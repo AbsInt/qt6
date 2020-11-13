@@ -1,0 +1,15 @@
+# Generated from dialogs.pro.
+
+add_subdirectory(qcolordialog)
+add_subdirectory(qdialog)
+add_subdirectory(qerrormessage)
+add_subdirectory(qfiledialog)
+add_subdirectory(qfiledialog2)
+add_subdirectory(qfontdialog)
+add_subdirectory(qinputdialog)
+add_subdirectory(qmessagebox)
+add_subdirectory(qprogressdialog)
+add_subdirectory(qwizard)
+if(QT_FEATURE_private_tests)
+    add_subdirectory(qsidebar)
+endif()

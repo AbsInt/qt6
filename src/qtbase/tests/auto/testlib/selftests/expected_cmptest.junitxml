@@ -1,0 +1,180 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<testsuite name="tst_Cmptest" timestamp="@TEST_START_TIME@" tests="28" failures="45" errors="0" time="@TEST_DURATION@">
+  <properties>
+    <property name="QTestVersion" value="@INSERT_QT_VERSION_HERE@"/>
+    <property name="QtVersion" value="@INSERT_QT_VERSION_HERE@"/>
+    <property name="QtBuild" value=""/>
+  </properties>
+  <testcase name="initTestCase" result="pass" time="@TEST_DURATION@"/>
+  <testcase name="compare_unregistered_enums" result="fail" time="@TEST_DURATION@">
+    <failure result="fail" message="Compared values are not the same"/>
+  </testcase>
+  <testcase name="compare_registered_enums" result="fail" time="@TEST_DURATION@">
+    <failure result="fail" message="Compared values are not the same
+   Actual   (Qt::Monday): Monday
+   Expected (Qt::Sunday): Sunday"/>
+  </testcase>
+  <testcase name="compare_class_enums" result="fail" time="@TEST_DURATION@">
+    <failure result="fail" message="Compared values are not the same
+   Actual   (MyClassEnum::MyClassEnumValue1): MyClassEnumValue1
+   Expected (MyClassEnum::MyClassEnumValue2): MyClassEnumValue2"/>
+  </testcase>
+  <testcase name="test_windowflags" result="fail" time="@TEST_DURATION@">
+    <failure result="fail" message="Compared values are not the same
+   Actual   (actualWindowFlags)  : Window|WindowSystemMenuHint|WindowStaysOnBottomHint
+   Expected (expectedWindowFlags): Window|FramelessWindowHint|WindowSystemMenuHint|WindowStaysOnBottomHint" tag="fail1"/>
+    <failure result="fail" message="Compared values are not the same
+   Actual   (actualWindowFlags)  : Window
+   Expected (expectedWindowFlags): Window|FramelessWindowHint" tag="fail2"/>
+  </testcase>
+  <testcase name="test_unregistered_flags" result="fail" time="@TEST_DURATION@">
+    <failure result="fail" message="Compared values are not the same
+   Actual   (actualFlags)  : 0x3
+   Expected (expectedFlags): 0x5" tag="fail1"/>
+    <failure result="fail" message="Compared values are not the same
+   Actual   (actualFlags)  : 0x1
+   Expected (expectedFlags): 0x5" tag="fail2"/>
+  </testcase>
+  <testcase name="compare_boolfuncs" result="pass" time="@TEST_DURATION@"/>
+  <testcase name="compare_to_nullptr" result="pass" time="@TEST_DURATION@"/>
+  <testcase name="compare_pointerfuncs" result="pass" time="@TEST_DURATION@"/>
+  <testcase name="compare_tostring" result="fail" time="@TEST_DURATION@">
+    <failure result="fail" message="Compared values are not the same
+   Actual   (actual)  : QVariant(int,123)
+   Expected (expected): QVariant(QString,hi)" tag="int, string"/>
+    <failure result="fail" message="Compared values are not the same
+   Actual   (actual)  : QVariant(QVariantHash)
+   Expected (expected): QVariant()" tag="null hash, invalid"/>
+    <failure result="fail" message="Compared values are not the same
+   Actual   (actual)  : QVariant(QString,A simple string)
+   Expected (expected): QVariant(PhonyClass)" tag="string, null user type"/>
+    <failure result="fail" message="Compared values are not the same
+   Actual   (actual)  : QVariant(PhonyClass,&lt;value not representable as string&gt;)
+   Expected (expected): QVariant(PhonyClass,&lt;value not representable as string&gt;)" tag="both non&#x002D;null user type"/>
+  </testcase>
+  <testcase name="compareQStringLists" result="fail" time="@TEST_DURATION@">
+    <failure result="fail" message="Compared lists differ at index 2.
+   Actual   (opA): &quot;string3&quot;
+   Expected (opB): &quot;DIFFERS&quot;" tag="last item different"/>
+    <failure result="fail" message="Compared lists differ at index 2.
+   Actual   (opA): &quot;string3&quot;
+   Expected (opB): &quot;DIFFERS&quot;" tag="second&#x002D;last item different"/>
+    <failure result="fail" message="Compared lists have different sizes.
+   Actual   (opA) size: 2
+   Expected (opB) size: 1" tag="prefix"/>
+    <failure result="fail" message="Compared lists have different sizes.
+   Actual   (opA) size: 12
+   Expected (opB) size: 1" tag="short list second"/>
+    <failure result="fail" message="Compared lists have different sizes.
+   Actual   (opA) size: 1
+   Expected (opB) size: 12" tag="short list first"/>
+  </testcase>
+  <testcase name="compareQListInt" result="fail" time="@TEST_DURATION@">
+    <failure result="fail" message="Compared lists have different sizes.
+   Actual   (actual) size: 2
+   Expected (expected) size: 3" tag="size mismatch"/>
+    <failure result="fail" message="Compared lists differ at index 2.
+   Actual   (actual): 4
+   Expected (expected): 3" tag="value mismatch"/>
+  </testcase>
+  <testcase name="compareQListIntToArray" result="fail" time="@TEST_DURATION@">
+    <failure result="fail" message="Compared lists have different sizes.
+   Actual   (actual) size: 2
+   Expected (expected) size: 3" tag="size mismatch"/>
+    <failure result="fail" message="Compared lists differ at index 2.
+   Actual   (actual): 4
+   Expected (expected): 3" tag="value mismatch"/>
+  </testcase>
+  <testcase name="compareQListIntToInitializerList" result="fail" time="@TEST_DURATION@">
+    <failure result="fail" message="Compared lists have different sizes.
+   Actual   (actual) size: 2
+   Expected (ARG({1, 2, 3})) size: 3" tag="size mismatch"/>
+    <failure result="fail" message="Compared lists differ at index 2.
+   Actual   (actual): 4
+   Expected (ARG({1, 2, 3})): 3" tag="value mismatch"/>
+  </testcase>
+  <testcase name="compareQListDouble" result="fail" time="@TEST_DURATION@">
+    <failure result="fail" message="Compared lists differ at index 0.
+   Actual   (double1): 1.5
+   Expected (double2): 1"/>
+  </testcase>
+  <testcase name="compareQColor" result="fail" time="@TEST_DURATION@">
+    <failure result="fail" message="Compared values are not the same
+   Actual   (colorA): #ffffff00
+   Expected (colorB): #ff00ff00" tag="Qt::yellow vs Qt::green"/>
+    <failure result="fail" message="Compared values are not the same
+   Actual   (colorA): #88ff0000
+   Expected (colorB): #ffff0000" tag="0x88ff0000 vs 0xffff0000"/>
+  </testcase>
+  <testcase name="compareQPixmaps" result="fail" time="@TEST_DURATION@">
+    <failure result="fail" message="Compared QPixmaps differ.
+   Actual   (opA).isNull(): 1
+   Expected (opB).isNull(): 0" tag="one null"/>
+    <failure result="fail" message="Compared QPixmaps differ.
+   Actual   (opA).isNull(): 0
+   Expected (opB).isNull(): 1" tag="other null"/>
+    <failure result="fail" message="Compared QPixmaps differ in size.
+   Actual   (opA): 11x20
+   Expected (opB): 20x20" tag="different size"/>
+    <failure result="fail" message="Compared values are not the same" tag="different pixels"/>
+    <failure result="fail" message="Compared QPixmaps differ in device pixel ratio.
+   Actual   (opA): 1
+   Expected (opB): 2" tag="different dpr"/>
+  </testcase>
+  <testcase name="compareQImages" result="fail" time="@TEST_DURATION@">
+    <failure result="fail" message="Compared QImages differ.
+   Actual   (opA).isNull(): 1
+   Expected (opB).isNull(): 0" tag="one null"/>
+    <failure result="fail" message="Compared QImages differ.
+   Actual   (opA).isNull(): 0
+   Expected (opB).isNull(): 1" tag="other null"/>
+    <failure result="fail" message="Compared QImages differ in size.
+   Actual   (opA): 11x20
+   Expected (opB): 20x20" tag="different size"/>
+    <failure result="fail" message="Compared QImages differ in format.
+   Actual   (opA): 6
+   Expected (opB): 3" tag="different format"/>
+    <failure result="fail" message="Compared values are not the same" tag="different pixels"/>
+    <failure result="fail" message="Compared QImages differ in device pixel ratio.
+   Actual   (opA): 1
+   Expected (opB): 2" tag="different dpr"/>
+  </testcase>
+  <testcase name="compareQRegion" result="fail" time="@TEST_DURATION@">
+    <failure result="fail" message="Compared values are not the same
+   Actual   (rA): QRegion(200x50+10+10)
+   Expected (rB): QRegion(null)" tag="1&#x002D;empty"/>
+    <failure result="fail" message="Compared values are not the same
+   Actual   (rA): QRegion(200x50+10+10)
+   Expected (rB): QRegion(2 rectangles, 50x200+100+200, 200x50+10+10)" tag="different lists"/>
+  </testcase>
+  <testcase name="compareQVector2D" result="fail" time="@TEST_DURATION@">
+    <failure result="fail" message="Compared values are not the same
+   Actual   (v2a): QVector2D(1, 2)
+   Expected (v2b): QVector2D(1, 3)"/>
+  </testcase>
+  <testcase name="compareQVector3D" result="fail" time="@TEST_DURATION@">
+    <failure result="fail" message="Compared values are not the same
+   Actual   (v3a): QVector3D(1, 2, 3)
+   Expected (v3b): QVector3D(1, 3, 3)"/>
+  </testcase>
+  <testcase name="compareQVector4D" result="fail" time="@TEST_DURATION@">
+    <failure result="fail" message="Compared values are not the same
+   Actual   (v4a): QVector4D(1, 2, 3, 4)
+   Expected (v4b): QVector4D(1, 3, 3, 4)"/>
+  </testcase>
+  <testcase name="verify" result="fail" time="@TEST_DURATION@">
+    <failure result="fail" message="&apos;opaqueFunc() &lt; 2&apos; returned FALSE. ()"/>
+  </testcase>
+  <testcase name="verify2" result="fail" time="@TEST_DURATION@">
+    <failure result="fail" message="&apos;opaqueFunc() &lt; 2&apos; returned FALSE. (42)"/>
+  </testcase>
+  <testcase name="tryVerify" result="fail" time="@TEST_DURATION@">
+    <failure result="fail" message="&apos;opaqueFunc() &lt; 2&apos; returned FALSE. ()"/>
+  </testcase>
+  <testcase name="tryVerify2" result="fail" time="@TEST_DURATION@">
+    <failure result="fail" message="&apos;opaqueFunc() &lt; 2&apos; returned FALSE. (42)"/>
+  </testcase>
+  <testcase name="verifyExplicitOperatorBool" result="pass" time="@TEST_DURATION@"/>
+  <testcase name="cleanupTestCase" result="pass" time="@TEST_DURATION@"/>
+  <system-err/>
+</testsuite>

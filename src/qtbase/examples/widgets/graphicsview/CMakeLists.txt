@@ -1,0 +1,15 @@
+# Generated from graphicsview.pro.
+
+add_subdirectory(chip)
+add_subdirectory(elasticnodes)
+add_subdirectory(embeddeddialogs)
+add_subdirectory(collidingmice)
+add_subdirectory(basicgraphicslayouts)
+add_subdirectory(diagramscene)
+add_subdirectory(flowlayout)
+add_subdirectory(anchorlayout)
+add_subdirectory(simpleanchorlayout)
+add_subdirectory(weatheranchorlayout)
+if(QT_FEATURE_cursor AND QT_FEATURE_draganddrop)
+    add_subdirectory(dragdroprobot)
+endif()

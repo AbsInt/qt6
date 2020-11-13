@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<testsuite name="tst_Warnings" timestamp="@TEST_START_TIME@" tests="6" failures="4" errors="17" time="@TEST_DURATION@">
+  <properties>
+    <property name="QTestVersion" value="@INSERT_QT_VERSION_HERE@"/>
+    <property name="QtVersion" value="@INSERT_QT_VERSION_HERE@"/>
+    <property name="QtBuild" value=""/>
+  </properties>
+  <testcase name="initTestCase" result="pass" time="@TEST_DURATION@"/>
+  <testcase name="testWarnings" result="pass" time="@TEST_DURATION@">
+    <!-- type="qwarn" message="Warning" -->
+    <!-- type="qwarn" message="Warning" -->
+    <!-- type="qdebug" message="Debug" -->
+    <!-- type="qdebug" message="Debug" -->
+    <!-- type="qinfo" message="Info" -->
+    <!-- type="qinfo" message="Info" -->
+    <!-- type="qdebug" message="Baba" -->
+    <!-- type="qdebug" message="Baba" -->
+    <!-- type="qdebug" message="Bubublabla" -->
+    <!-- type="qwarn" message="Babablabla" -->
+  </testcase>
+  <testcase name="testMissingWarnings" result="fail" time="@TEST_DURATION@">
+    <!-- type="info" message="Did not receive message: &quot;Warning0&quot;" -->
+    <!-- type="info" message="Did not receive message: &quot;Warning1&quot;" -->
+    <failure result="fail" message="Not all expected messages were received"/>
+  </testcase>
+  <testcase name="testMissingWarningsRegularExpression" result="fail" time="@TEST_DURATION@">
+    <!-- type="info" message="Did not receive any message matching: &quot;Warning\s\d&quot;" -->
+    <failure result="fail" message="Not all expected messages were received"/>
+  </testcase>
+  <testcase name="testMissingWarningsWithData" result="fail" time="@TEST_DURATION@">
+    <!-- type="info" message="Did not receive message: &quot;Warning0&quot;" tag="first row" -->
+    <!-- type="info" message="Did not receive message: &quot;Warning1&quot;" tag="first row" -->
+    <failure result="fail" message="Not all expected messages were received" tag="first row"/>
+    <!-- type="info" message="Did not receive message: &quot;Warning0&quot;" tag="second row" -->
+    <!-- type="info" message="Did not receive message: &quot;Warning1&quot;" tag="second row" -->
+    <failure result="fail" message="Not all expected messages were received" tag="second row"/>
+  </testcase>
+  <testcase name="cleanupTestCase" result="pass" time="@TEST_DURATION@"/>
+  <system-err>
+<![CDATA[Warning]]>
+<![CDATA[Warning]]>
+<![CDATA[Debug]]>
+<![CDATA[Debug]]>
+<![CDATA[Info]]>
+<![CDATA[Info]]>
+<![CDATA[Baba]]>
+<![CDATA[Baba]]>
+<![CDATA[Bubublabla]]>
+<![CDATA[Babablabla]]>
+<![CDATA[Did not receive message: "Warning0"]]>
+<![CDATA[Did not receive message: "Warning1"]]>
+<![CDATA[Did not receive any message matching: "Warning\s\d"]]>
+<![CDATA[Did not receive message: "Warning0"]]>
+<![CDATA[Did not receive message: "Warning1"]]>
+<![CDATA[Did not receive message: "Warning0"]]>
+<![CDATA[Did not receive message: "Warning1"]]>
+  </system-err>
+</testsuite>

@@ -1,0 +1,1718 @@
+import QtQuick.tooling 1.2
+
+Module {
+    dependencies: []
+
+    Component {
+        name: "undefined"
+        exports: ["QML/undefined 1.0"]
+        exportMetaObjectRevisions: [256]
+    }
+
+    Component {
+        name: "var"
+        exports: ["QML/var 1.0", "QML/variant 1.0"]
+        exportMetaObjectRevisions: [256]
+    }
+
+    Component {
+        name: "varargs"
+        accessSemantics: "value"
+    }
+
+    Component {
+        name: "QObject"
+        accessSemantics: "reference"
+        exports: ["QML/QtObject 1.0"]
+        exportMetaObjectRevisions: [256]
+
+        Method {
+            name: "toString"
+            type: "string"
+        }
+
+        Method {
+            name: "destroy"
+        }
+
+        Method {
+            name: "destroy"
+
+            Parameter {
+                name: "delay"
+                type: "int"
+            }
+
+        }
+
+    }
+
+    Component {
+        name: "QQmlComponent"
+        accessSemantics: "reference"
+        prototype: "QObject"
+        exports: ["QML/Component 1.0"]
+        exportMetaObjectRevisions: [256]
+
+        Enum {
+            name: "Status"
+            values: ["Null", "Ready", "Loading", "Error"]
+        }
+
+        Property {
+            name: "status"
+            type: "Status"
+            isReadonly: true
+        }
+
+        Signal {
+            name: "statusChanged"
+
+            Parameter {
+                type: "QQmlComponent::Status"
+            }
+
+        }
+
+        Method {
+            name: "errorString"
+            type: "string"
+        }
+
+    }
+
+    Component {
+        name: "Number"
+        // is a singleton, but its constructor can construct NumberPrototype objects...
+        isSingleton: true
+        prototype: "NumberPrototype"
+
+        Property {
+            name: "EPSILON"
+            type: "NumberPrototype"
+            isReadonly: true
+        }
+
+        Method {
+            name: "isFinite"
+            type: "bool"
+
+            Parameter {
+                name: "number"
+                type: "NumberPrototype"
+            }
+
+        }
+
+        Method {
+            name: "isInteger"
+            type: "bool"
+
+            Parameter {
+                name: "number"
+                type: "NumberPrototype"
+            }
+
+        }
+
+        Method {
+            name: "isNaN"
+            type: "bool"
+
+            Parameter {
+                name: "number"
+                type: "NumberPrototype"
+            }
+
+        }
+
+        Method {
+            name: "isSafeInteger"
+            type: "bool"
+
+            Parameter {
+                name: "number"
+                type: "NumberPrototype"
+            }
+
+        }
+
+        Property {
+            name: "MAX_SAFE_INTEGER"
+            type: "NumberPrototype"
+            isReadonly: true
+        }
+
+        Property {
+            name: "MAX_VALUE"
+            type: "NumberPrototype"
+            isReadonly: true
+        }
+
+        Property {
+            name: "MIN_SAFE_INTEGER"
+            type: "NumberPrototype"
+            isReadonly: true
+        }
+
+        Property {
+            name: "MIN_VALUE"
+            type: "NumberPrototype"
+            isReadonly: true
+        }
+
+        Property {
+            name: "NaN"
+            type: "NumberPrototype"
+            isReadonly: true
+        }
+
+        Property {
+            name: "NEGATIVE_INFINITY"
+            type: "NumberPrototype"
+            isReadonly: true
+        }
+
+        Method {
+            name: "parseFloat"
+            type: "double"
+
+            Parameter {
+                name: "string"
+                type: "string"
+            }
+
+        }
+
+        Method {
+            name: "parseInt"
+            type: "int"
+
+            Parameter {
+                name: "string"
+                type: "string"
+            }
+
+            Parameter {
+                name: "radix"
+                type: "int"
+            }
+
+        }
+
+        Property {
+            name: "POSITIVE_INFINITY"
+            type: "NumberPrototype"
+            isReadonly: true
+        }
+
+    }
+
+    Component {
+        name: "NumberPrototype"
+
+        Method {
+            name: "toExponential"
+            type: "string"
+
+            Parameter {
+                name: "fractionDigits"
+                type: "int"
+            }
+
+        }
+
+        Method {
+            name: "toFixed"
+            type: "string"
+
+            Parameter {
+                name: "fractionDigits"
+                type: "int"
+            }
+
+        }
+
+        Method {
+            name: "toLocaleString"
+            type: "string"
+
+            Parameter {
+                name: "locales"
+                type: "string"
+            }
+
+            Parameter {
+                name: "options"
+                type: "object"
+            }
+
+        }
+
+        Method {
+            name: "toPrecision"
+            type: "string"
+
+            Parameter {
+                name: "precision"
+                type: "int"
+            }
+
+        }
+
+        Method {
+            name: "toString"
+            type: "string"
+
+            Parameter {
+                name: "base"
+                type: "int"
+            }
+
+        }
+
+        Method {
+            name: "valueOf"
+            type: "NumberPrototype"
+        }
+
+    }
+
+    Component {
+        name: "Math"
+        isSingleton: true
+        exports: ["QML/Math 1.0"]
+        exportMetaObjectRevisions: [256]
+
+        Property {
+            name: "E"
+            type: "double"
+            isReadonly: true
+        }
+
+        Property {
+            name: "LN10"
+            type: "double"
+            isReadonly: true
+        }
+
+        Property {
+            name: "LN2"
+            type: "double"
+            isReadonly: true
+        }
+
+        Property {
+            name: "LOG10E"
+            type: "double"
+            isReadonly: true
+        }
+
+        Property {
+            name: "LOG2E"
+            type: "double"
+            isReadonly: true
+        }
+
+        Property {
+            name: "PI"
+            type: "double"
+            isReadonly: true
+        }
+
+        Property {
+            name: "SQRT1_2"
+            type: "double"
+            isReadonly: true
+        }
+
+        Property {
+            name: "SQRT2"
+            type: "double"
+            isReadonly: true
+        }
+
+        Method {
+            name: "abs"
+            type: "double"
+
+            Parameter {
+                name: "x"
+                type: "double"
+            }
+
+        }
+
+        Method {
+            name: "acos"
+            type: "double"
+
+            Parameter {
+                name: "x"
+                type: "double"
+            }
+
+        }
+
+        Method {
+            name: "acosh"
+            type: "double"
+
+            Parameter {
+                name: "x"
+                type: "double"
+            }
+
+        }
+
+        Method {
+            name: "asin"
+            type: "double"
+
+            Parameter {
+                name: "x"
+                type: "double"
+            }
+
+        }
+
+        Method {
+            name: "asinh"
+            type: "double"
+
+            Parameter {
+                name: "x"
+                type: "double"
+            }
+
+        }
+
+        Method {
+            name: "atan"
+            type: "double"
+
+            Parameter {
+                name: "x"
+                type: "double"
+            }
+
+        }
+
+        Method {
+            name: "atanh"
+            type: "double"
+
+            Parameter {
+                name: "x"
+                type: "double"
+            }
+
+        }
+
+        Method {
+            name: "atan2"
+            type: "double"
+
+            Parameter {
+                name: "x"
+                type: "double"
+            }
+
+        }
+
+        Method {
+            name: "acbrt"
+            type: "double"
+
+            Parameter {
+                name: "x"
+                type: "double"
+            }
+
+        }
+
+        Method {
+            name: "ceil"
+            type: "double"
+
+            Parameter {
+                name: "x"
+                type: "double"
+            }
+
+        }
+
+        Method {
+            name: "clz32"
+            type: "double"
+
+            Parameter {
+                name: "x"
+                type: "double"
+            }
+
+        }
+
+        Method {
+            name: "cos"
+            type: "double"
+
+            Parameter {
+                name: "x"
+                type: "double"
+            }
+
+        }
+
+        Method {
+            name: "cosh"
+            type: "double"
+
+            Parameter {
+                name: "x"
+                type: "double"
+            }
+
+        }
+
+        Method {
+            name: "exp"
+            type: "double"
+
+            Parameter {
+                name: "x"
+                type: "double"
+            }
+
+        }
+
+        Method {
+            name: "expm1"
+            type: "double"
+
+            Parameter {
+                name: "x"
+                type: "double"
+            }
+
+        }
+
+        Method {
+            name: "floor"
+            type: "double"
+
+            Parameter {
+                name: "x"
+                type: "double"
+            }
+
+        }
+
+        Method {
+            name: "fround"
+            type: "double"
+
+            Parameter {
+                name: "x"
+                type: "double"
+            }
+
+        }
+
+        Method {
+            name: "hypot"
+            type: "double"
+
+            Parameter {
+                name: "arguments"
+                type: "varargs"
+            }
+        }
+
+        Method {
+            name: "cosh"
+            type: "double"
+
+            Parameter {
+                name: "x"
+                type: "double"
+            }
+
+        }
+
+        Method {
+            name: "imul"
+            type: "double"
+
+            Parameter {
+                name: "x"
+                type: "double"
+            }
+
+        }
+
+        Method {
+            name: "log"
+            type: "double"
+
+            Parameter {
+                name: "x"
+                type: "double"
+            }
+
+        }
+
+        Method {
+            name: "log1p"
+            type: "double"
+
+            Parameter {
+                name: "x"
+                type: "double"
+            }
+
+        }
+
+        Method {
+            name: "log10"
+            type: "double"
+
+            Parameter {
+                name: "x"
+                type: "double"
+            }
+
+        }
+
+        Method {
+            name: "log2"
+            type: "double"
+
+            Parameter {
+                name: "x"
+                type: "double"
+            }
+
+        }
+
+        Method {
+            name: "max"
+            type: "NumberPrototype"
+
+            Parameter {
+                name: "arguments"
+                type: "varargs"
+            }
+        }
+
+        Method {
+            name: "min"
+            type: "NumberPrototype"
+
+            Parameter {
+                name: "arguments"
+                type: "varargs"
+            }
+        }
+
+        Method {
+            name: "pow"
+            type: "double"
+
+            Parameter {
+                name: "x"
+                type: "double"
+            }
+
+            Parameter {
+                name: "y"
+                type: "double"
+            }
+
+        }
+
+        Method {
+            name: "random"
+            type: "double"
+        }
+
+        Method {
+            name: "round"
+            type: "double"
+
+            Parameter {
+                name: "x"
+                type: "double"
+            }
+
+        }
+
+        Method {
+            name: "sign"
+            type: "double"
+
+            Parameter {
+                name: "x"
+                type: "double"
+            }
+
+        }
+
+        Method {
+            name: "sin"
+            type: "double"
+
+            Parameter {
+                name: "x"
+                type: "double"
+            }
+
+        }
+
+        Method {
+            name: "sinh"
+            type: "double"
+
+            Parameter {
+                name: "x"
+                type: "double"
+            }
+
+        }
+
+        Method {
+            name: "sqrt"
+            type: "double"
+
+            Parameter {
+                name: "x"
+                type: "double"
+            }
+
+        }
+
+        Method {
+            name: "tanh"
+            type: "double"
+
+            Parameter {
+                name: "x"
+                type: "double"
+            }
+
+        }
+
+        Method {
+            name: "trunc"
+            type: "double"
+
+            Parameter {
+                name: "x"
+                type: "double"
+            }
+
+        }
+
+    }
+
+    Component {
+        name: "int"
+        exports: ["QML/int 1.0"]
+        exportMetaObjectRevisions: [256]
+        prototype: "NumberPrototype"
+        accessSemantics: "value"
+    }
+
+    Component {
+        name: "float"
+        prototype: "NumberPrototype"
+        accessSemantics: "value"
+    }
+
+    Component {
+        name: "double"
+        exports: ["QML/real 1.0"]
+        exportMetaObjectRevisions: [256]
+        prototype: "NumberPrototype"
+        accessSemantics: "value"
+    }
+
+    Component {
+        name: "JSON"
+        exports: ["QML/JSON 1.0"]
+        exportMetaObjectRevisions: [256]
+        isSingleton: true
+
+        Method {
+            name: "parse"
+            type: "var"
+
+            Parameter {
+                name: "text"
+                type: "string"
+            }
+
+            Parameter {
+                name: "reviver"
+                type: "var"
+            }
+
+        }
+
+        Method {
+            name: "stringify"
+            type: "string"
+
+            Parameter {
+                name: "value"
+                type: "var"
+            }
+
+            Parameter {
+                name: "replacer"
+                type: "var"
+            }
+
+            Parameter {
+                name: "space"
+                type: "int"
+            }
+
+        }
+
+    }
+
+    Component {
+        name: "String"
+        exports: ["QML/String 1.0"]
+        exportMetaObjectRevisions: [256]
+        isSingleton: true
+        prototype: "StringPrototype"
+
+        Method {
+            name: "fromCharCode"
+            type: "string"
+
+            Parameter {
+                name: "arguments"
+                type: "varargs"
+            }
+        }
+
+        Method {
+            name: "fromCodePoint"
+            type: "string"
+
+            Parameter {
+                name: "arguments"
+                type: "varargs"
+            }
+        }
+
+        Method {
+            name: "raw"
+            type: "string"
+
+            Parameter {
+                name: "template"
+                type: "var"
+            }
+
+            Parameter {
+                name: "substitutions"
+                type: "varargs"
+            }
+        }
+
+    }
+
+    Component {
+        name: "StringPrototype"
+
+        Method {
+            name: "charAt"
+            type: "string"
+
+            Parameter {
+                name: "pos"
+                type: "int"
+            }
+
+        }
+
+        Method {
+            name: "codePointAt"
+            type: "int"
+
+            Parameter {
+                name: "pos"
+                type: "int"
+            }
+
+        }
+
+        Method {
+            name: "charCodeAt"
+            type: "int"
+
+            Parameter {
+                name: "pos"
+                type: "int"
+            }
+
+        }
+
+        Method {
+            name: "concat"
+            type: "string"
+
+            Parameter {
+                name: "arguments"
+                type: "varargs"
+            }
+        }
+
+        Method {
+            name: "endsWith"
+            type: "bool"
+
+            Parameter {
+                name: "searchString"
+                type: "string"
+            }
+
+            Parameter {
+                name: "endPosition"
+                type: "int"
+            }
+
+        }
+
+        Method {
+            name: "includes"
+            type: "bool"
+
+            Parameter {
+                name: "searchString"
+                type: "string"
+            }
+
+            Parameter {
+                name: "position"
+                type: "int"
+            }
+
+        }
+
+        Method {
+            name: "indexOf"
+            type: "int"
+
+            Parameter {
+                name: "searchString"
+                type: "string"
+            }
+
+            Parameter {
+                name: "position"
+                type: "int"
+            }
+
+        }
+
+        Method {
+            name: "lastIndexOf"
+            type: "int"
+
+            Parameter {
+                name: "searchString"
+                type: "string"
+            }
+
+            Parameter {
+                name: "position"
+                type: "int"
+            }
+
+        }
+
+        Method {
+            name: "localeCompare"
+            type: "int"
+
+            Parameter {
+                name: "that"
+                type: "string"
+            }
+
+            Parameter {
+                name: "locale"
+                type: "string"
+            }
+
+            Parameter {
+                name: "options"
+                type: "int"
+            }
+
+        }
+
+        Method {
+            name: "match"
+            type: "var"
+
+            Parameter {
+                name: "that"
+                type: "string"
+            }
+
+            Parameter {
+                name: "locale"
+                type: "string"
+            }
+
+            Parameter {
+                name: "options"
+                type: "int"
+            }
+
+        }
+
+        Method {
+            name: "normalize"
+            type: "string"
+
+            Parameter {
+                name: "form"
+                type: "string"
+            }
+
+        }
+
+        Method {
+            name: "repeat"
+            type: "string"
+
+            Parameter {
+                name: "count"
+                type: "int"
+            }
+
+        }
+
+        Method {
+            name: "replace"
+            type: "string"
+
+            Parameter {
+                name: "searchValue"
+                type: "string"
+            }
+
+            Parameter {
+                name: "replaceValue"
+                type: "string"
+            }
+
+        }
+
+        Method {
+            name: "search"
+            type: "var"
+
+            Parameter {
+                name: "regexp"
+                type: "var"
+            }
+
+        }
+
+        Method {
+            name: "slice"
+            type: "string"
+
+            Parameter {
+                name: "start"
+                type: "int"
+            }
+
+            Parameter {
+                name: "end"
+                type: "int"
+            }
+
+        }
+
+        Method {
+            name: "split"
+            type: "list"
+
+            Parameter {
+                name: "separator"
+                type: "string"
+            }
+
+            Parameter {
+                name: "limit"
+                type: "int"
+            }
+
+        }
+
+        Method {
+            name: "startsWith"
+            type: "bool"
+
+            Parameter {
+                name: "searchString"
+                type: "string"
+            }
+
+            Parameter {
+                name: "position"
+                type: "int"
+            }
+
+        }
+
+        Method {
+            name: "substring"
+            type: "string"
+
+            Parameter {
+                name: "start"
+                type: "int"
+            }
+
+            Parameter {
+                name: "end"
+                type: "int"
+            }
+
+        }
+
+        Method {
+            name: "toLocaleLowerCase"
+            type: "string"
+
+            Parameter {
+                name: "locale"
+                type: "string"
+            }
+
+            Parameter {
+                name: "options"
+                type: "var"
+            }
+
+        }
+
+        Method {
+            name: "toLowerCase"
+            type: "string"
+        }
+
+        Method {
+            name: "toUpperCase"
+            type: "string"
+
+            Parameter {
+                name: "locale"
+                type: "string"
+            }
+
+            Parameter {
+                name: "options"
+                type: "var"
+            }
+
+        }
+
+        Method {
+            name: "toUpperCase"
+            type: "string"
+        }
+
+        Method {
+            name: "trim"
+            type: "string"
+        }
+
+        Method {
+            name: "valueOf"
+            type: "string"
+        }
+
+        Property {
+            name: "length"
+            type: "int"
+        }
+
+    }
+
+    Component {
+        name: "string"
+        prototype: "StringPrototype"
+        exports: ["QML/string 1.0"]
+        exportMetaObjectRevisions: [256]
+        accessSemantics: "value"
+    }
+
+    Component {
+        name: "Boolean"
+        isSingleton: true
+        prototype: "BooleanPrototype"
+    }
+
+    Component {
+        name: "BooleanPrototype"
+
+        Method {
+            name: "toString"
+            type: "string"
+        }
+
+        Method {
+            name: "valueOf"
+            type: "bool"
+        }
+
+    }
+
+    Component {
+        name: "bool"
+        prototype: "BooleanPrototype"
+        exports: ["QML/bool 1.0"]
+        exportMetaObjectRevisions: [256]
+        accessSemantics: "value"
+    }
+
+    Component {
+        name: "Date"
+        isSingleton: true
+        prototype: "DatePrototype"
+
+        // Date ( year, month [, date [ , hours [ , minutes [ , seconds [ , ms ] ] ] ] ] )
+        Method {
+            name: "now"
+            type: "DatePrototype"
+        }
+
+        Method {
+            name: "parse"
+            type: "DatePrototype"
+
+            Parameter {
+                name: "string"
+                type: "string"
+            }
+
+        }
+
+        Method {
+            name: "UTC"
+            type: "DatePrototype"
+
+            Parameter {
+                name: "year"
+                type: "int"
+            }
+
+            Parameter {
+                name: "month"
+                type: "int"
+            }
+
+            Parameter {
+                name: "date"
+                type: "int"
+            }
+
+            Parameter {
+                name: "hours"
+                type: "int"
+            }
+
+            Parameter {
+                name: "minutes"
+                type: "int"
+            }
+
+            Parameter {
+                name: "seconds"
+                type: "int"
+            }
+
+            Parameter {
+                name: "ms"
+                type: "int"
+            }
+
+        }
+
+    }
+
+    Component {
+        name: "DatePrototype"
+
+        Method {
+            name: "getDate"
+            type: "int"
+        }
+
+        Method {
+            name: "getDay"
+            type: "int"
+        }
+
+        Method {
+            name: "getFullYear"
+            type: "int"
+        }
+
+        Method {
+            name: "getHours"
+            type: "int"
+        }
+
+        Method {
+            name: "getMilliseconds"
+            type: "int"
+        }
+
+        Method {
+            name: "getMinutes"
+            type: "int"
+        }
+
+        Method {
+            name: "getMonth"
+            type: "int"
+        }
+
+        Method {
+            name: "getSeconds"
+            type: "int"
+        }
+
+        Method {
+            name: "getTime"
+            type: "double"
+        }
+
+        Method {
+            name: "getTimeZoneOffset"
+            type: "double"
+        }
+
+        Method {
+            name: "getUTCDate"
+            type: "int"
+        }
+
+        Method {
+            name: "getUTCDay"
+            type: "int"
+        }
+
+        Method {
+            name: "getUTCFullYear"
+            type: "int"
+        }
+
+        Method {
+            name: "getUTCHours"
+            type: "int"
+        }
+
+        Method {
+            name: "getUTCMilliseconds"
+            type: "int"
+        }
+
+        Method {
+            name: "getUTCMinutes"
+            type: "int"
+        }
+
+        Method {
+            name: "getUTCMonth"
+            type: "int"
+        }
+
+        Method {
+            name: "getUTCSeconds"
+            type: "int"
+        }
+
+        Method {
+            name: "setDate"
+            type: "date"
+
+            Parameter {
+                name: "date"
+                type: "DatePrototype"
+            }
+
+        }
+
+        Method {
+            name: "setFullYear"
+            type: "date"
+
+            Parameter {
+                name: "year"
+                type: "int"
+            }
+
+            Parameter {
+                name: "month"
+                type: "int"
+            }
+
+            Parameter {
+                name: "date"
+                type: "int"
+            }
+
+        }
+
+        Method {
+            name: "setHours"
+            type: "date"
+
+            Parameter {
+                name: "hour"
+                type: "int"
+            }
+
+            Parameter {
+                name: "min"
+                type: "int"
+            }
+
+            Parameter {
+                name: "sec"
+                type: "int"
+            }
+
+            Parameter {
+                name: "ms"
+                type: "int"
+            }
+
+        }
+
+        Method {
+            name: "setMilliseconds"
+            type: "date"
+
+            Parameter {
+                name: "ms"
+                type: "int"
+            }
+
+        }
+
+        Method {
+            name: "setMinutes"
+            type: "date"
+
+            Parameter {
+                name: "min"
+                type: "int"
+            }
+
+            Parameter {
+                name: "sec"
+                type: "int"
+            }
+
+            Parameter {
+                name: "ms"
+                type: "int"
+            }
+
+        }
+
+        Method {
+            name: "setMonth"
+            type: "date"
+
+            Parameter {
+                name: "month"
+                type: "int"
+            }
+
+            Parameter {
+                name: "date"
+                type: "int"
+            }
+
+        }
+
+        Method {
+            name: "setSeconds"
+            type: "date"
+
+            Parameter {
+                name: "seconds"
+                type: "int"
+            }
+
+            Parameter {
+                name: "ms"
+                type: "int"
+            }
+
+        }
+
+        Method {
+            name: "setTime"
+            type: "date"
+
+            Parameter {
+                name: "time"
+                type: "int"
+            }
+
+        }
+
+        Method {
+            name: "setUTCDate"
+            type: "date"
+
+            Parameter {
+                name: "date"
+                type: "DatePrototype"
+            }
+
+        }
+
+        Method {
+            name: "setUTCFullYear"
+            type: "date"
+
+            Parameter {
+                name: "year"
+                type: "int"
+            }
+
+            Parameter {
+                name: "month"
+                type: "int"
+            }
+
+            Parameter {
+                name: "date"
+                type: "int"
+            }
+
+        }
+
+        Method {
+            name: "setUTCHours"
+            type: "date"
+
+            Parameter {
+                name: "hour"
+                type: "int"
+            }
+
+            Parameter {
+                name: "min"
+                type: "int"
+            }
+
+            Parameter {
+                name: "sec"
+                type: "int"
+            }
+
+            Parameter {
+                name: "ms"
+                type: "int"
+            }
+
+        }
+
+        Method {
+            name: "setUTCMilliseconds"
+            type: "date"
+
+            Parameter {
+                name: "ms"
+                type: "int"
+            }
+
+        }
+
+        Method {
+            name: "setUTCMinutes"
+            type: "date"
+
+            Parameter {
+                name: "min"
+                type: "int"
+            }
+
+            Parameter {
+                name: "sec"
+                type: "int"
+            }
+
+            Parameter {
+                name: "ms"
+                type: "int"
+            }
+
+        }
+
+        Method {
+            name: "setUTCMonth"
+            type: "date"
+
+            Parameter {
+                name: "month"
+                type: "int"
+            }
+
+            Parameter {
+                name: "date"
+                type: "int"
+            }
+
+        }
+
+        Method {
+            name: "setUTCSeconds"
+            type: "date"
+
+            Parameter {
+                name: "seconds"
+                type: "int"
+            }
+
+            Parameter {
+                name: "ms"
+                type: "int"
+            }
+
+        }
+
+        Method {
+            name: "toDateString"
+            type: "string"
+        }
+
+        Method {
+            name: "toISOString"
+            type: "string"
+        }
+
+        Method {
+            name: "toJSON"
+            type: "string"
+
+            Parameter {
+                name: "key"
+                type: "var" // ignored
+            }
+
+        }
+
+        Method {
+            name: "toLocaleDateString"
+            type: "string"
+
+            Parameter {
+                name: "locale"
+                type: "string"
+            }
+
+            Parameter {
+                name: "options"
+                type: "var"
+            }
+
+        }
+
+        Method {
+            name: "toLocaleDateDateString"
+            type: "string"
+
+            Parameter {
+                name: "locale"
+                type: "string"
+            }
+
+            Parameter {
+                name: "options"
+                type: "var"
+            }
+
+        }
+
+        Method {
+            name: "toLocaleDateTimeString"
+            type: "string"
+
+            Parameter {
+                name: "locale"
+                type: "string"
+            }
+
+            Parameter {
+                name: "options"
+                type: "var"
+            }
+
+        }
+
+        Method {
+            name: "toLocaleString"
+            type: "string"
+
+            Parameter {
+                name: "locale"
+                type: "string"
+            }
+
+            Parameter {
+                name: "options"
+                type: "var"
+            }
+
+        }
+
+        Method {
+            name: "toString"
+            type: "string"
+        }
+
+        Method {
+            name: "toTimeString"
+            type: "string"
+        }
+
+        Method {
+            name: "toUTCString"
+            type: "string"
+        }
+
+        Method {
+            name: "valueOf"
+            type: "date"
+        }
+
+    }
+
+    Component {
+        name: "date"
+        prototype: "DatePrototype"
+        exports: ["QML/date 1.0"]
+        exportMetaObjectRevisions: [256]
+        accessSemantics: "value"
+    }
+
+}

@@ -1,0 +1,94 @@
+@PACKAGE_INIT@
+
+if (CMAKE_CROSSCOMPILING AND CMAKE_SYSROOT)
+    # When cross compiling with CMake any calls to pkg_check_modules() will
+    # search into the host system instead of the target sysroot.
+    # The current work around is based on the discussion found at
+    # https://gitlab.kitware.com/cmake/cmake/-/merge_requests/4478
+    set(ENV{PKG_CONFIG_DIR} "")
+    set(ENV{PKG_CONFIG_LIBDIR} "${CMAKE_SYSROOT}/usr/lib/${CMAKE_LIBRARY_ARCHITECTURE}/pkgconfig")
+    set(ENV{PKG_CONFIG_SYSROOT_DIR} ${CMAKE_SYSROOT})
+endif()
+
+# Slightly amended version of ./src/corelib/Qt6Config.cmake.in
+if (CMAKE_VERSION VERSION_LESS 3.14)
+    message(FATAL_ERROR "Qt requires at least CMake version 3.14")
+endif()
+
+get_filename_component(_qt_cmake_dir "${CMAKE_CURRENT_LIST_DIR}/.." ABSOLUTE)
+set(_qt_@PROJECT_VERSION_MAJOR@_config_cmake_dir "${CMAKE_CURRENT_LIST_DIR}")
+
+if (NOT QT_NO_CREATE_TARGETS)
+    include("${CMAKE_CURRENT_LIST_DIR}/@INSTALL_CMAKE_NAMESPACE@Targets.cmake")
+    if(NOT QT_NO_CREATE_VERSIONLESS_TARGETS)
+        include("${CMAKE_CURRENT_LIST_DIR}/@INSTALL_CMAKE_NAMESPACE@VersionlessTargets.cmake")
+    endif()
+else()
+    # For examples using `find_package(...)` inside their CMakeLists.txt files:
+    # Make CMake's AUTOGEN detect this Qt version properly
+    set_directory_properties(PROPERTIES
+                             QT_VERSION_MAJOR @PROJECT_VERSION_MAJOR@
+                             QT_VERSION_MINOR @PROJECT_VERSION_MINOR@
+                             QT_VERSION_PATCH @PROJECT_VERSION_PATCH@)
+endif()
+
+# if (NOT @INSTALL_CMAKE_NAMESPACE@_FIND_COMPONENTS)
+#     set(@INSTALL_CMAKE_NAMESPACE@_NOT_FOUND_MESSAGE "The Qt package requires at least one component")
+#     set(@INSTALL_CMAKE_NAMESPACE@_FOUND False)
+#     return()
+# endif()
+
+get_filename_component(_qt_import_prefix "${CMAKE_CURRENT_LIST_FILE}" PATH)
+get_filename_component(_qt_import_prefix "${_qt_import_prefix}" REALPATH)
+list(APPEND CMAKE_MODULE_PATH "${_qt_import_prefix}")
+list(APPEND CMAKE_MODULE_PATH "${_qt_import_prefix}/3rdparty/extra-cmake-modules/find-modules")
+list(APPEND CMAKE_MODULE_PATH "${_qt_import_prefix}/3rdparty/kwin")
+
+if(APPLE AND (NOT CMAKE_SYSTEM_NAME OR CMAKE_SYSTEM_NAME STREQUAL "Darwin"))
+    # Add module directory to pick up custom Info.plist template for macOS
+    list(APPEND CMAKE_MODULE_PATH "${_qt_import_prefix}/macos")
+endif()
+
+# Find required dependencies, if any.
+include(CMakeFindDependencyMacro)
+if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/@INSTALL_CMAKE_NAMESPACE@Dependencies.cmake")
+    include("${CMAKE_CURRENT_LIST_DIR}/@INSTALL_CMAKE_NAMESPACE@Dependencies.cmake")
+    if(NOT @INSTALL_CMAKE_NAMESPACE@_DEPENDENCIES_FOUND)
+        set(@INSTALL_CMAKE_NAMESPACE@_FOUND FALSE)
+        message(FATAL_ERROR "Failed to find Qt Platform dependency: "
+            "${@INSTALL_CMAKE_NAMESPACE@_DEPENDENCY_NOT_FOUND_MESSAGE}")
+    endif()
+endif()
+
+set(__qt_use_no_default_path_for_qt_packages "NO_DEFAULT_PATH")
+if(QT_DISABLE_NO_DEFAULT_PATH_IN_QT_PACKAGES)
+    set(__qt_use_no_default_path_for_qt_packages "")
+endif()
+
+foreach(module ${@INSTALL_CMAKE_NAMESPACE@_FIND_COMPONENTS})
+    find_package(@INSTALL_CMAKE_NAMESPACE@${module}
+        ${_@INSTALL_CMAKE_NAMESPACE@_FIND_PARTS_QUIET}
+        ${_@INSTALL_CMAKE_NAMESPACE@_FIND_PARTS_REQUIRED}
+        PATHS
+            ${_qt_cmake_dir}
+            ${QT_ADDITIONAL_PACKAGES_PREFIX_PATH}
+            ${QT_EXAMPLES_CMAKE_PREFIX_PATH}
+        ${__qt_use_no_default_path_for_qt_packages}
+    )
+    if (NOT @INSTALL_CMAKE_NAMESPACE@${module}_FOUND)
+        string(CONFIGURE ${_qt5_module_location_template} _expected_module_location @ONLY)
+
+        if (@INSTALL_CMAKE_NAMESPACE@_FIND_REQUIRED_${module})
+            set(_Qt_NOTFOUND_MESSAGE "${_Qt_NOTFOUND_MESSAGE}Failed to find Qt component \"${module}\" config file at                                       \"${_expected_module_location}\"\n")
+        elseif(NOT @INSTALL_CMAKE_NAMESPACE@_FIND_QUIETLY)
+            message(WARNING "Failed to find Qt component \"${module}\" config file at \"${_expected_module_location}\"")
+        endif()
+
+        unset(_expected_module_location)
+    endif()
+endforeach()
+
+if (_Qt_NOTFOUND_MESSAGE)
+    set(@INSTALL_CMAKE_NAMESPACE@_NOT_FOUND_MESSAGE "${_Qt_NOTFOUND_MESSAGE}")
+    set(@INSTALL_CMAKE_NAMESPACE@_FOUND False)
+endif()

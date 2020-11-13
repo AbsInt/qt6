@@ -1,0 +1,13 @@
+include(config.qdocconf)
+project = OutputFromQDocFiles
+description = "A test project for QDoc build artifacts"
+buildversion = "$project - $description"
+moduleheader =
+
+sources = ../outputfromqdocfiles/qdoctests-outputfromqdocfiles.qdoc
+
+macro.beginqdoc = "\\c {/*!}"
+macro.endqdoc = "\\c */"
+macro.PROD = QDoc
+
+defines = test_navigation

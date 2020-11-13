@@ -1,0 +1,24 @@
+# Generated from compose.pro.
+
+#####################################################################
+## QComposePlatformInputContextPlugin Plugin:
+#####################################################################
+
+qt_internal_add_plugin(QComposePlatformInputContextPlugin
+    OUTPUT_NAME composeplatforminputcontextplugin
+    TYPE platforminputcontexts
+    SOURCES
+        qcomposeplatforminputcontext.cpp qcomposeplatforminputcontext.h
+        qcomposeplatforminputcontextmain.cpp
+    LIBRARIES
+        XKB::XKB
+    PUBLIC_LIBRARIES
+        Qt::Core
+        Qt::CorePrivate
+        Qt::Gui
+        Qt::GuiPrivate
+)
+
+#### Keys ignored in scope 1:.:.:compose.pro:<TRUE>:
+# OTHER_FILES = "$$PWD/compose.json"
+# PLUGIN_EXTENDS = "-"

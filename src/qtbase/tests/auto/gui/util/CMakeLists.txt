@@ -1,0 +1,14 @@
+# Generated from util.pro.
+
+add_subdirectory(qdesktopservices)
+add_subdirectory(qdoublevalidator)
+add_subdirectory(qintvalidator)
+add_subdirectory(qregularexpressionvalidator)
+add_subdirectory(qshadergenerator)
+add_subdirectory(qshadergraph)
+add_subdirectory(qshadergraphloader)
+add_subdirectory(qshadernodes)
+add_subdirectory(qshadernodesloader)
+add_subdirectory(qtexturefilereader)
+add_subdirectory(qundogroup)
+add_subdirectory(qundostack)

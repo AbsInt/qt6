@@ -1,0 +1,14 @@
+[constructor]
+rhel
+[length]
+rhel
+[toEncryptedPemOrDer]
+rhel
+[toPemOrDer]
+rhel
+
+# QTBUG-87386
+[passphraseChecks]
+android
+[noPassphraseChecks]
+android

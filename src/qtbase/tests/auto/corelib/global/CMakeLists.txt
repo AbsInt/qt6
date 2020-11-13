@@ -1,0 +1,17 @@
+# Generated from global.pro.
+
+add_subdirectory(qflags)
+add_subdirectory(q_func_info)
+add_subdirectory(qgetputenv)
+add_subdirectory(qglobal)
+add_subdirectory(qnumeric)
+add_subdirectory(qfloat16)
+add_subdirectory(qkeycombination)
+add_subdirectory(qrandomgenerator)
+add_subdirectory(qlogging)
+add_subdirectory(qtendian)
+add_subdirectory(qglobalstatic)
+add_subdirectory(qhooks)
+if(WIN32)
+    add_subdirectory(qwinregistry)
+endif()
