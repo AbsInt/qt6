@@ -377,8 +377,8 @@ public:
     }
 
     void remove(qsizetype i, qsizetype n = 1);
-    void removeFirst() { Q_ASSERT(!isEmpty()); remove(0); }
-    void removeLast() { Q_ASSERT(!isEmpty()); remove(size() - 1); }
+    void removeFirst();
+    void removeLast();
     value_type takeFirst() { Q_ASSERT(!isEmpty()); value_type v = std::move(first()); remove(0); return v; }
     value_type takeLast() { Q_ASSERT(!isEmpty()); value_type v = std::move(last()); remove(size() - 1); return v; }
 
@@ -639,23 +639,30 @@ inline void QList<T>::remove(qsizetype i, qsizetype n)
     if (n == 0)
         return;
 
-    const auto newSize = size() - n;
-    if (d->needsDetach() ||
-            ((d->flags() & Data::CapacityReserved) == 0
-             && newSize < d->allocatedCapacity()/2)) {
-        // allocate memory
-        DataPointer detached(Data::allocate(d->detachCapacity(newSize)));
-        const_iterator where = constBegin() + i;
-        if (newSize) {
-            detached->copyAppend(constBegin(), where);
-            detached->copyAppend(where + n, constEnd());
-        }
-        d.swap(detached);
-    } else {
-        // we're detached and we can just move data around
-        d->erase(d->begin() + i, d->begin() + i + n);
-    }
+    if (d->needsDetach())
+        d.detach();
+
+    d->erase(d->begin() + i, d->begin() + i + n);
 }
+
+template <typename T>
+inline void QList<T>::removeFirst()
+{
+    Q_ASSERT(!isEmpty());
+    if (d->needsDetach())
+        d.detach();
+    d->eraseFirst();
+}
+
+template <typename T>
+inline void QList<T>::removeLast()
+{
+    Q_ASSERT(!isEmpty());
+    if (d->needsDetach())
+        detach();
+    d->eraseLast();
+}
+
 
 template<typename T>
 inline T QList<T>::value(qsizetype i, parameter_type defaultValue) const

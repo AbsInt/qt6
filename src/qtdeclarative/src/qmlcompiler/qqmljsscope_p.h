@@ -101,7 +101,8 @@ public:
     enum class AccessSemantics {
         Reference,
         Value,
-        None
+        None,
+        Sequence
     };
 
     enum Flag {
@@ -165,8 +166,13 @@ public:
     bool hasMethod(const QString &name) const;
     QQmlJSMetaMethod method(const QString &name) const;
 
-    void addEnum(const QQmlJSMetaEnum &fakeEnum) { m_enums.insert(fakeEnum.name(), fakeEnum); }
-    QHash<QString, QQmlJSMetaEnum> enums() const { return m_enums; }
+    void addEnumeration(const QQmlJSMetaEnum &enumeration)
+    {
+        m_enumerations.insert(enumeration.name(), enumeration);
+    }
+    QHash<QString, QQmlJSMetaEnum> enumerations() const { return m_enumerations; }
+    QQmlJSMetaEnum enumeration(const QString &name) const { return m_enumerations.value(name); }
+    bool hasEnumeration(const QString &name) const { return m_enumerations.contains(name); }
 
     QString fileName() const { return m_fileName; }
     void setFileName(const QString &file) { m_fileName = file; }
@@ -199,6 +205,10 @@ public:
     QString attachedTypeName() const { return m_attachedTypeName; }
     void setAttachedTypeName(const QString &name) { m_attachedTypeName = name; }
     QQmlJSScope::ConstPtr attachedType() const { return m_attachedType; }
+
+    QString valueTypeName() const { return m_valueTypeName; }
+    void setValueTypeName(const QString &name) { m_valueTypeName = name; }
+    QQmlJSScope::ConstPtr valueType() const { return m_valueType; }
 
     bool isSingleton() const { return m_flags & Singleton; }
     bool isCreatable() const { return m_flags & Creatable; }
@@ -234,6 +244,15 @@ public:
         return m_sourceLocation;
     }
 
+    static QQmlJSScope::ConstPtr nonCompositeBaseType(const QQmlJSScope::ConstPtr &type)
+    {
+        for (QQmlJSScope::ConstPtr base = type; base; base = base->baseType()) {
+            if (!base->isComposite())
+                return base;
+        }
+        return {};
+    }
+
 private:
     QQmlJSScope(ScopeType type, const QQmlJSScope::Ptr &parentScope = QQmlJSScope::Ptr());
 
@@ -241,7 +260,7 @@ private:
 
     QMultiHash<QString, QQmlJSMetaMethod> m_methods;
     QHash<QString, QQmlJSMetaProperty> m_properties;
-    QHash<QString, QQmlJSMetaEnum> m_enums;
+    QHash<QString, QQmlJSMetaEnum> m_enumerations;
 
     QVector<QQmlJSScope::Ptr> m_childScopes;
     QQmlJSScope::WeakPtr m_parentScope;
@@ -257,6 +276,9 @@ private:
     QString m_defaultPropertyName;
     QString m_attachedTypeName;
     QQmlJSScope::WeakConstPtr m_attachedType;
+
+    QString m_valueTypeName;
+    QQmlJSScope::WeakConstPtr m_valueType;
 
     Flags m_flags;
     AccessSemantics m_semantics = AccessSemantics::Reference;

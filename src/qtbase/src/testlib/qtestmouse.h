@@ -77,7 +77,6 @@ namespace QTest
 {
     enum MouseAction { MousePress, MouseRelease, MouseClick, MouseDClick, MouseMove };
 
-    extern Q_TESTLIB_EXPORT Qt::MouseButton lastMouseButton; // ### unsued
     extern Q_TESTLIB_EXPORT int lastMouseTimestamp;
 
     // This value is used to emulate timestamps to avoid creating double clicks by mistake.
@@ -138,7 +137,6 @@ namespace QTest
             qtestMouseButtons.setFlag(button, true);
             qt_handleMouseEvent(w, pos, global, qtestMouseButtons, button, QEvent::MouseButtonPress,
                                 stateKey, ++lastMouseTimestamp);
-            lastMouseButton = button; // ### unsued
             if (action == MousePress)
                 break;
             Q_FALLTHROUGH();
@@ -147,7 +145,6 @@ namespace QTest
             qt_handleMouseEvent(w, pos, global, qtestMouseButtons, button, QEvent::MouseButtonRelease,
                                 stateKey, ++lastMouseTimestamp);
             lastMouseTimestamp += mouseDoubleClickInterval; // avoid double clicks being generated
-            lastMouseButton = Qt::NoButton; // ### unsued
             break;
         case MouseMove:
             qt_handleMouseEvent(w, pos, global, qtestMouseButtons, Qt::NoButton, QEvent::MouseMove,
@@ -211,21 +208,21 @@ namespace QTest
 
         stateKey &= static_cast<unsigned int>(Qt::KeyboardModifierMask);
 
-        QMouseEvent me(QEvent::User, QPointF(), Qt::LeftButton, QTestPrivate::qtestMouseButtons, stateKey, QPointingDevice::primaryPointingDevice());
+        QEvent::Type meType;
+        Qt::MouseButton meButton;
         switch (action)
         {
             case MousePress:
-                me = QMouseEvent(QEvent::MouseButtonPress, pos, widget->mapToGlobal(pos), button, button, stateKey, QPointingDevice::primaryPointingDevice());
-                me.setTimestamp(++lastMouseTimestamp);
+                meType = QEvent::MouseButtonPress;
+                meButton = button;
                 break;
             case MouseRelease:
-                me = QMouseEvent(QEvent::MouseButtonRelease, pos, widget->mapToGlobal(pos), button, Qt::MouseButton(), stateKey, QPointingDevice::primaryPointingDevice());
-                me.setTimestamp(++lastMouseTimestamp);
-                lastMouseTimestamp += mouseDoubleClickInterval; // avoid double clicks being generated
+                meType = QEvent::MouseButtonRelease;
+                meButton = Qt::MouseButton();
                 break;
             case MouseDClick:
-                me = QMouseEvent(QEvent::MouseButtonDblClick, pos, widget->mapToGlobal(pos), button, button, stateKey, QPointingDevice::primaryPointingDevice());
-                me.setTimestamp(++lastMouseTimestamp);
+                meType = QEvent::MouseButtonDblClick;
+                meButton = button;
                 break;
             case MouseMove:
                 QCursor::setPos(widget->mapToGlobal(pos));
@@ -238,6 +235,11 @@ namespace QTest
             default:
                 QTEST_ASSERT(false);
         }
+        QMouseEvent me(meType, pos, widget->mapToGlobal(pos), button, meButton, stateKey, QPointingDevice::primaryPointingDevice());
+        me.setTimestamp(++lastMouseTimestamp);
+        if (action == MouseRelease) // avoid double clicks being generated
+            lastMouseTimestamp += mouseDoubleClickInterval;
+
         QSpontaneKeyEvent::setSpontaneous(&me);
         if (!qApp->notify(widget, &me)) {
             static const char *const mouseActionNames[] =

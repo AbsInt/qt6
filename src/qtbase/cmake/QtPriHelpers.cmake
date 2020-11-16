@@ -152,9 +152,11 @@ function(qt_generate_module_pri_file target)
                         "${property_prefix}QT_MODULE_PRI_EXTRA_CONTENT")
     get_target_property(module_ldflags "${target}"
                         "${property_prefix}QT_MODULE_LDFLAGS")
+    get_target_property(module_depends "${target}"
+                        "${property_prefix}QT_MODULE_DEPENDS")
 
     foreach(var enabled_features disabled_features enabled_private_features disabled_private_features
-            module_internal_config module_uses module_pri_extra_content module_ldflags)
+            module_internal_config module_uses module_pri_extra_content module_ldflags module_depends)
         if(${var} STREQUAL "${var}-NOTFOUND")
             set(${var} "")
         else()
@@ -204,6 +206,12 @@ function(qt_generate_module_pri_file target)
         set(module_name_in_pri "${module_versioned}")
     endif()
 
+    if(arg_HEADER_MODULE)
+        set(module_name_in_pri "")
+    else()
+        set(module_name_in_pri "${module_name_in_pri}${QT_LIBINFIX}")
+    endif()
+
     get_target_property(hasModuleHeaders ${target} INTERFACE_MODULE_HAS_HEADERS)
     if (NOT hasModuleHeaders)
         unset(public_module_includes)
@@ -240,6 +248,7 @@ function(qt_generate_module_pri_file target)
 
     qt_get_direct_module_dependencies(${target} public_module_dependencies)
     list(JOIN public_module_dependencies " " public_module_dependencies)
+    set(public_module_dependencies "${module_depends} ${public_module_dependencies}")
 
     qt_path_join(pri_file_name "${target_path}" "qt_lib_${config_module_name}.pri")
     list(APPEND pri_files "${pri_file_name}")
@@ -265,7 +274,7 @@ function(qt_generate_module_pri_file target)
         CONTENT
     "QT.${config_module_name}.VERSION = ${PROJECT_VERSION}
 QT.${config_module_name}.name = ${module}
-QT.${config_module_name}.module = ${module_name_in_pri}${QT_LIBINFIX}
+QT.${config_module_name}.module = ${module_name_in_pri}
 QT.${config_module_name}.libs = $$QT_MODULE_LIB_BASE
 QT.${config_module_name}.ldflags = ${module_ldflags}
 QT.${config_module_name}.includes = ${public_module_includes}

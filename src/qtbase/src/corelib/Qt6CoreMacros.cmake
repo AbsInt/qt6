@@ -580,7 +580,7 @@ endif()
 # the --output-json parameter.
 # Params:
 #   INSTALL_DIR: Location where to install the metatypes file. For public consumption,
-#                defaults to a ${CMAKE_INSTALL_PREFIX}/lib/metatypes directory.
+#                defaults to a ${CMAKE_INSTALL_PREFIX}/${INSTALL_LIBDIR}/metatypes directory.
 #                Executable metatypes files are never installed.
 #   COPY_OVER_INSTALL: (Qt Internal) When present will install the file via a post build step
 #   copy rather than using install.
@@ -614,7 +614,12 @@ function(qt6_extract_metatypes target)
 
     # Automatically fill default install args when not specified.
     if (NOT arg_INSTALL_DIR)
-        set(arg_INSTALL_DIR "lib/metatypes")
+        # INSTALL_LIBDIR is not set when QtBuildInternals is not loaded (when not doing a Qt build).
+        if(INSTALL_LIBDIR)
+            set(arg_INSTALL_DIR "${INSTALL_LIBDIR}/metatypes")
+        else()
+            set(arg_INSTALL_DIR "lib/metatypes")
+        endif()
     endif()
 
     get_target_property(target_binary_dir ${target} BINARY_DIR)
@@ -1023,6 +1028,13 @@ END
             set(cfgs "${CMAKE_BUILD_TYPE}")
             set(outputs "${rc_file_output}")
         endif()
+
+        # We would like to do the following:
+        #     target_sources(${target} PRIVATE "$<$<CONFIG:${cfg}>:${output}>")
+        # However, https://gitlab.kitware.com/cmake/cmake/-/issues/20682 doesn't let us.
+        # Work-around by compiling the resources in an object lib and linking that.
+        add_library(${target}_rc OBJECT "${output}")
+        target_link_libraries(${target} PRIVATE $<TARGET_OBJECTS:${target}_rc>)
         while(outputs)
             list(POP_FRONT cfgs cfg)
             list(POP_FRONT outputs output)
@@ -1031,12 +1043,7 @@ END
                 DEPENDS "${input}"
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different "${input}" "${output}"
             )
-
-            # We would like to do the following:
-            #     target_sources(${target} PRIVATE "$<$<CONFIG:${cfg}>:${output}>")
-            # However, https://gitlab.kitware.com/cmake/cmake/-/issues/20682 doesn't let us.
-            add_library(${target}_${cfg}_rc OBJECT "${output}")
-            target_link_libraries(${target} PRIVATE "$<$<CONFIG:${cfg}>:${target}_${cfg}_rc>")
+            target_sources(${target}_rc PRIVATE "$<$<CONFIG:${cfg}>:${output}>")
         endwhile()
     endif()
 endfunction()
@@ -1101,7 +1108,11 @@ endfunction()
 #
 function(_qt_internal_process_resource target resourceName)
 
-    cmake_parse_arguments(rcc "" "PREFIX;LANG;BASE;OUTPUT_TARGETS" "FILES;OPTIONS" ${ARGN})
+    cmake_parse_arguments(rcc "" "PREFIX;LANG;BASE;OUTPUT_TARGETS;DESTINATION" "FILES;OPTIONS" ${ARGN})
+
+    if("${rcc_OPTIONS}" MATCHES "-binary")
+        set(isBinary TRUE)
+    endif()
 
     string(REPLACE "/" "_" resourceName ${resourceName})
     string(REPLACE "." "_" resourceName ${resourceName})
@@ -1155,8 +1166,8 @@ function(_qt_internal_process_resource target resourceName)
         return()
     endif()
     list(APPEND output_targets ${output_target_quick})
-    set(generatedResourceFile "${CMAKE_CURRENT_BINARY_DIR}/.rcc/generated_${newResourceName}.qrc")
-    set(generatedSourceCode "${CMAKE_CURRENT_BINARY_DIR}/.rcc/qrc_${newResourceName}.cpp")
+    set(generatedBaseName "generated_${newResourceName}")
+    set(generatedResourceFile "${CMAKE_CURRENT_BINARY_DIR}/.rcc/${generatedBaseName}.qrc")
 
     # Generate .qrc file:
 
@@ -1203,10 +1214,8 @@ function(_qt_internal_process_resource target resourceName)
     set(qt_core_configure_file_contents "${qrcContents}")
     configure_file("${template_file}" "${generatedResourceFile}")
 
-    set_property(TARGET ${target} APPEND PROPERTY _qt_generated_qrc_files "${generatedResourceFile}")
+    set(rccArgs --name "${newResourceName}" "${generatedResourceFile}")
 
-    set(rccArgs --name "${newResourceName}"
-        --output "${generatedSourceCode}" "${generatedResourceFile}")
     if(rcc_OPTIONS)
         list(APPEND rccArgs ${rcc_OPTIONS})
     endif()
@@ -1221,10 +1230,29 @@ function(_qt_internal_process_resource target resourceName)
         list(APPEND rccArgs "--no-zstd")
     endif()
 
+    set_property(SOURCE "${generatedResourceFile}" PROPERTY SKIP_AUTOGEN ON)
+
+    # Set output file name for rcc command
+    if(isBinary)
+        set(generatedOutfile "${CMAKE_CURRENT_BINARY_DIR}/${generatedBaseName}.rcc")
+        if(rcc_DESTINATION)
+            # Add .rcc suffix if it's not specified by user
+            get_filename_component(destinationRccExt "${rcc_DESTINATION}" LAST_EXT)
+            if("${destinationRccExt}" STREQUAL ".rcc")
+                set(generatedOutfile "${rcc_DESTINATION}")
+            else()
+                set(generatedOutfile "${rcc_DESTINATION}.rcc")
+            endif()
+        endif()
+    else()
+        set(generatedOutfile "${CMAKE_CURRENT_BINARY_DIR}/.rcc/qrc_${newResourceName}.cpp")
+    endif()
+
+    list(PREPEND rccArgs --output "${generatedOutfile}")
+
     # Process .qrc file:
-    add_custom_command(OUTPUT "${generatedSourceCode}"
-                       COMMAND "${QT_CMAKE_EXPORT_NAMESPACE}::rcc"
-                       ARGS ${rccArgs}
+    add_custom_command(OUTPUT "${generatedOutfile}"
+                       COMMAND "${QT_CMAKE_EXPORT_NAMESPACE}::rcc" ${rccArgs}
                        DEPENDS
                         ${resource_dependencies}
                         ${generatedResourceFile}
@@ -1232,18 +1260,25 @@ function(_qt_internal_process_resource target resourceName)
                        COMMENT "RCC ${newResourceName}"
                        VERBATIM)
 
-    get_target_property(type "${target}" TYPE)
-    # Only do this if newResourceName is the same as resourceName, since
-    # the resource will be chainloaded by the qt quickcompiler
-    # qml cache loader
-    if(newResourceName STREQUAL resourceName)
-        __qt_propagate_generated_resource(${target} ${resourceName} "${generatedSourceCode}" output_target)
-        list(APPEND output_targets ${output_target})
+    if(isBinary)
+        # Add generated .rcc target to 'all' set
+        add_custom_target(binary_resource_${generatedBaseName} ALL DEPENDS "${generatedOutfile}")
     else()
-        target_sources(${target} PRIVATE "${generatedSourceCode}")
-    endif()
-    if (rcc_OUTPUT_TARGETS)
-        set(${rcc_OUTPUT_TARGETS} "${output_targets}" PARENT_SCOPE)
+        set_property(SOURCE "${generatedOutfile}" PROPERTY SKIP_AUTOGEN ON)
+        set_property(TARGET ${target} APPEND PROPERTY _qt_generated_qrc_files "${generatedResourceFile}")
+
+        # Only do this if newResourceName is the same as resourceName, since
+        # the resource will be chainloaded by the qt quickcompiler
+        # qml cache loader
+        if(newResourceName STREQUAL resourceName)
+            __qt_propagate_generated_resource(${target} ${resourceName} "${generatedOutfile}" output_target)
+            list(APPEND output_targets ${output_target})
+        else()
+            target_sources(${target} PRIVATE "${generatedOutfile}")
+        endif()
+        if (rcc_OUTPUT_TARGETS)
+            set(${rcc_OUTPUT_TARGETS} "${output_targets}" PARENT_SCOPE)
+        endif()
     endif()
 endfunction()
 
@@ -1338,104 +1373,4 @@ function(_qt_internal_apply_strict_cpp target)
                 OBJCXX_EXTENSIONS OFF)
         endif()
     endif()
-endfunction()
-
-# Sets up auto-linkage of platform-specific entry points.
-#
-# See qt_internal_setup_startup_target() in qtbase/cmake/QtStartupHelpers.cmake for the internal
-# implementation counterpart.
-#
-# A project that uses Qt can opt-out of this auto-linking behavior by either setting the
-# QT_NO_LINK_QTMAIN property to TRUE on a target, or by setting the
-# QT_NO_LINK_QTMAIN variable to TRUE before the find_package(Qt6) call.
-#
-# QT_NO_LINK_QTMAIN replaces the old Qt5_NO_LINK_QTMAIN name for both the property and variable
-#name.
-#
-# This function is called by Qt6CoreConfigExtras.cmake at find_package(Qt6Core) time.
-# The reason the linkage is done at find_package() time instead of Qt build time is to allow
-# opting out via a variable. This ensures compatibility with Qt5 behavior.
-# If it was done at build time, opt-out could only be achieved via the property.
-function(_qt_internal_setup_startup_target)
-    set(target "${QT_CMAKE_EXPORT_NAMESPACE}::Startup")
-    set(dependent_target "${QT_CMAKE_EXPORT_NAMESPACE}::Core")
-
-    # Get actual Core target name.
-    get_target_property(dependent_aliased_target "${dependent_target}" ALIASED_TARGET)
-    if(dependent_aliased_target)
-        set(dependent_target "${dependent_aliased_target}")
-    endif()
-
-    # Check if Core is being built as part of current CMake invocation.
-    # If it is, that means the Core target scope is global and the same scope should be set for the
-    # to-be-created Startup target, to avoid creating 100s of local IMPORTED Startup targets
-    # when building with -DBUILD_TESTING=ON and -DBUILD_EXAMPLES=ON due to multiple
-    # find_package(Qt6Core) calls.
-    get_target_property(core_imported "${dependent_target}" IMPORTED)
-    set(create_global "")
-    if(NOT core_imported)
-        set(create_global "GLOBAL")
-    endif()
-
-    # Create Startup only if it's not available in the current scope.
-    # Guards against multiple find_package(Qt6Core) calls.
-    if(NOT TARGET "${target}")
-        add_library("${target}" INTERFACE IMPORTED ${create_global})
-    endif()
-
-    # Allow variable opt-out. Has to be after target creation, because Core always links against
-    # Startup.
-    if(QT_NO_LINK_QTMAIN)
-        return()
-    endif()
-
-    # find_package(Qt6Core) can be called multiple times, but we only want to set the flags once.
-    set(initialized_prop "_qt_startup_target_initialized")
-    get_target_property(initialized "${target}" "${initialized_prop}")
-    if(initialized)
-        return()
-    else()
-        set_target_properties("${target}" PROPERTIES "${initialized_prop}" TRUE)
-    endif()
-
-    # On Windows this enables automatic linkage to QtEntryPoint.
-    # On iOS this enables automatic passing of a linker flag that will change the default
-    # entry point of the linked executable.
-    set(isExe "$<STREQUAL:$<TARGET_PROPERTY:TYPE>,EXECUTABLE>")
-    set(isNotExcluded "$<NOT:$<BOOL:$<TARGET_PROPERTY:QT_NO_LINK_QTMAIN>>>")
-    if(WIN32)
-        set(isWin32 "$<BOOL:$<TARGET_PROPERTY:WIN32_EXECUTABLE>>")
-        set(isPolicyNEW "$<TARGET_POLICY:CMP0020>")
-        set(finalGenex "$<$<AND:${isExe},${isWin32},${isNotExcluded},${isPolicyNEW}>:Qt::EntryPoint>")
-
-        # Use set_target_properties instead of target_link_libraries because the latter has some
-        # weird additional behavior of checking which project the target belongs to, and might
-        # error out when called multiple times from different scopes.
-        set_target_properties("${target}" PROPERTIES INTERFACE_LINK_LIBRARIES "${finalGenex}")
-    elseif(CMAKE_SYSTEM_NAME STREQUAL "iOS")
-        set(flag "-Wl,-e,_qt_main_wrapper")
-        set(finalGenex "$<$<AND:${isExe},${isNotExcluded}>:${flag}>")
-
-        set_target_properties("${target}" PROPERTIES INTERFACE_LINK_OPTIONS "${finalGenex}")
-    endif()
-
-    # Set up the dependency on Startup for the local Core target, if it hasn't been set yet.
-    set(initialized_prop "_qt_core_startup_dependency_initialized")
-    get_target_property(initialized "${dependent_target}" "${initialized_prop}")
-    if(initialized)
-        get_target_property(thelibs "${dependent_target}" INTERFACE_LINK_LIBRARIES)
-        return()
-    else()
-        set_target_properties("${dependent_target}" PROPERTIES "${initialized_prop}" TRUE)
-
-        # Export the initialized property on Core, to ensure that Core links against Startup
-        # only once in a non-qtbase project.
-        if(NOT core_imported)
-            set_property(TARGET "${dependent_target}" APPEND PROPERTY
-                                 EXPORT_PROPERTIES "${initialized_prop}")
-        endif()
-    endif()
-
-    target_link_libraries("${dependent_target}" INTERFACE "${target}")
-    get_target_property(thelibs "${dependent_target}" INTERFACE_LINK_LIBRARIES)
 endfunction()

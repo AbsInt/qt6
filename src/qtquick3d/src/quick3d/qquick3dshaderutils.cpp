@@ -33,7 +33,7 @@
 #include <QtQml/qqmlcontext.h>
 #include <QtQml/qqmlfile.h>
 
-#include <QtQuick3D/private/qquick3dmaterial_p.h>
+#include <QtQuick3D/private/qquick3dcustommaterial_p.h>
 #include <QtQuick3D/private/qquick3deffect_p.h>
 
 QT_BEGIN_NAMESPACE
@@ -332,13 +332,13 @@ void QQuick3DShaderUtilsRenderPass::qmlAppendCommand(QQmlListProperty<QQuick3DSh
 }
 
 QQuick3DShaderUtilsRenderCommand *QQuick3DShaderUtilsRenderPass::qmlCommandAt(QQmlListProperty<QQuick3DShaderUtilsRenderCommand> *list,
-                                                                              int index)
+                                                                              qsizetype index)
 {
     QQuick3DShaderUtilsRenderPass *that = qobject_cast<QQuick3DShaderUtilsRenderPass *>(list->object);
     return that->m_commands.at(index);
 }
 
-int QQuick3DShaderUtilsRenderPass::qmlCommandCount(QQmlListProperty<QQuick3DShaderUtilsRenderCommand> *list)
+qsizetype QQuick3DShaderUtilsRenderPass::qmlCommandCount(QQmlListProperty<QQuick3DShaderUtilsRenderCommand> *list)
 {
     QQuick3DShaderUtilsRenderPass *that = qobject_cast<QQuick3DShaderUtilsRenderPass *>(list->object);
     return that->m_commands.count();
@@ -379,13 +379,13 @@ void QQuick3DShaderUtilsRenderPass::qmlAppendShader(QQmlListProperty<QQuick3DSha
 }
 
 QQuick3DShaderUtilsShader *QQuick3DShaderUtilsRenderPass::qmlShaderAt(QQmlListProperty<QQuick3DShaderUtilsShader> *list,
-                                                                      int index)
+                                                                      qsizetype index)
 {
     QQuick3DShaderUtilsRenderPass *that = qobject_cast<QQuick3DShaderUtilsRenderPass *>(list->object);
     return that->m_shaders.at(index);
 }
 
-int QQuick3DShaderUtilsRenderPass::qmlShaderCount(QQmlListProperty<QQuick3DShaderUtilsShader> *list)
+qsizetype QQuick3DShaderUtilsRenderPass::qmlShaderCount(QQmlListProperty<QQuick3DShaderUtilsShader> *list)
 {
     QQuick3DShaderUtilsRenderPass *that = qobject_cast<QQuick3DShaderUtilsRenderPass *>(list->object);
     return that->m_shaders.count();
@@ -414,7 +414,7 @@ void QQuick3DShaderUtilsTextureInput::setTexture(QQuick3DTexture *texture)
 
     QObject *p = parent();
     while (p != nullptr) {
-        if (QQuick3DMaterial *mat = qobject_cast<QQuick3DMaterial *>(p)) {
+        if (QQuick3DCustomMaterial *mat = qobject_cast<QQuick3DCustomMaterial *>(p)) {
             mat->setDynamicTextureMap(texture, name);
             break;
         } else if (QQuick3DEffect *efx = qobject_cast<QQuick3DEffect *>(p)) {

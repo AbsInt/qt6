@@ -98,12 +98,12 @@ QQmlJSMetaMethod QQmlJSScope::method(const QString &name) const
 bool QQmlJSScope::isIdInCurrentQMlScopes(const QString &id) const
 {
     if (m_scopeType == QQmlJSScope::QMLScope)
-        return m_properties.contains(id) || m_methods.contains(id) || m_enums.contains(id);
+        return m_properties.contains(id) || m_methods.contains(id) || m_enumerations.contains(id);
 
     const auto qmlScope = findCurrentQMLScope(parentScope());
     return qmlScope->m_properties.contains(id)
             || qmlScope->m_methods.contains(id)
-            || qmlScope->m_enums.contains(id);
+            || qmlScope->m_enumerations.contains(id);
 }
 
 bool QQmlJSScope::isIdInCurrentJSScopes(const QString &id) const
@@ -152,6 +152,7 @@ void QQmlJSScope::resolveTypes(const QHash<QString, QQmlJSScope::ConstPtr> &cont
 
     m_baseType = findType(m_baseTypeName);
     m_attachedType = findType(m_attachedTypeName);
+    m_valueType = findType(m_valueTypeName);
 
     for (auto it = m_properties.begin(), end = m_properties.end(); it != end; ++it)
         it->setType(findType(it->typeName()));

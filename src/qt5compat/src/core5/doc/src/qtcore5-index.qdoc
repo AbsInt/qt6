@@ -27,11 +27,11 @@
 /*!
     \page qtcore5-index.html
     \title Qt 5 Core Compatibility APIs
-    \brief The Qt 5 Core Compat module provides compatibility with the old Qt Core APIs.
+    \brief The Qt 5 Core Compat module provides compatibility with Qt Core APIs.
 
-    The Qt 5 Core Compat module contains the old Qt Core APIs which will be no
+    The Qt 5 Core Compat module contains the \l{Qt Core} APIs which will be no
     longer supported in Qt 6 and therefore were removed from Qt 6. The module is
-    provided to facilitate transitioning the old code to Qt 6.
+    provided to facilitate the transition to Qt 6.
 
     \section1 Using the Module
 
@@ -48,6 +48,19 @@
     \code
     QT += core5compat
     \endcode
+
+    \section1 Licenses and Attributions
+
+    Qt 5 Core Compat is available under commercial licenses from \l{The Qt Company}.
+    In addition, it is available under free software licenses:
+    The \l{GNU Lesser General Public License, version 3}, or
+    the \l{GNU General Public License, version 2}.
+    See \l{Qt Licensing} for further details.
+
+    Furthermore, Qt 5 Core Compat in Qt \QtVersion does contain third party
+    modules under following permissive licenses:
+
+    \generatelist{groupsbymodule attributions-qtcore5}
 
     \section1 Related Information
     \list

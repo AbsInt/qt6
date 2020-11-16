@@ -38,7 +38,7 @@ exampledirs += ../../../examples/qtconcurrent \
                .. \
                .
 
-manifestmeta.highlighted.names = "QtConcurrent/QtConcurrent Progress Dialog Example"
+manifestmeta.highlighted.names = "QtConcurrent/Image Scaling Example"
 
 excludedirs += ../../../examples/widgets/doc
 

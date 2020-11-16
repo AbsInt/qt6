@@ -463,20 +463,15 @@ void QDocIndexFiles::readIndexSection(QXmlStreamReader &reader, Node *current,
 
         hasReadChildren = true;
     } else if (elementName == QLatin1String("typedef")) {
-        node = new TypedefNode(parent, name);
+        if (attributes.hasAttribute("aliasedtype"))
+            node = new TypeAliasNode(parent, name, attributes.value(QLatin1String("aliasedtype")).toString());
+        else
+            node = new TypedefNode(parent, name);
 
         if (!indexUrl.isEmpty())
             location = Location(indexUrl + QLatin1Char('/') + parent->name().toLower() + ".html");
         else if (!indexUrl.isNull())
             location = Location(parent->name().toLower() + ".html");
-
-    } else if (elementName == QLatin1String("alias")) {
-        node = new TypeAliasNode(parent, name, attributes.value(QLatin1String("aliasedtype")).toString());
-        if (!indexUrl.isEmpty())
-            location = Location(indexUrl + QLatin1Char('/') + parent->name().toLower() + ".html");
-        else if (!indexUrl.isNull())
-            location = Location(parent->name().toLower() + ".html");
-
     } else if (elementName == QLatin1String("property")) {
         PropertyNode *propNode = new PropertyNode(parent, name);
         node = propNode;
@@ -912,11 +907,9 @@ bool QDocIndexFiles::generateIndexSection(QXmlStreamWriter &writer, Node *node,
     case Node::Enum:
         nodeName = "enum";
         break;
+    case Node::TypeAlias:
     case Node::Typedef:
         nodeName = "typedef";
-        break;
-    case Node::TypeAlias:
-        nodeName = "alias";
         break;
     case Node::Property:
         nodeName = "property";
@@ -924,11 +917,17 @@ bool QDocIndexFiles::generateIndexSection(QXmlStreamWriter &writer, Node *node,
     case Node::Variable:
         nodeName = "variable";
         break;
+    case Node::SharedComment:
+        if (!node->isPropertyGroup())
+            return false;
+        // Add an entry for property groups so that they can be linked to
+        nodeName = node->genus() == Node::QML ? "qmlproperty" : "jsproperty";
+        break;
     case Node::QmlProperty:
         nodeName = "qmlproperty";
         break;
     case Node::JsProperty:
-        nodeName = "jsProperty";
+        nodeName = "jsproperty";
         break;
     case Node::Proxy:
         nodeName = "proxy";

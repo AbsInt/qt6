@@ -709,8 +709,6 @@ ExecutionEngine::ExecutionEngine(QJSEngine *jsEngine)
     static_cast<VariantPrototype *>(variantPrototype())->init();
 
 #if QT_CONFIG(qml_sequence_object)
-    static const bool registered = QV4::SequencePrototype::registerDefaultTypes();
-    Q_UNUSED(registered);
     sequencePrototype()->cast<SequencePrototype>()->init();
 #endif
 
@@ -2048,10 +2046,7 @@ void ExecutionEngine::initQmlGlobalObject()
 
 void ExecutionEngine::initializeGlobal()
 {
-    QV4::Scope scope(this);
-
-    QV4::ScopedObject qt(scope, memoryManager->allocate<QV4::QtObject>(qmlEngine()));
-    globalObject->defineDefaultProperty(QStringLiteral("Qt"), qt);
+    createQtObject();
 
     QV4::GlobalExtensions::init(globalObject, QJSEngine::AllExtensions);
 
@@ -2076,6 +2071,15 @@ void ExecutionEngine::initializeGlobal()
             }
         }
     }
+}
+
+void ExecutionEngine::createQtObject()
+{
+    QV4::Scope scope(this);
+    QtObject *qtObject = new QtObject(this);
+    QJSEngine::setObjectOwnership(qtObject, QJSEngine::JavaScriptOwnership);
+    QV4::ScopedObject qt(scope, QV4::QObjectWrapper::wrap(this, qtObject));
+    globalObject->defineDefaultProperty(QStringLiteral("Qt"), qt);
 }
 
 const QSet<QString> &ExecutionEngine::illegalNames() const

@@ -224,6 +224,8 @@ void QQmlJSTypeDescriptionReader::readComponent(UiObjectDefinition *ast)
                 readMetaObjectRevisions(script, scope);
             } else if (name == QLatin1String("attachedType")) {
                 scope->setAttachedTypeName(readStringBinding(script));
+            } else if (name == QLatin1String("valueType")) {
+                scope->setValueTypeName(readStringBinding(script));
             } else if (name == QLatin1String("isSingleton")) {
                 scope->setIsSingleton(readBoolBinding(script));
             } else if (name == QLatin1String("isCreatable")) {
@@ -238,6 +240,8 @@ void QQmlJSTypeDescriptionReader::readComponent(UiObjectDefinition *ast)
                     scope->setAccessSemantics(QQmlJSScope::AccessSemantics::Value);
                 } else if (semantics == QLatin1String("none")) {
                     scope->setAccessSemantics(QQmlJSScope::AccessSemantics::None);
+                } else if (semantics == QLatin1String("sequence")) {
+                    scope->setAccessSemantics(QQmlJSScope::AccessSemantics::Sequence);
                 } else {
                     addWarning(script->firstSourceLocation(),
                                tr("Unknown access semantics \"%1\".").arg(semantics));
@@ -245,7 +249,7 @@ void QQmlJSTypeDescriptionReader::readComponent(UiObjectDefinition *ast)
             } else {
                 addWarning(script->firstSourceLocation(),
                            tr("Expected only name, prototype, defaultProperty, attachedType, "
-                              "exports, isSingleton, isCreatable, isComposite and "
+                              "valueType, exports, isSingleton, isCreatable, isComposite and "
                               "exportMetaObjectRevisions script bindings, not \"%1\".").arg(name));
             }
         } else {
@@ -382,7 +386,7 @@ void QQmlJSTypeDescriptionReader::readEnum(UiObjectDefinition *ast, const QQmlJS
         }
     }
 
-    scope->addEnum(metaEnum);
+    scope->addEnumeration(metaEnum);
 }
 
 void QQmlJSTypeDescriptionReader::readParameter(UiObjectDefinition *ast, QQmlJSMetaMethod *metaMethod)
@@ -673,10 +677,25 @@ void QQmlJSTypeDescriptionReader::readEnumValues(UiScriptBinding *ast, QQmlJSMet
     }
 
     if (auto *objectLit = cast<ObjectPattern *>(expStmt->expression)) {
+        int currentValue = -1;
         for (PatternPropertyList *it = objectLit->properties; it; it = it->next) {
             if (PatternProperty *assignement = it->property) {
                 if (auto *name = cast<StringLiteralPropertyName *>(assignement->name)) {
                     metaEnum->addKey(name->id.toString());
+
+                    if (auto *value = AST::cast<NumericLiteral *>(assignement->initializer)) {
+                        currentValue = int(value->value);
+                    } else if (auto *minus = AST::cast<UnaryMinusExpression *>(
+                                   assignement->initializer)) {
+                        if (auto *value = AST::cast<NumericLiteral *>(minus->expression))
+                            currentValue = -int(value->value);
+                        else
+                            ++currentValue;
+                    } else {
+                        ++currentValue;
+                    }
+
+                    metaEnum->addValue(currentValue);
                     continue;
                 }
             }

@@ -326,7 +326,6 @@ void QQmlPropertyPrivate::initProperty(QObject *obj, const QString &name)
 
                 QMetaProperty vtProp = valueTypeMetaObject->property(idx);
 
-                Q_ASSERT(vtProp.userType() <= 0x0000FFFF);
                 Q_ASSERT(idx <= 0x0000FFFF);
 
                 object = currentObject;
@@ -1339,7 +1338,7 @@ bool QQmlPropertyPrivate::write(
         if (variantType == qMetaTypeId<QQmlListReference>()) {
             QQmlListReference qdlr = value.value<QQmlListReference>();
 
-            for (int ii = 0; ii < qdlr.count(); ++ii) {
+            for (qsizetype ii = 0; ii < qdlr.count(); ++ii) {
                 QObject *o = qdlr.at(ii);
                 if (o && !QQmlMetaObject::canConvert(o, listType))
                     o = nullptr;
@@ -1348,7 +1347,7 @@ bool QQmlPropertyPrivate::write(
         } else if (variantType == qMetaTypeId<QList<QObject *> >()) {
             const QList<QObject *> &list = qvariant_cast<QList<QObject *> >(value);
 
-            for (int ii = 0; ii < list.count(); ++ii) {
+            for (qsizetype ii = 0; ii < list.count(); ++ii) {
                 QObject *o = list.at(ii);
                 if (o && !QQmlMetaObject::canConvert(o, listType))
                     o = nullptr;

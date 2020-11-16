@@ -67,6 +67,7 @@ private slots:
     void dontDocument();
     void inheritedQmlPropertyGroups();
     void crossModuleLinking();
+    void indexLinking();
     void includeFromExampleDirs();
     void singleExec();
     void preparePhase();
@@ -98,7 +99,7 @@ void tst_generatedOutput::initTestCase()
     const auto binpath = QLibraryInfo::path(QLibraryInfo::BinariesPath);
     const auto extension = QSysInfo::productType() == "windows" ? ".exe" : "";
     m_qdoc = binpath + QLatin1String("/qdoc") + extension;
-    m_expectedDir.setPath(QFINDTESTDATA(".") + QLatin1String("/expected_output"));
+    m_expectedDir.setPath(QFINDTESTDATA("expected_output"));
 
     // Resolve the path to the file containing extra parameters
     m_extraParams = QFileInfo(QTest::currentAppName()).dir().filePath("qdocincludepaths.inc");
@@ -363,6 +364,7 @@ void tst_generatedOutput::templateParameters()
     testAndCompare("testdata/configs/testtemplate.qdocconf",
                    "template/testqdoc-test.html "
                    "template/testqdoc-test-struct.html "
+                   "template/testqdoc-vec.html "
                    "template/foo.html "
                    "template/bar.html "
                    "template/baz.html");
@@ -389,6 +391,19 @@ void tst_generatedOutput::inheritedQmlPropertyGroups()
                    "qmlpropertygroups/qml-qdoc-test-anotherchild-members.html "
                    "qmlpropertygroups/qml-qdoc-test-parent.html "
                    "qmlpropertygroups-docbook/qml-qdoc-test-parent.xml");
+}
+
+void tst_generatedOutput::indexLinking()
+{
+    {
+        QScopedValueRollback<bool> skipRegen(m_regen, false);
+        inheritedQmlPropertyGroups();
+    }
+    copyIndexFiles();
+    QString indexDir = QLatin1String("-indexdir ") +  m_outputDir->path();
+    testAndCompare("testdata/indexlinking/indexlinking.qdocconf",
+                   "index-linking.html",
+                   indexDir.toLatin1().data());
 }
 
 void tst_generatedOutput::crossModuleLinking()

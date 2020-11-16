@@ -13,6 +13,7 @@ qt_internal_add_qml_module(qtquick3deffectplugin
         QtQuick3D/1.15
         QtQuick.Window/2.1
     GENERATE_QMLTYPES
+    INSTALL_QMLTYPES
     SOURCES
         plugin.cpp
     PUBLIC_LIBRARIES
@@ -88,6 +89,79 @@ qt_internal_add_resource(qtquick3deffectplugin "qteffectlibrary"
 
 ## Scopes:
 #####################################################################
+
+if(QT_FEATURE_quick_designer AND QT_BUILD_SHARED_LIBS) # special case handle unconverted static
+    get_target_property(__aux_qml_files_install_base qtquick3deffectplugin QT_QML_MODULE_INSTALL_DIR)
+
+    qt_path_join(__aux_qml_files_install_dir "${__aux_qml_files_install_base}" "designer")
+
+    qt_copy_or_install(
+        FILES
+            designer/AdditiveColorGradientSection.qml
+            designer/AdditiveColorGradientSpecifics.qml
+            designer/BlurSection.qml
+            designer/BlurSpecifics.qml
+            designer/BrushStrokesSection.qml
+            designer/BrushStrokesSpecifics.qml
+            designer/ChromaticAberrationSection.qml
+            designer/ChromaticAberrationSpecifics.qml
+            designer/ColorMasterSection.qml
+            designer/ColorMasterSpecifics.qml
+            designer/DepthOfFieldHQBlurSection.qml
+            designer/DepthOfFieldHQBlurSpecifics.qml
+            designer/DesaturateSection.qml
+            designer/DesaturateSpecifics.qml
+            designer/DistortionRippleSection.qml
+            designer/DistortionRippleSpecifics.qml
+            designer/DistortionSphereSection.qml
+            designer/DistortionSphereSpecifics.qml
+            designer/DistortionSpiralSection.qml
+            designer/DistortionSpiralSpecifics.qml
+            designer/EdgeDetectSection.qml
+            designer/EdgeDetectSpecifics.qml
+            designer/EffectSection.qml
+            designer/EffectSpecifics.qml
+            designer/EmbossSection.qml
+            designer/EmbossSpecifics.qml
+            designer/FlipSection.qml
+            designer/FlipSpecifics.qml
+            designer/FxaaSection.qml
+            designer/FxaaSpecifics.qml
+            designer/GaussianBlurSection.qml
+            designer/GaussianBlurSpecifics.qml
+            designer/HDRBloomTonemapSection.qml
+            designer/HDRBloomTonemapSpecifics.qml
+            designer/IdComboBox.qml
+            designer/MotionBlurSection.qml
+            designer/MotionBlurSpecifics.qml
+            designer/SCurveTonemapSection.qml
+            designer/SCurveTonemapSpecifics.qml
+            designer/ScatterSection.qml
+            designer/ScatterSpecifics.qml
+            designer/TiltShiftSection.qml
+            designer/TiltShiftSpecifics.qml
+            designer/VignetteSection.qml
+            designer/VignetteSpecifics.qml
+            designer/effectlib.metainfo
+        DESTINATION "${__aux_qml_files_install_dir}")
+
+    qt_path_join(__aux_qml_files_install_dir "${__aux_qml_files_install_base}" "designer/source")
+
+    qt_copy_or_install(
+        FILES
+            designer/source/effect_default_shader.frag
+            designer/source/effect_template.qml
+        DESTINATION "${__aux_qml_files_install_dir}")
+
+    qt_path_join(__aux_qml_files_install_dir "${__aux_qml_files_install_base}" "designer/images")
+
+    qt_copy_or_install(
+        FILES
+            designer/images/effect.png
+            designer/images/effect16.png
+            designer/images/effect@2x.png
+        DESTINATION "${__aux_qml_files_install_dir}")
+endif()
 
 set(qml_files
     "Vignette.qml"

@@ -242,15 +242,14 @@ QString XmlGenerator::refForNode(const Node *node)
     case Node::Enum:
         ref = node->name() + "-enum";
         break;
-    case Node::TypeAlias:
-        ref = node->name() + "-alias";
-        break;
     case Node::Typedef: {
-        const auto tdn = static_cast<const TypedefNode *>(node);
-        if (tdn->associatedEnum())
-            return refForNode(tdn->associatedEnum());
+        const auto *tdf = static_cast<const TypedefNode *>(node);
+        if (tdf->associatedEnum())
+            return refForNode(tdf->associatedEnum());
+    } Q_FALLTHROUGH();
+    case Node::TypeAlias:
         ref = node->name() + "-typedef";
-    } break;
+        break;
     case Node::Function: {
         const auto fn = static_cast<const FunctionNode *>(node);
         switch (fn->metaness()) {
@@ -279,6 +278,10 @@ QString XmlGenerator::refForNode(const Node *node)
             break;
         }
     } break;
+    case Node::SharedComment: {
+        if (!node->isPropertyGroup())
+            break;
+    } Q_FALLTHROUGH();
     case Node::JsProperty:
     case Node::QmlProperty:
         if (node->isAttached())
@@ -291,10 +294,6 @@ QString XmlGenerator::refForNode(const Node *node)
         break;
     case Node::Variable:
         ref = node->name() + "-var";
-        break;
-    case Node::SharedComment:
-        if (node->isPropertyGroup())
-            ref = node->name() + "-prop";
         break;
     default:
         break;

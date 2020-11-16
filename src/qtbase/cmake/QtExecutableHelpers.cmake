@@ -24,14 +24,13 @@ function(qt_internal_add_executable name)
         qt_android_apply_arch_suffix("${name}")
         qt_android_generate_deployment_settings("${name}")
         qt_android_add_apk_target("${name}")
-        # On our qmake builds we don't compile the executables with
-        # visibility=hidden. Not having this flag set will cause the
-        # executable to have main() hidden and can then no longer be loaded
-        # through dlopen()
-        set_property(TARGET ${name} PROPERTY C_VISIBILITY_PRESET default)
-        set_property(TARGET ${name} PROPERTY CXX_VISIBILITY_PRESET default)
     else()
         add_executable("${name}" ${arg_EXE_FLAGS})
+    endif()
+
+    if(arg_QT_APP AND QT_FEATURE_debug_and_release AND CMAKE_VERSION VERSION_GREATER_EQUAL "3.19.0")
+        set_property(TARGET "${target}"
+            PROPERTY EXCLUDE_FROM_ALL "$<NOT:$<CONFIG:${QT_MULTI_CONFIG_FIRST_CONFIG}>>")
     endif()
 
     if (arg_VERSION)
@@ -72,6 +71,14 @@ function(qt_internal_add_executable name)
     endif()
 
     qt_set_common_target_properties(${name})
+    if(ANDROID)
+        # On our qmake builds we don't compile the executables with
+        # visibility=hidden. Not having this flag set will cause the
+        # executable to have main() hidden and can then no longer be loaded
+        # through dlopen()
+        set_property(TARGET ${name} PROPERTY C_VISIBILITY_PRESET default)
+        set_property(TARGET ${name} PROPERTY CXX_VISIBILITY_PRESET default)
+    endif()
     qt_autogen_tools_initial_setup(${name})
     qt_skip_warnings_are_errors_when_repo_unclean("${name}")
 
@@ -141,8 +148,18 @@ function(qt_internal_add_executable name)
                 RUNTIME "${arg_INSTALL_DIRECTORY}"
                 LIBRARY "${arg_INSTALL_DIRECTORY}"
                 BUNDLE "${arg_INSTALL_DIRECTORY}")
+
+            # Make installation optional for targets that are not built by default in this config
+            if(NOT exclude_from_all AND arg_QT_APP AND QT_FEATURE_debug_and_release
+                    AND NOT (cmake_config STREQUAL QT_MULTI_CONFIG_FIRST_CONFIG))
+                set(install_optional_arg "OPTIONAL")
+            else()
+                unset(install_optional_arg)
+            endif()
+
             qt_install(TARGETS "${name}"
                        ${additional_install_args} # Needs to be before the DESTINATIONS.
+                       ${install_optional_arg}
                        CONFIGURATIONS ${cmake_config}
                        ${install_targets_default_args})
         endforeach()

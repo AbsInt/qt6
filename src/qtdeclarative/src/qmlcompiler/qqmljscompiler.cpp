@@ -243,6 +243,21 @@ bool qCompileQmlFile(const QString &inputFileName, QQmlJSSaveFunction saveFuncti
                     aotFunctionsByIndex[runtimeFunctionIndices[binding.value.compiledScriptIndex]] = *func;
                 }
             });
+
+            std::for_each(object->functionsBegin(), object->functionsEnd(),
+                          [&](const QmlIR::Function &function) {
+
+                qCDebug(lcAotCompiler) << "Compiling function"
+                                       << irDocument.stringAt(function.nameIndex);
+                auto result = aotCompiler->compileFunction(function);
+                if (auto *error = std::get_if<QQmlJS::DiagnosticMessage>(&result)) {
+                    qCDebug(lcAotCompiler) << "Could not compile function:"
+                                           << diagnosticErrorMessage(inputFileName, *error);
+                } else if (auto *func = std::get_if<QQmlJSAotFunction>(&result)) {
+                    qCInfo(lcAotCompiler) << "Generated code:" << func->code;
+                    aotFunctionsByIndex[runtimeFunctionIndices[function.index]] = *func;
+                }
+            });
         }
 
         if (!checkArgumentsObjectUseInSignalHandlers(irDocument, error)) {
@@ -433,14 +448,16 @@ bool qSaveQmlJSUnitAsCpp(const QString &inputFileName, const QString &outputFile
     if (!writeStr("};\n"))
         return false;
 
-    if (aotFunctions.isEmpty()) {
+    writeStr(aotFunctions[FileScopeCodeIndex].code.toUtf8().constData());
+    if (aotFunctions.size() <= 1) {
+        // FileScopeCodeIndex is always there, but it may be the only one.
         writeStr("extern const QQmlPrivate::AOTCompiledFunction aotBuiltFunctions[] = { { 0, QMetaType::fromType<void>(), nullptr } };");
     } else {
-        writeStr(aotFunctions[FileScopeCodeIndex].code.toUtf8().constData());
         writeStr(R"(template <typename Binding>
                  void wrapCall(QQmlContext *context, QObject *scopeObject, void *dataPtr, Binding &&binding) {
                  using return_type = std::invoke_result_t<Binding, QQmlContext*, QObject*>;
                  if constexpr (std::is_same_v<return_type, void>) {
+                 Q_UNUSED(dataPtr);
                  binding(context, scopeObject);
                  } else {
                  auto result = binding(context, scopeObject);
@@ -470,6 +487,8 @@ bool qSaveQmlJSUnitAsCpp(const QString &inputFileName, const QString &outputFile
                      .toUtf8().constData());
         }
 
+        // Conclude the list with a nullptr
+        writeStr("{ 0, QMetaType::fromType<void>(), nullptr }");
         writeStr("};\n");
     }
 

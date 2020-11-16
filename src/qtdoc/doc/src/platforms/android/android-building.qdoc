@@ -97,19 +97,6 @@
 
     To build Qt for Android under a Linux environment, follow the steps below:
 
-    \section2 Installing the License File
-
-    If you use Qt with a commercial license, the Qt tools look for a local license file.
-    If you are using a binary installer or the commercial Qt Creator, your licenses
-    are automatically fetched and stored in your local user profile
-    (\c{$XDG_DATA_HOME/Qt/qtlicenses.ini} file).
-
-    If you do not use any binary installer or Qt Creator, you can download
-    the respective license file from your \l {Qt Account} Web portal and save
-    it to your user profile as \c{$HOME/.qt-license}. If you prefer a
-    different location or file name, you need to set the \c{QT_LICENSE_FILE}
-    environment variable to the respective file path.
-
     \section2 Unpacking the Archive
 
     If you have downloaded the source code archive from \l {Qt Downloads}, then
@@ -150,7 +137,7 @@
     mkdir <path_to_build_dir>/build-qt
     cd <path_to_build_dir>/build-qt
 
-    <path_to_qt_source>/configure -xplatform android-clang -prefix </path/to/install> -disable-rpath -nomake tests -nomake examples -android-ndk <path/to/sdk>/ndk/<ndk_version> -android-sdk <path/to/sdk> -qt-host-path <path_to_host_qt_installation> -android-abis arm64-v8a -no-warnings-are-errors
+    <path_to_qt_source>/configure -xplatform android-clang -prefix </path/to/install> -android-ndk <path/to/sdk>/ndk/<ndk_version> -android-sdk <path/to/sdk> -qt-host-path <path_to_host_qt_installation> -android-abis arm64-v8a
     \endcode
 
     \l{Qt Configure Options} contains more information about the configure options.
@@ -236,17 +223,6 @@
     \note Qt for Android does not support building with Microsoft Visual C++ (MSVC),
     we only support building with MinGW.
 
-    \section2 Installing the License File
-
-    If you have a commercially licensed Qt, install your license file. If you're using
-    a binary installer or the commercial Qt Creator, your licenses are automatically
-    fetched and stored in your local user profile
-    \c{%USERPROFILE%\AppData\Roaming\Qt\qtlicenses.ini}. Alternatively, you can download
-    the respective license file from your Qt Account web portal and save it to your user
-    profile as \c{%USERPROFILE%\.qt-license}. If you prefer a different location or file
-    name, you need to set the \c QT_LICENSE_FILE environment variable to the respective
-    file path.
-
     \section2 Configuring and Building on Windows
 
     If you have downloaded the source code archive from \l {Qt Downloads}, unpack
@@ -260,7 +236,7 @@
     mkdir C:\Qt\Build\build-qt
     cd C:\Qt\Build\build-qt
 
-    ..\Src_%VERSION%\configure.bat -platform win32-g++ -xplatform android-clang -prefix <\path\to\install> -nomake tests -nomake examples -android-sdk <ANDROID_SDK_PATH> -android-ndk <ANDROID_SDK_PATH>\ndk\<ndk_version> -android-ndk-host windows-x86_64 -qt-host-path <path_to_host_qt_installation> -android-abis arm64-v8a -no-warnings-are-errors
+    ..\Src_%VERSION%\configure.bat -platform win32-g++ -xplatform android-clang -prefix <\path\to\install> -android-sdk <ANDROID_SDK_PATH> -android-ndk <ANDROID_SDK_PATH>\ndk\<ndk_version> -android-ndk-host windows-x86_64 -qt-host-path <path_to_host_qt_installation> -android-abis arm64-v8a
     \endcode
 
     \l{Qt Configure Options} contains more information about the configure options.
@@ -355,28 +331,8 @@
     \c qt-cmake wrapper. For Android the following has to be be provided:
 
     \badcode
-    <qt_for_android_install_path>/bin/qt-cmake -DANDROID_SDK_ROOT=<android_sdk_path> -DCMAKE_TOOLCHAIN_FILE=<android_ndk_path>/build/cmake/android.toolchain.cmake -DQT_HOST_PATH=<host_qt_install_path> -DCMAKE_FIND_ROOT_PATH=<qt_for_android_install_path> -DANDROID_ABI:STRING=<abi> -S <source_dir> -B <build_dir>
+    <qt_for_android_install_path>/bin/qt-cmake -DANDROID_SDK_ROOT=<android_sdk_path> -DANDROID_NDK_ROOT=<android_ndk_path> -S <source_dir> -B <build_dir>
     \endcode
 
     Additionally, you can still use \c qmake to build user projects as before in Qt 5.
-
-    \section1 Configuring with CMake
-
-    Another way to configure Qt is to provide the full CMake configuration command:
-
-    \badcode
-    cmake -DQT_HOST_PATH=<path_to_host_qt_installation> -DQT_QMAKE_TARGET_MKSPEC=android-clang -DANDROID_SDK_ROOT=<path_to_android_sdk> -DANDROID_NDK_ROOT=<path_to_android_ndk> -DANDROID_ABI=arm64-v8a -DCMAKE_INSTALL_PREFIX=<qt_install_prefix> -G Ninja <path_to_qt_source>
-    \endcode
-
-    To build Qt in the configured directory, run:
-
-    \badcode
-    cmake --build . --parallel
-    \endcode
-
-    Then to install Qt, run:
-
-    \badcode
-    cmake --install .
-    \endcode
 */

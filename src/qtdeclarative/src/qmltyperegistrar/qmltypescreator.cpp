@@ -58,6 +58,9 @@ void QmlTypesCreator::writeClassProperties(const QmlTypesClassDescription &colle
     if (!collector.superClass.isEmpty())
         m_qml.writeScriptBinding(QLatin1String("prototype"), enquote(collector.superClass));
 
+    if (!collector.sequenceValueType.isEmpty())
+        m_qml.writeScriptBinding(QLatin1String("valueType"), enquote(collector.sequenceValueType));
+
     if (collector.elementName.isEmpty())
         return;
 
@@ -111,10 +114,12 @@ void QmlTypesCreator::writeType(const QJsonObject &property, const QString &key,
     bool isList = false;
     bool isPointer = false;
 
-    if (type == QLatin1String("QString")) {
-        type = QLatin1String("string");
-    } else if (type == QLatin1String("qreal")) {
+    if (type == QLatin1String("qreal")) {
+#ifdef QT_COORD_TYPE_STRING
+        type = QLatin1String(QT_COORD_TYPE_STRING)
+#else
         type = QLatin1String("double");
+#endif
     } else if (type == QLatin1String("qint32")) {
         type = QLatin1String("int");
     } else if (type == QLatin1String("quint32")) {

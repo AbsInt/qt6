@@ -24,6 +24,11 @@ function(qt_print_build_instructions)
     if(CMAKE_HOST_WIN32)
         string(APPEND configure_module_command ".bat")
     endif()
+    if("${CMAKE_STAGING_PREFIX}" STREQUAL "")
+        set(local_install_prefix "${CMAKE_INSTALL_PREFIX}")
+    else()
+        set(local_install_prefix "${CMAKE_STAGING_PREFIX}")
+    endif()
 
     message("Qt is now configured for building. Just run '${build_command}'\n")
     if(QT_WILL_INSTALL)
@@ -34,7 +39,7 @@ function(qt_print_build_instructions)
         message("Note that this build cannot be deployed to other machines or devices.")
     endif()
     message("\nTo configure and build other Qt modules, you can use the following convenience script:
-        ${QT_STAGING_PREFIX}/${INSTALL_BINDIR}/${configure_module_command}")
+        ${local_install_prefix}/${INSTALL_BINDIR}/${configure_module_command}")
     message("\nIf reconfiguration fails for some reason, try to remove 'CMakeCache.txt' \
 from the build directory \n")
 endfunction()
@@ -135,13 +140,32 @@ macro(qt_configure_add_report_padded label message)
     set(__qt_configure_reports "${__qt_configure_reports}" PARENT_SCOPE)
 endmacro()
 
+# Pad 'label' and 'value' with dots like this:
+# "label ............... value"
+#
+# PADDING_LENGTH specifies the number of characters from the start to the last dot.
+#                Default is 30.
+# MIN_PADDING    specifies the minimum number of dots that are used for the padding.
+#                Default is 0.
 function(qt_configure_get_padded_string label value out_var)
-    set(pad_string ".........................................")
+    cmake_parse_arguments(arg "" "PADDING_LENGTH;MIN_PADDING" "" ${ARGN})
+    if("${arg_MIN_PADDING}" STREQUAL "")
+        set(arg_MIN_PADDING 0)
+    endif()
+    if(arg_PADDING_LENGTH)
+        set(pad_string "")
+        math(EXPR n "${arg_PADDING_LENGTH} - 1")
+        foreach(i RANGE ${n})
+            string(APPEND pad_string ".")
+        endforeach()
+    else()
+        set(pad_string ".........................................")
+    endif()
     string(LENGTH "${label}" label_len)
     string(LENGTH "${pad_string}" pad_len)
     math(EXPR pad_len "${pad_len}-${label_len}")
     if(pad_len LESS "0")
-        set(pad_len "0")
+        set(pad_len ${arg_MIN_PADDING})
     endif()
     string(SUBSTRING "${pad_string}" 0 "${pad_len}" pad_string)
     set(output "${label} ${pad_string} ${value}")

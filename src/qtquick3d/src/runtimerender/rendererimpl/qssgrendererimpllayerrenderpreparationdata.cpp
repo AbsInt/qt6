@@ -737,7 +737,11 @@ QSSGDefaultMaterialPreparationResult QSSGLayerRenderPreparationData::prepareCust
     return retval;
 }
 
-bool QSSGLayerRenderPreparationData::prepareModelForRender(QSSGRenderModel &inModel,
+// inModel is const to emphasize the fact that its members cannot be written
+// here: in case there is a scene shared between multiple View3Ds in different
+// QQuickWindows, each window may run this in their own render thread, while
+// inModel is the same.
+bool QSSGLayerRenderPreparationData::prepareModelForRender(const QSSGRenderModel &inModel,
                                                            const QMatrix4x4 &inViewProjection,
                                                            const QSSGOption<QSSGClippingFrustum> &inClipFrustum,
                                                            QSSGShaderLightList &lights,
@@ -745,6 +749,13 @@ bool QSSGLayerRenderPreparationData::prepareModelForRender(QSSGRenderModel &inMo
 {
     const QSSGRef<QSSGRenderContextInterface> &contextInterface(renderer->contextInterface());
     const QSSGRef<QSSGBufferManager> &bufferManager = contextInterface->bufferManager();
+
+    // Up to the BufferManager to employ the appropriate caching mechanisms, so
+    // loadMesh() is expected to be fast if already loaded. Note that preparing
+    // the same QSSGRenderModel in different QQuickWindows (possible when a
+    // scene is shared between View3Ds where the View3Ds belong to different
+    // windows) leads to a different QSSGRenderMesh since the BufferManager is,
+    // very correctly, per window, and so per scenegraph render thread.
 
     QSSGRenderMesh *theMesh = bufferManager->loadMesh(&inModel);
 

@@ -79,7 +79,7 @@ static inline void skipDuplicatePoints(const qreal **pts, const qreal *endPts)
     }
 }
 
-void QTriangulatingStroker::process(const QVectorPath &path, const QPen &pen, const QRectF &, QPainter::RenderHints hints)
+void QTriangulatingStroker::process(const QVectorPath &path, const QPen &pen, const QRectF &, QPainter::RenderHints)
 {
     const qreal *pts = path.points();
     const QPainterPath::ElementType *types = path.elements();
@@ -94,7 +94,7 @@ void QTriangulatingStroker::process(const QVectorPath &path, const QPen &pen, co
 
     m_width = realWidth / 2;
 
-    bool cosmetic = qt_pen_is_cosmetic(pen, hints);
+    bool cosmetic = pen.isCosmetic();
     if (cosmetic) {
         m_width = m_width * m_inv_scale;
     }
@@ -537,14 +537,14 @@ QDashedStrokeProcessor::QDashedStrokeProcessor()
     m_dash_stroker.setCubicToHook(qdashprocessor_cubicTo);
 }
 
-void QDashedStrokeProcessor::process(const QVectorPath &path, const QPen &pen, const QRectF &clip, QPainter::RenderHints hints)
+void QDashedStrokeProcessor::process(const QVectorPath &path, const QPen &pen, const QRectF &clip, QPainter::RenderHints)
 {
 
     const qreal *pts = path.points();
     const QPainterPath::ElementType *types = path.elements();
     int count = path.elementCount();
 
-    bool cosmetic = qt_pen_is_cosmetic(pen, hints);
+    bool cosmetic = pen.isCosmetic();
     bool implicitClose = path.hasImplicitClose();
 
     m_points.reset();

@@ -67,6 +67,9 @@ QT_BEGIN_NAMESPACE
     desktop environment's settings panel, to let the user globally control UI
     and font sizes in different applications.
 
+    \note Both physical and logical DPI are expressed in device-independent dots.
+    Multiply by QScreen::devicePixelRatio() to get device-dependent density.
+
     \inmodule QtGui
 */
 
@@ -254,6 +257,9 @@ QSize QScreen::size() const
   Depending on what information the underlying system provides the value might not be
   entirely accurate.
 
+  \note Physical DPI is expressed in device-independent dots. Multiply by QScreen::devicePixelRatio()
+  to get device-dependent density.
+
   \sa physicalDotsPerInchY()
 */
 qreal QScreen::physicalDotsPerInchX() const
@@ -268,6 +274,9 @@ qreal QScreen::physicalDotsPerInchX() const
   This value represents the actual vertical pixel density on the screen's display.
   Depending on what information the underlying system provides the value might not be
   entirely accurate.
+
+  \note Physical DPI is expressed in device-independent dots. Multiply by QScreen::devicePixelRatio()
+  to get device-dependent density.
 
   \sa physicalDotsPerInchX()
 */
@@ -286,6 +295,9 @@ qreal QScreen::physicalDotsPerInchY() const
 
   This is a convenience property that's simply the average of the physicalDotsPerInchX
   and physicalDotsPerInchY properties.
+
+  \note Physical DPI is expressed in device-independent dots. Multiply by QScreen::devicePixelRatio()
+  to get device-dependent density.
 
   \sa physicalDotsPerInchX()
   \sa physicalDotsPerInchY()

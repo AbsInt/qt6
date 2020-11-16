@@ -10,7 +10,8 @@ Module {
     }
 
     Component {
-        name: "var"
+        name: "QJSValue"
+        accessSemantics: "value"
         exports: ["QML/var 1.0", "QML/variant 1.0"]
         exportMetaObjectRevisions: [256]
     }
@@ -28,7 +29,7 @@ Module {
 
         Method {
             name: "toString"
-            type: "string"
+            type: "QString"
         }
 
         Method {
@@ -76,7 +77,7 @@ Module {
 
         Method {
             name: "errorString"
-            type: "string"
+            type: "QString"
         }
 
     }
@@ -179,7 +180,7 @@ Module {
 
             Parameter {
                 name: "string"
-                type: "string"
+                type: "QString"
             }
 
         }
@@ -190,7 +191,7 @@ Module {
 
             Parameter {
                 name: "string"
-                type: "string"
+                type: "QString"
             }
 
             Parameter {
@@ -213,7 +214,7 @@ Module {
 
         Method {
             name: "toExponential"
-            type: "string"
+            type: "QString"
 
             Parameter {
                 name: "fractionDigits"
@@ -224,7 +225,7 @@ Module {
 
         Method {
             name: "toFixed"
-            type: "string"
+            type: "QString"
 
             Parameter {
                 name: "fractionDigits"
@@ -235,11 +236,11 @@ Module {
 
         Method {
             name: "toLocaleString"
-            type: "string"
+            type: "QString"
 
             Parameter {
                 name: "locales"
-                type: "string"
+                type: "QString"
             }
 
             Parameter {
@@ -251,7 +252,7 @@ Module {
 
         Method {
             name: "toPrecision"
-            type: "string"
+            type: "QString"
 
             Parameter {
                 name: "precision"
@@ -262,7 +263,7 @@ Module {
 
         Method {
             name: "toString"
-            type: "string"
+            type: "QString"
 
             Parameter {
                 name: "base"
@@ -745,32 +746,32 @@ Module {
 
         Method {
             name: "parse"
-            type: "var"
+            type: "QJSValue"
 
             Parameter {
                 name: "text"
-                type: "string"
+                type: "QString"
             }
 
             Parameter {
                 name: "reviver"
-                type: "var"
+                type: "QJSValue"
             }
 
         }
 
         Method {
             name: "stringify"
-            type: "string"
+            type: "QString"
 
             Parameter {
                 name: "value"
-                type: "var"
+                type: "QJSValue"
             }
 
             Parameter {
                 name: "replacer"
-                type: "var"
+                type: "QJSValue"
             }
 
             Parameter {
@@ -791,7 +792,7 @@ Module {
 
         Method {
             name: "fromCharCode"
-            type: "string"
+            type: "QString"
 
             Parameter {
                 name: "arguments"
@@ -801,7 +802,7 @@ Module {
 
         Method {
             name: "fromCodePoint"
-            type: "string"
+            type: "QString"
 
             Parameter {
                 name: "arguments"
@@ -811,11 +812,11 @@ Module {
 
         Method {
             name: "raw"
-            type: "string"
+            type: "QString"
 
             Parameter {
                 name: "template"
-                type: "var"
+                type: "QJSValue"
             }
 
             Parameter {
@@ -831,7 +832,7 @@ Module {
 
         Method {
             name: "charAt"
-            type: "string"
+            type: "QString"
 
             Parameter {
                 name: "pos"
@@ -864,7 +865,7 @@ Module {
 
         Method {
             name: "concat"
-            type: "string"
+            type: "QString"
 
             Parameter {
                 name: "arguments"
@@ -878,7 +879,7 @@ Module {
 
             Parameter {
                 name: "searchString"
-                type: "string"
+                type: "QString"
             }
 
             Parameter {
@@ -894,7 +895,7 @@ Module {
 
             Parameter {
                 name: "searchString"
-                type: "string"
+                type: "QString"
             }
 
             Parameter {
@@ -910,7 +911,7 @@ Module {
 
             Parameter {
                 name: "searchString"
-                type: "string"
+                type: "QString"
             }
 
             Parameter {
@@ -926,7 +927,7 @@ Module {
 
             Parameter {
                 name: "searchString"
-                type: "string"
+                type: "QString"
             }
 
             Parameter {
@@ -942,12 +943,12 @@ Module {
 
             Parameter {
                 name: "that"
-                type: "string"
+                type: "QString"
             }
 
             Parameter {
                 name: "locale"
-                type: "string"
+                type: "QString"
             }
 
             Parameter {
@@ -959,16 +960,16 @@ Module {
 
         Method {
             name: "match"
-            type: "var"
+            type: "QJSValue"
 
             Parameter {
                 name: "that"
-                type: "string"
+                type: "QString"
             }
 
             Parameter {
                 name: "locale"
-                type: "string"
+                type: "QString"
             }
 
             Parameter {
@@ -980,18 +981,18 @@ Module {
 
         Method {
             name: "normalize"
-            type: "string"
+            type: "QString"
 
             Parameter {
                 name: "form"
-                type: "string"
+                type: "QString"
             }
 
         }
 
         Method {
             name: "repeat"
-            type: "string"
+            type: "QString"
 
             Parameter {
                 name: "count"
@@ -1002,34 +1003,34 @@ Module {
 
         Method {
             name: "replace"
-            type: "string"
+            type: "QString"
 
             Parameter {
                 name: "searchValue"
-                type: "string"
+                type: "QString"
             }
 
             Parameter {
                 name: "replaceValue"
-                type: "string"
+                type: "QString"
             }
 
         }
 
         Method {
             name: "search"
-            type: "var"
+            type: "QJSValue"
 
             Parameter {
                 name: "regexp"
-                type: "var"
+                type: "QJSValue"
             }
 
         }
 
         Method {
             name: "slice"
-            type: "string"
+            type: "QString"
 
             Parameter {
                 name: "start"
@@ -1049,7 +1050,7 @@ Module {
 
             Parameter {
                 name: "separator"
-                type: "string"
+                type: "QString"
             }
 
             Parameter {
@@ -1065,7 +1066,7 @@ Module {
 
             Parameter {
                 name: "searchString"
-                type: "string"
+                type: "QString"
             }
 
             Parameter {
@@ -1077,7 +1078,7 @@ Module {
 
         Method {
             name: "substring"
-            type: "string"
+            type: "QString"
 
             Parameter {
                 name: "start"
@@ -1093,54 +1094,54 @@ Module {
 
         Method {
             name: "toLocaleLowerCase"
-            type: "string"
+            type: "QString"
 
             Parameter {
                 name: "locale"
-                type: "string"
+                type: "QString"
             }
 
             Parameter {
                 name: "options"
-                type: "var"
+                type: "QJSValue"
             }
 
         }
 
         Method {
             name: "toLowerCase"
-            type: "string"
+            type: "QString"
         }
 
         Method {
             name: "toUpperCase"
-            type: "string"
+            type: "QString"
 
             Parameter {
                 name: "locale"
-                type: "string"
+                type: "QString"
             }
 
             Parameter {
                 name: "options"
-                type: "var"
+                type: "QJSValue"
             }
 
         }
 
         Method {
             name: "toUpperCase"
-            type: "string"
+            type: "QString"
         }
 
         Method {
             name: "trim"
-            type: "string"
+            type: "QString"
         }
 
         Method {
             name: "valueOf"
-            type: "string"
+            type: "QString"
         }
 
         Property {
@@ -1151,7 +1152,7 @@ Module {
     }
 
     Component {
-        name: "string"
+        name: "QString"
         prototype: "StringPrototype"
         exports: ["QML/string 1.0"]
         exportMetaObjectRevisions: [256]
@@ -1169,7 +1170,7 @@ Module {
 
         Method {
             name: "toString"
-            type: "string"
+            type: "QString"
         }
 
         Method {
@@ -1204,7 +1205,7 @@ Module {
 
             Parameter {
                 name: "string"
-                type: "string"
+                type: "QString"
             }
 
         }
@@ -1602,102 +1603,102 @@ Module {
 
         Method {
             name: "toDateString"
-            type: "string"
+            type: "QString"
         }
 
         Method {
             name: "toISOString"
-            type: "string"
+            type: "QString"
         }
 
         Method {
             name: "toJSON"
-            type: "string"
+            type: "QString"
 
             Parameter {
                 name: "key"
-                type: "var" // ignored
+                type: "QJSValue" // ignored
             }
 
         }
 
         Method {
             name: "toLocaleDateString"
-            type: "string"
+            type: "QString"
 
             Parameter {
                 name: "locale"
-                type: "string"
+                type: "QString"
             }
 
             Parameter {
                 name: "options"
-                type: "var"
+                type: "QJSValue"
             }
 
         }
 
         Method {
             name: "toLocaleDateDateString"
-            type: "string"
+            type: "QString"
 
             Parameter {
                 name: "locale"
-                type: "string"
+                type: "QString"
             }
 
             Parameter {
                 name: "options"
-                type: "var"
+                type: "QJSValue"
             }
 
         }
 
         Method {
             name: "toLocaleDateTimeString"
-            type: "string"
+            type: "QString"
 
             Parameter {
                 name: "locale"
-                type: "string"
+                type: "QString"
             }
 
             Parameter {
                 name: "options"
-                type: "var"
+                type: "QJSValue"
             }
 
         }
 
         Method {
             name: "toLocaleString"
-            type: "string"
+            type: "QString"
 
             Parameter {
                 name: "locale"
-                type: "string"
+                type: "QString"
             }
 
             Parameter {
                 name: "options"
-                type: "var"
+                type: "QJSValue"
             }
 
         }
 
         Method {
             name: "toString"
-            type: "string"
+            type: "QString"
         }
 
         Method {
             name: "toTimeString"
-            type: "string"
+            type: "QString"
         }
 
         Method {
             name: "toUTCString"
-            type: "string"
+            type: "QString"
         }
 
         Method {

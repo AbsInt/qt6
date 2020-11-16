@@ -1708,12 +1708,11 @@ void QByteArray::reallocData(qsizetype alloc, QArrayData::AllocationOption optio
         return;
     }
 
-    // there's a case of slow reallocate path where we need to memmove the data
-    // before a call to ::realloc(), meaning that there's an extra "heavy"
-    // operation. just prefer ::malloc() branch in this case
-    const bool slowReallocatePath = d.freeSpaceAtBegin() > 0;
+    // don't use reallocate path when reducing capacity and there's free space
+    // at the beginning: might shift data pointer outside of allocated space
+    const bool cannotUseReallocate = d.freeSpaceAtBegin() > 0;
 
-    if (d->needsDetach() || slowReallocatePath) {
+    if (d->needsDetach() || cannotUseReallocate) {
         DataPointer dd(Data::allocate(alloc, option), qMin(alloc, d.size));
         if (dd.size > 0)
             ::memcpy(dd.data(), d.data(), dd.size);
@@ -1953,6 +1952,24 @@ QByteArray &QByteArray::insert(qsizetype i, QByteArrayView data)
     d.data()[d.size] = '\0';
     return *this;
 }
+
+/*!
+    \fn QByteArray &QByteArray::insert(qsizetype i, const QByteArray &data)
+    Inserts \a data at index position \a i and returns a
+    reference to this byte array.
+
+    \sa append(), prepend(), replace(), remove()
+*/
+
+/*!
+    \fn QByteArray &QByteArray::insert(qsizetype i, const char *s)
+    Inserts \a s at index position \a i and returns a
+    reference to this byte array.
+
+    The function is equivalent to \c{insert(i, QByteArrayView(s))}
+
+    \sa append(), prepend(), replace(), remove()
+*/
 
 /*!
     \fn QByteArray &QByteArray::insert(qsizetype i, const char *data, qsizetype len)

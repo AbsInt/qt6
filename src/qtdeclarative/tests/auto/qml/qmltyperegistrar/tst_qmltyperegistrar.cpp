@@ -30,9 +30,12 @@
 #include <QtTest/qtest.h>
 #include <QtCore/qcoreapplication.h>
 #include <QtCore/qfile.h>
+#include <QtQml/QQmlEngine>
+#include <QtQml/QQmlComponent>
 
 void tst_qmltyperegistrar::initTestCase()
 {
+    Q_ASSERT(QCoreApplication::instance());
     QFile file(QCoreApplication::applicationDirPath() + "/tst_qmltyperegistrar.qmltypes");
     QVERIFY(file.open(QIODevice::ReadOnly));
     qmltypesData = file.readAll();
@@ -78,7 +81,7 @@ void tst_qmltyperegistrar::superAndForeignTypes()
     QVERIFY(qmltypesData.contains("prototype: \"SizeEnums\""));
     QVERIFY(qmltypesData.contains("Property { name: \"height\"; type: \"int\" }"));
     QVERIFY(qmltypesData.contains("Property { name: \"width\"; type: \"int\" }"));
-    QVERIFY(qmltypesData.contains("Method { name: \"sizeToString\"; type: \"string\" }"));
+    QVERIFY(qmltypesData.contains("Method { name: \"sizeToString\"; type: \"QString\" }"));
 }
 
 void tst_qmltyperegistrar::accessSemantics()
@@ -98,6 +101,14 @@ void tst_qmltyperegistrar::restrictToImportVersion()
     QVERIFY(qmltypesData.contains("ExcessiveVersion"));
     QVERIFY(!qmltypesData.contains("1536"));           // Q_REVISION(6, 0)
     QVERIFY(!qmltypesData.contains("paletteChanged")); // Added in version 6.0
+}
+
+void tst_qmltyperegistrar::pastMajorVersions()
+{
+    QQmlEngine engine;
+    QQmlComponent c(&engine);
+    c.setData("import QML\nimport QmlTypeRegistrarTest 0.254\nQtObject {}", QUrl());
+    QVERIFY2(!c.isError(), qPrintable(c.errorString()));
 }
 
 QTEST_MAIN(tst_qmltyperegistrar)

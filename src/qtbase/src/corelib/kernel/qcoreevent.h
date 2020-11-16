@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2020 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
@@ -205,6 +205,7 @@ public:
         GraphicsSceneDragLeave = 166,
         GraphicsSceneDrop = 167,
         GraphicsSceneWheel = 168,
+        GraphicsSceneLeave = 220,
 
         KeyboardLayoutChange = 169,             // keyboard layout changed
 
@@ -298,7 +299,7 @@ public:
     virtual ~QEvent();
     QEvent &operator=(const QEvent &other);
     inline Type type() const { return static_cast<Type>(t); }
-    inline bool spontaneous() const { return spont; }
+    inline bool spontaneous() const { return m_spont; }
 
     inline virtual void setAccepted(bool accepted) { m_accept = accepted; }
     inline bool isAccepted() const { return m_accept; }
@@ -319,33 +320,39 @@ protected:
     QEvent(Type type, PointerEventTag) : QEvent(type, InputEventTag{}) { m_pointerEvent = true; }
     struct SinglePointEventTag { explicit SinglePointEventTag() = default; };
     QEvent(Type type, SinglePointEventTag) : QEvent(type, PointerEventTag{}) { m_singlePointEvent = true; }
-    QEventPrivate *d;
-    ushort t;
+    quint16 t;
 
 private:
-    ushort posted : 1;
-    ushort spont : 1;
-    ushort m_accept : 1;
-    ushort m_inputEvent : 1;
-    ushort m_pointerEvent : 1;
-    ushort m_singlePointEvent : 1;
-    ushort reserved : 10;
+    /*
+        We can assume that C++ types are 8-byte aligned, and we can't assume that compilers
+        coalesce data members from subclasses. Use bitfields to fill up to next 8-byte
+        aligned size, which is 16 bytes. That way we don't waste memory, and have plenty of room
+        for future flags.
+        Don't use bitfields for the most important flags, as that would generate more code, and
+        access is always inline. Bytes used are:
+        8 vptr + 2 type + 3 bool flags => 3 bytes left, so 24 bits. However, compilers will word-
+        align the quint16s after the bools, so add another unused bool to fill that gap, which
+        leaves us with 16 bits.
+    */
+    bool m_posted = false;
+    bool m_spont = false;
+    bool m_accept = true;
+    bool m_unused = false;
+    quint16 m_reserved : 13;
+    quint16 m_inputEvent : 1;
+    quint16 m_pointerEvent : 1;
+    quint16 m_singlePointEvent : 1;
 
     friend class QCoreApplication;
     friend class QCoreApplicationPrivate;
     friend class QThreadData;
     friend class QApplication;
-#if QT_CONFIG(shortcut)
-    friend class QShortcutMap;
-#endif
-    friend class QGraphicsView;
-    friend class QGraphicsScene;
     friend class QGraphicsScenePrivate;
     // from QtTest:
     friend class QSpontaneKeyEvent;
     // needs this:
     Q_ALWAYS_INLINE
-    void setSpontaneous() { spont = true; }
+    void setSpontaneous() { m_spont = true; }
 };
 
 class Q_CORE_EXPORT QTimerEvent : public QEvent

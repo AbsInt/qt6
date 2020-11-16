@@ -281,20 +281,7 @@
     You can download the Qt sources from the \l{Downloads} page. For
     more information, visit the \l{Getting Started with Qt} page.
 
-    \section2 Step 1: Install the License File (Commercially Licensed Qt Only)
-
-    If you use Qt with a commercial license, the Qt tools look for a local license file.
-    If you are using a binary installer or the commercial Qt Creator, your licenses
-    are automatically fetched and stored in your local user profile
-    (\c{$HOME/Library/Application Support/Qt/qtlicenses.ini} file).
-
-    If you do not use any binary installer or Qt Creator, you can download
-    the respective license file from your \l {Qt Account} Web portal and save
-    it to your user profile as \c{$HOME/.qt-license}. If you prefer a
-    different location or file name, you need to set the \c{QT_LICENSE_FILE}
-    environment variable to the respective file path.
-
-    \section2 Step 2: Unpack the Archive
+    \section2 Step 1: Unpack the Archive
 
         Unpack the archive if you have not done so already. For example,
         if you have the \c{qt-everywhere-opensource-src-%VERSION%.tar.gz}
@@ -305,7 +292,7 @@
         This creates the directory \c{/tmp/qt-everywhere-opensource-src-%VERSION%}
         containing the files from the archive.
 
-    \section2 Step 3: Build the Qt Library
+    \section2 Step 2: Build the Qt Library
 
         To configure the Qt library for your machine type, run the
         \c{./configure} script in the package directory.
@@ -313,6 +300,9 @@
         By default, Qt is configured for installation in the
         \c{/usr/local/Qt-%VERSION%} directory, but this can be
         changed by using the \c{-prefix} option.
+
+        The \l{Qt Configure Options}{Configure Options} page contains more
+        information about the configure options.
 
     \snippet snippets/code/doc_src_installation.qdoc 12
 
@@ -340,10 +330,7 @@
         This command requires that you have administrator access
         on your machine.
 
-        \note There is a potential race condition when running make install with multiple
-        jobs. It is best to only run one make job (-j1) for the install.
-
-    \section2 Step 4: Set the Environment Variables
+    \section2 Step 3: Set the Environment Variables
 
         In order to use Qt, some environment variables need to be
         extended.
@@ -364,16 +351,6 @@
         variables accordingly.
 
     \b {Qt is now installed.}
-
-    \section1 Limitations
-
-    \section2 Fink
-
-    If you have installed the Qt for X11 package from \l{http://www.finkproject.org/}{Fink},
-    it will set the \c QMAKESPEC environment variable to \c darwin-g++. This will cause
-    problems when you build the Qt for macOS package. To fix this, simply unset your \c
-    QMAKESPEC or set it to \c macx-g++ before you run \c configure. To get a
-    fresh Qt distribution, run \c{make confclean} on the command-line.
 */
 
 /*!

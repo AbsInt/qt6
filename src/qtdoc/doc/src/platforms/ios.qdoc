@@ -79,12 +79,12 @@
     directory:
 
     \badcode
-        > ./configure -xplatform macx-ios-clang -release
+        > ./configure -xplatform macx-ios-clang -release -qt-host-path <path_to_host_qt_installation>
     \endcode
 
     For other configure options, see \l{Qt Configure Options}.
 
-    Then, simply run \c{make}.
+    Then, simply run \c{cmake --build . --parallel}.
 
     \note A default build will include both simulator and device
     libraries. If you want to build for a single target, use the \c
