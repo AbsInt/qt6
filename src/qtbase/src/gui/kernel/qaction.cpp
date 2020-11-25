@@ -206,7 +206,7 @@ QObject *QActionPrivate::menu() const
     menu and toolbar, then connected to the slot which will perform
     the action. For example:
 
-    \snippet mainwindows/application/mainwindow.cpp 19
+    \snippet ../widgets/mainwindows/application/mainwindow.cpp 19
 
     Actions are added to widgets using QWidget::addAction() or
     QGraphicsWidget::addAction(). Note that an action must be added to a
@@ -511,13 +511,13 @@ QAction::~QAction()
 void QAction::setActionGroup(QActionGroup *group)
 {
     Q_D(QAction);
-    if(group == d->group)
+    if (group == d->group)
         return;
 
-    if(d->group)
+    if (d->group)
         d->group->removeAction(this);
     d->group = group;
-    if(group)
+    if (group)
         group->addAction(this);
     d->sendDataChanged();
 }
@@ -652,7 +652,7 @@ QString QAction::text() const
 {
     Q_D(const QAction);
     QString s = d->text;
-    if(s.isEmpty()) {
+    if (s.isEmpty()) {
         s = d->iconText;
         s.replace(QLatin1Char('&'), QLatin1String("&&"));
     }
@@ -1130,7 +1130,7 @@ void QAction::activate(ActionEvent event)
         }
         if (!guard.isNull())
             emit triggered(d->checked);
-    } else if(event == Hover) {
+    } else if (event == Hover) {
         emit hovered();
     }
 }

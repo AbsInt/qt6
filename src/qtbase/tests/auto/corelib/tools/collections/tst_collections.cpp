@@ -1121,17 +1121,17 @@ void tst_Collections::hash()
         Hash hash;
         QString key = QLatin1String("  ");
         for (int i = 0; i < 10; ++i) {
-            key[0] = i + '0';
+            key[0] = QChar(i + '0');
             for (int j = 0; j < 10; ++j) {
-                key[1] = j + '0';
+                key[1] = QChar(j + '0');
                 hash.insert(key, "V" + key);
             }
         }
 
         for (int i = 0; i < 10; ++i) {
-            key[0] = i + '0';
+            key[0] = QChar(i + '0');
             for (int j = 0; j < 10; ++j) {
-                key[1] = j + '0';
+                key[1] = QChar(j + '0');
                 hash.remove(key);
             }
         }
@@ -2920,6 +2920,7 @@ void tst_Collections::forwardDeclared()
     TEST(QVector<T1>);
     TEST(QStack<T1>);
     TEST(QQueue<T1>);
+    TEST(QSet<T1>);
 #undef TEST
 #undef COMMA
 
@@ -3328,6 +3329,18 @@ template<class Container> void insert_remove_loop_impl()
     for (int i = 0; i < t.count(); i++) {
         QCOMPARE(t[i], T(IntOrString(expect5[i])));
     }
+
+    t.clear();
+    t << T(IntOrString(1)) << T(IntOrString(2)) << T(IntOrString(3)) << T(IntOrString(4));
+    t.insert(2, 4, T(IntOrString(9)));
+    t.insert(2, 4, T(IntOrString(7)));
+
+    int expect6[] = { 1, 2, 7, 7, 7, 7, 9, 9, 9, 9, 3, 4 };
+    QCOMPARE(size_t(t.count()), sizeof(expect6)/sizeof(int));
+    for (int i = 0; i < t.count(); i++) {
+        QCOMPARE(t[i], T(IntOrString(expect6[i])));
+    }
+
 }
 
 

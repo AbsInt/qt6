@@ -119,7 +119,6 @@ const QStringList AssimpImporter::inputExtensions() const
     extensions.append(QStringLiteral("fbx"));
     extensions.append(QStringLiteral("dae"));
     extensions.append(QStringLiteral("obj"));
-    extensions.append(QStringLiteral("blend"));
     extensions.append(QStringLiteral("gltf"));
     extensions.append(QStringLiteral("glb"));
     extensions.append(QStringLiteral("stl"));
@@ -144,6 +143,19 @@ const QString AssimpImporter::typeDescription() const
 const QVariantMap AssimpImporter::importOptions() const
 {
     return m_options;
+}
+namespace {
+bool fuzzyCompare(const aiVector3D &v1, const aiVector3D &v2)
+{
+    return qFuzzyCompare(v1.x, v2.x) && qFuzzyCompare(v1.y, v2.y)
+        && qFuzzyCompare(v1.z, v2.z);
+}
+
+bool fuzzyCompare(const aiQuaternion &q1, const aiQuaternion &q2)
+{
+    return qFuzzyCompare(q1.x, q2.x) && qFuzzyCompare(q1.y, q2.y)
+        && qFuzzyCompare(q1.z, q2.z) && qFuzzyCompare(q1.w, q2.w);
+}
 }
 
 const QString AssimpImporter::import(const QString &sourceFile, const QDir &savePath, const QVariantMap &options, QStringList *generatedFiles)
@@ -323,8 +335,37 @@ const QString AssimpImporter::import(const QString &sourceFile, const QDir &save
             for (uint j = 0; j < animation->mNumChannels; ++j) {
                 aiNodeAnim *channel = animation->mChannels[j];
                 aiNode *node = m_scene->mRootNode->FindNode(channel->mNodeName);
-                if (channel && node)
+                if (channel && node) {
+                    // remove redundant animations
+                    // assimp generates animation keys with the transformation
+                    // of a current node.
+                    aiMatrix4x4 transformMatrix = node->mTransformation;
+                    aiVector3D scaling;
+                    aiQuaternion rotation;
+                    aiVector3D translation;
+                    if (channel->mNumPositionKeys == 1 ||
+                            channel->mNumRotationKeys == 1 ||
+                            channel->mNumScalingKeys == 1)
+                        transformMatrix.Decompose(scaling, rotation, translation);
+                    if (channel->mNumPositionKeys == 1 &&
+                            fuzzyCompare(translation, channel->mPositionKeys[0].mValue))
+                        channel->mNumPositionKeys = 0;
+
+                    if (channel->mNumRotationKeys == 1 &&
+                            fuzzyCompare(rotation, channel->mRotationKeys[0].mValue))
+                        channel->mNumRotationKeys = 0;
+
+                    if (channel->mNumScalingKeys == 1 &&
+                            fuzzyCompare(scaling, channel->mScalingKeys[0].mValue))
+                        channel->mNumScalingKeys = 0;
+
+                    if (channel->mNumPositionKeys == 0 &&
+                            channel->mNumRotationKeys == 0 &&
+                            channel->mNumScalingKeys == 0)
+                        continue;
+
                     m_animations.back()->insert(node, channel);
+                }
             }
         }
     }
@@ -1438,7 +1479,7 @@ QString aiTilingMode(int tilingMode) {
     if (tilingMode == aiTextureMapMode_Wrap)
         return QStringLiteral("Texture.Repeat");
     if (tilingMode == aiTextureMapMode_Mirror)
-        return QStringLiteral("Texture.Mirror");
+        return QStringLiteral("Texture.MirroredRepeat");
     if (tilingMode == aiTextureMapMode_Clamp)
         return QStringLiteral("Texture.ClampToEdge");
 
@@ -1567,31 +1608,56 @@ QString AssimpImporter::generateImage(aiMaterial *material, aiTextureType textur
     aiUVTransform transforms;
     result = material->Get(AI_MATKEY_UVTRANSFORM(textureType, index), transforms);
     if (result == aiReturn_SUCCESS) {
+        // UV origins -
+        //      glTF: 0, 1 (top left of texture)
+        //      Assimp, Collada?, FBX?: 0.5, 0.5
+        //      Quick3D: 0, 0 (bottom left of texture)
+        // Assimp already tries to fix it but it's not correct.
+        // So, we restore original values and then use pivot
+        float rotation = -transforms.mRotation;
+        float rotationUV = qRadiansToDegrees(rotation);
+        float posU = transforms.mTranslation.x;
+        float posV = transforms.mTranslation.y;
+        if (m_gltfUsed) {
+            float rcos = std::cos(rotation);
+            float rsin = std::sin(rotation);
+            posU -= 0.5 * transforms.mScaling.x * (-rcos + rsin + 1);
+            posV -= (0.5 * transforms.mScaling.y * (rcos + rsin - 1) + 1 - transforms.mScaling.y);
+
+            output << QSSGQmlUtilities::insertTabs(tabLevel + 1)
+                   << QStringLiteral("pivotV: 1\n");
+        } else {
+            output << QSSGQmlUtilities::insertTabs(tabLevel + 1)
+                   << QStringLiteral("pivotU: 0.5\n");
+            output << QSSGQmlUtilities::insertTabs(tabLevel + 1)
+                   << QStringLiteral("pivotV: 0.5\n");
+        }
+
         QSSGQmlUtilities::writeQmlPropertyHelper(output,
-                                                   tabLevel + 1,
-                                                   QSSGQmlUtilities::PropertyMap::Texture,
-                                                   QStringLiteral("rotationUV"),
-                                                   transforms.mRotation);
+                                                 tabLevel + 1,
+                                                 QSSGQmlUtilities::PropertyMap::Texture,
+                                                 QStringLiteral("positionU"),
+                                                 posU);
         QSSGQmlUtilities::writeQmlPropertyHelper(output,
-                                                   tabLevel + 1,
-                                                   QSSGQmlUtilities::PropertyMap::Texture,
-                                                   QStringLiteral("positionU"),
-                                                   transforms.mTranslation.x);
+                                                 tabLevel + 1,
+                                                 QSSGQmlUtilities::PropertyMap::Texture,
+                                                 QStringLiteral("positionV"),
+                                                 posV);
         QSSGQmlUtilities::writeQmlPropertyHelper(output,
-                                                   tabLevel + 1,
-                                                   QSSGQmlUtilities::PropertyMap::Texture,
-                                                   QStringLiteral("positionV"),
-                                                   transforms.mTranslation.y);
+                                                 tabLevel + 1,
+                                                 QSSGQmlUtilities::PropertyMap::Texture,
+                                                 QStringLiteral("rotationUV"),
+                                                 rotationUV);
         QSSGQmlUtilities::writeQmlPropertyHelper(output,
-                                                   tabLevel + 1,
-                                                   QSSGQmlUtilities::PropertyMap::Texture,
-                                                   QStringLiteral("scaleU"),
-                                                   transforms.mScaling.x);
+                                                 tabLevel + 1,
+                                                 QSSGQmlUtilities::PropertyMap::Texture,
+                                                 QStringLiteral("scaleU"),
+                                                 transforms.mScaling.x);
         QSSGQmlUtilities::writeQmlPropertyHelper(output,
-                                                   tabLevel + 1,
-                                                   QSSGQmlUtilities::PropertyMap::Texture,
-                                                   QStringLiteral("scaleV"),
-                                                   transforms.mScaling.y);
+                                                 tabLevel + 1,
+                                                 QSSGQmlUtilities::PropertyMap::Texture,
+                                                 QStringLiteral("scaleV"),
+                                                 transforms.mScaling.y);
     }
     // We don't make use of the data here, but there are additional flags
     // available for example the usage of the alpha channel
@@ -1683,12 +1749,21 @@ void AssimpImporter::processAnimations(QTextStream &output)
                 continue;
 
             aiNodeAnim *nodeAnim = itr.value();
-            generateKeyframes(id, "position", nodeAnim->mNumPositionKeys, nodeAnim->mPositionKeys,
-                              keyframeStream, endFrameTime);
-            generateKeyframes(id, "rotation", nodeAnim->mNumRotationKeys, nodeAnim->mRotationKeys,
-                              keyframeStream, endFrameTime);
-            generateKeyframes(id, "scale", nodeAnim->mNumScalingKeys, nodeAnim->mScalingKeys,
-                              keyframeStream, endFrameTime);
+            if (nodeAnim->mNumPositionKeys > 0) {
+                generateKeyframes(id, "position", nodeAnim->mNumPositionKeys,
+                                  nodeAnim->mPositionKeys,
+                                  keyframeStream, endFrameTime);
+            }
+            if (nodeAnim->mNumRotationKeys > 0) {
+                generateKeyframes(id, "rotation", nodeAnim->mNumRotationKeys,
+                                  nodeAnim->mRotationKeys,
+                                  keyframeStream, endFrameTime);
+            }
+            if (nodeAnim->mNumScalingKeys > 0) {
+                generateKeyframes(id, "scale", nodeAnim->mNumScalingKeys,
+                                  nodeAnim->mScalingKeys,
+                                  keyframeStream, endFrameTime);
+            }
         }
 
         int endFrameTimeInt = qCeil(endFrameTime);
@@ -1722,18 +1797,6 @@ QString convertToQString(const aiVector3D &vec)
 QString convertToQString(const aiQuaternion &q)
 {
     return QString("Qt.quaternion(%1, %2, %3, %4)").arg(q.w).arg(q.x).arg(q.y).arg(q.z);
-}
-
-bool fuzzyCompare(const aiVector3D &v1, const aiVector3D &v2)
-{
-    return qFuzzyCompare(v1.x, v2.x) && qFuzzyCompare(v1.y, v2.y)
-        && qFuzzyCompare(v1.z, v2.z);
-}
-
-bool fuzzyCompare(const aiQuaternion &q1, const aiQuaternion &q2)
-{
-    return qFuzzyCompare(q1.x, q2.x) && qFuzzyCompare(q1.y, q2.y)
-        && qFuzzyCompare(q1.z, q2.z) && qFuzzyCompare(q1.w, q2.w);
 }
 
 // Add Vector3D into CBOR

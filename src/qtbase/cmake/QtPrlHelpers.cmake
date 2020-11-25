@@ -10,20 +10,72 @@ function(qt_merge_libs out_libs_var)
 endfunction()
 
 # Collects the library dependencies of a target.
+# As well as rcc object file dependencies.
 # This takes into account transitive usage requirements.
-function(qt_collect_libs target out_var)
-    qt_internal_walk_libs("${target}" "${out_var}" "qt_collect_libs_dict" "collect_libs")
-    set("${out_var}" "${${out_var}}" PARENT_SCOPE)
+function(qt_collect_libs target libs_out_var rcc_objects_out_var)
+    qt_internal_walk_libs("${target}" "${libs_out_var}"
+                          "${rcc_objects_out_var}" "qt_collect_libs_dict" "collect_libs")
+    set("${libs_out_var}" "${${libs_out_var}}" PARENT_SCOPE)
+
+    set(${rcc_objects_out_var} "${${rcc_objects_out_var}}" PARENT_SCOPE)
+
+endfunction()
+
+# Extracts value from per-target dict key and assigns it to out_var.
+# Assumes dict_name to be an existing INTERFACE target.
+function(qt_internal_get_dict_key_values out_var target_infix dict_name dict_key)
+    get_target_property(values "${dict_name}" "INTERFACE_${target_infix}_${dict_key}")
+    set(${out_var} "${values}" PARENT_SCOPE)
+endfunction()
+
+# Assigns 'values' to per-target dict key, including for aliases of the target.
+# Assumes dict_name to be an existing INTERFACE target.
+function(qt_internal_memoize_values_in_dict target dict_name dict_key values)
+    # Memoize the computed values for the target as well as its aliases.
+    #
+    # Aka assigns the contents of ${values} to INTERFACE_Core, INTERFACE_Qt::Core,
+    # INTERFACE_Qt6::Core.
+    #
+    # Yes, i know it's crazy that target names are legal property names.
+    #
+    # Assigning for library aliases is needed to avoid multiple recomputation of values.
+    # Scenario in the context of qt_internal_walk_libs:
+    # 'values' are computed for Core target and memoized to INTERFACE_Core.
+    # When processing Gui, it depends on Qt::Core, but there are no values for INTERFACE_Qt::Core.
+    set_target_properties(${dict_name} PROPERTIES INTERFACE_${target}_${dict_key} "${values}")
+
+    get_target_property(versionless_alias "${target}" "_qt_versionless_alias")
+    if(versionless_alias)
+        qt_internal_get_dict_key_values(
+            versionless_values "${versionless_alias}" "${dict_name}" "${dict_key}")
+        if(versionless_values MATCHES "-NOTFOUND$")
+            set_target_properties(${dict_name}
+                                  PROPERTIES INTERFACE_${versionless_alias}_${dict_key} "${values}")
+        endif()
+    endif()
+
+    get_target_property(versionfull_alias "${target}" "_qt_versionfull_alias")
+    if(versionfull_alias)
+        qt_internal_get_dict_key_values(
+            versionfull_values "${versionfull_alias}" "${dict_name}" "${dict_key}")
+        if(versionfull_values MATCHES "-NOTFOUND$")
+            set_target_properties(${dict_name}
+                                  PROPERTIES INTERFACE_${versionfull_alias}_${dict_key} "${values}")
+        endif()
+    endif()
 endfunction()
 
 # Walks a target's link libraries recursively, and performs some actions (poor man's polypmorphism)
 #
 # out_var is the name of the variable where the result will be assigned. The result is a list of
 # libraries, mostly in generator expression form.
-# dict_name is used for caching the result, and preventing the same target from being processed
+# rcc_objects_out_var is the name of the variable where the collected rcc object files will be
+# assigned (for the initial target and its dependencies)
+# dict_name is used for caching the results, and preventing the same target from being processed
 # twice
-# operation is a string to tell the function what to do
-function(qt_internal_walk_libs target out_var dict_name operation)
+# operation is a string to tell the function what additional behaviors to execute.
+function(qt_internal_walk_libs
+        target out_var rcc_objects_out_var dict_name operation)
     set(collected ${ARGN})
     if(target IN_LIST collected)
         return()
@@ -42,9 +94,12 @@ function(qt_internal_walk_libs target out_var dict_name operation)
     if(NOT TARGET ${dict_name})
         add_library(${dict_name} INTERFACE IMPORTED GLOBAL)
     endif()
-    get_target_property(libs ${dict_name} INTERFACE_${target})
-    if(NOT libs)
+    qt_internal_get_dict_key_values(libs "${target}" "${dict_name}" "libs")
+    qt_internal_get_dict_key_values(rcc_objects "${target}" "${dict_name}" "rcc_objects")
+
+    if(libs MATCHES "-NOTFOUND$")
         unset(libs)
+        unset(rcc_objects)
         get_target_property(target_libs ${target} INTERFACE_LINK_LIBRARIES)
         if(NOT target_libs)
             unset(target_libs)
@@ -56,6 +111,15 @@ function(qt_internal_walk_libs target out_var dict_name operation)
                 list(APPEND target_libs ${link_libs})
             endif()
         endif()
+
+        # Need to record the rcc object file info not only for dependencies, but also for
+        # the current target too. Otherwise the saved information is incomplete for prl static
+        # build purposes.
+        get_target_property(main_target_rcc_objects ${target} _qt_rcc_objects)
+        if(main_target_rcc_objects)
+            qt_merge_libs(rcc_objects ${main_target_rcc_objects})
+        endif()
+
         foreach(lib ${target_libs})
             # Cannot use $<TARGET_POLICY:...> in add_custom_command.
             # Check the policy now, and replace the generator expression with the value.
@@ -112,17 +176,35 @@ function(qt_internal_walk_libs target out_var dict_name operation)
                 get_target_property(lib_target_type ${lib_target} TYPE)
                 if(lib_target_type STREQUAL "INTERFACE_LIBRARY")
                     qt_internal_walk_libs(
-                        ${lib_target} lib_libs "${dict_name}" "${operation}" ${collected})
-                    if(lib_libs)
-                        qt_merge_libs(libs ${lib_libs})
+                        ${lib_target}
+                        lib_libs_${target}
+                        lib_rcc_objects_${target}
+                        "${dict_name}" "${operation}" ${collected})
+                    if(lib_libs_${target})
+                        qt_merge_libs(libs ${lib_libs_${target}})
                         set(is_module 0)
+                    endif()
+                    if(lib_rcc_objects_${target})
+                        qt_merge_libs(rcc_objects ${lib_rcc_objects_${target}})
                     endif()
                 else()
                     qt_merge_libs(libs "$<TARGET_FILE:${lib_target}>")
+
+                    get_target_property(target_rcc_objects "${lib_target}" _qt_rcc_objects)
+                    if(target_rcc_objects)
+                        qt_merge_libs(rcc_objects ${target_rcc_objects})
+                    endif()
+
                     qt_internal_walk_libs(
-                        ${lib_target} lib_libs "${dict_name}" "${operation}" ${collected})
-                    if(lib_libs)
-                        qt_merge_libs(libs ${lib_libs})
+                        ${lib_target}
+                        lib_libs_${target}
+                        lib_rcc_objects_${target}
+                        "${dict_name}" "${operation}" ${collected})
+                    if(lib_libs_${target})
+                        qt_merge_libs(libs ${lib_libs_${target}})
+                    endif()
+                    if(lib_rcc_objects_${target})
+                        qt_merge_libs(rcc_objects ${lib_rcc_objects_${target}})
                     endif()
                 endif()
                 if(operation STREQUAL "promote_global")
@@ -151,9 +233,13 @@ function(qt_internal_walk_libs target out_var dict_name operation)
                 qt_merge_libs(libs "${final_lib_name_to_merge}")
             endif()
         endforeach()
-        set_target_properties(${dict_name} PROPERTIES INTERFACE_${target} "${libs}")
+        qt_internal_memoize_values_in_dict("${target}" "${dict_name}" "libs" "${libs}")
+        qt_internal_memoize_values_in_dict("${target}" "${dict_name}"
+                                           "rcc_objects" "${rcc_objects}")
+
     endif()
     set(${out_var} ${libs} PARENT_SCOPE)
+    set(${rcc_objects_out_var} ${rcc_objects} PARENT_SCOPE)
 endfunction()
 
 # Generate a qmake .prl file for the given target.
@@ -162,15 +248,6 @@ function(qt_generate_prl_file target install_dir)
     get_target_property(target_type ${target} TYPE)
     if(target_type STREQUAL "INTERFACE_LIBRARY")
         return()
-    endif()
-
-    get_target_property(rcc_objects ${target} QT_RCC_OBJECTS)
-    if(rcc_objects)
-        if(QT_WILL_INSTALL)
-            list(TRANSFORM rcc_objects PREPEND "$$[QT_INSTALL_LIBS]/")
-        endif()
-    else()
-        unset(rcc_objects)
     endif()
 
     unset(prl_config)
@@ -188,6 +265,26 @@ function(qt_generate_prl_file target install_dir)
         endif()
     endif()
     list(JOIN prl_config " " prl_config)
+
+    set(rcc_objects "")
+    set(prl_step1_content_libs "")
+    if(NOT is_static AND WIN32)
+        # Do nothing. Prl files for shared libraries on Windows shouldn't have the libs listed,
+        # as per qt_build_config.prf and the conditional CONFIG+=explicitlib assignment.
+    else()
+        set(prl_libs "")
+        qt_collect_libs(${target} prl_libs prl_rcc_objects)
+        if(prl_libs)
+            set(prl_step1_content_libs "QMAKE_PRL_LIBS_FOR_CMAKE = ${prl_libs}\n")
+        endif()
+        if(prl_rcc_objects)
+            list(APPEND rcc_objects ${prl_rcc_objects})
+        endif()
+    endif()
+
+    if(rcc_objects AND QT_WILL_INSTALL)
+        list(TRANSFORM rcc_objects PREPEND "$$[QT_INSTALL_LIBS]/")
+    endif()
 
     # Generate a preliminary .prl file that contains absolute paths to all libraries
     if(MINGW)
@@ -240,15 +337,8 @@ QMAKE_PRL_BUILD_DIR = ${CMAKE_CURRENT_BINARY_DIR}
 QMAKE_PRL_TARGET = $<TARGET_FILE_NAME:${target}>
 QMAKE_PRL_CONFIG = ${prl_config}
 QMAKE_PRL_VERSION = ${PROJECT_VERSION}
+${prl_step1_content_libs}
 ")
-    if(NOT is_static AND WIN32)
-        # Do nothing. Prl files for shared libraries on Windows shouldn't have the libs listed,
-        # as per qt_build_config.prf and the conditional CONFIG+=explicitlib assignment.
-    else()
-        set(prl_libs "")
-        qt_collect_libs(${target} prl_libs)
-        string(APPEND prl_step1_content "QMAKE_PRL_LIBS_FOR_CMAKE = ${prl_libs}\n")
-    endif()
 
     file(GENERATE
         OUTPUT "${prl_step1_path}"

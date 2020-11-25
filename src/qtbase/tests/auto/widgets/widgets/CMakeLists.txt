@@ -19,7 +19,6 @@ add_subdirectory(qgroupbox)
 add_subdirectory(qlabel)
 add_subdirectory(qlcdnumber)
 add_subdirectory(qmdisubwindow)
-add_subdirectory(qmenu)
 add_subdirectory(qplaintextedit)
 add_subdirectory(qprogressbar)
 add_subdirectory(qpushbutton)
@@ -52,9 +51,12 @@ if(NOT ANDROID)
     add_subdirectory(qlineedit)
     # QTBUG-87420 # special case
     add_subdirectory(qmdiarea)
+    # QTBUG-87671 # special case
+    add_subdirectory(qmenu)
     # QTBUG-87421 # special case
     add_subdirectory(qmenubar)
 endif()
-if(QT_FEATURE_opengl)
+# QTBUG-87671 # special case
+if(QT_FEATURE_opengl AND NOT ANDROID)
     add_subdirectory(qopenglwidget)
 endif()

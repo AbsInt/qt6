@@ -362,6 +362,7 @@ public:
         IsGadget = 0x200,
         PointerToGadget = 0x400,
         IsPointer = 0x800,
+        IsQmlList =0x1000, // used in the QML engine to recognize QQmlListProperty<T> and list<T>
     };
     Q_DECLARE_FLAGS(TypeFlags, TypeFlag)
 
@@ -698,7 +699,7 @@ public:
     {
     }
 
-    QPairVariantInterfaceImpl()
+    constexpr QPairVariantInterfaceImpl()
       : _pair(nullptr)
       , _getFirst(nullptr)
       , _getSecond(nullptr)
@@ -818,36 +819,44 @@ namespace QtPrivate
     template<typename T, typename Enable = void>
     struct MetaObjectForType
     {
-        static constexpr inline const QMetaObject *value() { return nullptr; }
+        static constexpr const QMetaObject *value() { return nullptr; }
+        using MetaObjectFn = const QMetaObject *(*)(const QMetaTypeInterface *);
+        static constexpr MetaObjectFn metaObjectFunction = nullptr;
     };
 #ifndef QT_NO_QOBJECT
     template<>
     struct MetaObjectForType<void>
     {
-        static constexpr inline const QMetaObject *value() { return nullptr; }
+        static constexpr const QMetaObject *value() { return nullptr; }
+        using MetaObjectFn = const QMetaObject *(*)(const QMetaTypeInterface *);
+        static constexpr MetaObjectFn metaObjectFunction = nullptr;
     };
     template<typename T>
     struct MetaObjectForType<T*, typename std::enable_if<IsPointerToTypeDerivedFromQObject<T*>::Value>::type>
     {
-        static constexpr inline const QMetaObject *value() { return &T::staticMetaObject; }
+        static constexpr const QMetaObject *value() { return &T::staticMetaObject; }
+        static constexpr const QMetaObject *metaObjectFunction(const QMetaTypeInterface *) { return &T::staticMetaObject; }
     };
     template<typename T>
     struct MetaObjectForType<T, typename std::enable_if<IsGadgetHelper<T>::IsGadgetOrDerivedFrom>::type>
     {
-        static constexpr inline const QMetaObject *value() { return &T::staticMetaObject; }
+        static constexpr const QMetaObject *value() { return &T::staticMetaObject; }
+        static constexpr const QMetaObject *metaObjectFunction(const QMetaTypeInterface *) { return &T::staticMetaObject; }
     };
     template<typename T>
     struct MetaObjectForType<T, typename std::enable_if<IsPointerToGadgetHelper<T>::IsGadgetOrDerivedFrom>::type>
     {
-        static constexpr inline const QMetaObject *value()
+        static constexpr const QMetaObject *value()
         {
             return &IsPointerToGadgetHelper<T>::BaseType::staticMetaObject;
         }
+        static constexpr const QMetaObject *metaObjectFunction(const QMetaTypeInterface *) { return value(); }
     };
     template<typename T>
     struct MetaObjectForType<T, typename std::enable_if<IsQEnumHelper<T>::Value>::type >
     {
-        static constexpr inline const QMetaObject *value() { return qt_getEnumMetaObject(T()); }
+        static constexpr const QMetaObject *value() { return qt_getEnumMetaObject(T()); }
+        static constexpr const QMetaObject *metaObjectFunction(const QMetaTypeInterface *) { return value(); }
     };
 #endif
 
@@ -1062,6 +1071,9 @@ namespace QtPrivate {
     template <typename Result, typename... Args>
     struct IsPointerToTypeDerivedFromQObject<Result(*)(Args...)> { enum { Value = false }; };
 
+    template<typename T>
+    inline constexpr bool IsQmlListType = false;
+
     template<typename T, bool = std::is_enum<T>::value>
     constexpr bool IsUnsignedEnum = false;
     template<typename T>
@@ -1082,6 +1094,7 @@ namespace QtPrivate {
                      | (IsPointerToGadgetHelper<T>::IsGadgetOrDerivedFrom ? QMetaType::PointerToGadget : 0)
                      | (QTypeInfo<T>::isPointer ? QMetaType::IsPointer : 0)
                      | (IsUnsignedEnum<T> ? QMetaType::IsUnsignedEnumeration : 0)
+                     | (IsQmlListType<T> ? QMetaType::IsQmlList : 0)
              };
     };
 
@@ -1590,7 +1603,10 @@ public:
     uint size;
     uint flags;
     mutable QBasicAtomicInt typeId;
-    const QMetaObject *metaObject;
+
+    using MetaObjectFn = const QMetaObject *(*)(const QMetaTypeInterface *);
+    const MetaObjectFn metaObjectFn;
+
     const char *name;
 
     using DefaultCtrFn = void (*)(const QMetaTypeInterface *, void *);
@@ -2224,42 +2240,27 @@ public:
 template<typename T>
 struct QMetaTypeInterfaceWrapper
 {
-    static inline constexpr QMetaTypeInterface create()
-    {
-        return {
-            /*.revision=*/ 0,
-            /*.alignment=*/ alignof(T),
-            /*.size=*/ sizeof(T),
-            /*.flags=*/ QMetaTypeTypeFlags<T>::Flags,
-            /*.typeId=*/ BuiltinMetaType<T>::value,
-            /*.metaObject=*/ MetaObjectForType<T>::value(),
-            /*.name=*/ QMetaTypeForType<T>::getName(),
-            /*.defaultCtr=*/ QMetaTypeForType<T>::getDefaultCtr(),
-            /*.copyCtr=*/ QMetaTypeForType<T>::getCopyCtr(),
-            /*.moveCtr=*/ QMetaTypeForType<T>::getMoveCtr(),
-            /*.dtor=*/ QMetaTypeForType<T>::getDtor(),
-            /*.equals=*/ QEqualityOperatorForType<T>::equals,
-            /*.lessThan=*/ QLessThanOperatorForType<T>::lessThan,
-            /*.debugStream=*/ QDebugStreamOperatorForType<T>::debugStream,
-            /*.dataStreamOut=*/ QDataStreamOperatorForType<T>::dataStreamOut,
-            /*.dataStreamIn=*/ QDataStreamOperatorForType<T>::dataStreamIn,
-            /*.legacyRegisterOp=*/ QMetaTypeForType<T>::getLegacyRegister()
-        };
-    }
-
-#ifdef Q_OS_WIN
-    // MSVC produces link errors when the metaType is constexpr
-    static const QMetaTypeInterface metaType;
-#else
-    static constexpr const QMetaTypeInterface metaType = create();
-#endif
+    static inline constexpr const QMetaTypeInterface metaType = {
+        /*.revision=*/ 0,
+        /*.alignment=*/ alignof(T),
+        /*.size=*/ sizeof(T),
+        /*.flags=*/ QMetaTypeTypeFlags<T>::Flags,
+        /*.typeId=*/ BuiltinMetaType<T>::value,
+        /*.metaObjectFn=*/ MetaObjectForType<T>::metaObjectFunction,
+        /*.name=*/ QMetaTypeForType<T>::getName(),
+        /*.defaultCtr=*/ QMetaTypeForType<T>::getDefaultCtr(),
+        /*.copyCtr=*/ QMetaTypeForType<T>::getCopyCtr(),
+        /*.moveCtr=*/ QMetaTypeForType<T>::getMoveCtr(),
+        /*.dtor=*/ QMetaTypeForType<T>::getDtor(),
+        /*.equals=*/ QEqualityOperatorForType<T>::equals,
+        /*.lessThan=*/ QLessThanOperatorForType<T>::lessThan,
+        /*.debugStream=*/ QDebugStreamOperatorForType<T>::debugStream,
+        /*.dataStreamOut=*/ QDataStreamOperatorForType<T>::dataStreamOut,
+        /*.dataStreamIn=*/ QDataStreamOperatorForType<T>::dataStreamIn,
+        /*.legacyRegisterOp=*/ QMetaTypeForType<T>::getLegacyRegister()
+    };
 };
 
-#ifdef Q_OS_WIN
-template<typename T>
-const QMetaTypeInterface QMetaTypeInterfaceWrapper<T>::metaType
-    = QMetaTypeInterfaceWrapper<T>::create();
-#endif
 
 template<>
 class QMetaTypeInterfaceWrapper<void>
@@ -2272,7 +2273,7 @@ public:
         /*.size=*/ 0,
         /*.flags=*/ 0,
         /*.typeId=*/ BuiltinMetaType<void>::value,
-        /*.metaObject=*/ nullptr,
+        /*.metaObjectFn=*/ nullptr,
         /*.name=*/ "void",
         /*.defaultCtr=*/ nullptr,
         /*.copyCtr=*/ nullptr,
@@ -2395,7 +2396,7 @@ constexpr QMetaType::TypeFlags QMetaType::flags() const
 
 constexpr const QMetaObject *QMetaType::metaObject() const
 {
-    return d_ptr ? d_ptr->metaObject : nullptr;
+    return d_ptr && d_ptr->metaObjectFn ? d_ptr->metaObjectFn(d_ptr) : nullptr;
 }
 
 template<typename... T>

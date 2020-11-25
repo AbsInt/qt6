@@ -134,6 +134,8 @@ public:
     QQuickWindowPrivate();
     ~QQuickWindowPrivate() override;
 
+    void updateChildrenPalettes(const QPalette &parentPalette) override;
+
     void init(QQuickWindow *, QQuickRenderControl *control = nullptr);
 
     QQuickRootItem *contentItem;
@@ -152,6 +154,7 @@ public:
 #if QT_CONFIG(quick_draganddrop)
     QQuickDragGrabber *dragGrabber;
 #endif
+    QQuickItem *lastUngrabbed = nullptr;
     QStack<QPointerEvent *> eventsInDelivery;
 
     int touchMouseId; // only for obsolete stuff like QQuickItem::grabMouse()
@@ -185,6 +188,7 @@ public:
     bool compressTouchEvent(QTouchEvent *);
     void flushFrameSynchronousEvents();
     void deliverDelayedTouchEvent();
+    void handleWindowDeactivate();
 
     // utility functions that used to be in QQuickPointerEvent et al.
     bool allUpdatedPointsAccepted(const QPointerEvent *ev);
@@ -195,7 +199,7 @@ public:
     static bool isTabletEvent(const QPointerEvent *ev);
 
     // delivery of pointer events:
-    QMouseEvent touchToMouseEvent(QEvent::Type type, const QEventPoint &p, QTouchEvent *event, QQuickItem *item);
+    void touchToMouseEvent(QEvent::Type type, const QEventPoint &p, const QTouchEvent *touchEvent, QMutableSinglePointEvent *mouseEvent);
     void ensureDeviceConnected(const QPointingDevice *dev);
     void deliverPointerEvent(QPointerEvent *);
     bool deliverTouchCancelEvent(QTouchEvent *);

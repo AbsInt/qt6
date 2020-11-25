@@ -1561,8 +1561,9 @@ QList<QtDependency> findFilesRecursively(const Options &options, const QFileInfo
         const QStringList entries = dir.entryList(QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot);
 
         for (const QString &entry : entries) {
-            QString s = info.absoluteFilePath() + QLatin1Char('/') + entry;
-            ret += findFilesRecursively(options, s, rootPath);
+            ret += findFilesRecursively(options,
+                        QFileInfo(info.absoluteFilePath() + QChar(u'/') + entry),
+                        rootPath);
         }
 
         return ret;
@@ -1826,8 +1827,18 @@ bool scanImports(Options *options, QSet<QString> *usedDependencies)
     importPaths += shellQuote(options->qtInstallDirectory + QLatin1String("/qml"));
     if (!rootPath.isEmpty())
         importPaths += shellQuote(rootPath);
-    for (const QString &qmlImportPath : qAsConst(options->qmlImportPaths))
-        importPaths += shellQuote(qmlImportPath);
+    for (const QString &prefix : options->extraPrefixDirs)
+        if (QDir().exists(prefix + QLatin1String("/qml")))
+            importPaths += shellQuote(prefix + QLatin1String("/qml"));
+
+    for (const QString &qmlImportPath : qAsConst(options->qmlImportPaths)) {
+        if (QDir().exists(qmlImportPath)) {
+            importPaths += shellQuote(qmlImportPath);
+        } else {
+            fprintf(stderr, "Warning: QML import path %s does not exist.\n",
+                    qPrintable(qmlImportPath));
+        }
+    }
     qmlImportScanner += QLatin1String(" -importPath %1").arg(importPaths.join(QLatin1Char(' ')));
 
     if (options->verbose) {

@@ -162,7 +162,7 @@ void QWaylandWindow::initWindow()
                     name.chop(8);
                 mShellSurface->setAppId(name);
             } else {
-                QFileInfo fi = QCoreApplication::instance()->applicationFilePath();
+                QFileInfo fi = QFileInfo(QCoreApplication::instance()->applicationFilePath());
                 QStringList domainName =
                         QCoreApplication::instance()->organizationDomain().split(QLatin1Char('.'),
                                                                                  Qt::SkipEmptyParts);
@@ -192,10 +192,11 @@ void QWaylandWindow::initWindow()
         mSurface->set_buffer_scale(scale());
 
     setWindowFlags(window()->flags());
-    if (window()->geometry().isEmpty())
+    QRect geometry = windowGeometry();
+    if (geometry.isEmpty())
         setGeometry_helper(QRect(QPoint(), QSize(500,500)));
     else
-        setGeometry_helper(window()->geometry());
+        setGeometry_helper(geometry);
     setMask(window()->mask());
     if (mShellSurface)
         mShellSurface->requestWindowStates(window()->windowStates());
@@ -330,9 +331,11 @@ void QWaylandWindow::setWindowIcon(const QIcon &icon)
 
 void QWaylandWindow::setGeometry_helper(const QRect &rect)
 {
+    QSize minimum = windowMinimumSize();
+    QSize maximum = windowMaximumSize();
     QPlatformWindow::setGeometry(QRect(rect.x(), rect.y(),
-                qBound(window()->minimumWidth(), rect.width(), window()->maximumWidth()),
-                qBound(window()->minimumHeight(), rect.height(), window()->maximumHeight())));
+                qBound(minimum.width(), rect.width(), maximum.width()),
+                qBound(minimum.height(), rect.height(), maximum.height())));
 
     if (mSubSurfaceWindow) {
         QMargins m = QPlatformWindow::parent()->frameMargins();
@@ -427,7 +430,7 @@ void QWaylandWindow::setVisible(bool visible)
         initWindow();
         mDisplay->flushRequests();
 
-        setGeometry(window()->geometry());
+        setGeometry(windowGeometry());
         // Don't flush the events here, or else the newly visible window may start drawing, but since
         // there was no frame before it will be stuck at the waitForFrameSync() in
         // QWaylandShmBackingStore::beginPaint().
@@ -544,8 +547,8 @@ void QWaylandWindow::sendRecursiveExposeEvent()
 
 void QWaylandWindow::attach(QWaylandBuffer *buffer, int x, int y)
 {
-    Q_ASSERT(!buffer->committed());
     if (buffer) {
+        Q_ASSERT(!buffer->committed());
         handleUpdate();
         buffer->setBusy();
 

@@ -193,8 +193,15 @@ class QCache
 public:
     inline explicit QCache(qsizetype maxCost = 100) noexcept
         : mx(maxCost)
-    {}
-    inline ~QCache() { clear(); }
+    {
+    }
+    inline ~QCache()
+    {
+        static_assert(std::is_nothrow_destructible_v<Key>, "Types with throwing destructors are not supported in Qt containers.");
+        static_assert(std::is_nothrow_destructible_v<T>, "Types with throwing destructors are not supported in Qt containers.");
+
+        clear();
+    }
 
     inline qsizetype maxCost() const noexcept { return mx; }
     void setMaxCost(qsizetype m) noexcept(std::is_nothrow_destructible_v<Node>)
@@ -229,10 +236,9 @@ public:
 
     bool insert(const Key &key, T *object, qsizetype cost = 1)
     {
-        remove(key);
-
         if (cost > mx) {
             delete object;
+            remove(key);
             return false;
         }
         trim(mx - cost);

@@ -281,7 +281,6 @@ private:
 void tst_QStringView::constExpr() const
 {
     // compile-time checks
-#ifdef Q_COMPILER_CONSTEXPR
     {
         constexpr QStringView sv;
         static_assert(sv.size() == 0);
@@ -363,7 +362,6 @@ void tst_QStringView::constExpr() const
         static_assert(sv3.isEmpty());
         static_assert(sv3.size() == 0);
     }
-#endif
 }
 
 void tst_QStringView::basics() const
@@ -666,7 +664,7 @@ template <typename Char>
 void tst_QStringView::fromLiteral(const Char *arg) const
 {
     const Char *null = nullptr;
-    const Char empty[] = { 0 };
+    const Char empty[] = { Char{} };
 
     QCOMPARE(QStringView(null).size(), qsizetype(0));
     QCOMPARE(QStringView(null).data(), nullptr);

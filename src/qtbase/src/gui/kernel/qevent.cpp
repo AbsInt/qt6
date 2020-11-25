@@ -61,6 +61,10 @@
 
 QT_BEGIN_NAMESPACE
 
+static_assert(sizeof(QMutableTouchEvent) == sizeof(QTouchEvent));
+static_assert(sizeof(QMutableSinglePointEvent) == sizeof(QSinglePointEvent));
+static_assert(sizeof(QMouseEvent) == sizeof(QSinglePointEvent));
+
 /*!
     \class QEnterEvent
     \ingroup events
@@ -2260,16 +2264,6 @@ QInputMethodEvent::QInputMethodEvent()
 QInputMethodEvent::QInputMethodEvent(const QString &preeditText, const QList<Attribute> &attributes)
     : QEvent(QEvent::InputMethod), m_preedit(preeditText), m_attributes(attributes),
       m_replacementStart(0), m_replacementLength(0)
-{
-}
-
-/*!
-    Constructs a copy of \a other.
-*/
-QInputMethodEvent::QInputMethodEvent(const QInputMethodEvent &other)
-    : QEvent(QEvent::InputMethod), m_preedit(other.m_preedit), m_commit(other.m_commit),
-      m_attributes(other.m_attributes), m_replacementStart(other.m_replacementStart),
-      m_replacementLength(other.m_replacementLength)
 {
 }
 
@@ -4508,39 +4502,27 @@ QScrollPrepareEvent::~QScrollPrepareEvent()
 }
 
 /*!
+    \fn QPointF QScrollPrepareEvent::startPos() const
+
     Returns the position of the touch or mouse event that started the scrolling.
 */
-QPointF QScrollPrepareEvent::startPos() const
-{
-    return m_startPos;
-}
 
 /*!
+    \fn QSizeF QScrollPrepareEvent::viewportSize() const
     Returns size of the area that is to be scrolled as set by setViewportSize
 
     \sa setViewportSize()
 */
-QSizeF QScrollPrepareEvent::viewportSize() const
-{
-    return m_viewportSize;
-}
 
 /*!
+    \fn QRectF QScrollPrepareEvent::contentPosRange() const
     Returns the range of coordinates for the content as set by setContentPosRange().
 */
-QRectF QScrollPrepareEvent::contentPosRange() const
-{
-    return m_contentPosRange;
-}
 
 /*!
+    \fn QPointF QScrollPrepareEvent::contentPos() const
     Returns the current position of the content as set by setContentPos.
 */
-QPointF QScrollPrepareEvent::contentPos() const
-{
-    return m_contentPos;
-}
-
 
 /*!
     Sets the size of the area that is to be scrolled to \a size.
@@ -4623,25 +4605,23 @@ QScrollEvent::~QScrollEvent()
 }
 
 /*!
+    \fn QPointF QScrollEvent::contentPos() const
+
     Returns the new scroll position.
 */
-QPointF QScrollEvent::contentPos() const
-{
-    return m_contentPos;
-}
 
 /*!
+    \fn QPointF QScrollEvent::overshootDistance() const
+
     Returns the new overshoot distance.
     See QScroller for an explanation of the term overshoot.
 
     \sa QScroller
 */
-QPointF QScrollEvent::overshootDistance() const
-{
-    return m_overshoot;
-}
 
 /*!
+    \fn QScrollEvent::ScrollState QScrollEvent::scrollState() const
+
     Returns the current scroll state as a combination of ScrollStateFlag values.
     ScrollStarted (or ScrollFinished) will be set, if this scroll event is the first (or last) event in a scrolling activity.
     Please note that both values can be set at the same time, if the activity consists of a single QScrollEvent.
@@ -4649,10 +4629,6 @@ QPointF QScrollEvent::overshootDistance() const
 
     A widget could for example revert selections when scrolling is started and stopped.
 */
-QScrollEvent::ScrollState QScrollEvent::scrollState() const
-{
-    return m_state;
-}
 
 /*!
     Creates a new QScreenOrientationChangeEvent
@@ -4671,20 +4647,16 @@ QScreenOrientationChangeEvent::~QScreenOrientationChangeEvent()
 }
 
 /*!
+    \fn QScreen *QScreenOrientationChangeEvent::screen() const
+
     Returns the screen whose orientation changed.
 */
-QScreen *QScreenOrientationChangeEvent::screen() const
-{
-    return m_screen;
-}
 
 /*!
+    \fn Qt::ScreenOrientation QScreenOrientationChangeEvent::orientation() const
+
     Returns the orientation of the screen.
 */
-Qt::ScreenOrientation QScreenOrientationChangeEvent::orientation() const
-{
-    return m_orientation;
-}
 
 /*!
     Creates a new QApplicationStateChangeEvent.
@@ -4696,12 +4668,10 @@ QApplicationStateChangeEvent::QApplicationStateChangeEvent(Qt::ApplicationState 
 }
 
 /*!
+    \fn Qt::ApplicationState QApplicationStateChangeEvent::applicationState() const
+
     Returns the state of the application.
 */
-Qt::ApplicationState QApplicationStateChangeEvent::applicationState() const
-{
-    return m_applicationState;
-}
 
 /*! \internal
     Add the given \a point.

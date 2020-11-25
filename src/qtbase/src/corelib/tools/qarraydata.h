@@ -49,7 +49,7 @@ QT_BEGIN_NAMESPACE
 
 template <class T> struct QTypedArrayData;
 
-struct Q_CORE_EXPORT QArrayData
+struct QArrayData
 {
     enum AllocationOption {
         Grow,
@@ -71,12 +71,12 @@ struct Q_CORE_EXPORT QArrayData
     uint flags;
     qsizetype alloc;
 
-    inline qsizetype allocatedCapacity() noexcept
+    qsizetype allocatedCapacity() noexcept
     {
         return alloc;
     }
 
-    inline qsizetype constAllocatedCapacity() const noexcept
+    qsizetype constAllocatedCapacity() const noexcept
     {
         return alloc;
     }
@@ -118,11 +118,11 @@ struct Q_CORE_EXPORT QArrayData
 #if defined(Q_CC_GNU)
     __attribute__((__malloc__))
 #endif
-    static void *allocate(QArrayData **pdata, qsizetype objectSize, qsizetype alignment,
+    static Q_CORE_EXPORT void *allocate(QArrayData **pdata, qsizetype objectSize, qsizetype alignment,
             qsizetype capacity, AllocationOption option = QArrayData::KeepSize) noexcept;
-    [[nodiscard]] static QPair<QArrayData *, void *> reallocateUnaligned(QArrayData *data, void *dataPointer,
+    [[nodiscard]] static Q_CORE_EXPORT QPair<QArrayData *, void *> reallocateUnaligned(QArrayData *data, void *dataPointer,
             qsizetype objectSize, qsizetype newCapacity, AllocationOption option) noexcept;
-    static void deallocate(QArrayData *data, qsizetype objectSize,
+    static Q_CORE_EXPORT void deallocate(QArrayData *data, qsizetype objectSize,
             qsizetype alignment) noexcept;
 };
 
@@ -132,79 +132,6 @@ template <class T>
 struct QTypedArrayData
     : QArrayData
 {
-    class iterator {
-        T *i = nullptr;
-    public:
-        typedef std::random_access_iterator_tag  iterator_category;
-        typedef qsizetype difference_type;
-        typedef T value_type;
-        typedef T *pointer;
-        typedef T &reference;
-
-        inline constexpr iterator() = default;
-        inline iterator(T *n) : i(n) {}
-        inline T &operator*() const { return *i; }
-        inline T *operator->() const { return i; }
-        inline T &operator[](qsizetype j) const { return *(i + j); }
-        inline constexpr bool operator==(iterator o) const { return i == o.i; }
-        inline constexpr bool operator!=(iterator o) const { return i != o.i; }
-        inline constexpr bool operator<(iterator other) const { return i < other.i; }
-        inline constexpr bool operator<=(iterator other) const { return i <= other.i; }
-        inline constexpr bool operator>(iterator other) const { return i > other.i; }
-        inline constexpr bool operator>=(iterator other) const { return i >= other.i; }
-        inline constexpr bool operator==(pointer p) const { return i == p; }
-        inline constexpr bool operator!=(pointer p) const { return i != p; }
-        inline iterator &operator++() { ++i; return *this; }
-        inline iterator operator++(int) { T *n = i; ++i; return n; }
-        inline iterator &operator--() { i--; return *this; }
-        inline iterator operator--(int) { T *n = i; i--; return n; }
-        inline iterator &operator+=(qsizetype j) { i+=j; return *this; }
-        inline iterator &operator-=(qsizetype j) { i-=j; return *this; }
-        inline iterator operator+(qsizetype j) const { return iterator(i+j); }
-        inline iterator operator-(qsizetype j) const { return iterator(i-j); }
-        friend inline iterator operator+(qsizetype j, iterator k) { return k + j; }
-        inline qsizetype operator-(iterator j) const { return i - j.i; }
-        inline operator T*() const { return i; }
-    };
-
-    class const_iterator {
-        const T *i = nullptr;
-    public:
-        typedef std::random_access_iterator_tag  iterator_category;
-        typedef qsizetype difference_type;
-        typedef T value_type;
-        typedef const T *pointer;
-        typedef const T &reference;
-
-        inline constexpr const_iterator() = default;
-        inline const_iterator(const T *n) : i(n) {}
-        inline constexpr const_iterator(iterator o): i(o) {}
-        inline const T &operator*() const { return *i; }
-        inline const T *operator->() const { return i; }
-        inline const T &operator[](qsizetype j) const { return *(i + j); }
-        inline constexpr bool operator==(const_iterator o) const { return i == o.i; }
-        inline constexpr bool operator!=(const_iterator o) const { return i != o.i; }
-        inline constexpr bool operator<(const_iterator other) const { return i < other.i; }
-        inline constexpr bool operator<=(const_iterator other) const { return i <= other.i; }
-        inline constexpr bool operator>(const_iterator other) const { return i > other.i; }
-        inline constexpr bool operator>=(const_iterator other) const { return i >= other.i; }
-        inline constexpr bool operator==(iterator o) const { return i == const_iterator(o).i; }
-        inline constexpr bool operator!=(iterator o) const { return i != const_iterator(o).i; }
-        inline constexpr bool operator==(pointer p) const { return i == p; }
-        inline constexpr bool operator!=(pointer p) const { return i != p; }
-        inline const_iterator &operator++() { ++i; return *this; }
-        inline const_iterator operator++(int) { const T *n = i; ++i; return n; }
-        inline const_iterator &operator--() { i--; return *this; }
-        inline const_iterator operator--(int) { const T *n = i; i--; return n; }
-        inline const_iterator &operator+=(qsizetype j) { i+=j; return *this; }
-        inline const_iterator &operator-=(qsizetype j) { i-=j; return *this; }
-        inline const_iterator operator+(qsizetype j) const { return const_iterator(i+j); }
-        inline const_iterator operator-(qsizetype j) const { return const_iterator(i-j); }
-        friend inline const_iterator operator+(qsizetype j, const_iterator k) { return k + j; }
-        inline qsizetype operator-(const_iterator j) const { return i - j.i; }
-        inline operator const T*() const { return i; }
-    };
-
     struct AlignmentDummy { QArrayData header; T data; };
 
     [[nodiscard]] static QPair<QTypedArrayData *, T *> allocate(qsizetype capacity, AllocationOption option = QArrayData::KeepSize)

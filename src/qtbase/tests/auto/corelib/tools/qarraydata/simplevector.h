@@ -44,8 +44,8 @@ private:
 
 public:
     typedef T value_type;
-    typedef typename Data::iterator iterator;
-    typedef typename Data::const_iterator const_iterator;
+    typedef T *iterator;
+    typedef const T *const_iterator;
 
     SimpleVector()
     {
@@ -216,15 +216,10 @@ public:
 
         auto requiredSize = qsizetype(last - first);
         if (d->needsDetach() || d.freeSpaceAtEnd() < requiredSize) {
-            SimpleVector detached(DataPointer::allocateGrow(d, requiredSize, QArrayData::GrowsAtEnd));
+            DataPointer oldData;
+            d.reallocateAndGrow(QArrayData::GrowsAtEnd, requiredSize, &oldData);
 
-            if (d->size) {
-                const T *const begin = constBegin();
-                detached.d->copyAppend(begin, begin + d->size);
-            }
-            detached.d->copyAppend(first, last);
-            detached.swap(*this);
-
+            d->copyAppend(first, last);
             return;
         }
 
@@ -279,7 +274,7 @@ public:
         if (last == end)
             d->truncate(end - first);
         else
-            d->erase(first, last);
+            d->erase(first, last - first);
     }
 
     void swap(SimpleVector &other)

@@ -675,7 +675,7 @@ WId QWindow::winId() const
 {
     Q_D(const QWindow);
 
-    if(!d->platformWindow)
+    if (!d->platformWindow)
         const_cast<QWindow *>(this)->create();
 
     return d->platformWindow->winId();
@@ -1187,7 +1187,7 @@ QRegion QWindow::mask() const
 /*!
     Requests the window to be activated, i.e. receive keyboard focus.
 
-    \sa isActive(), QGuiApplication::focusWindow(), QWindowsWindowFunctions::setWindowActivationBehavior()
+    \sa isActive(), QGuiApplication::focusWindow()
 */
 void QWindow::requestActivate()
 {

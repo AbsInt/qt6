@@ -1824,22 +1824,22 @@ void QCommonStyle::drawControl(ControlElement element, const QStyleOption *opt,
                 switch (tab->shape) {
                 case QTabBar::TriangularNorth:
                     rect.adjust(0, 0, 0, -tabOverlap);
-                    if(!selected)
+                    if (!selected)
                         rect.adjust(1, 1, -1, 0);
                     break;
                 case QTabBar::TriangularSouth:
                     rect.adjust(0, tabOverlap, 0, 0);
-                    if(!selected)
+                    if (!selected)
                         rect.adjust(1, 0, -1, -1);
                     break;
                 case QTabBar::TriangularEast:
                     rect.adjust(tabOverlap, 0, 0, 0);
-                    if(!selected)
+                    if (!selected)
                         rect.adjust(0, 1, -1, -1);
                     break;
                 case QTabBar::TriangularWest:
                     rect.adjust(0, 0, -tabOverlap, 0);
-                    if(!selected)
+                    if (!selected)
                         rect.adjust(1, 1, 0, -1);
                     break;
                 default:
@@ -4511,7 +4511,8 @@ int QCommonStyle::pixelMetric(PixelMetric m, const QStyleOption *opt, const QWid
     case PM_DialogButtonsButtonHeight:
         ret = int(QStyleHelper::dpiScaled(30, opt));
         break;
-    case PM_TitleBarHeight: {
+    case PM_TitleBarHeight:
+    {
         if (const QStyleOptionTitleBar *tb = qstyleoption_cast<const QStyleOptionTitleBar *>(opt)) {
             if ((tb->titleBarFlags & Qt::WindowType_Mask) == Qt::Tool) {
                 ret = qMax(widget ? widget->fontMetrics().height() : opt->fontMetrics.height(), 16);
@@ -4525,8 +4526,8 @@ int QCommonStyle::pixelMetric(PixelMetric m, const QStyleOption *opt, const QWid
         } else {
             ret = int(QStyleHelper::dpiScaled(18., opt));
         }
-
-        break; }
+        break;
+    }
     case PM_TitleBarButtonSize:
         ret = int(QStyleHelper::dpiScaled(16., opt));
         break;
@@ -4691,17 +4692,19 @@ int QCommonStyle::pixelMetric(PixelMetric m, const QStyleOption *opt, const QWid
         ret = 2;
         break;
 
-    case PM_TabBarTabVSpace: {
+    case PM_TabBarTabVSpace:
+    {
         const QStyleOptionTab *tb = qstyleoption_cast<const QStyleOptionTab *>(opt);
         if (tb && (tb->shape == QTabBar::RoundedNorth || tb->shape == QTabBar::RoundedSouth
                    || tb->shape == QTabBar::RoundedWest || tb->shape == QTabBar::RoundedEast))
             ret = 8;
         else
-            if(tb && (tb->shape == QTabBar::TriangularWest || tb->shape == QTabBar::TriangularEast))
+            if (tb && (tb->shape == QTabBar::TriangularWest || tb->shape == QTabBar::TriangularEast))
                 ret = 3;
             else
                 ret = 2;
-        break; }
+        break;
+    }
 #endif
 
     case PM_ProgressBarChunkWidth:
@@ -4760,16 +4763,16 @@ int QCommonStyle::pixelMetric(PixelMetric m, const QStyleOption *opt, const QWid
     case PM_LayoutTopMargin:
     case PM_LayoutRightMargin:
     case PM_LayoutBottomMargin:
-        {
-            bool isWindow = false;
-            if (opt) {
-                isWindow = (opt->state & State_Window);
-            } else if (widget) {
-                isWindow = widget->isWindow();
-            }
-            ret = int(QStyleHelper::dpiScaled(isWindow ? 11 : 9, opt));
+    {
+        bool isWindow = false;
+        if (opt) {
+            isWindow = (opt->state & State_Window);
+        } else if (widget) {
+            isWindow = widget->isWindow();
         }
+        ret = int(QStyleHelper::dpiScaled(isWindow ? 11 : 9, opt));
         break;
+    }
     case PM_LayoutHorizontalSpacing:
     case PM_LayoutVerticalSpacing:
         ret = int(QStyleHelper::dpiScaled(6, opt));
@@ -5188,7 +5191,7 @@ int QCommonStyle::styleHint(StyleHint sh, const QStyleOption *opt, const QWidget
     case SH_FocusFrame_Mask:
         ret = 1;
         if (widget) {
-            if(QStyleHintReturnMask *mask = qstyleoption_cast<QStyleHintReturnMask*>(hret)) {
+            if (QStyleHintReturnMask *mask = qstyleoption_cast<QStyleHintReturnMask*>(hret)) {
                 mask->region = widget->rect();
                 const int vmargin = proxy()->pixelMetric(QStyle::PM_FocusFrameVMargin, opt);
                 const int hmargin = proxy()->pixelMetric(QStyle::PM_FocusFrameHMargin, opt);
@@ -5202,7 +5205,7 @@ int QCommonStyle::styleHint(StyleHint sh, const QStyleOption *opt, const QWidget
             ret = 0;
             if (rbOpt->shape == QRubberBand::Rectangle) {
                 ret = true;
-                if(QStyleHintReturnMask *mask = qstyleoption_cast<QStyleHintReturnMask*>(hret)) {
+                if (QStyleHintReturnMask *mask = qstyleoption_cast<QStyleHintReturnMask*>(hret)) {
                     mask->region = opt->rect;
                     const int margin = proxy()->pixelMetric(PM_DefaultFrameWidth, opt) * 2;
                     mask->region -= opt->rect.adjusted(margin, margin, -margin, -margin);

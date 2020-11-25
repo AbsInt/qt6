@@ -148,7 +148,8 @@ namespace QIcu {
 
 struct QLocaleId
 {
-    static QLocaleId fromName(const QString &name);
+    // ### Also used by Translator::languageAndCountry() in qttools:
+    Q_CORE_EXPORT static QLocaleId fromName(const QString &name);
     inline bool operator==(QLocaleId other) const
     { return language_id == other.language_id && script_id == other.script_id && country_id == other.country_id; }
     inline bool operator!=(QLocaleId other) const
@@ -488,7 +489,8 @@ inline char QLocaleData::numericToCLocale(QStringView in) const
 }
 
 QString qt_readEscapedFormatString(QStringView format, int *idx);
-bool qt_splitLocaleName(const QString &name, QString &lang, QString &script, QString &cntry);
+bool qt_splitLocaleName(QStringView name, QStringView *lang = nullptr,
+                        QStringView *script = nullptr, QStringView *cntry = nullptr);
 int qt_repeatCount(QStringView s);
 
 enum { AsciiSpaceMask = (1u << (' ' - 1)) |
@@ -502,7 +504,6 @@ constexpr inline bool ascii_isspace(uchar c)
     return c >= 1u && c <= 32u && (AsciiSpaceMask >> uint(c - 1)) & 1u;
 }
 
-#if defined(Q_COMPILER_CONSTEXPR)
 static_assert(ascii_isspace(' '));
 static_assert(ascii_isspace('\t'));
 static_assert(ascii_isspace('\n'));
@@ -516,7 +517,6 @@ static_assert(!ascii_isspace('\177'));
 static_assert(!ascii_isspace(uchar('\200')));
 static_assert(!ascii_isspace(uchar('\xA0')));
 static_assert(!ascii_isspace(uchar('\377')));
-#endif
 
 QT_END_NAMESPACE
 

@@ -53,8 +53,6 @@ private:
     typedef QArrayDataOps<T> DataOps;
 
 public:
-    typedef typename Data::iterator iterator;
-    typedef typename Data::const_iterator const_iterator;
     enum {
         pass_parameter_by_value =
                 std::is_arithmetic<T>::value || std::is_pointer<T>::value || std::is_enum<T>::value
@@ -142,12 +140,12 @@ public:
     T *data() noexcept { return ptr; }
     const T *data() const noexcept { return ptr; }
 
-    iterator begin(iterator = iterator()) noexcept { return data(); }
-    iterator end(iterator = iterator()) noexcept { return data() + size; }
-    const_iterator begin(const_iterator = const_iterator()) const noexcept { return data(); }
-    const_iterator end(const_iterator = const_iterator()) const noexcept { return data() + size; }
-    const_iterator constBegin(const_iterator = const_iterator()) const noexcept { return data(); }
-    const_iterator constEnd(const_iterator = const_iterator()) const noexcept { return data() + size; }
+    T *begin() noexcept { return data(); }
+    T *end() noexcept { return data() + size; }
+    const T *begin() const noexcept { return data(); }
+    const T *end() const noexcept { return data() + size; }
+    const T *constBegin() const noexcept { return data(); }
+    const T *constEnd() const noexcept { return data() + size; }
 
     void swap(QArrayDataPointer &other) noexcept
     {
@@ -162,17 +160,55 @@ public:
         swap(tmp);
     }
 
-    bool detach()
+    void detach(QArrayDataPointer *old = nullptr)
     {
-        if (needsDetach()) {
-            QPair<Data *, T *> copy = clone();
-            QArrayDataPointer old(d, ptr, size);
-            d = copy.first;
-            ptr = copy.second;
-            return true;
+        if (needsDetach())
+            reallocateAndGrow(QArrayData::GrowsAtEnd, 0, old);
+    }
+
+    // pass in a pointer to a default constructed QADP, to keep it alive beyond the detach() call
+    void detachAndGrow(QArrayData::GrowthPosition where, qsizetype n, QArrayDataPointer *old = nullptr)
+    {
+        if (!needsDetach()) {
+            if (!n ||
+                (where == QArrayData::GrowsAtBeginning && freeSpaceAtBegin() >= n) ||
+                (where == QArrayData::GrowsAtEnd && freeSpaceAtEnd() >= n))
+                return;
+        }
+        reallocateAndGrow(where, n, old);
+    }
+
+    Q_NEVER_INLINE void reallocateAndGrow(QArrayData::GrowthPosition where, qsizetype n, QArrayDataPointer *old = nullptr)
+    {
+        if constexpr (QTypeInfo<T>::isRelocatable && alignof(T) <= alignof(std::max_align_t)) {
+            if (where == QArrayData::GrowsAtEnd && !old && !needsDetach() && n > 0) {
+                (*this)->reallocate(constAllocatedCapacity() - freeSpaceAtEnd() + n, QArrayData::Grow); // fast path
+                return;
+            }
         }
 
-        return false;
+        QArrayDataPointer dp(allocateGrow(*this, n, where));
+        if (where == QArrayData::GrowsAtBeginning) {
+            dp.ptr += n;
+            Q_ASSERT(dp.freeSpaceAtBegin() >= n);
+        } else {
+            Q_ASSERT(dp.freeSpaceAtEnd() >= n);
+        }
+        if (size) {
+            qsizetype toCopy = size;
+            if (n < 0)
+                toCopy += n;
+            if (needsDetach() || old)
+                dp->copyAppend(begin(), begin() + toCopy);
+            else
+                dp->moveAppend(begin(), begin() + toCopy);
+            dp.d->flags = flags();
+            Q_ASSERT(dp.size == toCopy);
+        }
+
+        swap(dp);
+        if (old)
+            old->swap(dp);
     }
 
     // forwards from QArrayData
@@ -244,45 +280,8 @@ public:
         return lhs.data() != rhs.data() || lhs.size != rhs.size;
     }
 
-    static void reallocateGrow(QArrayDataPointer &from, qsizetype n)
-    {
-        Q_ASSERT(n > 0);
-
-        if constexpr (!QTypeInfo<T>::isRelocatable || alignof(T) > alignof(std::max_align_t)) {
-            QArrayDataPointer dd(allocateGrow(from, n, QArrayData::GrowsAtEnd));
-            dd->copyAppend(from.data(), from.data() + from.size);
-            from.swap(dd);
-        } else {
-            if (from.needsDetach()) {
-                QArrayDataPointer dd(allocateGrow(from, n, QArrayData::GrowsAtEnd));
-                dd->copyAppend(from.data(), from.data() + from.size);
-                from.swap(dd);
-            } else {
-                from->reallocate(from.constAllocatedCapacity() - from.freeSpaceAtEnd() + n, QArrayData::Grow); // fast path
-            }
-        }
-    }
-
-private:
-    [[nodiscard]] QPair<Data *, T *> clone() const
-    {
-        QPair<Data *, T *> pair = Data::allocate(detachCapacity(size), QArrayData::KeepSize);
-        QArrayDataPointer copy(pair.first, pair.second, 0);
-        if (size)
-            copy->copyAppend(begin(), end());
-
-        if (pair.first)
-            pair.first->flags = flags();
-        copy.d = nullptr;
-        copy.ptr = nullptr;
-        return pair;
-    }
-
-protected:
     Data *d;
     T *ptr;
-
-public:
     qsizetype size;
 };
 

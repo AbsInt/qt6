@@ -376,9 +376,9 @@ int QWin32PrintEngine::metric(QPaintDevice::PaintDeviceMetric m) const
     case QPaintDevice::PdmNumColors:
         {
             int bpp = GetDeviceCaps(d->hdc, BITSPIXEL);
-            if(bpp==32)
+            if (bpp==32)
                 val = INT_MAX;
-            else if(bpp<=8)
+            else if (bpp<=8)
                 val = GetDeviceCaps(d->hdc, NUMCOLORS);
             else
                 val = 1 << (bpp * GetDeviceCaps(d->hdc, PLANES));
@@ -750,8 +750,6 @@ void QWin32PrintEnginePrivate::fillPath(const QPainterPath &path, const QColor &
 
 void QWin32PrintEnginePrivate::strokePath(const QPainterPath &path, const QColor &color)
 {
-    Q_Q(QWin32PrintEngine);
-
     QPainterPathStroker stroker;
     if (pen.style() == Qt::CustomDashLine) {
         stroker.setDashPattern(pen.dashPattern());

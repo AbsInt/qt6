@@ -1948,7 +1948,7 @@ bool QGuiApplication::notify(QObject *object, QEvent *event)
 */
 bool QGuiApplication::event(QEvent *e)
 {
-    if(e->type() == QEvent::LanguageChange) {
+    if (e->type() == QEvent::LanguageChange) {
         setLayoutDirection(qt_detectRTLLanguage()?Qt::RightToLeft:Qt::LeftToRight);
         for (auto *topLevelWindow : QGuiApplication::topLevelWindows()) {
             if (topLevelWindow->flags() != Qt::Desktop)
@@ -2816,8 +2816,6 @@ void QGuiApplicationPrivate::processTouchEvent(QWindowSystemInterfacePrivate::To
             QWindow *w = mut.window();
             if (w)
                 windowsNeedingCancel.insert(w);
-            mut.setWindow(nullptr);
-            mut.setTarget(nullptr);
         }
 
         for (QSet<QWindow *>::const_iterator winIt = windowsNeedingCancel.constBegin(),

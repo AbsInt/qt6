@@ -73,6 +73,8 @@ struct QContiguousCacheTypedData : public QContiguousCacheData
 
 template<typename T>
 class QContiguousCache {
+    static_assert(std::is_nothrow_destructible_v<T>, "Types with throwing destructors are not supported in Qt containers.");
+
     typedef QContiguousCacheTypedData<T> Data;
     Data *d;
 public:
@@ -209,13 +211,13 @@ void QContiguousCache<T>::setCapacity(qsizetype asize)
     x->alloc = asize;
     x->count = qMin(d->count, asize);
     x->offset = d->offset + d->count - x->count;
-    if(asize)
+    if (asize)
         x->start = x->offset % x->alloc;
     else
         x->start = 0;
 
     qsizetype oldcount = x->count;
-    if(oldcount)
+    if (oldcount)
     {
         T *dest = x->array + (x->start + x->count-1) % x->alloc;
         T *src = d->array + (d->start + d->count-1) % d->alloc;

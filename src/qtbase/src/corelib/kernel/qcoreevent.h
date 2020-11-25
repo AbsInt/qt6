@@ -46,12 +46,20 @@
 
 QT_BEGIN_NAMESPACE
 
+#define Q_EVENT_DISABLE_COPY(Class) \
+protected: \
+    Class(const Class &) = default; \
+    Class(Class &&) = delete; \
+    Class &operator=(const Class &other) = default; \
+    Class &operator=(Class &&) = delete
 
 class QEventPrivate;
 class Q_CORE_EXPORT QEvent           // event base class
 {
     Q_GADGET
     QDOC_PROPERTY(bool accepted READ isAccepted WRITE setAccepted)
+
+    Q_EVENT_DISABLE_COPY(QEvent);
 public:
     enum Type {
         /*
@@ -295,9 +303,7 @@ public:
     Q_ENUM(Type)
 
     explicit QEvent(Type type);
-    QEvent(const QEvent &other);
     virtual ~QEvent();
-    QEvent &operator=(const QEvent &other);
     inline Type type() const { return static_cast<Type>(t); }
     inline bool spontaneous() const { return m_spont; }
 
@@ -312,6 +318,8 @@ public:
     inline bool isSinglePointEvent() const noexcept { return m_singlePointEvent; }
 
     static int registerEventType(int hint = -1) noexcept;
+
+    virtual QEvent *clone() const;
 
 protected:
     struct InputEventTag { explicit InputEventTag() = default; };
@@ -357,10 +365,13 @@ private:
 
 class Q_CORE_EXPORT QTimerEvent : public QEvent
 {
+    Q_EVENT_DISABLE_COPY(QTimerEvent);
 public:
     explicit QTimerEvent(int timerId);
     ~QTimerEvent();
     int timerId() const { return id; }
+
+    QTimerEvent *clone() const override { return new QTimerEvent(*this); };
 
 protected:
     int id;
@@ -370,6 +381,7 @@ class QObject;
 
 class Q_CORE_EXPORT QChildEvent : public QEvent
 {
+    Q_EVENT_DISABLE_COPY(QChildEvent);
 public:
     QChildEvent(Type type, QObject *child);
     ~QChildEvent();
@@ -378,17 +390,22 @@ public:
     bool polished() const { return type() == ChildPolished; }
     bool removed() const { return type() == ChildRemoved; }
 
+    QChildEvent *clone() const override { return new QChildEvent(*this); };
+
 protected:
     QObject *c;
 };
 
 class Q_CORE_EXPORT QDynamicPropertyChangeEvent : public QEvent
 {
+    Q_EVENT_DISABLE_COPY(QDynamicPropertyChangeEvent);
 public:
     explicit QDynamicPropertyChangeEvent(const QByteArray &name);
     ~QDynamicPropertyChangeEvent();
 
     inline QByteArray propertyName() const { return n; }
+
+    QDynamicPropertyChangeEvent *clone() const override { return new QDynamicPropertyChangeEvent(*this); };
 
 private:
     QByteArray n;
@@ -396,10 +413,13 @@ private:
 
 class Q_CORE_EXPORT QDeferredDeleteEvent : public QEvent
 {
+    Q_EVENT_DISABLE_COPY(QDeferredDeleteEvent);
 public:
     explicit QDeferredDeleteEvent();
     ~QDeferredDeleteEvent();
     int loopLevel() const { return level; }
+
+    QDeferredDeleteEvent *clone() const override { return new QDeferredDeleteEvent(*this); };
 
 private:
     int level;

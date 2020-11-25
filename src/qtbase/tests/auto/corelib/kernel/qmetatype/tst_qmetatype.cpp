@@ -413,19 +413,30 @@ void tst_QMetaType::registerGadget(const char *name, const QList<GadgetPropertyT
     meta->d.static_metacall = &GadgetsStaticMetacallFunction;
     meta->d.superdata = nullptr;
     const auto flags = QMetaType::IsGadget | QMetaType::NeedsConstruction | QMetaType::NeedsDestruction;
-    using TypeInfo = QtPrivate::QMetaTypeInterface;
+    struct TypeInfo : public QtPrivate::QMetaTypeInterface
+    {
+        QMetaObject *mo;
+    };
+
     auto typeInfo = new TypeInfo {
-        0, alignof(GenericGadgetType), sizeof(GenericGadgetType), uint(flags), 0, meta, name,
-        [](const TypeInfo *self, void *where) { GadgetTypedConstructor(self->typeId, where, nullptr); },
-        [](const TypeInfo *self, void *where, const void *copy) { GadgetTypedConstructor(self->typeId, where, copy); },
-        [](const TypeInfo *self, void *where, void *copy) { GadgetTypedConstructor(self->typeId, where, copy); },
-        [](const TypeInfo *self, void *ptr) { GadgetTypedDestructor(self->typeId, ptr); },
-        nullptr,
-        nullptr,
-        nullptr,
-        GadgetSaveOperator,
-        GadgetLoadOperator,
-        nullptr
+        {
+            0, alignof(GenericGadgetType), sizeof(GenericGadgetType), uint(flags), 0,
+            [](const QtPrivate::QMetaTypeInterface *self) -> const QMetaObject * {
+                return reinterpret_cast<const TypeInfo *>(self)->mo;
+            },
+            name,
+            [](const QtPrivate::QMetaTypeInterface *self, void *where) { GadgetTypedConstructor(self->typeId, where, nullptr); },
+            [](const QtPrivate::QMetaTypeInterface *self, void *where, const void *copy) { GadgetTypedConstructor(self->typeId, where, copy); },
+            [](const QtPrivate::QMetaTypeInterface *self, void *where, void *copy) { GadgetTypedConstructor(self->typeId, where, copy); },
+            [](const QtPrivate::QMetaTypeInterface *self, void *ptr) { GadgetTypedDestructor(self->typeId, ptr); },
+            nullptr,
+            nullptr,
+            nullptr,
+            GadgetSaveOperator,
+            GadgetLoadOperator,
+            nullptr
+        },
+        meta
     };
     QMetaType gadgetMetaType(typeInfo);
     dynamicGadgetProperties->m_metatype = gadgetMetaType;
@@ -1082,37 +1093,39 @@ void tst_QMetaType::flags_data()
     QTest::addColumn<bool>("isComplex");
     QTest::addColumn<bool>("isPointerToQObject");
     QTest::addColumn<bool>("isEnum");
+    QTest::addColumn<bool>("isQmlList");
 
 #define ADD_METATYPE_TEST_ROW(MetaTypeName, MetaTypeId, RealType) \
     QTest::newRow(#RealType) << MetaTypeId \
         << bool(QTypeInfo<RealType>::isRelocatable) \
         << bool(QTypeInfo<RealType>::isComplex) \
         << bool(QtPrivate::IsPointerToTypeDerivedFromQObject<RealType>::Value) \
-        << bool(std::is_enum<RealType>::value);
+        << bool(std::is_enum<RealType>::value) \
+        << false;
 QT_FOR_EACH_STATIC_CORE_CLASS(ADD_METATYPE_TEST_ROW)
 QT_FOR_EACH_STATIC_PRIMITIVE_POINTER(ADD_METATYPE_TEST_ROW)
 QT_FOR_EACH_STATIC_CORE_POINTER(ADD_METATYPE_TEST_ROW)
 #undef ADD_METATYPE_TEST_ROW
-    QTest::newRow("TestSpace::Foo") << ::qMetaTypeId<TestSpace::Foo>() << false << true << false << false;
-    QTest::newRow("Whity<double>") << ::qMetaTypeId<Whity<double> >() << true << true << false << false;
-    QTest::newRow("CustomMovable") << ::qMetaTypeId<CustomMovable>() << true << true << false << false;
-    QTest::newRow("CustomObject*") << ::qMetaTypeId<CustomObject*>() << true << false << true << false;
-    QTest::newRow("CustomMultiInheritanceObject*") << ::qMetaTypeId<CustomMultiInheritanceObject*>() << true << false << true << false;
-    QTest::newRow("QPair<C,C>") << ::qMetaTypeId<QPair<C,C> >() << false << true  << false << false;
-    QTest::newRow("QPair<C,M>") << ::qMetaTypeId<QPair<C,M> >() << false << true  << false << false;
-    QTest::newRow("QPair<C,P>") << ::qMetaTypeId<QPair<C,P> >() << false << true  << false << false;
-    QTest::newRow("QPair<M,C>") << ::qMetaTypeId<QPair<M,C> >() << false << true  << false << false;
-    QTest::newRow("QPair<M,M>") << ::qMetaTypeId<QPair<M,M> >() << true  << true  << false << false;
-    QTest::newRow("QPair<M,P>") << ::qMetaTypeId<QPair<M,P> >() << true  << true  << false << false;
-    QTest::newRow("QPair<P,C>") << ::qMetaTypeId<QPair<P,C> >() << false << true  << false << false;
-    QTest::newRow("QPair<P,M>") << ::qMetaTypeId<QPair<P,M> >() << true  << true  << false << false;
-    QTest::newRow("QPair<P,P>") << ::qMetaTypeId<QPair<P,P> >() << true  << false << false << false;
-    QTest::newRow("FlagsDataEnum") << ::qMetaTypeId<FlagsDataEnum>() << true << false << false << true;
+    QTest::newRow("TestSpace::Foo") << ::qMetaTypeId<TestSpace::Foo>() << false << true << false << false << false;
+    QTest::newRow("Whity<double>") << ::qMetaTypeId<Whity<double> >() << true << true << false << false << false;
+    QTest::newRow("CustomMovable") << ::qMetaTypeId<CustomMovable>() << true << true << false << false << false;
+    QTest::newRow("CustomObject*") << ::qMetaTypeId<CustomObject*>() << true << false << true << false << false;
+    QTest::newRow("CustomMultiInheritanceObject*") << ::qMetaTypeId<CustomMultiInheritanceObject*>() << true << false << true << false << false;
+    QTest::newRow("QPair<C,C>") << ::qMetaTypeId<QPair<C,C> >() << false << true  << false << false << false;
+    QTest::newRow("QPair<C,M>") << ::qMetaTypeId<QPair<C,M> >() << false << true  << false << false << false;
+    QTest::newRow("QPair<C,P>") << ::qMetaTypeId<QPair<C,P> >() << false << true  << false << false << false;
+    QTest::newRow("QPair<M,C>") << ::qMetaTypeId<QPair<M,C> >() << false << true  << false << false << false;
+    QTest::newRow("QPair<M,M>") << ::qMetaTypeId<QPair<M,M> >() << true  << true  << false << false << false;
+    QTest::newRow("QPair<M,P>") << ::qMetaTypeId<QPair<M,P> >() << true  << true  << false << false << false;
+    QTest::newRow("QPair<P,C>") << ::qMetaTypeId<QPair<P,C> >() << false << true  << false << false << false;
+    QTest::newRow("QPair<P,M>") << ::qMetaTypeId<QPair<P,M> >() << true  << true  << false << false << false;
+    QTest::newRow("QPair<P,P>") << ::qMetaTypeId<QPair<P,P> >() << true  << false << false << false << false;
+    QTest::newRow("FlagsDataEnum") << ::qMetaTypeId<FlagsDataEnum>() << true << false << false << true << false;
 
     // invalid ids.
-    QTest::newRow("-1") << -1 << false << false << false << false;
-    QTest::newRow("-124125534") << -124125534 << false << false << false << false;
-    QTest::newRow("124125534") << 124125534 << false << false << false << false;
+    QTest::newRow("-1") << -1 << false << false << false << false << false;
+    QTest::newRow("-124125534") << -124125534 << false << false << false << false << false;
+    QTest::newRow("124125534") << 124125534 << false << false << false << false << false;
 }
 
 void tst_QMetaType::flags()
@@ -1122,12 +1135,14 @@ void tst_QMetaType::flags()
     QFETCH(bool, isComplex);
     QFETCH(bool, isPointerToQObject);
     QFETCH(bool, isEnum);
+    QFETCH(bool, isQmlList);
 
     QCOMPARE(bool(QMetaType::typeFlags(type) & QMetaType::NeedsConstruction), isComplex);
     QCOMPARE(bool(QMetaType::typeFlags(type) & QMetaType::NeedsDestruction), isComplex);
     QCOMPARE(bool(QMetaType::typeFlags(type) & QMetaType::RelocatableType), isMovable);
     QCOMPARE(bool(QMetaType::typeFlags(type) & QMetaType::PointerToQObject), isPointerToQObject);
     QCOMPARE(bool(QMetaType::typeFlags(type) & QMetaType::IsEnumeration), isEnum);
+    QCOMPARE(bool(QMetaType::typeFlags(type) & QMetaType::IsQmlList), isQmlList);
 }
 
 void tst_QMetaType::flagsStaticLess_data()
@@ -2182,7 +2197,6 @@ struct RegisterMetaTypeStruct<qRegisterMetaType< Name >()> \
     enum { Value = qRegisterMetaType< Name >() }; \
 };
 
-#if defined(Q_COMPILER_CONSTEXPR)
 QT_FOR_EACH_STATIC_TYPE(METATYPE_ID_STRUCT)
 QT_FOR_EACH_STATIC_TYPE(REGISTER_METATYPE_STRUCT)
 
@@ -2197,11 +2211,9 @@ struct RegisterMetaTypeStructDefaultTemplateValue
 {
   enum { Value };
 };
-#endif
 
 void tst_QMetaType::constexprMetaTypeIds()
 {
-#if defined(Q_COMPILER_CONSTEXPR)
     int id = 0;
     int metaType;
 
@@ -2217,9 +2229,6 @@ void tst_QMetaType::constexprMetaTypeIds()
     default:;
     }
     Q_UNUSED(metaType);
-#else
-    QSKIP("The test needs a compiler supporting constexpr");
-#endif
 }
 
 void tst_QMetaType::constRefs()
@@ -2228,9 +2237,7 @@ void tst_QMetaType::constRefs()
     QCOMPARE(::qMetaTypeId<const QString &>(), ::qMetaTypeId<QString>());
     QCOMPARE(::qMetaTypeId<const CustomMovable &>(), ::qMetaTypeId<CustomMovable>());
     QCOMPARE(::qMetaTypeId<const QList<CustomMovable> &>(), ::qMetaTypeId<QList<CustomMovable> >());
-#if defined(Q_COMPILER_CONSTEXPR)
     static_assert(::qMetaTypeId<const int &>() == ::qMetaTypeId<int>());
-#endif
 }
 
 struct CustomConvertibleType

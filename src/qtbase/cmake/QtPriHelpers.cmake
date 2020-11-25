@@ -186,6 +186,9 @@ function(qt_generate_module_pri_file target)
 
     get_target_property(config_module_name ${target} _qt_config_module_name)
     get_target_property(qmake_module_config ${target} ${property_prefix}QT_QMAKE_MODULE_CONFIG)
+    if (arg_HEADER_MODULE)
+        list(APPEND qmake_module_config "no_link")
+    endif()
     if(qmake_module_config)
         string(REPLACE ";" " " module_build_config "${qmake_module_config}")
         set(module_build_config "\nQT.${config_module_name}.CONFIG = ${module_build_config}")
@@ -639,11 +642,11 @@ endfunction()
 function(qt_get_build_parts out_var)
     set(parts "libs")
 
-    if(BUILD_EXAMPLES AND NOT QT_NO_MAKE_EXAMPLES)
+    if(QT_BUILD_EXAMPLES AND QT_BUILD_EXAMPLES_BY_DEFAULT)
         list(APPEND parts "examples")
     endif()
 
-    if(BUILD_TESTING AND NOT QT_NO_MAKE_TESTS)
+    if(QT_BUILD_TESTS AND QT_BUILD_TESTS_BY_DEFAULT)
         list(APPEND parts "tests")
     endif()
 

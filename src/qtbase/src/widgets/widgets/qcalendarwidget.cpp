@@ -829,11 +829,7 @@ class StaticDayOfWeekAssociativeArray {
     static constexpr int day2idx(Qt::DayOfWeek day) noexcept { return int(day) - 1; } // alt: day % 7
 public:
     constexpr StaticDayOfWeekAssociativeArray() noexcept(noexcept(T()))
-#ifdef Q_COMPILER_CONSTEXPR
         : contained{}, data{}   // arrays require uniform initialization
-#else
-        : contained(), data()
-#endif
     {}
 
     constexpr bool contains(Qt::DayOfWeek day) const noexcept { return contained[day2idx(day)]; }
@@ -1142,7 +1138,7 @@ QTextCharFormat QCalendarModel::formatForCell(int row, int col) const
     if (!header) {
         QDate date = dateForCell(row, col);
         format.merge(m_dateFormats.value(date));
-        if(date < m_minimumDate || date > m_maximumDate)
+        if (date < m_minimumDate || date > m_maximumDate)
             format.setBackground(pal.brush(cg, QPalette::Window));
         if (m_shownMonth != date.month(m_calendar))
             format.setForeground(pal.brush(QPalette::Disabled, QPalette::Text));
@@ -1158,7 +1154,7 @@ QVariant QCalendarModel::data(const QModelIndex &index, int role) const
     int row = index.row();
     int column = index.column();
 
-    if(role == Qt::DisplayRole) {
+    if (role == Qt::DisplayRole) {
         if (m_weekNumbersShown && column == HeaderColumn
             && row >= m_firstRow && row < m_firstRow + RowCount) {
             QDate date = dateForCell(row, columnForDayOfWeek(Qt::Monday));
@@ -3165,7 +3161,7 @@ void QCalendarWidget::resizeEvent(QResizeEvent * event)
     // XXX Should really use a QWidgetStack for yearEdit and yearButton,
     // XXX here we hide the year edit when the layout is likely to break
     // XXX the manual positioning of the yearEdit over the yearButton.
-    if(d->yearEdit->isVisible() && event->size().width() != event->oldSize().width())
+    if (d->yearEdit->isVisible() && event->size().width() != event->oldSize().width())
         d->_q_yearEditingFinished();
 
     QWidget::resizeEvent(event);

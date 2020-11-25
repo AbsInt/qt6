@@ -139,13 +139,18 @@ endfunction()
 
 # Add Qt::target and Qt6::target as aliases for the target
 function(qt_internal_add_target_aliases target)
+    set(versionless_alias "Qt::${target}")
+    set(versionfull_alias "Qt${PROJECT_VERSION_MAJOR}::${target}")
+    set_target_properties("${target}" PROPERTIES _qt_versionless_alias "${versionless_alias}")
+    set_target_properties("${target}" PROPERTIES _qt_versionfull_alias "${versionfull_alias}")
+
     get_target_property(type "${target}" TYPE)
     if (type STREQUAL EXECUTABLE)
-        add_executable("Qt::${target}" ALIAS "${target}")
-        add_executable("Qt${PROJECT_VERSION_MAJOR}::${target}" ALIAS "${target}")
+        add_executable("${versionless_alias}" ALIAS "${target}")
+        add_executable("${versionfull_alias}" ALIAS "${target}")
     else()
-        add_library("Qt::${target}" ALIAS "${target}")
-        add_library("Qt${PROJECT_VERSION_MAJOR}::${target}" ALIAS "${target}")
+        add_library("${versionless_alias}" ALIAS "${target}")
+        add_library("${versionfull_alias}" ALIAS "${target}")
     endif()
 endfunction()
 
@@ -554,8 +559,22 @@ function(qt_internal_install_pdb_files target install_dir_path)
     if(MSVC)
         get_target_property(target_type ${target} TYPE)
 
-        if(target_type STREQUAL "SHARED_LIBRARY"
-                OR target_type STREQUAL "EXECUTABLE"
+        if(target_type STREQUAL "EXECUTABLE")
+            qt_get_cmake_configurations(cmake_configs)
+            list(LENGTH cmake_configs all_configs_count)
+            list(GET cmake_configs 0 first_config)
+            foreach(cmake_config ${cmake_configs})
+                set(suffix "")
+                if(all_configs_count GREATER 1 AND NOT cmake_config STREQUAL first_config)
+                    set(suffix "/${cmake_config}")
+                endif()
+                qt_install(FILES "$<TARGET_PDB_FILE:${target}>"
+                           CONFIGURATIONS ${cmake_config}
+                           DESTINATION "${install_dir_path}${suffix}"
+                           OPTIONAL)
+            endforeach()
+
+        elseif(target_type STREQUAL "SHARED_LIBRARY"
                 OR target_type STREQUAL "MODULE_LIBRARY")
             qt_install(FILES "$<TARGET_PDB_FILE:${target}>"
                        DESTINATION "${install_dir_path}"

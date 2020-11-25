@@ -75,10 +75,6 @@
              interfaces for desktop, embedded, and mobile devices. These
              types employ a simple styling architecture and are very efficient.
     \row
-        \li \l[QtQuickDialogs]{Qt Quick Dialogs}
-        \li Types for creating and interacting with system dialogs from a
-            Qt Quick application.
-    \row
         \li \l[QtQuickLayouts]{Qt Quick Layouts}
         \li Layouts are items that are used to arrange Qt Quick 2 based items in
             the user interface.
@@ -117,12 +113,14 @@
         \li Development Platforms
         \li Target Platforms
         \li Description
+\if defined(onlinedocs)
     \row
          \li \l[Qt3D]{Qt 3D}
          \li All
          \li All
          \li Functionality for near-realtime simulation systems with support
              for 2D and 3D rendering.
+\endif
     \row
          \li \l{Qt 5 Core Compatibility APIs}
          \li
@@ -139,11 +137,13 @@
         \li All
         \li All
         \li Classes for integrating documentation into applications.
+\if defined(onlinedocs)
     \row
         \li \l[QtImageFormats]{Qt Image Formats}
         \li All
         \li All
         \li Plugins for additional image formats: TIFF, MNG, TGA, WBMP.
+\endif
     \row
         \li \l[QtOpenGL]{Qt OpenGL}
         \li All
@@ -152,7 +152,6 @@
             A separate library of \l{Qt OpenGL Widgets C++ Classes} provides a widget for
             rendering OpenGL graphics.
     \row
-        \li \l[QtPlatformHeaders]{Qt Platform Headers}
         \li \l{Qt for Windows}, \l{Qt for Linux/X11}{Linux}, \l{Qt for macOS}{\macos}
         \li \l{Qt for Windows}, \l{Qt for Linux/X11}{Linux}, \l{Qt for macOS}{\macos}, \l{Qt for Android}{Android}
 
@@ -215,11 +214,13 @@
         \li {4,1} \target gpl-licensed-addons
                   Add-ons available under Commercial Licenses, or GNU General
                   Public License v3
+\if defined(onlinedocs)
     \row
         \li \l[QtNetworkAuth]{Qt Network Authorization}
         \li All
         \li All
         \li Provides support for OAuth-based authorization to online services.
+\endif
     \row
         \li \l{Qt Wayland Compositor}
         \li \l{Qt for Linux/X11}{Linux}

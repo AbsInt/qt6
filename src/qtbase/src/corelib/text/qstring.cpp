@@ -1509,8 +1509,10 @@ inline char qToLower(char ch)
 /*!
   \macro QT_NO_CAST_FROM_ASCII
   \relates QString
+  \relates QChar
 
-  Disables automatic conversions from 8-bit strings (char *) to unicode QStrings
+  Disables automatic conversions from 8-bit strings (char *) to unicode QStrings,
+  as well as from 8-bit char types (char and unsigned char) to QChar.
 
   \sa QT_NO_CAST_TO_ASCII, QT_RESTRICTED_CAST_FROM_ASCII, QT_NO_CAST_FROM_BYTEARRAY
 */
@@ -2983,7 +2985,7 @@ QString &QString::remove(qsizetype pos, qsizetype len)
         resize(pos); // truncate
     } else if (len > 0) {
         detach();
-        d->erase(d.begin() + pos, d.begin() + pos + len);
+        d->erase(d.begin() + pos, len);
         d.data()[d.size] = u'\0';
     }
     return *this;
@@ -3380,7 +3382,7 @@ QString& QString::replace(QChar ch, const QString &after, Qt::CaseSensitivity cs
 
         replace_helper(indices, pos, 1, after.constData(), after.size());
 
-        if (Q_LIKELY(index == -1)) // Nothing left to replace
+        if (Q_LIKELY(index == size())) // Nothing left to replace
             break;
         // The call to replace_helper just moved what index points at:
         index += pos*(after.size() - 1);
@@ -4473,9 +4475,9 @@ QString QString::section(const QString &sep, qsizetype start, qsizetype end, Sec
         const QStringView &section = sections.at(i);
         const bool empty = section.isEmpty();
         if (x >= start) {
-            if(x == start)
+            if (x == start)
                 first_i = i;
-            if(x == end)
+            if (x == end)
                 last_i = i;
             if (x > start && i > 0)
                 ret += sep;
@@ -4611,7 +4613,8 @@ QString QString::section(const QRegularExpression &re, qsizetype start, qsizetyp
     Returns a substring that contains the \a n leftmost characters
     of the string.
 
-    \obsolete Use first() instead in new code.
+    If you know that \a n cannot be out of bounds, use first() instead in new
+    code, because it is faster.
 
     The entire string is returned if \a n is greater than or equal
     to size(), or less than zero.
@@ -4629,7 +4632,8 @@ QString QString::left(qsizetype n)  const
     Returns a substring that contains the \a n rightmost characters
     of the string.
 
-    \obsolete Use last() instead in new code.
+    If you know that \a n cannot be out of bounds, use last() instead in new
+    code, because it is faster.
 
     The entire string is returned if \a n is greater than or equal
     to size(), or less than zero.
@@ -4647,7 +4651,8 @@ QString QString::right(qsizetype n) const
     Returns a string that contains \a n characters of this string,
     starting at the specified \a position index.
 
-    \obsolete Use sliced() instead in new code.
+    If you know that \a position and \a n cannot be out of bounds, use sliced()
+    instead in new code, because it is faster.
 
     Returns a null string if the \a position index exceeds the
     length of the string. If there are less than \a n characters
@@ -9112,7 +9117,8 @@ QString &QString::setRawData(const QChar *unicode, qsizetype size)
     Returns the substring of length \a length starting at position
     \a start in this Latin-1 string.
 
-    \obsolete Use sliced() instead in new code.
+    If you know that \a start and \a length cannot be out of bounds, use sliced()
+    instead in new code, because it is faster.
 
     Returns an empty Latin-1 string if \a start exceeds the
     length of this Latin-1 string. If there are less than \a length characters
@@ -9127,7 +9133,8 @@ QString &QString::setRawData(const QChar *unicode, qsizetype size)
     \fn QLatin1String QLatin1String::left(qsizetype length) const
     \since 5.8
 
-    \obsolete Use first() instead in new code.
+    If you know that \a length cannot be out of bounds, use first() instead in
+    new code, because it is faster.
 
     Returns the substring of length \a length starting at position
     0 in this Latin-1 string.
@@ -9142,7 +9149,8 @@ QString &QString::setRawData(const QChar *unicode, qsizetype size)
     \fn QLatin1String QLatin1String::right(qsizetype length) const
     \since 5.8
 
-    \obsolete Use last() instead in new code.
+    If you know that \a length cannot be out of bounds, use last() instead in
+    new code, because it is faster.
 
     Returns the substring of length \a length starting at position
     size() - \a length in this Latin-1 string.
