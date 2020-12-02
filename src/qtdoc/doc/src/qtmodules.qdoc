@@ -123,8 +123,8 @@
 \endif
     \row
          \li \l{Qt 5 Core Compatibility APIs}
-         \li
-         \li
+         \li All
+         \li All
          \li Qt Core APIs that were in Qt 5 but not Qt 6.
     \row
         \li \l[QtConcurrent]{Qt Concurrent}
@@ -151,13 +151,6 @@
         \li C++ classes that make it easy to use OpenGL in Qt applications.
             A separate library of \l{Qt OpenGL Widgets C++ Classes} provides a widget for
             rendering OpenGL graphics.
-    \row
-        \li \l{Qt for Windows}, \l{Qt for Linux/X11}{Linux}, \l{Qt for macOS}{\macos}
-        \li \l{Qt for Windows}, \l{Qt for Linux/X11}{Linux}, \l{Qt for macOS}{\macos}, \l{Qt for Android}{Android}
-
-        \li Provides classes that encapsulate platform-specific information,
-            tied to a given runtime configuration of a \l {Qt Platform Abstraction}
-            {platform plugin}.
     \row
         \li \l[QtPrintSupport]{Qt Print Support}
         \li All
@@ -188,8 +181,8 @@
         components in the Qt ecosystem.
     \row
         \li \l[QtSql]{Qt SQL}
-    \li
-    \li
+        \li All
+        \li All
         \li Classes for database integration using SQL.
     \row
         \li \l[QtSvg]{Qt SVG}

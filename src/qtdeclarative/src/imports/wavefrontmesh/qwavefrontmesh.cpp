@@ -91,8 +91,8 @@ public:
 
     To use this module, import the module with the following line:
 
-    \qml \QtMinorVersion
-    import Qt.labs.wavefrontmesh 1.\1
+    \qml
+    import Qt.labs.wavefrontmesh
     \endqml
 */
 

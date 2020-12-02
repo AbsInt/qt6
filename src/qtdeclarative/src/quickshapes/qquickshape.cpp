@@ -67,8 +67,8 @@ Q_LOGGING_CATEGORY(QQSHAPE_LOG_TIME_DIRTY_SYNC, "qt.shape.time.sync")
 
     To use the types in this module, import the module with the following line:
 
-    \qml \QtMinorVersion
-    import QtQuick.Shapes 1.\1
+    \qml
+    import QtQuick.Shapes
     \endqml
 */
 

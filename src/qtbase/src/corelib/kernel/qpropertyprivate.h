@@ -52,7 +52,6 @@
 //
 
 #include <QtCore/qglobal.h>
-#include <QtCore/QExplicitlySharedDataPointer>
 #include <QtCore/qtaggedpointer.h>
 #include <QtCore/qmetatype.h>
 
@@ -86,7 +85,12 @@ public:
     T *take() noexcept { T *x = d; d = nullptr; return x; }
 
     QPropertyBindingPrivatePtr() noexcept : d(nullptr) { }
-    Q_CORE_EXPORT ~QPropertyBindingPrivatePtr();
+    ~QPropertyBindingPrivatePtr()
+    {
+        if (d && (--d->ref == 0))
+            destroyAndFreeMemory();
+    }
+    Q_CORE_EXPORT void destroyAndFreeMemory();
 
     explicit QPropertyBindingPrivatePtr(T *data) noexcept : d(data) { if (d) d->addRef(); }
     QPropertyBindingPrivatePtr(const QPropertyBindingPrivatePtr &o) noexcept
@@ -154,6 +158,7 @@ template <typename T>
 class QPropertyData;
 
 namespace QtPrivate {
+struct BindingEvaluationState;
 
 struct BindingFunctionVTable
 {
@@ -225,6 +230,8 @@ public:
     QPropertyBindingData &operator=(QPropertyBindingData &&other) = delete;
     ~QPropertyBindingData();
 
+    static inline constexpr quintptr BindingBit = 0x1; // Is d_ptr pointing to a binding (1) or list of notifiers (0)?
+
     bool hasBinding() const { return d_ptr & BindingBit; }
 
     QUntypedPropertyBinding setBinding(const QUntypedPropertyBinding &newBinding,
@@ -232,27 +239,32 @@ public:
                                        QPropertyObserverCallback staticObserverCallback = nullptr,
                                        QPropertyBindingWrapper bindingWrapper = nullptr);
 
-    QPropertyBindingPrivate *binding() const;
-
-    void evaluateIfDirty(const QUntypedPropertyData *property) const;
-    void removeBinding();
-
-    void registerWithCurrentlyEvaluatingBinding() const;
-    void notifyObservers(QUntypedPropertyData *propertyDataPtr) const;
-
-    void setExtraBit(bool b)
+    QPropertyBindingPrivate *binding() const
     {
-        if (b)
-            d_ptr |= ExtraBit;
-        else
-            d_ptr &= ~ExtraBit;
+        if (d_ptr & BindingBit)
+            return reinterpret_cast<QPropertyBindingPrivate*>(d_ptr - BindingBit);
+        return nullptr;
+
     }
 
-    bool extraBit() const { return d_ptr & ExtraBit; }
+    void evaluateIfDirty(const QUntypedPropertyData *property) const;
+    void removeBinding()
+    {
+        if (hasBinding())
+            removeBinding_helper();
+    }
 
-    static const quintptr ExtraBit = 0x1;   // Used for QProperty<bool> specialization
-    static const quintptr BindingBit = 0x2; // Is d_ptr pointing to a binding (1) or list of notifiers (0)?
-    static const quintptr FlagMask = BindingBit | ExtraBit;
+    void registerWithCurrentlyEvaluatingBinding(QtPrivate::BindingEvaluationState *currentBinding) const
+    {
+        if (!currentBinding)
+            return;
+        registerWithCurrentlyEvaluatingBinding_helper(currentBinding);
+    }
+    void registerWithCurrentlyEvaluatingBinding() const;
+    void notifyObservers(QUntypedPropertyData *propertyDataPtr) const;
+private:
+    void registerWithCurrentlyEvaluatingBinding_helper(BindingEvaluationState *currentBinding) const;
+    void removeBinding_helper();
 };
 
 template <typename T, typename Tag>

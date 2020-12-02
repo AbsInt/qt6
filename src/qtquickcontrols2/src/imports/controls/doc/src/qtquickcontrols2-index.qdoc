@@ -49,8 +49,8 @@
     The \l{Qt Quick Controls QML Types}{QML types} can be imported into your
     application using the following import statement in your \c {.qml} file:
 
-    \qml \QtMinorVersion
-    import QtQuick.Controls 2.\1
+    \qml
+    import QtQuick.Controls
     \endqml
 
     \section2 C++ API
@@ -199,7 +199,10 @@
       \li \l{Qt Quick}
       \li \l{Qt Quick Layouts}
       \li \l{Qt Quick Templates 2}
-      \li \l{Qt Quick Calendar}
+      \if defined(onlinedocs)
+        \li \l{Qt Quick Calendar}
+      \endif
+      \li Qt Quick Calendar
       \li \l{Qt Labs Platform}
     \endlist
 */

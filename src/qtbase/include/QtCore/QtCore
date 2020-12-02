@@ -52,6 +52,7 @@
 #if QT_CONFIG(commandlineparser)
 #include "qcommandlineparser.h"
 #endif
+#include "qcompare.h"
 #include "qcompilerdetection.h"
 #if QT_CONFIG(concatenatetablesproxymodel)
 #include "qconcatenatetablesproxymodel.h"

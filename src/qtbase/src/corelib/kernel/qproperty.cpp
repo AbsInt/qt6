@@ -47,10 +47,9 @@ QT_BEGIN_NAMESPACE
 
 using namespace QtPrivate;
 
-QPropertyBindingPrivatePtr::~QPropertyBindingPrivatePtr()
+void QPropertyBindingPrivatePtr::destroyAndFreeMemory()
 {
-    if (d && (--d->ref == 0))
-        QPropertyBindingPrivate::destroyAndFreeMemory(static_cast<QPropertyBindingPrivate *>(d));
+    QPropertyBindingPrivate::destroyAndFreeMemory(static_cast<QPropertyBindingPrivate *>(d));
 }
 
 void QPropertyBindingPrivatePtr::reset(QtPrivate::RefCounted *ptr) noexcept
@@ -74,7 +73,8 @@ void QPropertyBindingDataPointer::addObserver(QPropertyObserver *observer)
             observer->next->prev = &observer->next;
         binding->firstObserver.ptr = observer;
     } else {
-        auto firstObserver = reinterpret_cast<QPropertyObserver*>(ptr->d_ptr & ~QPropertyBindingData::FlagMask);
+        Q_ASSERT(!(ptr->d_ptr & QPropertyBindingData::BindingBit));
+        auto firstObserver = reinterpret_cast<QPropertyObserver*>(ptr->d_ptr);
         observer->prev = reinterpret_cast<QPropertyObserver**>(&ptr->d_ptr);
         observer->next = firstObserver;
         if (observer->next)
@@ -123,10 +123,9 @@ void QPropertyBindingPrivate::markDirtyAndNotifyObservers()
         staticObserverCallback(propertyDataPtr);
 }
 
-bool QPropertyBindingPrivate::evaluateIfDirtyAndReturnTrueIfValueChanged(const QUntypedPropertyData *data)
+bool QPropertyBindingPrivate::evaluateIfDirtyAndReturnTrueIfValueChanged_helper(const QUntypedPropertyData *data, QBindingStatus *status)
 {
-    if (!dirty)
-        return false;
+    Q_ASSERT(dirty);
 
     if (updating) {
         error = QPropertyBindingError(QPropertyBindingError::BindingLoop);
@@ -144,7 +143,7 @@ bool QPropertyBindingPrivate::evaluateIfDirtyAndReturnTrueIfValueChanged(const Q
     QPropertyBindingPrivatePtr keepAlive {this};
     QScopedValueRollback<bool> updateGuard(updating, true);
 
-    BindingEvaluationState evaluationFrame(this);
+    BindingEvaluationState evaluationFrame(this, status);
 
     bool changed = false;
 
@@ -250,14 +249,14 @@ QUntypedPropertyBinding QPropertyBindingData::setBinding(const QUntypedPropertyB
         oldBinding = QPropertyBindingPrivatePtr(existingBinding);
         observer = static_cast<QPropertyBindingPrivate *>(oldBinding.data())->takeObservers();
         static_cast<QPropertyBindingPrivate *>(oldBinding.data())->unlinkAndDeref();
-        d_ptr &= FlagMask;
+        d_ptr = 0;
     } else {
         observer = d.firstObserver();
     }
 
     if (newBinding) {
         newBinding.data()->addRef();
-        d_ptr = (d_ptr & FlagMask) | reinterpret_cast<quintptr>(newBinding.data());
+        d_ptr = reinterpret_cast<quintptr>(newBinding.data());
         d_ptr |= BindingBit;
         auto newBindingRaw = static_cast<QPropertyBindingPrivate *>(newBinding.data());
         newBindingRaw->setDirty(true);
@@ -288,22 +287,17 @@ QPropertyBindingData::QPropertyBindingData(QPropertyBindingData &&other) : d_ptr
     d.fixupFirstObserverAfterMove();
 }
 
-QPropertyBindingPrivate *QPropertyBindingData::binding() const
-{
-    QPropertyBindingDataPointer d{this};
-    if (auto binding = d.bindingPtr())
-        return binding;
-    return nullptr;
-}
-
 static thread_local QBindingStatus bindingStatus;
 
-BindingEvaluationState::BindingEvaluationState(QPropertyBindingPrivate *binding)
+BindingEvaluationState::BindingEvaluationState(QPropertyBindingPrivate *binding, QBindingStatus *status)
     : binding(binding)
 {
+    QBindingStatus *s = status;
+    if (!s)
+        s = &bindingStatus;
     // store a pointer to the currentBindingEvaluationState to avoid a TLS lookup in
     // the destructor (as these come with a non zero cost)
-    currentState = &bindingStatus.currentlyEvaluatingBinding;
+    currentState = &s->currentlyEvaluatingBinding;
     previousState = *currentState;
     *currentState = this;
     binding->clearDependencyObservers();
@@ -334,17 +328,18 @@ void QPropertyBindingData::evaluateIfDirty(const QUntypedPropertyData *property)
     binding->evaluateIfDirtyAndReturnTrueIfValueChanged(property);
 }
 
-void QPropertyBindingData::removeBinding()
+void QPropertyBindingData::removeBinding_helper()
 {
     QPropertyBindingDataPointer d{this};
 
-    if (auto *existingBinding = d.bindingPtr()) {
-        auto observer = existingBinding->takeObservers();
-        d_ptr &= ExtraBit;
-        if (observer)
-            d.setObservers(observer.ptr);
-        existingBinding->unlinkAndDeref();
-    }
+    auto *existingBinding = d.bindingPtr();
+    Q_ASSERT(existingBinding);
+
+    auto observer = existingBinding->takeObservers();
+    d_ptr = 0;
+    if (observer)
+        d.setObservers(observer.ptr);
+    existingBinding->unlinkAndDeref();
 }
 
 void QPropertyBindingData::registerWithCurrentlyEvaluatingBinding() const
@@ -352,7 +347,12 @@ void QPropertyBindingData::registerWithCurrentlyEvaluatingBinding() const
     auto currentState = bindingStatus.currentlyEvaluatingBinding;
     if (!currentState)
         return;
+    registerWithCurrentlyEvaluatingBinding_helper(currentState);
+}
 
+
+void QPropertyBindingData::registerWithCurrentlyEvaluatingBinding_helper(BindingEvaluationState *currentState) const
+{
     QPropertyBindingDataPointer d{this};
 
     QPropertyObserverPointer dependencyObserver = currentState->binding->allocateDependencyObserver();
@@ -398,10 +398,6 @@ void QPropertyObserver::setSource(const QPropertyBindingData &property)
 
 QPropertyObserver::~QPropertyObserver()
 {
-    if (next.tag() == ActivelyExecuting) {
-        if (nodeState)
-            *nodeState = nullptr;
-    }
     QPropertyObserverPointer d{this};
     d.unlink();
 }
@@ -415,8 +411,6 @@ QPropertyObserver::QPropertyObserver(QPropertyObserver &&other) noexcept
         next->prev = &next;
     if (prev)
         prev.setPointer(this);
-    if (next.tag() == ActivelyExecuting)
-        *nodeState = this;
 }
 
 QPropertyObserver &QPropertyObserver::operator=(QPropertyObserver &&other) noexcept
@@ -435,8 +429,6 @@ QPropertyObserver &QPropertyObserver::operator=(QPropertyObserver &&other) noexc
         next->prev = &next;
     if (prev)
         prev.setPointer(this);
-    if (next.tag() == ActivelyExecuting)
-        *nodeState = this;
 
     return *this;
 }
@@ -455,21 +447,21 @@ void QPropertyObserverPointer::unlink()
 
 void QPropertyObserverPointer::setChangeHandler(QPropertyObserver::ChangeHandler changeHandler)
 {
-    Q_ASSERT(ptr->next.tag() != QPropertyObserver::ActivelyExecuting);
+    Q_ASSERT(ptr->next.tag() != QPropertyObserver::ObserverIsPlaceholder);
     ptr->changeHandler = changeHandler;
     ptr->next.setTag(QPropertyObserver::ObserverNotifiesChangeHandler);
 }
 
 void QPropertyObserverPointer::setAliasedProperty(QUntypedPropertyData *property)
 {
-    Q_ASSERT(ptr->next.tag() != QPropertyObserver::ActivelyExecuting);
+    Q_ASSERT(ptr->next.tag() != QPropertyObserver::ObserverIsPlaceholder);
     ptr->aliasedPropertyData = property;
     ptr->next.setTag(QPropertyObserver::ObserverNotifiesAlias);
 }
 
 void QPropertyObserverPointer::setBindingToMarkDirty(QPropertyBindingPrivate *binding)
 {
-    Q_ASSERT(ptr->next.tag() != QPropertyObserver::ActivelyExecuting);
+    Q_ASSERT(ptr->next.tag() != QPropertyObserver::ObserverIsPlaceholder);
     ptr->bindingToMarkDirty = binding;
     ptr->next.setTag(QPropertyObserver::ObserverNotifiesBinding);
 }
@@ -479,55 +471,26 @@ void QPropertyObserverPointer::setBindingToMarkDirty(QPropertyBindingPrivate *bi
  QPropertyObserverNodeProtector is a RAII wrapper which takes care of the internal switching logic
  for QPropertyObserverPointer::notify (described ibidem)
 */
-template <QPropertyObserver::ObserverTag tag>
 struct [[nodiscard]] QPropertyObserverNodeProtector {
-    QPropertyObserver m_placeHolder;
-    QPropertyObserver *&m_observer;
-    union {
-        QPropertyBindingPrivate *m_binding;
-        QPropertyObserver::ChangeHandler m_changeHandler;
-    };
-    QPropertyObserverNodeProtector(QPropertyObserver *&observer)
-        : m_observer(observer)
+    QPropertyObserverBase m_placeHolder;
+    QPropertyObserverNodeProtector(QPropertyObserver *observer)
     {
-        static_assert(tag == QPropertyObserver::ObserverNotifiesBinding ||
-                 tag == QPropertyObserver::ObserverNotifiesChangeHandler);
-        if constexpr (tag == QPropertyObserver::ObserverNotifiesBinding)
-            m_binding = m_observer->bindingToMarkDirty;
-        else
-            m_changeHandler = m_observer->changeHandler;
-        switchNodes(m_placeHolder, m_observer);
-        m_observer->nodeState = &m_observer;
-        m_observer->next.setTag(QPropertyObserver::ActivelyExecuting);
-        m_placeHolder.next.setTag(QPropertyObserver::ActivelyExecuting);
+        // insert m_placeholder after observer into the linked list
+        QPropertyObserver *next = observer->next.data();
+        m_placeHolder.next = next;
+        observer->next = static_cast<QPropertyObserver *>(&m_placeHolder);
+        if (next)
+            next->prev = &m_placeHolder.next;
+        m_placeHolder.prev = &observer->next;
+        m_placeHolder.next.setTag(QPropertyObserver::ObserverIsPlaceholder);
     }
+
+    QPropertyObserver *next() const { return m_placeHolder.next.data(); }
 
     ~QPropertyObserverNodeProtector() {
-        if (m_observer) {
-            if constexpr (tag == QPropertyObserver::ObserverNotifiesBinding)
-                m_observer->bindingToMarkDirty = m_binding;
-            else
-                m_observer->changeHandler = m_changeHandler;
-            switchNodes(*m_observer, &m_placeHolder);
-            m_observer->next.setTag(tag);
-        }
-        // set tag to a safer value where we don't execute anything in the dtor
-        m_placeHolder.next.setTag(QPropertyObserver::ObserverNotifiesChangeHandler);
+        QPropertyObserverPointer d{static_cast<QPropertyObserver *>(&m_placeHolder)};
+        d.unlink();
     }
-
-    /*!
-      \internal
-      replaces a node \a observer in the list with another node \a placeholder which must not be in the list
-     */
-    static void switchNodes(QPropertyObserver &placeHolder, QPropertyObserver *observer)  {
-        placeHolder.next = std::exchange(observer->next, {});
-        placeHolder.prev = std::exchange(observer->prev, {});
-        if (placeHolder.next) {
-            placeHolder.next->prev = &placeHolder.next;
-        }
-        if (placeHolder.prev)
-            placeHolder.prev.setPointer(&placeHolder);
-    };
 };
 
 /*! \internal
@@ -539,7 +502,7 @@ struct [[nodiscard]] QPropertyObserverNodeProtector {
   ObserverNotifiesChangeHandler case would not work. Thus we instead pass the knowledge of
   whether the value has changed we obtained when evaluating the binding eagerly along
  */
-void QPropertyObserverPointer::notify(QPropertyBindingPrivate *triggeringBinding, QUntypedPropertyData *propertyDataPtr,bool alreadyKnownToHaveChanged)
+void QPropertyObserverPointer::notify(QPropertyBindingPrivate *triggeringBinding, QUntypedPropertyData *propertyDataPtr, bool alreadyKnownToHaveChanged)
 {
     bool knownIfPropertyChanged = alreadyKnownToHaveChanged;
     bool propertyChanged = true;
@@ -551,56 +514,56 @@ void QPropertyObserverPointer::notify(QPropertyBindingPrivate *triggeringBinding
      * However, complication arise due to the fact that the triggered operations might modify the list,
      * which includes deletion and move of the current and next nodes.
      * Therefore, we take a few safety precautions:
-     * 1. Before executing any action which might modify the list, we replace the actual node in the list with
-     *    a placeholder node. As that one is stack allocated and owned by us, we can rest assured that it is
+     * 1. Before executing any action which might modify the list, we insert a placeholder node after the current node.
+     *    As that one is stack allocated and owned by us, we can rest assured that it is
      *    still there after the action has executed, and placeHolder->next points to the actual next node in the list.
      *    Note that taking next at the beginning of the loop does not work, as the execuated action might either move
      *    or delete that node.
-     * 2. To properly handle deletion or moves of the real current node, we store a pointer to a pointer to itself in
-     *    its nodeState. Whenever the node is reallocated and moved, we update that pointer to point to its new
-     *    location. If the node is actually deleted, we set it to nullptr.
-     * 3. After the triggered action has finished, we can use that information to restore the list to contain the actual
-     *    node again. We either switch the nodes with the real nodes current location, or, if the real node has been
-     *    deleted, we simply unlink the temporary node.
+     * 2. After the triggered action has finished, we can use the next pointer in the placeholder node as a safe way to
+     *    retrieve the next node.
+     * 3. Some care needs to be taken to avoid infinite recursion with change handlers, so we add an extra test there, that
+     *    checks whether we're already have the same change handler in our call stack. This can be done by checking whether
+     *    the node after the current one is a placeholder node.
      */
     while (observer) {
-        QPropertyObserver *next = nullptr;
+        QPropertyObserver *next = observer->next.data();
+
         char preventBug[1] = {'\0'}; // QTBUG-87245
         Q_UNUSED(preventBug);
-        switch (observer->next.tag()) {
+        switch (QPropertyObserver::ObserverTag(observer->next.tag())) {
         case QPropertyObserver::ObserverNotifiesChangeHandler:
-            if (auto handlerToCall = observer->changeHandler) {
-                // both evaluateIfDirtyAndReturnTrueIfValueChanged and handlerToCall might modify the list
-                QPropertyObserverNodeProtector<QPropertyObserver::ObserverNotifiesChangeHandler> protector(observer);
-                if (!knownIfPropertyChanged && triggeringBinding) {
-                    knownIfPropertyChanged = true;
-                    propertyChanged = triggeringBinding->evaluateIfDirtyAndReturnTrueIfValueChanged(propertyDataPtr);
-                }
-                if (!propertyChanged)
-                    return;
-                handlerToCall(observer, propertyDataPtr);
-                next = protector.m_placeHolder.next.data();
-            } else {
-                next = observer->next.data();
+        {
+            auto handlerToCall = observer->changeHandler;
+            // prevent recursion
+            if (next && next->next.tag() == QPropertyObserver::ObserverIsPlaceholder) {
+                observer = next->next.data();
+                continue;
             }
+            // both evaluateIfDirtyAndReturnTrueIfValueChanged and handlerToCall might modify the list
+            QPropertyObserverNodeProtector protector(observer);
+            if (!knownIfPropertyChanged && triggeringBinding) {
+                knownIfPropertyChanged = true;
+                propertyChanged = triggeringBinding->evaluateIfDirtyAndReturnTrueIfValueChanged(propertyDataPtr);
+            }
+            if (!propertyChanged)
+                return;
+            handlerToCall(observer, propertyDataPtr);
+            next = protector.next();
             break;
+        }
         case QPropertyObserver::ObserverNotifiesBinding:
-            if (auto bindingToMarkDirty =  observer->bindingToMarkDirty) {
-                QPropertyObserverNodeProtector<QPropertyObserver::ObserverNotifiesBinding> protector(observer);
-                bindingToMarkDirty->markDirtyAndNotifyObservers();
-                next = protector.m_placeHolder.next.data();
-            } else {
-                next = observer->next.data();
-            }
+        {
+            auto bindingToMarkDirty =  observer->bindingToMarkDirty;
+            QPropertyObserverNodeProtector protector(observer);
+            bindingToMarkDirty->markDirtyAndNotifyObservers();
+            next = protector.next();
             break;
+        }
         case QPropertyObserver::ObserverNotifiesAlias:
-            next = observer->next.data();
             break;
-        case QPropertyObserver::ActivelyExecuting:
+        case QPropertyObserver::ObserverIsPlaceholder:
             // recursion is already properly handled somewhere else
-            return;
-        default:
-            Q_UNREACHABLE();
+            break;
         }
         observer = next;
     }
@@ -1426,8 +1389,7 @@ struct QBindingStoragePrivate
 
     QPropertyBindingData *get(const QUntypedPropertyData *data)
     {
-        if (!d)
-            return nullptr;
+        Q_ASSERT(d);
         Q_ASSERT(d->size && (d->size & (d->size - 1)) == 0); // size is a power of two
         size_t index = qHash(data) & (d->size - 1);
         Pair *p = pairs(d);
@@ -1440,10 +1402,13 @@ struct QBindingStoragePrivate
         }
         return nullptr;
     }
-    QPropertyBindingData *getAndCreate(QUntypedPropertyData *data)
+    QPropertyBindingData *get(QUntypedPropertyData *data, bool create)
     {
-        if (!d)
+        if (!d) {
+            if (!create)
+                return nullptr;
             reallocate(8);
+        }
         else if (d->used*2 >= d->size)
             reallocate(d->size*2);
         Q_ASSERT(d->size && (d->size & (d->size - 1)) == 0); // size is a power of two
@@ -1456,6 +1421,8 @@ struct QBindingStoragePrivate
             if (index == d->size)
                 index = 0;
         }
+        if (!create)
+            return nullptr;
         ++d->used;
         new (p + index) Pair{data, QPropertyBindingData()};
         return &p[index].bindingData;
@@ -1497,31 +1464,26 @@ QBindingStorage::~QBindingStorage()
     QBindingStoragePrivate(d).destroy();
 }
 
-void QBindingStorage::maybeUpdateBindingAndRegister(const QUntypedPropertyData *data) const
+void QBindingStorage::maybeUpdateBindingAndRegister_helper(const QUntypedPropertyData *data) const
 {
     Q_ASSERT(bindingStatus);
     QUntypedPropertyData *dd = const_cast<QUntypedPropertyData *>(data);
-    auto storage = bindingStatus->currentlyEvaluatingBinding ?
-                QBindingStoragePrivate(d).getAndCreate(dd) :
-                QBindingStoragePrivate(d).get(dd);
+    auto storage = QBindingStoragePrivate(d).get(dd, /*create=*/ bindingStatus->currentlyEvaluatingBinding != nullptr);
     if (!storage)
         return;
     if (auto *binding = storage->binding())
-        binding->evaluateIfDirtyAndReturnTrueIfValueChanged(const_cast<QUntypedPropertyData *>(data));
-    storage->registerWithCurrentlyEvaluatingBinding();
+        binding->evaluateIfDirtyAndReturnTrueIfValueChanged(const_cast<QUntypedPropertyData *>(data), bindingStatus);
+    storage->registerWithCurrentlyEvaluatingBinding(bindingStatus->currentlyEvaluatingBinding);
 }
 
-QPropertyBindingData *QBindingStorage::bindingData(const QUntypedPropertyData *data) const
+QPropertyBindingData *QBindingStorage::bindingData_helper(const QUntypedPropertyData *data) const
 {
     return QBindingStoragePrivate(d).get(data);
 }
 
-QPropertyBindingData *QBindingStorage::bindingData(QUntypedPropertyData *data, bool create)
+QPropertyBindingData *QBindingStorage::bindingData_helper(QUntypedPropertyData *data, bool create)
 {
-    auto storage = create ?
-                QBindingStoragePrivate(d).getAndCreate(data) :
-                QBindingStoragePrivate(d).get(data);
-    return storage;
+    return QBindingStoragePrivate(d).get(data, create);
 }
 
 QT_END_NAMESPACE
