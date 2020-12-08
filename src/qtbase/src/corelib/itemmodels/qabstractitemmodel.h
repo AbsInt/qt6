@@ -226,7 +226,7 @@ public:
     bool operator==(const QModelIndex &other) const;
     bool operator!=(const QModelIndex &other) const;
     QPersistentModelIndex &operator=(const QModelIndex &other);
-    operator const QModelIndex&() const;
+    operator QModelIndex() const;
     int row() const;
     int column() const;
     void *internalPointer() const;
@@ -242,6 +242,8 @@ public:
 private:
     QPersistentModelIndexData *d;
     friend size_t qHash(const QPersistentModelIndex &, size_t seed) noexcept;
+    friend bool qHashEquals(const QPersistentModelIndex &a, const QPersistentModelIndex &b) noexcept
+    { return a.d == b.d; }
 #ifndef QT_NO_DEBUG_STREAM
     friend Q_CORE_EXPORT QDebug operator<<(QDebug, const QPersistentModelIndex &);
 #endif
