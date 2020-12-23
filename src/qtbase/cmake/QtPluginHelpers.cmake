@@ -88,7 +88,7 @@ function(qt_internal_add_plugin target)
 
     # Disable linking of plugins against other plugins during static regular and
     # super builds. The latter causes cyclic dependencies otherwise.
-    set_target_properties(${target} PROPERTIES QT_DEFAULT_PLUGINS 0)
+    _qt_internal_disable_static_default_plugins("${target}")
 
     set_target_properties("${target}" PROPERTIES
         LIBRARY_OUTPUT_DIRECTORY "${output_directory}"
@@ -241,6 +241,9 @@ function(qt_internal_add_plugin target)
             TARGETS ${target}
             EXPORT_NAME_PREFIX ${INSTALL_CMAKE_NAMESPACE}${target}
             CONFIG_INSTALL_DIR "${config_install_dir}")
+
+        qt_internal_get_min_new_policy_cmake_version(min_new_policy_version)
+        qt_internal_get_max_new_policy_cmake_version(max_new_policy_version)
         configure_package_config_file(
             "${QT_CMAKE_DIR}/QtPluginConfig.cmake.in"
             "${config_build_dir}/${INSTALL_CMAKE_NAMESPACE}${target}Config.cmake"

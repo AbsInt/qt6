@@ -1,6 +1,5 @@
-if (CMAKE_VERSION VERSION_LESS 3.1.0)
-    message(FATAL_ERROR "Qt requires at least CMake version 3.1.0")
-endif()
+# These values should be kept in sync with those in qtbase/.cmake.conf
+cmake_minimum_required(VERSION 3.14...3.19)
 
 ######################################
 #
@@ -168,6 +167,7 @@ macro(qt_build_internals_set_up_private_api)
     # Check for the minimum CMake version.
     include(QtCMakeVersionHelpers)
     qt_internal_require_suitable_cmake_version()
+    qt_internal_upgrade_cmake_policies()
 
     # Qt specific setup common for all modules:
     include(QtSetup)
@@ -335,6 +335,12 @@ macro(qt_build_repo_begin)
         add_custom_target(host_tools)
         add_custom_target(bootstrap_tools)
     endif()
+
+    # Add benchmark meta target. It's collection of all benchmarks added/registered by
+    # 'qt_internal_add_benchmark' helper.
+    if(NOT TARGET benchmark)
+        add_custom_target(benchmark)
+    endif()
 endmacro()
 
 macro(qt_build_repo_end)
@@ -415,7 +421,11 @@ function(qt_get_standalone_tests_confg_files_path out_var)
 
     # QT_CONFIG_INSTALL_DIR is relative in prefix builds.
     if(QT_WILL_INSTALL)
-        qt_path_join(path "${CMAKE_INSTALL_PREFIX}" "${path}")
+        if(DEFINED CMAKE_STAGING_PREFIX)
+            qt_path_join(path "${CMAKE_STAGING_PREFIX}" "${path}")
+        else()
+            qt_path_join(path "${CMAKE_INSTALL_PREFIX}" "${path}")
+        endif()
     endif()
 
     set("${out_var}" "${path}" PARENT_SCOPE)
@@ -449,8 +459,8 @@ macro(qt_build_tests)
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/benchmarks/CMakeLists.txt" AND QT_BUILD_BENCHMARKS)
         add_subdirectory(benchmarks)
     endif()
-    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/manual/CMakeLists.txt")
-        # add_subdirectory(manual) don't build manual tests for now, because qmake doesn't.
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/manual/CMakeLists.txt" AND QT_BUILD_MANUAL_TESTS)
+        add_subdirectory(manual)
     endif()
 endmacro()
 
@@ -568,12 +578,3 @@ macro(qt_examples_build_end)
 
     set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ${BACKUP_CMAKE_FIND_ROOT_PATH_MODE_PACKAGE})
 endmacro()
-
-if (ANDROID)
-    if(QT_SUPERBUILD)
-        include(QtBuildInternals/QtBuildInternalsAndroid)
-    else()
-        ### TODO: Find out why this is needed. See QTBUG-88718.
-        include(${CMAKE_CURRENT_LIST_DIR}/QtBuildInternalsAndroid.cmake)
-    endif()
-endif()

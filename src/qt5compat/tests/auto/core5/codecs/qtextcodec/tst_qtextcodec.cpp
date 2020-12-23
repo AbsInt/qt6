@@ -58,6 +58,8 @@ private slots:
     void codecForLocale();
 
     void asciiToIscii() const;
+    void unicodeToISCII();
+
     void nonFlaggedCodepointFFFF() const;
     void flagF7808080() const;
     void nonFlaggedEFBFBF() const;
@@ -65,6 +67,11 @@ private slots:
     void aliasForUTF16() const;
     void mibForTSCII() const;
     void codecForTSCII() const;
+    void asciiToTSCII();
+    void unicodeToTSCII();
+
+    void iso8859_1() const;
+    void iso8859_15() const;
     void iso8859_16() const;
 
     void utf8Codec_data();
@@ -98,6 +105,9 @@ private slots:
 
     void shiftJis();
     void userCodec();
+
+    void nullInputZeroOrNegativLength_data();
+    void nullInputZeroOrNegativLength();
 };
 
 void tst_QTextCodec::toUnicode_data()
@@ -404,6 +414,39 @@ void tst_QTextCodec::asciiToIscii() const
     }
 }
 
+void tst_QTextCodec::unicodeToISCII()
+{
+    auto codec = QTextCodec::codecForName("iscii-tml");
+    QVERIFY(codec != nullptr);
+
+    auto ba = QByteArray::fromHex("ABA3B3DD");
+    auto steel = QString("\u0b8e\u0b83\u0b95\u0bc1");
+
+    QTextCodec::ConverterState state;
+    QCOMPARE(codec->fromUnicode(steel.constData(), steel.size(), &state), ba);
+    state.clear();
+    QCOMPARE(codec->toUnicode(ba.constData(), ba.size(), &state), steel);
+
+    codec = QTextCodec::codecForName("iscii-dev");
+    QVERIFY(codec != nullptr);
+
+    ba = QByteArray::fromHex("e8e8");
+    auto zwnj = QString("\u094d\u200c");
+
+    state.clear();
+    QCOMPARE(codec->fromUnicode(zwnj.constData(), zwnj.size(), &state), ba);
+    state.clear();
+    QCOMPARE(codec->toUnicode(ba.constData(), ba.size(), &state), zwnj);
+
+    ba = QByteArray::fromHex("e8e9");
+    auto zwj = QString("\u094d\u200d");
+
+    state.clear();
+    QCOMPARE(codec->fromUnicode(zwj.constData(), zwj.size(), &state), ba);
+    state.clear();
+    QCOMPARE(codec->toUnicode(ba.constData(), ba.size(), &state), zwj);
+}
+
 void tst_QTextCodec::nonFlaggedCodepointFFFF() const
 {
     //Check that the code point 0xFFFF (=non-character code 0xEFBFBF) is not flagged
@@ -515,6 +558,94 @@ void tst_QTextCodec::codecForTSCII() const
     QTextCodec *codec = QTextCodec::codecForMib(2107);
     QVERIFY(codec);
     QCOMPARE(codec->mibEnum(), 2107);
+}
+
+void tst_QTextCodec::asciiToTSCII()
+{
+    /* Add all low, 7-bit ASCII characters. */
+    QString ascii;
+    const int len = 0x7F - 1;
+    ascii.resize(len);
+
+    for (int i = 0; i < len; ++i)
+        ascii[i] = QChar(i + 1);
+
+    QTextCodec* textCodec = QTextCodec::codecForName("TSCII");
+    QVERIFY(textCodec);
+
+    for (int i2 = 0; i2 < len; ++i2) {
+        /* For each character in ascii. */
+        const QChar c(ascii[i2]);
+        QVERIFY2(textCodec->canEncode(c),
+            qPrintable(QString::fromLatin1("Failed to encode %1 with encoding TSCII")
+                .arg(QString::number(c.unicode()))));
+    }
+
+    QVERIFY(textCodec->canEncode(QStringView(ascii)));
+    QVERIFY2(textCodec->canEncode(ascii), "Failed for full string with encoding TSCII");
+}
+
+void tst_QTextCodec::unicodeToTSCII()
+{
+    QTextCodec* codec = QTextCodec::codecForName("TSCII");
+    QVERIFY(codec != nullptr);
+
+    auto st = QString("\u0BA4\u0BBE\u0BAF\u0BCDKCharselect unicode block name");
+    auto ba = QByteArray::fromHex("BEA1F6") + "KCharselect unicode block name";
+
+    QTextCodec::ConverterState state;
+    QCOMPARE(codec->fromUnicode(st.constData(), st.size(), &state), ba);
+    QCOMPARE(codec->toUnicode(ba.constData(), ba.size(), &state), st);
+
+    st = QString("\u0BB5\u0BA3\u0B95\u0BCD\u0B95\u0BAE\u0BCD"); // Welcome
+    ba = QByteArray::fromHex("c5bdecb8f5");
+
+    state.clear();
+    QCOMPARE(codec->fromUnicode(st.constData(), st.size(), &state), ba);
+    QCOMPARE(codec->toUnicode(ba.constData(), ba.size(), &state), st);
+}
+
+void tst_QTextCodec::iso8859_1() const
+{
+    QTextCodec* codec = QTextCodec::codecForName("ISO8859-1");
+    QVERIFY(codec);
+    QCOMPARE(codec->name(), QByteArray("ISO-8859-1"));
+
+    auto st = QString("Invalid unicode character "
+        "\u20AC"); // EURO SIGN
+    auto ba = QByteArray::fromHex("496e76616c696420756e69636f646520636861726163746572203f");
+    QTextCodec::ConverterState state;
+    QCOMPARE(codec->fromUnicode(st.constData(), st.size(), &state), ba);
+}
+
+void tst_QTextCodec::iso8859_15() const
+{
+    QTextCodec* codec = QTextCodec::codecForName("ISO8859-15");
+    QVERIFY(codec);
+    QCOMPARE(codec->name(), QByteArray("ISO-8859-15"));
+
+    auto st = QString("Special unicode characters "
+        "\u20AC, " // EURO SIGN
+        "\u0160, " // LATIN CAPITAL LETTER S WITH CARON
+        "\u0161, " // LATIN SMALL LETTER S WITH CARON
+        "\u017d, " // LATIN CAPITAL LETTER Z WITH CARON
+        "\u017e, " // LATIN SMALL LETTER Z WITH CARON
+        "\u0152, " // LATIN CAPITAL LIGATURE OE
+        "\u0153, " // LATIN SMALL LIGATURE OE
+        "\u0178"); // LATIN CAPITAL LETTER Y WITH DIAERESIS
+    auto ba = QByteArray::fromHex("5370656369616c20756e69636f6465206368617261637465727320"
+        "a42C20" // EURO SIGN
+        "a62C20" // LATIN CAPITAL LETTER S WITH CARON
+        "a82C20" // LATIN SMALL LETTER S WITH CARON
+        "b42C20" // LATIN CAPITAL LETTER Z WITH CARON
+        "b82C20" // LATIN SMALL LETTER Z WITH CARON
+        "bc2C20" // LATIN CAPITAL LIGATURE OE
+        "bd2C20" // LATIN SMALL LIGATURE OE
+        "be");   // LATIN CAPITAL LETTER Y WITH DIAERESIS
+
+    QTextCodec::ConverterState state;
+    QCOMPARE(codec->fromUnicode(st.constData(), st.size(), &state), ba);
+    QCOMPARE(codec->toUnicode(ba.constData(), ba.size(), &state), st);
 }
 
 void tst_QTextCodec::iso8859_16() const
@@ -2456,6 +2587,107 @@ struct DontCrashAtExit {
 
     }
 } dontCrashAtExit;
+
+void tst_QTextCodec::nullInputZeroOrNegativLength_data()
+{
+    QTest::addColumn<QString>("codecName");
+    QTest::addColumn<int>("mibEnum");
+
+    QTest::newRow("Big5") << "Big5" << 2026;
+    QTest::newRow("Big5-HKSCS") << "Big5-HKSCS" << 2101;
+    QTest::newRow("EUC-JP") << "EUC-JP" << 18;
+    QTest::newRow("iscii-dev") << "iscii-dev" << -3000;
+    QTest::newRow("iscii-bng") << "iscii-bng" << -3001;
+    QTest::newRow("iscii-pnj") << "iscii-pnj" << -3002;
+    QTest::newRow("iscii-gjr") << "iscii-gjr" << -3003;
+    QTest::newRow("iscii-ori") << "iscii-ori" << -3004;
+    QTest::newRow("iscii-tml") << "iscii-tml" << -3005;
+    QTest::newRow("iscii-tlg") << "iscii-tlg" << -3006;
+    QTest::newRow("iscii-knd") << "iscii-knd" << -3007;
+    QTest::newRow("iscii-mlm") << "iscii-mlm" << -3008;
+    QTest::newRow("ISO-2022-JP") << "ISO-2022-JP" << 39;
+    QTest::newRow("ISO-8859-1") << "ISO-8859-1" << 4;
+    QTest::newRow("ISO-8859-15") << "ISO-8859-15" << 111;
+    QTest::newRow("KOI8-R") << "KOI8-R" << 2084;
+    QTest::newRow("KOI8-U") << "KOI8-U" << 2088;
+    QTest::newRow("ISO-8859-1") << "ISO-8859-1" << 4;
+    QTest::newRow("ISO-8859-2") << "ISO-8859-2" << 5;
+    QTest::newRow("ISO-8859-3") << "ISO-8859-3" << 6;
+    QTest::newRow("ISO-8859-4") << "ISO-8859-4" << 7;
+    QTest::newRow("ISO-8859-5") << "ISO-8859-5" << 8;
+    QTest::newRow("ISO-8859-9") << "ISO-8859-9" << 12;
+    QTest::newRow("ISO-8859-10") << "ISO-8859-10" << 13;
+    QTest::newRow("ISO-8859-13") << "ISO-8859-13" << 109;
+    QTest::newRow("ISO-8859-14") << "ISO-8859-14" << 110;
+    QTest::newRow("ISO-8859-16") << "ISO-8859-16" << 112;
+    QTest::newRow("IBM850") << "IBM850" << 2009;
+    QTest::newRow("IBM866") << "IBM866" << 2086;
+    QTest::newRow("windows-1250") << "windows-1250" << 2250;
+    QTest::newRow("windows-1251") << "windows-1251" << 2251;
+    QTest::newRow("windows-1252") << "windows-1252" << 2252;
+    QTest::newRow("windows-1253") << "windows-1253" << 2253;
+    QTest::newRow("windows-1254") << "windows-1254" << 2254;
+    QTest::newRow("windows-1255") << "windows-1255" << 2255;
+    QTest::newRow("windows-1256") << "windows-1256" << 2256;
+    QTest::newRow("windows-1257") << "windows-1257" << 2257;
+    QTest::newRow("windows-1258") << "windows-1258" << 2258;
+    QTest::newRow("macintosh") << "macintosh" << 2027;
+    QTest::newRow("TIS-620") << "TIS-620" << 2259;
+    QTest::newRow("hp-roman8") << "hp-roman8" << 2004;
+    QTest::newRow("Shift_JIS") << "Shift_JIS" << 17;
+    QTest::newRow("TSCII") << "TSCII" << 2107;
+    QTest::newRow("UTF-8") << "UTF-8" << 106;
+    QTest::newRow("UTF-16") << "UTF-16" << 1015;
+    QTest::newRow("UTF-16BE") << "UTF-16BE" << 1013;
+    QTest::newRow("UTF-16LE") << "UTF-16LE" << 1014;
+    QTest::newRow("UTF-32") << "UTF-32" << 1017;
+    QTest::newRow("UTF-32BE") << "UTF-32BE" << 1018;
+    QTest::newRow("UTF-32LE") << "UTF-32LE" << 1019;
+#ifdef Q_OS_WIN
+    QTest::newRow("EUC-KR") << "EUC-KR" << 38;
+    QTest::newRow("windows-949") << "windows-949" << -949;
+    QTest::newRow("GBK") << "GBK" << 113;
+    QTest::newRow("GB2312") << "GB2312" << 2025;
+    QTest::newRow("ISO-8859-6") << "ISO-8859-6" << 82;
+    QTest::newRow("ISO-8859-7") << "ISO-8859-7" << 10;
+    QTest::newRow("ISO-8859-8") << "ISO-8859-8" << 85;
+    QTest::newRow("IBM874") << "IBM874" << -874;
+    QTest::newRow("WINSAMI2") << "WINSAMI2" << -165;
+    QTest::newRow("System") << "System" << 0;
+#endif
+}
+
+void tst_QTextCodec::nullInputZeroOrNegativLength()
+{
+    QFETCH(QString, codecName);
+    QFETCH(int, mibEnum);
+
+    QTextCodec* codec = QTextCodec::codecForName(codecName.toLatin1());
+    QVERIFY(codec != nullptr);
+    QCOMPARE(codec->mibEnum(), mibEnum);
+
+    // null input
+    QCOMPARE(codec->toUnicode(nullptr), QString());
+    QCOMPARE(codec->toUnicode(nullptr, 0), QString());
+    QCOMPARE(codec->toUnicode(nullptr, -1), QString());
+    QCOMPARE(codec->toUnicode(nullptr, 128), QString());
+
+    // zero, negative length
+    QCOMPARE(codec->toUnicode("abc", 0), QString());
+    QCOMPARE(codec->toUnicode("abc", -1), QString());
+
+    // null input
+    QChar* dummy = nullptr;
+    QStringView view{ dummy };
+    QCOMPARE(codec->fromUnicode(view), QByteArray());
+    QCOMPARE(codec->fromUnicode(nullptr, 0), QByteArray());
+    QCOMPARE(codec->fromUnicode(nullptr, -1), QByteArray());
+    QCOMPARE(codec->fromUnicode(nullptr, 128), QByteArray());
+
+    // zero, negative length
+    QCOMPARE(codec->fromUnicode(QString("abc").constData(), 0), QByteArray());
+    QCOMPARE(codec->fromUnicode(QString("abc").constData(), -1), QByteArray());
+}
 
 QT_END_NAMESPACE
 

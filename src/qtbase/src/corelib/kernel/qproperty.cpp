@@ -246,6 +246,10 @@ QUntypedPropertyBinding QPropertyBindingData::setBinding(const QUntypedPropertyB
     if (auto *existingBinding = d.bindingPtr()) {
         if (existingBinding == newBinding.data())
             return QUntypedPropertyBinding(static_cast<QPropertyBindingPrivate *>(oldBinding.data()));
+        if (existingBinding->isEagerlyUpdating()) {
+            existingBinding->setError({QPropertyBindingError::BindingLoop, QStringLiteral("Binding set during binding evaluation!")});
+            return QUntypedPropertyBinding(static_cast<QPropertyBindingPrivate *>(oldBinding.data()));
+        }
         oldBinding = QPropertyBindingPrivatePtr(existingBinding);
         observer = static_cast<QPropertyBindingPrivate *>(oldBinding.data())->takeObservers();
         static_cast<QPropertyBindingPrivate *>(oldBinding.data())->unlinkAndDeref();
@@ -265,9 +269,11 @@ QUntypedPropertyBinding QPropertyBindingData::setBinding(const QUntypedPropertyB
             newBindingRaw->prependObserver(observer);
         newBindingRaw->setStaticObserver(staticObserverCallback, guardCallback);
         if (newBindingRaw->requiresEagerEvaluation()) {
+            newBindingRaw->setEagerlyUpdating(true);
             auto changed = newBindingRaw->evaluateIfDirtyAndReturnTrueIfValueChanged(propertyDataPtr);
             if (changed)
                 observer.notify(newBindingRaw, propertyDataPtr, /*alreadyKnownToHaveChanged=*/true);
+            newBindingRaw->setEagerlyUpdating(false);
         }
     } else if (observer) {
         d.setObservers(observer.ptr);
@@ -303,7 +309,7 @@ BindingEvaluationState::BindingEvaluationState(QPropertyBindingPrivate *binding,
     binding->clearDependencyObservers();
 }
 
-CurrentCompatProperty::CurrentCompatProperty(QBindingStatus *status, QUntypedPropertyData *property)
+CompatPropertySafePoint::CompatPropertySafePoint(QBindingStatus *status, QUntypedPropertyData *property)
     : property(property)
 {
     // store a pointer to the currentBindingEvaluationState to avoid a TLS lookup in
@@ -311,6 +317,10 @@ CurrentCompatProperty::CurrentCompatProperty(QBindingStatus *status, QUntypedPro
     currentState = &status->currentCompatProperty;
     previousState = *currentState;
     *currentState = this;
+
+    currentlyEvaluatingBindingList = &bindingStatus.currentlyEvaluatingBinding;
+    bindingState = *currentlyEvaluatingBindingList;
+    *currentlyEvaluatingBindingList = nullptr;
 }
 
 QPropertyBindingPrivate *QPropertyBindingPrivate::currentlyEvaluatingBinding()
@@ -700,7 +710,7 @@ QString QPropertyBindingError::description() const
     QProperty<int> age(41);
 
     QProperty<QString> fullname;
-    fullname.setBinding([&]() { return firstname.value() + " " + lastname.value() + " age:" + QString::number(age.value()); });
+    fullname.setBinding([&]() { return firstname.value() + " " + lastname.value() + " age: " + QString::number(age.value()); });
 
     qDebug() << fullname.value(); // Prints "John Smith age: 41"
 
@@ -926,28 +936,15 @@ QString QPropertyBindingError::description() const
   QObjectBindableProperty and pass the change signal as a callback.
 
   QObjectBindableProperty is usually not used directly, instead an instance of it is created by
-  using the Q_BINDABLE_PROPERTY_DATA macro.
+  using the Q_OBJECT_BINDABLE_PROPERTY macro.
 
-  Use the Q_BINDABLE_PROPERTY macro in the class declaration to declare the property as bindable.
+  Use the Q_OBJECT_BINDABLE_PROPERTY macro in the class declaration to declare
+  the property as bindable.
 
-  \code
-    class MyClass : public QObject
-    {
-        \Q_OBJECT
-        Q_PROPERTY(int x READ x WRITE setX NOTIFY xChanged BINDABLE bindableX)
-    public:
-        int x() const { return xProp; }
-        void setX(int x) { xProp = x; }
-        Bindable<int> bindableX() { return QBindable<int>(&xProp); }
+  \snippet code/src_corelib_kernel_qproperty.cpp 0
 
-    signals:
-        void xChanged();
-
-    private:
-        // Declare the instance of the bindable property data.
-        Q_OBJECT_BINDABLE_PROPERTY(MyClass, int, xProp, &MyClass::xChanged)
-    };
-  \endcode
+  If the property does not need a changed notification, you can leave out the "NOFITY xChanged" in the Q_PROPERTY macro as well as the last argument
+  of the Q_OBJECT_BINDABLE_PROPERTY macro.
 */
 
 /*!
@@ -1144,10 +1141,10 @@ QString QPropertyBindingError::description() const
     QPropertyAlias<QString> nameAlias(name);
     QPropertyAlias<int> ageAlias(&age);
 
-    QPropertyAlias<QString> fullname;
-    fullname.setBinding([&]() { return nameAlias.value() + " age:" + QString::number(ageAlias.value()); });
+    QProperty<QString> fullname;
+    fullname.setBinding([&]() { return nameAlias.value() + " age: " + QString::number(ageAlias.value()); });
 
-    qDebug() << fullname.value(); // Prints "Smith age: 41"
+    qDebug() << fullname.value(); // Prints "John age: 41"
 
     *name = "Emma"; // Marks binding expression as dirty
 
@@ -1484,6 +1481,19 @@ QPropertyBindingData *QBindingStorage::bindingData_helper(const QUntypedProperty
 QPropertyBindingData *QBindingStorage::bindingData_helper(QUntypedPropertyData *data, bool create)
 {
     return QBindingStoragePrivate(d).get(data, create);
+}
+
+
+BindingEvaluationState *suspendCurrentBindingStatus()
+{
+    auto ret = bindingStatus.currentlyEvaluatingBinding;
+    bindingStatus.currentlyEvaluatingBinding = nullptr;
+    return ret;
+}
+
+void restoreBindingStatus(BindingEvaluationState *status)
+{
+    bindingStatus.currentlyEvaluatingBinding = status;
 }
 
 QT_END_NAMESPACE

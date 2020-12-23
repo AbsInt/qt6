@@ -51,7 +51,10 @@ depends += \
     qtplatformintegration \
     qtwidgets \
     qmake \
-    qtsql
+    qtsql \
+    qtshadertools \
+    qmake \
+    qtcmake
 
 headerdirs  += ..\
                ../../quick \

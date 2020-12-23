@@ -48,6 +48,7 @@
 #include <qiodevice.h>
 #include <qdebug.h>
 #include <qstack.h>
+#include <qvarlengtharray.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -667,6 +668,27 @@ public:
         bufferStart = 0;
     }
 
+    struct ReadStringChunk {
+        union {
+            char *ptr;
+            QByteArray *array;
+            QString *string;
+        };
+        enum { ByteArray = -1, String = -3 };
+        qsizetype maxlen_or_type;
+
+        ReadStringChunk(char *ptr, qsizetype maxlen) : ptr(ptr), maxlen_or_type(maxlen) {}
+        ReadStringChunk(QByteArray *array) : array(array), maxlen_or_type(ByteArray) {}
+        ReadStringChunk(QString *str) : string(str), maxlen_or_type(String) {}
+        bool isString() const { return maxlen_or_type == String; }
+        bool isByteArray() const { return maxlen_or_type == ByteArray; }
+        bool isPlainPointer() const { return maxlen_or_type >= 0; }
+    };
+
+    static QCborStreamReader::StringResultCode appendStringChunk(QCborStreamReader &reader, QByteArray *data);
+    QCborStreamReader::StringResult<qsizetype> readStringChunk(ReadStringChunk params);
+    qsizetype readStringChunk_byte(ReadStringChunk params, qsizetype len);
+    qsizetype readStringChunk_unicode(ReadStringChunk params, qsizetype utf8len);
     bool ensureStringIteration();
 };
 
@@ -1054,19 +1076,18 @@ bool QCborStreamReader::next(int maxRecursion)
             next(maxRecursion - 1);
         if (lastError() == QCborError::NoError)
             leaveContainer();
-    } else if (isString() || isByteArray()) {
-        auto r = _readByteArray_helper();
-        while (r.status == Ok) {
-            if (isString() && r.data.size() > MaxStringSize) {
-                d->handleError(CborErrorDataTooLarge);
-                break;
-            }
-            if (isString() && !QUtf8::isValidUtf8(r.data).isValidUtf8) {
-                d->handleError(CborErrorInvalidUtf8TextString);
-                break;
-            }
-            r = _readByteArray_helper();
-        }
+    } else if (isByteArray()) {
+        char c;
+        StringResult<qsizetype> r;
+        do {
+            r = readStringChunk(&c, 1);
+        } while (r.status == Ok);
+    } else if (isString()) {
+        // we need to use actual readString so we get UTF-8 validation
+        StringResult<QString> r;
+        do {
+            r = readString();
+        } while (r.status == Ok);
     } else {
         // fixed types
         CborError err = cbor_value_advance_fixed(&d->currentElement);
@@ -1338,34 +1359,22 @@ bool QCborStreamReader::leaveContainer()
  */
 QCborStreamReader::StringResult<QString> QCborStreamReader::_readString_helper()
 {
-    auto r = _readByteArray_helper();
     QCborStreamReader::StringResult<QString> result;
+    auto r = d->readStringChunk(&result.data);
     result.status = r.status;
-
-    if (r.status == Ok) {
-        // See QUtf8::convertToUnicode() a detailed explanation of why this
-        // conversion uses the same number of words or less.
-        CborError err = CborNoError;
-        if (r.data.size() > MaxStringSize) {
-            err = CborErrorDataTooLarge;
-        } else {
-            QStringConverter::State cs(QStringConverter::Flag::Stateless);
-            result.data = QUtf8::convertToUnicode(r.data, &cs);
-            if (cs.invalidChars != 0 || cs.remainingChars != 0)
-                err = CborErrorInvalidUtf8TextString;
-        }
-
-        if (err) {
-            d->handleError(err);
-            result.data.clear();
-            result.status = Error;
-        }
+    if (r.status == Error) {
+        result.data.clear();
+    } else {
+        Q_ASSERT(r.data == result.data.length());
+        if (r.status == EndOfString && lastError() == QCborError::NoError)
+            preparse();
     }
+
     return result;
 }
 
 /*!
-   \fn QCborStreamReader::StringResult<QString> QCborStreamReader::readByteArray()
+   \fn QCborStreamReader::StringResult<QByteArray> QCborStreamReader::readByteArray()
 
    Decodes one byte array chunk from the CBOR string and returns it. This
    function is used for both regular and chunked contents, so the caller must
@@ -1383,19 +1392,16 @@ QCborStreamReader::StringResult<QString> QCborStreamReader::_readString_helper()
 QCborStreamReader::StringResult<QByteArray> QCborStreamReader::_readByteArray_helper()
 {
     QCborStreamReader::StringResult<QByteArray> result;
-    result.status = Error;
-    qsizetype len = _currentStringChunkSize();
-    if (len < 0)
-        return result;
-    if (len > MaxByteArraySize) {
-        d->handleError(CborErrorDataTooLarge);
-        return result;
+    auto r = d->readStringChunk(&result.data);
+    result.status = r.status;
+    if (r.status == Error) {
+        result.data.clear();
+    } else {
+        Q_ASSERT(r.data == result.data.length());
+        if (r.status == EndOfString && lastError() == QCborError::NoError)
+            preparse();
     }
 
-    result.data.resize(len);
-    auto r = readStringChunk(result.data.data(), len);
-    Q_ASSERT(r.status != Ok || r.data == len);
-    result.status = r.status;
     return result;
 }
 
@@ -1461,28 +1467,58 @@ qsizetype QCborStreamReader::_currentStringChunkSize() const
 QCborStreamReader::StringResult<qsizetype>
 QCborStreamReader::readStringChunk(char *ptr, qsizetype maxlen)
 {
+    auto r = d->readStringChunk({ptr, maxlen});
+    if (r.status == EndOfString && lastError() == QCborError::NoError)
+        preparse();
+    return r;
+}
+
+// used by qcborvalue.cpp
+QCborStreamReader::StringResultCode qt_cbor_append_string_chunk(QCborStreamReader &reader, QByteArray *data)
+{
+    return QCborStreamReaderPrivate::appendStringChunk(reader, data);
+}
+
+inline QCborStreamReader::StringResultCode
+QCborStreamReaderPrivate::appendStringChunk(QCborStreamReader &reader, QByteArray *data)
+{
+    auto status = reader.d->readStringChunk(data).status;
+    if (status == QCborStreamReader::EndOfString && reader.lastError() == QCborError::NoError)
+        reader.preparse();
+    return status;
+}
+
+Q_NEVER_INLINE QCborStreamReader::StringResult<qsizetype>
+QCborStreamReaderPrivate::readStringChunk(ReadStringChunk params)
+{
     CborError err;
     size_t len;
     const void *content = nullptr;
     QCborStreamReader::StringResult<qsizetype> result;
     result.data = 0;
-    result.status = Error;
+    result.status = QCborStreamReader::Error;
 
-    d->lastError = {};
-    if (!d->ensureStringIteration())
+    lastError = {};
+    if (!ensureStringIteration())
         return result;
 
+    // Note: in the current implementation, the call into TinyCBOR below only
+    // succeeds if we *already* have all the data in memory. That's obvious for
+    // the case of direct memory (no QIODevice), whereas for QIODevices
+    // qt_cbor_decoder_transfer_string() enforces that
+    // QIODevice::bytesAvailable() be bigger than the amount we're about to
+    // read.
 #if 1
     // Using internal TinyCBOR API!
-    err = _cbor_value_get_string_chunk(&d->currentElement, &content, &len, &d->currentElement);
+    err = _cbor_value_get_string_chunk(&currentElement, &content, &len, &currentElement);
 #else
     // the above is effectively the same as:
     if (cbor_value_is_byte_string(&currentElement))
-        err = cbor_value_get_byte_string_chunk(&d->currentElement, reinterpret_cast<const uint8_t **>(&content),
-                                               &len, &d->currentElement);
+        err = cbor_value_get_byte_string_chunk(&currentElement, reinterpret_cast<const uint8_t **>(&content),
+                                               &len, &currentElement);
     else
-        err = cbor_value_get_text_string_chunk(&d->currentElement, reinterpret_cast<const char **>(&content),
-                                               &len, &d->currentElement);
+        err = cbor_value_get_text_string_chunk(&currentElement, reinterpret_cast<const char **>(&content),
+                                               &len, &currentElement);
 #endif
 
     // Range check: using implementation-defined behavior in converting an
@@ -1494,56 +1530,158 @@ QCborStreamReader::readStringChunk(char *ptr, qsizetype maxlen)
 
     if (err) {
         if (err == CborErrorNoMoreStringChunks) {
-            d->preread();
-            err = cbor_value_finish_string_iteration(&d->currentElement);
-            result.status = EndOfString;
+            preread();
+            err = cbor_value_finish_string_iteration(&currentElement);
+            result.status = QCborStreamReader::EndOfString;
         }
         if (err)
-            d->handleError(err);
-        else
-            preparse();
+            handleError(err);
+        // caller musts call preparse()
         return result;
     }
 
-    // Read the chunk into the user's buffer.
-    qint64 actuallyRead;
     qptrdiff offset = qptrdiff(content);
-    qsizetype toRead = qsizetype(len);
-    qsizetype left = toRead - maxlen;
-    if (left < 0)
-        left = 0;               // buffer bigger than string
-    else
-        toRead = maxlen;        // buffer smaller than string
-
-    if (d->device) {
+    bufferStart += offset;
+    if (device) {
         // This first skip can't fail because we've already read this many bytes.
-        d->device->skip(d->bufferStart + qptrdiff(content));
-        actuallyRead = d->device->read(ptr, toRead);
+        device->skip(bufferStart);
+    }
+
+    if (params.isString()) {
+        // readString()
+        result.data = readStringChunk_unicode(params, qsizetype(len));
+    } else {
+        // readByteArray() or readStringChunk()
+        result.data = readStringChunk_byte(params, qsizetype(len));
+    }
+
+    if (result.data < 0)
+        return result;      // error
+
+    if (device)
+        updateBufferAfterString(0, len);
+    else
+        bufferStart += len;
+
+    preread();
+    result.status = QCborStreamReader::Ok;
+    return result;
+}
+
+inline qsizetype
+QCborStreamReaderPrivate::readStringChunk_byte(ReadStringChunk params, qsizetype len)
+{
+    qint64 actuallyRead;
+    qsizetype toRead = qsizetype(len);
+    qsizetype left = 0;     // bytes from the chunk not copied to the user buffer, to discard
+    char *ptr = nullptr;
+
+    if (params.isPlainPointer()) {
+        left = toRead - params.maxlen_or_type;
+        if (left < 0)
+            left = 0;                           // buffer bigger than string
+        else
+            toRead = params.maxlen_or_type;     // buffer smaller than string
+        ptr = params.ptr;
+    } else if (params.isByteArray()) {
+        // See note above on having ensured there is enough incoming data.
+        auto oldSize = params.array->size();
+        auto newSize = oldSize;
+        if (add_overflow<decltype(newSize)>(oldSize, toRead, &newSize)) {
+            handleError(CborErrorDataTooLarge);
+            return -1;
+        }
+        try {
+            params.array->resize(newSize);
+        } catch (const std::bad_alloc &) {
+            // the distinction between DataTooLarge and OOM is mostly for
+            // compatibility with Qt 5; in Qt 6, we could consider everything
+            // to be OOM.
+            handleError(newSize > MaxByteArraySize ? CborErrorDataTooLarge: CborErrorOutOfMemory);
+            return -1;
+        }
+
+        ptr = const_cast<char *>(params.array->constData()) + oldSize;
+    }
+
+    if (device) {
+        actuallyRead = device->read(ptr, toRead);
 
         if (actuallyRead != toRead)  {
             actuallyRead = -1;
         } else if (left) {
-            qint64 skipped = d->device->skip(left);
+            qint64 skipped = device->skip(left);
             if (skipped != left)
                 actuallyRead = -1;
         }
 
         if (actuallyRead < 0) {
-            d->handleError(CborErrorIO);
-            return result;
+            handleError(CborErrorIO);
+            return -1;
         }
-
-        d->updateBufferAfterString(offset, len);
     } else {
         actuallyRead = toRead;
-        memcpy(ptr, d->buffer.constData() + d->bufferStart + offset, toRead);
-        d->bufferStart += QByteArray::size_type(offset + len);
+        memcpy(ptr, buffer.constData() + bufferStart, toRead);
     }
 
-    d->preread();
-    result.data = actuallyRead;
-    result.status = Ok;
-    return result;
+    return actuallyRead;
+}
+
+inline qsizetype
+QCborStreamReaderPrivate::readStringChunk_unicode(ReadStringChunk params, qsizetype utf8len)
+{
+    // See QUtf8::convertToUnicode() a detailed explanation of why this
+    // conversion uses the same number of words or less.
+    QChar *begin = nullptr;
+    if (params.isString()) {
+        try {
+            params.string->resize(utf8len);
+        } catch (const std::bad_alloc &) {
+            if (utf8len > MaxStringSize)
+                handleError(CborErrorDataTooLarge);
+            else
+                handleError(CborErrorOutOfMemory);
+            return -1;
+        }
+
+        begin = const_cast<QChar *>(params.string->constData());
+    }
+
+    QChar *ptr = begin;
+    QStringConverter::State cs(QStringConverter::Flag::Stateless);
+    if (device == nullptr) {
+        // Easy case: we can decode straight from the buffer we already have
+        ptr = QUtf8::convertToUnicode(ptr, { buffer.constData() + bufferStart, utf8len }, &cs);
+    } else {
+        // read in chunks, to avoid creating large, intermediate buffers
+        constexpr qsizetype StringChunkSize = 16384;
+        qsizetype chunkSize = qMin(StringChunkSize, utf8len);
+        QVarLengthArray<char> chunk(chunkSize);
+
+        cs = { QStringConverter::Flag::ConvertInitialBom };
+        while (utf8len > 0 && cs.invalidChars == 0) {
+            qsizetype toRead = qMin(chunkSize, utf8len);
+            qint64 actuallyRead = device->read(chunk.data(), toRead);
+            if (actuallyRead == toRead)
+                ptr = QUtf8::convertToUnicode(ptr, { chunk.data(), toRead }, &cs);
+
+            if (actuallyRead != toRead) {
+                handleError(CborErrorIO);
+                return -1;
+            }
+            utf8len -= toRead;
+        }
+    }
+
+    if (cs.invalidChars != 0 || cs.remainingChars != 0) {
+        handleError(CborErrorInvalidUtf8TextString);
+        return -1;
+    }
+
+    qsizetype size = ptr - begin;
+    if (params.isString())
+        params.string->truncate(size);
+    return size;
 }
 
 QT_END_NAMESPACE

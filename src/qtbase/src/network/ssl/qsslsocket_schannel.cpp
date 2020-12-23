@@ -64,7 +64,7 @@
 
 // Redstone 5/1809 has all the API available, but TLS 1.3 is not enabled until a later version of
 // Win 10, checked at runtime in supportsTls13()
-#if NTDDI_VERSION >= NTDDI_WIN10_RS5
+#if defined(NTDDI_WIN10_RS5) && NTDDI_VERSION >= NTDDI_WIN10_RS5
 #define SUPPORTS_TLS13 1
 #endif
 
@@ -1324,6 +1324,9 @@ void QSslSocketBackendPrivate::startServerEncryption()
 void QSslSocketBackendPrivate::transmit()
 {
     Q_Q(QSslSocket);
+
+    if (mode == QSslSocket::UnencryptedMode)
+        return; // This function should not have been called
 
     // Can happen if called through QSslSocket::abort->QSslSocket::close->QSslSocket::flush->here
     if (plainSocket->state() == QAbstractSocket::SocketState::UnconnectedState)

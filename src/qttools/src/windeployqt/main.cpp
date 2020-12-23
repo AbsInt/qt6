@@ -1447,7 +1447,7 @@ static DeployResult deploy(const Options &options,
         }
 
         if (options.patchQt  && !options.dryRun) {
-            const QString qt5CoreName = QFileInfo(libraryPath(libraryLocation, "Qt6Core", qtLibInfix,
+            const QString qt6CoreName = QFileInfo(libraryPath(libraryLocation, "Qt6Core", qtLibInfix,
                                                               options.platform, result.isDebug)).fileName();
 #ifndef QT_RELOCATABLE
             if (!patchQtCore(targetPath + QLatin1Char('/') + qt6CoreName, errorMessage)) {
@@ -1607,6 +1607,10 @@ static bool deployWebEngineCore(const QMap<QString, QString> &qmakeVariables,
                       options.updateFileFlags, options.json, errorMessage);
 }
 
+QT_END_NAMESPACE
+
+QT_USE_NAMESPACE
+
 int main(int argc, char **argv)
 {
     QCoreApplication a(argc, argv);
@@ -1640,8 +1644,6 @@ int main(int argc, char **argv)
     const QMap<QString, QString> qmakeVariables = queryQMakeAll(options.qmakePath, &errorMessage);
     const QString xSpec = qmakeVariables.value(QStringLiteral("QMAKE_XSPEC"));
     options.platform = platformFromMkSpec(xSpec);
-    if (options.platform == WindowsDesktopMinGW || options.platform == WindowsDesktopMsvc)
-        options.compilerRunTime = true;
 
     if (qmakeVariables.isEmpty() || xSpec.isEmpty() || !qmakeVariables.contains(QStringLiteral("QT_INSTALL_BINS"))) {
         std::wcerr << "Unable to query qmake: " << errorMessage << '\n';
@@ -1688,5 +1690,3 @@ int main(int argc, char **argv)
 
     return 0;
 }
-
-QT_END_NAMESPACE

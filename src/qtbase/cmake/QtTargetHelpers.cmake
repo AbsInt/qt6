@@ -188,15 +188,15 @@ function(qt_set_common_target_properties target)
             OBJCXX_VISIBILITY_PRESET hidden
             VISIBILITY_INLINES_HIDDEN 1)
     endif()
-   if(FEATURE_static_runtime)
-       if(MSVC)
-           set_property(TARGET ${target} PROPERTY
-               MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
-       elseif(MINGW)
-           target_link_options(${target} INTERFACE "LINKER:-static")
-       endif()
-   endif()
-   qt_internal_set_compile_pdb_names("${target}")
+    if(QT_FEATURE_static_runtime)
+        if(MSVC)
+            set_property(TARGET ${target} PROPERTY
+                MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+        elseif(MINGW)
+            target_link_options(${target} INTERFACE "LINKER:-static")
+        endif()
+    endif()
+    qt_internal_set_compile_pdb_names("${target}")
 endfunction()
 
 # Set common, informational target properties.
@@ -501,7 +501,7 @@ function(qt_internal_create_tracepoints name tracepoints_file)
             set(tracegen_arg "etw")
         endif()
 
-        if(QT_HOST_PATH)
+        if(NOT "${QT_HOST_PATH}" STREQUAL "")
             qt_path_join(tracegen
                 "${QT_HOST_PATH}"
                 "${QT${PROJECT_VERSION_MAJOR}_HOST_INFO_BINDIR}"

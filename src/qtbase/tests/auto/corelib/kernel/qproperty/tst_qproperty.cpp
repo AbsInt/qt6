@@ -87,6 +87,8 @@ private slots:
 
     void modifyObserverListWhileIterating();
     void compatPropertyNoDobuleNotification();
+
+    void noFakeDependencies();
 };
 
 void tst_QProperty::functorBinding()
@@ -460,6 +462,7 @@ class BindingLoopTester : public QObject
         eagerData2.setBinding(Qt::makePropertyBinding([&](){ return eagerData.value() + 1; }  ) );
         i->setValue(42);
     }
+    BindingLoopTester() {}
 
     int eagerProp() {return eagerData.value();}
     void setEagerProp(int i) { eagerData = i; }
@@ -493,11 +496,21 @@ void tst_QProperty::bindingLoop()
     QCOMPARE(secondProp.binding().error().type(), QPropertyBindingError::BindingLoop);
 
 
-    QProperty<int> i;
-    BindingLoopTester tester(&i);
-    QCOMPARE(tester.bindableEagerProp().binding().error().type(), QPropertyBindingError::BindingLoop);
-    QEXPECT_FAIL("", "Only the first property in a dependency cycle is set to the error state", Continue);
-    QCOMPARE(tester.bindableEagerProp2().binding().error().type(), QPropertyBindingError::BindingLoop);
+    {
+        QProperty<int> i;
+        BindingLoopTester tester(&i);
+        QCOMPARE(tester.bindableEagerProp().binding().error().type(), QPropertyBindingError::BindingLoop);
+        QCOMPARE(tester.bindableEagerProp2().binding().error().type(), QPropertyBindingError::BindingLoop);
+    }
+    {
+        BindingLoopTester tester;
+        auto handler = tester.bindableEagerProp().onValueChanged([&]() {
+            tester.bindableEagerProp().setBinding([](){return 42;});
+        });
+        tester.bindableEagerProp().setBinding([]() {return 42;});
+        QCOMPARE(tester.bindableEagerProp().binding().error().type(), QPropertyBindingError::BindingLoop);
+        QCOMPARE(tester.bindableEagerProp().binding().error().description(), "Binding set during binding evaluation!");
+    }
 }
 
 class ReallocTester : public QObject
@@ -997,20 +1010,18 @@ class MyQObject : public QObject
     Q_OBJECT
     Q_PROPERTY(int foo READ foo WRITE setFoo BINDABLE bindableFoo NOTIFY fooChanged)
     Q_PROPERTY(int bar READ bar WRITE setBar BINDABLE bindableBar NOTIFY barChanged)
-    Q_PROPERTY(int read READ read NOTIFY readChanged)
+    Q_PROPERTY(int read READ read)
     Q_PROPERTY(int computed READ computed STORED false)
     Q_PROPERTY(int compat READ compat WRITE setCompat NOTIFY compatChanged)
 
 signals:
     void fooChanged();
     void barChanged();
-    void readChanged();
     void compatChanged();
 
 public slots:
     void fooHasChanged() { fooChangedCount++; }
     void barHasChanged() { barChangedCount++; }
-    void readHasChanged() { readChangedCount++; }
     void compatHasChanged() { compatChangedCount++; }
 
 public:
@@ -1042,13 +1053,12 @@ public:
 public:
     int fooChangedCount = 0;
     int barChangedCount = 0;
-    int readChangedCount = 0;
     int compatChangedCount = 0;
     int setCompatCalled = 0;
 
     Q_OBJECT_BINDABLE_PROPERTY(MyQObject, int, fooData, &MyQObject::fooChanged);
     Q_OBJECT_BINDABLE_PROPERTY(MyQObject, int, barData, &MyQObject::barChanged);
-    Q_OBJECT_BINDABLE_PROPERTY(MyQObject, int, readData, &MyQObject::readChanged);
+    Q_OBJECT_BINDABLE_PROPERTY(MyQObject, int, readData);
     Q_OBJECT_COMPUTED_PROPERTY(MyQObject, int, computedData, &MyQObject::computed);
     Q_OBJECT_COMPAT_PROPERTY(MyQObject, int, compatData, &MyQObject::setCompat)
 };
@@ -1058,7 +1068,6 @@ void tst_QProperty::testNewStuff()
     MyQObject object;
     QObject::connect(&object, &MyQObject::fooChanged, &object, &MyQObject::fooHasChanged);
     QObject::connect(&object, &MyQObject::barChanged, &object, &MyQObject::barHasChanged);
-    QObject::connect(&object, &MyQObject::readChanged, &object, &MyQObject::readHasChanged);
 
     QCOMPARE(object.fooChangedCount, 0);
     object.setFoo(10);
@@ -1110,6 +1119,11 @@ void tst_QProperty::testNewStuff()
     object.bindableBar().setBinding(object.bindableComputed().makeBinding());
     QCOMPARE(object.computed(), 42);
     object.readData.setValue(111);
+    QCOMPARE(object.computed(), 111);
+
+    object.bindableComputed().setBinding(object.bindableBar().makeBinding());
+    QCOMPARE(object.computed(), 111);
+    object.bindableComputed().setValue(10);
     QCOMPARE(object.computed(), 111);
 
     QCOMPARE(object.bindableFoo().value(), 111);
@@ -1351,6 +1365,55 @@ void tst_QProperty::compatPropertyNoDobuleNotification()
     auto observer = tester.bindableProp1().onValueChanged([&](){++counter;});
     iprop.setValue(2);
     QCOMPARE(counter, 1);
+}
+
+class FakeDependencyCreator : public QObject
+{
+    Q_OBJECT
+
+    Q_PROPERTY(int prop1 READ prop1 WRITE setProp1 NOTIFY prop1Changed BINDABLE bindableProp1)
+    Q_PROPERTY(int prop2 READ prop2 WRITE setProp2 NOTIFY prop2Changed BINDABLE bindableProp2)
+    Q_PROPERTY(int prop3 READ prop3 WRITE setProp3 NOTIFY prop3Changed BINDABLE bindableProp3)
+
+signals:
+    void prop1Changed();
+    void prop2Changed();
+    void prop3Changed();
+
+public:
+    void setProp1(int val) { prop1Data = val; emit prop1Changed();}
+    void setProp2(int val) { prop2Data = val; emit prop2Changed();}
+    void setProp3(int val) { prop3Data = val; emit prop3Changed();}
+
+    int prop1() { return prop1Data; }
+    int prop2() { return prop2Data; }
+    int prop3() { return prop3Data; }
+
+    QBindable<int> bindableProp1() { return QBindable<int>(&prop1Data); }
+    QBindable<int> bindableProp2() { return QBindable<int>(&prop2Data); }
+    QBindable<int> bindableProp3() { return QBindable<int>(&prop3Data); }
+
+private:
+    Q_OBJECT_COMPAT_PROPERTY(FakeDependencyCreator, int, prop1Data, &FakeDependencyCreator::setProp1);
+    Q_OBJECT_COMPAT_PROPERTY(FakeDependencyCreator, int, prop2Data, &FakeDependencyCreator::setProp2);
+    Q_OBJECT_COMPAT_PROPERTY(FakeDependencyCreator, int, prop3Data, &FakeDependencyCreator::setProp3);
+};
+
+void tst_QProperty::noFakeDependencies()
+{
+    FakeDependencyCreator fdc;
+    int bindingFunctionCalled = 0;
+    fdc.bindableProp1().setBinding([&]() -> int {++bindingFunctionCalled; return fdc.prop2();});
+    fdc.setProp2(42);
+    QCOMPARE(fdc.prop1(), 42); // basic binding works
+
+    int slotCounter = 0;
+    QObject::connect(&fdc, &FakeDependencyCreator::prop1Changed, &fdc, [&](){ (void) fdc.prop3(); ++slotCounter;});
+    fdc.setProp2(13);
+    QCOMPARE(slotCounter, 1); // sanity check
+    int old = bindingFunctionCalled;
+    fdc.setProp3(100);
+    QCOMPARE(old, bindingFunctionCalled);
 }
 
 QTEST_MAIN(tst_QProperty);

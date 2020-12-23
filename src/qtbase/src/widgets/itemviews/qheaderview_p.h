@@ -82,6 +82,7 @@ public:
           originalSize(-1),
           section(-1),
           target(-1),
+          firstPressed(-1),
           pressed(-1),
           hover(-1),
           length(0),
@@ -274,6 +275,7 @@ public:
     int originalSize;
     int section; // used for resizing and moving sections
     int target;
+    int firstPressed;
     int pressed;
     int hover;
 
@@ -388,7 +390,7 @@ public:
 
 };
 Q_DECLARE_TYPEINFO(QHeaderViewPrivate::SectionItem, Q_PRIMITIVE_TYPE);
-Q_DECLARE_TYPEINFO(QHeaderViewPrivate::LayoutChangeItem, Q_MOVABLE_TYPE);
+Q_DECLARE_TYPEINFO(QHeaderViewPrivate::LayoutChangeItem, Q_RELOCATABLE_TYPE);
 
 QT_END_NAMESPACE
 

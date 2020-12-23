@@ -7,7 +7,7 @@ The effort of this is tracked in QTBUG-85373 and QTBUG-85349.
 | -prefix /opt/qt6                      | -DCMAKE_INSTALL_PREFIX=/opt/qta6                  |                                                                 |
 | -extprefix /opt/qt6                   | -DCMAKE_STAGING_PREFIX=/opt/qt6                   |                                                                 |
 | -hostprefix  /where/ever              | n/a                                               | When cross-building Qt, we do not build for host system anymore |
-| -external-hostbindir /path/to/host/qt | -DQT_HOST_PATH=/path/to/host/qt                   |                                                                 |
+| -external-hostbindir /path/to/host/qt | -DQT_HOST_PATH=/path/to/host/qt                   | Can be set with configure -qt-host-path /path/to/host/qt.       |
 | -bindir <dir>                         | -DINSTALL_BINDIR=<dir>                            | similar for -headerdir -libdir and so on                        |
 | -hostdatadir <dir>                    | -DINSTALL_MKSPECSDIR=<dir>                        |                                                                 |
 | -host*dir <dir>                       | n/a                                               |                                                                 |
@@ -102,11 +102,16 @@ The effort of this is tracked in QTBUG-85373 and QTBUG-85349.
 | -android-javac-source                 | -DQT_ANDROID_JAVAC_SOURCE=7                       | Set the javac build source version.                             |
 | -android-javac-target                 | -DQT_ANDROID_JAVAC_TARGET=7                       | Set the javac build target version.                             |
 | -skip <repo>                          | -DBUILD_<repo>=OFF                                |                                                                 |
-| -make <part>                          | -DQT_BUILD_TESTS=ON                               | A way to turn on tools explicitly is missing.                   |
-|                                       | -DQT_BUILD_EXAMPLES=ON                            |                                                                 |
+| -make <part>                          | -DQT_BUILD_TESTS=ON                               | A way to turn on tools explicitly is missing. If tests/examples |
+|                                       | -DQT_BUILD_EXAMPLES=ON                            | are enabled, you can disable their building as part of the      |
+|                                       |                                                   | 'all' target by also passing -DQT_BUILD_TESTS_BY_DEFAULT=OFF or |
+|                                       |                                                   | -DQT_BUILD_EXAMPLES_BY_DEFAULT=OFF. Note that if you entirely   |
+|                                       |                                                   | disable tests/examples at configure time (by using              |
+|                                       |                                                   | -DQT_BUILD_TESTS=OFF or -DQT_BUILD_EXAMPLES=OFF) you can't then |
+|                                       |                                                   | build them separately, after configuration.                     | 
 | -nomake <part>                        | -DQT_BUILD_TESTS=OFF                              | A way to turn off tools explicitly is missing.                  |
 |                                       | -DQT_BUILD_EXAMPLES=OFF                           |                                                                 |
-| -no-gui                               |                                                   |                                                                 |
+| -no-gui                               | -DFEATURE_gui=OFF                                 |                                                                 |
 | -no-widgets                           | -DFEATURE_widgets=OFF                             |                                                                 |
 | -no-dbus                              | -DFEATURE_dbus=OFF                                |                                                                 |
 | -dbus [linked/runtime]                | -DINPUT_dbus=[linked/runtime]                     |                                                                 |
@@ -140,10 +145,10 @@ The effort of this is tracked in QTBUG-85373 and QTBUG-85349.
 |                                       | -DFEATURE_system_harfbuzz=ON/OFF                  |                                                                 |
 | -gtk                                  | -DFEATURE_gtk3=ON                                 |                                                                 |
 | -lgmon                                | n/a                                               | QNX-specific                                                    |
-| -no-opengl                            |                                                   |                                                                 |
-| -opengl <api>                         |                                                   |                                                                 |
-| -opengles3                            |                                                   |                                                                 |
-| -egl                                  |                                                   |                                                                 |
+| -no-opengl                            | -DINPUT_opengl=no                                 |                                                                 |
+| -opengl <api>                         | -DINPUT_opengl=<api>                              |                                                                 |
+| -opengles3                            | -DFEATURE_opengles3=ON                            |                                                                 |
+| -egl                                  | -DFEATURE_egl=ON                                  |                                                                 |
 | -qpa <name>                           | -DQT_QPA_DEFAULT_PLATFORM=<name>                  |                                                                 |
 | -xcb-xlib                             | -DFEATURE_xcb_xlib=ON                             |                                                                 |
 | -direct2d                             | -DFEATURE_direct2d=ON                             |                                                                 |

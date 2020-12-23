@@ -503,7 +503,7 @@ static QStringView findTag(QStringView name)
 static bool validTag(QStringView tag)
 {
     // Returns false if any character in tag is not an ASCII letter or digit
-    for (const QChar uc : tag) {
+    for (QChar uc : tag) {
         const char16_t ch = uc.unicode();
         if (!((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9')))
             return false;
@@ -2265,7 +2265,12 @@ QDate QLocale::toDate(const QString &string, const QString &format, QCalendar ca
     \note The month and day names used must be given in the user's local
     language.
 
-    If the string could not be parsed, returns an invalid QDateTime.
+    If the string could not be parsed, returns an invalid QDateTime.  If the
+    string can be parsed and represents an invalid date-time (e.g. in a gap
+    skipped by a time-zone transition), an invalid QDateTime is returned, whose
+    toMSecsSinceEpoch() represents a near-by date-time that is valid. Passing
+    that to fromMSecsSinceEpoch() will produce a valid date-time that isn't
+    faithfully represented by the string parsed.
 
     \sa dateTimeFormat(), toTime(), toDate(), QDateTime::fromString()
 */
@@ -2285,7 +2290,7 @@ QDateTime QLocale::toDateTime(const QString &string, const QString &format, QCal
 
     QDateTimeParser dt(QMetaType::QDateTime, QDateTimeParser::FromString, cal);
     dt.setDefaultLocale(*this);
-    if (dt.parseFormat(format) && dt.fromString(string, &datetime))
+    if (dt.parseFormat(format) && (dt.fromString(string, &datetime) || !datetime.isValid()))
         return datetime;
 #else
     Q_UNUSED(string);

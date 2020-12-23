@@ -178,6 +178,9 @@ function(qt6_add_qml_module target)
         if(NOT BUILD_SHARED_LIBS)
             add_library(${target} STATIC)
             set(is_static TRUE)
+
+            # No need to compile Q_IMPORT_PLUGIN-containing files for non-executables.
+            _qt_internal_disable_static_default_plugins("${resource_target}")
         else()
             add_library(${target} MODULE)
             set(is_static FALSE)
@@ -389,9 +392,7 @@ function(qt6_add_qml_module target)
             PROPERTIES QT_RESOURCE_ALIAS "qmldir"
         )
 
-        set(resource_target "Foo")
         qt6_add_resources(${target} ${qmldir_resource_name}
-            PREFIX ${target_resource_prefix}
             FILES "${qmldir_file}"
             OUTPUT_TARGETS resource_targets
         )
@@ -586,8 +587,7 @@ function(qt6_target_qml_files target)
     math(EXPR new_count "${resource_count} + 1")
     set_target_properties(${target} PROPERTIES QT6_QML_MODULE_ADD_QML_FILES_COUNT ${new_count})
 
-    # TODO: Fix this if it blows up on Windows due to too long target name.
-    qt6_add_resources(${target} "${target}_qml_files_resource_${new_count}"
+    qt6_add_resources(${target} "${target}_qml_files_${new_count}"
         FILES ${arg_FILES}
         OUTPUT_TARGETS resource_targets
     )

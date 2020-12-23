@@ -70,17 +70,26 @@ function(qt_internal_create_wrapper_scripts)
     set(__qt_cmake_standalone_test_bin_name "qt-cmake-standalone-test")
     set(__qt_cmake_standalone_test_bin_path
         "${INSTALL_BINDIR}/${__qt_cmake_standalone_test_bin_name}")
+    set(__qt_cmake_private_path
+        "${QT_STAGING_PREFIX}/${INSTALL_BINDIR}/qt-cmake-private")
     set(__qt_cmake_standalone_test_path
         "${__build_internals_install_dir}/${__build_internals_standalone_test_template_dir}")
 
     get_filename_component(rel_base_path
-                           "${CMAKE_INSTALL_PREFIX}/${__qt_cmake_standalone_test_bin_path}"
+                           "${QT_STAGING_PREFIX}/${__qt_cmake_standalone_test_bin_path}"
                            DIRECTORY)
+    if(QT_WILL_INSTALL)
+        # Need to prepend the staging prefix when doing prefix builds, because the build internals
+        # install dir is relative in that case..
+        qt_path_join(__qt_cmake_standalone_test_path
+                    "${QT_STAGING_PREFIX}"
+                    "${__qt_cmake_standalone_test_path}")
+    endif()
 
     file(RELATIVE_PATH __qt_cmake_private_relpath "${rel_base_path}"
-         "${CMAKE_INSTALL_PREFIX}/${INSTALL_BINDIR}/qt-cmake-private")
+        "${__qt_cmake_private_path}")
     file(RELATIVE_PATH __qt_cmake_standalone_test_relpath "${rel_base_path}"
-         "${CMAKE_INSTALL_PREFIX}/${__qt_cmake_standalone_test_path}")
+        "${__qt_cmake_standalone_test_path}")
 
     if(CMAKE_HOST_UNIX)
         set(__qt_cmake_standalone_test_os_prelude "#!/bin/sh")
@@ -112,10 +121,11 @@ function(qt_internal_create_wrapper_scripts)
     endif()
     configure_file("${CMAKE_CURRENT_SOURCE_DIR}/bin/${__qt_cmake_install_script_name}.in"
                    "${QT_BUILD_DIR}/${INSTALL_BINDIR}/${__qt_cmake_install_script_name}" @ONLY)
-    qt_install(PROGRAMS "${QT_BUILD_DIR}/${INSTALL_BINDIR}/${__qt_cmake_install_script_name}"
+    qt_install(FILES "${QT_BUILD_DIR}/${INSTALL_BINDIR}/${__qt_cmake_install_script_name}"
                DESTINATION "${INSTALL_BINDIR}")
 
     qt_internal_create_qt_configure_tests_wrapper_script()
+    qt_internal_install_android_helper_scripts()
 endfunction()
 
 function(qt_internal_create_qt_configure_tests_wrapper_script)
@@ -146,4 +156,12 @@ function(qt_internal_create_qt_configure_tests_wrapper_script)
                    "${QT_BUILD_DIR}/${INSTALL_BINDIR}/${script_name}")
     qt_install(PROGRAMS "${QT_BUILD_DIR}/${INSTALL_BINDIR}/${script_name}"
                DESTINATION "${INSTALL_BINDIR}")
+endfunction()
+
+function(qt_internal_install_android_helper_scripts)
+    qt_path_join(destination "${QT_INSTALL_DIR}" "${INSTALL_LIBEXECDIR}")
+    qt_copy_or_install(PROGRAMS "${CMAKE_CURRENT_SOURCE_DIR}/util/android/android_emulator_launcher.sh"
+                       DESTINATION "${destination}")
+    qt_copy_or_install(PROGRAMS "${CMAKE_CURRENT_SOURCE_DIR}/util/android/android_cmakelist_patcher.sh"
+                       DESTINATION "${destination}")
 endfunction()

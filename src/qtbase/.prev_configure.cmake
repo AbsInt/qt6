@@ -635,6 +635,11 @@ qt_feature("ltcg"
     CONDITION __qt_ltcg_detected
 )
 qt_feature_config("ltcg" QMAKE_PRIVATE_CONFIG)
+qt_feature("enable_new_dtags"
+    LABEL "Using new DTAGS"
+    CONDITION LINUX AND TEST_enable_new_dtags
+)
+qt_feature_config("enable_new_dtags" QMAKE_PRIVATE_CONFIG)
 qt_feature("enable_gdb_index"
     LABEL "Generating GDB index"
     AUTODETECT QT_FEATURE_developer_build
@@ -643,7 +648,7 @@ qt_feature("enable_gdb_index"
 qt_feature_config("enable_gdb_index" QMAKE_PRIVATE_CONFIG)
 qt_feature("reduce_exports" PRIVATE
     LABEL "Reduce amount of exported symbols"
-    CONDITION NOT WIN32 AND CMAKE_CXX_COMPILE_OPTIONS_VISIBILITY
+    CONDITION NOT MSVC
 )
 qt_feature_definition("reduce_exports" "QT_VISIBILITY_AVAILABLE")
 qt_feature_config("reduce_exports" QMAKE_PUBLIC_QT_CONFIG)
@@ -761,13 +766,13 @@ qt_feature_definition("avx512vbmi" "QT_COMPILER_SUPPORTS_AVX512VBMI" VALUE "1")
 qt_feature_config("avx512vbmi" QMAKE_PRIVATE_CONFIG)
 qt_feature("aesni"
     LABEL "AES"
-    CONDITION QT_FEATURE_sse2 AND TEST_subarch_aes
+    CONDITION QT_FEATURE_sse2 AND TEST_subarch_aesni
 )
 qt_feature_definition("aesni" "QT_COMPILER_SUPPORTS_AES" VALUE "1")
 qt_feature_config("aesni" QMAKE_PRIVATE_CONFIG)
 qt_feature("rdrnd"
     LABEL "RDRAND"
-    CONDITION TEST_subarch_rdseed
+    CONDITION TEST_subarch_rdrnd
 )
 qt_feature_definition("rdrnd" "QT_COMPILER_SUPPORTS_RDRND" VALUE "1")
 qt_feature_config("rdrnd" QMAKE_PRIVATE_CONFIG)
@@ -779,7 +784,7 @@ qt_feature_definition("rdseed" "QT_COMPILER_SUPPORTS_RDSEED" VALUE "1")
 qt_feature_config("rdseed" QMAKE_PRIVATE_CONFIG)
 qt_feature("shani"
     LABEL "SHA"
-    CONDITION QT_FEATURE_sse2 AND TEST_subarch_sha
+    CONDITION QT_FEATURE_sse2 AND TEST_subarch_shani
 )
 qt_feature_definition("shani" "QT_COMPILER_SUPPORTS_SHA" VALUE "1")
 qt_feature_config("shani" QMAKE_PRIVATE_CONFIG)

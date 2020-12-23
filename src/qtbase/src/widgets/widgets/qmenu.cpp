@@ -1366,7 +1366,8 @@ bool QMenuPrivate::mouseEventTaken(QMouseEvent *e)
         if (passOnEvent) {
             if (e->type() != QEvent::MouseButtonRelease || mouseDown == caused) {
                 QMouseEvent new_e(e->type(), cpos, caused->mapTo(caused->topLevelWidget(), cpos), e->globalPosition(),
-                                  e->button(), e->buttons(), e->modifiers(), e->source());
+                                  e->button(), e->buttons(), e->modifiers(),
+                                  e->source(), e->pointingDevice());
                 QCoreApplication::sendEvent(caused, &new_e);
                 return true;
             }
@@ -1691,7 +1692,7 @@ void QMenu::initStyleOption(QStyleOptionMenuItem *option, const QAction *action)
     addSeparator(), and addMenu().
 
     \sa QMenuBar, {fowler}{GUI Design Handbook: Menu, Drop-Down and Pop-Up},
-        {Application Example}, {Menus Example}
+        {Qt Widgets - Application Example}, {Menus Example}
 */
 
 
@@ -2957,7 +2958,7 @@ void QMenu::mouseReleaseEvent(QMouseEvent *e)
     QAction *action = d->actionAt(e->position().toPoint());
 
     if (action && action == d->currentAction) {
-        if (!action->menu()){
+        if (!action->menu()) {
 #if defined(Q_OS_WIN)
             //On Windows only context menus can be activated with the right button
             if (e->button() == Qt::LeftButton || d->topCausedWidget() == 0)

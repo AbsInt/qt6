@@ -2239,7 +2239,7 @@ bool QImage::reinterpretAsFormat(Format format)
 /*!
     \since 5.13
 
-    Detach and convert the image to the given \a format in place.
+    Converts the image to the given \a format in place, detaching if necessary.
 
     The specified image conversion \a flags control how the image data
     is handled during the conversion process.
@@ -2249,7 +2249,7 @@ bool QImage::reinterpretAsFormat(Format format)
 
 void QImage::convertTo(Format format, Qt::ImageConversionFlags flags)
 {
-    if (!d || format == QImage::Format_Invalid)
+    if (!d || format == QImage::Format_Invalid || d->format == format)
         return;
 
     detach();
@@ -2620,12 +2620,9 @@ void QImage::setPixelColor(int x, int y, const QColor &color)
         ((uint *)s)[x] = qConvertRgb64ToRgb30<PixelOrderRGB>(c);
         return;
     case Format_RGBX64:
-        ((QRgba64 *)s)[x] = color.rgba64();
-        ((QRgba64 *)s)[x].setAlpha(65535);
-        return;
     case Format_RGBA64:
     case Format_RGBA64_Premultiplied:
-        ((QRgba64 *)s)[x] = color.rgba64();
+        ((QRgba64 *)s)[x] = c;
         return;
     default:
         setPixel(x, y, c.toArgb32());

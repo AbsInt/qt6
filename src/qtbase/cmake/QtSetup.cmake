@@ -5,8 +5,14 @@
 set(QT_BUILDING_QT TRUE CACHE
     TYPE STRING "When this is present and set to true, it signals that we are building Qt from source.")
 
+# Pre-calculate the developer_build feature if it's set by the user via INPUT_developer_build
+if(NOT FEATURE_developer_build AND INPUT_developer_build
+        AND NOT "${INPUT_developer_build}" STREQUAL "undefined")
+    set(FEATURE_developer_build ON)
+endif()
+
 set(_default_build_type "Release")
-if(EXISTS "${CMAKE_SOURCE_DIR}/.git")
+if(FEATURE_developer_build)
     set(_default_build_type "Debug")
 endif()
 
@@ -53,12 +59,6 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 # Do not relink dependent libraries when no header has changed:
 set(CMAKE_LINK_DEPENDS_NO_SHARED ON)
-
-# Pre-calculate the developer_build feature if it's set by the user via INPUT_developer_build
-if(NOT FEATURE_developer_build AND INPUT_developer_build
-        AND NOT "${INPUT_developer_build}" STREQUAL "undefined")
-    set(FEATURE_developer_build ON)
-endif()
 
 # Detect non-prefix builds: either when the qtbase install prefix is set to the binary dir
 # or when a developer build is explicitly enabled and no install prefix is specified.
@@ -125,6 +125,12 @@ else()
     set(__build_benchmarks OFF)
 endif()
 
+# Build Benchmarks
+option(QT_BUILD_BENCHMARKS "Build Qt Benchmarks" ${__build_benchmarks})
+if(QT_BUILD_BENCHMARKS)
+    set(_qt_build_tests_default ON)
+endif()
+
 ## Set up testing
 option(QT_BUILD_TESTS "Build the testing tree." ${_qt_build_tests_default})
 unset(_qt_build_tests_default)
@@ -157,8 +163,7 @@ enable_testing()
 option(QT_BUILD_EXAMPLES "Build Qt examples" OFF)
 option(QT_BUILD_EXAMPLES_BY_DEFAULT "Should examples be built as part of the default 'all' target." ON)
 
-# Build Benchmarks
-option(QT_BUILD_BENCHMARKS "Build Qt Benchmarks" ${__build_benchmarks})
+option(QT_BUILD_MANUAL_TESTS "Build Qt manual tests" OFF)
 
 ## Find host tools (if non native):
 set(QT_HOST_PATH "" CACHE PATH "Installed Qt host directory path, used for cross compiling.")
@@ -169,11 +174,12 @@ if (CMAKE_CROSSCOMPILING)
     endif()
 endif()
 
-if(QT_HOST_PATH)
+if(NOT "${QT_HOST_PATH}" STREQUAL "")
     find_package(Qt${PROJECT_VERSION_MAJOR}HostInfo
                  CONFIG
                  REQUIRED
-                 PATHS "${QT_HOST_PATH}" "${QT_HOST_PATH}/lib/cmake"
+                 PATHS "${QT_HOST_PATH}"
+                       "${QT_HOST_PATH_CMAKE_DIR}"
                  NO_CMAKE_FIND_ROOT_PATH
                  NO_DEFAULT_PATH)
 endif()
@@ -215,5 +221,29 @@ if(QT_USE_CCACHE)
         set(CMAKE_OBJCXX_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
     else()
         message(WARNING "Ccache use was requested, but the program was not found.")
+    endif()
+endif()
+
+# We need to clean up QT_FEATURE_*, but only once per configuration cycle
+get_property(qt_feature_clean GLOBAL PROPERTY _qt_feature_clean)
+if(NOT qt_feature_clean)
+    message(STATUS "Check for feature set changes")
+    set_property(GLOBAL PROPERTY _qt_feature_clean TRUE)
+    foreach(feature ${QT_KNOWN_FEATURES})
+        if(DEFINED "FEATURE_${feature}" AND
+            NOT "${QT_FEATURE_${feature}}" STREQUAL "${FEATURE_${feature}}")
+            message("    '${feature}' is changed from ${QT_FEATURE_${feature}} \
+to ${FEATURE_${feature}}")
+            set(dirty_build TRUE)
+        endif()
+        unset("QT_FEATURE_${feature}" CACHE)
+    endforeach()
+
+    set(QT_KNOWN_FEATURES "" CACHE INTERNAL "" FORCE)
+
+    if(dirty_build)
+        set_property(GLOBAL PROPERTY _qt_dirty_build TRUE)
+        message(WARNING "Re-configuring in existing build folder. \
+Some features will be re-evaluated automatically.")
     endif()
 endif()

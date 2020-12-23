@@ -183,10 +183,6 @@ public:
         : QUntypedPropertyBinding(QMetaType::fromType<PropertyType>(), &QtPrivate::bindingFunctionVTable<std::remove_reference_t<Functor>, PropertyType>, &f, location)
     {}
 
-    template<typename Property, typename = typename Property::InheritsQUntypedPropertyData>
-    QPropertyBinding(const Property &property)
-        : QUntypedPropertyBinding(property.bindingData().binding())
-    {}
 
     // Internal
     explicit QPropertyBinding(const QUntypedPropertyBinding &binding)
@@ -423,7 +419,7 @@ public:
 
     QPropertyBinding<T> binding() const
     {
-        return QPropertyBinding<T>(*this);
+        return QPropertyBinding<T>(QUntypedPropertyBinding(d.binding()));
     }
 
     QPropertyBinding<T> takeBinding()
@@ -630,7 +626,7 @@ public:
     QPropertyBinding<T> setBinding(const QPropertyBinding<T> &binding)
     {
         Q_ASSERT(!iface || binding.isNull() || binding.valueMetaType() == iface->metaType());
-        return iface ? static_cast<QPropertyBinding<T> &&>(iface->setBinding(data, binding)) : QPropertyBinding<T>();
+        return (iface && iface->setBinding) ? static_cast<QPropertyBinding<T> &&>(iface->setBinding(data, binding)) : QPropertyBinding<T>();
     }
 #ifndef Q_CLANG_QDOC
     template <typename Functor>
@@ -657,7 +653,7 @@ public:
 
     void setValue(const T &value)
     {
-        if (iface)
+        if (iface && iface->setter)
             iface->setter(data, &value);
     }
 };
@@ -783,13 +779,13 @@ public:
 namespace QtPrivate {
 
 struct BindingEvaluationState;
-struct CurrentCompatProperty;
+struct CompatPropertySafePoint;
 }
 
 struct QBindingStatus
 {
     QtPrivate::BindingEvaluationState *currentlyEvaluatingBinding = nullptr;
-    QtPrivate::CurrentCompatProperty *currentCompatProperty = nullptr;
+    QtPrivate::CompatPropertySafePoint *currentCompatProperty = nullptr;
 };
 
 struct QBindingStorageData;
@@ -1013,13 +1009,23 @@ private:
     }
 };
 
-#define Q_OBJECT_BINDABLE_PROPERTY(Class, Type, name,  ...) \
+#define Q_OBJECT_BINDABLE_PROPERTY3(Class, Type, name) \
     static constexpr size_t _qt_property_##name##_offset() { \
         QT_WARNING_PUSH QT_WARNING_DISABLE_INVALID_OFFSETOF \
         return offsetof(Class, name); \
         QT_WARNING_POP \
     } \
-    QObjectBindableProperty<Class, Type, Class::_qt_property_##name##_offset, __VA_ARGS__> name;
+    QObjectBindableProperty<Class, Type, Class::_qt_property_##name##_offset, nullptr> name;
+
+#define Q_OBJECT_BINDABLE_PROPERTY4(Class, Type, name, Signal) \
+    static constexpr size_t _qt_property_##name##_offset() { \
+        QT_WARNING_PUSH QT_WARNING_DISABLE_INVALID_OFFSETOF \
+        return offsetof(Class, name); \
+        QT_WARNING_POP \
+    } \
+    QObjectBindableProperty<Class, Type, Class::_qt_property_##name##_offset, Signal> name;
+
+#define Q_OBJECT_BINDABLE_PROPERTY(...) QT_OVERLOADED_MACRO(Q_OBJECT_BINDABLE_PROPERTY, __VA_ARGS__)
 
 template<typename Class, typename T, auto Offset, auto Getter>
 class QObjectComputedProperty : public QUntypedPropertyData

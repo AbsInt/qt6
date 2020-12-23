@@ -170,7 +170,64 @@ function(qt_evaluate_config_expression resultVar)
     set(${resultVar} ${result} PARENT_SCOPE)
 endfunction()
 
-function(qt_feature_set_cache_value resultVar feature emit_if calculated label)
+function(_qt_internal_dump_expression_values expression_dump expression)
+    set(dump "")
+    set(skipNext FALSE)
+    set(isTargetExpression FALSE)
+
+    set(keywords "EQUAL" "LESS" "LESS_EQUAL" "GREATER" "GREATER_EQUAL" "STREQUAL" "STRLESS"
+        "STRLESS_EQUAL" "STRGREATER" "STRGREATER_EQUAL" "VERSION_EQUAL" "VERSION_LESS"
+        "VERSION_LESS_EQUAL" "VERSION_GREATER" "VERSION_GREATER_EQUAL" "MATCHES"
+        "EXISTS" "COMMAND" "DEFINED" "NOT" "AND" "OR" "TARGET" "EXISTS" "IN_LIST" "(" ")")
+
+    list(LENGTH expression length)
+    math(EXPR length "${length}-1")
+
+    if(${length} LESS 0)
+        return()
+    endif()
+
+    foreach(memberIdx RANGE ${length})
+        if(${skipNext})
+            set(skipNext FALSE)
+            continue()
+        endif()
+
+        list(GET expression ${memberIdx} member)
+        if(NOT "${member}" IN_LIST keywords)
+            string(FIND "${member}" "QT_FEATURE_" idx)
+            if(idx EQUAL 0)
+                if(NOT DEFINED ${member})
+                    list(APPEND dump "${member} not evaluated")
+                else()
+                    list(APPEND dump "${member} = \"${${member}}\"")
+                endif()
+            elseif(isTargetExpression)
+                set(targetExpression "TARGET;${member}")
+                if(${targetExpression})
+                    list(APPEND dump "TARGET ${member} found")
+                else()
+                    list(APPEND dump "TARGET ${member} not found")
+                endif()
+            else()
+                list(APPEND dump "${member} = \"${${member}}\"")
+            endif()
+            set(isTargetExpression FALSE)
+            set(skipNext FALSE)
+        elseif("${member}" STREQUAL "TARGET")
+            set(isTargetExpression TRUE)
+        elseif("${member}" STREQUAL "STREQUAL")
+            set(skipNext TRUE)
+        else()
+            set(skipNext FALSE)
+            set(isTargetExpression FALSE)
+        endif()
+    endforeach()
+    string(JOIN "\n    " ${expression_dump} ${dump})
+    set(${expression_dump} "${${expression_dump}}" PARENT_SCOPE)
+endfunction()
+
+function(qt_feature_set_cache_value resultVar feature emit_if condition calculated label)
     if (DEFINED "FEATURE_${feature}")
         # Must set up the cache
         if (NOT (emit_if))
@@ -179,14 +236,25 @@ function(qt_feature_set_cache_value resultVar feature emit_if calculated label)
 
         # Revisit value:
         set(cache "${FEATURE_${feature}}")
+
+        # If the build is marked as dirty and the cache value doesn't meet the new condition,
+        # reset it to the calculated one.
+        get_property(dirty_build GLOBAL PROPERTY _qt_dirty_build)
+        if(NOT condition AND cache AND dirty_build)
+            set(cache "${calculated}")
+            message(WARNING "Reset FEATURE_${feature} value to ${calculated}, because it doesn't \
+meet its condition after reconfiguration.")
+        endif()
+
         set(bool_values OFF NO FALSE N ON YES TRUE Y)
         if ((cache IN_LIST bool_values) OR (cache GREATER_EQUAL 0))
             set(result "${cache}")
         else()
             message(FATAL_ERROR "Sanity check failed: FEATURE_${feature} has invalid value \"${cache}\"!")
         endif()
+
         # Fix-up user-provided values
-        set("FEATURE_${feature}" "${cache}" CACHE BOOL "${label}")
+        set("FEATURE_${feature}" "${cache}" CACHE BOOL "${label}" FORCE)
     else()
         # Initial setup:
         if (emit_if)
@@ -200,22 +268,28 @@ function(qt_feature_set_cache_value resultVar feature emit_if calculated label)
     set("${resultVar}" "${result}" PARENT_SCOPE)
 endfunction()
 
-macro(qt_feature_set_value feature cache condition label)
+macro(qt_feature_set_value feature cache condition label conditionExpression)
     set(result "${cache}")
 
     if (NOT (condition) AND (cache))
-        message(SEND_ERROR "Feature \"${feature}\": Forcing to \"${cache}\" breaks its condition.")
+        _qt_internal_dump_expression_values(conditionDump "${conditionExpression}")
+        string(JOIN " " conditionString ${conditionExpression})
+        message(SEND_ERROR "Feature \"${feature}\": Forcing to \"${cache}\" breaks its condition:\
+\n    ${conditionString}\nCondition values dump:\n    ${conditionDump}\n")
     endif()
 
     if (DEFINED "QT_FEATURE_${feature}")
         message(FATAL_ERROR "Feature ${feature} is already defined when evaluating configure.cmake features for ${target}.")
     endif()
     set(QT_FEATURE_${feature} "${result}" CACHE INTERNAL "Qt feature: ${feature}")
+
+    # Add feature to build feature collection
+    list(APPEND QT_KNOWN_FEATURES "${feature}")
+    set(QT_KNOWN_FEATURES "${QT_KNOWN_FEATURES}" CACHE INTERNAL "" FORCE)
 endmacro()
 
 function(qt_evaluate_feature feature)
-    # If the feature was set explicitly by the user to be on or off, in the cache, then
-    # there's nothing for us to do.
+    # If the feature was already evaluated as dependency nothing to do here.
     if(DEFINED "QT_FEATURE_${feature}")
         return()
     endif()
@@ -228,10 +302,6 @@ function(qt_evaluate_feature feature)
     cmake_parse_arguments(arg
         "PRIVATE;PUBLIC"
         "LABEL;PURPOSE;SECTION;" "AUTODETECT;CONDITION;ENABLE;DISABLE;EMIT_IF" ${_QT_FEATURE_DEFINITION_${feature}})
-
-    if(DEFINED QT_FEATURE_${feature})
-        return()
-    endif()
 
     if("${arg_ENABLE}" STREQUAL "")
         set(arg_ENABLE OFF)
@@ -269,10 +339,6 @@ function(qt_evaluate_feature feature)
         qt_evaluate_config_expression(emit_if ${arg_EMIT_IF})
     endif()
 
-    if (NOT (condition) AND (calculated))
-        message(FATAL_ERROR "Sanity check failed: Feature ${feature} is enabled but condition does not hold true.")
-    endif()
-
     # If FEATURE_ is not defined trying to use INPUT_ variable to enable/disable feature.
     if ((NOT DEFINED "FEATURE_${feature}") AND (DEFINED "INPUT_${feature}")
         AND (NOT "${INPUT_${feature}}" STREQUAL "undefined")
@@ -284,8 +350,10 @@ function(qt_evaluate_feature feature)
         endif()
     endif()
 
-    qt_feature_set_cache_value(cache "${feature}" "${emit_if}" "${result}" "${arg_LABEL}")
-    qt_feature_set_value("${feature}" "${cache}" "${condition}" "${arg_LABEL}")
+    qt_feature_set_cache_value(cache "${feature}" "${emit_if}" "${condition}" "${result}"
+                               "${arg_LABEL}")
+    qt_feature_set_value("${feature}" "${cache}" "${condition}" "${arg_LABEL}"
+                         "${arg_CONDITION}")
 
     # Store each feature's label for summary info.
     set(QT_FEATURE_LABEL_${feature} "${arg_LABEL}" CACHE INTERNAL "")

@@ -2007,11 +2007,11 @@ void tst_QCborValue::validation_data()
     qToBigEndian(MinInvalid - 1, toolong + 1);
     QTest::addRow("bytearray-2chunked+1-too-big-for-qbytearray-%llx", MinInvalid)
             << ("\x5f\x41z" + QByteArray(toolong, sizeof(toolong)) + '\xff')
-            << 0 << CborErrorDataTooLarge;
+            << 0 << CborErrorUnexpectedEOF;
     toolong[0] |= 0x20;
     QTest::addRow("string-2chunked+1-too-big-for-qbytearray-%llx", MinInvalid)
             << ("\x7f\x61z" + QByteArray(toolong, sizeof(toolong)) + '\xff')
-            << 0 << CborErrorDataTooLarge;
+            << 0 << CborErrorUnexpectedEOF;
 
     // These tests say we have arrays and maps with very large item counts.
     // They are meant to ensure we don't pre-allocate a lot of memory
@@ -2166,7 +2166,9 @@ void tst_QCborValue::extendedTypeValidation()
 
 void tst_QCborValue::hugeDeviceValidation_data()
 {
-    addValidationHugeDevice(MaxByteArraySize + 1, MaxStringSize + 1);
+    // because QCborValue will attempt to retain the original string in UTF-8,
+    // the size which it can't store is actually the byte array size
+    addValidationHugeDevice(MaxByteArraySize + 1, MaxByteArraySize + 1);
 }
 
 void tst_QCborValue::hugeDeviceValidation()

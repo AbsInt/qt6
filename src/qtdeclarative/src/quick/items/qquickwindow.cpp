@@ -515,14 +515,15 @@ void forceUpdate(QQuickItem *item)
 
 void QQuickWindowRenderTarget::reset(QRhi *rhi, QSGRenderer *renderer)
 {
-    if (rhi && owns) {
-        if (renderer != nullptr && rpDesc != nullptr)
+    if (rhi) {
+        if (renderer)
             renderer->invalidatePipelineCacheDependency(rpDesc);
-
-        delete renderTarget;
-        delete rpDesc;
-        delete texture;
-        delete depthStencil;
+        if (owns) {
+            delete renderTarget;
+            delete rpDesc;
+            delete texture;
+            delete depthStencil;
+        }
     }
 
     renderTarget = nullptr;
@@ -2831,8 +2832,10 @@ void QQuickWindowPrivate::deliverUpdatedPoints(QPointerEvent *event)
     if (!event->allPointsGrabbed()) {
         QVector<QQuickItem *> targetItems;
         for (auto &point : event->points()) {
-            if (point.state() == QEventPoint::Pressed)
-                continue; // presses were delivered earlier; not the responsibility of deliverUpdatedTouchPoints
+            // Presses were delivered earlier; not the responsibility of deliverUpdatedTouchPoints.
+            // Don't find handlers for points that are already grabbed by an Item (such as Flickable).
+            if (point.state() == QEventPoint::Pressed || qmlobject_cast<QQuickItem *>(event->exclusiveGrabber(point)))
+                continue;
             QVector<QQuickItem *> targetItemsForPoint = pointerTargets(contentItem, event, point, false, false);
             if (targetItems.count()) {
                 targetItems = mergePointerTargets(targetItems, targetItemsForPoint);

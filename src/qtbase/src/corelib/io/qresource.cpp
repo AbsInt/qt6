@@ -194,7 +194,7 @@ static QString cleanPath(const QString &_path)
     return path;
 }
 
-Q_DECLARE_TYPEINFO(QResourceRoot, Q_MOVABLE_TYPE);
+Q_DECLARE_TYPEINFO(QResourceRoot, Q_RELOCATABLE_TYPE);
 
 typedef QList<QResourceRoot*> ResourceList;
 struct QResourceGlobalData
@@ -284,7 +284,7 @@ static inline QStringList *resourceSearchPaths()
     \value NoCompression    Contents are not compressed
     \value ZlibCompression  Contents are compressed using \l{https://zlib.net}{zlib} and can
                             be decompressed using the qUncompress() function.
-    \value ZstdCompression  Contents are compressed using \l{https://zstd.net}{zstd}. To
+    \value ZstdCompression  Contents are compressed using \l{Zstandard Site}{zstd}. To
                             decompress, use the \c{ZSTD_decompress} function from the zstd
                             library.
 

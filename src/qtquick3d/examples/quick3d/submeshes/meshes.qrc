@@ -1,5 +1,0 @@
-<RCC>
-    <qresource prefix="/">
-        <file>meshes/distortedcube.mesh</file>
-    </qresource>
-</RCC>

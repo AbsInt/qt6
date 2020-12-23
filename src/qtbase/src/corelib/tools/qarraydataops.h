@@ -286,6 +286,7 @@ public:
     void reallocate(qsizetype alloc, QArrayData::AllocationOption option)
     {
         auto pair = Data::reallocateUnaligned(this->d, this->ptr, alloc, option);
+        Q_CHECK_PTR(pair.second);
         Q_ASSERT(pair.first != nullptr);
         this->d = pair.first;
         this->ptr = pair.second;
@@ -397,8 +398,8 @@ public:
         T *begin;
         qsizetype size;
 
-        qsizetype sourceCopyConstruct, nSource, move, sourceCopyAssign;
-        T *end, *last, *where;
+        qsizetype sourceCopyConstruct = 0, nSource = 0, move = 0, sourceCopyAssign = 0;
+        T *end = nullptr, *last = nullptr, *where = nullptr;
 
         Inserter(QArrayDataPointer<T> *d, QArrayData::GrowthPosition pos)
             : data(d), increment(pos == QArrayData::GrowsAtBeginning ? -1 : 1)
@@ -414,6 +415,7 @@ public:
             data->ptr = begin;
             data->size = size;
         }
+        Q_DISABLE_COPY(Inserter)
 
         void setup(qsizetype pos, qsizetype n)
         {
@@ -848,6 +850,7 @@ public:
     void reallocate(qsizetype alloc, QArrayData::AllocationOption option)
     {
         auto pair = Data::reallocateUnaligned(this->d, this->ptr, alloc, option);
+        Q_CHECK_PTR(pair.second);
         Q_ASSERT(pair.first != nullptr);
         this->d = pair.first;
         this->ptr = pair.second;

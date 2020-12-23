@@ -19,6 +19,8 @@ file(RELATIVE_PATH
      ${__qt_bin_dir_absolute} ${__GlobalConfig_install_dir_absolute})
 
 # Generate and install Qt6 config file.
+qt_internal_get_min_new_policy_cmake_version(min_new_policy_version)
+qt_internal_get_max_new_policy_cmake_version(max_new_policy_version)
 configure_package_config_file(
     "${PROJECT_SOURCE_DIR}/cmake/QtConfig.cmake.in"
     "${__GlobalConfig_build_dir}/${INSTALL_CMAKE_NAMESPACE}Config.cmake"
@@ -57,10 +59,6 @@ qt_install(FILES
     DESTINATION "${__build_internals_install_dir}"
     COMPONENT Devel
 )
-qt_copy_or_install(
-    FILES
-    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/QtBuildInternals/QtBuildInternalsAndroid.cmake"
-    DESTINATION "${__build_internals_install_dir}")
 qt_copy_or_install(
     DIRECTORY
     "${CMAKE_CURRENT_SOURCE_DIR}/cmake/QtBuildInternals/${__build_internals_standalone_test_template_dir}"
@@ -149,6 +147,7 @@ qt_copy_or_install(FILES
                    cmake/ModuleDescription.json.in
                    cmake/Qt3rdPartyLibraryConfig.cmake.in
                    cmake/Qt3rdPartyLibraryHelpers.cmake
+                   cmake/QtAndroidHelpers.cmake
                    cmake/QtAppHelpers.cmake
                    cmake/QtAutogenHelpers.cmake
                    cmake/QtBuild.cmake
@@ -240,3 +239,8 @@ if(MACOS)
         DESTINATION "${__GlobalConfig_install_dir}/macos"
     )
 endif()
+
+# Install CI support files to libexec.
+qt_path_join(__qt_libexec_install_dir "${QT_INSTALL_DIR}" "${INSTALL_LIBEXECDIR}")
+qt_copy_or_install(FILES coin/instructions/qmake/ensure_pro_file.cmake
+    DESTINATION "${__qt_libexec_install_dir}")

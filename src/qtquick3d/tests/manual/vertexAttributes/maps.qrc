@@ -1,6 +1,0 @@
-<RCC>
-    <qresource prefix="/">
-        <file>maps/basemetal_small.png</file>
-        <file>maps/normalrough_small.png</file>
-    </qresource>
-</RCC>

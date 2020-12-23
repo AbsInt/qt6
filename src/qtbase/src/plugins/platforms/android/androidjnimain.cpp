@@ -135,8 +135,13 @@ namespace QtAndroid
         m_androidPlatformIntegration = androidPlatformIntegration;
 
         // flush the pending state if necessary.
-        if (m_androidPlatformIntegration && (m_pendingApplicationState != -1))
+        if (m_androidPlatformIntegration && (m_pendingApplicationState != -1)) {
+            if (m_pendingApplicationState == Qt::ApplicationActive)
+                QtAndroidPrivate::handleResume();
+            else if (m_pendingApplicationState == Qt::ApplicationInactive)
+                QtAndroidPrivate::handlePause();
             QWindowSystemInterface::handleApplicationStateChanged(Qt::ApplicationState(m_pendingApplicationState));
+        }
 
         m_pendingApplicationState = -1;
     }
@@ -201,6 +206,21 @@ namespace QtAndroid
     void setSystemUiVisibility(SystemUiVisibility uiVisibility)
     {
         QJNIObjectPrivate::callStaticMethod<void>(m_applicationClass, "setSystemUiVisibility", "(I)V", jint(uiVisibility));
+    }
+
+    void notifyAccessibilityLocationChange()
+    {
+        QJNIObjectPrivate::callStaticMethod<void>(m_applicationClass, "notifyAccessibilityLocationChange");
+    }
+
+    void notifyObjectHide(uint accessibilityObjectId)
+    {
+        QJNIObjectPrivate::callStaticMethod<void>(m_applicationClass, "notifyObjectHide","(I)V", accessibilityObjectId);
+    }
+
+    void notifyObjectFocus(uint accessibilityObjectId)
+    {
+        QJNIObjectPrivate::callStaticMethod<void>(m_applicationClass, "notifyObjectFocus","(I)V", accessibilityObjectId);
     }
 
     jobject createBitmap(QImage img, JNIEnv *env)

@@ -16,8 +16,9 @@ function(qt_generate_qmake_libraries_pri_content module_name output_root_dir out
     list(JOIN implicit_include_dirs_regex "|" implicit_include_dirs_regex)
 
     foreach(lib ${QT_QMAKE_LIBS_FOR_${module_name}})
-        set(lib_targets ${QT_QMAKE_LIB_TARGETS_${lib}})
+        set(lib_targets ${QT_TARGETS_OF_QMAKE_LIB_${lib}})
         string(TOUPPER ${lib} uclib)
+        string(REPLACE "-" "_" uclib "${uclib}")
         set(lib_defines "")
         set(lib_incdir "")
         set(lib_libdir "")
@@ -116,6 +117,23 @@ function(qt_get_direct_module_dependencies target out_var)
     set(${out_var} ${dependencies} PARENT_SCOPE)
 endfunction()
 
+# Return a list of qmake library names for a given list of targets.
+# For example, Vulkan::Vulkan_nolink is mapped to vulkan/nolink.
+function(qt_internal_map_targets_to_qmake_libs out_var)
+    set(result "")
+    foreach(target ${ARGN})
+        string(REGEX REPLACE "_nolink$" "" stripped_target "${target}")
+        qt_internal_map_target_to_qmake_lib(${stripped_target} qmake_lib)
+        if(NOT "${qmake_lib}" STREQUAL "")
+            if(NOT target STREQUAL stripped_target)
+                string(APPEND qmake_lib "/nolink")
+            endif()
+            list(APPEND result "${qmake_lib}")
+        endif()
+    endforeach()
+    set(${out_var} "${result}" PARENT_SCOPE)
+endfunction()
+
 # Generates module .pri files for consumption by qmake
 function(qt_generate_module_pri_file target)
     set(flags INTERNAL_MODULE HEADER_MODULE NO_PRIVATE_MODULE)
@@ -146,8 +164,6 @@ function(qt_generate_module_pri_file target)
 
     get_target_property(module_internal_config "${target}"
                         "${property_prefix}QT_MODULE_INTERNAL_CONFIG")
-    get_target_property(module_uses "${target}"
-                        "${property_prefix}QT_MODULE_USES")
     get_target_property(module_pri_extra_content "${target}"
                         "${property_prefix}QT_MODULE_PRI_EXTRA_CONTENT")
     get_target_property(module_ldflags "${target}"
@@ -156,7 +172,7 @@ function(qt_generate_module_pri_file target)
                         "${property_prefix}QT_MODULE_DEPENDS")
 
     foreach(var enabled_features disabled_features enabled_private_features disabled_private_features
-            module_internal_config module_uses module_pri_extra_content module_ldflags module_depends)
+            module_internal_config module_pri_extra_content module_ldflags module_depends)
         if(${var} STREQUAL "${var}-NOTFOUND")
             set(${var} "")
         else()
@@ -272,6 +288,11 @@ function(qt_generate_module_pri_file target)
         set(extra_assignments "\nQT_DEFAULT_QPA_PLUGIN = q${QT_QPA_DEFAULT_PLATFORM}")
     endif()
 
+    # Map the public dependencies of the target to qmake library names.
+    get_target_property(dep_targets ${target} INTERFACE_LINK_LIBRARIES)
+    qt_internal_map_targets_to_qmake_libs(module_uses ${dep_targets})
+    list(JOIN module_uses " " joined_module_uses)
+
     file(GENERATE
         OUTPUT "${pri_file_name}"
         CONTENT
@@ -284,7 +305,7 @@ QT.${config_module_name}.includes = ${public_module_includes}
 QT.${config_module_name}.frameworks = ${public_module_frameworks}
 QT.${config_module_name}.bins = $$QT_MODULE_BIN_BASE${module_plugin_types_assignment}
 QT.${config_module_name}.depends = ${public_module_dependencies}
-QT.${config_module_name}.uses = ${module_uses}
+QT.${config_module_name}.uses = ${joined_module_uses}
 QT.${config_module_name}.module_config = ${joined_module_internal_config}${module_build_config}
 QT.${config_module_name}.DEFINES = ${joined_target_defines}
 QT.${config_module_name}.enabled_features = ${enabled_features}
@@ -312,6 +333,11 @@ ${module_pri_extra_content}
         list(APPEND module_internal_config internal_module)
         list(JOIN module_internal_config " " joined_module_internal_config)
 
+        # Map the public dependencies of the private module to qmake library names.
+        get_target_property(dep_targets ${target}Private INTERFACE_LINK_LIBRARIES)
+        qt_internal_map_targets_to_qmake_libs(private_module_uses ${dep_targets})
+        list(JOIN private_module_uses " " joined_private_module_uses)
+
         # Generate a preliminary qt_lib_XXX_private.pri file
         file(GENERATE
             OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/${private_pri_file_name}"
@@ -323,7 +349,7 @@ QT.${config_module_name}_private.libs = $$QT_MODULE_LIB_BASE
 QT.${config_module_name}_private.includes = ${private_module_includes}
 QT.${config_module_name}_private.frameworks = ${private_module_frameworks}
 QT.${config_module_name}_private.depends = ${private_module_dependencies}
-QT.${config_module_name}_private.uses =
+QT.${config_module_name}_private.uses = ${joined_private_module_uses}
 QT.${config_module_name}_private.module_config = ${joined_module_internal_config}
 QT.${config_module_name}_private.enabled_features = ${enabled_private_features}
 QT.${config_module_name}_private.disabled_features = ${disabled_private_features}"

@@ -1220,7 +1220,7 @@ void tst_QImage::copy()
     // Task 99250
     {
         QImage img(16,16,QImage::Format_ARGB32);
-        img.copy(QRect(1000,1,1,1));
+        (void)img.copy(QRect(1000,1,1,1));
     }
 }
 
@@ -3572,6 +3572,14 @@ void tst_QImage::pixelColor()
     // Try setting an invalid color.
     QTest::ignoreMessage(QtWarningMsg, "QImage::setPixelColor: color is invalid");
     argb32.setPixelColor(0, 0, QColor());
+
+    // Test correct premultiplied handling of RGBA64 as well
+    QImage rgba64(1, 1, QImage::Format_RGBA64);
+    QImage rgba64pm(1, 1, QImage::Format_RGBA64_Premultiplied);
+    rgba64.setPixelColor(QPoint(0, 0), c);
+    rgba64pm.setPixelColor(QPoint(0, 0), c);
+    QCOMPARE(rgba64.pixelColor(QPoint(0, 0)), c);
+    QCOMPARE(rgba64pm.pixelColor(QPoint(0, 0)), c);
 }
 
 void tst_QImage::pixel()

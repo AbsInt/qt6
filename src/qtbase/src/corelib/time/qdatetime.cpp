@@ -319,7 +319,7 @@ static int fromOffsetString(QStringView offsetString, bool *valid) noexcept
     const QStringView hhRef = time.first(qMin(hhLen, time.size()));
     bool ok = false;
     const int hour = hhRef.toInt(&ok);
-    if (!ok)
+    if (!ok || hour > 23) // More generous than QTimeZone::MaxUtcOffsetSecs
         return 0;
 
     const QStringView mmRef = time.sliced(qMin(mmIndex, time.size()));
@@ -2856,21 +2856,21 @@ static void refreshZonedDateTime(QDateTimeData &d, Qt::TimeSpec spec)
         qint64 epochMSecs = 0;
         QDate testDate;
         QTime testTime;
+        auto dstStatus = extractDaylightStatus(status);
         if (spec == Qt::LocalTime) {
-            auto dstStatus = extractDaylightStatus(status);
             epochMSecs = localMSecsToEpochMSecs(msecs, &dstStatus, &testDate, &testTime);
-            status = mergeDaylightStatus(status, dstStatus);
 #if QT_CONFIG(timezone)
         // else spec == Qt::TimeZone, so check zone is valid:
         } else if (d->m_timeZone.isValid()) {
             epochMSecs = QDateTimePrivate::zoneMSecsToEpochMSecs(
-                msecs, d->m_timeZone, extractDaylightStatus(status), &testDate, &testTime);
+                msecs, d->m_timeZone, dstStatus, &testDate, &testTime);
 #endif // timezone
         } // else: testDate, testTime haven't been set, so are invalid.
         // Cache the offset to use in offsetFromUtc() &c.
         offsetFromUtc = (msecs - epochMSecs) / 1000;
         if (testDate.isValid() && testTime.isValid()
             && timeToMSecs(testDate, testTime) == msecs) {
+            status = mergeDaylightStatus(status, dstStatus);
             status |= QDateTimePrivate::ValidDateTime;
         } else {
             status &= ~QDateTimePrivate::ValidDateTime;
@@ -4977,7 +4977,13 @@ QDateTime QDateTime::fromString(QStringView string, Qt::DateFormat format)
 
     \snippet code/src_corelib_time_qdatetime.cpp 12
 
-    If the format is not satisfied, an invalid QDateTime is returned.
+    If the format is not satisfied, an invalid QDateTime is returned.  If the
+    format is satisfied but \a string represents an invalid date-time (e.g. in a
+    gap skipped by a time-zone transition), an invalid QDateTime is returned,
+    whose toMSecsSinceEpoch() represents a near-by date-time that is
+    valid. Passing that to fromMSecsSinceEpoch() will produce a valid date-time
+    that isn't faithfully represented by the string parsed.
+
     The expressions that don't have leading zeroes (d, M, h, m, s, z) will be
     greedy. This means that they will use two digits (or three, for z) even if this will
     put them outside the range and/or leave too few digits for other
@@ -5025,7 +5031,7 @@ QDateTime QDateTime::fromString(const QString &string, QStringView format, QCale
 
     QDateTimeParser dt(QMetaType::QDateTime, QDateTimeParser::FromString, cal);
     dt.setDefaultLocale(QLocale::c());
-    if (dt.parseFormat(format) && dt.fromString(string, &datetime))
+    if (dt.parseFormat(format) && (dt.fromString(string, &datetime) || !datetime.isValid()))
         return datetime;
 #else
     Q_UNUSED(string);

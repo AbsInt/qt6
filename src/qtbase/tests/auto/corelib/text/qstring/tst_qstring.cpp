@@ -1645,7 +1645,7 @@ void tst_QString::lastIndexOf()
     QCOMPARE(haystack.lastIndexOf(needle.toLatin1(), from, cs), expected);
     QCOMPARE(haystack.lastIndexOf(needle.toLatin1().data(), from, cs), expected);
 
-    if (from >= -1 && from < haystack.size()) {
+    if (from >= -1 && from < haystack.size() && needle.size() > 0) {
         // unfortunately, QString and QRegularExpression don't have the same out of bound semantics
         // I think QString is wrong -- See file log for contact information.
         {
@@ -2384,6 +2384,7 @@ void tst_QString::insert_special_cases()
     QCOMPARE(a.insert(1,'e'), QString("Yes"));
     QCOMPARE(a.insert(3,'!'), QString("Yes!"));
     QCOMPARE(a.insert(5,'?'), QString("Yes! ?"));
+    QCOMPARE(a.insert(-1,'a'), QString("Yes! a?"));
 
     a = "ABC";
     QCOMPARE(a.insert(5,"DEF"), QString("ABC  DEF"));
