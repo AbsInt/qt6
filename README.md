@@ -8,8 +8,8 @@ We directly pull them from the Qt Gits with the wanted branch.
 
 Run
 
-./update <version>
+./update.sh <version>
 
 e.g.
 
-./update 6.0
+./update.sh 6.0
