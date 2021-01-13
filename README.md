@@ -1,10 +1,12 @@
-# Sources
+# Qt 6.x Sources for AbsInt Tools
 
-This Git contains the Qt 6.x sources.
+This Git contains the Qt 6.x source code as used by the AbsInt tools.
 
-We directly pull them from the Qt Gits with the wanted branch.
+Not all parts stored here are actually in use, this is a super set.
 
-# How to update
+For the official Qt source code please head over to https://code.qt.io/cgit/
+
+# How to update this copy
 
 Run
 
