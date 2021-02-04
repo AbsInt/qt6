@@ -615,6 +615,8 @@ function(qt6_target_qml_files target)
         endif()
     endif()
 
+    qt6_target_enable_qmllint(${target})
+
     set(file_contents "")
     foreach(qml_file IN LISTS arg_FILES)
         get_filename_component(qml_file_dir "${qml_file}" DIRECTORY)
@@ -770,7 +772,7 @@ function(qt6_qml_type_registration target)
     # Run a script to recursively evaluate all the metatypes.json files in order
     # to collect all foreign types.
     string(TOLOWER "${target}_qmltyperegistrations.cpp" type_registration_cpp_file_name)
-    set(foreign_types_file "${target_binary_dir}/qmltypes/foreign_types.txt")
+    set(foreign_types_file "${target_binary_dir}/qmltypes/${target}_foreign_types.txt")
     set(type_registration_cpp_file "${target_binary_dir}/${type_registration_cpp_file_name}")
 
     set(dependency_file_cpp "${target_binary_dir}/qmltypes/${type_registration_cpp_file_name}.d")
@@ -934,6 +936,18 @@ function(_qt_internal_quick_compiler_process_resources target resource_name)
         endif()
         list(APPEND resource_files ${file})
     endforeach()
+
+    # Create a list of QML files for use with qmllint
+    if(qml_files)
+        get_target_property(qml_files_list ${target} QML_FILES)
+        if(NOT qml_files_list)
+            set(qml_files_list)
+        endif()
+
+        list(APPEND qml_files_list ${qml_files})
+        set_target_properties(${target} PROPERTIES QML_FILES "${qml_files_list}")
+    endif()
+
     if (NOT TARGET ${QT_CMAKE_EXPORT_NAMESPACE}::qmlcachegen AND qml_files)
         message(WARNING "QT6_PROCESS_RESOURCE: Qml files were detected but the qmlcachgen target is not defined. Consider adding QmlTools to your find_package command.")
     endif()
@@ -943,6 +957,21 @@ function(_qt_internal_quick_compiler_process_resources target resource_name)
         set(qml_resource_file "${CMAKE_CURRENT_BINARY_DIR}/.rcc/${resource_name}.qrc")
         if (resource_files)
             set(chained_resource_name "${resource_name}_qmlcache")
+        endif()
+
+        get_target_property(qmltypes ${target} QT_QML_MODULE_PLUGIN_TYPES_FILE)
+        if (qmltypes)
+            list(APPEND qmlcachegen_extra_args "-i" ${qmltypes})
+        endif()
+
+        get_target_property(direct_calls ${target} QT_QMLCACHEGEN_DIRECT_CALLS)
+        if (direct_calls)
+            list(APPEND qmlcachegen_extra_args "--direct-calls")
+        endif()
+
+        get_target_property(qmljs_runtime ${target} QT_QMLCACHEGEN_QMLJS_RUNTIME)
+        if (qmljs_runtime)
+            list(APPEND qmlcachegen_extra_args "--qmljs-runtime")
         endif()
 
         foreach(file IN LISTS qml_files)
@@ -972,6 +1001,7 @@ function(_qt_internal_quick_compiler_process_resources target resource_name)
                 COMMAND
                     ${QT_CMAKE_EXPORT_NAMESPACE}::qmlcachegen
                     --resource-path "${file_resource_path}"
+                    ${qmlcachegen_extra_args}
                     -o "${compiled_file}"
                     "${file_absolute}"
                 DEPENDS
@@ -1183,6 +1213,11 @@ function(_qt_internal_qmldir_defer_file command filepath content)
         file(${ARGV})
     else()
         if("${command}" STREQUAL "WRITE")
+            if("${__qt_qml_macros_module_base_dir}" STREQUAL "")
+                message(FATAL_ERROR "Unable to configure qml module.
+    \"find_package(Qt\${QT_VERSION_MAJOR} CONFIG COMPONENTS Qml)\" \
+is missing.")
+            endif()
             # Wrap with EVAL CODE to evaluate and expand arguments
             cmake_language(EVAL CODE
                            "cmake_language(DEFER DIRECTORY \"${CMAKE_CURRENT_SOURCE_DIR}\" CALL
@@ -1202,4 +1237,22 @@ function(_qt_internal_qmldir_defer_file command filepath content)
                                  WRITE and APPEND commands.")
         endif()
     endif()
+endfunction()
+
+# Adds a target called TARGET_qmllint that runs on all qml files compiled ahead-of-time.
+function(qt6_target_enable_qmllint target)
+    get_target_property(target_source ${target} SOURCE_DIR)
+    get_target_property(includes ${target} QML2_IMPORT_PATH)
+    get_target_property(files ${target} QML_FILES)
+
+    if(includes)
+        foreach(dir in LISTS includes)
+            list(APPEND include_args "-I${dir}")
+        endforeach()
+    endif()
+
+    add_custom_target(${target}_qmllint
+        ${QT_CMAKE_EXPORT_NAMESPACE}::qmllint ${files} ${include_args}
+        WORKING_DIRECTORY ${target_source}
+    )
 endfunction()

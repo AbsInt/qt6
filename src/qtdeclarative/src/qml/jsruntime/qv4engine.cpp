@@ -142,6 +142,9 @@ Q_DECLARE_METATYPE(QList<int>)
 
 QT_BEGIN_NAMESPACE
 
+DEFINE_BOOL_CONFIG_OPTION(disableDiskCache, QML_DISABLE_DISK_CACHE);
+DEFINE_BOOL_CONFIG_OPTION(forceDiskCache, QML_FORCE_DISK_CACHE);
+
 using namespace QV4;
 
 static QBasicAtomicInt engineSerial = Q_BASIC_ATOMIC_INITIALIZER(1);
@@ -1718,7 +1721,8 @@ static QVariant objectToVariant(QV4::ExecutionEngine *e, const QV4::Object *o, V
 
 QV4::ReturnedValue QV4::ExecutionEngine::fromVariant(const QVariant &variant)
 {
-    int type = variant.userType();
+    const QMetaType metaType = variant.metaType();
+    int type = metaType.id();
     const void *ptr = variant.constData();
 
     if (type < QMetaType::User) {
@@ -1804,8 +1808,8 @@ QV4::ReturnedValue QV4::ExecutionEngine::fromVariant(const QVariant &variant)
                 break;
         }
 
-        if (const QMetaObject *vtmo = QQmlValueTypeFactory::metaObjectForMetaType(type))
-            return QV4::QQmlValueTypeWrapper::create(this, variant, vtmo, type);
+        if (const QMetaObject *vtmo = QQmlValueTypeFactory::metaObjectForMetaType(metaType))
+            return QV4::QQmlValueTypeWrapper::create(this, variant, vtmo, metaType);
     } else {
         QV4::Scope scope(this);
         if (type == qMetaTypeId<QQmlListReference>()) {
@@ -1851,8 +1855,8 @@ QV4::ReturnedValue QV4::ExecutionEngine::fromVariant(const QVariant &variant)
             return sequentialIterableToJS(this, lst);
         }
 
-        if (const QMetaObject *vtmo = QQmlValueTypeFactory::metaObjectForMetaType(type))
-            return QV4::QQmlValueTypeWrapper::create(this, variant, vtmo, type);
+        if (const QMetaObject *vtmo = QQmlValueTypeFactory::metaObjectForMetaType(metaType))
+            return QV4::QQmlValueTypeWrapper::create(this, variant, vtmo, metaType);
     }
 
     // XXX TODO: To be compatible, we still need to handle:
@@ -1956,9 +1960,13 @@ ReturnedValue ExecutionEngine::global()
 QQmlRefPointer<ExecutableCompilationUnit> ExecutionEngine::compileModule(const QUrl &url)
 {
     QQmlMetaType::CachedUnitLookupError cacheError = QQmlMetaType::CachedUnitLookupError::NoError;
-    if (const QQmlPrivate::CachedQmlUnit *cachedUnit = QQmlMetaType::findCachedCompilationUnit(url, &cacheError)) {
+    if (const QQmlPrivate::CachedQmlUnit *cachedUnit = diskCacheEnabled()
+            ? QQmlMetaType::findCachedCompilationUnit(url, &cacheError)
+            : nullptr) {
         return ExecutableCompilationUnit::create(
-                    QV4::CompiledData::CompilationUnit(cachedUnit->qmlData, cachedUnit->aotCompiledFunctions, url.fileName(), url.toString()));
+                    QV4::CompiledData::CompilationUnit(
+                        cachedUnit->qmlData, cachedUnit->aotCompiledFunctions,
+                        url.fileName(), url.toString()));
     }
 
     QFile f(QQmlFile::urlToLocalFileOrQrc(url));
@@ -2036,6 +2044,11 @@ QQmlRefPointer<ExecutableCompilationUnit> ExecutionEngine::loadModule(const QUrl
     }
 
     return newModule;
+}
+
+bool ExecutionEngine::diskCacheEnabled() const
+{
+    return (!disableDiskCache() && !debugger()) || forceDiskCache();
 }
 
 void ExecutionEngine::initQmlGlobalObject()
@@ -2238,6 +2251,14 @@ bool ExecutionEngine::metaTypeFromJS(const Value &value, int type, void *data)
     case QMetaType::QDate:
         if (const QV4::DateObject *d = value.as<DateObject>()) {
             *reinterpret_cast<QDate *>(data) = d->toQDateTime().date();
+            return true;
+        } break;
+    case QMetaType::QUrl:
+        if (String *s = value.stringValue()) {
+            *reinterpret_cast<QUrl *>(data) = QUrl(s->toQString());
+            return true;
+        } else if (const QV4::UrlObject *d = value.as<UrlObject>()) {
+            *reinterpret_cast<QUrl *>(data) = d->toQUrl();
             return true;
         } break;
 #if QT_CONFIG(regularexpression)

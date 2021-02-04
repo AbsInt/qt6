@@ -1,34 +1,37 @@
 /****************************************************************************
 **
 ** Copyright (C) 2019 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the Qt Gui module
 **
-** $QT_BEGIN_LICENSE:LGPL3$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
 ** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPLv3 included in the
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
 ** packaging of this file. Please review the following information to
 ** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl.html.
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
 ** GNU General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or later as published by the Free
-** Software Foundation and appearing in the file LICENSE.GPL included in
-** the packaging of this file. Please review the following information to
-** ensure the GNU General Public License version 2.0 requirements will be
-** met: http://www.gnu.org/licenses/gpl-2.0.html.
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -450,6 +453,19 @@ Q_LOGGING_CATEGORY(QRHI_LOG_INFO, "qt.rhi.general")
     possible to decide if an adapter/device is software-based, this flag is
     ignored. It may also be ignored with graphics APIs that have no concept and
     means of enumerating adapters/devices.
+
+    \value EnablePipelineCacheDataSave Enables retrieving the pipeline cache
+    contents, where applicable. When not set, pipelineCacheData() will return
+    an empty blob always. Opting in is relevant in particular with backends
+    where additional, potentially time consuming work is needed to maintain the
+    data structures with the serialized, binary versions of shader programs. An
+    example is OpenGL, where the "pipeline cache" is simulated by retrieving
+    and loading shader program binaries. With backends where retrieving and
+    restoring the pipeline cache contents is not supported, the flag has no
+    effect. With some backends (such as, OpenGL) there are additional,
+    disk-based caching mechanisms for shader binaries. Writing to those may get
+    disabled whenever this flag is set since storing program binaries (OpenGL)
+    to multiple caches is not sensible.
  */
 
 /*!
@@ -609,6 +625,12 @@ Q_LOGGING_CATEGORY(QRHI_LOG_INFO, "qt.rhi.general")
     the 1 byte per component formats QRhiTexture::R8 and
     QRhiTexture::RED_OR_ALPHA8 are supported as well. Backends other than
     OpenGL can be expected to return true for this feature.
+
+    \value PipelineCacheDataLoadSave Indicates that the pipelineCacheData() and
+    setPipelineCacheData() functions are functional. When not supported, the
+    functions will not perform any action, the retrieved blob is always empty,
+    and thus no benefits can be expected from retrieving and, during a
+    subsequent run of the application, reloading the pipeline cache content.
  */
 
 /*!
@@ -1610,6 +1632,16 @@ QRhiTextureSubresourceUploadDescription::QRhiTextureSubresourceUploadDescription
 }
 
 /*!
+    Constructs a mip level description with the image data specified by \a data. This is suitable
+   for floating point and compressed formats as well.
+ */
+QRhiTextureSubresourceUploadDescription::QRhiTextureSubresourceUploadDescription(
+        const QByteArray &data)
+    : m_data(data)
+{
+}
+
+/*!
     \class QRhiTextureUploadEntry
     \internal
     \inmodule QtGui
@@ -2301,6 +2333,9 @@ QRhiResource::Type QRhiRenderBuffer::resourceType() const
 
      \value UsedAsCompressedAtlas The texture has a compressed format and the
      dimensions of subresource uploads may not match the texture size.
+
+     \value ExternalOES The texture should use the GL_TEXTURE_EXTERNAL_OES
+     target with OpenGL. This flag is ignored with other graphics APIs.
  */
 
 /*!
@@ -4726,6 +4761,100 @@ QRhi::Implementation QRhi::backend() const
 }
 
 /*!
+    \return the backend type as string for this QRhi.
+ */
+const char *QRhi::backendName() const
+{
+    switch (d->implType) {
+    case QRhi::Null:
+        return "Null";
+    case QRhi::Vulkan:
+        return "Vulkan";
+    case QRhi::OpenGLES2:
+        return "OpenGL";
+    case QRhi::D3D11:
+        return "D3D11";
+    case QRhi::Metal:
+        return "Metal";
+    default:
+        return "Unknown";
+    }
+}
+
+/*!
+    \enum QRhiDriverInfo::DeviceType
+    Specifies the graphics device's type, when the information is available. In
+    practice this is only applicable with Vulkan and Metal. With others the
+    value will always be UnknownDevice.
+
+    \value UnknownDevice
+    \value IntegratedDevice
+    \value DiscreteDevice
+    \value ExternalDevice
+    \value VirtualDevice
+    \value CpuDevice
+*/
+
+/*!
+    \struct QRhiDriverInfo
+    \internal
+    \inmodule QtGui
+    \since 6.1
+
+    \brief Describes the physical device, adapter, or graphics API
+    implementation that is used by an initialized QRhi.
+
+    Graphics APIs offer different levels and kinds of information. The only
+    value that is available across all APIs is the deviceName, which is a
+    freetext description of the physical device, adapter, or is a combination
+    of the strings reported for \c{GL_VENDOR} + \c{GL_RENDERER} +
+    \c{GL_VERSION}. The deviceId is always 0 for OpenGL. vendorId is always 0
+    for OpenGL and Metal. deviceType is always UnknownDevice for OpenGL and
+    Direct 3D.
+ */
+
+#ifndef QT_NO_DEBUG_STREAM
+static inline const char *deviceTypeStr(QRhiDriverInfo::DeviceType type)
+{
+    switch (type) {
+    case QRhiDriverInfo::UnknownDevice:
+        return "Unknown";
+    case QRhiDriverInfo::IntegratedDevice:
+        return "Integrated";
+    case QRhiDriverInfo::DiscreteDevice:
+        return "Discrete";
+    case QRhiDriverInfo::ExternalDevice:
+        return "External";
+    case QRhiDriverInfo::VirtualDevice:
+        return "Virtual";
+    case QRhiDriverInfo::CpuDevice:
+        return "Cpu";
+    default:
+        return "";
+    }
+}
+QDebug operator<<(QDebug dbg, const QRhiDriverInfo &info)
+{
+    QDebugStateSaver saver(dbg);
+    dbg.nospace() << "QRhiDriverInfo(deviceName=" << info.deviceName
+                  << " deviceId=0x" << Qt::hex << info.deviceId
+                  << " vendorId=0x" << info.vendorId
+                  << " deviceType=" << deviceTypeStr(info.deviceType)
+                  << ')';
+    return dbg;
+}
+#endif
+
+/*!
+    \return metadata for the graphics device used by this successfully
+    initialized QRhi instance.
+ */
+QRhiDriverInfo QRhi::driverInfo() const
+{
+    return d->driverInfo();
+}
+
+/*!
     \return the thread on which the QRhi was \l{QRhi::create()}{initialized}.
  */
 QThread *QRhi::thread() const
@@ -5002,7 +5131,8 @@ void QRhiResourceUpdateBatch::uploadTexture(QRhiTexture *tex, const QRhiTextureU
  */
 void QRhiResourceUpdateBatch::uploadTexture(QRhiTexture *tex, const QImage &image)
 {
-    uploadTexture(tex, QRhiTextureUploadEntry(0, 0, image));
+    uploadTexture(tex,
+                  QRhiTextureUploadEntry(0, 0, QRhiTextureSubresourceUploadDescription(image)));
 }
 
 /*!
@@ -5975,6 +6105,70 @@ void QRhi::releaseCachedResources()
 bool QRhi::isDeviceLost() const
 {
     return d->isDeviceLost();
+}
+
+/*!
+    \return a binary \a data blob with data collected from the
+    QRhiGraphicsPipeline and QRhiComputePipeline successfully created during
+    the lifetime of this QRhi.
+
+    By saving and then, in subsequent runs of the same application, reloading
+    the cache data, pipeline and shader creation times can potentially be
+    accelerated.
+
+    When the PipelineCacheDataLoadSave is reported as unsupported, the returned
+    QByteArray is empty.
+
+    When the EnablePipelineCacheDataSave flag was not specified when calling
+    create(), the returned QByteArray may be empty, even when the
+    PipelineCacheDataLoadSave feature is supported.
+
+    When the returned data is non-empty, it is always specific to the QRhi
+    backend, the graphics device, and the driver implementation in use. QRhi
+    takes care of adding the appropriate header and safeguards that ensure that
+    the data can always be passed safely to setPipelineCacheData().
+
+    \note Calling releaseCachedResources() may, depending on the backend, clear
+    the pipeline data collected. A subsequent call to this function may then
+    not return any data.
+
+    \sa setPipelineCacheData(), create(), isFeatureSupported()
+ */
+QByteArray QRhi::pipelineCacheData()
+{
+    return d->pipelineCacheData();
+}
+
+/*!
+    Loads \a data into the pipeline cache, when applicable.
+
+    When the PipelineCacheDataLoadSave is reported as unsupported, the function
+    is safe to call, but has no effect.
+
+    The blob returned by pipelineCacheData() is always specific to a QRhi
+    backend, a graphics device, and a given version of the graphics driver.
+    QRhi takes care of adding the appropriate header and safeguards that ensure
+    that the data can always be passed safely to this function. If there is a
+    mismatch, e.g. because the driver has been upgraded to a newer version, or
+    because the data was generated from a different QRhi backend, a warning is
+    printed and \a data is safely ignored.
+
+    With Vulkan, this maps directly to VkPipelineCache. Calling this function
+    creates a new Vulkan pipeline cache object, with its initial data sourced
+    from \a data. The pipeline cache object is then used by all subsequently
+    created QRhiGraphicsPipeline and QRhiComputePipeline objects, thus
+    accelerating, potentially, the pipeline creation.
+
+    \note QRhi cannot give any guarantees that \a data has an effect on the
+    pipeline and shader creation performance. With APIs like Vulkan, it is up
+    to the driver to decide if \a data is used for some purpose, or if it is
+    ignored.
+
+    \sa pipelineCacheData(), isFeatureSupported()
+ */
+void QRhi::setPipelineCacheData(const QByteArray &data)
+{
+    d->setPipelineCacheData(data);
 }
 
 /*!

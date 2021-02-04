@@ -249,8 +249,6 @@ void QSQLiteResultPrivate::initColumns(bool emptyResultset)
 bool QSQLiteResultPrivate::fetchNext(QSqlCachedResult::ValueCache &values, int idx, bool initialFetch)
 {
     Q_Q(QSQLiteResult);
-    int res;
-    int i;
 
     if (skipRow) {
         // already fetched
@@ -273,8 +271,7 @@ bool QSQLiteResultPrivate::fetchNext(QSqlCachedResult::ValueCache &values, int i
         q->setAt(QSql::AfterLastRow);
         return false;
     }
-    res = sqlite3_step(stmt);
-
+    int res = sqlite3_step(stmt);
     switch(res) {
     case SQLITE_ROW:
         // check to see if should fill out columns
@@ -283,7 +280,7 @@ bool QSQLiteResultPrivate::fetchNext(QSqlCachedResult::ValueCache &values, int i
             initColumns(false);
         if (idx < 0 && !initialFetch)
             return true;
-        for (i = 0; i < rInf.count(); ++i) {
+        for (int i = 0; i < rInf.count(); ++i) {
             switch (sqlite3_column_type(stmt, i)) {
             case SQLITE_BLOB:
                 values[i + idx] = QByteArray(static_cast<const char *>(
@@ -385,13 +382,14 @@ bool QSQLiteResult::prepare(const QString &query)
 
     setSelect(false);
 
-    const void *pzTail = NULL;
+    const void *pzTail = nullptr;
+    const auto size = int((query.size() + 1) * sizeof(QChar));
 
 #if (SQLITE_VERSION_NUMBER >= 3003011)
-    int res = sqlite3_prepare16_v2(d->drv_d_func()->access, query.constData(), (query.size() + 1) * sizeof(QChar),
+    int res = sqlite3_prepare16_v2(d->drv_d_func()->access, query.constData(), size,
                                    &d->stmt, &pzTail);
 #else
-    int res = sqlite3_prepare16(d->access, query.constData(), (query.size() + 1) * sizeof(QChar),
+    int res = sqlite3_prepare16(d->access, query.constData(), size,
                                 &d->stmt, &pzTail);
 #endif
 
@@ -522,27 +520,31 @@ bool QSQLiteResult::exec()
                     const QDateTime dateTime = value.toDateTime();
                     const QString str = dateTime.toString(Qt::ISODateWithMs);
                     res = sqlite3_bind_text16(d->stmt, i + 1, str.utf16(),
-                                              str.size() * sizeof(ushort), SQLITE_TRANSIENT);
+                                              int(str.size() * sizeof(ushort)),
+                                              SQLITE_TRANSIENT);
                     break;
                 }
                 case QMetaType::QTime: {
                     const QTime time = value.toTime();
                     const QString str = time.toString(u"hh:mm:ss.zzz");
                     res = sqlite3_bind_text16(d->stmt, i + 1, str.utf16(),
-                                              str.size() * sizeof(ushort), SQLITE_TRANSIENT);
+                                              int(str.size() * sizeof(ushort)),
+                                              SQLITE_TRANSIENT);
                     break;
                 }
                 case QMetaType::QString: {
                     // lifetime of string == lifetime of its qvariant
                     const QString *str = static_cast<const QString*>(value.constData());
                     res = sqlite3_bind_text16(d->stmt, i + 1, str->utf16(),
-                                              (str->size()) * sizeof(QChar), SQLITE_STATIC);
+                                              int(str->size()) * sizeof(QChar),
+                                              SQLITE_STATIC);
                     break; }
                 default: {
                     QString str = value.toString();
                     // SQLITE_TRANSIENT makes sure that sqlite buffers the data
                     res = sqlite3_bind_text16(d->stmt, i + 1, str.utf16(),
-                                              (str.size()) * sizeof(QChar), SQLITE_TRANSIENT);
+                                              int(str.size()) * sizeof(QChar),
+                                              SQLITE_TRANSIENT);
                     break; }
                 }
             }
@@ -719,6 +721,7 @@ bool QSQLiteDriver::open(const QString & db, const QString &, const QString &, c
     bool sharedCache = false;
     bool openReadOnlyOption = false;
     bool openUriOption = false;
+    bool useExtendedResultCodes = true;
 #if QT_CONFIG(regularexpression)
     static const QLatin1String regexpConnectOption = QLatin1String("QSQLITE_ENABLE_REGEXP");
     bool defineRegexp = false;
@@ -742,6 +745,8 @@ bool QSQLiteDriver::open(const QString & db, const QString &, const QString &, c
             openUriOption = true;
         } else if (option == QLatin1String("QSQLITE_ENABLE_SHARED_CACHE")) {
             sharedCache = true;
+        } else if (option == QLatin1String("QSQLITE_NO_USE_EXTENDED_RESULT_CODES")) {
+            useExtendedResultCodes = false;
         }
 #if QT_CONFIG(regularexpression)
         else if (option.startsWith(regexpConnectOption)) {
@@ -768,17 +773,19 @@ bool QSQLiteDriver::open(const QString & db, const QString &, const QString &, c
 
     openMode |= SQLITE_OPEN_NOMUTEX;
 
-    const int res = sqlite3_open_v2(db.toUtf8().constData(), &d->access, openMode, NULL);
+    const int res = sqlite3_open_v2(db.toUtf8().constData(), &d->access, openMode, nullptr);
 
     if (res == SQLITE_OK) {
         sqlite3_busy_timeout(d->access, timeOut);
+        sqlite3_extended_result_codes(d->access, useExtendedResultCodes);
         setOpen(true);
         setOpenError(false);
 #if QT_CONFIG(regularexpression)
         if (defineRegexp) {
             auto cache = new QCache<QString, QRegularExpression>(regexpCacheSize);
-            sqlite3_create_function_v2(d->access, "regexp", 2, SQLITE_UTF8, cache, &_q_regexp, NULL,
-                                       NULL, &_q_regexp_cleanup);
+            sqlite3_create_function_v2(d->access, "regexp", 2, SQLITE_UTF8, cache,
+                                       &_q_regexp, nullptr,
+                                       nullptr, &_q_regexp_cleanup);
         }
 #endif
         return true;
@@ -805,7 +812,7 @@ void QSQLiteDriver::close()
 
         if (d->access && (d->notificationid.count() > 0)) {
             d->notificationid.clear();
-            sqlite3_update_hook(d->access, NULL, NULL);
+            sqlite3_update_hook(d->access, nullptr, nullptr);
         }
 
         const int res = sqlite3_close(d->access);
@@ -1025,7 +1032,7 @@ bool QSQLiteDriver::unsubscribeFromNotification(const QString &name)
 
     d->notificationid.removeAll(name);
     if (d->notificationid.isEmpty())
-        sqlite3_update_hook(d->access, NULL, NULL);
+        sqlite3_update_hook(d->access, nullptr, nullptr);
 
     return true;
 }

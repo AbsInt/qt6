@@ -8,12 +8,18 @@
 # this module are imported into the scope of the calling feature.
 #
 # Target is without leading "Qt". So e.g. the "QtCore" module has the target "Core".
+#
+# Options:
+#   NO_ADDITIONAL_TARGET_INFO
+#     Don't generate a Qt6*AdditionalTargetInfo.cmake file.
+#     The caller is responsible for creating one.
+#
 function(qt_internal_add_module target)
     qt_internal_module_info(module "${target}")
 
     # Process arguments:
     qt_parse_all_arguments(arg "qt_add_module"
-        "NO_MODULE_HEADERS;STATIC;DISABLE_TOOLS_EXPORT;EXCEPTIONS;INTERNAL_MODULE;NO_SYNC_QT;NO_PRIVATE_MODULE;HEADER_MODULE;GENERATE_METATYPES;NO_CONFIG_HEADER_FILE;SKIP_DEPENDS_INCLUDE"
+        "NO_MODULE_HEADERS;STATIC;DISABLE_TOOLS_EXPORT;EXCEPTIONS;INTERNAL_MODULE;NO_SYNC_QT;NO_PRIVATE_MODULE;HEADER_MODULE;GENERATE_METATYPES;NO_CONFIG_HEADER_FILE;SKIP_DEPENDS_INCLUDE;NO_ADDITIONAL_TARGET_INFO"
         "MODULE_INCLUDE_NAME;CONFIG_MODULE_NAME;PRECOMPILED_HEADER;CONFIGURE_FILE_PATH;${__default_target_info_args}"
         "${__default_private_args};${__default_public_args};${__default_private_module_args};QMAKE_MODULE_CONFIG;EXTRA_CMAKE_FILES;EXTRA_CMAKE_INCLUDES;NO_PCH_SOURCES" ${ARGN})
 
@@ -80,6 +86,14 @@ function(qt_internal_add_module target)
         if(GCC AND is_shared_lib)
             target_link_options(${target} PRIVATE LINKER:-Bsymbolic-functions)
         endif()
+    endif()
+
+    if(FEATURE_ltcg AND GCC AND is_static_lib)
+        # CMake <= 3.19 appends -fno-fat-lto-objects for all library types if
+        # CMAKE_INTERPROCEDURAL_OPTIMIZATION is enabled. Static libraries need
+        # the opposite compiler option.
+        # (https://gitlab.kitware.com/cmake/cmake/-/issues/21696)
+        target_compile_options(${target} PRIVATE -ffat-lto-objects)
     endif()
 
     if (ANDROID)
@@ -187,7 +201,10 @@ function(qt_internal_add_module target)
                                  -builddir "${PROJECT_BINARY_DIR}"
                                  "${PROJECT_SOURCE_DIR}")
         message(STATUS "Running syncqt for module: '${module_include_name}' ")
-        execute_process(COMMAND ${syncqt_full_command})
+        execute_process(COMMAND ${syncqt_full_command} RESULT_VARIABLE syncqt_ret)
+        if(NOT syncqt_ret EQUAL 0)
+            message(FATAL_ERROR "Failed to run syncqt, return code: ${syncqt_ret}")
+        endif()
 
         set_target_properties("${target}" PROPERTIES
             INTERFACE_MODULE_HAS_HEADERS ON
@@ -389,8 +406,10 @@ function(qt_internal_add_module target)
     # thus we can't use qt_internal_extend_target()'s PUBLIC_DEFINES option.
     target_compile_definitions(${target} INTERFACE QT_${module_define_infix}_LIB)
 
-    if(NOT ${arg_EXCEPTIONS} AND NOT ${arg_HEADER_MODULE})
-        qt_internal_set_no_exceptions_flags("${target}")
+    if(NOT arg_EXCEPTIONS AND NOT ${arg_HEADER_MODULE})
+        qt_internal_set_exceptions_flags("${target}" FALSE)
+    elseif(arg_EXCEPTIONS)
+        qt_internal_set_exceptions_flags("${target}" TRUE)
     endif()
 
     set(configureFile "${CMAKE_CURRENT_SOURCE_DIR}/configure.cmake")
@@ -557,10 +576,12 @@ set(QT_CMAKE_EXPORT_NAMESPACE ${QT_CMAKE_EXPORT_NAMESPACE})")
                NAMESPACE ${QT_CMAKE_EXPORT_NAMESPACE}::
                DESTINATION ${config_install_dir})
 
-    qt_internal_export_additional_targets_file(
-        TARGETS ${exported_targets}
-        EXPORT_NAME_PREFIX ${INSTALL_CMAKE_NAMESPACE}${target}
-        CONFIG_INSTALL_DIR "${config_install_dir}")
+    if(NOT arg_NO_ADDITIONAL_TARGET_INFO)
+        qt_internal_export_additional_targets_file(
+            TARGETS ${exported_targets}
+            EXPORT_NAME_PREFIX ${INSTALL_CMAKE_NAMESPACE}${target}
+            CONFIG_INSTALL_DIR "${config_install_dir}")
+    endif()
 
     qt_internal_export_modern_cmake_config_targets_file(
         TARGETS ${exported_targets}

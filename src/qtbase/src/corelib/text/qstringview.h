@@ -71,6 +71,7 @@ QT_BEGIN_NAMESPACE
 class QString;
 class QStringView;
 class QRegularExpression;
+class QRegularExpressionMatch;
 
 namespace QtPrivate {
 template <typename Char>
@@ -253,7 +254,7 @@ public:
     [[nodiscard]] QByteArray toLatin1() const { return QtPrivate::convertToLatin1(*this); }
     [[nodiscard]] QByteArray toUtf8() const { return QtPrivate::convertToUtf8(*this); }
     [[nodiscard]] QByteArray toLocal8Bit() const { return QtPrivate::convertToLocal8Bit(*this); }
-    [[nodiscard]] inline QList<uint> toUcs4() const; // defined in qlist.h
+    [[nodiscard]] inline QList<uint> toUcs4() const; // defined in qlist.h ### Qt 7 char32_t
 
     [[nodiscard]] constexpr QChar at(qsizetype n) const noexcept { return (*this)[n]; }
 
@@ -347,6 +348,25 @@ public:
     { return QtPrivate::lastIndexOf(*this, from, s, cs); }
     [[nodiscard]] inline qsizetype lastIndexOf(QLatin1String s, qsizetype from = -1, Qt::CaseSensitivity cs = Qt::CaseSensitive) const noexcept;
 
+#if QT_CONFIG(regularexpression)
+    [[nodiscard]] qsizetype indexOf(const QRegularExpression &re, qsizetype from = 0, QRegularExpressionMatch *rmatch = nullptr) const
+    {
+        return QtPrivate::indexOf(*this, re, from, rmatch);
+    }
+    [[nodiscard]] qsizetype lastIndexOf(const QRegularExpression &re, qsizetype from = -1, QRegularExpressionMatch *rmatch = nullptr) const
+    {
+        return QtPrivate::lastIndexOf(*this, re, from, rmatch);
+    }
+    [[nodiscard]] bool contains(const QRegularExpression &re, QRegularExpressionMatch *rmatch = nullptr) const
+    {
+        return QtPrivate::contains(*this, re, rmatch);
+    }
+    [[nodiscard]] qsizetype count(const QRegularExpression &re) const
+    {
+        return QtPrivate::count(*this, re);
+    }
+#endif
+
     [[nodiscard]] bool isRightToLeft() const noexcept
     { return QtPrivate::isRightToLeft(*this); }
     [[nodiscard]] bool isValidUtf16() const noexcept
@@ -422,6 +442,8 @@ public:
     //
     // Qt compatibility API:
     //
+    [[nodiscard]] const_iterator constBegin() const noexcept { return begin(); }
+    [[nodiscard]] const_iterator constEnd() const noexcept { return end(); }
     [[nodiscard]] constexpr bool isNull() const noexcept { return !m_data; }
     [[nodiscard]] constexpr bool isEmpty() const noexcept { return empty(); }
     [[nodiscard]] constexpr int length() const /* not nothrow! */

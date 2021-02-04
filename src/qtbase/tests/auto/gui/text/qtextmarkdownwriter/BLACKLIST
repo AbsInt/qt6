@@ -1,2 +1,2 @@
-[rewriteDocument]
-ci b2qt
+# QTBUG-89819
+ci b2qt 32bit

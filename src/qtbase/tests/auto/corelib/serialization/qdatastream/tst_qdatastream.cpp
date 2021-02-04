@@ -26,7 +26,15 @@
 **
 ****************************************************************************/
 
-#include <QtTest/QtTest>
+#include <QTest>
+#include <QBuffer>
+#include <QEasingCurve>
+#include <QJsonValue>
+#include <QJsonObject>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QtEndian>
+
 #include <QtGui/QBitmap>
 #include <QtGui/QPainter>
 #include <QtGui/QPainterPath>
@@ -3019,6 +3027,10 @@ void tst_QDataStream::status_QBitArray()
     stream.setVersion(version);
     QBitArray str;
     stream >> str;
+
+    if (sizeof(qsizetype) == sizeof(int))
+        QEXPECT_FAIL("new badsize 0x10000", "size > INT_MAX fails on 32bit system (QTBUG-87660)",
+                     Continue);
 
     QCOMPARE(int(stream.status()), expectedStatus);
     QCOMPARE(str.size(), expectedString.size());

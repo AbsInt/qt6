@@ -68,6 +68,7 @@ private slots:
     void wrap();
     void elide();
     void elideParentChanged();
+    void elideRelayoutAfterZeroWidth();
     void multilineElide_data();
     void multilineElide();
     void implicitElide_data();
@@ -605,6 +606,15 @@ void tst_qquicktext::elideParentChanged()
     QTRY_VERIFY(!grabResult->image().isNull());
     const QImage actualItemImageGrab(grabResult->image());
     QCOMPARE(actualItemImageGrab, expectedItemImageGrab);
+}
+
+void tst_qquicktext::elideRelayoutAfterZeroWidth()
+{
+    QQmlEngine engine;
+    QQmlComponent component(&engine, testFileUrl("elideZeroWidth.qml"));
+    QScopedPointer<QObject> root(component.create());
+    QVERIFY2(root, qPrintable(component.errorString()));
+    QVERIFY(root->property("ok").toBool());
 }
 
 void tst_qquicktext::multilineElide_data()
@@ -2293,8 +2303,12 @@ void tst_qquicktext::lineHeight()
     QCOMPARE(myText->lineHeightMode(), QQuickText::ProportionalHeight);
 
     qreal h = myText->height();
+    QVERIFY(myText->lineCount() != 0);
+    const qreal h1stLine = h / myText->lineCount();
+
     myText->setLineHeight(1.5);
     QCOMPARE(myText->height(), qreal(qCeil(h)) * 1.5);
+    QCOMPARE(myText->contentHeight(), qreal(qCeil(h)) * 1.5);
 
     myText->setLineHeightMode(QQuickText::FixedHeight);
     myText->setLineHeight(20);
@@ -2306,11 +2320,21 @@ void tst_qquicktext::lineHeight()
 
     qreal h2 = myText->height();
     myText->setLineHeight(2.0);
-    QVERIFY(myText->height() == h2 * 2.0);
+    QCOMPARE(myText->height(), h2 * 2.0);
 
     myText->setLineHeightMode(QQuickText::FixedHeight);
     myText->setLineHeight(10);
-    QCOMPARE(myText->height(), myText->lineCount() * 10.0);
+    QVERIFY(myText->lineCount() > 1);
+    QCOMPARE(myText->height(), h1stLine + (myText->lineCount() - 1) * 10.0);
+    QCOMPARE(myText->contentHeight(), h1stLine + (myText->lineCount() - 1) * 10.0);
+    QCOMPARE(myText->implicitHeight(), h1stLine + (myText->lineCount() - 1) * 10.0);
+
+    myText->setLineHeightMode(QQuickText::ProportionalHeight);
+    myText->setLineHeight(0.5);
+    const qreal reducedHeight = h1stLine + (myText->lineCount() - 1) * h1stLine * 0.5;
+    QVERIFY(qAbs(myText->height() - reducedHeight) < 1.0); // allow a deviation of one pixel because the exact height depends on the font.
+    QVERIFY(qAbs(myText->contentHeight() - reducedHeight) < 1.0);
+    QVERIFY(qAbs(myText->implicitHeight() - reducedHeight) < 1.0);
 }
 
 void tst_qquicktext::implicitSize_data()

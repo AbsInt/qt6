@@ -86,9 +86,18 @@ public:
     QColorSpace(NamedColorSpace namedColorSpace);
     QColorSpace(Primaries primaries, TransferFunction transferFunction, float gamma = 0.0f);
     QColorSpace(Primaries primaries, float gamma);
+    QColorSpace(Primaries primaries, const QList<uint16_t> &transferFunctionTable);
     QColorSpace(const QPointF &whitePoint, const QPointF &redPoint,
                 const QPointF &greenPoint, const QPointF &bluePoint,
                 TransferFunction transferFunction, float gamma = 0.0f);
+    QColorSpace(const QPointF &whitePoint, const QPointF &redPoint,
+                const QPointF &greenPoint, const QPointF &bluePoint,
+                const QList<uint16_t> &transferFunctionTable);
+    QColorSpace(const QPointF &whitePoint, const QPointF &redPoint,
+                const QPointF &greenPoint, const QPointF &bluePoint,
+                const QList<uint16_t> &redTransferFunctionTable,
+                const QList<uint16_t> &greenTransferFunctionTable,
+                const QList<uint16_t> &blueTransferFunctionTable);
     ~QColorSpace();
 
     QColorSpace(const QColorSpace &colorSpace) noexcept;
@@ -110,7 +119,15 @@ public:
     float gamma() const noexcept;
 
     void setTransferFunction(TransferFunction transferFunction, float gamma = 0.0f);
+    void setTransferFunction(const QList<uint16_t> &transferFunctionTable);
+    void setTransferFunctions(const QList<uint16_t> &redTransferFunctionTable,
+                              const QList<uint16_t> &greenTransferFunctionTable,
+                              const QList<uint16_t> &blueTransferFunctionTable);
     QColorSpace withTransferFunction(TransferFunction transferFunction, float gamma = 0.0f) const;
+    QColorSpace withTransferFunction(const QList<uint16_t> &transferFunctionTable) const;
+    QColorSpace withTransferFunctions(const QList<uint16_t> &redTransferFunctionTable,
+                                      const QList<uint16_t> &greenTransferFunctionTable,
+                                      const QList<uint16_t> &blueTransferFunctionTable) const;
 
     void setPrimaries(Primaries primariesId);
     void setPrimaries(const QPointF &whitePoint, const QPointF &redPoint,

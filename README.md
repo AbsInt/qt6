@@ -14,4 +14,4 @@ Run
 
 e.g.
 
-./update.sh 6.0
+./update.sh 6.1

@@ -1467,6 +1467,41 @@ Qt::SortOrder QHeaderView::sortIndicatorOrder() const
 }
 
 /*!
+    \property QHeaderView::sortIndicatorClearable
+    \brief Whether the sort indicator can be cleared by clicking on a section multiple times
+    \since 6.1
+
+    This property controls whether the user is able to remove the
+    sorting indicator on a given section by clicking on the section
+    multiple times. Normally, clicking on a section will simply change
+    the sorting order for that section. By setting this property to
+    true, the sorting indicator will be cleared after alternating to
+    ascending and descending; this will typically restore the original
+    sorting of a model.
+
+    Setting this property to true has no effect unless
+    sectionsClickable() is also true (which is the default for certain
+    views, for instance QTableView, or is automatically set when making
+    a view sortable, for instance by calling
+    QTreeView::setSortingEnabled).
+*/
+
+void QHeaderView::setSortIndicatorClearable(bool clearable)
+{
+    Q_D(QHeaderView);
+    if (d->sortIndicatorClearable == clearable)
+        return;
+    d->sortIndicatorClearable = clearable;
+    emit sortIndicatorClearableChanged(clearable);
+}
+
+bool QHeaderView::isSortIndicatorClearable() const
+{
+    Q_D(const QHeaderView);
+    return d->sortIndicatorClearable;
+}
+
+/*!
     \property QHeaderView::stretchLastSection
     \brief whether the last visible section in the header takes up all the
     available space
@@ -2537,7 +2572,8 @@ void QHeaderView::mousePressEvent(QMouseEvent *e)
             acceptMoveSection = false; // Do not allow moving the tree nod
 
         if (acceptMoveSection) {
-            d->section = d->target = d->pressed;
+            d->target = -1;
+            d->section = d->pressed;
             if (d->section == -1)
                 return;
             d->state = QHeaderViewPrivate::MoveSection;
@@ -2607,21 +2643,25 @@ void QHeaderView::mouseMoveEvent(QMouseEvent *e)
                 if (visual == 0 && logicalIndex(0) == 0 && !d->allowUserMoveOfSection0)
                     return;
 
-                int posThreshold = d->headerSectionPosition(visual) - d->offset + d->headerSectionSize(visual) / 2;
+                const int posThreshold = d->headerSectionPosition(visual) - d->offset + d->headerSectionSize(visual) / 2;
+                const int checkPos = d->reverse() ? d->viewport->width() - pos : pos;
                 int moving = visualIndex(d->section);
+                int oldTarget = d->target;
                 if (visual < moving) {
-                    if (pos < posThreshold)
+                    if (checkPos < posThreshold)
                         d->target = d->logicalIndex(visual);
                     else
                         d->target = d->logicalIndex(visual + 1);
                 } else if (visual > moving) {
-                    if (pos > posThreshold)
+                    if (checkPos > posThreshold)
                         d->target = d->logicalIndex(visual);
                     else
                         d->target = d->logicalIndex(visual - 1);
                 } else {
                     d->target = d->section;
                 }
+                if (oldTarget != d->target || oldTarget == -1)
+                    d->updateSectionsBeforeAfter(d->target);
                 d->updateSectionIndicator(d->section, pos);
             }
             return;
@@ -2693,6 +2733,8 @@ void QHeaderView::mouseReleaseEvent(QMouseEvent *e)
             moveSection(from, to);
             d->section = d->target = -1;
             d->updateSectionIndicator(d->section, pos);
+            if (from == to)
+                d->updateSectionsBeforeAfter(from);
             break;
         } // not moving
         Q_FALLTHROUGH();
@@ -2901,26 +2943,17 @@ void QHeaderView::initStyleOptionForIndex(QStyleOptionHeader *option, int logica
     opt.text = d->model->headerData(logicalIndex, d->orientation,
                                     Qt::DisplayRole).toString();
 
-    int margin = 2 * style()->pixelMetric(QStyle::PM_HeaderMargin, nullptr, this);
-
-    const Qt::Alignment headerArrowAlignment = static_cast<Qt::Alignment>(style()->styleHint(QStyle::SH_Header_ArrowAlignment, nullptr, this));
-    const bool isHeaderArrowOnTheSide = headerArrowAlignment & Qt::AlignVCenter;
-    if (isSortIndicatorShown() && sortIndicatorSection() == logicalIndex && isHeaderArrowOnTheSide)
-        margin += style()->pixelMetric(QStyle::PM_HeaderMarkSize, nullptr, this);
-
     const QVariant variant = d->model->headerData(logicalIndex, d->orientation,
                                                   Qt::DecorationRole);
     opt.icon = qvariant_cast<QIcon>(variant);
     if (opt.icon.isNull())
         opt.icon = qvariant_cast<QPixmap>(variant);
-    if (!opt.icon.isNull()) // see CT_HeaderSection
-        margin += style()->pixelMetric(QStyle::PM_SmallIconSize, nullptr, this) +
-                  style()->pixelMetric(QStyle::PM_HeaderMargin, nullptr, this);
 
-    if (d->textElideMode != Qt::ElideNone) {
-        const QRect textRect = style()->subElementRect(QStyle::SE_HeaderLabel, &opt, this);
-        opt.text = opt.fontMetrics.elidedText(opt.text, d->textElideMode, textRect.width() - margin);
-    }
+    QVariant var = d->model->headerData(logicalIndex, d->orientation,
+                                        Qt::FontRole);
+    if (var.isValid() && var.canConvert<QFont>())
+        opt.fontMetrics = QFontMetrics(qvariant_cast<QFont>(var));
+    opt.textElideMode = d->textElideMode;
 
     QVariant foregroundBrush = d->model->headerData(logicalIndex, d->orientation,
                                                     Qt::ForegroundRole);
@@ -2959,6 +2992,7 @@ void QHeaderView::initStyleOptionForIndex(QStyleOptionHeader *option, int logica
         opt.selectedPosition = QStyleOptionHeader::NextIsSelected;
     else
         opt.selectedPosition = QStyleOptionHeader::NotAdjacent;
+    opt.isSectionDragTarget = d->target == logicalIndex;
 }
 
 /*!
@@ -3709,20 +3743,46 @@ void QHeaderViewPrivate::clear()
     }
 }
 
+static Qt::SortOrder flipOrder(Qt::SortOrder order)
+{
+    switch (order) {
+    case Qt::AscendingOrder:
+        return Qt::DescendingOrder;
+    case Qt::DescendingOrder:
+        return Qt::AscendingOrder;
+    };
+    Q_UNREACHABLE();
+    return Qt::AscendingOrder;
+};
+
 void QHeaderViewPrivate::flipSortIndicator(int section)
 {
     Q_Q(QHeaderView);
     Qt::SortOrder sortOrder;
     if (sortIndicatorSection == section) {
-        sortOrder = (sortIndicatorOrder == Qt::DescendingOrder) ? Qt::AscendingOrder : Qt::DescendingOrder;
+        if (sortIndicatorClearable) {
+            const Qt::SortOrder defaultSortOrder = defaultSortOrderForSection(section);
+            if (sortIndicatorOrder == defaultSortOrder) {
+                sortOrder = flipOrder(sortIndicatorOrder);
+            } else {
+                section = -1;
+                sortOrder = Qt::AscendingOrder;
+            }
+        } else {
+            sortOrder = flipOrder(sortIndicatorOrder);
+        }
     } else {
-        const QVariant value = model->headerData(section, orientation, Qt::InitialSortOrderRole);
-        if (value.canConvert<int>())
-            sortOrder = static_cast<Qt::SortOrder>(value.toInt());
-        else
-            sortOrder = Qt::AscendingOrder;
+        sortOrder = defaultSortOrderForSection(section);
     }
     q->setSortIndicator(section, sortOrder);
+}
+
+Qt::SortOrder QHeaderViewPrivate::defaultSortOrderForSection(int section) const
+{
+    const QVariant value = model->headerData(section, orientation, Qt::InitialSortOrderRole);
+    if (value.canConvert<int>())
+        return static_cast<Qt::SortOrder>(value.toInt());
+    return Qt::AscendingOrder;
 }
 
 void QHeaderViewPrivate::cascadingResize(int visual, int newSize)
@@ -3994,6 +4054,25 @@ void QHeaderViewPrivate::setScrollOffset(const QScrollBar *scrollBar, QAbstractI
     }
 }
 
+void QHeaderViewPrivate::updateSectionsBeforeAfter(int logical)
+{
+    Q_Q(QHeaderView);
+    const int visual = visualIndex(logical);
+    int from = logicalIndex(visual > 1 ? visual - 1 : 0);
+    int to = logicalIndex(visual + 1 >= sectionCount() ? visual : visual + 1);
+    QRect updateRect;
+    if (orientation == Qt::Horizontal) {
+        if (reverse())
+            std::swap(from, to);
+        updateRect = QRect(QPoint(q->sectionViewportPosition(from), 0),
+                           QPoint(q->sectionViewportPosition(to) + headerSectionSize(to), viewport->height()));
+    } else {
+        updateRect = QRect(QPoint(0, q->sectionViewportPosition(from)),
+                           QPoint(viewport->width(), q->sectionViewportPosition(to) + headerSectionSize(to)));
+    }
+    viewport->update(updateRect);
+}
+
 #ifndef QT_NO_DATASTREAM
 void QHeaderViewPrivate::write(QDataStream &out) const
 {
@@ -4027,6 +4106,7 @@ void QHeaderViewPrivate::write(QDataStream &out) const
     out << resizeContentsPrecision;
     out << customDefaultSectionSize;
     out << lastSectionSize;
+    out << int(sortIndicatorClearable);
 }
 
 bool QHeaderViewPrivate::read(QDataStream &in)
@@ -4169,6 +4249,11 @@ bool QHeaderViewPrivate::read(QDataStream &in)
         lastSectionLogicalIdx = q->logicalIndex(lastVisibleVisualIndex());
         doDelayedResizeSections();
     }
+
+    int inSortIndicatorClearable;
+    in >> inSortIndicatorClearable;
+    if (in.status() == QDataStream::Ok)  // we haven't read past end
+        sortIndicatorClearable = inSortIndicatorClearable;
 
     return true;
 }

@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2018 The Qt Company Ltd.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
@@ -589,7 +589,8 @@ qreal QFontEngine::minRightBearing() const
         }
 
         if (m_minLeftBearing == kBearingNotInitialized || m_minRightBearing == kBearingNotInitialized)
-            qWarning() << "Failed to compute left/right minimum bearings for" << fontDef.family;
+            qWarning() << "Failed to compute left/right minimum bearings for"
+                       << fontDef.families.first();
     }
 
     return m_minRightBearing;
@@ -795,7 +796,7 @@ void QFontEngine::addGlyphsToPath(glyph_t *glyphs, QFixedPoint *positions, int n
     addBitmapFontToPath(x, y, g, path, flags);
 }
 
-QImage QFontEngine::alphaMapForGlyph(glyph_t glyph, QFixed /*subPixelPosition*/)
+QImage QFontEngine::alphaMapForGlyph(glyph_t glyph, const QFixedPoint &/*subPixelPosition*/)
 {
     // For font engines don't support subpixel positioning
     return alphaMapForGlyph(glyph);
@@ -811,9 +812,9 @@ QImage QFontEngine::alphaMapForGlyph(glyph_t glyph, const QTransform &t)
     return i;
 }
 
-QImage QFontEngine::alphaMapForGlyph(glyph_t glyph, QFixed subPixelPosition, const QTransform &t)
+QImage QFontEngine::alphaMapForGlyph(glyph_t glyph, const QFixedPoint &subPixelPosition, const QTransform &t)
 {
-    if (! supportsSubPixelPositions())
+    if (!supportsHorizontalSubPixelPositions() && !supportsVerticalSubPixelPositions())
         return alphaMapForGlyph(glyph, t);
 
     QImage i = alphaMapForGlyph(glyph, subPixelPosition);
@@ -824,7 +825,7 @@ QImage QFontEngine::alphaMapForGlyph(glyph_t glyph, QFixed subPixelPosition, con
     return i;
 }
 
-QImage QFontEngine::alphaRGBMapForGlyph(glyph_t glyph, QFixed /*subPixelPosition*/, const QTransform &t)
+QImage QFontEngine::alphaRGBMapForGlyph(glyph_t glyph, const QFixedPoint &/*subPixelPosition*/, const QTransform &t)
 {
     const QImage alphaMask = alphaMapForGlyph(glyph, t);
     QImage rgbMask(alphaMask.width(), alphaMask.height(), QImage::Format_RGB32);
@@ -841,32 +842,37 @@ QImage QFontEngine::alphaRGBMapForGlyph(glyph_t glyph, QFixed /*subPixelPosition
     return rgbMask;
 }
 
-QImage QFontEngine::bitmapForGlyph(glyph_t, QFixed subPixelPosition, const QTransform&, const QColor &)
+QImage QFontEngine::bitmapForGlyph(glyph_t, const QFixedPoint &subPixelPosition, const QTransform&, const QColor &)
 {
     Q_UNUSED(subPixelPosition);
 
     return QImage();
 }
 
-QFixed QFontEngine::subPixelPositionForX(QFixed x) const
+QFixedPoint QFontEngine::subPixelPositionFor(const QFixedPoint &position) const
 {
-    if (m_subPixelPositionCount <= 1 || !supportsSubPixelPositions())
-        return QFixed();
-
-    QFixed subPixelPosition;
-    if (x != 0) {
-        subPixelPosition = x - x.floor();
-        QFixed fraction = (subPixelPosition / QFixed::fromReal(1.0 / m_subPixelPositionCount)).floor();
-
-        // Compensate for precision loss in fixed point to make sure we are always drawing at a subpixel position over
-        // the lower boundary for the selected rasterization by adding 1/64.
-        subPixelPosition = fraction / QFixed(m_subPixelPositionCount) + QFixed::fromReal(0.015625);
+    if (m_subPixelPositionCount <= 1
+            || (!supportsHorizontalSubPixelPositions()
+                && !supportsVerticalSubPixelPositions())) {
+        return QFixedPoint();
     }
-    return subPixelPosition;
+
+    auto f = [&](QFixed v) {
+        if (v != 0) {
+            v = v - v.floor() + QFixed::fromFixed(1);
+            QFixed fraction = (v * m_subPixelPositionCount).floor();
+            v = fraction / QFixed(m_subPixelPositionCount);
+        }
+        return v;
+    };
+
+    return QFixedPoint(f(position.x), f(position.y));
 }
 
-QFontEngine::Glyph *QFontEngine::glyphData(glyph_t, QFixed,
-                                           QFontEngine::GlyphFormat, const QTransform &)
+QFontEngine::Glyph *QFontEngine::glyphData(glyph_t,
+                                           const QFixedPoint &,
+                                           QFontEngine::GlyphFormat,
+                                           const QTransform &)
 {
     return nullptr;
 }
@@ -915,12 +921,9 @@ void QFontEngine::removeGlyphFromCache(glyph_t)
 QFontEngine::Properties QFontEngine::properties() const
 {
     Properties p;
-    p.postscriptName
-            = QFontEngine::convertToPostscriptFontFamilyName(fontDef.family.toUtf8())
-            + '-'
-            + QByteArray::number(fontDef.style)
-            + '-'
-            + QByteArray::number(fontDef.weight);
+    p.postscriptName =
+            QFontEngine::convertToPostscriptFontFamilyName(fontDef.families.first().toUtf8()) + '-'
+            + QByteArray::number(fontDef.style) + '-' + QByteArray::number(fontDef.weight);
     p.ascent = ascent();
     p.descent = descent();
     p.leading = leading();
@@ -1730,7 +1733,9 @@ void QFontEngineMulti::ensureFallbackFamiliesQueried()
     if (styleHint == QFont::AnyStyle && fontDef.fixedPitch)
         styleHint = QFont::TypeWriter;
 
-    setFallbackFamiliesList(qt_fallbacksForFamily(fontDef.family, QFont::Style(fontDef.style), styleHint, QChar::Script(m_script)));
+    setFallbackFamiliesList(qt_fallbacksForFamily(fontDef.families.first(),
+                                                  QFont::Style(fontDef.style), styleHint,
+                                                  QChar::Script(m_script)));
 }
 
 void QFontEngineMulti::setFallbackFamiliesList(const QStringList &fallbackFamilies)
@@ -1744,7 +1749,7 @@ void QFontEngineMulti::setFallbackFamiliesList(const QStringList &fallbackFamili
         QFontEngine *engine = m_engines.at(0);
         engine->ref.ref();
         m_engines[1] = engine;
-        m_fallbackFamilies << fontDef.family;
+        m_fallbackFamilies << fontDef.families.first();
     } else {
         m_engines.resize(m_fallbackFamilies.size() + 1);
     }
@@ -1771,8 +1776,7 @@ QFontEngine *QFontEngineMulti::loadEngine(int at)
 {
     QFontDef request(fontDef);
     request.styleStrategy |= QFont::NoFontMerging;
-    request.family = fallbackFamilyAt(at - 1);
-    request.families = QStringList(request.family);
+    request.families = QStringList(fallbackFamilyAt(at - 1));
 
     // At this point, the main script of the text has already been considered
     // when fetching the list of fallback families from the database, and the
@@ -2216,7 +2220,7 @@ QImage QFontEngineMulti::alphaMapForGlyph(glyph_t glyph)
     return engine(which)->alphaMapForGlyph(stripped(glyph));
 }
 
-QImage QFontEngineMulti::alphaMapForGlyph(glyph_t glyph, QFixed subPixelPosition)
+QImage QFontEngineMulti::alphaMapForGlyph(glyph_t glyph, const QFixedPoint &subPixelPosition)
 {
     const int which = highByte(glyph);
     return engine(which)->alphaMapForGlyph(stripped(glyph), subPixelPosition);
@@ -2228,13 +2232,17 @@ QImage QFontEngineMulti::alphaMapForGlyph(glyph_t glyph, const QTransform &t)
     return engine(which)->alphaMapForGlyph(stripped(glyph), t);
 }
 
-QImage QFontEngineMulti::alphaMapForGlyph(glyph_t glyph, QFixed subPixelPosition, const QTransform &t)
+QImage QFontEngineMulti::alphaMapForGlyph(glyph_t glyph,
+                                          const QFixedPoint &subPixelPosition,
+                                          const QTransform &t)
 {
     const int which = highByte(glyph);
     return engine(which)->alphaMapForGlyph(stripped(glyph), subPixelPosition, t);
 }
 
-QImage QFontEngineMulti::alphaRGBMapForGlyph(glyph_t glyph, QFixed subPixelPosition, const QTransform &t)
+QImage QFontEngineMulti::alphaRGBMapForGlyph(glyph_t glyph,
+                                             const QFixedPoint &subPixelPosition,
+                                             const QTransform &t)
 {
     const int which = highByte(glyph);
     return engine(which)->alphaRGBMapForGlyph(stripped(glyph), subPixelPosition, t);

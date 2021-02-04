@@ -2902,6 +2902,9 @@ int QMacStyle::styleHint(StyleHint sh, const QStyleOption *opt, const QWidget *w
     case SH_Table_GridLineColor:
         ret = int(qt_mac_toQColor(NSColor.gridColor).rgba());
         break;
+    case SH_TabBar_AllowWheelScrolling:
+        ret = false;
+        break;
     default:
         ret = QCommonStyle::styleHint(sh, opt, w, hret);
         break;
@@ -3561,9 +3564,12 @@ void QMacStyle::drawControl(ControlElement ce, const QStyleOption *opt, QPainter
                 proxy()->drawItemPixmap(p, pixr, Qt::AlignVCenter, pixmap);
                 textr.translate(pixmap.width() / pixmap.devicePixelRatio() + 2, 0);
             }
+            QString text = header->text;
+            if (header->textElideMode != Qt::ElideNone)
+                text = header->fontMetrics.elidedText(text, header->textElideMode, textr.width());
 
             proxy()->drawItemText(p, textr, header->textAlignment | Qt::AlignVCenter, header->palette,
-                                       header->state & State_Enabled, header->text, QPalette::ButtonText);
+                                  header->state.testFlag(State_Enabled), text, QPalette::ButtonText);
             p->restore();
         }
         break;
@@ -3989,8 +3995,6 @@ void QMacStyle::drawControl(ControlElement ce, const QStyleOption *opt, QPainter
                         rAdjusted.origin.x -= 3;
                         rAdjusted.size.width += 6;
                         if (isBigSurOrAbove) {
-                            rAdjusted.origin.y -= 1;
-                            rAdjusted.size.height += 1;
                             if (tp == QStyleOptionTab::End)
                                 rAdjusted.origin.x -= 2;
                         }
@@ -6473,9 +6477,9 @@ QSize QMacStyle::sizeFromContents(ContentsType ct, const QStyleOption *opt,
         if (const auto *cb = qstyleoption_cast<const QStyleOptionComboBox *>(opt)) {
             const auto controlSize = d->effectiveAquaSizeConstrain(opt, widget);
             if (!cb->editable) {
-                // Same as CT_PushButton, because we have to fit the focus
+                // See CT_PushButton; we have to fit the focus
                 // ring and a non-editable combo box is a NSPopUpButton.
-                sz.rwidth() += QMacStylePrivate::PushButtonLeftOffset + QMacStylePrivate::PushButtonRightOffset + 12;
+                sz.rwidth() += QMacStylePrivate::PushButtonLeftOffset + QMacStylePrivate::PushButtonRightOffset + 24;
                 // All values as measured from HIThemeGetButtonBackgroundBounds()
                 if (controlSize != QStyleHelper::SizeMini)
                     sz.rwidth() += 12; // We like 12 over here.

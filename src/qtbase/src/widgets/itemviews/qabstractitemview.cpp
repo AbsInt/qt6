@@ -2642,8 +2642,7 @@ QModelIndexList QAbstractItemView::selectedIndexes() const
         auto isHidden = [this](const QModelIndex &idx) {
             return isIndexHidden(idx);
         };
-        const auto end = indexes.end();
-        indexes.erase(std::remove_if(indexes.begin(), end, isHidden), end);
+        indexes.removeIf(isHidden);
     }
     return indexes;
 }
@@ -3702,8 +3701,10 @@ void QAbstractItemView::startDrag(Qt::DropActions supportedActions)
         else if (supportedActions & Qt::CopyAction && dragDropMode() != QAbstractItemView::InternalMove)
             defaultDropAction = Qt::CopyAction;
         d->dropEventMoved = false;
-        if (drag->exec(supportedActions, defaultDropAction) == Qt::MoveAction && !d->dropEventMoved)
-            d->clearOrRemove();
+        if (drag->exec(supportedActions, defaultDropAction) == Qt::MoveAction && !d->dropEventMoved) {
+            if (dragDropMode() != InternalMove || drag->target() == viewport())
+                d->clearOrRemove();
+        }
         d->dropEventMoved = false;
         // Reset the drop indicator
         d->dropIndicatorRect = QRect();
@@ -4489,9 +4490,7 @@ QModelIndexList QAbstractItemViewPrivate::selectedDraggableIndexes() const
     auto isNotDragEnabled = [this](const QModelIndex &index) {
         return !isIndexDragEnabled(index);
     };
-    indexes.erase(std::remove_if(indexes.begin(), indexes.end(),
-                                 isNotDragEnabled),
-                  indexes.end());
+    indexes.removeIf(isNotDragEnabled);
     return indexes;
 }
 

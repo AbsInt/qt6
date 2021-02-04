@@ -418,7 +418,6 @@
 #include "private/qipaddress_p.h"
 #include "qurlquery.h"
 #include "private/qdir_p.h"
-#include <private/qmemory_p.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -617,7 +616,7 @@ inline QUrlPrivate::~QUrlPrivate()
 
 std::unique_ptr<QUrlPrivate::Error> QUrlPrivate::cloneError() const
 {
-    return error ? qt_make_unique<Error>(*error) : nullptr;
+    return error ? std::make_unique<Error>(*error) : nullptr;
 }
 
 inline void QUrlPrivate::clearError()
@@ -631,7 +630,7 @@ inline void QUrlPrivate::setError(ErrorCode errorCode, const QString &source, in
         // don't overwrite an error set in a previous section during parsing
         return;
     }
-    error = qt_make_unique<Error>();
+    error = std::make_unique<Error>();
     error->code = errorCode;
     error->source = source;
     error->position = supplement;
@@ -1240,27 +1239,23 @@ static const QChar *parseIpFuture(QString &host, const QChar *begin, const QChar
 // ONLY the IPv6 address is parsed here, WITHOUT the brackets
 static const QChar *parseIp6(QString &host, const QChar *begin, const QChar *end, QUrl::ParsingMode mode)
 {
-    // ### Update to use QStringView once QStringView::indexOf and QStringView::lastIndexOf exists
-    QString decoded;
+    QStringView decoded(begin, end);
+    QString decodedBuffer;
     if (mode == QUrl::TolerantMode) {
         // this struct is kept in automatic storage because it's only 4 bytes
         const ushort decodeColon[] = { decode(':'), 0 };
-        if (qt_urlRecode(decoded, QStringView{begin, end}, QUrl::ComponentFormattingOption::PrettyDecoded, decodeColon) == 0)
-            decoded = QString(begin, end-begin);
-    } else {
-      decoded = QString(begin, end-begin);
+        if (qt_urlRecode(decodedBuffer, decoded, QUrl::ComponentFormattingOption::PrettyDecoded, decodeColon))
+            decoded = decodedBuffer;
     }
 
-    const QLatin1String zoneIdIdentifier("%25");
+    const QStringView zoneIdIdentifier(u"%25");
     QIPAddressUtils::IPv6Address address;
-    QString zoneId;
-
-    const QChar *endBeforeZoneId = decoded.constEnd();
+    QStringView zoneId;
 
     int zoneIdPosition = decoded.indexOf(zoneIdIdentifier);
     if ((zoneIdPosition != -1) && (decoded.lastIndexOf(zoneIdIdentifier) == zoneIdPosition)) {
         zoneId = decoded.mid(zoneIdPosition + zoneIdIdentifier.size());
-        endBeforeZoneId = decoded.constBegin() + zoneIdPosition;
+        decoded.truncate(zoneIdPosition);
 
         // was there anything after the zone ID separator?
         if (zoneId.isEmpty())
@@ -1269,14 +1264,14 @@ static const QChar *parseIp6(QString &host, const QChar *begin, const QChar *end
 
     // did the address become empty after removing the zone ID?
     // (it might have always been empty)
-    if (decoded.constBegin() == endBeforeZoneId)
+    if (decoded.isEmpty())
         return end;
 
-    const QChar *ret = QIPAddressUtils::parseIp6(address, decoded.constBegin(), endBeforeZoneId);
+    const QChar *ret = QIPAddressUtils::parseIp6(address, decoded.constBegin(), decoded.constEnd());
     if (ret)
         return begin + (ret - decoded.constBegin());
 
-    host.reserve(host.size() + (decoded.constEnd() - decoded.constBegin()));
+    host.reserve(host.size() + (end - begin) + 2);  // +2 for the brackets
     host += QLatin1Char('[');
     QIPAddressUtils::toString(host, address);
 

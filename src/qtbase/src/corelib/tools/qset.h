@@ -93,6 +93,12 @@ public:
 
     inline bool remove(const T &value) { return q_hash.remove(value) != 0; }
 
+    template <typename Pred>
+    inline qsizetype removeIf(Pred predicate)
+    {
+        return QtPrivate::qset_erase_if(*this, predicate);
+    }
+
     inline bool contains(const T &value) const { return q_hash.contains(value); }
 
     bool contains(const QSet<T> &set) const;
@@ -178,7 +184,9 @@ public:
     typedef const_iterator ConstIterator;
     inline qsizetype count() const { return q_hash.count(); }
     inline iterator insert(const T &value)
-        { return static_cast<typename Hash::iterator>(q_hash.insert(value, QHashDummyValue())); }
+        { return q_hash.insert(value, QHashDummyValue()); }
+    inline iterator insert(T &&value)
+        { return q_hash.emplace(std::move(value), QHashDummyValue()); }
     iterator find(const T &value) { return q_hash.find(value); }
     const_iterator find(const T &value) const { return q_hash.find(value); }
     inline const_iterator constFind(const T &value) const { return find(value); }
@@ -198,6 +206,9 @@ public:
     typedef qsizetype size_type;
 
     inline bool empty() const { return isEmpty(); }
+
+    iterator insert(const_iterator, const T &value) { return insert(value); }
+
     // comfort
     inline QSet<T> &operator<<(const T &value) { insert(value); return *this; }
     inline QSet<T> &operator|=(const QSet<T> &other) { unite(other); return *this; }
@@ -357,6 +368,12 @@ public:
     { while (c->constEnd() != (n = i)) if (*i++ == t) return true; return false; }
 };
 #endif // QT_NO_JAVA_STYLE_ITERATORS
+
+template <typename T, typename Predicate>
+qsizetype erase_if(QSet<T> &set, Predicate pred)
+{
+    return QtPrivate::qset_erase_if(set, pred);
+}
 
 QT_END_NAMESPACE
 

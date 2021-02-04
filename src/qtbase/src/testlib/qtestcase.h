@@ -246,8 +246,14 @@ namespace QTest
         return qstrdup(me.valueToKey(int(e))); // int cast is necessary to support enum classes
     }
 
+    template <typename T>
+    inline typename std::enable_if<!QtPrivate::IsQEnumHelper<T>::Value && std::is_enum_v<T>, char*>::type toString(const T &e)
+    {
+        return qstrdup(QByteArray::number(static_cast<std::underlying_type_t<T>>(e)).constData());
+    }
+
     template <typename T> // Fallback
-    inline typename std::enable_if<!QtPrivate::IsQEnumHelper<T>::Value, char*>::type toString(const T &)
+    inline typename std::enable_if<!QtPrivate::IsQEnumHelper<T>::Value && !std::is_enum_v<T>, char*>::type toString(const T &)
     {
         return nullptr;
     }
@@ -370,6 +376,11 @@ namespace QTest
 
     Q_TESTLIB_EXPORT bool qCompare(int t1, int t2, const char *actual, const char *expected,
                                    const char *file, int line);
+
+#if QT_POINTER_SIZE == 8
+    Q_TESTLIB_EXPORT bool qCompare(qsizetype t1, qsizetype t2, const char *actual, const char *expected,
+                                   const char *file, int line);
+#endif
 
     Q_TESTLIB_EXPORT bool qCompare(unsigned t1, unsigned t2, const char *actual, const char *expected,
                                    const char *file, int line);

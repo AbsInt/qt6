@@ -209,6 +209,11 @@ void QQmlJSImporter::processImport(
         QQmlJSImporter::AvailableTypes *types,
         const QString &prefix)
 {
+    const QString anonPrefix = QStringLiteral("$anonymous$");
+
+    if (!prefix.isEmpty())
+        types->qmlNames.insert(prefix, {}); // Empty type means "this is the prefix"
+
     for (auto it = import.scripts.begin(); it != import.scripts.end(); ++it)
         types->qmlNames.insert(prefixedName(prefix, it.key()), it.value());
 
@@ -218,6 +223,11 @@ void QQmlJSImporter::processImport(
         types->cppNames.insert(val->internalName(), val);
 
         const auto exports = val->exports();
+        if (exports.isEmpty()) {
+            types->qmlNames.insert(
+                        prefixedName(prefix, prefixedName(anonPrefix, val->internalName())), val);
+        }
+
         for (const auto &valExport : exports)
             types->qmlNames.insert(prefixedName(prefix, valExport.type()), val);
     }

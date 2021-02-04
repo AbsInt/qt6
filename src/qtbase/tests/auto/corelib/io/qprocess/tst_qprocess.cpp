@@ -29,7 +29,10 @@
 
 #include <emulationdetector.h>
 
-#include <QtTest/QtTest>
+#include <QTest>
+#include <QTestEventLoop>
+#include <QSignalSpy>
+
 #include <QtCore/QProcess>
 #include <QtCore/QDir>
 #include <QtCore/QElapsedTimer>
@@ -268,12 +271,14 @@ void tst_QProcess::simpleStart()
     QCOMPARE(qvariant_cast<QProcess::ProcessState>(spy.at(2).at(0)), QProcess::NotRunning);
 }
 
+#ifdef Q_OS_UNIX
 static const char messageFromChildProcess[] = "Message from the child process";
 static void childProcessModifier(int fd)
 {
     QT_WRITE(fd, messageFromChildProcess, sizeof(messageFromChildProcess) - 1);
     QT_CLOSE(fd);
 }
+#endif
 
 void tst_QProcess::setChildProcessModifier()
 {
@@ -1120,6 +1125,10 @@ void tst_QProcess::forwardedChannels_data()
             << true
             << int(QProcess::SeparateChannels) << int(QProcess::ManagedInputChannel)
             << QByteArray("out data") << QByteArray("err data");
+    QTest::newRow("detached-merged-forwarding")
+            << true
+            << int(QProcess::MergedChannels) << int(QProcess::ManagedInputChannel)
+            << QByteArray("out data" "err data") << QByteArray();
 }
 
 void tst_QProcess::forwardedChannels()
@@ -2021,14 +2030,18 @@ void tst_QProcess::setStandardOutputProcess_data()
 void tst_QProcess::setStandardOutputProcess()
 {
     QProcess source;
+    QProcess intermediate;
     QProcess sink;
 
     QFETCH(bool, merged);
     QFETCH(bool, waitForBytesWritten);
     source.setProcessChannelMode(merged ? QProcess::MergedChannels : QProcess::SeparateChannels);
-    source.setStandardOutputProcess(&sink);
+    source.setStandardOutputProcess(&intermediate);
+    intermediate.setStandardOutputProcess(&sink);
 
     source.start("testProcessEcho2/testProcessEcho2");
+    intermediate.setProgram("testProcessEcho/testProcessEcho");
+    QVERIFY(intermediate.startDetached());
     sink.start("testProcessEcho2/testProcessEcho2");
 
     QByteArray data("Hello, World");

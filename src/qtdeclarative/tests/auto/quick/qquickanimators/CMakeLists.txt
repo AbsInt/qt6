@@ -18,6 +18,7 @@ qt_internal_add_test(tst_qquickanimators
         ../shared/visualtestutil.cpp ../shared/visualtestutil.h
         tst_qquickanimators.cpp
     DEFINES
+        QT_DISABLE_DEPRECATED_BEFORE=0
         QT_QMLTEST_DATADIR=\\\"${CMAKE_CURRENT_SOURCE_DIR}/data\\\"
     INCLUDE_DIRECTORIES
         ../../shared
@@ -31,7 +32,7 @@ qt_internal_add_test(tst_qquickanimators
 )
 
 #### Keys ignored in scope 1:.:.:qquickanimators.pro:<TRUE>:
-# DISTFILES = "data/*"
+# OTHER_FILES = "data/positionerWithAnimator.qml" "data/windowWithAnimator.qml" "data/animatorImplicitFrom.qml"
 
 ## Scopes:
 #####################################################################

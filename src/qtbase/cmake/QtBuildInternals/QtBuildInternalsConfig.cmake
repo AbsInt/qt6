@@ -13,6 +13,17 @@ if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/QtBuildInternalsExtra.cmake")
     include(${CMAKE_CURRENT_LIST_DIR}/QtBuildInternalsExtra.cmake)
 endif()
 
+# The variables might have already been set in QtBuildInternalsExtra.cmake if the file is included
+# while building a new module and not QtBase. In that case, stop overriding the value.
+if(NOT INSTALL_CMAKE_NAMESPACE)
+    set(INSTALL_CMAKE_NAMESPACE "Qt${PROJECT_VERSION_MAJOR}"
+        CACHE STRING "CMake namespace [Qt${PROJECT_VERSION_MAJOR}]")
+endif()
+if(NOT QT_CMAKE_EXPORT_NAMESPACE)
+    set(QT_CMAKE_EXPORT_NAMESPACE "Qt${PROJECT_VERSION_MAJOR}"
+        CACHE STRING "CMake namespace used when exporting targets [Qt${PROJECT_VERSION_MAJOR}]")
+endif()
+
 macro(qt_set_up_build_internals_paths)
     # Set up the paths for the cmake modules located in the prefix dir. Prepend, so the paths are
     # least important compared to the source dir ones, but more important than command line
@@ -73,6 +84,12 @@ function(qt_build_internals_disable_pkg_config_if_needed)
 
     if(APPLE OR WIN32 OR QNX OR ANDROID OR (NOT PKG_CONFIG_EXECUTABLE))
         set(pkg_config_enabled OFF)
+    endif()
+
+    # Features won't have been evaluated yet if this is the first run, have to evaluate this here
+    if(NOT "${FEATURE_pkg_config}" AND "${INPUT_pkg_config}"
+       AND NOT "${INPUT_pkg_config}" STREQUAL "undefined")
+        set(FEATURE_pkg_config ON)
     endif()
 
     # If user explicitly specified a value for the feature, honor it, even if it might break

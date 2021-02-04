@@ -208,17 +208,6 @@ endfunction()
 qt_internal_set_up_global_paths()
 qt_get_relocatable_install_prefix(QT_BUILD_INTERNALS_RELOCATABLE_INSTALL_PREFIX)
 
-# The variables might have already been set in QtBuildInternalsExtra.cmake if the file is included
-# while building a new module and not QtBase. In that case, stop overriding the value.
-if(NOT INSTALL_CMAKE_NAMESPACE)
-    set(INSTALL_CMAKE_NAMESPACE "Qt${PROJECT_VERSION_MAJOR}"
-        CACHE STRING "CMake namespace [Qt${PROJECT_VERSION_MAJOR}]")
-endif()
-if(NOT QT_CMAKE_EXPORT_NAMESPACE)
-    set(QT_CMAKE_EXPORT_NAMESPACE "Qt${PROJECT_VERSION_MAJOR}"
-        CACHE STRING "CMake namespace used when exporting targets [Qt${PROJECT_VERSION_MAJOR}]")
-endif()
-
 set(QT_CMAKE_DIR "${CMAKE_CURRENT_LIST_DIR}")
 
 # Find the path to mkspecs/, depending on whether we are building as part of a standard qtbuild,
@@ -269,14 +258,14 @@ function(qt_setup_tool_path_command)
     set(bindir "${QT_BUILD_INTERNALS_RELOCATABLE_INSTALL_PREFIX}/${INSTALL_BINDIR}")
     file(TO_NATIVE_PATH "${bindir}" bindir)
     list(APPEND command COMMAND)
-    list(APPEND command set \"PATH=${bindir}$<SEMICOLON>%PATH%\")
+    list(APPEND command set PATH=${bindir}$<SEMICOLON>%PATH%)
     set(QT_TOOL_PATH_SETUP_COMMAND "${command}" CACHE INTERNAL "internal command prefix for tool invocations" FORCE)
 endfunction()
 qt_setup_tool_path_command()
 
 # Platform define path, etc.
 if(WIN32)
-    set(QT_DEFAULT_PLATFORM_DEFINITIONS UNICODE _UNICODE WIN32 _ENABLE_EXTENDED_ALIGNED_STORAGE)
+    set(QT_DEFAULT_PLATFORM_DEFINITIONS WIN32 _ENABLE_EXTENDED_ALIGNED_STORAGE)
     if(CMAKE_SIZEOF_VOID_P EQUAL 8)
         list(APPEND QT_DEFAULT_PLATFORM_DEFINITIONS WIN64 _WIN64)
     endif()
@@ -326,7 +315,7 @@ elseif(QNX)
     set(compiler_x86-64 x86_64)
     set(compiler_x86 x86)
     foreach(arch aarch64le armle-v7 x86-64 x86)
-        if (CMAKE_CXX_COMPILER_TARGET MATCHES "${compiler_${arch}}")
+        if (CMAKE_CXX_COMPILER_TARGET MATCHES "${compiler_${arch}}$")
             set(QT_DEFAULT_MKSPEC qnx-${arch}-qcc)
         endif()
     endforeach()

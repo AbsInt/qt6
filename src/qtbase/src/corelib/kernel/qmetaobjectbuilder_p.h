@@ -125,6 +125,7 @@ public:
     QMetaMethodBuilder addConstructor(const QMetaMethod& prototype);
 
     QMetaPropertyBuilder addProperty(const QByteArray& name, const QByteArray& type, int notifierId=-1);
+    QMetaPropertyBuilder addProperty(const QByteArray& name, const QByteArray& type, QMetaType metaType, int notifierId=-1);
     QMetaPropertyBuilder addProperty(const QMetaProperty& prototype);
 
     QMetaEnumBuilder addEnumerator(const QByteArray& name);
@@ -166,8 +167,6 @@ public:
     void setStaticMetacallFunction(QMetaObjectBuilder::StaticMetacallFunction value);
 
     QMetaObject *toMetaObject() const;
-    QByteArray toRelocatableData(bool * = nullptr) const;
-    static void fromRelocatableData(QMetaObject *, const QMetaObject *, const QByteArray &);
 
 #ifndef QT_NO_DATASTREAM
     void serialize(QDataStream& stream) const;

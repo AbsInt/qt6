@@ -38,11 +38,7 @@
 ****************************************************************************/
 
 #include <QtQml/qqmlextensionplugin.h>
-
-#include "qquicklinearlayout_p.h"
-#include "qquickstacklayout_p.h"
-
-extern void qml_register_types_QtQuick_Layouts();
+#include <QtQuickLayouts/private/qquicklayoutglobal_p.h>
 
 QT_BEGIN_NAMESPACE
 

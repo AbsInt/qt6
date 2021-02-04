@@ -147,6 +147,7 @@ private slots:
     void aliasProperties();
     void aliasPropertiesAndSignals();
     void aliasPropertyChangeSignals();
+    void qtbug_89822();
     void componentCompositeType();
     void i18n();
     void i18n_data();
@@ -312,6 +313,7 @@ private slots:
     void typeWrapperToVariant();
 
     void extendedForeignTypes();
+    void foreignTypeSingletons();
 
     void inlineComponent();
     void inlineComponent_data();
@@ -343,6 +345,7 @@ private slots:
     void extendedNamespace();
     void factorySingleton();
     void extendedSingleton();
+    void qtbug_85932();
 
 private:
     QQmlEngine engine;
@@ -2211,6 +2214,12 @@ void tst_qqmllanguage::aliasPropertiesAndSignals()
     QScopedPointer<QObject> o(component.create());
     QVERIFY(o);
     QCOMPARE(o->property("test").toBool(), true);
+}
+
+void tst_qqmllanguage::qtbug_89822()
+{
+    QQmlComponent component(&engine, testFileUrl("qtbug_89822.qml"));
+    VERIFY_ERRORS("qtbug_89822.errors.txt");
 }
 
 // Test that the root element in a composite type can be a Component
@@ -4796,7 +4805,7 @@ void tst_qqmllanguage::preservePropertyCacheOnGroupObjects()
     QVERIFY(subCache);
     QQmlPropertyData *pd = subCache->property(QStringLiteral("newProperty"), /*object*/nullptr, /*context*/nullptr);
     QVERIFY(pd);
-    QCOMPARE(pd->propType(), qMetaTypeId<int>());
+    QCOMPARE(pd->propType(), QMetaType::fromType<int>());
 }
 
 void tst_qqmllanguage::propertyCacheInSync()
@@ -5488,6 +5497,16 @@ void tst_qqmllanguage::extendedForeignTypes()
     QCOMPARE(o->property("foreignExtendedObjectName").toString(), QLatin1String("foreignExtended"));
 }
 
+void tst_qqmllanguage::foreignTypeSingletons() {
+    QQmlEngine engine;
+    QQmlComponent component(&engine, testFileUrl("foreignSingleton.qml"));
+    VERIFY_ERRORS(0);
+    QScopedPointer<QObject> o(component.create());
+    QVERIFY(!o.isNull());
+
+    QCOMPARE(o->property("number").toInt(), 42);
+}
+
 void tst_qqmllanguage::selfReference()
 {
     QQmlEngine engine;
@@ -5722,6 +5741,7 @@ void tst_qqmllanguage::inlineComponent_data()
     QTest::newRow("Alias resolves correctly") << testFileUrl("inlineComponentWithAlias.qml") << QColorConstants::Svg::lime << 42 << true;
 
     QTest::newRow("Two inline components in same do not crash (QTBUG-86989)") << testFileUrl("twoInlineComponents.qml") << QColor() << 0 << false;
+    QTest::newRow("Inline components used in same file (QTBUG-89173)") << testFileUrl("inlineComponentsSameFile.qml") << QColor() << 0 << false;
 }
 
 void tst_qqmllanguage::inlineComponentReferenceCycle_data()
@@ -6085,6 +6105,27 @@ void tst_qqmllanguage::extendedSingleton()
     QCOMPARE(obj->property("b").toInt(), 316);
     QCOMPARE(obj->property("c").toInt(), 42);
     QCOMPARE(obj->property("d").toInt(), 9);
+}
+
+void tst_qqmllanguage::qtbug_85932()
+{
+    QString warning1 = QLatin1String("%1:10:9: id is not unique").arg(testFileUrl("SingletonTest.qml").toString());
+    QString warning2 = QLatin1String("%1:4: Error: Due to the preceding error(s), Singleton \"SingletonTest\" could not be loaded.").arg(testFileUrl("qtbug_85932.qml").toString());
+
+    QTest::ignoreMessage(QtMsgType::QtWarningMsg, qPrintable(warning1));
+    QTest::ignoreMessage(QtMsgType::QtWarningMsg, qPrintable(warning2));
+
+    QQmlEngine engine;
+    QList<QQmlError> allWarnings;
+    QObject::connect(&engine, &QQmlEngine::warnings, [&allWarnings](const QList<QQmlError> &warnings) {
+        allWarnings.append(warnings);
+    });
+
+    QQmlComponent c(&engine, testFileUrl("qtbug_85932.qml"));
+    QScopedPointer<QObject> obj(c.create());
+    QTRY_COMPARE(allWarnings.count(), 2);
+    QCOMPARE(allWarnings.at(0).toString(), warning1);
+    QCOMPARE(allWarnings.at(1).toString(), warning2);
 }
 
 QTEST_MAIN(tst_qqmllanguage)

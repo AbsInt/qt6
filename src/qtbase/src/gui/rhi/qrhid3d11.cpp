@@ -1,34 +1,37 @@
 /****************************************************************************
 **
 ** Copyright (C) 2019 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the Qt Gui module
 **
-** $QT_BEGIN_LICENSE:LGPL3$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
 ** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPLv3 included in the
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
 ** packaging of this file. Please review the following information to
 ** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl.html.
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
 ** GNU General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or later as published by the Free
-** Software Foundation and appearing in the file LICENSE.GPL included in
-** the packaging of this file. Please review the following information to
-** ensure the GNU General Public License version 2.0 requirements will be
-** met: http://www.gnu.org/licenses/gpl-2.0.html.
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -220,7 +223,6 @@ bool QRhiD3D11::create(QRhi::Flags flags)
             hasDxgi2 ? "true" : "false", supportsFlipDiscardSwapchain ? "true" : "false");
 
     if (!importedDeviceAndContext) {
-        IDXGIAdapter1 *adapterToUse = nullptr;
         IDXGIAdapter1 *adapter;
         int requestedAdapterIndex = -1;
         if (qEnvironmentVariableIsSet("QT_D3D_ADAPTER_INDEX"))
@@ -253,6 +255,7 @@ bool QRhiD3D11::create(QRhi::Flags flags)
             }
         }
 
+        IDXGIAdapter1 *adapterToUse = nullptr;
         for (int adapterIndex = 0; dxgiFactory->EnumAdapters1(UINT(adapterIndex), &adapter) != DXGI_ERROR_NOT_FOUND; ++adapterIndex) {
             DXGI_ADAPTER_DESC1 desc;
             adapter->GetDesc1(&desc);
@@ -266,6 +269,9 @@ bool QRhiD3D11::create(QRhi::Flags flags)
             if (!adapterToUse && (requestedAdapterIndex < 0 || requestedAdapterIndex == adapterIndex)) {
                 adapterToUse = adapter;
                 adapterLuid = desc.AdapterLuid;
+                driverInfoStruct.deviceName = name.toUtf8();
+                driverInfoStruct.deviceId = desc.DeviceId;
+                driverInfoStruct.vendorId = desc.VendorId;
                 qCDebug(QRHI_LOG_INFO, "  using this adapter");
             } else {
                 adapter->Release();
@@ -323,6 +329,9 @@ bool QRhiD3D11::create(QRhi::Flags flags)
                 DXGI_ADAPTER_DESC desc;
                 adapter->GetDesc(&desc);
                 adapterLuid = desc.AdapterLuid;
+                driverInfoStruct.deviceName = QString::fromUtf16(reinterpret_cast<char16_t *>(desc.Description)).toUtf8();
+                driverInfoStruct.deviceId = desc.DeviceId;
+                driverInfoStruct.vendorId = desc.VendorId;
                 adapter->Release();
             }
             dxgiDev->Release();
@@ -531,6 +540,8 @@ bool QRhiD3D11::isFeatureSupported(QRhi::Feature feature) const
         return true;
     case QRhi::ReadBackAnyTextureFormat:
         return true;
+    case QRhi::PipelineCacheDataLoadSave:
+        return false;
     default:
         Q_UNREACHABLE();
         return false;
@@ -575,6 +586,11 @@ const QRhiNativeHandles *QRhiD3D11::nativeHandles()
     return &nativeHandlesStruct;
 }
 
+QRhiDriverInfo QRhiD3D11::driverInfo() const
+{
+    return driverInfoStruct;
+}
+
 void QRhiD3D11::sendVMemStatsToProfiler()
 {
     // nothing to do here
@@ -594,6 +610,16 @@ void QRhiD3D11::releaseCachedResources()
 bool QRhiD3D11::isDeviceLost() const
 {
     return deviceLost;
+}
+
+QByteArray QRhiD3D11::pipelineCacheData()
+{
+    return QByteArray();
+}
+
+void QRhiD3D11::setPipelineCacheData(const QByteArray &data)
+{
+    Q_UNUSED(data);
 }
 
 QRhiRenderBuffer *QRhiD3D11::createRenderBuffer(QRhiRenderBuffer::Type type, const QSize &pixelSize,

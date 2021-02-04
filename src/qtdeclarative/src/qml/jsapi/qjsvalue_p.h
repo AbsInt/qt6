@@ -83,15 +83,21 @@ class Q_AUTOTEST_EXPORT QJSValuePrivate
         return (m & IsString) ? nullptr : reinterpret_cast<QV4::Value *>(m);
     }
 
+    static QV4::Value *managedValue(QV4::Value &v)
+    {
+        quintptr m = quintptr(v.m());
+        return (m & IsString) ? nullptr : reinterpret_cast<QV4::Value *>(m);
+    }
+
     static const QString *qstring(const QV4::Value &v)
     {
         const quintptr m = quintptr(v.m());
         return (m & IsString) ? reinterpret_cast<QString *>(m & ~IsString) : nullptr;
     }
 
-    static QV4::ReturnedValue encode(const QString &string)
+    static QV4::ReturnedValue encode(QString string)
     {
-        const quintptr m = quintptr(new QString(string)) | IsString;
+        const quintptr m = quintptr(new QString(std::move(string))) | IsString;
         return encodeRawValue(m);
     }
 
@@ -108,14 +114,13 @@ class Q_AUTOTEST_EXPORT QJSValuePrivate
         return QV4::Value::fromHeapObject(reinterpret_cast<QV4::Heap::Base *>(m)).asReturnedValue();
     }
 
-protected:
-    // Only for the test. You're not supposed to subclass QJSValuePrivate otherwise.
+public:
+
     static void setRawValue(QJSValue *jsval, QV4::Value *m)
     {
         jsval->d = encodeRawValue(quintptr(m));
     }
 
-public:
     static QJSValue fromReturnedValue(QV4::ReturnedValue d)
     {
         QJSValue result;
@@ -131,6 +136,19 @@ public:
             return nullptr;
         if (const QV4::Value *value = managedValue(v))
             return value->as<T>();
+        return nullptr;
+    }
+
+    // This is a move operation and transfers ownership.
+    static QV4::Value *takeManagedValue(QJSValue *jsval)
+    {
+        QV4::Value v = QV4::Value::fromReturnedValue(jsval->d);
+        if (!v.isManaged())
+            return nullptr;
+        if (QV4::Value *value = managedValue(v)) {
+            setValue(jsval, QV4::Encode::undefined());
+            return value;
+        }
         return nullptr;
     }
 
@@ -160,14 +178,19 @@ public:
         return QV4::Encode::undefined();
     }
 
-    static void setString(QJSValue *jsval, const QString &s)
+    static void setString(QJSValue *jsval, QString s)
     {
-        jsval->d = encode(s);
+        jsval->d = encode(std::move(s));
     }
 
     static void setValue(QJSValue *jsval, const QV4::Value &v)
     {
         jsval->d = v.isManaged() ? encode(v) : v.asReturnedValue();
+    }
+
+    static void adoptValue(QJSValue *jsval, QV4::Value *v)
+    {
+        jsval->d = v->isManaged() ? encodeRawValue(quintptr(v)) : v->asReturnedValue();
     }
 
     // Moves any QString onto the V4 heap, changing the value to reflect that.

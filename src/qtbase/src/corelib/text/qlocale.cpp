@@ -102,7 +102,7 @@ QLocale::Language QLocalePrivate::codeToLanguage(QStringView code) noexcept
 {
     const auto len = code.size();
     if (len != 2 && len != 3)
-        return QLocale::C;
+        return QLocale::AnyLanguage;
     char16_t uc1 = code[0].toLower().unicode();
     char16_t uc2 = code[1].toLower().unicode();
     char16_t uc3 = len > 2 ? code[2].toLower().unicode() : 0;
@@ -131,7 +131,7 @@ QLocale::Language QLocalePrivate::codeToLanguage(QStringView code) noexcept
         if (uc1 == 'j' && uc2 == 'i') // ji -> yi
             return QLocale::Yiddish;
     }
-    return QLocale::C;
+    return QLocale::AnyLanguage;
 }
 
 QLocale::Script QLocalePrivate::codeToScript(QStringView code) noexcept
@@ -175,7 +175,7 @@ QLocale::Country QLocalePrivate::codeToCountry(QStringView code) noexcept
 
 QLatin1String QLocalePrivate::languageToCode(QLocale::Language language)
 {
-    if (language == QLocale::AnyLanguage)
+    if (language == QLocale::AnyLanguage || language > QLocale::LastLanguage)
         return QLatin1String();
     if (language == QLocale::C)
         return QLatin1String("C");
@@ -194,7 +194,7 @@ QLatin1String QLocalePrivate::scriptToCode(QLocale::Script script)
 
 QLatin1String QLocalePrivate::countryToCode(QLocale::Country country)
 {
-    if (country == QLocale::AnyCountry)
+    if (country == QLocale::AnyCountry || country > QLocale::LastCountry)
         return QLatin1String();
 
     const unsigned char *c = country_code_list + 3 * country;
@@ -558,21 +558,11 @@ bool qt_splitLocaleName(QStringView name, QStringView *lang, QStringView *script
             state = NoState;
             break;
         case NoState: // Precluded by loop condition !
-            Q_ASSERT(!"QLocale: This should never happen");
+            Q_UNREACHABLE();
             break;
         }
     }
     return state != LangState;
-}
-
-// TODO: kill this !  Still in use by qttools, patch submitted (2020 October).
-void QLocalePrivate::getLangAndCountry(const QString &name, QLocale::Language &lang,
-                                       QLocale::Script &script, QLocale::Country &land)
-{
-    const auto id = QLocaleId::fromName(name);
-    lang = QLocale::Language(id.language_id);
-    script = QLocale::Script(id.script_id);
-    land = QLocale::Country(id.country_id);
 }
 
 QLocaleId QLocaleId::fromName(const QString &name)
@@ -584,8 +574,8 @@ QLocaleId QLocaleId::fromName(const QString &name)
         return { QLocale::C, 0, 0 };
 
     QLocale::Language langId = QLocalePrivate::codeToLanguage(lang);
-    if (langId == QLocale::C)
-        return QLocaleId { langId, 0, 0 };
+    if (langId == QLocale::AnyLanguage)
+        return { QLocale::C, 0, 0 };
     return { langId, QLocalePrivate::codeToScript(script), QLocalePrivate::codeToCountry(land) };
 }
 
@@ -1356,6 +1346,91 @@ QString QLocale::bcp47Name() const
 }
 
 /*!
+    Returns the two- or three-letter language code for \a language, as defined
+    in the ISO 639 standards.
+
+    \note For \c{QLocale::C} the function returns \c{"C"}.
+    For \c QLocale::AnyLanguage an empty string is returned.
+
+    \since 6.1
+    \sa codeToLanguage(), language(), name(), bcp47Name(), countryToCode(), scriptToCode()
+*/
+QString QLocale::languageToCode(Language language)
+{
+    return QLocalePrivate::languageToCode(language);
+}
+
+/*!
+    Returns the QLocale::Language enum corresponding to the two- or three-letter
+    \a languageCode, as defined in the ISO 639 standards.
+
+    If the code is invalid or not known QLocale::AnyLanguage is returned.
+
+    \since 6.1
+    \sa languageToCode(), codeToCountry(), codeToScript()
+*/
+QLocale::Language QLocale::codeToLanguage(QStringView languageCode) noexcept
+{
+    return QLocalePrivate::codeToLanguage(languageCode);
+}
+
+/*!
+    Returns the two-letter country code for \a country, as defined
+    in the ISO 3166 standard.
+
+    \note For \c{QLocale::AnyCountry} an empty string is returned.
+
+    \since 6.1
+    \sa codeToCountry(), country(), name(), bcp47Name(), languageToCode(), scriptToCode()
+*/
+QString QLocale::countryToCode(Country country)
+{
+    return QLocalePrivate::countryToCode(country);
+}
+
+/*!
+    Returns the QLocale::Country enum corresponding to the two-letter or
+    three-digit \a countryCode, as defined in the ISO 3166 standard.
+
+    If the code is invalid or not known QLocale::AnyCountry is returned.
+
+    \since 6.1
+    \sa countryToCode(), codeToLanguage(), codeToScript()
+*/
+QLocale::Country QLocale::codeToCountry(QStringView countryCode) noexcept
+{
+    return QLocalePrivate::codeToCountry(countryCode);
+}
+
+/*!
+    Returns the four-letter script code for \a script, as defined in the
+    ISO 15924 standard.
+
+    \note For \c{QLocale::AnyScript} an empty string is returned.
+
+    \since 6.1
+    \sa script(), name(), bcp47Name(), languageToCode(), countryToCode()
+*/
+QString QLocale::scriptToCode(Script script)
+{
+    return QLocalePrivate::scriptToCode(script);
+}
+
+/*!
+    Returns the QLocale::Script enum corresponding to the four-letter script
+    \a scriptCode, as defined in the ISO 15924 standard.
+
+    If the code is invalid or not known QLocale::AnyScript is returned.
+
+    \since 6.1
+    \sa scriptToCode(), codeToLanguage(), codeToCountry()
+*/
+QLocale::Script QLocale::codeToScript(QStringView scriptCode) noexcept
+{
+    return QLocalePrivate::codeToScript(scriptCode);
+}
+
+/*!
     Returns a QString containing the name of \a language.
 
     \sa countryToString(), scriptToString(), bcp47Name()
@@ -1840,13 +1915,22 @@ QString QLocale::toString(QTime time, const QString &format) const
 #endif
 
 /*!
-    \since 5.10
+    \since 5.14
 
     Returns a localized string representation of the given \a date in the
-    specified \a format.
+    specified \a format, optionally for a specified calendar \a cal.
     If \a format is an empty string, an empty string is returned.
 
     \sa QDate::toString()
+*/
+QString QLocale::toString(QDate date, QStringView format, QCalendar cal) const
+{
+    return cal.dateTimeToString(format, QDateTime(), date, QTime(), *this);
+}
+
+/*!
+    \since 5.10
+    \overload
 */
 QString QLocale::toString(QDate date, QStringView format) const
 {
@@ -1854,13 +1938,39 @@ QString QLocale::toString(QDate date, QStringView format) const
 }
 
 /*!
+    \since 5.14
+
     Returns a localized string representation of the given \a date according
-    to the specified \a format (see dateFormat()).
+    to the specified \a format (see dateFormat()), optionally for a specified
+    calendar \a cal.
 
     \note Some locales may use formats that limit the range of years they can
     represent.
 */
+QString QLocale::toString(QDate date, FormatType format, QCalendar cal) const
+{
+    if (!date.isValid())
+        return QString();
 
+#ifndef QT_NO_SYSTEMLOCALE
+    if (cal.isGregorian() && d->m_data == &globalLocaleData) {
+        QVariant res = systemLocale()->query(format == LongFormat
+                                             ? QSystemLocale::DateToStringLong
+                                             : QSystemLocale::DateToStringShort,
+                                             date);
+        if (!res.isNull())
+            return res.toString();
+    }
+#endif
+
+    QString format_str = dateFormat(format);
+    return toString(date, format_str, cal);
+}
+
+/*!
+    \since 4.5
+    \overload
+*/
 QString QLocale::toString(QDate date, FormatType format) const
 {
     if (!date.isValid())
@@ -1899,7 +2009,7 @@ static bool timeFormatContainsAP(QStringView format)
 }
 
 /*!
-    \since 5.10
+    \since 4.5
 
     Returns a localized string representation of the given \a time according
     to the specified \a format.
@@ -1913,46 +2023,39 @@ QString QLocale::toString(QTime time, QStringView format) const
 }
 
 /*!
-    \since 5.10
+    \since 5.14
 
     Returns a localized string representation of the given \a dateTime according
-    to the specified \a format.
+    to the specified \a format, optionally for a specified calendar \a cal.
     If \a format is an empty string, an empty string is returned.
 
     \sa QDateTime::toString(), QDate::toString(), QTime::toString()
+*/
+QString QLocale::toString(const QDateTime &dateTime, QStringView format, QCalendar cal) const
+{
+    return cal.dateTimeToString(format, dateTime, QDate(), QTime(), *this);
+}
+
+/*!
+    \since 5.10
+    \overload
 */
 QString QLocale::toString(const QDateTime &dateTime, QStringView format) const
 {
     return QCalendar().dateTimeToString(format, dateTime, QDate(), QTime(), *this);
 }
 
-QString QLocale::toString(QDate date, QStringView format, QCalendar cal) const
-{
-    return cal.dateTimeToString(format, QDateTime(), date, QTime(), *this);
-}
+/*!
+    \since 5.14
 
-QString QLocale::toString(QDate date, QLocale::FormatType format, QCalendar cal) const
-{
-    if (!date.isValid())
-        return QString();
+    Returns a localized string representation of the given \a dateTime according
+    to the specified \a format (see dateTimeFormat()), optionally for a
+    specified calendar \a cal.
 
-#ifndef QT_NO_SYSTEMLOCALE
-    if (cal.isGregorian() && d->m_data == &globalLocaleData) {
-        QVariant res = systemLocale()->query(format == LongFormat
-                                             ? QSystemLocale::DateToStringLong
-                                             : QSystemLocale::DateToStringShort,
-                                             date);
-        if (!res.isNull())
-            return res.toString();
-    }
-#endif
-
-    QString format_str = dateFormat(format);
-    return toString(date, format_str, cal);
-}
-
-QString QLocale::toString(const QDateTime &dateTime, QLocale::FormatType format,
-                          QCalendar cal) const
+    \note Some locales may use formats that limit the range of years they can
+    represent.
+*/
+QString QLocale::toString(const QDateTime &dateTime, FormatType format, QCalendar cal) const
 {
     if (!dateTime.isValid())
         return QString();
@@ -1972,21 +2075,10 @@ QString QLocale::toString(const QDateTime &dateTime, QLocale::FormatType format,
     return toString(dateTime, format_str, cal);
 }
 
-QString QLocale::toString(const QDateTime &dateTime, QStringView format, QCalendar cal) const
-{
-    return cal.dateTimeToString(format, dateTime, QDate(), QTime(), *this);
-}
-
 /*!
     \since 4.4
-
-    Returns a localized string representation of the given \a dateTime according
-    to the specified \a format (see dateTimeFormat()).
-
-    \note Some locales may use formats that limit the range of years they can
-    represent.
+    \overload
 */
-
 QString QLocale::toString(const QDateTime &dateTime, FormatType format) const
 {
     if (!dateTime.isValid())

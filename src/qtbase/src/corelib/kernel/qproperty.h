@@ -402,6 +402,11 @@ public:
         return true;
     }
 
+    void markDirty() {
+        d.markDirty();
+        notify();
+    }
+
 #ifndef Q_CLANG_QDOC
     template <typename Functor>
     QPropertyBinding<T> setBinding(Functor &&f,
@@ -489,7 +494,7 @@ class QBindableInterfaceForProperty
 {
     using T = typename Property::value_type;
 public:
-    // interface for read-only properties. Those do not have a binding()/setBinding() method, but one can
+    // interface for computed properties. Those do not have a binding()/setBinding() method, but one can
     // install observers on them.
     static constexpr QBindableInterface iface = {
         [](const QUntypedPropertyData *d, void *value) -> void
@@ -497,6 +502,28 @@ public:
         nullptr,
         nullptr,
         nullptr,
+        [](const QUntypedPropertyData *d, const QPropertyBindingSourceLocation &location) -> QUntypedPropertyBinding
+        { return Qt::makePropertyBinding([d]() -> T { return static_cast<const Property *>(d)->value(); }, location); },
+        [](const QUntypedPropertyData *d, QPropertyObserver *observer) -> void
+        { observer->setSource(static_cast<const Property *>(d)->bindingData()); },
+        []() { return QMetaType::fromType<T>(); }
+    };
+};
+
+template<typename Property>
+class QBindableInterfaceForProperty<const Property, std::void_t<decltype(std::declval<Property>().binding())>>
+{
+    using T = typename Property::value_type;
+public:
+    // A bindable created from a const property results in a read-only interface, too.
+    static constexpr QBindableInterface iface = {
+
+        [](const QUntypedPropertyData *d, void *value) -> void
+        { *static_cast<T*>(value) = static_cast<const Property *>(d)->value(); },
+        /*setter=*/nullptr,
+        [](const QUntypedPropertyData *d) -> QUntypedPropertyBinding
+        { return static_cast<const Property *>(d)->binding(); },
+        /*setBinding=*/nullptr,
         [](const QUntypedPropertyData *d, const QPropertyBindingSourceLocation &location) -> QUntypedPropertyBinding
         { return Qt::makePropertyBinding([d]() -> T { return static_cast<const Property *>(d)->value(); }, location); },
         [](const QUntypedPropertyData *d, QPropertyObserver *observer) -> void
@@ -548,11 +575,28 @@ public:
 
     bool isValid() const { return data != nullptr; }
     bool isBindable() const { return iface && iface->getBinding; }
+    bool isReadOnly() const { return !(iface && iface->setBinding && iface->setObserver); }
 
     QUntypedPropertyBinding makeBinding(const QPropertyBindingSourceLocation &location = QT_PROPERTY_DEFAULT_BINDING_LOCATION)
     {
         return iface ? iface->makeBinding(data, location) : QUntypedPropertyBinding();
     }
+
+    QUntypedPropertyBinding takeBinding()
+    {
+        if (!iface)
+            return QUntypedPropertyBinding {};
+        // We do not have a dedicated takeBinding function pointer in the interface
+        // therefore we synthesize takeBinding by retrieving the binding with binding
+        // and calling setBinding with a default constructed QUntypedPropertyBinding
+        // afterwards.
+        if (!(iface->getBinding && iface->setBinding))
+            return QUntypedPropertyBinding {};
+        QUntypedPropertyBinding binding = iface->getBinding(data);
+        iface->setBinding(data, QUntypedPropertyBinding{});
+        return binding;
+    }
+
     void observe(QPropertyObserver *observer)
     {
         if (iface)
@@ -622,6 +666,12 @@ public:
     {
         return static_cast<QPropertyBinding<T> &&>(QUntypedBindable::binding());
     }
+
+    QPropertyBinding<T> takeBinding()
+    {
+        return static_cast<QPropertyBinding<T> &&>(QUntypedBindable::takeBinding());
+    }
+
     using QUntypedBindable::setBinding;
     QPropertyBinding<T> setBinding(const QPropertyBinding<T> &binding)
     {
@@ -968,6 +1018,15 @@ public:
         return bd && bd->binding() != nullptr;
     }
 
+    void markDirty() {
+        QBindingStorage *storage = qGetBindingStorage(owner());
+        auto bd = storage->bindingData(this, /*create=*/false);
+        if (bd) { // if we have no BindingData, nobody can listen anyway
+            bd->markDirty();
+            notify(bd);
+        }
+    }
+
     QPropertyBinding<T> binding() const
     {
         auto *bd = qGetBindingStorage(owner())->bindingData(this);
@@ -1011,21 +1070,43 @@ private:
 
 #define Q_OBJECT_BINDABLE_PROPERTY3(Class, Type, name) \
     static constexpr size_t _qt_property_##name##_offset() { \
-        QT_WARNING_PUSH QT_WARNING_DISABLE_INVALID_OFFSETOF \
         return offsetof(Class, name); \
-        QT_WARNING_POP \
     } \
     QObjectBindableProperty<Class, Type, Class::_qt_property_##name##_offset, nullptr> name;
 
 #define Q_OBJECT_BINDABLE_PROPERTY4(Class, Type, name, Signal) \
     static constexpr size_t _qt_property_##name##_offset() { \
-        QT_WARNING_PUSH QT_WARNING_DISABLE_INVALID_OFFSETOF \
         return offsetof(Class, name); \
-        QT_WARNING_POP \
     } \
     QObjectBindableProperty<Class, Type, Class::_qt_property_##name##_offset, Signal> name;
 
-#define Q_OBJECT_BINDABLE_PROPERTY(...) QT_OVERLOADED_MACRO(Q_OBJECT_BINDABLE_PROPERTY, __VA_ARGS__)
+#define Q_OBJECT_BINDABLE_PROPERTY(...) \
+    QT_WARNING_PUSH QT_WARNING_DISABLE_INVALID_OFFSETOF \
+    QT_OVERLOADED_MACRO(Q_OBJECT_BINDABLE_PROPERTY, __VA_ARGS__) \
+    QT_WARNING_POP
+
+#define Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS4(Class, Type, name, value)                            \
+    static constexpr size_t _qt_property_##name##_offset()                                         \
+    {                                                                                              \
+        return offsetof(Class, name);                                                              \
+    }                                                                                              \
+    QObjectBindableProperty<Class, Type, Class::_qt_property_##name##_offset, nullptr> name =      \
+            QObjectBindableProperty<Class, Type, Class::_qt_property_##name##_offset, nullptr>(    \
+                    value);
+
+#define Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS5(Class, Type, name, value, Signal)                    \
+    static constexpr size_t _qt_property_##name##_offset()                                         \
+    {                                                                                              \
+        return offsetof(Class, name);                                                              \
+    }                                                                                              \
+    QObjectBindableProperty<Class, Type, Class::_qt_property_##name##_offset, Signal> name =       \
+            QObjectBindableProperty<Class, Type, Class::_qt_property_##name##_offset, Signal>(     \
+                    value);
+
+#define Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(...)                                                  \
+    QT_WARNING_PUSH QT_WARNING_DISABLE_INVALID_OFFSETOF \
+    QT_OVERLOADED_MACRO(Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS, __VA_ARGS__) \
+    QT_WARNING_POP
 
 template<typename Class, typename T, auto Offset, auto Getter>
 class QObjectComputedProperty : public QUntypedPropertyData
@@ -1093,6 +1174,14 @@ public:
     {
         auto *storage = const_cast<QBindingStorage *>(qGetBindingStorage(owner()));
         return *storage->bindingData(const_cast<QObjectComputedProperty *>(this), true);
+    }
+
+    void markDirty() {
+        // computed property can't store a binding, so there's nothing to mark
+        auto *storage = const_cast<QBindingStorage *>(qGetBindingStorage(owner()));
+        auto bd = storage->bindingData(const_cast<QObjectComputedProperty *>(this), false);
+        if (bd)
+            bindingData().notifyObservers(this);
     }
 
 private:

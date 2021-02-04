@@ -428,6 +428,7 @@ public:
 #ifndef QT_NO_DATASTREAM
     bool save(QDataStream &stream, const void *data) const;
     bool load(QDataStream &stream, void *data) const;
+    bool hasRegisteredDataStreamOperators() const;
 
 #if QT_DEPRECATED_SINCE(6, 0)
     QT_DEPRECATED_VERSION_6_0
@@ -2082,6 +2083,8 @@ constexpr auto typenameHelper()
             "auto __cdecl QtPrivate::typenameHelper<"
 #elif defined(Q_CC_CLANG)
             "auto QtPrivate::typenameHelper() [T = "
+#elif defined(Q_CC_GHS)
+            "auto QtPrivate::typenameHelper<T>() [with T = "
 #else
             "constexpr auto QtPrivate::typenameHelper() [with T = "
 #endif
@@ -2217,7 +2220,7 @@ public:
 
     static constexpr QMetaTypeInterface::DtorFn getDtor()
     {
-        if constexpr (std::is_destructible_v<S>)
+        if constexpr (std::is_destructible_v<S> && !std::is_trivially_destructible_v<S>)
             return [](const QMetaTypeInterface *, void *addr) {
                 reinterpret_cast<S *>(addr)->~S();
             };

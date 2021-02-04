@@ -54,6 +54,7 @@ class tst_QSocketNotifier : public QObject
 {
     Q_OBJECT
 private slots:
+    void constructing();
     void unexpectedDisconnection();
     void mixingWithTimers();
 #ifdef Q_OS_UNIX
@@ -83,6 +84,51 @@ static QHostAddress makeNonAny(const QHostAddress &address,
     if (address == QHostAddress::AnyIPv6)
         return QHostAddress::LocalHostIPv6;
     return address;
+}
+
+void tst_QSocketNotifier::constructing()
+{
+    const qintptr fd = 15;
+
+    // Test constructing with no descriptor assigned.
+    {
+        QSocketNotifier notifier(QSocketNotifier::Read);
+
+        QVERIFY(!notifier.isValid());
+        QCOMPARE(notifier.socket(), Q_INT64_C(-1));
+        QCOMPARE(notifier.type(), QSocketNotifier::Read);
+        QVERIFY(!notifier.isEnabled());
+
+        notifier.setEnabled(true);
+        QVERIFY(!notifier.isEnabled());
+
+        notifier.setSocket(fd);
+        QVERIFY(notifier.isValid());
+        QCOMPARE(notifier.socket(), fd);
+        QVERIFY(!notifier.isEnabled());
+        notifier.setEnabled(true);
+        QVERIFY(notifier.isEnabled());
+    }
+
+    // Test constructing with the notifications enabled by default.
+    {
+        QSocketNotifier notifier(fd, QSocketNotifier::Write);
+
+        QVERIFY(notifier.isValid());
+        QCOMPARE(notifier.socket(), fd);
+        QCOMPARE(notifier.type(), QSocketNotifier::Write);
+        QVERIFY(notifier.isEnabled());
+
+        notifier.setSocket(fd);
+        QVERIFY(!notifier.isEnabled());
+
+        notifier.setEnabled(true);
+        QVERIFY(notifier.isEnabled());
+        notifier.setSocket(-1);
+        QVERIFY(!notifier.isValid());
+        QCOMPARE(notifier.socket(), Q_INT64_C(-1));
+        QVERIFY(!notifier.isEnabled());
+    }
 }
 
 class UnexpectedDisconnectTester : public QObject
@@ -147,7 +193,7 @@ void tst_QSocketNotifier::unexpectedDisconnection()
     readEnd1.connectToHost(server.serverAddress(), server.serverPort());
     QVERIFY(readEnd1.waitForWrite());
     QCOMPARE(readEnd1.state(), QAbstractSocket::ConnectedState);
-    QVERIFY(server.waitForNewConnection());
+    QVERIFY(server.waitForNewConnection(5000));
     QTcpSocket *writeEnd1 = server.nextPendingConnection();
     QVERIFY(writeEnd1 != 0);
 
@@ -156,7 +202,7 @@ void tst_QSocketNotifier::unexpectedDisconnection()
     readEnd2.connectToHost(server.serverAddress(), server.serverPort());
     QVERIFY(readEnd2.waitForWrite());
     QCOMPARE(readEnd2.state(), QAbstractSocket::ConnectedState);
-    QVERIFY(server.waitForNewConnection());
+    QVERIFY(server.waitForNewConnection(5000));
     QTcpSocket *writeEnd2 = server.nextPendingConnection();
     QVERIFY(writeEnd2 != 0);
 

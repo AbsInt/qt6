@@ -83,8 +83,7 @@ QVulkanInstance *QSGRhiSupport::defaultVulkanInstance()
                                         << "VK_LAYER_GOOGLE_unique_objects");
 #endif
         }
-        s_vulkanInstance->setExtensions(QByteArrayList()
-                                        << "VK_KHR_get_physical_device_properties2");
+        s_vulkanInstance->setExtensions(QRhiVulkanInitParams::preferredInstanceExtensions());
         if (!s_vulkanInstance->create()) {
             qWarning("Failed to create Vulkan instance");
             delete s_vulkanInstance;
@@ -206,6 +205,11 @@ void QSGRhiSupport::applySettings()
     // EnableProfiling + DebugMarkers
     m_profile = uint(qEnvironmentVariableIntValue("QSG_RHI_PROFILE"));
 
+    // EnablePipelineCacheDataSave
+    m_pipelineCacheSave = qEnvironmentVariable("QSG_RHI_PIPELINE_CACHE_SAVE");
+
+    m_pipelineCacheLoad = qEnvironmentVariable("QSG_RHI_PIPELINE_CACHE_LOAD");
+
     m_shaderEffectDebug = uint(qEnvironmentVariableIntValue("QSG_RHI_SHADEREFFECT_DEBUG"));
 
     m_preferSoftwareRenderer = uint(qEnvironmentVariableIntValue("QSG_RHI_PREFER_SOFTWARE_RENDERER"));
@@ -216,8 +220,11 @@ void QSGRhiSupport::applySettings()
 
     const QString backendName = rhiBackendName();
     qCDebug(QSG_LOG_INFO,
-            "Using QRhi with backend %s\n  graphics API debug/validation layers: %d\n  QRhi profiling and debug markers: %d",
-            qPrintable(backendName), m_debugLayer, m_profile);
+            "Using QRhi with backend %s\n"
+            "  Graphics API debug/validation layers: %d\n"
+            "  QRhi profiling and debug markers: %d\n"
+            "  Shader/pipeline cache collection: %d",
+            qPrintable(backendName), m_debugLayer, m_profile, !m_pipelineCacheSave.isEmpty());
     if (m_preferSoftwareRenderer)
         qCDebug(QSG_LOG_INFO, "Prioritizing software renderers");
 }
@@ -345,7 +352,7 @@ QSurface::SurfaceType QSGRhiSupport::windowSurfaceType() const
     case QRhi::OpenGLES2:
         return QSurface::OpenGLSurface;
     case QRhi::D3D11:
-        return QSurface::OpenGLSurface; // yup, OpenGLSurface
+        return QSurface::Direct3DSurface;
     case QRhi::Metal:
         return QSurface::MetalSurface;
     default:
@@ -577,6 +584,8 @@ QRhi *QSGRhiSupport::createRhi(QQuickWindow *window, QOffscreenSurface *offscree
         flags |= QRhi::EnableProfiling | QRhi::EnableDebugMarkers;
     if (isSoftwareRendererRequested())
         flags |= QRhi::PreferSoftwareRenderer;
+    if (!m_pipelineCacheSave.isEmpty())
+        flags |= QRhi::EnablePipelineCacheDataSave;
 
     const QRhi::Implementation backend = rhiBackend();
     if (backend == QRhi::Null) {
@@ -683,10 +692,46 @@ QRhi *QSGRhiSupport::createRhi(QQuickWindow *window, QOffscreenSurface *offscree
     }
 #endif
 
-    if (!rhi)
+    if (!rhi) {
         qWarning("Failed to create RHI (backend %d)", backend);
+        return nullptr;
+    }
+
+    if (!m_pipelineCacheLoad.isEmpty()) {
+        QFile f(m_pipelineCacheLoad);
+        if (f.open(QIODevice::ReadOnly)) {
+            qCDebug(QSG_LOG_INFO, "Attempting to seed pipeline cache from '%s'",
+                    qPrintable(m_pipelineCacheLoad));
+            rhi->setPipelineCacheData(f.readAll());
+        } else {
+            qWarning("Could not open pipeline cache source file '%s'",
+                     qPrintable(m_pipelineCacheLoad));
+        }
+    }
 
     return rhi;
+}
+
+void QSGRhiSupport::destroyRhi(QRhi *rhi)
+{
+    if (!rhi)
+        return;
+
+    if (!rhi->isDeviceLost()) {
+        if (!m_pipelineCacheSave.isEmpty()) {
+            QFile f(m_pipelineCacheSave);
+            if (f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+                qCDebug(QSG_LOG_INFO, "Writing pipeline cache contents to '%s'",
+                        qPrintable(m_pipelineCacheSave));
+                f.write(rhi->pipelineCacheData());
+            } else {
+                qWarning("Could not open pipeline cache output file '%s'",
+                         qPrintable(m_pipelineCacheSave));
+            }
+        }
+    }
+
+    delete rhi;
 }
 
 QImage QSGRhiSupport::grabAndBlockInCurrentFrame(QRhi *rhi, QRhiCommandBuffer *cb, QRhiTexture *src)

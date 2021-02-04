@@ -27,10 +27,12 @@
 ****************************************************************************/
 
 
-#include <QtTest/QtTest>
-
+#include <QTest>
 #include <QStandardItemModel>
 #include <QTreeView>
+#include <QSignalSpy>
+#include <QAbstractItemModelTester>
+
 #include <private/qabstractitemmodel_p.h>
 #include <private/qtreeview_p.h>
 
@@ -104,6 +106,7 @@ private slots:
     void sort();
     void sortRole_data();
     void sortRole();
+    void sortRoleBindings();
     void findItems();
     void getSetHeaderItem();
     void indexFromItem();
@@ -901,6 +904,22 @@ void tst_QStandardItemModel::sortRole()
         QCOMPARE(item->text(), expectedText.at(i));
         QCOMPARE(item->data(Qt::UserRole), expectedData.at(i));
     }
+}
+
+void tst_QStandardItemModel::sortRoleBindings()
+{
+    QStandardItemModel model;
+    QCOMPARE(model.sortRole(), Qt::DisplayRole);
+
+    QProperty<int> sortRole;
+    model.bindableSortRole().setBinding(Qt::makePropertyBinding(sortRole));
+    sortRole = Qt::UserRole;
+    QCOMPARE(model.sortRole(), Qt::UserRole);
+
+    QProperty<int> sortRoleObserver;
+    sortRoleObserver.setBinding([&] { return model.sortRole(); });
+    model.setSortRole(Qt::EditRole);
+    QCOMPARE(sortRoleObserver, Qt::EditRole);
 }
 
 void tst_QStandardItemModel::findItems()

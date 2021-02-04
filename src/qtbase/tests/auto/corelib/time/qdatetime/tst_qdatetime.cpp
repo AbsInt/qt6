@@ -27,7 +27,7 @@
 **
 ****************************************************************************/
 
-#include <QtTest/QtTest>
+#include <QTest>
 #include <time.h>
 #include <qdatetime.h>
 #include <private/qdatetime_p.h>
@@ -2811,6 +2811,11 @@ void tst_QDateTime::fromStringStringFormat_data()
     QTest::newRow("QTBUG-84349: positive sign in month")
             << QStringLiteral("9922+221102233Z") << QStringLiteral("yyyyMMddHHmmsst")
             << QDateTime();
+
+    // fuzzer test
+    QTest::newRow("integer overflow found by fuzzer")
+            << QStringLiteral("EEE1200000MUB") << QStringLiteral("t")
+            << QDateTime();
 }
 
 void tst_QDateTime::fromStringStringFormat()
@@ -3628,7 +3633,7 @@ void tst_QDateTime::timeZones() const
     QCOMPARE(nzStdOffset.date(), QDate(2012, 6, 1));
     QCOMPARE(nzStdOffset.time(), QTime(12, 0));
     QVERIFY(nzStdOffset.timeZone() == nzTzOffset);
-    QCOMPARE(nzStdOffset.timeZone().id(), QByteArray("UTC+12:00"));
+    QCOMPARE(nzStdOffset.timeZone().id(), QByteArray("UTC+12"));
     QCOMPARE(nzStdOffset.offsetFromUtc(), 43200);
     QCOMPARE(nzStdOffset.isDaylightTime(), false);
     QCOMPARE(nzStdOffset.toMSecsSinceEpoch(), utcStd.toMSecsSinceEpoch());

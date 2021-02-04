@@ -27,7 +27,8 @@
 ****************************************************************************/
 
 
-#include <QtTest/QtTest>
+#include <QTest>
+#include <QBuffer>
 
 #include <qcoreapplication.h>
 #include <qdebug.h>
@@ -693,14 +694,17 @@ void tst_QTextFormat::dataStreamCompatibility()
     QTextCharFormat format;
     format.setFontStretch(42);
     format.setFontLetterSpacingType(QFont::AbsoluteSpacing);
+    format.setFontFamilies({QLatin1String("Arial")});
 
     // Sanity check
     {
         QMap<int, QVariant> properties = format.properties();
         QVERIFY(properties.contains(QTextFormat::FontLetterSpacingType));
         QVERIFY(properties.contains(QTextFormat::FontStretch));
+        QVERIFY(properties.contains(QTextFormat::FontFamilies));
         QVERIFY(!properties.contains(QTextFormat::OldFontLetterSpacingType));
         QVERIFY(!properties.contains(QTextFormat::OldFontStretch));
+        QVERIFY(!properties.contains(QTextFormat::FontFamily));
     }
 
     QByteArray memory;
@@ -728,8 +732,10 @@ void tst_QTextFormat::dataStreamCompatibility()
                 QMap<int, QVariant> properties = other.properties();
                 QVERIFY(properties.contains(QTextFormat::FontLetterSpacingType));
                 QVERIFY(properties.contains(QTextFormat::FontStretch));
+                QVERIFY(properties.contains(QTextFormat::FontFamilies));
                 QVERIFY(!properties.contains(QTextFormat::OldFontLetterSpacingType));
                 QVERIFY(!properties.contains(QTextFormat::OldFontStretch));
+                QVERIFY(!properties.contains(QTextFormat::FontFamily));
             }
         }
 
@@ -746,8 +752,10 @@ void tst_QTextFormat::dataStreamCompatibility()
             stream >> properties;
             QVERIFY(properties.contains(QTextFormat::FontLetterSpacingType));
             QVERIFY(properties.contains(QTextFormat::FontStretch));
+            QVERIFY(properties.contains(QTextFormat::FontFamilies));
             QVERIFY(!properties.contains(QTextFormat::OldFontLetterSpacingType));
             QVERIFY(!properties.contains(QTextFormat::OldFontStretch));
+            QVERIFY(!properties.contains(QTextFormat::FontFamily));
         }
     }
 
@@ -777,8 +785,10 @@ void tst_QTextFormat::dataStreamCompatibility()
                 QMap<int, QVariant> properties = other.properties();
                 QVERIFY(properties.contains(QTextFormat::FontLetterSpacingType));
                 QVERIFY(properties.contains(QTextFormat::FontStretch));
+                QVERIFY(properties.contains(QTextFormat::FontFamilies));
                 QVERIFY(!properties.contains(QTextFormat::OldFontLetterSpacingType));
                 QVERIFY(!properties.contains(QTextFormat::OldFontStretch));
+                QVERIFY(!properties.contains(QTextFormat::FontFamily));
             }
         }
 
@@ -797,8 +807,10 @@ void tst_QTextFormat::dataStreamCompatibility()
             stream >> properties;
             QVERIFY(!properties.contains(QTextFormat::FontLetterSpacingType));
             QVERIFY(!properties.contains(QTextFormat::FontStretch));
+            QVERIFY(!properties.contains(QTextFormat::FontFamilies));
             QVERIFY(properties.contains(QTextFormat::OldFontLetterSpacingType));
             QVERIFY(properties.contains(QTextFormat::OldFontStretch));
+            QVERIFY(properties.contains(QTextFormat::FontFamily));
         }
     }
 

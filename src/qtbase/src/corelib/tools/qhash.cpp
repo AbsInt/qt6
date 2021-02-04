@@ -1209,22 +1209,26 @@ size_t qHash(long double key, size_t seed) noexcept
     instead, store a QWidget *.
 
     \target qHash
-    \section2 The qHash() hashing function
+    \section2 The hashing function
 
     A QHash's key type has additional requirements other than being an
     assignable data type: it must provide operator==(), and there must also be
-    a qHash() function in the type's namespace that returns a hash value for an
-    argument of the key's type.
+    a hashing function that returns a hash value for an argument of the
+    key's type.
 
-    The qHash() function computes a numeric value based on a key. It
+    The hashing function computes a numeric value based on a key. It
     can use any algorithm imaginable, as long as it always returns
     the same value if given the same argument. In other words, if
-    \c{e1 == e2}, then \c{qHash(e1) == qHash(e2)} must hold as well.
-    However, to obtain good performance, the qHash() function should
+    \c{e1 == e2}, then \c{hash(e1) == hash(e2)} must hold as well.
+    However, to obtain good performance, the hashing function should
     attempt to return different hash values for different keys to the
     largest extent possible.
 
-    For a key type \c{K}, the qHash function must have one of these signatures:
+    A hashing function for a key type \c{K} may be provided in two
+    different ways.
+
+    The first way is by having an overload of \c{qHash()} in \c{K}'s
+    namespace. The \c{qHash()} function must have one of these signatures:
 
     \snippet code/src_corelib_tools_qhash.cpp 32
 
@@ -1235,6 +1239,20 @@ size_t qHash(long double key, size_t seed) noexcept
     the latter is used by QHash (note that you can simply define a
     two-arguments version, and use a default value for the seed parameter).
 
+    The second way to provide a hashing function is by specializing
+    the \c{std::hash} class for the key type \c{K}, and providing a
+    suitable function call operator for it:
+
+    \snippet code/src_corelib_tools_qhash.cpp 33
+
+    The seed argument has the same meaning as for \c{qHash()},
+    and may be left out.
+
+    This second way allows to reuse the same hash function between
+    QHash and the C++ Standard Library unordered associative containers.
+    If both a \c{qHash()} overload and a \c{std::hash} specializations
+    are provided for a type, then the \c{qHash()} overload is preferred.
+
     Here's a partial list of the C++ and Qt types that can serve as keys in a
     QHash: any integer type (char, unsigned long, etc.), any pointer type,
     QChar, QString, and QByteArray. For all of these, the \c <QHash> header
@@ -1243,9 +1261,11 @@ size_t qHash(long double key, size_t seed) noexcept
     the documentation of each class.
 
     If you want to use other types as the key, make sure that you provide
-    operator==() and a qHash() implementation. The convenience qHashMulti()
-    function can be used to implement qHash() for a custom type, where
-    one usually wants to produce a hash value from multiple fields:
+    operator==() and a hash implementation.
+
+    The convenience qHashMulti() function can be used to implement
+    qHash() for a custom type, where one usually wants to produce a
+    hash value from multiple fields:
 
     Example:
     \snippet code/src_corelib_tools_qhash.cpp 13
@@ -1512,6 +1532,21 @@ size_t qHash(long double key, size_t seed) noexcept
     Removes the item that has the \a key from the hash.
     Returns true if the key exists in the hash and the item has been removed,
     and false otherwise.
+
+    \sa clear(), take()
+*/
+
+/*! \fn template <class Key, class T> template <typename Predicate> qsizetype QHash<Key, T>::removeIf(Predicate pred)
+    \since 6.1
+
+    Removes all elements for which the predicate \a pred returns true
+    from the hash.
+
+    The function supports predicates which take either an argument of
+    type \c{QHash<Key, T>::iterator}, or an argument of type
+    \c{std::pair<const Key &, T &>}.
+
+    Returns the number of elements removed, if any.
 
     \sa clear(), take()
 */
@@ -2655,6 +2690,21 @@ size_t qHash(long double key, size_t seed) noexcept
     \sa remove()
 */
 
+/*! \fn template <class Key, class T> template <typename Predicate> qsizetype QMultiHash<Key, T>::removeIf(Predicate pred)
+    \since 6.1
+
+    Removes all elements for which the predicate \a pred returns true
+    from the multi hash.
+
+    The function supports predicates which take either an argument of
+    type \c{QMultiHash<Key, T>::iterator}, or an argument of type
+    \c{std::pair<const Key &, T &>}.
+
+    Returns the number of elements removed, if any.
+
+    \sa clear(), take()
+*/
+
 /*! \fn template <class Key, class T> T QMultiHash<Key, T>::take(const Key &key)
 
     Removes the item with the \a key from the hash and returns
@@ -3340,6 +3390,34 @@ size_t qHash(long double key, size_t seed) noexcept
     Returns the hash value for the \a key, using \a seed to seed the calculation.
 
     Type \c T must be supported by qHash().
+*/
+
+/*! \fn template <typename Key, typename T, typename Predicate> qsizetype erase_if(QHash<Key, T> &hash, Predicate pred)
+    \relates QHash
+    \since 6.1
+
+    Removes all elements for which the predicate \a pred returns true
+    from the hash \a hash.
+
+    The function supports predicates which take either an argument of
+    type \c{QHash<Key, T>::iterator}, or an argument of type
+    \c{std::pair<const Key &, T &>}.
+
+    Returns the number of elements removed, if any.
+*/
+
+/*! \fn template <typename Key, typename T, typename Predicate> qsizetype erase_if(QMultiHash<Key, T> &hash, Predicate pred)
+    \relates QMultiHash
+    \since 6.1
+
+    Removes all elements for which the predicate \a pred returns true
+    from the multi hash \a hash.
+
+    The function supports predicates which take either an argument of
+    type \c{QMultiHash<Key, T>::iterator}, or an argument of type
+    \c{std::pair<const Key &, T &>}.
+
+    Returns the number of elements removed, if any.
 */
 
 QT_END_NAMESPACE

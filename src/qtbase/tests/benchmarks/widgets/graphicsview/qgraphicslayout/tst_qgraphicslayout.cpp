@@ -26,7 +26,7 @@
 **
 ****************************************************************************/
 
-#include <QtTest>
+#include <QTest>
 #include <QGraphicsLayout>
 #include <QGraphicsLinearLayout>
 #include <QGraphicsWidget>
@@ -113,8 +113,6 @@ void tst_QGraphicsLayout::invalidate()
     QVERIFY(QTest::qWaitForWindowExposed(view));
 
     // ...then measure...
-
-    int pass = 1;
 
     // should be as small as possible, to reduce overhead of painting
     QSizeF size(1, 1);

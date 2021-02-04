@@ -42,15 +42,7 @@
 
 #include <private/qqmlmodelsmodule_p.h>
 
-#if QT_CONFIG(qml_table_model)
-#include "qqmltablemodel_p.h"
-#include "qqmltablemodelcolumn_p.h"
-#endif
-#if QT_CONFIG(qml_delegate_model)
-#include "qqmldelegatecomponent_p.h"
-#endif
-
-extern void qml_register_types_Qt_labs_qmlmodels();
+#include <QtLabsQmlModels/private/qqmlmodelsglobal_p.h>
 
 QT_BEGIN_NAMESPACE
 

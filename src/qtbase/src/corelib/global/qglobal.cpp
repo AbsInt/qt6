@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2020 The Qt Company Ltd.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Copyright (C) 2017 Intel Corporation.
 ** Contact: https://www.qt.io/licensing/
 **
@@ -78,7 +78,7 @@
 #endif
 
 #if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
-#include <private/qjni_p.h>
+#include <qjniobject.h>
 #endif
 
 #if defined(Q_OS_SOLARIS)
@@ -139,6 +139,8 @@ static_assert(std::numeric_limits<int>::radix == 2,
                   "Qt assumes binary integers");
 static_assert((std::numeric_limits<int>::max() + std::numeric_limits<int>::lowest()) == -1,
                   "Qt assumes two's complement integers");
+static_assert(sizeof(wchar_t) == sizeof(char32_t) || sizeof(wchar_t) == sizeof(char16_t),
+              "Qt assumes wchar_t is compatible with either char32_t or char16_t");
 
 // While we'd like to check for __STDC_IEC_559__, as per ISO/IEC 9899:2011
 // Annex F (C11, normative for C++11), there are a few corner cases regarding
@@ -968,6 +970,8 @@ static_assert((std::is_same<qsizetype, qptrdiff>::value));
 
     Rounds half away from zero (e.g. 0.5 -> 1, -0.5 -> -1).
 
+    \note This function does not guarantee correctness for high precisions.
+
     Example:
 
     \snippet code/src_corelib_global_qglobal.cpp 11A
@@ -979,6 +983,8 @@ static_assert((std::is_same<qsizetype, qptrdiff>::value));
     Rounds \a d to the nearest integer.
 
     Rounds half away from zero (e.g. 0.5f -> 1, -0.5f -> -1).
+
+    \note This function does not guarantee correctness for high precisions.
 
     Example:
 
@@ -992,6 +998,8 @@ static_assert((std::is_same<qsizetype, qptrdiff>::value));
 
     Rounds half away from zero (e.g. 0.5 -> 1, -0.5 -> -1).
 
+    \note This function does not guarantee correctness for high precisions.
+
     Example:
 
     \snippet code/src_corelib_global_qglobal.cpp 12A
@@ -1003,6 +1011,8 @@ static_assert((std::is_same<qsizetype, qptrdiff>::value));
     Rounds \a d to the nearest 64-bit integer.
 
     Rounds half away from zero (e.g. 0.5f -> 1, -0.5f -> -1).
+
+    \note This function does not guarantee correctness for high precisions.
 
     Example:
 
@@ -2286,7 +2296,7 @@ Oreo
 
     // https://source.android.com/source/build-numbers.html
     // https://developer.android.com/guide/topics/manifest/uses-sdk-element.html#ApiLevels
-    const int sdk_int = QJNIObjectPrivate::getStaticField<jint>("android/os/Build$VERSION", "SDK_INT");
+    const int sdk_int = QJniObject::getStaticField<jint>("android/os/Build$VERSION", "SDK_INT");
     return &versions_string[versions_indices[qBound(0, sdk_int, versions_count - 1)]];
 }
 #endif
@@ -3088,7 +3098,11 @@ void qt_check_pointer(const char *n, int l) noexcept
 */
 void qBadAlloc()
 {
+#ifndef QT_NO_EXCEPTIONS
     QT_THROW(std::bad_alloc());
+#else
+    std::terminate();
+#endif
 }
 
 #ifndef QT_NO_EXCEPTIONS

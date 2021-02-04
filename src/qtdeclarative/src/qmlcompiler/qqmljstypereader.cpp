@@ -40,23 +40,6 @@
 
 QT_BEGIN_NAMESPACE
 
-static QQmlJSScope::Ptr parseProgram(QQmlJS::AST::Program *program, const QString &name)
-{
-    using namespace QQmlJS::AST;
-    QQmlJSScope::Ptr result = QQmlJSScope::create(QQmlJSScope::JSLexicalScope);
-    result->setInternalName(name);
-    for (auto *statement = program->statements; statement; statement = statement->next) {
-        if (auto *function = cast<FunctionDeclaration *>(statement->statement)) {
-            QQmlJSMetaMethod method(function->name.toString());
-            method.setMethodType(QQmlJSMetaMethod::Method);
-            for (auto *parameters = function->formals; parameters; parameters = parameters->next)
-                method.addParameter(parameters->element->bindingIdentifier.toString(), QString());
-            result->addOwnMethod(method);
-        }
-    }
-    return result;
-}
-
 QQmlJSScope::Ptr QQmlJSTypeReader::operator()()
 {
     using namespace QQmlJS::AST;
@@ -72,13 +55,16 @@ QQmlJSScope::Ptr QQmlJSTypeReader::operator()()
     const bool isESModule = lowerSuffix == QLatin1String("mjs");
     const bool isJavaScript = isESModule || lowerSuffix == QLatin1String("js");
 
-    QFile file(m_file);
-    if (!file.open(QFile::ReadOnly)) {
+    auto errorResult = [&](){
         QQmlJSScope::Ptr result = QQmlJSScope::create(
                     isJavaScript ? QQmlJSScope::JSLexicalScope : QQmlJSScope::QMLScope);
         result->setInternalName(scopeName);
         return result;
-    }
+    };
+
+    QFile file(m_file);
+    if (!file.open(QFile::ReadOnly))
+        return errorResult();
 
     QString code = QString::fromUtf8(file.readAll());
     file.close();
@@ -89,24 +75,19 @@ QQmlJSScope::Ptr QQmlJSTypeReader::operator()()
     const bool success = isJavaScript ? (isESModule ? parser.parseModule()
                                                     : parser.parseProgram())
                                       : parser.parse();
-    if (!success) {
-        QQmlJSScope::Ptr result = QQmlJSScope::create(
-                    isJavaScript ? QQmlJSScope::JSLexicalScope : QQmlJSScope::QMLScope);
-        result->setInternalName(scopeName);
-        return result;
-    }
+    if (!success)
+        return errorResult();
 
-    if (!isJavaScript) {
-        QQmlJS::AST::UiProgram *program = parser.ast();
-        QQmlJSImportVisitor membersVisitor(m_importer, QFileInfo(m_file).canonicalPath(),
-                                           m_qmltypesFiles);
-        program->accept(&membersVisitor);
-        m_errors = membersVisitor.errors();
-        return membersVisitor.result();
-    }
+    QQmlJS::AST::Node *rootNode = parser.rootNode();
+    if (!rootNode)
+        return errorResult();
 
-    // TODO: Anything special to do with ES modules here?
-    return parseProgram(QQmlJS::AST::cast<QQmlJS::AST::Program *>(parser.rootNode()), scopeName);
+    QQmlJSImportVisitor membersVisitor(m_importer, QFileInfo(m_file).canonicalPath(),
+                                       m_qmltypesFiles);
+    rootNode->accept(&membersVisitor);
+    auto result = membersVisitor.result();
+    result->setInternalName(scopeName);
+    return result;
 }
 
 QT_END_NAMESPACE

@@ -268,6 +268,7 @@ _qt_library_map = [
     LibraryMapping("qmldevtools", "Qt6", "Qt::QmlDevTools", extra=["COMPONENTS", "QmlDevTools"]),
     LibraryMapping("qmlcompiler", "Qt6", "Qt::QmlCompiler", extra=["COMPONENTS", "QmlCompiler"]),
     LibraryMapping("qml", "Qt6", "Qt::Qml", extra=["COMPONENTS", "Qml"]),
+    LibraryMapping("qmldom", "Qt6", "Qt::QmlDom", extra=["COMPONENTS", "QmlDom"]),
     LibraryMapping("qmlmodels", "Qt6", "Qt::QmlModels", extra=["COMPONENTS", "QmlModels"]),
     LibraryMapping("qmltest", "Qt6", "Qt::QuickTest", extra=["COMPONENTS", "QuickTest"]),
     LibraryMapping(
@@ -323,9 +324,11 @@ _qt_library_map = [
         "service_support", "Qt6", "Qt::ServiceSupport", extra=["COMPONENTS", "ServiceSupport"]
     ),
     LibraryMapping("shadertools", "Qt6", "Qt::ShaderTools", extra=["COMPONENTS", "ShaderTools"]),
+    LibraryMapping("statemachine", "Qt6", "Qt::StateMachine", extra=["COMPONENTS", "StateMachine"]),
     LibraryMapping("sql", "Qt6", "Qt::Sql", extra=["COMPONENTS", "Sql"]),
     LibraryMapping("svg", "Qt6", "Qt::Svg", extra=["COMPONENTS", "Svg"]),
     LibraryMapping("svgwidgets", "Qt6", "Qt::SvgWidgets", extra=["COMPONENTS", "SvgWidgets"]),
+    LibraryMapping("charts", "Qt6", "Qt::Charts", extra=["COMPONENTS", "Charts"]),
     LibraryMapping("testlib", "Qt6", "Qt::Test", extra=["COMPONENTS", "Test"]),
     LibraryMapping("texttospeech", "Qt6", "Qt::TextToSpeech", extra=["COMPONENTS", "TextToSpeech"]),
     LibraryMapping(
@@ -438,7 +441,7 @@ _library_map = [
     LibraryMapping("journald", "Libsystemd", "PkgConfig::Libsystemd"),
     LibraryMapping("jpeg", "JPEG", "JPEG::JPEG"),  # see also libjpeg
     LibraryMapping("libatomic", "WrapAtomic", "WrapAtomic::WrapAtomic"),
-    LibraryMapping("libb2", "Libb2", "PkgConfig::Libb2"),
+    LibraryMapping("libb2", "Libb2", "Libb2::Libb2"),
     LibraryMapping("libclang", "WrapLibClang", "WrapLibClang::WrapLibClang"),
     LibraryMapping("libdl", None, "${CMAKE_DL_LIBS}"),
     LibraryMapping("libinput", "Libinput", "Libinput::Libinput"),
@@ -563,14 +566,16 @@ _library_map = [
         "XCB",
         "XCB::XFIXES",
         extra=["COMPONENTS", "XFIXES"],
-        resultVariable="XCB_XFIXES",
+        resultVariable="TARGET XCB::XFIXES",
+        appendFoundSuffix=False,
     ),
     LibraryMapping(
         "xcb-xfixes",
         "XCB",
         "XCB::XFIXES",
         extra=["COMPONENTS", "XFIXES"],
-        resultVariable="XCB_XFIXES",
+        resultVariable="TARGET XCB::XFIXES",
+        appendFoundSuffix=False,
     ),
     LibraryMapping(
         "xcb_xinput",
@@ -597,9 +602,9 @@ _library_map = [
     LibraryMapping("sdl2", "WrapSDL2", "WrapSDL2::WrapSDL2"),
     LibraryMapping("hunspell", "Hunspell", "Hunspell::Hunspell"),
     LibraryMapping(
-        "assimp",
-        "WrapAssimp",
-        "WrapAssimp::WrapAssimp",
+        "qt3d-assimp",
+        "WrapQt3DAssimp",
+        "WrapQt3DAssimp::WrapQt3DAssimp",
         extra=["5"],
         run_library_test=True,
         resultVariable="TEST_assimp",

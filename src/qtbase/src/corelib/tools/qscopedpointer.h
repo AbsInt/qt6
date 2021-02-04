@@ -49,7 +49,7 @@ QT_BEGIN_NAMESPACE
 template <typename T>
 struct QScopedPointerDeleter
 {
-    static inline void cleanup(T *pointer)
+    static inline void cleanup(T *pointer) noexcept
     {
         // Enforce a complete type.
         // If you get a compile error here, read the section on forward declared
@@ -59,12 +59,16 @@ struct QScopedPointerDeleter
 
         delete pointer;
     }
+    void operator()(T *pointer) const noexcept
+    {
+        cleanup(pointer);
+    }
 };
 
 template <typename T>
 struct QScopedPointerArrayDeleter
 {
-    static inline void cleanup(T *pointer)
+    static inline void cleanup(T *pointer) noexcept
     {
         // Enforce a complete type.
         // If you get a compile error here, read the section on forward declared
@@ -74,11 +78,16 @@ struct QScopedPointerArrayDeleter
 
         delete[] pointer;
     }
+    void operator()(T *pointer) const noexcept
+    {
+        cleanup(pointer);
+    }
 };
 
 struct QScopedPointerPodDeleter
 {
-    static inline void cleanup(void *pointer) { if (pointer) free(pointer); }
+    static inline void cleanup(void *pointer) noexcept { free(pointer); }
+    void operator()(void *pointer) const noexcept { cleanup(pointer); }
 };
 
 #ifndef QT_NO_QOBJECT
@@ -86,6 +95,7 @@ template <typename T>
 struct QScopedPointerObjectDeleteLater
 {
     static inline void cleanup(T *pointer) { if (pointer) pointer->deleteLater(); }
+    void operator()(T *pointer) const { cleanup(pointer); }
 };
 
 class QObject;
@@ -146,17 +156,18 @@ public:
     {
         if (d == other)
             return;
-        T *oldD = d;
-        d = other;
+        T *oldD = qExchange(d, other);
         Cleanup::cleanup(oldD);
     }
 
+#if QT_DEPRECATED_SINCE(6, 1)
+    QT_DEPRECATED_VERSION_X_6_1("Use std::unique_ptr instead, and call release().")
     T *take() noexcept
     {
-        T *oldD = d;
-        d = nullptr;
+        T *oldD = qExchange(d, nullptr);
         return oldD;
     }
+#endif
 
     void swap(QScopedPointer<T, Cleanup> &other) noexcept
     {

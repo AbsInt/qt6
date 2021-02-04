@@ -1,33 +1,16 @@
 Version: 2
-Include: [cmake_platforms.yaml]
+Include: [
+    cmake_platforms.yaml,
+    macos-developer-build-tests.yaml
+]
 Configurations:
 -
-    Template: 'qtci-linux-openSUSE-15.1-x86_64'
-    Target os: 'WebAssembly'
-    Compiler: 'GCC'
-    Features: ['DisableTests', 'UseLegacyInstructions']
-    Configure arguments: '-qmake -opensource -confirm-license -verbose -prefix /home/qt/work/install -release -developer-build -static -nomake tests -nomake examples -no-pch -no-feature-thread -no-dbus -no-headersclean -no-ssl -no-warnings-are-errors -xplatform wasm-emscripten'
--
-    Template: 'qtci-macos-10.14-x86_64'
-    Compiler: 'Clang'
-    Features: ['UseLegacyInstructions']
-    Configure arguments: '-qmake -opensource -confirm-license -verbose -prefix /Users/qt/work/install -developer-build -release -no-pch -no-framework -qtnamespace TestNamespace -nomake tests -nomake examples -I/usr/local/opt/openssl/include'
--
-    Template: 'qtci-macos-10.14-x86_64'
-    Compiler: 'Clang'
-    Features: ['Sccache']
-    Configure arguments: '-DFEATURE_developer_build=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_WITH_PCH=OFF -DFEATURE_framework=OFF -DQT_NAMESPACE=TestNamespace  -DQT_BUILD_EXAMPLES=OFF -DCMAKE_OSX_SYSROOT:PATH=/Applications/Xcode11.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.15.sdk -DCMAKE_OSX_DEPLOYMENT_TARGET=10.14 -DOPENSSL_ROOT_DIR=/usr/local/opt/openssl -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache'
-    Environment variables: [
-        'NON_QTBASE_CONFIGURE_ARGS=-DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache',
-        'TEST_CONFIGURE_ARGS=-DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache'
-        ]
--
-    Template: 'qtci-linux-CentOS-8.1-x86_64-50'
+    Template: 'qtci-linux-CentOS-8.3-x86_64-50'
     Target os: 'Android_ANY'
     Target arch: 'x86'
     Compiler: 'GCC'
     Target compiler: 'Clang'
-    Platform dependency: 'CentOS-8.1-host'
+    Platform dependency: 'CentOS-8.3-host'
     Features: ['Packaging', 'Sccache', 'AndroidTestRun']
     Environment variables: [
         'TARGET_CONFIGURE_ARGS=-DBUILD_EXAMPLES=OFF -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_TOOLCHAIN_FILE={{.Env.ANDROID_NDK_ROOT}}/build/cmake/android.toolchain.cmake -DANDROID_SDK_ROOT={{.Env.ANDROID_SDK_HOME}} -DANDROID_ABI=x86 -DCMAKE_C_COMPILER_FRONTEND_VARIANT=GNU -DCMAKE_CXX_COMPILER_FRONTEND_VARIANT=GNU -DOPENSSL_ROOT_DIR={{.Env.OPENSSL_ANDROID_HOME}} -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache',

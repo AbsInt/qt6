@@ -1,6 +1,7 @@
 /****************************************************************************
 **
 ** Copyright (C) 2020 The Qt Company Ltd.
+** Copyright (C) 2020 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Giuseppe D'Angelo <giuseppe.dangelo@kdab.com>
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
@@ -48,6 +49,7 @@
 #include <QtCore/qrefcount.h>
 
 #include <initializer_list>
+#include <functional> // for std::hash
 
 QT_BEGIN_NAMESPACE
 
@@ -57,6 +59,46 @@ struct QHashDummyValue
 };
 
 namespace QHashPrivate {
+
+template <typename T, typename = void>
+constexpr inline bool HasQHashOverload = false;
+
+template <typename T>
+constexpr inline bool HasQHashOverload<T, std::enable_if_t<
+    std::is_convertible_v<decltype(qHash(std::declval<const T &>(), std::declval<size_t>())), size_t>
+>> = true;
+
+template <typename T, typename = void>
+constexpr inline bool HasStdHashSpecializationWithSeed = false;
+
+template <typename T>
+constexpr inline bool HasStdHashSpecializationWithSeed<T, std::enable_if_t<
+    std::is_convertible_v<decltype(std::hash<T>()(std::declval<const T &>(), std::declval<size_t>())), size_t>
+>> = true;
+
+template <typename T, typename = void>
+constexpr inline bool HasStdHashSpecializationWithoutSeed = false;
+
+template <typename T>
+constexpr inline bool HasStdHashSpecializationWithoutSeed<T, std::enable_if_t<
+    std::is_convertible_v<decltype(std::hash<T>()(std::declval<const T &>())), size_t>
+>> = true;
+
+template <typename T>
+size_t calculateHash(const T &t, size_t seed = 0)
+{
+    if constexpr (HasQHashOverload<T>) {
+        return qHash(t, seed);
+    } else if constexpr (HasStdHashSpecializationWithSeed<T>) {
+        return std::hash<T>()(t, seed);
+    } else if constexpr (HasStdHashSpecializationWithoutSeed<T>) {
+        Q_UNUSED(seed);
+        return std::hash<T>()(t);
+    } else {
+        static_assert(sizeof(T) == 0, "The key type must have a qHash overload or a std::hash specialization");
+        return 0;
+    }
+}
 
 // QHash uses a power of two growth policy.
 namespace GrowthPolicy {
@@ -545,7 +587,7 @@ struct Data
     iterator find(const Key &key) const noexcept
     {
         Q_ASSERT(numBuckets > 0);
-        size_t hash = qHash(key, seed);
+        size_t hash = QHashPrivate::calculateHash(key, seed);
         size_t bucket = GrowthPolicy::bucketForHash(numBuckets, hash);
         // loop over the buckets until we find the entry we search for
         // or an empty slot, in which case we know the entry doesn't exist
@@ -614,7 +656,7 @@ struct Data
             size_t nextIndex = next & Span::LocalBucketMask;
             if (!spans[nextSpan].hasNode(nextIndex))
                 break;
-            size_t hash = qHash(spans[nextSpan].at(nextIndex).key, seed);
+            size_t hash = QHashPrivate::calculateHash(spans[nextSpan].at(nextIndex).key, seed);
             size_t newBucket = GrowthPolicy::bucketForHash(numBuckets, hash);
             while (true) {
                 if (newBucket == next) {
@@ -829,6 +871,11 @@ public:
             return false;
         d->erase(it);
         return true;
+    }
+    template <typename Predicate>
+    qsizetype removeIf(Predicate pred)
+    {
+        return QtPrivate::associative_erase_if(*this, pred);
     }
     T take(const Key &key)
     {
@@ -1311,6 +1358,11 @@ public:
         Q_ASSERT(m_size >= 0);
         d->erase(it);
         return n;
+    }
+    template <typename Predicate>
+    qsizetype removeIf(Predicate pred)
+    {
+        return QtPrivate::associative_erase_if(*this, pred);
     }
     T take(const Key &key)
     {
@@ -1905,6 +1957,18 @@ inline size_t qHash(const QMultiHash<Key, T> &key, size_t seed = 0)
         hash += combine(h, it.value());
     }
     return hash;
+}
+
+template <typename Key, typename T, typename Predicate>
+qsizetype erase_if(QHash<Key, T> &hash, Predicate pred)
+{
+    return QtPrivate::associative_erase_if(hash, pred);
+}
+
+template <typename Key, typename T, typename Predicate>
+qsizetype erase_if(QMultiHash<Key, T> &hash, Predicate pred)
+{
+    return QtPrivate::associative_erase_if(hash, pred);
 }
 
 QT_END_NAMESPACE

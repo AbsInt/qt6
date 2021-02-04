@@ -108,7 +108,8 @@ public:
     enum Flag {
         Creatable = 0x1,
         Composite = 0x2,
-        Singleton = 0x4
+        Singleton = 0x4,
+        Script    = 0x8,
     };
     Q_DECLARE_FLAGS(Flags, Flag)
     Q_FLAGS(Flags);
@@ -147,7 +148,15 @@ public:
                                  const QQmlJSScope::Ptr &parentScope = QQmlJSScope::Ptr());
     static QQmlJSScope::ConstPtr findCurrentQMLScope(const QQmlJSScope::ConstPtr &scope);
 
-    QQmlJSScope::Ptr parentScope() const { return m_parentScope.toStrongRef(); }
+    QQmlJSScope::Ptr parentScope()
+    {
+        return m_parentScope.toStrongRef();
+    }
+
+    QQmlJSScope::ConstPtr parentScope() const
+    {
+        return QQmlJSScope::WeakConstPtr(m_parentScope).toStrongRef();
+    }
 
     void insertJSIdentifier(const QString &name, const JavaScriptIdentifier &identifier);
 
@@ -166,13 +175,14 @@ public:
     bool hasMethod(const QString &name) const;
     QList<QQmlJSMetaMethod> methods(const QString &name) const;
 
-    void addEnumeration(const QQmlJSMetaEnum &enumeration)
-    {
-        m_enumerations.insert(enumeration.name(), enumeration);
-    }
-    QHash<QString, QQmlJSMetaEnum> enumerations() const { return m_enumerations; }
-    QQmlJSMetaEnum enumeration(const QString &name) const { return m_enumerations.value(name); }
-    bool hasEnumeration(const QString &name) const { return m_enumerations.contains(name); }
+    void addOwnEnumeration(const QQmlJSMetaEnum &enumeration) { m_enumerations.insert(enumeration.name(), enumeration); }
+    QHash<QString, QQmlJSMetaEnum> ownEnumerations() const { return m_enumerations; }
+    QQmlJSMetaEnum ownEnumeration(const QString &name) const { return m_enumerations.value(name); }
+    bool hasOwnEnumeration(const QString &name) const { return m_enumerations.contains(name); }
+
+    bool hasEnumeration(const QString &name) const;
+    bool hasEnumerationKey(const QString &name) const;
+    QQmlJSMetaEnum enumeration(const QString &name) const;
 
     QString fileName() const { return m_fileName; }
     void setFileName(const QString &file) { m_fileName = file; }
@@ -184,6 +194,9 @@ public:
 
     void addExport(const QString &name, const QString &package, const QTypeRevision &version);
     QList<Export> exports() const { return m_exports; }
+
+    void setInterfaceNames(const QStringList& interfaces) { m_interfaceNames = interfaces; }
+    QStringList interfaceNames() { return m_interfaceNames; }
 
     // If isComposite(), this is the QML/JS name of the prototype. Otherwise it's the
     // relevant base class (in the hierarchy starting from QObject) of a C++ type.
@@ -206,6 +219,10 @@ public:
     void setAttachedTypeName(const QString &name) { m_attachedTypeName = name; }
     QQmlJSScope::ConstPtr attachedType() const { return m_attachedType; }
 
+    QString extensionTypeName() const { return m_extensionTypeName; }
+    void setExtensionTypeName(const QString &name) { m_extensionTypeName =  name; }
+    QQmlJSScope::ConstPtr extensionType() const { return m_extensionType; }
+
     QString valueTypeName() const { return m_valueTypeName; }
     void setValueTypeName(const QString &name) { m_valueTypeName = name; }
     QQmlJSScope::ConstPtr valueType() const { return m_valueType; }
@@ -213,22 +230,33 @@ public:
     bool isSingleton() const { return m_flags & Singleton; }
     bool isCreatable() const { return m_flags & Creatable; }
     bool isComposite() const { return m_flags & Composite; }
+    bool isScript() const { return m_flags & Script; }
     void setIsSingleton(bool v) { m_flags = v ? (m_flags | Singleton) : (m_flags & ~Singleton); }
     void setIsCreatable(bool v) { m_flags = v ? (m_flags | Creatable) : (m_flags & ~Creatable); }
     void setIsComposite(bool v) { m_flags = v ? (m_flags | Composite) : (m_flags & ~Composite); }
+    void setIsScript(bool v) { m_flags = v ? (m_flags | Script) : (m_flags & ~Script); }
 
     void setAccessSemantics(AccessSemantics semantics) { m_semantics = semantics; }
     AccessSemantics accessSemantics() const { return m_semantics; }
 
-    bool isIdInCurrentQMlScopes(const QString &id) const;
+    bool isIdInCurrentQmlScopes(const QString &id) const;
     bool isIdInCurrentJSScopes(const QString &id) const;
     bool isIdInjectedFromSignal(const QString &id) const;
 
     std::optional<JavaScriptIdentifier> findJSIdentifier(const QString &id) const;
 
-    QVector<QQmlJSScope::Ptr> childScopes() const
+    QVector<QQmlJSScope::Ptr> childScopes()
     {
         return m_childScopes;
+    }
+
+    QVector<QQmlJSScope::ConstPtr> childScopes() const
+    {
+        QVector<QQmlJSScope::ConstPtr> result;
+        result.reserve(m_childScopes.size());
+        for (const auto &child : m_childScopes)
+            result.append(child);
+        return result;
     }
 
     void resolveTypes(const QHash<QString, ConstPtr> &contextualTypes);
@@ -272,6 +300,7 @@ private:
 
     ScopeType m_scopeType = QMLScope;
     QList<Export> m_exports;
+    QStringList m_interfaceNames;
 
     QString m_defaultPropertyName;
     QString m_attachedTypeName;
@@ -279,6 +308,9 @@ private:
 
     QString m_valueTypeName;
     QQmlJSScope::WeakConstPtr m_valueType;
+
+    QString m_extensionTypeName;
+    QQmlJSScope::WeakConstPtr m_extensionType;
 
     Flags m_flags;
     AccessSemantics m_semantics = AccessSemantics::Reference;

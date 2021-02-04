@@ -17,8 +17,10 @@ qt_internal_add_module(EntryPoint
     NO_SYNC_QT
     NO_MODULE_HEADERS
     NO_PRIVATE_MODULE
+    NO_ADDITIONAL_TARGET_INFO
 )
 
+set(export_targets EntryPoint)
 # We don't need any include paths or default module defines
 set_target_properties(EntryPoint PROPERTIES
     INTERFACE_INCLUDE_DIRECTORIES ""
@@ -36,6 +38,8 @@ if(using_entrypoint_library)
         INCLUDE_DIRECTORIES
            $<TARGET_PROPERTY:Qt::Core,INTERFACE_INCLUDE_DIRECTORIES>
     )
+
+    list(APPEND export_targets EntryPointImplementation)
 
     set_target_properties(EntryPointImplementation PROPERTIES
         OUTPUT_NAME "${INSTALL_CMAKE_NAMESPACE}EntryPoint${QT_LIBINFIX}"
@@ -59,8 +63,7 @@ if(WIN32)
         # Store debug information inside the static lib
         qt_internal_replace_compiler_flags(
             "/Zi" "/Z7"
-            CONFIGS DEBUG RELWITHDEBINFO
-            IN_CURRENT_SCOPE)
+            CONFIGS DEBUG RELWITHDEBINFO)
     endif()
 
     if(MINGW)
@@ -103,5 +106,12 @@ QT.entrypoint_implementation.module_config = staticlib v2 internal_module
     qt_install(TARGETS EntryPointImplementation EXPORT ${export_name})
     qt_generate_prl_file(EntryPointImplementation "${INSTALL_LIBDIR}")
 endif()
+
+set(export_name_prefix "${INSTALL_CMAKE_NAMESPACE}EntryPoint")
+qt_path_join(config_install_dir ${QT_CONFIG_INSTALL_DIR} ${export_name_prefix})
+qt_internal_export_additional_targets_file(
+    TARGETS ${export_targets}
+    EXPORT_NAME_PREFIX ${export_name_prefix}
+    CONFIG_INSTALL_DIR "${config_install_dir}")
 
 # special case end

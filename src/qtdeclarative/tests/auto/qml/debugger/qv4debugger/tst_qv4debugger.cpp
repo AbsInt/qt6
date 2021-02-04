@@ -238,7 +238,7 @@ public:
             QJsonObject object = job.returnValue();
             object = object.value(QLatin1String("object")).toObject();
             QVERIFY(!object.contains("ref") || object.contains("properties"));
-            foreach (const QJsonValue &value, object.value(QLatin1String("properties")).toArray()) {
+            for (const QJsonValue value : object.value(QLatin1String("properties")).toArray()) {
                 QJsonObject property = value.toObject();
                 QString name = property.value(QLatin1String("name")).toString();
                 property.remove(QLatin1String("name"));
@@ -910,19 +910,25 @@ void tst_qv4debugger::signalParameters()
     component.setData("import QtQml 2.12\n"
                       "QtObject {\n"
                       "    id: root\n"
-                      "    property string result\n"
+                      "    property string result: 'unset'\n"
+                      "    property string resultCallbackInternal: 'unset'\n"
+                      "    property string resultCallbackExternal: 'unset'\n"
                       "    signal signalWithArg(string textArg)\n"
+                      "    function call(callback) { callback(); }\n"
+                      "    function externalCallback() { root.resultCallbackExternal = textArg; }\n"
                       "    property Connections connections : Connections {\n"
                       "        target: root\n"
-                      "        onSignalWithArg: { root.result = textArg; }\n"
+                      "        onSignalWithArg: { root.result = textArg; call(function() { root.resultCallbackInternal = textArg; }); call(externalCallback); }\n"
                       "    }\n"
                       "    Component.onCompleted: signalWithArg('something')\n"
                       "}", QUrl("test.qml"));
 
-    QVERIFY(component.isReady());
+    QVERIFY2(component.isReady(), qPrintable(component.errorString()));
     QScopedPointer<QObject> obj(component.create());
     QVERIFY(obj);
     QCOMPARE(obj->property("result").toString(), QLatin1String("something"));
+    QCOMPARE(obj->property("resultCallbackInternal").toString(), QLatin1String("something"));
+    QCOMPARE(obj->property("resultCallbackExternal").toString(), QLatin1String("unset"));
 }
 
 QTEST_MAIN(tst_qv4debugger)

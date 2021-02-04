@@ -27,7 +27,16 @@
 ****************************************************************************/
 
 
-#include <QtTest/QtTest>
+#include <QTest>
+#include <QSemaphore>
+#include <QTestEventLoop>
+#include <QSignalSpy>
+#include <QProcess>
+#include <QTimer>
+#include <QWaitCondition>
+#include <QScopeGuard>
+#include <QBuffer>
+
 #include <QtCore/QCryptographicHash>
 #include <QtCore/QDataStream>
 #include <QtCore/QUrl>
@@ -93,8 +102,6 @@ Q_DECLARE_METATYPE(QAuthenticator*)
 #ifndef QT_NO_NETWORKPROXY
 Q_DECLARE_METATYPE(QNetworkProxyQuery)
 #endif
-
-#include "emulationdetector.h"
 
 typedef QSharedPointer<QNetworkReply> QNetworkReplyPtr;
 
@@ -2118,14 +2125,6 @@ void tst_QNetworkReply::getErrors()
             QSKIP("Running this test as root doesn't make sense");
 
     }
-
-    if (EmulationDetector::isRunningArmOnX86()
-        && qstrcmp(QTest::currentDataTag(), "file-permissions") == 0) {
-        QFileInfo filePermissionFile = QFileInfo(filePermissionFileName.toLatin1());
-        if (filePermissionFile.ownerId() == ::geteuid()) {
-            QSKIP("Sysroot directories are owned by the current user");
-        }
-    }
 #endif
 
     QNetworkReplyPtr reply(manager.get(request));
@@ -2782,6 +2781,9 @@ void tst_QNetworkReply::putToHttpMultipart()
 #ifndef QT_NO_SSL
 void tst_QNetworkReply::putToHttps_data()
 {
+#if QT_CONFIG(securetransport)
+    QSKIP("SecTrustEvaluate() returns recoverable error, update the certificate on server");
+#endif
     uniqueExtension = createUniqueExtension();
     putToFile_data();
 }
@@ -2823,6 +2825,9 @@ void tst_QNetworkReply::putToHttps()
 
 void tst_QNetworkReply::putToHttpsSynchronous_data()
 {
+#if QT_CONFIG(securetransport)
+    QSKIP("SecTrustEvalueate() retruns recoverable error, update the server's certificate");
+#endif
     uniqueExtension = createUniqueExtension();
     putToFile_data();
 }
@@ -2868,6 +2873,9 @@ void tst_QNetworkReply::putToHttpsSynchronous()
 
 void tst_QNetworkReply::postToHttps_data()
 {
+#if QT_CONFIG(securetransport)
+    QSKIP("SecTrustEvaluate() returns recoverable error, update the certificate on server");
+#endif
     putToFile_data();
 }
 
@@ -2899,6 +2907,9 @@ void tst_QNetworkReply::postToHttps()
 
 void tst_QNetworkReply::postToHttpsSynchronous_data()
 {
+#if QT_CONFIG(securetransport)
+    QSKIP("SecTrustEvaluate() returns recoverable error, update the certificate on server");
+#endif
     putToFile_data();
 }
 
@@ -2935,6 +2946,9 @@ void tst_QNetworkReply::postToHttpsSynchronous()
 
 void tst_QNetworkReply::postToHttpsMultipart_data()
 {
+#if QT_CONFIG(securetransport)
+    QSKIP("SecTrustEvaluate() returns recoverable error, update the certificate on server");
+#endif
     postToHttpMultipart_data();
 }
 
@@ -6453,16 +6467,23 @@ void tst_QNetworkReply::sslConfiguration_data()
     QTest::newRow("empty") << QSslConfiguration() << false;
     QSslConfiguration conf = QSslConfiguration::defaultConfiguration();
     QTest::newRow("default") << conf << false; // does not contain test server cert
+#if QT_CONFIG(securetransport)
+    qWarning("SecTrustEvaluate() will fail, update the certificate on server");
+#else
     QList<QSslCertificate> testServerCert = QSslCertificate::fromPath(testDataDir + certsFilePath);
     conf.setCaCertificates(testServerCert);
+
     QTest::newRow("set-root-cert") << conf << true;
     conf.setProtocol(QSsl::SecureProtocols);
     QTest::newRow("secure") << conf << true;
+#endif
 }
 
 void tst_QNetworkReply::encrypted()
 {
-    qDebug() << QtNetworkSettings::httpServerName();
+#if QT_CONFIG(securetransport)
+    QSKIP("SecTrustEvalute() fails with old server certificate");
+#endif
     QUrl url("https://" + QtNetworkSettings::httpServerName());
     QNetworkRequest request(url);
     QNetworkReply *reply = manager.get(request);
@@ -6875,13 +6896,8 @@ public:
         // bytesAvailable must never be 0
         QVERIFY(bytesAvailable != 0);
 
-        if (bytesAvailableList.length() < 5) {
-            // We assume that the first few times the bytes available must be less than the complete size, e.g.
-            // the bytesAvailable() function works correctly in case of a downloadBuffer.
-            QVERIFY(bytesAvailable < uploadSize);
-        }
         if (!bytesAvailableList.isEmpty()) {
-            // Also check that the same bytesAvailable is not coming twice in a row
+            // Check that the same bytesAvailable is not coming twice in a row
             QVERIFY(bytesAvailableList.last() != bytesAvailable);
         }
 
@@ -6893,6 +6909,12 @@ public:
     {
         // We should have already received all readyRead
         QVERIFY(!bytesAvailableList.isEmpty());
+        for (int i = 0; i < std::min(int(bytesAvailableList.size() - 1), 5); ++i) {
+            // We assume that, at least, the first time the bytes available must be less than the
+            // complete size, e.g. the bytesAvailable() function works correctly in case of a
+            // downloadBuffer.
+            QVERIFY(bytesAvailableList.at(i) < uploadSize);
+        }
         QCOMPARE(bytesAvailableList.last(), uploadSize);
     }
 };
@@ -7731,11 +7753,15 @@ void tst_QNetworkReply::synchronousRequest_data()
         << QString("text/plain");
 
 #ifndef QT_NO_SSL
+#if QT_CONFIG(securetransport)
+    qWarning("Skipping https scheme, SecTrustEvalue() fails, update the certificate on server");
+#else
     QTest::newRow("https")
         << QUrl("https://" + QtNetworkSettings::httpServerName() + "/qtest/rfc3252.txt")
         << QString("file:" + testDataDir + "/rfc3252.txt")
         << true
         << QString("text/plain");
+#endif
 #endif
 
     QTest::newRow("data")
@@ -9050,6 +9076,9 @@ void tst_QNetworkReply::putWithServerClosingConnectionImmediately()
             for (int i = 0; i < numUploads; i++) {
                 // create the request
                 QNetworkRequest request(QUrl(urlPrefix + QString::number(i)));
+                // Disable http2 so we get the 6 simultaneous channels as when
+                // the test was originally written
+                request.setAttribute(QNetworkRequest::Http2AllowedAttribute, false);
                 QNetworkReply *reply = manager.put(request, sourceFile);
                 connect(reply, SIGNAL(sslErrors(QList<QSslError>)), reply, SLOT(ignoreSslErrors()));
                 connect(reply, SIGNAL(finished()), &server, SLOT(replyFinished()));

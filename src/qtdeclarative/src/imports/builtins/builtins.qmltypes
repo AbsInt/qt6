@@ -22,8 +22,11 @@ Module {
     }
 
     Component {
-        name: "varargs"
-        accessSemantics: "value"
+        // QQmlV4Function is the name for varargs. If such parameter is declared
+        // we can invoke the method with any number of QJSValue parameters.
+        // Access semantics are not "value" because the actual QQmlV4Function object
+        // is passed as a pointer.
+        name: "QQmlV4Function"
     }
 
     Component {
@@ -216,6 +219,7 @@ Module {
 
     Component {
         name: "NumberPrototype"
+        accessSemantics: "value"
 
         Method {
             name: "toExponential"
@@ -286,9 +290,6 @@ Module {
 
     Component {
         name: "Math"
-        isSingleton: true
-        exports: ["QML/Math 1.0"]
-        exportMetaObjectRevisions: [256]
 
         Property {
             name: "E"
@@ -531,7 +532,7 @@ Module {
 
             Parameter {
                 name: "arguments"
-                type: "varargs"
+                type: "QQmlV4Function"
             }
         }
 
@@ -607,7 +608,7 @@ Module {
 
             Parameter {
                 name: "arguments"
-                type: "varargs"
+                type: "QQmlV4Function"
             }
         }
 
@@ -617,7 +618,7 @@ Module {
 
             Parameter {
                 name: "arguments"
-                type: "varargs"
+                type: "QQmlV4Function"
             }
         }
 
@@ -745,9 +746,6 @@ Module {
 
     Component {
         name: "JSON"
-        exports: ["QML/JSON 1.0"]
-        exportMetaObjectRevisions: [256]
-        isSingleton: true
 
         Method {
             name: "parse"
@@ -790,9 +788,6 @@ Module {
 
     Component {
         name: "String"
-        exports: ["QML/String 1.0"]
-        exportMetaObjectRevisions: [256]
-        isSingleton: true
         prototype: "StringPrototype"
 
         Method {
@@ -801,7 +796,7 @@ Module {
 
             Parameter {
                 name: "arguments"
-                type: "varargs"
+                type: "QQmlV4Function"
             }
         }
 
@@ -811,7 +806,7 @@ Module {
 
             Parameter {
                 name: "arguments"
-                type: "varargs"
+                type: "QQmlV4Function"
             }
         }
 
@@ -826,7 +821,7 @@ Module {
 
             Parameter {
                 name: "substitutions"
-                type: "varargs"
+                type: "QQmlV4Function"
             }
         }
 
@@ -874,7 +869,7 @@ Module {
 
             Parameter {
                 name: "arguments"
-                type: "varargs"
+                type: "QQmlV4Function"
             }
         }
 
@@ -1721,4 +1716,10 @@ Module {
         accessSemantics: "value"
     }
 
+    Component {
+        name: "QUrl"
+        exports: ["QML/url 1.0"]
+        exportMetaObjectRevisions: [256]
+        accessSemantics: "value"
+    }
 }

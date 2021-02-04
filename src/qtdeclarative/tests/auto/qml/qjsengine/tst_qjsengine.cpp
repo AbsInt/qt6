@@ -243,6 +243,7 @@ private slots:
     void throwError();
     void throwErrorObject();
     void returnError();
+    void catchError();
     void mathMinMax();
 
     void importModule();
@@ -4810,9 +4811,22 @@ void tst_QJSEngine::returnError()
     QVERIFY(!result.property("stack").isUndefined());
 }
 
+void tst_QJSEngine::catchError()
+{
+    QJSEngine engine;
+    QVERIFY(!engine.hasError());
+    engine.throwError(QJSValue::GenericError, "some error");
+    QVERIFY(engine.hasError());
+    const QJSValue error = engine.catchError();
+    QVERIFY(error.isError());
+    QCOMPARE(error.errorType(), QJSValue::GenericError);
+    QCOMPARE(error.property("message").toString(), "some error");
+    QVERIFY(!engine.hasError());
+}
+
 QJSValue tst_QJSEngine::throwingCppMethod1()
 {
-    qjsEngine(this)->throwError("blub");
+    qjsEngine(this)->throwError(QStringLiteral("blub"));
     return QJSValue(47);
 }
 
@@ -4823,7 +4837,9 @@ void tst_QJSEngine::throwingCppMethod2()
 
 QJSValue tst_QJSEngine::throwingCppMethod3()
 {
-    return qjsEngine(this)->newErrorObject(QJSValue::EvalError, "Something is wrong");
+    QJSEngine *engine = qjsEngine(this);
+    engine->throwError(engine->newErrorObject(QJSValue::EvalError, "Something is wrong"));
+    return QJSValue(31);
 }
 
 void tst_QJSEngine::mathMinMax()

@@ -42,6 +42,8 @@
 #include <QtCore/qdatetime.h>
 #include "qjsengine.h"
 #include "qjsvalue.h"
+#include "qjsprimitivevalue.h"
+#include "qjsmanagedvalue.h"
 #include "qjsvalue_p.h"
 #include "qv4value_p.h"
 #include "qv4object_p.h"
@@ -182,6 +184,17 @@
     expected.
     \value URIError A URI handling function was used incorrectly or the URI
     provided is malformed.
+*/
+
+/*!
+    \enum QJSValue::ObjectConversionBehavior
+
+    This enum is used to specify how JavaScript objects without an equivalent
+    native Qt type should be treated when converting to QVariant.
+
+    \value ConvertJSObjects A best-effort, possibly lossy, conversion is attempted.
+
+    \value RetainJSObjects The value is retained as QJSValue wrapped in QVariant.
 */
 
 QT_BEGIN_NAMESPACE
@@ -549,9 +562,22 @@ quint32 QJSValue::toUInt() const
 }
 
 /*!
-  Returns the QVariant value of this QJSValue, if it can be
-  converted to a QVariant; otherwise returns an invalid QVariant.
-  The conversion is performed according to the following table:
+    \overload
+
+    Returns toVariant(ConvertJSObjects).
+
+    \sa isVariant()
+*/
+QVariant QJSValue::toVariant() const
+{
+    return toVariant(ConvertJSObjects);
+}
+
+/*!
+    Returns the QVariant value of this QJSValue, if it can be
+    converted to a QVariant; otherwise returns an invalid QVariant.
+    Some JavaScript types and objects have native expressions in Qt.
+    Those are converted to their native expressions. For example:
 
     \table
     \header \li Input Type \li Result
@@ -563,14 +589,22 @@ quint32 QJSValue::toUInt() const
     \row    \li QVariant Object \li The result is the QVariant value of the object (no conversion).
     \row    \li QObject Object \li A QVariant containing a pointer to the QObject.
     \row    \li Date Object \li A QVariant containing the date value (toDateTime()).
-    \row    \li RegExp Object \li A QVariant containing the regular expression value.
-    \row    \li Array Object \li The array is converted to a QVariantList. Each element is converted to a QVariant, recursively; cyclic references are not followed.
-    \row    \li Object     \li The object is converted to a QVariantMap. Each property is converted to a QVariant, recursively; cyclic references are not followed.
+    \row    \li RegularExpression Object \li A QVariant containing the regular expression value.
     \endtable
 
-  \sa isVariant()
+    For other types the \a behavior parameter is relevant. If
+    \c ConvertJSObjects is given, a best effort but possibly lossy conversion is
+    attempted. Generic JavaScript objects are converted to QVariantMap.
+    JavaScript arrays are converted to QVariantList. Each property or element is
+    converted to a QVariant, recursively; cyclic references are not followed.
+    JavaScript function objects are dropped. If \c RetainJSObjects is given, the
+    QJSValue is wrapped into a QVariant via QVariant::fromValue(). The resulting
+    conversion is lossless but the internal structure of the objects is not
+    immediately accessible.
+
+    \sa isVariant()
 */
-QVariant QJSValue::toVariant() const
+QVariant QJSValue::toVariant(QJSValue::ObjectConversionBehavior behavior) const
 {
     if (const QString *string = QJSValuePrivate::asQString(this))
         return QVariant(*string);
@@ -592,10 +626,43 @@ QVariant QJSValue::toVariant() const
     if (val.isString())
         return QVariant(val.toQString());
     if (QV4::Managed *m = val.as<QV4::Managed>())
-        return m->engine()->toVariant(val, /*typeHint*/ -1, /*createJSValueForObjects*/ false);
+        return m->engine()->toVariant(val, /*typeHint*/ -1, behavior == RetainJSObjects);
 
     Q_ASSERT(false);
     return QVariant();
+}
+
+/*!
+ * Converts the value to a QJSPrimitiveValue. If the value holds a type
+ * supported by QJSPrimitiveValue, the value is copied. Otherwise the
+ * value is converted to a string, and the string is stored in
+ * QJSPrimitiveValue.
+ *
+ * \note Conversion of a managed value to a string can throw an exception. In
+ *       particular, symbols cannot be coerced into strings, or a custom
+ *       toString() method  may throw. In this case the result is the undefined
+ *       value and the engine carries an error after the conversion.
+ */
+QJSPrimitiveValue QJSValue::toPrimitive() const
+{
+    if (const QString *string = QJSValuePrivate::asQString(this))
+        return *string;
+
+    const QV4::Value val = QV4::Value::fromReturnedValue(QJSValuePrivate::asReturnedValue(this));
+    if (val.isUndefined())
+        return QJSPrimitiveUndefined();
+    if (val.isNull())
+        return QJSPrimitiveNull();
+    if (val.isBoolean())
+        return val.toBoolean();
+    if (val.isInteger())
+        return val.integerValue();
+    if (val.isDouble())
+        return val.doubleValue();
+
+    bool ok;
+    const QString result = val.toQString(&ok);
+    return ok ? QJSPrimitiveValue(result) : QJSPrimitiveValue(QJSPrimitiveUndefined());
 }
 
 /*!
@@ -823,6 +890,46 @@ QJSValue& QJSValue::operator=(const QJSValue& other)
         QJSValuePrivate::setValue(this, QJSValuePrivate::asReturnedValue(&other));
 
     return *this;
+}
+
+QJSValue::QJSValue(QJSPrimitiveValue &&value)
+{
+    switch (value.type()) {
+    case QJSPrimitiveValue::Undefined:
+        d = QV4::Encode::undefined();
+        return;
+    case QJSPrimitiveValue::Null:
+        d = QV4::Encode::null();
+        return;
+    case QJSPrimitiveValue::Boolean:
+        d = QV4::Encode(value.asBoolean());
+        return;
+    case QJSPrimitiveValue::Integer:
+        d = QV4::Encode(value.asInteger());
+        return;
+    case QJSPrimitiveValue::Double:
+        d = QV4::Encode(value.asDouble());
+        return;
+    case QJSPrimitiveValue::String:
+        QJSValuePrivate::setString(this, std::move(std::get<QString>(value.d)));
+        return;
+    }
+
+    Q_UNREACHABLE();
+}
+
+QJSValue::QJSValue(QJSManagedValue &&value)
+{
+    if (!value.d) {
+        d = QV4::Encode::undefined();
+    } else if (value.d->isManaged()) {
+        QJSValuePrivate::setRawValue(this, value.d);
+        value.d = nullptr;
+    } else {
+        d = value.d->asReturnedValue();
+        QV4::PersistentValueStorage::free(value.d);
+        value.d = nullptr;
+    }
 }
 
 static bool js_equal(const QString &string, const QV4::Value &value)

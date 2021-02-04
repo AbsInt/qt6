@@ -28,7 +28,9 @@
 **
 ****************************************************************************/
 
-#include <QtTest/QtTest>
+#include <QTest>
+#include <QQueue>
+#include <QStack>
 
 #include <qvariant.h>
 #include <QtCore/private/qvariant_p.h>
@@ -52,6 +54,11 @@
 #include <QRegularExpression>
 #include <QDir>
 #include <QBuffer>
+#include <QJsonArray>
+#include <QJsonObject>
+#include <QEasingCurve>
+#include <QSequentialIterable>
+#include <QAssociativeIterable>
 #include "qnumeric.h"
 
 #include <private/qlocale_p.h>
@@ -60,6 +67,21 @@
 #include <unordered_map>
 
 class CustomNonQObject;
+
+template<typename T, typename  = void>
+struct QVariantFromValueCompiles
+{
+    static inline constexpr bool value = false;
+};
+
+template<typename T>
+struct QVariantFromValueCompiles<T, std::void_t<decltype (QVariant::fromValue(std::declval<T>()))>>
+{
+    static inline constexpr bool value = true;
+};
+
+static_assert(QVariantFromValueCompiles<int>::value);
+static_assert(!QVariantFromValueCompiles<QObject>::value);
 
 class tst_QVariant : public QObject
 {
@@ -467,7 +489,7 @@ void tst_QVariant::canConvert_data()
         << var << Y << N << N << N << N << N << N << N << N << N << N << N << N << N << N << N << N << N << N << N << N << N << N << N << N << N << N << N << N << N << N;
     var = QVariant(QByteArray());
     QTest::newRow("ByteArray")
-        << var << N << N << Y << N << Y << Y << N << N << N << Y << N << N << Y << N << N << N << Y << N << N << N << N << N << N << N << N << N << Y << N << N << Y << Y;
+        << var << N << N << Y << N << Y << Y << N << N << N << Y << N << N << Y << N << N << Y << Y << N << N << N << N << N << N << N << N << N << Y << N << N << Y << Y;
     var = QVariant(QDate());
     QTest::newRow("Date")
         << var << N << N << N << N << N << N << N << Y << Y << N << N << N << N << N << N << N << N << N << N << N << N << N << N << N << N << N << Y << N << N << N << N;
@@ -506,7 +528,7 @@ void tst_QVariant::canConvert_data()
         << var << N << N << N << N << N << N << N << N << N << N << N << N << N << N << N << N << N << N << N << N << N << N << N << N << Y << N << N << N << N << N << N;
     var = QVariant(QString());
     QTest::newRow("String")
-        << var << N << N << Y << N << Y << Y << N << Y << Y << Y << Y << N << Y << N << Y << N << Y << N << N << N << N << N << N << N << N << N << Y << Y << Y << Y << Y;
+        << var << N << N << Y << N << Y << Y << N << Y << Y << Y << Y << N << Y << N << Y << Y << Y << N << N << N << N << N << N << N << N << N << Y << Y << Y << Y << Y;
    var = QVariant(QStringList("entry"));
     QTest::newRow("StringList")
         << var << N << N << N << N << N << N << N << N << N << N << N << N << N << N << N << Y << N << N << N << N << N << N << N << N << N << N << Y << Y << N << N << N;
@@ -4067,6 +4089,42 @@ struct ContainerAPI<Container, QByteArray>
     }
 };
 
+template<typename Container>
+struct ContainerAPI<Container, QChar>
+{
+    static void insert(Container &container, int value)
+    {
+        container.push_back(QChar::fromLatin1(char(value) + '0'));
+    }
+
+    static bool compare(const QVariant &variant, QChar value)
+    {
+        return variant.value<QChar>() == value;
+    }
+    static bool compare(QVariant variant, const QVariant &value)
+    {
+        return variant == value;
+    }
+};
+
+template<typename Container>
+struct ContainerAPI<Container, char>
+{
+    static void insert(Container &container, int value)
+    {
+        container.push_back(char(value) + '0');
+    }
+
+    static bool compare(const QVariant &variant, char value)
+    {
+        return variant.value<char>() == value;
+    }
+    static bool compare(QVariant variant, const QVariant &value)
+    {
+        return variant == value;
+    }
+};
+
 #ifdef __has_include
 # if __has_include(<forward_list>)
 # define TEST_FORWARD_LIST
@@ -4280,14 +4338,20 @@ void testSequentialIteration()
     QCOMPARE(listIter.at(4), third);
     QCOMPARE(listIter.at(5), third);
 
-    listIter.removeValue();
-    compareLists();
-    QCOMPARE(listIter.size(), 5);
-    QCOMPARE(listIter.at(0), first);
-    QCOMPARE(listIter.at(1), first);
-    QCOMPARE(listIter.at(2), second);
-    QCOMPARE(listIter.at(3), second);
-    QCOMPARE(listIter.at(4), third);
+    if (listIter.metaContainer().canRemoveValue()) {
+        listIter.removeValue();
+        compareLists();
+        QCOMPARE(listIter.size(), 5);
+        QCOMPARE(listIter.at(0), first);
+        QCOMPARE(listIter.at(1), first);
+        QCOMPARE(listIter.at(2), second);
+        QCOMPARE(listIter.at(3), second);
+        QCOMPARE(listIter.at(4), third);
+    } else {
+        // QString and QByteArray have no pop_back or pop_front and it's unclear what other
+        // method we should use to remove an item.
+        QVERIFY((std::is_same_v<Container, QString> || std::is_same_v<Container, QByteArray>));
+    }
 
     auto i = listIter.mutableBegin();
     QVERIFY(i != listIter.mutableEnd());
@@ -4397,6 +4461,8 @@ void tst_QVariant::iterateContainerElements()
     testSequentialIteration<std::list<QString>>();
     testSequentialIteration<QStringList>();
     testSequentialIteration<QByteArrayList>();
+    testSequentialIteration<QString>();
+    testSequentialIteration<QByteArray>();
 
 #ifdef TEST_FORWARD_LIST
     testSequentialIteration<std::forward_list<int>>();

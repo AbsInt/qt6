@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2018 The Qt Company Ltd.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtNetwork module of the Qt Toolkit.
@@ -46,6 +46,7 @@
 #include "qsslcertificateextension.h"
 #include "qsslcertificate_p.h"
 #include "qsslcipher_p.h"
+#include "qtlsbackend_p.h"
 
 #include <QtCore/qscopeguard.h>
 #include <QtCore/qoperatingsystemversion.h>
@@ -157,6 +158,60 @@
 QT_BEGIN_NAMESPACE
 
 namespace {
+
+class SchannelBackend : public QTlsBackend
+{
+private:
+    QString backendName() const override
+    {
+        return builtinBackendNames[nameIndexSchannel];
+    }
+
+    QList<QSsl::SslProtocol> supportedProtocols() const override
+    {
+        QList<QSsl::SslProtocol> protocols;
+
+        protocols << QSsl::AnyProtocol;
+        protocols << QSsl::SecureProtocols;
+        protocols << QSsl::TlsV1_0;
+        protocols << QSsl::TlsV1_0OrLater;
+        protocols << QSsl::TlsV1_1;
+        protocols << QSsl::TlsV1_1OrLater;
+        protocols << QSsl::TlsV1_2;
+        protocols << QSsl::TlsV1_2OrLater;
+
+        if (supportsTls13()) {
+            protocols << QSsl::TlsV1_3;
+            protocols << QSsl::TlsV1_3OrLater;
+        }
+
+        return protocols;
+    }
+
+    QList<QSsl::SupportedFeature> supportedFeatures() const override
+    {
+        QList<QSsl::SupportedFeature> features;
+
+        features << QSsl::SupportedFeature::ClientSideAlpn;
+        features << QSsl::SupportedFeature::ServerSideAlpn;
+
+        return features;
+    }
+
+    QList<QSsl::ImplementedClass> implementedClasses() const override
+    {
+        QList<QSsl::ImplementedClass> classes;
+
+        classes << QSsl::ImplementedClass::Socket;
+        classes << QSsl::ImplementedClass::Certificate;
+        classes << QSsl::ImplementedClass::Key;
+
+        return classes;
+    }
+};
+
+Q_GLOBAL_STATIC(SchannelBackend, backend)
+
 SecBuffer createSecBuffer(void *ptr, unsigned long length, unsigned long bufferType)
 {
     return SecBuffer{ length, bufferType, ptr };
@@ -2142,6 +2197,14 @@ bool QSslSocketBackendPrivate::verifyCertContext(CERT_CONTEXT *certContext)
 bool QSslSocketBackendPrivate::rootCertOnDemandLoadingAllowed()
 {
     return allowRootCertOnDemandLoading && s_loadRootCertsOnDemand;
+}
+
+void QSslSocketPrivate::registerAdHocFactory()
+{
+    // TLSTODO: this is a temporary solution, waiting for
+    // backends to move to ... plugins.
+    if (!backend())
+        qCWarning(lcSsl, "Failed to create backend factory");
 }
 
 QT_END_NAMESPACE

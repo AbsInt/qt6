@@ -962,15 +962,18 @@ void tst_QJSValue::toUInt()
 void tst_QJSValue::toVariant()
 {
     QJSEngine eng;
-    QObject temp;
 
-    QJSValue undefined = eng.toScriptValue(QVariant());
-    QCOMPARE(undefined.toVariant(), QVariant());
-    QCOMPARE(qjsvalue_cast<QVariant>(undefined), QVariant());
+    {
+        QJSValue undefined = eng.toScriptValue(QVariant());
+        QCOMPARE(undefined.toVariant(), QVariant());
+        QCOMPARE(qjsvalue_cast<QVariant>(undefined), QVariant());
+    }
 
-    QJSValue null = eng.evaluate("null");
-    QCOMPARE(null.toVariant(), QVariant::fromValue(nullptr));
-    QCOMPARE(qjsvalue_cast<QVariant>(null), QVariant::fromValue(nullptr));
+    {
+        QJSValue null = eng.evaluate("null");
+        QCOMPARE(null.toVariant(), QVariant::fromValue(nullptr));
+        QCOMPARE(qjsvalue_cast<QVariant>(null), QVariant::fromValue(nullptr));
+    }
 
     {
         QJSValue number = eng.toScriptValue(123.0);
@@ -995,14 +998,21 @@ void tst_QJSValue::toVariant()
         QCOMPARE(qjsvalue_cast<QVariant>(str), QVariant(QString("ciao")));
     }
 
-    QJSValue object = eng.newObject();
-    QCOMPARE(object.toVariant(), QVariant(QVariantMap()));
-
-    QJSValue qobject = eng.newQObject(&temp);
     {
+        QJSValue object = eng.newObject();
+        QCOMPARE(object.toVariant(), QVariant(QVariantMap()));
+        QVariant retained = object.toVariant(QJSValue::RetainJSObjects);
+        QCOMPARE(retained.metaType(), QMetaType::fromType<QJSValue>());
+        QVERIFY(retained.value<QJSValue>().strictlyEquals(object));
+    }
+
+    {
+        QObject temp;
+        QJSValue qobject = eng.newQObject(&temp);
         QVariant var = qobject.toVariant();
         QCOMPARE(var.typeId(), int(QMetaType::QObjectStar));
         QCOMPARE(qvariant_cast<QObject*>(var), (QObject *)&temp);
+        QCOMPARE(qobject.toVariant(QJSValue::RetainJSObjects), var);
     }
 
     {
@@ -1010,6 +1020,7 @@ void tst_QJSValue::toVariant()
         QJSValue dateObject = eng.toScriptValue(dateTime);
         QVariant var = dateObject.toVariant();
         QCOMPARE(var, QVariant(dateTime));
+        QCOMPARE(dateObject.toVariant(QJSValue::RetainJSObjects), var);
     }
 
     {
@@ -1018,38 +1029,75 @@ void tst_QJSValue::toVariant()
         QVERIFY(rxObject.isRegExp());
         QVariant var = rxObject.toVariant();
         QCOMPARE(var, QVariant(rx));
+        QCOMPARE(rxObject.toVariant(QJSValue::RetainJSObjects), var);
     }
 
-    QJSValue inv;
-    QCOMPARE(inv.toVariant(), QVariant());
-    QCOMPARE(qjsvalue_cast<QVariant>(inv), QVariant());
+    {
+        QJSValue inv;
+        QCOMPARE(inv.toVariant(), QVariant());
+        QCOMPARE(inv.toVariant(QJSValue::RetainJSObjects), QVariant());
+        QCOMPARE(qjsvalue_cast<QVariant>(inv), QVariant());
+    }
 
     // V2 constructors
     {
         QJSValue number = QJSValue(123.0);
         QCOMPARE(number.toVariant(), QVariant(123.0));
+        QCOMPARE(number.toVariant(QJSValue::RetainJSObjects), QVariant(123.0));
         QCOMPARE(qjsvalue_cast<QVariant>(number), QVariant(123.0));
 
         QJSValue falskt = QJSValue(false);
         QCOMPARE(falskt.toVariant(), QVariant(false));
+        QCOMPARE(falskt.toVariant(QJSValue::RetainJSObjects), QVariant(false));
         QCOMPARE(qjsvalue_cast<QVariant>(falskt), QVariant(false));
 
         QJSValue sant = QJSValue(true);
         QCOMPARE(sant.toVariant(), QVariant(true));
+        QCOMPARE(sant.toVariant(QJSValue::RetainJSObjects), QVariant(true));
         QCOMPARE(qjsvalue_cast<QVariant>(sant), QVariant(true));
 
         QJSValue str = QJSValue(QString("ciao"));
         QCOMPARE(str.toVariant(), QVariant(QString("ciao")));
+        QCOMPARE(str.toVariant(QJSValue::RetainJSObjects), QVariant(QString("ciao")));
         QCOMPARE(qjsvalue_cast<QVariant>(str), QVariant(QString("ciao")));
 
         QJSValue undef = QJSValue(QJSValue::UndefinedValue);
         QCOMPARE(undef.toVariant(), QVariant());
+        QCOMPARE(undef.toVariant(QJSValue::RetainJSObjects), QVariant());
         QCOMPARE(qjsvalue_cast<QVariant>(undef), QVariant());
 
         QJSValue nil = QJSValue(QJSValue::NullValue);
         QCOMPARE(nil.toVariant(), QVariant::fromValue(nullptr));
+        QCOMPARE(nil.toVariant(QJSValue::RetainJSObjects), QVariant::fromValue(nullptr));
         QCOMPARE(qjsvalue_cast<QVariant>(nil), QVariant::fromValue(nullptr));
     }
+
+    // object
+    {
+        QVariantMap mapIn;
+        mapIn["a"] = 123;
+        mapIn["b"] = "hello";
+        QJSValue object = eng.toScriptValue(mapIn);
+        QVERIFY(object.isObject());
+
+        QVariant retained = object.toVariant(QJSValue::RetainJSObjects);
+        QCOMPARE(retained.metaType(), QMetaType::fromType<QJSValue>());
+        QVERIFY(retained.value<QJSValue>().strictlyEquals(object));
+
+        QVariant ret = object.toVariant();
+        QCOMPARE(ret.typeId(), QMetaType::QVariantMap);
+        QVariantMap mapOut = ret.toMap();
+        QCOMPARE(mapOut.size(), mapIn.size());
+        for (auto it = mapOut.begin(), end = mapOut.end(); it != end; ++it)
+            QCOMPARE(*it, mapIn[it.key()]);
+
+        // round-trip conversion
+        QJSValue object2 = eng.toScriptValue(ret);
+        QVERIFY(object2.isObject());
+        QVERIFY(object2.property("a").strictlyEquals(object.property("a")));
+        QVERIFY(object2.property("b").strictlyEquals(object.property("b")));
+    }
+
 
     // array
     {
@@ -1062,6 +1110,11 @@ void tst_QJSValue::toVariant()
         QJSValue array = eng.toScriptValue(listIn);
         QVERIFY(array.isArray());
         QCOMPARE(array.property("length").toInt(), 2);
+
+        QVariant retained = array.toVariant(QJSValue::RetainJSObjects);
+        QCOMPARE(retained.metaType(), QMetaType::fromType<QJSValue>());
+        QVERIFY(retained.value<QJSValue>().strictlyEquals(array));
+
         QVariant ret = array.toVariant();
         QCOMPARE(ret.typeId(), QMetaType::QVariantList);
         QVariantList listOut = ret.toList();
@@ -1076,6 +1129,69 @@ void tst_QJSValue::toVariant()
             QVERIFY(array2.property(i).strictlyEquals(array.property(i)));
 
         qInstallMessageHandler(handler);
+    }
+
+    // function
+    {
+        QJSValue func = eng.evaluate("(function() { return 5 + 5 })");
+        QVERIFY(func.isCallable());
+        QCOMPARE(func.call().toInt(), 10);
+
+        QVariant funcVar = func.toVariant(QJSValue::RetainJSObjects);
+        QVERIFY(funcVar.isValid());
+        QCOMPARE(funcVar.metaType(), QMetaType::fromType<QJSValue>());
+
+        QJSValue func2 = eng.toScriptValue(funcVar);
+        QVERIFY(func2.isCallable());
+        QCOMPARE(func2.call().toInt(), 10);
+
+        QCOMPARE(func.toVariant(), QVariant());
+    }
+}
+
+void tst_QJSValue::toPrimitive_data()
+{
+    newEngine();
+    QTest::addColumn<QJSValue>("value");
+    QTest::addColumn<QJSPrimitiveValue>("result");
+    QTest::addColumn<bool>("causesError");
+
+    QTest::newRow("undefined")       << QJSValue(QJSValue::UndefinedValue)
+                                     << QJSPrimitiveValue(QJSPrimitiveUndefined()) << false;
+    QTest::newRow("null")            << QJSValue(QJSValue::NullValue)
+                                     << QJSPrimitiveValue(QJSPrimitiveNull()) << false;
+    QTest::newRow("bool(true)")      << QJSValue(true) << QJSPrimitiveValue(true) << false;
+    QTest::newRow("bool(false)")     << QJSValue(false) << QJSPrimitiveValue(false) << false;
+    QTest::newRow("int")             << QJSValue(123) << QJSPrimitiveValue(123) << false;
+    QTest::newRow("double")          << QJSValue(10.2) << QJSPrimitiveValue(10.2) << false;
+    QTest::newRow("string")          << QJSValue(QStringLiteral("boo"))
+                                     << QJSPrimitiveValue(QStringLiteral("boo")) << false;
+    QTest::newRow("string(managed)") << engine->toScriptValue(QStringLiteral("mmmm"))
+                                     << QJSPrimitiveValue(QStringLiteral("mmmm")) << false;
+    QTest::newRow("symbol")          << engine->evaluate(QStringLiteral("Symbol('bar')"))
+                                     << QJSPrimitiveValue(QJSPrimitiveUndefined()) << true;
+    QTest::newRow("throws")          << engine->evaluate(QStringLiteral(
+                                                             "var a = {};\n"
+                                                             "a.__proto__.toString = function() {\n"
+                                                             "    throw new Error('naeh!');\n"
+                                                             "};\n"
+                                                             "a;"))
+                                     << QJSPrimitiveValue(QJSPrimitiveUndefined()) << true;
+}
+
+void tst_QJSValue::toPrimitive()
+{
+    QFETCH(QJSValue, value);
+    QFETCH(QJSPrimitiveValue, result);
+    QFETCH(bool, causesError);
+
+    QCOMPARE(value.toPrimitive(), result);
+    if (causesError) {
+        QVERIFY(engine->hasError());
+        engine->catchError();
+    } else {
+        QJSValue reconstructed(std::move(result));
+        QVERIFY(reconstructed.strictlyEquals(value));
     }
 }
 
@@ -2720,6 +2836,40 @@ void tst_QJSValue::deleteFromDifferentThread()
     QTRY_VERIFY(thread->isFinished());
     QTRY_COMPARE(storage.firstPage, nullptr);
 #endif
+}
+
+void tst_QJSValue::stringAndUrl()
+{
+    QJSEngine engine;
+    const QString string = QStringLiteral("http://example.com/something.html");
+    const QUrl url(string);
+
+    const QJSValue urlValue(engine.toScriptValue(url));
+    QCOMPARE(urlValue.toString(), string);
+    QCOMPARE(engine.fromScriptValue<QUrl>(urlValue), url);
+
+    const QJSValue stringValue(engine.toScriptValue(string));
+    QCOMPARE(stringValue.toString(), string);
+    QCOMPARE(engine.fromScriptValue<QUrl>(stringValue), url);
+
+    const QJSValue immediateStringValue(string);
+    QCOMPARE(immediateStringValue.toString(), string);
+    QCOMPARE(engine.fromScriptValue<QUrl>(immediateStringValue), url);
+}
+
+void tst_QJSValue::jsFunctionInVariant()
+{
+    QJSEngine engine;
+    engine.installExtensions(QJSEngine::ConsoleExtension);
+    QJSValue console = engine.globalObject().property("console");
+    QVERIFY(console.isObject());
+    QJSValue log = console.property("log");
+    QVERIFY(log.isCallable());
+
+    {
+        QTest::ignoreMessage(QtDebugMsg, "direct call");
+        log.callWithInstance(console, {"direct call"});
+    }
 }
 
 QTEST_MAIN(tst_QJSValue)

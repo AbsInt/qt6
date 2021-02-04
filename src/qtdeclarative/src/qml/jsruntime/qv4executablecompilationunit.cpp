@@ -211,7 +211,9 @@ QV4::Function *ExecutableCompilationUnit::linkToEngine(ExecutionEngine *engine)
     }
 
     runtimeFunctions.resize(data->functionTableSize);
-    const QQmlPrivate::AOTCompiledFunction *aotFunction = aotCompiledFunctions;
+    static bool forceInterpreter = qEnvironmentVariableIsSet("QV4_FORCE_INTERPRETER");
+    const QQmlPrivate::AOTCompiledFunction *aotFunction
+            = forceInterpreter ? nullptr : aotCompiledFunctions;
 
     auto advanceAotFunction = [&](int i) -> const QQmlPrivate::AOTCompiledFunction * {
         if (aotFunction) {
@@ -320,12 +322,7 @@ void ExecutableCompilationUnit::unlink()
                     || l.getter == QQmlTypeWrapper::lookupSingletonProperty) {
                 if (QQmlPropertyCache *pc = l.qobjectLookup.propertyCache)
                     pc->release();
-            } else if (l.getter == QQmlValueTypeWrapper::lookupGetter
-                       || l.getter == QQmlTypeWrapper::lookupSingletonProperty) {
-                if (QQmlPropertyCache *pc = l.qgadgetLookup.propertyCache)
-                    pc->release();
             }
-
             if (l.qmlContextPropertyGetter == QQmlContextWrapper::lookupScopeObjectProperty
                     || l.qmlContextPropertyGetter == QQmlContextWrapper::lookupContextObjectProperty) {
                 if (QQmlPropertyCache *pc = l.qobjectLookup.propertyCache)
@@ -767,7 +764,7 @@ bool ExecutableCompilationUnit::loadFromDisk(const QUrl &url, const QDateTime &s
 
     const QStringList cachePaths = { sourcePath + QLatin1Char('c'), localCacheFilePath(url) };
     for (const QString &cachePath : cachePaths) {
-        CompiledData::Unit *mappedUnit = cacheFile->open(cachePath, sourceTimeStamp, errorString);
+        CompiledData::Unit *mappedUnit = cacheFile->get(cachePath, sourceTimeStamp, errorString);
         if (!mappedUnit)
             continue;
 

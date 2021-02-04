@@ -1522,8 +1522,7 @@ QModelIndexList QListView::selectedIndexes() const
     auto ignorable = [this, d](const QModelIndex &index) {
         return index.column() != d->column || index.parent() != d->root || isIndexHidden(index);
     };
-    viewSelected.erase(std::remove_if(viewSelected.begin(), viewSelected.end(), ignorable),
-                       viewSelected.end());
+    viewSelected.removeIf(ignorable);
     return viewSelected;
 }
 
@@ -1960,9 +1959,7 @@ void QListViewPrivate::removeCurrentAndDisabled(QList<QModelIndex> *indexes,
     auto isCurrentOrDisabled = [this, current](const QModelIndex &index) {
         return !isIndexEnabled(index) || index == current;
     };
-    indexes->erase(std::remove_if(indexes->begin(), indexes->end(),
-                                  isCurrentOrDisabled),
-                   indexes->end());
+    indexes->removeIf(isCurrentOrDisabled);
 }
 
 /*
@@ -2901,8 +2898,10 @@ bool QIconModeViewBase::filterStartDrag(Qt::DropActions supportedActions)
         Qt::DropAction action = drag->exec(supportedActions, dd->defaultDropAction);
         draggedItems.clear();
         // delete item, unless it has already been moved internally (see filterDropEvent)
-        if (action == Qt::MoveAction && !dd->dropEventMoved)
-            dd->clearOrRemove();
+        if (action == Qt::MoveAction && !dd->dropEventMoved) {
+            if (dd->dragDropMode != QAbstractItemView::InternalMove || drag->target() == qq->viewport())
+                dd->clearOrRemove();
+        }
         dd->dropEventMoved = false;
     }
     return true;

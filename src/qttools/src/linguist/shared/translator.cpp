@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2020 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the Qt Linguist of the Qt Toolkit.
@@ -359,11 +359,15 @@ QString Translator::makeLanguageCode(QLocale::Language language, QLocale::Countr
     return result;
 }
 
-void Translator::languageAndCountry(const QString &languageCode,
-    QLocale::Language *lang, QLocale::Country *country)
+void Translator::languageAndCountry(const QString &languageCode, QLocale::Language *lang,
+                                    QLocale::Country *country)
 {
-    QLocale::Script script;
-    QLocalePrivate::getLangAndCountry(languageCode, *lang, script, *country);
+    // ### Uses private API.
+    QLocaleId lid = QLocaleId::fromName(languageCode);
+    if (lang)
+        *lang = QLocale::Language(lid.language_id);
+    if (country)
+        *country = QLocale::Country(lid.country_id);
 }
 
 int Translator::find(const TranslatorMessage &msg) const
@@ -517,7 +521,7 @@ struct TranslatorMessageIdPtr {
     const TranslatorMessage *ptr;
 };
 
-Q_DECLARE_TYPEINFO(TranslatorMessageIdPtr, Q_MOVABLE_TYPE);
+Q_DECLARE_TYPEINFO(TranslatorMessageIdPtr, Q_RELOCATABLE_TYPE);
 
 inline size_t qHash(TranslatorMessageIdPtr tmp)
 {
@@ -543,7 +547,7 @@ struct TranslatorMessageContentPtr {
     const TranslatorMessage *ptr;
 };
 
-Q_DECLARE_TYPEINFO(TranslatorMessageContentPtr, Q_MOVABLE_TYPE);
+Q_DECLARE_TYPEINFO(TranslatorMessageContentPtr, Q_RELOCATABLE_TYPE);
 
 inline size_t qHash(TranslatorMessageContentPtr tmp)
 {

@@ -108,11 +108,8 @@ public:
 
     inline ~QVarLengthArray()
     {
-        if (QTypeInfo<T>::isComplex) {
-            T *i = ptr + s;
-            while (i-- != ptr)
-                i->~T();
-        }
+        if constexpr (QTypeInfo<T>::isComplex)
+            std::destroy_n(ptr, s);
         if (ptr != reinterpret_cast<T *>(array))
             free(ptr);
     }
@@ -157,7 +154,7 @@ public:
     inline void removeLast()
     {
         Q_ASSERT(s > 0);
-        if (QTypeInfo<T>::isComplex)
+        if constexpr (QTypeInfo<T>::isComplex)
             ptr[s - 1].~T();
         --s;
     }
@@ -253,6 +250,12 @@ public:
     void replace(qsizetype i, const T &t);
     void remove(qsizetype i);
     void remove(qsizetype i, qsizetype n);
+    template <typename AT = T>
+    qsizetype removeAll(const AT &t);
+    template <typename AT = T>
+    bool removeOne(const AT &t);
+    template <typename Predicate>
+    qsizetype removeIf(Predicate pred);
 
     inline T *data() { return ptr; }
     inline const T *data() const { return ptr; }
@@ -473,14 +476,12 @@ Q_OUTOFLINE_TEMPLATE void QVarLengthArray<T, Prealloc>::append(const T *abuf, qs
     if (asize >= a)
         reallocate(s, qMax(s * 2, asize));
 
-    if (QTypeInfo<T>::isComplex) {
-        // call constructor for new objects (which can throw)
-        while (s < asize)
-            new (ptr+(s++)) T(*abuf++);
-    } else {
+    if constexpr (QTypeInfo<T>::isComplex)
+        std::uninitialized_copy_n(abuf, increment, ptr + s);
+    else
         memcpy(static_cast<void *>(&ptr[s]), static_cast<const void *>(abuf), increment * sizeof(T));
-        s = asize;
-    }
+
+    s = asize;
 }
 
 template <class T, qsizetype Prealloc>
@@ -491,6 +492,7 @@ template <class T, qsizetype Prealloc>
 Q_OUTOFLINE_TEMPLATE void QVarLengthArray<T, Prealloc>::reallocate(qsizetype asize, qsizetype aalloc)
 {
     Q_ASSERT(aalloc >= asize);
+    Q_ASSERT(ptr);
     T *oldPtr = ptr;
     qsizetype osize = s;
 
@@ -531,10 +533,10 @@ Q_OUTOFLINE_TEMPLATE void QVarLengthArray<T, Prealloc>::reallocate(qsizetype asi
     }
     s = copySize;
 
-    if (QTypeInfo<T>::isComplex) {
-        // destroy remaining old objects
-        while (osize > asize)
-            (oldPtr+(--osize))->~T();
+    // destroy remaining old objects
+    if constexpr (QTypeInfo<T>::isComplex) {
+        if (osize > asize)
+            std::destroy(oldPtr + asize, oldPtr + osize);
     }
 
     if (oldPtr != reinterpret_cast<T *>(array) && oldPtr != ptr)
@@ -582,6 +584,18 @@ template <class T, qsizetype Prealloc>
 inline void QVarLengthArray<T, Prealloc>::remove(qsizetype i)
 { Q_ASSERT_X(i >= 0 && i < s, "QVarLengthArray::remove", "index out of range");
   erase(begin() + i, begin() + i + 1); }
+template <class T, qsizetype Prealloc>
+template <typename AT>
+inline qsizetype QVarLengthArray<T, Prealloc>::removeAll(const AT &t)
+{ return QtPrivate::sequential_erase_with_copy(*this, t); }
+template <class T, qsizetype Prealloc>
+template <typename AT>
+inline bool QVarLengthArray<T, Prealloc>::removeOne(const AT &t)
+{ return QtPrivate::sequential_erase_one(*this, t); }
+template <class T, qsizetype Prealloc>
+template <typename Predicate>
+inline qsizetype QVarLengthArray<T, Prealloc>::removeIf(Predicate pred)
+{ return QtPrivate::sequential_erase_if(*this, pred); }
 template <class T, qsizetype Prealloc>
 inline void QVarLengthArray<T, Prealloc>::prepend(T &&t)
 { insert(cbegin(), std::move(t)); }
@@ -664,14 +678,10 @@ Q_OUTOFLINE_TEMPLATE typename QVarLengthArray<T, Prealloc>::iterator QVarLengthA
     qsizetype f = qsizetype(abegin - ptr);
     qsizetype l = qsizetype(aend - ptr);
     qsizetype n = l - f;
-    if (QTypeInfo<T>::isComplex) {
-        std::copy(ptr + l, ptr + s, QT_MAKE_CHECKED_ARRAY_ITERATOR(ptr + f, s - f));
-        T *i = ptr + s;
-        T *b = ptr + s - n;
-        while (i != b) {
-            --i;
-            i->~T();
-        }
+
+    if constexpr (QTypeInfo<T>::isComplex) {
+        std::move(ptr + l, ptr + s, QT_MAKE_CHECKED_ARRAY_ITERATOR(ptr + f, s - f));
+        std::destroy(ptr + s - n, ptr + s);
     } else {
         memmove(static_cast<void *>(ptr + f), static_cast<const void *>(ptr + l), (s - l) * sizeof(T));
     }
@@ -706,6 +716,18 @@ size_t qHash(const QVarLengthArray<T, Prealloc> &key, size_t seed = 0)
     noexcept(noexcept(qHashRange(key.cbegin(), key.cend(), seed)))
 {
     return qHashRange(key.cbegin(), key.cend(), seed);
+}
+
+template <typename T, qsizetype Prealloc, typename AT>
+qsizetype erase(QVarLengthArray<T, Prealloc> &array, const AT &t)
+{
+    return QtPrivate::sequential_erase(array, t);
+}
+
+template <typename T, qsizetype Prealloc, typename Predicate>
+qsizetype erase_if(QVarLengthArray<T, Prealloc> &array, Predicate pred)
+{
+    return QtPrivate::sequential_erase_if(array, pred);
 }
 
 QT_END_NAMESPACE

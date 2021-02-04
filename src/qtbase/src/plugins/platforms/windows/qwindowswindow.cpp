@@ -351,6 +351,8 @@ static inline bool windowIsAccelerated(const QWindow *w)
         return qt_window_private(const_cast<QWindow *>(w))->compositing;
     case QSurface::VulkanSurface:
         return true;
+    case QSurface::Direct3DSurface:
+        return true;
     default:
         return false;
     }
@@ -1365,14 +1367,12 @@ QWindowsWindow::QWindowsWindow(QWindow *aWindow, const QWindowsWindowData &data)
     const Qt::WindowType type = aWindow->type();
     if (type == Qt::Desktop)
         return; // No further handling for Qt::Desktop
-#ifndef QT_NO_OPENGL
-    if (aWindow->surfaceType() == QWindow::OpenGLSurface) {
-        if (QOpenGLContext::openGLModuleType() == QOpenGLContext::LibGL)
-            setFlag(OpenGLSurface);
-        else
-            setFlag(OpenGL_ES2);
-    }
-#endif // QT_NO_OPENGL
+    if (aWindow->surfaceType() == QWindow::Direct3DSurface)
+        setFlag(Direct3DSurface);
+#if QT_CONFIG(opengl)
+    if (aWindow->surfaceType() == QWindow::OpenGLSurface)
+        setFlag(OpenGLSurface);
+#endif
 #if QT_CONFIG(vulkan)
     if (aWindow->surfaceType() == QSurface::VulkanSurface)
         setFlag(VulkanSurface);
@@ -1831,8 +1831,11 @@ void QWindowsWindow::handleHidden()
 void QWindowsWindow::handleCompositionSettingsChanged()
 {
     const QWindow *w = window();
-    if ((w->surfaceType() == QWindow::OpenGLSurface || w->surfaceType() == QWindow::VulkanSurface)
-            && w->format().hasAlpha()) {
+    if ((w->surfaceType() == QWindow::OpenGLSurface
+         || w->surfaceType() == QWindow::VulkanSurface
+         || w->surfaceType() == QWindow::Direct3DSurface)
+        && w->format().hasAlpha())
+    {
         applyBlurBehindWindow(handle());
     }
 }
@@ -2008,9 +2011,10 @@ void QWindowsWindow::handleGeometryChange()
         return; // QGuiApplication will send resize when screen actually changes
     }
     QWindowSystemInterface::handleGeometryChange(window(), m_data.geometry);
-    // QTBUG-32121: OpenGL/normal windows (with exception of ANGLE) do not receive
-    // expose events when shrinking, synthesize.
-    if (!testFlag(OpenGL_ES2) && isExposed()
+    // QTBUG-32121: OpenGL/normal windows (with exception of ANGLE
+    // which we no longer support in Qt 6) do not receive expose
+    // events when shrinking, synthesize.
+    if (isExposed()
         && m_data.geometry.size() != previousGeometry.size() // Exclude plain move
         // One dimension grew -> Windows will send expose, no need to synthesize.
         && !(m_data.geometry.width() > previousGeometry.width() || m_data.geometry.height() > previousGeometry.height())) {
@@ -2125,8 +2129,7 @@ bool QWindowsWindow::handleWmPaint(HWND hwnd, UINT message,
     if (!window()->isVisible() && (GetWindowLong(hwnd, GWL_EXSTYLE) & WS_EX_LAYERED) != 0)
         return false;
     // Ignore invalid update bounding rectangles
-    RECT updateRect;
-    if (!GetUpdateRect(m_data.hwnd, &updateRect, FALSE))
+    if (!GetUpdateRect(m_data.hwnd, 0, FALSE))
         return false;
     PAINTSTRUCT ps;
 
@@ -2139,7 +2142,9 @@ bool QWindowsWindow::handleWmPaint(HWND hwnd, UINT message,
 
     // Observed painting problems with Aero style disabled (QTBUG-7865).
     if (Q_UNLIKELY(!dwmIsCompositionEnabled())
-            && ((testFlag(OpenGLSurface) && testFlag(OpenGLDoubleBuffered)) || testFlag(VulkanSurface)))
+        && ((testFlag(OpenGLSurface) && testFlag(OpenGLDoubleBuffered))
+            || testFlag(VulkanSurface)
+            || testFlag(Direct3DSurface)))
     {
         SelectClipRgn(ps.hdc, nullptr);
     }
@@ -2148,7 +2153,7 @@ bool QWindowsWindow::handleWmPaint(HWND hwnd, UINT message,
     // we still need to send isExposed=true, for compatibility.
     // Our tests depend on it.
     fireExpose(QRegion(qrectFromRECT(ps.rcPaint)), true);
-    if (qSizeOfRect(updateRect) == m_data.geometry.size() && !QWindowsContext::instance()->asyncExpose())
+    if (!QWindowsContext::instance()->asyncExpose())
         QWindowSystemInterface::flushWindowSystemEvents(QEventLoop::ExcludeUserInputEvents);
 
     EndPaint(hwnd, &ps);
@@ -2523,7 +2528,7 @@ void QWindowsWindow::setOpacity(qreal level)
         m_opacity = level;
         if (m_data.hwnd)
             setWindowOpacity(m_data.hwnd, m_data.flags,
-                             window()->format().hasAlpha(), testFlag(OpenGLSurface) || testFlag(VulkanSurface),
+                             window()->format().hasAlpha(), testFlag(OpenGLSurface) || testFlag(VulkanSurface) || testFlag(Direct3DSurface),
                              level);
     }
 }
@@ -2931,7 +2936,8 @@ void QWindowsWindow::setEnabled(bool enabled)
 static HICON createHIcon(const QIcon &icon, int xSize, int ySize)
 {
     if (!icon.isNull()) {
-        const QPixmap pm = icon.pixmap(icon.actualSize(QSize(xSize, ySize)));
+        // QTBUG-90363, request DPR=1 for the title bar.
+        const QPixmap pm = icon.pixmap(icon.actualSize(QSize(xSize, ySize)), 1);
         if (!pm.isNull())
             return qt_pixmapToWinHICON(pm);
     }

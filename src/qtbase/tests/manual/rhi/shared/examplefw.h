@@ -192,7 +192,7 @@ Window::Window()
         setSurfaceType(VulkanSurface);
         break;
     case D3D11:
-        setSurfaceType(OpenGLSurface); // not a typo
+        setSurfaceType(Direct3DSurface);
         break;
     case Metal:
 #if (QT_VERSION >= QT_VERSION_CHECK(5, 12, 0))
@@ -549,8 +549,7 @@ int main(int argc, char **argv)
                            << "VK_LAYER_GOOGLE_unique_objects");
 #endif
         }
-        inst.setExtensions(QByteArrayList()
-                           << "VK_KHR_get_physical_device_properties2");
+        inst.setExtensions(QRhiVulkanInitParams::preferredInstanceExtensions());
         if (!inst.create()) {
             qWarning("Failed to create Vulkan instance, switching to OpenGL");
             graphicsApi = OpenGL;

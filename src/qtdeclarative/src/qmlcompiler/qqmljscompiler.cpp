@@ -36,6 +36,8 @@
 #include <QtCore/qfile.h>
 #include <QtCore/qloggingcategory.h>
 
+#include <limits>
+
 Q_LOGGING_CATEGORY(lcAotCompiler, "qml.compiler.aot", QtWarningMsg);
 
 QT_BEGIN_NAMESPACE
@@ -162,6 +164,34 @@ static bool checkArgumentsObjectUseInSignalHandlers(const QmlIR::Document &doc,
     return true;
 }
 
+class BindingOrFunction
+{
+public:
+    BindingOrFunction(const QmlIR::Binding &b) : m_binding(&b) {}
+    BindingOrFunction(const QmlIR::Function &f) : m_function(&f) {}
+
+    friend bool operator<(const BindingOrFunction &lhs, const BindingOrFunction &rhs)
+    {
+        return lhs.index() < rhs.index();
+    }
+
+    const QmlIR::Binding *binding() const { return m_binding; }
+    const QmlIR::Function *function() const { return m_function; }
+
+    quint32 index() const
+    {
+        return m_binding
+                ? m_binding->value.compiledScriptIndex
+                : (m_function
+                   ? m_function->index
+                   : std::numeric_limits<quint32>::max());
+    }
+
+private:
+    const QmlIR::Binding *m_binding = nullptr;
+    const QmlIR::Function *m_function = nullptr;
+};
+
 bool qCompileQmlFile(const QString &inputFileName, QQmlJSSaveFunction saveFunction,
                      QQmlJSAotCompiler *aotCompiler, QQmlJSCompileError *error)
 {
@@ -198,8 +228,9 @@ bool qCompileQmlFile(const QString &inputFileName, QQmlJSSaveFunction saveFuncti
         if (aotCompiler)
             aotCompiler->setDocument(&irDocument);
 
+        QHash<QmlIR::Object *, QmlIR::Object *> effectiveScopes;
         for (QmlIR::Object *object: qAsConst(irDocument.objects)) {
-            if (object->functionsAndExpressions->count == 0)
+            if (object->functionsAndExpressions->count == 0 && object->bindingCount() == 0)
                 continue;
             QList<QmlIR::CompiledFunctionOrExpression> functionsToCompile;
             for (QmlIR::CompiledFunctionOrExpression *foe = object->functionsAndExpressions->first; foe; foe = foe->next)
@@ -216,46 +247,62 @@ bool qCompileQmlFile(const QString &inputFileName, QQmlJSSaveFunction saveFuncti
             if (!aotCompiler)
                 continue;
 
-            aotCompiler->setScopeObject(object);
+            QmlIR::Object *scope = object;
+            for (auto it = effectiveScopes.constFind(scope), end = effectiveScopes.constEnd();
+                 it != end; it = effectiveScopes.constFind(scope)) {
+                scope = *it;
+            }
 
+            aotCompiler->setScope(object, scope);
             aotFunctionsByIndex[FileScopeCodeIndex] = aotCompiler->globalCode();
 
-            std::for_each(object->bindingsBegin(), object->bindingsEnd(), [&](const QmlIR::Binding &binding) {
+            std::vector<BindingOrFunction> bindingsAndFunctions;
+            bindingsAndFunctions.reserve(object->bindingCount() + object->functionCount());
 
-                switch (binding.type) {
-                case QmlIR::Binding::Type_Boolean:
-                case QmlIR::Binding::Type_Number:
-                case QmlIR::Binding::Type_String:
-                case QmlIR::Binding::Type_Null:
-                    return;
-                default:
-                    break;
+            std::copy(object->bindingsBegin(), object->bindingsEnd(),
+                      std::back_inserter(bindingsAndFunctions));
+            std::copy(object->functionsBegin(), object->functionsEnd(),
+                      std::back_inserter(bindingsAndFunctions));
+
+            // AOT-compile bindings and functions in the same order as above so that the runtime
+            // class indices match
+            std::sort(bindingsAndFunctions.begin(), bindingsAndFunctions.end());
+            std::for_each(bindingsAndFunctions.begin(), bindingsAndFunctions.end(),
+                          [&](const BindingOrFunction &bindingOrFunction) {
+                std::variant<QQmlJSAotFunction, QQmlJS::DiagnosticMessage> result;
+                if (const auto *binding = bindingOrFunction.binding()) {
+                    switch (binding->type) {
+                    case QmlIR::Binding::Type_AttachedProperty:
+                    case QmlIR::Binding::Type_GroupProperty:
+                        effectiveScopes.insert(
+                                    irDocument.objects.at(binding->value.objectIndex), scope);
+                        return;
+                    case QmlIR::Binding::Type_Boolean:
+                    case QmlIR::Binding::Type_Number:
+                    case QmlIR::Binding::Type_String:
+                    case QmlIR::Binding::Type_Null:
+                        return;
+                    default:
+                        break;
+                    }
+
+                    qCDebug(lcAotCompiler) << "Compiling binding for property"
+                                           << irDocument.stringAt(binding->propertyNameIndex);
+                    result = aotCompiler->compileBinding(*binding);
+                } else if (const auto *function = bindingOrFunction.function()) {
+                    qCDebug(lcAotCompiler) << "Compiling function"
+                                           << irDocument.stringAt(function->nameIndex);
+                    result = aotCompiler->compileFunction(*function);
+                } else {
+                    Q_UNREACHABLE();
                 }
 
-                qCDebug(lcAotCompiler) << "Compiling binding for property"
-                                       << irDocument.stringAt(binding.propertyNameIndex);
-                auto result = aotCompiler->compileBinding(binding);
                 if (auto *error = std::get_if<QQmlJS::DiagnosticMessage>(&result)) {
-                    qCDebug(lcAotCompiler) << "Could not compile binding:"
-                                             << diagnosticErrorMessage(inputFileName, *error);
-                } else if (auto *func = std::get_if<QQmlJSAotFunction>(&result)) {
-                    qCInfo(lcAotCompiler) << "Generated code:" << func->code;
-                    aotFunctionsByIndex[runtimeFunctionIndices[binding.value.compiledScriptIndex]] = *func;
-                }
-            });
-
-            std::for_each(object->functionsBegin(), object->functionsEnd(),
-                          [&](const QmlIR::Function &function) {
-
-                qCDebug(lcAotCompiler) << "Compiling function"
-                                       << irDocument.stringAt(function.nameIndex);
-                auto result = aotCompiler->compileFunction(function);
-                if (auto *error = std::get_if<QQmlJS::DiagnosticMessage>(&result)) {
-                    qCDebug(lcAotCompiler) << "Could not compile function:"
+                    qCDebug(lcAotCompiler) << "Compilation failed:"
                                            << diagnosticErrorMessage(inputFileName, *error);
                 } else if (auto *func = std::get_if<QQmlJSAotFunction>(&result)) {
                     qCInfo(lcAotCompiler) << "Generated code:" << func->code;
-                    aotFunctionsByIndex[runtimeFunctionIndices[function.index]] = *func;
+                    aotFunctionsByIndex[runtimeFunctionIndices[bindingOrFunction.index()]] = *func;
                 }
             });
         }
@@ -367,6 +414,27 @@ bool qCompileJSFile(const QString &inputFileName, const QString &inputFileUrl, Q
     return saveFunction(QV4::CompiledData::SaveableUnitPointer(unit.data), empty, &error->message);
 }
 
+static const char *wrapCallCode = R"(
+template <typename Binding>
+void wrapCall(const QQmlPrivate::AOTCompiledContext *context, void *dataPtr, void **argumentsPtr, Binding &&binding)
+{
+    using return_type = std::invoke_result_t<Binding, const QQmlPrivate::AOTCompiledContext *, void **>;
+    if constexpr (std::is_same_v<return_type, void>) {
+       Q_UNUSED(dataPtr);
+       binding(context, argumentsPtr);
+    } else {
+       new (dataPtr) return_type(binding(context, argumentsPtr));
+    }
+}
+)";
+
+static const char *funcHeaderCode = R"(
+    [](const QQmlPrivate::AOTCompiledContext *context, void *dataPtr, void **argumentsPtr) {
+        wrapCall(context, dataPtr, argumentsPtr, [](const QQmlPrivate::AOTCompiledContext *context, void **argumentsPtr) {
+Q_UNUSED(context);
+Q_UNUSED(argumentsPtr);
+)";
+
 bool qSaveQmlJSUnitAsCpp(const QString &inputFileName, const QString &outputFileName, const QV4::CompiledData::SaveableUnitPointer &unit, const QQmlJSAotFunctionMap &aotFunctions, QString *errorString)
 {
 #if QT_CONFIG(temporaryfile)
@@ -451,25 +519,10 @@ bool qSaveQmlJSUnitAsCpp(const QString &inputFileName, const QString &outputFile
     writeStr(aotFunctions[FileScopeCodeIndex].code.toUtf8().constData());
     if (aotFunctions.size() <= 1) {
         // FileScopeCodeIndex is always there, but it may be the only one.
-        writeStr("extern const QQmlPrivate::AOTCompiledFunction aotBuiltFunctions[] = { { 0, QMetaType::fromType<void>(), nullptr } };");
+        writeStr("extern const QQmlPrivate::AOTCompiledFunction aotBuiltFunctions[] = { { 0, QMetaType::fromType<void>(), {}, nullptr } };");
     } else {
-        writeStr(R"(template <typename Binding>
-                 void wrapCall(QQmlContext *context, QObject *scopeObject, void *dataPtr, Binding &&binding) {
-                 using return_type = std::invoke_result_t<Binding, QQmlContext*, QObject*>;
-                 if constexpr (std::is_same_v<return_type, void>) {
-                 Q_UNUSED(dataPtr);
-                 binding(context, scopeObject);
-                 } else {
-                 auto result = binding(context, scopeObject);
-                 *reinterpret_cast<return_type *>(dataPtr) = std::move(result);
-                 }
-                 }        )");
-
-        writeStr("extern const QQmlPrivate::AOTCompiledFunction aotBuiltFunctions[] = {");
-
-        QString header = QStringLiteral("[](QQmlContext *context, QObject *scopeObject, void *dataPtr) {\n");
-        header += QStringLiteral("wrapCall(context, scopeObject, dataPtr, [](QQmlContext *context, QObject *scopeObject) {");
-        header += QStringLiteral("Q_UNUSED(context); Q_UNUSED(scopeObject);\n");
+        writeStr(wrapCallCode);
+        writeStr("extern const QQmlPrivate::AOTCompiledFunction aotBuiltFunctions[] = {\n");
 
         QString footer = QStringLiteral("});}\n");
 
@@ -480,15 +533,25 @@ bool qSaveQmlJSUnitAsCpp(const QString &inputFileName, const QString &outputFile
             if (func.key() == FileScopeCodeIndex)
                 continue;
 
-            QString function = header + func.value().code + footer;
+            QString function = QString::fromUtf8(funcHeaderCode) + func.value().code + footer;
 
-            writeStr(QStringLiteral("{ %1, QMetaType::fromType<%2>(), %3 },")
-                     .arg(func.key()).arg(func.value().returnType).arg(function)
+            QString argumentTypes = func.value().argumentTypes.join(
+                        QStringLiteral(">(), QMetaType::fromType<"));
+            if (!argumentTypes.isEmpty()) {
+                argumentTypes = QStringLiteral("QMetaType::fromType<")
+                        + argumentTypes + QStringLiteral(">()");
+            }
+
+            writeStr(QStringLiteral("{ %1, QMetaType::fromType<%2>(), { %3 }, %4 },")
+                     .arg(func.key())
+                     .arg(func.value().returnType)
+                     .arg(argumentTypes)
+                     .arg(function)
                      .toUtf8().constData());
         }
 
         // Conclude the list with a nullptr
-        writeStr("{ 0, QMetaType::fromType<void>(), nullptr }");
+        writeStr("{ 0, QMetaType::fromType<void>(), {}, nullptr }");
         writeStr("};\n");
     }
 

@@ -103,6 +103,15 @@ int main(int argc, char **argv)
                                                 QCoreApplication::translate("main", "Required to generate qmlcache_loader without qrc files. This is the name of the Qt resource the input files belong to."),
                                                 QCoreApplication::translate("main", "compiled-file-list"));
     parser.addOption(resourceNameOption);
+    QCommandLineOption directCallsOption(QStringLiteral("direct-calls"), QCoreApplication::translate("main", "This option is ignored."));
+    directCallsOption.setFlags(QCommandLineOption::HiddenFromHelp);
+    parser.addOption(directCallsOption);
+    QCommandLineOption qmlJSRuntimeOption(QStringLiteral("qmljs-runtime"), QCoreApplication::translate("main", "This option is ignored."));
+    qmlJSRuntimeOption.setFlags(QCommandLineOption::HiddenFromHelp);
+    parser.addOption(qmlJSRuntimeOption);
+    QCommandLineOption includesOption(QStringLiteral("i"), QCoreApplication::translate("main", "This option is ignored."), QCoreApplication::translate("main", "ignored file"));
+    includesOption.setFlags(QCommandLineOption::HiddenFromHelp);
+    parser.addOption(includesOption);
 
     QCommandLineOption outputFileOption(QStringLiteral("o"), QCoreApplication::translate("main", "Output file name"), QCoreApplication::translate("main", "file name"));
     parser.addOption(outputFileOption);

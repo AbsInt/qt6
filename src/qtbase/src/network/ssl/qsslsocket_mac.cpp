@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Copyright (C) 2014 Jeremy Lainé <jeremy.laine@m4x.org>
 ** Contact: https://www.qt.io/licensing/
 **
@@ -43,6 +44,7 @@
 #include "qsslsocket_mac_p.h"
 #include "qasn1element_p.h"
 #include "qsslcertificate_p.h"
+#include "qtlsbackend_p.h"
 #include "qsslcipher_p.h"
 #include "qsslkey_p.h"
 
@@ -74,6 +76,54 @@ QT_BEGIN_NAMESPACE
 
 namespace
 {
+
+// These two classes are ad-hoc temporary solution, to be replaced
+// by the real things soon.
+class SecureTransportBackend : public QTlsBackend
+{
+private:
+    QString backendName() const override
+    {
+        return builtinBackendNames[nameIndexSecureTransport];
+    }
+
+    QList<QSsl::SslProtocol> supportedProtocols() const override
+    {
+        QList<QSsl::SslProtocol> protocols;
+
+        protocols << QSsl::AnyProtocol;
+        protocols << QSsl::SecureProtocols;
+        protocols << QSsl::TlsV1_0;
+        protocols << QSsl::TlsV1_0OrLater;
+        protocols << QSsl::TlsV1_1;
+        protocols << QSsl::TlsV1_1OrLater;
+        protocols << QSsl::TlsV1_2;
+        protocols << QSsl::TlsV1_2OrLater;
+
+        return protocols;
+    }
+
+    QList<QSsl::SupportedFeature> supportedFeatures() const override
+    {
+        QList<QSsl::SupportedFeature> features;
+        features << QSsl::SupportedFeature::ClientSideAlpn;
+
+        return features;
+    }
+
+    QList<QSsl::ImplementedClass> implementedClasses() const override
+    {
+        QList<QSsl::ImplementedClass> classes;
+        classes << QSsl::ImplementedClass::Socket;
+        classes << QSsl::ImplementedClass::Certificate;
+        classes << QSsl::ImplementedClass::Key;
+
+        return classes;
+    }
+};
+
+Q_GLOBAL_STATIC(SecureTransportBackend, backend)
+
 #ifdef Q_OS_MACOS
 /*
 
@@ -1549,6 +1599,14 @@ bool QSslSocketBackendPrivate::startHandshake()
         renegotiating = false;
         return false;
     }
+}
+
+void QSslSocketPrivate::registerAdHocFactory()
+{
+    // TLSTODO: this is a temporary solution, waiting for
+    // backends to move to ... plugins.
+    if (!backend())
+        qCWarning(lcSsl, "Failed to create backend factory");
 }
 
 QT_END_NAMESPACE

@@ -26,9 +26,9 @@
 **
 ****************************************************************************/
 
-#include <QtTest/QtTest>
-#include <QtCore/QCoreApplication>
+#include <QTest>
 
+#include <QtCore/QCoreApplication>
 #include <QtCore/QSortFilterProxyModel>
 #include <QtCore/QStringListModel>
 #include <QtGui/QStandardItemModel>
@@ -37,6 +37,9 @@
 
 // for testing QModelRoleDataSpan construction
 #include <QVarLengthArray>
+#include <QSignalSpy>
+#include <QMimeData>
+
 #include <array>
 #include <vector>
 #include <deque>

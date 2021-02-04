@@ -38,6 +38,7 @@
 ****************************************************************************/
 
 #include <QtCore/qglobal.h>
+#include <QtCore/qversionnumber.h>
 
 #ifndef QOPERATINGSYSTEMVERSION_H
 #define QOPERATINGSYSTEMVERSION_H
@@ -45,7 +46,6 @@
 QT_BEGIN_NAMESPACE
 
 class QString;
-class QVersionNumber;
 
 class Q_CORE_EXPORT QOperatingSystemVersion
 {
@@ -84,6 +84,10 @@ public:
     static const QOperatingSystemVersion AndroidNougat;
     static const QOperatingSystemVersion AndroidNougat_MR1;
     static const QOperatingSystemVersion AndroidOreo;
+    static const QOperatingSystemVersion AndroidOreo_MR1;
+    static const QOperatingSystemVersion AndroidPie;
+    static const QOperatingSystemVersion AndroidQ;
+    static const QOperatingSystemVersion AndroidR;
 
     constexpr QOperatingSystemVersion(OSType osType,
                                              int vmajor, int vminor = -1, int vmicro = -1)
@@ -113,6 +117,8 @@ public:
         return Unknown;
 #endif
     }
+
+    QVersionNumber version() const { return QVersionNumber(m_major, m_minor, m_micro); }
 
     constexpr int majorVersion() const { return m_major; }
     constexpr int minorVersion() const { return m_minor; }

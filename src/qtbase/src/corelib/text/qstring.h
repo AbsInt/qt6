@@ -489,39 +489,39 @@ public:
     static QString vasprintf(const char *format, va_list ap) Q_ATTRIBUTE_FORMAT_PRINTF(1, 0);
     static QString asprintf(const char *format, ...) Q_ATTRIBUTE_FORMAT_PRINTF(1, 2);
 
-    qsizetype indexOf(QChar c, qsizetype from = 0, Qt::CaseSensitivity cs = Qt::CaseSensitive) const;
-    qsizetype indexOf(QLatin1String s, qsizetype from = 0, Qt::CaseSensitivity cs = Qt::CaseSensitive) const;
+    [[nodiscard]] qsizetype indexOf(QChar c, qsizetype from = 0, Qt::CaseSensitivity cs = Qt::CaseSensitive) const;
+    [[nodiscard]] qsizetype indexOf(QLatin1String s, qsizetype from = 0, Qt::CaseSensitivity cs = Qt::CaseSensitive) const;
 #if QT_STRINGVIEW_LEVEL < 2
-    qsizetype indexOf(const QString &s, qsizetype from = 0, Qt::CaseSensitivity cs = Qt::CaseSensitive) const;
+    [[nodiscard]] qsizetype indexOf(const QString &s, qsizetype from = 0, Qt::CaseSensitivity cs = Qt::CaseSensitive) const;
 #endif
     [[nodiscard]] qsizetype indexOf(QStringView s, qsizetype from = 0, Qt::CaseSensitivity cs = Qt::CaseSensitive) const noexcept
     { return QtPrivate::findString(*this, from, s, cs); }
-    qsizetype lastIndexOf(QChar c, qsizetype from = -1, Qt::CaseSensitivity cs = Qt::CaseSensitive) const;
-    qsizetype lastIndexOf(QLatin1String s, qsizetype from = -1, Qt::CaseSensitivity cs = Qt::CaseSensitive) const;
+    [[nodiscard]] qsizetype lastIndexOf(QChar c, qsizetype from = -1, Qt::CaseSensitivity cs = Qt::CaseSensitive) const;
+    [[nodiscard]] qsizetype lastIndexOf(QLatin1String s, qsizetype from = -1, Qt::CaseSensitivity cs = Qt::CaseSensitive) const;
 #if QT_STRINGVIEW_LEVEL < 2
-    qsizetype lastIndexOf(const QString &s, qsizetype from = -1, Qt::CaseSensitivity cs = Qt::CaseSensitive) const;
+    [[nodiscard]] qsizetype lastIndexOf(const QString &s, qsizetype from = -1, Qt::CaseSensitivity cs = Qt::CaseSensitive) const;
 #endif
 
     [[nodiscard]] qsizetype lastIndexOf(QStringView s, qsizetype from = -1, Qt::CaseSensitivity cs = Qt::CaseSensitive) const noexcept
     { return QtPrivate::lastIndexOf(*this, from, s, cs); }
 
-    inline bool contains(QChar c, Qt::CaseSensitivity cs = Qt::CaseSensitive) const;
+    [[nodiscard]] inline bool contains(QChar c, Qt::CaseSensitivity cs = Qt::CaseSensitive) const;
 #if QT_STRINGVIEW_LEVEL < 2
-    inline bool contains(const QString &s, Qt::CaseSensitivity cs = Qt::CaseSensitive) const;
+    [[nodiscard]] inline bool contains(const QString &s, Qt::CaseSensitivity cs = Qt::CaseSensitive) const;
 #endif
-    inline bool contains(QLatin1String s, Qt::CaseSensitivity cs = Qt::CaseSensitive) const;
-    inline bool contains(QStringView s, Qt::CaseSensitivity cs = Qt::CaseSensitive) const noexcept;
-    qsizetype count(QChar c, Qt::CaseSensitivity cs = Qt::CaseSensitive) const;
-    qsizetype count(const QString &s, Qt::CaseSensitivity cs = Qt::CaseSensitive) const;
-    qsizetype count(QStringView s, Qt::CaseSensitivity cs = Qt::CaseSensitive) const;
+    [[nodiscard]] inline bool contains(QLatin1String s, Qt::CaseSensitivity cs = Qt::CaseSensitive) const;
+    [[nodiscard]] inline bool contains(QStringView s, Qt::CaseSensitivity cs = Qt::CaseSensitive) const noexcept;
+    [[nodiscard]] qsizetype count(QChar c, Qt::CaseSensitivity cs = Qt::CaseSensitive) const;
+    [[nodiscard]] qsizetype count(const QString &s, Qt::CaseSensitivity cs = Qt::CaseSensitive) const;
+    [[nodiscard]] qsizetype count(QStringView s, Qt::CaseSensitivity cs = Qt::CaseSensitive) const;
 
 #if QT_CONFIG(regularexpression)
-    qsizetype indexOf(const QRegularExpression &re, qsizetype from = 0,
-                      QRegularExpressionMatch *rmatch = nullptr) const;
-    qsizetype lastIndexOf(const QRegularExpression &re, qsizetype from = -1,
-                          QRegularExpressionMatch *rmatch = nullptr) const;
-    bool contains(const QRegularExpression &re, QRegularExpressionMatch *rmatch = nullptr) const;
-    qsizetype count(const QRegularExpression &re) const;
+    [[nodiscard]] qsizetype indexOf(const QRegularExpression &re, qsizetype from = 0,
+                                    QRegularExpressionMatch *rmatch = nullptr) const;
+    [[nodiscard]] qsizetype lastIndexOf(const QRegularExpression &re, qsizetype from = -1,
+                                        QRegularExpressionMatch *rmatch = nullptr) const;
+    [[nodiscard]] bool contains(const QRegularExpression &re, QRegularExpressionMatch *rmatch = nullptr) const;
+    [[nodiscard]] qsizetype count(const QRegularExpression &re) const;
 #endif
 
     enum SectionFlag {
@@ -533,10 +533,10 @@ public:
     };
     Q_DECLARE_FLAGS(SectionFlags, SectionFlag)
 
-    QString section(QChar sep, qsizetype start, qsizetype end = -1, SectionFlags flags = SectionDefault) const;
-    QString section(const QString &in_sep, qsizetype start, qsizetype end = -1, SectionFlags flags = SectionDefault) const;
+    [[nodiscard]] QString section(QChar sep, qsizetype start, qsizetype end = -1, SectionFlags flags = SectionDefault) const;
+    [[nodiscard]] QString section(const QString &in_sep, qsizetype start, qsizetype end = -1, SectionFlags flags = SectionDefault) const;
 #if QT_CONFIG(regularexpression)
-    QString section(const QRegularExpression &re, qsizetype start, qsizetype end = -1, SectionFlags flags = SectionDefault) const;
+    [[nodiscard]] QString section(const QRegularExpression &re, qsizetype start, qsizetype end = -1, SectionFlags flags = SectionDefault) const;
 #endif
     [[nodiscard]] QString left(qsizetype n) const;
     [[nodiscard]] QString right(qsizetype n) const;
@@ -642,6 +642,12 @@ public:
     QString &remove(QChar c, Qt::CaseSensitivity cs = Qt::CaseSensitive);
     QString &remove(QLatin1String s, Qt::CaseSensitivity cs = Qt::CaseSensitive);
     QString &remove(const QString &s, Qt::CaseSensitivity cs = Qt::CaseSensitive);
+    template <typename Predicate>
+    QString &removeIf(Predicate pred)
+    {
+        QtPrivate::sequential_erase_if(*this, pred);
+        return *this;
+    }
     QString &replace(qsizetype i, qsizetype len, QChar after);
     QString &replace(qsizetype i, qsizetype len, const QChar *s, qsizetype slen);
     QString &replace(qsizetype i, qsizetype len, const QString &after);
@@ -702,7 +708,7 @@ public:
 
     [[nodiscard]] QString repeated(qsizetype times) const;
 
-    const ushort *utf16() const;
+    const ushort *utf16() const; // ### Qt 7 char16_t
 
 #if !defined(Q_CLANG_QDOC)
     [[nodiscard]] QByteArray toLatin1() const &
@@ -722,7 +728,7 @@ public:
     [[nodiscard]] QByteArray toUtf8() const;
     [[nodiscard]] QByteArray toLocal8Bit() const;
 #endif
-    [[nodiscard]] QList<uint> toUcs4() const;
+    [[nodiscard]] QList<uint> toUcs4() const; // ### Qt 7 char32_t
 
     // note - this are all inline so we can benefit from strlen() compile time optimizations
     static QString fromLatin1(QByteArrayView ba);
@@ -769,7 +775,7 @@ public:
 
     QString &setRawData(const QChar *unicode, qsizetype size);
     QString &setUnicode(const QChar *unicode, qsizetype size);
-    inline QString &setUtf16(const ushort *utf16, qsizetype size);
+    inline QString &setUtf16(const ushort *utf16, qsizetype size); // ### Qt 7 char16_t
 
 #if QT_STRINGVIEW_LEVEL < 2
     int compare(const QString &s, Qt::CaseSensitivity cs = Qt::CaseSensitive) const noexcept;
@@ -1016,6 +1022,7 @@ public:
     inline void push_front(QChar c) { prepend(c); }
     inline void push_front(const QString &s) { prepend(s); }
     void shrink_to_fit() { squeeze(); }
+    iterator erase(const_iterator first, const_iterator last);
 
     static inline QString fromStdString(const std::string &s);
     inline std::string toStdString() const;
@@ -1082,7 +1089,7 @@ private:
     static QByteArray toLatin1_helper_inplace(QString &);
     static QByteArray toUtf8_helper(const QString &);
     static QByteArray toLocal8Bit_helper(const QChar *data, qsizetype size);
-    static qsizetype toUcs4_helper(const ushort *uc, qsizetype length, uint *out);
+    static qsizetype toUcs4_helper(const ushort *uc, qsizetype length, uint *out); // ### Qt 7 char16_t
     static qlonglong toIntegral_helper(QStringView string, bool *ok, int base);
     static qulonglong toIntegral_helper(QStringView string, bool *ok, uint base);
     void replace_helper(size_t *indices, qsizetype nIndices, qsizetype blen, const QChar *after, qsizetype alen);
@@ -1441,8 +1448,8 @@ inline QString QString::fromStdU32String(const std::u32string &s)
 inline std::u32string QString::toStdU32String() const
 {
     std::u32string u32str(length(), char32_t(0));
-    int len = toUcs4_helper(reinterpret_cast<const ushort *>(constData()), length(),
-                            reinterpret_cast<uint*>(&u32str[0]));
+    qsizetype len = toUcs4_helper(reinterpret_cast<const ushort *>(constData()),
+                                  length(), reinterpret_cast<uint*>(&u32str[0]));
     u32str.resize(len);
     return u32str;
 }
@@ -1520,6 +1527,18 @@ Q_ALWAYS_INLINE
 QString QLatin1String::arg(Args &&...args) const
 {
     return QtPrivate::argToQStringDispatch(*this, QtPrivate::qStringLikeToArg(args)...);
+}
+
+template <typename T>
+qsizetype erase(QString &s, const T &t)
+{
+    return QtPrivate::sequential_erase(s, t);
+}
+
+template <typename Predicate>
+qsizetype erase_if(QString &s, Predicate pred)
+{
+    return QtPrivate::sequential_erase_if(s, pred);
 }
 
 QT_END_NAMESPACE

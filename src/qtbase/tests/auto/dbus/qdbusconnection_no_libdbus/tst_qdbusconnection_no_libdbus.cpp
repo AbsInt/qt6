@@ -28,8 +28,8 @@
 #include <qcoreapplication.h>
 #include <qdebug.h>
 
-#include <QtTest/QtTest>
-#include <QtDBus/QtDBus>
+#include <QTest>
+
 
 #include <stdlib.h>
 

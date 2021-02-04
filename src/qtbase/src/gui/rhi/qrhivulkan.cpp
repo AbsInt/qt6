@@ -1,34 +1,37 @@
 /****************************************************************************
 **
 ** Copyright (C) 2019 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the Qt Gui module
 **
-** $QT_BEGIN_LICENSE:LGPL3$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
 ** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPLv3 included in the
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
 ** packaging of this file. Please review the following information to
 ** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl.html.
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
 ** GNU General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or later as published by the Free
-** Software Foundation and appearing in the file LICENSE.GPL included in
-** the packaging of this file. Please review the following information to
-** ensure the GNU General Public License version 2.0 requirements will be
-** met: http://www.gnu.org/licenses/gpl-2.0.html.
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -113,8 +116,7 @@ QT_BEGIN_NAMESPACE
                        << "VK_LAYER_LUNARG_swapchain"
                        << "VK_LAYER_GOOGLE_unique_objects");
     #endif
-        inst.setExtensions(QByteArrayList()
-                           << "VK_KHR_get_physical_device_properties2");
+        inst.setExtensions(QRhiVulkanInitParams::preferredInstanceExtensions());
         if (!inst.create())
             qFatal("Vulkan not available");
 
@@ -122,16 +124,18 @@ QT_BEGIN_NAMESPACE
     }
     \endcode
 
-    The example here has two optional aspects: it enables the
+    This example enables the
     \l{https://github.com/KhronosGroup/Vulkan-ValidationLayers}{Vulkan
     validation layers}, when they are available, and also enables the
-    VK_KHR_get_physical_device_properties2 extension (part of Vulkan 1.1), when
-    available. The former is useful during the development phase (remember that
-    QVulkanInstance conveniently redirects messages and warnings to qDebug).
-    Avoid enabling it in production builds, however. The latter is important in
-    order to make QRhi::CustomInstanceStepRate available with Vulkan since
-    VK_EXT_vertex_attribute_divisor (part of Vulkan 1.1) depends on it. It can
-    be omitted when instanced drawing with a non-one step rate is not used.
+    instance-level extensions QRhi reports as desirable (such as,
+    VK_KHR_get_physical_device_properties2), as long as they are supported by
+    the Vulkan implementation at run time.
+
+    The former is optional, and is useful during the development phase
+    QVulkanInstance conveniently redirects messages and warnings to qDebug.
+    Avoid enabling it in production builds, however. The latter is strongly
+    recommended, and is important in order to make certain features functional
+    (for example, QRhi::CustomInstanceStepRate).
 
     Once this is done, a Vulkan-based QRhi can be created by passing the
     instance and a QWindow with its surface type set to
@@ -156,6 +160,12 @@ QT_BEGIN_NAMESPACE
     in deviceExtensions. This can be relevant when integrating with native Vulkan
     rendering code.
 
+    It is expected that the desired list of instance extensions will be queried
+    by calling the static function preferredInstanceExtensions() before
+    initializing a QVulkanInstance. The returned list can be passed to
+    QVulkanInstance::setExtensions() as-is, because unsupported extensions are
+    filtered out automatically.
+
     \section2 Working with existing Vulkan devices
 
     When interoperating with another graphics engine, it may be necessary to
@@ -179,6 +189,11 @@ QT_BEGIN_NAMESPACE
     memory allocator} between two QRhi instances.
 
     The QRhi does not take ownership of any of the external objects.
+
+    Applications are encouraged to query the list of desired device extensions
+    by calling the static function preferredExtensionsForImportedDevice(), and
+    enable them on the VkDevice. Otherwise certain QRhi features may not be
+    available.
  */
 
 /*!
@@ -308,6 +323,22 @@ static inline VmaAllocator toVmaAllocator(QVkAllocator a)
     return reinterpret_cast<VmaAllocator>(a);
 }
 
+QByteArrayList QRhiVulkanInitParams::preferredInstanceExtensions()
+{
+    return {
+        QByteArrayLiteral("VK_KHR_get_physical_device_properties2")
+    };
+}
+
+QByteArrayList QRhiVulkanInitParams::preferredExtensionsForImportedDevice()
+{
+    return {
+        QByteArrayLiteral("VK_KHR_swapchain"),
+        QByteArrayLiteral("VK_EXT_debug_marker"),
+        QByteArrayLiteral("VK_EXT_vertex_attribute_divisor")
+    };
+}
+
 QRhiVulkan::QRhiVulkan(QRhiVulkanInitParams *params, QRhiVulkanNativeHandles *importParams)
     : ofr(this)
 {
@@ -361,11 +392,27 @@ static bool qvk_debug_filter(VkDebugReportFlagsEXT flags, VkDebugReportObjectTyp
     return false;
 }
 
+static inline QRhiDriverInfo::DeviceType toRhiDeviceType(VkPhysicalDeviceType type)
+{
+    switch (type) {
+    case VK_PHYSICAL_DEVICE_TYPE_OTHER:
+        return QRhiDriverInfo::UnknownDevice;
+    case VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU:
+        return QRhiDriverInfo::IntegratedDevice;
+    case VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU:
+        return QRhiDriverInfo::DiscreteDevice;
+    case VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU:
+        return QRhiDriverInfo::VirtualDevice;
+    case VK_PHYSICAL_DEVICE_TYPE_CPU:
+        return QRhiDriverInfo::CpuDevice;
+    default:
+        return QRhiDriverInfo::UnknownDevice;
+    }
+}
+
 bool QRhiVulkan::create(QRhi::Flags flags)
 {
-    Q_UNUSED(flags);
     Q_ASSERT(inst);
-
     if (!inst->isValid()) {
         qWarning("Vulkan instance is not valid");
         return false;
@@ -374,6 +421,8 @@ bool QRhiVulkan::create(QRhi::Flags flags)
     globalVulkanInstance = inst; // assume this will not change during the lifetime of the entire application
 
     f = inst->functions();
+
+    rhiFlags = flags;
 
     QList<VkQueueFamilyProperties> queueFamilyProps;
     auto queryQueueFamilyProps = [this, &queueFamilyProps] {
@@ -453,6 +502,11 @@ bool QRhiVulkan::create(QRhi::Flags flags)
                 physDevProperties.deviceID,
                 physDevProperties.deviceType);
     }
+
+    driverInfoStruct.deviceName = QByteArray(physDevProperties.deviceName);
+    driverInfoStruct.deviceId = physDevProperties.deviceID;
+    driverInfoStruct.vendorId = physDevProperties.vendorID;
+    driverInfoStruct.deviceType = toRhiDeviceType(physDevProperties.deviceType);
 
     f->vkGetPhysicalDeviceFeatures(physDev, &physDevFeatures);
 
@@ -1340,8 +1394,8 @@ bool QRhiVulkan::createOffscreenRenderPass(QVkRenderPassDescriptor *rpD,
     rpInfo.subpassCount = 1;
     rpInfo.pSubpasses = &subpassDesc;
     // don't yet know the correct initial/final access and stage stuff for the
-    // implicit deps at this point, so leave it to the resource tracking to
-    // generate barriers
+    // implicit deps at this point, so leave it to the resource tracking and
+    // activateTextureRenderTarget() to generate barriers
 
     VkResult err = df->vkCreateRenderPass(dev, &rpInfo, nullptr, &rpD->rp);
     if (err != VK_SUCCESS) {
@@ -2147,8 +2201,17 @@ void QRhiVulkan::activateTextureRenderTarget(QVkCommandBuffer *cbD, QVkTextureRe
             resolveTexD->lastActiveFrameSlot = currentFrameSlot;
         }
     }
-    if (rtD->m_desc.depthStencilBuffer())
-        QRHI_RES(QVkRenderBuffer, rtD->m_desc.depthStencilBuffer())->lastActiveFrameSlot = currentFrameSlot;
+    if (rtD->m_desc.depthStencilBuffer()) {
+        QVkRenderBuffer *rbD = QRHI_RES(QVkRenderBuffer, rtD->m_desc.depthStencilBuffer());
+        Q_ASSERT(rbD->m_type == QRhiRenderBuffer::DepthStencil);
+        // We specify no explicit VkSubpassDependency for an offscreen render
+        // target, meaning we need an explicit barrier for the depth-stencil
+        // buffer to avoid a write-after-write hazard (as the implicit one is
+        // not sufficient). Textures are taken care of by the resource tracking
+        // but that excludes the (content-wise) throwaway depth-stencil buffer.
+        depthStencilExplicitBarrier(cbD, rbD);
+        rbD->lastActiveFrameSlot = currentFrameSlot;
+    }
     if (rtD->m_desc.depthTexture()) {
         QVkTexture *depthTexD = QRHI_RES(QVkTexture, rtD->m_desc.depthTexture());
         trackedRegisterTexture(&passResTracker, depthTexD,
@@ -2569,7 +2632,7 @@ VkShaderModule QRhiVulkan::createShader(const QByteArray &spirv)
     return shaderModule;
 }
 
-bool QRhiVulkan::ensurePipelineCache()
+bool QRhiVulkan::ensurePipelineCache(const void *initialData, size_t initialDataSize)
 {
     if (pipelineCache)
         return true;
@@ -2577,6 +2640,8 @@ bool QRhiVulkan::ensurePipelineCache()
     VkPipelineCacheCreateInfo pipelineCacheInfo;
     memset(&pipelineCacheInfo, 0, sizeof(pipelineCacheInfo));
     pipelineCacheInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
+    pipelineCacheInfo.initialDataSize = initialDataSize;
+    pipelineCacheInfo.pInitialData = initialData;
     VkResult err = df->vkCreatePipelineCache(dev, &pipelineCacheInfo, nullptr, &pipelineCache);
     if (err != VK_SUCCESS) {
         qWarning("Failed to create pipeline cache: %d", err);
@@ -2802,6 +2867,37 @@ void QRhiVulkan::trackedImageBarrier(QVkCommandBuffer *cbD, QVkTexture *texD,
     s.layout = layout;
     s.access = access;
     s.stage = stage;
+}
+
+void QRhiVulkan::depthStencilExplicitBarrier(QVkCommandBuffer *cbD, QVkRenderBuffer *rbD)
+{
+    Q_ASSERT(cbD->recordingPass == QVkCommandBuffer::NoPass);
+
+    VkImageMemoryBarrier barrier;
+    memset(&barrier, 0, sizeof(barrier));
+    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+    barrier.subresourceRange.baseMipLevel = 0;
+    barrier.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
+    barrier.subresourceRange.baseArrayLayer = 0;
+    barrier.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
+    barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    barrier.newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+    barrier.srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT
+        | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    barrier.image = rbD->image;
+
+    const VkPipelineStageFlags stages = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT
+        | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+
+    QVkCommandBuffer::Command &cmd(cbD->commands.get());
+    cmd.cmd = QVkCommandBuffer::Command::ImageBarrier;
+    cmd.args.imageBarrier.srcStageMask = stages;
+    cmd.args.imageBarrier.dstStageMask = stages;
+    cmd.args.imageBarrier.count = 1;
+    cmd.args.imageBarrier.index = cbD->pools.imageBarrier.count();
+    cbD->pools.imageBarrier.append(barrier);
 }
 
 void QRhiVulkan::subresourceBarrier(QVkCommandBuffer *cbD, VkImage image,
@@ -4142,6 +4238,8 @@ bool QRhiVulkan::isFeatureSupported(QRhi::Feature feature) const
         return true;
     case QRhi::ReadBackAnyTextureFormat:
         return true;
+    case QRhi::PipelineCacheDataLoadSave:
+        return true;
     default:
         Q_UNREACHABLE();
         return false;
@@ -4184,6 +4282,11 @@ const QRhiNativeHandles *QRhiVulkan::nativeHandles()
     return &nativeHandlesStruct;
 }
 
+QRhiDriverInfo QRhiVulkan::driverInfo() const
+{
+    return driverInfoStruct;
+}
+
 void QRhiVulkan::sendVMemStatsToProfiler()
 {
     QRhiProfilerPrivate *rhiP = profilerPrivateOrNull();
@@ -4210,6 +4313,129 @@ void QRhiVulkan::releaseCachedResources()
 bool QRhiVulkan::isDeviceLost() const
 {
     return deviceLost;
+}
+
+struct QVkPipelineCacheDataHeader
+{
+    quint32 rhiId;
+    quint32 arch;
+    quint32 driverVersion;
+    quint32 vendorId;
+    quint32 deviceId;
+    quint32 dataSize;
+    quint32 uuidSize;
+    quint32 reserved;
+};
+
+QByteArray QRhiVulkan::pipelineCacheData()
+{
+    Q_STATIC_ASSERT(sizeof(QVkPipelineCacheDataHeader) == 32);
+
+    QByteArray data;
+    if (!pipelineCache || !rhiFlags.testFlag(QRhi::EnablePipelineCacheDataSave))
+        return data;
+
+    size_t dataSize = 0;
+    VkResult err = df->vkGetPipelineCacheData(dev, pipelineCache, &dataSize, nullptr);
+    if (err != VK_SUCCESS) {
+        qWarning("Failed to get pipeline cache data size: %d", err);
+        return QByteArray();
+    }
+    const size_t headerSize = sizeof(QVkPipelineCacheDataHeader);
+    const size_t dataOffset = headerSize + VK_UUID_SIZE;
+    data.resize(dataOffset + dataSize);
+    err = df->vkGetPipelineCacheData(dev, pipelineCache, &dataSize, data.data() + dataOffset);
+    if (err != VK_SUCCESS) {
+        qWarning("Failed to get pipeline cache data of %d bytes: %d", int(dataSize), err);
+        return QByteArray();
+    }
+
+    QVkPipelineCacheDataHeader header;
+    header.rhiId = pipelineCacheRhiId();
+    header.arch = quint32(sizeof(void*));
+    header.driverVersion = physDevProperties.driverVersion;
+    header.vendorId = physDevProperties.vendorID;
+    header.deviceId = physDevProperties.deviceID;
+    header.dataSize = quint32(dataSize);
+    header.uuidSize = VK_UUID_SIZE;
+    memcpy(data.data(), &header, headerSize);
+    memcpy(data.data() + headerSize, physDevProperties.pipelineCacheUUID, VK_UUID_SIZE);
+
+    return data;
+}
+
+void QRhiVulkan::setPipelineCacheData(const QByteArray &data)
+{
+    if (data.isEmpty())
+        return;
+
+    const size_t headerSize = sizeof(QVkPipelineCacheDataHeader);
+    if (data.size() < qsizetype(headerSize)) {
+        qWarning("setPipelineCacheData: Invalid blob size");
+        return;
+    }
+    QVkPipelineCacheDataHeader header;
+    memcpy(&header, data.constData(), headerSize);
+
+    const quint32 rhiId = pipelineCacheRhiId();
+    if (header.rhiId != rhiId) {
+        qWarning("setPipelineCacheData: The data is for a different QRhi version or backend (%u, %u)",
+                 rhiId, header.rhiId);
+        return;
+    }
+    const quint32 arch = quint32(sizeof(void*));
+    if (header.arch != arch) {
+        qWarning("setPipelineCacheData: Architecture does not match (%u, %u)",
+                 arch, header.arch);
+        return;
+    }
+    if (header.driverVersion != physDevProperties.driverVersion) {
+        qWarning("setPipelineCacheData: driverVersion does not match (%u, %u)",
+                 physDevProperties.driverVersion, header.driverVersion);
+        return;
+    }
+    if (header.vendorId != physDevProperties.vendorID) {
+        qWarning("setPipelineCacheData: vendorID does not match (%u, %u)",
+                 physDevProperties.vendorID, header.vendorId);
+        return;
+    }
+    if (header.deviceId != physDevProperties.deviceID) {
+        qWarning("setPipelineCacheData: deviceID does not match (%u, %u)",
+                 physDevProperties.deviceID, header.deviceId);
+        return;
+    }
+    if (header.uuidSize != VK_UUID_SIZE) {
+        qWarning("setPipelineCacheData: VK_UUID_SIZE does not match (%u, %u)",
+                 quint32(VK_UUID_SIZE), header.uuidSize);
+        return;
+    }
+
+    if (data.size() < qsizetype(headerSize + VK_UUID_SIZE)) {
+        qWarning("setPipelineCacheData: Invalid blob, no uuid");
+        return;
+    }
+    if (memcmp(data.constData() + headerSize, physDevProperties.pipelineCacheUUID, VK_UUID_SIZE)) {
+        qWarning("setPipelineCacheData: pipelineCacheUUID does not match");
+        return;
+    }
+
+    const size_t dataOffset = headerSize + VK_UUID_SIZE;
+    if (data.size() < qsizetype(dataOffset + header.dataSize)) {
+        qWarning("setPipelineCacheData: Invalid blob, data missing");
+        return;
+    }
+
+    if (pipelineCache) {
+        df->vkDestroyPipelineCache(dev, pipelineCache, nullptr);
+        pipelineCache = VK_NULL_HANDLE;
+    }
+
+    if (ensurePipelineCache(data.constData() + dataOffset, header.dataSize)) {
+        qCDebug(QRHI_LOG_INFO, "Created pipeline cache with initial data of %d bytes",
+                int(header.dataSize));
+    } else {
+        qWarning("Failed to create pipeline cache with initial data specified");
+    }
 }
 
 QRhiRenderBuffer *QRhiVulkan::createRenderBuffer(QRhiRenderBuffer::Type type, const QSize &pixelSize,

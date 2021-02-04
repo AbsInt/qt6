@@ -27,7 +27,7 @@
 ****************************************************************************/
 
 
-#include <QtTest/QtTest>
+#include <QTest>
 #include <QtTest/private/qtesthelpers_p.h>
 #include "qlineedit.h"
 #include "qapplication.h"
@@ -43,6 +43,9 @@
 #include "qstylehints.h"
 #include <private/qapplication_p.h>
 #include "qclipboard.h"
+#include <QSignalSpy>
+#include <QRandomGenerator>
+#include <QTimer>
 
 #include <qlineedit.h>
 #include <private/qlineedit_p.h>
@@ -4982,7 +4985,7 @@ void tst_QLineEdit::testQuickSelectionWithMouse()
     QVERIFY(lineEdit.selectedText().endsWith(suffix));
     QTest::mouseMove(lineEdit.windowHandle(), center + QPoint(20, 0));
     qCDebug(lcTests) << "Selected text:" << lineEdit.selectedText();
-#ifdef Q_PROCESSOR_ARM
+#ifdef Q_PROCESSOR_ARM_32
     QEXPECT_FAIL("", "Currently fails on gcc-armv7, needs investigation.", Continue);
 #endif
     QCOMPARE(lineEdit.selectedText(), partialSelection);

@@ -27,7 +27,8 @@
 **
 ****************************************************************************/
 
-#include <QtTest/QtTest>
+#include <QTest>
+#include <QScopedValueRollback>
 #include <qplatformdefs.h>
 
 #include <QCoreApplication>
@@ -36,6 +37,10 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QTemporaryDir>
+#include <QTemporaryFile>
+#include <QOperatingSystemVersion>
+#include <QStorageInfo>
+#include <QScopeGuard>
 
 #include <private/qabstractfileengine_p.h>
 #include <private/qfsfileengine_p.h>
@@ -1825,9 +1830,18 @@ void tst_QFile::bufferedRead()
 #ifdef Q_OS_UNIX
 void tst_QFile::isSequential()
 {
-    QFile zero("/dev/null");
+    QFile zero("/dev/zero");
     QVERIFY2(zero.open(QFile::ReadOnly), msgOpenFailed(zero).constData());
     QVERIFY(zero.isSequential());
+
+    QFile null("/dev/null");
+    QVERIFY(null.open(QFile::ReadOnly));
+    QVERIFY(null.isSequential());
+
+    // /dev/tty will fail to open if we don't have a controlling TTY
+    QFile tty("/dev/tty");
+    if (tty.open(QFile::ReadOnly))
+        QVERIFY(tty.isSequential());
 }
 #endif
 
@@ -3701,6 +3715,9 @@ void tst_QFile::moveToTrash_data()
 
 void tst_QFile::moveToTrash()
 {
+#ifdef Q_OS_ANDROID
+    QSKIP("Android doesn't implement a trash bin");
+#endif
     QFETCH(QString, source);
     QFETCH(bool, create);
     QFETCH(bool, result);

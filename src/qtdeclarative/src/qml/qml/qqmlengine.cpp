@@ -105,40 +105,6 @@
 
 QT_BEGIN_NAMESPACE
 
-// Declared in qqml.h
-int qmlRegisterUncreatableMetaObject(const QMetaObject &staticMetaObject,
-                                     const char *uri, int versionMajor,
-                                     int versionMinor, const char *qmlName,
-                                     const QString& reason)
-{
-    QQmlPrivate::RegisterType type = {
-        0,
-        QMetaType(),
-        QMetaType(),
-        0,
-        nullptr,
-        nullptr,
-        reason,
-        nullptr,
-
-        uri, QTypeRevision::fromVersion(versionMajor, versionMinor), qmlName, &staticMetaObject,
-
-        QQmlAttachedPropertiesFunc(),
-        nullptr,
-
-        0,
-        0,
-        0,
-
-        nullptr, nullptr,
-
-        nullptr,
-        QTypeRevision::zero()
-    };
-
-    return QQmlPrivate::qmlregister(QQmlPrivate::TypeRegistration, &type);
-}
-
 /*!
   \qmltype QtObject
     \instantiates QObject
@@ -621,7 +587,7 @@ QQmlEnginePrivate::QQmlEnginePrivate(QQmlEngine *e)
   profiler(nullptr),
 #endif
   outputWarningsToMsgLog(true),
-  cleanup(nullptr), erroredBindings(nullptr), inProgressCreations(0),
+  erroredBindings(nullptr), inProgressCreations(0),
 #if QT_CONFIG(qml_worker_script)
   workerScriptEngine(nullptr),
 #endif
@@ -638,15 +604,6 @@ QQmlEnginePrivate::~QQmlEnginePrivate()
 {
     if (inProgressCreations)
         qWarning() << QQmlEngine::tr("There are still \"%1\" items in the process of being created at engine destruction.").arg(inProgressCreations);
-
-    while (cleanup) {
-        QQmlCleanup *c = cleanup;
-        cleanup = c->next;
-        if (cleanup) cleanup->prev = &cleanup;
-        c->next = nullptr;
-        c->prev = nullptr;
-        c->clear();
-    }
 
     doDeleteInEngineThread();
 
@@ -1495,80 +1452,6 @@ void QQmlEnginePrivate::doDeleteInEngineThread()
         delete d;
 }
 
-/*!
-   \internal
-*/
-void qmlExecuteDeferred(QObject *object)
-{
-    QQmlData *data = QQmlData::get(object);
-
-    if (data && !data->deferredData.isEmpty() && !data->wasDeleted(object)) {
-        QQmlEnginePrivate *ep = QQmlEnginePrivate::get(data->context->engine());
-
-        QQmlComponentPrivate::DeferredState state;
-        QQmlComponentPrivate::beginDeferred(ep, object, &state);
-
-        // Release the reference for the deferral action (we still have one from construction)
-        data->releaseDeferredData();
-
-        QQmlComponentPrivate::completeDeferred(ep, &state);
-    }
-}
-
-QQmlContext *qmlContext(const QObject *obj)
-{
-    return QQmlEngine::contextForObject(obj);
-}
-
-QQmlEngine *qmlEngine(const QObject *obj)
-{
-    QQmlData *data = QQmlData::get(obj, false);
-    if (!data || !data->context)
-        return nullptr;
-    return data->context->engine();
-}
-
-static QObject *resolveAttachedProperties(QQmlAttachedPropertiesFunc pf, QQmlData *data,
-                                          QObject *object, bool create)
-{
-    if (!pf)
-        return nullptr;
-
-    QObject *rv = data->hasExtendedData() ? data->attachedProperties()->value(pf) : 0;
-    if (rv || !create)
-        return rv;
-
-    rv = pf(object);
-
-    if (rv)
-        data->attachedProperties()->insert(pf, rv);
-
-    return rv;
-}
-
-QQmlAttachedPropertiesFunc qmlAttachedPropertiesFunction(QObject *object,
-                                                         const QMetaObject *attachedMetaObject)
-{
-    QQmlEngine *engine = object ? qmlEngine(object) : nullptr;
-    return QQmlMetaType::attachedPropertiesFunc(engine ? QQmlEnginePrivate::get(engine) : nullptr,
-                                                attachedMetaObject);
-}
-
-QObject *qmlAttachedPropertiesObject(QObject *object, QQmlAttachedPropertiesFunc func, bool create)
-{
-    if (!object)
-        return nullptr;
-
-    QQmlData *data = QQmlData::get(object, create);
-
-    // Attached properties are only on objects created by QML,
-    // unless explicitly requested (create==true)
-    if (!data)
-        return nullptr;
-
-    return resolveAttachedProperties(func, data, object, create);
-}
-
 class QQmlDataExtended {
 public:
     QQmlDataExtended();
@@ -2196,14 +2079,7 @@ bool QQmlEnginePrivate::isQObject(int t)
 
 QObject *QQmlEnginePrivate::toQObject(const QVariant &v, bool *ok) const
 {
-    Locker locker(this);
-    int t = v.userType();
-    if (t == QMetaType::QObjectStar || m_compositeTypes.contains(t)) {
-        if (ok) *ok = true;
-        return *(QObject *const *)(v.constData());
-    } else {
-        return QQmlMetaType::toQObject(v, ok);
-    }
+    return QQmlMetaType::toQObject(v, ok);
 }
 
 QQmlMetaType::TypeCategory QQmlEnginePrivate::typeCategory(int t) const
@@ -2398,6 +2274,12 @@ QJSValue QQmlEnginePrivate::singletonInstance<QJSValue>(const QQmlType &type)
         singletonInstances.convertAndInsert(v4engine(), type, &value);
     } else if (!siinfo->url.isEmpty()) {
         QQmlComponent component(q, siinfo->url, QQmlComponent::PreferSynchronous);
+        if (component.isError()) {
+            warning(component.errors());
+            v4engine()->throwError(QLatin1String("Due to the preceding error(s), Singleton \"%1\" could not be loaded.").arg(QString::fromUtf8(type.typeName())));
+
+            return QJSValue(QJSValue::UndefinedValue);
+        }
         QObject *o = component.beginCreate(q->rootContext());
         value = q->newQObject(o);
         singletonInstances.convertAndInsert(v4engine(), type, &value);

@@ -27,12 +27,12 @@
 ****************************************************************************/
 #include <qtconcurrentmap.h>
 #include <qexception.h>
-
 #include <qdebug.h>
+
 #include <QThread>
 #include <QMutex>
-
-#include <QtTest/QtTest>
+#include <QTest>
+#include <QRandomGenerator>
 
 #include "../testhelper_functions.h"
 
@@ -1798,14 +1798,14 @@ void tst_QtConcurrentMap::stlContainers()
     vector.push_back(2);
 
     std::vector<int> vector2 = QtConcurrent::blockingMapped(vector, mapper);
-    QCOMPARE(vector2.size(), 2);
+    QCOMPARE(vector2.size(), 2u);
 
     std::list<int> list;
     list.push_back(1);
     list.push_back(2);
 
     std::list<int> list2 = QtConcurrent::blockingMapped(list, mapper);
-    QCOMPARE(list2.size(), 2);
+    QCOMPARE(list2.size(), 2u);
 
     QtConcurrent::mapped(list, mapper).waitForFinished();
 
@@ -1820,7 +1820,7 @@ void tst_QtConcurrentMap::stlContainersLambda()
 
     std::vector<int> vector2 =
             QtConcurrent::blockingMapped(vector, [](const int &i) { return mapper(i); });
-    QCOMPARE(vector2.size(), 2);
+    QCOMPARE(vector2.size(), 2u);
 
     std::list<int> list;
     list.push_back(1);
@@ -1828,7 +1828,7 @@ void tst_QtConcurrentMap::stlContainersLambda()
 
     std::list<int> list2 =
             QtConcurrent::blockingMapped(list, [](const int &i) { return mapper(i); });
-    QCOMPARE(list2.size(), 2);
+    QCOMPARE(list2.size(), 2u);
 
     QtConcurrent::mapped(list, [](const int &i) { return mapper(i); }).waitForFinished();
 

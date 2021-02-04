@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2017 The Qt Company Ltd.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Copyright (C) 2014 Governikus GmbH & Co. KG
 ** Contact: https://www.qt.io/licensing/
 **
@@ -100,6 +100,75 @@
 QT_BEGIN_NAMESPACE
 
 namespace {
+
+// These two classes are ad-hoc temporary solution, to be replaced
+// by the real things soon.
+class OpenSSLBackend : public QTlsBackend
+{
+private:
+    QString backendName() const override
+    {
+        return builtinBackendNames[nameIndexOpenSSL];
+    }
+    QList<QSsl::SslProtocol> supportedProtocols() const override
+    {
+        QList<QSsl::SslProtocol> protocols;
+
+        protocols << QSsl::AnyProtocol;
+        protocols << QSsl::SecureProtocols;
+        protocols << QSsl::TlsV1_0;
+        protocols << QSsl::TlsV1_0OrLater;
+        protocols << QSsl::TlsV1_1;
+        protocols << QSsl::TlsV1_1OrLater;
+        protocols << QSsl::TlsV1_2;
+        protocols << QSsl::TlsV1_2OrLater;
+
+#ifdef TLS1_3_VERSION
+        protocols << QSsl::TlsV1_3;
+        protocols << QSsl::TlsV1_3OrLater;
+#endif // TLS1_3_VERSION
+
+#if QT_CONFIG(dtls)
+        protocols << QSsl::DtlsV1_0;
+        protocols << QSsl::DtlsV1_0OrLater;
+        protocols << QSsl::DtlsV1_2;
+        protocols << QSsl::DtlsV1_2OrLater;
+#endif // dtls
+
+        return protocols;
+    }
+
+    QList<QSsl::SupportedFeature> supportedFeatures() const override
+    {
+        QList<QSsl::SupportedFeature> features;
+
+        features << QSsl::SupportedFeature::CertificateVerification;
+        features << QSsl::SupportedFeature::ClientSideAlpn;
+        features << QSsl::SupportedFeature::ServerSideAlpn;
+        features << QSsl::SupportedFeature::Ocsp;
+        features << QSsl::SupportedFeature::Psk;
+        features << QSsl::SupportedFeature::SessionTicket;
+        features << QSsl::SupportedFeature::Alerts;
+
+        return features;
+    }
+
+    QList<QSsl::ImplementedClass> implementedClasses() const override
+    {
+        QList<QSsl::ImplementedClass> classes;
+
+        classes << QSsl::ImplementedClass::Key;
+        classes << QSsl::ImplementedClass::Certificate;
+        classes << QSsl::ImplementedClass::Socket;
+        classes << QSsl::ImplementedClass::Dtls;
+        classes << QSsl::ImplementedClass::EllipticCurve;
+        classes << QSsl::ImplementedClass::DiffieHellman;
+
+        return classes;
+    }
+};
+
+Q_GLOBAL_STATIC(OpenSSLBackend, backend)
 
 QSsl::AlertLevel tlsAlertLevel(int value)
 {
@@ -2510,5 +2579,12 @@ bool QSslSocketBackendPrivate::importPkcs12(QIODevice *device,
     return true;
 }
 
+void QSslSocketPrivate::registerAdHocFactory()
+{
+    // TLSTODO: this is a temporary solution, waiting for
+    // backends to move to ... plugins.
+    if (!backend())
+        qCWarning(lcSsl, "Failed to create backend factory");
+}
 
 QT_END_NAMESPACE

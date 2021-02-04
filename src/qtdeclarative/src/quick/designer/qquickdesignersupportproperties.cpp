@@ -136,10 +136,9 @@ QQuickDesignerSupport::PropertyNameList QQuickDesignerSupportProperties::propert
 
     if (inspectedObjects == nullptr)
         inspectedObjects = &localObjectList;
-    else if (inspectedObjects->contains(object))
-        return propertyNameList;
 
-    inspectedObjects->append(object);
+    if (!inspectedObjects->contains(object))
+        inspectedObjects->append(object);
 
     const QMetaObject *metaObject = object->metaObject();
     for (int index = 0; index < metaObject->propertyCount(); ++index) {
@@ -154,7 +153,7 @@ QQuickDesignerSupport::PropertyNameList QQuickDesignerSupportProperties::propert
                                                                                   + '.', inspectedObjects));
             }
         } else if (QQmlGadgetPtrWrapper *valueType
-                   = QQmlGadgetPtrWrapper::instance(qmlEngine(object), metaProperty.userType())) {
+                   = QQmlGadgetPtrWrapper::instance(qmlEngine(object), metaProperty.metaType())) {
             valueType->setValue(metaProperty.read(object));
             propertyNameList.append(propertyNameListForWritableProperties(valueType,
                                                                           baseName +  QQuickDesignerSupport::PropertyName(metaProperty.name())
@@ -192,12 +191,8 @@ QQuickDesignerSupport::PropertyNameList QQuickDesignerSupportProperties::allProp
     if (inspectedObjects == nullptr)
         inspectedObjects = &localObjectList;
 
-
-    if (inspectedObjects->contains(object))
-        return propertyNameList;
-
-    inspectedObjects->append(object);
-
+    if (!inspectedObjects->contains(object))
+        inspectedObjects->append(object);
 
     const QMetaObject *metaObject = object->metaObject();
 
@@ -222,7 +217,7 @@ QQuickDesignerSupport::PropertyNameList QQuickDesignerSupportProperties::allProp
                                                              + '.', inspectedObjects));
             }
         } else if (QQmlGadgetPtrWrapper *valueType
-                   = QQmlGadgetPtrWrapper::instance(qmlEngine(object), metaProperty.userType())) {
+                   = QQmlGadgetPtrWrapper::instance(qmlEngine(object), metaProperty.metaType())) {
             valueType->setValue(metaProperty.read(object));
             propertyNameList.append(baseName + QQuickDesignerSupport::PropertyName(metaProperty.name()));
             propertyNameList.append(allPropertyNames(valueType,

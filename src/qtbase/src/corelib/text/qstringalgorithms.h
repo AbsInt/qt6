@@ -70,6 +70,8 @@ class QStringView;
 template <bool> class QBasicUtf8StringView;
 class QAnyStringView;
 class QChar;
+class QRegularExpression;
+class QRegularExpressionMatch;
 
 namespace QtPrivate {
 
@@ -122,12 +124,27 @@ namespace QtPrivate {
 [[nodiscard]] Q_CORE_EXPORT Q_DECL_PURE_FUNCTION qsizetype count(QStringView haystack, QChar needle, Qt::CaseSensitivity cs = Qt::CaseSensitive) noexcept;
 [[nodiscard]] Q_CORE_EXPORT Q_DECL_PURE_FUNCTION qsizetype count(QStringView haystack, QStringView needle, Qt::CaseSensitivity cs = Qt::CaseSensitive) noexcept;
 
+#if QT_CONFIG(regularexpression)
+[[nodiscard]] Q_CORE_EXPORT qsizetype indexOf(QStringView haystack,
+                                              const QRegularExpression &re,
+                                              qsizetype from = 0,
+                                              QRegularExpressionMatch *rmatch = nullptr);
+[[nodiscard]] Q_CORE_EXPORT qsizetype lastIndexOf(QStringView haystack,
+                                                  const QRegularExpression &re,
+                                                  qsizetype from = -1,
+                                                  QRegularExpressionMatch *rmatch = nullptr);
+[[nodiscard]] Q_CORE_EXPORT bool contains(QStringView haystack,
+                                          const QRegularExpression &re,
+                                          QRegularExpressionMatch *rmatch = nullptr);
+[[nodiscard]] Q_CORE_EXPORT qsizetype count(QStringView haystack, const QRegularExpression &re);
+#endif
+
 [[nodiscard]] Q_CORE_EXPORT QString convertToQString(QAnyStringView s);
 
 [[nodiscard]] Q_CORE_EXPORT QByteArray convertToLatin1(QStringView str);
 [[nodiscard]] Q_CORE_EXPORT QByteArray convertToUtf8(QStringView str);
 [[nodiscard]] Q_CORE_EXPORT QByteArray convertToLocal8Bit(QStringView str);
-[[nodiscard]] Q_CORE_EXPORT QList<uint> convertToUcs4(QStringView str);
+[[nodiscard]] Q_CORE_EXPORT QList<uint> convertToUcs4(QStringView str); // ### Qt 7 char32_t
 
 [[nodiscard]] Q_CORE_EXPORT Q_DECL_PURE_FUNCTION bool isRightToLeft(QStringView string) noexcept;
 

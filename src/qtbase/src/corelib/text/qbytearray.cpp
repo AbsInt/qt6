@@ -1153,6 +1153,21 @@ QByteArray qUncompress(const uchar* data, qsizetype nbytes)
     squeeze().
 */
 
+/*!
+    \since 6.1
+
+    Removes from the byte array the characters in the half-open range
+    [ \a first , \a last ). Returns an iterator to the character
+    referred to by \a last before the erase.
+*/
+QByteArray::iterator QByteArray::erase(QByteArray::const_iterator first, QByteArray::const_iterator last)
+{
+    const auto start = std::distance(cbegin(), first);
+    const auto len = std::distance(first, last);
+    remove(start, len);
+    return begin() + start;
+}
+
 /*! \fn QByteArray::QByteArray(const QByteArray &other)
 
     Constructs a copy of \a other.
@@ -2131,6 +2146,16 @@ QByteArray &QByteArray::remove(qsizetype pos, qsizetype len)
     d.data()[d.size] = '\0';
     return *this;
 }
+
+/*!
+    \fn template <typename Predicate> QByteArray &QByteArray::removeIf(Predicate pred)
+    \since 6.1
+
+    Removes all bytes for which the predicate \a pred returns true
+    from the byte array. Returns a reference to the byte array.
+
+    \sa remove()
+*/
 
 /*!
     Replaces \a len bytes from index position \a pos with the byte
@@ -4819,5 +4844,26 @@ size_t qHash(const QByteArray::FromBase64Result &key, size_t seed) noexcept
 {
     return qHashMulti(seed, key.decoded, static_cast<int>(key.decodingStatus));
 }
+
+/*! \fn template <typename T> qsizetype erase(QByteArray &ba, const T &t)
+    \relates QByteArray
+    \since 6.1
+
+    Removes all elements that compare equal to \a t from the
+    byte array \a ba. Returns the number of elements removed, if any.
+
+    \sa erase_if
+*/
+
+/*! \fn template <typename Predicate> qsizetype erase_if(QByteArray &ba, Predicate pred)
+    \relates QByteArray
+    \since 6.1
+
+    Removes all elements for which the predicate \a pred returns true
+    from the byte array \a ba. Returns the number of elements removed, if
+    any.
+
+    \sa erase
+*/
 
 QT_END_NAMESPACE

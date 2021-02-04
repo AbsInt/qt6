@@ -590,6 +590,24 @@ bool QMetaObjectPrivate::methodMatch(const QMetaObject *m, const QMetaMethod &me
     return true;
 }
 
+/*!
+   \internal
+   Returns the first method with name \a name found in \a baseObject
+ */
+QMetaMethod QMetaObjectPrivate::firstMethod(const QMetaObject *baseObject, QByteArrayView name)
+{
+    for (const QMetaObject *currentObject = baseObject; currentObject; currentObject = currentObject->superClass()) {
+        const int start = priv(currentObject->d.data)->methodCount - 1;
+        const int end = 0;
+        for (int i = start; i >= end; --i) {
+            auto candidate = QMetaMethod::fromRelativeMethodIndex(currentObject, i);
+            if (name == candidate.name())
+                return candidate;
+        }
+    }
+    return QMetaMethod{};
+}
+
 /**
 * \internal
 * helper function for indexOf{Method,Slot,Signal}, returns the relative index of the method within
@@ -1013,8 +1031,8 @@ int QMetaObject::indexOfProperty(const char *name) const
     while (m) {
         const QMetaObjectPrivate *d = priv(m->d.data);
         for (int i = 0; i < d->propertyCount; ++i) {
-            const QMetaProperty p(m, i);
-            const char *prop = rawStringData(m, p.data.name());
+            const QMetaProperty::Data data = QMetaProperty::getMetaPropertyData(m, i);
+            const char *prop = rawStringData(m, data.name());
             if (name[0] == prop[0] && strcmp(name + 1, prop + 1) == 0) {
                 i += m->propertyOffset();
                 return i;
@@ -2934,6 +2952,9 @@ const char *QMetaProperty::typeName() const
 {
     if (!mobj)
         return nullptr;
+    // TODO: can the metatype be invalid for dynamic metaobjects?
+    if (const auto mt = metaType(); mt.isValid())
+        return mt.name();
     return rawTypeNameFromTypeInfo(mobj, data.type());
 }
 
@@ -3083,7 +3104,7 @@ int QMetaProperty::registerPropertyType() const
 
 QMetaProperty::QMetaProperty(const QMetaObject *mobj, int index)
     : mobj(mobj),
-      data({ mobj->d.data + priv(mobj->d.data)->propertyData + index * Data::Size })
+      data(getMetaPropertyData(mobj, index))
 {
     Q_ASSERT(index >= 0 && index < priv(mobj->d.data)->propertyCount);
 
@@ -3118,6 +3139,15 @@ QMetaProperty::QMetaProperty(const QMetaObject *mobj, int index)
                 free(scope_buffer);
         }
     }
+}
+
+/*!
+   \internal
+   Constructs the \c QMetaProperty::Data for the \a index th property of \a mobj
+ */
+QMetaProperty::Data QMetaProperty::getMetaPropertyData(const QMetaObject *mobj, int index)
+{
+    return { mobj->d.data + priv(mobj->d.data)->propertyData + index * Data::Size };
 }
 
 /*!

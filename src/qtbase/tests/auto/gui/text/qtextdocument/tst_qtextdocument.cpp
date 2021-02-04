@@ -27,8 +27,8 @@
 ****************************************************************************/
 
 
-#include <QtTest/QtTest>
-
+#include <QTest>
+#include <QSignalSpy>
 
 #include <qtextdocument.h>
 #include <qdebug.h>
@@ -47,6 +47,7 @@
 #include <qimage.h>
 #include <qtextlayout.h>
 #include <QDomDocument>
+#include <qurlresourceprovider.h>
 #include "common.h"
 
 // #define DEBUG_WRITE_OUTPUT
@@ -191,6 +192,8 @@ private slots:
 
     void clearUndoRedoStacks();
     void mergeFontFamilies();
+
+    void resourceProvider();
 
 private:
     void backgroundImage_checkExpectedHtml(const QTextDocument &doc);
@@ -806,7 +809,7 @@ void tst_QTextDocument::toHtml_data()
         CREATE_DOC_AND_CURSOR();
 
         QTextCharFormat fmt;
-        fmt.setFontFamily("Times");
+        fmt.setFontFamilies({QLatin1String("Times")});
         cursor.insertText("Blah", fmt);
 
         QTest::newRow("font-family") << QTextDocumentFragment(&doc)
@@ -817,7 +820,7 @@ void tst_QTextDocument::toHtml_data()
         CREATE_DOC_AND_CURSOR();
 
         QTextCharFormat fmt;
-        fmt.setFontFamily("Foo's Family");
+        fmt.setFontFamilies({QLatin1String("Foo's Family")});
         cursor.insertText("Blah", fmt);
 
         QTest::newRow("font-family-with-quotes1") << QTextDocumentFragment(&doc)
@@ -828,7 +831,7 @@ void tst_QTextDocument::toHtml_data()
         CREATE_DOC_AND_CURSOR();
 
         QTextCharFormat fmt;
-        fmt.setFontFamily("Foo\"s Family");
+        fmt.setFontFamilies({QLatin1String("Foo\"s Family")});
         cursor.insertText("Blah", fmt);
 
         QTest::newRow("font-family-with-quotes2") << QTextDocumentFragment(&doc)
@@ -839,7 +842,6 @@ void tst_QTextDocument::toHtml_data()
         CREATE_DOC_AND_CURSOR();
 
         QTextCharFormat fmt;
-        fmt.setFontFamily("Times");
         fmt.setFontFamilies(QStringList{ "Times", "serif" });
         cursor.insertText("Blah", fmt);
 
@@ -3540,7 +3542,7 @@ void tst_QTextDocument::fontTagFace()
         td.setHtml("<html><body><font face='Times'>Foobar</font></body></html>");
         QTextFragment fragment = td.begin().begin().fragment();
         QTextCharFormat format = fragment.charFormat();
-        QCOMPARE(format.fontFamily(), QLatin1String("Times"));
+        QCOMPARE(format.fontFamilies().toStringList().value(0, QString()), QLatin1String("Times"));
     }
 
     {
@@ -3548,7 +3550,7 @@ void tst_QTextDocument::fontTagFace()
         td.setHtml("<html><body><font face='Times, serif'>Foobar</font></body></html>");
         QTextFragment fragment = td.begin().begin().fragment();
         QTextCharFormat format = fragment.charFormat();
-        QCOMPARE(format.fontFamily(), QLatin1String("Times"));
+        QCOMPARE(format.fontFamilies().toStringList().value(0, QString()), QLatin1String("Times"));
         QStringList expectedFamilies = { QLatin1String("Times"), QLatin1String("serif") };
         QCOMPARE(format.fontFamilies().toStringList(), expectedFamilies);
     }
@@ -3563,20 +3565,20 @@ void tst_QTextDocument::mergeFontFamilies()
                    "</body></html>"));
 
     QTextCharFormat newFormat;
-    newFormat.setFontFamily(QLatin1String("Jokerman"));
+    newFormat.setFontFamilies({QLatin1String("Jokerman")});
 
     QTextCursor cursor = QTextCursor(&td);
     cursor.setPosition(0);
     cursor.setPosition(QByteArray("Hello World").length(), QTextCursor::KeepAnchor);
     cursor.mergeCharFormat(newFormat);
 
-    QVERIFY(td.toHtml().contains(QLatin1String("font-family:'MS Shell Dlg 2','Jokerman';")));
+    QVERIFY(td.toHtml().contains(QLatin1String("font-family:'Jokerman';")));
 
     QTextCharFormat newFormatFamilies;
     newFormatFamilies.setFontFamilies({ QLatin1String("Arial"), QLatin1String("Helvetica") });
     cursor.mergeCharFormat(newFormatFamilies);
 
-    QVERIFY(td.toHtml().contains(QLatin1String("font-family:'Arial','Helvetica','Jokerman'")));
+    QVERIFY(td.toHtml().contains(QLatin1String("font-family:'Arial','Helvetica'")));
 
     newFormatFamilies.setFontFamilies({ QLatin1String("Arial"), QLatin1String("Jokerman"), QLatin1String("Helvetica") });
     cursor.mergeCharFormat(newFormatFamilies);
@@ -3594,6 +3596,28 @@ void tst_QTextDocument::clearUndoRedoStacks()
     QVERIFY(!doc.isUndoAvailable());
 }
 
+class UrlResourceProvider : public QUrlResourceProvider
+{
+public:
+    QVariant resource(const QUrl &url) override
+    {
+        resourseUrl = url;
+        return QVariant();
+    }
+
+    QUrl resourseUrl;
+};
+
+void tst_QTextDocument::resourceProvider()
+{
+    QTextDocument doc;
+    UrlResourceProvider resourceProvider;
+    doc.setResourceProvider(&resourceProvider);
+    QUrl url("test://img");
+    doc.setHtml(QStringLiteral("<img src='%1'/>").arg(url.toString()));
+    doc.resource(QTextDocument::UserResource, url);
+    QCOMPARE(url, resourceProvider.resourseUrl);
+}
 
 QTEST_MAIN(tst_QTextDocument)
 #include "tst_qtextdocument.moc"

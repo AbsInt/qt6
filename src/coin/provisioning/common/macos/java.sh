@@ -46,7 +46,7 @@ url=ci-files01-hki.intra.qt.io:/hdd/www/input/mac
 
 echo "Mounting $targetFile"
 sudo mkdir -p /Volumes/files
-sudo mount "$url" /Volumes/files
+sudo mount -o locallocks "$url" /Volumes/files
 
 sudo cp "/Volumes/files/$targetFile" /tmp
 sudo umount /Volumes/files

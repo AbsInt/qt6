@@ -97,7 +97,7 @@ class Q_QML_PRIVATE_EXPORT QQmlGadgetPtrWrapper : public QObject
 {
     Q_OBJECT
 public:
-    static QQmlGadgetPtrWrapper *instance(QQmlEngine *engine, int index);
+    static QQmlGadgetPtrWrapper *instance(QQmlEngine *engine, QMetaType type);
 
     QQmlGadgetPtrWrapper(QQmlValueType *valueType, QObject *parent);
     ~QQmlGadgetPtrWrapper();
@@ -120,12 +120,12 @@ private:
 class Q_QML_PRIVATE_EXPORT QQmlValueTypeFactory
 {
 public:
-    static bool isValueType(int idx);
-    static QQmlValueType *valueType(int idx);
-    static const QMetaObject *metaObjectForMetaType(int type);
+    static bool isValueType(QMetaType type);
+    static QQmlValueType *valueType(QMetaType metaType);
+    static const QMetaObject *metaObjectForMetaType(QMetaType type);
 };
 
-struct QQmlPointFValueType
+struct Q_QML_PRIVATE_EXPORT QQmlPointFValueType
 {
     QPointF v;
     Q_PROPERTY(qreal x READ x WRITE setX FINAL)
@@ -144,7 +144,7 @@ public:
     void setY(qreal);
 };
 
-struct QQmlPointValueType
+struct Q_QML_PRIVATE_EXPORT QQmlPointValueType
 {
     QPoint v;
     Q_PROPERTY(int x READ x WRITE setX FINAL)
@@ -153,6 +153,7 @@ struct QQmlPointValueType
     QML_ANONYMOUS
     QML_FOREIGN(QPoint)
     QML_ADDED_IN_VERSION(2, 0)
+    QML_EXTENDED(QQmlPointValueType)
 
 public:
     Q_INVOKABLE QString toString() const;
@@ -162,7 +163,7 @@ public:
     void setY(int);
 };
 
-struct QQmlSizeFValueType
+struct Q_QML_PRIVATE_EXPORT QQmlSizeFValueType
 {
     QSizeF v;
     Q_PROPERTY(qreal width READ width WRITE setWidth FINAL)
@@ -181,7 +182,7 @@ public:
     void setHeight(qreal);
 };
 
-struct QQmlSizeValueType
+struct Q_QML_PRIVATE_EXPORT QQmlSizeValueType
 {
     QSize v;
     Q_PROPERTY(int width READ width WRITE setWidth FINAL)
@@ -190,6 +191,7 @@ struct QQmlSizeValueType
     QML_ANONYMOUS
     QML_FOREIGN(QSize)
     QML_ADDED_IN_VERSION(2, 0)
+    QML_EXTENDED(QQmlSizeValueType)
 
 public:
     Q_INVOKABLE QString toString() const;
@@ -199,7 +201,7 @@ public:
     void setHeight(int);
 };
 
-struct QQmlRectFValueType
+struct Q_QML_PRIVATE_EXPORT QQmlRectFValueType
 {
     QRectF v;
     Q_PROPERTY(qreal x READ x WRITE setX FINAL)
@@ -234,7 +236,7 @@ public:
     qreal bottom() const;
 };
 
-struct QQmlRectValueType
+struct Q_QML_PRIVATE_EXPORT QQmlRectValueType
 {
     QRect v;
     Q_PROPERTY(int x READ x WRITE setX FINAL)
@@ -249,6 +251,7 @@ struct QQmlRectValueType
     QML_ANONYMOUS
     QML_FOREIGN(QRect)
     QML_ADDED_IN_VERSION(2, 0)
+    QML_EXTENDED(QQmlRectValueType)
 
 public:
     Q_INVOKABLE QString toString() const;
@@ -306,13 +309,14 @@ enum Type {
 Q_ENUM_NS(Type)
 };
 
-struct QQmlEasingValueType
+struct Q_QML_PRIVATE_EXPORT QQmlEasingValueType
 {
     QEasingCurve v;
     Q_GADGET
     QML_ANONYMOUS
     QML_FOREIGN(QEasingCurve)
     QML_ADDED_IN_VERSION(2, 0)
+    QML_EXTENDED(QQmlEasingValueType)
 
     Q_PROPERTY(QQmlEasingEnums::Type type READ type WRITE setType FINAL)
     Q_PROPERTY(qreal amplitude READ amplitude WRITE setAmplitude FINAL)
@@ -334,7 +338,7 @@ public:
 };
 #endif
 
-struct QQmlPropertyValueType
+struct Q_QML_PRIVATE_EXPORT QQmlPropertyValueType
 {
     QQmlProperty v;
     Q_PROPERTY(QObject *object READ object CONSTANT FINAL)
@@ -343,6 +347,7 @@ struct QQmlPropertyValueType
     QML_ANONYMOUS
     QML_FOREIGN(QQmlProperty)
     QML_ADDED_IN_VERSION(2, 15)
+    QML_EXTENDED(QQmlPropertyValueType)
 
 public:
     QObject *object() const;

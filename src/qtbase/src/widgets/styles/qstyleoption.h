@@ -219,7 +219,10 @@ public:
     SectionPosition position;
     SelectedPosition selectedPosition;
     SortIndicator sortIndicator;
-    Qt::Orientation orientation;
+    Qt::Orientation orientation:2;
+    Qt::TextElideMode textElideMode:2;
+    bool isSectionDragTarget:1;
+    int unused:27;
 
     QStyleOptionHeader();
     QStyleOptionHeader(const QStyleOptionHeader &other) : QStyleOption(Version, Type) { *this = other; }

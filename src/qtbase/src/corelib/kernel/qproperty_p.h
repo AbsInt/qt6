@@ -59,6 +59,10 @@
 
 QT_BEGIN_NAMESPACE
 
+namespace QtPrivate {
+    Q_CORE_EXPORT bool isAnyBindingEvaluating();
+}
+
 // Keep all classes related to QProperty in one compilation unit. Performance of this code is crucial and
 // we need to allow the compiler to inline where it makes sense.
 
@@ -104,7 +108,7 @@ struct QPropertyObserverPointer
     void setChangeHandler(QPropertyObserver::ChangeHandler changeHandler);
     void setAliasedProperty(QUntypedPropertyData *propertyPtr);
 
-    void notify(QPropertyBindingPrivate *triggeringBinding, QUntypedPropertyData *propertyDataPtr, const bool alreadyKnownToHaveChanged = false);
+    void notify(QPropertyBindingPrivate *triggeringBinding, QUntypedPropertyData *propertyDataPtr, bool knownToHaveChanged = false);
     void observeProperty(QPropertyBindingDataPointer property);
 
     explicit operator bool() const { return ptr != nullptr; }
@@ -176,6 +180,7 @@ private:
     bool hasBindingWrapper:1;
     // used to detect binding loops for eagerly evaluated properties
     bool eagerlyUpdating:1;
+    bool isQQmlPropertyBinding:1;
 
     const QtPrivate::BindingFunctionVTable *vtable;
 
@@ -183,14 +188,31 @@ private:
         QtPrivate::QPropertyObserverCallback staticObserverCallback = nullptr;
         QtPrivate::QPropertyBindingWrapper staticBindingWrapper;
     };
-    ObserverArray inlineDependencyObservers;
+    ObserverArray inlineDependencyObservers; // for things we are observing
 
-    QPropertyObserverPointer firstObserver;
-    QScopedPointer<std::vector<QPropertyObserver>> heapObservers;
+    QPropertyObserverPointer firstObserver; // list of observers observing us
+    QScopedPointer<std::vector<QPropertyObserver>> heapObservers; // for things we are observing
 
     QUntypedPropertyData *propertyDataPtr = nullptr;
 
-    QPropertyBindingSourceLocation location;
+    /* For bindings set up from C++, location stores where the binding was created in the C++ source
+       For QQmlPropertyBinding that information does not make sense, and the location in the QML  file
+       is stored somewhere else. To make efficient use of the space, we instead provide a scratch space
+       for QQmlPropertyBinding (which stores further binding information there).
+       Anything stored in the union must be trivially destructible.
+    */
+    static_assert(std::is_trivially_destructible_v<QPropertyBindingSourceLocation>);
+    static_assert(std::is_trivially_destructible_v<std::byte[sizeof(QPropertyBindingSourceLocation)]>);
+protected:
+    using DeclarativeErrorCallback = void(*)(QPropertyBindingPrivate *);
+    union {
+        QPropertyBindingSourceLocation location;
+        struct {
+            std::byte declarativeExtraData[sizeof(QPropertyBindingSourceLocation) - sizeof(DeclarativeErrorCallback)];
+            DeclarativeErrorCallback errorCallBack;
+        };
+    };
+private:
     QPropertyBindingError error;
 
     QMetaType metaType;
@@ -212,11 +234,11 @@ public:
     void setEagerlyUpdating(bool b) {eagerlyUpdating = b;}
 
     QPropertyBindingPrivate(QMetaType metaType, const QtPrivate::BindingFunctionVTable *vtable,
-                            const QPropertyBindingSourceLocation &location)
+                            const QPropertyBindingSourceLocation &location, bool isQQmlPropertyBinding=false)
         : hasBindingWrapper(false)
         , eagerlyUpdating(false)
+        , isQQmlPropertyBinding(isQQmlPropertyBinding)
         , vtable(vtable)
-        , inlineDependencyObservers() // Explicit initialization required because of union
         , location(location)
         , metaType(metaType)
     {}
@@ -439,12 +461,6 @@ public:
             notify(bd);
     }
 
-    QObjectCompatProperty &operator=(parameter_type newValue)
-    {
-        setValue(newValue);
-        return *this;
-    }
-
     QPropertyBinding<T> setBinding(const QPropertyBinding<T> &newBinding)
     {
         QtPrivate::QPropertyBindingData *bd = qGetBindingStorage(owner())->bindingData(this, true);
@@ -477,6 +493,15 @@ public:
     bool hasBinding() const {
         auto *bd = qGetBindingStorage(owner())->bindingData(this);
         return bd && bd->binding() != nullptr;
+    }
+
+    void markDirty() {
+        QBindingStorage *storage = qGetBindingStorage(owner());
+        auto *bd = storage->bindingData(this, false);
+        if (bd) {
+            bd->markDirty();
+            notify(bd);
+        }
     }
 
     QPropertyBinding<T> binding() const
@@ -526,6 +551,15 @@ private:
     } \
     QObjectCompatProperty<Class, Type, Class::_qt_property_##name##_offset, setter> name;
 
+#define Q_OBJECT_COMPAT_PROPERTY_WITH_ARGS(Class, Type, name, setter, value)                       \
+    static constexpr size_t _qt_property_##name##_offset()                                         \
+    {                                                                                              \
+        QT_WARNING_PUSH QT_WARNING_DISABLE_INVALID_OFFSETOF return offsetof(Class, name);          \
+        QT_WARNING_POP                                                                             \
+    }                                                                                              \
+    QObjectCompatProperty<Class, Type, Class::_qt_property_##name##_offset, setter> name =         \
+            QObjectCompatProperty<Class, Type, Class::_qt_property_##name##_offset, setter>(       \
+                    value);
 
 QT_END_NAMESPACE
 

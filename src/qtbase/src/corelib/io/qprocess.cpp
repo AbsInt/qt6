@@ -89,7 +89,7 @@ QT_END_NAMESPACE
 #include "qprocess_p.h"
 
 #include <qbytearray.h>
-#include <qelapsedtimer.h>
+#include <qdeadlinetimer.h>
 #include <qcoreapplication.h>
 #include <qsocketnotifier.h>
 #include <qtimer.h>
@@ -616,7 +616,8 @@ void QProcessPrivate::Channel::clear()
     process into the standard output channel (\c stdout). The
     standard error channel (\c stderr) will not receive any data. The
     standard output and standard error data of the running process
-    are interleaved.
+    are interleaved. For detached processes, the merged output of the
+    running process is forwarded onto the main process.
 
     \value ForwardedChannels QProcess forwards the output of the
     running process onto the main process. Anything the child process
@@ -848,12 +849,6 @@ void QProcessPrivate::cleanup()
 {
     q_func()->setProcessState(QProcess::NotRunning);
 #ifdef Q_OS_WIN
-    if (pid) {
-        CloseHandle(pid->hThread);
-        CloseHandle(pid->hProcess);
-        delete pid;
-        pid = 0;
-    }
     if (stdinWriteTrigger) {
         delete stdinWriteTrigger;
         stdinWriteTrigger = 0;
@@ -862,30 +857,19 @@ void QProcessPrivate::cleanup()
         delete processFinishedNotifier;
         processFinishedNotifier = 0;
     }
-
-#endif
+    if (pid) {
+        CloseHandle(pid->hThread);
+        CloseHandle(pid->hProcess);
+        delete pid;
+        pid = nullptr;
+    }
+#else
     pid = 0;
-    sequenceNumber = 0;
+#endif
 
-    if (stdoutChannel.notifier) {
-        delete stdoutChannel.notifier;
-        stdoutChannel.notifier = nullptr;
-    }
-    if (stderrChannel.notifier) {
-        delete stderrChannel.notifier;
-        stderrChannel.notifier = nullptr;
-    }
-    if (stdinChannel.notifier) {
-        delete stdinChannel.notifier;
-        stdinChannel.notifier = nullptr;
-    }
-    if (startupSocketNotifier) {
-        delete startupSocketNotifier;
-        startupSocketNotifier = nullptr;
-    }
-    if (deathNotifier) {
-        delete deathNotifier;
-        deathNotifier = nullptr;
+    if (stateNotifier) {
+        delete stateNotifier;
+        stateNotifier = nullptr;
     }
     closeChannel(&stdoutChannel);
     closeChannel(&stderrChannel);
@@ -943,6 +927,84 @@ void QProcessPrivate::setErrorAndEmit(QProcess::ProcessError error, const QStrin
 
 /*!
     \internal
+*/
+bool QProcessPrivate::openChannels()
+{
+    // stdin channel.
+    if (inputChannelMode == QProcess::ForwardedInputChannel) {
+        if (stdinChannel.type != Channel::Normal)
+            qWarning("QProcess::openChannels: Inconsistent stdin channel configuration");
+    } else if (!openChannel(stdinChannel)) {
+        return false;
+    }
+
+    // stdout channel.
+    if (processChannelMode == QProcess::ForwardedChannels
+            || processChannelMode == QProcess::ForwardedOutputChannel) {
+        if (stdoutChannel.type != Channel::Normal)
+            qWarning("QProcess::openChannels: Inconsistent stdout channel configuration");
+    } else if (!openChannel(stdoutChannel)) {
+        return false;
+    }
+
+    // stderr channel.
+    if (processChannelMode == QProcess::ForwardedChannels
+            || processChannelMode == QProcess::ForwardedErrorChannel
+            || processChannelMode == QProcess::MergedChannels) {
+        if (stderrChannel.type != Channel::Normal)
+            qWarning("QProcess::openChannels: Inconsistent stderr channel configuration");
+    } else if (!openChannel(stderrChannel)) {
+        return false;
+    }
+
+    return true;
+}
+
+/*!
+    \internal
+*/
+bool QProcessPrivate::openChannelsForDetached()
+{
+    // stdin channel.
+    bool needToOpen = (stdinChannel.type == Channel::Redirect
+                       || stdinChannel.type == Channel::PipeSink);
+    if (stdinChannel.type != Channel::Normal
+            && (!needToOpen
+                || inputChannelMode == QProcess::ForwardedInputChannel)) {
+        qWarning("QProcess::openChannelsForDetached: Inconsistent stdin channel configuration");
+    }
+    if (needToOpen && !openChannel(stdinChannel))
+        return false;
+
+    // stdout channel.
+    needToOpen = (stdoutChannel.type == Channel::Redirect
+                  || stdoutChannel.type == Channel::PipeSource);
+    if (stdoutChannel.type != Channel::Normal
+            && (!needToOpen
+                || processChannelMode == QProcess::ForwardedChannels
+                || processChannelMode == QProcess::ForwardedOutputChannel)) {
+        qWarning("QProcess::openChannelsForDetached: Inconsistent stdout channel configuration");
+    }
+    if (needToOpen && !openChannel(stdoutChannel))
+        return false;
+
+    // stderr channel.
+    needToOpen = (stderrChannel.type == Channel::Redirect);
+    if (stderrChannel.type != Channel::Normal
+            && (!needToOpen
+                || processChannelMode == QProcess::ForwardedChannels
+                || processChannelMode == QProcess::ForwardedErrorChannel
+                || processChannelMode == QProcess::MergedChannels)) {
+        qWarning("QProcess::openChannelsForDetached: Inconsistent stderr channel configuration");
+    }
+    if (needToOpen && !openChannel(stderrChannel))
+        return false;
+
+    return true;
+}
+
+/*!
+    \internal
     Returns \c true if we emitted readyRead().
 */
 bool QProcessPrivate::tryReadFromChannel(Channel *channel)
@@ -978,8 +1040,6 @@ bool QProcessPrivate::tryReadFromChannel(Channel *channel)
     }
     if (readBytes == 0) {
         // EOF
-        if (channel->notifier)
-            channel->notifier->setEnabled(false);
         closeChannel(channel);
 #if defined QPROCESS_DEBUG
         qDebug("QProcessPrivate::tryReadFromChannel(%d), 0 bytes available",
@@ -1057,69 +1117,63 @@ bool QProcessPrivate::_q_canWrite()
 /*!
     \internal
 */
-bool QProcessPrivate::_q_processDied()
+void QProcessPrivate::_q_processDied()
 {
-    Q_Q(QProcess);
 #if defined QPROCESS_DEBUG
     qDebug("QProcessPrivate::_q_processDied()");
 #endif
-#ifdef Q_OS_UNIX
-    if (!waitForDeadChild())
-        return false;
-#endif
+
+    // in case there is data in the pipeline and this slot by chance
+    // got called before the read notifications, call these functions
+    // so the data is made available before we announce death.
 #ifdef Q_OS_WIN
-    if (processFinishedNotifier)
-        processFinishedNotifier->setEnabled(false);
     drainOutputPipes();
-#endif
-
-    // the process may have died before it got a chance to report that it was
-    // either running or stopped, so we will call _q_startupNotification() and
-    // give it a chance to emit started() or errorOccurred(FailedToStart).
-    if (processState == QProcess::Starting) {
-        if (!_q_startupNotification())
-            return true;
-    }
-
-    if (dying) {
-        // at this point we know the process is dead. prevent
-        // reentering this slot recursively by calling waitForFinished()
-        // or opening a dialog inside slots connected to the readyRead
-        // signals emitted below.
-        return true;
-    }
-    dying = true;
-
-    // in case there is data in the pipe line and this slot by chance
-    // got called before the read notifications, call these two slots
-    // so the data is made available before the process dies.
+#else
     _q_canReadStandardOutput();
     _q_canReadStandardError();
+#endif
 
+    // Slots connected to signals emitted by the functions called above
+    // might call waitFor*(), which would synchronously reap the process.
+    // So check the state to avoid trying to reap a second time.
+    if (processState != QProcess::NotRunning)
+        processFinished();
+}
+
+/*!
+    \internal
+*/
+void QProcessPrivate::processFinished()
+{
+    Q_Q(QProcess);
+#if defined QPROCESS_DEBUG
+    qDebug("QProcessPrivate::processFinished()");
+#endif
+
+#ifdef Q_OS_UNIX
+    waitForDeadChild();
+#else
     findExitCode();
+#endif
+
+    cleanup();
 
     if (crashed) {
         exitStatus = QProcess::CrashExit;
         setErrorAndEmit(QProcess::Crashed);
     }
 
-    bool wasRunning = (processState == QProcess::Running);
+    // we received EOF now:
+    emit q->readChannelFinished();
+    // in the future:
+    //emit q->standardOutputClosed();
+    //emit q->standardErrorClosed();
 
-    cleanup();
+    emit q->finished(exitCode, exitStatus);
 
-    if (wasRunning) {
-        // we received EOF now:
-        emit q->readChannelFinished();
-        // in the future:
-        //emit q->standardOutputClosed();
-        //emit q->standardErrorClosed();
-
-        emit q->finished(exitCode, exitStatus);
-    }
 #if defined QPROCESS_DEBUG
-    qDebug("QProcessPrivate::_q_processDied() process is dead");
+    qDebug("QProcessPrivate::processFinished(): process is dead");
 #endif
-    return true;
 }
 
 /*!
@@ -1132,8 +1186,6 @@ bool QProcessPrivate::_q_startupNotification()
     qDebug("QProcessPrivate::startupNotification()");
 #endif
 
-    if (startupSocketNotifier)
-        startupSocketNotifier->setEnabled(false);
     QString errorMessage;
     if (processStarted(&errorMessage)) {
         q->setProcessState(QProcess::Running);
@@ -1144,9 +1196,7 @@ bool QProcessPrivate::_q_startupNotification()
     q->setProcessState(QProcess::NotRunning);
     setErrorAndEmit(QProcess::FailedToStart, errorMessage);
 #ifdef Q_OS_UNIX
-    // make sure the process manager removes this entry
     waitForDeadChild();
-    findExitCode();
 #endif
     cleanup();
     return false;
@@ -1160,10 +1210,7 @@ void QProcessPrivate::closeWriteChannel()
 #if defined QPROCESS_DEBUG
     qDebug("QProcessPrivate::closeWriteChannel()");
 #endif
-    if (stdinChannel.notifier) {
-        delete stdinChannel.notifier;
-        stdinChannel.notifier = nullptr;
-    }
+
 #ifdef Q_OS_WIN
     // ### Find a better fix, feeding the process little by little
     // instead.
@@ -1198,10 +1245,6 @@ QProcess::~QProcess()
         kill();
         waitForFinished();
     }
-#ifdef Q_OS_UNIX
-    // make sure the process manager removes this entry
-    d->findExitCode();
-#endif
     d->cleanup();
 }
 
@@ -1768,7 +1811,7 @@ bool QProcess::waitForStarted(int msecs)
 {
     Q_D(QProcess);
     if (d->processState == QProcess::Starting)
-        return d->waitForStarted(msecs);
+        return d->waitForStarted(QDeadlineTimer(msecs));
 
     return d->processState == QProcess::Running;
 }
@@ -1785,7 +1828,15 @@ bool QProcess::waitForReadyRead(int msecs)
         return false;
     if (d->currentReadChannel == QProcess::StandardError && d->stderrChannel.closed)
         return false;
-    return d->waitForReadyRead(msecs);
+
+    QDeadlineTimer deadline(msecs);
+    if (d->processState == QProcess::Starting) {
+        bool started = d->waitForStarted(deadline);
+        if (!started)
+            return false;
+    }
+
+    return d->waitForReadyRead(deadline);
 }
 
 /*! \reimp
@@ -1795,16 +1846,15 @@ bool QProcess::waitForBytesWritten(int msecs)
     Q_D(QProcess);
     if (d->processState == QProcess::NotRunning)
         return false;
+
+    QDeadlineTimer deadline(msecs);
     if (d->processState == QProcess::Starting) {
-        QElapsedTimer stopWatch;
-        stopWatch.start();
-        bool started = waitForStarted(msecs);
+        bool started = d->waitForStarted(deadline);
         if (!started)
             return false;
-        msecs = qt_subtract_from_timeout(msecs, stopWatch.elapsed());
     }
 
-    return d->waitForBytesWritten(msecs);
+    return d->waitForBytesWritten(deadline);
 }
 
 /*!
@@ -1831,16 +1881,15 @@ bool QProcess::waitForFinished(int msecs)
     Q_D(QProcess);
     if (d->processState == QProcess::NotRunning)
         return false;
+
+    QDeadlineTimer deadline(msecs);
     if (d->processState == QProcess::Starting) {
-        QElapsedTimer stopWatch;
-        stopWatch.start();
-        bool started = waitForStarted(msecs);
+        bool started = d->waitForStarted(deadline);
         if (!started)
             return false;
-        msecs = qt_subtract_from_timeout(msecs, stopWatch.elapsed());
     }
 
-    return d->waitForFinished(msecs);
+    return d->waitForFinished(deadline);
 }
 
 /*!
@@ -2099,6 +2148,8 @@ void QProcess::startCommand(const QString &command, OpenMode mode)
     \li setStandardErrorFile()
     \li setStandardInputFile()
     \li setStandardOutputFile()
+    \li setProcessChannelMode(QProcess::MergedChannels)
+    \li setStandardOutputProcess()
     \li setWorkingDirectory()
     \endlist
     All other properties of the QProcess object are ignored.
@@ -2185,7 +2236,6 @@ void QProcessPrivate::start(QIODevice::OpenMode mode)
     stderrChannel.closed = false;
 
     exitCode = 0;
-    dying = false;
     exitStatus = QProcess::NormalExit;
     processError = QProcess::UnknownError;
     errorString.clear();

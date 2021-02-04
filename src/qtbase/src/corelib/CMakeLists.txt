@@ -44,7 +44,6 @@ qt_internal_add_module(Core
         global/qlibraryinfo.cpp global/qlibraryinfo.h
         global/qlogging.cpp global/qlogging.h
         global/qmalloc.cpp
-        global/qmemory_p.h
         # global/qnamespace.h  # special case
         global/qnumeric.cpp global/qnumeric.h global/qnumeric_p.h
         global/qoperatingsystemversion.cpp global/qoperatingsystemversion.h global/qoperatingsystemversion_p.h
@@ -54,7 +53,6 @@ qt_internal_add_module(Core
         global/qsysinfo.h
         global/qsystemdetection.h
         global/qtypeinfo.h
-        global/qversiontagging.cpp global/qversiontagging.h  # special case
         io/qabstractfileengine.cpp io/qabstractfileengine_p.h
         io/qbuffer.cpp io/qbuffer.h
         io/qdataurl.cpp io/qdataurl_p.h
@@ -226,7 +224,7 @@ qt_internal_add_module(Core
         tools/qrect.cpp tools/qrect.h
         tools/qrefcount.cpp tools/qrefcount.h
         tools/qringbuffer.cpp tools/qringbuffer_p.h
-        tools/qscopedpointer.h tools/qscopedpointer_p.h
+        tools/qscopedpointer.h
         tools/qscopedvaluerollback.h
         tools/qscopeguard.h
         tools/qset.h
@@ -474,7 +472,6 @@ qt_internal_extend_target(Core CONDITION WIN32
         kernel/qwineventnotifier.cpp kernel/qwineventnotifier.h kernel/qwineventnotifier_p.h
         kernel/qwinregistry.cpp kernel/qwinregistry_p.h
         plugin/qsystemlibrary.cpp plugin/qsystemlibrary_p.h
-        thread/qatomic_msvc.h
         thread/qthread_win.cpp
     # DEFINES # special case: remove
     LIBRARIES
@@ -532,6 +529,12 @@ qt_internal_extend_target(Core CONDITION INTEGRITY
         --pending_instantiations=128
 )
 
+# Workaround for QTBUG-90353
+# Remove if MinGW (our only supported gcc version < 9) is no longer supported
+qt_internal_extend_target(Core CONDITION GCC AND (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "9.0.0")
+    PUBLIC_COMPILE_OPTIONS -Wno-error=invalid-offsetof
+)
+
 #### Keys ignored in scope 14:.:.:corelib.pro:pathIsAbsolute(_ss_CMAKE_HOST_DATA_DIR):
 # CMAKE_HOST_DATA_DIR = "$$[QT_HOST_DATA/src]/"
 # CMAKE_HOST_DATA_DIR_IS_ABSOLUTE = "True"
@@ -567,7 +570,7 @@ qt_internal_extend_target(Core CONDITION INTEGRITY
 #)
 # special case end
 
-qt_internal_extend_target(Core CONDITION LINUX AND NOT static
+qt_internal_extend_target(Core CONDITION LINUX AND QT_BUILD_SHARED_LIBS
     SOURCES
         global/minimum-linux_p.h
 )
@@ -584,7 +587,7 @@ qt_internal_extend_target(Core CONDITION LINUX AND NOT static
 #### Keys ignored in scope 35:.:global:global/global.pri:silent:
 # no_pch_assembler.commands = "@echo" "compiling[no_pch]" "${QMAKE_FILE_IN}" "&&"
 
-qt_internal_extend_target(Core CONDITION LINUX AND NOT precompile_header AND NOT static
+qt_internal_extend_target(Core CONDITION LINUX AND NOT precompile_header AND QT_BUILD_SHARED_LIBS
     SOURCES
         global/minimum-linux.S
 )
@@ -599,22 +602,28 @@ qt_internal_extend_target(Core CONDITION QT_FEATURE_journald
         PkgConfig::Libsystemd
 )
 
-#### Keys ignored in scope 39:.:global:global/global.pri:GCC AND ltcg:
-# QMAKE_EXTRA_COMPILERS = "versiontagging_compiler"
-# versiontagging_compiler.commands = "$$QMAKE_CXX" "-c" "$(CXXFLAGS)" "$(INCPATH)" "-fno-lto" "-o" "${QMAKE_FILE_OUT}" "${QMAKE_FILE_IN}"
-# versiontagging_compiler.dependency_type = "TYPE_C"
-# versiontagging_compiler.input = "VERSIONTAGGING_SOURCES"
-# versiontagging_compiler.name = "compiling[versiontagging]" "${QMAKE_FILE_IN}"
-# versiontagging_compiler.output = "${QMAKE_VAR_OBJECTS_DIR}${QMAKE_FILE_BASE}$${firstQMAKE_EXT_OBJ}"
-# versiontagging_compiler.variable_out = "OBJECTS"
-
-#### Keys ignored in scope 40:.:global:global/global.pri:silent:
-# versiontagging_compiler.commands = "@echo" "compiling[versiontagging]" "${QMAKE_FILE_IN}" "&&"
-
-qt_internal_extend_target(Core CONDITION NOT GCC OR NOT ltcg
-    SOURCES
-        global/qversiontagging.cpp
+# special case begin
+add_library(Core_versiontagging OBJECT
+    global/qversiontagging.cpp global/qversiontagging.h
 )
+
+set_target_properties(Core_versiontagging PROPERTIES
+    COMPILE_OPTIONS $<TARGET_PROPERTY:Core,COMPILE_OPTIONS>
+    COMPILE_DEFINITIONS $<TARGET_PROPERTY:Core,COMPILE_DEFINITIONS>
+    INCLUDE_DIRECTORIES $<TARGET_PROPERTY:Core,INCLUDE_DIRECTORIES>
+)
+
+# Disable LTO, as the symbols disappear somehow under GCC
+# (https://gcc.gnu.org/bugzilla/show_bug.cgi?id=48200)
+if(GCC AND FEATURE_ltcg)
+    target_compile_options(Core_versiontagging PRIVATE "-fno-lto")
+endif()
+
+qt_internal_extend_target(Core
+    SOURCES
+        $<TARGET_OBJECTS:Core_versiontagging>
+)
+# special case end
 
 qt_internal_extend_target(Core CONDITION UNIX
     SOURCES
@@ -753,7 +762,7 @@ qt_internal_extend_target(Core CONDITION QT_FEATURE_doubleconversion AND NOT QT_
 
 qt_internal_extend_target(Core CONDITION QT_FEATURE_system_libb2
     LIBRARIES
-        PkgConfig::Libb2
+        Libb2::Libb2
 )
 
 qt_internal_extend_target(Core CONDITION QT_FEATURE_easingcurve
@@ -970,6 +979,8 @@ qt_internal_extend_target(Core CONDITION ANDROID AND NOT ANDROID_EMBEDDED
         io/qstandardpaths_android.cpp
         io/qstorageinfo_unix.cpp
         kernel/qjni.cpp kernel/qjni_p.h
+        kernel/qjnienvironment.cpp kernel/qjnienvironment.h
+        kernel/qjniobject.cpp kernel/qjniobject.h
         kernel/qjnihelpers.cpp kernel/qjnihelpers_p.h
         kernel/qjnionload.cpp
 )
@@ -1345,6 +1356,6 @@ if(NOT QT_FEATURE_system_zlib)
     )
 endif()
 
-qt_internal_add_optimize_full_flags(IN_CURRENT_SCOPE)
+qt_internal_add_optimize_full_flags()
 
 # special case end

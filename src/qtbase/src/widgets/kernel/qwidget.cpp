@@ -113,8 +113,6 @@
 
 #include "qwindowcontainer_p.h"
 
-#include <private/qmemory_p.h>
-
 // widget/widget data creation count
 //#define QWIDGET_EXTRA_DEBUG
 //#define ALIEN_DEBUG
@@ -1330,7 +1328,7 @@ void QWidgetPrivate::create()
 
     if (!store) {
         if (q->windowType() != Qt::Desktop) {
-            if (q->isTopLevel())
+            if (q->isWindow())
                 q->setBackingStore(new QBackingStore(win));
         } else {
             q->setAttribute(Qt::WA_PaintOnScreen, true);
@@ -1570,7 +1568,7 @@ void QWidgetPrivate::createTLExtra()
     if (!extra)
         createExtra();
     if (!extra->topextra) {
-        extra->topextra = qt_make_unique<QTLWExtra>();
+        extra->topextra = std::make_unique<QTLWExtra>();
         QTLWExtra* x = extra->topextra.get();
         x->backingStore = nullptr;
         x->sharedPainter = nullptr;
@@ -1601,7 +1599,7 @@ void QWidgetPrivate::createTLExtra()
 void QWidgetPrivate::createExtra()
 {
     if (!extra) {                                // if not exists
-        extra = qt_make_unique<QWExtra>();
+        extra = std::make_unique<QWExtra>();
         extra->glContext = nullptr;
 #if QT_CONFIG(graphicsview)
         extra->proxyWidget = nullptr;
@@ -4807,7 +4805,7 @@ void QWidget::setCursor(const QCursor &cursor)
         || (d->extra && d->extra->curs))
     {
         d->createExtra();
-        d->extra->curs = qt_make_unique<QCursor>(cursor);
+        d->extra->curs = std::make_unique<QCursor>(cursor);
     }
     setAttribute(Qt::WA_SetCursor);
     d->setCursor_sys(cursor);
@@ -6028,7 +6026,7 @@ void QWidget::setWindowIcon(const QIcon &icon)
     d->createTLExtra();
 
     if (!d->extra->topextra->icon)
-        d->extra->topextra->icon = qt_make_unique<QIcon>(icon);
+        d->extra->topextra->icon = std::make_unique<QIcon>(icon);
     else
         *d->extra->topextra->icon = icon;
 
@@ -6507,6 +6505,9 @@ void QWidget::clearFocus()
         QCoreApplication::sendEvent(this, &focusAboutToChange);
     }
 
+    QTLWExtra *extra = window()->d_func()->maybeTopData();
+    QObject *originalFocusObject = (extra && extra->window) ? extra->window->focusObject() : nullptr;
+
     QWidget *w = this;
     while (w) {
         // Just like setFocus(), we update (clear) the focus_child of our parents
@@ -6515,14 +6516,12 @@ void QWidget::clearFocus()
         w = w->parentWidget();
     }
 
-    // Since we've unconditionally cleared the focus_child of our parents, we need
+    // We've potentially cleared the focus_child of our parents, so we need
     // to report this to the rest of Qt. Note that the focus_child is not the same
     // thing as the application's focusWidget, which is why this piece of code is
-    // not inside the hasFocus() block below.
-    if (QTLWExtra *extra = window()->d_func()->maybeTopData()) {
-        if (extra->window)
-            emit extra->window->focusObjectChanged(extra->window->focusObject());
-    }
+    // not inside a hasFocus() block.
+    if (originalFocusObject && originalFocusObject != extra->window->focusObject())
+        emit extra->window->focusObjectChanged(extra->window->focusObject());
 
 #if QT_CONFIG(graphicsview)
     const auto &topData = d_func()->extra;
@@ -6775,8 +6774,21 @@ void QWidget::setTabOrder(QWidget* first, QWidget *second)
         lastFocusChild = target;
 
         QWidget *focusProxy = target->d_func()->deepestFocusProxy();
-        if (!focusProxy || !target->isAncestorOf(focusProxy))
+        if (!focusProxy || !target->isAncestorOf(focusProxy)) {
+            // QTBUG-81097: Another case is possible here. We can have a child
+            // widget, that sets its focusProxy() to the parent (target).
+            // An example of such widget is a QLineEdit, nested into
+            // a QAbstractSpinBox. In this case such widget should be considered
+            // the last focus child.
+            for (auto *object : target->children()) {
+                QWidget *w = qobject_cast<QWidget*>(object);
+                if (w && w->focusProxy() == target) {
+                    lastFocusChild = w;
+                    break;
+                }
+            }
             return;
+        }
 
         lastFocusChild = focusProxy;
 
@@ -11856,7 +11868,7 @@ void QWidget::setBackingStore(QBackingStore *store)
 {
     // ### createWinId() ??
 
-    if (!isTopLevel())
+    if (!isWindow())
         return;
 
     Q_D(QWidget);
@@ -11873,7 +11885,7 @@ void QWidget::setBackingStore(QBackingStore *store)
     if (!repaintManager)
         return;
 
-    if (isTopLevel()) {
+    if (isWindow()) {
         if (repaintManager->backingStore() != oldStore && repaintManager->backingStore() != store)
             delete repaintManager->backingStore();
         repaintManager->setBackingStore(store);
@@ -11970,7 +11982,7 @@ QOpenGLContext *QWidgetPrivate::shareContext() const
         return nullptr;
 
     if (!extra->topextra->shareContext) {
-        auto ctx = qt_make_unique<QOpenGLContext>();
+        auto ctx = std::make_unique<QOpenGLContext>();
         ctx->setShareContext(qt_gl_global_share_context());
         ctx->setFormat(extra->topextra->window->format());
         ctx->setScreen(extra->topextra->window->screen());

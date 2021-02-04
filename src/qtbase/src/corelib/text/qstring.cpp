@@ -1496,7 +1496,7 @@ inline char qToLower(char ch)
   to unicode QStrings, but allows the use of
   the \c{QChar(char)} and \c{QString(const char (&ch)[N]} constructors,
   and the \c{QString::operator=(const char (&ch)[N])} assignment operator.
-  This gives most of the type-safety benefits of \c QT_NO_CAST_FROM_ASCII
+  This gives most of the type-safety benefits of \l QT_NO_CAST_FROM_ASCII
   but does not require user code to wrap character and string literals
   with QLatin1Char, QLatin1String or similar.
 
@@ -3189,6 +3189,16 @@ QString &QString::remove(QChar ch, Qt::CaseSensitivity cs)
 */
 
 /*!
+  \fn template <typename Predicate> QString &QString::removeIf(Predicate pred)
+  \since 6.1
+
+  Removes all elements for which the predicate \a pred returns true
+  from the string. Returns a reference to the string.
+
+  \sa remove()
+*/
+
+/*!
   \fn QString &QString::replace(qsizetype position, qsizetype n, const QString &after)
 
   Replaces \a n characters beginning at index \a position with
@@ -4408,10 +4418,16 @@ bool QString::contains(const QRegularExpression &re, QRegularExpressionMatch *rm
     Returns the number of times the regular expression \a re matches
     in the string.
 
-    This function counts overlapping matches, so in the example
-    below, there are four instances of "ana" or "ama":
+    For historical reasons, this function counts overlapping matches,
+    so in the example below, there are four instances of "ana" or
+    "ama":
 
     \snippet qstring/main.cpp 95
+
+    This behavior is different from simply iterating over the matches
+    in the string using QRegularExpressionMatchIterator.
+
+    \sa QRegularExpression::globalMatch()
 */
 qsizetype QString::count(const QRegularExpression &re) const
 {
@@ -4422,7 +4438,7 @@ qsizetype QString::count(const QRegularExpression &re) const
     qsizetype count = 0;
     qsizetype index = -1;
     qsizetype len = length();
-    while (index < len - 1) {
+    while (index <= len - 1) {
         QRegularExpressionMatch match = re.match(*this, index + 1);
         if (!match.hasMatch())
             break;
@@ -5416,7 +5432,7 @@ QString QString::fromUcs4(const char32_t *unicode, qsizetype size)
     Resizes the string to \a size characters and copies \a unicode
     into the string.
 
-    If \a unicode is 0, nothing is copied, but the string is still
+    If \a unicode is \nullptr, nothing is copied, but the string is still
     resized to \a size.
 
     \sa unicode(), setUtf16()
@@ -5435,7 +5451,7 @@ QString& QString::setUnicode(const QChar *unicode, qsizetype size)
     Resizes the string to \a size characters and copies \a unicode
     into the string.
 
-    If \a unicode is 0, nothing is copied, but the string is still
+    If \a unicode is \nullptr, nothing is copied, but the string is still
     resized to \a size.
 
     Note that unlike fromUtf16(), this function does not consider BOMs and
@@ -8571,6 +8587,21 @@ bool QString::isRightToLeft() const
     Appends the given \a ch character onto the end of this string.
 */
 
+/*!
+    \since 6.1
+
+    Removes from the string the characters in the half-open range
+    [ \a first , \a last ). Returns an iterator to the character
+    referred to by \a last before the erase.
+*/
+QString::iterator QString::erase(QString::const_iterator first, QString::const_iterator last)
+{
+    const auto start = std::distance(cbegin(), first);
+    const auto len = std::distance(first, last);
+    remove(start, len);
+    return begin() + start;
+}
+
 /*! \fn void QString::shrink_to_fit()
     \since 5.10
 
@@ -10323,6 +10354,84 @@ qsizetype QtPrivate::lastIndexOf(QLatin1String haystack, qsizetype from, QLatin1
     return qLastIndexOf(haystack, from, needle, cs);
 }
 
+#if QT_CONFIG(regularexpression)
+qsizetype QtPrivate::indexOf(QStringView haystack, const QRegularExpression &re, qsizetype from, QRegularExpressionMatch *rmatch)
+{
+    if (!re.isValid()) {
+        qWarning("QStringView::indexOf: invalid QRegularExpression object");
+        return -1;
+    }
+
+    QRegularExpressionMatch match = re.match(haystack, from);
+    if (match.hasMatch()) {
+        const qsizetype ret = match.capturedStart();
+        if (rmatch)
+            *rmatch = std::move(match);
+        return ret;
+    }
+
+    return -1;
+}
+
+qsizetype QtPrivate::lastIndexOf(QStringView haystack, const QRegularExpression &re, qsizetype from, QRegularExpressionMatch *rmatch)
+{
+    if (!re.isValid()) {
+        qWarning("QStringView::lastIndexOf: invalid QRegularExpression object");
+        return -1;
+    }
+
+    qsizetype endpos = (from < 0) ? (haystack.size() + from + 1) : (from);
+    QRegularExpressionMatchIterator iterator = re.globalMatch(haystack);
+    qsizetype lastIndex = -1;
+    while (iterator.hasNext()) {
+        QRegularExpressionMatch match = iterator.next();
+        qsizetype start = match.capturedStart();
+        if (start <= endpos) {
+            lastIndex = start;
+            if (rmatch)
+                *rmatch = std::move(match);
+        } else {
+            break;
+        }
+    }
+
+    return lastIndex;
+}
+
+bool QtPrivate::contains(QStringView haystack, const QRegularExpression &re, QRegularExpressionMatch *rmatch)
+{
+    if (!re.isValid()) {
+        qWarning("QStringView::contains: invalid QRegularExpression object");
+        return false;
+    }
+    QRegularExpressionMatch m = re.match(haystack);
+    bool hasMatch = m.hasMatch();
+    if (hasMatch && rmatch)
+        *rmatch = std::move(m);
+    return hasMatch;
+}
+
+qsizetype QtPrivate::count(QStringView haystack, const QRegularExpression &re)
+{
+    if (!re.isValid()) {
+        qWarning("QStringView::count: invalid QRegularExpression object");
+        return 0;
+    }
+    qsizetype count = 0;
+    qsizetype index = -1;
+    qsizetype len = haystack.length();
+    while (index <= len - 1) {
+        QRegularExpressionMatch match = re.match(haystack, index + 1);
+        if (!match.hasMatch())
+            break;
+        index = match.capturedStart();
+        count++;
+    }
+    return count;
+}
+
+#endif // QT_CONFIG(regularexpression)
+
 /*!
     \since 5.0
 
@@ -10416,5 +10525,28 @@ float QStringView::toFloat(bool *ok) const
 {
     return QLocaleData::convertDoubleToFloat(toDouble(ok), ok);
 }
+
+/*!
+  \fn template <typename T> qsizetype erase(QString &s, const T &t)
+  \relates QString
+  \since 6.1
+
+  Removes all elements that compare equal to \a t from the
+  string \a s. Returns the number of elements removed, if any.
+
+  \sa erase_if
+*/
+
+/*!
+  \fn template <typename Predicate> qsizetype erase_if(QString &s, Predicate pred)
+  \relates QString
+  \since 6.1
+
+  Removes all elements for which the predicate \a pred returns true
+  from the string \a s. Returns the number of elements removed, if
+  any.
+
+  \sa erase
+*/
 
 QT_END_NAMESPACE

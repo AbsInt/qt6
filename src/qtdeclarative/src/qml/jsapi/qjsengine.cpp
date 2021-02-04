@@ -728,6 +728,13 @@ QJSValue QJSEngine::globalObject() const
     return QJSValuePrivate::fromReturnedValue(v->asReturnedValue());
 }
 
+QJSManagedValue QJSEngine::createManaged(QMetaType type, const void *ptr)
+{
+    QJSManagedValue result(m_v4Engine);
+    *result.d = m_v4Engine->metaTypeToJS(type.id(), ptr);
+    return result;
+}
+
 /*!
  *  \internal
  * used by QJSEngine::toScriptValue
@@ -737,6 +744,11 @@ QJSValue QJSEngine::create(int type, const void *ptr)
     QV4::Scope scope(m_v4Engine);
     QV4::ScopedValue v(scope, scope.engine->metaTypeToJS(type, ptr));
     return QJSValuePrivate::fromReturnedValue(v->asReturnedValue());
+}
+
+bool QJSEngine::convertManaged(const QJSManagedValue &value, int type, void *ptr)
+{
+    return QV4::ExecutionEngine::metaTypeFromJS(*value.d, type, ptr);
 }
 
 /*!
@@ -755,6 +767,11 @@ bool QJSEngine::convertV2(const QJSValue &value, int type, void *ptr)
             *reinterpret_cast<QString*>(ptr) = *string;
             return true;
         }
+        if (type == QMetaType::QUrl) {
+            *reinterpret_cast<QUrl *>(ptr) = QUrl(*string);
+            return true;
+        }
+
         double d = QV4::RuntimeHelpers::stringToNumber(*string);
         switch (type) {
         case QMetaType::Int:
@@ -919,6 +936,47 @@ void QJSEngine::throwError(QJSValue::ErrorType errorType, const QString &message
     if (!e)
         return;
     m_v4Engine->throwError(e);
+}
+
+/*!
+    \overload throwError()
+
+    Throws a pre-constructed run-time \a error (exception). This way you can
+    use \l newErrorObject() to create the error and customize it as necessary.
+
+    \since 6.1
+    \sa {Script Exceptions}, newErrorObject()
+*/
+void QJSEngine::throwError(const QJSValue &error)
+{
+    m_v4Engine->throwError(QJSValuePrivate::asReturnedValue(&error));
+}
+
+/*!
+ * Returns \c true if the last JavaScript execution resulted in an exception or
+ * if throwError() was called. Otherwise returns \c false. Mind that evaluate()
+ * catches any exceptions thrown in the evaluated code.
+ *
+ * \since Qt 6.1
+ */
+bool QJSEngine::hasError() const
+{
+    return m_v4Engine->hasException;
+}
+
+/*!
+ * If an exception is currently pending, catches it and returns it as a
+ * QJSValue. Otherwise returns undefined as QJSValue. After calling this method
+ * hasError() returns \c false.
+ *
+ * \since Qt 6.1
+ */
+QJSValue QJSEngine::catchError()
+{
+    if (m_v4Engine->hasException)
+        return QJSValuePrivate::fromReturnedValue(m_v4Engine->catchException());
+    else
+        return QJSValue();
 }
 
 /*!

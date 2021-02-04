@@ -80,7 +80,16 @@ QT_BEGIN_NAMESPACE
 Q_CORE_EXPORT char *qstrdup(const char *);
 
 inline size_t qstrlen(const char *str)
-{ return str ? strlen(str) : 0; }
+{
+    QT_WARNING_PUSH
+#if defined(Q_CC_GNU) && Q_CC_GNU >= 900 && Q_CC_GNU < 1000
+    // spurious compiler warning (https://gcc.gnu.org/bugzilla/show_bug.cgi?id=91490#c6)
+    // when Q_DECLARE_METATYPE_TEMPLATE_1ARG is used
+    QT_WARNING_DISABLE_GCC("-Wstringop-overflow")
+#endif
+    return str ? strlen(str) : 0;
+    QT_WARNING_POP
+}
 
 inline size_t qstrnlen(const char *str, size_t maxlen)
 {
@@ -309,6 +318,12 @@ public:
     { return insert(i, QByteArrayView(s, len)); }
 
     QByteArray &remove(qsizetype index, qsizetype len);
+    template <typename Predicate>
+    QByteArray &removeIf(Predicate pred)
+    {
+        QtPrivate::sequential_erase_if(*this, pred);
+        return *this;
+    }
 
     QByteArray &replace(qsizetype index, qsizetype len, const char *s, qsizetype alen)
     { return replace(index, len, QByteArrayView(s, alen)); }
@@ -497,6 +512,7 @@ public:
     void push_front(QByteArrayView a)
     { prepend(a); }
     void shrink_to_fit() { squeeze(); }
+    iterator erase(const_iterator first, const_iterator last);
 
     static inline QByteArray fromStdString(const std::string &s);
     inline std::string toStdString() const;
@@ -719,6 +735,18 @@ Q_DECLARE_SHARED(QByteArray::FromBase64Result)
 
 
 Q_CORE_EXPORT Q_DECL_PURE_FUNCTION size_t qHash(const QByteArray::FromBase64Result &key, size_t seed = 0) noexcept;
+
+template <typename T>
+qsizetype erase(QByteArray &ba, const T &t)
+{
+    return QtPrivate::sequential_erase(ba, t);
+}
+
+template <typename Predicate>
+qsizetype erase_if(QByteArray &ba, Predicate pred)
+{
+    return QtPrivate::sequential_erase_if(ba, pred);
+}
 
 //
 // QByteArrayView members that require QByteArray:

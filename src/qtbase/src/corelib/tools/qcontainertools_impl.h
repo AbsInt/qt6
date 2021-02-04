@@ -150,6 +150,131 @@ using IfIsNotSame =
 
 template<typename T, typename U>
 using IfIsNotConvertible = typename std::enable_if<!std::is_convertible<T, U>::value, bool>::type;
+
+template <typename Container, typename T>
+auto sequential_erase(Container &c, const T &t)
+{
+    // avoid a detach in case there is nothing to remove
+    const auto cbegin = c.cbegin();
+    const auto cend = c.cend();
+    const auto t_it = std::find(cbegin, cend, t);
+    auto result = std::distance(cbegin, t_it);
+    if (result == c.size())
+        return result - result; // `0` of the right type
+
+    const auto e = c.end();
+    const auto it = std::remove(std::next(c.begin(), result), e, t);
+    result = std::distance(it, e);
+    c.erase(it, e);
+    return result;
+}
+
+template <typename Container, typename T>
+auto sequential_erase_with_copy(Container &c, const T &t)
+{
+    using CopyProxy = std::conditional_t<std::is_copy_constructible_v<T>, T, const T &>;
+    const T &tCopy = CopyProxy(t);
+    return sequential_erase(c, tCopy);
+}
+
+template <typename Container, typename T>
+auto sequential_erase_one(Container &c, const T &t)
+{
+    const auto cend = c.cend();
+    const auto it = std::find(c.cbegin(), cend, t);
+    if (it == cend)
+        return false;
+    c.erase(it);
+    return true;
+}
+
+template <typename Container, typename Predicate>
+auto sequential_erase_if(Container &c, Predicate &pred)
+{
+    // avoid a detach in case there is nothing to remove
+    const auto cbegin = c.cbegin();
+    const auto cend = c.cend();
+    const auto t_it = std::find_if(cbegin, cend, pred);
+    auto result = std::distance(cbegin, t_it);
+    if (result == c.size())
+        return result - result; // `0` of the right type
+
+    const auto e = c.end();
+    const auto it = std::remove_if(std::next(c.begin(), result), e, pred);
+    result = std::distance(it, e);
+    c.erase(it, e);
+    return result;
+}
+
+template <typename T, typename Predicate>
+qsizetype qset_erase_if(QSet<T> &set, Predicate &pred)
+{
+    qsizetype result = 0;
+    auto it = set.begin();
+    const auto e = set.end();
+    while (it != e) {
+        if (pred(*it)) {
+            ++result;
+            it = set.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    return result;
+}
+
+
+// Prerequisite: F is invocable on ArgTypes
+template <typename R, typename F, typename ... ArgTypes>
+struct is_invoke_result_explicitly_convertible : std::is_constructible<R, std::invoke_result_t<F, ArgTypes...>>
+{};
+
+// is_invocable_r checks for implicit conversions, but we need to check
+// for explicit conversions in remove_if. So, roll our own trait.
+template <typename R, typename F, typename ... ArgTypes>
+constexpr bool is_invocable_explicit_r_v = std::conjunction_v<
+    std::is_invocable<F, ArgTypes...>,
+    is_invoke_result_explicitly_convertible<R, F, ArgTypes...>
+>;
+
+template <typename Container, typename Predicate>
+auto associative_erase_if(Container &c, Predicate &pred)
+{
+    // we support predicates callable with either Container::iterator
+    // or with std::pair<const Key &, Value &>
+    using Iterator = typename Container::iterator;
+    using Key = typename Container::key_type;
+    using Value = typename Container::mapped_type;
+    using KeyValuePair = std::pair<const Key &, Value &>;
+
+    typename Container::size_type result = 0;
+
+    auto it = c.begin();
+    const auto e = c.end();
+    while (it != e) {
+        if constexpr (is_invocable_explicit_r_v<bool, Predicate &, Iterator &>) {
+            if (pred(it)) {
+                it = c.erase(it);
+                ++result;
+            } else {
+                ++it;
+            }
+        } else if constexpr (is_invocable_explicit_r_v<bool, Predicate &, KeyValuePair &&>) {
+            KeyValuePair p(it.key(), it.value());
+            if (pred(std::move(p))) {
+                it = c.erase(it);
+                ++result;
+            } else {
+                ++it;
+            }
+        } else {
+            static_assert(sizeof(Container) == 0, "Predicate has an incompatible signature");
+        }
+    }
+
+    return result;
+}
+
 } // namespace QtPrivate
 
 QT_END_NAMESPACE

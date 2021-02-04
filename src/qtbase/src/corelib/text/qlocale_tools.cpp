@@ -362,6 +362,7 @@ double qt_asciiToDouble(const char *num, qsizetype numLen, bool &ok, int &proces
         buffer = reasonableBuffer;
     else
         buffer = static_cast<char *>(malloc(numLen + 1));
+    Q_CHECK_PTR(buffer);
     memcpy(buffer, num, numLen);
     buffer[numLen] = '\0';
 
@@ -530,7 +531,8 @@ QString qulltoa(qulonglong number, int base, const QStringView zero)
 
             number /= base;
         }
-    } else {
+    } else { // zero should always be either a non-surrogate or a surrogate pair:
+        Q_UNREACHABLE();
         return QString();
     }
 

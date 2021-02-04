@@ -40,10 +40,7 @@
 #include <QtQml/qqmlextensionplugin.h>
 #include <QtQml/qqml.h>
 
-#include "qwavefrontmesh.h"
-
-extern void qml_register_types_Qt_labs_wavefrontmesh();
-
+#include <QtLabsWavefrontMesh/private/qqmlwavefrontmeshglobal_p.h>
 QT_BEGIN_NAMESPACE
 
 class QmlWavefrontMeshPlugin : public QQmlEngineExtensionPlugin

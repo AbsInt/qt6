@@ -5,7 +5,7 @@
 #####################################################################
 
 qt_internal_add_module(Network
-    PLUGIN_TYPES networkaccessbackends
+    PLUGIN_TYPES networkaccessbackends networkinformationbackends
     SOURCES
         access/qabstractnetworkcache.cpp access/qabstractnetworkcache.h access/qabstractnetworkcache_p.h
         access/qhsts.cpp access/qhsts_p.h
@@ -30,6 +30,7 @@ qt_internal_add_module(Network
         kernel/qhostinfo.cpp kernel/qhostinfo.h kernel/qhostinfo_p.h
         kernel/qnetconmonitor_p.h
         kernel/qnetworkdatagram.cpp kernel/qnetworkdatagram.h kernel/qnetworkdatagram_p.h
+        kernel/qnetworkinformation.cpp kernel/qnetworkinformation_p.h kernel/qnetworkinformation.h
         kernel/qnetworkinterface.cpp kernel/qnetworkinterface.h kernel/qnetworkinterface_p.h
         kernel/qnetworkinterface_unix_p.h
         kernel/qnetworkproxy.cpp kernel/qnetworkproxy.h
@@ -325,6 +326,7 @@ qt_internal_extend_target(Network CONDITION QT_FEATURE_ssl
         ssl/qsslkey.h ssl/qsslkey_p.cpp ssl/qsslkey_p.h
         ssl/qsslpresharedkeyauthenticator.cpp ssl/qsslpresharedkeyauthenticator.h ssl/qsslpresharedkeyauthenticator_p.h
         ssl/qsslsocket.cpp ssl/qsslsocket.h ssl/qsslsocket_p.h
+        ssl/qtlsbackend.cpp ssl/qtlsbackend_p.h
 )
 
 qt_internal_extend_target(Network CONDITION QT_FEATURE_schannel AND QT_FEATURE_ssl
@@ -392,13 +394,7 @@ qt_internal_extend_target(Network CONDITION ANDROID AND QT_FEATURE_openssl AND Q
         ssl/qsslsocket_openssl_android.cpp
 )
 
-qt_internal_extend_target(Network CONDITION ANDROID AND QT_FEATURE_openssl AND QT_FEATURE_openssl_linked AND QT_FEATURE_ssl AND (build_pass OR single_android_abi)
-    LIBRARIES
-        crypto_${CMAKE_SYSTEM_PROCESSOR}
-        ssl_${CMAKE_SYSTEM_PROCESSOR}
-)
-
-qt_internal_extend_target(Network CONDITION QT_FEATURE_openssl AND QT_FEATURE_openssl_linked AND QT_FEATURE_ssl AND NOT ANDROID
+qt_internal_extend_target(Network CONDITION QT_FEATURE_openssl AND QT_FEATURE_openssl_linked AND QT_FEATURE_ssl
     LIBRARIES
         WrapOpenSSL::WrapOpenSSL
     PRIVATE_MODULE_INTERFACE

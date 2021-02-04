@@ -53,6 +53,7 @@
 #include <private/qv4objectiterator_p.h>
 #include <private/qqmlabstractbinding_p.h>
 #include <private/qqmlvaluetypeproxybinding_p.h>
+#include <QtCore/private/qproperty_p.h>
 
 #ifdef Q_CC_MSVC
 #define NO_INLINE __declspec(noinline)
@@ -79,6 +80,7 @@ private slots:
     void assignBasicTypes();
     void assignDate_data();
     void assignDate();
+    void assignFunctionThroughAliasToVarProperty();
     void exportDate_data();
     void exportDate();
     void checkDate_data();
@@ -91,6 +93,8 @@ private slots:
     void signalAssignment();
     void signalArguments();
     void bindingLoop();
+    void cppPropertyBindingLoop_data();
+    void cppPropertyBindingLoop();
     void basicExpressions();
     void basicExpressions_data();
     void arrayExpressions();
@@ -396,6 +400,7 @@ private slots:
     void proxyIteration();
     void proxyHandlerTraps();
     void gcCrashRegressionTest();
+    void cmpInThrows();
 
 private:
 //    static void propertyVarWeakRefCallback(v8::Persistent<v8::Value> object, void* parameter);
@@ -560,6 +565,19 @@ void tst_qqmlecmascript::assignDate()
     QCOMPARE(object->dateTimeProperty(), expectedDateTime);
     QCOMPARE(object->dateTimeProperty2(), expectedDateTime2);
     QCOMPARE(object->boolProperty(), true);
+}
+
+void tst_qqmlecmascript::assignFunctionThroughAliasToVarProperty()
+{
+    QQmlEngine engine;
+    QQmlComponent component(&engine, testFileUrl("assignFunctionThroughAliasToVarProperty.qml"));
+    QScopedPointer<QObject> root(component.create());
+    QVERIFY2(root, qPrintable(component.errorString()));
+
+    QJSValue fooFunc = root->property("foo").value<QJSValue>();
+    QVERIFY(fooFunc.isCallable());
+    QJSValue callResult = fooFunc.call();
+    QVERIFY(callResult.toBool());
 }
 
 void tst_qqmlecmascript::exportDate_data()
@@ -867,6 +885,78 @@ void tst_qqmlecmascript::bindingLoop()
     QObject *object = component.create();
     QVERIFY(object != nullptr);
     delete object;
+}
+
+
+struct QPropertyBindingLoop : public QObject
+{
+    Q_OBJECT
+    Q_PROPERTY(float value MEMBER value BINDABLE bindableValue)
+    Q_PROPERTY(float value2 MEMBER value2 BINDABLE bindableValue2)
+    Q_PROPERTY(float eager1 READ eager1 WRITE setEager1 BINDABLE bindableEager1)
+    Q_PROPERTY(float eager2 READ eager2 WRITE setEager2 BINDABLE bindableEager2)
+    Q_PROPERTY(float oldprop READ oldprop WRITE setOldprop NOTIFY oldpropChanged)
+signals:
+    void oldpropChanged();
+public:
+
+    float eager1() {return eager1Data;}
+    void setEager1(float f) {eager1Data.setValue(f);}
+    float eager2() {return eager2Data;}
+    void setEager2(float f) {eager2Data.setValue(f);}
+    QProperty<float> value;
+    QProperty<float> value2;
+    QBindable<float> bindableValue() { return QBindable<float>(&value); }
+    QBindable<float> bindableValue2() { return QBindable<float>(&value2); }
+    QBindable<float> bindableEager1() {return QBindable<float>(&eager1Data);}
+    QBindable<float> bindableEager2() {return QBindable<float>(&eager2Data);}
+    float m_oldprop;
+
+    float oldprop() const;
+    void setOldprop(float oldprop);
+
+private:
+    Q_OBJECT_COMPAT_PROPERTY(QPropertyBindingLoop, float, eager1Data, &QPropertyBindingLoop::setEager1);
+    Q_OBJECT_COMPAT_PROPERTY(QPropertyBindingLoop, float, eager2Data, &QPropertyBindingLoop::setEager2);
+
+};
+
+
+float QPropertyBindingLoop::oldprop() const
+{
+    return m_oldprop;
+}
+
+void QPropertyBindingLoop::setOldprop(float oldprop)
+{
+    m_oldprop = oldprop;
+    emit oldpropChanged();
+}
+
+void tst_qqmlecmascript::cppPropertyBindingLoop_data()
+{
+    QTest::addColumn<QString>("file");
+    QTest::addColumn<QString>("warningMsg");
+
+    QTest::newRow("eager eager") << "bindingLoopEagerEager.qml" << R"(:4:5: QML BindingLoop: Binding loop detected for property "eager1")";
+    QTest::newRow("lazy lazy") << "bindingLoopLazyLazy.qml" << R"(:7:5: QML BindingLoop: Binding loop detected for property "value2")";
+    QTest::newRow("lazy eager") << "bindingLoopLazyEager.qml" << R"(:4:5: QML BindingLoop: Binding loop detected for property "eager1")";
+    QTest::newRow("eager lazy") << "bindingLoopEagerLazy.qml" << R"(:10:9: QML BindingLoop: Binding loop detected for property "eager1")";
+    QTest::newRow("eager old") << "bindingLoopEagerOld.qml" << R"(:4:5: QML BindingLoop: Binding loop detected for property "eager1")";
+
+    qmlRegisterType<QPropertyBindingLoop>("test", 1, 0, "BindingLoop");
+}
+
+void tst_qqmlecmascript::cppPropertyBindingLoop()
+{
+    QFETCH(QString, file);
+    QFETCH(QString, warningMsg);
+    QQmlEngine engine;
+    QQmlComponent component(&engine, testFileUrl(file));
+    QString warning = component.url().toString() + warningMsg;
+    QTest::ignoreMessage(QtWarningMsg, warning.toLatin1().constData());
+    QScopedPointer<QObject> object { component.create() };
+    QVERIFY2(object, qPrintable(component.errorString()));
 }
 
 void tst_qqmlecmascript::basicExpressions_data()
@@ -3483,6 +3573,46 @@ void tst_qqmlecmascript::scriptConnect()
         QCOMPARE(object->property("test").toInt(), 0);
         emit object->argumentSignal(19, "Hello world!", 10.25, MyQmlObject::EnumValue4, Qt::RightButton);
         QCOMPARE(object->property("test").toInt(), 2);
+
+        delete object;
+    }
+
+    {
+        QQmlComponent component(&engine, testFileUrl("scriptConnect.dynamic.1.qml"));
+
+        QObject *object = component.create();
+        QVERIFY(object != nullptr);
+
+        QCOMPARE(object->property("test").toInt(), 0);
+
+        QMetaObject::invokeMethod(object, "outer");
+        QCOMPARE(object->property("test").toInt(), 1);
+
+        // process the dynamic object deletion queried with deleteLater()
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+        QCoreApplication::processEvents();
+
+        // after deletion, further invocations do not update the property
+        QMetaObject::invokeMethod(object, "outer");
+        QCOMPARE(object->property("test").toInt(), 1);
+
+        delete object;
+    }
+
+    {
+        QQmlComponent component(&engine, testFileUrl("scriptConnect.dynamic.2.qml"));
+
+        QObject *object = component.create();
+        QVERIFY(object != nullptr);
+
+        QCOMPARE(object->property("test").toInt(), 0);
+        QMetaObject::invokeMethod(object, "outer");
+        QCOMPARE(object->property("test").toInt(), 1);
+
+        // no need to manually process events here, as we disconnect explicitly
+
+        QMetaObject::invokeMethod(object, "outer");
+        QCOMPARE(object->property("test").toInt(), 1);
 
         delete object;
     }
@@ -9562,6 +9692,18 @@ void tst_qqmlecmascript::proxyHandlerTraps()
     QJSEngine engine;
     QJSValue value = engine.evaluate(expression);
     QVERIFY(value.isString() && value.toString() == QStringLiteral("SUCCESS"));
+}
+
+void tst_qqmlecmascript::cmpInThrows()
+{
+    QJSEngine engine;
+    QStringList stacktrace;
+    QJSValue value = engine.evaluate(QStringLiteral("\n\n'foo' in 1"), QStringLiteral("foo.js"), 12,
+                                     &stacktrace);
+    QVERIFY(value.isError());
+    QCOMPARE(value.errorType(), QJSValue::TypeError);
+    QVERIFY(!stacktrace.isEmpty());
+    QCOMPARE(stacktrace.at(0), QStringLiteral("%entry:14:-1:file:foo.js"));
 }
 
 QTEST_MAIN(tst_qqmlecmascript)

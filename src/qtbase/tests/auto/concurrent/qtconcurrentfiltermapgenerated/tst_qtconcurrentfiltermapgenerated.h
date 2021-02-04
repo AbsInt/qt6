@@ -27,7 +27,7 @@
 ****************************************************************************/
 #include <qtconcurrentfilter.h>
 #include <qtconcurrentmap.h>
-#include <QtTest/QtTest>
+#include <QTest>
 
 #include "generation_helpers.h"
 
@@ -44,6 +44,8 @@ private slots:
     void moveOnlyReduceObject();
     void functorAsReduction();
     void moveOnlyReductionItem();
+    void noDefaultConstructorItemMapped();
+    void noDefaultConstructorItemFiltered();
     // START_GENERATED_SLOTS (see generate_tests.py)
     void test1();
     // END_GENERATED_SLOTS (see generate_tests.py)

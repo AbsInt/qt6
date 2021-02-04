@@ -27,10 +27,14 @@
 ****************************************************************************/
 #include <QCoreApplication>
 #include <QDebug>
+#include <QSemaphore>
+#include <QTestEventLoop>
+#include <QTimer>
+#include <QSignalSpy>
 
 #define QFUTURE_TEST
 
-#include <QtTest/QtTest>
+#include <QTest>
 #include <qfuture.h>
 #include <qfuturewatcher.h>
 #include <qresultstore.h>
@@ -138,6 +142,7 @@ private slots:
     void onFailedForMoveOnlyTypes();
 #endif
     void onCanceled();
+    void continuationsWithContext();
 #if 0
     // TODO: enable when QFuture::takeResults() is enabled
     void takeResults();
@@ -155,6 +160,8 @@ private slots:
     void rejectResultOverwrite();
     void rejectPendingResultOverwrite_data() { rejectResultOverwrite_data(); }
     void rejectPendingResultOverwrite();
+
+    void createReadyFutures();
 
 private:
     using size_type = std::vector<int>::size_type;
@@ -1179,13 +1186,13 @@ void tst_QFuture::iterators()
         QVERIFY(c2 != c1);
 
         int x1 = *i1;
-        Q_UNUSED(x1);
+        Q_UNUSED(x1)
         int x2 = *i2;
-        Q_UNUSED(x2);
+        Q_UNUSED(x2)
         int y1 = *c1;
-        Q_UNUSED(y1);
+        Q_UNUSED(y1)
         int y2 = *c2;
-        Q_UNUSED(y2);
+        Q_UNUSED(y2)
     }
 
     {
@@ -1237,10 +1244,10 @@ void tst_QFuture::iterators()
         QCOMPARE(x1, y1);
         QCOMPARE(x2, y2);
 
-        int i1Size = i1->size();
-        int i2Size = i2->size();
-        int c1Size = c1->size();
-        int c2Size = c2->size();
+        auto i1Size = i1->size();
+        auto i2Size = i2->size();
+        auto c1Size = c1->size();
+        auto c2Size = c2->size();
 
         QCOMPARE(i1Size, c1Size);
         QCOMPARE(i2Size, c2Size);
@@ -1685,7 +1692,7 @@ void tst_QFuture::exceptions()
         bool caught = false;
         try {
             foreach (int e, f.results()) {
-                Q_UNUSED(e);
+                Q_UNUSED(e)
                 QFAIL("did not get exception");
             }
         } catch (QException &) {
@@ -1752,7 +1759,7 @@ void tst_QFuture::nestedExceptions()
 {
     try {
         MyClass m;
-        Q_UNUSED(m);
+        Q_UNUSED(m)
         throw 0;
     } catch (int) {}
 
@@ -1780,7 +1787,7 @@ void tst_QFuture::nonGlobalThreadPool()
         void run() override
         {
             const int ms = 100 + (QRandomGenerator::global()->bounded(100) - 100/2);
-            QThread::msleep(ms);
+            QThread::msleep(ulong(ms));
             reportResult(Answer);
             reportFinished();
         }
@@ -2818,6 +2825,85 @@ void tst_QFuture::onCanceled()
 #endif // QT_NO_EXCEPTIONS
 }
 
+void tst_QFuture::continuationsWithContext()
+{
+    QThread thread;
+    thread.start();
+
+    auto context = new QObject();
+    context->moveToThread(&thread);
+
+    auto tstThread = QThread::currentThread();
+
+    // .then()
+    {
+        auto future = QtFuture::makeReadyFuture(0)
+                              .then([&](int val) {
+                                  if (QThread::currentThread() != tstThread)
+                                      return 0;
+                                  return val + 1;
+                              })
+                              .then(context,
+                                    [&](int val) {
+                                        if (QThread::currentThread() != &thread)
+                                            return 0;
+                                        return val + 1;
+                                    })
+                              .then([&](int val) {
+                                  if (QThread::currentThread() != &thread)
+                                      return 0;
+                                  return val + 1;
+                              });
+        QCOMPARE(future.result(), 3);
+    }
+
+    // .onCanceled
+    {
+        auto future = createCanceledFuture<int>()
+                              .onCanceled(context,
+                                          [&] {
+                                              if (QThread::currentThread() != &thread)
+                                                  return 0;
+                                              return 1;
+                                          })
+                              .then([&](int val) {
+                                  if (QThread::currentThread() != &thread)
+                                      return 0;
+                                  return val + 1;
+                              });
+        QCOMPARE(future.result(), 2);
+    }
+
+#ifndef QT_NO_EXCEPTIONS
+    // .onFaled()
+    {
+        auto future = QtFuture::makeReadyFuture()
+                              .then([&] {
+                                  if (QThread::currentThread() != tstThread)
+                                      return 0;
+                                  throw std::runtime_error("error");
+                              })
+                              .onFailed(context,
+                                        [&] {
+                                            if (QThread::currentThread() != &thread)
+                                                return 0;
+                                            return 1;
+                                        })
+                              .then([&](int val) {
+                                  if (QThread::currentThread() != &thread)
+                                      return 0;
+                                  return val + 1;
+                              });
+        QCOMPARE(future.result(), 2);
+    }
+#endif // QT_NO_EXCEPTIONS
+
+    context->deleteLater();
+
+    thread.quit();
+    thread.wait();
+}
+
 void tst_QFuture::testSingleResult(const UniquePtr &p)
 {
     QVERIFY(p.get() != nullptr);
@@ -2831,7 +2917,7 @@ void tst_QFuture::testSingleResult(const std::vector<int> &v)
 template<class T>
 void tst_QFuture::testSingleResult(const T &unknown)
 {
-    Q_UNUSED(unknown);
+    Q_UNUSED(unknown)
 }
 
 
@@ -3336,6 +3422,73 @@ void tst_QFuture::rejectPendingResultOverwrite()
     QCOMPARE(f.resultAt(1), initResults[0]);
     initResults.prepend(123);
     QCOMPARE(f.results(), initResults);
+}
+
+void tst_QFuture::createReadyFutures()
+{
+    // using const T &
+    {
+        const int val = 42;
+        QFuture<int> f = QtFuture::makeReadyFuture(val);
+        QCOMPARE(f.result(), val);
+    }
+
+    // using T
+    {
+        int val = 42;
+        QFuture<int> f = QtFuture::makeReadyFuture(val);
+        QCOMPARE(f.result(), val);
+    }
+
+    // using T &&
+    {
+        auto f = QtFuture::makeReadyFuture(std::make_unique<int>(42));
+        QCOMPARE(*f.takeResult(), 42);
+    }
+
+    // using void
+    {
+        auto f = QtFuture::makeReadyFuture();
+        QVERIFY(f.isStarted());
+        QVERIFY(!f.isRunning());
+        QVERIFY(f.isFinished());
+    }
+
+    // using const QList<T> &
+    {
+        const QList<int> values { 1, 2, 3 };
+        auto f = QtFuture::makeReadyFuture(values);
+        QCOMPARE(f.resultCount(), 3);
+        QCOMPARE(f.results(), values);
+    }
+
+#ifndef QT_NO_EXCEPTIONS
+    // using QException
+    {
+        QException e;
+        auto f = QtFuture::makeExceptionalFuture<int>(e);
+        bool caught = false;
+        try {
+            f.result();
+        } catch (QException &) {
+            caught = true;
+        }
+        QVERIFY(caught);
+    }
+
+    // using std::exception_ptr and QFuture<void>
+    {
+        auto exception = std::make_exception_ptr(TestException());
+        auto f = QtFuture::makeExceptionalFuture(exception);
+        bool caught = false;
+        try {
+            f.waitForFinished();
+        } catch (TestException &) {
+            caught = true;
+        }
+        QVERIFY(caught);
+    }
+#endif
 }
 
 QTEST_MAIN(tst_QFuture)

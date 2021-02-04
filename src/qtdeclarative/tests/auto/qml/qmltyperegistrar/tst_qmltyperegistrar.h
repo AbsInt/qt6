@@ -33,6 +33,30 @@
 
 #include <QtQml/qqml.h>
 #include <QtCore/qproperty.h>
+#include <QtCore/qtimeline.h>
+
+class Interface {};
+class Interface2 {};
+
+QT_BEGIN_NAMESPACE
+Q_DECLARE_INTERFACE(Interface, "io.qt.bugreports.Interface");
+Q_DECLARE_INTERFACE(Interface2, "io.qt.bugreports.Interface2");
+QT_END_NAMESPACE
+
+
+class ImplementsInterfaces : public QObject, public Interface
+{
+    Q_OBJECT
+    QML_ELEMENT
+    QML_IMPLEMENTS_INTERFACES(Interface)
+};
+
+class ImplementsInterfaces2 : public QObject, public Interface, public Interface2
+{
+    Q_OBJECT
+    QML_ELEMENT
+    QML_IMPLEMENTS_INTERFACES(Interface Interface2)
+};
 
 class ExcessiveVersion : public QObject
 {
@@ -63,7 +87,7 @@ private:
 class SizeEnums
 {
     Q_GADGET
-    QML_NAMED_ELEMENT(SizeEnums)
+    QML_NAMED_ELEMENT(sizeEnums)
     QML_UNCREATABLE("Element is not creatable.")
 
 public:
@@ -76,8 +100,9 @@ class SizeValueType : public SizeEnums
     QSize v;
     Q_GADGET
     Q_PROPERTY(int width READ width WRITE setWidth FINAL)
-    QML_NAMED_ELEMENT(MySize)
+    QML_NAMED_ELEMENT(mySize)
     QML_FOREIGN(SizeGadget)
+    QML_EXTENDED(SizeValueType)
 
 public:
     Q_INVOKABLE QString sizeToString() const
@@ -109,6 +134,22 @@ public:
     QProperty<int> someProperty;
 };
 
+namespace Namespace {
+    class Element : public QObject
+    {
+        Q_OBJECT
+        QML_ELEMENT
+    };
+}
+
+class DerivedFromForeign : public QTimeLine
+{
+    Q_OBJECT
+    QML_ELEMENT
+public:
+    DerivedFromForeign(QObject *parent) : QTimeLine(1000, parent) {}
+};
+
 class tst_qmltyperegistrar : public QObject
 {
     Q_OBJECT
@@ -117,6 +158,7 @@ private slots:
     void initTestCase();
     void qmltypesHasForeign();
     void qmltypesHasHppClassAndNoext();
+    void qmltypesHasReadAndWrite();
     void qmltypesHasFileNames();
     void qmltypesHasFlags();
     void superAndForeignTypes();
@@ -124,6 +166,10 @@ private slots:
     void isBindable();
     void restrictToImportVersion();
     void pastMajorVersions();
+    void implementsInterfaces();
+    void namespacedElement();
+    void derivedFromForeign();
+    void metaTypesRegistered();
 
 private:
     QByteArray qmltypesData;

@@ -126,6 +126,30 @@ static qreal qt_getDevicePixelRatio(const QWidget *widget)
     return widget ? widget->devicePixelRatio() : qApp->devicePixelRatio();
 }
 
+static QIcon tabBarCloseButtonIcon()
+{
+    QIcon result;
+    result.addPixmap(QPixmap(
+                     QLatin1String(":/qt-project.org/styles/commonstyle/images/standardbutton-closetab-16.png")),
+                     QIcon::Normal, QIcon::Off);
+    result.addPixmap(QPixmap(
+                     QLatin1String(":/qt-project.org/styles/commonstyle/images/standardbutton-closetab-32.png")),
+                     QIcon::Normal, QIcon::Off);
+    result.addPixmap(QPixmap(
+                     QLatin1String(":/qt-project.org/styles/commonstyle/images/standardbutton-closetab-down-16.png")),
+                     QIcon::Normal, QIcon::On);
+    result.addPixmap(QPixmap(
+                     QLatin1String(":/qt-project.org/styles/commonstyle/images/standardbutton-closetab-down-32.png")),
+                     QIcon::Normal, QIcon::On);
+    result.addPixmap(QPixmap(
+                     QLatin1String(":/qt-project.org/styles/commonstyle/images/standardbutton-closetab-hover-16.png")),
+                     QIcon::Active, QIcon::Off);
+    result.addPixmap(QPixmap(
+                     QLatin1String(":/qt-project.org/styles/commonstyle/images/standardbutton-closetab-hover-32.png")),
+                     QIcon::Active, QIcon::Off);
+    return result;
+}
+
 /*!
     \class QCommonStyle
     \brief The QCommonStyle class encapsulates the common Look and Feel of a GUI.
@@ -416,17 +440,8 @@ void QCommonStyle::drawPrimitive(PrimitiveElement pe, const QStyleOption *opt, Q
         }
         break;
     case PE_IndicatorTabClose: {
-        if (d->tabBarcloseButtonIcon.isNull()) {
-            d->tabBarcloseButtonIcon.addPixmap(QPixmap(
-                        QLatin1String(":/qt-project.org/styles/commonstyle/images/standardbutton-closetab-16.png")),
-                        QIcon::Normal, QIcon::Off);
-            d->tabBarcloseButtonIcon.addPixmap(QPixmap(
-                        QLatin1String(":/qt-project.org/styles/commonstyle/images/standardbutton-closetab-down-16.png")),
-                        QIcon::Normal, QIcon::On);
-            d->tabBarcloseButtonIcon.addPixmap(QPixmap(
-                        QLatin1String(":/qt-project.org/styles/commonstyle/images/standardbutton-closetab-hover-16.png")),
-                        QIcon::Active, QIcon::Off);
-        }
+        if (d->tabBarcloseButtonIcon.isNull())
+            d->tabBarcloseButtonIcon = tabBarCloseButtonIcon();
 
         const int size = proxy()->pixelMetric(QStyle::PM_SmallIconSize, opt);
         QIcon::Mode mode = opt->state & State_Enabled ?
@@ -1344,7 +1359,7 @@ void QCommonStyle::drawControl(ControlElement element, const QStyleOption *opt,
                 int mbi = proxy()->pixelMetric(PM_MenuButtonIndicator, btn, widget);
                 QRect ir = btn->rect;
                 QStyleOptionButton newBtn = *btn;
-                newBtn.rect = QRect(ir.right() - mbi + 2, ir.height()/2 - mbi/2 + 3, mbi - 6, mbi - 6);
+                newBtn.rect = QRect(ir.right() - mbi - 2, ir.height()/2 - mbi/2 + 3, mbi - 6, mbi - 6);
                 newBtn.rect = visualRect(btn->direction, br, newBtn.rect);
                 proxy()->drawPrimitive(PE_IndicatorArrowDown, &newBtn, p, widget);
             }
@@ -1356,6 +1371,14 @@ void QCommonStyle::drawControl(ControlElement element, const QStyleOption *opt,
             uint tf = Qt::AlignVCenter | Qt::TextShowMnemonic;
             if (!proxy()->styleHint(SH_UnderlineShortcut, button, widget))
                 tf |= Qt::TextHideMnemonic;
+
+            if (button->features & QStyleOptionButton::HasMenu) {
+                int indicatorSize = proxy()->pixelMetric(PM_MenuButtonIndicator, button, widget);
+                if (button->direction == Qt::LeftToRight)
+                    textRect = textRect.adjusted(0, 0, -indicatorSize, 0);
+                else
+                    textRect = textRect.adjusted(indicatorSize, 0, 0, 0);
+            }
 
             if (!button->icon.isNull()) {
                 //Center both icon and text
@@ -1402,13 +1425,6 @@ void QCommonStyle::drawControl(ControlElement element, const QStyleOption *opt,
                 textRect.translate(proxy()->pixelMetric(PM_ButtonShiftHorizontal, opt, widget),
                              proxy()->pixelMetric(PM_ButtonShiftVertical, opt, widget));
 
-            if (button->features & QStyleOptionButton::HasMenu) {
-                int indicatorSize = proxy()->pixelMetric(PM_MenuButtonIndicator, button, widget);
-                if (button->direction == Qt::LeftToRight)
-                    textRect = textRect.adjusted(0, 0, -indicatorSize, 0);
-                else
-                    textRect = textRect.adjusted(indicatorSize, 0, 0, 0);
-            }
             proxy()->drawItemText(p, textRect, tf, button->palette, (button->state & State_Enabled),
                          button->text, QPalette::ButtonText);
         }
@@ -1659,13 +1675,20 @@ void QCommonStyle::drawControl(ControlElement element, const QStyleOption *opt,
                 else
                     rect.setRight(rect.right() - pixw - margin);
             }
+            QFontMetrics fm(header->fontMetrics);
             if (header->state & QStyle::State_On) {
                 QFont fnt = p->font();
                 fnt.setBold(true);
                 p->setFont(fnt);
+                fm = QFontMetrics((p->font()));
             }
+            QString text;
+            if (header->textElideMode != Qt::ElideNone)
+                text = fm.elidedText(header->text, header->textElideMode, rect.width());
+            else
+                text = header->text;
             proxy()->drawItemText(p, rect, header->textAlignment, header->palette,
-                         (header->state & State_Enabled), header->text, QPalette::ButtonText);
+                                  header->state.testFlag(State_Enabled), text, QPalette::ButtonText);
         }
         break;
 #if QT_CONFIG(toolbutton)
@@ -3207,8 +3230,8 @@ static StaticPolygonF<3> calcArrow(const QStyleOptionSlider *dial, qreal &a)
         a = (Q_PI * 8 - (currentSliderPosition - dial->minimum) * 10 * Q_PI
             / (dial->maximum - dial->minimum)) / 6;
 
-    int xc = width / 2;
-    int yc = height / 2;
+    int xc = width / 2 + dial->rect.left();
+    int yc = height / 2 + dial->rect.top();
 
     int len = r - QStyleHelper::calcBigLineSize(r) - 5;
     if (len < 5)
@@ -5384,6 +5407,9 @@ int QCommonStyle::styleHint(StyleHint sh, const QStyleOption *opt, const QWidget
         break;
     case SH_SpinBox_StepModifier:
         ret = Qt::ControlModifier;
+        break;
+    case SH_TabBar_AllowWheelScrolling:
+        ret = true;
         break;
     default:
         ret = 0;

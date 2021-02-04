@@ -82,7 +82,7 @@ from helper import (
 )
 
 
-cmake_version_string = "3.15.0"
+cmake_version_string = "3.16"
 cmake_api_version = 2
 
 
@@ -1694,6 +1694,7 @@ def map_condition(condition: str) -> str:
                     and not feature_name.startswith("system_sqlite")
                     and not feature_name.startswith("system_hunspell")
                     and not feature_name.startswith("system_libb2")
+                    and not feature_name.startswith("system_webp")
                 ):
                     part = "ON"
                 elif feature == "dlopen":
@@ -4348,7 +4349,7 @@ def create_top_level_cmake_conf():
     conf_file_name = ".cmake.conf"
     try:
         with open(conf_file_name, "x") as file:
-            file.write('set(QT_REPO_MODULE_VERSION "6.0.0")\n')
+            file.write('set(QT_REPO_MODULE_VERSION "6.1.0")\n')
     except FileExistsError:
         pass
 

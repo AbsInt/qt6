@@ -1429,6 +1429,16 @@ void QPainterPrivate::updateState(QPainterState *newState)
     a smooth pixmap transformation algorithm (such as bilinear) rather
     than nearest neighbor.
 
+    \value VerticalSubpixelPositioning Allow text to be positioned at fractions
+    of pixels vertically as well as horizontally, if this is supported by the
+    font engine. This is currently supported by Freetype on all platforms when
+    the hinting preference is QFont::PreferNoHinting, and also on macOS. For
+    most use cases this will not improve visual quality, but may increase memory
+    consumption and some reduction in text rendering performance. Therefore, enabling
+    this is not recommended unless the use case requires it. One such use case could
+    be aligning glyphs with other visual primitives.
+    This value was added in Qt 6.1.
+
     \value LosslessImageRendering Use a lossless image rendering, whenever possible.
     Currently, this hint is only used when QPainter is employed to output a PDF
     file through QPrinter or QPdfWriter, where drawImage()/drawPixmap() calls
@@ -3876,7 +3886,7 @@ void QPainter::setFont(const QFont &font)
 
 #ifdef QT_DEBUG_DRAW
     if (qt_show_painter_debug_output)
-        printf("QPainter::setFont(), family=%s, pointSize=%d\n", font.family().toLatin1().constData(), font.pointSize());
+        printf("QPainter::setFont(), family=%s, pointSize=%d\n", font.families().first().toLatin1().constData(), font.pointSize());
 #endif
 
     if (!d->engine) {
@@ -6517,7 +6527,9 @@ void QPainter::drawTiledPixmap(const QRectF &r, const QPixmap &pixmap, const QPo
     painted on a widget or pixmap can also be stored in a picture.
 
     This function does exactly the same as QPicture::play() when
-    called with \a point = QPoint(0, 0).
+    called with \a point = QPointF(0, 0).
+
+    \note The state of the painter is preserved by this function.
 
     \table 100%
     \row

@@ -53,6 +53,11 @@ private Q_SLOTS:
     void directoryPassedAsQmlTypesFile();
     void oldQmltypes();
 
+    void qmltypes_data();
+    void qmltypes();
+
+    void autoqmltypes();
+
 private:
     QString runQmllint(const QString &fileToLint,
                        std::function<void(QProcess &)> handleResult,
@@ -146,6 +151,38 @@ void TestQmllint::oldQmltypes()
     QVERIFY(errors.contains(QStringLiteral("Revision 0 corresponds to version 0.0; it should be 1.0.")));
 }
 
+void TestQmllint::qmltypes_data()
+{
+    QTest::addColumn<QString>("file");
+
+    const QString importsPath = QLibraryInfo::path(QLibraryInfo::Qml2ImportsPath);
+    QDirIterator it(importsPath, { "*.qmltypes" },
+                    QDir::Files, QDirIterator::Subdirectories);
+    while (it.hasNext())
+        QTest::addRow("%s", qPrintable(it.next().mid(importsPath.length()))) << it.filePath();
+}
+
+void TestQmllint::qmltypes()
+{
+    QFETCH(QString, file);
+    runQmllint(file, true);
+}
+
+void TestQmllint::autoqmltypes()
+{
+    QProcess process;
+    process.setWorkingDirectory(testFile("autoqmltypes"));
+    process.start(m_qmllintPath, { QStringLiteral("test.qml") });
+
+    process.waitForFinished();
+
+    QCOMPARE(process.exitStatus(), QProcess::NormalExit);
+    QCOMPARE(process.exitCode(), 0);
+
+    QVERIFY(process.readAllStandardError().isEmpty());
+    QVERIFY(process.readAllStandardOutput().isEmpty());
+}
+
 void TestQmllint::dirtyQmlCode_data()
 {
     QTest::addColumn<QString>("filename");
@@ -232,6 +269,14 @@ void TestQmllint::dirtyQmlCode_data()
             << QStringLiteral("badAliasObject.qml")
             << QString("Warning: Property \"wrongwrongwrong\" not found on type \"QtObject\"")
             << QString();
+    QTest::newRow("badScript")
+            << QStringLiteral("badScript.qml")
+            << QString("Warning: Property \"stuff\" not found on type \"Empty\"")
+            << QString();
+    QTest::newRow("brokenNamespace")
+            << QStringLiteral("brokenNamespace.qml")
+            << QString("Warning: type not found in namespace at %1:4:17")
+            << QString();
 }
 
 void TestQmllint::dirtyQmlCode()
@@ -290,6 +335,8 @@ void TestQmllint::cleanQmlCode_data()
     QTest::newRow("anchors2") << QStringLiteral("anchors2.qml");
     QTest::newRow("optionalImport") << QStringLiteral("optionalImport.qml");
     QTest::newRow("goodAliasObject") << QStringLiteral("goodAliasObject.qml");
+    QTest::newRow("jsmoduleimport") << QStringLiteral("jsmoduleimport.qml");
+    QTest::newRow("overridescript") << QStringLiteral("overridescript.qml");
 }
 
 void TestQmllint::cleanQmlCode()
@@ -305,7 +352,8 @@ QString TestQmllint::runQmllint(const QString &fileToLint,
 {
     auto qmlImportDir = QLibraryInfo::path(QLibraryInfo::Qml2ImportsPath);
     QStringList args;
-    args  << testFile(fileToLint)
+
+    args << (QFileInfo(fileToLint).isAbsolute() ? fileToLint : testFile(fileToLint))
          << QStringLiteral("-I") << qmlImportDir
          << QStringLiteral("-I") << dataDirectory();
     args << extraArgs;

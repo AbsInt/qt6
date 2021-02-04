@@ -1109,6 +1109,7 @@ QQmlComponent *QtObject::createComponent(const QUrl &url, QQmlComponent::Compila
     return c;
 }
 
+#if QT_CONFIG(translation)
 QString QtObject::uiLanguage() const
 {
     if (const QJSEngine *e = jsEngine())
@@ -1128,6 +1129,7 @@ QBindable<QString> QtObject::uiLanguageBindable()
         return QBindable<QString>(&QJSEnginePrivate::get(e)->uiLanguage);
     return QBindable<QString>();
 }
+#endif
 
 #if QT_CONFIG(qml_locale)
 /*!
@@ -1391,9 +1393,10 @@ static ReturnedValue writeToConsole(const FunctionObject *b, const Value *argv, 
     if (!loggingCategory)
         loggingCategory = v4->qmlEngine() ? &qmlLoggingCategory : &jsLoggingCategory;
     QV4::CppStackFrame *frame = v4->currentStackFrame;
-    const QByteArray baSource = frame->source().toUtf8();
-    const QByteArray baFunction = frame->function().toUtf8();
-    QMessageLogger logger(baSource.constData(), frame->lineNumber(), baFunction.constData(), loggingCategory->categoryName());
+    const QByteArray baSource = frame ? frame->source().toUtf8() : QByteArray();
+    const QByteArray baFunction = frame ? frame->function().toUtf8() : QByteArray();
+    QMessageLogger logger(baSource.constData(), frame ? frame->lineNumber() : 0,
+                          baFunction.constData(), loggingCategory->categoryName());
 
     switch (logType) {
     case Log:

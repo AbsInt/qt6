@@ -148,7 +148,6 @@ namespace QIcu {
 
 struct QLocaleId
 {
-    // ### Also used by Translator::languageAndCountry() in qttools:
     Q_CORE_EXPORT static QLocaleId fromName(const QString &name);
     inline bool operator==(QLocaleId other) const
     { return language_id == other.language_id && script_id == other.script_id && country_id == other.country_id; }
@@ -418,8 +417,6 @@ public:
     static QLocale::Language codeToLanguage(QStringView code) noexcept;
     static QLocale::Script codeToScript(QStringView code) noexcept;
     static QLocale::Country codeToCountry(QStringView code) noexcept;
-    static void getLangAndCountry(const QString &name, QLocale::Language &lang,
-                                  QLocale::Script &script, QLocale::Country &cntry);
 
     QLocale::MeasurementSystem measurementSystem() const;
 

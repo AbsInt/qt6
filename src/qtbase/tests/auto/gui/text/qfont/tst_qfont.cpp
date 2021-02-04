@@ -26,9 +26,10 @@
 **
 ****************************************************************************/
 
-
-#include <QtTest/QtTest>
-
+#include <QTest>
+#include <QBuffer>
+#include <QtEndian>
+#include <QProcess>
 
 #include <qfont.h>
 #include <private/qfont_p.h>
@@ -40,6 +41,7 @@
 #include <qwidget.h>
 #endif
 #include <qlist.h>
+#include "emulationdetector.h"
 
 class tst_QFont : public QObject
 {
@@ -311,10 +313,11 @@ void tst_QFont::resolve()
     QCOMPARE(font6.families(), fontFamilies);
 
     QFont font7, font8;
+    // This will call setFamilies() directly now
     font7.setFamily(QLatin1String("Helvetica"));
     font8.setFamilies(fontFamilies);
     font7 = font7.resolve(font8);
-    QCOMPARE(font7.families(), QStringList({"Helvetica", "Arial"}));
+    QCOMPARE(font7.families(), QStringList({"Helvetica"}));
     QCOMPARE(font7.family(), "Helvetica");
 }
 
@@ -574,6 +577,10 @@ void tst_QFont::defaultFamily()
             break;
         }
     }
+#ifdef Q_PROCESSOR_ARM_32
+    if (EmulationDetector::isRunningArmOnX86())
+        QEXPECT_FAIL("", "Fails on ARMv7 QEMU (QTQAINFRA-4127)", Continue);
+#endif
 
 #ifdef Q_OS_ANDROID
     QEXPECT_FAIL("serif", "QTBUG-69215", Continue);
@@ -710,6 +717,7 @@ void tst_QFont::sharing()
 
 void tst_QFont::familyNameWithCommaQuote_data()
 {
+    QTest::addColumn<QString>("enteredFamilyName");
     QTest::addColumn<QString>("familyName");
     QTest::addColumn<QString>("chosenFamilyName");
 
@@ -717,15 +725,16 @@ void tst_QFont::familyNameWithCommaQuote_data()
     if (standardFont.isEmpty())
         QSKIP("No default font available on the system");
     const QString weirdFont(QLatin1String("'My, weird'' font name',"));
+    const QString bogusFont(QLatin1String("BogusFont"));
     const QString commaSeparated(standardFont + QLatin1String(",Times New Roman"));
     const QString commaSeparatedWeird(weirdFont + QLatin1String(",") + standardFont);
-    const QString commaSeparatedBogus(QLatin1String("BogusFont,") + standardFont);
+    const QString commaSeparatedBogus(bogusFont +  QLatin1String(",") + standardFont);
 
-    QTest::newRow("standard") << standardFont << standardFont;
-    QTest::newRow("weird") << weirdFont << weirdFont;
-    QTest::newRow("commaSeparated") << commaSeparated << standardFont;
-    QTest::newRow("commaSeparatedWeird") << commaSeparatedWeird << weirdFont;
-    QTest::newRow("commaSeparatedBogus") << commaSeparatedBogus << standardFont;
+    QTest::newRow("standard") << standardFont << standardFont << standardFont;
+    QTest::newRow("weird") << weirdFont << QString("'My") << standardFont;
+    QTest::newRow("commaSeparated") << commaSeparated << standardFont << standardFont;
+    QTest::newRow("commaSeparatedWeird") << commaSeparatedWeird << QString("'My") << standardFont;
+    QTest::newRow("commaSeparatedBogus") << commaSeparatedBogus << bogusFont << standardFont;
 }
 
 void tst_QFont::familyNameWithCommaQuote()
@@ -753,6 +762,7 @@ void tst_QFont::setFamilies_data()
     if (standardFont.isEmpty())
         QSKIP("No default font available on the system");
 
+    QTest::newRow("emptyFamily") << (QStringList()) << QString();
     QTest::newRow("standard") << (QStringList() << standardFont) << standardFont;
     QTest::newRow("weird") << (QStringList() << weirdFont) << weirdFont;
     QTest::newRow("standard-weird") << (QStringList() << standardFont << weirdFont) << standardFont;
@@ -770,7 +780,8 @@ void tst_QFont::setFamilies()
     QVERIFY(weirdFontId != -1);
     QFont f;
     f.setFamilies(families);
-    QCOMPARE(QFontInfo(f).family(), chosenFamilyName);
+    if (!chosenFamilyName.isEmpty()) // Only check when it is not empty
+        QCOMPARE(QFontInfo(f).family(), chosenFamilyName);
 
     QFontDatabase::removeApplicationFont(weirdFontId);
 }
@@ -789,6 +800,7 @@ void tst_QFont::setFamiliesAndFamily_data()
     const QString timesFont(QLatin1String("Times"));
     const QString nonExistFont(QLatin1String("NonExistentFont"));
 
+    QTest::newRow("emptyFamily") << (QStringList()) << QString() << QString();
     QTest::newRow("firstInFamilies") << (QStringList() << defaultFont << timesFont) << weirdFont << defaultFont;
     QTest::newRow("secondInFamilies") << (QStringList() << nonExistFont << weirdFont) << defaultFont << weirdFont;
     QTest::newRow("family") << (QStringList() << nonExistFont) << defaultFont << defaultFont;
@@ -804,9 +816,10 @@ void tst_QFont::setFamiliesAndFamily()
 
     QVERIFY(weirdFontId != -1);
     QFont f;
-    f.setFamilies(families);
     f.setFamily(family);
-    QCOMPARE(QFontInfo(f).family(), chosenFamilyName);
+    f.setFamilies(families);
+    if (!family.isEmpty()) // Only check when it is not empty
+        QCOMPARE(QFontInfo(f).family(), chosenFamilyName);
 
     QFontDatabase::removeApplicationFont(weirdFontId);
 }

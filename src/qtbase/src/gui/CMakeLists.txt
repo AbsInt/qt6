@@ -242,6 +242,7 @@ qt_internal_add_module(Gui
         text/qtextobject.cpp text/qtextobject.h text/qtextobject_p.h
         text/qtextoption.cpp text/qtextoption.h
         text/qtexttable.cpp text/qtexttable.h text/qtexttable_p.h
+        text/qurlresourceprovider.cpp text/qurlresourceprovider.h
         util/qabstractlayoutstyleinfo.cpp util/qabstractlayoutstyleinfo_p.h
         util/qastchandler.cpp util/qastchandler_p.h
         util/qdesktopservices.cpp util/qdesktopservices.h
@@ -358,6 +359,7 @@ qt_internal_extend_target(Gui CONDITION MACOS
         platform/macos/qcocoanativeinterface.mm
     LIBRARIES
         ${FWAppKit}
+        ${FWCarbon}
     PUBLIC_LIBRARIES
         ${FWAppKit}
 )
@@ -368,6 +370,7 @@ qt_internal_extend_target(Gui CONDITION APPLE
         painting/qcoregraphics.mm painting/qcoregraphics_p.h
         painting/qrasterbackingstore.cpp painting/qrasterbackingstore_p.h
         platform/darwin/qmacmime.mm platform/darwin/qmacmime_p.h
+        platform/darwin/qapplekeymapper.mm platform/darwin/qapplekeymapper_p.h
         text/coretext/qcoretextfontdatabase.mm text/coretext/qcoretextfontdatabase_p.h
         text/coretext/qfontengine_coretext.mm text/coretext/qfontengine_coretext_p.h
     LIBRARIES
@@ -895,7 +898,7 @@ if (QT_FEATURE_vulkan)
     list(APPEND vulkan_fun_command_content
         COMMAND "${qvkgen}"
             "${CMAKE_CURRENT_SOURCE_DIR}/vulkan/vk.xml"
-            "${PROJECT_SOURCE_DIR}/header.LGPL"
+            "${CMAKE_CURRENT_SOURCE_DIR}/vulkan/generated_header.txt"
             "${CMAKE_CURRENT_BINARY_DIR}/vulkan/qvulkanfunctions"
         DEPENDS vulkan/vk.xml
         COMMENT "Generating vulkan data"
@@ -1029,5 +1032,5 @@ qt_internal_add_docs(Gui
 )
 
 # special case begin
-qt_internal_add_optimize_full_flags(IN_CURRENT_SCOPE)
+qt_internal_add_optimize_full_flags()
 # special case end

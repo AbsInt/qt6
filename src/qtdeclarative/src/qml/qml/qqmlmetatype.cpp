@@ -379,7 +379,6 @@ QQmlType QQmlMetaType::registerInterface(const QQmlPrivate::RegisterInterface &t
     data->idToType.insert(priv->listId.id(), priv);
 
     data->interfaces.insert(type.typeId.id());
-    data->lists.insert(type.listId.id());
 
     return QQmlType(priv);
 }
@@ -473,15 +472,10 @@ void addTypeToData(QQmlTypePrivate *type, QQmlMetaTypeData *data)
 
     if (type->typeId.isValid()) {
         data->idToType.insert(type->typeId.id(), type);
-        if (type->typeId.flags() & QMetaType::PointerToQObject
-                && type->regType != QQmlType::RegistrationType::SequentialContainerType) {
-            data->objects.insert(type->typeId.id());
-        }
     }
 
     if (type->listId.isValid()) {
         data->idToType.insert(type->listId.id(), type);
-        data->lists.insert(type->listId.id());
     }
 
     if (!type->module.isEmpty()) {
@@ -507,10 +501,7 @@ QQmlType QQmlMetaType::registerType(const QQmlPrivate::RegisterType &type)
     }
 
     QQmlTypePrivate *priv = createQQmlType(data, elementName, type);
-
     addTypeToData(priv, data);
-    if (!type.typeId.isValid())
-        data->idToType.insert(priv->typeId.id(), priv);
 
     return QQmlType(priv);
 }
@@ -683,8 +674,6 @@ QQmlType QQmlMetaType::registerSequentialContainer(
     *priv->extraData.ld = container.metaSequence;
 
     addTypeToData(priv, data);
-    if (!container.typeId.isValid())
-        data->idToType.insert(priv->typeId.id(), priv);
 
     return QQmlType(priv);
 }
@@ -1088,7 +1077,7 @@ QList<QQmlPrivate::AutoParentFunction> QQmlMetaType::parentFunctions()
 
 QObject *QQmlMetaType::toQObject(const QVariant &v, bool *ok)
 {
-    if (!isQObject(v.userType())) {
+    if (!v.metaType().flags().testFlag(QMetaType::PointerToQObject)) {
         if (ok) *ok = false;
         return nullptr;
     }
@@ -1102,8 +1091,8 @@ bool QQmlMetaType::isQObject(int userType)
 {
     if (userType == QMetaType::QObjectStar)
         return true;
-    QQmlMetaTypeDataPtr data;
-    return data->objects.contains(userType);
+    QMetaType type (userType);
+    return type.flags().testFlag(QMetaType::PointerToQObject);
 }
 
 /*
@@ -1190,12 +1179,14 @@ QQmlMetaType::TypeCategory QQmlMetaType::typeCategory(int userType)
     if (userType == QMetaType::QObjectStar)
         return Object;
 
+    QMetaType type(userType);
+    if (type.flags().testFlag(QMetaType::PointerToQObject))
+        return Object;
+    else if (type.flags().testFlag(QMetaType::IsQmlList))
+        return List;
+
     QQmlMetaTypeDataPtr data;
     if (data->qmlLists.contains(userType))
-        return List;
-    else if (data->objects.contains(userType))
-        return Object;
-    else if (data->lists.contains(userType))
         return List;
     else
         return Unknown;
@@ -1228,10 +1219,13 @@ const char *QQmlMetaType::interfaceIId(int userType)
 
 bool QQmlMetaType::isList(int userType)
 {
+    QMetaType type(userType);
+    if (type.flags().testFlag(QMetaType::IsQmlList))
+        return true;
     QQmlMetaTypeDataPtr data;
     if (data->qmlLists.contains(userType))
         return true;
-    return data->lists.contains(userType);
+    return false;
 }
 
 /*!

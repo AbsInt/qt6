@@ -267,7 +267,7 @@ QVector<QQmlError> QQmlPropertyValidator::validateObject(
 
             if (!pd->isQList() && (binding->flags & QV4::CompiledData::Binding::IsListItem)) {
                 QString error;
-                if (pd->propType() == qMetaTypeId<QQmlScriptString>())
+                if (pd->propType() == QMetaType::fromType<QQmlScriptString>())
                     error = tr( "Cannot assign multiple values to a script property");
                 else
                     error = tr( "Cannot assign multiple values to a singular property");
@@ -305,7 +305,7 @@ QVector<QQmlError> QQmlPropertyValidator::validateObject(
                         return recordError(binding->location, tr("Invalid grouped property access"));
                     }
                 } else {
-                    const int typeId = pd->propType();
+                    const int typeId = pd->propType().id();
                     if (isPrimitiveType(typeId)) {
                         return recordError(
                                     binding->location,
@@ -412,7 +412,7 @@ QQmlError QQmlPropertyValidator::validateLiteralBinding(QQmlPropertyCache *prope
         return  binding->type == QV4::CompiledData::Binding::Type_String;
     };
 
-    switch (property->propType()) {
+    switch (property->propType().id()) {
     case QMetaType::QVariant:
     break;
     case QMetaType::QString: {
@@ -572,7 +572,7 @@ QQmlError QQmlPropertyValidator::validateLiteralBinding(QQmlPropertyCache *prope
     case QMetaType::QVector4D:
     case QMetaType::QQuaternion: {
         auto typeName = [&]() {
-            switch (property->propType()) {
+            switch (property->propType().id()) {
             case QMetaType::QVector2D: return QStringLiteral("2D vector");
             case QMetaType::QVector3D: return QStringLiteral("3D vector");
             case QMetaType::QVector4D: return QStringLiteral("4D vector");
@@ -582,7 +582,7 @@ QQmlError QQmlPropertyValidator::validateLiteralBinding(QQmlPropertyCache *prope
         };
         QVariant result;
         if (!QQml_valueTypeProvider()->createValueType(
-                    property->propType(),
+                    property->propType().id(),
                     compilationUnit->bindingValueAsString(binding), result)) {
             return warnOrError(tr("Invalid property assignment: %1 expected")
                                .arg(typeName()));
@@ -593,12 +593,12 @@ QQmlError QQmlPropertyValidator::validateLiteralBinding(QQmlPropertyCache *prope
         return warnOrError(tr("Invalid property assignment: regular expression expected; use /pattern/ syntax"));
     default: {
         // generate single literal value assignment to a list property if required
-        if (property->propType() == qMetaTypeId<QList<qreal> >()) {
+        if (property->propType() == QMetaType::fromType<QList<qreal> >()) {
             if (binding->type != QV4::CompiledData::Binding::Type_Number) {
                 return warnOrError(tr("Invalid property assignment: number or array of numbers expected"));
             }
             break;
-        } else if (property->propType() == qMetaTypeId<QList<int> >()) {
+        } else if (property->propType() == QMetaType::fromType<QList<int> >()) {
             bool ok = (binding->type == QV4::CompiledData::Binding::Type_Number);
             if (ok) {
                 double n = compilationUnit->bindingValueAsNumber(binding);
@@ -608,24 +608,24 @@ QQmlError QQmlPropertyValidator::validateLiteralBinding(QQmlPropertyCache *prope
             if (!ok)
                 return warnOrError(tr("Invalid property assignment: int or array of ints expected"));
             break;
-        } else if (property->propType() == qMetaTypeId<QList<bool> >()) {
+        } else if (property->propType() == QMetaType::fromType<QList<bool> >()) {
             if (binding->type != QV4::CompiledData::Binding::Type_Boolean) {
                 return warnOrError(tr("Invalid property assignment: bool or array of bools expected"));
             }
             break;
-        } else if (property->propType() == qMetaTypeId<QList<QUrl> >()) {
+        } else if (property->propType() == QMetaType::fromType<QList<QUrl> >()) {
             if (binding->type != QV4::CompiledData::Binding::Type_String) {
                 return warnOrError(tr("Invalid property assignment: url or array of urls expected"));
             }
             break;
-        } else if (property->propType() == qMetaTypeId<QList<QString> >()) {
+        } else if (property->propType() == QMetaType::fromType<QList<QString> >()) {
             if (!binding->evaluatesToString()) {
                 return warnOrError(tr("Invalid property assignment: string or array of strings expected"));
             }
             break;
-        } else if (property->propType() == qMetaTypeId<QJSValue>()) {
+        } else if (property->propType() == QMetaType::fromType<QJSValue>()) {
             break;
-        } else if (property->propType() == qMetaTypeId<QQmlScriptString>()) {
+        } else if (property->propType() == QMetaType::fromType<QQmlScriptString>()) {
             break;
         } else if (property->isQObject()
                    && binding->type == QV4::CompiledData::Binding::Type_Null) {
@@ -633,7 +633,7 @@ QQmlError QQmlPropertyValidator::validateLiteralBinding(QQmlPropertyCache *prope
         }
 
         // otherwise, try a custom type assignment
-        QQmlMetaType::StringConverter converter = QQmlMetaType::customStringConverter(property->propType());
+        QQmlMetaType::StringConverter converter = QQmlMetaType::customStringConverter(property->propType().id());
         if (!converter) {
             return warnOrError(tr("Invalid property assignment: unsupported type \"%1\"").arg(QString::fromLatin1(QMetaType(property->propType()).name())));
         }
@@ -650,6 +650,19 @@ QQmlError QQmlPropertyValidator::validateLiteralBinding(QQmlPropertyCache *prope
 bool QQmlPropertyValidator::canCoerce(int to, QQmlPropertyCache *fromMo) const
 {
     QQmlPropertyCache *toMo = enginePrivate->rawPropertyCacheForType(to);
+
+    if (toMo == nullptr) {
+        // if we have an inline component from the current file,
+        // it is not properly registered at this point, as registration
+        // only occurs after the whole file has been validated
+        // Therefore we need to check the ICs here
+        for (const auto& icDatum : compilationUnit->inlineComponentData) {
+            if (icDatum.typeIds.id.id() == to) {
+                toMo = compilationUnit->propertyCaches.at(icDatum.objectIndex);
+                break;
+            }
+        }
+    }
 
     while (fromMo) {
         if (fromMo == toMo)
@@ -705,7 +718,7 @@ QQmlError QQmlPropertyValidator::validateObjectBinding(QQmlPropertyData *propert
         return noError;
     }
 
-    const int propType = property->propType();
+    const int propType = property->propType().id();
     const auto rhsType = [&]() {
         return stringAt(compilationUnit->objectAt(binding->value.objectIndex)
                         ->inheritedTypeNameIndex);
@@ -737,7 +750,7 @@ QQmlError QQmlPropertyValidator::validateObjectBinding(QQmlPropertyData *propert
                                                       .arg(typeName));
     } else if (propType == qMetaTypeId<QQmlScriptString>()) {
         return qQmlCompileError(binding->valueLocation, tr("Invalid property assignment: script expected"));
-    } else if (QQmlValueTypeFactory::isValueType(propType)) {
+    } else if (QQmlValueTypeFactory::isValueType(property->propType())) {
         return qQmlCompileError(binding->location, tr("Cannot assign value of type \"%1\" to property \"%2\", expecting an object")
                                                       .arg(rhsType()).arg(propertyName));
     } else {
@@ -746,6 +759,18 @@ QQmlError QQmlPropertyValidator::validateObjectBinding(QQmlPropertyData *propert
         // effect the properties on the type, but don't effect assignability
         // Not passing a version ensures that we get the raw metaObject.
         QQmlPropertyCache *propertyMetaObject = enginePrivate->rawPropertyCacheForType(propType);
+        if (!propertyMetaObject) {
+            // if we have an inline component from the current file,
+            // it is not properly registered at this point, as registration
+            // only occurs after the whole file has been validated
+            // Therefore we need to check the ICs here
+            for (const auto& icDatum: compilationUnit->inlineComponentData) {
+                if (icDatum.typeIds.id == property->propType()) {
+                    propertyMetaObject = compilationUnit->propertyCaches.at(icDatum.objectIndex);
+                    break;
+                }
+            }
+        }
 
         if (propertyMetaObject) {
             // Will be true if the assigned type inherits propertyMetaObject
@@ -759,11 +784,11 @@ QQmlError QQmlPropertyValidator::validateObjectBinding(QQmlPropertyData *propert
 
             if (!isAssignable) {
                 return qQmlCompileError(binding->valueLocation, tr("Cannot assign object of type \"%1\" to property of type \"%2\" as the former is neither the same as the latter nor a sub-class of it.")
-                        .arg(rhsType()).arg(QLatin1String(QMetaType(propType).name())));
+                        .arg(rhsType()).arg(QLatin1String(property->propType().name())));
             }
         } else {
             return qQmlCompileError(binding->valueLocation, tr("Cannot assign to property of unknown type \"%1\".")
-                        .arg(QLatin1String(QMetaType(propType).name())));
+                        .arg(QLatin1String(property->propType().name())));
         }
 
     }

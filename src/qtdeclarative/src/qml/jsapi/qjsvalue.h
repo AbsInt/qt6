@@ -53,12 +53,16 @@ class QVariant;
 class QObject;
 struct QMetaObject;
 class QDateTime;
+class QJSPrimitiveValue;
 
 typedef QList<QJSValue> QJSValueList;
 namespace QV4 {
     struct ExecutionEngine;
     struct Value;
 }
+
+class QJSPrimitiveValue;
+class QJSManagedValue;
 
 class Q_QML_EXPORT QJSValue
 {
@@ -77,6 +81,11 @@ public:
         SyntaxError,
         TypeError,
         URIError
+    };
+
+    enum ObjectConversionBehavior {
+        ConvertJSObjects,
+        RetainJSObjects
     };
 
 public:
@@ -102,6 +111,9 @@ public:
 
     QJSValue &operator=(const QJSValue &other);
 
+    explicit QJSValue(QJSPrimitiveValue &&value);
+    explicit QJSValue(QJSManagedValue &&value);
+
     bool isBool() const;
     bool isNumber() const;
     bool isNull() const;
@@ -121,7 +133,11 @@ public:
     qint32 toInt() const;
     quint32 toUInt() const;
     bool toBool() const;
+
     QVariant toVariant() const;
+    QVariant toVariant(ObjectConversionBehavior behavior) const;
+    QJSPrimitiveValue toPrimitive() const;
+
     QObject *toQObject() const;
     const QMetaObject *toQMetaObject() const;
     QDateTime toDateTime() const;

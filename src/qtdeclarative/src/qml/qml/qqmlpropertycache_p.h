@@ -53,7 +53,6 @@
 
 #include <private/qqmlrefcount_p.h>
 #include <private/qflagpointer_p.h>
-#include "qqmlcleanup_p.h"
 #include "qqmlnotifier_p.h"
 #include <private/qqmlpropertyindex_p.h>
 
@@ -138,10 +137,6 @@ public:
 
     QQmlPropertyCache *copy();
 
-    QQmlPropertyCache *copyAndAppend(const QMetaObject *,
-                QQmlPropertyData::Flags propertyFlags = QQmlPropertyData::Flags(),
-                QQmlPropertyData::Flags methodFlags = QQmlPropertyData::Flags(),
-                QQmlPropertyData::Flags signalFlags = QQmlPropertyData::Flags());
     QQmlPropertyCache *copyAndAppend(
                 const QMetaObject *, QTypeRevision typeVersion,
                 QQmlPropertyData::Flags propertyFlags = QQmlPropertyData::Flags(),
@@ -151,7 +146,7 @@ public:
     QQmlPropertyCache *copyAndReserve(int propertyCount,
                                       int methodCount, int signalCount, int enumCount);
     void appendProperty(const QString &, QQmlPropertyData::Flags flags, int coreIndex,
-                        int propType, QTypeRevision revision, int notifyIndex);
+                        QMetaType propType, QTypeRevision revision, int notifyIndex);
     void appendSignal(const QString &, QQmlPropertyData::Flags, int coreIndex,
                       const int *types = nullptr, const QList<QByteArray> &names = QList<QByteArray>());
     void appendMethod(const QString &, QQmlPropertyData::Flags flags, int coreIndex, int returnType,
@@ -256,9 +251,6 @@ private:
     QQmlPropertyData *findProperty(StringCache::ConstIterator it, const QQmlVMEMetaObject *,
                                    const QQmlRefPointer<QQmlContextData> &) const;
 
-    QQmlPropertyData *ensureResolved(QQmlPropertyData*) const;
-
-    Q_NEVER_INLINE void resolve(QQmlPropertyData *) const;
     void updateRecur(const QMetaObject *);
 
     template<typename K>
@@ -299,14 +291,6 @@ private:
     QByteArray _checksum;
 };
 
-inline QQmlPropertyData *QQmlPropertyCache::ensureResolved(QQmlPropertyData *p) const
-{
-    if (p && Q_UNLIKELY(p->notFullyResolved()))
-        resolve(p);
-
-    return p;
-}
-
 // Returns this property cache's metaObject.  May be null if it hasn't been created yet.
 inline const QMetaObject *QQmlPropertyCache::metaObject() const
 {
@@ -331,8 +315,7 @@ inline QQmlPropertyData *QQmlPropertyCache::property(int index) const
     if (index < propertyIndexCacheStart)
         return _parent->property(index);
 
-    QQmlPropertyData *rv = const_cast<QQmlPropertyData *>(&propertyIndexCache.at(index - propertyIndexCacheStart));
-    return ensureResolved(rv);
+    return const_cast<QQmlPropertyData *>(&propertyIndexCache.at(index - propertyIndexCacheStart));
 }
 
 inline QQmlPropertyData *QQmlPropertyCache::method(int index) const
@@ -343,8 +326,7 @@ inline QQmlPropertyData *QQmlPropertyCache::method(int index) const
     if (index < methodIndexCacheStart)
         return _parent->method(index);
 
-    QQmlPropertyData *rv = const_cast<QQmlPropertyData *>(&methodIndexCache.at(index - methodIndexCacheStart));
-    return ensureResolved(rv);
+    return const_cast<QQmlPropertyData *>(&methodIndexCache.at(index - methodIndexCacheStart));
 }
 
 /*! \internal
@@ -361,7 +343,7 @@ inline QQmlPropertyData *QQmlPropertyCache::signal(int index) const
 
     QQmlPropertyData *rv = const_cast<QQmlPropertyData *>(&methodIndexCache.at(index - signalHandlerIndexCacheStart));
     Q_ASSERT(rv->isSignal() || rv->coreIndex() == -1);
-    return ensureResolved(rv);
+    return rv;
 }
 
 inline QQmlEnumData *QQmlPropertyCache::qmlEnum(int index) const

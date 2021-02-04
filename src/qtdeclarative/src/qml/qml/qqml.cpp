@@ -41,16 +41,126 @@
 
 #include <QtQml/qqmlprivate.h>
 
+#include <private/qjsvalue_p.h>
 #include <private/qqmlengine_p.h>
 #include <private/qqmlmetatype_p.h>
 #include <private/qqmlmetatypedata_p.h>
 #include <private/qqmltype_p_p.h>
 #include <private/qqmltypemodule_p.h>
 #include <private/qqmltypenotavailable_p.h>
+#include <private/qqmlcomponent_p.h>
 
 #include <QtCore/qmutex.h>
 
 QT_BEGIN_NAMESPACE
+
+
+/*!
+   \internal
+*/
+void qmlExecuteDeferred(QObject *object)
+{
+    QQmlData *data = QQmlData::get(object);
+
+    if (data && !data->deferredData.isEmpty() && !data->wasDeleted(object)) {
+        QQmlEnginePrivate *ep = QQmlEnginePrivate::get(data->context->engine());
+
+        QQmlComponentPrivate::DeferredState state;
+        QQmlComponentPrivate::beginDeferred(ep, object, &state);
+
+        // Release the reference for the deferral action (we still have one from construction)
+        data->releaseDeferredData();
+
+        QQmlComponentPrivate::completeDeferred(ep, &state);
+    }
+}
+
+QQmlContext *qmlContext(const QObject *obj)
+{
+    return QQmlEngine::contextForObject(obj);
+}
+
+QQmlEngine *qmlEngine(const QObject *obj)
+{
+    QQmlData *data = QQmlData::get(obj, false);
+    if (!data || !data->context)
+        return nullptr;
+    return data->context->engine();
+}
+
+static QObject *resolveAttachedProperties(QQmlAttachedPropertiesFunc pf, QQmlData *data,
+                                          QObject *object, bool create)
+{
+    if (!pf)
+        return nullptr;
+
+    QObject *rv = data->hasExtendedData() ? data->attachedProperties()->value(pf) : 0;
+    if (rv || !create)
+        return rv;
+
+    rv = pf(object);
+
+    if (rv)
+        data->attachedProperties()->insert(pf, rv);
+
+    return rv;
+}
+
+QQmlAttachedPropertiesFunc qmlAttachedPropertiesFunction(QObject *object,
+                                                         const QMetaObject *attachedMetaObject)
+{
+    QQmlEngine *engine = object ? qmlEngine(object) : nullptr;
+    return QQmlMetaType::attachedPropertiesFunc(engine ? QQmlEnginePrivate::get(engine) : nullptr,
+                                                attachedMetaObject);
+}
+
+QObject *qmlAttachedPropertiesObject(QObject *object, QQmlAttachedPropertiesFunc func, bool create)
+{
+    if (!object)
+        return nullptr;
+
+    QQmlData *data = QQmlData::get(object, create);
+
+    // Attached properties are only on objects created by QML,
+    // unless explicitly requested (create==true)
+    if (!data)
+        return nullptr;
+
+    return resolveAttachedProperties(func, data, object, create);
+}
+
+int qmlRegisterUncreatableMetaObject(const QMetaObject &staticMetaObject,
+                                     const char *uri, int versionMajor,
+                                     int versionMinor, const char *qmlName,
+                                     const QString& reason)
+{
+    QQmlPrivate::RegisterType type = {
+        0,
+        QMetaType(),
+        QMetaType(),
+        0,
+        nullptr,
+        nullptr,
+        reason,
+        nullptr,
+
+        uri, QTypeRevision::fromVersion(versionMajor, versionMinor), qmlName, &staticMetaObject,
+
+        QQmlAttachedPropertiesFunc(),
+        nullptr,
+
+        0,
+        0,
+        0,
+
+        nullptr, nullptr,
+
+        nullptr,
+        QTypeRevision::zero()
+    };
+
+    return QQmlPrivate::qmlregister(QQmlPrivate::TypeRegistration, &type);
+}
 
 void qmlClearTypeRegistrations() // Declared in qqml.h
 {
@@ -559,6 +669,17 @@ namespace QQmlPrivate {
 
         qmlregister(TypeAndRevisionsRegistration, &type);
     }
+}
+
+QJSValue QQmlPrivate::AOTCompiledContext::jsMetaType(int index) const
+{
+    return QJSValuePrivate::fromReturnedValue(
+                compilationUnit->runtimeClasses[index]->asReturnedValue());
+}
+
+void QQmlPrivate::AOTCompiledContext::setInstructionPointer(int offset) const
+{
+    engine->handle()->currentStackFrame->instructionPointer = offset;
 }
 
 QT_END_NAMESPACE

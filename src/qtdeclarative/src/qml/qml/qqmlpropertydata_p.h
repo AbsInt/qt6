@@ -90,7 +90,7 @@ public:
         // trySetStaticMetaCallFunction for details.
         // (Note: this padding is done here, because certain compilers have surprising behavior
         // when an enum is declared in-between two bit fields.)
-        enum { BitsLeftInFlags = 15 };
+        enum { BitsLeftInFlags = 16 };
         unsigned otherBits       : BitsLeftInFlags; // align to 32 bits
 
         // Members of the form aORb can only be a when type is not FunctionType, and only be
@@ -120,7 +120,6 @@ public:
         // Apply only to IsFunctions
 
         // Internal QQmlPropertyCache flags
-        unsigned notFullyResolved : 1; // True if the type data is to be lazily resolved
         unsigned overrideIndexIsProperty: 1;
 
         inline Flags();
@@ -260,10 +259,8 @@ public:
     bool hasOverride() const { return overrideIndex() >= 0; }
     bool hasRevision() const { return revision() != QTypeRevision::zero(); }
 
-    bool isFullyResolved() const { return !m_flags.notFullyResolved; }
-
-    int propType() const { Q_ASSERT(isFullyResolved()); return m_propType; }
-    void setPropType(int pt)
+    QMetaType propType() const { return m_propType; }
+    void setPropType(QMetaType pt)
     {
         m_propType = pt;
     }
@@ -398,10 +395,8 @@ private:
     friend class QQmlPropertyCache;
     void lazyLoad(const QMetaProperty &);
     void lazyLoad(const QMetaMethod &);
-    bool notFullyResolved() const { return m_flags.notFullyResolved; }
 
     Flags m_flags;
-    int m_propType = 0;
     qint16 m_coreIndex = -1;
 
     // The notify index is in the range returned by QObjectPrivate::signalIndex().
@@ -413,6 +408,8 @@ private:
 
     QTypeRevision m_revision = QTypeRevision::zero();
     QTypeRevision m_typeVersion = QTypeRevision::zero();
+
+    QMetaType m_propType = {};
 
     QQmlPropertyCacheMethodArguments *m_arguments = nullptr;
     StaticMetaCallFunction m_staticMetaCallFunction = nullptr;
@@ -447,7 +444,6 @@ QQmlPropertyData::Flags::Flags()
     , isDirect(false)
     , isOverridden(false)
     , type(OtherType)
-    , notFullyResolved(false)
     , overrideIndexIsProperty(false)
 {}
 
@@ -463,7 +459,6 @@ bool QQmlPropertyData::Flags::operator==(const QQmlPropertyData::Flags &other) c
             isRequiredORisCloned == other.isRequiredORisCloned &&
             type == other.type &&
             isConstructorORisBindable == other.isConstructorORisBindable &&
-            notFullyResolved == other.notFullyResolved &&
             overrideIndexIsProperty == other.overrideIndexIsProperty;
 }
 

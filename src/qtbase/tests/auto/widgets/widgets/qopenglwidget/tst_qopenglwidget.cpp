@@ -37,7 +37,7 @@
 #include <QtWidgets/QVBoxLayout>
 #include <QtWidgets/QPushButton>
 #include <QtWidgets/QStackedWidget>
-#include <QtTest/QtTest>
+#include <QTest>
 #include <QSignalSpy>
 #include <private/qguiapplication_p.h>
 #include <private/qstatictext_p.h>
@@ -587,7 +587,8 @@ void tst_QOpenGLWidget::stackWidgetOpaqueChildIsVisible()
 #endif
     if (QGuiApplication::platformName().startsWith(QLatin1String("wayland"), Qt::CaseInsensitive))
         QSKIP("Wayland: This fails. Figure out why.");
-
+    if (QGuiApplication::platformName().startsWith(QLatin1String("offscreen"), Qt::CaseInsensitive))
+        QSKIP("Offscreen: This fails.");
 
     QStackedWidget stack;
 

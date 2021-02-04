@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
@@ -50,7 +50,7 @@
 #include <qdebug.h>
 
 #if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
-#include <private/qjni_p.h>
+#include <QJniObject>
 #endif
 
 QT_BEGIN_NAMESPACE
@@ -157,7 +157,7 @@ QOperatingSystemVersion QOperatingSystemVersion::current()
     version.m_os = currentType();
 #if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
 #ifndef QT_BOOTSTRAPPED
-    const QVersionNumber v = QVersionNumber::fromString(QJNIObjectPrivate::getStaticObjectField(
+    const QVersionNumber v = QVersionNumber::fromString(QJniObject::getStaticObjectField(
         "android/os/Build$VERSION", "RELEASE", "Ljava/lang/String;").toString());
     if (!v.isNull()) {
         version.m_major = v.majorVersion();
@@ -200,10 +200,14 @@ QOperatingSystemVersion QOperatingSystemVersion::current()
         { 7, 0 }, // API level 24
         { 7, 1 }, // API level 25
         { 8, 0 }, // API level 26
+        { 8, 1 }, // API level 27
+        { 9, 0 }, // API level 28
+        { 10, 0 }, // API level 29
+        { 11, 0 }, // API level 30
     };
 
     // This will give us at least the first 2 version components
-    const size_t versionIdx = size_t(QJNIObjectPrivate::getStaticField<jint>(
+    const size_t versionIdx = size_t(QJniObject::getStaticField<jint>(
         "android/os/Build$VERSION", "SDK_INT")) - 1;
     if (versionIdx < sizeof(versions) / sizeof(versions[0])) {
         version.m_major = versions[versionIdx].major;
@@ -239,6 +243,19 @@ int QOperatingSystemVersion::compare(const QOperatingSystemVersion &v1,
 }
 
 /*!
+    \fn QVersionNumber QOperatingSystemVersion::version() const
+
+    \since 6.1
+
+    Returns the operating system's version number.
+
+    See the main class documentation for what the version number is on a given
+    operating system.
+
+    \sa majorVersion(), minorVersion(), microVersion()
+*/
+
+/*!
     \fn int QOperatingSystemVersion::majorVersion() const
 
     Returns the major version number, that is, the first segment of the
@@ -249,7 +266,7 @@ int QOperatingSystemVersion::compare(const QOperatingSystemVersion &v1,
 
     -1 indicates an unknown or absent version number component.
 
-    \sa minorVersion(), microVersion()
+    \sa version(), minorVersion(), microVersion()
 */
 
 /*!
@@ -263,7 +280,7 @@ int QOperatingSystemVersion::compare(const QOperatingSystemVersion &v1,
 
     -1 indicates an unknown or absent version number component.
 
-    \sa majorVersion(), microVersion()
+    \sa version(), majorVersion(), microVersion()
 */
 
 /*!
@@ -277,7 +294,7 @@ int QOperatingSystemVersion::compare(const QOperatingSystemVersion &v1,
 
     -1 indicates an unknown or absent version number component.
 
-    \sa majorVersion(), minorVersion()
+    \sa version(), majorVersion(), minorVersion()
 */
 
 /*!
@@ -549,6 +566,38 @@ const QOperatingSystemVersion QOperatingSystemVersion::AndroidNougat_MR1 =
  */
 const QOperatingSystemVersion QOperatingSystemVersion::AndroidOreo =
     QOperatingSystemVersion(QOperatingSystemVersion::Android, 8, 0);
+
+/*!
+    \variable QOperatingSystemVersion::AndroidOreo_MR1
+    \brief a version corresponding to Android Oreo_MR1 (version 8.1, API level 27).
+    \since 6.1
+ */
+const QOperatingSystemVersion QOperatingSystemVersion::AndroidOreo_MR1 =
+    QOperatingSystemVersion(QOperatingSystemVersion::Android, 8, 1);
+
+/*!
+    \variable QOperatingSystemVersion::AndroidPie
+    \brief a version corresponding to Android Pie (version 9.0, API level 28).
+    \since 6.1
+ */
+const QOperatingSystemVersion QOperatingSystemVersion::AndroidPie =
+    QOperatingSystemVersion(QOperatingSystemVersion::Android, 9, 0);
+
+/*!
+    \variable QOperatingSystemVersion::AndroidQ
+    \brief a version corresponding to Android Q (version 10.0, API level 29).
+    \since 6.1
+ */
+const QOperatingSystemVersion QOperatingSystemVersion::AndroidQ =
+    QOperatingSystemVersion(QOperatingSystemVersion::Android, 10, 0);
+
+/*!
+    \variable QOperatingSystemVersion::AndroidR
+    \brief a version corresponding to Android R (version 11.0, API level 30).
+    \since 6.1
+ */
+const QOperatingSystemVersion QOperatingSystemVersion::AndroidR =
+    QOperatingSystemVersion(QOperatingSystemVersion::Android, 11, 0);
 
 #ifndef QT_NO_DEBUG_STREAM
 QDebug operator<<(QDebug debug, const QOperatingSystemVersion &ov)

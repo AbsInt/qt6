@@ -78,6 +78,7 @@ private slots:
     void notifiedProperty();
     void typeNoOperatorEqual();
     void bindingValueReplacement();
+    void quntypedBindableApi();
 
     void testNewStuff();
     void qobjectObservers();
@@ -89,6 +90,9 @@ private slots:
     void compatPropertyNoDobuleNotification();
 
     void noFakeDependencies();
+
+    void bindablePropertyWithInitialization();
+    void markDirty();
 };
 
 void tst_QProperty::functorBinding()
@@ -465,12 +469,12 @@ class BindingLoopTester : public QObject
     BindingLoopTester() {}
 
     int eagerProp() {return eagerData.value();}
-    void setEagerProp(int i) { eagerData = i; }
+    void setEagerProp(int i) { eagerData.setValue(i); }
     QBindable<int> bindableEagerProp() {return QBindable<int>(&eagerData);}
     Q_OBJECT_COMPAT_PROPERTY(BindingLoopTester, int, eagerData, &BindingLoopTester::setEagerProp)
 
     int eagerProp2() {return eagerData2.value();}
-    void setEagerProp2(int i) { eagerData2 = i; }
+    void setEagerProp2(int i) { eagerData2.setValue(i); }
     QBindable<int> bindableEagerProp2() {return QBindable<int>(&eagerData2);}
     Q_OBJECT_COMPAT_PROPERTY(BindingLoopTester, int, eagerData2, &BindingLoopTester::setEagerProp2)
 };
@@ -532,7 +536,7 @@ public:
 
 #define GEN(N) \
     int prop##N() {return propData##N.value();} \
-    void setProp##N(int i) { propData##N = i; } \
+    void setProp##N(int i) { propData##N.setValue(i); } \
     QBindable<int> bindableProp##N() {return QBindable<int>(&propData##N);} \
     Q_OBJECT_COMPAT_PROPERTY(ReallocTester, int, propData##N, &ReallocTester::setProp##N)
     GEN(1)
@@ -615,7 +619,8 @@ void tst_QProperty::changePropertyFromWithinChangeHandlerThroughDependency()
 
     resetPropertyOnChange = true;
     sourceProperty = 42;
-    QCOMPARE(property.value(), 100);
+    QVERIFY(property.value() == 100 || property.value() == 42);
+    QVERIFY(property.binding().error().type() == QPropertyBindingError::BindingLoop);
     // changing the property value inside the change handler won't result in the change
     // handler being called again.
     QCOMPARE(changeHandlerCallCount, 1);
@@ -636,6 +641,7 @@ void tst_QProperty::changePropertyFromWithinChangeHandler2()
 
     property = 42;
     QCOMPARE(property.value(), 43);
+    QVERIFY(!property.hasBinding()); // setting the value in the change handler removed the binding
 }
 
 void tst_QProperty::settingPropertyValueDoesRemoveBinding()
@@ -1005,6 +1011,23 @@ void tst_QProperty::bindingValueReplacement()
 //    QCOMPARE(test.iconText.value(), 42);
 }
 
+void tst_QProperty::quntypedBindableApi()
+{
+    QProperty<int> iprop;
+    QUntypedBindable bindable(&iprop);
+    QVERIFY(!bindable.hasBinding());
+    QVERIFY(bindable.binding().isNull());
+    bindable.setBinding(Qt::makePropertyBinding([]() -> int {return 42;}));
+    QVERIFY(bindable.hasBinding());
+    QVERIFY(!bindable.binding().isNull());
+    QUntypedPropertyBinding binding = bindable.takeBinding();
+    QVERIFY(!bindable.hasBinding());
+    bindable.setBinding(binding);
+    QCOMPARE(iprop.value(), 42);
+    QUntypedBindable propLess;
+    QVERIFY(propLess.takeBinding().isNull());
+}
+
 class MyQObject : public QObject
 {
     Q_OBJECT
@@ -1040,11 +1063,12 @@ public:
         ++setCompatCalled;
         if (i < 0)
             i = 0;
-        compatData = i;
+        compatData.setValue(i);
         emit compatChanged();
     }
 
     QBindable<int> bindableFoo() { return QBindable<int>(&fooData); }
+    const QBindable<int> bindableFoo() const { return QBindable<int>(&fooData); }
     QBindable<int> bindableBar() { return QBindable<int>(&barData); }
     QBindable<int> bindableRead() { return QBindable<int>(&readData); }
     QBindable<int> bindableComputed() { return QBindable<int>(&computedData); }
@@ -1065,7 +1089,14 @@ public:
 
 void tst_QProperty::testNewStuff()
 {
+    MyQObject testReadOnly;
+    testReadOnly.bindableFoo().setBinding([](){return 42;});
+    auto bindable = const_cast<const MyQObject&>(testReadOnly).bindableFoo();
+    QVERIFY(bindable.hasBinding());
+    QVERIFY(bindable.isReadOnly());
+
     MyQObject object;
+    QVERIFY(!object.bindableFoo().isReadOnly());
     QObject::connect(&object, &MyQObject::fooChanged, &object, &MyQObject::fooHasChanged);
     QObject::connect(&object, &MyQObject::barChanged, &object, &MyQObject::barHasChanged);
 
@@ -1129,6 +1160,15 @@ void tst_QProperty::testNewStuff()
     QCOMPARE(object.bindableFoo().value(), 111);
     object.bindableFoo().setValue(24);
     QCOMPARE(object.foo(), 24);
+
+    auto isCurrentlyEvaluatingBinding = []() {
+        return QtPrivate::isAnyBindingEvaluating();
+    };
+    QVERIFY(!isCurrentlyEvaluatingBinding());
+    QProperty<bool> evaluationDetector {false};
+    evaluationDetector.setBinding(isCurrentlyEvaluatingBinding);
+    QVERIFY(evaluationDetector.value());
+    QVERIFY(!isCurrentlyEvaluatingBinding());
 }
 
 void tst_QProperty::qobjectObservers()
@@ -1161,7 +1201,7 @@ void tst_QProperty::compatBindings()
 
     QCOMPARE(object.compatData, 0);
     // setting data through the private interface should not call the changed signal or the public setter
-    object.compatData = 10;
+    object.compatData.setValue(10);
     QCOMPARE(object.compatChangedCount, 0);
     QCOMPARE(object.setCompatCalled, 0);
     // going through the public API should emit the signal
@@ -1350,7 +1390,7 @@ class CompatPropertyTester : public QObject
     CompatPropertyTester(QObject *parent = nullptr) : QObject(parent) { }
 
     int prop1() {return prop1Data.value();}
-    void setProp1(int i) { prop1Data = i; }
+    void setProp1(int i) { prop1Data.setValue(i); }
     QBindable<int> bindableProp1() {return QBindable<int>(&prop1Data);}
     Q_OBJECT_COMPAT_PROPERTY(CompatPropertyTester, int, prop1Data, &CompatPropertyTester::setProp1)
 
@@ -1381,9 +1421,9 @@ signals:
     void prop3Changed();
 
 public:
-    void setProp1(int val) { prop1Data = val; emit prop1Changed();}
-    void setProp2(int val) { prop2Data = val; emit prop2Changed();}
-    void setProp3(int val) { prop3Data = val; emit prop3Changed();}
+    void setProp1(int val) { prop1Data.setValue(val); emit prop1Changed();}
+    void setProp2(int val) { prop2Data.setValue(val); emit prop2Changed();}
+    void setProp3(int val) { prop3Data.setValue(val); emit prop3Changed();}
 
     int prop1() { return prop1Data; }
     int prop2() { return prop2Data; }
@@ -1414,6 +1454,144 @@ void tst_QProperty::noFakeDependencies()
     int old = bindingFunctionCalled;
     fdc.setProp3(100);
     QCOMPARE(old, bindingFunctionCalled);
+}
+
+struct CustomType
+{
+    CustomType() = default;
+    CustomType(int val) : value(val) { }
+    CustomType(int val, int otherVal) : value(val), anotherValue(otherVal) { }
+    CustomType(const CustomType &) = default;
+    CustomType(CustomType &&) = default;
+    ~CustomType() = default;
+    CustomType &operator=(const CustomType &) = default;
+    CustomType &operator=(CustomType &&) = default;
+    bool operator==(const CustomType &other) const
+    {
+        return (value == other.value) && (anotherValue == other.anotherValue);
+    }
+
+    int value = 0;
+    int anotherValue = 0;
+};
+
+class PropertyWithInitializationTester : public QObject
+{
+    Q_OBJECT
+    Q_PROPERTY(int prop1 READ prop1 WRITE setProp1 NOTIFY prop1Changed BINDABLE bindableProp1)
+    Q_PROPERTY(CustomType prop2 READ prop2 WRITE setProp2 BINDABLE bindableProp2)
+    Q_PROPERTY(CustomType prop3 READ prop3 WRITE setProp3 BINDABLE bindableProp3)
+signals:
+    void prop1Changed();
+
+public:
+    PropertyWithInitializationTester(QObject *parent = nullptr) : QObject(parent) { }
+
+    int prop1() { return prop1Data.value(); }
+    void setProp1(int i) { prop1Data = i; }
+    QBindable<int> bindableProp1() { return QBindable<int>(&prop1Data); }
+
+    CustomType prop2() { return prop2Data.value(); }
+    void setProp2(CustomType val) { prop2Data = val; }
+    QBindable<CustomType> bindableProp2() { return QBindable<CustomType>(&prop2Data); }
+
+    CustomType prop3() { return prop3Data.value(); }
+    void setProp3(CustomType val) { prop3Data.setValue(val); }
+    QBindable<CustomType> bindableProp3() { return QBindable<CustomType>(&prop3Data); }
+
+    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(PropertyWithInitializationTester, int, prop1Data, 5,
+                                         &PropertyWithInitializationTester::prop1Changed)
+    Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS(PropertyWithInitializationTester, CustomType, prop2Data,
+                                         CustomType(5))
+    Q_OBJECT_COMPAT_PROPERTY_WITH_ARGS(PropertyWithInitializationTester, CustomType, prop3Data,
+                                       &PropertyWithInitializationTester::setProp3,
+                                       CustomType(10, 20))
+};
+
+void tst_QProperty::bindablePropertyWithInitialization()
+{
+    PropertyWithInitializationTester tester;
+
+    QCOMPARE(tester.prop1(), 5);
+    QCOMPARE(tester.prop2().value, 5);
+    QCOMPARE(tester.prop3().value, 10);
+    QCOMPARE(tester.prop3().anotherValue, 20);
+}
+
+class MarkDirtyTester : public QObject
+{
+    Q_OBJECT
+public:
+    Q_PROPERTY(int value1 READ value1 WRITE setValue1 BINDABLE bindableValue1)
+    Q_PROPERTY(int value2 READ value2 WRITE setValue1 BINDABLE bindableValue2)
+    Q_PROPERTY(int computed READ computed BINDABLE bindableComputed)
+
+    inline static int staticValue = 0;
+
+    int value1() const {return m_value1;}
+    void setValue1(int val) {m_value1 = val;}
+    QBindable<int> bindableValue1() {return { &m_value1 };}
+
+    int value2() const {return m_value2;}
+    void setValue2(int val) { m_value2.setValue(val); }
+    QBindable<int> bindableValue2() {return { &m_value2 };}
+
+    int computed() const { return staticValue + m_value1; }
+    QBindable<int> bindableComputed() {return {&m_computed};}
+
+    void incrementStaticValue() {
+        ++staticValue;
+        m_computed.markDirty();
+    }
+
+    void markValue1Dirty() {
+        m_value1.markDirty();
+    }
+
+    void markValue2Dirty() {
+        m_value2.markDirty();
+    }
+private:
+    Q_OBJECT_BINDABLE_PROPERTY(MarkDirtyTester, int, m_value1, nullptr)
+    Q_OBJECT_COMPAT_PROPERTY(MarkDirtyTester, int, m_value2, &MarkDirtyTester::setValue2)
+    Q_OBJECT_COMPUTED_PROPERTY(MarkDirtyTester, int, m_computed, &MarkDirtyTester::computed)
+};
+
+void tst_QProperty::markDirty()
+{
+    {
+        QProperty<int> testProperty;
+        int changeCounter = 0;
+        auto handler = testProperty.onValueChanged([&](){++changeCounter;});
+        testProperty.markDirty();
+        QCOMPARE(changeCounter, 1);
+    }
+    {
+        MarkDirtyTester dirtyTester;
+        int computedChangeCounter = 0;
+        int value1ChangeCounter = 0;
+        auto handler = dirtyTester.bindableComputed().onValueChanged([&](){
+            computedChangeCounter++;
+        });
+        auto handler2 = dirtyTester.bindableValue1().onValueChanged([&](){
+            value1ChangeCounter++;
+        });
+        dirtyTester.incrementStaticValue();
+        QCOMPARE(computedChangeCounter, 1);
+        QCOMPARE(dirtyTester.computed(), 1);
+        dirtyTester.markValue1Dirty();
+        QCOMPARE(value1ChangeCounter, 1);
+        QCOMPARE(computedChangeCounter, 1);
+    }
+    {
+        MarkDirtyTester dirtyTester;
+        int changeCounter = 0;
+        auto handler = dirtyTester.bindableValue2().onValueChanged([&](){
+            changeCounter++;
+        });
+        dirtyTester.markValue2Dirty();
+        QCOMPARE(changeCounter, 1);
+    }
 }
 
 QTEST_MAIN(tst_QProperty);

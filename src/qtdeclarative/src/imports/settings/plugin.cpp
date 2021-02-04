@@ -40,9 +40,7 @@
 #include <QtQml/qqmlextensionplugin.h>
 #include <QtQml/qqml.h>
 
-#include "qqmlsettings_p.h"
-
-extern void qml_register_types_Qt_labs_settings();
+#include <QtLabsSettings/private/qqmlsettingsglobal_p.h>
 
 QT_BEGIN_NAMESPACE
 

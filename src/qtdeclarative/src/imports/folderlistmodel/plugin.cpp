@@ -41,9 +41,8 @@
 #include <QtQml/qqml.h>
 #include <QtQml/private/qqmlmetatype_p.h>
 
-#include "qquickfolderlistmodel.h"
-
-extern void qml_register_types_Qt_labs_folderlistmodel();
+#include <QtLabsFolderListModel/private/qquickfolderlistmodelglobal_p.h>
+#include <QtLabsFolderListModel/private/qquickfolderlistmodel_p.h>
 
 QT_BEGIN_NAMESPACE
 

@@ -216,6 +216,7 @@ bool QOffscreenIntegration::hasCapability(QPlatformIntegration::Capability cap) 
     switch (cap) {
     case ThreadedPixmaps: return true;
     case MultipleWindows: return true;
+    case RhiBasedRendering: return false;
     default: return QPlatformIntegration::hasCapability(cap);
     }
 }
@@ -275,6 +276,20 @@ public:
         }
         return QPlatformTheme::themeHint(h);
     }
+
+    virtual const QFont *font(Font type = SystemFont) const override
+    {
+        static QFont systemFont(QLatin1String("Sans Serif"), 9);
+        static QFont fixedFont(QLatin1String("monospace"), 9);
+        switch (type) {
+        case QPlatformTheme::SystemFont:
+            return &systemFont;
+        case QPlatformTheme::FixedFont:
+            return &fixedFont;
+        default:
+            return nullptr;
+        }
+    }
 };
 
 QPlatformTheme *QOffscreenIntegration::createPlatformTheme(const QString &name) const
@@ -307,9 +322,10 @@ QOffscreenIntegration *QOffscreenIntegration::createOffscreenIntegration(const Q
     QByteArray glx = qgetenv("QT_QPA_OFFSCREEN_NO_GLX");
     if (glx.isEmpty())
         offscreenIntegration = new QOffscreenX11Integration;
-#else
-    offscreenIntegration = new QOffscreenIntegration;
 #endif
+
+     if (!offscreenIntegration)
+        offscreenIntegration = new QOffscreenIntegration;
 
     offscreenIntegration->configure(paramList);
     return offscreenIntegration;

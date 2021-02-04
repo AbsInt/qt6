@@ -1,34 +1,37 @@
 /****************************************************************************
 **
 ** Copyright (C) 2019 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the Qt Gui module
 **
-** $QT_BEGIN_LICENSE:LGPL3$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
 ** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPLv3 included in the
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
 ** packaging of this file. Please review the following information to
 ** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl.html.
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
 ** GNU General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or later as published by the Free
-** Software Foundation and appearing in the file LICENSE.GPL included in
-** the packaging of this file. Please review the following information to
-** ensure the GNU General Public License version 2.0 requirements will be
-** met: http://www.gnu.org/licenses/gpl-2.0.html.
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -305,6 +308,10 @@ QT_BEGIN_NAMESPACE
 #define GL_TEXTURE_2D_MULTISAMPLE         0x9100
 #endif
 
+#ifndef GL_TEXTURE_EXTERNAL_OES
+#define GL_TEXTURE_EXTERNAL_OES           0x8D65
+#endif
+
 #ifndef GL_MAX_COMPUTE_WORK_GROUP_INVOCATIONS
 #define GL_MAX_COMPUTE_WORK_GROUP_INVOCATIONS 0x90EB
 #endif
@@ -319,6 +326,18 @@ QT_BEGIN_NAMESPACE
 
 #ifndef GL_TEXTURE_CUBE_MAP_SEAMLESS
 #define GL_TEXTURE_CUBE_MAP_SEAMLESS      0x884F
+#endif
+
+#ifndef GL_CONTEXT_LOST
+#define GL_CONTEXT_LOST                   0x0507
+#endif
+
+#ifndef GL_PROGRAM_BINARY_LENGTH
+#define GL_PROGRAM_BINARY_LENGTH          0x8741
+#endif
+
+#ifndef GL_NUM_PROGRAM_BINARY_FORMATS
+#define GL_NUM_PROGRAM_BINARY_FORMATS     0x87FE
 #endif
 
 /*!
@@ -431,8 +450,8 @@ bool QRhiGles2::ensureContext(QSurface *surface) const
 
 bool QRhiGles2::create(QRhi::Flags flags)
 {
-    Q_UNUSED(flags);
     Q_ASSERT(fallbackSurface);
+    rhiFlags = flags;
 
     if (!importedContext) {
         ctx = new QOpenGLContext;
@@ -460,6 +479,17 @@ bool QRhiGles2::create(QRhi::Flags flags)
     const char *version = reinterpret_cast<const char *>(f->glGetString(GL_VERSION));
     if (vendor && renderer && version)
         qCDebug(QRHI_LOG_INFO, "OpenGL VENDOR: %s RENDERER: %s VERSION: %s", vendor, renderer, version);
+
+    if (vendor) {
+        driverInfoStruct.deviceName += QByteArray(vendor);
+        driverInfoStruct.deviceName += ' ';
+    }
+    if (renderer) {
+        driverInfoStruct.deviceName += QByteArray(renderer);
+        driverInfoStruct.deviceName += ' ';
+    }
+    if (version)
+        driverInfoStruct.deviceName += QByteArray(version);
 
     const QSurfaceFormat actualFormat = ctx->format();
 
@@ -564,12 +594,24 @@ bool QRhiGles2::create(QRhi::Flags flags)
     caps.intAttributes = caps.ctxMajor >= 3; // 3.0 or ES 3.0
     caps.screenSpaceDerivatives = f->hasOpenGLExtension(QOpenGLExtensions::StandardDerivatives);
 
-    // TO DO: We could also check for ARB_texture_multisample but it is not
-    // currently in QOpenGLExtensions
-    // 3.0 or ES 3.1
-    caps.multisampledTexture = caps.gles
-            ? (caps.ctxMajor > 3 || (caps.ctxMajor >= 3 && caps.ctxMinor >= 1))
-            : (caps.ctxMajor >= 3);
+    if (caps.gles)
+        caps.multisampledTexture = caps.ctxMajor > 3 || (caps.ctxMajor == 3 && caps.ctxMinor >= 1); // ES 3.1
+    else
+        caps.multisampledTexture = caps.ctxMajor >= 3; // 3.0
+
+    // Program binary support: only the core stuff, do not bother with the old
+    // extensions like GL_OES_get_program_binary
+    if (caps.gles)
+        caps.programBinary = caps.ctxMajor >= 3; // ES 3.0
+    else
+        caps.programBinary = caps.ctxMajor > 4 || (caps.ctxMajor == 4 && caps.ctxMinor >= 1); // 4.1
+
+    if (caps.programBinary) {
+        GLint fmtCount = 0;
+        f->glGetIntegerv(GL_NUM_PROGRAM_BINARY_FORMATS, &fmtCount);
+        if (fmtCount < 1)
+            caps.programBinary = false;
+    }
 
     if (!caps.gles) {
         f->glEnable(GL_VERTEX_PROGRAM_POINT_SIZE);
@@ -948,6 +990,8 @@ bool QRhiGles2::isFeatureSupported(QRhi::Feature feature) const
         return caps.screenSpaceDerivatives;
     case QRhi::ReadBackAnyTextureFormat:
         return false;
+    case QRhi::PipelineCacheDataLoadSave:
+        return caps.programBinary;
     default:
         Q_UNREACHABLE();
         return false;
@@ -990,6 +1034,11 @@ const QRhiNativeHandles *QRhiGles2::nativeHandles()
     return &nativeHandlesStruct;
 }
 
+QRhiDriverInfo QRhiGles2::driverInfo() const
+{
+    return driverInfoStruct;
+}
+
 void QRhiGles2::sendVMemStatsToProfiler()
 {
     // nothing to do here
@@ -1012,11 +1061,144 @@ void QRhiGles2::releaseCachedResources()
         f->glDeleteShader(shader);
 
     m_shaderCache.clear();
+
+    m_pipelineCache.clear();
 }
 
 bool QRhiGles2::isDeviceLost() const
 {
     return contextLost;
+}
+
+struct QGles2PipelineCacheDataHeader
+{
+    quint32 rhiId;
+    quint32 arch;
+    quint32 programBinaryCount;
+    quint32 dataSize;
+    char driver[240];
+};
+
+QByteArray QRhiGles2::pipelineCacheData()
+{
+    Q_STATIC_ASSERT(sizeof(QGles2PipelineCacheDataHeader) == 256);
+
+    if (m_pipelineCache.isEmpty())
+        return QByteArray();
+
+    QGles2PipelineCacheDataHeader header;
+    memset(&header, 0, sizeof(header));
+    header.rhiId = pipelineCacheRhiId();
+    header.arch = quint32(sizeof(void*));
+    header.programBinaryCount = m_pipelineCache.count();
+    const size_t driverStrLen = qMin(sizeof(header.driver) - 1, size_t(driverInfoStruct.deviceName.count()));
+    if (driverStrLen)
+        memcpy(header.driver, driverInfoStruct.deviceName.constData(), driverStrLen);
+    header.driver[driverStrLen] = '\0';
+
+    const size_t dataOffset = sizeof(header);
+    size_t dataSize = 0;
+    for (auto it = m_pipelineCache.cbegin(), end = m_pipelineCache.cend(); it != end; ++it) {
+        dataSize += sizeof(quint32) + it.key().size()
+                  + sizeof(quint32) + it->data.size()
+                  + sizeof(quint32);
+    }
+
+    QByteArray buf(dataOffset + dataSize, Qt::Uninitialized);
+    char *p = buf.data() + dataOffset;
+    for (auto it = m_pipelineCache.cbegin(), end = m_pipelineCache.cend(); it != end; ++it) {
+        const QByteArray key = it.key();
+        const QByteArray data = it->data;
+        const quint32 format = it->format;
+
+        quint32 i = key.size();
+        memcpy(p, &i, 4);
+        p += 4;
+        memcpy(p, key.constData(), key.size());
+        p += key.size();
+
+        i = data.size();
+        memcpy(p, &i, 4);
+        p += 4;
+        memcpy(p, data.constData(), data.size());
+        p += data.size();
+
+        memcpy(p, &format, 4);
+        p += 4;
+    }
+    Q_ASSERT(p == buf.data() + dataOffset + dataSize);
+
+    header.dataSize = quint32(dataSize);
+    memcpy(buf.data(), &header, sizeof(header));
+
+    return buf;
+}
+
+void QRhiGles2::setPipelineCacheData(const QByteArray &data)
+{
+    if (data.isEmpty())
+        return;
+
+    const size_t headerSize = sizeof(QGles2PipelineCacheDataHeader);
+    if (data.size() < qsizetype(headerSize)) {
+        qWarning("setPipelineCacheData: Invalid blob size (header incomplete)");
+        return;
+    }
+    const size_t dataOffset = headerSize;
+    QGles2PipelineCacheDataHeader header;
+    memcpy(&header, data.constData(), headerSize);
+
+    const quint32 rhiId = pipelineCacheRhiId();
+    if (header.rhiId != rhiId) {
+        qWarning("setPipelineCacheData: The data is for a different QRhi version or backend (%u, %u)",
+                 rhiId, header.rhiId);
+        return;
+    }
+    const quint32 arch = quint32(sizeof(void*));
+    if (header.arch != arch) {
+        qWarning("setPipelineCacheData: Architecture does not match (%u, %u)",
+                 arch, header.arch);
+        return;
+    }
+    if (header.programBinaryCount == 0)
+        return;
+
+    const size_t driverStrLen = qMin(sizeof(header.driver) - 1, size_t(driverInfoStruct.deviceName.count()));
+    if (strncmp(header.driver, driverInfoStruct.deviceName.constData(), driverStrLen)) {
+        qWarning("setPipelineCacheData: OpenGL vendor/renderer/version does not match");
+        return;
+    }
+
+    if (data.size() < qsizetype(dataOffset + header.dataSize)) {
+        qWarning("setPipelineCacheData: Invalid blob size (data incomplete)");
+        return;
+    }
+
+    m_pipelineCache.clear();
+
+    const char *p = data.constData() + dataOffset;
+    for (quint32 i = 0; i < header.programBinaryCount; ++i) {
+        quint32 len = 0;
+        memcpy(&len, p, 4);
+        p += 4;
+        QByteArray key(len, Qt::Uninitialized);
+        memcpy(key.data(), p, len);
+        p += len;
+
+        memcpy(&len, p, 4);
+        p += 4;
+        QByteArray data(len, Qt::Uninitialized);
+        memcpy(data.data(), p, len);
+        p += len;
+
+        quint32 format;
+        memcpy(&format, p, 4);
+        p += 4;
+
+        m_pipelineCache.insert(key, { format, data });
+    }
+
+    qCDebug(QRHI_LOG_INFO, "Seeded pipeline cache with %d program binaries", int(m_pipelineCache.count()));
 }
 
 QRhiRenderBuffer *QRhiGles2::createRenderBuffer(QRhiRenderBuffer::Type type, const QSize &pixelSize,
@@ -2120,9 +2302,8 @@ void QRhiGles2::trackedRegisterTexture(QRhiPassResourceTracker *passResTracker,
     u.access = toGlAccess(access);
 }
 
-void QRhiGles2::executeCommandBuffer(QRhiCommandBuffer *cb)
+struct CommandBufferExecTrackedState
 {
-    QGles2CommandBuffer *cbD = QRHI_RES(QGles2CommandBuffer, cb);
     GLenum indexType = GL_UNSIGNED_SHORT;
     quint32 indexStride = sizeof(quint16);
     quint32 indexOffset = 0;
@@ -2135,8 +2316,30 @@ void QRhiGles2::executeCommandBuffer(QRhiCommandBuffer *cb)
         int binding = 0;
     } lastBindVertexBuffer;
     static const int TRACKED_ATTRIB_COUNT = 16;
-    bool enabledAttribArrays[TRACKED_ATTRIB_COUNT];
-    memset(enabledAttribArrays, 0, sizeof(enabledAttribArrays));
+    bool enabledAttribArrays[TRACKED_ATTRIB_COUNT] = {};
+    bool nonzeroAttribDivisor[TRACKED_ATTRIB_COUNT] = {};
+    bool instancedAttributesUsed = false;
+    int maxUntrackedInstancedAttribute = 0;
+};
+
+// Helper that must be used in executeCommandBuffer() whenever changing the
+// ARRAY or ELEMENT_ARRAY buffer binding outside of Command::BindVertexBuffer
+// and Command::BindIndexBuffer.
+static inline void bindVertexIndexBufferWithStateReset(CommandBufferExecTrackedState *state,
+                                                       QOpenGLExtensions *f,
+                                                       GLenum target,
+                                                       GLuint buffer)
+{
+    state->currentArrayBuffer = 0;
+    state->currentElementArrayBuffer = 0;
+    state->lastBindVertexBuffer.buffer = 0;
+    f->glBindBuffer(target, buffer);
+}
+
+void QRhiGles2::executeCommandBuffer(QRhiCommandBuffer *cb)
+{
+    CommandBufferExecTrackedState state;
+    QGles2CommandBuffer *cbD = QRHI_RES(QGles2CommandBuffer, cb);
 
     for (auto it = cbD->commands.cbegin(), end = cbD->commands.cend(); it != end; ++it) {
         const QGles2CommandBuffer::Command &cmd(*it);
@@ -2149,6 +2352,15 @@ void QRhiGles2::executeCommandBuffer(QRhiCommandBuffer *cb)
             }
             break;
         case QGles2CommandBuffer::Command::EndFrame:
+            if (state.instancedAttributesUsed) {
+                for (int i = 0; i < CommandBufferExecTrackedState::TRACKED_ATTRIB_COUNT; ++i) {
+                    if (state.nonzeroAttribDivisor[i])
+                         f->glVertexAttribDivisor(GLuint(i), 0);
+                }
+                for (int i = CommandBufferExecTrackedState::TRACKED_ATTRIB_COUNT; i <= state.maxUntrackedInstancedAttribute; ++i)
+                    f->glVertexAttribDivisor(GLuint(i), 0);
+                state.instancedAttributesUsed = false;
+            }
             if (vao)
                 f->glBindVertexArray(0);
             break;
@@ -2183,25 +2395,25 @@ void QRhiGles2::executeCommandBuffer(QRhiCommandBuffer *cb)
         {
             QGles2GraphicsPipeline *psD = QRHI_RES(QGles2GraphicsPipeline, cmd.args.bindVertexBuffer.ps);
             if (psD) {
-                if (lastBindVertexBuffer.ps == psD
-                        && lastBindVertexBuffer.buffer == cmd.args.bindVertexBuffer.buffer
-                        && lastBindVertexBuffer.offset == cmd.args.bindVertexBuffer.offset
-                        && lastBindVertexBuffer.binding == cmd.args.bindVertexBuffer.binding)
+                if (state.lastBindVertexBuffer.ps == psD
+                        && state.lastBindVertexBuffer.buffer == cmd.args.bindVertexBuffer.buffer
+                        && state.lastBindVertexBuffer.offset == cmd.args.bindVertexBuffer.offset
+                        && state.lastBindVertexBuffer.binding == cmd.args.bindVertexBuffer.binding)
                 {
                     // The pipeline and so the vertex input layout is
                     // immutable, no point in issuing the exact same set of
                     // glVertexAttribPointer again and again for the same buffer.
                     break;
                 }
-                lastBindVertexBuffer.ps = psD;
-                lastBindVertexBuffer.buffer = cmd.args.bindVertexBuffer.buffer;
-                lastBindVertexBuffer.offset = cmd.args.bindVertexBuffer.offset;
-                lastBindVertexBuffer.binding = cmd.args.bindVertexBuffer.binding;
+                state.lastBindVertexBuffer.ps = psD;
+                state.lastBindVertexBuffer.buffer = cmd.args.bindVertexBuffer.buffer;
+                state.lastBindVertexBuffer.offset = cmd.args.bindVertexBuffer.offset;
+                state.lastBindVertexBuffer.binding = cmd.args.bindVertexBuffer.binding;
 
-                if (cmd.args.bindVertexBuffer.buffer != currentArrayBuffer) {
-                    currentArrayBuffer = cmd.args.bindVertexBuffer.buffer;
+                if (cmd.args.bindVertexBuffer.buffer != state.currentArrayBuffer) {
+                    state.currentArrayBuffer = cmd.args.bindVertexBuffer.buffer;
                     // we do not support more than one vertex buffer
-                    f->glBindBuffer(GL_ARRAY_BUFFER, currentArrayBuffer);
+                    f->glBindBuffer(GL_ARRAY_BUFFER, state.currentArrayBuffer);
                 }
                 for (auto it = psD->m_vertexInputLayout.cbeginAttributes(), itEnd = psD->m_vertexInputLayout.cendAttributes();
                      it != itEnd; ++it)
@@ -2292,20 +2504,34 @@ void QRhiGles2::executeCommandBuffer(QRhiCommandBuffer *cb)
                         } else {
                             qWarning("Current RHI backend does not support IntAttributes. Check supported features.");
                             // This is a trick to disable this attribute
-                            if (locationIdx < TRACKED_ATTRIB_COUNT)
-                                enabledAttribArrays[locationIdx] = true;
+                            if (locationIdx < CommandBufferExecTrackedState::TRACKED_ATTRIB_COUNT)
+                                state.enabledAttribArrays[locationIdx] = true;
                         }
                     } else {
                         f->glVertexAttribPointer(GLuint(locationIdx), size, type, normalize, stride,
                                                  reinterpret_cast<const GLvoid *>(quintptr(ofs)));
                     }
-                    if (locationIdx >= TRACKED_ATTRIB_COUNT || !enabledAttribArrays[locationIdx]) {
-                        if (locationIdx < TRACKED_ATTRIB_COUNT)
-                            enabledAttribArrays[locationIdx] = true;
+                    if (locationIdx >= CommandBufferExecTrackedState::TRACKED_ATTRIB_COUNT || !state.enabledAttribArrays[locationIdx]) {
+                        if (locationIdx < CommandBufferExecTrackedState::TRACKED_ATTRIB_COUNT)
+                            state.enabledAttribArrays[locationIdx] = true;
                         f->glEnableVertexAttribArray(GLuint(locationIdx));
                     }
-                    if (inputBinding->classification() == QRhiVertexInputBinding::PerInstance && caps.instancing)
+                    if (inputBinding->classification() == QRhiVertexInputBinding::PerInstance && caps.instancing) {
                         f->glVertexAttribDivisor(GLuint(locationIdx), GLuint(inputBinding->instanceStepRate()));
+                        if (Q_LIKELY(locationIdx < CommandBufferExecTrackedState::TRACKED_ATTRIB_COUNT))
+                            state.nonzeroAttribDivisor[locationIdx] = true;
+                        else
+                            state.maxUntrackedInstancedAttribute = qMax(state.maxUntrackedInstancedAttribute, locationIdx);
+                        state.instancedAttributesUsed = true;
+                    } else if ((locationIdx < CommandBufferExecTrackedState::TRACKED_ATTRIB_COUNT
+                                && state.nonzeroAttribDivisor[locationIdx])
+                               || Q_UNLIKELY(locationIdx >= CommandBufferExecTrackedState::TRACKED_ATTRIB_COUNT
+                                             && locationIdx <= state.maxUntrackedInstancedAttribute))
+                    {
+                        f->glVertexAttribDivisor(GLuint(locationIdx), 0);
+                        if (locationIdx < CommandBufferExecTrackedState::TRACKED_ATTRIB_COUNT)
+                            state.nonzeroAttribDivisor[locationIdx] = false;
+                    }
                 }
             } else {
                 qWarning("No graphics pipeline active for setVertexInput; ignored");
@@ -2313,12 +2539,12 @@ void QRhiGles2::executeCommandBuffer(QRhiCommandBuffer *cb)
         }
             break;
         case QGles2CommandBuffer::Command::BindIndexBuffer:
-            indexType = cmd.args.bindIndexBuffer.type;
-            indexStride = indexType == GL_UNSIGNED_SHORT ? sizeof(quint16) : sizeof(quint32);
-            indexOffset = cmd.args.bindIndexBuffer.offset;
-            if (currentElementArrayBuffer != cmd.args.bindIndexBuffer.buffer) {
-                currentElementArrayBuffer = cmd.args.bindIndexBuffer.buffer;
-                f->glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, currentElementArrayBuffer);
+            state.indexType = cmd.args.bindIndexBuffer.type;
+            state.indexStride = state.indexType == GL_UNSIGNED_SHORT ? sizeof(quint16) : sizeof(quint32);
+            state.indexOffset = cmd.args.bindIndexBuffer.offset;
+            if (state.currentElementArrayBuffer != cmd.args.bindIndexBuffer.buffer) {
+                state.currentElementArrayBuffer = cmd.args.bindIndexBuffer.buffer;
+                f->glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state.currentElementArrayBuffer);
             }
             break;
         case QGles2CommandBuffer::Command::Draw:
@@ -2341,32 +2567,32 @@ void QRhiGles2::executeCommandBuffer(QRhiCommandBuffer *cb)
             QGles2GraphicsPipeline *psD = QRHI_RES(QGles2GraphicsPipeline, cmd.args.drawIndexed.ps);
             if (psD) {
                 const GLvoid *ofs = reinterpret_cast<const GLvoid *>(
-                            quintptr(cmd.args.drawIndexed.firstIndex * indexStride + indexOffset));
+                            quintptr(cmd.args.drawIndexed.firstIndex * state.indexStride + state.indexOffset));
                 if (cmd.args.drawIndexed.instanceCount == 1 || !caps.instancing) {
                     if (cmd.args.drawIndexed.baseVertex != 0 && caps.baseVertex) {
                         f->glDrawElementsBaseVertex(psD->drawMode,
                                                     GLsizei(cmd.args.drawIndexed.indexCount),
-                                                    indexType,
+                                                    state.indexType,
                                                     ofs,
                                                     cmd.args.drawIndexed.baseVertex);
                     } else {
                         f->glDrawElements(psD->drawMode,
                                           GLsizei(cmd.args.drawIndexed.indexCount),
-                                          indexType,
+                                          state.indexType,
                                           ofs);
                     }
                 } else {
                     if (cmd.args.drawIndexed.baseVertex != 0 && caps.baseVertex) {
                         f->glDrawElementsInstancedBaseVertex(psD->drawMode,
                                                              GLsizei(cmd.args.drawIndexed.indexCount),
-                                                             indexType,
+                                                             state.indexType,
                                                              ofs,
                                                              GLsizei(cmd.args.drawIndexed.instanceCount),
                                                              cmd.args.drawIndexed.baseVertex);
                     } else {
                         f->glDrawElementsInstanced(psD->drawMode,
                                                    GLsizei(cmd.args.drawIndexed.indexCount),
-                                                   indexType,
+                                                   state.indexType,
                                                    ofs,
                                                    GLsizei(cmd.args.drawIndexed.instanceCount));
                     }
@@ -2423,14 +2649,14 @@ void QRhiGles2::executeCommandBuffer(QRhiCommandBuffer *cb)
             cbD->graphicsPassState.reset(); // altered depth/color write, invalidate in order to avoid confusing the state tracking
             break;
         case QGles2CommandBuffer::Command::BufferSubData:
-            f->glBindBuffer(cmd.args.bufferSubData.target, cmd.args.bufferSubData.buffer);
+            bindVertexIndexBufferWithStateReset(&state, f, cmd.args.bufferSubData.target, cmd.args.bufferSubData.buffer);
             f->glBufferSubData(cmd.args.bufferSubData.target, cmd.args.bufferSubData.offset, cmd.args.bufferSubData.size,
                                cmd.args.bufferSubData.data);
             break;
         case QGles2CommandBuffer::Command::GetBufferSubData:
         {
             QRhiBufferReadbackResult *result = cmd.args.getBufferSubData.result;
-            f->glBindBuffer(cmd.args.getBufferSubData.target, cmd.args.getBufferSubData.buffer);
+            bindVertexIndexBufferWithStateReset(&state, f, cmd.args.getBufferSubData.target, cmd.args.getBufferSubData.buffer);
             if (caps.gles) {
                 if (caps.properMapBuffer) {
                     void *p = f->glMapBufferRange(cmd.args.getBufferSubData.target,
@@ -2622,6 +2848,14 @@ void QRhiGles2::executeCommandBuffer(QRhiCommandBuffer *cb)
         default:
             break;
         }
+    }
+    if (state.instancedAttributesUsed) {
+        for (int i = 0; i < CommandBufferExecTrackedState::TRACKED_ATTRIB_COUNT; ++i) {
+            if (state.nonzeroAttribDivisor[i])
+                 f->glVertexAttribDivisor(GLuint(i), 0);
+        }
+        for (int i = CommandBufferExecTrackedState::TRACKED_ATTRIB_COUNT; i <= state.maxUntrackedInstancedAttribute; ++i)
+            f->glVertexAttribDivisor(GLuint(i), 0);
     }
 }
 
@@ -3709,22 +3943,28 @@ static inline QShader::Stage toShaderStage(QRhiShaderStage::Type type)
     }
 }
 
-QRhiGles2::DiskCacheResult QRhiGles2::tryLoadFromDiskCache(const QRhiShaderStage *stages,
-                                                           int stageCount,
-                                                           GLuint program,
-                                                           const QVector<QShaderDescription::InOutVariable> &inputVars,
-                                                           QByteArray *cacheKey)
+QRhiGles2::ProgramCacheResult QRhiGles2::tryLoadFromDiskOrPipelineCache(const QRhiShaderStage *stages,
+                                                                        int stageCount,
+                                                                        GLuint program,
+                                                                        const QVector<QShaderDescription::InOutVariable> &inputVars,
+                                                                        QByteArray *cacheKey)
 {
-    QRhiGles2::DiskCacheResult result = QRhiGles2::DiskCacheMiss;
-    QByteArray diskCacheKey;
+    Q_ASSERT(cacheKey);
 
-    if (isProgramBinaryDiskCacheEnabled()) {
+    // the traditional QOpenGL disk cache since Qt 5.9
+    const bool legacyDiskCacheEnabled = isProgramBinaryDiskCacheEnabled();
+
+    // QRhi's own (set)PipelineCacheData()
+    const bool pipelineCacheEnabled = caps.programBinary && !m_pipelineCache.isEmpty();
+
+    // calculating the cache key based on the source code is common for both types of caches
+    if (legacyDiskCacheEnabled || pipelineCacheEnabled) {
         QOpenGLProgramBinaryCache::ProgramDesc binaryProgram;
         for (int i = 0; i < stageCount; ++i) {
             const QRhiShaderStage &stage(stages[i]);
             QByteArray source = shaderSource(stage, nullptr);
             if (source.isEmpty())
-                return QRhiGles2::DiskCacheError;
+                return QRhiGles2::ProgramCacheError;
 
             if (stage.type() == QRhiShaderStage::Vertex) {
                 // Now add something to the key that indicates the vertex input locations.
@@ -3757,27 +3997,68 @@ QRhiGles2::DiskCacheResult QRhiGles2::tryLoadFromDiskCache(const QRhiShaderStage
             binaryProgram.shaders.append(QOpenGLProgramBinaryCache::ShaderDesc(toShaderStage(stage.type()), source));
         }
 
-        diskCacheKey = binaryProgram.cacheKey();
+        *cacheKey = binaryProgram.cacheKey();
 
-        if (qrhi_programBinaryCache()->load(diskCacheKey, program)) {
+        // Try our pipeline cache simulation first, if it got seeded with
+        // setPipelineCacheData and there's a hit, then no need to go to the
+        // filesystem at all.
+        if (pipelineCacheEnabled) {
+            auto it = m_pipelineCache.constFind(*cacheKey);
+            if (it != m_pipelineCache.constEnd()) {
+                GLenum err;
+                for ( ; ; ) {
+                    err = f->glGetError();
+                    if (err == GL_NO_ERROR || err == GL_CONTEXT_LOST)
+                        break;
+                }
+                f->glProgramBinary(program, it->format, it->data.constData(), it->data.size());
+                err = f->glGetError();
+                if (err == GL_NO_ERROR) {
+                    GLint linkStatus = 0;
+                    f->glGetProgramiv(program, GL_LINK_STATUS, &linkStatus);
+                    if (linkStatus == GL_TRUE)
+                        return QRhiGles2::ProgramCacheHit;
+                }
+            }
+        }
+
+        if (legacyDiskCacheEnabled && qrhi_programBinaryCache()->load(*cacheKey, program)) {
+            // use the logging category QOpenGLShaderProgram would
             qCDebug(lcOpenGLProgramDiskCache, "Program binary received from cache, program %u, key %s",
-                    program, diskCacheKey.constData());
-            result = QRhiGles2::DiskCacheHit;
+                    program, cacheKey->constData());
+            return QRhiGles2::ProgramCacheHit;
         }
     }
 
-    if (cacheKey)
-        *cacheKey = diskCacheKey;
-
-    return result;
+    return QRhiGles2::ProgramCacheMiss;
 }
 
 void QRhiGles2::trySaveToDiskCache(GLuint program, const QByteArray &cacheKey)
 {
+    // This is only for the traditional QOpenGL disk cache since Qt 5.9.
+
     if (isProgramBinaryDiskCacheEnabled()) {
+        // use the logging category QOpenGLShaderProgram would
         qCDebug(lcOpenGLProgramDiskCache, "Saving program binary, program %u, key %s",
                 program, cacheKey.constData());
         qrhi_programBinaryCache()->save(cacheKey, program);
+    }
+}
+
+void QRhiGles2::trySaveToPipelineCache(GLuint program, const QByteArray &cacheKey, bool force)
+{
+    // This handles our own simulated "pipeline cache". (specific to QRhi, not
+    // shared with legacy QOpenGL* stuff)
+
+    if (caps.programBinary && (force || !m_pipelineCache.contains(cacheKey))) {
+        GLint blobSize = 0;
+        f->glGetProgramiv(program, GL_PROGRAM_BINARY_LENGTH, &blobSize);
+        QByteArray blob(blobSize, Qt::Uninitialized);
+        GLint outSize = 0;
+        GLenum binaryFormat = 0;
+        f->glGetProgramBinary(program, blobSize, &outSize, &binaryFormat, blob.data());
+        if (blobSize == outSize)
+            m_pipelineCache.insert(cacheKey, { binaryFormat, blob });
     }
 }
 
@@ -4066,6 +4347,9 @@ bool QGles2Texture::prepareCreate(QSize *adjustedSize)
 
     target = isCube ? GL_TEXTURE_CUBE_MAP
                     : m_sampleCount > 1 ? GL_TEXTURE_2D_MULTISAMPLE : GL_TEXTURE_2D;
+    if (m_flags.testFlag(ExternalOES))
+        target = GL_TEXTURE_EXTERNAL_OES;
+
     mipLevelCount = hasMipMaps ? rhiD->q->mipLevelsForSize(size) : 1;
     gltype = GL_UNSIGNED_BYTE;
 
@@ -4507,16 +4791,16 @@ bool QGles2GraphicsPipeline::create()
             fsDesc = shaderStage.shader().description();
     }
 
-    QByteArray diskCacheKey;
-    QRhiGles2::DiskCacheResult diskCacheResult = rhiD->tryLoadFromDiskCache(m_shaderStages.constData(),
-                                                                            m_shaderStages.count(),
-                                                                            program,
-                                                                            vsDesc.inputVariables(),
-                                                                            &diskCacheKey);
-    if (diskCacheResult == QRhiGles2::DiskCacheError)
+    QByteArray cacheKey;
+    QRhiGles2::ProgramCacheResult cacheResult = rhiD->tryLoadFromDiskOrPipelineCache(m_shaderStages.constData(),
+                                                                                     m_shaderStages.count(),
+                                                                                     program,
+                                                                                     vsDesc.inputVariables(),
+                                                                                     &cacheKey);
+    if (cacheResult == QRhiGles2::ProgramCacheError)
         return false;
 
-    if (diskCacheResult == QRhiGles2::DiskCacheMiss) {
+    if (cacheResult == QRhiGles2::ProgramCacheMiss) {
         for (const QRhiShaderStage &shaderStage : qAsConst(m_shaderStages)) {
             if (shaderStage.type() == QRhiShaderStage::Vertex) {
                 if (!rhiD->compileShader(program, shaderStage, nullptr))
@@ -4534,7 +4818,22 @@ bool QGles2GraphicsPipeline::create()
         if (!rhiD->linkProgram(program))
             return false;
 
-        rhiD->trySaveToDiskCache(program, diskCacheKey);
+        if (rhiD->rhiFlags.testFlag(QRhi::EnablePipelineCacheDataSave)) {
+            // force replacing existing cache entry (if there is one, then
+            // something is wrong with it, as there was no hit)
+            rhiD->trySaveToPipelineCache(program, cacheKey, true);
+        } else {
+            // legacy QOpenGLShaderProgram style behavior: the "pipeline cache"
+            // was not enabled, so instead store to the Qt 5 disk cache
+            rhiD->trySaveToDiskCache(program, cacheKey);
+        }
+    } else {
+        Q_ASSERT(cacheResult == QRhiGles2::ProgramCacheHit);
+        if (rhiD->rhiFlags.testFlag(QRhi::EnablePipelineCacheDataSave)) {
+            // just so that it ends up in the pipeline cache also when the hit was
+            // from the disk cache
+            rhiD->trySaveToPipelineCache(program, cacheKey);
+        }
     }
 
     // Use the same work area for the vertex & fragment stages, thus ensuring
@@ -4610,19 +4909,34 @@ bool QGles2ComputePipeline::create()
     const QShaderDescription csDesc = m_shaderStage.shader().description();
     program = rhiD->f->glCreateProgram();
 
-    QByteArray diskCacheKey;
-    QRhiGles2::DiskCacheResult diskCacheResult = rhiD->tryLoadFromDiskCache(&m_shaderStage, 1, program, {}, &diskCacheKey);
-    if (diskCacheResult == QRhiGles2::DiskCacheError)
+    QByteArray cacheKey;
+    QRhiGles2::ProgramCacheResult cacheResult = rhiD->tryLoadFromDiskOrPipelineCache(&m_shaderStage, 1, program, {}, &cacheKey);
+    if (cacheResult == QRhiGles2::ProgramCacheError)
         return false;
 
-    if (diskCacheResult == QRhiGles2::DiskCacheMiss) {
+    if (cacheResult == QRhiGles2::ProgramCacheMiss) {
         if (!rhiD->compileShader(program, m_shaderStage, nullptr))
             return false;
 
         if (!rhiD->linkProgram(program))
             return false;
 
-        rhiD->trySaveToDiskCache(program, diskCacheKey);
+        if (rhiD->rhiFlags.testFlag(QRhi::EnablePipelineCacheDataSave)) {
+            // force replacing existing cache entry (if there is one, then
+            // something is wrong with it, as there was no hit)
+            rhiD->trySaveToPipelineCache(program, cacheKey, true);
+        } else {
+            // legacy QOpenGLShaderProgram style behavior: the "pipeline cache"
+            // was not enabled, so instead store to the Qt 5 disk cache
+            rhiD->trySaveToDiskCache(program, cacheKey);
+        }
+    } else {
+        Q_ASSERT(cacheResult == QRhiGles2::ProgramCacheHit);
+        if (rhiD->rhiFlags.testFlag(QRhi::EnablePipelineCacheDataSave)) {
+            // just so that it ends up in the pipeline cache also when the hit was
+            // from the disk cache
+            rhiD->trySaveToPipelineCache(program, cacheKey);
+        }
     }
 
     QSet<int> activeUniformLocations;

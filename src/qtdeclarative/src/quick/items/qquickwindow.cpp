@@ -171,7 +171,7 @@ protected:
 
 public slots:
     void incubate() {
-        if (incubatingObjectCount()) {
+        if (m_renderLoop && incubatingObjectCount()) {
             if (m_renderLoop->interleaveIncubation()) {
                 incubateFor(m_incubation_time);
             } else {
@@ -187,12 +187,12 @@ public slots:
 protected:
     void incubatingObjectCountChanged(int count) override
     {
-        if (count && !m_renderLoop->interleaveIncubation())
+        if (count && m_renderLoop && !m_renderLoop->interleaveIncubation())
             incubateAgain();
     }
 
 private:
-    QSGRenderLoop *m_renderLoop;
+    QPointer<QSGRenderLoop> m_renderLoop;
     int m_incubation_time;
     int m_timer;
 };
@@ -1681,6 +1681,10 @@ QQuickWindow::~QQuickWindow()
     QQuickPixmap::purgeCache();
 }
 
+#if QT_CONFIG(quick_shadereffect)
+void qtquick_shadereffect_purge_gui_thread_shader_cache();
+#endif
+
 /*!
     This function tries to release redundant resources currently held by the QML scene.
 
@@ -1707,6 +1711,9 @@ void QQuickWindow::releaseResources()
     if (d->windowManager)
         d->windowManager->releaseResources(this);
     QQuickPixmap::purgeCache();
+#if QT_CONFIG(quick_shadereffect)
+    qtquick_shadereffect_purge_gui_thread_shader_cache();
+#endif
 }
 
 
@@ -2058,7 +2065,7 @@ void QQuickWindowPrivate::deliverKeyEvent(QKeyEvent *e)
 */
 QPointerEvent *QQuickWindowPrivate::clonePointerEvent(QPointerEvent *event, std::optional<QPointF> transformedLocalPos)
 {
-    QPointerEvent *ret = static_cast<QPointerEvent*>(event->clone());
+    QPointerEvent *ret = event->clone();
     QMutableEventPoint &point = QMutableEventPoint::from(ret->point(0));
     point.detach();
     point.setTimestamp(event->timestamp());
@@ -2145,7 +2152,9 @@ bool QQuickWindowPrivate::deliverHoverEvent(QQuickItem *item, const QPointF &sce
         QList<QQuickItem *> children = itemPrivate->paintOrderChildItems();
         for (int ii = children.count() - 1; ii >= 0; --ii) {
             QQuickItem *child = children.at(ii);
-            if (!child->isVisible() || !child->isEnabled() || QQuickItemPrivate::get(child)->culled)
+            if (!child->isVisible() || QQuickItemPrivate::get(child)->culled)
+                continue;
+            if (!child->isEnabled() && !QQuickItemPrivate::get(child)->subtreeHoverEnabled)
                 continue;
             if (deliverHoverEvent(child, scenePos, lastScenePos, modifiers, timestamp, accepted))
                 return true;
@@ -2282,7 +2291,7 @@ bool QQuickWindowPrivate::deliverTouchCancelEvent(QTouchEvent *event)
     // Deliver it to all items and handlers that have active touches.
     const_cast<QPointingDevicePrivate *>(QPointingDevicePrivate::get(event->pointingDevice()))->
             sendTouchCancelEvent(event);
-
+    cancelTouchMouseSynthesis();
     return true;
 }
 
@@ -4682,14 +4691,15 @@ QSGTexture *QQuickWindow::createTextureFromImage(const QImage &image, CreateText
 QSGTexture *QQuickWindowPrivate::createTextureFromNativeTexture(quint64 nativeObjectHandle,
                                                                 int nativeLayout,
                                                                 const QSize &size,
-                                                                QQuickWindow::CreateTextureOptions options) const
+                                                                QQuickWindow::CreateTextureOptions options,
+                                                                TextureFromNativeTextureFlags flags) const
 {
     if (!rhi)
         return nullptr;
 
     QSGPlainTexture *texture = new QSGPlainTexture;
     texture->setTextureFromNativeTexture(rhi, nativeObjectHandle, nativeLayout,
-                                         size, options.testFlag(QQuickWindow::TextureHasMipmaps));
+                                         size, options, flags);
     texture->setHasAlphaChannel(options & QQuickWindow::TextureHasAlphaChannel);
     // note that the QRhiTexture does not (and cannot) own the native object
     texture->setOwnsTexture(true); // texture meaning the QRhiTexture here, not the native object

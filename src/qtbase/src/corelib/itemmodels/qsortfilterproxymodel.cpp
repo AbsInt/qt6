@@ -641,10 +641,7 @@ QList<QPair<int, int>> QSortFilterProxyModelPrivate::proxy_intervals_for_source_
             interval.first = interval.second = -1;
         }
     }
-    proxy_intervals.erase(
-        std::remove_if(proxy_intervals.begin(), proxy_intervals.end(),
-                       [](QPair<int, int> &interval) { return interval.first < 0; }),
-        proxy_intervals.end());
+    proxy_intervals.removeIf([](QPair<int, int> interval) { return interval.first < 0; });
     return proxy_intervals;
 }
 
@@ -1404,15 +1401,19 @@ void QSortFilterProxyModelPrivate::_q_sourceDataChanged(const QModelIndex &sourc
                 while (source_left_column < source_bottom_right.column()
                        && m->proxy_columns.at(source_left_column) == -1)
                     ++source_left_column;
-                const QModelIndex proxy_top_left = create_index(
-                    proxy_start_row, m->proxy_columns.at(source_left_column), it);
-                int source_right_column = source_bottom_right.column();
-                while (source_right_column > source_top_left.column()
-                       && m->proxy_columns.at(source_right_column) == -1)
-                    --source_right_column;
-                const QModelIndex proxy_bottom_right = create_index(
-                    proxy_end_row, m->proxy_columns.at(source_right_column), it);
-                emit q->dataChanged(proxy_top_left, proxy_bottom_right, roles);
+                if (m->proxy_columns.at(source_left_column) != -1) {
+                    const QModelIndex proxy_top_left = create_index(
+                        proxy_start_row, m->proxy_columns.at(source_left_column), it);
+                    int source_right_column = source_bottom_right.column();
+                    while (source_right_column > source_top_left.column()
+                           && m->proxy_columns.at(source_right_column) == -1)
+                        --source_right_column;
+                    if (m->proxy_columns.at(source_right_column) != -1) {
+                        const QModelIndex proxy_bottom_right = create_index(
+                            proxy_end_row, m->proxy_columns.at(source_right_column), it);
+                        emit q->dataChanged(proxy_top_left, proxy_bottom_right, roles);
+                    }
+                }
             }
         }
 

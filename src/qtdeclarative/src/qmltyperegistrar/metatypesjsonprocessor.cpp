@@ -54,7 +54,7 @@ bool MetaTypesJsonProcessor::processTypes(const QStringList &files)
 
         if (metaObjects.isArray()) {
             const QJsonArray metaObjectsArray = metaObjects.array();
-            for (const QJsonValue metaObject : metaObjectsArray) {
+            for (const QJsonValue &metaObject : metaObjectsArray) {
                 if (!metaObject.isObject()) {
                     fprintf(stderr, "Error parsing %s: JSON is not an object\n",
                             qPrintable(source));
@@ -96,7 +96,7 @@ bool MetaTypesJsonProcessor::processForeignTypes(const QStringList &foreignTypes
         }
 
         const QJsonArray foreignObjectsArray = foreignMetaObjects.array();
-        for (const QJsonValue metaObject : foreignObjectsArray) {
+        for (const QJsonValue &metaObject : foreignObjectsArray) {
             if (!metaObject.isObject()) {
                 fprintf(stderr, "Error parsing %s: JSON is not an object\n",
                         qPrintable(types));
@@ -110,16 +110,24 @@ bool MetaTypesJsonProcessor::processForeignTypes(const QStringList &foreignTypes
     return success;
 }
 
+static void sortStringList(QStringList *list)
+{
+    std::sort(list->begin(), list->end());
+    const auto newEnd = std::unique(list->begin(), list->end());
+    list->erase(QStringList::const_iterator(newEnd), list->constEnd());
+}
+
 void MetaTypesJsonProcessor::postProcessTypes()
 {
     sortTypes(m_types);
-    sortIncludes();
+    sortStringList(&m_includes);
 }
 
 void MetaTypesJsonProcessor::postProcessForeignTypes()
 {
     sortTypes(m_foreignTypes);
-    m_types += foreignRelatedTypes();
+    addRelatedTypes();
+    sortStringList(&m_referencedTypes);
     sortTypes(m_types);
 }
 
@@ -127,7 +135,7 @@ MetaTypesJsonProcessor::RegistrationMode MetaTypesJsonProcessor::qmlTypeRegistra
         const QJsonObject &classDef)
 {
     const QJsonArray classInfos = classDef[QLatin1String("classInfos")].toArray();
-    for (const QJsonValue info : classInfos) {
+    for (const QJsonValue &info : classInfos) {
         const QString name = info[QLatin1String("name")].toString();
         if (name == QLatin1String("QML.Element")) {
             if (classDef[QLatin1String("object")].toBool())
@@ -145,13 +153,14 @@ MetaTypesJsonProcessor::RegistrationMode MetaTypesJsonProcessor::qmlTypeRegistra
     return NoRegistration;
 }
 
-QVector<QJsonObject> MetaTypesJsonProcessor::foreignRelatedTypes() const
+void MetaTypesJsonProcessor::addRelatedTypes()
 {
     const QLatin1String classInfosKey("classInfos");
     const QLatin1String nameKey("name");
     const QLatin1String qualifiedClassNameKey("qualifiedClassName");
     const QLatin1String qmlNamePrefix("QML.");
     const QLatin1String qmlForeignName("QML.Foreign");
+    const QLatin1String qmlExtendedName("QML.Extended");
     const QLatin1String qmlAttachedName("QML.Attached");
     const QLatin1String qmlSequenceName("QML.Sequence");
     const QLatin1String valueKey("value");
@@ -162,13 +171,12 @@ QVector<QJsonObject> MetaTypesJsonProcessor::foreignRelatedTypes() const
     QSet<QString> processedRelatedNames;
     QQueue<QJsonObject> typeQueue;
     typeQueue.append(m_types);
-    QVector<QJsonObject> relatedTypes;
 
     // First mark all classes registered from this module as already processed.
     for (const QJsonObject &type : m_types) {
         processedRelatedNames.insert(type.value(qualifiedClassNameKey).toString());
         const auto classInfos = type.value(classInfosKey).toArray();
-        for (const QJsonValue classInfo : classInfos) {
+        for (const QJsonValue &classInfo : classInfos) {
             const QJsonObject obj = classInfo.toObject();
             if (obj.value(nameKey).toString() == qmlForeignName) {
                 processedRelatedNames.insert(obj.value(valueKey).toString());
@@ -182,7 +190,7 @@ QVector<QJsonObject> MetaTypesJsonProcessor::foreignRelatedTypes() const
     for (const QJsonObject &foreignType : m_foreignTypes) {
         const auto classInfos = foreignType.value(classInfosKey).toArray();
         bool seenQmlPrefix = false;
-        for (const QJsonValue classInfo : classInfos) {
+        for (const QJsonValue &classInfo : classInfos) {
             const QJsonObject obj = classInfo.toObject();
             const QString name = obj.value(nameKey).toString();
             if (!seenQmlPrefix && name.startsWith(qmlNamePrefix)) {
@@ -197,12 +205,13 @@ QVector<QJsonObject> MetaTypesJsonProcessor::foreignRelatedTypes() const
     }
 
     auto addType = [&](const QString &typeName) {
+        m_referencedTypes.append(typeName);
         if (processedRelatedNames.contains(typeName))
             return;
         processedRelatedNames.insert(typeName);
         if (const QJsonObject *other
                 = QmlTypesClassDescription::findType(m_foreignTypes, typeName)) {
-            relatedTypes.append(*other);
+            m_types.append(*other);
             typeQueue.enqueue(*other);
         }
     };
@@ -213,10 +222,11 @@ QVector<QJsonObject> MetaTypesJsonProcessor::foreignRelatedTypes() const
         const QJsonObject classDef = typeQueue.dequeue();
 
         const auto classInfos = classDef.value(classInfosKey).toArray();
-        for (const QJsonValue classInfo : classInfos) {
+        for (const QJsonValue &classInfo : classInfos) {
             const QJsonObject obj = classInfo.toObject();
             const QString objNameValue = obj.value(nameKey).toString();
-            if (objNameValue == qmlAttachedName || objNameValue == qmlSequenceName) {
+            if (objNameValue == qmlAttachedName || objNameValue == qmlSequenceName
+                    || objNameValue == qmlExtendedName) {
                 addType(obj.value(valueKey).toString());
             } else if (objNameValue == qmlForeignName) {
                 const QString foreignClassName = obj.value(valueKey).toString();
@@ -230,16 +240,16 @@ QVector<QJsonObject> MetaTypesJsonProcessor::foreignRelatedTypes() const
                     }
 
                     const auto otherClassInfos = other->value(classInfosKey).toArray();
-                    for (const QJsonValue otherClassInfo : otherClassInfos) {
+                    for (const QJsonValue &otherClassInfo : otherClassInfos) {
                         const QJsonObject obj = otherClassInfo.toObject();
                         const QString objNameValue = obj.value(nameKey).toString();
-                        if (objNameValue == qmlAttachedName || objNameValue == qmlSequenceName) {
+                        if (objNameValue == qmlAttachedName || objNameValue == qmlSequenceName
+                                || objNameValue == qmlExtendedName) {
                             addType(obj.value(valueKey).toString());
                             break;
                         }
                         // No, you cannot chain QML_FOREIGN declarations. Sorry.
                     }
-                    break;
                 }
             }
         }
@@ -251,8 +261,6 @@ QVector<QJsonObject> MetaTypesJsonProcessor::foreignRelatedTypes() const
                 addType(superObject.value(nameKey).toString());
         }
     }
-
-    return relatedTypes;
 }
 
 void MetaTypesJsonProcessor::sortTypes(QVector<QJsonObject> &types)
@@ -262,13 +270,6 @@ void MetaTypesJsonProcessor::sortTypes(QVector<QJsonObject> &types)
         return a.value(qualifiedClassNameKey).toString() <
                 b.value(qualifiedClassNameKey).toString();
     });
-}
-
-void MetaTypesJsonProcessor::sortIncludes()
-{
-    std::sort(m_includes.begin(), m_includes.end());
-    const auto newEnd = std::unique(m_includes.begin(), m_includes.end());
-    m_includes.erase(newEnd, m_includes.end());
 }
 
 QString MetaTypesJsonProcessor::resolvedInclude(const QString &include)
@@ -282,7 +283,7 @@ void MetaTypesJsonProcessor::processTypes(const QJsonObject &types)
 {
     const QString include = resolvedInclude(types[QLatin1String("inputFile")].toString());
     const QJsonArray classes = types[QLatin1String("classes")].toArray();
-    for (const QJsonValue cls : classes) {
+    for (const QJsonValue &cls : classes) {
         QJsonObject classDef = cls.toObject();
         classDef.insert(QLatin1String("inputFile"), include);
 
@@ -302,20 +303,6 @@ void MetaTypesJsonProcessor::processTypes(const QJsonObject &types)
                         qPrintable(include));
             }
             m_includes.append(include);
-            {
-                bool shouldRegister = true;
-                for (const QJsonValue v :
-                     classDef.value(QLatin1String("classInfos")).toArray()) {
-                    if (v[QLatin1String("name")].toString()
-                            == QLatin1String("QML.ManualRegistration")) {
-                        shouldRegister = QStringView(u"true").compare(
-                                    v[QLatin1String("value")].toString(),
-                                Qt::CaseInsensitive) != 0;
-                    }
-                }
-                classDef.insert(QLatin1String("registerable"), shouldRegister);
-            }
-
             m_types.append(classDef);
             break;
         }
@@ -330,7 +317,7 @@ void MetaTypesJsonProcessor::processForeignTypes(const QJsonObject &types)
 {
     const QString include = types[QLatin1String("inputFile")].toString();
     const QJsonArray classes = types[QLatin1String("classes")].toArray();
-    for (const QJsonValue cls : classes) {
+    for (const QJsonValue &cls : classes) {
         QJsonObject classDef = cls.toObject();
         classDef.insert(QLatin1String("inputFile"), include);
         m_foreignTypes.append(classDef);

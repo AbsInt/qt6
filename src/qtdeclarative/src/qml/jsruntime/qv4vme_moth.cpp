@@ -42,6 +42,7 @@
 #include <QtCore/qjsondocument.h>
 #include <QtCore/qjsonobject.h>
 
+#include <private/qv4alloca_p.h>
 #include <private/qv4instr_moth_p.h>
 #include <private/qv4value_p.h>
 #include <private/qv4debugging_p.h>
@@ -424,7 +425,7 @@ static bool compareEqualInt(QV4::Value &accumulator, QV4::Value lhs, int rhs)
                 d = val.toNumberImpl(); \
                 CHECK_EXCEPTION; \
             } \
-            i = Double::toInt32(d); \
+            i = QJSNumberCoercion::toInteger(d); \
         } \
     } while (false)
 
@@ -443,7 +444,10 @@ ReturnedValue VME::exec(CppStackFrame *frame, ExecutionEngine *engine)
 
 #if QT_CONFIG(qml_jit)
     if (debugger == nullptr) {
-        if (function->jittedCode == nullptr) {
+        // Check for codeRef here. In rare cases the JIT compilation may fail, which leaves us
+        // with a (useless) codeRef, but no jittedCode. In that case, don't try to JIT again every
+        // time we execute the function, but just interpret instead.
+        if (function->codeRef == nullptr) {
             if (engine->canJIT(function))
                 QV4::JIT::BaselineJIT(function).generate();
             else
@@ -460,21 +464,50 @@ ReturnedValue VME::exec(CppStackFrame *frame, ExecutionEngine *engine)
     if (function->jittedCode != nullptr && debugger == nullptr) {
         result = function->jittedCode(frame, engine);
     } else if (function->aotFunction) {
+        const qsizetype numFunctionArguments = function->aotFunction->argumentTypes.size();
+        Q_ALLOCA_DECLARE(void *, argumentPtrs);
+
+        if (numFunctionArguments > 0) {
+            Q_ALLOCA_ASSIGN(void *, argumentPtrs, numFunctionArguments * sizeof(void *));
+            for (qsizetype i = 0; i < numFunctionArguments; ++i) {
+                const QMetaType argumentType = function->aotFunction->argumentTypes[i];
+                if (const qsizetype argumentSize = argumentType.sizeOf()) {
+                    Q_ALLOCA_VAR(void, argument, argumentSize);
+                    argumentType.construct(argument);
+                    if (i < frame->originalArgumentsCount) {
+                        engine->metaTypeFromJS(frame->originalArguments[i], argumentType.id(),
+                                               argument);
+                    }
+                    argumentPtrs[i] = argument;
+                } else {
+                    argumentPtrs[i] = nullptr;
+                }
+            }
+        }
+
+        Q_ALLOCA_DECLARE(void, returnValue);
+        const QMetaType returnType = function->aotFunction->returnType;
+        if (const qsizetype returnSize = returnType.sizeOf())
+            Q_ALLOCA_ASSIGN(void, returnValue, returnSize);
+
         Scope scope(engine);
         Scoped<QmlContext> qmlContext(scope, engine->qmlContext());
+        QQmlPrivate::AOTCompiledContext aotContext;
+        aotContext.qmlContext = qmlContext ? qmlContext->qmlContext()->asQQmlContext() : nullptr;
+        aotContext.qmlScopeObject = qmlContext ? qmlContext->qmlScope() : nullptr;
+        aotContext.engine = engine->jsEngine();
+        aotContext.compilationUnit = function->executableCompilationUnit();
+        function->aotFunction->functionPtr(&aotContext, returnValue, argumentPtrs);
 
-        QVariant resultVariant;
-        if (function->aotFunction->returnType.id() == QMetaType::QVariant) {
-            function->aotFunction->functionPtr(
-                    qmlContext->qmlContext()->asQQmlContext(), qmlContext->qmlScope(),
-                    &resultVariant);
+        if (returnValue) {
+            result = engine->metaTypeToJS(returnType.id(), returnValue);
+            returnType.destruct(returnValue);
         } else {
-            resultVariant = QVariant(function->aotFunction->returnType, nullptr);
-            function->aotFunction->functionPtr(
-                    qmlContext->qmlContext()->asQQmlContext(), qmlContext->qmlScope(),
-                    resultVariant.data());
+            result = Encode::undefined();
         }
-        result = engine->fromVariant(resultVariant);
+
+        for (qsizetype i = 0; i < numFunctionArguments; ++i)
+            function->aotFunction->argumentTypes[i].destruct(argumentPtrs[i]);
     } else {
         // interpreter
         result = interpret(frame, engine, function->codeData);
@@ -1177,6 +1210,7 @@ QV4::ReturnedValue VME::interpret(CppStackFrame *frame, ExecutionEngine *engine,
     MOTH_END_INSTR(CmpStrictNotEqual)
 
     MOTH_BEGIN_INSTR(CmpIn)
+        STORE_IP();
         STORE_ACC();
         acc = Runtime::In::call(engine, STACK_VALUE(lhs), accumulator);
         CHECK_EXCEPTION;

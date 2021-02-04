@@ -37,12 +37,10 @@
 **
 ****************************************************************************/
 
-#include "qquicklocalstorage_p.h"
-
 #include <QtQml/qqmlextensionplugin.h>
 #include <QtQml/qqml.h>
 
-extern void qml_register_types_QtQuick_LocalStorage();
+#include <QtQmlLocalStorage/private/qqmllocalstorageglobal_p.h>
 
 QT_BEGIN_NAMESPACE
 

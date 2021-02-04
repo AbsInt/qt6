@@ -170,13 +170,14 @@ public:
     bool hasTag(const QString &tag) const override { return (m_tag == tag); }
     void setTag(const QString &tag) { m_tag = tag; }
     const QString &tag() const { return m_tag; }
-    bool compare(const FunctionNode *functionNode) const;
+    bool compare(const Node *node, bool sameParent = true) const;
     bool isIgnored() const;
     bool hasOverloads() const;
     void clearOverloadFlag() { m_overloadFlag = false; }
     void setOverloadFlag() { m_overloadFlag = true; }
     void setOverloadNumber(signed short number);
     void appendOverload(FunctionNode *functionNode);
+    void removeOverload(FunctionNode *functionNode);
     signed short overloadNumber() const { return m_overloadNumber; }
     FunctionNode *nextOverload() { return m_nextOverload; }
     void setNextOverload(FunctionNode *functionNode) { m_nextOverload = functionNode; }

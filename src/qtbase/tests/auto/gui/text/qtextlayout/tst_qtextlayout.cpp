@@ -32,7 +32,7 @@
     Please don't save this file in emacs. It contains utf8 text sequences emacs will
     silently convert to a series of question marks.
  */
-#include <QtTest/QtTest>
+#include <QTest>
 
 
 
@@ -1894,6 +1894,19 @@ void tst_QTextLayout::longText()
         layout.endLayout();
         QVERIFY(line.isValid());
         QVERIFY(line.cursorToX(line.textLength() - 1) > 0);
+    }
+
+    {
+        QTextLayout layout(QString("Qt rocks! ").repeated(200000));
+        layout.setCacheEnabled(true);
+        layout.beginLayout();
+        forever {
+            QTextLine line = layout.createLine();
+            if (!line.isValid())
+                break;
+        }
+        layout.endLayout();
+        QVERIFY(layout.maximumWidth() <= QFIXED_MAX);
     }
 }
 

@@ -27,12 +27,13 @@
 ****************************************************************************/
 
 
-#include <QtTest/QtTest>
+#include <QTest>
 #include <math.h>
 #include <qdebug.h>
 #include <qdir.h>
 #include <qfileinfo.h>
 #include <QScopedArrayPointer>
+#include <QTimeZone>
 #include <qdatetime.h>
 #if QT_CONFIG(process)
 # include <qprocess.h>
@@ -148,6 +149,9 @@ private slots:
 
     void numberGroupingIndia();
     void numberFormatChakma();
+
+    void lcsToCode();
+    void codeToLcs();
 
     // *** ORDER-DEPENDENCY *** (This Is Bad.)
     // Test order is determined by order of declaration here: *all* tests that
@@ -3221,6 +3225,46 @@ void tst_QLocale::numberFormatChakma()
     const quint64 uint64 = Q_UINT64_C(6005004003002001000);
     QCOMPARE(chakma.toString(uint64), strResult64);
     QCOMPARE(chakma.toULongLong(strResult64), uint64);
+}
+
+void tst_QLocale::lcsToCode()
+{
+    QCOMPARE(QLocale::languageToCode(QLocale::AnyLanguage), QString());
+    QCOMPARE(QLocale::languageToCode(QLocale::C), QString("C"));
+    QCOMPARE(QLocale::languageToCode(QLocale::English), QString("en"));
+
+    QCOMPARE(QLocale::countryToCode(QLocale::AnyCountry), QString());
+    QCOMPARE(QLocale::countryToCode(QLocale::UnitedStates), QString("US"));
+    QCOMPARE(QLocale::countryToCode(QLocale::EuropeanUnion), QString("EU"));
+
+    QCOMPARE(QLocale::scriptToCode(QLocale::AnyScript), QString());
+    QCOMPARE(QLocale::scriptToCode(QLocale::SimplifiedHanScript), QString("Hans"));
+}
+
+void tst_QLocale::codeToLcs()
+{
+    QCOMPARE(QLocale::codeToLanguage(QString()), QLocale::AnyLanguage);
+    QCOMPARE(QLocale::codeToLanguage(QString(" ")), QLocale::AnyLanguage);
+    QCOMPARE(QLocale::codeToLanguage(QString("und")), QLocale::AnyLanguage);
+    QCOMPARE(QLocale::codeToLanguage(QString("e")), QLocale::AnyLanguage);
+    QCOMPARE(QLocale::codeToLanguage(QString("en")), QLocale::English);
+    QCOMPARE(QLocale::codeToLanguage(QString("EN")), QLocale::English);
+    QCOMPARE(QLocale::codeToLanguage(QString("eng")), QLocale::AnyLanguage);
+    QCOMPARE(QLocale::codeToLanguage(QString("ha")), QLocale::Hausa);
+    QCOMPARE(QLocale::codeToLanguage(QString("haw")), QLocale::Hawaiian);
+
+    QCOMPARE(QLocale::codeToCountry(QString()), QLocale::AnyCountry);
+    QCOMPARE(QLocale::codeToCountry(QString("ZZ")), QLocale::AnyCountry);
+    QCOMPARE(QLocale::codeToCountry(QString("US")), QLocale::UnitedStates);
+    QCOMPARE(QLocale::codeToCountry(QString("us")), QLocale::UnitedStates);
+    QCOMPARE(QLocale::codeToCountry(QString("USA")), QLocale::AnyCountry);
+    QCOMPARE(QLocale::codeToCountry(QString("EU")), QLocale::EuropeanUnion);
+    QCOMPARE(QLocale::codeToCountry(QString("001")), QLocale::World);
+    QCOMPARE(QLocale::codeToCountry(QString("150")), QLocale::Europe);
+
+    QCOMPARE(QLocale::codeToScript(QString()), QLocale::AnyScript);
+    QCOMPARE(QLocale::codeToScript(QString("Zzzz")), QLocale::AnyScript);
+    QCOMPARE(QLocale::codeToScript(QString("Hans")), QLocale::SimplifiedHanScript);
 }
 
 QTEST_MAIN(tst_QLocale)

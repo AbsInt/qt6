@@ -101,9 +101,11 @@ struct QQmlPropertyCacheCreatorBase
 public:
     static QAtomicInt classIndexCounter;
 
-    static int metaTypeForPropertyType(QV4::CompiledData::BuiltinType type);
+    static QMetaType metaTypeForPropertyType(QV4::CompiledData::BuiltinType type);
 
     static QByteArray createClassNameTypeByUrl(const QUrl &url);
+
+    static QByteArray createClassNameForInlineComponent(const QUrl &baseUrl, int icId);
 };
 
 template <typename ObjectContainer>
@@ -129,7 +131,7 @@ protected:
     QQmlRefPointer<QQmlPropertyCache> propertyCacheForObject(const CompiledObject *obj, const QQmlBindingInstantiationContext &context, QQmlError *error) const;
     QQmlError createMetaObject(int objectIndex, const CompiledObject *obj, const QQmlRefPointer<QQmlPropertyCache> &baseTypeCache);
 
-    int metaTypeForParameter(const QV4::CompiledData::ParameterType &param, QString *customTypeName = nullptr);
+    QMetaType metaTypeForParameter(const QV4::CompiledData::ParameterType &param, QString *customTypeName = nullptr);
 
     QString stringAt(int index) const { return objectContainer->stringAt(index); }
 
@@ -471,11 +473,11 @@ inline QQmlError QQmlPropertyCacheCreator<ObjectContainer>::createMetaObject(int
                 names.append(stringAt(param->nameIndex).toUtf8());
 
                 QString customTypeName;
-                auto type = metaTypeForParameter(param->type, &customTypeName);
-                if (type == QMetaType::UnknownType)
+                QMetaType type = metaTypeForParameter(param->type, &customTypeName);
+                if (!type.isValid())
                     return qQmlCompileError(s->location, QQmlPropertyCacheCreatorBase::tr("Invalid signal parameter type: %1").arg(customTypeName));
 
-                paramTypes[i + 1] = type;
+                paramTypes[i + 1] = type.id();
             }
         }
 
@@ -512,13 +514,13 @@ inline QQmlError QQmlPropertyCacheCreator<ObjectContainer>::createMetaObject(int
         for ( ; formal != end; ++formal) {
             flags.setHasArguments(true);
             parameterNames << stringAt(formal->nameIndex).toUtf8();
-            int type = metaTypeForParameter(formal->type);
+            int type = metaTypeForParameter(formal->type).id();
             if (type == QMetaType::UnknownType)
                 type = QMetaType::QVariant;
             parameterTypes << type;
         }
 
-        int returnType = metaTypeForParameter(function->returnType);
+        int returnType = metaTypeForParameter(function->returnType).id();
         if (returnType == QMetaType::UnknownType)
             returnType = QMetaType::QVariant;
 
@@ -532,7 +534,7 @@ inline QQmlError QQmlPropertyCacheCreator<ObjectContainer>::createMetaObject(int
     p = obj->propertiesBegin();
     pend = obj->propertiesEnd();
     for ( ; p != pend; ++p, ++propertyIdx) {
-        int propertyType = 0;
+        QMetaType propertyType;
         QTypeRevision propertyTypeVersion = QTypeRevision::zero();
         QQmlPropertyData::Flags propertyFlags;
 
@@ -582,15 +584,15 @@ inline QQmlError QQmlPropertyCacheCreator<ObjectContainer>::createMetaObject(int
                 }
 
                 if (p->isList) {
-                    propertyType = typeIds.listId.id();
+                    propertyType = typeIds.listId;
                 } else {
-                    propertyType = typeIds.id.id();
+                    propertyType = typeIds.id;
                 }
             } else {
                 if (p->isList) {
-                    propertyType = qmltype.qListTypeId().id();
+                    propertyType = qmltype.qListTypeId();
                 } else {
-                    propertyType = qmltype.typeId().id();
+                    propertyType = qmltype.typeId();
                     propertyTypeVersion = qmltype.version();
                 }
             }
@@ -619,7 +621,7 @@ inline QQmlError QQmlPropertyCacheCreator<ObjectContainer>::createMetaObject(int
 }
 
 template <typename ObjectContainer>
-inline int QQmlPropertyCacheCreator<ObjectContainer>::metaTypeForParameter(const QV4::CompiledData::ParameterType &param,
+inline QMetaType QQmlPropertyCacheCreator<ObjectContainer>::metaTypeForParameter(const QV4::CompiledData::ParameterType &param,
                                                                            QString *customTypeName)
 {
     if (param.indexIsBuiltinType) {
@@ -635,13 +637,13 @@ inline int QQmlPropertyCacheCreator<ObjectContainer>::metaTypeForParameter(const
     bool selfReference = false;
     if (!imports->resolveType(typeName, &qmltype, nullptr, nullptr, nullptr,
                               QQmlType::AnyRegistrationType, &selfReference))
-        return QMetaType::UnknownType;
+        return QMetaType();
 
     if (!qmltype.isComposite())
-        return qmltype.typeId().id();
+        return qmltype.typeId();
 
     if (selfReference)
-        return objectContainer->typeIdsForComponent().id.id();
+        return objectContainer->typeIdsForComponent().id;
 
     QQmlRefPointer<QQmlTypeData> tdata = enginePrivate->typeLoader.getType(qmltype.sourceUrl());
     Q_ASSERT(tdata);
@@ -649,7 +651,7 @@ inline int QQmlPropertyCacheCreator<ObjectContainer>::metaTypeForParameter(const
 
     auto compilationUnit = tdata->compilationUnit();
 
-    return compilationUnit->typeIds.id.id();
+    return compilationUnit->typeIds.id;
 }
 
 template <typename ObjectContainer>
@@ -666,7 +668,7 @@ public:
 
 private:
     void appendAliasPropertiesInMetaObjectsWithinComponent(const CompiledObject &component, int firstObjectIndex, QQmlEnginePrivate *enginePriv);
-    QQmlError propertyDataForAlias(const CompiledObject &component, const QV4::CompiledData::Alias &alias, int *type, QTypeRevision *version, QQmlPropertyData::Flags *propertyFlags, QQmlEnginePrivate *enginePriv);
+    QQmlError propertyDataForAlias(const CompiledObject &component, const QV4::CompiledData::Alias &alias, QMetaType *type, QTypeRevision *version, QQmlPropertyData::Flags *propertyFlags, QQmlEnginePrivate *enginePriv);
 
     void collectObjectsWithAliasesRecursively(int objectIndex, QVector<int> *objectsWithAliases) const;
 
@@ -778,11 +780,11 @@ inline void QQmlPropertyCacheAliasCreator<ObjectContainer>::collectObjectsWithAl
 
 template <typename ObjectContainer>
 inline QQmlError QQmlPropertyCacheAliasCreator<ObjectContainer>::propertyDataForAlias(
-        const CompiledObject &component, const QV4::CompiledData::Alias &alias, int *type,
+        const CompiledObject &component, const QV4::CompiledData::Alias &alias, QMetaType *type,
         QTypeRevision *version, QQmlPropertyData::Flags *propertyFlags,
         QQmlEnginePrivate *enginePriv)
 {
-    *type = 0;
+    *type = QMetaType();
     bool writable = false;
     bool resettable = false;
     bool bindable = false;
@@ -833,9 +835,9 @@ inline QQmlError QQmlPropertyCacheAliasCreator<ObjectContainer>::propertyDataFor
 
         const auto referencedType = typeRef->type();
         if (referencedType.isValid())
-            *type = referencedType.typeId().id();
+            *type = referencedType.typeId();
         else
-            *type = typeRef->compilationUnit()->typeIds.id.id();
+            *type = typeRef->compilationUnit()->typeIds.id;
 
         *version = typeRef->version();
 
@@ -854,10 +856,14 @@ inline QQmlError QQmlPropertyCacheAliasCreator<ObjectContainer>::propertyDataFor
         if (!QQmlValueTypeFactory::isValueType(targetProperty->propType()) && valueTypeIndex != -1) {
             // deep alias property
             *type = targetProperty->propType();
-            targetCache = enginePriv->propertyCacheForType(*type);
+            targetCache = enginePriv->propertyCacheForType(type->id());
             Q_ASSERT(targetCache);
             targetProperty = targetCache->property(valueTypeIndex);
 
+            if (targetProperty == nullptr) {
+                return qQmlCompileError(alias.referenceLocation,
+                                        QQmlPropertyCacheCreatorBase::tr("Invalid alias target"));
+            }
 
             *type = targetProperty->propType();
             writable = targetProperty->isWritable();
@@ -874,12 +880,12 @@ inline QQmlError QQmlPropertyCacheAliasCreator<ObjectContainer>::propertyDataFor
             if (valueTypeIndex != -1) {
                 const QMetaObject *valueTypeMetaObject = QQmlValueTypeFactory::metaObjectForMetaType(*type);
                 if (valueTypeMetaObject->property(valueTypeIndex).isEnumType())
-                    *type = QMetaType::Int;
+                    *type = QMetaType::fromType<int>();
                 else
-                    *type = valueTypeMetaObject->property(valueTypeIndex).userType();
+                    *type = valueTypeMetaObject->property(valueTypeIndex).metaType();
             } else {
                 if (targetProperty->isEnum()) {
-                    *type = QMetaType::Int;
+                    *type = QMetaType::fromType<int>();
                 } else {
                     // Copy type flags
                     propertyFlags->copyPropertyTypeFlags(targetProperty->flags());
@@ -917,7 +923,7 @@ inline QQmlError QQmlPropertyCacheAliasCreator<ObjectContainer>::appendAliasesTo
     for ( ; alias != end; ++alias, ++aliasIndex) {
         Q_ASSERT(alias->flags & QV4::CompiledData::Alias::Resolved);
 
-        int type = 0;
+        QMetaType type;
         QTypeRevision version = QTypeRevision::zero();
         QQmlPropertyData::Flags propertyFlags;
         QQmlError error = propertyDataForAlias(component, *alias, &type, &version,

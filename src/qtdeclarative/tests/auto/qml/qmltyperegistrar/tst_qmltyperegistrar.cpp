@@ -57,6 +57,12 @@ void tst_qmltyperegistrar::qmltypesHasHppClassAndNoext()
     QVERIFY(qmltypesData.contains("Noext"));
 }
 
+void tst_qmltyperegistrar::qmltypesHasReadAndWrite()
+{
+    QVERIFY(qmltypesData.contains(R"(read: "eieiei")"));
+    QVERIFY(qmltypesData.contains(R"(write: "setEieiei")"));
+}
+
 void tst_qmltyperegistrar::qmltypesHasFileNames()
 {
     QVERIFY(qmltypesData.contains("file: \"hppheader.hpp\""));
@@ -79,9 +85,10 @@ void tst_qmltyperegistrar::superAndForeignTypes()
     QVERIFY(qmltypesData.contains("values: [\"Pixel\", \"Centimeter\", \"Inch\", \"Point\"]"));
     QVERIFY(qmltypesData.contains("name: \"SizeGadget\""));
     QVERIFY(qmltypesData.contains("prototype: \"SizeEnums\""));
-    QVERIFY(qmltypesData.contains("Property { name: \"height\"; type: \"int\" }"));
-    QVERIFY(qmltypesData.contains("Property { name: \"width\"; type: \"int\" }"));
+    QVERIFY(qmltypesData.contains("Property { name: \"height\"; type: \"int\"; read: \"height\"; write: \"setHeight\" }"));
+    QVERIFY(qmltypesData.contains("Property { name: \"width\"; type: \"int\"; read: \"width\"; write: \"setWidth\" }"));
     QVERIFY(qmltypesData.contains("Method { name: \"sizeToString\"; type: \"QString\" }"));
+    QVERIFY(qmltypesData.contains("extension: \"SizeValueType\""));
 }
 
 void tst_qmltyperegistrar::accessSemantics()
@@ -109,6 +116,49 @@ void tst_qmltyperegistrar::pastMajorVersions()
     QQmlComponent c(&engine);
     c.setData("import QML\nimport QmlTypeRegistrarTest 0.254\nQtObject {}", QUrl());
     QVERIFY2(!c.isError(), qPrintable(c.errorString()));
+}
+
+void tst_qmltyperegistrar::implementsInterfaces()
+{
+    QVERIFY(qmltypesData.contains("interfaces: [\"Interface\"]"));
+    QVERIFY(qmltypesData.contains("interfaces: [\"Interface\", \"Interface2\"]"));
+}
+
+void tst_qmltyperegistrar::namespacedElement()
+{
+    QQmlEngine engine;
+    QQmlComponent c(&engine);
+    c.setData("import QML\nimport QmlTypeRegistrarTest 1.0\nElement {}", QUrl());
+    QVERIFY2(!c.isError(), qPrintable(c.errorString()));
+}
+
+void tst_qmltyperegistrar::derivedFromForeign()
+{
+    QVERIFY(qmltypesData.contains("name: \"DerivedFromForeign\""));
+    QVERIFY(qmltypesData.contains("prototype: \"QTimeLine\""));
+    QVERIFY(qmltypesData.contains("name: \"QTimeLine\""));
+}
+
+void tst_qmltyperegistrar::metaTypesRegistered()
+{
+    QQmlEngine engine;
+    QQmlComponent c(&engine);
+    c.setData("import QmlTypeRegistrarTest\nOoo {}", QUrl());
+    QVERIFY(c.isReady());
+    QScopedPointer<QObject> obj(c.create());
+
+    auto verifyMetaType = [](const char *name, const char *className) {
+        const auto foundMetaType = QMetaType::fromName(name);
+        QVERIFY(foundMetaType.isValid());
+        QCOMPARE(foundMetaType.name(), name);
+        QVERIFY(foundMetaType.metaObject());
+        QCOMPARE(foundMetaType.metaObject()->className(), className);
+    };
+
+    verifyMetaType("Foo", "Foo");
+    verifyMetaType("Ooo*", "Ooo");
+    verifyMetaType("Bbb*", "Bbb");
+    verifyMetaType("Ccc*", "Ccc");
 }
 
 QTEST_MAIN(tst_qmltyperegistrar)

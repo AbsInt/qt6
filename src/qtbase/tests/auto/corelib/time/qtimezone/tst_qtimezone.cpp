@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2020 The Qt Company Ltd.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
@@ -26,10 +26,14 @@
 **
 ****************************************************************************/
 
-#include <QtTest/QtTest>
+#include <QTest>
 #include <qtimezone.h>
 #include <private/qtimezoneprivate_p.h>
 #include <qlocale.h>
+
+#if defined(Q_OS_WIN)
+#include <QOperatingSystemVersion>
+#endif
 
 #if defined(Q_OS_WIN) && !QT_CONFIG(icu)
 #  define USING_WIN_TZ
@@ -155,25 +159,23 @@ void tst_QTimeZone::printTimeZone(const QTimeZone &tz)
 
 void tst_QTimeZone::createTest()
 {
-    QTimeZone tz("Pacific/Auckland");
+    const QTimeZone tz("Pacific/Auckland");
 
     if (debug)
         printTimeZone(tz);
 
     // If the tz is not valid then skip as is probably using the UTC backend which is tested later
     if (!tz.isValid())
-        return;
+        QSKIP("System lacks zone used for test"); // This returns.
 
-    // Validity tests
-    QCOMPARE(tz.isValid(), true);
-
-    // Comparison tests
-    QTimeZone tz2("Pacific/Auckland");
-    QTimeZone tz3("Australia/Sydney");
-    QCOMPARE((tz == tz2), true);
-    QCOMPARE((tz != tz2), false);
-    QCOMPARE((tz == tz3), false);
-    QCOMPARE((tz != tz3), true);
+    QCOMPARE(tz.id(), "Pacific/Auckland");
+    // Comparison tests:
+    const QTimeZone same("Pacific/Auckland");
+    QCOMPARE((tz == same), true);
+    QCOMPARE((tz != same), false);
+    const QTimeZone other("Australia/Sydney");
+    QCOMPARE((tz == other), false);
+    QCOMPARE((tz != other), true);
 
     QCOMPARE(tz.country(), QLocale::NewZealand);
 
@@ -447,6 +449,7 @@ void tst_QTimeZone::utcOffsetId_data()
     ROW("UTC+12:00", true, 43200);
     ROW("UTC+13:00", true, 46800);
     ROW("UTC+14:00", true, 50400);
+
     // Windows IDs known to CLDR v35.1:
     ROW("UTC-11", true, -39600);
     ROW("UTC-09", true, -32400);
@@ -499,6 +502,7 @@ void tst_QTimeZone::utcOffsetId()
         QFETCH(int, offset);
         QCOMPARE(zone.offsetFromUtc(epoch), offset);
         QVERIFY(!zone.hasDaylightTime());
+        QCOMPARE(zone.id(), id);
     }
 }
 
@@ -608,10 +612,6 @@ void tst_QTimeZone::transitionEachZone()
         if (zone == "Europe/Samara" && i == -3) {
             continue;
         }
-#endif
-#ifdef Q_OS_ANDROID
-        if (zone == "America/Mazatlan" || zone == "Mexico/BajaSur")
-            QSKIP("Crashes on Android, see QTBUG-69132");
 #endif
         qint64 here = secs + i * 3600;
         QDateTime when = QDateTime::fromMSecsSinceEpoch(here * 1000, named);
@@ -977,11 +977,11 @@ void tst_QTimeZone::utcTest()
     QCOMPARE(tzp.hasDaylightTime(), false);
     QCOMPARE(tzp.hasTransitions(), false);
 
-    // Test create from UTC Offset
+    // Test create from UTC Offset (uses minimal id, skipping minutes if 0)
     QDateTime now = QDateTime::currentDateTime();
     QTimeZone tz(36000);
-    QCOMPARE(tz.isValid(),   true);
-    QCOMPARE(tz.id(), QByteArray("UTC+10:00"));
+    QVERIFY(tz.isValid());
+    QCOMPARE(tz.id(), QByteArray("UTC+10"));
     QCOMPARE(tz.offsetFromUtc(now), 36000);
     QCOMPARE(tz.standardTimeOffset(now), 36000);
     QCOMPARE(tz.daylightTimeOffset(now), 0);
@@ -996,9 +996,9 @@ void tst_QTimeZone::utcTest()
     QCOMPARE(QTimeZone(max).isValid(), true);
     QCOMPARE(QTimeZone(max + 1).isValid(), false);
 
-    // Test create from standard name
+    // Test create from standard name (preserves :00 for minutes in id):
     tz = QTimeZone("UTC+10:00");
-    QCOMPARE(tz.isValid(),   true);
+    QVERIFY(tz.isValid());
     QCOMPARE(tz.id(), QByteArray("UTC+10:00"));
     QCOMPARE(tz.offsetFromUtc(now), 36000);
     QCOMPARE(tz.standardTimeOffset(now), 36000);

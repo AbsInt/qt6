@@ -422,6 +422,30 @@ QStyle::~QStyle()
 }
 
 /*!
+    Returns the name of the style.
+
+    This value can be used to create a style with QStyleFactory::create().
+
+    \sa QStyleFactory::create()
+    \since 6.1
+*/
+QString QStyle::name() const
+{
+    Q_D(const QStyle);
+    return d->name;
+}
+
+/*!
+    \internal
+    Set the style name
+*/
+void QStyle::setName(const QString &name)
+{
+    Q_D(QStyle);
+    d->name = name;
+}
+
+/*!
     Initializes the appearance of the given \a widget.
 
     This function is called for every widget at some point after it
@@ -1981,6 +2005,11 @@ void QStyle::drawItemPixmap(QPainter *painter, const QRect &rect, int alignment,
            disables this feature.
            This enum value has been introduced in Qt 5.12.
 
+    \value SH_TabBar_AllowWheelScrolling
+           Determines if the mouse wheel can be used to cycle through the tabs
+           of a QTabBar.
+           This enum value has been introduced in Qt 6.1.
+
     \sa styleHint()
 */
 
@@ -2401,17 +2430,19 @@ int QStyle::combinedLayoutSpacing(QSizePolicy::ControlTypes controls1,
 const QStyle * QStyle::proxy() const
 {
     Q_D(const QStyle);
-    return d->proxyStyle;
+    return d->proxyStyle == this ? this : d->proxyStyle->proxy();
 }
 
 /* \internal
 
     This function sets the base style that style calls will be
-    redirected to. Note that ownership is not transferred.
+    redirected to. Note that ownership is not transferred. \a style
+    must be a valid pointer (not nullptr).
 */
 void QStyle::setProxy(QStyle *style)
 {
     Q_D(QStyle);
+    Q_ASSERT(style);
     d->proxyStyle = style;
 }
 

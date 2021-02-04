@@ -250,7 +250,7 @@ void QQmlVMEMetaObjectEndpoint::tryConnect()
             if (pd && valueTypeIndex != -1 && !QQmlValueTypeFactory::valueType(pd->propType())) {
                 // deep alias
                 QQmlEnginePrivate *enginePriv = QQmlEnginePrivate::get(metaObject->compilationUnit->engine->qmlEngine());
-                auto const *newPropertyCache = enginePriv->propertyCacheForType(pd->propType());
+                auto const *newPropertyCache = enginePriv->propertyCacheForType(pd->propType().id());
                 void *argv[1] = { &target };
                 QMetaObject::metacall(target, QMetaObject::ReadProperty, coreIndex, argv);
                 Q_ASSERT(newPropertyCache);
@@ -321,12 +321,13 @@ bool QQmlInterceptorMetaObject::intercept(QMetaObject::Call c, int id, void **a)
 
             const int valueIndex = vi->m_propertyIndex.valueTypeIndex();
             const QQmlData *data = QQmlData::get(object);
-            const int type = data->propertyCache->property(id)->propType();
+            const QMetaType metaType = data->propertyCache->property(id)->propType();
+            const int type = metaType.id();
 
             if (type != QMetaType::UnknownType) {
                 if (valueIndex != -1) {
                     QQmlGadgetPtrWrapper *valueType = QQmlGadgetPtrWrapper::instance(
-                                data->context->engine(), type);
+                                data->context->engine(), metaType);
                     Q_ASSERT(valueType);
 
                     //
@@ -700,7 +701,7 @@ int QQmlVMEMetaObject::metaCall(QObject *o, QMetaObject::Call c, int _id, void *
                         ? nullptr
                         : QQmlEnginePrivate::get(ctxt->engine());
 
-                const int fallbackMetaType = QQmlPropertyCacheCreatorBase::metaTypeForPropertyType(t);
+                const int fallbackMetaType = QQmlPropertyCacheCreatorBase::metaTypeForPropertyType(t).id();
 
                 if (c == QMetaObject::ReadProperty) {
                     switch (t) {
@@ -1007,24 +1008,24 @@ int QQmlVMEMetaObject::metaCall(QObject *o, QMetaObject::Call c, int _id, void *
                     jsCallData->args[ii] = scope.engine->metaTypeToJS(arguments->arguments[ii + 1], a[ii + 1]);
                 }
 
-                const int returnType = methodData->propType();
+                const QMetaType returnType = methodData->propType();
                 QV4::ScopedValue result(scope, function->call(jsCallData));
                 if (scope.hasException()) {
                     QQmlError error = scope.engine->catchExceptionAsQmlError();
                     if (error.isValid())
                         ep->warning(error);
                     if (a[0]) {
-                        QMetaType(returnType).destruct(a[0]);
-                        QMetaType(returnType).construct(a[0], nullptr);
+                        returnType.destruct(a[0]);
+                        returnType.construct(a[0], nullptr);
                     }
                 } else {
                     if (a[0]) {
                         // When the return type is QVariant, JS objects are to be returned as QJSValue wrapped in
                         // QVariant.
-                        if (returnType == QMetaType::QVariant)
+                        if (returnType == QMetaType::fromType<QVariant>())
                             *(QVariant *)a[0] = scope.engine->toVariant(result, 0);
                         else
-                            scope.engine->metaTypeFromJS(result, returnType, a[0]);
+                            scope.engine->metaTypeFromJS(result, returnType.id(), a[0]);
                     }
                 }
 

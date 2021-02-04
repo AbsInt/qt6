@@ -56,10 +56,7 @@ private:
 };
 
 static const QStringList unknownBuiltins = {
-    // TODO: "string" should be added to builtins.qmltypes, and the special handling below removed
     QStringLiteral("alias"),    // TODO: we cannot properly resolve aliases, yet
-    QStringLiteral("QRectF"),   // TODO: should be added to builtins.qmltypes
-    QStringLiteral("QFont"),    // TODO: should be added to builtins.qmltypes
     QStringLiteral("QJSValue"), // We cannot say anything intelligent about untyped JS values.
     QStringLiteral("variant"),  // Same for generic variants
 };
@@ -86,6 +83,12 @@ static bool walkViaParentAndAttachedScopes(QQmlJSScope::ConstPtr rootType,
         return false;
     std::stack<QQmlJSScope::ConstPtr> stack;
     stack.push(rootType);
+
+    if (!rootType->isComposite()) {
+        if (auto extension = rootType->extensionType())
+            stack.push(extension);
+    }
+
     while (!stack.empty()) {
         const auto type = stack.top();
         stack.pop();
@@ -93,8 +96,13 @@ static bool walkViaParentAndAttachedScopes(QQmlJSScope::ConstPtr rootType,
         if (visit(type))
             return true;
 
-        if (auto superType = type->baseType())
+        if (auto superType = type->baseType()) {
             stack.push(superType);
+            if (type->isComposite() && !superType->isComposite()) {
+                if (auto extension = superType->extensionType())
+                    stack.push(extension);
+            }
+        }
 
         if (auto attachedType = type->attachedType())
             stack.push(attachedType);
@@ -197,22 +205,19 @@ bool CheckIdentifiers::checkMemberAccess(const QVector<FieldMember> &members,
             return true; // Access to property of JS function
 
         auto checkEnums = [&](const QQmlJSScope::ConstPtr &scope) {
-            const auto enums = scope->enumerations();
-            for (const auto &enumerator : enums) {
-                if (enumerator.name() == access.m_name) {
-                    detectedRestrictiveKind = QLatin1String("enum");
-                    detectedRestrictiveName = access.m_name;
-                    expectedNext.append(enumerator.keys());
-                    return true;
-                }
-                for (const QString &key : enumerator.keys()) {
-                    if (access.m_name == key) {
-                        detectedRestrictiveKind = QLatin1String("enum");
-                        detectedRestrictiveName = access.m_name;
-                        return true;
-                    }
-                }
+            if (scope->hasEnumeration(access.m_name)) {
+                detectedRestrictiveKind = QLatin1String("enum");
+                detectedRestrictiveName = access.m_name;
+                expectedNext.append(scope->enumeration(access.m_name).keys());
+                return true;
             }
+
+            if (scope->hasEnumerationKey(access.m_name)) {
+                detectedRestrictiveKind = QLatin1String("enum");
+                detectedRestrictiveName = access.m_name;
+                return true;
+            }
+
             return false;
         };
 
@@ -294,7 +299,7 @@ bool CheckIdentifiers::operator()(
             if (memberAccessChain.isEmpty())
                 continue;
 
-            const auto memberAccessBase = memberAccessChain.takeFirst();
+            auto memberAccessBase = memberAccessChain.takeFirst();
             const auto jsId = currentScope->findJSIdentifier(memberAccessBase.m_name);
             if (jsId.has_value() && jsId->kind != QQmlJSScope::JavaScriptIdentifier::Injected)
                 continue;
@@ -349,12 +354,24 @@ bool CheckIdentifiers::operator()(
                 continue;
             }
 
-            // TODO: Lots of builtins are missing
-            if (memberAccessBase.m_name == QLatin1String("Qt"))
-                continue;
+            const QString baseName = memberAccessBase.m_name;
+            auto typeIt = m_types.find(memberAccessBase.m_name);
+            bool baseIsPrefixed = false;
+            while (typeIt != m_types.end() && typeIt->isNull()) {
+                // This is a namespaced import. Check with the full name.
+                if (!memberAccessChain.isEmpty()) {
+                    auto location = memberAccessBase.m_location;
+                    memberAccessBase = memberAccessChain.takeFirst();
+                    memberAccessBase.m_name.prepend(baseName + u'.');
+                    location.length = memberAccessBase.m_location.offset - location.offset
+                            + memberAccessBase.m_location.length;
+                    memberAccessBase.m_location = location;
+                    typeIt = m_types.find(memberAccessBase.m_name);
+                    baseIsPrefixed = true;
+                }
+            }
 
-            const auto typeIt = m_types.find(memberAccessBase.m_name);
-            if (typeIt != m_types.end()) {
+            if (typeIt != m_types.end() && !typeIt->isNull()) {
                 if (!checkMemberAccess(memberAccessChain, *typeIt))
                     noUnqualifiedIdentifier = false;
                 continue;
@@ -362,10 +379,20 @@ bool CheckIdentifiers::operator()(
 
             noUnqualifiedIdentifier = false;
             const auto location = memberAccessBase.m_location;
-            m_colorOut->writePrefixedMessage(QString::fromLatin1("unqualified access at %1:%2:%3\n")
-                           .arg(m_fileName)
-                           .arg(location.startLine).arg(location.startColumn),
-                           Warning);
+
+            if (baseIsPrefixed) {
+                m_colorOut->writePrefixedMessage(
+                            QString::fromLatin1("type not found in namespace at %1:%2:%3\n")
+                               .arg(m_fileName)
+                               .arg(location.startLine).arg(location.startColumn),
+                               Warning);
+            } else {
+                m_colorOut->writePrefixedMessage(
+                            QString::fromLatin1("unqualified access at %1:%2:%3\n")
+                               .arg(m_fileName)
+                               .arg(location.startLine).arg(location.startColumn),
+                               Warning);
+            }
 
             printContext(m_code, m_colorOut, location);
 
@@ -373,7 +400,7 @@ bool CheckIdentifiers::operator()(
             const auto firstElement = root->childScopes()[0];
             if (firstElement->hasProperty(memberAccessBase.m_name)
                     || firstElement->hasMethod(memberAccessBase.m_name)
-                    || firstElement->enumerations().contains(memberAccessBase.m_name)) {
+                    || firstElement->hasEnumeration(memberAccessBase.m_name)) {
                 m_colorOut->writePrefixedMessage(
                             memberAccessBase.m_name
                             + QLatin1String(" is a member of the root element\n")

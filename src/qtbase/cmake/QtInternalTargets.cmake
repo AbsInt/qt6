@@ -147,6 +147,15 @@ elseif(UIKIT)
     target_compile_definitions(PlatformCommonInternal INTERFACE GLES_SILENCE_DEPRECATION)
 endif()
 
+if(WIN32)
+    target_compile_definitions(PlatformCommonInternal INTERFACE "UNICODE;_UNICODE")
+    if(MSVC)
+        target_compile_definitions(PlatformCommonInternal INTERFACE
+            "$<$<STREQUAL:$<TARGET_PROPERTY:TYPE>,SHARED_LIBRARY>:_WINDLL>"
+        )
+    endif()
+endif()
+
 if(UIKIT)
     # Do what mkspecs/features/uikit/default_pre.prf does, aka enable sse2 for
     # simulator_and_device_builds.
@@ -167,7 +176,7 @@ if (MSVC)
             -FS
             -Zc:rvalueCast
             -Zc:inline
-    )
+        )
     endif()
     if (MSVC_VERSION GREATER_EQUAL 1899)
         target_compile_options(PlatformCommonInternal INTERFACE
@@ -192,9 +201,13 @@ if (MSVC)
 
     target_compile_options(PlatformCommonInternal INTERFACE -Zc:wchar_t)
 
+    target_compile_options(PlatformCommonInternal INTERFACE
+        $<$<NOT:$<CONFIG:Debug>>:-guard:cf>
+    )
+
     target_link_options(PlatformCommonInternal INTERFACE
         -DYNAMICBASE -NXCOMPAT
-        $<$<NOT:$<CONFIG:Debug>>:-OPT:REF -OPT:ICF>
+        $<$<NOT:$<CONFIG:Debug>>:-OPT:REF -OPT:ICF -GUARD:CF>
     )
 endif()
 

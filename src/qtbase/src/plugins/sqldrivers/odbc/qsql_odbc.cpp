@@ -347,12 +347,16 @@ static QMetaType qDecodeODBCType(SQLSMALLINT sqltype, bool isSigned = true)
     switch (sqltype) {
     case SQL_DECIMAL:
     case SQL_NUMERIC:
-    case SQL_REAL:
-    case SQL_FLOAT:
-    case SQL_DOUBLE:
+    case SQL_FLOAT: // 24 or 53 bits precision
+    case SQL_DOUBLE:// 53 bits
         type = QMetaType::Double;
         break;
+    case SQL_REAL:  // 24 bits
+        type = QMetaType::Float;
+        break;
     case SQL_SMALLINT:
+        type = isSigned ? QMetaType::Short : QMetaType::UShort;
+        break;
     case SQL_INTEGER:
     case SQL_BIT:
         type = isSigned ? QMetaType::Int : QMetaType::UInt;
@@ -1220,9 +1224,11 @@ QVariant QODBCResult::data(int field)
             d->fieldCache[i] = qGetBigIntData(d->hStmt, i, false);
             break;
         case QMetaType::Int:
+        case QMetaType::Short:
             d->fieldCache[i] = qGetIntData(d->hStmt, i);
-        break;
+            break;
         case QMetaType::UInt:
+        case QMetaType::UShort:
             d->fieldCache[i] = qGetIntData(d->hStmt, i, false);
             break;
         case QMetaType::QDate:
@@ -1283,7 +1289,8 @@ QVariant QODBCResult::data(int field)
                     d->fieldCache[i] = qGetDoubleData(d->hStmt, i);
                     break;
                 case QSql::HighPrecision:
-                    d->fieldCache[i] = qGetStringData(d->hStmt, i, info.length(), false);
+                    const int extra = info.precision() > 0 ? 1 : 0;
+                    d->fieldCache[i] = qGetStringData(d->hStmt, i, info.length() + extra, false);
                     break;
             }
             break;
@@ -1513,12 +1520,48 @@ bool QODBCResult::exec()
                                       0,
                                       *ind == SQL_NULL_DATA ? ind : NULL);
                 break;
+            case QMetaType::Short:
+                r = SQLBindParameter(d->hStmt,
+                                      i + 1,
+                                      qParamType[bindValueType(i) & QSql::InOut],
+                                      SQL_C_SSHORT,
+                                      SQL_SMALLINT,
+                                      0,
+                                      0,
+                                      const_cast<void *>(val.constData()),
+                                      0,
+                                      *ind == SQL_NULL_DATA ? ind : NULL);
+                break;
+            case QMetaType::UShort:
+                r = SQLBindParameter(d->hStmt,
+                                      i + 1,
+                                      qParamType[bindValueType(i) & QSql::InOut],
+                                      SQL_C_USHORT,
+                                      SQL_NUMERIC,
+                                      15,
+                                      0,
+                                      const_cast<void *>(val.constData()),
+                                      0,
+                                      *ind == SQL_NULL_DATA ? ind : NULL);
+                break;
             case QMetaType::Double:
                 r = SQLBindParameter(d->hStmt,
                                       i + 1,
                                       qParamType[bindValueType(i) & QSql::InOut],
                                       SQL_C_DOUBLE,
                                       SQL_DOUBLE,
+                                      0,
+                                      0,
+                                      const_cast<void *>(val.constData()),
+                                      0,
+                                      *ind == SQL_NULL_DATA ? ind : NULL);
+                break;
+            case QMetaType::Float:
+                r = SQLBindParameter(d->hStmt,
+                                      i + 1,
+                                      qParamType[bindValueType(i) & QSql::InOut],
+                                      SQL_C_FLOAT,
+                                      SQL_REAL,
                                       0,
                                       0,
                                       const_cast<void *>(val.constData()),
@@ -1705,8 +1748,11 @@ bool QODBCResult::exec()
                                QTime(dt.hour, dt.minute, dt.second, dt.fraction / 1000000)));
                 break; }
             case QMetaType::Bool:
+            case QMetaType::Short:
+            case QMetaType::UShort:
             case QMetaType::Int:
             case QMetaType::UInt:
+            case QMetaType::Float:
             case QMetaType::Double:
             case QMetaType::QByteArray:
             case QMetaType::LongLong:

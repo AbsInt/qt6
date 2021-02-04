@@ -73,6 +73,8 @@ public:
     QStyle();
     virtual ~QStyle();
 
+    QString name() const;
+
     virtual void polish(QWidget *widget);
     virtual void unpolish(QWidget *widget);
 
@@ -731,6 +733,7 @@ public:
         SH_ComboBox_AllowWheelScrolling,
         SH_SpinBox_ButtonsInsideFrame,
         SH_SpinBox_StepModifier,
+        SH_TabBar_AllowWheelScrolling,
         // Add new style hint values here
 
         SH_CustomBase = 0xf0000000
@@ -855,12 +858,16 @@ public:
     const QStyle * proxy() const;
 
 private:
+    void setName(const QString &name);
+
+private:
     Q_DISABLE_COPY(QStyle)
     friend class QWidget;
     friend class QWidgetPrivate;
     friend class QApplication;
     friend class QProxyStyle;
     friend class QProxyStylePrivate;
+    friend class QStyleFactory;
     void setProxy(QStyle *style);
 };
 

@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2020 The Qt Company Ltd.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Copyright (C) 2016 Intel Corporation.
 ** Contact: https://www.qt.io/licensing/
 **
@@ -91,8 +91,8 @@
 #endif // QT_NO_QOBJECT
 
 #if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
-#  include <private/qjni_p.h>
-#  include <private/qjnihelpers_p.h>
+#include <QJniObject>
+#include <private/qjnihelpers_p.h>
 #endif
 
 #ifdef Q_OS_MAC
@@ -170,17 +170,17 @@ QString QCoreApplicationPrivate::appVersion() const
 #  ifdef Q_OS_DARWIN
     applicationVersion = infoDictionaryStringProperty(QStringLiteral("CFBundleVersion"));
 #  elif defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
-    QJNIObjectPrivate context(QtAndroidPrivate::context());
+    QJniObject context(QtAndroidPrivate::context());
     if (context.isValid()) {
-        QJNIObjectPrivate pm = context.callObjectMethod(
+        QJniObject pm = context.callObjectMethod(
             "getPackageManager", "()Landroid/content/pm/PackageManager;");
-        QJNIObjectPrivate pn = context.callObjectMethod<jstring>("getPackageName");
+        QJniObject pn = context.callObjectMethod<jstring>("getPackageName");
         if (pm.isValid() && pn.isValid()) {
-            QJNIObjectPrivate packageInfo = pm.callObjectMethod(
+            QJniObject packageInfo = pm.callObjectMethod(
                 "getPackageInfo", "(Ljava/lang/String;I)Landroid/content/pm/PackageInfo;",
                 pn.object(), 0);
             if (packageInfo.isValid()) {
-                QJNIObjectPrivate versionName = packageInfo.getObjectField(
+                QJniObject versionName = packageInfo.getObjectField(
                     "versionName", "Ljava/lang/String;");
                 if (versionName.isValid())
                     return versionName.toString();
@@ -1231,8 +1231,10 @@ bool QCoreApplication::closingDown()
     Processes some pending events for the calling thread according to
     the specified \a flags.
 
-    You can call this function occasionally when your program is busy
-    performing a long operation (e.g. copying a file).
+    Use of this function is discouraged. Instead, prefer to move long
+    operations out of the GUI thread into an auxiliary one and to completely
+    avoid nested event loop processing. If event processing is really
+    necessary, consider using \l QEventLoop instead.
 
     In the event that you are running a local loop which calls this function
     continuously, without an event loop, the
@@ -1268,13 +1270,18 @@ void QCoreApplication::processEvents(QEventLoop::ProcessEventsFlags flags)
     milliseconds or until there are no more events to process,
     whichever is shorter.
 
-    You can call this function occasionally when your program is busy
-    doing a long operation (e.g. copying a file).
+    Use of this function is discouraged. Instead, prefer to move long
+    operations out of the GUI thread into an auxiliary one and to completely
+    avoid nested event loop processing. If event processing is really
+    necessary, consider using \l QEventLoop instead.
 
     Calling this function processes events only for the calling thread.
 
     \note Unlike the \l{QCoreApplication::processEvents(QEventLoop::ProcessEventsFlags flags)}{processEvents()}
     overload, this function also processes events that are posted while the function runs.
+
+    \note All events that were queued before the timeout will be processed,
+    however long it takes.
 
     \threadsafe
 
@@ -2730,9 +2737,10 @@ QStringList QCoreApplication::libraryPathsLocked()
 
 /*!
 
-    Sets the list of directories to search when loading libraries to
-    \a paths. All existing paths will be deleted and the path list
-    will consist of the paths given in \a paths.
+    Sets the list of directories to search when loading plugins with
+    QLibrary to \a paths. All existing paths will be deleted and the
+    path list will consist of the paths given in \a paths and the path
+    to the application.
 
     The library paths are reset to the default when an instance of
     QCoreApplication is destructed.

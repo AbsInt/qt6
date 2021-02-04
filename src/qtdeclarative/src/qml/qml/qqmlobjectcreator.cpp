@@ -66,6 +66,9 @@
 
 #include <qtqml_tracepoints_p.h>
 #include <QScopedValueRollback>
+#include <QLoggingCategory>
+
+Q_LOGGING_CATEGORY(lcQmlDefaultMethod, "qt.qml.defaultmethod")
 
 QT_USE_NAMESPACE
 
@@ -346,7 +349,7 @@ void QQmlObjectCreator::setPropertyValue(const QQmlPropertyData *property, const
     QQmlPropertyData::WriteFlags propertyWriteFlags = QQmlPropertyData::BypassInterceptor | QQmlPropertyData::RemoveBindingOnAliasWrite;
     QV4::Scope scope(v4);
 
-    int propertyType = property->propType();
+    int propertyType = property->propType().id();
 
     if (property->isEnum()) {
         if (binding->flags & QV4::CompiledData::Binding::IsResolvedEnum) {
@@ -576,37 +579,37 @@ void QQmlObjectCreator::setPropertyValue(const QQmlPropertyData *property, const
     }
     default: {
         // generate single literal value assignment to a list property if required
-        if (property->propType() == qMetaTypeId<QList<qreal> >()) {
+        if (propertyType == qMetaTypeId<QList<qreal> >()) {
             assertType(QV4::CompiledData::Binding::Type_Number);
             QList<qreal> value;
             value.append(compilationUnit->bindingValueAsNumber(binding));
             property->writeProperty(_qobject, &value, propertyWriteFlags);
             break;
-        } else if (property->propType() == qMetaTypeId<QList<int> >()) {
+        } else if (propertyType == qMetaTypeId<QList<int> >()) {
             assertType(QV4::CompiledData::Binding::Type_Number);
             double n = compilationUnit->bindingValueAsNumber(binding);
             QList<int> value;
             value.append(int(n));
             property->writeProperty(_qobject, &value, propertyWriteFlags);
             break;
-        } else if (property->propType() == qMetaTypeId<QList<bool> >()) {
+        } else if (propertyType == qMetaTypeId<QList<bool> >()) {
             assertType(QV4::CompiledData::Binding::Type_Boolean);
             QList<bool> value;
             value.append(binding->valueAsBoolean());
             property->writeProperty(_qobject, &value, propertyWriteFlags);
             break;
-        } else if (property->propType() == qMetaTypeId<QList<QUrl> >()) {
+        } else if (propertyType == qMetaTypeId<QList<QUrl> >()) {
             assertType(QV4::CompiledData::Binding::Type_String);
             QList<QUrl> value { QUrl(compilationUnit->bindingValueAsString(binding)) };
             property->writeProperty(_qobject, &value, propertyWriteFlags);
             break;
-        } else if (property->propType() == qMetaTypeId<QList<QString> >()) {
+        } else if (propertyType == qMetaTypeId<QList<QString> >()) {
             assertOrNull(binding->evaluatesToString());
             QList<QString> value;
             value.append(compilationUnit->bindingValueAsString(binding));
             property->writeProperty(_qobject, &value, propertyWriteFlags);
             break;
-        } else if (property->propType() == qMetaTypeId<QJSValue>()) {
+        } else if (propertyType == qMetaTypeId<QJSValue>()) {
             QJSValue value;
             if (binding->type == QV4::CompiledData::Binding::Type_Boolean) {
                 value = QJSValue(binding->valueAsBoolean());
@@ -627,12 +630,12 @@ void QQmlObjectCreator::setPropertyValue(const QQmlPropertyData *property, const
 
         // otherwise, try a custom type assignment
         QString stringValue = compilationUnit->bindingValueAsString(binding);
-        QQmlMetaType::StringConverter converter = QQmlMetaType::customStringConverter(property->propType());
+        QQmlMetaType::StringConverter converter = QQmlMetaType::customStringConverter(property->propType().id());
         Q_ASSERT(converter);
         QVariant value = (*converter)(stringValue);
 
         QMetaProperty metaProperty = _qobject->metaObject()->property(property->coreIndex());
-        if (value.isNull() || metaProperty.userType() != property->propType()) {
+        if (value.isNull() || metaProperty.metaType() != property->propType()) {
             recordError(binding->location, tr("Cannot assign value %1 to property %2").arg(stringValue).arg(QString::fromUtf8(metaProperty.name())));
             break;
         }
@@ -664,7 +667,7 @@ void QQmlObjectCreator::setupBindings(bool applyDeferredBindings)
     if (_compiledObject->idNameIndex) {
         const QQmlPropertyData *idProperty = propertyData.last();
         Q_ASSERT(!idProperty || !idProperty->isValid() || idProperty->name(_qobject) == QLatin1String("id"));
-        if (idProperty && idProperty->isValid() && idProperty->isWritable() && idProperty->propType() == QMetaType::QString) {
+        if (idProperty && idProperty->isValid() && idProperty->isWritable() && idProperty->propType().id() == QMetaType::QString) {
             QV4::CompiledData::Binding idBinding;
             idBinding.propertyNameIndex = 0; // Not used
             idBinding.flags = 0;
@@ -806,7 +809,7 @@ bool QQmlObjectCreator::setPropertyBinding(const QQmlPropertyData *bindingProper
     }
 
     // ### resolve this at compile time
-    if (bindingProperty && bindingProperty->propType() == qMetaTypeId<QQmlScriptString>()) {
+    if (bindingProperty && bindingProperty->propType() == QMetaType::fromType<QQmlScriptString>()) {
         QQmlScriptString ss(compilationUnit->bindingValueAsScriptString(binding),
                             context->asQQmlContext(), _scopeObject);
         ss.d.data()->bindingId = binding->type == QV4::CompiledData::Binding::Type_Script ? binding->value.compiledScriptIndex : (quint32)QQmlBinding::Invalid;
@@ -919,7 +922,8 @@ bool QQmlObjectCreator::setPropertyBinding(const QQmlPropertyData *bindingProper
                 qmlBinding = QQmlTranslationPropertyBinding::create(bindingProperty, compilationUnit, binding);
             } else {
                 QV4::Function *runtimeFunction = compilationUnit->runtimeFunctions[binding->value.compiledScriptIndex];
-                qmlBinding = QQmlPropertyBinding::create(bindingProperty, runtimeFunction, _scopeObject, context, currentQmlContext());
+                QQmlPropertyIndex index(bindingProperty->coreIndex(), -1);
+                qmlBinding = QQmlPropertyBinding::create(bindingProperty, runtimeFunction, _scopeObject, context, currentQmlContext(), _bindingTarget, index);
             }
             sharedState.data()->allQPropertyBindings.emplaceBack(_bindingTarget, bindingProperty->coreIndex(), qmlBinding);
         } else {
@@ -1036,7 +1040,7 @@ bool QQmlObjectCreator::setPropertyBinding(const QQmlPropertyData *bindingProper
             return false;
         }
 
-        // Assigning object to signal property?
+        // Assigning object to signal property? ### Qt 7: Remove that functionality
         if (binding->flags & QV4::CompiledData::Binding::IsSignalHandlerObject) {
             if (!bindingProperty->isFunction()) {
                 recordError(binding->valueLocation, tr("Cannot assign an object to signal property %1").arg(bindingProperty->name(_qobject)));
@@ -1047,6 +1051,9 @@ bool QQmlObjectCreator::setPropertyBinding(const QQmlPropertyData *bindingProper
                 recordError(binding->valueLocation, tr("Cannot assign object type %1 with no default method").arg(QString::fromLatin1(createdSubObject->metaObject()->className())));
                 return false;
             }
+            qCWarning(lcQmlDefaultMethod) << "Assigning an object to a signal handler is deprecated."
+                                             "Instead, create the object, give it an id, and call the desired slot from the signal handler."
+                                             ;
 
             QMetaMethod signalMethod = _qobject->metaObject()->method(bindingProperty->coreIndex());
             if (!QMetaObject::checkConnectArgs(signalMethod, method)) {
@@ -1066,7 +1073,7 @@ bool QQmlObjectCreator::setPropertyBinding(const QQmlPropertyData *bindingProper
         int propertyWriteStatus = -1;
         void *argv[] = { nullptr, nullptr, &propertyWriteStatus, &propertyWriteFlags };
 
-        if (const char *iid = QQmlMetaType::interfaceIId(bindingProperty->propType())) {
+        if (const char *iid = QQmlMetaType::interfaceIId(bindingProperty->propType().id())) {
             void *ptr = createdSubObject->qt_metacast(iid);
             if (ptr) {
                 argv[0] = &ptr;
@@ -1075,7 +1082,7 @@ bool QQmlObjectCreator::setPropertyBinding(const QQmlPropertyData *bindingProper
                 recordError(binding->location, tr("Cannot assign object to interface property"));
                 return false;
             }
-        } else if (bindingProperty->propType() == QMetaType::QVariant) {
+        } else if (bindingProperty->propType() == QMetaType::fromType<QVariant>()) {
             if (bindingProperty->isVarProperty()) {
                 QV4::Scope scope(v4);
                 QV4::ScopedValue wrappedObject(scope, QV4::QObjectWrapper::wrap(engine->handle(), createdSubObject));
@@ -1085,7 +1092,7 @@ bool QQmlObjectCreator::setPropertyBinding(const QQmlPropertyData *bindingProper
                 argv[0] = &value;
                 QMetaObject::metacall(_qobject, QMetaObject::WriteProperty, bindingProperty->coreIndex(), argv);
             }
-        } else if (bindingProperty->propType() == qMetaTypeId<QJSValue>()) {
+        } else if (bindingProperty->propType() == QMetaType::fromType<QJSValue>()) {
             QV4::Scope scope(v4);
             QV4::ScopedValue wrappedObject(scope, QV4::QObjectWrapper::wrap(engine->handle(), createdSubObject));
             if (bindingProperty->isVarProperty()) {
@@ -1102,7 +1109,7 @@ bool QQmlObjectCreator::setPropertyBinding(const QQmlPropertyData *bindingProper
             void *itemToAdd = createdSubObject;
 
             const char *iid = nullptr;
-            int listItemType = QQmlEnginePrivate::get(engine)->listType(bindingProperty->propType());
+            int listItemType = QQmlEnginePrivate::get(engine)->listType(bindingProperty->propType().id());
             if (listItemType != -1)
                 iid = QQmlMetaType::interfaceIId(listItemType);
             if (iid)

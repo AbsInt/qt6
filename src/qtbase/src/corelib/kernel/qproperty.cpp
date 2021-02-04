@@ -100,25 +100,27 @@ void QPropertyBindingPrivate::unlinkAndDeref()
 
 void QPropertyBindingPrivate::markDirtyAndNotifyObservers()
 {
+    if (eagerlyUpdating) {
+        error = QPropertyBindingError(QPropertyBindingError::BindingLoop);
+        if (isQQmlPropertyBinding)
+            errorCallBack(this);
+        return;
+    }
     if (dirty)
         return;
     dirty = true;
-    if (eagerlyUpdating) {
-        error = QPropertyBindingError(QPropertyBindingError::BindingLoop);
-        return;
-    }
 
     eagerlyUpdating = true;
     QScopeGuard guard([&](){eagerlyUpdating = false;});
-    bool knownIfChanged = false;
+    bool knownToHaveChanged = false;
     if (requiresEagerEvaluation()) {
         // these are compat properties that we will need to evaluate eagerly
         if (!evaluateIfDirtyAndReturnTrueIfValueChanged(propertyDataPtr))
             return;
-        knownIfChanged = true;
+        knownToHaveChanged = true;
     }
     if (firstObserver)
-        firstObserver.notify(this, propertyDataPtr, knownIfChanged);
+        firstObserver.notify(this, propertyDataPtr, knownToHaveChanged);
     if (hasStaticObserver)
         staticObserverCallback(propertyDataPtr);
 }
@@ -129,6 +131,8 @@ bool QPropertyBindingPrivate::evaluateIfDirtyAndReturnTrueIfValueChanged_helper(
 
     if (updating) {
         error = QPropertyBindingError(QPropertyBindingError::BindingLoop);
+        if (isQQmlPropertyBinding)
+            errorCallBack(this);
         return false;
     }
 
@@ -272,7 +276,7 @@ QUntypedPropertyBinding QPropertyBindingData::setBinding(const QUntypedPropertyB
             newBindingRaw->setEagerlyUpdating(true);
             auto changed = newBindingRaw->evaluateIfDirtyAndReturnTrueIfValueChanged(propertyDataPtr);
             if (changed)
-                observer.notify(newBindingRaw, propertyDataPtr, /*alreadyKnownToHaveChanged=*/true);
+                observer.notify(newBindingRaw, propertyDataPtr, /*knownToHaveChanged=*/true);
             newBindingRaw->setEagerlyUpdating(false);
         }
     } else if (observer) {
@@ -375,6 +379,13 @@ void QPropertyBindingData::notifyObservers(QUntypedPropertyData *propertyDataPtr
     QPropertyBindingDataPointer d{this};
     if (QPropertyObserverPointer observer = d.firstObserver())
         observer.notify(d.bindingPtr(), propertyDataPtr);
+}
+
+void QPropertyBindingData::markDirty()
+{
+    QPropertyBindingDataPointer d{this};
+    if (auto *binding = d.bindingPtr())
+        binding->setDirty(true);
 }
 
 int QPropertyBindingDataPointer::observerCount() const
@@ -512,11 +523,8 @@ struct [[nodiscard]] QPropertyObserverNodeProtector {
   ObserverNotifiesChangeHandler case would not work. Thus we instead pass the knowledge of
   whether the value has changed we obtained when evaluating the binding eagerly along
  */
-void QPropertyObserverPointer::notify(QPropertyBindingPrivate *triggeringBinding, QUntypedPropertyData *propertyDataPtr, bool alreadyKnownToHaveChanged)
+void QPropertyObserverPointer::notify(QPropertyBindingPrivate *triggeringBinding, QUntypedPropertyData *propertyDataPtr, bool knownToHaveChanged)
 {
-    bool knownIfPropertyChanged = alreadyKnownToHaveChanged;
-    bool propertyChanged = true;
-
     auto observer = const_cast<QPropertyObserver*>(ptr);
     /*
      * The basic idea of the loop is as follows: We iterate over all observers in the linked list,
@@ -551,12 +559,11 @@ void QPropertyObserverPointer::notify(QPropertyBindingPrivate *triggeringBinding
             }
             // both evaluateIfDirtyAndReturnTrueIfValueChanged and handlerToCall might modify the list
             QPropertyObserverNodeProtector protector(observer);
-            if (!knownIfPropertyChanged && triggeringBinding) {
-                knownIfPropertyChanged = true;
-                propertyChanged = triggeringBinding->evaluateIfDirtyAndReturnTrueIfValueChanged(propertyDataPtr);
+            if (!knownToHaveChanged && triggeringBinding) {
+                if (!triggeringBinding->evaluateIfDirtyAndReturnTrueIfValueChanged(propertyDataPtr))
+                    return;
+                knownToHaveChanged = true;
             }
-            if (!propertyChanged)
-                return;
             handlerToCall(observer, propertyDataPtr);
             next = protector.next();
             break;
@@ -682,6 +689,210 @@ QString QPropertyBindingError::description() const
     \note Using this method will bypass any potential binding registered for this property.
 */
 
+/*!
+  \class QUntypedBindable
+  \inmodule QtCore
+  \brief QUntypedBindable is a uniform interface over bindable properties like \c QProperty\<T\>
+         and \c QObjectBindableProperty of any type \c T.
+  \since 6.0
+
+  \ingroup tools
+
+  QUntypedBindable is a fully type-erased generic interface to wrap bindable properties.
+  You can use it to interact with properties without knowing their type nor caring what
+  kind of bindable property they are (e.g. QProperty or QObjectBindableProperty).
+  For most use cases, using QBindable\<T\> (which is generic over the property implementation
+  but has a fixed type) should be preferred.
+*/
+
+/*!
+  \fn QUntypedBindable::QUntypedBindable()
+
+  Default-constructs a QUntypedBindable. It is in an invalid state.
+  \sa  isValid()
+*/
+
+/*!
+   \fn template<typename Property> QUntypedBindable::QUntypedBindable(Property *property)
+
+   Constructs a QUntypedBindable from the property \a property. If Property is const,
+   the QUntypedBindable will be read only. If \a property is null, the QUntypedBindable
+   will be invalid.
+
+   \sa isValid(), isReadOnly()
+ */
+
+/*!
+   \fn bool QUntypedBindble::isValid()
+
+   Returns true if the QUntypedBindable is valid. Methods called on an invalid
+   QUntypedBindable generally have no effect, unless otherwise noted.
+ */
+
+/*!
+   \fn bool QUntypedBindble::isReadOnly()
+   \since 6.1
+
+   Returns true if the QUntypedBindable is read-only.
+ */
+
+/*!
+   \fn bool QUntypedBindable::isBindable()
+   \internal
+
+   Returns true if the underlying property's binding can be queried
+   with binding() and, if not read-only, changed with setBinding.
+   Only QObjectComputedProperty currently leads to this method returning
+   false.
+
+   \sa isReadOnly()
+ */
+
+/*!
+  \fn QUntypedPropertyBinding QUntypedBindable::makeBinding()
+
+  Creates a binding returning the underlying properties' value.
+*/
+
+/*!
+  \fn void QUntypedBindable::observe(QPropertyObserver *observer)
+  \internal
+
+  Installs the observer on the underlying property.
+*/
+
+/*!
+  \fn template<typename Functor> QPropertyChangeHandler<Functor> QUntypedBindable::onValueChanged(Functor f)
+
+  Installs \a f as a change handler. Whenever the underlying property changes, \a f will be called, as
+  long as the returned \c QPropertyChangeHandler and the property are kept alive.
+
+  \sa template<typename T> QProperty::onValueChanged(), subscribe()
+*/
+
+/*!
+    template<typename Functor> QPropertyChangeHandler<Functor> QUntypedBindable::subscribe(Functor f)
+
+    Behaves like a call to \a f followed by \c onValueChanged(f),
+
+    \sa onValueChanged
+*/
+
+/*!
+  \fn QUntypedPropertyBinding QUntypedBindable::binding()
+
+  Returns the underlying property's binding if there is any, or a default
+  constructed QUntypedPropertyBinding otherwise.
+
+  \sa hasBinding()
+*/
+
+/*!
+  \fn QUntypedPropertyBinding QUntypedBindable::takeBinding()
+
+  Removes the currently set binding from the property and returns it.
+  Returns a default-constructed QUntypedPropertyBinding if no binding is set.
+
+  \since 6.1
+*/
+
+/*!
+  \fn bool QUntypedBindable::setBinding(const QUntypedPropertyBinding &binding)
+
+  Sets the underlying property's binding to \a binding. This does not have any effect
+  if the QUntypedBindable is read-only, null or if \a binding's type does match the
+  underlying property's type.
+
+  \sa QUntypedPropertyBinding::valueMetaType()
+*/
+
+/*!
+  \fn bool QUntypedBindable::hasBinding()
+
+  Returns true if the underlying property has a binding.
+*/
+
+/*!
+  \class QBindable
+  \inmodule QtCore
+  \brief QBindable is a wrapper class around binding-enabled properties. It allows type-safe
+         operations while abstracting the differences between the various property classes away.
+  \inherits QUntypedBindable
+
+   \ingroup tools
+
+   QBindable\<T\> helps to integrate Qt's traditional Q_PROPERTY with binding-enabled properties.
+   If a property is backed by a QProperty, QObjectBindableProperty or QObjectComputedProperty,
+   you can add \c BINDABLE bindablePropertyName to the Q_PROPERTY
+   declaration, where bindablePropertyName is a function returning an instance of QBindable
+   constructed from the QProperty. The returned QBindable allows users of the property to set
+   and query bindings of the property, without having to know the exact kind of binding-enabled
+   property used.
+
+   \snippet code/src_corelib_kernel_qproperty.cpp 0
+   \snippet code/src_corelib_kernel_qproperty.cpp 3
+
+   \sa QMetaProperty::isBindable, template <typename T> QProperty<T>, QObjectBindableProperty
+*/
+
+/*!
+  \fn template<typename T> QPropertyBinding<T> QBindable<T>::makeBinding(const QPropertyBindingSourceLocation &location)
+
+  Constructs a binding evaluating to the underlying property's value.
+*/
+
+/*!
+  \fn template <typename T> QPropertyBinding<T> QBindable<T>::binding()
+
+   Returns  the currently set binding of the underlying property. If the property does not
+   have a binding, the returned \c QPropertyBinding<T> will be invalid.
+
+   \sa setBinding, QPropertyBinding<T>::isValid(), hasBinding
+*/
+
+/*!
+  \fn template <typename T> QPropertyBinding<T> QBindable<T>::takeBinding()
+
+   Removes the currently set binding of the underlying property and returns it.
+   If the property does not have a binding, the returned \c QPropertyBinding<T> will be invalid.
+
+   \sa setBinding, getBinding, QPropertyBinding<T>::isValid(), hasBinding
+*/
+
+
+/*!
+  \fn template <typename T> void QBindable<T>::setBinding(const QPropertyBinding<T> &binding)
+
+   Sets the underlying property's binding to \a binding. Does nothing if the QBindable is
+   read-only or invalid.
+
+   \sa binding, QPropertyBinding<T>::isValid(), isReadOnly(), isValid()
+*/
+
+/*!
+  \fn  template <typename T> template <typename Functor> QPropertyBinding<T> QBindable<T>::setBinding(Functor f);
+  \overload
+
+  Creates a \c QPropertyBinding<T> from \a f, and sets it as the underlying property's binding.
+*/
+
+/*!
+  \fn template <typename T> T QBindable<T>::value() const
+
+  Returns the underlying property's current value. If the QBindable is invalid,
+  a default constructed \T is returned.
+
+  \sa isValid()
+*/
+
+/*!
+  \fn template <typename T> void QBindable<T>::setValue(const T & value) const
+
+  Sets the underlying property's value to \a value. This removes any currenltly set
+  binding from it. This function has no effect if the QBindable is read-only or invalid.
+
+  \sa isValid(), isReadOnly(), setBinding()
+*/
 
 /*!
   \class QProperty
@@ -691,64 +902,13 @@ QString QPropertyBindingError::description() const
 
   \ingroup tools
 
-  QProperty\<T\> is a generic container that holds an instance of T. You can assign
+  QProperty\<T\> is one of the classes implementing \l {Qt Bindable Properties}.
+  It is a container that holds an instance of T. You can assign
   a value to it and you can read it via the value() function or the T conversion
   operator. You can also tie the property to an expression that computes the value
   dynamically, the binding expression. It is represented as a C++ lambda and
   can be used to express relationships between different properties in your
   application.
-
-  The binding expression computes the value by reading other QProperty values.
-  Behind the scenes this dependency is tracked. Whenever a change in any property's
-  dependency is detected, the binding expression is re-evaluated and the new
-  result is applied to the property. This happens lazily, by marking the binding
-  as dirty and evaluating it only when the property's value is requested. For example:
-
-  \code
-    QProperty<QString> firstname("John");
-    QProperty<QString> lastname("Smith");
-    QProperty<int> age(41);
-
-    QProperty<QString> fullname;
-    fullname.setBinding([&]() { return firstname.value() + " " + lastname.value() + " age: " + QString::number(age.value()); });
-
-    qDebug() << fullname.value(); // Prints "John Smith age: 41"
-
-    firstname = "Emma"; // Marks binding expression as dirty
-
-    qDebug() << fullname.value(); // Re-evaluates the binding expression and prints "Emma Smith age: 41"
-
-    // Birthday is coming up
-    age.setValue(age.value() + 1);
-
-    qDebug() << fullname.value(); // Re-evaluates the binding expression and prints "Emma Smith age: 42"
-  \endcode
-
-  When a new value is assigned to the \c firstname property, the binding
-  expression for \c fullname is marked as dirty. So when the last \c qDebug() statement
-  tries to read the name value of the \c fullname property, the expression is
-  evaluated again, \c firstname() will be called again and return the new value.
-
-  Since bindings are C++ lambda expressions, they may do anything that's possible
-  in C++. This includes calling other functions. If those functions access values
-  held by QProperty, they automatically become dependencies to the binding.
-
-  Binding expressions may use properties of any type, so in the above example the age
-  is an integer and folded into the string value using conversion to integer, but
-  the dependency is fully tracked.
-
-  \section1 Tracking properties
-
-  Sometimes the relationships between properties cannot be expressed using
-  bindings. Instead you may need to run custom code whenever the value of a property
-  changes and instead of assigning the value to another property, pass it to
-  other parts of your application. For example writing data into a network socket
-  or printing debug output. QProperty provides two mechanisms for tracking.
-
-  You can register for a callback function to be called whenever the value of
-  a property changes, by using onValueChanged(). If you want the callback to also
-  be called for the current value of the property, register your callback using
-  subscribe() instead.
 */
 
 /*!
@@ -830,6 +990,31 @@ QString QPropertyBindingError::description() const
   property value is read, the binding is evaluated. Whenever a dependency of the
   binding changes, the binding will be re-evaluated the next time the value of
   this property is read.
+*/
+
+/*!
+  \fn template <typename T> void QProperty<T>::markDirty()
+
+  Programatically sets the property dirty. Any binding which depends on it will
+  be notified.
+  This can be useful for properties which do not only depend on bindable properties,
+  but also on non-bindable properties or some other state.
+
+  For example, assume we have a \c Circle class, with a non-bindable \c radius property
+  and a corresponding \c radiusChanged signal. We now want to create a property for a
+  cylinders volume, based on a height \c QProperty and an instance of Circle. To ensure
+  that the volume changes, we can call setDirty in a slot  connected to radiusChanged.
+  \code
+  Circle circle;
+  QProperty<double> height;
+
+  QProperty<double> volume;
+  volume.setBinding([&]() {return height * std::pi_v<double> * circle.radius() * circle.radius()};
+  QOBject::connect(&circle, &Circle::radiusChanged, [&](){volume.markDirty();});
+  \endcode
+
+  \note Binding to a QObjectBindableProperty's signal does not make sense in general. Bindings
+  across bindable properties get marked dirty automatically.
 */
 
 /*!
@@ -925,7 +1110,9 @@ QString QPropertyBindingError::description() const
   \ingroup tools
 
   QObjectBindableProperty is a generic container that holds an
-  instance of T and behaves mostly like \l QProperty. The extra template
+  instance of T and behaves mostly like \l QProperty.
+  It is one of the classes implementing \l {Qt Bindable Properties}.
+  The extra template
   parameters are used to identify the surrounding class and a member function of
   that class. The member function will be called whenever the value held by the
   property changes.
@@ -943,8 +1130,22 @@ QString QPropertyBindingError::description() const
 
   \snippet code/src_corelib_kernel_qproperty.cpp 0
 
-  If the property does not need a changed notification, you can leave out the "NOFITY xChanged" in the Q_PROPERTY macro as well as the last argument
-  of the Q_OBJECT_BINDABLE_PROPERTY macro.
+  If you need to directly initialize the property with some non-default value,
+  you can use the Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS macro. It accepts a
+  value for the initialization as one of its parameters.
+
+  \snippet code/src_corelib_kernel_qproperty.cpp 1
+
+  Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS does not support multiple arguments
+  directly. If your property requires multiple arguments for initialization,
+  please explicitly call the specific constructor.
+
+  \snippet code/src_corelib_kernel_qproperty.cpp 2
+
+  If the property does not need a changed notification, you can leave out the
+  "NOFITY xChanged" in the Q_PROPERTY macro as well as the last argument
+  of the Q_OBJECT_BINDABLE_PROPERTY and Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS
+  macros.
 */
 
 /*!
@@ -1015,6 +1216,17 @@ QString QPropertyBindingError::description() const
   Assigns \a newValue to this property and removes the property's associated
   binding, if present. If the property value changes as a result, calls the
   Callback function on \a owner.
+*/
+
+/*!
+  \fn template <typename Class, typename T, auto offset, auto Callback> void QObjectBindableProperty<Class, T, offset, Callback>::markDirty()
+
+  Programatically sets the property dirty. Any binding which depend on it will
+  be notified.
+  This can be useful for properties which do not only depend on bindable properties,
+  but also on non-bindable properties or some other state.
+
+  \sa QProperty::markDirty()
 */
 
 /*!
@@ -1496,5 +1708,20 @@ void restoreBindingStatus(BindingEvaluationState *status)
 {
     bindingStatus.currentlyEvaluatingBinding = status;
 }
+
+namespace QtPrivate {
+/*!
+    \internal
+    This function can be used to detect whether we are currently
+    evaluating a binding. This can e.g. be used to defer the allocation
+    of extra data for a QPropertyBindingStorage in a getter.
+    Note that this function accesses TLS storage, and is therefore soemwhat
+    costly to call.
+ */
+bool isAnyBindingEvaluating()
+{
+    return bindingStatus.currentlyEvaluatingBinding != nullptr;
+}
+} // namespace QtPrivate end
 
 QT_END_NAMESPACE

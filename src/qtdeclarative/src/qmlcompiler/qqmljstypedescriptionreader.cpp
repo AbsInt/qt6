@@ -220,6 +220,8 @@ void QQmlJSTypeDescriptionReader::readComponent(UiObjectDefinition *ast)
                 scope->setDefaultPropertyName(readStringBinding(script));
             } else if (name == QLatin1String("exports")) {
                 readExports(script, scope);
+            } else if (name == QLatin1String("interfaces")) {
+                readInterfaces(script, scope);
             } else if (name == QLatin1String("exportMetaObjectRevisions")) {
                 readMetaObjectRevisions(script, scope);
             } else if (name == QLatin1String("attachedType")) {
@@ -246,10 +248,12 @@ void QQmlJSTypeDescriptionReader::readComponent(UiObjectDefinition *ast)
                     addWarning(script->firstSourceLocation(),
                                tr("Unknown access semantics \"%1\".").arg(semantics));
                 }
+            } else if (name == QLatin1String("extension")) {
+                scope->setExtensionTypeName(readStringBinding(script));
             } else {
                 addWarning(script->firstSourceLocation(),
                            tr("Expected only name, prototype, defaultProperty, attachedType, "
-                              "valueType, exports, isSingleton, isCreatable, isComposite and "
+                              "valueType, exports, interfaces, isSingleton, isCreatable, isComposite and "
                               "exportMetaObjectRevisions script bindings, not \"%1\".").arg(name));
             }
         } else {
@@ -343,6 +347,9 @@ void QQmlJSTypeDescriptionReader::readProperty(UiObjectDefinition *ast, const QQ
             property.setRevision(readIntBinding(script));
         } else if (id == QLatin1String("bindable")) {
             property.setBindable(readStringBinding(script));
+        } else if (id == QLatin1String("read") || id == QLatin1String("write")) {
+            // QQmlJSMetaProperty currently does not make use of the getter and setter name
+            continue;
         } else {
             addWarning(script->firstSourceLocation(),
                        tr("Expected only type, name, revision, isPointer, isReadonly, bindable, and"
@@ -386,7 +393,7 @@ void QQmlJSTypeDescriptionReader::readEnum(UiObjectDefinition *ast, const QQmlJS
         }
     }
 
-    scope->addEnumeration(metaEnum);
+    scope->addOwnEnumeration(metaEnum);
 }
 
 void QQmlJSTypeDescriptionReader::readParameter(UiObjectDefinition *ast, QQmlJSMetaMethod *metaMethod)
@@ -551,35 +558,47 @@ int QQmlJSTypeDescriptionReader::readIntBinding(UiScriptBinding *ast)
     return i;
 }
 
-void QQmlJSTypeDescriptionReader::readExports(UiScriptBinding *ast, const QQmlJSScope::Ptr &scope)
+ArrayPattern* QQmlJSTypeDescriptionReader::getArray(UiScriptBinding *ast)
 {
     Q_ASSERT(ast);
 
     if (!ast->statement) {
         addError(ast->colonToken, tr("Expected array of strings after colon."));
-        return;
+        return nullptr;
     }
 
     auto *expStmt = cast<ExpressionStatement *>(ast->statement);
     if (!expStmt) {
         addError(ast->statement->firstSourceLocation(),
                  tr("Expected array of strings after colon."));
-        return;
+        return nullptr;
     }
 
     auto *arrayLit = cast<ArrayPattern *>(expStmt->expression);
     if (!arrayLit) {
         addError(expStmt->firstSourceLocation(), tr("Expected array of strings after colon."));
-        return;
+        return nullptr;
     }
+
+    return arrayLit;
+}
+
+void QQmlJSTypeDescriptionReader::readExports(UiScriptBinding *ast, const QQmlJSScope::Ptr &scope)
+{
+    auto *arrayLit = getArray(ast);
+
+    if (!arrayLit)
+        return;
 
     for (PatternElementList *it = arrayLit->elements; it; it = it->next) {
         auto *stringLit = cast<StringLiteral *>(it->element->initializer);
+
         if (!stringLit) {
             addError(arrayLit->firstSourceLocation(),
                      tr("Expected array literal with only string literal members."));
             return;
         }
+
         QString exp = stringLit->value.toString();
         int slashIdx = exp.indexOf(QLatin1Char('/'));
         int spaceIdx = exp.indexOf(QLatin1Char(' '));
@@ -599,6 +618,29 @@ void QQmlJSTypeDescriptionReader::readExports(UiScriptBinding *ast, const QQmlJS
         // ### relocatable exports where package is empty?
         scope->addExport(name, package, version);
     }
+}
+
+void QQmlJSTypeDescriptionReader::readInterfaces(UiScriptBinding *ast, const QQmlJSScope::Ptr &scope)
+{
+    auto *arrayLit = getArray(ast);
+
+    if (!arrayLit)
+        return;
+
+    QStringList list;
+
+    for (PatternElementList *it = arrayLit->elements; it; it = it->next) {
+        auto *stringLit = cast<StringLiteral *>(it->element->initializer);
+        if (!stringLit) {
+            addError(arrayLit->firstSourceLocation(),
+                     tr("Expected array literal with only string literal members."));
+            return;
+        }
+
+        list << stringLit->value.toString();
+    }
+
+    scope->setInterfaceNames(list);
 }
 
 void QQmlJSTypeDescriptionReader::readMetaObjectRevisions(UiScriptBinding *ast,

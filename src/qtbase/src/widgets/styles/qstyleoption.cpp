@@ -377,9 +377,8 @@ QStyleOption &QStyleOption::operator=(const QStyleOption &other)
 */
 
 QStyleOptionFocusRect::QStyleOptionFocusRect()
-    : QStyleOption(Version, SO_FocusRect)
+    : QStyleOptionFocusRect(Version)
 {
-    state |= QStyle::State_KeyboardFocusChange; // assume we had one, will be corrected in initFrom()
 }
 
 /*!
@@ -477,8 +476,7 @@ QStyleOptionFocusRect::QStyleOptionFocusRect(int version)
 */
 
 QStyleOptionFrame::QStyleOptionFrame()
-    : QStyleOption(Version, SO_Frame), lineWidth(0), midLineWidth(0),
-      features(None), frameShape(QFrame::NoFrame)
+    : QStyleOptionFrame(Version)
 {
 }
 
@@ -690,8 +688,7 @@ QStyleOptionFrame::QStyleOptionFrame(int version)
     variables to their default values.
 */
 QStyleOptionGroupBox::QStyleOptionGroupBox()
-    : QStyleOptionComplex(Version, Type), features(QStyleOptionFrame::None),
-      textAlignment(Qt::AlignLeft), lineWidth(0), midLineWidth(0)
+    : QStyleOptionGroupBox(Version)
 {
 }
 
@@ -739,11 +736,7 @@ QStyleOptionGroupBox::QStyleOptionGroupBox(int version)
 */
 
 QStyleOptionHeader::QStyleOptionHeader()
-    : QStyleOption(QStyleOptionHeader::Version, SO_Header),
-      section(0), textAlignment(Qt::AlignLeft), iconAlignment(Qt::AlignLeft),
-      position(QStyleOptionHeader::Beginning),
-      selectedPosition(QStyleOptionHeader::NotAdjacent), sortIndicator(None),
-      orientation(Qt::Horizontal)
+    : QStyleOptionHeader(QStyleOptionHeader::Version)
 {
 }
 
@@ -755,7 +748,7 @@ QStyleOptionHeader::QStyleOptionHeader(int version)
       section(0), textAlignment(Qt::AlignLeft), iconAlignment(Qt::AlignLeft),
       position(QStyleOptionHeader::Beginning),
       selectedPosition(QStyleOptionHeader::NotAdjacent), sortIndicator(None),
-      orientation(Qt::Horizontal)
+      orientation(Qt::Horizontal), textElideMode(Qt::ElideNone), isSectionDragTarget(false), unused(0)
 {
 }
 
@@ -899,6 +892,16 @@ QStyleOptionHeader::QStyleOptionHeader(int version)
 */
 
 /*!
+    \variable QStyleOptionHeader::textElideMode
+    \brief where ellipsis should be added for text that is too long to fit
+    into an item
+
+    The default value is Qt::ElideNone.
+
+    \sa Qt::TextElideMode
+*/
+
+/*!
     \class QStyleOptionButton
     \brief The QStyleOptionButton class is used to describe the
     parameters for drawing buttons.
@@ -942,7 +945,7 @@ QStyleOptionHeader::QStyleOptionHeader(int version)
 */
 
 QStyleOptionButton::QStyleOptionButton()
-    : QStyleOption(QStyleOptionButton::Version, SO_Button), features(None)
+    : QStyleOptionButton(QStyleOptionButton::Version)
 {
 }
 
@@ -1066,8 +1069,7 @@ QStyleOptionButton::QStyleOptionButton(int version)
 */
 
 QStyleOptionToolBar::QStyleOptionToolBar()
-    : QStyleOption(Version, SO_ToolBar), positionOfLine(OnlyOne), positionWithinLine(OnlyOne),
-      toolBarArea(Qt::TopToolBarArea), features(None), lineWidth(0), midLineWidth(0)
+    : QStyleOptionToolBar(Version)
 {
 }
 
@@ -1251,13 +1253,7 @@ QStyleOptionToolBar::QStyleOptionToolBar(int version)
 */
 
 QStyleOptionTab::QStyleOptionTab()
-    : QStyleOption(QStyleOptionTab::Version, SO_Tab),
-      shape(QTabBar::RoundedNorth),
-      row(0),
-      position(Beginning),
-      selectedPosition(NotAdjacent), cornerWidgets(QStyleOptionTab::NoCornerWidgets),
-      documentMode(false),
-      features(QStyleOptionTab::None)
+    : QStyleOptionTab(QStyleOptionTab::Version)
 {
 }
 
@@ -1494,9 +1490,7 @@ QStyleOptionTab::QStyleOptionTab(int version)
 */
 
 QStyleOptionProgressBar::QStyleOptionProgressBar()
-    : QStyleOption(QStyleOptionProgressBar::Version, SO_ProgressBar),
-      minimum(0), maximum(0), progress(0), textAlignment(Qt::AlignLeft), textVisible(false),
-      invertedAppearance(false), bottomToTop(false)
+    : QStyleOptionProgressBar(QStyleOptionProgressBar::Version)
 {
 }
 
@@ -1656,9 +1650,7 @@ QStyleOptionProgressBar::QStyleOptionProgressBar(int version)
 */
 
 QStyleOptionMenuItem::QStyleOptionMenuItem()
-    : QStyleOption(QStyleOptionMenuItem::Version, SO_MenuItem), menuItemType(Normal),
-      checkType(NotCheckable), checked(false), menuHasCheckableItems(true), maxIconWidth(0),
-      reservedShortcutWidth(0)
+    : QStyleOptionMenuItem(QStyleOptionMenuItem::Version)
 {
 }
 
@@ -1954,10 +1946,7 @@ QStyleOptionComplex::QStyleOptionComplex(int version, int type)
 */
 
 QStyleOptionSlider::QStyleOptionSlider()
-    : QStyleOptionComplex(Version, SO_Slider), orientation(Qt::Horizontal), minimum(0), maximum(0),
-      tickPosition(QSlider::NoTicks), tickInterval(0), upsideDown(false),
-      sliderPosition(0), sliderValue(0), singleStep(0), pageStep(0), notchTarget(0.0),
-      dialWrapping(false), keyboardModifiers{}
+    : QStyleOptionSlider(Version)
 {
 }
 
@@ -2154,8 +2143,7 @@ QStyleOptionSlider::QStyleOptionSlider(int version)
 */
 
 QStyleOptionSpinBox::QStyleOptionSpinBox()
-    : QStyleOptionComplex(Version, SO_SpinBox), buttonSymbols(QAbstractSpinBox::UpDownArrows),
-      stepEnabled(QAbstractSpinBox::StepNone), frame(false)
+    : QStyleOptionSpinBox(Version)
 {
 }
 
@@ -2260,8 +2248,7 @@ QStyleOptionSpinBox::QStyleOptionSpinBox(int version)
 */
 
 QStyleOptionDockWidget::QStyleOptionDockWidget()
-    : QStyleOption(Version, SO_DockWidget), closable(false),
-      movable(false), floatable(false), verticalTitleBar(false)
+    : QStyleOptionDockWidget(Version)
 {
 }
 
@@ -2382,8 +2369,7 @@ QStyleOptionDockWidget::QStyleOptionDockWidget(int version)
 */
 
 QStyleOptionToolButton::QStyleOptionToolButton()
-    : QStyleOptionComplex(Version, SO_ToolButton), features(None), arrowType(Qt::DownArrow)
-    , toolButtonStyle(Qt::ToolButtonIconOnly)
+    : QStyleOptionToolButton(Version)
 {
 }
 
@@ -2532,7 +2518,7 @@ QStyleOptionToolButton::QStyleOptionToolButton(int version)
 */
 
 QStyleOptionComboBox::QStyleOptionComboBox()
-    : QStyleOptionComplex(Version, SO_ComboBox), editable(false), frame(true)
+    : QStyleOptionComboBox(Version)
 {
 }
 
@@ -2668,7 +2654,7 @@ QStyleOptionComboBox::QStyleOptionComboBox(int version)
 */
 
 QStyleOptionToolBox::QStyleOptionToolBox()
-    : QStyleOption(Version, SO_ToolBox), position(Beginning), selectedPosition(NotAdjacent)
+    : QStyleOptionToolBox(Version)
 {
 }
 
@@ -2795,7 +2781,7 @@ QStyleOptionToolBox::QStyleOptionToolBox(int version)
 */
 
 QStyleOptionRubberBand::QStyleOptionRubberBand()
-    : QStyleOption(Version, SO_RubberBand), shape(QRubberBand::Line), opaque(false)
+    : QStyleOptionRubberBand(Version)
 {
 }
 
@@ -2887,7 +2873,7 @@ QStyleOptionRubberBand::QStyleOptionRubberBand(int version)
 */
 
 QStyleOptionTitleBar::QStyleOptionTitleBar()
-    : QStyleOptionComplex(Version, SO_TitleBar), titleBarState(0)
+    : QStyleOptionTitleBar(Version)
 {
 }
 
@@ -3037,11 +3023,7 @@ QStyleOptionTitleBar::QStyleOptionTitleBar(int version)
 */
 
 QStyleOptionViewItem::QStyleOptionViewItem()
-    : QStyleOption(Version, SO_ViewItem),
-      displayAlignment(Qt::AlignLeft), decorationAlignment(Qt::AlignLeft),
-      textElideMode(Qt::ElideMiddle), decorationPosition(Left),
-      showDecorationSelected(false), features(None), widget(nullptr),
-      checkState(Qt::Unchecked), viewItemPosition(QStyleOptionViewItem::Invalid)
+    : QStyleOptionViewItem(Version)
 {
 }
 
@@ -3266,8 +3248,7 @@ QStyleOptionViewItem::QStyleOptionViewItem(int version)
     variables to their default values.
 */
 QStyleOptionTabWidgetFrame::QStyleOptionTabWidgetFrame()
-    : QStyleOption(Version, SO_TabWidgetFrame), lineWidth(0), midLineWidth(0),
-      shape(QTabBar::RoundedNorth)
+    : QStyleOptionTabWidgetFrame(Version)
 {
 }
 
@@ -3409,8 +3390,7 @@ QStyleOptionTabWidgetFrame::QStyleOptionTabWidgetFrame(int version)
     vaiables to their default values.
 */
 QStyleOptionTabBarBase::QStyleOptionTabBarBase()
-    : QStyleOption(Version, SO_TabBarBase), shape(QTabBar::RoundedNorth),
-      documentMode(false)
+    : QStyleOptionTabBarBase(Version)
 {
 }
 
@@ -3519,7 +3499,7 @@ QStyleOptionTabBarBase::QStyleOptionTabBarBase(int version)
     Constructs a QStyleOptionSizeGrip.
 */
 QStyleOptionSizeGrip::QStyleOptionSizeGrip()
-    : QStyleOptionComplex(Version, Type), corner(Qt::BottomRightCorner)
+    : QStyleOptionSizeGrip(Version)
 {
 }
 
@@ -3630,7 +3610,7 @@ QStyleOptionSizeGrip::QStyleOptionSizeGrip(int version)
     Constructs a QStyleOptionGraphicsItem.
 */
 QStyleOptionGraphicsItem::QStyleOptionGraphicsItem()
-    : QStyleOption(Version, Type)
+    : QStyleOptionGraphicsItem(Version)
 {
 }
 

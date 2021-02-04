@@ -27,7 +27,7 @@
 ****************************************************************************/
 
 
-#include <QtTest/QtTest>
+#include <QTest>
 
 
 #include <qtextdocument.h>
@@ -1661,19 +1661,22 @@ void tst_QTextDocumentFragment::html_cssShorthandFont()
         const char html[] = "<span style=\"font: 50px sans-serif\">Foo</span>";
         setHtml(html);
         QCOMPARE(cursor.charFormat().property(QTextFormat::FontPixelSize).toInt(), 50);
-        QCOMPARE(cursor.charFormat().property(QTextFormat::FontFamily).toString(), QString("sans-serif"));
+        QCOMPARE(cursor.charFormat().property(QTextFormat::FontFamilies).toStringList(),
+                 QStringList{"sans-serif"});
     }
     {
         const char html[] = "<span style=\"font: 50pt sans-serif\">Foo</span>";
         setHtml(html);
         QCOMPARE(cursor.charFormat().property(QTextFormat::FontPointSize).toInt(), 50);
-        QCOMPARE(cursor.charFormat().property(QTextFormat::FontFamily).toString(), QString("sans-serif"));
+        QCOMPARE(cursor.charFormat().property(QTextFormat::FontFamilies).toStringList(),
+                 QStringList{"sans-serif"});
     }
     {
         const char html[] = "<span style='font:7.0pt \"Times New Roman\"'>Foo</span>";
         setHtml(html);
         QCOMPARE(cursor.charFormat().property(QTextFormat::FontPointSize).toInt(), 7);
-        QCOMPARE(cursor.charFormat().property(QTextFormat::FontFamily).toString(), QString("Times New Roman"));
+        QCOMPARE(cursor.charFormat().property(QTextFormat::FontFamilies).toStringList(),
+                 QStringList{"Times New Roman"});
     }
     {
         const char html[] = "<span style='font:bold 7.0pt'>Foo</span>";
@@ -2412,8 +2415,9 @@ void tst_QTextDocumentFragment::html_quotedFontFamily()
     QFETCH(QStringList, fontFamilies);
 
     setHtml(html);
-    QCOMPARE(doc->begin().begin().fragment().charFormat().fontFamily(), fontFamily);
-    QCOMPARE(doc->begin().begin().fragment().charFormat().font().families(), fontFamilies);
+    const auto charFormat = doc->begin().begin().fragment().charFormat();
+    QCOMPARE(charFormat.fontFamilies().toStringList().value(0, QString()), fontFamily);
+    QCOMPARE(charFormat.font().families(), fontFamilies);
 }
 
 void tst_QTextDocumentFragment::defaultFont()

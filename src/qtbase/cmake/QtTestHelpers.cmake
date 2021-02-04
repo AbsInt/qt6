@@ -136,7 +136,11 @@ function(qt_internal_setup_docker_test_fixture name)
             QT_TEST_SERVER QT_TEST_SERVER_NAME QT_TEST_SERVER_DOMAIN=\"${DNSDOMAIN}\"
     )
 
-    set(TESTSERVER_COMPOSE_FILE "${QT_SOURCE_TREE}/tests/testserver/docker-compose-bridge-network.yml")
+    if(DEFINED QT_TESTSERVER_COMPOSE_FILE)
+        set(TESTSERVER_COMPOSE_FILE ${QT_TESTSERVER_COMPOSE_FILE})
+    else()
+        set(TESTSERVER_COMPOSE_FILE "${QT_SOURCE_TREE}/tests/testserver/docker-compose-bridge-network.yml")
+    endif()
 
     # Bring up test servers and make sure the services are ready.
     add_test(NAME ${name}-setup COMMAND
@@ -154,7 +158,7 @@ function(qt_internal_setup_docker_test_fixture name)
     foreach(test_name ${name} ${name}-setup ${name}-cleanup)
         set_property(TEST "${test_name}" APPEND PROPERTY ENVIRONMENT "testserver=${QT_DOCKER_COMPOSE_VERSION}")
         set_property(TEST "${test_name}" APPEND PROPERTY ENVIRONMENT TEST_DOMAIN=${DNSDOMAIN})
-        set_property(TEST "${test_name}" APPEND PROPERTY ENVIRONMENT "SHARED_DATA=${QT_SOURCE_TREE}/mkspecs/features/data/testserver")
+        set_property(TEST "${test_name}" APPEND PROPERTY ENVIRONMENT "SHARED_DATA=${QT_MKSPECS_DIR}/features/data/testserver")
         set_property(TEST "${test_name}" APPEND PROPERTY ENVIRONMENT SHARED_SERVICE=bridge-network)
     endforeach()
 
@@ -559,7 +563,8 @@ execute_process(COMMAND ${extra_runner} ${arg_COMMAND}
 )
 ${post_run}
 if(NOT result EQUAL 0)
-    message(FATAL_ERROR \"${arg_COMMAND} execution failed.\")
+    string(JOIN \" \" full_command ${arg_COMMAND})
+    message(FATAL_ERROR \"\${full_command} execution failed.\")
 endif()"
     )
 endfunction()

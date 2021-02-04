@@ -13,9 +13,15 @@ if(QT_FEATURE_qml_worker_script)
     add_subdirectory(qmlworkerscript)
 endif()
 
+if(TARGET Qt::Sql)
+   add_subdirectory(qmllocalstorage)
+ endif()
+
+
 if(TARGET Qt::Gui AND QT_FEATURE_qml_animation)
     add_subdirectory(quick)
     add_subdirectory(quickshapes)
+    add_subdirectory(quicklayouts)
 
     find_package(Qt6 ${PROJECT_VERSION} CONFIG COMPONENTS Test) # special case
     if(QT_FEATURE_testlib AND TARGET Qt::Test) # special case
@@ -31,6 +37,8 @@ if(TARGET Qt::Gui AND QT_FEATURE_qml_animation)
     endif()
 endif()
 
+add_subdirectory(labs)
+
 # special case begin
 # These need to be included here since they have dependencies on the modules
 # specified above.
@@ -38,6 +46,7 @@ add_subdirectory(plugins)
 
 if(QT_FEATURE_qml_devtools)
     add_subdirectory(qmldevtools)
+    add_subdirectory(qmldom)
     add_subdirectory(qmlcompiler)
 
     # Build qmlcachegen now, so that we can use it in src/imports.

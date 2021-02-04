@@ -24,7 +24,6 @@ qt_internal_add_module(Qml
         ../3rdparty/masm/assembler/MacroAssemblerX86.h
         ../3rdparty/masm/assembler/MacroAssemblerX86Common.h
         ../3rdparty/masm/assembler/MacroAssemblerX86_64.h
-        ../3rdparty/masm/assembler/RepatchBuffer.h
         ../3rdparty/masm/assembler/X86Assembler.h
         ../3rdparty/masm/disassembler/ARM64/A64DOpcode.cpp ../3rdparty/masm/disassembler/ARM64/A64DOpcode.h
         ../3rdparty/masm/disassembler/ARM64Disassembler.cpp
@@ -85,6 +84,7 @@ qt_internal_add_module(Qml
         ../3rdparty/masm/yarr/YarrPattern.cpp ../3rdparty/masm/yarr/YarrPattern.h
         ../3rdparty/masm/yarr/YarrSyntaxChecker.cpp ../3rdparty/masm/yarr/YarrSyntaxChecker.h
         ../3rdparty/masm/yarr/YarrUnicodeProperties.h
+        common/qjsnumbercoercion.cpp common/qjsnumbercoercion.h
         common/qqmlapiversion_p.h
         common/qqmljsdiagnosticmessage_p.h
         common/qqmljsfixedpoolarray_p.h
@@ -113,6 +113,8 @@ qt_internal_add_module(Qml
         debugger/qqmlprofiler_p.h
         inlinecomponentutils_p.h
         jsapi/qjsengine.cpp jsapi/qjsengine.h jsapi/qjsengine_p.h
+        jsapi/qjsmanagedvalue.cpp jsapi/qjsmanagedvalue.h
+        jsapi/qjsprimitivevalue.cpp jsapi/qjsprimitivevalue.h
         jsapi/qjsvalue.cpp jsapi/qjsvalue.h jsapi/qjsvalue_p.h
         jsapi/qjsvalueiterator.cpp jsapi/qjsvalueiterator.h jsapi/qjsvalueiterator_p.h
         jsruntime/qv4argumentsobject.cpp jsruntime/qv4argumentsobject_p.h
@@ -223,7 +225,6 @@ qt_internal_add_module(Qml
         qml/qqmlapplicationengine.cpp qml/qqmlapplicationengine.h qml/qqmlapplicationengine_p.h
         qml/qqmlbinding.cpp qml/qqmlbinding_p.h
         qml/qqmlboundsignal.cpp qml/qqmlboundsignal_p.h
-        qml/qqmlcleanup.cpp qml/qqmlcleanup_p.h
         qml/qqmlcomponent.cpp qml/qqmlcomponent.h qml/qqmlcomponent_p.h
         qml/qqmlcomponentattached_p.h
         qml/qqmlcontext.cpp qml/qqmlcontext.h qml/qqmlcontext_p.h
@@ -282,7 +283,6 @@ qt_internal_add_module(Qml
         qml/qqmlscriptdata.cpp qml/qqmlscriptdata_p.h
         qml/qqmlscriptstring.cpp qml/qqmlscriptstring.h qml/qqmlscriptstring_p.h
         qml/qqmlsourcecoordinate_p.h
-        qml/qqmlstaticmetaobject.cpp qml/qqmlstaticmetaobject_p.h
         qml/qqmlstringconverters.cpp qml/qqmlstringconverters_p.h
         qml/qqmltype.cpp qml/qqmltype_p.h
         qml/qqmltype_p_p.h
