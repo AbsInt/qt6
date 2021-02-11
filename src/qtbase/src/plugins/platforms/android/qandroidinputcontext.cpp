@@ -405,7 +405,7 @@ static JNINativeMethod methods[] = {
     {"updateCursorPosition", "()Z", (void *)updateCursorPosition}
 };
 
-static QRect inputItemRectangle()
+static QRect screenInputItemRectangle()
 {
     QRectF itemRect = qGuiApp->inputMethod()->inputItemRectangle();
     QRect rect = qGuiApp->inputMethod()->inputItemTransform().mapRect(itemRect).toRect();
@@ -786,7 +786,7 @@ void QAndroidInputContext::handleLocationChanged(int handleId, int x, int y)
 
 void QAndroidInputContext::touchDown(int x, int y)
 {
-    if (m_focusObject && inputItemRectangle().contains(x, y)) {
+    if (m_focusObject && screenInputItemRectangle().contains(x, y)) {
         // If the user touch the input rectangle, we can show the cursor handle
         m_handleMode = ShowCursor;
         // The VK will appear in a moment, stop the timer
@@ -820,16 +820,11 @@ void QAndroidInputContext::longPress(int x, int y)
     if (noHandles)
         return;
 
-    if (m_focusObject && inputItemRectangle().contains(x, y)) {
+    if (m_focusObject && screenInputItemRectangle().contains(x, y)) {
         BatchEditLock batchEditLock(this);
 
         focusObjectStopComposing();
-
-        const double pixelDensity =
-                QGuiApplication::focusWindow()
-                ? QHighDpiScaling::factor(QGuiApplication::focusWindow())
-                : QHighDpiScaling::factor(QtAndroid::androidPlatformIntegration()->screen());
-        const QPointF touchPoint(x / pixelDensity, y / pixelDensity);
+        const QPointF touchPoint(x, y);
         setSelectionOnFocusObject(touchPoint, touchPoint);
 
         QInputMethodQueryEvent query(Qt::ImCursorPosition | Qt::ImAnchorPosition | Qt::ImTextBeforeCursor | Qt::ImTextAfterCursor);
@@ -928,7 +923,7 @@ void QAndroidInputContext::showInputPanel()
     else
         m_updateCursorPosConnection = connect(qGuiApp->focusObject(), SIGNAL(cursorPositionChanged()), this, SLOT(updateCursorPosition()));
 
-    QRect rect = inputItemRectangle();
+    QRect rect = screenInputItemRectangle();
     QtAndroidInput::showSoftwareKeyboard(rect.left(), rect.top(), rect.width(), rect.height(),
                                          query->value(Qt::ImHints).toUInt(),
                                          query->value(Qt::ImEnterKeyType).toUInt());
@@ -1664,9 +1659,9 @@ jboolean QAndroidInputContext::paste()
 void QAndroidInputContext::sendShortcut(const QKeySequence &sequence)
 {
     for (int i = 0; i < sequence.count(); ++i) {
-        const int keys = sequence[i];
-        Qt::Key key = Qt::Key(keys & ~Qt::KeyboardModifierMask);
-        Qt::KeyboardModifiers mod = Qt::KeyboardModifiers(keys & Qt::KeyboardModifierMask);
+        const QKeyCombination keys = sequence[i];
+        Qt::Key key = Qt::Key(keys.toCombined() & ~Qt::KeyboardModifierMask);
+        Qt::KeyboardModifiers mod = Qt::KeyboardModifiers(keys.toCombined() & Qt::KeyboardModifierMask);
 
         QKeyEvent pressEvent(QEvent::KeyPress, key, mod);
         QKeyEvent releaseEvent(QEvent::KeyRelease, key, mod);

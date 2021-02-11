@@ -53,11 +53,15 @@
 
 #include <private/qtnetworkglobal_p.h>
 
+#include <private/qsslkey_p.h>
+
 #include <QtNetwork/qsslcertificate.h>
 #include <QtNetwork/qsslerror.h>
 #include <QtNetwork/qsslkey.h>
 #include <QtNetwork/qssl.h>
 
+#include <QtCore/qloggingcategory.h>
+#include <QtCore/qnamespace.h>
 #include <QtCore/qobject.h>
 #include <QtCore/qglobal.h>
 #include <QtCore/qstring.h>
@@ -76,16 +80,92 @@ class QIODevice;
 
 namespace QSsl {
 
-// Encapsulates key's data or backend-specific
+// The class TlsKey encapsulates key's data (DER) or backend-specific
 // data-structure, like RSA/DSA/DH structs in OpenSSL.
-class TlsKey;
+// TLSTODO: Interface is mostly what QSslKeyPrivate is now. Names,
+// however strange they are, for now preserved to ease the transition
+// (this may change in future - for example, 'decodeDer' is not just
+// decoding DER, it's initializing a key from DER.
+class TlsKey {
+public:
+    virtual ~TlsKey();
 
-// Abstraction above OpenSSL's X509, or our generic
+    virtual void decodeDer(KeyType type, KeyAlgorithm algorithm, const QByteArray &der,
+                           const QByteArray &passPhrase, bool deepClear) = 0;
+    virtual void decodePem(KeyType type, KeyAlgorithm algorithm, const QByteArray &pem,
+                           const QByteArray &passPhrase, bool deepClear) = 0;
+
+    virtual QByteArray toPem(const QByteArray &passPhrase) const = 0;
+    virtual QByteArray derFromPem(const QByteArray &pem, QMap<QByteArray, QByteArray> *headers) const = 0;
+    virtual QByteArray pemFromDer(const QByteArray &der, const QMap<QByteArray, QByteArray> &headers) const = 0;
+
+    virtual void fromHandle(Qt::HANDLE opaque, KeyType type) = 0;
+    virtual Qt::HANDLE handle() const = 0;
+
+    virtual bool isNull() const = 0;
+    virtual KeyType type() const = 0;
+    virtual KeyAlgorithm algorithm() const = 0;
+    virtual int length() const = 0;
+
+    virtual void clear(bool deepClear) = 0;
+
+    // Needed by QSslKeyPrivate::pemFromDer() for non-OpenSSL backends.
+    virtual bool isPkcs8() const = 0;
+
+    using Cipher = QSslKeyPrivate::Cipher;
+    virtual QByteArray decrypt(Cipher cipher, const QByteArray &data,
+                               const QByteArray &key, const QByteArray &iv) const = 0;
+    virtual QByteArray encrypt(Cipher cipher, const QByteArray &data,
+                               const QByteArray &key, const QByteArray &iv) const = 0;
+
+    // Those two are non-virtual, always the same and only depend on the key type
+    // and algorithm:
+    QByteArray pemHeader() const;
+    QByteArray pemFooter() const;
+};
+
+// An abstraction hiding OpenSSL's X509 or our generic
 // 'derData'-based code.
-class X509Certificate;
+class X509Certificate
+{
+public:
+    virtual ~X509Certificate();
 
-// X509-related auxiliary functions, previously static
-// member-functions in different classes.
+    virtual bool isEqual(const X509Certificate &rhs) const = 0;
+    virtual bool isNull() const = 0;
+    virtual bool isSelfSigned() const = 0;
+    virtual QByteArray version() const = 0;
+    virtual QByteArray serialNumber() const = 0;
+    virtual QStringList issuerInfo(QSslCertificate::SubjectInfo info) const = 0;
+    virtual QStringList issuerInfo(const QByteArray &attribute) const = 0;
+    virtual QStringList subjectInfo(QSslCertificate::SubjectInfo info) const = 0;
+    virtual QStringList subjectInfo(const QByteArray &attribute) const = 0;
+
+    virtual QList<QByteArray> subjectInfoAttributes() const = 0;
+    virtual QList<QByteArray> issuerInfoAttributes() const = 0;
+    virtual QMultiMap<QSsl::AlternativeNameEntryType, QString> subjectAlternativeNames() const = 0;
+    virtual QDateTime effectiveDate() const = 0;
+    virtual QDateTime expiryDate() const = 0;
+    virtual TlsKey *publicKey() const = 0;
+
+    // Extensions. Plugins do not expose internal representation
+    // and cannot rely on QSslCertificate's internals.
+    virtual qsizetype numberOfExtensions() const = 0;
+    virtual QString oidForExtension(qsizetype index) const = 0;
+    virtual QString nameForExtension(qsizetype index) const = 0;
+    virtual QVariant valueForExtension(qsizetype index) const = 0;
+    virtual bool isExtensionCritical(qsizetype index) const = 0;
+    virtual bool isExtensionSupported(qsizetype index) const = 0;
+
+    virtual QByteArray toPem() const = 0;
+    virtual QByteArray toDer() const = 0;
+    virtual QString toText() const = 0;
+
+    virtual Qt::HANDLE handle() const = 0;
+
+    virtual size_t hash(size_t seed) const noexcept = 0;
+};
+
 using X509ChainVerifyPtr = QList<QSslError> (*)(const QList<QSslCertificate> &chain,
                                                 const QString &hostName);
 using X509PemReaderPtr = QList<QSslCertificate> (*)(const QByteArray &pem, int count);
@@ -149,8 +229,16 @@ public:
 
     static const QString builtinBackendNames[];
 
+    template<class DynamicType, class  TLSObject>
+    static DynamicType *backend(const TLSObject &o)
+    {
+        return static_cast<DynamicType *>(o.backendImplementation());
+    }
+
     Q_DISABLE_COPY_MOVE(QTlsBackend)
 };
+
+Q_DECLARE_LOGGING_CATEGORY(lcTlsBackend)
 
 #define QTlsBackend_iid "org.qt-project.Qt.QTlsBackend"
 Q_DECLARE_INTERFACE(QTlsBackend, QTlsBackend_iid);

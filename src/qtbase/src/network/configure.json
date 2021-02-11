@@ -40,18 +40,6 @@
                 "-lbrotlidec"
             ]
         },
-        "corewlan": {
-            "label": "CoreWLan",
-            "export": "",
-            "test": {
-                "lang": "objc++",
-                "include": [ "CoreWLAN/CoreWLAN.h", "CoreWLAN/CWInterface.h" ],
-                "main": "[CWInterface interfaceWithName:@\"en2\"];"
-            },
-            "sources": [
-                "-framework CoreWLAN -framework Foundation"
-            ]
-        },
         "network": {
             "sources": [
                 { "type": "makeSpec", "spec": "NETWORK" }
@@ -226,7 +214,7 @@
             },
             "use": "openssl"
         },
-        "netlistmgr": {
+        "networklistmanager": {
             "label": "Network List Manager",
             "type": "compile",
             "test": {
@@ -245,12 +233,6 @@
     },
 
     "features": {
-        "corewlan": {
-            "label": "CoreWLan",
-            "condition": "libs.corewlan",
-            "emitIf": "config.darwin",
-            "output": [ "feature", "privateFeature" ]
-        },
         "getifaddrs": {
             "label": "getifaddrs()",
             "condition": "tests.getifaddrs",
@@ -425,11 +407,11 @@
             "condition": "config.win32",
             "output": [ "publicFeature", "feature" ]
         },
-        "netlistmgr": {
+        "networklistmanager": {
             "label": "Network List Manager",
             "purpose": "Use Network List Manager to keep track of network connectivity",
             "section": "Networking",
-            "condition": "config.win32 && tests.netlistmgr",
+            "condition": "config.win32 && tests.networklistmanager",
             "output": [ "privateFeature" ]
         },
         "topleveldomain": {
@@ -456,11 +438,6 @@ For example:
         {
             "section": "Qt Network",
             "entries": [
-                {
-                    "type": "feature",
-                    "args": "corewlan",
-                    "condition": "config.darwin"
-                },
                 "getifaddrs", "ipv6ifname", "libproxy",
                 {
                     "type": "feature",

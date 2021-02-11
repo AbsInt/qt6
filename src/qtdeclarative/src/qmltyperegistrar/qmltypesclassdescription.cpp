@@ -112,10 +112,8 @@ void QmlTypesClassDescription::collectLocalAnonymous(
     const auto classInfos = classDef->value(QLatin1String("classInfos")).toArray();
     for (const QJsonValue &classInfo : classInfos) {
         const QJsonObject obj = classInfo.toObject();
-        if (obj[QLatin1String("name")].toString() == QLatin1String("DefaultProperty")) {
-            defaultProp = obj[QLatin1String("value")].toString();
-            break;
-        }
+        if (obj[QStringLiteral("name")].toString() == QStringLiteral("DefaultProperty"))
+            defaultProp = obj[QStringLiteral("value")].toString();
     }
 
     collectInterfaces(classDef);
@@ -131,6 +129,7 @@ void QmlTypesClassDescription::collect(
 
     const auto classInfos = classDef->value(QLatin1String("classInfos")).toArray();
     const QString classDefName = classDef->value(QLatin1String("className")).toString();
+    QString foreignTypeName;
     for (const QJsonValue &classInfo : classInfos) {
         const QJsonObject obj = classInfo.toObject();
         const QString name = obj[QLatin1String("name")].toString();
@@ -175,33 +174,41 @@ void QmlTypesClassDescription::collect(
             if (value == QLatin1String("true"))
                 isSingleton = true;
         } else if (name == QLatin1String("QML.Foreign")) {
-            if (const QJsonObject *other = findType(foreign, value)) {
-                classDef = other;
-                // Foreign type can have a default property or an attached types
-                const auto classInfos = classDef->value(QLatin1String("classInfos")).toArray();
-                for (const QJsonValue &classInfo : classInfos) {
-                    const QJsonObject obj = classInfo.toObject();
-                    const QString foreignName = obj[QLatin1String("name")].toString();
-                    const QString foreignValue = obj[QLatin1String("value")].toString();
-                    if (defaultProp.isEmpty() && foreignName == QLatin1String("DefaultProperty")) {
-                        defaultProp = foreignValue;
-                    } else if (foreignName == QLatin1String("QML.Attached")) {
-                        attachedType = foreignValue;
-                        collectRelated(foreignValue, types, foreign, defaultRevision);
-                    } else if (foreignName == QLatin1String("QML.Extended")) {
-                        extensionType = foreignValue;
-                        collectRelated(foreignValue, types, foreign, defaultRevision);
-                    } else if (foreignName == QLatin1String("QML.Sequence")) {
-                        sequenceValueType = foreignValue;
-                        collectRelated(foreignValue, types, foreign, defaultRevision);
-                    }
-                }
-            } else {
-                className = value;
-                classDef = nullptr;
-            }
+            foreignTypeName = value;
         } else if (name == QLatin1String("QML.Root")) {
             isRootClass = true;
+        }
+    }
+
+    if (!foreignTypeName.isEmpty()) {
+        if (const QJsonObject *other = findType(foreign, foreignTypeName)) {
+            classDef = other;
+
+            // Default properties are always local.
+            defaultProp.clear();
+
+            // Foreign type can have a default property or an attached types
+            const auto classInfos = classDef->value(QLatin1String("classInfos")).toArray();
+            for (const QJsonValue &classInfo : classInfos) {
+                const QJsonObject obj = classInfo.toObject();
+                const QString foreignName = obj[QLatin1String("name")].toString();
+                const QString foreignValue = obj[QLatin1String("value")].toString();
+                if (defaultProp.isEmpty() && foreignName == QLatin1String("DefaultProperty")) {
+                    defaultProp = foreignValue;
+                } else if (foreignName == QLatin1String("QML.Attached")) {
+                    attachedType = foreignValue;
+                    collectRelated(foreignValue, types, foreign, defaultRevision);
+                } else if (foreignName == QLatin1String("QML.Extended")) {
+                    extensionType = foreignValue;
+                    collectRelated(foreignValue, types, foreign, defaultRevision);
+                } else if (foreignName == QLatin1String("QML.Sequence")) {
+                    sequenceValueType = foreignValue;
+                    collectRelated(foreignValue, types, foreign, defaultRevision);
+                }
+            }
+        } else {
+            className = foreignTypeName;
+            classDef = nullptr;
         }
     }
 

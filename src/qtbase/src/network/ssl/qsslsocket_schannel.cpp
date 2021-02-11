@@ -46,7 +46,9 @@
 #include "qsslcertificateextension.h"
 #include "qsslcertificate_p.h"
 #include "qsslcipher_p.h"
-#include "qtlsbackend_p.h"
+#include "qtlsbackend_schannel_p.h"
+#include "qtlskey_schannel_p.h"
+#include "qx509_schannel_p.h"
 
 #include <QtCore/qscopeguard.h>
 #include <QtCore/qoperatingsystemversion.h>
@@ -158,59 +160,79 @@
 QT_BEGIN_NAMESPACE
 
 namespace {
+bool supportsTls13();
+}
 
-class SchannelBackend : public QTlsBackend
+QString QSchannelBackend::backendName() const
 {
-private:
-    QString backendName() const override
-    {
-        return builtinBackendNames[nameIndexSchannel];
+    return builtinBackendNames[nameIndexSchannel];
+}
+
+QList<QSsl::SslProtocol> QSchannelBackend::supportedProtocols() const
+{
+    QList<QSsl::SslProtocol> protocols;
+
+    protocols << QSsl::AnyProtocol;
+    protocols << QSsl::SecureProtocols;
+    protocols << QSsl::TlsV1_0;
+    protocols << QSsl::TlsV1_0OrLater;
+    protocols << QSsl::TlsV1_1;
+    protocols << QSsl::TlsV1_1OrLater;
+    protocols << QSsl::TlsV1_2;
+    protocols << QSsl::TlsV1_2OrLater;
+
+    if (supportsTls13()) {
+        protocols << QSsl::TlsV1_3;
+        protocols << QSsl::TlsV1_3OrLater;
     }
 
-    QList<QSsl::SslProtocol> supportedProtocols() const override
-    {
-        QList<QSsl::SslProtocol> protocols;
+    return protocols;
+}
 
-        protocols << QSsl::AnyProtocol;
-        protocols << QSsl::SecureProtocols;
-        protocols << QSsl::TlsV1_0;
-        protocols << QSsl::TlsV1_0OrLater;
-        protocols << QSsl::TlsV1_1;
-        protocols << QSsl::TlsV1_1OrLater;
-        protocols << QSsl::TlsV1_2;
-        protocols << QSsl::TlsV1_2OrLater;
+QList<QSsl::SupportedFeature> QSchannelBackend::supportedFeatures() const
+{
+    QList<QSsl::SupportedFeature> features;
 
-        if (supportsTls13()) {
-            protocols << QSsl::TlsV1_3;
-            protocols << QSsl::TlsV1_3OrLater;
-        }
+    features << QSsl::SupportedFeature::ClientSideAlpn;
+    features << QSsl::SupportedFeature::ServerSideAlpn;
 
-        return protocols;
-    }
+    return features;
+}
 
-    QList<QSsl::SupportedFeature> supportedFeatures() const override
-    {
-        QList<QSsl::SupportedFeature> features;
+QList<QSsl::ImplementedClass> QSchannelBackend::implementedClasses() const
+{
+    QList<QSsl::ImplementedClass> classes;
 
-        features << QSsl::SupportedFeature::ClientSideAlpn;
-        features << QSsl::SupportedFeature::ServerSideAlpn;
+    classes << QSsl::ImplementedClass::Socket;
+    classes << QSsl::ImplementedClass::Certificate;
+    classes << QSsl::ImplementedClass::Key;
 
-        return features;
-    }
+    return classes;
+}
 
-    QList<QSsl::ImplementedClass> implementedClasses() const override
-    {
-        QList<QSsl::ImplementedClass> classes;
+QSsl::TlsKey *QSchannelBackend::createKey() const
+{
+    return new QSsl::TlsKeySchannel;
+}
 
-        classes << QSsl::ImplementedClass::Socket;
-        classes << QSsl::ImplementedClass::Certificate;
-        classes << QSsl::ImplementedClass::Key;
+QSsl::X509Certificate *QSchannelBackend::createCertificate() const
+{
+    return new QSsl::X509CertificateSchannel;
+}
 
-        return classes;
-    }
-};
+QSsl::X509PemReaderPtr QSchannelBackend::X509PemReader() const
+{
+    return QSsl::X509CertificateGeneric::certificatesFromPem;
+}
 
-Q_GLOBAL_STATIC(SchannelBackend, backend)
+QSsl::X509DerReaderPtr QSchannelBackend::X509DerReader() const
+{
+    return QSsl::X509CertificateGeneric::certificatesFromDer;
+}
+
+Q_GLOBAL_STATIC(QSchannelBackend, backend)
+
+namespace {
 
 SecBuffer createSecBuffer(void *ptr, unsigned long length, unsigned long bufferType)
 {

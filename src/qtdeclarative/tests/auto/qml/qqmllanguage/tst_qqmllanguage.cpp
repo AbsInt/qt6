@@ -346,6 +346,10 @@ private slots:
     void factorySingleton();
     void extendedSingleton();
     void qtbug_85932();
+    void qtbug_86482();
+
+    void multiExtension();
+    void invalidInlineComponent();
 
 private:
     QQmlEngine engine;
@@ -6126,6 +6130,61 @@ void tst_qqmllanguage::qtbug_85932()
     QTRY_COMPARE(allWarnings.count(), 2);
     QCOMPARE(allWarnings.at(0).toString(), warning1);
     QCOMPARE(allWarnings.at(1).toString(), warning2);
+}
+
+void tst_qqmllanguage::multiExtension()
+{
+    QQmlEngine engine;
+    QQmlComponent c(&engine);
+    c.setData("import StaticTest\nMultiExtension {}", QUrl());
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+    QScopedPointer<QObject> o(c.create());
+    QCOMPARE(o->property("a").toInt(), int('a'));
+    QCOMPARE(o->property("b").toInt(), int('b'));
+    QCOMPARE(o->property("p").toInt(), int('p'));
+    QCOMPARE(o->property("e").toInt(), int('e'));
+
+    // Extension properties override base object properties
+    QCOMPARE(o->property("c").toInt(), 12);
+    QCOMPARE(o->property("d").toInt(), 22);
+    QCOMPARE(o->property("f").toInt(), 31);
+    QCOMPARE(o->property("g").toInt(), 44);
+}
+
+void tst_qqmllanguage::invalidInlineComponent()
+{
+    QQmlEngine e;
+    QQmlComponent c(&engine);
+    c.setData("import QtQuick 2.0\n"
+              "import QtQuick.Window 2.1\n"
+              "Window {\n"
+              "    component TestPopup: Window {\n"
+              "        visibility: Window.Windowed\n"
+              "    }\n"
+              "    TestPopup { color: \"blue\" }\n"
+              "}", QUrl());
+    QVERIFY(c.isError());
+    QVERIFY(c.errorString().contains("\"Window.visibility\" is not available in QtQuick 2.0."));
+}
+
+void tst_qqmllanguage::qtbug_86482()
+{
+    QQmlEngine engine;
+    QQmlComponent component(&engine);
+    component.setData(QByteArray(R"(import QtQml 2.0
+                                 import StaticTest
+                                 QtObject {
+                                     id: root
+                                     property string result
+                                     property StringSignaler str: StringSignaler {
+                                        onSignal: function(value) { root.result = value; }
+                                     }
+                                     Component.onCompleted: str.call();
+                                 })"), QUrl());
+    VERIFY_ERRORS(0);
+    QScopedPointer<QObject> o(component.create());
+    QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+    QCOMPARE(o->property("result").toString(), QStringLiteral("Hello world!"));
 }
 
 QTEST_MAIN(tst_qqmllanguage)

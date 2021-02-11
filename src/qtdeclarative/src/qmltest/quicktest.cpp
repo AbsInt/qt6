@@ -72,10 +72,6 @@
 #include <private/qqmlcomponent_p.h>
 #include <private/qv4resolvedtypereference_p.h>
 
-#ifdef QT_QMLTEST_WITH_WIDGETS
-#include <QtWidgets/QApplication>
-#endif
-
 QT_BEGIN_NAMESPACE
 
 /*!
@@ -302,14 +298,17 @@ private:
 
         if (!object) // Start at root of compilation unit if not enumerating a specific child
             object = compilationUnit->objectAt(0);
+        if (object->flags & Object::IsInlineComponentRoot)
+            return result;
 
         if (const auto superTypeUnit = compilationUnit->resolvedTypes.value(
                     object->inheritedTypeNameIndex)->compilationUnit()) {
             // We have a non-C++ super type, which could indicate we're a subtype of a TestCase
             if (testCaseType.isValid() && superTypeUnit->url() == testCaseType.sourceUrl())
                 result.isTestCase = true;
-            else
+            else if (superTypeUnit->url() != compilationUnit->url()) { // urls are the same for inline component, avoid infinite recursion
                 result = enumerateTestCases(superTypeUnit);
+            }
 
             if (result.isTestCase) {
                 // Look for override of name in this type
@@ -362,28 +361,9 @@ int quick_test_main(int argc, char **argv, const char *name, const char *sourceD
 
 int quick_test_main_with_setup(int argc, char **argv, const char *name, const char *sourceDir, QObject *setup)
 {
-    // Peek at arguments to check for '-widgets' argument
-#ifdef QT_QMLTEST_WITH_WIDGETS
-    bool withWidgets = false;
-    for (int index = 1; index < argc; ++index) {
-        if (strcmp(argv[index], "-widgets") == 0) {
-            withWidgets = true;
-            break;
-        }
-    }
-#endif
-
     QCoreApplication *app = nullptr;
-    if (!QCoreApplication::instance()) {
-#ifdef QT_QMLTEST_WITH_WIDGETS
-        if (withWidgets)
-            app = new QApplication(argc, argv);
-        else
-#endif
-        {
-            app = new QGuiApplication(argc, argv);
-        }
-    }
+    if (!QCoreApplication::instance())
+        app = new QGuiApplication(argc, argv);
 
     if (setup)
         maybeInvokeSetupMethod(setup, "applicationAvailable()");
@@ -415,11 +395,6 @@ int quick_test_main_with_setup(int argc, char **argv, const char *name, const ch
             index += 2;
         } else if (strcmp(argv[index], "-opengl") == 0) {
             ++index;
-#ifdef QT_QMLTEST_WITH_WIDGETS
-        } else if (strcmp(argv[index], "-widgets") == 0) {
-            withWidgets = true;
-            ++index;
-#endif
         } else if (strcmp(argv[index], "-translation") == 0 && (index + 1) < argc) {
             translationFile = stripQuotes(QString::fromLocal8Bit(argv[index + 1]));
             index += 2;

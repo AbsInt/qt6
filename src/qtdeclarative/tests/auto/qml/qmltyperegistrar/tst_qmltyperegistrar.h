@@ -37,10 +37,12 @@
 
 class Interface {};
 class Interface2 {};
+class Interface3 {};
 
 QT_BEGIN_NAMESPACE
 Q_DECLARE_INTERFACE(Interface, "io.qt.bugreports.Interface");
 Q_DECLARE_INTERFACE(Interface2, "io.qt.bugreports.Interface2");
+Q_DECLARE_INTERFACE(Interface3, "io.qt.bugreports.Interface3");
 QT_END_NAMESPACE
 
 
@@ -114,11 +116,61 @@ public:
     void setWidth(int width) { v.setWidth(width); }
 };
 
+class ForeignWithoutDefault : public QObject
+{
+    Q_OBJECT
+    Q_PROPERTY(QObject *d READ d WRITE setD NOTIFY dChanged)
+public:
+    QObject *d() const { return m_d; }
+
+    void setD(QObject *d)
+    {
+        if (m_d != d) {
+            m_d = d;
+            emit dChanged();
+        }
+    }
+
+signals:
+    void dChanged();
+
+private:
+    QObject *m_d = nullptr;
+};
+
+class LocalWithDefault : public QObject
+{
+    Q_OBJECT
+    Q_PROPERTY(QObject *d READ d WRITE setD NOTIFY dChanged)
+    QML_NAMED_ELEMENT(ForeignWithoutDefault)
+    QML_FOREIGN(ForeignWithoutDefault)
+    Q_CLASSINFO("DefaultProperty", "d")
+
+public:
+    LocalWithDefault(QObject *parent = nullptr) : QObject(parent) {}
+    QObject *d() const { return m_d; }
+
+    void setD(QObject *d)
+    {
+        if (m_d != d) {
+            m_d = d;
+            emit dChanged();
+        }
+    }
+
+signals:
+    void dChanged();
+
+private:
+    QObject *m_d = nullptr;
+};
+
 class Local : public Foreign
 {
     Q_OBJECT
     QML_ELEMENT
     Q_PROPERTY(int someProperty MEMBER someProperty BINDABLE bindableSomeProperty)
+    QML_EXTENDED(LocalWithDefault)
 public:
     enum Flag {
         Flag1 = 0x1,
@@ -150,6 +202,49 @@ public:
     DerivedFromForeign(QObject *parent) : QTimeLine(1000, parent) {}
 };
 
+class ExtensionA : public QObject
+{
+    Q_OBJECT
+    QML_ANONYMOUS
+    Q_PROPERTY(int a READ a CONSTANT)
+public:
+    ExtensionA(QObject *parent = nullptr) : QObject(parent) {}
+    int a() const { return 'a'; }
+};
+
+class ExtensionB : public QObject
+{
+    Q_OBJECT
+    QML_ANONYMOUS
+    Q_PROPERTY(int b READ b CONSTANT)
+public:
+    ExtensionB(QObject *parent = nullptr) : QObject(parent) {}
+    int b() const { return 'b'; }
+};
+
+class MultiExtensionParent : public QObject, public Interface3
+{
+    Q_OBJECT
+    QML_ANONYMOUS
+    QML_EXTENDED(ExtensionA)
+    QML_IMPLEMENTS_INTERFACES(Interface3)
+    Q_PROPERTY(int p READ p CONSTANT)
+public:
+    MultiExtensionParent(QObject *parent = nullptr) : QObject(parent) {}
+    int p() const { return 'p'; }
+};
+
+class MultiExtension : public MultiExtensionParent
+{
+    Q_OBJECT
+    QML_ELEMENT
+    QML_EXTENDED(ExtensionB)
+    Q_PROPERTY(int e READ e CONSTANT)
+public:
+    MultiExtension(QObject *parent = nullptr) : MultiExtensionParent(parent) {}
+    int e() const { return 'e'; }
+};
+
 class tst_qmltyperegistrar : public QObject
 {
     Q_OBJECT
@@ -170,6 +265,8 @@ private slots:
     void namespacedElement();
     void derivedFromForeign();
     void metaTypesRegistered();
+    void multiExtensions();
+    void localDefault();
 
 private:
     QByteArray qmltypesData;

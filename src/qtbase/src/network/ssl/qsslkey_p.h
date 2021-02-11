@@ -61,20 +61,19 @@
 #include <openssl/dsa.h>
 #endif
 
+#include <memory>
+
 QT_BEGIN_NAMESPACE
+
+namespace QSsl {
+class TlsKey;
+}
 
 class QSslKeyPrivate
 {
 public:
-    inline QSslKeyPrivate()
-        : algorithm(QSsl::Opaque)
-        , opaque(nullptr)
-    {
-        clear(false);
-    }
-
-    inline ~QSslKeyPrivate()
-    { clear(); }
+    QSslKeyPrivate();
+    ~QSslKeyPrivate();
 
     void clear(bool deep = true);
 
@@ -130,6 +129,7 @@ public:
     int keyLength;
 #endif
 
+    std::unique_ptr<QSsl::TlsKey> keyBackend;
     QAtomicInt ref;
 
 private:

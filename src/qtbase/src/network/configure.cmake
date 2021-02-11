@@ -204,8 +204,8 @@ int main(int argc, char **argv)
 }
 ")
 
-# netlistmgr
-qt_config_compile_test(netlistmgr
+# networklistmanager
+qt_config_compile_test(networklistmanager
     LABEL "Network List Manager"
     CODE
 "
@@ -232,12 +232,6 @@ connectionPointContainer->FindConnectionPoint(IID_INetworkConnectionEvents, &con
 
 #### Features
 
-qt_feature("corewlan" PUBLIC PRIVATE
-    LABEL "CoreWLan"
-    CONDITION libs.corewlan OR FIXME
-    EMIT_IF APPLE
-)
-qt_feature_definition("corewlan" "QT_NO_COREWLAN" NEGATE VALUE "1")
 qt_feature("getifaddrs" PUBLIC
     LABEL "getifaddrs()"
     CONDITION TEST_getifaddrs
@@ -393,11 +387,11 @@ qt_feature("sspi" PUBLIC
     CONDITION WIN32
 )
 qt_feature_definition("sspi" "QT_NO_SSPI" NEGATE VALUE "1")
-qt_feature("netlistmgr" PRIVATE
+qt_feature("networklistmanager" PRIVATE
     SECTION "Networking"
     LABEL "Network List Manager"
     PURPOSE "Use Network List Manager to keep track of network connectivity"
-    CONDITION WIN32 AND TEST_netlistmgr
+    CONDITION WIN32 AND TEST_networklistmanager
 )
 qt_feature("topleveldomain" PUBLIC
     SECTION "Networking"
@@ -405,10 +399,6 @@ qt_feature("topleveldomain" PUBLIC
     PURPOSE "Provides support for extracting the top level domain from URLs.  If enabled, a binary dump of the Public Suffix List (http://www.publicsuffix.org, Mozilla License) is included. The data is then also used in QNetworkCookieJar::validateCookie."
 )
 qt_configure_add_summary_section(NAME "Qt Network")
-qt_configure_add_summary_entry(
-    ARGS "corewlan"
-    CONDITION APPLE
-)
 qt_configure_add_summary_entry(ARGS "getifaddrs")
 qt_configure_add_summary_entry(ARGS "ipv6ifname")
 qt_configure_add_summary_entry(ARGS "libproxy")
@@ -434,8 +424,10 @@ qt_configure_add_summary_entry(ARGS "system-proxies")
 qt_configure_add_summary_entry(ARGS "gssapi")
 qt_configure_add_summary_entry(ARGS "brotli")
 qt_configure_end_summary_section() # end of "Qt Network" section
+# special case begin
 qt_configure_add_report_entry(
     TYPE NOTE
     MESSAGE "When linking against OpenSSL, you can override the default library names through OPENSSL_LIBS. For example: OPENSSL_LIBS='-L/opt/ssl/lib -lssl -lcrypto' ./configure -openssl-linked"
     CONDITION NOT ANDROID AND QT_FEATURE_openssl_linked AND ( NOT TEST_openssl.source EQUAL 0 ) AND INPUT_openssl.prefix STREQUAL '' AND INPUT_openssl.libs STREQUAL '' AND INPUT_openssl.libs.debug STREQUAL '' OR FIXME
 )
+# special case end

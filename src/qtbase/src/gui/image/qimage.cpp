@@ -3036,6 +3036,8 @@ QImage QImage::createMaskFromColor(QRgb color, Qt::MaskMode mode) const
     QIMAGE_SANITYCHECK_MEMORY(maskImage);
     maskImage.fill(0);
     uchar *s = maskImage.bits();
+    if (!s)
+        return QImage();
 
     if (depth() == 32) {
         for (int h = 0; h < d->height; h++) {
@@ -4826,7 +4828,7 @@ void QImage::applyColorTransform(const QColorTransform &transform)
     }
 
 #if QT_CONFIG(thread) && !defined(Q_OS_WASM)
-    int segments = sizeInBytes() / (1<<16);
+    int segments = (qsizetype(width()) * height()) >> 16;
     segments = std::min(segments, height());
     QThreadPool *threadPool = QThreadPool::globalInstance();
     if (segments > 1 && threadPool && !threadPool->contains(QThread::currentThread())) {

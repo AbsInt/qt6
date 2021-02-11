@@ -277,6 +277,9 @@ endif()
 
 qt_generate_qconfig_cpp()
 
+set_target_properties(Core PROPERTIES INTERFACE_QT_COORD_TYPE "${QT_COORD_TYPE}")
+set_property(TARGET Core APPEND PROPERTY COMPATIBLE_INTERFACE_STRING QT_COORD_TYPE)
+
 # Handle qtConfig(thread): CONFIG += thread like in qt.prf.
 # Aka if the feature is enabled, publically link against the threading library.
 # This also ensures the link flag is in the .prl file.
@@ -744,19 +747,28 @@ qt_internal_extend_target(Core CONDITION QT_FEATURE_system_doubleconversion
 
 qt_internal_extend_target(Core CONDITION QT_FEATURE_doubleconversion AND NOT QT_FEATURE_system_doubleconversion
     SOURCES
-        ../3rdparty/double-conversion/bignum.cc ../3rdparty/double-conversion/bignum.h
-        ../3rdparty/double-conversion/bignum-dtoa.cc ../3rdparty/double-conversion/bignum-dtoa.h
-        ../3rdparty/double-conversion/cached-powers.cc ../3rdparty/double-conversion/cached-powers.h
-        ../3rdparty/double-conversion/diy-fp.cc ../3rdparty/double-conversion/diy-fp.h
-        ../3rdparty/double-conversion/double-conversion.cc
-        ../3rdparty/double-conversion/fast-dtoa.cc ../3rdparty/double-conversion/fast-dtoa.h
-        ../3rdparty/double-conversion/fixed-dtoa.cc ../3rdparty/double-conversion/fixed-dtoa.h
+        ../3rdparty/double-conversion/cached-powers.h
+        ../3rdparty/double-conversion/double-to-string.cc
         ../3rdparty/double-conversion/ieee.h
-        ../3rdparty/double-conversion/include/double-conversion/double-conversion.h
+        ../3rdparty/double-conversion/fast-dtoa.cc
+        ../3rdparty/double-conversion/diy-fp.h
+        ../3rdparty/double-conversion/strtod.h
+        ../3rdparty/double-conversion/fixed-dtoa.h
+        ../3rdparty/double-conversion/strtod.cc
+        ../3rdparty/double-conversion/bignum.h
+        ../3rdparty/double-conversion/bignum.cc
+        ../3rdparty/double-conversion/cached-powers.cc
+        ../3rdparty/double-conversion/bignum-dtoa.cc
+        ../3rdparty/double-conversion/fast-dtoa.h
+        ../3rdparty/double-conversion/fixed-dtoa.cc
+        ../3rdparty/double-conversion/string-to-double.cc
+        ../3rdparty/double-conversion/bignum-dtoa.h
         ../3rdparty/double-conversion/include/double-conversion/utils.h
-        ../3rdparty/double-conversion/strtod.cc ../3rdparty/double-conversion/strtod.h
+        ../3rdparty/double-conversion/include/double-conversion/double-to-string.h
+        ../3rdparty/double-conversion/include/double-conversion/double-conversion.h
+        ../3rdparty/double-conversion/include/double-conversion/string-to-double.h
     INCLUDE_DIRECTORIES
-        ../3rdparty/double-conversion/..
+        ../3rdparty
         ../3rdparty/double-conversion/include
 )
 

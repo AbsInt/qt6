@@ -1373,9 +1373,15 @@ static void applyVisibilityRules(ushort ucs, QGlyphLayout *glyphs, uint glyphPos
         if (!fontEngine->symbol) {
             // U+00AD [SOFT HYPHEN] is a default ignorable codepoint,
             // so we replace its glyph and metrics with ones for
-            // U+002D [HYPHEN-MINUS] and make it visible if it appears at line-break
+            // U+002D [HYPHEN-MINUS] or U+2010 [HYPHEN] and make
+            // it visible if it appears at line-break
             const uint engineIndex = glyphs->glyphs[glyphPosition] & 0xff000000;
-            glyphs->glyphs[glyphPosition] = fontEngine->glyphIndex('-');
+            glyph_t glyph = fontEngine->glyphIndex(0x002d);
+            if (glyph == 0)
+                glyph = fontEngine->glyphIndex(0x2010);
+            if (glyph == 0)
+                glyph = fontEngine->glyphIndex(0x00ad);
+            glyphs->glyphs[glyphPosition] = glyph;
             if (Q_LIKELY(glyphs->glyphs[glyphPosition] != 0)) {
                 glyphs->glyphs[glyphPosition] |= engineIndex;
                 QGlyphLayout tmp = glyphs->mid(glyphPosition, 1);
@@ -1546,11 +1552,20 @@ void QTextEngine::shapeText(int item) const
 
         si.num_glyphs = glyph_pos;
     }
+
     if (Q_UNLIKELY(si.num_glyphs == 0)) {
-        Q_UNREACHABLE(); // ### report shaping errors somehow
+        if (Q_UNLIKELY(!ensureSpace(si.glyph_data_offset + 1))) {
+            qWarning() << "Unable to allocate space for place-holder glyph";
+            return;
+        }
+
+        si.num_glyphs = 1;
+
+        // Overwrite with 0 token to indicate failure
+        QGlyphLayout g = availableGlyphs(&si);
+        g.glyphs[0] = 0;
         return;
     }
-
 
     layoutData->used += si.num_glyphs;
 

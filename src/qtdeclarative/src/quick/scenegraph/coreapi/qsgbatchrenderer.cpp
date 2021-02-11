@@ -959,6 +959,11 @@ static void qsg_wipeBatch(Batch *batch, bool separateIndexBuffer)
 Renderer::~Renderer()
 {
     if (m_rhi) {
+        // If setExternalRenderPassDescriptor() was called, we have to
+        // aggressively invalidate to prevent an object, the lifetime of which
+        // we have no control over, staying in the (per-window) caches.
+        invalidatePipelineCacheDependency(m_external_rp_desc);
+
         // Clean up batches and buffers
         const bool separateIndexBuffer = m_context->separateIndexBuffer();
         for (int i = 0; i < m_opaqueBatches.size(); ++i)
@@ -1068,11 +1073,11 @@ void Renderer::unmap(Buffer *buffer, bool isIndexBuf)
     }
     if (buffer->buf->type() != QRhiBuffer::Dynamic) {
         m_resourceUpdates->uploadStaticBuffer(buffer->buf,
-                                              QByteArray::fromRawData(buffer->data, buffer->size));
+                                             0, buffer->size, buffer->data);
         buffer->nonDynamicChangeCount += 1;
     } else {
         m_resourceUpdates->updateDynamicBuffer(buffer->buf, 0, buffer->size,
-                                               QByteArray::fromRawData(buffer->data, buffer->size));
+                                               buffer->data);
     }
     if (m_visualizer->mode() == Visualizer::VisualizeNothing)
         buffer->data = nullptr;
