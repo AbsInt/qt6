@@ -330,9 +330,13 @@ bool ScanFunctions::visit(PatternElement *ast)
     BoundNames names;
     ast->boundNames(&names);
 
-    QQmlJS::SourceLocation lastInitializerLocation = ast->lastSourceLocation();
-    if (_context->lastBlockInitializerLocation.isValid())
-        lastInitializerLocation = _context->lastBlockInitializerLocation;
+    QQmlJS::SourceLocation declarationLocation = ast->firstSourceLocation();
+    if (_context->lastBlockInitializerLocation.isValid()) {
+        declarationLocation.length = _context->lastBlockInitializerLocation.end()
+                - declarationLocation.offset;
+    } else {
+        declarationLocation.length = ast->lastSourceLocation().end() - declarationLocation.offset;
+    }
 
     for (const auto &name : qAsConst(names)) {
         if (_context->isStrict && (name.id == QLatin1String("eval") || name.id == QLatin1String("arguments")))
@@ -345,7 +349,7 @@ bool ScanFunctions::visit(PatternElement *ast)
             return false;
         }
         if (!_context->addLocalVar(name.id, ast->initializer ? Context::VariableDefinition : Context::VariableDeclaration, ast->scope,
-                                   /*function*/nullptr, lastInitializerLocation)) {
+                                   /*function*/nullptr, declarationLocation)) {
             _cg->throwSyntaxError(ast->identifierToken, QStringLiteral("Identifier %1 has already been declared").arg(name.id));
             return false;
         }
@@ -699,22 +703,24 @@ bool ScanFunctions::enterFunction(Node *ast, const QString &name, FormalParamete
 
     const BoundNames boundNames = formals ? formals->boundNames() : BoundNames();
     for (int i = 0; i < boundNames.size(); ++i) {
-        const QString &arg = boundNames.at(i).id;
+        const auto &arg = boundNames.at(i);
         if (_context->isStrict || !isSimpleParameterList) {
-            bool duplicate = (boundNames.indexOf(arg, i + 1) != -1);
+            bool duplicate = (boundNames.indexOf(arg.id, i + 1) != -1);
             if (duplicate) {
-                _cg->throwSyntaxError(formals->firstSourceLocation(), QStringLiteral("Duplicate parameter name '%1' is not allowed.").arg(arg));
+                _cg->throwSyntaxError(formals->firstSourceLocation(), QStringLiteral("Duplicate parameter name '%1' is not allowed.").arg(arg.id));
                 return false;
             }
         }
         if (_context->isStrict) {
-            if (arg == QLatin1String("eval") || arg == QLatin1String("arguments")) {
-                _cg->throwSyntaxError(formals->firstSourceLocation(), QStringLiteral("'%1' cannot be used as parameter name in strict mode").arg(arg));
+            if (arg.id == QLatin1String("eval") || arg.id == QLatin1String("arguments")) {
+                _cg->throwSyntaxError(formals->firstSourceLocation(), QStringLiteral("'%1' cannot be used as parameter name in strict mode").arg(arg.id));
                 return false;
             }
         }
-        if (!_context->arguments.contains(arg))
-            _context->addLocalVar(arg, Context::VariableDefinition, VariableScope::Var);
+        if (!_context->arguments.contains(arg.id)) {
+            _context->addLocalVar(arg.id, Context::VariableDefinition, VariableScope::Var, nullptr,
+                                  QQmlJS::SourceLocation(), arg.isInjected());
+        }
     }
 
     return true;
@@ -783,7 +789,7 @@ void ScanFunctions::calcEscapingVariables()
                     }
                     break;
                 }
-                if (c->findArgument(var) != -1) {
+                if (c->hasArgument(var)) {
                     c->argumentsCanEscape = true;
                     c->requiresExecutionContext = true;
                     break;

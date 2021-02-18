@@ -209,8 +209,8 @@ Rectangle {
 
     TapHandler {
         id: handler
-        onTapped: root.activated(mouseXY.x, mouseXY.y)
-        onPressedChanged: mouseXY = handler.point.position
+        onTapped: root.activated(root.mouseXY.x, root.mouseXY.y)
+        onPressedChanged: root.mouseXY = handler.point.position
     }
 }
 \endqml
@@ -220,7 +220,7 @@ Now any objects of the \c SquareButton can connect to the \c activated signal us
 \qml
 // myapplication.qml
 SquareButton {
-    onActivated: console.log("Activated at " + xPosition + "," + yPosition)
+    onActivated: (xPosition, yPosition)=> console.log("Activated at " + xPosition + "," + yPosition)
 }
 \endqml
 
