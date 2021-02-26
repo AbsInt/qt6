@@ -42,7 +42,6 @@
 
 #include <qpa/qplatformwindow.h>
 #include <qpa/qplatformwindow_p.h>
-#include <QHash>
 #include <QRect>
 #include <QPointer>
 

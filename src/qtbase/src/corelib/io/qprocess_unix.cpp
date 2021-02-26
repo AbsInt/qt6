@@ -1,7 +1,8 @@
 /****************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
-** Copyright (C) 2016 Intel Corporation.
+** Copyright (C) 2020 The Qt Company Ltd.
+** Copyright (C) 2021 Intel Corporation.
+** Copyright (C) 2021 Alex Trotsenko.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
@@ -883,17 +884,21 @@ bool QProcessPrivate::startDetached(qint64 *pid)
 
     // To catch the startup of the child
     int startedPipe[2];
-    if (qt_safe_pipe(startedPipe) != 0)
+    if (qt_safe_pipe(startedPipe) != 0) {
+        setErrorAndEmit(QProcess::FailedToStart, QLatin1String("pipe: ") + qt_error_string(errno));
         return false;
+    }
     // To communicate the pid of the child
     int pidPipe[2];
     if (qt_safe_pipe(pidPipe) != 0) {
+        setErrorAndEmit(QProcess::FailedToStart, QLatin1String("pipe: ") + qt_error_string(errno));
         qt_safe_close(startedPipe[0]);
         qt_safe_close(startedPipe[1]);
         return false;
     }
 
     if (!openChannelsForDetached()) {
+        // openChannel sets the error string
         closeChannel(&stdinChannel);
         closeChannel(&stdoutChannel);
         closeChannel(&stderrChannel);
@@ -906,27 +911,23 @@ bool QProcessPrivate::startDetached(qint64 *pid)
 
     pid_t childPid = fork();
     if (childPid == 0) {
-        struct sigaction noaction;
-        memset(&noaction, 0, sizeof(noaction));
-        noaction.sa_handler = SIG_IGN;
-        ::sigaction(SIGPIPE, &noaction, nullptr);
-
+        ::signal(SIGPIPE, SIG_DFL);     // reset the signal that we ignored
         ::setsid();
 
         qt_safe_close(startedPipe[0]);
         qt_safe_close(pidPipe[0]);
 
-        pid_t doubleForkPid = fork();
+        pid_t doubleForkPid = 0;
+        if (!encodedWorkingDirectory.isEmpty())
+            doubleForkPid = QT_CHDIR(encodedWorkingDirectory.constData());
+
+        if (doubleForkPid == 0)
+            doubleForkPid = fork();
         if (doubleForkPid == 0) {
             qt_safe_close(pidPipe[1]);
 
             // Render channels configuration.
             commitChannels();
-
-            if (!encodedWorkingDirectory.isEmpty()) {
-                if (QT_CHDIR(encodedWorkingDirectory.constData()) == -1)
-                    qWarning("QProcessPrivate::startDetached: failed to chdir to %s", encodedWorkingDirectory.constData());
-            }
 
             char **argv = new char *[arguments.size() + 2];
             for (int i = 0; i < arguments.size(); ++i)
@@ -955,22 +956,12 @@ bool QProcessPrivate::startDetached(qint64 *pid)
             else
                 qt_safe_execv(argv[0], argv);
 
-            struct sigaction noaction;
-            memset(&noaction, 0, sizeof(noaction));
-            noaction.sa_handler = SIG_IGN;
-            ::sigaction(SIGPIPE, &noaction, nullptr);
-
             // '\1' means execv failed
             char c = '\1';
             qt_safe_write(startedPipe[1], &c, 1);
             qt_safe_close(startedPipe[1]);
             ::_exit(1);
         } else if (doubleForkPid == -1) {
-            struct sigaction noaction;
-            memset(&noaction, 0, sizeof(noaction));
-            noaction.sa_handler = SIG_IGN;
-            ::sigaction(SIGPIPE, &noaction, nullptr);
-
             // '\2' means internal error
             char c = '\2';
             qt_safe_write(startedPipe[1], &c, 1);
@@ -978,11 +969,10 @@ bool QProcessPrivate::startDetached(qint64 *pid)
 
         qt_safe_close(startedPipe[1]);
         qt_safe_write(pidPipe[1], (const char *)&doubleForkPid, sizeof(pid_t));
-        if (QT_CHDIR("/") == -1)
-            qWarning("QProcessPrivate::startDetached: failed to chdir to /");
         ::_exit(1);
     }
 
+    int savedErrno = errno;
     closeChannel(&stdinChannel);
     closeChannel(&stdoutChannel);
     closeChannel(&stderrChannel);
@@ -992,6 +982,7 @@ bool QProcessPrivate::startDetached(qint64 *pid)
     if (childPid == -1) {
         qt_safe_close(startedPipe[0]);
         qt_safe_close(pidPipe[0]);
+        setErrorAndEmit(QProcess::FailedToStart, QLatin1String("fork: ") + qt_error_string(savedErrno));
         return false;
     }
 
@@ -1000,14 +991,17 @@ bool QProcessPrivate::startDetached(qint64 *pid)
     int result;
     qt_safe_close(startedPipe[0]);
     qt_safe_waitpid(childPid, &result, 0);
+
     bool success = (startResult != -1 && reply == '\0');
     if (success && pid) {
-        pid_t actualPid = 0;
-        if (qt_safe_read(pidPipe[0], (char *)&actualPid, sizeof(pid_t)) == sizeof(pid_t)) {
-            *pid = actualPid;
-        } else {
-            *pid = 0;
-        }
+        pid_t actualPid;
+        if (qt_safe_read(pidPipe[0], &actualPid, sizeof(pid_t)) != sizeof(pid_t))
+            actualPid = 0;
+        *pid = actualPid;
+    } else if (!success) {
+        if (pid)
+            *pid = -1;
+        setErrorAndEmit(QProcess::FailedToStart);
     }
     qt_safe_close(pidPipe[0]);
     return success;

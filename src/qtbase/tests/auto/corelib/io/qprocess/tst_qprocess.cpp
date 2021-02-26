@@ -27,8 +27,6 @@
 **
 ****************************************************************************/
 
-#include <emulationdetector.h>
-
 #include <QTest>
 #include <QTestEventLoop>
 #include <QSignalSpy>
@@ -120,6 +118,7 @@ private slots:
     void discardUnwantedOutput();
     void setWorkingDirectory();
     void setNonExistentWorkingDirectory();
+    void detachedSetNonExistentWorkingDirectory();
 
     void exitStatus_data();
     void exitStatus();
@@ -1237,8 +1236,6 @@ void tst_QProcess::processInAThread()
 
 void tst_QProcess::processesInMultipleThreads()
 {
-    if (EmulationDetector::isRunningArmOnX86())
-        QSKIP("Flakily hangs in QEMU. QTBUG-67760");
     for (int i = 0; i < 10; ++i) {
         // run from 1 to 10 threads, but run at least some tests
         // with more threads than the ideal
@@ -2268,6 +2265,22 @@ void tst_QProcess::setNonExistentWorkingDirectory()
 #  endif
     QVERIFY2(process.errorString().startsWith("chdir:"), process.errorString().toLocal8Bit());
 #endif
+}
+
+void tst_QProcess::detachedSetNonExistentWorkingDirectory()
+{
+    QProcess process;
+    process.setWorkingDirectory("this/directory/should/not/exist/for/sure");
+
+    // use absolute path because on Windows, the executable is relative to the parent's CWD
+    // while on Unix with fork it's relative to the child's (with posix_spawn, it could be either).
+    process.setProgram(QFileInfo("testSetWorkingDirectory/testSetWorkingDirectory").absoluteFilePath());
+
+    qint64 pid = -1;
+    QVERIFY(!process.startDetached(&pid));
+    QCOMPARE(pid, -1);
+    QCOMPARE(process.error(), QProcess::FailedToStart);
+    QVERIFY(process.errorString() != "Unknown error");
 }
 
 void tst_QProcess::startFinishStartFinish()

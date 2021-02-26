@@ -803,6 +803,8 @@ QString QPropertyBindingError::description() const
   if the QUntypedBindable is read-only, null or if \a binding's type does match the
   underlying property's type.
 
+  \return \c true when the binding was successfully set.
+
   \sa QUntypedPropertyBinding::valueMetaType()
 */
 
@@ -880,7 +882,7 @@ QString QPropertyBindingError::description() const
   \fn template <typename T> T QBindable<T>::value() const
 
   Returns the underlying property's current value. If the QBindable is invalid,
-  a default constructed \T is returned.
+  a default constructed \c T is returned.
 
   \sa isValid()
 */
@@ -1338,6 +1340,8 @@ QString QPropertyBindingError::description() const
 /*!
   \class QPropertyAlias
   \inmodule QtCore
+  \internal
+
   \brief The QPropertyAlias class is a safe alias for a QProperty with same template parameter.
 
   \ingroup tools

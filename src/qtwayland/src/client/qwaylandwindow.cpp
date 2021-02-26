@@ -363,7 +363,7 @@ void QWaylandWindow::setGeometry(const QRect &rect)
     if (isExposed() && !mInResizeFromApplyConfigure && exposeGeometry != mLastExposeGeometry)
         sendExposeEvent(exposeGeometry);
 
-    if (mShellSurface)
+    if (mShellSurface && isExposed())
         mShellSurface->setWindowGeometry(windowContentGeometry());
 
     if (isOpaque() && mMask.isEmpty())
@@ -1242,12 +1242,14 @@ bool QWaylandWindow::isOpaque() const
 
 void QWaylandWindow::setOpaqueArea(const QRegion &opaqueArea)
 {
-    if (opaqueArea == mOpaqueArea || !mSurface)
+    const QRegion translatedOpaqueArea = opaqueArea.translated(frameMargins().left(), frameMargins().top());
+
+    if (translatedOpaqueArea == mOpaqueArea || !mSurface)
         return;
 
-    mOpaqueArea = opaqueArea;
+    mOpaqueArea = translatedOpaqueArea;
 
-    struct ::wl_region *region = mDisplay->createRegion(opaqueArea);
+    struct ::wl_region *region = mDisplay->createRegion(translatedOpaqueArea);
     mSurface->set_opaque_region(region);
     wl_region_destroy(region);
 }

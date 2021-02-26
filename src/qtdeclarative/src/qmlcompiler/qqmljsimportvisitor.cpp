@@ -52,7 +52,7 @@ void QQmlJSImportVisitor::enterEnvironment(QQmlJSScope::ScopeType type, const QS
                                            const QQmlJS::SourceLocation &location)
 {
     m_currentScope = QQmlJSScope::create(type, m_currentScope);
-    if (type == QQmlJSScope::GroupedPropertyScope)
+    if (type == QQmlJSScope::GroupedPropertyScope || type == QQmlJSScope::AttachedPropertyScope)
         m_currentScope->setInternalName(name);
     else
         m_currentScope->setBaseTypeName(name);
@@ -136,7 +136,6 @@ bool QQmlJSImportVisitor::visit(UiObjectDefinition *definition)
 void QQmlJSImportVisitor::endVisit(UiObjectDefinition *)
 {
     m_currentScope->resolveTypes(m_rootScopeImports);
-    m_currentScope->resolveGroupedScopes();
     leaveEnvironment();
 }
 
@@ -261,16 +260,20 @@ bool QQmlJSImportVisitor::visit(UiScriptBinding *scriptBinding)
         for (auto group = id; group->next; group = group->next) {
             const QString name = group->name.toString();
 
-            if (name.isEmpty() || name.front().isUpper())
-                break; // TODO: uppercase grouped scopes are attached properties. Handle them.
+            if (name.isEmpty())
+                break;
 
-            enterEnvironment(QQmlJSScope::GroupedPropertyScope, name, group->firstSourceLocation());
+            enterEnvironment(name.front().isUpper() ? QQmlJSScope::AttachedPropertyScope
+                                                    : QQmlJSScope::GroupedPropertyScope,
+                             name, group->firstSourceLocation());
         }
 
         // TODO: remember the actual binding, once we can process it.
 
-        while (m_currentScope->scopeType() == QQmlJSScope::GroupedPropertyScope)
+        while (m_currentScope->scopeType() == QQmlJSScope::GroupedPropertyScope
+               || m_currentScope->scopeType() == QQmlJSScope::AttachedPropertyScope) {
             leaveEnvironment();
+        }
 
         if (!statement || !statement->expression->asFunctionDefinition()) {
             enterEnvironment(QQmlJSScope::JSFunctionScope, QStringLiteral("binding"),
@@ -471,24 +474,26 @@ bool QQmlJSImportVisitor::visit(QQmlJS::AST::UiObjectBinding *uiob)
 {
     // property QtObject __styleData: QtObject {...}
 
+    Q_ASSERT(uiob->qualifiedTypeNameId);
     QString name;
     for (auto id = uiob->qualifiedTypeNameId; id; id = id->next)
         name += id->name.toString() + QLatin1Char('.');
 
     name.chop(1);
 
-    QQmlJSMetaProperty prop;
-    prop.setPropertyName(uiob->qualifiedId->name.toString());
-    prop.setTypeName(name);
-    prop.setIsWritable(true);
-    prop.setIsPointer(true);
-    prop.setIsAlias(name == QLatin1String("alias"));
-    prop.setType(m_rootScopeImports.value(uiob->qualifiedTypeNameId->name.toString()));
-    m_currentScope->addOwnProperty(prop);
+    if (!uiob->hasOnToken) {
+        QQmlJSMetaProperty prop;
+        prop.setPropertyName(uiob->qualifiedId->name.toString());
+        prop.setTypeName(name);
+        prop.setIsWritable(true);
+        prop.setIsPointer(true);
+        prop.setIsAlias(name == QLatin1String("alias"));
+        prop.setType(m_rootScopeImports.value(uiob->qualifiedTypeNameId->name.toString()));
+        m_currentScope->addOwnProperty(prop);
+    }
 
     enterEnvironment(QQmlJSScope::QMLScope, name,
-                     uiob->qualifiedTypeNameId ? uiob->qualifiedTypeNameId->identifierToken
-                                               : uiob->firstSourceLocation());
+                     uiob->qualifiedTypeNameId->identifierToken);
     m_currentScope->resolveTypes(m_rootScopeImports);
     return true;
 }
@@ -496,13 +501,14 @@ bool QQmlJSImportVisitor::visit(QQmlJS::AST::UiObjectBinding *uiob)
 void QQmlJSImportVisitor::endVisit(QQmlJS::AST::UiObjectBinding *uiob)
 {
     m_currentScope->resolveTypes(m_rootScopeImports);
-    m_currentScope->resolveGroupedScopes();
     const QQmlJSScope::ConstPtr childScope = m_currentScope;
     leaveEnvironment();
 
-    QQmlJSMetaProperty property = m_currentScope->property(uiob->qualifiedId->name.toString());
-    property.setType(childScope);
-    m_currentScope->addOwnProperty(property);
+    if (!uiob->hasOnToken) {
+        QQmlJSMetaProperty property = m_currentScope->property(uiob->qualifiedId->name.toString());
+        property.setType(childScope);
+        m_currentScope->addOwnProperty(property);
+    }
 }
 
 bool QQmlJSImportVisitor::visit(ExportDeclaration *)

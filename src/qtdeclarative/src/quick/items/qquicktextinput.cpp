@@ -3432,17 +3432,19 @@ void QQuickTextInputPrivate::processInputMethodEvent(QInputMethodEvent *event)
     if (event->replacementStart() <= 0)
         c += event->commitString().length() - qMin(-event->replacementStart(), event->replacementLength());
 
-    m_cursor += event->replacementStart();
-    if (m_cursor < 0)
-        m_cursor = 0;
+    int cursorInsertPos = m_cursor + event->replacementStart();
+    if (cursorInsertPos < 0)
+        cursorInsertPos = 0;
 
     // insert commit string
     if (event->replacementLength()) {
-        m_selstart = m_cursor;
+        m_selstart = cursorInsertPos;
         m_selend = m_selstart + event->replacementLength();
         m_selend = qMin(m_selend, m_text.length());
         removeSelectedText();
     }
+    m_cursor = cursorInsertPos;
+
     if (!event->commitString().isEmpty()) {
         internalInsert(event->commitString());
         cursorPositionChanged = true;
@@ -3469,8 +3471,12 @@ void QQuickTextInputPrivate::processInputMethodEvent(QInputMethodEvent *event)
     }
     QString oldPreeditString = m_textLayout.preeditAreaText();
     m_textLayout.setPreeditArea(m_cursor, event->preeditString());
-    if (oldPreeditString != m_textLayout.preeditAreaText())
+    if (oldPreeditString != m_textLayout.preeditAreaText()) {
         emit q->preeditTextChanged();
+        if (!event->preeditString().isEmpty() && m_undoPreeditState == -1)
+            // Pre-edit text started. Remember state for undo purpose.
+            m_undoPreeditState = priorState;
+    }
     const int oldPreeditCursor = m_preeditCursor;
     m_preeditCursor = event->preeditString().length();
     hasImState = !event->preeditString().isEmpty();
@@ -3513,6 +3519,11 @@ void QQuickTextInputPrivate::processInputMethodEvent(QInputMethodEvent *event)
         q->updateInputMethod(Qt::ImCursorRectangle | Qt::ImAnchorRectangle
                             | Qt::ImCurrentSelection);
     }
+
+    // Empty pre-edit text handled. Clean m_undoPreeditState
+    if (event->preeditString().isEmpty())
+        m_undoPreeditState = -1;
+
 }
 #endif // im
 
@@ -3589,6 +3600,12 @@ bool QQuickTextInputPrivate::finishChange(int validateFromState, bool update, bo
         if (m_maskData)
             checkIsValid();
 
+#if QT_CONFIG(im)
+        // If we were during pre-edit, validateFromState should point to the state before pre-edit
+        // has been started. Choose the correct oldest remembered state
+        if (m_undoPreeditState >= 0 && (m_undoPreeditState < validateFromState || validateFromState < 0))
+                validateFromState = m_undoPreeditState;
+#endif
         if (validateFromState >= 0 && wasValidInput && !m_validInput) {
             if (m_transactions.count())
                 return false;
@@ -3661,6 +3678,9 @@ void QQuickTextInputPrivate::internalSetText(const QString &txt, int pos, bool e
     }
     m_history.clear();
     m_undoState = 0;
+#if QT_CONFIG(im)
+    m_undoPreeditState = -1;
+#endif
     m_cursor = (pos < 0 || pos > m_text.length()) ? m_text.length() : pos;
     m_textDirty = (oldText != m_text);
 
