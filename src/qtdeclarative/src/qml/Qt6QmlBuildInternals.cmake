@@ -66,10 +66,12 @@ function(qt_internal_add_qml_module target)
     qt_remove_args(plugin_args
         ARGS_TO_REMOVE
             ${target}
-            ${qml_module_multi_args}
+            ${qml_module_optional_args}
             ${qml_module_single_args}
+            ${qml_module_multi_args}
         ALL_ARGS
             ${__qt_add_plugin_optional_args}
+            ${qml_module_optional_args}
             ${__qt_add_plugin_single_args}
             ${qml_module_single_args}
             ${__qt_add_plugin_multi_args}
@@ -123,12 +125,6 @@ function(qt_internal_add_qml_module target)
 
     qt_path_join(qml_module_install_dir ${QT_INSTALL_DIR} "${INSTALL_QMLDIR}/${arg_TARGET_PATH}")
 
-    set(qml_module_build_dir "")
-    if(NOT QT_WILL_INSTALL)
-        qt_path_join(qml_module_build_dir ${QT_INSTALL_DIR} "${INSTALL_QMLDIR}/${arg_TARGET_PATH}")
-        set(qml_module_build_dir OUTPUT_DIRECTORY "${qml_module_build_dir}")
-    endif()
-
     if (arg_SOURCES AND NOT arg_TYPEINFO)
         set(arg_TYPEINFO "plugins.qmltypes")
     endif()
@@ -152,8 +148,6 @@ function(qt_internal_add_qml_module target)
         OPTIONAL_IMPORTS "${arg_OPTIONAL_IMPORTS}"
         TYPEINFO "${arg_TYPEINFO}"
         DO_NOT_INSTALL_METADATA
-        INSTALL_QML_FILES
-        ${qml_module_build_dir}
         INSTALL_LOCATION "${qml_module_install_dir}"
         DEPENDENCIES ${arg_DEPENDENCIES}
         RESOURCE_EXPORT "${INSTALL_CMAKE_NAMESPACE}${target}Targets"

@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2018 The Qt Company Ltd.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtNetwork module of the Qt Toolkit.
@@ -37,26 +37,47 @@
 **
 ****************************************************************************/
 
-#include "qsslcertificate.h"
-#include "qsslcertificate_p.h"
+#ifndef QTLSBACKEND_CERT_P_H
+#define QTLSBACKEND_CERT_P_H
 
-#include <wincrypt.h>
+//
+//  W A R N I N G
+//  -------------
+//
+// This file is not part of the Qt API.  It exists purely as an
+// implementation detail.  This header file may change from version to
+// version without notice, or even be removed.
+//
+// We mean it.
+//
+
+#include <private/qtnetworkglobal_p.h>
+
+#include "qtlsbackend_p.h"
+
+#include <QtCore/qglobal.h>
+
+#ifdef QT_NO_SSL
 
 QT_BEGIN_NAMESPACE
 
-QSslCertificate QSslCertificatePrivate::QSslCertificate_from_CERT_CONTEXT(const CERT_CONTEXT *certificateContext)
+class QTlsBackendCertOnly final : public QTlsBackend
 {
-    QByteArray derData = QByteArray((const char *)certificateContext->pbCertEncoded,
-                                    certificateContext->cbCertEncoded);
+public:
+private:
+    QString backendName() const override;
 
-    QSslCertificate certificate(derData, QSsl::Der);
-    certificate.d->certificateContext = CertDuplicateCertificateContext(certificateContext);
-    return certificate;
-}
+    QList<QSsl::SslProtocol> supportedProtocols() const override;
+    QList<QSsl::SupportedFeature> supportedFeatures() const override;
+    QList<QSsl::ImplementedClass> implementedClasses() const override;
 
-Qt::HANDLE QSslCertificate::handle() const
-{
-    return Qt::HANDLE(d->certificateContext);
-}
+    QTlsPrivate::X509Certificate *createCertificate() const override;
+    QTlsPrivate::X509PemReaderPtr X509PemReader() const override;
+    QTlsPrivate::X509DerReaderPtr X509DerReader() const override;
+};
 
 QT_END_NAMESPACE
+
+#endif // QT_NO_SSL
+
+#endif // QTLSBACKEND_CERT_P_H

@@ -13,6 +13,23 @@ function(qt_internal_add_plugin target)
         "${ARGN}"
     )
 
+    # Put this behind a cache option for now. It's too noisy for general use
+    # until most repos are updated.
+    option(QT_WARN_PLUGIN_PUBLIC_KEYWORDS "Warn if a plugin specifies a PUBLIC keyword")
+    if(QT_WARN_PLUGIN_PUBLIC_KEYWORDS)
+        foreach(publicKeyword IN LISTS __default_public_args)
+            if(NOT "${arg_${publicKeyword}}" STREQUAL "")
+                string(REPLACE "PUBLIC_" "" privateKeyword "${publicKeyword}")
+                message(AUTHOR_WARNING
+                    "Plugins are not intended to be linked to. "
+                    "They should not have any public properties, but ${target} "
+                    "sets ${publicKeyword} to the following value:\n"
+                    "    ${arg_${publicKeyword}}\n"
+                    "Update your project to use ${privateKeyword} instead.\n")
+            endif()
+        endforeach()
+    endif()
+
     qt_get_sanitized_plugin_type("${arg_TYPE}" plugin_type_escaped)
 
     set(output_directory_default "${QT_BUILD_DIR}/${INSTALL_PLUGINSDIR}/${arg_TYPE}")
@@ -111,8 +128,8 @@ function(qt_internal_add_plugin target)
 
     # Save the Qt module in the plug-in's properties
     if(NOT plugin_type_escaped STREQUAL "qml_plugin")
-        qt_get_module_for_plugin("${target}" "${plugin_type_escaped}")
-        get_target_property(qt_module "${target}" QT_MODULE)
+        qt_internal_get_module_for_plugin("${target}" "${plugin_type_escaped}" qt_module)
+        set_target_properties("${target}" PROPERTIES QT_MODULE "${qt_module}")
         set(plugin_install_package_suffix "${qt_module}")
     endif()
 
@@ -311,8 +328,7 @@ function(qt_get_sanitized_plugin_type plugin_type out_var)
 endfunction()
 
 # Utility function to find the module to which a plug-in belongs.
-# This will set the QT_MODULE target property on the plug-in - e.g. "Gui", "Sql"...
-function(qt_get_module_for_plugin target target_type)
+function(qt_internal_get_module_for_plugin target target_type out_var)
     qt_internal_get_qt_all_known_modules(known_modules)
 
     qt_get_sanitized_plugin_type("${target_type}" target_type)
@@ -327,14 +343,10 @@ function(qt_get_module_for_plugin target target_type)
         get_target_property(plugin_types
                            "${QT_CMAKE_EXPORT_NAMESPACE}::${qt_module}"
                             MODULE_PLUGIN_TYPES)
-        if(plugin_types)
-            foreach(plugin_type ${plugin_types})
-                if("${target_type}" STREQUAL "${plugin_type}")
-                    set_target_properties("${target}" PROPERTIES QT_MODULE "${qt_module}")
-                    return()
-                endif()
-            endforeach()
+        if(plugin_types AND target_type IN_LIST plugin_types)
+            set("${out_var}" "${qt_module}" PARENT_SCOPE)
+            return()
         endif()
     endforeach()
-    message(AUTHOR_WARNING "The plug-in '${target}' does not belong to any Qt module.")
+    message(FATAL_ERROR "The plug-in '${target}' does not belong to any Qt module.")
 endfunction()

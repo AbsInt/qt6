@@ -1,9 +1,9 @@
 /****************************************************************************
 **
-** Copyright (C) 2014 Governikus GmbH & Co. KG.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
-** This file is part of the QtNetwork module of the Qt Toolkit.
+** This file is part of the QtQuick module of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
@@ -37,35 +37,65 @@
 **
 ****************************************************************************/
 
-#include "qsslellipticcurve.h"
+#ifndef QQUICKDELIVERYAGENT_P_H
+#define QQUICKDELIVERYAGENT_P_H
+
+//
+//  W A R N I N G
+//  -------------
+//
+// This file is not part of the Qt API.  It exists purely as an
+// implementation detail.  This header file may change from version to
+// version without notice, or even be removed.
+//
+// We mean it.
+//
+
+#include <QtQuick/private/qtquickglobal_p.h>
+
+#include <QtQml/qqml.h>
+#include <QtQml/private/qqmlglobal_p.h>
+
+#include <QtCore/qobject.h>
+#include <QtGui/qevent.h>
 
 QT_BEGIN_NAMESPACE
 
-QString QSslEllipticCurve::shortName() const
-{
-    return QString();
-}
+class QQuickItem;
+class QQuickDeliveryAgentPrivate;
 
-QString QSslEllipticCurve::longName() const
+class Q_QUICK_EXPORT QQuickDeliveryAgent : public QObject
 {
-    return QString();
-}
+    Q_OBJECT
+    Q_DECLARE_PRIVATE(QQuickDeliveryAgent)
 
-QSslEllipticCurve QSslEllipticCurve::fromShortName(const QString &name)
-{
-    Q_UNUSED(name);
-    return QSslEllipticCurve();
-}
+public:
+    struct Q_QUICK_EXPORT Transform
+    {
+        virtual ~Transform();
+        virtual QPointF map(const QPointF &point) = 0;
+    };
 
-QSslEllipticCurve QSslEllipticCurve::fromLongName(const QString &name)
-{
-    Q_UNUSED(name);
-    return QSslEllipticCurve();
-}
+    explicit QQuickDeliveryAgent(QQuickItem *rootItem);
+    virtual ~QQuickDeliveryAgent();
 
-bool QSslEllipticCurve::isTlsNamedCurve() const noexcept
-{
-    return false;
-}
+    static QQuickDeliveryAgent *grabberAgent(QPointerEvent *pe, const QEventPoint &pt);
+
+    QQuickItem *rootItem() const;
+
+    void setSceneTransform(Transform *transform);
+    bool event(QEvent *ev) override;
+
+Q_SIGNALS:
+
+private:
+    Q_DISABLE_COPY(QQuickDeliveryAgent)
+};
+
+#ifndef QT_NO_DEBUG_STREAM
+QDebug Q_QUICK_EXPORT operator<<(QDebug debug, const QQuickDeliveryAgent *da);
+#endif
 
 QT_END_NAMESPACE
+
+#endif // QQUICKDELIVERYAGENT_P_H

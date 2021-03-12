@@ -38,7 +38,15 @@
 ****************************************************************************/
 
 #include "qtlsbackend_p.h"
+
+#if QT_CONFIG(ssl)
 #include "qsslsocket_p.h"
+#include "qsslkey_p.h"
+#include "qsslkey.h"
+#else
+#include "qtlsbackend_cert_p.h"
+#endif
+
 #include "qssl_p.h"
 
 #include <QtCore/private/qfactoryloader_p.h>
@@ -93,8 +101,13 @@ public:
         while (loader->instance(index))
             ++index;
 
-        // TLSTODO: obviously, this one should go away:
+        // TLSTODO: obviously, these two below should
+        // disappear as soon as plugins are in place.
+#if QT_CONFIG(ssl)
         QSslSocketPrivate::registerAdHocFactory();
+#else
+        static QTlsBackendCertOnly certGenerator;
+#endif // QT_CONFIG(ssl)
 
         return loaded = true;
     }
@@ -140,7 +153,7 @@ private:
 
 Q_GLOBAL_STATIC(BackendCollection, backends);
 
-namespace QSsl {
+namespace QTlsPrivate {
 
 TlsKey::~TlsKey() = default;
 
@@ -180,7 +193,17 @@ QByteArray TlsKey::pemFooter() const
 
 X509Certificate::~X509Certificate() = default;
 
-} // namespace QSsl
+TlsKey *X509Certificate::publicKey() const
+{
+    // 'no-ssl' build has no key support either.
+    return nullptr;
+}
+
+#if QT_CONFIG(dtls)
+DtlsBase::~DtlsBase() = default;
+#endif // QT_CONFIG(dtls)
+
+} // namespace QTlsPrivate
 
 const QString QTlsBackend::builtinBackendNames[] = {
     QStringLiteral("schannel"),
@@ -210,58 +233,120 @@ QString QTlsBackend::backendName() const
     return QStringLiteral("dummyTLS");
 }
 
-QSsl::TlsKey *QTlsBackend::createKey() const
+#define REPORT_MISSING_SUPPORT(message) \
+    qCWarning(lcSsl) << "The backend" << backendName() << message
+
+QTlsPrivate::TlsKey *QTlsBackend::createKey() const
 {
-    qCWarning(lcSsl, "Dummy TLS backend, cannot generate a key");
+    REPORT_MISSING_SUPPORT("does not support QSslKey");
     return nullptr;
 }
 
-QSsl::X509Certificate *QTlsBackend::createCertificate() const
+QTlsPrivate::X509Certificate *QTlsBackend::createCertificate() const
 {
-    qCWarning(lcSsl, "Dummy TLS backend, cannot create a certificate");
+    REPORT_MISSING_SUPPORT("does not support QSslCertificate");
     return nullptr;
 }
 
-QSsl::TlsCryptograph *QTlsBackend::createTlsCryptograph() const
+QTlsPrivate::TlsCryptograph *QTlsBackend::createTlsCryptograph() const
 {
-    qCWarning(lcSsl, "Dummy TLS backend, cannot create TLS session");
+    REPORT_MISSING_SUPPORT("does not support QSslSocket");
     return nullptr;
 }
 
-QSsl::DtlsCryptograph *QTlsBackend::createDtlsCryptograph() const
+QTlsPrivate::DtlsCryptograph *QTlsBackend::createDtlsCryptograph(QDtls *qObject, int mode) const
 {
-    qCWarning(lcSsl, "Dummy TLS backend, cannot create DTLS session");
+    Q_UNUSED(qObject);
+    Q_UNUSED(mode);
+    REPORT_MISSING_SUPPORT("does not support QDtls");
     return nullptr;
 }
 
-QSsl::DtlsCookieVerifier *QTlsBackend::createDtlsCookieVerifier() const
+QTlsPrivate::DtlsCookieVerifier *QTlsBackend::createDtlsCookieVerifier() const
 {
-    qCWarning(lcSsl, "Dummy TLS backend, cannot create DTLS cookie generator/verifier");
+    REPORT_MISSING_SUPPORT("does not support DTLS cookies");
     return nullptr;
 }
 
-QSsl::X509ChainVerifyPtr QTlsBackend::X509Verifier() const
+QTlsPrivate::X509ChainVerifyPtr QTlsBackend::X509Verifier() const
 {
-    qCWarning(lcSsl, "Dummy TLS backend, cannot verify X509 chain");
+    REPORT_MISSING_SUPPORT("does not support (manual) certificate verification");
     return nullptr;
 }
 
-QSsl::X509PemReaderPtr QTlsBackend::X509PemReader() const
+QTlsPrivate::X509PemReaderPtr QTlsBackend::X509PemReader() const
 {
-    qCWarning(lcSsl, "Dummy TLS backend, cannot read PEM format");
+    REPORT_MISSING_SUPPORT("cannot read PEM format");
     return nullptr;
 }
 
-QSsl::X509DerReaderPtr QTlsBackend::X509DerReader() const
+QTlsPrivate::X509DerReaderPtr QTlsBackend::X509DerReader() const
 {
-    qCWarning(lcSsl, "Dummy TLS backend, don't know how to read DER");
+    REPORT_MISSING_SUPPORT("cannot read DER format");
     return nullptr;
 }
 
-QSsl::X509Pkcs12ReaderPtr QTlsBackend::X509Pkcs12Reader() const
+QTlsPrivate::X509Pkcs12ReaderPtr QTlsBackend::X509Pkcs12Reader() const
 {
-    qCWarning(lcSsl, "Dummy TLS backend, cannot read PKCS12");
+    REPORT_MISSING_SUPPORT("cannot read PKCS12 format");
     return nullptr;
+}
+
+QList<int> QTlsBackend::ellipticCurvesIds() const
+{
+    REPORT_MISSING_SUPPORT("does not support QSslEllipticCurve");
+    return {};
+}
+
+int QTlsBackend::curveIdFromShortName(const QString &name) const
+{
+    Q_UNUSED(name);
+    REPORT_MISSING_SUPPORT("does not support QSslEllipticCurve");
+    return 0;
+}
+
+int QTlsBackend::curveIdFromLongName(const QString &name) const
+{
+    Q_UNUSED(name);
+    REPORT_MISSING_SUPPORT("does not support QSslEllipticCurve");
+    return 0;
+}
+
+QString QTlsBackend::shortNameForId(int cid) const
+{
+    Q_UNUSED(cid);
+    REPORT_MISSING_SUPPORT("does not support QSslEllipticCurve");
+    return {};
+}
+
+QString QTlsBackend::longNameForId(int cid) const
+{
+    Q_UNUSED(cid);
+    REPORT_MISSING_SUPPORT("does not support QSslEllipticCurve");
+    return {};
+}
+
+bool QTlsBackend::isTlsNamedCurve(int cid) const
+{
+    Q_UNUSED(cid);
+    REPORT_MISSING_SUPPORT("does not support QSslEllipticCurve");
+    return false;
+}
+
+int QTlsBackend::dhParametersFromDer(const QByteArray &derData, QByteArray *data) const
+{
+    Q_UNUSED(derData);
+    Q_UNUSED(data);
+    REPORT_MISSING_SUPPORT("does not support QSslDiffieHellmanParameters in DER format");
+    return {};
+}
+
+int QTlsBackend::dhParametersFromPem(const QByteArray &pemData, QByteArray *data) const
+{
+    Q_UNUSED(pemData);
+    Q_UNUSED(data);
+    REPORT_MISSING_SUPPORT("does not support QSslDiffieHellmanParameters in PEM format");
+    return {};
 }
 
 QList<QString> QTlsBackend::availableBackendNames()
@@ -286,6 +371,9 @@ QString QTlsBackend::defaultBackendName()
     if (names.contains(name))
         return name;
 
+    if (names.size())
+        return names[0];
+
     return {};
 }
 
@@ -299,6 +387,15 @@ QTlsBackend *QTlsBackend::findBackend(const QString &backendName)
 
     qCWarning(lcSsl) << "Cannot create unknown backend named" << backendName;
     return nullptr;
+}
+
+QTlsBackend *QTlsBackend::activeOrAnyBackend()
+{
+#if QT_CONFIG(ssl)
+    return QSslSocketPrivate::tlsBackendInUse();
+#else
+    return findBackend(defaultBackendName());
+#endif // QT_CONFIG(ssl)
 }
 
 QList<QSsl::SslProtocol> QTlsBackend::supportedProtocols(const QString &backendName)
@@ -332,6 +429,16 @@ QList<QSsl::ImplementedClass> QTlsBackend::implementedClasses(const QString &bac
         return fct->implementedClasses();
 
     return {};
+}
+
+void QTlsBackend::resetBackend(QSslKey &key, QTlsPrivate::TlsKey *keyBackend)
+{
+#if QT_CONFIG(ssl)
+    key.d->backend.reset(keyBackend);
+#else
+    Q_UNUSED(key);
+    Q_UNUSED(keyBackend);
+#endif // QT_CONFIG(ssl)
 }
 
 QT_END_NAMESPACE

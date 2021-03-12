@@ -61,7 +61,7 @@
 
 QT_BEGIN_NAMESPACE
 
-namespace QSsl {
+namespace QTlsPrivate {
 
 // This class is what previously was known as qsslkey_qt:
 // it implements most of functionality needed by QSslKey
@@ -101,28 +101,6 @@ public:
         return pkcs8;
     }
 
-    QByteArray decrypt(Cipher cipher, const QByteArray &data,
-                       const QByteArray &key, const QByteArray &iv) const override
-    {
-        // The real implementation is to be provided by Schannel or SecureTransport.
-        Q_UNUSED(cipher)
-        Q_UNUSED(data)
-        Q_UNUSED(key)
-        Q_UNUSED(iv)
-
-        return {};
-    }
-    QByteArray encrypt(Cipher cipher, const QByteArray &data,
-                       const QByteArray &key, const QByteArray &iv) const override
-    {
-        // The real implementation is to be provided by Schannel or SecureTransport.
-        Q_UNUSED(cipher)
-        Q_UNUSED(data)
-        Q_UNUSED(key)
-        Q_UNUSED(iv)
-
-        return {};
-    }
 private:
     QByteArray decryptPkcs8(const QByteArray &encrypted, const QByteArray &passPhrase);
 
@@ -132,7 +110,7 @@ private:
     int keyLength = -1;
 };
 
-} // namespace QSsl
+} // namespace QTlsPrivate
 
 QT_END_NAMESPACE
 

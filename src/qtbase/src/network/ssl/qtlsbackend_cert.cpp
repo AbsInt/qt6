@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 Mikkel Krautz <mikkel@krautz.dk>
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtNetwork module of the Qt Toolkit.
@@ -37,21 +37,60 @@
 **
 ****************************************************************************/
 
+#include "qtlsbackend_cert_p.h"
 
-#include "qssldiffiehellmanparameters.h"
-#include "qssldiffiehellmanparameters_p.h"
+#ifdef QT_NO_SSL
 
-#include <QtCore/qglobal.h>
-#include <QtCore/qbytearray.h>
+#include "qx509_generic_p.h"
+
+#include <qssl.h>
+
+#include <qlist.h>
 
 QT_BEGIN_NAMESPACE
 
-void QSslDiffieHellmanParametersPrivate::decodeDer(const QByteArray &)
+Q_LOGGING_CATEGORY(lcTlsBackend, "qt.tlsbackend.cert-only");
+
+QString QTlsBackendCertOnly::backendName() const
 {
+    return QStringLiteral("cert-only");
 }
 
-void QSslDiffieHellmanParametersPrivate::decodePem(const QByteArray &)
+
+QList<QSsl::SslProtocol> QTlsBackendCertOnly::supportedProtocols() const
 {
+    return {};
+}
+
+QList<QSsl::SupportedFeature> QTlsBackendCertOnly::supportedFeatures() const
+{
+    return {};
+}
+
+QList<QSsl::ImplementedClass> QTlsBackendCertOnly::implementedClasses() const
+{
+    QList<QSsl::ImplementedClass> classes;
+    classes << QSsl::ImplementedClass::Certificate;
+
+    return classes;
+}
+
+QTlsPrivate::X509Certificate *QTlsBackendCertOnly::createCertificate() const
+{
+    return new QTlsPrivate::X509CertificateGeneric;
+}
+
+QTlsPrivate::X509PemReaderPtr QTlsBackendCertOnly::X509PemReader() const
+{
+    return QTlsPrivate::X509CertificateGeneric::certificatesFromPem;
+}
+
+QTlsPrivate::X509DerReaderPtr QTlsBackendCertOnly::X509DerReader() const
+{
+    return QTlsPrivate::X509CertificateGeneric::certificatesFromDer;
 }
 
 QT_END_NAMESPACE
+
+#endif // QT_NO_SSL
+

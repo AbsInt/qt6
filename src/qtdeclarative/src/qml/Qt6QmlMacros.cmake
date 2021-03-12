@@ -35,9 +35,6 @@ set(__qt_qml_macros_module_base_dir "${CMAKE_CURRENT_LIST_DIR}")
 #
 # DO_NOT_INSTALL_METADATA: When present, will not install the supporting files.
 #
-# INSTALL_QML_FILES: When present, will install the qml files along side the
-#   plugin.
-#
 # SOURCES: List of C++ sources. (OPTIONAL)
 #
 # DEPENDENCIES: List of QML Module dependencies and their versions. The module
@@ -99,7 +96,6 @@ function(qt6_add_qml_module target)
         DO_NOT_INSTALL_METADATA
         SKIP_TYPE_REGISTRATION
         PLUGIN_OPTIONAL
-        INSTALL_QML_FILES
         PURE_MODULE
     )
 
@@ -273,10 +269,6 @@ function(qt6_add_qml_module target)
         else()
             get_target_property(target_output_dir ${target} LIBRARY_OUTPUT_DIRECTORY)
         endif()
-    endif()
-
-    if (arg_INSTALL_QML_FILES)
-        set_target_properties(${target} PROPERTIES QT_QML_MODULE_INSTALL_QML_FILES TRUE)
     endif()
 
     if (arg_SKIP_TYPE_REGISTRATION)
@@ -576,7 +568,6 @@ function(qt6_target_qml_files target)
     cmake_parse_arguments(arg "" "" "FILES" ${ARGN})
     get_target_property(resource_count ${target} QT6_QML_MODULE_ADD_QML_FILES_COUNT)
     get_target_property(qmldir_file ${target} QT_QML_MODULE_QMLDIR_FILE)
-    get_target_property(install_qml_files ${target} QT_QML_MODULE_INSTALL_QML_FILES)
     if (NOT qmldir_file)
         message(FATAL_ERROR "qt6_target_qml_file: ${target} is not a Qml module")
     endif()
@@ -623,7 +614,7 @@ function(qt6_target_qml_files target)
         if (NOT "${qml_file_dir}" STREQUAL "")
             set(qml_file_dir "/${qml_file_dir}")
         endif()
-        if (install_qml_files AND qml_module_install_dir)
+        if (qml_module_install_dir)
             if (NOT QT_WILL_INSTALL)
                 file(COPY "${qml_file}" DESTINATION "${qml_module_install_dir}${qml_file_dir}")
             else()
@@ -1084,10 +1075,21 @@ endfunction()
 
 include(CMakeParseArguments)
 
+# This function is called as a finalizer in qt6_finalize_executable() for any
+# target that links against the Qml library for a statically built Qt.
 function(qt6_import_qml_plugins target)
     if(QT6_IS_SHARED_LIBS_BUILD)
         return()
     endif()
+
+    # Protect against being called multiple times in case we are being called
+    # explicitly before the finalizer is invoked.
+    get_target_property(alreadyImported ${target} _QT_QML_PLUGINS_IMPORTED)
+    if(alreadyImported)
+        return()
+    endif()
+    set_target_properties(${target} PROPERTIES _QT_QML_PLUGINS_IMPORTED TRUE)
+
     set(options)
     set(oneValueArgs "PATH_TO_SCAN")
     set(multiValueArgs)

@@ -571,7 +571,7 @@ int QMetaType::id() const
 */
 void *QMetaType::create(const void *copy) const
 {
-    if (d_ptr) {
+    if (d_ptr && (copy ? !!d_ptr->copyCtr : !!d_ptr->defaultCtr)) {
         void *where =
 #ifdef __STDCPP_DEFAULT_NEW_ALIGNMENT__
             d_ptr->alignment > __STDCPP_DEFAULT_NEW_ALIGNMENT__ ?
@@ -855,7 +855,11 @@ static const struct : QMetaTypeModuleHelper
     {
         Q_ASSERT(fromTypeId != toTypeId);
 
+        // canConvert calls with two nullptr
         bool onlyCheck = (from == nullptr && to == nullptr);
+
+        // other callers must provide two valid pointers
+        Q_ASSERT(onlyCheck || (bool(from) && bool(to)));
 
         using Char = char;
         using SChar = signed char;
@@ -2157,12 +2161,18 @@ static bool convertQObject(QMetaType fromType, const void *from, QMetaType toTyp
 
     Converts the object at \a from from \a fromTypeId to the preallocated space at \a to
     typed \a toTypeId. Returns \c true, if the conversion succeeded, otherwise false.
+
+    Both \a from and \a to have to be valid pointers.
+
     \since 5.2
 */
 
 /*!
     Converts the object at \a from from \a fromType to the preallocated space at \a to
     typed \a toType. Returns \c true, if the conversion succeeded, otherwise false.
+
+    Both \a from and \a to have to be valid pointers.
+
     \since 5.2
 */
 bool QMetaType::convert(QMetaType fromType, const void *from, QMetaType toType, void *to)

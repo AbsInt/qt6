@@ -148,6 +148,32 @@ QProcessEnvironment QProcessEnvironment::systemEnvironment()
 #if QT_CONFIG(process)
 
 namespace {
+struct AutoPipe
+{
+    int pipe[2] = { -1, -1 };
+    AutoPipe(int flags = 0)
+    {
+        qt_safe_pipe(pipe, flags);
+    }
+    ~AutoPipe()
+    {
+        for (int fd : pipe) {
+            if (fd >= 0)
+                qt_safe_close(fd);
+        }
+    }
+
+    explicit operator bool() const  { return pipe[0] >= 0; }
+    int &operator[](int idx)        { return pipe[idx]; }
+    int operator[](int idx) const   { return pipe[idx]; }
+};
+
+struct ChildError
+{
+    qint64 code;
+    char function[8];
+};
+
 struct QProcessPoller
 {
     QProcessPoller(const QProcessPrivate &proc);
@@ -532,12 +558,6 @@ void QProcessPrivate::startProcess()
         ::fcntl(stderrChannel.pipe[0], F_SETFL, ::fcntl(stderrChannel.pipe[0], F_GETFL) | O_NONBLOCK);
 }
 
-struct ChildError
-{
-    int code;
-    char function[8];
-};
-
 void QProcessPrivate::execChild(const char *workingDir, char **argv, char **envp)
 {
     ::signal(SIGPIPE, SIG_DFL);         // reset the signal that we ignored
@@ -882,18 +902,12 @@ bool QProcessPrivate::startDetached(qint64 *pid)
 {
     QByteArray encodedWorkingDirectory = QFile::encodeName(workingDirectory);
 
-    // To catch the startup of the child
-    int startedPipe[2];
-    if (qt_safe_pipe(startedPipe) != 0) {
+    static_assert(PIPE_BUF >= sizeof(ChildError));
+    ChildError childStatus = { 0, {} };
+
+    AutoPipe startedPipe, pidPipe;
+    if (!startedPipe || !pidPipe) {
         setErrorAndEmit(QProcess::FailedToStart, QLatin1String("pipe: ") + qt_error_string(errno));
-        return false;
-    }
-    // To communicate the pid of the child
-    int pidPipe[2];
-    if (qt_safe_pipe(pidPipe) != 0) {
-        setErrorAndEmit(QProcess::FailedToStart, QLatin1String("pipe: ") + qt_error_string(errno));
-        qt_safe_close(startedPipe[0]);
-        qt_safe_close(startedPipe[1]);
         return false;
     }
 
@@ -902,10 +916,6 @@ bool QProcessPrivate::startDetached(qint64 *pid)
         closeChannel(&stdinChannel);
         closeChannel(&stdoutChannel);
         closeChannel(&stderrChannel);
-        qt_safe_close(pidPipe[0]);
-        qt_safe_close(pidPipe[1]);
-        qt_safe_close(startedPipe[0]);
-        qt_safe_close(startedPipe[1]);
         return false;
     }
 
@@ -917,15 +927,20 @@ bool QProcessPrivate::startDetached(qint64 *pid)
         qt_safe_close(startedPipe[0]);
         qt_safe_close(pidPipe[0]);
 
-        pid_t doubleForkPid = 0;
-        if (!encodedWorkingDirectory.isEmpty())
-            doubleForkPid = QT_CHDIR(encodedWorkingDirectory.constData());
+        auto reportFailed = [&](const char *function) {
+            childStatus.code = errno;
+            strcpy(childStatus.function, function);
+            qt_safe_write(startedPipe[1], &childStatus, sizeof(childStatus));
+            ::_exit(1);
+        };
 
-        if (doubleForkPid == 0)
-            doubleForkPid = fork();
+        if (!encodedWorkingDirectory.isEmpty()) {
+            if (QT_CHDIR(encodedWorkingDirectory.constData()) < 0)
+                reportFailed("chdir: ");
+        }
+
+        pid_t doubleForkPid = fork();
         if (doubleForkPid == 0) {
-            qt_safe_close(pidPipe[1]);
-
             // Render channels configuration.
             commitChannels();
 
@@ -956,19 +971,13 @@ bool QProcessPrivate::startDetached(qint64 *pid)
             else
                 qt_safe_execv(argv[0], argv);
 
-            // '\1' means execv failed
-            char c = '\1';
-            qt_safe_write(startedPipe[1], &c, 1);
-            qt_safe_close(startedPipe[1]);
-            ::_exit(1);
+            reportFailed("execv: ");
         } else if (doubleForkPid == -1) {
-            // '\2' means internal error
-            char c = '\2';
-            qt_safe_write(startedPipe[1], &c, 1);
+            reportFailed("fork: ");
         }
 
-        qt_safe_close(startedPipe[1]);
-        qt_safe_write(pidPipe[1], (const char *)&doubleForkPid, sizeof(pid_t));
+        // success
+        qt_safe_write(pidPipe[1], &doubleForkPid, sizeof(pid_t));
         ::_exit(1);
     }
 
@@ -976,34 +985,42 @@ bool QProcessPrivate::startDetached(qint64 *pid)
     closeChannel(&stdinChannel);
     closeChannel(&stdoutChannel);
     closeChannel(&stderrChannel);
-    qt_safe_close(startedPipe[1]);
-    qt_safe_close(pidPipe[1]);
 
     if (childPid == -1) {
-        qt_safe_close(startedPipe[0]);
-        qt_safe_close(pidPipe[0]);
         setErrorAndEmit(QProcess::FailedToStart, QLatin1String("fork: ") + qt_error_string(savedErrno));
         return false;
     }
 
-    char reply = '\0';
-    int startResult = qt_safe_read(startedPipe[0], &reply, 1);
+    // close the writing ends of the pipes so we can properly get EOFs
+    qt_safe_close(pidPipe[1]);
+    qt_safe_close(startedPipe[1]);
+    pidPipe[1] = startedPipe[1] = -1;
+
+    // This read() will block until we're cleared to proceed. If it returns 0
+    // (EOF), it means the direct child has exited and the grandchild
+    // successfully execve()'d the target process. If it returns any positive
+    // result, it means one of the two children wrote an error result. Negative
+    // values should not happen.
+    ssize_t startResult = qt_safe_read(startedPipe[0], &childStatus, sizeof(childStatus));
+
+    // reap the intermediate child
     int result;
-    qt_safe_close(startedPipe[0]);
     qt_safe_waitpid(childPid, &result, 0);
 
-    bool success = (startResult != -1 && reply == '\0');
+    bool success = (startResult == 0);  // nothing written -> no error
     if (success && pid) {
         pid_t actualPid;
         if (qt_safe_read(pidPipe[0], &actualPid, sizeof(pid_t)) != sizeof(pid_t))
-            actualPid = 0;
+            actualPid = 0;              // this shouldn't happen!
         *pid = actualPid;
     } else if (!success) {
         if (pid)
             *pid = -1;
-        setErrorAndEmit(QProcess::FailedToStart);
+        QString msg;
+        if (startResult == sizeof(childStatus))
+            msg = QLatin1String(childStatus.function) + qt_error_string(childStatus.code);
+        setErrorAndEmit(QProcess::FailedToStart, msg);
     }
-    qt_safe_close(pidPipe[0]);
     return success;
 }
 

@@ -41,6 +41,10 @@
 #include "qtlskey_openssl_p.h"
 #include "qx509_openssl_p.h"
 
+#if QT_CONFIG(dtls)
+#include "qdtls_openssl_p.h"
+#endif // QT_CONFIG(dtls)
+
 // TLSTODO: Later, this code (ensure initialised, etc.)
 // must move from the socket to backend.
 #include "qsslsocket_p.h"
@@ -50,6 +54,8 @@
 #include <qssl.h>
 
 #include <qlist.h>
+
+#include <algorithm>
 
 QT_BEGIN_NAMESPACE
 
@@ -151,34 +157,183 @@ QList<QSsl::ImplementedClass> QTlsBackendOpenSSL::implementedClasses() const
     return classes;
 }
 
-QSsl::TlsKey *QTlsBackendOpenSSL::createKey() const
+QTlsPrivate::TlsKey *QTlsBackendOpenSSL::createKey() const
 {
-    return new QSsl::TlsKeyOpenSSL;
+    return new QTlsPrivate::TlsKeyOpenSSL;
 }
 
-QSsl::X509Certificate *QTlsBackendOpenSSL::createCertificate() const
+QTlsPrivate::X509Certificate *QTlsBackendOpenSSL::createCertificate() const
 {
-    return new QSsl::X509CertificateOpenSSL;
+    return new QTlsPrivate::X509CertificateOpenSSL;
 }
 
-QSsl::X509ChainVerifyPtr QTlsBackendOpenSSL::X509Verifier() const
+QTlsPrivate::DtlsCookieVerifier *QTlsBackendOpenSSL::createDtlsCookieVerifier() const
 {
-    return QSsl::X509CertificateOpenSSL::verify;
+#if QT_CONFIG(dtls)
+    return new QDtlsClientVerifierOpenSSL;
+#else
+    qCWarning(lcTlsBackend, "Feature 'dtls' is disabled, cannot verify DTLS cookies");
+    return nullptr;
+#endif // QT_CONFIG(dtls)
 }
 
-QSsl::X509PemReaderPtr QTlsBackendOpenSSL::X509PemReader() const
+QTlsPrivate::DtlsCryptograph *QTlsBackendOpenSSL::createDtlsCryptograph(QDtls *q, int mode) const
 {
-    return QSsl::X509CertificateOpenSSL::certificatesFromPem;
+#if QT_CONFIG(dtls)
+    return new QDtlsPrivateOpenSSL(q, QSslSocket::SslMode(mode));
+#else
+    Q_UNUSED(q);
+    Q_UNUSED(mode);
+    qCWarning(lcTlsBackend, "Feature 'dtls' is disabled, cannot encrypt UDP datagrams");
+    return nullptr;
+#endif // QT_CONFIG(dtls)
 }
 
-QSsl::X509DerReaderPtr QTlsBackendOpenSSL::X509DerReader() const
+QTlsPrivate::X509ChainVerifyPtr QTlsBackendOpenSSL::X509Verifier() const
 {
-    return QSsl::X509CertificateOpenSSL::certificatesFromDer;
+    return QTlsPrivate::X509CertificateOpenSSL::verify;
 }
 
-QSsl::X509Pkcs12ReaderPtr QTlsBackendOpenSSL::X509Pkcs12Reader() const
+QTlsPrivate::X509PemReaderPtr QTlsBackendOpenSSL::X509PemReader() const
 {
-    return QSsl::X509CertificateOpenSSL::importPkcs12;
+    return QTlsPrivate::X509CertificateOpenSSL::certificatesFromPem;
+}
+
+QTlsPrivate::X509DerReaderPtr QTlsBackendOpenSSL::X509DerReader() const
+{
+    return QTlsPrivate::X509CertificateOpenSSL::certificatesFromDer;
+}
+
+QTlsPrivate::X509Pkcs12ReaderPtr QTlsBackendOpenSSL::X509Pkcs12Reader() const
+{
+    return QTlsPrivate::X509CertificateOpenSSL::importPkcs12;
+}
+
+QList<int> QTlsBackendOpenSSL::ellipticCurvesIds() const
+{
+    QList<int> ids;
+
+#ifndef OPENSSL_NO_EC
+    const size_t curveCount = q_EC_get_builtin_curves(nullptr, 0);
+    QVarLengthArray<EC_builtin_curve> builtinCurves(static_cast<int>(curveCount));
+
+    if (q_EC_get_builtin_curves(builtinCurves.data(), curveCount) == curveCount) {
+        ids.reserve(curveCount);
+        for (const auto &ec : builtinCurves)
+            ids.push_back(ec.nid);
+    }
+#endif // OPENSSL_NO_EC
+
+    return ids;
+}
+
+ int QTlsBackendOpenSSL::curveIdFromShortName(const QString &name) const
+ {
+     int nid = 0;
+     if (name.isEmpty())
+         return nid;
+
+     // TLSTODO: check if it's needed! The fact we are here,
+     // means OpenSSL was loaded, symbols resolved. Is it because
+     // of ensureCiphers(AndCertificates)Loaded ?
+     QSslSocketPrivate::ensureInitialized();
+#ifndef OPENSSL_NO_EC
+     const QByteArray curveNameLatin1 = name.toLatin1();
+     nid = q_OBJ_sn2nid(curveNameLatin1.data());
+
+     if (nid == 0)
+         nid = q_EC_curve_nist2nid(curveNameLatin1.data());
+#endif // !OPENSSL_NO_EC
+
+     return nid;
+ }
+
+ int QTlsBackendOpenSSL::curveIdFromLongName(const QString &name) const
+ {
+     int nid = 0;
+     if (name.isEmpty())
+         return nid;
+
+     // TLSTODO: check if it's needed! The fact we are here,
+     // means OpenSSL was loaded, symbols resolved. Is it because
+     // of ensureCiphers(AndCertificates)Loaded ?
+     QSslSocketPrivate::ensureInitialized();
+
+#ifndef OPENSSL_NO_EC
+     const QByteArray curveNameLatin1 = name.toLatin1();
+     nid = q_OBJ_ln2nid(curveNameLatin1.data());
+#endif
+
+     return nid;
+ }
+
+ QString QTlsBackendOpenSSL::shortNameForId(int id) const
+ {
+     QString result;
+
+#ifndef OPENSSL_NO_EC
+     if (id != 0)
+         result = QString::fromLatin1(q_OBJ_nid2sn(id));
+#endif
+
+     return result;
+ }
+
+QString QTlsBackendOpenSSL::longNameForId(int id) const
+{
+    QString result;
+
+#ifndef OPENSSL_NO_EC
+    if (id != 0)
+        result = QString::fromLatin1(q_OBJ_nid2ln(id));
+#endif
+
+    return result;
+}
+
+// NIDs of named curves allowed in TLS as per RFCs 4492 and 7027,
+// see also https://www.iana.org/assignments/tls-parameters/tls-parameters.xhtml#tls-parameters-8
+static const int tlsNamedCurveNIDs[] = {
+    // RFC 4492
+    NID_sect163k1,
+    NID_sect163r1,
+    NID_sect163r2,
+    NID_sect193r1,
+    NID_sect193r2,
+    NID_sect233k1,
+    NID_sect233r1,
+    NID_sect239k1,
+    NID_sect283k1,
+    NID_sect283r1,
+    NID_sect409k1,
+    NID_sect409r1,
+    NID_sect571k1,
+    NID_sect571r1,
+
+    NID_secp160k1,
+    NID_secp160r1,
+    NID_secp160r2,
+    NID_secp192k1,
+    NID_X9_62_prime192v1, // secp192r1
+    NID_secp224k1,
+    NID_secp224r1,
+    NID_secp256k1,
+    NID_X9_62_prime256v1, // secp256r1
+    NID_secp384r1,
+    NID_secp521r1,
+
+    // RFC 7027
+    NID_brainpoolP256r1,
+    NID_brainpoolP384r1,
+    NID_brainpoolP512r1
+};
+
+const size_t tlsNamedCurveNIDCount = sizeof(tlsNamedCurveNIDs) / sizeof(tlsNamedCurveNIDs[0]);
+
+bool QTlsBackendOpenSSL::isTlsNamedCurve(int id) const
+{
+    const int *const tlsNamedCurveNIDsEnd = tlsNamedCurveNIDs + tlsNamedCurveNIDCount;
+    return std::find(tlsNamedCurveNIDs, tlsNamedCurveNIDsEnd, id) != tlsNamedCurveNIDsEnd;
 }
 
 QT_END_NAMESPACE

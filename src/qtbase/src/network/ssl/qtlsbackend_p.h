@@ -51,10 +51,15 @@
 // We mean it.
 //
 
-#include <private/qtnetworkglobal_p.h>
+#include <QtNetwork/private/qtnetworkglobal_p.h>
 
-#include <private/qsslkey_p.h>
-#include <private/qssl_p.h>
+#include "qsslconfiguration.h"
+#include "qsslerror.h"
+#include "qssl_p.h"
+
+#if QT_CONFIG(dtls)
+#include "qdtls.h"
+#endif
 
 #include <QtNetwork/qsslcertificate.h>
 #include <QtNetwork/qsslerror.h>
@@ -69,15 +74,18 @@
 #include <QtCore/qlist.h>
 #include <QtCore/qmap.h>
 
-#include <vector>
 #include <memory>
 
 QT_BEGIN_NAMESPACE
 
+class QHostAddress;
 class QByteArray;
+class QSslCipher;
+class QUdpSocket;
 class QIODevice;
+class QSslKey;
 
-namespace QSsl {
+namespace QTlsPrivate {
 
 // The class TlsKey encapsulates key's data (DER) or backend-specific
 // data-structure, like RSA/DSA/DH structs in OpenSSL.
@@ -90,6 +98,9 @@ namespace QSsl {
 class TlsKey {
 public:
     virtual ~TlsKey();
+
+    using KeyType = QSsl::KeyType;
+    using KeyAlgorithm = QSsl::KeyAlgorithm;
 
     virtual void decodeDer(KeyType type, KeyAlgorithm algorithm, const QByteArray &der,
                            const QByteArray &passPhrase, bool deepClear) = 0;
@@ -113,7 +124,6 @@ public:
     // Needed by QSslKeyPrivate::pemFromDer() for non-OpenSSL backends.
     virtual bool isPkcs8() const = 0;
 
-    using Cipher = QSsl::Cipher;
     virtual QByteArray decrypt(Cipher cipher, const QByteArray &data,
                                const QByteArray &key, const QByteArray &iv) const = 0;
     virtual QByteArray encrypt(Cipher cipher, const QByteArray &data,
@@ -147,7 +157,8 @@ public:
     virtual QMultiMap<QSsl::AlternativeNameEntryType, QString> subjectAlternativeNames() const = 0;
     virtual QDateTime effectiveDate() const = 0;
     virtual QDateTime expiryDate() const = 0;
-    virtual TlsKey *publicKey() const = 0;
+
+    virtual TlsKey *publicKey() const;
 
     // Extensions. Plugins do not expose internal representation
     // and cannot rely on QSslCertificate's internals.
@@ -167,6 +178,11 @@ public:
     virtual size_t hash(size_t seed) const noexcept = 0;
 };
 
+// TLSTODO: consider making those into virtuals in QTlsBackend. After all, we ask the backend
+// to return those pointers if the functionality is supported, but it's a bit odd to have
+// this level of indirection. They are not parts of the classes above because ...
+// you'd then have to ask backend to create a certificate to ... call those
+// functions on a certificate.
 using X509ChainVerifyPtr = QList<QSslError> (*)(const QList<QSslCertificate> &chain,
                                                 const QString &hostName);
 using X509PemReaderPtr = QList<QSslCertificate> (*)(const QByteArray &pem, int count);
@@ -178,13 +194,80 @@ using X509Pkcs12ReaderPtr = bool (*)(QIODevice *device, QSslKey *key, QSslCertif
 // TLS over TCP. Handshake, encryption/decryption.
 class TlsCryptograph;
 
-// TLS over UDP. Handshake, encryption/decryption.
-class DtlsCryptograph;
+#if QT_CONFIG(dtls)
+
+class DtlsBase
+{
+public:
+    virtual ~DtlsBase();
+
+    virtual void setDtlsError(QDtlsError code, const QString &description) = 0;
+
+    virtual QDtlsError error() const = 0;
+    virtual QString errorString() const = 0;
+
+    virtual void clearDtlsError() = 0;
+
+    virtual void setConfiguration(const QSslConfiguration &configuration) = 0;
+    virtual QSslConfiguration configuration() const = 0;
+
+    using GenParams = QDtlsClientVerifier::GeneratorParameters;
+    virtual bool setCookieGeneratorParameters(const GenParams &params) = 0;
+    virtual GenParams cookieGeneratorParameters() const = 0;
+};
 
 // DTLS cookie: generation and verification.
-class DtlsCookieVerifier;
+class DtlsCookieVerifier : virtual public DtlsBase
+{
+public:
+    virtual bool verifyClient(QUdpSocket *socket, const QByteArray &dgram,
+                              const QHostAddress &address, quint16 port) = 0;
+    virtual QByteArray verifiedHello() const = 0;
+};
 
-} // namespace QSsl
+// TLS over UDP. Handshake, encryption/decryption.
+class DtlsCryptograph : virtual public DtlsBase
+{
+public:
+
+    virtual QSslSocket::SslMode cryptographMode() const = 0;
+    virtual void setPeer(const QHostAddress &addr, quint16 port, const QString &name) = 0;
+    virtual QHostAddress peerAddress() const = 0;
+    virtual quint16 peerPort() const = 0;
+    virtual void setPeerVerificationName(const QString &name) = 0;
+    virtual QString peerVerificationName() const = 0;
+
+    virtual void setDtlsMtuHint(quint16 mtu) = 0;
+    virtual quint16 dtlsMtuHint() const = 0;
+
+    virtual QDtls::HandshakeState state() const = 0;
+    virtual bool isConnectionEncrypted() const = 0;
+
+    virtual bool startHandshake(QUdpSocket *socket, const QByteArray &dgram) = 0;
+    virtual bool handleTimeout(QUdpSocket *socket) = 0;
+    virtual bool continueHandshake(QUdpSocket *socket, const QByteArray &dgram) = 0;
+    virtual bool resumeHandshake(QUdpSocket *socket) = 0;
+    virtual void abortHandshake(QUdpSocket *socket) = 0;
+    virtual void sendShutdownAlert(QUdpSocket *socket) = 0;
+
+    virtual QList<QSslError> peerVerificationErrors() const = 0;
+    virtual void ignoreVerificationErrors(const QList<QSslError> &errorsToIgnore) = 0;
+
+    virtual QSslCipher dtlsSessionCipher() const = 0;
+    virtual QSsl::SslProtocol dtlsSessionProtocol() const = 0;
+
+    virtual qint64 writeDatagramEncrypted(QUdpSocket *socket, const QByteArray &dgram) = 0;
+    virtual QByteArray decryptDatagram(QUdpSocket *socket, const QByteArray &dgram) = 0;
+};
+
+#else
+
+class DtlsCookieVerifier;
+class DtlsCryptograph;
+
+#endif // QT_CONFIG(dtls)
+
+} // namespace QTlsPrivate
 
 // Factory, creating back-end specific implementations of
 // different entities QSslSocket is using.
@@ -203,23 +286,38 @@ public:
     virtual QList<QSsl::ImplementedClass> implementedClasses() const = 0;
 
     // X509 and keys:
-    virtual QSsl::TlsKey *createKey() const;
-    virtual QSsl::X509Certificate *createCertificate() const;
+    virtual QTlsPrivate::TlsKey *createKey() const;
+    virtual QTlsPrivate::X509Certificate *createCertificate() const;
 
     // TLS and DTLS:
-    virtual QSsl::TlsCryptograph *createTlsCryptograph() const;
-    virtual QSsl::DtlsCryptograph *createDtlsCryptograph() const;
-    virtual QSsl::DtlsCookieVerifier *createDtlsCookieVerifier() const;
+    virtual QTlsPrivate::TlsCryptograph *createTlsCryptograph() const;
+    virtual QTlsPrivate::DtlsCryptograph *createDtlsCryptograph(class QDtls *qObject, int mode) const;
+    virtual QTlsPrivate::DtlsCookieVerifier *createDtlsCookieVerifier() const;
 
-    // X509 machinery:
-    virtual QSsl::X509ChainVerifyPtr X509Verifier() const;
-    virtual QSsl::X509PemReaderPtr X509PemReader() const;
-    virtual QSsl::X509DerReaderPtr X509DerReader() const;
-    virtual QSsl::X509Pkcs12ReaderPtr X509Pkcs12Reader() const;
+    // TLSTODO - get rid of these function pointers, make them virtuals in
+    // the backend itself. X509 machinery:
+    virtual QTlsPrivate::X509ChainVerifyPtr X509Verifier() const;
+    virtual QTlsPrivate::X509PemReaderPtr X509PemReader() const;
+    virtual QTlsPrivate::X509DerReaderPtr X509DerReader() const;
+    virtual QTlsPrivate::X509Pkcs12ReaderPtr X509Pkcs12Reader() const;
+
+    // Elliptic curves:
+    virtual QList<int> ellipticCurvesIds() const;
+    virtual int curveIdFromShortName(const QString &name) const;
+    virtual int curveIdFromLongName(const QString &name) const;
+    virtual QString shortNameForId(int cid) const;
+    virtual QString longNameForId(int cid) const;
+    virtual bool isTlsNamedCurve(int cid) const;
+
+    // TLSTODO: int->enum ugliness in error reporting.
+    // DH decoding:
+    virtual int dhParametersFromDer(const QByteArray &derData, QByteArray *data) const;
+    virtual int dhParametersFromPem(const QByteArray &pemData, QByteArray *data) const;
 
     static QList<QString> availableBackendNames();
     static QString defaultBackendName();
     static QTlsBackend *findBackend(const QString &backendName);
+    static QTlsBackend *activeOrAnyBackend();
 
     static QList<QSsl::SslProtocol> supportedProtocols(const QString &backendName);
     static QList<QSsl::SupportedFeature> supportedFeatures(const QString &backendName);
@@ -232,11 +330,13 @@ public:
 
     static const QString builtinBackendNames[];
 
-    template<class DynamicType, class  TLSObject>
+    template<class DynamicType, class TLSObject>
     static DynamicType *backend(const TLSObject &o)
     {
-        return static_cast<DynamicType *>(o.backendImplementation());
+        return static_cast<DynamicType *>(o.d->backend.get());
     }
+
+    static void resetBackend(QSslKey &key, QTlsPrivate::TlsKey *keyBackend);
 
     Q_DISABLE_COPY_MOVE(QTlsBackend)
 };

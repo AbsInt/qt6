@@ -66,12 +66,6 @@ class QSslCertificate;
 // qHash is a friend, but we can't use default arguments for friends (§8.3.6.4)
 Q_NETWORK_EXPORT size_t qHash(const QSslCertificate &key, size_t seed = 0) noexcept;
 
-namespace QSsl {
-
-class X509Certificate;
-
-} // namespace QSsl.
-
 class QSslCertificatePrivate;
 class Q_NETWORK_EXPORT QSslCertificate
 {
@@ -148,12 +142,7 @@ public:
         const QByteArray &data, QSsl::EncodingFormat format = QSsl::Pem);
 
 #ifndef QT_NO_SSL
-#if QT_VERSION >= QT_VERSION_CHECK(6,0,0)
     static QList<QSslError> verify(const QList<QSslCertificate> &certificateChain, const QString &hostName = QString());
-#else
-    static QList<QSslError> verify(QList<QSslCertificate> certificateChain, const QString &hostName = QString());
-#endif
-
     static bool importPkcs12(QIODevice *device,
                              QSslKey *key, QSslCertificate *cert,
                              QList<QSslCertificate> *caCertificates = nullptr,
@@ -163,10 +152,6 @@ public:
     Qt::HANDLE handle() const;
 
 private:
-    QSsl::X509Certificate *backendImplementation() const
-    {
-        return nullptr; // TLSTODO
-    }
     QExplicitlySharedDataPointer<QSslCertificatePrivate> d;
     friend class QSslCertificatePrivate;
     friend class QSslSocketBackendPrivate;
