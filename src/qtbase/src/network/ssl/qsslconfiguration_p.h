@@ -118,7 +118,7 @@ public:
 
     QSsl::SslOptions sslOptions;
 
-    Q_AUTOTEST_EXPORT static const QSsl::SslOptions defaultSslOptions;
+    static const QSsl::SslOptions defaultSslOptions;
 
     QList<QSslEllipticCurve> ellipticCurves;
 
