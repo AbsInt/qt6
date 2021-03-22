@@ -231,7 +231,9 @@ public:
         // are invalidated. However, erasing from the beginning effectively
         // means that all iterators are invalidated. We can use this freedom to
         // erase by moving towards the end.
-        if (b == this->begin())
+        const bool canRemoveFromBegin =
+                this->freeSpaceAtBegin() < (this->constAllocatedCapacity() - n) / 3;
+        if (b == this->begin() && e != this->end() && canRemoveFromBegin)
             this->ptr = e;
         else if (e != this->end())
             ::memmove(static_cast<void *>(b), static_cast<void *>(e), (static_cast<T *>(this->end()) - e) * sizeof(T));
@@ -610,7 +612,9 @@ public:
         // are invalidated. However, erasing from the beginning effectively
         // means that all iterators are invalidated. We can use this freedom to
         // erase by moving towards the end.
-        if (b == this->begin()) {
+        const bool canRemoveFromBegin =
+                this->freeSpaceAtBegin() < (this->constAllocatedCapacity() - n) / 3;
+        if (b == this->begin() && e != this->end() && canRemoveFromBegin) {
             this->ptr = e;
         } else {
             const T *const end = this->end();
@@ -839,7 +843,9 @@ public:
         // erase by moving towards the end.
 
         std::destroy(b, e);
-        if (b == this->begin()) {
+        const bool canRemoveFromBegin =
+                this->freeSpaceAtBegin() < (this->constAllocatedCapacity() - n) / 3;
+        if (b == this->begin() && e != this->end() && canRemoveFromBegin) {
             this->ptr = e;
         } else if (e != this->end()) {
             memmove(static_cast<void *>(b), static_cast<const void *>(e), (static_cast<const T *>(this->end()) - e)*sizeof(T));
