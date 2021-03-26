@@ -301,7 +301,11 @@ const Atom *WebXMLGenerator::addAtomElements(QXmlStreamWriter &writer, const Ato
     case Atom::AutoLink:
         if (!m_inLink && !m_inSectionHeading) {
             const Node *node = nullptr;
-            QString link = getLink(atom, relative, &node);
+            QString link = getAutoLink(atom, relative, &node, Node::API);
+            if (!link.isEmpty() && node && node->status() == Node::Obsolete
+                && relative->parent() != node && !relative->isObsolete()) {
+                link.clear();
+            }
             if (node) {
                 startLink(writer, atom, node, link);
                 if (m_inLink) {
@@ -753,7 +757,7 @@ void WebXMLGenerator::startLink(QXmlStreamWriter &writer, const Atom *atom, cons
         fullName = node->fullName();
     if (!fullName.isEmpty() && !link.isEmpty()) {
         writer.writeStartElement("link");
-        if (!atom->string().isEmpty())
+        if (atom && !atom->string().isEmpty())
             writer.writeAttribute("raw", atom->string());
         else
             writer.writeAttribute("raw", fullName);
