@@ -1,9 +1,9 @@
 /****************************************************************************
 **
-** Copyright (C) 2020 Alexander Volkov <avolkov@astralinux.ru>
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
-** This file is part of the QtGui module of the Qt Toolkit.
+** This file is part of the QtQuick module of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
@@ -37,27 +37,38 @@
 **
 ****************************************************************************/
 
-#ifndef QURLRESOURCEPROVIDER_H
-#define QURLRESOURCEPROVIDER_H
+import QtQuick 2.12
+import QtQuick.Window 2.3
 
-#include <QtGui/qtguiglobal.h>
-#include <QtCore/qvariant.h>
+Item {
+    width: 640
+    height: 450
 
-QT_BEGIN_NAMESPACE
+    property alias tableView: tableView
 
+    TableView {
+        id: tableView
+        width: 600
+        height: 400
+        anchors.margins: 1
+        delegate: tableViewDelegate
+        columnSpacing: 1
+        rowSpacing: 1
+    }
 
-class Q_GUI_EXPORT QUrlResourceProvider
-{
-    Q_DISABLE_COPY(QUrlResourceProvider)
-public:
-    QUrlResourceProvider() = default;
-    virtual ~QUrlResourceProvider();
-    virtual QVariant resource(const QUrl &url) = 0;
+    Component {
+        id: tableViewDelegate
+        Rectangle {
+            color: "lightgray"
+            implicitWidth: text.width
+            implicitHeight: text.height
 
-    static QUrlResourceProvider *defaultProvider();
-    static void setDefaultProvider(QUrlResourceProvider *provider);
-};
+            Text {
+                id: text
+                anchors.centerIn: parent
+                text: modelData
+            }
+        }
+    }
 
-QT_END_NAMESPACE
-
-#endif // QURLRESOURCEPROVIDER_H
+}

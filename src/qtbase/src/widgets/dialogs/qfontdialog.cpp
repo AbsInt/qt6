@@ -591,6 +591,14 @@ void QFontDialogPrivate::updateStyles()
                     cstyle.replace(QLatin1String("Oblique"), QLatin1String("Italic"));
                     first = false;
                     goto redo;
+                } else if (cstyle.contains(QLatin1String("Regular"))) {
+                    cstyle.replace(QLatin1String("Regular"), QLatin1String("Normal"));
+                    first = false;
+                    goto redo;
+                } else if (cstyle.contains(QLatin1String("Normal"))) {
+                    cstyle.replace(QLatin1String("Normal"), QLatin1String("Regular"));
+                    first = false;
+                    goto redo;
                 }
             }
             if (!found)
@@ -804,7 +812,7 @@ void QFontDialog::changeEvent(QEvent *e)
 void QFontDialog::setCurrentFont(const QFont &font)
 {
     Q_D(QFontDialog);
-    d->family = font.families().first();
+    d->family = font.families().value(0);
     d->style = QFontDatabase::styleString(font);
     d->size = font.pointSize();
     if (d->size == -1) {

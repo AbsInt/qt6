@@ -125,3 +125,45 @@ function(qt_set_up_nonprefix_build)
         qt_remove_install_target()
     endif()
 endfunction()
+
+# Create a versioned hard-link for the given target.
+# E.g. "bin/qmake6" -> "bin/qmake".
+# If no hard link can be created, make a copy instead.
+#
+# In a multi-config build, create the link for the main config only.
+function(qt_internal_install_versioned_link install_dir target)
+    if(NOT QT_WILL_INSTALL)
+        return()
+    endif()
+
+    qt_path_join(install_base_file_path "$\{qt_full_install_prefix}"
+        "${install_dir}" "$<TARGET_FILE_BASE_NAME:${target}>")
+    set(original "${install_base_file_path}$<TARGET_FILE_SUFFIX:${target}>")
+    set(linkname "${install_base_file_path}${PROJECT_VERSION_MAJOR}$<TARGET_FILE_SUFFIX:${target}>")
+    set(code "set(qt_full_install_prefix \"$\{CMAKE_INSTALL_PREFIX}\")"
+        "  if(NOT \"$ENV\{DESTDIR}\" STREQUAL \"\")"
+        )
+    if(CMAKE_HOST_WIN32)
+        list(APPEND code
+            "    if(qt_full_install_prefix MATCHES \"^[a-zA-Z]:\")"
+            "        string(SUBSTRING \"$\{qt_full_install_prefix}\" 2 -1 qt_full_install_prefix)"
+            "    endif()"
+            )
+    endif()
+    list(APPEND code
+        "    string(PREPEND qt_full_install_prefix \"$ENV\{DESTDIR}\")"
+        "  endif()"
+        "  message(STATUS \"Creating hard link ${original} -> ${linkname}\")"
+        "  file(CREATE_LINK \"${original}\" \"${linkname}\" COPY_ON_ERROR)")
+
+    if(QT_GENERATOR_IS_MULTI_CONFIG)
+        # Wrap the code in a configuration check,
+        # because install(CODE) does not support a CONFIGURATIONS argument.
+        qt_create_case_insensitive_regex(main_config_regex ${QT_MULTI_CONFIG_FIRST_CONFIG})
+        list(PREPEND code "if(\"\${CMAKE_INSTALL_CONFIG_NAME}\" MATCHES \"${main_config_regex}\")")
+        list(APPEND code "endif()")
+    endif()
+
+    list(JOIN code "\n" code)
+    install(CODE "${code}")
+endfunction()
