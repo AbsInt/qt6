@@ -58,10 +58,7 @@ private:
 static const QStringList unknownBuiltins = {
     QStringLiteral("alias"),    // TODO: we cannot properly resolve aliases, yet
     QStringLiteral("QJSValue"), // We cannot say anything intelligent about untyped JS values.
-
-    // Same for generic variants
-    QStringLiteral("variant"),
-    QStringLiteral("var")
+    QStringLiteral("QVariant")  // Same for generic variants
 };
 
 void CheckIdentifiers::printContext(
@@ -166,7 +163,7 @@ bool CheckIdentifiers::checkMemberAccess(const QVector<FieldMember> &members,
                 continue;
             }
 
-            if (typeName == QLatin1String("string")) {
+            if (typeName == QLatin1String("QString")) {
                 detectedRestrictiveKind = typeName;
                 detectedRestrictiveName = access.m_name;
                 expectedNext.append(QLatin1String("length"));
