@@ -239,7 +239,7 @@ void ManifestWriter::generateManifestFile(const QString &manifest, const QString
 
         // attributes that are always written for the element
         usedAttributes.insert("name", example->title());
-        usedAttributes.insert("docUrl", m_manifestDir + Generator::fileBase(example) + ".html");
+        usedAttributes.insert("docUrl", m_manifestDir + Generator::currentGenerator()->fileBase(example) + ".html");
 
         if (!example->projectFile().isEmpty())
             usedAttributes.insert("projectPath", installPath + example->projectFile());
@@ -351,7 +351,8 @@ void ManifestWriter::addTitleWordsToTags(const ExampleNode *example)
  */
 void ManifestWriter::addWordsFromModuleNamesAsTags()
 {
-    QRegularExpression re("([A-Z]+[a-z0-9]*(3D|GL)?)");
+    // '?<=': positive lookbehind
+    QRegularExpression re("([A-Z]+[a-z0-9]*((?<=3)D|GL)?)");
     int pos = 0;
     QRegularExpressionMatch match;
     while ((match = re.match(m_project, pos)).hasMatch()) {

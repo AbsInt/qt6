@@ -443,7 +443,9 @@ bool IRBuilder::generateFromQml(const QString &code, const QString &url, Documen
 
                 errors << m;
             }
-            return false;
+
+            if (!errors.isEmpty() || !parseResult)
+                return false;
         }
         program = parser.ast();
         Q_ASSERT(program);
@@ -1648,8 +1650,8 @@ void QmlUnitGenerator::generate(Document &output, const QV4::CompiledData::Depen
     // No more new strings after this point, we're calculating offsets.
     output.jsGenerator.stringTable.freeze();
 
-    const uint importSize = sizeof(QV4::CompiledData::Import) * output.imports.count();
-    const uint objectOffsetTableSize = output.objects.count() * sizeof(quint32);
+    const uint importSize = uint(sizeof(QV4::CompiledData::Import)) * output.imports.count();
+    const uint objectOffsetTableSize = output.objects.count() * uint(sizeof(quint32));
 
     QHash<const Object*, quint32> objectOffsets;
 

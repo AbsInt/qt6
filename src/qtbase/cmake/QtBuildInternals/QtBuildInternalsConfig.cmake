@@ -1,11 +1,49 @@
 # These values should be kept in sync with those in qtbase/.cmake.conf
 cmake_minimum_required(VERSION 3.14...3.19)
 
-######################################
+###############################################
 #
-#       Macros for building Qt modules
+# Macros and functions for building Qt modules
 #
-######################################
+###############################################
+
+# Recursively reads the dependencies section from dependencies.yaml in ${repo_dir} and returns the
+# list of dependencies, including transitive ones, in out_var.
+#
+# The returned dependencies are topologically sorted.
+#
+# Example output for qtimageformats:
+# qtbase;qtshadertools;qtsvg;qtdeclarative;qttools
+#
+function(qt_internal_read_repo_dependencies out_var repo_dir)
+    set(seen ${ARGN})
+    set(dependencies "")
+    set(in_dependencies_section FALSE)
+    set(dependencies_file "${repo_dir}/dependencies.yaml")
+    if(EXISTS "${dependencies_file}")
+        file(STRINGS "${dependencies_file}" lines)
+        foreach(line IN LISTS lines)
+            if(line MATCHES "^([^ ]+):")
+                if(CMAKE_MATCH_1 STREQUAL "dependencies")
+                    set(in_dependencies_section TRUE)
+                else()
+                    set(in_dependencies_section FALSE)
+                endif()
+            elseif(in_dependencies_section AND line MATCHES "^  (.+):$")
+                set(dependency "${CMAKE_MATCH_1}")
+                set(dependency_repo_dir "${repo_dir}/${dependency}")
+                string(REGEX MATCH "[^/]+$" dependency "${dependency}")
+                if(NOT dependency IN_LIST seen)
+                    qt_internal_read_repo_dependencies(subdeps "${dependency_repo_dir}"
+                        ${seen} ${dependency})
+                    list(APPEND dependencies ${subdeps} ${dependency})
+                endif()
+            endif()
+        endforeach()
+        list(REMOVE_DUPLICATES dependencies)
+    endif()
+    set(${out_var} "${dependencies}" PARENT_SCOPE)
+endfunction()
 
 set(QT_BACKUP_CMAKE_INSTALL_PREFIX_BEFORE_EXTRA_INCLUDE "${CMAKE_INSTALL_PREFIX}")
 
@@ -204,18 +242,19 @@ endmacro()
 # find all targets defined in $subdir by recursing through all added subdirectories
 # populates $qt_repo_targets with a ;-list of non-UTILITY targets
 macro(qt_build_internals_get_repo_targets subdir)
+    get_directory_property(_targets DIRECTORY "${subdir}" BUILDSYSTEM_TARGETS)
+    if(_targets)
+        foreach(_target IN LISTS _targets)
+            get_target_property(_type ${_target} TYPE)
+            if(NOT (${_type} STREQUAL "UTILITY" OR ${_type} STREQUAL "INTERFACE"))
+                list(APPEND qt_repo_targets "${_target}")
+            endif()
+        endforeach()
+    endif()
+
     get_directory_property(_directories DIRECTORY "${subdir}" SUBDIRECTORIES)
     if (_directories)
         foreach(_directory IN LISTS _directories)
-            get_directory_property(_targets DIRECTORY "${_directory}" BUILDSYSTEM_TARGETS)
-            if (_targets)
-                foreach(_target IN LISTS _targets)
-                    get_target_property(_type ${_target} TYPE)
-                    if (NOT (${_type} STREQUAL "UTILITY" OR ${_type} STREQUAL "INTERFACE"))
-                        list(APPEND qt_repo_targets "${_target}")
-                    endif()
-                endforeach()
-            endif()
             qt_build_internals_get_repo_targets("${_directory}")
         endforeach()
     endif()

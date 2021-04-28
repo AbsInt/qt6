@@ -44,12 +44,6 @@
 
 #if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
 #include <jni.h>
-#else
-class JNIEnv;
-class JNINativeMethod;
-class JavaVM;
-class jclass;
-#endif
 
 QT_BEGIN_NAMESPACE
 
@@ -60,8 +54,9 @@ class Q_CORE_EXPORT QJniEnvironment
 public:
     QJniEnvironment();
     ~QJniEnvironment();
-    JNIEnv *operator->();
-    operator JNIEnv *() const;
+    JNIEnv *operator->() const;
+    JNIEnv &operator*() const;
+    JNIEnv *jniEnv() const;
     jclass findClass(const char *className);
     static JavaVM *javaVM();
     bool registerNativeMethods(const char *className, JNINativeMethod methods[], int size);
@@ -74,12 +69,13 @@ public:
     bool checkAndClearExceptions(OutputMode outputMode = OutputMode::Verbose);
     static bool checkAndClearExceptions(JNIEnv *env, OutputMode outputMode = OutputMode::Verbose);
 
-
 private:
     Q_DISABLE_COPY_MOVE(QJniEnvironment)
     QScopedPointer<QJniEnvironmentPrivate> d;
 };
 
 QT_END_NAMESPACE
+
+#endif
 
 #endif // QJNI_ENVIRONMENT_H

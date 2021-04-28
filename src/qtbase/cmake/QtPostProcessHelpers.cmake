@@ -619,6 +619,15 @@ endif()
 
         string(APPEND QT_EXTRA_BUILD_INTERNALS_VARS "${install_prefix_content}")
 
+        if(NOT QT_SUPERBUILD AND NOT BUILD_SHARED_LIBS)
+            string(APPEND QT_EXTRA_BUILD_INTERNALS_VARS
+                "
+if(DEFINED QT_REPO_MODULE_VERSION AND NOT DEFINED QT_REPO_DEPENDENCIES)
+    qt_internal_read_repo_dependencies(QT_REPO_DEPENDENCIES \"$\{PROJECT_SOURCE_DIR}\")
+endif()
+")
+        endif()
+
         qt_compute_relative_path_from_cmake_config_dir_to_prefix()
         configure_file(
             "${CMAKE_CURRENT_LIST_DIR}/QtBuildInternalsExtra.cmake.in"
@@ -698,10 +707,15 @@ function(qt_internal_create_config_file_for_standalone_tests)
 endfunction()
 
 function(qt_internal_install_prl_files)
-    # Install prl files
+    # Get locations relative to QT_BUILD_DIR from which prl files should be installed.
     get_property(prl_install_dirs GLOBAL PROPERTY QT_PRL_INSTALL_DIRS)
+
+    # Clear the list of install dirs so the previous values don't pollute the list of install dirs
+    # for the next repository in a top-level build.
+    set_property(GLOBAL PROPERTY QT_PRL_INSTALL_DIRS "")
+
     foreach(prl_install_dir ${prl_install_dirs})
-        qt_install(DIRECTORY "${PROJECT_BINARY_DIR}/${prl_install_dir}/"
+        qt_install(DIRECTORY "${QT_BUILD_DIR}/${prl_install_dir}/"
             DESTINATION ${prl_install_dir}
             FILES_MATCHING PATTERN "*.prl"
         )

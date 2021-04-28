@@ -528,7 +528,11 @@ how to accomplish this.
 \li \l{cmake-target-property-QT_ANDROID_DEPLOYMENT_DEPENDENCIES}{QT_ANDROID_DEPLOYMENT_DEPENDENCIES}
 \li \l{cmake-target-property-QT_ANDROID_EXTRA_LIBS}{QT_ANDROID_EXTRA_LIBS}
 \li \l{cmake-target-property-QT_ANDROID_EXTRA_PLUGINS}{QT_ANDROID_EXTRA_PLUGINS}
+\li \l{cmake-target-property-QT_ANDROID_MIN_SDK_VERSION}{QT_ANDROID_MIN_SDK_VERSION}
 \li \l{cmake-target-property-QT_ANDROID_PACKAGE_SOURCE_DIR}{QT_ANDROID_PACKAGE_SOURCE_DIR}
+\li \l{cmake-target-property-QT_ANDROID_TARGET_SDK_VERSION}{QT_ANDROID_TARGET_SDK_VERSION}
+\li \l{cmake-target-property-QT_ANDROID_VERSION_NAME}{QT_ANDROID_VERSION_NAME}
+\li \l{cmake-target-property-QT_ANDROID_VERSION_CODE}{QT_ANDROID_VERSION_CODE}
 \li \l{cmake-target-property-QT_QML_IMPORT_PATH}{QT_QML_IMPORT_PATH}
 \li \l{cmake-target-property-QT_QML_ROOT_PATH}{QT_QML_ROOT_PATH}
 \li \l{cmake-target-property-qt_no_entrypoint}{qt_no_entrypoint}

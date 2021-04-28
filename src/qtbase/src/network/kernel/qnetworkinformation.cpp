@@ -46,6 +46,7 @@
 #include <QtCore/private/qobject_p.h>
 #include <QtCore/qcoreapplication.h>
 #include <QtCore/qmutex.h>
+#include <QtCore/qthread.h>
 #include <QtCore/private/qfactoryloader_p.h>
 
 #include <algorithm>
@@ -56,6 +57,11 @@ QT_BEGIN_NAMESPACE
 Q_DECLARE_LOGGING_CATEGORY(lcNetInfo)
 Q_LOGGING_CATEGORY(lcNetInfo, "qt.network.info");
 
+struct QNetworkInformationDeleter
+{
+    void operator()(QNetworkInformation *information) { delete information; }
+};
+
 Q_GLOBAL_STATIC_WITH_ARGS(QFactoryLoader, loader,
                           (QNetworkInformationBackendFactory_iid,
                            QStringLiteral("/networkinformationbackends")))
@@ -63,16 +69,35 @@ Q_GLOBAL_STATIC_WITH_ARGS(QFactoryLoader, loader,
 struct QStaticNetworkInformationDataHolder
 {
     QMutex instanceMutex;
-    std::unique_ptr<QNetworkInformation> instanceHolder;
+    std::unique_ptr<QNetworkInformation, QNetworkInformationDeleter> instanceHolder;
     QList<QNetworkInformationBackendFactory *> factories;
 };
 Q_GLOBAL_STATIC(QStaticNetworkInformationDataHolder, dataHolder);
+
+static void networkInfoCleanup()
+{
+    if (!dataHolder.exists())
+        return;
+    QMutexLocker locker(&dataHolder->instanceMutex);
+    QNetworkInformation *instance = dataHolder->instanceHolder.get();
+    if (!instance)
+        return;
+
+    auto needsReinvoke = instance->thread() && instance->thread() != QThread::currentThread();
+    if (needsReinvoke) {
+        QMetaObject::invokeMethod(dataHolder->instanceHolder.get(), []() { networkInfoCleanup(); });
+        return;
+    }
+    dataHolder->instanceHolder.reset();
+}
 
 class QNetworkInformationPrivate : public QObjectPrivate
 {
     Q_DECLARE_PUBLIC(QNetworkInformation)
 public:
-    QNetworkInformationPrivate(QNetworkInformationBackend *backend) : backend(backend) { }
+    QNetworkInformationPrivate(QNetworkInformationBackend *backend) : backend(backend) {
+        qAddPostRoutine(&networkInfoCleanup);
+     }
 
     static QNetworkInformation *create(QNetworkInformation::Features features);
     static QNetworkInformation *create(QStringView name);
@@ -166,6 +191,8 @@ QStringList QNetworkInformationPrivate::backendNames()
 
 QNetworkInformation *QNetworkInformationPrivate::create(QStringView name)
 {
+    if (name.isEmpty())
+        return nullptr;
     if (!dataHolder())
         return nullptr;
 #ifdef DEBUG_LOADING
@@ -184,40 +211,31 @@ QNetworkInformation *QNetworkInformationPrivate::create(QStringView name)
         return dataHolder->instanceHolder.get();
 
 
-    QNetworkInformationBackend *backend = nullptr;
-    if (!name.isEmpty()) {
-        const auto nameMatches = [name](QNetworkInformationBackendFactory *factory) {
-            return factory->name().compare(name, Qt::CaseInsensitive) == 0;
-        };
-        auto it = std::find_if(dataHolder->factories.cbegin(), dataHolder->factories.cend(),
-                               nameMatches);
-        if (it == dataHolder->factories.cend()) {
+    const auto nameMatches = [name](QNetworkInformationBackendFactory *factory) {
+        return factory->name().compare(name, Qt::CaseInsensitive) == 0;
+    };
+    auto it = std::find_if(dataHolder->factories.cbegin(), dataHolder->factories.cend(),
+                            nameMatches);
+    if (it == dataHolder->factories.cend()) {
 #ifdef DEBUG_LOADING
-            if (dataHolder->factories.isEmpty()) {
-                qDebug("No plugins available");
-            } else {
-                QString listNames;
-                listNames.reserve(8 * dataHolder->factories.count());
-                for (const auto *factory : qAsConst(dataHolder->factories))
-                    listNames += factory->name() + QStringLiteral(", ");
-                listNames.chop(2);
-                qDebug().nospace() << "Couldn't find " << name << " in list with names: { "
-                                   << listNames << " }";
-            }
-#endif
-            return nullptr;
+        if (dataHolder->factories.isEmpty()) {
+            qDebug("No plugins available");
+        } else {
+            QString listNames;
+            listNames.reserve(8 * dataHolder->factories.count());
+            for (const auto *factory : qAsConst(dataHolder->factories))
+                listNames += factory->name() + QStringLiteral(", ");
+            listNames.chop(2);
+            qDebug().nospace() << "Couldn't find " << name << " in list with names: { "
+                                << listNames << " }";
         }
-#ifdef DEBUG_LOADING
-        qDebug() << "Creating instance using loader named " << (*it)->name();
 #endif
-        backend = (*it)->create({});
-    } else {
-#ifdef DEBUG_LOADING
-        qDebug() << "Creating instance using loader named" << dataHolder->factories.front()->name();
-#endif
-        if (!dataHolder->factories.isEmpty())
-            backend = dataHolder->factories.front()->create({});
+        return nullptr;
     }
+#ifdef DEBUG_LOADING
+    qDebug() << "Creating instance using loader named " << (*it)->name();
+#endif
+    QNetworkInformationBackend *backend = (*it)->create({});
     if (!backend)
         return nullptr;
     dataHolder->instanceHolder.reset(new QNetworkInformation(backend));
@@ -410,7 +428,9 @@ QNetworkInformationBackendFactory::~QNetworkInformationBackendFactory()
     you can load() plugins based on which features are needed.
 
     QNetworkInformation is a singleton and stays alive from the first
-    successful load() until application shutdown.
+    successful load() until destruction of the QCoreApplication object.
+    If you destroy and re-create the QCoreApplication object you must call
+    load() again.
 
     \sa QNetworkInformation::Feature
 */
@@ -432,7 +452,7 @@ QNetworkInformationBackendFactory::~QNetworkInformationBackendFactory()
 
     \value Unknown
         If this value is returned then we may be connected but the OS
-        has still not confirmed full connectivity, or this features
+        has still not confirmed full connectivity, or this feature
         is not supported.
     \value Disconnected
         Indicates that the system may have no connectivity at all.

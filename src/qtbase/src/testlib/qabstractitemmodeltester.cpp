@@ -455,7 +455,7 @@ void QAbstractItemModelTesterPrivate::parent()
 
     // Common error test #2, make sure that a second level index has a parent
     // that is the first level index.
-    if (model->rowCount(topIndex) > 0) {
+    if (model->rowCount(topIndex) > 0 && model->columnCount(topIndex) > 0) {
         QModelIndex childIndex = model->index(0, 0, topIndex);
         MODELTESTER_VERIFY(childIndex.isValid());
         MODELTESTER_COMPARE(model->parent(childIndex), topIndex);
@@ -721,12 +721,12 @@ void QAbstractItemModelTesterPrivate::rowsAboutToBeRemoved(const QModelIndex &pa
     Changing c;
     c.parent = parent;
     c.oldSize = model->rowCount(parent);
-    if (start > 0) {
+    if (start > 0 && model->columnCount(parent) > 0) {
         const QModelIndex startIndex = model->index(start - 1, 0, parent);
         MODELTESTER_VERIFY(startIndex.isValid());
         c.last = model->data(startIndex);
     }
-    if (end < c.oldSize - 1) {
+    if (end < c.oldSize - 1 && model->columnCount(parent) > 0) {
         const QModelIndex endIndex = model->index(end + 1, 0, parent);
         MODELTESTER_VERIFY(endIndex.isValid());
         c.next = model->data(endIndex);

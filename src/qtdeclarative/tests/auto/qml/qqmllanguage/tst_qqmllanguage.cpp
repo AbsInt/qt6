@@ -356,6 +356,8 @@ private slots:
 
     void qtbug_85615();
 
+    void hangOnWarning();
+
 private:
     QQmlEngine engine;
     QStringList defaultImportPathList;
@@ -905,7 +907,7 @@ void tst_qqmllanguage::assignLiteralToVar()
     QCOMPARE(object->property("test9"), QVariant(QString(QLatin1String("#FF008800"))));
     QCOMPARE(object->property("test10"), QVariant(bool(true)));
     QCOMPARE(object->property("test11"), QVariant(bool(false)));
-    QCOMPARE(object->property("test12"), QVariant(QColor::fromRgbF(0.2, 0.3, 0.4, 0.5)));
+    QCOMPARE(object->property("test12"), QVariant(QColor::fromRgbF(0.2f, 0.3f, 0.4f, 0.5f)));
     QCOMPARE(object->property("test13"), QVariant(QRectF(10, 10, 10, 10)));
     QCOMPARE(object->property("test14"), QVariant(QPointF(10, 10)));
     QCOMPARE(object->property("test15"), QVariant(QSizeF(10, 10)));
@@ -1060,7 +1062,7 @@ void tst_qqmllanguage::bindJSValueToVar()
     QCOMPARE(object->property("test9"), QVariant(QString(QLatin1String("#FF008800"))));
     QCOMPARE(object->property("test10"), QVariant(bool(true)));
     QCOMPARE(object->property("test11"), QVariant(bool(false)));
-    QCOMPARE(object->property("test12"), QVariant(QColor::fromRgbF(0.2, 0.3, 0.4, 0.5)));
+    QCOMPARE(object->property("test12"), QVariant(QColor::fromRgbF(0.2f, 0.3f, 0.4f, 0.5f)));
     QCOMPARE(object->property("test13"), QVariant(QRectF(10, 10, 10, 10)));
     QCOMPARE(object->property("test14"), QVariant(QPointF(10, 10)));
     QCOMPARE(object->property("test15"), QVariant(QSizeF(10, 10)));
@@ -1109,7 +1111,7 @@ void tst_qqmllanguage::bindJSValueToVariant()
     QCOMPARE(object->property("test9"), QVariant(QString(QLatin1String("#FF008800"))));
     QCOMPARE(object->property("test10"), QVariant(bool(true)));
     QCOMPARE(object->property("test11"), QVariant(bool(false)));
-    QCOMPARE(object->property("test12"), QVariant(QColor::fromRgbF(0.2, 0.3, 0.4, 0.5)));
+    QCOMPARE(object->property("test12"), QVariant(QColor::fromRgbF(0.2f, 0.3f, 0.4f, 0.5f)));
     QCOMPARE(object->property("test13"), QVariant(QRectF(10, 10, 10, 10)));
     QCOMPARE(object->property("test14"), QVariant(QPointF(10, 10)));
     QCOMPARE(object->property("test15"), QVariant(QSizeF(10, 10)));
@@ -1133,7 +1135,7 @@ void tst_qqmllanguage::bindJSValueToType()
         QCOMPARE(object->doubleProperty(), double(1.7));
         QCOMPARE(object->stringProperty(), QString(QLatin1String("Hello world!")));
         QCOMPARE(object->boolProperty(), true);
-        QCOMPARE(object->colorProperty(), QColor::fromRgbF(0.2, 0.3, 0.4, 0.5));
+        QCOMPARE(object->colorProperty(), QColor::fromRgbF(0.2f, 0.3f, 0.4f, 0.5f));
         QCOMPARE(object->rectFProperty(), QRectF(10, 10, 10, 10));
         QCOMPARE(object->pointFProperty(), QPointF(10, 10));
         QCOMPARE(object->sizeFProperty(), QSizeF(10, 10));
@@ -6274,6 +6276,16 @@ void tst_qqmllanguage::bareInlineComponent()
         }
     }
     QVERIFY(tab1Found);
+}
+
+void tst_qqmllanguage::hangOnWarning()
+{
+    QTest::ignoreMessage(QtWarningMsg,
+                         qPrintable(QStringLiteral("%1:3 : Ignored annotation")
+                                            .arg(testFileUrl("hangOnWarning.qml").toString())));
+    QQmlComponent component(&engine, testFileUrl("hangOnWarning.qml"));
+    QScopedPointer<QObject> object(component.create());
+    QVERIFY(object != nullptr);
 }
 
 QTEST_MAIN(tst_qqmllanguage)

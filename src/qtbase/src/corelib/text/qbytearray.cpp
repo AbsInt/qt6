@@ -67,12 +67,6 @@
 
 QT_BEGIN_NAMESPACE
 
-template <typename T, typename Cmp = std::less<>>
-static constexpr bool points_into_range(const T *p, const T *b, const T *e, Cmp less = {}) noexcept
-{
-    return !less(p, b) && less(p, e);
-}
-
 const char QByteArray::_empty = '\0';
 
 // ASCII case system, used by QByteArray::to{Upper,Lower}() and qstr(n)icmp():
@@ -1977,8 +1971,7 @@ QByteArray &QByteArray::append(const QByteArray &ba)
 
 QByteArray& QByteArray::append(char ch)
 {
-    if (d->needsDetach() || !d->freeSpaceAtEnd())
-        reallocGrowData(1);
+    d.detachAndGrow(QArrayData::GrowsAtEnd, 1, nullptr, nullptr);
     d->copyAppend(1, ch);
     d.data()[d.size] = '\0';
     return *this;
@@ -2018,19 +2011,15 @@ QByteArray &QByteArray::insert(qsizetype i, QByteArrayView data)
         // defer a call to free() so that it comes after we copied the data from
         // the old memory:
         DataPointer detached{};  // construction is free
-        if (d->needsDetach() || i + size - d->size > d.freeSpaceAtEnd()) {
-            detached = DataPointer::allocateGrow(d, i + size - d->size, Data::GrowsAtEnd);
-            Q_CHECK_PTR(detached.data());
-            detached->copyAppend(d.constBegin(), d.constEnd());
-            d.swap(detached);
-        }
+        d.detachAndGrow(Data::GrowsAtEnd, (i - d.size) + size, &str, &detached);
+        Q_CHECK_PTR(d.data());
         d->copyAppend(i - d->size, ' ');
         d->copyAppend(str, str + size);
         d.data()[d.size] = '\0';
         return *this;
     }
 
-    if (!d->needsDetach() && points_into_range(str, d.data(), d.data() + d.size)) {
+    if (!d->needsDetach() && QtPrivate::q_points_into_range(str, d.data(), d.data() + d.size)) {
         QVarLengthArray a(str, str + size);
         return insert(i, a);
     }
@@ -2100,12 +2089,8 @@ QByteArray &QByteArray::insert(qsizetype i, qsizetype count, char ch)
 
     if (i >= d->size) {
         // handle this specially, as QArrayDataOps::insert() doesn't handle out of bounds positions
-        if (d->needsDetach() || i + count - d->size > d.freeSpaceAtEnd()) {
-            DataPointer detached(DataPointer::allocateGrow(d, i + count - d->size, Data::GrowsAtEnd));
-            Q_CHECK_PTR(detached.data());
-            detached->copyAppend(d.constBegin(), d.constEnd());
-            d.swap(detached);
-        }
+        d.detachAndGrow(Data::GrowsAtEnd, (i - d.size) + count, nullptr, nullptr);
+        Q_CHECK_PTR(d.data());
         d->copyAppend(i - d->size, ' ');
         d->copyAppend(count, ch);
         d.data()[d.size] = '\0';
@@ -2169,7 +2154,7 @@ QByteArray &QByteArray::remove(qsizetype pos, qsizetype len)
 
 QByteArray &QByteArray::replace(qsizetype pos, qsizetype len, QByteArrayView after)
 {
-    if (points_into_range(after.data(), d.data(), d.data() + d.size)) {
+    if (QtPrivate::q_points_into_range(after.data(), d.data(), d.data() + d.size)) {
         QVarLengthArray copy(after.data(), after.data() + after.size());
         return replace(pos, len, QByteArrayView{copy});
     }
@@ -2226,11 +2211,11 @@ QByteArray &QByteArray::replace(QByteArrayView before, QByteArrayView after)
         return *this;
 
     // protect against before or after being part of this
-    if (points_into_range(a, d.data(), d.data() + d.size)) {
+    if (QtPrivate::q_points_into_range(a, d.data(), d.data() + d.size)) {
         QVarLengthArray copy(a, a + asize);
         return replace(before, QByteArrayView{copy});
     }
-    if (points_into_range(b, d.data(), d.data() + d.size)) {
+    if (QtPrivate::q_points_into_range(b, d.data(), d.data() + d.size)) {
         QVarLengthArray copy(b, b + bsize);
         return replace(QByteArrayView{copy}, after);
     }

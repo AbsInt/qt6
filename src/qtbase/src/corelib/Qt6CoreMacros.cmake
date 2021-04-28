@@ -559,6 +559,144 @@ function(qt6_finalize_executable target)
         qt6_android_generate_deployment_settings("${target}")
         qt6_android_add_apk_target("${target}")
     endif()
+    if(IOS)
+        qt6_finalize_ios_app("${target}")
+    endif()
+endfunction()
+
+function(_qt_internal_find_ios_development_team_id out_var)
+    get_property(team_id GLOBAL PROPERTY _qt_internal_ios_development_team_id)
+    get_property(team_id_computed GLOBAL PROPERTY _qt_internal_ios_development_team_id_computed)
+    if(team_id_computed)
+        # Just in case if the value is non-empty but still booly FALSE.
+        if(NOT team_id)
+            set(team_id "")
+        endif()
+        set("${out_var}" "${team_id}" PARENT_SCOPE)
+        return()
+    endif()
+
+    set_property(GLOBAL PROPERTY _qt_internal_ios_development_team_id_computed "TRUE")
+
+    set(home_dir "$ENV{HOME}")
+    set(xcode_preferences_path "${home_dir}/Library/Preferences/com.apple.dt.Xcode.plist")
+
+    # Extract the first account name (email) from the user's Xcode preferences
+    message(DEBUG "Trying to extract an Xcode development team id from '${xcode_preferences_path}'")
+    execute_process(COMMAND "/usr/libexec/PlistBuddy"
+                            -x -c "print IDEProvisioningTeams" "${xcode_preferences_path}"
+                    OUTPUT_VARIABLE teams_xml
+                    ERROR_VARIABLE plist_error)
+    if(teams_xml AND NOT plist_error)
+        string(REPLACE "\n" ";" teams_xml_lines "${teams_xml}")
+        foreach(xml_line ${teams_xml_lines})
+            if(xml_line MATCHES "<key>(.+)</key>")
+                set(first_account "${CMAKE_MATCH_1}")
+                string(STRIP "${first_account}" first_account)
+                break()
+            endif()
+        endforeach()
+    endif()
+
+    if(NOT first_account)
+        message(DEBUG "Failed to extract an Xcode development team id.")
+        return()
+    endif()
+
+    # Extract the first team ID
+    execute_process(COMMAND "/usr/libexec/PlistBuddy"
+                            -c "print IDEProvisioningTeams:${first_account}:0:teamID"
+                            "${xcode_preferences_path}"
+                    OUTPUT_VARIABLE team_id
+                    ERROR_VARIABLE team_id_error)
+    if(team_id AND NOT team_id_error)
+        message(DEBUG "Successfully extracted the first encountered Xcode development team id.")
+        string(STRIP "${team_id}" team_id)
+        set_property(GLOBAL PROPERTY _qt_internal_ios_development_team_id "${team_id}")
+        set("${out_var}" "${team_id}" PARENT_SCOPE)
+    endif()
+endfunction()
+
+function(_qt_internal_get_ios_bundle_identifier_prefix out_var)
+    get_property(prefix GLOBAL PROPERTY _qt_internal_ios_bundle_identifier_prefix)
+    get_property(prefix_computed GLOBAL PROPERTY
+                 _qt_internal_ios_bundle_identifier_prefix_computed)
+    if(prefix_computed)
+        # Just in case if the value is non-empty but still booly FALSE.
+        if(NOT prefix)
+            set(prefix "")
+        endif()
+        set("${out_var}" "${prefix}" PARENT_SCOPE)
+        return()
+    endif()
+
+    set_property(GLOBAL PROPERTY _qt_internal_ios_bundle_identifier_prefix_computed "TRUE")
+
+    set(home_dir "$ENV{HOME}")
+    set(xcode_preferences_path "${home_dir}/Library/Preferences/com.apple.dt.Xcode.plist")
+
+    message(DEBUG "Trying to extract the default bundle identifier prefix from Xcode preferences.")
+    execute_process(COMMAND "/usr/libexec/PlistBuddy"
+                            -c "print IDETemplateOptions:bundleIdentifierPrefix"
+                            "${xcode_preferences_path}"
+                    OUTPUT_VARIABLE prefix
+                    ERROR_VARIABLE prefix_error)
+    if(prefix AND NOT prefix_error)
+        message(DEBUG "Successfully extracted the default bundle indentifier prefix.")
+        string(STRIP "${prefix}" prefix)
+    else()
+        message(DEBUG "Failed to extract the default bundle indentifier prefix.")
+    endif()
+
+    if(prefix)
+        set_property(GLOBAL PROPERTY _qt_internal_ios_bundle_identifier_prefix "${prefix}")
+        set("${out_var}" "${prefix}" PARENT_SCOPE)
+    endif()
+endfunction()
+
+function(_qt_internal_get_default_ios_bundle_identifier out_var)
+    _qt_internal_get_ios_bundle_identifier_prefix(prefix)
+    if(NOT prefix)
+        set(prefix "com.yourcompany")
+    endif()
+    set("${out_var}" "${prefix}.\${PRODUCT_NAME:rfc1034identifier}" PARENT_SCOPE)
+endfunction()
+
+
+function(qt6_finalize_ios_app target)
+    # If user hasn't provided a development team id, try to find the first one specified
+    # in the Xcode preferences.
+    if(NOT CMAKE_XCODE_ATTRIBUTE_DEVELOPMENT_TEAM AND NOT QT_NO_SET_XCODE_DEVELOPMENT_TEAM_ID)
+        get_target_property(existing_team_id "${target}" XCODE_ATTRIBUTE_DEVELOPMENT_TEAM)
+        if(NOT existing_team_id)
+            _qt_internal_find_ios_development_team_id(team_id)
+            set_target_properties("${target}"
+                                  PROPERTIES XCODE_ATTRIBUTE_DEVELOPMENT_TEAM "${team_id}")
+        endif()
+    endif()
+
+    # If user hasn't provided a bundle identifier for the app, get a default identifier
+    # using the default bundle prefix from Xcode preferences and add it to the generated
+    # Info.plist file.
+    if(NOT MACOSX_BUNDLE_GUI_IDENTIFIER AND NOT QT_NO_SET_XCODE_BUNDLE_IDENTIFIER)
+        get_target_property(existing_id "${target}" MACOSX_BUNDLE_GUI_IDENTIFIER)
+        if(NOT existing_id)
+            _qt_internal_get_default_ios_bundle_identifier(bundle_id)
+            set_target_properties("${target}"
+                                  PROPERTIES MACOSX_BUNDLE_GUI_IDENTIFIER "${bundle_id}")
+        endif()
+    endif()
+
+    # Reuse the same bundle identifier for the Xcode property.
+    if(NOT CMAKE_XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER
+            AND NOT QT_NO_SET_XCODE_BUNDLE_IDENTIFIER)
+        get_target_property(existing_id "${target}" XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER)
+        if(NOT existing_id)
+            set_target_properties("${target}"
+                                  PROPERTIES XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER
+                                  "${bundle_id}")
+        endif()
+    endif()
 endfunction()
 
 if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
@@ -1185,6 +1323,20 @@ function(__qt_propagate_generated_resource target resource_name generated_source
 
         set(resource_target "${target}_resources_${resource_count}")
         add_library("${resource_target}" OBJECT "${generated_source_code}")
+        target_compile_definitions("${resource_target}" PRIVATE
+            "$<TARGET_PROPERTY:${QT_CMAKE_EXPORT_NAMESPACE}::Core,INTERFACE_COMPILE_DEFINITIONS>"
+        )
+
+        target_link_libraries(${resource_target} PRIVATE ${QT_CMAKE_EXPORT_NAMESPACE}::Platform)
+        _qt_internal_copy_dependency_properties(${resource_target} ${target} PRIVATE_ONLY)
+
+        # Special handling is required for the Core library resources. The linking of the Core
+        # library to the resources adds a circular dependency. This leads to the wrong
+        # objects/library order in the linker command line, since the Core library target is resolved
+        # first.
+        if(NOT target STREQUAL "Core")
+            target_link_libraries(${resource_target} INTERFACE ${QT_CMAKE_EXPORT_NAMESPACE}::Core)
+        endif()
         set_property(TARGET ${resource_target} APPEND PROPERTY _qt_resource_name ${resource_name})
 
         # Save the path to the generated source file, relative to the the current build dir.
@@ -1201,8 +1353,17 @@ function(__qt_propagate_generated_resource target resource_name generated_source
         # Use TARGET_NAME genex to map to the correct prefixed target name when it is exported
         # via qt_install(EXPORT), so that the consumers of the target can find the object library
         # as well.
-        target_link_libraries(${target} INTERFACE
-                              "$<TARGET_OBJECTS:$<TARGET_NAME:${resource_target}>>")
+        target_sources(${target} INTERFACE
+            "$<TARGET_OBJECTS:$<TARGET_NAME:${resource_target}>>"
+        )
+        if(NOT target STREQUAL "Core")
+            # It's necessary to link the object library target, since we want to pass
+            # the object library dependencies to the 'target'. Interface linking doesn't
+            # add the objects of the resource library to the end-point linker line
+            # but propagates all the dependencies of the resource_target added before
+            # or AFTER the line below.
+            target_link_libraries(${target} INTERFACE ${resource_target})
+        endif()
         set(${output_generated_target} "${resource_target}" PARENT_SCOPE)
 
         # No need to compile Q_IMPORT_PLUGIN-containing files for non-executables.
@@ -1554,4 +1715,53 @@ function(_qt_internal_apply_strict_cpp target)
                 OBJCXX_EXTENSIONS OFF)
         endif()
     endif()
+endfunction()
+
+# Copies properties of the dependency to the target.
+# Arguments:
+#   PROPERTIES list of properties to copy. If not specified the following properties are copied
+#              by default: INCLUDE_DIRECTORIES SYSTEM_INCLUDE_DIRECTORIES COMPILE_DEFINITIONS
+#              COMPILE_OPTIONS COMPILE_FEATURES
+#   PRIVATE_ONLY copy only private properties (without INTERFACE analogues). Optional.
+#   INTERFACE_ONLY copy only interface properties (without non-prefixed analogues). Optional.
+#      Note: Not all properties have INTERFACE properties analogues.
+#            See https://cmake.org/cmake/help/latest/prop_tgt/EXPORT_PROPERTIES.html for details.
+#
+# PRIVATE_ONLY and INTERFACE_ONLY in the same call are not allowed. Omit these options to copy
+# both sets.
+function(_qt_internal_copy_dependency_properties target dependency)
+    cmake_parse_arguments(arg "INTERFACE_ONLY;PRIVATE_ONLY" "" "PROPERTIES" ${ARGN})
+    if(arg_PRIVATE_ONLY AND arg_INTERFACE_ONLY)
+        message("Both PRIVATE_ONLY and INTERFACE_ONLY options are set.\
+Please use _qt_internal_copy_dependency_properties without these options to copy a set of
+properties of both types."
+        )
+    endif()
+
+    if(arg_PROPERTIES)
+        set(common_props_to_set ${arg_PROPERTIES})
+    else()
+        set(common_props_to_set
+            INCLUDE_DIRECTORIES SYSTEM_INCLUDE_DIRECTORIES
+            COMPILE_DEFINITIONS COMPILE_OPTIONS
+            COMPILE_FEATURES
+        )
+    endif()
+
+    set(props_to_set "")
+    if(NOT arg_INTERFACE_ONLY)
+        set(props_to_set ${common_props_to_set})
+    endif()
+    if(NOT arg_PRIVATE_ONLY)
+        list(TRANSFORM common_props_to_set PREPEND INTERFACE_
+                        OUTPUT_VARIABLE interface_properties)
+        list(APPEND props_to_set ${interface_properties})
+    endif()
+
+    foreach(prop ${props_to_set})
+        set_property(TARGET
+            "${target}" APPEND PROPERTY
+            ${prop} "$<TARGET_PROPERTY:${dependency},${prop}>"
+        )
+    endforeach()
 endfunction()
