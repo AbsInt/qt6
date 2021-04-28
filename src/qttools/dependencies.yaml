@@ -1,7 +1,4 @@
 dependencies:
-  ../qtactiveqt:
-    ref: 8ee808234fcf287ae3bf387d0e62455967e9c067
-    required: false
   ../qtbase:
     ref: c295d9d7984d0129330faace2c75da5700543ba3
     required: true
