@@ -27,7 +27,6 @@ U_NAMESPACE_BEGIN
 
 UOBJECT_DEFINE_RTTI_IMPLEMENTATION(RuleBasedTransliterator)
 
-static UMutex transliteratorDataMutex = U_MUTEX_INITIALIZER;
 static Replaceable *gLockedText = NULL;
 
 void RuleBasedTransliterator::_construct(const UnicodeString& rules,
@@ -102,7 +101,7 @@ RuleBasedTransliterator::RuleBasedTransliterator(
 }*/
 
 /**
- * Covenience constructor with no filter.
+ * Convenience constructor with no filter.
  */
 /*RuleBasedTransliterator::RuleBasedTransliterator(
                             const UnicodeString& id,
@@ -115,7 +114,7 @@ RuleBasedTransliterator::RuleBasedTransliterator(
 }*/
 
 /**
- * Covenience constructor with no filter and FORWARD direction.
+ * Convenience constructor with no filter and FORWARD direction.
  */
 /*RuleBasedTransliterator::RuleBasedTransliterator(
                             const UnicodeString& id,
@@ -127,7 +126,7 @@ RuleBasedTransliterator::RuleBasedTransliterator(
 }*/
 
 /**
- * Covenience constructor with FORWARD direction.
+ * Convenience constructor with FORWARD direction.
  */
 /*RuleBasedTransliterator::RuleBasedTransliterator(
                             const UnicodeString& id,
@@ -192,8 +191,8 @@ RuleBasedTransliterator::~RuleBasedTransliterator() {
     }
 }
 
-Transliterator* // Covariant return NOT ALLOWED (for portability)
-RuleBasedTransliterator::clone(void) const {
+RuleBasedTransliterator*
+RuleBasedTransliterator::clone() const {
     return new RuleBasedTransliterator(*this);
 }
 
@@ -253,6 +252,8 @@ RuleBasedTransliterator::handleTransliterate(Replaceable& text, UTransPosition& 
     //  Shared RBT data protected by transliteratorDataMutex.
     //
     // TODO(andy): Need a better scheme for handling this.
+
+    static UMutex transliteratorDataMutex;
     UBool needToLock;
     {
         Mutex m;

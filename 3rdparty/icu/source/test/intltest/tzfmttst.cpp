@@ -85,6 +85,8 @@ TimeZoneFormatTest::runIndexedTest( int32_t index, UBool exec, const char* &name
         TESTCASE(5, TestFormatTZDBNames);
         TESTCASE(6, TestFormatCustomZone);
         TESTCASE(7, TestFormatTZDBNamesAllZoneCoverage);
+        TESTCASE(8, TestAdoptDefaultThreadSafe);
+        TESTCASE(9, TestCentralTime);
     default: name = ""; break;
     }
 }
@@ -409,7 +411,7 @@ struct LocaleData {
         for (int i=0; i<UPRV_LENGTHOF(times); i++) {
             times[i] = 0;
         }
-    };
+    }
 
     void resetTestIteration() {
         localeIndex = -1;
@@ -711,6 +713,44 @@ void TimeZoneFormatTest::RunTimeRoundTripTests(int32_t threadNumber) {
     delete tzids;
 }
 
+void
+TimeZoneFormatTest::TestAdoptDefaultThreadSafe(void) {
+    ThreadPool<TimeZoneFormatTest> threads(this, threadCount, &TimeZoneFormatTest::RunAdoptDefaultThreadSafeTests);
+    threads.start();   // Start all threads.
+    threads.join();    // Wait for all threads to finish.
+}
+
+static const int32_t kAdoptDefaultIteration = 10;
+static const int32_t kCreateDefaultIteration = 5000;
+static const int64_t kStartTime = 1557288964845;
+
+void TimeZoneFormatTest::RunAdoptDefaultThreadSafeTests(int32_t threadNumber) {
+    UErrorCode status = U_ZERO_ERROR;
+    if (threadNumber % 2 == 0) {
+        for (int32_t i = 0; i < kAdoptDefaultIteration; i++) {
+            std::unique_ptr<icu::StringEnumeration> timezones(
+                    icu::TimeZone::createEnumeration());
+            // Fails with missing data.
+            if (!assertTrue(WHERE, (bool)timezones, false, true)) {return;}
+            while (const icu::UnicodeString* timezone = timezones->snext(status)) {
+                status = U_ZERO_ERROR;
+                icu::TimeZone::adoptDefault(icu::TimeZone::createTimeZone(*timezone));
+            }
+        }
+    } else {
+        int32_t rawOffset;
+        int32_t dstOffset;
+        int64_t date = kStartTime;
+        for (int32_t i = 0; i < kCreateDefaultIteration; i++) {
+            date += 6000 * i;
+            std::unique_ptr<icu::TimeZone> tz(icu::TimeZone::createDefault());
+            status = U_ZERO_ERROR;
+            tz->getOffset(static_cast<UDate>(date), TRUE, rawOffset, dstOffset, status);
+            status = U_ZERO_ERROR;
+            tz->getOffset(static_cast<UDate>(date), FALSE, rawOffset, dstOffset, status);
+        }
+    }
+}
 
 typedef struct {
     const char*     text;
@@ -1302,4 +1342,56 @@ TimeZoneFormatTest::TestFormatTZDBNamesAllZoneCoverage(void) {
     }
 }
 
+// Test for checking parse results are same for a same input string
+// using SimpleDateFormat initialized with different regional locales - US and Belize.
+// Belize did not observe DST from 1968 to 1973, 1975 to 1982, and 1985 and later.
+void
+TimeZoneFormatTest::TestCentralTime(void) {
+    UnicodeString pattern(u"y-MM-dd HH:mm:ss zzzz");
+    UnicodeString testInputs[] = {
+        // 1970-01-01 - Chicago:STD/Belize:STD
+        u"1970-01-01 12:00:00 Central Standard Time",
+        u"1970-01-01 12:00:00 Central Daylight Time",
+
+        // 1970-07-01 - Chicago:STD/Belize:STD
+        u"1970-07-01 12:00:00 Central Standard Time",
+        u"1970-07-01 12:00:00 Central Daylight Time",
+
+        // 1974-01-01 - Chicago:STD/Belize:DST
+        u"1974-01-01 12:00:00 Central Standard Time",
+        u"1974-01-01 12:00:00 Central Daylight Time",
+
+        // 2020-01-01 - Chicago:STD/Belize:STD
+        u"2020-01-01 12:00:00 Central Standard Time",
+        u"2020-01-01 12:00:00 Central Daylight Time",
+
+        // 2020-01-01 - Chicago:DST/Belize:STD
+        u"2020-07-01 12:00:00 Central Standard Time",
+        u"2020-07-01 12:00:00 Central Daylight Time",
+
+        u""
+    };
+
+    UErrorCode status = U_ZERO_ERROR;
+    SimpleDateFormat sdfUS(pattern, Locale("en_US"), status);
+    SimpleDateFormat sdfBZ(pattern, Locale("en_BZ"), status);
+    if (U_FAILURE(status)) {
+        errln("Failed to create SimpleDateFormat instance");
+        return;
+    }
+
+    for (int32_t i = 0; !testInputs[i].isEmpty(); i++) {
+        UDate dUS = sdfUS.parse(testInputs[i], status);
+        UDate dBZ = sdfBZ.parse(testInputs[i], status);
+
+        if (U_FAILURE(status)) {
+            errln((UnicodeString)"Failed to parse date string: " + testInputs[i]);
+            continue;
+        }
+
+        if (dUS != dBZ) {
+            errln((UnicodeString)"Parse results should be same for input: " + testInputs[i]);
+        }
+    }
+}
 #endif /* #if !UCONFIG_NO_FORMATTING */

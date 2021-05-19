@@ -56,6 +56,7 @@ public:
     void TestTruncatingIteratorFromLinearMatchLong();
     void TestIteratorFromBytes();
     void TestFailedIterator();
+    void TestDelta();
 
     void checkData(const StringAndValue data[], int32_t dataLength);
     void checkData(const StringAndValue data[], int32_t dataLength, UStringTrieBuildOption buildOption);
@@ -64,6 +65,7 @@ public:
     void checkFirst(BytesTrie &trie, const StringAndValue data[], int32_t dataLength);
     void checkNext(BytesTrie &trie, const StringAndValue data[], int32_t dataLength);
     void checkNextWithState(BytesTrie &trie, const StringAndValue data[], int32_t dataLength);
+    void checkNextWithState64(BytesTrie &trie, const StringAndValue data[], int32_t dataLength);
     void checkNextString(BytesTrie &trie, const StringAndValue data[], int32_t dataLength);
     void checkIterator(const BytesTrie &trie, const StringAndValue data[], int32_t dataLength);
     void checkIterator(BytesTrie::Iterator &iter, const StringAndValue data[], int32_t dataLength);
@@ -109,6 +111,7 @@ void BytesTrieTest::runIndexedTest(int32_t index, UBool exec, const char *&name,
     TESTCASE_AUTO(TestTruncatingIteratorFromLinearMatchLong);
     TESTCASE_AUTO(TestIteratorFromBytes);
     TESTCASE_AUTO(TestFailedIterator);
+    TESTCASE_AUTO(TestDelta);
     TESTCASE_AUTO_END;
 }
 
@@ -598,6 +601,45 @@ void BytesTrieTest::TestFailedIterator() {
     }
 }
 
+void BytesTrieTest::TestDelta() {
+    char intBytes0[5];
+    char intBytes1[5];
+    static constexpr int32_t sampleDeltas[] = {
+        -1, 0, 1, 2, 3, 0xa5, 0xbe, 0xbf,
+        -2, 0xc0, 0xc1, 0xeee, 0x1234, 0x2ffe, 0x2fff,
+        -3, 0x3000, 0x3001, 0x3003, 0x50005, 0xdfffe, 0xdffff,
+        -4, 0xe0000, 0xe0001, 0xef0123, 0xfffffe, 0xffffff,
+        -5, 0x1000000, 0x1000001, 0x7fffffff
+    };
+    int32_t expectedLength = 0;
+    for (int32_t delta : sampleDeltas) {
+        if (delta < 0) {
+            expectedLength = -delta;
+            continue;
+        }
+        // Encoding twice into differently-initialized arrays
+        // catches bytes that are not written to.
+        memset(intBytes0, 0, sizeof(intBytes0));
+        memset(intBytes1, 1, sizeof(intBytes1));
+        int32_t length0 = BytesTrieBuilder::internalEncodeDelta(delta, intBytes0);
+        int32_t length1 = BytesTrieBuilder::internalEncodeDelta(delta, intBytes1);
+        assertTrue(UnicodeString(u"non-zero length to encode delta ") + delta, length0 > 0);
+        assertEquals(UnicodeString(u"consistent length to encode delta ") + delta, length0, length1);
+        assertEquals(UnicodeString(u"expected length to encode delta ") + delta,
+                     expectedLength, length0);
+        for (int32_t i = 0; i < length0; ++i) {
+            uint8_t b0 = intBytes0[i];
+            uint8_t b1 = intBytes1[i];
+            assertEquals(UnicodeString(u"differently encoded delta ") + delta +
+                            u" at byte index " + i, b0, b1);
+        }
+        const uint8_t *start = (const uint8_t *)intBytes0;
+        const uint8_t *pos = BytesTrie::jumpByDelta(start);
+        assertEquals(UnicodeString(u"roundtrip for delta ") + delta,
+                     delta, (int32_t)(pos - start) - length0);
+    }
+}
+
 void BytesTrieTest::checkData(const StringAndValue data[], int32_t dataLength) {
     logln("checkData(dataLength=%d, fast)", (int)dataLength);
     checkData(data, dataLength, USTRINGTRIE_BUILD_FAST);
@@ -613,6 +655,7 @@ void BytesTrieTest::checkData(const StringAndValue data[], int32_t dataLength, U
     checkFirst(*trie, data, dataLength);
     checkNext(*trie, data, dataLength);
     checkNextWithState(*trie, data, dataLength);
+    checkNextWithState64(*trie, data, dataLength);
     checkNextString(*trie, data, dataLength);
     checkIterator(*trie, data, dataLength);
 }
@@ -691,7 +734,7 @@ void BytesTrieTest::checkNext(BytesTrie &trie,
                               const StringAndValue data[], int32_t dataLength) {
     BytesTrie::State state;
     for(int32_t i=0; i<dataLength; ++i) {
-        int32_t stringLength= (i&1) ? -1 : strlen(data[i].s);
+        int32_t stringLength= (i&1) ? -1 : static_cast<int32_t>(strlen(data[i].s));
         UStringTrieResult result;
         if( !USTRINGTRIE_HAS_VALUE(result=trie.next(data[i].s, stringLength)) ||
             result!=trie.current()
@@ -706,7 +749,7 @@ void BytesTrieTest::checkNext(BytesTrie &trie,
             errln("trie value for %s changes when repeating current()/getValue()", data[i].s);
         }
         trie.reset();
-        stringLength=strlen(data[i].s);
+        stringLength = static_cast<int32_t>(strlen(data[i].s));
         result=trie.current();
         for(int32_t j=0; j<stringLength; ++j) {
             if(!USTRINGTRIE_HAS_NEXT(result)) {
@@ -776,8 +819,8 @@ void BytesTrieTest::checkNextWithState(BytesTrie &trie,
             trie.resetToState(noState);
         }
         const char *expectedString=data[i].s;
-        int32_t stringLength=strlen(expectedString);
-        int32_t partialLength=stringLength/3;
+        int32_t stringLength= static_cast<int32_t>(strlen(expectedString));
+        int32_t partialLength = stringLength / 3;
         for(int32_t j=0; j<partialLength; ++j) {
             if(!USTRINGTRIE_MATCHES(trie.next(expectedString[j]))) {
                 errln("trie.next()=USTRINGTRIE_NO_MATCH for a prefix of %s", data[i].s);
@@ -825,13 +868,68 @@ void BytesTrieTest::checkNextWithState(BytesTrie &trie,
     }
 }
 
+void BytesTrieTest::checkNextWithState64(BytesTrie &trie,
+                                         const StringAndValue data[], int32_t dataLength) {
+    assertTrue("trie(initial state).getState64()!=0", trie.getState64() != 0);
+    for(int32_t i=0; i<dataLength; ++i) {
+        const char *expectedString=data[i].s;
+        int32_t stringLength= static_cast<int32_t>(strlen(expectedString));
+        int32_t partialLength = stringLength / 3;
+        for(int32_t j=0; j<partialLength; ++j) {
+            if(!USTRINGTRIE_MATCHES(trie.next(expectedString[j]))) {
+                errln("trie.next()=USTRINGTRIE_NO_MATCH for a prefix of %s", data[i].s);
+                return;
+            }
+        }
+        uint64_t state = trie.getState64();
+        assertTrue("trie.getState64()!=0", state != 0);
+        UStringTrieResult resultAtState=trie.current();
+        UStringTrieResult result;
+        int32_t valueAtState=-99;
+        if(USTRINGTRIE_HAS_VALUE(resultAtState)) {
+            valueAtState=trie.getValue();
+        }
+        result=trie.next(0);  // mismatch
+        if(result!=USTRINGTRIE_NO_MATCH || result!=trie.current()) {
+            errln("trie.next(0) matched after part of %s", data[i].s);
+        }
+        if( resultAtState!=trie.resetToState64(state).current() ||
+            (USTRINGTRIE_HAS_VALUE(resultAtState) && valueAtState!=trie.getValue())
+        ) {
+            errln("trie.next(part of %s) changes current()/getValue() after "
+                  "getState64/next(0)/resetToState64",
+                  data[i].s);
+        } else if(!USTRINGTRIE_HAS_VALUE(
+                      result=trie.next(expectedString+partialLength,
+                                       stringLength-partialLength)) ||
+                  result!=trie.current()) {
+            errln("trie.next(rest of %s) does not seem to contain %s after "
+                  "getState64/next(0)/resetToState64",
+                  data[i].s, data[i].s);
+        } else if(!USTRINGTRIE_HAS_VALUE(
+                      result=trie.resetToState64(state).
+                                  next(expectedString+partialLength,
+                                       stringLength-partialLength)) ||
+                  result!=trie.current()) {
+            errln("trie does not seem to contain %s after getState64/next(rest)/resetToState64",
+                  data[i].s);
+        } else if(trie.getValue()!=data[i].value) {
+            errln("trie value for %s is %ld=0x%lx instead of expected %ld=0x%lx",
+                  data[i].s,
+                  (long)trie.getValue(), (long)trie.getValue(),
+                  (long)data[i].value, (long)data[i].value);
+        }
+        trie.reset();
+    }
+}
+
 // next(string) is also tested in other functions,
 // but here we try to go partway through the string, and then beyond it.
 void BytesTrieTest::checkNextString(BytesTrie &trie,
                                     const StringAndValue data[], int32_t dataLength) {
     for(int32_t i=0; i<dataLength; ++i) {
         const char *expectedString=data[i].s;
-        int32_t stringLength=strlen(expectedString);
+        int32_t stringLength = static_cast<int32_t>(strlen(expectedString));
         if(!trie.next(expectedString, stringLength/2)) {
             errln("trie.next(up to middle of string)=USTRINGTRIE_NO_MATCH for %s", data[i].s);
             continue;

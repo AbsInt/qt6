@@ -45,10 +45,9 @@ U_CDECL_BEGIN
 Static cache for already opened StringPrep profiles
 */
 static UHashtable *SHARED_DATA_HASHTABLE = NULL;
-static icu::UInitOnce gSharedDataInitOnce;
+static icu::UInitOnce gSharedDataInitOnce = U_INITONCE_INITIALIZER;
 
-static UMutex usprepMutex = U_MUTEX_INITIALIZER;
-
+static UMutex usprepMutex;
 /* format version of spp file */
 //static uint8_t formatVersion[4]={ 0, 0, 0, 0 };
 
@@ -576,7 +575,7 @@ usprep_map(  const UStringPrepProfile* profile,
             }
 
         }else if(type==USPREP_DELETE){
-             // just consume the codepoint and contine
+             // just consume the codepoint and continue
             continue;
         }
         //copy the code point into destination

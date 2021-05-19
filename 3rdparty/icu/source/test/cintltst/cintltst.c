@@ -210,7 +210,7 @@ int main(int argc, const char* const argv[])
         root = NULL;
         addAllTests(&root);
 
-        /*  Tests acutally run HERE.   TODO:  separate command line option parsing & setting from test execution!! */
+        /*  Tests actually run HERE.   TODO:  separate command line option parsing & setting from test execution!! */
         nerrors = runTestRequest(root, argc, argv);
 
         setTestOption(REPEAT_TESTS_OPTION, DECREMENT_OPTION_VALUE);
@@ -696,6 +696,12 @@ U_CFUNC UBool assertTrue(const char* msg, int /*not UBool*/ condition) {
 
 U_CFUNC UBool assertEquals(const char* message, const char* expected,
                            const char* actual) {
+    if (expected == NULL) {
+        expected = "(null)";
+    }
+    if (actual == NULL) {
+        actual = "(null)";
+    }
     if (uprv_strcmp(expected, actual) != 0) {
         log_err("FAIL: %s; got \"%s\"; expected \"%s\"\n",
                 message, actual, expected);
@@ -711,6 +717,12 @@ U_CFUNC UBool assertEquals(const char* message, const char* expected,
 
 U_CFUNC UBool assertUEquals(const char* message, const UChar* expected,
                             const UChar* actual) {
+    if (expected == NULL) {
+        expected = u"(null)";
+    }
+    if (actual == NULL) {
+        actual = u"(null)";
+    }
     for (int32_t i=0;; i++) {
         if (expected[i] != actual[i]) {
             log_err("FAIL: %s; got \"%s\"; expected \"%s\"\n",
@@ -738,6 +750,20 @@ U_CFUNC UBool assertIntEquals(const char* message, int64_t expected, int64_t act
 #ifdef VERBOSE_ASSERTIONS
     else {
         log_verbose("Ok: %s; got \"%d\"\n", message, actual);
+    }
+#endif
+    return TRUE;
+}
+
+U_CFUNC UBool assertPtrEquals(const char* message, const void* expected, const void* actual) {
+    if (expected != actual) {
+        log_err("FAIL: %s; got 0x%llx; expected 0x%llx\n",
+                message, actual, expected);
+        return FALSE;
+    }
+#ifdef VERBOSE_ASSERTIONS
+    else {
+        log_verbose("Ok: %s; got 0x%llx\n", message, actual);
     }
 #endif
     return TRUE;

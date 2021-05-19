@@ -69,6 +69,8 @@ public:
     void Test4147315(void);
     void Test4147317(void);
     void Test4147552(void);
+
+    void Test20639_DeprecatesISO3Language();
     
     void TestVariantParsing(void);
 
@@ -79,7 +81,9 @@ public:
    /* Test getting keyword values */
    void TestKeywordVariantParsing(void);
    void TestCreateKeywordSet(void);
+   void TestCreateKeywordSetEmpty(void);
    void TestCreateUnicodeKeywordSet(void);
+   void TestCreateUnicodeKeywordSetEmpty(void);
    void TestGetKeywordValueStdString(void);
    void TestGetUnicodeKeywordValueStdString(void);
 
@@ -103,6 +107,8 @@ public:
 
     void TestCanonicalization(void);
 
+    void TestCanonicalize(void);
+
 #if !UCONFIG_NO_FORMATTING
     static UDate date(int32_t y, int32_t m, int32_t d, int32_t hr = 0, int32_t min = 0, int32_t sec = 0);
 #endif
@@ -114,17 +120,40 @@ public:
     void TestBug11421();
     void TestBug13277();
     void TestBug13554();
+    void TestBug20410();
+    void TestBug20900();
+    void TestLocaleCanonicalizationFromFile();
+    void TestKnownCanonicalizedListCorrect();
+    void TestConstructorAcceptsBCP47();
 
     void TestAddLikelySubtags();
     void TestMinimizeSubtags();
+    void TestAddLikelyAndMinimizeSubtags();
 
     void TestForLanguageTag();
     void TestToLanguageTag();
+    void TestToLanguageTagOmitTrue();
 
     void TestMoveAssign();
     void TestMoveCtor();
 
+    void TestBug20407iVariantPreferredValue();
+
     void TestBug13417VeryLongLanguageTag();
+
+    void TestBug11053UnderlineTimeZone();
+
+    void TestUnd();
+    void TestUndScript();
+    void TestUndRegion();
+    void TestUndCAPI();
+    void TestRangeIterator();
+    void TestPointerConvertingIterator();
+    void TestTagConvertingIterator();
+    void TestCapturingTagConvertingIterator();
+    void TestSetUnicodeKeywordValueInLongLocale();
+    void TestSetUnicodeKeywordValueNullInLongLocale();
+    void TestLeak21419();
 
 private:
     void _checklocs(const char* label,

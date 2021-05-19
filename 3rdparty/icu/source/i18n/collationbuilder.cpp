@@ -577,8 +577,7 @@ CollationBuilder::getSpecialResetPosition(const UnicodeString &str,
         parserErrorReason = "LDML forbids tailoring to U+FFFF";
         return 0;
     default:
-        U_ASSERT(FALSE);
-        return 0;
+        UPRV_UNREACHABLE;
     }
 
     int32_t index = findOrInsertNodeForRootCE(ce, strength, errorCode);
@@ -689,7 +688,7 @@ CollationBuilder::addRelation(int32_t strength, const UnicodeString &prefix,
         // A Hangul syllable completely inside a contraction is ok.
     }
     // Note: If there is a prefix, then the parser checked that
-    // both the prefix and the string beging with NFC boundaries (not Jamo V or T).
+    // both the prefix and the string begin with NFC boundaries (not Jamo V or T).
     // Therefore: prefix.isEmpty() || !isJamoVOrT(nfdString.charAt(0))
     // (While handling a Hangul syllable, prefixes on Jamo V or T
     // would not see the previous Jamo of that syllable.)

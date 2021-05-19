@@ -71,6 +71,12 @@ extern IntlTest *createTimeUnitTest();
 extern IntlTest *createMeasureFormatTest();
 extern IntlTest *createNumberFormatSpecificationTest();
 extern IntlTest *createScientificNumberFormatterTest();
+extern IntlTest *createFormattedValueTest();
+extern IntlTest *createFormattedStringBuilderTest();
+extern IntlTest *createStringSegmentTest();
+extern IntlTest *createUnitsDataTest();
+extern IntlTest *createUnitsTest();
+extern IntlTest *createUnitsRouterTest();
 
 
 #define TESTCLASS(id, TestClass)          \
@@ -217,6 +223,60 @@ void IntlTestFormat::runIndexedTest( int32_t index, UBool exec, const char* &nam
         TESTCLASS(50,NumberFormatDataDrivenTest);
         TESTCLASS(51,NumberTest);
         TESTCLASS(52,EraRulesTest);
+        case 53:
+          name = "FormattedValueTest";
+          if (exec) {
+            logln("FormattedValueTest test---");
+            logln((UnicodeString)"");
+            LocalPointer<IntlTest> test(createFormattedValueTest());
+            callTest(*test, par);
+          }
+          break;
+        case 54:
+          name = "FormattedStringBuilderTest";
+          if (exec) {
+            logln("FormattedStringBuilderTest test---");
+            logln((UnicodeString)"");
+            LocalPointer<IntlTest> test(createFormattedStringBuilderTest());
+            callTest(*test, par);
+          }
+          break;
+        case 55:
+          name = "StringSegmentTest";
+          if (exec) {
+            logln("StringSegmentTest test---");
+            logln((UnicodeString)"");
+            LocalPointer<IntlTest> test(createStringSegmentTest());
+            callTest(*test, par);
+          }
+          break;
+        case 56:
+          name = "UnitsTest";
+          if (exec) {
+            logln("UnitsTest test---");
+            logln((UnicodeString)"");
+            LocalPointer<IntlTest> test(createUnitsTest());
+            callTest(*test, par);
+          }
+          break;
+        case 57:
+          name = "UnitsDataTest";
+          if (exec) {
+            logln("UnitsDataTest test---");
+            logln((UnicodeString)"");
+            LocalPointer<IntlTest> test(createUnitsDataTest());
+            callTest(*test, par);
+          }
+          break;
+        case 58:
+          name = "UnitsRouterTest";
+          if (exec) {
+            logln("UnitsRouterTest test---");
+            logln((UnicodeString)"");
+            LocalPointer<IntlTest> test(createUnitsRouterTest());
+            callTest(*test, par);
+          }
+          break;
         default: name = ""; break; //needed to end loop
     }
     if (exec) {

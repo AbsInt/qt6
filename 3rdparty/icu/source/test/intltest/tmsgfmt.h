@@ -83,7 +83,7 @@ public:
         UnicodeString pattern ,Locale locale , UErrorCode& err, char* errMsg);
 
     /**
-     * Verify that MessageFormat accomodates more than 10 arguments
+     * Verify that MessageFormat accommodates more than 10 arguments
      * and more than 10 subformats.
      */
     void TestUnlimitedArgsAndSubformats();
@@ -122,9 +122,14 @@ public:
     void TestDecimals();
     void TestArgIsPrefixOfAnother();
     void TestMessageFormatNumberSkeleton();
+    void TestMessageFormatDateSkeleton();
+    void TestMessageFormatTimeSkeleton();
 
 private:
     UnicodeString GetPatternAndSkipSyntax(const MessagePattern& pattern);
+    void doTheRealDateTimeSkeletonTesting(UDate testDate,
+        const char16_t* messagePattern, const char* localeName, const char16_t* expected,
+        IcuTestErrorCode& status);
 };
 
 #endif /* #if !UCONFIG_NO_FORMATTING */

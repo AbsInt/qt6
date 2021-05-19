@@ -48,7 +48,10 @@ void NumberRangeFormatterTest::runIndexedTest(int32_t index, UBool exec, const c
         TESTCASE_AUTO(testIdentity);
         TESTCASE_AUTO(testDifferentFormatters);
         TESTCASE_AUTO(testPlurals);
+        TESTCASE_AUTO(testFieldPositions);
         TESTCASE_AUTO(testCopyMove);
+        TESTCASE_AUTO(toObject);
+        TESTCASE_AUTO(testGetDecimalNumbers);
     TESTCASE_AUTO_END;
 }
 
@@ -646,7 +649,7 @@ void NumberRangeFormatterTest::testDifferentFormatters() {
         u"Different rounding rules",
         NumberRangeFormatter::with()
             .numberFormatterFirst(NumberFormatter::with().precision(Precision::integer()))
-            .numberFormatterSecond(NumberFormatter::with().precision(Precision::fixedDigits(2))),
+            .numberFormatterSecond(NumberFormatter::with().precision(Precision::fixedSignificantDigits(2))),
         Locale("en-us"),
         u"1–5.0",
         u"5–5.0",
@@ -713,13 +716,72 @@ void NumberRangeFormatterTest::testPlurals() {
         {5, 5, u"5–5 britanskih funtov"}, // other + other -> other
     };
     for (auto& cas : cases) {
-        UnicodeString message = Int64ToUnicodeString(cas.first);
+        UnicodeString message = Int64ToUnicodeString(static_cast<int64_t>(cas.first));
         message += u" ";
-        message += Int64ToUnicodeString(cas.second);
+        message += Int64ToUnicodeString(static_cast<int64_t>(cas.second));
         status.setScope(message);
         UnicodeString actual = lnrf.formatFormattableRange(cas.first, cas.second, status).toString(status);
         assertEquals(message, cas.expected, actual);
         status.errIfFailureAndReset();
+    }
+}
+
+void NumberRangeFormatterTest::testFieldPositions() {
+    {
+        const char16_t* message = u"Field position test 1";
+        const char16_t* expectedString = u"3K – 5K m";
+        FormattedNumberRange result = assertFormattedRangeEquals(
+            message,
+            NumberRangeFormatter::with()
+                .numberFormatterBoth(NumberFormatter::with()
+                    .unit(METER)
+                    .notation(Notation::compactShort()))
+                .locale("en-us"),
+            3000,
+            5000,
+            expectedString);
+        static const UFieldPositionWithCategory expectedFieldPositions[] = {
+            // category, field, begin index, end index
+            {UFIELD_CATEGORY_NUMBER_RANGE_SPAN, 0, 0, 2},
+            {UFIELD_CATEGORY_NUMBER, UNUM_INTEGER_FIELD, 0, 1},
+            {UFIELD_CATEGORY_NUMBER, UNUM_COMPACT_FIELD, 1, 2},
+            {UFIELD_CATEGORY_NUMBER_RANGE_SPAN, 1, 5, 7},
+            {UFIELD_CATEGORY_NUMBER, UNUM_INTEGER_FIELD, 5, 6},
+            {UFIELD_CATEGORY_NUMBER, UNUM_COMPACT_FIELD, 6, 7},
+            {UFIELD_CATEGORY_NUMBER, UNUM_MEASURE_UNIT_FIELD, 8, 9}};
+        checkMixedFormattedValue(
+            message,
+            result,
+            expectedString,
+            expectedFieldPositions,
+            UPRV_LENGTHOF(expectedFieldPositions));
+    }
+
+    {
+        const char16_t* message = u"Field position test 2";
+        const char16_t* expectedString = u"87,654,321–98,765,432";
+        FormattedNumberRange result = assertFormattedRangeEquals(
+            message,
+            NumberRangeFormatter::withLocale("en-us"),
+            87654321,
+            98765432,
+            expectedString);
+        static const UFieldPositionWithCategory expectedFieldPositions[] = {
+            // category, field, begin index, end index
+            {UFIELD_CATEGORY_NUMBER_RANGE_SPAN, 0, 0, 10},
+            {UFIELD_CATEGORY_NUMBER, UNUM_GROUPING_SEPARATOR_FIELD, 2, 3},
+            {UFIELD_CATEGORY_NUMBER, UNUM_GROUPING_SEPARATOR_FIELD, 6, 7},
+            {UFIELD_CATEGORY_NUMBER, UNUM_INTEGER_FIELD, 0, 10},
+            {UFIELD_CATEGORY_NUMBER_RANGE_SPAN, 1, 11, 21},
+            {UFIELD_CATEGORY_NUMBER, UNUM_GROUPING_SEPARATOR_FIELD, 13, 14},
+            {UFIELD_CATEGORY_NUMBER, UNUM_GROUPING_SEPARATOR_FIELD, 17, 18},
+            {UFIELD_CATEGORY_NUMBER, UNUM_INTEGER_FIELD, 11, 21}};
+        checkMixedFormattedValue(
+            message,
+            result,
+            expectedString,
+            expectedFieldPositions,
+            UPRV_LENGTHOF(expectedFieldPositions));
     }
 }
 
@@ -765,6 +827,84 @@ void NumberRangeFormatterTest::testCopyMove() {
     assertEquals("FormattedNumberRange move assignment", u"3,00–6,00 $US", result.toString(status));
 }
 
+void NumberRangeFormatterTest::toObject() {
+    IcuTestErrorCode status(*this, "toObject");
+
+    // const lvalue version
+    {
+        LocalizedNumberRangeFormatter lnf = NumberRangeFormatter::withLocale("en");
+        LocalPointer<LocalizedNumberRangeFormatter> lnf2(lnf.clone());
+        assertFalse("should create successfully, const lvalue", lnf2.isNull());
+        assertEquals("object API test, const lvalue", u"5–7",
+            lnf2->formatFormattableRange(5, 7, status).toString(status));
+    }
+
+    // rvalue reference version
+    {
+        LocalPointer<LocalizedNumberRangeFormatter> lnf(
+            NumberRangeFormatter::withLocale("en").clone());
+        assertFalse("should create successfully, rvalue reference", lnf.isNull());
+        assertEquals("object API test, rvalue reference", u"5–7",
+            lnf->formatFormattableRange(5, 7, status).toString(status));
+    }
+
+    // to std::unique_ptr via assignment
+    {
+        std::unique_ptr<LocalizedNumberRangeFormatter> lnf =
+            NumberRangeFormatter::withLocale("en").clone();
+        assertTrue("should create successfully, unique_ptr B", static_cast<bool>(lnf));
+        assertEquals("object API test, unique_ptr B", u"5–7",
+            lnf->formatFormattableRange(5, 7, status).toString(status));
+    }
+
+    // make sure no memory leaks
+    {
+        NumberRangeFormatter::with().clone();
+    }
+}
+
+void NumberRangeFormatterTest::testGetDecimalNumbers() {
+    IcuTestErrorCode status(*this, "testGetDecimalNumbers");
+
+    LocalizedNumberRangeFormatter lnf = NumberRangeFormatter::withLocale("en")
+        .numberFormatterBoth(NumberFormatter::with().unit(USD));
+
+    // Range of numbers
+    {
+        FormattedNumberRange range = lnf.formatFormattableRange(1, 5, status);
+        assertEquals("Range: Formatted string should be as expected",
+            u"$1.00 \u2013 $5.00",
+            range.toString(status));
+        auto decimalNumbers = range.getDecimalNumbers<std::string>(status);
+        // TODO(ICU-21281): DecNum doesn't retain trailing zeros. Is that a problem?
+        if (logKnownIssue("ICU-21281")) {
+            assertEquals("First decimal number", "1", decimalNumbers.first.c_str());
+            assertEquals("Second decimal number", "5", decimalNumbers.second.c_str());
+        } else {
+            assertEquals("First decimal number", "1.00", decimalNumbers.first.c_str());
+            assertEquals("Second decimal number", "5.00", decimalNumbers.second.c_str());
+        }
+    }
+
+    // Identity fallback
+    {
+        FormattedNumberRange range = lnf.formatFormattableRange(3, 3, status);
+        assertEquals("Identity: Formatted string should be as expected",
+            u"~$3.00",
+            range.toString(status));
+        auto decimalNumbers = range.getDecimalNumbers<std::string>(status);
+        // NOTE: DecNum doesn't retain trailing zeros. Is that a problem?
+        // TODO(ICU-21281): DecNum doesn't retain trailing zeros. Is that a problem?
+        if (logKnownIssue("ICU-21281")) {
+            assertEquals("First decimal number", "3", decimalNumbers.first.c_str());
+            assertEquals("Second decimal number", "3", decimalNumbers.second.c_str());
+        } else {
+            assertEquals("First decimal number", "3.00", decimalNumbers.first.c_str());
+            assertEquals("Second decimal number", "3.00", decimalNumbers.second.c_str());
+        }
+    }
+}
+
 void  NumberRangeFormatterTest::assertFormatRange(
       const char16_t* message,
       const UnlocalizedNumberRangeFormatter& f,
@@ -792,7 +932,7 @@ void  NumberRangeFormatterTest::assertFormatRange(
     assertFormattedRangeEquals(message, l, 5e3, 5e6, expected_50K_50M);
 }
 
-void NumberRangeFormatterTest::assertFormattedRangeEquals(
+FormattedNumberRange NumberRangeFormatterTest::assertFormattedRangeEquals(
       const char16_t* message,
       const LocalizedNumberRangeFormatter& l,
       double first,
@@ -801,8 +941,10 @@ void NumberRangeFormatterTest::assertFormattedRangeEquals(
     IcuTestErrorCode status(*this, "assertFormattedRangeEquals");
     UnicodeString fullMessage = UnicodeString(message) + u": " + DoubleToUnicodeString(first) + u", " + DoubleToUnicodeString(second);
     status.setScope(fullMessage);
-    UnicodeString actual = l.formatFormattableRange(first, second, status).toString(status);
+    FormattedNumberRange fnr = l.formatFormattableRange(first, second, status);
+    UnicodeString actual = fnr.toString(status);
     assertEquals(fullMessage, expected, actual);
+    return fnr;
 }
 
 

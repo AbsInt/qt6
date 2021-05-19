@@ -53,6 +53,7 @@ public:
     void TestTitleOptions();
     void TestFullCaseFoldingIterator();
     void TestGreekUpper();
+    void TestArmenian();
     void TestLongUpper();
     void TestMalformedUTF8();
     void TestBufferOverflow();
@@ -97,6 +98,7 @@ StringCaseTest::runIndexedTest(int32_t index, UBool exec, const char *&name, cha
 #endif
     TESTCASE_AUTO(TestFullCaseFoldingIterator);
     TESTCASE_AUTO(TestGreekUpper);
+    TESTCASE_AUTO(TestArmenian);
     TESTCASE_AUTO(TestLongUpper);
     TESTCASE_AUTO(TestMalformedUTF8);
     TESTCASE_AUTO(TestBufferOverflow);
@@ -747,7 +749,7 @@ StringCaseTest::assertGreekUpper(const char16_t *s, const char16_t *expected) {
     msg = UnicodeString("ucasemap_utf8ToUpper/Greek(\"") + s16 + "\")";
     char dest8[1000];
     length = ucasemap_utf8ToUpper(csm.getAlias(), dest8, UPRV_LENGTHOF(dest8),
-                                  s8.data(), s8.length(), &errorCode);
+                                  s8.data(), static_cast<int32_t>(s8.length()), &errorCode);
     assertSuccess("ucasemap_utf8ToUpper", errorCode);
     StringPiece result8(dest8, length);
     UnicodeString result16From8 = UnicodeString::fromUTF8(result8);
@@ -765,7 +767,7 @@ StringCaseTest::assertGreekUpper(const char16_t *s, const char16_t *expected) {
         memset(dest8b, 0x5A, UPRV_LENGTHOF(dest8b));
         UErrorCode errorCode = U_ZERO_ERROR;
         length = ucasemap_utf8ToUpper(csm.getAlias(), dest8b, cap,
-                                      s8.data(), s8.length(), &errorCode);
+                                      s8.data(), static_cast<int32_t>(s8.length()), &errorCode);
         assertEquals(msg + cap, expected8Length, length);
         UErrorCode expectedErrorCode;
         if (cap < expected8Length) {
@@ -812,6 +814,26 @@ StringCaseTest::TestGreekUpper() {
     // http://multilingualtypesetting.co.uk/blog/greek-typesetting-tips/
     assertGreekUpper(u"ρωμέικα", u"ΡΩΜΕΪΚΑ");
     assertGreekUpper(u"ή.", u"Ή.");
+}
+
+void StringCaseTest::TestArmenian() {
+    Locale hy("hy");  // Eastern Armenian
+    Locale hyw("hyw");  // Western Armenian
+    Locale root = Locale::getRoot();
+    // See ICU-13416:
+    // և ligature ech-yiwn
+    // uppercases to ԵՒ=ech+yiwn by default and in Western Armenian,
+    // but to ԵՎ=ech+vew in Eastern Armenian.
+    UnicodeString s(u"և Երևանի");
+
+    assertEquals("upper root", u"ԵՒ ԵՐԵՒԱՆԻ", UnicodeString(s).toUpper(root));
+    assertEquals("upper hy", u"ԵՎ ԵՐԵՎԱՆԻ", UnicodeString(s).toUpper(hy));
+    assertEquals("upper hyw", u"ԵՒ ԵՐԵՒԱՆԻ", UnicodeString(s).toUpper(hyw));
+#if !UCONFIG_NO_BREAK_ITERATION
+    assertEquals("title root", u"Եւ Երևանի", UnicodeString(s).toTitle(nullptr, root));
+    assertEquals("title hy", u"Եվ Երևանի", UnicodeString(s).toTitle(nullptr, hy));
+    assertEquals("title hyw", u"Եւ Երևանի", UnicodeString(s).toTitle(nullptr, hyw));
+#endif
 }
 
 void
@@ -910,7 +932,7 @@ void StringCaseTest::TestBufferOverflow() {
     std::string data_utf8;
     data.toUTF8String(data_utf8);
 #if !UCONFIG_NO_BREAK_ITERATION
-    result = ucasemap_utf8ToTitle(csm.getAlias(), NULL, 0, data_utf8.c_str(), data_utf8.length(), errorCode);
+    result = ucasemap_utf8ToTitle(csm.getAlias(), NULL, 0, data_utf8.c_str(), static_cast<int32_t>(data_utf8.length()), errorCode);
     if (errorCode.get() != U_BUFFER_OVERFLOW_ERROR || result != (int32_t)data_utf8.length()) {
         errln("%s:%d ucasemap_toTitle(\"hello world\") failed: "
               "expected (U_BUFFER_OVERFLOW_ERROR, %d), got (%s, %d)",
@@ -1314,7 +1336,8 @@ void StringCaseTest::TestCaseMapUTF8WithEdits() {
     Edits edits;
 
     int32_t length = CaseMap::utf8ToLower("tr", U_OMIT_UNCHANGED_TEXT,
-                                          u8"IstanBul", 8, dest, UPRV_LENGTHOF(dest), &edits, errorCode);
+                                          reinterpret_cast<const char*>(u8"IstanBul"), 8,
+                                          dest, UPRV_LENGTHOF(dest), &edits, errorCode);
     assertEquals(u"toLower(IstanBul)", UnicodeString(u"ıb"),
                  UnicodeString::fromUTF8(StringPiece(dest, length)));
     static const EditChange lowerExpectedChanges[] = {
@@ -1330,7 +1353,8 @@ void StringCaseTest::TestCaseMapUTF8WithEdits() {
 
     edits.reset();
     length = CaseMap::utf8ToUpper("el", U_OMIT_UNCHANGED_TEXT,
-                                  u8"Πατάτα", 6 * 2, dest, UPRV_LENGTHOF(dest), &edits, errorCode);
+                                  reinterpret_cast<const char*>(u8"Πατάτα"), 6 * 2,
+                                  dest, UPRV_LENGTHOF(dest), &edits, errorCode);
     assertEquals(u"toUpper(Πατάτα)", UnicodeString(u"ΑΤΑΤΑ"),
                  UnicodeString::fromUTF8(StringPiece(dest, length)));
     static const EditChange upperExpectedChanges[] = {
@@ -1352,7 +1376,7 @@ void StringCaseTest::TestCaseMapUTF8WithEdits() {
                                   U_OMIT_UNCHANGED_TEXT |
                                   U_TITLECASE_NO_BREAK_ADJUSTMENT |
                                   U_TITLECASE_NO_LOWERCASE,
-                                  nullptr, u8"IjssEL IglOo", 12,
+                                  nullptr, reinterpret_cast<const char*>(u8"IjssEL IglOo"), 12,
                                   dest, UPRV_LENGTHOF(dest), &edits, errorCode);
     assertEquals(u"toTitle(IjssEL IglOo)", UnicodeString(u"J"),
                  UnicodeString::fromUTF8(StringPiece(dest, length)));
@@ -1370,7 +1394,8 @@ void StringCaseTest::TestCaseMapUTF8WithEdits() {
     // No explicit nor automatic edits.reset(). Edits should be appended.
     length = CaseMap::utf8Fold(U_OMIT_UNCHANGED_TEXT | U_EDITS_NO_RESET |
                                    U_FOLD_CASE_EXCLUDE_SPECIAL_I,
-                               u8"IßtanBul", 1 + 2 + 6, dest, UPRV_LENGTHOF(dest), &edits, errorCode);
+                               reinterpret_cast<const char*>(u8"IßtanBul"), 1 + 2 + 6,
+                               dest, UPRV_LENGTHOF(dest), &edits, errorCode);
     assertEquals(u"foldCase(IßtanBul)", UnicodeString(u"ıssb"),
                  UnicodeString::fromUTF8(StringPiece(dest, length)));
     static const EditChange foldExpectedChanges[] = {

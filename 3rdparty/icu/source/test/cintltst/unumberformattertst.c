@@ -9,9 +9,12 @@
 // Helpful in toString methods and elsewhere.
 #define UNISTR_FROM_STRING_EXPLICIT
 
+#include <stdio.h>
 #include "unicode/unumberformatter.h"
 #include "unicode/umisc.h"
 #include "unicode/unum.h"
+#include "unicode/ustring.h"
+#include "cformtst.h"
 #include "cintltst.h"
 #include "cmemory.h"
 
@@ -21,12 +24,26 @@ static void TestSkeletonFormatToFields(void);
 
 static void TestExampleCode(void);
 
+static void TestFormattedValue(void);
+
+static void TestSkeletonParseError(void);
+
+static void TestToDecimalNumber(void);
+
+static void TestPerUnitInArabic(void);
+
 void addUNumberFormatterTest(TestNode** root);
 
+#define TESTCASE(x) addTest(root, &x, "tsformat/unumberformatter/" #x)
+
 void addUNumberFormatterTest(TestNode** root) {
-    addTest(root, &TestSkeletonFormatToString, "unumberformatter/TestSkeletonFormatToString");
-    addTest(root, &TestSkeletonFormatToFields, "unumberformatter/TestSkeletonFormatToFields");
-    addTest(root, &TestExampleCode, "unumberformatter/TestExampleCode");
+    TESTCASE(TestSkeletonFormatToString);
+    TESTCASE(TestSkeletonFormatToFields);
+    TESTCASE(TestExampleCode);
+    TESTCASE(TestFormattedValue);
+    TESTCASE(TestSkeletonParseError);
+    TESTCASE(TestToDecimalNumber);
+    TESTCASE(TestPerUnitInArabic);
 }
 
 
@@ -87,7 +104,7 @@ static void TestSkeletonFormatToFields() {
     if (assertSuccessCheck("unumf_formatInt() failed", &ec, TRUE)) {
 
         // field position test:
-        UFieldPosition ufpos = {UNUM_DECIMAL_SEPARATOR_FIELD};
+        UFieldPosition ufpos = {UNUM_DECIMAL_SEPARATOR_FIELD, 0, 0};
         unumf_resultNextFieldPosition(uresult, &ufpos, &ec);
         assertIntEquals("Field position should be correct", 14, ufpos.beginIndex);
         assertIntEquals("Field position should be correct", 15, ufpos.endIndex);
@@ -105,10 +122,11 @@ static void TestSkeletonFormatToFields() {
                 {UNUM_GROUPING_SEPARATOR_FIELD, 10, 11},
                 {UNUM_INTEGER_FIELD, 1, 14},
                 {UNUM_DECIMAL_SEPARATOR_FIELD, 14, 15},
-                {UNUM_FRACTION_FIELD, 15, 17}
+                {UNUM_FRACTION_FIELD, 15, 17},
+                {UNUM_MEASURE_UNIT_FIELD, 18, 19}
             };
             UFieldPosition actual;
-            for (int32_t i = 0; i < sizeof(expectedFields) / sizeof(*expectedFields); i++) {
+            for (int32_t i = 0; i < (int32_t)(sizeof(expectedFields) / sizeof(*expectedFields)); i++) {
                 // Iterate using the UFieldPosition to hold state...
                 UFieldPosition expected = expectedFields[i];
                 actual.field = ufieldpositer_next(ufpositer, &actual.beginIndex, &actual.endIndex);
@@ -187,4 +205,174 @@ static void TestExampleCode() {
 }
 
 
+static void TestFormattedValue() {
+    UErrorCode ec = U_ZERO_ERROR;
+    UNumberFormatter* uformatter = unumf_openForSkeletonAndLocale(
+            u".00 compact-short", -1, "en", &ec);
+    assertSuccessCheck("Should create without error", &ec, TRUE);
+    UFormattedNumber* uresult = unumf_openResult(&ec);
+    assertSuccess("Should create result without error", &ec);
+
+    unumf_formatInt(uformatter, 55000, uresult, &ec); // "55.00 K"
+    if (assertSuccessCheck("Should format without error", &ec, TRUE)) {
+        const UFormattedValue* fv = unumf_resultAsValue(uresult, &ec);
+        assertSuccess("Should convert without error", &ec);
+        static const UFieldPosition expectedFieldPositions[] = {
+            // field, begin index, end index
+            {UNUM_INTEGER_FIELD, 0, 2},
+            {UNUM_DECIMAL_SEPARATOR_FIELD, 2, 3},
+            {UNUM_FRACTION_FIELD, 3, 5},
+            {UNUM_COMPACT_FIELD, 5, 6}};
+        checkFormattedValue(
+            "FormattedNumber as FormattedValue",
+            fv,
+            u"55.00K",
+            UFIELD_CATEGORY_NUMBER,
+            expectedFieldPositions,
+            UPRV_LENGTHOF(expectedFieldPositions));
+    }
+
+    // cleanup:
+    unumf_closeResult(uresult);
+    unumf_close(uformatter);
+}
+
+
+static void TestSkeletonParseError() {
+    UErrorCode ec = U_ZERO_ERROR;
+    UNumberFormatter* uformatter;
+    UParseError perror;
+
+    // The UParseError can be null. The following should not segfault.
+    uformatter = unumf_openForSkeletonAndLocaleWithError(
+            u".00 measure-unit/typo", -1, "en", NULL, &ec);
+    unumf_close(uformatter);
+
+    // Now test the behavior.
+    ec = U_ZERO_ERROR;
+    uformatter = unumf_openForSkeletonAndLocaleWithError(
+            u".00 measure-unit/typo", -1, "en", &perror, &ec);
+
+    assertIntEquals("Should have set error code", U_NUMBER_SKELETON_SYNTAX_ERROR, ec);
+    assertIntEquals("Should have correct skeleton error offset", 17, perror.offset);
+    assertUEquals("Should have correct pre context", u"0 measure-unit/", perror.preContext);
+    assertUEquals("Should have correct post context", u"typo", perror.postContext);
+
+    // cleanup:
+    unumf_close(uformatter);
+}
+
+
+static void TestToDecimalNumber() {
+    UErrorCode ec = U_ZERO_ERROR;
+    UNumberFormatter* uformatter = unumf_openForSkeletonAndLocale(
+        u"currency/USD",
+        -1,
+        "en-US",
+        &ec);
+    assertSuccessCheck("Should create without error", &ec, TRUE);
+    UFormattedNumber* uresult = unumf_openResult(&ec);
+    assertSuccess("Should create result without error", &ec);
+
+    unumf_formatDouble(uformatter, 3.0, uresult, &ec);
+    const UChar* str = ufmtval_getString(unumf_resultAsValue(uresult, &ec), NULL, &ec);
+    assertSuccessCheck("Formatting should succeed", &ec, TRUE);
+    assertUEquals("Should produce expected string result", u"$3.00", str);
+
+    char buffer[CAPACITY];
+
+    int32_t len = unumf_resultToDecimalNumber(uresult, buffer, CAPACITY, &ec);
+    assertIntEquals("Length should be as expected", strlen(buffer), len);
+    assertEquals("Decimal should be as expected", "3", buffer);
+
+    // cleanup:
+    unumf_closeResult(uresult);
+    unumf_close(uformatter);
+}
+
+
+static void TestPerUnitInArabic() {
+    const char* simpleMeasureUnits[] = {
+        "area-acre",
+        "digital-bit",
+        "digital-byte",
+        "temperature-celsius",
+        "length-centimeter",
+        "duration-day",
+        "angle-degree",
+        "temperature-fahrenheit",
+        "volume-fluid-ounce",
+        "length-foot",
+        "volume-gallon",
+        "digital-gigabit",
+        "digital-gigabyte",
+        "mass-gram",
+        "area-hectare",
+        "duration-hour",
+        "length-inch",
+        "digital-kilobit",
+        "digital-kilobyte",
+        "mass-kilogram",
+        "length-kilometer",
+        "volume-liter",
+        "digital-megabit",
+        "digital-megabyte",
+        "length-meter",
+        "length-mile",
+        "length-mile-scandinavian",
+        "volume-milliliter",
+        "length-millimeter",
+        "duration-millisecond",
+        "duration-minute",
+        "duration-month",
+        "mass-ounce",
+        "concentr-percent",
+        "digital-petabyte",
+        "mass-pound",
+        "duration-second",
+        "mass-stone",
+        "digital-terabit",
+        "digital-terabyte",
+        "duration-week",
+        "length-yard",
+        "duration-year"
+    };
+#define BUFFER_LEN 256
+    char buffer[BUFFER_LEN];
+    UChar ubuffer[BUFFER_LEN];
+    const char* locale = "ar";
+    UErrorCode status = U_ZERO_ERROR;
+    UFormattedNumber* formatted = unumf_openResult(&status);
+    if (U_FAILURE(status)) {
+        log_err("FAIL: unumf_openResult failed");
+        return;
+    }
+    for(int32_t i=0; i < UPRV_LENGTHOF(simpleMeasureUnits); ++i) {
+        for(int32_t j=0; j < UPRV_LENGTHOF(simpleMeasureUnits); ++j) {
+            status = U_ZERO_ERROR;
+            sprintf(buffer, "measure-unit/%s per-measure-unit/%s",
+                    simpleMeasureUnits[i], simpleMeasureUnits[j]);
+            int32_t outputlen = 0;
+            u_strFromUTF8(ubuffer, BUFFER_LEN, &outputlen, buffer, (int32_t)strlen(buffer), &status);
+            if (U_FAILURE(status)) {
+                log_err("FAIL u_strFromUTF8: %s = %s ( %s )\n", locale, buffer,
+                        u_errorName(status));
+            }
+            UNumberFormatter* nf = unumf_openForSkeletonAndLocale(
+                ubuffer, outputlen, locale, &status);
+            if (U_FAILURE(status)) {
+                log_err("FAIL unumf_openForSkeletonAndLocale: %s = %s ( %s )\n",
+                        locale, buffer, u_errorName(status));
+            } else {
+                unumf_formatDouble(nf, 1, formatted, &status);
+                if (U_FAILURE(status)) {
+                    log_err("FAIL unumf_formatDouble: %s = %s ( %s )\n",
+                            locale, buffer, u_errorName(status));
+                }
+            }
+            unumf_close(nf);
+        }
+    }
+    unumf_closeResult(formatted);
+}
 #endif /* #if !UCONFIG_NO_FORMATTING */

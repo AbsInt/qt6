@@ -34,7 +34,10 @@ void StaticUnicodeSetsTest::runIndexedTest(int32_t index, UBool exec, const char
         logln("TestSuite StaticUnicodeSetsTest: ");
     }
     TESTCASE_AUTO_BEGIN;
-        TESTCASE_AUTO(testSetCoverage);
+        if (!quick) {
+            // Slow test: run in exhaustive mode only
+            TESTCASE_AUTO(testSetCoverage);
+        }
         TESTCASE_AUTO(testNonEmpty);
     TESTCASE_AUTO_END;
 }
@@ -64,7 +67,7 @@ void StaticUnicodeSetsTest::testSetCoverage() {
     const UnicodeSet &minusSign = *get(unisets::MINUS_SIGN);
     const UnicodeSet &percent = *get(unisets::PERCENT_SIGN);
     const UnicodeSet &permille = *get(unisets::PERMILLE_SIGN);
-    const UnicodeSet &infinity = *get(unisets::INFINITY_KEY);
+    const UnicodeSet &infinity = *get(unisets::INFINITY_SIGN);
 
     int32_t localeCount;
     const Locale* allAvailableLocales = Locale::getAvailableLocales(localeCount);
@@ -87,7 +90,7 @@ void StaticUnicodeSetsTest::testSetCoverage() {
 }
 
 void StaticUnicodeSetsTest::testNonEmpty() {
-    for (int32_t i=0; i<unisets::COUNT; i++) {
+    for (int32_t i=0; i<unisets::UNISETS_KEY_COUNT; i++) {
         if (i == unisets::EMPTY) {
             continue;
         }
@@ -108,8 +111,9 @@ void StaticUnicodeSetsTest::assertInSet(const UnicodeString &localeName, const U
 
 void StaticUnicodeSetsTest::assertInSet(const UnicodeString &localeName, const UnicodeString &setName,
                               const UnicodeSet &set, UChar32 cp) {
-    // If this test case fails, add the specified code point to the corresponding set in
-    // UnicodeSetStaticCache.java and numparse_unisets.cpp
+    // If this test case fails, add the specified code point to the corresponding set in either:
+    // - parseLenients in CLDR root.xml
+    // - harded-coded sets in StaticUnicodeSets.java and static_unicode_sets.cpp
     assertTrue(
             localeName + UnicodeString(u" ") + UnicodeString(cp) + UnicodeString(u" is missing in ") +
             setName, set.contains(cp));
