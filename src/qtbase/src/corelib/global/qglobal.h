@@ -834,6 +834,7 @@ inline void qt_noop(void) {}
 #  endif
 #endif
 
+Q_NORETURN Q_DECL_COLD_FUNCTION Q_CORE_EXPORT void qTerminate() noexcept;
 #ifdef QT_NO_EXCEPTIONS
 #  define QT_TRY if (true)
 #  define QT_CATCH(A) else
@@ -845,7 +846,6 @@ inline void qt_noop(void) {}
 #  define QT_CATCH(A) catch (A)
 #  define QT_THROW(A) throw A
 #  define QT_RETHROW throw
-Q_NORETURN Q_DECL_COLD_FUNCTION Q_CORE_EXPORT void qTerminate() noexcept;
 #  ifdef Q_COMPILER_NOEXCEPT
 #    define QT_TERMINATE_ON_EXCEPTION(expr) do { expr; } while (false)
 #  else
@@ -1289,7 +1289,7 @@ inline int qIntCast(float f) { return int(f); }
 
 #define QT_VA_ARGS_CHOOSE(_1, _2, _3, _4, _5, _6, _7, _8, _9, N, ...) N
 #define QT_VA_ARGS_EXPAND(...) __VA_ARGS__ // Needed for MSVC
-#define QT_VA_ARGS_COUNT(...) QT_VA_ARGS_EXPAND(QT_VA_ARGS_CHOOSE(__VA_ARGS__, 9, 8, 7, 6, 5, 4, 3, 2, 1))
+#define QT_VA_ARGS_COUNT(...) QT_VA_ARGS_EXPAND(QT_VA_ARGS_CHOOSE(__VA_ARGS__, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0))
 #define QT_OVERLOADED_MACRO_EXPAND(MACRO, ARGC) MACRO##ARGC
 #define QT_OVERLOADED_MACRO_IMP(MACRO, ARGC) QT_OVERLOADED_MACRO_EXPAND(MACRO, ARGC)
 #define QT_OVERLOADED_MACRO(MACRO, ...) QT_VA_ARGS_EXPAND(QT_OVERLOADED_MACRO_IMP(MACRO, QT_VA_ARGS_COUNT(__VA_ARGS__))(__VA_ARGS__))

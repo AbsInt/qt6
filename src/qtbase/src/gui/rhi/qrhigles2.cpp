@@ -3957,6 +3957,29 @@ void QRhiGles2::gatherSamplers(GLuint program,
     }
 }
 
+void QRhiGles2::sanityCheckVertexFragmentInterface(const QShaderDescription &vsDesc, const QShaderDescription &fsDesc)
+{
+    if (!vsDesc.isValid() || !fsDesc.isValid())
+        return;
+
+    // Print a warning if the fragment shader input for a given location uses a
+    // name that does not match the vertex shader output at the same location.
+    // This is not an error with any other API and not with GLSL >= 330 either,
+    // but matters for older GLSL code that has no location qualifiers.
+    for (const QShaderDescription::InOutVariable &outVar : vsDesc.outputVariables()) {
+        for (const QShaderDescription::InOutVariable &inVar : fsDesc.inputVariables()) {
+            if (inVar.location == outVar.location) {
+                if (inVar.name != outVar.name) {
+                    qWarning("Vertex output name '%s' does not match fragment input '%s'. "
+                             "This should be avoided because it causes problems with older GLSL versions.",
+                             outVar.name.constData(), inVar.name.constData());
+                }
+                break;
+            }
+        }
+    }
+}
+
 bool QRhiGles2::isProgramBinaryDiskCacheEnabled() const
 {
     static QOpenGLProgramBinarySupportCheckWrapper checker;
@@ -4111,6 +4134,9 @@ QGles2Buffer::~QGles2Buffer()
 
 void QGles2Buffer::destroy()
 {
+    delete[] data;
+    data = nullptr;
+
     if (!buffer)
         return;
 
@@ -4118,10 +4144,7 @@ void QGles2Buffer::destroy()
     e.type = QRhiGles2::DeferredReleaseEntry::Buffer;
 
     e.buffer.buffer = buffer;
-
     buffer = 0;
-    delete[] data;
-    data = nullptr;
 
     QRHI_RES_RHI(QRhiGles2);
     rhiD->releaseQueue.append(e);
@@ -4145,6 +4168,7 @@ bool QGles2Buffer::create()
             qWarning("Uniform buffer: multiple usages specified, this is not supported by the OpenGL backend");
             return false;
         }
+        delete[] data;
         data = new char[nonZeroSize];
         QRHI_PROF_F(newBuffer(this, uint(nonZeroSize), 0, 1));
         return true;
@@ -4856,6 +4880,8 @@ bool QGles2GraphicsPipeline::create()
         // important when GLSL <= 150 is used that does not have location qualifiers
         for (const QShaderDescription::InOutVariable &inVar : vsDesc.inputVariables())
             rhiD->f->glBindAttribLocation(program, GLuint(inVar.location), inVar.name);
+
+        rhiD->sanityCheckVertexFragmentInterface(vsDesc, fsDesc);
 
         if (!rhiD->linkProgram(program))
             return false;

@@ -79,10 +79,9 @@ public:
     explicit QQuickDeliveryAgent(QQuickItem *rootItem);
     virtual ~QQuickDeliveryAgent();
 
-    static QQuickDeliveryAgent *grabberAgent(QPointerEvent *pe, const QEventPoint &pt);
-
     QQuickItem *rootItem() const;
 
+    Transform *sceneTransform() const;
     void setSceneTransform(Transform *transform);
     bool event(QEvent *ev) override;
 

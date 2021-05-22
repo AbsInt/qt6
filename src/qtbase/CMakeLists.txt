@@ -39,6 +39,9 @@ project(QtBase
 # Make sure we only use latest private CMake API, aka no compatibility wrappers.
 set(QT_NO_INTERNAL_COMPATIBILITY_FUNCTIONS TRUE)
 
+# Make sure we use the fixed BASE argument of qt_add_resource.
+set(QT_USE_FIXED_QT_ADD_RESOURCE_BASE TRUE)
+
 if(NOT QT_BUILD_STANDALONE_TESTS)
     ## Add some paths to check for cmake modules:
     list(PREPEND CMAKE_MODULE_PATH
@@ -80,6 +83,9 @@ if(NOT QT_BUILD_STANDALONE_TESTS)
 
     ## Should this Qt be built with Werror?
     option(WARNINGS_ARE_ERRORS "Build Qt with warnings as errors" ${FEATURE_developer_build})
+
+    ## Should this Qt create versioned hard link for some tools?
+    option(QT_CREATE_VERSIONED_HARD_LINK "Enable the use of versioned hard link" ON)
 
     ## QtBase specific configure tests:
     include(QtBaseConfigureTests)

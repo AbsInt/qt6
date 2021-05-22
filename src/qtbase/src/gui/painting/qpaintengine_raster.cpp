@@ -2357,15 +2357,19 @@ void QRasterPaintEngine::drawImage(const QRectF &r, const QImage &img, const QRe
         QRectF targetBounds = s->matrix.mapRect(r);
         bool exceedsPrecision = r.width() > 0x7fff
                              || r.height() > 0x7fff
+                             || targetBounds.left() < -0x7fff
+                             || targetBounds.top() < -0x7fff
+                             || targetBounds.right() > 0x7fff
+                             || targetBounds.bottom() > 0x7fff
                              || targetBounds.width() > 0x7fff
                              || targetBounds.height() > 0x7fff
                              || s->matrix.m11() >= 512
                              || s->matrix.m22() >= 512;
-
         if (!exceedsPrecision && d->canUseFastImageBlending(d->rasterBuffer->compositionMode, img)) {
             if (s->matrix.type() > QTransform::TxScale) {
                 SrcOverTransformFunc func = qTransformFunctions[d->rasterBuffer->format][img.format()];
-                if (func && (!clip || clip->hasRectClip)) {
+                // The fast transform methods doesn't really work on small targets, see QTBUG-93475
+                if (func && (!clip || clip->hasRectClip) && targetBounds.width() >= 16 && targetBounds.height() >= 16) {
                     func(d->rasterBuffer->buffer(), d->rasterBuffer->bytesPerLine(), img.bits(),
                          img.bytesPerLine(), r, sr, !clip ? d->deviceRect : clip->clipRect,
                          s->matrix, s->intOpacity);
@@ -3826,6 +3830,7 @@ void QClipData::initialize()
     Q_CHECK_PTR(m_clipLines);
     QT_TRY {
         allocated = clipSpanHeight;
+        count = 0;
         QT_TRY {
             if (hasRegionClip) {
                 const auto rects = clipRegion.begin();
@@ -3837,7 +3842,6 @@ void QClipData::initialize()
 
                 int y = 0;
                 int firstInBand = 0;
-                count = 0;
                 while (firstInBand < numRects) {
                     const int currMinY = rects[firstInBand].y();
                     const int currMaxY = currMinY + rects[firstInBand].height();
@@ -3895,7 +3899,6 @@ void QClipData::initialize()
                 }
 
                 const int len = clipRect.width();
-                count = 0;
                 while (y < ymax) {
                     QSpan *span = m_spans + count;
                     span->x = xmin;

@@ -608,6 +608,28 @@ void QLayout::childEvent(QChildEvent *e)
   \internal
   Also takes contentsMargins and menu bar into account.
 */
+int QLayout::totalMinimumHeightForWidth(int w) const
+{
+    Q_D(const QLayout);
+    int side=0, top=0;
+    if (d->topLevel) {
+        QWidget *parent = parentWidget();
+        parent->ensurePolished();
+        QWidgetPrivate *wd = parent->d_func();
+        side += wd->leftmargin + wd->rightmargin;
+        top += wd->topmargin + wd->bottommargin;
+    }
+    int h = minimumHeightForWidth(w - side) + top;
+#if QT_CONFIG(menubar)
+    h += menuBarHeightForWidth(d->menubar, w);
+#endif
+    return h;
+}
+
+/*!
+  \internal
+  Also takes contentsMargins and menu bar into account.
+*/
 int QLayout::totalHeightForWidth(int w) const
 {
     Q_D(const QLayout);
@@ -1333,6 +1355,11 @@ QRect QLayout::alignmentRect(const QRect &r) const
 */
 void QLayout::removeWidget(QWidget *widget)
 {
+    if (Q_UNLIKELY(!widget)) {
+        qWarning("QLayout::removeWidget: Cannot remove a null widget.");
+        return;
+    }
+
     int i = 0;
     QLayoutItem *child;
     while ((child = itemAt(i))) {

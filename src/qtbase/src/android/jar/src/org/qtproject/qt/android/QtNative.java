@@ -970,6 +970,11 @@ public class QtNative
         });
     }
 
+    public static void notifyQtAndroidPluginRunning(final boolean running)
+    {
+        m_activityDelegate.notifyQtAndroidPluginRunning(running);
+    }
+
     private static void registerClipboardManager()
     {
         if (m_service == null || m_activity != null) { // Avoid freezing if only service
@@ -1001,6 +1006,7 @@ public class QtNative
     {
         if (Build.VERSION.SDK_INT >= 28 && m_clipboardManager != null)
             m_clipboardManager.clearPrimaryClip();
+         m_usePrimaryClip = false;
     }
     private static void setClipboardText(String text)
     {

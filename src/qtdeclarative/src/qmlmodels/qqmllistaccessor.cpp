@@ -43,6 +43,7 @@
 
 #include <QtCore/qstringlist.h>
 #include <QtCore/qdebug.h>
+#include <QtCore/qurl.h>
 
 // ### Remove me
 #include <private/qqmlengine_p.h>
@@ -78,7 +79,9 @@ void QQmlListAccessor::setList(const QVariant &v, QQmlEngine *engine)
         m_type = Invalid;
     } else if (d.userType() == QMetaType::QStringList) {
         m_type = StringList;
-    } else if (d.userType() == QMetaType::QVariantList) {
+    } else if (d.userType() == qMetaTypeId<QList<QUrl>>()) {
+        m_type = UrlList;
+    } else if (d.userType() == qMetaTypeId<QVariantList>()) {
         m_type = VariantList;
     } else if (d.userType() == qMetaTypeId<QList<QObject *>>()) {
         m_type = ObjectList;
@@ -102,6 +105,7 @@ void QQmlListAccessor::setList(const QVariant &v, QQmlEngine *engine)
             m_type = Invalid;
         } else {
             m_type = Integer;
+            d = i;
         }
     } else if ((!enginePrivate && QQmlMetaType::isQObject(d.userType())) ||
                (enginePrivate && enginePrivate->isQObject(d.userType()))) {
@@ -120,6 +124,8 @@ qsizetype QQmlListAccessor::count() const
     switch(m_type) {
     case StringList:
         return qvariant_cast<QStringList>(d).count();
+    case UrlList:
+        return qvariant_cast<QList<QUrl>>(d).count();
     case VariantList:
         return qvariant_cast<QVariantList>(d).count();
     case ObjectList:
@@ -142,6 +148,8 @@ QVariant QQmlListAccessor::at(qsizetype idx) const
     switch(m_type) {
     case StringList:
         return QVariant::fromValue(qvariant_cast<QStringList>(d).at(idx));
+    case UrlList:
+        return QVariant::fromValue(qvariant_cast<QList<QUrl>>(d).at(idx));
     case VariantList:
         return qvariant_cast<QVariantList>(d).at(idx);
     case ObjectList:

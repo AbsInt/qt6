@@ -302,7 +302,8 @@ void QQuickPointerHandler::onGrabChanged(QQuickPointerHandler *grabber, QPointin
 */
 void QQuickPointerHandler::setPassiveGrab(QPointerEvent *event, const QEventPoint &point, bool grab)
 {
-    qCDebug(lcPointerHandlerGrab) << point << grab;
+    qCDebug(lcPointerHandlerGrab) << this << point << grab << "via"
+                                  << QQuickDeliveryAgentPrivate::currentOrItemDeliveryAgent(parentItem());
     if (grab) {
         event->addPassiveGrabber(point, this);
     } else {
@@ -338,8 +339,8 @@ bool QQuickPointerHandler::approveGrabTransition(QPointerEvent *event, const QEv
 {
     Q_D(const QQuickPointerHandler);
     bool allowed = false;
+    QObject* existingGrabber = event->exclusiveGrabber(point);
     if (proposedGrabber == this) {
-        QObject* existingGrabber = event->exclusiveGrabber(point);
         allowed = (existingGrabber == nullptr) || ((d->grabPermissions & CanTakeOverFromAnything) == CanTakeOverFromAnything);
         if (existingGrabber) {
             if (QQuickPointerHandler *existingPhGrabber = qobject_cast<QQuickPointerHandler *>(event->exclusiveGrabber(point))) {
@@ -394,7 +395,8 @@ bool QQuickPointerHandler::approveGrabTransition(QPointerEvent *event, const QEv
     }
     qCDebug(lcPointerHandlerGrab) << "point" << Qt::hex << point.id() << "permission" <<
             QMetaEnum::fromType<GrabPermissions>().valueToKeys(grabPermissions()) <<
-            ':' << this << (allowed ? "approved to" : "denied to") << proposedGrabber;
+            ':' << this << (allowed ? "approved from" : "denied from") <<
+            existingGrabber << "to" << proposedGrabber;
     return allowed;
 }
 
@@ -516,8 +518,11 @@ bool QQuickPointerHandler::parentContains(const QPointF &scenePosition) const
 {
     if (QQuickItem *par = parentItem()) {
         if (par->window()) {
+            QRect windowGeometry = par->window()->geometry();
+            if (!par->window()->isTopLevel())
+                windowGeometry = QRect(QWindowPrivate::get(par->window())->globalPosition(), par->window()->size());
             QPoint screenPosition = par->window()->mapToGlobal(scenePosition.toPoint());
-            if (!par->window()->geometry().contains(screenPosition))
+            if (!windowGeometry.contains(screenPosition))
                 return false;
         }
         QPointF p = par->mapFromScene(scenePosition);
