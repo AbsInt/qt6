@@ -57,8 +57,14 @@ macro(qt_collect_third_party_deps target)
                     set(package_components "")
                 endif()
 
+                get_target_property(package_optional_components ${dep}
+                    INTERFACE_QT_PACKAGE_OPTIONAL_COMPONENTS)
+                if(NOT package_optional_components)
+                    set(package_optional_components "")
+                endif()
+
                 list(APPEND third_party_deps
-                    "${package_name}\;${package_is_optional}\;${package_version}\;${package_components}")
+                    "${package_name}\;${package_is_optional}\;${package_version}\;${package_components}\;${package_optional_components}")
             endif()
         endif()
     endforeach()
@@ -629,6 +635,14 @@ endif()
 if(DEFINED QT_REPO_MODULE_VERSION AND NOT DEFINED QT_REPO_DEPENDENCIES AND NOT QT_SUPERBUILD)
     qt_internal_read_repo_dependencies(QT_REPO_DEPENDENCIES \"$\{PROJECT_SOURCE_DIR}\")
 endif()
+")
+        endif()
+
+        if(DEFINED OpenGL_GL_PREFERENCE)
+            string(APPEND QT_EXTRA_BUILD_INTERNALS_VARS
+                "
+# Use the OpenGL_GL_PREFERENCE value qtbase was built with. But do not FORCE it.
+set(OpenGL_GL_PREFERENCE \"${OpenGL_GL_PREFERENCE}\" CACHE STRING \"\")
 ")
         endif()
 

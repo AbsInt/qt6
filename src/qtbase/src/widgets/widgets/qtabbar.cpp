@@ -408,10 +408,12 @@ void QTabBarPrivate::init()
 {
     Q_Q(QTabBar);
     leftB = new QToolButton(q);
+    leftB->setObjectName(QStringLiteral("ScrollLeftButton"));
     leftB->setAutoRepeat(true);
     QObject::connect(leftB, SIGNAL(clicked()), q, SLOT(_q_scrollTabs()));
     leftB->hide();
     rightB = new QToolButton(q);
+    rightB->setObjectName(QStringLiteral("ScrollRightButton"));
     rightB->setAutoRepeat(true);
     QObject::connect(rightB, SIGNAL(clicked()), q, SLOT(_q_scrollTabs()));
     rightB->hide();
@@ -824,21 +826,24 @@ void QTabBarPrivate::_q_scrollTabs()
     Q_Q(QTabBar);
     const QObject *sender = q->sender();
     const bool horizontal = !verticalTabs(shape);
-    const QRect scrollRect = normalizedScrollRect();
+    const QRect scrollRect = normalizedScrollRect().translated(scrollOffset, 0);
+
     int i = -1;
 
     if (sender == leftB) {
         for (i = tabList.count() - 1; i >= 0; --i) {
             int start = horizontal ? tabList.at(i)->rect.left() : tabList.at(i)->rect.top();
-            if (start < scrollRect.left() + scrollOffset) {
+            if (start < scrollRect.left()) {
                 makeVisible(i);
                 return;
             }
         }
     } else if (sender == rightB) {
         for (i = 0; i < tabList.count(); ++i) {
-            int end = horizontal ? tabList.at(i)->rect.right() : tabList.at(i)->rect.bottom();
-            if (end > scrollRect.right() + scrollOffset) {
+            const auto tabRect = tabList.at(i)->rect;
+            int start = horizontal ? tabRect.left() : tabRect.top();
+            int end = horizontal ? tabRect.right() : tabRect.bottom();
+            if (end > scrollRect.right() && start > scrollOffset) {
                 makeVisible(i);
                 return;
             }
@@ -914,7 +919,7 @@ void QTabBar::setShape(Shape shape)
     \property QTabBar::drawBase
     \brief defines whether or not tab bar should draw its base.
 
-    If true then QTabBar draws a base in relation to the styles overlab.
+    If true then QTabBar draws a base in relation to the styles overlap.
     Otherwise only the tabs are drawn.
 
     \sa QStyle::pixelMetric(), QStyle::PM_TabBarBaseOverlap, QStyleOptionTabBarBase
@@ -1832,6 +1837,20 @@ void QTabBar::paintEvent(QPaintEvent *)
 
     if (d->drawBase)
         p.drawPrimitive(QStyle::PE_FrameTabBarBase, optTabBase);
+
+    // the buttons might be semi-transparent or not fill their rect, but we don't
+    // want the tab underneath to shine through, so clip the button area; QTBUG-50866
+    if (d->leftB->isVisible() || d->rightB->isVisible()) {
+        QStyleOption opt;
+        opt.initFrom(this);
+        QRegion buttonRegion;
+        if (d->leftB->isVisible())
+            buttonRegion |= style()->subElementRect(QStyle::SE_TabBarScrollLeftButton, &opt, this);
+        if (d->rightB->isVisible())
+            buttonRegion |= style()->subElementRect(QStyle::SE_TabBarScrollRightButton, &opt, this);
+        if (!buttonRegion.isEmpty())
+            p.setClipRegion(QRegion(rect()) - buttonRegion);
+    }
 
     for (int i = 0; i < d->tabList.count(); ++i) {
         const auto tab = d->tabList.at(i);

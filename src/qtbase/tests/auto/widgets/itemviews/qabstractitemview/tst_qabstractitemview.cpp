@@ -35,11 +35,13 @@
 #include <QHeaderView>
 #include <QIdentityProxyModel>
 #include <QItemDelegate>
+#include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
 #include <QProxyStyle>
 #include <QPushButton>
 #include <QScrollBar>
+#include <QScroller>
 #include <QSignalSpy>
 #include <QSortFilterProxyModel>
 #include <QSpinBox>
@@ -154,8 +156,12 @@ private slots:
     void checkFocusAfterActivationChanges_data();
     void checkFocusAfterActivationChanges();
     void dragSelectAfterNewPress();
+    void dragWithSecondClick_data();
+    void dragWithSecondClick();
     void selectionCommand_data();
     void selectionCommand();
+    void scrollerSmoothScroll();
+
 private:
     static QAbstractItemView *viewFromString(const QByteArray &viewType, QWidget *parent = nullptr)
     {
@@ -2600,6 +2606,99 @@ void tst_QAbstractItemView::dragSelectAfterNewPress()
         QVERIFY(selected.contains(model.index(i, 0)));
 }
 
+void tst_QAbstractItemView::dragWithSecondClick_data()
+{
+    QTest::addColumn<QString>("viewClass");
+    QTest::addColumn<bool>("doubleClick");
+    for (QString viewClass : {"QListView", "QTreeView"}) {
+        QTest::addRow("DoubleClick") << viewClass << true;
+        QTest::addRow("Two Single Clicks") << viewClass << false;
+    }
+}
+
+// inject the ability to record which indexes get dragged into any QAbstractItemView class
+struct DragRecorder
+{
+    virtual ~DragRecorder() = default;
+    bool dragStarted = false;
+    QModelIndexList draggedIndexes;
+    QAbstractItemView *view;
+};
+
+template<class ViewClass>
+class DragRecorderView : public ViewClass, public DragRecorder
+{
+public:
+    DragRecorderView()
+    { view = this; }
+protected:
+    void startDrag(Qt::DropActions) override
+    {
+        draggedIndexes = ViewClass::selectedIndexes();
+        dragStarted = true;
+    }
+};
+
+void tst_QAbstractItemView::dragWithSecondClick()
+{
+    QFETCH(QString, viewClass);
+    QFETCH(bool, doubleClick);
+
+    QStandardItemModel model;
+    QStandardItem *parentItem = model.invisibleRootItem();
+    for (int i = 0; i < 10; ++i) {
+        QStandardItem *item = new QStandardItem(QString("item %0").arg(i));
+        item->setDragEnabled(true);
+        item->setEditable(false);
+        parentItem->appendRow(item);
+    }
+
+    std::unique_ptr<DragRecorder> dragRecorder;
+    if (viewClass == "QTreeView")
+        dragRecorder.reset(new DragRecorderView<QTreeView>);
+    else if (viewClass == "QListView")
+        dragRecorder.reset(new DragRecorderView<QListView>);
+
+    QAbstractItemView *view = dragRecorder->view;
+    view->setModel(&model);
+    view->setFixedSize(160, 650); // Minimum width for windows with frame on Windows 8
+    view->setSelectionMode(QAbstractItemView::MultiSelection);
+    view->setDragDropMode(QAbstractItemView::InternalMove);
+    centerOnScreen(view);
+    moveCursorAway(view);
+    view->show();
+    QVERIFY(QTest::qWaitForWindowExposed(view));
+
+    QModelIndex index0 = model.index(0, 0);
+    QModelIndex index1 = model.index(1, 0);
+    // Select item 0 using a single click
+    QTest::mouseClick(view->viewport(), Qt::LeftButton, Qt::NoModifier,
+                      view->visualRect(index0).center());
+    QCOMPARE(view->currentIndex(), index0);
+
+    if (doubleClick) {
+        // press on same item within the double click interval
+        QTest::mouseDClick(view->viewport(), Qt::LeftButton, Qt::NoModifier,
+                           view->visualRect(index0).center());
+    } else {
+        // or on different item with a slow second press
+        QTest::mousePress(view->viewport(), Qt::LeftButton, Qt::NoModifier,
+                          view->visualRect(index1).center());
+    }
+    // then drag far enough with left button held
+    const QPoint dragTo = view->visualRect(index1).center()
+                        + QPoint(2 * QApplication::startDragDistance(),
+                                 2 * QApplication::startDragDistance());
+    QMouseEvent mouseMoveEvent(QEvent::MouseMove, dragTo,
+                            Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+    QVERIFY(QApplication::sendEvent(view->viewport(), &mouseMoveEvent));
+    // twice since the view will first enter dragging state, then start the drag
+    // (not necessary to actually move the mouse)
+    QVERIFY(QApplication::sendEvent(view->viewport(), &mouseMoveEvent));
+    QVERIFY(dragRecorder->dragStarted);
+    QTest::mouseRelease(view->viewport(), Qt::LeftButton, Qt::NoModifier, dragTo);
+}
+
 void tst_QAbstractItemView::selectionCommand_data()
 {
     QTest::addColumn<QAbstractItemView::SelectionMode>("selectionMode");
@@ -2642,6 +2741,67 @@ void tst_QAbstractItemView::selectionCommand()
     view.setSelectionMode(selectionMode);
     QTest::keyPress(&view, Qt::Key_A, keyboardModifier);
     QCOMPARE(selectionFlag, view.selectionCommand(QModelIndex(), nullptr));
+}
+
+/*!
+    Verify that scrolling an autoScroll enabled itemview with a QScroller
+    produces a continuous, smooth scroll without any jumping around due to
+    the currentItem negotiation between QAbstractItemView and QScroller.
+    QTBUG-64543.
+*/
+void tst_QAbstractItemView::scrollerSmoothScroll()
+{
+    QListWidget view;
+    view.setAutoScroll(true);
+    view.setVerticalScrollMode(QListView::ScrollPerPixel);
+
+    QScroller::grabGesture(view.viewport(), QScroller::TouchGesture);
+    QScroller::grabGesture(view.viewport(), QScroller::LeftMouseButtonGesture);
+
+    for (int i = 0; i < 50; i++) {
+        QListWidgetItem* item = new QListWidgetItem("item " + QString::number(i), &view);
+        // gives items a touch friendly size so that only a few fit into the viewport
+        item->setSizeHint(QSize(100,50));
+    }
+
+    // make sure we have space for only a few items
+    view.setFixedSize(120, 200);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowActive(&view));
+
+    // we flick up, so we should never scroll back
+    int lastScrollPosition = 0;
+    bool scrollBack = false;
+    connect(view.verticalScrollBar(), &QScrollBar::valueChanged, [&](int value){
+        scrollBack |= (value < lastScrollPosition);
+        lastScrollPosition = value;
+    });
+
+    // start in the middle
+    view.scrollToItem(view.item(25));
+    QCOMPARE(view.currentItem(), view.item(0));
+    QListWidgetItem *pressItem = view.item(23);
+    QPoint dragPosition = view.visualRect(view.indexFromItem(pressItem)).center();
+    // the mouse press changes the current item temporarily, but the press is delayed
+    // by the gesture machinery. this is not what we are testing here, so skip the test
+    // if this fails within a reasonable amount of time.
+    QTest::mousePress(view.viewport(), Qt::LeftButton, Qt::NoModifier, dragPosition);
+    if (!(QTest::qWaitFor([&]{ return view.currentItem() == pressItem; })))
+        QSKIP("Current item didn't change on press, skipping test");
+
+    // QAIV will reset the current item when the scroller changes state to Dragging
+    for (int y = 0; y < QApplication::startDragDistance() * 2; ++y) {
+        // gesture recognizer needs some throttling
+        QTest::qWait(10);
+        dragPosition -= QPoint(0, 10);
+        const QPoint globalPos = view.viewport()->mapToGlobal(dragPosition);
+        QMouseEvent mouseMoveEvent(QEvent::MouseMove, dragPosition, dragPosition, globalPos,
+                                    Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(view.viewport(), &mouseMoveEvent);
+        QVERIFY(!scrollBack);
+    }
+
+    QTest::mouseRelease(view.viewport(), Qt::LeftButton, Qt::NoModifier, dragPosition);
 }
 
 QTEST_MAIN(tst_QAbstractItemView)

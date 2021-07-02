@@ -50,14 +50,24 @@
 #include <QtCore/qpropertyprivate.h>
 
 #if __has_include(<source_location>) && __cplusplus >= 202002L && !defined(Q_CLANG_QDOC)
-#include <experimental/source_location>
+#include <source_location>
+#if defined(__cpp_lib_source_location)
+#define QT_SOURCE_LOCATION_NAMESPACE std
 #define QT_PROPERTY_COLLECT_BINDING_LOCATION
 #define QT_PROPERTY_DEFAULT_BINDING_LOCATION QPropertyBindingSourceLocation(std::source_location::current())
-#elif __has_include(<experimental/source_location>) && __cplusplus >= 201703L && !defined(Q_CLANG_QDOC)
+#endif
+#endif
+
+#if !defined(QT_PROPERTY_COLLECT_BINDING_LOCATION) && __has_include(<experimental/source_location>) && __cplusplus >= 201703L && !defined(Q_CLANG_QDOC)
 #include <experimental/source_location>
+#if defined(__cpp_lib_experimental_source_location)
+#define QT_SOURCE_LOCATION_NAMESPACE std::experimental
 #define QT_PROPERTY_COLLECT_BINDING_LOCATION
 #define QT_PROPERTY_DEFAULT_BINDING_LOCATION QPropertyBindingSourceLocation(std::experimental::source_location::current())
-#else
+#endif
+#endif
+
+#if !defined(QT_PROPERTY_COLLECT_BINDING_LOCATION)
 #define QT_PROPERTY_DEFAULT_BINDING_LOCATION QPropertyBindingSourceLocation()
 #endif
 
@@ -97,7 +107,7 @@ struct Q_CORE_EXPORT QPropertyBindingSourceLocation
     quint32 column = 0;
     QPropertyBindingSourceLocation() = default;
 #ifdef QT_PROPERTY_COLLECT_BINDING_LOCATION
-    QPropertyBindingSourceLocation(const std::experimental::source_location &cppLocation)
+    QPropertyBindingSourceLocation(const QT_SOURCE_LOCATION_NAMESPACE::source_location &cppLocation)
     {
         fileName = cppLocation.file_name();
         functionName = cppLocation.function_name();
@@ -1194,6 +1204,8 @@ private:
         QT_WARNING_POP \
     } \
     QObjectComputedProperty<Class, Type, Class::_qt_property_##name##_offset, __VA_ARGS__> name;
+
+#undef QT_SOURCE_LOCATION_NAMESPACE
 
 QT_END_NAMESPACE
 

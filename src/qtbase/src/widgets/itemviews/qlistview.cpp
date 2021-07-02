@@ -214,8 +214,8 @@ QListView::~QListView()
     grid, or cannot be moved at all.
 
     This property determines how the user can move the items in the
-    view. \l Static means that the items can't be moved the user. \l
-    Free means that the user can drag and drop the items to any
+    view. \l Static means that the items can't be moved by the user.
+    \l Free means that the user can drag and drop the items to any
     position in the view. \l Snap means that the user can drag and
     drop the items, but only to the positions in a notional grid
     signified by the gridSize property.
@@ -1234,13 +1234,25 @@ QModelIndex QListView::moveCursor(CursorAction cursorAction, Qt::KeyboardModifie
             d->removeCurrentAndDisabled(&intersectVector, current);
         }
         return d->closestIndex(initialRect, intersectVector);
-    case MovePageUp:
-        // move current by (visibileRowCount - 1) items.
-        // rect.translate(0, -rect.height()); will happen in the switch fallthrough for MoveUp.
-        rect.moveTop(rect.top() - d->viewport->height() + 2 * rect.height());
-        if (rect.top() < rect.height())
-            rect.moveTop(rect.height());
-        Q_FALLTHROUGH();
+    case MovePageUp: {
+        rect.moveTop(rect.top() - d->viewport->height() + 1 );
+        if (rect.top() < rect.height()) {
+            rect.setTop(0);
+            rect.setBottom(1);
+        }
+        QModelIndex findindex = current;
+        while (intersectVector.isEmpty()
+               || rectForIndex(findindex).top() <= (rectForIndex(current).bottom() - d->viewport->rect().height())
+               || rect.top() <= 0) {
+            rect.translate(0, 1);
+            if (rect.bottom() <= 0) {
+                return current;
+            }
+            intersectVector = d->intersectingSet(rect);
+            findindex = d->closestIndex(initialRect, intersectVector);
+        }
+        return findindex;
+    }
     case MovePrevious:
     case MoveUp:
         while (intersectVector.isEmpty()) {
@@ -1263,13 +1275,26 @@ QModelIndex QListView::moveCursor(CursorAction cursorAction, Qt::KeyboardModifie
             d->removeCurrentAndDisabled(&intersectVector, current);
         }
         return d->closestIndex(initialRect, intersectVector);
-    case MovePageDown:
-        // move current by (visibileRowCount - 1) items.
-        // rect.translate(0, rect.height()); will happen in the switch fallthrough for MoveDown.
-        rect.moveTop(rect.top() + d->viewport->height() - 2 * rect.height());
-        if (rect.bottom() > contents.height() - rect.height())
-            rect.moveBottom(contents.height() - rect.height());
-        Q_FALLTHROUGH();
+    case MovePageDown: {
+        rect.moveTop(rect.top() + d->viewport->height() - 1 );
+        if (rect.bottom() > contents.height() - rect.height()){
+            rect.setTop(contents.height() - 1);
+            rect.setBottom(contents.height());
+        }
+        QModelIndex index = current;
+        // index's bottom() - current's top() always <=  (d->viewport->rect().height()
+        while (intersectVector.isEmpty()
+               || rectForIndex(index).bottom() >= (d->viewport->rect().height() + rectForIndex(current).top())
+               || rect.bottom() > contents.height()) {
+            rect.translate(0, -1);
+            if (rect.top() >= contents.height()) {
+                return current;
+            }
+            intersectVector = d->intersectingSet(rect);
+            index = d->closestIndex(initialRect, intersectVector);
+        }
+        return index;
+    }
     case MoveNext:
     case MoveDown:
         while (intersectVector.isEmpty()) {
@@ -1798,6 +1823,7 @@ void QListViewPrivate::prepareItemsLayout()
     // Qt::ScrollBarAlwaysOn but scrollbar extent must be deduced if policy
     // is Qt::ScrollBarAsNeeded
     int verticalMargin = (vbarpolicy == Qt::ScrollBarAsNeeded) && (flow == QListView::LeftToRight || vbar->isVisible())
+                        && !q->style()->pixelMetric(QStyle::PM_ScrollView_ScrollBarOverlap, nullptr, vbar)
         ? q->style()->pixelMetric(QStyle::PM_ScrollBarExtent, nullptr, vbar) + frameAroundContents
         : 0;
     int horizontalMargin =  hbarpolicy==Qt::ScrollBarAsNeeded
@@ -3143,6 +3169,7 @@ void QIconModeViewBase::doDynamicLayout(const QListViewLayoutInfo &info)
 
     QRect rect(QPoint(), topLeft);
     QListViewItem *item = nullptr;
+    Q_ASSERT(info.first <= info.last);
     for (int row = info.first; row <= info.last; ++row) {
         item = &items[row];
         if (isHidden(row)) {
@@ -3213,6 +3240,7 @@ void QIconModeViewBase::doDynamicLayout(const QListViewLayoutInfo &info)
             flowPosition += deltaFlowPosition; // current position + item width + gap
         }
     }
+    Q_ASSERT(item);
     batchSavedDeltaSeg = deltaSegPosition;
     batchStartRow = info.last + 1;
     bool done = (info.last >= rowCount() - 1);

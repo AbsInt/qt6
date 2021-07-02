@@ -281,41 +281,91 @@ function(qt6_android_add_apk_target target)
         message(FATAL_ERROR "Target ${target} is not a valid android executable target\n")
     endif()
 
-    # Create a top-level "apk" target for convenience, so that users can call 'ninja apk'.
-    # It will trigger building all the target specific apk build targets that are added via this
-    # function.
-    # Allow opt-out.
-    if(NOT QT_NO_GLOBAL_APK_TARGET)
-        if(NOT TARGET apk)
-            add_custom_target(apk
-                DEPENDS ${target}_prepare_apk_dir
-                COMMENT "Building all apks"
-            )
-        endif()
-        set(should_add_to_global_apk TRUE)
+    # Make global apk target depend on the current apk target.
+    if(TARGET apk)
+        add_dependencies(apk ${target}_make_apk)
+        _qt_internal_create_global_apk_all_target_if_needed()
     endif()
 
     set(deployment_tool "${QT_HOST_PATH}/${QT6_HOST_INFO_BINDIR}/androiddeployqt")
-    set(apk_dir "$<TARGET_PROPERTY:${target},BINARY_DIR>/android-build")
+    set(apk_final_dir "$<TARGET_PROPERTY:${target},BINARY_DIR>/android-build")
+    set(apk_intermediate_dir "${CMAKE_CURRENT_BINARY_DIR}/android-build")
+    set(apk_file_name "${target}.apk")
+    set(apk_final_file_path "${apk_final_dir}/${apk_file_name}")
+    set(apk_intermediate_file_path "${apk_intermediate_dir}/${apk_file_name}")
+
+    # This target is used by Qt Creator's Android support.
     add_custom_target(${target}_prepare_apk_dir
         DEPENDS ${target}
         COMMAND ${CMAKE_COMMAND}
-            -E copy $<TARGET_FILE:${target}>
-            "${apk_dir}/libs/${CMAKE_ANDROID_ARCH_ABI}/$<TARGET_FILE_NAME:${target}>"
+            -E copy_if_different $<TARGET_FILE:${target}>
+            "${apk_final_dir}/libs/${CMAKE_ANDROID_ARCH_ABI}/$<TARGET_FILE_NAME:${target}>"
         COMMENT "Copying ${target} binary to apk folder"
     )
 
-    add_custom_target(${target}_make_apk
-        DEPENDS ${target}_prepare_apk_dir
-        COMMAND  ${deployment_tool}
-            --input ${deployment_file}
-            --output ${apk_dir}
-            --apk ${apk_dir}/${target}.apk
+    # Add custom command that creates the apk in an intermediate location.
+    # We need the intermediate location, because we cannot have target-dependent generator
+    # expressions in OUTPUT.
+    add_custom_command(OUTPUT "${apk_intermediate_file_path}"
+        COMMAND ${CMAKE_COMMAND}
+            -E copy "$<TARGET_FILE:${target}>"
+            "${apk_intermediate_dir}/libs/${CMAKE_ANDROID_ARCH_ABI}/$<TARGET_FILE_NAME:${target}>"
+        COMMAND "${deployment_tool}"
+            --input "${deployment_file}"
+            --output "${apk_intermediate_dir}"
+            --apk "${apk_intermediate_file_path}"
         COMMENT "Creating APK for ${target}"
-    )
+        DEPENDS "${target}" "${deployment_file}")
 
-    if(should_add_to_global_apk)
-        add_dependencies(apk "${target}_make_apk")
+    # Create a ${target}_make_apk target to copy the apk from the intermediate to its final
+    # location.  If the final and intermediate locations are identical, this is a no-op.
+    add_custom_target(${target}_make_apk
+        COMMAND "${CMAKE_COMMAND}"
+            -E copy_if_different "${apk_intermediate_file_path}" "${apk_final_file_path}"
+        DEPENDS "${apk_intermediate_file_path}")
+endfunction()
+
+function(_qt_internal_create_global_apk_target)
+    # Create a top-level "apk" target for convenience, so that users can call 'ninja apk'.
+    # It will trigger building all the apk build targets that are added as part of the project.
+    # Allow opting out.
+    if(NOT QT_NO_GLOBAL_APK_TARGET)
+        if(NOT TARGET apk)
+            add_custom_target(apk COMMENT "Building all apks")
+        endif()
+    endif()
+endfunction()
+
+# This function allows deciding whether apks should be built as part of the ALL target at first
+# add_executable call point, rather than when the 'apk' target is created as part of the
+# find_package(Core) call.
+#
+# It does so by creating a custom 'apk_all' target as an implementation detail.
+#
+# This is needed to ensure that the decision is made only when the value of QT_BUILDING_QT is
+# available, which is defined in qt_repo_build() -> include(QtSetup), which is included after the
+# execution of _qt_internal_create_global_apk_target.
+function(_qt_internal_create_global_apk_all_target_if_needed)
+    if(TARGET apk AND NOT TARGET apk_all)
+        # Some Qt tests helper executables have their apk build process failing.
+        # qt_internal_add_executables that are excluded from ALL should also not have apks built
+        # for them.
+        # Don't build apks by default when doing a Qt build.
+        set(skip_add_to_all FALSE)
+        if(QT_BUILDING_QT)
+            set(skip_add_to_all TRUE)
+        endif()
+
+        option(QT_NO_GLOBAL_APK_TARGET_PART_OF_ALL
+            "Skip building apks as part of the default 'ALL' target" ${skip_add_to_all})
+
+        set(part_of_all "ALL")
+        if(QT_NO_GLOBAL_APK_TARGET_PART_OF_ALL)
+            set(part_of_all "")
+        endif()
+
+        add_custom_target(apk_all ${part_of_all})
+        add_dependencies(apk_all apk)
     endif()
 endfunction()
 

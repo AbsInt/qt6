@@ -1149,6 +1149,8 @@ static QStyleHelper::WidgetSizePolicy qt_aqua_guess_size(const QWidget *widg, QS
 
 void QMacStylePrivate::drawFocusRing(QPainter *p, const QRectF &targetRect, int hMargin, int vMargin, const CocoaControl &cw) const
 {
+    const bool isBigSurOrAbove = QOperatingSystemVersion::current() >= QOperatingSystemVersion::MacOSBigSur;
+
     QPainterPath focusRingPath;
     focusRingPath.setFillRule(Qt::OddEvenFill);
 
@@ -1198,7 +1200,6 @@ void QMacStylePrivate::drawFocusRing(QPainter *p, const QRectF &targetRect, int 
     }
     case Button_PullDown:
     case Button_PushButton: {
-        const bool isBigSurOrAbove = QOperatingSystemVersion::current() >= QOperatingSystemVersion::MacOSBigSur;
         QRectF focusRect;
         auto *pb = static_cast<NSButton *>(cocoaControl(cw));
         const QRectF frameRect = cw.adjustedControlFrame(targetRect.adjusted(hMargin, vMargin, -hMargin, -vMargin));
@@ -1229,11 +1230,14 @@ void QMacStylePrivate::drawFocusRing(QPainter *p, const QRectF &targetRect, int 
     }
     case Button_PopupButton:
     case SegmentedControl_Single: {
+        QRectF focusRect = targetRect;
+        if (isBigSurOrAbove)
+            focusRect.translate(0, -1.5);
         const qreal innerRadius = cw.type == Button_PushButton ? 3 : 4;
         const qreal outerRadius = innerRadius + focusRingWidth;
-        hOffset = targetRect.left();
-        vOffset = targetRect.top();
-        const auto innerRect = targetRect.translated(-targetRect.topLeft());
+        hOffset = focusRect.left();
+        vOffset = focusRect.top();
+        const auto innerRect = focusRect.translated(-focusRect.topLeft());
         const auto outerRect = innerRect.adjusted(-hMargin, -vMargin, hMargin, vMargin);
         focusRingPath.addRoundedRect(innerRect, innerRadius, innerRadius);
         focusRingPath.addRoundedRect(outerRect, outerRadius, outerRadius);
@@ -3036,7 +3040,7 @@ void QMacStyle::drawPrimitive(PrimitiveElement pe, const QStyleOption *opt, QPai
             }
 #if QT_CONFIG(tabwidget)
             QRegion region(tbb->rect);
-            region -= tbb->tabBarRect;
+            region -= tbb->tabBarRect.adjusted(3, 0, -3, 0);
             p->save();
             p->setClipRegion(region);
             QStyleOptionTabWidgetFrame twf;
@@ -4332,9 +4336,25 @@ void QMacStyle::drawControl(ControlElement ce, const QStyleOption *opt, QPainter
             if (!rightMarginText.isEmpty()) {
                 p->setFont(qt_app_fonts_hash()->value("QMenuItem", p->font()));
                 int xp = mi->rect.right() - tabwidth - macRightBorder + 2;
-                if (!isSubMenu)
+                if (isSubMenu) {
+                    p->drawText(xp, yPos, tabwidth, mi->rect.height(), text_flags | Qt::AlignRight, rightMarginText);
+                } else {
                     xp -= macItemHMargin + macItemFrame + 3; // Adjust for shortcut
-                p->drawText(xp, yPos, tabwidth, mi->rect.height(), text_flags | Qt::AlignRight, rightMarginText);
+                    // try to render modifier part of shortcut string right aligned, key part left aligned
+                    const QKeySequence seq = QKeySequence::fromString(rightMarginText, QKeySequence::NativeText);
+                    if (seq.count() == 1) { // one-combo sequence, the right most character is the key
+                        // we don't know which key of all menu items is the widest, so use the widest possible
+                        const int maxKeyWidth = p->fontMetrics().maxWidth();
+                        const QChar key = rightMarginText.at(rightMarginText.length() - 1);
+                        const QString modifiers = rightMarginText.left(rightMarginText.size() - 1);
+                        p->drawText(xp + tabwidth - maxKeyWidth, yPos, maxKeyWidth, mi->rect.height(), text_flags, key);
+                        // don't clip the shortcuts; maxKeyWidth might be more than what we have been alotted by the menu
+                        p->drawText(xp, yPos, tabwidth - maxKeyWidth, mi->rect.height(),
+                                    text_flags | Qt::AlignRight | Qt::TextDontClip, modifiers);
+                    } else { // draw the whole thing left-aligned for complex or unparsable cases
+                        p->drawText(xp, yPos, tabwidth, mi->rect.height(), text_flags, rightMarginText);
+                    }
+                }
             }
 
             if (!s.isEmpty()) {
@@ -4376,8 +4396,10 @@ void QMacStyle::drawControl(ControlElement ce, const QStyleOption *opt, QPainter
                     // line-break the string if it doesn't fit the given rect. It's better to draw outside
                     // the rect and possibly overlap something than to have part of the text disappear.
                     [s.toNSString() drawAtPoint:CGPointMake(xpos, yPos)
-                                withAttributes:@{ NSFontAttributeName:f, NSForegroundColorAttributeName:c,
-                                                  NSObliquenessAttributeName: [NSNumber numberWithDouble: myFont.italic() ? 0.3 : 0.0]}];
+                            withAttributes:@{ NSFontAttributeName:f, NSForegroundColorAttributeName:c,
+                                                NSObliquenessAttributeName: [NSNumber numberWithDouble: myFont.italic() ? 0.3 : 0.0],
+                                                NSUnderlineStyleAttributeName: [NSNumber numberWithInt: myFont.underline() ? NSUnderlineStyleSingle
+                                                                                                                           : NSUnderlineStyleNone]}];
 
                     d->restoreNSGraphicsContext(cgCtx);
                 } else {
