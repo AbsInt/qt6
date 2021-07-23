@@ -931,12 +931,16 @@ bool QQuickDeliveryAgentPrivate::sendHoverEvent(QEvent::Type type, QQuickItem *i
                                       Qt::KeyboardModifiers modifiers, ulong timestamp,
                                       bool accepted)
 {
-    const QTransform transform = QQuickItemPrivate::get(item)->windowToItemTransform();
-
-    //create copy of event
+    auto itemPrivate = QQuickItemPrivate::get(item);
+    const QTransform transform = itemPrivate->windowToItemTransform();
     QHoverEvent hoverEvent(type, transform.map(scenePos), transform.map(lastScenePos), modifiers);
     hoverEvent.setTimestamp(timestamp);
     hoverEvent.setAccepted(accepted);
+    const QTransform transformToGlobal = itemPrivate->windowToGlobalTransform();
+    QMutableEventPoint &point = QMutableEventPoint::from(hoverEvent.point(0));
+    point.setScenePosition(scenePos);
+    point.setGlobalPosition(transformToGlobal.map(scenePos));
+    point.setGlobalLastPosition(transformToGlobal.map(lastScenePos));
 
     hasFiltered.clear();
     if (sendFilteredMouseEvent(&hoverEvent, item, item->parentItem()))
@@ -1366,10 +1370,10 @@ void QQuickDeliveryAgentPrivate::handleMouseEvent(QMouseEvent *event)
 #if QT_CONFIG(cursor)
         QQuickWindowPrivate::get(rootItem->window())->updateCursor(event->scenePosition());
 #endif
+        const QPointF last = lastMousePosition.isNull() ? event->scenePosition() : lastMousePosition;
+        lastMousePosition = event->scenePosition();
+        qCDebug(lcHoverTrace) << q << "mouse pos" << last << "->" << lastMousePosition;
         if (!event->points().count() || !event->exclusiveGrabber(event->point(0))) {
-            QPointF last = lastMousePosition.isNull() ? event->scenePosition() : lastMousePosition;
-            lastMousePosition = event->scenePosition();
-            qCDebug(lcHoverTrace) << q << "mouse pos" << last << "->" << lastMousePosition << event;
             bool accepted = event->isAccepted();
             bool delivered = deliverHoverEvent(rootItem, event->scenePosition(), last, event->modifiers(), event->timestamp(), accepted);
             if (!delivered) {
@@ -1413,7 +1417,7 @@ void QQuickDeliveryAgentPrivate::flushFrameSynchronousEvents(QQuickWindow *win)
     if (frameSynchronousHoverEnabled && !win->mouseGrabberItem() &&
             !lastMousePosition.isNull() && QQuickWindowPrivate::get(win)->dirtyItemList) {
         bool accepted = false;
-        qCDebug(lcHoverTrace) << q << "delivering frame-sync hover to root";
+        qCDebug(lcHoverTrace) << q << "delivering frame-sync hover to root @" << lastMousePosition;
         bool delivered = deliverHoverEvent(rootItem, lastMousePosition, lastMousePosition, QGuiApplication::keyboardModifiers(), 0, accepted);
         if (!delivered)
             clearHover(); // take care of any exits

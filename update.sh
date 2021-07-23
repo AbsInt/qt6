@@ -6,7 +6,7 @@ git clone --single-branch --branch "$1" http://code.qt.io/qt/qt5.git || exit 1
 cd qt5 || exit 1
 
 # get only the really needed sub-modules
-perl init-repository -f --branch --module-subset=qtbase,qtdeclarative,qttools,qtwayland || exit 1
+perl init-repository -f --branch --module-subset=qtbase,qtdeclarative,qttools,qtwayland,qtsvg,qtactiveqt || exit 1
 
 # kill git files
 find . -name ".git" -exec rm -rf --one-file-system {} \;

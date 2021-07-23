@@ -73,17 +73,24 @@ class QDuplicateTracker {
         }
     };
 
-    char buffer[Prealloc * sizeof(T)];
+    struct node_guesstimate { void *next; size_t hash; T value; };
+    static constexpr size_t bufferSize(size_t N) {
+        return N * sizeof(void*) // bucket list
+                + N * sizeof(node_guesstimate); // nodes
+    }
+
+    char buffer[bufferSize(Prealloc)];
     std::pmr::monotonic_buffer_resource res{buffer, sizeof buffer};
-    std::pmr::unordered_set<T, QHasher<T>> set{&res};
+    std::pmr::unordered_set<T, QHasher<T>> set{Prealloc, &res};
 #else
-    QSet<T> set;
+    static QSet<T> makeQSet() { QSet<T> r; r.reserve(Prealloc); return r; }
+    QSet<T> set = makeQSet();
     int setSize = 0;
 #endif
     Q_DISABLE_COPY_MOVE(QDuplicateTracker);
 public:
     QDuplicateTracker() = default;
-    void reserve(int n) { set.reserve(n); }
+    void reserve(qsizetype n) { set.reserve(n); }
     [[nodiscard]] bool hasSeen(const T &s)
     {
         bool inserted;
