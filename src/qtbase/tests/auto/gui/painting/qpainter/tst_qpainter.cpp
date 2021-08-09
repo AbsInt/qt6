@@ -599,7 +599,7 @@ QImage tst_QPainter::getResImage( const QString &dir, const QString &addition, c
     QImage res;
     QString resFilename  = dir + QLatin1String("/res_") + addition + QLatin1Char('.') + extension;
     if ( !res.load( resFilename ) ) {
-        QWARN(QString("Could not load result data %s %1").arg(resFilename).toLatin1());
+        qWarning() << "Could not load result data" << resFilename;
         return QImage();
     }
     return res;
@@ -610,14 +610,14 @@ QBitmap tst_QPainter::getBitmap( const QString &dir, const QString &filename, bo
     QBitmap bm;
     QString bmFilename = dir + QLatin1Char('/') + filename + QLatin1String(".xbm");
     if ( !bm.load( bmFilename ) ) {
-        QWARN(QString("Could not load bitmap '%1'").arg(bmFilename).toLatin1());
+        qWarning() << "Could not load bitmap" << bmFilename;
         return QBitmap();
     }
     if ( mask ) {
         QBitmap mask;
         QString maskFilename = dir + QLatin1Char('/') + filename + QLatin1String("-mask.xbm");
         if (!mask.load(maskFilename)) {
-            QWARN(QString("Could not load mask '%1'").arg(maskFilename).toLatin1());
+            qWarning() << "Could not load mask" << maskFilename;
             return QBitmap();
         }
         bm.setMask( mask );
@@ -1060,6 +1060,7 @@ void tst_QPainter::fillRect_data()
     QTest::newRow("argb32pm") << QImage::Format_ARGB32_Premultiplied;
     QTest::newRow("rgba8888pm") << QImage::Format_RGBA8888_Premultiplied;
     QTest::newRow("rgba64pm") << QImage::Format_RGBA64_Premultiplied;
+    QTest::newRow("rgbaFP16pm") << QImage::Format_RGBA16FPx4_Premultiplied;
 }
 
 void tst_QPainter::fillRect()
@@ -1558,6 +1559,8 @@ void tst_QPainter::qimageFormats_data()
     QTest::newRow("Qimage::Format_BGR888") << QImage::Format_BGR888;
     QTest::newRow("Qimage::Format_A2RGB30_Premultiplied") << QImage::Format_A2RGB30_Premultiplied;
     QTest::newRow("Qimage::Format_RGB30") << QImage::Format_RGB30;
+    QTest::newRow("QImage::Format_RGBX16FPx4") << QImage::Format_RGBX16FPx4;
+    QTest::newRow("QImage::Format_RGBA32FPx4_Premultiplied") << QImage::Format_RGBA32FPx4_Premultiplied;
 }
 
 /*

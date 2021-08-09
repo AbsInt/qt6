@@ -218,6 +218,8 @@ void QQmlJSTypeDescriptionReader::readComponent(UiObjectDefinition *ast)
                 scope->setBaseTypeName(readStringBinding(script));
             } else if (name == QLatin1String("defaultProperty")) {
                 scope->setDefaultPropertyName(readStringBinding(script));
+            } else if (name == QLatin1String("parentProperty")) {
+                scope->setParentPropertyName(readStringBinding(script));
             } else if (name == QLatin1String("exports")) {
                 readExports(script, scope);
             } else if (name == QLatin1String("interfaces")) {
@@ -225,7 +227,7 @@ void QQmlJSTypeDescriptionReader::readComponent(UiObjectDefinition *ast)
             } else if (name == QLatin1String("exportMetaObjectRevisions")) {
                 readMetaObjectRevisions(script, scope);
             } else if (name == QLatin1String("attachedType")) {
-                scope->setAttachedTypeName(readStringBinding(script));
+                scope->setOwnAttachedTypeName(readStringBinding(script));
             } else if (name == QLatin1String("valueType")) {
                 scope->setValueTypeName(readStringBinding(script));
             } else if (name == QLatin1String("isSingleton")) {
@@ -234,6 +236,8 @@ void QQmlJSTypeDescriptionReader::readComponent(UiObjectDefinition *ast)
                 scope->setIsCreatable(readBoolBinding(script));
             } else if (name == QLatin1String("isComposite")) {
                 scope->setIsComposite(readBoolBinding(script));
+            } else if (name == QLatin1String("hasCustomParser")) {
+                scope->setHasCustomParser(readBoolBinding(script));
             } else if (name == QLatin1String("accessSemantics")) {
                 const QString semantics = readStringBinding(script);
                 if (semantics == QLatin1String("reference")) {
@@ -253,8 +257,10 @@ void QQmlJSTypeDescriptionReader::readComponent(UiObjectDefinition *ast)
             } else {
                 addWarning(script->firstSourceLocation(),
                            tr("Expected only name, prototype, defaultProperty, attachedType, "
-                              "valueType, exports, interfaces, isSingleton, isCreatable, isComposite and "
-                              "exportMetaObjectRevisions script bindings, not \"%1\".").arg(name));
+                              "valueType, exports, interfaces, isSingleton, isCreatable, "
+                              "isComposite, hasCustomParser and "
+                              "exportMetaObjectRevisions script bindings, not \"%1\".")
+                                   .arg(name));
             }
         } else {
             addWarning(member->firstSourceLocation(),
@@ -300,9 +306,11 @@ void QQmlJSTypeDescriptionReader::readSignalOrMethod(UiObjectDefinition *ast, bo
                 metaMethod.setReturnTypeName(readStringBinding(script));
             } else if (name == QLatin1String("revision")) {
                 metaMethod.setRevision(readIntBinding(script));
+            } else if (name == QLatin1String("isConstructor")) {
+                metaMethod.setIsConstructor(true);
             } else {
                 addWarning(script->firstSourceLocation(),
-                           tr("Expected only name and type script bindings."));
+                           tr("Expected only name type, revision and isConstructor script bindings."));
             }
         } else {
             addWarning(member->firstSourceLocation(),
@@ -323,6 +331,7 @@ void QQmlJSTypeDescriptionReader::readProperty(UiObjectDefinition *ast, const QQ
 {
     QQmlJSMetaProperty property;
     property.setIsWritable(true); // default is writable
+    bool isRequired = false;
 
     for (UiObjectMemberList *it = ast->initializer->members; it; it = it->next) {
         UiObjectMember *member = it->member;
@@ -341,29 +350,41 @@ void QQmlJSTypeDescriptionReader::readProperty(UiObjectDefinition *ast, const QQ
             property.setIsPointer(readBoolBinding(script));
         } else if (id == QLatin1String("isReadonly")) {
             property.setIsWritable(!readBoolBinding(script));
+        } else if (id == QLatin1String("isRequired")) {
+            isRequired = readBoolBinding(script);
         } else if (id == QLatin1String("isList")) {
             property.setIsList(readBoolBinding(script));
+        } else if (id == QLatin1String("isFinal")) {
+            property.setIsFinal(readBoolBinding(script));
         } else if (id == QLatin1String("revision")) {
             property.setRevision(readIntBinding(script));
         } else if (id == QLatin1String("bindable")) {
             property.setBindable(readStringBinding(script));
-        } else if (id == QLatin1String("read") || id == QLatin1String("write")) {
-            // QQmlJSMetaProperty currently does not make use of the getter and setter name
-            continue;
+        } else if (id == QLatin1String("read")) {
+            property.setRead(readStringBinding(script));
+        } else if (id == QLatin1String("write")) {
+            property.setWrite(readStringBinding(script));
+        } else if (id == QLatin1String("notify")) {
+            property.setNotify(readStringBinding(script));
+        } else if (id == QLatin1String("index")) {
+            property.setIndex(readIntBinding(script));
         } else {
             addWarning(script->firstSourceLocation(),
-                       tr("Expected only type, name, revision, isPointer, isReadonly, bindable, and"
-                          " isList script bindings."));
+                       tr("Expected only type, name, revision, isPointer, isReadonly, isRequired, "
+                          "isFinal, bindable, read, write, notify, index and isList script "
+                          "bindings."));
         }
     }
 
-    if (property.propertyName().isEmpty() || property.typeName().isEmpty()) {
+    if (property.propertyName().isEmpty()) {
         addError(ast->firstSourceLocation(),
-                 tr("Property object is missing a name or type script binding."));
+                 tr("Property object is missing a name script binding."));
         return;
     }
 
     scope->addOwnProperty(property);
+    if (isRequired)
+        scope->setPropertyLocallyRequired(property.propertyName(), true);
 }
 
 void QQmlJSTypeDescriptionReader::readEnum(UiObjectDefinition *ast, const QQmlJSScope::Ptr &scope)

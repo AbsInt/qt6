@@ -49,7 +49,7 @@
 ****************************************************************************/
 #include <QTest>
 #include <QSqlDatabase>
-#include <QtGui/qfontdatabase.h>
+#include <QFontDatabase>
 
 #include <initializer_list>
 
@@ -158,11 +158,9 @@ QTEST_MAIN(TestQString)
 
 void testObject()
 {
-class MyTestObject: public QObject
-{
-    public:
-        void toString();
-};
+    class MyTestObject : public QObject
+    {
+    };
 //! [18]
 MyTestObject test1;
 QTest::qExec(&test1);

@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Copyright (C) 2015 Olivier Goffart <ogoffart@woboq.com>
 ** Contact: https://www.qt.io/licensing/
 **
@@ -28,6 +28,7 @@
 ****************************************************************************/
 
 #include <QTest>
+#include <QtTest/private/qpropertytesthelper_p.h>
 #include <QStringListModel>
 #include <QAbstractEventDispatcher>
 #include <QScopedValueRollback>
@@ -154,7 +155,6 @@ private slots:
     void qmlConnect();
     void qmlConnectToQObjectReceiver();
     void exceptions();
-    void noDeclarativeParentChangedOnDestruction();
     void deleteLaterInAboutToBlockHandler();
     void mutableFunctor();
     void checkArgumentsForNarrowing();
@@ -162,6 +162,7 @@ private slots:
     void functorReferencesConnection();
     void disconnectDisconnects();
     void singleShotConnection();
+    void objectNameBinding();
 };
 
 struct QObjectCreatedOnShutdown
@@ -6993,42 +6994,6 @@ void tst_QObject::exceptions()
 #endif
 }
 
-#ifdef QT_BUILD_INTERNAL
-static bool parentChangeCalled = false;
-
-static void testParentChanged(QAbstractDeclarativeData *, QObject *, QObject *)
-{
-    parentChangeCalled = true;
-}
-#endif
-
-void tst_QObject::noDeclarativeParentChangedOnDestruction()
-{
-#ifdef QT_BUILD_INTERNAL
-    typedef void (*ParentChangedCallback)(QAbstractDeclarativeData *, QObject *, QObject *);
-    QScopedValueRollback<ParentChangedCallback> rollback(QAbstractDeclarativeData::parentChanged);
-    QAbstractDeclarativeData::parentChanged = testParentChanged;
-
-    QObject *parent = new QObject;
-    QObject *child = new QObject;
-
-    QAbstractDeclarativeData dummy;
-    QObjectPrivate::get(child)->declarativeData = &dummy;
-
-    parentChangeCalled = false;
-    child->setParent(parent);
-
-    QVERIFY(parentChangeCalled);
-    parentChangeCalled = false;
-
-    delete child;
-    QVERIFY(!parentChangeCalled);
-
-    delete parent;
-#else
-    QSKIP("Needs QT_BUILD_INTERNAL");
-#endif
-}
 
 struct MutableFunctor {
     int count;
@@ -7351,8 +7316,10 @@ void tst_QObject::checkArgumentsForNarrowing()
     FITS(ConvertingToDouble, long double);
 
 
-    // no compiler still implements this properly.
-#if 0
+    // GCC and clang don't implement this properly yet:
+    // https://gcc.gnu.org/bugzilla/show_bug.cgi?id=99625
+    // https://bugs.llvm.org/show_bug.cgi?id=49676
+#if defined(Q_CC_MSVC) // at least since VS2017
     struct ConstructibleFromInt {
         /* implicit */ ConstructibleFromInt(int) {}
     };
@@ -7371,7 +7338,9 @@ void tst_QObject::checkArgumentsForNarrowing()
     class ForwardDeclared;
     FITS(ForwardDeclared, ForwardDeclared);
 
-#if 0 // waiting for official compiler releases that implement P1957...
+#if (defined(Q_CC_EXACTLY_GCC) && Q_CC_EXACTLY_GCC >= 1100) \
+    || (defined(Q_CC_CLANG) && Q_CC_CLANG >= 1100) \
+    || defined(Q_CC_MSVC) // at least since VS2017
     {
         // wg21.link/P1957
         NARROWS(char*, bool);
@@ -8146,6 +8115,13 @@ void tst_QObject::singleShotConnection()
         QCOMPARE(DeleteThisReceiver::counter, 1);
         QVERIFY(!p);
     }
+}
+
+void tst_QObject::objectNameBinding()
+{
+    QObject obj;
+    QTestPrivate::testReadWritePropertyBasics<QObject, QString>(obj, "test1", "test2",
+                                                                "objectName");
 }
 
 // Test for QtPrivate::HasQ_OBJECT_Macro

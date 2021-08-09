@@ -251,6 +251,10 @@ private slots:
     void importModuleWithLexicallyScopedVars();
     void importExportErrors();
 
+    void registerModule();
+    void registerModuleQObject();
+    void registerModuleNamedError();
+
     void equality();
     void aggressiveGc();
     void noAccumulatorInTemplateLiteral();
@@ -260,6 +264,7 @@ private slots:
 
     void triggerBackwardJumpWithDestructuring();
     void arrayConcatOnSparseArray();
+    void concatAfterUnshift();
     void sortSparseArray();
     void compileBrokenRegexp();
     void sortNonStringArray();
@@ -688,8 +693,8 @@ void tst_QJSEngine::newVariant_valueOfEnum()
 {
     QJSEngine eng;
     {
-        QJSValue object = eng.toScriptValue(QVariant::fromValue(Qt::ControlModifier));
-        QJSValue value = object.property("valueOf").callWithInstance(object);
+        QJSManagedValue object = eng.toManagedValue(QVariant::fromValue(Qt::ControlModifier));
+        QJSValue value = object.property("valueOf").callWithInstance(object.toJSValue());
         QVERIFY(value.isNumber());
         QCOMPARE(value.toInt(), static_cast<qint32>(Qt::ControlModifier));
     }
@@ -1636,10 +1641,8 @@ void tst_QJSEngine::valueConversion_QVariant()
         QJSValue val1 = eng.toScriptValue(tmp1);
         QJSValue val2 = eng.toScriptValue(tmp2);
         QVERIFY(val1.isUndefined());
-        QEXPECT_FAIL("", "Variant are unrwapped, maybe we should not...", Continue);
         QVERIFY(!val2.isUndefined());
         QVERIFY(!val1.isVariant());
-        QEXPECT_FAIL("", "Variant are unrwapped, maybe we should not...", Continue);
         QVERIFY(val2.isVariant());
     }
     {
@@ -1654,12 +1657,10 @@ void tst_QJSEngine::valueConversion_QVariant()
         QJSValue val2 = eng.toScriptValue(tmp3);
         QVERIFY(!val1.isUndefined());
         QVERIFY(!val2.isUndefined());
-        QEXPECT_FAIL("", "Variant are unrwapped, maybe we should not...", Continue);
         QVERIFY(val1.isVariant());
-        QEXPECT_FAIL("", "Variant are unrwapped, maybe we should not...", Continue);
         QVERIFY(val2.isVariant());
-        QCOMPARE(val1.toVariant().toInt(), 123);
-        QCOMPARE(eng.toScriptValue(val2.toVariant()).toVariant().toInt(), 123);
+        QCOMPARE(val1.toVariant(), tmp2);
+        QCOMPARE(val2.toVariant(), tmp3);
     }
     {
         QJSValue val = eng.toScriptValue(QVariant(true));
@@ -1805,8 +1806,8 @@ class Klazz : public QWidget,
     Q_OBJECT
 public:
     Klazz(QWidget *parent = nullptr) : QWidget(parent) { }
-    virtual QRectF boundingRect() const { return QRectF(); }
-    virtual void paint(QPainter*, const QStyleOptionGraphicsItem*, QWidget*) { }
+    QRectF boundingRect() const override { return QRectF(); }
+    void paint(QPainter*, const QStyleOptionGraphicsItem*, QWidget*) override { }
 };
 
 Q_DECLARE_METATYPE(Klazz*)
@@ -3481,7 +3482,7 @@ public:
 
     ThreadedTestEngine() {}
 
-    void run() {
+    void run() override {
         QJSEngine firstEngine;
         QJSEngine secondEngine;
         QJSValue value = firstEngine.evaluate("1");
@@ -4927,6 +4928,76 @@ void tst_QJSEngine::importExportErrors()
     }
 }
 
+void tst_QJSEngine::registerModule()
+{
+    QJSEngine engine;
+    QJSValue magic(63);
+    QJSValue name("Qt6");
+    QJSValue version("6.1.3");
+    QJSValue obj = engine.newObject();
+    bool ret = false;
+
+    obj.setProperty("name", name);
+    obj.setProperty("version", version);
+
+    ret = engine.registerModule("magic", magic);
+    QVERIFY2(ret, "Error registering magic");
+    ret = engine.registerModule("qt_info", obj);
+    QVERIFY2(ret, "Error registering qt_info");
+    QJSValue result = engine.importModule(QStringLiteral(":/testregister.mjs"));
+    QVERIFY(!result.isError());
+
+    QJSValue nameVal = result.property("getName").call();
+    QJSValue magicVal = result.property("getMagic").call();
+    QCOMPARE(nameVal.toString(), QLatin1String("Qt6"));
+    QCOMPARE(magicVal.toInt(), 63);
+
+    // Verify that "name" doesn't change in JS even if the object is changed.
+    QJSValue replacement("Bad");
+    obj.setProperty("name", replacement);
+    QJSValue newNameVal = result.property("getName").call();
+    QCOMPARE(nameVal.toString(), "Qt6");
+}
+
+class TestRegisterObject : public QObject
+{
+    Q_OBJECT
+public:
+    TestRegisterObject() {}
+
+    Q_INVOKABLE int add(int a, int b) {
+        return a + b;
+    }
+};
+
+void tst_QJSEngine::registerModuleQObject()
+{
+    QJSEngine engine;
+    TestRegisterObject obj;
+    QJSValue wrapper = engine.newQObject(&obj);
+    auto args = QJSValueList() << 1 << 2;
+
+    bool ret = engine.registerModule("math", wrapper);
+    QVERIFY(ret);
+
+    QJSValue result = engine.importModule(QStringLiteral(":/testregister2.mjs"));
+    QVERIFY(!result.isError());
+
+    QJSValue value = result.property("addAndDouble").call(args);
+    QCOMPARE(value.toInt(), 6);
+}
+
+void tst_QJSEngine::registerModuleNamedError() {
+    QJSEngine engine;
+    QJSValue notanobject(666);
+
+    bool ret = engine.registerModule("notanobject", notanobject);
+    QVERIFY(ret);
+
+    QJSValue result = engine.importModule(QStringLiteral(":/testregister3.mjs"));
+    QCOMPARE(result.toString(), QString("ReferenceError: Unable to resolve import reference subval because notanobject is not an object"));
+}
+
 void tst_QJSEngine::equality()
 {
     QJSEngine engine;
@@ -5076,6 +5147,23 @@ void tst_QJSEngine::arrayConcatOnSparseArray()
         QCOMPARE(value.property(i).toInt(), i + 1);
     for (int i = 5; i < 1340; ++i)
         QVERIFY(value.property(i).isUndefined());
+}
+
+void tst_QJSEngine::concatAfterUnshift()
+{
+    QJSEngine engine;
+    const auto value = engine.evaluate(uR"(
+            (function() {
+            let test = ['val2']
+            test.unshift('val1')
+            test = test.concat([])
+            return test
+            })()
+    )"_qs);
+    QVERIFY2(!value.isError(), qPrintable(value.toString()));
+    QVERIFY(value.isArray());
+    QCOMPARE(value.property(0).toString(), u"val1"_qs);
+    QCOMPARE(value.property(1).toString(), u"val2"_qs);
 }
 
 void tst_QJSEngine::sortSparseArray()
@@ -5332,6 +5420,20 @@ void tst_QJSEngine::urlObject()
         engine.catchError();
     }
 
+    QVariant urlVariant(url);
+    QV4::Scope scope(engine.handle());
+    QV4::ScopedValue urlValue(scope, scope.engine->fromVariant(urlVariant));
+    QVERIFY(urlValue->isObject());
+
+    QUrl result1;
+    QVERIFY(scope.engine->metaTypeFromJS(urlValue, QMetaType::fromType<QUrl>(), &result1));
+    QCOMPARE(result1, url);
+
+    QV4::ScopedValue urlVariantValue(scope, scope.engine->newVariantObject(urlVariant));
+    QVERIFY(urlVariantValue->isObject());
+    QUrl result2;
+    QVERIFY(scope.engine->metaTypeFromJS(urlVariantValue, QMetaType::fromType<QUrl>(), &result2));
+    QCOMPARE(result2, url);
 }
 
 QTEST_MAIN(tst_QJSEngine)

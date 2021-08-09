@@ -1,8 +1,6 @@
-# Generated from examples.pro.
+find_package(Qt6 COMPONENTS Sql) # special case
 
-# special case begin
-qt_examples_build_begin()
-# special case end
+qt_examples_build_begin(EXTERNAL_BUILD)
 
 add_subdirectory(qml)
 if(TARGET Qt::QuickTest)
@@ -11,7 +9,8 @@ endif()
 if(TARGET Qt::Quick)
     add_subdirectory(quick)
 endif()
+if(TARGET Qt::QuickTemplates2)
+    add_subdirectory(quickcontrols2)
+endif()
 
-# special case begin
 qt_examples_build_end()
-# special case end

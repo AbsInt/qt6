@@ -43,6 +43,8 @@
 #include <QtCore/qstringlist.h>
 #include <QtCore/qsharedpointer.h>
 
+#include "qqmljsannotation_p.h"
+
 // MetaMethod and MetaProperty have both type names and actual QQmlJSScope types.
 // When parsing the information from the relevant QML or qmltypes files, we only
 // see the names and don't have a complete picture of the types, yet. In a second
@@ -180,7 +182,13 @@ public:
     int revision() const { return m_revision; }
     void setRevision(int r) { m_revision = r; }
 
+    bool isConstructor() const { return m_isConstructor; }
+    void setIsConstructor(bool isConstructor) { m_isConstructor = isConstructor; }
+
     bool isValid() const { return !m_name.isEmpty(); }
+
+    const QVector<QQmlJSAnnotation>& annotations() const { return m_annotations; }
+    void setAnnotations(QVector<QQmlJSAnnotation> annotations) { m_annotations = annotations; }
 
     friend bool operator==(const QQmlJSMetaMethod &a, const QQmlJSMetaMethod &b)
     {
@@ -190,9 +198,11 @@ public:
                 && a.m_paramNames == b.m_paramNames
                 && a.m_paramTypeNames == b.m_paramTypeNames
                 && a.m_paramTypes == b.m_paramTypes
+                && a.m_annotations == b.m_annotations
                 && a.m_methodType == b.m_methodType
                 && a.m_methodAccess == b.m_methodAccess
-                && a.m_revision == b.m_revision;
+                && a.m_revision == b.m_revision
+                && a.m_isConstructor == b.m_isConstructor;
     }
 
     friend bool operator!=(const QQmlJSMetaMethod &a, const QQmlJSMetaMethod &b)
@@ -208,9 +218,12 @@ public:
         seed = combine(seed, method.m_returnTypeName);
         seed = combine(seed, method.m_returnType.toStrongRef().data());
         seed = combine(seed, method.m_paramNames);
+        seed = combine(seed, method.m_paramTypeNames);
+        seed = combine(seed, method.m_annotations);
         seed = combine(seed, method.m_methodType);
         seed = combine(seed, method.m_methodAccess);
         seed = combine(seed, method.m_revision);
+        seed = combine(seed, method.m_isConstructor);
 
         for (const auto &type : method.m_paramTypes)
             seed = combine(seed, type.toStrongRef().data());
@@ -226,23 +239,31 @@ private:
     QStringList m_paramNames;
     QStringList m_paramTypeNames;
     QList<QWeakPointer<const QQmlJSScope>> m_paramTypes;
+    QList<QQmlJSAnnotation> m_annotations;
 
     Type m_methodType = Signal;
     Access m_methodAccess = Private;
     int m_revision = 0;
+    bool m_isConstructor = false;
 };
 
 class QQmlJSMetaProperty
 {
     QString m_propertyName;
     QString m_typeName;
+    QString m_read;
+    QString m_write;
     QString m_bindable;
+    QString m_notify;
     QWeakPointer<const QQmlJSScope> m_type;
+    QVector<QQmlJSAnnotation> m_annotations;
     bool m_isList = false;
     bool m_isWritable = false;
     bool m_isPointer = false;
     bool m_isAlias = false;
+    bool m_isFinal = false;
     int m_revision = 0;
+    int m_index = -1; // relative property index within owning QQmlJSScope
 
 public:
     QQmlJSMetaProperty() = default;
@@ -253,11 +274,23 @@ public:
     void setTypeName(const QString &typeName) { m_typeName = typeName; }
     QString typeName() const { return m_typeName; }
 
+    void setRead(const QString &read) { m_read = read; }
+    QString read() const { return m_read; }
+
+    void setWrite(const QString &write) { m_write = write; }
+    QString write() const { return m_write; }
+
     void setBindable(const QString &bindable) { m_bindable = bindable; }
     QString bindable() const { return m_bindable; }
 
+    void setNotify(const QString &notify) { m_notify = notify; }
+    QString notify() const { return m_notify; }
+
     void setType(const QSharedPointer<const QQmlJSScope> &type) { m_type = type; }
     QSharedPointer<const QQmlJSScope> type() const { return m_type.toStrongRef(); }
+
+    void setAnnotations(const QList<QQmlJSAnnotation> &annotation) { m_annotations = annotation; }
+    const QList<QQmlJSAnnotation> &annotations() const { return m_annotations; }
 
     void setIsList(bool isList) { m_isList = isList; }
     bool isList() const { return m_isList; }
@@ -271,20 +304,24 @@ public:
     void setIsAlias(bool isAlias) { m_isAlias = isAlias; }
     bool isAlias() const { return m_isAlias; }
 
+    void setIsFinal(bool isFinal) { m_isFinal = isFinal; }
+    bool isFinal() const { return m_isFinal; }
+
     void setRevision(int revision) { m_revision = revision; }
     int revision() const { return m_revision; }
 
+    void setIndex(int index) { m_index = index; }
+    int index() const { return m_index; }
+
+    bool isValid() const { return !m_propertyName.isEmpty(); }
+
     friend bool operator==(const QQmlJSMetaProperty &a, const QQmlJSMetaProperty &b)
     {
-        return a.m_propertyName == b.m_propertyName
-                && a.m_typeName == b.m_typeName
-                && a.m_bindable == b.m_bindable
-                && a.m_type == b.m_type
-                && a.m_isList == b.m_isList
-                && a.m_isWritable == b.m_isWritable
-                && a.m_isPointer == b.m_isPointer
-                && a.m_isAlias == b.m_isAlias
-                && a.m_revision == b.m_revision;
+        return a.m_propertyName == b.m_propertyName && a.m_typeName == b.m_typeName
+                && a.m_bindable == b.m_bindable && a.m_type == b.m_type && a.m_isList == b.m_isList
+                && a.m_isWritable == b.m_isWritable && a.m_isPointer == b.m_isPointer
+                && a.m_isAlias == b.m_isAlias && a.m_revision == b.m_revision
+                && a.m_isFinal == b.m_isFinal;
     }
 
     friend bool operator!=(const QQmlJSMetaProperty &a, const QQmlJSMetaProperty &b)
@@ -295,10 +332,94 @@ public:
     friend size_t qHash(const QQmlJSMetaProperty &prop, size_t seed = 0)
     {
         return qHashMulti(seed, prop.m_propertyName, prop.m_typeName, prop.m_bindable,
-                          prop.m_type.toStrongRef().data(),
-                          prop.m_isList, prop.m_isWritable, prop.m_isPointer, prop.m_isAlias,
-                          prop.m_revision);
+                          prop.m_type.toStrongRef().data(), prop.m_isList, prop.m_isWritable,
+                          prop.m_isPointer, prop.m_isAlias, prop.m_revision, prop.m_isFinal);
     }
+};
+
+class QQmlJSMetaPropertyBinding
+{
+    QString m_propertyName;
+    QString m_valueTypeName;
+    QString m_interceptorTypeName;
+    QString m_valueSourceTypeName;
+    QWeakPointer<const QQmlJSScope> m_value;
+    QWeakPointer<const QQmlJSScope> m_interceptor;
+    QWeakPointer<const QQmlJSScope> m_valueSource;
+
+public:
+
+    QQmlJSMetaPropertyBinding() = default;
+    QQmlJSMetaPropertyBinding(const QQmlJSMetaProperty &prop) : m_propertyName(prop.propertyName())
+    {
+    }
+
+    void setPropertyName(const QString &propertyName) { m_propertyName = propertyName; }
+    QString propertyName() const { return m_propertyName; }
+
+    void setValueTypeName(const QString &valueTypeName) { m_valueTypeName = valueTypeName; }
+    QString valueTypeName() const { return m_valueTypeName; }
+
+    void setInterceptorTypeName(const QString &interceptorTypeName)
+    {
+        m_interceptorTypeName = interceptorTypeName;
+    }
+    QString interceptorTypeName() const { return m_interceptorTypeName; }
+
+    void setValueSourceTypeName(const QString &valueSourceTypeName)
+    {
+        m_valueSourceTypeName = valueSourceTypeName;
+    }
+    QString valueSourceTypeName() const { return m_valueSourceTypeName; }
+
+    QSharedPointer<const QQmlJSScope> value() const { return m_value; }
+    void setValue(const QSharedPointer<const QQmlJSScope> &value) { m_value = value; }
+
+    QSharedPointer<const QQmlJSScope> interceptor() const { return m_interceptor; }
+    void setInterceptor(const QSharedPointer<const QQmlJSScope> &interceptor)
+    {
+        m_interceptor = interceptor;
+    }
+
+    QSharedPointer<const QQmlJSScope> valueSource() const { return m_valueSource; }
+    void setValueSource(const QSharedPointer<const QQmlJSScope> &valueSource)
+    {
+        m_valueSource = valueSource;
+    }
+
+    bool hasValue() const { return !m_value.isNull(); }
+    bool hasInterceptor() const { return !m_interceptor.isNull(); }
+    bool hasValueSource() const { return !m_valueSource.isNull(); }
+
+    bool isValid() const { return !m_propertyName.isEmpty(); }
+
+    friend bool operator==(const QQmlJSMetaPropertyBinding &a, const QQmlJSMetaPropertyBinding &b)
+    {
+        return a.m_propertyName == b.m_propertyName && a.m_valueTypeName == b.m_valueTypeName
+                && a.m_interceptorTypeName == b.m_interceptorTypeName
+                && a.m_valueSourceTypeName == b.m_valueSourceTypeName && a.m_value == b.m_value
+                && a.m_interceptor == b.m_interceptor;
+    }
+
+    friend bool operator!=(const QQmlJSMetaPropertyBinding &a, const QQmlJSMetaPropertyBinding &b)
+    {
+        return !(a == b);
+    }
+
+    friend size_t qHash(const QQmlJSMetaPropertyBinding &binding, size_t seed = 0)
+    {
+        return qHashMulti(seed, binding.m_propertyName, binding.m_valueTypeName,
+                          binding.m_interceptorTypeName, binding.m_valueSourceTypeName,
+                          binding.m_value.toStrongRef().data(),
+                          binding.m_interceptor.toStrongRef().data(),
+                          binding.m_valueSource.toStrongRef().data());
+    }
+};
+
+struct QQmlJSMetaSignalHandler
+{
+    QStringList signalParameters;
+    bool isMultiline;
 };
 
 QT_END_NAMESPACE

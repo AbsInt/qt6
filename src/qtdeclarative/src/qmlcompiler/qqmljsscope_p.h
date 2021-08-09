@@ -41,6 +41,7 @@
 
 #include "qqmljsmetatypes_p.h"
 #include "qdeferredpointer_p.h"
+#include "qqmljsannotation_p.h"
 
 #include <QtQml/private/qqmljssourcelocation_p.h>
 
@@ -111,7 +112,10 @@ public:
         Creatable = 0x1,
         Composite = 0x2,
         Singleton = 0x4,
-        Script    = 0x8,
+        Script = 0x8,
+        CustomParser = 0x10,
+        Array = 0x20,
+        InlineComponent = 0x40
     };
     Q_DECLARE_FLAGS(Flags, Flag)
     Q_FLAGS(Flags);
@@ -186,6 +190,9 @@ public:
     bool hasEnumerationKey(const QString &name) const;
     QQmlJSMetaEnum enumeration(const QString &name) const;
 
+    void setAnnotations(const QList<QQmlJSAnnotation> &annotation) { m_annotations = std::move(annotation); }
+    const QList<QQmlJSAnnotation> &annotations() const { return m_annotations; }
+
     QString fileName() const { return m_fileName; }
     void setFileName(const QString &file) { m_fileName = file; }
 
@@ -198,7 +205,10 @@ public:
     QList<Export> exports() const { return m_exports; }
 
     void setInterfaceNames(const QStringList& interfaces) { m_interfaceNames = interfaces; }
-    QStringList interfaceNames() { return m_interfaceNames; }
+    QStringList interfaceNames() const { return m_interfaceNames; }
+
+    bool hasInterface(const QString &name) const;
+    bool hasOwnInterface(const QString &name) const { return m_interfaceNames.contains(name); }
 
     // If isComposite(), this is the QML/JS name of the prototype. Otherwise it's the
     // relevant base class (in the hierarchy starting from QObject) of a C++ type.
@@ -214,12 +224,48 @@ public:
     bool hasProperty(const QString &name) const;
     QQmlJSMetaProperty property(const QString &name) const;
 
+    void setPropertyLocallyRequired(const QString &name, bool isRequired);
+    bool isPropertyRequired(const QString &name) const;
+    bool isPropertyLocallyRequired(const QString &name) const;
+
+    void addOwnPropertyBinding(const QQmlJSMetaPropertyBinding &binding)
+    {
+        m_propertyBindings.insert(binding.propertyName(), binding);
+    }
+    QHash<QString, QQmlJSMetaPropertyBinding> ownPropertyBindings() const
+    {
+        return m_propertyBindings;
+    }
+    QQmlJSMetaPropertyBinding ownPropertyBinding(const QString &name) const
+    {
+        return m_propertyBindings.value(name);
+    }
+    bool hasOwnPropertyBinding(const QString &name) const
+    {
+        return m_propertyBindings.contains(name);
+    }
+
+    bool hasPropertyBinding(const QString &name) const;
+    QQmlJSMetaPropertyBinding propertyBinding(const QString &name) const;
+
+    static QQmlJSScope::ConstPtr ownerOfProperty(const QQmlJSScope::ConstPtr &self,
+                                                 const QString &name);
+
+    bool isResolved() const;
+    bool isFullyResolved() const;
+
     QString defaultPropertyName() const { return m_defaultPropertyName; }
     void setDefaultPropertyName(const QString &name) { m_defaultPropertyName = name; }
 
-    QString attachedTypeName() const { return m_attachedTypeName; }
-    void setAttachedTypeName(const QString &name) { m_attachedTypeName = name; }
-    QQmlJSScope::ConstPtr attachedType() const { return m_attachedType; }
+    QString parentPropertyName() const { return m_parentPropertyName; }
+    void setParentPropertyName(const QString &name) { m_parentPropertyName = name; }
+
+    QString ownAttachedTypeName() const { return m_attachedTypeName; }
+    void setOwnAttachedTypeName(const QString &name) { m_attachedTypeName = name; }
+    QQmlJSScope::ConstPtr ownAttachedType() const { return m_attachedType; }
+
+    QString attachedTypeName() const;
+    QQmlJSScope::ConstPtr attachedType() const;
 
     QString extensionTypeName() const { return m_extensionTypeName; }
     void setExtensionTypeName(const QString &name) { m_extensionTypeName =  name; }
@@ -233,10 +279,19 @@ public:
     bool isCreatable() const { return m_flags & Creatable; }
     bool isComposite() const { return m_flags & Composite; }
     bool isScript() const { return m_flags & Script; }
-    void setIsSingleton(bool v) { m_flags = v ? (m_flags | Singleton) : (m_flags & ~Singleton); }
-    void setIsCreatable(bool v) { m_flags = v ? (m_flags | Creatable) : (m_flags & ~Creatable); }
-    void setIsComposite(bool v) { m_flags = v ? (m_flags | Composite) : (m_flags & ~Composite); }
-    void setIsScript(bool v) { m_flags = v ? (m_flags | Script) : (m_flags & ~Script); }
+    bool hasCustomParser() const { return m_flags & CustomParser; }
+    bool isArrayScope() const { return m_flags & Array; }
+    bool isInlineComponent() const { return m_flags & InlineComponent; }
+    void setIsSingleton(bool v) { m_flags.setFlag(Singleton, v); }
+    void setIsCreatable(bool v) { m_flags.setFlag(Creatable, v); }
+    void setIsComposite(bool v) { m_flags.setFlag(Composite, v); }
+    void setIsScript(bool v) { m_flags.setFlag(Script, v); }
+    void setHasCustomParser(bool v)
+    {
+        m_flags.setFlag(CustomParser, v);;
+    }
+    void setIsArrayScope(bool v) { m_flags.setFlag(Array, v); }
+    void setIsInlineComponent(bool v) { m_flags.setFlag(InlineComponent, v); }
 
     void setAccessSemantics(AccessSemantics semantics) { m_semantics = semantics; }
     AccessSemantics accessSemantics() const { return m_semantics; }
@@ -262,7 +317,8 @@ public:
     }
 
     static void resolveTypes(const QQmlJSScope::Ptr &self,
-                             const QHash<QString, ConstPtr> &contextualTypes);
+                             const QHash<QString, ConstPtr> &contextualTypes,
+                             QSet<QString> *usedTypes = nullptr);
 
     void setSourceLocation(const QQmlJS::SourceLocation &sourceLocation)
     {
@@ -283,6 +339,46 @@ public:
         return {};
     }
 
+    /*!
+      \internal
+      Checks whether \a otherScope is the same type as this.
+
+      In addition to checking whether the scopes are identical, we also cover duplicate scopes with
+      the same internal name.
+    */
+    bool isSameType(const QQmlJSScope::ConstPtr &otherScope) const
+    {
+        return this == otherScope.get()
+                || (!this->internalName().isEmpty()
+                    && this->internalName() == otherScope->internalName());
+    }
+
+    bool inherits(const QQmlJSScope::ConstPtr &base) const
+    {
+        for (const QQmlJSScope *scope = this; scope; scope = scope->baseType().get()) {
+            if (scope->isSameType(base))
+                return true;
+        }
+        return false;
+    }
+
+    /*!
+      \internal
+      Checks whether \a derived type can be assigned to this type. Returns \c
+      true if the type hierarchy of \a derived contains a type equal to this.
+
+      \note Assigning \a derived to "QVariant" or "QJSValue" is always possible and
+      the function returns \c true in this case. In addition any "QObject" based \a derived type
+      can be assigned to a this type if that type is derived from "QQmlComponent".
+    */
+    bool canAssign(const QQmlJSScope::ConstPtr &derived) const;
+
+    /*!
+      \internal
+      Checks whether this type or its parents have a custom parser.
+    */
+    bool isInCustomParserParent() const;
+
 private:
     QQmlJSScope(ScopeType type, const QQmlJSScope::Ptr &parentScope = QQmlJSScope::Ptr());
 
@@ -290,8 +386,10 @@ private:
 
     QMultiHash<QString, QQmlJSMetaMethod> m_methods;
     QHash<QString, QQmlJSMetaProperty> m_properties;
+    QHash<QString, QQmlJSMetaPropertyBinding> m_propertyBindings;
     QHash<QString, QQmlJSMetaEnum> m_enumerations;
 
+    QVector<QQmlJSAnnotation> m_annotations;
     QVector<QQmlJSScope::Ptr> m_childScopes;
     QQmlJSScope::WeakPtr m_parentScope;
 
@@ -305,7 +403,9 @@ private:
     QStringList m_interfaceNames;
 
     QString m_defaultPropertyName;
+    QString m_parentPropertyName;
     QString m_attachedTypeName;
+    QStringList m_requiredPropertyNames;
     QQmlJSScope::WeakConstPtr m_attachedType;
 
     QString m_valueTypeName;

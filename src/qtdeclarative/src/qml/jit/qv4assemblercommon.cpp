@@ -51,6 +51,8 @@
 #include <assembler/LinkBuffer.h>
 #include <WTFStubs.h>
 
+#if QT_CONFIG(qml_jit)
+
 #undef ENABLE_ALL_ASSEMBLERS_FOR_REFACTORING_PURPOSES
 
 QT_BEGIN_NAMESPACE
@@ -179,7 +181,7 @@ void PlatformAssemblerCommon::prepareCallWithArgCount(int argc)
 
 void PlatformAssemblerCommon::storeInstructionPointer(int instructionOffset)
 {
-    Address addr(CppStackFrameRegister, offsetof(QV4::CppStackFrame, instructionPointer));
+    Address addr(CppStackFrameRegister, offsetof(QV4::JSTypesStackFrame, instructionPointer));
     store32(TrustedImm32(instructionOffset), addr);
 }
 
@@ -371,3 +373,5 @@ void PlatformAssemblerCommon::storeInt32AsValue(int srcInt, Address destAddr)
 } // QV4 namepsace
 
 QT_END_NAMESPACE
+
+#endif // QT_CONFIG(qml_jit)

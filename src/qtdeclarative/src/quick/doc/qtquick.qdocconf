@@ -42,6 +42,7 @@ depends += \
     qtcore \
     qtqml \
     qtqmlmodels \
+    qtqmlxmllistmodel \
     qtqmltest \
     qtgui \
     qtlinguist \
@@ -62,7 +63,8 @@ depends += \
     ../../quickwidgets \
     ../../qmllocalstorage \
     ../../quicklayouts \
-    ../../labs
+    ../../labs/animation \
+    ../../labs/folderlistmodel
 
 exampledirs +=  ../../../examples/quick \
                 snippets
@@ -82,12 +84,6 @@ sourcedirs += ../../imports
 #add plugins directory because of dependencies
 headerdirs += ../../plugins
 sourcedirs += ../../plugins
-
-#exclude certain directories
-excludedirs += ../../imports/models \
-               ../../imports/labsmodels \
-               ../../imports/testlib \
-               ../../imports/workerscript
 
 excludefiles += ../util/qquickpropertychanges_p.h
 examples.fileextensions        += "*.qm"

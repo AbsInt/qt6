@@ -92,7 +92,7 @@ Q_LOGGING_CATEGORY(lcPinchHandler, "qt.quick.handler.pinch")
     but if it's a disallowed number, it does not scale or rotate
     its \l target, and the \l active property remains \c false.
 
-    \sa PinchArea, QPointerEvent::pointCount()
+    \sa PinchArea, QPointerEvent::pointCount(), QNativeGestureEvent::fingerCount()
 */
 
 QQuickPinchHandler::QQuickPinchHandler(QQuickItem *parent)
@@ -170,7 +170,8 @@ bool QQuickPinchHandler::wantsPointerEvent(QPointerEvent *event)
 #if QT_CONFIG(gestures)
     if (event->type() == QEvent::NativeGesture) {
         const auto gesture = static_cast<const QNativeGestureEvent *>(event);
-        if (minimumPointCount() == 2) {
+        if (!gesture->fingerCount() || (gesture->fingerCount() >= minimumPointCount() &&
+                                        gesture->fingerCount() <= maximumPointCount())) {
             switch (gesture->gestureType()) {
             case Qt::BeginNativeGesture:
             case Qt::EndNativeGesture:
@@ -248,11 +249,11 @@ void QQuickPinchHandler::onActiveChanged()
 
 void QQuickPinchHandler::handlePointerEventImpl(QPointerEvent *event)
 {
+    QQuickMultiPointHandler::handlePointerEventImpl(event);
     if (Q_UNLIKELY(lcPinchHandler().isDebugEnabled())) {
         for (const QQuickHandlerPoint &p : currentPoints())
             qCDebug(lcPinchHandler) << Qt::hex << p.id() << p.sceneGrabPosition() << "->" << p.scenePosition();
     }
-    QQuickMultiPointHandler::handlePointerEventImpl(event);
 
     qreal dist = 0;
 #if QT_CONFIG(gestures)

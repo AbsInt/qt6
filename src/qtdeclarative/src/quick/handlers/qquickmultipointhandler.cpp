@@ -104,7 +104,8 @@ bool QQuickMultiPointHandler::wantsPointerEvent(QPointerEvent *event)
         d->currentPoints.resize(c);
         for (int i = 0; i < c; ++i) {
             d->currentPoints[i].reset(event, candidatePoints[i]);
-            d->currentPoints[i].localize(parentItem());
+            if (auto par = parentItem())
+                d->currentPoints[i].localize(par);
         }
     } else {
         d->currentPoints.clear();
@@ -158,6 +159,13 @@ void QQuickMultiPointHandler::onGrabChanged(QQuickPointerHandler *grabber, QPoin
         return;
     switch (transition) {
     case QPointingDevice::GrabExclusive:
+        for (auto &pt : d->currentPoints)
+            if (pt.id() == point.id()) {
+                pt.m_sceneGrabPosition = point.scenePosition();
+                break;
+            }
+        QQuickPointerHandler::onGrabChanged(grabber, transition, event, point);
+        break;
     case QPointingDevice::GrabPassive:
     case QPointingDevice::UngrabPassive:
     case QPointingDevice::UngrabExclusive:
@@ -178,7 +186,7 @@ QVector<QEventPoint> QQuickMultiPointHandler::eligiblePoints(QPointerEvent *even
     bool stealingAllowed = event->isBeginEvent() || event->isEndEvent();
     for (int i = 0; i < event->pointCount(); ++i) {
         auto &p = QMutableEventPoint::from(event->point(i));
-        if (QQuickWindowPrivate::isMouseEvent(event)) {
+        if (QQuickDeliveryAgentPrivate::isMouseEvent(event)) {
             if (static_cast<QMouseEvent *>(event)->buttons() == Qt::NoButton)
                 continue;
         }

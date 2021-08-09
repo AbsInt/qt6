@@ -1,6 +1,7 @@
 /****************************************************************************
 **
 ** Copyright (C) 2019 Thibaut Cuvelier
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the tools applications of the Qt Toolkit.
@@ -63,47 +64,47 @@ static const char xlinkNamespace[] = "http://www.w3.org/1999/xlink";
 
 inline void DocBookGenerator::newLine()
 {
-    writer->writeCharacters("\n");
+    m_writer->writeCharacters("\n");
 }
 
 void DocBookGenerator::startSectionBegin()
 {
-    writer->writeStartElement(dbNamespace, "section");
+    m_writer->writeStartElement(dbNamespace, "section");
     newLine();
-    writer->writeStartElement(dbNamespace, "title");
+    m_writer->writeStartElement(dbNamespace, "title");
 }
 
 void DocBookGenerator::startSectionBegin(const QString &id)
 {
-    writer->writeStartElement(dbNamespace, "section");
-    writer->writeAttribute("xml:id", id);
+    m_writer->writeStartElement(dbNamespace, "section");
+    m_writer->writeAttribute("xml:id", id);
     newLine();
-    writer->writeStartElement(dbNamespace, "title");
+    m_writer->writeStartElement(dbNamespace, "title");
 }
 
 void DocBookGenerator::startSectionEnd()
 {
-    writer->writeEndElement(); // title
+    m_writer->writeEndElement(); // title
     newLine();
 }
 
 void DocBookGenerator::startSection(const QString &id, const QString &title)
 {
     startSectionBegin(id);
-    writer->writeCharacters(title);
+    m_writer->writeCharacters(title);
     startSectionEnd();
 }
 
 void DocBookGenerator::endSection()
 {
-    writer->writeEndElement(); // section
+    m_writer->writeEndElement(); // section
     newLine();
 }
 
 void DocBookGenerator::writeAnchor(const QString &id)
 {
-    writer->writeEmptyElement(dbNamespace, "anchor");
-    writer->writeAttribute("xml:id", id);
+    m_writer->writeEmptyElement(dbNamespace, "anchor");
+    m_writer->writeAttribute("xml:id", id);
     newLine();
 }
 
@@ -115,19 +116,19 @@ void DocBookGenerator::initializeGenerator()
 {
     // Excerpts from HtmlGenerator::initializeGenerator.
     Generator::initializeGenerator();
-    config = &Config::instance();
+    m_config = &Config::instance();
 
-    project = config->getString(CONFIG_PROJECT);
+    m_project = m_config->getString(CONFIG_PROJECT);
 
-    projectDescription = config->getString(CONFIG_DESCRIPTION);
-    if (projectDescription.isEmpty() && !project.isEmpty())
-        projectDescription = project + QLatin1String(" Reference Documentation");
+    m_projectDescription = m_config->getString(CONFIG_DESCRIPTION);
+    if (m_projectDescription.isEmpty() && !m_project.isEmpty())
+        m_projectDescription = m_project + QLatin1String(" Reference Documentation");
 
-    naturalLanguage = config->getString(CONFIG_NATURALLANGUAGE);
-    if (naturalLanguage.isEmpty())
-        naturalLanguage = QLatin1String("en");
+    m_naturalLanguage = m_config->getString(CONFIG_NATURALLANGUAGE);
+    if (m_naturalLanguage.isEmpty())
+        m_naturalLanguage = QLatin1String("en");
 
-    buildversion = config->getString(CONFIG_BUILDVERSION);
+    m_buildVersion = m_config->getString(CONFIG_BUILDVERSION);
 }
 
 QString DocBookGenerator::format()
@@ -148,9 +149,8 @@ QString DocBookGenerator::fileExtension() const
   is the node that represents the entity where a qdoc comment
   was found, and \a text represents the qdoc comment.
  */
-bool DocBookGenerator::generateText(const Text &text, const Node *relative, CodeMarker *marker)
+bool DocBookGenerator::generateText(const Text &text, const Node *relative)
 {
-    Q_UNUSED(marker);
     // From Generator::generateText.
     if (!text.firstAtom())
         return false;
@@ -172,7 +172,7 @@ bool DocBookGenerator::generateText(const Text &text, const Node *relative, Code
 const Atom *DocBookGenerator::generateAtomList(const Atom *atom, const Node *relative,
                                                bool generate, int &numAtoms)
 {
-    Q_ASSERT(writer);
+    Q_ASSERT(m_writer);
     // From Generator::generateAtomList.
     while (atom) {
         switch (atom->type()) {
@@ -192,8 +192,7 @@ const Atom *DocBookGenerator::generateAtomList(const Atom *atom, const Node *rel
             if (atom->type() == Atom::FormatEndif) {
                 if (generate && numAtoms0 == numAtoms) {
                     relative->location().warning(QStringLiteral("Output format %1 not handled %2")
-                                                         .arg(format())
-                                                         .arg(outFileName()));
+                                                         .arg(format(), outFileName()));
                     Atom unhandledFormatAtom(Atom::UnhandledFormat, format());
                     generateAtomList(&unhandledFormatAtom, relative, generate, numAtoms);
                 }
@@ -219,10 +218,9 @@ const Atom *DocBookGenerator::generateAtomList(const Atom *atom, const Node *rel
 /*!
   Generate DocBook from an instance of Atom.
  */
-int DocBookGenerator::generateAtom(const Atom *atom, const Node *relative, CodeMarker *marker)
+qsizetype DocBookGenerator::generateAtom(const Atom *atom, const Node *relative)
 {
-    Q_ASSERT(writer);
-    Q_UNUSED(marker);
+    Q_ASSERT(m_writer);
     // From HtmlGenerator::generateAtom, without warning generation.
     int idx = 0;
     int skipAhead = 0;
@@ -235,22 +233,22 @@ int DocBookGenerator::generateAtom(const Atom *atom, const Node *relative, CodeM
         genus = Node::API;
         Q_FALLTHROUGH();
     case Atom::NavAutoLink:
-        if (!inLink && !m_inContents && !m_inSectionHeading) {
+        if (!m_inLink && !m_inContents && !m_inSectionHeading) {
             const Node *node = nullptr;
             QString link = getAutoLink(atom, relative, &node, genus);
-            if (!link.isEmpty() && node && node->status() == Node::Obsolete
-                && relative->parent() != node && !relative->isObsolete()) {
+            if (!link.isEmpty() && node && node->isDeprecated()
+                && relative->parent() != node && !relative->isDeprecated()) {
                 link.clear();
             }
             if (link.isEmpty()) {
-                writer->writeCharacters(atom->string());
+                m_writer->writeCharacters(atom->string());
             } else {
                 beginLink(link, node, relative);
                 generateLink(atom);
                 endLink();
             }
         } else {
-            writer->writeCharacters(atom->string());
+            m_writer->writeCharacters(atom->string());
         }
         break;
     case Atom::BaseName:
@@ -260,12 +258,12 @@ int DocBookGenerator::generateAtom(const Atom *atom, const Node *relative, CodeM
             skipAhead = skipAtoms(atom, Atom::BriefRight);
             break;
         }
-        writer->writeStartElement(dbNamespace, "para");
+        m_writer->writeStartElement(dbNamespace, "para");
         rewritePropertyBrief(atom, relative);
         break;
     case Atom::BriefRight:
         if (hasBrief(relative)) {
-            writer->writeEndElement(); // para
+            m_writer->writeEndElement(); // para
             newLine();
         }
         break;
@@ -273,71 +271,71 @@ int DocBookGenerator::generateAtom(const Atom *atom, const Node *relative, CodeM
         // This may at one time have been used to mark up C++ code but it is
         // now widely used to write teletype text. As a result, text marked
         // with the \c command is not passed to a code marker.
-        writer->writeTextElement(dbNamespace, "code", plainCode(atom->string()));
+        m_writer->writeTextElement(dbNamespace, "code", plainCode(atom->string()));
         break;
     case Atom::CaptionLeft:
-        writer->writeStartElement(dbNamespace, "title");
+        m_writer->writeStartElement(dbNamespace, "title");
         break;
     case Atom::CaptionRight:
         endLink();
-        writer->writeEndElement(); // title
+        m_writer->writeEndElement(); // title
         newLine();
         break;
     case Atom::Qml:
-        writer->writeStartElement(dbNamespace, "programlisting");
-        writer->writeAttribute("language", "qml");
-        writer->writeCharacters(atom->string());
-        writer->writeEndElement(); // programlisting
+        m_writer->writeStartElement(dbNamespace, "programlisting");
+        m_writer->writeAttribute("language", "qml");
+        m_writer->writeCharacters(atom->string());
+        m_writer->writeEndElement(); // programlisting
         newLine();
         break;
     case Atom::JavaScript:
-        writer->writeStartElement(dbNamespace, "programlisting");
-        writer->writeAttribute("language", "js");
-        writer->writeCharacters(atom->string());
-        writer->writeEndElement(); // programlisting
+        m_writer->writeStartElement(dbNamespace, "programlisting");
+        m_writer->writeAttribute("language", "js");
+        m_writer->writeCharacters(atom->string());
+        m_writer->writeEndElement(); // programlisting
         newLine();
         break;
     case Atom::CodeNew:
-        writer->writeTextElement(dbNamespace, "para", "you can rewrite it as");
+        m_writer->writeTextElement(dbNamespace, "para", "you can rewrite it as");
         newLine();
-        writer->writeStartElement(dbNamespace, "programlisting");
-        writer->writeAttribute("language", "cpp");
-        writer->writeAttribute("role", "new");
-        writer->writeCharacters(atom->string());
-        writer->writeEndElement(); // programlisting
+        m_writer->writeStartElement(dbNamespace, "programlisting");
+        m_writer->writeAttribute("language", "cpp");
+        m_writer->writeAttribute("role", "new");
+        m_writer->writeCharacters(atom->string());
+        m_writer->writeEndElement(); // programlisting
         newLine();
         break;
     case Atom::Code:
-        writer->writeStartElement(dbNamespace, "programlisting");
-        writer->writeAttribute("language", "cpp");
-        writer->writeCharacters(atom->string());
-        writer->writeEndElement(); // programlisting
+        m_writer->writeStartElement(dbNamespace, "programlisting");
+        m_writer->writeAttribute("language", "cpp");
+        m_writer->writeCharacters(atom->string());
+        m_writer->writeEndElement(); // programlisting
         newLine();
         break;
     case Atom::CodeOld:
-        writer->writeTextElement(dbNamespace, "para", "For example, if you have code like");
+        m_writer->writeTextElement(dbNamespace, "para", "For example, if you have code like");
         newLine();
         Q_FALLTHROUGH();
     case Atom::CodeBad:
-        writer->writeStartElement(dbNamespace, "programlisting");
-        writer->writeAttribute("language", "cpp");
-        writer->writeAttribute("role", "bad");
-        writer->writeCharacters(atom->string());
-        writer->writeEndElement(); // programlisting
+        m_writer->writeStartElement(dbNamespace, "programlisting");
+        m_writer->writeAttribute("language", "cpp");
+        m_writer->writeAttribute("role", "bad");
+        m_writer->writeCharacters(atom->string());
+        m_writer->writeEndElement(); // programlisting
         newLine();
         break;
     case Atom::DivLeft:
     case Atom::DivRight:
         break;
     case Atom::FootnoteLeft:
-        writer->writeStartElement(dbNamespace, "footnote");
+        m_writer->writeStartElement(dbNamespace, "footnote");
         newLine();
-        writer->writeStartElement(dbNamespace, "para");
+        m_writer->writeStartElement(dbNamespace, "para");
         break;
     case Atom::FootnoteRight:
-        writer->writeEndElement(); // para
+        m_writer->writeEndElement(); // para
         newLine();
-        writer->writeEndElement(); // footnote
+        m_writer->writeEndElement(); // footnote
         break;
     case Atom::FormatElse:
     case Atom::FormatEndif:
@@ -345,23 +343,23 @@ int DocBookGenerator::generateAtom(const Atom *atom, const Node *relative, CodeM
         break;
     case Atom::FormattingLeft:
         if (atom->string() == ATOM_FORMATTING_BOLD) {
-            writer->writeStartElement(dbNamespace, "emphasis");
-            writer->writeAttribute("role", "bold");
+            m_writer->writeStartElement(dbNamespace, "emphasis");
+            m_writer->writeAttribute("role", "bold");
         } else if (atom->string() == ATOM_FORMATTING_ITALIC) {
-            writer->writeStartElement(dbNamespace, "emphasis");
+            m_writer->writeStartElement(dbNamespace, "emphasis");
         } else if (atom->string() == ATOM_FORMATTING_UNDERLINE) {
-            writer->writeStartElement(dbNamespace, "emphasis");
-            writer->writeAttribute("role", "underline");
+            m_writer->writeStartElement(dbNamespace, "emphasis");
+            m_writer->writeAttribute("role", "underline");
         } else if (atom->string() == ATOM_FORMATTING_SUBSCRIPT) {
-            writer->writeStartElement(dbNamespace, "sub");
+            m_writer->writeStartElement(dbNamespace, "sub");
         } else if (atom->string() == ATOM_FORMATTING_SUPERSCRIPT) {
-            writer->writeStartElement(dbNamespace, "sup");
+            m_writer->writeStartElement(dbNamespace, "sup");
         } else if (atom->string() == ATOM_FORMATTING_TELETYPE
                    || atom->string() == ATOM_FORMATTING_PARAMETER) {
-            writer->writeStartElement(dbNamespace, "code");
+            m_writer->writeStartElement(dbNamespace, "code");
 
             if (atom->string() == ATOM_FORMATTING_PARAMETER)
-                writer->writeAttribute("role", "parameter");
+                m_writer->writeAttribute("role", "parameter");
         }
         break;
     case Atom::FormattingRight:
@@ -371,7 +369,7 @@ int DocBookGenerator::generateAtom(const Atom *atom, const Node *relative, CodeM
             || atom->string() == ATOM_FORMATTING_SUPERSCRIPT
             || atom->string() == ATOM_FORMATTING_TELETYPE
             || atom->string() == ATOM_FORMATTING_PARAMETER) {
-            writer->writeEndElement();
+            m_writer->writeEndElement();
         }
         if (atom->string() == ATOM_FORMATTING_LINK)
             endLink();
@@ -460,36 +458,36 @@ int DocBookGenerator::generateAtom(const Atom *atom, const Node *relative, CodeM
     case Atom::Image: // mediaobject
     case Atom::InlineImage: { // inlinemediaobject
         QString tag = atom->type() == Atom::Image ? "mediaobject" : "inlinemediaobject";
-        writer->writeStartElement(dbNamespace, tag);
+        m_writer->writeStartElement(dbNamespace, tag);
         newLine();
 
         QString fileName = imageFileName(relative, atom->string());
         if (fileName.isEmpty()) {
-            writer->writeStartElement(dbNamespace, "textobject");
+            m_writer->writeStartElement(dbNamespace, "textobject");
             newLine();
-            writer->writeStartElement(dbNamespace, "para");
-            writer->writeTextElement(dbNamespace, "emphasis",
-                                     "[Missing image " + atom->string() + "]");
-            writer->writeEndElement(); // para
+            m_writer->writeStartElement(dbNamespace, "para");
+            m_writer->writeTextElement(dbNamespace, "emphasis",
+                                       "[Missing image " + atom->string() + "]");
+            m_writer->writeEndElement(); // para
             newLine();
-            writer->writeEndElement(); // textobject
+            m_writer->writeEndElement(); // textobject
             newLine();
         } else {
             if (atom->next() && !atom->next()->string().isEmpty())
-                writer->writeTextElement(dbNamespace, "alt", atom->next()->string());
+                m_writer->writeTextElement(dbNamespace, "alt", atom->next()->string());
 
-            writer->writeStartElement(dbNamespace, "imageobject");
+            m_writer->writeStartElement(dbNamespace, "imageobject");
             newLine();
-            writer->writeEmptyElement(dbNamespace, "imagedata");
-            writer->writeAttribute("fileref", fileName);
+            m_writer->writeEmptyElement(dbNamespace, "imagedata");
+            m_writer->writeAttribute("fileref", fileName);
             newLine();
-            writer->writeEndElement(); // imageobject
+            m_writer->writeEndElement(); // imageobject
             newLine();
 
             setImageFileName(relative, fileName);
         }
 
-        writer->writeEndElement(); // [inline]mediaobject
+        m_writer->writeEndElement(); // [inline]mediaobject
         if (atom->type() == Atom::Image)
             newLine();
     } break;
@@ -498,15 +496,15 @@ int DocBookGenerator::generateAtom(const Atom *atom, const Node *relative, CodeM
     case Atom::ImportantLeft:
     case Atom::NoteLeft: {
         QString tag = atom->type() == Atom::ImportantLeft ? "important" : "note";
-        writer->writeStartElement(dbNamespace, tag);
+        m_writer->writeStartElement(dbNamespace, tag);
         newLine();
-        writer->writeStartElement(dbNamespace, "para");
+        m_writer->writeStartElement(dbNamespace, "para");
     } break;
     case Atom::ImportantRight:
     case Atom::NoteRight:
-        writer->writeEndElement(); // para
+        m_writer->writeEndElement(); // para
         newLine();
-        writer->writeEndElement(); // note/important
+        m_writer->writeEndElement(); // note/important
         newLine();
         break;
     case Atom::LegaleseLeft:
@@ -526,56 +524,56 @@ int DocBookGenerator::generateAtom(const Atom *atom, const Node *relative, CodeM
     } break;
     case Atom::ListLeft:
         if (inPara) {
-            writer->writeEndElement(); // para
+            m_writer->writeEndElement(); // para
             newLine();
             inPara = false;
         }
         if (atom->string() == ATOM_LIST_BULLET) {
-            writer->writeStartElement(dbNamespace, "itemizedlist");
+            m_writer->writeStartElement(dbNamespace, "itemizedlist");
             newLine();
         } else if (atom->string() == ATOM_LIST_TAG) {
-            writer->writeStartElement(dbNamespace, "variablelist");
+            m_writer->writeStartElement(dbNamespace, "variablelist");
             newLine();
         } else if (atom->string() == ATOM_LIST_VALUE) {
-            writer->writeStartElement(dbNamespace, "informaltable");
+            m_writer->writeStartElement(dbNamespace, "informaltable");
             newLine();
-            writer->writeStartElement(dbNamespace, "thead");
+            m_writer->writeStartElement(dbNamespace, "thead");
             newLine();
-            writer->writeStartElement(dbNamespace, "tr");
+            m_writer->writeStartElement(dbNamespace, "tr");
             newLine();
-            writer->writeTextElement(dbNamespace, "th", "Constant");
+            m_writer->writeTextElement(dbNamespace, "th", "Constant");
             newLine();
 
             m_threeColumnEnumValueTable = isThreeColumnEnumValueTable(atom);
             if (m_threeColumnEnumValueTable && relative->nodeType() == Node::Enum) {
                 // If not in \enum topic, skip the value column
-                writer->writeTextElement(dbNamespace, "th", "Value");
+                m_writer->writeTextElement(dbNamespace, "th", "Value");
                 newLine();
             }
 
-            writer->writeTextElement(dbNamespace, "th", "Description");
+            m_writer->writeTextElement(dbNamespace, "th", "Description");
             newLine();
 
-            writer->writeEndElement(); // tr
+            m_writer->writeEndElement(); // tr
             newLine();
-            writer->writeEndElement(); // thead
+            m_writer->writeEndElement(); // thead
             newLine();
         } else {
-            writer->writeStartElement(dbNamespace, "orderedlist");
+            m_writer->writeStartElement(dbNamespace, "orderedlist");
 
             if (atom->next() != nullptr && atom->next()->string().toInt() > 1)
-                writer->writeAttribute("startingnumber", atom->next()->string());
+                m_writer->writeAttribute("startingnumber", atom->next()->string());
 
             if (atom->string() == ATOM_LIST_UPPERALPHA)
-                writer->writeAttribute("numeration", "upperalpha");
+                m_writer->writeAttribute("numeration", "upperalpha");
             else if (atom->string() == ATOM_LIST_LOWERALPHA)
-                writer->writeAttribute("numeration", "loweralpha");
+                m_writer->writeAttribute("numeration", "loweralpha");
             else if (atom->string() == ATOM_LIST_UPPERROMAN)
-                writer->writeAttribute("numeration", "upperroman");
+                m_writer->writeAttribute("numeration", "upperroman");
             else if (atom->string() == ATOM_LIST_LOWERROMAN)
-                writer->writeAttribute("numeration", "lowerroman");
+                m_writer->writeAttribute("numeration", "lowerroman");
             else // (atom->string() == ATOM_LIST_NUMERIC)
-                writer->writeAttribute("numeration", "arabic");
+                m_writer->writeAttribute("numeration", "arabic");
 
             newLine();
         }
@@ -584,34 +582,34 @@ int DocBookGenerator::generateAtom(const Atom *atom, const Node *relative, CodeM
         break;
     case Atom::ListTagLeft:
         if (atom->string() == ATOM_LIST_TAG) {
-            writer->writeStartElement(dbNamespace, "varlistentry");
+            m_writer->writeStartElement(dbNamespace, "varlistentry");
             newLine();
-            writer->writeStartElement(dbNamespace, "item");
+            m_writer->writeStartElement(dbNamespace, "item");
         } else { // (atom->string() == ATOM_LIST_VALUE)
             QPair<QString, int> pair = getAtomListValue(atom);
             skipAhead = pair.second;
 
-            writer->writeStartElement(dbNamespace, "tr");
+            m_writer->writeStartElement(dbNamespace, "tr");
             newLine();
-            writer->writeStartElement(dbNamespace, "td");
+            m_writer->writeStartElement(dbNamespace, "td");
             newLine();
-            writer->writeStartElement(dbNamespace, "para");
+            m_writer->writeStartElement(dbNamespace, "para");
             generateEnumValue(pair.first, relative);
-            writer->writeEndElement(); // para
+            m_writer->writeEndElement(); // para
             newLine();
-            writer->writeEndElement(); // td
+            m_writer->writeEndElement(); // td
             newLine();
 
             if (relative->nodeType() == Node::Enum) {
                 const auto enume = static_cast<const EnumNode *>(relative);
                 QString itemValue = enume->itemValue(atom->next()->string());
 
-                writer->writeStartElement(dbNamespace, "td");
+                m_writer->writeStartElement(dbNamespace, "td");
                 if (itemValue.isEmpty())
-                    writer->writeCharacters("?");
+                    m_writer->writeCharacters("?");
                 else
-                    writer->writeTextElement(dbNamespace, "code", itemValue);
-                writer->writeEndElement(); // td
+                    m_writer->writeTextElement(dbNamespace, "code", itemValue);
+                m_writer->writeEndElement(); // td
                 newLine();
             }
         }
@@ -619,52 +617,52 @@ int DocBookGenerator::generateAtom(const Atom *atom, const Node *relative, CodeM
     case Atom::SinceTagRight:
     case Atom::ListTagRight:
         if (atom->string() == ATOM_LIST_TAG) {
-            writer->writeEndElement(); // item
+            m_writer->writeEndElement(); // item
             newLine();
         }
         break;
     case Atom::ListItemLeft:
-        inListItemLineOpen = false;
+        m_inListItemLineOpen = false;
         if (atom->string() == ATOM_LIST_TAG) {
-            writer->writeStartElement(dbNamespace, "listitem");
+            m_writer->writeStartElement(dbNamespace, "listitem");
             newLine();
-            writer->writeStartElement(dbNamespace, "para");
+            m_writer->writeStartElement(dbNamespace, "para");
         } else if (atom->string() == ATOM_LIST_VALUE) {
             if (m_threeColumnEnumValueTable) {
                 if (matchAhead(atom, Atom::ListItemRight)) {
-                    writer->writeEmptyElement(dbNamespace, "td");
+                    m_writer->writeEmptyElement(dbNamespace, "td");
                     newLine();
-                    inListItemLineOpen = false;
+                    m_inListItemLineOpen = false;
                 } else {
-                    writer->writeStartElement(dbNamespace, "td");
+                    m_writer->writeStartElement(dbNamespace, "td");
                     newLine();
-                    inListItemLineOpen = true;
+                    m_inListItemLineOpen = true;
                 }
             }
         } else {
-            writer->writeStartElement(dbNamespace, "listitem");
+            m_writer->writeStartElement(dbNamespace, "listitem");
             newLine();
         }
         // Don't skip a paragraph, DocBook requires them within list items.
         break;
     case Atom::ListItemRight:
         if (atom->string() == ATOM_LIST_TAG) {
-            writer->writeEndElement(); // para
+            m_writer->writeEndElement(); // para
             newLine();
-            writer->writeEndElement(); // listitem
+            m_writer->writeEndElement(); // listitem
             newLine();
-            writer->writeEndElement(); // varlistentry
+            m_writer->writeEndElement(); // varlistentry
             newLine();
         } else if (atom->string() == ATOM_LIST_VALUE) {
-            if (inListItemLineOpen) {
-                writer->writeEndElement(); // td
+            if (m_inListItemLineOpen) {
+                m_writer->writeEndElement(); // td
                 newLine();
-                inListItemLineOpen = false;
+                m_inListItemLineOpen = false;
             }
-            writer->writeEndElement(); // tr
+            m_writer->writeEndElement(); // tr
             newLine();
         } else {
-            writer->writeEndElement(); // listitem
+            m_writer->writeEndElement(); // listitem
             newLine();
         }
         break;
@@ -674,33 +672,33 @@ int DocBookGenerator::generateAtom(const Atom *atom, const Node *relative, CodeM
         // - ATOM_LIST_TAG: variablelist
         // - ATOM_LIST_VALUE: informaltable
         // - ATOM_LIST_NUMERIC: orderedlist
-        writer->writeEndElement();
+        m_writer->writeEndElement();
         newLine();
         break;
     case Atom::Nop:
         break;
     case Atom::ParaLeft:
-        writer->writeStartElement(dbNamespace, "para");
+        m_writer->writeStartElement(dbNamespace, "para");
         inPara = true;
         break;
     case Atom::ParaRight:
         endLink();
         if (inPara) {
-            writer->writeEndElement(); // para
+            m_writer->writeEndElement(); // para
             newLine();
             inPara = false;
         }
         break;
     case Atom::QuotationLeft:
-        writer->writeStartElement(dbNamespace, "blockquote");
+        m_writer->writeStartElement(dbNamespace, "blockquote");
         inPara = true;
         break;
     case Atom::QuotationRight:
-        writer->writeEndElement(); // blockquote
+        m_writer->writeEndElement(); // blockquote
         newLine();
         break;
     case Atom::RawString:
-        writer->writeCharacters(atom->string());
+        m_writer->writeCharacters(atom->string());
         break;
     case Atom::SectionLeft:
         currentSectionLevel = atom->string().toInt() + hOffset(relative);
@@ -710,15 +708,15 @@ int DocBookGenerator::generateAtom(const Atom *atom, const Node *relative, CodeM
             // i.e. going to a new section, even deeper.
             while (!sectionLevels.empty() && sectionLevels.top() >= currentSectionLevel) {
                 sectionLevels.pop();
-                writer->writeEndElement(); // section
+                m_writer->writeEndElement(); // section
                 newLine();
             }
 
             sectionLevels.push(currentSectionLevel);
 
-            writer->writeStartElement(dbNamespace, "section");
-            writer->writeAttribute("xml:id",
-                                   Doc::canonicalTitle(Text::sectionHeading(atom).toString()));
+            m_writer->writeStartElement(dbNamespace, "section");
+            m_writer->writeAttribute("xml:id",
+                                     Doc::canonicalTitle(Text::sectionHeading(atom).toString()));
             newLine();
             // Unlike startSectionBegin, don't start a title here.
         }
@@ -730,30 +728,30 @@ int DocBookGenerator::generateAtom(const Atom *atom, const Node *relative, CodeM
     case Atom::SectionHeadingLeft:
         // Level 1 is dealt with at the header level (info tag).
         if (currentSectionLevel > 1) {
-            writer->writeStartElement(dbNamespace, "title");
+            m_writer->writeStartElement(dbNamespace, "title");
             m_inSectionHeading = true;
         }
         break;
     case Atom::SectionHeadingRight:
         // Level 1 is dealt with at the header level (info tag).
         if (currentSectionLevel > 1) {
-            writer->writeEndElement(); // title
+            m_writer->writeEndElement(); // title
             newLine();
             m_inSectionHeading = false;
         }
         break;
     case Atom::SidebarLeft:
-        writer->writeStartElement(dbNamespace, "sidebar");
+        m_writer->writeStartElement(dbNamespace, "sidebar");
         break;
     case Atom::SidebarRight:
-        writer->writeEndElement(); // sidebar
+        m_writer->writeEndElement(); // sidebar
         newLine();
         break;
     case Atom::String:
-        if (inLink && !m_inContents && !m_inSectionHeading)
+        if (m_inLink && !m_inContents && !m_inSectionHeading)
             generateLink(atom);
         else
-            writer->writeCharacters(atom->string());
+            m_writer->writeCharacters(atom->string());
         break;
     case Atom::TableLeft: {
         QPair<QString, QString> pair = getTableWidthAttr(atom);
@@ -761,46 +759,46 @@ int DocBookGenerator::generateAtom(const Atom *atom, const Node *relative, CodeM
         QString width = pair.first;
 
         if (inPara) {
-            writer->writeEndElement(); // para or blockquote
+            m_writer->writeEndElement(); // para or blockquote
             newLine();
             inPara = false;
         }
 
-        writer->writeStartElement(dbNamespace, "informaltable");
-        writer->writeAttribute("style", attr);
+        m_writer->writeStartElement(dbNamespace, "informaltable");
+        m_writer->writeAttribute("style", attr);
         if (!width.isEmpty())
-            writer->writeAttribute("width", width);
+            m_writer->writeAttribute("width", width);
         newLine();
         m_numTableRows = 0;
     } break;
     case Atom::TableRight:
-        writer->writeEndElement(); // table
+        m_writer->writeEndElement(); // table
         newLine();
         break;
     case Atom::TableHeaderLeft:
-        writer->writeStartElement(dbNamespace, "thead");
+        m_writer->writeStartElement(dbNamespace, "thead");
         newLine();
-        writer->writeStartElement(dbNamespace, "tr");
+        m_writer->writeStartElement(dbNamespace, "tr");
         newLine();
         m_inTableHeader = true;
         break;
     case Atom::TableHeaderRight:
-        writer->writeEndElement(); // tr
+        m_writer->writeEndElement(); // tr
         newLine();
         if (matchAhead(atom, Atom::TableHeaderLeft)) {
             skipAhead = 1;
-            writer->writeStartElement(dbNamespace, "tr");
+            m_writer->writeStartElement(dbNamespace, "tr");
             newLine();
         } else {
-            writer->writeEndElement(); // thead
+            m_writer->writeEndElement(); // thead
             newLine();
             m_inTableHeader = false;
         }
         break;
     case Atom::TableRowLeft:
-        writer->writeStartElement(dbNamespace, "tr");
+        m_writer->writeStartElement(dbNamespace, "tr");
         if (atom->string().isEmpty()) {
-            writer->writeAttribute("valign", "top");
+            m_writer->writeAttribute("valign", "top");
         } else {
             // Basic parsing of attributes, should be enough. The input string (atom->string())
             // looks like:
@@ -815,29 +813,29 @@ int DocBookGenerator::generateAtom(const Atom *atom, const Node *relative, CodeM
                                 .arg(atom->string()));
             }
             for (int i = 0; i + 1 < args.size(); i += 2)
-                writer->writeAttribute(args.at(i).chopped(1), args.at(i + 1));
+                m_writer->writeAttribute(args.at(i).chopped(1), args.at(i + 1));
         }
         newLine();
         break;
     case Atom::TableRowRight:
-        writer->writeEndElement(); // tr
+        m_writer->writeEndElement(); // tr
         newLine();
         break;
     case Atom::TableItemLeft:
-        writer->writeStartElement(dbNamespace, m_inTableHeader ? "th" : "td");
+        m_writer->writeStartElement(dbNamespace, m_inTableHeader ? "th" : "td");
 
         for (int i = 0; i < atom->count(); ++i) {
             const QString &p = atom->string(i);
             if (p.contains('=')) {
                 QStringList lp = p.split(QLatin1Char('='));
-                writer->writeAttribute(lp.at(0), lp.at(1));
+                m_writer->writeAttribute(lp.at(0), lp.at(1));
             } else {
                 QStringList spans = p.split(QLatin1Char(','));
                 if (spans.size() == 2) {
                     if (spans.at(0) != "1")
-                        writer->writeAttribute("colspan", spans.at(0));
+                        m_writer->writeAttribute("colspan", spans.at(0));
                     if (spans.at(1) != "1")
-                        writer->writeAttribute("rowspan", spans.at(1));
+                        m_writer->writeAttribute("rowspan", spans.at(1));
                 }
             }
         }
@@ -845,7 +843,7 @@ int DocBookGenerator::generateAtom(const Atom *atom, const Node *relative, CodeM
         // No skipahead, as opposed to HTML: in DocBook, the text must be wrapped in paragraphs.
         break;
     case Atom::TableItemRight:
-        writer->writeEndElement(); // th if m_inTableHeader, otherwise td
+        m_writer->writeEndElement(); // th if m_inTableHeader, otherwise td
         newLine();
         break;
     case Atom::TableOfContents:
@@ -856,19 +854,19 @@ int DocBookGenerator::generateAtom(const Atom *atom, const Node *relative, CodeM
         writeAnchor(Doc::canonicalTitle(atom->string()));
         break;
     case Atom::UnhandledFormat:
-        writer->writeStartElement(dbNamespace, "emphasis");
-        writer->writeAttribute("role", "bold");
-        writer->writeCharacters("&lt;Missing DocBook&gt;");
-        writer->writeEndElement(); // emphasis
+        m_writer->writeStartElement(dbNamespace, "emphasis");
+        m_writer->writeAttribute("role", "bold");
+        m_writer->writeCharacters("&lt;Missing DocBook&gt;");
+        m_writer->writeEndElement(); // emphasis
         break;
     case Atom::UnknownCommand:
-        writer->writeStartElement(dbNamespace, "emphasis");
-        writer->writeAttribute("role", "bold");
-        writer->writeCharacters("&lt;Unknown command&gt;");
-        writer->writeStartElement(dbNamespace, "code");
-        writer->writeCharacters(atom->string());
-        writer->writeEndElement(); // code
-        writer->writeEndElement(); // emphasis
+        m_writer->writeStartElement(dbNamespace, "emphasis");
+        m_writer->writeAttribute("role", "bold");
+        m_writer->writeCharacters("&lt;Unknown command&gt;");
+        m_writer->writeStartElement(dbNamespace, "code");
+        m_writer->writeCharacters(atom->string());
+        m_writer->writeEndElement(); // code
+        m_writer->writeEndElement(); // emphasis
         break;
     case Atom::QmlText:
     case Atom::EndQmlText:
@@ -903,22 +901,22 @@ void DocBookGenerator::generateClassHierarchy(const Node *relative, NodeMultiMap
     QStack<NodeMap> stack;
     stack.push(topLevel);
 
-    writer->writeStartElement(dbNamespace, "itemizedlist");
+    m_writer->writeStartElement(dbNamespace, "itemizedlist");
     newLine();
     while (!stack.isEmpty()) {
         if (stack.top().isEmpty()) {
             stack.pop();
-            writer->writeEndElement(); // listitem
+            m_writer->writeEndElement(); // listitem
             newLine();
-            writer->writeEndElement(); // itemizedlist
+            m_writer->writeEndElement(); // itemizedlist
             newLine();
         } else {
-            ClassNode *child = static_cast<ClassNode *>(*stack.top().begin());
-            writer->writeStartElement(dbNamespace, "listitem");
+            auto *child = static_cast<ClassNode *>(*stack.top().begin());
+            m_writer->writeStartElement(dbNamespace, "listitem");
             newLine();
-            writer->writeStartElement(dbNamespace, "para");
+            m_writer->writeStartElement(dbNamespace, "para");
             generateFullName(child, relative);
-            writer->writeEndElement(); // para
+            m_writer->writeEndElement(); // para
             newLine();
             // Don't close the listitem now, as DocBook requires sublists to reside in items.
             stack.top().erase(stack.top().begin());
@@ -930,7 +928,7 @@ void DocBookGenerator::generateClassHierarchy(const Node *relative, NodeMultiMap
             }
             if (!newTop.isEmpty()) {
                 stack.push(newTop);
-                writer->writeStartElement(dbNamespace, "itemizedlist");
+                m_writer->writeStartElement(dbNamespace, "itemizedlist");
                 newLine();
             }
         }
@@ -944,13 +942,13 @@ void DocBookGenerator::generateLink(const Atom *atom)
     auto match = funcLeftParen.match(atom->string());
     if (match.hasMatch()) {
         // hack for C++: move () outside of link
-        int k = match.capturedStart(1);
-        writer->writeCharacters(atom->string().left(k));
-        writer->writeEndElement(); // link
-        inLink = false;
-        writer->writeCharacters(atom->string().mid(k));
+        qsizetype k = match.capturedStart(1);
+        m_writer->writeCharacters(atom->string().left(k));
+        m_writer->writeEndElement(); // link
+        m_inLink = false;
+        m_writer->writeCharacters(atom->string().mid(k));
     } else {
-        writer->writeCharacters(atom->string());
+        m_writer->writeCharacters(atom->string());
     }
 }
 
@@ -961,20 +959,20 @@ void DocBookGenerator::generateLink(const Atom *atom)
 void DocBookGenerator::beginLink(const QString &link, const Node *node, const Node *relative)
 {
     // From HtmlGenerator::beginLink.
-    writer->writeStartElement(dbNamespace, "link");
-    writer->writeAttribute(xlinkNamespace, "href", link);
+    m_writer->writeStartElement(dbNamespace, "link");
+    m_writer->writeAttribute(xlinkNamespace, "href", link);
     if (node && !(relative && node->status() == relative->status())
-        && node->status() == Node::Obsolete)
-        writer->writeAttribute("role", "obsolete");
-    inLink = true;
+        && node->isDeprecated())
+        m_writer->writeAttribute("role", "deprecated");
+    m_inLink = true;
 }
 
 void DocBookGenerator::endLink()
 {
     // From HtmlGenerator::endLink.
-    if (inLink)
-        writer->writeEndElement(); // link
-    inLink = false;
+    if (m_inLink)
+        m_writer->writeEndElement(); // link
+    m_inLink = false;
 }
 
 void DocBookGenerator::generateList(const Node *relative, const QString &selector)
@@ -1024,37 +1022,37 @@ void DocBookGenerator::generateAnnotatedList(const Node *relative, const NodeLis
 
     // Do nothing if all items are internal or obsolete
     if (std::all_of(nodeList.cbegin(), nodeList.cend(), [](const Node *n) {
-        return n->isInternal() || n->isObsolete(); })) {
+        return n->isInternal() || n->isDeprecated(); })) {
         return;
     }
 
     // From WebXMLGenerator::generateAnnotatedList.
-    writer->writeStartElement(dbNamespace, "variablelist");
-    writer->writeAttribute("role", selector);
+    m_writer->writeStartElement(dbNamespace, "variablelist");
+    m_writer->writeAttribute("role", selector);
     newLine();
 
     for (const auto node : nodeList) {
-        if (node->isInternal() || node->isObsolete())
+        if (node->isInternal() || node->isDeprecated())
             continue;
-        writer->writeStartElement(dbNamespace, "varlistentry");
+        m_writer->writeStartElement(dbNamespace, "varlistentry");
         newLine();
-        writer->writeStartElement(dbNamespace, "term");
+        m_writer->writeStartElement(dbNamespace, "term");
         generateFullName(node, relative);
-        writer->writeEndElement(); // term
+        m_writer->writeEndElement(); // term
         newLine();
 
-        writer->writeStartElement(dbNamespace, "listitem");
+        m_writer->writeStartElement(dbNamespace, "listitem");
         newLine();
-        writer->writeStartElement(dbNamespace, "para");
-        writer->writeCharacters(node->doc().briefText().toString());
-        writer->writeEndElement(); // para
+        m_writer->writeStartElement(dbNamespace, "para");
+        m_writer->writeCharacters(node->doc().briefText().toString());
+        m_writer->writeEndElement(); // para
         newLine();
-        writer->writeEndElement(); // listitem
+        m_writer->writeEndElement(); // listitem
         newLine();
-        writer->writeEndElement(); // varlistentry
+        m_writer->writeEndElement(); // varlistentry
         newLine();
     }
-    writer->writeEndElement(); // variablelist
+    m_writer->writeEndElement(); // variablelist
     newLine();
 }
 
@@ -1097,7 +1095,7 @@ void DocBookGenerator::generateCompactList(ListType listType, const Node *relati
         return;
 
     const int NumParagraphs = 37; // '0' to '9', 'A' to 'Z', '_'
-    int commonPrefixLen = commonPrefix.length();
+    qsizetype commonPrefixLen = commonPrefix.length();
 
     /*
       Divide the data into 37 paragraphs: 0, ..., 9, A, ..., Z,
@@ -1165,31 +1163,31 @@ void DocBookGenerator::generateCompactList(ListType listType, const Node *relati
         */
         if (curParOffset == 0) {
             if (i > 0) {
-                writer->writeEndElement(); // variablelist
+                m_writer->writeEndElement(); // variablelist
                 newLine();
             }
 
-            writer->writeStartElement(dbNamespace, "variablelist");
-            writer->writeAttribute("role", selector);
+            m_writer->writeStartElement(dbNamespace, "variablelist");
+            m_writer->writeAttribute("role", selector);
             newLine();
-            writer->writeStartElement(dbNamespace, "varlistentry");
+            m_writer->writeStartElement(dbNamespace, "varlistentry");
             newLine();
 
-            writer->writeStartElement(dbNamespace, "term");
-            writer->writeStartElement(dbNamespace, "emphasis");
-            writer->writeAttribute("role", "bold");
-            writer->writeCharacters(paragraphName[curParNr]);
-            writer->writeEndElement(); // emphasis
-            writer->writeEndElement(); // term
+            m_writer->writeStartElement(dbNamespace, "term");
+            m_writer->writeStartElement(dbNamespace, "emphasis");
+            m_writer->writeAttribute("role", "bold");
+            m_writer->writeCharacters(paragraphName[curParNr]);
+            m_writer->writeEndElement(); // emphasis
+            m_writer->writeEndElement(); // term
             newLine();
         }
 
         /*
           Output a listitem for the current offset in the current paragraph.
          */
-        writer->writeStartElement(dbNamespace, "listitem");
+        m_writer->writeStartElement(dbNamespace, "listitem");
         newLine();
-        writer->writeStartElement(dbNamespace, "para");
+        m_writer->writeStartElement(dbNamespace, "para");
         if ((curParNr < NumParagraphs) && !paragraphName[curParNr].isEmpty()) {
             NodeMultiMap::Iterator it;
             NodeMultiMap::Iterator next;
@@ -1199,9 +1197,9 @@ void DocBookGenerator::generateCompactList(ListType listType, const Node *relati
 
             if (listType == Generic) {
                 generateFullName(it.value(), relative);
-                writer->writeStartElement(dbNamespace, "link");
-                writer->writeAttribute(xlinkNamespace, "href", fullDocumentLocation(*it));
-                writer->writeAttribute("type", targetType(it.value()));
+                m_writer->writeStartElement(dbNamespace, "link");
+                m_writer->writeAttribute(xlinkNamespace, "href", fullDocumentLocation(*it));
+                m_writer->writeAttribute("type", targetType(it.value()));
             } else if (listType == Obsolete) {
                 QString fn = fileName(it.value(), fileExtension());
                 QString link;
@@ -1209,9 +1207,9 @@ void DocBookGenerator::generateCompactList(ListType listType, const Node *relati
                     link = QString("../" + it.value()->outputSubdirectory() + QLatin1Char('/'));
                 link += fn;
 
-                writer->writeStartElement(dbNamespace, "link");
-                writer->writeAttribute(xlinkNamespace, "href", link);
-                writer->writeAttribute("type", targetType(it.value()));
+                m_writer->writeStartElement(dbNamespace, "link");
+                m_writer->writeAttribute(xlinkNamespace, "href", link);
+                m_writer->writeAttribute("type", targetType(it.value()));
             }
 
             QStringList pieces;
@@ -1231,58 +1229,58 @@ void DocBookGenerator::generateCompactList(ListType listType, const Node *relati
             } else
                 pieces = it.value()->fullName(relative).split("::");
 
-            writer->writeCharacters(pieces.last());
-            writer->writeEndElement(); // link
+            m_writer->writeCharacters(pieces.last());
+            m_writer->writeEndElement(); // link
 
             if (pieces.size() > 1) {
-                writer->writeCharacters(" (");
+                m_writer->writeCharacters(" (");
                 generateFullName(it.value()->parent(), relative);
-                writer->writeCharacters(")");
+                m_writer->writeCharacters(")");
             }
         }
-        writer->writeEndElement(); // para
+        m_writer->writeEndElement(); // para
         newLine();
-        writer->writeEndElement(); // listitem
+        m_writer->writeEndElement(); // listitem
         newLine();
-        writer->writeEndElement(); // varlistentry
+        m_writer->writeEndElement(); // varlistentry
         newLine();
         curParOffset++;
     }
     if (nmm.count() > 0) {
-        writer->writeEndElement(); // variablelist
+        m_writer->writeEndElement(); // variablelist
     }
 }
 
 void DocBookGenerator::generateFunctionIndex(const Node *relative)
 {
     // From HtmlGenerator::generateFunctionIndex.
-    writer->writeStartElement(dbNamespace, "simplelist");
-    writer->writeAttribute("role", "functionIndex");
+    m_writer->writeStartElement(dbNamespace, "simplelist");
+    m_writer->writeAttribute("role", "functionIndex");
     newLine();
     for (int i = 0; i < 26; i++) {
         QChar ch('a' + i);
-        writer->writeStartElement(dbNamespace, "member");
-        writer->writeAttribute(xlinkNamespace, "href", QString("#") + ch);
-        writer->writeCharacters(ch.toUpper());
-        writer->writeEndElement(); // member
+        m_writer->writeStartElement(dbNamespace, "member");
+        m_writer->writeAttribute(xlinkNamespace, "href", QString("#") + ch);
+        m_writer->writeCharacters(ch.toUpper());
+        m_writer->writeEndElement(); // member
         newLine();
     }
-    writer->writeEndElement(); // simplelist
+    m_writer->writeEndElement(); // simplelist
     newLine();
 
     char nextLetter = 'a';
     char currentLetter;
 
-    writer->writeStartElement(dbNamespace, "itemizedlist");
+    m_writer->writeStartElement(dbNamespace, "itemizedlist");
     newLine();
 
     NodeMapMap &funcIndex = m_qdb->getFunctionIndex();
     QMap<QString, NodeMap>::ConstIterator f = funcIndex.constBegin();
     while (f != funcIndex.constEnd()) {
-        writer->writeStartElement(dbNamespace, "listitem");
+        m_writer->writeStartElement(dbNamespace, "listitem");
         newLine();
-        writer->writeStartElement(dbNamespace, "para");
-        writer->writeCharacters(f.key() + ": ");
+        m_writer->writeStartElement(dbNamespace, "para");
+        m_writer->writeCharacters(f.key() + ": ");
 
         currentLetter = f.key()[0].unicode();
         while (islower(currentLetter) && currentLetter >= nextLetter) {
@@ -1292,18 +1290,18 @@ void DocBookGenerator::generateFunctionIndex(const Node *relative)
 
         NodeMap::ConstIterator s = (*f).constBegin();
         while (s != (*f).constEnd()) {
-            writer->writeCharacters(" ");
+            m_writer->writeCharacters(" ");
             generateFullName((*s)->parent(), relative);
             ++s;
         }
 
-        writer->writeEndElement(); // para
+        m_writer->writeEndElement(); // para
         newLine();
-        writer->writeEndElement(); // listitem
+        m_writer->writeEndElement(); // listitem
         newLine();
         ++f;
     }
-    writer->writeEndElement(); // itemizedlist
+    m_writer->writeEndElement(); // itemizedlist
     newLine();
 }
 
@@ -1314,20 +1312,20 @@ void DocBookGenerator::generateLegaleseList(const Node *relative)
     for (auto it = legaleseTexts.cbegin(), end = legaleseTexts.cend(); it != end; ++it) {
         Text text = it.key();
         generateText(text, relative);
-        writer->writeStartElement(dbNamespace, "itemizedlist");
+        m_writer->writeStartElement(dbNamespace, "itemizedlist");
         newLine();
         do {
-            writer->writeStartElement(dbNamespace, "listitem");
+            m_writer->writeStartElement(dbNamespace, "listitem");
             newLine();
-            writer->writeStartElement(dbNamespace, "para");
+            m_writer->writeStartElement(dbNamespace, "para");
             generateFullName(it.value(), relative);
-            writer->writeEndElement(); // para
+            m_writer->writeEndElement(); // para
             newLine();
-            writer->writeEndElement(); // listitem
+            m_writer->writeEndElement(); // listitem
             newLine();
             ++it;
         } while (it != legaleseTexts.constEnd() && it.key() == text);
-        writer->writeEndElement(); // itemizedlist
+        m_writer->writeEndElement(); // itemizedlist
         newLine();
     }
 }
@@ -1342,9 +1340,9 @@ void DocBookGenerator::generateBrief(const Node *node)
         if (!brief.lastAtom()->string().endsWith('.'))
             brief << Atom(Atom::String, ".");
 
-        writer->writeStartElement(dbNamespace, "para");
+        m_writer->writeStartElement(dbNamespace, "para");
         generateText(brief, node);
-        writer->writeEndElement(); // para
+        m_writer->writeEndElement(); // para
         newLine();
     }
 }
@@ -1353,12 +1351,12 @@ bool DocBookGenerator::generateSince(const Node *node)
 {
     // From Generator::generateSince.
     if (!node->since().isEmpty()) {
-        writer->writeStartElement(dbNamespace, "para");
-        writer->writeCharacters("This " + typeString(node) + " was introduced");
+        m_writer->writeStartElement(dbNamespace, "para");
+        m_writer->writeCharacters("This " + typeString(node) + " was introduced");
         if (node->nodeType() == Node::Enum)
-            writer->writeCharacters(" or modified");
-        writer->writeCharacters(" in " + formatSince(node) + ".");
-        writer->writeEndElement(); // para
+            m_writer->writeCharacters(" or modified");
+        m_writer->writeCharacters(" in " + formatSince(node) + ".");
+        m_writer->writeEndElement(); // para
         newLine();
 
         return true;
@@ -1374,28 +1372,28 @@ void DocBookGenerator::generateHeader(const QString &title, const QString &subTi
     refMap.clear();
 
     // Output the DocBook header.
-    writer->writeStartElement(dbNamespace, "info");
+    m_writer->writeStartElement(dbNamespace, "info");
     newLine();
-    writer->writeTextElement(dbNamespace, "title", title);
+    m_writer->writeTextElement(dbNamespace, "title", title);
     newLine();
 
     if (!subTitle.isEmpty()) {
-        writer->writeTextElement(dbNamespace, "subtitle", subTitle);
+        m_writer->writeTextElement(dbNamespace, "subtitle", subTitle);
         newLine();
     }
 
-    if (!project.isEmpty()) {
-        writer->writeTextElement(dbNamespace, "productname", project);
+    if (!m_project.isEmpty()) {
+        m_writer->writeTextElement(dbNamespace, "productname", m_project);
         newLine();
     }
 
-    if (!buildversion.isEmpty()) {
-        writer->writeTextElement(dbNamespace, "edition", buildversion);
+    if (!m_buildVersion.isEmpty()) {
+        m_writer->writeTextElement(dbNamespace, "edition", m_buildVersion);
         newLine();
     }
 
-    if (!projectDescription.isEmpty()) {
-        writer->writeTextElement(dbNamespace, "titleabbrev", projectDescription);
+    if (!m_projectDescription.isEmpty()) {
+        m_writer->writeTextElement(dbNamespace, "titleabbrev", m_projectDescription);
         newLine();
     }
 
@@ -1416,15 +1414,15 @@ void DocBookGenerator::generateHeader(const QString &title, const QString &subTi
             else
                 anchorPair = anchorForNode(linkNode);
 
-            writer->writeStartElement(dbNamespace, "extendedlink");
-            writer->writeEmptyElement(dbNamespace, "link");
-            writer->writeAttribute(xlinkNamespace, "to", anchorPair.first);
-            writer->writeAttribute(xlinkNamespace, "title", "prev");
+            m_writer->writeStartElement(dbNamespace, "extendedlink");
+            m_writer->writeEmptyElement(dbNamespace, "link");
+            m_writer->writeAttribute(xlinkNamespace, "to", anchorPair.first);
+            m_writer->writeAttribute(xlinkNamespace, "title", "prev");
             if (linkPair.first == linkPair.second && !anchorPair.second.isEmpty())
-                writer->writeAttribute(xlinkNamespace, "label", anchorPair.second);
+                m_writer->writeAttribute(xlinkNamespace, "label", anchorPair.second);
             else
-                writer->writeAttribute(xlinkNamespace, "label", linkPair.second);
-            writer->writeEndElement(); // extendedlink
+                m_writer->writeAttribute(xlinkNamespace, "label", linkPair.second);
+            m_writer->writeEndElement(); // extendedlink
         }
         if (node->links().contains(Node::NextLink)) {
             linkPair = node->links()[Node::NextLink];
@@ -1434,15 +1432,15 @@ void DocBookGenerator::generateHeader(const QString &title, const QString &subTi
             else
                 anchorPair = anchorForNode(linkNode);
 
-            writer->writeStartElement(dbNamespace, "extendedlink");
-            writer->writeEmptyElement(dbNamespace, "link");
-            writer->writeAttribute(xlinkNamespace, "to", anchorPair.first);
-            writer->writeAttribute(xlinkNamespace, "title", "prev");
+            m_writer->writeStartElement(dbNamespace, "extendedlink");
+            m_writer->writeEmptyElement(dbNamespace, "link");
+            m_writer->writeAttribute(xlinkNamespace, "to", anchorPair.first);
+            m_writer->writeAttribute(xlinkNamespace, "title", "prev");
             if (linkPair.first == linkPair.second && !anchorPair.second.isEmpty())
-                writer->writeAttribute(xlinkNamespace, "label", anchorPair.second);
+                m_writer->writeAttribute(xlinkNamespace, "label", anchorPair.second);
             else
-                writer->writeAttribute(xlinkNamespace, "label", linkPair.second);
-            writer->writeEndElement(); // extendedlink
+                m_writer->writeAttribute(xlinkNamespace, "label", linkPair.second);
+            m_writer->writeEndElement(); // extendedlink
         }
         if (node->links().contains(Node::StartLink)) {
             linkPair = node->links()[Node::StartLink];
@@ -1452,15 +1450,15 @@ void DocBookGenerator::generateHeader(const QString &title, const QString &subTi
             else
                 anchorPair = anchorForNode(linkNode);
 
-            writer->writeStartElement(dbNamespace, "extendedlink");
-            writer->writeEmptyElement(dbNamespace, "link");
-            writer->writeAttribute(xlinkNamespace, "to", anchorPair.first);
-            writer->writeAttribute(xlinkNamespace, "title", "start");
+            m_writer->writeStartElement(dbNamespace, "extendedlink");
+            m_writer->writeEmptyElement(dbNamespace, "link");
+            m_writer->writeAttribute(xlinkNamespace, "to", anchorPair.first);
+            m_writer->writeAttribute(xlinkNamespace, "title", "start");
             if (linkPair.first == linkPair.second && !anchorPair.second.isEmpty())
-                writer->writeAttribute(xlinkNamespace, "label", anchorPair.second);
+                m_writer->writeAttribute(xlinkNamespace, "label", anchorPair.second);
             else
-                writer->writeAttribute(xlinkNamespace, "label", linkPair.second);
-            writer->writeEndElement(); // extendedlink
+                m_writer->writeAttribute(xlinkNamespace, "label", linkPair.second);
+            m_writer->writeEndElement(); // extendedlink
         }
     }
 
@@ -1471,7 +1469,7 @@ void DocBookGenerator::generateHeader(const QString &title, const QString &subTi
         // abstracts only happen in the header (info tag), slightly different tags must be used at
         // other places. Also includes code from HtmlGenerator::generateCppReferencePage to handle
         // the name spaces.
-        writer->writeStartElement(dbNamespace, "abstract");
+        m_writer->writeStartElement(dbNamespace, "abstract");
         newLine();
 
         bool generatedSomething = false;
@@ -1498,9 +1496,9 @@ void DocBookGenerator::generateHeader(const QString &title, const QString &subTi
             if (!brief.lastAtom()->string().endsWith('.'))
                 brief << Atom(Atom::String, ".");
 
-            writer->writeStartElement(dbNamespace, "para");
+            m_writer->writeStartElement(dbNamespace, "para");
             generateText(brief, node);
-            writer->writeEndElement(); // para
+            m_writer->writeEndElement(); // para
             newLine();
 
             generatedSomething = true;
@@ -1513,14 +1511,14 @@ void DocBookGenerator::generateHeader(const QString &title, const QString &subTi
 
         // An abstract cannot be empty, hence use the project description.
         if (!generatedSomething)
-            writer->writeTextElement(dbNamespace, "para", projectDescription + ".");
+            m_writer->writeTextElement(dbNamespace, "para", m_projectDescription + ".");
 
-        writer->writeEndElement(); // abstract
+        m_writer->writeEndElement(); // abstract
         newLine();
     }
 
     // End of the DocBook header.
-    writer->writeEndElement(); // info
+    m_writer->writeEndElement(); // info
     newLine();
 }
 
@@ -1535,15 +1533,15 @@ void DocBookGenerator::closeTextSections()
 void DocBookGenerator::generateFooter()
 {
     closeTextSections();
-    writer->writeEndElement(); // article
+    m_writer->writeEndElement(); // article
 }
 
 void DocBookGenerator::generateSimpleLink(const QString &href, const QString &text)
 {
-    writer->writeStartElement(dbNamespace, "link");
-    writer->writeAttribute(xlinkNamespace, "href", href);
-    writer->writeCharacters(text);
-    writer->writeEndElement(); // link
+    m_writer->writeStartElement(dbNamespace, "link");
+    m_writer->writeAttribute(xlinkNamespace, "href", href);
+    m_writer->writeCharacters(text);
+    m_writer->writeEndElement(); // link
 }
 
 void DocBookGenerator::generateObsoleteMembers(const Sections &sections)
@@ -1563,24 +1561,23 @@ void DocBookGenerator::generateObsoleteMembers(const Sections &sections)
 
     startSection("obsolete", "Obsolete Members for " + aggregate->name());
 
-    writer->writeStartElement(dbNamespace, "para");
-    writer->writeStartElement(dbNamespace, "emphasis");
-    writer->writeAttribute("role", "bold");
-    writer->writeCharacters("The following members of class ");
+    m_writer->writeStartElement(dbNamespace, "para");
+    m_writer->writeStartElement(dbNamespace, "emphasis");
+    m_writer->writeAttribute("role", "bold");
+    m_writer->writeCharacters("The following members of class ");
     generateSimpleLink(linkForNode(aggregate, nullptr), aggregate->name());
-    writer->writeCharacters(" are obsolete.");
-    writer->writeEndElement(); // emphasis bold
-    writer->writeCharacters(" They are provided to keep old source code working. "
-                            "We strongly advise against using them in new code.");
-    writer->writeEndElement(); // para
+    m_writer->writeCharacters(" are deprecated.");
+    m_writer->writeEndElement(); // emphasis bold
+    m_writer->writeCharacters(" We strongly advise against using them in new code.");
+    m_writer->writeEndElement(); // para
     newLine();
 
-    for (int i = 0; i < details_spv.size(); ++i) {
-        QString title = details_spv.at(i)->title();
+    for (const Section *section : details_spv) {
+        const QString &title = section->title();
         QString ref = registerRef(title.toLower());
         startSection(ref, title);
 
-        const NodeVector &members = details_spv.at(i)->obsoleteMembers();
+        const NodeVector &members = section->obsoleteMembers();
         NodeVector::ConstIterator m = members.constBegin();
         while (m != members.constEnd()) {
             if ((*m)->access() != Access::Private)
@@ -1600,7 +1597,7 @@ void DocBookGenerator::generateObsoleteMembers(const Sections &sections)
   the section lists, which are then traversed and output here.
 
   Note that this function currently only handles correctly the
-  case where \a status is \c {Section::Obsolete}.
+  case where \a status is \c {Section::Deprecated}.
  */
 void DocBookGenerator::generateObsoleteQmlMembers(const Sections &sections)
 {
@@ -1611,7 +1608,6 @@ void DocBookGenerator::generateObsoleteQmlMembers(const Sections &sections)
         return;
 
     Aggregate *aggregate = sections.aggregate();
-    QString title = "Obsolete Members for " + aggregate->name();
     QString fn = fileName(aggregate, fileExtension());
     QString link;
     if (useOutputSubdirs() && !Generator::outputSubdir().isEmpty())
@@ -1621,25 +1617,27 @@ void DocBookGenerator::generateObsoleteQmlMembers(const Sections &sections)
 
     startSection("obsolete", "Obsolete Members for " + aggregate->name());
 
-    writer->writeStartElement(dbNamespace, "para");
-    writer->writeStartElement(dbNamespace, "emphasis");
-    writer->writeAttribute("role", "bold");
-    writer->writeCharacters("The following members of QML type ");
+    m_writer->writeStartElement(dbNamespace, "para");
+    m_writer->writeStartElement(dbNamespace, "emphasis");
+    m_writer->writeAttribute("role", "bold");
+    m_writer->writeCharacters("The following members of QML type ");
     generateSimpleLink(linkForNode(aggregate, nullptr), aggregate->name());
-    writer->writeCharacters(" are obsolete.");
-    writer->writeEndElement(); // emphasis bold
-    writer->writeCharacters("They are provided to keep old source code working. "
-                            "We strongly advise against using them in new code.");
-    writer->writeEndElement(); // para
+    m_writer->writeCharacters(" are deprecated.");
+    m_writer->writeEndElement(); // emphasis bold
+    m_writer->writeCharacters(" We strongly advise against using them in new code.");
+    m_writer->writeEndElement(); // para
     newLine();
 
-    for (auto i : details_spv) {
-        QString ref = registerRef(i->title().toLower());
-        startSection(ref, i->title());
+    for (const auto *section : details_spv) {
+        const QString &title = section->title();
+        QString ref = registerRef(title.toLower());
+        startSection(ref, title);
 
-        NodeVector::ConstIterator m = i->members().constBegin();
-        while (m != i->members().constEnd()) {
-            generateDetailedQmlMember(*m, aggregate);
+        const NodeVector &members = section->obsoleteMembers();
+        NodeVector::ConstIterator m = members.constBegin();
+        while (m != members.constEnd()) {
+            if ((*m)->access() != Access::Private)
+                generateDetailedQmlMember(*m, aggregate);
             ++m;
         }
 
@@ -1682,29 +1680,29 @@ static QString nodeToSynopsisTag(const Node *node)
 
 void DocBookGenerator::generateStartRequisite(const QString &description)
 {
-    writer->writeStartElement(dbNamespace, "varlistentry");
+    m_writer->writeStartElement(dbNamespace, "varlistentry");
     newLine();
-    writer->writeTextElement(dbNamespace, "term", description);
+    m_writer->writeTextElement(dbNamespace, "term", description);
     newLine();
-    writer->writeStartElement(dbNamespace, "listitem");
+    m_writer->writeStartElement(dbNamespace, "listitem");
     newLine();
-    writer->writeStartElement(dbNamespace, "para");
+    m_writer->writeStartElement(dbNamespace, "para");
 }
 
 void DocBookGenerator::generateEndRequisite()
 {
-    writer->writeEndElement(); // para
+    m_writer->writeEndElement(); // para
     newLine();
-    writer->writeEndElement(); // listitem
+    m_writer->writeEndElement(); // listitem
     newLine();
-    writer->writeEndElement(); // varlistentry
+    m_writer->writeEndElement(); // varlistentry
     newLine();
 }
 
 void DocBookGenerator::generateRequisite(const QString &description, const QString &value)
 {
     generateStartRequisite(description);
-    writer->writeCharacters(value);
+    m_writer->writeCharacters(value);
     generateEndRequisite();
 }
 
@@ -1716,11 +1714,11 @@ void DocBookGenerator::generateCMakeRequisite(const QStringList &values)
 {
     const QString description("CMake");
     generateStartRequisite(description);
-    writer->writeCharacters(values.first());
-    writer->writeEndElement(); // para
+    m_writer->writeCharacters(values.first());
+    m_writer->writeEndElement(); // para
     newLine();
-    writer->writeStartElement(dbNamespace, "para");
-    writer->writeCharacters(values.last());
+    m_writer->writeStartElement(dbNamespace, "para");
+    m_writer->writeCharacters(values.last());
     generateEndRequisite();
 }
 
@@ -1744,7 +1742,7 @@ void DocBookGenerator::generateSortedNames(const ClassNode *cn, const QList<Rela
     int index = 0;
     for (const QString &className : classNames) {
         generateFullName(classMap.value(className), cn);
-        writer->writeCharacters(Utilities::comma(index++, classNames.count()));
+        m_writer->writeCharacters(Utilities::comma(index++, classNames.count()));
     }
 }
 
@@ -1764,7 +1762,7 @@ void DocBookGenerator::generateSortedQmlNames(const Node *base, const NodeList &
 
     for (const QString &name : names) {
         generateFullName(classMap.value(name), base);
-        writer->writeCharacters(Utilities::comma(index++, names.count()));
+        m_writer->writeCharacters(Utilities::comma(index++, names.count()));
     }
 }
 
@@ -1775,7 +1773,7 @@ void DocBookGenerator::generateRequisites(const Aggregate *aggregate)
 {
     // Adapted from HtmlGenerator::generateRequisites, but simplified: no need to store all the
     // elements, they can be produced one by one.
-    writer->writeStartElement(dbNamespace, "variablelist");
+    m_writer->writeStartElement(dbNamespace, "variablelist");
     newLine();
 
     // Includes.
@@ -1829,10 +1827,10 @@ void DocBookGenerator::generateRequisites(const Aggregate *aggregate)
                     generateFullName((*r).m_node, classe);
 
                     if ((*r).m_access == Access::Protected)
-                        writer->writeCharacters(" (protected)");
+                        m_writer->writeCharacters(" (protected)");
                     else if ((*r).m_access == Access::Private)
-                        writer->writeCharacters(" (private)");
-                    writer->writeCharacters(
+                        m_writer->writeCharacters(" (private)");
+                    m_writer->writeCharacters(
                             Utilities::comma(index++, classe->baseClasses().count()));
                 }
                 ++r;
@@ -1849,7 +1847,7 @@ void DocBookGenerator::generateRequisites(const Aggregate *aggregate)
         }
     }
 
-    writer->writeEndElement(); // variablelist
+    m_writer->writeEndElement(); // variablelist
     newLine();
 }
 
@@ -1863,7 +1861,7 @@ void DocBookGenerator::generateQmlRequisites(const QmlTypeNode *qcn)
     if (!qcn)
         return;
 
-    writer->writeStartElement(dbNamespace, "variablelist");
+    m_writer->writeStartElement(dbNamespace, "variablelist");
     newLine();
 
     // Module name and version (i.e. import).
@@ -1875,9 +1873,11 @@ void DocBookGenerator::generateQmlRequisites(const QmlTypeNode *qcn)
         logicalModuleVersion =
                 collection ? collection->logicalModuleVersion() : qcn->logicalModuleVersion();
 
-        generateRequisite("Import Statement",
-                          "import " + qcn->logicalModuleName() + QLatin1Char(' ')
-                                  + logicalModuleVersion);
+        QStringList importText;
+        importText << "import " + qcn->logicalModuleName();
+        if (!logicalModuleVersion.isEmpty())
+            importText << logicalModuleVersion;
+        generateRequisite("Import Statement", importText.join(' '));
     }
 
     // Since and project.
@@ -1911,16 +1911,14 @@ void DocBookGenerator::generateQmlRequisites(const QmlTypeNode *qcn)
     // Instantiates.
     ClassNode *cn = (const_cast<QmlTypeNode *>(qcn))->classNode();
     if (cn && (cn->status() != Node::Internal)) {
-        const Node *otherNode = nullptr;
         Atom a = Atom(Atom::LinkNode, CodeMarker::stringForNode(qcn));
-        QString link = getAutoLink(&a, cn, &otherNode);
 
         generateStartRequisite("Instantiates:");
         generateSimpleLink(fullDocumentLocation(cn), cn->name());
         generateEndRequisite();
     }
 
-    writer->writeEndElement(); // variablelist
+    m_writer->writeEndElement(); // variablelist
     newLine();
 }
 
@@ -1932,39 +1930,28 @@ bool DocBookGenerator::generateStatus(const Node *node)
         // Do nothing.
         return false;
     case Node::Preliminary:
-        writer->writeStartElement(dbNamespace, "para");
-        writer->writeStartElement(dbNamespace, "emphasis");
-        writer->writeAttribute("role", "bold");
-        writer->writeCharacters("This " + typeString(node)
-                                + " is under development and is subject to change.");
-        writer->writeEndElement(); // emphasis
-        writer->writeEndElement(); // para
+        m_writer->writeStartElement(dbNamespace, "para");
+        m_writer->writeStartElement(dbNamespace, "emphasis");
+        m_writer->writeAttribute("role", "bold");
+        m_writer->writeCharacters("This " + typeString(node)
+                                  + " is under development and is subject to change.");
+        m_writer->writeEndElement(); // emphasis
+        m_writer->writeEndElement(); // para
         newLine();
         return true;
     case Node::Deprecated:
-        writer->writeStartElement(dbNamespace, "para");
+        m_writer->writeStartElement(dbNamespace, "para");
         if (node->isAggregate()) {
-            writer->writeStartElement(dbNamespace, "emphasis");
-            writer->writeAttribute("role", "bold");
+            m_writer->writeStartElement(dbNamespace, "emphasis");
+            m_writer->writeAttribute("role", "bold");
         }
-        writer->writeCharacters("This " + typeString(node) + " is deprecated.");
+        m_writer->writeCharacters("This " + typeString(node) + " is deprecated");
+        if (const QString &version = node->deprecatedSince(); !version.isEmpty())
+            m_writer->writeCharacters(" since " + version);
+        m_writer->writeCharacters(". We strongly advise against using it in new code.");
         if (node->isAggregate())
-            writer->writeEndElement(); // emphasis
-        writer->writeEndElement(); // para
-        newLine();
-        return true;
-    case Node::Obsolete:
-        writer->writeStartElement(dbNamespace, "para");
-        if (node->isAggregate()) {
-            writer->writeStartElement(dbNamespace, "emphasis");
-            writer->writeAttribute("role", "bold");
-        }
-        writer->writeCharacters("This " + typeString(node) + " is obsolete.");
-        if (node->isAggregate())
-            writer->writeEndElement(); // emphasis
-        writer->writeCharacters(" It is provided to keep old source code working. "
-                                "We strongly advise against using it in new code.");
-        writer->writeEndElement(); // para
+            m_writer->writeEndElement(); // emphasis
+        m_writer->writeEndElement(); // para
         newLine();
         return true;
     case Node::Internal:
@@ -1980,26 +1967,26 @@ bool DocBookGenerator::generateStatus(const Node *node)
 void DocBookGenerator::generateSignatureList(const NodeList &nodes)
 {
     // From Generator::signatureList and Generator::appendSignature.
-    writer->writeStartElement(dbNamespace, "itemizedlist");
+    m_writer->writeStartElement(dbNamespace, "itemizedlist");
     newLine();
 
     NodeList::ConstIterator n = nodes.constBegin();
     while (n != nodes.constEnd()) {
-        writer->writeStartElement(dbNamespace, "listitem");
+        m_writer->writeStartElement(dbNamespace, "listitem");
         newLine();
-        writer->writeStartElement(dbNamespace, "para");
+        m_writer->writeStartElement(dbNamespace, "para");
 
         generateSimpleLink(currentGenerator()->fullDocumentLocation(*n),
                            (*n)->signature(false, true));
 
-        writer->writeEndElement(); // para
+        m_writer->writeEndElement(); // para
         newLine();
-        writer->writeEndElement(); // itemizedlist
+        m_writer->writeEndElement(); // itemizedlist
         newLine();
         ++n;
     }
 
-    writer->writeEndElement(); // itemizedlist
+    m_writer->writeEndElement(); // itemizedlist
     newLine();
 }
 
@@ -2020,25 +2007,25 @@ bool DocBookGenerator::generateThreadSafeness(const Node *node)
     QString linkThreadSafe = getAutoLink(&threadSafeAtom, node, &threadSafeNode);
 
     if (ts == Node::NonReentrant) {
-        writer->writeStartElement(dbNamespace, "warning");
+        m_writer->writeStartElement(dbNamespace, "warning");
         newLine();
-        writer->writeStartElement(dbNamespace, "para");
-        writer->writeCharacters("This " + typeString(node) + " is not ");
+        m_writer->writeStartElement(dbNamespace, "para");
+        m_writer->writeCharacters("This " + typeString(node) + " is not ");
         generateSimpleLink(linkReentrant, "reentrant");
-        writer->writeCharacters(".");
-        writer->writeEndElement(); // para
+        m_writer->writeCharacters(".");
+        m_writer->writeEndElement(); // para
         newLine();
-        writer->writeEndElement(); // warning
+        m_writer->writeEndElement(); // warning
 
         return true;
     }
     if (ts == Node::Reentrant || ts == Node::ThreadSafe) {
-        writer->writeStartElement(dbNamespace, "note");
+        m_writer->writeStartElement(dbNamespace, "note");
         newLine();
-        writer->writeStartElement(dbNamespace, "para");
+        m_writer->writeStartElement(dbNamespace, "para");
 
         if (node->isAggregate()) {
-            writer->writeCharacters("All functions in this " + typeString(node) + " are ");
+            m_writer->writeCharacters("All functions in this " + typeString(node) + " are ");
             if (ts == Node::ThreadSafe)
                 generateSimpleLink(linkThreadSafe, "thread-safe");
             else
@@ -2049,62 +2036,62 @@ bool DocBookGenerator::generateThreadSafeness(const Node *node)
             NodeList nonreentrant;
             bool exceptions = hasExceptions(node, reentrant, threadsafe, nonreentrant);
             if (!exceptions || (ts == Node::Reentrant && !threadsafe.isEmpty())) {
-                writer->writeCharacters(".");
-                writer->writeEndElement(); // para
+                m_writer->writeCharacters(".");
+                m_writer->writeEndElement(); // para
                 newLine();
             } else {
-                writer->writeCharacters(" with the following exceptions:");
-                writer->writeEndElement(); // para
+                m_writer->writeCharacters(" with the following exceptions:");
+                m_writer->writeEndElement(); // para
                 newLine();
-                writer->writeStartElement(dbNamespace, "para");
+                m_writer->writeStartElement(dbNamespace, "para");
 
                 if (ts == Node::Reentrant) {
                     if (!nonreentrant.isEmpty()) {
-                        writer->writeCharacters("These functions are not ");
+                        m_writer->writeCharacters("These functions are not ");
                         generateSimpleLink(linkReentrant, "reentrant");
-                        writer->writeCharacters(":");
-                        writer->writeEndElement(); // para
+                        m_writer->writeCharacters(":");
+                        m_writer->writeEndElement(); // para
                         newLine();
                         generateSignatureList(nonreentrant);
                     }
                     if (!threadsafe.isEmpty()) {
-                        writer->writeCharacters("These functions are also ");
+                        m_writer->writeCharacters("These functions are also ");
                         generateSimpleLink(linkThreadSafe, "thread-safe");
-                        writer->writeCharacters(":");
-                        writer->writeEndElement(); // para
+                        m_writer->writeCharacters(":");
+                        m_writer->writeEndElement(); // para
                         newLine();
                         generateSignatureList(threadsafe);
                     }
                 } else { // thread-safe
                     if (!reentrant.isEmpty()) {
-                        writer->writeCharacters("These functions are only ");
+                        m_writer->writeCharacters("These functions are only ");
                         generateSimpleLink(linkReentrant, "reentrant");
-                        writer->writeCharacters(":");
-                        writer->writeEndElement(); // para
+                        m_writer->writeCharacters(":");
+                        m_writer->writeEndElement(); // para
                         newLine();
                         generateSignatureList(reentrant);
                     }
                     if (!nonreentrant.isEmpty()) {
-                        writer->writeCharacters("These functions are not ");
+                        m_writer->writeCharacters("These functions are not ");
                         generateSimpleLink(linkReentrant, "reentrant");
-                        writer->writeCharacters(":");
-                        writer->writeEndElement(); // para
+                        m_writer->writeCharacters(":");
+                        m_writer->writeEndElement(); // para
                         newLine();
                         generateSignatureList(nonreentrant);
                     }
                 }
             }
         } else {
-            writer->writeCharacters("This " + typeString(node) + " is ");
+            m_writer->writeCharacters("This " + typeString(node) + " is ");
             if (ts == Node::ThreadSafe)
                 generateSimpleLink(linkThreadSafe, "thread-safe");
             else
                 generateSimpleLink(linkReentrant, "reentrant");
-            writer->writeCharacters(".");
-            writer->writeEndElement(); // para
+            m_writer->writeCharacters(".");
+            m_writer->writeEndElement(); // para
             newLine();
         }
-        writer->writeEndElement(); // note
+        m_writer->writeEndElement(); // note
 
         return true;
     }
@@ -2145,7 +2132,7 @@ void DocBookGenerator::generateBody(const Node *node)
             }
 
             if (!t.isEmpty())
-                writer->writeTextElement(dbNamespace, "para", t);
+                m_writer->writeTextElement(dbNamespace, "para", t);
         }
     } else if (!node->isSharingComment()) {
         // Reimplements clause and type alias info precede body text
@@ -2162,13 +2149,13 @@ void DocBookGenerator::generateBody(const Node *node)
 
         if (fn) {
             if (fn->isQmlSignal())
-                generateAddendum(node, QmlSignalHandler);
+                generateAddendum(node, QmlSignalHandler, nullptr, true);
             if (fn->isPrivateSignal())
-                generateAddendum(node, PrivateSignal);
+                generateAddendum(node, PrivateSignal, nullptr, true);
             if (fn->isInvokable())
-                generateAddendum(node, Invokable);
+                generateAddendum(node, Invokable, nullptr, true);
             if (fn->hasAssociatedProperties())
-                generateAddendum(node, AssociatedProperties);
+                generateAddendum(node, AssociatedProperties, nullptr, true);
         }
 
         // Warning generation skipped with respect to Generator::generateBody.
@@ -2233,13 +2220,13 @@ void DocBookGenerator::generateLinkToExample(const ExampleNode *en, const QStrin
             << Config::instance().getString(CONFIG_EXAMPLESINSTALLPATH) << en->name();
     path.removeAll(QString());
 
-    writer->writeStartElement(dbNamespace, "para");
-    writer->writeStartElement(dbNamespace, "link");
-    writer->writeAttribute(xlinkNamespace, "href",
-                           exampleUrl.replace(placeholder, path.join(separator)));
-    writer->writeCharacters(link);
-    writer->writeEndElement(); // link
-    writer->writeEndElement(); // para
+    m_writer->writeStartElement(dbNamespace, "para");
+    m_writer->writeStartElement(dbNamespace, "link");
+    m_writer->writeAttribute(xlinkNamespace, "href",
+                             exampleUrl.replace(placeholder, path.join(separator)));
+    m_writer->writeCharacters(link);
+    m_writer->writeEndElement(); // link
+    m_writer->writeEndElement(); // para
     newLine();
 }
 
@@ -2267,12 +2254,12 @@ void DocBookGenerator::generateFileList(const ExampleNode *en, bool images)
     if (paths.isEmpty())
         return;
 
-    writer->writeStartElement(dbNamespace, "para");
-    writer->writeCharacters(tag);
-    writer->writeEndElement(); // para
+    m_writer->writeStartElement(dbNamespace, "para");
+    m_writer->writeCharacters(tag);
+    m_writer->writeEndElement(); // para
     newLine();
 
-    writer->writeStartElement(dbNamespace, "itemizedlist");
+    m_writer->writeStartElement(dbNamespace, "itemizedlist");
 
     for (const auto &file : qAsConst(paths)) {
         if (images) {
@@ -2282,26 +2269,24 @@ void DocBookGenerator::generateFileList(const ExampleNode *en, bool images)
             generateExampleFilePage(en, file);
         }
 
-        writer->writeStartElement(dbNamespace, "listitem");
+        m_writer->writeStartElement(dbNamespace, "listitem");
         newLine();
-        writer->writeStartElement(dbNamespace, "para");
+        m_writer->writeStartElement(dbNamespace, "para");
         generateSimpleLink(file, file);
-        writer->writeEndElement(); // para
-        writer->writeEndElement(); // listitem
+        m_writer->writeEndElement(); // para
+        m_writer->writeEndElement(); // listitem
         newLine();
     }
 
-    writer->writeEndElement(); // itemizedlist
+    m_writer->writeEndElement(); // itemizedlist
     newLine();
 }
 
 /*!
   Generate a file with the contents of a C++ or QML source file.
  */
-void DocBookGenerator::generateExampleFilePage(const Node *node, const QString &file,
-                                               CodeMarker *marker)
+void DocBookGenerator::generateExampleFilePage(const Node *node, const QString &file)
 {
-    Q_UNUSED(marker);
     // From HtmlGenerator::generateExampleFilePage.
     if (!node->isExample())
         return;
@@ -2309,8 +2294,8 @@ void DocBookGenerator::generateExampleFilePage(const Node *node, const QString &
     const auto en = static_cast<const ExampleNode *>(node);
 
     // Store current (active) writer
-    QXmlStreamWriter *currentWriter = writer;
-    writer = startDocument(en, file);
+    QXmlStreamWriter *currentWriter = m_writer;
+    m_writer = startDocument(en, file);
     generateHeader(en->fullTitle(), en->subtitle(), en);
 
     Text text;
@@ -2324,7 +2309,7 @@ void DocBookGenerator::generateExampleFilePage(const Node *node, const QString &
 
     endDocument();
     // Restore writer
-    writer = currentWriter;
+    m_writer = currentWriter;
 }
 
 void DocBookGenerator::generateReimplementsClause(const FunctionNode *fn)
@@ -2336,87 +2321,85 @@ void DocBookGenerator::generateReimplementsClause(const FunctionNode *fn)
             const FunctionNode *overrides = cn->findOverriddenFunction(fn);
             if (overrides && !overrides->isPrivate() && !overrides->parent()->isPrivate()) {
                 if (overrides->hasDoc()) {
-                    writer->writeStartElement(dbNamespace, "para");
-                    writer->writeCharacters("Reimplements: ");
+                    m_writer->writeStartElement(dbNamespace, "para");
+                    m_writer->writeCharacters("Reimplements: ");
                     QString fullName =
                             overrides->parent()->name() + "::" + overrides->signature(false, true);
                     generateFullName(overrides->parent(), fullName, overrides);
-                    writer->writeCharacters(".");
+                    m_writer->writeCharacters(".");
                     return;
                 }
             }
             const PropertyNode *sameName = cn->findOverriddenProperty(fn);
             if (sameName && sameName->hasDoc()) {
-                writer->writeStartElement(dbNamespace, "para");
-                writer->writeCharacters("Reimplements an access function for property: ");
+                m_writer->writeStartElement(dbNamespace, "para");
+                m_writer->writeCharacters("Reimplements an access function for property: ");
                 QString fullName = sameName->parent()->name() + "::" + sameName->name();
                 generateFullName(sameName->parent(), fullName, overrides);
-                writer->writeCharacters(".");
+                m_writer->writeCharacters(".");
                 return;
             }
         }
     }
 }
 
-void DocBookGenerator::generateAlsoList(const Node *node, CodeMarker *marker)
+void DocBookGenerator::generateAlsoList(const Node *node)
 {
-    Q_UNUSED(marker);
     // From Generator::generateAlsoList.
     QList<Text> alsoList = node->doc().alsoList();
     supplementAlsoList(node, alsoList);
 
     if (!alsoList.isEmpty()) {
-        writer->writeStartElement(dbNamespace, "para");
-        writer->writeStartElement(dbNamespace, "emphasis");
-        writer->writeCharacters("See also ");
-        writer->writeEndElement(); // emphasis
+        m_writer->writeStartElement(dbNamespace, "para");
+        m_writer->writeStartElement(dbNamespace, "emphasis");
+        m_writer->writeCharacters("See also ");
+        m_writer->writeEndElement(); // emphasis
         newLine();
 
-        writer->writeStartElement(dbNamespace, "simplelist");
-        writer->writeAttribute("type", "vert");
-        writer->writeAttribute("role", "see-also");
+        m_writer->writeStartElement(dbNamespace, "simplelist");
+        m_writer->writeAttribute("type", "vert");
+        m_writer->writeAttribute("role", "see-also");
         for (const Text &text : alsoList) {
-            writer->writeStartElement(dbNamespace, "member");
+            m_writer->writeStartElement(dbNamespace, "member");
             generateText(text, node);
-            writer->writeEndElement(); // member
+            m_writer->writeEndElement(); // member
             newLine();
         }
-        writer->writeEndElement(); // simplelist
+        m_writer->writeEndElement(); // simplelist
         newLine();
 
-        writer->writeEndElement(); // para
+        m_writer->writeEndElement(); // para
     }
 }
 
 /*!
   Generate a list of maintainers in the output
  */
-void DocBookGenerator::generateMaintainerList(const Aggregate *node, CodeMarker *marker)
+void DocBookGenerator::generateMaintainerList(const Aggregate *node)
 {
-    Q_UNUSED(marker);
     // From Generator::generateMaintainerList.
-    QStringList sl = getMetadataElements(node, "maintainer");
+    const QStringList sl = getMetadataElements(node, "maintainer");
 
     if (!sl.isEmpty()) {
-        writer->writeStartElement(dbNamespace, "para");
-        writer->writeStartElement(dbNamespace, "emphasis");
-        writer->writeCharacters("Maintained by: ");
-        writer->writeEndElement(); // emphasis
+        m_writer->writeStartElement(dbNamespace, "para");
+        m_writer->writeStartElement(dbNamespace, "emphasis");
+        m_writer->writeCharacters("Maintained by: ");
+        m_writer->writeEndElement(); // emphasis
         newLine();
 
-        writer->writeStartElement(dbNamespace, "simplelist");
-        writer->writeAttribute("type", "vert");
-        writer->writeAttribute("role", "maintainer");
-        for (int i = 0; i < sl.size(); ++i) {
-            writer->writeStartElement(dbNamespace, "member");
-            writer->writeCharacters(sl.at(i));
-            writer->writeEndElement(); // member
+        m_writer->writeStartElement(dbNamespace, "simplelist");
+        m_writer->writeAttribute("type", "vert");
+        m_writer->writeAttribute("role", "maintainer");
+        for (const QString &maintainer : sl) {
+            m_writer->writeStartElement(dbNamespace, "member");
+            m_writer->writeCharacters(maintainer);
+            m_writer->writeEndElement(); // member
             newLine();
         }
-        writer->writeEndElement(); // simplelist
+        m_writer->writeEndElement(); // simplelist
         newLine();
 
-        writer->writeEndElement(); // para
+        m_writer->writeEndElement(); // para
     }
 }
 
@@ -2427,23 +2410,23 @@ void DocBookGenerator::generateMaintainerList(const Aggregate *node, CodeMarker 
 QXmlStreamWriter *DocBookGenerator::startGenericDocument(const Node *node, const QString &fileName)
 {
     QFile *outFile = openSubPageFile(node, fileName);
-    writer = new QXmlStreamWriter(outFile);
-    writer->setAutoFormatting(false); // We need a precise handling of line feeds.
+    m_writer = new QXmlStreamWriter(outFile);
+    m_writer->setAutoFormatting(false); // We need a precise handling of line feeds.
 
-    writer->writeStartDocument();
+    m_writer->writeStartDocument();
     newLine();
-    writer->writeNamespace(dbNamespace, "db");
-    writer->writeNamespace(xlinkNamespace, "xlink");
-    writer->writeStartElement(dbNamespace, "article");
-    writer->writeAttribute("version", "5.2");
-    if (!naturalLanguage.isEmpty())
-        writer->writeAttribute("xml:lang", naturalLanguage);
+    m_writer->writeNamespace(dbNamespace, "db");
+    m_writer->writeNamespace(xlinkNamespace, "xlink");
+    m_writer->writeStartElement(dbNamespace, "article");
+    m_writer->writeAttribute("version", "5.2");
+    if (!m_naturalLanguage.isEmpty())
+        m_writer->writeAttribute("xml:lang", m_naturalLanguage);
     newLine();
 
     // Empty the section stack for the new document.
     sectionLevels.resize(0);
 
-    return writer;
+    return m_writer;
 }
 
 QXmlStreamWriter *DocBookGenerator::startDocument(const Node *node)
@@ -2454,17 +2437,17 @@ QXmlStreamWriter *DocBookGenerator::startDocument(const Node *node)
 
 QXmlStreamWriter *DocBookGenerator::startDocument(const ExampleNode *en, const QString &file)
 {
-    QString fileName = linkForExampleFile(file, en);
+    QString fileName = linkForExampleFile(file);
     return startGenericDocument(en, fileName);
 }
 
 void DocBookGenerator::endDocument()
 {
-    writer->writeEndElement(); // article
-    writer->writeEndDocument();
-    writer->device()->close();
-    delete writer;
-    writer = nullptr;
+    m_writer->writeEndElement(); // article
+    m_writer->writeEndDocument();
+    m_writer->device()->close();
+    delete m_writer;
+    m_writer = nullptr;
 }
 
 /*!
@@ -2500,7 +2483,7 @@ void DocBookGenerator::generateCppReferencePage(Node *node)
         subtitleText = fullTitle;
 
     // Start producing the DocBook file.
-    writer = startDocument(node);
+    m_writer = startDocument(node);
 
     // Info container.
     generateHeader(title, subtitleText, aggregate);
@@ -2548,7 +2531,7 @@ void DocBookGenerator::generateCppReferencePage(Node *node)
                 generateDetailedMember(*member, aggregate);
             } else {
                 startSectionBegin();
-                writer->writeCharacters("class ");
+                m_writer->writeCharacters("class ");
                 generateFullName(*member, aggregate);
                 startSectionEnd();
                 generateBrief(*member);
@@ -2570,16 +2553,16 @@ void DocBookGenerator::generateCppReferencePage(Node *node)
 
 void DocBookGenerator::generateSynopsisInfo(const QString &key, const QString &value)
 {
-    writer->writeStartElement(dbNamespace, "synopsisinfo");
-    writer->writeAttribute(dbNamespace, "role", key);
-    writer->writeCharacters(value);
-    writer->writeEndElement(); // synopsisinfo
+    m_writer->writeStartElement(dbNamespace, "synopsisinfo");
+    m_writer->writeAttribute(dbNamespace, "role", key);
+    m_writer->writeCharacters(value);
+    m_writer->writeEndElement(); // synopsisinfo
     newLine();
 }
 
 void DocBookGenerator::generateModifier(const QString &value)
 {
-    writer->writeTextElement(dbNamespace, "modifier", value);
+    m_writer->writeTextElement(dbNamespace, "modifier", value);
     newLine();
 }
 
@@ -2595,13 +2578,13 @@ void DocBookGenerator::generateDocBookSynopsis(const Node *node)
     // Generator::generateThreadSafeness, QDocIndexFiles::generateIndexSection.
 
     // This function is the only place where DocBook extensions are used.
-    if (config->getBool(CONFIG_DOCBOOKEXTENSIONS))
+    if (m_config->getBool(CONFIG_DOCBOOKEXTENSIONS))
         return;
 
     // Nothing to export in some cases. Note that isSharedCommentNode() returns
     // true also for QML property groups.
-    if (node->isGroup() || node->isGroup() || node->isSharedCommentNode() || node->isModule()
-        || node->isJsModule() || node->isQmlModule() || node->isPageNode())
+    if (node->isGroup() || node->isSharedCommentNode() || node->isModule() || node->isJsModule()
+        || node->isQmlModule() || node->isPageNode())
         return;
 
     // Cast the node to several subtypes (null pointer if the node is not of the required type).
@@ -2624,64 +2607,64 @@ void DocBookGenerator::generateDocBookSynopsis(const Node *node)
 
     // Start the synopsis tag.
     QString synopsisTag = nodeToSynopsisTag(node);
-    writer->writeStartElement(dbNamespace, synopsisTag);
+    m_writer->writeStartElement(dbNamespace, synopsisTag);
     newLine();
 
     // Name and basic properties of each tag (like types and parameters).
     if (node->isClass()) {
-        writer->writeStartElement(dbNamespace, "ooclass");
-        writer->writeTextElement(dbNamespace, "classname", node->plainName());
-        writer->writeEndElement(); // ooclass
+        m_writer->writeStartElement(dbNamespace, "ooclass");
+        m_writer->writeTextElement(dbNamespace, "classname", node->plainName());
+        m_writer->writeEndElement(); // ooclass
         newLine();
     } else if (node->isNamespace()) {
-        writer->writeTextElement(dbNamespace, "namespacename", node->plainName());
+        m_writer->writeTextElement(dbNamespace, "namespacename", node->plainName());
         newLine();
     } else if (node->isQmlType()) {
-        writer->writeStartElement(dbNamespace, "ooclass");
-        writer->writeTextElement(dbNamespace, "classname", node->plainName());
-        writer->writeEndElement(); // ooclass
+        m_writer->writeStartElement(dbNamespace, "ooclass");
+        m_writer->writeTextElement(dbNamespace, "classname", node->plainName());
+        m_writer->writeEndElement(); // ooclass
         newLine();
         if (!qcn->groupNames().isEmpty())
-            writer->writeAttribute("groups", qcn->groupNames().join(QLatin1Char(',')));
+            m_writer->writeAttribute("groups", qcn->groupNames().join(QLatin1Char(',')));
     } else if (node->isProperty()) {
-        writer->writeTextElement(dbNamespace, "modifier", "(Qt property)");
+        m_writer->writeTextElement(dbNamespace, "modifier", "(Qt property)");
         newLine();
-        writer->writeTextElement(dbNamespace, "type", propertyNode->dataType());
+        m_writer->writeTextElement(dbNamespace, "type", propertyNode->dataType());
         newLine();
-        writer->writeTextElement(dbNamespace, "varname", node->plainName());
+        m_writer->writeTextElement(dbNamespace, "varname", node->plainName());
         newLine();
     } else if (node->isVariable()) {
         if (variableNode->isStatic()) {
-            writer->writeTextElement(dbNamespace, "modifier", "static");
+            m_writer->writeTextElement(dbNamespace, "modifier", "static");
             newLine();
         }
-        writer->writeTextElement(dbNamespace, "type", variableNode->dataType());
+        m_writer->writeTextElement(dbNamespace, "type", variableNode->dataType());
         newLine();
-        writer->writeTextElement(dbNamespace, "varname", node->plainName());
+        m_writer->writeTextElement(dbNamespace, "varname", node->plainName());
         newLine();
     } else if (node->isEnumType()) {
-        writer->writeTextElement(dbNamespace, "enumname", node->plainName());
+        m_writer->writeTextElement(dbNamespace, "enumname", node->plainName());
         newLine();
     } else if (node->isQmlProperty()) {
         QString name = node->name();
         if (qpn->isAttached())
             name.prepend(qpn->element() + QLatin1Char('.'));
 
-        writer->writeTextElement(dbNamespace, "type", qpn->dataType());
+        m_writer->writeTextElement(dbNamespace, "type", qpn->dataType());
         newLine();
-        writer->writeTextElement(dbNamespace, "varname", name);
+        m_writer->writeTextElement(dbNamespace, "varname", name);
         newLine();
 
         if (qpn->isAttached()) {
-            writer->writeTextElement(dbNamespace, "modifier", "attached");
+            m_writer->writeTextElement(dbNamespace, "modifier", "attached");
             newLine();
         }
         if ((const_cast<QmlPropertyNode *>(qpn))->isWritable()) {
-            writer->writeTextElement(dbNamespace, "modifier", "writable");
+            m_writer->writeTextElement(dbNamespace, "modifier", "writable");
             newLine();
         }
         if ((const_cast<QmlPropertyNode *>(qpn))->isRequired()) {
-            writer->writeTextElement(dbNamespace, "modifier", "required");
+            m_writer->writeTextElement(dbNamespace, "modifier", "required");
             newLine();
         }
         if (qpn->isReadOnly()) {
@@ -2702,14 +2685,14 @@ void DocBookGenerator::generateDocBookSynopsis(const Node *node)
 
         if (!functionNode->isMacro()) {
             if (functionNode->returnType() == "void")
-                writer->writeEmptyElement(dbNamespace, "void");
+                m_writer->writeEmptyElement(dbNamespace, "void");
             else
-                writer->writeTextElement(dbNamespace, "type", functionNode->returnType());
+                m_writer->writeTextElement(dbNamespace, "type", functionNode->returnType());
             newLine();
         }
         // Remove two characters from the plain name to only get the name
         // of the method without parentheses.
-        writer->writeTextElement(dbNamespace, "methodname", node->plainName().chopped(2));
+        m_writer->writeTextElement(dbNamespace, "methodname", node->plainName().chopped(2));
         newLine();
 
         if (functionNode->isOverload())
@@ -2722,24 +2705,24 @@ void DocBookGenerator::generateDocBookSynopsis(const Node *node)
             generateModifier("override");
 
         if (!functionNode->isMacro() && functionNode->parameters().isEmpty()) {
-            writer->writeEmptyElement(dbNamespace, "void");
+            m_writer->writeEmptyElement(dbNamespace, "void");
             newLine();
         }
 
         const Parameters &lp = functionNode->parameters();
         for (int i = 0; i < lp.count(); ++i) {
             const Parameter &parameter = lp.at(i);
-            writer->writeStartElement(dbNamespace, "methodparam");
+            m_writer->writeStartElement(dbNamespace, "methodparam");
             newLine();
-            writer->writeTextElement(dbNamespace, "type", parameter.type());
+            m_writer->writeTextElement(dbNamespace, "type", parameter.type());
             newLine();
-            writer->writeTextElement(dbNamespace, "parameter", parameter.name());
+            m_writer->writeTextElement(dbNamespace, "parameter", parameter.name());
             newLine();
             if (!parameter.defaultValue().isEmpty()) {
-                writer->writeTextElement(dbNamespace, "initializer", parameter.defaultValue());
+                m_writer->writeTextElement(dbNamespace, "initializer", parameter.defaultValue());
                 newLine();
             }
-            writer->writeEndElement(); // methodparam
+            m_writer->writeEndElement(); // methodparam
             newLine();
         }
 
@@ -2778,7 +2761,7 @@ void DocBookGenerator::generateDocBookSynopsis(const Node *node)
             signature += " = default";
         generateSynopsisInfo("signature", signature);
     } else if (node->isTypedef()) {
-        writer->writeTextElement(dbNamespace, "type", node->plainName());
+        m_writer->writeTextElement(dbNamespace, "type", node->plainName());
     } else {
         node->doc().location().warning(
                 QStringLiteral("Unexpected node type in generateDocBookSynopsis: %1")
@@ -2815,9 +2798,6 @@ void DocBookGenerator::generateDocBookSynopsis(const Node *node)
         break;
     case Node::Deprecated:
         generateSynopsisInfo("status", "deprecated");
-        break;
-    case Node::Obsolete:
-        generateSynopsisInfo("status", "obsolete");
         break;
     case Node::Internal:
         generateSynopsisInfo("status", "internal");
@@ -2867,18 +2847,18 @@ void DocBookGenerator::generateDocBookSynopsis(const Node *node)
                 Atom a = Atom(Atom::LinkNode, CodeMarker::stringForNode(classe->qmlElement()));
                 QString link = getAutoLink(&a, aggregate, &otherNode);
 
-                writer->writeStartElement(dbNamespace, "synopsisinfo");
-                writer->writeAttribute(dbNamespace, "role", "instantiatedBy");
+                m_writer->writeStartElement(dbNamespace, "synopsisinfo");
+                m_writer->writeAttribute(dbNamespace, "role", "instantiatedBy");
                 generateSimpleLink(link, classe->qmlElement()->name());
-                writer->writeEndElement(); // synopsisinfo
+                m_writer->writeEndElement(); // synopsisinfo
                 newLine();
             }
 
             // Inherits.
             QList<RelatedClass>::ConstIterator r;
             if (!classe->baseClasses().isEmpty()) {
-                writer->writeStartElement(dbNamespace, "synopsisinfo");
-                writer->writeAttribute(dbNamespace, "role", "inherits");
+                m_writer->writeStartElement(dbNamespace, "synopsisinfo");
+                m_writer->writeAttribute(dbNamespace, "role", "inherits");
 
                 r = classe->baseClasses().constBegin();
                 int index = 0;
@@ -2887,26 +2867,26 @@ void DocBookGenerator::generateDocBookSynopsis(const Node *node)
                         generateFullName((*r).m_node, classe);
 
                         if ((*r).m_access == Access::Protected) {
-                            writer->writeCharacters(" (protected)");
+                            m_writer->writeCharacters(" (protected)");
                         } else if ((*r).m_access == Access::Private) {
-                            writer->writeCharacters(" (private)");
+                            m_writer->writeCharacters(" (private)");
                         }
-                        writer->writeCharacters(
+                        m_writer->writeCharacters(
                                 Utilities::comma(index++, classe->baseClasses().count()));
                     }
                     ++r;
                 }
 
-                writer->writeEndElement(); // synopsisinfo
+                m_writer->writeEndElement(); // synopsisinfo
                 newLine();
             }
 
             // Inherited by.
             if (!classe->derivedClasses().isEmpty()) {
-                writer->writeStartElement(dbNamespace, "synopsisinfo");
-                writer->writeAttribute(dbNamespace, "role", "inheritedBy");
+                m_writer->writeStartElement(dbNamespace, "synopsisinfo");
+                m_writer->writeAttribute(dbNamespace, "role", "inheritedBy");
                 generateSortedNames(classe, classe->derivedClasses());
-                writer->writeEndElement(); // synopsisinfo
+                m_writer->writeEndElement(); // synopsisinfo
                 newLine();
             }
         }
@@ -2923,9 +2903,11 @@ void DocBookGenerator::generateDocBookSynopsis(const Node *node)
         else
             logicalModuleVersion = qcn->logicalModuleVersion();
 
-        generateSynopsisInfo("import",
-                             "import " + qcn->logicalModuleName() + QLatin1Char(' ')
-                                     + logicalModuleVersion);
+        QStringList importText;
+        importText << "import " + qcn->logicalModuleName();
+        if (!logicalModuleVersion.isEmpty())
+            importText << logicalModuleVersion;
+        generateSynopsisInfo("import", importText.join(' '));
 
         // Since and project.
         if (!qcn->since().isEmpty())
@@ -2935,10 +2917,10 @@ void DocBookGenerator::generateDocBookSynopsis(const Node *node)
         NodeList subs;
         QmlTypeNode::subclasses(qcn, subs);
         if (!subs.isEmpty()) {
-            writer->writeTextElement(dbNamespace, "synopsisinfo");
-            writer->writeAttribute(dbNamespace, "role", "inheritedBy");
+            m_writer->writeTextElement(dbNamespace, "synopsisinfo");
+            m_writer->writeAttribute(dbNamespace, "role", "inheritedBy");
             generateSortedQmlNames(qcn, subs);
-            writer->writeEndElement(); // synopsisinfo
+            m_writer->writeEndElement(); // synopsisinfo
             newLine();
         }
 
@@ -2951,10 +2933,10 @@ void DocBookGenerator::generateDocBookSynopsis(const Node *node)
             Atom a = Atom(Atom::LinkNode, CodeMarker::stringForNode(base));
             QString link = getAutoLink(&a, base, &otherNode);
 
-            writer->writeTextElement(dbNamespace, "synopsisinfo");
-            writer->writeAttribute(dbNamespace, "role", "inherits");
+            m_writer->writeTextElement(dbNamespace, "synopsisinfo");
+            m_writer->writeAttribute(dbNamespace, "role", "inherits");
             generateSimpleLink(link, base->name());
-            writer->writeEndElement(); // synopsisinfo
+            m_writer->writeEndElement(); // synopsisinfo
             newLine();
         }
 
@@ -2965,10 +2947,10 @@ void DocBookGenerator::generateDocBookSynopsis(const Node *node)
             Atom a = Atom(Atom::LinkNode, CodeMarker::stringForNode(qcn));
             QString link = getAutoLink(&a, cn, &otherNode);
 
-            writer->writeTextElement(dbNamespace, "synopsisinfo");
-            writer->writeAttribute(dbNamespace, "role", "instantiates");
+            m_writer->writeTextElement(dbNamespace, "synopsisinfo");
+            m_writer->writeAttribute(dbNamespace, "role", "instantiates");
             generateSimpleLink(link, cn->name());
-            writer->writeEndElement(); // synopsisinfo
+            m_writer->writeEndElement(); // synopsisinfo
             newLine();
         }
     }
@@ -3034,26 +3016,26 @@ void DocBookGenerator::generateDocBookSynopsis(const Node *node)
     // Enums and typedefs.
     if (enumNode) {
         for (const EnumItem &item : enumNode->items()) {
-            writer->writeStartElement(dbNamespace, "enumitem");
-            writer->writeAttribute(dbNamespace, "enumidentifier", item.name());
-            writer->writeAttribute(dbNamespace, "enumvalue", item.value());
-            writer->writeEndElement(); // enumitem
+            m_writer->writeStartElement(dbNamespace, "enumitem");
+            m_writer->writeAttribute(dbNamespace, "enumidentifier", item.name());
+            m_writer->writeAttribute(dbNamespace, "enumvalue", item.value());
+            m_writer->writeEndElement(); // enumitem
             newLine();
         }
     }
 
-    writer->writeEndElement(); // nodeToSynopsisTag (like classsynopsis)
+    m_writer->writeEndElement(); // nodeToSynopsisTag (like classsynopsis)
     newLine();
 
     // The typedef associated to this enum.
     if (enumNode && enumNode->flagsType()) {
-        writer->writeStartElement(dbNamespace, "typedefsynopsis");
+        m_writer->writeStartElement(dbNamespace, "typedefsynopsis");
         newLine();
 
-        writer->writeTextElement(dbNamespace, "typedefname",
-                                 enumNode->flagsType()->fullDocumentName());
+        m_writer->writeTextElement(dbNamespace, "typedefname",
+                                   enumNode->flagsType()->fullDocumentName());
 
-        writer->writeEndElement(); // typedefsynopsis
+        m_writer->writeEndElement(); // typedefsynopsis
         newLine();
     }
 }
@@ -3096,7 +3078,7 @@ void DocBookGenerator::typified(const QString &string, const Node *relative, boo
                 bool isProbablyType = (pendingWord != QLatin1String("const"));
                 if (generateType && isProbablyType) {
                     // Flush the current buffer.
-                    writer->writeCharacters(result);
+                    m_writer->writeCharacters(result);
                     result.truncate(0);
 
                     // Add the link, logic from HtmlGenerator::highlightedCode.
@@ -3108,12 +3090,12 @@ void DocBookGenerator::typified(const QString &string, const Node *relative, boo
                         href = linkForNode(n, relative);
                     }
 
-                    writer->writeStartElement(dbNamespace, "type");
+                    m_writer->writeStartElement(dbNamespace, "type");
                     if (href.isEmpty())
-                        writer->writeCharacters(pendingWord);
+                        m_writer->writeCharacters(pendingWord);
                     else
                         generateSimpleLink(href, pendingWord);
-                    writer->writeEndElement(); // type
+                    m_writer->writeEndElement(); // type
                 } else {
                     result += pendingWord;
                 }
@@ -3130,7 +3112,7 @@ void DocBookGenerator::typified(const QString &string, const Node *relative, boo
             result += QLatin1Char(' ');
     }
 
-    writer->writeCharacters(result);
+    m_writer->writeCharacters(result);
 }
 
 void DocBookGenerator::generateSynopsisName(const Node *node, const Node *relative,
@@ -3141,14 +3123,14 @@ void DocBookGenerator::generateSynopsisName(const Node *node, const Node *relati
     QString name = taggedNode(node);
 
     if (!generateNameLink) {
-        writer->writeCharacters(name);
+        m_writer->writeCharacters(name);
         return;
     }
 
-    writer->writeStartElement(dbNamespace, "emphasis");
-    writer->writeAttribute("role", "bold");
+    m_writer->writeStartElement(dbNamespace, "emphasis");
+    m_writer->writeAttribute("role", "bold");
     generateSimpleLink(linkForNode(node, relative), name);
-    writer->writeEndElement(); // emphasis
+    m_writer->writeEndElement(); // emphasis
 }
 
 void DocBookGenerator::generateParameter(const Parameter &parameter, const Node *relative,
@@ -3168,22 +3150,22 @@ void DocBookGenerator::generateParameter(const Parameter &parameter, const Node 
         // this is intended to be rendered as a subscript.
         QRegularExpression sub("([a-z]+)_([0-9]+|n)");
 
-        writer->writeStartElement(dbNamespace, "emphasis");
+        m_writer->writeStartElement(dbNamespace, "emphasis");
         auto match = sub.match(paramName);
         if (match.hasMatch()) {
-            writer->writeCharacters(match.captured(0));
-            writer->writeStartElement(dbNamespace, "sub");
-            writer->writeCharacters(match.captured(1));
-            writer->writeEndElement(); // sub
+            m_writer->writeCharacters(match.captured(0));
+            m_writer->writeStartElement(dbNamespace, "sub");
+            m_writer->writeCharacters(match.captured(1));
+            m_writer->writeEndElement(); // sub
         } else {
-            writer->writeCharacters(paramName);
+            m_writer->writeCharacters(paramName);
         }
-        writer->writeEndElement(); // emphasis
+        m_writer->writeEndElement(); // emphasis
     }
 
     const QString &pvalue = parameter.defaultValue();
     if (generateExtra && !pvalue.isEmpty())
-        writer->writeCharacters(" = " + pvalue);
+        m_writer->writeCharacters(" = " + pvalue);
 }
 
 void DocBookGenerator::generateSynopsis(const Node *node, const Node *relative,
@@ -3198,24 +3180,24 @@ void DocBookGenerator::generateSynopsis(const Node *node, const Node *relative,
     const int MaxEnumValues = 6;
 
     if (generateExtra)
-        writer->writeCharacters(CodeMarker::extraSynopsis(node, style));
+        m_writer->writeCharacters(CodeMarker::extraSynopsis(node, style));
 
     // Then generate the synopsis.
     if (style == Section::Details) {
         if (!node->isRelatedNonmember() && !node->isProxyNode() && !node->parent()->name().isEmpty()
             && !node->parent()->isHeader() && !node->isProperty() && !node->isQmlNode()
             && !node->isJsNode()) {
-            writer->writeCharacters(taggedNode(node->parent()) + "::");
+            m_writer->writeCharacters(taggedNode(node->parent()) + "::");
         }
     }
 
     switch (node->nodeType()) {
     case Node::Namespace:
-        writer->writeCharacters("namespace ");
+        m_writer->writeCharacters("namespace ");
         generateSynopsisName(node, relative, generateNameLink);
         break;
     case Node::Class:
-        writer->writeCharacters("class ");
+        m_writer->writeCharacters("class ");
         generateSynopsisName(node, relative, generateNameLink);
         break;
     case Node::Function: {
@@ -3224,7 +3206,7 @@ void DocBookGenerator::generateSynopsis(const Node *node, const Node *relative,
         // First, the part coming before the name.
         if (style == Section::Summary || style == Section::Accessors) {
             if (!func->isNonvirtual())
-                writer->writeCharacters(QStringLiteral("virtual "));
+                m_writer->writeCharacters(QStringLiteral("virtual "));
         }
 
         // Name and parameters.
@@ -3233,19 +3215,19 @@ void DocBookGenerator::generateSynopsis(const Node *node, const Node *relative,
         generateSynopsisName(node, relative, generateNameLink);
 
         if (!func->isMacroWithoutParams()) {
-            writer->writeCharacters(QStringLiteral("("));
+            m_writer->writeCharacters(QStringLiteral("("));
             if (!func->parameters().isEmpty()) {
                 const Parameters &parameters = func->parameters();
                 for (int i = 0; i < parameters.count(); i++) {
                     if (i > 0)
-                        writer->writeCharacters(QStringLiteral(", "));
+                        m_writer->writeCharacters(QStringLiteral(", "));
                     generateParameter(parameters.at(i), relative, generateExtra, generateType);
                 }
             }
-            writer->writeCharacters(QStringLiteral(")"));
+            m_writer->writeCharacters(QStringLiteral(")"));
         }
         if (func->isConst())
-            writer->writeCharacters(QStringLiteral(" const"));
+            m_writer->writeCharacters(QStringLiteral(" const"));
 
         if (style == Section::Summary || style == Section::Accessors) {
             // virtual is prepended, if needed.
@@ -3260,10 +3242,10 @@ void DocBookGenerator::generateSynopsis(const Node *node, const Node *relative,
                 synopsis += QStringLiteral(" &");
             else if (func->isRefRef())
                 synopsis += QStringLiteral(" &&");
-            writer->writeCharacters(synopsis);
+            m_writer->writeCharacters(synopsis);
         } else if (style == Section::AllMembers) {
             if (!func->returnType().isEmpty() && func->returnType() != "void") {
-                writer->writeCharacters(QStringLiteral(" : "));
+                m_writer->writeCharacters(QStringLiteral(" : "));
                 typified(func->returnType(), relative, false, generateType);
             }
         } else {
@@ -3272,12 +3254,12 @@ void DocBookGenerator::generateSynopsis(const Node *node, const Node *relative,
                 synopsis += QStringLiteral(" &");
             else if (func->isRefRef())
                 synopsis += QStringLiteral(" &&");
-            writer->writeCharacters(synopsis);
+            m_writer->writeCharacters(synopsis);
         }
     } break;
     case Node::Enum: {
         const auto enume = static_cast<const EnumNode *>(node);
-        writer->writeCharacters(QStringLiteral("enum "));
+        m_writer->writeCharacters(QStringLiteral("enum "));
         generateSynopsisName(node, relative, generateNameLink);
 
         QString synopsis;
@@ -3307,38 +3289,38 @@ void DocBookGenerator::generateSynopsis(const Node *node, const Node *relative,
                 synopsis += QLatin1Char(' ');
             synopsis += QLatin1Char('}');
         }
-        writer->writeCharacters(synopsis);
+        m_writer->writeCharacters(synopsis);
     } break;
     case Node::TypeAlias: {
         if (style == Section::Details) {
             QString templateDecl = node->templateDecl();
             if (!templateDecl.isEmpty())
-                writer->writeCharacters(templateDecl + QLatin1Char(' '));
+                m_writer->writeCharacters(templateDecl + QLatin1Char(' '));
         }
         generateSynopsisName(node, relative, generateNameLink);
     } break;
     case Node::Typedef: {
         if (static_cast<const TypedefNode *>(node)->associatedEnum())
-            writer->writeCharacters("flags ");
+            m_writer->writeCharacters("flags ");
         generateSynopsisName(node, relative, generateNameLink);
     } break;
     case Node::Property: {
         const auto property = static_cast<const PropertyNode *>(node);
         generateSynopsisName(node, relative, generateNameLink);
-        writer->writeCharacters(" : ");
+        m_writer->writeCharacters(" : ");
         typified(property->qualifiedDataType(), relative, false, generateType);
     } break;
     case Node::Variable: {
         const auto variable = static_cast<const VariableNode *>(node);
         if (style == Section::AllMembers) {
             generateSynopsisName(node, relative, generateNameLink);
-            writer->writeCharacters(" : ");
+            m_writer->writeCharacters(" : ");
             typified(variable->dataType(), relative, false, generateType);
         } else {
             typified(variable->leftType(), relative, false, generateType);
-            writer->writeCharacters(" ");
+            m_writer->writeCharacters(" ");
             generateSynopsisName(node, relative, generateNameLink);
-            writer->writeCharacters(variable->rightType());
+            m_writer->writeCharacters(variable->rightType());
         }
     } break;
     default:
@@ -3352,7 +3334,7 @@ void DocBookGenerator::generateEnumValue(const QString &enumValue, const Node *r
     // <@op>). With respect to CppCodeMarker::markedUpEnumValue, the order of generation of parents
     // must be reversed so that they are processed in the order
     if (!relative->isEnumType()) {
-        writer->writeCharacters(enumValue);
+        m_writer->writeCharacters(enumValue);
         return;
     }
 
@@ -3367,14 +3349,14 @@ void DocBookGenerator::generateEnumValue(const QString &enumValue, const Node *r
     if (static_cast<const EnumNode *>(relative)->isScoped())
         parents << relative;
 
-    writer->writeStartElement(dbNamespace, "code");
+    m_writer->writeStartElement(dbNamespace, "code");
     for (auto parent : parents) {
         generateSynopsisName(parent, relative, true);
-        writer->writeCharacters("::");
+        m_writer->writeCharacters("::");
     }
 
-    writer->writeCharacters(enumValue);
-    writer->writeEndElement(); // code
+    m_writer->writeCharacters(enumValue);
+    m_writer->writeEndElement(); // code
 }
 
 /*!
@@ -3392,19 +3374,19 @@ void DocBookGenerator::generateOverloadedSignal(const Node *node)
     if (code.isEmpty())
         return;
 
-    writer->writeStartElement(dbNamespace, "note");
+    m_writer->writeStartElement(dbNamespace, "note");
     newLine();
-    writer->writeStartElement(dbNamespace, "para");
-    writer->writeCharacters("Signal ");
-    writer->writeTextElement(dbNamespace, "emphasis", node->name());
-    writer->writeCharacters(" is overloaded in this class. To connect to this "
-                            "signal by using the function pointer syntax, Qt "
-                            "provides a convenient helper for obtaining the "
-                            "function pointer as shown in this example:");
-    writer->writeTextElement(dbNamespace, "code", code);
-    writer->writeEndElement(); // para
+    m_writer->writeStartElement(dbNamespace, "para");
+    m_writer->writeCharacters("Signal ");
+    m_writer->writeTextElement(dbNamespace, "emphasis", node->name());
+    m_writer->writeCharacters(" is overloaded in this class. To connect to this "
+                              "signal by using the function pointer syntax, Qt "
+                              "provides a convenient helper for obtaining the "
+                              "function pointer as shown in this example:");
+    m_writer->writeTextElement(dbNamespace, "code", code);
+    m_writer->writeEndElement(); // para
     newLine();
-    writer->writeEndElement(); // note
+    m_writer->writeEndElement(); // note
     newLine();
 }
 
@@ -3418,23 +3400,24 @@ void DocBookGenerator::generateAddendum(const Node *node, Addendum type, CodeMar
     Q_UNUSED(marker);
     Q_ASSERT(node && !node->name().isEmpty());
     if (generateNote) {
-        writer->writeStartElement(dbNamespace, "note");
+        m_writer->writeStartElement(dbNamespace, "note");
         newLine();
     }
     switch (type) {
     case Invokable:
-        writer->writeStartElement(dbNamespace, "para");
-        writer->writeCharacters(
-            "This function can be invoked via the meta-object system and from QML. See ");
+        m_writer->writeStartElement(dbNamespace, "para");
+        m_writer->writeCharacters(
+                "This function can be invoked via the meta-object system and from QML. See ");
         generateSimpleLink(node->url(), "Q_INVOKABLE");
-        writer->writeCharacters(".");
-        writer->writeEndElement(); // para
+        m_writer->writeCharacters(".");
+        m_writer->writeEndElement(); // para
         newLine();
         break;
     case PrivateSignal:
-        writer->writeTextElement(dbNamespace, "para",
-            "This is a private signal. It can be used in signal connections but "
-            "cannot be emitted by the user.");
+        m_writer->writeTextElement(
+                dbNamespace, "para",
+                "This is a private signal. It can be used in signal connections but "
+                "cannot be emitted by the user.");
         break;
     case QmlSignalHandler:
     {
@@ -3442,11 +3425,11 @@ void DocBookGenerator::generateAddendum(const Node *node, Addendum type, CodeMar
         int prefixLocation = handler.lastIndexOf('.', -2) + 1;
         handler[prefixLocation] = handler[prefixLocation].toTitleCase();
         handler.insert(prefixLocation, QLatin1String("on"));
-        writer->writeStartElement(dbNamespace, "para");
-        writer->writeCharacters("The corresponding handler is ");
-        writer->writeTextElement(dbNamespace, "code", handler);
-        writer->writeCharacters(".");
-        writer->writeEndElement(); // para
+        m_writer->writeStartElement(dbNamespace, "para");
+        m_writer->writeCharacters("The corresponding handler is ");
+        m_writer->writeTextElement(dbNamespace, "code", handler);
+        m_writer->writeCharacters(".");
+        m_writer->writeEndElement(); // para
         newLine();
         break;
     }
@@ -3454,7 +3437,7 @@ void DocBookGenerator::generateAddendum(const Node *node, Addendum type, CodeMar
     {
         if (!node->isFunction())
             return;
-        const FunctionNode *fn = static_cast<const FunctionNode *>(node);
+        const auto *fn = static_cast<const FunctionNode *>(node);
         NodeList nodes = fn->associatedProperties();
         if (nodes.isEmpty())
             return;
@@ -3478,9 +3461,9 @@ void DocBookGenerator::generateAddendum(const Node *node, Addendum type, CodeMar
             default:
                 continue;
             }
-            writer->writeCharacters(msg + " for property ");
+            m_writer->writeCharacters(msg + " for property ");
             generateSimpleLink(linkForNode(pn, nullptr), pn->name());
-            writer->writeCharacters(". ");
+            m_writer->writeCharacters(". ");
         }
         break;
     }
@@ -3489,11 +3472,11 @@ void DocBookGenerator::generateAddendum(const Node *node, Addendum type, CodeMar
         const Node *linkNode;
         Atom linkAtom = Atom(Atom::Link, "QProperty");
         QString link = getAutoLink(&linkAtom, node, &linkNode);
-        writer->writeStartElement(dbNamespace, "para");
-        writer->writeCharacters("This property supports ");
+        m_writer->writeStartElement(dbNamespace, "para");
+        m_writer->writeCharacters("This property supports ");
         generateSimpleLink(link, "QProperty");
-        writer->writeCharacters(" bindings.");
-        writer->writeEndElement(); // para
+        m_writer->writeCharacters(" bindings.");
+        m_writer->writeEndElement(); // para
         newLine();
         break;
     }
@@ -3502,7 +3485,7 @@ void DocBookGenerator::generateAddendum(const Node *node, Addendum type, CodeMar
     }
 
     if (generateNote) {
-        writer->writeEndElement(); // note
+        m_writer->writeEndElement(); // note
         newLine();
     }
 }
@@ -3510,7 +3493,7 @@ void DocBookGenerator::generateAddendum(const Node *node, Addendum type, CodeMar
 void DocBookGenerator::generateDetailedMember(const Node *node, const PageNode *relative)
 {
     // From HtmlGenerator::generateDetailedMember.
-    writer->writeStartElement(dbNamespace, "section");
+    m_writer->writeStartElement(dbNamespace, "section");
     if (node->isSharedCommentNode()) {
         const auto scn = reinterpret_cast<const SharedCommentNode *>(node);
         const QList<Node *> &collective = scn->collective();
@@ -3521,20 +3504,20 @@ void DocBookGenerator::generateDetailedMember(const Node *node, const PageNode *
                 QString nodeRef = refForNode(n);
 
                 if (firstFunction) {
-                    writer->writeAttribute("xml:id", refForNode(collective.at(0)));
+                    m_writer->writeAttribute("xml:id", refForNode(collective.at(0)));
                     newLine();
-                    writer->writeStartElement(dbNamespace, "title");
+                    m_writer->writeStartElement(dbNamespace, "title");
                     generateSynopsis(n, relative, Section::Details);
-                    writer->writeEndElement(); // title
+                    m_writer->writeEndElement(); // title
                     newLine();
 
                     firstFunction = false;
                 } else {
-                    writer->writeStartElement(dbNamespace, "bridgehead");
-                    writer->writeAttribute("renderas", "sect2");
-                    writer->writeAttribute("xml:id", nodeRef);
+                    m_writer->writeStartElement(dbNamespace, "bridgehead");
+                    m_writer->writeAttribute("renderas", "sect2");
+                    m_writer->writeAttribute("xml:id", nodeRef);
                     generateSynopsis(n, relative, Section::Details);
-                    writer->writeEndElement(); // bridgehead
+                    m_writer->writeEndElement(); // bridgehead
                     newLine();
                 }
             }
@@ -3543,22 +3526,22 @@ void DocBookGenerator::generateDetailedMember(const Node *node, const PageNode *
         const EnumNode *etn;
         QString nodeRef = refForNode(node);
         if (node->isEnumType() && (etn = static_cast<const EnumNode *>(node))->flagsType()) {
-            writer->writeAttribute("xml:id", nodeRef);
+            m_writer->writeAttribute("xml:id", nodeRef);
             newLine();
-            writer->writeStartElement(dbNamespace, "title");
+            m_writer->writeStartElement(dbNamespace, "title");
             generateSynopsis(etn, relative, Section::Details);
-            writer->writeEndElement(); // title
+            m_writer->writeEndElement(); // title
             newLine();
-            writer->writeStartElement(dbNamespace, "bridgehead");
+            m_writer->writeStartElement(dbNamespace, "bridgehead");
             generateSynopsis(etn->flagsType(), relative, Section::Details);
-            writer->writeEndElement(); // bridgehead
+            m_writer->writeEndElement(); // bridgehead
             newLine();
         } else {
-            writer->writeAttribute("xml:id", nodeRef);
+            m_writer->writeAttribute("xml:id", nodeRef);
             newLine();
-            writer->writeStartElement(dbNamespace, "title");
+            m_writer->writeStartElement(dbNamespace, "title");
             generateSynopsis(node, relative, Section::Details);
-            writer->writeEndElement(); // title
+            m_writer->writeEndElement(); // title
             newLine();
         }
     }
@@ -3581,15 +3564,15 @@ void DocBookGenerator::generateDetailedMember(const Node *node, const PageNode *
             section.appendMembers(property->resetters().toVector());
 
             if (!section.members().isEmpty()) {
-                writer->writeStartElement(dbNamespace, "para");
+                m_writer->writeStartElement(dbNamespace, "para");
                 newLine();
-                writer->writeStartElement(dbNamespace, "emphasis");
-                writer->writeAttribute("role", "bold");
-                writer->writeCharacters("Access functions:");
+                m_writer->writeStartElement(dbNamespace, "emphasis");
+                m_writer->writeAttribute("role", "bold");
+                m_writer->writeCharacters("Access functions:");
                 newLine();
-                writer->writeEndElement(); // emphasis
+                m_writer->writeEndElement(); // emphasis
                 newLine();
-                writer->writeEndElement(); // para
+                m_writer->writeEndElement(); // para
                 newLine();
                 generateSectionList(section, node);
             }
@@ -3598,15 +3581,15 @@ void DocBookGenerator::generateDetailedMember(const Node *node, const PageNode *
             notifiers.appendMembers(property->notifiers().toVector());
 
             if (!notifiers.members().isEmpty()) {
-                writer->writeStartElement(dbNamespace, "para");
+                m_writer->writeStartElement(dbNamespace, "para");
                 newLine();
-                writer->writeStartElement(dbNamespace, "emphasis");
-                writer->writeAttribute("role", "bold");
-                writer->writeCharacters("Notifier signal:");
+                m_writer->writeStartElement(dbNamespace, "emphasis");
+                m_writer->writeAttribute("role", "bold");
+                m_writer->writeCharacters("Notifier signal:");
                 newLine();
-                writer->writeEndElement(); // emphasis
+                m_writer->writeEndElement(); // emphasis
                 newLine();
-                writer->writeEndElement(); // para
+                m_writer->writeEndElement(); // para
                 newLine();
                 generateSectionList(notifiers, node);
             }
@@ -3614,19 +3597,19 @@ void DocBookGenerator::generateDetailedMember(const Node *node, const PageNode *
     } else if (node->isEnumType()) {
         const auto en = static_cast<const EnumNode *>(node);
 
-        if (qflagsHref_.isEmpty()) {
+        if (m_qflagsHref.isEmpty()) {
             Node *qflags = m_qdb->findClassNode(QStringList("QFlags"));
             if (qflags)
-                qflagsHref_ = linkForNode(qflags, nullptr);
+                m_qflagsHref = linkForNode(qflags, nullptr);
         }
 
         if (en->flagsType()) {
-            writer->writeStartElement(dbNamespace, "para");
-            writer->writeCharacters("The " + en->flagsType()->name() + " type is a typedef for ");
-            generateSimpleLink(qflagsHref_, "QFlags");
-            writer->writeCharacters("&lt;" + en->name() + "&gt;. ");
-            writer->writeCharacters("It stores an OR combination of " + en->name() + "values.");
-            writer->writeEndElement(); // para
+            m_writer->writeStartElement(dbNamespace, "para");
+            m_writer->writeCharacters("The " + en->flagsType()->name() + " type is a typedef for ");
+            generateSimpleLink(m_qflagsHref, "QFlags");
+            m_writer->writeCharacters("&lt;" + en->name() + "&gt;. ");
+            m_writer->writeCharacters("It stores an OR combination of " + en->name() + "values.");
+            m_writer->writeEndElement(); // para
             newLine();
         }
     }
@@ -3644,7 +3627,7 @@ void DocBookGenerator::generateSectionList(const Section &section, const Node *r
         bool hasPrivateSignals = false;
         bool isInvokable = false;
 
-        writer->writeStartElement(dbNamespace, "itemizedlist");
+        m_writer->writeStartElement(dbNamespace, "itemizedlist");
         newLine();
 
         int i = 0;
@@ -3655,9 +3638,9 @@ void DocBookGenerator::generateSectionList(const Section &section, const Node *r
                 continue;
             }
 
-            writer->writeStartElement(dbNamespace, "listitem");
+            m_writer->writeStartElement(dbNamespace, "listitem");
             newLine();
-            writer->writeStartElement(dbNamespace, "para");
+            m_writer->writeStartElement(dbNamespace, "para");
 
             // prefix no more needed.
             generateSynopsis(*m, relative, section.style());
@@ -3669,32 +3652,32 @@ void DocBookGenerator::generateSectionList(const Section &section, const Node *r
                     isInvokable = true;
             }
 
-            writer->writeEndElement(); // para
+            m_writer->writeEndElement(); // para
             newLine();
-            writer->writeEndElement(); // listitem
+            m_writer->writeEndElement(); // listitem
             newLine();
 
             i++;
             ++m;
         }
 
-        writer->writeEndElement(); // itemizedlist
+        m_writer->writeEndElement(); // itemizedlist
         newLine();
 
         if (hasPrivateSignals)
-            generateAddendum(relative, Generator::PrivateSignal);
+            generateAddendum(relative, Generator::PrivateSignal, nullptr, true);
         if (isInvokable)
-            generateAddendum(relative, Generator::Invokable);
+            generateAddendum(relative, Generator::Invokable, nullptr, true);
     }
 
     if (status != Section::Obsolete && section.style() == Section::Summary
         && !section.inheritedMembers().isEmpty()) {
-        writer->writeStartElement(dbNamespace, "itemizedlist");
+        m_writer->writeStartElement(dbNamespace, "itemizedlist");
         newLine();
 
         generateSectionInheritedList(section, relative);
 
-        writer->writeEndElement(); // itemizedlist
+        m_writer->writeEndElement(); // itemizedlist
         newLine();
     }
 }
@@ -3704,13 +3687,13 @@ void DocBookGenerator::generateSectionInheritedList(const Section &section, cons
     // From HtmlGenerator::generateSectionInheritedList.
     QList<QPair<Aggregate *, int>>::ConstIterator p = section.inheritedMembers().constBegin();
     while (p != section.inheritedMembers().constEnd()) {
-        writer->writeStartElement(dbNamespace, "listitem");
-        writer->writeCharacters(QString::number((*p).second) + u' ');
+        m_writer->writeStartElement(dbNamespace, "listitem");
+        m_writer->writeCharacters(QString::number((*p).second) + u' ');
         if ((*p).second == 1)
-            writer->writeCharacters(section.singular());
+            m_writer->writeCharacters(section.singular());
         else
-            writer->writeCharacters(section.plural());
-        writer->writeCharacters(" inherited from ");
+            m_writer->writeCharacters(section.plural());
+        m_writer->writeCharacters(" inherited from ");
         generateSimpleLink(fileName((*p).first) + '#'
                                    + Generator::cleanRef(section.title().toLower()),
                            (*p).first->plainFullName(relative));
@@ -3724,9 +3707,9 @@ void DocBookGenerator::generateSectionInheritedList(const Section &section, cons
  */
 void DocBookGenerator::generatePageNode(PageNode *pn)
 {
-    Q_ASSERT(writer == nullptr);
+    Q_ASSERT(m_writer == nullptr);
     // From HtmlGenerator::generatePageNode, remove anything related to TOCs.
-    writer = startDocument(pn);
+    m_writer = startDocument(pn);
 
     generateHeader(pn->fullTitle(), pn->subtitle(), pn);
     generateBody(pn);
@@ -3739,11 +3722,8 @@ void DocBookGenerator::generatePageNode(PageNode *pn)
 /*!
   Extract sections of markup text and output them.
  */
-bool DocBookGenerator::generateQmlText(const Text &text, const Node *relative, CodeMarker *marker,
-                                       const QString &qmlName)
+bool DocBookGenerator::generateQmlText(const Text &text, const Node *relative)
 {
-    Q_UNUSED(marker);
-    Q_UNUSED(qmlName);
     // From Generator::generateQmlText.
     const Atom *atom = text.firstAtom();
     bool result = false;
@@ -3774,8 +3754,8 @@ void DocBookGenerator::generateQmlTypePage(QmlTypeNode *qcn)
 {
     // From HtmlGenerator::generateQmlTypePage.
     // Start producing the DocBook file.
-    Q_ASSERT(writer == nullptr);
-    writer = startDocument(qcn);
+    Q_ASSERT(m_writer == nullptr);
+    m_writer = startDocument(qcn);
 
     Generator::setQmlTypeContext(qcn);
     QString title = qcn->fullTitle();
@@ -3825,8 +3805,8 @@ void DocBookGenerator::generateQmlBasicTypePage(QmlBasicTypeNode *qbtn)
 {
     // From HtmlGenerator::generateQmlBasicTypePage.
     // Start producing the DocBook file.
-    Q_ASSERT(writer == nullptr);
-    writer = startDocument(qbtn);
+    Q_ASSERT(m_writer == nullptr);
+    m_writer = startDocument(qbtn);
 
     QString htmlTitle = qbtn->fullTitle();
     if (qbtn->isJsType())
@@ -3884,6 +3864,8 @@ void DocBookGenerator::generateDetailedQmlMember(Node *node, const Aggregate *re
             extra << "read-only";
         else if (n->isRequired())
             extra << "required";
+        else if (!n->defaultValue().isEmpty())
+            extra << "default: " + n->defaultValue();
 
         if (!n->since().isEmpty()) {
             if (!extra.isEmpty())
@@ -3924,11 +3906,11 @@ void DocBookGenerator::generateDetailedQmlMember(Node *node, const Aggregate *re
             if (node->isQmlProperty() || node->isJsProperty()) {
                 auto *qpn = static_cast<QmlPropertyNode *>(node);
 
-                writer->writeStartElement(dbNamespace, "bridgehead");
-                writer->writeAttribute("renderas", "sect2");
-                writer->writeAttribute("xml:id", refForNode(qpn));
-                writer->writeCharacters(getQmlPropertyTitle(qpn));
-                writer->writeEndElement(); // bridgehead
+                m_writer->writeStartElement(dbNamespace, "bridgehead");
+                m_writer->writeAttribute("renderas", "sect2");
+                m_writer->writeAttribute("xml:id", refForNode(qpn));
+                m_writer->writeCharacters(getQmlPropertyTitle(qpn));
+                m_writer->writeEndElement(); // bridgehead
                 newLine();
 
                 generateDocBookSynopsis(qpn);
@@ -3954,22 +3936,22 @@ void DocBookGenerator::generateDetailedQmlMember(Node *node, const Aggregate *re
 
             // Complete the section tag.
             if (i == 0) {
-                writer->writeStartElement(dbNamespace, "section");
-                writer->writeAttribute("xml:id", refForNode(m));
+                m_writer->writeStartElement(dbNamespace, "section");
+                m_writer->writeAttribute("xml:id", refForNode(m));
                 newLine();
             }
 
             // Write the tag containing the title.
-            writer->writeStartElement(dbNamespace, (i == 0) ? "title" : "bridgehead");
+            m_writer->writeStartElement(dbNamespace, (i == 0) ? "title" : "bridgehead");
             if (i > 0)
-                writer->writeAttribute("renderas", "sect2");
+                m_writer->writeAttribute("renderas", "sect2");
 
             // Write the title.
-            QString title;
             if (node->isFunction(Node::QML) || node->isFunction(Node::JS))
                 generateQmlMethodTitle(node);
             else if (node->isQmlProperty() || node->isJsProperty())
-                writer->writeCharacters(getQmlPropertyTitle(static_cast<QmlPropertyNode *>(node)));
+                m_writer->writeCharacters(
+                        getQmlPropertyTitle(static_cast<QmlPropertyNode *>(node)));
 
             // Complete the title and the synopsis.
             generateDocBookSynopsis(m);
@@ -4077,8 +4059,8 @@ void DocBookGenerator::generateProxyPage(Aggregate *aggregate)
     Q_ASSERT(aggregate->isProxyNode());
 
     // Start producing the DocBook file.
-    Q_ASSERT(writer == nullptr);
-    writer = startDocument(aggregate);
+    Q_ASSERT(m_writer == nullptr);
+    m_writer = startDocument(aggregate);
 
     // Info container.
     generateHeader(aggregate->plainFullName(), "", aggregate);
@@ -4135,8 +4117,8 @@ void DocBookGenerator::generateCollectionNode(CollectionNode *cn)
 {
     // Adapted from HtmlGenerator::generateCollectionNode.
     // Start producing the DocBook file.
-    Q_ASSERT(writer == nullptr);
-    writer = startDocument(cn);
+    Q_ASSERT(m_writer == nullptr);
+    m_writer = startDocument(cn);
 
     // Info container.
     generateHeader(cn->fullTitle(), cn->subtitle(), cn);
@@ -4208,8 +4190,8 @@ void DocBookGenerator::generateGenericCollectionPage(CollectionNode *cn)
     QString filename = cn->tree()->physicalModuleName() + "-" + name + "." + fileExtension();
 
     // Start producing the DocBook file.
-    Q_ASSERT(writer == nullptr);
-    writer = startGenericDocument(cn, filename);
+    Q_ASSERT(m_writer == nullptr);
+    m_writer = startGenericDocument(cn, filename);
 
     // Info container.
     generateHeader(cn->fullTitle(), cn->subtitle(), cn);
@@ -4218,12 +4200,12 @@ void DocBookGenerator::generateGenericCollectionPage(CollectionNode *cn)
     generateDocBookSynopsis(cn);
 
     // Actual content.
-    writer->writeStartElement(dbNamespace, "para");
-    writer->writeCharacters("Each function or type documented here is related to a class or "
-                            "namespace that is documented in a different module. The reference "
-                            "page for that class or namespace will link to the function or type "
-                            "on this page.");
-    writer->writeEndElement(); // para
+    m_writer->writeStartElement(dbNamespace, "para");
+    m_writer->writeCharacters("Each function or type documented here is related to a class or "
+                              "namespace that is documented in a different module. The reference "
+                              "page for that class or namespace will link to the function or type "
+                              "on this page.");
+    m_writer->writeEndElement(); // para
 
     const CollectionNode *cnc = cn;
     const QList<Node *> members = cn->members();
@@ -4241,11 +4223,11 @@ void DocBookGenerator::generateFullName(const Node *node, const Node *relative)
     Q_ASSERT(relative);
 
     // From Generator::appendFullName.
-    writer->writeStartElement(dbNamespace, "link");
-    writer->writeAttribute(xlinkNamespace, "href", fullDocumentLocation(node));
-    writer->writeAttribute(xlinkNamespace, "role", targetType(node));
-    writer->writeCharacters(node->fullName(relative));
-    writer->writeEndElement(); // link
+    m_writer->writeStartElement(dbNamespace, "link");
+    m_writer->writeAttribute(xlinkNamespace, "href", fullDocumentLocation(node));
+    m_writer->writeAttribute(xlinkNamespace, "role", targetType(node));
+    m_writer->writeCharacters(node->fullName(relative));
+    m_writer->writeEndElement(); // link
 }
 
 void DocBookGenerator::generateFullName(const Node *apparentNode, const QString &fullName,
@@ -4257,11 +4239,11 @@ void DocBookGenerator::generateFullName(const Node *apparentNode, const QString 
     // From Generator::appendFullName.
     if (actualNode == nullptr)
         actualNode = apparentNode;
-    writer->writeStartElement(dbNamespace, "link");
-    writer->writeAttribute(xlinkNamespace, "href", fullDocumentLocation(actualNode));
-    writer->writeAttribute("type", targetType(actualNode));
-    writer->writeCharacters(fullName);
-    writer->writeEndElement(); // link
+    m_writer->writeStartElement(dbNamespace, "link");
+    m_writer->writeAttribute(xlinkNamespace, "href", fullDocumentLocation(actualNode));
+    m_writer->writeAttribute("type", targetType(actualNode));
+    m_writer->writeCharacters(fullName);
+    m_writer->writeEndElement(); // link
 }
 
 QT_END_NAMESPACE

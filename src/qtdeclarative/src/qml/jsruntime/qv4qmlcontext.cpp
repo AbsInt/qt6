@@ -88,11 +88,7 @@ static OptionalReturnedValue searchContextProperties(
         bool *hasProperty, Value *base, QV4::Lookup *lookup, QV4::Lookup *originalLookup,
         QQmlEnginePrivate *ep)
 {
-    const QV4::IdentifierHash &properties = context->propertyNames();
-    if (properties.count() == 0)
-        return OptionalReturnedValue();
-
-    const int propertyIdx = properties.value(name);
+    const int propertyIdx = context->propertyIndex(name);
 
     if (propertyIdx == -1)
         return OptionalReturnedValue();
@@ -126,7 +122,7 @@ static OptionalReturnedValue searchContextProperties(
         QQmlListProperty<QObject> prop(context->asQQmlContext(), (void*) qintptr(propertyIdx),
                                        QQmlContextPrivate::context_count,
                                        QQmlContextPrivate::context_at);
-        return OptionalReturnedValue(QmlListWrapper::create(v4, prop, qMetaTypeId<QQmlListProperty<QObject> >()));
+        return OptionalReturnedValue(QmlListWrapper::create(v4, prop, QMetaType::fromType<QQmlListProperty<QObject> >()));
     }
     return OptionalReturnedValue(v4->fromVariant(cp->propertyValue(propertyIdx)));
 }
@@ -236,6 +232,7 @@ ReturnedValue QQmlContextWrapper::getPropertyAndBase(const QQmlContextWrapper *r
                 return QV4::Encode::null();
             } else if (r.type.isValid()) {
                 if (lookup) {
+                    bool isValueSingleton = false;
                     if (r.type.isSingleton()) {
                         QQmlEnginePrivate *e = QQmlEnginePrivate::get(v4->qmlEngine());
                         if (r.type.isQObjectSingleton() || r.type.isCompositeSingleton()) {
@@ -255,9 +252,11 @@ ReturnedValue QQmlContextWrapper::getPropertyAndBase(const QQmlContextWrapper *r
                                 lookup->qmlContextSingletonLookup.singletonObject = val->heapObject();
                             } else {
                                 lookup->qmlContextSingletonLookup.singletonValue = QJSValuePrivate::asReturnedValue(&singleton);
+                                isValueSingleton = true;
                             }
                         }
-                        lookup->qmlContextPropertyGetter = QQmlContextWrapper::lookupSingleton;
+                        lookup->qmlContextPropertyGetter = isValueSingleton ? QQmlContextWrapper::lookupValueSingleton
+                                                                            : QQmlContextWrapper::lookupSingleton;
                         return lookup->qmlContextPropertyGetter(lookup, v4, base);
                     }
                 }
@@ -429,17 +428,13 @@ bool QQmlContextWrapper::virtualPut(Managed *m, PropertyKey id, const Value &val
     ScopedString name(scope, id.asStringOrSymbol());
 
     while (context) {
-        const QV4::IdentifierHash &properties = context->propertyNames();
         // Search context properties
-        if (properties.count()) {
-            const int propertyIndex = properties.value(name);
-            if (propertyIndex != -1) {
-                if (propertyIndex < context->numIdValues()) {
-                    v4->throwError(QLatin1String("left-hand side of assignment operator is not an lvalue"));
-                    return false;
-                }
+        if (const int propertyIndex = context->propertyIndex(name); propertyIndex != -1) {
+            if (propertyIndex < context->numIdValues()) {
+                v4->throwError(QLatin1String("left-hand side of assignment operator is not an lvalue"));
                 return false;
             }
+            return false;
         }
 
         // Search scope object
@@ -547,9 +542,15 @@ ReturnedValue QQmlContextWrapper::lookupSingleton(Lookup *l, ExecutionEngine *en
     Q_UNUSED(engine);
     Q_UNUSED(base);
 
-    if (l->qmlContextSingletonLookup.singletonObject != nullptr)
-        return l->qmlContextSingletonLookup.singletonObject->asReturnedValue();
+    return l->qmlContextSingletonLookup.singletonObject->asReturnedValue();
+}
 
+ReturnedValue QQmlContextWrapper::lookupValueSingleton(Lookup *l, ExecutionEngine *engine, Value *base)
+{
+    Q_UNUSED(engine);
+    Q_UNUSED(base);
+
+    Q_ASSERT(l->qmlContextSingletonLookup.singletonObject == nullptr);
     return l->qmlContextSingletonLookup.singletonValue;
 }
 
@@ -572,6 +573,12 @@ ReturnedValue QQmlContextWrapper::lookupIdObject(Lookup *l, ExecutionEngine *eng
         qmlEngine->propertyCapture->captureProperty(context->idValueBindings(objectId));
 
     return QV4::QObjectWrapper::wrap(engine, context->idValue(objectId));
+}
+
+ReturnedValue QQmlContextWrapper::lookupIdObjectInParentContext(
+        Lookup *l, ExecutionEngine *engine, Value *base)
+{
+    return QQmlContextWrapper::resolveQmlContextPropertyLookupGetter(l, engine, base);
 }
 
 ReturnedValue QQmlContextWrapper::lookupScopeObjectProperty(Lookup *l, ExecutionEngine *engine, Value *base)

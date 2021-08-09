@@ -59,7 +59,7 @@ VkSubpassContents contents;
 class VulkanRenderer : public QVulkanWindowRenderer
 {
 public:
-    VulkanRenderer(QVulkanWindow *w) : m_window(w) { }
+    VulkanRenderer(QVulkanWindow *w) : m_window(w), m_devFuncs(nullptr) { }
 
     void initResources() override
     {
@@ -98,7 +98,7 @@ int main(int argc, char *argv[])
 
     QVulkanInstance inst;
     // enable the standard validation layers, when available
-    inst.setLayers(QByteArrayList() << "VK_LAYER_LUNARG_standard_validation");
+    inst.setLayers({ "VK_LAYER_KHRONOS_validation" });
     if (!inst.create())
         qFatal("Failed to create Vulkan instance: %d", inst.errorCode());
 

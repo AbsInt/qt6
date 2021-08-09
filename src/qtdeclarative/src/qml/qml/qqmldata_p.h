@@ -98,7 +98,6 @@ public:
         if (!initialized) {
             initialized = true;
             QAbstractDeclarativeData::destroyed = destroyed;
-            QAbstractDeclarativeData::parentChanged = parentChanged;
             QAbstractDeclarativeData::signalEmitted = signalEmitted;
             QAbstractDeclarativeData::receivers = receivers;
             QAbstractDeclarativeData::isSignalConnected = isSignalConnected;
@@ -106,22 +105,29 @@ public:
     }
 
     static void destroyed(QAbstractDeclarativeData *, QObject *);
-    static void parentChanged(QAbstractDeclarativeData *, QObject *, QObject *);
     static void signalEmitted(QAbstractDeclarativeData *, QObject *, int, void **);
     static int receivers(QAbstractDeclarativeData *, const QObject *, int);
     static bool isSignalConnected(QAbstractDeclarativeData *, const QObject *, int);
 
     void destroyed(QObject *);
-    void parentChanged(QObject *, QObject *);
 
     void setImplicitDestructible() {
         if (!explicitIndestructibleSet) indestructible = false;
     }
 
-    quint32 ownedByQml1:1; // This bit is shared with QML1's QDeclarativeData.
+    // If ownMemomry is true, the QQmlData was normally allocated. Otherwise it was allocated
+    // with placement new and QQmlData::destroyed is not allowed to free the memory
     quint32 ownMemory:1;
+    // indestructible is set if and only if the object has CppOwnership
+    // This can be explicitly set with QJSEngine::setObjectOwnership
+    // Top level objects generally have CppOwnership (see QQmlcCmponentprivate::beginCreate),
+    // unless created by special methods like the QML component.createObject() function
     quint32 indestructible:1;
+    // indestructible was explicitly set  with setObjectOwnership
+    // or the object is a top-level object
     quint32 explicitIndestructibleSet:1;
+    // set when one QObject has been wrapped into QObjectWrapper in multiple engines
+    // at the same time - a rather rare case
     quint32 hasTaintedV4Object:1;
     quint32 isQueuedForDeletion:1;
     /*
@@ -129,10 +135,10 @@ public:
      * v8 GC will check this flag, only deletes the objects when rootObjectInCreation is false.
      */
     quint32 rootObjectInCreation:1;
+    // set when at least one of the object's properties is intercepted
     quint32 hasInterceptorMetaObject:1;
     quint32 hasVMEMetaObject:1;
-    quint32 parentFrozen:1;
-    quint32 dummy:6;
+    quint32 dummy:8;
 
     // When bindingBitsSize < sizeof(ptr), we store the binding bit flags inside
     // bindingBitsValue. When we need more than sizeof(ptr) bits, we allocated

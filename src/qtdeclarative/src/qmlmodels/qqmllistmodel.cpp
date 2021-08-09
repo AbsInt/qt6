@@ -129,7 +129,7 @@ const ListLayout::Role &ListLayout::getRoleOrCreate(QV4::String *key, Role::Data
 
 const ListLayout::Role &ListLayout::createRole(const QString &key, ListLayout::Role::DataType type)
 {
-    const int dataSizes[] = { sizeof(StringOrTranslation), sizeof(double), sizeof(bool), sizeof(ListModel *), sizeof(QPointer<QObject>), sizeof(QVariantMap), sizeof(QDateTime), sizeof(QUrl), sizeof(QJSValue) };
+    const int dataSizes[] = { sizeof(StringOrTranslation), sizeof(double), sizeof(bool), sizeof(ListModel *), sizeof(ListElement::GuardedQObjectPointer), sizeof(QVariantMap), sizeof(QDateTime), sizeof(QUrl), sizeof(QJSValue) };
     const int dataAlignments[] = { alignof(StringOrTranslation), alignof(double), alignof(bool), alignof(ListModel *), alignof(QObject *), alignof(QVariantMap), alignof(QDateTime), alignof(QUrl), alignof(QJSValue) };
 
     Role *r = new Role;
@@ -627,7 +627,7 @@ void ListModel::set(int elementIndex, QV4::Object *object, QVector<int> *roles)
                 const ListLayout::Role &role = m_layout->getRoleOrCreate(propertyName, ListLayout::Role::QObject);
                 if (role.type == ListLayout::Role::QObject)
                     roleIndex = e->setQObjectProperty(role, o);
-            } else if (QVariant maybeUrl = o->engine()->toVariant(o->asReturnedValue(), QMetaType::QUrl, true);
+            } else if (QVariant maybeUrl = o->engine()->toVariant(o->asReturnedValue(), QMetaType::fromType<QUrl>(), true);
                        maybeUrl.metaType() == QMetaType::fromType<QUrl>()) {
                 const ListLayout::Role &r = m_layout->getRoleOrCreate(propertyName, ListLayout::Role::Url);
                 QUrl qurl = maybeUrl.toUrl();
@@ -719,7 +719,7 @@ void ListModel::set(int elementIndex, QV4::Object *object, ListModel::SetElement
                 if (r.type == ListLayout::Role::QObject)
                     e->setQObjectPropertyFast(r, o);
             } else {
-                QVariant maybeUrl = o->engine()->toVariant(o->asReturnedValue(), QMetaType::QUrl, true);
+                QVariant maybeUrl = o->engine()->toVariant(o->asReturnedValue(), QMetaType::fromType<QUrl>(), true);
                 if (maybeUrl.metaType() == QMetaType::fromType<QUrl>()) {
                     const QUrl qurl = maybeUrl.toUrl();
                     const ListLayout::Role &r = m_layout->getRoleOrCreate(propertyName, ListLayout::Role::Url);
@@ -845,7 +845,8 @@ StringOrTranslation *ListElement::getStringProperty(const ListLayout::Role &role
 QObject *ListElement::getQObjectProperty(const ListLayout::Role &role)
 {
     char *mem = getPropertyMemory(role);
-    QPointer<QObject> *o = reinterpret_cast<QPointer<QObject> *>(mem);
+    GuardedQObjectPointer *o
+            = reinterpret_cast<GuardedQObjectPointer *>(mem);
     return o->data();
 }
 
@@ -893,22 +894,24 @@ QJSValue *ListElement::getFunctionProperty(const ListLayout::Role &role)
     return f;
 }
 
-QPointer<QObject> *ListElement::getGuardProperty(const ListLayout::Role &role)
+ListElement::GuardedQObjectPointer *
+ListElement::getGuardProperty(const ListLayout::Role &role)
 {
     char *mem = getPropertyMemory(role);
 
     bool existingGuard = false;
-    for (size_t i=0 ; i < sizeof(QPointer<QObject>) ; ++i) {
+    for (size_t i = 0; i < sizeof(GuardedQObjectPointer);
+         ++i) {
         if (mem[i] != 0) {
             existingGuard = true;
             break;
         }
     }
 
-    QPointer<QObject> *o = nullptr;
+    GuardedQObjectPointer *o = nullptr;
 
     if (existingGuard)
-        o = reinterpret_cast<QPointer<QObject> *>(mem);
+        o = reinterpret_cast<GuardedQObjectPointer *>(mem);
 
     return o;
 }
@@ -938,6 +941,8 @@ QVariant ListElement::getProperty(const ListLayout::Role &role, const QQmlListMo
                 StringOrTranslation *value = reinterpret_cast<StringOrTranslation *>(mem);
                 if (value->isSet())
                     data = value->toString(owner);
+                else
+                    data = QString();
             }
             break;
         case ListLayout::Role::Bool:
@@ -964,10 +969,12 @@ QVariant ListElement::getProperty(const ListLayout::Role &role, const QQmlListMo
             break;
         case ListLayout::Role::QObject:
             {
-                QPointer<QObject> *guard = reinterpret_cast<QPointer<QObject> *>(mem);
-                QObject *object = guard->data();
-                if (object)
-                    data = QVariant::fromValue(object);
+            GuardedQObjectPointer *guard =
+                    reinterpret_cast<GuardedQObjectPointer *>(
+                            mem);
+            QObject *object = guard->data();
+            if (object)
+                data = QVariant::fromValue(object);
             }
             break;
         case ListLayout::Role::VariantMap:
@@ -1079,15 +1086,50 @@ int ListElement::setListProperty(const ListLayout::Role &role, ListModel *m)
     return roleIndex;
 }
 
+static void
+restoreQObjectOwnership(ListElement::GuardedQObjectPointer *pointer)
+{
+    if (QObject *o = pointer->data()) {
+        QQmlData *data = QQmlData::get(o, false);
+        Q_ASSERT(data);
+
+        // Only restore the previous state if the object hasn't become explicitly
+        // owned
+        if (!data->explicitIndestructibleSet) {
+            data->indestructible = (pointer->tag() & ListElement::Indestructible);
+            data->explicitIndestructibleSet = (pointer->tag() & ListElement::ExplicitlySet);
+        }
+    }
+}
+
+static void setQObjectOwnership(char *mem, QObject *o)
+{
+    QQmlData *ddata = QQmlData::get(o, false);
+    const int ownership = (!ddata || ddata->indestructible ? ListElement::Indestructible : 0)
+            | (ddata && ddata->explicitIndestructibleSet ? ListElement::ExplicitlySet : 0);
+
+    // If ddata didn't exist above, force its creation now
+    if (!ddata)
+        ddata = QQmlData::get(o, true);
+
+    ddata->indestructible = true;
+    ddata->explicitIndestructibleSet = false;
+
+    new (mem) ListElement::GuardedQObjectPointer(
+            o, static_cast<ListElement::ObjectIndestructible>(ownership));
+}
+
 int ListElement::setQObjectProperty(const ListLayout::Role &role, QObject *o)
 {
     int roleIndex = -1;
 
     if (role.type == ListLayout::Role::QObject) {
         char *mem = getPropertyMemory(role);
-        QPointer<QObject> *g = reinterpret_cast<QPointer<QObject> *>(mem);
+        GuardedQObjectPointer *g =
+                reinterpret_cast<GuardedQObjectPointer *>(mem);
         bool existingGuard = false;
-        for (size_t i=0 ; i < sizeof(QPointer<QObject>) ; ++i) {
+        for (size_t i = 0; i < sizeof(GuardedQObjectPointer);
+             ++i) {
             if (mem[i] != 0) {
                 existingGuard = true;
                 break;
@@ -1096,11 +1138,15 @@ int ListElement::setQObjectProperty(const ListLayout::Role &role, QObject *o)
         bool changed;
         if (existingGuard) {
             changed = g->data() != o;
-            g->~QPointer();
+            if (changed)
+                restoreQObjectOwnership(g);
+            g->~GuardedQObjectPointer();
         } else {
             changed = true;
         }
-        new (mem) QPointer<QObject>(o);
+
+        setQObjectOwnership(mem, o);
+
         if (changed)
             roleIndex = role.index;
     }
@@ -1238,7 +1284,8 @@ void ListElement::setBoolPropertyFast(const ListLayout::Role &role, bool b)
 void ListElement::setQObjectPropertyFast(const ListLayout::Role &role, QObject *o)
 {
     char *mem = getPropertyMemory(role);
-    new (mem) QPointer<QObject>(o);
+
+    setQObjectOwnership(mem, o);
 }
 
 void ListElement::setListPropertyFast(const ListLayout::Role &role, ListModel *m)
@@ -1410,9 +1457,14 @@ void ListElement::destroy(ListLayout *layout)
                     break;
                 case ListLayout::Role::QObject:
                     {
-                        QPointer<QObject> *guard = getGuardProperty(r);
-                        if (guard)
-                            guard->~QPointer();
+                    GuardedQObjectPointer *guard =
+                            getGuardProperty(r);
+
+                    if (guard) {
+                        restoreQObjectOwnership(guard);
+
+                        guard->~GuardedQObjectPointer();
+                    }
                     }
                     break;
                 case ListLayout::Role::VariantMap:
@@ -1554,7 +1606,7 @@ int ListElement::setJsProperty(const ListLayout::Role &role, const QV4::Value &d
         } else if (role.type == ListLayout::Role::VariantMap) {
             roleIndex = setVariantMapProperty(role, o);
         } else if (role.type == ListLayout::Role::Url) {
-            QVariant maybeUrl = o->engine()->toVariant(o.asReturnedValue(), QMetaType::QUrl, true);
+            QVariant maybeUrl = o->engine()->toVariant(o.asReturnedValue(), QMetaType::fromType<QUrl>(), true);
             if (maybeUrl.metaType() == QMetaType::fromType<QUrl>()) {
                 roleIndex = setUrlProperty(role, maybeUrl.toUrl());
             }

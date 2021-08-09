@@ -460,6 +460,7 @@ public:
     ExpressionNode() {}
 
     ExpressionNode *expressionCast() override;
+    bool containsOptionalChain() const;
 
     AST::FormalParameterList *reparseAsFormalParameterList(MemoryPool *pool);
 
@@ -734,6 +735,7 @@ public:
 
     void accept0(BaseVisitor *visitor) override;
 
+    bool hasNoSubstitution = false;
     QStringView value;
     QStringView rawValue;
     ExpressionNode *expression;
@@ -1198,6 +1200,7 @@ public:
     ExpressionNode *expression;
     SourceLocation lbracketToken;
     SourceLocation rbracketToken;
+    bool isOptional = false;
 };
 
 class QML_PARSER_EXPORT FieldMemberExpression: public LeftHandSideExpression
@@ -1222,6 +1225,7 @@ public:
     QStringView name;
     SourceLocation dotToken;
     SourceLocation identifierToken;
+    bool isOptional = false;
 };
 
 class QML_PARSER_EXPORT TaggedTemplate : public LeftHandSideExpression
@@ -1314,6 +1318,7 @@ public:
     ArgumentList *arguments;
     SourceLocation lparenToken;
     SourceLocation rparenToken;
+    bool isOptional = false;
 };
 
 class QML_PARSER_EXPORT ArgumentList: public Node
@@ -2957,7 +2962,6 @@ public:
     ExportDeclaration(FromClause *fromClause)
         : fromClause(fromClause)
     {
-        exportAll = true;
         kind = K;
     }
 
@@ -2980,6 +2984,11 @@ public:
         kind = K;
     }
 
+    bool exportsAll() const
+    {
+        return fromClause && !exportClause;
+    }
+
     void accept0(BaseVisitor *visitor) override;
 
     SourceLocation firstSourceLocation() const override
@@ -2989,7 +2998,6 @@ public:
 
 // attributes
     SourceLocation exportToken;
-    bool exportAll = false;
     ExportClause *exportClause = nullptr;
     FromClause *fromClause = nullptr;
     Node *variableStatementOrDeclaration = nullptr;
@@ -3574,7 +3582,7 @@ public:
     { kind = K; }
 
     SourceLocation firstSourceLocation() const override
-    { return qualifiedId->identifierToken; }
+    { Q_ASSERT(qualifiedId); return qualifiedId->identifierToken; }
 
     SourceLocation lastSourceLocation() const override
     { return rbracketToken; }

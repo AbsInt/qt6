@@ -426,7 +426,7 @@ void QPaintEngineEx::stroke(const QVectorPath &path, const QPen &inPen)
             patternLength *= pen.widthF();
         if (qFuzzyIsNull(patternLength)) {
             pen.setStyle(Qt::NoPen);
-        } else if (extent / patternLength > 10000) {
+        } else if (qFuzzyIsNull(extent) || extent / patternLength > 10000) {
             // approximate stream of tiny dashes with semi-transparent solid line
             pen.setStyle(Qt::SolidLine);
             QColor color(pen.color());
@@ -938,6 +938,7 @@ void QPaintEngineEx::drawPoints(const QPoint *points, int pointCount)
 
 void QPaintEngineEx::drawPolygon(const QPointF *points, int pointCount, PolygonDrawMode mode)
 {
+    Q_ASSUME(pointCount >= 2);
     QVectorPath path((const qreal *) points, pointCount, nullptr, QVectorPath::polygonFlags(mode));
 
     if (mode == PolylineMode)
@@ -948,6 +949,7 @@ void QPaintEngineEx::drawPolygon(const QPointF *points, int pointCount, PolygonD
 
 void QPaintEngineEx::drawPolygon(const QPoint *points, int pointCount, PolygonDrawMode mode)
 {
+    Q_ASSUME(pointCount >= 2);
     int count = pointCount<<1;
     QVarLengthArray<qreal> pts(count);
 

@@ -1625,24 +1625,28 @@ static void storeItemFlags(const T *item, QList<DomProperty*> *properties)
 
 template<class T>
 static void storeItemProps(QAbstractFormBuilder *abstractFormBuilder, const T *item,
-        QList<DomProperty*> *properties)
+        QList<DomProperty*> *properties,
+        Qt::Alignment defaultAlign = Qt::AlignLeading | Qt::AlignVCenter)
 {
     static const QFormBuilderStrings &strings = QFormBuilderStrings::instance();
     FriendlyFB * const formBuilder = static_cast<FriendlyFB *>(abstractFormBuilder);
 
     DomProperty *p;
-    QVariant v;
 
     for (const QFormBuilderStrings::TextRoleNName &it : strings.itemTextRoles)
         if ((p = formBuilder->saveText(it.second, item->data(it.first.second))))
             properties->append(p);
 
-    for (const QFormBuilderStrings::RoleNName &it : strings.itemRoles)
-        if ((v = item->data(it.first)).isValid() &&
-            (p = variantToDomProperty(abstractFormBuilder,
-                static_cast<const QMetaObject *>(&QAbstractFormBuilderGadget::staticMetaObject),
-                it.second, v)))
+    auto *mo = static_cast<const QMetaObject *>(&QAbstractFormBuilderGadget::staticMetaObject);
+    for (const QFormBuilderStrings::RoleNName &it : strings.itemRoles) {
+        const QVariant v = item->data(it.first);
+        const bool isModified = v.isValid()
+            && (it.first != Qt::TextAlignmentRole || v.toUInt() != uint(defaultAlign));
+        if (isModified &&
+            (p = variantToDomProperty(abstractFormBuilder, mo, it.second, v))) {
             properties->append(p);
+        }
+    }
 
     if ((p = formBuilder->saveResource(item->data(Qt::DecorationPropertyRole))))
         properties->append(p);
@@ -1800,11 +1804,12 @@ void QAbstractFormBuilder::saveTableWidgetExtraInfo(QTableWidget *tableWidget, D
 
     // save the horizontal header
     QList<DomColumn *> columns;
+    auto *header = tableWidget->horizontalHeader();
     for (int c = 0; c < tableWidget->columnCount(); c++) {
         QList<DomProperty*> properties;
         QTableWidgetItem *item = tableWidget->horizontalHeaderItem(c);
         if (item)
-            storeItemProps(this, item, &properties);
+            storeItemProps(this, item, &properties, header->defaultAlignment());
 
         DomColumn *column = new DomColumn;
         column->setElementProperty(properties);
@@ -1814,11 +1819,12 @@ void QAbstractFormBuilder::saveTableWidgetExtraInfo(QTableWidget *tableWidget, D
 
     // save the vertical header
     QList<DomRow *> rows;
+    header = tableWidget->verticalHeader();
     for (int r = 0; r < tableWidget->rowCount(); r++) {
         QList<DomProperty*> properties;
         QTableWidgetItem *item = tableWidget->verticalHeaderItem(r);
         if (item)
-            storeItemProps(this, item, &properties);
+            storeItemProps(this, item, &properties, header->defaultAlignment());
 
         DomRow *row = new DomRow;
         row->setElementProperty(properties);
@@ -2518,34 +2524,6 @@ QMetaEnum QAbstractFormBuilder::toolBarAreaMetaEnum()
     return metaEnum<QAbstractFormBuilderGadget>("toolBarArea");
 }
 
-#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
-
-/*!
-    \internal
-    Return paths of an icon.
-*/
-
-QAbstractFormBuilder::IconPaths QAbstractFormBuilder::iconPaths(const QIcon &icon) const
-{
-    Q_UNUSED(icon);
-    qWarning() << "QAbstractFormBuilder::iconPaths() is obsoleted";
-    return IconPaths();
-}
-
-/*!
-    \internal
-    Return paths of a pixmap.
-*/
-
-QAbstractFormBuilder::IconPaths QAbstractFormBuilder::pixmapPaths(const QPixmap &pixmap) const
-{
-    Q_UNUSED(pixmap);
-    qWarning() << "QAbstractFormBuilder::pixmapPaths() is obsoleted";
-    return IconPaths();
-}
-
-#endif // < Qt 6
-
 /*!
     \internal
     Set up a DOM property with icon.
@@ -2574,22 +2552,6 @@ void QAbstractFormBuilder::setPixmapProperty(DomProperty &p, const IconPaths &ip
 {
     QFormBuilderExtra::setPixmapProperty(&p, ip);
 }
-
-#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
-
-/*!
-    \internal
-    Convenience. Return DOM property for icon; 0 if icon.isNull().
-*/
-
-DomProperty* QAbstractFormBuilder::iconToDomProperty(const QIcon &icon) const
-{
-    Q_UNUSED(icon);
-    qWarning() << "QAbstractFormBuilder::iconToDomProperty() is obsoleted";
-    return nullptr;
-}
-
-#endif // < Qt 6
 
 /*!
     \internal
@@ -2641,64 +2603,6 @@ const DomResourcePixmap *QAbstractFormBuilder::domPixmap(const DomProperty* p) {
     }
     return nullptr;
 }
-
-#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
-
-/*!
-    \internal
-    Create icon from DOM.
-    From 4.4 - unused
-*/
-
-QIcon QAbstractFormBuilder::domPropertyToIcon(const DomResourcePixmap *icon)
-{
-    Q_UNUSED(icon);
-    qWarning() << "QAbstractFormBuilder::domPropertyToIcon() is obsoleted";
-    return QIcon();
-}
-
-/*!
-    \internal
-    Create icon from DOM. Assert if !domPixmap
-    From 4.4 - unused
-*/
-
-QIcon QAbstractFormBuilder::domPropertyToIcon(const DomProperty* p)
-{
-    Q_UNUSED(p);
-    qWarning() << "QAbstractFormBuilder::domPropertyToIcon() is obsoleted";
-    return QIcon();
-}
-
-
-/*!
-    \internal
-    Create pixmap from DOM.
-    From 4.4 - unused
-*/
-
-QPixmap QAbstractFormBuilder::domPropertyToPixmap(const DomResourcePixmap* pixmap)
-{
-    Q_UNUSED(pixmap);
-    qWarning() << "QAbstractFormBuilder::domPropertyToPixmap() is obsoleted";
-    return QPixmap();
-}
-
-
-/*!
-    \internal
-    Create pixmap from DOM. Assert if !domPixmap
-    From 4.4 - unused
-*/
-
-QPixmap QAbstractFormBuilder::domPropertyToPixmap(const DomProperty* p)
-{
-    Q_UNUSED(p);
-    qWarning() << "QAbstractFormBuilder::domPropertyToPixmap() is obsoleted";
-    return QPixmap();
-}
-
-#endif // < Qt 6
 
 /*!
     \fn void QAbstractFormBuilder::createConnections ( DomConnections *, QWidget * )

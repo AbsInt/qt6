@@ -68,6 +68,7 @@
 #include "qwaylandclientbufferintegration_p.h"
 
 #include "qwaylandextendedsurface_p.h"
+#include "qwaylandpointergestures_p.h"
 #include "qwaylandsubsurface_p.h"
 #include "qwaylandtouch_p.h"
 #include "qwaylandtabletv2_p.h"
@@ -162,13 +163,6 @@ QWaylandDisplay::QWaylandDisplay(QWaylandIntegration *waylandIntegration)
     if (!mXkbContext)
         qCWarning(lcQpaWayland, "failed to create xkb context");
 #endif
-
-    forceRoundTrip();
-
-    if (!mWaitingScreens.isEmpty()) {
-        // Give wl_output.done and zxdg_output_v1.done events a chance to arrive
-        forceRoundTrip();
-    }
 }
 
 QWaylandDisplay::~QWaylandDisplay(void)
@@ -191,6 +185,18 @@ QWaylandDisplay::~QWaylandDisplay(void)
 #endif
     if (mDisplay)
         wl_display_disconnect(mDisplay);
+}
+
+// Steps which is called just after constructor. This separates registry_global() out of the constructor
+// so that factory functions in integration can be overridden.
+void QWaylandDisplay::initialize()
+{
+    forceRoundTrip();
+
+    if (!mWaitingScreens.isEmpty()) {
+        // Give wl_output.done and zxdg_output_v1.done events a chance to arrive
+        forceRoundTrip();
+    }
 }
 
 void QWaylandDisplay::ensureScreen()
@@ -328,7 +334,7 @@ void QWaylandDisplay::registry_global(uint32_t id, const QString &interface, uin
     struct ::wl_registry *registry = object();
 
     if (interface == QStringLiteral("wl_output")) {
-        mWaitingScreens << new QWaylandScreen(this, version, id);
+        mWaitingScreens << mWaylandIntegration->createPlatformScreen(this, version, id);
     } else if (interface == QStringLiteral("wl_compositor")) {
         mCompositor.init(registry, id, qMin((int)version, 4));
     } else if (interface == QStringLiteral("wl_shm")) {
@@ -350,6 +356,8 @@ void QWaylandDisplay::registry_global(uint32_t id, const QString &interface, uin
         mQtKeyExtension.reset(new QWaylandQtKeyExtension(this, id));
     } else if (interface == QStringLiteral("zwp_tablet_manager_v2")) {
         mTabletManager.reset(new QWaylandTabletManagerV2(this, id, qMin(1, int(version))));
+    } else if (interface == QStringLiteral("zwp_pointer_gestures_v1")) {
+        mPointerGestures.reset(new QWaylandPointerGestures(this, id, 1));
 #if QT_CONFIG(wayland_client_primary_selection)
     } else if (interface == QStringLiteral("zwp_primary_selection_device_manager_v1")) {
         mPrimarySelectionManager.reset(new QWaylandPrimarySelectionDeviceManagerV1(this, id, 1));
@@ -627,7 +635,7 @@ QWaylandInputDevice *QWaylandDisplay::defaultInputDevice() const
 QWaylandCursor *QWaylandDisplay::waylandCursor()
 {
     if (!mCursor)
-        mCursor.reset(new QWaylandCursor(this));
+        mCursor.reset(mWaylandIntegration->createPlatformCursor(this));
     return mCursor.data();
 }
 

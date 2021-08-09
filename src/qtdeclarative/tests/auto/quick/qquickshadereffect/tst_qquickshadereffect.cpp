@@ -56,8 +56,15 @@ public:
     int signalsConnected = 0;
 
 protected:
-    void connectNotify(const QMetaMethod &) override { ++signalsConnected; }
-    void disconnectNotify(const QMetaMethod &) override { --signalsConnected; }
+    void connectNotify(const QMetaMethod &s) override {
+        if (s.name() == "sourceChanged")
+            ++signalsConnected;
+    }
+    void disconnectNotify(const QMetaMethod &s) override
+    {
+        if (s.name() == "sourceChanged")
+            --signalsConnected;
+    }
 
 signals:
     void dummyChanged();
@@ -73,7 +80,7 @@ public:
     tst_qquickshadereffect();
 
 private slots:
-    void initTestCase();
+    void initTestCase() override;
     void cleanupTestCase();
     void testConnection();
     void deleteSourceItem();

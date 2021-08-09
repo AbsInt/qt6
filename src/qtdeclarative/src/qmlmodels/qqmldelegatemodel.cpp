@@ -431,7 +431,7 @@ void QQmlDelegateModel::setModel(const QVariant &model)
         _q_itemsRemoved(0, d->m_count);
 
     d->disconnectFromAbstractItemModel();
-    d->m_adaptorModel.setModel(model, this, d->m_context->engine());
+    d->m_adaptorModel.setModel(model, this);
     d->connectToAbstractItemModel();
 
     d->m_adaptorModel.replaceWatchedRoles(QList<QByteArray>(), d->m_watchedRoles);
@@ -538,7 +538,7 @@ void QQmlDelegateModel::setRootIndex(const QVariant &root)
         if (!d->m_adaptorModel.isValid() && d->m_adaptorModel.aim()) {
             // The previous root index was invalidated, so we need to reconnect the model.
             d->disconnectFromAbstractItemModel();
-            d->m_adaptorModel.setModel(d->m_adaptorModel.list.list(), this, d->m_context->engine());
+            d->m_adaptorModel.setModel(d->m_adaptorModel.list.list(), this);
             d->connectToAbstractItemModel();
         }
         if (d->m_adaptorModel.canFetchMore())
@@ -963,8 +963,19 @@ void QQDMIncubationTask::initializeRequiredProperties(QQmlDelegateModelItem *mod
     if (incubatorPriv->hadRequiredProperties()) {
         QQmlData *d = QQmlData::get(object);
         auto contextData = d ? d->context : nullptr;
-        if (contextData)
+        if (contextData) {
             contextData->setExtraObject(modelItemToIncubate);
+        }
+
+        // If we have required properties, we clear the context object
+        // so that the model role names are not polluting the context
+        if (incubating) {
+            Q_ASSERT(incubating->contextData);
+            incubating->contextData->setContextObject(nullptr);
+        }
+        if (proxyContext) {
+            proxyContext->setContextObject(nullptr);
+        }
 
         if (incubatorPriv->requiredProperties().empty())
             return;
@@ -1277,6 +1288,7 @@ QObject *QQmlDelegateModelPrivate::object(Compositor::Group group, int index, QQ
 
         QQmlRefPointer<QQmlContextData> ctxt = QQmlContextData::createRefCounted(
                     QQmlContextData::get(creationContext  ? creationContext : m_context.data()));
+        ctxt->setContextObject(cacheItem);
         cacheItem->contextData = ctxt;
 
         if (m_adaptorModel.hasProxyObject()) {
@@ -1286,6 +1298,7 @@ QObject *QQmlDelegateModelPrivate::object(Compositor::Group group, int index, QQ
                 QObject *proxied = proxy->proxiedObject();
                 cacheItem->incubationTask->proxiedObject = proxied;
                 cacheItem->incubationTask->proxyContext = ctxt;
+                ctxt->setContextObject(cacheItem);
                 // We don't own the proxied object. We need to clear it if it goes away.
                 QObject::connect(proxied, &QObject::destroyed,
                                  cacheItem, &QQmlDelegateModelItem::childContextObjectDestroyed);
@@ -2033,7 +2046,7 @@ bool QQmlDelegateModelPrivate::insert(Compositor::insert_iterator &before, const
         propertyName = it.nextPropertyNameAsString(v);
         if (propertyName->isNull())
             break;
-        cacheItem->setValue(propertyName->toQStringNoThrow(), scope.engine->toVariant(v, QMetaType::UnknownType));
+        cacheItem->setValue(propertyName->toQStringNoThrow(), scope.engine->toVariant(v, QMetaType {}));
     }
 
     cacheItem->groups = groups | Compositor::UnresolvedFlag | Compositor::CacheFlag;

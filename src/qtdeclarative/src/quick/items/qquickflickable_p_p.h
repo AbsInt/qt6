@@ -234,12 +234,12 @@ public:
     QVector2D accumulatedWheelPixelDelta;
     qreal deceleration;
     qreal maxVelocity;
-    qreal reportedVelocitySmoothing;
     QPointerEvent *delayedPressEvent;
     QBasicTimer delayedPressTimer;
     int pressDelay;
     int fixupDuration;
     qreal flickBoost;
+    qreal initialWheelFlickDistance;
 
     enum FixupMode { Normal, Immediate, ExtentChanged };
     FixupMode fixupMode;
@@ -276,8 +276,6 @@ public:
     static qsizetype data_count(QQmlListProperty<QObject> *);
     static QObject *data_at(QQmlListProperty<QObject> *, qsizetype);
     static void data_clear(QQmlListProperty<QObject> *);
-
-    static QVarLengthArray<const QPointingDevice *, 4> nonClickyWheelMice;
 };
 
 class QQuickFlickableVisibleArea : public QObject

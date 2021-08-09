@@ -38,47 +38,92 @@
 ****************************************************************************/
 
 #include "qqmlpropertybinding_p.h"
+#include <private/qv4functionobject_p.h>
+#include <private/qv4jscall_p.h>
 #include <qqmlinfo.h>
+#include <QtCore/qloggingcategory.h>
 
 QT_BEGIN_NAMESPACE
+
+Q_LOGGING_CATEGORY(lcQQPropertyBinding, "qt.qml.propertybinding");
 
 QUntypedPropertyBinding QQmlPropertyBinding::create(const QQmlPropertyData *pd, QV4::Function *function,
                                                     QObject *obj, const QQmlRefPointer<QQmlContextData> &ctxt,
                                                     QV4::ExecutionContext *scope, QObject *target, QQmlPropertyIndex targetIndex)
 {
-    if (auto aotFunction = function->aotFunction; aotFunction && aotFunction->returnType == pd->propType()) {
-        return QUntypedPropertyBinding(aotFunction->returnType,
-            [
-                aotFunction,
-                unit = QQmlRefPointer<QV4::ExecutableCompilationUnit>(function->executableCompilationUnit()),
-                scopeObject = QPointer<QObject>(obj),
-                context = ctxt,
-                engine = scope->engine()
-            ](const QMetaType &, void *dataPtr) -> bool {
-                QQmlPrivate::AOTCompiledContext aotContext;
-                aotContext.qmlContext = context->asQQmlContext();
-                aotContext.qmlScopeObject = scopeObject.data();
-                aotContext.engine = engine->jsEngine();
-                aotContext.compilationUnit = unit.data();
-                aotFunction->functionPtr(&aotContext, dataPtr, nullptr);
-                // ### Fixme: The aotFunction should do the check whether old and new value are the same and
-                // return false in that case
-                return true;
-            },
-            QPropertyBindingSourceLocation());
-    }
+    Q_ASSERT(pd);
+    return create(pd->propType(), function, obj, ctxt, scope, target, targetIndex);
+}
 
-    auto buffer = new std::byte[sizeof(QQmlPropertyBinding)]; // QQmlPropertyBinding uses delete[]
-    auto binding = new(buffer) QQmlPropertyBinding(QMetaType(pd->propType()), target, targetIndex);
-    binding->setNotifyOnValueChanged(true);
-    binding->setContext(ctxt);
-    binding->setScopeObject(obj);
-    binding->setupFunction(scope, function);
+QUntypedPropertyBinding QQmlPropertyBinding::create(QMetaType propertyType, QV4::Function *function,
+                                                    QObject *obj,
+                                                    const QQmlRefPointer<QQmlContextData> &ctxt,
+                                                    QV4::ExecutionContext *scope, QObject *target,
+                                                    QQmlPropertyIndex targetIndex)
+{
+    auto buffer = new std::byte[QQmlPropertyBinding::getSizeEnsuringAlignment()
+            + sizeof(QQmlPropertyBindingJS)+jsExpressionOffsetLength()]; // QQmlPropertyBinding uses delete[]
+    auto binding = new (buffer) QQmlPropertyBinding(propertyType, target, targetIndex,
+                                                    TargetData::WithoutBoundFunction);
+    auto js = new(buffer + QQmlPropertyBinding::getSizeEnsuringAlignment() + jsExpressionOffsetLength()) QQmlPropertyBindingJS();
+    Q_ASSERT(binding->jsExpression() == js);
+    Q_ASSERT(js->asBinding() == binding);
+    Q_UNUSED(js);
+    binding->jsExpression()->setNotifyOnValueChanged(true);
+    binding->jsExpression()->setContext(ctxt);
+    binding->jsExpression()->setScopeObject(obj);
+    binding->jsExpression()->setupFunction(scope, function);
     return QUntypedPropertyBinding(static_cast<QPropertyBindingPrivate *>(QPropertyBindingPrivatePtr(binding).data()));
 }
 
-void QQmlPropertyBinding::expressionChanged()
+QUntypedPropertyBinding QQmlPropertyBinding::createFromCodeString(const QQmlPropertyData *pd, const QString& str, QObject *obj, const QQmlRefPointer<QQmlContextData> &ctxt, const QString &url, quint16 lineNumber, QObject *target, QQmlPropertyIndex targetIndex)
 {
+    auto buffer = new std::byte[QQmlPropertyBinding::getSizeEnsuringAlignment()
+            + sizeof(QQmlPropertyBindingJS)+jsExpressionOffsetLength()]; // QQmlPropertyBinding uses delete[]
+    auto binding = new(buffer) QQmlPropertyBinding(QMetaType(pd->propType()), target, targetIndex, TargetData::WithoutBoundFunction);
+    auto js = new(buffer + QQmlPropertyBinding::getSizeEnsuringAlignment() + jsExpressionOffsetLength()) QQmlPropertyBindingJS();
+    Q_ASSERT(binding->jsExpression() == js);
+    Q_ASSERT(js->asBinding() == binding);
+    Q_UNUSED(js);
+    binding->jsExpression()->setNotifyOnValueChanged(true);
+    binding->jsExpression()->setContext(ctxt);
+    binding->jsExpression()->createQmlBinding(ctxt, obj, str, url, lineNumber);
+    return QUntypedPropertyBinding(static_cast<QPropertyBindingPrivate *>(QPropertyBindingPrivatePtr(binding).data()));
+}
+
+QUntypedPropertyBinding QQmlPropertyBinding::createFromBoundFunction(const QQmlPropertyData *pd, QV4::BoundFunction *function, QObject *obj, const QQmlRefPointer<QQmlContextData> &ctxt, QV4::ExecutionContext *scope, QObject *target, QQmlPropertyIndex targetIndex)
+{
+    auto buffer = new std::byte[QQmlPropertyBinding::getSizeEnsuringAlignment()
+            + sizeof(QQmlPropertyBindingJSForBoundFunction)+jsExpressionOffsetLength()]; // QQmlPropertyBinding uses delete[]
+    auto binding = new(buffer) QQmlPropertyBinding(QMetaType(pd->propType()), target, targetIndex, TargetData::HasBoundFunction);
+    auto js = new(buffer + QQmlPropertyBinding::getSizeEnsuringAlignment() + jsExpressionOffsetLength()) QQmlPropertyBindingJSForBoundFunction();
+    Q_ASSERT(binding->jsExpression() == js);
+    Q_ASSERT(js->asBinding() == binding);
+    Q_UNUSED(js);
+    binding->jsExpression()->setNotifyOnValueChanged(true);
+    binding->jsExpression()->setContext(ctxt);
+    binding->jsExpression()->setScopeObject(obj);
+    binding->jsExpression()->setupFunction(scope, function->function());
+    js->m_boundFunction.set(function->engine(), *function);
+    return QUntypedPropertyBinding(static_cast<QPropertyBindingPrivate *>(QPropertyBindingPrivatePtr(binding).data()));
+}
+
+/*!
+    \fn bool QQmlPropertyBindingJS::hasDependencies()
+    \internal
+
+    Returns true if this binding has dependencies.
+    Dependencies can be either QProperty dependencies or dependencies of
+    the JS expression (aka activeGuards). Translations end up as a QProperty
+    dependency, so they do not need any special handling
+    Note that a QQmlPropertyBinding never stores qpropertyChangeTriggers.
+ */
+
+
+void QQmlPropertyBindingJS::expressionChanged()
+{
+    if (!asBinding()->propertyDataPtr)
+        return;
     const auto currentTag = m_error.tag();
     if (currentTag & InEvaluationLoop) {
         QQmlError err;
@@ -86,17 +131,23 @@ void QQmlPropertyBinding::expressionChanged()
         err.setUrl(QUrl{location.sourceFile});
         err.setLine(location.line);
         err.setColumn(location.column);
-        err.setDescription(QString::fromLatin1("Binding loop detected"));
-        err.setObject(target());
+        const auto ctxt = context();
+        QQmlEngine *engine = ctxt ? ctxt->engine() : nullptr;
+        if (engine)
+            err.setDescription(asBinding()->createBindingLoopErrorDescription(QQmlEnginePrivate::get(engine)));
+        else
+            err.setDescription(QString::fromLatin1("Binding loop detected"));
+        err.setObject(asBinding()->target());
         qmlWarning(this->scopeObject(), err);
         return;
     }
     m_error.setTag(currentTag | InEvaluationLoop);
-    markDirtyAndNotifyObservers();
+    asBinding()->evaluateRecursive();
+    asBinding()->notifyRecursive();
     m_error.setTag(currentTag);
 }
 
-QQmlPropertyBinding::QQmlPropertyBinding(QMetaType mt, QObject *target, QQmlPropertyIndex targetIndex)
+QQmlPropertyBinding::QQmlPropertyBinding(QMetaType mt, QObject *target, QQmlPropertyIndex targetIndex, TargetData::BoundFunction hasBoundFunction)
     : QPropertyBindingPrivate(mt,
                               &QtPrivate::bindingFunctionVTable<QQmlPropertyBinding>,
                               QPropertyBindingSourceLocation(), true)
@@ -104,35 +155,102 @@ QQmlPropertyBinding::QQmlPropertyBinding(QMetaType mt, QObject *target, QQmlProp
     static_assert (std::is_trivially_destructible_v<TargetData>);
     static_assert (sizeof(TargetData) + sizeof(DeclarativeErrorCallback) <= sizeof(QPropertyBindingSourceLocation));
     static_assert (alignof(TargetData) <= alignof(QPropertyBindingSourceLocation));
-    new (&declarativeExtraData) TargetData {target, targetIndex};
+    const auto state = hasBoundFunction ? TargetData::HasBoundFunction : TargetData::WithoutBoundFunction;
+    new (&declarativeExtraData) TargetData {target, targetIndex, state};
     errorCallBack = bindingErrorCallback;
+}
+
+template<typename T>
+bool compareAndAssign(void *dataPtr, const void *result)
+{
+    if (*static_cast<const T *>(result) == *static_cast<const T *>(dataPtr))
+        return false;
+    *static_cast<T *>(dataPtr) = *static_cast<const T *>(result);
+    return true;
 }
 
 bool QQmlPropertyBinding::evaluate(QMetaType metaType, void *dataPtr)
 {
-    const auto ctxt = context();
+    const auto ctxt = jsExpression()->context();
     QQmlEngine *engine = ctxt ? ctxt->engine() : nullptr;
     if (!engine) {
         QPropertyBindingError error(QPropertyBindingError::EvaluationError);
-        QPropertyBindingPrivate::currentlyEvaluatingBinding()->setError(std::move(error));
+        if (auto currentBinding = QPropertyBindingPrivate::currentlyEvaluatingBinding())
+            currentBinding->setError(std::move(error));
         return false;
     }
     QQmlEnginePrivate *ep = QQmlEnginePrivate::get(engine);
     ep->referenceScarceResources();
 
-    bool isUndefined = false;
+    const auto handleErrorAndUndefined = [&](bool evaluatedToUndefined) {
+        ep->dereferenceScarceResources();
+        if (jsExpression()->hasError()) {
+            QPropertyBindingError error(QPropertyBindingError::UnknownError,
+                                        jsExpression()->delayedError()->error().description());
+            QPropertyBindingPrivate::currentlyEvaluatingBinding()->setError(std::move(error));
+            bindingErrorCallback(this);
+            return false;
+        }
 
-    QV4::Scope scope(engine->handle());
-    QV4::ScopedValue result(scope, QQmlJavaScriptExpression::evaluate(&isUndefined));
+        if (evaluatedToUndefined) {
+            handleUndefinedAssignment(ep, dataPtr);
+            // if property has been changed due to reset, reset is responsible for
+            // notifying observers
+            return false;
+        } else if (isUndefined()) {
+            setIsUndefined(false);
+        }
 
-    ep->dereferenceScarceResources();
+        return true;
+    };
 
-    if (hasError()) {
-        QPropertyBindingError error(QPropertyBindingError::UnknownError, delayedError()->error().description());
-        QPropertyBindingPrivate::currentlyEvaluatingBinding()->setError(std::move(error));
-        bindingErrorCallback(this);
-        return false;
+    if (!hasBoundFunction()) {
+        Q_ASSERT(metaType.sizeOf() > 0);
+
+        // No need to construct here. evaluate() expects uninitialized memory.
+        Q_ALLOCA_VAR(void, result, metaType.sizeOf());
+
+        const bool evaluatedToUndefined = !jsExpression()->evaluate(&result, &metaType, 0);
+        if (!handleErrorAndUndefined(evaluatedToUndefined))
+            return false;
+
+        if (metaType.flags() & QMetaType::PointerToQObject)
+            return compareAndAssign<QObject *>(dataPtr, result);
+
+        switch (metaType.id()) {
+        case QMetaType::Bool:
+            return compareAndAssign<bool>(dataPtr, result);
+        case QMetaType::Int:
+            return compareAndAssign<int>(dataPtr, result);
+        case QMetaType::Double:
+            return compareAndAssign<double>(dataPtr, result);
+        case QMetaType::Float:
+            return compareAndAssign<float>(dataPtr, result);
+        case QMetaType::QString: {
+            const bool hasChanged = compareAndAssign<QString>(dataPtr, result);
+            static_cast<QString *>(result)->~QString();
+            return hasChanged;
+        }
+        default:
+            break;
+        }
+
+        const bool hasChanged = !metaType.equals(result, dataPtr);
+        if (hasChanged) {
+            metaType.destruct(dataPtr);
+            metaType.construct(dataPtr, result);
+        }
+        metaType.destruct(result);
+        return hasChanged;
     }
+
+    bool evaluatedToUndefined = false;
+    QV4::Scope scope(engine->handle());
+    QV4::ScopedValue result(scope, static_cast<QQmlPropertyBindingJSForBoundFunction *>(
+                                jsExpression())->evaluate(&evaluatedToUndefined));
+
+    if (!handleErrorAndUndefined(evaluatedToUndefined))
+        return false;
 
     int propertyType = metaType.id();
 
@@ -193,12 +311,101 @@ bool QQmlPropertyBinding::evaluate(QMetaType metaType, void *dataPtr)
         break;
     }
 
-    QVariant resultVariant(scope.engine->toVariant(result, metaType.id()));
+    QVariant resultVariant(scope.engine->toVariant(result, metaType));
     resultVariant.convert(metaType);
     const bool hasChanged = !metaType.equals(resultVariant.constData(), dataPtr);
     metaType.destruct(dataPtr);
     metaType.construct(dataPtr, resultVariant.constData());
     return hasChanged;
+}
+
+static QtPrivate::QPropertyBindingData *bindingDataFromPropertyData(QUntypedPropertyData *dataPtr, QMetaType type)
+{
+    // XXX Qt 7: We need a clean way to access the binding data
+    /* This function makes the (dangerous) assumption that if we could not get the binding data
+       from the binding storage, we must have been handed a QProperty.
+       This does hold for anything a user could write, as there the only ways of providing a bindable property
+       are to use the Q_X_BINDABLE macros, or to directly expose a QProperty.
+       As long as we can ensure that any "fancier" property we implement is not resettable, we should be fine.
+       We procede to calculate the address of the binding data pointer from the address of the data pointer
+    */
+    Q_ASSERT(dataPtr);
+    std::byte *qpropertyPointer = reinterpret_cast<std::byte *>(dataPtr);
+    qpropertyPointer += type.sizeOf();
+    constexpr auto alignment = alignof(QtPrivate::QPropertyBindingData *);
+    auto aligned = (quintptr(qpropertyPointer) + alignment - 1) & ~(alignment - 1); // ensure pointer alignment
+    return reinterpret_cast<QtPrivate::QPropertyBindingData *>(aligned);
+}
+
+void QQmlPropertyBinding::handleUndefinedAssignment(QQmlEnginePrivate *ep, void *dataPtr)
+{
+    QQmlPropertyData *propertyData = nullptr;
+    QQmlPropertyData valueTypeData;
+    QQmlData *data = QQmlData::get(target(), false);
+    Q_ASSERT(data);
+    if (Q_UNLIKELY(!data->propertyCache)) {
+        data->propertyCache = ep->cache(target()->metaObject());
+        data->propertyCache->addref();
+    }
+    propertyData = data->propertyCache->property(targetIndex().coreIndex());
+    Q_ASSERT(propertyData);
+    Q_ASSERT(!targetIndex().hasValueTypeIndex());
+    QQmlProperty prop = QQmlPropertyPrivate::restore(target(), *propertyData, &valueTypeData, nullptr);
+    // helper function for writing back value into dataPtr
+    // this is necessary  for QObjectCompatProperty, which doesn't give us the "real" dataPtr
+    // if we don't write the correct value, we would otherwise set the default constructed value
+    auto writeBackCurrentValue = [&](QVariant &&currentValue) {
+        if (currentValue.metaType() != valueMetaType())
+            currentValue.convert(valueMetaType());
+        auto metaType = valueMetaType();
+        metaType.destruct(dataPtr);
+        metaType.construct(dataPtr, currentValue.constData());
+    };
+    if (prop.isResettable()) {
+        // Normally a reset would remove any existing binding; but now we need to keep the binding alive
+        // to handle the case where this binding becomes defined again
+        // We therefore detach the binding, call reset, and reattach again
+        const auto storage = qGetBindingStorage(target());
+        auto bindingData = storage->bindingData(propertyDataPtr);
+        if (!bindingData)
+            bindingData = bindingDataFromPropertyData(propertyDataPtr, propertyData->propType());
+        QPropertyBindingDataPointer bindingDataPointer{bindingData};
+        auto firstObserver = takeObservers();
+        bindingData->d_ref() = 0;
+        if (firstObserver) {
+            bindingDataPointer.setObservers(firstObserver.ptr);
+        }
+        Q_ASSERT(!bindingData->hasBinding());
+        setIsUndefined(true);
+        //suspend binding evaluation state for reset and subsequent read
+        auto state = QtPrivate::suspendCurrentBindingStatus();
+        prop.reset();
+        QVariant currentValue = QVariant(prop.propertyMetaType(), propertyDataPtr);
+        QtPrivate::restoreBindingStatus(state);
+        writeBackCurrentValue(std::move(currentValue));
+        // reattach the binding (without causing a new notification)
+        if (Q_UNLIKELY(bindingData->d() & QtPrivate::QPropertyBindingData::BindingBit)) {
+            qCWarning(lcQQPropertyBinding) << "Resetting " << prop.name() << "due to the binding becoming undefined  caused a new binding to be installed\n"
+                       << "The old binding binding will be abandonned";
+            deref();
+            return;
+        }
+        // reset might have changed observers (?), so refresh firstObserver
+        firstObserver = bindingDataPointer.firstObserver();
+        bindingData->d_ref() = reinterpret_cast<quintptr>(this) | QtPrivate::QPropertyBindingData::BindingBit;
+        if (firstObserver)
+            bindingDataPointer.setObservers(firstObserver.ptr);
+    } else {
+        QQmlError qmlError;
+        auto location = jsExpression()->sourceLocation();
+        qmlError.setColumn(location.column);
+        qmlError.setLine(location.line);
+        qmlError.setUrl(QUrl {location.sourceFile});
+        const QString description = QStringLiteral(R"(QML %1: Unable to assign [undefined] to "%2")").arg(QQmlMetaType::prettyTypeName(target()) , prop.name());
+        qmlError.setDescription(description);
+        qmlError.setObject(target());
+        ep->warning(qmlError);
+    }
 }
 
 QString QQmlPropertyBinding::createBindingLoopErrorDescription(QJSEnginePrivate *ep)
@@ -218,16 +425,6 @@ QString QQmlPropertyBinding::createBindingLoopErrorDescription(QJSEnginePrivate 
     return QStringLiteral(R"(QML %1: Binding loop detected for property "%2")").arg(QQmlMetaType::prettyTypeName(target()) , prop.name());
 }
 
-QObject *QQmlPropertyBinding::target()
-{
-    return std::launder(reinterpret_cast<TargetData *>(&declarativeExtraData))->target;
-}
-
-QQmlPropertyIndex QQmlPropertyBinding::targetIndex()
-{
-    return std::launder(reinterpret_cast<TargetData *>(&declarativeExtraData))->targetIndex;
-}
-
 void QQmlPropertyBinding::bindingErrorCallback(QPropertyBindingPrivate *that)
 {
     auto This = static_cast<QQmlPropertyBinding *>(that);
@@ -239,7 +436,7 @@ void QQmlPropertyBinding::bindingErrorCallback(QPropertyBindingPrivate *that)
 
     auto error = This->bindingError();
     QQmlError qmlError;
-    auto location = This->QQmlJavaScriptExpression::sourceLocation();
+    auto location = This->jsExpression()->sourceLocation();
     qmlError.setColumn(location.column);
     qmlError.setLine(location.line);
     qmlError.setUrl(QUrl {location.sourceFile});
@@ -269,6 +466,27 @@ QUntypedPropertyBinding QQmlTranslationPropertyBinding::create(const QQmlPropert
     };
 
     return QUntypedPropertyBinding(QMetaType(pd->propType()), translationBinding, QPropertyBindingSourceLocation());
+}
+
+QV4::ReturnedValue QQmlPropertyBindingJSForBoundFunction::evaluate(bool *isUndefined)
+{
+    QV4::ExecutionEngine *v4 = engine()->handle();
+    int argc = 0;
+    const QV4::Value *argv = nullptr;
+    const QV4::Value *thisObject = nullptr;
+    QV4::BoundFunction *b = nullptr;
+    if ((b = m_boundFunction.as<QV4::BoundFunction>())) {
+        QV4::Heap::MemberData *args = b->boundArgs();
+        if (args) {
+            argc = args->values.size;
+            argv = args->values.data();
+        }
+        thisObject = &b->d()->boundThis;
+    }
+    QV4::Scope scope(v4);
+    QV4::JSCallData jsCall(thisObject, argv, argc);
+
+    return QQmlJavaScriptExpression::evaluate(jsCall.callData(scope), isUndefined);
 }
 
 QT_END_NAMESPACE

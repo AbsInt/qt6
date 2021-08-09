@@ -46,13 +46,17 @@ private: // helpers
     QGuiApplication *createStandardOffscreenApp(const QJsonArray &screens);
     static void standardScreenDpiTestData();
 private slots:
-    void initTestCase();
+    void cleanup();
     void qhighdpiscaling_data();
     void qhighdpiscaling();
     void minimumDpr();
     void noscreens();
     void screenDpiAndDpr_data();
     void screenDpiAndDpr();
+    void environment_QT_SCALE_FACTOR();
+    void environment_QT_SCREEN_SCALE_FACTORS_data();
+    void environment_QT_SCREEN_SCALE_FACTORS();
+    void environment_QT_USE_PHYSICAL_DPI();
     void screenAt_data();
     void screenAt();
     void screenGeometry_data();
@@ -162,20 +166,25 @@ QGuiApplication *tst_QHighDpi::createStandardOffscreenApp(const QJsonArray &scre
 
 void tst_QHighDpi::standardScreenDpiTestData()
 {
-    // We run each test under three screen configurations (each with three screens):
+    // We run each test under different DPI configurations, each with three screens:
     QTest::addColumn<QList<qreal>>("dpiValues");
-    QTest::newRow("96") << QList<qreal> { 96, 96, 96 }; // standard-dpi sanity check
-    QTest::newRow("192") << QList<qreal> { 192, 192, 192 };  // 2x high dpi
-    QTest::newRow("144-168-192") << QList<qreal> { 144, 168, 192 }; // mixed dpi (1.5x, 1.75x, 2x)
+    // Standard-DPI sanity check
+    QTest::newRow("96") << QList<qreal> { 96, 96, 96 };
+    // 2x high DPI
+    QTest::newRow("192") << QList<qreal> { 192, 192, 192 };
+    // Mixed desktop DPI (1.5x, 1.75x, 2x)
+    QTest::newRow("144-168-192") << QList<qreal> { 144, 168, 192 };
+    // Densities from Android's DisplayMetrics docs, normalized to base 96 DPI
+    QTest::newRow("240-252-360") << QList<qreal> { 400./160 * 96, 420./160 * 96, 600./160 * 96 };
 }
 
-void tst_QHighDpi::initTestCase()
+void tst_QHighDpi::cleanup()
 {
-#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
-    // Run tests on the (proposed) Qt 6 default configuration
-    QGuiApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
-    QGuiApplication::setHighDpiScaleFactorRoundingPolicy(Qt::HighDpiScaleFactorRoundingPolicy::PassThrough);
-#endif
+    // Some test functions set environment variables. Unset them here,
+    // in order to avoid getting confusing follow-on errors on test failures.
+    qunsetenv("QT_SCALE_FACTOR");
+    qunsetenv("QT_SCREEN_SCALE_FACTORS");
+    qunsetenv("QT_USE_PHYSICAL_DPI");
 }
 
 void tst_QHighDpi::qhighdpiscaling_data()
@@ -224,6 +233,93 @@ void tst_QHighDpi::screenDpiAndDpr()
     }
 }
 
+void tst_QHighDpi::environment_QT_SCALE_FACTOR()
+{
+    qreal factor = 3.1415;
+    qputenv("QT_SCALE_FACTOR", QByteArray::number(factor));
+
+    QList<qreal> dpiValues { 96, 144, 192 };
+    std::unique_ptr<QGuiApplication> app(createStandardOffscreenApp(dpiValues));
+    int i = 0;
+    for (QScreen *screen : app->screens()) {
+        // Verify that QT_SCALE_FACTOR applies as a multiplicative factor.
+        qreal expextedDpr = (dpiValues[i] / standardBaseDpi) * factor;
+        ++i;
+        QCOMPARE(screen->devicePixelRatio(), expextedDpr);
+        QCOMPARE(screen->logicalDotsPerInch(), 96);
+        QWindow window(screen);
+        QCOMPARE(window.devicePixelRatio(), expextedDpr);
+    }
+}
+
+void tst_QHighDpi::environment_QT_SCREEN_SCALE_FACTORS_data()
+{
+    QTest::addColumn<QList<qreal>>("platformScreenDpi"); // The to-be-overridden values
+    QTest::addColumn<QByteArray>("environment");
+    QTest::addColumn<QList<qreal>>("expectedDprValues");
+
+    QList<qreal> platformScreenDpi { 192, 216, 240 };
+    QList<qreal> fromPlatformScreenDpr { 2, 2.25, 2.5 };
+    QList<qreal> fromEnvironmentDpr { 1, 1.5, 2 };
+
+    // Correct env. variable values.
+    QTest::newRow("list") << platformScreenDpi << QByteArray("1;1.5;2") << fromEnvironmentDpr;
+    QTest::newRow("names") << platformScreenDpi << QByteArray("screen#1=1.5;screen#0=1;screen#2=2") << fromEnvironmentDpr;
+
+    // Various broken env. variable values. Should not crash,
+    // and should not change the DPR.
+    QTest::newRow("empty") << platformScreenDpi << QByteArray("") << fromPlatformScreenDpr;
+    QTest::newRow("bogus-1") << platformScreenDpi << QByteArray("foo=bar") << fromPlatformScreenDpr;
+    QTest::newRow("bogus-2") << platformScreenDpi << QByteArray("fo0==2;;=;==;=3") << fromPlatformScreenDpr;
+}
+
+void tst_QHighDpi::environment_QT_SCREEN_SCALE_FACTORS()
+{
+    QFETCH(QList<qreal>, platformScreenDpi);
+    QFETCH(QByteArray, environment);
+    QFETCH(QList<qreal>, expectedDprValues);
+
+    // Verify that setting QT_SCREEN_SCALE_FACTORS overrides the from-platform-screen-DPI DPR.
+    {
+        qputenv("QT_SCREEN_SCALE_FACTORS", environment);
+        std::unique_ptr<QGuiApplication> app(createStandardOffscreenApp(platformScreenDpi));
+        int i = 0;
+        for (QScreen *screen : app->screens()) {
+            qreal expextedDpr = expectedDprValues[i];
+            ++i;
+            QCOMPARE(screen->devicePixelRatio(), expextedDpr);
+            QCOMPARE(screen->logicalDotsPerInch(), 96);
+            QWindow window(screen);
+            QCOMPARE(window.devicePixelRatio(), expextedDpr);
+        }
+    }
+}
+
+void tst_QHighDpi::environment_QT_USE_PHYSICAL_DPI()
+{
+    qputenv("QT_USE_PHYSICAL_DPI", "1");
+
+    QList<qreal> dpiValues { 96, 144, 192 };
+    std::unique_ptr<QGuiApplication> app(createStandardOffscreenApp(dpiValues));
+
+    // Verify that the device pixel ratio is computed as physicalDpi / baseDpi.
+    // (which in practice uses physicalSize since this is what QPlatformScreen provides)
+
+    // The default QPlatformScreen::physicalSize() implementation (which QOffscreenScreen
+    // currerently uses) assumes a default DPI of 100 and calculates a fake physical size
+    // based on that value. Use DPI 100 here as well: if you have changed the default value
+    // in QPlatformScreen and get a test failure then update the value below.
+    const qreal platformScreenDefualtDpi = 100;
+    qreal expextedDpr = (platformScreenDefualtDpi / qreal(standardBaseDpi));
+
+    for (QScreen *screen : app->screens()) {
+        QCOMPARE(screen->devicePixelRatio(), expextedDpr);
+        QCOMPARE(screen->logicalDotsPerInch(), 96);
+        QWindow window(screen);
+        QCOMPARE(window.devicePixelRatio(), expextedDpr);
+    }
+}
+
 void tst_QHighDpi::minimumDpr()
 {
     QList<qreal> dpiValues { 40, 60, 95 };
@@ -238,6 +334,11 @@ void tst_QHighDpi::minimumDpr()
     }
 }
 
+QT_BEGIN_NAMESPACE
+extern int qt_defaultDpiX();
+extern int qt_defaultDpiY();
+QT_END_NAMESPACE
+
 void tst_QHighDpi::noscreens()
 {
     // Create application object with a no-screens configuration (should not crash)
@@ -245,6 +346,11 @@ void tst_QHighDpi::noscreens()
     std::unique_ptr<QGuiApplication> app(createStandardOffscreenApp(noScreens));
 
     QCOMPARE(qApp->devicePixelRatio(), 1);
+
+    // Test calling qt_defaultDpiX/Y: These may be called early during QGuiApplication
+    // initialization, before the platform plugin has created screen objects. They
+    // should then 1) not crash and 2) return some default value.
+    QCOMPARE(qt_defaultDpiX(), qt_defaultDpiY());
 }
 
 void tst_QHighDpi::screenAt_data()

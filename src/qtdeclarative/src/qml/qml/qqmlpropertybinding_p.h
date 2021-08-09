@@ -61,46 +61,147 @@
 
 QT_BEGIN_NAMESPACE
 
-class QQmlPropertyBinding : public QQmlJavaScriptExpression,
-                            public QPropertyBindingPrivate
+namespace QV4 {
+    struct BoundFunction;
+}
 
+class QQmlPropertyBinding;
+
+class Q_QML_PRIVATE_EXPORT QQmlPropertyBindingJS : public QQmlJavaScriptExpression
+{
+    friend class QQmlPropertyBinding;
+    void expressionChanged() override;
+    QQmlPropertyBinding *asBinding()
+    {
+        return const_cast<QQmlPropertyBinding *>(static_cast<const QQmlPropertyBindingJS *>(this)->asBinding());
+    }
+
+    inline QQmlPropertyBinding const *asBinding() const;
+};
+
+class Q_QML_PRIVATE_EXPORT QQmlPropertyBindingJSForBoundFunction : public QQmlPropertyBindingJS
 {
 public:
-    static constexpr auto propertyBindingOffset() {
+    QV4::ReturnedValue evaluate(bool *isUndefined);
+    QV4::PersistentValue m_boundFunction;
+};
+
+class Q_QML_PRIVATE_EXPORT QQmlPropertyBinding : public QPropertyBindingPrivate
+
+{
+    friend class QQmlPropertyBindingJS;
+
+    static constexpr std::size_t jsExpressionOffsetLength() {
+        struct composite { QQmlPropertyBinding b; QQmlPropertyBindingJS js; };
         QT_WARNING_PUSH QT_WARNING_DISABLE_INVALID_OFFSETOF
-        return offsetof(QQmlPropertyBinding, ref);
+        return sizeof (QQmlPropertyBinding) - offsetof(composite, js);
         QT_WARNING_POP
+    }
+
+public:
+
+    QQmlPropertyBindingJS *jsExpression()
+    {
+        return const_cast<QQmlPropertyBindingJS *>(static_cast<const QQmlPropertyBinding *>(this)->jsExpression());
+    }
+
+    QQmlPropertyBindingJS const *jsExpression() const
+    {
+        return std::launder(reinterpret_cast<QQmlPropertyBindingJS const *>(
+                                reinterpret_cast<std::byte const*>(this)
+                                + QPropertyBindingPrivate::getSizeEnsuringAlignment()
+                                + jsExpressionOffsetLength()));
     }
 
     static QUntypedPropertyBinding create(const QQmlPropertyData *pd, QV4::Function *function,
                                           QObject *obj, const QQmlRefPointer<QQmlContextData> &ctxt,
                                           QV4::ExecutionContext *scope, QObject *target,
                                           QQmlPropertyIndex targetIndex);
+    static QUntypedPropertyBinding create(QMetaType propertyType, QV4::Function *function,
+                                          QObject *obj, const QQmlRefPointer<QQmlContextData> &ctxt,
+                                          QV4::ExecutionContext *scope, QObject *target,
+                                          QQmlPropertyIndex targetIndex);
+    static QUntypedPropertyBinding createFromCodeString(const QQmlPropertyData *property,
+                                                        const QString &str, QObject *obj,
+                                                        const QQmlRefPointer<QQmlContextData> &ctxt,
+                                                        const QString &url, quint16 lineNumber,
+                                                        QObject *target, QQmlPropertyIndex targetIndex);
 
-    void expressionChanged() override;
+    static QUntypedPropertyBinding createFromBoundFunction(const QQmlPropertyData *pd, QV4::BoundFunction *function,
+                                          QObject *obj, const QQmlRefPointer<QQmlContextData> &ctxt,
+                                          QV4::ExecutionContext *scope, QObject *target,
+                                          QQmlPropertyIndex targetIndex);
 
+    static bool isUndefined(const QUntypedPropertyBinding &binding)
+    {
+        return isUndefined(QPropertyBindingPrivate::get(binding));
+    }
+
+    static bool isUndefined(const QPropertyBindingPrivate *binding)
+    {
+        if (!(binding && binding->hasCustomVTable()))
+            return false;
+        return static_cast<const QQmlPropertyBinding *>(binding)->isUndefined();
+    }
 
     static bool doEvaluate(QMetaType metaType, QUntypedPropertyData *dataPtr, void *f) {
         auto address = static_cast<std::byte*>(f);
-        address -= sizeof (QPropertyBindingPrivate); // f now points to QPropertyBindingPrivate suboject
-        address -= QQmlPropertyBinding::propertyBindingOffset(); //  f now points to QQmlPropertyBinding
+        address -= QPropertyBindingPrivate::getSizeEnsuringAlignment(); // f now points to QPropertyBindingPrivate suboject
+        // and that has the same address as QQmlPropertyBinding
         return reinterpret_cast<QQmlPropertyBinding *>(address)->evaluate(metaType, dataPtr);
     }
 
-private:
-    QQmlPropertyBinding(QMetaType metaType, QObject *target, QQmlPropertyIndex targetIndex);
+    bool hasDependencies()
+    {
+        return (dependencyObserverCount > 0) || !jsExpression()->activeGuards.isEmpty();
+    }
 
+private:
     bool evaluate(QMetaType metaType, void *dataPtr);
+
+    Q_NEVER_INLINE void handleUndefinedAssignment(QQmlEnginePrivate *ep, void *dataPtr);
 
     QString createBindingLoopErrorDescription(QJSEnginePrivate *ep);
 
     struct TargetData {
+        enum BoundFunction : bool {
+            WithoutBoundFunction = false,
+            HasBoundFunction = true,
+        };
+        TargetData(QObject *target, QQmlPropertyIndex index, BoundFunction state)
+            : target(target), targetIndex(index), hasBoundFunction(state)
+        {}
         QObject *target;
         QQmlPropertyIndex targetIndex;
+        bool hasBoundFunction;
+        bool isUndefined = false;
     };
+    QQmlPropertyBinding(QMetaType metaType, QObject *target, QQmlPropertyIndex targetIndex, TargetData::BoundFunction hasBoundFunction);
 
-    QObject *target();
-    QQmlPropertyIndex targetIndex();
+    QObject *target()
+    {
+        return std::launder(reinterpret_cast<TargetData *>(&declarativeExtraData))->target;
+    }
+
+    QQmlPropertyIndex targetIndex()
+    {
+        return std::launder(reinterpret_cast<TargetData *>(&declarativeExtraData))->targetIndex;
+    }
+
+    bool hasBoundFunction()
+    {
+        return std::launder(reinterpret_cast<TargetData *>(&declarativeExtraData))->hasBoundFunction;
+    }
+
+    bool isUndefined() const
+    {
+        return std::launder(reinterpret_cast<TargetData const *>(&declarativeExtraData))->isUndefined;
+    }
+
+    void setIsUndefined(bool isUndefined)
+    {
+        std::launder(reinterpret_cast<TargetData *>(&declarativeExtraData))->isUndefined = isUndefined;
+    }
 
     static void bindingErrorCallback(QPropertyBindingPrivate *);
 };
@@ -113,9 +214,10 @@ template<>
 inline constexpr BindingFunctionVTable bindingFunctionVTable<QQmlPropertyBinding> = {
     &QQmlPropertyBinding::doEvaluate,
     [](void *qpropertyBinding){
+        QQmlPropertyBinding *binding = reinterpret_cast<QQmlPropertyBinding *>(qpropertyBinding);
+        binding->jsExpression()->~QQmlPropertyBindingJS();
+        binding->~QQmlPropertyBinding();
         auto address = static_cast<std::byte*>(qpropertyBinding);
-        address -= QQmlPropertyBinding::propertyBindingOffset(); //  f now points to QQmlPropertyBinding
-        reinterpret_cast<QQmlPropertyBinding *>(address)->~QQmlPropertyBinding();
         delete[] address;
     },
     [](void *, void *){},
@@ -126,10 +228,20 @@ inline constexpr BindingFunctionVTable bindingFunctionVTable<QQmlPropertyBinding
 class QQmlTranslationPropertyBinding
 {
 public:
-    static QUntypedPropertyBinding create(const QQmlPropertyData *pd,
+    static QUntypedPropertyBinding Q_QML_PRIVATE_EXPORT create(const QQmlPropertyData *pd,
                                           const QQmlRefPointer<QV4::ExecutableCompilationUnit> &compilationUnit,
                                           const QV4::CompiledData::Binding *binding);
 };
+
+inline const QQmlPropertyBinding *QQmlPropertyBindingJS::asBinding() const
+{
+    return std::launder(reinterpret_cast<QQmlPropertyBinding const *>(
+                            reinterpret_cast<std::byte const*>(this)
+                            - QPropertyBindingPrivate::getSizeEnsuringAlignment()
+                            - QQmlPropertyBinding::jsExpressionOffsetLength()));
+}
+
+static_assert(sizeof(QQmlPropertyBinding) == sizeof(QPropertyBindingPrivate)); // else the whole offset computatation will break
 
 QT_END_NAMESPACE
 

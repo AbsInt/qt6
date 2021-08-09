@@ -148,9 +148,11 @@ public:
     void appendProperty(const QString &, QQmlPropertyData::Flags flags, int coreIndex,
                         QMetaType propType, QTypeRevision revision, int notifyIndex);
     void appendSignal(const QString &, QQmlPropertyData::Flags, int coreIndex,
-                      const int *types = nullptr, const QList<QByteArray> &names = QList<QByteArray>());
-    void appendMethod(const QString &, QQmlPropertyData::Flags flags, int coreIndex, int returnType,
-                      const QList<QByteArray> &names, const QVector<int> &parameterTypes);
+                      const QMetaType *types = nullptr,
+                      const QList<QByteArray> &names = QList<QByteArray>());
+    void appendMethod(const QString &, QQmlPropertyData::Flags flags, int coreIndex,
+                      QMetaType returnType, const QList<QByteArray> &names,
+                      const QVector<QMetaType> &parameterTypes);
     void appendEnum(const QString &, const QVector<QQmlEnumValue> &);
 
     const QMetaObject *metaObject() const;
@@ -186,13 +188,6 @@ public:
                                       const QQmlRefPointer<QQmlContextData> &, QQmlPropertyData *);
     static QQmlPropertyData *property(QJSEngine *, QObject *, const QV4::String *,
                                       const QQmlRefPointer<QQmlContextData> &, QQmlPropertyData *);
-
-    static QQmlPropertyData *property(QJSEngine *engine, QObject *obj, const QString &name,
-                                      const QQmlRefPointer<QQmlContextData> &context,
-                                      QQmlPropertyData *local)
-    {
-        return property(engine, obj, QStringView(name), context, local);
-    }
 
     //see QMetaObjectPrivate::originalClone
     int originalClone(int index);
@@ -268,10 +263,30 @@ private:
     }
 
 private:
+    enum OverrideResult { NoOverride, InvalidOverride, ValidOverride };
+
+    template<typename String>
+    OverrideResult handleOverride(const String &name, QQmlPropertyData *data, QQmlPropertyData *old)
+    {
+        if (!old)
+            return NoOverride;
+
+        if (data->markAsOverrideOf(old))
+            return ValidOverride;
+
+        qWarning("Final member %s is overridden in class %s. The override won't be used.",
+                 qPrintable(name), className());
+        return InvalidOverride;
+    }
+
+    template<typename String>
+    OverrideResult handleOverride(const String &name, QQmlPropertyData *data)
+    {
+        return handleOverride(name, data, findNamedProperty(name));
+    }
+
+    int propertyIndexCacheStart; // placed here to avoid gap between QQmlRefCount and _parent
     QQmlPropertyCache *_parent;
-    int propertyIndexCacheStart;
-    int methodIndexCacheStart;
-    int signalHandlerIndexCacheStart;
 
     IndexCache propertyIndexCache;
     IndexCache methodIndexCache;
@@ -280,15 +295,17 @@ private:
     AllowedRevisionCache allowedRevisionCache;
     QVector<QQmlEnumData> enumCache;
 
-    bool _hasPropertyOverrides : 1;
-    bool _ownMetaObject : 1;
     RefCountedMetaObject _metaObject;
     QByteArray _dynamicClassName;
     QByteArray _dynamicStringData;
     QString _defaultPropertyName;
     QQmlPropertyCacheMethodArguments *argumentsCache;
-    int _jsFactoryMethodIndex;
     QByteArray _checksum;
+    int methodIndexCacheStart;
+    int signalHandlerIndexCacheStart;
+    int _jsFactoryMethodIndex;
+    bool _hasPropertyOverrides;
+    bool _ownMetaObject;
 };
 
 // Returns this property cache's metaObject.  May be null if it hasn't been created yet.

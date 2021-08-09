@@ -27,6 +27,7 @@
 ****************************************************************************/
 
 #include <QObject>
+#include <QSignalSpy>
 #include <qtest.h>
 #include <qproperty.h>
 #include <private/qproperty_p.h>
@@ -56,6 +57,7 @@ private slots:
     void basicDependencies();
     void multipleDependencies();
     void bindingWithDeletedDependency();
+    void dependencyChangeDuringDestruction();
     void recursiveDependency();
     void bindingAfterUse();
     void bindingFunctionDtorCalled();
@@ -63,6 +65,7 @@ private slots:
     void avoidDependencyAllocationAfterFirstEval();
     void boolProperty();
     void takeBinding();
+    void stickyBinding();
     void replaceBinding();
     void changeHandler();
     void propertyChangeHandlerApi();
@@ -81,26 +84,37 @@ private slots:
     void genericPropertyBindingBool();
     void setBindingFunctor();
     void multipleObservers();
-    void propertyAlias();
     void arrowAndStarOperator();
     void notifiedProperty();
     void typeNoOperatorEqual();
     void bindingValueReplacement();
     void quntypedBindableApi();
+    void readonlyConstQBindable();
+    void qobjectBindableManualNotify();
+    void qobjectBindableSignalTakingNewValue();
 
     void testNewStuff();
     void qobjectObservers();
     void compatBindings();
     void metaProperty();
-    void aliasOnMetaProperty();
 
     void modifyObserverListWhileIterating();
     void compatPropertyNoDobuleNotification();
+    void compatPropertySignals();
 
     void noFakeDependencies();
 
     void bindablePropertyWithInitialization();
-    void markDirty();
+    void noDoubleNotification();
+    void groupedNotifications();
+    void groupedNotificationConsistency();
+    void uninstalledBindingDoesNotEvaluate();
+
+    void notify();
+
+    void bindableInterfaceOfCompatPropertyUsesSetter();
+
+    void selfBindingShouldNotCrash();
 };
 
 void tst_QProperty::functorBinding()
@@ -134,8 +148,8 @@ void tst_QProperty::multipleDependencies()
     QProperty<int> sum;
     sum.setBinding([&]() { return firstDependency + secondDependency; });
 
-    QCOMPARE(QPropertyBindingDataPointer::get(firstDependency).observerCount(), 0);
-    QCOMPARE(QPropertyBindingDataPointer::get(secondDependency).observerCount(), 0);
+    QCOMPARE(QPropertyBindingDataPointer::get(firstDependency).observerCount(), 1);
+    QCOMPARE(QPropertyBindingDataPointer::get(secondDependency).observerCount(), 1);
 
     QCOMPARE(sum.value(), int(3));
     QCOMPARE(QPropertyBindingDataPointer::get(firstDependency).observerCount(), 1);
@@ -188,6 +202,35 @@ void tst_QProperty::bindingWithDeletedDependency()
     bindingReturnsDynamicProperty = false;
 
     QCOMPARE(propertySelector.value(), staticProperty.value());
+}
+
+class ChangeDuringDtorTester : public QObject
+{
+    Q_OBJECT
+    Q_PROPERTY(int prop READ prop WRITE setProp BINDABLE bindableProp)
+
+public:
+    void setProp(int i) { m_prop = i;}
+    int prop() const { return m_prop; }
+    QBindable<int> bindableProp() { return &m_prop; }
+private:
+    Q_OBJECT_COMPAT_PROPERTY(ChangeDuringDtorTester, int, m_prop, &ChangeDuringDtorTester::setProp)
+};
+
+void tst_QProperty::dependencyChangeDuringDestruction()
+{
+    auto tester = std::make_unique<ChangeDuringDtorTester>();
+    QProperty<int> iprop {42};
+    tester->bindableProp().setBinding(Qt::makePropertyBinding(iprop));
+    QObject::connect(tester.get(), &QObject::destroyed, [&](){
+        iprop = 12;
+    });
+    bool failed = false;
+    auto handler = tester->bindableProp().onValueChanged([&](){
+        failed = true;
+    });
+    tester.reset();
+    QVERIFY(!failed);
 }
 
 void tst_QProperty::recursiveDependency()
@@ -265,12 +308,12 @@ void tst_QProperty::avoidDependencyAllocationAfterFirstEval()
 
     QCOMPARE(propWithBinding.value(), int(11));
 
-    QVERIFY(QPropertyBindingDataPointer::get(propWithBinding).bindingPtr());
-    QCOMPARE(QPropertyBindingDataPointer::get(propWithBinding).bindingPtr()->dependencyObserverCount, 2u);
+    QVERIFY(QPropertyBindingDataPointer::get(propWithBinding).binding());
+    QCOMPARE(QPropertyBindingDataPointer::get(propWithBinding).binding()->dependencyObserverCount, 2u);
 
     firstDependency = 100;
     QCOMPARE(propWithBinding.value(), int(110));
-    QCOMPARE(QPropertyBindingDataPointer::get(propWithBinding).bindingPtr()->dependencyObserverCount, 2u);
+    QCOMPARE(QPropertyBindingDataPointer::get(propWithBinding).binding()->dependencyObserverCount, 2u);
 }
 
 void tst_QProperty::boolProperty()
@@ -308,6 +351,30 @@ void tst_QProperty::takeBinding()
     second.setBinding(existingBinding);
     QCOMPARE(second.value(), int(10));
     QVERIFY(!existingBinding.isNull());
+}
+
+void tst_QProperty::stickyBinding()
+{
+    QProperty<int> prop;
+    QProperty<int> prop2 {2};
+    prop.setBinding([&](){ return prop2.value(); });
+    QCOMPARE(prop.value(), 2);
+    auto privBinding = QPropertyBindingPrivate::get(prop.binding());
+    // If we make a binding sticky,
+    privBinding->setSticky();
+    // then writing to the property does not remove it
+    prop = 1;
+    QVERIFY(prop.hasBinding());
+    // but the value still changes.
+    QCOMPARE(prop.value(), 1);
+    // The binding continues to work normally.
+    prop2 = 3;
+    QCOMPARE(prop.value(), 3);
+    // If we remove the stickiness
+    privBinding->setSticky(false);
+    // the binding goes away on the next write
+    prop = 42;
+    QVERIFY(!prop.hasBinding());
 }
 
 void tst_QProperty::replaceBinding()
@@ -477,35 +544,34 @@ class BindingLoopTester : public QObject
     BindingLoopTester() {}
 
     int eagerProp() {return eagerData.value();}
-    void setEagerProp(int i) { eagerData.setValue(i); }
+    void setEagerProp(int i) { eagerData.setValue(i); eagerData.notify(); }
     QBindable<int> bindableEagerProp() {return QBindable<int>(&eagerData);}
     Q_OBJECT_COMPAT_PROPERTY(BindingLoopTester, int, eagerData, &BindingLoopTester::setEagerProp)
 
     int eagerProp2() {return eagerData2.value();}
-    void setEagerProp2(int i) { eagerData2.setValue(i); }
+    void setEagerProp2(int i) { eagerData2.setValue(i); eagerData2.notify(); }
     QBindable<int> bindableEagerProp2() {return QBindable<int>(&eagerData2);}
     Q_OBJECT_COMPAT_PROPERTY(BindingLoopTester, int, eagerData2, &BindingLoopTester::setEagerProp2)
 };
 
 void tst_QProperty::bindingLoop()
 {
-    QScopedPointer<QProperty<int>> firstProp;
+    QProperty<int> firstProp;
 
     QProperty<int> secondProp([&]() -> int {
-        return firstProp ? firstProp->value() : 0;
+        return firstProp.value();
     });
 
     QProperty<int> thirdProp([&]() -> int {
         return secondProp.value();
     });
 
-    firstProp.reset(new QProperty<int>());
-    firstProp->setBinding([&]() -> int {
-        return secondProp.value();
+    firstProp.setBinding([&]() -> int {
+        return secondProp.value() + thirdProp.value();
     });
 
-    QCOMPARE(thirdProp.value(), 0);
-    QCOMPARE(secondProp.binding().error().type(), QPropertyBindingError::BindingLoop);
+    thirdProp.setValue(10);
+    QCOMPARE(firstProp.binding().error().type(), QPropertyBindingError::BindingLoop);
 
 
     {
@@ -544,7 +610,7 @@ public:
 
 #define GEN(N) \
     int prop##N() {return propData##N.value();} \
-    void setProp##N(int i) { propData##N.setValue(i); } \
+    void setProp##N(int i) { if (i == propData##N) return; propData##N.setValue(i); propData##N.notify(); } \
     QBindable<int> bindableProp##N() {return QBindable<int>(&propData##N);} \
     Q_OBJECT_COMPAT_PROPERTY(ReallocTester, int, propData##N, &ReallocTester::setProp##N)
     GEN(1)
@@ -758,52 +824,6 @@ void tst_QProperty::multipleObservers()
     QCOMPARE(value1, 22);
     QCOMPARE(value2, 22);
     QCOMPARE(property.value(), 22);
-}
-
-void tst_QProperty::propertyAlias()
-{
-    QScopedPointer<QProperty<int>> property(new QProperty<int>);
-    property->setValue(5);
-    QPropertyAlias alias(property.get());
-    QVERIFY(alias.isValid());
-    QCOMPARE(alias.value(), 5);
-
-    int value1 = 1;
-    auto changeHandler = alias.onValueChanged([&]() { value1 = alias.value(); });
-    QCOMPARE(value1, 1);
-
-    int value2 = 2;
-    auto subscribeHandler = alias.subscribe([&]() { value2 = alias.value(); });
-    QCOMPARE(value2, 5);
-
-    alias.setValue(6);
-    QVERIFY(alias.isValid());
-    QCOMPARE(alias.value(), 6);
-    QCOMPARE(value1, 6);
-    QCOMPARE(value2, 6);
-
-    alias.setBinding([]() { return 12; });
-    QCOMPARE(value1, 12);
-    QCOMPARE(value2, 12);
-    QCOMPARE(alias.value(), 12);
-
-    alias.setValue(22);
-    QCOMPARE(value1, 22);
-    QCOMPARE(value2, 22);
-    QCOMPARE(alias.value(), 22);
-
-    property.reset();
-
-    QVERIFY(!alias.isValid());
-    QCOMPARE(alias.value(), int());
-    QCOMPARE(value1, 22);
-    QCOMPARE(value2, 22);
-
-    // Does not crash
-    alias.setValue(25);
-    QCOMPARE(alias.value(), int());
-    QCOMPARE(value1, 22);
-    QCOMPARE(value2, 22);
 }
 
 void tst_QProperty::arrowAndStarOperator()
@@ -1034,6 +1054,45 @@ void tst_QProperty::quntypedBindableApi()
     QCOMPARE(iprop.value(), 42);
     QUntypedBindable propLess;
     QVERIFY(propLess.takeBinding().isNull());
+
+    QUntypedBindable invalidBindable;
+#ifndef QT_NO_DEBUG
+    QTest::ignoreMessage(QtMsgType::QtWarningMsg, "setBinding: Could not set binding via bindable interface. The QBindable is invalid.");
+#endif
+    invalidBindable.setBinding(Qt::makePropertyBinding(iprop));
+
+    QUntypedBindable readOnlyBindable(static_cast<const QProperty<int> *>(&iprop) );
+    QVERIFY(readOnlyBindable.isReadOnly());
+#ifndef QT_NO_DEBUG
+    QTest::ignoreMessage(QtMsgType::QtWarningMsg, "setBinding: Could not set binding via bindable interface. The QBindable is read-only.");
+#endif
+    readOnlyBindable.setBinding(Qt::makePropertyBinding(iprop));
+
+    QProperty<float> fprop;
+#ifndef QT_NO_DEBUG
+    QTest::ignoreMessage(QtMsgType::QtWarningMsg, "setBinding: Could not set binding as the property expects it to be of type int but got float instead.");
+#endif
+    bindable.setBinding(Qt::makePropertyBinding(fprop));
+}
+
+void tst_QProperty::readonlyConstQBindable()
+{
+    QProperty<int> i {42};
+    const QBindable<int> bindableI(const_cast<const QProperty<int> *>(&i));
+
+    // check that read-only operations work with a const QBindable
+    QVERIFY(bindableI.isReadOnly());
+    QVERIFY(!bindableI.hasBinding());
+    // we can still create a binding to a read only bindable through the interface
+    QProperty<int> j;
+    j.setBinding(bindableI.makeBinding());
+    QCOMPARE(j.value(), bindableI.value());
+    int counter = 0;
+    auto observer = bindableI.subscribe([&](){++counter;});
+    QCOMPARE(counter, 1);
+    auto observer2 = bindableI.onValueChanged([&](){++counter;});
+    i = 0;
+    QCOMPARE(counter, 3);
 }
 
 class MyQObject : public QObject
@@ -1046,7 +1105,7 @@ class MyQObject : public QObject
     Q_PROPERTY(int compat READ compat WRITE setCompat NOTIFY compatChanged)
 
 signals:
-    void fooChanged();
+    void fooChanged(int newFoo);
     void barChanged();
     void compatChanged();
 
@@ -1072,6 +1131,7 @@ public:
         if (i < 0)
             i = 0;
         compatData.setValue(i);
+        compatData.notify();
         emit compatChanged();
     }
 
@@ -1095,9 +1155,78 @@ public:
     Q_OBJECT_COMPAT_PROPERTY(MyQObject, int, compatData, &MyQObject::setCompat)
 };
 
+
+void tst_QProperty::qobjectBindableManualNotify()
+{
+    // Given an object of type MyQObject,
+    MyQObject object;
+    // track its foo property's change count
+    auto bindable = object.bindableFoo();
+    int fooChangeCount = 0;
+    auto changeHandler = bindable.onValueChanged([&](){++fooChangeCount;});
+    // and how many changed signals it emits.
+    QSignalSpy fooChangedSpy(&object, &MyQObject::fooChanged);
+
+    // If we bypass the bindings system,
+    object.fooData.setValueBypassingBindings(42);
+    // there is no change.
+    QCOMPARE(fooChangeCount, 0);
+    QCOMPARE(fooChangedSpy.count(), 0);
+    // Once we notify manually
+    object.fooData.notify();
+    // observers are notified and the signal arrives.
+    QCOMPARE(fooChangeCount, 1);
+    QCOMPARE(fooChangedSpy.count(), 1);
+
+    // If we set a binding
+    int i = 1;
+    object.fooData.setBinding([&](){return i;});
+    // then the value changes
+    QCOMPARE(object.foo(), 1);
+    // and the change and signal count are incremented.
+    QCOMPARE(fooChangeCount, 2);
+    QCOMPARE(fooChangedSpy.count(), 2);
+    // Changing a non-property won't trigger any notification.
+    i = 2;
+    QCOMPARE(fooChangeCount, 2);
+    QCOMPARE(fooChangedSpy.count(), 2);
+    // Manually triggering the notification
+    object.fooData.notify();
+    // increments the change count
+    QCOMPARE(fooChangeCount, 3);
+    QCOMPARE(fooChangedSpy.count(), 3);
+    // but doesn't actually cause a binding reevaluation.
+    QCOMPARE(object.foo(), 1);
+}
+
+void tst_QProperty::qobjectBindableSignalTakingNewValue()
+{
+    // Given an object of type MyQObject,
+    MyQObject object;
+    // and tracking the values emitted via its fooChanged signal,
+    int newValue = -1;
+    QObject::connect(&object, &MyQObject::fooChanged, [&](int i){ newValue = i; } );
+
+    // when we change the property's value via the bindable interface
+    object.bindableFoo().setValue(1);
+    // we obtain the newly set value.
+    QCOMPARE(newValue, 1);
+
+    // The same holds true when we set a binding
+    QProperty<int> i {2};
+    object.bindableFoo().setBinding(Qt::makePropertyBinding(i));
+    QCOMPARE(newValue, 2);
+    // and when the binding gets reevaluated to a new value
+    i = 3;
+    QCOMPARE(newValue, 3);
+}
+
 void tst_QProperty::testNewStuff()
 {
     MyQObject testReadOnly;
+#ifndef QT_NO_DEBUG
+    QTest::ignoreMessage(QtMsgType::QtWarningMsg, "setBinding: Could not set binding via bindable interface. The QBindable is read-only.");
+#endif
     testReadOnly.bindableFoo().setBinding([](){return 42;});
     auto bindable = const_cast<const MyQObject&>(testReadOnly).bindableFoo();
     QVERIFY(bindable.hasBinding());
@@ -1184,7 +1313,9 @@ void tst_QProperty::qobjectObservers()
     MyQObject object;
     int onValueChangedCalled = 0;
     {
-        auto handler = object.bindableFoo().onValueChanged([&onValueChangedCalled]() { ++onValueChangedCalled;});
+        auto handler = object.bindableFoo().onValueChanged([&onValueChangedCalled]() {
+            ++onValueChangedCalled;
+        });
         QCOMPARE(onValueChangedCalled, 0);
 
         object.setFoo(10);
@@ -1303,42 +1434,6 @@ void tst_QProperty::metaProperty()
     QCOMPARE(object.fooData.value(), 1);
 }
 
-void tst_QProperty::aliasOnMetaProperty()
-{
-    MyQObject object;
-    QPropertyAlias<int> alias(object.bindableFoo());
-
-    QVERIFY(alias.isValid());
-    QCOMPARE(alias.value(), object.foo());
-    QVERIFY(!alias.hasBinding());
-
-    object.setFoo(42);
-    QCOMPARE(alias.value(), 42);
-
-    auto f = [&object]() -> int {
-        return object.barData;
-    };
-    object.bindableFoo().setBinding(f);
-    QVERIFY(alias.hasBinding());
-    QCOMPARE(alias.value(), object.bar());
-
-    object.setBar(111);
-    QCOMPARE(alias.value(), 111);
-
-    int changedCount = 0;
-    auto observer = alias.onValueChanged([&changedCount]() { ++changedCount; });
-    QCOMPARE(changedCount, 0);
-    object.setBar(666);
-    QCOMPARE(changedCount, 1);
-
-    alias.setBinding([&object]() { return object.read(); });
-    QCOMPARE(changedCount, 2);
-    QCOMPARE(alias.value(), 0);
-    object.readData = 100;
-    QCOMPARE(changedCount, 3);
-    QCOMPARE(alias.value(), 100);
-}
-
 void tst_QProperty::modifyObserverListWhileIterating()
 {
         struct DestructingObserver : QPropertyObserver {
@@ -1394,14 +1489,46 @@ class CompatPropertyTester : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(int prop1 READ prop1 WRITE setProp1 BINDABLE bindableProp1)
-    public:
+    Q_PROPERTY(int prop2 READ prop2 WRITE setProp2 NOTIFY prop2Changed BINDABLE bindableProp2)
+    Q_PROPERTY(int prop3 READ prop3 WRITE setProp3 NOTIFY prop3Changed BINDABLE bindableProp3)
+public:
     CompatPropertyTester(QObject *parent = nullptr) : QObject(parent) { }
 
     int prop1() {return prop1Data.value();}
-    void setProp1(int i) { prop1Data.setValue(i); }
+    void setProp1(int i) { if (i == prop1Data) return; prop1Data.setValue(i); prop1Data.notify(); }
     QBindable<int> bindableProp1() {return QBindable<int>(&prop1Data);}
-    Q_OBJECT_COMPAT_PROPERTY(CompatPropertyTester, int, prop1Data, &CompatPropertyTester::setProp1)
 
+    int prop2() { return prop2Data.value(); }
+    void setProp2(int i)
+    {
+        if (i == prop2Data)
+            return;
+        prop2Data.setValue(i);
+        prop2Data.notify();
+    }
+    QBindable<int> bindableProp2() { return QBindable<int>(&prop2Data); }
+
+    int prop3() { return prop3Data.value(); }
+    void setProp3(int i)
+    {
+        if (i == prop3Data)
+            return;
+        prop3Data.setValue(i);
+        prop3Data.notify();
+    }
+    QBindable<int> bindableProp3() { return QBindable<int>(&prop3Data); }
+
+signals:
+    void prop2Changed(int value);
+    void prop3Changed();
+
+private:
+    Q_OBJECT_COMPAT_PROPERTY(CompatPropertyTester, int, prop1Data, &CompatPropertyTester::setProp1)
+    Q_OBJECT_COMPAT_PROPERTY(CompatPropertyTester, int, prop2Data, &CompatPropertyTester::setProp2,
+                             &CompatPropertyTester::prop2Changed)
+    Q_OBJECT_COMPAT_PROPERTY_WITH_ARGS(CompatPropertyTester, int, prop3Data,
+                                       &CompatPropertyTester::setProp3,
+                                       &CompatPropertyTester::prop3Changed, 1)
 };
 
 void tst_QProperty::compatPropertyNoDobuleNotification()
@@ -1413,6 +1540,38 @@ void tst_QProperty::compatPropertyNoDobuleNotification()
     auto observer = tester.bindableProp1().onValueChanged([&](){++counter;});
     iprop.setValue(2);
     QCOMPARE(counter, 1);
+}
+
+void tst_QProperty::compatPropertySignals()
+{
+    CompatPropertyTester tester;
+
+    // Compat property with signal. Signal has parameter.
+    QProperty<int> prop2Observer;
+    prop2Observer.setBinding(tester.bindableProp2().makeBinding());
+
+    QSignalSpy prop2Spy(&tester, &CompatPropertyTester::prop2Changed);
+
+    tester.setProp2(10);
+
+    QCOMPARE(prop2Observer.value(), 10);
+    QCOMPARE(prop2Spy.count(), 1);
+    const QList<QVariant> arguments = prop2Spy.takeFirst();
+    QCOMPARE(arguments.size(), 1);
+    QCOMPARE(arguments.at(0).metaType().id(), QMetaType::Int);
+    QCOMPARE(arguments.at(0).toInt(), 10);
+
+    // Compat property with signal and default value. Signal has no parameter.
+    QProperty<int> prop3Observer;
+    prop3Observer.setBinding(tester.bindableProp3().makeBinding());
+    QCOMPARE(prop3Observer.value(), 1);
+
+    QSignalSpy prop3Spy(&tester, &CompatPropertyTester::prop3Changed);
+
+    tester.setProp3(5);
+
+    QCOMPARE(prop3Observer.value(), 5);
+    QCOMPARE(prop3Spy.count(), 1);
 }
 
 class FakeDependencyCreator : public QObject
@@ -1429,9 +1588,9 @@ signals:
     void prop3Changed();
 
 public:
-    void setProp1(int val) { prop1Data.setValue(val); emit prop1Changed();}
-    void setProp2(int val) { prop2Data.setValue(val); emit prop2Changed();}
-    void setProp3(int val) { prop3Data.setValue(val); emit prop3Changed();}
+    void setProp1(int val) { prop1Data.setValue(val); prop1Data.notify();}
+    void setProp2(int val) { prop2Data.setValue(val); prop2Data.notify();}
+    void setProp3(int val) { prop3Data.setValue(val); prop3Data.notify();}
 
     int prop1() { return prop1Data; }
     int prop2() { return prop2Data; }
@@ -1442,9 +1601,9 @@ public:
     QBindable<int> bindableProp3() { return QBindable<int>(&prop3Data); }
 
 private:
-    Q_OBJECT_COMPAT_PROPERTY(FakeDependencyCreator, int, prop1Data, &FakeDependencyCreator::setProp1);
-    Q_OBJECT_COMPAT_PROPERTY(FakeDependencyCreator, int, prop2Data, &FakeDependencyCreator::setProp2);
-    Q_OBJECT_COMPAT_PROPERTY(FakeDependencyCreator, int, prop3Data, &FakeDependencyCreator::setProp3);
+    Q_OBJECT_COMPAT_PROPERTY(FakeDependencyCreator, int, prop1Data, &FakeDependencyCreator::setProp1, &FakeDependencyCreator::prop1Changed);
+    Q_OBJECT_COMPAT_PROPERTY(FakeDependencyCreator, int, prop2Data, &FakeDependencyCreator::setProp2, &FakeDependencyCreator::prop2Changed);
+    Q_OBJECT_COMPAT_PROPERTY(FakeDependencyCreator, int, prop3Data, &FakeDependencyCreator::setProp3, &FakeDependencyCreator::prop3Changed);
 };
 
 void tst_QProperty::noFakeDependencies()
@@ -1526,80 +1685,175 @@ void tst_QProperty::bindablePropertyWithInitialization()
     QCOMPARE(tester.prop3().anotherValue, 20);
 }
 
-class MarkDirtyTester : public QObject
+void tst_QProperty::noDoubleNotification()
 {
-    Q_OBJECT
-public:
-    Q_PROPERTY(int value1 READ value1 WRITE setValue1 BINDABLE bindableValue1)
-    Q_PROPERTY(int value2 READ value2 WRITE setValue1 BINDABLE bindableValue2)
-    Q_PROPERTY(int computed READ computed BINDABLE bindableComputed)
+    /* dependency graph for this test
+       x --> y means y depends on x
+      a-->b-->d
+      \       ^
+       \->c--/
+    */
+    QProperty<int> a(0);
+    QProperty<int> b;
+    b.setBinding([&](){ return a.value(); });
+    QProperty<int> c;
+    c.setBinding([&](){ return a.value(); });
+    QProperty<int> d;
+    d.setBinding([&](){ return b.value() + c.value(); });
+    int nNotifications = 0;
+    int expected = 0;
+    auto connection = d.subscribe([&](){
+        ++nNotifications;
+        QCOMPARE(d.value(), expected);
+    });
+    QCOMPARE(nNotifications, 1);
+    expected = 2;
+    a = 1;
+    QCOMPARE(nNotifications, 2);
+    expected = 4;
+    a = 2;
+    QCOMPARE(nNotifications, 3);
+}
 
-    inline static int staticValue = 0;
-
-    int value1() const {return m_value1;}
-    void setValue1(int val) {m_value1 = val;}
-    QBindable<int> bindableValue1() {return { &m_value1 };}
-
-    int value2() const {return m_value2;}
-    void setValue2(int val) { m_value2.setValue(val); }
-    QBindable<int> bindableValue2() {return { &m_value2 };}
-
-    int computed() const { return staticValue + m_value1; }
-    QBindable<int> bindableComputed() {return {&m_computed};}
-
-    void incrementStaticValue() {
-        ++staticValue;
-        m_computed.markDirty();
-    }
-
-    void markValue1Dirty() {
-        m_value1.markDirty();
-    }
-
-    void markValue2Dirty() {
-        m_value2.markDirty();
-    }
-private:
-    Q_OBJECT_BINDABLE_PROPERTY(MarkDirtyTester, int, m_value1, nullptr)
-    Q_OBJECT_COMPAT_PROPERTY(MarkDirtyTester, int, m_value2, &MarkDirtyTester::setValue2)
-    Q_OBJECT_COMPUTED_PROPERTY(MarkDirtyTester, int, m_computed, &MarkDirtyTester::computed)
-};
-
-void tst_QProperty::markDirty()
+void tst_QProperty::groupedNotifications()
 {
+    QProperty<int> a(0);
+    QProperty<int> b;
+    b.setBinding([&](){ return a.value(); });
+    QProperty<int> c;
+    c.setBinding([&](){ return a.value(); });
+    QProperty<int> d;
+    QProperty<int> e;
+    e.setBinding([&](){ return b.value() + c.value() + d.value(); });
+    int nNotifications = 0;
+    int expected = 0;
+    auto connection = e.subscribe([&](){
+        ++nNotifications;
+        QCOMPARE(e.value(), expected);
+    });
+    QCOMPARE(nNotifications, 1);
+
+    expected = 2;
+    Qt::beginPropertyUpdateGroup();
+    a = 1;
+    QCOMPARE(b.value(), 0);
+    QCOMPARE(c.value(), 0);
+    QCOMPARE(d.value(), 0);
+    QCOMPARE(nNotifications, 1);
+    Qt::endPropertyUpdateGroup();
+    QCOMPARE(b.value(), 1);
+    QCOMPARE(c.value(), 1);
+    QCOMPARE(e.value(), 2);
+    QCOMPARE(nNotifications, 2);
+
+    expected = 7;
+    Qt::beginPropertyUpdateGroup();
+    a = 2;
+    d = 3;
+    QCOMPARE(b.value(), 1);
+    QCOMPARE(c.value(), 1);
+    QCOMPARE(d.value(), 3);
+    QCOMPARE(nNotifications, 2);
+    Qt::endPropertyUpdateGroup();
+    QCOMPARE(b.value(), 2);
+    QCOMPARE(c.value(), 2);
+    QCOMPARE(e.value(), 7);
+    QCOMPARE(nNotifications, 3);
+
+
+}
+
+void tst_QProperty::groupedNotificationConsistency()
+{
+    QProperty<int> i(0);
+    QProperty<int> j(0);
+    bool areEqual = true;
+
+    auto observer = i.onValueChanged([&](){
+        areEqual = i == j;
+    });
+
+    i = 1;
+    j = 1;
+    QVERIFY(!areEqual); // value changed runs before j = 1
+
+    Qt::beginPropertyUpdateGroup();
+    i = 2;
+    j = 2;
+    Qt::endPropertyUpdateGroup();
+    QVERIFY(areEqual); // value changed runs after everything has been evaluated
+}
+
+void tst_QProperty::uninstalledBindingDoesNotEvaluate()
+{
+    QProperty<int> i;
+    QProperty<int> j;
+    int bindingEvaluationCounter = 0;
+    i.setBinding([&](){
+        bindingEvaluationCounter++;
+        return j.value();
+    });
+    QCOMPARE(bindingEvaluationCounter, 1);
+    // Sanity check: if we force a binding reevaluation,
+    j = 42;
+    // the binding function will be called again.
+    QCOMPARE(bindingEvaluationCounter, 2);
+    // If we keep referencing the binding
+    auto keptBinding = i.binding();
+    // but have it not installed on a property
+    i = 10;
+    QVERIFY(!i.hasBinding());
+    QVERIFY(!keptBinding.isNull());
+    // then changing a dependency
+    j = 12;
+    // does not lead to the binding being reevaluated.
+    QCOMPARE(bindingEvaluationCounter, 2);
+}
+
+void tst_QProperty::notify()
+{
+    QProperty<int> testProperty(0);
+    QList<int> recordedValues;
+    int value = 0;
+    QPropertyNotifier notifier;
+
     {
-        QProperty<int> testProperty;
-        int changeCounter = 0;
-        auto handler = testProperty.onValueChanged([&](){++changeCounter;});
-        testProperty.markDirty();
-        QCOMPARE(changeCounter, 1);
-    }
-    {
-        MarkDirtyTester dirtyTester;
-        int computedChangeCounter = 0;
-        int value1ChangeCounter = 0;
-        auto handler = dirtyTester.bindableComputed().onValueChanged([&](){
-            computedChangeCounter++;
+        QPropertyNotifier handler = testProperty.addNotifier([&]() {
+            recordedValues << testProperty;
         });
-        auto handler2 = dirtyTester.bindableValue1().onValueChanged([&](){
-            value1ChangeCounter++;
+        notifier = testProperty.addNotifier([&]() {
+            value = testProperty;
         });
-        dirtyTester.incrementStaticValue();
-        QCOMPARE(computedChangeCounter, 1);
-        QCOMPARE(dirtyTester.computed(), 1);
-        dirtyTester.markValue1Dirty();
-        QCOMPARE(value1ChangeCounter, 1);
-        QCOMPARE(computedChangeCounter, 1);
+
+        testProperty = 1;
+        testProperty = 2;
     }
-    {
-        MarkDirtyTester dirtyTester;
-        int changeCounter = 0;
-        auto handler = dirtyTester.bindableValue2().onValueChanged([&](){
-            changeCounter++;
-        });
-        dirtyTester.markValue2Dirty();
-        QCOMPARE(changeCounter, 1);
-    }
+    QCOMPARE(value, 2);
+    testProperty = 3;
+    QCOMPARE(value, 3);
+    notifier = {};
+    testProperty = 4;
+    QCOMPARE(value, 3);
+
+    QCOMPARE(recordedValues.count(), 2);
+    QCOMPARE(recordedValues.at(0), 1);
+    QCOMPARE(recordedValues.at(1), 2);
+}
+
+void tst_QProperty::bindableInterfaceOfCompatPropertyUsesSetter()
+{
+    MyQObject obj;
+    QBindable<int> bindable = obj.bindableCompat();
+    QCOMPARE(obj.setCompatCalled, 0);
+    bindable.setValue(42);
+    QCOMPARE(obj.setCompatCalled, 1);
+}
+
+void tst_QProperty::selfBindingShouldNotCrash()
+{
+    QProperty<int> i;
+    i.setBinding([&](){ return i+1; });
+    QVERIFY(i.binding().error().hasError());
 }
 
 QTEST_MAIN(tst_QProperty);

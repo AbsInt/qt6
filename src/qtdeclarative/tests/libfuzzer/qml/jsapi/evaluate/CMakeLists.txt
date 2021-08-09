@@ -1,28 +1,33 @@
-# Generated from evaluate.pro.
+cmake_minimum_required(VERSION 3.14)
+project(evaluate LANGUAGES CXX)
 
-#####################################################################
-## evaluate Binary:
-#####################################################################
+set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
-qt_internal_add_executable(evaluate
-    SOURCES
-        main.cpp
-    PUBLIC_LIBRARIES
-        Qt::Qml
+set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTORCC ON)
+set(CMAKE_AUTOUIC ON)
+
+find_package(Qt6 COMPONENTS Core)
+find_package(Qt6 COMPONENTS Quick)
+
+qt_add_executable(evaluate
+    main.cpp
 )
 
-#### Keys ignored in scope 1:.:.:evaluate.pro:<TRUE>:
-# FUZZ_ENGINE = "$$(LIB_FUZZING_ENGINE)"
-
-## Scopes:
-#####################################################################
-
-qt_internal_extend_target(evaluate CONDITION FUZZ_ENGINE_ISEMPTY
-    LINK_OPTIONS
-        "-fsanitize=fuzzer"
+target_link_libraries(evaluate PUBLIC
+    Qt::Core
+    Qt::Quick
 )
-
-qt_internal_extend_target(evaluate CONDITION NOT FUZZ_ENGINE_ISEMPTY
-    PUBLIC_LIBRARIES
+if(DEFINED ENV{LIB_FUZZING_ENGINE})
+    target_link_libraries(evaluate PRIVATE
         $ENV{LIB_FUZZING_ENGINE}
+    )
+else()
+    target_link_libraries(evaluate PRIVATE
+        -fsanitize=fuzzer
+    )
+endif()
+
+qt_import_plugins(evaluate
+    INCLUDE Qt::QMinimalIntegrationPlugin
 )

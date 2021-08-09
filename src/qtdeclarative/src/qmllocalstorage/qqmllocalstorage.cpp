@@ -265,7 +265,7 @@ static QVariant toSqlVariant(QV4::ExecutionEngine *engine, const QV4::ScopedValu
     // expects a null variant. (this is because of QTBUG-40880)
     if (value->isNull())
         return QVariant();
-    return engine->toVariant(value, /*typehint*/-1);
+    return engine->toVariant(value, /*typehint*/ QMetaType {});
 }
 
 static ReturnedValue qmlsqldatabase_executeSql(const FunctionObject *b, const Value *thisObject, const Value *argv, int argc)
@@ -412,9 +412,9 @@ static ReturnedValue qmlsqldatabase_changeVersion(const FunctionObject *b, const
         ok = false;
         db.transaction();
 
-        JSCallData jsCall(scope, 1);
-        *jsCall->thisObject = scope.engine->globalObject;
-        jsCall->args[0] = query;
+        JSCallArguments jsCall(scope, 1);
+        *jsCall.thisObject = scope.engine->globalObject;
+        jsCall.args[0] = query;
 
         TransactionRollback rollbackOnException(&db, &query->d()->inTransaction);
         callback->call(jsCall);
@@ -468,9 +468,9 @@ static ReturnedValue qmlsqldatabase_transaction_shared(const FunctionObject *b, 
 
     db.transaction();
     if (callback) {
-        JSCallData jsCall(scope, 1);
-        *jsCall->thisObject = scope.engine->globalObject;
-        jsCall->args[0] = w;
+        JSCallArguments jsCall(scope, 1);
+        *jsCall.thisObject = scope.engine->globalObject;
+        jsCall.args[0] = w;
         TransactionRollback rollbackOnException(&db, &w->d()->inTransaction);
         callback->call(jsCall);
         rollbackOnException.clear();
@@ -781,9 +781,9 @@ void QQmlLocalStorage::openDatabaseSync(QQmlV4Function *args)
     *db->d()->version = version;
 
     if (created && dbcreationCallback) {
-        JSCallData jsCall(scope, 1);
-        *jsCall->thisObject = scope.engine->globalObject;
-        jsCall->args[0] = db;
+        JSCallArguments jsCall(scope, 1);
+        *jsCall.thisObject = scope.engine->globalObject;
+        jsCall.args[0] = db;
         dbcreationCallback->call(jsCall);
     }
 

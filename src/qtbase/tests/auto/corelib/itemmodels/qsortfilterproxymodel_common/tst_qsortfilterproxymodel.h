@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
@@ -55,6 +55,7 @@ private slots:
     void sort();
     void sortHierarchy_data();
     void sortHierarchy();
+    void createPersistentOnLayoutAboutToBeChanged();
 
     void insertRows_data();
     void insertRows();
@@ -165,6 +166,17 @@ private slots:
 
     void checkFilteredIndexes();
     void invalidateColumnsOrRowsFilter();
+
+    void filterKeyColumnBinding();
+    void dynamicSortFilterBinding();
+    void sortCaseSensitivityBinding();
+    void isSortLocaleAwareBinding();
+    void sortRoleBinding();
+    void filterRoleBinding();
+    void recursiveFilteringEnabledBinding();
+    void autoAcceptChildRowsBinding();
+    void filterCaseSensitivityBinding();
+    void filterRegularExpressionBinding();
 
 protected:
     void buildHierarchy(const QStringList &data, QAbstractItemModel *model);

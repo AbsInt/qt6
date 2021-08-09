@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2020 The Qt Company Ltd.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the tools applications of the Qt Toolkit.
@@ -63,13 +63,13 @@ public:
     static QString dedent(int level, const QString &str);
     static QString slashed(const QString &str);
 
-    static int tabSize;
-    static QStringList exampleFiles;
-    static QStringList exampleDirs;
-    static QStringList sourceFiles;
-    static QStringList sourceDirs;
-    static QStringList ignoreWords;
-    static bool quoting;
+    static int s_tabSize;
+    static QStringList s_exampleFiles;
+    static QStringList s_exampleDirs;
+    static QStringList s_sourceFiles;
+    static QStringList s_sourceDirs;
+    static QStringList s_ignoreWords;
+    static bool s_quoting;
 
 private:
     Location &location();
@@ -112,7 +112,7 @@ private:
     QString getCode(int cmd, CodeMarker *marker, const QString &argStr = QString());
 
     inline bool isAutoLinkString(const QString &word);
-    bool isAutoLinkString(const QString &word, int &curPos);
+    bool isAutoLinkString(const QString &word, qsizetype &curPos);
     bool isBlankLine();
     bool isLeftBraceAhead();
     bool isLeftBracketAhead();
@@ -123,15 +123,15 @@ private:
     static bool isCode(const Atom *atom);
     static bool isQuote(const Atom *atom);
 
-    QStack<int> m_openedInputs;
+    QStack<qsizetype> m_openedInputs {};
 
-    QString m_input;
-    int m_position {};
-    int m_backslashPosition {};
-    int m_endPosition {};
-    int m_inputLength {};
-    Location m_cachedLocation;
-    int m_cachedPosition {};
+    QString m_input {};
+    qsizetype m_position {};
+    qsizetype m_backslashPosition {};
+    qsizetype m_endPosition {};
+    qsizetype m_inputLength {};
+    Location m_cachedLocation {};
+    qsizetype m_cachedPosition {};
 
     DocPrivate *m_private { nullptr };
     enum ParagraphState { OutsideParagraph, InSingleLineParagraph, InMultiLineParagraph };
@@ -142,18 +142,18 @@ private:
     bool m_indexStartedParagraph {}; // ### rename
     Atom::AtomType m_pendingParagraphLeftType {};
     Atom::AtomType m_pendingParagraphRightType {};
-    QString m_pendingParagraphString;
+    QString m_pendingParagraphString {};
 
     int m_braceDepth {};
     Doc::Sections m_currentSection {};
-    QMap<QString, Location> m_targetMap;
-    QMap<int, QString> m_pendingFormats;
-    QStack<int> m_openedCommands;
-    QStack<OpenedList> m_openedLists;
-    Quoter m_quoter;
+    QMap<QString, Location> m_targetMap {};
+    QMap<int, QString> m_pendingFormats {};
+    QStack<int> m_openedCommands {};
+    QStack<OpenedList> m_openedLists {};
+    Quoter m_quoter {};
     Atom *m_lastAtom { nullptr };
 
-    static DocUtilities &m_utilities;
+    static DocUtilities &s_utilities;
 };
 QT_END_NAMESPACE
 

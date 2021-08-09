@@ -1,4 +1,7 @@
-add_subdirectory(settings)
+if(QT_FEATURE_settings)
+    add_subdirectory(settings)
+endif()
+
 add_subdirectory(models)
 
 if(QT_FEATURE_qml_itemmodel)
@@ -9,6 +12,10 @@ if(TARGET Qt::Quick)
     add_subdirectory(animation)
 endif()
 
+if(TARGET Qt::QuickTemplates2)
+    add_subdirectory(platform)
+endif()
+
 if(QT_FEATURE_quick_shadereffect AND TARGET Qt::Quick)
     add_subdirectory(wavefrontmesh)
 endif()
@@ -16,3 +23,4 @@ endif()
 if(QT_FEATURE_systemsemaphore AND TARGET Qt::Quick)
     add_subdirectory(sharedimage)
 endif()
+

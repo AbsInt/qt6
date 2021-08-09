@@ -1212,10 +1212,10 @@
             By default, support is enabled.
     \row    \li c++14 \li C++14 support is enabled. This option has no effect if
             the compiler does not support C++14, or can't select the C++ standard.
-            By default, the compiler default is used.
+            By default, support is enabled.
     \row    \li c++17 \li C++17 support is enabled. This option has no effect if
             the compiler does not support C++17, or can't select the C++ standard.
-            By default, support is disabled.
+            By default, support is enabled.
     \row    \li c++1z \li Obsolete alias for c++17.
     \row    \li c++20 \li C++20 support is enabled. This option has no effect if
             the compiler does not support C++20, or can't select the C++ standard.
@@ -1252,6 +1252,9 @@
             subproject.
     \row \li no_include_pwd \li Do not add the current directory to
             INCLUDEPATHS.
+    \row \li compile_included_sources \li By default, qmake does not
+             compile source files that are included in other source files. This
+             option disables this behavior.
     \endtable
 
     When you use the \c debug_and_release option (which is the default under
@@ -5602,11 +5605,11 @@
     on the command-line:
 
     \code
-        # Run tests through test-wrapper and use xunitxml output format.
+        # Run tests through test-wrapper and use JUnit XML output format.
         # In this example, test-wrapper is a fictional wrapper script which terminates
         # a test if it does not complete within the amount of seconds set by "--timeout".
-        # The "-o result.xml,xunitxml" options are interpreted by QTestLib.
-        make check TESTRUNNER="test-wrapper --timeout 120" TESTARGS="-o result.xml,xunitxml"
+        # The "-o result.xml,junitxml" options are interpreted by QTestLib.
+        make check TESTRUNNER="test-wrapper --timeout 120" TESTARGS="-o result.xml,junitxml"
     \endcode
 
     Testcase projects may be further customized with the following \c CONFIG options:

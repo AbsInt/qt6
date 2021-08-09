@@ -58,7 +58,6 @@
 #include <private/qflagpointer_p.h>
 #include <private/qqmlrefcount_p.h>
 #include <private/qqmlglobal_p.h>
-#include <private/qbitfield_p.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -80,7 +79,6 @@ public:
 
     // evaluation of a bound signal expression doesn't return any value
     void evaluate(void **a);
-    void evaluate(const QList<QVariant> &args);
 
     QString expression() const;
     const QObject *target() const { return m_target; }

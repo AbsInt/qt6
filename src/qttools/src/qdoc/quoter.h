@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2019 The Qt Company Ltd.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the tools applications of the Qt Toolkit.
@@ -25,10 +25,6 @@
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
-
-/*
-  quoter.h
-*/
 
 #ifndef QUOTER_H
 #define QUOTER_H
@@ -59,14 +55,14 @@ private:
     QString getLine(int unindent = 0);
     void failedAtEnd(const Location &docLocation, const QString &command);
     bool match(const Location &docLocation, const QString &pattern, const QString &line);
-    QString commentForCode() const;
+    [[nodiscard]] QString commentForCode() const;
     QString removeSpecialLines(const QString &line, const QString &comment, int unindent = 0);
 
-    bool silent;
-    QStringList plainLines;
-    QStringList markedLines;
-    Location codeLocation;
-    static QHash<QString, QString> commentHash;
+    bool m_silent {};
+    QStringList m_plainLines {};
+    QStringList m_markedLines {};
+    Location m_codeLocation {};
+    static QHash<QString, QString> s_commentHash;
 };
 
 QT_END_NAMESPACE

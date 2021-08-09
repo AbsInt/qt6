@@ -71,7 +71,7 @@ public:
 
     QColor color() const { return m_color; }
 
-    QSGNode *updatePaintNode(QSGNode *node, UpdatePaintNodeData *)
+    QSGNode *updatePaintNode(QSGNode *node, UpdatePaintNodeData *) override
     {
         delete node;
         node = new QSGNode;
@@ -103,7 +103,7 @@ class tst_SceneGraph : public QQmlDataTest
     Q_OBJECT
 
 private slots:
-    void initTestCase();
+    void initTestCase() override;
 
     void manyWindows_data();
     void manyWindows();
@@ -271,7 +271,7 @@ void tst_SceneGraph::manyWindows()
 }
 
 struct Sample {
-    Sample(int xx, int yy, qreal rr, qreal gg, qreal bb, qreal errorMargin = 0.05)
+    constexpr Sample(int xx, int yy, qreal rr, qreal gg, qreal bb, qreal errorMargin = 0.05)
         : x(xx)
         , y(yy)
         , r(rr)
@@ -280,8 +280,18 @@ struct Sample {
         , tolerance(errorMargin)
     {
     }
-    Sample(const Sample &o) : x(o.x), y(o.y), r(o.r), g(o.g), b(o.b), tolerance(o.tolerance) { }
-    Sample() : x(0), y(0), r(0), g(0), b(0), tolerance(0) { }
+    constexpr Sample(const Sample &o) : x(o.x), y(o.y), r(o.r), g(o.g), b(o.b), tolerance(o.tolerance) { }
+    constexpr Sample() : x(0), y(0), r(0), g(0), b(0), tolerance(0) { }
+    constexpr Sample &operator=(const Sample &o)
+    {
+        x = o.x;
+        y = o.y;
+        r = o.r;
+        g = o.g;
+        b = o.b;
+        tolerance = o.tolerance;
+        return *this;
+    }
 
     QString toString(const QImage &image) const {
         QColor color(image.pixel(x,y));
@@ -366,7 +376,8 @@ void tst_SceneGraph::render_data()
           << "render_ImageFiltering.qml"
           << "render_bug37422.qml"
           << "render_OpacityThroughBatchRoot.qml"
-          << "render_Mipmap.qml";
+          << "render_Mipmap.qml"
+          << "render_AlphaOverlapRebuild.qml";
 
     QRegularExpression sampleCount("#samples: *(\\d+)");
     //                          X:int   Y:int   R:float       G:float       B:float       Error:float

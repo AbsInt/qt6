@@ -31,11 +31,21 @@ package org.qtproject.qt.android.testdatapackage;
 public class QtJniEnvironmentTestClass
 {
     private static native void callbackFromJava(String message);
+    private static native void intCallbackFromJava(int value);
+
+    public final int INT_FIELD = 123;
+    public static final int S_INT_FIELD = 321;
+
+    QtJniEnvironmentTestClass() {}
 
     public static void appendJavaToString(String message)
     {
         callbackFromJava("From Java: " + message);
     }
 
+    public static void convertToInt(String message)
+    {
+        intCallbackFromJava(Integer.parseInt(message));
+    }
 }
 

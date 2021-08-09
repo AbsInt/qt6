@@ -72,7 +72,7 @@ class QQmlPropertyData;
 class Q_QML_EXPORT QQmlMetaObject
 {
 public:
-    typedef QVarLengthArray<int, 9> ArgTypeStorage;
+    typedef QVarLengthArray<QMetaType, 9> ArgTypeStorage;
 
     inline QQmlMetaObject() = default;
     inline QQmlMetaObject(const QObject *);
@@ -89,10 +89,20 @@ public:
 
     inline const QMetaObject *metaObject() const;
 
-    int methodReturnType(const QQmlPropertyData &data, QByteArray *unknownTypeError) const;
-    int *methodParameterTypes(int index, ArgTypeStorage *argStorage,
+    QMetaType methodReturnType(const QQmlPropertyData &data, QByteArray *unknownTypeError) const;
+    /*!
+      \internal
+      Returns false if one of the types is unknown. Otherwise, fills \a argstorage with the
+      metatypes of the function.
+    */
+    bool methodParameterTypes(int index, ArgTypeStorage *argStorage,
                               QByteArray *unknownTypeError) const;
-    int *constructorParameterTypes(int index, ArgTypeStorage *dummy, QByteArray *unknownTypeError) const;
+    /*!
+      \internal
+      Returns false if one of the types is unknown. Otherwise, fills \a argstorage with the
+      metatypes of the function.
+    */
+    bool constructorParameterTypes(int index, ArgTypeStorage *dummy, QByteArray *unknownTypeError) const;
 
 
     static bool canConvert(const QQmlMetaObject &from, const QQmlMetaObject &to);
@@ -101,10 +111,11 @@ public:
     // we need a helper to find the correct meta object and property/method index.
     static void resolveGadgetMethodOrPropertyIndex(QMetaObject::Call type, const QMetaObject **metaObject, int *index);
 
-    static int *methodParameterTypes(const QMetaMethod &method, ArgTypeStorage *argStorage,
+    static bool methodParameterTypes(const QMetaMethod &method, ArgTypeStorage *argStorage,
                               QByteArray *unknownTypeError);
 protected:
     const QMetaObject *_m = nullptr;
+
 };
 
 QQmlMetaObject::QQmlMetaObject(const QObject *o)

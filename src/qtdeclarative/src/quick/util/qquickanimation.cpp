@@ -165,17 +165,15 @@ void QQuickAbstractAnimationPrivate::commence()
     QQuickStateActions actions;
     QQmlProperties properties;
 
-    QAbstractAnimationJob *oldInstance = animationInstance;
-    animationInstance = q->transition(actions, properties, QQuickAbstractAnimation::Forward);
-    if (oldInstance && oldInstance != animationInstance)
-        delete oldInstance;
+    auto *newInstance = q->transition(actions, properties, QQuickAbstractAnimation::Forward);
+    Q_ASSERT(newInstance != animationInstance);
+    delete animationInstance;
+    animationInstance = newInstance;
 
     if (animationInstance) {
-        if (oldInstance != animationInstance) {
-            if (q->threadingModel() == QQuickAbstractAnimation::RenderThread)
-                animationInstance = new QQuickAnimatorProxyJob(animationInstance, q);
-            animationInstance->addAnimationChangeListener(this, QAbstractAnimationJob::Completion);
-        }
+        if (q->threadingModel() == QQuickAbstractAnimation::RenderThread)
+            animationInstance = new QQuickAnimatorProxyJob(animationInstance, q);
+        animationInstance->addAnimationChangeListener(this, QAbstractAnimationJob::Completion);
         emit q->started();
         animationInstance->start();
     }
@@ -1384,7 +1382,7 @@ void QQuickNumberAnimation::init()
             // ...
         ]
 
-        transition: Transition {
+        transitions: Transition {
             NumberAnimation { properties: "x"; from: 100; duration: 200 }
         }
     }
@@ -1614,7 +1612,7 @@ QQuickRotationAnimation::~QQuickRotationAnimation()
             // ...
         ]
 
-        transition: Transition {
+        transitions: Transition {
             RotationAnimation { properties: "angle"; from: 100; duration: 2000 }
         }
     }
@@ -1984,12 +1982,8 @@ void QQuickPropertyAnimationPrivate::convertVariant(QVariant &variant, QMetaType
         }
         break;
     default:
-        if (QQmlValueTypeFactory::isValueType(type)) {
+        if (QQmlMetaType::isValueType(type)) {
             variant.convert(QMetaType(type));
-        } else {
-            QQmlMetaType::StringConverter converter = QQmlMetaType::customStringConverter(type.id());
-            if (converter)
-                variant = converter(variant.toString());
         }
         break;
     }

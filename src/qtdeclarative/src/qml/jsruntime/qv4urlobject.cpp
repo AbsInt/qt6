@@ -149,11 +149,16 @@ bool UrlObject::setHost(QString hostname)
 
 bool UrlObject::setHref(QString href)
 {
-    QUrl url(href);
-
+    const QUrl url(href);
     if (!url.isValid() || url.isRelative())
         return false;
 
+    setUrl(url);
+    return true;
+}
+
+void UrlObject::setUrl(const QUrl &url)
+{
     d()->hash.set(engine(), engine()->newString(url.fragment()));
     d()->hostname.set(engine(), engine()->newString(url.host()));
     d()->href.set(engine(), engine()->newString(url.toString()));
@@ -168,8 +173,6 @@ bool UrlObject::setHref(QString href)
 
     updateOrigin();
     updateHost();
-
-    return true;
 }
 
 bool UrlObject::setPassword(QString password)
@@ -1454,10 +1457,10 @@ ReturnedValue UrlSearchParamsPrototype::method_forEach(const FunctionObject *b,
         Scoped<String> name(scope, o->nameAtRaw(i));
         Scoped<String> value(scope, o->valueAtRaw(i));
 
-        QV4::JSCallData calldata(scope, 2);
+        QV4::JSCallArguments calldata(scope, 2);
 
-        calldata->args[0] = value;
-        calldata->args[1] = name;
+        calldata.args[0] = value;
+        calldata.args[1] = name;
 
         func->call(calldata);
     }

@@ -196,7 +196,13 @@ bool qCompileQmlFile(const QString &inputFileName, QQmlJSSaveFunction saveFuncti
                      QQmlJSAotCompiler *aotCompiler, QQmlJSCompileError *error)
 {
     QmlIR::Document irDocument(/*debugMode*/false);
+    return qCompileQmlFile(irDocument, inputFileName, saveFunction, aotCompiler, error);
+}
 
+bool qCompileQmlFile(QmlIR::Document &irDocument, const QString &inputFileName,
+                     QQmlJSSaveFunction saveFunction, QQmlJSAotCompiler *aotCompiler,
+                     QQmlJSCompileError *error)
+{
     QString sourceCode;
     {
         QFile f(inputFileName);
@@ -226,7 +232,7 @@ bool qCompileQmlFile(const QString &inputFileName, QQmlJSSaveFunction saveFuncti
         QmlIR::JSCodeGen v4CodeGen(&irDocument, *illegalNames());
 
         if (aotCompiler)
-            aotCompiler->setDocument(&irDocument);
+            aotCompiler->setDocument(&v4CodeGen, &irDocument);
 
         QHash<QmlIR::Object *, QmlIR::Object *> effectiveScopes;
         for (QmlIR::Object *object: qAsConst(irDocument.objects)) {
@@ -270,6 +276,7 @@ bool qCompileQmlFile(const QString &inputFileName, QQmlJSSaveFunction saveFuncti
             std::for_each(bindingsAndFunctions.begin(), bindingsAndFunctions.end(),
                           [&](const BindingOrFunction &bindingOrFunction) {
                 std::variant<QQmlJSAotFunction, QQmlJS::DiagnosticMessage> result;
+                auto *module = v4CodeGen.module();
                 if (const auto *binding = bindingOrFunction.binding()) {
                     switch (binding->type) {
                     case QmlIR::Binding::Type_AttachedProperty:
@@ -281,18 +288,35 @@ bool qCompileQmlFile(const QString &inputFileName, QQmlJSSaveFunction saveFuncti
                     case QmlIR::Binding::Type_Number:
                     case QmlIR::Binding::Type_String:
                     case QmlIR::Binding::Type_Null:
+                    case QmlIR::Binding::Type_Object:
+                    case QmlIR::Binding::Type_Translation:
+                    case QmlIR::Binding::Type_TranslationById:
                         return;
                     default:
                         break;
                     }
 
+                    Q_ASSERT(functionsToCompile.length() > binding->value.compiledScriptIndex);
+                    auto *node = functionsToCompile[binding->value.compiledScriptIndex].parentNode;
+                    Q_ASSERT(node);
+                    Q_ASSERT(module->contextMap.contains(node));
+                    QV4::Compiler::Context *context = module->contextMap[node];
+                    Q_ASSERT(context);
+
                     qCDebug(lcAotCompiler) << "Compiling binding for property"
                                            << irDocument.stringAt(binding->propertyNameIndex);
-                    result = aotCompiler->compileBinding(*binding);
+                    result = aotCompiler->compileBinding(context, *binding);
                 } else if (const auto *function = bindingOrFunction.function()) {
+                    Q_ASSERT(functionsToCompile.length() > function->index);
+                    auto *node = functionsToCompile[function->index].node;
+                    Q_ASSERT(node);
+                    Q_ASSERT(module->contextMap.contains(node));
+                    QV4::Compiler::Context *context = module->contextMap[node];
+                    Q_ASSERT(context);
+
                     qCDebug(lcAotCompiler) << "Compiling function"
                                            << irDocument.stringAt(function->nameIndex);
-                    result = aotCompiler->compileFunction(*function);
+                    result = aotCompiler->compileFunction(context, *function);
                 } else {
                     Q_UNREACHABLE();
                 }
@@ -416,22 +440,26 @@ bool qCompileJSFile(const QString &inputFileName, const QString &inputFileUrl, Q
 
 static const char *wrapCallCode = R"(
 template <typename Binding>
-void wrapCall(const QQmlPrivate::AOTCompiledContext *context, void *dataPtr, void **argumentsPtr, Binding &&binding)
+void wrapCall(const QQmlPrivate::AOTCompiledContext *aotContext, void *dataPtr, void **argumentsPtr, Binding &&binding)
 {
     using return_type = std::invoke_result_t<Binding, const QQmlPrivate::AOTCompiledContext *, void **>;
     if constexpr (std::is_same_v<return_type, void>) {
        Q_UNUSED(dataPtr);
-       binding(context, argumentsPtr);
+       binding(aotContext, argumentsPtr);
     } else {
-       new (dataPtr) return_type(binding(context, argumentsPtr));
+        if (dataPtr) {
+           new (dataPtr) return_type(binding(aotContext, argumentsPtr));
+        } else {
+           binding(aotContext, argumentsPtr);
+        }
     }
 }
 )";
 
 static const char *funcHeaderCode = R"(
-    [](const QQmlPrivate::AOTCompiledContext *context, void *dataPtr, void **argumentsPtr) {
-        wrapCall(context, dataPtr, argumentsPtr, [](const QQmlPrivate::AOTCompiledContext *context, void **argumentsPtr) {
-Q_UNUSED(context);
+    [](const QQmlPrivate::AOTCompiledContext *aotContext, void *dataPtr, void **argumentsPtr) {
+        wrapCall(aotContext, dataPtr, argumentsPtr, [](const QQmlPrivate::AOTCompiledContext *aotContext, void **argumentsPtr) {
+Q_UNUSED(aotContext);
 Q_UNUSED(argumentsPtr);
 )";
 

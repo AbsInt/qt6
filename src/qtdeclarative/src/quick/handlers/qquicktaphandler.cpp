@@ -77,6 +77,8 @@ int QQuickTapHandler::m_touchMultiTapDistanceSquared(-1);
     button in order to cancel the click.  For this use case, set the
     \l gesturePolicy to \c TapHandler.ReleaseWithinBounds.
 
+    \snippet pointerHandlers/tapHandlerButton.qml 0
+
     For multi-tap gestures (double-tap, triple-tap etc.), the distance moved
     must not exceed QStyleHints::mouseDoubleClickDistance() with mouse and
     QStyleHints::touchDoubleTapDistance() with touch, and the time between
@@ -99,8 +101,9 @@ QQuickTapHandler::QQuickTapHandler(QQuickItem *parent)
 
 bool QQuickTapHandler::wantsEventPoint(const QPointerEvent *event, const QEventPoint &point)
 {
-    if (!QQuickWindowPrivate::isMouseEvent(event) && !QQuickWindowPrivate::isTouchEvent(event) &&
-            !QQuickWindowPrivate::isTabletEvent(event))
+    if (!QQuickDeliveryAgentPrivate::isMouseEvent(event) &&
+            !QQuickDeliveryAgentPrivate::isTouchEvent(event) &&
+            !QQuickDeliveryAgentPrivate::isTabletEvent(event))
         return false;
     // If the user has not violated any constraint, it could be a tap.
     // Otherwise we want to give up the grab so that a competing handler
@@ -154,9 +157,19 @@ void QQuickTapHandler::handleEventPoint(QPointerEvent *event, QEventPoint &point
         setPressed(true, false, event, point);
         break;
     case QEventPoint::Released: {
-        if (QQuickWindowPrivate::isTouchEvent(event) ||
+        // If the point has an exclusive grabber Item, then if it got the grab by filtering (like Flickable does),
+        // it's OK for DragHandler to react in spite of that.  But in other cases, if an exclusive grab
+        // still exists at the time of release, TapHandler should not react, because it would be redundant:
+        // some other item is already reacting, i.e. acting as if it has been clicked or tapped.
+        // So in that case we cancel the pressed state and do not emit tapped().
+        bool nonFilteringExclusiveGrabber = false;
+        if (auto g = qmlobject_cast<QQuickItem *>(event->exclusiveGrabber(point))) {
+            if (!g->filtersChildMouseEvents())
+                nonFilteringExclusiveGrabber = true;
+        }
+        if (QQuickDeliveryAgentPrivate::isTouchEvent(event) ||
                 (static_cast<const QSinglePointEvent *>(event)->buttons() & acceptedButtons()) == Qt::NoButton)
-            setPressed(false, false, event, point);
+            setPressed(false, nonFilteringExclusiveGrabber, event, point);
         break;
     }
     default:
@@ -214,6 +227,8 @@ void QQuickTapHandler::timerEvent(QTimerEvent *event)
     If the spatial constraint is violated, \l pressed transitions immediately
     from true to false, regardless of the time held.
 
+    The \c gesturePolicy also affects grab behavior as described below.
+
     \value TapHandler.DragThreshold
            (the default value) The event point must not move significantly.
            If the mouse, finger or stylus moves past the system-wide drag
@@ -222,11 +237,13 @@ void QQuickTapHandler::timerEvent(QTimerEvent *event)
            can be useful whenever TapHandler needs to cooperate with other
            input handlers (for example \l DragHandler) or event-handling Items
            (for example QtQuick Controls), because in this case TapHandler
-           will not take the exclusive grab, but merely a passive grab.
+           will not take the exclusive grab, but merely a
+           \l {QPointerEvent::addPassiveGrabber()}{passive grab}.
 
     \value TapHandler.WithinBounds
            If the event point leaves the bounds of the \c parent Item, the tap
-           gesture is canceled. The TapHandler will take the exclusive grab on
+           gesture is canceled. The TapHandler will take the
+           \l {QPointerEvent::setExclusiveGrabber}{exclusive grab} on
            press, but will release the grab as soon as the boundary constraint
            is no longer satisfied.
 
@@ -237,8 +254,9 @@ void QQuickTapHandler::timerEvent(QTimerEvent *event)
            typical behavior for button widgets: you can cancel a click by
            dragging outside the button, and you can also change your mind by
            dragging back inside the button before release. Note that it's
-           necessary for TapHandler take the exclusive grab on press and retain
-           it until release in order to detect this gesture.
+           necessary for TapHandler to take the
+           \l {QPointerEvent::setExclusiveGrabber}{exclusive grab} on press
+           and retain it until release in order to detect this gesture.
 */
 void QQuickTapHandler::setGesturePolicy(QQuickTapHandler::GesturePolicy gesturePolicy)
 {
@@ -331,10 +349,13 @@ void QQuickTapHandler::onGrabChanged(QQuickPointerHandler *grabber, QPointingDev
 
 void QQuickTapHandler::connectPreRenderSignal(bool conn)
 {
+    auto par = parentItem();
+    if (!par)
+        return;
     if (conn)
-        connect(parentItem()->window(), &QQuickWindow::beforeSynchronizing, this, &QQuickTapHandler::updateTimeHeld);
+        connect(par->window(), &QQuickWindow::beforeSynchronizing, this, &QQuickTapHandler::updateTimeHeld);
     else
-        disconnect(parentItem()->window(), &QQuickWindow::beforeSynchronizing, this, &QQuickTapHandler::updateTimeHeld);
+        disconnect(par->window(), &QQuickWindow::beforeSynchronizing, this, &QQuickTapHandler::updateTimeHeld);
 }
 
 void QQuickTapHandler::updateTimeHeld()

@@ -34,6 +34,7 @@
 #include <QtQml/qqml.h>
 #include <QtCore/qproperty.h>
 #include <QtCore/qtimeline.h>
+#include <QtCore/qrect.h>
 
 class Interface {};
 class Interface2 {};
@@ -44,7 +45,6 @@ Q_DECLARE_INTERFACE(Interface, "io.qt.bugreports.Interface");
 Q_DECLARE_INTERFACE(Interface2, "io.qt.bugreports.Interface2");
 Q_DECLARE_INTERFACE(Interface3, "io.qt.bugreports.Interface3");
 QT_END_NAMESPACE
-
 
 class ImplementsInterfaces : public QObject, public Interface
 {
@@ -234,6 +234,28 @@ public:
     int p() const { return 'p'; }
 };
 
+class RequiredProperty : public QObject
+{
+    Q_OBJECT
+    QML_ELEMENT
+    Q_PROPERTY(int foo READ foo WRITE setFoo REQUIRED)
+public:
+    RequiredProperty(QObject *parent = nullptr) : QObject(parent) {}
+    int foo() { return m_foo; }
+    void setFoo(int foo) { m_foo = foo; }
+private:
+    int m_foo;
+};
+
+class FinalProperty : public QObject
+{
+    Q_OBJECT
+    QML_ELEMENT
+    Q_PROPERTY(int fff MEMBER fff FINAL)
+public:
+    int fff = 0;
+};
+
 class MultiExtension : public MultiExtensionParent
 {
     Q_OBJECT
@@ -245,6 +267,121 @@ public:
     int e() const { return 'e'; }
 };
 
+class HiddenAccessorsPrivate
+{
+public:
+    QString hiddenRead() const { return QStringLiteral("bar"); }
+};
+
+class HiddenAccessors : public QObject
+{
+    Q_OBJECT
+    Q_PRIVATE_PROPERTY(HiddenAccessors::d_func(), QString hiddenRead READ hiddenRead CONSTANT)
+    QML_ELEMENT
+    Q_DECLARE_PRIVATE(HiddenAccessors)
+};
+
+struct SelfExtensionHack
+{
+    QRectF rect;
+    Q_GADGET
+    QML_EXTENDED(SelfExtensionHack)
+    QML_FOREIGN(QRectF)
+    QML_VALUE_TYPE(recterei)
+};
+
+class ParentProperty : public QObject
+{
+    Q_OBJECT
+    Q_PROPERTY(QObject *ppp READ ppp BINDABLE pppBindable)
+    QML_ELEMENT
+    Q_CLASSINFO("ParentProperty", "ppp")
+public:
+
+    QObject *ppp() const { return m_parent.value(); }
+    QBindable<QObject *> pppBindable() { return QBindable<QObject *>(&m_parent); }
+
+private:
+    QProperty<QObject *> m_parent;
+};
+
+
+class ValueTypeWithEnum1
+{
+    Q_GADGET
+    Q_PROPERTY(ValueTypeWithEnum1::Quality quality READ quality WRITE setQuality)
+public:
+    enum Quality
+    {
+        VeryLowQuality,
+        LowQuality,
+        NormalQuality,
+        HighQuality,
+        VeryHighQuality
+    };
+    Q_ENUM(Quality)
+
+    Quality quality() const { return m_quality; }
+    void setQuality(Quality quality) { m_quality = quality; }
+
+private:
+    Quality m_quality = HighQuality;
+};
+
+// value type alphabetically first
+struct AValueTypeWithEnumForeign1
+{
+    Q_GADGET
+    QML_FOREIGN(ValueTypeWithEnum1)
+    QML_NAMED_ELEMENT(valueTypeWithEnum1)
+};
+
+// namespace alphabetically second
+namespace BValueTypeWithEnumForeignNamespace1
+{
+    Q_NAMESPACE
+    QML_FOREIGN_NAMESPACE(ValueTypeWithEnum1)
+    QML_NAMED_ELEMENT(ValueTypeWithEnum1)
+};
+
+class ValueTypeWithEnum2
+{
+    Q_GADGET
+    Q_PROPERTY(ValueTypeWithEnum2::Quality quality READ quality WRITE setQuality)
+public:
+    enum Quality
+    {
+        VeryLowQuality,
+        LowQuality,
+        NormalQuality,
+        HighQuality,
+        VeryHighQuality
+    };
+    Q_ENUM(Quality)
+
+    Quality quality() const { return m_quality; }
+    void setQuality(Quality quality) { m_quality = quality; }
+
+private:
+    Quality m_quality = HighQuality;
+};
+
+// namespace alphabetically first
+namespace AValueTypeWithEnumForeignNamespace2
+{
+    Q_NAMESPACE
+    QML_FOREIGN_NAMESPACE(ValueTypeWithEnum2)
+    QML_NAMED_ELEMENT(ValueTypeWithEnum2)
+};
+
+// value type alphabetically second
+struct BValueTypeWithEnumForeign2
+{
+    Q_GADGET
+    QML_FOREIGN(ValueTypeWithEnum2)
+    QML_NAMED_ELEMENT(valueTypeWithEnum2)
+};
+
 class tst_qmltyperegistrar : public QObject
 {
     Q_OBJECT
@@ -254,6 +391,8 @@ private slots:
     void qmltypesHasForeign();
     void qmltypesHasHppClassAndNoext();
     void qmltypesHasReadAndWrite();
+    void qmltypesHasNotify();
+    void qmltypesHasPropertyIndex();
     void qmltypesHasFileNames();
     void qmltypesHasFlags();
     void superAndForeignTypes();
@@ -267,6 +406,11 @@ private slots:
     void metaTypesRegistered();
     void multiExtensions();
     void localDefault();
+    void requiredProperty();
+    void hiddenAccessor();
+    void finalProperty();
+    void parentProperty();
+    void namespacesAndValueTypes();
 
 private:
     QByteArray qmltypesData;

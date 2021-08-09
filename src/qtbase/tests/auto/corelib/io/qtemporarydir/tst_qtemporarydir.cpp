@@ -165,19 +165,19 @@ void tst_QTemporaryDir::fileTemplate_data()
         return; // skip if we have no drive letter
 
     tmp.data()[1] = u'$';
-    const auto tmpPath = tmp + QLatin1String(R"(\UNC.XXXXXX.tmpDir)");
+    const auto tmpPath = tmp + uR"(\UNC.XXXXXX.tmpDir)"_qs;
 
     QTest::newRow("UNC-backslash")
-            << "\\\\localhost\\" + tmpPath << "UNC."
+            << uR"(\\localhost\)"_qs + tmpPath << "UNC."
             << ".tmpDir";
     QTest::newRow("UNC-prefix")
-            << "\\\\?\\UNC\\localhost\\" + tmpPath << "UNC."
+            << uR"(\\?\UNC\localhost\)"_qs + tmpPath << "UNC."
             << ".tmpDir";
     QTest::newRow("UNC-slash")
-            << "//localhost/" + QDir::fromNativeSeparators(tmpPath) << "UNC."
+            << u"//localhost/"_qs + QDir::fromNativeSeparators(tmpPath) << "UNC."
             << ".tmpDir";
     QTest::newRow("UNC-prefix-slash")
-            << "//?/UNC/localhost/" + QDir::fromNativeSeparators(tmpPath) << "UNC."
+            << uR"(//?/UNC/localhost/)"_qs + QDir::fromNativeSeparators(tmpPath) << "UNC."
             << ".tmpDir";
 #endif
 }

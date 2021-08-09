@@ -319,6 +319,7 @@ void ExecutableCompilationUnit::unlink()
         for (uint i = 0; i < data->lookupTableSize; ++i) {
             QV4::Lookup &l = runtimeLookups[i];
             if (l.getter == QV4::QObjectWrapper::lookupGetter
+                    || l.setter == QV4::QObjectWrapper::lookupSetter
                     || l.getter == QQmlTypeWrapper::lookupSingletonProperty) {
                 if (QQmlPropertyCache *pc = l.qobjectLookup.propertyCache)
                     pc->release();
@@ -401,6 +402,7 @@ IdentifierHash ExecutableCompilationUnit::createNamedObjectsPerComponent(int com
         const CompiledData::Object *namedObject = objectAt(*namedObjectIndexPtr);
         namedObjectCache.add(runtimeStrings[namedObject->idNameIndex], namedObject->id);
     }
+    Q_ASSERT(!namedObjectCache.isEmpty());
     return *namedObjectsPerComponentCache.insert(componentObjectIndex, namedObjectCache);
 }
 
@@ -579,7 +581,11 @@ Heap::Module *ExecutableCompilationUnit::instantiate(ExecutionEngine *engine)
         setModule(module->d());
 
     for (const QString &request: moduleRequests()) {
-        auto dependentModuleUnit = engine->loadModule(QUrl(request), this);
+        const QUrl url(request);
+        if (engine->nativeModules.contains(url))
+            continue;
+
+        auto dependentModuleUnit = engine->loadModule(url, this);
         if (engine->hasException)
             return nullptr;
         dependentModuleUnit->instantiate(engine);
@@ -594,16 +600,62 @@ Heap::Module *ExecutableCompilationUnit::instantiate(ExecutionEngine *engine)
     }
     for (uint i = 0; i < importCount; ++i) {
         const CompiledData::ImportEntry &entry = data->importEntryTable()[i];
-        auto dependentModuleUnit = engine->loadModule(urlAt(entry.moduleRequest), this);
-        importName = runtimeStrings[entry.importName];
-        const Value *valuePtr = dependentModuleUnit->resolveExport(importName);
-        if (!valuePtr) {
-            QString referenceErrorMessage = QStringLiteral("Unable to resolve import reference ");
-            referenceErrorMessage += importName->toQString();
-            engine->throwReferenceError(referenceErrorMessage, fileName(), entry.location.line, entry.location.column);
-            return nullptr;
+        QUrl url = urlAt(entry.moduleRequest);
+        const auto nativeModule = engine->nativeModules.find(url);
+        if (nativeModule != engine->nativeModules.end()) {
+            importName = runtimeStrings[entry.importName];
+            const QString name = importName->toQString();
+
+            QV4::Value *value = nativeModule.value();
+            if (value->isNullOrUndefined()) {
+                QString errorMessage = name;
+                errorMessage += QStringLiteral(" from ");
+                errorMessage += url.toString();
+                errorMessage += QStringLiteral(" is null");
+                engine->throwError(errorMessage);
+                return nullptr;
+            }
+
+            if (name == QStringLiteral("default")) {
+                imports[i] = value;
+            } else {
+                url.setFragment(name);
+                auto fragment = engine->nativeModules.find(url);
+                if (fragment != engine->nativeModules.end()) {
+                    imports[i] = fragment.value();
+                } else {
+                    Scope scope(this->engine);
+                    ScopedObject o(scope, value);
+                    if (!o) {
+                        QString referenceErrorMessage = QStringLiteral("Unable to resolve import reference ");
+                        referenceErrorMessage += name;
+                        referenceErrorMessage += QStringLiteral(" because ");
+                        referenceErrorMessage += url.toString(QUrl::RemoveFragment);
+                        referenceErrorMessage += QStringLiteral(" is not an object");
+                        engine->throwReferenceError(referenceErrorMessage, fileName(), entry.location.line, entry.location.column);
+                        return nullptr;
+                    }
+
+                    const ScopedPropertyKey key(scope, scope.engine->identifierTable->asPropertyKey(name));
+                    const ScopedValue result(scope, o->get(key));
+                    Value *valuePtr = engine->memoryManager->m_persistentValues->allocate();
+                    *valuePtr = result->asReturnedValue();
+                    imports[i] = valuePtr;
+                    engine->nativeModules.insert(url, valuePtr);
+                }
+            }
+        } else {
+            auto dependentModuleUnit = engine->loadModule(url, this);
+            importName = runtimeStrings[entry.importName];
+            const Value *valuePtr = dependentModuleUnit->resolveExport(importName);
+            if (!valuePtr) {
+                QString referenceErrorMessage = QStringLiteral("Unable to resolve import reference ");
+                referenceErrorMessage += importName->toQString();
+                engine->throwReferenceError(referenceErrorMessage, fileName(), entry.location.line, entry.location.column);
+                return nullptr;
+            }
+            imports[i] = valuePtr;
         }
-        imports[i] = valuePtr;
     }
 
     for (uint i = 0; i < data->indirectExportEntryTableSize; ++i) {
@@ -743,6 +795,8 @@ void ExecutableCompilationUnit::evaluate()
 void ExecutableCompilationUnit::evaluateModuleRequests()
 {
     for (const QString &request: moduleRequests()) {
+        if (engine->nativeModules.contains(QUrl(request)))
+            continue;
         auto dependentModuleUnit = engine->loadModule(QUrl(request), this);
         if (engine->hasException)
             return;
@@ -811,10 +865,22 @@ bool ExecutableCompilationUnit::saveToDisk(const QUrl &unitUrl, QString *errorSt
     });
 }
 
+/*!
+    \internal
+    This function creates a temporary key vector and sorts it to guarantuee a stable
+    hash. This is used to calculate a check-sum on dependent meta-objects.
+ */
 bool ResolvedTypeReferenceMap::addToHash(QCryptographicHash *hash, QQmlEngine *engine) const
 {
+    std::vector<int> keys (count());
+    int i = 0;
     for (auto it = constBegin(), end = constEnd(); it != end; ++it) {
-        if (!it.value()->addToHash(hash, engine))
+        keys[i] = it.key();
+        ++i;
+    }
+    std::sort(keys.begin(), keys.end());
+    for (int key: keys) {
+        if (!this->operator[](key)->addToHash(hash, engine))
             return false;
     }
 

@@ -37,6 +37,7 @@
 
 #if QT_CONFIG(opengl)
 # include <QOpenGLContext>
+# include <QOpenGLFunctions>
 # include <QtGui/private/qrhigles2_p.h>
 # define TST_GL
 #endif
@@ -70,6 +71,7 @@ private slots:
     void cleanupTestCase();
 
     void rhiTestData();
+    void rhiTestDataOpenGL();
     void create_data();
     void create();
     void nativeHandles_data();
@@ -89,6 +91,8 @@ private slots:
     void resourceUpdateBatchRGBATextureCopy();
     void resourceUpdateBatchRGBATextureMip_data();
     void resourceUpdateBatchRGBATextureMip();
+    void resourceUpdateBatchTextureRawDataStride_data();
+    void resourceUpdateBatchTextureRawDataStride();
     void invalidPipeline_data();
     void invalidPipeline();
     void srbLayoutCompatibility_data();
@@ -127,6 +131,14 @@ private slots:
 
     void pipelineCache_data();
     void pipelineCache();
+    void textureImportOpenGL_data();
+    void textureImportOpenGL();
+    void renderbufferImportOpenGL_data();
+    void renderbufferImportOpenGL();
+    void threeDimTexture_data();
+    void threeDimTexture();
+    void leakedResourceDestroy_data();
+    void leakedResourceDestroy();
 
 private:
     void setWindowType(QWindow *window, QRhi::Implementation impl);
@@ -161,17 +173,12 @@ void tst_QRhi::initTestCase()
 #endif
 
 #ifdef TST_VK
-#ifndef Q_OS_ANDROID
-    vulkanInstance.setLayers({ QByteArrayLiteral("VK_LAYER_LUNARG_standard_validation") });
-#else
-    vulkanInstance.setLayers({ QByteArrayLiteral("VK_LAYER_GOOGLE_threading"),
-                               QByteArrayLiteral("VK_LAYER_LUNARG_parameter_validation"),
-                               QByteArrayLiteral("VK_LAYER_LUNARG_object_tracker"),
-                               QByteArrayLiteral("VK_LAYER_LUNARG_core_validation"),
-                               QByteArrayLiteral("VK_LAYER_LUNARG_image"),
-                               QByteArrayLiteral("VK_LAYER_LUNARG_swapchain"),
-                               QByteArrayLiteral("VK_LAYER_GOOGLE_unique_objects") });
-#endif
+    const QVersionNumber supportedVersion = vulkanInstance.supportedApiVersion();
+    if (supportedVersion >= QVersionNumber(1, 2))
+        vulkanInstance.setApiVersion(QVersionNumber(1, 2));
+    else if (supportedVersion >= QVersionNumber(1, 1))
+        vulkanInstance.setApiVersion(QVersionNumber(1, 2));
+    vulkanInstance.setLayers({ "VK_LAYER_KHRONOS_validation" });
     vulkanInstance.setExtensions(QRhiVulkanInitParams::preferredInstanceExtensions());
     vulkanInstance.create();
     initParams.vk.inst = &vulkanInstance;
@@ -209,6 +216,16 @@ void tst_QRhi::rhiTestData()
 #endif
 #ifdef TST_MTL
     QTest::newRow("Metal") << QRhi::Metal << static_cast<QRhiInitParams *>(&initParams.mtl);
+#endif
+}
+
+void tst_QRhi::rhiTestDataOpenGL()
+{
+    QTest::addColumn<QRhi::Implementation>("impl");
+    QTest::addColumn<QRhiInitParams *>("initParams");
+
+#ifdef TST_GL
+    QTest::newRow("OpenGL") << QRhi::OpenGLES2 << static_cast<QRhiInitParams *>(&initParams.gl);
 #endif
 }
 
@@ -348,7 +365,10 @@ void tst_QRhi::create()
             QRhi::IntAttributes,
             QRhi::ScreenSpaceDerivatives,
             QRhi::ReadBackAnyTextureFormat,
-            QRhi::PipelineCacheDataLoadSave
+            QRhi::PipelineCacheDataLoadSave,
+            QRhi::ImageDataStride,
+            QRhi::RenderBufferImport,
+            QRhi::ThreeDimensionalTextures
         };
         for (size_t i = 0; i <sizeof(features) / sizeof(QRhi::Feature); ++i)
             rhi->isFeatureSupported(features[i]);
@@ -892,10 +912,8 @@ void tst_QRhi::resourceUpdateBatchBuffer()
     }
 }
 
-inline bool imageRGBAEquals(const QImage &a, const QImage &b)
+inline bool imageRGBAEquals(const QImage &a, const QImage &b, int maxFuzz = 1)
 {
-    const int maxFuzz = 1;
-
     if (a.size() != b.size())
         return false;
 
@@ -1290,6 +1308,64 @@ void tst_QRhi::resourceUpdateBatchRGBATextureMip()
             expectedImage.fill(0);
         }
         QVERIFY(imageRGBAEquals(expectedImage, wrapperImage));
+    }
+}
+
+void tst_QRhi::resourceUpdateBatchTextureRawDataStride_data()
+{
+    rhiTestData();
+}
+
+void tst_QRhi::resourceUpdateBatchTextureRawDataStride()
+{
+    QFETCH(QRhi::Implementation, impl);
+    QFETCH(QRhiInitParams *, initParams);
+
+    QScopedPointer<QRhi> rhi(QRhi::create(impl, initParams, QRhi::Flags(), nullptr));
+    if (!rhi)
+        QSKIP("QRhi could not be created, skipping testing texture resource updates");
+
+    const int WIDTH = 150;
+    const int DATA_WIDTH = 180;
+    const int HEIGHT = 50;
+    QByteArray image;
+    image.resize(DATA_WIDTH * HEIGHT * 4);
+    for (int y = 0; y < HEIGHT; ++y) {
+        char *p = image.data() + y * DATA_WIDTH * 4;
+        memset(p, y, DATA_WIDTH * 4);
+    }
+
+    {
+        QScopedPointer<QRhiTexture> texture(rhi->newTexture(QRhiTexture::RGBA8, QSize(WIDTH, HEIGHT),
+                                                            1, QRhiTexture::UsedAsTransferSource));
+        QVERIFY(texture->create());
+
+        QRhiResourceUpdateBatch *batch = rhi->nextResourceUpdateBatch();
+
+        QRhiTextureSubresourceUploadDescription subresDesc(image.constData(), image.size());
+        subresDesc.setDataStride(DATA_WIDTH * 4);
+        QRhiTextureUploadEntry upload(0, 0, subresDesc);
+        QRhiTextureUploadDescription uploadDesc(upload);
+        batch->uploadTexture(texture.data(), uploadDesc);
+
+        QRhiReadbackResult readResult;
+        bool readCompleted = false;
+        readResult.completed = [&readCompleted] { readCompleted = true; };
+        batch->readBackTexture(texture.data(), &readResult);
+
+        QVERIFY(submitResourceUpdates(rhi.data(), batch));
+        QVERIFY(readCompleted);
+        QCOMPARE(readResult.format, QRhiTexture::RGBA8);
+        QCOMPARE(readResult.pixelSize, QSize(WIDTH, HEIGHT));
+
+        QImage wrapperImage(reinterpret_cast<const uchar *>(readResult.data.constData()),
+                            readResult.pixelSize.width(), readResult.pixelSize.height(),
+                            QImage::Format_RGBA8888_Premultiplied);
+        // wrap the original data, note the bytesPerLine argument
+        QImage originalWrapperImage(reinterpret_cast<const uchar *>(image.constData()),
+                                    WIDTH, HEIGHT, DATA_WIDTH * 4,
+                                    QImage::Format_RGBA8888_Premultiplied);
+        QVERIFY(imageRGBAEquals(wrapperImage, originalWrapperImage));
     }
 }
 
@@ -3626,6 +3702,336 @@ void tst_QRhi::pipelineCache()
         pipeline->setRenderPassDescriptor(rpDesc.data());
         QVERIFY(pipeline->create());
     }
+}
+
+void tst_QRhi::textureImportOpenGL_data()
+{
+    rhiTestDataOpenGL();
+}
+
+void tst_QRhi::textureImportOpenGL()
+{
+    QFETCH(QRhi::Implementation, impl);
+    if (impl != QRhi::OpenGLES2)
+        QSKIP("Skipping OpenGL-dependent test");
+
+#ifdef TST_GL
+    QFETCH(QRhiInitParams *, initParams);
+
+    QScopedPointer<QRhi> rhi(QRhi::create(impl, initParams, QRhi::Flags(), nullptr));
+    if (!rhi)
+        QSKIP("QRhi could not be created, skipping testing native texture");
+
+    QVERIFY(rhi->makeThreadLocalNativeContextCurrent());
+    QOpenGLContext *ctx = QOpenGLContext::currentContext();
+    QVERIFY(ctx);
+    QOpenGLFunctions *f = ctx->functions();
+
+    QImage image(320, 200, QImage::Format_RGBA8888_Premultiplied);
+    image.fill(Qt::red);
+
+    GLuint t = 0;
+    f->glGenTextures(1, &t);
+    f->glBindTexture(GL_TEXTURE_2D, t);
+    f->glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, image.width(), image.height(), 0, GL_RGBA, GL_UNSIGNED_BYTE, image.constBits());
+
+    QScopedPointer<QRhiTexture> tex(rhi->newTexture(QRhiTexture::RGBA8, image.size()));
+    QRhiTexture::NativeTexture nativeTex = { t, 0 };
+    QVERIFY(tex->createFrom(nativeTex));
+    QCOMPARE(tex->nativeTexture().object, nativeTex.object);
+
+    QRhiReadbackResult readResult;
+    bool readCompleted = false;
+    readResult.completed = [&readCompleted] { readCompleted = true; };
+    QRhiResourceUpdateBatch *batch = rhi->nextResourceUpdateBatch();
+    batch->readBackTexture(tex.data(), &readResult);
+    QVERIFY(submitResourceUpdates(rhi.data(), batch));
+    QVERIFY(readCompleted);
+    QCOMPARE(readResult.format, QRhiTexture::RGBA8);
+    QCOMPARE(readResult.pixelSize, image.size());
+    QImage wrapperImage(reinterpret_cast<const uchar *>(readResult.data.constData()),
+                        readResult.pixelSize.width(), readResult.pixelSize.height(),
+                        image.format());
+    QVERIFY(imageRGBAEquals(image, wrapperImage));
+
+    f->glDeleteTextures(1, &t);
+#endif
+}
+
+void tst_QRhi::renderbufferImportOpenGL_data()
+{
+    rhiTestDataOpenGL();
+}
+
+void tst_QRhi::renderbufferImportOpenGL()
+{
+    QFETCH(QRhi::Implementation, impl);
+    if (impl != QRhi::OpenGLES2)
+        QSKIP("Skipping OpenGL-dependent test");
+
+#ifdef TST_GL
+    QFETCH(QRhiInitParams *, initParams);
+
+    QScopedPointer<QRhi> rhi(QRhi::create(impl, initParams, QRhi::Flags(), nullptr));
+    if (!rhi)
+        QSKIP("QRhi could not be created, skipping testing native texture");
+
+    QVERIFY(rhi->makeThreadLocalNativeContextCurrent());
+    QOpenGLContext *ctx = QOpenGLContext::currentContext();
+    QVERIFY(ctx);
+    QOpenGLFunctions *f = ctx->functions();
+
+    const QSize size(320, 200);
+    GLuint b = 0;
+    f->glGenRenderbuffers(1, &b);
+    f->glBindRenderbuffer(GL_RENDERBUFFER, b);
+    // in a real world use case this would be some extension, e.g. glEGLImageTargetRenderbufferStorageOES instead
+    f->glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA4, size.width(), size.height());
+    f->glBindRenderbuffer(GL_RENDERBUFFER, 0);
+
+    QScopedPointer<QRhiRenderBuffer> rb(rhi->newRenderBuffer(QRhiRenderBuffer::Color, size));
+    QVERIFY(rb->createFrom({ b }));
+
+    QScopedPointer<QRhiRenderBuffer> depthStencil(rhi->newRenderBuffer(QRhiRenderBuffer::DepthStencil, size));
+    QVERIFY(depthStencil->create());
+    QRhiColorAttachment att(rb.data());
+    QRhiTextureRenderTargetDescription rtDesc(att);
+    rtDesc.setDepthStencilBuffer(depthStencil.data());
+    QScopedPointer<QRhiTextureRenderTarget> rt(rhi->newTextureRenderTarget(rtDesc));
+    QScopedPointer<QRhiRenderPassDescriptor> rp(rt->newCompatibleRenderPassDescriptor());
+    rt->setRenderPassDescriptor(rp.data());
+    QVERIFY(rt->create());
+
+    QRhiCommandBuffer *cb = nullptr;
+    QVERIFY(rhi->beginOffscreenFrame(&cb) == QRhi::FrameOpSuccess);
+    QVERIFY(cb);
+    cb->beginPass(rt.data(), Qt::red, { 1.0f, 0 }, nullptr, QRhiCommandBuffer::ExternalContent);
+    cb->beginExternal();
+    QByteArray tmpBuf;
+    tmpBuf.resize(size.width() * size.height() * 4);
+    f->glReadPixels(0, 0, size.width(), size.height(), GL_RGBA, GL_UNSIGNED_BYTE, tmpBuf.data());
+    cb->endExternal();
+    cb->endPass();
+    rhi->endOffscreenFrame();
+
+    f->glDeleteRenderbuffers(1, &b);
+
+    QImage wrapperImage(reinterpret_cast<const uchar *>(tmpBuf.constData()),
+                        size.width(), size.height(), QImage::Format_RGBA8888_Premultiplied);
+
+    QImage image(320, 200, QImage::Format_RGBA8888_Premultiplied);
+    image.fill(Qt::red);
+    QVERIFY(imageRGBAEquals(image, wrapperImage));
+#endif
+}
+
+void tst_QRhi::threeDimTexture_data()
+{
+    rhiTestData();
+}
+
+void tst_QRhi::threeDimTexture()
+{
+    QFETCH(QRhi::Implementation, impl);
+    QFETCH(QRhiInitParams *, initParams);
+
+    QScopedPointer<QRhi> rhi(QRhi::create(impl, initParams));
+    if (!rhi)
+        QSKIP("QRhi could not be created, skipping testing 3D textures");
+
+    if (!rhi->isFeatureSupported(QRhi::ThreeDimensionalTextures))
+        QSKIP("Skipping testing 3D textures because they are reported as unsupported");
+
+    const int WIDTH = 512;
+    const int HEIGHT = 256;
+    const int DEPTH = 128;
+
+    {
+        QScopedPointer<QRhiTexture> texture(rhi->newTexture(QRhiTexture::RGBA8, WIDTH, HEIGHT, DEPTH));
+        QVERIFY(texture->create());
+
+        QRhiResourceUpdateBatch *batch = rhi->nextResourceUpdateBatch();
+        QVERIFY(batch);
+
+        for (int i = 0; i < DEPTH; ++i) {
+            QImage img(WIDTH, HEIGHT, QImage::Format_RGBA8888);
+            img.fill(QColor::fromRgb(i * 2, 0, 0));
+            QRhiTextureUploadEntry sliceUpload(i, 0, QRhiTextureSubresourceUploadDescription(img));
+            batch->uploadTexture(texture.data(), sliceUpload);
+        }
+
+        QVERIFY(submitResourceUpdates(rhi.data(), batch));
+    }
+
+    // mipmaps
+    {
+        QScopedPointer<QRhiTexture> texture(rhi->newTexture(QRhiTexture::RGBA8, WIDTH, HEIGHT, DEPTH,
+                                                            1, QRhiTexture::MipMapped | QRhiTexture::UsedWithGenerateMips));
+        QVERIFY(texture->create());
+
+        QRhiResourceUpdateBatch *batch = rhi->nextResourceUpdateBatch();
+        QVERIFY(batch);
+
+        for (int i = 0; i < DEPTH; ++i) {
+            QImage img(WIDTH, HEIGHT, QImage::Format_RGBA8888);
+            img.fill(QColor::fromRgb(i * 2, 0, 0));
+            QRhiTextureUploadEntry sliceUpload(i, 0, QRhiTextureSubresourceUploadDescription(img));
+            batch->uploadTexture(texture.data(), sliceUpload);
+        }
+
+        batch->generateMips(texture.data());
+
+        QVERIFY(submitResourceUpdates(rhi.data(), batch));
+
+        // read back slice 63 of level 1 (256x128, almost red)
+        batch = rhi->nextResourceUpdateBatch();
+        QRhiReadbackResult readResult;
+        QImage result;
+        readResult.completed = [&readResult, &result] {
+            result = QImage(reinterpret_cast<const uchar *>(readResult.data.constData()),
+                            readResult.pixelSize.width(), readResult.pixelSize.height(),
+                            QImage::Format_RGBA8888);
+        };
+        QRhiReadbackDescription readbackDescription(texture.data());
+        readbackDescription.setLevel(1);
+        readbackDescription.setLayer(63);
+        batch->readBackTexture(readbackDescription, &readResult);
+        QVERIFY(submitResourceUpdates(rhi.data(), batch));
+        QVERIFY(!result.isNull());
+        QImage referenceImage(WIDTH / 2, HEIGHT / 2, result.format());
+        referenceImage.fill(QColor::fromRgb(253, 0, 0));
+
+        // Now restrict the test a bit. The Null QRhi backend has broken support for
+        // mipmap generation of 3D textures (it ignores the depth, effectively behaving as
+        // if the 3D texture was a 2D array which is incorrect wrt mipmapping)
+        // Some software-based OpenGL implementations, such as Mesa llvmpipe builds that are
+        // used both in Qt CI and are shipped with the official Qt binaries also seem to have
+        // problems with this.
+        if (impl != QRhi::Null && impl != QRhi::OpenGLES2)
+            QVERIFY(imageRGBAEquals(result, referenceImage, 2));
+    }
+
+    // render target (one slice)
+    // NB with Vulkan we require Vulkan 1.1 for this to work.
+    {
+        const int SLICE = 23;
+        QScopedPointer<QRhiTexture> texture(rhi->newTexture(QRhiTexture::RGBA8, WIDTH, HEIGHT, DEPTH,
+                                                            1, QRhiTexture::RenderTarget | QRhiTexture::UsedAsTransferSource));
+        QVERIFY(texture->create());
+
+        QRhiColorAttachment att(texture.data());
+        att.setLayer(SLICE);
+        QRhiTextureRenderTargetDescription rtDesc(att);
+        QScopedPointer<QRhiTextureRenderTarget> rt(rhi->newTextureRenderTarget(rtDesc));
+        QScopedPointer<QRhiRenderPassDescriptor> rp(rt->newCompatibleRenderPassDescriptor());
+        rt->setRenderPassDescriptor(rp.data());
+        QVERIFY(rt->create());
+
+        QRhiResourceUpdateBatch *batch = rhi->nextResourceUpdateBatch();
+        QVERIFY(batch);
+
+        for (int i = 0; i < DEPTH; ++i) {
+            QImage img(WIDTH, HEIGHT, QImage::Format_RGBA8888);
+            img.fill(QColor::fromRgb(i * 2, 0, 0));
+            QRhiTextureUploadEntry sliceUpload(i, 0, QRhiTextureSubresourceUploadDescription(img));
+            batch->uploadTexture(texture.data(), sliceUpload);
+        }
+
+        QRhiCommandBuffer *cb = nullptr;
+        QVERIFY(rhi->beginOffscreenFrame(&cb) == QRhi::FrameOpSuccess);
+        QVERIFY(cb);
+        cb->beginPass(rt.data(), Qt::blue, { 1.0f, 0 }, batch);
+        // slice 23 is now blue
+        cb->endPass();
+        rhi->endOffscreenFrame();
+
+        // read back slice 23 (blue)
+        batch = rhi->nextResourceUpdateBatch();
+        QRhiReadbackResult readResult;
+        QImage result;
+        readResult.completed = [&readResult, &result] {
+            result = QImage(reinterpret_cast<const uchar *>(readResult.data.constData()),
+                            readResult.pixelSize.width(), readResult.pixelSize.height(),
+                            QImage::Format_RGBA8888);
+        };
+        QRhiReadbackDescription readbackDescription(texture.data());
+        readbackDescription.setLayer(23);
+        batch->readBackTexture(readbackDescription, &readResult);
+        QVERIFY(submitResourceUpdates(rhi.data(), batch));
+        QVERIFY(!result.isNull());
+        QImage referenceImage(WIDTH, HEIGHT, result.format());
+        referenceImage.fill(QColor::fromRgbF(0.0f, 0.0f, 1.0f));
+        // the Null backend does not render so skip the verification for that
+        if (impl != QRhi::Null)
+            QVERIFY(imageRGBAEquals(result, referenceImage));
+
+        // read back slice 0 (black)
+        batch = rhi->nextResourceUpdateBatch();
+        result = QImage();
+        readbackDescription.setLayer(0);
+        batch->readBackTexture(readbackDescription, &readResult);
+        QVERIFY(submitResourceUpdates(rhi.data(), batch));
+        QVERIFY(!result.isNull());
+        referenceImage.fill(QColor::fromRgbF(0.0f, 0.0f, 0.0f));
+        QVERIFY(imageRGBAEquals(result, referenceImage));
+
+        // read back slice 127 (almost red)
+        batch = rhi->nextResourceUpdateBatch();
+        result = QImage();
+        readbackDescription.setLayer(127);
+        batch->readBackTexture(readbackDescription, &readResult);
+        QVERIFY(submitResourceUpdates(rhi.data(), batch));
+        QVERIFY(!result.isNull());
+        referenceImage.fill(QColor::fromRgb(254, 0, 0));
+        QVERIFY(imageRGBAEquals(result, referenceImage));
+    }
+}
+
+void tst_QRhi::leakedResourceDestroy_data()
+{
+    rhiTestData();
+}
+
+void tst_QRhi::leakedResourceDestroy()
+{
+    QFETCH(QRhi::Implementation, impl);
+    QFETCH(QRhiInitParams *, initParams);
+
+    QScopedPointer<QRhi> rhi(QRhi::create(impl, initParams));
+    if (!rhi)
+        QSKIP("QRhi could not be created, skipping");
+
+    // Incorrectly destroy the QRhi before the resources created from it.  Attempting to
+    // destroy the resources afterwards is pointless, the native resources are leaked.
+    // Nonetheless, it should not crash, which is what we are testing here.
+    //
+    // We do not however have control over other, native and 3rd party components: a
+    // validation or debug layer, or a memory allocator may warn, assert, or abort when
+    // not releasing all native resources correctly.
+#ifndef QT_NO_DEBUG
+    // don't want asserts from vkmemalloc, skip the test in debug builds
+    if (impl == QRhi::Vulkan)
+        QSKIP("Skipping leaked resource destroy test due to Vulkan and debug build");
+#endif
+
+    QScopedPointer<QRhiBuffer> buffer(rhi->newBuffer(QRhiBuffer::Immutable, QRhiBuffer::VertexBuffer, 256));
+    QVERIFY(buffer->create());
+
+    QScopedPointer<QRhiTexture> texture(rhi->newTexture(QRhiTexture::RGBA8, QSize(512, 512), 1, QRhiTexture::RenderTarget));
+    QVERIFY(texture->create());
+
+    QScopedPointer<QRhiTextureRenderTarget> rt(rhi->newTextureRenderTarget({ texture.data() }));
+    QScopedPointer<QRhiRenderPassDescriptor> rpDesc(rt->newCompatibleRenderPassDescriptor());
+    QVERIFY(rpDesc);
+    rt->setRenderPassDescriptor(rpDesc.data());
+    QVERIFY(rt->create());
+
+    if (impl == QRhi::Vulkan)
+        qDebug("Vulkan validation layer warnings may be printed below - this is expected");
+
+    rhi.reset();
+
+    // let the scoped ptr do its job with the resources
 }
 
 #include <tst_qrhi.moc>

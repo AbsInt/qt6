@@ -37,14 +37,14 @@
 **
 ****************************************************************************/
 
-#include "qwaylandglcontext.h"
+#include "qwaylandglcontext_p.h"
 
 #include <QtWaylandClient/private/qwaylanddisplay_p.h>
 #include <QtWaylandClient/private/qwaylandwindow_p.h>
 #include <QtWaylandClient/private/qwaylandsubsurface_p.h>
 #include <QtWaylandClient/private/qwaylandabstractdecoration_p.h>
 #include <QtWaylandClient/private/qwaylandintegration_p.h>
-#include "qwaylandeglwindow.h"
+#include "qwaylandeglwindow_p.h"
 
 #include <QDebug>
 #include <QtGui/private/qeglconvenience_p.h>
@@ -195,7 +195,7 @@ public:
         QOpenGLTextureCache *cache = QOpenGLTextureCache::cacheForContext(m_context->context());
 
         QSize surfaceSize = window->surfaceSize();
-        int scale = window->scale() ;
+        qreal scale = window->scale() ;
         glViewport(0, 0, surfaceSize.width() * scale, surfaceSize.height() * scale);
 
         //Draw Decoration

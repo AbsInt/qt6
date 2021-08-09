@@ -212,6 +212,8 @@ void tst_QByteArrayApiSymmetry::startsWith_impl()
         QVERIFY(haystack.startsWith((char *)0) == result);
     } else {
         QVERIFY(haystack.startsWith(needle.data()) == result);
+        if (needle.size() == 1)
+            QVERIFY(haystack.startsWith(needle.at(0)) == result);
     }
 }
 
@@ -267,6 +269,8 @@ void tst_QByteArrayApiSymmetry::endsWith_impl()
         QVERIFY(haystack.endsWith((char *)0) == result);
     } else {
         QVERIFY(haystack.endsWith(needle.data()) == result);
+        if (needle.size() == 1)
+            QVERIFY(haystack.endsWith(needle.at(0)) == result);
     }
 }
 
@@ -316,12 +320,20 @@ void tst_QByteArrayApiSymmetry::indexOf_data()
     static const char n19[] = { 0x00, 0x00, 0x01, 0x00 };
     QTest::newRow("19") << QByteArray(h19, sizeof(h19)) << QByteArray(n19, sizeof(n19)) << 0 << -1;
 
-    QTest::newRow("empty") << QByteArray("") << QByteArray("x") << 0 << -1;
-    QTest::newRow("null") << QByteArray() << QByteArray("x") << 0 << -1;
+    QTest::newRow("empty from 0") << QByteArray("") << QByteArray("x") << 0 << -1;
+    QTest::newRow("empty from -1") << QByteArray("") << QByteArray("x") << -1 << -1;
+    QTest::newRow("empty from 1") << QByteArray("") << QByteArray("x") << 1 << -1;
+    QTest::newRow("null from 0") << QByteArray() << QByteArray("x") << 0 << -1;
+    QTest::newRow("null from -1") << QByteArray() << QByteArray("x") << -1 << -1;
+    QTest::newRow("null from 1") << QByteArray() << QByteArray("x") << 1 << -1;
     QTest::newRow("null-in-null") << QByteArray() << QByteArray() << 0 << 0;
     QTest::newRow("empty-in-null") << QByteArray() << QByteArray("") << 0 << 0;
     QTest::newRow("null-in-empty") << QByteArray("") << QByteArray() << 0 << 0;
     QTest::newRow("empty-in-empty") << QByteArray("") << QByteArray("") << 0 << 0;
+    QTest::newRow("empty in abc from 0") << abc << QByteArray() << 0 << 0;
+    QTest::newRow("empty in abc from 2") << abc << QByteArray() << 2 << 2;
+    QTest::newRow("empty in abc from 5") << abc << QByteArray() << 5 << -1;
+    QTest::newRow("empty in abc from -1") << abc << QByteArray() << -1 << 2;
 
     QByteArray veryBigHaystack(500, 'a');
     veryBigHaystack += 'B';
@@ -404,12 +416,23 @@ void tst_QByteArrayApiSymmetry::lastIndexOf_data()
     static const char n25[] = { 0x00, 0x00, 0x01, 0x00 };
     QTest::newRow("25") << QByteArray(h25, sizeof(h25)) << QByteArray(n25, sizeof(n25)) << 0 << -1;
 
-    QTest::newRow("empty") << QByteArray("") << QByteArray("x") << -1 << -1;
-    QTest::newRow("null") << QByteArray() << QByteArray("x") << -1 << -1;
+    QTest::newRow("empty from 0") << QByteArray("") << QByteArray("x") << 0 << -1;
+    QTest::newRow("empty from -1") << QByteArray("") << QByteArray("x") << -1 << -1;
+    QTest::newRow("empty from 1") << QByteArray("") << QByteArray("x") << 1 << -1;
+    QTest::newRow("null from 0") << QByteArray() << QByteArray("x") << 0 << -1;
+    QTest::newRow("null from -1") << QByteArray() << QByteArray("x") << -1 << -1;
+    QTest::newRow("null from 1") << QByteArray() << QByteArray("x") << 1 << -1;
     QTest::newRow("null-in-null") << QByteArray() << QByteArray() << -1 << 0;
     QTest::newRow("empty-in-null") << QByteArray() << QByteArray("") << -1 << 0;
     QTest::newRow("null-in-empty") << QByteArray("") << QByteArray() << -1 << 0;
     QTest::newRow("empty-in-empty") << QByteArray("") << QByteArray("") << -1 << 0;
+    QTest::newRow("empty in abc from 0") << abc << QByteArray() << 0 << 0;
+    QTest::newRow("empty in abc from 2") << abc << QByteArray() << 2 << 2;
+    QTest::newRow("empty in abc from 5")
+            << abc << QByteArray() << 5 << -1; // perversely enough, should be 3?
+    QTest::newRow("empty in abc from -1") << abc << QByteArray() << -1 << 3;
+    QTest::newRow("empty in abc from -5")
+            << abc << QByteArray() << -5 << 3; // perversely enough, should be -1?
 }
 
 template<typename Haystack, typename Needle>
@@ -490,6 +513,14 @@ void tst_QByteArrayApiSymmetry::count_data()
 
     QTest::addRow("aaa") << QByteArray("aaa") << QByteArray("a") << 3;
     QTest::addRow("xyzaaaxyz") << QByteArray("xyzaaxyaxyz") << QByteArray("xyz") << 2;
+    QTest::addRow("a in null") << QByteArray() << QByteArray("a") << 0;
+    QTest::addRow("a in empty") << QByteArray("") << QByteArray("a") << 0;
+    QTest::addRow("xyz in null") << QByteArray() << QByteArray("xyz") << 0;
+    QTest::addRow("xyz in empty") << QByteArray("") << QByteArray("xyz") << 0;
+    QTest::addRow("null in null") << QByteArray() << QByteArray() << 1;
+    QTest::addRow("empty in empty") << QByteArray("") << QByteArray("") << 1;
+    QTest::addRow("empty in null") << QByteArray() << QByteArray("") << 1;
+    QTest::addRow("null in empty") << QByteArray("") << QByteArray() << 1;
 
     const int len = 500;
     QByteArray longData(len, 'a');

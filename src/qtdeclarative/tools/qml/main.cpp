@@ -99,6 +99,7 @@ static const QString iconResourcePath(QStringLiteral(":/qt-project.org/QmlRuntim
 static const QString confResourcePath(QStringLiteral(":/qt-project.org/QmlRuntime/conf/"));
 static bool verboseMode = false;
 static bool quietMode = false;
+static bool glShareContexts = true;
 
 static void loadConf(const QString &override, bool quiet) // Terminates app on failure
 {
@@ -270,6 +271,7 @@ void LoadWatcher::contain(QObject *o, const QUrl &containPath)
     QObject *o2 = c.create();
     if (!o2)
         return;
+    o2->setParent(this);
     checkForWindow(o2);
     bool success = false;
     int idx;
@@ -330,25 +332,14 @@ static void getAppFlags(int argc, char **argv)
             QCoreApplication::setAttribute(Qt::AA_UseOpenGLES);
         } else if (!strcmp(argv[i], "-software") || !strcmp(argv[i], "--software")) {
             QCoreApplication::setAttribute(Qt::AA_UseSoftwareOpenGL);
+        } else if (!strcmp(argv[i], "-disable-context-sharing") || !strcmp(argv[i], "--disable-context-sharing")) {
+            glShareContexts = false;
         }
     }
 #else
     Q_UNUSED(argc);
     Q_UNUSED(argv);
 #endif // QT_GUI_LIB
-}
-
-bool getFileSansBangLine(const QString &path, QByteArray &output)
-{
-    QFile f(path);
-    if (!f.open(QFile::ReadOnly | QFile::Text))
-        return false;
-    output = f.readAll();
-    if (output.startsWith("#!")) {//Remove first line in this case (except \n, to avoid disturbing line count)
-        output.remove(0, output.indexOf('\n'));
-        return true;
-    }
-    return false;
 }
 
 static void loadDummyDataFiles(QQmlEngine &engine, const QString& directory)
@@ -378,6 +369,10 @@ static void loadDummyDataFiles(QQmlEngine &engine, const QString& directory)
 int main(int argc, char *argv[])
 {
     getAppFlags(argc, argv);
+
+    if (glShareContexts)
+        QCoreApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
+
     std::unique_ptr<QCoreApplication> app;
     switch (applicationType) {
 #ifdef QT_GUI_LIB
@@ -454,6 +449,12 @@ int main(int argc, char *argv[])
     QCommandLineOption glSoftwareOption(QStringLiteral("software"),
         QCoreApplication::translate("main", "Force use of software rendering (AA_UseSoftwareOpenGL)."));
     parser.addOption(glSoftwareOption); // Just for the help text... we've already handled this argument above
+    QCommandLineOption glCoreProfile(QStringLiteral("core-profile"),
+        QCoreApplication::translate("main", "Force use of OpenGL Core Profile."));
+    parser.addOption(glCoreProfile);
+    QCommandLineOption glContextSharing(QStringLiteral("disable-context-sharing"),
+        QCoreApplication::translate("main", "Disable the use of a shared GL context for QtQuick Windows"));
+    parser.addOption(glContextSharing); // Just for the help text... we've already handled this argument above
 #endif // QT_GUI_LIB
     // Debugging and verbosity options
     QCommandLineOption quietOption(QStringLiteral("quiet"),
@@ -524,7 +525,7 @@ int main(int argc, char *argv[])
         e.setExtraFileSelectors(customSelectors);
 
 #if defined(QT_GUI_LIB)
-    if (qEnvironmentVariableIsSet("QSG_CORE_PROFILE") || qEnvironmentVariableIsSet("QML_CORE_PROFILE")) {
+    if (qEnvironmentVariableIsSet("QSG_CORE_PROFILE") || qEnvironmentVariableIsSet("QML_CORE_PROFILE") || parser.isSet(glCoreProfile)) {
         QSurfaceFormat surfaceFormat;
         surfaceFormat.setStencilBufferSize(8);
         surfaceFormat.setDepthBufferSize(24);
@@ -603,12 +604,7 @@ int main(int argc, char *argv[])
         QUrl url = QUrl::fromUserInput(path, QDir::currentPath(), QUrl::AssumeLocalFile);
         if (verboseMode)
             printf("qml: loading %s\n", qPrintable(url.toString()));
-        QByteArray strippedFile;
-        if (getFileSansBangLine(path, strippedFile))
-            // QQmlComponent won't resolve it for us: it doesn't know it's a valid file if we loadData
-            e.loadData(strippedFile, e.baseUrl().resolved(url));
-        else // Errors or no bang line
-            e.load(url);
+        e.load(url);
     }
 
     if (lw->earlyExit)

@@ -40,35 +40,59 @@
 // We mean it.
 
 #include "qqmljsscope_p.h"
+#include "qqmljsannotation_p.h"
+#include "qqmljslogger_p.h"
 
 #include <private/qqmljsast_p.h>
 #include <private/qqmljsdiagnosticmessage_p.h>
 #include <private/qqmljsimporter_p.h>
 
+
 QT_BEGIN_NAMESPACE
 
+struct QQmlJSResourceFileMapper;
 class QQmlJSImportVisitor : public QQmlJS::AST::Visitor
 {
 public:
     QQmlJSImportVisitor(QQmlJSImporter *importer, const QString &implicitImportDirectory,
-                        const QStringList &qmltypesFiles = QStringList());
+                        const QStringList &qmltypesFiles = QStringList(), const QString &fileName = QString(), const QString &code = QString(), bool silent = true);
 
     QQmlJSScope::Ptr result() const;
-    QList<QQmlJS::DiagnosticMessage> errors() const { return m_errors; }
+
+    // TODO: Should be superseded by accessing the logger instead
+    QList<QQmlJS::DiagnosticMessage> errors() const { return m_logger.warnings() + m_logger.errors(); }
+
+    QQmlJSLogger &logger() { return m_logger; }
+
     QHash<QString, QQmlJSScope::ConstPtr> imports() const { return m_rootScopeImports; }
     QHash<QString, QQmlJSScope::ConstPtr> addressableScopes() const { return m_scopesById; }
 
+    static QString implicitImportDirectory(
+            const QString &localFile, QQmlJSResourceFileMapper *mapper);
+
 protected:
+    // Linter warnings, we might want to move this at some point
+    bool visit(QQmlJS::AST::StringLiteral *) override;
+
+    bool visit(QQmlJS::AST::ExpressionStatement *ast) override;
+    void endVisit(QQmlJS::AST::ExpressionStatement *ast) override;
+
     bool visit(QQmlJS::AST::UiProgram *) override;
     void endVisit(QQmlJS::AST::UiProgram *) override;
     bool visit(QQmlJS::AST::UiObjectDefinition *) override;
     void endVisit(QQmlJS::AST::UiObjectDefinition *) override;
+    bool visit(QQmlJS::AST::UiInlineComponent *) override;
+    void endVisit(QQmlJS::AST::UiInlineComponent *) override;
     bool visit(QQmlJS::AST::UiPublicMember *) override;
+    bool visit(QQmlJS::AST::UiRequired *required) override;
     bool visit(QQmlJS::AST::UiScriptBinding *) override;
     void endVisit(QQmlJS::AST::UiScriptBinding *) override;
+    bool visit(QQmlJS::AST::UiArrayBinding *) override;
+    void endVisit(QQmlJS::AST::UiArrayBinding *) override;
     bool visit(QQmlJS::AST::UiEnumDeclaration *uied) override;
     bool visit(QQmlJS::AST::FunctionExpression *fexpr) override;
     void endVisit(QQmlJS::AST::FunctionExpression *) override;
+    bool visit(QQmlJS::AST::UiSourceElement *) override;
     bool visit(QQmlJS::AST::FunctionDeclaration *fdecl) override;
     void endVisit(QQmlJS::AST::FunctionDeclaration *) override;
     bool visit(QQmlJS::AST::ClassExpression *ast) override;
@@ -107,24 +131,105 @@ protected:
     void throwRecursionDepthError() override;
 
     QString m_implicitImportDirectory;
+    QString m_code;
+    QString m_filePath;
+    QString m_rootId;
+    QStringView m_inlineComponentName;
+    bool m_nextIsInlineComponent = false;
     QStringList m_qmltypesFiles;
     QQmlJSScope::Ptr m_currentScope;
     QQmlJSScope::Ptr m_exportedRootScope;
     QQmlJSScope::ConstPtr m_globalScope;
     QHash<QString, QQmlJSScope::ConstPtr> m_scopesById;
     QHash<QString, QQmlJSScope::ConstPtr> m_rootScopeImports;
-    QQmlJSImporter *m_importer;
 
-    QList<QQmlJS::DiagnosticMessage> m_errors;
+    // Maps all qmlNames to the source location of their import
+    QMultiHash<QString, QQmlJS::SourceLocation> m_importTypeLocationMap;
+    // Contains all import source locations (could be extracted from above but that is expensive)
+    QSet<QQmlJS::SourceLocation> m_importLocations;
+    // A set of all types that have been used during type resolution
+    QSet<QString> m_usedTypes;
+
+    QQmlJSImporter *m_importer;
 
     void enterEnvironment(QQmlJSScope::ScopeType type, const QString &name,
                           const QQmlJS::SourceLocation &location);
+    // Finds an existing scope before attempting to create a new one. Returns \c
+    // true if the scope already exists and \c false if the new scope is created
+    bool enterEnvironmentNonUnique(QQmlJSScope::ScopeType type, const QString &name,
+                                   const QQmlJS::SourceLocation &location);
     void leaveEnvironment();
+
+    QVector<QQmlJSAnnotation> parseAnnotations(QQmlJS::AST::UiAnnotationList *list);
+    void addDefaultProperties();
+    void processDefaultProperties();
+    void processPropertyBindings();
+    void checkRequiredProperties();
+    void processPropertyTypes();
+    void processPropertyBindingObjects();
+    void checkSignals();
+    void flushPendingSignalParameters();
+
+    void checkInheritanceCycle(QQmlJSScope::ConstPtr scope);
+    void checkGroupedAndAttachedScopes(QQmlJSScope::ConstPtr scope);
+
+    QQmlJSLogger m_logger;
+
+    // Used to temporarily store annotations for functions and generators wrapped in UiSourceElements
+    QVector<QQmlJSAnnotation> m_pendingMethodAnnotations;
+
+    struct PendingPropertyType
+    {
+        QQmlJSScope::Ptr scope;
+        QString name;
+        QQmlJS::SourceLocation location;
+    };
+
+    struct PendingPropertyObjectBinding
+    {
+        QQmlJSScope::Ptr scope;
+        QQmlJSScope::ConstPtr childScope;
+        QString name;
+        QQmlJS::SourceLocation location;
+        bool onToken;
+    };
+
+    struct RequiredProperty
+    {
+        QQmlJSScope::Ptr scope;
+        QString name;
+        QQmlJS::SourceLocation location;
+    };
+
+    QHash<QQmlJSScope::Ptr, QVector<QQmlJSScope::Ptr>> m_pendingDefaultProperties;
+    QVector<PendingPropertyType> m_pendingPropertyTypes;
+    QVector<PendingPropertyObjectBinding> m_pendingPropertyObjectBindings;
+    QVector<RequiredProperty> m_requiredProperties;
+    QVector<QQmlJSScope::Ptr> m_objectBindingScopes;
+    QVector<QQmlJSScope::Ptr> m_objectDefinitionScopes;
+
+    QHash<QQmlJSScope::Ptr, QVector<QString>> m_propertyBindings;
+    QHash<QQmlJSScope::Ptr, QVector<QPair<QString, QStringList>>> m_signals;
+
+    QHash<QQmlJS::SourceLocation, QQmlJSMetaSignalHandler> m_signalHandlers;
+    QQmlJS::SourceLocation m_pendingSignalHandler;
+
+    struct OutstandingConnection
+    {
+        QString targetName;
+        QQmlJSScope::Ptr scope;
+        QQmlJS::AST::UiObjectDefinition *uiod;
+    };
+
+    QVarLengthArray<OutstandingConnection, 3>
+            m_outstandingConnections; // Connections whose target we have not encountered
 
 private:
     void importBaseModules();
     void resolveAliases();
     void visitFunctionExpressionHelper(QQmlJS::AST::FunctionExpression *fexpr);
+    void processImportWarnings(const QString &what, const QQmlJS::SourceLocation &srcLocation = QQmlJS::SourceLocation());
+    void addImportWithLocation(const QString &name, const QQmlJS::SourceLocation &loc);
 };
 
 QT_END_NAMESPACE

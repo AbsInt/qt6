@@ -59,8 +59,8 @@
 #endif
 #if QT_CONFIG(textedit)
 #include <qtextedit.h>
-#endif
 #include <qplaintextedit.h>
+#endif
 #include <private/qwindowsstyle_p.h>
 #if QT_CONFIG(combobox)
 #include <qcombobox.h>
@@ -2110,10 +2110,10 @@ QRenderRule QStyleSheetStyle::renderRule(const QObject *obj, const QStyleOption 
 
         }
 #endif
+#if QT_CONFIG(textedit)
         else if (const QPlainTextEdit *edit = qobject_cast<const QPlainTextEdit *>(obj)) {
             extraClass |= (edit->isReadOnly() ? PseudoClass_ReadOnly : PseudoClass_Editable);
         }
-#if QT_CONFIG(textedit)
         else if (const QTextEdit *edit = qobject_cast<const QTextEdit *>(obj)) {
             extraClass |= (edit->isReadOnly() ? PseudoClass_ReadOnly : PseudoClass_Editable);
         }
@@ -2553,10 +2553,10 @@ static quint64 extendedPseudoClass(const QWidget *w)
     if (const QTextEdit *edit = qobject_cast<const QTextEdit *>(w)) {
         pc |= (edit->isReadOnly() ? PseudoClass_ReadOnly : PseudoClass_Editable);
     } else
-#endif
     if (const QPlainTextEdit *edit = qobject_cast<const QPlainTextEdit *>(w)) {
         pc |= (edit->isReadOnly() ? PseudoClass_ReadOnly : PseudoClass_Editable);
     }
+#endif
     return pc;
 }
 
@@ -2669,6 +2669,9 @@ void QStyleSheetStyle::setProperties(QWidget *w)
 #endif
         default: v = decl.d->values.at(0).variant; break;
         }
+
+        if (propertyL1 == QByteArrayView("styleSheet") && value == v)
+            continue;
 
         w->setProperty(propertyL1, v);
     }
@@ -3553,6 +3556,35 @@ void QStyleSheetStyle::drawComplexControl(ComplexControl cc, const QStyleOptionC
     baseStyle()->drawComplexControl(cc, opt, p, w);
 }
 
+void QStyleSheetStyle::renderMenuItemIcon(const QStyleOptionMenuItem *mi, QPainter *p, const QWidget *w,
+                                          const QRect &rect, QRenderRule &subRule) const
+{
+    const QIcon::Mode mode = mi->state & QStyle::State_Enabled
+                           ? (mi->state & QStyle::State_Selected ? QIcon::Active : QIcon::Normal)
+                           : QIcon::Disabled;
+    const bool checked = mi->checkType != QStyleOptionMenuItem::NotCheckable && mi->checked;
+    const QPixmap pixmap(mi->icon.pixmap(pixelMetric(PM_SmallIconSize), mode,
+                        checked ? QIcon::On : QIcon::Off));
+    const int pixw = pixmap.width() / pixmap.devicePixelRatio();
+    const int pixh = pixmap.height() / pixmap.devicePixelRatio();
+    QRenderRule iconRule = renderRule(w, mi, PseudoElement_MenuIcon);
+    if (!iconRule.hasGeometry()) {
+        iconRule.geo = new QStyleSheetGeometryData(pixw, pixh, pixw, pixh, -1, -1);
+    } else {
+        iconRule.geo->width = pixw;
+        iconRule.geo->height = pixh;
+    }
+    QRect iconRect = positionRect(w, subRule, iconRule, PseudoElement_MenuIcon, rect, mi->direction);
+    if (mi->direction == Qt::LeftToRight)
+        iconRect.moveLeft(iconRect.left());
+    else
+        iconRect.moveRight(iconRect.right());
+    iconRule.drawRule(p, iconRect);
+    QRect pmr(0, 0, pixw, pixh);
+    pmr.moveCenter(iconRect.center());
+    p->drawPixmap(pmr.topLeft(), pixmap);
+}
+
 void QStyleSheetStyle::drawControl(ControlElement ce, const QStyleOption *opt, QPainter *p,
                           const QWidget *w) const
 {
@@ -3617,7 +3649,8 @@ void QStyleSheetStyle::drawControl(ControlElement ce, const QStyleOption *opt, Q
 
             if (btn->features & QStyleOptionButton::HasMenu) {
                 QRenderRule subRule = renderRule(w, opt, PseudoElement_PushButtonMenuIndicator);
-                QRect ir = positionRect(w, rule, subRule, PseudoElement_PushButtonMenuIndicator, opt->rect, opt->direction);
+                QRect ir = positionRect(w, rule, subRule, PseudoElement_PushButtonMenuIndicator,
+                                        baseStyle()->subElementRect(SE_PushButtonBevel, btn, w), opt->direction);
                 if (subRule.hasDrawable()) {
                     subRule.drawRule(p, ir);
                 } else {
@@ -3832,42 +3865,18 @@ void QStyleSheetStyle::drawControl(ControlElement ce, const QStyleOption *opt, Q
                 }
                 mi.palette.setBrush(QPalette::HighlightedText, mi.palette.brush(QPalette::ButtonText));
 
-                bool checkable = mi.checkType != QStyleOptionMenuItem::NotCheckable;
-                bool checked = checkable ? mi.checked : false;
-
-                bool dis = !(opt->state & QStyle::State_Enabled),
-                     act = opt->state & QStyle::State_Selected;
-
                 int textRectOffset = m->maxIconWidth;
                 if (!mi.icon.isNull()) {
-                    QIcon::Mode mode = dis ? QIcon::Disabled : QIcon::Normal;
-                    if (act && !dis)
-                        mode = QIcon::Active;
-                    const QPixmap pixmap(mi.icon.pixmap(pixelMetric(PM_SmallIconSize), mode, checked ? QIcon::On : QIcon::Off));
-                    const int pixw = pixmap.width() / pixmap.devicePixelRatio();
-                    const int pixh = pixmap.height() / pixmap.devicePixelRatio();
-                    QRenderRule iconRule = renderRule(w, opt, PseudoElement_MenuIcon);
-                    if (!iconRule.hasGeometry()) {
-                        iconRule.geo = new QStyleSheetGeometryData(pixw, pixh, pixw, pixh, -1, -1);
-                    } else {
-                        iconRule.geo->width = pixw;
-                        iconRule.geo->height = pixh;
-                    }
-                    QRect iconRect = positionRect(w, subRule, iconRule, PseudoElement_MenuIcon, opt->rect, opt->direction);
-                    if (opt->direction == Qt::LeftToRight)
-                        iconRect.moveLeft(iconRect.left());
-                    else
-                        iconRect.moveRight(iconRect.right());
-                    iconRule.drawRule(p, iconRect);
-                    QRect pmr(0, 0, pixw, pixh);
-                    pmr.moveCenter(iconRect.center());
-                    p->drawPixmap(pmr.topLeft(), pixmap);
+                    renderMenuItemIcon(&mi, p, w, opt->rect, subRule);
                 } else if (mi.menuHasCheckableItems) {
-                    QRenderRule subSubRule = renderRule(w, opt, PseudoElement_MenuCheckMark);
+                    const bool checkable = mi.checkType != QStyleOptionMenuItem::NotCheckable;
+                    const bool checked = checkable ? mi.checked : false;
+
+                    const QRenderRule subSubRule = renderRule(w, opt, PseudoElement_MenuCheckMark);
                     const QRect cmRect = positionRect(w, subRule, subSubRule, PseudoElement_MenuCheckMark, opt->rect, opt->direction);
                     if (checkable && (subSubRule.hasDrawable() || checked)) {
                         QStyleOptionMenuItem newMi = mi;
-                        if (!dis)
+                        if (opt->state & QStyle::State_Enabled)
                             newMi.state |= State_Enabled;
                         if (mi.checked)
                             newMi.state |= State_On;
@@ -3904,6 +3913,17 @@ void QStyleSheetStyle::drawControl(ControlElement ce, const QStyleOption *opt, Q
                     mi.rect = positionRect(w, subRule, subRule2, PseudoElement_MenuRightArrow, opt->rect, mi.direction);
                     drawPrimitive(arrow, &mi, p, w);
                 }
+            } else if (!mi.icon.isNull() && hasStyleRule(w, PseudoElement_MenuIcon)) {
+                // we wouldn't be here if the item itself would be styled, so now we only want
+                // the text from the default style, and then draw the icon ourselves.
+                QStyleOptionMenuItem newMi = mi;
+                newMi.icon = {};
+                newMi.checkType = QStyleOptionMenuItem::NotCheckable;
+                if (rule.baseStyleCanDraw() && subRule.baseStyleCanDraw())
+                    baseStyle()->drawControl(ce, &newMi, p, w);
+                else
+                    ParentStyle::drawControl(ce, &newMi, p, w);
+                renderMenuItemIcon(&mi, p, w, opt->rect, subRule);
             } else if (hasStyleRule(w, PseudoElement_MenuCheckMark) || hasStyleRule(w, PseudoElement_MenuRightArrow)) {
                 QWindowsStyle::drawControl(ce, &mi, p, w);
                 if (mi.checkType != QStyleOptionMenuItem::NotCheckable && !mi.checked) {
@@ -4043,6 +4063,14 @@ void QStyleSheetStyle::drawControl(ControlElement ce, const QStyleOption *opt, Q
         if (const QStyleOptionHeader *header = qstyleoption_cast<const QStyleOptionHeader *>(opt)) {
             QStyleOptionHeader hdr(*header);
             QRenderRule subRule = renderRule(w, opt, PseudoElement_HeaderViewSection);
+            if (hasStyleRule(w, PseudoElement_HeaderViewUpArrow)
+             || hasStyleRule(w, PseudoElement_HeaderViewDownArrow)) {
+                const QRect arrowRect = subElementRect(SE_HeaderArrow, opt, w);
+                if (hdr.orientation == Qt::Horizontal)
+                    hdr.rect.setWidth(hdr.rect.width() - arrowRect.width());
+                else
+                    hdr.rect.setHeight(hdr.rect.height() - arrowRect.height());
+            }
             subRule.configurePalette(&hdr.palette, QPalette::ButtonText, QPalette::Button);
             if (subRule.hasFont) {
                 QFont oldFont = p->font();
@@ -5206,8 +5234,17 @@ QSize QStyleSheetStyle::sizeFromContents(ContentsType ct, const QStyleOption *op
                     }
                     return subRule.size(sz);
                 }
-                return subRule.baseStyleCanDraw() ? baseStyle()->sizeFromContents(ct, opt, sz, w)
-                                                  : QWindowsStyle::sizeFromContents(ct, opt, sz, w);
+                sz = subRule.baseStyleCanDraw() ? baseStyle()->sizeFromContents(ct, opt, sz, w)
+                                                : QWindowsStyle::sizeFromContents(ct, opt, sz, w);
+                if (hasStyleRule(w, PseudoElement_HeaderViewDownArrow)
+                 || hasStyleRule(w, PseudoElement_HeaderViewUpArrow)) {
+                    const QRect arrowRect = subElementRect(SE_HeaderArrow, opt, w);
+                    if (hdr->orientation == Qt::Horizontal)
+                        sz.rwidth() += arrowRect.width();
+                    else
+                        sz.rheight() += arrowRect.height();
+                }
+                return sz;
             }
         }
         break;

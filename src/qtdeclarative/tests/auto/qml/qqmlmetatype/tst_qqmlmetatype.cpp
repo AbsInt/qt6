@@ -36,6 +36,7 @@
 #include <private/qqmlmetatype_p.h>
 #include <private/qqmlpropertyvalueinterceptor_p.h>
 #include <private/qqmlengine_p.h>
+#include <private/qqmlanybinding_p.h>
 #include "../../shared/util.h"
 
 class tst_qqmlmetatype : public QQmlDataTest
@@ -45,7 +46,7 @@ public:
     tst_qqmlmetatype() {}
 
 private slots:
-    void initTestCase();
+    void initTestCase() override;
 
     void qmlParserStatusCast();
     void qmlPropertyValueSourceCast();
@@ -56,6 +57,8 @@ private slots:
     void registrationType();
     void compositeType();
     void externalEnums();
+
+    void interceptorAPI();
 
     void isList();
 
@@ -128,7 +131,7 @@ class ValueSourceTestType : public QObject, public QQmlPropertyValueSource
     Q_OBJECT
     Q_INTERFACES(QQmlPropertyValueSource)
 public:
-    virtual void setTarget(const QQmlProperty &) {}
+    void setTarget(const QQmlProperty &) override {}
 };
 QML_DECLARE_TYPE(ValueSourceTestType);
 
@@ -137,8 +140,8 @@ class ValueInterceptorTestType : public QObject, public QQmlPropertyValueInterce
     Q_OBJECT
     Q_INTERFACES(QQmlPropertyValueInterceptor)
 public:
-    virtual void setTarget(const QQmlProperty &) {}
-    virtual void write(const QVariant &) {}
+    void setTarget(const QQmlProperty &) override {}
+    void write(const QVariant &) override {}
 };
 QML_DECLARE_TYPE(ValueInterceptorTestType);
 
@@ -257,9 +260,9 @@ void tst_qqmlmetatype::prettyTypeName()
 
 void tst_qqmlmetatype::isList()
 {
-    QCOMPARE(QQmlMetaType::isList(QMetaType::UnknownType), false);
-    QCOMPARE(QQmlMetaType::isList(QMetaType::Int), false);
-    QCOMPARE(QQmlMetaType::isList(qMetaTypeId<QQmlListProperty<TestType> >()), true);
+    QCOMPARE(QQmlMetaType::isList(QMetaType {}), false);
+    QCOMPARE(QQmlMetaType::isList(QMetaType::fromType<int>()), false);
+    QCOMPARE(QQmlMetaType::isList(QMetaType::fromType<QQmlListProperty<TestType> >()), true);
 }
 
 void tst_qqmlmetatype::defaultObject()
@@ -335,6 +338,60 @@ void tst_qqmlmetatype::externalEnums()
     QCOMPARE(b.typeId(), QMetaType::Int);
     QCOMPARE(b.toInt(), int(QStandardPaths::DocumentsLocation));
 
+}
+
+class ForwardAndLogInterceptor : public QObject, public QQmlPropertyValueInterceptor {
+    Q_OBJECT
+    Q_INTERFACES(QQmlPropertyValueInterceptor)
+public:
+
+    // QQmlPropertyValueInterceptor interface
+    void setTarget(const QQmlProperty &property) override
+    {
+        m_property = property;
+    }
+    void write(const QVariant &value) override
+    {
+        interceptedWrite = true;
+        QQmlPropertyPrivate::write(m_property, value, QQmlPropertyData::BypassInterceptor);
+    }
+    bool bindable(QUntypedBindable *bindable, QUntypedBindable target) override
+    {
+        interceptedBindable = true;
+        *bindable = target;
+        return true;
+    }
+
+    QQmlProperty m_property;
+    bool interceptedBindable = false;
+    bool interceptedWrite = false;
+};
+
+void tst_qqmlmetatype::interceptorAPI()
+{
+    qmlRegisterType<ForwardAndLogInterceptor>("test", 1, 0, "Interceptor");
+    QQmlEngine engine;
+    QQmlComponent component(&engine, testFileUrl("interceptorApi.qml"));
+    QScopedPointer<QObject> obj(component.create());
+    QVERIFY2(obj, qPrintable(component.errorString()));
+
+    auto interceptor = obj->property("i").value<ForwardAndLogInterceptor *>();
+    QVERIFY(interceptor->interceptedBindable);
+    QVERIFY(interceptor->interceptedWrite);
+
+    QQmlProperty objectName(obj.get(), "objectName");
+    QProperty<QString> hello(u"Hello, World!"_qs);
+    QQmlAnyBinding binding;
+    binding = Qt::makePropertyBinding(hello);
+    interceptor->interceptedBindable = false;
+    binding.installOn(objectName, QQmlAnyBinding::RespectInterceptors);
+    QVERIFY(interceptor->interceptedBindable);
+    binding = QQmlAnyBinding::takeFrom(objectName);
+    objectName.write("bar");
+    interceptor->interceptedBindable = false;
+    binding.installOn(objectName, QQmlAnyBinding::IgnoreInterceptors);
+    QVERIFY(!interceptor->interceptedBindable);
+    QCOMPARE(objectName.read().toString(), hello.value());
 }
 
 class Controller1 : public QObject

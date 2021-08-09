@@ -322,6 +322,8 @@ public:
     void foo(struct ForwardDeclaredStruct *);
 };
 
+QT_WARNING_PUSH
+QT_WARNING_DISABLE_GCC("-Wunused-variable")
 void StructQObject::foo(struct ForwardDeclaredStruct *)
 {
     struct Inner {
@@ -330,10 +332,11 @@ void StructQObject::foo(struct ForwardDeclaredStruct *)
 
     Q_DECL_UNUSED_MEMBER struct Inner unusedVariable;
 }
-
+QT_WARNING_POP
 
 QT_WARNING_PUSH
 QT_WARNING_DISABLE_CLANG("-Wignored-qualifiers")
+QT_WARNING_DISABLE_GCC("-Wignored-qualifiers")
 
 class TestClass : public MyNamespace::TestSuperClass, public DONT_CONFUSE_MOC(MyStruct),
                   public DONT_CONFUSE_MOC_EVEN_MORE(MyStruct2, dummy, ignored)
@@ -775,7 +778,7 @@ private:
 void tst_Moc::initTestCase()
 {
     QString binpath = QLibraryInfo::path(QLibraryInfo::BinariesPath);
-    QString qmake = QString("%1/qmake").arg(binpath);
+    QString qtpaths = QString("%1/qtpaths").arg(binpath);
     QString libexecPath = QLibraryInfo::path(QLibraryInfo::LibraryExecutablesPath);
     m_moc = QString("%1/moc").arg(libexecPath);
 
@@ -784,7 +787,7 @@ void tst_Moc::initTestCase()
     m_sourceDirectory = QFileInfo(testHeader).absolutePath();
 #if defined(Q_OS_UNIX) && QT_CONFIG(process)
     QProcess proc;
-    proc.start(qmake, QStringList() << "-query" << "QT_INSTALL_HEADERS");
+    proc.start(qtpaths, QStringList() << "-query" << "QT_INSTALL_HEADERS");
     QVERIFY(proc.waitForFinished());
     QCOMPARE(proc.exitCode(), 0);
     QByteArray output = proc.readAllStandardOutput();
@@ -1765,6 +1768,7 @@ void tst_Moc::QTBUG5590_dummyProperty()
 
 QT_WARNING_PUSH
 QT_WARNING_DISABLE_CLANG("-Wignored-qualifiers")
+QT_WARNING_DISABLE_GCC("-Wignored-qualifiers")
 class QTBUG7421_ReturnConstTemplate: public QObject
 { Q_OBJECT
 public slots:
@@ -4112,7 +4116,8 @@ void tst_Moc::requiredProperties()
 class ClassWithQPropertyMembers : public QObject
 {
     Q_OBJECT
-    Q_PROPERTY(int publicProperty MEMBER publicProperty BINDABLE bindablePublicProperty NOTIFY publicPropertyChanged)
+    Q_PROPERTY(int publicProperty MEMBER publicProperty BINDABLE bindablePublicProperty
+               NOTIFY publicPropertyChanged)
     Q_PROPERTY(int privateExposedProperty MEMBER privateExposedProperty)
 public:
 
@@ -4219,8 +4224,10 @@ class ClassWithPrivateQPropertyShim :public QObject
 {
     Q_OBJECT
 public:
-    Q_PROPERTY(int testProperty READ testProperty WRITE setTestProperty BINDABLE bindableTestProperty NOTIFY testPropertyChanged)
-    Q_PROPERTY(int testProperty2 READ testProperty2 WRITE setTestProperty2 BINDABLE bindableTestProperty2)
+    Q_PROPERTY(int testProperty READ testProperty WRITE setTestProperty
+               BINDABLE bindableTestProperty NOTIFY testPropertyChanged)
+    Q_PROPERTY(int testProperty2 READ testProperty2 WRITE setTestProperty2
+               BINDABLE bindableTestProperty2)
     //Q_PROPERTY(d_func(), int, lazyTestProperty, setLazyTestProperty, NOTIFY lazyTestPropertyChanged)
 
 signals:

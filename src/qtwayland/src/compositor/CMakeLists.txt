@@ -4,15 +4,7 @@
 ## WaylandCompositor Module:
 #####################################################################
 
-# special case begin
-set(__qt_wayland_compositor_module_args "")
-if(QT_FEATURE_wayland_compositor_quick)
-    list(APPEND __qt_wayland_compositor_module_args "GENERATE_METATYPES")
-endif()
-# special case end
-
 qt_internal_add_module(WaylandCompositor
-    ${__qt_wayland_compositor_module_args} # special case
     PLUGIN_TYPES wayland-graphics-integration-server wayland-hardware-layer-integration
     SOURCES
         ../shared/qwaylandinputmethodeventbuilder.cpp ../shared/qwaylandinputmethodeventbuilder_p.h
@@ -150,7 +142,7 @@ qt_internal_extend_target(WaylandCompositor CONDITION QT_FEATURE_wayland_composi
         compositor_api/qwaylandquickcompositor.cpp compositor_api/qwaylandquickcompositor.h
         compositor_api/qwaylandquickitem.cpp compositor_api/qwaylandquickitem.h compositor_api/qwaylandquickitem_p.h
         compositor_api/qwaylandquickoutput.cpp compositor_api/qwaylandquickoutput.h
-        compositor_api/qwaylandquicksurface.cpp compositor_api/qwaylandquicksurface.h
+        compositor_api/qwaylandquicksurface.cpp compositor_api/qwaylandquicksurface.h compositor_api/qwaylandquicksurface_p.h
         extensions/qwaylandivisurfaceintegration.cpp extensions/qwaylandivisurfaceintegration_p.h
         extensions/qwaylandquickshellintegration.cpp extensions/qwaylandquickshellintegration.h
         extensions/qwaylandquickshellsurfaceitem.cpp extensions/qwaylandquickshellsurfaceitem.h extensions/qwaylandquickshellsurfaceitem_p.h
@@ -168,11 +160,6 @@ qt_internal_extend_target(WaylandCompositor CONDITION QT_FEATURE_wayland_composi
         Qt::QuickPrivate
 )
 
-#### Keys ignored in scope 4:.:.:compositor.pro:QT_FEATURE_wayland_compositor_quick:
-# QMLTYPES_FILENAME = "plugins.qmltypes"
-# QMLTYPES_INSTALL_DIR = "$$[QT_INSTALL_QML]/QtWayland/Compositor"
-# QML_IMPORT_NAME = "QtWayland.Compositor"
-# QML_IMPORT_VERSION = "$$QT_VERSION"
 
 qt_internal_extend_target(WaylandCompositor CONDITION QT_FEATURE_wayland_datadevice
     SOURCES
@@ -181,16 +168,6 @@ qt_internal_extend_target(WaylandCompositor CONDITION QT_FEATURE_wayland_datadev
         wayland_wrapper/qwldataoffer.cpp wayland_wrapper/qwldataoffer_p.h
         wayland_wrapper/qwldatasource.cpp wayland_wrapper/qwldatasource_p.h
 )
-
-# special case begin
-#
-# Do not explicitly add XKB::XKB. This is already done by Qt::GuiPrivate.
-#
-#qt_internal_extend_target(WaylandCompositor CONDITION QT_FEATURE_xkbcommon
-#    PUBLIC_LIBRARIES
-#        XKB::XKB
-#)
-# special case end
 
 qt_internal_extend_target(WaylandCompositor CONDITION QT_FEATURE_im
     SOURCES
@@ -211,19 +188,30 @@ qt_internal_add_docs(WaylandCompositor
     doc/qtwaylandcompositor.qdocconf
 )
 
-# special case begin
-if (TARGET Qt::Qml)
-    set_target_properties(WaylandCompositor PROPERTIES
-        QT_QML_MODULE_INSTALL_QMLTYPES TRUE
-        QT_QML_MODULE_VERSION ${PROJECT_VERSION}
-        QT_QML_MODULE_URI QtWayland.Compositor
-        QT_QMLTYPES_FILENAME plugins.qmltypes
-        QT_QML_MODULE_INSTALL_DIR "${INSTALL_QMLDIR}/QtWayland/Compositor"
-    )
+set(qmlfiles
+    qmlfiles/WaylandCursorItem.qml
+    qmlfiles/WaylandOutputWindow.qml
+)
 
-    qt6_qml_type_registration(WaylandCompositor)
+set_source_files_properties(qmlfiles/WaylandOutputWindow.qml PROPERTIES
+    QT_QML_SOURCE_VERSION "1.0"
+    QT_QML_SOURCE_TYPENAME WaylandOutputWindow
+)
+set_source_files_properties(qmlfiles/WaylandCursorItem.qml PROPERTIES
+    QT_QML_SOURCE_VERSION "1.0"
+    QT_QML_SOURCE_TYPENAME WaylandCursorItem
+)
+
+if (TARGET Qt::Qml)
+    qt_internal_add_qml_module(WaylandCompositor
+        URI QtWayland.Compositor
+        VERSION ${PROJECT_VERSION}
+        CLASS_NAME QWaylandCompositorPlugin
+        PLUGIN_TARGET qwaylandcompositorplugin
+        QML_FILES ${qmlfiles}
+        DEPENDENCIES
+            QtQuick
+    )
 endif()
 
 qt_record_extra_qt_main_tools_package_dependency(WaylandCompositor WaylandScannerTools "${PROJECT_VERSION}")
-# special case end
-

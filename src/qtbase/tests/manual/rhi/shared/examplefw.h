@@ -536,18 +536,13 @@ int main(int argc, char **argv)
     if (graphicsApi == Vulkan) {
         if (debugLayer) {
             qDebug("Enabling Vulkan validation layer (if available)");
-#ifndef Q_OS_ANDROID
-            inst.setLayers(QByteArrayList() << "VK_LAYER_LUNARG_standard_validation");
-#else
-            inst.setLayers(QByteArrayList()
-                           << "VK_LAYER_GOOGLE_threading"
-                           << "VK_LAYER_LUNARG_parameter_validation"
-                           << "VK_LAYER_LUNARG_object_tracker"
-                           << "VK_LAYER_LUNARG_core_validation"
-                           << "VK_LAYER_LUNARG_image"
-                           << "VK_LAYER_LUNARG_swapchain"
-                           << "VK_LAYER_GOOGLE_unique_objects");
-#endif
+            inst.setLayers({ "VK_LAYER_KHRONOS_validation" });
+        }
+        const QVersionNumber supportedVersion = inst.supportedApiVersion();
+        qDebug() << "Supported Vulkan API version:" << supportedVersion;
+        if (supportedVersion >= QVersionNumber(1, 1)) {
+            qDebug("Requesting Vulkan API 1.1 on the VkInstance");
+            inst.setApiVersion(QVersionNumber(1, 1));
         }
         inst.setExtensions(QRhiVulkanInitParams::preferredInstanceExtensions());
         if (!inst.create()) {

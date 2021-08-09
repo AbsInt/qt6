@@ -109,9 +109,7 @@ namespace TestQDoc {
 */
 
 /*!
-    \deprecated
-
-    Use someFunction() instead.
+    \deprecated [6.0] Use someFunction() instead.
 */
 void Test::deprecatedMember()
 {
@@ -287,7 +285,37 @@ void TestDerived::staticObsoleteMember()
     \nothing
 \endif
 */
+
+/*!
+\if defined(test_template)
+    \macro Q_INVOKABLE
+    \relates TestQDoc::Test
+
+    This is a mock Q_INVOKABLE for the purpose of ensuring QDoc autolink to it
+    as expected.
+\else
+    \nothing
+\endif
+*/
+
 } // namespace TestQDoc
+
+
+/*!
+    \namespace CrossModuleRef
+    \inmodule TestCPP
+    \brief Namespace that has documented functions in multiple modules.
+*/
+namespace CrossModuleRef {
+
+/*!
+    Document me!
+*/
+void documentMe()
+{
+}
+
+} // namespace CrossModuleRef
 
 /*!
     \class DontLinkToMe

@@ -1,12 +1,17 @@
-# Generated from quickshapes.pro.
-
 #####################################################################
-## QuickShapes Module:
+## QuickShapesPrivate Module:
 #####################################################################
 
-qt_internal_add_module(QuickShapes
+qt_internal_add_qml_module(QuickShapesPrivate
+    URI "QtQuick.Shapes"
+    VERSION "${PROJECT_VERSION}"
+    PLUGIN_TARGET qmlshapesplugin
+    NO_PLUGIN_OPTIONAL
+    NO_GENERATE_PLUGIN_SOURCE
+    CLASS_NAME QmlShapesPlugin
+    DEPENDENCIES
+        QtQuick
     INTERNAL_MODULE
-    GENERATE_METATYPES
     SOURCES
         qquickshape.cpp qquickshape_p.h
         qquickshape_p_p.h
@@ -20,6 +25,13 @@ qt_internal_add_module(QuickShapes
         Qt::QuickPrivate
 )
 
+# We need to do additional initialization, so we have to provide our own
+# plugin class rather than using the generated one
+qt_internal_extend_target(qmlshapesplugin
+    SOURCES   qquickshapesplugin.cpp
+    LIBRARIES Qt::QuickShapesPrivate
+)
+
 # Resources:
 set(qtquickshapes_resource_files
     "shaders_ng/conicalgradient.frag.qsb"
@@ -30,26 +42,10 @@ set(qtquickshapes_resource_files
     "shaders_ng/radialgradient.vert.qsb"
 )
 
-qt_internal_add_resource(QuickShapes "qtquickshapes"
+qt_internal_add_resource(QuickShapesPrivate "qtquickshapes"
     PREFIX
         "/qt-project.org/shapes"
     FILES
         ${qtquickshapes_resource_files}
 )
 
-
-#### Keys ignored in scope 1:.:.:quickshapes.pro:<TRUE>:
-# QMLTYPES_FILENAME = "plugins.qmltypes"
-# QMLTYPES_INSTALL_DIR = "$$[QT_INSTALL_QML]/QtQuick/Shapes"
-# QML_IMPORT_NAME = "QtQuick.Shapes"
-# QML_IMPORT_VERSION = "$$QT_VERSION"
-
-set_target_properties(QuickShapes PROPERTIES
-    QT_QML_MODULE_INSTALL_QMLTYPES TRUE
-    QT_QML_MODULE_VERSION ${PROJECT_VERSION}
-    QT_QML_MODULE_URI QtQuick.Shapes
-    QT_QMLTYPES_FILENAME plugins.qmltypes
-    QT_QML_MODULE_INSTALL_DIR "${INSTALL_QMLDIR}/QtQuick/Shapes"
-)
-
-qt6_qml_type_registration(QuickShapes)

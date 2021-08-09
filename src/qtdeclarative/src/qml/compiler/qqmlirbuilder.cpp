@@ -1114,6 +1114,12 @@ void IRBuilder::setBindingValue(QV4::CompiledData::Binding *binding, QQmlJS::AST
         if (QQmlJS::AST::StringLiteral *lit = QQmlJS::AST::cast<QQmlJS::AST::StringLiteral *>(expr)) {
             binding->type = QV4::CompiledData::Binding::Type_String;
             binding->stringIndex = registerString(lit->value.toString());
+        } else if (QQmlJS::AST::TemplateLiteral *templateLit = QQmlJS::AST::cast<QQmlJS::AST::TemplateLiteral *>(expr);
+                   templateLit && templateLit->hasNoSubstitution) {
+            // A template literal without substitution is just a string.
+            // With substitution, it could however be an arbitrarily complex expression
+            binding->type = QV4::CompiledData::Binding::Type_String;
+            binding->stringIndex = registerString(templateLit->value.toString());
         } else if (expr->kind == QQmlJS::AST::Node::Kind_TrueLiteral) {
             binding->type = QV4::CompiledData::Binding::Type_Boolean;
             binding->value.b = true;
@@ -1986,8 +1992,6 @@ bool JSCodeGen::compileComponent(int contextObject)
         Q_ASSERT(componentBinding->type == QV4::CompiledData::Binding::Type_Object);
         contextObject = componentBinding->value.objectIndex;
     }
-    for (auto it = obj->inlineComponentsBegin(); it != obj->inlineComponentsEnd(); ++it)
-        compileComponent(it->objectIndex);
 
     return compileJavaScriptCodeInObjectsRecursively(contextObject, contextObject);
 }
@@ -1997,6 +2001,9 @@ bool JSCodeGen::compileJavaScriptCodeInObjectsRecursively(int objectIndex, int s
     QmlIR::Object *object = document->objects.at(objectIndex);
     if (object->flags & QV4::CompiledData::Object::IsComponent && !object->isInlineComponent)
         return true;
+
+    for (auto it = object->inlineComponentsBegin(); it != object->inlineComponentsEnd(); ++it)
+        compileComponent(it->objectIndex);
 
     if (object->functionsAndExpressions->count > 0) {
         QList<QmlIR::CompiledFunctionOrExpression> functionsToCompile;

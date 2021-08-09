@@ -4,13 +4,16 @@
 ## tst_qmltyperegistrar Test:
 #####################################################################
 
-qt_manual_moc(moc_files OUTPUT_MOC_JSON_FILES json_list noextheader) # special case
+qt_manual_moc(moc_files OUTPUT_MOC_JSON_FILES json_list noextheader
+              INCLUDE_DIRECTORY_TARGETS Qt::Qml)
+
 qt_internal_add_test(tst_qmltyperegistrar
     SOURCES
         hppheader.hpp
         # noextheader special case
         tst_qmltyperegistrar.cpp tst_qmltyperegistrar.h
         foo.cpp foo.h
+        ${moc_files}
     INCLUDE_DIRECTORIES
         foreign
     PUBLIC_LIBRARIES
@@ -18,7 +21,6 @@ qt_internal_add_test(tst_qmltyperegistrar
         Qt::Qml
         foreign
 )
-target_compile_definitions(tst_qmltyperegistrar PRIVATE BUILD_WITH_CMAKE) # special case
 
 #### Keys ignored in scope 2:.:.:tst_qmltyperegistrar.pro:<TRUE>:
 # QMLTYPES_FILENAME = "tst_qmltyperegistrar.qmltypes"
@@ -31,12 +33,16 @@ target_compile_definitions(tst_qmltyperegistrar PRIVATE BUILD_WITH_CMAKE) # spec
 ## Scopes:
 #####################################################################
 
+# Simulate conditions that qt6_add_qml_module() would normally set up for us
 set_target_properties(tst_qmltyperegistrar PROPERTIES
     QT_QML_MODULE_VERSION 1.0
-    QT_QML_PAST_MAJOR_VERSIONS 0
+    QT_QML_MODULE_PAST_MAJOR_VERSIONS 0
     QT_QML_MODULE_URI QmlTypeRegistrarTest
-    QT_QMLTYPES_FILENAME tst_qmltyperegistrar.qmltypes
+    QT_QML_MODULE_TYPEINFO tst_qmltyperegistrar.qmltypes
+    QT_QML_MODULE_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
 )
 
-qt6_qml_type_registration(tst_qmltyperegistrar ${json_list}) # special case
+# qt6_add_qml_module() doesn't allow us to pass through MANUAL_MOC_JSON_FILES
+# yet, so we have to call it directly to test that code path for now.
+qt6_qml_type_registration(tst_qmltyperegistrar MANUAL_MOC_JSON_FILES ${json_list})
 add_subdirectory(foreign)

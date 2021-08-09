@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2019 The Qt Company Ltd.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the tools applications of the Qt Toolkit.
@@ -72,7 +72,7 @@ QString WebXMLGenerator::fileExtension() const
     Some pages produce supplementary output while being generated, and that's
     handled here.
 */
-int WebXMLGenerator::generateAtom(const Atom *atom, const Node *relative, CodeMarker *marker)
+qsizetype WebXMLGenerator::generateAtom(const Atom *atom, const Node *relative, CodeMarker *marker)
 {
     if (m_supplement && currentWriter)
         addAtomElements(*currentWriter.data(), atom, relative, marker);
@@ -125,13 +125,13 @@ void WebXMLGenerator::generateExampleFilePage(const Node *en, const QString &fil
     QByteArray data;
     QXmlStreamWriter writer(&data);
     writer.setAutoFormatting(true);
-    beginFilePage(en, linkForExampleFile(file, en, "webxml"));
+    beginFilePage(en, linkForExampleFile(file, "webxml"));
     writer.writeStartDocument();
     writer.writeStartElement("WebXML");
     writer.writeStartElement("document");
     writer.writeStartElement("page");
     writer.writeAttribute("name", file);
-    writer.writeAttribute("href", linkForExampleFile(file, en));
+    writer.writeAttribute("href", linkForExampleFile(file));
     QString title = exampleFileTitle(static_cast<const ExampleNode *>(en), file);
     writer.writeAttribute("title", title);
     writer.writeAttribute("fulltitle", title);
@@ -302,8 +302,8 @@ const Atom *WebXMLGenerator::addAtomElements(QXmlStreamWriter &writer, const Ato
         if (!m_inLink && !m_inSectionHeading) {
             const Node *node = nullptr;
             QString link = getAutoLink(atom, relative, &node, Node::API);
-            if (!link.isEmpty() && node && node->status() == Node::Obsolete
-                && relative->parent() != node && !relative->isObsolete()) {
+            if (!link.isEmpty() && node && node->isDeprecated()
+                && relative->parent() != node && !relative->isDeprecated()) {
                 link.clear();
             }
             if (node) {
@@ -432,7 +432,7 @@ const Atom *WebXMLGenerator::addAtomElements(QXmlStreamWriter &writer, const Ato
 
     case Atom::ExampleFileLink: {
         if (!m_inLink) {
-            QString link = linkForExampleFile(atom->string(), relative);
+            QString link = linkForExampleFile(atom->string());
             if (!link.isEmpty())
                 startLink(writer, atom, relative, link);
         }

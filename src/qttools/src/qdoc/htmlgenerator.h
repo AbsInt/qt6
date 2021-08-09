@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2019 The Qt Company Ltd.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the tools applications of the Qt Toolkit.
@@ -60,7 +60,7 @@ public:
 
 protected:
     void generateExampleFilePage(const Node *en, const QString &file, CodeMarker *marker) override;
-    int generateAtom(const Atom *atom, const Node *relative, CodeMarker *marker) override;
+    qsizetype generateAtom(const Atom *atom, const Node *relative, CodeMarker *marker) override;
     void generateCppReferencePage(Aggregate *aggregate, CodeMarker *marker) override;
     void generateProxyPage(Aggregate *aggregate, CodeMarker *marker) override;
     void generateQmlTypePage(QmlTypeNode *qcn, CodeMarker *marker) override;
@@ -68,8 +68,7 @@ protected:
     void generatePageNode(PageNode *pn, CodeMarker *marker) override;
     void generateCollectionNode(CollectionNode *cn, CodeMarker *marker) override;
     void generateGenericCollectionPage(CollectionNode *cn, CodeMarker *marker) override;
-    QString fileExtension() const override;
-    void generateKeywordAnchors(const Node *node);
+    [[nodiscard]] QString fileExtension() const override;
 
 private:
     enum SubTitleSize { SmallSubTitle, LargeSubTitle };
@@ -108,7 +107,6 @@ private:
     void generateQmlSummary(const NodeVector &members, const Node *relative, CodeMarker *marker);
     void generateQmlItem(const Node *node, const Node *relative, CodeMarker *marker, bool summary);
     void generateDetailedQmlMember(Node *node, const Aggregate *relative, CodeMarker *marker);
-    void generateQmlInherits(QmlTypeNode *qcn, CodeMarker *marker) override;
 
     void generateSection(const NodeVector &nv, const Node *relative, CodeMarker *marker);
     void generateSynopsis(const Node *node, const Node *relative, CodeMarker *marker,
@@ -148,6 +146,10 @@ private:
     void generateTheTable(const QStringList &requisiteOrder, const QMap<QString, Text> &requisites,
                           const QString &headerText, const Aggregate *aggregate,
                           CodeMarker *marker);
+    inline void openUnorderedList();
+    inline void closeUnorderedList();
+
+    static bool s_inUnorderedList;
 
     int m_codeIndent { 0 };
     QString m_codePrefix {};
@@ -169,7 +171,6 @@ private:
     QString m_projectUrl {};
     QString m_navigationLinks {};
     QString m_navigationSeparator {};
-    static int id;
     QString m_homepage {};
     QString m_hometitle {};
     QString m_landingpage {};
@@ -184,8 +185,6 @@ private:
 
     Config *config { nullptr };
 
-public:
-    static QString divNavTop;
 };
 
 #define HTMLGENERATOR_ADDRESS "address"

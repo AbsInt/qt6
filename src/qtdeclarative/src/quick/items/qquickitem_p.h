@@ -59,6 +59,7 @@
 #include <QtQuick/private/qquickstate_p.h>
 #include <QtQuick/private/qquickpaletteproviderprivatebase_p.h>
 #include <QtQuick/private/qquickwindow_p.h>
+#include <QtCore/private/qproperty_p.h>
 
 #if QT_CONFIG(quick_shadereffect)
 #include <QtQuick/private/qquickshadereffectsource_p.h>
@@ -417,6 +418,7 @@ public:
     QLazilyAllocated<ExtraData, ExtraDataTags> extra;
     // Contains mask
     QPointer<QObject> mask;
+    QPointer<QQuickItem> quickMask;
     // If the mask is an Item, inform it that it's being used as a mask (true) or is no longer being used (false)
     virtual void registerAsContainmentMask(QQuickItem * /* maskedItem */, bool /* set */) { }
 
@@ -440,8 +442,8 @@ public:
 
     // Bit 0
     quint32 flags:5;
-    bool widthValid:1;
-    bool heightValid:1;
+    bool widthValidFlag:1;
+    bool heightValidFlag:1;
     bool componentComplete:1;
     bool keepMouse:1;
     bool keepTouch:1;
@@ -562,12 +564,23 @@ public:
 
     static bool canAcceptTabFocus(QQuickItem *item);
 
-    qreal x;
-    qreal y;
-    qreal width;
-    qreal height;
+    void setX(qreal x) {q_func()->setX(x);}
+    void xChanged() {q_func()->xChanged();}
+    Q_OBJECT_COMPAT_PROPERTY(QQuickItemPrivate, qreal, x, &QQuickItemPrivate::setX, &QQuickItemPrivate::xChanged);
+    void setY(qreal y) {q_func()->setY(y);}
+    void yChanged() {q_func()->yChanged();}
+    Q_OBJECT_COMPAT_PROPERTY(QQuickItemPrivate, qreal, y, &QQuickItemPrivate::setY, &QQuickItemPrivate::yChanged);
+    void setWidth(qreal width) {q_func()->setWidth(width);}
+    void widthChanged() {q_func()->widthChanged();}
+    Q_OBJECT_COMPAT_PROPERTY(QQuickItemPrivate, qreal, width, &QQuickItemPrivate::setWidth, &QQuickItemPrivate::widthChanged);
+    void setHeight(qreal height) {q_func()->setHeight(height);}
+    void heightChanged() {q_func()->heightChanged();}
+    Q_OBJECT_COMPAT_PROPERTY(QQuickItemPrivate, qreal, height, &QQuickItemPrivate::setHeight, &QQuickItemPrivate::heightChanged);
     qreal implicitWidth;
     qreal implicitHeight;
+
+    bool widthValid() const { return widthValidFlag || (width.hasBinding() && !QQmlPropertyBinding::isUndefined(width.binding()) ); }
+    bool heightValid() const { return heightValidFlag || (height.hasBinding() && !QQmlPropertyBinding::isUndefined(height.binding()) ); }
 
     qreal baselineOffset;
 

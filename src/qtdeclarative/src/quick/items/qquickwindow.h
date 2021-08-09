@@ -48,6 +48,7 @@
 #include <QtGui/qevent.h>
 #include <QtQml/qqml.h>
 #include <QtQml/qqmldebug.h>
+#include <QtQml/qqmlinfo.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -64,6 +65,7 @@ class QQuickRenderControl;
 class QSGRectangleNode;
 class QSGImageNode;
 class QSGNinePatchNode;
+class QQuickPalette;
 class QQuickRenderTarget;
 class QQuickGraphicsDevice;
 class QQuickGraphicsConfiguration;
@@ -75,6 +77,8 @@ class Q_QUICK_EXPORT QQuickWindow : public QWindow
     Q_PROPERTY(QColor color READ color WRITE setColor NOTIFY colorChanged)
     Q_PROPERTY(QQuickItem* contentItem READ contentItem CONSTANT)
     Q_PROPERTY(QQuickItem* activeFocusItem READ activeFocusItem NOTIFY activeFocusItemChanged REVISION(2, 1))
+    Q_PRIVATE_PROPERTY(QQuickWindow::d_func(), QQuickPalette *palette READ palette WRITE setPalette
+        RESET resetPalette NOTIFY paletteChanged REVISION(6, 2))
     QDOC_PROPERTY(QWindow* transientParent READ transientParent WRITE setTransientParent NOTIFY transientParentChanged)
     Q_CLASSINFO("DefaultProperty", "data")
     Q_DECLARE_PRIVATE(QQuickWindow)
@@ -256,6 +260,14 @@ private Q_SLOTS:
     void runJobsAfterSwap();
     void handleApplicationStateChanged(Qt::ApplicationState state);
 private:
+#ifndef QT_NO_DEBUG_STREAM
+    inline friend QQmlInfo operator<<(QQmlInfo info, const QQuickWindow *window)
+    {
+        info.QDebug::operator<<(window);
+        return info;
+    }
+#endif
+
     friend class QQuickItem;
     friend class QQuickWidget;
     friend class QQuickRenderControl;
@@ -267,6 +279,12 @@ private:
 
 #ifndef QT_NO_DEBUG_STREAM
 QDebug Q_QUICK_EXPORT operator<<(QDebug debug, const QQuickWindow *item);
+
+inline QQmlInfo operator<<(QQmlInfo info, const QWindow *window)
+{
+    info.QDebug::operator<<(window);
+    return info;
+}
 #endif
 
 QT_END_NAMESPACE

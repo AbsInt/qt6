@@ -103,7 +103,7 @@ void tst_QTimeZone::printTimeZone(const QTimeZone &tz)
     qDebug() << "Is Valid                = " << tz.isValid();
     qDebug() << "";
     qDebug() << "Zone ID                 = " << tz.id();
-    qDebug() << "Country                 = " << QLocale::countryToString(tz.country());
+    qDebug() << "Territory               = " << QLocale::territoryToString(tz.territory());
     qDebug() << "Comment                 = " << tz.comment();
     qDebug() << "";
     qDebug() << "Locale                  = " << QLocale().name();
@@ -178,7 +178,7 @@ void tst_QTimeZone::createTest()
     QCOMPARE((tz == other), false);
     QCOMPARE((tz != other), true);
 
-    QCOMPARE(tz.country(), QLocale::NewZealand);
+    QCOMPARE(tz.territory(), QLocale::NewZealand);
 
     QDateTime jan = QDateTime(QDate(2012, 1, 1), QTime(0, 0, 0), Qt::UTC);
     QDateTime jun = QDateTime(QDate(2012, 6, 1), QTime(0, 0, 0), Qt::UTC);
@@ -275,7 +275,7 @@ void tst_QTimeZone::nullTest()
     QCOMPARE(utc.isValid(), false);
 
     QCOMPARE(nullTz1.id(), QByteArray());
-    QCOMPARE(nullTz1.country(), QLocale::AnyCountry);
+    QCOMPARE(nullTz1.territory(), QLocale::AnyTerritory);
     QCOMPARE(nullTz1.comment(), QString());
 
     QDateTime jan = QDateTime(QDate(2012, 1, 1), QTime(0, 0, 0), Qt::UTC);
@@ -326,6 +326,18 @@ void tst_QTimeZone::systemZone()
     QVERIFY(zone.isValid());
     QCOMPARE(zone.id(), QTimeZone::systemTimeZoneId());
     QCOMPARE(zone, QTimeZone(QTimeZone::systemTimeZoneId()));
+    // Check it behaves the same as local-time:
+    const QDate dates[] = {
+        QDate::fromJulianDay(0), // far in the distant past (LMT)
+        QDate(1625, 6, 8), // Before time-zones (date of Cassini's birth)
+        QDate(1901, 12, 13), // Last day before 32-bit time_t's range
+        QDate(1969, 12, 31), // Last day before the epoch
+        QDate(1970, 0, 0), // Start of epoch
+        QDate(2000, 2, 29), // An anomalous leap day
+        QDate(2038, 1, 20) // First day after 32-bit time_t's range
+    };
+    for (const auto &date : dates)
+        QCOMPARE(date.startOfDay(Qt::LocalTime), date.startOfDay(zone));
 }
 
 void tst_QTimeZone::dataStreamTest()
@@ -344,7 +356,7 @@ void tst_QTimeZone::dataStreamTest()
     }
     QCOMPARE(tz2.id(), QByteArray("QST"));
     QCOMPARE(tz2.comment(), QString("Qt Testing"));
-    QCOMPARE(tz2.country(), QLocale::Norway);
+    QCOMPARE(tz2.territory(), QLocale::Norway);
     QCOMPARE(tz2.abbreviation(QDateTime::currentDateTime()), QString("QST"));
     QCOMPARE(tz2.displayName(QTimeZone::StandardTime, QTimeZone::LongName, QLocale()),
              QString("Qt Standard Time"));
@@ -390,7 +402,7 @@ void tst_QTimeZone::isTimeZoneIdAvailable()
     const QList<QByteArray> available = QTimeZone::availableTimeZoneIds();
     for (const QByteArray &id : available) {
         QVERIFY(QTimeZone::isTimeZoneIdAvailable(id));
-        QVERIFY(QTimeZone(id).isValid());
+        QVERIFY2(QTimeZone(id).isValid(), id);
     }
 }
 
@@ -518,6 +530,10 @@ void tst_QTimeZone::specificTransition_data()
     QTest::addColumn<int>("offset");
     QTest::addColumn<int>("stdoff");
     QTest::addColumn<int>("dstoff");
+#ifdef Q_OS_ANDROID
+    if (!QTimeZone("Europe/Moscow").hasTransitions())
+        QSKIP("Android time-zone back-end has no transition data");
+#endif
 
     // Moscow ditched DST on 2010-10-31 but has since changed standard offset twice.
 #ifdef USING_WIN_TZ
@@ -574,7 +590,7 @@ void tst_QTimeZone::transitionEachZone_data()
     QTest::addColumn<int>("start");
     QTest::addColumn<int>("stop");
 
-    struct {
+    const struct {
         qint64 baseSecs;
         int start, stop;
         int year;
@@ -584,7 +600,7 @@ void tst_QTimeZone::transitionEachZone_data()
     };
 
     const auto zones = QTimeZone::availableTimeZoneIds();
-    for (int k = sizeof(table) / sizeof(table[0]); k-- > 0; ) {
+    for (int k = std::size(table); k-- > 0; ) {
         for (const QByteArray &zone : zones) {
             const QString name = QString::asprintf("%s@%d", zone.constData(), table[k].year);
             QTest::newRow(name.toUtf8().constData())
@@ -600,25 +616,31 @@ void tst_QTimeZone::transitionEachZone()
 {
     // Regression test: round-trip fromMsecs/toMSecs should be idempotent; but
     // various zones failed during fall-back transitions.
-    QFETCH(QByteArray, zone);
-    QFETCH(qint64, secs);
-    QFETCH(int, start);
-    QFETCH(int, stop);
-    QTimeZone named(zone);
+    QFETCH(const QByteArray, zone);
+    QFETCH(const qint64, secs);
+    QFETCH(const int, start);
+    QFETCH(const int, stop);
+    const QTimeZone named(zone);
+    if (!named.isValid())
+        QSKIP("Supposedly available zone is not valid");
+    if (named.id() != zone)
+        QSKIP("Supposedly available zone's id does not match");
 
     for (int i = start; i < stop; i++) {
 #ifdef USING_WIN_TZ
         // See QTBUG-64985: MS's TZ APIs' misdescription of Europe/Samara leads
         // to mis-disambiguation of its fall-back here.
-        if (zone == "Europe/Samara" && i == -3) {
+        if (zone == "Europe/Samara" && i == -3)
             continue;
-        }
 #endif
-        qint64 here = secs + i * 3600;
-        QDateTime when = QDateTime::fromMSecsSinceEpoch(here * 1000, named);
-        qint64 stamp = when.toMSecsSinceEpoch();
-        if (here * 1000 != stamp) // (The +1 is due to using *1*:30 as baseSecs.)
-            qDebug() << "Failing for" << zone << "at half past" << (i + 1) << "UTC";
+        const qint64 here = secs + i * 3600;
+        const QDateTime when = QDateTime::fromSecsSinceEpoch(here, named);
+        const qint64 stamp = when.toMSecsSinceEpoch();
+        if (here * 1000 != stamp) {
+            // (The +1 is due to using _1_:30 as baseSecs.)
+            qDebug("Failing at half past %d UTC (offset %d in %s)", i + 1, when.offsetFromUtc(),
+                   QLocale::territoryToString(named.territory()).toUtf8().constData());
+        }
         QCOMPARE(stamp % 1000, 0);
         QCOMPARE(here - stamp / 1000, 0);
     }
@@ -707,7 +729,7 @@ void tst_QTimeZone::stressTest()
         QCOMPARE(testZone.isValid(), true);
         QCOMPARE(testZone.id(), id);
         QDateTime testDate = QDateTime(QDate(2015, 1, 1), QTime(0, 0, 0), Qt::UTC);
-        testZone.country();
+        testZone.territory();
         testZone.comment();
         testZone.displayName(testDate);
         testZone.displayName(QTimeZone::DaylightTime);
@@ -758,7 +780,7 @@ void tst_QTimeZone::windowsId()
     USA         "America/Chicago America/Indiana/Knox America/Indiana/Tell_City America/Menominee"
                 "America/North_Dakota/Beulah America/North_Dakota/Center"
                 "America/North_Dakota/New_Salem"
-    AnyCountry  "CST6CDT"
+    AnyTerritory  "CST6CDT"
 */
     QCOMPARE(QTimeZone::ianaIdToWindowsId("America/Chicago"),
              QByteArray("Central Standard Time"));
@@ -775,7 +797,7 @@ void tst_QTimeZone::windowsId()
              QByteArray("America/Chicago"));
     QCOMPARE(QTimeZone::windowsIdToDefaultIanaId("Central Standard Time", QLocale::Canada),
              QByteArray("America/Winnipeg"));
-    QCOMPARE(QTimeZone::windowsIdToDefaultIanaId("Central Standard Time", QLocale::AnyCountry),
+    QCOMPARE(QTimeZone::windowsIdToDefaultIanaId("Central Standard Time", QLocale::AnyTerritory),
              QByteArray("CST6CDT"));
     QCOMPARE(QTimeZone::windowsIdToDefaultIanaId(QByteArray()), QByteArray());
 
@@ -812,13 +834,13 @@ void tst_QTimeZone::windowsId()
 
     list.clear();
     list << "CST6CDT";
-    QCOMPARE(QTimeZone::windowsIdToIanaIds("Central Standard Time", QLocale::AnyCountry),
+    QCOMPARE(QTimeZone::windowsIdToIanaIds("Central Standard Time", QLocale::AnyTerritory),
              list);
 
     // Check no windowsId return empty
     list.clear();
     QCOMPARE(QTimeZone::windowsIdToIanaIds(QByteArray()), list);
-    QCOMPARE(QTimeZone::windowsIdToIanaIds(QByteArray(), QLocale::AnyCountry), list);
+    QCOMPARE(QTimeZone::windowsIdToIanaIds(QByteArray(), QLocale::AnyTerritory), list);
 }
 
 void tst_QTimeZone::isValidId_data()
@@ -971,10 +993,13 @@ void tst_QTimeZone::malformed()
     const QDateTime now = QDateTime::currentDateTime();
     QTimeZone barf("QUT4tCZ0 , /");
     if (barf.isValid())
-        barf.offsetFromUtc(now);
+        QCOMPARE(barf.offsetFromUtc(now), 0);
     barf = QTimeZone("QtC+09,,MA");
     if (barf.isValid())
-        barf.offsetFromUtc(now);
+        QCOMPARE(barf.offsetFromUtc(now), 0);
+    barf = QTimeZone("UTCC+14:00,-,");
+    if (barf.isValid())
+        QCOMPARE(barf.daylightTimeOffset(now), -14 * 3600);
 }
 
 void tst_QTimeZone::utcTest()
@@ -984,7 +1009,7 @@ void tst_QTimeZone::utcTest()
     QUtcTimeZonePrivate tzp;
     QCOMPARE(tzp.isValid(),   true);
     QCOMPARE(tzp.id(), QByteArray("UTC"));
-    QCOMPARE(tzp.country(), QLocale::AnyCountry);
+    QCOMPARE(tzp.territory(), QLocale::AnyTerritory);
     QCOMPARE(tzp.abbreviation(0), QString("UTC"));
     QCOMPARE(tzp.displayName(QTimeZone::StandardTime, QTimeZone::LongName, QLocale()), QString("UTC"));
     QCOMPARE(tzp.offsetFromUtc(0), 0);
@@ -1025,7 +1050,7 @@ void tst_QTimeZone::utcTest()
     QCOMPARE(tz.isValid(),   true);
     QCOMPARE(tz.id(), QByteArray("QST"));
     QCOMPARE(tz.comment(), QString("Qt Testing"));
-    QCOMPARE(tz.country(), QLocale::Norway);
+    QCOMPARE(tz.territory(), QLocale::Norway);
     QCOMPARE(tz.abbreviation(now), QString("QST"));
     QCOMPARE(tz.displayName(QTimeZone::StandardTime, QTimeZone::LongName, QLocale()),
              QString("Qt Standard Time"));
@@ -1084,6 +1109,8 @@ void tst_QTimeZone::icuTest()
     }
 
     testCetPrivate(tzp);
+    if (QTest::currentTestFailed())
+        return;
     testEpochTranPrivate(QIcuTimeZonePrivate("America/Toronto"));
 #endif // icu
 }
@@ -1108,8 +1135,27 @@ void tst_QTimeZone::tzTest()
     QVERIFY(tzp.isValid());
 
     // Test POSIX-format value for $TZ:
-    QTzTimeZonePrivate tzposix("MET-1METDST-2,M3.5.0/02:00:00,M10.5.0/03:00:00");
+    QTimeZone tzposix("MET-1METDST-2,M3.5.0/02:00:00,M10.5.0/03:00:00");
     QVERIFY(tzposix.isValid());
+    QVERIFY(tzposix.hasDaylightTime());
+
+    // RHEL has been seen with this as Africa/Casablanca's POSIX rule:
+    QTzTimeZonePrivate permaDst("<+00>0<+01>,0/0,J365/25");
+    const QTimeZone utcP1("UTC+01:00"); // Should always have same offset as permaDst
+    QVERIFY(permaDst.isValid());
+    QVERIFY(permaDst.hasDaylightTime());
+    QVERIFY(permaDst.isDaylightTime(QDate(2020, 1, 1).startOfDay(utcP1).toMSecsSinceEpoch()));
+    QVERIFY(permaDst.isDaylightTime(QDate(2020, 12, 31).endOfDay(utcP1).toMSecsSinceEpoch()));
+    // Note that the final /25 could be misunderstood as putting a fall-back at
+    // 1am on the next year's Jan 1st; check we don't do that:
+    QVERIFY(permaDst.isDaylightTime(
+                QDateTime(QDate(2020, 1, 1), QTime(1, 30), utcP1).toMSecsSinceEpoch()));
+    // It shouldn't have any transitions. QTimeZone::hasTransitions() only says
+    // whether the backend supports them, so ask for transitions in a wide
+    // enough interval that one would show up, if there are any:
+    QVERIFY(permaDst.transitions(QDate(2015, 1, 1).startOfDay(Qt::UTC).toMSecsSinceEpoch(),
+                                 QDate(2020, 1, 1).startOfDay(Qt::UTC).toMSecsSinceEpoch()
+                                ).isEmpty());
 
     QTimeZone tzBrazil("BRT+3"); // parts of Northern Brazil, as a POSIX rule
     QVERIFY(tzBrazil.isValid());
@@ -1166,7 +1212,11 @@ void tst_QTimeZone::tzTest()
     }
 
     testCetPrivate(tzp);
+    if (QTest::currentTestFailed())
+        return;
     testEpochTranPrivate(QTzTimeZonePrivate("America/Toronto"));
+    if (QTest::currentTestFailed())
+        return;
 
     // Test first and last transition rule
     // Warning: This could vary depending on age of TZ file!
@@ -1326,6 +1376,8 @@ void tst_QTimeZone::macTest()
     }
 
     testCetPrivate(tzp);
+    if (QTest::currentTestFailed())
+        return;
     testEpochTranPrivate(QMacTimeZonePrivate("America/Toronto"));
 #endif // QT_BUILD_INTERNAL && Q_OS_DARWIN
 }
@@ -1392,6 +1444,8 @@ void tst_QTimeZone::winTest()
     }
 
     testCetPrivate(tzp);
+    if (QTest::currentTestFailed())
+        return;
     testEpochTranPrivate(QWinTimeZonePrivate("America/Toronto"));
 #endif // QT_BUILD_INTERNAL && USING_WIN_TZ
 }

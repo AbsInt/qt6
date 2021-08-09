@@ -66,10 +66,40 @@ public:
           startLine(line), startColumn(column)
     { }
 
-    bool isValid() const { return length != 0; }
+    bool isValid() const { return *this != SourceLocation(); }
 
     quint32 begin() const { return offset; }
     quint32 end() const { return offset + length; }
+
+    // Returns a zero length location at the start of the current one.
+    SourceLocation startZeroLengthLocation() const
+    {
+        return SourceLocation(offset, 0, startLine, startColumn);
+    }
+    // Returns a zero length location at the end of the current one.
+    SourceLocation endZeroLengthLocation(QStringView text) const
+    {
+        quint32 i = offset;
+        quint32 endLine = startLine;
+        quint32 endColumn = startColumn;
+        while (i < end()) {
+            QChar c = text.at(i);
+            switch (c.unicode()) {
+            case '\n':
+                if (i + 1 < end() && text.at(i + 1) == QLatin1Char('\r'))
+                    ++i;
+                Q_FALLTHROUGH();
+            case '\r':
+                ++endLine;
+                endColumn = 1;
+                break;
+            default:
+                ++endColumn;
+            }
+            ++i;
+        }
+        return SourceLocation(offset + length, 0, endLine, endColumn);
+    }
 
 // attributes
     // ### encode
@@ -88,6 +118,21 @@ public:
     {
         return a.offset == b.offset && a.length == b.length
                 && a.startLine == b.startLine && a.startColumn == b.startColumn;
+    }
+
+    friend bool operator!=(const SourceLocation &a, const SourceLocation &b) { return !(a == b); }
+
+    // Returns a source location starting at the beginning of l1, l2 and ending at the end of them.
+    // Ignores invalid source locations.
+    friend SourceLocation combine(const SourceLocation &l1, const SourceLocation &l2) {
+        quint32 e = qMax(l1.end(), l2.end());
+        SourceLocation res;
+        if (l1.offset <= l2.offset)
+            res = (l1.isValid() ? l1 : l2);
+        else
+            res = (l2.isValid() ? l2 : l1);
+        res.length = e - res.offset;
+        return res;
     }
 };
 

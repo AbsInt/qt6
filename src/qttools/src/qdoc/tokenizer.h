@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2019 The Qt Company Ltd.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the tools applications of the Qt Toolkit.
@@ -25,10 +25,6 @@
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
-
-/*
-  tokenizer.h
-*/
 
 #ifndef TOKENIZER_H
 #define TOKENIZER_H
@@ -81,57 +77,16 @@ enum {
     Tok_class,
     Tok_const,
     Tok_double,
-    Tok_enum,
-    Tok_explicit,
-    Tok_friend,
-    Tok_inline,
     Tok_int,
     Tok_long,
-    Tok_namespace,
     Tok_operator,
-    Tok_private,
-    Tok_protected,
-    Tok_public,
     Tok_short,
-    Tok_signals,
     Tok_signed,
-    Tok_slots,
-    Tok_static,
-    Tok_struct,
-    Tok_template,
-    Tok_typedef,
     Tok_typename,
-    Tok_union,
     Tok_unsigned,
-    Tok_using,
-    Tok_virtual,
     Tok_void,
     Tok_volatile,
     Tok_int64,
-    Tok_default,
-    Tok_delete,
-    Tok_final,
-    Tok_override,
-    Tok_Q_OBJECT,
-    Tok_Q_OVERRIDE,
-    Tok_Q_PROPERTY,
-    Tok_Q_PRIVATE_PROPERTY,
-    Tok_Q_DECLARE_SEQUENTIAL_ITERATOR,
-    Tok_Q_DECLARE_MUTABLE_SEQUENTIAL_ITERATOR,
-    Tok_Q_DECLARE_ASSOCIATIVE_ITERATOR,
-    Tok_Q_DECLARE_MUTABLE_ASSOCIATIVE_ITERATOR,
-    Tok_Q_DECLARE_FLAGS,
-    Tok_Q_SIGNALS,
-    Tok_Q_SLOTS,
-    Tok_QT_COMPAT,
-    Tok_QT_COMPAT_CONSTRUCTOR,
-    Tok_QT_DEPRECATED,
-    Tok_QT_MOC_COMPAT,
-    Tok_QT_MODULE,
-    Tok_QT3_SUPPORT,
-    Tok_QT3_SUPPORT_CONSTRUCTOR,
-    Tok_QT3_MOC_SUPPORT,
-    Tok_QDOC_PROPERTY,
     Tok_QPrivateSignal,
     Tok_FirstKeyword = Tok_char,
     Tok_LastKeyword = Tok_QPrivateSignal
@@ -149,22 +104,20 @@ enum {
 class Tokenizer
 {
 public:
-    Tokenizer(const Location &loc, const QByteArray &in);
+    Tokenizer(const Location &loc, QByteArray in);
     Tokenizer(const Location &loc, QFile &file);
 
     ~Tokenizer();
 
     int getToken();
-    void setParsingFnOrMacro(bool macro) { parsingMacro = macro; }
+    void setParsingFnOrMacro(bool macro) { m_parsingMacro = macro; }
 
-    const Location &location() const { return yyTokLoc; }
-    QString previousLexeme() const;
-    QString lexeme() const;
-    QString version() const { return yyVersion; }
-    int braceDepth() const { return yyBraceDepth; }
-    int parenDepth() const { return yyParenDepth; }
-    int bracketDepth() const { return yyBracketDepth; }
-    Location &tokenLocation() { return yyTokLoc; }
+    [[nodiscard]] const Location &location() const { return m_tokLoc; }
+    [[nodiscard]] QString previousLexeme() const;
+    [[nodiscard]] QString lexeme() const;
+    [[nodiscard]] QString version() const { return m_version; }
+    [[nodiscard]] int parenDepth() const { return m_parenDepth; }
+    [[nodiscard]] int bracketDepth() const { return m_bracketDepth; }
 
     static void initialize();
     static void terminate();
@@ -180,17 +133,17 @@ private:
     */
     enum { yyLexBufSize = 524288 };
 
-    int getch() { return yyPos == yyIn.size() ? EOF : yyIn[yyPos++]; }
+    int getch() { return m_pos == m_in.size() ? EOF : m_in[m_pos++]; }
 
     inline int getChar()
     {
-        if (yyCh == EOF)
+        if (m_ch == EOF)
             return EOF;
-        if (yyLexLen < yyLexBufSize - 1) {
-            yyLex[yyLexLen++] = (char)yyCh;
-            yyLex[yyLexLen] = '\0';
+        if (m_lexLen < yyLexBufSize - 1) {
+            m_lex[m_lexLen++] = (char)m_ch;
+            m_lex[m_lexLen] = '\0';
         }
-        yyCurLoc.advance(QChar(yyCh));
+        m_curLoc.advance(QChar(m_ch));
         int ch = getch();
         if (ch == EOF)
             return EOF;
@@ -204,26 +157,26 @@ private:
     void pushSkipping(bool skip);
     bool popSkipping();
 
-    Location yyTokLoc;
-    Location yyCurLoc;
-    char *yyLexBuf1;
-    char *yyLexBuf2;
-    char *yyPrevLex;
-    char *yyLex;
-    size_t yyLexLen;
-    QStack<bool> yyPreprocessorSkipping;
-    int yyNumPreprocessorSkipping;
-    int yyBraceDepth;
-    int yyParenDepth;
-    int yyBracketDepth;
-    int yyCh;
+    Location m_tokLoc;
+    Location m_curLoc;
+    char *m_lexBuf1 { nullptr };
+    char *m_lexBuf2 { nullptr };
+    char *m_prevLex { nullptr };
+    char *m_lex { nullptr };
+    size_t m_lexLen {};
+    QStack<bool> m_preprocessorSkipping;
+    int m_numPreprocessorSkipping {};
+    int m_braceDepth {};
+    int m_parenDepth {};
+    int m_bracketDepth {};
+    int m_ch {};
 
-    QString yyVersion;
-    bool parsingMacro;
+    QString m_version {};
+    bool m_parsingMacro {};
 
 protected:
-    QByteArray yyIn;
-    int yyPos;
+    QByteArray m_in {};
+    int m_pos {};
 };
 
 QT_END_NAMESPACE

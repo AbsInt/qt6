@@ -50,11 +50,9 @@ public:
 
 private:
     void writeClassProperties(const QmlTypesClassDescription &collector);
-    void writeType(const QJsonObject &property, const QString &key, bool isReadonly,
-                   bool parsePointer);
-    void writeProperties(const QJsonArray &properties, QSet<QString> &notifySignals);
-    void writeMethods(const QJsonArray &methods, const QString &type,
-                      const QSet<QString> &notifySignals = QSet<QString>());
+    void writeType(const QJsonObject &property, const QString &key, bool parsePointer);
+    void writeProperties(const QJsonArray &properties);
+    void writeMethods(const QJsonArray &methods, const QString &type);
     void writeEnums(const QJsonArray &enums);
     void writeComponents();
 

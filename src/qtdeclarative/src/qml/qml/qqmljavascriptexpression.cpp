@@ -172,98 +172,149 @@ void QQmlJavaScriptExpression::setContext(const QQmlRefPointer<QQmlContextData> 
         context->addExpression(this);
 }
 
-QV4::Function *QQmlJavaScriptExpression::function() const
-{
-    return m_v4Function;
-}
-
 void QQmlJavaScriptExpression::refresh()
 {
 }
 
 QV4::ReturnedValue QQmlJavaScriptExpression::evaluate(bool *isUndefined)
 {
-    QV4::ExecutionEngine *v4 = m_context->engine()->handle();
-    QV4::Scope scope(v4);
-    QV4::JSCallData jsCall(scope);
-
-    return evaluate(jsCall.callData(), isUndefined);
-}
-
-QV4::ReturnedValue QQmlJavaScriptExpression::evaluate(QV4::CallData *callData, bool *isUndefined)
-{
-    Q_ASSERT(m_context && m_context->engine());
-
-    QV4::Function *v4Function = function();
-    if (!v4Function) {
+    QQmlEngine *qmlengine = engine();
+    if (!qmlengine) {
         if (isUndefined)
             *isUndefined = true;
         return QV4::Encode::undefined();
     }
 
-    QQmlEnginePrivate *ep = QQmlEnginePrivate::get(m_context->engine());
+    QV4::Scope scope(qmlengine->handle());
+    QV4::JSCallArguments jsCall(scope);
+
+    return evaluate(jsCall.callData(scope), isUndefined);
+}
+
+class QQmlJavaScriptExpressionCapture
+{
+    Q_DISABLE_COPY_MOVE(QQmlJavaScriptExpressionCapture)
+public:
+    QQmlJavaScriptExpressionCapture(QQmlJavaScriptExpression *expression, QQmlEngine *engine)
+        : watcher(expression)
+        , capture(engine, expression, &watcher)
+        , ep(QQmlEnginePrivate::get(engine))
+    {
+        Q_ASSERT(expression->notifyOnValueChanged() || expression->activeGuards.isEmpty());
+
+        lastPropertyCapture = ep->propertyCapture;
+        ep->propertyCapture = expression->notifyOnValueChanged() ? &capture : nullptr;
+
+        if (expression->notifyOnValueChanged())
+            capture.guards.copyAndClearPrepend(expression->activeGuards);
+    }
+
+    ~QQmlJavaScriptExpressionCapture()
+    {
+        if (capture.errorString) {
+            for (int ii = 0; ii < capture.errorString->count(); ++ii)
+                qWarning("%s", qPrintable(capture.errorString->at(ii)));
+            delete capture.errorString;
+            capture.errorString = nullptr;
+        }
+
+        while (QQmlJavaScriptExpressionGuard *g = capture.guards.takeFirst())
+            g->Delete();
+
+        if (!watcher.wasDeleted())
+            capture.expression->setTranslationsCaptured(capture.translationCaptured);
+
+        ep->propertyCapture = lastPropertyCapture;
+    }
+
+    bool catchException(const QV4::Scope &scope) const
+    {
+        if (scope.hasException()) {
+            if (watcher.wasDeleted())
+                scope.engine->catchException(); // ignore exception
+            else
+                capture.expression->delayedError()->catchJavaScriptException(scope.engine);
+            return true;
+        }
+
+        if (!watcher.wasDeleted() && capture.expression->hasDelayedError())
+            capture.expression->delayedError()->clearError();
+        return false;
+    }
+
+private:
+    QQmlJavaScriptExpression::DeleteWatcher watcher;
+    QQmlPropertyCapture capture;
+    QQmlEnginePrivate *ep;
+    QQmlPropertyCapture *lastPropertyCapture;
+};
+
+static inline QV4::ReturnedValue thisObject(QObject *scopeObject, QV4::ExecutionEngine *v4)
+{
+    if (scopeObject) {
+        // The result of wrap() can only be null, undefined, or an object.
+        const QV4::ReturnedValue scope = QV4::QObjectWrapper::wrap(v4, scopeObject);
+        if (QV4::Value::fromReturnedValue(scope).isManaged())
+            return scope;
+    }
+    return v4->globalObject->asReturnedValue();
+}
+
+QV4::ReturnedValue QQmlJavaScriptExpression::evaluate(QV4::CallData *callData, bool *isUndefined)
+{
+    QQmlEngine *qmlEngine = engine();
+    QV4::Function *v4Function = function();
+    if (!v4Function || !qmlEngine) {
+        if (isUndefined)
+            *isUndefined = true;
+        return QV4::Encode::undefined();
+    }
 
     // All code that follows must check with watcher before it accesses data members
     // incase we have been deleted.
-    DeleteWatcher watcher(this);
+    QQmlJavaScriptExpressionCapture capture(this, qmlEngine);
 
-    Q_ASSERT(notifyOnValueChanged() || activeGuards.isEmpty());
-    QQmlPropertyCapture capture(m_context->engine(), this, &watcher);
-
-    QQmlPropertyCapture *lastPropertyCapture = ep->propertyCapture;
-    ep->propertyCapture = notifyOnValueChanged() ? &capture : nullptr;
-
-
-    if (notifyOnValueChanged())
-        capture.guards.copyAndClearPrepend(activeGuards);
-
-    QV4::ExecutionEngine *v4 = m_context->engine()->handle();
-    callData->thisObject = v4->globalObject;
-    if (scopeObject()) {
-         QV4::ReturnedValue scope = QV4::QObjectWrapper::wrap(v4, scopeObject());
-        if (QV4::Value::fromReturnedValue(scope).isObject())
-            callData->thisObject = scope;
-    }
+    QV4::Scope scope(qmlEngine->handle());
+    callData->thisObject = thisObject(scopeObject(), scope.engine);
 
     Q_ASSERT(m_qmlScope.valueRef());
-    QV4::ReturnedValue res = v4Function->call(
+    QV4::ScopedValue result(scope, v4Function->call(
             &(callData->thisObject.asValue<QV4::Value>()),
             callData->argValues<QV4::Value>(), callData->argc(),
-            static_cast<QV4::ExecutionContext *>(m_qmlScope.valueRef()));
-    QV4::Scope scope(v4);
-    QV4::ScopedValue result(scope, res);
+            static_cast<QV4::ExecutionContext *>(m_qmlScope.valueRef())));
 
-    if (scope.hasException()) {
-        if (watcher.wasDeleted())
-            scope.engine->catchException(); // ignore exception
-        else
-            delayedError()->catchJavaScriptException(scope.engine);
+    if (capture.catchException(scope)) {
         if (isUndefined)
             *isUndefined = true;
-    } else {
-        if (isUndefined)
-            *isUndefined = result->isUndefined();
-
-        if (!watcher.wasDeleted() && hasDelayedError())
-            delayedError()->clearError();
+    } else if (isUndefined) {
+        *isUndefined = result->isUndefined();
     }
-
-    if (capture.errorString) {
-        for (int ii = 0; ii < capture.errorString->count(); ++ii)
-            qWarning("%s", qPrintable(capture.errorString->at(ii)));
-        delete capture.errorString;
-        capture.errorString = nullptr;
-    }
-
-    while (QQmlJavaScriptExpressionGuard *g = capture.guards.takeFirst())
-        g->Delete();
-
-    if (!watcher.wasDeleted())
-        setTranslationsCaptured(capture.translationCaptured);
-
-    ep->propertyCapture = lastPropertyCapture;
 
     return result->asReturnedValue();
+}
+
+bool QQmlJavaScriptExpression::evaluate(void **a, const QMetaType *types, int argc)
+{
+    // All code that follows must check with watcher before it accesses data members
+    // incase we have been deleted.
+    QQmlEngine *qmlEngine = engine();
+
+    // If there is no engine, we have no way to evaluate anything.
+    // This can happen on destruction.
+    if (!qmlEngine)
+        return false;
+
+    QQmlJavaScriptExpressionCapture capture(this, qmlEngine);
+
+    QV4::Scope scope(qmlEngine->handle());
+    QV4::ScopedValue self(scope, thisObject(scopeObject(), scope.engine));
+
+    Q_ASSERT(m_qmlScope.valueRef());
+    Q_ASSERT(function());
+    const bool isUndefined = !function()->call(
+                self, a, types, argc, static_cast<QV4::ExecutionContext *>(m_qmlScope.valueRef()));
+
+    return !capture.catchException(scope) && !isUndefined;
 }
 
 void QQmlPropertyCapture::captureProperty(QQmlNotifier *n)
@@ -315,23 +366,54 @@ void QQmlPropertyCapture::captureProperty(QObject *o, int c, int n, bool doNotif
                 metaObjectForBindable = m;
         }
         if (metaObjectForBindable) {
-            // if the property is a QPropery, and we're binding to a QProperty
-            // the automatic capturing process already takes care of everything
-            if (typeid(QQmlPropertyBinding) == typeid(*expression))
-                return;
-            for (auto trigger = expression->qpropertyChangeTriggers; trigger; trigger = trigger->next) {
-                if (trigger->target == o && trigger->propertyIndex == c)
-                    return; // already installed
-            }
-            auto trigger = expression->allocatePropertyChangeTrigger(o, c);
-            QUntypedBindable bindable;
-            void *argv[] = { &bindable };
-            metaObjectForBindable->metacall(o, QMetaObject::BindableProperty, c, argv);
-            bindable.observe(trigger);
+            captureBindableProperty(o, metaObjectForBindable, c);
             return;
         }
     }
 
+    captureNonBindableProperty(o, n, c, doNotify);
+}
+
+void QQmlPropertyCapture::captureProperty(
+        QObject *o, const QQmlPropertyCache *propertyCache, const QQmlPropertyData *propertyData,
+        bool doNotify)
+{
+    if (watcher->wasDeleted())
+        return;
+
+    Q_ASSERT(expression);
+
+    if (propertyData->isBindable()) {
+        if (const QMetaObject *metaObjectForBindable = propertyCache->metaObject()) {
+            captureBindableProperty(o, metaObjectForBindable, propertyData->coreIndex());
+            return;
+        }
+    }
+
+    captureNonBindableProperty(o, propertyData->notifyIndex(), propertyData->coreIndex(), doNotify);
+}
+
+void QQmlPropertyCapture::captureBindableProperty(
+        QObject *o, const QMetaObject *metaObjectForBindable, int c)
+{
+    // if the property is a QPropery, and we're binding to a QProperty
+    // the automatic capturing process already takes care of everything
+    if (typeid(QQmlPropertyBindingJS) == typeid(*expression))
+        return;
+    for (auto trigger = expression->qpropertyChangeTriggers; trigger;
+         trigger = trigger->next) {
+        if (trigger->target == o && trigger->propertyIndex == c)
+            return; // already installed
+    }
+    auto trigger = expression->allocatePropertyChangeTrigger(o, c);
+    QUntypedBindable bindable;
+    void *argv[] = { &bindable };
+    metaObjectForBindable->metacall(o, QMetaObject::BindableProperty, c, argv);
+    bindable.observe(trigger);
+}
+
+void QQmlPropertyCapture::captureNonBindableProperty(QObject *o, int n, int c, bool doNotify)
+{
     if (n == -1) {
         if (!errorString) {
             errorString = new QStringList;

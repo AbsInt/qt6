@@ -55,7 +55,8 @@ private:
 void TestQmlimportscanner::initTestCase()
 {
     QQmlDataTest::initTestCase();
-    m_qmlimportscannerPath = QLibraryInfo::path(QLibraryInfo::BinariesPath) + QLatin1String("/qmlimportscanner");
+    m_qmlimportscannerPath = QLibraryInfo::path(QLibraryInfo::LibraryExecutablesPath)
+            + QLatin1String("/qmlimportscanner");
 #ifdef Q_OS_WIN
     m_qmlimportscannerPath += QLatin1String(".exe");
 #endif
@@ -121,7 +122,7 @@ void TestQmlimportscanner::runQmlimportscanner(const QString &mode, const QStrin
     const QString file(pathToScan);
     QStringList args {
         mode, file,
-        "-importPath", QLibraryInfo::path(QLibraryInfo::Qml2ImportsPath), dataDirectory()
+        "-importPath", QLibraryInfo::path(QLibraryInfo::QmlImportsPath), dataDirectory()
     };
     QString errors;
     QProcess process;

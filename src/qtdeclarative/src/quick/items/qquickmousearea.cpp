@@ -122,11 +122,13 @@ bool QQuickMouseAreaPrivate::isClickConnected()
     IS_SIGNAL_CONNECTED(q, QQuickMouseArea, clicked, (QQuickMouseEvent *));
 }
 
+#if QT_CONFIG(wheelevent)
 bool QQuickMouseAreaPrivate::isWheelConnected()
 {
     Q_Q(QQuickMouseArea);
     IS_SIGNAL_CONNECTED(q, QQuickMouseArea, wheel, (QQuickWheelEvent *));
 }
+#endif
 
 void QQuickMouseAreaPrivate::propagate(QQuickMouseEvent* event, PropagateType t)
 {
@@ -846,6 +848,15 @@ void QQuickMouseArea::hoverEnterEvent(QHoverEvent *event)
         emit mouseYChanged(&me);
         me.setPosition(d->lastPos);
     }
+
+    if (auto parentMouseArea = qobject_cast<QQuickMouseArea *>(parentItem())) {
+        if (parentMouseArea->acceptHoverEvents()) {
+            // Special legacy case: if our parent is another MouseArea, and we're
+            // hovered, the parent MouseArea should be hovered too. We achieve this
+            // by simply ignoring the event to not block propagation.
+            event->ignore();
+        }
+    }
 }
 
 void QQuickMouseArea::hoverMoveEvent(QHoverEvent *event)
@@ -864,6 +875,15 @@ void QQuickMouseArea::hoverMoveEvent(QHoverEvent *event)
         me.setPosition(d->lastPos);
         emit positionChanged(&me);
     }
+
+    if (auto parentMouseArea = qobject_cast<QQuickMouseArea *>(parentItem())) {
+        if (parentMouseArea->acceptHoverEvents()) {
+            // Special legacy case: if our parent is another MouseArea, and we're
+            // hovered, the parent MouseArea should be hovered too. We achieve this
+            // by simply ignoring the event to not block propagation.
+            event->ignore();
+        }
+    }
 }
 
 void QQuickMouseArea::hoverLeaveEvent(QHoverEvent *event)
@@ -873,6 +893,15 @@ void QQuickMouseArea::hoverLeaveEvent(QHoverEvent *event)
         QQuickItem::hoverLeaveEvent(event);
     else
         setHovered(false);
+
+    if (auto parentMouseArea = qobject_cast<QQuickMouseArea *>(parentItem())) {
+        if (parentMouseArea->acceptHoverEvents()) {
+            // Special legacy case: if our parent is another MouseArea, and we're
+            // hovered, the parent MouseArea should be hovered too. We achieve this
+            // by simply ignoring the event to not block propagation.
+            event->ignore();
+        }
+    }
 }
 
 #if QT_CONFIG(wheelevent)

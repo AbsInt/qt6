@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2020 The Qt Company Ltd.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the tools applications of the Qt Toolkit.
@@ -34,8 +34,7 @@
 
 QT_BEGIN_NAMESPACE
 
-bool QmlTypeNode::qmlOnly = false;
-QMultiMap<const Node *, Node *> QmlTypeNode::inheritedBy;
+QMultiMap<const Node *, Node *> QmlTypeNode::s_inheritedBy;
 
 /*!
   Constructs a Qml type node or a Js type node depending on
@@ -46,12 +45,7 @@ QMultiMap<const Node *, Node *> QmlTypeNode::inheritedBy;
 QmlTypeNode::QmlTypeNode(Aggregate *parent, const QString &name, NodeType type)
     : Aggregate(type, parent, name)
 {
-    int i = 0;
-    if (name.startsWith("QML:")) {
-        qDebug() << "BOGUS QML qualifier:" << name;
-        i = 4;
-    }
-    setTitle(name.mid(i));
+    setTitle(name);
 }
 
 /*!
@@ -60,7 +54,7 @@ QmlTypeNode::QmlTypeNode(Aggregate *parent, const QString &name, NodeType type)
  */
 void QmlTypeNode::terminate()
 {
-    inheritedBy.clear();
+    s_inheritedBy.clear();
 }
 
 /*!
@@ -71,8 +65,8 @@ void QmlTypeNode::addInheritedBy(const Node *base, Node *sub)
 {
     if (sub->isInternal())
         return;
-    if (!inheritedBy.contains(base, sub))
-        inheritedBy.insert(base, sub);
+    if (!s_inheritedBy.contains(base, sub))
+        s_inheritedBy.insert(base, sub);
 }
 
 /*!
@@ -81,8 +75,8 @@ void QmlTypeNode::addInheritedBy(const Node *base, Node *sub)
 void QmlTypeNode::subclasses(const Node *base, NodeList &subs)
 {
     subs.clear();
-    if (inheritedBy.count(base) > 0) {
-        subs = inheritedBy.values(base);
+    if (s_inheritedBy.count(base) > 0) {
+        subs = s_inheritedBy.values(base);
     }
 }
 

@@ -25,14 +25,14 @@
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
+#define QFUTURE_TEST
+
 #include <QCoreApplication>
 #include <QDebug>
 #include <QSemaphore>
 #include <QTestEventLoop>
 #include <QTimer>
 #include <QSignalSpy>
-
-#define QFUTURE_TEST
 
 #include <QTest>
 #include <qfuture.h>
@@ -729,6 +729,26 @@ void tst_QFuture::futureInterface()
         swap(i1, i2);  // ADL must resolve this
         QCOMPARE(i1.resultReference(0), 2);
         QCOMPARE(i2.resultReference(0), 1);
+    }
+
+    {
+        QFutureInterface<int> fi;
+        fi.reportStarted();
+        QVERIFY(!fi.reportResults(QList<int> {}));
+        fi.reportFinished();
+
+        QVERIFY(fi.results().empty());
+    }
+
+    {
+        QFutureInterface<int> fi;
+        fi.reportStarted();
+        QList<int> values = { 1, 2, 3 };
+        QVERIFY(fi.reportResults(values));
+        QVERIFY(!fi.reportResults(QList<int> {}));
+        fi.reportFinished();
+
+        QCOMPARE(fi.results(), values);
     }
 }
 

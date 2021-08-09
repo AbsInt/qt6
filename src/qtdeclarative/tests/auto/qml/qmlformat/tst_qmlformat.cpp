@@ -32,6 +32,7 @@
 #include <QProcess>
 #include <QString>
 #include <QTemporaryDir>
+#include <QtTest/private/qemulationdetector_p.h>
 
 #include <util.h>
 
@@ -101,6 +102,7 @@ void TestQmlformat::initTestCase()
     m_invalidFiles << "tests/auto/qml/qqmllanguage/data/invalidRoot.1.qml";
     m_invalidFiles << "tests/auto/qml/qqmllanguage/data/invalidQmlEnumValue.1.qml";
     m_invalidFiles << "tests/auto/qml/qqmllanguage/data/invalidQmlEnumValue.2.qml";
+    m_invalidFiles << "tests/auto/qml/qqmllanguage/data/questionDotEOF.qml";
     m_invalidFiles << "tests/auto/qml/qquickfolderlistmodel/data/dummy.qml";
     m_invalidFiles << "tests/auto/qml/qqmlecmascript/data/stringParsing_error.1.qml";
     m_invalidFiles << "tests/auto/qml/qqmlecmascript/data/stringParsing_error.2.qml";
@@ -257,6 +259,8 @@ void TestQmlformat::testFormat()
 #if !defined(QTEST_CROSS_COMPILED) // sources not available when cross compiled
 void TestQmlformat::testExample_data()
 {
+    if (QTestPrivate::isRunningArmOnX86())
+        QSKIP("Crashes in QEMU. (timeout)");
     QTest::addColumn<QString>("file");
 
     QString examples = QLatin1String(SRCDIR) + "/../../../../examples/";

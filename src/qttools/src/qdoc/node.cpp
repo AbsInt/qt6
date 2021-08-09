@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2019 The Qt Company Ltd.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the tools applications of the Qt Toolkit.
@@ -44,6 +44,8 @@
 
 #include <QtCore/quuid.h>
 #include <QtCore/qversionnumber.h>
+
+#include <utility>
 
 QT_BEGIN_NAMESPACE
 
@@ -277,8 +279,7 @@ bool Node::nodeNameLessThan(const Node *n1, const Node *n2)
   An unsigned char that specifies the status of the documentation element in
   the documentation set.
 
-  \value Obsolete The element is obsolete and no longer exists in the software.
-  \value Deprecated The element has been deprecated but still exists in the software.
+  \value Deprecated The element has been deprecated.
   \value Preliminary The element is new; the documentation is preliminary.
   \value Active The element is current.
   \value Internal The element is for internal use only, not to be published.
@@ -347,10 +348,6 @@ bool Node::nodeNameLessThan(const Node *n1, const Node *n2)
 
 /*! \fn bool Node::isActive() const
   Returns true if this node's status is \c Active.
- */
-
-/*! \fn bool Node::isAnyType() const
-  Always returns true. I'm not sure why this is here.
  */
 
 /*! \fn bool Node::isClass() const
@@ -423,10 +420,6 @@ bool Node::nodeNameLessThan(const Node *n1, const Node *n2)
 
 /*! \fn bool Node::isNamespace() const
   Returns true if the node type is \c Namespace.
- */
-
-/*! \fn bool Node::isObsolete() const
-  Returns true if this node's status is \c Obsolete.
  */
 
 /*! \fn bool Node::isPage() const
@@ -665,11 +658,8 @@ QString Node::fullName(const Node *relative) const
  */
 bool Node::match(const QList<int> &types) const
 {
-    for (int i = 0; i < types.size(); ++i) {
-        if (nodeType() == types.at(i))
-            return true;
-    }
-    return false;
+    return std::any_of(types.cbegin(), types.cend(),
+                       [this](const int type) { return nodeType() == type; });
 }
 
 /*!
@@ -690,17 +680,12 @@ void Node::setDoc(const Doc &doc, bool replace)
 }
 
 /*!
-  Sets the node's status to \a t, except that once
-  the node's status has been set to \c Obsolete or
-  \c Deprecated, it can't be reset.
+  Sets the node's status to \a t.
 
   \sa Status
 */
 void Node::setStatus(Status t)
 {
-    if (m_status == Obsolete && t == Deprecated)
-        return;
-
     m_status = t;
 
     // Set non-null, empty URL to nodes that are ignored as
@@ -723,13 +708,13 @@ void Node::setStatus(Status t)
   given \a parent and \a name. The new node is added to the
   parent's child list.
  */
-Node::Node(NodeType type, Aggregate *parent, const QString &name)
+Node::Node(NodeType type, Aggregate *parent, QString name)
     : m_nodeType(type),
       m_indexNodeFlag(false),
       m_relatedNonmember(false),
       m_hadDoc(false),
       m_parent(parent),
-      m_name(name)
+      m_name(std::move(name))
 {
     if (m_parent)
         m_parent->addChild(this);
@@ -1007,11 +992,6 @@ Node::FlagValue Node::toFlagValue(bool b)
   If \a fv is neither the true enum value nor the
   false enum value, the boolean value returned is
   \a defaultValue.
-
-  Note that runtimeDesignabilityFunction() should be called
-  first. If that function returns the name of a function, it
-  means the function must be called at runtime to determine
-  whether the property is Designable.
  */
 bool Node::fromFlagValue(FlagValue fv, bool defaultValue)
 {
@@ -1058,23 +1038,6 @@ void Node::setSince(const QString &since)
         return;
 
     m_since = parts.join(QLatin1Char(' '));
-}
-
-/*!
-  Returns a string representing the access specifier.
- */
-QString Node::accessString() const
-{
-    switch (m_access) {
-    case Access::Protected:
-        return QLatin1String("protected");
-    case Access::Private:
-        return QLatin1String("private");
-    case Access::Public:
-    default:
-        break;
-    }
-    return QLatin1String("public");
 }
 
 /*!
@@ -1246,28 +1209,12 @@ QString Node::qualifyWithParentName()
 }
 
 /*!
-  Returns the QML node's qualified name by stripping off the
-  "QML:" if present and prepending the logical module name.
+  Returns the QML node's qualified name by prepending the logical
+  module name.
  */
 QString Node::qualifyQmlName()
 {
-    QString qualifiedName = m_name;
-    if (m_name.startsWith(QLatin1String("QML:")))
-        qualifiedName = m_name.mid(4);
-    qualifiedName = logicalModuleName() + "::" + m_name;
-    return qualifiedName;
-}
-
-/*!
-  Returns the QML node's name after stripping off the
-  "QML:" if present.
- */
-QString Node::unqualifyQmlName()
-{
-    QString qmlTypeName = m_name.toLower();
-    if (qmlTypeName.startsWith(QLatin1String("qml:")))
-        qmlTypeName = qmlTypeName.mid(4);
-    return qmlTypeName;
+    return logicalModuleName() + "::" + m_name;
 }
 
 /*!
@@ -1277,7 +1224,7 @@ QString Node::unqualifyQmlName()
  */
 bool Node::isWrapper() const
 {
-    return (m_parent ? m_parent->isWrapper() : false);
+    return m_parent != nullptr && m_parent->isWrapper();
 }
 
 /*!
@@ -1335,13 +1282,13 @@ QString Node::physicalModuleName() const
 
     QString path = location().filePath();
     QString pattern = QString("src") + QDir::separator();
-    int start = path.lastIndexOf(pattern);
+    qsizetype start = path.lastIndexOf(pattern);
 
     if (start == -1)
         return QString();
 
     QString moduleDir = path.mid(start + pattern.size());
-    int finish = moduleDir.indexOf(QDir::separator());
+    qsizetype finish = moduleDir.indexOf(QDir::separator());
 
     if (finish == -1)
         return QString();
@@ -1370,6 +1317,15 @@ QString Node::physicalModuleName() const
         return QLatin1String("QtXml");
     else
         return QString();
+}
+void Node::setDeprecatedSince(const QString &sinceVersion)
+{
+    if (!m_deprecatedSince.isEmpty())
+        qCWarning(lcQdoc) << QStringLiteral(
+                                     "Setting deprecated since version for %1 to %2 even though it "
+                                     "was already set to %3. This is very unexpected.")
+                                     .arg(this->m_name, sinceVersion, this->m_deprecatedSince);
+    m_deprecatedSince = sinceVersion;
 }
 
 /*! \fn Node *Node::clone(Aggregate *parent)
@@ -1489,11 +1445,6 @@ QString Node::physicalModuleName() const
 /*! \fn void Node::addMember(Node *node)
   In a CollectionNode, this function adds \a node to the collection
   node's members list. It does nothing if this node is not a CollectionNode.
- */
-
-/*! \fn bool Node::hasMembers() const
-  Returns \c true if this is a CollectionNode and its members list
-  is not empty. Otherwise it returns \c false.
  */
 
 /*! \fn bool Node::hasNamespaces() const

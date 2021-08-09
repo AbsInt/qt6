@@ -64,6 +64,7 @@
 #include <QtCore/qdebug.h>
 #include <cmath>
 #include <QtQml/QQmlPropertyMap>
+#include <QtCore/private/qproperty_p.h>
 
 Q_DECLARE_METATYPE(QList<int>)
 Q_DECLARE_METATYPE(QList<qreal>)
@@ -316,9 +317,9 @@ void QQmlPropertyPrivate::initProperty(QObject *obj, const QString &name)
             if (property->isFunction())
                 return; // Not an object property
 
-            if (ii == (path.count() - 2) && QQmlValueTypeFactory::isValueType(property->propType())) {
+            if (ii == (path.count() - 2) && QQmlMetaType::isValueType(property->propType())) {
                 // We're now at a value type property
-                const QMetaObject *valueTypeMetaObject = QQmlValueTypeFactory::metaObjectForMetaType(property->propType());
+                const QMetaObject *valueTypeMetaObject = QQmlMetaType::metaObjectForValueType(property->propType());
                 if (!valueTypeMetaObject) return; // Not a value type
 
                 int idx = valueTypeMetaObject->indexOfProperty(path.last().toUtf8().constData());
@@ -414,7 +415,6 @@ void QQmlPropertyPrivate::initProperty(QObject *obj, const QString &name)
         object = currentObject;
         core = *property;
         nameCache = terminal.toString();
-        isNameCached = true;
     }
 }
 
@@ -480,7 +480,7 @@ QQmlPropertyPrivate::propertyTypeCategory() const
         QMetaType type = propertyType();
         if (!type.isValid())
             return QQmlProperty::InvalidCategory;
-        else if (QQmlValueTypeFactory::isValueType(type))
+        else if (QQmlMetaType::isValueType(type))
             return QQmlProperty::Normal;
         else if (core.isQObject())
             return QQmlProperty::Object;
@@ -502,7 +502,7 @@ const char *QQmlProperty::propertyTypeName() const
     if (!d)
         return nullptr;
     if (d->isValueType()) {
-        const QMetaObject *valueTypeMetaObject = QQmlValueTypeFactory::metaObjectForMetaType(d->core.propType());
+        const QMetaObject *valueTypeMetaObject = QQmlMetaType::metaObjectForValueType(d->core.propType());
         Q_ASSERT(valueTypeMetaObject);
         return valueTypeMetaObject->property(d->valueTypeData.coreIndex()).typeName();
     } else if (d->object && type() & Property && d->core.isValid()) {
@@ -641,6 +641,21 @@ bool QQmlProperty::isWritable() const
 }
 
 /*!
+    \internal
+    Returns true if the property is bindable, otherwise false.
+ */
+bool QQmlProperty::isBindable() const
+{
+    if (!d)
+        return false;
+    if (!d->object)
+        return false;
+    if (d->core.isValid())
+        return d->core.isBindable();
+    return false;
+}
+
+/*!
     Returns true if the property is designable, otherwise false.
 */
 bool QQmlProperty::isDesignable() const
@@ -684,11 +699,11 @@ QString QQmlProperty::name() const
 {
     if (!d)
         return QString();
-    if (!d->isNameCached) {
+    if (d->nameCache.isEmpty()) {
         // ###
         if (!d->object) {
         } else if (d->isValueType()) {
-            const QMetaObject *valueTypeMetaObject = QQmlValueTypeFactory::metaObjectForMetaType(d->core.propType());
+            const QMetaObject *valueTypeMetaObject = QQmlMetaType::metaObjectForValueType(d->core.propType());
             Q_ASSERT(valueTypeMetaObject);
 
             const char *vtName = valueTypeMetaObject->property(d->valueTypeData.coreIndex()).name();
@@ -700,7 +715,6 @@ QString QQmlProperty::name() const
         } else {
             d->nameCache = d->core.name(d->object);
         }
-        d->isNameCached = true;
     }
 
     return d->nameCache;
@@ -757,9 +771,6 @@ QQmlPropertyPrivate::binding(const QQmlProperty &that)
 
     Ownership of \a newBinding transfers to QML.  Ownership of the return value
     is assumed by the caller.
-
-    \a flags is passed through to the binding and is used for the initial update (when
-    the binding sets the initial value, it will use these flags for the write).
 */
 void
 QQmlPropertyPrivate::setBinding(const QQmlProperty &that, QQmlAbstractBinding *newBinding)
@@ -817,9 +828,7 @@ void QQmlPropertyPrivate::removeBinding(QObject *o, QQmlPropertyIndex index)
 {
     Q_ASSERT(o);
 
-    QObject *target;
-    QQmlPropertyIndex targetIndex;
-    findAliasTarget(o, index, &target, &targetIndex);
+    auto [target, targetIndex] = findAliasTarget(o, index);
     removeOldBinding(target, targetIndex);
 }
 
@@ -834,7 +843,9 @@ void QQmlPropertyPrivate::removeBinding(const QQmlProperty &that)
 QQmlAbstractBinding *
 QQmlPropertyPrivate::binding(QObject *object, QQmlPropertyIndex index)
 {
-    findAliasTarget(object, index, &object, &index);
+    auto aliasTarget = findAliasTarget(object, index);
+    object = aliasTarget.targetObject;
+    index = aliasTarget.targetIndex;
 
     QQmlData *data = QQmlData::get(object);
     if (!data)
@@ -895,6 +906,14 @@ void QQmlPropertyPrivate::findAliasTarget(QObject *object, QQmlPropertyIndex bin
     *targetObject = object;
     *targetBindingIndex = bindingIndex;
 }
+
+QQmlPropertyPrivate::ResolvedAlias QQmlPropertyPrivate::findAliasTarget(QObject *baseObject, QQmlPropertyIndex baseIndex)
+{
+    ResolvedAlias resolved;
+    findAliasTarget(baseObject, baseIndex, &resolved.targetObject, &resolved.targetIndex);
+    return resolved;
+}
+
 
 
 void QQmlPropertyPrivate::setBinding(QQmlAbstractBinding *binding, BindingFlags flags, QQmlPropertyData::WriteFlags writeFlags)
@@ -1075,7 +1094,7 @@ QVariant QQmlPropertyPrivate::readValueProperty()
     if (isValueType()) {
         if (QQmlGadgetPtrWrapper *wrapper = QQmlGadgetPtrWrapper::instance(engine, core.propType()))
             return doRead(wrapper);
-        if (QQmlValueType *valueType = QQmlValueTypeFactory::valueType(core.propType())) {
+        if (QQmlValueType *valueType = QQmlMetaType::valueType(core.propType())) {
             QQmlGadgetPtrWrapper wrapper(valueType, nullptr);
             return doRead(&wrapper);
         }
@@ -1084,7 +1103,7 @@ QVariant QQmlPropertyPrivate::readValueProperty()
 
         QQmlListProperty<QObject> prop;
         core.readProperty(object, &prop);
-        return QVariant::fromValue(QQmlListReferencePrivate::init(prop, core.propType().id(), engine));
+        return QVariant::fromValue(QQmlListReferencePrivate::init(prop, core.propType(), engine));
 
     } else if (core.isQObject()) {
 
@@ -1215,7 +1234,7 @@ QQmlPropertyPrivate::writeValueProperty(QObject *object,
                 : nullptr;
         if (wrapper) {
             doWrite(wrapper);
-        } else if (QQmlValueType *valueType = QQmlValueTypeFactory::valueType(core.propType())) {
+        } else if (QQmlValueType *valueType = QQmlMetaType::valueType(core.propType())) {
             QQmlGadgetPtrWrapper wrapper(valueType, nullptr);
             doWrite(&wrapper);
         }
@@ -1235,6 +1254,24 @@ bool QQmlPropertyPrivate::write(
     const int propertyType = propertyMetaType.id();
     const int variantType = value.userType();
 
+    // we need to prevent new-style bindings from being  removed
+    QUntypedPropertyBinding untypedBinding;
+    if (property.isBindable() && (flags & QQmlPropertyData::DontRemoveBinding)) {
+        QUntypedBindable bindable;
+        void *argv[] = {&bindable};
+        QMetaObject::metacall(object, QMetaObject::BindableProperty, property.coreIndex(), argv);
+        untypedBinding = bindable.binding();
+        auto priv = QPropertyBindingPrivate::get(untypedBinding);
+        if (priv)
+          priv->setSticky(true);
+    }
+    auto bindingFixer = qScopeGuard([&](){
+        if (untypedBinding.isNull())
+            return;
+        auto priv = QPropertyBindingPrivate::get(untypedBinding);
+        priv->setSticky(false);
+    });
+
     if (property.isEnum()) {
         QMetaProperty prop = object->metaObject()->property(property.coreIndex());
         QVariant v = value;
@@ -1243,7 +1280,7 @@ bool QQmlPropertyPrivate::write(
             double integral;
             double fractional = std::modf(value.toDouble(), &integral);
             if (qFuzzyIsNull(fractional))
-                v.convert(QMetaType(QMetaType::Int));
+                v.convert(QMetaType::fromType<qint32>());
         }
         return writeEnumProperty(prop, property.coreIndex(), object, v, flags);
     }
@@ -1334,9 +1371,9 @@ bool QQmlPropertyPrivate::write(
         QQmlMetaObject listType;
 
         if (enginePriv) {
-            listType = enginePriv->rawMetaObjectForType(enginePriv->listType(propertyType));
+            listType = enginePriv->rawMetaObjectForType(QQmlMetaType::listType(propertyMetaType).id());
         } else {
-            QQmlType type = QQmlMetaType::qmlType(QQmlMetaType::listType(propertyType));
+            QQmlType type = QQmlMetaType::qmlType(QQmlMetaType::listType(propertyMetaType).id());
             if (!type.isValid())
                 return false;
             listType = type.baseMetaObject();
@@ -1371,7 +1408,7 @@ bool QQmlPropertyPrivate::write(
                 prop.append(&prop, o);
             }
         } else {
-            QObject *o = enginePriv?enginePriv->toQObject(value):QQmlMetaType::toQObject(value);
+            QObject *o = QQmlMetaType::toQObject(value);
             if (o && !QQmlMetaObject::canConvert(o, listType))
                 o = nullptr;
             prop.append(&prop, o);
@@ -1388,14 +1425,6 @@ bool QQmlPropertyPrivate::write(
             v = value;
             if (v.convert(propertyMetaType)) {
                 ok = true;
-            } else if (static_cast<uint>(propertyType) >= QMetaType::User &&
-                       variantType == QMetaType::QString) {
-                QQmlMetaType::StringConverter con = QQmlMetaType::customStringConverter(propertyType);
-                if (con) {
-                    v = con(value.toString());
-                    if (v.userType() == propertyType)
-                        ok = true;
-                }
             }
         }
         if (!ok) {

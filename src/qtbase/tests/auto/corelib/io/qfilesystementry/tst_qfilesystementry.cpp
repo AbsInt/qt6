@@ -106,13 +106,13 @@ void tst_QFileSystemEntry::getSetCheck_data()
             << "A:dir/without/leading/backslash.bat" << "backslash.bat" << "backslash" << "backslash" << "bat" << "bat" << false << false;
 
     QTest::newRow("longpath")
-            << QString("\\\\?\\D:\\")
-            << absPrefix + QString("D:\\")
+            << uR"(\\?\D:\)"_qs
+            << absPrefix + QLatin1String(R"(D:\)")
             << "D:/" << "" << "" << "" << "" << "" << true << false;
 
     QTest::newRow("uncprefix")
-            << QString("\\\\?\\UNC\\localhost\\C$\\tmp.txt")
-            << absPrefix + QString("UNC\\localhost\\C$\\tmp.txt")
+            << uR"(\\?\UNC\localhost\C$\tmp.txt)"_qs
+            << absPrefix + QLatin1String(R"(UNC\localhost\C$\tmp.txt)")
             << "//localhost/C$/tmp.txt" << "tmp.txt" << "tmp" << "tmp" << "txt" << "txt" << true
             << false;
 }

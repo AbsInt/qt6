@@ -123,15 +123,12 @@ signals:
     void requestShowLink(const QUrl &url);
 
 private slots:
-#if QT_VERSION < QT_VERSION_CHECK(6,0,0)
-    void setSource(const QUrl & /* name */) override {}
-#else
     void doSetSource(const QUrl & /*name*/, QTextDocument::ResourceType /*type*/) override {}
-#endif
 
 private:
     QColor m_linkColor;
 };
+
 
 class QHelpSearchResultWidgetPrivate : public QObject
 {

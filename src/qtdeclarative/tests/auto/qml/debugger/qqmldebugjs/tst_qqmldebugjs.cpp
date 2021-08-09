@@ -1081,9 +1081,7 @@ void tst_QQmlDebugJS::letConstLocals()
                     .value(QStringLiteral("properties")).toArray();
             for (const auto &prop : props) {
                 const auto propObj = prop.toObject();
-                const QString name = propObj.value(QStringLiteral("name")).toString();
-                if (name == QStringLiteral("onCompleted"))
-                    continue;
+                QString name = propObj.value(QStringLiteral("name")).toString();
                 QVERIFY(name.length() == 1);
                 auto i = expectedMembers.indexOf(name.at(0));
                 QVERIFY(i != -1);

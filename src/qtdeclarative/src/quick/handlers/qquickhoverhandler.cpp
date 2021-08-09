@@ -83,14 +83,35 @@ QQuickHoverHandler::~QQuickHoverHandler()
         QQuickItemPrivate::get(parent)->setHasHoverInChild(false);
 }
 
+bool QQuickHoverHandler::event(QEvent *event)
+{
+    switch (event->type())
+    {
+    case QEvent::HoverLeave:
+        setHovered(false);
+        setActive(false);
+        break;
+    default:
+        return QQuickSinglePointHandler::event(event);
+        break;
+    }
+
+    return true;
+}
+
 void QQuickHoverHandler::componentComplete()
 {
-    parentItem()->setAcceptHoverEvents(true);
-    QQuickItemPrivate::get(parentItem())->setHasHoverInChild(true);
+    if (auto par = parentItem()) {
+        par->setAcceptHoverEvents(true);
+        QQuickItemPrivate::get(par)->setHasHoverInChild(true);
+    }
 }
 
 bool QQuickHoverHandler::wantsPointerEvent(QPointerEvent *event)
 {
+    // No state change should occur if a button is being pressed or released.
+    if (event->isSinglePointEvent() && static_cast<QSinglePointEvent *>(event)->button())
+        return false;
     auto &point = event->point(0);
     if (QQuickPointerDeviceHandler::wantsPointerEvent(event) && wantsEventPoint(event, point) && parentContains(point)) {
         // assume this is a mouse or tablet event, so there's only one point
@@ -106,7 +127,7 @@ bool QQuickHoverHandler::wantsPointerEvent(QPointerEvent *event)
     // the hovered property to transition to false prematurely.
     // If a QQuickPointerTabletEvent caused the hovered property to become true,
     // then only another QQuickPointerTabletEvent can make it become false.
-    if (!(m_hoveredTablet && QQuickWindowPrivate::isMouseEvent(event)))
+    if (!(m_hoveredTablet && QQuickDeliveryAgentPrivate::isMouseEvent(event)))
         setHovered(false);
 
     return false;
@@ -118,10 +139,9 @@ void QQuickHoverHandler::handleEventPoint(QPointerEvent *ev, QEventPoint &point)
     if (point.state() == QEventPoint::Released &&
             ev->pointingDevice()->pointerType() == QPointingDevice::PointerType::Finger)
         hovered = false;
-    else if (QQuickWindowPrivate::isTabletEvent(ev))
+    else if (QQuickDeliveryAgentPrivate::isTabletEvent(ev))
         m_hoveredTablet = true;
     setHovered(hovered);
-    setPassiveGrab(ev, point);
 }
 
 /*!

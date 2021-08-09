@@ -4,13 +4,14 @@
 ## QQmlDebugServerFactory Plugin:
 #####################################################################
 
-qt_internal_add_plugin(QQmlDebugServerFactory
+qt_internal_add_plugin(QQmlDebugServerFactoryPlugin
     OUTPUT_NAME qmldbg_server
+    CLASS_NAME QQmlDebugServerFactory
     TYPE qmltooling
     SOURCES
         qqmldebugserver.cpp
         qqmldebugserverfactory.h
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::PacketProtocolPrivate
         Qt::QmlPrivate
 )

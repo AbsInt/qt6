@@ -62,6 +62,7 @@
 #include <private/qqmlboundsignal_p.h>
 #include <private/qqmljsdiagnosticmessage_p.h>
 #include <private/qqmltype_p_p.h>
+#include <private/qqmlpluginimporter_p.h>
 #include <QtCore/qstandardpaths.h>
 #include <QtCore/qmetaobject.h>
 #include <QDebug>
@@ -651,9 +652,9 @@ void QQmlPrivate::qdeclarativeelement_destructor(QObject *o)
 }
 
 QQmlData::QQmlData()
-    : ownedByQml1(false), ownMemory(true), indestructible(true), explicitIndestructibleSet(false),
+    : ownMemory(true), indestructible(true), explicitIndestructibleSet(false),
       hasTaintedV4Object(false), isQueuedForDeletion(false), rootObjectInCreation(false),
-      hasInterceptorMetaObject(false), hasVMEMetaObject(false), parentFrozen(false),
+      hasInterceptorMetaObject(false), hasVMEMetaObject(false),
       bindingBitsArraySize(InlineBindingArraySize), notifyList(nullptr),
       bindings(nullptr), signalHandlers(nullptr), nextContextObject(nullptr), prevContextObject(nullptr),
       lineNumber(0), columnNumber(0), jsEngineId(0),
@@ -673,11 +674,6 @@ void QQmlData::destroyed(QAbstractDeclarativeData *d, QObject *o)
     ddata->destroyed(o);
 }
 
-void QQmlData::parentChanged(QAbstractDeclarativeData *d, QObject *o, QObject *p)
-{
-    QQmlData *ddata = static_cast<QQmlData *>(d);
-    ddata->parentChanged(o, p);
-}
 
 class QQmlThreadNotifierProxyObject : public QObject
 {
@@ -1083,6 +1079,15 @@ QUrl QQmlEngine::interceptUrl(const QUrl &url, QQmlAbstractUrlInterceptor::DataT
     for (QQmlAbstractUrlInterceptor *interceptor : d->urlInterceptors)
         result = interceptor->intercept(result, type);
     return result;
+}
+
+/*!
+  Returns the list of currently active URL interceptors.
+ */
+QList<QQmlAbstractUrlInterceptor *> QQmlEngine::urlInterceptors() const
+{
+    Q_D(const QQmlEngine);
+    return d->urlInterceptors;
 }
 
 void QQmlEnginePrivate::registerFinalizeCallback(QObject *obj, int index)
@@ -1699,25 +1704,6 @@ void QQmlData::destroyed(QObject *object)
         this->~QQmlData();
 }
 
-DEFINE_BOOL_CONFIG_OPTION(parentTest, QML_PARENT_TEST);
-
-void QQmlData::parentChanged(QObject *object, QObject *parent)
-{
-    if (parentTest()) {
-        if (parentFrozen && !QObjectPrivate::get(object)->wasDeleted) {
-            QString on;
-            QString pn;
-
-            { QDebug dbg(&on); dbg << object; on = on.left(on.length() - 1); }
-            { QDebug dbg(&pn); dbg << parent; pn = pn.left(pn.length() - 1); }
-
-            qFatal("Object %s has had its parent frozen by QML and cannot be changed.\n"
-                   "User code is attempting to change it to %s.\n"
-                   "This behavior is NOT supported!", qPrintable(on), qPrintable(pn));
-        }
-    }
-}
-
 QQmlData::BindingBitsType *QQmlData::growBits(QObject *obj, int bit)
 {
     BindingBitsType *bits = (bindingBitsArraySize == InlineBindingArraySize) ? bindingBitsValue : bindingBits;
@@ -1778,24 +1764,24 @@ static void dumpwarning(const QQmlError &error)
     switch (error.messageType()) {
     case QtDebugMsg:
         QMessageLogger(error.url().toString().toLatin1().constData(),
-                       error.line(), nullptr).debug().nospace()
-                << qPrintable(error.toString());
+                       error.line(), nullptr).debug().noquote().nospace()
+                << error.toString();
         break;
     case QtInfoMsg:
         QMessageLogger(error.url().toString().toLatin1().constData(),
-                       error.line(), nullptr).info().nospace()
-                << qPrintable(error.toString());
+                       error.line(), nullptr).info().noquote().nospace()
+                << error.toString();
         break;
     case QtWarningMsg:
     case QtFatalMsg: // fatal does not support streaming, and furthermore, is actually fatal. Probably not desirable for QML.
         QMessageLogger(error.url().toString().toLatin1().constData(),
-                       error.line(), nullptr).warning().nospace()
-                << qPrintable(error.toString());
+                       error.line(), nullptr).warning().noquote().nospace()
+                << error.toString();
         break;
     case QtCriticalMsg:
         QMessageLogger(error.url().toString().toLatin1().constData(),
-                       error.line(), nullptr).critical().nospace()
-                << qPrintable(error.toString());
+                       error.line(), nullptr).critical().noquote().nospace()
+                << error.toString();
         break;
     }
 }
@@ -1919,8 +1905,8 @@ void QQmlEngine::addImportPath(const QString& path)
   type version mapping and possibly QML extensions plugins.
 
   By default, the list contains the directory of the application executable,
-  paths specified in the \c QML2_IMPORT_PATH environment variable,
-  and the builtin \c Qml2ImportsPath from QLibraryInfo.
+  paths specified in the \c QML_IMPORT_PATH environment variable,
+  and the builtin \c QmlImportsPath from QLibraryInfo.
 
   \sa addImportPath(), setImportPathList()
 */
@@ -1935,8 +1921,8 @@ QStringList QQmlEngine::importPathList() const
   installed modules in a URL-based directory structure.
 
   By default, the list contains the directory of the application executable,
-  paths specified in the \c QML2_IMPORT_PATH environment variable,
-  and the builtin \c Qml2ImportsPath from QLibraryInfo.
+  paths specified in the \c QML_IMPORT_PATH environment variable,
+  and the builtin \c QmlImportsPath from QLibraryInfo.
 
   \sa importPathList(), addImportPath()
   */
@@ -2007,8 +1993,10 @@ void QQmlEngine::setPluginPathList(const QStringList &paths)
 bool QQmlEngine::importPlugin(const QString &filePath, const QString &uri, QList<QQmlError> *errors)
 {
     Q_D(QQmlEngine);
-    return d->importDatabase.importDynamicPlugin(filePath, uri, QString(), QTypeRevision(), false,
-                                                 errors).isValid();
+    QQmlTypeLoaderQmldirContent qmldir;
+    QQmlPluginImporter importer(
+                uri, QTypeRevision(), &d->importDatabase, &qmldir, &d->typeLoader, errors);
+    return importer.importDynamicPlugin(filePath, uri, false).isValid();
 }
 #endif
 
@@ -2070,36 +2058,6 @@ QString QQmlEnginePrivate::offlineStorageDatabaseDirectory() const
     Q_Q(const QQmlEngine);
     return q->offlineStoragePath() + QDir::separator() + QLatin1String("Databases") + QDir::separator();
 }
-
-bool QQmlEnginePrivate::isQObject(int t)
-{
-    Locker locker(this);
-    return m_compositeTypes.contains(t) || QQmlMetaType::isQObject(t);
-}
-
-QObject *QQmlEnginePrivate::toQObject(const QVariant &v, bool *ok) const
-{
-    return QQmlMetaType::toQObject(v, ok);
-}
-
-QQmlMetaType::TypeCategory QQmlEnginePrivate::typeCategory(int t) const
-{
-    Locker locker(this);
-    if (m_compositeTypes.contains(t))
-        return QQmlMetaType::Object;
-    return QQmlMetaType::typeCategory(t);
-}
-
-bool QQmlEnginePrivate::isList(int t) const
-{
-    return QQmlMetaType::isList(t);
-}
-
-int QQmlEnginePrivate::listType(int t) const
-{
-    return QQmlMetaType::listType(t);
-}
-
 
 static QQmlPropertyCache *propertyCacheForPotentialInlineComponentType(int t, const QHash<int, QV4::ExecutableCompilationUnit *>::const_iterator &iter) {
     if (t != (*iter)->typeIds.id.id()) {
@@ -2310,6 +2268,33 @@ bool QQmlEnginePrivate::isTypeLoaded(const QUrl &url) const
 bool QQmlEnginePrivate::isScriptLoaded(const QUrl &url) const
 {
     return typeLoader.isScriptLoaded(url);
+}
+
+void QQmlEnginePrivate::executeRuntimeFunction(const QUrl &url, qsizetype functionIndex,
+                                               QObject *thisObject, int argc, void **args,
+                                               QMetaType *types)
+{
+    Q_Q(QQmlEngine);
+    const auto unit = typeLoader.getType(url)->compilationUnit();
+    if (!unit)
+        return;
+
+    Q_ASSERT(functionIndex >= 0);
+    Q_ASSERT(thisObject);
+
+    if (!unit->engine)
+        unit->linkToEngine(q->handle());
+
+    if (unit->runtimeFunctions.length() <= functionIndex)
+        return;
+
+    QQmlContext *ctx = q->contextForObject(thisObject);
+    if (!ctx)
+        ctx = q->rootContext();
+
+    // implicitly sets the return value, if it is present
+    q->handle()->callInContext(unit->runtimeFunctions[functionIndex], thisObject,
+                               QQmlContextData::get(ctx), argc, args, types);
 }
 
 #if defined(Q_OS_WIN)

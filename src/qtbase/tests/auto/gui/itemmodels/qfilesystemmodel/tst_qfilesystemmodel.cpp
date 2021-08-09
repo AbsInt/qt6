@@ -233,17 +233,17 @@ void tst_QFileSystemModel::rootPath()
 
 #ifdef Q_OS_WIN
     // check case insensitive root node on windows, tests QTBUG-71701
-    QModelIndex index = model->setRootPath(QString("\\\\localhost\\c$"));
+    QModelIndex index = model->setRootPath(uR"(\\localhost\c$)"_qs);
     QVERIFY(index.isValid());
-    QCOMPARE(model->rootPath(), QString("//localhost/c$"));
+    QCOMPARE(model->rootPath(), u"//localhost/c$"_qs);
 
-    index = model->setRootPath(QString("\\\\localhost\\C$"));
+    index = model->setRootPath(uR"(\\localhost\C$)"_qs);
     QVERIFY(index.isValid());
-    QCOMPARE(model->rootPath(), QString("//localhost/C$"));
+    QCOMPARE(model->rootPath(), u"//localhost/C$"_qs);
 
-    index = model->setRootPath(QString("\\\\LOCALHOST\\C$"));
+    index = model->setRootPath(uR"(\\LOCALHOST\C$)"_qs);
     QVERIFY(index.isValid());
-    QCOMPARE(model->rootPath(), QString("//LOCALHOST/C$"));
+    QCOMPARE(model->rootPath(), u"//LOCALHOST/C$"_qs);
 #endif
 }
 

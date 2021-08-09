@@ -190,6 +190,10 @@ struct Q_QML_EXPORT QObjectWrapper : public Object
 
     static ReturnedValue virtualResolveLookupGetter(const Object *object, ExecutionEngine *engine, Lookup *lookup);
     static ReturnedValue lookupGetter(Lookup *l, ExecutionEngine *engine, const Value &object);
+    static ReturnedValue lookupAttached(Lookup *l, ExecutionEngine *engine, const Value &object);
+    static bool lookupSetter(QV4::Lookup *l, QV4::ExecutionEngine *engine,
+                             QV4::Value &object, const QV4::Value &value);
+
     template <typename ReversalFunctor> static ReturnedValue lookupGetterImpl(Lookup *l, ExecutionEngine *engine, const Value &object, bool useOriginalProperty, ReversalFunctor revert);
     static bool virtualResolveLookupSetter(Object *object, ExecutionEngine *engine, Lookup *lookup, const Value &value);
 
@@ -335,6 +339,8 @@ class MultiplyWrappedQObjectMap : public QObject,
 public:
     typedef QHash<QObject*, QV4::WeakValue>::ConstIterator ConstIterator;
     typedef QHash<QObject*, QV4::WeakValue>::Iterator Iterator;
+
+    using value_type = QHash<QObject*, QV4::WeakValue>::value_type;
 
     ConstIterator begin() const { return QHash<QObject*, QV4::WeakValue>::constBegin(); }
     Iterator begin() { return QHash<QObject*, QV4::WeakValue>::begin(); }

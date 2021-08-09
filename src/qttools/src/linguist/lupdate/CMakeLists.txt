@@ -19,6 +19,7 @@ qt_get_tool_target_name(target_name lupdate)
 qt_internal_add_tool(${target_name}
     TARGET_DESCRIPTION "Qt Translation File Update Tool"
     TOOLS_TARGET Linguist # special case
+    EXTRA_CMAKE_FILES "${CMAKE_CURRENT_LIST_DIR}/../GenerateLUpdateProject.cmake"
     SOURCES
         ../shared/numerus.cpp
         ../shared/po.cpp
@@ -35,6 +36,7 @@ qt_internal_add_tool(${target_name}
         ../shared/xmlparser.cpp ../shared/xmlparser.h
         cpp.cpp cpp.h
         java.cpp
+        python.cpp
         lupdate.h
         main.cpp
         merge.cpp
@@ -46,7 +48,7 @@ qt_internal_add_tool(${target_name}
         ../shared
     PUBLIC_LIBRARIES
         Qt::CorePrivate
-        Qt::ToolsPrivate
+        Qt::Tools
 )
 
 #### Keys ignored in scope 1:.:.:lupdate.pro:<TRUE>:
@@ -86,7 +88,6 @@ qt_internal_extend_target(${target_name} CONDITION QT_FEATURE_clangcpp
         #LUPDATE_CLANG_VERSION_MINOR=
         #LUPDATE_CLANG_VERSION_PATCH=
         # in favor of these
-        CLANG_RESOURCE_DIR="${QT_LIB_CLANG_LIBDIR}/clang/${QT_LIB_CLANG_VERSION}"
         LUPDATE_CLANG_VERSION_STR="\"${QT_LIB_CLANG_VERSION}\""
         LUPDATE_CLANG_VERSION_MAJOR=${QT_LIB_CLANG_VERSION_MAJOR}
         LUPDATE_CLANG_VERSION_MINOR=${QT_LIB_CLANG_VERSION_MINOR}

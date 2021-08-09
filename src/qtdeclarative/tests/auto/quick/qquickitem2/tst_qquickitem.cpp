@@ -34,6 +34,7 @@
 #include <QtQuick/qquickview.h>
 #include <QtGui/private/qinputmethod_p.h>
 #include <QtQuick/private/qquickloader_p.h>
+#include <QtQuick/private/qquickpalette_p.h>
 #include <QtQuick/private/qquickrectangle_p.h>
 #include <QtQuick/private/qquicktextinput_p.h>
 #include <QtQuick/private/qquickitemchangelistener_p.h>
@@ -41,9 +42,13 @@
 #include <private/qquickitem_p.h>
 #include "../../shared/util.h"
 #include "../shared/visualtestutil.h"
+#include "../shared/viewtestutil.h"
 #include "../../shared/platforminputcontext.h"
+#include <QtTest/private/qpropertytesthelper_p.h>
 
 using namespace QQuickVisualTestUtil;
+
+Q_LOGGING_CATEGORY(lcTests, "qt.quick.tests")
 
 class tst_QQuickItem : public QQmlDataTest
 {
@@ -52,7 +57,7 @@ public:
     tst_QQuickItem();
 
 private slots:
-    void initTestCase();
+    void initTestCase() override;
     void cleanup();
 
     void activeFocusOnTab();
@@ -117,6 +122,8 @@ private slots:
 
     void childrenProperty();
     void resourcesProperty();
+    void bindableProperties_data();
+    void bindableProperties();
 
     void changeListener();
     void transformCrash();
@@ -130,6 +137,11 @@ private slots:
     void isAncestorOf();
 
     void grab();
+
+    void colorGroup();
+    void paletteAllocated();
+
+    void undefinedIsInvalidForWidthAndHeight();
 
 private:
     QQmlEngine engine;
@@ -204,7 +216,7 @@ public:
     KeyTestItem(QQuickItem *parent=nullptr) : QQuickItem(parent), mKey(0) {}
 
 protected:
-    void keyPressEvent(QKeyEvent *e) {
+    void keyPressEvent(QKeyEvent *e) override {
         mKey = e->key();
 
         if (e->key() == Qt::Key_A)
@@ -213,7 +225,7 @@ protected:
             e->ignore();
     }
 
-    void keyReleaseEvent(QKeyEvent *e) {
+    void keyReleaseEvent(QKeyEvent *e) override {
         if (e->key() == Qt::Key_B)
             e->accept();
         else
@@ -227,7 +239,7 @@ public:
 class FocusEventFilter : public QObject
 {
 protected:
-    bool eventFilter(QObject *watched, QEvent *event) {
+    bool eventFilter(QObject *watched, QEvent *event) override {
         if ((event->type() == QEvent::FocusIn) ||  (event->type() == QEvent::FocusOut)) {
             QFocusEvent *focusEvent = static_cast<QFocusEvent *>(event);
             lastFocusReason = focusEvent->reason();
@@ -244,8 +256,8 @@ QML_DECLARE_TYPE(KeyTestItem);
 class HollowTestItem : public QQuickItem
 {
     Q_OBJECT
-    Q_PROPERTY(bool circle READ isCircle WRITE setCircle)
-    Q_PROPERTY(qreal holeRadius READ holeRadius WRITE setHoleRadius)
+    Q_PROPERTY(bool circle READ isCircle WRITE setCircle NOTIFY circleChanged)
+    Q_PROPERTY(qreal holeRadius READ holeRadius WRITE setHoleRadius NOTIFY holeRadiusChanged)
 
 public:
     HollowTestItem(QQuickItem *parent = nullptr)
@@ -263,12 +275,12 @@ public:
     bool isHovered() const { return m_isHovered; }
 
     bool isCircle() const { return m_isCircle; }
-    void setCircle(bool circle) { m_isCircle = circle; }
+    void setCircle(bool circle) { m_isCircle = circle; emit circleChanged(); }
 
     qreal holeRadius() const { return m_holeRadius; }
-    void setHoleRadius(qreal radius) { m_holeRadius = radius; }
+    void setHoleRadius(qreal radius) { m_holeRadius = radius; emit holeRadiusChanged(); }
 
-    bool contains(const QPointF &point) const {
+    bool contains(const QPointF &point) const override {
         const qreal w = width();
         const qreal h = height();
         const qreal r = m_holeRadius;
@@ -289,11 +301,15 @@ public:
         return dd > (r * r) && dd <= outerRadius * outerRadius;
     }
 
+signals:
+    void circleChanged();
+    void holeRadiusChanged();
+
 protected:
-    void hoverEnterEvent(QHoverEvent *) { m_isHovered = true; }
-    void hoverLeaveEvent(QHoverEvent *) { m_isHovered = false; }
-    void mousePressEvent(QMouseEvent *) { m_isPressed = true; }
-    void mouseReleaseEvent(QMouseEvent *) { m_isPressed = false; }
+    void hoverEnterEvent(QHoverEvent *) override { m_isHovered = true; }
+    void hoverLeaveEvent(QHoverEvent *) override { m_isHovered = false; }
+    void mousePressEvent(QMouseEvent *) override { m_isPressed = true; }
+    void mouseReleaseEvent(QMouseEvent *) override { m_isPressed = false; }
 
 private:
     bool m_isPressed;
@@ -1286,14 +1302,13 @@ void verifyTabFocusChain(QQuickView *window, const char **focusChain, bool forwa
     int idx = 0;
     for (const char **objectName = focusChain; *objectName; ++objectName, ++idx) {
         const QString &descrStr = QString("idx=%1 objectName=\"%2\"").arg(idx).arg(*objectName);
-        const char *descr = descrStr.toLocal8Bit().data();
         QKeyEvent key(QEvent::KeyPress, Qt::Key_Tab, forward ? Qt::NoModifier : Qt::ShiftModifier);
         QGuiApplication::sendEvent(window, &key);
-        QVERIFY2(key.isAccepted(), descr);
+        QVERIFY2(key.isAccepted(), qPrintable(descrStr));
 
         QQuickItem *item = findItem<QQuickItem>(window->rootObject(), *objectName);
-        QVERIFY2(item, descr);
-        QVERIFY2(item->hasActiveFocus(), descr);
+        QVERIFY2(item, qPrintable(descrStr));
+        QVERIFY2(item->hasActiveFocus(), qPrintable(descrStr));
     }
 }
 
@@ -2843,6 +2858,30 @@ void tst_QQuickItem::resourcesProperty()
     delete object;
 }
 
+void tst_QQuickItem::bindableProperties_data()
+{
+    QTest::addColumn<qreal>("initialValue");
+    QTest::addColumn<qreal>("newValue");
+    QTest::addColumn<QString>("property");
+
+    // can't simply use 3. or 3.0 for the numbers as qreal might
+    // be float instead of double...
+    QTest::addRow("x") << qreal(3) << qreal(14) << "x";
+    QTest::addRow("y") << qreal(10) << qreal(20) << "y";
+    QTest::addRow("width") << qreal(100) << qreal(200) << "width";
+    QTest::addRow("height") << qreal(50) << qreal(40) << "height";
+}
+
+void tst_QQuickItem::bindableProperties()
+{
+    QQuickItem item;
+    QFETCH(qreal, initialValue);
+    QFETCH(qreal, newValue);
+    QFETCH(QString, property);
+
+    QTestPrivate::testReadWritePropertyBasics(item, initialValue, newValue, property.toUtf8().constData());
+}
+
 void tst_QQuickItem::propertyChanges()
 {
     QQuickView *window = new QQuickView(nullptr);
@@ -2967,7 +3006,7 @@ void tst_QQuickItem::childrenRectBug()
 {
     QQuickView *window = new QQuickView(nullptr);
 
-    QString warning = testFileUrl("childrenRectBug.qml").toString() + ":7:5: QML Item: Binding loop detected for property \"height\"";
+    QString warning = testFileUrl("childrenRectBug.qml").toString() + ":11:9: QML Item: Binding loop detected for property \"height\"";
     QTest::ignoreMessage(QtWarningMsg, qPrintable(warning));
     QTest::ignoreMessage(QtWarningMsg, qPrintable(warning));
 
@@ -2988,11 +3027,11 @@ void tst_QQuickItem::childrenRectBug2()
 {
     QQuickView *window = new QQuickView(nullptr);
 
-    QString warning1 = testFileUrl("childrenRectBug2.qml").toString() + ":7:5: QML Item: Binding loop detected for property \"width\"";
+    QString warning1 = testFileUrl("childrenRectBug2.qml").toString() + ":10:9: QML Item: Binding loop detected for property \"width\"";
     QTest::ignoreMessage(QtWarningMsg, qPrintable(warning1));
     QTest::ignoreMessage(QtWarningMsg, qPrintable(warning1));
 
-    QString warning2 = testFileUrl("childrenRectBug2.qml").toString() + ":7:5: QML Item: Binding loop detected for property \"height\"";
+    QString warning2 = testFileUrl("childrenRectBug2.qml").toString() + ":11:9: QML Item: Binding loop detected for property \"height\"";
     QTest::ignoreMessage(QtWarningMsg, qPrintable(warning2));
     QTest::ignoreMessage(QtWarningMsg, qPrintable(warning2));
     QTest::ignoreMessage(QtWarningMsg, qPrintable(warning2));
@@ -3543,39 +3582,35 @@ void tst_QQuickItem::contains()
     QFETCH(bool, insideTarget);
     QFETCH(QList<QPoint>, points);
 
-    QQuickView *window = new QQuickView(nullptr);
-    window->rootContext()->setContextProperty("circleShapeTest", circleTest);
-    window->setBaseSize(QSize(400, 400));
-    window->setSource(testFileUrl("hollowTestItem.qml"));
-    window->show();
-    window->requestActivate();
-    QVERIFY(QTest::qWaitForWindowActive(window));
-    QCOMPARE(QGuiApplication::focusWindow(), window);
-
-    QQuickItem *root = qobject_cast<QQuickItem *>(window->rootObject());
+    QQuickView window;
+    QVERIFY(QQuickTest::showView(window, testFileUrl("hollowTestItem.qml")));
+    QQuickItem *root = qobject_cast<QQuickItem *>(window.rootObject());
     QVERIFY(root);
+
+    // Ensure that we don't get extra hover events delivered on the side.
+    QQuickWindowPrivate::get(&window)->deliveryAgentPrivate()->frameSynchronousHoverEnabled = false;
+    // Flush out any mouse events that might be queued up
+    qGuiApp->processEvents();
 
     HollowTestItem *hollowItem = root->findChild<HollowTestItem *>("hollowItem");
     QVERIFY(hollowItem);
+    hollowItem->setCircle(circleTest);
 
-    foreach (const QPoint &point, points) {
+    for (const QPoint &point : points) {
+        qCDebug(lcTests) << "hover and click @" << point;
+
         // check mouse hover
-        QTest::mouseMove(window, point);
-        QTest::qWait(10);
-        QCOMPARE(hollowItem->isHovered(), insideTarget);
+        QTest::mouseMove(&window, point);
+        QTRY_COMPARE(hollowItem->isHovered(), insideTarget);
 
         // check mouse press
-        QTest::mousePress(window, Qt::LeftButton, Qt::NoModifier, point);
-        QTest::qWait(10);
-        QCOMPARE(hollowItem->isPressed(), insideTarget);
+        QTest::mousePress(&window, Qt::LeftButton, Qt::NoModifier, point);
+        QTRY_COMPARE(hollowItem->isPressed(), insideTarget);
 
         // check mouse release
-        QTest::mouseRelease(window, Qt::LeftButton, Qt::NoModifier, point);
-        QTest::qWait(10);
-        QCOMPARE(hollowItem->isPressed(), false);
+        QTest::mouseRelease(&window, Qt::LeftButton, Qt::NoModifier, point);
+        QTRY_COMPARE(hollowItem->isPressed(), false);
     }
-
-    delete window;
 }
 
 void tst_QQuickItem::childAt()
@@ -3690,6 +3725,112 @@ void tst_QQuickItem::isAncestorOf()
     QVERIFY(!sub2.isAncestorOf(&child2));
     QVERIFY(!sub1.isAncestorOf(&sub1));
     QVERIFY(!sub2.isAncestorOf(&sub2));
+}
+
+/*
+    Verify that a nested item's palette responds to changes of the enabled state
+    and of the window's activation state by switching the current color group.
+*/
+void tst_QQuickItem::colorGroup()
+{
+    QQuickView view;
+
+    view.setSource(testFileUrl("colorgroup.qml"));
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+
+    QQuickItem *root = qobject_cast<QQuickItem *>(view.rootObject());
+    QQuickItem *background = root->findChild<QQuickItem *>("background");
+    QVERIFY(background);
+    QQuickItem *foreground = root->findChild<QQuickItem *>("foreground");
+    QVERIFY(foreground);
+
+    QQuickPalette *palette = foreground->property("palette").value<QQuickPalette*>();
+    QVERIFY(palette);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowActive(&view));
+
+    QCOMPARE(palette->currentColorGroup(), QPalette::Active);
+    QCOMPARE(foreground->property("color").value<QColor>(), palette->active()->base());
+
+    background->setEnabled(false);
+    QCOMPARE(palette->currentColorGroup(), QPalette::Disabled);
+    QCOMPARE(foreground->property("color").value<QColor>(), palette->disabled()->base());
+
+    QWindow activationThief;
+    activationThief.show();
+    activationThief.requestActivate();
+    QVERIFY(QTest::qWaitForWindowActive(&activationThief));
+    QCOMPARE(palette->currentColorGroup(), QPalette::Disabled);
+    QCOMPARE(foreground->property("color").value<QColor>(), palette->disabled()->base());
+
+    background->setEnabled(true);
+    QCOMPARE(palette->currentColorGroup(), QPalette::Inactive);
+    QCOMPARE(foreground->property("color").value<QColor>(), palette->inactive()->base());
+
+    view.requestActivate();
+    QVERIFY(QTest::qWaitForWindowActive(&view));
+    QCOMPARE(palette->currentColorGroup(), QPalette::Active);
+    QCOMPARE(foreground->property("color").value<QColor>(), palette->active()->base());
+
+    activationThief.requestActivate();
+    QVERIFY(QTest::qWaitForWindowActive(&activationThief));
+    QCOMPARE(palette->currentColorGroup(), QPalette::Inactive);
+    QCOMPARE(foreground->property("color").value<QColor>(), palette->inactive()->base());
+}
+
+/*!
+    Verify that items don't allocate their own QQuickPalette instance
+    unnecessarily.
+*/
+void tst_QQuickItem::paletteAllocated()
+{
+    QQuickView view;
+
+    view.setSource(testFileUrl("paletteAllocate.qml"));
+
+    QQuickItem *root = qobject_cast<QQuickItem *>(view.rootObject());
+    QQuickItem *background = root->findChild<QQuickItem *>("background");
+    QVERIFY(background);
+    QQuickItem *foreground = root->findChild<QQuickItem *>("foreground");
+    QVERIFY(foreground);
+
+    bool backgroundHasPalette = false;
+    bool foregroundHasPalette = false;
+    QObject::connect(background, &QQuickItem::paletteCreated, this, [&]{ backgroundHasPalette = true; });
+    QObject::connect(foreground, &QQuickItem::paletteCreated, this, [&]{ foregroundHasPalette = true; });
+
+    view.show();
+    view.requestActivate();
+    QVERIFY(QTest::qWaitForWindowActive(&view));
+
+    QVERIFY(!backgroundHasPalette);
+    QVERIFY(!foregroundHasPalette);
+
+    view.close();
+
+    QVERIFY(!backgroundHasPalette);
+    QVERIFY(!foregroundHasPalette);
+
+    auto quickpalette = foreground->property("palette").value<QQuickPalette*>();
+    QVERIFY(!backgroundHasPalette);
+    QVERIFY(quickpalette);
+    QVERIFY(foregroundHasPalette);
+}
+
+void tst_QQuickItem::undefinedIsInvalidForWidthAndHeight()
+{
+    QQmlEngine engine;
+    QQmlComponent component(&engine, testFileUrl("undefinedInvalid.qml"));
+    QScopedPointer<QObject> root(component.create());
+    QVERIFY(root);
+    auto item = qobject_cast<QQuickItem *>(root.get());
+    auto priv = QQuickItemPrivate::get(item);
+    QVERIFY(item);
+    QCOMPARE(item->height(), 300);
+    QCOMPARE(item->width(), 200);
+    QVERIFY(!priv->widthValid());
+    QVERIFY(!priv->heightValid());
 }
 
 QTEST_MAIN(tst_QQuickItem)

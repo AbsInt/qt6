@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2017 The Qt Company Ltd.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the documentation of the Qt Toolkit.
@@ -48,10 +48,10 @@
 **
 ****************************************************************************/
 
-import QtQuick 2.5
-import QtQuick.Window 2.2
-import QtQuick.Layouts 1.1
-import QtQuick.LocalStorage 2.0
+import QtQuick
+import QtQuick.Controls
+import QtQuick.Layouts
+import QtQuick.LocalStorage
 import "Database.js" as JS
 
 Window {
@@ -69,26 +69,28 @@ Window {
 
         ColumnLayout {
             anchors.fill: parent
+            anchors.margins: 10
 
             Header {
                 id: input
                 Layout.fillWidth: true
                 listView: listView
-                statusText: statustext
+                enabled: window.creatingNewEntry || window.editingEntry
             }
+
             RowLayout {
-                MyButton {
-                    text: "New"
+                Button {
+                    text: qsTr("New")
                     onClicked: {
                         input.initrec_new()
                         window.creatingNewEntry = true
                         listView.model.setProperty(listView.currentIndex, "id", 0)
                     }
                 }
-                MyButton {
+                Button {
                     id: saveButton
                     enabled: (window.creatingNewEntry || window.editingEntry) && listView.currentIndex != -1
-                    text: "Save"
+                    text: qsTr("Save")
                     onClicked: {
                         var insertedRow = false;
                         if (listView.model.get(listView.currentIndex).id < 1) {
@@ -99,7 +101,7 @@ Window {
                                 insertedRow = true
                             } else {
                                 // Failed to insert a row; display an error message.
-                                statustext.text = "Failed to insert row"
+                                statustext.displayWarning(qsTr("Failed to insert row"))
                             }
                         } else {
                             // edit mode
@@ -118,9 +120,9 @@ Window {
                         }
                     }
                 }
-                MyButton {
+                Button {
                     id: editButton
-                    text: "Edit"
+                    text: qsTr("Edit")
                     enabled: !window.creatingNewEntry && !window.editingEntry && listView.currentIndex != -1
                     onClicked: {
                         input.editrec(listView.model.get(listView.currentIndex).date,
@@ -131,9 +133,9 @@ Window {
                         window.editingEntry = true
                     }
                 }
-                MyButton {
+                Button {
                     id: deleteButton
-                    text: "Delete"
+                    text: qsTr("Delete")
                     enabled: !window.creatingNewEntry && listView.currentIndex != -1
                     onClicked: {
                         JS.dbDeleteRow(listView.model.get(listView.currentIndex).id)
@@ -145,9 +147,9 @@ Window {
                         }
                     }
                 }
-                MyButton {
+                Button {
                     id: cancelButton
-                    text: "Cancel"
+                    text: qsTr("Cancel")
                     enabled: (window.creatingNewEntry || window.editingEntry) && listView.currentIndex != -1
                     onClicked: {
                         if (listView.model.get(listView.currentIndex).id === 0) {
@@ -161,10 +163,19 @@ Window {
                         input.initrec()
                     }
                 }
-                MyButton {
-                    text: "Exit"
+                Button {
+                    text: qsTr("Exit")
                     onClicked: Qt.quit()
                 }
+            }
+            Item {
+                Layout.fillWidth: true
+                height: 5
+            }
+            Label {
+                Layout.alignment: Qt.AlignCenter
+                text: qsTr("Saved activities")
+                font.pointSize: 15
             }
             Component {
                 id: highlightBar
@@ -180,7 +191,8 @@ Window {
                 Layout.fillHeight: true
                 model: MyModel {}
                 delegate: MyDelegate {
-                    onClicked: listView.currentIndex = index
+                    width: listView.width
+                    onClicked: ()=> listView.currentIndex = index
                 }
                 // Don't allow changing the currentIndex while the user is creating/editing values.
                 enabled: !window.creatingNewEntry && !window.editingEntry
@@ -188,20 +200,70 @@ Window {
                 highlight: highlightBar
                 highlightFollowsCurrentItem: true
                 focus: true
+                clip: true
 
                 header: Component {
-                    Text {
-                        text: "Saved activities"
+                    RowLayout {
+                        property var headerTitles: [qsTr("Date"), qsTr("Description"), qsTr("Distance")]
+                        width: ListView.view.width
+                        Repeater {
+                            model: headerTitles
+                            delegate: Label {
+                                id: headerTitleDelegate
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+                                Layout.preferredWidth: 1
+                                text: modelData
+                                font.pointSize: 15
+                                font.bold: true
+                                font.underline: true
+                                padding: 12
+                                horizontalAlignment: Label.AlignHCenter
+                            }
+                        }
                     }
                 }
             }
-            Text {
+            Label {
                 id: statustext
                 color: "red"
-                Layout.fillWidth: true
                 font.bold: true
                 font.pointSize: 20
+                opacity: 0.0
+                visible: opacity !== 0 // properly cull item if effectively invisible
+                Layout.alignment: Layout.Center
 
+                function displayWarning(text) {
+                    statustext.text = text
+                    statusAnim.restart()
+                }
+
+                Connections {
+                    target: input
+                    function onStatusMessage(msg) { statustext.displayWarning(msg); }
+                }
+
+                SequentialAnimation {
+                    id: statusAnim
+
+                    OpacityAnimator {
+                        target: statustext
+                        from: 0.0
+                        to: 1.0
+                        duration: 50
+                    }
+
+                    PauseAnimation {
+                        duration: 2000
+                    }
+
+                    OpacityAnimator {
+                        target: statustext
+                        from: 1.0
+                        to: 0.0
+                        duration: 50
+                    }
+                }
             }
         }
     }

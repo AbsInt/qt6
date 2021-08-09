@@ -86,7 +86,7 @@ class tst_qqmllanguage : public QQmlDataTest
     Q_OBJECT
 
 private slots:
-    void initTestCase();
+    void initTestCase() override;
     void cleanupTestCase();
 
     void errors_data();
@@ -142,7 +142,6 @@ private slots:
     void requiredPropertyFromCpp();
     void attachedProperties();
     void dynamicObjects();
-    void customVariantTypes();
     void valueTypes();
     void cppnamespace();
     void aliasProperties();
@@ -327,6 +326,7 @@ private slots:
     void nonExistingInlineComponent();
     void inlineComponentFoundBeforeOtherImports();
     void inlineComponentDuplicateNameError();
+    void inlineComponentWithAliasInstantiatedWithNewProperties();
 
     void selfReference();
     void selfReferencingSingleton();
@@ -357,6 +357,11 @@ private slots:
     void qtbug_85615();
 
     void hangOnWarning();
+
+    void listEnumConversion();
+    void deepInlineComponentScriptBinding();
+
+    void propertyObserverOnReadonly();
 
     void variantListConversion();
 
@@ -531,6 +536,10 @@ void tst_qqmllanguage::errors_data()
     QTest::newRow("nullishCoalescing_LHS_And") << "nullishCoalescing_LHS_And.qml" << "nullishCoalescing_LHS_And.errors.txt" << false;
     QTest::newRow("nullishCoalescing_RHS_Or") << "nullishCoalescing_RHS_Or.qml" << "nullishCoalescing_RHS_Or.errors.txt" << false;
     QTest::newRow("nullishCoalescing_RHS_And") << "nullishCoalescing_RHS_And.qml" << "nullishCoalescing_RHS_And.errors.txt" << false;
+
+    QTest::newRow("questionDotEOF") << "questionDotEOF.qml" << "questionDotEOF.errors.txt" << false;
+    QTest::newRow("optionalChaining.LHS") << "optionalChaining.LHS.qml" << "optionalChaining.LHS.errors.txt" << false;
+
 
     QTest::newRow("invalidGroupedProperty.1") << "invalidGroupedProperty.1.qml" << "invalidGroupedProperty.1.errors.txt" << false;
     QTest::newRow("invalidGroupedProperty.2") << "invalidGroupedProperty.2.qml" << "invalidGroupedProperty.2.errors.txt" << false;
@@ -1338,6 +1347,7 @@ void tst_qqmllanguage::rootItemIsComponent()
     QQmlContext *context = qmlContext(other.data());
     QVERIFY(context);
     QCOMPARE(context->nameForObject(other.data()), QStringLiteral("blah"));
+    QCOMPARE(context->objectForName(QStringLiteral("blah")), other.data());
 }
 
 // Tests that components can be specified inline
@@ -1382,7 +1392,8 @@ void tst_qqmllanguage::idProperty()
         QVERIFY(!root.isNull());
         QQmlContext *ctx = qmlContext(root.data());
         QVERIFY(ctx);
-        QCOMPARE(ctx->nameForObject(root.data()), QString("root"));
+        QCOMPARE(ctx->nameForObject(root.data()), QStringLiteral("root"));
+        QCOMPARE(ctx->objectForName(QStringLiteral("root")), root.data());
     }
 }
 
@@ -1824,16 +1835,6 @@ void tst_qqmllanguage::dynamicObjects()
     VERIFY_ERRORS(0);
     QScopedPointer<QObject> object(component.create());
     QVERIFY(object != nullptr);
-}
-
-// Tests the registration of custom variant string converters
-void tst_qqmllanguage::customVariantTypes()
-{
-    QQmlComponent component(&engine, testFileUrl("customVariantTypes.qml"));
-    VERIFY_ERRORS(0);
-    QScopedPointer<MyQmlObject> object(qobject_cast<MyQmlObject*>(component.create()));
-    QVERIFY(object != nullptr);
-    QCOMPARE(object->customType().a, 10);
 }
 
 void tst_qqmllanguage::valueTypes()
@@ -3421,11 +3422,11 @@ void tst_qqmllanguage::importJs()
 
     {
         DETERMINE_ERRORS(errorFile,expected,actual);
-        QCOMPARE(expected.size(), actual.size());
+        QCOMPARE(actual.size(), expected.size());
         for (int i = 0; i < expected.size(); ++i)
         {
             const int compareLen = qMin(expected.at(i).length(), actual.at(i).length());
-            QCOMPARE(expected.at(i).left(compareLen), actual.at(i).left(compareLen));
+            QCOMPARE(actual.at(i).left(compareLen), expected.at(i).left(compareLen));
         }
     }
 
@@ -3739,8 +3740,6 @@ void tst_qqmllanguage::initTestCase()
 
 
     defaultImportPathList = engine.importPathList();
-
-    QQmlMetaType::registerCustomStringConverter(qMetaTypeId<MyCustomVariantType>(), myCustomVariantTypeConverter);
 
     registerTypes();
     // Registered here because it uses testFileUrl
@@ -5508,6 +5507,8 @@ void tst_qqmllanguage::extendedForeignTypes()
     QCOMPARE(o->property("foreignExtendedExtension").toInt(), 42);
     QCOMPARE(o->property("foreignObjectName").toString(), QLatin1String("foreign"));
     QCOMPARE(o->property("foreignExtendedObjectName").toString(), QLatin1String("foreignExtended"));
+    QCOMPARE(o->property("extendedInvokable").toInt(), 123);
+    QCOMPARE(o->property("extendedSlot").toInt(), 456);
 }
 
 void tst_qqmllanguage::foreignTypeSingletons() {
@@ -5626,7 +5627,7 @@ void tst_qqmllanguage::overrideSingleton()
 
     QTest::ignoreMessage(
                 QtWarningMsg,
-                "singleton.qml:3: TypeError: Cannot read property 'objectName' of undefined");
+                "singleton.qml:3:12: TypeError: Cannot read property 'objectName' of undefined");
     check("", "UncreatableSingleton");
 
     qmlRegisterSingletonInstance("Test", 1, 0, "UncreatableSingleton",
@@ -5866,6 +5867,19 @@ void tst_qqmllanguage::inlineComponentDuplicateNameError()
     QVERIFY(root.isNull());
     QVERIFY(component.isError());
     QCOMPARE(component.errorString(), message);
+}
+
+void tst_qqmllanguage::inlineComponentWithAliasInstantiatedWithNewProperties()
+{
+    // this tests that metaobjects are resolved in the correct order
+    // so that inline components are fully resolved before they are used
+    // in their parent component
+
+    QQmlEngine engine;
+    QQmlComponent component(&engine, testFileUrl("inlineComponentWithAliasInstantiated.qml"));
+    QScopedPointer<QObject> root {component.create()};
+    QVERIFY2(root, qPrintable(component.errorString()));
+    QCOMPARE(root->property("result").toString(), "Bar");
 }
 
 struct QJSValueConvertible {
@@ -6180,7 +6194,7 @@ void tst_qqmllanguage::warnOnInjectedParameters()
 {
    QQmlEngine e;
    QQmlComponent c(&engine);
-   QTest::ignoreMessage(QtWarningMsg, "qrc:/foo.qml:4:18 Parameter \"bar\" is not declared."
+   QTest::ignoreMessage(QtWarningMsg, "qrc:/foo.qml:4:5 Parameter \"bar\" is not declared."
                                       " Injection of parameters into signal handlers is deprecated."
                                       " Use JavaScript functions with formal parameters instead.");
    c.setData("import QtQml\n"
@@ -6288,6 +6302,57 @@ void tst_qqmllanguage::hangOnWarning()
     QQmlComponent component(&engine, testFileUrl("hangOnWarning.qml"));
     QScopedPointer<QObject> object(component.create());
     QVERIFY(object != nullptr);
+}
+
+void tst_qqmllanguage::listEnumConversion()
+{
+    QQmlEngine e;
+    QQmlComponent c(&engine);
+    c.setData(R"(
+import QtQml 2.0
+import StaticTest 1.0
+QtObject {
+    property EnumList enumList: EnumList {}
+    property var list: enumList.list()
+    property bool resultAlpha: EnumList.Alpha === list[0]
+    property bool resultBeta: EnumList.Beta === list[1]
+    property bool resultGamma: EnumList.Gamma === list[2]
+    property var resultEnumType: EnumList.Alpha
+    property var resultEnumListType: list[0]
+})",
+              QUrl());
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+
+    QScopedPointer<QObject> o(c.create());
+    QCOMPARE(o->property("resultAlpha").toBool(), true);
+    QCOMPARE(o->property("resultBeta").toBool(), true);
+    QCOMPARE(o->property("resultGamma").toBool(), true);
+    QCOMPARE(o->property("resultEnumType").metaType(), QMetaType(QMetaType::Int));
+    QCOMPARE(o->property("resultEnumListType").metaType(), QMetaType(QMetaType::Int));
+}
+
+void tst_qqmllanguage::deepInlineComponentScriptBinding()
+{
+    QQmlEngine e;
+    QQmlComponent c(&engine);
+    c.loadUrl(testFileUrl("deepInlineComponentScriptBinding.qml"));
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+
+    QScopedPointer<QObject> o(c.create());
+    QVERIFY(!o.isNull());
+}
+
+void tst_qqmllanguage::propertyObserverOnReadonly()
+{
+    QQmlEngine e;
+    QQmlComponent c(&engine, testFileUrl("SelectionRange.qml"));
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+    QScopedPointer<QObject> o(c.create());
+
+    QCOMPARE(o->property("zoomer").toDouble(), o->property("height").toDouble());
+    o->setProperty("height", QVariant::fromValue<double>(54.2));
+    QCOMPARE(o->property("zoomer").toDouble(), 54.2);
+    QCOMPARE(o->property("height").toDouble(), 54.2);
 }
 
 void tst_qqmllanguage::variantListConversion()

@@ -27,15 +27,85 @@
 ****************************************************************************/
 
 import QtQuick 2.0
-import QtQuick.Controls 2.12
+
 
 Item {
+    id: root
     width: 360
     height: 360
+    property int widthFactor: 7
 
-    Text {
-        text: qsTr("hello")
-        width: parent.width / 10
-        elide: Text.ElideRight
+    Column {
+        Text {
+            id: text1
+            text: qsTr("hello")
+            width: root.width / widthFactor
+        }
+        Text {
+            id: text2
+            text: qsTr("short")
+            width: root.width / widthFactor
+        }
+        Text {
+            id: text3
+            text: "long not translated text"
+            width: root.width / widthFactor
+        }
     }
+    // this is necessary to have the test working for different font sizes and dpi settings
+    Text {
+        id: originHelloTextToGetTheNecessaryWidth
+        text: "short"
+        opacity: 0
+        anchors.bottom: root.bottom
+        onWidthChanged: root.width = originHelloTextToGetTheNecessaryWidth.width * widthFactor
+    }
+    states: [
+        State {
+            name: "BiggerFontState"
+
+            PropertyChanges {
+                target: text1
+                font.pointSize: 20
+            }
+
+            PropertyChanges {
+                target: text2
+                font.pointSize: 20
+            }
+
+            PropertyChanges {
+                target: text3
+                font.pointSize: 20
+            }
+
+            PropertyChanges {
+                target: originHelloTextToGetTheNecessaryWidth
+                font.pointSize: 20
+            }
+        },
+        State {
+            name: "WayBiggerFontState"
+
+            PropertyChanges {
+                target: text1
+                font.pointSize: 30
+            }
+
+            PropertyChanges {
+                target: text2
+                font.pointSize: 30
+            }
+
+            PropertyChanges {
+                target: text3
+                font.pointSize: 30
+            }
+
+            PropertyChanges {
+                target: originHelloTextToGetTheNecessaryWidth
+                font.pointSize: 30
+            }
+        }
+    ]
 }

@@ -6,7 +6,7 @@
 
 qt_internal_add_plugin(QSQLiteDriverPlugin
     OUTPUT_NAME qsqlite
-    TYPE sqldrivers
+    PLUGIN_TYPE sqldrivers
     SOURCES
         qsql_sqlite.cpp qsql_sqlite_p.h
         smain.cpp
@@ -35,6 +35,10 @@ qt_internal_extend_target(QSQLiteDriverPlugin CONDITION QT_FEATURE_system_sqlite
 if (NOT QT_FEATURE_system_sqlite)
     # On newer compilers compiling sqlite.c produces warnings
     qt_disable_warnings(QSQLiteDriverPlugin)
+endif()
+
+if(QT_FEATURE_system_sqlite)
+    qt_internal_force_macos_intel_arch(QSQLiteDriverPlugin)
 endif()
 # special case end
 

@@ -6,7 +6,7 @@
 
 qt_internal_add_plugin(QDB2DriverPlugin
     OUTPUT_NAME qsqldb2
-    TYPE sqldrivers
+    PLUGIN_TYPE sqldrivers
     SOURCES
         main.cpp
         qsql_db2.cpp qsql_db2_p.h
@@ -30,3 +30,5 @@ qt_internal_extend_target(QDB2DriverPlugin CONDITION (TEST_architecture_arch STR
     DEFINES
         ODBC64
 )
+
+qt_internal_force_macos_intel_arch(QDB2DriverPlugin)

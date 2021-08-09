@@ -1153,10 +1153,12 @@ QRectF QQuickTextPrivate::setupTextLayout(qreal *const baseline)
 
         elideLayout->setFont(layout.font());
         elideLayout->setTextOption(layout.textOption());
+#if QT_CONFIG(translation) && QT_CONFIG(qml_debug)
         if (QQmlDebugTranslationService *service
                      = QQmlDebugConnector::service<QQmlDebugTranslationService>()) {
             elideText = service->foundElidedText(q, layoutText, elideText);
         }
+#endif //QT_CONFIG(translation)
         elideLayout->setText(elideText);
         elideLayout->beginLayout();
 
@@ -1181,8 +1183,8 @@ QRectF QQuickTextPrivate::setupTextLayout(qreal *const baseline)
     QTextLine firstLine = visibleCount == 1 && elideLayout
             ? elideLayout->lineAt(0)
             : layout.lineAt(0);
-    Q_ASSERT(firstLine.isValid());
-    *baseline = firstLine.y() + firstLine.ascent();
+    if (firstLine.isValid())
+        *baseline = firstLine.y() + firstLine.ascent();
 
     if (!customLayout)
         br.setHeight(height);
@@ -1728,9 +1730,11 @@ void QQuickText::setText(const QString &n)
     if (isComponentComplete()) {
         if (d->richText) {
             d->ensureDoc();
+#if QT_CONFIG(textmarkdownreader)
             if (d->markdownText)
                 d->extra->doc->setMarkdownText(n);
             else
+#endif
                 d->extra->doc->setText(n);
             d->rightToLeftText = d->extra->doc->toPlainText().isRightToLeft();
         } else {
@@ -2171,7 +2175,7 @@ void QQuickText::resetMaximumLineCount()
     <img src="" align="top,middle,bottom" width="" height=""> - inline images
     <ol type="">, <ul type=""> and <li> - ordered and unordered lists
     <pre></pre> - preformatted
-    &gt; &lt; &amp; &quot; &nbsp; &apos;
+    All entities
     \endcode
 
     \c Text.StyledText parser is strict, requiring tags to be correctly nested.
@@ -2760,9 +2764,11 @@ void QQuickText::componentComplete()
     if (d->updateOnComponentComplete) {
         if (d->richText) {
             d->ensureDoc();
+#if QT_CONFIG(textmarkdownreader)
             if (d->markdownText)
                 d->extra->doc->setMarkdownText(d->text);
             else
+#endif
                 d->extra->doc->setText(d->text);
             d->rightToLeftText = d->extra->doc->toPlainText().isRightToLeft();
         } else {
@@ -2866,6 +2872,38 @@ bool QQuickTextPrivate::isLinkHoveredConnected()
     Q_Q(QQuickText);
     IS_SIGNAL_CONNECTED(q, QQuickText, linkHovered, (const QString &));
 }
+
+static void getLinks_helper(const QTextLayout *layout, QVector<QQuickTextPrivate::LinkDesc> *links)
+{
+    for (const QTextLayout::FormatRange &formatRange : layout->formats()) {
+        if (formatRange.format.isAnchor()) {
+            const int start = formatRange.start;
+            const int len = formatRange.length;
+            QTextLine line = layout->lineForTextPosition(start);
+            QRectF r;
+            r.setTop(line.y());
+            r.setLeft(line.cursorToX(start, QTextLine::Leading));
+            r.setHeight(line.height());
+            r.setRight(line.cursorToX(start + len, QTextLine::Trailing));
+            // ### anchorNames() is empty?! Not sure why this doesn't work
+            // QString anchorName = formatRange.format.anchorNames().value(0); //### pick the first?
+            // Therefore, we resort to QString::mid()
+            QString anchorName = layout->text().mid(start, len);
+            const QString anchorHref = formatRange.format.anchorHref();
+            if (anchorName.isEmpty())
+                anchorName = anchorHref;
+            links->append( { anchorName, anchorHref, start, start + len, r.toRect()} );
+        }
+    }
+}
+
+QVector<QQuickTextPrivate::LinkDesc> QQuickTextPrivate::getLinks() const
+{
+    QVector<QQuickTextPrivate::LinkDesc> links;
+    getLinks_helper(&layout, &links);
+    return links;
+}
+
 
 /*!
     \qmlsignal QtQuick::Text::linkHovered(string link)

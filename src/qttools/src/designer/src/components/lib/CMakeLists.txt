@@ -1,10 +1,10 @@
 # Generated from lib.pro.
 
 #####################################################################
-## DesignerComponents Module:
+## DesignerComponentsPrivate Module:
 #####################################################################
 
-qt_internal_add_module(DesignerComponents
+qt_internal_add_module(DesignerComponentsPrivate
     INTERNAL_MODULE
     SOURCES
         ../buddyeditor/buddyeditor.cpp ../buddyeditor/buddyeditor.h
@@ -14,7 +14,7 @@ qt_internal_add_module(DesignerComponents
         ../formeditor/default_actionprovider.cpp ../formeditor/default_actionprovider.h
         ../formeditor/default_container.cpp ../formeditor/default_container.h
         ../formeditor/default_layoutdecoration.cpp ../formeditor/default_layoutdecoration.h
-        ../formeditor/deviceprofiledialog.cpp ../formeditor/deviceprofiledialog.h ../formeditor/deviceprofiledialog.ui
+        ../formeditor/deviceprofiledialog.cpp ../formeditor/deviceprofiledialog.h
         ../formeditor/dpi_chooser.cpp ../formeditor/dpi_chooser.h
         ../formeditor/embeddedoptionspage.cpp ../formeditor/embeddedoptionspage.h
         ../formeditor/formeditor.cpp ../formeditor/formeditor.h
@@ -25,7 +25,7 @@ qt_internal_add_module(DesignerComponents
         ../formeditor/formwindow_widgetstack.cpp ../formeditor/formwindow_widgetstack.h
         ../formeditor/formwindowcursor.cpp ../formeditor/formwindowcursor.h
         ../formeditor/formwindowmanager.cpp ../formeditor/formwindowmanager.h
-        ../formeditor/formwindowsettings.cpp ../formeditor/formwindowsettings.h ../formeditor/formwindowsettings.ui
+        ../formeditor/formwindowsettings.cpp ../formeditor/formwindowsettings.h
         ../formeditor/itemview_propertysheet.cpp ../formeditor/itemview_propertysheet.h
         ../formeditor/layout_propertysheet.cpp ../formeditor/layout_propertysheet.h
         ../formeditor/line_propertysheet.cpp ../formeditor/line_propertysheet.h
@@ -36,7 +36,7 @@ qt_internal_add_module(DesignerComponents
         ../formeditor/qmdiarea_container.cpp ../formeditor/qmdiarea_container.h
         ../formeditor/qwizard_container.cpp ../formeditor/qwizard_container.h
         ../formeditor/spacer_propertysheet.cpp ../formeditor/spacer_propertysheet.h
-        ../formeditor/templateoptionspage.cpp ../formeditor/templateoptionspage.h ../formeditor/templateoptionspage.ui
+        ../formeditor/templateoptionspage.cpp ../formeditor/templateoptionspage.h
         ../formeditor/tool_widgeteditor.cpp ../formeditor/tool_widgeteditor.h
         ../formeditor/widgetselection.cpp ../formeditor/widgetselection.h
         ../objectinspector/objectinspector.cpp ../objectinspector/objectinspector.h
@@ -45,17 +45,17 @@ qt_internal_add_module(DesignerComponents
         ../propertyeditor/brushpropertymanager.cpp ../propertyeditor/brushpropertymanager.h
         ../propertyeditor/designerpropertymanager.cpp ../propertyeditor/designerpropertymanager.h
         ../propertyeditor/fontpropertymanager.cpp ../propertyeditor/fontpropertymanager.h
-        ../propertyeditor/newdynamicpropertydialog.cpp ../propertyeditor/newdynamicpropertydialog.h ../propertyeditor/newdynamicpropertydialog.ui
-        ../propertyeditor/paletteeditor.cpp ../propertyeditor/paletteeditor.h ../propertyeditor/paletteeditor.ui
+        ../propertyeditor/newdynamicpropertydialog.cpp ../propertyeditor/newdynamicpropertydialog.h
+        ../propertyeditor/paletteeditor.cpp ../propertyeditor/paletteeditor.h
         ../propertyeditor/paletteeditorbutton.cpp ../propertyeditor/paletteeditorbutton.h
         ../propertyeditor/previewframe.cpp ../propertyeditor/previewframe.h
-        ../propertyeditor/previewwidget.cpp ../propertyeditor/previewwidget.h ../propertyeditor/previewwidget.ui
+        ../propertyeditor/previewwidget.cpp ../propertyeditor/previewwidget.h
         ../propertyeditor/propertyeditor.cpp ../propertyeditor/propertyeditor.h
         ../propertyeditor/propertyeditor_global.h
         ../propertyeditor/qlonglongvalidator.cpp ../propertyeditor/qlonglongvalidator.h
-        ../propertyeditor/stringlisteditor.cpp ../propertyeditor/stringlisteditor.h ../propertyeditor/stringlisteditor.ui
+        ../propertyeditor/stringlisteditor.cpp ../propertyeditor/stringlisteditor.h
         ../propertyeditor/stringlisteditorbutton.cpp ../propertyeditor/stringlisteditorbutton.h
-        ../signalsloteditor/connectdialog.cpp ../signalsloteditor/connectdialog.ui ../signalsloteditor/connectdialog_p.h
+        ../signalsloteditor/connectdialog.cpp  ../signalsloteditor/connectdialog_p.h
         ../signalsloteditor/signalslot_utils.cpp ../signalsloteditor/signalslot_utils_p.h
         ../signalsloteditor/signalsloteditor.cpp ../signalsloteditor/signalsloteditor.h ../signalsloteditor/signalsloteditor_p.h
         ../signalsloteditor/signalsloteditor_global.h
@@ -72,7 +72,7 @@ qt_internal_add_module(DesignerComponents
         ../taskmenu/groupbox_taskmenu.cpp ../taskmenu/groupbox_taskmenu.h
         ../taskmenu/inplace_editor.cpp ../taskmenu/inplace_editor.h
         ../taskmenu/inplace_widget_helper.cpp ../taskmenu/inplace_widget_helper.h
-        ../taskmenu/itemlisteditor.cpp ../taskmenu/itemlisteditor.h ../taskmenu/itemlisteditor.ui
+        ../taskmenu/itemlisteditor.cpp ../taskmenu/itemlisteditor.h
         ../taskmenu/label_taskmenu.cpp ../taskmenu/label_taskmenu.h
         ../taskmenu/layouttaskmenu.cpp ../taskmenu/layouttaskmenu.h
         ../taskmenu/lineedit_taskmenu.cpp ../taskmenu/lineedit_taskmenu.h
@@ -80,12 +80,12 @@ qt_internal_add_module(DesignerComponents
         ../taskmenu/listwidgeteditor.cpp ../taskmenu/listwidgeteditor.h
         ../taskmenu/menutaskmenu.cpp ../taskmenu/menutaskmenu.h
         ../taskmenu/tablewidget_taskmenu.cpp ../taskmenu/tablewidget_taskmenu.h
-        ../taskmenu/tablewidgeteditor.cpp ../taskmenu/tablewidgeteditor.h ../taskmenu/tablewidgeteditor.ui
+        ../taskmenu/tablewidgeteditor.cpp ../taskmenu/tablewidgeteditor.h
         ../taskmenu/taskmenu_component.cpp ../taskmenu/taskmenu_component.h
         ../taskmenu/textedit_taskmenu.cpp ../taskmenu/textedit_taskmenu.h
         ../taskmenu/toolbar_taskmenu.cpp ../taskmenu/toolbar_taskmenu.h
         ../taskmenu/treewidget_taskmenu.cpp ../taskmenu/treewidget_taskmenu.h
-        ../taskmenu/treewidgeteditor.cpp ../taskmenu/treewidgeteditor.h ../taskmenu/treewidgeteditor.ui
+        ../taskmenu/treewidgeteditor.cpp ../taskmenu/treewidgeteditor.h
         ../widgetbox/widgetbox.cpp ../widgetbox/widgetbox.h
         ../widgetbox/widgetbox_dnditem.cpp ../widgetbox/widgetbox_dnditem.h
         ../widgetbox/widgetbox_global.h
@@ -125,12 +125,34 @@ qt_internal_add_module(DesignerComponents
         "lib_pch.h"
 )
 
+set(ui_sources
+    ../formeditor/deviceprofiledialog.ui
+    ../formeditor/formwindowsettings.ui
+    ../formeditor/templateoptionspage.ui
+    ../propertyeditor/newdynamicpropertydialog.ui
+    ../propertyeditor/paletteeditor.ui
+    ../propertyeditor/previewwidget.ui
+    ../propertyeditor/stringlisteditor.ui
+    ../signalsloteditor/connectdialog.ui
+    ../taskmenu/itemlisteditor.ui
+    ../taskmenu/tablewidgeteditor.ui
+    ../taskmenu/treewidgeteditor.ui
+)
+
+# Work around QTBUG-95305
+if(CMAKE_GENERATOR STREQUAL "Ninja Multi-Config" AND CMAKE_CROSS_CONFIGS)
+    qt6_wrap_ui(ui_sources_processed ${ui_sources})
+else()
+    set(ui_sources_processed ${ui_sources})
+endif()
+target_sources(DesignerComponentsPrivate PRIVATE ${ui_sources_processed})
+
 # Resources:
 set(propertyeditor_resource_files
     "../propertyeditor/fontmapping.xml"
 )
 
-qt_internal_add_resource(DesignerComponents "propertyeditor"
+qt_internal_add_resource(DesignerComponentsPrivate "propertyeditor"
     PREFIX
         "/qt-project.org/propertyeditor"
     BASE
@@ -313,7 +335,7 @@ set(formeditor_resource_files
     "../formeditor/images/win/widgettool.png"
 )
 
-qt_internal_add_resource(DesignerComponents "formeditor"
+qt_internal_add_resource(DesignerComponentsPrivate "formeditor"
     PREFIX
         "/qt-project.org/formeditor"
     BASE
@@ -325,7 +347,7 @@ set(formeditor1_resource_files
     "../formeditor/defaultbrushes.xml"
 )
 
-qt_internal_add_resource(DesignerComponents "formeditor1"
+qt_internal_add_resource(DesignerComponentsPrivate "formeditor1"
     PREFIX
         "/qt-project.org/brushes"
     BASE
@@ -337,7 +359,7 @@ set(widgetbox_resource_files
     "../widgetbox/widgetbox.xml"
 )
 
-qt_internal_add_resource(DesignerComponents "widgetbox"
+qt_internal_add_resource(DesignerComponentsPrivate "widgetbox"
     PREFIX
         "/qt-project.org/widgetbox"
     BASE
@@ -348,12 +370,12 @@ qt_internal_add_resource(DesignerComponents "widgetbox"
 
 
 #### Keys ignored in scope 1:.:.:lib.pro:<TRUE>:
-# MODULE = "designercomponents"
+# MODULE = "DesignerComponentsPrivate"
 
 ## Scopes:
 #####################################################################
 
-qt_internal_extend_target(DesignerComponents CONDITION NOT QT_BUILD_SHARED_LIBS
+qt_internal_extend_target(DesignerComponentsPrivate CONDITION NOT QT_BUILD_SHARED_LIBS
     DEFINES
         QT_DESIGNER_STATIC
     INCLUDE_DIRECTORIES
@@ -362,7 +384,7 @@ qt_internal_extend_target(DesignerComponents CONDITION NOT QT_BUILD_SHARED_LIBS
         ../../../../shared/qtpropertybrowser
 )
 
-qt_internal_extend_target(DesignerComponents CONDITION QT_BUILD_SHARED_LIBS
+qt_internal_extend_target(DesignerComponentsPrivate CONDITION QT_BUILD_SHARED_LIBS
     SOURCES
         ../../../../shared/findwidget/abstractfindwidget.cpp ../../../../shared/findwidget/abstractfindwidget.h
         ../../../../shared/findwidget/itemviewfindwidget.cpp ../../../../shared/findwidget/itemviewfindwidget.h
@@ -396,7 +418,7 @@ if(QT_BUILD_SHARED_LIBS)
         "../../../../shared/findwidget/images/wrap.png"
     )
 
-    qt_internal_add_resource(DesignerComponents "findwidget"
+    qt_internal_add_resource(DesignerComponentsPrivate "findwidget"
         PREFIX
             "/qt-project.org/shared"
         BASE
@@ -425,7 +447,7 @@ if(QT_BUILD_SHARED_LIBS)
         "../../../../shared/qtpropertybrowser/images/cursor-whatsthis.png"
     )
 
-    qt_internal_add_resource(DesignerComponents "qtpropertybrowser"
+    qt_internal_add_resource(DesignerComponentsPrivate "qtpropertybrowser"
         PREFIX
             "/qt-project.org/qtpropertybrowser"
         BASE

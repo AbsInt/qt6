@@ -91,6 +91,7 @@ set(subprograms
     findtestdata
     float
     globaldata
+    junit
     longstring
     maxwarnings
     multiexec
@@ -116,7 +117,6 @@ set(subprograms
     verifyexceptionthrown
     warnings
     watchdog
-    xunit
 )
 
 if(TARGET Qt::Gui)
@@ -126,6 +126,9 @@ if(TARGET Qt::Gui)
     )
 endif()
 
+# Ensure uniform location info between release and debug builds
+add_definitions(-DQT_MESSAGELOGCONTEXT)
+
 foreach(subprogram IN LISTS subprograms)
     add_subdirectory(${subprogram})
 endforeach()
@@ -133,7 +136,7 @@ endforeach()
 list(JOIN subprograms " " subprograms)
 qt_internal_extend_target(tst_selftests
     DEFINES
-        SUBPROGRAMS=${subprograms}
+        $<$<COMPILE_LANGUAGE:CXX>:SUBPROGRAMS=${subprograms}>
 )
 # special case end
 

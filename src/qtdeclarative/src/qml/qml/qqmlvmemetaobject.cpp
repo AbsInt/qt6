@@ -247,7 +247,7 @@ void QQmlVMEMetaObjectEndpoint::tryConnect()
             int coreIndex = encodedIndex.coreIndex();
             int valueTypeIndex = encodedIndex.valueTypeIndex();
             const QQmlPropertyData *pd = targetDData->propertyCache->property(coreIndex);
-            if (pd && valueTypeIndex != -1 && !QQmlValueTypeFactory::valueType(pd->propType())) {
+            if (pd && valueTypeIndex != -1 && !QQmlMetaType::valueType(pd->propType())) {
                 // deep alias
                 QQmlEnginePrivate *enginePriv = QQmlEnginePrivate::get(metaObject->compilationUnit->engine->qmlEngine());
                 auto const *newPropertyCache = enginePriv->propertyCacheForType(pd->propType().id());
@@ -312,8 +312,9 @@ int QQmlInterceptorMetaObject::metaCall(QObject *o, QMetaObject::Call c, int id,
 
 bool QQmlInterceptorMetaObject::intercept(QMetaObject::Call c, int id, void **a)
 {
-    if (c == QMetaObject::WriteProperty && interceptors &&
-       !(*reinterpret_cast<int*>(a[3]) & QQmlPropertyData::BypassInterceptor)) {
+    if ( ( (c == QMetaObject::WriteProperty &&
+            !(*reinterpret_cast<int*>(a[3]) & QQmlPropertyData::BypassInterceptor)) || c == QMetaObject::BindableProperty )
+         && interceptors ) {
 
         for (QQmlPropertyValueInterceptor *vi = interceptors; vi; vi = vi->m_next) {
             if (vi->m_propertyIndex.coreIndex() != id)
@@ -322,10 +323,10 @@ bool QQmlInterceptorMetaObject::intercept(QMetaObject::Call c, int id, void **a)
             const int valueIndex = vi->m_propertyIndex.valueTypeIndex();
             const QQmlData *data = QQmlData::get(object);
             const QMetaType metaType = data->propertyCache->property(id)->propType();
-            const int type = metaType.id();
 
-            if (type != QMetaType::UnknownType) {
-                if (valueIndex != -1) {
+            if (metaType.isValid()) {
+                if (valueIndex != -1 && c == QMetaObject::WriteProperty) {
+                    // TODO: handle intercepting bindable properties for value types?
                     QQmlGadgetPtrWrapper *valueType = QQmlGadgetPtrWrapper::instance(
                                 data->context->engine(), metaType);
                     Q_ASSERT(valueType);
@@ -362,7 +363,7 @@ bool QQmlInterceptorMetaObject::intercept(QMetaObject::Call c, int id, void **a)
                     //
 
                     QMetaProperty valueProp = valueType->property(valueIndex);
-                    QVariant newValue(QMetaType(type), a[0]);
+                    QVariant newValue(metaType, a[0]);
 
                     valueType->read(object, id);
                     QVariant prevComponentValue = valueProp.read(valueType);
@@ -382,9 +383,13 @@ bool QQmlInterceptorMetaObject::intercept(QMetaObject::Call c, int id, void **a)
 
                     if (updated)
                         return true;
-                } else {
-                    vi->write(QVariant(QMetaType(type), a[0]));
+                } else if (c == QMetaObject::WriteProperty) {
+                    vi->write(QVariant(metaType, a[0]));
                     return true;
+                } else {
+                    object->qt_metacall(c, id, a);
+                    QUntypedBindable target = *reinterpret_cast<QUntypedBindable *>(a[0]);
+                    return vi->bindable(reinterpret_cast<QUntypedBindable *>(a[0]), target);
                 }
             }
         }
@@ -651,7 +656,7 @@ QVector<QQmlGuard<QObject>> *QQmlVMEMetaObject::readPropertyAsList(int id) const
 
     QV4::Scope scope(engine);
     QV4::Scoped<QV4::VariantObject> v(scope, *(md->data() + id));
-    if (!v || (int)v->d()->data().userType() != qMetaTypeId<QVector<QQmlGuard<QObject>> >()) {
+    if (!v || v->d()->data().metaType() != QMetaType::fromType<QVector<QQmlGuard<QObject>>>()) {
         QVariant variant(QVariant::fromValue(QVector<QQmlGuard<QObject>>()));
         v = engine->newVariantObject(variant);
         md->set(engine, id, v);
@@ -693,6 +698,8 @@ int QQmlVMEMetaObject::metaCall(QObject *o, QMetaObject::Call c, int _id, void *
             id -= propOffset();
 
             if (id < propertyCount) {
+                // if we reach this point, propertyCount must have been > 0, and thus compiledObject != nullptr
+                Q_ASSERT(compiledObject);
                 const QV4::CompiledData::Property &property = compiledObject->propertyTable()[id];
                 const QV4::CompiledData::BuiltinType t = property.builtinType();
 
@@ -998,35 +1005,24 @@ int QQmlVMEMetaObject::metaCall(QObject *o, QMetaObject::Call c, int _id, void *
                 auto methodData = cache->method(_id);
                 auto arguments = methodData->hasArguments() ? methodData->arguments() : nullptr;
 
-                const unsigned int parameterCount = (arguments && arguments->names) ? arguments->names->count() : 0;
-                Q_ASSERT(parameterCount == function->formalParameterCount());
-
-                QV4::JSCallData jsCallData(scope, parameterCount);
-                *jsCallData->thisObject = v4->global();
-
-                for (uint ii = 0; ii < parameterCount; ++ii) {
-                    jsCallData->args[ii] = scope.engine->metaTypeToJS(arguments->arguments[ii + 1], a[ii + 1]);
+                if (arguments && arguments->names) {
+                    const auto parameterCount = arguments->names->count();
+                    Q_ASSERT(parameterCount == function->formalParameterCount());
+                    if (void *result = a[0])
+                        arguments->types[0].destruct(result);
+                    function->call(v4->globalObject, a, arguments->types, parameterCount);
+                } else {
+                    Q_ASSERT(function->formalParameterCount() == 0);
+                    const QMetaType returnType = methodData->propType();
+                    if (void *result = a[0])
+                        returnType.destruct(result);
+                    function->call(v4->globalObject, a, &returnType, 0);
                 }
 
-                const QMetaType returnType = methodData->propType();
-                QV4::ScopedValue result(scope, function->call(jsCallData));
                 if (scope.hasException()) {
                     QQmlError error = scope.engine->catchExceptionAsQmlError();
                     if (error.isValid())
                         ep->warning(error);
-                    if (a[0]) {
-                        returnType.destruct(a[0]);
-                        returnType.construct(a[0], nullptr);
-                    }
-                } else {
-                    if (a[0]) {
-                        // When the return type is QVariant, JS objects are to be returned as QJSValue wrapped in
-                        // QVariant.
-                        if (returnType == QMetaType::fromType<QVariant>())
-                            *(QVariant *)a[0] = scope.engine->toVariant(result, 0);
-                        else
-                            scope.engine->metaTypeFromJS(result, returnType.id(), a[0]);
-                    }
                 }
 
                 ep->dereferenceScarceResources(); // "release" scarce resources if top-level expression evaluation is complete.
@@ -1076,7 +1072,7 @@ QVariant QQmlVMEMetaObject::readPropertyAsVariant(int id) const
         const QV4::VariantObject *v = (md->data() + id)->as<QV4::VariantObject>();
         if (v)
             return v->d()->data();
-        return engine->toVariant(*(md->data() + id), -1);
+        return engine->toVariant(*(md->data() + id), QMetaType {});
     }
     return QVariant();
 }

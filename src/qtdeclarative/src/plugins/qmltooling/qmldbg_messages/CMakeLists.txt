@@ -4,13 +4,14 @@
 ## QDebugMessageServiceFactory Plugin:
 #####################################################################
 
-qt_internal_add_plugin(QDebugMessageServiceFactory
+qt_internal_add_plugin(QDebugMessageServiceFactoryPlugin
     OUTPUT_NAME qmldbg_messages
+    CLASS_NAME QDebugMessageServiceFactory
     TYPE qmltooling
     SOURCES
         qdebugmessageservice.cpp qdebugmessageservice.h
         qdebugmessageservicefactory.cpp qdebugmessageservicefactory.h
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Core
         Qt::PacketProtocolPrivate
         Qt::QmlPrivate

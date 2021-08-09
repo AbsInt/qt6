@@ -29,6 +29,8 @@
 #include "clangtoolastreader.h"
 #include "translator.h"
 
+#include <QLibraryInfo>
+
 QT_BEGIN_NAMESPACE
 
 namespace LupdatePrivate
@@ -86,14 +88,23 @@ namespace LupdatePrivate
                     exploreChildrenForFirstStringLiteral(method->getBody(), context);
                 }
             } else if (accessSpec) {
-                QString location = accessSpec->getBeginLoc().isValid() ?
-                            QString::fromStdString(accessSpec->getBeginLoc().printToString(sm)) : QString();
-                const QString accessForQDeclareTrFunctions = QStringLiteral("src/corelib/kernel/qcoreapplication.h");
-                const QString accessForQObject = QStringLiteral("src/corelib/kernel/qtmetamacros.h");
-                if (location.contains(accessForQDeclareTrFunctions))
-                    access_for_qdeclaretrfunction = true;
-                if (location.contains(accessForQObject))
-                    access_for_qobject = true;
+                if (!accessSpec->getBeginLoc().isValid())
+                        continue;
+                QString location = QString::fromStdString(
+                            sm.getSpellingLoc(accessSpec->getBeginLoc()).printToString(sm));
+                qsizetype indexLast = location.lastIndexOf(QLatin1String(":"));
+                qsizetype indexBeforeLast = location.lastIndexOf(QLatin1String(":"), indexLast-1);
+                location.truncate(indexBeforeLast);
+                const QString qtInstallDirPath = QLibraryInfo::path(QLibraryInfo::PrefixPath);
+                const QString accessForQDeclareTrFunctions = QStringLiteral("qcoreapplication.h");
+                const QString accessForQObject = QStringLiteral("qtmetamacros.h");
+                // Qt::CaseInsensitive because of potential discrepancy in Windows with D:/ and d:/
+                if (location.startsWith(qtInstallDirPath, Qt::CaseInsensitive)) {
+                    if (location.endsWith(accessForQDeclareTrFunctions))
+                        access_for_qdeclaretrfunction = true;
+                    if (location.endsWith(accessForQObject))
+                        access_for_qobject = true;
+                }
             }
         }
 
@@ -174,6 +185,7 @@ namespace LupdatePrivate
                 clang::CXXRecordDecl *recordDecl = llvm::dyn_cast<clang::CXXRecordDecl>(decl);
 
                 context = lookForContext(recordDecl, sm);
+
                 if (!context.isEmpty())
                     return context;
             }
@@ -828,17 +840,14 @@ void LupdateVisitor::generateOuput()
 {
     qCDebug(lcClang) << "=================m_trCallserateOuput============================";
     m_noopTranslationMacroAll.erase(std::remove_if(m_noopTranslationMacroAll.begin(),
-          m_noopTranslationMacroAll.end(), [](const TranslationRelatedStore &store) {
-              // only fill if a context has been retrieved in the file we're currently visiting
-              // emit warning if both context are empty
-              if (store.contextRetrieved.isEmpty() && store.contextArg.isEmpty()) {
-                  std::cerr << qPrintable(store.lupdateLocationFile) << ":";
-                  std::cerr << store.lupdateLocationLine << ":";
-                  std::cerr << store.locationCol << ": ";
-                  std::cerr << " \'" << qPrintable(store.funcName) << "\' cannot be called without context.";
-                  std::cerr << " The call is ignored (missing Q_OBJECT maybe?)\n";
-              }
-              return store.contextRetrieved.isEmpty() && store.contextArg.isEmpty();
+        m_noopTranslationMacroAll.end(), [this](const TranslationRelatedStore &store) {
+        // Macros not located in the currently visited file are missing context (and it's normal),
+        // so an output is only generated for macros present in the currently visited file.
+        // If context could not be found, it is warned against in ClangCppParser::collectMessages
+        // (where it is possible to order the warnings and print them consistantly)
+        if ( m_inputFile != qPrintable(store.lupdateLocationFile))
+            return true;
+        return false;
       }), m_noopTranslationMacroAll.end());
 
     m_stores->QNoopTranlsationWithContext.emplace_bulk(std::move(m_noopTranslationMacroAll));

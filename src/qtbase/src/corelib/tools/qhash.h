@@ -477,7 +477,7 @@ struct Data
         numBuckets = GrowthPolicy::bucketsForCapacity(reserve);
         size_t nSpans = (numBuckets + Span::LocalBucketMask) / Span::NEntries;
         spans = new Span[nSpans];
-        seed = qGlobalQHashSeed();
+        seed = QHashSeed::globalSeed();
     }
     Data(const Data &other, size_t reserved = 0)
         : size(other.size),
@@ -850,7 +850,11 @@ public:
         else
             d = Data::detached(d, size_t(size));
     }
-    inline void squeeze() { reserve(0); }
+    inline void squeeze()
+    {
+        if (capacity())
+            reserve(0);
+    }
 
     inline void detach() { if (!d || d->ref.isShared()) d = Data::detached(d); }
     inline bool isDetached() const noexcept { return d && !d->ref.isShared(); }

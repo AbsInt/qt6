@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2020 The Qt Company Ltd.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the tools applications of the Qt Toolkit.
@@ -28,7 +28,6 @@
 
 #include "collectionnode.h"
 
-#include <QtCore/qdebug.h>
 #include <QtCore/qstringlist.h>
 
 QT_BEGIN_NAMESPACE
@@ -37,15 +36,6 @@ QT_BEGIN_NAMESPACE
   \class CollectionNode
   \brief A class for holding the members of a collection of doc pages.
  */
-
-/*!
-  Returns \c true if the collection node's member list is
-  not empty.
- */
-bool CollectionNode::hasMembers() const
-{
-    return !m_members.isEmpty();
-}
 
 /*!
   Appends \a node to the collection node's member list, if
@@ -106,16 +96,14 @@ void CollectionNode::getMemberClasses(NodeMap &out) const
 }
 
 /*!
-  Prints the collection node's list of members.
-  For debugging only.
- */
-void CollectionNode::printMembers(const QString &title)
+  Returns the logical module version.
+*/
+QString CollectionNode::logicalModuleVersion() const
 {
-    qDebug() << title << name() << m_members.size();
-    if (m_members.empty()) {
-        for (const auto &member : qAsConst(m_members))
-            qDebug() << "  MEMBER:" << member->name() << member->nodeTypeString();
-    }
+    QStringList version;
+    version << m_logicalModuleVersionMajor << m_logicalModuleVersionMinor;
+    version.removeAll(QString());
+    return version.join(".");
 }
 
 /*!

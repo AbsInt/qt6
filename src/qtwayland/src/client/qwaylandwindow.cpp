@@ -189,12 +189,12 @@ void QWaylandWindow::initWindow()
     // typically be integer 1 (normal-dpi) or 2 (high-dpi). Call set_buffer_scale()
     // to inform the compositor that high-resolution buffers will be provided.
     if (mSurface->version() >= 3)
-        mSurface->set_buffer_scale(scale());
+        mSurface->set_buffer_scale(mScale);
 
     setWindowFlags(window()->flags());
     QRect geometry = windowGeometry();
     if (geometry.isEmpty())
-        setGeometry_helper(QRect(QPoint(), QSize(500,500)));
+        setGeometry_helper(defaultGeometry());
     else
         setGeometry_helper(geometry);
     setMask(window()->mask());
@@ -329,6 +329,11 @@ void QWaylandWindow::setWindowIcon(const QIcon &icon)
         mWindowDecoration->update();
 }
 
+QRect QWaylandWindow::defaultGeometry() const
+{
+    return QRect(QPoint(), QSize(500,500));
+}
+
 void QWaylandWindow::setGeometry_helper(const QRect &rect)
 {
     QSize minimum = windowMinimumSize();
@@ -340,7 +345,12 @@ void QWaylandWindow::setGeometry_helper(const QRect &rect)
     if (mSubSurfaceWindow) {
         QMargins m = QPlatformWindow::parent()->frameMargins();
         mSubSurfaceWindow->set_position(rect.x() + m.left(), rect.y() + m.top());
-        mSubSurfaceWindow->parent()->window()->requestUpdate();
+
+        QWaylandWindow *parentWindow = mSubSurfaceWindow->parent();
+        if (parentWindow && parentWindow->isExposed()) {
+            QRect parentExposeGeometry(QPoint(), parentWindow->geometry().size());
+            parentWindow->sendExposeEvent(parentExposeGeometry);
+        }
     }
 }
 
@@ -373,6 +383,16 @@ void QWaylandWindow::setGeometry(const QRect &rect)
 void QWaylandWindow::resizeFromApplyConfigure(const QSize &sizeWithMargins, const QPoint &offset)
 {
     QMargins margins = frameMargins();
+
+    // Exclude shadows from margins once they are excluded from window geometry
+    // 1) First resizeFromApplyConfigure() call will have sizeWithMargins equal to surfaceSize()
+    //    which has full margins (shadows included).
+    // 2) Following resizeFromApplyConfigure() calls should have sizeWithMargins equal to
+    //    windowContentGeometry() which excludes shadows, therefore in this case we have to
+    //    exclude them too in order not to accidentally apply smaller size to the window.
+    if (mWindowDecoration && (sizeWithMargins != surfaceSize()))
+        margins = mWindowDecoration->margins(QWaylandAbstractDecoration::ShadowsExcluded);
+
     int widthWithoutMargins = qMax(sizeWithMargins.width() - (margins.left() + margins.right()), 1);
     int heightWithoutMargins = qMax(sizeWithMargins.height() - (margins.top() + margins.bottom()), 1);
     QRect geometry(windowGeometry().topLeft(), QSize(widthWithoutMargins, heightWithoutMargins));
@@ -458,14 +478,14 @@ void QWaylandWindow::lower()
 
 void QWaylandWindow::setMask(const QRegion &mask)
 {
+    QReadLocker locker(&mSurfaceLock);
+    if (!mSurface)
+        return;
+
     if (mMask == mask)
         return;
 
     mMask = mask;
-
-    QReadLocker locker(&mSurfaceLock);
-    if (!mSurface)
-        return;
 
     if (mMask.isEmpty()) {
         mSurface->set_input_region(nullptr);
@@ -576,9 +596,9 @@ void QWaylandWindow::damage(const QRect &rect)
     if (mSurface == nullptr)
         return;
 
-    const int s = scale();
+    const qreal s = scale();
     if (mSurface->version() >= 4)
-        mSurface->damage_buffer(s * rect.x(), s * rect.y(), s * rect.width(), s * rect.height());
+        mSurface->damage_buffer(qFloor(s * rect.x()), qFloor(s * rect.y()), qCeil(s * rect.width()), qCeil(s * rect.height()));
     else
         mSurface->damage(rect.x(), rect.y(), rect.width(), rect.height());
 }
@@ -617,9 +637,9 @@ void QWaylandWindow::commit(QWaylandBuffer *buffer, const QRegion &damage)
 
     attachOffset(buffer);
     if (mSurface->version() >= 4) {
-        const int s = scale();
+        const qreal s = scale();
         for (const QRect &rect: damage)
-            mSurface->damage_buffer(s * rect.x(), s * rect.y(), s * rect.width(), s * rect.height());
+            mSurface->damage_buffer(qFloor(s * rect.x()), qFloor(s * rect.y()), qCeil(s * rect.width()), qCeil(s * rect.height()));
     } else {
         for (const QRect &rect: damage)
             mSurface->damage(rect.x(), rect.y(), rect.width(), rect.height());
@@ -652,22 +672,23 @@ void QWaylandWindow::handleFrameCallback()
 
     // The rest can wait until we can run it on the correct thread
     if (!mWaitingForUpdateDelivery) {
-        auto doHandleExpose = [this]() {
-            bool wasExposed = isExposed();
-            mFrameCallbackTimedOut = false;
-            if (!wasExposed && isExposed()) // Did setting mFrameCallbackTimedOut make the window exposed?
-                sendExposeEvent(QRect(QPoint(), geometry().size()));
-            if (wasExposed && hasPendingUpdateRequest())
-                deliverUpdateRequest();
-
-            mWaitingForUpdateDelivery = false;
-        };
-
         // Queued connection, to make sure we don't call handleUpdate() from inside waitForFrameSync()
         // in the single-threaded case.
         mWaitingForUpdateDelivery = true;
-        QMetaObject::invokeMethod(this, doHandleExpose, Qt::QueuedConnection);
+        QMetaObject::invokeMethod(this, &QWaylandWindow::doHandleFrameCallback, Qt::QueuedConnection);
     }
+}
+
+void QWaylandWindow::doHandleFrameCallback()
+{
+    bool wasExposed = isExposed();
+    mFrameCallbackTimedOut = false;
+    if (!wasExposed && isExposed()) // Did setting mFrameCallbackTimedOut make the window exposed?
+        sendExposeEvent(QRect(QPoint(), geometry().size()));
+    if (wasExposed && hasPendingUpdateRequest())
+        deliverUpdateRequest();
+
+    mWaitingForUpdateDelivery = false;
 }
 
 bool QWaylandWindow::waitForFrameSync(int timeout)
@@ -706,7 +727,12 @@ QSize QWaylandWindow::surfaceSize() const
  */
 QRect QWaylandWindow::windowContentGeometry() const
 {
-    return QRect(QPoint(), surfaceSize());
+    QMargins shadowMargins;
+
+    if (mWindowDecoration)
+        shadowMargins = mWindowDecoration->margins(QWaylandAbstractDecoration::ShadowsOnly);
+
+    return QRect(QPoint(shadowMargins.left(), shadowMargins.top()), surfaceSize().shrunkBy(shadowMargins));
 }
 
 /*!
@@ -952,6 +978,133 @@ void QWaylandWindow::handleMouse(QWaylandInputDevice *inputDevice, const QWaylan
 #endif
 }
 
+#ifndef QT_NO_GESTURES
+void QWaylandWindow::handleSwipeGesture(QWaylandInputDevice *inputDevice,
+                                        const QWaylandPointerGestureSwipeEvent &e)
+{
+    switch (e.state) {
+        case Qt::GestureStarted:
+            if (mGestureState != GestureNotActive)
+                qCWarning(lcQpaWaylandInput) << "Unexpected gesture state. Gestures will act weird.";
+
+            if (mWindowDecoration && !mMouseEventsInContentArea) {
+                // whole gesture sequence will be ignored
+                mGestureState = GestureActiveInDecoration;
+                return;
+            }
+
+            mGestureState = GestureActiveInContentArea;
+            QWindowSystemInterface::handleGestureEvent(window(), e.timestamp,
+                                                       inputDevice->mTouchPadDevice,
+                                                       Qt::BeginNativeGesture,
+                                                       e.local, e.global, e.fingers);
+            break;
+        case Qt::GestureUpdated:
+            if (mGestureState != GestureActiveInContentArea)
+                return;
+
+            if (!e.delta.isNull()) {
+                QWindowSystemInterface::handleGestureEventWithValueAndDelta(
+                            window(), e.timestamp, inputDevice->mTouchPadDevice,
+                            Qt::PanNativeGesture,
+                            0, e.delta, e.local, e.global, e.fingers);
+            }
+            break;
+        case Qt::GestureFinished:
+        case Qt::GestureCanceled:
+            if (mGestureState == GestureActiveInDecoration) {
+                mGestureState = GestureNotActive;
+                return;
+            }
+
+            if (mGestureState != GestureActiveInContentArea)
+                qCWarning(lcQpaWaylandInput) << "Unexpected gesture state. Gestures will act weird.";
+
+            mGestureState = GestureNotActive;
+
+            // There's currently no way to expose cancelled gestures to the rest of Qt, so
+            // this part of information is lost.
+            QWindowSystemInterface::handleGestureEvent(window(), e.timestamp,
+                                                       inputDevice->mTouchPadDevice,
+                                                       Qt::EndNativeGesture,
+                                                       e.local, e.global, e.fingers);
+            break;
+        default:
+            break;
+    }
+}
+
+void QWaylandWindow::handlePinchGesture(QWaylandInputDevice *inputDevice,
+                                        const QWaylandPointerGesturePinchEvent &e)
+{
+    switch (e.state) {
+        case Qt::GestureStarted:
+            if (mGestureState != GestureNotActive)
+                qCWarning(lcQpaWaylandInput) << "Unexpected gesture state. Gestures will act weird.";
+
+            if (mWindowDecoration && !mMouseEventsInContentArea) {
+                // whole gesture sequence will be ignored
+                mGestureState = GestureActiveInDecoration;
+                return;
+            }
+
+            mGestureState = GestureActiveInContentArea;
+            QWindowSystemInterface::handleGestureEvent(window(), e.timestamp,
+                                                       inputDevice->mTouchPadDevice,
+                                                       Qt::BeginNativeGesture,
+                                                       e.local, e.global, e.fingers);
+            break;
+        case Qt::GestureUpdated:
+            if (mGestureState != GestureActiveInContentArea)
+                return;
+
+            if (!e.delta.isNull()) {
+                QWindowSystemInterface::handleGestureEventWithValueAndDelta(
+                            window(), e.timestamp, inputDevice->mTouchPadDevice,
+                            Qt::PanNativeGesture,
+                            0, e.delta, e.local, e.global, e.fingers);
+            }
+            if (e.rotation_delta != 0) {
+                QWindowSystemInterface::handleGestureEventWithRealValue(window(), e.timestamp,
+                                                                        inputDevice->mTouchPadDevice,
+                                                                        Qt::RotateNativeGesture,
+                                                                        e.rotation_delta,
+                                                                        e.local, e.global, e.fingers);
+            }
+            if (e.scale_delta != 0) {
+                QWindowSystemInterface::handleGestureEventWithRealValue(window(), e.timestamp,
+                                                                        inputDevice->mTouchPadDevice,
+                                                                        Qt::ZoomNativeGesture,
+                                                                        e.scale_delta,
+                                                                        e.local, e.global, e.fingers);
+            }
+            break;
+        case Qt::GestureFinished:
+        case Qt::GestureCanceled:
+            if (mGestureState == GestureActiveInDecoration) {
+                mGestureState = GestureNotActive;
+                return;
+            }
+
+            if (mGestureState != GestureActiveInContentArea)
+                qCWarning(lcQpaWaylandInput) << "Unexpected gesture state. Gestures will act weird.";
+
+            mGestureState = GestureNotActive;
+
+            // There's currently no way to expose cancelled gestures to the rest of Qt, so
+            // this part of information is lost.
+            QWindowSystemInterface::handleGestureEvent(window(), e.timestamp,
+                                                       inputDevice->mTouchPadDevice,
+                                                       Qt::EndNativeGesture,
+                                                       e.local, e.global, e.fingers);
+            break;
+        default:
+            break;
+    }
+}
+#endif // #ifndef QT_NO_GESTURES
+
+
 bool QWaylandWindow::touchDragDecoration(QWaylandInputDevice *inputDevice, const QPointF &local, const QPointF &global, QEventPoint::State state, Qt::KeyboardModifiers mods)
 {
     if (!mWindowDecoration)
@@ -1076,14 +1229,14 @@ bool QWaylandWindow::isActive() const
     return mDisplay->isWindowActivated(this);
 }
 
-int QWaylandWindow::scale() const
+qreal QWaylandWindow::scale() const
 {
-    return mScale;
+    return devicePixelRatio();
 }
 
 qreal QWaylandWindow::devicePixelRatio() const
 {
-    return mScale;
+    return qreal(mScale);
 }
 
 bool QWaylandWindow::setMouseGrabEnabled(bool grab)
@@ -1095,6 +1248,21 @@ bool QWaylandWindow::setMouseGrabEnabled(bool grab)
 
     mMouseGrab = grab ? this : nullptr;
     return true;
+}
+
+QWaylandWindow::ToplevelWindowTilingStates QWaylandWindow::toplevelWindowTilingStates() const
+{
+    return mLastReportedToplevelWindowTilingStates;
+}
+
+void QWaylandWindow::handleToplevelWindowTilingStatesChanged(ToplevelWindowTilingStates states)
+{
+    mLastReportedToplevelWindowTilingStates = states;
+}
+
+Qt::WindowStates QWaylandWindow::windowStates() const
+{
+    return mLastReportedWindowStates;
 }
 
 void QWaylandWindow::handleWindowStatesChanged(Qt::WindowStates states)
@@ -1194,6 +1362,9 @@ void QWaylandWindow::handleUpdate()
         return;
 
     if (mFrameCallback) {
+        if (!isExposed())
+            return;
+
         wl_callback_destroy(mFrameCallback);
         mFrameCallback = nullptr;
     }

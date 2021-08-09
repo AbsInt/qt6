@@ -315,8 +315,12 @@ void QQmlTypeData::done()
     auto cleanup = qScopeGuard([this]{
         m_document.reset();
         m_typeReferences.clear();
-        if (isError())
+        if (isError()) {
+            const auto encounteredErrors = errors();
+            for (const QQmlError &e : encounteredErrors)
+                qCDebug(DBG_DISK_CACHE) << e.toString();
             m_compiledData = nullptr;
+        }
     });
 
     if (isError())
@@ -691,12 +695,15 @@ void QQmlTypeData::continueLoadFromIR()
     for (const QV4::CompiledData::Import *import : qAsConst(m_document->imports)) {
         if (!addImport(import, {}, &errors)) {
             Q_ASSERT(errors.size());
-            QQmlError error(errors.takeFirst());
+
+            // We're only interested in the chronoligically last error. The previous
+            // errors might be from unsuccessfully trying to load a module from the
+            // resource file system.
+            QQmlError error = errors.first();
             error.setUrl(m_importCache.baseUrl());
             error.setLine(qmlConvertSourceCoordinate<quint32, int>(import->location.line));
             error.setColumn(qmlConvertSourceCoordinate<quint32, int>(import->location.column));
-            errors.prepend(error); // put it back on the list after filling out information.
-            setError(errors);
+            setError(error);
             return;
         }
     }

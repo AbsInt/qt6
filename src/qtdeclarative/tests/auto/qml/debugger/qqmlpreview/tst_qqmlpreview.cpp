@@ -26,9 +26,9 @@
 **
 ****************************************************************************/
 
-#include "qqmldebugprocess_p.h"
-#include "debugutil_p.h"
-#include "qqmlpreviewblacklist.h"
+#include <qqmldebugprocess_p.h>
+#include <debugutil_p.h>
+#include <qqmlpreviewblacklist.h>
 
 #include <QtTest/qtest.h>
 #include <QtTest/qsignalspy.h>
@@ -69,7 +69,6 @@ private slots:
     void error();
     void zoom();
     void fps();
-    void language();
 };
 
 QQmlDebugTest::ConnectResult tst_QQmlPreview::startQmlProcess(const QString &qmlFile)
@@ -245,18 +244,18 @@ void tst_QQmlPreview::blacklist()
     blacklist2.blacklist(":/qt-project.org");
     blacklist2.blacklist(":/QtQuick/Controls/Styles");
     blacklist2.blacklist(":/ExtrasImports/QtQuick/Controls/Styles");
-    blacklist2.blacklist(QLibraryInfo::path(QLibraryInfo::Qml2ImportsPath));
+    blacklist2.blacklist(QLibraryInfo::path(QLibraryInfo::QmlImportsPath));
     blacklist2.blacklist("/home/ulf/.local/share/QtProject/Qml Runtime/configuration.qml");
     blacklist2.blacklist("/usr/share");
     blacklist2.blacklist("/usr/share/QtProject/Qml Runtime/configuration.qml");
-    QVERIFY(blacklist2.isBlacklisted(QLibraryInfo::path(QLibraryInfo::Qml2ImportsPath)));
+    QVERIFY(blacklist2.isBlacklisted(QLibraryInfo::path(QLibraryInfo::QmlImportsPath)));
     blacklist2.blacklist("/usr/local/share/QtProject/Qml Runtime/configuration.qml");
     blacklist2.blacklist("qml");
     blacklist2.blacklist(""); // This should not remove all other paths.
 
-    QVERIFY(blacklist2.isBlacklisted(QLibraryInfo::path(QLibraryInfo::Qml2ImportsPath) +
+    QVERIFY(blacklist2.isBlacklisted(QLibraryInfo::path(QLibraryInfo::QmlImportsPath) +
                                      "/QtQuick/Window.2.0"));
-    QVERIFY(blacklist2.isBlacklisted(QLibraryInfo::path(QLibraryInfo::Qml2ImportsPath)));
+    QVERIFY(blacklist2.isBlacklisted(QLibraryInfo::path(QLibraryInfo::QmlImportsPath)));
     QVERIFY(blacklist2.isBlacklisted("/usr/share/QtProject/Qml Runtime/configuration.qml"));
     QVERIFY(blacklist2.isBlacklisted("/usr/share/stuff"));
     QVERIFY(blacklist2.isBlacklisted(""));
@@ -349,14 +348,6 @@ void tst_QQmlPreview::fps()
     } else {
         QSKIP("offscreen rendering doesn't produce any frames");
     }
-}
-
-void tst_QQmlPreview::language()
-{
-    QCOMPARE(startQmlProcess("window.qml"), ConnectSuccess);
-    QVERIFY(m_client);
-    m_client->triggerLanguage(dataDirectoryUrl(), "fr_FR");
-    QTRY_VERIFY_WITH_TIMEOUT(m_files.contains(testFile("i18n/qml_fr_FR.qm")), 30000);
 }
 
 QTEST_MAIN(tst_QQmlPreview)

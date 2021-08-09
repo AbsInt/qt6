@@ -47,6 +47,10 @@ template<typename T>
 using Specialized = Struct<int, T>;
 #endif
 
+#ifdef test_template
+#    define Q_INVOKABLE void foo() {};
+#endif
+
 #ifdef test_scopedenum
     enum ClassicEnum { Yee, Haw, Howdy, Partner };
 
@@ -54,7 +58,9 @@ using Specialized = Struct<int, T>;
         This = 0x01,
         That = 0x02,
         All = This | That,
-        OmittedValue = 99
+        OmittedValue = 99,
+        UselessValue,
+        VeryLastValue
     };
 #endif
     typedef struct {
@@ -131,5 +137,9 @@ using Vec = BaseVec<T>;
 #endif
 
 } // namespace TestQDoc
+
+namespace CrossModuleRef {
+    void documentMe();
+}
 
 class DontLinkToMe {};

@@ -33,7 +33,7 @@
 <db:section xml:id="property-documentation">
 <db:title>Property Documentation</db:title>
 <db:section xml:id="active-prop">
-<db:title>active : bool</db:title>
+<db:title>[default: true] active : bool</db:title>
 <db:fieldsynopsis>
 <db:type>bool</db:type>
 <db:varname>active</db:varname>
@@ -79,6 +79,13 @@
 <db:para>Signal with parameter <db:code role="parameter">bar</db:code>.</db:para>
 <db:note>
 <db:para>The corresponding handler is <db:code>onFoo</db:code>.</db:para>
+</db:note>
+</db:section>
+<db:section xml:id="itsHappening-signal">
+<db:title>itsHappening(bool <db:emphasis>really</db:emphasis>)</db:title>
+<db:para>Signals that something is <db:code role="parameter">really</db:code> happening.</db:para>
+<db:note>
+<db:para>The corresponding handler is <db:code>onItsHappening</db:code>.</db:para>
 </db:note>
 </db:section>
 </db:section>

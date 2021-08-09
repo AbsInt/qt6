@@ -101,7 +101,7 @@ struct QQmlValueTypeWrapper : Object {
         return m_metaObject;
     }
 
-
+    void setData(const void *data) const;
     void setValue(const QVariant &value) const;
     QVariant toVariant() const;
 
@@ -109,6 +109,38 @@ private:
     mutable void *m_gadgetPtr;
     QQmlValueType *m_valueType;
     const QMetaObject *m_metaObject;
+};
+
+struct QQmlValueTypeReference : QQmlValueTypeWrapper
+{
+    void init() {
+        QQmlValueTypeWrapper::init();
+        object.init();
+    }
+    void destroy() {
+        object.destroy();
+        QQmlValueTypeWrapper::destroy();
+    }
+
+    void writeBack() {
+        const QMetaProperty writebackProperty = object->metaObject()->property(property);
+        if (!writebackProperty.isWritable())
+            return;
+
+        int flags = 0;
+        int status = -1;
+        if (writebackProperty.metaType() == QMetaType::fromType<QVariant>()) {
+            QVariant variantReferenceValue = toVariant();
+            void *a[] = { &variantReferenceValue, nullptr, &status, &flags };
+            QMetaObject::metacall(object, QMetaObject::WriteProperty, property, a);
+        } else {
+            void *a[] = { gadgetPtr(), nullptr, &status, &flags };
+            QMetaObject::metacall(object, QMetaObject::WriteProperty, property, a);
+        }
+    }
+
+    QV4QPointer<QObject> object;
+    int property;
 };
 
 }
@@ -123,6 +155,7 @@ public:
 
     static ReturnedValue create(ExecutionEngine *engine, QObject *, int, const QMetaObject *metaObject, QMetaType type);
     static ReturnedValue create(ExecutionEngine *engine, const QVariant &, const QMetaObject *metaObject, QMetaType type);
+    static ReturnedValue create(ExecutionEngine *engine, const void *, const QMetaObject *metaObject, QMetaType type);
 
     QVariant toVariant() const;
     bool toGadget(void *data) const;
@@ -142,8 +175,18 @@ public:
     static ReturnedValue virtualResolveLookupGetter(const Object *object, ExecutionEngine *engine, Lookup *lookup);
     static bool virtualResolveLookupSetter(Object *object, ExecutionEngine *engine, Lookup *lookup, const Value &value);
     static ReturnedValue lookupGetter(Lookup *lookup, ExecutionEngine *engine, const Value &object);
+    static bool lookupSetter(QV4::Lookup *l, QV4::ExecutionEngine *engine,
+                             QV4::Value &object, const QV4::Value &value);
 
     static void initProto(ExecutionEngine *v4);
+};
+
+struct QQmlValueTypeReference : public QQmlValueTypeWrapper
+{
+    V4_OBJECT2(QQmlValueTypeReference, QQmlValueTypeWrapper)
+    V4_NEEDS_DESTROY
+
+    bool readReferenceValue() const;
 };
 
 }

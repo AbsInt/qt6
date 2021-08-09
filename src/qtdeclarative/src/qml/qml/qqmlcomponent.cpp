@@ -64,11 +64,14 @@
 #include <QStringList>
 #include <QThreadStorage>
 #include <QtCore/qdebug.h>
+#include <QtCore/qloggingcategory.h>
 #include <qqmlinfo.h>
 
 namespace {
     QThreadStorage<int> creationDepth;
 }
+
+Q_LOGGING_CATEGORY(lcQmlComponentGeneral, "qt.qml.qmlcomponent")
 
 QT_BEGIN_NAMESPACE
 
@@ -903,6 +906,12 @@ QObject *QQmlComponent::beginCreate(QQmlContext *publicContext)
 QObject *QQmlComponentPrivate::beginCreate(QQmlRefPointer<QQmlContextData> context)
 {
     Q_Q(QQmlComponent);
+    auto cleanup = qScopeGuard([this] {
+        if (!state.errors.isEmpty()) {
+            for (const auto &e : qAsConst(state.errors))
+                qCDebug(lcQmlComponentGeneral) << "QQmlComponent: " << e.toString();
+        }
+    });
     if (!context) {
         qWarning("QQmlComponent: Cannot create a component in a null context");
         return nullptr;
@@ -1757,9 +1766,9 @@ void QV4::QmlIncubatorObject::statusChanged(QQmlIncubator::Status s)
 
     QV4::ScopedFunctionObject f(scope, d()->statusChanged);
     if (f) {
-        QV4::JSCallData jsCallData(scope, 1);
-        *jsCallData->thisObject = this;
-        jsCallData->args[0] = QV4::Value::fromUInt32(s);
+        QV4::JSCallArguments jsCallData(scope, 1);
+        *jsCallData.thisObject = this;
+        jsCallData.args[0] = QV4::Value::fromUInt32(s);
         f->call(jsCallData);
         if (scope.hasException()) {
             QQmlError error = scope.engine->catchExceptionAsQmlError();

@@ -50,7 +50,7 @@ public:
     tst_qqmlvaluetypes() {}
 
 private slots:
-    void initTestCase();
+    void initTestCase() override;
 
     void point();
     void pointf();
@@ -100,6 +100,8 @@ private slots:
     void scarceTypes();
     void nonValueTypes();
     void char16Type();
+    void writeBackOnFunctionCall();
+    void valueTypeConversions();
 
 private:
     QQmlEngine engine;
@@ -1712,7 +1714,7 @@ void tst_qqmlvaluetypes::sequences()
         QJSValue value = engine.toScriptValue(container);
         QCOMPARE(value.property("length").toInt(), int(container.size()));
         for (size_t i = 0; i < container.size(); ++i)
-            QCOMPARE(value.property(i).property("baseProperty").toInt(), container.at(i).baseProperty());
+            QCOMPARE(value.property(quint32(i)).property("baseProperty").toInt(), container.at(i).baseProperty());
     }
     {
         QVector<QChar> qcharVector{QChar(1), QChar(4), QChar(42), QChar(8), QChar(15)};
@@ -1823,8 +1825,8 @@ void tst_qqmlvaluetypes::scarceTypes()
     // These should not be treated as value types because we want the scarce resource
     // mechanism to clear them when going out of scope. The scarce resource mechanism
     // only works on QV4::VariantObject as that has an additional level of redirection.
-    QVERIFY(!QQmlValueTypeFactory::isValueType(QMetaType::fromType<QImage>()));
-    QVERIFY(!QQmlValueTypeFactory::isValueType(QMetaType::fromType<QPixmap>()));
+    QVERIFY(!QQmlMetaType::isValueType(QMetaType::fromType<QImage>()));
+    QVERIFY(!QQmlMetaType::isValueType(QMetaType::fromType<QPixmap>()));
 
     QV4::ExecutionEngine engine;
     QV4::Scope scope(&engine);
@@ -1839,7 +1841,7 @@ void tst_qqmlvaluetypes::scarceTypes()
 }
 
 #define CHECK_TYPE_IS_NOT_VALUETYPE(Type, typeId, cppType) \
-    QVERIFY(!QQmlValueTypeFactory::isValueType(QMetaType(QMetaType::Type)));
+    QVERIFY(!QQmlMetaType::isValueType(QMetaType(QMetaType::Type)));
 
 void tst_qqmlvaluetypes::nonValueTypes()
 {
@@ -1860,6 +1862,118 @@ void tst_qqmlvaluetypes::char16Type()
     QCOMPARE(v.typeId(), QMetaType::Char16);
     QV4::ScopedValue scoped(scope, engine.fromVariant(v));
     QCOMPARE(scoped->toQString(), "a");
+}
+
+struct Foo {
+    Q_GADGET
+    QML_ANONYMOUS
+public:
+    int val = 1;
+    Q_INVOKABLE int value() const { return val; }
+    Q_INVOKABLE void setValue(int v) { val = v; }
+};
+
+Q_DECLARE_METATYPE(Foo);
+
+class S : public QObject
+{
+    Q_OBJECT
+    Q_PROPERTY(Foo foo READ foo WRITE setFoo NOTIFY fooChanged);
+    QML_ELEMENT
+public:
+    int writeCount = 0;
+    Foo f;
+    Foo foo() { return f; }
+    void setFoo(Foo f)
+    {
+        ++writeCount;
+        this->f = f;
+        emit fooChanged();
+    }
+    Q_INVOKABLE Foo get() { return f; }
+signals:
+    void fooChanged();
+};
+
+void tst_qqmlvaluetypes::writeBackOnFunctionCall()
+{
+    qmlRegisterTypesAndRevisions<Foo>("WriteBack", 1);
+    qmlRegisterTypesAndRevisions<S>("WriteBack", 1);
+
+    QQmlEngine engine;
+    QQmlComponent component(&engine);
+    component.setData("import QtQml 2.15\n"
+                      "import WriteBack 1.0\n"
+                      "QtObject {\n"
+                      "    property S s: S {}\n"
+                      "    property int a: -1\n"
+                      "    property int b: -1\n"
+                      "    Component.onCompleted: {\n"
+                      "        var f = s.foo\n"
+                      "        f.setValue(3)\n"
+                      "        s.foo = f\n"
+                      "        a = f.value()\n"
+                      "        f = s.get()\n"
+                      "        f.setValue(3)\n"
+                      "        b = f.value()\n"
+                      "    }\n"
+                      "}\n", QUrl());
+    QVERIFY2(component.isReady(), component.errorString().toUtf8());
+    QScopedPointer<QObject> o(component.create());
+    QVERIFY(!o.isNull());
+    QCOMPARE(o->property("a").toInt(), 3);
+    QCOMPARE(o->property("b").toInt(), 3);
+    S *s = qvariant_cast<S *>(o->property("s"));
+    QVERIFY(s);
+    // f.value() should not write back.
+    QCOMPARE(s->writeCount, 2);
+}
+
+struct TypeB;
+struct TypeA
+{
+    Q_GADGET
+
+public:
+    TypeA() = default;
+    TypeA(const TypeB &other);
+    TypeA &operator=(const TypeB &other);
+
+    int a = 4;
+};
+
+struct TypeB
+{
+    Q_GADGET
+
+public:
+    TypeB() = default;
+    TypeB(const TypeA &other) : b(other.a) {}
+    TypeB &operator=(const TypeA &other) { b = other.a; return *this; }
+
+    int b = 5;
+};
+
+TypeA::TypeA(const TypeB &other) : a(other.b) {}
+TypeA &TypeA::operator=(const TypeB &other) { a = other.b; return *this; }
+
+void tst_qqmlvaluetypes::valueTypeConversions()
+{
+    QMetaType::registerConverter<TypeA, TypeB>();
+    QMetaType::registerConverter<TypeB, TypeA>();
+
+    TypeA a;
+    TypeB b;
+
+    QJSEngine engine;
+    QJSValue jsA = engine.toScriptValue(a);
+    QJSValue jsB = engine.toScriptValue(b);
+
+    TypeA resultA = engine.fromScriptValue<TypeA>(jsB);
+    TypeB resultB = engine.fromScriptValue<TypeB>(jsA);
+
+    QCOMPARE(resultA.a, b.b);
+    QCOMPARE(resultB.b, a.a);
 }
 
 #undef CHECK_TYPE_IS_NOT_VALUETYPE

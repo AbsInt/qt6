@@ -26,6 +26,7 @@
 **
 ****************************************************************************/
 
+#include <QtNetwork/qtnetworkglobal.h>
 
 #include <QTest>
 #include <QSemaphore>
@@ -68,9 +69,10 @@
 #include <QtNetwork/QHttpPart>
 #include <QtNetwork/QHttpMultiPart>
 #include <QtNetwork/QNetworkProxyQuery>
-#ifndef QT_NO_SSL
+#if QT_CONFIG(ssl)
 #include <QtNetwork/qsslerror.h>
 #include <QtNetwork/qsslconfiguration.h>
+#include <QtNetwork/qsslsocket.h>
 #ifdef QT_BUILD_INTERNAL
 #include <QtNetwork/private/qsslconfiguration_p.h>
 #endif
@@ -90,23 +92,16 @@ Q_DECLARE_METATYPE(QSharedPointer<char>)
 
 #include "../../../network-settings.h"
 
-// Non-OpenSSL backends are not able to report a specific error code
-// for self-signed certificates.
-#ifndef QT_NO_OPENSSL
-#define FLUKE_CERTIFICATE_ERROR QSslError::SelfSignedCertificate
-#else
-#define FLUKE_CERTIFICATE_ERROR QSslError::CertificateUntrusted
-#endif
-
 Q_DECLARE_METATYPE(QAuthenticator*)
-#ifndef QT_NO_NETWORKPROXY
+#if QT_CONFIG(networkproxy)
 Q_DECLARE_METATYPE(QNetworkProxyQuery)
 #endif
 
 typedef QSharedPointer<QNetworkReply> QNetworkReplyPtr;
 
-#ifndef QT_NO_OPENSSL
+#if QT_CONFIG(ssl)
 QT_BEGIN_NAMESPACE
+// Technically, a workaround, and only needed for OpenSSL:
 void qt_ForceTlsSecurityLevel();
 QT_END_NAMESPACE
 #endif
@@ -116,7 +111,7 @@ class tst_QNetworkReply: public QObject
 {
     Q_OBJECT
 
-#ifndef QT_NO_NETWORKPROXY
+#if QT_CONFIG(networkproxy)
     struct ProxyData
     {
         ProxyData(const QNetworkProxy &p, const QByteArray &t, bool auth)
@@ -125,7 +120,7 @@ class tst_QNetworkReply: public QObject
         QNetworkProxy proxy;
         bool requiresAuthentication;
     };
-#endif // !QT_NO_NETWORKPROXY
+#endif // QT_CONFIG(networkproxy)
 
     static bool seedCreated;
     static QString createUniqueExtension()
@@ -158,16 +153,18 @@ class tst_QNetworkReply: public QObject
     QString wronlyFileName;
 #endif
     QString uniqueExtension;
-#ifndef QT_NO_NETWORKPROXY
+#if QT_CONFIG(networkproxy)
     QList<ProxyData> proxies;
 #endif
     QNetworkAccessManager manager;
     MyCookieJar *cookieJar;
-#ifndef QT_NO_SSL
+#if QT_CONFIG(ssl)
     QSslConfiguration storedSslConfiguration;
     QList<QSslError> storedExpectedSslErrors;
     static const QString certsFilePath;
-#endif
+    bool isSecureTransport = false;
+    bool isSchannel = false;
+#endif // QT_CONFIG(ssl)
 
     using QObject::connect;
     static bool connect(const QNetworkReplyPtr &ptr, const char *signal, const QObject *receiver, const char *slot, Qt::ConnectionType ct = Qt::AutoConnection)
@@ -195,7 +192,7 @@ public Q_SLOTS:
     void pipeliningHelperSlot();
     void emitErrorForAllRepliesSlot();
 
-#ifndef QT_NO_SSL
+#if QT_CONFIG(ssl)
     void sslErrors(QNetworkReply*,const QList<QSslError> &);
     void storeSslConfiguration();
     void ignoreSslErrorListSlot(QNetworkReply *reply, const QList<QSslError> &);
@@ -228,10 +225,10 @@ private Q_SLOTS:
     void getFromHttp();
     void getErrors_data();
     void getErrors();
-#ifndef QT_NO_NETWORKPROXY
+#if QT_CONFIG(networkproxy)
     void headFromHttp_data();
     void headFromHttp();
-#endif // !QT_NO_NETWORKPROXY
+#endif // QT_CONFIG(networkproxy)
     void putToFile_data();
     void putToFile();
     void putToFtp_data();
@@ -250,7 +247,7 @@ private Q_SLOTS:
     void postToHttpMultipart_data();
     void postToHttpMultipart();
     void multipartSkipIndices(); // QTBUG-32534
-#ifndef QT_NO_SSL
+#if QT_CONFIG(ssl)
     void putToHttps_data();
     void putToHttps();
     void putToHttpsSynchronous_data();
@@ -289,12 +286,12 @@ private Q_SLOTS:
     void ioGetFromHttpWithAuth_data();
     void ioGetFromHttpWithAuth();
     void ioGetFromHttpWithAuthSynchronous();
-#ifndef QT_NO_NETWORKPROXY
+#if QT_CONFIG(networkproxy)
     void ioGetFromHttpWithProxyAuth();
     void ioGetFromHttpWithProxyAuthSynchronous();
     void ioGetFromHttpWithSocksProxy();
-#endif // !QT_NO_NETWORKPROXY
-#ifndef QT_NO_SSL
+#endif // QT_CONFIG(networkproxy)
+#if QT_CONFIG(ssl)
     void ioGetFromHttpsWithSslErrors();
     void ioGetFromHttpsWithIgnoreSslErrors();
     void ioGetFromHttpsWithSslHandshakeError();
@@ -308,10 +305,10 @@ private Q_SLOTS:
     void ioGetFromHttpWithCache_data();
     void ioGetFromHttpWithCache();
 
-#ifndef QT_NO_NETWORKPROXY
+#if QT_CONFIG(networkproxy)
     void ioGetWithManyProxies_data();
     void ioGetWithManyProxies();
-#endif // !QT_NO_NETWORKPROXY
+#endif // QT_CONFIG(networkproxy)
 
     void ioPutToFileFromFile_data();
     void ioPutToFileFromFile();
@@ -327,12 +324,12 @@ private Q_SLOTS:
     void ioPutToHttpFromFile();
     void ioPostToHttpFromFile_data();
     void ioPostToHttpFromFile();
-#ifndef QT_NO_NETWORKPROXY
+#if QT_CONFIG(networkproxy)
     void ioPostToHttpFromSocket_data();
     void ioPostToHttpFromSocket();
     void ioPostToHttpFromSocketSynchronous();
     void ioPostToHttpFromSocketSynchronous_data();
-#endif // !QT_NO_NETWORKPROXY
+#endif // QT_CONFIG(networkproxy)
     void ioPostToHttpFromMiddleOfFileToEnd();
     void ioPostToHttpFromMiddleOfFileFiveBytes();
     void ioPostToHttpFromMiddleOfQBufferFiveBytes();
@@ -372,13 +369,13 @@ private Q_SLOTS:
 
     void nestedEventLoops();
 
-#ifndef QT_NO_NETWORKPROXY
+#if QT_CONFIG(networkproxy)
     void httpProxyCommands_data();
     void httpProxyCommands();
     void httpProxyCommandsSynchronous_data();
     void httpProxyCommandsSynchronous();
     void proxyChange();
-#endif // !QT_NO_NETWORKPROXY
+#endif // QT_CONFIG(networkproxy)
     void authorizationError_data();
     void authorizationError();
 
@@ -392,7 +389,7 @@ private Q_SLOTS:
 
     void httpRecursiveCreation();
 
-#ifndef QT_NO_SSL
+#if QT_CONFIG(ssl)
     void ioPostToHttpsUploadProgress();
     void ignoreSslErrorsList_data();
     void ignoreSslErrorsList();
@@ -449,7 +446,7 @@ private Q_SLOTS:
 
     void synchronousRequest_data();
     void synchronousRequest();
-#ifndef QT_NO_SSL
+#if QT_CONFIG(ssl)
     void synchronousRequestSslFailure();
 #endif
 
@@ -458,11 +455,11 @@ private Q_SLOTS:
     void dontInsertPartialContentIntoTheCache();
 
     void httpUserAgent();
-#ifndef QT_NO_NETWORKPROXY
+#if QT_CONFIG(networkproxy)
     void authenticationCacheAfterCancel_data();
     void authenticationCacheAfterCancel();
     void authenticationWithDifferentRealm();
-#endif // !QT_NO_NETWORKPROXY
+#endif // QT_CONFIG(networkproxy)
     void synchronousAuthenticationCache();
     void pipelining();
 
@@ -498,7 +495,7 @@ private Q_SLOTS:
     void ioHttpRedirectCustom();
     void ioHttpRedirectWithUploadDevice_data();
     void ioHttpRedirectWithUploadDevice();
-#ifndef QT_NO_SSL
+#if QT_CONFIG(ssl)
     void putWithServerClosingConnectionImmediately();
 #endif
 
@@ -522,6 +519,9 @@ private:
     bool notEnoughDataForFastSender;
 
     bool ftpSupported = false;
+#if QT_CONFIG(ssl)
+    QSslError::SslError flukeCertTlsError = QSslError::CertificateUntrusted;
+#endif
 };
 
 const QByteArray tst_QNetworkReply::httpEmpty200Response =
@@ -548,7 +548,7 @@ static bool validateRedirectedResponseHeaders(QNetworkReplyPtr reply)
            && !reply->header(QNetworkRequest::LocationHeader).isValid();
 }
 
-#ifndef QT_NO_SSL
+#if QT_CONFIG(ssl)
 static void setupSslServer(QSslSocket* serverSocket)
 {
     QString testDataDir = QFileInfo(QFINDTESTDATA("rfc3252.txt")).absolutePath();
@@ -574,7 +574,7 @@ const QString tst_QNetworkReply::certsFilePath = "/certs/qt-test-server-host-net
 const QString tst_QNetworkReply::certsFilePath = "/certs/qt-test-server-cacert.pem";
 #endif
 
-#endif // !QT_NO_SSL
+#endif // QT_CONFIG(ssl)
 
 // NOTE: MiniHttpServer has a very limited support of PUT/POST requests! Make
 // sure you understand the server's code before PUTting/POSTing data (and
@@ -632,7 +632,7 @@ protected:
     void incomingConnection(qintptr socketDescriptor) override
     {
         //qDebug() << "incomingConnection" << socketDescriptor << "doSsl:" << doSsl << "ipv6:" << ipv6;
-#ifndef QT_NO_SSL
+#if QT_CONFIG(ssl)
         if (doSsl) {
             QSslSocket *serverSocket = new QSslSocket(this);
             if (!serverSocket->setSocketDescriptor(socketDescriptor)) {
@@ -693,7 +693,7 @@ private:
     }
 
 private slots:
-#ifndef QT_NO_SSL
+#if QT_CONFIG(ssl)
     void slotSslErrors(const QList<QSslError>& errors)
     {
         QTcpSocket *currentClient = qobject_cast<QTcpSocket *>(sender());
@@ -764,7 +764,7 @@ public:
         { QNetworkCookieJar::setAllCookies(cookieList); }
 };
 
-#ifndef QT_NO_NETWORKPROXY
+#if QT_CONFIG(networkproxy)
 class MyProxyFactory: public QNetworkProxyFactory
 {
 public:
@@ -787,7 +787,7 @@ public:
         return toReturn;
     }
 };
-#endif // !QT_NO_NETWORKPROXY
+#endif // QT_CONFIG(networkproxy)
 
 class MyMemoryCache: public QAbstractNetworkCache
 {
@@ -1000,7 +1000,7 @@ public:
     }
     virtual void incomingConnection(qintptr socketDescriptor) override
     {
-#ifndef QT_NO_SSL
+#if QT_CONFIG(ssl)
         if (doSsl) {
             QSslSocket *serverSocket = new QSslSocket;
             serverSocket->setParent(this);
@@ -1016,7 +1016,7 @@ public:
     }
 private slots:
 
-#ifndef QT_NO_SSL
+#if QT_CONFIG(ssl)
     void slotSslErrors(const QList<QSslError>& errors)
     {
         qDebug() << "slotSslErrors" << sslSocket->errorString() << errors;
@@ -1286,12 +1286,17 @@ tst_QNetworkReply::tst_QNetworkReply()
 {
     qRegisterMetaType<QNetworkReply *>(); // for QSignalSpy
     qRegisterMetaType<QAuthenticator *>();
-#ifndef QT_NO_NETWORKPROXY
+#if QT_CONFIG(networkproxy)
     qRegisterMetaType<QNetworkProxy>();
 #endif
-#ifndef QT_NO_SSL
+
+#if QT_CONFIG(ssl)
     qRegisterMetaType<QList<QSslError> >();
+    isSecureTransport = QSslSocket::activeBackend() == QStringLiteral("securetransport");
+    if (!isSecureTransport)
+        isSchannel = QSslSocket::activeBackend() == QStringLiteral("schannel");
 #endif
+
     qRegisterMetaType<QNetworkReply::NetworkError>();
 
     uniqueExtension = createUniqueExtension();
@@ -1299,7 +1304,7 @@ tst_QNetworkReply::tst_QNetworkReply()
     cookieJar = new MyCookieJar;
     manager.setCookieJar(cookieJar);
 
-#ifndef QT_NO_NETWORKPROXY
+#if QT_CONFIG(networkproxy)
     QHostInfo hostInfo = QHostInfo::fromName(QtNetworkSettings::httpProxyServerName());
 
     proxies << ProxyData(QNetworkProxy::NoProxy, "", false);
@@ -1318,13 +1323,13 @@ tst_QNetworkReply::tst_QNetworkReply()
                 << ProxyData(QNetworkProxy(QNetworkProxy::Socks5Proxy, socksProxy, 1081),
                              "+socksauth", true);
     } else {
-#endif // !QT_NO_NETWORKPROXY
+#endif // QT_CONFIG(networkproxy)
         fprintf(stderr, "==================================================================\n");
         fprintf(stderr, "Proxy could not be looked up. No proxy will be used while testing!\n");
         fprintf(stderr, "==================================================================\n");
-#ifndef QT_NO_NETWORKPROXY
+#if QT_CONFIG(networkproxy)
     }
-#endif // !QT_NO_NETWORKPROXY
+#endif // QT_CONFIG(networkproxy)
 
     ftpSupported = manager.supportedSchemes().contains("ftp");
 }
@@ -1346,7 +1351,7 @@ void tst_QNetworkReply::proxyAuthenticationRequired(const QNetworkProxy &, QAuth
     auth->setPassword("password");
 }
 
-#ifndef QT_NO_SSL
+#if QT_CONFIG(ssl)
 void tst_QNetworkReply::sslErrors(QNetworkReply *reply, const QList<QSslError> &errors)
 {
     reply->ignoreSslErrors();
@@ -1568,7 +1573,7 @@ void tst_QNetworkReply::initTestCase()
 #endif
 
     QDir::setSearchPaths("testdata", QStringList() << testDataDir);
-#ifndef QT_NO_SSL
+#if QT_CONFIG(ssl)
     QSslConfiguration::defaultConfiguration().caCertificates(); //preload certificates
 #endif
 
@@ -1577,10 +1582,12 @@ void tst_QNetworkReply::initTestCase()
         QString::fromLatin1("Couldn't find echo dir starting from %1.").arg(QDir::currentPath())));
 
     cleanupTestData();
-#ifndef QT_NO_OPENSSL
+#if QT_CONFIG(ssl)
     QT_PREPEND_NAMESPACE(qt_ForceTlsSecurityLevel)();
-#endif // QT_NO_OPENSSL
 
+    if (QSslSocket::activeBackend() == QStringLiteral("openssl"))
+        flukeCertTlsError = QSslError::SelfSignedCertificate;
+#endif
 }
 
 void tst_QNetworkReply::cleanupTestCase()
@@ -1598,7 +1605,7 @@ void tst_QNetworkReply::cleanupTestData()
 
     // clear the internal cache
     manager.clearAccessCache();
-#ifndef QT_NO_NETWORKPROXY
+#if QT_CONFIG(networkproxy)
     manager.setProxy(QNetworkProxy());
 #endif
     manager.setCache(0);
@@ -1607,7 +1614,7 @@ void tst_QNetworkReply::cleanupTestData()
     cookieJar->setAllCookies(QList<QNetworkCookie>());
 
     // disconnect manager signals
-#ifndef QT_NO_SSL
+#if QT_CONFIG(ssl)
     manager.disconnect(SIGNAL(sslErrors(QNetworkReply*,QList<QSslError>)));
 #endif
     manager.disconnect(SIGNAL(authenticationRequired(QNetworkReply*,QAuthenticator*)));
@@ -1946,7 +1953,7 @@ void tst_QNetworkReply::getFromHttp()
     QCOMPARE(reply->readAll(), reference.readAll());
 }
 
-#ifndef QT_NO_NETWORKPROXY
+#if QT_CONFIG(networkproxy)
 void tst_QNetworkReply::headFromHttp_data()
 {
     QTest::addColumn<qint64>("referenceSize");
@@ -2035,7 +2042,7 @@ void tst_QNetworkReply::headFromHttp()
     if (reply->header(QNetworkRequest::ContentTypeHeader).isValid())
         QCOMPARE(reply->header(QNetworkRequest::ContentTypeHeader).toString(), contentType);
 }
-#endif // !QT_NO_NETWORKPROXY
+#endif // QT_CONFIG(networkproxy)
 
 void tst_QNetworkReply::getErrors_data()
 {
@@ -2778,12 +2785,12 @@ void tst_QNetworkReply::putToHttpMultipart()
     QCOMPARE(replyData, expectedReplyData);
 }
 
-#ifndef QT_NO_SSL
+#if QT_CONFIG(ssl)
 void tst_QNetworkReply::putToHttps_data()
 {
-#if QT_CONFIG(securetransport)
-    QSKIP("SecTrustEvaluate() returns recoverable error, update the certificate on server");
-#endif
+    if (isSecureTransport)
+        QSKIP("SecTrustEvaluate() returns recoverable error, update the certificate on server");
+
     uniqueExtension = createUniqueExtension();
     putToFile_data();
 }
@@ -2825,9 +2832,9 @@ void tst_QNetworkReply::putToHttps()
 
 void tst_QNetworkReply::putToHttpsSynchronous_data()
 {
-#if QT_CONFIG(securetransport)
-    QSKIP("SecTrustEvalueate() retruns recoverable error, update the server's certificate");
-#endif
+    if (isSecureTransport)
+        QSKIP("SecTrustEvalueate() retruns recoverable error, update the server's certificate");
+
     uniqueExtension = createUniqueExtension();
     putToFile_data();
 }
@@ -2873,9 +2880,9 @@ void tst_QNetworkReply::putToHttpsSynchronous()
 
 void tst_QNetworkReply::postToHttps_data()
 {
-#if QT_CONFIG(securetransport)
-    QSKIP("SecTrustEvaluate() returns recoverable error, update the certificate on server");
-#endif
+    if (isSecureTransport)
+        QSKIP("SecTrustEvaluate() returns recoverable error, update the certificate on server");
+
     putToFile_data();
 }
 
@@ -2907,9 +2914,9 @@ void tst_QNetworkReply::postToHttps()
 
 void tst_QNetworkReply::postToHttpsSynchronous_data()
 {
-#if QT_CONFIG(securetransport)
-    QSKIP("SecTrustEvaluate() returns recoverable error, update the certificate on server");
-#endif
+    if (isSecureTransport)
+        QSKIP("SecTrustEvaluate() returns recoverable error, update the certificate on server");
+
     putToFile_data();
 }
 
@@ -2946,9 +2953,9 @@ void tst_QNetworkReply::postToHttpsSynchronous()
 
 void tst_QNetworkReply::postToHttpsMultipart_data()
 {
-#if QT_CONFIG(securetransport)
-    QSKIP("SecTrustEvaluate() returns recoverable error, update the certificate on server");
-#endif
+    if (isSecureTransport)
+        QSKIP("SecTrustEvaluate() returns recoverable error, update the certificate on server");
+
     postToHttpMultipart_data();
 }
 
@@ -2995,7 +3002,7 @@ void tst_QNetworkReply::postToHttpsMultipart()
     QCOMPARE(replyData, expectedReplyData);
 }
 
-#endif // QT_NO_SSL
+#endif // QT_CONFIG(ssl)
 
 void tst_QNetworkReply::deleteFromHttp_data()
 {
@@ -3641,7 +3648,7 @@ void tst_QNetworkReply::ioGetFromHttpWithAuthSynchronous()
     QCOMPARE(replySync->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt(), 401);
 }
 
-#ifndef QT_NO_NETWORKPROXY
+#if QT_CONFIG(networkproxy)
 void tst_QNetworkReply::ioGetFromHttpWithProxyAuth()
 {
     // This test sends three requests
@@ -3804,9 +3811,9 @@ void tst_QNetworkReply::ioGetFromHttpWithSocksProxy()
         QCOMPARE(authspy.count(), 0);
     }
 }
-#endif // !QT_NO_NETWORKPROXY
+#endif // QT_CONFIG(networkproxy)
 
-#ifndef QT_NO_SSL
+#if QT_CONFIG(ssl)
 void tst_QNetworkReply::ioGetFromHttpsWithSslErrors()
 {
     QFile reference(testDataDir + "/rfc3252.txt");
@@ -4193,7 +4200,7 @@ void tst_QNetworkReply::ioGetFromHttpWithCache()
     QCOMPARE(reply->readAll().constData(), qPrintable(body));
 }
 
-#ifndef QT_NO_NETWORKPROXY
+#if QT_CONFIG(networkproxy)
 void tst_QNetworkReply::ioGetWithManyProxies_data()
 {
     QTest::addColumn<QList<QNetworkProxy> >("proxyList");
@@ -4254,7 +4261,7 @@ void tst_QNetworkReply::ioGetWithManyProxies_data()
                 << QNetworkReply::NoError;
     }
 
-#ifndef QT_NO_SSL
+#if QT_CONFIG(ssl)
     // HTTPS with HTTP transparent proxy
     proxyList.clear();
     proxyList << QNetworkProxy(QNetworkProxy::HttpProxy, QtNetworkSettings::httpProxyServerName(), 3129);
@@ -4304,7 +4311,7 @@ void tst_QNetworkReply::ioGetWithManyProxies_data()
                 << QNetworkReply::ProxyNotFoundError;
     }
 
-#ifndef QT_NO_SSL
+#if QT_CONFIG(ssl)
     // HTTPS with HTTP caching proxy
     proxyList.clear();
     proxyList << QNetworkProxy(QNetworkProxy::HttpCachingProxy, QtNetworkSettings::httpProxyServerName(), 3129);
@@ -4383,7 +4390,7 @@ void tst_QNetworkReply::ioGetWithManyProxies_data()
                 << QNetworkReply::NoError;
     }
 
-#ifndef QT_NO_SSL
+#if QT_CONFIG(ssl)
     // HTTPS request with HTTP Caching + HTTP transparent
     proxyList.clear();
     proxyList << QNetworkProxy(QNetworkProxy::HttpCachingProxy, QtNetworkSettings::httpProxyServerName(), 3129)
@@ -4427,7 +4434,7 @@ void tst_QNetworkReply::ioGetWithManyProxies()
     QSignalSpy authspy(&manager, SIGNAL(proxyAuthenticationRequired(QNetworkProxy,QAuthenticator*)));
     connect(&manager, SIGNAL(proxyAuthenticationRequired(QNetworkProxy,QAuthenticator*)),
             SLOT(proxyAuthenticationRequired(QNetworkProxy,QAuthenticator*)));
-#ifndef QT_NO_SSL
+#if QT_CONFIG(ssl)
     connect(&manager, SIGNAL(sslErrors(QNetworkReply*,QList<QSslError>)),
             SLOT(sslErrors(QNetworkReply*,QList<QSslError>)));
 #endif
@@ -4436,7 +4443,7 @@ void tst_QNetworkReply::ioGetWithManyProxies()
 
     manager.disconnect(SIGNAL(proxyAuthenticationRequired(QNetworkProxy,QAuthenticator*)),
                        this, SLOT(proxyAuthenticationRequired(QNetworkProxy,QAuthenticator*)));
-#ifndef QT_NO_SSL
+#if QT_CONFIG(ssl)
     manager.disconnect(SIGNAL(sslErrors(QNetworkReply*,QList<QSslError>)),
                        this, SLOT(sslErrors(QNetworkReply*,QList<QSslError>)));
 #endif
@@ -4468,7 +4475,7 @@ void tst_QNetworkReply::ioGetWithManyProxies()
         QCOMPARE(authspy.count(), 0);
     }
 }
-#endif // !QT_NO_NETWORKPROXY
+#endif // QT_CONFIG(networkproxy)
 
 void tst_QNetworkReply::ioPutToFileFromFile_data()
 {
@@ -4765,7 +4772,7 @@ void tst_QNetworkReply::ioPostToHttpFromFile()
     QCOMPARE(reply->readAll().trimmed(), md5sum(sourceFile.readAll()).toHex());
 }
 
-#ifndef QT_NO_NETWORKPROXY
+#if QT_CONFIG(networkproxy)
 void tst_QNetworkReply::ioPostToHttpFromSocket_data()
 {
     QTest::addColumn<QByteArray>("data");
@@ -4916,7 +4923,7 @@ void tst_QNetworkReply::ioPostToHttpFromSocketSynchronous()
 
     QCOMPARE(reply->readAll().trimmed(), md5sum(data).toHex());
 }
-#endif // !QT_NO_NETWORKPROXY
+#endif // QT_CONFIG(networkproxy)
 
 // this tests checks if rewinding the POST-data to some place in the middle
 // worked.
@@ -5033,7 +5040,7 @@ void tst_QNetworkReply::ioPostToHttpNoBufferFlag()
     QCOMPARE(reply->error(), QNetworkReply::ContentReSendError);
 }
 
-#ifndef QT_NO_SSL
+#if QT_CONFIG(ssl)
 class SslServer : public QTcpServer
 {
     Q_OBJECT
@@ -5149,7 +5156,7 @@ void tst_QNetworkReply::ioGetFromBuiltinHttp_data()
     QTest::addColumn<int>("bufferSize");
     QTest::newRow("http+unlimited") << false << 0;
     QTest::newRow("http+limited") << false << 4096;
-#ifndef QT_NO_SSL
+#if QT_CONFIG(ssl)
     QTest::newRow("https+unlimited") << true << 0;
     QTest::newRow("https+limited") << true << 4096;
 #endif
@@ -5909,7 +5916,7 @@ void tst_QNetworkReply::nestedEventLoops()
     QCOMPARE(errorspy.count(), 0);
 }
 
-#ifndef QT_NO_NETWORKPROXY
+#if QT_CONFIG(networkproxy)
 void tst_QNetworkReply::httpProxyCommands_data()
 {
     QTest::addColumn<QUrl>("url");
@@ -5920,7 +5927,7 @@ void tst_QNetworkReply::httpProxyCommands_data()
         << QUrl("http://0.0.0.0:4443/http-request")
         << QByteArray("HTTP/1.0 200 OK\r\nProxy-Connection: close\r\nContent-Length: 1\r\n\r\n1")
         << "GET http://0.0.0.0:4443/http-request HTTP/1.";
-#ifndef QT_NO_SSL
+#if QT_CONFIG(ssl)
     QTest::newRow("https")
         << QUrl("https://0.0.0.0:4443/https-request")
         << QByteArray("HTTP/1.0 200 Connection Established\r\n\r\n")
@@ -5982,7 +5989,7 @@ void tst_QNetworkReply::httpProxyCommandsSynchronous_data()
 {
     httpProxyCommands_data();
 }
-#endif // !QT_NO_NETWORKPROXY
+#endif // QT_CONFIG(networkproxy)
 
 struct QThreadCleanup
 {
@@ -6004,7 +6011,7 @@ struct QDeleteLaterCleanup
     }
 };
 
-#ifndef QT_NO_NETWORKPROXY
+#if QT_CONFIG(networkproxy)
 void tst_QNetworkReply::httpProxyCommandsSynchronous()
 {
     QFETCH(QUrl, url);
@@ -6094,7 +6101,7 @@ void tst_QNetworkReply::proxyChange()
 
     QVERIFY(int(reply3->error()) > 0);
 }
-#endif // !QT_NO_NETWORKPROXY
+#endif // QT_CONFIG(networkproxy)
 
 void tst_QNetworkReply::authorizationError_data()
 {
@@ -6391,7 +6398,7 @@ void tst_QNetworkReply::httpRecursiveCreation()
     QVERIFY(!QTestEventLoop::instance().timeout());
 }
 
-#ifndef QT_NO_SSL
+#if QT_CONFIG(ssl)
 void tst_QNetworkReply::ignoreSslErrorsList_data()
 {
     QTest::addColumn<QList<QSslError> >("expectedSslErrors");
@@ -6399,8 +6406,8 @@ void tst_QNetworkReply::ignoreSslErrorsList_data()
 
     QList<QSslError> expectedSslErrors;
     QList<QSslCertificate> certs = QSslCertificate::fromPath(testDataDir + certsFilePath);
-    QSslError rightError(FLUKE_CERTIFICATE_ERROR, certs.at(0));
-    QSslError wrongError(FLUKE_CERTIFICATE_ERROR);
+    QSslError rightError(flukeCertTlsError, certs.at(0));
+    QSslError wrongError(flukeCertTlsError);
 
     QTest::newRow("SSL-failure-empty-list") << expectedSslErrors << QNetworkReply::SslHandshakeFailedError;
     expectedSslErrors.append(wrongError);
@@ -6467,23 +6474,23 @@ void tst_QNetworkReply::sslConfiguration_data()
     QTest::newRow("empty") << QSslConfiguration() << false;
     QSslConfiguration conf = QSslConfiguration::defaultConfiguration();
     QTest::newRow("default") << conf << false; // does not contain test server cert
-#if QT_CONFIG(securetransport)
-    qWarning("SecTrustEvaluate() will fail, update the certificate on server");
-#else
-    QList<QSslCertificate> testServerCert = QSslCertificate::fromPath(testDataDir + certsFilePath);
-    conf.setCaCertificates(testServerCert);
+    if (isSecureTransport) {
+        qWarning("SecTrustEvaluate() will fail, update the certificate on server");
+    } else {
+        QList<QSslCertificate> testServerCert = QSslCertificate::fromPath(testDataDir + certsFilePath);
+        conf.setCaCertificates(testServerCert);
 
-    QTest::newRow("set-root-cert") << conf << true;
-    conf.setProtocol(QSsl::SecureProtocols);
-    QTest::newRow("secure") << conf << true;
-#endif
+        QTest::newRow("set-root-cert") << conf << true;
+        conf.setProtocol(QSsl::SecureProtocols);
+        QTest::newRow("secure") << conf << true;
+    }
 }
 
 void tst_QNetworkReply::encrypted()
 {
-#if QT_CONFIG(securetransport)
-    QSKIP("SecTrustEvalute() fails with old server certificate");
-#endif
+    if (isSecureTransport)
+        QSKIP("SecTrustEvalute() fails with old server certificate");
+
     QUrl url("https://" + QtNetworkSettings::httpServerName());
     QNetworkRequest request(url);
     QNetworkReply *reply = manager.get(request);
@@ -6556,9 +6563,8 @@ void tst_QNetworkReply::sslSessionSharing_data()
 
 void tst_QNetworkReply::sslSessionSharing()
 {
-#if QT_CONFIG(schannel) || defined(QT_SECURETRANSPORT)
-    QSKIP("Not implemented with SecureTransport/Schannel");
-#endif
+    if (isSchannel || isSecureTransport)
+        QSKIP("Not implemented with SecureTransport/Schannel");
 
     QString urlString("https://" + QtNetworkSettings::httpServerName());
     QList<QNetworkReplyPtr> replies;
@@ -6627,9 +6633,8 @@ void tst_QNetworkReply::sslSessionSharingFromPersistentSession_data()
 
 void tst_QNetworkReply::sslSessionSharingFromPersistentSession()
 {
-#if QT_CONFIG(schannel) || defined(QT_SECURETRANSPORT)
-    QSKIP("Not implemented with SecureTransport/Schannel");
-#endif
+    if (isSchannel || isSecureTransport)
+        QSKIP("Not implemented with SecureTransport/Schannel");
 
     QString urlString("https://" + QtNetworkSettings::httpServerName());
 
@@ -6682,7 +6687,7 @@ void tst_QNetworkReply::sslSessionSharingFromPersistentSession()
 }
 
 #endif // QT_BUILD_INTERNAL
-#endif // QT_NO_SSL
+#endif // QT_CONFIG(ssl)
 
 void tst_QNetworkReply::getAndThenDeleteObject_data()
 {
@@ -7037,8 +7042,7 @@ void tst_QNetworkReply::qtbug12908compressedHttpReply()
     QNetworkRequest request(QUrl("http://localhost:" + QString::number(server.serverPort())));
     // QDecompressHelper will abort the download if the compressed to decompressed size ratio
     // differs too much, so we override it
-    request.setAttribute(QNetworkRequest::Attribute(QNetworkRequest::User - 1),
-                         QByteArray("__qdecompresshelper_ignore_download_ratio"));
+    request.setDecompressedSafetyCheckThreshold(-1);
     QNetworkReplyPtr reply(manager.get(request));
 
     QVERIFY2(waitForFinish(reply) == Success, msgWaitForFinished(reply));
@@ -7117,7 +7121,7 @@ void tst_QNetworkReply::qtbug4121unknownAuthentication()
     QCOMPARE(reply->error(), QNetworkReply::AuthenticationRequiredError);
 }
 
-#ifndef QT_NO_NETWORKPROXY
+#if QT_CONFIG(networkproxy)
 void tst_QNetworkReply::authenticationCacheAfterCancel_data()
 {
     QTest::addColumn<QNetworkProxy>("proxy");
@@ -7128,7 +7132,7 @@ void tst_QNetworkReply::authenticationCacheAfterCancel_data()
             << proxies.at(i).proxy
             << proxies.at(i).requiresAuthentication
             << QUrl("http://" + QtNetworkSettings::httpServerName() + "/qtest/rfcs-auth/rfc3252.txt");
-#ifndef QT_NO_SSL
+#if QT_CONFIG(ssl)
         QTest::newRow("https" + proxies.at(i).tag)
             << proxies.at(i).proxy
             << proxies.at(i).requiresAuthentication
@@ -7184,7 +7188,7 @@ void tst_QNetworkReply::authenticationCacheAfterCancel()
     QFETCH(bool, proxyAuth);
     QFETCH(QUrl, url);
     QNetworkAccessManager manager;
-#ifndef QT_NO_SSL
+#if QT_CONFIG(ssl)
     connect(&manager, SIGNAL(sslErrors(QNetworkReply*,QList<QSslError>)),
             SLOT(sslErrors(QNetworkReply*,QList<QSslError>)));
 #endif
@@ -7311,7 +7315,7 @@ void tst_QNetworkReply::authenticationWithDifferentRealm()
 {
     AuthenticationCacheHelper helper;
     QNetworkAccessManager manager;
-#ifndef QT_NO_SSL
+#if QT_CONFIG(ssl)
     connect(&manager, SIGNAL(sslErrors(QNetworkReply*,QList<QSslError>)),
             SLOT(sslErrors(QNetworkReply*,QList<QSslError>)));
 #endif
@@ -7338,7 +7342,7 @@ void tst_QNetworkReply::authenticationWithDifferentRealm()
     QVERIFY(!QTestEventLoop::instance().timeout());
     QCOMPARE(reply->error(), QNetworkReply::NoError);
 }
-#endif // !QT_NO_NETWORKPROXY
+#endif // QT_CONFIG(networkproxy)
 
 class QtBug13431Helper : public QObject
 {
@@ -7752,17 +7756,17 @@ void tst_QNetworkReply::synchronousRequest_data()
         //  ### we would need to enflate (un-deflate) the file content and compare the sizes
         << QString("text/plain");
 
-#ifndef QT_NO_SSL
-#if QT_CONFIG(securetransport)
-    qWarning("Skipping https scheme, SecTrustEvalue() fails, update the certificate on server");
-#else
-    QTest::newRow("https")
-        << QUrl("https://" + QtNetworkSettings::httpServerName() + "/qtest/rfc3252.txt")
-        << QString("file:" + testDataDir + "/rfc3252.txt")
-        << true
-        << QString("text/plain");
-#endif
-#endif
+#if QT_CONFIG(ssl)
+    if (isSecureTransport) {
+        qWarning("Skipping https scheme, SecTrustEvalue() fails, update the certificate on server");
+    } else {
+        QTest::newRow("https")
+                << QUrl("https://" + QtNetworkSettings::httpServerName() + "/qtest/rfc3252.txt")
+                << QString("file:" + testDataDir + "/rfc3252.txt")
+                << true
+                << QString("text/plain");
+    }
+#endif // QT_CONFIG(ssl)
 
     QTest::newRow("data")
         << QUrl(QString::fromLatin1("data:text/plain,hello world"))
@@ -7787,7 +7791,7 @@ void tst_QNetworkReply::synchronousRequest()
 
     QNetworkRequest request(url);
 
-#ifndef QT_NO_SSL
+#if QT_CONFIG(ssl)
     // workaround for HTTPS requests: add self-signed server cert to list of CA certs,
     // since we cannot react to the sslErrors() signal
     // to fix this properly we would need to have an ignoreSslErrors() method in the
@@ -7832,7 +7836,7 @@ void tst_QNetworkReply::synchronousRequest()
     reply->deleteLater();
 }
 
-#ifndef QT_NO_SSL
+#if QT_CONFIG(ssl)
 void tst_QNetworkReply::synchronousRequestSslFailure()
 {
     // test that SSL won't be accepted with self-signed certificate,
@@ -8943,7 +8947,7 @@ void tst_QNetworkReply::ioHttpRedirectWithUploadDevice()
     }
 }
 
-#ifndef QT_NO_SSL
+#if QT_CONFIG(ssl)
 
 class PutWithServerClosingConnectionImmediatelyHandler: public QObject
 {

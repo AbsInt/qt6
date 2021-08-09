@@ -54,6 +54,8 @@
 #endif
 
 #include <vector>
+#include <iostream>
+#include <sstream>
 
 QT_BEGIN_NAMESPACE
 
@@ -94,20 +96,43 @@ struct TranslationRelatedStore
     QString lupdateComment;
     QString lupdateExtraComment;
     QString lupdatePlural;
+    QString lupdateWarning;
     clang::SourceLocation sourceLocation;
 
-    bool isValid() const
+    bool isValid(bool printwarning = false)
     {
         switch (trFunctionAliasManager.trFunctionByName(funcName)) {
         // only one argument: the source
         case TrFunctionAliasManager::Function_Q_DECLARE_TR_FUNCTIONS:
-            if (contextArg.isEmpty())
+            if (contextArg.isEmpty()) {
+                if (printwarning) {
+                    std::stringstream warning;
+                    warning << qPrintable(lupdateLocationFile) << ":"
+                        << lupdateLocationLine << ":"
+                        << locationCol << ": "
+                        << " \'" << qPrintable(funcName)
+                        << "\' cannot be called without context."
+                        << " The call is ignored." <<std::endl;
+                    lupdateWarning.append(QString::fromStdString(warning.str()));
+                }
                 return false;
+            }
             break;
         case TrFunctionAliasManager::Function_tr:
         case TrFunctionAliasManager::Function_trUtf8:
-            if (lupdateSource.isEmpty())
+            if (lupdateSource.isEmpty()) {
+                if (printwarning) {
+                    std::stringstream warning;
+                    warning << qPrintable(lupdateLocationFile) << ":"
+                        << lupdateLocationLine << ":"
+                        << locationCol << ": "
+                        << " \'" << qPrintable(funcName)
+                        << "\' cannot be called without source."
+                        << " The call is ignored." << std::endl;
+                    lupdateWarning.append(QString::fromStdString(warning.str()));
+                }
                 return false;
+            }
             break;
         // two arguments: the context and the source
         case TrFunctionAliasManager::Function_QT_TRANSLATE_N_NOOP:
@@ -117,20 +142,53 @@ struct TranslationRelatedStore
         case TrFunctionAliasManager::Function_QT_TRANSLATE_NOOP_UTF8:
         case TrFunctionAliasManager::Function_QT_TRANSLATE_NOOP3:
         case TrFunctionAliasManager::Function_QT_TRANSLATE_NOOP3_UTF8:
-            if (contextArg.isEmpty() || lupdateSource.isEmpty())
+            if (contextArg.isEmpty() || lupdateSource.isEmpty()) {
+                if (printwarning) {
+                    std::stringstream warning;
+                    warning << qPrintable(lupdateLocationFile) << ":"
+                        << lupdateLocationLine << ":"
+                        << locationCol << ": "
+                        << " \'" << qPrintable(funcName)
+                        << "\' cannot be called without context or source."
+                        << " The call is ignored." << std::endl;
+                    lupdateWarning.append(QString::fromStdString(warning.str()));
+                }
                 return false;
+            }
             // not sure if the third argument is compulsory
             break;
         // only one argument (?) the message Id
         case TrFunctionAliasManager::Function_QT_TRID_N_NOOP:
         case TrFunctionAliasManager::Function_qtTrId:
         case TrFunctionAliasManager::Function_QT_TRID_NOOP:
-            if (lupdateId.isEmpty())
+            if (lupdateId.isEmpty()) {
+                if (printwarning) {
+                    std::stringstream warning;
+                    warning << qPrintable(lupdateLocationFile) << ":"
+                        << lupdateLocationLine << ":"
+                        << locationCol << ": "
+                        << " \'" << qPrintable(funcName)
+                        << "\' cannot be called without Id."
+                        << " The call is ignored." << std::endl;
+                    lupdateWarning.append(QString::fromStdString(warning.str()));
+                }
                 return false;
+            }
             break;
         default:
-            if (funcName == QStringLiteral("TRANSLATOR") && lupdateComment.isEmpty())
+            if (funcName == QStringLiteral("TRANSLATOR") && lupdateComment.isEmpty()) {
+                if (printwarning) {
+                    std::stringstream warning;
+                    warning << qPrintable(lupdateLocationFile) << ":"
+                        << lupdateLocationLine << ":"
+                        << locationCol << ": "
+                        << qPrintable(funcName)
+                        << " cannot be called without comment."
+                        << " The call is ignored." << std::endl;
+                    lupdateWarning.append(QString::fromStdString(warning.str()));
+                }
                 return false;
+            }
         }
         return !lupdateLocationFile.isEmpty() && (lupdateLocationLine > -1) && (locationCol > -1);
     }
@@ -186,11 +244,23 @@ struct Stores
     TranslationStores Preprocessor;
     WriteSynchronizedRef<TranslationRelatedStore> AST;
     WriteSynchronizedRef<TranslationRelatedStore> QDeclareTrWithContext;
-    WriteSynchronizedRef<TranslationRelatedStore> QNoopTranlsationWithContext;
+    WriteSynchronizedRef<TranslationRelatedStore> QNoopTranlsationWithContext; // or with warnings that need to be
+                                                                               //displayed in the same order, always
 };
 
 namespace LupdatePrivate
 {
+    inline QString fixedLineEndings(const QString &s)
+    {
+#ifdef Q_OS_WIN
+        QString result = s;
+        result.replace(QLatin1String("\r\n"), QLatin1String("\n"));
+        return result;
+#else
+        return s;
+#endif
+    }
+
     enum QuoteCompulsary
     {
         None = 0x01,
@@ -214,7 +284,7 @@ namespace LupdatePrivate
             return {};
         if (!s.consume_back("\"") && ((quote & Right) != 0))
             return {};
-        return toQt(s);
+        return fixedLineEndings(toQt(s));
     }
 
     /*
@@ -227,7 +297,7 @@ namespace LupdatePrivate
         if (token.empty())
             return {};
 
-        const QString string = QString::fromStdString(token).trimmed();
+        const QString string = fixedLineEndings(QString::fromStdString(token).trimmed());
         const int index = string.indexOf(QLatin1Char('"'));
         if (index <= 0)
             return LupdatePrivate::cleanQuote(token, QuoteCompulsary::LeftAndRight);
@@ -259,9 +329,9 @@ namespace ClangCppParser
                  bool *fail);
 
     using TranslatorMessageVector = std::vector<TranslatorMessage>;
-    void collectMessages(TranslatorMessageVector &result, const TranslationRelatedStore &store);
+    void collectMessages(TranslatorMessageVector &result, TranslationRelatedStore &store);
     TranslatorMessage translatorMessage(const TranslationRelatedStore &store,
-        const QString &id, bool plural, bool isID);
+        const QString &id, bool plural, bool isID, bool isWarningOnly = false);
 
     void correctAstTranslationContext(ReadSynchronizedRef<TranslationRelatedStore> &ast,
         WriteSynchronizedRef<TranslationRelatedStore> &newAst, const TranslationStores &qDecl);

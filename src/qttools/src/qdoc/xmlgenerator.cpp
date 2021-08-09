@@ -1,6 +1,7 @@
 /****************************************************************************
 **
 ** Copyright (C) 2019 Thibaut Cuvelier
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the tools applications of the Qt Toolkit.
@@ -420,7 +421,7 @@ QString XmlGenerator::getAutoLink(const Atom *atom, const Node *relative, const 
         return link; // Explicit empty url (node is ignored as a link target)
     }
     if (!ref.isEmpty()) {
-        int hashtag = link.lastIndexOf(QChar('#'));
+        qsizetype hashtag = link.lastIndexOf(QChar('#'));
         if (hashtag != -1)
             link.truncate(hashtag);
         link += QLatin1Char('#') + ref;

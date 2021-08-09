@@ -115,8 +115,11 @@ bool ImageViewer::loadFile(const QString &fileName)
 
     setWindowFilePath(fileName);
 
-    const QString message = tr("Opened \"%1\", %2x%3, Depth: %4")
-        .arg(QDir::toNativeSeparators(fileName)).arg(image.width()).arg(image.height()).arg(image.depth());
+    const QString description = image.colorSpace().isValid()
+        ? image.colorSpace().description() : tr("unknown");
+    const QString message = tr("Opened \"%1\", %2x%3, Depth: %4 (%5)")
+        .arg(QDir::toNativeSeparators(fileName)).arg(image.width()).arg(image.height())
+        .arg(image.depth()).arg(description);
     statusBar()->showMessage(message);
     return true;
 }
@@ -148,7 +151,7 @@ bool ImageViewer::saveFile(const QString &fileName)
     if (!writer.write(image)) {
         QMessageBox::information(this, QGuiApplication::applicationDisplayName(),
                                  tr("Cannot write %1: %2")
-                                 .arg(QDir::toNativeSeparators(fileName)), writer.errorString());
+                                 .arg(QDir::toNativeSeparators(fileName), writer.errorString()));
         return false;
     }
     const QString message = tr("Wrote \"%1\"").arg(QDir::toNativeSeparators(fileName));

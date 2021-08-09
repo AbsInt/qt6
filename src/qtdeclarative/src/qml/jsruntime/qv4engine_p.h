@@ -561,7 +561,10 @@ public:
     void setProfiler(Profiling::Profiler *profiler);
 #endif // QT_CONFIG(qml_debug)
 
-    ExecutionContext *currentContext() const;
+    ExecutionContext *currentContext() const
+    {
+        return static_cast<ExecutionContext *>(&currentStackFrame->jsFrame->context);
+    }
 
     // ensure we always get odd prototype IDs. This helps make marking in QV4::Lookup fast
     quintptr newProtoId() { return (protoIdCount += 2); }
@@ -598,6 +601,7 @@ public:
 #endif
 
     Heap::UrlObject *newUrlObject();
+    Heap::UrlObject *newUrlObject(const QUrl &url);
     Heap::UrlSearchParamsObject *newUrlSearchParamsObject();
 
     Heap::Object *newErrorObject(const Value &value);
@@ -622,6 +626,25 @@ public:
     Heap::Object *newSetIteratorObject(Object *o);
     Heap::Object *newMapIteratorObject(Object *o);
     Heap::Object *newArrayIteratorObject(Object *o);
+
+    static Heap::ExecutionContext *qmlContext(Heap::ExecutionContext *ctx)
+    {
+        Heap::ExecutionContext *outer = ctx->outer;
+
+        if (ctx->type != Heap::ExecutionContext::Type_QmlContext && !outer)
+            return nullptr;
+
+        while (outer && outer->type != Heap::ExecutionContext::Type_GlobalContext) {
+            ctx = outer;
+            outer = ctx->outer;
+        }
+
+        Q_ASSERT(ctx);
+        if (ctx->type != Heap::ExecutionContext::Type_QmlContext)
+            return nullptr;
+
+        return ctx;
+    }
 
     Heap::QmlContext *qmlContext() const;
     QObject *qmlScopeObject() const;
@@ -659,13 +682,13 @@ public:
     QQmlError catchExceptionAsQmlError();
 
     // variant conversions
-    QVariant toVariant(const QV4::Value &value, int typeHint, bool createJSValueForObjects = true);
+    QVariant toVariant(const QV4::Value &value, QMetaType typeHint, bool createJSValueForObjects = true);
     QV4::ReturnedValue fromVariant(const QVariant &);
 
     QVariantMap variantMapFromJS(const QV4::Object *o);
 
-    static bool metaTypeFromJS(const Value &value, int type, void *data);
-    QV4::ReturnedValue metaTypeToJS(int type, const void *data);
+    static bool metaTypeFromJS(const Value &value, QMetaType type, void *data);
+    QV4::ReturnedValue metaTypeToJS(QMetaType type, const void *data);
 
     int maxJSStackSize() const;
     int maxGCStackSize() const;
@@ -737,13 +760,27 @@ public:
 
     mutable QMutex moduleMutex;
     QHash<QUrl, QQmlRefPointer<ExecutableCompilationUnit>> modules;
+
+    // QV4::PersistentValue would be preferred, but using QHash will create copies,
+    // and QV4::PersistentValue doesn't like creating copies.
+    // Instead, we allocate a raw pointer using the same manual memory management
+    // technique in QV4::PersistentValue.
+    QHash<QUrl, QV4::Value*> nativeModules;
+
     void injectModule(const QQmlRefPointer<ExecutableCompilationUnit> &moduleUnit);
     QQmlRefPointer<ExecutableCompilationUnit> moduleForUrl(const QUrl &_url, const ExecutableCompilationUnit *referrer = nullptr) const;
     QQmlRefPointer<ExecutableCompilationUnit> loadModule(const QUrl &_url, const ExecutableCompilationUnit *referrer = nullptr);
+    void registerModule(const QString &name, const QJSValue &module);
 
     bool diskCacheEnabled() const;
 
+    void callInContext(Function *function, QObject *self, QQmlRefPointer<QQmlContextData> ctxtdata,
+                       int argc, void **args, QMetaType *types);
+
 private:
+    QV4::ReturnedValue fromData(
+            const QMetaType &type, const void *ptr, const QVariant *variant = nullptr);
+
 #if QT_CONFIG(qml_debug)
     QScopedPointer<QV4::Debugging::Debugger> m_debugger;
     QScopedPointer<QV4::Profiling::Profiler> m_profiler;

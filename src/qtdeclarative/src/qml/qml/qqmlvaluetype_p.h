@@ -117,14 +117,6 @@ private:
     void *m_gadgetPtr = nullptr;
 };
 
-class Q_QML_PRIVATE_EXPORT QQmlValueTypeFactory
-{
-public:
-    static bool isValueType(QMetaType type);
-    static QQmlValueType *valueType(QMetaType metaType);
-    static const QMetaObject *metaObjectForMetaType(QMetaType type);
-};
-
 struct Q_QML_PRIVATE_EXPORT QQmlPointFValueType
 {
     QPointF v;
@@ -274,7 +266,7 @@ public:
 #if QT_CONFIG(easingcurve)
 namespace QQmlEasingEnums
 {
-Q_NAMESPACE
+Q_NAMESPACE_EXPORT(Q_QML_PRIVATE_EXPORT)
 QML_NAMED_ELEMENT(Easing)
 QML_ADDED_IN_VERSION(2, 0)
 
@@ -337,22 +329,6 @@ public:
     QVariantList bezierCurve() const;
 };
 #endif
-
-struct Q_QML_PRIVATE_EXPORT QQmlPropertyValueType
-{
-    QQmlProperty v;
-    Q_PROPERTY(QObject *object READ object CONSTANT FINAL)
-    Q_PROPERTY(QString name READ name CONSTANT FINAL)
-    Q_GADGET
-    QML_ANONYMOUS
-    QML_FOREIGN(QQmlProperty)
-    QML_ADDED_IN_VERSION(2, 15)
-    QML_EXTENDED(QQmlPropertyValueType)
-
-public:
-    QObject *object() const;
-    QString name() const;
-};
 
 QT_END_NAMESPACE
 

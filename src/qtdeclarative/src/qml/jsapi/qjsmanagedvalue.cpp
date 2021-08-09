@@ -52,6 +52,7 @@
 #include <QtQml/private/qv4regexpobject_p.h>
 #include <QtQml/private/qv4dateobject_p.h>
 #include <QtQml/private/qv4errorobject_p.h>
+#include <QtQml/private/qv4identifiertable_p.h>
 
 #include <QtCore/qregularexpression.h>
 #include <QtCore/qurl.h>
@@ -61,7 +62,10 @@ QT_BEGIN_NAMESPACE
 
 /*!
  * \class QJSManagedValue
+ * \inmodule QtQml
  * \since 6.1
+ *
+ * \inmodule QtQml
  *
  * \brief QJSManagedValue represents a value on the JavaScript heap belonging to a QJSEngine.
  *
@@ -664,7 +668,7 @@ QVariant QJSManagedValue::toVariant() const
     if (d->isString())
         return QVariant(d->toQString());
     if (QV4::Managed *m = d->as<QV4::Managed>())
-        return m->engine()->toVariant(*d, -1, true);
+        return m->engine()->toVariant(*d, QMetaType{}, true);
 
     Q_UNREACHABLE();
     return QVariant();
@@ -739,8 +743,8 @@ bool QJSManagedValue::hasProperty(const QString &name) const
 
     if (QV4::Object *obj = d->as<QV4::Object>()) {
         QV4::Scope scope(obj->engine());
-        QV4::ScopedString str(scope, obj->engine()->newString(name));
-        return obj->hasProperty(str->toPropertyKey());
+        QV4::ScopedPropertyKey key(scope, scope.engine->identifierTable->asPropertyKey(name));
+        return obj->hasProperty(key);
     }
 
     return prototype().hasProperty(name);
@@ -760,8 +764,8 @@ bool QJSManagedValue::hasOwnProperty(const QString &name) const
 
     if (QV4::Object *obj = d->as<QV4::Object>()) {
         QV4::Scope scope(obj->engine());
-        QV4::ScopedString str(scope, obj->engine()->newString(name));
-        return obj->getOwnProperty(str->toPropertyKey()) != QV4::Attr_Invalid;
+        QV4::ScopedPropertyKey key(scope, scope.engine->identifierTable->asPropertyKey(name));
+        return obj->getOwnProperty(key) != QV4::Attr_Invalid;
     }
 
     return false;
@@ -773,8 +777,14 @@ bool QJSManagedValue::hasOwnProperty(const QString &name) const
  */
 QJSValue QJSManagedValue::property(const QString &name) const
 {
-    if (!d || d->isNullOrUndefined())
+    if (!d)
         return QJSValue();
+
+    if (d->isNullOrUndefined()) {
+        QV4::ExecutionEngine *e = v4Engine(d);
+        e->throwTypeError(QStringLiteral("Cannot read property '%1' of null").arg(name));
+        return QJSValue();
+    }
 
     if (QV4::String *string = d->as<QV4::String>()) {
         if (name == QStringLiteral("length"))
@@ -783,8 +793,8 @@ QJSValue QJSManagedValue::property(const QString &name) const
 
     if (QV4::Object *obj = d->as<QV4::Object>()) {
         QV4::Scope scope(obj->engine());
-        QV4::ScopedString str(scope, obj->engine()->newString(name));
-        return QJSValuePrivate::fromReturnedValue(obj->get(str->toPropertyKey()));
+        QV4::ScopedPropertyKey key(scope, scope.engine->identifierTable->asPropertyKey(name));
+        return QJSValuePrivate::fromReturnedValue(obj->get(key));
     }
 
     return prototype().property(name);
@@ -800,17 +810,21 @@ void QJSManagedValue::setProperty(const QString &name, const QJSValue &value)
     if (!d)
         return;
 
+    if (d->isNullOrUndefined()) {
+        v4Engine(d)->throwTypeError(
+                    QStringLiteral("Value is null and could not be converted to an object"));
+    }
+
     if (QV4::Object *obj = d->as<QV4::Object>()) {
+        QV4::Scope scope(obj->engine());
         QV4::ExecutionEngine *v4 = QJSValuePrivate::engine(&value);
-        if (Q_UNLIKELY(v4 && v4 != obj->engine())) {
+        if (Q_UNLIKELY(v4 && v4 != scope.engine)) {
             qWarning("QJSManagedValue::setProperty() failed: "
                      "Value was created in different engine.");
             return;
         }
-        QV4::Scope scope(obj->engine());
-        QV4::ScopedString str(scope, obj->engine()->newString(name));
-        obj->put(str->toPropertyKey(),
-                 QJSValuePrivate::convertToReturnedValue(scope.engine, value));
+        QV4::ScopedPropertyKey key(scope, scope.engine->identifierTable->asPropertyKey(name));
+        obj->put(key, QJSValuePrivate::convertToReturnedValue(scope.engine, value));
     }
 }
 
@@ -825,8 +839,8 @@ bool QJSManagedValue::deleteProperty(const QString &name)
 
     if (QV4::Object *obj = d->as<QV4::Object>()) {
         QV4::Scope scope(obj->engine());
-        QV4::ScopedString str(scope, obj->engine()->newString(name));
-        return obj->deleteProperty(str->toPropertyKey());
+        QV4::ScopedPropertyKey key(scope, scope.engine->identifierTable->asPropertyKey(name));
+        return obj->deleteProperty(key);
     }
 
     return false;
@@ -980,15 +994,15 @@ QJSValue QJSManagedValue::call(const QJSValueList &arguments) const
     QV4::ExecutionEngine *engine = f->engine();
 
     QV4::Scope scope(engine);
-    QV4::JSCallData jsCallData(scope, arguments.length());
-    *jsCallData->thisObject = engine->globalObject;
+    QV4::JSCallArguments jsCallData(scope, arguments.length());
+    *jsCallData.thisObject = engine->globalObject;
     int i = 0;
     for (const QJSValue &arg : arguments) {
         if (Q_UNLIKELY(!QJSValuePrivate::checkEngine(engine, arg))) {
             qWarning("QJSManagedValue::call() failed: Argument was created in different engine.");
             return QJSValue();
         }
-        jsCallData->args[i++] = QJSValuePrivate::convertToReturnedValue(engine, arg);
+        jsCallData.args[i++] = QJSValuePrivate::convertToReturnedValue(engine, arg);
     }
 
     return QJSValuePrivate::fromReturnedValue(f->call(jsCallData));
@@ -1019,8 +1033,8 @@ QJSValue QJSManagedValue::callWithInstance(const QJSValue &instance,
     }
 
     QV4::Scope scope(engine);
-    QV4::JSCallData jsCallData(scope, arguments.length());
-    *jsCallData->thisObject = QJSValuePrivate::convertToReturnedValue(engine, instance);
+    QV4::JSCallArguments jsCallData(scope, arguments.length());
+    *jsCallData.thisObject = QJSValuePrivate::convertToReturnedValue(engine, instance);
     int i = 0;
     for (const QJSValue &arg : arguments) {
         if (Q_UNLIKELY(!QJSValuePrivate::checkEngine(engine, arg))) {
@@ -1028,7 +1042,7 @@ QJSValue QJSManagedValue::callWithInstance(const QJSValue &instance,
                      "Argument was created in different engine.");
             return QJSValue();
         }
-        jsCallData->args[i++] = QJSValuePrivate::convertToReturnedValue(engine, arg);
+        jsCallData.args[i++] = QJSValuePrivate::convertToReturnedValue(engine, arg);
     }
 
     return QJSValuePrivate::fromReturnedValue(f->call(jsCallData));
@@ -1052,7 +1066,7 @@ QJSValue QJSManagedValue::callAsConstructor(const QJSValueList &arguments) const
     QV4::ExecutionEngine *engine = f->engine();
 
     QV4::Scope scope(engine);
-    QV4::JSCallData jsCallData(scope, arguments.length());
+    QV4::JSCallArguments jsCallData(scope, arguments.length());
     int i = 0;
     for (const QJSValue &arg : arguments) {
         if (Q_UNLIKELY(!QJSValuePrivate::checkEngine(engine, arg))) {
@@ -1060,7 +1074,7 @@ QJSValue QJSManagedValue::callAsConstructor(const QJSValueList &arguments) const
                      "Argument was created in different engine.");
             return QJSValue();
         }
-        jsCallData->args[i++] = QJSValuePrivate::convertToReturnedValue(engine, arg);
+        jsCallData.args[i++] = QJSValuePrivate::convertToReturnedValue(engine, arg);
     }
 
     return QJSValuePrivate::fromReturnedValue(f->callAsConstructor(jsCallData));

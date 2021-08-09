@@ -129,6 +129,20 @@ QQuickImagePrivate::QQuickImagePrivate()
     \li \c ASTC (since Qt 5.13)
     \endlist
 
+    \note The intended vertical orientation of an image in a texture file is not generally well
+    defined. Different texture compression tools have different defaults and options of when to
+    perform vertical flipping of the input image. If an image from a texture file appears upside
+    down, flipping may need to be toggled in the asset conditioning process. Alternatively, the
+    Image element itself can be flipped by either applying a suitable transformation via the
+    transform property or, more conveniently, by setting the mirrorVertically property:
+    \badcode
+    transform: [ Translate { y: -myImage.height }, Scale { yScale: -1 } ]
+    \endcode
+    or
+    \badcode
+    mirrorVertically: true
+    \endcode
+
     \note Semi-transparent original images require alpha pre-multiplication
     prior to texture compression in order to be correctly displayed in Qt
     Quick. This can be done with the following ImageMagick command
@@ -570,6 +584,17 @@ qreal QQuickImage::paintedHeight() const
 */
 
 /*!
+    \qmlproperty bool QtQuick::Image::mirrorVertically
+
+    This property holds whether the image should be vertically inverted
+    (effectively displaying a mirrored image).
+
+    The default value is false.
+
+    \since 6.2
+*/
+
+/*!
     \qmlproperty enumeration QtQuick::Image::horizontalAlignment
     \qmlproperty enumeration QtQuick::Image::verticalAlignment
 
@@ -829,7 +854,7 @@ QSGNode *QQuickImage::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
     node->setTargetRect(targetRect);
     node->setInnerTargetRect(targetRect);
     node->setSubSourceRect(nsrect);
-    node->setMirror(d->mirror);
+    node->setMirror(d->mirrorHorizontally, d->mirrorVertically);
     node->setAntialiasing(d->antialiasing);
     node->update();
 

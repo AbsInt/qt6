@@ -38,6 +38,7 @@
 #include "qqmldomerrormessage_p.h"
 #include "qqmldomitem_p.h"
 #include "qqmldomstringdumper_p.h"
+#include "qqmldomattachedinfo_p.h"
 
 #include <QtCore/QCborMap>
 #include <QtCore/QMutex>
@@ -47,6 +48,8 @@ QT_BEGIN_NAMESPACE
 
 namespace QQmlJS {
 namespace Dom {
+
+Q_LOGGING_CATEGORY(domLog, "qt.qmldom", QtWarningMsg);
 
 enum {
     FatalMsgMaxLen=511
@@ -181,7 +184,8 @@ ErrorMessage ErrorGroups::errorMessage(Dumper msg, ErrorLevel level, Path elemen
 ErrorMessage ErrorGroups::errorMessage(const DiagnosticMessage &msg, Path element, QString canonicalFilePath) const
 {
     ErrorMessage res(*this, msg, element, canonicalFilePath);
-    if (!res.location.isValid() && (res.location.startLine != 0 || res.location.startColumn != 0)) {
+    if (res.location == SourceLocation()
+        && (res.location.startLine != 0 || res.location.startColumn != 0)) {
         res.location.offset = -1;
         res.location.length = 1;
     }
@@ -244,26 +248,6 @@ ErrorMessage ErrorGroups::info(Dumper message) const
     return ErrorMessage(dumperToString(message), *this, ErrorLevel::Info);
 }
 
-ErrorMessage ErrorGroups::hint(QString message) const
-{
-    return ErrorMessage(message, *this, ErrorLevel::Hint);
-}
-
-ErrorMessage ErrorGroups::hint(Dumper message) const
-{
-    return ErrorMessage(dumperToString(message), *this, ErrorLevel::Hint);
-}
-
-ErrorMessage ErrorGroups::maybeWarning(QString message) const
-{
-    return ErrorMessage(message, *this, ErrorLevel::MaybeWarning);
-}
-
-ErrorMessage ErrorGroups::maybeWarning(Dumper message) const
-{
-    return ErrorMessage(dumperToString(message), *this, ErrorLevel::MaybeWarning);
-}
-
 ErrorMessage ErrorGroups::warning(QString message) const
 {
     return ErrorMessage(message, *this, ErrorLevel::Warning);
@@ -272,16 +256,6 @@ ErrorMessage ErrorGroups::warning(QString message) const
 ErrorMessage ErrorGroups::warning(Dumper message) const
 {
     return ErrorMessage(dumperToString(message), *this, ErrorLevel::Warning);
-}
-
-ErrorMessage ErrorGroups::maybeError(QString message) const
-{
-    return ErrorMessage(message, *this, ErrorLevel::MaybeError);
-}
-
-ErrorMessage ErrorGroups::maybeError(Dumper message) const
-{
-    return ErrorMessage(dumperToString(message), *this, ErrorLevel::MaybeError);
 }
 
 ErrorMessage ErrorGroups::error(QString message) const
@@ -381,7 +355,7 @@ QLatin1String ErrorMessage::msg(QLatin1String errorId, ErrorMessage err)
     return errorId;
 }
 
-void ErrorMessage::visitRegisteredMessages(std::function<bool (ErrorMessage)> visitor)
+void ErrorMessage::visitRegisteredMessages(function_ref<bool (ErrorMessage)> visitor)
 {
     QHash<QLatin1String, StorableMsg> r;
     {
@@ -449,8 +423,11 @@ ErrorMessage &ErrorMessage::withItem(DomItem el)
         path = el.canonicalPath();
     if (file.isEmpty())
         file = el.canonicalFilePath();
-    if (!location.isValid())
-        location = el.location();
+    if (location == SourceLocation()) {
+        if (const FileLocations *fLocPtr = FileLocations::fileLocationsPtr(el)) {
+            location = fLocPtr->regions.value(QString(), fLocPtr->fullRegion);
+        }
+    }
     return *this;
 }
 
@@ -486,7 +463,10 @@ void ErrorMessage::dump(Sink sink) const
     sink(message);
     if (path.length()>0) {
         sink(u" for ");
-        path.dump(sink);
+        if (!file.isEmpty() && path.length() > 3 && path.headKind() == Path::Kind::Root)
+            path.mid(3).dump(sink);
+        else
+            path.dump(sink);
     }
 }
 

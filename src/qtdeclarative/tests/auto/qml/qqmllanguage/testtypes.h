@@ -1468,6 +1468,9 @@ class Extension : public QObject
 public:
     Extension(QObject *parent = nullptr) : QObject(parent) {}
     int extension() const { return 42; }
+    Q_INVOKABLE int invokable() { return 123; }
+public slots:
+    int slot() { return 456; }
 };
 
 class Extended : public QObject
@@ -1709,6 +1712,17 @@ public:
     Q_INVOKABLE void call() { emit signal(QJSValue("Hello world!")); }
 signals:
     void signal(QJSValue value);
+};
+
+class EnumList : public QObject
+{
+    Q_OBJECT
+    QML_ELEMENT
+public:
+    enum Enum { Alpha, Beta, Gamma };
+    Q_ENUM(Enum)
+
+    Q_INVOKABLE QList<EnumList::Enum> list() const { return { Alpha, Beta, Gamma }; }
 };
 
 struct Large {

@@ -53,6 +53,7 @@
 #include <private/qv4qobjectwrapper_p.h>
 #include <private/qv4stackframe_p.h>
 #include <private/qv4module_p.h>
+#include <private/qv4symbol_p.h>
 
 #include <QtCore/qdatetime.h>
 #include <QtCore/qmetaobject.h>
@@ -146,6 +147,46 @@ Q_DECLARE_METATYPE(QList<int>)
   export function addTwice(left, right)
   {
       return sum(left, right) * 2;
+  }
+  \endcode
+
+  Modules don't have to be files. They can be values registered with
+  QJSEngine::registerModule():
+
+  \code
+  import version from "version";
+
+  export function getVersion()
+  {
+      return version;
+  }
+  \endcode
+
+  \code
+  QJSValue version(610);
+  myEngine.registerModule("version", version);
+  QJSValue module = myEngine.importModule("./myprint.mjs");
+  QJSValue getVersion = module.property("getVersion");
+  QJSValue result = getVersion.call();
+  \endcode
+
+  Named exports are supported, but because they are treated as members of an
+  object, the default export must be an ECMAScript object. Most of the newXYZ
+  functions in QJSValue will return an object.
+
+  \code
+  QJSValue name("Qt6");
+  QJSValue obj = myEngine.newObject();
+  obj.setProperty("name", name);
+  myEngine.registerModule("info", obj);
+  \endcode
+
+  \code
+  import { name } from "info";
+
+  export function getName()
+  {
+      return name;
   }
   \endcode
 
@@ -554,6 +595,8 @@ QJSValue QJSEngine::evaluate(const QString& program, const QString& fileName, in
     \note If an exception is thrown during the loading of the module, the return value
     will be the exception (typically an \c{Error} object; see QJSValue::isError()).
 
+    \sa registerModule()
+
     \since 5.12
  */
 QJSValue QJSEngine::importModule(const QString &fileName)
@@ -576,6 +619,39 @@ QJSValue QJSEngine::importModule(const QString &fileName)
 }
 
 /*!
+    Registers a QJSValue to serve as a module. After this function is called,
+    all modules that import \a moduleName will import the value of \a value
+    instead of loading \a moduleName from the filesystem.
+
+    Any valid QJSValue can be registered, but named exports (i.e.
+    \c {import { name } from "info"} are treated as members of an object, so
+    the default export must be created with one of the newXYZ methods of
+    QJSEngine.
+
+    Because this allows modules that do not exist on the filesystem to be imported,
+    scripting applications can use this to provide built-in modules, similar to
+    Node.js.
+
+    Returns \c true on success, \c false otherwise.
+
+    \note The QJSValue \a value is not called or read until it is used by another module.
+    This means that there is no code to evaluate, so no errors will be seen until
+    another module throws an exception while trying to load this module.
+
+    \warning Attempting to access a named export from a QJSValue that is not an
+    object will trigger a \l{Script Exceptions}{exception}.
+
+    \sa importModule()
+ */
+bool QJSEngine::registerModule(const QString &moduleName, const QJSValue &value)
+{
+    m_v4Engine->registerModule(moduleName, value);
+    if (m_v4Engine->hasException)
+        return false;
+    return true;
+}
+
+/*!
   Creates a JavaScript object of class Object.
 
   The prototype of the created object will be the Object
@@ -587,6 +663,22 @@ QJSValue QJSEngine::newObject()
 {
     QV4::Scope scope(m_v4Engine);
     QV4::ScopedValue v(scope, m_v4Engine->newObject());
+    return QJSValuePrivate::fromReturnedValue(v->asReturnedValue());
+}
+
+/*!
+  \since 6.2
+
+  Creates a JavaScript object of class Symbol, with value \a name.
+
+  The prototype of the created object will be the Symbol prototype object.
+
+  \sa newObject()
+*/
+QJSValue QJSEngine::newSymbol(const QString &name)
+{
+    QV4::Scope scope(m_v4Engine);
+    QV4::ScopedValue v(scope, QV4::Symbol::create(m_v4Engine, u'@' + name));
     return QJSValuePrivate::fromReturnedValue(v->asReturnedValue());
 }
 
@@ -731,7 +823,7 @@ QJSValue QJSEngine::globalObject() const
 QJSManagedValue QJSEngine::createManaged(QMetaType type, const void *ptr)
 {
     QJSManagedValue result(m_v4Engine);
-    *result.d = m_v4Engine->metaTypeToJS(type.id(), ptr);
+    *result.d = m_v4Engine->metaTypeToJS(type, ptr);
     return result;
 }
 
@@ -739,41 +831,59 @@ QJSManagedValue QJSEngine::createManaged(QMetaType type, const void *ptr)
  *  \internal
  * used by QJSEngine::toScriptValue
  */
-QJSValue QJSEngine::create(int type, const void *ptr)
+QJSValue QJSEngine::create(QMetaType type, const void *ptr)
 {
     QV4::Scope scope(m_v4Engine);
     QV4::ScopedValue v(scope, scope.engine->metaTypeToJS(type, ptr));
     return QJSValuePrivate::fromReturnedValue(v->asReturnedValue());
 }
 
+#if QT_VERSION < QT_VERSION_CHECK(7,0,0)
+QJSValue QJSEngine::create(int typeId, const void *ptr)
+{
+    QMetaType type(typeId);
+    return create(type, ptr);
+}
+#endif
+
 bool QJSEngine::convertManaged(const QJSManagedValue &value, int type, void *ptr)
 {
+    return convertManaged(value, QMetaType(type), ptr);
+}
+
+bool QJSEngine::convertManaged(const QJSManagedValue &value, QMetaType type, void *ptr)
+{
     return QV4::ExecutionEngine::metaTypeFromJS(*value.d, type, ptr);
+}
+
+bool QJSEngine::convertV2(const QJSValue &value, int type, void *ptr)
+{
+    return convertV2(value, QMetaType(type), ptr);
 }
 
 /*!
     \internal
     convert \a value to \a type, store the result in \a ptr
 */
-bool QJSEngine::convertV2(const QJSValue &value, int type, void *ptr)
+bool QJSEngine::convertV2(const QJSValue &value, QMetaType metaType, void *ptr)
 {
     if (const QString *string = QJSValuePrivate::asQString(&value)) {
         // have a string based value without engine. Do conversion manually
-        if (type == QMetaType::Bool) {
+        if (metaType == QMetaType::fromType<bool>()) {
             *reinterpret_cast<bool*>(ptr) = string->length() != 0;
             return true;
         }
-        if (type == QMetaType::QString) {
+        if (metaType == QMetaType::fromType<QString>()) {
             *reinterpret_cast<QString*>(ptr) = *string;
             return true;
         }
-        if (type == QMetaType::QUrl) {
+        if (metaType == QMetaType::fromType<QUrl>()) {
             *reinterpret_cast<QUrl *>(ptr) = QUrl(*string);
             return true;
         }
 
         double d = QV4::RuntimeHelpers::stringToNumber(*string);
-        switch (type) {
+        switch (metaType.id()) {
         case QMetaType::Int:
             *reinterpret_cast<int*>(ptr) = QV4::Value::toInt32(d);
             return true;
@@ -815,12 +925,13 @@ bool QJSEngine::convertV2(const QJSValue &value, int type, void *ptr)
         }
     }
 
-    return QV4::ExecutionEngine::metaTypeFromJS(QJSValuePrivate::asReturnedValue(&value), type, ptr);
+    return QV4::ExecutionEngine::metaTypeFromJS(QJSValuePrivate::asReturnedValue(&value), metaType, ptr);
 }
 
 /*! \fn template <typename T> QJSValue QJSEngine::toScriptValue(const T &value)
 
     Creates a QJSValue with the given \a value.
+    This works with any type \c{T} that has a \c{QMetaType}.
 
     \sa fromScriptValue()
 */
@@ -828,6 +939,7 @@ bool QJSEngine::convertV2(const QJSValue &value, int type, void *ptr)
 /*! \fn template <typename T> T QJSEngine::fromScriptValue(const QJSValue &value)
 
     Returns the given \a value converted to the template type \c{T}.
+    This works with any type \c{T} that has a \c{QMetaType}.
 
     \sa toScriptValue()
 */

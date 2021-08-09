@@ -1,11 +1,16 @@
-# Generated from quick.pro.
-
 #####################################################################
 ## Quick Module:
 #####################################################################
 
-qt_internal_add_module(Quick
-    GENERATE_METATYPES
+qt_internal_add_qml_module(Quick
+    URI "QtQuick"
+    VERSION "${PROJECT_VERSION}"
+    DESIGNER_SUPPORTED
+    PLUGIN_TARGET qtquick2plugin
+    NO_GENERATE_PLUGIN_SOURCE
+    CLASS_NAME QtQuick2Plugin
+    IMPORTS
+        QtQml/auto
     PLUGIN_TYPES scenegraph
     SOURCES
         handlers/qquickdragaxis.cpp handlers/qquickdragaxis_p.h
@@ -219,87 +224,81 @@ qt_internal_add_module(Quick
         Qt::QmlPrivate
 )
 
-# Resources:
-set(scenegraph_resource_files
-    "scenegraph/shaders_ng/24bittextmask.frag.qsb"
-    "scenegraph/shaders_ng/32bitcolortext.frag.qsb"
-    "scenegraph/shaders_ng/8bittextmask.frag.qsb"
-    "scenegraph/shaders_ng/8bittextmask_a.frag.qsb"
-    "scenegraph/shaders_ng/distancefieldoutlinetext.frag.qsb"
-    "scenegraph/shaders_ng/distancefieldoutlinetext.vert.qsb"
-    "scenegraph/shaders_ng/distancefieldoutlinetext_a.frag.qsb"
-    "scenegraph/shaders_ng/distancefieldoutlinetext_a_fwidth.frag.qsb"
-    "scenegraph/shaders_ng/distancefieldoutlinetext_fwidth.frag.qsb"
-    "scenegraph/shaders_ng/distancefieldshiftedtext.frag.qsb"
-    "scenegraph/shaders_ng/distancefieldshiftedtext.vert.qsb"
-    "scenegraph/shaders_ng/distancefieldshiftedtext_a.frag.qsb"
-    "scenegraph/shaders_ng/distancefieldshiftedtext_a_fwidth.frag.qsb"
-    "scenegraph/shaders_ng/distancefieldshiftedtext_fwidth.frag.qsb"
-    "scenegraph/shaders_ng/distancefieldtext.frag.qsb"
-    "scenegraph/shaders_ng/distancefieldtext.vert.qsb"
-    "scenegraph/shaders_ng/distancefieldtext_a.frag.qsb"
-    "scenegraph/shaders_ng/distancefieldtext_a_fwidth.frag.qsb"
-    "scenegraph/shaders_ng/distancefieldtext_fwidth.frag.qsb"
-    "scenegraph/shaders_ng/flatcolor.frag.qsb"
-    "scenegraph/shaders_ng/flatcolor.vert.qsb"
-    "scenegraph/shaders_ng/hiqsubpixeldistancefieldtext.frag.qsb"
-    "scenegraph/shaders_ng/hiqsubpixeldistancefieldtext.vert.qsb"
-    "scenegraph/shaders_ng/hiqsubpixeldistancefieldtext_a.frag.qsb"
-    "scenegraph/shaders_ng/loqsubpixeldistancefieldtext.frag.qsb"
-    "scenegraph/shaders_ng/loqsubpixeldistancefieldtext.vert.qsb"
-    "scenegraph/shaders_ng/loqsubpixeldistancefieldtext_a.frag.qsb"
-    "scenegraph/shaders_ng/opaquetexture.frag.qsb"
-    "scenegraph/shaders_ng/opaquetexture.vert.qsb"
-    "scenegraph/shaders_ng/outlinedtext.frag.qsb"
-    "scenegraph/shaders_ng/outlinedtext.vert.qsb"
-    "scenegraph/shaders_ng/outlinedtext_a.frag.qsb"
-    "scenegraph/shaders_ng/shadereffect.frag.qsb"
-    "scenegraph/shaders_ng/shadereffect.vert.qsb"
-    "scenegraph/shaders_ng/smoothcolor.frag.qsb"
-    "scenegraph/shaders_ng/smoothcolor.vert.qsb"
-    "scenegraph/shaders_ng/smoothtexture.frag.qsb"
-    "scenegraph/shaders_ng/smoothtexture.vert.qsb"
-    "scenegraph/shaders_ng/sprite.frag.qsb"
-    "scenegraph/shaders_ng/sprite.vert.qsb"
-    "scenegraph/shaders_ng/stencilclip.frag.qsb"
-    "scenegraph/shaders_ng/stencilclip.vert.qsb"
-    "scenegraph/shaders_ng/styledtext.frag.qsb"
-    "scenegraph/shaders_ng/styledtext.vert.qsb"
-    "scenegraph/shaders_ng/styledtext_a.frag.qsb"
-    "scenegraph/shaders_ng/textmask.frag.qsb"
-    "scenegraph/shaders_ng/textmask.vert.qsb"
-    "scenegraph/shaders_ng/texture.frag.qsb"
-    "scenegraph/shaders_ng/texture.vert.qsb"
-    "scenegraph/shaders_ng/vertexcolor.frag.qsb"
-    "scenegraph/shaders_ng/vertexcolor.vert.qsb"
-    "scenegraph/shaders_ng/visualization.frag.qsb"
-    "scenegraph/shaders_ng/visualization.vert.qsb"
+# We need to do additional initialization, so we have to provide our own
+# plugin class rather than using the generated one
+qt_internal_extend_target(qtquick2plugin
+    SOURCES   qtquickplugin.cpp
+    LIBRARIES Qt::QuickPrivate
 )
 
-qt_internal_add_resource(Quick "scenegraph"
+qt_internal_add_shaders(Quick "scenegraph_shaders"
+    SILENT
+    BATCHABLE
+    PRECOMPILE
+    OPTIMIZED
     PREFIX
-        "/qt-project.org"
+        "/qt-project.org/scenegraph/shaders_ng"
     FILES
-        ${scenegraph_resource_files}
+        "scenegraph/shaders_ng/24bittextmask.frag"
+        "scenegraph/shaders_ng/32bitcolortext.frag"
+        "scenegraph/shaders_ng/8bittextmask.frag"
+        "scenegraph/shaders_ng/8bittextmask_a.frag"
+        "scenegraph/shaders_ng/distancefieldoutlinetext.frag"
+        "scenegraph/shaders_ng/distancefieldoutlinetext.vert"
+        "scenegraph/shaders_ng/distancefieldoutlinetext_a.frag"
+        "scenegraph/shaders_ng/distancefieldoutlinetext_a_fwidth.frag"
+        "scenegraph/shaders_ng/distancefieldoutlinetext_fwidth.frag"
+        "scenegraph/shaders_ng/distancefieldshiftedtext.frag"
+        "scenegraph/shaders_ng/distancefieldshiftedtext.vert"
+        "scenegraph/shaders_ng/distancefieldshiftedtext_a.frag"
+        "scenegraph/shaders_ng/distancefieldshiftedtext_a_fwidth.frag"
+        "scenegraph/shaders_ng/distancefieldshiftedtext_fwidth.frag"
+        "scenegraph/shaders_ng/distancefieldtext.frag"
+        "scenegraph/shaders_ng/distancefieldtext.vert"
+        "scenegraph/shaders_ng/distancefieldtext_a.frag"
+        "scenegraph/shaders_ng/distancefieldtext_a_fwidth.frag"
+        "scenegraph/shaders_ng/distancefieldtext_fwidth.frag"
+        "scenegraph/shaders_ng/flatcolor.frag"
+        "scenegraph/shaders_ng/flatcolor.vert"
+        "scenegraph/shaders_ng/hiqsubpixeldistancefieldtext.frag"
+        "scenegraph/shaders_ng/hiqsubpixeldistancefieldtext.vert"
+        "scenegraph/shaders_ng/hiqsubpixeldistancefieldtext_a.frag"
+        "scenegraph/shaders_ng/loqsubpixeldistancefieldtext.frag"
+        "scenegraph/shaders_ng/loqsubpixeldistancefieldtext.vert"
+        "scenegraph/shaders_ng/loqsubpixeldistancefieldtext_a.frag"
+        "scenegraph/shaders_ng/opaquetexture.frag"
+        "scenegraph/shaders_ng/opaquetexture.vert"
+        "scenegraph/shaders_ng/outlinedtext.frag"
+        "scenegraph/shaders_ng/outlinedtext.vert"
+        "scenegraph/shaders_ng/outlinedtext_a.frag"
+        "scenegraph/shaders_ng/shadereffect.frag"
+        "scenegraph/shaders_ng/shadereffect.vert"
+        "scenegraph/shaders_ng/smoothcolor.frag"
+        "scenegraph/shaders_ng/smoothcolor.vert"
+        "scenegraph/shaders_ng/smoothtexture.frag"
+        "scenegraph/shaders_ng/smoothtexture.vert"
+        "scenegraph/shaders_ng/sprite.frag"
+        "scenegraph/shaders_ng/sprite.vert"
+        "scenegraph/shaders_ng/stencilclip.frag"
+        "scenegraph/shaders_ng/stencilclip.vert"
+        "scenegraph/shaders_ng/styledtext.frag"
+        "scenegraph/shaders_ng/styledtext.vert"
+        "scenegraph/shaders_ng/styledtext_a.frag"
+        "scenegraph/shaders_ng/textmask.frag"
+        "scenegraph/shaders_ng/textmask.vert"
+        "scenegraph/shaders_ng/texture.frag"
+        "scenegraph/shaders_ng/texture.vert"
+        "scenegraph/shaders_ng/vertexcolor.frag"
+        "scenegraph/shaders_ng/vertexcolor.vert"
+        "scenegraph/shaders_ng/visualization.frag"
+        "scenegraph/shaders_ng/visualization.vert"
 )
-
 
 if(ANDROID)
     set_property(TARGET Quick APPEND PROPERTY QT_ANDROID_BUNDLED_FILES
         qml
     )
 endif()
-
-#### Keys ignored in scope 1:.:.:quick.pro:<TRUE>:
-# QMLTYPES_FILENAME = "plugins.qmltypes"
-# QMLTYPES_INSTALL_DIR = "$$[QT_INSTALL_QML]/QtQuick"
-# QML_IMPORT_NAME = "QtQuick"
-# QML_IMPORT_VERSION = "$$QT_VERSION"
-# qmldir.files = "$$PWD/../imports/window/qmldir"
-# qmldir.path = "$$[QT_INSTALL_QML]/QtQuick/Window"
-
-## Scopes:
-#####################################################################
 
 qt_internal_extend_target(Quick CONDITION QT_FEATURE_qml_network
     LIBRARIES
@@ -367,12 +366,6 @@ qt_internal_extend_target(Quick CONDITION QT_FEATURE_accessibility
         Qt::GuiPrivate
         Qt::QmlPrivate
 )
-
-#### Keys ignored in scope 10:.:.:quick.pro:prefix_build:
-# INSTALLS = "qmldir"
-
-#### Keys ignored in scope 11:.:.:quick.pro:else:
-# COPIES = "qmldir"
 
 qt_internal_extend_target(Quick CONDITION QT_FEATURE_qml_debug
     SOURCES
@@ -459,6 +452,7 @@ qt_internal_extend_target(Quick CONDITION QT_FEATURE_quick_tableview
     SOURCES
         items/qquicktableview.cpp items/qquicktableview_p.h
         items/qquicktableview_p_p.h
+        items/qquickselectable_p.h
 )
 
 qt_internal_extend_target(Quick CONDITION QT_FEATURE_quick_pathview
@@ -513,13 +507,4 @@ qt_internal_add_docs(Quick
     doc/qtquick.qdocconf
 )
 
-
-set_target_properties(Quick PROPERTIES
-    QT_QML_MODULE_INSTALL_QMLTYPES TRUE
-    QT_QML_MODULE_VERSION ${PROJECT_VERSION}
-    QT_QML_MODULE_URI QtQuick
-    QT_QMLTYPES_FILENAME plugins.qmltypes
-    QT_QML_MODULE_INSTALL_DIR "${INSTALL_QMLDIR}/QtQuick"
-)
-
-qt6_qml_type_registration(Quick)
+add_subdirectory(window)

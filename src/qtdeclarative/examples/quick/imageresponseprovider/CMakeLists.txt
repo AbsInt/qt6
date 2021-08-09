@@ -14,6 +14,7 @@ if(NOT DEFINED INSTALL_EXAMPLESDIR)
 endif()
 
 set(INSTALL_EXAMPLEDIR "${INSTALL_EXAMPLESDIR}/quick/imageresponseprovider/ImageResponseProviderCore")
+set(QT_QML_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/examples/quick/imageresponseprovider)
 
 find_package(Qt6 COMPONENTS Core)
 find_package(Qt6 COMPONENTS Gui)
@@ -21,10 +22,12 @@ find_package(Qt6 COMPONENTS Qml)
 find_package(Qt6 COMPONENTS Quick)
 
 qt6_add_qml_module(qmlimageresponseproviderplugin
-    OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/ImageResponseProviderCore"
     VERSION 1.0
     URI "ImageResponseProviderCore"
-    INSTALL_LOCATION ${INSTALL_EXAMPLEDIR}
+    PLUGIN_TARGET qmlimageresponseproviderplugin
+    NO_PLUGIN_OPTIONAL
+    NO_GENERATE_PLUGIN_SOURCE
+    CLASS_NAME ImageProviderExtensionPlugin
 )
 
 target_sources(qmlimageresponseproviderplugin PRIVATE

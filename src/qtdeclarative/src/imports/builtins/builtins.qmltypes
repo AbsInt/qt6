@@ -88,6 +88,7 @@ Module {
 
     Component {
         name: "number"
+        extension: "Number"
         accessSemantics: "value"
     }
 
@@ -108,13 +109,14 @@ Module {
     Component {
         name: "double"
         prototype: "number"
-        exports: ["QML/real 1.0"]
+        exports: ["QML/real 1.0", "QML/double 1.0"]
         exportMetaObjectRevisions: [256]
         accessSemantics: "value"
     }
 
     Component {
         name: "QString"
+        extension: "String"
         exports: ["QML/string 1.0"]
         exportMetaObjectRevisions: [256]
         accessSemantics: "value"
@@ -129,6 +131,7 @@ Module {
 
     Component {
         name: "QDateTime"
+        extension: "Date"
         exports: ["QML/date 1.0"]
         exportMetaObjectRevisions: [256]
         accessSemantics: "value"
@@ -139,5 +142,22 @@ Module {
         exports: ["QML/url 1.0"]
         exportMetaObjectRevisions: [256]
         accessSemantics: "value"
+    }
+
+    Component {
+        name: "QVariantList"
+        valueType: "QVariant"
+        accessSemantics: "sequence"
+    }
+
+    Component {
+       name: "QVariantMap"
+       accessSemantics: "value"
+    }
+
+    Component {
+      name: "QRegularExpression"
+      extension: "RegExp"
+      accessSemantics: "value"
     }
 }

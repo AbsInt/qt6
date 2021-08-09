@@ -28,7 +28,14 @@
 
 #include <QDateTime>
 
+// Enable to report the currently used format, e.g. when reproducing issues
+// #define LOG_FORMAT
+#ifdef LOG_FORMAT
+#include <QDebug>
+#endif
+
 static const QString formats[] = {
+    QStringLiteral("M/d/yyyy"),
     QStringLiteral("h"),
     QStringLiteral("hh"),
     QStringLiteral("H"),
@@ -41,7 +48,6 @@ static const QString formats[] = {
     QStringLiteral("zzz"),
     QStringLiteral("A"),
     QStringLiteral("t"),
-    QStringLiteral("M/d/yyyy"),
     QStringLiteral("M/d/yyyy hh:mm"),
     QStringLiteral("M/d/yyyy hh:mm A"),
     QStringLiteral("M/d/yyyy, hh:mm"),
@@ -93,7 +99,14 @@ extern "C" int LLVMFuzzerTestOneInput(const char *Data, size_t Size)
     QDateTime::fromString(userString, Qt::RFC2822Date);
     QDateTime::fromString(userString, Qt::ISODateWithMs);
 
+    QDateTime::fromString(userString, formats[0], QCalendar(QCalendar::System::Gregorian));
+    for (int sys = int(QCalendar::System::Julian); sys <= int(QCalendar::System::Last); ++sys)
+        QDateTime::fromString(userString, formats[0], QCalendar(sys));
+
     for (const auto &format : formats) {
+        #ifdef LOG_FORMAT
+        qDebug() << "Trying format:" << format;
+        #endif
         QDateTime::fromString(userString, format);
     }
     return 0;

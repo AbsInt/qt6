@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2017 The Qt Company Ltd.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the documentation of the Qt Toolkit.
@@ -48,16 +48,17 @@
 **
 ****************************************************************************/
 
-import QtQuick 2.0
-import QtQuick.LocalStorage 2.0
-import QtQuick.Layouts 1.1
+import QtQuick
+import QtQuick.Controls
+import QtQuick.Layouts
+import QtQuick.LocalStorage
 import "Database.js" as JS
 
 Item {
     id: delegate
 
-    width: parent.width
-    height: rDate.implicitHeight
+    width: ListView.view.width
+    implicitHeight: rDate.implicitHeight * 1.5
 
     required property int index
     required property int distance
@@ -71,34 +72,43 @@ Item {
         anchors.fill: parent
         opacity: 0.8
         color: delegate.index % 2 ? "lightgrey" : "grey"
+        border.width: 2
+        border.color: Qt.lighter(color)
+        radius: 5
 
         MouseArea {
             anchors.fill: parent
             onClicked: delegate.clicked()
         }
-        GridLayout {
-            anchors.fill:parent
-            columns: 3
 
-            Text {
+        RowLayout {
+            anchors.fill: parent
+
+            Label {
                 id: rDate
+                Layout.preferredWidth: 42
+                Layout.alignment: Qt.AlignCenter
+                horizontalAlignment: Text.AlignHCenter
                 text: delegate.date
                 font.pixelSize: 22
-                Layout.preferredWidth: parent.width / 4
                 color: "black"
             }
-            Text {
-                id: rDesc
+
+            Label {
+                Layout.preferredWidth: 42
+                Layout.alignment: Qt.AlignCenter
+                horizontalAlignment: Text.AlignHCenter
                 text: delegate.trip_desc
-                Layout.fillWidth: true
                 font.pixelSize: 22
                 color: "black"
             }
-            Text {
-                id: rDistance
+
+            Label {
+                Layout.preferredWidth: 42
+                Layout.alignment: Qt.AlignCenter
+                horizontalAlignment: Text.AlignHCenter
                 text: delegate.distance
                 font.pixelSize: 22
-                Layout.alignment: Qt.AlignRight
                 color: "black"
             }
         }

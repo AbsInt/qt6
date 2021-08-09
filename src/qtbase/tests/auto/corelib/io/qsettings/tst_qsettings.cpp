@@ -45,7 +45,7 @@
 
 #include <QtCore>
 #include <QtGui>
-#include "tst_qmetatype.h"
+#include "tst_qmetatype_common.h"
 
 #include <cctype>
 #include <stdlib.h>
@@ -57,8 +57,10 @@
 #if defined(Q_OS_WIN)
 #include <QtCore/qt_windows.h>
 #include <private/qwinregistry_p.h>
+#define QT_UNLINK _unlink
 #else
 #include <unistd.h>
+#define QT_UNLINK unlink
 #endif
 
 #if defined(Q_OS_DARWIN)
@@ -1740,7 +1742,7 @@ void tst_QSettings::sync()
 
     // Now "some other app" will change other.software.org.ini
     QString userConfDir = settingsPath("__user__") + QDir::separator();
-    unlink((userConfDir + "other.software.org.ini").toLatin1());
+    QT_UNLINK((userConfDir + "other.software.org.ini").toLatin1());
     rename((userConfDir + "software.org.ini").toLatin1(),
            (userConfDir + "other.software.org.ini").toLatin1());
 
@@ -2071,7 +2073,7 @@ void SettingsThread::run()
         settings.setValue(QString::number((param * NumIterations) + i), param);
         settings.sync();
         if (settings.status() != QSettings::NoError) {
-            QWARN(qPrintable(QString("Unexpected QSettings status %1").arg((int)settings.status())));
+            qWarning() << qPrintable(QString("Unexpected QSettings status %1").arg((int)settings.status()));
             ++numThreadSafetyFailures;
         }
     }

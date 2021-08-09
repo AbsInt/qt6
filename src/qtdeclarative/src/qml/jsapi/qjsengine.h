@@ -71,8 +71,10 @@ public:
     QJSValue evaluate(const QString &program, const QString &fileName = QString(), int lineNumber = 1, QStringList *exceptionStackTrace = nullptr);
 
     QJSValue importModule(const QString &fileName);
+    bool registerModule(const QString &moduleName, const QJSValue &value);
 
     QJSValue newObject();
+    QJSValue newSymbol(const QString &name);
     QJSValue newArray(uint length = 0);
 
     QJSValue newQObject(QObject *object);
@@ -90,7 +92,7 @@ public:
     template <typename T>
     inline QJSValue toScriptValue(const T &value)
     {
-        return create(qMetaTypeId<T>(), &value);
+        return create(QMetaType::fromType<T>(), &value);
     }
 
     template <typename T>
@@ -146,10 +148,15 @@ Q_SIGNALS:
 
 private:
     QJSManagedValue createManaged(QMetaType type, const void *ptr);
-    QJSValue create(int type, const void *ptr);
+    QJSValue create(QMetaType type, const void *ptr);
+#if QT_VERSION < QT_VERSION_CHECK(7,0,0)
+    QJSValue create(int id, const void *ptr); // only there for BC reasons
+#endif
 
     static bool convertManaged(const QJSManagedValue &value, int type, void *ptr);
+    static bool convertManaged(const QJSManagedValue &value, QMetaType type, void *ptr);
     static bool convertV2(const QJSValue &value, int type, void *ptr);
+    static bool convertV2(const QJSValue &value, QMetaType metaType, void *ptr);
 
     template<typename T>
     friend inline T qjsvalue_cast(const QJSValue &);
@@ -172,9 +179,7 @@ template<typename T>
 T qjsvalue_cast(const QJSValue &value)
 {
     T t;
-    const int id = qMetaTypeId<T>();
-
-    if (QJSEngine::convertV2(value, id, &t))
+    if (QJSEngine::convertV2(value, QMetaType::fromType<T>(), &t))
         return t;
     else if (value.isVariant())
         return qvariant_cast<T>(value.toVariant());
@@ -187,7 +192,7 @@ T qjsvalue_cast(const QJSManagedValue &value)
 {
     {
         T t;
-        if (QJSEngine::convertManaged(value, qMetaTypeId<T>(), &t))
+        if (QJSEngine::convertManaged(value, QMetaType::fromType<T>(), &t))
             return t;
     }
 

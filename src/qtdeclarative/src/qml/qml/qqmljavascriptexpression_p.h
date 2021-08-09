@@ -108,6 +108,7 @@ public:
 
     QV4::ReturnedValue evaluate(bool *isUndefined);
     QV4::ReturnedValue evaluate(QV4::CallData *callData, bool *isUndefined);
+    bool evaluate(void **a, const QMetaType *types, int argc);
 
     inline bool notifyOnValueChanged() const;
 
@@ -135,7 +136,7 @@ public:
         *listHead = this;
     }
 
-    QV4::Function *function() const;
+    QV4::Function *function() const { return m_v4Function; }
 
     virtual void refresh();
 
@@ -207,6 +208,7 @@ private:
     friend class QQmlPropertyCapture;
     friend void QQmlJavaScriptExpressionGuard_callback(QQmlNotifierEndpoint *, void **);
     friend class QQmlTranslationBinding;
+    friend class QQmlJavaScriptExpressionCapture;
 
     // Not refcounted as the context will clear the expressions when destructed.
     QQmlContextData *m_context;
@@ -235,6 +237,7 @@ public:
 
     void captureProperty(QQmlNotifier *);
     void captureProperty(QObject *, int, int, bool doNotify = true);
+    void captureProperty(QObject *, const QQmlPropertyCache *, const QQmlPropertyData *, bool doNotify = true);
     void captureTranslation() { translationCaptured = true; }
 
     QQmlEngine *engine;
@@ -243,6 +246,10 @@ public:
     QForwardFieldList<QQmlJavaScriptExpressionGuard, &QQmlJavaScriptExpressionGuard::next> guards;
     QStringList *errorString;
     bool translationCaptured = false;
+
+private:
+    void captureBindableProperty(QObject *o, const QMetaObject *metaObjectForBindable, int c);
+    void captureNonBindableProperty(QObject *o, int n, int c, bool doNotify);
 };
 
 QQmlJavaScriptExpression::DeleteWatcher::DeleteWatcher(QQmlJavaScriptExpression *e)

@@ -93,6 +93,7 @@ private slots:
     void textSize(const QString &p);
     void textStyle(int styleIndex);
     void textColor();
+    void underlineColor();
     void textAlign(QAction *a);
     void setChecked(bool checked);
     void indent();
@@ -122,6 +123,7 @@ private:
     QAction *actionTextUnderline;
     QAction *actionTextItalic;
     QAction *actionTextColor;
+    QAction *actionUnderlineColor;
     QAction *actionAlignLeft;
     QAction *actionAlignCenter;
     QAction *actionAlignRight;

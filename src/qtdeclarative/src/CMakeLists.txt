@@ -9,6 +9,8 @@ add_subdirectory(qmltyperegistrar)
 add_subdirectory(qml)
 add_subdirectory(qmlmodels)
 
+add_subdirectory(core)
+
 if(QT_FEATURE_qml_worker_script)
     add_subdirectory(qmlworkerscript)
 endif()
@@ -17,8 +19,11 @@ if(TARGET Qt::Sql)
    add_subdirectory(qmllocalstorage)
  endif()
 
+if (QT_FEATURE_qml_xmllistmodel)
+    add_subdirectory(qmlxmllistmodel)
+endif()
 
-if(TARGET Qt::Gui AND QT_FEATURE_qml_animation)
+if(TARGET Qt::Gui AND TARGET Qt::qsb AND QT_FEATURE_qml_animation)
     add_subdirectory(quick)
     add_subdirectory(quickshapes)
     add_subdirectory(quicklayouts)
@@ -35,6 +40,19 @@ if(TARGET Qt::Gui AND QT_FEATURE_qml_animation)
     if(TARGET Qt::Widgets)
         add_subdirectory(quickwidgets)
     endif()
+
+    add_subdirectory(quicktemplates2)
+    add_subdirectory(quickcontrols2impl)
+    add_subdirectory(quickcontrols2)
+    add_subdirectory(quickdialogs2)
+    add_subdirectory(quicknativestyle)
+else()
+    qt_configure_add_summary_section(NAME "Qt Quick")
+    qt_configure_add_summary_entry(TYPE "message" ARGS "Qt Quick support" MESSAGE "no")
+    qt_configure_add_report_entry(
+        TYPE NOTE
+        MESSAGE "Qt Quick modules not built due to not finding the qtshadertools 'qsb' tool."
+    )
 endif()
 
 add_subdirectory(labs)

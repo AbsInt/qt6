@@ -46,13 +46,21 @@ QT_BEGIN_NAMESPACE
 /*!
   \since 6.1
   \class QJSPrimitiveUndefined
+
+  \inmodule QtQml
+
   \brief An empty marker type to signify the JavaScript Undefined type and its single value.
+  \inmodule QtQml
  */
 
 /*!
   \since 6.1
   \class QJSPrimitiveNull
+
+  \inmodule QtQml
+
   \brief An empty marker type to signify the JavaScript null value.
+  \inmodule QtQml
  */
 
 /*!
@@ -184,7 +192,8 @@ QT_BEGIN_NAMESPACE
  */
 
 /*!
-  \fn QJSPrimitiveValue operator+(const QJSPrimitiveValue &lhs, const QJSPrimitiveValue &rhs)
+  \fn QJSPrimitiveValue QJSPrimitiveValue::operator+(const QJSPrimitiveValue &lhs, const QJSPrimitiveValue &rhs)
+
   \since 6.1
 
   Perfoms the JavaScript '+' operation on \a lhs and \a rhs, and returns the
@@ -192,7 +201,7 @@ QT_BEGIN_NAMESPACE
  */
 
 /*!
-  \fn QJSPrimitiveValue operator-(const QJSPrimitiveValue &lhs, const QJSPrimitiveValue &rhs)
+  \fn QJSPrimitiveValue QJSPrimitiveValue::operator-(const QJSPrimitiveValue &lhs, const QJSPrimitiveValue &rhs)
   \since 6.1
 
   Performs the JavaScript '-' operation on \a lhs and \a rhs, and returns the
@@ -200,7 +209,7 @@ QT_BEGIN_NAMESPACE
  */
 
 /*!
-  \fn QJSPrimitiveValue operator*(const QJSPrimitiveValue &lhs, const QJSPrimitiveValue &rhs)
+  \fn QJSPrimitiveValue QJSPrimitiveValue::operator*(const QJSPrimitiveValue &lhs, const QJSPrimitiveValue &rhs)
   \since 6.1
 
   Performs the JavaScript '*' operation on \a lhs and \a rhs, and returns the
@@ -208,7 +217,7 @@ QT_BEGIN_NAMESPACE
  */
 
 /*!
-  \fn QJSPrimitiveValue operator/(const QJSPrimitiveValue &lhs, const QJSPrimitiveValue &rhs)
+  \fn QJSPrimitiveValue QJSPrimitiveValue::operator/(const QJSPrimitiveValue &lhs, const QJSPrimitiveValue &rhs)
   \since 6.1
 
   Performs the JavaScript '/' operation between \a lhs and \a rhs, and returns the
@@ -230,7 +239,7 @@ QT_BEGIN_NAMESPACE
  */
 
 /*!
-  \fn bool operator==(const QJSPrimitiveValue &lhs, const QJSPrimitiveValue &rhs)
+  \fn bool QJSPrimitiveValue::operator==(const QJSPrimitiveValue &lhs, const QJSPrimitiveValue &rhs)
   \since 6.1
 
   Performs the JavaScript '===' operation on \a lhs and \a rhs, and returns the
@@ -238,7 +247,7 @@ QT_BEGIN_NAMESPACE
  */
 
 /*!
-  \fn bool operator!=(const QJSPrimitiveValue &lhs, const QJSPrimitiveValue &rhs)
+  \fn bool QJSPrimitiveValue::operator!=(const QJSPrimitiveValue &lhs, const QJSPrimitiveValue &rhs)
   \since 6.1
 
   Performs the JavaScript '!==' operation on \a lhs and \a rhs, and returns the
@@ -246,7 +255,7 @@ QT_BEGIN_NAMESPACE
  */
 
 /*!
-  \fn bool operator<(const QJSPrimitiveValue &lhs, const QJSPrimitiveValue &rhs)
+  \fn bool QJSPrimitiveValue::operator<(const QJSPrimitiveValue &lhs, const QJSPrimitiveValue &rhs)
   \since 6.1
 
   Performs the JavaScript '<' operation on \a lhs and \a rhs, and returns the
@@ -254,7 +263,7 @@ QT_BEGIN_NAMESPACE
  */
 
 /*!
-  \fn bool operator>(const QJSPrimitiveValue &lhs, const QJSPrimitiveValue &rhs)
+  \fn bool QJSPrimitiveValue::operator>(const QJSPrimitiveValue &lhs, const QJSPrimitiveValue &rhs)
   \since 6.1
 
   Performs the JavaScript '>' operation on \a lhs and \a rhs, and returns the
@@ -262,7 +271,7 @@ QT_BEGIN_NAMESPACE
  */
 
 /*!
-  \fn bool operator<=(const QJSPrimitiveValue &lhs, const QJSPrimitiveValue &rhs)
+  \fn bool QJSPrimitiveValue::operator<=(const QJSPrimitiveValue &lhs, const QJSPrimitiveValue &rhs)
   \since 6.1
 
   Performs the JavaScript '<=' operation on \a lhs and \a rhs, and returns the
@@ -270,7 +279,7 @@ QT_BEGIN_NAMESPACE
  */
 
 /*!
-  \fn bool operator>=(const QJSPrimitiveValue &lhs, const QJSPrimitiveValue &rhs)
+  \fn bool QJSPrimitiveValue::operator>=(const QJSPrimitiveValue &lhs, const QJSPrimitiveValue &rhs)
   \since 6.1
 
   Performs the JavaScript '>=' operation on \a lhs and \a rhs, and returns the

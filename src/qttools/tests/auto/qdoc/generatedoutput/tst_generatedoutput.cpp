@@ -252,12 +252,16 @@ void tst_generatedOutput::htmlFromQml()
                    "test-cmaketest-example.html "
                    "uicomponents-qmlmodule.html "
                    "qdoc-test-qmlmodule.html "
+                   "test-nover-qmlmodule.html "
                    "qml-qdoc-test-abstractparent.html "
                    "qml-qdoc-test-child.html "
                    "qml-qdoc-test-yetanotherchild.html "
                    "qml-qdoc-test-doctest.html "
                    "qml-qdoc-test-type-members.html "
+                   "qml-qdoc-test-type-obsolete.html "
                    "qml-qdoc-test-type.html "
+                   "qml-test-nover-typenoversion.html "
+                   "qml-test-nover-typenoversion-members.html "
                    "qml-uicomponents-progressbar.html "
                    "qml-uicomponents-switch.html "
                    "qml-uicomponents-tabwidget.html "
@@ -293,6 +297,7 @@ void tst_generatedOutput::webXmlFromQml()
 {
     testAndCompare("testdata/configs/webxml_testqml.qdocconf",
                    "html/test-componentset-example.webxml "
+                   "html/test-nover-qmlmodule.webxml "
                    "html/uicomponents-qmlmodule.webxml");
 }
 
@@ -328,11 +333,13 @@ void tst_generatedOutput::docBookFromQml()
                    "docbook/test-componentset-example.xml "
                    "docbook/uicomponents-qmlmodule.xml "
                    "docbook/qdoc-test-qmlmodule.xml "
+                   "docbook/test-nover-qmlmodule.xml "
                    "docbook/qml-qdoc-test-abstractparent.xml "
                    "docbook/qml-qdoc-test-child.xml "
                    "docbook/qml-qdoc-test-yetanotherchild.xml "
                    "docbook/qml-qdoc-test-doctest.xml "
                    "docbook/qml-qdoc-test-type.xml "
+                   "docbook/qml-test-nover-typenoversion.xml "
                    "docbook/qml-uicomponents-progressbar.xml "
                    "docbook/qml-uicomponents-switch.xml "
                    "docbook/qml-uicomponents-tabwidget.xml "
@@ -424,7 +431,8 @@ void tst_generatedOutput::crossModuleLinking()
     QString indexDir = QLatin1String("-indexdir ") +  m_outputDir->path();
     testAndCompare("testdata/crossmodule/crossmodule.qdocconf",
                    "crossmodule/testtype.html "
-                   "crossmodule/testtype-members.html",
+                   "crossmodule/testtype-members.html "
+                   "crossmodule/crossmoduleref-sub-crossmodule.html",
                    indexDir.toLatin1().data());
 }
 
@@ -444,6 +452,8 @@ void tst_generatedOutput::singleExec()
                    "testqdoc-test.html "
                    "testqdoc-test-members.html "
                    "testqdoc.html "
+                   "crossmoduleref.html "
+                   "crossmodule/all-namespaces.html "
                    "crossmodule/testtype.html "
                    "crossmodule/testtype-members.html",
                    "-single-exec");

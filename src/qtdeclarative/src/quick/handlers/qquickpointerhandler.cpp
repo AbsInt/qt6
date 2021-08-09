@@ -63,13 +63,20 @@ Q_LOGGING_CATEGORY(lcPointerHandlerActive, "qt.quick.handler.active")
 */
 
 QQuickPointerHandler::QQuickPointerHandler(QQuickItem *parent)
-  : QObject(*(new QQuickPointerHandlerPrivate), parent)
+  : QQuickPointerHandler(*(new QQuickPointerHandlerPrivate), parent)
 {
 }
 
 QQuickPointerHandler::QQuickPointerHandler(QQuickPointerHandlerPrivate &dd, QQuickItem *parent)
   : QObject(dd, parent)
 {
+    // When a handler is created in QML, the given parent is null, and we
+    // depend on QQuickItemPrivate::data_append() later when it's added to an
+    // item's DefaultProperty data property. But when a handler is created in
+    // C++ with a parent item, data_append() won't be called, and the caller
+    // shouldn't have to worry about it either.
+    if (parent)
+        QQuickItemPrivate::get(parent)->addPointerHandler(this);
 }
 
 QQuickPointerHandler::~QQuickPointerHandler()
@@ -353,11 +360,14 @@ bool QQuickPointerHandler::approveGrabTransition(QPointerEvent *event, const QEv
             } else if ((d->grabPermissions & CanTakeOverFromItems)) {
                 allowed = true;
                 QQuickItem * existingItemGrabber = qobject_cast<QQuickItem *>(event->exclusiveGrabber(point));
-                auto da = QQuickItemPrivate::get(parentItem())->deliveryAgentPrivate();
+                auto da = parentItem() ? QQuickItemPrivate::get(parentItem())->deliveryAgentPrivate()
+                                       : QQuickDeliveryAgentPrivate::currentEventDeliveryAgent ? static_cast<QQuickDeliveryAgentPrivate *>(
+                                            QQuickDeliveryAgentPrivate::get(QQuickDeliveryAgentPrivate::currentEventDeliveryAgent)) : nullptr;
+                const bool isTouchMouse = (da && da->isDeliveringTouchAsMouse());
                 if (existingItemGrabber &&
                         ((existingItemGrabber->keepMouseGrab() &&
-                          (QQuickWindowPrivate::isMouseEvent(event) || da->isDeliveringTouchAsMouse())) ||
-                         (existingItemGrabber->keepTouchGrab() && QQuickWindowPrivate::isTouchEvent(event)))) {
+                          (QQuickDeliveryAgentPrivate::isMouseEvent(event) || isTouchMouse)) ||
+                         (existingItemGrabber->keepTouchGrab() && QQuickDeliveryAgentPrivate::isTouchEvent(event)))) {
                     allowed = false;
                     // If the handler wants to steal the exclusive grab from an Item, the Item can usually veto
                     // by having its keepMouseGrab flag set.  But an exception is if that Item is a parent that
@@ -369,7 +379,7 @@ bool QQuickPointerHandler::approveGrabTransition(QPointerEvent *event, const QEv
                     if (existingItemGrabber->keepMouseGrab() &&
                             existingItemGrabber->filtersChildMouseEvents() && existingItemGrabber->isAncestorOf(parentItem())) {
                         Q_ASSERT(da);
-                        if (da->isDeliveringTouchAsMouse() && point.id() == da->touchMouseId) {
+                        if (isTouchMouse && point.id() == da->touchMouseId) {
                             qCDebug(lcPointerHandlerGrab) << this << "steals touchpoint" << point.id()
                                 << "despite parent touch-mouse grabber with keepMouseGrab=true" << existingItemGrabber;
                             allowed = true;
@@ -539,6 +549,10 @@ bool QQuickPointerHandler::parentContains(const QPointF &scenePosition) const
         if (m > 0)
             return p.x() >= -m && p.y() >= -m && p.x() <= par->width() + m && p.y() <= par->height() + m;
         return par->contains(p);
+    } else if (parent() && parent()->inherits("QQuick3DModel")) {
+        // If the parent is from Qt Quick 3D, assume that
+        // bounds checking was already done, as part of picking.
+        return true;
     }
     return false;
 }
@@ -597,7 +611,7 @@ void QQuickPointerHandler::setTarget(QQuickItem *target)
 
 QQuickItem *QQuickPointerHandler::parentItem() const
 {
-    return static_cast<QQuickItem *>(QObject::parent());
+    return qmlobject_cast<QQuickItem *>(QObject::parent());
 }
 
 QQuickItem *QQuickPointerHandler::target() const
@@ -634,12 +648,14 @@ void QQuickPointerHandler::handlePointerEvent(QPointerEvent *event)
 {
     bool wants = wantsPointerEvent(event);
     qCDebug(lcPointerHandlerDispatch) << metaObject()->className() << objectName()
-                                      << "on" << parentItem()->metaObject()->className() << parentItem()->objectName()
+                                      << "on" << parent()->metaObject()->className() << parent()->objectName()
                                       << (wants ? "WANTS" : "DECLINES") << event;
     if (wants) {
         handlePointerEventImpl(event);
     } else {
+#if QT_CONFIG(gestures)
         if (event->type() != QEvent::NativeGesture)
+#endif
             setActive(false);
         for (int i = 0; i < event->pointCount(); ++i) {
             auto &pt = event->point(i);
@@ -705,6 +721,9 @@ void QQuickPointerHandler::handlePointerEventImpl(QPointerEvent *event)
     pointer event is relevant if at least one of its event points occurs within
     the Item's interior.  Initially \l [QML] {target} {target()} is the same, but it
     can be reassigned.
+
+    \note When a handler is declared in a \l [QtQuick3D] {Model}{QtQuick3D.Model}
+          object, the parent is not an Item, therefore this property is \c null.
 
     \sa {target}, QObject::parent()
 */

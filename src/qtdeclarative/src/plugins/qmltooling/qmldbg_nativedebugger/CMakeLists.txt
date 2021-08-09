@@ -4,13 +4,14 @@
 ## QQmlNativeDebugServiceFactory Plugin:
 #####################################################################
 
-qt_internal_add_plugin(QQmlNativeDebugServiceFactory
+qt_internal_add_plugin(QQmlNativeDebugServiceFactoryPlugin
     OUTPUT_NAME qmldbg_nativedebugger
+    CLASS_NAME QQmlNativeDebugServiceFactory
     TYPE qmltooling
     SOURCES
         qqmlnativedebugservice.cpp qqmlnativedebugservice.h
         qqmlnativedebugservicefactory.cpp qqmlnativedebugservicefactory.h
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Core
         Qt::PacketProtocolPrivate
         Qt::QmlPrivate

@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2020 The Qt Company Ltd.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the tools applications of the Qt Toolkit.
@@ -26,10 +26,6 @@
 **
 ****************************************************************************/
 
-/*
-  config.h
-*/
-
 #ifndef CONFIG_H
 #define CONFIG_H
 
@@ -42,6 +38,8 @@
 #include <QtCore/qset.h>
 #include <QtCore/qstack.h>
 #include <QtCore/qstringlist.h>
+
+#include <utility>
 
 QT_BEGIN_NAMESPACE
 
@@ -57,8 +55,8 @@ struct ExpandVar
     QString m_var {};
     QChar m_delim {};
 
-    ExpandVar(int valueIndex, int index, const QString &var, const QChar &delim)
-        : m_valueIndex(valueIndex), m_index(index), m_var(var), m_delim(delim)
+    ExpandVar(int valueIndex, int index, QString var, const QChar &delim)
+        : m_valueIndex(valueIndex), m_index(index), m_var(std::move(var)), m_delim(delim)
     {
     }
 };
@@ -82,10 +80,10 @@ struct ConfigVar
 
     ConfigVar() = default;
 
-    ConfigVar(const QString &name, const QStringList &values, const QString &dir,
+    ConfigVar(QString name, const QStringList &values, const QString &dir,
               const Location &loc = Location(),
               const QList<ExpandVar> &expandVars = QList<ExpandVar>())
-        : m_name(name), m_location(loc), m_expandVars(expandVars)
+        : m_name(std::move(name)), m_location(loc), m_expandVars(expandVars)
     {
         for (const auto &v : values)
             m_values << ConfigValue {v, dir};
@@ -121,8 +119,8 @@ public:
     enum QDocPass { Neither, Prepare, Generate };
 
     void init(const QString &programName, const QStringList &args);
-    bool getDebug() const { return m_debug; }
-    bool showInternal() const { return m_showInternal; }
+    [[nodiscard]] bool getDebug() const { return m_debug; }
+    [[nodiscard]] bool showInternal() const { return m_showInternal; }
 
     void clear();
     void reset();
@@ -131,27 +129,27 @@ public:
     void insertStringList(const QString &var, const QStringList &values);
 
     void showHelp(int exitCode = 0) { m_parser.showHelp(exitCode); }
-    QStringList qdocFiles() const { return m_parser.positionalArguments(); }
-    const QString &programName() const { return m_prog; }
-    const Location &location() const { return m_location; }
-    const Location &lastLocation() const { return m_lastLocation; }
-    bool getBool(const QString &var) const;
-    int getInt(const QString &var) const;
+    [[nodiscard]] QStringList qdocFiles() const { return m_parser.positionalArguments(); }
+    [[nodiscard]] const QString &programName() const { return m_prog; }
+    [[nodiscard]] const Location &location() const { return m_location; }
+    [[nodiscard]] const Location &lastLocation() const { return m_lastLocation; }
+    [[nodiscard]] bool getBool(const QString &var) const;
+    [[nodiscard]] int getInt(const QString &var) const;
 
-    QString getOutputDir(const QString &format = QString("HTML")) const;
-    QSet<QString> getOutputFormats() const;
-    QString getString(const QString &var, const QString &defaultString = QString()) const;
-    QSet<QString> getStringSet(const QString &var) const;
-    QStringList getStringList(const QString &var) const;
-    QStringList getCanonicalPathList(const QString &var, bool validate = false) const;
-    QRegularExpression getRegExp(const QString &var) const;
-    QList<QRegularExpression> getRegExpList(const QString &var) const;
-    QSet<QString> subVars(const QString &var) const;
-    void subVarsAndValues(const QString &var, ConfigVarMap &map) const;
+    [[nodiscard]] QString getOutputDir(const QString &format = QString("HTML")) const;
+    [[nodiscard]] QSet<QString> getOutputFormats() const;
+    [[nodiscard]] QString getString(const QString &var,
+                                    const QString &defaultString = QString()) const;
+    [[nodiscard]] QSet<QString> getStringSet(const QString &var) const;
+    [[nodiscard]] QStringList getStringList(const QString &var) const;
+    [[nodiscard]] QStringList getCanonicalPathList(const QString &var, bool validate = false) const;
+    [[nodiscard]] QRegularExpression getRegExp(const QString &var) const;
+    [[nodiscard]] QList<QRegularExpression> getRegExpList(const QString &var) const;
+    [[nodiscard]] QSet<QString> subVars(const QString &var) const;
     QStringList getAllFiles(const QString &filesVar, const QString &dirsVar,
                             const QSet<QString> &excludedDirs = QSet<QString>(),
                             const QSet<QString> &excludedFiles = QSet<QString>());
-    QString getIncludeFilePath(const QString &fileName) const;
+    [[nodiscard]] QString getIncludeFilePath(const QString &fileName) const;
     QStringList getExampleQdocFiles(const QSet<QString> &excludedDirs,
                                     const QSet<QString> &excludedFiles);
     QStringList getExampleImageFiles(const QSet<QString> &excludedDirs,
@@ -185,21 +183,20 @@ public:
     static QString overrideOutputDir;
     static QSet<QString> overrideOutputFormats;
 
-    inline bool singleExec() const;
-    inline bool dualExec() const;
+    [[nodiscard]] inline bool singleExec() const;
+    [[nodiscard]] inline bool dualExec() const;
     QStringList &defines() { return m_defines; }
     QStringList &dependModules() { return m_dependModules; }
     QStringList &includePaths() { return m_includePaths; }
     QStringList &indexDirs() { return m_indexDirs; }
-    QString currentDir() const { return m_currentDir; }
+    [[nodiscard]] QString currentDir() const { return m_currentDir; }
     void setCurrentDir(const QString &path) { m_currentDir = path; }
-    QString previousCurrentDir() const { return m_previousCurrentDir; }
+    [[nodiscard]] QString previousCurrentDir() const { return m_previousCurrentDir; }
     void setPreviousCurrentDir(const QString &path) { m_previousCurrentDir = path; }
 
-    QDocPass qdocPass() const { return m_qdocPass; }
     void setQDocPass(const QDocPass &pass) { m_qdocPass = pass; };
-    bool preparing() const { return (m_qdocPass == Prepare); }
-    bool generating() const { return (m_qdocPass == Generate); }
+    [[nodiscard]] bool preparing() const { return (m_qdocPass == Prepare); }
+    [[nodiscard]] bool generating() const { return (m_qdocPass == Generate); }
 
 private:
     void processCommandLineOptions(const QStringList &args);
@@ -231,7 +228,6 @@ private:
     Location m_lastLocation {};
     ConfigVarMap m_configVars {};
 
-    static QMap<QString, QString> m_uncompressedFiles;
     static QMap<QString, QString> m_extractedDirs;
     static QStack<QString> m_workingDirs;
     static QMap<QString, QStringList> m_includeFilesMap;
@@ -316,7 +312,6 @@ struct ConfigStrings
     static QString VERSIONSYM;
     static QString FILEEXTENSIONS;
     static QString IMAGEEXTENSIONS;
-    static QString QMLONLY;
     static QString QMLTYPESPAGE;
     static QString QMLTYPESTITLE;
     static QString WARNINGLIMIT;
@@ -396,7 +391,6 @@ struct ConfigStrings
 #define CONFIG_VERSIONSYM ConfigStrings::VERSIONSYM
 #define CONFIG_FILEEXTENSIONS ConfigStrings::FILEEXTENSIONS
 #define CONFIG_IMAGEEXTENSIONS ConfigStrings::IMAGEEXTENSIONS
-#define CONFIG_QMLONLY ConfigStrings::QMLONLY
 #define CONFIG_QMLTYPESPAGE ConfigStrings::QMLTYPESPAGE
 #define CONFIG_QMLTYPESTITLE ConfigStrings::QMLTYPESTITLE
 #define CONFIG_WARNINGLIMIT ConfigStrings::WARNINGLIMIT

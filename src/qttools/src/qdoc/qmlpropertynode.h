@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2020 The Qt Company Ltd.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the tools applications of the Qt Toolkit.
@@ -40,30 +40,39 @@ QT_BEGIN_NAMESPACE
 class QmlPropertyNode : public Node
 {
 public:
-    QmlPropertyNode(Aggregate *parent, const QString &name, const QString &type, bool attached);
+    QmlPropertyNode(Aggregate *parent, const QString &name, QString type, bool attached);
 
     void setDataType(const QString &dataType) override { m_type = dataType; }
     void setStored(bool stored) { m_stored = toFlagValue(stored); }
+    void setDefaultValue(const QString &value) { m_defaultValue = value; }
     void setDesignable(bool designable) { m_designable = toFlagValue(designable); }
     void setRequired() { m_required = toFlagValue(true); }
 
-    const QString &dataType() const { return m_type; }
-    QString qualifiedDataType() const { return m_type; }
-    bool isReadOnlySet() const { return (readOnly_ != FlagValueDefault); }
-    bool isStored() const { return fromFlagValue(m_stored, true); }
-    bool isDesignable() const { return fromFlagValue(m_designable, false); }
+    [[nodiscard]] const QString &dataType() const { return m_type; }
+    [[nodiscard]] const QString &defaultValue() const { return m_defaultValue; }
+    [[nodiscard]] bool isReadOnlySet() const { return (readOnly_ != FlagValueDefault); }
+    [[nodiscard]] bool isStored() const { return fromFlagValue(m_stored, true); }
     bool isWritable();
     bool isRequired();
-    bool isDefault() const override { return m_isDefault; }
-    bool isReadOnly() const override { return fromFlagValue(readOnly_, false); }
-    bool isAlias() const override { return m_isAlias; }
-    bool isAttached() const override { return m_attached; }
-    bool isQtQuickNode() const override { return parent()->isQtQuickNode(); }
-    QString qmlTypeName() const override { return parent()->qmlTypeName(); }
-    QString logicalModuleName() const override { return parent()->logicalModuleName(); }
-    QString logicalModuleVersion() const override { return parent()->logicalModuleVersion(); }
-    QString logicalModuleIdentifier() const override { return parent()->logicalModuleIdentifier(); }
-    QString element() const override { return parent()->name(); }
+    [[nodiscard]] bool isDefault() const override { return m_isDefault; }
+    [[nodiscard]] bool isReadOnly() const override { return fromFlagValue(readOnly_, false); }
+    [[nodiscard]] bool isAlias() const override { return m_isAlias; }
+    [[nodiscard]] bool isAttached() const override { return m_attached; }
+    [[nodiscard]] bool isQtQuickNode() const override { return parent()->isQtQuickNode(); }
+    [[nodiscard]] QString qmlTypeName() const override { return parent()->qmlTypeName(); }
+    [[nodiscard]] QString logicalModuleName() const override
+    {
+        return parent()->logicalModuleName();
+    }
+    [[nodiscard]] QString logicalModuleVersion() const override
+    {
+        return parent()->logicalModuleVersion();
+    }
+    [[nodiscard]] QString logicalModuleIdentifier() const override
+    {
+        return parent()->logicalModuleIdentifier();
+    }
+    [[nodiscard]] QString element() const override { return parent()->name(); }
 
     void markDefault() override { m_isDefault = true; }
     void markReadOnly(bool flag) override { readOnly_ = toFlagValue(flag); }
@@ -73,6 +82,7 @@ private:
 
 private:
     QString m_type {};
+    QString m_defaultValue {};
     FlagValue m_stored { FlagValueDefault };
     FlagValue m_designable { FlagValueDefault };
     bool m_isAlias { false };

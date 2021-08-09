@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2020 The Qt Company Ltd.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the tools applications of the Qt Toolkit.
@@ -52,7 +52,7 @@ bool HeaderNode::docMustBeGenerated() const
 {
     if (isInAPI())
         return true;
-    return (hasDocumentedChildren() ? true : false);
+    return hasDocumentedChildren();
 }
 
 /*!
@@ -61,11 +61,8 @@ bool HeaderNode::docMustBeGenerated() const
  */
 bool HeaderNode::hasDocumentedChildren() const
 {
-    for (const auto *node : qAsConst(m_children)) {
-        if (node->isInAPI())
-            return true;
-    }
-    return false;
+    return std::any_of(m_children.cbegin(), m_children.cend(),
+                       [](Node *child) { return child->isInAPI(); });
 }
 
 QT_END_NAMESPACE

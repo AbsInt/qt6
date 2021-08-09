@@ -607,6 +607,9 @@ tst_QWidget::tst_QWidget()
     palette.setColor(QPalette::ToolTipBase, QColor(12, 13, 14));
     palette.setColor(QPalette::Text, QColor(21, 22, 23));
     QApplication::setPalette(palette, "QPropagationTestWidget");
+
+    if (QApplication::platformName().startsWith(QLatin1String("wayland")))
+        qputenv("QT_WAYLAND_DISABLE_WINDOWDECORATION", "1");
 }
 
 tst_QWidget::~tst_QWidget()
@@ -3345,30 +3348,30 @@ void tst_QWidget::lostUpdatesOnHide()
 
 void tst_QWidget::raise()
 {
-    QScopedPointer<QWidget> parentPtr(new QWidget);
+    std::unique_ptr<QWidget> parentPtr(new QWidget);
     parentPtr->resize(200, 200);
     parentPtr->setObjectName(QLatin1String("raise"));
     parentPtr->setWindowTitle(parentPtr->objectName());
     QList<UpdateWidget *> allChildren;
 
-    UpdateWidget *child1 = new UpdateWidget(parentPtr.data());
+    UpdateWidget *child1 = new UpdateWidget(parentPtr.get());
     child1->setAutoFillBackground(true);
     allChildren.append(child1);
 
-    UpdateWidget *child2 = new UpdateWidget(parentPtr.data());
+    UpdateWidget *child2 = new UpdateWidget(parentPtr.get());
     child2->setAutoFillBackground(true);
     allChildren.append(child2);
 
-    UpdateWidget *child3 = new UpdateWidget(parentPtr.data());
+    UpdateWidget *child3 = new UpdateWidget(parentPtr.get());
     child3->setAutoFillBackground(true);
     allChildren.append(child3);
 
-    UpdateWidget *child4 = new UpdateWidget(parentPtr.data());
+    UpdateWidget *child4 = new UpdateWidget(parentPtr.get());
     child4->setAutoFillBackground(true);
     allChildren.append(child4);
 
     parentPtr->show();
-    QVERIFY(QTest::qWaitForWindowExposed(parentPtr.data()));
+    QVERIFY(QTest::qWaitForWindowExposed(parentPtr.get()));
 
 #ifdef Q_OS_MACOS
     if (child1->internalWinId()) {
@@ -3412,7 +3415,7 @@ void tst_QWidget::raise()
     // the children underneath doesn't trigger a repaint on the covering widget.
     QWidget topLevel;
     topLevel.setWindowTitle(QLatin1String(QTest::currentTestFunction()));
-    QWidget *parent = parentPtr.take();
+    QWidget *parent = parentPtr.release();
     parent->setParent(&topLevel);
     topLevel.show();
 
@@ -6383,6 +6386,9 @@ void tst_QWidget::setCursor()
 
 void tst_QWidget::setToolTip()
 {
+    if (QApplication::platformName().startsWith(QLatin1String("wayland")))
+        QSKIP("Setting mouse cursor position is not possible on Wayland");
+
     QWidget widget;
     widget.resize(200, 200);
     // Showing the widget is not required for the tooltip event count test
@@ -10212,9 +10218,16 @@ void tst_QWidget::focusProxy()
 
     window.setFocus();
     window.show();
-    window.activateWindow();
-    if (!QTest::qWaitForWindowExposed(&window) || !QTest::qWaitForWindowActive(&window))
-        QSKIP("Window activation failed");
+    if (!QTest::qWaitForWindowExposed(&window))
+        QSKIP("Window exposed failed");
+    if (QGuiApplicationPrivate::platformIntegration()->hasCapability(QPlatformIntegration::WindowActivation)) {
+        window.activateWindow();
+        if (!QTest::qWaitForWindowActive(&window))
+            QSKIP("Window activation failed");
+    } else {
+        if (!QTest::qWaitFor([&]() { return window.windowHandle()->isActive(); }, 5000))
+            QSKIP("Window activation failed");
+    }
 
     // given a widget without focus proxy
     QVERIFY(window.hasFocus());

@@ -101,6 +101,7 @@ class QWaylandDataDeviceManager;
 class QWaylandPrimarySelectionDeviceManagerV1;
 #endif
 class QWaylandTabletManagerV2;
+class QWaylandPointerGestures;
 class QWaylandTouchExtension;
 class QWaylandQtKeyExtension;
 class QWaylandWindow;
@@ -129,6 +130,8 @@ public:
 
     QWaylandDisplay(QWaylandIntegration *waylandIntegration);
     ~QWaylandDisplay(void) override;
+
+    void initialize();
 
 #if QT_CONFIG(xkbcommon)
     struct xkb_context *xkbContext() const { return mXkbContext.get(); }
@@ -170,13 +173,12 @@ public:
 #endif
     QtWayland::qt_surface_extension *windowExtension() const { return mWindowExtension.data(); }
     QWaylandTabletManagerV2 *tabletManager() const { return mTabletManager.data(); }
+    QWaylandPointerGestures *pointerGestures() const { return mPointerGestures.data(); }
     QWaylandTouchExtension *touchExtension() const { return mTouchExtension.data(); }
     QtWayland::qt_text_input_method_manager_v1 *textInputMethodManager() const { return mTextInputMethodManager.data(); }
     QtWayland::zwp_text_input_manager_v2 *textInputManager() const { return mTextInputManager.data(); }
     QWaylandHardwareIntegration *hardwareIntegration() const { return mHardwareIntegration.data(); }
     QWaylandXdgOutputManagerV1 *xdgOutputManager() const { return mXdgOutputManager.data(); }
-
-    bool usingInputContextFromCompositor() const { return mUsingInputContextFromCompositor; }
 
     struct RegistryGlobal {
         uint32_t id;
@@ -275,6 +277,7 @@ private:
     QScopedPointer<QWaylandQtKeyExtension> mQtKeyExtension;
     QScopedPointer<QWaylandWindowManagerIntegration> mWindowManagerIntegration;
     QScopedPointer<QWaylandTabletManagerV2> mTabletManager;
+    QScopedPointer<QWaylandPointerGestures> mPointerGestures;
 #if QT_CONFIG(wayland_client_primary_selection)
     QScopedPointer<QWaylandPrimarySelectionDeviceManagerV1> mPrimarySelectionManager;
 #endif
@@ -297,7 +300,6 @@ private:
     QReadWriteLock m_frameQueueLock;
 
     bool mClientSideInputContextRequested = !QPlatformInputContextFactory::requested().isNull();
-    bool mUsingInputContextFromCompositor = false;
 
     void registry_global(uint32_t id, const QString &interface, uint32_t version) override;
     void registry_global_remove(uint32_t id) override;

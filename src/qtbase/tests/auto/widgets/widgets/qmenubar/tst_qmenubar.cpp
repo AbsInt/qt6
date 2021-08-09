@@ -921,7 +921,7 @@ void tst_QMenuBar::check_escKey()
 
     if (!QGuiApplication::platformName().compare(QLatin1String("minimal"), Qt::CaseInsensitive)
         || !QGuiApplication::platformName().compare(QLatin1String("offscreen"), Qt::CaseInsensitive)) {
-        QWARN("Skipping menu button test on minimal/offscreen platforms");
+        qWarning("Skipping menu button test on minimal/offscreen platforms");
         return;
     }
 
@@ -1356,7 +1356,8 @@ void tst_QMenuBar::menubarSizeHint()
     {
         MyStyle() : QProxyStyle(QStyleFactory::create("windows")) { }
 
-        virtual int pixelMetric(PixelMetric metric, const QStyleOption * option = 0, const QWidget * widget = 0 ) const
+        int pixelMetric(PixelMetric metric, const QStyleOption *option = 0,
+                        const QWidget *widget = 0) const override
         {
             // I chose strange values (prime numbers to be more sure that the size of the menubar is correct)
             switch (metric)

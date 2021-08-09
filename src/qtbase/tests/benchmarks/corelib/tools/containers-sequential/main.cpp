@@ -55,21 +55,21 @@ T * f(T *ts) // dummy function to prevent code from being optimized away by the 
 template<typename T>
 class UseCases_QList : public UseCases<T>
 {
-    void insert(int size)
+    void insert(int size) override
     {
         QList<T> v;
-        T t;
+        T t{};
         QBENCHMARK {
             for (int i = 0; i < size; ++i)
                 v.append(t);
         }
     }
 
-    void lookup(int size)
+    void lookup(int size) override
     {
         QList<T> v;
 
-        T t;
+        T t{};
         for (int i = 0; i < size; ++i)
             v.append(t);
 
@@ -87,7 +87,7 @@ class UseCases_QList : public UseCases<T>
 template <typename T>
 class UseCases_stdvector : public UseCases<T>
 {
-    void insert(int size)
+    void insert(int size) override
     {
         std::vector<T> v;
         T t;
@@ -97,7 +97,7 @@ class UseCases_stdvector : public UseCases<T>
         }
     }
 
-    void lookup(int size)
+    void lookup(int size) override
     {
         std::vector<T> v;
 

@@ -27,6 +27,7 @@
 ****************************************************************************/
 
 #include <QTest>
+#include <QtTest/private/qpropertytesthelper_p.h>
 #include <QSignalSpy>
 #include <QAnimationGroup>
 #include <QSequentialAnimationGroup>
@@ -193,6 +194,7 @@ private slots:
     void totalDuration();
     void zeroLoopCount();
     void recursiveAnimations();
+    void bindings();
 };
 
 void tst_QPropertyAnimation::initTestCase()
@@ -1399,6 +1401,29 @@ void tst_QPropertyAnimation::recursiveAnimations()
     QCOMPARE(o.y(), qreal(4000));
 }
 
+void tst_QPropertyAnimation::bindings()
+{
+    std::unique_ptr<AnimationObject> o1(new AnimationObject);
+    std::unique_ptr<AnimationObject> o2(new AnimationObject);
+    QPropertyAnimation a(o1.get(), "value");
+
+    QTestPrivate::testReadWritePropertyBasics<QPropertyAnimation, QByteArray>(
+            a, QByteArray("realValue"), QByteArray("value"), "propertyName");
+    if (QTest::currentTestFailed()) {
+        qDebug() << "Failed property test for QPropertyAnimation::propertyName";
+        return;
+    }
+    QTestPrivate::testReadWritePropertyBasics<QPropertyAnimation, QObject *>(a, o2.get(), o1.get(),
+                                                                             "targetObject");
+    if (QTest::currentTestFailed()) {
+        qDebug() << "Failed property test for QPropertyAnimation::targetObject";
+        return;
+    }
+
+    a.setTargetObject(o1.get());
+    o1.reset();
+    QCOMPARE(a.targetObject(), nullptr);
+}
 
 QTEST_MAIN(tst_QPropertyAnimation)
 #include "tst_qpropertyanimation.moc"

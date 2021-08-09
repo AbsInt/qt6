@@ -1100,6 +1100,16 @@ void tst_QTimer::bindToTimer()
     timer.setSingleShot(false);
     QVERIFY(!singleShot);
 
+    // interval property
+    QProperty<int> interval;
+    interval.setBinding([&](){ return timer.interval(); });
+    QCOMPARE(timer.interval(), interval);
+
+    timer.setInterval(10);
+    QCOMPARE(interval, 10);
+    timer.setInterval(100);
+    QCOMPARE(interval, 100);
+
     // timerType property
     QProperty<Qt::TimerType> timerType;
     timerType.setBinding(timer.bindableTimerType().makeBinding());
@@ -1137,6 +1147,21 @@ void tst_QTimer::bindTimer()
     QVERIFY(timer.isSingleShot());
     singleShot = false;
     QVERIFY(!timer.isSingleShot());
+
+    // interval property
+    QCOMPARE(timer.interval(), 0);
+
+    QProperty<int> interval;
+    timer.bindableInterval().setBinding(Qt::makePropertyBinding(interval));
+
+    interval = 10;
+    QCOMPARE(timer.interval(), 10);
+    interval = 100;
+    QCOMPARE(timer.interval(), 100);
+    timer.setInterval(50);
+    QCOMPARE(timer.interval(), 50);
+    interval = 30;
+    QCOMPARE(timer.interval(), 50);
 
     // timerType property
     QCOMPARE(timer.timerType(), Qt::CoarseTimer);

@@ -56,6 +56,7 @@
 #include <private/qv4mm_p.h>
 #include <private/qv4jscall_p.h>
 #include <private/qv4qobjectwrapper_p.h>
+#include <private/qv4urlobject_p.h>
 
 /*!
   \since 5.0
@@ -371,6 +372,15 @@ bool QJSValue::isError() const
 }
 
 /*!
+  Returns true if this QJSValue is an object of the URL class;
+  otherwise returns false.
+*/
+bool QJSValue::isUrl() const
+{
+    return QJSValuePrivate::asManagedType<UrlObject>(this);
+}
+
+/*!
   \since 5.12
   Returns the error type this QJSValue represents if it is an Error object.
   Otherwise, returns \c NoError."
@@ -626,7 +636,7 @@ QVariant QJSValue::toVariant(QJSValue::ObjectConversionBehavior behavior) const
     if (val.isString())
         return QVariant(val.toQString());
     if (QV4::Managed *m = val.as<QV4::Managed>())
-        return m->engine()->toVariant(val, /*typeHint*/ -1, behavior == RetainJSObjects);
+        return m->engine()->toVariant(val, /*typeHint*/ QMetaType{}, behavior == RetainJSObjects);
 
     Q_ASSERT(false);
     return QVariant();
@@ -690,14 +700,14 @@ QJSValue QJSValue::call(const QJSValueList &args) const
     Q_ASSERT(engine);
 
     Scope scope(engine);
-    JSCallData jsCallData(scope, args.length());
-    *jsCallData->thisObject = engine->globalObject;
+    JSCallArguments jsCallData(scope, args.length());
+    *jsCallData.thisObject = engine->globalObject;
     for (int i = 0; i < args.size(); ++i) {
         if (!QJSValuePrivate::checkEngine(engine, args.at(i))) {
             qWarning("QJSValue::call() failed: cannot call function with argument created in a different engine");
             return QJSValue();
         }
-        jsCallData->args[i] = QJSValuePrivate::convertToReturnedValue(engine, args.at(i));
+        jsCallData.args[i] = QJSValuePrivate::convertToReturnedValue(engine, args.at(i));
     }
 
     ScopedValue result(scope, f->call(jsCallData));
@@ -744,14 +754,14 @@ QJSValue QJSValue::callWithInstance(const QJSValue &instance, const QJSValueList
         return QJSValue();
     }
 
-    JSCallData jsCallData(scope, args.size());
-    *jsCallData->thisObject = QJSValuePrivate::convertToReturnedValue(engine, instance);
+    JSCallArguments jsCallData(scope, args.size());
+    *jsCallData.thisObject = QJSValuePrivate::convertToReturnedValue(engine, instance);
     for (int i = 0; i < args.size(); ++i) {
         if (!QJSValuePrivate::checkEngine(engine, args.at(i))) {
             qWarning("QJSValue::call() failed: cannot call function with argument created in a different engine");
             return QJSValue();
         }
-        jsCallData->args[i] = QJSValuePrivate::convertToReturnedValue(engine, args.at(i));
+        jsCallData.args[i] = QJSValuePrivate::convertToReturnedValue(engine, args.at(i));
     }
 
     ScopedValue result(scope, f->call(jsCallData));
@@ -791,13 +801,13 @@ QJSValue QJSValue::callAsConstructor(const QJSValueList &args) const
     Q_ASSERT(engine);
 
     Scope scope(engine);
-    JSCallData jsCallData(scope, args.size());
+    JSCallArguments jsCallData(scope, args.size());
     for (int i = 0; i < args.size(); ++i) {
         if (!QJSValuePrivate::checkEngine(engine, args.at(i))) {
             qWarning("QJSValue::callAsConstructor() failed: cannot construct function with argument created in a different engine");
             return QJSValue();
         }
-        jsCallData->args[i] = QJSValuePrivate::convertToReturnedValue(engine, args.at(i));
+        jsCallData.args[i] = QJSValuePrivate::convertToReturnedValue(engine, args.at(i));
     }
 
     ScopedValue result(scope, f->callAsConstructor(jsCallData));

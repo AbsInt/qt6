@@ -36,436 +36,33 @@
 #include <QtQml/private/qqmljsast_p.h>
 #include <QtQml/private/qqmljslexer_p.h>
 #include <QtQml/private/qqmljsparser_p.h>
-#include <QtQml/private/qv4codegen_p.h>
 #include <QtQml/private/qqmlimportresolver_p.h>
 
 #include <QtCore/qfile.h>
 #include <QtCore/qdiriterator.h>
 #include <QtCore/qscopedvaluerollback.h>
 
-void FindWarningVisitor::checkInheritanceCycle(QQmlJSScope::ConstPtr scope)
-{
-    QList<QQmlJSScope::ConstPtr> scopes;
-    while (!scope.isNull()) {
-        if (scopes.contains(scope)) {
-            QString inheritenceCycle;
-            for (const auto &seen: qAsConst(scopes)) {
-                if (!inheritenceCycle.isEmpty())
-                    inheritenceCycle.append(QLatin1String(" -> "));
-                inheritenceCycle.append(seen->baseTypeName());
-            }
-
-            if (m_warnInheritanceCycle) {
-                m_errors.append({
-                                    QStringLiteral("%1 is part of an inheritance cycle: %2\n")
-                                       .arg(scope->internalName())
-                                       .arg(inheritenceCycle),
-                                    QtWarningMsg,
-                                    QQmlJS::SourceLocation()
-                                });
-            }
-
-            m_unknownImports.insert(scope->internalName());
-            m_visitFailed = true;
-            break;
-        }
-
-        scopes.append(scope);
-
-        if (scope->baseTypeName().isEmpty()) {
-            break;
-        } else if (auto newScope = scope->baseType()) {
-            scope = newScope;
-        } else {
-            m_errors.append({
-                                scope->baseTypeName() + QStringLiteral(
-                                        " was not found. Did you add all import paths?\n"),
-                                QtWarningMsg,
-                                QQmlJS::SourceLocation()
-                            });
-            m_unknownImports.insert(scope->baseTypeName());
-            m_visitFailed = true;
-            break;
-        }
-    }
-}
-
-void FindWarningVisitor::checkGroupedAndAttachedScopes(QQmlJSScope::ConstPtr scope)
-{
-    auto children = scope->childScopes();
-    while (!children.isEmpty()) {
-        auto childScope = children.takeFirst();
-        const auto type = childScope->scopeType();
-        switch (type) {
-        case QQmlJSScope::GroupedPropertyScope:
-        case QQmlJSScope::AttachedPropertyScope:
-            if (!childScope->baseType()) {
-                m_errors.append({
-                                    QStringLiteral("unknown %1 property scope %2.")
-                                            .arg(type == QQmlJSScope::GroupedPropertyScope
-                                                    ? QStringLiteral("grouped")
-                                                    : QStringLiteral("attached"),
-                                            childScope->internalName()),
-                                    QtWarningMsg,
-                                    childScope->sourceLocation()
-                                });
-                m_visitFailed = true;
-            }
-            children.append(childScope->childScopes());
-        default:
-            break;
-        }
-    }
-}
-
-void FindWarningVisitor::flushPendingSignalParameters()
-{
-    const SignalHandler handler = m_signalHandlers[m_pendingSingalHandler];
-    for (const QString &parameter : handler.signal.parameterNames()) {
-        m_currentScope->insertJSIdentifier(
-                    parameter, {
-                        QQmlJSScope::JavaScriptIdentifier::Injected,
-                        m_pendingSingalHandler
-                    });
-    }
-    m_pendingSingalHandler = QQmlJS::SourceLocation();
-}
-
-void FindWarningVisitor::throwRecursionDepthError()
-{
-    QQmlJSImportVisitor::throwRecursionDepthError();
-    m_visitFailed = true;
-}
-
-bool FindWarningVisitor::visit(QQmlJS::AST::ExpressionStatement *ast)
-{
-    if (m_pendingSingalHandler.isValid()) {
-        enterEnvironment(QQmlJSScope::JSFunctionScope, "signalhandler", ast->firstSourceLocation());
-        flushPendingSignalParameters();
-    }
-    return true;
-}
-
-void FindWarningVisitor::endVisit(QQmlJS::AST::ExpressionStatement *)
-{
-    if (m_currentScope->scopeType() == QQmlJSScope::JSFunctionScope
-            && m_currentScope->baseTypeName() == "signalhandler") {
-        leaveEnvironment();
-    }
-}
-
-bool FindWarningVisitor::visit(QQmlJS::AST::Block *block)
-{
-    if (!QQmlJSImportVisitor::visit(block))
-        return false;
-    if (m_pendingSingalHandler.isValid())
-        flushPendingSignalParameters();
-    return true;
-}
-
-bool FindWarningVisitor::visit(QQmlJS::AST::WithStatement *withStatement)
-{
-    if (m_warnWithStatement) {
-        m_errors.append({
-                            QStringLiteral(
-                                "with statements are strongly discouraged in QML "
-                                "and might cause false positives when analysing unqualified "
-                                "identifiers\n"),
-                            QtWarningMsg,
-                            withStatement->firstSourceLocation()
-                        });
-    }
-
-    return QQmlJSImportVisitor::visit(withStatement);
-}
-
-static QString signalName(QStringView handlerName)
-{
-    if (handlerName.startsWith(u"on") && handlerName.size() > 2) {
-        QString signal = handlerName.mid(2).toString();
-        for (int i = 0; i < signal.length(); ++i) {
-            QChar &ch = signal[i];
-            if (ch.isLower())
-                return QString();
-            if (ch.isUpper()) {
-                ch = ch.toLower();
-                return signal;
-            }
-        }
-    }
-    return QString();
-}
-
-bool FindWarningVisitor::visit(QQmlJS::AST::UiScriptBinding *uisb)
-{
-    using namespace QQmlJS::AST;
-
-    const auto qmlScope = m_currentScope;
-    if (!QQmlJSImportVisitor::visit(uisb))
-        return false;
-
-    auto name = uisb->qualifiedId->name;
-    if (name == QLatin1String("id")) {
-        // Figure out whether the current scope is the root scope.
-        if (auto parentScope = qmlScope->parentScope()) {
-            if (!parentScope->parentScope()) {
-                const auto expstat = cast<ExpressionStatement *>(uisb->statement);
-                const auto identexp = cast<IdentifierExpression *>(expstat->expression);
-                m_rootId = identexp->name.toString();
-            }
-        }
-        return true;
-    }
-
-    const QString signal = signalName(name);
-    if (signal.isEmpty()) {
-        for (const auto &childScope : qmlScope->childScopes()) {
-            if ((childScope->scopeType() == QQmlJSScope::AttachedPropertyScope
-                 || childScope->scopeType() == QQmlJSScope::GroupedPropertyScope)
-                    && childScope->internalName() == name) {
-                return true;
-            }
-        }
-
-        if (!qmlScope->hasProperty(name.toString())) {
-            m_errors.append({
-                                QStringLiteral("Binding assigned to \"%1\", but no property \"%1\" "
-                                               "exists in the current element.\n").arg(name),
-                                QtWarningMsg,
-                                uisb->firstSourceLocation()
-                            });
-            m_visitFailed = true;
-            return true;
-        }
-
-        const auto property = qmlScope->property(name.toString());
-        if (!property.type()) {
-            m_errors.append({
-                                QStringLiteral("No type found for property \"%1\". This may be due "
-                                               "to a missing import statement or incomplete "
-                                               "qmltypes files.\n").arg(name),
-                                QtWarningMsg,
-                                uisb->firstSourceLocation()
-                            });
-            m_visitFailed = true;
-
-        }
-
-        return true;
-    }
-
-
-    if (!qmlScope->hasMethod(signal) && m_warnUnqualified) {
-        m_errors.append({
-                            QStringLiteral("no matching signal found for handler \"%1\"\n")
-                               .arg(name.toString()),
-                            QtWarningMsg,
-                            uisb->firstSourceLocation()
-                        });
-        m_visitFailed = true;
-        return true;
-    }
-
-    QQmlJSMetaMethod scopeSignal;
-    for (QQmlJSScope::ConstPtr scope = qmlScope; scope; scope = scope->baseType()) {
-        const auto methods = scope->ownMethods();
-        const auto methodsRange = methods.equal_range(signal);
-        for (auto method = methodsRange.first; method != methodsRange.second; ++method) {
-            if (method->methodType() != QQmlJSMetaMethod::Signal)
-                continue;
-            scopeSignal = *method;
-            break;
-        }
-    }
-
-    const auto statement = uisb->statement;
-    if (ExpressionStatement *expr = cast<ExpressionStatement *>(statement)) {
-        if (FunctionExpression *func = expr->expression->asFunctionDefinition()) {
-            // functions are already handled
-            // they do not get names inserted according to the signal, but access their formal
-            // parameters. Let's still check if the names match, though.
-            const QStringList signalParameters = scopeSignal.parameterNames();
-            qsizetype i = 0, end = signalParameters.length();
-            for (FormalParameterList *formal = func->formals;
-                 formal; ++i, formal = formal->next) {
-                if (i == end) {
-                    m_errors.append({
-                                        QStringLiteral("Signal handler for \"%2\" has more formal"
-                                                       " parameters than the signal it handles.")
-                                                .arg(name),
-                                        QtWarningMsg,
-                                        uisb->firstSourceLocation()
-                                    });
-                    m_visitFailed = true;
-                }
-
-                const QStringView handlerParameter = formal->element->bindingIdentifier;
-                const qsizetype j = signalParameters.indexOf(handlerParameter);
-                if (j == i || j < 0)
-                    continue;
-
-                m_errors.append({
-                                    QStringLiteral("Parameter %1 to signal handler for \"%2\""
-                                                   " is called \"%3\". The signal has a parameter"
-                                                   " of the same name in position %4.\n")
-                                            .arg(i + 1).arg(name, handlerParameter).arg(j + 1),
-                                    QtWarningMsg,
-                                    uisb->firstSourceLocation()
-                                });
-                m_visitFailed = true;
-            }
-
-            return true;
-        }
-    }
-
-    const auto firstSourceLocation = statement->firstSourceLocation();
-    bool hasMultilineStatementBody
-            = statement->lastSourceLocation().startLine > firstSourceLocation.startLine;
-    m_pendingSingalHandler = firstSourceLocation;
-    m_signalHandlers.insert(firstSourceLocation, {scopeSignal, hasMultilineStatementBody});
-    return true;
-}
-
-bool FindWarningVisitor::visit(QQmlJS::AST::IdentifierExpression *idexp)
-{
-    m_memberAccessChains[m_currentScope].append(
-                {{idexp->name.toString(), QString(), idexp->firstSourceLocation()}});
-    m_fieldMemberBase = idexp;
-    return true;
-}
-
-FindWarningVisitor::FindWarningVisitor(
-        QQmlJSImporter *importer, QStringList qmltypesFiles, QString code, QString fileName,
-        bool silent, bool warnUnqualified, bool warnWithStatement, bool warnInheritanceCycle)
-    : QQmlJSImportVisitor(importer, QFileInfo {fileName}.canonicalPath(), qmltypesFiles),
-      m_code(std::move(code)),
-      m_rootId(QLatin1String("<id>")),
-      m_filePath(std::move(fileName)),
-      m_colorOut(silent),
-      m_warnUnqualified(warnUnqualified),
-      m_warnWithStatement(warnWithStatement),
-      m_warnInheritanceCycle(warnInheritanceCycle)
-{
-    m_currentScope->setInternalName("global");
-
-    // setup color output
-    m_colorOut.insertMapping(Error, ColorOutput::RedForeground);
-    m_colorOut.insertMapping(Warning, ColorOutput::PurpleForeground);
-    m_colorOut.insertMapping(Info, ColorOutput::BlueForeground);
-    m_colorOut.insertMapping(Normal, ColorOutput::DefaultColor);
-    m_colorOut.insertMapping(Hint, ColorOutput::GreenForeground);
-    QLatin1String jsGlobVars[] = {
-        /* Not listed on the MDN page; browser and QML extensions: */
-        // console/debug api
-        QLatin1String("console"), QLatin1String("print"),
-        // garbage collector
-        QLatin1String("gc"),
-        // i18n
-        QLatin1String("qsTr"), QLatin1String("qsTrId"), QLatin1String("QT_TR_NOOP"),
-        QLatin1String("QT_TRANSLATE_NOOP"), QLatin1String("QT_TRID_NOOP"),
-        // XMLHttpRequest
-        QLatin1String("XMLHttpRequest")
-    };
-
-    QQmlJSScope::JavaScriptIdentifier globalJavaScript = {
-        QQmlJSScope::JavaScriptIdentifier::LexicalScoped,
-        QQmlJS::SourceLocation()
-    };
-    for (const char **globalName = QV4::Compiler::Codegen::s_globalNames;
-         *globalName != nullptr;
-         ++globalName) {
-        m_currentScope->insertJSIdentifier(QString::fromLatin1(*globalName), globalJavaScript);
-    }
-    for (const auto& jsGlobVar: jsGlobVars)
-        m_currentScope->insertJSIdentifier(jsGlobVar, globalJavaScript);
-}
-
-static MessageColors messageColor(QtMsgType type)
-{
-    switch (type) {
-    case QtDebugMsg:
-        return Normal;
-    case QtWarningMsg:
-        return Warning;
-    case QtCriticalMsg:
-    case QtFatalMsg:
-        return Error;
-    case QtInfoMsg:
-        return Info;
-    }
-
-    return Normal;
-}
-
-bool FindWarningVisitor::check()
-{
-    for (const auto &error : qAsConst(m_errors)) {
-        if (error.loc.isValid()) {
-            m_colorOut.writePrefixedMessage(
-                        QStringLiteral("%1:%2: %3")
-                            .arg(error.loc.startLine).arg(error.loc.startColumn).arg(error.message),
-                        messageColor(error.type));
-        } else {
-            m_colorOut.writePrefixedMessage(error.message, messageColor(error.type));
-        }
-    }
-
-    // now that all ids are known, revisit any Connections whose target were perviously unknown
-    for (auto const &outstandingConnection: m_outstandingConnections) {
-        auto targetScope = m_scopesById[outstandingConnection.targetName];
-        if (outstandingConnection.scope) {
-            for (const auto scope = targetScope; targetScope;
-                 targetScope = targetScope->baseType()) {
-                const auto connectionMethods = targetScope->ownMethods();
-                for (const auto &method : connectionMethods)
-                    outstandingConnection.scope->addOwnMethod(method);
-            }
-        }
-        QScopedValueRollback<QQmlJSScope::Ptr> rollback(m_currentScope, outstandingConnection.scope);
-        outstandingConnection.uiod->initializer->accept(this);
-    }
-
-    if (!m_warnUnqualified)
-        return true;
-
-    CheckIdentifiers check(&m_colorOut, m_code, m_rootScopeImports, m_filePath);
-    return check(m_scopesById, m_signalHandlers, m_memberAccessChains, m_globalScope, m_rootId)
-            && !m_visitFailed;
-}
-
-bool FindWarningVisitor::visit(QQmlJS::AST::UiObjectBinding *uiob)
-{
-    if (!QQmlJSImportVisitor::visit(uiob))
-        return false;
-
-    checkInheritanceCycle(m_currentScope);
-    return true;
-}
-
 bool FindWarningVisitor::visit(QQmlJS::AST::UiObjectDefinition *uiod)
 {
-    using namespace QQmlJS::AST;
-
-    if (!QQmlJSImportVisitor::visit(uiod))
-        return false;
+    QQmlJSImportVisitor::visit(uiod);
 
     const QString name = m_currentScope->baseTypeName();
     if (name.isEmpty() || name.front().isLower())
         return false; // Ignore grouped properties for now
 
-    checkInheritanceCycle(m_currentScope);
-
-    if (name.endsWith("Connections")) {
+    if (name.endsWith(u"Connections"_qs)) {
         QString target;
         auto member = uiod->initializer->members;
         while (member) {
             if (member->member->kind == QQmlJS::AST::Node::Kind_UiScriptBinding) {
-                auto asBinding = static_cast<QQmlJS::AST::UiScriptBinding*>(member->member);
-                if (asBinding->qualifiedId->name == QLatin1String("target")) {
+                auto asBinding = static_cast<QQmlJS::AST::UiScriptBinding *>(member->member);
+                if (asBinding->qualifiedId->name == u"target"_qs) {
                     if (asBinding->statement->kind == QQmlJS::AST::Node::Kind_ExpressionStatement) {
-                        auto expr = static_cast<QQmlJS::AST::ExpressionStatement*>(asBinding->statement)->expression;
-                        if (auto idexpr = QQmlJS::AST::cast<QQmlJS::AST::IdentifierExpression*>(expr)) {
+                        auto expr = static_cast<QQmlJS::AST::ExpressionStatement *>(
+                                            asBinding->statement)
+                                            ->expression;
+                        if (auto idexpr =
+                                    QQmlJS::AST::cast<QQmlJS::AST::IdentifierExpression *>(expr)) {
                             target = idexpr->name.toString();
                         } else {
                             // more complex expressions are not supported
@@ -486,11 +83,11 @@ bool FindWarningVisitor::visit(QQmlJS::AST::UiObjectDefinition *uiod)
             targetScope = m_rootScopeImports.value(scope->baseTypeName());
         } else {
             // there was a target, check if we already can find it
-            auto scopeIt =  m_scopesById.find(target);
+            auto scopeIt = m_scopesById.find(target);
             if (scopeIt != m_scopesById.end()) {
                 targetScope = *scopeIt;
             } else {
-                m_outstandingConnections.push_back({target, m_currentScope, uiod});
+                m_outstandingConnections.push_back({ target, m_currentScope, uiod });
                 return false; // visit children later once target is known
             }
         }
@@ -500,7 +97,166 @@ bool FindWarningVisitor::visit(QQmlJS::AST::UiObjectDefinition *uiod)
                 m_currentScope->addOwnMethod(method);
         }
     }
+
+    addDefaultProperties();
+    m_objectDefinitionScopes << m_currentScope;
+
     return true;
+}
+
+void FindWarningVisitor::endVisit(QQmlJS::AST::UiObjectDefinition *uiod)
+{
+    auto childScope = m_currentScope;
+    QQmlJSImportVisitor::endVisit(uiod);
+
+    if (m_currentScope == m_globalScope
+        || m_currentScope->baseTypeName() == QStringLiteral("Component")) {
+        return;
+    }
+
+    QString parentPropertyName;
+    for (QQmlJSScope::ConstPtr scope = childScope; scope; scope = scope->baseType()) {
+        parentPropertyName = scope->parentPropertyName();
+        if (parentPropertyName.isEmpty())
+            continue;
+
+        auto property = scope->property(parentPropertyName);
+        property.setType(QQmlJSScope::ConstPtr(m_currentScope));
+
+        if (childScope->hasOwnProperty(parentPropertyName)) {
+            Q_ASSERT(childScope->ownProperty(parentPropertyName).index() >= 0);
+        } else {
+            // it's a new property, so must adjust the index. the index is
+            // "outdated" as it's a relative index of scope, not childScope (or
+            // it might even be -1 in theory but this is likely an error)
+            property.setIndex(childScope->ownProperties().size());
+        }
+
+        // TODO: This is bad. We shouldn't add a new property but rather amend the existing one.
+        childScope->addOwnProperty(property);
+    }
+}
+
+bool FindWarningVisitor::visit(QQmlJS::AST::IdentifierExpression *idexp)
+{
+    const QString name = idexp->name.toString();
+    if (name.front().isUpper() && m_importTypeLocationMap.contains(name)) {
+        m_usedTypes.insert(name);
+    }
+
+    m_memberAccessChains[m_currentScope].append(
+                {{name, QString(), idexp->firstSourceLocation()}});
+    m_fieldMemberBase = idexp;
+    return true;
+}
+
+FindWarningVisitor::FindWarningVisitor(QQmlJSImporter *importer, QStringList qmltypesFiles,
+                                       QString code, QList<QQmlJS::SourceLocation> comments,
+                                       QString fileName, bool silent)
+    : QQmlJSImportVisitor(importer,
+                          implicitImportDirectory(fileName, importer->resourceFileMapper()),
+                          qmltypesFiles, fileName, code, silent)
+{
+    parseComments(comments);
+}
+
+void FindWarningVisitor::parseComments(const QList<QQmlJS::SourceLocation> &comments)
+{
+    QHash<int, QSet<QQmlJSLoggerCategory>> disablesPerLine;
+    QHash<int, QSet<QQmlJSLoggerCategory>> enablesPerLine;
+    QHash<int, QSet<QQmlJSLoggerCategory>> oneLineDisablesPerLine;
+
+    const QStringList lines = m_code.split(u'\n');
+
+    for (const auto &loc : comments) {
+        const QString comment = m_code.mid(loc.offset, loc.length);
+        if (!comment.startsWith(u" qmllint ") && !comment.startsWith(u"qmllint "))
+            continue;
+
+        QStringList words = comment.split(u' ');
+        if (words.constFirst().isEmpty())
+            words.removeFirst();
+
+        const QString command = words.at(1);
+
+        QSet<QQmlJSLoggerCategory> categories;
+        for (qsizetype i = 2; i < words.size(); i++) {
+            const QString category = words.at(i);
+            const auto option = m_logger.options().constFind(category);
+            if (option != m_logger.options().constEnd())
+                categories << option->m_category;
+            else
+                m_logger.log(u"qmllint directive on unknown category \"%1\""_qs.arg(category),
+                             Log_Syntax, loc);
+        }
+
+        if (categories.isEmpty()) {
+            for (const auto &option : m_logger.options())
+                categories << option.m_category;
+        }
+
+        if (command == u"disable"_qs) {
+            const QString line = lines[loc.startLine - 1];
+            const QString preComment = line.left(line.indexOf(comment) - 2);
+
+            bool lineHasContent = false;
+            for (qsizetype i = 0; i < preComment.size(); i++) {
+                if (!preComment[i].isSpace()) {
+                    lineHasContent = true;
+                    break;
+                }
+            }
+
+            if (lineHasContent)
+                oneLineDisablesPerLine[loc.startLine] |= categories;
+            else
+                disablesPerLine[loc.startLine] |= categories;
+        } else if (command == u"enable"_qs) {
+            enablesPerLine[loc.startLine + 1] |= categories;
+        } else {
+            m_logger.log(u"Invalid qmllint directive \"%1\" provided"_qs.arg(command), Log_Syntax,
+                         loc);
+        }
+    }
+
+    if (disablesPerLine.isEmpty() && oneLineDisablesPerLine.isEmpty())
+        return;
+
+    QSet<QQmlJSLoggerCategory> currentlyDisabled;
+    for (qsizetype i = 1; i <= lines.length(); i++) {
+        currentlyDisabled.unite(disablesPerLine[i]).subtract(enablesPerLine[i]);
+
+        currentlyDisabled.unite(oneLineDisablesPerLine[i]);
+
+        if (!currentlyDisabled.isEmpty())
+            m_logger.ignoreWarnings(i, currentlyDisabled);
+
+        currentlyDisabled.subtract(oneLineDisablesPerLine[i]);
+    }
+}
+
+bool FindWarningVisitor::check()
+{
+    // now that all ids are known, revisit any Connections whose target were perviously unknown
+    for (auto const &outstandingConnection: m_outstandingConnections) {
+        auto targetScope = m_scopesById[outstandingConnection.targetName];
+        if (outstandingConnection.scope) {
+            for (const auto scope = targetScope; targetScope;
+                 targetScope = targetScope->baseType()) {
+                const auto connectionMethods = targetScope->ownMethods();
+                for (const auto &method : connectionMethods)
+                    outstandingConnection.scope->addOwnMethod(method);
+            }
+        }
+        QScopedValueRollback<QQmlJSScope::Ptr> rollback(m_currentScope,
+                                                        outstandingConnection.scope);
+        outstandingConnection.uiod->initializer->accept(this);
+    }
+
+    CheckIdentifiers check(&m_logger, m_code, m_rootScopeImports, m_filePath);
+    check(m_scopesById, m_signalHandlers, m_memberAccessChains, m_globalScope, m_rootId);
+
+    return !m_logger.hasWarnings() && !m_logger.hasErrors();
 }
 
 bool FindWarningVisitor::visit(QQmlJS::AST::PatternElement *element)
@@ -522,35 +278,11 @@ bool FindWarningVisitor::visit(QQmlJS::AST::PatternElement *element)
     return true;
 }
 
-void FindWarningVisitor::endVisit(QQmlJS::AST::UiObjectDefinition *uiod)
-{
-    auto childScope = m_currentScope;
-    QQmlJSImportVisitor::endVisit(uiod);
-
-    if (m_warnUnqualified)
-        checkGroupedAndAttachedScopes(childScope);
-
-    if (m_currentScope == m_globalScope
-            || m_currentScope->baseTypeName() == QStringLiteral("Component")) {
-        return;
-    }
-
-    auto property = childScope->property(QStringLiteral("parent"));
-    if (!property.propertyName().isEmpty()) {
-        property.setType(QQmlJSScope::ConstPtr(m_currentScope));
-        childScope->addOwnProperty(property);
-    }
-}
-
-bool FindWarningVisitor::visit(QQmlJS::AST::FieldMemberExpression *)
-{
-    return true;
-}
-
 void FindWarningVisitor::endVisit(QQmlJS::AST::FieldMemberExpression *fieldMember)
 {
     using namespace QQmlJS::AST;
     ExpressionNode *base = fieldMember->base;
+
     while (auto *nested = cast<NestedExpression *>(base))
         base = nested->expression;
 
@@ -565,9 +297,17 @@ void FindWarningVisitor::endVisit(QQmlJS::AST::FieldMemberExpression *fieldMembe
 
 
         auto &chain = m_memberAccessChains[m_currentScope];
+
         Q_ASSERT(!chain.last().isEmpty());
+
+        const QString name = fieldMember->name.toString();
+        if (m_importTypeLocationMap.contains(name)) {
+            if (auto it = m_rootScopeImports.find(name); it != m_rootScopeImports.end() && !*(it))
+                m_usedTypes.insert(name);
+        }
+
         chain.last().append(FieldMember {
-                                fieldMember->name.toString(), type, fieldMember->identifierToken
+                                name, type, fieldMember->identifierToken
                             });
         m_fieldMemberBase = fieldMember;
     } else {
@@ -575,15 +315,12 @@ void FindWarningVisitor::endVisit(QQmlJS::AST::FieldMemberExpression *fieldMembe
     }
 }
 
-bool FindWarningVisitor::visit(QQmlJS::AST::BinaryExpression *)
-{
-    return true;
-}
-
 void FindWarningVisitor::endVisit(QQmlJS::AST::BinaryExpression *binExp)
 {
-    if (binExp->op == QSOperator::As && m_fieldMemberBase == binExp->left)
+    if (binExp->op == QSOperator::As
+            && (m_fieldMemberBase == binExp->left || m_fieldMemberBase == binExp->right)) {
         m_fieldMemberBase = binExp;
-    else
+    } else {
         m_fieldMemberBase = nullptr;
+    }
 }

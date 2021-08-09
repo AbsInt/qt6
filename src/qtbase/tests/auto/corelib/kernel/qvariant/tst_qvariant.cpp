@@ -59,6 +59,7 @@
 #include <QEasingCurve>
 #include <QSequentialIterable>
 #include <QAssociativeIterable>
+#include <QScopeGuard>
 #include "qnumeric.h"
 
 #include <private/qlocale_p.h>
@@ -253,6 +254,7 @@ private slots:
     void convertByteArrayToBool() const;
     void convertByteArrayToBool_data() const;
     void convertIterables() const;
+    void convertConstNonConst() const;
     void toIntFromQString() const;
     void toIntFromDouble() const;
     void setValue();
@@ -3136,6 +3138,34 @@ void tst_QVariant::convertIterables() const
     }
 }
 
+struct Derived : QObject
+{
+    Q_OBJECT
+};
+
+void tst_QVariant::convertConstNonConst() const
+{
+    Derived *derived = new Derived;
+    QObject *obj = derived;
+    QObject const *unrelatedConstObj = new QObject;
+    auto cleanUp = qScopeGuard([&] {
+        delete unrelatedConstObj;
+        delete derived;
+    });
+    QObject const *constObj = obj;
+    Derived const *constDerived = derived;
+    QCOMPARE(QVariant::fromValue(constObj).value<QObject *>(), obj);
+    QCOMPARE(QVariant::fromValue(obj).value<QObject const *>(), constObj);
+
+    QCOMPARE(QVariant::fromValue(constDerived).value<QObject *>(), derived);
+    QCOMPARE(QVariant::fromValue(derived).value<QObject const *>(), derived);
+
+    QObject const *derivedAsConstObject = derived;
+    // up cast and remove const is possible, albeit dangerous
+    QCOMPARE(QVariant::fromValue(derivedAsConstObject).value<Derived *>(), derived);
+    QCOMPARE(QVariant::fromValue(unrelatedConstObj).value<Derived *>(), nullptr);
+}
+
 /*!
   We verify that:
     1. Converting the string "9.9" to int fails. This is the behavior of
@@ -4613,7 +4643,8 @@ template<typename Enum> void testVariant(Enum value, bool *ok)
     QVERIFY(var2.convert(QMetaType::Int));
     QCOMPARE(var2.value<int>(), static_cast<int>(value));
 
-    if ((static_cast<qint64>(value) <= INT_MAX) && (static_cast<qint64>(value) >= INT_MIN)) {
+    // unary + to silence gcc warning
+    if ((+static_cast<qint64>(value) <= INT_MAX) && (+static_cast<qint64>(value) >= INT_MIN)) {
         int intValue = static_cast<int>(value);
         QVariant intVar = intValue;
         QVERIFY(intVar.canConvert<Enum>());
@@ -4672,7 +4703,8 @@ template<typename Enum> void testVariantMeta(Enum value, bool *ok, const char *s
 
     QVariant strVar = QString::fromLatin1(string);
     QVERIFY(strVar.canConvert<Enum>());
-    if ((static_cast<qint64>(value) > INT_MAX) || (static_cast<qint64>(value) < INT_MIN)) {
+    // unary + to silence gcc warning
+    if ((+static_cast<qint64>(value) > INT_MAX) || (+static_cast<qint64>(value) < INT_MIN)) {
         QEXPECT_FAIL("", "QMetaEnum api uses 'int' as return type  QTBUG-27451", Abort);
         *ok = true;
     }

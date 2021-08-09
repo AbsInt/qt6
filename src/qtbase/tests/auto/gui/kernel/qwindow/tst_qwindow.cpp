@@ -109,6 +109,7 @@ private slots:
     void testBlockingWindowShownAfterModalDialog();
     void generatedMouseMove();
     void keepPendingUpdateRequests();
+    void activateDeactivateEvent();
 
 private:
     QPoint m_availableTopLeft;
@@ -2062,7 +2063,7 @@ void tst_QWindow::modalDialog()
     QGuiApplication::processEvents();
 
     if (isPlatformOffscreenOrMinimal()) {
-        QWARN("Focus stays in normalWindow on offscreen/minimal platforms");
+        qWarning("Focus stays in normalWindow on offscreen/minimal platforms");
         QTRY_COMPARE(QGuiApplication::focusWindow(), &normalWindow);
         return;
     }
@@ -2108,7 +2109,7 @@ void tst_QWindow::modalDialogClosingOneOfTwoModal()
     QGuiApplication::processEvents();
 
     if (isPlatformOffscreenOrMinimal()) {
-        QWARN("Focus is lost when closing modal dialog on offscreen/minimal platforms");
+        qWarning("Focus is lost when closing modal dialog on offscreen/minimal platforms");
         QTRY_COMPARE(QGuiApplication::focusWindow(), nullptr);
         return;
     }
@@ -2385,6 +2386,8 @@ void tst_QWindow::spuriousMouseMove()
     const QString &platformName = QGuiApplication::platformName();
     if (platformName == QLatin1String("offscreen") || platformName == QLatin1String("cocoa"))
         QSKIP("No enter events sent");
+    if (platformName == QLatin1String("wayland"))
+        QSKIP("Setting mouse cursor position is not possible on Wayland");
     const QRect screenGeometry = QGuiApplication::primaryScreen()->geometry();
     const QPoint center = screenGeometry.center();
     QCursor::setPos(center);
@@ -2600,6 +2603,48 @@ void tst_QWindow::keepPendingUpdateRequests()
 
     QVERIFY(platformWindow->hasPendingUpdateRequest());
     QTRY_VERIFY(!platformWindow->hasPendingUpdateRequest());
+}
+
+void tst_QWindow::activateDeactivateEvent()
+{
+    class Window : public QWindow
+    {
+    public:
+        using QWindow::QWindow;
+
+        int activateCount = 0;
+        int deactivateCount = 0;
+    protected:
+        bool event(QEvent *e)
+        {
+            switch (e->type()) {
+            case QEvent::WindowActivate:
+                ++activateCount;
+                break;
+            case QEvent::WindowDeactivate:
+                ++deactivateCount;
+                break;
+            default:
+                break;
+            }
+            return QWindow::event(e);
+        }
+    };
+
+    Window w1;
+    Window w2;
+
+    w1.show();
+    w1.requestActivate();
+    QVERIFY(QTest::qWaitForWindowActive(&w1));
+    QCOMPARE(w1.activateCount, 1);
+    QCOMPARE(w1.deactivateCount, 0);
+
+    w2.show();
+    w2.requestActivate();
+    QVERIFY(QTest::qWaitForWindowActive(&w2));
+    QCOMPARE(w1.deactivateCount, 1);
+    QCOMPARE(w2.activateCount, 1);
 }
 
 #include <tst_qwindow.moc>

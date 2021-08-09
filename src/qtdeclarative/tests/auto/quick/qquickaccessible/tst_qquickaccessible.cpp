@@ -67,7 +67,7 @@ public:
     virtual ~tst_QQuickAccessible();
 
 public slots:
-    void initTestCase();
+    void initTestCase() override;
     void cleanupTestCase();
     void init();
     void cleanup();
@@ -120,10 +120,14 @@ void tst_QQuickAccessible::cleanup()
         qWarning().noquote() << list.count()
                              << "accessibility event(s) were not handled in testfunction '"
                              << QTest::currentTestFunction() << "':";
-        for (int i = 0; i < list.count(); ++i)
-            qWarning().noquote() << " " << (i + 1) << ": Object: " << list.at(i)->object()
+        for (int i = 0; i < list.count(); ++i) {
+            auto object = list.at(i)->object();
+            QString objectInfo = object ? QDebug::toString(object)
+                                        : u"[deleted object]"_qs;
+            qWarning().noquote() << " " << (i + 1) << objectInfo
                        << "Event: '" << qAccessibleEventString(list.at(i)->type())
                        << "' Child: " << list.at(i)->child();
+        }
     }
     QTestAccessibility::clearEvents();
 }
@@ -359,7 +363,7 @@ void tst_QQuickAccessible::basicPropertiesTest()
 
     QAccessibleInterface *item = iface->child(0);
     QVERIFY(item);
-    QCOMPARE(item->childCount(), 5);
+    QCOMPARE(item->childCount(), 6);
     QCOMPARE(item->rect().size(), QSize(400, 400));
     QCOMPARE(item->role(), QAccessible::Client);
     QCOMPARE(iface->indexOfChild(item), 0);
@@ -443,6 +447,31 @@ void tst_QQuickAccessible::basicPropertiesTest()
     attached->setRole(QAccessible::StaticText);
     QCOMPARE(text3->role(), QAccessible::StaticText);
     QVERIFY(text3->state().readOnly);
+
+    // Text "Rich text"
+    QAccessibleInterface *richText = item->child(5);
+    QVERIFY(text3);
+    QCOMPARE(richText->childCount(), 2);
+    QCOMPARE(richText->text(QAccessible::Name), QLatin1String("Rich text with links:\nWebsite or blog"));
+    QCOMPARE(richText->role(), QAccessible::StaticText);
+    QCOMPARE(item->indexOfChild(richText), 5);
+    QVERIFY(!richText->state().editable);
+    QVERIFY(!richText->state().readOnly);
+
+    // Check for hyperlink child nodes
+    for (int i = 0; i < richText->childCount(); ++i) {
+        static const char *linkUrls[2][2] = {
+            {"Website", "https://qt.io"},
+            {"blog", "https://qt.io/blog"}
+        };
+        QAccessibleInterface *link1 = richText->child(i);
+        QVERIFY(link1);
+        QCOMPARE(link1->role(), QAccessible::Link);
+        QAccessibleHyperlinkInterface *link = link1->hyperlinkInterface();
+        QVERIFY(link);
+        QCOMPARE(link->anchor(), QLatin1String(linkUrls[i][0]));
+        QCOMPARE(link->anchorTarget(), QLatin1String(linkUrls[i][1]));
+    }
 
     // see if implicit changes back
     attached->setRole(QAccessible::EditableText);

@@ -4,13 +4,14 @@
 ## QTcpServerConnectionFactory Plugin:
 #####################################################################
 
-qt_internal_add_plugin(QTcpServerConnectionFactory
+qt_internal_add_plugin(QTcpServerConnectionFactoryPlugin
     OUTPUT_NAME qmldbg_tcp
+    CLASS_NAME QTcpServerConnectionFactory
     TYPE qmltooling
     SOURCES
         qtcpserverconnection.cpp
         qtcpserverconnectionfactory.h
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Network
         Qt::QmlPrivate
 )

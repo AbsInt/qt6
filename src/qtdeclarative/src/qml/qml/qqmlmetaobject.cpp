@@ -44,45 +44,6 @@
 
 QT_BEGIN_NAMESPACE
 
-static bool isNamedEnumeratorInScope(const QMetaObject *resolvedMetaObject, const QByteArray &scope,
-                                     const QByteArray &name)
-{
-    for (int i = resolvedMetaObject->enumeratorCount() - 1; i >= 0; --i) {
-        QMetaEnum m = resolvedMetaObject->enumerator(i);
-        if ((m.name() == name) && (scope.isEmpty() || (m.scope() == scope)))
-            return true;
-    }
-    return false;
-}
-
-static bool isNamedEnumerator(const QMetaObject *metaObj, const QByteArray &scopedName)
-{
-    QByteArray scope;
-    QByteArray name;
-    int scopeIdx = scopedName.lastIndexOf("::");
-    if (scopeIdx != -1) {
-        scope = scopedName.left(scopeIdx);
-        name = scopedName.mid(scopeIdx + 2);
-    } else {
-        name = scopedName;
-    }
-
-    if (scope == "Qt")
-        return isNamedEnumeratorInScope(&Qt::staticMetaObject, scope, name);
-
-    if (isNamedEnumeratorInScope(metaObj, scope, name))
-        return true;
-
-    if (metaObj->d.relatedMetaObjects && !scope.isEmpty()) {
-        for (auto related = metaObj->d.relatedMetaObjects; *related; ++related) {
-            if (isNamedEnumeratorInScope(*related, scope, name))
-                return true;
-        }
-    }
-
-    return false;
-}
-
 // Returns true if \a from is assignable to a property of type \a to
 bool QQmlMetaObject::canConvert(const QQmlMetaObject &from, const QQmlMetaObject &to)
 {
@@ -135,39 +96,25 @@ void QQmlMetaObject::resolveGadgetMethodOrPropertyIndex(QMetaObject::Call type, 
     *index -= offset;
 }
 
-int QQmlMetaObject::methodReturnType(const QQmlPropertyData &data, QByteArray *unknownTypeError) const
+QMetaType QQmlMetaObject::methodReturnType(const QQmlPropertyData &data, QByteArray *unknownTypeError) const
 {
     Q_ASSERT(_m && data.coreIndex() >= 0);
 
     QMetaType type = data.propType();
-
-    const char *propTypeName = nullptr;
-
     if (!type.isValid()) {
         // Find the return type name from the method info
-        QMetaMethod m = _m->method(data.coreIndex());
-
-        type = m.returnMetaType();
-        propTypeName = m.typeName();
+        type = _m->method(data.coreIndex()).returnMetaType();
     }
-
-    if (type.sizeOf() <= qsizetype(sizeof(int))) {
-        if (type.flags() & QMetaType::IsEnumeration)
-            return QMetaType::Int;
-
-        if (isNamedEnumerator(_m, propTypeName))
-            return QMetaType::Int;
-
-        if (!type.isValid()) {
-            if (unknownTypeError)
-                *unknownTypeError = propTypeName;
-        }
-    } // else we know that it's a known type, as sizeOf(UnknownType) == 0
-
-    return type.id();
+    if (type.flags().testFlag(QMetaType::IsEnumeration))
+        type = QMetaType::fromType<int>();
+    if (type.isValid())
+        return type;
+    else if (unknownTypeError)
+        *unknownTypeError = _m->method(data.coreIndex()).typeName();
+    return QMetaType();
 }
 
-int *QQmlMetaObject::methodParameterTypes(int index, ArgTypeStorage *argStorage,
+bool QQmlMetaObject::methodParameterTypes(int index, ArgTypeStorage *argStorage,
                                           QByteArray *unknownTypeError) const
 {
     Q_ASSERT(_m && index >= 0);
@@ -176,55 +123,33 @@ int *QQmlMetaObject::methodParameterTypes(int index, ArgTypeStorage *argStorage,
     return methodParameterTypes(m, argStorage, unknownTypeError);
 }
 
-int *QQmlMetaObject::constructorParameterTypes(int index, ArgTypeStorage *dummy,
+bool QQmlMetaObject::constructorParameterTypes(int index, ArgTypeStorage *dummy,
                                                      QByteArray *unknownTypeError) const
 {
     QMetaMethod m = _m->constructor(index);
     return methodParameterTypes(m, dummy, unknownTypeError);
 }
 
-int *QQmlMetaObject::methodParameterTypes(const QMetaMethod &m, ArgTypeStorage *argStorage,
+bool QQmlMetaObject::methodParameterTypes(const QMetaMethod &m, ArgTypeStorage *argStorage,
                                           QByteArray *unknownTypeError)
 {
     Q_ASSERT(argStorage);
 
     int argc = m.parameterCount();
-    argStorage->resize(argc + 1);
-    argStorage->operator[](0) = argc;
-    QList<QByteArray> argTypeNames; // Only loaded if needed
-
+    argStorage->resize(argc);
     for (int ii = 0; ii < argc; ++ii) {
-        int type = m.parameterType(ii);
-        if (QMetaType(type).sizeOf() > qsizetype(sizeof(int))) {
-            // Cannot be passed as int
-            // We know that it's a known type, as sizeOf(UnknownType) == 0
-        } else if (QMetaType(type).flags() & QMetaType::IsEnumeration) {
-            type = QMetaType::Int;
-        } else {
-            if (argTypeNames.isEmpty())
-                argTypeNames = m.parameterTypes();
-            // hack only needed in Qt 6.1 to access the metaobject of the metamethod
-            // In 6.2 this method has been refactored and does not need acccess to the metaobject
-            union HackyAccessor {
-                HackyAccessor(QMetaMethod method) : m(method) {}
-                QMetaMethod m;
-                struct {
-                    const QMetaObject *mobj = nullptr;
-                } accessor;
-            };
-            HackyAccessor hack { m };
-            if (isNamedEnumerator(hack.accessor.mobj, argTypeNames.at(ii))) {
-                type = QMetaType::Int;
-            } else if (type == QMetaType::UnknownType) {
-                if (unknownTypeError)
-                    *unknownTypeError = argTypeNames.at(ii);
-                return nullptr;
-            }
+        QMetaType type = m.parameterMetaType(ii);
+        // we treat enumerations as int
+        if (type.flags().testFlag(QMetaType::IsEnumeration))
+            type = QMetaType::fromType<int>();
+        if (!type.isValid()) {
+            if (unknownTypeError)
+                *unknownTypeError =  m.parameterTypeName(ii);
+            return false;
         }
-        argStorage->operator[](ii + 1) = type;
+        argStorage->operator[](ii) = type;
     }
-
-    return argStorage->data();
+    return true;
 }
 
 QT_END_NAMESPACE

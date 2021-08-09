@@ -42,6 +42,7 @@
 
 #include <QtQml/qtqmlglobal.h>
 #include <QtCore/qmetaobject.h>
+#include <QtQml/qqmlregistration.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -54,6 +55,12 @@ class QQmlEngine;
 class QQmlPropertyPrivate;
 class Q_QML_EXPORT QQmlProperty
 {
+    Q_GADGET
+    QML_ANONYMOUS
+    QML_ADDED_IN_VERSION(2, 15)
+
+    Q_PROPERTY(QObject *object READ object CONSTANT FINAL)
+    Q_PROPERTY(QString name READ name CONSTANT FINAL)
 public:
     enum PropertyTypeCategory {
         InvalidCategory,
@@ -114,6 +121,7 @@ public:
     bool connectNotifySignal(QObject *dest, int method) const;
 
     bool isWritable() const;
+    bool isBindable() const;
     bool isDesignable() const;
     bool isResettable() const;
     QObject *object() const;

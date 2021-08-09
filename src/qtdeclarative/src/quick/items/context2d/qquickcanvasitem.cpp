@@ -417,7 +417,7 @@ void QQuickCanvasItem::setCanvasSize(const QSizeF & size)
 
     By default the tileSize is the same as the canvasSize.
 
-    \obsolete This feature is incomplete. For details, see QTBUG-33129.
+    \deprecated This feature is incomplete. For details, see QTBUG-33129.
 
     \sa canvasSize, canvasWindow
 */
@@ -452,7 +452,7 @@ void QQuickCanvasItem::setTileSize(const QSize & size)
      can display different visible areas by changing the canvas windowSize
      and/or position.
 
-    \obsolete This feature is incomplete. For details, see QTBUG-33129
+    \deprecated This feature is incomplete. For details, see QTBUG-33129.
 
     \sa canvasSize, tileSize
 */
@@ -713,12 +713,12 @@ void QQuickCanvasItem::updatePolish()
         QV4::ExecutionEngine *v4 = qmlEngine(this)->handle();
         QV4::Scope scope(v4);
         QV4::ScopedFunctionObject function(scope);
-        QV4::JSCallData jsCall(scope, 1);
-        *jsCall->thisObject = QV4::QObjectWrapper::wrap(v4, this);
+        QV4::JSCallArguments jsCall(scope, 1);
+        *jsCall.thisObject = QV4::QObjectWrapper::wrap(v4, this);
 
         for (auto it = animationCallbacks.cbegin(), end = animationCallbacks.cend(); it != end; ++it) {
             function = it.value().value();
-            jsCall->args[0] = QV4::Value::fromUInt32(QDateTime::currentMSecsSinceEpoch());
+            jsCall.args[0] = QV4::Value::fromUInt32(QDateTime::currentMSecsSinceEpoch());
             function->call(jsCall);
         }
     }

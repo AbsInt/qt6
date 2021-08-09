@@ -356,6 +356,10 @@ void TextEdit::setupTextActions()
     actionTextColor = menu->addAction(pix, tr("&Color..."), this, &TextEdit::textColor);
     tb->addAction(actionTextColor);
 
+    const QIcon underlineColorIcon(rsrcPath + "/textundercolor.png");
+    actionUnderlineColor = menu->addAction(underlineColorIcon, tr("Underline color..."), this, &TextEdit::underlineColor);
+    tb->addAction(actionUnderlineColor);
+
     menu->addSeparator();
 
     const QIcon checkboxIcon = QIcon::fromTheme("status-checkbox-checked", QIcon(rsrcPath + "/checkbox-checked.png"));
@@ -609,7 +613,7 @@ void TextEdit::textItalic()
 void TextEdit::textFamily(const QString &f)
 {
     QTextCharFormat fmt;
-    fmt.setFontFamily(f);
+    fmt.setFontFamilies({f});
     mergeFormatOnWordOrSelection(fmt);
 }
 
@@ -714,6 +718,17 @@ void TextEdit::textColor()
         return;
     QTextCharFormat fmt;
     fmt.setForeground(col);
+    mergeFormatOnWordOrSelection(fmt);
+    colorChanged(col);
+}
+
+void TextEdit::underlineColor()
+{
+    QColor col = QColorDialog::getColor(Qt::black, this);
+    if (!col.isValid())
+        return;
+    QTextCharFormat fmt;
+    fmt.setUnderlineColor(col);
     mergeFormatOnWordOrSelection(fmt);
     colorChanged(col);
 }

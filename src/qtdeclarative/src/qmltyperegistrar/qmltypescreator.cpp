@@ -55,6 +55,9 @@ void QmlTypesCreator::writeClassProperties(const QmlTypesClassDescription &colle
     if (!collector.defaultProp.isEmpty())
         m_qml.writeScriptBinding(QLatin1String("defaultProperty"), enquote(collector.defaultProp));
 
+    if (!collector.parentProp.isEmpty())
+        m_qml.writeScriptBinding(QLatin1String("parentProperty"), enquote(collector.parentProp));
+
     if (!collector.superClass.isEmpty())
         m_qml.writeScriptBinding(QLatin1String("prototype"), enquote(collector.superClass));
 
@@ -103,14 +106,16 @@ void QmlTypesCreator::writeClassProperties(const QmlTypesClassDescription &colle
     if (collector.isSingleton)
         m_qml.writeScriptBinding(QLatin1String("isSingleton"), QLatin1String("true"));
 
+    if (collector.hasCustomParser)
+        m_qml.writeScriptBinding(QLatin1String("hasCustomParser"), QLatin1String("true"));
+
     m_qml.writeArrayBinding(QLatin1String("exportMetaObjectRevisions"), metaObjects);
 
     if (!collector.attachedType.isEmpty())
         m_qml.writeScriptBinding(QLatin1String("attachedType"), enquote(collector.attachedType));
 }
 
-void QmlTypesCreator::writeType(const QJsonObject &property, const QString &key, bool isReadonly,
-                                bool parsePointer)
+void QmlTypesCreator::writeType(const QJsonObject &property, const QString &key, bool parsePointer)
 {
     auto it = property.find(key);
     if (it == property.end())
@@ -158,15 +163,13 @@ void QmlTypesCreator::writeType(const QJsonObject &property, const QString &key,
     const QLatin1String trueString("true");
     if (isList)
         m_qml.writeScriptBinding(QLatin1String("isList"), trueString);
-    if (isReadonly)
-        m_qml.writeScriptBinding(QLatin1String("isReadonly"), trueString);
     if (isPointer)
         m_qml.writeScriptBinding(QLatin1String("isPointer"), trueString);
 }
 
-void QmlTypesCreator::writeProperties(const QJsonArray &properties, QSet<QString> &notifySignals)
+void QmlTypesCreator::writeProperties(const QJsonArray &properties)
 {
-    for (const QJsonValue &property : properties) {
+    for (const QJsonValue property : properties) {
         const QJsonObject obj = property.toObject();
         const QString name = obj[QLatin1String("name")].toString();
         m_qml.writeStartObject(QLatin1String("Property"));
@@ -174,48 +177,67 @@ void QmlTypesCreator::writeProperties(const QJsonArray &properties, QSet<QString
         const auto it = obj.find(QLatin1String("revision"));
         if (it != obj.end())
             m_qml.writeScriptBinding(QLatin1String("revision"), QString::number(it.value().toInt()));
-        const auto bindable = obj.constFind(QLatin1String("bindable"));
-        if (bindable != obj.constEnd())
-            m_qml.writeScriptBinding(QLatin1String("bindable"), enquote(bindable->toString()));
-        writeType(obj, QLatin1String("type"), !obj.contains(QLatin1String("write")), true);
-        const auto read = obj.constFind(QLatin1String("read"));
-        if (read != obj.constEnd())
-             m_qml.writeScriptBinding(QLatin1String("read"), enquote(read->toString()));
-        const auto write = obj.constFind(QLatin1String("write"));
-        if (write != obj.constEnd())
-             m_qml.writeScriptBinding(QLatin1String("write"), enquote(write->toString()));
-        m_qml.writeEndObject();
 
-        const QString notify = obj[QLatin1String("notify")].toString();
-        if (notify == name + QLatin1String("Changed"))
-            notifySignals.insert(notify);
+        writeType(obj, QLatin1String("type"), true);
+
+        if (!obj.contains(QStringLiteral("privateClass"))) {
+            const auto bindable = obj.constFind(QLatin1String("bindable"));
+            if (bindable != obj.constEnd())
+                m_qml.writeScriptBinding(QLatin1String("bindable"), enquote(bindable->toString()));
+            const auto read = obj.constFind(QLatin1String("read"));
+            if (read != obj.constEnd())
+                 m_qml.writeScriptBinding(QLatin1String("read"), enquote(read->toString()));
+            const auto write = obj.constFind(QLatin1String("write"));
+            if (write != obj.constEnd())
+                 m_qml.writeScriptBinding(QLatin1String("write"), enquote(write->toString()));
+            const auto notify = obj.constFind(QLatin1String("notify"));
+            if (notify != obj.constEnd())
+                m_qml.writeScriptBinding(QLatin1String("notify"), enquote(notify->toString()));
+            const auto index = obj.constFind(QLatin1String("index"));
+            if (index != obj.constEnd())
+                m_qml.writeScriptBinding(QLatin1String("index"),
+                                         QString::number(index.value().toInt()));
+        }
+
+        if (!obj.contains(QLatin1String("write")) && !obj.contains(QLatin1String("member")))
+            m_qml.writeScriptBinding(QLatin1String("isReadonly"), QLatin1String("true"));
+
+        const auto final = obj.constFind(QLatin1String("final"));
+        if (final != obj.constEnd() && final->toBool())
+            m_qml.writeScriptBinding(QLatin1String("isFinal"), QLatin1String("true"));
+
+        const auto required = obj.constFind(QLatin1String("required"));
+        if (required != obj.constEnd() && required->toBool())
+            m_qml.writeScriptBinding(QLatin1String("isRequired"), QLatin1String("true"));
+
+        m_qml.writeEndObject();
     }
 }
 
-void QmlTypesCreator::writeMethods(const QJsonArray &methods, const QString &type,
-                                   const QSet<QString> &notifySignals)
+void QmlTypesCreator::writeMethods(const QJsonArray &methods, const QString &type)
 {
-    for (const QJsonValue &method : methods) {
+    for (const QJsonValue method : methods) {
         const QJsonObject obj = method.toObject();
         const QString name = obj[QLatin1String("name")].toString();
         if (name.isEmpty())
             continue;
         const QJsonArray arguments = method[QLatin1String("arguments")].toArray();
         const auto revision = obj.find(QLatin1String("revision"));
-        if (notifySignals.contains(name) && arguments.isEmpty() && revision == obj.end())
-            continue;
         m_qml.writeStartObject(type);
         m_qml.writeScriptBinding(QLatin1String("name"), enquote(name));
         if (revision != obj.end())
             m_qml.writeScriptBinding(QLatin1String("revision"), QString::number(revision.value().toInt()));
-        writeType(obj, QLatin1String("returnType"), false, false);
-        for (const QJsonValue &argument : arguments) {
+        writeType(obj, QLatin1String("returnType"), false);
+        const auto isConstructor = obj.find(QLatin1String("isConstructor"));
+        if (isConstructor != obj.constEnd() && isConstructor->toBool())
+            m_qml.writeScriptBinding(QLatin1String("isConstructor"), QLatin1String("true"));
+        for (const QJsonValue argument : arguments) {
             const QJsonObject obj = argument.toObject();
             m_qml.writeStartObject(QLatin1String("Parameter"));
             const QString name = obj[QLatin1String("name")].toString();
             if (!name.isEmpty())
                 m_qml.writeScriptBinding(QLatin1String("name"), enquote(name));
-            writeType(obj, QLatin1String("type"), false, true);
+            writeType(obj, QLatin1String("type"), true);
             m_qml.writeEndObject();
         }
         m_qml.writeEndObject();
@@ -224,12 +246,12 @@ void QmlTypesCreator::writeMethods(const QJsonArray &methods, const QString &typ
 
 void QmlTypesCreator::writeEnums(const QJsonArray &enums)
 {
-    for (const QJsonValue &item : enums) {
+    for (const QJsonValue item : enums) {
         const QJsonObject obj = item.toObject();
         const QJsonArray values = obj.value(QLatin1String("values")).toArray();
         QStringList valueList;
 
-        for (const QJsonValue &value : values)
+        for (const QJsonValue value : values)
             valueList.append(enquote(value.toString()));
 
         m_qml.writeStartObject(QLatin1String("Enum"));
@@ -264,7 +286,7 @@ static QJsonArray members(const QJsonObject *classDef,
     QJsonArray classDefMembers;
 
     const QJsonArray candidates = classDef->value(key).toArray();
-    for (const QJsonValue &member : candidates) {
+    for (const QJsonValue member : candidates) {
         if (isAllowedInMajorVersion(member, maxMajorVersion))
             classDefMembers.append(member);
     }
@@ -299,7 +321,7 @@ void QmlTypesCreator::writeComponents()
     const QLatin1String intType("int");
     const QLatin1String stringType("string");
 
-    auto writeRootClass = [&](const QJsonObject *classDef, const QSet<QString> &notifySignals) {
+    auto writeRootClass = [&](const QJsonObject *classDef) {
         // Hide destroyed() signals
         QJsonArray componentSignals = members(classDef, signalsKey, m_version);
         for (auto it = componentSignals.begin(); it != componentSignals.end();) {
@@ -308,12 +330,12 @@ void QmlTypesCreator::writeComponents()
             else
                 ++it;
         }
-        writeMethods(componentSignals, signalElement, notifySignals);
+        writeMethods(componentSignals, signalElement);
 
         // Hide deleteLater() methods
         QJsonArray componentMethods = members(classDef, methodsKey, m_version);
         const QJsonArray componentSlots = members(classDef, slotsKey, m_version);
-        for (const QJsonValue &componentSlot : componentSlots)
+        for (const QJsonValue componentSlot : componentSlots)
             componentMethods.append(componentSlot);
         for (auto it = componentMethods.begin(); it != componentMethods.end();) {
             if (it->toObject().value(nameKey).toString() == deleteLaterName)
@@ -362,14 +384,12 @@ void QmlTypesCreator::writeComponents()
         if (const QJsonObject *classDef = collector.resolvedClass) {
             writeEnums(members(classDef, enumsKey, m_version));
 
-            QSet<QString> notifySignals;
-            writeProperties(members(classDef, propertiesKey, m_version), notifySignals);
+            writeProperties(members(classDef, propertiesKey, m_version));
 
             if (collector.isRootClass) {
-                writeRootClass(classDef, notifySignals);
+                writeRootClass(classDef);
             } else {
-                writeMethods(members(classDef, signalsKey, m_version), signalElement,
-                             notifySignals);
+                writeMethods(members(classDef, signalsKey, m_version), signalElement);
                 writeMethods(members(classDef, slotsKey, m_version), methodElement);
                 writeMethods(members(classDef, methodsKey, m_version), methodElement);
             }
@@ -393,11 +413,9 @@ void QmlTypesCreator::writeComponents()
             writeClassProperties(collector);
             writeEnums(members(&component, enumsKey, m_version));
 
-            QSet<QString> notifySignals;
-            writeProperties(members(&component, propertiesKey, m_version), notifySignals);
+            writeProperties(members(&component, propertiesKey, m_version));
 
-            writeMethods(members(&component, signalsKey, m_version), signalElement,
-                         notifySignals);
+            writeMethods(members(&component, signalsKey, m_version), signalElement);
             writeMethods(members(&component, slotsKey, m_version), methodElement);
             writeMethods(members(&component, methodsKey, m_version), methodElement);
 

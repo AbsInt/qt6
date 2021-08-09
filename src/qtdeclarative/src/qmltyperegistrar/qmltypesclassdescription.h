@@ -42,6 +42,7 @@ struct QmlTypesClassDescription
     QString className;
     QString elementName;
     QString defaultProp;
+    QString parentProp;
     QString superClass;
     QString attachedType;
     QString extensionType;
@@ -53,6 +54,7 @@ struct QmlTypesClassDescription
     bool isCreatable = true;
     bool isSingleton = false;
     bool isRootClass = false;
+    bool hasCustomParser = false;
     QStringList implementsInterfaces;
 
     enum CollectMode {

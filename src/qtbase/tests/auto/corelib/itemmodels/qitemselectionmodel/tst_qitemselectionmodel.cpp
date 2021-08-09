@@ -27,6 +27,7 @@
 ****************************************************************************/
 
 #include <QTest>
+#include <QtTest/private/qpropertytesthelper_p.h>
 #include <QSignalSpy>
 
 #include <QtGui/QtGui>
@@ -85,6 +86,8 @@ private slots:
     void deselectRemovedMiddleRange();
     void setModel();
 
+    void bindableModel();
+
     void testDifferentModels();
 
     void testValidRangesInSelectionsAfterReset();
@@ -99,6 +102,8 @@ private slots:
 
     void QTBUG18001_data();
     void QTBUG18001();
+
+    void QTBUG93305();
 
 private:
     QAbstractItemModel *model;
@@ -2065,8 +2070,10 @@ void tst_QItemSelectionModel::unselectable()
     selectionModel.select(QItemSelection(model.index(0, 0), model.index(9, 0)), QItemSelectionModel::Select);
     QCOMPARE(selectionModel.selectedIndexes().count(), 10);
     QCOMPARE(selectionModel.selectedRows().count(), 10);
+    QVERIFY(selectionModel.hasSelection());
     for (int j = 0; j < 10; ++j)
         model.item(j)->setFlags({ });
+    QVERIFY(!selectionModel.hasSelection());
     QCOMPARE(selectionModel.selectedIndexes().count(), 0);
     QCOMPARE(selectionModel.selectedRows().count(), 0);
 }
@@ -2433,6 +2440,29 @@ void tst_QItemSelectionModel::setModel()
     QVERIFY(!sel.selection().isEmpty());
     sel.setModel(0);
     QVERIFY(sel.selection().isEmpty());
+}
+
+void tst_QItemSelectionModel::bindableModel()
+{
+    QItemSelectionModel sel;
+    QVERIFY(!sel.model());
+
+    std::unique_ptr<QStringListModel> firstModel(
+            new QStringListModel(QStringList { "Some", "random", "content" }));
+    std::unique_ptr<QStringListModel> changedModel(
+            new QStringListModel(QStringList { "Other", "random", "content" }));
+
+    QTestPrivate::testReadWritePropertyBasics<QItemSelectionModel, QAbstractItemModel *>(
+            sel, firstModel.get(), changedModel.get(), "model");
+    if (QTest::currentTestFailed()) {
+        qDebug("Failed property test for QItemSelectionModel::model");
+        return;
+    }
+
+    // check that model is set to nullptr when the object pointed to is deleted:
+    sel.setModel(firstModel.get());
+    firstModel.reset();
+    QCOMPARE(sel.model(), nullptr);
 }
 
 void tst_QItemSelectionModel::testDifferentModels()
@@ -2869,6 +2899,47 @@ void tst_QItemSelectionModel::QTBUG18001()
        QVERIFY2(expected == actual, description.data());
     }
 
+}
+
+void tst_QItemSelectionModel::QTBUG93305()
+{
+    // make sure the model is sane (5x5)
+    QCOMPARE(model->rowCount(QModelIndex()), 5);
+    QCOMPARE(model->columnCount(QModelIndex()), 5);
+
+    QSignalSpy spy(selection, &QItemSelectionModel::selectionChanged);
+
+    // select in row 1
+    QModelIndex index = model->index(1, 0, QModelIndex());
+    selection->select(index, QItemSelectionModel::ClearAndSelect);
+    QVERIFY(selection->hasSelection());
+    QCOMPARE(spy.count(), 1);
+
+    // removing row 0 does not change which cells are selected, but it
+    // does change the row number of the selected cells. Thus it changes
+    // what selectedIndexes() returns.
+    // The property selectedIndexes() has selectionChanged() as its
+    // NOTIFY signal, so selectionChanged() should be emitted.
+
+    // delete row 0
+    model->removeRows(0, 1, QModelIndex());
+    QVERIFY(selection->hasSelection());
+    QCOMPARE(spy.count(), 2);
+
+    // inserting a row before the first row again does not change which cells
+    // are selected, but does change the row number of the selected cells.
+    // This changes what selectedIndexes() returns and should thus trigger
+    // a selectionChanged() signal
+
+    // insert row 0 again
+    model->insertRows(0, 1, QModelIndex());
+    QVERIFY(selection->hasSelection());
+    QCOMPARE(spy.count(), 3);
+
+    // test for inserting multiple (6) rows
+    model->insertRows(0, 6, QModelIndex());
+    QVERIFY(selection->hasSelection());
+    QCOMPARE(spy.count(), 4);
 }
 
 QTEST_MAIN(tst_QItemSelectionModel)

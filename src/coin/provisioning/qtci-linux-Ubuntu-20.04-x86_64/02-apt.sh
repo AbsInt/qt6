@@ -55,6 +55,9 @@ function set_internal_repo {
     deb [arch=amd64] http://repo-clones.ci.qt.io/apt-mirror/mirror/ubuntu/ focal-updates main restricted universe multiverse
     deb [arch=amd64] http://repo-clones.ci.qt.io/apt-mirror/mirror/ubuntu/ focal-backports main restricted universe
     deb [arch=amd64] http://repo-clones.ci.qt.io/apt-mirror/mirror/ubuntu/ focal-security main restricted universe multiverse
+    deb [arch=i386] http://repo-clones.ci.qt.io/apt-mirror/mirror/ubuntu/ focal main restricted
+    deb [arch=i386] http://repo-clones.ci.qt.io/apt-mirror/mirror/ubuntu/ focal-updates main restricted
+    deb [arch=i386] http://repo-clones.ci.qt.io/apt-mirror/mirror/ubuntu/ focal universe
 EOC
 }
 
@@ -83,6 +86,9 @@ installPackages+=(libdbus-1-dev)
 installPackages+=(libudev-dev)
 installPackages+=(libegl1-mesa-dev)
 installPackages+=(libfontconfig1-dev)
+installPackages+=(libgbm-dev)
+installPackages+=(libxkbfile-dev)
+installPackages+=(libxshmfence-dev)
 installPackages+=(libxss-dev)
 installPackages+=(nodejs)
 # NOTE! Can't install nodejs-dev because libssl1.0-dev conflicts with libssl1.0-dev which is depandency of nodejs-dev.
@@ -111,6 +117,10 @@ installPackages+=(libgstreamer1.0-dev)
 installPackages+=(libgstreamer-plugins-base1.0-dev)
 installPackages+=(libgstreamer-plugins-good1.0-dev)
 installPackages+=(libgstreamer-plugins-bad1.0-dev)
+installPackages+=(libgstreamer-gl1.0-0)
+installPackages+=(gir1.2-gst-plugins-base-1.0)
+installPackages+=(gir1.2-gst-plugins-bad-1.0)
+
 # Support for cross-building to x86 (needed by WebEngine boot2qt builds)
 installPackages+=(g++-multilib)
 # python3 development package
@@ -126,6 +136,11 @@ installPackages+=(mesa-common-dev)
 installPackages+=(libgl1-mesa-glx)
 installPackages+=(libgl1-mesa-dev)
 installPackages+=(libegl1-mesa-dev)
+installPackages+=(libegl1)
+installPackages+=(libegl-mesa0)
+installPackages+=(libegl-dev)
+installPackages+=(libglvnd-dev)
+installPackages+=(libgles2-mesa-dev)
 installPackages+=(curl)
 installPackages+=(libicu-dev)
 installPackages+=(zlib1g-dev)
@@ -139,7 +154,6 @@ installPackages+=(libxcomposite-dev)
 installPackages+=(libxdamage-dev)
 installPackages+=(libxrandr-dev)
 installPackages+=(libfontconfig1-dev)
-installPackages+=(libxss-dev)
 installPackages+=(libsrtp2-dev)
 installPackages+=(libwebp-dev)
 installPackages+=(libjsoncpp-dev)
@@ -192,6 +206,18 @@ installPackages+=(diffstat)
 installPackages+=(binfmt-support)
 # Vulkan is needed for examples
 installPackages+=(libvulkan-dev)
+# Needed for qtdltlogging
+installPackages+=(libdlt-dev)
+# For integrity
+installPackages+=(libc6:i386)
+installPackages+=(libncurses5:i386)
+installPackages+=(libstdc++6:i386)
+installPackages+=(libx11-6:i386)
+installPackages+=(lib32z1)
+installPackages+=(linux-libc-dev:i386)
+installPackages+=(libxcursor1:i386)
+installPackages+=(libc6-dev-i386)
+sudo dpkg --add-architecture i386
 
 echo "Running update for apt"
 waitLoop

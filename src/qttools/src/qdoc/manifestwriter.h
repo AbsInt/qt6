@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2020 The Qt Company Ltd.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the tools applications of the Qt Toolkit.
@@ -41,9 +41,9 @@ class ManifestWriter
 {
     struct ManifestMetaFilter
     {
-        QSet<QString> names;
-        QSet<QString> attributes;
-        QSet<QString> tags;
+        QSet<QString> m_names {};
+        QSet<QString> m_attributes {};
+        QSet<QString> m_tags {};
     };
 
 public:

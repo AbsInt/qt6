@@ -44,6 +44,22 @@ cmake_minimum_required(VERSION 3.14)
 
 project(cmake_usage_tests)
 
+# Building the CMake tests as part of a Qt prefix build + in-tree tests, currently doesn't work.
+# Each CMake test will fail with a message like
+#
+# CMake Error at qtbase/lib/cmake/Qt6/Qt6Config.cmake:33 (include):
+#   include could not find load file:
+#    qtbase/lib/cmake/Qt6/Qt6Targets.cmake
+#
+# That's because the Qt packages are not installed, and we try to load the Config files from the
+# build dir, but they can't work in a prefix build without installation.
+# Configuring the tests as standalone tests or as a separate project works fine.
+# Configuring the tests in-tree also works fine in a non-prefix build.
+if(QT_REPO_MODULE_VERSION AND NOT QT_BUILD_STANDALONE_TESTS AND QT_WILL_INSTALL)
+    message(WARNING
+        "Skipping building CMake build tests because they don't work in a prefix in-tree config")
+endif()
+
 enable_testing()
 
 # Most of the tests fail to build on Boot2qt / qemu with undefined references to QtDBus because
@@ -69,13 +85,10 @@ find_package(Qt6 REQUIRED COMPONENTS ${required_packages})
 find_package(Qt6 OPTIONAL_COMPONENTS ${optional_packages})
 
 # Setup common test variables which were previously set by ctest_testcase_common.prf.
-set(CMAKE_MODULES_UNDER_TEST "${required_packages}")
-foreach(qt_package ${optional_packages})
-    set(package_name "${QT_CMAKE_EXPORT_NAMESPACE}${qt_package}")
-    list(APPEND CMAKE_MODULES_UNDER_TEST "${qt_package}")
-endforeach()
+set(CMAKE_MODULES_UNDER_TEST "${required_packages}" ${optional_packages})
 
 foreach(qt_package ${CMAKE_MODULES_UNDER_TEST})
+    set(package_name "${QT_CMAKE_EXPORT_NAMESPACE}${qt_package}")
     if(${package_name}_FOUND)
         set(CMAKE_${qt_package}_MODULE_MAJOR_VERSION "${${package_name}_VERSION_MAJOR}")
         set(CMAKE_${qt_package}_MODULE_MINOR_VERSION "${${package_name}_VERSION_MINOR}")
@@ -108,26 +121,18 @@ _qt_internal_test_expect_pass(test_platform_defs_include)
 _qt_internal_test_expect_pass(test_qtmainwin_library)
 
 if (CMAKE_GENERATOR STREQUAL Ninja AND UNIX AND NOT WIN32)
-    set(qfindtestdata_build_dir "${CMAKE_CURRENT_SOURCE_DIR}/test_QFINDTESTDATA/build")
-    add_test(test_QFINDTESTDATA ${CMAKE_CTEST_COMMAND}
-      --build-and-test
-      "${CMAKE_CURRENT_SOURCE_DIR}/test_QFINDTESTDATA"
-      # Build in a subdir of the source dir.
-      # This causes Ninja to use relative paths.
-      "${qfindtestdata_build_dir}"
-      --build-config "${CMAKE_BUILD_TYPE}"
-      --build-generator "${CMAKE_GENERATOR}"
-      --build-makeprogram "${CMAKE_MAKE_PROGRAM}"
-      --build-options "-DCMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}" ${BUILD_OPTIONS_LIST}
+    _qt_internal_test_expect_pass(test_QFINDTESTDATA
+        BINARY "tests/test_QFINDTESTDATA"
+        SIMULATE_IN_SOURCE
     )
-    set_tests_properties(test_QFINDTESTDATA   PROPERTIES FIXTURES_SETUP    QFINDTESTDATA)
-
-    add_test(NAME run_test_QFINDTESTDATA COMMAND sh -c "cd \"${qfindtestdata_build_dir}/tests\" && ./test_QFINDTESTDATA -v2")
-    set_tests_properties(run_test_QFINDTESTDATA PROPERTIES FIXTURES_REQUIRED QFINDTESTDATA)
-
-    # source dir should be untouched by build, so remove build results
-    add_test(NAME cleanup_test_QFINDTESTDATA COMMAND sh -c "rm -rf \"${qfindtestdata_build_dir}\"")
-    set_tests_properties(cleanup_test_QFINDTESTDATA PROPERTIES FIXTURES_CLEANUP QFINDTESTDATA)
+    # TODO: Decide if there's a reason to keep this test. With CMake 3.21.0 which passes absolute
+    # source file paths to the compiler (instead of relative ones), specifying a custom
+    # QT_TESTCASE_BUILDDIR is a no-op, which fails the test's preconditions.
+    # See QTBUG-95268.
+    #_qt_internal_test_expect_pass(test_QT_TESTCASE_BUILDDIR
+    #    BINARY "test_qt_testcase_builddir"
+    #    SIMULATE_IN_SOURCE
+    #)
 endif()
 
 if (NOT NO_DBUS)
@@ -220,14 +225,43 @@ if(NOT NO_WIDGETS)
     _qt_internal_test_expect_pass(test_QTBUG-63422)
 endif()
 
-# FIXME: Needs porting of the qmake .pro files to create the modules and plugins in Qt6 CMake land.
-# _qt_internal_test_expect_pass(test_import_plugins BINARY ${CMAKE_CTEST_COMMAND})
+# Find main Qt installation location and bin dir.
+if(QT_BUILD_INTERNALS_RELOCATABLE_INSTALL_PREFIX)
+    set(qt_install_prefix "${QT_BUILD_INTERNALS_RELOCATABLE_INSTALL_PREFIX}")
+elseif(QT6_INSTALL_PREFIX)
+    set(qt_install_prefix "${QT6_INSTALL_PREFIX}")
+endif()
+if(INSTALL_BINDIR)
+    set(qt_install_bin_dir "${INSTALL_BINDIR}")
+elseif(QT6_INSTALL_BINS)
+    set(qt_install_bin_dir "${QT6_INSTALL_BINS}")
+endif()
+
+# Test building and installing a few dummy Qt modules and plugins.
+_qt_internal_test_expect_pass(mockplugins
+    BINARY "${CMAKE_COMMAND}"
+    BINARY_ARGS
+    "-DQT_BUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}/mockplugins"
+    -P "${qt_install_prefix}/${qt_install_bin_dir}/qt-cmake-private-install.cmake")
+set_tests_properties(mockplugins PROPERTIES FIXTURES_SETUP build_mockplugins)
+
+# Test importing the plugins built in the project above.
+_qt_internal_test_expect_pass(test_import_plugins BINARY ${CMAKE_CTEST_COMMAND} BINARY_ARGS -V)
+set_tests_properties(test_import_plugins PROPERTIES FIXTURES_REQUIRED build_mockplugins)
+
 _qt_internal_test_expect_pass(test_versionless_targets)
+
+if(NOT NO_GUI)
+  _qt_internal_test_expect_pass(test_global_promotion)
+endif()
 
 _qt_internal_test_expect_pass(test_add_resources_binary_generated
                               BINARY test_add_resources_binary_generated)
 
 include(test_plugin_shared_static_flavor.cmake)
-
 _qt_internal_test_expect_pass(tst_qaddpreroutine
                               BINARY tst_qaddpreroutine)
+
+_qt_internal_test_expect_pass(test_static_resources
+                              BINARY "${CMAKE_CTEST_COMMAND}"
+                              BINARY_ARGS "-V")

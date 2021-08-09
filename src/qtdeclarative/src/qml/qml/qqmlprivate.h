@@ -73,7 +73,7 @@
 QT_BEGIN_NAMESPACE
 
 class QQmlPropertyValueInterceptor;
-class QQmlContext;
+class QQmlContextData;
 
 namespace QQmlPrivate {
 struct CachedQmlUnit;
@@ -83,9 +83,9 @@ using QQmlAttachedPropertiesFunc = A *(*)(QObject *);
 
 namespace QV4 {
 struct ExecutionEngine;
+class ExecutableCompilationUnit;
 namespace CompiledData {
 struct Unit;
-struct CompilationUnit;
 }
 }
 namespace QmlIR {
@@ -603,13 +603,83 @@ namespace QQmlPrivate
     };
 
     struct Q_QML_EXPORT AOTCompiledContext {
-        QQmlContext *qmlContext;
+        QQmlContextData *qmlContext;
         QObject *qmlScopeObject;
         QJSEngine *engine;
-        QV4::CompiledData::CompilationUnit *compilationUnit;
+        QV4::ExecutableCompilationUnit *compilationUnit;
+
+        QQmlEngine *qmlEngine() const;
 
         QJSValue jsMetaType(int index) const;
         void setInstructionPointer(int offset) const;
+        void setReturnValueUndefined() const;
+
+        // Run QQmlPropertyCapture::captureProperty() without retrieving the value.
+        bool captureLookup(uint index, QObject *object) const;
+        bool captureQmlContextPropertyLookup(uint index) const;
+        QMetaType lookupResultMetaType(uint index) const;
+        void storeNameSloppy(uint nameIndex, void *value, QMetaType type) const;
+
+        // All of these lookup functions should be used as follows:
+        //
+        // while (!fooBarLookup(...)) {
+        //     setInstructionPointer(...);
+        //     initFooBarLookup(...);
+        //     if (engine->hasException()) {
+        //         ...
+        //         break;
+        //     }
+        // }
+        //
+        // The bool-returning *Lookup functions exclusively run the happy path and return false if
+        // that fails in any way. The failure may either be in the lookup structs not being
+        // initialized or an exception being thrown.
+        // The init*Lookup functions initialize the lookup structs and amend any exceptions
+        // previously thrown with line numbers. They might also throw their own exceptions. If an
+        // exception is present after the initialization there is no way to carry out the lookup and
+        // the exception should be propagated. If not, the original lookup can be tried again.
+
+        bool callQmlContextPropertyLookup(
+                uint index, void **args, const QMetaType *types, int argc) const;
+        void initCallQmlContextPropertyLookup(uint index) const;
+
+        bool loadContextIdLookup(uint index, void *target) const;
+        void initLoadContextIdLookup(uint index) const;
+
+        bool callObjectPropertyLookup(uint index, QObject *object,
+                                      void **args, const QMetaType *types, int argc) const;
+        void initCallObjectPropertyLookup(uint index) const;
+
+        bool callGlobalLookup(uint index, void **args, const QMetaType *types, int argc) const;
+        void initCallGlobalLookup(uint index) const;
+
+        bool loadGlobalLookup(uint index, void *target, QMetaType type) const;
+        void initLoadGlobalLookup(uint index) const;
+
+        bool loadScopeObjectPropertyLookup(uint index, void *target) const;
+        void initLoadScopeObjectPropertyLookup(uint index, QMetaType type) const;
+
+        bool loadTypeLookup(uint index, void *target) const;
+        void initLoadTypeLookup(uint index) const;
+
+        bool loadAttachedLookup(uint index, QObject *object, void *target) const;
+        void initLoadAttachedLookup(uint index, QObject *object) const;
+
+        bool getObjectLookup(uint index, QObject *object, void *target) const;
+        void initGetObjectLookup(uint index, QObject *object, QMetaType type) const;
+
+        bool getValueLookup(uint index, void *value, void *target) const;
+        void initGetValueLookup(uint index, const QMetaObject *metaObject, QMetaType type) const;
+
+        bool getEnumLookup(uint index, int *target) const;
+        void initGetEnumLookup(uint index, const QMetaObject *metaObject,
+                               const char *enumerator, const char *enumValue) const;
+
+        bool setObjectLookup(uint index, QObject *object, void *value) const;
+        void initSetObjectLookup(uint index, QObject *object, QMetaType type) const;
+
+        bool setValueLookup(uint index, void *target, void *value) const;
+        void initSetValueLookup(uint index, const QMetaObject *metaObject, QMetaType type) const;
     };
 
     struct AOTCompiledFunction {
@@ -655,13 +725,16 @@ namespace QQmlPrivate
         bool alreadyCalled = false;
     };
 
-    static int indexOfOwnClassInfo(const QMetaObject *metaObject, const char *key)
+    static int indexOfOwnClassInfo(const QMetaObject *metaObject, const char *key, int startOffset = -1)
     {
         if (!metaObject || !key)
             return -1;
 
         const int offset = metaObject->classInfoOffset();
-        for (int i = metaObject->classInfoCount() + offset - 1; i >= offset; --i)
+        const int start = (startOffset == -1)
+                ? (metaObject->classInfoCount() + offset - 1)
+                : startOffset;
+        for (int i = start; i >= offset; --i)
             if (qstrcmp(key, metaObject->classInfo(i).name()) == 0) {
                 return i;
         }
@@ -680,6 +753,17 @@ namespace QQmlPrivate
         return (index == -1) ? defaultValue
                              : QTypeRevision::fromEncodedVersion(
                                    QByteArray(metaObject->classInfo(index).value()).toInt());
+    }
+
+    inline QList<QTypeRevision> revisionClassInfos(const QMetaObject *metaObject, const char *key)
+    {
+        QList<QTypeRevision> revisions;
+        for (int index = indexOfOwnClassInfo(metaObject, key); index != -1;
+             index = indexOfOwnClassInfo(metaObject, key, index - 1)) {
+            revisions.push_back(QTypeRevision::fromEncodedVersion(
+                          QByteArray(metaObject->classInfo(index).value()).toInt()));
+        }
+        return revisions;
     }
 
     inline bool boolClassInfo(const QMetaObject *metaObject, const char *key,
@@ -878,6 +962,9 @@ namespace QQmlPrivate
             &qmlCreateCustomParser<T>,
             qmlTypeIds
         };
+
+        // Initialize the extension so that we can find it by name or ID.
+        qMetaTypeId<E>();
 
         qmlregister(TypeAndRevisionsRegistration, &type);
     }

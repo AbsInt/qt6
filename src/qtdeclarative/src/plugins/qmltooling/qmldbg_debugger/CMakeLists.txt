@@ -4,8 +4,9 @@
 ## QQmlDebuggerServiceFactory Plugin:
 #####################################################################
 
-qt_internal_add_plugin(QQmlDebuggerServiceFactory
+qt_internal_add_plugin(QQmlDebuggerServiceFactoryPlugin
     OUTPUT_NAME qmldbg_debugger
+    CLASS_NAME QQmlDebuggerServiceFactory
     TYPE qmltooling
     SOURCES
         qqmldebuggerservicefactory.cpp qqmldebuggerservicefactory.h
@@ -16,7 +17,7 @@ qt_internal_add_plugin(QQmlDebuggerServiceFactory
         qv4debuggeragent.cpp qv4debuggeragent.h
         qv4debugjob.cpp qv4debugjob.h
         qv4debugservice.cpp qv4debugservice.h
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::CorePrivate
         Qt::PacketProtocolPrivate
         Qt::QmlPrivate

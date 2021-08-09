@@ -14,6 +14,7 @@ if(NOT DEFINED INSTALL_EXAMPLESDIR)
 endif()
 
 set(INSTALL_EXAMPLEDIR "${INSTALL_EXAMPLESDIR}/quick/customitems/painteditem/TextBalloonPlugin")
+set(QT_QML_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/examples/quick/customitems/painteditem)
 
 find_package(Qt6 COMPONENTS Core)
 find_package(Qt6 COMPONENTS Gui)
@@ -21,14 +22,14 @@ find_package(Qt6 COMPONENTS Qml)
 find_package(Qt6 COMPONENTS Quick)
 
 qt6_add_qml_module(qmltextballoonplugin
-    OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/TextBalloonPlugin"
     VERSION 1.0
     URI "TextBalloonPlugin"
-    INSTALL_LOCATION ${INSTALL_EXAMPLEDIR}
+    PLUGIN_TARGET qmltextballoonplugin
+    QML_FILES textballoons.qml
+    RESOURCE_PREFIX "/painteditem"
 )
 
 target_sources(qmltextballoonplugin PRIVATE
-    TextBalloonPlugin/plugin.h
     textballoon.cpp textballoon.h
 )
 set_target_properties(qmltextballoonplugin PROPERTIES
@@ -46,7 +47,6 @@ target_link_libraries(qmltextballoonplugin PUBLIC
 # Resources:
 set(painteditem_resource_files
     "textballoon.h"
-    "textballoons.qml"
 )
 
 qt6_add_resources(qmltextballoonplugin "painteditem"
@@ -61,10 +61,3 @@ install(TARGETS qmltextballoonplugin
     BUNDLE DESTINATION "${INSTALL_EXAMPLEDIR}"
     LIBRARY DESTINATION "${INSTALL_EXAMPLEDIR}"
 )
-
-set_target_properties(qmltextballoonplugin PROPERTIES
-    QT_QML_MODULE_VERSION 1.0
-    QT_QML_MODULE_URI TextBalloonPlugin
-)
-
-qt6_qml_type_registration(qmltextballoonplugin)

@@ -4,13 +4,14 @@
 ## QLocalClientConnectionFactory Plugin:
 #####################################################################
 
-qt_internal_add_plugin(QLocalClientConnectionFactory
+qt_internal_add_plugin(QLocalClientConnectionFactoryPlugin
     OUTPUT_NAME qmldbg_local
+    CLASS_NAME QLocalClientConnectionFactory
     TYPE qmltooling
     SOURCES
         qlocalclientconnection.cpp
         qlocalclientconnectionfactory.h
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::QmlPrivate
 )
 

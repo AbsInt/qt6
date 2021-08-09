@@ -41,7 +41,9 @@
     In this topic we summarize those changes in Qt DBus, and provide
     guidance to handle them.
 
-    \section1 The QtDBus module has undergone some basic consolidation and
+    \section1 API changes
+
+    The QtDBus module has undergone some basic consolidation and
     cleanup. There should be minimal porting effort to be able to switch to Qt6.
 
     \section2 The QDBusMessage class

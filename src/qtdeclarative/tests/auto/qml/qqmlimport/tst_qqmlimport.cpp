@@ -55,6 +55,7 @@ private slots:
     void importDependenciesPrecedence();
     void cleanup();
     void envResourceImportPath();
+    void preferResourcePath();
 };
 
 void tst_QQmlImport::cleanup()
@@ -64,13 +65,13 @@ void tst_QQmlImport::cleanup()
 
 void tst_QQmlImport::envResourceImportPath()
 {
-    const bool hadEnv = qEnvironmentVariableIsSet("QML2_IMPORT_PATH");
-    const QByteArray oldEnv = hadEnv ? qgetenv("QML2_IMPORT_PATH") : QByteArray();
+    const bool hadEnv = qEnvironmentVariableIsSet("QML_IMPORT_PATH");
+    const QByteArray oldEnv = hadEnv ? qgetenv("QML_IMPORT_PATH") : QByteArray();
     auto guard = qScopeGuard([&] {
         if (hadEnv)
-            qputenv("QML2_IMPORT_PATH", oldEnv);
+            qputenv("QML_IMPORT_PATH", oldEnv);
         else
-            qunsetenv("QML2_IMPORT_PATH");
+            qunsetenv("QML_IMPORT_PATH");
     });
 
     const QStringList envPaths({
@@ -80,13 +81,24 @@ void tst_QQmlImport::envResourceImportPath()
         directory()
     });
 
-    qputenv("QML2_IMPORT_PATH", envPaths.join(QDir::listSeparator()).toUtf8());
+    qputenv("QML_IMPORT_PATH", envPaths.join(QDir::listSeparator()).toUtf8());
 
     QQmlImportDatabase importDb(nullptr);
     const QStringList importPaths = importDb.importPathList();
 
     for (const QString &path : envPaths)
         QVERIFY((importPaths.contains(path.startsWith(u':') ? QLatin1String("qrc") + path : path)));
+}
+
+void tst_QQmlImport::preferResourcePath()
+{
+    QQmlEngine engine;
+    engine.addImportPath(dataDirectory());
+
+    QQmlComponent component(&engine, testFileUrl("prefer.qml"));
+    QVERIFY2(component.isReady(), component.errorString().toUtf8());
+    QScopedPointer<QObject> o(component.create());
+    QCOMPARE(o->objectName(), "right");
 }
 
 void tst_QQmlImport::testDesignerSupported()
@@ -166,11 +178,11 @@ void tst_QQmlImport::uiFormatLoading()
 void tst_QQmlImport::importPathOrder()
 {
 #ifdef Q_OS_ANDROID
-    QSKIP("QLibraryInfo::path(QLibraryInfo::Qml2ImportsPath) returns bogus path on Android, but its nevertheless unusable.");
+    QSKIP("QLibraryInfo::path(QLibraryInfo::QmlImportsPath) returns bogus path on Android, but its nevertheless unusable.");
 #endif
     QStringList expectedImportPaths;
     QString appDirPath = QCoreApplication::applicationDirPath();
-    QString qml2Imports = QLibraryInfo::path(QLibraryInfo::Qml2ImportsPath);
+    QString qml2Imports = QLibraryInfo::path(QLibraryInfo::QmlImportsPath);
 #ifdef Q_OS_WIN
     // The drive letter has a different case as QQmlImport will
     // cause it to be converted after passing through QUrl
@@ -181,12 +193,34 @@ void tst_QQmlImport::importPathOrder()
                         << QLatin1String("qrc:/qt-project.org/imports")
                         << qml2Imports;
     QQmlEngine engine;
-    QCOMPARE(expectedImportPaths, engine.importPathList());
+    QCOMPARE(engine.importPathList(), expectedImportPaths);
 
     // Add an import path
     engine.addImportPath(QT_QMLTEST_DATADIR);
-    expectedImportPaths.prepend(QT_QMLTEST_DATADIR);
-    QCOMPARE(expectedImportPaths, engine.importPathList());
+    QFileInfo fi(QT_QMLTEST_DATADIR);
+    expectedImportPaths.prepend(fi.absoluteFilePath());
+    QCOMPARE(engine.importPathList(), expectedImportPaths);
+
+    // Add qml2Imports again to make it the first of the list
+    engine.addImportPath(qml2Imports);
+    expectedImportPaths.move(expectedImportPaths.indexOf(qml2Imports), 0);
+    QCOMPARE(engine.importPathList(), expectedImportPaths);
+
+    // Verify if the type in the module comes first in the import path list
+    // takes the precedence. In the case below, the width of both items
+    // should be the same to that of the type defined in "path2".
+    engine.addImportPath(testFile("importPathOrder/path1"));
+    engine.addImportPath(testFile("importPathOrder/path2"));
+    QQmlComponent component(&engine, testFile("importPathOrder/MyModuleTest.qml"));
+    QScopedPointer<QObject> rootItem(component.create());
+    QVERIFY(component.errorString().isEmpty());
+    QVERIFY(!rootItem.isNull());
+    QQuickItem *item1 = rootItem->findChild<QQuickItem*>("myItem1");
+    QQuickItem *item2 = rootItem->findChild<QQuickItem*>("myItem2");
+    QVERIFY(item1 != nullptr);
+    QVERIFY(item2 != nullptr);
+    QCOMPARE(item1->width(), 200);
+    QCOMPARE(item2->width(), 200);
 }
 
 Q_DECLARE_METATYPE(QQmlImports::ImportVersion)

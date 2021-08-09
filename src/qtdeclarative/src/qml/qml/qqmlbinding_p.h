@@ -86,6 +86,10 @@ public:
             const QQmlPropertyData *property, QV4::Function *function, QObject *obj,
             const QQmlRefPointer<QQmlContextData> &ctxt, QV4::ExecutionContext *scope);
 
+    static QQmlBinding *create(QMetaType propertyType, QV4::Function *function, QObject *obj,
+                               const QQmlRefPointer<QQmlContextData> &ctxt,
+                               QV4::ExecutionContext *scope);
+
     static QQmlBinding *createTranslationBinding(
             const QQmlRefPointer<QV4::ExecutableCompilationUnit> &unit,
             const QV4::CompiledData::Binding *binding, QObject *obj,
@@ -95,6 +99,7 @@ public:
 
     void setTarget(const QQmlProperty &);
     bool setTarget(QObject *, const QQmlPropertyData &, const QQmlPropertyData *valueType);
+    bool setTarget(QObject *, int coreIndex, bool coreIsAlias, int valueTypeIndex);
 
     void refresh() override;
 
@@ -116,6 +121,7 @@ public:
     void setBoundFunction(QV4::BoundFunction *boundFunction) {
         m_boundFunction.set(boundFunction->engine(), *boundFunction);
     }
+    bool hasBoundFunction() const { return m_boundFunction.valueRef(); }
 
     /**
      * This method returns a snapshot of the currently tracked dependencies of
@@ -136,8 +142,15 @@ protected:
 
     bool slowWrite(const QQmlPropertyData &core, const QQmlPropertyData &valueTypeData,
                    const QV4::Value &result, bool isUndefined, QQmlPropertyData::WriteFlags flags);
+    bool slowWrite(const QQmlPropertyData &core, const QQmlPropertyData &valueTypeData,
+                   const void *result, QMetaType resultType, bool isUndefined,
+                   QQmlPropertyData::WriteFlags flags);
 
     QV4::ReturnedValue evaluate(bool *isUndefined);
+    bool evaluate(void *result, QMetaType type)
+    {
+        return QQmlJavaScriptExpression::evaluate(&result, &type, 0);
+    }
 
 private:
     inline bool updatingFlag() const;
@@ -146,9 +159,11 @@ private:
     inline void setEnabledFlag(bool);
 
     static QQmlBinding *newBinding(QQmlEnginePrivate *engine, const QQmlPropertyData *property);
+    static QQmlBinding *newBinding(QQmlEnginePrivate *engine, QMetaType propertyType);
 
     QQmlSourceLocation *m_sourceLocation = nullptr; // used for Qt.binding() created functions
     QV4::PersistentValue m_boundFunction; // used for Qt.binding() that are created from a bound function object
+    void handleWriteError(const void *result, QMetaType resultType, QMetaType metaType);
 };
 
 bool QQmlBinding::updatingFlag() const

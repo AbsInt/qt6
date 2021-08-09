@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2019 The Qt Company Ltd.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the tools applications of the Qt Toolkit.
@@ -53,14 +53,14 @@ public:
     virtual void parseHeaderFile(const Location &location, const QString &filePath);
     virtual void parseSourceFile(const Location &location, const QString &filePath) = 0;
     virtual void precompileHeaders() {}
-    virtual Node *parseFnArg(const Location &, const QString &) { return nullptr; }
+    virtual Node *parseFnArg(const Location &, const QString &, const QString & = QString())
+    {
+        return nullptr;
+    }
 
-    bool isParsingH() const;
-    bool isParsingCpp() const;
-    bool isParsingQdoc() const;
-    const QString &currentFile() const { return currentFile_; }
-    const QString &moduleHeader() const { return moduleHeader_; }
-    void setModuleHeader(const QString &t) { moduleHeader_ = t; }
+    [[nodiscard]] const QString &currentFile() const { return m_currentFile; }
+    [[nodiscard]] const QString &moduleHeader() const { return m_moduleHeader; }
+    void setModuleHeader(const QString &t) { m_moduleHeader = t; }
     void checkModuleInclusion(Node *n);
 
     static void initialize();
@@ -74,19 +74,19 @@ public:
 protected:
     const QSet<QString> &commonMetaCommands();
     static void extractPageLinkAndDesc(QStringView arg, QString *link, QString *desc);
-    static bool showInternal() { return showInternal_; }
-    QString moduleHeader_;
-    QString currentFile_;
-    QDocDatabase *qdb_;
+    static bool showInternal() { return s_showInternal; }
+    QString m_moduleHeader {};
+    QString m_currentFile {};
+    QDocDatabase *m_qdb {};
 
 private:
-    static QList<CodeParser *> parsers;
-    static bool showInternal_;
-    static bool singleExec_;
+    static QList<CodeParser *> s_parsers;
+    static bool s_showInternal;
 };
 
 #define COMMAND_ABSTRACT Doc::alias(QLatin1String("abstract"))
 #define COMMAND_CLASS Doc::alias(QLatin1String("class"))
+#define COMMAND_DEFAULT Doc::alias(QLatin1String("default"))
 #define COMMAND_DEPRECATED Doc::alias(QLatin1String("deprecated")) // ### don't document
 #define COMMAND_DONTDOCUMENT Doc::alias(QLatin1String("dontdocument"))
 #define COMMAND_ENUM Doc::alias(QLatin1String("enum"))
@@ -130,7 +130,7 @@ private:
 #define COMMAND_QMLATTACHEDSIGNAL Doc::alias(QLatin1String("qmlattachedsignal"))
 #define COMMAND_QMLBASICTYPE Doc::alias(QLatin1String("qmlbasictype"))
 #define COMMAND_QMLCLASS Doc::alias(QLatin1String("qmlclass"))
-#define COMMAND_QMLDEFAULT Doc::alias(QLatin1String("default"))
+#define COMMAND_QMLDEFAULT Doc::alias(QLatin1String("qmldefault"))
 #define COMMAND_QMLINHERITS Doc::alias(QLatin1String("inherits"))
 #define COMMAND_QMLINSTANTIATES Doc::alias(QLatin1String("instantiates"))
 #define COMMAND_QMLMETHOD Doc::alias(QLatin1String("qmlmethod"))

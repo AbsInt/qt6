@@ -29,9 +29,6 @@
 #include <private/qqmljslexer_p.h>
 #include <private/qqmljsparser_p.h>
 #include <private/qqmljsast_p.h>
-#include <private/qv4codegen_p.h>
-#include <private/qv4staticvalue_p.h>
-#include <private/qqmlirbuilder_p.h>
 #include <private/qqmljsdiagnosticmessage_p.h>
 #include <private/qqmldirparser_p.h>
 #include <private/qqmljsresourcefilemapper_p.h>
@@ -65,6 +62,7 @@ inline QString versionLiteral()      { return QStringLiteral("version"); }
 inline QString nameLiteral()         { return QStringLiteral("name"); }
 inline QString relativePathLiteral() { return QStringLiteral("relativePath"); }
 inline QString pluginsLiteral()      { return QStringLiteral("plugins"); }
+inline QString pluginIsOptionalLiteral() { return QStringLiteral("pluginIsOptional"); }
 inline QString pathLiteral()         { return QStringLiteral("path"); }
 inline QString classnamesLiteral()   { return QStringLiteral("classnames"); }
 inline QString dependenciesLiteral() { return QStringLiteral("dependencies"); }
@@ -76,7 +74,7 @@ void printUsage(const QString &appNameIn)
 {
     const std::wstring appName = appNameIn.toStdWString();
 #ifndef QT_BOOTSTRAPPED
-    const QString qmlPath = QLibraryInfo::path(QLibraryInfo::Qml2ImportsPath);
+    const QString qmlPath = QLibraryInfo::path(QLibraryInfo::QmlImportsPath);
 #else
     const QString qmlPath = QStringLiteral("/home/user/dev/qt-install/qml");
 #endif
@@ -177,10 +175,23 @@ QVariantMap pluginsForModulePath(const QString &modulePath, const QString &versi
     QVariantMap pluginInfo;
 
     QStringList pluginNameList;
+    bool isOptional = false;
     const auto plugins = parser.plugins();
-    for (const auto &plugin : plugins)
+    for (const auto &plugin : plugins) {
         pluginNameList.append(plugin.name);
+        isOptional = plugin.optional;
+    }
+
     pluginInfo[pluginsLiteral()] = pluginNameList.join(QLatin1Char(' '));
+
+    if (plugins.size() > 1) {
+        qWarning() << QStringLiteral("Warning: \"%1\" contains multiple plugin entries. This is discouraged and does not support marking plugins as optional.").arg(modulePath);
+        isOptional = false;
+    }
+
+    if (isOptional) {
+        pluginInfo[pluginIsOptionalLiteral()] = true;
+    }
 
     pluginInfo[classnamesLiteral()] = parser.classNames().join(QLatin1Char(' '));
 
@@ -300,9 +311,12 @@ QVariantList findPathsForModuleImports(const QVariantList &imports)
                 plugininfo = pluginsForModulePath(paths.first, version);
             }
             QString plugins = plugininfo.value(pluginsLiteral()).toString();
+            bool isOptional = plugininfo.value(pluginIsOptionalLiteral(), QVariant(false)).toBool();
             QString classnames = plugininfo.value(classnamesLiteral()).toString();
             if (!plugins.isEmpty())
                 import.insert(QStringLiteral("plugin"), plugins);
+            if (isOptional)
+                import.insert(pluginIsOptionalLiteral(), true);
             if (!classnames.isEmpty())
                 import.insert(QStringLiteral("classname"), classnames);
             if (plugininfo.contains(dependenciesLiteral())) {
@@ -564,13 +578,44 @@ QString generateCmakeIncludeFileContent(const QVariantList &importList) {
     return content;
 }
 
+bool argumentsFromCommandLineAndFile(QStringList &allArguments, const QStringList &arguments)
+{
+    allArguments.reserve(arguments.size());
+    for (const QString &argument : arguments) {
+        // "@file" doesn't start with a '-' so we can't use QCommandLineParser for it
+        if (argument.startsWith(QLatin1Char('@'))) {
+            QString optionsFile = argument;
+            optionsFile.remove(0, 1);
+            if (optionsFile.isEmpty()) {
+                fprintf(stderr, "The @ option requires an input file");
+                return false;
+            }
+            QFile f(optionsFile);
+            if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) {
+                fprintf(stderr, "Cannot open options file specified with @");
+                return false;
+            }
+            while (!f.atEnd()) {
+                QString line = QString::fromLocal8Bit(f.readLine().trimmed());
+                if (!line.isEmpty())
+                    allArguments << line;
+            }
+        } else {
+            allArguments << argument;
+        }
+    }
+    return true;
+}
+
 } // namespace
 
 int main(int argc, char *argv[])
 {
     QCoreApplication app(argc, argv);
     QCoreApplication::setApplicationVersion(QLatin1String(QT_VERSION_STR));
-    QStringList args = app.arguments();
+    QStringList args;
+    if (!argumentsFromCommandLineAndFile(args, app.arguments()))
+        return EXIT_FAILURE;
     const QString appName = QFileInfo(app.applicationFilePath()).baseName();
     if (args.size() < 2) {
         printUsage(appName);
@@ -631,8 +676,10 @@ int main(int argc, char *argv[])
         }
     }
 
-    if (!qrcFiles.isEmpty())
-        scanFiles << QQmlJSResourceFileMapper(qrcFiles).qmlCompilerFiles(QQmlJSResourceFileMapper::FileOutput::AbsoluteFilePath);
+    if (!qrcFiles.isEmpty()) {
+        scanFiles << QQmlJSResourceFileMapper(qrcFiles).filePaths(
+                         QQmlJSResourceFileMapper::allQmlJSFilter());
+    }
 
     g_qmlImportPaths = qmlImportPaths;
 

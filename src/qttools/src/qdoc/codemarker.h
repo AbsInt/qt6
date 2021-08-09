@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the tools applications of the Qt Toolkit.
@@ -45,7 +45,7 @@ public:
     virtual bool recognizeCode(const QString & /*code*/) { return true; }
     virtual bool recognizeExtension(const QString & /*extension*/) { return true; }
     virtual bool recognizeLanguage(const QString & /*language*/) { return false; }
-    virtual Atom::AtomType atomType() const { return Atom::Code; }
+    [[nodiscard]] virtual Atom::AtomType atomType() const { return Atom::Code; }
     virtual QString markedUpCode(const QString &code, const Node * /*relative*/,
                                  const Location & /*location*/)
     {
@@ -58,10 +58,6 @@ public:
     }
     virtual QString markedUpQmlItem(const Node *, bool) { return QString(); }
     virtual QString markedUpName(const Node * /*node*/) { return QString(); }
-    virtual QString markedUpFullName(const Node * /*node*/, const Node * /*relative*/)
-    {
-        return QString();
-    }
     virtual QString markedUpEnumValue(const QString & /*enumValue*/, const Node * /*relative*/)
     {
         return QString();
@@ -89,8 +85,8 @@ protected:
     QString linkTag(const Node *node, const QString &body);
 
 private:
-    static QString defaultLang;
-    static QList<CodeMarker *> markers;
+    static QString s_defaultLang;
+    static QList<CodeMarker *> s_markers;
 };
 
 QT_END_NAMESPACE

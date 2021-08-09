@@ -184,6 +184,14 @@ void Lexer::scanChar()
     }
 }
 
+QChar Lexer::peekChar()
+{
+    auto peekPtr = _codePtr;
+    if (peekPtr < _endPtr)
+        return *peekPtr;
+    return QChar();
+}
+
 namespace {
 inline bool isBinop(int tok)
 {
@@ -583,6 +591,10 @@ again:
             scanChar();
             return T_QUESTION_QUESTION;
         }
+        if (_char == u'.' && !peekChar().isDigit()) {
+            scanChar();
+            return T_QUESTION_DOT;
+        }
 
         return T_QUESTION;
     }
@@ -768,6 +780,20 @@ again:
         else
             return scanNumber(ch);
 
+    case '#':
+        if (_currentLineNumber == 1 && _currentColumnNumber == 2) {
+            // shebang support
+            while (_codePtr <= _endPtr && !isLineTerminator()) {
+                scanChar();
+            }
+            if (_engine) {
+                _engine->addComment(tokenOffset(), _codePtr - _tokenStartPtr - 1,
+                                    tokenStartLine(), tokenStartColumn());
+            }
+            goto again;
+        }
+        Q_FALLTHROUGH();
+
     default: {
         uint c = ch.unicode();
         bool identifierWithEscapeChars = false;
@@ -814,13 +840,11 @@ again:
                     if (!isIdentifierPart(c))
                         break;
 
-                    if (identifierWithEscapeChars) {
-                        if (QChar::requiresSurrogates(c)) {
-                            _tokenText += QChar(QChar::highSurrogate(c));
-                            _tokenText += QChar(QChar::lowSurrogate(c));
-                        } else {
-                            _tokenText += QChar(c);
-                        }
+                    if (QChar::requiresSurrogates(c)) {
+                        _tokenText += QChar(QChar::highSurrogate(c));
+                        _tokenText += QChar(QChar::lowSurrogate(c));
+                    } else {
+                        _tokenText += QChar(c);
                     }
                     continue;
                 }

@@ -543,7 +543,7 @@ void QIODevice::setOpenMode(QIODeviceBase::OpenMode openMode)
 {
     Q_D(QIODevice);
 #if defined QIODEVICE_DEBUG
-    printf("%p QIODevice::setOpenMode(0x%x)\n", this, int(openMode));
+    printf("%p QIODevice::setOpenMode(0x%x)\n", this, openMode.toInt());
 #endif
     d->openMode = openMode;
     d->accessMode = QIODevicePrivate::Unset;
@@ -580,7 +580,7 @@ void QIODevice::setTextModeEnabled(bool enabled)
 */
 bool QIODevice::isTextModeEnabled() const
 {
-    return d_func()->openMode & Text;
+    return d_func()->openMode.testAnyFlag(Text);
 }
 
 /*!
@@ -788,7 +788,7 @@ bool QIODevice::open(QIODeviceBase::OpenMode mode)
     d->setWriteChannelCount(isWritable() ? 1 : 0);
     d->errorString.clear();
 #if defined QIODEVICE_DEBUG
-    printf("%p QIODevice::open(0x%x)\n", this, quint32(mode));
+    printf("%p QIODevice::open(0x%x)\n", this, mode.toInt());
 #endif
     return true;
 }
@@ -937,7 +937,7 @@ bool QIODevice::atEnd() const
                                                     && bytesAvailable() == 0));
 #if defined QIODEVICE_DEBUG
     printf("%p QIODevice::atEnd() returns %s, d->openMode == %d, d->pos == %lld\n", this,
-           result ? "true" : "false", int(d->openMode), d->pos);
+           result ? "true" : "false", d->openMode.toInt(), d->pos);
 #endif
     return result;
 }
@@ -1320,12 +1320,17 @@ QByteArray QIODevice::readAll()
     newline will not be inserted into the buffer. On windows newline
     characters are replaced with '\\n'.
 
+    Note that on sequential devices, data may not be immediately available,
+    which may result in a partial line being returned. By calling the
+    canReadLine() function before reading, you can check whether a complete
+    line (including the newline character) can be read.
+
     This function calls readLineData(), which is implemented using
     repeated calls to getChar(). You can provide a more efficient
     implementation by reimplementing readLineData() in your own
     subclass.
 
-    \sa getChar(), read(), write()
+    \sa getChar(), read(), canReadLine(), write()
 */
 qint64 QIODevice::readLine(char *data, qint64 maxSize)
 {

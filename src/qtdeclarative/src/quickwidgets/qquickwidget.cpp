@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtQuick module of the Qt Toolkit.
@@ -39,6 +39,7 @@
 
 #include "qquickwidget.h"
 #include "qquickwidget_p.h"
+#include "qaccessiblequickwidgetfactory_p.h"
 
 #include "private/qquickwindow_p.h"
 #include "private/qquickitem_p.h"
@@ -84,9 +85,16 @@
 
 QT_BEGIN_NAMESPACE
 
+QQuickWidgetOffscreenWindow::QQuickWidgetOffscreenWindow(QQuickWindowPrivate &dd, QQuickRenderControl *control)
+:QQuickWindow(dd, control)
+{
+    setTitle(QString::fromLatin1("Offscreen"));
+    setObjectName(QString::fromLatin1("QQuickWidgetOffscreenWindow"));
+}
+
 // override setVisble to prevent accidental offscreen window being created
 // by base class.
-class QQuickOffcreenWindowPrivate: public QQuickWindowPrivate {
+class QQuickWidgetOffscreenWindowPrivate: public QQuickWindowPrivate {
 public:
     void setVisible(bool visible) override {
         Q_Q(QWindow);
@@ -112,14 +120,16 @@ private:
 void QQuickWidgetPrivate::initOffscreenWindow()
 {
     Q_Q(QQuickWidget);
-    offscreenWindow = new QQuickWindow(*new QQuickOffcreenWindowPrivate(), renderControl);
-    offscreenWindow->setTitle(QString::fromLatin1("Offscreen"));
-    offscreenWindow->setObjectName(QString::fromLatin1("QQuickOffScreenWindow"));
+    offscreenWindow = new QQuickWidgetOffscreenWindow(*new QQuickWidgetOffscreenWindowPrivate(), renderControl);
     // Do not call create() on offscreenWindow.
 
     QWidget::connect(offscreenWindow, SIGNAL(sceneGraphInitialized()), q, SLOT(createFramebufferObject()));
     QWidget::connect(offscreenWindow, SIGNAL(sceneGraphInvalidated()), q, SLOT(destroyFramebufferObject()));
     QWidget::connect(offscreenWindow, &QQuickWindow::focusObjectChanged, q, &QQuickWidget::propagateFocusObjectChanged);
+
+#if QT_CONFIG(accessibility)
+    QAccessible::installFactory(&qAccessibleQuickWidgetFactory);
+#endif
 }
 
 void QQuickWidgetPrivate::init(QQmlEngine* e)
@@ -359,7 +369,8 @@ void QQuickWidgetPrivate::render(bool needsSync)
             renderControl->polishItems();
             renderControl->sync();
         }
-
+        if (!offscreenWindow)
+            return;
         QQuickWindowPrivate *cd = QQuickWindowPrivate::get(offscreenWindow);
         auto softwareRenderer = static_cast<QSGSoftwareRenderer*>(cd->renderer);
         if (softwareRenderer && !softwareImage.isNull()) {
@@ -483,9 +494,13 @@ QImage QQuickWidgetPrivate::grabFramebuffer()
 
     \note QQuickWidget is an alternative to using QQuickView and QWidget::createWindowContainer().
     The restrictions on stacking order do not apply, making QQuickWidget the more flexible
-    alternative, behaving more like an ordinary widget. This comes at the expense of
-    performance. Unlike QQuickWindow and QQuickView, QQuickWidget involves rendering into OpenGL
-    framebuffer objects. This will naturally carry a minor performance hit.
+    alternative, behaving more like an ordinary widget.
+
+    \note However, the above mentioned advantages come at the expense of performance.
+    Unlike QQuickWindow and QQuickView, QQuickWidget requires rendering into OpenGL
+    framebuffer objects, which needs to be enforced by calling
+    QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGLRhi) at startup.
+    This will naturally carry a minor performance hit.
 
     \note Using QQuickWidget disables the threaded render loop on all platforms. This means that
     some of the benefits of threaded rendering, for example \l Animator classes and vsync driven
@@ -1430,7 +1445,7 @@ void QQuickWidget::showEvent(QShowEvent *)
     if (shouldTriggerUpdate)
         triggerUpdate();
 
-    // note offscreenWindow  is "QQuickOffScreenWindow" instance
+    // note offscreenWindow  is "QQuickWidgetOffscreenWindow" instance
     d->offscreenWindow->setVisible(true);
     if (QQmlInspectorService *service = QQmlDebugConnector::service<QQmlInspectorService>())
         service->setParentWindow(d->offscreenWindow, window()->windowHandle());
@@ -1442,7 +1457,7 @@ void QQuickWidget::hideEvent(QHideEvent *)
     Q_D(QQuickWidget);
     if (!d->offscreenWindow->isPersistentSceneGraph())
         d->invalidateRenderControl();
-    // note offscreenWindow  is "QQuickOffScreenWindow" instance
+    // note offscreenWindow  is "QQuickWidgetOffscreenWindow" instance
     d->offscreenWindow->setVisible(false);
     if (QQmlInspectorService *service = QQmlDebugConnector::service<QQmlInspectorService>())
         service->setParentWindow(d->offscreenWindow, d->offscreenWindow);

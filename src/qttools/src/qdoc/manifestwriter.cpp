@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2020 The Qt Company Ltd.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the tools applications of the Qt Toolkit.
@@ -159,10 +159,10 @@ template <typename F>
 void ManifestWriter::processManifestMetaContent(const QString &fullName, F matchFunc)
 {
     for (const auto &index : m_manifestMetaContent) {
-        const auto &names = index.names;
+        const auto &names = index.m_names;
         for (const QString &name : names) {
             bool match;
-            int wildcard = name.indexOf(QChar('*'));
+            qsizetype wildcard = name.indexOf(QChar('*'));
             switch (wildcard) {
             case -1: // no wildcard used, exact match required
                 match = (fullName == name);
@@ -229,9 +229,8 @@ void ManifestWriter::generateManifestFile(const QString &manifest, const QString
         const QString installPath = retrieveExampleInstallationPath(example);
         const QString fullName = m_project + QLatin1Char('/') + example->title();
 
-        processManifestMetaContent(fullName, [&](const ManifestMetaFilter &filter) {
-            m_tags += filter.tags;
-        });
+        processManifestMetaContent(
+                fullName, [&](const ManifestMetaFilter &filter) { m_tags += filter.m_tags; });
         includeTagsAddedWithMetaCommand(example);
         // omit from the manifest if explicitly marked broken
         if (m_tags.contains("broken"))
@@ -247,16 +246,16 @@ void ManifestWriter::generateManifestFile(const QString &manifest, const QString
             usedAttributes.insert("imageUrl",  m_manifestDir + example->imageFileName());
 
         processManifestMetaContent(fullName, [&](const ManifestMetaFilter &filter) {
-            const auto attributes = filter.attributes;
-                for (const auto &attribute : attributes) {
-                    const QLatin1Char div(':');
-                    QStringList attrList = attribute.split(div);
-                    if (attrList.count() == 1)
-                        attrList.append(QStringLiteral("true"));
-                    QString attrName = attrList.takeFirst();
-                    if (!usedAttributes.contains(attrName))
-                        usedAttributes.insert(attrName, attrList.join(div));
-                }
+            const auto attributes = filter.m_attributes;
+            for (const auto &attribute : attributes) {
+                const QLatin1Char div(':');
+                QStringList attrList = attribute.split(div);
+                if (attrList.count() == 1)
+                    attrList.append(QStringLiteral("true"));
+                QString attrName = attrList.takeFirst();
+                if (!usedAttributes.contains(attrName))
+                    usedAttributes.insert(attrName, attrList.join(div));
+            }
         });
 
         // write the example/demo element
@@ -353,7 +352,7 @@ void ManifestWriter::addWordsFromModuleNamesAsTags()
 {
     // '?<=': positive lookbehind
     QRegularExpression re("([A-Z]+[a-z0-9]*((?<=3)D|GL)?)");
-    int pos = 0;
+    qsizetype pos = 0;
     QRegularExpressionMatch match;
     while ((match = re.match(m_project, pos)).hasMatch()) {
         m_tags << match.captured(1).toLower();
@@ -396,9 +395,9 @@ void ManifestWriter::readManifestMetaContent()
     for (const auto &manifest : names) {
         ManifestMetaFilter filter;
         QString prefix = CONFIG_MANIFESTMETA + Config::dot + manifest + Config::dot;
-        filter.names = config.getStringSet(prefix + QStringLiteral("names"));
-        filter.attributes = config.getStringSet(prefix + QStringLiteral("attributes"));
-        filter.tags = config.getStringSet(prefix + QStringLiteral("tags"));
+        filter.m_names = config.getStringSet(prefix + QStringLiteral("names"));
+        filter.m_attributes = config.getStringSet(prefix + QStringLiteral("attributes"));
+        filter.m_tags = config.getStringSet(prefix + QStringLiteral("tags"));
         m_manifestMetaContent.append(filter);
     }
 }

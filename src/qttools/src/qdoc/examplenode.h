@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2020 The Qt Company Ltd.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the tools applications of the Qt Toolkit.
@@ -41,17 +41,17 @@ class ExampleNode : public PageNode
 {
 public:
     ExampleNode(Aggregate *parent, const QString &name) : PageNode(Node::Example, parent, name) {}
-    QString imageFileName() const override { return m_imageFileName; }
+    [[nodiscard]] QString imageFileName() const override { return m_imageFileName; }
     void setImageFileName(const QString &ifn) override { m_imageFileName = ifn; }
-    const QStringList &files() const { return m_files; }
-    const QStringList &images() const { return m_images; }
-    const QString &projectFile() const { return m_projectFile; }
-    void setFiles(const QStringList files, const QString &projectFile)
+    [[nodiscard]] const QStringList &files() const { return m_files; }
+    [[nodiscard]] const QStringList &images() const { return m_images; }
+    [[nodiscard]] const QString &projectFile() const { return m_projectFile; }
+    void setFiles(const QStringList &files, const QString &projectFile)
     {
         m_files = files;
         m_projectFile = projectFile;
     }
-    void setImages(const QStringList images) { m_images = images; }
+    void setImages(const QStringList &images) { m_images = images; }
     void appendFile(QString &file) { m_files.append(file); }
     void appendImage(QString &image) { m_images.append(image); }
 

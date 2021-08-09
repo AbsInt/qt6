@@ -1045,7 +1045,7 @@ void tst_QDoubleSpinBox::undoRedo()
         QVERIFY(!spin.lineEdit()->isUndoAvailable());
         QVERIFY(spin.lineEdit()->isRedoAvailable());
     } else {
-        QWARN("Undo not tested because no key sequence associated to QKeySequence::Redo");
+        qWarning("Undo not tested because no key sequence associated to QKeySequence::Redo");
     }
 
 
@@ -1058,7 +1058,7 @@ void tst_QDoubleSpinBox::undoRedo()
         QVERIFY(!spin.lineEdit()->isRedoAvailable());
         QVERIFY(spin.lineEdit()->isUndoAvailable());
     } else {
-        QWARN("Redo not tested because no key sequence associated to QKeySequence::Redo");
+        qWarning("Redo not tested because no key sequence associated to QKeySequence::Redo");
     }
 
 
@@ -1208,7 +1208,7 @@ void tst_QDoubleSpinBox::taskQTBUG_6496_fiddlingWithPrecision()
 void tst_QDoubleSpinBox::setGroupSeparatorShown_data()
 {
     QTest::addColumn<QLocale::Language>("lang");
-    QTest::addColumn<QLocale::Country>("country");
+    QTest::addColumn<QLocale::Territory>("country");
 
     QTest::newRow("data0") << QLocale::English << QLocale::UnitedStates;
     QTest::newRow("data1") << QLocale::Swedish << QLocale::Sweden;
@@ -1220,7 +1220,7 @@ void tst_QDoubleSpinBox::setGroupSeparatorShown_data()
 void tst_QDoubleSpinBox::setGroupSeparatorShown()
 {
     QFETCH(QLocale::Language, lang);
-    QFETCH(QLocale::Country, country);
+    QFETCH(QLocale::Territory, country);
 
     QLocale loc(lang, country);
     QLocale::setDefault(loc);

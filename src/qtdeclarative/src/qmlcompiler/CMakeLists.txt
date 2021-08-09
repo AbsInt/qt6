@@ -1,14 +1,16 @@
 # Generated from qmlcompiler.pro.
 
 #####################################################################
-## QmlCompiler Module:
+## QmlCompilerPrivate Module:
 #####################################################################
 
-qt_internal_add_module(QmlCompiler
+qt_internal_add_module(QmlCompilerPrivate
     STATIC
     INTERNAL_MODULE
     SOURCES
+        qcoloroutput_p.h qcoloroutput.cpp
         qdeferredpointer_p.h
+        qqmljslogger_p.h qqmljslogger.cpp
         qqmljscompiler.cpp qqmljscompiler_p.h
         qqmljsimporter.cpp qqmljsimporter_p.h
         qqmljsimportvisitor.cpp qqmljsimportvisitor_p.h
@@ -20,6 +22,7 @@ qt_internal_add_module(QmlCompiler
         qqmljstypedescriptionreader.cpp qqmljstypedescriptionreader_p.h
         qqmljstypereader.cpp qqmljstypereader_p.h
         qresourcerelocater.cpp qresourcerelocater_p.h
+        qqmljsannotation_p.h qqmljsannotation.cpp
     PUBLIC_LIBRARIES
         Qt::CorePrivate
         Qt::QmlDevToolsPrivate

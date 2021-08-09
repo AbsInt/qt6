@@ -109,8 +109,6 @@ private Q_SLOTS:
 private:
     void rhiTestData();
 
-    QOffscreenSurface *surface = nullptr;
-    QOpenGLContext *context = nullptr;
     QSGDefaultRenderContext *renderContext = nullptr;
 
     struct {
@@ -172,12 +170,12 @@ public:
         setRootNode(root);
     }
 
-    void render() {
+    void render() override {
         ++renderCount;
         renderingOrder = ++globalRendereringOrder;
     }
 
-    void nodeChanged(QSGNode *node, QSGNode::DirtyState state) {
+    void nodeChanged(QSGNode *node, QSGNode::DirtyState state) override {
         changedNode = node;
         changedState = state;
         QSGBatchRenderer::Renderer::nodeChanged(node, state);

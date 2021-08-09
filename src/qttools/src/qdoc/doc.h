@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2020 The Qt Company Ltd.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the tools applications of the Qt Toolkit.
@@ -25,10 +25,6 @@
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
-
-/*
-  doc.h
-*/
 
 #ifndef DOC_H
 #define DOC_H
@@ -59,9 +55,7 @@ class Doc
 public:
     // the order is important
     enum Sections {
-        NoSection = -2,
-        Part = -1,
-        Chapter = 1,
+        NoSection = -1,
         Section1 = 1,
         Section2 = 2,
         Section3 = 3,
@@ -76,31 +70,32 @@ public:
 
     Doc &operator=(const Doc &doc);
 
-    const Location &location() const;
-    const Location &startLocation() const;
-    bool isEmpty() const;
-    const QString &source() const;
-    const Text &body() const;
-    Text briefText(bool inclusive = false) const;
-    Text trimmedBriefText(const QString &className) const;
-    Text legaleseText() const;
-    QSet<QString> parameterNames() const;
-    QStringList enumItemNames() const;
-    QStringList omitEnumItemNames() const;
-    QSet<QString> metaCommandsUsed() const;
-    TopicList topicsUsed() const;
-    ArgList metaCommandArgs(const QString &metaCommand) const;
-    QList<Text> alsoList() const;
-    bool hasTableOfContents() const;
-    bool hasKeywords() const;
-    bool hasTargets() const;
-    bool isInternal() const;
-    bool isMarkedReimp() const;
-    const QList<Atom *> &tableOfContents() const;
-    const QList<int> &tableOfContentsLevels() const;
-    const QList<Atom *> &keywords() const;
-    const QList<Atom *> &targets() const;
-    QStringMultiMap *metaTagMap() const;
+    [[nodiscard]] const Location &location() const;
+    [[nodiscard]] const Location &startLocation() const;
+    [[nodiscard]] bool isEmpty() const;
+    [[nodiscard]] const QString &source() const;
+    [[nodiscard]] const Text &body() const;
+    [[nodiscard]] Text briefText(bool inclusive = false) const;
+    [[nodiscard]] Text trimmedBriefText(const QString &className) const;
+    [[nodiscard]] Text legaleseText() const;
+    [[nodiscard]] QSet<QString> parameterNames() const;
+    [[nodiscard]] QStringList enumItemNames() const;
+    [[nodiscard]] QStringList omitEnumItemNames() const;
+    [[nodiscard]] QSet<QString> metaCommandsUsed() const;
+    [[nodiscard]] TopicList topicsUsed() const;
+    [[nodiscard]] ArgList metaCommandArgs(const QString &metaCommand) const;
+    [[nodiscard]] QList<Text> alsoList() const;
+    [[nodiscard]] bool hasTableOfContents() const;
+    [[nodiscard]] bool hasKeywords() const;
+    [[nodiscard]] bool hasTargets() const;
+    [[nodiscard]] bool isInternal() const;
+    [[nodiscard]] bool isMarkedReimp() const;
+    [[nodiscard]] const QList<Atom *> &tableOfContents() const;
+    [[nodiscard]] const QList<int> &tableOfContentsLevels() const;
+    [[nodiscard]] const QList<Atom *> &keywords() const;
+    [[nodiscard]] const QList<Atom *> &targets() const;
+    [[nodiscard]] QStringMultiMap *metaTagMap() const;
+    [[nodiscard]] QString bracketedArgs(const QString &command) const;
 
     static void initialize();
     static void terminate();
@@ -114,7 +109,7 @@ public:
 
 private:
     void detach();
-    DocPrivate *priv { nullptr };
+    DocPrivate *m_priv { nullptr };
     static DocUtilities &m_utilities;
 };
 Q_DECLARE_TYPEINFO(Doc, Q_RELOCATABLE_TYPE);

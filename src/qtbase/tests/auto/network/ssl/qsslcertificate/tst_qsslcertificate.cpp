@@ -28,6 +28,9 @@
 
 
 #include <QTest>
+
+#include <QtNetwork/qtnetworkglobal.h>
+
 #include <qsslcertificate.h>
 #include <qsslkey.h>
 #include <qsslsocket.h>
@@ -58,14 +61,14 @@ class tst_QSslCertificate : public QObject
     QMap<QString, QString> sha1Map;
 
     void createTestRows();
-#ifndef QT_NO_SSL
+#if QT_CONFIG(ssl)
     void compareCertificates(const QSslCertificate & cert1, const QSslCertificate & cert2);
 #endif
 
 public slots:
     void initTestCase();
 
-#ifndef QT_NO_SSL
+#if QT_CONFIG(ssl)
 private slots:
     void hash();
     void emptyConstructor();
@@ -117,9 +120,10 @@ private slots:
 
 // ### add tests for certificate bundles (multiple certificates concatenated into a single
 //     structure); both PEM and DER formatted
-#endif
+#endif // QT_CONFIG(ssl)
 private:
     QString testDataDir;
+    bool isNonOpenSslTls = false;
 };
 
 void tst_QSslCertificate::initTestCase()
@@ -129,6 +133,13 @@ void tst_QSslCertificate::initTestCase()
         testDataDir = QCoreApplication::applicationDirPath();
     if (!testDataDir.endsWith(QLatin1String("/")))
         testDataDir += QLatin1String("/");
+#if QT_CONFIG(opensslv11)
+    // In the presence of 'openssl' backend, QSslSocket will
+    // select 'openssl' as the default one.
+    isNonOpenSslTls = QSslSocket::activeBackend() != QStringLiteral("openssl");
+#else
+    isNonOpenSslTls = true;
+#endif // QT_CONFIG(ssl)
 
     QDir dir(testDataDir + "certificates");
     QFileInfoList fileInfoList = dir.entryInfoList(QDir::Files | QDir::Readable);
@@ -155,7 +166,7 @@ void tst_QSslCertificate::initTestCase()
     }
 }
 
-#ifndef QT_NO_SSL
+#if QT_CONFIG(ssl)
 
 void tst_QSslCertificate::hash()
 {
@@ -169,7 +180,7 @@ static QByteArray readFile(const QString &absFilePath)
 {
     QFile file(absFilePath);
     if (!file.open(QIODevice::ReadOnly)) {
-        QWARN("failed to open file");
+        qWarning("failed to open file");
         return QByteArray();
     }
     return file.readAll();
@@ -465,10 +476,9 @@ void tst_QSslCertificate::subjectInfoToString()
     QVERIFY(testInfo(QSslCertificate::StateOrProvinceName, QStringLiteral("Oslo")));
     QVERIFY(testInfo(QSslCertificate::DistinguishedNameQualifier, QString()));
     QVERIFY(testInfo(QSslCertificate::SerialNumber, QString()));
-#ifndef QT_NO_OPENSSL
     // TODO: check why generic code does not handle this!
-    QVERIFY(testInfo(QSslCertificate::EmailAddress, QStringLiteral("ababic@trolltech.com")));
-#endif
+    if (!isNonOpenSslTls)
+        QVERIFY(testInfo(QSslCertificate::EmailAddress, QStringLiteral("ababic@trolltech.com")));
 }
 
 void tst_QSslCertificate::subjectIssuerDisplayName_data()
@@ -889,9 +899,9 @@ void tst_QSslCertificate::task256066toPem()
 
 void tst_QSslCertificate::nulInCN()
 {
-#if QT_CONFIG(securetransport) || QT_CONFIG(schannel)
-    QSKIP("Generic QSslCertificatePrivate fails this test");
-#endif
+    if (isNonOpenSslTls)
+        QSKIP("Generic QSslCertificatePrivate fails this test");
+
     QList<QSslCertificate> certList =
         QSslCertificate::fromPath(testDataDir + "more-certificates/badguy-nul-cn.crt", QSsl::Pem, QSslCertificate::PatternSyntax::FixedString);
     QCOMPARE(certList.size(), 1);
@@ -908,9 +918,10 @@ void tst_QSslCertificate::nulInCN()
 
 void tst_QSslCertificate::nulInSan()
 {
-#if QT_CONFIG(securetransport) || QT_CONFIG(schannel)
-    QSKIP("Generic QSslCertificatePrivate fails this test");
-#endif
+
+    if (isNonOpenSslTls)
+        QSKIP("Generic QSslCertificatePrivate fails this test");
+
     QList<QSslCertificate> certList =
         QSslCertificate::fromPath(testDataDir + "more-certificates/badguy-nul-san.crt", QSsl::Pem, QSslCertificate::PatternSyntax::FixedString);
     QCOMPARE(certList.size(), 1);
@@ -973,6 +984,9 @@ void tst_QSslCertificate::selfsignedCertificates()
 
 void tst_QSslCertificate::toText()
 {
+    if (isNonOpenSslTls)
+        QSKIP("QSslCertificate::toText is not implemented on platforms which do not use openssl");
+
     QList<QSslCertificate> certList =
         QSslCertificate::fromPath(testDataDir + "more-certificates/cert-large-expiration-date.pem", QSsl::Pem, QSslCertificate::PatternSyntax::FixedString);
 
@@ -1003,9 +1017,6 @@ void tst_QSslCertificate::toText()
 
     QString txtcert = cert.toText();
 
-#ifdef QT_NO_OPENSSL
-    QEXPECT_FAIL("", "QSslCertificate::toText is not implemented on platforms which do not use openssl", Continue);
-#endif
     QVERIFY(QString::fromLatin1(txt098) == txtcert ||
             QString::fromLatin1(txt100) == txtcert ||
             QString::fromLatin1(txt101) == txtcert ||
@@ -1039,7 +1050,8 @@ void tst_QSslCertificate::subjectAndIssuerAttributes()
 
     QByteArray shortName("1.3.6.1.4.1.311.60.2.1.3");
 #if !defined(QT_NO_OPENSSL) && defined(SN_jurisdictionCountryName)
-    shortName = SN_jurisdictionCountryName;
+    if (!isNonOpenSslTls)
+        shortName = SN_jurisdictionCountryName;
 #endif
     attributes = certList[0].subjectInfoAttributes();
     QVERIFY(attributes.contains(shortName));
@@ -1047,9 +1059,9 @@ void tst_QSslCertificate::subjectAndIssuerAttributes()
 
 void tst_QSslCertificate::verify()
 {
-#if QT_CONFIG(securetransport)
-    QSKIP("Not implemented in SecureTransport");
-#endif
+    if (isNonOpenSslTls)
+        QSKIP("Not implemented in SecureTransport or Schannel");
+
     QList<QSslError> errors;
     QList<QSslCertificate> toVerify;
 
@@ -1059,9 +1071,6 @@ void tst_QSslCertificate::verify()
         qPrintable(QString("errors: %1").arg(toString(errors))) \
     )
 
-#ifdef QT_NO_OPENSSL
-    QEXPECT_FAIL("", "Verifying a chain is not supported without openssl", Abort); // TODO?
-#endif
     // Empty chain is unspecified error
     errors = QSslCertificate::verify(toVerify);
     VERIFY_VERBOSE(errors.count() == 1);
@@ -1400,9 +1409,9 @@ void tst_QSslCertificate::pkcs12()
     QSslCertificate cert;
     QList<QSslCertificate> caCerts;
 
-#ifdef QT_NO_OPENSSL
-    QEXPECT_FAIL("", "pkcs12 imports are only supported when openssl is used", Abort); // TODO?
-#endif
+    if (isNonOpenSslTls)
+        QEXPECT_FAIL("", "pkcs12 imports are only supported when openssl is used", Abort); // TODO?
+
     ok = QSslCertificate::importPkcs12(&f, &key, &cert, &caCerts);
     QVERIFY(ok);
     f.close();
@@ -1478,7 +1487,7 @@ void tst_QSslCertificate::invalidDateTime()
     }
 }
 
-#endif // QT_NO_SSL
+#endif // QT_CONFIG(ssl)
 
 QTEST_MAIN(tst_QSslCertificate)
 #include "tst_qsslcertificate.moc"

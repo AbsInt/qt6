@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2020 The Qt Company Ltd.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
@@ -40,12 +40,16 @@
 import QML
 
 Member {
-    required property string type
+    property string type
     property bool isPointer: false
     property bool isReadonly: false
+    property bool isRequired: false
     property bool isList: false
+    property bool isFinal: false
     property int revision: 0
     property string bindable
     property string read
     property string write
+    property string notify
+    property int index: -1
 }

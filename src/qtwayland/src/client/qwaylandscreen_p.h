@@ -110,7 +110,14 @@ public:
     static QWaylandScreen *waylandScreenFromWindow(QWindow *window);
     static QWaylandScreen *fromWlOutput(::wl_output *output);
 
-private:
+protected:
+    enum Event : uint {
+        XdgOutputDoneEvent = 0x1,
+        OutputDoneEvent = 0x2,
+        XdgOutputNameEvent = 0x4,
+    };
+    uint requiredEvents() const;
+
     void output_mode(uint32_t flags, int width, int height, int refresh) override;
     void output_geometry(int32_t x, int32_t y,
                          int32_t width, int32_t height,
@@ -143,13 +150,8 @@ private:
     QSize mPhysicalSize;
     QString mOutputName;
     Qt::ScreenOrientation m_orientation = Qt::PrimaryOrientation;
-    bool mOutputDone = false;
-    bool mXdgOutputDone = false;
+    uint mProcessedEvents = 0;
     bool mInitialized = false;
-
-#if QT_CONFIG(cursor)
-    QScopedPointer<QWaylandCursor> mWaylandCursor;
-#endif
 };
 
 }

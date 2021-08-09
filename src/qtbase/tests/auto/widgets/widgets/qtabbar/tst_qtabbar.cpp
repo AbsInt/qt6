@@ -968,8 +968,8 @@ void tst_QTabBar::scrollButtons()
     window.show();
     QVERIFY(QTest::qWaitForWindowActive(&window));
 
-    auto *leftB = tabWidget.tabBar()->findChild<QAbstractButton*>(QStringLiteral("ScrollLeftButton"));
-    auto *rightB = tabWidget.tabBar()->findChild<QAbstractButton*>(QStringLiteral("ScrollRightButton"));
+    auto *leftB = tabWidget.tabBar()->findChild<QAbstractButton*>(u"ScrollLeftButton"_qs);
+    auto *rightB = tabWidget.tabBar()->findChild<QAbstractButton*>(u"ScrollRightButton"_qs);
 
     QVERIFY(leftB->isVisible());
     QVERIFY(!leftB->isEnabled());

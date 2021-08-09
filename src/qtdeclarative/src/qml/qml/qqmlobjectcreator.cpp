@@ -80,7 +80,7 @@ QQmlObjectCreator::QQmlObjectCreator(
     : phase(Startup)
     , compilationUnit(compilationUnit)
     , propertyCaches(&compilationUnit->propertyCaches)
-    , sharedState(new QQmlObjectCreatorSharedState)
+    , sharedState(new QQmlObjectCreatorSharedState, QQmlRefPointer<QQmlObjectCreatorSharedState>::Adopt)
     , topLevelCreator(true)
     , incubator(incubator)
 {
@@ -168,13 +168,16 @@ QObject *QQmlObjectCreator::create(int subComponentIndex, QObject *parent, QQmlI
     phase = CreatingObjects;
 
     int objectToCreate;
+    bool isComponentRoot = false; // either a "real" component of or an inline component
 
     if (subComponentIndex == -1) {
         objectToCreate = /*root object*/0;
+        isComponentRoot = true;
     } else {
         Q_ASSERT(subComponentIndex >= 0);
         if (flags & CreationFlags::InlineComponent) {
             objectToCreate = subComponentIndex;
+            isComponentRoot = true;
         } else {
             Q_ASSERT(flags & CreationFlags::NormalObject);
             const QV4::CompiledData::Object *compObj = compilationUnit->objectAt(subComponentIndex);
@@ -199,7 +202,7 @@ QObject *QQmlObjectCreator::create(int subComponentIndex, QObject *parent, QQmlI
     if (topLevelCreator)
         sharedState->allJavaScriptObjects = scope.alloc(compilationUnit->totalObjectCount());
 
-    if (subComponentIndex == -1 && compilationUnit->dependentScripts.count()) {
+    if (isComponentRoot && compilationUnit->dependentScripts.count()) {
         QV4::ScopedObject scripts(scope, v4->newArrayObject(compilationUnit->dependentScripts.count()));
         context->setImportedScripts(QV4::PersistentValue(v4, scripts.asReturnedValue()));
         QV4::ScopedValue v(scope);
@@ -628,18 +631,11 @@ void QQmlObjectCreator::setPropertyValue(const QQmlPropertyData *property, const
             break;
         }
 
-        // otherwise, try a custom type assignment
+        // string converters are not exposed, so ending up here indicates an error
         QString stringValue = compilationUnit->bindingValueAsString(binding);
-        QQmlMetaType::StringConverter converter = QQmlMetaType::customStringConverter(property->propType().id());
-        QVariant value = converter ? (*converter)(stringValue) : QVariant();
-
         QMetaProperty metaProperty = _qobject->metaObject()->property(property->coreIndex());
-        if (value.isNull() || metaProperty.metaType() != property->propType()) {
-            recordError(binding->location, tr("Cannot assign value %1 to property %2").arg(stringValue).arg(QString::fromUtf8(metaProperty.name())));
-            break;
-        }
-
-        property->writeProperty(_qobject, value.data(), propertyWriteFlags);
+        recordError(binding->location, tr("Cannot assign value %1 to property"
+" %2").arg(stringValue, QString::fromUtf8(metaProperty.name())));
     }
     break;
     }
@@ -715,13 +711,11 @@ void QQmlObjectCreator::setupBindings(bool applyDeferredBindings)
             QQmlPropertyData* targetProperty = property;
             if (targetProperty->isAlias()) {
                 // follow alias
-                auto target = _bindingTarget;
                 QQmlPropertyIndex originalIndex(targetProperty->coreIndex(), _valueTypeProperty ? _valueTypeProperty->coreIndex() : -1);
-                QQmlPropertyIndex propIndex;
-                QQmlPropertyPrivate::findAliasTarget(target, originalIndex, &target, &propIndex);
-                QQmlData *data = QQmlData::get(target);
+                auto [targetObject, targetIndex] = QQmlPropertyPrivate::findAliasTarget(_bindingTarget, originalIndex);
+                QQmlData *data = QQmlData::get(targetObject);
                 Q_ASSERT(data && data->propertyCache);
-                targetProperty = data->propertyCache->property(propIndex.coreIndex());
+                targetProperty = data->propertyCache->property(targetIndex.coreIndex());
             }
             sharedState->requiredProperties.remove(targetProperty);
         }
@@ -845,7 +839,7 @@ bool QQmlObjectCreator::setPropertyBinding(const QQmlPropertyData *bindingProper
             const QQmlPropertyData *valueTypeProperty = nullptr;
             QObject *bindingTarget = _bindingTarget;
 
-            if (QQmlValueTypeFactory::isValueType(bindingProperty->propType())) {
+            if (QQmlMetaType::isValueType(bindingProperty->propType())) {
                 valueType = QQmlGadgetPtrWrapper::instance(engine, bindingProperty->propType());
                 if (!valueType) {
                     recordError(binding->location, tr("Cannot set properties on %1 as it is null").arg(stringAt(binding->propertyNameIndex)));
@@ -899,11 +893,11 @@ bool QQmlObjectCreator::setPropertyBinding(const QQmlPropertyData *bindingProper
                     // This should be faster than doing a detour through the metaobject of the target, and relying on
                     // QMetaObject::metacall doing the correct resolution
                     QQmlPropertyIndex originalIndex(bindingProperty->coreIndex(), _valueTypeProperty ? _valueTypeProperty->coreIndex() : -1);
-                    QQmlPropertyIndex propIndex;
-                    QQmlPropertyPrivate::findAliasTarget(target, originalIndex, &target, &propIndex);
+                    auto [aliasTargetObject, aliasTargetIndex] = QQmlPropertyPrivate::findAliasTarget(target, originalIndex);
+                    target = aliasTargetObject;
                     QQmlData *data = QQmlData::get(target);
                     Q_ASSERT(data && data->propertyCache);
-                    bindingProperty = data->propertyCache->property(propIndex.coreIndex());
+                    bindingProperty = data->propertyCache->property(aliasTargetIndex.coreIndex());
                 }
                 auto &observer = QQmlData::get(_scopeObject)->propertyObservers.emplace_back(expr);
                 QUntypedBindable bindable;
@@ -1003,8 +997,8 @@ bool QQmlObjectCreator::setPropertyBinding(const QQmlPropertyData *bindingProper
                 QQmlPropertyIndex propertyIndex;
                 if (bindingProperty->isAlias()) {
                     QQmlPropertyIndex originalIndex(bindingProperty->coreIndex(), _valueTypeProperty ? _valueTypeProperty->coreIndex() : -1);
-                    QQmlPropertyIndex propIndex;
-                    QQmlPropertyPrivate::findAliasTarget(target, originalIndex, &target, &propIndex);
+                    auto aliasTarget = QQmlPropertyPrivate::findAliasTarget(target, originalIndex);
+                    target = aliasTarget.targetObject;
                     QQmlData *data = QQmlData::get(target);
                     if (!data || !data->propertyCache) {
                         qWarning() << "can't resolve property alias for 'on' assignment";
@@ -1012,7 +1006,7 @@ bool QQmlObjectCreator::setPropertyBinding(const QQmlPropertyData *bindingProper
                     }
 
                     // we can't have aliasses on subproperties of value types, so:
-                    QQmlPropertyData targetPropertyData = *data->propertyCache->property(propIndex.coreIndex());
+                    QQmlPropertyData targetPropertyData = *data->propertyCache->property(aliasTarget.targetIndex.coreIndex());
                     auto prop = QQmlPropertyPrivate::restore(
                                 target, targetPropertyData, nullptr, context);
                     vi->setTarget(prop);
@@ -1107,12 +1101,12 @@ bool QQmlObjectCreator::setPropertyBinding(const QQmlPropertyData *bindingProper
 
             void *itemToAdd = createdSubObject;
 
-            const char *iid = nullptr;
-            int listItemType = QQmlEnginePrivate::get(engine)->listType(bindingProperty->propType().id());
-            if (listItemType != -1)
-                iid = QQmlMetaType::interfaceIId(listItemType);
-            if (iid)
-                itemToAdd = createdSubObject->qt_metacast(iid);
+            QMetaType listItemType = QQmlMetaType::listType(bindingProperty->propType());
+            if (listItemType.isValid()) {
+                const char *iid = QQmlMetaType::interfaceIId(listItemType.id());
+                if (iid)
+                    itemToAdd = createdSubObject->qt_metacast(iid);
+            }
 
             if (_currentList.append)
                 _currentList.append(&_currentList, itemToAdd);
@@ -1405,6 +1399,19 @@ bool QQmlObjectCreator::finalize(QQmlInstantiationInterrupt &interrupt)
     QQmlObjectCreatorRecursionWatcher watcher(this);
     QScopedValueRollback<QQmlObjectCreator*> ocRestore(QQmlEnginePrivate::get(engine)->activeObjectCreator, this);
 
+    /* We install all pending bindings (both plain QML and QProperty), and remove the ones which do not
+       actually have dependencies.
+       It is necessary to install the binding so that it runs at least once, which causes it to capture any
+       dependencies.
+       We then check for the following conditions:
+       - Is the binding in an error state?
+       - Does the binding has any dependencies (from properties)?
+       - Does it depend on anything in the context, which has not been resolved yet (and thus couldn't be
+         captured)?
+       If the answer to all of those questions is "no", it is safe to remove the binding, as there is no
+       way for it to change its value afterwards from that point on.
+    */
+
     while (!sharedState->allCreatedBindings.isEmpty()) {
         QQmlAbstractBinding::Ptr b = sharedState->allCreatedBindings.pop();
         Q_ASSERT(b);
@@ -1419,7 +1426,7 @@ bool QQmlObjectCreator::finalize(QQmlInstantiationInterrupt &interrupt)
         if (!b->isValueTypeProxy()) {
             QQmlBinding *binding = static_cast<QQmlBinding*>(b.data());
             if (!binding->hasError() && !binding->hasDependencies()
-                    && binding->hasContext() && !binding->hasUnresolvedNames()) {
+                    && !binding->hasUnresolvedNames()) {
                 b->removeFromObject();
             }
         }
@@ -1432,9 +1439,18 @@ bool QQmlObjectCreator::finalize(QQmlInstantiationInterrupt &interrupt)
         auto& [target, index, qmlBinding] = sharedState->allQPropertyBindings.first();
         QUntypedBindable bindable;
         void *argv[] = { &bindable };
-        target->qt_metacall(QMetaObject::BindableProperty, index, argv);
+        // allow interception
+        target->metaObject()->metacall(target, QMetaObject::BindableProperty, index, argv);
         bindable.setBinding(qmlBinding);
         sharedState->allQPropertyBindings.pop_front();
+        if (auto priv = QPropertyBindingPrivate::get(qmlBinding); priv->hasCustomVTable()) {
+            auto qmlBindingPriv = static_cast<QQmlPropertyBinding *>(priv);
+            auto jsExpression = qmlBindingPriv->jsExpression();
+            const bool canRemove = !qmlBinding.error().hasError() && !qmlBindingPriv->hasDependencies()
+                    && !jsExpression->hasUnresolvedNames();
+            if (canRemove)
+                bindable.takeBinding();
+        }
         if (watcher.hasRecursed() || interrupt.shouldInterrupt())
             return false;
     }

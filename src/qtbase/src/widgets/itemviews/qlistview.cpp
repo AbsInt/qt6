@@ -685,7 +685,7 @@ void QListView::reset()
 }
 
 /*!
-  \internal
+  \reimp
 */
 void QListView::setRootIndex(const QModelIndex &index)
 {
@@ -698,7 +698,7 @@ void QListView::setRootIndex(const QModelIndex &index)
 }
 
 /*!
-    \internal
+    \reimp
 
     Scroll the view contents by \a dx and \a dy.
 */

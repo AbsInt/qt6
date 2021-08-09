@@ -32,23 +32,141 @@
 #include "synchronized.h"
 #include "translator.h"
 
+#include <QLibraryInfo>
 #include <QtCore/qdir.h>
 #include <QtCore/qfileinfo.h>
 #include <QtCore/qjsonarray.h>
 #include <QtCore/qjsondocument.h>
 #include <QtCore/qjsonobject.h>
+#include <QtCore/QProcess>
+#include <QStandardPaths>
+#include <QtTools/private/qttools-config_p.h>
 
 #include <clang/Tooling/CompilationDatabase.h>
 
 #include <algorithm>
 #include <limits>
 #include <thread>
+#include <iostream>
+#include <cstdlib>
+
+#include <cstdio>
+#include <memory>
+#include <stdexcept>
+#include <string>
+#include <array>
 
 using clang::tooling::CompilationDatabase;
 
 QT_BEGIN_NAMESPACE
 
 Q_LOGGING_CATEGORY(lcClang, "qt.lupdate.clang");
+
+static QString getSysCompiler()
+{
+    QStringList candidates;
+    if (const char* local_compiler = std::getenv("CXX")) {
+        candidates.push_back(QLatin1String(local_compiler));
+    } else {
+        candidates = {
+#ifdef Q_OS_WIN
+            QStringLiteral("cl"),
+#endif
+            QStringLiteral("clang++"),
+            QStringLiteral("gcc")
+        };
+    }
+    QString sysCompiler;
+    for (const QString &comp : candidates) {
+
+        sysCompiler = QStandardPaths::findExecutable(comp);
+        if (!sysCompiler.isEmpty())
+            break;
+    }
+    return sysCompiler;
+}
+
+static QByteArrayList getMSVCIncludePathsFromEnvironment()
+{
+    QList<QByteArray> pathList;
+    if (const char* includeEnv = std::getenv("INCLUDE")) {
+        QByteArray includeList = QByteArray::fromRawData(includeEnv, strlen(includeEnv));
+        pathList = includeList.split(';');
+    }
+    for (auto it = pathList.begin(); it != pathList.end(); ++it) {
+        it->prepend("-isystem");
+    }
+    return pathList;
+}
+
+
+static QByteArray frameworkSuffix()
+{
+    return QByteArrayLiteral(" (framework directory)");
+}
+
+QByteArrayList getIncludePathsFromCompiler()
+{
+
+    QList<QByteArray> pathList;
+    QString compiler = getSysCompiler();
+    if (compiler.isEmpty()) {
+        qWarning("lupdate: Could not determine system compiler.");
+        return pathList;
+    }
+
+    const QFileInfo fiCompiler(compiler);
+    const QString compilerName
+
+#ifdef Q_OS_WIN
+        = fiCompiler.completeBaseName();
+#else
+        = fiCompiler.fileName();
+#endif
+
+    if (compilerName == QLatin1String("cl"))
+        return getMSVCIncludePathsFromEnvironment();
+
+    if (compilerName != QLatin1String("gcc") && compilerName != QLatin1String("clang++")) {
+        qWarning("lupdate: Unknown compiler %s", qPrintable(compiler));
+        return pathList;
+    }
+
+    const QStringList compilerFlags = {
+        QStringLiteral("-E"), QStringLiteral("-x"), QStringLiteral("c++"),
+        QStringLiteral("-"), QStringLiteral("-v")
+    };
+
+    QProcess proc;
+    proc.setStandardInputFile(proc.nullDevice());
+    proc.start(compiler, compilerFlags);
+    proc.waitForFinished(30000);
+    QByteArray buffer = proc.readAllStandardError();
+    proc.kill();
+
+    // ### TODO: Merge this with qdoc's getInternalIncludePaths()
+    const QByteArrayList stdErrLines = buffer.split('\n');
+    bool isIncludeDir = false;
+    for (const QByteArray &line : stdErrLines) {
+        if (isIncludeDir) {
+            if (line.startsWith(QByteArrayLiteral("End of search list"))) {
+                isIncludeDir = false;
+            } else {
+                QByteArray prefix("-isystem");
+                QByteArray headerPath{line.trimmed()};
+                if (headerPath.endsWith(frameworkSuffix())) {
+                    headerPath.truncate(headerPath.size() - frameworkSuffix().size());
+                    prefix = QByteArrayLiteral("-F");
+                }
+                pathList.append(prefix + headerPath);
+            }
+        } else if (line.startsWith(QByteArrayLiteral("#include <...> search starts here"))) {
+            isIncludeDir = true;
+        }
+    }
+
+    return pathList;
+}
 
 // Makes sure all the comments will be parsed and part of the AST
 // Clang will run with the flag -fparse-all-comments
@@ -63,9 +181,30 @@ clang::tooling::ArgumentsAdjuster getClangArgumentAdjuster()
                 adjustedArgs.push_back(args[i]);
         }
         adjustedArgs.push_back("-fparse-all-comments");
-        adjustedArgs.push_back("-I");
-        adjustedArgs.push_back(CLANG_RESOURCE_DIR);
+        adjustedArgs.push_back("-nostdinc");
+
+        // Turn off SSE support to avoid usage of gcc builtins.
+        // TODO: Look into what Qt Creator does.
+        // Pointers: HeaderPathFilter::removeGccInternalIncludePaths()
+        //           and gccInstallDir() in gcctoolchain.cpp
+        // Also needed for Mac, No need for CLANG_RESOURCE_DIR when this is part of the argument.
+        adjustedArgs.push_back("-mno-sse");
+
         adjustedArgs.push_back("-fsyntax-only");
+#ifdef Q_OS_WIN
+        adjustedArgs.push_back("-fms-compatibility-version=19");
+        adjustedArgs.push_back("-DQ_COMPILER_UNIFORM_INIT");    // qtbase + clang-cl hack
+#endif
+        adjustedArgs.push_back("-Wno-everything");
+        adjustedArgs.push_back("-std=gnu++17");
+
+        for (QByteArray line : getIncludePathsFromCompiler()) {
+            line = line.trimmed();
+            if (line.isEmpty())
+                continue;
+            adjustedArgs.push_back(line.data());
+        }
+
         return adjustedArgs;
     };
 }
@@ -110,30 +249,35 @@ bool ClangCppParser::containsTranslationInformation(llvm::StringRef ba)
      return false;
 }
 
-static bool generateCompilationDatabase(const QString &outputFilePath, const QStringList &sources,
-                                        const ConversionData &cd)
+static bool generateCompilationDatabase(const QString &outputFilePath, const ConversionData &cd)
 {
     QJsonArray commandObjects;
     const QString buildDir = QDir::currentPath();
-    for (const auto &source : sources) {
-        QFileInfo fi(source);
-        QJsonObject obj;
-        obj[QLatin1String("file")] = fi.fileName();
-        obj[QLatin1String("directory")] = buildDir;
-        QJsonArray args = {
-            QLatin1String("clang++"), QLatin1String("-o"),
-            QString(fi.completeBaseName() + QLatin1String(".o")),
-            fi.fileName(),
+    const QString fakefileName = QLatin1String("dummmy.cpp");
+    QJsonObject obj;
+    obj[QLatin1String("file")] = fakefileName;
+    obj[QLatin1String("directory")] = buildDir;
+    QJsonArray args = {
+            QLatin1String("clang++"),
+    #ifndef Q_OS_WIN
             QLatin1String("-fPIC"),
-            QLatin1String("-std=gnu++17")
+    #endif
         };
-        for (const QString &path : cd.m_includePath) {
+
+#if defined(Q_OS_MACOS) && QT_CONFIG(framework)
+        const QString installPath = QLibraryInfo::path(QLibraryInfo::LibrariesPath);
+        QString arg =  QLatin1String("-F") + installPath;
+        args.push_back(arg);
+#endif
+
+    for (const QString &path : cd.m_includePath) {
             QString arg = QLatin1String("-I") + path;
             args.push_back(std::move(arg));
-        }
-        obj[QLatin1String("arguments")] = args;
-        commandObjects.append(std::move(obj));
     }
+
+    obj[QLatin1String("arguments")] = args;
+    commandObjects.append(obj);
+
     QJsonDocument doc(commandObjects);
     QFile file(outputFilePath);
     if (!file.open(QIODevice::WriteOnly))
@@ -142,11 +286,18 @@ static bool generateCompilationDatabase(const QString &outputFilePath, const QSt
     return true;
 }
 
-
 // Sort messages in such a way that they appear in the same order like in the given file list.
 static void sortMessagesByFileOrder(ClangCppParser::TranslatorMessageVector &messages,
                                     const QStringList &files)
 {
+    // first sort messages by line number
+    std::stable_sort(messages.begin(), messages.end(),
+              [&](const TranslatorMessage &lhs, const TranslatorMessage &rhs) {
+                  auto i = lhs.lineNumber();
+                  auto k = rhs.lineNumber();
+                  return i < k;
+              });
+
     QHash<QString, QStringList::size_type> indexByPath;
     for (const TranslatorMessage &m : messages)
         indexByPath[m.fileName()] = std::numeric_limits<QStringList::size_type>::max();
@@ -158,17 +309,18 @@ static void sortMessagesByFileOrder(ClangCppParser::TranslatorMessageVector &mes
               [&](const TranslatorMessage &lhs, const TranslatorMessage &rhs) {
                   auto i = indexByPath.value(lhs.fileName());
                   auto k = indexByPath.value(rhs.fileName());
-                  return i <= k;
+                  return i < k;
               });
 }
 
 void ClangCppParser::loadCPP(Translator &translator, const QStringList &files, ConversionData &cd,
                             bool *fail)
 {
+
     // pre-process the files by a simple text search if there is any occurrence
     // of things we are interested in
     qCDebug(lcClang) << "Load CPP \n";
-    std::vector<std::string> sources, sourcesAst, sourcesPP;
+    std::vector<std::string> sourcesAst, sourcesPP;
     for (const QString &filename : files) {
         QFile file(filename);
         qCDebug(lcClang) << "File: " << filename << " \n";
@@ -180,16 +332,15 @@ void ClangCppParser::loadCPP(Translator &translator, const QStringList &files, C
                     sourcesAst.emplace_back(sourcesPP.back());
                 }
             } else {
-                // mmap did not succeed, remember it anyway
-                sources.push_back(filename.toStdString());
+                QByteArray mem = file.readAll();
+                const auto ba = llvm::StringRef((const char*) (mem), file.size());
+                if (containsTranslationInformation(ba)) {
+                    sourcesPP.emplace_back(filename.toStdString());
+                    sourcesAst.emplace_back(sourcesPP.back());
+                }
             }
-        } else {
-            // we could not open the file, remember it anyway
-            sources.push_back(filename.toStdString());
         }
     }
-    sourcesPP.insert(sourcesPP.cend(), sources.cbegin(), sources.cend());
-    sourcesAst.insert(sourcesAst.cend(), sources.cbegin(), sources.cend());
 
     std::string errorMessage;
     std::unique_ptr<CompilationDatabase> db;
@@ -207,7 +358,7 @@ void ClangCppParser::loadCPP(Translator &translator, const QStringList &files, C
     if (!db) {
         const QString dbFilePath = QStringLiteral("compile_commands.json");
         qCDebug(lcClang) << "Generating compilation database" << dbFilePath;
-        if (!generateCompilationDatabase(dbFilePath, files, cd)) {
+        if (!generateCompilationDatabase(dbFilePath, cd)) {
             *fail = true;
             cd.appendError(LU::tr("Cannot generate compilation database."));
             return;
@@ -274,20 +425,34 @@ void ClangCppParser::loadCPP(Translator &translator, const QStringList &files, C
     ClangCppParser::finalize(rsvQNoop, wsv);
 
     TranslatorMessageVector messages;
-    for (const auto &store : finalStores)
+    for (auto &store : finalStores)
         ClangCppParser::collectMessages(messages, store);
 
     sortMessagesByFileOrder(messages, files);
 
-    for (TranslatorMessage &msg : messages)
+    for (TranslatorMessage &msg : messages) {
+        if (!msg.warning().isEmpty()) {
+            std::cerr << qPrintable(msg.warning());
+            if (msg.warningOnly() == true)
+                continue;
+        }
         translator.extend(std::move(msg), cd);
+    }
 }
 
 void ClangCppParser::collectMessages(TranslatorMessageVector &result,
-                                     const TranslationRelatedStore &store)
+                                     TranslationRelatedStore &store)
 {
-    if (!store.isValid())
+    if (!store.isValid(true)) {
+        if (store.lupdateWarning.isEmpty())
+            return;
+        // The message needs to be added to the results so that the warning can be ordered
+        // and printed in a consistent way.
+        // the message won't appear in the .ts file
+        result.push_back(translatorMessage(store, store.lupdateIdMetaData, false, false, true));
         return;
+    }
+
     qCDebug(lcClang) << "---------------------------------------------------------------Filling translator for " << store.funcName;
     qCDebug(lcClang) << " contextRetrieved " << store.contextRetrieved;
     qCDebug(lcClang) << " source   " << store.lupdateSource;
@@ -302,11 +467,29 @@ void ClangCppParser::collectMessages(TranslatorMessageVector &result,
     case TrFunctionAliasManager::Function_trUtf8:
     case TrFunctionAliasManager::Function_QT_TR_NOOP:
     case TrFunctionAliasManager::Function_QT_TR_NOOP_UTF8:
-        if (!store.lupdateSourceWhenId.isEmpty())
+        if (!store.lupdateSourceWhenId.isEmpty()) {
+            std::stringstream warning;
+            warning << qPrintable(store.lupdateLocationFile) << ":"
+                << store.lupdateLocationLine << ":"
+                << store.locationCol << ": "
+                << "//% cannot be used with tr() / QT_TR_NOOP(). Ignoring\n";
+            store.lupdateWarning.append(QString::fromStdString(warning.str()));
             qCDebug(lcClang) << "//% is ignored when using tr function\n";
-        if (store.contextRetrieved.isEmpty() && store.contextArg.isEmpty())
+        }
+        if (store.contextRetrieved.isEmpty() && store.contextArg.isEmpty()) {
+            std::stringstream warning;
+            warning << qPrintable(store.lupdateLocationFile) << ":"
+                << store.lupdateLocationLine << ":"
+                << store.locationCol << ": "
+                << qPrintable(store.funcName) << " cannot be called without context."
+                << " The call is ignored (missing Q_OBJECT maybe?)\n";
+            store.lupdateWarning.append(QString::fromStdString(warning.str()));
             qCDebug(lcClang) << "tr() cannot be called without context \n";
-        else
+            // The message need to be added to the results so that the warning can be ordered
+            // and printed in a consistent way.
+            // the message won't appear in the .ts file
+            result.push_back(translatorMessage(store, store.lupdateIdMetaData, plural, false, true));
+        } else
             result.push_back(translatorMessage(store, store.lupdateIdMetaData, plural, false));
         break;
 
@@ -321,8 +504,15 @@ void ClangCppParser::collectMessages(TranslatorMessageVector &result,
     case TrFunctionAliasManager::Function_QT_TRANSLATE_NOOP_UTF8:
     case TrFunctionAliasManager::Function_QT_TRANSLATE_NOOP3:
     case TrFunctionAliasManager::Function_QT_TRANSLATE_NOOP3_UTF8:
-        if (!store.lupdateSourceWhenId.isEmpty())
+        if (!store.lupdateSourceWhenId.isEmpty()) {
+            std::stringstream warning;
+            warning << qPrintable(store.lupdateLocationFile) << ":"
+                << store.lupdateLocationLine << ":"
+                << store.locationCol << ": "
+                << "//% cannot be used with translate() / QT_TRANSLATE_NOOP(). Ignoring\n";
+            store.lupdateWarning.append(QString::fromStdString(warning.str()));
             qCDebug(lcClang) << "//% is ignored when using translate function\n";
+        }
         result.push_back(translatorMessage(store, store.lupdateIdMetaData, plural, false));
         break;
 
@@ -332,8 +522,15 @@ void ClangCppParser::collectMessages(TranslatorMessageVector &result,
         Q_FALLTHROUGH();
     case TrFunctionAliasManager::Function_qtTrId:
     case TrFunctionAliasManager::Function_QT_TRID_NOOP:
-        if (!store.lupdateIdMetaData.isEmpty())
+        if (!store.lupdateIdMetaData.isEmpty()) {
+            std::stringstream warning;
+            warning << qPrintable(store.lupdateLocationFile) << ":"
+                << store.lupdateLocationLine << ":"
+                << store.locationCol << ": "
+                << "//= cannot be used with qtTrId() / QT_TRID_NOOP(). Ignoring\n";
+            store.lupdateWarning.append(QString::fromStdString(warning.str()));
             qCDebug(lcClang) << "//= is ignored when using qtTrId function \n";
+        }
         result.push_back(translatorMessage(store, store.lupdateId, plural, true));
         break;
     default:
@@ -342,17 +539,27 @@ void ClangCppParser::collectMessages(TranslatorMessageVector &result,
     }
 }
 
-static QString ensureAbsolutePath(const QString &filePath)
+static QString ensureCanonicalPath(const QString &filePath)
 {
     QFileInfo fi(filePath);
     if (fi.isRelative())
-        return QDir::current().absoluteFilePath(filePath);
-    return filePath;
+        fi.setFile(QDir::current().absoluteFilePath(filePath));
+    return fi.canonicalFilePath();
 }
 
 TranslatorMessage ClangCppParser::translatorMessage(const TranslationRelatedStore &store,
-    const QString &id, bool plural, bool isId)
+    const QString &id, bool plural, bool isId, bool isWarningOnly)
 {
+    if (isWarningOnly) {
+        TranslatorMessage msg;
+        // msg filled with file name and line number should be enough for the message ordering
+        msg.setFileName(ensureCanonicalPath(store.lupdateLocationFile));
+        msg.setLineNumber(store.lupdateLocationLine);
+        msg.setWarning(store.lupdateWarning);
+        msg.setWarningOnly(isWarningOnly);
+        return msg;
+    }
+
     QString context;
     if (!isId) {
         context = ParserTool::transcode(store.contextArg.isEmpty() ? store.contextRetrieved
@@ -364,7 +571,7 @@ TranslatorMessage ClangCppParser::translatorMessage(const TranslationRelatedStor
             : store.lupdateSource),
         ParserTool::transcode(store.lupdateComment),
         QString(),
-        ensureAbsolutePath(store.lupdateLocationFile),
+        ensureCanonicalPath(store.lupdateLocationFile),
         store.lupdateLocationLine,
         QStringList(),
         TranslatorMessage::Type::Unfinished,
@@ -374,6 +581,8 @@ TranslatorMessage ClangCppParser::translatorMessage(const TranslationRelatedStor
         msg.setExtras(store.lupdateAllMagicMetaData);
     msg.setExtraComment(ParserTool::transcode(store.lupdateExtraComment));
     msg.setId(ParserTool::transcode(id));
+    if (!store.lupdateWarning.isEmpty())
+        msg.setWarning(store.lupdateWarning);
     return msg;
 }
 

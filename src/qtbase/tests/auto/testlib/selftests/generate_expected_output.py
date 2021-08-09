@@ -64,7 +64,7 @@ TESTS = ['assert', 'badxml', 'benchlibcallgrind', 'benchlibcounting',
          'signaldumper', 'silent', 'singleskip', 'skip', 'skipcleanup',
          'skipinit', 'skipinitdata', 'sleep', 'strcmp', 'subtest', 'testlib',
          'tuplediagnostics', 'verbose1', 'verbose2', 'verifyexceptionthrown',
-         'warnings', 'watchdog', 'xunit', 'keyboard']
+         'warnings', 'watchdog', 'junit', 'keyboard']
 
 
 class Fail (Exception): pass
@@ -116,6 +116,7 @@ class Cleaner (object):
             (r'(Config: Using QtTest library).*', r'\1'), # txt
             (r'( *<QtBuild)>[^<]+</QtBuild>', r'\1/>'), # xml, lightxml
             (r'(<property name="QtBuild" value=")[^"]+"', r'\1"'), # junitxml
+            (r'(<testsuite .*? hostname=")[^"]+(".*>)', r'\1@HOSTNAME@\2'), # junit
             # Line numbers in source files:
             (r'(ASSERT: ("|&quot;).*("|&quot;) in file .*, line) \d+', r'\1 0'), # lightxml
             (r'(Loc: \[[^[\]()]+)\(\d+\)', r'\1(0)'), # txt
@@ -295,10 +296,19 @@ def generateTestData(test_path, expected_path, clean, formats):
         print("Warning: directory", testname, "contains no test executable")
         return
 
+    # See TestLogger::shouldIgnoreTest() in tst_selftest.cpp for these
+    # single-format tests:
+    if testname == 'junit':
+        formats = ( 'junitxml', ) if 'junitxml' in formats else ()
+    elif testname == 'float':
+        formats = ( 'txt', ) if 'txt' in formats else ()
+
     # Prepare environment in which to run tests:
     env = testEnv(testname)
 
     for format in formats:
+        if testname == "junit" and not format == "junitxml":
+            continue
         print(f'  running {testname}/{format}')
         cmd = [path, f'-{format}']
         expected_file = f'expected_{testname}.{format}'

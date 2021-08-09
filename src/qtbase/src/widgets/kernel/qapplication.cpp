@@ -1563,7 +1563,7 @@ QWidget *QApplication::activeWindow()
 
 #if QT_DEPRECATED_SINCE(6,0)
 /*!
-    \obsolete Use the QFontMetricsF constructor instead
+    \deprecated Use the QFontMetricsF constructor instead.
     Returns display (screen) font metrics for the application font.
 
     \sa font(), setFont(), QWidget::fontMetrics(), QPainter::fontMetrics()
@@ -1921,6 +1921,7 @@ void QApplicationPrivate::notifyActiveWindowChange(QWindow *previous)
                 if (widget->inherits("QAxHostWidget"))
                     widget->setFocus(Qt::ActiveWindowFocusReason);
     }
+    // don't call base class to avoid double delivery of WindowActivate/Deactivate events
 }
 
 /*!internal
@@ -2266,12 +2267,6 @@ bool qt_try_modal(QWidget *widget, QEvent::Type type)
     bool block_event  = false;
 
     switch (type) {
-#if 0
-    case QEvent::Focus:
-        if (!static_cast<QWSFocusEvent*>(event)->simpleData.get_focus)
-            break;
-        // drop through
-#endif
     case QEvent::MouseButtonPress:                        // disallow mouse/key events
     case QEvent::MouseButtonRelease:
     case QEvent::MouseMove:
@@ -4104,6 +4099,11 @@ QPixmap QApplicationPrivate::applyQIconStyleHelper(QIcon::Mode mode, const QPixm
     QStyleOption opt(0);
     opt.palette = QGuiApplication::palette();
     return QApplication::style()->generatedIconPixmap(mode, base, &opt);
+}
+
+void *QApplication::resolveInterface(const char *name, int revision) const
+{
+    return QGuiApplication::resolveInterface(name, revision);
 }
 
 QT_END_NAMESPACE

@@ -235,11 +235,6 @@ public:
     using QJSEnginePrivate::cache;
 
     // These methods may be called from the loader thread
-    bool isQObject(int);
-    QObject *toQObject(const QVariant &, bool *ok = nullptr) const;
-    QQmlMetaType::TypeCategory typeCategory(int) const;
-    bool isList(int) const;
-    int listType(int) const;
     QQmlMetaObject rawMetaObjectForType(int) const;
     QQmlMetaObject metaObjectForType(int) const;
     QQmlPropertyCache *propertyCacheForType(int);
@@ -291,7 +286,7 @@ public:
         if (it != cachedValueTypeInstances.end())
             return *it;
 
-        if (QQmlValueType *valueType = QQmlValueTypeFactory::valueType(type)) {
+        if (QQmlValueType *valueType = QQmlMetaType::valueType(type)) {
             QQmlGadgetPtrWrapper *instance = new QQmlGadgetPtrWrapper(valueType, q_func());
             cachedValueTypeInstances.insert(typeIndex, instance);
             return instance;
@@ -299,6 +294,9 @@ public:
 
         return nullptr;
     }
+
+    void executeRuntimeFunction(const QUrl &url, qsizetype functionIndex, QObject *thisObject,
+                                int argc = 0, void **args = nullptr, QMetaType *types = nullptr);
 
 private:
     class SingletonInstances : private QHash<QQmlType, QJSValue>

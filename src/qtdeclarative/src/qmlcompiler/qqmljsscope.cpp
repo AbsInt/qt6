@@ -35,16 +35,50 @@
 #include <QtCore/qfileinfo.h>
 
 #include <algorithm>
+#include <type_traits>
 
 QT_BEGIN_NAMESPACE
 
-template<typename Action>
-static bool searchBaseAndExtensionTypes(const QQmlJSScope *type, const Action &check)
+/*! \internal
+
+    Utility method that returns proper value according to the type To. This
+    version returns From.
+*/
+template<typename To, typename From, typename std::enable_if_t<!std::is_pointer_v<To>, int> = 0>
+static auto getQQmlJSScopeFromSmartPtr(const From &p) -> From
 {
-    for (const QQmlJSScope *scope = type; scope; scope = scope->baseType().data()) {
+    static_assert(!std::is_pointer_v<From>, "From has to be a smart pointer holding QQmlJSScope");
+    return p;
+}
+
+/*! \internal
+
+    Utility method that returns proper value according to the type To. This
+    version returns From::get(), which is a raw pointer. The returned type is
+    not necessary equal to To (e.g. To might be `QQmlJSScope *` while returned
+    is `const QQmlJSScope *`).
+*/
+template<typename To, typename From, typename std::enable_if_t<std::is_pointer_v<To>, int> = 0>
+static auto getQQmlJSScopeFromSmartPtr(const From &p) -> decltype(p.get())
+{
+    static_assert(!std::is_pointer_v<From>, "From has to be a smart pointer holding QQmlJSScope");
+    return p.get();
+}
+
+template<typename QQmlJSScopePtr, typename Action>
+static bool searchBaseAndExtensionTypes(QQmlJSScopePtr type, const Action &check)
+{
+    // NB: among other things, getQQmlJSScopeFromSmartPtr() also resolves const
+    // vs non-const pointer issue, so use it's return value as the type
+    using T = decltype(
+            getQQmlJSScopeFromSmartPtr<QQmlJSScopePtr>(std::declval<QQmlJSScope::ConstPtr>()));
+
+    for (T scope = type; scope;
+         scope = getQQmlJSScopeFromSmartPtr<QQmlJSScopePtr>(scope->baseType())) {
         // Extensions override their base types
-        for (const QQmlJSScope *extension = scope->extensionType().data(); extension;
-             extension = extension->baseType().data()) {
+        for (T extension = getQQmlJSScopeFromSmartPtr<QQmlJSScopePtr>(scope->extensionType());
+             extension;
+             extension = getQQmlJSScopeFromSmartPtr<QQmlJSScopePtr>(extension->baseType())) {
             if (check(extension))
                 return true;
         }
@@ -191,20 +225,29 @@ QQmlJSScope::findJSIdentifier(const QString &id) const
 }
 
 void QQmlJSScope::resolveTypes(const QQmlJSScope::Ptr &self,
-                               const QHash<QString, QQmlJSScope::ConstPtr> &contextualTypes)
+                               const QHash<QString, QQmlJSScope::ConstPtr> &contextualTypes,
+                               QSet<QString> *usedTypes)
 {
     auto findType = [&](const QString &name) -> QQmlJSScope::ConstPtr {
         auto type = contextualTypes.constFind(name);
-        if (type != contextualTypes.constEnd())
+
+        if (type != contextualTypes.constEnd()) {
+            if (usedTypes != nullptr)
+                usedTypes->insert(name);
             return *type;
+        }
 
         const auto colonColon = name.indexOf(QStringLiteral("::"));
         if (colonColon > 0) {
-            const auto outerType = contextualTypes.constFind(name.left(colonColon));
+            const QString outerTypeName = name.left(colonColon);
+            const auto outerType = contextualTypes.constFind(outerTypeName);
             if (outerType != contextualTypes.constEnd()) {
                 for (const auto &innerType : qAsConst((*outerType)->m_childScopes)) {
-                    if (innerType->m_internalName == name)
+                    if (innerType->m_internalName == name) {
+                        if (usedTypes != nullptr)
+                            usedTypes->insert(name);
                         return innerType;
+                    }
                 }
             }
         }
@@ -296,7 +339,7 @@ void QQmlJSScope::resolveTypes(const QQmlJSScope::Ptr &self,
         default:
             break;
         }
-        resolveTypes(childScope, contextualTypes);
+        resolveTypes(childScope, contextualTypes, usedTypes);
     }
 }
 
@@ -334,6 +377,126 @@ QQmlJSMetaProperty QQmlJSScope::property(const QString &name) const
     return prop;
 }
 
+QQmlJSScope::ConstPtr QQmlJSScope::ownerOfProperty(const QQmlJSScope::ConstPtr &self,
+                                                   const QString &name)
+{
+    QQmlJSScope::ConstPtr owner;
+    searchBaseAndExtensionTypes(self, [&](const QQmlJSScope::ConstPtr &scope) {
+        if (scope->hasOwnProperty(name)) {
+            owner = scope;
+            return true;
+        }
+        return false;
+    });
+    return owner;
+}
+
+void QQmlJSScope::setPropertyLocallyRequired(const QString &name, bool isRequired)
+{
+    if (!isRequired)
+        m_requiredPropertyNames.removeOne(name);
+    else if (!m_requiredPropertyNames.contains(name))
+        m_requiredPropertyNames.append(name);
+}
+
+bool QQmlJSScope::isPropertyRequired(const QString &name) const
+{
+    bool isRequired = false;
+    searchBaseAndExtensionTypes(this, [&](const QQmlJSScope *scope) {
+        if (scope->isPropertyLocallyRequired(name)) {
+            isRequired = true;
+            return true;
+        }
+
+        // If it has a property of that name, and that is not required, then none of the
+        // base types matter. You cannot make a derived type's property required with
+        // a "required" specification in a base type.
+        return scope->hasOwnProperty(name);
+    });
+    return isRequired;
+}
+
+bool QQmlJSScope::isPropertyLocallyRequired(const QString &name) const
+{
+    return m_requiredPropertyNames.contains(name);
+}
+
+bool QQmlJSScope::hasPropertyBinding(const QString &name) const
+{
+    return searchBaseAndExtensionTypes(this, [&](const QQmlJSScope *scope) {
+        return scope->m_propertyBindings.contains(name);
+    });
+}
+
+QQmlJSMetaPropertyBinding QQmlJSScope::propertyBinding(const QString &name) const
+{
+    QQmlJSMetaPropertyBinding binding;
+    searchBaseAndExtensionTypes(this, [&](const QQmlJSScope *scope) {
+        const auto it = scope->m_propertyBindings.find(name);
+        if (it == scope->m_propertyBindings.end())
+            return false;
+        binding = *it;
+        return true;
+    });
+    return binding;
+}
+
+bool QQmlJSScope::hasInterface(const QString &name) const
+{
+    return searchBaseAndExtensionTypes(
+            this, [&](const QQmlJSScope *scope) { return scope->m_interfaceNames.contains(name); });
+}
+
+QString QQmlJSScope::attachedTypeName() const
+{
+    QString name;
+    searchBaseAndExtensionTypes(this, [&](const QQmlJSScope *scope) {
+        if (scope->ownAttachedType().isNull())
+            return false;
+        name = scope->ownAttachedTypeName();
+        return true;
+    });
+
+    return name;
+}
+
+QQmlJSScope::ConstPtr QQmlJSScope::attachedType() const
+{
+    QQmlJSScope::ConstPtr ptr;
+    searchBaseAndExtensionTypes(this, [&](const QQmlJSScope *scope) {
+        if (scope->ownAttachedType().isNull())
+            return false;
+        ptr = scope->ownAttachedType();
+        return true;
+    });
+
+    return ptr;
+}
+
+bool QQmlJSScope::isResolved() const
+{
+    if (m_scopeType == ScopeType::AttachedPropertyScope
+        || m_scopeType == ScopeType::GroupedPropertyScope) {
+        return m_internalName.isEmpty() || !m_baseType.isNull();
+    }
+
+    return m_baseTypeName.isEmpty() || !m_baseType.isNull();
+}
+
+bool QQmlJSScope::isFullyResolved() const
+{
+    bool baseResolved = true;
+    searchBaseAndExtensionTypes(this, [&](const QQmlJSScope *scope) {
+        if (!scope->isResolved()) {
+            baseResolved = false;
+            return true;
+        }
+        return false;
+    });
+
+    return baseResolved;
+}
+
 QQmlJSScope::Export::Export(QString package, QString type, const QTypeRevision &version) :
     m_package(std::move(package)),
     m_type(std::move(type)),
@@ -353,6 +516,39 @@ QQmlJSScope QDeferredFactory<QQmlJSScope>::create() const
     m_importer->m_warnings.append(typeReader.errors());
     result->setInternalName(QFileInfo(m_filePath).baseName());
     return std::move(*result);
+}
+
+bool QQmlJSScope::canAssign(const QQmlJSScope::ConstPtr &derived) const
+{
+    if (!derived)
+        return false;
+
+    bool isBaseComponent = false;
+    for (auto scope = this; scope; scope = scope->baseType().get()) {
+        if (internalName() == u"QQmlComponent"_qs) {
+            isBaseComponent = true;
+            break;
+        }
+    }
+
+    for (auto scope = derived; !scope.isNull(); scope = scope->baseType()) {
+        if (isSameType(scope))
+            return true;
+        if (isBaseComponent && scope->internalName() == u"QObject"_qs)
+            return true;
+    }
+
+    return internalName() == u"QVariant"_qs || internalName() == u"QJSValue"_qs;
+}
+
+bool QQmlJSScope::isInCustomParserParent() const
+{
+    for (const auto *scope = this; scope; scope = scope->parentScope().get()) {
+        if (!scope->baseType().isNull() && scope->baseType()->hasCustomParser())
+            return true;
+    }
+
+    return false;
 }
 
 QT_END_NAMESPACE

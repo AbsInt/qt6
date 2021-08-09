@@ -56,6 +56,9 @@ public:
     bool useTextureAlpha() const;
     void setUseTextureAlpha(bool useTextureAlpha);
 
+protected:
+    QWaylandQuickSurface(QWaylandQuickSurfacePrivate &dptr);
+
 Q_SIGNALS:
     void useTextureAlphaChanged();
 };

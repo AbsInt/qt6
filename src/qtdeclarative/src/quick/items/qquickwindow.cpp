@@ -492,6 +492,7 @@ void QQuickWindowRenderTarget::reset(QRhi *rhi, QSGRenderer *renderer)
             delete renderTarget;
             delete rpDesc;
             delete texture;
+            delete renderBuffer;
             delete depthStencil;
         }
     }
@@ -499,6 +500,7 @@ void QQuickWindowRenderTarget::reset(QRhi *rhi, QSGRenderer *renderer)
     renderTarget = nullptr;
     rpDesc = nullptr;
     texture = nullptr;
+    renderBuffer = nullptr;
     depthStencil = nullptr;
     owns = false;
 }
@@ -840,7 +842,7 @@ void QQuickWindowPrivate::dirtyItem(QQuickItem *)
 }
 
 /*!
-    \obsolete Use QPointerEvent::exclusiveGrabber()
+    \deprecated Use QPointerEvent::exclusiveGrabber().
     Returns the item which currently has the mouse grab.
 */
 QQuickItem *QQuickWindow::mouseGrabberItem() const
@@ -1498,6 +1500,7 @@ bool QQuickWindow::event(QEvent *e)
             return true;
         break;
     case QEvent::LanguageChange:
+    case QEvent::LocaleChange:
         if (d->contentItem)
             QCoreApplication::sendEvent(d->contentItem, e);
         break;
@@ -1516,6 +1519,10 @@ bool QQuickWindow::event(QEvent *e)
     case QEvent::WindowDeactivate:
         if (auto da = d->deliveryAgentPrivate())
             da->handleWindowDeactivate(this);
+        Q_FALLTHROUGH();
+    case QEvent::WindowActivate:
+        if (d->contentItem)
+            QCoreApplication::sendEvent(d->contentItem, e);
         break;
     default:
         break;
@@ -1667,7 +1674,7 @@ QPair<QQuickItem*, QQuickPointerHandler*> QQuickWindowPrivate::findCursorItemAnd
 
 /*!
     \qmlproperty list<Object> Window::data
-    \default
+    \qmldefault
 
     The data property allows you to freely mix visual children, resources
     and other Windows in a Window.
@@ -1780,7 +1787,7 @@ void QQuickWindowPrivate::cleanupNodesOnShutdown(QQuickItem *item)
         p->dirty(QQuickItemPrivate::Window);
     }
 
-    // Qt 6: Make invalidateSceneGraph a virtual member of QQuickItem
+    // Qt 7: Make invalidateSceneGraph a virtual member of QQuickItem
     if (p->flags & QQuickItem::ItemHasContents) {
         const QMetaObject *mo = item->metaObject();
         int index = mo->indexOfSlot("invalidateSceneGraph()");
@@ -2417,6 +2424,48 @@ QQuickRenderTarget QQuickWindow::renderTarget() const
     return d->customRenderTarget;
 }
 
+#ifdef Q_OS_WEBOS
+class GrabWindowForProtectedContent : public QRunnable
+{
+public:
+    GrabWindowForProtectedContent(QQuickWindow *window, QImage *image, QWaitCondition *condition)
+        : m_window(window)
+        , m_image(image)
+        , m_condition(condition)
+    {
+    }
+
+    bool checkGrabbable()
+    {
+        if (!m_window)
+            return false;
+        if (!m_image)
+            return false;
+        if (!QQuickWindowPrivate::get(m_window))
+            return false;
+
+        return true;
+    }
+
+    void run() override
+    {
+        if (!checkGrabbable())
+            return;
+
+        *m_image = QSGRhiSupport::instance()->grabOffscreenForProtectedContent(m_window);
+        if (m_condition)
+            m_condition->wakeOne();
+        return;
+    }
+
+private:
+    QQuickWindow *m_window;
+    QImage *m_image;
+    QWaitCondition *m_condition;
+
+};
+#endif
+
 /*!
     Grabs the contents of the window and returns it as an image.
 
@@ -2457,6 +2506,24 @@ QImage QQuickWindow::grabWindow()
         }
     }
 
+#ifdef Q_OS_WEBOS
+    if (requestedFormat().testOption(QSurfaceFormat::ProtectedContent)) {
+        QImage image;
+        QMutex mutex;
+        QWaitCondition condition;
+        mutex.lock();
+        GrabWindowForProtectedContent *job = new GrabWindowForProtectedContent(this, &image, &condition);
+        if (!job) {
+            qWarning("QQuickWindow::grabWindow: Failed to create a job for capturing protected content");
+            mutex.unlock();
+            return QImage();
+        }
+        scheduleRenderJob(job, QQuickWindow::NoStage);
+        condition.wait(&mutex);
+        mutex.unlock();
+        return image;
+    }
+#endif
     // The common case: we have an exposed window with an initialized
     // scenegraph, meaning we can request grabbing via the render loop, or we
     // are not targeting the window, in which case the request is to be
@@ -2465,6 +2532,7 @@ QImage QQuickWindow::grabWindow()
         return QQuickRenderControlPrivate::get(d->renderControl)->grab();
     else if (d->windowManager)
         return d->windowManager->grab(this);
+
     return QImage();
 }
 

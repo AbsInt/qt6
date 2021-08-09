@@ -48,7 +48,7 @@ public:
     tst_qqmlparser();
 
 private slots:
-    void initTestCase();
+    void initTestCase() override;
 #if !defined(QTEST_CROSS_COMPILED) // sources not available when cross compiled
     void qmlParser_data();
     void qmlParser();
@@ -140,7 +140,7 @@ struct TypeAnnotationObserver: public AST::Visitor
         AST::Node::accept(node, this);
     }
 
-    virtual bool visit(AST::TypeAnnotation *)
+    bool visit(AST::TypeAnnotation *) override
     {
         typeAnnotationSeen = true;
         return true;
@@ -181,6 +181,7 @@ class CheckLocations : public Check
 public:
     CheckLocations(const QString &code)
     {
+        m_codeStr = code;
         m_code = code.split('\u000A');
     }
 
@@ -215,8 +216,24 @@ public:
             ++startLine;
         }
         QCOMPARE(expected, found);
+        SourceLocation combined(first.offset, last.end() - first.begin(),
+                                first.startLine, first.startColumn);
+        SourceLocation cStart = combined.startZeroLengthLocation();
+        SourceLocation cEnd = combined.endZeroLengthLocation(m_codeStr);
+        QCOMPARE(cStart.begin(), first.begin());
+        QCOMPARE(cStart.end(), first.begin());
+        QCOMPARE(cStart.startLine, first.startLine);
+        QCOMPARE(cStart.startColumn, first.startColumn);
+        QCOMPARE(cEnd.begin(), last.end());
+        QCOMPARE(cEnd.end(), last.end());
+        QCOMPARE(cEnd.startLine, uint(startLine));
+        int lastNewline = found.lastIndexOf(QLatin1Char('\n'));
+        if (lastNewline < 0)
+            lastNewline = -int(combined.startColumn);
+        QCOMPARE(cEnd.startColumn, found.length() - lastNewline);
     }
 private:
+    QString m_codeStr;
     QStringList m_code;
 };
 
@@ -645,28 +662,20 @@ void tst_qqmlparser::typeAssertion_data()
     QTest::addColumn<QString>("expression");
     QTest::addRow("as A")
             << QString::fromLatin1("A { onStuff: (b as A).happen() }");
-    QTest::addRow("as double paren")
-            << QString::fromLatin1("A { onStuff: console.log((12 as double)); }");
-    QTest::addRow("as double noparen")
-            << QString::fromLatin1("A { onStuff: console.log(12 as double); }");
-    QTest::addRow("property as double")
-            << QString::fromLatin1("A { prop: (12 as double); }");
-    QTest::addRow("property noparen as double")
-            << QString::fromLatin1("A { prop: 12 as double; }");
 
-    // rabbits cannot be discerned from types on a syntactical level.
-    // We could detect this on a semantical level, once we implement type assertions there.
+    // Rabbits cannot be discerned from types on a syntactical level.
+    // (rabbits would instead cause an error, as they are lower case)
 
-    QTest::addRow("as rabbit")
-            << QString::fromLatin1("A { onStuff: (b as rabbit).happen() }");
-    QTest::addRow("as rabbit paren")
-            << QString::fromLatin1("A { onStuff: console.log((12 as rabbit)); }");
-    QTest::addRow("as rabbit noparen")
-            << QString::fromLatin1("A { onStuff: console.log(12 as rabbit); }");
-    QTest::addRow("property as rabbit")
-            << QString::fromLatin1("A { prop: (12 as rabbit); }");
-    QTest::addRow("property noparen as rabbit")
-            << QString::fromLatin1("A { prop: 12 as rabbit; }");
+    QTest::addRow("as Rabbit")
+            << QString::fromLatin1("A { onStuff: (b as Rabbit).happen() }");
+    QTest::addRow("as Rabbit paren")
+            << QString::fromLatin1("A { onStuff: console.log((12 as Rabbit)); }");
+    QTest::addRow("as Rabbit noparen")
+            << QString::fromLatin1("A { onStuff: console.log(12 as Rabbit); }");
+    QTest::addRow("property as Rabbit")
+            << QString::fromLatin1("A { prop: (12 as Rabbit); }");
+    QTest::addRow("property noparen as Rabbit")
+            << QString::fromLatin1("A { prop: 12 as Rabbit; }");
 }
 
 void tst_qqmlparser::typeAssertion()

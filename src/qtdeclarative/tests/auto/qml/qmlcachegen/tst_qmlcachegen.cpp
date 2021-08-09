@@ -46,7 +46,7 @@ class tst_qmlcachegen: public QQmlDataTest
     Q_OBJECT
 
 private slots:
-    void initTestCase();
+    void initTestCase() override;
 
     void loadGeneratedFile();
     void translationExpressionSupport();
@@ -107,7 +107,8 @@ static bool generateCache(const QString &qmlFileName, QByteArray *capturedStderr
     QProcess proc;
     if (capturedStderr == nullptr)
         proc.setProcessChannelMode(QProcess::ForwardedChannels);
-    proc.setProgram(QLibraryInfo::path(QLibraryInfo::BinariesPath) + QDir::separator() + QLatin1String("qmlcachegen"));
+    proc.setProgram(QLibraryInfo::path(QLibraryInfo::LibraryExecutablesPath)
+                    + QLatin1String("/qmlcachegen"));
     proc.setArguments(QStringList() << qmlFileName);
     proc.start();
     if (!proc.waitForFinished())
@@ -696,8 +697,9 @@ void tst_qmlcachegen::parameterAdjustment()
 
 void tst_qmlcachegen::inlineComponent()
 {
-    bool ok = generateCache(testFile("inlineComponentWithId.qml"));
-    QVERIFY(ok);
+    QByteArray errors;
+    bool ok = generateCache(testFile("inlineComponentWithId.qml"), &errors);
+    QVERIFY2(ok, errors);
     QQmlEngine engine;
     CleanlyLoadingComponent component(&engine, testFileUrl("inlineComponentWithId.qml"));
     QTest::ignoreMessage(QtMsgType::QtInfoMsg, "42");

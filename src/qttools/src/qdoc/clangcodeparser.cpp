@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2019 The Qt Company Ltd.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the tools applications of the Qt Toolkit.
@@ -36,10 +36,6 @@
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
-
-/*
-  clangcodeparser.cpp
-*/
 
 #include "clangcodeparser.h"
 
@@ -461,7 +457,7 @@ private:
      */
     struct SimpleLoc
     {
-        unsigned int line, column;
+        unsigned int line {}, column {};
         friend bool operator<(const SimpleLoc &a, const SimpleLoc &b)
         {
             return a.line != b.line ? a.line < b.line : a.column < b.column;
@@ -582,8 +578,8 @@ CXChildVisitResult ClangVisitor::visitFnSignature(CXCursor cursor, CXSourceLocat
             *fnNode = findNodeForCursor(qdb_, cursor);
             if (*fnNode) {
                 if ((*fnNode)->isFunction(Node::CPP)) {
-                FunctionNode *fn = static_cast<FunctionNode *>(*fnNode);
-                readParameterNamesAndAttributes(fn, cursor);
+                    auto *fn = static_cast<FunctionNode *>(*fnNode);
+                    readParameterNamesAndAttributes(fn, cursor);
                 }
             } else { // Possibly an implicitly generated special member
                 QString name = functionName(cursor);
@@ -622,14 +618,14 @@ CXChildVisitResult ClangVisitor::visitHeader(CXCursor cursor, CXSourceLocation l
         if (typeAlias.size() == 2) {
             typeAlias[0] = typeAlias[0].trimmed();
             const QLatin1String usingString("using ");
-            int usingPos = typeAlias[0].indexOf(usingString);
+            qsizetype usingPos = typeAlias[0].indexOf(usingString);
             if (usingPos != -1) {
                 if (kind == CXCursor_TypeAliasTemplateDecl)
                     templateString = typeAlias[0].left(usingPos).trimmed();
                 typeAlias[0].remove(0, usingPos + usingString.size());
                 typeAlias[0] = typeAlias[0].split(QLatin1Char(' ')).first();
                 typeAlias[1] = typeAlias[1].trimmed();
-                TypeAliasNode *ta = new TypeAliasNode(parent_, typeAlias[0], typeAlias[1]);
+                auto *ta = new TypeAliasNode(parent_, typeAlias[0], typeAlias[1]);
                 ta->setAccess(fromCX_CXXAccessSpecifier(clang_getCXXAccessSpecifier(cursor)));
                 ta->setLocation(fromCXSourceLocation(clang_getCursorLocation(cursor)));
                 ta->setTemplateDecl(templateString);
@@ -668,7 +664,7 @@ CXChildVisitResult ClangVisitor::visitHeader(CXCursor cursor, CXSourceLocation l
         else if (actualKind == CXCursor_UnionDecl)
             type = Node::Union;
 
-        ClassNode *classe = new ClassNode(type, semanticParent, className);
+        auto *classe = new ClassNode(type, semanticParent, className);
         classe->setAccess(fromCX_CXXAccessSpecifier(clang_getCXXAccessSpecifier(cursor)));
         classe->setLocation(fromCXSourceLocation(clang_getCursorLocation(cursor)));
 
@@ -688,8 +684,8 @@ CXChildVisitResult ClangVisitor::visitHeader(CXCursor cursor, CXSourceLocation l
         auto classe = static_cast<ClassNode *>(parent_);
         if (baseNode == nullptr || !baseNode->isClassNode()) {
             QString bcName = reconstructQualifiedPathForCursor(baseCursor);
-            classe->addUnresolvedBaseClass(
-                    access, bcName.split(QLatin1String("::"), Qt::SkipEmptyParts), bcName);
+            classe->addUnresolvedBaseClass(access,
+                                           bcName.split(QLatin1String("::"), Qt::SkipEmptyParts));
             return CXChildVisit_Continue;
         }
         auto baseClasse = static_cast<ClassNode *>(baseNode);
@@ -724,16 +720,16 @@ CXChildVisitResult ClangVisitor::visitHeader(CXCursor cursor, CXSourceLocation l
         if (ignoredSymbol(name))
             return CXChildVisit_Continue;
 
-        FunctionNode *fn = new FunctionNode(parent_, name);
+        auto *fn = new FunctionNode(parent_, name);
         CXSourceRange range = clang_Cursor_getCommentRange(cursor);
         if (!clang_Range_isNull(range)) {
             QString comment = getSpelling(range);
             if (comment.startsWith("//!")) {
-                int tag = comment.indexOf(QChar('['));
+                qsizetype tag = comment.indexOf(QChar('['));
                 if (tag > 0) {
-                    int end = comment.indexOf(QChar(']'), tag);
+                    qsizetype end = comment.indexOf(QChar(']'), ++tag);
                     if (end > 0)
-                        fn->setTag(comment.mid(tag, 1 + end - tag));
+                        fn->setTag(comment.mid(tag, end - tag));
                 }
             }
         }
@@ -749,7 +745,7 @@ CXChildVisitResult ClangVisitor::visitHeader(CXCursor cursor, CXSourceLocation l
     }
 #endif
     case CXCursor_EnumDecl: {
-        EnumNode *en = static_cast<EnumNode *>(findNodeForCursor(qdb_, cursor));
+        auto *en = static_cast<EnumNode *>(findNodeForCursor(qdb_, cursor));
         if (en && en->items().count())
             return CXChildVisit_Continue; // Was already parsed, probably in another TU
         QString enumTypeName = fromCXString(clang_getCursorSpelling(cursor));
@@ -810,7 +806,7 @@ CXChildVisitResult ClangVisitor::visitHeader(CXCursor cursor, CXSourceLocation l
     case CXCursor_TypedefDecl: {
         if (findNodeForCursor(qdb_, cursor)) // Was already parsed, probably in another TU
             return CXChildVisit_Continue;
-        TypedefNode *td = new TypedefNode(parent_, fromCXString(clang_getCursorSpelling(cursor)));
+        auto *td = new TypedefNode(parent_, fromCXString(clang_getCursorSpelling(cursor)));
         td->setAccess(fromCX_CXXAccessSpecifier(clang_getCXXAccessSpecifier(cursor)));
         td->setLocation(fromCXSourceLocation(clang_getCursorLocation(cursor)));
         // Search to see if this is a Q_DECLARE_FLAGS  (if the type is QFlags<ENUM>)
@@ -966,8 +962,8 @@ bool ClangVisitor::parseProperty(const QString &spelling, const Location &loc)
         && !spelling.startsWith(QLatin1String("Q_OVERRIDE")))
         return false;
 
-    int lpIdx = spelling.indexOf(QChar('('));
-    int rpIdx = spelling.lastIndexOf(QChar(')'));
+    qsizetype lpIdx = spelling.indexOf(QChar('('));
+    qsizetype rpIdx = spelling.lastIndexOf(QChar(')'));
     if (lpIdx <= 0 || rpIdx <= lpIdx)
         return false;
 
@@ -983,10 +979,10 @@ bool ClangVisitor::parseProperty(const QString &spelling, const Location &loc)
         parts.removeFirst(); // QTBUG-80027
 
     type = parts.takeFirst();
-    if (type == QLatin1String("const") && parts.size() > 0)
+    if (type == QLatin1String("const") && !parts.empty())
         type += " " + parts.takeFirst();
 
-    if (parts.size() > 0)
+    if (!parts.empty())
         name = parts.takeFirst();
     else
         return false;
@@ -1006,8 +1002,6 @@ bool ClangVisitor::parseProperty(const QString &spelling, const Location &loc)
         // Keywords with no associated values
         if (key == "CONSTANT") {
             property->setConstant();
-        } else if (key == "FINAL") {
-            property->setFinal();
         } else if (key == "REQUIRED") {
             property->setRequired();
         }
@@ -1028,7 +1022,6 @@ bool ClangVisitor::parseProperty(const QString &spelling, const Location &loc)
                     property->setDesignable(false);
                 else {
                     property->setDesignable(false);
-                    property->setRuntimeDesFunc(value);
                 }
             } else if (key == "BINDABLE") {
                 property->setPropertyType(PropertyNode::Bindable);
@@ -1036,14 +1029,6 @@ bool ClangVisitor::parseProperty(const QString &spelling, const Location &loc)
                 qdb_->addPropertyFunction(property, value, PropertyNode::Resetter);
             } else if (key == "NOTIFY") {
                 qdb_->addPropertyFunction(property, value, PropertyNode::Notifier);
-            } else if (key == "REVISION") {
-                int revision;
-                bool ok;
-                revision = value.toInt(&ok);
-                if (ok)
-                    property->setRevision(revision);
-                else
-                    loc.warning(QStringLiteral("Invalid revision number: %1").arg(value));
             } else if (key == "SCRIPTABLE") {
                 QString v = value.toLower();
                 if (v == "true")
@@ -1052,7 +1037,6 @@ bool ClangVisitor::parseProperty(const QString &spelling, const Location &loc)
                     property->setScriptable(false);
                 else {
                     property->setScriptable(false);
-                    property->setRuntimeScrFunc(value);
                 }
             }
         }
@@ -1098,14 +1082,6 @@ Node *ClangVisitor::nodeForCommentAtLocation(CXSourceLocation loc, CXSourceLocat
     if (node && node->isFunction(Node::CPP))
         readParameterNamesAndAttributes(static_cast<FunctionNode *>(node), *decl_it);
     return node;
-}
-
-/*!
-  The destructor is trivial.
- */
-ClangCodeParser::~ClangCodeParser()
-{
-    // nothing.
 }
 
 /*!
@@ -1290,9 +1266,7 @@ void ClangCodeParser::getMoreArgs()
           that list instead.
          */
         qCWarning(lcQdoc) << "No include paths passed to qdoc; guessing reasonable include paths";
-        auto forest = qdb_->searchOrder();
 
-        QByteArray version = qdb_->version().toUtf8();
         QString basicIncludeDir = QDir::cleanPath(QString(Config::installDir + "/../include"));
         m_moreArgs += "-I" + basicIncludeDir.toLatin1();
         m_moreArgs += includePathsFromHeaders(m_allHeaders);
@@ -1420,7 +1394,7 @@ void ClangCodeParser::buildPCH()
                     // Visit the header now, as token from pre-compiled header won't be visited
                     // later
                     CXCursor cur = clang_getTranslationUnitCursor(tu);
-                    ClangVisitor visitor(qdb_, m_allHeaders);
+                    ClangVisitor visitor(m_qdb, m_allHeaders);
                     visitor.visitChildren(cur);
                     qCDebug(lcQdoc) << "PCH built and visited for" << moduleHeader();
                 }
@@ -1474,8 +1448,8 @@ void ClangCodeParser::parseSourceFile(const Location & /*location*/, const QStri
       The set of open namespaces is cleared before parsing
       each source file. The word "source" here means cpp file.
      */
-    qdb_->clearOpenNamespaces();
-    currentFile_ = filePath;
+    m_qdb->clearOpenNamespaces();
+    m_currentFile = filePath;
     flags_ = static_cast<CXTranslationUnit_Flags>(CXTranslationUnit_Incomplete
                                                   | CXTranslationUnit_SkipFunctionBodies
                                                   | CXTranslationUnit_KeepGoing);
@@ -1507,7 +1481,7 @@ void ClangCodeParser::parseSourceFile(const Location & /*location*/, const QStri
     }
 
     CXCursor tuCur = clang_getTranslationUnitCursor(tu);
-    ClangVisitor visitor(qdb_, m_allHeaders);
+    ClangVisitor visitor(m_qdb, m_allHeaders);
     visitor.visitChildren(tuCur);
 
     CXToken *tokens;
@@ -1537,7 +1511,7 @@ void ClangCodeParser::parseSourceFile(const Location & /*location*/, const QStri
         NodeList nodes;
         const TopicList &topics = doc.topicsUsed();
         if (!topics.isEmpty())
-            topic = topics[0].topic;
+            topic = topics[0].m_topic;
 
         if (topic.isEmpty()) {
             Node *n = nullptr;
@@ -1567,8 +1541,7 @@ void ClangCodeParser::parseSourceFile(const Location & /*location*/, const QStri
                                            "topic command (e.g., '\\%1', '\\%2') in the "
                                            "comment and no function definition following "
                                            "the comment.")
-                                    .arg(COMMAND_FN)
-                                    .arg(COMMAND_PAGE));
+                                    .arg(COMMAND_FN, COMMAND_PAGE));
                 }
             }
         } else {
@@ -1597,10 +1570,10 @@ void ClangCodeParser::parseSourceFile(const Location & /*location*/, const QStri
 
 /*!
   Use clang to parse the function signature from a function
-  command. \a location is used for reporting errors. \a fnArg
+  command. \a location is used for reporting errors. \a fnSignature
   is the string to parse. It is always a function decl.
  */
-Node *ClangCodeParser::parseFnArg(const Location &location, const QString &fnArg)
+Node *ClangCodeParser::parseFnArg(const Location &location, const QString &fnSignature, const QString &idTag)
 {
     Node *fnNode = nullptr;
     /*
@@ -1609,42 +1582,36 @@ Node *ClangCodeParser::parseFnArg(const Location &location, const QString &fnArg
       for the correct function node. It is an error if it can
       not be found. Return 0 in that case.
     */
-    if (fnArg.startsWith('[')) {
-        int tagEnd = fnArg.indexOf(QChar(']', 0));
-        if (tagEnd > 1) {
-            QString tag = fnArg.left(++tagEnd);
-            fnNode = qdb_->findFunctionNodeForTag(tag);
-            if (!fnNode) {
-                location.error(
-                        QStringLiteral("tag \\fn %1 not used in any include file in current module")
-                                .arg(tag));
-            } else {
-                /*
-                  The function node was found. Use the formal
-                  parameter names from the \fn command, because
-                  they will be the names used in the documentation.
-                 */
-                QString fnSignature = fnArg.mid(tagEnd);
-                FunctionNode *fn = static_cast<FunctionNode *>(fnNode);
-                QStringList leftParenSplit = fnSignature.mid(fnSignature.indexOf(fn->name())).split('(');
-                if (leftParenSplit.size() > 1) {
-                    QStringList rightParenSplit = leftParenSplit[1].split(')');
-                    if (rightParenSplit.size() > 0) {
-                        QString params = rightParenSplit[0];
-                        if (!params.isEmpty()) {
-                            QStringList commaSplit = params.split(',');
-                            Parameters &parameters = fn->parameters();
-                            if (parameters.count() == commaSplit.size()) {
-                                for (int i = 0; i < parameters.count(); ++i) {
-                                    QStringList blankSplit = commaSplit[i].split(' ', Qt::SkipEmptyParts);
-                                    if (blankSplit.size() > 1) {
-                                        QString pName = blankSplit.last();
-                                        // Remove any non-letters from the start of parameter name
-                                        auto it = std::find_if(std::begin(pName), std::end(pName),
-                                                [](const QChar &c) { return c.isLetter(); });
-                                        parameters[i].setName(
-                                                pName.remove(0, std::distance(std::begin(pName), it)));
-                                    }
+    if (!idTag.isEmpty()) {
+        fnNode = m_qdb->findFunctionNodeForTag(idTag);
+        if (!fnNode) {
+            location.error(
+                    QStringLiteral("tag \\fn [%1] not used in any include file in current module").arg(idTag));
+        } else {
+            /*
+              The function node was found. Use the formal
+              parameter names from the \fn command, because
+              they will be the names used in the documentation.
+             */
+            auto *fn = static_cast<FunctionNode *>(fnNode);
+            QStringList leftParenSplit = fnSignature.mid(fnSignature.indexOf(fn->name())).split('(');
+            if (leftParenSplit.size() > 1) {
+                QStringList rightParenSplit = leftParenSplit[1].split(')');
+                if (!rightParenSplit.empty()) {
+                    QString params = rightParenSplit[0];
+                    if (!params.isEmpty()) {
+                        QStringList commaSplit = params.split(',');
+                        Parameters &parameters = fn->parameters();
+                        if (parameters.count() == commaSplit.size()) {
+                            for (int i = 0; i < parameters.count(); ++i) {
+                                QStringList blankSplit = commaSplit[i].split(' ', Qt::SkipEmptyParts);
+                                if (blankSplit.size() > 1) {
+                                    QString pName = blankSplit.last();
+                                    // Remove any non-letters from the start of parameter name
+                                    auto it = std::find_if(std::begin(pName), std::end(pName),
+                                            [](const QChar &c) { return c.isLetter(); });
+                                    parameters[i].setName(
+                                            pName.remove(0, std::distance(std::begin(pName), it)));
                                 }
                             }
                         }
@@ -1654,9 +1621,9 @@ Node *ClangCodeParser::parseFnArg(const Location &location, const QString &fnArg
         }
         return fnNode;
     }
-    CXTranslationUnit_Flags flags = static_cast<CXTranslationUnit_Flags>(
-            CXTranslationUnit_Incomplete | CXTranslationUnit_SkipFunctionBodies
-            | CXTranslationUnit_KeepGoing);
+    auto flags = static_cast<CXTranslationUnit_Flags>(CXTranslationUnit_Incomplete
+                                                      | CXTranslationUnit_SkipFunctionBodies
+                                                      | CXTranslationUnit_KeepGoing);
 
     CXIndex index = clang_createIndex(1, kClangDontDisplayDiagnostics);
 
@@ -1673,7 +1640,7 @@ Node *ClangCodeParser::parseFnArg(const Location &location, const QString &fnArg
     s_fn.clear();
     for (const auto &ns : qAsConst(m_namespaceScope))
         s_fn.prepend("namespace " + ns.toUtf8() + " {");
-    s_fn += fnArg.toUtf8();
+    s_fn += fnSignature.toUtf8();
     if (!s_fn.endsWith(";"))
         s_fn += "{ }";
     s_fn.append(m_namespaceScope.size(), '}');
@@ -1687,7 +1654,7 @@ Node *ClangCodeParser::parseFnArg(const Location &location, const QString &fnArg
                     << ") returns" << err;
     printDiagnostics(tu);
     if (err || !tu) {
-        location.error(QStringLiteral("clang could not parse \\fn %1").arg(fnArg));
+        location.error(QStringLiteral("clang could not parse \\fn %1").arg(fnSignature));
         clang_disposeTranslationUnit(tu);
         clang_disposeIndex(index);
         return fnNode;
@@ -1699,7 +1666,7 @@ Node *ClangCodeParser::parseFnArg(const Location &location, const QString &fnArg
           the diagnostics if they stop us finding the node.
          */
         CXCursor cur = clang_getTranslationUnitCursor(tu);
-        ClangVisitor visitor(qdb_, m_allHeaders);
+        ClangVisitor visitor(m_qdb, m_allHeaders);
         bool ignoreSignature = false;
         visitor.visitFnArg(cur, &fnNode, ignoreSignature);
         /*
@@ -1712,7 +1679,7 @@ Node *ClangCodeParser::parseFnArg(const Location &location, const QString &fnArg
             const auto &config = Config::instance();
             if (diagnosticCount > 0 && (!config.preparing() || config.singleExec())) {
                 bool report = true;
-                QStringList signature = fnArg.split(QChar('('));
+                QStringList signature = fnSignature.split(QChar('('));
                 if (signature.size() > 1) {
                     QStringList qualifiedName = signature.at(0).split(QChar(' '));
                     qualifiedName = qualifiedName.last().split(QLatin1String("::"));
@@ -1723,14 +1690,14 @@ Node *ClangCodeParser::parseFnArg(const Location &location, const QString &fnArg
                             qualifier[i++] = QChar(' ');
                         if (i > 0)
                             qualifier = qualifier.simplified();
-                        ClassNode *cn = qdb_->findClassNode(QStringList(qualifier));
+                        ClassNode *cn = m_qdb->findClassNode(QStringList(qualifier));
                         if (cn && cn->isInternal())
                             report = false;
                     }
                 }
                 if (report) {
                     location.warning(
-                            QStringLiteral("clang couldn't find function when parsing \\fn %1").arg(fnArg));
+                            QStringLiteral("clang couldn't find function when parsing \\fn %1").arg(fnSignature));
                 }
             }
         }

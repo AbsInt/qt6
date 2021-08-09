@@ -1371,6 +1371,9 @@ void tst_QMenu::QTBUG_89082_actionTipsHide()
     widget.resize(300, 200);
     centerOnScreen(&widget);
     widget.show();
+#if QT_CONFIG(cursor)
+    QCursor::setPos(widget.screen()->availableGeometry().topLeft() + QPoint(10, 10));
+#endif
     widget.activateWindow();
     QVERIFY(QTest::qWaitForWindowExposed(&widget));
     menu->popup(widget.geometry().topRight() + QPoint(50, 0));
@@ -1753,7 +1756,7 @@ void tst_QMenu::menuSize_Scrolling()
             QSize s = size();
             if (!QGuiApplication::platformName().compare(QLatin1String("minimal"), Qt::CaseInsensitive)
                 || !QGuiApplication::platformName().compare(QLatin1String("offscreen"), Qt::CaseInsensitive)) {
-                QWARN("Skipping test on minimal/offscreen platforms - QTBUG-73522");
+                qWarning("Skipping test on minimal/offscreen platforms - QTBUG-73522");
                 QMenu::showEvent(e);
                 return;
             }

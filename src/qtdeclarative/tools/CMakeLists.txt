@@ -8,6 +8,7 @@ qt_exclude_tool_directories_from_default_target(
 )
 
 if(QT_FEATURE_qml_devtools)
+    add_subdirectory(qmldom)
     add_subdirectory(qmllint)
     add_subdirectory(qmlimportscanner)
     add_subdirectory(qmlformat)
@@ -35,7 +36,20 @@ endif()
 if(QT_BUILD_SHARED_LIBS AND QT_FEATURE_process AND QT_FEATURE_regularexpression AND QT_FEATURE_thread AND TARGET Qt::Quick AND NOT ANDROID AND NOT WASM AND NOT rtems)
     add_subdirectory(qmlplugindump)
 endif()
-if(QT_FEATURE_dialogbuttonbox AND QT_FEATURE_thread AND TARGET Qt::Quick AND TARGET Qt::Widgets AND NOT ANDROID AND NOT WASM AND NOT rtems)
+if(TARGET Qt::Quick
+        AND TARGET Qt::Widgets
+        AND QT_FEATURE_checkbox
+        AND QT_FEATURE_combobox
+        AND QT_FEATURE_dialogbuttonbox
+        AND QT_FEATURE_formlayout
+        AND QT_FEATURE_groupbox
+        AND QT_FEATURE_lineedit
+        AND QT_FEATURE_mainwindow
+        AND QT_FEATURE_spinbox
+        AND QT_FEATURE_textedit
+        AND NOT ANDROID
+        AND NOT WASM
+        AND NOT rtems)
     add_subdirectory(qmleasing)
 endif()
 if(QT_FEATURE_thread AND TARGET Qt::QuickTest AND NOT ANDROID AND NOT WASM AND NOT rtems)
@@ -43,4 +57,7 @@ if(QT_FEATURE_thread AND TARGET Qt::QuickTest AND NOT ANDROID AND NOT WASM AND N
 endif()
 if(QT_FEATURE_private_tests AND QT_FEATURE_thread AND NOT ANDROID AND NOT WASM AND NOT rtems)
     add_subdirectory(qmljs)
+endif()
+if (QT_FEATURE_private_tests AND NOT ANDROID AND NOT WASM AND NOT rtems)
+    add_subdirectory(qmljsrootgen)
 endif()

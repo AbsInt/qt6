@@ -38,7 +38,6 @@
 #include <QtCore/QMap>
 #include <QtCore/QThread>
 
-#include "externaltests.h"
 #include "forwarddeclared.h"
 #include "nontracked.h"
 #include "wrapper.h"
@@ -112,9 +111,10 @@ private slots:
     void threadStressTest_data();
     void threadStressTest();
     void validConstructs();
+#if 0
     void invalidConstructs_data();
     void invalidConstructs();
-
+#endif
 
     // let invalidConstructs be the last test, because it's the slowest;
     // add new tests above this block
@@ -341,6 +341,11 @@ void tst_QSharedPointer::basics()
         QCOMPARE(!weak, isNull);
         QCOMPARE(bool(weak), !isNull);
 
+        QCOMPARE(weak.isNull(), (weak == nullptr));
+        QCOMPARE(weak.isNull(), (nullptr == weak));
+        QCOMPARE(!weak.isNull(), (weak != nullptr));
+        QCOMPARE(!weak.isNull(), (nullptr != weak));
+
         QVERIFY(ptr == weak);
         QVERIFY(weak == ptr);
         QVERIFY(! (ptr != weak));
@@ -426,6 +431,12 @@ void tst_QSharedPointer::nullptrOps()
     QVERIFY(!p2.get());
     QVERIFY(p1 == p2);
 
+    QWeakPointer<char> wp1 = p1;
+    QVERIFY(wp1 == nullptr);
+    QVERIFY(nullptr == wp1);
+    QCOMPARE(wp1, nullptr);
+    QCOMPARE(nullptr, wp1);
+
     QSharedPointer<char> p3 = p1;
     QVERIFY(p3 == p1);
     QVERIFY(p3 == null);
@@ -452,6 +463,10 @@ void tst_QSharedPointer::nullptrOps()
     QVERIFY(p4 != p2);
     QVERIFY(p4 != null);
     QVERIFY(p4 != p3);
+
+    QWeakPointer<char> wp2 = p4;
+    QVERIFY(wp2 != nullptr);
+    QVERIFY(nullptr != wp2);
 }
 
 void tst_QSharedPointer::swap()
@@ -594,6 +609,9 @@ void tst_QSharedPointer::useOfForwardDeclared()
 
 void tst_QSharedPointer::memoryManagement()
 {
+QT_WARNING_PUSH
+QT_WARNING_DISABLE_CLANG("-Wself-assign-overloaded")
+
     int generation = Data::generationCounter + 1;
     int destructorCounter = Data::destructorCounter;
 
@@ -655,6 +673,7 @@ void tst_QSharedPointer::memoryManagement()
     QVERIFY(ptr.isNull());
     QVERIFY(ptr == 0);
     QCOMPARE(ptr.data(), (Data*)0);
+QT_WARNING_POP
 }
 
 void tst_QSharedPointer::dropLastReferenceOfForwardDeclared()
@@ -2113,7 +2132,10 @@ void tst_QSharedPointer::validConstructs()
         Data *aData = new Data;
         QSharedPointer<Data> ptr1 = QSharedPointer<Data>(aData);
 
+QT_WARNING_PUSH
+QT_WARNING_DISABLE_CLANG("-Wself-assign-overloaded")
         ptr1 = ptr1;            // valid
+QT_WARNING_POP
 
         QSharedPointer<Data> ptr2(ptr1);
 
@@ -2125,6 +2147,7 @@ void tst_QSharedPointer::validConstructs()
     }
 }
 
+#if 0
 typedef bool (QTest::QExternalTest:: * TestFunction)(const QByteArray &body);
 Q_DECLARE_METATYPE(TestFunction)
 void tst_QSharedPointer::invalidConstructs_data()
@@ -2334,6 +2357,7 @@ void tst_QSharedPointer::invalidConstructs()
         QFAIL("Fail");
     }
 }
+#endif // #if 0
 
 void tst_QSharedPointer::qvariantCast()
 {

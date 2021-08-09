@@ -8,7 +8,7 @@ qt_find_package(ODBC) # special case
 
 qt_internal_add_plugin(QODBCDriverPlugin
     OUTPUT_NAME qsqlodbc
-    TYPE sqldrivers
+    PLUGIN_TYPE sqldrivers
     SOURCES
         main.cpp
         qsql_odbc.cpp qsql_odbc_p.h
@@ -32,3 +32,5 @@ qt_internal_extend_target(QODBCDriverPlugin CONDITION UNIX
     DEFINES
         UNICODE
 )
+
+qt_internal_force_macos_intel_arch(QODBCDriverPlugin)

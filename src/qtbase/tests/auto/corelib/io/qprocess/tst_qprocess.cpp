@@ -1145,9 +1145,8 @@ void tst_QProcess::forwardedChannels()
     QVERIFY(process.waitForStarted(5000));
     QCOMPARE(process.write("input"), 5);
     process.closeWriteChannel();
-    QVERIFY(process.waitForFinished(5000));
+    QVERIFY(process.waitForFinished(40000));    // testForwarding has a 30s wait
     QCOMPARE(process.exitStatus(), QProcess::NormalExit);
-    QCOMPARE(process.exitCode(), 0);
     const char *err;
     switch (process.exitCode()) {
     case 0: err = "ok"; break;
@@ -1294,7 +1293,7 @@ void tst_QProcess::waitForReadyReadInAReadyReadSlot()
     QVERIFY(process.waitForFinished(5000));
     QCOMPARE(process.exitStatus(), QProcess::NormalExit);
     QCOMPARE(process.exitCode(), 0);
-    QVERIFY(process.bytesAvailable() > bytesAvailable);
+    QVERIFY(process.bytesAvailable() >= bytesAvailable);
 }
 
 void tst_QProcess::waitForReadyReadInAReadyReadSlotSlot()
@@ -1304,6 +1303,8 @@ void tst_QProcess::waitForReadyReadInAReadyReadSlotSlot()
     bytesAvailable = process->bytesAvailable();
     process->write("bar", 4);
     QVERIFY(process->waitForReadyRead(5000));
+    QVERIFY(process->bytesAvailable() > bytesAvailable);
+    bytesAvailable = process->bytesAvailable();
     QTestEventLoop::instance().exitLoop();
 }
 
@@ -2260,9 +2261,6 @@ void tst_QProcess::setNonExistentWorkingDirectory()
     QCOMPARE(int(process.error()), int(QProcess::FailedToStart));
 
 #ifdef Q_OS_UNIX
-#  ifdef QPROCESS_USE_SPAWN
-    QEXPECT_FAIL("", "QProcess cannot detect failure to start when using posix_spawn()", Continue);
-#  endif
     QVERIFY2(process.errorString().startsWith("chdir:"), process.errorString().toLocal8Bit());
 #endif
 }

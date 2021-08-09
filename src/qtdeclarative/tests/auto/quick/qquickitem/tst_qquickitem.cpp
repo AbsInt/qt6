@@ -73,6 +73,7 @@ public:
     QPoint lastWheelEventPos;
     QPoint lastWheelEventGlobalPos;
     int languageChangeEventCount = 0;
+    int localeChangeEventCount = 0;
 protected:
     void focusInEvent(QFocusEvent *event) override {
         qCDebug(lcTests) << objectName() << event;
@@ -110,8 +111,16 @@ protected:
     bool event(QEvent *e) override
     {
         Q_ASSERT(e->isAccepted()); // every event is constructed with the accept flag initialized to true
-        if (e->type() == QEvent::LanguageChange)
-            languageChangeEventCount++;
+        switch (e->type()) {
+        case QEvent::LanguageChange:
+            ++languageChangeEventCount;
+            break;
+        case QEvent::LocaleChange:
+            ++localeChangeEventCount;
+            break;
+        default:
+            break;
+        }
         return QQuickItem::event(e); // default dispatch
     }
 };
@@ -123,7 +132,7 @@ public:
         : QQuickWindow()
     {}
 
-    virtual bool event(QEvent *event)
+    bool event(QEvent *event) override
     {
         return QQuickWindow::event(event);
     }
@@ -142,7 +151,7 @@ public:
     int repolishLoopCount = 0;
 
 protected:
-    virtual void updatePolish() {
+    void updatePolish() override {
         wasPolished = true;
         if (repolishLoopCount > 0) {
             --repolishLoopCount;
@@ -164,8 +173,8 @@ public:
 
     bool focused;
 protected:
-    virtual void focusInEvent(QFocusEvent *) { Q_ASSERT(!focused); focused = true; }
-    virtual void focusOutEvent(QFocusEvent *) { Q_ASSERT(focused); focused = false; }
+    void focusInEvent(QFocusEvent *) override { Q_ASSERT(!focused); focused = true; }
+    void focusOutEvent(QFocusEvent *) override { Q_ASSERT(focused); focused = false; }
 };
 
 class tst_qquickitem : public QQmlDataTest
@@ -174,7 +183,7 @@ class tst_qquickitem : public QQmlDataTest
 public:
 
 private slots:
-    void initTestCase();
+    void initTestCase() override;
 
     void noWindow();
     void simpleFocus();
@@ -220,6 +229,8 @@ private slots:
 
     void contains_data();
     void contains();
+    void containsContainmentMask_data();
+    void containsContainmentMask();
 
     void childAt();
 
@@ -233,6 +244,7 @@ private slots:
 
     void setParentCalledInOnWindowChanged();
     void receivesLanguageChangeEvent();
+    void receivesLocaleChangeEvent();
     void polishLoopDetection_data();
     void polishLoopDetection();
 
@@ -1632,6 +1644,13 @@ void tst_qquickitem::hoverEvent()
     item->setVisible(visible);
     item->setAcceptHoverEvents(acceptHoverEvents);
 
+    // Ensure that we don't get extra hover events delivered on the
+    // side, since it can affect the number of hover move events we receive below.
+    QQuickWindowPrivate::get(window)->deliveryAgentPrivate()->frameSynchronousHoverEnabled = false;
+    // And flush out any mouse events that might be queued up
+    // in QPA, since QTest::mouseMove() calls processEvents.
+    qGuiApp->processEvents();
+
     const QPoint outside(150, 150);
     const QPoint inside(50, 50);
     const QPoint anotherInside(51, 51);
@@ -1663,7 +1682,9 @@ void tst_qquickitem::hoverEvent()
 
     if (shouldReceiveHoverEvents) {
         QCOMPARE(item->hoverEnterCount, 1);
-        QCOMPARE(item->hoverMoveCount, 2);
+        QVERIFY(item->hoverMoveCount >= 2);
+        if (item->hoverMoveCount > 2)
+            qCDebug(lcTests) << "expected 2 hover move events, but got" << item->hoverMoveCount;
         QCOMPARE(item->hoverLeaveCount, 1);
     } else {
         QCOMPARE(item->hoverEnterCount, 0);
@@ -2074,7 +2095,8 @@ void tst_qquickitem::contains_data()
     QTest::newRow("(50, 0) = false") << 50 << 0 << false;
     QTest::newRow("(0, 50) = false") << 0 << 50 << false;
     QTest::newRow("(50, 50) = true") << 50 << 50 << true;
-    QTest::newRow("(100, 100) = true") << 100 << 100 << true;
+    QTest::newRow("(99, 99) = true") << 99 << 99 << true;
+    QTest::newRow("(100, 100) = false") << 100 << 100 << false;
     QTest::newRow("(150, 150) = false") << 150 << 150 << false;
 }
 
@@ -2103,6 +2125,46 @@ void tst_qquickitem::contains()
     QVERIFY(QMetaObject::invokeMethod(root, "childContainsViaMapFromItem",
         Q_RETURN_ARG(QVariant, result), Q_ARG(QVariant, qreal(x)), Q_ARG(QVariant, qreal(y))));
     QCOMPARE(result.toBool(), contains);
+}
+
+void tst_qquickitem::containsContainmentMask_data()
+{
+    QTest::addColumn<QPointF>("point");
+    QTest::addColumn<bool>("contains");
+
+    QTest::newRow("(-6, -6) = false") << QPointF(-6, -6) << false;
+    QTest::newRow("(-5, -5) = true") << QPointF(-5, -5) << true;
+    QTest::newRow("(-4, -4) = true") << QPointF(-4, -4) << true;
+    QTest::newRow("(-3, -3) = true") << QPointF(-3, -3) << true;
+    QTest::newRow("(-2, -2) = true") << QPointF(-2, -2) << true;
+    QTest::newRow("(-1, -1) = true") << QPointF(-1, -1) << true;
+    QTest::newRow("(0, 0) = true") << QPointF(0, 0) << true;
+    QTest::newRow("(1, 1) = true") << QPointF(1, 1) << true;
+    QTest::newRow("(2, 2) = true") << QPointF(2, 2) << true;
+    QTest::newRow("(3, 3) = true") << QPointF(3, 3) << true;
+    QTest::newRow("(4, 4) = true") << QPointF(4, 4) << true;
+    QTest::newRow("(5, 5) = false") << QPointF(5, 5) << false;
+}
+
+void tst_qquickitem::containsContainmentMask()
+{
+    QFETCH(QPointF, point);
+    QFETCH(bool, contains);
+
+    QQuickView view;
+    view.setSource(testFileUrl("containsContainmentMask.qml"));
+
+    QQuickItem *root = qobject_cast<QQuickItem*>(view.rootObject());
+    QVERIFY(root);
+
+    QQuickItem *firstItem = root->findChild<QQuickItem*>("firstItem");
+    QVERIFY(firstItem);
+
+    QQuickItem *secondItem = root->findChild<QQuickItem*>("secondItem");
+    QVERIFY(secondItem);
+
+    QCOMPARE(firstItem->contains(point), contains);
+    QCOMPARE(secondItem->contains(point), contains);
 }
 
 void tst_qquickitem::childAt()
@@ -2276,6 +2338,31 @@ void tst_qquickitem::receivesLanguageChangeEvent()
 
     QTRY_COMPARE(child1->languageChangeEventCount, 1);
     QCOMPARE(child2->languageChangeEventCount, 1);
+}
+
+void tst_qquickitem::receivesLocaleChangeEvent()
+{
+    QQuickWindow window;
+    window.setFramePosition(QPoint(100, 100));
+    window.resize(200, 200);
+    window.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+    QScopedPointer<TestItem> child1(new TestItem);
+    child1->setObjectName(QStringLiteral("child1"));
+    child1->setSize(QSizeF(200, 100));
+    child1->setParentItem(window.contentItem());
+
+    QScopedPointer<TestItem> child2(new TestItem);
+    child2->setObjectName(QStringLiteral("child2"));
+    child2->setSize(QSizeF(50, 50));
+    child2->setParentItem(child1.data());
+
+    QEvent e(QEvent::LocaleChange);
+    QCoreApplication::sendEvent(&window, &e);
+
+    QTRY_COMPARE(child1->localeChangeEventCount, 1);
+    QCOMPARE(child2->localeChangeEventCount, 1);
 }
 
 QTEST_MAIN(tst_qquickitem)

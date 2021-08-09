@@ -197,7 +197,14 @@ int main(int argc, char **argv)
 
     const QString functionName = QStringLiteral("qml_register_types_") + moduleAsSymbol;
 
-    fprintf(output, "void %s()\n{", qPrintable(functionName));
+    fprintf(output,
+            "#if !defined(QT_STATIC)\n"
+            "#define Q_QMLTYPE_EXPORT Q_DECL_EXPORT\n"
+            "#else\n"
+            "#define Q_QMLTYPE_EXPORT\n"
+            "#endif\n"
+            "\n");
+    fprintf(output, "Q_QMLTYPE_EXPORT void %s()\n{", qPrintable(functionName));
     const auto majorVersion = parser.value(majorVersionOption);
     const auto pastMajorVersions = parser.values(pastMajorVersionOption);
     const auto minorVersion = parser.value(minorVersionOption);
@@ -212,14 +219,17 @@ int main(int argc, char **argv)
                 qPrintable(module), qPrintable(majorVersion));
     }
 
+    auto moduleVersion = QTypeRevision::fromVersion(majorVersion.toInt(), minorVersion.toInt());
+
     const QVector<QJsonObject> types = processor.types();
+    const QVector<QJsonObject> foreignTypes = processor.foreignTypes();
     for (const QJsonObject &classDef : types) {
         const QString className = classDef[QLatin1String("qualifiedClassName")].toString();
 
         QString targetName = className;
         bool seenQmlElement = false;
         const QJsonArray classInfos = classDef.value(QLatin1String("classInfos")).toArray();
-        for (const QJsonValue &v : classInfos) {
+        for (const QJsonValue v : classInfos) {
             const QString name = v[QStringLiteral("name")].toString();
             if (name == QStringLiteral("QML.Element"))
                 seenQmlElement = true;
@@ -231,15 +241,45 @@ int main(int argc, char **argv)
         // without including the C++ headers. That's the reason for the QMetaType(foo).id() calls.
 
         if (classDef.value(QLatin1String("namespace")).toBool()) {
-            fprintf(output, "\n    {");
-            fprintf(output, "\n        static const auto metaType "
-                            "= QQmlPrivate::metaTypeForNamespace("
-                            "[](const QtPrivate::QMetaTypeInterface *) { "
-                            "return &%s::staticMetaObject; "
-                            "}, \"%s\");",
-                    qPrintable(targetName), qPrintable(targetName));
-            fprintf(output, "\n        QMetaType(&metaType).id();");
-            fprintf(output, "\n    }");
+            // We need to figure out if the _target_ is a namespace. If not, it already has a
+            // QMetaType and we don't need to generate one.
+
+            QString targetTypeName = targetName;
+            const auto targetIsNamespace = [&]() {
+                if (className == targetName)
+                    return true;
+
+                const QJsonObject *target = QmlTypesClassDescription::findType(types, targetName);
+                if (!target)
+                    target = QmlTypesClassDescription::findType(foreignTypes, targetName);
+
+                if (!target)
+                    return false;
+
+                if (target->value(QStringLiteral("namespace")).toBool())
+                    return true;
+
+                if (target->value(QStringLiteral("object")).toBool())
+                    targetTypeName += QStringLiteral(" *");
+
+                return false;
+            };
+
+            if (targetIsNamespace()) {
+                fprintf(output, "\n    {");
+                fprintf(output, "\n        static const auto metaType "
+                                "= QQmlPrivate::metaTypeForNamespace("
+                                "[](const QtPrivate::QMetaTypeInterface *) { "
+                                "return &%s::staticMetaObject; "
+                                "}, \"%s\");",
+                        qPrintable(targetName), qPrintable(targetTypeName));
+                fprintf(output, "\n        QMetaType(&metaType).id();");
+                fprintf(output, "\n    }");
+            } else {
+                fprintf(output, "\n    QMetaType::fromType<%s>().id();",
+                        qPrintable(targetTypeName));
+            }
+
             if (seenQmlElement) {
                 fprintf(output, "\n    qmlRegisterNamespaceAndRevisions(&%s::staticMetaObject, "
                                 "\"%s\", %s, nullptr, &%s::staticMetaObject);",
@@ -248,6 +288,31 @@ int main(int argc, char **argv)
             }
         } else {
             if (seenQmlElement) {
+                auto checkRevisions = [&](const QJsonArray &array, const QString &type) {
+                    for (auto it = array.constBegin(); it != array.constEnd(); ++it) {
+                        auto object = it->toObject();
+                        if (!object.contains(QLatin1String("revision")))
+                            continue;
+
+                        QTypeRevision revision = QTypeRevision::fromEncodedVersion(object[QLatin1String("revision")].toInt());
+                        if (moduleVersion < revision) {
+                            qWarning().noquote()
+                                    << "Warning:" << className << "is trying to register" << type
+                                    << object[QStringLiteral("name")].toString()
+                                    << "with future version" << revision
+                                    << "when module version is only" << moduleVersion;
+                        }
+                    }
+                };
+
+                const QJsonArray methods = classDef[QLatin1String("methods")].toArray();
+                const QJsonArray properties = classDef[QLatin1String("properties")].toArray();
+
+                if (moduleVersion.isValid()) {
+                    checkRevisions(properties, QLatin1String("property"));
+                    checkRevisions(methods, QLatin1String("method"));
+                }
+
                 fprintf(output, "\n    qmlRegisterTypesAndRevisions<%s>(\"%s\", %s);",
                         qPrintable(className), qPrintable(module), qPrintable(majorVersion));
             } else {

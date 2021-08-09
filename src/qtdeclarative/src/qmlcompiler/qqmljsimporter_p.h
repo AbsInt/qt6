@@ -40,6 +40,7 @@
 // We mean it.
 
 #include "qqmljsscope_p.h"
+#include "qqmljsresourcefilemapper_p.h"
 #include <QtQml/private/qqmldirparser_p.h>
 
 QT_BEGIN_NAMESPACE
@@ -49,10 +50,17 @@ class QQmlJSImporter
 public:
     using ImportedTypes = QHash<QString, QQmlJSScope::ConstPtr>;
 
-    QQmlJSImporter(const QStringList &importPaths) : m_importPaths(importPaths), m_builtins({}) {}
+    QQmlJSImporter(const QStringList &importPaths, QQmlJSResourceFileMapper *mapper)
+        : m_importPaths(importPaths)
+        , m_builtins({})
+        , m_mapper(mapper)
+    {}
+
+    QQmlJSResourceFileMapper *resourceFileMapper() { return m_mapper; }
+    void setResourceFileMapper(QQmlJSResourceFileMapper *mapper) { m_mapper = mapper; }
 
     ImportedTypes importBuiltins();
-    ImportedTypes importQmltypes(const QStringList &qmltypesFiles);
+    void importQmltypes(const QStringList &qmltypesFiles);
 
     QQmlJSScope::Ptr importFile(const QString &file);
     ImportedTypes importDirectory(const QString &directory, const QString &prefix = QString());
@@ -69,6 +77,9 @@ public:
         m_warnings.clear();
         return result;
     }
+
+    QStringList importPaths() const { return m_importPaths; }
+    void setImportPaths(const QStringList &importPaths);
 
 private:
     friend class QDeferredFactory<QQmlJSScope>;
@@ -94,11 +105,11 @@ private:
     };
 
     AvailableTypes builtinImportHelper();
-    void importHelper(const QString &module, AvailableTypes *types,
+    bool importHelper(const QString &module, AvailableTypes *types,
                       const QString &prefix = QString(),
                       QTypeRevision version = QTypeRevision());
     void processImport(const Import &import, AvailableTypes *types,
-                       const QString &prefix = QString());
+                       const QString &prefix = QString(), QTypeRevision version = QTypeRevision());
     void importDependencies(const QQmlJSImporter::Import &import,
                             AvailableTypes *types,
                             const QString &prefix = QString(),
@@ -109,10 +120,15 @@ private:
     QQmlJSScope::Ptr localFile2ScopeTree(const QString &filePath);
 
     QStringList m_importPaths;
-    QHash<QPair<QString, QTypeRevision>, Import> m_seenImports;
+
+    QHash<QPair<QString, QTypeRevision>, QString> m_seenImports;
+    QHash<QPair<QString, QTypeRevision>, QSharedPointer<AvailableTypes>> m_cachedImportTypes;
+    QHash<QString, Import> m_seenQmldirFiles;
+
     QHash<QString, QQmlJSScope::Ptr> m_importedFiles;
     QList<QQmlJS::DiagnosticMessage> m_warnings;
     AvailableTypes m_builtins;
+    QQmlJSResourceFileMapper *m_mapper = nullptr;
 };
 
 QT_END_NAMESPACE

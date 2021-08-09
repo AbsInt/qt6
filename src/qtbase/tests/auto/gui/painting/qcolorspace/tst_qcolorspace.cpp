@@ -61,6 +61,8 @@ private slots:
     void imageConversion();
     void imageConversion64_data();
     void imageConversion64();
+    void imageConversion64PM_data();
+    void imageConversion64PM();
     void imageConversionOverLargerGamut_data();
     void imageConversionOverLargerGamut();
 
@@ -80,6 +82,8 @@ private slots:
     void changePrimaries();
 
     void transferFunctionTable();
+
+    void description();
 };
 
 tst_QColorSpace::tst_QColorSpace()
@@ -225,7 +229,7 @@ void tst_QColorSpace::fromIccProfile()
         QCOMPARE(fileColorSpace, namedColorSpace);
 
     QCOMPARE(fileColorSpace.transferFunction(), transferFunction);
-    QCOMPARE(QColorSpacePrivate::get(fileColorSpace)->description, description);
+    QCOMPARE(fileColorSpace.description(), description);
 }
 
 void tst_QColorSpace::imageConversion_data()
@@ -348,6 +352,76 @@ void tst_QColorSpace::imageConversion64()
         lastRed = qRed(p);
         lastGreen = qGreen(p);
         lastBlue = qBlue(p);
+    }
+}
+
+void tst_QColorSpace::imageConversion64PM_data()
+{
+    imageConversion64_data();
+}
+
+void tst_QColorSpace::imageConversion64PM()
+{
+    QFETCH(QColorSpace::NamedColorSpace, fromColorSpace);
+    QFETCH(QColorSpace::NamedColorSpace, toColorSpace);
+
+    QImage testImage(256, 16, QImage::Format_RGBA64_Premultiplied);
+
+    for (int j = 0; j < 16; ++j) {
+        int a = j * 15;
+        for (int i = 0; i < 256; ++i)
+            testImage.setPixel(i, j, qPremultiply(qRgba(i, i, i, a)));
+    }
+
+    testImage.setColorSpace(fromColorSpace);
+    QCOMPARE(testImage.colorSpace(), QColorSpace(fromColorSpace));
+
+    testImage.convertToColorSpace(toColorSpace);
+    QCOMPARE(testImage.colorSpace(), QColorSpace(toColorSpace));
+
+    int lastRed = 0;
+    int lastGreen = 0;
+    int lastBlue = 0;
+    for (int j = 0; j < 16; ++j) {
+        for (int i = 0; i < 256; ++i) {
+            QRgb p = testImage.pixel(i, j);
+            QVERIFY(qRed(p) >= lastRed);
+            QVERIFY(qGreen(p) >= lastGreen);
+            QVERIFY(qBlue(p) >= lastBlue);
+            QCOMPARE(qAlpha(p), j * 15);
+            lastRed = qRed(p);
+            lastGreen = qGreen(p);
+            lastBlue = qBlue(p);
+        }
+        QVERIFY(lastRed <= j * 15);
+        QVERIFY(lastGreen <= j * 15);
+        QVERIFY(lastBlue <= j * 15);
+        lastRed = 0;
+        lastGreen = 0;
+        lastBlue = 0;
+    }
+
+    testImage.convertToColorSpace(fromColorSpace);
+    QCOMPARE(testImage.colorSpace(), QColorSpace(fromColorSpace));
+    for (int j = 0; j < 16; ++j) {
+        for (int i = 0; i < 256; ++i) {
+            QRgb p = testImage.pixel(i, j);
+            QCOMPARE(qRed(p),  qGreen(p));
+            QCOMPARE(qRed(p),  qBlue(p));
+            QCOMPARE(qAlpha(p), j * 15);
+            QVERIFY((lastRed   - qRed(p))   <= 0);
+            QVERIFY((lastGreen - qGreen(p)) <= 0);
+            QVERIFY((lastBlue  - qBlue(p))  <= 0);
+            lastRed = qRed(p);
+            lastGreen = qGreen(p);
+            lastBlue = qBlue(p);
+        }
+        QVERIFY(lastRed <= j * 15);
+        QVERIFY(lastGreen <= j * 15);
+        QVERIFY(lastBlue <= j * 15);
+        lastRed = 0;
+        lastGreen = 0;
+        lastBlue = 0;
     }
 }
 
@@ -614,6 +688,25 @@ void tst_QColorSpace::transferFunctionTable()
 
     customSRgb.setTransferFunction(linearTable);
     QCOMPARE(customSRgb, QColorSpace::SRgbLinear);
+}
+
+void tst_QColorSpace::description()
+{
+    QColorSpace srgb(QColorSpace::SRgb);
+    QCOMPARE(srgb.description(), QLatin1String("sRGB"));
+
+    srgb.setTransferFunction(QColorSpace::TransferFunction::ProPhotoRgb);
+    QCOMPARE(srgb.description(), QString()); // No longer sRGB
+    srgb.setTransferFunction(QColorSpace::TransferFunction::Linear);
+    QCOMPARE(srgb.description(), QLatin1String("Linear sRGB")); // Auto-detect
+
+    srgb.setTransferFunction(QColorSpace::TransferFunction::ProPhotoRgb);
+    srgb.setDescription(QStringLiteral("My custom sRGB"));
+    QCOMPARE(srgb.description(), QLatin1String("My custom sRGB"));
+    srgb.setTransferFunction(QColorSpace::TransferFunction::Linear);
+    QCOMPARE(srgb.description(), QLatin1String("My custom sRGB")); // User given name not reset
+    srgb.setDescription(QString());
+    QCOMPARE(srgb.description(), QLatin1String("Linear sRGB")); // Set to empty returns default behavior
 }
 
 QTEST_MAIN(tst_QColorSpace)

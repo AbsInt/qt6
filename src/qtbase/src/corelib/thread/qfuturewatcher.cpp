@@ -136,8 +136,7 @@ void QFutureWatcherBase::cancel()
 #if QT_DEPRECATED_SINCE(6, 0)
 /*! \fn template <typename T> void QFutureWatcher<T>::setPaused(bool paused)
 
-    \obsolete
-    Use setSuspended() instead.
+    \deprecated [6.6] Use setSuspended() instead.
 
     If \a paused is true, this function pauses the asynchronous computation
     represented by the future(). If the computation is already paused, this
@@ -154,7 +153,7 @@ void QFutureWatcherBase::cancel()
     QFuture returned by QtConcurrent::run() cannot be paused; but the QFuture
     returned by QtConcurrent::mappedReduced() can.
 
-    \sa pause(), resume(), togglePaused()
+    \sa suspend(), resume(), toggleSuspended()
 */
 void QFutureWatcherBase::setPaused(bool paused)
 {
@@ -163,7 +162,7 @@ void QFutureWatcherBase::setPaused(bool paused)
 
 /*! \fn template <typename T> void QFutureWatcher<T>::pause()
 
-    \obsolete
+    \deprecated
     Use suspend() instead.
 
     Pauses the asynchronous computation represented by the future(). This is a
@@ -233,15 +232,14 @@ void QFutureWatcherBase::resume()
 #if QT_DEPRECATED_SINCE(6, 0)
 /*! \fn template <typename T> void QFutureWatcher<T>::togglePaused()
 
-    \obsolete
-    Use toggleSuspended() instead.
+    \deprecated [6.0] Use toggleSuspended() instead.
 
     Toggles the paused state of the asynchronous computation. In other words,
     if the computation is currently paused, calling this function resumes it;
     if the computation is running, it is paused. This is a convenience method
     for calling setPaused(!isPaused()).
 
-    \sa setPaused(), pause(), resume()
+    \sa setSuspended(), suspend(), resume()
 */
 void QFutureWatcherBase::togglePaused()
 {
@@ -329,8 +327,7 @@ bool QFutureWatcherBase::isStarted() const
 */
 bool QFutureWatcherBase::isFinished() const
 {
-    Q_D(const QFutureWatcherBase);
-    return d->finished;
+    return futureInterface().isFinished();
 }
 
 /*! \fn template <typename T> bool QFutureWatcher<T>::isRunning() const
@@ -360,8 +357,7 @@ bool QFutureWatcherBase::isCanceled() const
 
 /*! \fn template <typename T> bool QFutureWatcher<T>::isPaused() const
 
-    \obsolete
-    Use isSuspending() or isSuspended() instead.
+    \deprecated [6.0] Use isSuspending() or isSuspended() instead.
 
     Returns \c true if the asynchronous computation has been paused with the
     pause() function; otherwise returns \c false.
@@ -370,7 +366,7 @@ bool QFutureWatcherBase::isCanceled() const
     function returns \c true. See setPaused() for more details. To check
     if pause actually took effect, use isSuspended() instead.
 
-    \sa setPaused(), togglePaused(), isSuspended()
+    \sa setSuspended(), toggleSuspended(), isSuspended()
 */
 
 bool QFutureWatcherBase::isPaused() const
@@ -480,8 +476,7 @@ void QFutureWatcherBase::disconnectNotify(const QMetaMethod &signal)
 */
 QFutureWatcherBasePrivate::QFutureWatcherBasePrivate()
     : maximumPendingResultsReady(QThread::idealThreadCount() * 2),
-      resultAtConnected(0),
-      finished(true) /* the initial m_future is a canceledResult(), with Finished set */
+      resultAtConnected(0)
 { }
 
 /*!
@@ -500,7 +495,6 @@ void QFutureWatcherBase::disconnectOutputInterface(bool pendingAssignment)
     if (pendingAssignment) {
         Q_D(QFutureWatcherBase);
         d->pendingResultsReady.storeRelaxed(0);
-        d->finished = false; /* May soon be amended, during connectOutputInterface() */
     }
 
     futureInterface().d->disconnectOutputInterface(d_func());
@@ -532,7 +526,6 @@ void QFutureWatcherBasePrivate::sendCallOutEvent(QFutureCallOutEvent *event)
             emit q->started();
         break;
         case QFutureCallOutEvent::Finished:
-            finished = true;
             emit q->finished();
         break;
         case QFutureCallOutEvent::Canceled:
@@ -665,8 +658,7 @@ QT_WARNING_POP
 #if QT_DEPRECATED_SINCE(6, 0)
 /*! \fn template <typename T> void QFutureWatcher<T>::paused()
 
-    \obsolete
-    Use suspending() instead.
+    \deprecated [6.0] Use suspending() instead.
 
     This signal is emitted when the state of the watched future is
     set to paused.
@@ -677,7 +669,7 @@ QT_WARNING_POP
     still be delivered. To to be informed when pause() actually
     took effect, use the suspended() signal.
 
-    \sa setPaused(), pause(), suspended()
+    \sa setSuspended(), suspend(), suspended()
 */
 #endif // QT_DEPRECATED_SINCE(6, 0)
 

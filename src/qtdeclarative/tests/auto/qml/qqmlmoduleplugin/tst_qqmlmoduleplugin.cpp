@@ -60,7 +60,7 @@ class tst_qqmlmoduleplugin : public QQmlDataTest
 public:
 
 private slots:
-    virtual void initTestCase();
+    void initTestCase() override;
     void importsPlugin();
     void importsPlugin_data();
     void importsMixedQmlCppPlugin();
@@ -86,6 +86,7 @@ private slots:
     void parallelPluginImport();
     void multiSingleton();
     void optionalPlugin();
+    void moduleFromQrc();
 
 private:
     QString m_importsDirectory;
@@ -222,7 +223,7 @@ void tst_qqmlmoduleplugin::initTestCase()
             } \
             file.close(); \
         } else { \
-            QCOMPARE(expected, actual); \
+            QCOMPARE(actual, expected); \
         } \
     }
 
@@ -829,6 +830,16 @@ void tst_qqmlmoduleplugin::optionalPlugin()
     QVERIFY(!object10.isNull());
 }
 
+void tst_qqmlmoduleplugin::moduleFromQrc()
+{
+    QQmlEngine engine;
+    engine.setImportPathList({ QStringLiteral(":/foo/imports/"), m_dataImportsDirectory });
+    QQmlComponent component(&engine);
+    component.setData("import ModuleFromQrc\nFoo {}\n", QUrl());
+    QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+    QScopedPointer<QObject> object(component.create());
+    QVERIFY(!object.isNull());
+}
 
 QTEST_MAIN(tst_qqmlmoduleplugin)
 

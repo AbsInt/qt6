@@ -108,6 +108,7 @@ private slots:
     void checkZeroSizedDelegate();
     void checkImplicitSizeDelegate();
     void checkColumnWidthWithoutProvider();
+    void checkColumnWidthAndRowHeightFunctions();
     void checkDelegateWithAnchors();
     void checkColumnWidthProvider();
     void checkColumnWidthProviderInvalidReturnValues();
@@ -118,6 +119,7 @@ private slots:
     void checkRowHeightProviderInvalidReturnValues();
     void checkRowHeightProviderNegativeReturnValue();
     void checkRowHeightProviderNotCallable();
+    void isColumnLoadedAndIsRowLoaded();
     void checkForceLayoutFunction();
     void checkForceLayoutEndUpDoingALayout();
     void checkForceLayoutDuringModelChange();
@@ -196,6 +198,14 @@ private slots:
     void leftRightTopBottomProperties();
     void checkContentSize_data();
     void checkContentSize();
+    void checkSelectionModelWithRequiredSelectedProperty_data();
+    void checkSelectionModelWithRequiredSelectedProperty();
+    void checkSelectionModelWithUnrequiredSelectedProperty();
+    void removeAndAddSelectionModel();
+    void testSelectableStartPosEndPos_data();
+    void testSelectableStartPosEndPos();
+    void testSelectableStartPosEndPosOutsideView();
+    void testSelectableScrollTowardsPos();
 };
 
 tst_QQuickTableView::tst_QQuickTableView()
@@ -367,6 +377,33 @@ void tst_QQuickTableView::checkColumnWidthWithoutProvider()
             const auto item = tableViewPrivate->loadedTableItem(QPoint(column, row))->item;
             QCOMPARE(item->width(), expectedColumnWidth);
         }
+    }
+}
+
+void tst_QQuickTableView::checkColumnWidthAndRowHeightFunctions()
+{
+    // Checks that the column width and row height functions return
+    // the correct sizes. When we have row-, or columnWidthProviders
+    // the actual row and column sizes will normally differ from the
+    // minimum row and column sizes (which is the maximum implicit
+    // size found among the delegates).
+    LOAD_TABLEVIEW("userowcolumnprovider.qml");
+
+    const int count = 4;
+    auto model = TestModelAsVariant(count, count);
+
+    tableView->setModel(model);
+
+    WAIT_UNTIL_POLISHED;
+
+    const qreal expectedimplicitSize = 20;
+
+    for (int i = 0; i < count; ++i) {
+        const qreal expectedSize = i + 10;
+        QCOMPARE(tableView->columnWidth(i), expectedSize);
+        QCOMPARE(tableView->rowHeight(i), expectedSize);
+        QCOMPARE(tableView->implicitColumnWidth(i), expectedimplicitSize);
+        QCOMPARE(tableView->implicitRowHeight(i), expectedimplicitSize);
     }
 }
 
@@ -553,6 +590,26 @@ void tst_QQuickTableView::checkRowHeightProviderNotCallable()
 
     for (auto fxItem : tableViewPrivate->loadedItems)
         QCOMPARE(fxItem->item->height(), kDefaultRowHeight);
+}
+
+void tst_QQuickTableView::isColumnLoadedAndIsRowLoaded()
+{
+    // Check that all the delegate items are loaded and available from
+    // the columnWidthProvider/rowHeightProvider when 'isColumnLoaded()'
+    // and 'isRowLoaded()' returns true.
+    LOAD_TABLEVIEW("iscolumnloaded.qml");
+
+    auto model = TestModelAsVariant(4, 5);
+
+    tableView->setModel(model);
+
+    WAIT_UNTIL_POLISHED;
+
+    const int itemsInColumnAfterLoaded = view->rootObject()->property("itemsInColumnAfterLoaded").toInt();
+    const int itemsInRowAfterLoaded = view->rootObject()->property("itemsInRowAfterLoaded").toInt();
+
+    QCOMPARE(itemsInColumnAfterLoaded, tableView->rows());
+    QCOMPARE(itemsInRowAfterLoaded, tableView->columns());
 }
 
 void tst_QQuickTableView::checkForceLayoutFunction()
@@ -3400,6 +3457,310 @@ void tst_QQuickTableView::checkContentSize()
     WAIT_UNTIL_POLISHED;
     QCOMPARE(tableView->contentWidth(), rowCount == 0 ? 0 : (colCount * (delegateWidth + colSpacing)) - colSpacing);
     QCOMPARE(tableView->contentHeight(), rowCount == 0 ? 0 : (rowCount * (delegateHeight + rowSpacing)) - rowSpacing);
+}
+
+void tst_QQuickTableView::checkSelectionModelWithRequiredSelectedProperty_data()
+{
+    QTest::addColumn<QVector<QPoint>>("selected");
+    QTest::addColumn<QPoint>("toggle");
+
+    QTest::newRow("nothing selected") << QVector<QPoint>() << QPoint(0,0);
+    QTest::newRow("one item selected") << (QVector<QPoint>() << QPoint(0, 0)) << QPoint(1, 1);
+    QTest::newRow("two items selected") << (QVector<QPoint>() << QPoint(1, 1) << QPoint(2, 2)) << QPoint(1, 1);
+}
+
+void tst_QQuickTableView::checkSelectionModelWithRequiredSelectedProperty()
+{
+    // Check that if you add a "required property selected" to the delegate,
+    // TableView will give it a value upon creation that matches the state
+    // in the selection model.
+    QFETCH(QVector<QPoint>, selected);
+    QFETCH(QPoint, toggle);
+
+    LOAD_TABLEVIEW("tableviewwithselected1.qml");
+
+    TestModel model(10, 10);
+    QItemSelectionModel selectionModel(&model);
+
+    // Set initially selected cells
+    for (auto it = selected.constBegin(); it != selected.constEnd(); ++it) {
+        const QPoint &cell = *it;
+        selectionModel.select(model.index(cell.y(), cell.x()), QItemSelectionModel::Select);
+    }
+
+    tableView->setModel(QVariant::fromValue(&model));
+    tableView->setSelectionModel(&selectionModel);
+
+    WAIT_UNTIL_POLISHED;
+
+    // Check that all delegates have "selected" set with the initial value
+    for (auto fxItem : tableViewPrivate->loadedItems) {
+        const auto context = qmlContext(fxItem->item.data());
+        const int row = context->contextProperty("row").toInt();
+        const int column = context->contextProperty("column").toInt();
+        const bool selected = fxItem->item->property("selected").toBool();
+        const auto modelIndex = model.index(row, column);
+        QCOMPARE(selected, selectionModel.isSelected(modelIndex));
+    }
+
+    // Toggle selected on one of the model indices, and check
+    // that the "selected" property got updated as well
+    const QModelIndex toggleIndex = model.index(toggle.y(), toggle.x());
+    const bool wasSelected = selectionModel.isSelected(toggleIndex);
+    selectionModel.select(toggleIndex, QItemSelectionModel::Toggle);
+    const auto fxItem = tableViewPrivate->loadedTableItem(toggle);
+    const bool isSelected = fxItem->item->property("selected").toBool();
+    QCOMPARE(isSelected, !wasSelected);
+}
+
+void tst_QQuickTableView::checkSelectionModelWithUnrequiredSelectedProperty()
+{
+    // Check that if there is a property "selected" in the delegate, but it's
+    // not required, then TableView will not touch it. This is for legacy reasons, to
+    // not break applications written before Qt 6.2 that has such a property
+    // added for application logic.
+    LOAD_TABLEVIEW("tableviewwithselected2.qml");
+
+    TestModel model(10, 10);
+    tableView->setModel(QVariant::fromValue(&model));
+    QItemSelectionModel *selectionModel = tableView->selectionModel();
+    QVERIFY(selectionModel);
+
+    // Select a cell
+    selectionModel->select(model.index(1, 1), QItemSelectionModel::Select);
+
+    WAIT_UNTIL_POLISHED;
+
+    const auto fxItem = tableViewPrivate->loadedTableItem(QPoint(1, 1));
+    const bool selected = fxItem->item->property("selected").toBool();
+    QCOMPARE(selected, false);
+}
+
+void tst_QQuickTableView::removeAndAddSelectionModel()
+{
+    // Check that if we remove the selection model from TableView, all delegates
+    // will be unselected. And opposite, if we add the selection model back, the
+    // delegates will be updated.
+    LOAD_TABLEVIEW("tableviewwithselected1.qml");
+
+    TestModel model(10, 10);
+    QItemSelectionModel selectionModel(&model);
+
+    // Select a cell in the selection model
+    selectionModel.select(model.index(1, 1), QItemSelectionModel::Select);
+
+    tableView->setModel(QVariant::fromValue(&model));
+    tableView->setSelectionModel(&selectionModel);
+
+    WAIT_UNTIL_POLISHED;
+
+    // Check that the delegate item is selected
+    const auto fxItem = tableViewPrivate->loadedTableItem(QPoint(1, 1));
+    bool selected = fxItem->item->property("selected").toBool();
+    QCOMPARE(selected, true);
+
+    // Remove the selection model, and check that the delegate item is now unselected
+    tableView->setSelectionModel(nullptr);
+    selected = fxItem->item->property("selected").toBool();
+    QCOMPARE(selected, false);
+
+    // Add the selection model back, and check that the delegate item is selected again
+    tableView->setSelectionModel(&selectionModel);
+    selected = fxItem->item->property("selected").toBool();
+    QCOMPARE(selected, true);
+}
+
+void tst_QQuickTableView::testSelectableStartPosEndPos_data()
+{
+    QTest::addColumn<QPoint>("endCellDist");
+
+    QTest::newRow("single cell") << QPoint(0, 0);
+
+    QTest::newRow("left to right") << QPoint(1, 0);
+    QTest::newRow("left to right") << QPoint(2, 0);
+    QTest::newRow("right to left") << QPoint(-1, 0);
+    QTest::newRow("right to left") << QPoint(-2, 0);
+
+    QTest::newRow("top to bottom") << QPoint(0, 1);
+    QTest::newRow("top to bottom") << QPoint(0, 2);
+    QTest::newRow("bottom to top") << QPoint(0, -1);
+    QTest::newRow("bottom to top") << QPoint(0, -2);
+
+    QTest::newRow("diagonal top left to bottom right") << QPoint(1, 1);
+    QTest::newRow("diagonal top left to bottom right") << QPoint(2, 2);
+    QTest::newRow("diagonal bottom left to top right") << QPoint(-1, -1);
+    QTest::newRow("diagonal bottom left to top right") << QPoint(-2, -2);
+    QTest::newRow("diagonal top right to bottom left") << QPoint(-1, 1);
+    QTest::newRow("diagonal top right to bottom left") << QPoint(-2, 2);
+    QTest::newRow("diagonal bottom right to top left") << QPoint(1, -1);
+    QTest::newRow("diagonal bottom right to top left") << QPoint(2, -2);
+}
+
+void tst_QQuickTableView::testSelectableStartPosEndPos()
+{
+    // Check that the TableView implement QQuickSelectableInterface setSelectionStartPos, setSelectionEndPos
+    // and clearSelection correctly. Do this by calling setSelectionStartPos/setSelectionEndPos on top of
+    // different cells, and see that we end up with the expected selections.
+    QFETCH(QPoint, endCellDist);
+    LOAD_TABLEVIEW("tableviewwithselected1.qml");
+
+    TestModel model(10, 10);
+    QItemSelectionModel selectionModel(&model);
+
+    tableView->setModel(QVariant::fromValue(&model));
+    tableView->setSelectionModel(&selectionModel);
+
+    WAIT_UNTIL_POLISHED;
+
+    QCOMPARE(selectionModel.hasSelection(), false);
+
+    const QPoint startCell(5, 5);
+    const QPoint endCell = startCell + endCellDist;
+    const QPoint endCellWrapped = startCell - endCellDist;
+
+    const QQuickItem *startItem = tableView->itemAtCell(startCell);
+    const QQuickItem *endItem = tableView->itemAtCell(endCell);
+    const QQuickItem *endItemWrapped = tableView->itemAtCell(endCellWrapped);
+    QVERIFY(startItem);
+    QVERIFY(endItem);
+    QVERIFY(endItemWrapped);
+
+    const QPointF startPos(startItem->x(), startItem->y());
+    const QPointF endPos(endItem->x(), endItem->y());
+    const QPointF endPosWrapped(endItemWrapped->x(), endItemWrapped->y());
+
+    tableViewPrivate->setSelectionStartPos(startPos);
+    tableViewPrivate->setSelectionEndPos(endPos);
+
+    QCOMPARE(selectionModel.hasSelection(), true);
+
+    const int x1 = qMin(startCell.x(), endCell.x());
+    const int x2 = qMax(startCell.x(), endCell.x());
+    const int y1 = qMin(startCell.y(), endCell.y());
+    const int y2 = qMax(startCell.y(), endCell.y());
+
+    for (int x = x1; x < x2; ++x) {
+        for (int y = y1; y < y2; ++y) {
+            const auto index = model.index(y, x);
+            QVERIFY(selectionModel.isSelected(index));
+        }
+    }
+
+    const int expectedCount = (x2 - x1 + 1) * (y2 - y1 + 1);
+    const int actualCount = selectionModel.selectedIndexes().count();
+    QCOMPARE(actualCount, expectedCount);
+
+    // Wrap the selection
+    tableViewPrivate->setSelectionEndPos(endPosWrapped);
+
+    for (int x = x2; x < x1; ++x) {
+        for (int y = y2; y < y1; ++y) {
+            const auto index = model.index(y, x);
+            QVERIFY(selectionModel.isSelected(index));
+        }
+    }
+
+    const int actualCountAfterWrap = selectionModel.selectedIndexes().count();
+    QCOMPARE(actualCountAfterWrap, expectedCount);
+
+    tableViewPrivate->clearSelection();
+    QCOMPARE(selectionModel.hasSelection(), false);
+}
+
+void tst_QQuickTableView::testSelectableStartPosEndPosOutsideView()
+{
+    // Call setSelectionStartPos and setSelectionEndPos with positions outside the view.
+    // This should first of all not crash, but instead just clamp the selection to the
+    // cells that are visible inside the view.
+    LOAD_TABLEVIEW("tableviewwithselected1.qml");
+
+    TestModel model(10, 10);
+    QItemSelectionModel selectionModel(&model);
+
+    tableView->setModel(QVariant::fromValue(&model));
+    tableView->setSelectionModel(&selectionModel);
+
+    WAIT_UNTIL_POLISHED;
+
+    const QPoint centerCell(5, 5);
+    const QQuickItem *centerItem = tableView->itemAtCell(centerCell);
+    QVERIFY(centerItem);
+
+    const QPointF centerPos(centerItem->x(), centerItem->y());
+    const QPointF outsideLeft(-100, centerPos.y());
+    const QPointF outsideRight(tableView->width() + 100, centerPos.y());
+    const QPointF outsideTop(centerPos.x(), -100);
+    const QPointF outsideBottom(centerPos.x(), tableView->height() + 100);
+
+    tableViewPrivate->setSelectionStartPos(centerPos);
+
+    tableViewPrivate->setSelectionEndPos(outsideLeft);
+    for (int x = 0; x <= centerCell.x(); ++x) {
+        const auto index = model.index(centerCell.y(), x);
+        QVERIFY(selectionModel.isSelected(index));
+    }
+
+    tableViewPrivate->setSelectionEndPos(outsideRight);
+    for (int x = centerCell.x(); x < model.columnCount(); ++x) {
+        const auto index = model.index(centerCell.y(), x);
+        QVERIFY(selectionModel.isSelected(index));
+    }
+
+    tableViewPrivate->setSelectionEndPos(outsideTop);
+    for (int y = 0; y <= centerCell.y(); ++y) {
+        const auto index = model.index(y, centerCell.x());
+        QVERIFY(selectionModel.isSelected(index));
+    }
+
+    tableViewPrivate->setSelectionEndPos(outsideBottom);
+    for (int y = centerCell.y(); y < model.rowCount(); ++y) {
+        const auto index = model.index(y, centerCell.x());
+        QVERIFY(selectionModel.isSelected(index));
+    }
+}
+
+void tst_QQuickTableView::testSelectableScrollTowardsPos()
+{
+    // Check that TableView will implement the scrollTowardsSelectionPoint function
+    // correctly, and move the content item towards the given position
+    LOAD_TABLEVIEW("tableviewwithselected1.qml");
+
+    TestModel model(200, 200);
+    QItemSelectionModel selectionModel(&model);
+
+    tableView->setModel(QVariant::fromValue(&model));
+    tableView->setSelectionModel(&selectionModel);
+
+    WAIT_UNTIL_POLISHED;
+
+    QCOMPARE(tableView->contentX(), 0);
+    QCOMPARE(tableView->contentY(), 0);
+
+    const QSizeF step(1, 1);
+    const QPointF topLeft(-100, -100);
+    const QPointF topRight(tableView->width() + 100, -100);
+    const QPointF bottomLeft(-100, tableView->height() + 100);
+    const QPointF bottomRight(tableView->width() + 100, tableView->height() + 100);
+
+    tableViewPrivate->scrollTowardsSelectionPoint(topRight, step);
+    QCOMPARE(tableView->contentX(), step.width());
+    QCOMPARE(tableView->contentY(), 0);
+
+    tableViewPrivate->scrollTowardsSelectionPoint(bottomRight, step);
+    QCOMPARE(tableView->contentX(), step.width() * 2);
+    QCOMPARE(tableView->contentY(), step.height());
+
+    tableViewPrivate->scrollTowardsSelectionPoint(bottomLeft, step);
+    QCOMPARE(tableView->contentX(), step.width());
+    QCOMPARE(tableView->contentY(), step.height() * 2);
+
+    tableViewPrivate->scrollTowardsSelectionPoint(topLeft, step);
+    QCOMPARE(tableView->contentX(), 0);
+    QCOMPARE(tableView->contentY(), step.height());
+
+    tableViewPrivate->scrollTowardsSelectionPoint(topLeft, step);
+    QCOMPARE(tableView->contentX(), 0);
+    QCOMPARE(tableView->contentY(), 0);
 }
 
 QTEST_MAIN(tst_QQuickTableView)

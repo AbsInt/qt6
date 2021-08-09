@@ -253,7 +253,7 @@ public:
 
         qsizetype count = size();
         const QMetaType valueMetaType = meta(d())->valueMetaType();
-        const QVariant element = engine()->toVariant(value, valueMetaType.id(), false);
+        const QVariant element = engine()->toVariant(value, valueMetaType, false);
 
         if (index == count) {
             append(element);
@@ -627,8 +627,14 @@ ReturnedValue SequencePrototype::newSequence(QV4::ExecutionEngine *engine, int s
     return Encode::undefined();
 }
 
-ReturnedValue SequencePrototype::fromVariant(QV4::ExecutionEngine *engine, const QVariant &v,
-                                             bool *succeeded)
+ReturnedValue SequencePrototype::fromVariant(
+        QV4::ExecutionEngine *engine, const QVariant &v, bool *succeeded)
+{
+    return fromData(engine, v.metaType(), v.constData(), succeeded);
+}
+
+ReturnedValue SequencePrototype::fromData(
+        ExecutionEngine *engine, const QMetaType &type, const void *data, bool *succeeded)
 {
     QV4::Scope scope(engine);
     // This function is called when assigning a sequence value to a normal JS var
@@ -637,11 +643,10 @@ ReturnedValue SequencePrototype::fromVariant(QV4::ExecutionEngine *engine, const
     // QObject property.
 
     const QQmlType qmlType = QQmlMetaType::qmlType(
-                v.userType(), QQmlMetaType::TypeIdCategory::MetaType);
+                type.id(), QQmlMetaType::TypeIdCategory::MetaType);
     if (qmlType.isSequentialContainer()) {
         *succeeded = true;
-        QV4::ScopedObject obj(scope, engine->memoryManager->allocate<QV4Sequence>(
-                                  qmlType, v.data()));
+        QV4::ScopedObject obj(scope, engine->memoryManager->allocate<QV4Sequence>(qmlType, data));
         return obj.asReturnedValue();
     }
 
@@ -675,7 +680,7 @@ QVariant SequencePrototype::toVariant(const QV4::Value &array, int typeHint, boo
         QV4::ScopedValue v(scope);
         for (quint32 i = 0; i < length; ++i) {
             const QMetaType valueMetaType = meta->valueMetaType();
-            QVariant variant = scope.engine->toVariant(a->get(i), valueMetaType.id(), false);
+            QVariant variant = scope.engine->toVariant(a->get(i), valueMetaType, false);
             if (variant.metaType() != valueMetaType && !variant.convert(valueMetaType))
                 variant = QVariant(valueMetaType);
             meta->addValueAtEnd(result.data(), variant.constData());

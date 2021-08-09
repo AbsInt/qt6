@@ -80,10 +80,9 @@ public:
     QQmlPropertyData core;
     QQmlPropertyData valueTypeData;
 
-    bool isNameCached:1;
     QString nameCache;
 
-    QQmlPropertyPrivate() : isNameCached(false) {}
+    QQmlPropertyPrivate() {}
 
     QQmlPropertyIndex encodedIndex() const
     { return encodedIndex(core, valueTypeData); }
@@ -114,6 +113,18 @@ public:
                       const QQmlRefPointer<QQmlContextData> &,
                       QQmlPropertyData::WriteFlags flags = {});
     static void findAliasTarget(QObject *, QQmlPropertyIndex, QObject **, QQmlPropertyIndex *);
+
+    struct ResolvedAlias
+    {
+        QObject *targetObject;
+        QQmlPropertyIndex targetIndex;
+    };
+    /*!
+        \internal
+        Given an alias property specified by \a baseObject and \a baseIndex, this function
+        computes the alias target.
+     */
+    static ResolvedAlias findAliasTarget(QObject *baseObject, QQmlPropertyIndex baseIndex);
 
     enum BindingFlag {
         None = 0,

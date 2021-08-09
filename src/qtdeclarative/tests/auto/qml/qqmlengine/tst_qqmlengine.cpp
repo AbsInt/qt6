@@ -44,6 +44,7 @@
 #include <QTemporaryDir>
 #include <private/qqmlengine_p.h>
 #include <private/qqmltypedata_p.h>
+#include <private/qqmlcomponentattached_p.h>
 #include <QQmlAbstractUrlInterceptor>
 
 class tst_qqmlengine : public QQmlDataTest
@@ -85,7 +86,11 @@ private slots:
     void cachedGetterLookup_qtbug_75335();
     void createComponentOnSingletonDestruction();
     void uiLanguage();
+    void executeRuntimeFunction();
     void captureQProperty();
+    void listWrapperAsListReference();
+    void attachedObjectAsObject();
+    void listPropertyAsQJSValue();
 
 public slots:
     QObject *createAQObjectForOwnershipTest ()
@@ -154,10 +159,10 @@ public:
     ImmediateReply() {
         setFinished(true);
     }
-    virtual qint64 readData(char* , qint64 ) {
+    qint64 readData(char* , qint64 ) override {
         return 0;
     }
-    virtual void abort() { }
+    void abort() override { }
 };
 
 class ImmediateManager : public QNetworkAccessManager {
@@ -428,7 +433,7 @@ public:
     }
 
 private:
-    virtual void timerEvent(QTimerEvent *)
+    void timerEvent(QTimerEvent *) override
     {
         incubateFor(1000);
     }
@@ -763,7 +768,7 @@ class CustomSelector : public QQmlAbstractUrlInterceptor
 {
 public:
     CustomSelector(const QUrl &base):m_base(base){}
-    virtual QUrl intercept(const QUrl &url, QQmlAbstractUrlInterceptor::DataType d)
+    QUrl intercept(const QUrl &url, QQmlAbstractUrlInterceptor::DataType d) override
     {
         if ((url.scheme() != QStringLiteral("file") && url.scheme() != QStringLiteral("qrc"))
             || url.path().contains("QtQml"))
@@ -891,10 +896,6 @@ void tst_qqmlengine::qmlContextProperties()
 
 void tst_qqmlengine::testGCCorruption()
 {
-#ifdef SKIP_GCCORRUPTION_TEST
-    QSKIP("Test too heavy for qemu");
-#endif
-
     QQmlEngine e;
 
     QQmlComponent c(&e, testFileUrl("testGCCorruption.qml"));
@@ -1239,6 +1240,44 @@ void tst_qqmlengine::uiLanguage()
     }
 }
 
+void tst_qqmlengine::executeRuntimeFunction()
+{
+    QQmlEngine engine;
+    QQmlEnginePrivate *priv = QQmlEnginePrivate::get(std::addressof(engine));
+
+    const QUrl url = testFileUrl("runtimeFunctions.qml");
+    QQmlComponent component(&engine, url);
+    QScopedPointer<QObject> dummy(component.create());
+
+    // getConstantValue():
+    int constant = 0;
+    void *a0[] = { const_cast<void *>(reinterpret_cast<const void *>(std::addressof(constant))) };
+    QMetaType t0[] = { QMetaType::fromType<int>() };
+    priv->executeRuntimeFunction(url, /* index = */ 0, dummy.get(), /* argc = */ 0, a0, t0);
+    QCOMPARE(constant, 42);
+
+    // squareValue():
+    int squared = 0;
+    int x = 5;
+    void *a1[] = { const_cast<void *>(reinterpret_cast<const void *>(std::addressof(squared))),
+                   const_cast<void *>(reinterpret_cast<const void *>(std::addressof(x))) };
+    QMetaType t1[] = { QMetaType::fromType<int>(), QMetaType::fromType<int>() };
+    priv->executeRuntimeFunction(url, /* index = */ 1, dummy.get(), /* argc = */ 1, a1, t1);
+    QCOMPARE(squared, x * x);
+
+    // concatenate():
+    QString concatenated;
+    QString str1 = QStringLiteral("Hello"); // uses "raw data" storage
+    QString str2 = QLatin1String(", Qml"); // uses own QString storage
+    void *a2[] = { const_cast<void *>(reinterpret_cast<const void *>(std::addressof(concatenated))),
+                   const_cast<void *>(reinterpret_cast<const void *>(std::addressof(str1))),
+                   const_cast<void *>(reinterpret_cast<const void *>(std::addressof(str2))) };
+    QMetaType t2[] = { QMetaType::fromType<QString>(), QMetaType::fromType<QString>(),
+                       QMetaType::fromType<QString>() };
+    priv->executeRuntimeFunction(url, /* index = */ 2, dummy.get(), /* argc = */ 2, a2, t2);
+    QCOMPARE(concatenated, str1 + str2);
+}
+
 class WithQProperty : public QObject
 {
     Q_OBJECT
@@ -1309,6 +1348,66 @@ void tst_qqmlengine::captureQProperty()
     QCOMPARE(o->property("x").toInt(), 12);
     static_cast<WithoutQProperty *>(o.data())->triggerBinding(13);
     QCOMPARE(o->property("x").toInt(), 13);
+}
+
+void tst_qqmlengine::listWrapperAsListReference()
+{
+    QQmlEngine engine;
+    QQmlComponent c(&engine);
+    c.setData("import QtQml\nQtObject {\nproperty list<QtObject> c: [ QtObject {} ]\n}", QUrl());
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+    QScopedPointer<QObject> o(c.create());
+    QJSManagedValue m = engine.toManagedValue(o.data());
+    QJSValue prop = m.property("c");
+    const QQmlListReference ref = qjsvalue_cast<QQmlListReference>(prop);
+    QCOMPARE(ref.size(), 1);
+}
+
+void tst_qqmlengine::attachedObjectAsObject()
+{
+    QQmlEngine engine;
+    QQmlComponent c(&engine);
+    c.setData("import QtQml\nQtObject { property var a: Component }", QUrl());
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+    QScopedPointer<QObject> o(c.create());
+    QJSManagedValue m = engine.toManagedValue(o.data());
+    QJSValue prop = m.property("a");
+    const QQmlComponentAttached *attached = qjsvalue_cast<QQmlComponentAttached *>(prop);
+    QCOMPARE(attached, qmlAttachedPropertiesObject<QQmlComponent>(o.data()));
+}
+
+class WithListProperty : public QObject
+{
+    Q_OBJECT
+    Q_PROPERTY(QQmlListProperty<QQmlComponent> components READ components CONSTANT)
+    QML_ELEMENT
+public:
+
+    QQmlListProperty<QQmlComponent> components()
+    {
+        return QQmlListProperty<QQmlComponent>(this, &m_components);
+    }
+
+private:
+    QList<QQmlComponent *> m_components;
+};
+
+void tst_qqmlengine::listPropertyAsQJSValue()
+{
+    qmlRegisterTypesAndRevisions<WithListProperty>("Foo", 1);
+    QQmlEngine engine;
+    QQmlComponent c(&engine);
+    c.setData("import Foo\nWithListProperty {}", QUrl());
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+    QScopedPointer<QObject> o(c.create());
+    WithListProperty *parent = qobject_cast<WithListProperty *>(o.data());
+    QVERIFY(parent);
+    QQmlListProperty<QQmlComponent> prop = parent->components();
+    QJSValue val = engine.toScriptValue(prop);
+    QQmlListReference ref = engine.fromScriptValue<QQmlListReference>(val);
+    ref.append(&c);
+    QCOMPARE(prop.count(&prop), 1);
+    QCOMPARE(prop.at(&prop, 0), &c);
 }
 
 QTEST_MAIN(tst_qqmlengine)

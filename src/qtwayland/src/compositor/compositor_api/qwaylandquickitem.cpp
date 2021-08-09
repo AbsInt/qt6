@@ -374,8 +374,7 @@ public:
 
     ~QWaylandSurfaceTextureProvider() override
     {
-        if (m_sgTex)
-            m_sgTex->deleteLater();
+        delete m_sgTex;
     }
 
     void setBufferRef(QWaylandQuickItem *surfaceItem, const QWaylandBufferRef &buffer)
@@ -841,6 +840,7 @@ void QWaylandQuickItem::handleSubsurfaceAdded(QWaylandSurface *childSurface)
         childItem->setSurface(childSurface);
         childItem->setVisible(true);
         childItem->setParentItem(this);
+        childItem->setParent(this);
         connect(childSurface, &QWaylandSurface::subsurfacePositionChanged, childItem, &QWaylandQuickItem::handleSubsurfacePosition);
         connect(childSurface, &QWaylandSurface::destroyed, childItem, &QObject::deleteLater);
     } else {
@@ -965,6 +965,10 @@ void QWaylandQuickItem::setBufferLocked(bool locked)
 {
     Q_D(QWaylandQuickItem);
     d->view->setBufferLocked(locked);
+
+    // Apply the latest surface size
+    if (!locked)
+        updateSize();
 }
 
 /*!
@@ -1125,6 +1129,12 @@ void QWaylandQuickItem::parentChanged(QWaylandSurface *newParent, QWaylandSurfac
 void QWaylandQuickItem::updateSize()
 {
     Q_D(QWaylandQuickItem);
+
+    // No resize if buffer is locked
+    if (isBufferLocked()) {
+        qWarning() << "No update on item size as the buffer is currently locked";
+        return;
+    }
 
     QSize size(0, 0);
     if (surface())
@@ -1410,7 +1420,7 @@ QSGNode *QWaylandQuickItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeDat
     d->lastMatrix = data->transformNode->combinedMatrix();
     const bool bufferHasContent = d->view->currentBuffer().hasContent();
 
-    if (d->view->isBufferLocked() && !bufferHasContent && d->paintEnabled)
+    if (d->view->isBufferLocked() && d->paintEnabled)
         return oldNode;
 
     if (!bufferHasContent || !d->paintEnabled || !surface()) {
@@ -1428,11 +1438,21 @@ QSGNode *QWaylandQuickItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeDat
             || bufferTypes[ref.bufferFormatEgl()].canProvideTexture
 #endif
     ) {
+#if QT_CONFIG(opengl)
+        if (oldNode && !d->paintByProvider) {
+            // Need to re-create a node
+            delete oldNode;
+            oldNode = nullptr;
+        }
+        d->paintByProvider = true;
+#endif
         // This case could covered by the more general path below, but this is more efficient (especially when using ShaderEffect items).
         QSGSimpleTextureNode *node = static_cast<QSGSimpleTextureNode *>(oldNode);
 
         if (!node) {
             node = new QSGSimpleTextureNode();
+            if (smooth())
+                node->setFiltering(QSGTexture::Linear);
             d->newTexture = true;
         }
 
@@ -1458,6 +1478,13 @@ QSGNode *QWaylandQuickItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeDat
 #if QT_CONFIG(opengl)
     Q_ASSERT(!d->provider);
 
+    if (oldNode && d->paintByProvider) {
+        // Need to re-create a node
+        delete oldNode;
+        oldNode = nullptr;
+    }
+    d->paintByProvider = false;
+
     QSGGeometryNode *node = static_cast<QSGGeometryNode *>(oldNode);
 
     if (!node) {
@@ -1482,10 +1509,18 @@ QSGNode *QWaylandQuickItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeDat
                 QWaylandQuickSurface *waylandSurface = qobject_cast<QWaylandQuickSurface *>(surface());
                 if (waylandSurface != nullptr && waylandSurface->useTextureAlpha())
                     opt |= QQuickWindow::TextureHasAlphaChannel;
-                QSGTexture *scenegraphTexture = QNativeInterface::QSGOpenGLTexture::fromNative(texture->textureId(),
-                                                                                                 window(),
-                                                                                                 ref.size(),
-                                                                                                 opt);
+                QSGTexture *scenegraphTexture;
+                if (ref.bufferFormatEgl() == QWaylandBufferRef::BufferFormatEgl_EXTERNAL_OES) {
+                    scenegraphTexture = QNativeInterface::QSGOpenGLTexture::fromNativeExternalOES(texture->textureId(),
+                                                                                                     window(),
+                                                                                                     ref.size(),
+                                                                                                     opt);
+                } else {
+                    scenegraphTexture = QNativeInterface::QSGOpenGLTexture::fromNative(texture->textureId(),
+                                                                                                     window(),
+                                                                                                     ref.size(),
+                                                                                                     opt);
+                }
                 scenegraphTexture->setFiltering(smooth() ? QSGTexture::Linear : QSGTexture::Nearest);
                 material->setTextureForPlane(plane, texture, scenegraphTexture);
             }

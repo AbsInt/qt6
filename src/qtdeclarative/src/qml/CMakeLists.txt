@@ -1,11 +1,31 @@
-# Generated from qml.pro.
+include(Qt6QmlBuildInternals.cmake)
 
 #####################################################################
 ## Qml Module:
 #####################################################################
 
-qt_internal_add_module(Qml
-    GENERATE_METATYPES
+# Need to evaluate Qml features early. We can't wait until
+# qt_internal_add_qml_module() is executed because we need feature evaluation
+# to determine some of the arguments to that command.
+qt_feature_evaluate_features("${CMAKE_CURRENT_SOURCE_DIR}/configure.cmake")
+
+set(module_dynamic_qml_imports
+    QtQml.Models/auto
+)
+
+if (QT_FEATURE_qml_worker_script)
+    list(APPEND module_dynamic_qml_imports
+        QtQml.WorkerScript/auto
+    )
+endif()
+
+qt_internal_add_qml_module(Qml
+    URI "QtQml"
+    VERSION "${PROJECT_VERSION}"
+    DESIGNER_SUPPORTED
+    PLUGIN_TARGET qmlplugin
+    CLASS_NAME QtQmlPlugin
+    IMPORTS ${module_dynamic_qml_imports}
     PLUGIN_TYPES qmltooling
     SOURCES
         ../3rdparty/masm/assembler/ARM64Assembler.h
@@ -86,7 +106,6 @@ qt_internal_add_module(Qml
         ../3rdparty/masm/yarr/YarrSyntaxChecker.cpp ../3rdparty/masm/yarr/YarrSyntaxChecker.h
         ../3rdparty/masm/yarr/YarrUnicodeProperties.h
         common/qjsnumbercoercion.cpp common/qjsnumbercoercion.h
-        common/qqmlapiversion_p.h
         common/qqmljsdiagnosticmessage_p.h
         common/qqmljsfixedpoolarray_p.h
         common/qqmljsmemorypool_p.h
@@ -148,7 +167,7 @@ qt_internal_add_module(Qml
         jsruntime/qv4include.cpp jsruntime/qv4include_p.h
         jsruntime/qv4internalclass.cpp jsruntime/qv4internalclass_p.h
         jsruntime/qv4iterator.cpp jsruntime/qv4iterator_p.h
-        jsruntime/qv4jscall_p.h
+        jsruntime/qv4jscall_p.h jsruntime/qv4jscall.cpp
         jsruntime/qv4jsonobject.cpp jsruntime/qv4jsonobject_p.h
         jsruntime/qv4lookup.cpp jsruntime/qv4lookup_p.h
         jsruntime/qv4managed.cpp jsruntime/qv4managed_p.h
@@ -204,7 +223,7 @@ qt_internal_add_module(Qml
         parser/qqmljsglobal_p.h
         parser/qqmljskeywords_p.h
         parser/qqmljslexer.cpp parser/qqmljslexer_p.h
-        qml/ftw/qbitfield_p.h
+        qml/ftw/qdoubleendedlist_p.h
         qml/ftw/qfieldlist_p.h
         qml/ftw/qfinitestack_p.h
         qml/ftw/qflagpointer_p.h
@@ -220,6 +239,7 @@ qt_internal_add_module(Qml
         qml/ftw/qrecursionwatcher_p.h
         qml/ftw/qrecyclepool_p.h
         qml/ftw/qstringhash_p.h
+        qml/qqmlregistration.h
         qml/qqml.cpp qml/qqml.h
         qml/qqmlabstractbinding.cpp qml/qqmlabstractbinding_p.h
         qml/qqmlabstracturlinterceptor.cpp qml/qqmlabstracturlinterceptor.h
@@ -266,9 +286,11 @@ qt_internal_add_module(Qml
         qml/qqmlopenmetaobject.cpp qml/qqmlopenmetaobject_p.h
         qml/qqmlparserstatus.cpp qml/qqmlparserstatus.h
         qml/qqmlplatform.cpp qml/qqmlplatform_p.h
+        qml/qqmlpluginimporter.cpp qml/qqmlpluginimporter_p.h
         qml/qqmlprivate.h
         qml/qqmlproperty.cpp qml/qqmlproperty.h qml/qqmlproperty_p.h
         qml/qqmlpropertybinding.cpp qml/qqmlpropertybinding_p.h
+        qml/qqmlanybinding_p.h
         qml/qqmlpropertycache.cpp qml/qqmlpropertycache_p.h
         qml/qqmlpropertycachecreator.cpp qml/qqmlpropertycachecreator_p.h
         qml/qqmlpropertycachemethodarguments_p.h
@@ -356,7 +378,11 @@ qt_internal_add_module(Qml
     PRIVATE_MODULE_INTERFACE
         Qt::CorePrivate
     EXTRA_CMAKE_FILES
-        "${CMAKE_CURRENT_SOURCE_DIR}/Qt6qmldirTemplate.cmake.in"
+        "${CMAKE_CURRENT_LIST_DIR}/${INSTALL_CMAKE_NAMESPACE}qmldirTemplate.cmake.in"
+        "${CMAKE_CURRENT_LIST_DIR}/${INSTALL_CMAKE_NAMESPACE}QmlPluginTemplate.cpp.in"
+        "${CMAKE_CURRENT_LIST_DIR}/${INSTALL_CMAKE_NAMESPACE}QmlFindQmlscInternal.cmake"
+    EXTRA_CMAKE_INCLUDES
+        "${INSTALL_CMAKE_NAMESPACE}QmlFindQmlscInternal.cmake"
 )
 
 # special case begin remove the block, handled manually
@@ -372,15 +398,6 @@ set(_qt_qlalr_flags "--no-debug" "--qt")
 qt_process_qlalr(Qml "${CMAKE_CURRENT_SOURCE_DIR}/parser/qqmljs.g" "${_qt_qlalr_flags}")
 qt_declarative_generate_reg_exp_jit_tables(Qml)
 # special case end
-
-#### Keys ignored in scope 1:.:.:qml.pro:<TRUE>:
-# QMLTYPES_FILENAME = "plugins.qmltypes"
-# QMLTYPES_INSTALL_DIR = "$$[QT_INSTALL_QML]/QtQml"
-# QML_IMPORT_NAME = "QtQml"
-# QML_IMPORT_VERSION = "$$QT_VERSION"
-
-## Scopes:
-#####################################################################
 
 qt_internal_extend_target(Qml CONDITION QT_FEATURE_qml_network
     SOURCES
@@ -497,6 +514,11 @@ qt_internal_extend_target(Qml CONDITION QT_FEATURE_qml_debug
         debugger/qqmlprofiler.cpp
         debugger/qqmlprofilerdefinitions_p.h
         jsruntime/qv4profiling.cpp
+)
+
+qt_internal_extend_target(Qml CONDITION QT_FEATURE_qml_debug AND QT_FEATURE_translation
+    SOURCES
+        debugger/qqmldebugtranslationprotocol_p.h
 )
 
 qt_internal_extend_target(Qml CONDITION QT_FEATURE_qml_sequence_object
@@ -647,33 +669,3 @@ qt_internal_create_tracepoints(Qml qtqml.tracepoints)
 qt_internal_add_docs(Qml
     doc/qtqml.qdocconf
 )
-
-
-set_target_properties(Qml PROPERTIES
-    QT_QML_MODULE_INSTALL_QMLTYPES TRUE
-    QT_QML_MODULE_VERSION ${PROJECT_VERSION}
-    QT_QML_MODULE_URI QtQml
-    QT_QMLTYPES_FILENAME plugins.qmltypes
-    QT_QML_MODULE_INSTALL_DIR "${INSTALL_QMLDIR}/QtQml"
-)
-
-qt6_qml_type_registration(Qml)
-
-include(Qt6QmlBuildInternals.cmake) # special case
-
-# special case begin
-# Install Qml import scanner template cpp file.
-set(target "Qml")
-set(path_suffix "${INSTALL_CMAKE_NAMESPACE}${target}")
-qt_path_join(config_install_dir ${QT_CONFIG_INSTALL_DIR} ${path_suffix})
-qt_copy_or_install(FILES
-    "${CMAKE_CURRENT_LIST_DIR}/${INSTALL_CMAKE_NAMESPACE}${target}ImportScannerTemplate.cpp.in"
-    DESTINATION "${config_install_dir}"
-)
-
-# Install pure QML Plugin template cpp file.
-qt_copy_or_install(FILES
-    "${CMAKE_CURRENT_LIST_DIR}/${INSTALL_CMAKE_NAMESPACE}${target}PluginTemplate.cpp.in"
-    DESTINATION "${config_install_dir}"
-)
-# special case end
