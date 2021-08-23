@@ -1051,31 +1051,59 @@ QRenderRule::QRenderRule(const QList<Declaration> &declarations, const QObject *
             for (int i = 0; i < numKnownStyleHints; i++) {
                 QLatin1String styleHint(knownStyleHints[i]);
                 if (decl.d->property.compare(styleHint) == 0) {
-                   QString hintName = QString(styleHint);
-                   QVariant hintValue;
-                   if (hintName.endsWith(QLatin1String("alignment"))) {
-                       hintValue = (int) decl.alignmentValue();
-                   } else if (hintName.endsWith(QLatin1String("color"))) {
-                       hintValue = (int) decl.colorValue().rgba();
-                   } else if (hintName.endsWith(QLatin1String("size"))) {
-                       hintValue = decl.sizeValue();
-                   } else if (hintName.endsWith(QLatin1String("icon"))) {
-                       hintValue = decl.iconValue();
-                   } else if (hintName == QLatin1String("button-layout")
-                              && decl.d->values.count() != 0 && decl.d->values.at(0).type == Value::String) {
-                       hintValue = subControlLayout(decl.d->values.at(0).variant.toString());
-                   } else {
-                       int integer;
-                       decl.intValue(&integer);
-                       hintValue = integer;
-                   }
-                   styleHints[decl.d->property] = hintValue;
-                   knownStyleHint = true;
-                   break;
+                    QString hintName = QString(styleHint);
+                    QVariant hintValue;
+                    if (hintName.endsWith(QLatin1String("alignment"))) {
+                        hintValue = (int) decl.alignmentValue();
+                    } else if (hintName.endsWith(QLatin1String("color"))) {
+                        hintValue = (int) decl.colorValue().rgba();
+                    } else if (hintName.endsWith(QLatin1String("size"))) {
+                        // Check only for the 'em' case
+                        const QString valueString = decl.d->values.at(0).variant.toString();
+                        const bool isEmSize = valueString.endsWith(u"em", Qt::CaseInsensitive);
+                        if (isEmSize || valueString.endsWith(u"ex", Qt::CaseInsensitive)) {
+                            // 1em == size of font; 1ex == xHeight of font
+                            // See lengthValueFromData helper in qcssparser.cpp
+                            QFont fontForSize(font);
+                            // if no font is specified, then use the widget font if possible
+                            if (const QWidget *widget; !hasFont && (widget = qobject_cast<const QWidget*>(object)))
+                                fontForSize = widget->font();
+
+                            const QFontMetrics fontMetrics(fontForSize);
+                            qreal pixelSize = isEmSize ? fontMetrics.height() : fontMetrics.xHeight();
+
+                            // Transform size according to the 'em'/'ex' value
+                            qreal emexSize = {};
+                            if (decl.realValue(&emexSize, isEmSize ? "em" : "ex") && emexSize > 0) {
+                                pixelSize *= emexSize;
+                                const QSizeF newSize(pixelSize, pixelSize);
+                                decl.d->parsed = QVariant::fromValue<QSizeF>(newSize);
+                                hintValue = newSize;
+                            } else {
+                                qWarning("Invalid '%s' size for %s. Skipping.",
+                                         isEmSize ? "em" : "ex", qPrintable(valueString));
+                            }
+                        } else {
+                            // Normal case where we receive a 'px' or 'pt' unit
+                            hintValue = decl.sizeValue();
+                        }
+                    } else if (hintName.endsWith(QLatin1String("icon"))) {
+                        hintValue = decl.iconValue();
+                    } else if (hintName == QLatin1String("button-layout")
+                                && decl.d->values.count() != 0 && decl.d->values.at(0).type == Value::String) {
+                        hintValue = subControlLayout(decl.d->values.at(0).variant.toString());
+                    } else {
+                        int integer;
+                        decl.intValue(&integer);
+                        hintValue = integer;
+                    }
+                    styleHints[decl.d->property] = hintValue;
+                    knownStyleHint = true;
+                    break;
                 }
             }
             if (!knownStyleHint)
-                qDebug("Unknown property %s", qPrintable(decl.d->property));
+                qWarning("Unknown property %s", qPrintable(decl.d->property));
         }
     }
 
@@ -4555,14 +4583,13 @@ void QStyleSheetStyle::drawPrimitive(PrimitiveElement pe, const QStyleOption *op
 
     case PE_PanelLineEdit:
         if (const QStyleOptionFrame *frm = qstyleoption_cast<const QStyleOptionFrame *>(opt)) {
-#if QT_CONFIG(spinbox)
-            if (w && qobject_cast<const QAbstractSpinBox *>(w->parentWidget())) {
-                QRenderRule spinboxRule = renderRule(w->parentWidget(), opt);
-                if (!spinboxRule.hasNativeBorder() || !spinboxRule.baseStyleCanDraw())
+            if (QWidget *container = containerWidget(w); container != w) {
+                QRenderRule containerRule = renderRule(container, opt);
+                if (!containerRule.hasNativeBorder() || !containerRule.baseStyleCanDraw())
                     return;
-                rule = spinboxRule;
+                rule = containerRule;
             }
-#endif
+
             if (rule.hasNativeBorder()) {
                 QStyleOptionFrame frmOpt(*frm);
                 rule.configurePalette(&frmOpt.palette, QPalette::Text, QPalette::Base);

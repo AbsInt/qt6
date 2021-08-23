@@ -94,41 +94,65 @@
             window = popup->window();
     }
 
+    qCDebug(lcQpaKeys) << "Handling" << nsevent << "as" << Qt::Key(keyCode)
+        << "with" << modifiers << "and resulting text" << text;
+
     if (eventType == QEvent::KeyPress) {
 
         if (m_composingText.isEmpty()) {
-            m_sendKeyEvent = !QWindowSystemInterface::handleShortcutEvent(window, timestamp, keyCode,
-                modifiers, nativeScanCode, nativeVirtualKey, nativeModifiers, text, [nsevent isARepeat], 1);
-
-            // Handling a shortcut may result in closing the window
-            if (!m_platformWindow)
-                return true;
-        }
-
-        QObject *fo = m_platformWindow->window()->focusObject();
-        if (m_sendKeyEvent && fo) {
-            QInputMethodQueryEvent queryEvent(Qt::ImEnabled | Qt::ImHints);
-            if (QCoreApplication::sendEvent(fo, &queryEvent)) {
-                bool imEnabled = queryEvent.value(Qt::ImEnabled).toBool();
-                Qt::InputMethodHints hints = static_cast<Qt::InputMethodHints>(queryEvent.value(Qt::ImHints).toUInt());
-                // make sure we send dead keys and the next key to the input method for composition
-                const bool ignoreHidden = (hints & Qt::ImhHiddenText) && !text.isEmpty() && !m_lastKeyDead;
-                if (imEnabled && !(hints & Qt::ImhDigitsOnly || hints & Qt::ImhFormattedNumbersOnly || ignoreHidden)) {
-                    // pass the key event to the input method. note that m_sendKeyEvent may be set to false during this call
-                    m_currentlyInterpretedKeyEvent = nsevent;
-                    [self interpretKeyEvents:@[nsevent]];
-                    m_currentlyInterpretedKeyEvent = 0;
-                    // if the last key we sent was dead, then pass the next key to the IM as well to complete composition
-                    m_lastKeyDead = text.isEmpty();
-                }
+            qCDebug(lcQpaKeys) << "Trying potential shortcuts in" << window;
+            if (QWindowSystemInterface::handleShortcutEvent(window, timestamp, keyCode, modifiers,
+                    nativeScanCode, nativeVirtualKey, nativeModifiers, text, [nsevent isARepeat], 1)) {
+                qCDebug(lcQpaKeys) << "Found matching shortcut; will not send as key event";
+                m_sendKeyEvent = false;
+                // Handling a shortcut may result in closing the window
+                if (!m_platformWindow)
+                    return true;
+            } else {
+                qCDebug(lcQpaKeys) << "No matching shortcuts; continuing with key event delivery";
             }
         }
+
+        QObject *focusObject = m_platformWindow->window()->focusObject();
+        if (m_sendKeyEvent && focusObject) {
+            if (auto queryResult = queryInputMethod(focusObject, Qt::ImHints)) {
+                auto hints = static_cast<Qt::InputMethodHints>(queryResult.value(Qt::ImHints).toUInt());
+
+                // Make sure we send dead keys and the next key to the input method for composition
+                const bool ignoreHidden = (hints & Qt::ImhHiddenText) && !text.isEmpty() && !m_lastKeyDead;
+
+                if (!(hints & Qt::ImhDigitsOnly || hints & Qt::ImhFormattedNumbersOnly || ignoreHidden)) {
+                    // Pass the key event to the input method. Note that m_sendKeyEvent may be set
+                    // to false during this call
+                    qCDebug(lcQpaKeys) << "Interpreting key event for focus object" << focusObject;
+                    m_currentlyInterpretedKeyEvent = nsevent;
+                    [self interpretKeyEvents:@[nsevent]];
+
+                    // If the receiver opens an editor in response to a key press, then the focus will change, the input
+                    // method will be reset, and the first key press will be gone. If the focus object changes, then we
+                    // need to pass the key event to the input method once more.
+                    if (qApp->focusObject() != focusObject) {
+                        qCDebug(lcQpaKeys) << "Interpreting key event again for new focus object" << qApp->focusObject();
+                        [self interpretKeyEvents:@[nsevent]];
+                    }
+
+                    m_currentlyInterpretedKeyEvent = 0;
+
+                    // If the last key we sent was dead, then pass the next
+                    // key to the IM as well to complete composition.
+                    m_lastKeyDead = text.isEmpty();
+                }
+
+            }
+        }
+
         if (m_resendKeyEvent)
             m_sendKeyEvent = true;
     }
 
     bool accepted = true;
     if (m_sendKeyEvent && m_composingText.isEmpty()) {
+        qCDebug(lcQpaKeys) << "Sending as regular key event";
         QWindowSystemInterface::handleExtendedKeyEvent(window, timestamp, QEvent::Type(eventType), keyCode, modifiers,
                                                        nativeScanCode, nativeVirtualKey, nativeModifiers, text, [nsevent isARepeat], 1, false);
         accepted = QWindowSystemInterface::flushWindowSystemEvents();
@@ -199,6 +223,9 @@
     ulong timestamp = [nsevent timestamp] * 1000;
     ulong nativeModifiers = [nsevent modifierFlags];
     Qt::KeyboardModifiers modifiers = QAppleKeyMapper::fromCocoaModifiers(nativeModifiers);
+
+    qCDebug(lcQpaKeys) << "Flags changed with" << nsevent
+        << "resulting in" << modifiers;
 
     // Scan codes are hardware dependent codes for each key. There is no way to get these
     // from Carbon or Cocoa, so leave it 0, as documented in QKeyEvent::nativeScanCode().

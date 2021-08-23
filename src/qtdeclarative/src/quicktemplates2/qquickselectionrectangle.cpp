@@ -52,7 +52,7 @@ QT_BEGIN_NAMESPACE
     \inqmlmodule QtQuick.Controls
     \since 6.2
     \ingroup utilities
-    \brief Used to select table cells inside a TableView
+    \brief Used to select table cells inside a TableView.
 
     \image qtquickcontrols2-selectionrectangle.png
 
@@ -257,20 +257,18 @@ void QQuickSelectionRectanglePrivate::updateActiveState(bool active)
     emit q_func()->activeChanged();
 }
 
-QQuickItem *QQuickSelectionRectanglePrivate::createHandle(QQmlComponent *delegate)
+QQuickItem *QQuickSelectionRectanglePrivate::createHandle(QQmlComponent *delegate, Qt::Corner corner)
 {
     Q_Q(QQuickSelectionRectangle);
 
-    const bool topLeft = (delegate == m_topLeftHandleDelegate);
-
     // Incubate the handle
-    const auto handlerTarget = m_selectable->selectionPointerHandlerTarget();
     QObject *obj = delegate->beginCreate(QQmlEngine::contextForObject(q));
     QQuickItem *handleItem = qobject_cast<QQuickItem*>(obj);
+    const auto handlerTarget = m_selectable->selectionPointerHandlerTarget();
+    handleItem->setParentItem(handlerTarget);
     if (auto attached = getAttachedObject(handleItem))
         attached->setControl(q);
     delegate->completeCreate();
-    handleItem->setParentItem(handlerTarget);
     if (handleItem->z() == 0)
         handleItem->setZ(100);
 
@@ -284,7 +282,7 @@ QQuickItem *QQuickSelectionRectanglePrivate::createHandle(QQmlComponent *delegat
         if (dragHandler->active()) {
             const QPointF localPos = dragHandler->centroid().position();
             const QPointF pos = handleItem->mapToItem(handleItem->parentItem(), localPos);
-            if (topLeft)
+            if (corner == Qt::TopLeftCorner)
                 m_selectable->setSelectionStartPos(pos);
             else
                 m_selectable->setSelectionEndPos(pos);
@@ -305,7 +303,7 @@ QQuickItem *QQuickSelectionRectanglePrivate::createHandle(QQmlComponent *delegat
 
         const QPointF localPos = dragHandler->centroid().position();
         const QPointF pos = handleItem->mapToItem(handleItem->parentItem(), localPos);
-        if (topLeft)
+        if (corner == Qt::TopLeftCorner)
             m_selectable->setSelectionStartPos(pos);
         else
             m_selectable->setSelectionEndPos(pos);
@@ -325,10 +323,10 @@ void QQuickSelectionRectanglePrivate::updateHandles()
     const QRectF rect = m_selectable->selectionRectangle().normalized();
 
     if (!m_topLeftHandle && m_topLeftHandleDelegate)
-        m_topLeftHandle = createHandle(m_topLeftHandleDelegate);
+        m_topLeftHandle = createHandle(m_topLeftHandleDelegate, Qt::TopLeftCorner);
 
     if (!m_bottomRightHandle && m_bottomRightHandleDelegate)
-        m_bottomRightHandle = createHandle(m_bottomRightHandleDelegate);
+        m_bottomRightHandle = createHandle(m_bottomRightHandleDelegate, Qt::BottomRightCorner);
 
     if (m_topLeftHandle) {
         m_topLeftHandle->setX(rect.x() - (m_topLeftHandle->width() / 2));

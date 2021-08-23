@@ -492,9 +492,14 @@ function(qt_evaluate_feature_definition key)
         set(expected OFF)
     endif()
 
+    set(actual OFF)
+    if(QT_FEATURE_${arg_FEATURE})
+        set(actual ON)
+    endif()
+
     set(msg "")
 
-    if(QT_FEATURE_${arg_FEATURE} STREQUAL expected)
+    if(actual STREQUAL expected)
         set(indent "")
         if(arg_PREREQUISITE)
             string(APPEND msg "#if ${arg_PREREQUISITE}\n")
@@ -861,6 +866,15 @@ function(qt_config_compile_test name)
 
         if(NOT arg_CMAKE_FLAGS)
             set(arg_CMAKE_FLAGS "")
+        endif()
+
+        # CI passes the project dir of the Qt repository as absolute path without drive letter:
+        #   \Users\qt\work\qt\qtbase
+        # Ensure that arg_PROJECT_PATH is an absolute path with drive letter:
+        #   C:/Users/qt/work/qt/qtbase
+        # This works around CMake upstream issue #22534.
+        if(CMAKE_HOST_WIN32)
+            get_filename_component(arg_PROJECT_PATH "${arg_PROJECT_PATH}" REALPATH)
         endif()
 
         try_compile(HAVE_${name} "${CMAKE_BINARY_DIR}/config.tests/${name}" "${arg_PROJECT_PATH}"

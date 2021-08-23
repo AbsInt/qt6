@@ -131,7 +131,7 @@ endfunction()
 # Wraps the genex condition to evaluate to true only when using the regular plugin importing mode
 # (not finalizer mode).
 function(__qt_internal_get_plugin_condition_regular_mode plugin_condition out_var)
-    set(not_finalizer_mode "$<NOT:$<BOOL:$<TARGET_PROPERTY:_qt_static_plugins_use_finalizer_mode>>>")
+    set(not_finalizer_mode "$<NOT:$<BOOL:$<TARGET_PROPERTY:_qt_static_plugins_finalizer_mode>>>")
     set(full_plugin_condition "$<AND:${plugin_condition},${not_finalizer_mode}>")
     set(${out_var} "${full_plugin_condition}" PARENT_SCOPE)
 endfunction()
@@ -193,13 +193,12 @@ function(__qt_internal_add_static_plugin_import_macro
         qt_module_unprefixed)
 
     __qt_internal_get_static_plugin_init_target_name("${plugin_target}" plugin_init_target)
-    set(objs_genex "$<TARGET_OBJECTS:${QT_CMAKE_EXPORT_NAMESPACE}::${plugin_init_target}>")
+    set(plugin_init_target_namespaced "${QT_CMAKE_EXPORT_NAMESPACE}::${plugin_init_target}")
 
-    # TODO: Replace the target_sources call here with the more generalized approach that will be
-    # added to __qt_propagate_generated_resource (the one that determines whether to use
-    # target_sources or target_link_libraries depending on the CMake version).
-    target_sources(${QT_CMAKE_EXPORT_NAMESPACE}::${plugin_target} INTERFACE
-                   "${objs_genex}")
+    __qt_internal_propagate_object_library(
+        "${QT_CMAKE_EXPORT_NAMESPACE}::${plugin_target}"
+        "${plugin_init_target_namespaced}"
+    )
 endfunction()
 
 # Get target name of object library which is used to initialize a qt plugin.
@@ -368,17 +367,6 @@ function(__qt_internal_collect_plugin_targets_from_dependencies_of_plugins targe
     set("${out_var}" "${plugin_targets}" PARENT_SCOPE)
 endfunction()
 
-# Helper to check if the finalizer mode of plugin importing should be used.
-# If true or unset, use finalizer mode.
-# If false, use regular mode (usage requirement propagation via associated Qt module)
-function(__qt_internal_get_plugin_imports_finalizer_mode target out_var)
-    get_target_property(value ${target} _qt_static_plugins_use_finalizer_mode)
-    if("${value}" STREQUAL "value-NOTFOUND")
-        set(value "")
-    endif()
-    set(${out_var} "${value}" PARENT_SCOPE)
-endfunction()
-
 # Main logic of finalizer mode.
 function(__qt_internal_apply_plugin_imports_finalizer_mode target)
     # Nothing to do in a shared build.
@@ -392,17 +380,15 @@ function(__qt_internal_apply_plugin_imports_finalizer_mode target)
         return()
     endif()
 
-    __qt_internal_get_plugin_imports_finalizer_mode(${target} use_finalizer_mode)
-
     # By default if the project hasn't explicitly opted in or out, use finalizer mode.
     # The precondition for this is that qt_finalize_target was called (either explicitly by the user
     # or auto-deferred by CMake 3.19+).
-    if("${use_finalizer_mode}" STREQUAL "")
-        qt_enable_import_plugins_finalizer_mode(${target} TRUE)
-    endif()
+    __qt_internal_check_finalizer_mode("${target}"
+        use_finalizer_mode
+        static_plugins
+        DEFAULT_VALUE "TRUE"
+    )
 
-    # Check if the project chose a mode explicitly.
-    __qt_internal_get_plugin_imports_finalizer_mode(${target} use_finalizer_mode)
     if(NOT use_finalizer_mode)
         return()
     endif()

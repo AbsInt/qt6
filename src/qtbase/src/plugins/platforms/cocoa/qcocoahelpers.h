@@ -71,6 +71,8 @@ QT_BEGIN_NAMESPACE
 Q_DECLARE_LOGGING_CATEGORY(lcQpaWindow)
 Q_DECLARE_LOGGING_CATEGORY(lcQpaDrawing)
 Q_DECLARE_LOGGING_CATEGORY(lcQpaMouse)
+Q_DECLARE_LOGGING_CATEGORY(lcQpaKeys)
+Q_DECLARE_LOGGING_CATEGORY(lcQpaInputMethods)
 Q_DECLARE_LOGGING_CATEGORY(lcQpaScreen)
 Q_DECLARE_LOGGING_CATEGORY(lcQpaApplication)
 Q_DECLARE_LOGGING_CATEGORY(lcQpaClipboard)
@@ -357,6 +359,20 @@ QSendSuperHelper<Args...> qt_objcDynamicSuperHelper(id receiver, SEL selector, A
 
 // Same as calling super, but the super_class field resolved at runtime instead of compile time
 #define qt_objcDynamicSuper(...) qt_objcDynamicSuperHelper(self, _cmd, ##__VA_ARGS__)
+
+// -------------------------------------------------------------------------
+
+struct InputMethodQueryResult : public QHash<Qt::InputMethodQuery, QVariant>
+{
+    operator bool() { return !isEmpty(); }
+};
+
+InputMethodQueryResult queryInputMethod(QObject *object, Qt::InputMethodQueries queries = Qt::ImEnabled);
+
+// -------------------------------------------------------------------------
+
+QDebug operator<<(QDebug, const NSRange &);
+QDebug operator<<(QDebug, SEL);
 
 #endif // __OBJC__
 

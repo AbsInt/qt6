@@ -715,6 +715,30 @@ function(_qt_internal_get_default_ios_bundle_identifier out_var)
     set("${out_var}" "${prefix}.\${PRODUCT_NAME:rfc1034identifier}" PARENT_SCOPE)
 endfunction()
 
+function(_qt_internal_set_placeholder_apple_bundle_version target)
+    # If user hasn't provided neither a bundle version nor a bundle short version string for the
+    # app, set a placeholder value for both which will add them to the generated Info.plist file.
+    # This is required so that the app launches in the simulator (but apparently not for running
+    # on-device).
+    get_target_property(bundle_version "${target}" MACOSX_BUNDLE_BUNDLE_VERSION)
+    get_target_property(bundle_short_version "${target}" MACOSX_BUNDLE_SHORT_VERSION_STRING)
+
+    if(NOT MACOSX_BUNDLE_BUNDLE_VERSION AND
+       NOT MACOSX_BUNDLE_SHORT_VERSION_STRING AND
+       NOT bundle_version AND
+       NOT bundle_short_version AND
+       NOT QT_NO_SET_XCODE_BUNDLE_VERSION
+     )
+         set(bundle_version "0.0.1")
+         set(bundle_short_version "0.0.1")
+         set_target_properties("${target}"
+                               PROPERTIES
+                               MACOSX_BUNDLE_BUNDLE_VERSION "${bundle_version}"
+                               MACOSX_BUNDLE_SHORT_VERSION_STRING "${bundle_short_version}"
+                               )
+    endif()
+endfunction()
+
 function(_qt_internal_finalize_ios_app target)
     # If user hasn't provided a development team id, try to find the first one specified
     # in the Xcode preferences.
@@ -749,6 +773,8 @@ function(_qt_internal_finalize_ios_app target)
                                   "${bundle_id}")
         endif()
     endif()
+
+    _qt_internal_set_placeholder_apple_bundle_version("${target}")
 endfunction()
 
 if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
@@ -881,62 +907,75 @@ if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
     endfunction()
 endif()
 
-# This function allows enabling or disabling the finalizer mode of plugin importing in static Qt
-# builds.
+# This function is currently in Technical Preview. It's signature may change or be removed entirely.
+
+# This function allows enabling or disabling finalizer modes for a specific target.
+# Currently, the only supported finalizer mode is for plugin importing in static Qt builds which
+# is called 'static_plugins'. You can enable / disable it by calling
 #
-# When finalizer mode is enabled, all plugins initializer object libraries are directly linked to
-# the given '${target}' (executable or shared library).
-# This prevents cycles between Qt provided static libraries and reduces link time, due to the
-# libraries not being repeated because they are not part of a cycle anymore.
+#   qt6_set_finalizer_mode(${target} ENABLE MODES "static_plugins")
+#   qt6_set_finalizer_mode(${target} DISABLE MODES "static_plugins")
 #
-# When finalizer mode is disabled, each plugin initializer is propagated via usage requirements
-# of its associated module.
+# When the "static_plugins" finalizer mode is enabled, all plugins initializer object libraries are
+# directly linked to the given ${target} (executable or shared library).
+# This prevents cycles between Qt provided static libraries and reduces link time, thanks to the
+# libraries not being repeated on the link line because they are not part of a cycle anymore.
 #
-# Finalizer mode is enabled by default if:
+# When the finalizer mode is disabled, each plugin initializer is propagated via usage requirements
+# of its associated module, which may cause cycles in the current build system implementation.
+#
+# The "static_plugins" finalizer mode is enabled by default if:
 #   - the project calls qt_finalize_target explicitly at the end of the project file or
 #   - the project uses qt_add_executable and a CMake version greater than or equal to 3.19
 #     (which will DEFER CALL qt_finalize_target)
-function(qt6_enable_import_plugins_finalizer_mode target enabled)
-    if(enabled)
-        set(enabled "TRUE")
-    else()
-        set(enabled "FALSE")
+function(qt6_set_finalizer_mode target)
+    cmake_parse_arguments(arg "ENABLE;DISABLE" "" "MODES" ${ARGN})
+    if(NOT arg_ENABLE AND NOT arg_DISABLE)
+        message(FATAL_ERROR "No option was specified whether to enable or disable the modes.")
+    elseif(arg_ENABLE AND arg_DISABLE)
+        message(FATAL_ERROR "Both ENABLE and DISABLE options were specified.")
     endif()
-    set_property(TARGET "${target}" PROPERTY _qt_static_plugins_use_finalizer_mode "${enabled}")
+    if(NOT arg_MODES)
+        message(FATAL_ERROR "No modes were specified in qt6_set_finalizer_mode() call.")
+    endif()
+
+    if(arg_ENABLE)
+        set(value "TRUE")
+    elseif(arg_DISABLE)
+        set(value "FALSE")
+    endif()
+
+    foreach(mode ${arg_MODES})
+        __qt_internal_enable_finalizer_mode("${target}" "${mode}" "${value}")
+    endforeach()
 endfunction()
 
 if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
-    function(qt_enable_import_plugins_finalizer_mode)
-        qt6_enable_import_plugins_finalizer_mode(${ARGV})
-    endfunction()
-endif()
-
-# This function allows enabling or disabling the finalizer mode of resource objects linking in
-# static Qt builds.
-# It makes sense to manually disable the finalizer of the resource object if you are using
-# linkers other than ld, since the dependencies between resource objects and static libraries
-# are resolved correctly by them.
-function(qt6_enable_object_libraries_finalizer_mode target enabled)
-    __qt_internal_enable_finalizer_mode(${target} object_libraries ${enabled})
-endfunction()
-
-if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
-    function(qt_enable_object_libraries_finalizer_mode)
-        qt6_enable_object_libraries_finalizer_mode(${ARGV})
+    function(qt_set_finalizer_mode)
+        qt6_set_finalizer_mode(${ARGV})
     endfunction()
 endif()
 
 # Extracts metatypes from a Qt target and generates a metatypes.json for it.
+#
 # By default we check whether AUTOMOC has been enabled and we extract the information from the
 # target's AUTOMOC supporting files.
-# Should you not wish to use automoc you need to pass in all the generated json files via the
+#
+# Should you not wish to use AUTOMOC you need to pass in all the generated json files via the
 # MANUAL_MOC_JSON_FILES parameter. The latter can be obtained by running moc with
 # the --output-json parameter.
 # Params:
-#   INSTALL_DIR: Location where to install the metatypes file. For public consumption,
-#                defaults to a ${CMAKE_INSTALL_PREFIX}/${INSTALL_LIBDIR}/metatypes directory.
-#                Executable metatypes files are never installed.
+#   OUTPUT_FILES: a variable name in which to store the list of the extracted metatype json files.
+#                 A typical use case would to install them.
+#
+#   TODO: Move these internal options out into an internal function to be used by Qt only.
+#   __QT_INTERNAL_INSTALL_DIR: Location where to install the metatypes file. For public consumption,
+#                              defaults to a ${CMAKE_INSTALL_PREFIX}/${INSTALL_LIBDIR}/metatypes
+#                              directory.
+#                              Executable metatypes files are never installed.
 #   __QT_INTERNAL_NO_INSTALL: When passed, will skip installation of the metatype file.
+#   __QT_INTERNAL_INSTALL: Installs the metatypes files into the default Qt metatypes folder.
+#                          Only to be used by the Qt build.
 function(qt6_extract_metatypes target)
 
     get_target_property(existing_meta_types_file ${target} INTERFACE_QT_META_TYPES_BUILD_FILE)
@@ -944,8 +983,27 @@ function(qt6_extract_metatypes target)
         return()
     endif()
 
+    set(args_option
+        # TODO: Remove this once all leaf module usages of it are removed. It's now a no-op.
+        __QT_INTERNAL_NO_INSTALL
+
+        # TODO: Move this into a separate internal function, so it doesn't pollute the public one.
+        __QT_INTERNAL_INSTALL
+    )
+    set(args_single
+        # TODO: Move this into a separate internal function, so it doesn't pollute the public one.
+        __QT_INTERNAL_INSTALL_DIR
+
+        OUTPUT_FILES
+    )
+    set(args_multi
+        MANUAL_MOC_JSON_FILES
+    )
+
     cmake_parse_arguments(arg
-        "__QT_INTERNAL_NO_INSTALL" "INSTALL_DIR" "MANUAL_MOC_JSON_FILES" ${ARGN})
+        "${args_option}"
+        "${args_single}"
+        "${args_multi}" ${ARGN})
 
     get_target_property(target_type ${target} TYPE)
     if (target_type STREQUAL "INTERFACE_LIBRARY")
@@ -1136,33 +1194,40 @@ function(qt6_extract_metatypes target)
     )
     target_sources(${target} INTERFACE ${metatypes_file_genex_build})
 
+    if(arg_OUTPUT_FILES)
+        set(${arg_OUTPUT_FILES} "${metatypes_file}")
+    endif()
+
     # Chech whether the generated json file needs to be installed.
     # Executable metatypes.json files should not be installed. Qt non-prefix builds should also
     # not install the files.
-    set(should_install TRUE)
-    if (target_type STREQUAL "EXECUTABLE" OR arg___QT_INTERNAL_NO_INSTALL)
-        set(should_install "FALSE")
+    set(should_install FALSE)
+
+    if(NOT target_type STREQUAL "EXECUTABLE" AND arg___QT_INTERNAL_INSTALL)
+        set(should_install TRUE)
     endif()
 
     # Automatically fill default install args when not specified.
-    if (NOT arg_INSTALL_DIR)
+    if(NOT arg___QT_INTERNAL_INSTALL_DIR)
         # INSTALL_LIBDIR is not set when QtBuildInternals is not loaded (when not doing a Qt build).
         # Default to a hardcoded location for user projects.
         if(INSTALL_LIBDIR)
-            set(arg_INSTALL_DIR "${INSTALL_LIBDIR}/metatypes")
+            set(install_dir "${INSTALL_LIBDIR}/metatypes")
         else()
-            set(arg_INSTALL_DIR "lib/metatypes")
+            set(install_dir "lib/metatypes")
         endif()
+    else()
+        set(install_dir "${arg___QT_INTERNAL_INSTALL_DIR}")
     endif()
 
     if(should_install)
-        set(metatypes_file_install_path "${arg_INSTALL_DIR}/${metatypes_file_name}")
+        set(metatypes_file_install_path "${install_dir}/${metatypes_file_name}")
         set(metatypes_file_install_path_genex "$<INSTALL_PREFIX>/${metatypes_file_install_path}")
         set(metatypes_file_genex_install
             "$<INSTALL_INTERFACE:$<${consumes_metatypes}:${metatypes_file_install_path_genex}>>"
         )
         target_sources(${target} INTERFACE ${metatypes_file_genex_install})
-        install(FILES "${metatypes_file}" DESTINATION "${arg_INSTALL_DIR}")
+        install(FILES "${metatypes_file}" DESTINATION "${install_dir}")
     endif()
 endfunction()
 

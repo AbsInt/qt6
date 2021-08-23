@@ -15,12 +15,12 @@ function(qt_configure_file)
     if(arg_CONTENT)
         set(template_name "QtFileConfigure.txt.in")
         # When building qtbase, use the source template file.
-        # Otherwise use the installed file.
+        # Otherwise use the installed file (basically wherever Qt6 package is found).
         # This should work for non-prefix and superbuilds as well.
         if(QtBase_SOURCE_DIR)
             set(input_file "${QtBase_SOURCE_DIR}/cmake/${template_name}")
         else()
-            set(input_file "${Qt6_DIR}/${template_name}")
+            set(input_file "${_qt_6_config_cmake_dir}/${template_name}")
         endif()
         set(__qt_file_configure_content "${arg_CONTENT}")
     elseif(arg_INPUT)
@@ -137,7 +137,7 @@ function(qt_remove_args out_var)
             endif()
             list(GET result ${find_result} arg_current)
             # remove values until we hit another arg or the end of the list
-            while(NOT ${arg_current} IN_LIST arg_ALL_ARGS AND find_result LESS result_len)
+            while(NOT "${arg_current}" IN_LIST arg_ALL_ARGS AND find_result LESS result_len)
                 list(REMOVE_AT result ${find_result})
                 list(LENGTH result result_len)
                 if (NOT find_result EQUAL result_len)

@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2018 The Qt Company Ltd.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
@@ -39,183 +39,180 @@
 
 // This file is included from qnsview.mm, and only used to organize the code
 
-@implementation QNSView (ComplexTextAPI)
-
-- (void)cancelComposingText
-{
-    if (m_composingText.isEmpty())
-        return;
-
-    if (m_composingFocusObject) {
-        QInputMethodQueryEvent queryEvent(Qt::ImEnabled);
-        if (QCoreApplication::sendEvent(m_composingFocusObject, &queryEvent)) {
-            if (queryEvent.value(Qt::ImEnabled).toBool()) {
-                QInputMethodEvent e;
-                QCoreApplication::sendEvent(m_composingFocusObject, &e);
-            }
-        }
-    }
-
-    m_composingText.clear();
-    m_composingFocusObject = nullptr;
-}
-
-- (void)unmarkText
-{
-    if (!m_composingText.isEmpty()) {
-        if (QObject *fo = m_platformWindow->window()->focusObject()) {
-            QInputMethodQueryEvent queryEvent(Qt::ImEnabled);
-            if (QCoreApplication::sendEvent(fo, &queryEvent)) {
-                if (queryEvent.value(Qt::ImEnabled).toBool()) {
-                    QInputMethodEvent e;
-                    e.setCommitString(m_composingText);
-                    QCoreApplication::sendEvent(fo, &e);
-                }
-            }
-        }
-    }
-    m_composingText.clear();
-    m_composingFocusObject = nullptr;
-}
-
-@end
-
 @implementation QNSView (ComplexText)
+
+// ------------- Text insertion -------------
+
+/*
+    Inserts the given text, potentially replacing existing text.
+
+    The text input management system calls this as a result of:
+
+     - A normal key press, via [NSView interpretKeyEvents:] or
+       [NSInputContext handleEvent:]
+
+     - An input method finishing (confirming) composition
+
+     - Pressing a key in the Keyboard Viewer panel
+
+     - Confirming an inline input area (accent popup e.g.)
+
+    \a replacementRange refers to the existing text to replace.
+    Under normal circumstances this is {NSNotFound, 0}, and the
+    implementation should replace either the existing marked text,
+    the current selection, or just insert the text at the current
+    cursor location.
+*/
+- (void)insertText:(id)text replacementRange:(NSRange)replacementRange
+{
+    qCDebug(lcQpaKeys).nospace() << "Inserting \"" << text << "\""
+        << ", replacing range " << replacementRange;
+
+    if (m_sendKeyEvent && m_composingText.isEmpty() && [text isEqualToString:m_inputSource]) {
+        // We do not send input method events for simple text input,
+        // and instead let handleKeyEvent send the key event.
+        qCDebug(lcQpaKeys) << "Not sending simple text as input method event";
+        return;
+    }
+
+    const bool isAttributedString = [text isKindOfClass:NSAttributedString.class];
+    QString commitString = QString::fromNSString(isAttributedString ? [text string] : text);
+
+    QObject *focusObject = m_platformWindow->window()->focusObject();
+    if (queryInputMethod(focusObject)) {
+        QInputMethodEvent e;
+        e.setCommitString(commitString);
+        QCoreApplication::sendEvent(focusObject, &e);
+        // prevent handleKeyEvent from sending a key event
+        m_sendKeyEvent = false;
+    }
+
+    m_composingText.clear();
+    m_composingFocusObject = nullptr;
+}
 
 - (void)insertNewline:(id)sender
 {
     Q_UNUSED(sender);
+    qCDebug(lcQpaKeys) << "Inserting newline";
     m_resendKeyEvent = true;
 }
 
-- (void)doCommandBySelector:(SEL)aSelector
+// ------------- Text composition -------------
+
+/*
+    Updates the composed text, potentially replacing existing text.
+
+    The NSTextInputClient protocol refers to composed text as "marked",
+    since it is "marked differently from the selection, using temporary
+    attributes that affect only display, not layout or storage.""
+
+    The concept maps to the preeditString of our QInputMethodEvent.
+
+    \a selectedRange refers to the part of the marked text that
+    is considered selected, for example when composing text with
+    multiple clause segments (Hiragana - Kana e.g.).
+
+    \a replacementRange refers to the existing text to replace.
+    Under normal circumstances this is {NSNotFound, 0}, and the
+    implementation should replace either the existing marked text,
+    the current selection, or just insert the text at the current
+    cursor location. But when initiating composition of existing
+    committed text (Hiragana - Kana e.g.), the range will be valid.
+*/
+- (void)setMarkedText:(id)text selectedRange:(NSRange)selectedRange replacementRange:(NSRange)replacementRange
 {
-    [self tryToPerform:aSelector with:self];
-}
+    qCDebug(lcQpaKeys).nospace() << "Marking \"" << text << "\""
+        << " with selected range " << selectedRange
+        << ", replacing range " << replacementRange;
 
-- (void)insertText:(id)aString replacementRange:(NSRange)replacementRange
-{
-    Q_UNUSED(replacementRange);
+    const bool isAttributedString = [text isKindOfClass:NSAttributedString.class];
+    QString preeditString = QString::fromNSString(isAttributedString ? [text string] : text);
 
-    if (m_sendKeyEvent && m_composingText.isEmpty() && [aString isEqualToString:m_inputSource]) {
-        // don't send input method events for simple text input (let handleKeyEvent send key events instead)
-        return;
-    }
+    QList<QInputMethodEvent::Attribute> preeditAttributes;
+    preeditAttributes << QInputMethodEvent::Attribute(
+        QInputMethodEvent::Cursor, selectedRange.location + selectedRange.length, true);
 
-    QString commitString;
-    if ([aString length]) {
-        if ([aString isKindOfClass:[NSAttributedString class]]) {
-            commitString = QString::fromCFString(reinterpret_cast<CFStringRef>([aString string]));
-        } else {
-            commitString = QString::fromCFString(reinterpret_cast<CFStringRef>(aString));
-        };
-    }
-    if (QObject *fo = m_platformWindow->window()->focusObject()) {
-        QInputMethodQueryEvent queryEvent(Qt::ImEnabled);
-        if (QCoreApplication::sendEvent(fo, &queryEvent)) {
-            if (queryEvent.value(Qt::ImEnabled).toBool()) {
-                QInputMethodEvent e;
-                e.setCommitString(commitString);
-                QCoreApplication::sendEvent(fo, &e);
-                // prevent handleKeyEvent from sending a key event
-                m_sendKeyEvent = false;
-            }
-        }
-    }
+    int index = 0;
+    int composingLength = preeditString.length();
+    while (index < composingLength) {
+        NSRange range = NSMakeRange(index, composingLength - index);
 
-    m_composingText.clear();
-    m_composingFocusObject = nullptr;
-}
+        static NSDictionary *defaultMarkedTextAttributes = []{
+            NSTextView *textView = [[NSTextView new] autorelease];
+            return [textView.markedTextAttributes retain];
+        }();
 
-- (void)setMarkedText:(id)aString selectedRange:(NSRange)selectedRange replacementRange:(NSRange)replacementRange
-{
-    Q_UNUSED(replacementRange);
-    QString preeditString;
+        NSDictionary *attributes = isAttributedString
+            ? [text attributesAtIndex:index longestEffectiveRange:&range inRange:range]
+            : defaultMarkedTextAttributes;
 
-    QList<QInputMethodEvent::Attribute> attrs;
-    attrs<<QInputMethodEvent::Attribute(QInputMethodEvent::Cursor, selectedRange.location + selectedRange.length, 1, QVariant());
-
-    if ([aString isKindOfClass:[NSAttributedString class]]) {
-        // Preedit string has attribution
-        preeditString = QString::fromCFString(reinterpret_cast<CFStringRef>([aString string]));
-        int composingLength = preeditString.length();
-        int index = 0;
-        // Create attributes for individual sections of preedit text
-        while (index < composingLength) {
-            NSRange effectiveRange;
-            NSRange range = NSMakeRange(index, composingLength-index);
-            NSDictionary *attributes = [aString attributesAtIndex:index
-                                            longestEffectiveRange:&effectiveRange
-                                                          inRange:range];
-            NSNumber *underlineStyle = [attributes objectForKey:NSUnderlineStyleAttributeName];
-            if (underlineStyle) {
-                QColor clr (Qt::black);
-                NSColor *color = [attributes objectForKey:NSUnderlineColorAttributeName];
-                if (color) {
-                    clr = qt_mac_toQColor(color);
-                }
-                QTextCharFormat format;
-                format.setFontUnderline(true);
-                format.setUnderlineColor(clr);
-                attrs<<QInputMethodEvent::Attribute(QInputMethodEvent::TextFormat,
-                                                    effectiveRange.location,
-                                                    effectiveRange.length,
-                                                    format);
-            }
-            index = effectiveRange.location + effectiveRange.length;
-        }
-    } else {
-        // No attributes specified, take only the preedit text.
-        preeditString = QString::fromCFString(reinterpret_cast<CFStringRef>(aString));
-    }
-
-    if (attrs.isEmpty()) {
+        qCDebug(lcQpaKeys) << "Decorating range" << range << "based on" << attributes;
         QTextCharFormat format;
-        format.setFontUnderline(true);
-        attrs<<QInputMethodEvent::Attribute(QInputMethodEvent::TextFormat,
-                                            0, preeditString.length(), format);
+
+        if (NSNumber *underlineStyle = attributes[NSUnderlineStyleAttributeName]) {
+            format.setFontUnderline(true);
+            NSUnderlineStyle style = underlineStyle.integerValue;
+            if (style & NSUnderlineStylePatternDot)
+                format.setUnderlineStyle(QTextCharFormat::DotLine);
+            else if (style & NSUnderlineStylePatternDash)
+                format.setUnderlineStyle(QTextCharFormat::DashUnderline);
+            else if (style & NSUnderlineStylePatternDashDot)
+                format.setUnderlineStyle(QTextCharFormat::DashDotLine);
+            if (style & NSUnderlineStylePatternDashDotDot)
+                format.setUnderlineStyle(QTextCharFormat::DashDotDotLine);
+            else
+                format.setUnderlineStyle(QTextCharFormat::SingleUnderline);
+
+            // Unfortunately QTextCharFormat::UnderlineStyle does not distinguish
+            // between NSUnderlineStyle{Single,Thick,Double}, which is used by CJK
+            // input methods to highlight the selected clause segments, so we fake
+            // it using QTextCharFormat::WaveUnderline.
+            if ((style & NSUnderlineStyleThick) == NSUnderlineStyleThick
+                || (style & NSUnderlineStyleDouble) == NSUnderlineStyleDouble)
+                format.setUnderlineStyle(QTextCharFormat::WaveUnderline);
+        }
+        if (NSColor *underlineColor = attributes[NSUnderlineColorAttributeName])
+            format.setUnderlineColor(qt_mac_toQColor(underlineColor));
+        if (NSColor *foregroundColor = attributes[NSForegroundColorAttributeName])
+            format.setForeground(qt_mac_toQColor(foregroundColor));
+        if (NSColor *backgroundColor = attributes[NSBackgroundColorAttributeName])
+            format.setBackground(qt_mac_toQColor(backgroundColor));
+
+        if (format != QTextCharFormat()) {
+            preeditAttributes << QInputMethodEvent::Attribute(
+                QInputMethodEvent::TextFormat, range.location, range.length, format);
+        }
+
+        index = range.location + range.length;
     }
 
     m_composingText = preeditString;
 
-    if (QObject *fo = m_platformWindow->window()->focusObject()) {
-        m_composingFocusObject = fo;
-        QInputMethodQueryEvent queryEvent(Qt::ImEnabled);
-        if (QCoreApplication::sendEvent(fo, &queryEvent)) {
-            if (queryEvent.value(Qt::ImEnabled).toBool()) {
-                QInputMethodEvent e(preeditString, attrs);
-                QCoreApplication::sendEvent(fo, &e);
-                // prevent handleKeyEvent from sending a key event
-                m_sendKeyEvent = false;
-            }
+    if (QObject *focusObject = m_platformWindow->window()->focusObject()) {
+        m_composingFocusObject = focusObject;
+        if (queryInputMethod(focusObject)) {
+            QInputMethodEvent event(preeditString, preeditAttributes);
+            QCoreApplication::sendEvent(focusObject, &event);
+            // prevent handleKeyEvent from sending a key event
+            m_sendKeyEvent = false;
         }
     }
 }
 
-- (BOOL)hasMarkedText
+- (NSArray<NSString *> *)validAttributesForMarkedText
 {
-    return (m_composingText.isEmpty() ? NO: YES);
+    return @[
+        NSUnderlineColorAttributeName,
+        NSUnderlineStyleAttributeName,
+        NSForegroundColorAttributeName,
+        NSBackgroundColorAttributeName
+    ];
 }
 
-- (NSAttributedString *)attributedSubstringForProposedRange:(NSRange)aRange actualRange:(NSRangePointer)actualRange
+- (BOOL)hasMarkedText
 {
-    Q_UNUSED(actualRange);
-    QObject *fo = m_platformWindow->window()->focusObject();
-    if (!fo)
-        return nil;
-    QInputMethodQueryEvent queryEvent(Qt::ImEnabled | Qt::ImCurrentSelection);
-    if (!QCoreApplication::sendEvent(fo, &queryEvent))
-        return nil;
-    if (!queryEvent.value(Qt::ImEnabled).toBool())
-        return nil;
-
-    QString selectedText = queryEvent.value(Qt::ImCurrentSelection).toString();
-    if (selectedText.isEmpty())
-        return nil;
-
-    QCFString string(selectedText.mid(aRange.location, aRange.length));
-    const NSString *tmpString = reinterpret_cast<const NSString *>((CFStringRef)string);
-    return [[[NSAttributedString alloc]  initWithString:const_cast<NSString *>(tmpString)] autorelease];
+    return !m_composingText.isEmpty();
 }
 
 - (NSRange)markedRange
@@ -231,85 +228,117 @@
     return range;
 }
 
+/*
+    Confirms the marked (composed) text.
+
+    The marked text is accepted as if it had been inserted normally,
+    and the preedit string is cleared.
+
+    If there is no marked text this method has no effect.
+*/
+- (void)unmarkText
+{
+    // FIXME: Match cancelComposingText in early exit and focus object handling
+
+    qCDebug(lcQpaKeys) << "Unmarking" << m_composingText
+        << "for focus object" << m_composingFocusObject;
+
+    if (!m_composingText.isEmpty()) {
+        QObject *focusObject = m_platformWindow->window()->focusObject();
+        if (queryInputMethod(focusObject)) {
+            QInputMethodEvent e;
+            e.setCommitString(m_composingText);
+            QCoreApplication::sendEvent(focusObject, &e);
+        }
+    }
+
+    m_composingText.clear();
+    m_composingFocusObject = nullptr;
+}
+
+/*
+    Cancels composition.
+
+    The marked text is discarded, and the preedit string is cleared.
+
+    If there is no marked text this method has no effect.
+*/
+- (void)cancelComposingText
+{
+    if (m_composingText.isEmpty())
+        return;
+
+    qCDebug(lcQpaKeys) << "Canceling composition" << m_composingText
+        << "for focus object" << m_composingFocusObject;
+
+    if (queryInputMethod(m_composingFocusObject)) {
+        QInputMethodEvent e;
+        QCoreApplication::sendEvent(m_composingFocusObject, &e);
+    }
+
+    m_composingText.clear();
+    m_composingFocusObject = nullptr;
+}
+
+// ------------- Key binding command handling -------------
+
+- (void)doCommandBySelector:(SEL)selector
+{
+    qCDebug(lcQpaKeys) << "Trying to perform command" << selector;
+    [self tryToPerform:selector with:self];
+}
+
+// ------------- Various text properties -------------
+
 - (NSRange)selectedRange
 {
-    NSRange selectedRange = {0, 0};
-
-    QObject *fo = m_platformWindow->window()->focusObject();
-    if (!fo)
-        return selectedRange;
-    QInputMethodQueryEvent queryEvent(Qt::ImEnabled | Qt::ImCurrentSelection);
-    if (!QCoreApplication::sendEvent(fo, &queryEvent))
-        return selectedRange;
-    if (!queryEvent.value(Qt::ImEnabled).toBool())
-        return selectedRange;
-
-    QString selectedText = queryEvent.value(Qt::ImCurrentSelection).toString();
-
-    if (!selectedText.isEmpty()) {
-        selectedRange.location = 0;
-        selectedRange.length = selectedText.length();
+    QObject *focusObject = m_platformWindow->window()->focusObject();
+    if (auto queryResult = queryInputMethod(focusObject, Qt::ImCurrentSelection)) {
+        QString selectedText = queryResult.value(Qt::ImCurrentSelection).toString();
+        return selectedText.isEmpty() ? NSMakeRange(0, 0) : NSMakeRange(0, selectedText.length());
+    } else {
+        return NSMakeRange(0, 0);
     }
-    return selectedRange;
 }
 
-- (NSRect)firstRectForCharacterRange:(NSRange)aRange actualRange:(NSRangePointer)actualRange
+- (NSAttributedString *)attributedSubstringForProposedRange:(NSRange)range actualRange:(NSRangePointer)actualRange
 {
-    Q_UNUSED(aRange);
     Q_UNUSED(actualRange);
 
-    QObject *fo = m_platformWindow->window()->focusObject();
-    if (!fo)
-        return NSZeroRect;
+    QObject *focusObject = m_platformWindow->window()->focusObject();
+    if (auto queryResult = queryInputMethod(focusObject, Qt::ImCurrentSelection)) {
+        QString selectedText = queryResult.value(Qt::ImCurrentSelection).toString();
+        if (selectedText.isEmpty())
+            return nil;
 
-    QInputMethodQueryEvent queryEvent(Qt::ImEnabled);
-    if (!QCoreApplication::sendEvent(fo, &queryEvent))
-        return NSZeroRect;
-    if (!queryEvent.value(Qt::ImEnabled).toBool())
-        return NSZeroRect;
+        NSString *substring = QStringView(selectedText).mid(range.location, range.length).toNSString();
+        return [[[NSAttributedString alloc] initWithString:substring] autorelease];
 
-    // The returned rect is always based on the internal cursor.
-    QRect mr = qApp->inputMethod()->cursorRectangle().toRect();
-    mr.moveBottomLeft(m_platformWindow->window()->mapToGlobal(mr.bottomLeft()));
-    return QCocoaScreen::mapToNative(mr);
+    } else {
+        return nil;
+    }
 }
 
-- (NSUInteger)characterIndexForPoint:(NSPoint)aPoint
+- (NSRect)firstRectForCharacterRange:(NSRange)range actualRange:(NSRangePointer)actualRange
+{
+    Q_UNUSED(range);
+    Q_UNUSED(actualRange);
+
+    QWindow *window = m_platformWindow->window();
+    if (queryInputMethod(window->focusObject())) {
+        QRect cursorRect = qApp->inputMethod()->cursorRectangle().toRect();
+        cursorRect.moveBottomLeft(window->mapToGlobal(cursorRect.bottomLeft()));
+        return QCocoaScreen::mapToNative(cursorRect);
+    } else {
+        return NSZeroRect;
+    }
+}
+
+- (NSUInteger)characterIndexForPoint:(NSPoint)point
 {
     // We don't support cursor movements using mouse while composing.
-    Q_UNUSED(aPoint);
+    Q_UNUSED(point);
     return NSNotFound;
-}
-
-- (NSArray<NSString *> *)validAttributesForMarkedText
-{
-    if (!m_platformWindow)
-        return nil;
-
-    if (m_platformWindow->window() != QGuiApplication::focusWindow())
-        return nil;
-
-    QObject *fo = m_platformWindow->window()->focusObject();
-    if (!fo)
-        return nil;
-
-    QInputMethodQueryEvent queryEvent(Qt::ImEnabled);
-    if (!QCoreApplication::sendEvent(fo, &queryEvent))
-        return nil;
-    if (!queryEvent.value(Qt::ImEnabled).toBool())
-        return nil;
-
-    // Support only underline color/style.
-    return @[NSUnderlineColorAttributeName, NSUnderlineStyleAttributeName];
-}
-
-- (void)textInputContextKeyboardSelectionDidChangeNotification:(NSNotification *)textInputContextKeyboardSelectionDidChangeNotification
-{
-    Q_UNUSED(textInputContextKeyboardSelectionDidChangeNotification);
-    if (([NSApp keyWindow] == self.window) && self.window.firstResponder == self) {
-        if (QCocoaInputContext *ic = qobject_cast<QCocoaInputContext *>(QCocoaIntegration::instance()->inputContext()))
-            ic->updateLocale();
-    }
 }
 
 @end

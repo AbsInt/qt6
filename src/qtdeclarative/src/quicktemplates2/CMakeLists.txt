@@ -44,8 +44,6 @@ qt_internal_add_qml_module(QuickTemplates2
         qquickframe.cpp qquickframe_p.h
         qquickframe_p_p.h
         qquickgroupbox.cpp qquickgroupbox_p.h
-        qquickheaderview.cpp qquickheaderview_p.h
-        qquickheaderview_p_p.h
         qquickicon.cpp qquickicon_p.h
         qquickindicatorbutton_p.cpp qquickindicatorbutton_p.h
         qquickitemdelegate.cpp qquickitemdelegate_p.h
@@ -73,7 +71,6 @@ qt_internal_add_qml_module(QuickTemplates2
         qquickpopupanchors.cpp qquickpopupanchors_p.h
         qquickpopupanchors_p_p.h
         qquickpopupitem.cpp
-        qquickpopupitem_p.h
         qquickpopupitem_p_p.h
         qquickpopuppositioner.cpp
         qquickpopuppositioner_p_p.h
@@ -119,7 +116,6 @@ qt_internal_add_qml_module(QuickTemplates2
         qquicktoolbutton.cpp qquicktoolbutton_p.h
         qquicktoolseparator.cpp qquicktoolseparator_p.h
         qquicktooltip.cpp qquicktooltip_p.h
-        qquicktooltippopupitem.cpp qquicktooltippopupitem_p_p.h
         qquickvelocitycalculator.cpp
         qquickvelocitycalculator_p_p.h
         qtquicktemplates2global.cpp qtquicktemplates2global_p.h
@@ -133,6 +129,10 @@ qt_internal_add_qml_module(QuickTemplates2
         Qt::GuiPrivate
         Qt::QmlPrivate
         Qt::QuickPrivate
+    PUBLIC_LIBRARIES
+        Qt::Core
+        Qt::Gui
+        Qt::Quick
 )
 
 qt_internal_extend_target(QuickTemplates2 CONDITION TARGET Qt::QmlModels
@@ -142,6 +142,12 @@ qt_internal_extend_target(QuickTemplates2 CONDITION TARGET Qt::QmlModels
         Qt::QmlModels
     PRIVATE_MODULE_INTERFACE
         Qt::QmlModelsPrivate
+)
+
+qt_internal_extend_target(QuickTemplates2 CONDITION QT_FEATURE_quick_tableview
+    SOURCES
+        qquickheaderview.cpp qquickheaderview_p.h
+        qquickheaderview_p_p.h
 )
 
 qt_internal_extend_target(QuickTemplates2 CONDITION QT_FEATURE_quick_listview AND QT_FEATURE_quick_pathview

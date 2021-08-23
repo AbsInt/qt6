@@ -1803,7 +1803,7 @@ inline void QUrlPrivate::validate() const
     Constructs a URL by parsing \a url. QUrl will automatically percent encode
     all characters that are not allowed in a URL and decode the percent-encoded
     sequences that represent an unreserved character (letters, digits, hyphens,
-    undercores, dots and tildes). All other characters are left in their
+    underscores, dots and tildes). All other characters are left in their
     original forms.
 
     Parses the \a url using the parser mode \a parsingMode. In TolerantMode
@@ -1907,7 +1907,7 @@ void QUrl::clear()
     Parses \a url and sets this object to that value. QUrl will automatically
     percent encode all characters that are not allowed in a URL and decode the
     percent-encoded sequences that represent an unreserved character (letters,
-    digits, hyphens, undercores, dots and tildes). All other characters are
+    digits, hyphens, underscores, dots and tildes). All other characters are
     left in their original forms.
 
     Parses the \a url using the parser mode \a parsingMode. In TolerantMode
@@ -3115,6 +3115,8 @@ bool QUrl::operator <(const QUrl &url) const
 /*!
     Returns \c true if this URL and the given \a url are equal;
     otherwise returns \c false.
+
+    \sa matches()
 */
 bool QUrl::operator ==(const QUrl &url) const
 {
@@ -3222,6 +3224,8 @@ bool QUrl::matches(const QUrl &url, FormattingOptions options) const
 /*!
     Returns \c true if this URL and the given \a url are not equal;
     otherwise returns \c false.
+
+    \sa matches()
 */
 bool QUrl::operator !=(const QUrl &url) const
 {

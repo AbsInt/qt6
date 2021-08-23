@@ -226,7 +226,16 @@ function(qt_internal_create_module_depends_file target)
     foreach(dep ${target_deps})
         if(NOT dep MATCHES ".+Private$" AND
            dep MATCHES "${INSTALL_CMAKE_NAMESPACE}(.+)")
-            list(APPEND qt_module_dependencies "${CMAKE_MATCH_1}")
+            # target_deps cointains elements that are a pair of target name and version,
+            # e.g. 'Core\;6.2'
+            # After the extracting from the target_deps list, the element becomes a list itself,
+            # because it loses escape symbol before the semicolon, so ${CMAKE_MATCH_1} is the list:
+            # Core;6.2.
+            # We need to store only the target name in the qt_module_dependencies variable.
+            list(GET CMAKE_MATCH_1 0 dep_name)
+            if(dep_name)
+                list(APPEND qt_module_dependencies "${dep_name}")
+            endif()
         endif()
     endforeach()
     list(REMOVE_DUPLICATES qt_module_dependencies)
@@ -283,12 +292,15 @@ function(qt_internal_create_plugin_depends_file target)
 
     if(third_party_deps OR target_deps)
         # Setup build and install paths
-        set(find_dependency_paths "\${CMAKE_CURRENT_LIST_DIR}/..")
+
+        # Plugins should look for their dependencies in their associated module package folder as
+        # well as the Qt6 package folder which is stored by the Qt6 package in _qt_cmake_dir.
+        set(find_dependency_paths "\${CMAKE_CURRENT_LIST_DIR}/..;\${_qt_cmake_dir}")
         if(plugin_install_package_suffix)
             set(path_suffix "${INSTALL_CMAKE_NAMESPACE}${plugin_install_package_suffix}")
             if(plugin_install_package_suffix MATCHES "/QmlPlugins")
                 # Qml plugins are one folder deeper.
-                set(find_dependency_paths "\${CMAKE_CURRENT_LIST_DIR}/../..")
+                set(find_dependency_paths "\${CMAKE_CURRENT_LIST_DIR}/../..;\${_qt_cmake_dir}")
             endif()
 
         else()
@@ -540,6 +552,11 @@ endif()\n")
         if(DEFINED QT_IS_MACOS_UNIVERSAL)
             string(APPEND QT_EXTRA_BUILD_INTERNALS_VARS
                 "set(QT_IS_MACOS_UNIVERSAL \"${QT_IS_MACOS_UNIVERSAL}\" CACHE BOOL \"\")\n")
+        endif()
+
+        if(DEFINED QT_UIKIT_SDK)
+            string(APPEND QT_EXTRA_BUILD_INTERNALS_VARS
+                "set(QT_UIKIT_SDK \"${QT_UIKIT_SDK}\" CACHE BOOL \"\")\n")
         endif()
 
         if(CMAKE_CROSSCOMPILING AND QT_BUILD_TOOLS_WHEN_CROSSCOMPILING)

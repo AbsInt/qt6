@@ -197,6 +197,8 @@ function(qt_internal_add_qml_module target)
         )
     endif()
 
+    set(add_qml_module_args "")
+
     if(NOT arg_NO_PLUGIN AND NOT arg_NO_CREATE_PLUGIN_TARGET)
         # If the qt_internal_add_qml_module call didn't specify a CLASS_NAME, we need to pre-compute
         # it here and pass it along to qt_internal_add_plugin -> qt_add_plugin so that
@@ -208,7 +210,7 @@ function(qt_internal_add_qml_module target)
 
         # Create plugin target now so we can set internal things
         list(APPEND plugin_args
-            TYPE qml_plugin
+            PLUGIN_TYPE qml_plugin
             DEFAULT_IF FALSE
             OUTPUT_DIRECTORY ${arg_OUTPUT_DIRECTORY}
             INSTALL_DIRECTORY ${arg_INSTALL_DIRECTORY}
@@ -216,6 +218,28 @@ function(qt_internal_add_qml_module target)
         )
 
         qt_internal_add_plugin(${arg_PLUGIN_TARGET} ${plugin_args})
+
+        # Get the last dot-separated part of the URI. There should only be one
+        # plugin library in the output directory, so we shouldn't need to
+        # include the full URI namespace.
+        string(REGEX REPLACE "^(.*\\.)?([^.]+)$" "\\2" plugin_basename "${arg_URI}")
+        # Add the infix and "plugin", lowercase that and use it as the basename
+        # of the plugin library.
+        string(TOLOWER "${plugin_basename}${QT_LIBINFIX}plugin" plugin_basename)
+        set_target_properties(${arg_PLUGIN_TARGET} PROPERTIES
+            OUTPUT_NAME "${plugin_basename}"
+        )
+
+        get_target_property(export_name ${arg_PLUGIN_TARGET} EXPORT_NAME)
+        if(export_name)
+            list(APPEND add_qml_module_args
+                INSTALLED_PLUGIN_TARGET "${QT_CMAKE_EXPORT_NAMESPACE}::${export_name}"
+            )
+        else()
+            list(APPEND add_qml_module_args
+                INSTALLED_PLUGIN_TARGET "${QT_CMAKE_EXPORT_NAMESPACE}::${arg_PLUGIN_TARGET}"
+                )
+        endif()
 
         if(NOT arg_PLUGIN_TARGET STREQUAL target)
             get_target_property(lib_type ${arg_PLUGIN_TARGET} TYPE)
@@ -233,14 +257,6 @@ function(qt_internal_add_qml_module target)
                 )
             endif()
         endif()
-
-        # FIXME: Some repos expect this to be set and use it to install other
-        #        things relative to it. They should just specify the install
-        #        location directly. Once the other repos have been updated to
-        #        not rely on this, remove this property.
-        set_target_properties(${arg_PLUGIN_TARGET} PROPERTIES
-            QT_QML_MODULE_INSTALL_DIR ${arg_INSTALL_DIRECTORY}
-        )
     endif()
 
     # TODO: Check if we need arg_SOURCES in this condition
@@ -262,13 +278,10 @@ function(qt_internal_add_qml_module target)
         endif()
     endforeach()
 
-    if(QT_LIBINFIX)
-        list(APPEND add_qml_module_args __QT_INTERNAL_QT_LIBINFIX "${QT_LIBINFIX}")
-    endif()
-
     # Update the backing and plugin targets with qml-specific things.
     qt6_add_qml_module(${target}
         ${add_qml_module_args}
+        __QT_INTERNAL_INSTALL_METATYPES_JSON
         OUTPUT_DIRECTORY ${arg_OUTPUT_DIRECTORY}
         RESOURCE_PREFIX "/qt-project.org/imports"
         OUTPUT_TARGETS output_targets

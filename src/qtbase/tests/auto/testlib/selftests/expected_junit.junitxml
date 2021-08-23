@@ -7,13 +7,18 @@
   </properties>
   <testcase name="initTestCase" classname="tst_JUnit" time="@TEST_DURATION@"/>
   <testcase name="testFunc1" classname="tst_JUnit" time="@TEST_DURATION@">
-    <!-- type="qwarn" message="just a qWarning() !" -->
+    <system-err>
+      <![CDATA[just a qWarning() !]]>
+    </system-err>
   </testcase>
   <testcase name="testFunc2" classname="tst_JUnit" time="@TEST_DURATION@">
-    <!-- type="qdebug" message="a qDebug() call with comment&#x002D;ending stuff &#x002D;&#x002D;&gt;" -->
-    <failure type="fail" message="Compared values are not the same
-   Actual   (2): 2
-   Expected (3): 3"/>
+    <failure type="fail" message="Compared values are not the same">
+      <![CDATA[   Actual   (2): 2
+   Expected (3): 3]]>
+    </failure>
+    <system-out>
+      <![CDATA[a qDebug() call with comment-ending stuff -->]]>
+    </system-out>
   </testcase>
   <testcase name="testFunc3" classname="tst_JUnit" time="@TEST_DURATION@">
     <skipped message="skipping this function!"/>
@@ -22,21 +27,17 @@
     <failure type="fail" message="a forced failure!"/>
   </testcase>
   <testcase name="testFunc5" classname="tst_JUnit" time="@TEST_DURATION@">
-    <!-- type="info" message="this failure is expected" -->
+    <system-out>
+      <![CDATA[this failure is expected]]>
+    </system-out>
   </testcase>
   <testcase name="testFunc6" classname="tst_JUnit" time="@TEST_DURATION@">
-    <!-- type="info" message="this failure is also expected" -->
+    <system-out>
+      <![CDATA[this failure is also expected]]>
+    </system-out>
   </testcase>
   <testcase name="testFunc7" classname="tst_JUnit" time="@TEST_DURATION@">
     <failure type="xpass" message="&apos;true&apos; returned TRUE unexpectedly. ()"/>
   </testcase>
   <testcase name="cleanupTestCase" classname="tst_JUnit" time="@TEST_DURATION@"/>
-  <system-out>
-    <![CDATA[a qDebug() call with comment-ending stuff -->]]>
-    <![CDATA[this failure is expected]]>
-    <![CDATA[this failure is also expected]]>
-  </system-out>
-  <system-err>
-    <![CDATA[just a qWarning() !]]>
-  </system-err>
 </testsuite>

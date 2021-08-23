@@ -87,10 +87,6 @@ void QJUnitTestLogger::startLogging()
     QAbstractTestLogger::startLogging();
 
     logFormatter = new QTestJUnitStreamer(this);
-    delete systemOutputElement;
-    systemOutputElement = new QTestElement(QTest::LET_SystemOutput);
-    delete systemErrorElement;
-    systemErrorElement = new QTestElement(QTest::LET_SystemError);
 
     Q_ASSERT(!currentTestSuite);
     currentTestSuite = new QTestElement(QTest::LET_TestSuite);
@@ -154,9 +150,6 @@ void QJUnitTestLogger::stopLogging()
         testcase = testcase->nextElement();
     }
 
-    currentTestSuite->addLogElement(systemOutputElement);
-    currentTestSuite->addLogElement(systemErrorElement);
-
     logFormatter->output(currentTestSuite);
 
     delete currentTestSuite;
@@ -172,10 +165,14 @@ void QJUnitTestLogger::enterTestFunction(const char *function)
 
 void QJUnitTestLogger::enterTestCase(const char *name)
 {
-    currentLogElement = new QTestElement(QTest::LET_TestCase);
-    currentLogElement->addAttribute(QTest::AI_Name, name);
-    currentLogElement->addAttribute(QTest::AI_Classname, QTestResult::currentTestObjectName());
-    currentLogElement->addToList(&listOfTestcases);
+    currentTestCase = new QTestElement(QTest::LET_TestCase);
+    currentTestCase->addAttribute(QTest::AI_Name, name);
+    currentTestCase->addAttribute(QTest::AI_Classname, QTestResult::currentTestObjectName());
+    currentTestCase->addToList(&listOfTestcases);
+
+    Q_ASSERT(!systemOutputElement && !systemErrorElement);
+    systemOutputElement = new QTestElement(QTest::LET_SystemOutput);
+    systemErrorElement = new QTestElement(QTest::LET_SystemError);
 
     // The element will be deleted when the suite is deleted
 
@@ -194,7 +191,7 @@ void QJUnitTestLogger::enterTestData(QTestData *)
     if (QTestResult::currentTestFunction() != lastTestFunction) {
         // Adopt existing testcase for the initial test data
         auto *name = const_cast<QTestElementAttribute*>(
-            currentLogElement->attribute(QTest::AI_Name));
+            currentTestCase->attribute(QTest::AI_Name));
         name->setPair(QTest::AI_Name, testIdentifier.data());
         lastTestFunction = QTestResult::currentTestFunction();
         elapsedTestcaseTime.restart();
@@ -212,62 +209,78 @@ void QJUnitTestLogger::leaveTestFunction()
 
 void QJUnitTestLogger::leaveTestCase()
 {
-    currentLogElement->addAttribute(QTest::AI_Time,
+    currentTestCase->addAttribute(QTest::AI_Time,
         toSecondsFormat(elapsedTestCaseSeconds()).constData());
+
+    if (systemOutputElement->childElements())
+        currentTestCase->addLogElement(systemOutputElement);
+    else
+        delete systemOutputElement;
+
+    if (systemErrorElement->childElements())
+        currentTestCase->addLogElement(systemErrorElement);
+    else
+        delete systemErrorElement;
+
+    systemOutputElement = nullptr;
+    systemErrorElement = nullptr;
 }
 
 void QJUnitTestLogger::addIncident(IncidentTypes type, const char *description,
                                    const char *file, int line)
 {
-    const char *typeBuf = nullptr;
-
-    switch (type) {
-    case QAbstractTestLogger::XPass:
-        ++failureCounter;
-        typeBuf = "xpass";
-        break;
-    case QAbstractTestLogger::Pass:
-        typeBuf = "pass";
-        break;
-    case QAbstractTestLogger::XFail:
-        typeBuf = "xfail";
-        break;
-    case QAbstractTestLogger::Fail:
-        ++failureCounter;
-        typeBuf = "fail";
-        break;
-    case QAbstractTestLogger::BlacklistedPass:
-        typeBuf = "bpass";
-        break;
-    case QAbstractTestLogger::BlacklistedFail:
-        ++failureCounter;
-        typeBuf = "bfail";
-        break;
-    case QAbstractTestLogger::BlacklistedXPass:
-        typeBuf = "bxpass";
-        break;
-    case QAbstractTestLogger::BlacklistedXFail:
-        ++failureCounter;
-        typeBuf = "bxfail";
-        break;
-    default:
-        typeBuf = "??????";
-        break;
-    }
-
     if (type == QAbstractTestLogger::Fail || type == QAbstractTestLogger::XPass) {
-        QTestElement *failureElement = new QTestElement(QTest::LET_Failure);
-        failureElement->addAttribute(QTest::AI_Type, typeBuf);
-        failureElement->addAttribute(QTest::AI_Message, description);
-        currentLogElement->addLogElement(failureElement);
+        auto failureType = [&]() {
+            switch (type) {
+            case QAbstractTestLogger::Fail: return "fail";
+            case QAbstractTestLogger::XPass: return "xpass";
+            default: Q_UNREACHABLE();
+            }
+        }();
+
+        addFailure(QTest::LET_Failure, failureType, QString::fromUtf8(description));
+    } else if (type == QAbstractTestLogger::XFail) {
+        // Since XFAIL does not add a failure to the testlog in JUnit XML we add a
+        // message, so we still have some information about the expected failure.
+        addMessage(QAbstractTestLogger::Info, QString::fromUtf8(description), file, line);
+    }
+}
+
+void QJUnitTestLogger::addFailure(QTest::LogElementType elementType,
+    const char *failureType, const QString &failureDescription)
+{
+    if (elementType == QTest::LET_Failure) {
+        // Make sure we're not adding failure when we already have error,
+        // or adding additional failures when we already have a failure.
+        for (auto *childElement = currentTestCase->childElements();
+                   childElement; childElement = childElement->nextElement()) {
+            if (childElement->elementType() == QTest::LET_Error ||
+                childElement->elementType() == QTest::LET_Failure)
+                return;
+        }
     }
 
-    /*
-        Since XFAIL does not add a failure to the testlog in junitxml, add a message, so we still
-        have some information about the expected failure.
-    */
-    if (type == QAbstractTestLogger::XFail) {
-        QJUnitTestLogger::addMessage(QAbstractTestLogger::Info, QString::fromUtf8(description), file, line);
+    QTestElement *failureElement = new QTestElement(elementType);
+    failureElement->addAttribute(QTest::AI_Type, failureType);
+
+    // Assume the first line is the message, and the remainder are details
+    QString message = failureDescription.section(QLatin1Char('\n'), 0, 0);
+    QString details = failureDescription.section(QLatin1Char('\n'), 1);
+
+    failureElement->addAttribute(QTest::AI_Message, message.toUtf8().constData());
+
+    if (!details.isEmpty()) {
+        auto textNode = new QTestElement(QTest::LET_Text);
+        textNode->addAttribute(QTest::AI_Value, details.toUtf8().constData());
+        failureElement->addLogElement(textNode);
+    }
+
+    currentTestCase->addLogElement(failureElement);
+
+    switch (elementType) {
+    case QTest::LET_Failure: ++failureCounter; break;
+    case QTest::LET_Error: ++errorCounter; break;
+    default: Q_UNREACHABLE();
     }
 }
 
@@ -279,58 +292,31 @@ void QJUnitTestLogger::addMessage(MessageTypes type, const QString &message, con
     if (type == QAbstractTestLogger::Skip) {
         auto skippedElement = new QTestElement(QTest::LET_Skipped);
         skippedElement->addAttribute(QTest::AI_Message, message.toUtf8().constData());
-        currentLogElement->addLogElement(skippedElement);
+        currentTestCase->addLogElement(skippedElement);
+        return;
+    } else if (type == QAbstractTestLogger::QFatal) {
+        addFailure(QTest::LET_Error, "qfatal", message);
         return;
     }
 
-    auto messageElement = new QTestElement(QTest::LET_Message);
-    auto systemLogElement = systemOutputElement;
-    const char *typeBuf = nullptr;
+    auto systemLogElement = [&]() {
+        switch (type) {
+        case QAbstractTestLogger::QDebug:
+        case QAbstractTestLogger::Info:
+        case QAbstractTestLogger::QInfo:
+            return systemOutputElement;
+        case QAbstractTestLogger::Warn:
+        case QAbstractTestLogger::QWarning:
+        case QAbstractTestLogger::QCritical:
+            return systemErrorElement;
+        default:
+            Q_UNREACHABLE();
+        }
+    }();
 
-    switch (type) {
-    case QAbstractTestLogger::Warn:
-        systemLogElement = systemErrorElement;
-        typeBuf = "warn";
-        break;
-    case QAbstractTestLogger::QSystem:
-        typeBuf = "system";
-        break;
-    case QAbstractTestLogger::QDebug:
-        typeBuf = "qdebug";
-        break;
-    case QAbstractTestLogger::QInfo:
-        typeBuf = "qinfo";
-        break;
-    case QAbstractTestLogger::QWarning:
-        systemLogElement = systemErrorElement;
-        typeBuf = "qwarn";
-        break;
-    case QAbstractTestLogger::QFatal:
-        systemLogElement = systemErrorElement;
-        typeBuf = "qfatal";
-        break;
-    case QAbstractTestLogger::Skip:
-        Q_UNREACHABLE();
-        break;
-    case QAbstractTestLogger::Info:
-        typeBuf = "info";
-        break;
-    default:
-        typeBuf = "??????";
-        break;
-    }
-
-    messageElement->addAttribute(QTest::AI_Type, typeBuf);
-    messageElement->addAttribute(QTest::AI_Message, message.toUtf8().constData());
-
-    currentLogElement->addLogElement(messageElement);
-
-    // Also add the message to the system log (stdout/stderr), if one exists
-    if (systemLogElement) {
-        auto messageElement = new QTestElement(QTest::LET_Message);
-        messageElement->addAttribute(QTest::AI_Message, message.toUtf8().constData());
-        systemLogElement->addLogElement(messageElement);
-    }
+    auto textNode = new QTestElement(QTest::LET_Text);
+    textNode->addAttribute(QTest::AI_Value, message.toUtf8().constData());
+    systemLogElement->addLogElement(textNode);
 }
 
 QT_END_NAMESPACE

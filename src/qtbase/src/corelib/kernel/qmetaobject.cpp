@@ -157,13 +157,19 @@ static inline const char *rawStringData(const QMetaObject *mo, int index)
     return reinterpret_cast<const char *>(mo->d.stringdata) + offset;
 }
 
-static inline const QByteArray stringData(const QMetaObject *mo, int index)
+static inline QLatin1String stringDataView(const QMetaObject *mo, int index)
 {
     Q_ASSERT(priv(mo->d.data)->revision >= 7);
     uint offset = mo->d.stringdata[2*index];
     uint length = mo->d.stringdata[2*index + 1];
     const char *string = reinterpret_cast<const char *>(mo->d.stringdata) + offset;
-    return QByteArray::fromRawData(string, length);
+    return QLatin1String(string, length);
+}
+
+static inline QByteArray stringData(const QMetaObject *mo, int index)
+{
+    const auto view = stringDataView(mo, index);
+    return QByteArray::fromRawData(view.data(), view.size());
 }
 
 static inline const char *rawTypeNameFromTypeInfo(const QMetaObject *mo, uint typeInfo)
@@ -2840,12 +2846,8 @@ int QMetaEnum::keysToValue(const char *keys, bool *ok) const
         *ok = false;
     if (!mobj || !keys)
         return -1;
-    if (ok != nullptr)
-        *ok = true;
     const QString keysString = QString::fromLatin1(keys);
     const auto splitKeys = QStringView{keysString}.split(QLatin1Char('|'));
-    if (splitKeys.isEmpty())
-        return 0;
     // ### TODO write proper code: do not allocate memory, so we can go nothrow
     int value = 0;
     for (QStringView untrimmed : splitKeys) {
@@ -2870,13 +2872,35 @@ int QMetaEnum::keysToValue(const char *keys, bool *ok) const
             }
         }
         if (i < 0) {
-            if (ok != nullptr)
-                *ok = false;
-            value |= -1;
+            return -1;
         }
     }
+    if (ok != nullptr)
+        *ok = true;
     return value;
 }
+
+namespace
+{
+template <typename String, typename Container, typename Separator>
+void join_reversed(String &s, const Container &c, Separator sep)
+{
+    if (c.empty())
+        return;
+    qsizetype len = qsizetype(c.size()) - 1; // N - 1 separators
+    for (auto &e : c)
+        len += qsizetype(e.size()); // N parts
+    s.reserve(len);
+    bool first = true;
+    for (auto rit = c.rbegin(), rend = c.rend(); rit != rend; ++rit) {
+        const auto &e = *rit;
+        if (!first)
+            s.append(sep);
+        first = false;
+        s.append(e.data(), e.size());
+    }
+}
+} // unnamed namespace
 
 /*!
     Returns a byte array of '|'-separated keys that represents the
@@ -2889,17 +2913,17 @@ QByteArray QMetaEnum::valueToKeys(int value) const
     QByteArray keys;
     if (!mobj)
         return keys;
+    QVarLengthArray<QLatin1String, sizeof(int) * CHAR_BIT> parts;
     int v = value;
     // reverse iterate to ensure values like Qt::Dialog=0x2|Qt::Window are processed first.
     for (int i = data.keyCount() - 1; i >= 0; --i) {
         int k = mobj->d.data[data.data() + 2 * i + 1];
         if ((k != 0 && (v & k) == k) || (k == value)) {
             v = v & ~k;
-            if (!keys.isEmpty())
-                keys.prepend('|');
-            keys.prepend(stringData(mobj, mobj->d.data[data.data() + 2 * i]));
+            parts.push_back(stringDataView(mobj, mobj->d.data[data.data() + 2 * i]));
         }
     }
+    join_reversed(keys, parts, '|');
     return keys;
 }
 
