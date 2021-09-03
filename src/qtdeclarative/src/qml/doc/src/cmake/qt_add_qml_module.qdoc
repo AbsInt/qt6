@@ -68,7 +68,7 @@ qt_add_qml_module(
 
 \endcode
 
-\versionlessNote qt6_add_qml_module()
+\versionlessCMakeCommandsNote qt6_add_qml_module()
 
 \section1 Description
 
@@ -181,6 +181,14 @@ re-run automatically, so you should explicitly re-run CMake to force the
 The backing target's C++ sources are scanned at build time to generate a
 typeinfo file and a C++ file to register the associated types. The generated
 C++ file is automatically added to the backing target as a source.
+This requires \c AUTOMOC to be enabled on the target. The project is
+responsible for ensuring this, usually by setting the \c CMAKE_AUTOMOC variable
+to \c TRUE before calling \c qt_add_qml_module(), or by passing in an existing
+target with the \c AUTOMOC target property already set to \c TRUE. It isn't an
+error to have \c AUTOMOC disabled on the target, but the project is then
+responsible for handling the consequences. This may include having to manually
+generate the typeinfo file instead of allowing it to be auto-generated with
+missing details, and adding C++ code to register the types.
 
 Projects should prefer to use the auto-generated typeinfo and \c qmldir files
 where possible. They are easier to maintain and they don't suffer from the same
@@ -242,10 +250,9 @@ found at the following resource paths:
 A separate linting target will be automatically created if any \c{.qml} files
 are added to the module via the \c QML_FILES keyword, or by a later call to
 \l{qt6_target_qml_sources}{qt_target_qml_sources()}. The name of the linting
-target will be the \c target followed by \c{_qmllint}. The linting target is
-not part of the default CMake \c ALL target, it is intended for developers to
-execute manually on demand. An \c{all_qmllint} target which depends on all the
-individual \c{*_qmllint} targets is also provided as a convenience.
+target will be the \c target followed by \c{_qmllint}. An \c{all_qmllint}
+target which depends on all the individual \c{*_qmllint} targets is also
+provided as a convenience.
 
 \section1 Arguments
 

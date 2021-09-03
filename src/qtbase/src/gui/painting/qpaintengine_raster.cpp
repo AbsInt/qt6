@@ -1633,8 +1633,9 @@ void QRasterPaintEngine::stroke(const QVectorPath &path, const QPen &pen)
             patternLength += pattern.at(i);
 
         if (patternLength > 0) {
-            int n = qFloor(dashOffset / patternLength);
-            dashOffset -= n * patternLength;
+            dashOffset = std::fmod(dashOffset, patternLength);
+            if (dashOffset < 0)
+                dashOffset += patternLength;
             while (dashOffset >= pattern.at(dashIndex)) {
                 dashOffset -= pattern.at(dashIndex);
                 if (++dashIndex >= pattern.size())
@@ -3263,6 +3264,11 @@ void QRasterPaintEnginePrivate::rasterizeLine_dashed(QLineF line,
 
     qreal length = line.length();
     Q_ASSERT(length > 0);
+    if (length / (patternLength * width) > QDashStroker::repetitionLimit()) {
+        rasterizer->rasterizeLine(line.p1(), line.p2(), width / length, squareCap);
+        return;
+    }
+
     while (length > 0) {
         const bool rasterize = *inDash;
         qreal dash = (pattern.at(*dashIndex) - *dashOffset) * width;

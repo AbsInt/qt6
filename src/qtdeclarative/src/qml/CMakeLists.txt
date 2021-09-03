@@ -385,6 +385,20 @@ qt_internal_add_qml_module(Qml
         "${INSTALL_CMAKE_NAMESPACE}QmlFindQmlscInternal.cmake"
 )
 
+# Linking to the static qml plugin should also automatically link to the worker script
+# static plugin otherwise you get errors like
+#  module "QtQml.WorkerScript" plugin "workerscriptplugin" not found
+#     import QtQuick 2.0
+#     ^
+if(QT_FEATURE_qml_worker_script AND NOT BUILD_SHARED_LIBS)
+    # Abuse a genex marker, to skip the dependency to be added into prl files.
+    # TODO: Introduce a more generic marker name in qtbase specifically
+    # for skipping deps in prl file deps generation.
+    set(skip_prl_marker "$<BOOL:QT_IS_PLUGIN_GENEX>")
+    target_link_libraries(qmlplugin PRIVATE
+        "$<${skip_prl_marker}:$<TARGET_NAME:workerscriptplugin>>")
+endif()
+
 # special case begin remove the block, handled manually
 # QLALR Grammars:
 #qt_process_qlalr(
@@ -669,3 +683,8 @@ qt_internal_create_tracepoints(Qml qtqml.tracepoints)
 qt_internal_add_docs(Qml
     doc/qtqml.qdocconf
 )
+
+# include snippet projects for developer builds
+if(NOT QT_SUPERBUILD AND QT_FEATURE_private_tests AND CMAKE_VERSION VERSION_GREATER_EQUAL "3.19")
+    add_subdirectory(doc/snippets/cmake/qt_target_qml_sources)
+endif()

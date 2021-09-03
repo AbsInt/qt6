@@ -1055,7 +1055,8 @@ QString getLibInfix(const QStringList &deployedFrameworks)
 {
     QString libInfix;
     foreach (const QString &framework, deployedFrameworks) {
-        if (framework.startsWith(QStringLiteral("QtCore")) && framework.endsWith(QStringLiteral(".framework"))) {
+        if (framework.startsWith(QStringLiteral("QtCore")) && framework.endsWith(QStringLiteral(".framework")) &&
+            !framework.contains(QStringLiteral("5Compat"))) {
             Q_ASSERT(framework.length() >= 16);
             // 16 == "QtCore" + ".framework"
             const int lengthOfLibInfix = framework.length() - 16;
@@ -1109,7 +1110,7 @@ void deployPlugins(const ApplicationBundleInfo &appBundleInfo, const QString &pl
 
     // Network
     if (deploymentInfo.containsModule("Network", libInfix))
-        addPlugins(QStringLiteral("bearer"));
+        addPlugins(QStringLiteral("tls"));
 
     // All image formats (svg if QtSvg is used)
     const bool usesSvg = deploymentInfo.containsModule("Svg", libInfix);

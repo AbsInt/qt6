@@ -49,6 +49,7 @@
 ****************************************************************************/
 
 import QtQuick
+import shared
 
 //! [splash-properties]
 Window {
@@ -69,7 +70,7 @@ Window {
 
     Image {
         id: splashImage
-        source: "../shared/images/qt-logo.png"
+        source: Images.qtLogo
         MouseArea {
             anchors.fill: parent
             onClicked: Qt.quit()

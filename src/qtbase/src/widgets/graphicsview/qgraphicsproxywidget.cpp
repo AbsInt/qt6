@@ -239,6 +239,7 @@ void QGraphicsProxyWidgetPrivate::sendWidgetMouseEvent(QGraphicsSceneHoverEvent 
     mouseEvent.setButton(Qt::NoButton);
     mouseEvent.setButtons({ });
     mouseEvent.setModifiers(event->modifiers());
+    mouseEvent.setTimestamp(event->timestamp());
     sendWidgetMouseEvent(&mouseEvent);
     event->setAccepted(mouseEvent.isAccepted());
 }
@@ -304,6 +305,7 @@ void QGraphicsProxyWidgetPrivate::sendWidgetMouseEvent(QGraphicsSceneMouseEvent 
     QMouseEvent mouseEvent(type, pos, receiver->mapTo(receiver->topLevelWidget(), pos.toPoint()),
                            receiver->mapToGlobal(pos.toPoint()),
                            event->button(), event->buttons(), event->modifiers(), event->source());
+    mouseEvent.setTimestamp(event->timestamp());
 
     QWidget *embeddedMouseGrabberPtr = (QWidget *)embeddedMouseGrabber;
     QApplicationPrivate::sendMouseEvent(receiver, &mouseEvent, alienWidget, widget,
@@ -832,6 +834,10 @@ bool QGraphicsProxyWidget::event(QEvent *event)
         return QGraphicsWidget::event(event);
 
     switch (event->type()) {
+    case QEvent::WindowActivate:
+    case QEvent::WindowDeactivate:
+        QCoreApplication::sendEvent(d->widget, event);
+        break;
     case QEvent::StyleChange:
         // Propagate style changes to the embedded widget.
         if (!d->styleChangeMode) {
@@ -925,7 +931,7 @@ bool QGraphicsProxyWidget::event(QEvent *event)
             return true;
 
         break;
-   }
+    }
     default:
         break;
     }
@@ -1044,6 +1050,7 @@ void QGraphicsProxyWidget::contextMenuEvent(QGraphicsSceneContextMenuEvent *even
     // Send mouse event. ### Doesn't propagate the event.
     QContextMenuEvent contextMenuEvent(QContextMenuEvent::Reason(event->reason()),
                                        pos.toPoint(), globalPos, event->modifiers());
+    contextMenuEvent.setTimestamp(event->timestamp());
     QCoreApplication::sendEvent(receiver, &contextMenuEvent);
 
     event->setAccepted(contextMenuEvent.isAccepted());

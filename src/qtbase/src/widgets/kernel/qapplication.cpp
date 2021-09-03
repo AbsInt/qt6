@@ -3916,16 +3916,15 @@ void QApplicationPrivate::activateImplicitTouchGrab(QWidget *widget, QTouchEvent
     // TODO setExclusiveGrabber() to be consistent with Qt Quick?
 }
 
-bool QApplicationPrivate::translateRawTouchEvent(QWidget *window,
-                                                 const QPointingDevice *device,
-                                                 QList<QEventPoint> &touchPoints,
-                                                 ulong timestamp)
+bool QApplicationPrivate::translateRawTouchEvent(QWidget *window, const QTouchEvent *te)
 {
     QApplicationPrivate *d = self;
     // TODO get rid of this QPair
     typedef QPair<QEventPoint::State, QList<QEventPoint> > StatesAndTouchPoints;
     QHash<QWidget *, StatesAndTouchPoints> widgetsNeedingEvents;
 
+    const auto *device = te->pointingDevice();
+    auto touchPoints = te->points(); // touch points will be mutated
     for (auto &touchPoint : touchPoints) {
         // update state
         QPointer<QObject> target;
@@ -4010,7 +4009,7 @@ bool QApplicationPrivate::translateRawTouchEvent(QWidget *window,
         QMutableTouchEvent touchEvent(eventType, device, QGuiApplication::keyboardModifiers(),
                                       it.value().second);
         bool containsPress = updateTouchPointsForWidget(widget, &touchEvent);
-        touchEvent.setTimestamp(timestamp);
+        touchEvent.setTimestamp(te->timestamp());
         touchEvent.setTarget(widget);
 
         if (containsPress)

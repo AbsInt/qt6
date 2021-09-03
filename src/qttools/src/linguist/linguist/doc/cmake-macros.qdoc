@@ -42,10 +42,9 @@ functions \l{qt6_add_lrelease} or \l{qt6_add_translations} instead.
 \badcode
 qt_add_translation(<VAR> file1.ts [file2.ts ...]
                     [OPTIONS ...])
-
-qt6_add_translation(<VAR> file1.ts [file2.ts ...]
-                    [OPTIONS ...])
 \endcode
+
+\versionlessCMakeCommandsNote qt6_add_translation
 
 \section1 Description
 
@@ -94,9 +93,11 @@ functions \l{qt6_add_lupdate} or \l{qt6_add_translations} instead.
 \section1 Synopsis
 
 \badcode
-qt6_create_translation(<VAR> ts-file-or-sources [ts-file-or-sources2 ...]
-                       [OPTIONS ...])
+qt_create_translation(<VAR> ts-file-or-sources [ts-file-or-sources2 ...]
+                      [OPTIONS ...])
 \endcode
+
+\versionlessCMakeCommandsNote qt6_create_translation
 
 \section1 Description
 
@@ -148,7 +149,7 @@ qt_add_lupdate(target TS_FILES file1.ts [file2.ts ...]
                [OPTIONS ...])
 \endcode
 
-\versionlessNote qt6_add_lupdate()
+\versionlessCMakeCommandsNote qt6_add_lupdate()
 
 \section1 Description
 
@@ -220,7 +221,7 @@ qt_add_lrelease(target TS_FILES file1.ts [file2.ts ...]
                 [OPTIONS ...])
 \endcode
 
-\versionlessNote qt6_add_lrelease()
+\versionlessCMakeCommandsNote qt6_add_lrelease()
 
 \section1 Description
 
@@ -306,7 +307,7 @@ qt_add_translations(target TS_FILES file1.ts [file2.ts ...]
                     [LRELEASE_OPTIONS])
 \endcode
 
-\versionlessNote qt6_add_translations()
+\versionlessCMakeCommandsNote qt6_add_translations()
 
 \preliminarycmakecommand
 

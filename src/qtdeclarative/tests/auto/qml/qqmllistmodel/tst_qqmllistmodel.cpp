@@ -136,6 +136,8 @@ private slots:
     void destroyObject();
     void emptyStringNotUndefined();
     void listElementWithTemplateString();
+    void destroyComponentObject();
+    void objectOwnershipFlip();
 };
 
 bool tst_qqmllistmodel::compareVariantList(const QVariantList &testList, QVariant object)
@@ -1854,6 +1856,65 @@ void tst_qqmllistmodel::listElementWithTemplateString()
     QVERIFY2(component.isReady(), qPrintable(component.errorString()));
     QScopedPointer<QObject> root(component.create());
     QVERIFY(!root.isNull());
+}
+
+//QTBUG-95895
+void tst_qqmllistmodel::destroyComponentObject()
+{
+    QQmlEngine eng;
+    QQmlComponent component(&eng, testFileUrl("destroyObject.qml"));
+    QVERIFY(!component.isError());
+    QScopedPointer<QObject> obj(component.create());
+    QVERIFY(!obj.isNull());
+    QQmlListModel *list = qvariant_cast<QQmlListModel *>(obj->property("projects"));
+    QVERIFY(list != nullptr);
+    QCOMPARE(list->count(), 1);
+    QPointer<QObject> created(qvariant_cast<QObject *>(obj->property("object")));
+    QVERIFY(!created.isNull());
+    QCOMPARE(list->get(0).property("obj").toQObject(), created.data());
+    QVariant retVal;
+    QMetaObject::invokeMethod(obj.data(),
+                              "destroy",
+                               Qt::DirectConnection,
+                               Q_RETURN_ARG(QVariant, retVal));
+    QVERIFY(retVal.toBool());
+    QTRY_VERIFY(created.isNull());
+    QTRY_VERIFY(list->get(0).property("obj").isUndefined());
+    QCOMPARE(list->count(), 1);
+}
+
+// Used for objectOwnershipFlip
+class TestItem : public QQuickItem
+{
+    Q_OBJECT
+public:
+    // To trigger QQmlData::setImplicitDestructible through QV4::CallArgument::toValue
+    Q_INVOKABLE TestItem* dummy() { return this; }
+};
+
+void tst_qqmllistmodel::objectOwnershipFlip()
+{
+    QQmlEngine engine;
+    QQmlComponent component(&engine, testFileUrl("objectOwnership.qml"));
+    QVERIFY(!component.isError());
+    QScopedPointer<QObject> root(component.create());
+    QVERIFY(!root.isNull());
+    QQmlListModel *model = root->findChild<QQmlListModel*>("listModel");
+    QVERIFY(model != nullptr);
+
+    QScopedPointer<TestItem> item(new TestItem());
+    item->setObjectName("cppOwnedItem");
+    QJSEngine::setObjectOwnership(item.data(), QJSEngine::CppOwnership);
+    QCOMPARE(QJSEngine::objectOwnership(item.data()), QJSEngine::CppOwnership);
+
+    engine.rootContext()->setContextProperty("cppOwnedItem", item.data());
+
+    QMetaObject::invokeMethod(model, "addItem");
+    QCOMPARE(model->count(), 1);
+
+    QMetaObject::invokeMethod(root.data(), "checkItem");
+
+    QCOMPARE(QJSEngine::objectOwnership(item.data()), QJSEngine::CppOwnership);
 }
 
 QTEST_MAIN(tst_qqmllistmodel)

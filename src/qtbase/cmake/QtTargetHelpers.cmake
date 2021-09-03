@@ -38,9 +38,9 @@ function(qt_internal_extend_target target)
             set(is_library TRUE)
         endif()
         foreach(lib ${arg_PUBLIC_LIBRARIES} ${arg_LIBRARIES})
-            # Automatically generate PCH for 'target' using dependencies
-            # if 'target' is a library/module!
-            if (${is_library})
+            # Automatically generate PCH for 'target' using public dependencies.
+            # But only if 'target' is a library/module that does not specify its own PCH file.
+            if(NOT arg_PRECOMPILED_HEADER AND ${is_library})
                 qt_update_precompiled_header_with_library("${target}" "${lib}")
             endif()
 
@@ -101,9 +101,23 @@ function(qt_internal_extend_target target)
         endforeach()
 
         set(target_private "${target}Private")
+        get_target_property(is_internal_module ${target} _qt_is_internal_module)
+        # Internal modules don't have Private targets but we still need to
+        # propagate their private dependencies.
+        if(is_internal_module)
+            set(target_private "${target}")
+        endif()
         if(TARGET "${target_private}")
-          target_link_libraries("${target_private}"
-                                INTERFACE ${arg_PRIVATE_MODULE_INTERFACE})
+            target_link_libraries("${target_private}"
+                                  INTERFACE ${arg_PRIVATE_MODULE_INTERFACE})
+        elseif(arg_PRIVATE_MODULE_INTERFACE)
+            set(warning_message "")
+            string(APPEND warning_message
+                "The PRIVATE_MODULE_INTERFACE option was provided the values:"
+                "'${arg_PRIVATE_MODULE_INTERFACE}' "
+                "but there is no ${target}Private target to assign them to."
+                "Ensure the target exists or remove the option.")
+            message(AUTHOR_WARNING "${warning_message}")
         endif()
         qt_register_target_dependencies("${target}"
                                         "${arg_PUBLIC_LIBRARIES}"

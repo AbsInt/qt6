@@ -38,6 +38,8 @@
 #include "qquickselectionrectangle_p_p.h"
 
 #include <QtQml/qqmlinfo.h>
+#include <QtQuick/private/qquickdraghandler_p.h>
+#include <QtQuick/private/qquickhoverhandler_p.h>
 
 #include <QtQuick/private/qquicktableview_p_p.h>
 
@@ -68,7 +70,7 @@ QT_BEGIN_NAMESPACE
     The following example shows how you can make a SelectionRectangle target
     a TableView:
 
-    \snippet qml/tableview/selectionmodel.qml 0
+    \snippet qtquickcontrols2-selectionrectangle.qml 0
 
     \note A SelectionRectangle itself is not shown as part of a selection. Only the
     delegates (like topLeftHandle and bottomRightHandle) are used.
@@ -109,7 +111,7 @@ QT_BEGIN_NAMESPACE
     top-left corner of the selection rectangle. When a handle is
     provided, the user can drag it to adjust the selection.
 
-    You can set this property to \c null if you don't want a top-left selection handle.
+    Set this property to \c null if you don't want a selection handle on the top-left.
 
     \sa bottomRightHandle
 */
@@ -121,7 +123,7 @@ QT_BEGIN_NAMESPACE
     top-left corner of the selection rectangle. When a handle is
     provided, the user can drag it to adjust the selection.
 
-    You can set this property to \c null if you don't want a top-left selection handle.
+    Set this property to \c null if you don't want a selection handle on the bottom-right.
 
     \sa topLeftHandle
 */
@@ -278,6 +280,12 @@ QQuickItem *QQuickSelectionRectanglePrivate::createHandle(QQmlComponent *delegat
     dragHandler->setParent(handleItem);
     QQuickItemPrivate::get(handleItem)->addPointerHandler(dragHandler);
 
+    QQuickHoverHandler *hoverHandler = new QQuickHoverHandler();
+    hoverHandler->setTarget(nullptr);
+    hoverHandler->setParent(handleItem);
+    hoverHandler->setCursorShape(Qt::SizeFDiagCursor);
+    QQuickItemPrivate::get(handleItem)->addPointerHandler(hoverHandler);
+
     QObject::connect(dragHandler, &QQuickDragHandler::activeChanged, [=]() {
         if (dragHandler->active()) {
             const QPointF localPos = dragHandler->centroid().position();
@@ -290,10 +298,12 @@ QQuickItem *QQuickSelectionRectanglePrivate::createHandle(QQmlComponent *delegat
             m_draggedHandle = handleItem;
             updateHandles();
             updateDraggingState(true);
+            QGuiApplication::setOverrideCursor(Qt::SizeFDiagCursor);
         } else {
             m_scrollTimer.stop();
             m_selectable->normalizeSelection();
             updateDraggingState(false);
+            QGuiApplication::restoreOverrideCursor();
         }
     });
 

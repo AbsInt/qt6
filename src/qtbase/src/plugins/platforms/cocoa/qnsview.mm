@@ -135,12 +135,10 @@ QT_NAMESPACE_ALIAS_OBJC_CLASS(QNSViewMouseMoveHelper);
     // Keys
     bool m_lastKeyDead;
     bool m_sendKeyEvent;
-    bool m_resendKeyEvent;
     NSEvent *m_currentlyInterpretedKeyEvent;
     QSet<quint32> m_acceptedKeyDowns;
 
     // Text
-    NSString *m_inputSource;
     QString m_composingText;
     QPointer<QObject> m_composingFocusObject;
 }
@@ -163,10 +161,7 @@ QT_NAMESPACE_ALIAS_OBJC_CLASS(QNSViewMouseMoveHelper);
 
         m_lastKeyDead = false;
         m_sendKeyEvent = false;
-        m_resendKeyEvent = false;
         m_currentlyInterpretedKeyEvent = nil;
-
-        m_inputSource = nil;
     }
     return self;
 }
@@ -175,7 +170,6 @@ QT_NAMESPACE_ALIAS_OBJC_CLASS(QNSViewMouseMoveHelper);
 {
     qCDebug(lcQpaWindow) << "Deallocating" << self;
 
-    [m_inputSource release];
     [[NSNotificationCenter defaultCenter] removeObserver:self];
     [m_mouseMoveHelper release];
 

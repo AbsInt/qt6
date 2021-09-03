@@ -164,13 +164,13 @@ function(qt6_generate_moc infile outfile )
 endfunction()
 
 if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
-    function(qt_generate_moc)
+    macro(qt_generate_moc)
         if(QT_DEFAULT_MAJOR_VERSION EQUAL 5)
             qt5_generate_moc(${ARGV})
         elseif(QT_DEFAULT_MAJOR_VERSION EQUAL 6)
             qt6_generate_moc(${ARGV})
         endif()
-    endfunction()
+    endmacro()
 endif()
 
 
@@ -203,14 +203,13 @@ endfunction()
 
 # This will override the CMake upstream command, because that one is for Qt 3.
 if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
-    function(qt_wrap_cpp outfiles)
+    macro(qt_wrap_cpp)
         if(QT_DEFAULT_MAJOR_VERSION EQUAL 5)
-            qt5_wrap_cpp("${outfiles}" ${ARGN})
+            qt5_wrap_cpp(${ARGV})
         elseif(QT_DEFAULT_MAJOR_VERSION EQUAL 6)
-            qt6_wrap_cpp("${outfiles}" ${ARGN})
+            qt6_wrap_cpp(${ARGV})
         endif()
-        set("${outfiles}" "${${outfiles}}" PARENT_SCOPE)
-    endfunction()
+    endmacro()
 endif()
 
 
@@ -291,13 +290,13 @@ function(qt6_add_binary_resources target )
 endfunction()
 
 if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
-    function(qt_add_binary_resources)
+    macro(qt_add_binary_resources)
         if(QT_DEFAULT_MAJOR_VERSION EQUAL 5)
             qt5_add_binary_resources(${ARGV})
         elseif(QT_DEFAULT_MAJOR_VERSION EQUAL 6)
             qt6_add_binary_resources(${ARGV})
         endif()
-    endfunction()
+    endmacro()
 endif()
 
 
@@ -349,16 +348,13 @@ function(qt6_add_resources outfiles )
 endfunction()
 
 if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
-    function(qt_add_resources outfiles)
+    macro(qt_add_resources)
         if(QT_DEFAULT_MAJOR_VERSION EQUAL 5)
-            qt5_add_resources("${outfiles}" ${ARGN})
+            qt5_add_resources(${ARGV})
         elseif(QT_DEFAULT_MAJOR_VERSION EQUAL 6)
-            qt6_add_resources("${outfiles}" ${ARGN})
+            qt6_add_resources(${ARGV})
         endif()
-        if(NOT TARGET ${outfiles})
-            set("${outfiles}" "${${outfiles}}" PARENT_SCOPE)
-        endif()
-    endfunction()
+    endmacro()
 endif()
 
 
@@ -427,14 +423,13 @@ function(qt6_add_big_resources outfiles )
 endfunction()
 
 if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
-    function(qt_add_big_resources outfiles)
+    macro(qt_add_big_resources)
         if(QT_DEFAULT_MAJOR_VERSION EQUAL 5)
-            qt5_add_big_resources(${outfiles} ${ARGN})
+            qt5_add_big_resources(${ARGV})
         elseif(QT_DEFAULT_MAJOR_VERSION EQUAL 6)
-            qt6_add_big_resources(${outfiles} ${ARGN})
+            qt6_add_big_resources(${ARGV})
         endif()
-        set("${outfiles}" "${${outfiles}}" PARENT_SCOPE)
-    endfunction()
+    endmacro()
 endif()
 
 function(_qt_internal_apply_win_prefix_and_suffix target)
@@ -701,7 +696,7 @@ function(_qt_internal_get_ios_bundle_identifier_prefix out_var)
         message(DEBUG "Failed to extract the default bundle indentifier prefix.")
     endif()
 
-    if(prefix)
+    if(prefix AND NOT prefix_error)
         set_property(GLOBAL PROPERTY _qt_internal_ios_bundle_identifier_prefix "${prefix}")
         set("${out_var}" "${prefix}" PARENT_SCOPE)
     endif()
@@ -778,17 +773,17 @@ function(_qt_internal_finalize_ios_app target)
 endfunction()
 
 if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
-    function(qt_add_executable)
+    macro(qt_add_executable)
         qt6_add_executable(${ARGV})
-    endfunction()
-    function(qt_finalize_target)
+    endmacro()
+    macro(qt_finalize_target)
         qt6_finalize_target(${ARGV})
-    endfunction()
+    endmacro()
 
     # Kept for compatibility with Qt Creator 4.15 wizards
-    function(qt_finalize_executable)
+    macro(qt_finalize_executable)
         qt6_finalize_target(${ARGV})
-    endfunction()
+    endmacro()
 endif()
 
 function(_qt_get_plugin_name_with_version target out_var)
@@ -898,13 +893,13 @@ function(qt6_import_plugins target)
 endfunction()
 
 if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
-    function(qt_import_plugins)
+    macro(qt_import_plugins)
         if(QT_DEFAULT_MAJOR_VERSION EQUAL 5)
             qt5_import_plugins(${ARGV})
         elseif(QT_DEFAULT_MAJOR_VERSION EQUAL 6)
             qt6_import_plugins(${ARGV})
         endif()
-    endfunction()
+    endmacro()
 endif()
 
 # This function is currently in Technical Preview. It's signature may change or be removed entirely.
@@ -951,9 +946,9 @@ function(qt6_set_finalizer_mode target)
 endfunction()
 
 if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
-    function(qt_set_finalizer_mode)
+    macro(qt_set_finalizer_mode)
         qt6_set_finalizer_mode(${ARGV})
-    endfunction()
+    endmacro()
 endif()
 
 # Extracts metatypes from a Qt target and generates a metatypes.json for it.
@@ -1232,9 +1227,9 @@ function(qt6_extract_metatypes target)
 endfunction()
 
 if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
-    function(qt_extract_metatypes)
+    macro(qt_extract_metatypes)
         qt6_extract_metatypes(${ARGV})
-    endfunction()
+    endmacro()
 endif()
 
 # Generate Win32 RC files for a target. All entries in the RC file are generated
@@ -1692,7 +1687,6 @@ function(_qt_internal_process_resource target resourceName)
     string(REPLACE "/" "_" resourceName ${resourceName})
     string(REPLACE "." "_" resourceName ${resourceName})
 
-    set(output_targets "")
     set(resource_files ${rcc_FILES})
     if(NOT "${rcc_BASE}" STREQUAL "")
         get_filename_component(abs_base "${rcc_BASE}" ABSOLUTE)
@@ -1715,11 +1709,10 @@ function(_qt_internal_process_resource target resourceName)
 
     if (NOT resource_files)
         if (rcc_OUTPUT_TARGETS)
-            set(${rcc_OUTPUT_TARGETS} "${output_target_quick}" PARENT_SCOPE)
+            set(${rcc_OUTPUT_TARGETS} "" PARENT_SCOPE)
         endif()
         return()
     endif()
-    list(APPEND output_targets ${output_target_quick})
     set(generatedBaseName "${resourceName}")
     set(generatedResourceFile "${CMAKE_CURRENT_BINARY_DIR}/.rcc/${generatedBaseName}.qrc")
 
@@ -1814,6 +1807,7 @@ function(_qt_internal_process_resource target resourceName)
                        COMMENT "Running rcc for resource ${resourceName}"
                        VERBATIM)
 
+    set(output_targets "")
     if(isBinary)
         # Add generated .rcc target to 'all' set
         add_custom_target(binary_resource_${generatedBaseName} ALL DEPENDS "${generatedOutfile}")
@@ -1821,11 +1815,10 @@ function(_qt_internal_process_resource target resourceName)
         set_property(SOURCE "${generatedOutfile}" PROPERTY SKIP_AUTOGEN ON)
         set_property(TARGET ${target} APPEND PROPERTY _qt_generated_qrc_files "${generatedResourceFile}")
 
-        __qt_propagate_generated_resource(${target} ${resourceName} "${generatedOutfile}" output_target)
-        list(APPEND output_targets ${output_target})
-        if (rcc_OUTPUT_TARGETS)
-            set(${rcc_OUTPUT_TARGETS} "${output_targets}" PARENT_SCOPE)
-        endif()
+        __qt_propagate_generated_resource(${target} ${resourceName} "${generatedOutfile}" output_targets)
+    endif()
+    if (rcc_OUTPUT_TARGETS)
+        set(${rcc_OUTPUT_TARGETS} "${output_targets}" PARENT_SCOPE)
     endif()
 endfunction()
 
@@ -1833,6 +1826,7 @@ macro(_qt_internal_get_add_plugin_keywords option_args single_args multi_args)
     set(${option_args}
         STATIC
         SHARED
+        __QT_INTERNAL_NO_PROPAGATE_PLUGIN_INITIALIZER
     )
     set(${single_args}
         # TODO: For backward compatibility / transitional use only, remove once all repos no longer
@@ -1842,6 +1836,7 @@ macro(_qt_internal_get_add_plugin_keywords option_args single_args multi_args)
         PLUGIN_TYPE
         CLASS_NAME
         OUTPUT_NAME
+        OUTPUT_TARGETS
     )
     set(${multi_args})
 endmacro()
@@ -1951,6 +1946,28 @@ function(qt6_add_plugin target)
 
     set_target_properties(${target} PROPERTIES QT_PLUGIN_CLASS_NAME "${plugin_class_name}")
 
+    # Create a plugin initializer object library for static plugins.
+    # It contains a Q_IMPORT_PLUGIN(QT_PLUGIN_CLASS_NAME) call.
+    # Project targets will automatically link to the plugin initializer whenever they link to the
+    # plugin target.
+    # The plugin init target name is stored in OUTPUT_TARGETS, so projects may install them.
+    # Qml plugin inits are handled in Qt6QmlMacros.
+    if(NOT "${arg_PLUGIN_TYPE}" STREQUAL "qml_plugin"
+            AND target_type STREQUAL "STATIC_LIBRARY")
+        __qt_internal_add_static_plugin_init_object_library("${target}" plugin_init_target)
+
+        if(arg_OUTPUT_TARGETS)
+            set(${arg_OUTPUT_TARGETS} ${plugin_init_target} PARENT_SCOPE)
+        endif()
+
+        # We don't automatically propagate the plugin init library for Qt provided plugins, because
+        # there are 2 other code paths that take care of that, one involving finalizers and the
+        # other regular usage requirements.
+        if(NOT arg___QT_INTERNAL_NO_PROPAGATE_PLUGIN_INITIALIZER)
+            __qt_internal_propagate_object_library("${target}" "${plugin_init_target}")
+        endif()
+    endif()
+
     target_compile_definitions(${target} PRIVATE
         QT_PLUGIN
         QT_DEPRECATED_WARNINGS
@@ -1958,9 +1975,9 @@ function(qt6_add_plugin target)
 endfunction()
 
 if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
-    function(qt_add_plugin)
+    macro(qt_add_plugin)
         qt6_add_plugin(${ARGV})
-    endfunction()
+    endmacro()
 endif()
 
 # Creates a library by forwarding arguments to add_library, applies some Qt naming file name naming
@@ -2060,9 +2077,9 @@ function(_qt_internal_add_library target)
 endfunction()
 
 if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
-    function(qt_add_library)
+    macro(qt_add_library)
         qt6_add_library(${ARGV})
-    endfunction()
+    endmacro()
 endif()
 
 # By default Qt6 forces usage of utf8 sources for consumers of Qt.
@@ -2073,9 +2090,9 @@ function(qt6_allow_non_utf8_sources target)
 endfunction()
 
 if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
-    function(qt_allow_non_utf8_sources)
+    macro(qt_allow_non_utf8_sources)
         qt6_allow_non_utf8_sources(${ARGV})
-    endfunction()
+    endmacro()
 endif()
 
 function(_qt_internal_apply_strict_cpp target)
@@ -2173,7 +2190,7 @@ function(qt6_disable_unicode_defines target)
 endfunction()
 
 if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
-    function(qt_disable_unicode_defines)
+    macro(qt_disable_unicode_defines)
         qt6_disable_unicode_defines(${ARGV})
-    endfunction()
+    endmacro()
 endif()

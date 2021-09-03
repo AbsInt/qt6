@@ -237,7 +237,7 @@ qt_internal_add_shaders(Quick "scenegraph_shaders"
     PRECOMPILE
     OPTIMIZED
     PREFIX
-        "/qt-project.org/scenegraph/shaders_ng"
+        "/qt-project.org"
     FILES
         "scenegraph/shaders_ng/24bittextmask.frag"
         "scenegraph/shaders_ng/32bitcolortext.frag"
@@ -345,7 +345,6 @@ qt_internal_extend_target(Quick CONDITION QT_FEATURE_quick_designer
         designer/qquickdesignersupportproperties.cpp designer/qquickdesignersupportproperties_p.h
         designer/qquickdesignersupportpropertychanges.cpp designer/qquickdesignersupportpropertychanges_p.h
         designer/qquickdesignersupportstates.cpp designer/qquickdesignersupportstates_p.h
-        designer/qquickdesignerwindowmanager.cpp designer/qquickdesignerwindowmanager_p.h
 )
 
 qt_internal_extend_target(Quick CONDITION QT_FEATURE_accessibility

@@ -21,7 +21,7 @@ function(qt6_add_qml_module target)
         # TODO: Remove once all usages have also been removed
         SKIP_TYPE_REGISTRATION
 
-        # Used only by qt6_qml_type_registration()
+        # Used only by _qt_internal_qml_type_registration()
         # TODO: Remove this once qt6_extract_metatypes does not install by default.
         __QT_INTERNAL_INSTALL_METATYPES_JSON
     )
@@ -275,6 +275,24 @@ function(qt6_add_qml_module target)
         endif()
     endif()
 
+    # Sanity check that we are not trying to have two different QML modules use
+    # the same output directory.
+    get_property(dirs GLOBAL PROPERTY _qt_all_qml_output_dirs)
+    if(dirs)
+        list(FIND dirs "${arg_OUTPUT_DIRECTORY}" index)
+        if(NOT index EQUAL -1)
+            get_property(qml_targets GLOBAL PROPERTY _qt_all_qml_targets)
+            list(GET qml_targets ${index} other_target)
+            message(FATAL_ERROR
+                "Output directory for target \"${target}\" is already used by "
+                "another QML module (target \"${other_target}\"). "
+                "Output directory is:\n  ${arg_OUTPUT_DIRECTORY}\n"
+            )
+        endif()
+    endif()
+    set_property(GLOBAL APPEND PROPERTY _qt_all_qml_output_dirs ${arg_OUTPUT_DIRECTORY})
+    set_property(GLOBAL APPEND PROPERTY _qt_all_qml_targets     ${target})
+
     # TODO: Support for old keyword, remove once all repos no longer use CLASSNAME
     if(arg_CLASSNAME)
         if(arg_CLASS_NAME AND NOT arg_CLASSNAME STREQUAL arg_CLASS_NAME)
@@ -316,10 +334,6 @@ function(qt6_add_qml_module target)
             )
         else()
             qt6_add_library(${target} ${lib_type})
-            if(ANDROID)
-                # TODO: Check if we need to do this for a backing library
-                qt6_android_apply_arch_suffix(${target})
-            endif()
         endif()
     endif()
 
@@ -412,8 +426,15 @@ function(qt6_add_qml_module target)
         QT_QML_MODULE_TARGET_PATH "${arg_TARGET_PATH}"
         QT_QML_MODULE_VERSION "${arg_VERSION}"
         QT_QML_MODULE_CLASS_NAME "${arg_CLASS_NAME}"
+
         QT_QML_MODULE_PLUGIN_TARGET "${arg_PLUGIN_TARGET}"
         QT_QML_MODULE_INSTALLED_PLUGIN_TARGET "${arg_INSTALLED_PLUGIN_TARGET}"
+
+        # Also Save the PLUGIN_TARGET values in a separate property to circumvent
+        # https://gitlab.kitware.com/cmake/cmake/-/issues/21484 when exporting the properties
+        _qt_qml_module_plugin_target "${arg_PLUGIN_TARGET}"
+        _qt_qml_module_installed_plugin_target "${arg_INSTALLED_PLUGIN_TARGET}"
+
         QT_QML_MODULE_DESIGNER_SUPPORTED "${arg_DESIGNER_SUPPORTED}"
         QT_QML_MODULE_OUTPUT_DIRECTORY "${arg_OUTPUT_DIRECTORY}"
         QT_QML_MODULE_RESOURCE_PREFIX "${qt_qml_module_resource_prefix}"
@@ -423,6 +444,14 @@ function(qt6_add_qml_module target)
         # TODO: Check how this is used by qt6_android_generate_deployment_settings()
         QT_QML_IMPORT_PATH "${arg_IMPORT_PATH}"
     )
+
+    # Executables don't have a plugin target, so no need to export the properties.
+    if(NOT backing_target_type STREQUAL "EXECUTABLE" AND NOT is_android_executable)
+        set_property(TARGET ${target} APPEND PROPERTY
+            EXPORT_PROPERTIES _qt_qml_module_plugin_target _qt_qml_module_installed_plugin_target
+        )
+    endif()
+
     set(ensure_set_properties
         QT_QML_MODULE_PLUGIN_TYPES_FILE
         QT_QML_MODULE_RESOURCE_PATHS
@@ -442,7 +471,7 @@ function(qt6_add_qml_module target)
         if(arg___QT_INTERNAL_INSTALL_METATYPES_JSON)
             list(APPEND type_registration_extra_args __QT_INTERNAL_INSTALL_METATYPES_JSON)
         endif()
-        qt6_qml_type_registration(${target} ${type_registration_extra_args})
+        _qt_internal_qml_type_registration(${target} ${type_registration_extra_args})
     endif()
 
     set(output_targets)
@@ -484,19 +513,21 @@ function(qt6_add_qml_module target)
             PROPERTIES QT_RESOURCE_ALIAS "qmldir"
         )
 
-        foreach(prefix IN LISTS prefixes)
-            set(resource_targets)
-            qt6_add_resources(${target} ${qmldir_resource_name}
-                FILES ${arg_OUTPUT_DIRECTORY}/qmldir
-                PREFIX "${prefix}"
-                OUTPUT_TARGETS resource_targets
-            )
-            list(APPEND output_targets ${resource_targets})
-            # If we are adding the same file twice, we need a different resource
-            # name for the second one. It has the same QT_RESOURCE_ALIAS but a
-            # different prefix, so we can't put it in the same resource.
-            string(APPEND qmldir_resource_name "_copy")
-        endforeach()
+        if(NOT ANDROID)
+            foreach(prefix IN LISTS prefixes)
+                set(resource_targets)
+                    qt6_add_resources(${target} ${qmldir_resource_name}
+                        FILES ${arg_OUTPUT_DIRECTORY}/qmldir
+                        PREFIX "${prefix}"
+                        OUTPUT_TARGETS resource_targets
+                    )
+                    list(APPEND output_targets ${resource_targets})
+                # If we are adding the same file twice, we need a different resource
+                # name for the second one. It has the same QT_RESOURCE_ALIAS but a
+                # different prefix, so we can't put it in the same resource.
+                string(APPEND qmldir_resource_name "_copy")
+            endforeach()
+        endif()
     endif()
 
     if(NOT arg_NO_PLUGIN AND NOT arg_NO_CREATE_PLUGIN_TARGET)
@@ -568,9 +599,9 @@ function(qt6_add_qml_module target)
 endfunction()
 
 if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
-    function(qt_add_qml_module)
+    macro(qt_add_qml_module)
         qt6_add_qml_module(${ARGV})
-    endfunction()
+    endmacro()
 endif()
 
 function(_qt_internal_get_escaped_uri uri out_var)
@@ -847,15 +878,8 @@ function(_qt_internal_target_generate_qmldir target)
             string(APPEND content "optional ")
         endif()
 
-        set(plugin_basename)
-        if(TARGET ${plugin_target})
-            get_target_property(plugin_basename ${plugin_target} OUTPUT_NAME)
-        endif()
-        if(plugin_basename)
-            string(APPEND content "plugin ${plugin_basename}\n")
-        else()
-            string(APPEND content "plugin ${plugin_target}\n")
-        endif()
+        _qt_internal_get_qml_plugin_basename(plugin_basename ${plugin_target})
+        string(APPEND content "plugin ${plugin_basename}\n")
 
         _qt_internal_qmldir_item(classname QT_QML_MODULE_CLASS_NAME)
     endif()
@@ -1090,7 +1114,9 @@ function(qt6_add_qml_plugin target)
             string(REPLACE "." "_" android_plugin_name_infix_name "${arg_URI}")
         endif()
 
-        set(final_android_qml_plugin_name "qml_${android_plugin_name_infix_name}_${target}")
+        _qt_internal_get_qml_plugin_basename(plugin_basename ${target})
+        set(final_android_qml_plugin_name
+            "qml_${android_plugin_name_infix_name}_${plugin_basename}")
         set_target_properties(${target}
             PROPERTIES
             LIBRARY_OUTPUT_NAME "${final_android_qml_plugin_name}"
@@ -1147,88 +1173,33 @@ function(qt6_add_qml_plugin target)
     endif()
 
     target_link_libraries(${target} PRIVATE ${QT_CMAKE_EXPORT_NAMESPACE}::Qml)
-    if(NOT "${arg_BACKING_TARGET}" STREQUAL target)
+
+    # Link plugin against its backing lib if it has one.
+    if(NOT arg_BACKING_TARGET STREQUAL "" AND NOT arg_BACKING_TARGET STREQUAL target)
         target_link_libraries(${target} PRIVATE ${arg_BACKING_TARGET})
     endif()
 
+    if(${CMAKE_VERSION} VERSION_GREATER_EQUAL "3.19.0")
+        # Defer the collection of plugin dependencies until after any extra target_link_libraries
+        # calls that a user project might do.
+        # We wrap the deferred call with EVAL CODE
+        # so that ${target} is evaluated now rather than the end of the scope.
+        cmake_language(EVAL CODE
+            "cmake_language(DEFER CALL _qt_internal_add_static_qml_plugin_dependencies \"${target}\" \"${arg_BACKING_TARGET}\")"
+        )
+    else()
+        # Can't defer, have to do it now.
+        _qt_internal_add_static_qml_plugin_dependencies("${target}" "${arg_BACKING_TARGET}")
+    endif()
 endfunction()
 
 if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
-    function(qt_add_qml_plugin)
+    macro(qt_add_qml_plugin)
         qt6_add_qml_plugin(${ARGV})
-    endfunction()
+    endmacro()
 endif()
 
-# Add Qml files (.qml,.js,.mjs) to a Qml module.
-#
-# target: The backing target of the qml module. (REQUIRED)
-#
-# QML_FILES: The qml files to add to the backing target. Supported file extensions
-#   are .qml, .js and .mjs. No other file types should be listed. (REQUIRED)
-#
-# RESOURCES: Resources used in QML, for example images. (OPTIONAL)
-#
-# PREFIX: The resource path under which to add the compiled qml files. If not
-#   specified, the QT_QML_MODULE_RESOURCE_PREFIX property of the target is used
-#   as the default, if set (that property is set by qt6_add_qml_module()).
-#   If the default is empty, this option must be provided. (OPTIONAL)
-#
-# OUTPUT_TARGETS: In static builds, additional CMake targets can be created
-#   which consumers of the module will need to potentially install.
-#   Supply the name of an output variable, which will be set to a list of these
-#   targets. If installing the main target, you will also need to install these
-#   output targets for static builds. (OPTIONAL)
-#
-# NO_LINT: Do not add the specified files to the ${target}_qmllint target.
-#   If this option is not given, the default will be taken from the target.
-#
-# NO_CACHEGEN: Do not compile the qml files. Add the raw qml files to the
-#   target resources instead. If this option is not given, the default will be
-#   taken from the target.
-#
-# NO_QMLDIR_TYPES: Do not append type information from the qml files to the
-#   qmldir file associated with the qml module. If this option is not given,
-#   the default will be taken from the target.
-#
-# In addition to the above NO_... options, individual files can be explicitly
-# skipped by setting the relevant source property. These are:
-#
-#   - QT_QML_SKIP_QMLLINT
-#   - QT_QML_SKIP_QMLDIR_ENTRY
-#   - QT_QML_SKIP_CACHEGEN
-#
-# Disabling the qmldir entry for a qml file would normally only be used for a
-# file that does not expose a public type (e.g. a private JS file).
-# If appending of type information has not been disabled for a particular qml
-# file, the following additional source properties can be specified to
-# customize the file's type details:
-#
-# QT_QML_SOURCE_VERSION: Version(s) for this qml file. If not present the module
-#   version will be used.
-#
-# QT_QML_SOURCE_TYPENAME: Override the file's type name. If not present, the
-#   type name will be deduced using the file's basename.
-#
-# QT_QML_SINGLETON_TYPE: Set to true if this qml file contains a singleton type.
-#
-# QT_QML_INTERNAL_TYPE: When set to true, the type specified by
-#   QT_QML_SOURCE_TYPENAME will not be available to users of this module.
-#
-#   e.g.:
-#       set_source_files_properties(my_qml_file.qml
-#           PROPERTIES
-#               QT_QML_SOURCE_VERSION "2.0;6.0"
-#               QT_QML_SOURCE_TYPENAME MyQmlFile
-#
-#       qt6_target_qml_sources(my_qml_module
-#           QML_FILES
-#               my_qml_file.qml
-#       )
-#
-# The above will produce the following entry in the qmldir file:
-#
-#   MyQmlFile 2.0 my_qml_file.qml
-#
+
 function(qt6_target_qml_sources target)
 
     get_target_property(uri        ${target} QT_QML_MODULE_URI)
@@ -1261,7 +1232,7 @@ function(qt6_target_qml_sources target)
         message(FATAL_ERROR "Unknown/unexpected arguments: ${arg_UNPARSED_ARGUMENTS}")
     endif()
 
-    if (NOT arg_QML_FILES)
+    if (NOT arg_QML_FILES AND NOT arg_RESOURCES)
         if(arg_OUTPUT_TARGETS)
             set(${arg_OUTPUT_TARGETS} "" PARENT_SCOPE)
         endif()
@@ -1282,6 +1253,7 @@ function(qt6_target_qml_sources target)
     get_target_property(no_qmldir              ${target} QT_QML_MODULE_NO_GENERATE_QMLDIR)
     get_target_property(resource_prefix        ${target} QT_QML_MODULE_RESOURCE_PREFIX)
     get_target_property(qml_module_version     ${target} QT_QML_MODULE_VERSION)
+    get_target_property(past_major_versions    ${target} QT_QML_MODULE_PAST_MAJOR_VERSIONS)
 
     if(NOT output_dir)
         # Probably not a qml module. We still want to support tooling for this
@@ -1305,6 +1277,19 @@ function(qt6_target_qml_sources target)
         string(APPEND arg_PREFIX "/")
     endif()
 
+    if (qml_module_version MATCHES "^([0-9]+)\\.")
+        set(qml_module_files_versions "${CMAKE_MATCH_1}.0")
+    else()
+        message(FATAL_ERROR
+            "No major version found in '${qml_module_version}'."
+        )
+    endif()
+    if (past_major_versions OR past_major_versions STREQUAL "0")
+        foreach (past_major_version ${past_major_versions})
+            list(APPEND qml_module_files_versions "${past_major_version}.0")
+        endforeach()
+    endif()
+
     # Linting and cachegen can still occur for a target that isn't a qml module,
     # but for such targets, there is no qmldir file to update.
     if(arg_NO_LINT)
@@ -1317,7 +1302,7 @@ function(qt6_target_qml_sources target)
         set(no_qmldir TRUE)
     endif()
 
-    if(NOT no_cachegen)
+    if(NOT no_cachegen AND arg_QML_FILES)
         _qt_internal_genex_getproperty(types_file    ${target} QT_QML_MODULE_PLUGIN_TYPES_FILE)
         _qt_internal_genex_getproperty(qmlcachegen   ${target} QT_QMLCACHEGEN_BINARY)
         _qt_internal_genex_getproperty(direct_calls  ${target} QT_QMLCACHEGEN_DIRECT_CALLS)
@@ -1418,10 +1403,6 @@ function(qt6_target_qml_sources target)
         # resource paths and the source locations might be structured quite
         # differently.
 
-        # Fed to qmlimportscanner in qt6_import_qml_plugins. Also may be used in
-        # generator expressions to install all qml files for the target.
-        set_property(TARGET ${target} APPEND PROPERTY QT_QML_MODULE_FILES ${qml_file_out})
-
         # Add file to those processed by qmllint
         get_source_file_property(skip_qmllint ${qml_file_src} QT_QML_SKIP_QMLLINT)
         if(NOT no_lint AND NOT skip_qmllint)
@@ -1441,13 +1422,31 @@ function(qt6_target_qml_sources target)
 
             # Do not add qmldir entries for lowercase names. Those are not components.
             if (qml_file_typename MATCHES "^[A-Z]")
-                # TODO: rename to QT_QML_SOURCE_VERSIONS
-                get_source_file_property(qml_file_versions  ${qml_file_src} QT_QML_SOURCE_VERSION)
+                # We previously accepted the singular form of this property name
+                # during tech preview. Issue a warning for that, but still
+                # honor it. The plural form will override it if both are set.
+                get_property(have_singular_property SOURCE ${qml_file_src}
+                    PROPERTY QT_QML_SOURCE_VERSION SET
+                )
+                if(have_singular_property)
+                    message(AUTHOR_WARNING
+                        "The QT_QML_SOURCE_VERSION source file property has been replaced "
+                        "by QT_QML_SOURCE_VERSIONS (i.e. plural rather than singular). "
+                        "The singular form will eventually be removed, please update "
+                        "the project to use the plural form instead for the file at:\n"
+                        "  ${qml_file_src}"
+                    )
+                endif()
+                get_source_file_property(qml_file_versions ${qml_file_src} QT_QML_SOURCE_VERSIONS)
+                if(NOT qml_file_versions AND have_singular_property)
+                    get_source_file_property(qml_file_versions ${qml_file_src} QT_QML_SOURCE_VERSION)
+                endif()
+
                 get_source_file_property(qml_file_singleton ${qml_file_src} QT_QML_SINGLETON_TYPE)
                 get_source_file_property(qml_file_internal  ${qml_file_src} QT_QML_INTERNAL_TYPE)
 
                 if (NOT qml_file_versions)
-                    set(qml_file_versions ${qml_module_version})
+                    set(qml_file_versions ${qml_module_files_versions})
                 endif()
 
                 set(qmldir_file_contents "")
@@ -1583,15 +1582,11 @@ function(qt6_target_qml_sources target)
 endfunction()
 
 if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
-    function(qt_target_qml_sources)
+    macro(qt_target_qml_sources)
         qt6_target_qml_sources(${ARGV})
-    endfunction()
+    endmacro()
 endif()
 
-# NOTE: This function does not normally need to be called directly by projects.
-#       It is called automatically by qt6_add_qml_module() unless
-#       NO_GENERATE_QMLTYPES is also given to that function.
-#
 # target: Expected to be the backing target for a qml module. Certain target
 #   properties normally set by qt6_add_qml_module() will be retrieved from this
 #   target. (REQUIRED)
@@ -1599,7 +1594,7 @@ endif()
 # MANUAL_MOC_JSON_FILES: Specifies a list of json files, generated by a manual
 #   moc call, to extract metatypes. (OPTIONAL)
 #
-function(qt6_qml_type_registration target)
+function(_qt_internal_qml_type_registration target)
     set(args_option __QT_INTERNAL_INSTALL_METATYPES_JSON)
     set(args_single "")
     set(args_multi  MANUAL_MOC_JSON_FILES)
@@ -1822,9 +1817,19 @@ function(qt6_qml_type_registration target)
     )
 endfunction()
 
+function(qt6_qml_type_registration)
+    message(FATAL_ERROR
+        "This function, previously available under Technical Preview, has been removed. "
+        "Please use qt6_add_qml_module() instead."
+    )
+endfunction()
+
 if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
     function(qt_qml_type_registration)
-        qt6_qml_type_registration(${ARGV})
+        message(FATAL_ERROR
+            "This function, previously available under Technical Preview, has been removed. "
+            "Please use qt_add_qml_module() instead."
+        )
     endfunction()
 endif()
 
@@ -1903,7 +1908,7 @@ but this file does not exist.  Possible reasons include:
     file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/.qt_plugins)
 
     set(cmd_args
-        "${arg_PATH_TO_SCAN}"
+        -rootPath "${arg_PATH_TO_SCAN}"
         -cmake-output
         -importPath "${qml_path}"
     )
@@ -1920,11 +1925,10 @@ but this file does not exist.  Possible reasons include:
         list(APPEND cmd_args "${QT_QML_OUTPUT_DIRECTORY}")
     endif()
 
-    get_target_property(qml_files ${target} QT_QML_MODULE_FILES)
-    if (qml_files)
-        list(APPEND cmd_args "-qmlFiles" ${qml_files})
-    endif()
-
+    # All of the module's .qml files will be listed in one of the generated
+    # .qrc files, so there's no need to list the files individually. We provide
+    # the .qrc files instead because they have the additional information for
+    # each file's resource alias.
     get_target_property(qrc_files ${target} _qt_generated_qrc_files)
     if (qrc_files)
         list(APPEND cmd_args "-qrcFiles" ${qrc_files})
@@ -2023,11 +2027,116 @@ but this file does not exist.  Possible reasons include:
 endfunction()
 
 if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
-    function(qt_import_qml_plugins)
+    macro(qt_import_qml_plugins)
         if(QT_DEFAULT_MAJOR_VERSION EQUAL 5)
             qt5_import_qml_plugins(${ARGV})
         elseif(QT_DEFAULT_MAJOR_VERSION EQUAL 6)
             qt6_import_qml_plugins(${ARGV})
         endif()
-    endfunction()
+    endmacro()
 endif()
+
+function(_qt_internal_add_static_qml_plugin_dependencies plugin_target backing_target)
+    # Protect against multiple calls of qt_add_qml_plugin.
+    get_target_property(plugin_deps_added "${plugin_target}" _qt_extra_static_qml_plugin_deps_added)
+    if(plugin_deps_added)
+        return()
+    endif()
+    set_target_properties("${plugin_target}" PROPERTIES _qt_extra_static_qml_plugin_deps_added TRUE)
+
+    if(NOT backing_target STREQUAL plugin_target AND TARGET "${backing_target}")
+        set(has_backing_lib TRUE)
+    else()
+        set(has_backing_lib FALSE)
+    endif()
+
+    # Target who's direct dependencies will be walked to set up additional dependencies for
+    # a static qml plugin.
+    if(has_backing_lib)
+        set(target_with_candidate_qml_module_deps "${backing_target}")
+    else()
+        set(target_with_candidate_qml_module_deps "${plugin_target}")
+    endif()
+
+    get_target_property(plugin_type ${plugin_target} TYPE)
+    set(skip_prl_marker "$<BOOL:QT_IS_PLUGIN_GENEX>")
+
+    # If ${plugin_target} is a static qml plugin, recursively get its private dependencies (or its
+    # backing lib private deps), identify which of those are qml modules, extract any associated qml
+    # plugin target from those qml modules and make them dependencies of ${plugin_target}.
+    #
+    # E.g. this ensures that if a user project links directly to the static qtquick2plugin plugin
+    # target (note the plugin target, not the backing lib) it will automatically also link to
+    # Quick's transitive plugin dependencies: qmlplugin, modelsplugin and workerscriptplugin, in
+    # addition to the the Qml, QmlModels and QmlWorkerScript backing libraries.
+    #
+    # Note this logic is not specific to qtquick2plugin, it applies to all static qml plugins.
+    #
+    # This eliminates the needed boilerplate to link to the full transitive closure of qml plugins
+    # in user projects that don't want to use qmlimportscanner / qt_import_qml_plugins.
+    set(additional_plugin_deps "")
+
+    if(plugin_type STREQUAL "STATIC_LIBRARY")
+        __qt_internal_collect_all_target_dependencies(
+            "${target_with_candidate_qml_module_deps}" plugin_private_deps)
+
+        foreach(dep IN LISTS plugin_private_deps)
+            if(NOT TARGET "${dep}")
+                continue()
+            endif()
+            get_target_property(dep_type ${dep} TYPE)
+            if(dep_type STREQUAL "STATIC_LIBRARY")
+                set(associated_qml_plugin "")
+
+                # Check if the target has an associated imported qml plugin (like a Qt-provided
+                # one).
+                get_target_property(associated_qml_plugin_candidate ${dep}
+                    _qt_qml_module_installed_plugin_target)
+
+                if(associated_qml_plugin_candidate AND TARGET "${associated_qml_plugin_candidate}")
+                    set(associated_qml_plugin "${associated_qml_plugin_candidate}")
+                endif()
+
+                # Check if the target has an associated qml plugin that's built as part of the
+                # current project (non-installed one, so without a target namespace prefix).
+                get_target_property(associated_qml_plugin_candidate ${dep}
+                    _qt_qml_module_plugin_target)
+
+                if(NOT associated_qml_plugin AND
+                        associated_qml_plugin_candidate
+                        AND TARGET "${associated_qml_plugin_candidate}")
+                    set(associated_qml_plugin "${associated_qml_plugin_candidate}")
+                endif()
+
+                if(associated_qml_plugin)
+                    # Abuse a genex marker, to skip the dependency to be added into prl files.
+                    # TODO: Introduce a more generic marker name in qtbase specifically
+                    # for skipping deps in prl file deps generation.
+                    set(wrapped_associated_qml_plugin
+                        "$<${skip_prl_marker}:$<TARGET_NAME:${associated_qml_plugin}>>")
+
+                    if(NOT wrapped_associated_qml_plugin IN_LIST additional_plugin_deps)
+                        list(APPEND additional_plugin_deps "${wrapped_associated_qml_plugin}")
+                    endif()
+                endif()
+            endif()
+        endforeach()
+    endif()
+
+    if(additional_plugin_deps)
+        target_link_libraries(${plugin_target} PRIVATE ${additional_plugin_deps})
+    endif()
+endfunction()
+
+# The function returns the base output name of a qml plugin that will be used as library output
+# name and in a qmldir file as the 'plugin <plugin_basename>' record.
+function(_qt_internal_get_qml_plugin_basename out_var plugin_target)
+    set(plugin_basename)
+    if(TARGET ${plugin_target})
+        get_target_property(plugin_basename ${plugin_target} OUTPUT_NAME)
+    endif()
+    if(NOT plugin_basename)
+        set(plugin_basename "${plugin_target}")
+    endif()
+    set(${out_var} "${plugin_basename}" PARENT_SCOPE)
+endfunction()

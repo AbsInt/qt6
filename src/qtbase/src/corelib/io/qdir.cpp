@@ -1951,6 +1951,8 @@ QFileInfoList QDir::drives()
     Returns \c true if the directory was successfully changed; otherwise
     returns \c false.
 
+    \snippet code/src_corelib_io_qdir.cpp 16
+
     \sa current(), currentPath(), home(), root(), temp()
 */
 bool QDir::setCurrent(const QString &path)
@@ -2290,8 +2292,10 @@ QString qt_normalizePathSegments(const QString &name, QDirPrivate::PathNormaliza
 
 static QString qt_cleanPath(const QString &path, bool *ok)
 {
-    if (path.isEmpty())
+    if (path.isEmpty()) {
+        Q_ASSERT(!ok); // The only caller passing ok knows its path is non-empty
         return path;
+    }
 
     QString name = QDir::fromNativeSeparators(path);
     QString ret = qt_normalizePathSegments(name, OSSupportsUncPaths ? QDirPrivate::AllowUncPaths : QDirPrivate::DefaultNormalization, ok);
