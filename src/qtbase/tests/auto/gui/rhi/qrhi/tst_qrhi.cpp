@@ -3271,6 +3271,9 @@ void tst_QRhi::srbLayoutCompatibility()
 
         QVERIFY(srb1->isLayoutCompatible(srb2.data()));
         QVERIFY(srb2->isLayoutCompatible(srb1.data()));
+
+        QCOMPARE(srb1->serializedLayoutDescription(), srb2->serializedLayoutDescription());
+        QVERIFY(srb1->serializedLayoutDescription().count() == 0);
     }
 
     // different count (not compatible)
@@ -3286,6 +3289,10 @@ void tst_QRhi::srbLayoutCompatibility()
 
         QVERIFY(!srb1->isLayoutCompatible(srb2.data()));
         QVERIFY(!srb2->isLayoutCompatible(srb1.data()));
+
+        QVERIFY(srb1->serializedLayoutDescription() != srb2->serializedLayoutDescription());
+        QVERIFY(srb1->serializedLayoutDescription().count() == 0);
+        QVERIFY(srb2->serializedLayoutDescription().count() == 1 * QRhiShaderResourceBinding::LAYOUT_DESC_ENTRIES_PER_BINDING);
     }
 
     // full match (compatible)
@@ -3306,6 +3313,25 @@ void tst_QRhi::srbLayoutCompatibility()
 
         QVERIFY(srb1->isLayoutCompatible(srb2.data()));
         QVERIFY(srb2->isLayoutCompatible(srb1.data()));
+
+        QVERIFY(!srb1->serializedLayoutDescription().isEmpty());
+        QVERIFY(!srb2->serializedLayoutDescription().isEmpty());
+        QCOMPARE(srb1->serializedLayoutDescription(), srb2->serializedLayoutDescription());
+        QVERIFY(srb1->serializedLayoutDescription().count() == 2 * QRhiShaderResourceBinding::LAYOUT_DESC_ENTRIES_PER_BINDING);
+
+        // see what we would get if a binding list got serialized "manually", without pulling it out from the srb after building
+        // (the results should be identical)
+        QVector<quint32> layoutDesc1;
+        QRhiShaderResourceBinding::serializeLayoutDescription(srb1->cbeginBindings(), srb1->cendBindings(), std::back_inserter(layoutDesc1));
+        QCOMPARE(layoutDesc1, srb1->serializedLayoutDescription());
+        QVector<quint32> layoutDesc2;
+        QRhiShaderResourceBinding::serializeLayoutDescription(srb2->cbeginBindings(), srb2->cendBindings(), std::back_inserter(layoutDesc2));
+        QCOMPARE(layoutDesc2, srb2->serializedLayoutDescription());
+
+        // exercise with an "output iterator" different from back_inserter
+        quint32 layoutDesc3[2 * QRhiShaderResourceBinding::LAYOUT_DESC_ENTRIES_PER_BINDING];
+        QRhiShaderResourceBinding::serializeLayoutDescription(srb1->cbeginBindings(), srb1->cendBindings(), layoutDesc3);
+        QVERIFY(!memcmp(layoutDesc3, layoutDesc1.constData(), sizeof(quint32) * 2 * QRhiShaderResourceBinding::LAYOUT_DESC_ENTRIES_PER_BINDING));
     }
 
     // different visibility (not compatible)
@@ -3324,6 +3350,8 @@ void tst_QRhi::srbLayoutCompatibility()
 
         QVERIFY(!srb1->isLayoutCompatible(srb2.data()));
         QVERIFY(!srb2->isLayoutCompatible(srb1.data()));
+
+        QVERIFY(srb1->serializedLayoutDescription() != srb2->serializedLayoutDescription());
     }
 
     // different binding points (not compatible)
@@ -3342,6 +3370,8 @@ void tst_QRhi::srbLayoutCompatibility()
 
         QVERIFY(!srb1->isLayoutCompatible(srb2.data()));
         QVERIFY(!srb2->isLayoutCompatible(srb1.data()));
+
+        QVERIFY(srb1->serializedLayoutDescription() != srb2->serializedLayoutDescription());
     }
 
     // different buffer region offset and size (compatible)
@@ -3362,6 +3392,8 @@ void tst_QRhi::srbLayoutCompatibility()
 
         QVERIFY(srb1->isLayoutCompatible(srb2.data()));
         QVERIFY(srb2->isLayoutCompatible(srb1.data()));
+
+        QCOMPARE(srb1->serializedLayoutDescription(), srb2->serializedLayoutDescription());
     }
 
     // different resources (compatible)
@@ -3382,6 +3414,8 @@ void tst_QRhi::srbLayoutCompatibility()
 
         QVERIFY(srb1->isLayoutCompatible(srb2.data()));
         QVERIFY(srb2->isLayoutCompatible(srb1.data()));
+
+        QCOMPARE(srb1->serializedLayoutDescription(), srb2->serializedLayoutDescription());
     }
 }
 

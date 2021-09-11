@@ -145,6 +145,29 @@ function(qt6_add_qml_module target)
                 )
         endif()
 
+        # With CMake 3.17 and earlier, a source file's generated property isn't
+        # visible outside of the directory scope in which it is set. That can
+        # lead to build errors for things like type registration due to CMake
+        # thinking nothing will create a missing file on the first run. With
+        # CMake 3.18 or later, we can force that visibility. Policy CMP0118
+        # added in CMake 3.20 should have made this unnecessary, but we can't
+        # rely on that because the user project controls what it is set to at
+        # the point where it matters, which is the end of the target's
+        # directory scope (hence we can't even test for it here).
+        get_target_property(source_dir ${target} SOURCE_DIR)
+        if(NOT source_dir STREQUAL CMAKE_CURRENT_SOURCE_DIR AND
+           CMAKE_VERSION VERSION_LESS "3.18")
+            message(WARNING
+                "qt6_add_qml_module() is being called in a different "
+                "directory scope to the one in which the target \"${target}\" "
+                "was created. CMake 3.18 or later is required to generate a "
+                "project robustly for this scenario, but you are using "
+                "CMake ${CMAKE_VERSION}. Ideally, qt6_add_qml_module() should "
+                "only be called from the same scope as the one the target was "
+                "created in to avoid dependency and visibility problems."
+            )
+        endif()
+
         get_target_property(backing_target_type ${target} TYPE)
         get_target_property(is_android_executable "${target}" _qt_is_android_executable)
         if (backing_target_type STREQUAL "EXECUTABLE" OR is_android_executable)
@@ -230,10 +253,6 @@ function(qt6_add_qml_module target)
             "exist. Either ensure the target is already created or do not "
             "specify NO_CREATE_PLUGIN_TARGET."
         )
-    endif()
-    if(arg_PLUGIN_TARGET STREQUAL target)
-        # The plugin can't be optional when it has no backing target
-        set(arg_NO_PLUGIN_OPTIONAL TRUE)
     endif()
     if(NOT arg_INSTALLED_PLUGIN_TARGET)
         set(arg_INSTALLED_PLUGIN_TARGET ${arg_PLUGIN_TARGET})
@@ -599,9 +618,13 @@ function(qt6_add_qml_module target)
 endfunction()
 
 if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
-    macro(qt_add_qml_module)
+    function(qt_add_qml_module)
         qt6_add_qml_module(${ARGV})
-    endmacro()
+        cmake_parse_arguments(PARSE_ARGV 1 arg "" "OUTPUT_TARGETS" "")
+        if(arg_OUTPUT_TARGETS)
+            set(${arg_OUTPUT_TARGETS} ${${arg_OUTPUT_TARGETS}} PARENT_SCOPE)
+        endif()
+    endfunction()
 endif()
 
 function(_qt_internal_get_escaped_uri uri out_var)
@@ -791,6 +814,9 @@ function(_qt_internal_target_enable_qmlcachegen target output_targets_var qmlcac
         _qt_generated_qrc_files "--resource$<SEMICOLON>" "$<SEMICOLON>"
     )
 
+    if(CMAKE_GENERATOR STREQUAL "Ninja Multi-Config" AND CMAKE_VERSION VERSION_GREATER_EQUAL "3.20")
+        set(qmlcachegen "$<COMMAND_CONFIG:${qmlcachegen}>")
+    endif()
     set(cmd
         ${QT_TOOL_COMMAND_WRAPPER_PATH}
         ${qmlcachegen}
@@ -814,6 +840,21 @@ function(_qt_internal_target_enable_qmlcachegen target output_targets_var qmlcac
             ${qmlcache_loader_list}
             $<TARGET_PROPERTY:${target},_qt_generated_qrc_files>
     )
+
+    # The current scope sees the file as generated automatically, but the
+    # target scope may not if it is different. Force it where we can.
+    if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.18")
+        set_source_files_properties(
+            ${qmlcache_loader_cpp}
+            TARGET_DIRECTORY ${target}
+            PROPERTIES GENERATED TRUE
+        )
+    endif()
+    get_target_property(target_source_dir ${target} SOURCE_DIR)
+    if(NOT target_source_dir STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+        add_custom_target(${target}_qmlcachegen DEPENDS ${qmlcache_loader_cpp})
+        add_dependencies(${target} ${target}_qmlcachegen)
+    endif()
 
     # TODO: Probably need to reject ${target} being an object library as unsupported
     get_target_property(target_type ${target} TYPE)
@@ -1194,9 +1235,9 @@ function(qt6_add_qml_plugin target)
 endfunction()
 
 if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
-    macro(qt_add_qml_plugin)
+    function(qt_add_qml_plugin)
         qt6_add_qml_plugin(${ARGV})
-    endmacro()
+    endfunction()
 endif()
 
 
@@ -1383,6 +1424,7 @@ function(qt6_target_qml_sources target)
         endif()
     endforeach()
 
+    set(generated_sources_other_scope)
     foreach(qml_file_src IN LISTS arg_QML_FILES)
         # This is to facilitate updating code that used the earlier tech preview
         # API function qt6_target_qml_files()
@@ -1417,11 +1459,21 @@ function(qt6_target_qml_sources target)
         if(NOT no_qmldir AND NOT skip_qmldir)
             get_source_file_property(qml_file_typename ${qml_file_src} QT_QML_SOURCE_TYPENAME)
             if (NOT qml_file_typename)
-                get_filename_component(qml_file_typename ${qml_file_src} NAME_WLE)
+                get_filename_component(qml_file_ext ${qml_file_src} EXT)
+                if (NOT qml_file_ext STREQUAL ".js" AND NOT qml_file_ext STREQUAL ".mjs")
+                    get_filename_component(qml_file_typename ${qml_file_src} NAME_WE)
+                endif()
             endif()
 
             # Do not add qmldir entries for lowercase names. Those are not components.
-            if (qml_file_typename MATCHES "^[A-Z]")
+            if (qml_file_typename AND qml_file_typename MATCHES "^[A-Z]")
+                if (qml_file_ext AND NOT qml_file_ext STREQUAL ".qml" AND NOT qml_file_ext STREQUAL ".ui.qml")
+                    message(AUTHOR_WARNING
+                        "${qml_file_src} has a file extension different from .qml and .ui.qml. "
+                        "This leads to unexpected component names."
+                    )
+                endif()
+
                 # We previously accepted the singular form of this property name
                 # during tech preview. Issue a warning for that, but still
                 # honor it. The plural form will override it if both are set.
@@ -1495,19 +1547,24 @@ function(qt6_target_qml_sources target)
                 "${CMAKE_CURRENT_BINARY_DIR}/.rcc/qmlcache/${target}_${compiled_file}.cpp")
             get_filename_component(out_dir ${compiled_file} DIRECTORY)
 
+            if(CMAKE_GENERATOR STREQUAL "Ninja Multi-Config" AND CMAKE_VERSION VERSION_GREATER_EQUAL "3.20")
+                set(qmlcachegen_cmd "$<COMMAND_CONFIG:${qmlcachegen}>")
+            else()
+                set(qmlcachegen_cmd "${qmlcachegen}")
+            endif()
             add_custom_command(
                 OUTPUT ${compiled_file}
                 COMMAND ${CMAKE_COMMAND} -E make_directory ${out_dir}
                 COMMAND
                     ${QT_TOOL_COMMAND_WRAPPER_PATH}
-                    ${qmlcachegen}
+                    ${qmlcachegen_cmd}
                     --resource-path "${file_resource_path}"
                     ${cachegen_args}
                     -o "${compiled_file}"
                     "${file_absolute}"
                 COMMAND_EXPAND_LISTS
                 DEPENDS
-                    ${qmlcachegen}
+                    ${qmlcachegen_cmd}
                     "${file_absolute}"
                     $<TARGET_PROPERTY:${target},_qt_generated_qrc_files>
                     "$<$<BOOL:${types_file}>:${types_file}>"
@@ -1520,8 +1577,29 @@ function(qt6_target_qml_sources target)
             set_source_files_properties(${compiled_file} PROPERTIES
                 SKIP_AUTOGEN ON
             )
+            # The current scope automatically sees the file as generated, but the
+            # target scope may not if it is different. Force it where we can.
+            # We will also have to add the generated file to a target in this
+            # scope at the end to ensure correct dependencies.
+            get_target_property(target_source_dir ${target} SOURCE_DIR)
+            if(NOT target_source_dir STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+                list(APPEND generated_sources_other_scope ${compiled_file})
+                if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.18")
+                    set_source_files_properties(
+                        ${compiled_file}
+                        TARGET_DIRECTORY ${target}
+                        PROPERTIES
+                            SKIP_AUTOGEN TRUE
+                            GENERATED TRUE
+                    )
+                endif()
+            endif()
         endif()
     endforeach()
+
+    if(ANDROID)
+        _qt_internal_collect_qml_root_paths("${target}" ${arg_QML_FILES})
+    endif()
 
     if(non_qml_files)
         list(JOIN non_qml_files "\n  " file_list)
@@ -1532,14 +1610,16 @@ function(qt6_target_qml_sources target)
         )
     endif()
 
-    if(copied_files)
+    if(copied_files OR generated_sources_other_scope)
         if(CMAKE_VERSION VERSION_LESS 3.19)
             # Called from qt6_add_qml_module() and we know there can only be
             # this one call. With those constraints, we can use a custom target
             # to implement the necessary dependencies to get files copied to the
             # build directory when their source files change.
             add_custom_target(${target}_tooling ALL
-                DEPENDS ${copied_files}
+                DEPENDS
+                    ${copied_files}
+                    ${generated_sources_other_scope}
             )
             add_dependencies(${target} ${target}_tooling)
         else()
@@ -1553,7 +1633,10 @@ function(qt6_target_qml_sources target)
                 add_library(${target}_tooling INTERFACE)
                 add_dependencies(${target} ${target}_tooling)
             endif()
-            target_sources(${target}_tooling PRIVATE ${copied_files})
+            target_sources(${target}_tooling PRIVATE
+                ${copied_files}
+                ${generated_sources_other_scope}
+            )
         endif()
     endif()
 
@@ -1575,16 +1658,20 @@ function(qt6_target_qml_sources target)
     set_target_properties(${target} PROPERTIES QT_QML_MODULE_RAW_QML_SETS ${counter})
     list(APPEND output_targets ${resource_targets})
 
-    if(arg_OUTPUT_TARGETS AND output_targets)
+    if(arg_OUTPUT_TARGETS)
         set(${arg_OUTPUT_TARGETS} ${output_targets} PARENT_SCOPE)
     endif()
 
 endfunction()
 
 if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
-    macro(qt_target_qml_sources)
+    function(qt_target_qml_sources)
         qt6_target_qml_sources(${ARGV})
-    endmacro()
+        cmake_parse_arguments(PARSE_ARGV 1 arg  "" "OUTPUT_TARGETS" "")
+        if(arg_OUTPUT_TARGETS)
+            set(${arg_OUTPUT_TARGETS} ${${arg_OUTPUT_TARGETS}} PARENT_SCOPE)
+        endif()
+    endfunction()
 endif()
 
 # target: Expected to be the backing target for a qml module. Certain target
@@ -1811,6 +1898,16 @@ function(_qt_internal_qml_type_registration target)
         SKIP_AUTOGEN ON
         ${additional_source_files_properties}
     )
+    if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.18")
+        set_source_files_properties(
+            ${type_registration_cpp_file}
+            TARGET_DIRECTORY ${target}
+            PROPERTIES
+                SKIP_AUTOGEN TRUE
+                GENERATED TRUE
+                ${additional_source_files_properties}
+        )
+    endif()
 
     target_include_directories(${target} PRIVATE
         $<TARGET_PROPERTY:${QT_CMAKE_EXPORT_NAMESPACE}::QmlPrivate,INTERFACE_INCLUDE_DIRECTORIES>
@@ -1850,7 +1947,7 @@ function(qt6_import_qml_plugins target)
     set_target_properties(${target} PROPERTIES _QT_QML_PLUGINS_IMPORTED TRUE)
 
     set(options)
-    set(oneValueArgs "PATH_TO_SCAN")
+    set(oneValueArgs "PATH_TO_SCAN")   # Internal option, may be removed
     set(multiValueArgs)
 
     cmake_parse_arguments(arg "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
@@ -2027,13 +2124,13 @@ but this file does not exist.  Possible reasons include:
 endfunction()
 
 if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
-    macro(qt_import_qml_plugins)
+    function(qt_import_qml_plugins)
         if(QT_DEFAULT_MAJOR_VERSION EQUAL 5)
             qt5_import_qml_plugins(${ARGV})
         elseif(QT_DEFAULT_MAJOR_VERSION EQUAL 6)
             qt6_import_qml_plugins(${ARGV})
         endif()
-    endmacro()
+    endfunction()
 endif()
 
 function(_qt_internal_add_static_qml_plugin_dependencies plugin_target backing_target)

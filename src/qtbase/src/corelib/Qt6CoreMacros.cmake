@@ -164,13 +164,13 @@ function(qt6_generate_moc infile outfile )
 endfunction()
 
 if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
-    macro(qt_generate_moc)
+    function(qt_generate_moc)
         if(QT_DEFAULT_MAJOR_VERSION EQUAL 5)
             qt5_generate_moc(${ARGV})
         elseif(QT_DEFAULT_MAJOR_VERSION EQUAL 6)
             qt6_generate_moc(${ARGV})
         endif()
-    endmacro()
+    endfunction()
 endif()
 
 
@@ -203,13 +203,14 @@ endfunction()
 
 # This will override the CMake upstream command, because that one is for Qt 3.
 if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
-    macro(qt_wrap_cpp)
+    function(qt_wrap_cpp outfiles)
         if(QT_DEFAULT_MAJOR_VERSION EQUAL 5)
-            qt5_wrap_cpp(${ARGV})
+            qt5_wrap_cpp("${outfiles}" ${ARGN})
         elseif(QT_DEFAULT_MAJOR_VERSION EQUAL 6)
-            qt6_wrap_cpp(${ARGV})
+            qt6_wrap_cpp("${outfiles}" ${ARGN})
         endif()
-    endmacro()
+        set("${outfiles}" "${${outfiles}}" PARENT_SCOPE)
+    endfunction()
 endif()
 
 
@@ -290,13 +291,13 @@ function(qt6_add_binary_resources target )
 endfunction()
 
 if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
-    macro(qt_add_binary_resources)
+    function(qt_add_binary_resources)
         if(QT_DEFAULT_MAJOR_VERSION EQUAL 5)
             qt5_add_binary_resources(${ARGV})
         elseif(QT_DEFAULT_MAJOR_VERSION EQUAL 6)
             qt6_add_binary_resources(${ARGV})
         endif()
-    endmacro()
+    endfunction()
 endif()
 
 
@@ -348,13 +349,21 @@ function(qt6_add_resources outfiles )
 endfunction()
 
 if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
-    macro(qt_add_resources)
+    function(qt_add_resources outfiles)
         if(QT_DEFAULT_MAJOR_VERSION EQUAL 5)
-            qt5_add_resources(${ARGV})
+            qt5_add_resources("${outfiles}" ${ARGN})
         elseif(QT_DEFAULT_MAJOR_VERSION EQUAL 6)
-            qt6_add_resources(${ARGV})
+            qt6_add_resources("${outfiles}" ${ARGN})
         endif()
-    endmacro()
+        if(TARGET ${outfiles})
+            cmake_parse_arguments(PARSE_ARGV 1 arg "" "OUTPUT_TARGETS" "")
+            if (arg_OUTPUT_TARGETS)
+                set(${arg_OUTPUT_TARGETS} ${${arg_OUTPUT_TARGETS}} PARENT_SCOPE)
+            endif()
+        else()
+            set("${outfiles}" "${${outfiles}}" PARENT_SCOPE)
+        endif()
+    endfunction()
 endif()
 
 
@@ -423,13 +432,14 @@ function(qt6_add_big_resources outfiles )
 endfunction()
 
 if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
-    macro(qt_add_big_resources)
+    function(qt_add_big_resources outfiles)
         if(QT_DEFAULT_MAJOR_VERSION EQUAL 5)
-            qt5_add_big_resources(${ARGV})
+            qt5_add_big_resources(${outfiles} ${ARGN})
         elseif(QT_DEFAULT_MAJOR_VERSION EQUAL 6)
-            qt6_add_big_resources(${ARGV})
+            qt6_add_big_resources(${outfiles} ${ARGN})
         endif()
-    endmacro()
+        set("${outfiles}" "${${outfiles}}" PARENT_SCOPE)
+    endfunction()
 endif()
 
 function(_qt_internal_apply_win_prefix_and_suffix target)
@@ -662,6 +672,8 @@ function(_qt_internal_find_ios_development_team_id out_var)
         string(STRIP "${team_id}" team_id)
         set_property(GLOBAL PROPERTY _qt_internal_ios_development_team_id "${team_id}")
         set("${out_var}" "${team_id}" PARENT_SCOPE)
+    else()
+        set("${out_var}" "" PARENT_SCOPE)
     endif()
 endfunction()
 
@@ -699,6 +711,8 @@ function(_qt_internal_get_ios_bundle_identifier_prefix out_var)
     if(prefix AND NOT prefix_error)
         set_property(GLOBAL PROPERTY _qt_internal_ios_bundle_identifier_prefix "${prefix}")
         set("${out_var}" "${prefix}" PARENT_SCOPE)
+    else()
+        set("${out_var}" "" PARENT_SCOPE)
     endif()
 endfunction()
 
@@ -773,17 +787,17 @@ function(_qt_internal_finalize_ios_app target)
 endfunction()
 
 if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
-    macro(qt_add_executable)
+    function(qt_add_executable)
         qt6_add_executable(${ARGV})
-    endmacro()
-    macro(qt_finalize_target)
+    endfunction()
+    function(qt_finalize_target)
         qt6_finalize_target(${ARGV})
-    endmacro()
+    endfunction()
 
     # Kept for compatibility with Qt Creator 4.15 wizards
-    macro(qt_finalize_executable)
+    function(qt_finalize_executable)
         qt6_finalize_target(${ARGV})
-    endmacro()
+    endfunction()
 endif()
 
 function(_qt_get_plugin_name_with_version target out_var)
@@ -893,13 +907,13 @@ function(qt6_import_plugins target)
 endfunction()
 
 if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
-    macro(qt_import_plugins)
+    function(qt_import_plugins)
         if(QT_DEFAULT_MAJOR_VERSION EQUAL 5)
             qt5_import_plugins(${ARGV})
         elseif(QT_DEFAULT_MAJOR_VERSION EQUAL 6)
             qt6_import_plugins(${ARGV})
         endif()
-    endmacro()
+    endfunction()
 endif()
 
 # This function is currently in Technical Preview. It's signature may change or be removed entirely.
@@ -946,9 +960,9 @@ function(qt6_set_finalizer_mode target)
 endfunction()
 
 if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
-    macro(qt_set_finalizer_mode)
+    function(qt_set_finalizer_mode)
         qt6_set_finalizer_mode(${ARGV})
-    endmacro()
+    endfunction()
 endif()
 
 # Extracts metatypes from a Qt target and generates a metatypes.json for it.
@@ -1169,13 +1183,24 @@ function(qt6_extract_metatypes target)
         COMMENT "Running moc --collect-json for target ${target}"
     )
 
+    # We can't rely on policy CMP0118 since user project controls it
+    set(scope_args)
+    if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.18")
+        set(scope_args TARGET_DIRECTORY ${target})
+    endif()
+    set_source_files_properties(${metatypes_file_gen} ${metatypes_file}  ${scope_args}
+        PROPERTIES GENERATED TRUE
+    )
+
     # We still need to add this file as a source of the target, otherwise the file
     # rule above is not triggered. INTERFACE_SOURCES do not properly register
     # as dependencies to build the current target.
     # TODO: Can we pass ${metatypes_file} instead of ${metatypes_file_gen} as a source?
     # TODO: Do we still need the _gen variant at all?
     target_sources(${target} PRIVATE ${metatypes_file_gen})
-    set_source_files_properties(${metatypes_file} PROPERTIES HEADER_FILE_ONLY TRUE)
+    set_source_files_properties(${metatypes_file} ${scope_args}
+        PROPERTIES HEADER_FILE_ONLY TRUE
+    )
 
     set_target_properties(${target} PROPERTIES
         INTERFACE_QT_MODULE_HAS_META_TYPES YES
@@ -1190,7 +1215,7 @@ function(qt6_extract_metatypes target)
     target_sources(${target} INTERFACE ${metatypes_file_genex_build})
 
     if(arg_OUTPUT_FILES)
-        set(${arg_OUTPUT_FILES} "${metatypes_file}")
+        set(${arg_OUTPUT_FILES} "${metatypes_file}" PARENT_SCOPE)
     endif()
 
     # Chech whether the generated json file needs to be installed.
@@ -1227,9 +1252,13 @@ function(qt6_extract_metatypes target)
 endfunction()
 
 if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
-    macro(qt_extract_metatypes)
+    function(qt_extract_metatypes)
         qt6_extract_metatypes(${ARGV})
-    endmacro()
+        cmake_parse_arguments(PARSE_ARGV 0 arg "" "OUTPUT_FILES" "")
+        if(arg_OUTPUT_FILES)
+            set(${arg_OUTPUT_FILES} "${${arg_OUTPUT_FILES}}" PARENT_SCOPE)
+        endif()
+    endfunction()
 endif()
 
 # Generate Win32 RC files for a target. All entries in the RC file are generated
@@ -1441,6 +1470,11 @@ END
             target_link_libraries(${target} PRIVATE $<TARGET_OBJECTS:${target}_rc>)
         endif()
 
+        set(scope_args)
+        if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.18")
+            set(scope_args TARGET_DIRECTORY ${end_target})
+        endif()
+
         while(outputs)
             list(POP_FRONT cfgs cfg)
             list(POP_FRONT outputs output)
@@ -1448,6 +1482,10 @@ END
             add_custom_command(OUTPUT "${output}"
                 DEPENDS "${input}"
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different "${input}" "${output}"
+            )
+            # We can't rely on policy CMP0118 since user project controls it
+            set_source_files_properties(${output} ${scope_args}
+                PROPERTIES GENERATED TRUE
             )
             target_sources(${end_target} PRIVATE "$<$<CONFIG:${cfg}>:${output}>")
         endwhile()
@@ -1700,6 +1738,12 @@ function(_qt_internal_process_resource target resourceName)
         endforeach()
     endif()
 
+    if(ANDROID)
+        if(COMMAND _qt_internal_collect_qml_root_paths)
+            _qt_internal_collect_qml_root_paths(${target} ${resource_files})
+        endif()
+    endif()
+
     if(NOT rcc_PREFIX)
         get_target_property(rcc_PREFIX ${target} QT_RESOURCE_PREFIX)
         if (NOT rcc_PREFIX)
@@ -1713,8 +1757,7 @@ function(_qt_internal_process_resource target resourceName)
         endif()
         return()
     endif()
-    set(generatedBaseName "${resourceName}")
-    set(generatedResourceFile "${CMAKE_CURRENT_BINARY_DIR}/.rcc/${generatedBaseName}.qrc")
+    set(generatedResourceFile "${CMAKE_CURRENT_BINARY_DIR}/.rcc/${resourceName}.qrc")
 
     # Generate .qrc file:
 
@@ -1781,7 +1824,7 @@ function(_qt_internal_process_resource target resourceName)
 
     # Set output file name for rcc command
     if(isBinary)
-        set(generatedOutfile "${CMAKE_CURRENT_BINARY_DIR}/${generatedBaseName}.rcc")
+        set(generatedOutfile "${CMAKE_CURRENT_BINARY_DIR}/${resourceName}.rcc")
         if(rcc_DESTINATION)
             # Add .rcc suffix if it's not specified by user
             get_filename_component(destinationRccExt "${rcc_DESTINATION}" LAST_EXT)
@@ -1810,9 +1853,26 @@ function(_qt_internal_process_resource target resourceName)
     set(output_targets "")
     if(isBinary)
         # Add generated .rcc target to 'all' set
-        add_custom_target(binary_resource_${generatedBaseName} ALL DEPENDS "${generatedOutfile}")
+        add_custom_target(binary_resource_${resourceName} ALL DEPENDS "${generatedOutfile}")
     else()
-        set_property(SOURCE "${generatedOutfile}" PROPERTY SKIP_AUTOGEN ON)
+        # We can't rely on policy CMP0118 since user project controls it.
+        # We also want SKIP_AUTOGEN known in the target's scope, where we can.
+        set(scope_args)
+        if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.18")
+            set(scope_args TARGET_DIRECTORY ${target})
+        endif()
+        set_source_files_properties(${generatedOutfile} ${scope_args} PROPERTIES
+            SKIP_AUTOGEN TRUE
+            GENERATED TRUE
+        )
+        get_target_property(target_source_dir ${target} SOURCE_DIR)
+        if(NOT target_source_dir STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+            # We have to create a separate target in this scope that depends on
+            # the generated file, otherwise the original target won't have the
+            # required dependencies in place to ensure correct build order.
+            add_custom_target(${target}_${resourceName} DEPENDS ${generatedOutfile})
+            add_dependencies(${target} ${target}_${resourceName})
+        endif()
         set_property(TARGET ${target} APPEND PROPERTY _qt_generated_qrc_files "${generatedResourceFile}")
 
         __qt_propagate_generated_resource(${target} ${resourceName} "${generatedOutfile}" output_targets)
@@ -1966,6 +2026,10 @@ function(qt6_add_plugin target)
         if(NOT arg___QT_INTERNAL_NO_PROPAGATE_PLUGIN_INITIALIZER)
             __qt_internal_propagate_object_library("${target}" "${plugin_init_target}")
         endif()
+    else()
+        if(arg_OUTPUT_TARGETS)
+            set(${arg_OUTPUT_TARGETS} "" PARENT_SCOPE)
+        endif()
     endif()
 
     target_compile_definitions(${target} PRIVATE
@@ -1975,9 +2039,13 @@ function(qt6_add_plugin target)
 endfunction()
 
 if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
-    macro(qt_add_plugin)
+    function(qt_add_plugin)
         qt6_add_plugin(${ARGV})
-    endmacro()
+        cmake_parse_arguments(PARSE_ARGV 1 arg "" "OUTPUT_TARGETS" "")
+        if(arg_OUTPUT_TARGETS)
+            set(${arg_OUTPUT_TARGETS} ${${arg_OUTPUT_TARGETS}} PARENT_SCOPE)
+        endif()
+    endfunction()
 endif()
 
 # Creates a library by forwarding arguments to add_library, applies some Qt naming file name naming
@@ -2077,9 +2145,9 @@ function(_qt_internal_add_library target)
 endfunction()
 
 if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
-    macro(qt_add_library)
+    function(qt_add_library)
         qt6_add_library(${ARGV})
-    endmacro()
+    endfunction()
 endif()
 
 # By default Qt6 forces usage of utf8 sources for consumers of Qt.
@@ -2090,9 +2158,9 @@ function(qt6_allow_non_utf8_sources target)
 endfunction()
 
 if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
-    macro(qt_allow_non_utf8_sources)
+    function(qt_allow_non_utf8_sources)
         qt6_allow_non_utf8_sources(${ARGV})
-    endmacro()
+    endfunction()
 endif()
 
 function(_qt_internal_apply_strict_cpp target)
@@ -2190,7 +2258,7 @@ function(qt6_disable_unicode_defines target)
 endfunction()
 
 if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
-    macro(qt_disable_unicode_defines)
+    function(qt_disable_unicode_defines)
         qt6_disable_unicode_defines(${ARGV})
-    endmacro()
+    endfunction()
 endif()

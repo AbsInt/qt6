@@ -171,7 +171,7 @@ struct Options
     QString inputFileName;
     QString applicationBinary;
     QString applicationArguments;
-    QString rootPath;
+    std::vector<QString> rootPaths;
     QString rccBinaryPath;
     QString depFilePath;
     QString buildDirectory;
@@ -395,7 +395,7 @@ void deleteMissingFiles(const Options &options, const QDir &srcDir, const QDir &
         for (const QFileInfo &src : srcEntries)
             if (dst.fileName() == src.fileName()) {
                 if (dst.isDir())
-                    deleteMissingFiles(options, src.absoluteFilePath(), dst.absoluteFilePath());
+                    deleteMissingFiles(options, src.absoluteDir(), dst.absoluteDir());
                 found = true;
                 break;
             }
@@ -1030,8 +1030,17 @@ bool readInputFile(Options *options)
 
     {
         const QJsonValue qmlRootPath = jsonObject.value(QLatin1String("qml-root-path"));
-        if (!qmlRootPath.isUndefined())
-            options->rootPath = qmlRootPath.toString();
+        if (qmlRootPath.isString()) {
+            options->rootPaths.push_back(qmlRootPath.toString());
+        } else if (qmlRootPath.isArray()) {
+            auto qmlRootPaths = qmlRootPath.toArray();
+            for (auto path : qmlRootPaths) {
+                if (path.isString())
+                    options->rootPaths.push_back(path.toString());
+            }
+        } else {
+            options->rootPaths.push_back(options->inputFileName);
+        }
     }
 
     {
@@ -1151,16 +1160,17 @@ void cleanTopFolders(const Options &options, const QDir &srcDir, const QString &
     const auto dirs = srcDir.entryInfoList(QDir::NoDotAndDotDot | QDir::Dirs);
     for (const QFileInfo &dir : dirs) {
         if (dir.fileName() != QLatin1String("libs"))
-            deleteMissingFiles(options, dir.absoluteFilePath(), dstDir + dir.fileName());
+            deleteMissingFiles(options, dir.absoluteDir(), QDir(dstDir + dir.fileName()));
     }
 }
 
 void cleanAndroidFiles(const Options &options)
 {
     if (!options.androidSourceDirectory.isEmpty())
-        cleanTopFolders(options, options.androidSourceDirectory, options.outputDirectory);
+        cleanTopFolders(options, QDir(options.androidSourceDirectory), options.outputDirectory);
 
-    cleanTopFolders(options, options.qtInstallDirectory + QLatin1String("/src/android/templates"), options.outputDirectory);
+    cleanTopFolders(options, QDir(options.qtInstallDirectory + QLatin1String("/src/android/templates")),
+                    options.outputDirectory);
 }
 
 bool copyAndroidTemplate(const Options &options, const QString &androidTemplate, const QString &outDirPrefix = QString())
@@ -1671,7 +1681,8 @@ bool readAndroidDependencyXml(Options *options,
                     QString file = reader.attributes().value(QLatin1String("file")).toString();
 
                     // Special case, since this is handled by qmlimportscanner instead
-                    if (!options->rootPath.isEmpty() && (file == QLatin1String("qml") || file == QLatin1String("qml/")))
+                    if (!options->rootPaths.empty()
+                        && (file == QLatin1String("qml") || file == QLatin1String("qml/")))
                         continue;
 
                     const QList<QtDependency> fileNames = findFilesRecursively(*options, file);
@@ -1849,6 +1860,7 @@ QString defaultLibexecDir()
 }
 
 bool goodToCopy(const Options *options, const QString &file, QStringList *unmetDependencies);
+bool checkQmlFileInRootPaths(const Options *options, const QString &absolutePath);
 
 bool scanImports(Options *options, QSet<QString> *usedDependencies)
 {
@@ -1863,16 +1875,6 @@ bool scanImports(Options *options, QSet<QString> *usedDependencies)
 #if defined(Q_OS_WIN32)
     qmlImportScanner += QLatin1String(".exe");
 #endif
-
-    QString rootPath = options->rootPath;
-
-    if (rootPath.isEmpty())
-        rootPath = QFileInfo(options->inputFileName).absolutePath();
-    else
-        rootPath = QFileInfo(rootPath).absoluteFilePath();
-
-    if (!rootPath.endsWith(QLatin1Char('/')))
-        rootPath += QLatin1Char('/');
 
     QStringList importPaths;
     importPaths += shellQuote(options->qtInstallDirectory + QLatin1String("/qml"));
@@ -1914,11 +1916,18 @@ bool scanImports(Options *options, QSet<QString> *usedDependencies)
         return true;
     }
 
-    // After checking for qml folder imports we can add rootPath
-    if (!rootPath.isEmpty())
-        importPaths += shellQuote(rootPath);
+    for (auto rootPath : options->rootPaths) {
+        rootPath = QFileInfo(rootPath).absoluteFilePath();
 
-    qmlImportScanner += QLatin1String(" -rootPath %1").arg(shellQuote(rootPath));
+        if (!rootPath.endsWith(QLatin1Char('/')))
+            rootPath += QLatin1Char('/');
+
+        // After checking for qml folder imports we can add rootPath
+        if (!rootPath.isEmpty())
+            importPaths += shellQuote(rootPath);
+
+        qmlImportScanner += QLatin1String(" -rootPath %1").arg(shellQuote(rootPath));
+    }
 
     if (!options->qrcFiles.isEmpty()) {
         qmlImportScanner += QLatin1String(" -qrcFiles");
@@ -1980,7 +1989,7 @@ bool scanImports(Options *options, QSet<QString> *usedDependencies)
             if (!absolutePath.endsWith(QLatin1Char('/')))
                 absolutePath += QLatin1Char('/');
 
-            if (absolutePath.startsWith(rootPath)) {
+            if (checkQmlFileInRootPaths(options, absolutePath)) {
                 if (options->verbose)
                     fprintf(stdout, "    -- Skipping because path is in QML root path.\n");
                 continue;
@@ -2033,6 +2042,15 @@ bool scanImports(Options *options, QSet<QString> *usedDependencies)
     }
 
     return true;
+}
+
+bool checkQmlFileInRootPaths(const Options *options, const QString &absolutePath)
+{
+    for (auto rootPath : options->rootPaths) {
+        if (absolutePath.startsWith(rootPath))
+            return true;
+    }
+    return false;
 }
 
 bool runCommand(const Options &options, const QString &command)
@@ -2161,7 +2179,7 @@ bool readDependencies(Options *options)
         }
     }
 
-    if ((!options->rootPath.isEmpty() || options->qrcFiles.isEmpty()) &&
+    if ((!options->rootPaths.empty() || options->qrcFiles.isEmpty()) &&
         !scanImports(options, &usedDependencies))
         return false;
 

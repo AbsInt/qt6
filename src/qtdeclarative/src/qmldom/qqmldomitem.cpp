@@ -1927,14 +1927,23 @@ MutableDomItem DomItem::makeCopy(DomItem::CopyOption option)
         return MutableDomItem(newItem.path(pathFromOwner()));
     }
     DomItem env = environment();
-    std::shared_ptr<DomEnvironment> envPtr = env.ownerAs<DomEnvironment>();
-    Q_ASSERT(envPtr);
-    std::shared_ptr<DomEnvironment> newEnvPtr(
-            new DomEnvironment(envPtr, envPtr->loadPaths(), envPtr->options()));
-    DomBase *eBase = envPtr.get();
-    if (std::holds_alternative<DomEnvironment *>(m_element) && eBase
-        && std::get<DomEnvironment *>(m_element) == eBase)
-        return MutableDomItem(DomItem(newEnvPtr));
+    std::shared_ptr<DomEnvironment> newEnvPtr;
+    if (std::shared_ptr<DomEnvironment> envPtr = env.ownerAs<DomEnvironment>()) {
+        newEnvPtr = std::shared_ptr<DomEnvironment>(
+                new DomEnvironment(envPtr, envPtr->loadPaths(), envPtr->options()));
+        DomBase *eBase = envPtr.get();
+        if (std::holds_alternative<DomEnvironment *>(m_element) && eBase
+            && std::get<DomEnvironment *>(m_element) == eBase)
+            return MutableDomItem(DomItem(newEnvPtr));
+    } else if (std::shared_ptr<DomUniverse> univPtr = top().ownerAs<DomUniverse>()) {
+        newEnvPtr = std::shared_ptr<DomEnvironment>(new DomEnvironment(
+                QStringList(),
+                DomEnvironment::Option::SingleThreaded | DomEnvironment::Option::NoDependencies,
+                univPtr));
+    } else {
+        Q_ASSERT(false);
+        return {};
+    }
     DomItem newItem = std::visit(
             [this, newEnvPtr, &o](auto &&el) {
                 auto copyPtr = el->makeCopy(o);
@@ -2279,21 +2288,23 @@ DomItem::DomItem(std::shared_ptr<DomUniverse> universePtr):
 }
 
 void DomItem::loadFile(QString canonicalFilePath, QString logicalPath, QString code,
-                       QDateTime codeDate, DomTop::Callback callback, LoadOptions loadOptions)
+                       QDateTime codeDate, DomTop::Callback callback, LoadOptions loadOptions,
+                       std::optional<DomType> fileType)
 {
     DomItem topEl = top();
     if (topEl.internalKind() == DomType::DomEnvironment
         || topEl.internalKind() == DomType::DomUniverse) {
         if (auto univ = topEl.ownerAs<DomUniverse>())
             univ->loadFile(*this, canonicalFilePath, logicalPath, code, codeDate, callback,
-                           loadOptions);
+                           loadOptions, fileType);
         else if (auto env = topEl.ownerAs<DomEnvironment>()) {
             if (env->options() & DomEnvironment::Option::NoDependencies)
                 env->loadFile(topEl, canonicalFilePath, logicalPath, code, codeDate, callback,
-                              DomTop::Callback(), DomTop::Callback(), loadOptions);
+                              DomTop::Callback(), DomTop::Callback(), loadOptions, fileType);
             else
                 env->loadFile(topEl, canonicalFilePath, logicalPath, code, codeDate,
-                              DomTop::Callback(), DomTop::Callback(), callback, loadOptions);
+                              DomTop::Callback(), DomTop::Callback(), callback, loadOptions,
+                              fileType);
         } else
             Q_ASSERT(false && "expected either DomUniverse or DomEnvironment cast to succeed");
     } else {
@@ -2303,7 +2314,7 @@ void DomItem::loadFile(QString canonicalFilePath, QString logicalPath, QString c
 }
 
 void DomItem::loadFile(QString filePath, QString logicalPath, DomTop::Callback callback,
-                       LoadOptions loadOptions)
+                       LoadOptions loadOptions, std::optional<DomType> fileType)
 {
     DomItem topEl = top();
     if (topEl.internalKind() == DomType::DomEnvironment
@@ -2313,10 +2324,10 @@ void DomItem::loadFile(QString filePath, QString logicalPath, DomTop::Callback c
         else if (auto env = topEl.ownerAs<DomEnvironment>()) {
             if (env->options() & DomEnvironment::Option::NoDependencies)
                 env->loadFile(topEl, filePath, logicalPath, callback, DomTop::Callback(),
-                              DomTop::Callback(), loadOptions);
+                              DomTop::Callback(), loadOptions, fileType);
             else
                 env->loadFile(topEl, filePath, logicalPath, DomTop::Callback(), DomTop::Callback(),
-                              callback, loadOptions);
+                              callback, loadOptions, fileType);
         } else
             Q_ASSERT(false && "expected either DomUniverse or DomEnvironment cast to succeed");
     } else {
@@ -2727,26 +2738,28 @@ DomItem Reference::get(DomItem &self, ErrorHandler h, QList<Path> *visitedRefs) 
         Path cachedPath;
         if (shouldCache()) {
             env = self.environment();
-            selfPath = self.canonicalPath();
-            RefCacheEntry cached = RefCacheEntry::forPath(self, selfPath);
-            switch (cached.cached) {
-            case RefCacheEntry::Cached::None:
-                break;
-            case RefCacheEntry::Cached::First:
-            case RefCacheEntry::Cached::All:
-                if (!cached.canonicalPaths.isEmpty())
-                    cachedPath = cached.canonicalPaths.first();
-                else
-                    return res;
-                break;
-            }
-            if (cachedPath) {
-                res = env.path(cachedPath);
-                if (!res)
-                    qCWarning(refLog) << "referenceCache outdated, reference at " << selfPath
-                                      << " leads to invalid path " << cachedPath;
-                else
-                    return res;
+            if (env) {
+                selfPath = self.canonicalPath();
+                RefCacheEntry cached = RefCacheEntry::forPath(self, selfPath);
+                switch (cached.cached) {
+                case RefCacheEntry::Cached::None:
+                    break;
+                case RefCacheEntry::Cached::First:
+                case RefCacheEntry::Cached::All:
+                    if (!cached.canonicalPaths.isEmpty())
+                        cachedPath = cached.canonicalPaths.first();
+                    else
+                        return res;
+                    break;
+                }
+                if (cachedPath) {
+                    res = env.path(cachedPath);
+                    if (!res)
+                        qCWarning(refLog) << "referenceCache outdated, reference at " << selfPath
+                                          << " leads to invalid path " << cachedPath;
+                    else
+                        return res;
+                }
             }
         }
         QList<Path> visitedRefsLocal;
@@ -2972,12 +2985,10 @@ void OwningItem::addError(DomItem &, ErrorMessage msg)
 void OwningItem::addErrorLocal(ErrorMessage msg)
 {
     QMutexLocker l(mutex());
-    auto it = m_errors.constFind(msg.path);
-    while (it != m_errors.constEnd() && it->path == msg.path) {
-        if (*it++ == msg)
-            return;
-    }
-    m_errors.insert(msg.path, msg);
+    quint32 &c = m_errorsCounts[msg];
+    c += 1;
+    if (c == 1)
+        m_errors.insert(msg.path, msg);
 }
 
 void OwningItem::clearErrors(ErrorGroups groups)

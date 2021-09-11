@@ -1593,6 +1593,7 @@ void QMessageBox::showEvent(QShowEvent *e)
     }
     if (d->detailsButton)
         addButton(d->detailsButton, QMessageBox::ActionRole);
+    d->clickedButton = nullptr;
     d->detectEscapeButton();
     d->updateSize();
 
@@ -1829,6 +1830,7 @@ void QMessageBox::about(QWidget *parent, const QString &title, const QString &te
 #else
     msgBox->d_func()->buttonBox->setCenterButtons(true);
 #endif
+    msgBox->setModal(false);
     msgBox->show();
 #else
     msgBox->exec();
@@ -1914,6 +1916,7 @@ void QMessageBox::aboutQt(QWidget *parent, const QString &title)
 #else
     msgBox->d_func()->buttonBox->setCenterButtons(true);
 #endif
+    msgBox->setModal(false);
     msgBox->show();
 #else
     msgBox->exec();

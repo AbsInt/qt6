@@ -1,9 +1,9 @@
 /****************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
-** This file is part of the demonstration applications of the Qt Toolkit.
+** This file is part of the examples of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:BSD$
 ** Commercial License Usage
@@ -48,38 +48,22 @@
 **
 ****************************************************************************/
 
-import QtQuick 2.0
+import QtQuick
+import "itemCreation.js" as Code
 
-FocusScope {
-    id: root
+Image {
+    id: paletteItem
 
-    width: 100
-    height: 30
+    property string componentFile
+    property string image
 
-    property Item nextInFocus;
-    property string label;
+    source: image
 
-    Rectangle {
-        anchors.margins: 2
+    MouseArea {
         anchors.fill: parent
-        radius: 8
-        gradient: Gradient {
-            GradientStop { position: 0; color: "lightgray" }
-            GradientStop { position: 1; color: "white" }
-        }
-        border.color: "white"
-        border.width: 2
-        antialiasing: true
 
-        TextInput {
-            anchors.fill: parent
-            verticalAlignment: Text.AlignVCenter
-            horizontalAlignment: Text.AlignHCenter
-            focus: true
-
-            text: root.label;
-
-            KeyNavigation.tab: root.nextInFocus;
-        }
+        onPressed: (mouse)=> Code.startDrag(mouse);
+        onPositionChanged: (mouse)=> Code.continueDrag(mouse);
+        onReleased: (mouse)=> Code.endDrag(mouse);
     }
 }

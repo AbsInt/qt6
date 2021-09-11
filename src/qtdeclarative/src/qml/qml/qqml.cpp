@@ -916,7 +916,8 @@ QMetaType AOTCompiledContext::lookupResultMetaType(uint index) const
     if (l->qmlContextPropertyGetter == QV4::QQmlContextWrapper::lookupScopeObjectProperty
             || l->qmlContextPropertyGetter == QV4::QQmlContextWrapper::lookupContextObjectProperty
             || l->getter == QV4::QQmlTypeWrapper::lookupSingletonProperty
-            || l->getter == QV4::QObjectWrapper::lookupGetter) {
+            || l->getter == QV4::QObjectWrapper::lookupGetter
+            || l->setter == QV4::QObjectWrapper::lookupSetter) {
         return l->qobjectLookup.propertyData->propType();
     } else if (l->getter == QV4::QQmlValueTypeWrapper::lookupGetter) {
         return QMetaType(l->qgadgetLookup.metaType);
@@ -940,8 +941,19 @@ void AOTCompiledContext::storeNameSloppy(uint nameIndex, void *value, QMetaType 
     QV4::Lookup l;
     l.clear();
     l.nameIndex = nameIndex;
-    if (initObjectLookup(this, &l, qmlScopeObject, type)) {
-        switch (storeObjectProperty(&l, qmlScopeObject, value)) {
+    if (initObjectLookup(this, &l, qmlScopeObject, QMetaType())) {
+
+        ObjectPropertyResult storeResult;
+        const QMetaType propType = l.qobjectLookup.propertyData->propType();
+        if (type == propType) {
+            storeResult = storeObjectProperty(&l, qmlScopeObject, value);
+        } else {
+            QVariant var(propType);
+            propType.convert(type, value, propType, var.data());
+            storeResult = storeObjectProperty(&l, qmlScopeObject, var.data());
+        }
+
+        switch (storeResult) {
         case ObjectPropertyResult::NeedsInit:
             engine->handle()->throwTypeError();
             break;

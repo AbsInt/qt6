@@ -3002,6 +3002,7 @@ QRhiResource::Type QRhiTextureRenderTarget::resourceType() const
 QRhiShaderResourceBindings::QRhiShaderResourceBindings(QRhiImplementation *rhi)
     : QRhiResource(rhi)
 {
+    m_layoutDesc.reserve(BINDING_PREALLOC * QRhiShaderResourceBinding::LAYOUT_DESC_ENTRIES_PER_BINDING);
 }
 
 /*!
@@ -3024,8 +3025,12 @@ QRhiResource::Type QRhiShaderResourceBindings::resourceType() const
     then safely be passed to QRhiCommandBuffer::setShaderResources(), and so
     be used with the pipeline in place of this QRhiShaderResourceBindings.
 
-    This function can be called before create() as well. The bindings must
-    already be set via setBindings() however.
+    \note This function must only be called after a successful create(), because
+    it relies on data generated during the baking of the underlying data
+    structures. This way the function can implement a comparison approach that
+    is more efficient than iterating through two binding lists and calling
+    QRhiShaderResourceBinding::isLayoutCompatible() on each pair. This becomes
+    relevant especially when this function is called at a high frequency.
  */
 bool QRhiShaderResourceBindings::isLayoutCompatible(const QRhiShaderResourceBindings *other) const
 {
@@ -3048,11 +3053,12 @@ void QRhiImplementation::updateLayoutDesc(QRhiShaderResourceBindings *srb)
 {
     srb->m_layoutDescHash = 0;
     srb->m_layoutDesc.clear();
+    auto layoutDescAppender = std::back_inserter(srb->m_layoutDesc);
     for (const QRhiShaderResourceBinding &b : qAsConst(srb->m_bindings)) {
         const QRhiShaderResourceBinding::Data *d = b.data();
-        // must match QRhiShaderResourceBinding::isLayoutCompatible()
-        srb->m_layoutDescHash ^= uint(d->binding) ^ uint(d->stage) ^ uint(d->type);
-        srb->m_layoutDesc << uint(d->binding) << uint(d->stage) << uint(d->type);
+        srb->m_layoutDescHash ^= uint(d->binding) ^ uint(d->stage) ^ uint(d->type)
+            ^ uint(d->type == QRhiShaderResourceBinding::SampledTexture ? d->u.stex.count : 1);
+        layoutDescAppender = d->serialize(layoutDescAppender);
     }
 }
 
@@ -3116,7 +3122,10 @@ void QRhiImplementation::updateLayoutDesc(QRhiShaderResourceBindings *srb)
  */
 bool QRhiShaderResourceBinding::isLayoutCompatible(const QRhiShaderResourceBinding &other) const
 {
-    return d.binding == other.d.binding && d.stage == other.d.stage && d.type == other.d.type;
+    // i.e. everything that goes into a VkDescriptorSetLayoutBinding must match
+    const int thisCount = d.type == QRhiShaderResourceBinding::SampledTexture ? d.u.stex.count : 1;
+    const int otherCount = other.d.type == QRhiShaderResourceBinding::SampledTexture ? other.d.u.stex.count : 1;
+    return d.binding == other.d.binding && d.stage == other.d.stage && d.type == other.d.type && thisCount == otherCount;
 }
 
 /*!
@@ -5610,6 +5619,13 @@ void QRhiCommandBuffer::setGraphicsPipeline(QRhiGraphicsPipeline *ps)
     back the QRhiBuffer, QRhiTexture, QRhiSampler objects referenced from \a
     srb. In this case setShaderResources() must be called even if \a srb is
     the same as in the last call.
+
+    When \a srb is not null, the QRhiShaderResourceBindings object the pipeline
+    was built with in create() is guaranteed to be not accessed in any form. In
+    fact, it does not need to be valid even at this point: destroying the
+    pipeline's associated srb after create() and instead explicitly specifying
+    another, \l{QRhiShaderResourceBindings::isLayoutCompatible()}{layout
+    compatible} one in every setShaderResources() call is valid.
 
     \a dynamicOffsets allows specifying buffer offsets for uniform buffers that
     were associated with \a srb via

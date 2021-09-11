@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2017 The Qt Company Ltd.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the examples of the Qt Toolkit.
@@ -47,13 +47,5 @@
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
-
-import QtQuick 2.0
-
-Image {
-    property bool created: false
-    property string image
-
-    source: image
-
-}
+#include "../../shared/shared.h"
+DECLARATIVE_EXAMPLE_MAIN(painteditem/textballoons)

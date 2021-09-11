@@ -1,9 +1,9 @@
 /****************************************************************************
 **
-** Copyright (C) 2017 The Qt Company Ltd.
+** Copyright (C) 2016 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
-** This file is part of the examples of the Qt Toolkit.
+** This file is part of the demonstration applications of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:BSD$
 ** Commercial License Usage
@@ -48,36 +48,12 @@
 **
 ****************************************************************************/
 
-import QtQuick 2.0
+#include <QQmlEngineExtensionPlugin>
 
+#include "textballoon.h"
 
-Rectangle {
-    id:rect
-    width: 350
-    height: 400
-
-    property alias button: button
-    property alias text: buttonText
-    property alias mouseArea: mouseArea
-    property alias msg: ttext
-
-    Text { id: ttext; anchors.fill: parent; anchors.margins: 10 }
-
-    Rectangle {
-        id: button
-        anchors.horizontalCenter: parent.horizontalCenter;
-        anchors.bottom: parent.bottom
-        anchors.margins: 10
-        width: buttonText.width + 10
-        height: buttonText.height + 10
-        radius : 5; antialiasing: true
-
-        Text { id: buttonText; anchors.centerIn: parent }
-
-        MouseArea {
-            id: mouseArea
-            anchors.fill: parent
-        }
-    }
-}
-
+class TextBalloonPlugin : public QQmlEngineExtensionPlugin
+{
+    Q_OBJECT
+    Q_PLUGIN_METADATA(IID QQmlEngineExtensionInterface_iid)
+};

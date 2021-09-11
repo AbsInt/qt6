@@ -198,6 +198,8 @@ function(__qt_internal_add_static_plugin_import_macro
     __qt_internal_propagate_object_library(
         "${QT_CMAKE_EXPORT_NAMESPACE}::${plugin_target}"
         "${plugin_init_target_namespaced}"
+        EXTRA_CONDITIONS
+            "$<NOT:$<BOOL:$<TARGET_PROPERTY:_qt_static_plugins_finalizer_mode>>>"
     )
 endfunction()
 
@@ -232,6 +234,11 @@ function(__qt_internal_add_static_plugin_init_object_library
         OUTPUT "${generated_qt_plugin_file_name}"
         CONTENT "${import_content}"
     )
+
+    # CMake versions earlier than 3.18.0 can't find the generated file for some reason,
+    # failing at generation phase.
+    # Explicitly marking the file as GENERATED fixes the issue.
+    set_source_files_properties("${generated_qt_plugin_file_name}" PROPERTIES GENERATED TRUE)
 
     __qt_internal_get_static_plugin_init_target_name("${plugin_target}" plugin_init_target)
 
