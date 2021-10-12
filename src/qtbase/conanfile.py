@@ -448,18 +448,26 @@ class QtBase(ConanFile):
         # as those probably differ on each machine
         rm_list = [
             "sdk",
-            "android_sdk_path",
-            "android_ndk_path",
+            "android_sdk",
+            "android_ndk",
             "android_ndk_platform",
             "android_abis",
             "android_javac_target",
             "android_javac_source",
             "qpa",
             "translationsdir",
+            "headersclean",
         ]
         for item in rm_list:
             if item in self.info.options:
                 delattr(self.info.options, item)
+        # filter also those cmake options that should not end up in the package_id
+        if hasattr(self.info.options, "cmake_args_qtbase"):
+            _filter = self.python_requires[
+                "qt-conan-common"
+            ].module.filter_cmake_args_for_package_id
+
+            self.info.options.cmake_args_qtbase = _filter(self.info.options.cmake_args_qtbase)
 
     def deploy(self):
         self.copy("*")  # copy from current package

@@ -28,11 +28,19 @@ target_link_libraries(painteditemexample PRIVATE
     Qt::Gui
     Qt::Qml
     Qt::Quick
-    qmltextballoon
 )
+add_dependencies(painteditemexample qmltextballoon)
 
 install(TARGETS painteditemexample
     RUNTIME DESTINATION "${INSTALL_EXAMPLEDIR}"
     BUNDLE DESTINATION "${INSTALL_EXAMPLEDIR}"
     LIBRARY DESTINATION "${INSTALL_EXAMPLEDIR}"
 )
+
+include(../../shared/QtBundleQmlModuleForMacOS.cmake)
+
+set(app_target "painteditemexample")
+set(qml_plugin_target "qmltextballoon")
+set(qml_module_uri "TextBalloon")
+add_qml_module_to_macos_app_bundle(
+    "${app_target}" "${qml_plugin_target}" "${qml_module_uri}")

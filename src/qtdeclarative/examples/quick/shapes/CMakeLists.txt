@@ -34,8 +34,8 @@ target_link_libraries(shapesexample PUBLIC
     Qt::Gui
     Qt::Qml
     Qt::Quick
-    shapes_shared
 )
+add_dependencies(shapesexample shapes_shared)
 
 qt_add_qml_module(shapesexample
     URI shapes

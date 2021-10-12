@@ -30,12 +30,14 @@
 #include <QtTest/QtTest>
 #include <QProcess>
 #include <QString>
-
-#include <util.h>
+#include <QtQuickTestUtils/private/qmlutils_p.h>
 
 class TestQmllint: public QQmlDataTest
 {
     Q_OBJECT
+
+public:
+    TestQmllint();
 
 private Q_SLOTS:
     void initTestCase() override;
@@ -68,6 +70,8 @@ private Q_SLOTS:
 
     void settingsFile();
 
+    void lazyAndDirect();
+
 private:
     QString runQmllint(const QString &fileToLint, std::function<void(QProcess &)> handleResult,
                        const QStringList &extraArgs = QStringList(), bool ignoreSettings = true);
@@ -78,6 +82,11 @@ private:
     QString m_qmljsrootgenPath;
     QString m_qmltyperegistrarPath;
 };
+
+TestQmllint::TestQmllint()
+    : QQmlDataTest(QT_QMLTEST_DATADIR)
+{
+}
 
 void TestQmllint::initTestCase()
 {
@@ -405,7 +414,7 @@ void TestQmllint::dirtyQmlCode_data()
             << false;
     QTest::newRow("nanchors1")
             << QStringLiteral("nanchors1.qml")
-            << QString()
+            << QString("unknown grouped property scope nanchors.")
             << QString()
             << false;
     QTest::newRow("nanchors2")
@@ -642,6 +651,11 @@ void TestQmllint::dirtyQmlCode_data()
     QTest::newRow("nestedInlineComponents")
             << QStringLiteral("nestedInlineComponents.qml")
             << QStringLiteral("Nested inline components are not supported") << QString() << false;
+    QTest::newRow("cachedDependency")
+            << QStringLiteral("cachedDependency.qml")
+            << QStringLiteral("Unused import at %1:1:1")
+            << QStringLiteral("Cannot assign binding of type QQuickItem to QObject")
+            << true;
 }
 
 void TestQmllint::dirtyQmlCode()
@@ -658,7 +672,6 @@ void TestQmllint::dirtyQmlCode()
         QVERIFY(process.waitForFinished());
         QCOMPARE(process.exitStatus(), QProcess::NormalExit);
         QEXPECT_FAIL("anchors3", "We don't see that QQuickItem cannot be assigned to QQuickAnchorLine", Abort);
-        QEXPECT_FAIL("nanchors1", "Invalid grouped properties are not always detected", Abort);
         QEXPECT_FAIL("TypePropertAccess", "We cannot discern between types and instances", Abort);
         QEXPECT_FAIL("badAttachedPropertyTypeString",
                      "Script bindings do not perform property type matching", Abort);
@@ -891,6 +904,11 @@ void TestQmllint::settingsFile()
     QVERIFY(runQmllint("settings/unusedImportWarning/unused.qml", false, QStringList(), false)
                     .contains(QStringLiteral("Warning: %1:2:1: Unused import at %1:2:1")
                                       .arg(testFile("settings/unusedImportWarning/unused.qml"))));
+}
+
+void TestQmllint::lazyAndDirect()
+{
+    QVERIFY(runQmllint("LazyAndDirect/Lazy.qml", true, {}, false).isEmpty());
 }
 
 QTEST_MAIN(TestQmllint)

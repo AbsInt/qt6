@@ -39,8 +39,6 @@
 #include <private/qqmlvmemetaobject_p.h>
 #include <private/qv4qmlcontext_p.h>
 #include "testtypes.h"
-#include "testhttpserver.h"
-#include "../../shared/util.h"
 #include <private/qv4functionobject_p.h>
 #include <private/qv4scopedvalue_p.h>
 #include <private/qv4jscall_p.h>
@@ -54,6 +52,8 @@
 #include <private/qqmlabstractbinding_p.h>
 #include <private/qqmlvaluetypeproxybinding_p.h>
 #include <QtCore/private/qproperty_p.h>
+#include <QtQuickTestUtils/private/qmlutils_p.h>
+#include <QtQuickTestUtils/private/testhttpserver_p.h>
 
 #ifdef Q_CC_MSVC
 #define NO_INLINE __declspec(noinline)
@@ -71,6 +71,9 @@ Static QML language issues are covered in qmllanguage
 class tst_qqmlecmascript : public QQmlDataTest
 {
     Q_OBJECT
+
+public:
+    tst_qqmlecmascript();
 
 private slots:
     void initTestCase() override;
@@ -306,6 +309,7 @@ private slots:
     void replaceBinding();
     void bindingBoundFunctions();
     void qpropertyAndQtBinding();
+    void qpropertyBindingReplacement();
     void deleteRootObjectInCreation();
     void onDestruction();
     void onDestructionViaGC();
@@ -418,6 +422,8 @@ private slots:
     void optionalChainNull();
 
     void asCast();
+    void functionNameInFunctionScope();
+
 private:
 //    static void propertyVarWeakRefCallback(v8::Persistent<v8::Value> object, void* parameter);
     static void verifyContextLifetime(const QQmlRefPointer<QQmlContextData> &ctxt);
@@ -441,6 +447,11 @@ static void gc(QQmlEngine &engine)
     QCoreApplication::processEvents();
 }
 
+
+tst_qqmlecmascript::tst_qqmlecmascript()
+    : QQmlDataTest(QT_QMLTEST_DATADIR)
+{
+}
 
 void tst_qqmlecmascript::initTestCase()
 {
@@ -7564,6 +7575,15 @@ void tst_qqmlecmascript::qpropertyAndQtBinding()
     QCOMPARE(root->complex.value(), 150);
 }
 
+void tst_qqmlecmascript::qpropertyBindingReplacement()
+{
+    QQmlEngine engine;
+    QQmlComponent c(&engine, testFileUrl("qpropertyBindingReplacement.qml"));
+    QScopedPointer<QObject> root(c.create());
+    QVERIFY(root);
+    QCOMPARE(root->objectName(), u"overwritten"_qs);
+}
+
 void tst_qqmlecmascript::deleteRootObjectInCreation()
 {
     QQmlEngine engine;
@@ -9823,6 +9843,80 @@ void tst_qqmlecmascript::asCast()
     QCOMPARE(qvariant_cast<QObject *>(root->property("rectangleAsObject")), rectangle);
     QCOMPARE(qvariant_cast<QObject *>(root->property("rectangleAsItem")), rectangle);
     QCOMPARE(qvariant_cast<QObject *>(root->property("rectangleAsRectangle")), rectangle);
+}
+
+void tst_qqmlecmascript::functionNameInFunctionScope()
+{
+    QJSEngine engine;
+    QJSValue result = engine.evaluate(R"(
+        var a = {};
+        var foo = function foo() {
+            return foo;
+        }
+        a.foo = foo();
+
+        function bar() {
+            bar = 2;
+        }
+        bar()
+        a.bar = bar;
+
+        var baz = function baz() {
+            baz = 3;
+        }
+        baz()
+        a.baz = baz;
+
+        var foo2 = function() {
+            return foo2;
+        }
+        a.foo2 = foo2();
+
+        var baz2 = function() {
+            baz2 = 3;
+        }
+        baz2()
+        a.baz2 = baz2;
+        a
+
+    )");
+
+    QVERIFY(!result.isError());
+    const QJSManagedValue m(result, &engine);
+
+    QVERIFY(m.property("foo").isCallable());
+    QCOMPARE(m.property("bar").toInt(), 2);
+    QVERIFY(m.property("baz").isCallable());
+    QVERIFY(m.property("foo2").isCallable());
+    QCOMPARE(m.property("baz2").toInt(), 3);
+
+    const QJSValue getterInClass = engine.evaluate(R"(
+        class Tester {
+            constructor () {
+                this.a = 1;
+                this.b = 1;
+            }
+
+            get sum() {
+                const sum = this.a + this.b;
+                return sum;
+            }
+        }
+    )");
+
+    QVERIFY(!getterInClass.isError());
+
+    const QJSValue innerName = engine.evaluate(R"(
+        const a = 2;
+        var b = function a() { return a };
+        ({a: a, b: b, c: b()})
+    )");
+
+    QVERIFY(!innerName.isError());
+    const QJSManagedValue m2(innerName, &engine);
+    QCOMPARE(m2.property("a").toInt(), 2);
+    QVERIFY(m2.property("b").isCallable());
+    QVERIFY(m2.property("c").isCallable());
 }
 
 QTEST_MAIN(tst_qqmlecmascript)

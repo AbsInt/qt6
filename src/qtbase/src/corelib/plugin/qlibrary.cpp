@@ -252,16 +252,29 @@ static bool findPatternUnloaded(const QString &library, QLibraryPrivate *lib)
     constexpr qint64 MaxMemoryMapSize =
             Q_INT64_C(1) << (sizeof(qsizetype) > 4 ? 40 : 29);
 
-    QByteArray data;
     qsizetype fdlen = qMin(file.size(), MaxMemoryMapSize);
     const char *filedata = reinterpret_cast<char *>(file.map(0, fdlen));
 
+#ifdef Q_OS_UNIX
     if (filedata == nullptr) {
-        // Try reading the data into memory instead (up to 64 MB).
+        // If we can't mmap(), then the dynamic loader won't be able to either.
+        // This can't be used as a plugin.
+        if (qt_debug_component())
+            qWarning("%s: failed to map to memory: %ls", QFile::encodeName(library).constData(),
+                     qUtf16Printable(file.errorString()));
+        return false;
+    }
+#else
+    QByteArray data;
+    if (filedata == nullptr) {
+        // It's unknown at this point whether Windows supports LoadLibrary() on
+        // files that fail to CreateFileMapping / MapViewOfFile, so we err on
+        // the side of doing a regular read into memory (up to 64 MB).
         data = file.read(64 * 1024 * 1024);
         filedata = data.constData();
         fdlen = data.size();
     }
+#endif
 
     /*
        ELF and Mach-O binaries with GCC have .qplugin sections.
@@ -272,7 +285,7 @@ static bool findPatternUnloaded(const QString &library, QLibraryPrivate *lib)
     pattern[0] = 'Q'; // Ensure the pattern "QTMETADATA" is not found in this library should QPluginLoader ever encounter it.
     const ulong plen = ulong(qstrlen(pattern));
 #if defined (Q_OF_ELF) && defined(Q_CC_GNU)
-    int r = QElfParser().parse(filedata, fdlen, library, lib, &pos, &fdlen);
+    QElfParser::ScanResult r = QElfParser().parse(filedata, fdlen, library, lib, &pos, &fdlen);
     if (r == QElfParser::Corrupt || r == QElfParser::NotElf) {
             if (lib && qt_debug_component()) {
                 qWarning("QElfParser: %ls", qUtf16Printable(lib->errorString));
@@ -413,6 +426,11 @@ inline void QLibraryStore::cleanup()
                 // glibc has a bug in unloading from global destructors
                 // see https://bugzilla.novell.com/show_bug.cgi?id=622977
                 // and http://sourceware.org/bugzilla/show_bug.cgi?id=11941
+                lib->unload(QLibraryPrivate::NoUnloadSys);
+#elif defined(Q_OS_DARWIN)
+                // We cannot fully unload libraries, as we don't know if there are
+                // lingering references (in system threads e.g.) to Objective-C classes
+                // defined in the library.
                 lib->unload(QLibraryPrivate::NoUnloadSys);
 #else
                 lib->unload();

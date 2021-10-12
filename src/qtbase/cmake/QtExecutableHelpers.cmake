@@ -19,13 +19,10 @@ function(qt_internal_add_executable name)
         set(arg_INSTALL_DIRECTORY "${INSTALL_BINDIR}")
     endif()
 
+    _qt_internal_create_executable(${name})
     if (ANDROID)
-        add_library("${name}" MODULE)
-        qt_android_apply_arch_suffix("${name}")
         qt_android_generate_deployment_settings("${name}")
         qt_android_add_apk_target("${name}")
-    else()
-        add_executable("${name}" ${arg_EXE_FLAGS})
     endif()
 
     if(arg_QT_APP AND QT_FEATURE_debug_and_release AND CMAKE_VERSION VERSION_GREATER_EQUAL "3.19.0")
@@ -74,15 +71,14 @@ function(qt_internal_add_executable name)
     endif()
 
     qt_set_common_target_properties(${name})
-    _qt_internal_set_up_static_runtime_library(${name})
     if(ANDROID)
-        # On our qmake builds we don't compile the executables with
-        # visibility=hidden. Not having this flag set will cause the
-        # executable to have main() hidden and can then no longer be loaded
-        # through dlopen()
+        # The above call to qt_set_common_target_properties() sets the symbol
+        # visibility to hidden, but for Android, we need main() to not be hidden
+        # because it has to be loadable at runtime using dlopen().
         set_property(TARGET ${name} PROPERTY C_VISIBILITY_PRESET default)
         set_property(TARGET ${name} PROPERTY CXX_VISIBILITY_PRESET default)
     endif()
+
     qt_autogen_tools_initial_setup(${name})
     qt_skip_warnings_are_errors_when_repo_unclean("${name}")
 

@@ -2371,6 +2371,8 @@ void QRhiVulkan::beginPass(QRhiCommandBuffer *cb,
 
     if (cbD->passUsesSecondaryCb)
         cbD->activeSecondaryCbStack.append(startSecondaryCommandBuffer(rtD));
+
+    cbD->resetCachedState();
 }
 
 void QRhiVulkan::endPass(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates)
@@ -2382,7 +2384,6 @@ void QRhiVulkan::endPass(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourc
         VkCommandBuffer secondaryCb = cbD->activeSecondaryCbStack.last();
         cbD->activeSecondaryCbStack.removeLast();
         endAndEnqueueSecondaryCommandBuffer(secondaryCb, cbD);
-        cbD->resetCachedState();
     }
 
     QVkCommandBuffer::Command &cmd(cbD->commands.get());
@@ -2414,6 +2415,8 @@ void QRhiVulkan::beginComputePass(QRhiCommandBuffer *cb,
 
     if (cbD->passUsesSecondaryCb)
         cbD->activeSecondaryCbStack.append(startSecondaryCommandBuffer());
+
+    cbD->resetCachedState();
 }
 
 void QRhiVulkan::endComputePass(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates)
@@ -2425,7 +2428,6 @@ void QRhiVulkan::endComputePass(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *
         VkCommandBuffer secondaryCb = cbD->activeSecondaryCbStack.last();
         cbD->activeSecondaryCbStack.removeLast();
         endAndEnqueueSecondaryCommandBuffer(secondaryCb, cbD);
-        cbD->resetCachedState();
     }
 
     cbD->recordingPass = QVkCommandBuffer::NoPass;
@@ -6131,6 +6133,7 @@ bool QVkSampler::create()
 QVkRenderPassDescriptor::QVkRenderPassDescriptor(QRhiImplementation *rhi)
     : QRhiRenderPassDescriptor(rhi)
 {
+    serializedFormatData.reserve(32);
 }
 
 QVkRenderPassDescriptor::~QVkRenderPassDescriptor()
@@ -6223,6 +6226,48 @@ bool QVkRenderPassDescriptor::isCompatible(const QRhiRenderPassDescriptor *other
     return true;
 }
 
+void QVkRenderPassDescriptor::updateSerializedFormat()
+{
+    serializedFormatData.clear();
+    auto p = std::back_inserter(serializedFormatData);
+
+    *p++ = attDescs.count();
+    *p++ = colorRefs.count();
+    *p++ = resolveRefs.count();
+    *p++ = hasDepthStencil;
+
+    auto serializeAttachmentData = [this, &p](uint32_t attIdx) {
+        const bool used = attIdx != VK_ATTACHMENT_UNUSED;
+        const VkAttachmentDescription *a = used ? &attDescs[attIdx] : nullptr;
+        *p++ = used ? a->format : 0;
+        *p++ = used ? a->samples : 0;
+        *p++ = used ? a->loadOp : 0;
+        *p++ = used ? a->storeOp : 0;
+        *p++ = used ? a->stencilLoadOp : 0;
+        *p++ = used ? a->stencilStoreOp : 0;
+        *p++ = used ? a->initialLayout : 0;
+        *p++ = used ? a->finalLayout : 0;
+    };
+
+    for (int i = 0, ie = colorRefs.count(); i != ie; ++i) {
+        const uint32_t attIdx = colorRefs[i].attachment;
+        *p++ = attIdx;
+        serializeAttachmentData(attIdx);
+    }
+
+    if (hasDepthStencil) {
+        const uint32_t attIdx = dsRef.attachment;
+        *p++ = attIdx;
+        serializeAttachmentData(attIdx);
+    }
+
+    for (int i = 0, ie = resolveRefs.count(); i != ie; ++i) {
+        const uint32_t attIdx = resolveRefs[i].attachment;
+        *p++ = attIdx;
+        serializeAttachmentData(attIdx);
+    }
+}
+
 QRhiRenderPassDescriptor *QVkRenderPassDescriptor::newCompatibleRenderPassDescriptor() const
 {
     QVkRenderPassDescriptor *rpD = new QVkRenderPassDescriptor(m_rhi);
@@ -6247,8 +6292,14 @@ QRhiRenderPassDescriptor *QVkRenderPassDescriptor::newCompatibleRenderPassDescri
         return nullptr;
     }
 
+    rpD->updateSerializedFormat();
     rhiD->registerResource(rpD);
     return rpD;
+}
+
+QVector<quint32> QVkRenderPassDescriptor::serializedFormat() const
+{
+    return serializedFormatData;
 }
 
 const QRhiNativeHandles *QVkRenderPassDescriptor::nativeHandles()
@@ -6348,6 +6399,7 @@ QRhiRenderPassDescriptor *QVkTextureRenderTarget::newCompatibleRenderPassDescrip
     }
 
     rp->ownsRp = true;
+    rp->updateSerializedFormat();
     rhiD->registerResource(rp);
     return rp;
 }
@@ -7122,6 +7174,7 @@ QRhiRenderPassDescriptor *QVkSwapChain::newCompatibleRenderPassDescriptor()
     }
 
     rp->ownsRp = true;
+    rp->updateSerializedFormat();
     rhiD->registerResource(rp);
     return rp;
 }

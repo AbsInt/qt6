@@ -37,16 +37,20 @@
 #include <QLoggingCategory>
 #include <private/qqmlcomponent_p.h>
 #include <private/qqmlscriptdata_p.h>
+#include <private/qv4compileddata_p.h>
 #include <qtranslator.h>
 #include <qqmlscriptstring.h>
 #include <QString>
 
-#include "../../shared/util.h"
+#include <QtQuickTestUtils/private/qmlutils_p.h>
 #include "scriptstringprops.h"
 
 class tst_qmlcachegen: public QQmlDataTest
 {
     Q_OBJECT
+
+public:
+    tst_qmlcachegen();
 
 private slots:
     void initTestCase() override;
@@ -83,6 +87,7 @@ private slots:
     void posthocRequired();
 
     void scriptStringCachegenInteraction();
+    void saveableUnitPointer();
 };
 
 // A wrapper around QQmlComponent to ensure the temporary reference counts
@@ -125,6 +130,11 @@ static bool generateCache(const QString &qmlFileName, QByteArray *capturedStderr
     if (proc.exitStatus() != QProcess::NormalExit)
         return false;
     return proc.exitCode() == 0;
+}
+
+tst_qmlcachegen::tst_qmlcachegen()
+    : QQmlDataTest(QT_QMLTEST_DATADIR)
+{
 }
 
 void tst_qmlcachegen::initTestCase()
@@ -743,7 +753,17 @@ void tst_qmlcachegen::scriptStringCachegenInteraction()
     QVERIFY(ok);
 }
 
+void tst_qmlcachegen::saveableUnitPointer()
+{
+    QV4::CompiledData::Unit unit;
+    unit.flags = QV4::CompiledData::Unit::StaticData | QV4::CompiledData::Unit::IsJavascript;
+    const auto flags = unit.flags;
 
+    QV4::CompiledData::SaveableUnitPointer pointer(&unit);
+
+    QVERIFY(pointer.saveToDisk<char>([](const char *, quint32) { return true; }));
+    QCOMPARE(unit.flags, flags);
+}
 
 const QQmlScriptString &ScriptStringProps::undef() const
 {

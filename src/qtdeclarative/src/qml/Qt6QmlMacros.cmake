@@ -586,6 +586,9 @@ function(qt6_add_qml_module target)
 
     # Build an init object library for static plugins and propagate it along with the plugin
     # target.
+    # TODO: Figure out if we can move this code block into qt_add_qml_plugin. Need to consider
+    #       various corner cases.
+    #       QTBUG-96937
     if(TARGET "${arg_PLUGIN_TARGET}")
         get_target_property(plugin_lib_type ${arg_PLUGIN_TARGET} TYPE)
         if(plugin_lib_type STREQUAL "STATIC_LIBRARY")
@@ -602,9 +605,13 @@ function(qt6_add_qml_module target)
             # Defer the write to allow more qml files to be added later by calls to
             # qt6_target_qml_sources(). We wrap the deferred call with EVAL CODE
             # so that ${target} is evaluated now rather than the end of the scope.
+            # We also delay target finalization until after our deferred write
+            # because the qmldir file must be written before any finalizer
+            # might call qt_import_qml_plugins().
             cmake_language(EVAL CODE
-                "cmake_language(DEFER CALL _qt_internal_write_deferred_qmldir_file ${target})"
+                "cmake_language(DEFER ID_VAR write_id CALL _qt_internal_write_deferred_qmldir_file ${target})"
             )
+            _qt_internal_delay_finalization_until_after(${write_id})
         else()
             # Can't defer the write, have to do it now
             _qt_internal_write_deferred_qmldir_file(${target})
@@ -957,17 +964,6 @@ function(_qt_internal_target_generate_qmldir target)
     # NOTE: qt6_target_qml_sources() may append further content later.
 endfunction()
 
-# TODO: Need to consider the case where an executable's finalizer might execute
-#       before our deferred call. That can occur in the following situations:
-#
-#         - The executable target is created in the same scope as the qml module
-#           and the executable target is created first.
-#         - The qml module is created in a parent scope of the executable.
-#
-#       Note that the qml module can safely be created in another scope as long
-#       as that scope has been finalized by the time the executable target's
-#       finalizer is called. A child scope satisfies this, as does any other
-#       scope that has already finished being processed earlier in the CMake run.
 function(_qt_internal_write_deferred_qmldir_file target)
     get_target_property(__qt_qmldir_content ${target} _qt_internal_qmldir_content)
     get_target_property(out_dir ${target} QT_QML_MODULE_OUTPUT_DIRECTORY)
@@ -1058,10 +1054,19 @@ function(qt6_add_qml_plugin target)
         endforeach()
 
         get_target_property(existing_class_name ${target} QT_PLUGIN_CLASS_NAME)
-        if(existing_class_name AND NOT existing_class_name STREQUAL arg_CLASS_NAME)
+        if(existing_class_name)
+            if(NOT existing_class_name STREQUAL arg_CLASS_NAME)
+                message(FATAL_ERROR
+                    "An existing plugin target was given, but it has a different class name "
+                    "(${existing_class_name}) to that being used here (${arg_CLASS_NAME})"
+                )
+            endif()
+        elseif(arg_CLASS_NAME)
+            set_property(TARGET ${target} PROPERTY QT_PLUGIN_CLASS_NAME "${arg_CLASS_NAME}")
+        else()
             message(FATAL_ERROR
-                "An existing target was given, but it has a different class name "
-                "(${existing_class_name}) to that being used here (${arg_CLASS_NAME})"
+                "An existing '${target}' plugin target was given, but it has no class name set "
+                "and no new class name was provided."
             )
         endif()
     else()
@@ -1356,8 +1361,14 @@ function(qt6_target_qml_sources target)
         _qt_internal_genex_getjoinedproperty(qrc_resource_args ${target}
             _qt_generated_qrc_files "--resource$<SEMICOLON>" "$<SEMICOLON>"
         )
+        get_target_property(target_type ${target} TYPE)
+        get_target_property(is_android_executable ${target} _qt_is_android_executable)
+        if(target_type STREQUAL "EXECUTABLE" OR is_android_executable)
+            # The application binary directory is part of the default import path.
+            list(APPEND import_paths -I "$<TARGET_PROPERTY:${target},BINARY_DIR>")
+        endif()
         set(cachegen_args
-            "$<${have_import_paths}:${import_paths}>"
+            ${import_paths}
             "$<${have_types_file}:-i$<SEMICOLON>${types_file}>"
             "$<${have_direct_calls}:--direct-calls>"
             "$<${have_arguments}:${arguments}>"
@@ -1432,6 +1443,11 @@ function(qt6_target_qml_sources target)
             list(APPEND non_qml_files ${qml_file_src})
             continue()
         endif()
+
+        # Mark QML files as source files, so that they do not appear in <Other Locations> in Creator
+        # or other IDEs
+        set_source_files_properties(${qml_file_src} HEADER_FILE_ONLY ON)
+        target_sources(${target} PRIVATE ${qml_file_src})
 
         get_filename_component(file_absolute ${qml_file_src} ABSOLUTE)
         __qt_get_relative_resource_path_for_file(file_resource_path ${qml_file_src})
@@ -1570,10 +1586,7 @@ function(qt6_target_qml_sources target)
                     "$<$<BOOL:${types_file}>:${types_file}>"
             )
 
-            target_sources(${target} PRIVATE
-                ${compiled_file}
-                ${qml_file_src} # Make the original qml file show up under this target in the IDE
-            )
+            target_sources(${target} PRIVATE ${compiled_file})
             set_source_files_properties(${compiled_file} PROPERTIES
                 SKIP_AUTOGEN ON
             )
@@ -2141,24 +2154,22 @@ function(_qt_internal_add_static_qml_plugin_dependencies plugin_target backing_t
     endif()
     set_target_properties("${plugin_target}" PROPERTIES _qt_extra_static_qml_plugin_deps_added TRUE)
 
+    # Get the install plugin target name, which we will need for filtering later on.
+    if(TARGET "${backing_target}")
+        get_target_property(installed_plugin_target
+                            "${backing_target}" _qt_qml_module_installed_plugin_target)
+    endif()
+
     if(NOT backing_target STREQUAL plugin_target AND TARGET "${backing_target}")
         set(has_backing_lib TRUE)
     else()
         set(has_backing_lib FALSE)
     endif()
 
-    # Target who's direct dependencies will be walked to set up additional dependencies for
-    # a static qml plugin.
-    if(has_backing_lib)
-        set(target_with_candidate_qml_module_deps "${backing_target}")
-    else()
-        set(target_with_candidate_qml_module_deps "${plugin_target}")
-    endif()
-
     get_target_property(plugin_type ${plugin_target} TYPE)
     set(skip_prl_marker "$<BOOL:QT_IS_PLUGIN_GENEX>")
 
-    # If ${plugin_target} is a static qml plugin, recursively get its private dependencies (or its
+    # If ${plugin_target} is a static qml plugin, recursively get its private dependencies (and its
     # backing lib private deps), identify which of those are qml modules, extract any associated qml
     # plugin target from those qml modules and make them dependencies of ${plugin_target}.
     #
@@ -2174,10 +2185,25 @@ function(_qt_internal_add_static_qml_plugin_dependencies plugin_target backing_t
     set(additional_plugin_deps "")
 
     if(plugin_type STREQUAL "STATIC_LIBRARY")
-        __qt_internal_collect_all_target_dependencies(
-            "${target_with_candidate_qml_module_deps}" plugin_private_deps)
+        set(all_private_deps "")
 
-        foreach(dep IN LISTS plugin_private_deps)
+        # We walk both plugin_target and backing_lib private deps because they can have differing
+        # dependencies and we want to consider all of them.
+        __qt_internal_collect_all_target_dependencies(
+            "${plugin_target}" plugin_private_deps)
+        if(plugin_private_deps)
+            list(APPEND all_private_deps ${plugin_private_deps})
+        endif()
+
+        if(has_backing_lib)
+            __qt_internal_collect_all_target_dependencies(
+                "${backing_target}" backing_lib_private_deps)
+            if(backing_lib_private_deps)
+                list(APPEND all_private_deps ${backing_lib_private_deps})
+            endif()
+        endif()
+
+        foreach(dep IN LISTS all_private_deps)
             if(NOT TARGET "${dep}")
                 continue()
             endif()
@@ -2205,7 +2231,11 @@ function(_qt_internal_add_static_qml_plugin_dependencies plugin_target backing_t
                     set(associated_qml_plugin "${associated_qml_plugin_candidate}")
                 endif()
 
-                if(associated_qml_plugin)
+                # We need to filter out adding the plugin_target as a dependency to itself,
+                # when walking the backing lib of the plugin_target.
+                if(associated_qml_plugin
+                        AND NOT associated_qml_plugin STREQUAL plugin_target
+                        AND NOT associated_qml_plugin STREQUAL installed_plugin_target)
                     # Abuse a genex marker, to skip the dependency to be added into prl files.
                     # TODO: Introduce a more generic marker name in qtbase specifically
                     # for skipping deps in prl file deps generation.
@@ -2236,4 +2266,19 @@ function(_qt_internal_get_qml_plugin_basename out_var plugin_target)
         set(plugin_basename "${plugin_target}")
     endif()
     set(${out_var} "${plugin_basename}" PARENT_SCOPE)
+endfunction()
+
+# Used to add extra dependencies between ${target} and ${dep_target} qml plugins in a static
+# Qt build, without creating a dependency in the genereated qmake .prl files.
+# These dependencies make manual linking to static plugins a nicer experience for users that don't
+# want to use qt_import_qml_plugins.
+function(_qt_internal_add_qml_static_plugin_dependency target dep_target)
+    if(NOT BUILD_SHARED_LIBS)
+        # Abuse a genex marker, to skip the dependency to be added into prl files.
+        # TODO: Introduce a more generic marker name in qtbase specifically
+        # for skipping deps in prl file deps generation.
+        set(skip_prl_marker "$<BOOL:QT_IS_PLUGIN_GENEX>")
+        target_link_libraries("${target}" PRIVATE
+            "$<${skip_prl_marker}:$<TARGET_NAME:${dep_target}>>")
+    endif()
 endfunction()

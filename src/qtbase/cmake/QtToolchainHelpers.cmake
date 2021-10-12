@@ -33,7 +33,10 @@ function(qt_internal_create_toolchain_file)
     if(CMAKE_TOOLCHAIN_FILE)
         file(TO_CMAKE_PATH "${CMAKE_TOOLCHAIN_FILE}" __qt_chainload_toolchain_file)
         set(init_original_toolchain_file
-            "set(__qt_chainload_toolchain_file \"${__qt_chainload_toolchain_file}\")")
+            "
+set(__qt_initially_configured_toolchain_file \"${__qt_chainload_toolchain_file}\")
+set(__qt_chainload_toolchain_file \"\${__qt_initially_configured_toolchain_file}\")
+")
     endif()
 
     if(VCPKG_CHAINLOAD_TOOLCHAIN_FILE)
@@ -222,13 +225,34 @@ function(qt_internal_create_toolchain_file)
             "            \"Please specify the toolchain file with -DQT_CHAINLOAD_TOOLCHAIN_FILE=<file>.\")")
         list(APPEND init_platform "    endif()")
         list(APPEND init_platform "endif()")
+    elseif(EMSCRIPTEN)
+        list(APPEND init_platform
+"include(\${CMAKE_CURRENT_LIST_DIR}/QtPublicWasmToolchainHelpers.cmake)
+if(DEFINED ENV{EMSDK} AND NOT \"\$ENV{EMSDK}\" STREQUAL \"\")
+    __qt_internal_get_emroot_path_suffix_from_emsdk_env(__qt_toolchain_emroot_path)
+    __qt_internal_get_emscripten_cmake_toolchain_file_path_from_emsdk_env(
+        \"\${__qt_toolchain_emroot_path}\" _qt_candidate_emscripten_toolchain_path)
+    set(__qt_chainload_toolchain_file \"\${_qt_candidate_emscripten_toolchain_path}\")
+endif()
+")
+        list(APPEND init_post_chainload_toolchain "
+if(NOT __qt_chainload_toolchain_file_included)
+    __qt_internal_show_error_no_emscripten_toolchain_file_found_when_using_qt()
+endif()
+")
     endif()
 
     string(REPLACE ";" "\n" init_additional_used_variables
         "${init_additional_used_variables}")
     string(REPLACE ";" "\n" init_vcpkg "${init_vcpkg}")
+
     string(REPLACE ";" "\n" init_platform "${init_platform}")
     string(REPLACE "LITERAL_SEMICOLON" ";" init_platform "${init_platform}")
+
+    string(REPLACE ";" "\n" init_post_chainload_toolchain "${init_post_chainload_toolchain}")
+    string(REPLACE "LITERAL_SEMICOLON" ";" init_post_chainload_toolchain
+           "${init_post_chainload_toolchain}")
+
     qt_compute_relative_path_from_cmake_config_dir_to_prefix()
     configure_file(
         "${CMAKE_CURRENT_SOURCE_DIR}/cmake/qt.toolchain.cmake.in"

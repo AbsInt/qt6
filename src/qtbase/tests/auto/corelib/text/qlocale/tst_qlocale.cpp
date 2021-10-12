@@ -39,12 +39,12 @@
 # include <qprocess.h>
 #endif
 #include <float.h>
-#include <locale.h>
 
 #include <qlocale.h>
 #include <private/qlocale_p.h>
 #include <private/qlocale_tools_p.h>
 #include <qnumeric.h>
+#include "../../../../shared/localechange.h"
 
 #if defined(Q_OS_LINUX) && !defined(__UCLIBC__)
 #    define QT_USE_FENV
@@ -176,58 +176,7 @@ private:
     bool europeanTimeZone;
     void toReal_data();
 
-    class TransientLocale
-    {
-        const int m_category;
-        const char *const m_prior;
-#if !defined(QT_NO_SYSTEMLOCALE) && defined(Q_OS_UNIX) \
-    && (!defined(Q_OS_DARWIN) || defined(Q_OS_NACL))
-#define TRANSIENT_ENV
-        // Unix system locale consults environment variables, so we need to set
-        // the appropriate one, too.
-        const QByteArray m_envVar, m_envPrior;
-        const bool m_envSet;
-        static QByteArray categoryToEnv(int category)
-        {
-            switch (category) {
-#define CASE(cat) case cat: return #cat
-            CASE(LC_ALL); CASE(LC_NUMERIC); CASE(LC_TIME); CASE(LC_MONETARY);
-            CASE(LC_MESSAGES); CASE(LC_MEASUREMENT); CASE(LC_COLLATE);
-#undef CASE
-            // Nothing in our code pays attention to any other LC_*
-            default:
-                Q_UNREACHABLE();
-                qFatal("You need to add a case for this category");
-            }
-        }
-#endif // TRANSIENT_ENV
-    public:
-        TransientLocale(int category, const char *locale)
-            : m_category(category),
-              m_prior(setlocale(category, locale))
-#ifdef TRANSIENT_ENV
-            , m_envVar(categoryToEnv(category)),
-              m_envPrior(qgetenv(m_envVar.constData())),
-              m_envSet(qputenv(m_envVar.constData(), locale))
-#endif
-        {
-            QSystemLocale dummy; // to provoke a refresh of the system locale
-        }
-        ~TransientLocale()
-        {
-#ifdef TRANSIENT_ENV
-            if (m_envSet) {
-                if (m_envPrior.isEmpty())
-                    qunsetenv(m_envVar.constData());
-                else
-                    qputenv(m_envVar.constData(), m_envPrior);
-            }
-#endif
-            setlocale(m_category, m_prior);
-            QSystemLocale dummy; // to provoke a refresh of the system locale
-        }
-#undef TRANSIENT_ENV
-    };
+    using TransientLocale = QTestLocaleChange::TransientLocale;
 };
 
 tst_QLocale::tst_QLocale()
@@ -2181,7 +2130,7 @@ public:
         setWinLocaleInfo(LOCALE_SNATIVEDIGITS, m_digits);
         setWinLocaleInfo(LOCALE_IDIGITSUBSTITUTION, m_subst);
 
-        QSystemLocale dummy; // to provoke a refresh of the system locale
+        QTestLocaleChange::resetSystemLocale();
     }
 
     QString m_decimal, m_thousand, m_sdate, m_ldate, m_stime, m_ltime, m_digits, m_subst;
@@ -2207,8 +2156,7 @@ void tst_QLocale::windowsDefaultLocale()
     setWinLocaleInfo(LOCALE_IDIGITSUBSTITUTION, u"2");
     // NB: when adding to the system things being set, be sure to update RestoreLocaleHelper, too.
 
-    QSystemLocale dummy; // to provoke a refresh of the system locale
-    QLocale locale = QLocale::system();
+    QLocale locale = QTestLocaleChange::resetSystemLocale();
 
     // Make sure we are seeing the system's format strings
     QCOMPARE(locale.zeroDigit(), QStringView(u"\u3007"));
@@ -3214,6 +3162,11 @@ void tst_QLocale::systemLocaleDayAndMonthNames_data()
             << QByteArray("ru_RU") << QDate(2021, 8, 30) << QLocale::ShortFormat
             << QString("\u0430\u0432\u0433.") << QString("\u0430\u0432\u0433.")
             << QString("\u043f\u043d") << QString("\u043f\u043d");
+    // А, А, пн, П
+    QTest::newRow("ru_RU 30.08.2021 narrow")
+            << QByteArray("ru_RU") << QDate(2021, 8, 30) << QLocale::NarrowFormat
+            << QString("\u0410") << QString("\u0410") << QString("\u043f\u043d")
+            << QString("\u041f");
 #elif defined(Q_OS_DARWIN)
     // августа, август, понедельник, понедельник
     QTest::newRow("ru_RU 30.08.2021 long")
@@ -3227,6 +3180,11 @@ void tst_QLocale::systemLocaleDayAndMonthNames_data()
             << QByteArray("ru_RU") << QDate(2021, 8, 30) << QLocale::ShortFormat
             << QString("\u0430\u0432\u0433.") << QString("\u0430\u0432\u0433.")
             << QString("\u041f\u043d") << QString("\u041f\u043d");
+    // А, А, Пн, П
+    QTest::newRow("ru_RU 30.08.2021 narrow")
+            << QByteArray("ru_RU") << QDate(2021, 8, 30) << QLocale::NarrowFormat
+            << QString("\u0410") << QString("\u0410") << QString("\u041f\u043d")
+            << QString("\u041f");
 #endif
 
 #if QT_CONFIG(icu) || defined(Q_OS_DARWIN)
@@ -3236,6 +3194,9 @@ void tst_QLocale::systemLocaleDayAndMonthNames_data()
     QTest::newRow("en_US 30.08.2021 short")
             << QByteArray("en_US") << QDate(2021, 8, 30) << QLocale::ShortFormat
             << "Aug" << "Aug" << "Mon" << "Mon";
+    QTest::newRow("en_US 30.08.2021 narrow")
+            << QByteArray("en_US") << QDate(2021, 8, 30) << QLocale::NarrowFormat
+            << "A" << "A" << "M" << "M";
 
     QTest::newRow("de_DE 30.08.2021 long")
             << QByteArray("de_DE") << QDate(2021, 8, 30) << QLocale::LongFormat
@@ -3243,6 +3204,9 @@ void tst_QLocale::systemLocaleDayAndMonthNames_data()
     QTest::newRow("de_DE 30.08.2021 short")
             << QByteArray("de_DE") << QDate(2021, 8, 30) << QLocale::ShortFormat
             << "Aug." << "Aug" << "Mo." << "Mo";
+    QTest::newRow("de_DE 30.08.2021 narrow")
+            << QByteArray("de_DE") << QDate(2021, 8, 30) << QLocale::NarrowFormat
+            << "A" << "A" << "M" << "M";
 #elif defined(Q_OS_WIN)
     // августа, Август, понедельник, понедельник
     QTest::newRow("ru_RU 30.08.2021 long")
@@ -3256,6 +3220,11 @@ void tst_QLocale::systemLocaleDayAndMonthNames_data()
             << QByteArray("ru_RU") << QDate(2021, 8, 30) << QLocale::ShortFormat
             << QString("\u0430\u0432\u0433") << QString("\u0430\u0432\u0433")
             << QString("\u041f\u043d") << QString("\u043f\u043d");
+    // А, А, Пн, П
+    QTest::newRow("ru_RU 30.08.2021 narrow")
+            << QByteArray("ru_RU") << QDate(2021, 8, 30) << QLocale::NarrowFormat
+            << QString("\u0410") << QString("\u0410") << QString("\u041f\u043d")
+            << QString("\u041f");
 
     QTest::newRow("en_US 30.08.2021 long")
             << QByteArray("en_US") << QDate(2021, 8, 30) << QLocale::LongFormat
@@ -3263,6 +3232,9 @@ void tst_QLocale::systemLocaleDayAndMonthNames_data()
     QTest::newRow("en_US 30.08.2021 short")
             << QByteArray("en_US") << QDate(2021, 8, 30) << QLocale::ShortFormat
             << "Aug" << "Aug" << "Mon" << "Mon";
+    QTest::newRow("en_US 30.08.2021 narrow")
+            << QByteArray("en_US") << QDate(2021, 8, 30) << QLocale::NarrowFormat
+            << "A" << "A" << "Mo" << "M";
 
     QTest::newRow("de_DE 30.08.2021 long")
             << QByteArray("de_DE") << QDate(2021, 8, 30) << QLocale::LongFormat
@@ -3270,6 +3242,9 @@ void tst_QLocale::systemLocaleDayAndMonthNames_data()
     QTest::newRow("de_DE 30.08.2021 short")
             << QByteArray("de_DE") << QDate(2021, 8, 30) << QLocale::ShortFormat
             << "Aug" << "Aug" << "Mo" << "Mo";
+    QTest::newRow("de_DE 30.08.2021 narrow")
+            << QByteArray("de_DE") << QDate(2021, 8, 30) << QLocale::NarrowFormat
+            << "A" << "A" << "Mo" << "M";
 #else
     QSKIP("This test can't run on this OS");
 #endif

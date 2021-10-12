@@ -269,7 +269,11 @@ endfunction()
 # Saves the final user value to QT_FEATURE_${feature}, after checking that the condition is met.
 macro(qt_feature_check_and_save_internal_value
         feature saved_user_value condition label conditionExpression)
-    set(result "${saved_user_value}")
+    if(${saved_user_value})
+        set(result ON)
+    else()
+        set(result OFF)
+    endif()
 
     if ((NOT condition) AND result)
         _qt_internal_dump_expression_values(conditionDump "${conditionExpression}")
@@ -797,7 +801,14 @@ function(qt_config_compile_test name)
         # If the repo has its own cmake modules, include those in the module path, so that various
         # find_package calls work.
         if(EXISTS "${PROJECT_SOURCE_DIR}/cmake")
-            list(APPEND flags "-DCMAKE_MODULE_PATH:STRING=${PROJECT_SOURCE_DIR}/cmake")
+            set(flags_copy "${flags}")
+            set(flags)
+            foreach(flag IN LISTS flags_copy)
+                if(flag MATCHES "^-DCMAKE_MODULE_PATH:STRING=")
+                    set(flag "${flag};${PROJECT_SOURCE_DIR}/cmake")
+                endif()
+                list(APPEND flags "${flag}")
+            endforeach()
         endif()
 
         # Pass which packages need to be found.
@@ -903,6 +914,7 @@ function(qt_config_compile_test name)
             set(_save_CMAKE_C_STANDARD "${CMAKE_C_STANDARD}")
             set(_save_CMAKE_CXX_STANDARD "${CMAKE_CXX_STANDARD}")
             set(_save_CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS}")
+            set(_save_CMAKE_TRY_COMPILE_PLATFORM_VARIABLES "${CMAKE_TRY_COMPILE_PLATFORM_VARIABLES}")
 
             if(arg_C_STANDARD)
                set(CMAKE_C_STANDARD "${arg_C_STANDARD}")
@@ -924,6 +936,11 @@ function(qt_config_compile_test name)
                 list(APPEND CMAKE_REQUIRED_FLAGS "-Zc:__cplusplus")
             endif()
 
+            # Let CMake load our custom platform modules.
+            if(NOT QT_AVOID_CUSTOM_PLATFORM_MODULES)
+                list(APPEND CMAKE_TRY_COMPILE_PLATFORM_VARIABLES CMAKE_MODULE_PATH)
+            endif()
+
             set(_save_CMAKE_REQUIRED_LIBRARIES "${CMAKE_REQUIRED_LIBRARIES}")
             set(CMAKE_REQUIRED_LIBRARIES "${arg_LIBRARIES}")
             check_cxx_source_compiles("${arg_UNPARSED_ARGUMENTS} ${arg_CODE}" HAVE_${name})
@@ -932,6 +949,7 @@ function(qt_config_compile_test name)
             set(CMAKE_C_STANDARD "${_save_CMAKE_C_STANDARD}")
             set(CMAKE_CXX_STANDARD "${_save_CMAKE_CXX_STANDARD}")
             set(CMAKE_REQUIRED_FLAGS "${_save_CMAKE_REQUIRED_FLAGS}")
+            set(CMAKE_TRY_COMPILE_PLATFORM_VARIABLES "${_save_CMAKE_TRY_COMPILE_PLATFORM_VARIABLES}")
         endif()
     endif()
 
@@ -944,6 +962,9 @@ endfunction()
 function(qt_get_platform_try_compile_vars out_var)
     # Use the regular variables that are used for source-based try_compile() calls.
     set(flags "${CMAKE_TRY_COMPILE_PLATFORM_VARIABLES}")
+
+    # Pass custom flags.
+    list(APPEND flags "CMAKE_OBJCOPY")
 
     # Pass toolchain files.
     if(CMAKE_TOOLCHAIN_FILE)
@@ -964,6 +985,11 @@ function(qt_get_platform_try_compile_vars out_var)
             list(APPEND flags_cmd_line "-D${flag}=${${flag}}")
         endif()
     endforeach()
+
+    # Let CMake load our custom platform modules.
+    if(NOT QT_AVOID_CUSTOM_PLATFORM_MODULES)
+        list(APPEND flags_cmd_line "-DCMAKE_MODULE_PATH:STRING=${QT_CMAKE_DIR}/platforms")
+    endif()
 
     # Pass darwin specific options.
     # The architectures need to be passed explicitly to project-based try_compile calls even on

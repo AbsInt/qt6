@@ -70,6 +70,8 @@ private slots:
     void showMinimized();
     void showFullScreen();
     void showAsTool();
+    void showWithoutActivating_data();
+    void showWithoutActivating();
     void toolDialogPosition();
     void deleteMainDefault();
     void deleteInExec();
@@ -86,6 +88,7 @@ private slots:
     void virtualsOnClose();
     void deleteOnDone();
     void quitOnDone();
+    void focusWidgetAfterOpen();
 };
 
 // Testing get/set functions
@@ -304,9 +307,8 @@ void tst_QDialog::showFullScreen()
 
 void tst_QDialog::showAsTool()
 {
-#if defined(Q_OS_UNIX)
-    QSKIP("Qt/X11: Skipped since activeWindow() is not respected by all window managers");
-#endif
+    if (QStringList{"xcb", "offscreen"}.contains(QGuiApplication::platformName()))
+        QSKIP("activeWindow() is not respected by all Xcb window managers and the offscreen plugin");
     DummyDialog testWidget;
     testWidget.resize(200, 200);
     testWidget.setWindowTitle(QTest::currentTestFunction());
@@ -320,6 +322,33 @@ void tst_QDialog::showAsTool()
     } else {
         QCOMPARE(dialog.wasActive(), false);
     }
+}
+
+void tst_QDialog::showWithoutActivating_data()
+{
+    QTest::addColumn<bool>("showWithoutActivating");
+    QTest::addColumn<int>("focusInCount");
+
+    QTest::addRow("showWithoutActivating") << true << 0;
+    QTest::addRow("showWithActivating") << false << 1;
+}
+
+void tst_QDialog::showWithoutActivating()
+{
+    QFETCH(bool, showWithoutActivating);
+    QFETCH(int, focusInCount);
+
+    struct Dialog : public QDialog
+    {
+        int focusInCount = 0;
+    protected:
+        void focusInEvent(QFocusEvent *) override { ++focusInCount; }
+    } dialog;
+    dialog.setAttribute(Qt::WA_ShowWithoutActivating, showWithoutActivating);
+
+    dialog.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&dialog));
+    QCOMPARE(dialog.focusInCount, focusInCount);
 }
 
 // Verify that pos() returns the same before and after show()
@@ -734,6 +763,23 @@ void tst_QDialog::quitOnDone()
     QTimer::singleShot(1000, QApplication::instance(), &QApplication::quit);
     QApplication::exec();
     QCOMPARE(quitSpy.count(), 1);
+}
+
+void tst_QDialog::focusWidgetAfterOpen()
+{
+    QDialog dialog;
+    dialog.setLayout(new QVBoxLayout);
+
+    QPushButton *pb1 = new QPushButton;
+    QPushButton *pb2 = new QPushButton;
+    dialog.layout()->addWidget(pb1);
+    dialog.layout()->addWidget(pb2);
+
+    pb2->setFocus();
+    QCOMPARE(dialog.focusWidget(), static_cast<QWidget *>(pb2));
+
+    dialog.open();
+    QCOMPARE(dialog.focusWidget(), static_cast<QWidget *>(pb2));
 }
 
 QTEST_MAIN(tst_QDialog)

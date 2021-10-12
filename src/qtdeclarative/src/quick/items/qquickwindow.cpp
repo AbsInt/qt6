@@ -483,18 +483,14 @@ void forceUpdate(QQuickItem *item)
         forceUpdate(items.at(i));
 }
 
-void QQuickWindowRenderTarget::reset(QRhi *rhi, QSGRenderer *renderer)
+void QQuickWindowRenderTarget::reset(QRhi *rhi)
 {
-    if (rhi) {
-        if (renderer)
-            renderer->invalidatePipelineCacheDependency(rpDesc);
-        if (owns) {
-            delete renderTarget;
-            delete rpDesc;
-            delete texture;
-            delete renderBuffer;
-            delete depthStencil;
-        }
+    if (rhi && owns) {
+        delete renderTarget;
+        delete rpDesc;
+        delete texture;
+        delete renderBuffer;
+        delete depthStencil;
     }
 
     renderTarget = nullptr;
@@ -514,7 +510,7 @@ void QQuickWindowPrivate::ensureCustomRenderTarget()
 
     redirect.renderTargetDirty = false;
 
-    redirect.rt.reset(rhi, renderer);
+    redirect.rt.reset(rhi);
 
     // a default constructed QQuickRenderTarget means no redirection
     if (customRenderTarget.isNull())
@@ -723,7 +719,7 @@ QQuickWindowPrivate::QQuickWindowPrivate()
 QQuickWindowPrivate::~QQuickWindowPrivate()
 {
     inDestructor = true;
-    redirect.rt.reset(rhi, renderer);
+    redirect.rt.reset(rhi);
     if (QQmlInspectorService *service = QQmlDebugConnector::service<QQmlInspectorService>())
         service->removeWindow(q_func());
     deliveryAgent = nullptr;
@@ -883,14 +879,6 @@ void QQuickWindowPrivate::cleanup(QSGNode *n)
 
     The Window object creates a new top-level window for a Qt Quick scene. It automatically sets up the
     window for use with \c {QtQuick} graphical types.
-
-    To use this type, you will need to import the module with the following line:
-    \code
-    import QtQuick
-    \endcode
-
-    Omitting this import will allow you to have a QML environment without
-    access to window system features.
 
     A Window can be declared inside an Item or inside another Window; in that
     case the inner Window will automatically become "transient for" the outer

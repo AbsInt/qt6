@@ -104,7 +104,8 @@ macro(_qt_internal_get_moc_flags _moc_flags)
 endmacro()
 
 # helper macro to set up a moc rule
-function(_qt_internal_create_moc_command infile outfile moc_flags moc_options moc_target moc_depends)
+function(_qt_internal_create_moc_command infile outfile moc_flags moc_options
+         moc_target moc_depends out_json_file)
     # Pass the parameters in a file.  Set the working directory to
     # be that containing the parameters file and reference it by
     # just the file name.  This is necessary because the moc tool on
@@ -117,6 +118,11 @@ function(_qt_internal_create_moc_command infile outfile moc_flags moc_options mo
     endif()
     set (_moc_parameters_file ${outfile}_parameters)
     set (_moc_parameters ${moc_flags} ${moc_options} -o "${outfile}" "${infile}")
+    if(out_json_file)
+        list(APPEND _moc_parameters --output-json)
+        set(extra_output_files "${outfile}.json")
+        set(${out_json_file} "${extra_output_files}" PARENT_SCOPE)
+    endif()
     string (REPLACE ";" "\n" _moc_parameters "${_moc_parameters}")
 
     if(moc_target)
@@ -139,7 +145,7 @@ function(_qt_internal_create_moc_command infile outfile moc_flags moc_options mo
     endif()
 
     set(_moc_extra_parameters_file @${_moc_parameters_file})
-    add_custom_command(OUTPUT ${outfile}
+    add_custom_command(OUTPUT ${outfile} ${extra_output_files}
                        COMMAND ${QT_CMAKE_EXPORT_NAMESPACE}::moc ${_moc_extra_parameters_file}
                        DEPENDS ${infile} ${moc_depends}
                        ${_moc_working_dir}
@@ -160,7 +166,10 @@ function(qt6_generate_moc infile outfile )
     if ("x${ARGV2}" STREQUAL "xTARGET")
         set(moc_target ${ARGV3})
     endif()
-    _qt_internal_create_moc_command(${abs_infile} ${_outfile} "${moc_flags}" "" "${moc_target}" "")
+    _qt_internal_create_moc_command(${abs_infile} ${_outfile} "${moc_flags}" "" "${moc_target}"
+        "" # moc_depends
+        "" # out_json_file
+    )
 endfunction()
 
 if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
@@ -181,7 +190,10 @@ function(qt6_wrap_cpp outfiles )
     _qt_internal_get_moc_flags(moc_flags)
 
     set(options)
-    set(oneValueArgs TARGET)
+    set(oneValueArgs
+        TARGET
+        __QT_INTERNAL_OUTPUT_MOC_JSON_FILES
+    )
     set(multiValueArgs OPTIONS DEPENDS)
 
     cmake_parse_arguments(_WRAP_CPP "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
@@ -191,14 +203,31 @@ function(qt6_wrap_cpp outfiles )
     set(moc_target ${_WRAP_CPP_TARGET})
     set(moc_depends ${_WRAP_CPP_DEPENDS})
 
+    set(metatypes_json_list "")
+
     foreach(it ${moc_files})
         get_filename_component(it ${it} ABSOLUTE)
         _qt_internal_make_output_file(${it} moc_ cpp outfile)
+
+        set(out_json_file_var "")
+        if(_WRAP_CPP___QT_INTERNAL_OUTPUT_MOC_JSON_FILES)
+            set(out_json_file_var "out_json_file")
+        endif()
+
         _qt_internal_create_moc_command(
-            ${it} ${outfile} "${moc_flags}" "${moc_options}" "${moc_target}" "${moc_depends}")
+            ${it} ${outfile} "${moc_flags}" "${moc_options}" "${moc_target}" "${moc_depends}"
+            "${out_json_file_var}")
         list(APPEND ${outfiles} ${outfile})
+        if(_WRAP_CPP___QT_INTERNAL_OUTPUT_MOC_JSON_FILES)
+            list(APPEND metatypes_json_list "${${out_json_file_var}}")
+        endif()
     endforeach()
     set(${outfiles} ${${outfiles}} PARENT_SCOPE)
+
+    if(metatypes_json_list)
+        set(${_WRAP_CPP___QT_INTERNAL_OUTPUT_MOC_JSON_FILES}
+            "${metatypes_json_list}" PARENT_SCOPE)
+    endif()
 endfunction()
 
 # This will override the CMake upstream command, because that one is for Qt 3.
@@ -492,6 +521,7 @@ function(qt6_add_executable target)
     cmake_parse_arguments(PARSE_ARGV 1 arg "MANUAL_FINALIZATION" "" "")
 
     _qt_internal_create_executable("${target}" ${arg_UNPARSED_ARGUMENTS})
+    target_link_libraries("${target}" PRIVATE Qt6::Core)
 
     if(arg_MANUAL_FINALIZATION)
         # Caller says they will call qt6_finalize_target() themselves later
@@ -529,7 +559,6 @@ function(_qt_internal_create_executable target)
         add_executable("${target}" ${ARGN})
     endif()
 
-    target_link_libraries("${target}" PRIVATE Qt6::Core)
     _qt_internal_set_up_static_runtime_library("${target}")
 endfunction()
 
@@ -609,7 +638,34 @@ function(_qt_internal_finalize_executable target)
     set_target_properties(${target} PROPERTIES _qt_executable_is_finalized TRUE)
 endfunction()
 
+# If a task needs to run before any targets are finalized in the current directory
+# scope, call this function and pass the ID of that task as the argument.
+function(_qt_internal_delay_finalization_until_after defer_id)
+    set_property(DIRECTORY APPEND PROPERTY qt_internal_finalizers_wait_for_ids "${defer_id}")
+endfunction()
+
 function(qt6_finalize_target target)
+    if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.19")
+        cmake_language(DEFER GET_CALL_IDS ids_queued)
+        get_directory_property(wait_for_ids qt_internal_finalizers_wait_for_ids)
+        while(wait_for_ids)
+            list(GET wait_for_ids 0 id_to_wait_for)
+            if(id_to_wait_for IN_LIST ids_queued)
+                # Something else needs to run before we finalize targets.
+                # Try again later by re-deferring ourselves, which effectively
+                # puts us at the end of the current list of deferred actions.
+                cmake_language(EVAL CODE "cmake_language(DEFER CALL ${CMAKE_CURRENT_FUNCTION} ${ARGV})")
+                set_directory_properties(PROPERTIES
+                    qt_internal_finalizers_wait_for_ids "${wait_for_ids}"
+                )
+                return()
+            endif()
+            list(POP_FRONT wait_for_ids)
+        endwhile()
+        # No other deferred tasks to wait for
+        set_directory_properties(PROPERTIES qt_internal_finalizers_wait_for_ids "")
+    endif()
+
     if(NOT TARGET "${target}")
         message(FATAL_ERROR "No target '${target}' found in current scope.")
     endif()
@@ -834,25 +890,6 @@ function(_qt_internal_disable_static_default_plugins target)
     set_target_properties(${target} PROPERTIES QT_DEFAULT_PLUGINS 0)
 endfunction()
 
-# This function is used to indicate which plug-ins are going to be
-# used by a given target.
-# This allows static linking to a correct set of plugins.
-# Options :
-#    NO_DEFAULT: disable linking against any plug-in by default for that target, e.g. no platform plug-in.
-#    INCLUDE <list of additional plug-ins to be linked against>
-#    EXCLUDE <list of plug-ins to be removed from the default set>
-#    INCLUDE_BY_TYPE <type> <included plugins>
-#    EXCLUDE_BY_TYPE <type to be excluded>
-#
-# Example :
-# qt_import_plugins(myapp
-#     INCLUDE Qt::QCocoaIntegrationPlugin
-#     EXCLUDE Qt::QMinimalIntegrationPlugin
-#     INCLUDE_BY_TYPE imageformats Qt::QGifPlugin Qt::QJpegPlugin
-#     EXCLUDE_BY_TYPE sqldrivers
-# )
-
-# TODO : support qml plug-ins.
 function(qt6_import_plugins target)
     cmake_parse_arguments(arg "NO_DEFAULT" "" "INCLUDE;EXCLUDE;INCLUDE_BY_TYPE;EXCLUDE_BY_TYPE" ${ARGN})
 
@@ -917,26 +954,6 @@ if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
 endif()
 
 # This function is currently in Technical Preview. It's signature may change or be removed entirely.
-
-# This function allows enabling or disabling finalizer modes for a specific target.
-# Currently, the only supported finalizer mode is for plugin importing in static Qt builds which
-# is called 'static_plugins'. You can enable / disable it by calling
-#
-#   qt6_set_finalizer_mode(${target} ENABLE MODES "static_plugins")
-#   qt6_set_finalizer_mode(${target} DISABLE MODES "static_plugins")
-#
-# When the "static_plugins" finalizer mode is enabled, all plugins initializer object libraries are
-# directly linked to the given ${target} (executable or shared library).
-# This prevents cycles between Qt provided static libraries and reduces link time, thanks to the
-# libraries not being repeated on the link line because they are not part of a cycle anymore.
-#
-# When the finalizer mode is disabled, each plugin initializer is propagated via usage requirements
-# of its associated module, which may cause cycles in the current build system implementation.
-#
-# The "static_plugins" finalizer mode is enabled by default if:
-#   - the project calls qt_finalize_target explicitly at the end of the project file or
-#   - the project uses qt_add_executable and a CMake version greater than or equal to 3.19
-#     (which will DEFER CALL qt_finalize_target)
 function(qt6_set_finalizer_mode target)
     cmake_parse_arguments(arg "ENABLE;DISABLE" "" "MODES" ${ARGN})
     if(NOT arg_ENABLE AND NOT arg_DISABLE)
@@ -965,26 +982,6 @@ if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
     endfunction()
 endif()
 
-# Extracts metatypes from a Qt target and generates a metatypes.json for it.
-#
-# By default we check whether AUTOMOC has been enabled and we extract the information from the
-# target's AUTOMOC supporting files.
-#
-# Should you not wish to use AUTOMOC you need to pass in all the generated json files via the
-# MANUAL_MOC_JSON_FILES parameter. The latter can be obtained by running moc with
-# the --output-json parameter.
-# Params:
-#   OUTPUT_FILES: a variable name in which to store the list of the extracted metatype json files.
-#                 A typical use case would to install them.
-#
-#   TODO: Move these internal options out into an internal function to be used by Qt only.
-#   __QT_INTERNAL_INSTALL_DIR: Location where to install the metatypes file. For public consumption,
-#                              defaults to a ${CMAKE_INSTALL_PREFIX}/${INSTALL_LIBDIR}/metatypes
-#                              directory.
-#                              Executable metatypes files are never installed.
-#   __QT_INTERNAL_NO_INSTALL: When passed, will skip installation of the metatype file.
-#   __QT_INTERNAL_INSTALL: Installs the metatypes files into the default Qt metatypes folder.
-#                          Only to be used by the Qt build.
 function(qt6_extract_metatypes target)
 
     get_target_property(existing_meta_types_file ${target} INTERFACE_QT_META_TYPES_BUILD_FILE)
@@ -994,13 +991,20 @@ function(qt6_extract_metatypes target)
 
     set(args_option
         # TODO: Remove this once all leaf module usages of it are removed. It's now a no-op.
+        # It's original purpose was to skip installation of the metatypes file.
         __QT_INTERNAL_NO_INSTALL
 
         # TODO: Move this into a separate internal function, so it doesn't pollute the public one.
+        # When given, metatypes files will be installed into the default Qt
+        # metatypes folder. Only to be used by the Qt build.
         __QT_INTERNAL_INSTALL
     )
     set(args_single
         # TODO: Move this into a separate internal function, so it doesn't pollute the public one.
+        # Location where to install the metatypes file. Only used if
+        # __QT_INTERNAL_INSTALL is given. It defaults to the
+        # ${CMAKE_INSTALL_PREFIX}/${INSTALL_LIBDIR}/metatypes directory.
+        # Executable metatypes files are never installed.
         __QT_INTERNAL_INSTALL_DIR
 
         OUTPUT_FILES
@@ -1893,16 +1897,14 @@ macro(_qt_internal_get_add_plugin_keywords option_args single_args multi_args)
         # use it
         TYPE
 
-        PLUGIN_TYPE
+        PLUGIN_TYPE   # Internal use only, may be changed or removed
         CLASS_NAME
-        OUTPUT_NAME
+        OUTPUT_NAME   # Internal use only, may be changed or removed
         OUTPUT_TARGETS
     )
     set(${multi_args})
 endmacro()
 
-# This function is currently in Technical Preview.
-# It's signature and behavior might change.
 function(qt6_add_plugin target)
     _qt_internal_get_add_plugin_keywords(opt_args single_args multi_args)
 
@@ -2150,9 +2152,6 @@ if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
     endfunction()
 endif()
 
-# By default Qt6 forces usage of utf8 sources for consumers of Qt.
-# Users can opt out of utf8 sources by calling this function with the target name of their
-# application or library.
 function(qt6_allow_non_utf8_sources target)
     set_target_properties("${target}" PROPERTIES QT_NO_UTF8_SOURCE TRUE)
 endfunction()
@@ -2252,7 +2251,6 @@ properties of both types."
     endforeach()
 endfunction()
 
-# Disables the default unicode definitions for the target
 function(qt6_disable_unicode_defines target)
     set_target_properties(${target} PROPERTIES QT_NO_UNICODE_DEFINES TRUE)
 endfunction()

@@ -89,6 +89,12 @@ struct RequiredPropertyInfo
 
 class RequiredProperties : public QHash<QQmlPropertyData*, RequiredPropertyInfo> {};
 
+struct DeferredQPropertyBinding {
+    QObject *target = nullptr;
+    int properyIndex = -1;
+    QUntypedPropertyBinding binding;
+};
+
 struct QQmlObjectCreatorSharedState : QQmlRefCount
 {
     QQmlRefPointer<QQmlContextData> rootContext;
@@ -102,7 +108,7 @@ struct QQmlObjectCreatorSharedState : QQmlRefCount
     QQmlVmeProfiler profiler;
     QRecursionNode recursionNode;
     RequiredProperties requiredProperties;
-    QList<std::tuple<QObject *, int, QUntypedPropertyBinding>> allQPropertyBindings;
+    QList<DeferredQPropertyBinding> allQPropertyBindings;
     bool hadRequiredProperties;
 };
 
@@ -155,8 +161,9 @@ private:
 
     QObject *createInstance(int index, QObject *parent = nullptr, bool isContextObject = false);
 
-    bool populateInstance(int index, QObject *instance,
-                          QObject *bindingTarget, const QQmlPropertyData *valueTypeProperty);
+    bool populateInstance(int index, QObject *instance, QObject *bindingTarget,
+                          const QQmlPropertyData *valueTypeProperty,
+                          const QV4::CompiledData::Binding *binding = nullptr);
 
     // If qmlProperty and binding are null, populate all properties, otherwise only the given one.
     void populateDeferred(QObject *instance, int deferredIndex,

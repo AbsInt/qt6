@@ -52,6 +52,10 @@
 #include <QtCore/qatomic.h>
 #include <QtCore/qdatastream.h>
 
+#if defined(Q_OS_MACOS)
+#include <QtCore/private/qcore_mac_p.h>
+#endif
+
 #define PCRE2_CODE_UNIT_WIDTH 16
 
 #include <pcre2.h>
@@ -1011,6 +1015,8 @@ static bool isJitEnabled()
 
 #ifdef QT_DEBUG
     return false;
+#elif defined(Q_OS_MACOS)
+    return !qt_mac_runningUnderRosetta();
 #else
     return true;
 #endif
@@ -1178,7 +1184,7 @@ void QRegularExpressionPrivate::doMatch(QRegularExpressionMatchPrivate *priv,
     // its length is zero. We however allow it in input: a QStringView
     // subject may have data == nullptr. In this case, to keep PCRE
     // happy, pass a pointer to a dummy character.
-    constexpr char16_t dummySubject = 0;
+    const char16_t dummySubject = 0;
     const char16_t * const subjectUtf16 = [&]()
     {
         const auto subjectUtf16 = priv->subject.utf16();

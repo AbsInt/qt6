@@ -440,6 +440,12 @@ bool QRhiMetal::create(QRhi::Flags flags)
     }
 #endif
 
+    caps.supportedSampleCounts = { 1 };
+    for (int sampleCount : { 2, 4, 8 }) {
+        if ([d->dev supportsTextureSampleCount: sampleCount])
+            caps.supportedSampleCounts.append(sampleCount);
+    }
+
     nativeHandlesStruct.dev = (MTLDevice *) d->dev;
     nativeHandlesStruct.cmdQueue = (MTLCommandQueue *) d->cmdQueue;
 
@@ -469,7 +475,7 @@ void QRhiMetal::destroy()
 
 QVector<int> QRhiMetal::supportedSampleCounts() const
 {
-    return { 1, 2, 4, 8 };
+    return caps.supportedSampleCounts;
 }
 
 int QRhiMetal::effectiveSampleCount(int sampleCount) const
@@ -2924,6 +2930,7 @@ bool QMetalSampler::create()
 QMetalRenderPassDescriptor::QMetalRenderPassDescriptor(QRhiImplementation *rhi)
     : QRhiRenderPassDescriptor(rhi)
 {
+    serializedFormatData.reserve(16);
 }
 
 QMetalRenderPassDescriptor::~QMetalRenderPassDescriptor()
@@ -2962,6 +2969,18 @@ bool QMetalRenderPassDescriptor::isCompatible(const QRhiRenderPassDescriptor *ot
     return true;
 }
 
+void QMetalRenderPassDescriptor::updateSerializedFormat()
+{
+    serializedFormatData.clear();
+    auto p = std::back_inserter(serializedFormatData);
+
+    *p++ = colorAttachmentCount;
+    *p++ = hasDepthStencil;
+    for (int i = 0; i < colorAttachmentCount; ++i)
+      *p++ = colorFormat[i];
+    *p++ = hasDepthStencil ? dsFormat : 0;
+}
+
 QRhiRenderPassDescriptor *QMetalRenderPassDescriptor::newCompatibleRenderPassDescriptor() const
 {
     QMetalRenderPassDescriptor *rp = new QMetalRenderPassDescriptor(m_rhi);
@@ -2969,7 +2988,13 @@ QRhiRenderPassDescriptor *QMetalRenderPassDescriptor::newCompatibleRenderPassDes
     rp->hasDepthStencil = hasDepthStencil;
     memcpy(rp->colorFormat, colorFormat, sizeof(colorFormat));
     rp->dsFormat = dsFormat;
+    rp->updateSerializedFormat();
     return rp;
+}
+
+QVector<quint32> QMetalRenderPassDescriptor::serializedFormat() const
+{
+    return serializedFormatData;
 }
 
 QMetalReferenceRenderTarget::QMetalReferenceRenderTarget(QRhiImplementation *rhi)
@@ -3042,6 +3067,7 @@ QRhiRenderPassDescriptor *QMetalTextureRenderTarget::newCompatibleRenderPassDesc
     else if (m_desc.depthStencilBuffer())
         rpD->dsFormat = int(QRHI_RES(QMetalRenderBuffer, m_desc.depthStencilBuffer())->d->format);
 
+    rpD->updateSerializedFormat();
     return rpD;
 }
 
@@ -3953,6 +3979,7 @@ QRhiRenderPassDescriptor *QMetalSwapChain::newCompatibleRenderPassDescriptor()
     rpD->dsFormat = MTLPixelFormatDepth32Float_Stencil8;
 #endif
 
+    rpD->updateSerializedFormat();
     return rpD;
 }
 

@@ -1,6 +1,6 @@
 # Generated from qtdeclarative.pro.
 
-cmake_minimum_required(VERSION 3.15.0)
+cmake_minimum_required(VERSION 3.16)
 
 include(.cmake.conf)
 project(QtDeclarative # special case
@@ -38,6 +38,11 @@ if(NOT "${QT_HOST_PATH}" STREQUAL "")
      set(CMAKE_PREFIX_PATH ${_qt_backup_qtdeclarative_CMAKE_PREFIX_PATH})
      set(CMAKE_FIND_ROOT_PATH ${_qt_backup_qtdeclarative_CMAKE_FIND_ROOT_PATH})
 endif()
+
+# Optionally look for the target ShaderTools package to avoid warnings
+# when configuring the project to build examples in-tree in a prefix Qt build.
+# See QTBUG-96358 for details.
+find_package(Qt6 ${PROJECT_VERSION} CONFIG OPTIONAL_COMPONENTS ShaderTools)
 
 # special case begin
 # export QT6_ADD_QML_MODULE to this project

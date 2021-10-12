@@ -34,14 +34,15 @@
 #include <QtQuick/qquickview.h>
 #include <QtQuick/qquickitemgrabresult.h>
 #include <QtQuick/private/qquicktext_p.h>
+#include <QtQuick/private/qquickimage_p_p.h>
+#include <QtQuickTestUtils/private/qmlutils_p.h>
+#include <QtQuickTestUtils/private/visualtestutils_p.h>
 #include <QtQuickTemplates2/private/qquickicon_p.h>
 #include <QtQuickControls2Impl/private/qquickiconimage_p.h>
 #include <QtQuickControls2Impl/private/qquickiconlabel_p.h>
+#include <QtQuickControls2Impl/private/qquickiconlabel_p_p.h>
 
-#include "../shared/util.h"
-#include "../shared/visualtestutil.h"
-
-using namespace QQuickVisualTestUtil;
+using namespace QQuickVisualTestUtils;
 
 class tst_qquickiconlabel : public QQmlDataTest
 {
@@ -56,9 +57,11 @@ private slots:
     void spacingWithOneDelegate();
     void emptyIconSource();
     void colorChanges();
+    void iconSourceContext();
 };
 
 tst_qquickiconlabel::tst_qquickiconlabel()
+    : QQmlDataTest(QT_QMLTEST_DATADIR)
 {
 }
 
@@ -327,6 +330,34 @@ void tst_qquickiconlabel::colorChanges()
     grabResult = label->grabToImage();
     QTRY_VERIFY(!grabResult->image().isNull());
     QVERIFY(grabResult->image() != enabledImageGrab);
+}
+
+void tst_qquickiconlabel::iconSourceContext()
+{
+    QQmlEngine engine;
+    QQmlComponent component(&engine, testFileUrl("iconSourceContext.qml"));
+    QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+
+    QScopedPointer<QObject> o(component.create());
+    QQuickItem *root = qobject_cast<QQuickItem *>(o.data());
+    QVERIFY(root);
+
+    for (QQuickItem *child : root->childItems()) {
+        QQuickImage *image = qobject_cast<QQuickImage *>(child);
+        if (!image) {
+            if (QQuickIconLabel *label = qobject_cast<QQuickIconLabel *>(child)) {
+                QQuickIconLabelPrivate *labelPrivate = static_cast<QQuickIconLabelPrivate *>(
+                            QQuickItemPrivate::get(label));
+                image = labelPrivate->image;
+            }
+        }
+
+        QVERIFY(image);
+        QQuickImagePrivate *imagePrivate
+                = static_cast<QQuickImagePrivate *>(QQuickItemPrivate::get(image));
+        QCOMPARE(imagePrivate->pix.url(), dataDirectoryUrl().resolved(QStringLiteral("a.png")));
+    }
+
 }
 
 QTEST_MAIN(tst_qquickiconlabel)

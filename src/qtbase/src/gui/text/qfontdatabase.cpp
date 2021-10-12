@@ -304,11 +304,9 @@ void QFontDatabasePrivate::invalidate()
     emit static_cast<QGuiApplication *>(QCoreApplication::instance())->fontDatabaseChanged();
 }
 
-QtFontFamily *QFontDatabasePrivate::family(const QString &family, FamilyRequestFlags flags)
+QtFontFamily *QFontDatabasePrivate::family(const QString &f, FamilyRequestFlags flags)
 {
     QtFontFamily *fam = nullptr;
-
-    const QString f = family.trimmed();
 
     int low = 0;
     int high = count;
@@ -1051,9 +1049,13 @@ static bool matchFamilyName(const QString &familyName, QtFontFamily *f)
 
     Tries to find the best match for a given request and family/foundry
 */
-static int match(int script, const QFontDef &request,
-                 const QString &family_name, const QString &foundry_name,
-                 QtFontDesc *desc, const QList<int> &blacklistedFamilies)
+static int match(int script,
+                 const QFontDef &request,
+                 const QString &family_name,
+                 const QString &foundry_name,
+                 QtFontDesc *desc,
+                 const QList<int> &blacklistedFamilies,
+                 unsigned int *resultingScore = nullptr)
 {
     int result = -1;
 
@@ -1126,6 +1128,10 @@ static int match(int script, const QFontDef &request,
         if (newscore < 10) // xlfd instead of FT... just accept it
             break;
     }
+
+    if (resultingScore != nullptr)
+        *resultingScore = score;
+
     return result;
 }
 
@@ -2394,8 +2400,9 @@ QFontEngine *QFontDatabasePrivate::findFont(const QFontDef &request,
     parseFontName(requestFamily, foundry_name, family_name);
     QtFontDesc desc;
     QList<int> blackListed;
-    int index = match(multi ? QChar::Script_Common : script, request, family_name, foundry_name, &desc, blackListed);
-    if (index < 0 && QGuiApplicationPrivate::platformIntegration()->fontDatabase()->populateFamilyAliases(family_name)) {
+    unsigned int score = UINT_MAX;
+    int index = match(multi ? QChar::Script_Common : script, request, family_name, foundry_name, &desc, blackListed, &score);
+    if (score > 0 && QGuiApplicationPrivate::platformIntegration()->fontDatabase()->populateFamilyAliases(family_name)) {
         // We populated familiy aliases (e.g. localized families), so try again
         index = match(multi ? QChar::Script_Common : script, request, family_name, foundry_name, &desc, blackListed);
     }

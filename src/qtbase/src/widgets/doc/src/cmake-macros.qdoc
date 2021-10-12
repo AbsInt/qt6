@@ -32,7 +32,9 @@
 \title qt_wrap_ui
 \target qt6_wrap_ui
 
-\brief Creates sources for \c{.ui} files.
+\summary Creates sources for .ui files.
+
+\include cmake-find-package-widgets.qdocinc
 
 \section1 Synopsis
 

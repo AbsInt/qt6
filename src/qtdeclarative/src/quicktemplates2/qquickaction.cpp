@@ -145,7 +145,7 @@ int QQuickActionPrivate::ShortcutEntry::shortcutId() const
 
 void QQuickActionPrivate::ShortcutEntry::grab(const QKeySequence &shortcut, bool enabled)
 {
-    if (shortcut.isEmpty())
+    if (shortcut.isEmpty() || m_shortcutId)
         return;
 
     Qt::ShortcutContext context = Qt::WindowShortcut; // TODO
@@ -403,6 +403,7 @@ void QQuickAction::setIcon(const QQuickIcon &icon)
         return;
 
     d->icon = icon;
+    d->icon.setOwner(this);
     emit iconChanged(icon);
 }
 

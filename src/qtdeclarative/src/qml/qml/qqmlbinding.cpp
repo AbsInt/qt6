@@ -394,18 +394,23 @@ protected:
     }
 };
 
-class QQmlTranslationBinding : public GenericBinding<QMetaType::QString> {
+class QQmlTranslationBinding : public GenericBinding<QMetaType::QString>, public QPropertyObserver {
 public:
     QQmlTranslationBinding(const QQmlRefPointer<QV4::ExecutableCompilationUnit> &compilationUnit, const QV4::CompiledData::Binding *binding)
+        : QPropertyObserver(&QQmlTranslationBinding::onLanguageChange)
     {
         setCompilationUnit(compilationUnit);
         m_binding = binding;
+        setSource(QQmlEnginePrivate::get(compilationUnit->engine)->translationLanguage);
     }
 
     QQmlSourceLocation sourceLocation() const override final
     {
         return QQmlSourceLocation(m_compilationUnit->fileName(), m_binding->valueLocation.line, m_binding->valueLocation.column);
     }
+
+    static void onLanguageChange(QPropertyObserver *observer, QUntypedPropertyData *)
+    { static_cast<QQmlTranslationBinding *>(observer)->update(); }
 
     void doUpdate(const DeleteWatcher &watcher,
                   QQmlPropertyData::WriteFlags flags, QV4::Scope &scope) override final
@@ -772,9 +777,15 @@ QVector<QQmlProperty> QQmlBinding::dependencies() const
         for (int i = 0; i < senderMeta->propertyCount(); i++) {
             QMetaProperty property = senderMeta->property(i);
             if (property.notifySignalIndex() == QMetaObjectPrivate::signal(senderMeta, guard->signalIndex()).methodIndex()) {
-                dependencies.push_back(QQmlProperty(senderObject, QString::fromUtf8(senderObject->metaObject()->property(i).name())));
+                dependencies.push_back(QQmlProperty(senderObject, QString::fromUtf8(property.name())));
             }
         }
+    }
+
+    for (auto trigger = qpropertyChangeTriggers; trigger; trigger = trigger->next) {
+        QMetaProperty prop = trigger->property();
+        if (prop.isValid())
+            dependencies.push_back(QQmlProperty(trigger->target, QString::fromUtf8(prop.name())));
     }
 
     return dependencies;
@@ -782,7 +793,7 @@ QVector<QQmlProperty> QQmlBinding::dependencies() const
 
 bool QQmlBinding::hasDependencies() const
 {
-    return !activeGuards.isEmpty() || translationsCaptured() || qpropertyChangeTriggers;
+    return !activeGuards.isEmpty() || qpropertyChangeTriggers;
 }
 
 class QObjectPointerBinding: public QQmlNonbindingBinding

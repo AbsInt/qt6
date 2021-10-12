@@ -39,7 +39,7 @@
 #include <QtCore/qtranslator.h>
 #include <QSignalSpy>
 
-#include "../../shared/util.h"
+#include <QtQuickTestUtils/private/qmlutils_p.h>
 
 Q_DECLARE_METATYPE(QList<int>)
 Q_DECLARE_METATYPE(QList<QVariantHash>)
@@ -74,6 +74,7 @@ class tst_qqmllistmodel : public QQmlDataTest
     Q_OBJECT
 public:
     tst_qqmllistmodel()
+        : QQmlDataTest(QT_QMLTEST_DATADIR)
     {
         qRegisterMetaType<QVector<int> >();
     }
@@ -1408,6 +1409,8 @@ void tst_qqmllistmodel::url()
     QVERIFY(o);
     QCOMPARE(o->property("result1").toUrl(), QUrl("http://qt.io"));
     QCOMPARE(o->property("result2").toUrl(), QUrl("http://qt-project.org"));
+    QCOMPARE(o->property("alive1").toString(), QStringLiteral("indeed"));
+    QCOMPARE(o->property("alive2").toString(), QStringLiteral("and kicking"));
 }
 
 void tst_qqmllistmodel::datetime()

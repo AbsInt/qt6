@@ -50,11 +50,11 @@
 #include <private/qqmlvmemetaobject_p.h>
 #include <private/qqmlcomponent_p.h>
 #include <private/qqmltype_p_p.h>
+#include <private/qqmlcomponentattached_p.h>
 
 #include "testtypes.h"
-#include "testhttpserver.h"
-
-#include "../../shared/util.h"
+#include <QtQuickTestUtils/private/qmlutils_p.h>
+#include <QtQuickTestUtils/private/testhttpserver_p.h>
 
 #include <deque>
 
@@ -84,6 +84,9 @@ Evaluation of expressions and bindings is covered in qmlecmascript
 class tst_qqmllanguage : public QQmlDataTest
 {
     Q_OBJECT
+
+public:
+    tst_qqmllanguage();
 
 private slots:
     void initTestCase() override;
@@ -3736,6 +3739,11 @@ void tst_qqmllanguage::uncreatableTypesAsProperties()
     QVERIFY(!object.isNull());
 }
 
+tst_qqmllanguage::tst_qqmllanguage()
+    : QQmlDataTest(QT_QMLTEST_DATADIR)
+{
+}
+
 void tst_qqmllanguage::initTestCase()
 {
     QQmlDataTest::initTestCase();
@@ -6391,11 +6399,14 @@ void tst_qqmllanguage::variantListConversion()
     Foo *foo = qobject_cast<Foo *>(o.data());
     QVERIFY(foo);
     const QVariantList list = foo->getList();
-    QCOMPARE(list.length(), 2);
+    QCOMPARE(list.length(), 3);
     const Large l0 = qvariant_cast<Large>(list.at(0));
     QCOMPARE(l0.a, 12ull);
     const Large l1 = qvariant_cast<Large>(list.at(1));
     QCOMPARE(l1.a, 13ull);
+    const QObject *attached = qvariant_cast<QObject *>(list.at(2));
+    QVERIFY(attached);
+    QCOMPARE(attached->metaObject(), &QQmlComponentAttached::staticMetaObject);
 }
 
 void tst_qqmllanguage::thisInArrowFunction()

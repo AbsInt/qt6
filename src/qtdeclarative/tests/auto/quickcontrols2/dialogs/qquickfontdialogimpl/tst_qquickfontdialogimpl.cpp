@@ -34,10 +34,6 @@
 **
 ****************************************************************************/
 
-#include "../../shared/dialogtestutil.h"
-#include "../../shared/util.h"
-#include "../../shared/visualtestutil.h"
-
 #include <QtTest/qtest.h>
 #include <QtTest/qsignalspy.h>
 #include <QtQml/qqmlfile.h>
@@ -46,6 +42,8 @@
 #include <QtQuickDialogs2/private/qquickfontdialog_p.h>
 #include <QtQuickDialogs2QuickImpl/private/qquickfontdialogimpl_p.h>
 #include <QtQuickTest/quicktest.h>
+#include <QtQuickControlsTestUtils/private/controlstestutils_p.h>
+#include <QtQuickControlsTestUtils/private/dialogstestutils_p.h>
 #include <QtQuickTemplates2/private/qquickapplicationwindow_p.h>
 #include <QtQuickTemplates2/private/qquickcombobox_p.h>
 #include <QtQuickTemplates2/private/qquicktextfield_p.h>
@@ -53,13 +51,28 @@
 #include <QtQuickTemplates2/private/qquickdialogbuttonbox_p_p.h>
 #include <QtQuickTemplates2/private/qquicklabel_p.h>
 #include <QtQuickTemplates2/private/qquickoverlay_p.h>
+#include <QtQuickControls2/qquickstyle.h>
 
-using namespace QQuickDialogTestUtil;
-using namespace QQuickVisualTestUtil;
+using namespace QQuickVisualTestUtils;
+using namespace QQuickDialogTestUtils;
+using namespace QQuickControlsTestUtils;
 
 class tst_QQuickFontDialogImpl : public QQmlDataTest
 {
     Q_OBJECT
+
+public:
+    tst_QQuickFontDialogImpl();
+    static void initMain()
+    {
+        // We need to set this attribute.
+        QCoreApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
+        // We don't want to run this test for every style, as each one will have
+        // different ways of implementing the dialogs.
+        // For now we only test one style.
+        // TODO: use Basic
+        QQuickStyle::setStyle("Fusion");
+    }
 
 private slots:
     void writingSystem();
@@ -125,6 +138,11 @@ private:
     QString errorMessage;                                                                          \
     QVERIFY2(closePopup(&dialogHelper, BUTTON, errorMessage), qPrintable(errorMessage));           \
     QTRY_VERIFY(!dialogHelper.quickDialog->isVisible());
+
+tst_QQuickFontDialogImpl::tst_QQuickFontDialogImpl()
+    : QQmlDataTest(QT_QMLTEST_DATADIR)
+{
+}
 
 void tst_QQuickFontDialogImpl::writingSystem()
 {
@@ -504,18 +522,6 @@ void tst_QQuickFontDialogImpl::searchFamily()
     CLOSE_DIALOG("Ok");
 }
 
-int main(int argc, char *argv[])
-{
-    // We need to set this attribute, and this (defining main() ourselves and
-    // calling QTEST_MAIN_IMPL) seems to be the nicest way to do it without
-    // duplicating too much code.
-    // We also don't want to run this for every style, as each one will have
-    // different ways of implementing the dialogs.
-    QCoreApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
-    // For now we only test one style.
-    // TODO: use Basic
-    QQuickStyle::setStyle("Fusion");
-    QTEST_MAIN_IMPL(tst_QQuickFontDialogImpl)
-}
+QTEST_MAIN(tst_QQuickFontDialogImpl)
 
 #include "tst_qquickfontdialogimpl.moc"

@@ -104,15 +104,6 @@
                     qCDebug(lcQpaKeys) << "Interpreting key event for focus object" << focusObject;
                     m_currentlyInterpretedKeyEvent = nsevent;
                     [self interpretKeyEvents:@[nsevent]];
-
-                    // If the receiver opens an editor in response to a key press, then the focus will change, the input
-                    // method will be reset, and the first key press will be gone. If the focus object changes, then we
-                    // need to pass the key event to the input method once more.
-                    if (qApp->focusObject() != focusObject) {
-                        qCDebug(lcQpaKeys) << "Interpreting key event again for new focus object" << qApp->focusObject();
-                        [self interpretKeyEvents:@[nsevent]];
-                    }
-
                     m_currentlyInterpretedKeyEvent = 0;
 
                     // If the last key we sent was dead, then pass the next
@@ -180,8 +171,10 @@
 
     // Handling the key event may recurse back here through interpretKeyEvents
     // (when IM is enabled), so we need to guard against that.
-    if (currentEvent == m_currentlyInterpretedKeyEvent)
+    if (currentEvent == m_currentlyInterpretedKeyEvent) {
+        m_sendKeyEvent = true;
         return;
+    }
 
     // Send Command+Key_Period and Escape as normal keypresses so that
     // the key sequence is delivered through Qt. That way clients can

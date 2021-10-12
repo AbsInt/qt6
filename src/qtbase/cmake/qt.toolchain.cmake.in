@@ -43,9 +43,12 @@ if(__qt_chainload_toolchain_file)
             "'${__qt_chainload_toolchain_file}' does not exist.")
     else()
         include("${__qt_chainload_toolchain_file}")
+        set(__qt_chainload_toolchain_file_included TRUE)
     endif()
     unset(__qt_chainload_toolchain_file)
 endif()
+
+@init_post_chainload_toolchain@
 
 # Compute dynamically the Qt installation prefix from the location of this file. This allows
 # the usage of the toolchain file when the Qt installation is relocated.
@@ -66,6 +69,12 @@ get_filename_component(QT_TOOLCHAIN_RELOCATABLE_CMAKE_DIR "${CMAKE_CURRENT_LIST_
 # Qt install prefix, and the prefix path to the lib/cmake subdir.
 list(PREPEND CMAKE_PREFIX_PATH "${QT_TOOLCHAIN_RELOCATABLE_CMAKE_DIR}")
 list(PREPEND CMAKE_FIND_ROOT_PATH "${QT_TOOLCHAIN_RELOCATABLE_INSTALL_PREFIX}")
+
+# Let CMake load our custom platform modules.
+# CMake-provided platform modules take precedence.
+if(NOT QT_AVOID_CUSTOM_PLATFORM_MODULES)
+    list(PREPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/platforms")
+endif()
 
 # Handle packages located in QT_ADDITIONAL_PACKAGES_PREFIX_PATH when cross-compiling. Needed for
 # Conan.

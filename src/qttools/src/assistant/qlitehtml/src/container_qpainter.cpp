@@ -1382,8 +1382,11 @@ QUrl DocumentContainerPrivate::resolveUrl(const QString &url, const QString &bas
     // relative path: "foo/bar.css"
     // server relative path: "/foo/bar.css"
     // net path: "//foo.bar/blah.css"
+    // fragment only: "#foo-fragment"
     const QUrl qurl(url);
     if (qurl.scheme().isEmpty()) {
+        if (url.startsWith('#')) // leave alone if just a fragment
+            return qurl;
         const QUrl pageBaseUrl = QUrl(baseUrl.isEmpty() ? m_baseUrl : baseUrl);
         if (url.startsWith("//")) // net path
             return QUrl(pageBaseUrl.scheme() + ":" + url);

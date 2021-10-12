@@ -2529,13 +2529,23 @@ bool buildAndroidProject(const Options &options)
     GradleProperties gradleProperties = readGradleProperties(gradlePropertiesPath);
     gradleProperties["android.bundle.enableUncompressedNativeLibs"] = "false";
     gradleProperties["buildDir"] = "build";
+    gradleProperties["qtAndroidDir"] = (options.qtInstallDirectory + QLatin1String("/src/android/java")).toUtf8();
+    // The following property "qt5AndroidDir" is only for compatibility.
+    // Projects using a custom build.gradle file may use this variable.
+    // ### Qt7: Remove the following line
     gradleProperties["qt5AndroidDir"] = (options.qtInstallDirectory + QLatin1String("/src/android/java")).toUtf8();
     gradleProperties["androidCompileSdkVersion"] = options.androidPlatform.split(QLatin1Char('-')).last().toLocal8Bit();
     gradleProperties["qtMinSdkVersion"] = options.minSdkVersion;
     gradleProperties["qtTargetSdkVersion"] = options.targetSdkVersion;
     if (gradleProperties["androidBuildToolsVersion"].isEmpty())
         gradleProperties["androidBuildToolsVersion"] = options.sdkBuildToolsVersion.toLocal8Bit();
-
+    QString abiList;
+    for (auto it = options.architectures.constBegin(); it != options.architectures.constEnd(); ++it) {
+        if (abiList.size())
+            abiList.append(u",");
+        abiList.append(it.key());
+    }
+    gradleProperties["qtTargetAbiList"] = abiList.toLocal8Bit();// armeabi-v7a or arm64-v8a or ...
     if (!mergeGradleProperties(gradlePropertiesPath, gradleProperties))
         return false;
 
@@ -2784,7 +2794,7 @@ bool jarSignerSignPackage(const Options &options)
     auto signPackage = [&](const QString &file) {
         fprintf(stdout, "Signing file %s\n", qPrintable(file));
         fflush(stdout);
-        auto command = jarSignerTool + QLatin1String(" %1 %2")
+        QString command = jarSignerTool + QLatin1String(" %1 %2")
                 .arg(file)
                 .arg(shellQuote(options.keyStoreAlias));
 

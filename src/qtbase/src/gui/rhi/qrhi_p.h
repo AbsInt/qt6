@@ -284,8 +284,6 @@ private:
     friend Q_GUI_EXPORT QDebug operator<<(QDebug, const QRhiVertexInputLayout &);
 };
 
-Q_DECLARE_TYPEINFO(QRhiVertexInputLayout, Q_RELOCATABLE_TYPE);
-
 Q_GUI_EXPORT bool operator==(const QRhiVertexInputLayout &a, const QRhiVertexInputLayout &b) noexcept;
 Q_GUI_EXPORT bool operator!=(const QRhiVertexInputLayout &a, const QRhiVertexInputLayout &b) noexcept;
 Q_GUI_EXPORT size_t qHash(const QRhiVertexInputLayout &v, size_t seed = 0) noexcept;
@@ -526,8 +524,6 @@ private:
     QRhiTexture *m_depthTexture = nullptr;
 };
 
-Q_DECLARE_TYPEINFO(QRhiTextureRenderTargetDescription, Q_RELOCATABLE_TYPE);
-
 class Q_GUI_EXPORT QRhiTextureSubresourceUploadDescription
 {
 public:
@@ -608,8 +604,6 @@ public:
 private:
     QVarLengthArray<QRhiTextureUploadEntry, 16> m_entries;
 };
-
-Q_DECLARE_TYPEINFO(QRhiTextureUploadDescription, Q_RELOCATABLE_TYPE);
 
 class Q_GUI_EXPORT QRhiTextureCopyDescription
 {
@@ -778,7 +772,8 @@ public:
         UsedWithLoadStore = 1 << 7,
         UsedAsCompressedAtlas = 1 << 8,
         ExternalOES = 1 << 9,
-        ThreeDimensional = 1 << 10
+        ThreeDimensional = 1 << 10,
+        TextureRectangleGL = 1 << 11
     };
     Q_DECLARE_FLAGS(Flags, Flag)
 
@@ -991,6 +986,8 @@ public:
     virtual const QRhiNativeHandles *nativeHandles();
 
     virtual QRhiRenderPassDescriptor *newCompatibleRenderPassDescriptor() const = 0;
+
+    virtual QVector<quint32> serializedFormat() const = 0;
 
 protected:
     QRhiRenderPassDescriptor(QRhiImplementation *rhi);
@@ -1467,7 +1464,7 @@ struct Q_GUI_EXPORT QRhiReadbackResult
     QRhiTexture::Format format;
     QSize pixelSize;
     QByteArray data;
-}; // non-movable due to the std::function
+};
 
 struct Q_GUI_EXPORT QRhiBufferReadbackResult
 {

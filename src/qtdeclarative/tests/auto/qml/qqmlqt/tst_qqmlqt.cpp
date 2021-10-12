@@ -44,14 +44,14 @@
 #include <QQuaternion>
 #include <QMatrix4x4>
 #include <QFont>
-#include "../../shared/util.h"
+#include <QtQuickTestUtils/private/qmlutils_p.h>
 #include <private/qglobal_p.h>
 
 class tst_qqmlqt : public QQmlDataTest
 {
     Q_OBJECT
 public:
-    tst_qqmlqt() {}
+    tst_qqmlqt() : QQmlDataTest(QT_QMLTEST_DATADIR) {}
 
 private slots:
     void initTestCase() override;
@@ -1166,6 +1166,8 @@ void tst_qqmlqt::exit()
 
 void tst_qqmlqt::resolvedUrl()
 {
+    QQmlEngine engine;
+    engine.addImportPath(dataDirectory());
     QQmlComponent component(&engine, testFileUrl("resolvedUrl.qml"));
 
     QScopedPointer<QObject> object(component.create());
@@ -1174,6 +1176,15 @@ void tst_qqmlqt::resolvedUrl()
     QCOMPARE(object->property("result").toString(), component.url().toString());
     QCOMPARE(object->property("isString").toBool(), false);
     QCOMPARE(object->property("isObject").toBool(), true);
+
+    QCOMPARE(qvariant_cast<QUrl>(object->property("resolvedHere")),
+             dataDirectoryUrl().resolved(QStringLiteral("somewhere.qml")));
+    QCOMPARE(qvariant_cast<QUrl>(object->property("resolvedThere")),
+             dataDirectoryUrl().resolved(QStringLiteral("Other/somewhere.qml")));
+
+    QVariant unresolved = object->property("unresolvedUrl");
+    QCOMPARE(unresolved.metaType(), QMetaType::fromType<QUrl>());
+    QCOMPARE(qvariant_cast<QUrl>(unresolved), QUrl(QStringLiteral("nowhere/else.js")));
 }
 
 void tst_qqmlqt::later_data()

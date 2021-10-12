@@ -2450,6 +2450,13 @@ bool QRhiRenderBuffer::createFrom(NativeRenderBuffer src)
      render target's color attachment refers to a slice in range [0..depth-1].
      The underlying graphics API may not support 3D textures at run time.
      Support is indicated by the QRhi::ThreeDimensionalTextures feature.
+
+     \value TextureRectangleGL The texture should use the GL_TEXTURE_RECTANGLE
+     target with OpenGL. This flag is ignored with other graphics APIs. Just
+     like ExternalOES, this flag is useful when working with platform APIs where
+     native OpenGL texture objects received from the platform are wrapped in a
+     QRhiTexture, and the platform can only provide textures for a non-2D
+     texture target.
  */
 
 /*!
@@ -2739,7 +2746,17 @@ QRhiResource::Type QRhiRenderPassDescriptor::resourceType() const
     \l{QRhiTextureRenderTarget::newCompatibleRenderPassDescriptor()}{created}
     from the same QRhiTextureRenderTarget are always compatible.
 
-    \sa newCompatibleRenderPassDescriptor()
+    Similarly to QRhiShaderResourceBindings, compatibility can also be tested
+    without having two existing objects available. Extracting the opaque blob by
+    calling serializedFormat() allows testing for compatibility by comparing the
+    returned vector to another QRhiRenderPassDescriptor's
+    serializedFormat(). This has benefits in certain situations, because it
+    allows testing the compatibility of a QRhiRenderPassDescriptor with a
+    QRhiGraphicsPipeline even when the QRhiRenderPassDescriptor the pipeline was
+    originally built was is no longer available (but the data returned from its
+    serializedFormat() still is).
+
+    \sa newCompatibleRenderPassDescriptor(), serializedFormat()
  */
 
 /*!
@@ -2759,6 +2776,24 @@ QRhiResource::Type QRhiRenderPassDescriptor::resourceType() const
     with the textures and render targets it was created from) In such a
     situation, it can be beneficial to store a cloned version in the data
     structures, and thus transferring ownership as well.
+
+    \sa isCompatible()
+ */
+
+/*!
+    \fn QVector<quint32> QRhiRenderPassDescriptor::serializedFormat() const
+
+    \return a vector of integers containing an opaque blob describing the data
+    relevant for \l{isCompatible()}{compatibility}.
+
+    Given two QRhiRenderPassDescriptor objects \c rp1 and \c rp2, if the data
+    returned from this function is identical, then \c{rp1->isCompatible(rp2)},
+    and vice versa hold true as well.
+
+    \note The returned data is meant to be used for storing in memory and
+    comparisons during the lifetime of the QRhi the object belongs to. It is not
+    meant for storing on disk, reusing between processes, or using with multiple
+    QRhi instances with potentially different backends.
 
     \sa isCompatible()
  */
@@ -3031,6 +3066,8 @@ QRhiResource::Type QRhiShaderResourceBindings::resourceType() const
     is more efficient than iterating through two binding lists and calling
     QRhiShaderResourceBinding::isLayoutCompatible() on each pair. This becomes
     relevant especially when this function is called at a high frequency.
+
+    \sa serializedLayoutDescription()
  */
 bool QRhiShaderResourceBindings::isLayoutCompatible(const QRhiShaderResourceBindings *other) const
 {
@@ -3048,6 +3085,25 @@ bool QRhiShaderResourceBindings::isLayoutCompatible(const QRhiShaderResourceBind
     return m_layoutDescHash == other->m_layoutDescHash
             && m_layoutDesc == other->m_layoutDesc;
 }
+
+/*!
+    \fn QVector<quint32> QRhiShaderResourceBindings::serializedLayoutDescription() const
+
+    \return a vector of integers containing an opaque blob describing the layout
+    of the binding list, i.e. the data relevant for
+    \l{isLayoutCompatible()}{layout compatibility tests}.
+
+    Given two objects \c srb1 and \c srb2, if the data returned from this
+    function is identical, then \c{srb1->isLayoutCompatible(srb2), and vice
+    versa hold true as well.
+
+    \note The returned data is meant to be used for storing in memory and
+    comparisons during the lifetime of the QRhi the object belongs to. It is not
+    meant for storing on disk, reusing between processes, or using with multiple
+    QRhi instances with potentially different backends.
+
+    \sa isLayoutCompatible()
+ */
 
 void QRhiImplementation::updateLayoutDesc(QRhiShaderResourceBindings *srb)
 {
@@ -5311,6 +5367,11 @@ void QRhiResourceUpdateBatch::uploadTexture(QRhiTexture *tex, const QImage &imag
 
    \note The source texture \a src must be created with
    QRhiTexture::UsedAsTransferSource.
+
+   \note The format of the textures must match. With most graphics
+   APIs the data is copied as-is without any format conversions. If
+   \a dst and \a src are created with different formats, unspecified
+   issues may arise.
  */
 void QRhiResourceUpdateBatch::copyTexture(QRhiTexture *dst, QRhiTexture *src, const QRhiTextureCopyDescription &desc)
 {

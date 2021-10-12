@@ -226,6 +226,21 @@ TestCase {
         verify(!oldHorizontalScrollBar.visible)
     }
 
+    function getGrooveRange(scrollbar) {
+        return {
+            start: {    // top left
+               x: scrollbar.orientation === Qt.Horizontal ? scrollbar.leftPadding : 0,
+               y: scrollbar.orientation === Qt.Vertical ? scrollbar.topPadding : 0
+            },
+            end: {      // bottom right, (inclusive, last pixel position of the groove)
+               x: (scrollbar.orientation === Qt.Horizontal ? scrollbar.width - scrollbar.rightPadding : scrollbar.width) - 1,
+               y: (scrollbar.orientation === Qt.Vertical ? scrollbar.height - scrollbar.bottomPadding : scrollbar.height) - 1
+            },
+            width : scrollbar.width - scrollbar.leftPadding - scrollbar.rightPadding,
+            height: scrollbar.height - scrollbar.topPadding - scrollbar.bottomPadding
+        }
+    }
+
     function test_mouse_data() {
         return [
             { tag: "horizontal", properties: { visible: true, orientation: Qt.Horizontal, width: testCase.width } },
@@ -236,23 +251,8 @@ TestCase {
     function test_mouse(data) {
         var control = createTemporaryObject(scrollBarWithDefaultPadding, testCase, data.properties)
         verify(control)
-        // ### we should consider calling updateGeometry() from QQuickStyleItem::componentComplete()
-        // to avoid the wait here...
-        if (control.__decreaseVisual.indicator !== null)
-            waitForItemPolished(control.__decreaseVisual.indicator)
 
-        var grooveRange = {
-            start: {
-               x: control.orientation == Qt.Horizontal ? control.leftPadding : 0,
-               y: control.orientation == Qt.Vertical ? control.topPadding : 0
-            },
-            end: {
-               x: control.orientation == Qt.Horizontal ? control.width - control.rightPadding : 0,
-               y: control.orientation == Qt.Vertical ? control.height - control.bottomPadding: 0
-            },
-            width : control.width - control.leftPadding - control.rightPadding,
-            height: control.height - control.topPadding - control.bottomPadding
-        }
+        var grooveRange = getGrooveRange(control)
 
         var pressedSpy = signalSpy.createObject(control, {target: control, signalName: "pressedChanged"})
         verify(pressedSpy.valid)
@@ -277,11 +277,12 @@ TestCase {
         compare(control.pressed, false)
         compare(control.position, 0.5)
 
-        mousePress(control, control.width - 1, control.height - 1, Qt.LeftButton)
+        mousePress(control, grooveRange.end.x, grooveRange.end.y, Qt.LeftButton)
         compare(pressedSpy.count, 3)
         compare(control.pressed, true)
-        // We can't click on right and bottom edge, so click to (width-1, height-1), and move mouse to (width,height)
-        mouseMove(control, control.width, control.height, 0)
+        // We can't click on right and bottom edge, so click to (grooveRange.end),
+        // and move mouse to (grooveRange.end.x + 1, grooveRange.end.y + 1)
+        mouseMove(control, grooveRange.end.x + 1, grooveRange.end.y + 1, 0)
         compare(control.position, 1.0)
 
         mouseMove(control, control.width * 2, control.height * 2, 0)
@@ -334,9 +335,23 @@ TestCase {
         var pressedSpy = signalSpy.createObject(control, {target: control, signalName: "pressedChanged"})
         verify(pressedSpy.valid)
 
+        control.width += (control.leftPadding + control.rightPadding)
+        control.height += (control.topPadding + control.bottomPadding)
+        var availableSlideWidth = 0
+        var availableSlideHeight = 0
+
+        var p0 = {}
+        if (control.orientation === Qt.Horizontal) {
+            availableSlideWidth = control.width - control.rightPadding - control.leftPadding
+            p0 = { x = control.leftPadding, y = control.height/2 }
+        } else {
+            availableSlideHeight = control.height - control.bottomPadding - control.topPadding
+            p0 = { x = control.width/2, y = control.topPadding}
+        }
+
         var touch = touchEvent(control)
 
-        touch.press(0, control, 0, 0).commit()
+        touch.press(0, control, p0.x, p0.y).commit()
         compare(pressedSpy.count, 1)
         compare(control.pressed, true)
         compare(control.position, 0.0)
@@ -346,17 +361,17 @@ TestCase {
         compare(control.pressed, true)
         compare(control.position, 0.0)
 
-        touch.move(0, control, control.width * 0.5, control.height * 0.5).commit()
+        touch.move(0, control, p0.x + availableSlideWidth * 0.5, p0.y + availableSlideHeight * 0.5).commit()
         compare(pressedSpy.count, 1)
         compare(control.pressed, true)
         verify(control.position, 0.5)
 
-        touch.release(0, control, control.width * 0.5, control.height * 0.5).commit()
+        touch.release(0, control, p0.x + availableSlideWidth * 0.5, p0.y + availableSlideHeight * 0.5).commit()
         compare(pressedSpy.count, 2)
         compare(control.pressed, false)
         compare(control.position, 0.5)
 
-        touch.press(0, control, control.width - 1, control.height - 1).commit()
+        touch.press(0, control, p0.x + availableSlideWidth - 1, p0.y + availableSlideHeight - 1).commit()
         compare(pressedSpy.count, 3)
         compare(control.pressed, true)
         compare(control.position, 0.5)
@@ -366,12 +381,12 @@ TestCase {
         compare(control.pressed, true)
         compare(control.position, 1.0)
 
-        touch.move(0, control, control.width * 0.75, control.height * 0.75).commit()
+        touch.move(0, control, p0.x + availableSlideWidth * 0.75, p0.y + availableSlideHeight * 0.75).commit()
         compare(pressedSpy.count, 3)
         compare(control.pressed, true)
         compare(control.position, 0.75)
 
-        touch.release(0, control, control.width * 0.25, control.height * 0.25).commit()
+        touch.release(0, control, p0.x + availableSlideWidth * 0.25, p0.y + availableSlideHeight * 0.25).commit()
         compare(pressedSpy.count, 4)
         compare(control.pressed, false)
         compare(control.position, 0.25)
@@ -380,6 +395,10 @@ TestCase {
     function test_multiTouch() {
         var control1 = createTemporaryObject(scrollBar, testCase)
         verify(control1)
+
+        control1.height = 200 + (control1.topPadding + control1.bottomPadding)
+
+        var grooveRange = getGrooveRange(control1)
 
         var pressedCount1 = 0
         var movedCount1 = 0
@@ -391,7 +410,7 @@ TestCase {
         verify(positionSpy1.valid)
 
         var touch = touchEvent(control1)
-        touch.press(0, control1, 0, 0).commit().move(0, control1, control1.width, control1.height).commit()
+        touch.press(0, control1, grooveRange.start.x, grooveRange.start.y).commit().move(0, control1, grooveRange.end.x+1, grooveRange.end.y+1).commit()
 
         compare(pressedSpy1.count, ++pressedCount1)
         compare(positionSpy1.count, ++movedCount1)
@@ -399,8 +418,8 @@ TestCase {
         compare(control1.position, 1.0)
 
         // second touch point on the same control is ignored
-        touch.stationary(0).press(1, control1, 0, 0).commit()
-        touch.stationary(0).move(1, control1).commit()
+        touch.stationary(0).press(1, control1, grooveRange.start.x, grooveRange.start.y).commit()
+        touch.stationary(0).move(1).commit()
         touch.stationary(0).release(1).commit()
 
         compare(pressedSpy1.count, pressedCount1)
@@ -410,6 +429,7 @@ TestCase {
 
         var control2 = createTemporaryObject(scrollBar, testCase, {y: control1.height})
         verify(control2)
+        control2.height = 200 + (control2.topPadding + control2.bottomPadding)
 
         var pressedCount2 = 0
         var movedCount2 = 0
@@ -421,7 +441,7 @@ TestCase {
         verify(positionSpy2.valid)
 
         // press the second scrollbar
-        touch.stationary(0).press(2, control2, 0, 0).commit()
+        touch.stationary(0).press(2, control2, grooveRange.start.x, grooveRange.start.y).commit()
 
         compare(pressedSpy2.count, ++pressedCount2)
         compare(positionSpy2.count, movedCount2)
@@ -594,6 +614,9 @@ TestCase {
     function test_snapMode_mouse(data) {
         var control = createTemporaryObject(scrollBar, testCase, {snapMode: data.snapMode, orientation: Qt.Horizontal, stepSize: data.stepSize, size: data.size, width: data.width})
         verify(control)
+        // In case the slider is surrounded with decrease/increase buttons
+        // Adjust slider width so that slider area is a whole number (to avoid rounding errors)
+        control.width += control.leftPadding + control.rightPadding
 
         function snappedPosition(pos) {
             var effectiveStep = control.stepSize * (1.0 - control.size)
@@ -604,10 +627,13 @@ TestCase {
             return Math.max(0, Math.min(pos, 1.0 - control.size))
         }
 
-        mousePress(control, 0, 0)
+        var minHandlePos = control.leftPadding
+        var maxHandlePos = control.width - control.rightPadding
+        var availableSlideWidth = maxHandlePos - minHandlePos
+        mousePress(control, minHandlePos, 0)
         compare(control.position, 0)
 
-        mouseMove(control, control.width * 0.3, 0)
+        mouseMove(control, minHandlePos + availableSlideWidth * 0.3, 0)
         var expectedMovePos = 0.3
         if (control.snapMode === ScrollBar.SnapAlways) {
             expectedMovePos = snappedPosition(expectedMovePos)
@@ -615,7 +641,7 @@ TestCase {
         }
         compare(control.position, expectedMovePos)
 
-        mouseRelease(control, control.width * 0.75, 0)
+        mouseRelease(control, minHandlePos + availableSlideWidth * 0.75, 0)
         var expectedReleasePos = 0.75
         if (control.snapMode !== ScrollBar.NoSnap) {
             expectedReleasePos = snappedPosition(expectedReleasePos)
@@ -624,14 +650,14 @@ TestCase {
         compare(control.position, expectedReleasePos)
 
         control.position = 0
-        mousePress(control, 0, 0)
+        mousePress(control, minHandlePos, 0)
 
         var steps = 0
         var prevPos = 0
 
-        for (var x = 0; x < control.width; ++x) {
+        for (var x = minHandlePos; x < maxHandlePos; ++x) {
             mouseMove(control, x, 0)
-            expectedMovePos = boundPosition(x / control.width)
+            expectedMovePos = boundPosition((x - minHandlePos) / availableSlideWidth)
             if (control.snapMode === ScrollBar.SnapAlways)
                 expectedMovePos = snappedPosition(expectedMovePos)
             compare(control.position, expectedMovePos)
@@ -642,7 +668,7 @@ TestCase {
         }
         compare(steps, data.steps)
 
-        mouseRelease(control, control.width - 1, 0)
+        mouseRelease(control, maxHandlePos - 1, 0)
     }
 
     function test_snapMode_touch_data() {
@@ -652,6 +678,9 @@ TestCase {
     function test_snapMode_touch(data) {
         var control = createTemporaryObject(scrollBar, testCase, {snapMode: data.snapMode, orientation: Qt.Horizontal, stepSize: data.stepSize, size: data.size, width: data.width})
         verify(control)
+        // In case the slider is surrounded with decrease/increase buttons
+        // Adjust slider width so that slider area is a whole number (to avoid rounding errors)
+        control.width += control.leftPadding + control.rightPadding
 
         function snappedPosition(pos) {
             var effectiveStep = control.stepSize * (1.0 - control.size)
@@ -664,10 +693,13 @@ TestCase {
 
         var touch = touchEvent(control)
 
-        touch.press(0, control, 0, 0).commit()
+        var minHandlePos = control.leftPadding
+        var maxHandlePos = control.width - control.rightPadding
+        var availableSlideWidth = maxHandlePos - minHandlePos
+        touch.press(0, control, minHandlePos, 0).commit()
         compare(control.position, 0)
 
-        touch.move(0, control, control.width * 0.3, 0).commit()
+        touch.move(0, control, minHandlePos + availableSlideWidth*0.3, 0).commit()
         var expectedMovePos = 0.3
         if (control.snapMode === ScrollBar.SnapAlways) {
             expectedMovePos = snappedPosition(expectedMovePos)
@@ -675,7 +707,7 @@ TestCase {
         }
         compare(control.position, expectedMovePos)
 
-        touch.release(0, control, control.width * 0.75, 0).commit()
+        touch.release(0, control, minHandlePos + availableSlideWidth*0.75, 0).commit()
         var expectedReleasePos = 0.75
         if (control.snapMode !== ScrollBar.NoSnap) {
             expectedReleasePos = snappedPosition(expectedReleasePos)
@@ -684,14 +716,14 @@ TestCase {
         compare(control.position, expectedReleasePos)
 
         control.position = 0
-        touch.press(0, control, 0, 0).commit()
+        touch.press(0, control, minHandlePos, 0).commit()
 
         var steps = 0
         var prevPos = 0
 
-        for (var x = 0; x < control.width; ++x) {
+        for (var x = minHandlePos; x < maxHandlePos; ++x) {
             touch.move(0, control, x, 0).commit()
-            expectedMovePos = boundPosition(x / control.width)
+            expectedMovePos = boundPosition((x - minHandlePos) / availableSlideWidth)
             if (control.snapMode === ScrollBar.SnapAlways)
                 expectedMovePos = snappedPosition(expectedMovePos)
             compare(control.position, expectedMovePos)
@@ -702,7 +734,7 @@ TestCase {
         }
         compare(steps, data.steps)
 
-        touch.release(0, control, control.width - 1).commit()
+        touch.release(0, control, maxHandlePos - 1).commit()
     }
 
     function test_interactive_data() {
@@ -717,9 +749,11 @@ TestCase {
         verify(control)
 
         compare(control.interactive, data.interactive)
+        // 200 pixels tall to avoid rounding errors further on
+        control.height = 200 + (control.topPadding + control.bottomPadding)
 
         // press-move-release
-        mousePress(control, 0, 0, Qt.LeftButton)
+        mousePress(control, control.width/2, control.topPadding, Qt.LeftButton)
         compare(control.pressed, data.interactive)
 
         mouseMove(control, control.width / 2, control.height / 2)
@@ -768,18 +802,21 @@ TestCase {
         compare(control.visible, true)
         compare(control.policy, ScrollBar.AsNeeded)
 
-        control.size = 0.5
-        verify(control.state === "active" || control.contentItem.state === "active")
+        if (Qt.platform.pluginName !== "windows") {
+            control.size = 0.5
+            verify(control.state === "active" || control.contentItem.state === "active")
 
-        control.size = 1.0
-        verify(control.state !== "active" && control.contentItem.state !== "active")
-
+            control.size = 1.0
+            verify(control.state !== "active" && control.contentItem.state !== "active")
+        }
         control.policy = ScrollBar.AlwaysOff
         compare(control.visible, false)
 
         control.policy = ScrollBar.AlwaysOn
         compare(control.visible, true)
-        verify(control.state === "active" || control.contentItem.state === "active")
+        if (Qt.platform.pluginName !== "windows") {
+            verify(control.state === "active" || control.contentItem.state === "active")
+        }
     }
 
     function test_overshoot() {
@@ -836,6 +873,10 @@ TestCase {
         verify(activeSpy.valid)
 
         compare(control.active, false)
+        if (control.contentItem && control.contentItem.opacity > 0)
+            // Slider handle is always visible in this style (Windows style)
+            return
+
         if (control.contentItem)
             compare(control.contentItem.opacity, 0)
         if (control.background)

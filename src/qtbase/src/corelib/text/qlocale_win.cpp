@@ -51,6 +51,20 @@
 #   include <time.h>
 #endif
 
+#if defined(Q_CC_MSVC)
+#   include <winrt/base.h>
+// Workaround for Windows SDK bug.
+// See https://github.com/microsoft/Windows.UI.Composition-Win32-Samples/issues/47
+namespace winrt::impl
+{
+    template <typename Async>
+    auto wait_for(Async const& async, Windows::Foundation::TimeSpan const& timeout);
+}
+#   include <winrt/Windows.Foundation.h>
+#   include <winrt/Windows.Foundation.Collections.h>
+#   include <winrt/Windows.System.UserProfile.h>
+#endif // defined(Q_CC_MSVC)
+
 QT_BEGIN_NAMESPACE
 
 static QByteArray getWinLocaleName(LCID id = LOCALE_USER_DEFAULT);
@@ -616,6 +630,18 @@ QVariant QSystemLocalePrivate::toCurrencyString(const QSystemLocale::CurrencyToS
 
 QVariant QSystemLocalePrivate::uiLanguages()
 {
+    QStringList result;
+#if defined(Q_CC_MSVC) // msvc supports WinRT calls
+    using namespace winrt;
+    using namespace Windows::Foundation;
+    using namespace Windows::System::UserProfile;
+    auto languages = GlobalizationPreferences::Languages();
+    for (const auto &lang : languages)
+        result << QString::fromStdString(winrt::to_string(lang));
+    if (!result.isEmpty())
+        return result; // else just fall back to WIN32 API implementation
+#endif // defined(Q_CC_MSVC)
+    // mingw and clang still have to use Win32 API
     unsigned long cnt = 0;
     QVarLengthArray<wchar_t, 64> buf(64);
 #    if !defined(QT_BOOTSTRAPPED) // Not present in MinGW 4.9/bootstrap builds.
@@ -630,7 +656,6 @@ QVariant QSystemLocalePrivate::uiLanguages()
         }
     }
 #    endif // !QT_BOOTSTRAPPED
-    QStringList result;
     result.reserve(cnt);
     const wchar_t *str = buf.constData();
     for (; cnt > 0; --cnt) {
@@ -758,8 +783,11 @@ QVariant QSystemLocale::query(QueryType type, QVariant in) const
         return d->dayName(in.toInt(), QLocale::LongFormat);
     case DayNameShort:
         return d->dayName(in.toInt(), QLocale::ShortFormat);
+    case DayNameNarrow:
+        return d->dayName(in.toInt(), QLocale::NarrowFormat);
     case StandaloneDayNameLong:
     case StandaloneDayNameShort:
+    case StandaloneDayNameNarrow:
         // Windows does not provide standalone day names, so fall back to CLDR
         return QVariant();
     case MonthNameLong:
@@ -770,6 +798,10 @@ QVariant QSystemLocale::query(QueryType type, QVariant in) const
         return d->monthName(in.toInt(), QLocale::ShortFormat);
     case StandaloneMonthNameShort:
         return d->standaloneMonthName(in.toInt(), QLocale::ShortFormat);
+    case MonthNameNarrow:
+    case StandaloneMonthNameNarrow:
+        // Windows provides no narrow month names, so we fall back to CLDR
+        return QVariant();
     case DateToStringShort:
         return d->toString(in.toDate(), QLocale::ShortFormat);
     case DateToStringLong:

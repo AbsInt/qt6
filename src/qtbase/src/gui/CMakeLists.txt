@@ -250,13 +250,6 @@ qt_internal_add_module(Gui
         util/qktxhandler.cpp util/qktxhandler_p.h
         util/qlayoutpolicy.cpp util/qlayoutpolicy_p.h
         util/qpkmhandler.cpp util/qpkmhandler_p.h
-        util/qshaderformat.cpp util/qshaderformat_p.h
-        util/qshadergraph.cpp util/qshadergraph_p.h
-        util/qshadergraphloader.cpp util/qshadergraphloader_p.h
-        util/qshaderlanguage.cpp util/qshaderlanguage_p.h
-        util/qshadernode.cpp util/qshadernode_p.h
-        util/qshadernodeport.cpp util/qshadernodeport_p.h
-        util/qshadernodesloader.cpp util/qshadernodesloader_p.h
         util/qtexturefiledata.cpp util/qtexturefiledata_p.h
         util/qtexturefilehandler_p.h
         util/qtexturefilereader.cpp util/qtexturefilereader_p.h
@@ -497,7 +490,13 @@ qt_internal_extend_target(Gui CONDITION QT_FEATURE_accessibility AND WIN32
         accessible/windows/apisupport/uiatypes_p.h
 )
 
-qt_internal_extend_target(Gui CONDITION QT_FEATURE_accessibility AND QT_FEATURE_accessibility_atspi_bridge
+if(QT_FEATURE_accessibility AND QT_FEATURE_accessibility_atspi_bridge)
+    set(atspi_accessibility ON)
+else()
+    set(atspi_accessibility OFF)
+endif()
+
+qt_internal_extend_target(Gui CONDITION atspi_accessibility
     SOURCES
         accessible/linux/atspiadaptor.cpp accessible/linux/atspiadaptor_p.h
         accessible/linux/dbusconnection.cpp accessible/linux/dbusconnection_p.h
@@ -518,9 +517,11 @@ qt_internal_extend_target(Gui CONDITION QT_FEATURE_accessibility AND QT_FEATURE_
     DBUS_INTERFACE_FLAGS
         "-i" "QtGui/private/qspi_struct_marshallers_p.h"
 # special case end
-    LIBRARIES
-        PkgConfig::ATSPI2_nolink
 )
+
+if(atspi_accessibility)
+    qt_internal_add_target_include_dirs(Gui PkgConfig::ATSPI2)
+endif()
 
 qt_internal_extend_target(Gui CONDITION QT_FEATURE_action
     SOURCES
@@ -801,11 +802,6 @@ qt_internal_extend_target(Gui CONDITION NOT QT_FEATURE_system_zlib
 qt_internal_extend_target(Gui CONDITION NOT QT_FEATURE_system_zlib AND NOT no_core_dep
     LIBRARIES
         Qt::Core
-)
-
-qt_internal_extend_target(Gui CONDITION QT_FEATURE_regularexpression
-    SOURCES
-        util/qshadergenerator.cpp util/qshadergenerator_p.h
 )
 
 qt_internal_extend_target(Gui CONDITION QT_FEATURE_undocommand

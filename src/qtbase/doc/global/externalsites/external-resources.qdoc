@@ -233,8 +233,8 @@
 */
 
 /*!
-    \externalpage http://msdn.microsoft.com/en-us/directx/default.aspx
-    \title Direct X SDK
+    \externalpage https://docs.microsoft.com/en-us/windows/win32/winsock/socket-handles-2
+    \title Winsock 2 Socket Handle
 */
 
 /*!
@@ -348,12 +348,12 @@
 */
 
 /*!
-    \externalpage http://cgi.netscape.com/newsref/std/cookie_spec.html
+    \externalpage https://web.archive.org/web/20020803110822/http://wp.netscape.com/newsref/std/cookie_spec.html
     \title Netscape Cookie Specification
 */
 
 /*!
-    \externalpage http://msdn.microsoft.com/en-us/library/ms533046(VS.85).aspx
+    \externalpage https://docs.microsoft.com/en-us/previous-versions//ms533046(v=vs.85)
     \title Mitigating Cross-site Scripting With HTTP-only Cookies
 */
 
@@ -508,7 +508,7 @@
 */
 
 /*!
-    \externalpage http://msdn.microsoft.com/en-us/library/dd318066.aspx
+    \externalpage https://docs.microsoft.com/en-us/windows/win32/winauto/event-constants
     \title Microsoft Active Accessibility Event Constants
 */
 

@@ -167,6 +167,7 @@ qt_config_compile_test(egl_x11
 // has to be disabled in plugins like xcb in this case since the native display,
 // window and pixmap types will be different than what an X-based platform
 // plugin would expect.
+#define USE_X11
 #include <EGL/egl.h>
 #include <X11/Xlib.h>
 
@@ -751,7 +752,6 @@ qt_feature("vkgen" PRIVATE
 )
 qt_feature("vulkan" PUBLIC
     LABEL "Vulkan"
-    AUTODETECT NOT QNX # FIXME: CI QNX toolchain is broken and finds host vulkan QTQAINFRA-4502
     CONDITION QT_FEATURE_library AND QT_FEATURE_vkgen AND WrapVulkanHeaders_FOUND
 )
 qt_feature("vkkhrdisplay" PRIVATE

@@ -221,9 +221,6 @@ public:
         while (QQmlJavaScriptExpressionGuard *g = capture.guards.takeFirst())
             g->Delete();
 
-        if (!watcher.wasDeleted())
-            capture.expression->setTranslationsCaptured(capture.translationCaptured);
-
         ep->propertyCapture = lastPropertyCapture;
     }
 
@@ -393,6 +390,21 @@ void QQmlPropertyCapture::captureProperty(
     captureNonBindableProperty(o, propertyData->notifyIndex(), propertyData->coreIndex(), doNotify);
 }
 
+void QQmlPropertyCapture::captureTranslation()
+{
+    // use a unique invalid index to avoid needlessly querying the metaobject for
+    // the correct index of of the  translationLanguage property
+    int const invalidIndex = -2;
+    for (auto trigger = expression->qpropertyChangeTriggers; trigger;
+         trigger = trigger->next) {
+        if (trigger->target == engine && trigger->propertyIndex == invalidIndex)
+            return; // already installed
+    }
+    auto trigger = expression->allocatePropertyChangeTrigger(engine, invalidIndex);
+
+    trigger->setSource(QQmlEnginePrivate::get(engine)->translationLanguage);
+}
+
 void QQmlPropertyCapture::captureBindableProperty(
         QObject *o, const QMetaObject *metaObjectForBindable, int c)
 {
@@ -539,6 +551,16 @@ void QQmlJavaScriptExpression::setCompilationUnit(const QQmlRefPointer<QV4::Exec
 void QPropertyChangeTrigger::trigger(QPropertyObserver *observer, QUntypedPropertyData *) {
     auto This = static_cast<QPropertyChangeTrigger *>(observer);
     This->m_expression->expressionChanged();
+}
+
+QMetaProperty QPropertyChangeTrigger::property() const
+{
+    if (!target)
+        return {};
+    auto const mo = target->metaObject();
+    if (!mo)
+        return {};
+    return mo->property(propertyIndex);
 }
 
 QPropertyChangeTrigger *QQmlJavaScriptExpression::allocatePropertyChangeTrigger(QObject *target, int propertyIndex)
