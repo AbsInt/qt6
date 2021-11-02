@@ -83,12 +83,15 @@ private slots:
     void activeFocusOnClose2();
     void activeFocusOnClose3();
     void activeFocusOnClosingSeveralPopups();
+    void activeFocusAfterExit();
+    void activeFocusOnDelayedEnter();
     void hover_data();
     void hover();
     void wheel_data();
     void wheel();
     void parentDestroyed();
     void nested();
+    void modelessOnModalOnModeless();
     void grabber();
     void cursorShape();
     void componentComplete();
@@ -108,6 +111,7 @@ private slots:
     void centerInOverlayWithinStackViewItem();
     void destroyDuringExitTransition();
     void releaseAfterExitTransition();
+    void dimmerContainmentMask();
 };
 
 tst_QQuickPopup::tst_QQuickPopup()
@@ -734,6 +738,79 @@ void tst_QQuickPopup::activeFocusOnClosingSeveralPopups()
     QTRY_COMPARE(button->hasActiveFocus(), true);
 }
 
+void tst_QQuickPopup::activeFocusAfterExit()
+{
+    // Test that after closing a popup the highest one in z-order receives it instead.
+    QQuickControlsApplicationHelper helper(this, QStringLiteral("activeFocusAfterExit.qml"));
+    QVERIFY2(helper.ready, helper.failureMessage());
+    QQuickApplicationWindow *window = helper.appWindow;
+    window->show();
+    window->requestActivate();
+    QVERIFY(QTest::qWaitForWindowActive(window));
+
+    QQuickPopup *popup1 = window->property("popup1").value<QQuickPopup*>();
+    QVERIFY(popup1);
+
+    QQuickPopup *popup2 = window->property("popup2").value<QQuickPopup*>();
+    QVERIFY(popup2);
+    QSignalSpy closedSpy2(popup2, SIGNAL(closed()));
+    QVERIFY(closedSpy2.isValid());
+
+    QQuickPopup *popup3 = window->property("popup3").value<QQuickPopup*>();
+    QVERIFY(popup3);
+    QSignalSpy closedSpy3(popup3, SIGNAL(closed()));
+    QVERIFY(closedSpy3.isValid());
+
+    popup1->open();
+    QVERIFY(popup1->isVisible());
+    QTRY_VERIFY(popup1->hasActiveFocus());
+
+    popup2->open();
+    QVERIFY(popup2->isVisible());
+    QTRY_VERIFY(!popup2->hasActiveFocus());
+
+    popup3->open();
+    QVERIFY(popup3->isVisible());
+    QTRY_VERIFY(popup3->hasActiveFocus());
+
+    popup3->close();
+    closedSpy3.wait();
+    QVERIFY(!popup3->isVisible());
+    QTRY_VERIFY(!popup3->hasActiveFocus());
+    QTRY_VERIFY(!popup2->hasActiveFocus());
+    QTRY_VERIFY(popup1->hasActiveFocus());
+
+    popup2->close();
+    closedSpy2.wait();
+    QVERIFY(!popup2->isVisible());
+    QTRY_VERIFY(!popup2->hasActiveFocus());
+    QTRY_VERIFY(popup1->hasActiveFocus());
+}
+
+void tst_QQuickPopup::activeFocusOnDelayedEnter()
+{
+    // Test that after opening two popups, first of which has an animation, does not cause
+    // the first one to receive focus after the animation stops.
+    QQuickControlsApplicationHelper helper(this, QStringLiteral("activeFocusOnDelayedEnter.qml"));
+    QVERIFY2(helper.ready, helper.failureMessage());
+    QQuickApplicationWindow *window = helper.appWindow;
+    window->show();
+    window->requestActivate();
+    QVERIFY(QTest::qWaitForWindowActive(window));
+
+    QQuickPopup *popup1 = window->property("popup1").value<QQuickPopup*>();
+    QVERIFY(popup1);
+    QSignalSpy openedSpy(popup1, SIGNAL(opened()));
+
+    QQuickPopup *popup2 = window->property("popup2").value<QQuickPopup*>();
+    QVERIFY(popup2);
+
+    popup1->open();
+    popup2->open();
+    openedSpy.wait();
+    QTRY_VERIFY(popup2->hasActiveFocus());
+}
+
 void tst_QQuickPopup::hover_data()
 {
     QTest::addColumn<QString>("source");
@@ -920,6 +997,48 @@ void tst_QQuickPopup::nested()
 
     QTRY_COMPARE(modelessPopup->isVisible(), false);
     QCOMPARE(modalPopup->isVisible(), true);
+}
+
+void tst_QQuickPopup::modelessOnModalOnModeless()
+{
+    QQuickControlsApplicationHelper helper(this, QStringLiteral("modelessOnModalOnModeless.qml"));
+    QVERIFY2(helper.ready, helper.failureMessage());
+    QQuickWindow *window = helper.window;
+    window->show();
+    QVERIFY(QTest::qWaitForWindowExposed(window));
+
+    QQuickPopup *modelessPopup = window->property("modelessPopup").value<QQuickPopup *>();
+    QVERIFY(modelessPopup);
+
+    QQuickButton *button = window->property("button").value<QQuickButton *>();
+    QVERIFY(button);
+    QQuickPopup *modalPopup = window->property("modalPopup").value<QQuickPopup *>();
+    QVERIFY(modalPopup);
+    QQuickPopup *tooltip = window->property("tooltip").value<QQuickPopup *>();
+    QVERIFY(modalPopup);
+
+    modelessPopup->open();
+    QCOMPARE(modelessPopup->isVisible(), true);
+    QTRY_COMPARE(modelessPopup->isOpened(), true);
+
+    const auto buttonPoint = button->mapToScene(button->boundingRect().center()).toPoint();
+    // click into the button, should not be blocked
+    QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, buttonPoint);
+    QVERIFY(button->isChecked());
+
+    modalPopup->open();
+    QCOMPARE(modalPopup->isVisible(), true);
+    QTRY_COMPARE(modalPopup->isOpened(), true);
+    // click into the button, should be blocked
+    QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, buttonPoint);
+    QVERIFY(button->isChecked());
+
+    tooltip->setVisible(true);
+    QCOMPARE(tooltip->isVisible(), true);
+    QTRY_COMPARE(tooltip->isOpened(), true);
+    // click into the button, should be blocked
+    QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, buttonPoint);
+    QVERIFY(button->isChecked());
 }
 
 // QTBUG-56697
@@ -1491,6 +1610,74 @@ void tst_QQuickPopup::releaseAfterExitTransition()
     QTRY_VERIFY(popup->isOpened());
     QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, QPoint(1, 1));
     QTRY_VERIFY(!popup->isOpened());
+}
+
+class ContainmentMask : public QObject
+{
+    Q_OBJECT
+public:
+    mutable bool called = false;
+    Q_INVOKABLE bool contains(const QPointF &point) const
+    {
+        called = true;
+        // let clicks at {1, 1} through the dimmer
+        return point != QPoint(1, 1);
+    }
+};
+
+/*
+    Test case for behavior we rely on in the virtual keyboard:
+    To prevent the virtual keyboard from being blocked by modal popups,
+    it sets a containment mask on the dimmer item, and lets clicks through
+    that hit the virtual keyboard.
+*/
+void tst_QQuickPopup::dimmerContainmentMask()
+{
+    ContainmentMask containmentMask;
+    int expectedClickCount = 0;
+
+    QQuickApplicationHelper helper(this, "dimmerContainmentMask.qml");
+    QVERIFY2(helper.ready, helper.failureMessage());
+
+    QQuickWindow *window = helper.window;
+    window->show();
+    QCOMPARE(window->property("clickCount").toInt(), expectedClickCount);
+    QVERIFY(QTest::qWaitForWindowActive(window));
+
+    QQuickOverlay *overlay = QQuickOverlay::overlay(window);
+    QQuickPopup *modalPopup = window->property("modalPopup").value<QQuickPopup *>();
+
+    QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, QPoint(1, 1));
+    QCOMPARE(window->property("clickCount"), ++expectedClickCount);
+
+    modalPopup->open();
+    QTRY_VERIFY(modalPopup->isOpened());
+
+    QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, QPoint(1, 1));
+    QCOMPARE(window->property("clickCount"), expectedClickCount); // blocked by modal
+    QTRY_VERIFY(!modalPopup->isOpened()); // auto-close
+
+    modalPopup->open();
+    QTRY_VERIFY(modalPopup->isOpened());
+
+    QPointer<QQuickItem> dimmer = overlay->property("_q_dimmerItem").value<QQuickItem *>();
+    QVERIFY(dimmer);
+    dimmer->setContainmentMask(&containmentMask);
+
+    QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, QPoint(1, 1));
+    QVERIFY(containmentMask.called);
+    QCOMPARE(window->property("clickCount"), ++expectedClickCount); // let through by containment mask
+    QVERIFY(modalPopup->isOpened()); // no auto-close
+
+    QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, QPoint(2, 2));
+    QCOMPARE(window->property("clickCount"), expectedClickCount); // blocked by modal
+    QTRY_VERIFY(!modalPopup->isOpened()); // auto-close
+    QTRY_VERIFY(!dimmer);
+
+    QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, QPoint(1, 1));
+    QCOMPARE(window->property("clickCount"), ++expectedClickCount); // no mask left behind
+    QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, QPoint(2, 2));
+    QCOMPARE(window->property("clickCount"), ++expectedClickCount); // no mask left behind
 }
 
 QTEST_QUICKCONTROLS_MAIN(tst_QQuickPopup)

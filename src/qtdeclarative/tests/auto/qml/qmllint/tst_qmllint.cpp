@@ -656,6 +656,10 @@ void TestQmllint::dirtyQmlCode_data()
             << QStringLiteral("Unused import at %1:1:1")
             << QStringLiteral("Cannot assign binding of type QQuickItem to QObject")
             << true;
+    QTest::newRow("cycle in import")
+            << QStringLiteral("cycleHead.qml")
+            << QStringLiteral("MenuItem is part of an inheritance cycle: MenuItem -> MenuItem")
+            << QString() << false;
 }
 
 void TestQmllint::dirtyQmlCode()
@@ -800,6 +804,8 @@ void TestQmllint::cleanQmlCode_data()
     QTest::newRow("BindingsOnGroupAndAttachedProperties")
             << QStringLiteral("goodBindingsOnGroupAndAttached.qml");
     QTest::newRow("QQmlEasingEnums::Type") << QStringLiteral("animationEasing.qml");
+    QTest::newRow("required property in Component") << QStringLiteral("requiredPropertyInComponent.qml");
+    QTest::newRow("connectionNoParent") << QStringLiteral("connectionNoParent.qml"); // QTBUG-97600
 }
 
 void TestQmllint::cleanQmlCode()

@@ -138,7 +138,6 @@ public:
 public slots:
     void safeCall(const std::function<void()> &func, Qt::ConnectionType conType = Qt::BlockingQueuedConnection);
     void updateCursorPosition();
-    void updateInputItemRectangle();
     void updateSelectionHandles();
     void handleLocationChanged(int handleId, int x, int y);
     void touchDown(int x, int y);
@@ -155,14 +154,13 @@ private:
     bool focusObjectIsComposing() const;
     void focusObjectStartComposing();
     bool focusObjectStopComposing();
-    QRect cursorRect();
-    void updateCursorPositionInRange(const QSharedPointer<QInputMethodQueryEvent> &query);
 
 private:
     ExtractedText m_extractedText;
     QString m_composingText;
     int m_composingTextStart;
     int m_composingCursor;
+    QMetaObject::Connection m_updateCursorPosConnection;
     HandleModes m_handleMode;
     int m_batchEditNestingLevel;
     QObject *m_focusObject;

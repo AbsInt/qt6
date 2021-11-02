@@ -1090,7 +1090,7 @@ struct QMessagePattern
         QString backtraceSeparator;
         int backtraceDepth;
     };
-    QList<BacktraceParams> backtraceArgs; // backtrace argumens in sequence of %{backtrace
+    QList<BacktraceParams> backtraceArgs; // backtrace arguments in sequence of %{backtrace
 #endif
 
     bool fromEnvironment;
@@ -1497,7 +1497,7 @@ static QBasicAtomicPointer<void (QtMsgType, const QMessageLogContext &, const QS
 // ------------------------ Alternate logging sinks -------------------------
 
 #if defined(QT_BOOTSTRAPPED)
-    // Boostrapped tools always print to stderr, so no need for alternate sinks
+    // Bootstrapped tools always print to stderr, so no need for alternate sinks
 #else
 
 #if QT_CONFIG(slog2)
@@ -1682,7 +1682,7 @@ static void win_outputDebugString_helper(QStringView message)
     } else {
         wchar_t *messagePart = new wchar_t[maxOutputStringLength + 1];
         for (qsizetype i = 0; i < message.length(); i += maxOutputStringLength) {
-            const qsizetype length = std::min(message.length() - i, maxOutputStringLength);
+            const qsizetype length = qMin(message.length() - i, maxOutputStringLength);
             const qsizetype len = message.mid(i, length).toWCharArray(messagePart);
             Q_ASSERT(len == length);
             messagePart[len] = 0;
@@ -2045,13 +2045,17 @@ void qErrnoWarning(int code, const char *msg, ...)
     environment variable; if both \l qSetMessagePattern() is called and QT_MESSAGE_PATTERN is
     set, the environment variable takes precedence.
 
+    \note The information for the placeholders \c category, \c file, \c function and \c line is
+    only recorded in debug builds. Alternatively, \c QT_MESSAGELOGCONTEXT can be defined
+    explicitly. For more information refer to the QMessageLogContext documentation.
+
     \note The message pattern only applies to unstructured logging, such as the default
     \c stderr output. Structured logging such as systemd will record the message as is,
     along with as much structured information as can be captured.
 
     Custom message handlers can use qFormatLogMessage() to take \a pattern into account.
 
-    \sa qInstallMessageHandler(), {Debugging Techniques}, {QLoggingCategory}
+    \sa qInstallMessageHandler(), {Debugging Techniques}, {QLoggingCategory}, QMessageLogContext
  */
 
 QtMessageHandler qInstallMessageHandler(QtMessageHandler h)

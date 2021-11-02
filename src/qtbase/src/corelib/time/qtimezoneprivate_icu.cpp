@@ -1,6 +1,7 @@
 /****************************************************************************
 **
 ** Copyright (C) 2013 John Layt <jlayt@kde.org>
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
@@ -264,18 +265,17 @@ static QList<QByteArray> uenumToIdList(UEnumeration *uenum)
 static int ucalDaylightOffset(const QByteArray &id)
 {
     UErrorCode status = U_ZERO_ERROR;
-    const int32_t dstMSecs = ucal_getDSTSavings(reinterpret_cast<const UChar *>(id.data()), &status);
-    if (U_SUCCESS(status))
-        return (dstMSecs / 1000);
-    else
-        return 0;
+    const QString utf16 = QString::fromLatin1(id);
+    const int32_t dstMSecs = ucal_getDSTSavings(
+        reinterpret_cast<const UChar *>(utf16.data()), &status);
+    return U_SUCCESS(status) ? dstMSecs / 1000 : 0;
 }
 
 // Create the system default time zone
 QIcuTimeZonePrivate::QIcuTimeZonePrivate()
     : m_ucal(nullptr)
 {
-    // TODO No ICU C API to obtain sysem tz, assume default hasn't been changed
+    // TODO No ICU C API to obtain system tz, assume default hasn't been changed
     init(ucalDefaultTimeZoneId());
 }
 
@@ -459,7 +459,7 @@ QTimeZonePrivate::Data QIcuTimeZonePrivate::previousTransition(qint64 beforeMSec
 
 QByteArray QIcuTimeZonePrivate::systemTimeZoneId() const
 {
-    // No ICU C API to obtain sysem tz
+    // No ICU C API to obtain system tz
     // TODO Assume default hasn't been changed and is the latests system
     return ucalDefaultTimeZoneId();
 }

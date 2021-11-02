@@ -38,6 +38,8 @@
 #include <QtQml/private/qqmljsparser_p.h>
 #include <QtQml/private/qqmlimportresolver_p.h>
 
+#include <QtCore/private/qduplicatetracker_p.h>
+
 #include <QtCore/qfile.h>
 #include <QtCore/qdiriterator.h>
 #include <QtCore/qscopedvaluerollback.h>
@@ -75,7 +77,10 @@ bool FindWarningVisitor::visit(QQmlJS::AST::UiObjectDefinition *uiod)
             // no target set, connection comes from parentF
             QQmlJSScope::Ptr scope = m_currentScope;
             do {
-                scope = scope->parentScope(); // TODO: rename method
+                if (auto parentScope = scope->parentScope(); !parentScope.isNull())
+                    scope = parentScope;
+                else
+                    break;
             } while (scope->scopeType() != QQmlJSScope::QMLScope);
             targetScope = m_rootScopeImports.value(scope->baseTypeName());
         } else {
@@ -112,7 +117,9 @@ void FindWarningVisitor::endVisit(QQmlJS::AST::UiObjectDefinition *uiod)
     }
 
     QString parentPropertyName;
-    for (QQmlJSScope::ConstPtr scope = childScope; scope; scope = scope->baseType()) {
+    QDuplicateTracker<QQmlJSScope::ConstPtr> seen;
+    for (QQmlJSScope::ConstPtr scope = childScope; scope && !seen.hasSeen(scope);
+         scope = scope->baseType()) {
         parentPropertyName = scope->parentPropertyName();
         if (parentPropertyName.isEmpty())
             continue;

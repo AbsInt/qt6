@@ -766,7 +766,7 @@ void QPropertyObserverPointer::notify(QUntypedPropertyData *propertyDataPtr)
      * 1. Before executing any action which might modify the list, we insert a placeholder node after the current node.
      *    As that one is stack allocated and owned by us, we can rest assured that it is
      *    still there after the action has executed, and placeHolder->next points to the actual next node in the list.
-     *    Note that taking next at the beginning of the loop does not work, as the execuated action might either move
+     *    Note that taking next at the beginning of the loop does not work, as the executed action might either move
      *    or delete that node.
      * 2. After the triggered action has finished, we can use the next pointer in the placeholder node as a safe way to
      *    retrieve the next node.
@@ -1185,7 +1185,8 @@ QString QPropertyBindingError::description() const
 
    \ingroup tools
 
-   QBindable\<T\> helps to integrate Qt's traditional Q_PROPERTY with binding-enabled properties.
+   QBindable\<T\> helps to integrate Qt's traditional Q_PROPERTY with
+   \l {Qt Bindable Properties}{binding-enabled} properties.
    If a property is backed by a QProperty, QObjectBindableProperty or QObjectComputedProperty,
    you can add \c BINDABLE bindablePropertyName to the Q_PROPERTY
    declaration, where bindablePropertyName is a function returning an instance of QBindable
@@ -1196,7 +1197,8 @@ QString QPropertyBindingError::description() const
    \snippet code/src_corelib_kernel_qproperty.cpp 0
    \snippet code/src_corelib_kernel_qproperty.cpp 3
 
-   \sa QMetaProperty::isBindable, QProperty, QObjectBindableProperty
+   \sa QMetaProperty::isBindable, QProperty, QObjectBindableProperty,
+       QObjectComputedProperty, {Qt Bindable Properties}
 */
 
 /*!
@@ -1479,7 +1481,7 @@ QString QPropertyBindingError::description() const
   instance of T and behaves mostly like \l QProperty.
   It is one of the classes implementing \l {Qt Bindable Properties}.
   Unlike QProperty, it stores its management data structure in
-  the sourrounding QObject.
+  the surrounding QObject.
   The extra template parameters are used to identify the surrounding
   class and a member function of that class acting as a change handler.
 
@@ -1522,6 +1524,9 @@ QString QPropertyBindingError::description() const
   "NOTIFY xChanged" in the Q_PROPERTY macro as well as the last argument
   of the Q_OBJECT_BINDABLE_PROPERTY and Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS
   macros.
+
+  \sa Q_OBJECT_BINDABLE_PROPERTY, Q_OBJECT_BINDABLE_PROPERTY_WITH_ARGS, QProperty,
+      QObjectComputedProperty, {Qt's Property System}, {Qt Bindable Properties}
 */
 
 /*!
@@ -1640,7 +1645,6 @@ QString QPropertyBindingError::description() const
          properties to the bindable property system.
   \since 6.0
   \ingroup tools
-  \internal
 
   QObjectComputedProperty is a read-only property which is recomputed on each read.
   It does not store the computed value.
@@ -1650,42 +1654,7 @@ QString QPropertyBindingError::description() const
 
   See the following example.
 
-  \code
-    class Client{};
-
-    class MyClassPrivate : public QObjectPrivate
-    {
-    public:
-        QList<Client> clients;
-        bool hasClientsActualCalculation() const { return clients.size() > 0; }
-        Q_OBJECT_COMPUTED_PROPERTY(MyClassPrivate, bool, hasClientsData,
-                                   &MyClassPrivate::hasClientsActualCalculation)
-    };
-
-    class MyClass : public QObject
-    {
-        // add q-object macro here (confuses qdoc if we do it here)
-        Q_PROPERTY(bool hasClients READ hasClients STORED false BINDABLE bindableHasClients)
-    public:
-        QBindable<bool> bindableHasClients()
-        {
-            return QBindable<bool>(&d_func()->hasClientsData);
-        }
-        bool hasClients() const
-        {
-            return d_func()->hasClientsData.value();
-        }
-        void addClient(const Client &c)
-        {
-            Q_D(MyClass);
-            d->clients.push_back(c);
-            // notify that the value could have changed
-            d->hasClientsData.markDirty();
-        }
-    private:
-        Q_DECLARE_PRIVATE(MyClass)
-    };
-  \endcode
+  \snippet code/src_corelib_kernel_qproperty.cpp 5
 
   The rules for getters in \l {Bindable Property Getters and Setters}
   also apply for QObjectComputedProperty. Especially, the getter
@@ -1712,15 +1681,14 @@ QString QPropertyBindingError::description() const
   QObjectComputedProperty is not suitable for use with a computation that depends
   on any input that might change without notice, such as the contents of a file.
 
-  \sa Q_OBJECT_COMPUTED_PROPERTY, QObjectBindableProperty, {Qt's Property System},
-      {Qt Bindable Properties}
+  \sa Q_OBJECT_COMPUTED_PROPERTY, QProperty, QObjectBindableProperty,
+      {Qt's Property System}, {Qt Bindable Properties}
 */
 
 /*!
   \macro Q_OBJECT_COMPUTED_PROPERTY(containingClass, type, name, callback)
   \since 6.0
   \relates QObjectCompatProperty
-  \internal
   \brief Declares a \l QObjectComputedProperty inside \a containingClass
   of type \a type with name \a name. The argument \a callback specifies
   a GETTER function to be called when the property is evaluated.

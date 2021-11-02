@@ -108,7 +108,7 @@ static bool isProcessLowIntegrity() {
     auto* token_info = reinterpret_cast<TOKEN_MANDATORY_LABEL*>(token_info_buf.data());
     DWORD token_info_length = token_info_buf.size();
     if (!GetTokenInformation(process_token, TokenIntegrityLevel, token_info, token_info_length, &token_info_length)) {
-        // grow bufer and retry GetTokenInformation
+        // grow buffer and retry GetTokenInformation
         token_info_buf.resize(token_info_length);
         token_info = reinterpret_cast<TOKEN_MANDATORY_LABEL*>(token_info_buf.data());
         if (!GetTokenInformation(process_token, TokenIntegrityLevel, token_info, token_info_length, &token_info_length))
@@ -179,13 +179,8 @@ static GUID writableSpecialFolderId(QStandardPaths::StandardLocation type)
 static QString sHGetKnownFolderPath(const GUID &clsid)
 {
     QString result;
-    typedef HRESULT (WINAPI *GetKnownFolderPath)(const GUID&, DWORD, HANDLE, LPWSTR*);
-
-    static const GetKnownFolderPath sHGetKnownFolderPath = // Vista onwards.
-        reinterpret_cast<GetKnownFolderPath>(QSystemLibrary::resolve(QLatin1String("shell32"), "SHGetKnownFolderPath"));
-
     LPWSTR path;
-    if (Q_LIKELY(sHGetKnownFolderPath && SUCCEEDED(sHGetKnownFolderPath(clsid, KF_FLAG_DONT_VERIFY, 0, &path)))) {
+    if (Q_LIKELY(SUCCEEDED(SHGetKnownFolderPath(clsid, KF_FLAG_DONT_VERIFY, 0, &path)))) {
         result = convertCharArray(path);
         CoTaskMemFree(path);
     }

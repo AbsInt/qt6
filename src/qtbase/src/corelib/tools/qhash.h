@@ -489,8 +489,9 @@ struct Data
         bool resized = numBuckets != other.numBuckets;
         size_t nSpans = (numBuckets + Span::LocalBucketMask) / Span::NEntries;
         spans = new Span[nSpans];
+        size_t otherNSpans = (other.numBuckets + Span::LocalBucketMask) / Span::NEntries;
 
-        for (size_t s = 0; s < nSpans; ++s) {
+        for (size_t s = 0; s < otherNSpans; ++s) {
             const Span &span = other.spans[s];
             for (size_t index = 0; index < Span::NEntries; ++index) {
                 if (!span.hasNode(index))
@@ -819,8 +820,9 @@ public:
 #endif
     void swap(QHash &other) noexcept { qSwap(d, other.d); }
 
-    template <typename U = T>
-    QTypeTraits::compare_eq_result_container<QHash, U> operator==(const QHash &other) const noexcept
+#ifndef Q_CLANG_QDOC
+    template <typename AKey = Key, typename AT = T>
+    QTypeTraits::compare_eq_result_container<QHash, AKey, AT> operator==(const QHash &other) const noexcept
     {
         if (d == other.d)
             return true;
@@ -835,9 +837,13 @@ public:
         // all values must be the same as size is the same
         return true;
     }
-    template <typename U = T>
-    QTypeTraits::compare_eq_result_container<QHash, U> operator!=(const QHash &other) const noexcept
+    template <typename AKey = Key, typename AT = T>
+    QTypeTraits::compare_eq_result_container<QHash, AKey, AT> operator!=(const QHash &other) const noexcept
     { return !(*this == other); }
+#else
+    bool operator==(const QHash &other) const;
+    bool operator!=(const QHash &other) const;
+#endif // Q_CLANG_QDOC
 
     inline qsizetype size() const noexcept { return d ? qsizetype(d->size) : 0; }
     inline bool isEmpty() const noexcept { return !d || d->size == 0; }
@@ -1290,7 +1296,9 @@ public:
     }
     void swap(QMultiHash &other) noexcept { qSwap(d, other.d); qSwap(m_size, other.m_size); }
 
-    bool operator==(const QMultiHash &other) const noexcept
+#ifndef Q_CLANG_QDOC
+    template <typename AKey = Key, typename AT = T>
+    QTypeTraits::compare_eq_result_container<QMultiHash, AKey, AT> operator==(const QMultiHash &other) const noexcept
     {
         if (d == other.d)
             return true;
@@ -1323,7 +1331,13 @@ public:
         // all values must be the same as size is the same
         return true;
     }
-    bool operator!=(const QMultiHash &other) const noexcept { return !(*this == other); }
+    template <typename AKey = Key, typename AT = T>
+    QTypeTraits::compare_eq_result_container<QMultiHash, AKey, AT> operator!=(const QMultiHash &other) const noexcept
+    { return !(*this == other); }
+#else
+    bool operator==(const QMultiHash &other) const;
+    bool operator!=(const QMultiHash &other) const;
+#endif // Q_CLANG_QDOC
 
     inline qsizetype size() const noexcept { return m_size; }
 

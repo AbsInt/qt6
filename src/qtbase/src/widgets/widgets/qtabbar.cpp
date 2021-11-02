@@ -1433,11 +1433,19 @@ void QTabBar::setCurrentIndex(int index)
     int oldIndex = d->currentIndex;
     if (auto tab = d->at(index)) {
         d->currentIndex = index;
+        // If the size hint depends on whether the tab is selected (for instance a style
+        // sheet rule that sets a bold font on the 'selected' tab) then we need to
+        // re-layout the entire tab bar. To minimize the cost, do that only if the
+        // size hint changes for the tab that becomes the current tab (the old curent tab
+        // will most certainly do the same). QTBUG-6905
+        if (tabRect(index).size() != tabSizeHint(index))
+            d->layoutTabs();
         update();
         d->makeVisible(index);
-        tab->lastTab = oldIndex;
-        if (oldIndex >= 0 && oldIndex < count())
+        if (d->validIndex(oldIndex)) {
+            tab->lastTab = oldIndex;
             d->layoutTab(oldIndex);
+        }
         d->layoutTab(index);
 #ifndef QT_NO_ACCESSIBILITY
         if (QAccessible::isActive()) {
@@ -2450,7 +2458,7 @@ void QTabBar::timerEvent(QTimerEvent *event)
     This property controls how items are elided when there is not
     enough space to show them for a given tab bar size.
 
-    By default the value is style dependent.
+    By default the value is style-dependent.
 
     \sa QTabWidget::elideMode, usesScrollButtons, QStyle::SH_TabBar_ElideMode
 */
@@ -2479,7 +2487,7 @@ void QTabBar::setElideMode(Qt::TextElideMode mode)
     When there are too many tabs in a tab bar for its size, the tab bar can either choose
     to expand its size or to add buttons that allow you to scroll through the tabs.
 
-    By default the value is style dependant.
+    By default the value is style-dependent.
 
     \sa elideMode, QTabWidget::usesScrollButtons, QStyle::SH_TabBar_PreferNoArrows
 */

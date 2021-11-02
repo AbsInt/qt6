@@ -1208,9 +1208,9 @@ QDir::Filters QDir::filter() const
     files that the application can read, write, or execute, and symlinks
     to such files/directories can be listed.
 
-    To retrieve the permissons for a directory, use the
+    To retrieve the permissions for a directory, use the
     entryInfoList() function to get the associated QFileInfo objects
-    and then use the QFileInfo::permissons() to obtain the permissions
+    and then use the QFileInfo::permissions() to obtain the permissions
     and ownership for each file.
 */
 
@@ -2265,7 +2265,7 @@ QString qt_normalizePathSegments(const QString &name, QDirPrivate::PathNormaliza
 
     if (prefixLength) {
         if (!isEmpty && out[used] == '/') {
-            // Eventhough there is a prefix the out string is a slash. This happens, if the input
+            // Even though there is a prefix the out string is a slash. This happens, if the input
             // string only consists of a prefix followed by one or more slashes. Just skip the slash.
             ++used;
         }

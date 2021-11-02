@@ -1579,12 +1579,12 @@ bool QFontDatabase::isSmoothlyScalable(const QString &family, const QString &sty
     }
     if (!f) return smoothScalable;
 
-    QtFontStyle::Key styleKey(style);
+    const QtFontStyle::Key styleKey(style);
     for (int j = 0; j < f->count; j++) {
         QtFontFoundry *foundry = f->foundries[j];
         if (foundryName.isEmpty() || foundry->name.compare(foundryName, Qt::CaseInsensitive) == 0) {
             for (int k = 0; k < foundry->count; k++) {
-                QtFontStyle *fontStyle = foundry->styles[k];
+                const QtFontStyle *fontStyle = foundry->styles[k];
                 smoothScalable =
                         fontStyle->smoothScalable
                         && ((style.isEmpty()
@@ -2403,7 +2403,7 @@ QFontEngine *QFontDatabasePrivate::findFont(const QFontDef &request,
     unsigned int score = UINT_MAX;
     int index = match(multi ? QChar::Script_Common : script, request, family_name, foundry_name, &desc, blackListed, &score);
     if (score > 0 && QGuiApplicationPrivate::platformIntegration()->fontDatabase()->populateFamilyAliases(family_name)) {
-        // We populated familiy aliases (e.g. localized families), so try again
+        // We populated family aliases (e.g. localized families), so try again
         index = match(multi ? QChar::Script_Common : script, request, family_name, foundry_name, &desc, blackListed);
     }
 

@@ -309,7 +309,7 @@ bool QQuickPopupPrivate::tryClose(const QPointF &pos, QQuickPopup::ClosePolicy f
     const bool onOutside = closePolicy & (flags & outsideFlags);
     const bool onOutsideParent = closePolicy & (flags & outsideParentFlags);
     if (onOutside || onOutsideParent) {
-        if (!contains(pos)) {
+        if (!contains(pos) && (!dimmer || dimmer->contains(dimmer->mapFromScene(pos)))) {
             if (!onOutsideParent || !parentItem || !parentItem->contains(parentItem->mapFromScene(pos))) {
                 closeOrReject();
                 return true;
@@ -471,6 +471,9 @@ bool QQuickPopupPrivate::prepareEnterTransition()
         popupItem->setVisible(true);
         getPositioner()->setParentItem(parentItem);
         emit q->visibleChanged();
+
+        if (focus)
+            popupItem->setFocus(true);
     }
     return true;
 }
@@ -504,8 +507,6 @@ bool QQuickPopupPrivate::prepareExitTransition()
 void QQuickPopupPrivate::finalizeEnterTransition()
 {
     Q_Q(QQuickPopup);
-    if (focus)
-        popupItem->setFocus(true);
     transitionState = NoTransition;
     getPositioner()->reposition();
     emit q->openedChanged();
@@ -528,13 +529,14 @@ void QQuickPopupPrivate::finalizeExitTransition()
         if (QQuickOverlay *overlay = QQuickOverlay::overlay(window)) {
             const auto stackingOrderPopups = QQuickOverlayPrivate::get(overlay)->stackingOrderPopups();
             for (auto popup : stackingOrderPopups) {
-                if (QQuickPopupPrivate::get(popup)->transitionState != ExitTransition) {
+                if (QQuickPopupPrivate::get(popup)->transitionState != ExitTransition
+                        && popup->hasFocus()) {
                     nextFocusPopup = popup;
                     break;
                 }
             }
         }
-        if (nextFocusPopup && nextFocusPopup->hasFocus()) {
+        if (nextFocusPopup) {
             nextFocusPopup->forceActiveFocus();
         } else {
             QQuickApplicationWindow *applicationWindow = qobject_cast<QQuickApplicationWindow*>(window);
@@ -739,6 +741,9 @@ static QQuickItem *createDimmer(QQmlComponent *component, QQuickPopup *popup, QQ
         item->setParentItem(parent);
         item->stackBefore(popup->popupItem());
         item->setZ(popup->z());
+        // needed for the virtual keyboard to set a containment mask on the dimmer item
+        qCDebug(lcDimmer) << "dimmer" << item << "registered with" << parent;
+        parent->setProperty("_q_dimmerItem", QVariant::fromValue<QQuickItem*>(item));
         if (popup->isModal()) {
             item->setAcceptedMouseButtons(Qt::AllButtons);
 #if QT_CONFIG(cursor)
@@ -783,6 +788,10 @@ void QQuickPopupPrivate::destroyOverlay()
 {
     if (dimmer) {
         qCDebug(lcDimmer) << "destroying dimmer" << dimmer;
+        if (QObject *dimmerParentItem = dimmer->parentItem()) {
+            if (dimmerParentItem->property("_q_dimmerItem").value<QQuickItem*>() == dimmer)
+                dimmerParentItem->setProperty("_q_dimmerItem", QVariant());
+        }
         dimmer->setParentItem(nullptr);
         dimmer->deleteLater();
         dimmer = nullptr;
@@ -2031,6 +2040,8 @@ void QQuickPopup::setScale(qreal scale)
         has active focus.
 
     The default value is \c {Popup.CloseOnEscape | Popup.CloseOnPressOutside}.
+    This default value may interfere with existing shortcuts in the application
+    that makes use of the \e Escape key.
 
     \note There is a known limitation that the \c Popup.CloseOnReleaseOutside
         and \c Popup.CloseOnReleaseOutsideParent policies only work with

@@ -78,16 +78,15 @@ namespace QtAndroidInput
                                            candidatesEnd);
     }
 
-    void showSoftwareKeyboard(int left, int top, int width, int height, int editorHeight, int inputHints, int enterKeyType)
+    void showSoftwareKeyboard(int left, int top, int width, int height, int inputHints, int enterKeyType)
     {
         QJniObject::callStaticMethod<void>(applicationClass(),
                                            "showSoftwareKeyboard",
-                                           "(IIIIIII)V",
+                                           "(IIIIII)V",
                                            left,
                                            top,
                                            width,
                                            height,
-                                           editorHeight,
                                            inputHints,
                                            enterKeyType);
 #ifdef QT_DEBUG_ANDROID_IM_PROTOCOL
@@ -132,17 +131,6 @@ namespace QtAndroidInput
                                            mode, editMenuPos.x(), editMenuPos.y(), editButtons,
                                            cursor.x(), cursor.y(),
                                            anchor.x(), anchor.y(), rtl);
-    }
-
-    void updateInputItemRectangle(int left, int top, int width, int height)
-    {
-        QJniObject::callStaticMethod<void>(applicationClass(),
-                                            "updateInputItemRectangle",
-                                            "(IIII)V",
-                                            left,
-                                            top,
-                                            width,
-                                            height);
     }
 
     static void mouseDown(JNIEnv */*env*/, jobject /*thiz*/, jint /*winId*/, jint x, jint y)
@@ -279,15 +267,11 @@ namespace QtAndroidInput
         }
     }
 
-    static void touchEnd(JNIEnv */*env*/, jobject /*thiz*/, jint /*winId*/, jint /*action*/)
+    static QPointingDevice *getTouchDevice()
     {
-        if (m_touchPoints.isEmpty())
-            return;
-
-        QMutexLocker lock(QtAndroid::platformInterfaceMutex());
         QAndroidPlatformIntegration *platformIntegration = QtAndroid::androidPlatformIntegration();
         if (!platformIntegration)
-            return;
+            return nullptr;
 
         QPointingDevice *touchDevice = platformIntegration->touchDevice();
         if (!touchDevice) {
@@ -303,8 +287,35 @@ namespace QtAndroidInput
             platformIntegration->setTouchDevice(touchDevice);
         }
 
+        return touchDevice;
+    }
+
+    static void touchEnd(JNIEnv * /*env*/, jobject /*thiz*/, jint /*winId*/, jint /*action*/)
+    {
+        if (m_touchPoints.isEmpty())
+            return;
+
+        QMutexLocker lock(QtAndroid::platformInterfaceMutex());
+        QPointingDevice *touchDevice = getTouchDevice();
+        if (!touchDevice)
+            return;
+
         QWindow *window = QtAndroid::topLevelWindowAt(m_touchPoints.at(0).area.center().toPoint());
         QWindowSystemInterface::handleTouchEvent(window, touchDevice, m_touchPoints);
+    }
+
+    static void touchCancel(JNIEnv * /*env*/, jobject /*thiz*/, jint /*winId*/)
+    {
+        if (m_touchPoints.isEmpty())
+            return;
+
+        QMutexLocker lock(QtAndroid::platformInterfaceMutex());
+        QPointingDevice *touchDevice = getTouchDevice();
+        if (!touchDevice)
+            return;
+
+        QWindow *window = QtAndroid::topLevelWindowAt(m_touchPoints.at(0).area.center().toPoint());
+        QWindowSystemInterface::handleTouchCancelEvent(window, touchDevice);
     }
 
     static bool isTabletEventSupported(JNIEnv */*env*/, jobject /*thiz*/)
@@ -858,6 +869,7 @@ namespace QtAndroidInput
         {"touchBegin","(I)V",(void*)touchBegin},
         {"touchAdd","(IIIZIIFFFF)V",(void*)touchAdd},
         {"touchEnd","(II)V",(void*)touchEnd},
+        {"touchCancel", "(I)V", (void *)touchCancel},
         {"mouseDown", "(III)V", (void *)mouseDown},
         {"mouseUp", "(III)V", (void *)mouseUp},
         {"mouseMove", "(III)V", (void *)mouseMove},

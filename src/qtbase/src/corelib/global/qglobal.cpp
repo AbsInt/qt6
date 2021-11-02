@@ -582,7 +582,7 @@ static_assert(sizeof(qint64) == 8, "Internal error, qint64 is misdefined");
     \relates QFlags
 
     Calculates the hash for the flags \a flags, using \a seed
-    to seed the calcualtion.
+    to seed the calculation.
 */
 
 /*!
@@ -2202,7 +2202,17 @@ static const char *osVer_helper(QOperatingSystemVersion version = QOperatingSyst
 #define Q_WINVER(major, minor) (major << 8 | minor)
     switch (Q_WINVER(osver.dwMajorVersion, osver.dwMinorVersion)) {
     case Q_WINVER(10, 0):
-        return workstation ? "10" : "Server 2016";
+        if (workstation) {
+            if (osver.dwBuildNumber >= 22000)
+                return "11";
+            return "10";
+        }
+        // else: Server
+        if (osver.dwBuildNumber >= 20348)
+            return "Server 2022";
+        if (osver.dwBuildNumber >= 17763)
+            return "Server 2019";
+        return "Server 2016";
     }
 #undef Q_WINVER
     // unknown, future version
@@ -4180,7 +4190,7 @@ bool qunsetenv(const char *varName)
 
     Qt will try to detect the class of a type using
     \l {https://en.cppreference.com/w/cpp/types/is_trivial} {std::is_trivial_v<T>}
-    to indentify primitive
+    to identify primitive
     types and it will require both
     \l {https://en.cppreference.com/w/cpp/types/is_trivially_copyable} {std::is_trivially_copyable_v<T>}
     and

@@ -456,8 +456,8 @@ public:
     {
         const QBindingStorage *storage = qGetBindingStorage(owner());
         // make sure we don't register this binding as a dependency to itself
-        if (!inBindingWrapper(storage))
-            storage->registerDependency(this);
+        if (storage->bindingStatus->currentlyEvaluatingBinding && !inBindingWrapper(storage))
+            storage->registerDependency_helper(this);
         return this->val;
     }
 
@@ -486,11 +486,11 @@ public:
     void setValue(parameter_type t)
     {
         QBindingStorage *storage = qGetBindingStorage(owner());
-        auto *bd = storage->bindingData(this);
-        // make sure we don't remove the binding if called from the bindingWrapper
-        const bool inWrapper = inBindingWrapper(storage);
-        if (bd && !inWrapper)
-            bd->removeBinding();
+        if (auto *bd = storage->bindingData(this)) {
+            // make sure we don't remove the binding if called from the bindingWrapper
+            if (bd->hasBinding() && !inBindingWrapper(storage))
+                bd->removeBinding_helper();
+        }
         this->val = t;
     }
 
@@ -537,20 +537,20 @@ public:
     void removeBindingUnlessInWrapper()
     {
         QBindingStorage *storage = qGetBindingStorage(owner());
-        auto *bd = storage->bindingData(this);
-        // make sure we don't remove the binding if called from the bindingWrapper
-        const bool inWrapper = inBindingWrapper(storage);
-        if (bd && !inWrapper)
-            bd->removeBinding();
+        if (auto *bd = storage->bindingData(this)) {
+            // make sure we don't remove the binding if called from the bindingWrapper
+            if (bd->hasBinding() && !inBindingWrapper(storage))
+                bd->removeBinding_helper();
+        }
     }
 
     void notify()
     {
         QBindingStorage *storage = qGetBindingStorage(owner());
-        auto bd = storage->bindingData(this, false);
-        const bool inWrapper = inBindingWrapper(storage);
-        if (bd && !inWrapper)
-            notify(bd);
+        if (auto bd = storage->bindingData(this, false)) {
+            if (!inBindingWrapper(storage))
+                notify(bd);
+        }
         if constexpr (Signal != nullptr) {
             if constexpr (SignalTakesValue::value)
                 (owner()->*Signal)(value());

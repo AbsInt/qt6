@@ -105,7 +105,7 @@ static void qRegisterNotificationCallbacks()
                 if (QNSView *qnsView = qnsview_cast(notification.object))
                     cocoaWindows += qnsView.platformWindow;
             } else {
-                qCWarning(lcCocoaNotifications) << "Unhandled notifcation"
+                qCWarning(lcCocoaNotifications) << "Unhandled notification"
                     << notification.name << "for" << notification.object;
                 return;
             }
@@ -253,7 +253,7 @@ bool QCocoaWindow::isForeignWindow() const
 
 QRect QCocoaWindow::geometry() const
 {
-    // QWindows that are embedded in a NSView hiearchy may be considered
+    // QWindows that are embedded in a NSView hierarchy may be considered
     // top-level from Qt's point of view but are not from Cocoa's point
     // of view. Embedded QWindows get global (screen) geometry.
     if (isEmbedded()) {
@@ -266,6 +266,40 @@ QRect QCocoaWindow::geometry() const
     }
 
     return QPlatformWindow::geometry();
+}
+
+/*!
+    \brief the geometry of the window as it will appear when shown as
+    a normal (not maximized or full screen) top-level window.
+
+    For child windows this property always holds an empty rectangle.
+
+    \sa QWidget::normalGeometry()
+*/
+QRect QCocoaWindow::normalGeometry() const
+{
+    if (!isContentView())
+        return QRect();
+
+    // We only persist the normal the geometry when going into
+    // fullscreen and maximized states. For all other cases we
+    // can just report the geometry as is.
+
+    if (!(windowState() & (Qt::WindowFullScreen | Qt::WindowMaximized)))
+        return geometry();
+
+    return m_normalGeometry;
+}
+
+void QCocoaWindow::updateNormalGeometry()
+{
+    if (!isContentView())
+        return;
+
+    if (windowState() != Qt::WindowNoState)
+        return;
+
+    m_normalGeometry = geometry();
 }
 
 void QCocoaWindow::setCocoaGeometry(const QRect &rect)
@@ -759,6 +793,11 @@ void QCocoaWindow::toggleMaximized()
         window.styleMask &= ~NSWindowStyleMaskResizable;
 }
 
+void QCocoaWindow::windowWillZoom()
+{
+    updateNormalGeometry();
+}
+
 void QCocoaWindow::toggleFullScreen()
 {
     const NSWindow *window = m_view.window;
@@ -776,6 +815,8 @@ void QCocoaWindow::windowWillEnterFullScreen()
 {
     if (!isContentView())
         return;
+
+    updateNormalGeometry();
 
     // The NSWindow needs to be resizable, otherwise we'll end up with
     // the normal window geometry, centered in the middle of the screen
@@ -1125,7 +1166,7 @@ NSWindow *QCocoaWindow::nativeWindow() const
 
 void QCocoaWindow::setEmbeddedInForeignView()
 {
-    // Release any previosly created NSWindow.
+    // Release any previously created NSWindow.
     [m_nsWindow closeAndRelease];
     m_nsWindow = 0;
 }
@@ -1828,7 +1869,7 @@ void QCocoaWindow::applyContentBorderThickness(NSWindow *window)
         if (!m_enabledContentBorderAreas.value(range.identifier, false))
             continue;
 
-        // Is this sub-range adjacent to or overlaping the
+        // Is this sub-range adjacent to or overlapping the
         // existing total border area range? If so merge
         // it into the total range,
         if (range.upper <= (effectiveTopContentBorderThickness + 1))
@@ -1879,7 +1920,7 @@ bool QCocoaWindow::testContentBorderAreaPosition(int position) const
     if (!m_drawContentBorderGradient || !isContentView())
         return false;
 
-    // Determine if the given y postion (relative to the content area) is inside the
+    // Determine if the given y position (relative to the content area) is inside the
     // unified toolbar area. Note that the value returned by contentBorderThicknessForEdge
     // includes the title bar height; subtract it.
     const int contentBorderThickness = [m_view.window contentBorderThicknessForEdge:NSMaxYEdge];

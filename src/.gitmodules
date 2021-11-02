@@ -72,10 +72,17 @@
 	status = essential
 	priority = 50
 [submodule "qtlocation"]
-	depends = qtbase
-	recommends = qtdeclarative qtserialport
+	depends = qtbase qtpositioning
+	recommends = qtdeclarative
 	path = qtlocation
 	url = ../qtlocation.git
+	branch = 6.2
+	status = ignore
+[submodule "qtpositioning"]
+	depends = qtbase
+	recommends = qtdeclarative qtserialport
+	path = qtpositioning
+	url = ../qtpositioning.git
 	branch = 6.2
 	status = addon
 [submodule "qtsensors"]
@@ -161,7 +168,7 @@
 	status = addon
 [submodule "qtwebengine"]
 	depends = qtdeclarative
-	recommends = qtlocation qtwebchannel qttools
+	recommends = qtwebchannel qttools qtpositioning
 	path = qtwebengine
 	url = ../qtwebengine.git
 	branch = 6.2

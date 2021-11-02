@@ -318,6 +318,8 @@ public:
     void handleResized(int wParam);
     void handleHidden();
     void handleCompositionSettingsChanged();
+    void handleDpiScaledSize(WPARAM wParam, LPARAM lParam, LRESULT *result);
+    void handleDpiChanged(HWND hwnd, WPARAM wParam, LPARAM lParam);
 
     static void displayChanged();
     static void settingsChanged();
@@ -416,6 +418,7 @@ private:
     VkSurfaceKHR m_vkSurface = VK_NULL_HANDLE;
 #endif
     static bool m_borderInFullScreenDefault;
+    static bool m_inSetgeometry;
 };
 
 #ifndef QT_NO_DEBUG_STREAM

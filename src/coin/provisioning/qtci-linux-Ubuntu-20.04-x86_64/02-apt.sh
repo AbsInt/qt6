@@ -206,6 +206,7 @@ installPackages+=(ssh)
 # For bitbake
 installPackages+=(diffstat)
 installPackages+=(binfmt-support)
+installPackages+=(zstd)
 # Vulkan is needed for examples
 installPackages+=(libvulkan-dev)
 # Needed for qtdltlogging
@@ -220,6 +221,10 @@ installPackages+=(linux-libc-dev:i386)
 installPackages+=(libxcursor1:i386)
 installPackages+=(libc6-dev-i386)
 sudo dpkg --add-architecture i386
+# For QNX
+installPackages+=(nfs-kernel-server)
+installPackages+=(net-tools)
+installPackages+=(bridge-utils)
 
 echo "Running update for apt"
 waitLoop

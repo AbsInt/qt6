@@ -154,7 +154,7 @@
     const bool keyUpAccepted = [self handleKeyEvent:nsevent];
 
     // Propagate the keyUp if neither Qt accepted it nor the corresponding KeyDown was
-    // accepted. Qt text controls wil often not use and ignore keyUp events, but we
+    // accepted. Qt text controls will often not use and ignore keyUp events, but we
     // want to avoid propagating unmatched keyUps.
     const bool keyDownAccepted = m_acceptedKeyDowns.remove(nsevent.keyCode);
     if (!keyUpAccepted && !keyDownAccepted)
@@ -240,6 +240,9 @@
 KeyEvent::KeyEvent(NSEvent *nsevent)
 {
     timestamp = nsevent.timestamp * 1000;
+    nativeModifiers = nsevent.modifierFlags;
+    nativeVirtualKey = nsevent.keyCode;
+    modifiers = QAppleKeyMapper::fromCocoaModifiers(nativeModifiers);
 
     switch (nsevent.type) {
     case NSEventTypeKeyDown: type = QEvent::KeyPress; break;
@@ -275,11 +278,6 @@ KeyEvent::KeyEvent(NSEvent *nsevent)
 
         isRepeat = nsevent.ARepeat;
     }
-
-    nativeVirtualKey = nsevent.keyCode;
-
-    nativeModifiers = nsevent.modifierFlags;
-    modifiers = QAppleKeyMapper::fromCocoaModifiers(nativeModifiers);
 }
 
 bool KeyEvent::sendWindowSystemEvent(QWindow *window) const

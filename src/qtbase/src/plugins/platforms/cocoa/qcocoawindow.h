@@ -113,6 +113,7 @@ public:
 
     void setGeometry(const QRect &rect) override;
     QRect geometry() const override;
+    QRect normalGeometry() const override;
     void setCocoaGeometry(const QRect &rect);
 
     void setVisible(bool visible) override;
@@ -174,6 +175,8 @@ public:
     Q_NOTIFICATION_HANDLER(NSWindowDidChangeScreenNotification) void windowDidChangeScreen();
     Q_NOTIFICATION_HANDLER(NSWindowWillCloseNotification) void windowWillClose();
 
+    void windowWillZoom();
+
     bool windowShouldClose();
     bool windowIsPopupType(Qt::WindowType type = Qt::Widget) const;
 
@@ -206,6 +209,8 @@ public:
     bool shouldRefuseKeyWindowAndFirstResponder();
 
     QPoint bottomLeftClippedByNSWindowOffset() const override;
+
+    void updateNormalGeometry();
 
     enum RecreationReason {
         RecreationNotNeeded = 0,
@@ -265,6 +270,7 @@ public: // for QNSView
 
     bool m_frameStrutEventsEnabled;
     QRect m_exposedRect;
+    QRect m_normalGeometry;
     int m_registerTouchCount;
     bool m_resizableTransientParent;
 
@@ -285,8 +291,8 @@ public: // for QNSView
               return upper < right.upper;
         }
     };
-    QHash<quintptr, BorderRange> m_contentBorderAreas; // identifer -> uppper/lower
-    QHash<quintptr, bool> m_enabledContentBorderAreas; // identifer -> enabled state (true/false)
+    QHash<quintptr, BorderRange> m_contentBorderAreas; // identifier -> uppper/lower
+    QHash<quintptr, bool> m_enabledContentBorderAreas; // identifier -> enabled state (true/false)
 
 #if QT_CONFIG(vulkan)
     VkSurfaceKHR m_vulkanSurface = nullptr;

@@ -1222,7 +1222,7 @@ function(qt6_extract_metatypes target)
         set(${arg_OUTPUT_FILES} "${metatypes_file}" PARENT_SCOPE)
     endif()
 
-    # Chech whether the generated json file needs to be installed.
+    # Check whether the generated json file needs to be installed.
     # Executable metatypes.json files should not be installed. Qt non-prefix builds should also
     # not install the files.
     set(should_install FALSE)
@@ -1531,7 +1531,7 @@ function(__qt_internal_propagate_object_library target object_library)
     # All object libraries mark themselves with the _is_qt_propagated_object_library property.
     # Using a finalizer approach we walk through the target dependencies and look for libraries
     # using the _is_qt_propagated_object_library property. Then, objects of the collected libraries
-    # are moved to the beginnig of the linker line using target_sources.
+    # are moved to the beginning of the linker line using target_sources.
     #
     # Note: target_link_libraries works well with linkers other than ld. If user didn't enforce
     # a finalizer we rely on linker to resolve circular dependencies between objects and static
@@ -1610,7 +1610,7 @@ function(__qt_internal_propagate_object_library target object_library)
         ":${objects}>"
     )
     # target_link_options works well since CMake 3.17 which has policy CMP0099 set to NEW for the
-    # minimum required CMake version greated than or equal 3.17. The default is OLD. See
+    # minimum required CMake version greater than or equal to 3.17. The default is OLD. See
     # https://cmake.org/cmake/help/git-master/policy/CMP0099.html for details.
     # This provides yet another way of linking object libraries if user sets the policy to NEW
     # before calling find_package(Qt...).
@@ -1700,6 +1700,14 @@ function(_qt_internal_expose_source_file_to_ide target file)
     set(ide_target ${target}_other_files)
     if(NOT TARGET ${ide_target})
         add_custom_target(${ide_target} SOURCES "${file}")
+
+        # The new Xcode build system requires a common target to drive the generation of files,
+        # otherwise project configuration fails.
+        # By adding ${target} as a dependency of ${target}_other_files,
+        # it becomes the common target, so project configuration succeeds.
+        if(CMAKE_GENERATOR STREQUAL "Xcode")
+            add_dependencies(${ide_target} ${target})
+        endif()
     else()
         set_property(TARGET ${ide_target} APPEND PROPERTY SOURCES "${file}")
     endif()

@@ -58,18 +58,32 @@ function(qt_internal_add_tool target_name)
     endif()
 
     set(full_name "${QT_CMAKE_EXPORT_NAMESPACE}::${name}")
-    set(imported_tool_target_found FALSE)
+    set(imported_tool_target_already_found FALSE)
+
+    # This condition can only be TRUE if a previous find_package(Qt6${arg_TOOLS_TARGET}Tools)
+    # was already done. That can happen if we are cross compiling or QT_FORCE_FIND_TOOLS was ON.
+    # In such a case, we need to exit early if we're not going to also cross-build the tools.
     if(TARGET ${full_name})
         get_property(path TARGET ${full_name} PROPERTY LOCATION)
         message(STATUS "Tool '${full_name}' was found at ${path}.")
-        set(imported_tool_target_found TRUE)
-        if(CMAKE_CROSSCOMPILING AND NOT QT_BUILD_TOOLS_WHEN_CROSSCOMPILING)
+        set(imported_tool_target_already_found TRUE)
+        if(NOT QT_WILL_BUILD_TOOLS)
             return()
         endif()
     endif()
 
-    if(arg_TOOLS_TARGET AND (NOT QT_WILL_BUILD_TOOLS OR QT_BUILD_TOOLS_WHEN_CROSSCOMPILING)
-            AND NOT imported_tool_target_found)
+    # We need to search for the host Tools package when:
+    # - doing a cross-build and tools are not cross-built
+    # - doing a cross-build and tools ARE cross-built
+    # - QT_FORCE_FIND_TOOLS is ON
+    # This collapses to the condition below.
+    # As an optimiziation, we don't search for the package one more time if the target
+    # was already brought into scope from a previous find_package.
+    set(search_for_host_package FALSE)
+    if(NOT QT_WILL_BUILD_TOOLS OR QT_BUILD_TOOLS_WHEN_CROSSCOMPILING)
+        set(search_for_host_package TRUE)
+    endif()
+    if(search_for_host_package AND NOT imported_tool_target_already_found)
         set(tools_package_name "Qt6${arg_TOOLS_TARGET}Tools")
         message(STATUS "Searching for tool '${full_name}' in package ${tools_package_name}.")
 
@@ -78,17 +92,39 @@ function(qt_internal_add_tool target_name)
         set(BACKUP_QT_NO_CREATE_TARGETS ${QT_NO_CREATE_TARGETS})
         set(QT_NO_CREATE_TARGETS OFF)
 
-        # Only search in path provided by QT_HOST_PATH. We need to do it with CMAKE_PREFIX_PATH
-        # instead of PATHS option, because any find_dependency call inside a Tools package would
-        # not get the proper prefix when using PATHS.
-        set(BACKUP_CMAKE_PREFIX_PATH ${CMAKE_PREFIX_PATH})
-        set(CMAKE_PREFIX_PATH "${QT_HOST_PATH}")
+        # When cross-compiling, we want to search for Tools packages in QT_HOST_PATH.
+        # To do that, we override CMAKE_PREFIX_PATH and CMAKE_FIND_ROOT_PATH.
+        #
+        # We don't use find_package + PATHS option because any recursive find_dependency call
+        # inside a Tools package would not inherit the initial PATHS value given.
+        # TODO: Potentially we could set a global __qt_cmake_host_dir var like we currently
+        # do with _qt_cmake_dir in Qt6Config and change all our host tool find_package calls
+        # everywhere to specify that var in PATHS.
+        #
+        # Note though that due to path rerooting issue in
+        # https://gitlab.kitware.com/cmake/cmake/-/issues/21937
+        # we have to append a lib/cmake suffix to CMAKE_PREFIX_PATH so the value does not get
+        # rerooted on top of CMAKE_FIND_ROOT_PATH.
+        # Use QT_HOST_PATH_CMAKE_DIR for the suffix when available (it would be set by
+        # the qt.toolchain.cmake file when building other repos or given by the user when
+        # configuring qtbase) or derive it from from the Qt6HostInfo package which is
+        # found in QtSetup.
+        set(${tools_package_name}_BACKUP_CMAKE_PREFIX_PATH ${CMAKE_PREFIX_PATH})
+        set(${tools_package_name}_BACKUP_CMAKE_FIND_ROOT_PATH "${CMAKE_FIND_ROOT_PATH}")
+        if(QT_HOST_PATH_CMAKE_DIR)
+            set(CMAKE_PREFIX_PATH "${QT_HOST_PATH_CMAKE_DIR}")
+        elseif(Qt${PROJECT_VERSION_MAJOR}HostInfo_DIR)
+            get_filename_component(qt_host_path_cmake_dir_absolute
+                "${Qt${PROJECT_VERSION_MAJOR}HostInfo_DIR}/.." ABSOLUTE)
+            set(CMAKE_PREFIX_PATH "${qt_host_path_cmake_dir_absolute}")
+        else()
+            # This should never happen, serves as an assert.
+            message(FATAL_ERROR
+                "Neither QT_HOST_PATH_CMAKE_DIR nor "
+                "Qt${PROJECT_VERSION_MAJOR}HostInfo_DIR} available.")
+        endif()
+        list(PREPEND CMAKE_FIND_ROOT_PATH "${QT_HOST_PATH}")
 
-        # Search both with sysroots prepended as well as in the host system. When cross compiling
-        # the mode_package might be set to ONLY only, and the Qt6 tools packages are actually
-        # in the host system.
-        set(BACKUP_CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ${CMAKE_FIND_ROOT_PATH_MODE_PACKAGE})
-        set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE "BOTH")
         find_package(
             ${tools_package_name}
             ${PROJECT_VERSION}
@@ -98,8 +134,10 @@ function(qt_internal_add_tool target_name)
             NO_CMAKE_PACKAGE_REGISTRY
             NO_CMAKE_SYSTEM_PATH
             NO_CMAKE_SYSTEM_PACKAGE_REGISTRY)
-        set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE "${BACKUP_CMAKE_FIND_ROOT_PATH_MODE_PACKAGE}")
-        set(CMAKE_PREFIX_PATH "${BACKUP_CMAKE_PREFIX_PATH}")
+
+        # Restore backups.
+        set(CMAKE_FIND_ROOT_PATH "${${tools_package_name}_BACKUP_CMAKE_FIND_ROOT_PATH}")
+        set(CMAKE_PREFIX_PATH "${${tools_package_name}_BACKUP_CMAKE_PREFIX_PATH}")
         set(QT_NO_CREATE_TARGETS ${BACKUP_QT_NO_CREATE_TARGETS})
 
         if(${${tools_package_name}_FOUND} AND TARGET ${full_name})
@@ -262,8 +300,8 @@ function(qt_internal_add_tool target_name)
 endfunction()
 
 function(qt_export_tools module_name)
-    # Bail out when cross-compiling, unless QT_BUILD_TOOLS_WHEN_CROSSCOMPILING is on.
-    if(CMAKE_CROSSCOMPILING AND NOT QT_BUILD_TOOLS_WHEN_CROSSCOMPILING)
+    # Bail out when not building tools.
+    if(NOT QT_WILL_BUILD_TOOLS)
         return()
     endif()
 
@@ -370,15 +408,20 @@ endif()
         INSTALL_DESTINATION "${config_install_dir}"
     )
     write_basic_package_version_file(
-        "${config_build_dir}/${INSTALL_CMAKE_NAMESPACE}${target}ConfigVersion.cmake"
+        "${config_build_dir}/${INSTALL_CMAKE_NAMESPACE}${target}ConfigVersionImpl.cmake"
         VERSION ${PROJECT_VERSION}
         COMPATIBILITY AnyNewerVersion
         ARCH_INDEPENDENT
+    )
+    qt_internal_write_qt_package_version_file(
+        "${INSTALL_CMAKE_NAMESPACE}${target}"
+        "${config_build_dir}/${INSTALL_CMAKE_NAMESPACE}${target}ConfigVersion.cmake"
     )
 
     qt_install(FILES
         "${config_build_dir}/${INSTALL_CMAKE_NAMESPACE}${target}Config.cmake"
         "${config_build_dir}/${INSTALL_CMAKE_NAMESPACE}${target}ConfigVersion.cmake"
+        "${config_build_dir}/${INSTALL_CMAKE_NAMESPACE}${target}ConfigVersionImpl.cmake"
         DESTINATION "${config_install_dir}"
         COMPONENT Devel
     )

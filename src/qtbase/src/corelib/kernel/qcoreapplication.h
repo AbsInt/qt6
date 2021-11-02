@@ -45,10 +45,6 @@
 #ifndef QT_NO_QOBJECT
 #include <QtCore/qcoreevent.h>
 #include <QtCore/qeventloop.h>
-#if QT_CONFIG(future)
-#include <QtCore/qfuture.h>
-#include <QtCore/qapplicationpermission.h>
-#endif
 #include <QtCore/qobject.h>
 #else
 #include <QtCore/qscopedpointer.h>

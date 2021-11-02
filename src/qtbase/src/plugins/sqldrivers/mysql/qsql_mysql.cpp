@@ -1277,11 +1277,20 @@ bool QMYSQLDriver::open(const QString& db,
                                       unixSocket.isNull() ? nullptr : unixSocket.toUtf8().constData(),
                                       optionFlags);
 
+    if (mysql != d->mysql) {
+        setLastError(qMakeError(tr("Unable to connect"),
+                     QSqlError::ConnectionError, d));
+        mysql_close(d->mysql);
+        d->mysql = nullptr;
+        setOpenError(true);
+        return false;
+    }
+
     // now ask the server to match the charset we selected
-    if (!cs || mysql_set_character_set(d->mysql, cs->csname)) {
+    if (!cs || mysql_set_character_set(d->mysql, cs->csname) != 0) {
         bool ok = false;
         for (const char *p : wanted_charsets) {
-            if (mysql_set_character_set(d->mysql, p)) {
+            if (mysql_set_character_set(d->mysql, p) == 0) {
                 ok = true;
                 break;
             }
@@ -1292,30 +1301,15 @@ bool QMYSQLDriver::open(const QString& db,
                      mysql_character_set_name(d->mysql));
     }
 
-    if (mysql == d->mysql) {
-        if (!db.isEmpty() && mysql_select_db(d->mysql, db.toUtf8().constData())) {
-            setLastError(qMakeError(tr("Unable to open database '%1'").arg(db), QSqlError::ConnectionError, d));
-            mysql_close(d->mysql);
-            setOpenError(true);
-            return false;
-        }
-        if (reconnect)
-            mysql_options(d->mysql, MYSQL_OPT_RECONNECT, &reconnect);
-    } else {
-        setLastError(qMakeError(tr("Unable to connect"),
-                     QSqlError::ConnectionError, d));
+    if (!db.isEmpty() && mysql_select_db(d->mysql, db.toUtf8().constData())) {
+        setLastError(qMakeError(tr("Unable to open database '%1'").arg(db), QSqlError::ConnectionError, d));
         mysql_close(d->mysql);
-        d->mysql = nullptr;
         setOpenError(true);
         return false;
     }
 
-    // force the communication to be utf8mb4 (only utf8mb4 supports 4-byte characters)
-    if (mysql_set_character_set(d->mysql, "utf8mb4")) {
-        // this failed, try forcing it to utf (BMP only)
-        if (mysql_set_character_set(d->mysql, "utf8"))
-            qWarning() << "MySQL: Unable to set the client character set to utf8.";
-    }
+    if (reconnect)
+        mysql_options(d->mysql, MYSQL_OPT_RECONNECT, &reconnect);
 
     d->preparedQuerysEnabled = checkPreparedQueries(d->mysql);
 

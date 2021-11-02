@@ -120,7 +120,6 @@ qt_internal_add_module(Core
         kernel/qobjectcleanuphandler.cpp kernel/qobjectcleanuphandler.h
         kernel/qobjectdefs.h
         kernel/qobjectdefs_impl.h
-        kernel/qapplicationpermission.h
         kernel/qpointer.cpp kernel/qpointer.h
         kernel/qproperty.cpp kernel/qproperty.h kernel/qproperty_p.h
         kernel/qpropertyprivate.h
@@ -286,7 +285,7 @@ set_target_properties(Core PROPERTIES INTERFACE_QT_COORD_TYPE "${QT_COORD_TYPE}"
 set_property(TARGET Core APPEND PROPERTY COMPATIBLE_INTERFACE_STRING QT_COORD_TYPE)
 
 # Handle qtConfig(thread): CONFIG += thread like in qt.prf.
-# Aka if the feature is enabled, publically link against the threading library.
+# Aka if the feature is enabled, publicly link against the threading library.
 # This also ensures the link flag is in the .prl file.
 if(QT_FEATURE_thread)
     target_link_libraries(Platform INTERFACE Threads::Threads)
@@ -785,7 +784,8 @@ qt_internal_extend_target(Core CONDITION WIN32
         text/qlocale_win.cpp
 )
 
-qt_internal_extend_target(Core CONDITION WIN32 AND MSVC
+# On MS-Win, clang has two flavors, one of which immitates MSVC (so claims to be it)
+qt_internal_extend_target(Core CONDITION WIN32 AND MSVC AND NOT CLANG
     LIBRARIES
         runtimeobject
 )
@@ -1276,6 +1276,7 @@ endif()
 qt_internal_extend_target(Core CONDITION WASM
     SOURCES
         platform/wasm/qstdweb.cpp platform/wasm/qstdweb_p.h
+        kernel/qeventdispatcher_wasm.cpp kernel/qeventdispatcher_wasm_p.h
 )
 
 # special case begin

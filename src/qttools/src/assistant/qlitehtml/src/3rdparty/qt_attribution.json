@@ -8,6 +8,7 @@
 
         "Description": "Gumbo is an implementation of the HTML5 parsing algorithm implemented as a pure C99 library with no outside dependencies.",
         "Homepage": "https://github.com/google/gumbo-parser",
+        "Version": "0.10.1",
         "LicenseId": "Apache-2.0 AND MIT",
         "License": "Apache License 2.0 AND MIT",
         "CopyrightFile": "GUMBO-AUTHORS.txt"

@@ -1946,7 +1946,8 @@ void QWindow::resize(const QSize &newSize)
     Q_D(QWindow);
     d->positionPolicy = QWindowPrivate::WindowFrameExclusive;
     if (d->platformWindow) {
-        d->platformWindow->setGeometry(QHighDpi::toNativePixels(QRect(position(), newSize), this));
+        d->platformWindow->setGeometry(
+            QHighDpi::toNativeWindowGeometry(QRect(position(), newSize), this));
     } else {
         const QSize oldSize = d->geometry.size();
         d->geometry.setSize(newSize);
@@ -1997,7 +1998,7 @@ void QWindowPrivate::destroy()
     // Let subclasses act, typically by doing graphics resource cleaup, when
     // the window, to which graphics resource may be tied, is going away.
     //
-    // NB! This is disfunctional when destroy() is invoked from the dtor since
+    // NB! This is dysfunctional when destroy() is invoked from the dtor since
     // a reimplemented event() will not get called in the subclasses at that
     // stage. However, the typical QWindow cleanup involves either close() or
     // going through QWindowContainer, both of which will do an explicit, early
@@ -2264,7 +2265,7 @@ bool QWindow::close()
     Q_D(QWindow);
 
     // Do not close non top level windows
-    if (parent())
+    if (!isTopLevel())
         return false;
 
     if (!d->platformWindow)
@@ -2774,7 +2775,7 @@ QPointF QWindow::mapFromGlobal(const QPointF &pos) const
         return pos - d->globalPosition();
 
     // Calculate local position in the native coordinate system. (See comment for the
-    // correspinding mapToGlobal() code above).
+    // corresponding mapToGlobal() code above).
     QPointF nativeGlobalPos = QHighDpi::toNativeGlobalPosition(pos, this);
     QPointF nativeWindowGlobalPos = QHighDpi::toNativeGlobalPosition(QPointF(d->globalPosition()), this);
     QPointF nativeLocalPos = nativeGlobalPos - nativeWindowGlobalPos;
@@ -2904,7 +2905,7 @@ QWindow *QWindow::fromWinId(WId id)
 }
 
 /*!
-    Causes an alert to be shown for \a msec miliseconds. If \a msec is \c 0 (the
+    Causes an alert to be shown for \a msec milliseconds. If \a msec is \c 0 (the
     default), then the alert is shown indefinitely until the window becomes
     active again. This function has no effect on an active window.
 

@@ -61,6 +61,9 @@ QT_BEGIN_NAMESPACE
 
 class QBindingStorage;
 
+template<typename Class, typename T, auto Offset, auto Setter, auto Signal>
+class QObjectCompatProperty;
+
 namespace QtPrivate {
 // QPropertyBindingPrivatePtr operates on a RefCountingMixin solely so that we can inline
 // the constructor and copy constructor
@@ -201,7 +204,7 @@ struct BindingFunctionVTable
                     static_assert (std::is_invocable_r_v<bool, Callable, QMetaType, QUntypedPropertyData *> );
                     auto untypedEvaluationFunction = static_cast<Callable *>(f);
                     return std::invoke(*untypedEvaluationFunction, metaType, dataPtr);
-                } else if constexpr (!std::is_same_v<PropertyType, void>) { // check for void to woraround MSVC issue
+                } else if constexpr (!std::is_same_v<PropertyType, void>) { // check for void to workaround MSVC issue
                     Q_UNUSED(metaType);
                     QPropertyData<PropertyType> *propertyPtr = static_cast<QPropertyData<PropertyType> *>(dataPtr);
                     // That is allowed by POSIX even if Callable is a function pointer
@@ -259,6 +262,10 @@ class Q_CORE_EXPORT QPropertyBindingData
     friend struct QT_PREPEND_NAMESPACE(QPropertyBindingDataPointer);
     friend class QT_PREPEND_NAMESPACE(QQmlPropertyBinding);
     friend struct QT_PREPEND_NAMESPACE(QPropertyDelayedNotifications);
+
+    template<typename Class, typename T, auto Offset, auto Setter, auto Signal>
+    friend class QT_PREPEND_NAMESPACE(QObjectCompatProperty);
+
     Q_DISABLE_COPY(QPropertyBindingData)
 public:
     QPropertyBindingData() = default;
@@ -311,7 +318,7 @@ private:
         Returns a reference to d_ptr, except when d_ptr points to a proxy.
         In that case, a reference to proxy->d_ptr is returned instead.
 
-        To properly support proxying, direct access to d_ptr only occcurs when
+        To properly support proxying, direct access to d_ptr only occurs when
         - a function actually deals with proxying (e.g.
           QPropertyDelayedNotifications::addProperty),
         - only the tag value is accessed (e.g. hasBinding) or

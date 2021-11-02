@@ -202,7 +202,7 @@ void QAbstractScrollAreaScrollBarContainer::addWidget(QWidget *widget, LogicalPo
 }
 
 /*! \internal
-    Retuns a list of scroll bar widgets for the given position. The scroll bar
+    Returns a list of scroll-bar widgets for the given position. The scroll bar
     itself is not returned.
 */
 QWidgetList QAbstractScrollAreaScrollBarContainer::widgets(LogicalPosition position)
@@ -442,8 +442,10 @@ void QAbstractScrollAreaPrivate::layoutChildren_helper(bool *needHorizontalScrol
         viewportRect.adjust(right, top, -left, -bottom);
     else
         viewportRect.adjust(left, top, -right, -bottom);
+    viewportRect = QStyle::visualRect(opt.direction, opt.rect, viewportRect);
+    viewportRect.translate(-overshoot);
+    viewport->setGeometry(viewportRect); // resize the viewport last
 
-    viewport->setGeometry(QStyle::visualRect(opt.direction, opt.rect, viewportRect)); // resize the viewport last
     *needHorizontalScrollbar = needh;
     *needVerticalScrollbar = needv;
 }

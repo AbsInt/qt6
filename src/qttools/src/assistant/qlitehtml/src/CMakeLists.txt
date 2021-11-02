@@ -15,14 +15,17 @@ set(QLITEHTML_VERSION_COMPAT ${QLITEHTML_VERSION} CACHE STRING "qlitehtml compat
 find_package(litehtml QUIET)
 if(NOT TARGET litehtml AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/litehtml/CMakeLists.txt)
     set(ORIG_FPIC ${CMAKE_POSITION_INDEPENDENT_CODE})
+    set(ORIG_BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS})
     if (WIN32)
       set(LITEHTML_UTF8 ON CACHE BOOL "")
     endif()
     set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+    set(BUILD_SHARED_LIBS OFF)
 
     add_subdirectory(3rdparty/litehtml EXCLUDE_FROM_ALL)
 
     set(CMAKE_POSITION_INDEPENDENT_CODE "${ORIG_FPIC}")
+    set(BUILD_SHARED_LIBS ${ORIG_BUILD_SHARED_LIBS})
     # force optimized litehtml even in debug
     if (CMAKE_BUILD_TYPE STREQUAL "Debug")
       # except for windows
@@ -133,7 +136,7 @@ if(TARGET litehtml)
         ${_DEVEL_COMPONENT}
         OPTIONAL
       ARCHIVE
-        DESTINATION "${QLITEHTML_LIBRARY_ARCHIVE_PATH_PATH}"
+        DESTINATION "${QLITEHTML_LIBRARY_ARCHIVE_PATH}"
         ${_DEVEL_COMPONENT}
         OPTIONAL)
   endif()

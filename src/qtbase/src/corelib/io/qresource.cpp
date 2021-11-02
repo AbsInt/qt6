@@ -471,6 +471,10 @@ qint64 QResourcePrivate::uncompressedSize() const
 qsizetype QResourcePrivate::decompress(char *buffer, qsizetype bufferSize) const
 {
     Q_ASSERT(data);
+#if defined(QT_NO_COMPRESS) && !QT_CONFIG(zstd)
+    Q_UNUSED(buffer);
+    Q_UNUSED(bufferSize);
+#endif
 
     switch (compressionAlgo) {
     case QResource::NoCompression:
@@ -631,7 +635,7 @@ bool QResource::isValid() const
     possible compression algorithm.
 
     If this function returns QResource::ZstdCompression, you need to use the
-    Zstandard library functios (\c{<zstd.h> header). Qt does not provide a
+    Zstandard library functions (\c{<zstd.h> header). Qt does not provide a
     wrapper.
 
     See \l{http://facebook.github.io/zstd/zstd_manual.html}{Zstandard manual}.

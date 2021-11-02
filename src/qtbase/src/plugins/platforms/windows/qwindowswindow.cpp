@@ -1345,6 +1345,7 @@ void QWindowCreationContext::applyToMinMaxInfo(MINMAXINFO *mmi) const
 const char *QWindowsWindow::embeddedNativeParentHandleProperty = "_q_embedded_native_parent_handle";
 const char *QWindowsWindow::hasBorderInFullScreenProperty = "_q_has_border_in_fullscreen";
 bool QWindowsWindow::m_borderInFullScreenDefault = false;
+bool QWindowsWindow::m_inSetgeometry = false;
 
 QWindowsWindow::QWindowsWindow(QWindow *aWindow, const QWindowsWindowData &data) :
     QWindowsBaseWindow(aWindow),
@@ -1833,6 +1834,68 @@ void QWindowsWindow::handleCompositionSettingsChanged()
     }
 }
 
+void QWindowsWindow::handleDpiScaledSize(WPARAM wParam, LPARAM lParam, LRESULT *result)
+{
+    // We want to keep QWindow's device independent size constant across the
+    // DPI change. To accomplish this, scale QPlatformWindow's native size
+    // by the change of DPI (e.g. 120 -> 144 = 1.2), also taking any scale
+    // factor rounding into account. The win32 window size includes the margins;
+    // add the margins for the new DPI to the window size.
+    const int dpi = int(wParam);
+    const qreal scale = QHighDpiScaling::roundScaleFactor(qreal(dpi) / QWindowsScreen::baseDpi) /
+                        QHighDpiScaling::roundScaleFactor(qreal(savedDpi()) / QWindowsScreen::baseDpi);
+    const QMargins margins = QWindowsGeometryHint::frame(style(), exStyle(), dpi);
+    const QSize windowSize = (geometry().size() * scale).grownBy(margins);
+    SIZE *size = reinterpret_cast<SIZE *>(lParam);
+    size->cx = windowSize.width();
+    size->cy = windowSize.height();
+    *result = true; // Inform Windows that we've set a size
+}
+
+void QWindowsWindow::handleDpiChanged(HWND hwnd, WPARAM wParam, LPARAM lParam)
+{
+    const UINT dpi = HIWORD(wParam);
+    const qreal scale = qreal(dpi) / qreal(savedDpi());
+    setSavedDpi(dpi);
+
+    // Send screen change first, so that the new sceen is set during any following resize
+    checkForScreenChanged(QWindowsWindow::FromDpiChange);
+
+    // We get WM_DPICHANGED in one of two situations:
+    //
+    // 1. The DPI change is a "spontaneous" DPI change as a result of e.g.
+    // the user dragging the window to a new screen. In this case Windows
+    // first sends WM_GETDPISCALEDSIZE, where we set the new window size,
+    // followed by this event where we apply the suggested window geometry
+    // to the native window. This will make sure the window tracks the mouse
+    // cursor during screen change, and also that the window size is scaled
+    // according to the DPI change.
+    //
+    // 2. The DPI change is a result of a setGeometry() call. In this case
+    // Qt has already scaled the window size for the new DPI. Further, Windows
+    // does not call WM_GETDPISCALEDSIZE, and also applies its own scaling
+    // to the already scaled window size. Since there is no need to set the
+    // window geometry again, and the provided geometry is incorrect, we omit
+    // making the SetWindowPos() call.
+    if (!m_inSetgeometry) {
+        updateFullFrameMargins();
+        const auto prcNewWindow = reinterpret_cast<RECT *>(lParam);
+        SetWindowPos(hwnd, nullptr, prcNewWindow->left, prcNewWindow->top,
+                     prcNewWindow->right - prcNewWindow->left,
+                     prcNewWindow->bottom - prcNewWindow->top, SWP_NOZORDER | SWP_NOACTIVATE);
+    }
+
+    // Scale child QPlatformWindow size. Windows sends WM_DPICHANGE to top-level windows only.
+    for (QWindow *childWindow : window()->findChildren<QWindow *>()) {
+        QWindowsWindow *platformChildWindow = static_cast<QWindowsWindow *>(childWindow->handle());
+        if (!platformChildWindow)
+            continue;
+        QRect currentGeometry = platformChildWindow->geometry();
+        QRect scaledGeometry = QRect(currentGeometry.topLeft() * scale, currentGeometry.size() * scale);
+        platformChildWindow->setGeometry(scaledGeometry);
+    }
+}
+
 static QRect normalFrameGeometry(HWND hwnd)
 {
     WINDOWPLACEMENT wp;
@@ -1903,6 +1966,8 @@ static QString msgUnableToSetGeometry(const QWindowsWindow *platformWindow,
 
 void QWindowsWindow::setGeometry(const QRect &rectIn)
 {
+    QBoolBlocker b(m_inSetgeometry);
+
     QRect rect = rectIn;
     // This means it is a call from QWindow::setFramePosition() and
     // the coordinates include the frame (size is still the contents rectangle).
@@ -2079,7 +2144,7 @@ HDC QWindowsWindow::getDC()
 }
 
 /*!
-    Relases the HDC for the window or does nothing in
+    Releases the HDC for the window or does nothing in
     case it was obtained from WinAPI BeginPaint within a WM_PAINT event.
 
     \sa getDC()

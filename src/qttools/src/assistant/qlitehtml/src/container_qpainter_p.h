@@ -80,7 +80,7 @@ struct Index
     Entry findElement(int index) const;
 };
 
-class DocumentContainerPrivate : public litehtml::document_container
+class DocumentContainerPrivate final : public litehtml::document_container
 {
 public: // document_container API
     litehtml::uint_ptr create_font(const litehtml::tchar_t *faceName,

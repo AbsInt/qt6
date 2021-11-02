@@ -468,6 +468,10 @@
     code that was using QFuture with QtConcurrent. Only the code that was using
     it with the undocumented \c QFutureInterface may be affected.
 
+    \li QFutureWatcher::isFinished() now reflects the finished-state of the
+    QFuture rather than returning false until QFutureWatcher::finished() has
+    been emitted.
+
     \endlist
 
     \section2 The QPromise class
@@ -518,7 +522,7 @@
     \li \c QVariant::isNull() now only returns \c true if the \c QVariant is empty or contains a
     \c nullptr. In Qt 5, it also returned true for classes in qtbase which had an \c isNull method
     themselves if that one returned true. Code relying on the old behavior needs to check whether
-    the contained value returs isNull – however such code is unlikely to occur in practice, as
+    the contained value returns isNull – however such code is unlikely to occur in practice, as
     \c isNull() is rarely the property one is interested in (compare \c QString::isEmpty() / \c isNull()
     and \c QTime::isValid / \c isNull).
 

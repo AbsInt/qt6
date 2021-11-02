@@ -42,6 +42,9 @@
 #include <private/qv4jscall_p.h>
 #include <qqmlinfo.h>
 #include <QtCore/qloggingcategory.h>
+#include <private/qqmlscriptstring_p.h>
+#include <private/qqmlbinding_p.h>
+#include <private/qv4qmlcontext_p.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -91,6 +94,44 @@ QUntypedPropertyBinding QQmlPropertyBinding::createFromCodeString(const QQmlProp
     return QUntypedPropertyBinding(static_cast<QPropertyBindingPrivate *>(QPropertyBindingPrivatePtr(binding).data()));
 }
 
+QUntypedPropertyBinding QQmlPropertyBinding::createFromScriptString(const QQmlPropertyData *property, const QQmlScriptString &script, QObject *obj, QQmlContext *ctxt, QObject *target, QQmlPropertyIndex targetIndex)
+{
+    const QQmlScriptStringPrivate *scriptPrivate = script.d.data();
+    // without a valid context, we cannot create anything
+    if (!ctxt && (!scriptPrivate->context || !scriptPrivate->context->isValid())) {
+        return {};
+    }
+
+    auto scopeObject = obj ? obj : scriptPrivate->scope;
+
+    QV4::Function *runtimeFunction = nullptr;
+    QString url;
+    QQmlRefPointer<QQmlContextData> ctxtdata = QQmlContextData::get(scriptPrivate->context);
+    QQmlEnginePrivate *engine = QQmlEnginePrivate::get(scriptPrivate->context->engine());
+    if (engine && ctxtdata && !ctxtdata->urlString().isEmpty() && ctxtdata->typeCompilationUnit()) {
+        url = ctxtdata->urlString();
+        if (scriptPrivate->bindingId != QQmlBinding::Invalid)
+            runtimeFunction = ctxtdata->typeCompilationUnit()->runtimeFunctions.at(scriptPrivate->bindingId);
+    }
+    // Do we actually have a function in the script string? If not, this becomes createCodeFromString
+    if (!runtimeFunction)
+        return createFromCodeString(property, scriptPrivate->script, obj, ctxtdata, url, scriptPrivate->lineNumber, target, targetIndex);
+
+    auto buffer = new std::byte[QQmlPropertyBinding::getSizeEnsuringAlignment()
+            + sizeof(QQmlPropertyBindingJS)+jsExpressionOffsetLength()]; // QQmlPropertyBinding uses delete[]
+    auto binding = new(buffer) QQmlPropertyBinding(QMetaType(property->propType()), target, targetIndex, TargetData::WithoutBoundFunction);
+    auto js = new(buffer + QQmlPropertyBinding::getSizeEnsuringAlignment() + jsExpressionOffsetLength()) QQmlPropertyBindingJS();
+    Q_ASSERT(binding->jsExpression() == js);
+    Q_ASSERT(js->asBinding() == binding);
+    js->setContext(QQmlContextData::get(ctxt ? ctxt : scriptPrivate->context));
+
+    QV4::ExecutionEngine *v4 = engine->v4engine();
+    QV4::Scope scope(v4);
+    QV4::Scoped<QV4::QmlContext> qmlContext(scope, QV4::QmlContext::create(v4->rootContext(), ctxtdata, scopeObject));
+    js->setupFunction(qmlContext, runtimeFunction);
+    return QUntypedPropertyBinding(static_cast<QPropertyBindingPrivate *>(QPropertyBindingPrivatePtr(binding).data()));
+}
+
 QUntypedPropertyBinding QQmlPropertyBinding::createFromBoundFunction(const QQmlPropertyData *pd, QV4::BoundFunction *function, QObject *obj, const QQmlRefPointer<QQmlContextData> &ctxt, QV4::ExecutionContext *scope, QObject *target, QQmlPropertyIndex targetIndex)
 {
     auto buffer = new std::byte[QQmlPropertyBinding::getSizeEnsuringAlignment()
@@ -123,6 +164,8 @@ QUntypedPropertyBinding QQmlPropertyBinding::createFromBoundFunction(const QQmlP
 void QQmlPropertyBindingJS::expressionChanged()
 {
     if (!asBinding()->propertyDataPtr)
+        return;
+    if (QQmlData::wasDeleted(asBinding()->target()))
         return;
     const auto currentTag = m_error.tag();
     if (currentTag == InEvaluationLoop) {

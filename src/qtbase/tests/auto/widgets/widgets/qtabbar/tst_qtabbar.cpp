@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
@@ -104,6 +104,8 @@ private slots:
 
     void scrollButtons_data();
     void scrollButtons();
+
+    void currentTabLargeFont();
 
 private:
     void checkPositions(const TabBar &tabbar, const QList<int> &positions);
@@ -229,6 +231,7 @@ public:
     using QTabBar::initStyleOption;
     using QTabBar::moveTab;
     using QTabBar::QTabBar;
+    using QTabBar::tabSizeHint;
 };
 
 void tst_QTabBar::insertAtCurrentIndex()
@@ -602,6 +605,8 @@ void tst_QTabBar::selectionBehaviorOnRemove_data()
     // every other one
     QTest::newRow("previous-10") << QTabBar::SelectPreviousTab << 7 << (IntList() << 0 << 2 << 4 << 6) << (IntList() << 6 << 4) << 2;
 
+    // QTBUG-94352
+    QTest::newRow("QTBUG-94352") << QTabBar::SelectPreviousTab << 4 << (IntList() << 3) << (IntList() << 2 << 2) << 0;
 
 }
 
@@ -837,9 +842,10 @@ void tst_QTabBar::mouseReleaseOutsideTabBar()
         QRect rectToBeRepainted;
         bool eventFilter(QObject *, QEvent *event) override
         {
-            if (event->type() == QEvent::Paint
-                && rectToBeRepainted.contains(static_cast<QPaintEvent *>(event)->rect()))
+            if (event->type() == QEvent::Paint &&
+                static_cast<QPaintEvent *>(event)->rect().contains(rectToBeRepainted)) {
                 repainted = true;
+            }
             return false;
         }
     } repaintChecker;
@@ -854,14 +860,15 @@ void tst_QTabBar::mouseReleaseOutsideTabBar()
 
     QRect tabRect = tabBar.tabRect(1);
     QPoint tabCenter = tabRect.center();
-    QTest::mousePress(&tabBar, Qt::LeftButton, {}, tabCenter);
-    QTest::mouseEvent(QTest::MouseMove, &tabBar, Qt::LeftButton, {}, tabCenter + QPoint(tabCenter.x(), tabCenter.y() + tabRect.height()));
-
-    // make sure the holding tab is repainted after releasing the mouse
-    repaintChecker.repainted = false;
     repaintChecker.rectToBeRepainted = tabRect;
+    // if a press repaints the tab...
+    QTest::mousePress(&tabBar, Qt::LeftButton, {}, tabCenter);
+    const bool pressRepainted = QTest::qWaitFor([&]{ return repaintChecker.repainted; }, 250);
+
+    // ... then releasing the mouse outside the tabbar should repaint it as well
+    repaintChecker.repainted = false;
     QTest::mouseRelease(&tabBar, Qt::LeftButton, {}, tabCenter + QPoint(tabCenter.x(), tabCenter.y() + tabRect.height()));
-    QTRY_VERIFY(repaintChecker.repainted);
+    QTRY_COMPARE(repaintChecker.repainted, pressRepainted);
 }
 
 void tst_QTabBar::checkPositions(const TabBar &tabbar, const QList<int> &positions)
@@ -931,6 +938,8 @@ void tst_QTabBar::mouseWheel()
     QVERIFY(tabbar.currentIndex() != startIndex);
 }
 
+#endif // QT_CONFIG(wheelevent)
+
 void tst_QTabBar::scrollButtons_data()
 {
     QTest::addColumn<QTabWidget::TabPosition>("tabPosition");
@@ -997,7 +1006,30 @@ void tst_QTabBar::scrollButtons()
     QVERIFY(!leftB->isEnabled());
 }
 
-#endif // QT_CONFIG(wheelevent)
+void tst_QTabBar::currentTabLargeFont()
+{
+    TabBar tabBar;
+    tabBar.setStyleSheet(R"(
+        QTabBar::tab::selected {
+            font-size: 24pt;
+        }
+    )");
+
+    tabBar.addTab("Tab Item 1");
+    tabBar.addTab("Tab Item 2");
+    tabBar.addTab("Tab Item 3");
+
+    tabBar.setCurrentIndex(0);
+    tabBar.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&tabBar));
+
+    QList<QRect> oldTabRects;
+    oldTabRects << tabBar.tabRect(0) << tabBar.tabRect(1) << tabBar.tabRect(2);
+    tabBar.setCurrentIndex(1);
+    QList<QRect> newTabRects;
+    newTabRects << tabBar.tabRect(0) << tabBar.tabRect(1) << tabBar.tabRect(2);
+    QVERIFY(oldTabRects != newTabRects);
+}
 
 QTEST_MAIN(tst_QTabBar)
 #include "tst_qtabbar.moc"

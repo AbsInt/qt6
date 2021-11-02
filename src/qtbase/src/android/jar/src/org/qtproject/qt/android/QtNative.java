@@ -726,9 +726,11 @@ public class QtNative
             }
             return 1;
         }
-        if (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_POINTER_DOWN && index == event.getActionIndex()) {
+        if (action == MotionEvent.ACTION_DOWN
+            || action == MotionEvent.ACTION_POINTER_DOWN && index == event.getActionIndex()) {
             return 0;
-        } else if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL || action == MotionEvent.ACTION_POINTER_UP && index == event.getActionIndex()) {
+        } else if (action == MotionEvent.ACTION_UP
+            || action == MotionEvent.ACTION_POINTER_UP && index == event.getActionIndex()) {
             return 3;
         }
         return 2;
@@ -778,6 +780,10 @@ public class QtNative
 
                 case MotionEvent.ACTION_UP:
                     touchEnd(id, 2);
+                    break;
+
+                case MotionEvent.ACTION_CANCEL:
+                    touchCancel(id);
                     break;
 
                 default:
@@ -892,25 +898,10 @@ public class QtNative
         });
     }
 
-    private static void updateInputItemRectangle(final int x,
-                                                 final int y,
-                                                 final int w,
-                                                 final int h)
-    {
-        runAction(new Runnable() {
-            @Override
-            public void run() {
-                m_activityDelegate.updateInputItemRectangle(x, y, w, h);
-            }
-        });
-    }
-
-
     private static void showSoftwareKeyboard(final int x,
                                              final int y,
                                              final int width,
                                              final int height,
-                                             final int editorHeight,
                                              final int inputHints,
                                              final int enterKeyType)
     {
@@ -918,7 +909,7 @@ public class QtNative
             @Override
             public void run() {
                 if (m_activityDelegate != null)
-                    m_activityDelegate.showSoftwareKeyboard(x, y, width, height, editorHeight, inputHints, enterKeyType);
+                    m_activityDelegate.showSoftwareKeyboard(x, y, width, height, inputHints, enterKeyType);
             }
         });
     }
@@ -1379,6 +1370,7 @@ public class QtNative
     public static native void touchBegin(int winId);
     public static native void touchAdd(int winId, int pointerId, int action, boolean primary, int x, int y, float major, float minor, float rotation, float pressure);
     public static native void touchEnd(int winId, int action);
+    public static native void touchCancel(int winId);
     public static native void longPress(int winId, int x, int y);
     // pointer methods
 

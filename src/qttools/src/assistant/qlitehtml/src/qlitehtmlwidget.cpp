@@ -608,14 +608,25 @@ void QLiteHtmlWidget::contextMenuEvent(QContextMenuEvent *event)
     emit contextMenuRequested(event->pos(), d->documentContainer.linkAt(pos, viewportPos));
 }
 
+static QAbstractSlider::SliderAction getSliderAction(int key)
+{
+    if (key == Qt::Key_Home)
+        return QAbstractSlider::SliderToMinimum;
+    if (key == Qt::Key_End)
+        return QAbstractSlider::SliderToMaximum;
+    if (key == Qt::Key_PageUp)
+        return QAbstractSlider::SliderPageStepSub;
+    if (key == Qt::Key_PageDown)
+        return QAbstractSlider::SliderPageStepAdd;
+    return QAbstractSlider::SliderNoAction;
+}
+
 void QLiteHtmlWidget::keyPressEvent(QKeyEvent *event)
 {
-    if (event->modifiers() == Qt::NoModifier) {
-        if (event->key() == Qt::Key_Home) {
-            verticalScrollBar()->triggerAction(QAbstractSlider::SliderToMinimum);
-            event->accept();
-        } else if (event->key() == Qt::Key_End) {
-            verticalScrollBar()->triggerAction(QAbstractSlider::SliderToMaximum);
+    if (event->modifiers() == Qt::NoModifier || event->modifiers() == Qt::KeypadModifier) {
+        const QAbstractSlider::SliderAction sliderAction = getSliderAction(event->key());
+        if (sliderAction != QAbstractSlider::SliderNoAction) {
+            verticalScrollBar()->triggerAction(sliderAction);
             event->accept();
         }
     }

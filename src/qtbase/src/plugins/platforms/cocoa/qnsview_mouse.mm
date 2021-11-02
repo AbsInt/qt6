@@ -93,7 +93,7 @@
 
 - (void)resetMouseButtons
 {
-    qCDebug(lcQpaMouse) << "Reseting mouse buttons";
+    qCDebug(lcQpaMouse) << "Resetting mouse buttons";
     m_buttons = Qt::NoButton;
     m_frameStrutButtons = Qt::NoButton;
 }
@@ -475,17 +475,35 @@ static const QPointingDevice *pointingDeviceFor(qint64 deviceID)
         return;
     }
 
-    if ([self hasMarkedText]) {
-        [[NSTextInputContext currentInputContext] handleEvent:theEvent];
-    } else {
-        if (!m_dontOverrideCtrlLMB && (theEvent.modifierFlags & NSEventModifierFlagControl)) {
-            m_buttons |= Qt::RightButton;
-            m_sendUpAsRightButton = true;
-        } else {
-            m_buttons |= Qt::LeftButton;
+    // FIXME: AppKit transfers first responder to the view before calling mouseDown,
+    // whereas we only transfer focus once the mouse press is delivered, which means
+    // on first click the focus item won't be the correct one when transferring focus.
+    auto *focusObject = m_platformWindow->window()->focusObject();
+    if (queryInputMethod(focusObject)) {
+        // Input method is enabled. Pass on to the input context if we
+        // are hitting the input item.
+        if (QPlatformInputContext::inputItemClipRectangle().contains(qtWindowPoint)) {
+            qCDebug(lcQpaInputMethods) << "Asking input context to handle mouse press"
+                << "for focus object" << focusObject;
+            if ([NSTextInputContext.currentInputContext handleEvent:theEvent]) {
+                // NSTextView bails out if the input context handled the event,
+                // which is e.g. the case for 2-Set Korean input. We follow suit,
+                // even if that means having to click twice to move the cursor
+                // for these input methods when they are composing.
+                qCDebug(lcQpaInputMethods) << "Input context handled event; bailing out.";
+                return;
+            }
         }
-        [self handleMouseEvent:theEvent];
     }
+
+    if (!m_dontOverrideCtrlLMB && (theEvent.modifierFlags & NSEventModifierFlagControl)) {
+        m_buttons |= Qt::RightButton;
+        m_sendUpAsRightButton = true;
+    } else {
+        m_buttons |= Qt::LeftButton;
+    }
+
+    [self handleMouseEvent:theEvent];
 }
 
 - (void)mouseDragged:(NSEvent *)theEvent

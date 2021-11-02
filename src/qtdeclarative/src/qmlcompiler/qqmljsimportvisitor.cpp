@@ -35,6 +35,7 @@
 #include <QtCore/qscopedvaluerollback.h>
 
 #include <QtQml/private/qv4codegen_p.h>
+#include <QtCore/private/qduplicatetracker_p.h>
 
 #include <algorithm>
 
@@ -453,10 +454,10 @@ void QQmlJSImportVisitor::processDefaultProperties()
 
         // TODO: Currently we only support binding one scope, adjust this once this is no longer
         // true
-        const QQmlJSScope::ConstPtr scope = it.value().constFirst();
+        QQmlJSScope::Ptr scope = it.value().first();
 
         QQmlJSMetaPropertyBinding binding(defaultProp);
-        binding.setValue(scope);
+        binding.setValue(static_cast<QQmlJSScope::ConstPtr>(scope));
         binding.setValueTypeName(getScopeName(scope, QQmlJSScope::QMLScope));
 
         it.key()->addOwnPropertyBinding(binding);
@@ -468,8 +469,13 @@ void QQmlJSImportVisitor::processDefaultProperties()
 
         // Assigning any element to a QQmlComponent property implicitly wraps it into a Component
         // Check whether the property can be assigned the scope
-        if (propType->canAssign(scope))
-            return;
+        if (propType->canAssign(scope)) {
+            if (propType->causesImplicitComponentWrapping()) {
+                // mark the scope as implicitly wrapped, unless it is a Component
+                scope->setIsWrappedInImplicitComponent(!scope->causesImplicitComponentWrapping());
+            }
+            continue;
+        }
 
         m_logger.log(QStringLiteral("Cannot assign to default property of incompatible type"),
                      Log_Property, scope->sourceLocation());
@@ -504,6 +510,10 @@ void QQmlJSImportVisitor::processPropertyBindingObjects()
 
         if (property.isValid() && !property.type().isNull()
             && (objectBinding.onToken || property.type()->canAssign(objectBinding.childScope))) {
+
+
+            if (property.type()->causesImplicitComponentWrapping())
+                objectBinding.childScope->setIsWrappedInImplicitComponent(!objectBinding.childScope->causesImplicitComponentWrapping());
 
             QQmlJSMetaPropertyBinding binding =
                     objectBinding.scope->hasOwnPropertyBinding(propertyName)
@@ -601,11 +611,13 @@ void QQmlJSImportVisitor::checkRequiredProperties()
     }
 
     for (const auto &defScope : m_objectDefinitionScopes) {
-        if (defScope->parentScope() == m_globalScope || defScope->isInlineComponent())
+        if (defScope->parentScope() == m_globalScope || defScope->isInlineComponent() || defScope->isComponentRootElement())
             continue;
 
         QVector<QQmlJSScope::ConstPtr> scopesToSearch;
-        for (QQmlJSScope::ConstPtr scope = defScope; scope; scope = scope->baseType()) {
+        QDuplicateTracker<QQmlJSScope::ConstPtr> seen;
+        for (QQmlJSScope::ConstPtr scope = defScope; scope && !seen.hasSeen(scope);
+             scope = scope->baseType()) {
             scopesToSearch << scope;
             const auto ownProperties = scope->ownProperties();
             for (auto propertyIt = ownProperties.constBegin();
@@ -1527,7 +1539,8 @@ bool QQmlJSImportVisitor::visit(QQmlJS::AST::UiObjectBinding *uiob)
 void QQmlJSImportVisitor::endVisit(QQmlJS::AST::UiObjectBinding *uiob)
 {
     QQmlJSScope::resolveTypes(m_currentScope, m_rootScopeImports, &m_usedTypes);
-    const QQmlJSScope::ConstPtr childScope = m_currentScope;
+    // must be mutable, as we might mark it as implicitly wrapped in a component
+    const QQmlJSScope::Ptr childScope = m_currentScope;
     leaveEnvironment();
 
     auto group = uiob->qualifiedId;

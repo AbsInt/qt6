@@ -2313,7 +2313,7 @@ void QWidgetPrivate::deactivateWidgetCleanup()
 
 
 /*!
-    Returns a pointer to the widget with window identifer/handle \a
+    Returns a pointer to the widget with window identifier/handle \a
     id.
 
     The window identifier type depends on the underlying window
@@ -2633,7 +2633,7 @@ void QWidget::setStyle(QStyle *style)
 #ifndef QT_NO_STYLE_STYLESHEET
     if (QStyleSheetStyle *styleSheetStyle = qt_styleSheet(style)) {
         //if for some reason someone try to set a QStyleSheetStyle, ref it
-        //(this may happen for exemple in QButtonDialogBox which propagates its style)
+        //(this may happen for example in QButtonDialogBox which propagates its style)
         styleSheetStyle->ref();
         d->setStyle_helper(style, false);
     } else if (qt_styleSheet(d->extra->style) || !qApp->styleSheet().isEmpty()) {
@@ -3454,19 +3454,6 @@ QPoint QWidget::pos() const
 */
 
 /*!
-    \property QWidget::normalGeometry
-
-    \brief the geometry of the widget as it will appear when shown as
-    a normal (not maximized or full screen) top-level widget
-
-    For child widgets this property always holds an empty rectangle.
-
-    By default, this property contains an empty rectangle.
-
-    \sa QWidget::windowState(), QWidget::geometry
-*/
-
-/*!
     \property QWidget::size
     \brief the size of the widget excluding any window frame
 
@@ -3534,11 +3521,25 @@ QPoint QWidget::pos() const
     \sa size
 */
 
+/*!
+    \property QWidget::normalGeometry
 
+    \brief the geometry of the widget as it will appear when shown as
+    a normal (not maximized or full screen) top-level widget
+
+    If the widget is already in this state the normal geometry will
+    reflect the widget's current geometry().
+
+    For child widgets this property always holds an empty rectangle.
+
+    By default, this property contains an empty rectangle.
+
+    \sa QWidget::windowState(), QWidget::geometry
+*/
 QRect QWidget::normalGeometry() const
 {
     Q_D(const QWidget);
-    if (!d->extra || !d->extra->topextra)
+    if (!isWindow())
         return QRect();
 
     if (!isMaximized() && !isFullScreen())
@@ -5332,10 +5333,11 @@ void QWidgetPrivate::drawWidget(QPaintDevice *pdev, const QRegion &rgn, const QP
         QWidgetEffectSourcePrivate *sourced = static_cast<QWidgetEffectSourcePrivate *>
                                                          (source->d_func());
         if (!sourced->context) {
-            QWidgetPaintContext context(pdev, rgn, offset, flags, sharedPainter, repaintManager);
+            const QRegion effectRgn(rgn.boundingRect());
+            QWidgetPaintContext context(pdev, effectRgn, offset, flags, sharedPainter, repaintManager);
             sourced->context = &context;
             if (!sharedPainter) {
-                setSystemClip(pdev->paintEngine(), pdev->devicePixelRatio(), rgn.translated(offset));
+                setSystemClip(pdev->paintEngine(), pdev->devicePixelRatio(), effectRgn.translated(offset));
                 QPainter p(pdev);
                 p.translate(offset);
                 context.painter = &p;
@@ -5349,7 +5351,7 @@ void QWidgetPrivate::drawWidget(QPaintDevice *pdev, const QRegion &rgn, const QP
                 }
                 sharedPainter->save();
                 sharedPainter->translate(offset);
-                setSystemClip(sharedPainter->paintEngine(), sharedPainter->device()->devicePixelRatio(), rgn.translated(offset));
+                setSystemClip(sharedPainter->paintEngine(), sharedPainter->device()->devicePixelRatio(), effectRgn.translated(offset));
                 graphicsEffect->draw(sharedPainter);
                 setSystemClip(sharedPainter->paintEngine(), 1, QRegion());
                 sharedPainter->restore();
@@ -5357,7 +5359,7 @@ void QWidgetPrivate::drawWidget(QPaintDevice *pdev, const QRegion &rgn, const QP
             sourced->context = nullptr;
 
             if (repaintManager)
-                repaintManager->markNeedsFlush(q, rgn, offset);
+                repaintManager->markNeedsFlush(q, effectRgn, offset);
 
             return;
         }
@@ -8334,7 +8336,7 @@ bool QWidgetPrivate::close_helper(CloseMode mode)
     is also deleted. A close events is delivered to the widget no
     matter if the widget is visible or not.
 
-    The \l QApplication::lastWindowClosed() signal is emitted when the
+    The \l QGuiApplication::lastWindowClosed() signal is emitted when the
     last visible primary window (i.e. window with no parent) with the
     Qt::WA_QuitOnClose attribute set is closed. By default this
     attribute is set for all widgets except transient windows such as
@@ -8347,8 +8349,10 @@ bool QWidget::close()
     // Close native widgets via QWindow::close() in order to run QWindow
     // close code. The QWidget-specific close code in close_helper() will
     // in this case be called from the Close event handler in QWidgetWindow.
-    if (QWindow *widgetWindow = windowHandle())
-        return widgetWindow->close();
+    if (QWindow *widgetWindow = windowHandle()) {
+        if (widgetWindow->isTopLevel())
+            return widgetWindow->close();
+    }
 
     return d_func()->close_helper(QWidgetPrivate::CloseWithEvent);
 }

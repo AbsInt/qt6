@@ -623,7 +623,7 @@ int QDialog::exec()
   As with QWidget::close(), done() deletes the dialog if the
   Qt::WA_DeleteOnClose flag is set. If the dialog is the application's
   main widget, the application terminates. If the dialog is the
-  last window closed, the QApplication::lastWindowClosed() signal is
+  last window closed, the QGuiApplication::lastWindowClosed() signal is
   emitted.
 
   \sa accept(), reject(), QApplication::activeWindow(), QCoreApplication::quit()
@@ -793,7 +793,7 @@ void QDialog::setVisible(bool visible)
 
             /*
             The following block is to handle a special case, and does not
-            really follow propper logic in concern of autoDefault and TAB
+            really follow proper logic in concern of autoDefault and TAB
             order. However, it's here to ease usage for the users. If a
             dialog has a default QPushButton, and first widget in the TAB
             order also is a QPushButton, then we give focus to the main

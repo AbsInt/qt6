@@ -712,7 +712,7 @@ void QGraphicsScenePrivate::removeItemHelper(QGraphicsItem *item)
     if (item == dragDropItem)
         dragDropItem = nullptr;
 
-    // Reenable selectionChanged() for individual items
+    // Re-enable selectionChanged() for individual items
     --selectionChanging;
     if (!selectionChanging && selectedItems.size() != oldSelectedItemsSize)
         emit q->selectionChanged();
@@ -1439,9 +1439,9 @@ void QGraphicsScenePrivate::mousePressEventHandler(QGraphicsSceneMouseEvent *mou
         if (mouseEvent->type() == QEvent::GraphicsSceneMouseDoubleClick
             && item != lastMouseGrabberItem && lastMouseGrabberItem) {
             // If this item is different from the item that received the last
-            // mouse event, and mouseEvent is a doubleclick event, then the
+            // mouse event, and mouseEvent is a double-click event, then the
             // event is converted to a press. Known limitation:
-            // Triple-clicking will not generate a doubleclick, though.
+            // Triple-clicking will not generate a double-click, though.
             QGraphicsSceneMouseEvent mousePress(QEvent::GraphicsSceneMousePress);
             mousePress.m_spont = mouseEvent->spontaneous();
             mousePress.accept();
@@ -1855,7 +1855,7 @@ void QGraphicsScene::render(QPainter *painter, const QRectF &target, const QRect
     item discovery functions like items() and itemAt(). Indexing is most
     efficient for static scenes (i.e., where items don't move around). For
     dynamic scenes, or scenes with many animated items, the index bookkeeping
-    can outweight the fast lookup speeds.
+    can outweigh the fast lookup speeds.
 
     For the common case, the default index method BspTreeIndex works fine.  If
     your scene uses many animations and you are experiencing slowness, you can
@@ -2266,7 +2266,7 @@ void QGraphicsScene::setSelectionArea(const QPainterPath &path,
         break;
     }
 
-    // Reenable emitting selectionChanged() for individual items.
+    // Re-enable emitting selectionChanged() for individual items.
     --d->selectionChanging;
 
     if (!d->selectionChanging && changed)
@@ -2290,7 +2290,7 @@ void QGraphicsScene::clearSelection()
         item->setSelected(false);
     d->selectedItems.clear();
 
-    // Reenable emitting selectionChanged() for individual items.
+    // Re-enable emitting selectionChanged() for individual items.
     --d->selectionChanging;
 
     if (!d->selectionChanging && changed)
@@ -2395,7 +2395,7 @@ void QGraphicsScene::destroyItemGroup(QGraphicsItemGroup *group)
 }
 
 /*!
-    Adds or moves the \a item and all its childen to this scene.
+    Adds or moves the \a item and all its children to this scene.
     This scene takes ownership of the \a item.
 
     If the item is visible (i.e., QGraphicsItem::isVisible() returns
@@ -2552,7 +2552,7 @@ void QGraphicsScene::addItem(QGraphicsItem *item)
     item->d_ptr->resolvePalette(d->palette.resolveMask());
 
 
-    // Reenable selectionChanged() for individual items
+    // Re-enable selectionChanged() for individual items
     --d->selectionChanging;
     if (!d->selectionChanging && d->selectedItems.size() != oldSelectedItemSize)
         emit selectionChanged();
@@ -4060,15 +4060,15 @@ void QGraphicsScene::mouseReleaseEvent(QGraphicsSceneMouseEvent *mouseEvent)
 
 /*!
     This event handler, for event \a mouseEvent, can be reimplemented
-    in a subclass to receive mouse doubleclick events for the scene.
+    in a subclass to receive mouse double-click events for the scene.
 
     If someone doubleclicks on the scene, the scene will first receive
     a mouse press event, followed by a release event (i.e., a click),
-    then a doubleclick event, and finally a release event. If the
-    doubleclick event is delivered to a different item than the one
+    then a double-click event, and finally a release event. If the
+    double-click event is delivered to a different item than the one
     that received the first press and release, it will be delivered as
     a press event. However, tripleclick events are not delivered as
-    doubleclick events in this case.
+    double-click events in this case.
 
     The default implementation is similar to mousePressEvent().
 
@@ -4734,7 +4734,7 @@ void QGraphicsScenePrivate::drawSubtreeRecursive(QGraphicsItem *item, QPainter *
 
         if (itemIsTooSmallToRender || itemIsOutsideVisibleRect) {
             // We cannot simply use !drawItem here. If we did it is possible
-            // to enter the outter if statement with drawItem == false and minimumRenderSize > 0
+            // to enter the outer if statement with drawItem == false and minimumRenderSize > 0
             // and finally end up inside this inner if, even though none of the above two
             // conditions are met. In that case we should not return from this function
             // but call draw() instead.
