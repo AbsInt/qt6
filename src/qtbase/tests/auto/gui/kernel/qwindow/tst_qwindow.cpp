@@ -1602,20 +1602,114 @@ void tst_QWindow::sizes()
     QCOMPARE(maximumHeightSpy.count(), 1);
 }
 
+class CloseOnCloseEventWindow : public QWindow
+{
+public:
+    inline static int closeEvents;
+    CloseOnCloseEventWindow() { closeEvents = 0; }
+
+protected:
+    void closeEvent(QCloseEvent *e) override
+    {
+        if (++closeEvents > 1)
+            return;
+
+        close();
+        e->accept();
+    }
+};
+
 void tst_QWindow::close()
 {
-    QWindow a;
-    a.setTitle(QLatin1String(QTest::currentTestFunction()));
-    QWindow b;
-    QWindow c(&a);
+    {
+        QWindow a;
+        QWindow b;
+        QWindow c(&a);
 
-    a.show();
-    b.show();
+        a.show();
+        b.show();
 
-    // we can not close a non top level window
-    QVERIFY(!c.close());
-    QVERIFY(a.close());
-    QVERIFY(b.close());
+        // we can not close a non top level window
+        QVERIFY(!c.close());
+        QVERIFY(a.close());
+        QVERIFY(b.close());
+    }
+
+    // Verify that closing a QWindow deletes its platform window,
+    // independent of API used to close the window.
+    {
+        // Close with QWindow::close
+        {
+            QWindow w;
+            w.create();
+            QVERIFY(w.handle());
+            w.close();
+            QVERIFY(!w.handle());
+        }
+
+        // Close with QWindowSystemInterface::handleCloseEvent();
+        {
+            QWindow w;
+            w.create();
+            QVERIFY(w.handle());
+            QWindowSystemInterface::handleCloseEvent(&w);
+            QCoreApplication::processEvents();
+            QVERIFY(!w.handle());
+        }
+    }
+
+    // Verify that closing a QWindow deletes the platform window for
+    // child windows
+    {
+        QWindow w;
+        QWindow c(&w);
+        w.create();
+        c.create();
+        QVERIFY(w.handle());
+        QVERIFY(c.handle());
+        w.close();
+        QVERIFY(!w.handle());
+        QVERIFY(!c.handle());
+    }
+
+    // Verify that re-creating closed windows is possble.
+    {
+        // Re-create top-level window
+        {
+            QWindow w;
+            w.create();
+            QVERIFY(w.handle());
+            w.close();
+            QVERIFY(!w.handle());
+            w.create();
+            QVERIFY(w.handle());
+        }
+
+        // Re-create top-level window with child window
+        {
+            QWindow w;
+            QWindow c(&w);
+            c.create();
+            QVERIFY(w.handle());
+            QVERIFY(c.handle());
+            w.close();
+            QVERIFY(!w.handle());
+            QVERIFY(!c.handle());
+            c.create();
+            QVERIFY(w.handle());
+            QVERIFY(c.handle());
+        }
+    }
+
+    {
+        // A QWidget will call close() from the destructor, and
+        // we allow widgets deleting itself in the closeEvent,
+        // so we need to guard against close being called recursively.
+        CloseOnCloseEventWindow w;
+        w.create();
+        w.close();
+        QCOMPARE(CloseOnCloseEventWindow::closeEvents, 1);
+    }
 }
 
 void tst_QWindow::activateAndClose()
