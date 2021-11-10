@@ -67,7 +67,9 @@ QCFType<CGColorSpaceRef> QCocoaBackingStore::colorSpace() const
 QCALayerBackingStore::QCALayerBackingStore(QWindow *window)
     : QCocoaBackingStore(window)
 {
-    qCDebug(lcQpaBackingStore) << "Creating QCALayerBackingStore for" << window;
+    qCDebug(lcQpaBackingStore) << "Creating QCALayerBackingStore for" << window
+        << "with" << window->format();
+
     m_buffers.resize(1);
 
     observeBackingPropertiesChanges();
@@ -138,20 +140,14 @@ void QCALayerBackingStore::beginPaint(const QRegion &region)
             painter.fillRect(rect, Qt::transparent);
     }
 
-    m_paintedRegion += region;
+    // We assume the client is going to paint the entire region
+    updateDirtyStates(region);
 }
 
 void QCALayerBackingStore::ensureBackBuffer()
 {
     if (window()->format().swapBehavior() == QSurfaceFormat::SingleBuffer)
         return;
-
-    // The current back buffer may have been assigned to a layer in a previous flush,
-    // but we deferred the swap. Do it now if the surface has been picked up by CA.
-    if (m_buffers.back() && m_buffers.back()->isInUse() && m_buffers.back() != m_buffers.front()) {
-        qCInfo(lcQpaBackingStore) << "Back buffer has been picked up by CA, swapping to front";
-        std::swap(m_buffers.back(), m_buffers.front());
-    }
 
     if (Q_UNLIKELY(lcQpaBackingStore().isDebugEnabled())) {
         // ┌───────┬───────┬───────┬─────┬──────┐
@@ -247,8 +243,11 @@ QPaintDevice *QCALayerBackingStore::paintDevice()
 
 void QCALayerBackingStore::endPaint()
 {
-    qCInfo(lcQpaBackingStore) << "Paint ended with painted region" << m_paintedRegion;
+    qCInfo(lcQpaBackingStore) << "Paint ended. Back buffer valid region is now" << m_buffers.back()->validRegion();
     m_buffers.back()->unlock();
+
+    // Since we can have multiple begin/endPaint rounds before a flush
+    // we defer finalizing the back buffer until its content is needed.
 }
 
 void QCALayerBackingStore::flush(QWindow *flushedWindow, const QRegion &region, const QPoint &offset)
@@ -256,11 +255,20 @@ void QCALayerBackingStore::flush(QWindow *flushedWindow, const QRegion &region, 
     Q_UNUSED(region);
     Q_UNUSED(offset);
 
-    if (!prepareForFlush())
+    if (!m_buffers.back()) {
+        qCWarning(lcQpaBackingStore) << "Tried to flush backingstore without painting to it first";
         return;
+    }
+
+    finalizeBackBuffer();
 
     if (flushedWindow != window()) {
         flushSubWindow(flushedWindow);
+        return;
+    }
+
+    if (m_buffers.front()->isInUse() && !m_buffers.front()->isDirty()) {
+        qCInfo(lcQpaBackingStore) << "Asked to flush, but front buffer is up to date. Ignoring.";
         return;
     }
 
@@ -287,16 +295,6 @@ void QCALayerBackingStore::flush(QWindow *flushedWindow, const QRegion &region, 
     const bool isSingleBuffered = window()->format().swapBehavior() == QSurfaceFormat::SingleBuffer;
 
     id backBufferSurface = (__bridge id)m_buffers.back()->surface();
-    if (!isSingleBuffered && flushedView.layer.contents == backBufferSurface) {
-        // We've managed to paint to the back buffer again before Core Animation had time
-        // to flush the transaction and persist the layer changes to the window server, or
-        // we've been asked to flush without painting anything. The layer already knows about
-        // the back buffer, and we don't need to re-apply it to pick up any possible surface
-        // changes, so bail out early.
-        qCInfo(lcQpaBackingStore).nospace() << "Skipping flush of " << flushedView
-            << ", layer already reflects back buffer";
-        return;
-    }
 
     // Trigger a new display cycle if there isn't one. This ensures that our layer updates
     // are committed as part of a display-cycle instead of on the next runloop pass. This
@@ -315,14 +313,17 @@ void QCALayerBackingStore::flush(QWindow *flushedWindow, const QRegion &region, 
 
     flushedView.layer.contents = backBufferSurface;
 
-    // Since we may receive multiple flushes before a new frame is started, we do not
-    // swap any buffers just yet. Instead we check in the next beginPaint if the layer's
-    // surface is in use, and if so swap to an unused surface as the new back buffer.
+    if (!isSingleBuffered) {
+        // Mark the surface as in use, so that we don't end up rendering
+        // to it while it's assigned to a layer.
+        IOSurfaceIncrementUseCount(m_buffers.back()->surface());
 
-    // Note: Ideally CoreAnimation would mark a surface as in use the moment we assign
-    // it to a layer, but as that's not the case we may end up painting to the same back
-    // buffer once more if we are painting faster than CA can ship the surfaces over to
-    // the window server.
+        if (m_buffers.back() != m_buffers.front()) {
+            qCInfo(lcQpaBackingStore) << "Swapping back buffer to front";
+            std::swap(m_buffers.back(), m_buffers.front());
+            IOSurfaceDecrementUseCount(m_buffers.back()->surface());
+        }
+    }
 }
 
 void QCALayerBackingStore::flushSubWindow(QWindow *subWindow)
@@ -376,8 +377,12 @@ void QCALayerBackingStore::windowDestroyed(QObject *object)
 void QCALayerBackingStore::composeAndFlush(QWindow *window, const QRegion &region, const QPoint &offset,
                                     QPlatformTextureList *textures, bool translucentBackground)
 {
-    if (!prepareForFlush())
+    if (!m_buffers.back()) {
+        qCWarning(lcQpaBackingStore) << "Tried to flush backingstore without painting to it first";
         return;
+    }
+
+    finalizeBackBuffer();
 
     QPlatformBackingStore::composeAndFlush(window, region, offset, textures, translucentBackground);
 }
@@ -385,8 +390,10 @@ void QCALayerBackingStore::composeAndFlush(QWindow *window, const QRegion &regio
 
 QImage QCALayerBackingStore::toImage() const
 {
-    if (!const_cast<QCALayerBackingStore*>(this)->prepareForFlush())
+    if (!m_buffers.back())
         return QImage();
+
+    const_cast<QCALayerBackingStore*>(this)->finalizeBackBuffer();
 
     // We need to make a copy here, as the returned image could be used just
     // for reading, in which case it won't detach, and then the underlying
@@ -421,69 +428,77 @@ QPlatformGraphicsBuffer *QCALayerBackingStore::graphicsBuffer() const
     return m_buffers.back().get();
 }
 
-bool QCALayerBackingStore::prepareForFlush()
+void QCALayerBackingStore::updateDirtyStates(const QRegion &paintedRegion)
 {
-    if (!m_buffers.back()) {
-        qCWarning(lcQpaBackingStore) << "Tried to flush backingstore without painting to it first";
-        return false;
-    }
-
     // Update dirty state of buffers based on what was painted. The back buffer will be
     // less dirty, since we painted to it, while other buffers will become more dirty.
     // This allows us to minimize copies between front and back buffers on swap in the
     // cases where the painted region overlaps with the previous frame (front buffer).
     for (const auto &buffer : m_buffers) {
         if (buffer == m_buffers.back())
-            buffer->dirtyRegion -= m_paintedRegion;
+            buffer->dirtyRegion -= paintedRegion;
         else
-            buffer->dirtyRegion += m_paintedRegion;
+            buffer->dirtyRegion += paintedRegion;
     }
+}
 
+void QCALayerBackingStore::finalizeBackBuffer()
+{
     // After painting, the back buffer is only guaranteed to have content for the painted
     // region, and may still have dirty areas that need to be synced up with the front buffer,
     // if we have one. We know that the front buffer is always up to date.
-    if (!m_buffers.back()->dirtyRegion.isEmpty() && m_buffers.front() != m_buffers.back()) {
-        QRegion preserveRegion = m_buffers.back()->dirtyRegion;
-        qCDebug(lcQpaBackingStore) << "Preserving" << preserveRegion << "from front to back buffer";
 
-        m_buffers.front()->lock(QPlatformGraphicsBuffer::SWReadAccess);
-        const QImage *frontBuffer = m_buffers.front()->asImage();
+    if (!m_buffers.back()->isDirty())
+        return;
 
-        const QRect frontSurfaceBounds(QPoint(0, 0), m_buffers.front()->size());
-        const qreal sourceDevicePixelRatio = frontBuffer->devicePixelRatio();
+    m_buffers.back()->lock(QPlatformGraphicsBuffer::SWWriteAccess);
+    preserveFromFrontBuffer(m_buffers.back()->dirtyRegion);
+    m_buffers.back()->unlock();
 
-        m_buffers.back()->lock(QPlatformGraphicsBuffer::SWWriteAccess);
-        QPainter painter(m_buffers.back()->asImage());
-        painter.setCompositionMode(QPainter::CompositionMode_Source);
+    // The back buffer is now completely in sync, ready to be presented
+    m_buffers.back()->dirtyRegion = QRegion();
+}
 
-        // Let painter operate in device pixels, to make it easier to compare coordinates
-        const qreal targetDevicePixelRatio = painter.device()->devicePixelRatio();
-        painter.scale(1.0 / targetDevicePixelRatio, 1.0 / targetDevicePixelRatio);
+void QCALayerBackingStore::preserveFromFrontBuffer(const QRegion &region, const QPoint &offset)
+{
 
-        for (const QRect &rect : preserveRegion) {
-            QRect sourceRect(rect.topLeft() * sourceDevicePixelRatio, rect.size() * sourceDevicePixelRatio);
-            QRect targetRect(rect.topLeft() * targetDevicePixelRatio, rect.size() * targetDevicePixelRatio);
+    if (m_buffers.front() == m_buffers.back())
+        return; // Nothing to preserve from
+
+    qCDebug(lcQpaBackingStore) << "Preserving" << region << "of front buffer to"
+        << region.translated(offset) << "of back buffer";
+
+    Q_ASSERT(m_buffers.back()->isLocked() == QPlatformGraphicsBuffer::SWWriteAccess);
+
+    m_buffers.front()->lock(QPlatformGraphicsBuffer::SWReadAccess);
+    const QImage *frontBuffer = m_buffers.front()->asImage();
+
+    const QRect frontSurfaceBounds(QPoint(0, 0), m_buffers.front()->size());
+    const qreal sourceDevicePixelRatio = frontBuffer->devicePixelRatio();
+
+    QPainter painter(m_buffers.back()->asImage());
+    painter.setCompositionMode(QPainter::CompositionMode_Source);
+
+    // Let painter operate in device pixels, to make it easier to compare coordinates
+    const qreal targetDevicePixelRatio = painter.device()->devicePixelRatio();
+    painter.scale(1.0 / targetDevicePixelRatio, 1.0 / targetDevicePixelRatio);
+
+    for (const QRect &rect : region) {
+        QRect sourceRect(rect.topLeft() * sourceDevicePixelRatio,
+                         rect.size() * sourceDevicePixelRatio);
+        QRect targetRect((rect.topLeft() + offset) * targetDevicePixelRatio,
+                          rect.size() * targetDevicePixelRatio);
 
 #ifdef QT_DEBUG
-            if (Q_UNLIKELY(!frontSurfaceBounds.contains(sourceRect.bottomRight()))) {
-                qCWarning(lcQpaBackingStore) << "Front buffer too small to preserve"
-                    << QRegion(sourceRect).subtracted(frontSurfaceBounds);
-            }
-#endif
-            painter.drawImage(targetRect, *frontBuffer, sourceRect);
+        if (Q_UNLIKELY(!frontSurfaceBounds.contains(sourceRect.bottomRight()))) {
+            qCWarning(lcQpaBackingStore) << "Front buffer too small to preserve"
+                << QRegion(sourceRect).subtracted(frontSurfaceBounds);
         }
-
-        m_buffers.back()->unlock();
-        m_buffers.front()->unlock();
-
-        // The back buffer is now completely in sync, ready to be presented
-        m_buffers.back()->dirtyRegion = QRegion();
+#endif
+        painter.drawImage(targetRect, *frontBuffer, sourceRect);
     }
 
-    // Prepare for another round of painting
-    m_paintedRegion = QRegion();
-
-    return true;
+    m_buffers.front()->unlock();
 }
 
 // ----------------------------------------------------------------------------
@@ -491,10 +506,17 @@ bool QCALayerBackingStore::prepareForFlush()
 QCALayerBackingStore::GraphicsBuffer::GraphicsBuffer(const QSize &size, qreal devicePixelRatio,
                                 const QPixelFormat &format, QCFType<CGColorSpaceRef> colorSpace)
     : QIOSurfaceGraphicsBuffer(size, format)
-    , dirtyRegion(0, 0, size.width() / devicePixelRatio, size.height() / devicePixelRatio)
+    , dirtyRegion(QRect(QPoint(0, 0), size / devicePixelRatio))
     , m_devicePixelRatio(devicePixelRatio)
 {
     setColorSpace(colorSpace);
+}
+
+QRegion QCALayerBackingStore::GraphicsBuffer::validRegion() const
+{
+
+    QRegion fullRegion = QRect(QPoint(0, 0), size() / m_devicePixelRatio);
+    return fullRegion - dirtyRegion;
 }
 
 QImage *QCALayerBackingStore::GraphicsBuffer::asImage()
