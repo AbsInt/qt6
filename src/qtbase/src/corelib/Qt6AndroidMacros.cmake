@@ -307,9 +307,10 @@ function(qt6_android_add_apk_target target)
         message(FATAL_ERROR "Target ${target} is not a valid android executable target\n")
     endif()
 
-    # Make global apk target depend on the current apk target.
+    # Make global apk and aab targets depend on the current apk target.
     if(TARGET apk)
         add_dependencies(apk ${target}_make_apk)
+        add_dependencies(aab ${target}_make_aab)
         _qt_internal_create_global_apk_all_target_if_needed()
     endif()
 
@@ -344,6 +345,18 @@ function(qt6_android_add_apk_target target)
     # The DEPFILE argument to add_custom_command is only available with Ninja or CMake>=3.20 and make.
     if (CMAKE_GENERATOR MATCHES "Ninja" OR
         (CMAKE_VERSION VERSION_GREATER_EQUAL 3.20 AND CMAKE_GENERATOR MATCHES "Makefiles"))
+
+        cmake_policy(PUSH)
+        if(POLICY CMP0116)
+            # Without explicitly setting this policy to NEW, we get a warning
+            # even though we ensure there's actually no problem here.
+            # See https://gitlab.kitware.com/cmake/cmake/-/issues/21959
+            cmake_policy(SET CMP0116 NEW)
+            set(relative_to_dir ${CMAKE_CURRENT_BINARY_DIR})
+        else()
+            set(relative_to_dir ${CMAKE_BINARY_DIR})
+        endif()
+
         # Add custom command that creates the apk in an intermediate location.
         # We need the intermediate location, because we cannot have target-dependent generator
         # expressions in OUTPUT.
@@ -356,10 +369,11 @@ function(qt6_android_add_apk_target target)
                 --output "${apk_intermediate_dir}"
                 --apk "${apk_intermediate_file_path}"
                 --depfile "${dep_intermediate_file_path}"
-                --builddir "${CMAKE_BINARY_DIR}"
+                --builddir "${relative_to_dir}"
             COMMENT "Creating APK for ${target}"
             DEPENDS "${target}" "${deployment_file}" ${extra_deps}
             DEPFILE "${dep_intermediate_file_path}")
+        cmake_policy(POP)
 
         # Create a ${target}_make_apk target to copy the apk from the intermediate to its final
         # location.  If the final and intermediate locations are identical, this is a no-op.
@@ -377,17 +391,41 @@ function(qt6_android_add_apk_target target)
             COMMENT "Creating APK for ${target}"
         )
     endif()
+
+    # Add target triggering AAB creation. Since the _make_aab target is not added to the ALL
+    # set, we may avoid dependency check for it and admit that the target is "always out
+    # of date".
+    add_custom_target(${target}_make_aab
+        DEPENDS ${target}_prepare_apk_dir
+        COMMAND  ${deployment_tool}
+            --input ${deployment_file}
+            --output ${apk_final_dir}
+            --apk ${apk_final_file_path}
+            --aab
+            ${extra_args}
+        COMMENT "Creating AAB for ${target}"
+    )
 endfunction()
 
-function(_qt_internal_create_global_apk_target)
+function(_qt_internal_create_global_android_targets)
+    macro(_qt_internal_create_global_android_targets_impl target)
+        string(TOUPPER "${target}" target_upper)
+        if(NOT QT_NO_GLOBAL_${target_upper}_TARGET)
+            if(NOT TARGET ${target})
+                add_custom_target(${target} COMMENT "Building all apks")
+            endif()
+        endif()
+    endmacro()
+
     # Create a top-level "apk" target for convenience, so that users can call 'ninja apk'.
     # It will trigger building all the apk build targets that are added as part of the project.
     # Allow opting out.
-    if(NOT QT_NO_GLOBAL_APK_TARGET)
-        if(NOT TARGET apk)
-            add_custom_target(apk COMMENT "Building all apks")
-        endif()
-    endif()
+    _qt_internal_create_global_android_targets_impl(apk)
+
+    # Create a top-level "aab" target for convenience, so that users can call 'ninja aab'.
+    # It will trigger building all the apk build targets that are added as part of the project.
+    # Allow opting out.
+    _qt_internal_create_global_android_targets_impl(aab)
 endfunction()
 
 # This function allows deciding whether apks should be built as part of the ALL target at first

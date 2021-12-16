@@ -877,9 +877,10 @@ public:
     {
         if (isEmpty()) // prevents detaching shared null
             return false;
-        detach();
-
         auto it = d->find(key);
+        detach();
+        it = d->detachedIterator(it);
+
         if (it.isUnused())
             return false;
         d->erase(it);
@@ -894,9 +895,10 @@ public:
     {
         if (isEmpty()) // prevents detaching shared null
             return T();
-        detach();
-
         auto it = d->find(key);
+        detach();
+        it = d->detachedIterator(it);
+
         if (it.isUnused())
             return T();
         T value = it.node()->takeValue();
@@ -939,6 +941,7 @@ public:
     }
     T &operator[](const Key &key)
     {
+        const auto copy = isDetached() ? QHash() : *this; // keep 'key' alive across the detach
         detach();
         auto result = d->findOrInsert(key);
         Q_ASSERT(!result.it.atEnd());
@@ -1131,8 +1134,9 @@ public:
     {
         if (isEmpty()) // prevents detaching shared null
             return end();
-        detach();
         auto it = d->find(key);
+        detach();
+        it = d->detachedIterator(it);
         if (it.isUnused())
             it = d->end();
         return iterator(it);
@@ -1180,14 +1184,15 @@ public:
     template <typename ...Args>
     iterator emplace(Key &&key, Args &&... args)
     {
+        if (isDetached()) {
+            if (d->shouldGrow()) // Construct the value now so that no dangling references are used
+                return emplace_helper(std::move(key), T(std::forward<Args>(args)...));
+            return emplace_helper(std::move(key), std::forward<Args>(args)...);
+        }
+        // else: we must detach
+        const auto copy = *this; // keep 'args' alive across the detach/growth
         detach();
-
-        auto result = d->findOrInsert(key);
-        if (!result.initialized)
-            Node::createInPlace(result.it.node(), std::move(key), std::forward<Args>(args)...);
-        else
-            result.it.node()->emplaceValue(std::forward<Args>(args)...);
-        return iterator(result.it);
+        return emplace_helper(std::move(key), std::forward<Args>(args)...);
     }
 
     float load_factor() const noexcept { return d ? d->loadFactor() : 0; }
@@ -1196,6 +1201,18 @@ public:
     static size_t max_bucket_count() noexcept { return QHashPrivate::GrowthPolicy::maxNumBuckets(); }
 
     inline bool empty() const noexcept { return isEmpty(); }
+
+private:
+    template <typename ...Args>
+    iterator emplace_helper(Key &&key, Args &&... args)
+    {
+        auto result = d->findOrInsert(key);
+        if (!result.initialized)
+            Node::createInPlace(result.it.node(), std::move(key), std::forward<Args>(args)...);
+        else
+            result.it.node()->emplaceValue(std::forward<Args>(args)...);
+        return iterator(result.it);
+    }
 };
 
 
@@ -1312,12 +1329,12 @@ public:
         if (d->size != other.d->size)
             return false;
         for (auto it = other.d->begin(); it != other.d->end(); ++it) {
-            auto i = d->find(it.node()->key);
-            if (i == d->end())
+            auto *n = d->findNode(it.node()->key);
+            if (!n)
                 return false;
             Chain *e = it.node()->value;
             while (e) {
-                Chain *oe = i.node()->value;
+                Chain *oe = n->value;
                 while (oe) {
                     if (oe->value == e->value)
                         break;
@@ -1369,9 +1386,10 @@ public:
     {
         if (isEmpty()) // prevents detaching shared null
             return 0;
-        detach();
-
         auto it = d->find(key);
+        detach();
+        it = d->detachedIterator(it);
+
         if (it.isUnused())
             return 0;
         qsizetype n = Node::freeChain(it.node());
@@ -1389,9 +1407,10 @@ public:
     {
         if (isEmpty()) // prevents detaching shared null
             return T();
-        detach();
-
         auto it = d->find(key);
+        detach();
+        it = d->detachedIterator(it);
+
         if (it.isUnused())
             return T();
         Chain *e = it.node()->value;
@@ -1444,6 +1463,7 @@ public:
 
     T &operator[](const Key &key)
     {
+        const auto copy = isDetached() ? QMultiHash() : *this; // keep 'key' alive across the detach
         detach();
         auto result = d->findOrInsert(key);
         Q_ASSERT(!result.it.atEnd());
@@ -1678,7 +1698,8 @@ public:
     iterator erase(const_iterator it)
     {
         Q_ASSERT(d);
-        iterator i = detach(it);
+        iterator iter = detach(it);
+        iterator i = iter;
         Chain *e = *i.e;
         Chain *next = e->next;
         *i.e = next;
@@ -1688,7 +1709,7 @@ public:
                 // last remaining entry, erase
                 i = iterator(d->erase(i.i));
             } else {
-                i = iterator(++it.i);
+                i = iterator(++iter.i);
             }
         }
         --m_size;
@@ -1704,8 +1725,10 @@ public:
     {
         if (isEmpty())
             return end();
-        detach();
         auto it = d->find(key);
+        detach();
+        it = d->detachedIterator(it);
+
         if (it.isUnused())
             it = d->end();
         return iterator(it);
@@ -1731,21 +1754,22 @@ public:
     template <typename ...Args>
     iterator emplace(const Key &key, Args &&... args)
     {
-        return emplace(Key(key), std::forward<Args>(args)...);
+        Key copy = key; // Needs to be explicit for MSVC 2019
+        return emplace(std::move(copy), std::forward<Args>(args)...);
     }
 
     template <typename ...Args>
     iterator emplace(Key &&key, Args &&... args)
     {
+        if (isDetached()) {
+            if (d->shouldGrow()) // Construct the value now so that no dangling references are used
+                return emplace_helper(std::move(key), T(std::forward<Args>(args)...));
+            return emplace_helper(std::move(key), std::forward<Args>(args)...);
+        }
+        // else: we must detach
+        const auto copy = *this; // keep 'args' alive across the detach/growth
         detach();
-
-        auto result = d->findOrInsert(key);
-        if (!result.initialized)
-            Node::createInPlace(result.it.node(), std::move(key), std::forward<Args>(args)...);
-        else
-            result.it.node()->insertMulti(std::forward<Args>(args)...);
-        ++m_size;
-        return iterator(result.it);
+        return emplace_helper(std::move(key), std::forward<Args>(args)...);
     }
 
 
@@ -1770,16 +1794,15 @@ public:
     template <typename ...Args>
     iterator emplaceReplace(Key &&key, Args &&... args)
     {
-        detach();
-
-        auto result = d->findOrInsert(key);
-        if (!result.initialized) {
-            ++m_size;
-            Node::createInPlace(result.it.node(), std::move(key), std::forward<Args>(args)...);
-        } else {
-            result.it.node()->emplaceValue(std::forward<Args>(args)...);
+        if (isDetached()) {
+            if (d->shouldGrow()) // Construct the value now so that no dangling references are used
+                return emplaceReplace_helper(std::move(key), T(std::forward<Args>(args)...));
+            return emplaceReplace_helper(std::move(key), std::forward<Args>(args)...);
         }
-        return iterator(result.it);
+        // else: we must detach
+        const auto copy = *this; // keep 'args' alive across the detach/growth
+        detach();
+        return emplaceReplace_helper(std::move(key), std::forward<Args>(args)...);
     }
 
     inline QMultiHash &operator+=(const QMultiHash &other)
@@ -1801,9 +1824,10 @@ public:
     {
         if (isEmpty()) // prevents detaching shared null
             return 0;
-        detach();
-
         auto it = d->find(key);
+        detach();
+        it = d->detachedIterator(it);
+
         if (it.isUnused())
             return 0;
         qsizetype n = 0;
@@ -1864,6 +1888,7 @@ public:
     {
         if (isEmpty())
             return end();
+        const auto copy = isDetached() ? QMultiHash() : *this; // keep 'key'/'value' alive across the detach
         detach();
         auto it = constFind(key, value);
         return iterator(it.i, it.e);
@@ -1921,6 +1946,7 @@ public:
 
     QPair<iterator, iterator> equal_range(const Key &key)
     {
+        const auto copy = isDetached() ? QMultiHash() : *this; // keep 'key' alive across the detach
         detach();
         auto pair = qAsConst(*this).equal_range(key);
         return qMakePair(iterator(pair.first.i), iterator(pair.second.i));
@@ -1950,6 +1976,31 @@ private:
         if (!d->ref.deref())
             delete d;
         d = dd;
+    }
+
+    template<typename... Args>
+    iterator emplace_helper(Key &&key, Args &&...args)
+    {
+        auto result = d->findOrInsert(key);
+        if (!result.initialized)
+            Node::createInPlace(result.it.node(), std::move(key), std::forward<Args>(args)...);
+        else
+            result.it.node()->insertMulti(std::forward<Args>(args)...);
+        ++m_size;
+        return iterator(result.it);
+    }
+
+    template<typename... Args>
+    iterator emplaceReplace_helper(Key &&key, Args &&...args)
+    {
+        auto result = d->findOrInsert(key);
+        if (!result.initialized) {
+            Node::createInPlace(result.it.node(), std::move(key), std::forward<Args>(args)...);
+            ++m_size;
+        } else {
+            result.it.node()->emplaceValue(std::forward<Args>(args)...);
+        }
+        return iterator(result.it);
     }
 };
 

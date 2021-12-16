@@ -2166,10 +2166,12 @@ static inline bool isSoftwareGl()
 }
 
 bool QWindowsWindow::handleWmPaint(HWND hwnd, UINT message,
-                                         WPARAM, LPARAM)
+                                         WPARAM, LPARAM, LRESULT *result)
 {
-    if (message == WM_ERASEBKGND) // Backing store - ignored.
+    if (message == WM_ERASEBKGND) { // Backing store - ignored.
+        *result = 1;
         return true;
+    }
     // QTBUG-75455: Suppress WM_PAINT sent to invisible windows when setting WS_EX_LAYERED
     if (!window()->isVisible() && (GetWindowLong(hwnd, GWL_EXSTYLE) & WS_EX_LAYERED) != 0)
         return false;
@@ -2481,6 +2483,11 @@ void QWindowsWindow::propagateSizeHints()
 bool QWindowsWindow::handleGeometryChangingMessage(MSG *message, const QWindow *qWindow, const QMargins &margins)
 {
     auto *windowPos = reinterpret_cast<WINDOWPOS *>(message->lParam);
+
+    // Tell Windows to discard the entire contents of the client area, as re-using
+    // parts of the client area would lead to jitter during resize.
+    windowPos->flags |= SWP_NOCOPYBITS;
+
     if ((windowPos->flags & SWP_NOZORDER) == 0) {
         if (QWindowsWindow *platformWindow = QWindowsWindow::windowsWindowOf(qWindow)) {
             QWindow *parentWindow = qWindow->parent();
@@ -2493,7 +2500,7 @@ bool QWindowsWindow::handleGeometryChangingMessage(MSG *message, const QWindow *
     }
     if (!qWindow->isTopLevel()) // Implement hasHeightForWidth().
         return false;
-    if ((windowPos->flags & (SWP_NOCOPYBITS | SWP_NOSIZE)))
+    if (windowPos->flags & SWP_NOSIZE)
         return false;
     const QRect suggestedFrameGeometry(windowPos->x, windowPos->y,
                                        windowPos->cx, windowPos->cy);
@@ -2898,7 +2905,14 @@ void QWindowsWindow::applyCursor()
 void QWindowsWindow::setCursor(const CursorHandlePtr &c)
 {
 #ifndef QT_NO_CURSOR
-    if (c->handle() != m_cursor->handle()) {
+    bool changed = c->handle() != m_cursor->handle();
+    // QTBUG-98856: Cursors can get out of sync after restoring override
+    // cursors on native windows. Force an update.
+    if (testFlag(RestoreOverrideCursor)) {
+        clearFlag(RestoreOverrideCursor);
+        changed = true;
+    }
+    if (changed) {
         const bool apply = applyNewCursor(window());
         qCDebug(lcQpaWindows) << window() << __FUNCTION__
             << c->handle() << " doApply=" << apply;

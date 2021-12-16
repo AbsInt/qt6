@@ -118,6 +118,7 @@ void QQmlJSImportVisitor::enterEnvironment(QQmlJSScope::ScopeType type, const QS
     setScopeName(m_currentScope, type, name);
     m_currentScope->setIsComposite(true);
     m_currentScope->setSourceLocation(location);
+    m_scopesByIrLocation.insert({ location.startLine, location.startColumn }, m_currentScope);
 }
 
 bool QQmlJSImportVisitor::enterEnvironmentNonUnique(QQmlJSScope::ScopeType type,
@@ -142,6 +143,7 @@ bool QQmlJSImportVisitor::enterEnvironmentNonUnique(QQmlJSScope::ScopeType type,
         return false;
     }
     // enter found scope
+    m_scopesByIrLocation.insert({ location.startLine, location.startColumn }, *it);
     m_currentScope = *it;
     return true;
 }
@@ -168,14 +170,14 @@ void QQmlJSImportVisitor::resolveAliases()
             if (!property.isAlias() || !property.type().isNull())
                 continue;
 
-            QStringList components = property.typeName().split(u'.');
-            QQmlJSScope::ConstPtr type;
+            QStringList components = property.typeName().split(u'.', Qt::SkipEmptyParts);
             QQmlJSMetaProperty targetProperty;
 
             // The first component has to be an ID. Find the object it refers to.
-            const auto it = m_scopesById.find(components.takeFirst());
-            if (it != m_scopesById.end()) {
-                type = *it;
+            QQmlJSScope::ConstPtr type = components.isEmpty()
+                    ? QQmlJSScope::ConstPtr()
+                    : m_scopesById.scope(components.takeFirst(), object);
+            if (!type.isNull()) {
 
                 // Any further components are nested properties of that object.
                 // Technically we can only resolve a limited depth in the engine, but the rules
@@ -260,10 +262,10 @@ QString QQmlJSImportVisitor::implicitImportDirectory(
     return QFileInfo(localFile).canonicalPath() + u'/';
 }
 
-void QQmlJSImportVisitor::processImportWarnings(const QString &what, const QQmlJS::SourceLocation &srcLocation)
+void QQmlJSImportVisitor::processImportWarnings(
+        const QString &what, const QQmlJS::SourceLocation &srcLocation)
 {
     const auto warnings = m_importer->takeWarnings();
-
     if (warnings.isEmpty())
         return;
 
@@ -308,12 +310,15 @@ void QQmlJSImportVisitor::endVisit(UiProgram *)
     processPropertyBindingObjects();
     checkRequiredProperties();
 
-    for (const auto &scope : m_objectBindingScopes)
-        checkInheritanceCycle(scope);
+    for (const auto &scope : m_objectBindingScopes) {
+        breakInheritanceCycles(scope);
+        checkDeprecation(scope);
+    }
 
     for (const auto &scope : m_objectDefinitionScopes) {
         checkGroupedAndAttachedScopes(scope);
-        checkInheritanceCycle(scope);
+        breakInheritanceCycles(scope);
+        checkDeprecation(scope);
     }
 
     auto unusedImports = m_importLocations;
@@ -799,25 +804,10 @@ void QQmlJSImportVisitor::addDefaultProperties()
     m_pendingDefaultProperties[m_currentScope->parentScope()] << m_currentScope;
 }
 
-void QQmlJSImportVisitor::checkInheritanceCycle(QQmlJSScope::ConstPtr scope)
+void QQmlJSImportVisitor::breakInheritanceCycles(const QQmlJSScope::Ptr &originalScope)
 {
-    QQmlJSScope::ConstPtr originalScope = scope;
     QList<QQmlJSScope::ConstPtr> scopes;
-    while (!scope.isNull()) {
-        for (const QQmlJSAnnotation &annotation : scope->annotations()) {
-            if (annotation.isDeprecation()) {
-                QQQmlJSDeprecation deprecation = annotation.deprecation();
-
-                QString message =
-                        QStringLiteral("Type \"%1\" is deprecated").arg(scope->internalName());
-
-                if (!deprecation.reason.isEmpty())
-                    message.append(QStringLiteral(" (Reason: %1)").arg(deprecation.reason));
-
-                m_logger.log(message, Log_Deprecation, originalScope->sourceLocation());
-            }
-        }
-
+    for (QQmlJSScope::ConstPtr scope = originalScope; scope;) {
         if (scopes.contains(scope)) {
             QString inheritenceCycle;
             for (const auto &seen : qAsConst(scopes)) {
@@ -830,20 +820,38 @@ void QQmlJSImportVisitor::checkInheritanceCycle(QQmlJSScope::ConstPtr scope)
                                  .arg(scope->internalName())
                                  .arg(inheritenceCycle),
                          Log_InheritanceCycle);
+            originalScope->clearBaseType();
             break;
         }
 
         scopes.append(scope);
 
-        if (scope->baseTypeName().isEmpty()) {
-            break;
-        } else if (auto newScope = scope->baseType()) {
-            scope = newScope;
-        } else {
+        const auto newScope = scope->baseType();
+        if (newScope.isNull() && !scope->baseTypeName().isEmpty()) {
             m_logger.log(scope->baseTypeName()
                                  + QStringLiteral(" was not found. Did you add all import paths?"),
                          Log_Import);
-            break;
+        }
+
+        scope = newScope;
+    }
+}
+
+void QQmlJSImportVisitor::checkDeprecation(const QQmlJSScope::ConstPtr &originalScope)
+{
+    for (QQmlJSScope::ConstPtr scope = originalScope; scope; scope = scope->baseType()) {
+        for (const QQmlJSAnnotation &annotation : scope->annotations()) {
+            if (annotation.isDeprecation()) {
+                QQQmlJSDeprecation deprecation = annotation.deprecation();
+
+                QString message =
+                        QStringLiteral("Type \"%1\" is deprecated").arg(scope->internalName());
+
+                if (!deprecation.reason.isEmpty())
+                    message.append(QStringLiteral(" (Reason: %1)").arg(deprecation.reason));
+
+                m_logger.log(message, Log_Deprecation, originalScope->sourceLocation());
+            }
         }
     }
 }
@@ -1077,17 +1085,31 @@ void QQmlJSImportVisitor::visitFunctionExpressionHelper(QQmlJS::AST::FunctionExp
             m_pendingMethodAnnotations.clear();
         }
 
+        bool anyFormalTyped = false;
         if (const auto *formals = fexpr->formals) {
             const auto parameters = formals->formals();
             for (const auto &parameter : parameters) {
                 const QString type = parameter.typeName();
-                method.addParameter(parameter.id,
-                                    type.isEmpty() ? QStringLiteral("var") : type);
+                if (type.isEmpty()) {
+                    method.addParameter(parameter.id, QStringLiteral("var"));
+                }  else {
+                    anyFormalTyped = true;
+                    method.addParameter(parameter.id, type);
+                }
             }
         }
-        method.setReturnTypeName(fexpr->typeAnnotation
-                                 ? fexpr->typeAnnotation->type->toString()
-                                 : QStringLiteral("var"));
+
+        // Methods with explicit return type return that.
+        // Methods with only untyped arguments return an untyped value.
+        // Methods with at least one typed argument but no explicit return type return void.
+        // In order to make a function without arguments return void, you have to specify that.
+        if (fexpr->typeAnnotation)
+            method.setReturnTypeName(fexpr->typeAnnotation->type->toString());
+        else if (anyFormalTyped)
+            method.setReturnTypeName(QStringLiteral("void"));
+        else
+            method.setReturnTypeName(QStringLiteral("var"));
+
         m_currentScope->addOwnMethod(method);
 
         if (m_currentScope->scopeType() != QQmlJSScope::QMLScope) {
@@ -1155,7 +1177,8 @@ bool QQmlJSImportVisitor::visit(UiScriptBinding *scriptBinding)
     if (!id->next && id->name == QLatin1String("id")) {
         const auto *idExpression = cast<IdentifierExpression *>(statement->expression);
         const QString &name = idExpression->name.toString();
-        m_scopesById.insert(name, m_currentScope);
+        if (!name.isEmpty())
+            m_scopesById.insert(name, m_currentScope);
 
         // TODO: Discard this once we properly store binding values and can just use
         // QQmlJSScope::property() to obtain this

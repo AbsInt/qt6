@@ -51,6 +51,7 @@
 #endif // Q_OS_WIN || Q_OS_CYGWIN
 #include <private/qlocale_tools_p.h>
 #include "qnativeinterface.h"
+#include "qnativeinterface_p.h"
 
 #include <qmutex.h>
 #include <QtCore/private/qlocking_p.h>
@@ -148,7 +149,7 @@ static_assert(sizeof(wchar_t) == sizeof(char32_t) || sizeof(wchar_t) == sizeof(c
 // denormals where GHS compiler is relying hardware behavior that is not IEC
 // 559 compliant. So split the check in several subchecks.
 
-// On GHC the compiler reports std::numeric_limits<float>::is_iec559 as false.
+// On GHS the compiler reports std::numeric_limits<float>::is_iec559 as false.
 // This is all right according to our needs.
 #if !defined(Q_CC_GHS)
 static_assert(std::numeric_limits<float>::is_iec559,
@@ -4909,8 +4910,8 @@ bool QInternal::activateCallbacks(Callback cb, void **parameters)
     declares __CFMutableString and CFMutableStringRef.
 */
 
-namespace QNativeInterface::Private {
-    Q_LOGGING_CATEGORY(lcNativeInterface, "qt.nativeinterface")
+namespace QtPrivate {
+Q_LOGGING_CATEGORY(lcNativeInterface, "qt.nativeinterface")
 }
 
 QT_END_NAMESPACE

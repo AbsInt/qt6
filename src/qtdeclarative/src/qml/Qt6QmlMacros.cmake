@@ -412,19 +412,7 @@ function(qt6_add_qml_module target)
         endif()
     endforeach()
 
-    # Make the prefix conform to the following:
-    #   - Starts with a "/"
-    #   - Does not end with a "/" unless the prefix is exactly "/"
-    if(NOT arg_RESOURCE_PREFIX)
-        set(arg_RESOURCE_PREFIX "/")
-    endif()
-    if(NOT arg_RESOURCE_PREFIX MATCHES "^/")
-        string(PREPEND arg_RESOURCE_PREFIX "/")
-    endif()
-    if(arg_RESOURCE_PREFIX MATCHES [[(.+)/$]])
-        set(arg_RESOURCE_PREFIX "${CMAKE_MATCH_1}")
-    endif()
-
+    _qt_internal_canonicalize_resource_path("${arg_RESOURCE_PREFIX}" arg_RESOURCE_PREFIX)
     if(arg_NO_RESOURCE_TARGET_PATH)
         set(qt_qml_module_resource_prefix "${arg_RESOURCE_PREFIX}")
     else()
@@ -631,6 +619,22 @@ if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
         endif()
     endfunction()
 endif()
+
+# Make the prefix conform to the following:
+#   - Starts with a "/"
+#   - Does not end with a "/" unless the prefix is exactly "/"
+function(_qt_internal_canonicalize_resource_path path out_var)
+    if(NOT path)
+        set(path "/")
+    endif()
+    if(NOT path MATCHES "^/")
+        string(PREPEND path "/")
+    endif()
+    if(path MATCHES [[(.+)/$]])
+        set(path "${CMAKE_MATCH_1}")
+    endif()
+    set(${out_var} "${path}" PARENT_SCOPE)
+endfunction()
 
 function(_qt_internal_get_escaped_uri uri out_var)
     string(REGEX REPLACE "[^A-Za-z0-9]" "_" escaped_uri "${uri}")
@@ -1304,7 +1308,8 @@ function(qt6_target_qml_sources target)
             )
         endif()
     endif()
-    if(NOT arg_PREFIX MATCHES [[/$]])
+    _qt_internal_canonicalize_resource_path("${arg_PREFIX}" arg_PREFIX)
+    if(NOT arg_PREFIX STREQUAL "/")
         string(APPEND arg_PREFIX "/")
     endif()
 
@@ -2013,10 +2018,18 @@ but this file does not exist.  Possible reasons include:
     endif()
 
     # Facilitate self-import so we can find the qmldir file
-    list(APPEND cmd_args "${CMAKE_CURRENT_BINARY_DIR}")
+    get_target_property(module_out_dir ${target} QT_QML_MODULE_OUTPUT_DIRECTORY)
+    if(module_out_dir)
+        list(APPEND cmd_args "${module_out_dir}")
+    endif()
 
-    if(NOT "${QT_QML_OUTPUT_DIRECTORY}" STREQUAL "" AND EXISTS "${QT_QML_OUTPUT_DIRECTORY}")
-        list(APPEND cmd_args "${QT_QML_OUTPUT_DIRECTORY}")
+    # Find qmldir files we copied to the build directory
+    if(NOT "${QT_QML_OUTPUT_DIRECTORY}" STREQUAL "")
+        if(EXISTS "${QT_QML_OUTPUT_DIRECTORY}")
+            list(APPEND cmd_args "${QT_QML_OUTPUT_DIRECTORY}")
+        endif()
+    else()
+        list(APPEND cmd_args "${CMAKE_CURRENT_BINARY_DIR}")
     endif()
 
     # All of the module's .qml files will be listed in one of the generated

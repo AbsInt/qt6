@@ -294,17 +294,24 @@ void QQmlPropertyPrivate::initProperty(QObject *obj, const QString &name)
                         currentObject = qmlAttachedPropertiesObject(currentObject, func);
                         if (!currentObject) return; // Something is broken with the attachable type
                     } else if (r.importNamespace) {
-                        if ((ii + 1) == path.count()) return; // No type following the namespace
+                        if (++ii == path.count())
+                            return; // No type following the namespace
 
-                        ++ii; r = typeNameCache->query(path.at(ii), r.importNamespace);
-                        if (!r.type.isValid()) return; // Invalid type in namespace
+                        // TODO: Do we really _not_ want to query the namespaced types here?
+                        r = typeNameCache->query<QQmlTypeNameCache::QueryNamespaced::No>(
+                                    path.at(ii), r.importNamespace);
+
+                        if (!r.type.isValid())
+                            return; // Invalid type in namespace
 
                         QQmlEnginePrivate *enginePrivate = QQmlEnginePrivate::get(engine);
                         QQmlAttachedPropertiesFunc func = r.type.attachedPropertiesFunction(enginePrivate);
-                        if (!func) return; // Not an attachable type
+                        if (!func)
+                            return; // Not an attachable type
 
                         currentObject = qmlAttachedPropertiesObject(currentObject, func);
-                        if (!currentObject) return; // Something is broken with the attachable type
+                        if (!currentObject)
+                            return; // Something is broken with the attachable type
 
                     } else if (r.scriptIndex != -1) {
                         return; // Not a type
@@ -619,12 +626,8 @@ QObject *QQmlProperty::object() const
 */
 QQmlProperty &QQmlProperty::operator=(const QQmlProperty &other)
 {
-    if (d)
-        d->release();
-    d = other.d;
-    if (d)
-        d->addref();
-
+    QQmlProperty copied(other);
+    qSwap(d, copied.d);
     return *this;
 }
 
@@ -1306,15 +1309,18 @@ bool QQmlPropertyPrivate::write(
         return property.writeProperty(object, const_cast<void *>(value.constData()), flags);
     } else if (property.isQObject()) {
         QVariant val = value;
-        int varType = variantType;
-        if (variantType == QMetaType::Nullptr) {
+        const QMetaType variantMetaType = value.metaType();
+        QMetaType varType;
+        if (variantMetaType == QMetaType::fromType<std::nullptr_t>()) {
             // This reflects the fact that you can assign a nullptr to a QObject pointer
             // Without the change to QObjectStar, rawMetaObjectForType would not give us a QQmlMetaObject
-            varType = QMetaType::QObjectStar;
+            varType = QMetaType::fromType<QObject*>();
             val = QVariant(QMetaType::fromType<QObject *>(), nullptr);
+        } else {
+            varType = variantMetaType;
         }
-        QQmlMetaObject valMo = rawMetaObjectForType(enginePriv, varType);
-        if (valMo.isNull())
+        QQmlMetaObject valMo = rawMetaObjectForType(enginePriv, varType.id());
+        if (valMo.isNull() || !varType.flags().testFlag(QMetaType::PointerToQObject))
             return false;
         QObject *o = *static_cast<QObject *const *>(val.constData());
         QQmlMetaObject propMo = rawMetaObjectForType(enginePriv, propertyType);

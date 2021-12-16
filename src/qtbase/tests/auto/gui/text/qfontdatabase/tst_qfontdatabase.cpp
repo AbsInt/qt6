@@ -82,6 +82,10 @@ private slots:
     void registerOpenTypePreferredNamesSystem();
     void registerOpenTypePreferredNamesApplication();
 
+#ifdef Q_OS_WIN
+    void findCourier();
+#endif
+
 private:
     QString m_ledFont;
     QString m_testFont;
@@ -407,7 +411,9 @@ void tst_QFontDatabase::condensedFontMatching()
     tfcByStyleName.setStyleName("Condensed");
 
 #ifdef Q_OS_WIN
-    QFontPrivate *font_d = QFontPrivate::get(tfcByStretch);
+    QFont f;
+    f.setStyleStrategy(QFont::NoFontMerging);
+    QFontPrivate *font_d = QFontPrivate::get(f);
     if (font_d->engineForScript(QChar::Script_Common)->type() != QFontEngine::Freetype)
         QEXPECT_FAIL("","No matching of sub-family by stretch on Windows", Continue);
 #endif
@@ -473,6 +479,33 @@ void tst_QFontDatabase::registerOpenTypePreferredNamesApplication()
 
     QFontDatabase::removeApplicationFont(id);
 }
+
+#ifdef Q_OS_WIN
+void tst_QFontDatabase::findCourier()
+{
+    QFont font = QFontDatabase::font(u"Courier"_qs, u""_qs, 16);
+    QFontInfo info(font);
+    QCOMPARE(info.family(), u"Courier New"_qs);
+    QCOMPARE(info.pointSize(), 16);
+
+    font = QFontDatabase::font("Courier", "", 64);
+    info = font;
+    QCOMPARE(info.family(), u"Courier New"_qs);
+    QCOMPARE(info.pointSize(), 64);
+
+    // By setting "PreferBitmap" we should get Courier itself.
+    font.setStyleStrategy(QFont::PreferBitmap);
+    info = font;
+    QCOMPARE(info.family(), u"Courier"_qs);
+    // Which has an upper bound on point size
+    QCOMPARE(info.pointSize(), 19);
+
+    font.setStyleStrategy(QFont::PreferDefault);
+    info = font;
+    QCOMPARE(info.family(), u"Courier New"_qs);
+    QCOMPARE(info.pointSize(), 64);
+}
+#endif
 
 QTEST_MAIN(tst_QFontDatabase)
 #include "tst_qfontdatabase.moc"

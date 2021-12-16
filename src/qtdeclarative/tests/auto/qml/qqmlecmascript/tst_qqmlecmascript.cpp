@@ -248,6 +248,7 @@ private slots:
     void topLevelGeneratorFunction();
     void generatorCrashNewProperty();
     void generatorCallsGC();
+    void noYieldInInnerFunction();
     void qtbug_10696();
     void qtbug_11606();
     void qtbug_11600();
@@ -1390,6 +1391,7 @@ void tst_qqmlecmascript::enums()
     QCOMPARE(object->property("j").toInt(), 19);
     QCOMPARE(object->property("k").toInt(), 42);
     QCOMPARE(object->property("l").toInt(), 333);
+    QCOMPARE(object->property("m").toInt(), 3);
     }
     // Non-existent enums
     {
@@ -6419,6 +6421,19 @@ void tst_qqmlecmascript::generatorCallsGC()
 
     QScopedPointer<QObject> o(component.create()); // should not crash
     QVERIFY2(o != nullptr, qPrintable(component.errorString()));
+}
+
+void tst_qqmlecmascript::noYieldInInnerFunction()
+{
+    QJSEngine engine;
+    const QString program = R"(
+    function *a() {
+        (function() { yield 1; })();
+    };
+    )";
+    auto result = engine.evaluate(program);
+    QVERIFY(result.isError());
+    QCOMPARE(result.errorType(), QJSValue::SyntaxError);
 }
 
 // Test the "Qt.include" method

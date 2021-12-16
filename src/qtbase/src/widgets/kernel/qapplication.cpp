@@ -1955,7 +1955,10 @@ QWidget *QApplicationPrivate::focusNextPrevChild_helper(QWidget *toplevel, bool 
         // \a next). This is to ensure that we can tab in and out of compound widgets
         // without getting stuck in a tab-loop between parent and child.
         QWidget *focusProxy = test->d_func()->deepestFocusProxy();
-        const bool canTakeFocus = ((focusProxy ? focusProxy->focusPolicy() : test->focusPolicy())
+        auto effectiveFocusPolicy = [](QWidget *widget) {
+            return widget->isEnabled() ? widget->focusPolicy() : Qt::NoFocus;
+        };
+        const bool canTakeFocus = (effectiveFocusPolicy(focusProxy ? focusProxy : test)
                                   & focus_flag) == focus_flag;
         const bool composites = focusProxy ? (next ? focusProxy->isAncestorOf(test)
                                                    : test->isAncestorOf(focusProxy))
@@ -3215,8 +3218,9 @@ bool QApplication::notify(QObject *receiver, QEvent *e)
 
 #ifndef QT_NO_GESTURES
         if (!eventAccepted && !gesturePendingWidget.isNull()) {
-            // the first widget subscribed to a gesture gets an implicit grab
-            d->activateImplicitTouchGrab(gesturePendingWidget, touchEvent);
+            // the first widget subscribed to a gesture gets an implicit grab for all
+            // points, also for events and event points that have not been accepted.
+            d->activateImplicitTouchGrab(gesturePendingWidget, touchEvent, QApplicationPrivate::GrabAllPoints);
         }
 #endif
 
@@ -3910,16 +3914,18 @@ QWidget *QApplicationPrivate::findClosestTouchPointTarget(const QPointingDevice 
     return static_cast<QWidget *>(closestTarget);
 }
 
-void QApplicationPrivate::activateImplicitTouchGrab(QWidget *widget, QTouchEvent *touchEvent)
+void QApplicationPrivate::activateImplicitTouchGrab(QWidget *widget, QTouchEvent *touchEvent,
+                                                    ImplicitTouchGrabMode grabMode)
 {
     if (touchEvent->type() != QEvent::TouchBegin)
         return;
 
     // If the widget dispatched the event further (see QGraphicsProxyWidget), then
-    // there might already be an implicit grabber. Don't override that.
+    // there might already be an implicit grabber. Don't override that. A widget that
+    // has partially recognized a gesture needs to grab all points.
     for (int i = 0; i < touchEvent->pointCount(); ++i) {
         auto &mep = QMutableEventPoint::from(touchEvent->point(i));
-        if (!mep.target() && mep.isAccepted())
+        if (!mep.target() && (mep.isAccepted() || grabMode == GrabAllPoints))
             mep.setTarget(widget);
     }
     // TODO setExclusiveGrabber() to be consistent with Qt Quick?

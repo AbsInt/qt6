@@ -216,20 +216,19 @@ public:
         if (s == a) { // i.e. s != 0
             T copy(t);
             reallocate(s, s << 1);
-            const qsizetype idx = s++;
-            new (ptr + idx) T(std::move(copy));
+            new (end()) T(std::move(copy));
         } else {
-            const qsizetype idx = s++;
-            new (ptr + idx) T(t);
+            new (end()) T(t);
         }
+        ++s;
     }
 
     void append(T &&t)
     {
         if (s == a)
             reallocate(s, s << 1);
-        const qsizetype idx = s++;
-        new (ptr + idx) T(std::move(t));
+        new (end()) T(std::move(t));
+        ++s;
     }
 
     void append(const T *buf, qsizetype size);
@@ -372,7 +371,15 @@ private:
     qsizetype a;      // capacity
     qsizetype s;      // size
     T *ptr;     // data
-    std::aligned_storage_t<sizeof(T), alignof(T)> array[Prealloc];
+    alignas(T) char array[Prealloc * (alignof(T) > sizeof(T) ? alignof(T) : sizeof(T))];
+    QT_WARNING_PUSH
+    QT_WARNING_DISABLE_DEPRECATED
+    // ensure we maintain BC: std::aligned_storage_t was only specified by a
+    // minimum size, but for BC we need the substitution to be exact in size:
+    template <size_t> class print;
+    static_assert(std::is_same_v<print<sizeof(std::aligned_storage_t<sizeof(T), alignof(T)>[Prealloc])>,
+                                 print<sizeof(array)>>);
+    QT_WARNING_POP
 
     bool isValidIterator(const const_iterator &i) const
     {
@@ -467,7 +474,7 @@ Q_INLINE_TEMPLATE bool QVarLengthArray<T, Prealloc>::contains(const AT &t) const
 template <class T, qsizetype Prealloc>
 Q_OUTOFLINE_TEMPLATE void QVarLengthArray<T, Prealloc>::append(const T *abuf, qsizetype increment)
 {
-    Q_ASSERT(abuf);
+    Q_ASSERT(abuf || increment == 0);
     if (increment <= 0)
         return;
 
@@ -644,7 +651,7 @@ Q_OUTOFLINE_TEMPLATE typename QVarLengthArray<T, Prealloc>::iterator QVarLengthA
 }
 
 template <class T, qsizetype Prealloc>
-Q_OUTOFLINE_TEMPLATE typename QVarLengthArray<T, Prealloc>::iterator QVarLengthArray<T, Prealloc>::insert(const_iterator before, size_type n, const T &t)
+Q_OUTOFLINE_TEMPLATE typename QVarLengthArray<T, Prealloc>::iterator QVarLengthArray<T, Prealloc>::insert(const_iterator before, qsizetype n, const T &t)
 {
     Q_ASSERT_X(isValidIterator(before), "QVarLengthArray::insert", "The specified const_iterator argument 'before' is invalid");
 
@@ -681,6 +688,11 @@ Q_OUTOFLINE_TEMPLATE typename QVarLengthArray<T, Prealloc>::iterator QVarLengthA
     qsizetype f = qsizetype(abegin - ptr);
     qsizetype l = qsizetype(aend - ptr);
     qsizetype n = l - f;
+
+    if (n == 0) // avoid UB in std::move() below
+        return data() + f;
+
+    Q_ASSERT(n > 0); // aend must be reachable from abegin
 
     if constexpr (QTypeInfo<T>::isComplex) {
         std::move(ptr + l, ptr + s, QT_MAKE_CHECKED_ARRAY_ITERATOR(ptr + f, s - f));

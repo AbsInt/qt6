@@ -2351,31 +2351,22 @@ QQuickItem::~QQuickItem()
     while (!d->childItems.isEmpty())
         d->childItems.constFirst()->setParentItem(nullptr);
 
-    if (!d->changeListeners.isEmpty()) {
-        const auto listeners = d->changeListeners; // NOTE: intentional copy (QTBUG-54732)
-        for (const QQuickItemPrivate::ChangeListener &change : listeners) {
-            QQuickAnchorsPrivate *anchor = change.listener->anchorPrivate();
-            if (anchor)
-                anchor->clearItem(this);
-        }
-
-        /*
+    d->notifyChangeListeners(QQuickItemPrivate::AllChanges, [this](const QQuickItemPrivate::ChangeListener &change){
+        QQuickAnchorsPrivate *anchor = change.listener->anchorPrivate();
+        if (anchor)
+            anchor->clearItem(this);
+    });
+    /*
         update item anchors that depended on us unless they are our child (and will also be destroyed),
         or our sibling, and our parent is also being destroyed.
     */
-        for (const QQuickItemPrivate::ChangeListener &change : listeners) {
-            QQuickAnchorsPrivate *anchor = change.listener->anchorPrivate();
-            if (anchor && anchor->item && anchor->item->parentItem() && anchor->item->parentItem() != this)
-                anchor->update();
-        }
-
-        for (const QQuickItemPrivate::ChangeListener &change : listeners) {
-            if (change.types & QQuickItemPrivate::Destroyed)
-                change.listener->itemDestroyed(this);
-        }
-
-        d->changeListeners.clear();
-    }
+    d->notifyChangeListeners(QQuickItemPrivate::AllChanges, [this](const QQuickItemPrivate::ChangeListener &change){
+        QQuickAnchorsPrivate *anchor = change.listener->anchorPrivate();
+        if (anchor && anchor->item && anchor->item->parentItem() && anchor->item->parentItem() != this)
+            anchor->update();
+    });
+    d->notifyChangeListeners(QQuickItemPrivate::Destroyed, &QQuickItemChangeListener::itemDestroyed, this);
+    d->changeListeners.clear();
 
     /*
        Remove any references our transforms have to us, in case they try to
@@ -3658,14 +3649,7 @@ QQuickAnchors *QQuickItemPrivate::anchors() const
 void QQuickItemPrivate::siblingOrderChanged()
 {
     Q_Q(QQuickItem);
-    if (!changeListeners.isEmpty()) {
-        const auto listeners = changeListeners; // NOTE: intentional copy (QTBUG-54732)
-        for (const QQuickItemPrivate::ChangeListener &change : listeners) {
-            if (change.types & QQuickItemPrivate::SiblingOrder) {
-                change.listener->itemSiblingOrderChanged(q);
-            }
-        }
-    }
+    notifyChangeListeners(QQuickItemPrivate::SiblingOrder, &QQuickItemChangeListener::itemSiblingOrderChanged, q);
 }
 
 QQmlListProperty<QObject> QQuickItemPrivate::data()
@@ -3786,15 +3770,10 @@ void QQuickItem::geometryChange(const QRectF &newGeometry, const QRectF &oldGeom
     change.setWidthChange(newGeometry.width() != oldGeometry.width());
     change.setHeightChange(newGeometry.height() != oldGeometry.height());
 
-    if (!d->changeListeners.isEmpty()) {
-        const auto listeners = d->changeListeners; // NOTE: intentional copy (QTBUG-54732)
-        for (const QQuickItemPrivate::ChangeListener &listener : listeners) {
-            if (listener.types & QQuickItemPrivate::Geometry) {
-                if (change.matches(listener.gTypes))
-                    listener.listener->itemGeometryChanged(this, change, oldGeometry);
-            }
-        }
-    }
+    d->notifyChangeListeners(QQuickItemPrivate::Geometry, [&](const QQuickItemPrivate::ChangeListener &listener){
+        if (change.matches(listener.gTypes))
+            listener.listener->itemGeometryChanged(this, change, oldGeometry);
+    });
 
     // The notify method takes care of emitting the signal, and also notifies any
     // property observers.
@@ -4422,16 +4401,11 @@ void QQuickItem::setBaselineOffset(qreal offset)
 
     d->baselineOffset = offset;
 
-    if (!d->changeListeners.isEmpty()) {
-        const auto listeners = d->changeListeners; // NOTE: intentional copy (QTBUG-54732)
-        for (const QQuickItemPrivate::ChangeListener &change : listeners) {
-            if (change.types & QQuickItemPrivate::Geometry) {
-                QQuickAnchorsPrivate *anchor = change.listener->anchorPrivate();
-                if (anchor)
-                    anchor->updateVerticalAnchors();
-            }
-        }
-    }
+    d->notifyChangeListeners(QQuickItemPrivate::Geometry, [](const QQuickItemPrivate::ChangeListener &change){
+        QQuickAnchorsPrivate *anchor = change.listener->anchorPrivate();
+        if (anchor)
+            anchor->updateVerticalAnchors();
+    });
 
     if (d->_anchors && (d->_anchors->usedAnchors() & QQuickAnchors::BaselineAnchor))
         QQuickAnchorsPrivate::get(d->_anchors)->updateVerticalAnchors();
@@ -4567,10 +4541,10 @@ static bool unwrapMapFromToFromItemArgs(QQmlV4Function *args, const QQuickItem *
 }
 
 /*!
-    \qmlmethod object QtQuick::Item::mapFromItem(Item item, real x, real y)
-    \qmlmethod object QtQuick::Item::mapFromItem(Item item, point p)
-    \qmlmethod object QtQuick::Item::mapFromItem(Item item, real x, real y, real width, real height)
-    \qmlmethod object QtQuick::Item::mapFromItem(Item item, rect r)
+    \qmlmethod point QtQuick::Item::mapFromItem(Item item, real x, real y)
+    \qmlmethod point QtQuick::Item::mapFromItem(Item item, point p)
+    \qmlmethod rect QtQuick::Item::mapFromItem(Item item, real x, real y, real width, real height)
+    \qmlmethod rect QtQuick::Item::mapFromItem(Item item, rect r)
 
     Maps the point (\a x, \a y) or rect (\a x, \a y, \a width, \a height), which is in \a
     item's coordinate system, to this item's coordinate system, and returns a \l point or \l rect
@@ -4622,10 +4596,10 @@ QTransform QQuickItem::itemTransform(QQuickItem *other, bool *ok) const
 }
 
 /*!
-    \qmlmethod object QtQuick::Item::mapToItem(Item item, real x, real y)
-    \qmlmethod object QtQuick::Item::mapToItem(Item item, point p)
-    \qmlmethod object QtQuick::Item::mapToItem(Item item, real x, real y, real width, real height)
-    \qmlmethod object QtQuick::Item::mapToItem(Item item, rect r)
+    \qmlmethod point QtQuick::Item::mapToItem(Item item, real x, real y)
+    \qmlmethod point QtQuick::Item::mapToItem(Item item, point p)
+    \qmlmethod rect QtQuick::Item::mapToItem(Item item, real x, real y, real width, real height)
+    \qmlmethod rect QtQuick::Item::mapToItem(Item item, rect r)
 
     Maps the point (\a x, \a y) or rect (\a x, \a y, \a width, \a height), which is in this
     item's coordinate system, to \a item's coordinate system, and returns a \l point or \l rect
@@ -4707,7 +4681,7 @@ static bool unwrapMapFromToFromGlobalArgs(QQmlV4Function *args, const QQuickItem
 
 /*!
     \since 5.7
-    \qmlmethod object QtQuick::Item::mapFromGlobal(real x, real y)
+    \qmlmethod point QtQuick::Item::mapFromGlobal(real x, real y)
 
     Maps the point (\a x, \a y), which is in the global coordinate system, to the
     item's coordinate system, and returns a \l point  matching the mapped coordinate.
@@ -4734,7 +4708,7 @@ void QQuickItem::mapFromGlobal(QQmlV4Function *args) const
 
 /*!
     \since 5.7
-    \qmlmethod object QtQuick::Item::mapToGlobal(real x, real y)
+    \qmlmethod point QtQuick::Item::mapToGlobal(real x, real y)
 
     Maps the point (\a x, \a y), which is in this item's coordinate system, to the
     global coordinate system, and returns a \l point  matching the mapped coordinate.
@@ -6427,26 +6401,12 @@ void QQuickItemPrivate::itemChange(QQuickItem::ItemChange change, const QQuickIt
     switch (change) {
     case QQuickItem::ItemChildAddedChange: {
         q->itemChange(change, data);
-        if (!changeListeners.isEmpty()) {
-            const auto listeners = changeListeners; // NOTE: intentional copy (QTBUG-54732)
-            for (const QQuickItemPrivate::ChangeListener &change : listeners) {
-                if (change.types & QQuickItemPrivate::Children) {
-                    change.listener->itemChildAdded(q, data.item);
-                }
-            }
-        }
+        notifyChangeListeners(QQuickItemPrivate::Children, &QQuickItemChangeListener::itemChildAdded, q, data.item);
         break;
     }
     case QQuickItem::ItemChildRemovedChange: {
         q->itemChange(change, data);
-        if (!changeListeners.isEmpty()) {
-            const auto listeners = changeListeners; // NOTE: intentional copy (QTBUG-54732)
-            for (const QQuickItemPrivate::ChangeListener &change : listeners) {
-                if (change.types & QQuickItemPrivate::Children) {
-                    change.listener->itemChildRemoved(q, data.item);
-                }
-            }
-        }
+        notifyChangeListeners(QQuickItemPrivate::Children, &QQuickItemChangeListener::itemChildRemoved, q, data.item);
         break;
     }
     case QQuickItem::ItemSceneChange:
@@ -6454,50 +6414,22 @@ void QQuickItemPrivate::itemChange(QQuickItem::ItemChange change, const QQuickIt
         break;
     case QQuickItem::ItemVisibleHasChanged: {
         q->itemChange(change, data);
-        if (!changeListeners.isEmpty()) {
-            const auto listeners = changeListeners; // NOTE: intentional copy (QTBUG-54732)
-            for (const QQuickItemPrivate::ChangeListener &change : listeners) {
-                if (change.types & QQuickItemPrivate::Visibility) {
-                    change.listener->itemVisibilityChanged(q);
-                }
-            }
-        }
+        notifyChangeListeners(QQuickItemPrivate::Visibility, &QQuickItemChangeListener::itemVisibilityChanged, q);
         break;
     }
     case QQuickItem::ItemEnabledHasChanged: {
         q->itemChange(change, data);
-        if (!changeListeners.isEmpty()) {
-            const auto listeners = changeListeners; // NOTE: intentional copy (QTBUG-54732)
-            for (const QQuickItemPrivate::ChangeListener &change : listeners) {
-                if (change.types & QQuickItemPrivate::Enabled) {
-                    change.listener->itemEnabledChanged(q);
-                }
-            }
-        }
+        notifyChangeListeners(QQuickItemPrivate::Enabled, &QQuickItemChangeListener::itemEnabledChanged, q);
         break;
     }
     case QQuickItem::ItemParentHasChanged: {
         q->itemChange(change, data);
-        if (!changeListeners.isEmpty()) {
-            const auto listeners = changeListeners; // NOTE: intentional copy (QTBUG-54732)
-            for (const QQuickItemPrivate::ChangeListener &change : listeners) {
-                if (change.types & QQuickItemPrivate::Parent) {
-                    change.listener->itemParentChanged(q, data.item);
-                }
-            }
-        }
+        notifyChangeListeners(QQuickItemPrivate::Parent, &QQuickItemChangeListener::itemParentChanged, q, data.item);
         break;
     }
     case QQuickItem::ItemOpacityHasChanged: {
         q->itemChange(change, data);
-        if (!changeListeners.isEmpty()) {
-            const auto listeners = changeListeners; // NOTE: intentional copy (QTBUG-54732)
-            for (const QQuickItemPrivate::ChangeListener &change : listeners) {
-                if (change.types & QQuickItemPrivate::Opacity) {
-                    change.listener->itemOpacityChanged(q);
-                }
-            }
-        }
+        notifyChangeListeners(QQuickItemPrivate::Opacity, &QQuickItemChangeListener::itemOpacityChanged, q);
         break;
     }
     case QQuickItem::ItemActiveFocusHasChanged:
@@ -6505,14 +6437,7 @@ void QQuickItemPrivate::itemChange(QQuickItem::ItemChange change, const QQuickIt
         break;
     case QQuickItem::ItemRotationHasChanged: {
         q->itemChange(change, data);
-        if (!changeListeners.isEmpty()) {
-            const auto listeners = changeListeners; // NOTE: intentional copy (QTBUG-54732)
-            for (const QQuickItemPrivate::ChangeListener &change : listeners) {
-                if (change.types & QQuickItemPrivate::Rotation) {
-                    change.listener->itemRotationChanged(q);
-                }
-            }
-        }
+        notifyChangeListeners(QQuickItemPrivate::Rotation, &QQuickItemChangeListener::itemRotationChanged, q);
         break;
     }
     case QQuickItem::ItemAntialiasingHasChanged:
@@ -6913,14 +6838,7 @@ void QQuickItem::resetWidth()
 void QQuickItemPrivate::implicitWidthChanged()
 {
     Q_Q(QQuickItem);
-    if (!changeListeners.isEmpty()) {
-        const auto listeners = changeListeners; // NOTE: intentional copy (QTBUG-54732)
-        for (const QQuickItemPrivate::ChangeListener &change : listeners) {
-            if (change.types & QQuickItemPrivate::ImplicitWidth) {
-                change.listener->itemImplicitWidthChanged(q);
-            }
-        }
-    }
+    notifyChangeListeners(QQuickItemPrivate::ImplicitWidth, &QQuickItemChangeListener::itemImplicitWidthChanged, q);
     emit q->implicitWidthChanged();
 }
 
@@ -7129,14 +7047,7 @@ void QQuickItem::resetHeight()
 void QQuickItemPrivate::implicitHeightChanged()
 {
     Q_Q(QQuickItem);
-    if (!changeListeners.isEmpty()) {
-        const auto listeners = changeListeners; // NOTE: intentional copy (QTBUG-54732)
-        for (const QQuickItemPrivate::ChangeListener &change : listeners) {
-            if (change.types & QQuickItemPrivate::ImplicitHeight) {
-                change.listener->itemImplicitHeightChanged(q);
-            }
-        }
-    }
+    notifyChangeListeners(QQuickItemPrivate::ImplicitHeight, &QQuickItemChangeListener::itemImplicitHeightChanged, q);
     emit q->implicitHeightChanged();
 }
 
@@ -7474,20 +7385,19 @@ void QQuickItem::setFocus(bool focus, Qt::FocusReason reason)
     if (d->focus == focus)
         return;
 
+    bool notifyListeners = false;
     if (d->window || d->parentItem) {
         // Need to find our nearest focus scope
         QQuickItem *scope = parentItem();
         while (scope && !scope->isFocusScope() && scope->parentItem())
             scope = scope->parentItem();
         if (d->window) {
-            if (reason != Qt::PopupFocusReason) {
-                auto da = d->deliveryAgentPrivate();
-                Q_ASSERT(da);
-                if (focus)
-                    da->setFocusInScope(scope, this, reason);
-                else
-                    da->clearFocusInScope(scope, this, reason);
-            }
+            auto da = d->deliveryAgentPrivate();
+            Q_ASSERT(da);
+            if (focus)
+                da->setFocusInScope(scope, this, reason);
+            else
+                da->clearFocusInScope(scope, this, reason);
         } else {
             // do the focus changes from setFocusInScope/clearFocusInScope that are
             // unrelated to a window
@@ -7505,9 +7415,10 @@ void QQuickItem::setFocus(bool focus, Qt::FocusReason reason)
 
             d->focus = focus;
             changed << this;
+            notifyListeners = true;
             emit focusChanged(focus);
 
-            QQuickDeliveryAgentPrivate::notifyFocusChangesRecur(changed.data(), changed.count() - 1);
+            QQuickDeliveryAgentPrivate::notifyFocusChangesRecur(changed.data(), changed.count() - 1, reason);
         }
     } else {
         QVarLengthArray<QQuickItem *, 20> changed;
@@ -7520,10 +7431,13 @@ void QQuickItem::setFocus(bool focus, Qt::FocusReason reason)
 
         d->focus = focus;
         changed << this;
+        notifyListeners = true;
         emit focusChanged(focus);
 
-        QQuickDeliveryAgentPrivate::notifyFocusChangesRecur(changed.data(), changed.count() - 1);
+        QQuickDeliveryAgentPrivate::notifyFocusChangesRecur(changed.data(), changed.count() - 1, reason);
     }
+    if (notifyListeners)
+        d->notifyChangeListeners(QQuickItemPrivate::Focus, &QQuickItemChangeListener::itemFocusChanged, this, reason);
 }
 
 /*!

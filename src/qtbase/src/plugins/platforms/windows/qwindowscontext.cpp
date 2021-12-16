@@ -251,14 +251,12 @@ QWindowsContext *QWindowsContext::m_instance = nullptr;
     \internal
 */
 
-typedef QHash<HWND, QWindowsWindow *> HandleBaseWindowHash;
-
 struct QWindowsContextPrivate {
     QWindowsContextPrivate();
 
     unsigned m_systemInfo = 0;
     QSet<QString> m_registeredWindowClassNames;
-    HandleBaseWindowHash m_windows;
+    QWindowsContext::HandleBaseWindowHash m_windows;
     HDC m_displayContext = nullptr;
     int m_defaultDPI = 96;
     QWindowsKeyMapper m_keyMapper;
@@ -542,6 +540,11 @@ bool QWindowsContext::useRTLExtensions() const
 QList<int> QWindowsContext::possibleKeys(const QKeyEvent *e) const
 {
     return d->m_keyMapper.possibleKeys(e);
+}
+
+QWindowsContext::HandleBaseWindowHash &QWindowsContext::windows()
+{
+    return d->m_windows;
 }
 
 QSharedPointer<QWindowCreationContext> QWindowsContext::setWindowCreationContext(const QSharedPointer<QWindowCreationContext> &ctx)
@@ -1350,7 +1353,7 @@ bool QWindowsContext::windowsProc(HWND hwnd, UINT message,
     case QtWindows::GeometryChangingEvent:
         return platformWindow->QWindowsWindow::handleGeometryChanging(&msg);
     case QtWindows::ExposeEvent:
-        return platformWindow->handleWmPaint(hwnd, message, wParam, lParam);
+        return platformWindow->handleWmPaint(hwnd, message, wParam, lParam, result);
     case QtWindows::NonClientMouseEvent:
         if ((d->m_systemInfo & QWindowsContext::SI_SupportsPointer) && platformWindow->frameStrutEventsEnabled())
             return sessionManagerInteractionBlocked() || d->m_pointerHandler.translateMouseEvent(platformWindow->window(), hwnd, et, msg, result);
@@ -1542,7 +1545,7 @@ void QWindowsContext::handleFocusEvent(QtWindows::WindowsEventType et,
     }
     if (nextActiveWindow != d->m_lastActiveWindow) {
          d->m_lastActiveWindow = nextActiveWindow;
-         QWindowSystemInterface::handleWindowActivated(nextActiveWindow);
+         QWindowSystemInterface::handleWindowActivated(nextActiveWindow, Qt::ActiveWindowFocusReason);
     }
 }
 

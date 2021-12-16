@@ -749,7 +749,7 @@ enum class ObjectPropertyResult { OK, NeedsInit, Deleted };
 static ObjectPropertyResult loadObjectProperty(QV4::Lookup *l, QObject *object, void *target,
                                QQmlContextData *qmlContext)
 {
-    const QQmlData *qmlData = QQmlData::get(object);
+    QQmlData *qmlData = QQmlData::get(object);
     if (!qmlData)
         return ObjectPropertyResult::NeedsInit;
     if (qmlData->isQueuedForDeletion)
@@ -759,6 +759,11 @@ static ObjectPropertyResult loadObjectProperty(QV4::Lookup *l, QObject *object, 
     if (!inherits(qmlData->propertyCache, propertyCache))
         return ObjectPropertyResult::NeedsInit;
     const QQmlPropertyData *property = l->qobjectLookup.propertyData;
+
+    const int coreIndex = property->coreIndex();
+    if (qmlData->hasPendingBindingBit(coreIndex))
+        qmlData->flushPendingBinding(coreIndex);
+
     captureObjectProperty(object, propertyCache, property, qmlContext);
     property->readProperty(object, target);
     return ObjectPropertyResult::OK;
@@ -845,12 +850,7 @@ static bool initObjectLookup(
 
     Q_ASSERT(ddata->propertyCache);
 
-    if (l->qobjectLookup.propertyCache)
-        l->qobjectLookup.propertyCache->release();
-
-    l->qobjectLookup.propertyCache = ddata->propertyCache;
-    l->qobjectLookup.propertyCache->addref();
-    l->qobjectLookup.propertyData = property;
+    QV4::setupQObjectLookup(l, ddata, property);
     return true;
 }
 
@@ -892,8 +892,9 @@ bool AOTCompiledContext::captureLookup(uint index, QObject *object) const
         return false;
     }
 
-    captureObjectProperty(
-                object, l->qobjectLookup.propertyCache, l->qobjectLookup.propertyData, qmlContext);
+    const QQmlPropertyData *property = l->qobjectLookup.propertyData;
+    QQmlData::flushPendingBinding(object, property->coreIndex());
+    captureObjectProperty(object, l->qobjectLookup.propertyCache, property, qmlContext);
     return true;
 }
 
@@ -905,8 +906,9 @@ bool AOTCompiledContext::captureQmlContextPropertyLookup(uint index) const
         return false;
     }
 
-    captureObjectProperty(qmlScopeObject, l->qobjectLookup.propertyCache,
-                          l->qobjectLookup.propertyData, qmlContext);
+    const QQmlPropertyData *property = l->qobjectLookup.propertyData;
+    QQmlData::flushPendingBinding(qmlScopeObject, property->coreIndex());
+    captureObjectProperty(qmlScopeObject, l->qobjectLookup.propertyCache, property, qmlContext);
     return true;
 }
 
@@ -1218,7 +1220,7 @@ void AOTCompiledContext::initLoadAttachedLookup(uint index, QObject *object) con
     QV4::Lookup *l = compilationUnit->runtimeLookups + index;
     QV4::Scope scope(engine->handle());
     QV4::ScopedString name(scope, compilationUnit->runtimeStrings[l->nameIndex]);
-    QQmlTypeNameCache::Result r = qmlContext->imports()->query(name);
+    QQmlTypeNameCache::Result r = qmlContext->imports()->query<QQmlImport::AllowRecursion>(name);
 
     if (!r.isValid() || !r.type.isValid()) {
         scope.engine->throwTypeError();

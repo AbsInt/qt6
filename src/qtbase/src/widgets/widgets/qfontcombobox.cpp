@@ -311,6 +311,10 @@ public:
 void QFontComboBoxPrivate::_q_updateModel()
 {
     Q_Q(QFontComboBox);
+
+    if (QCoreApplication::closingDown())
+        return;
+
     const int scalableMask = (QFontComboBox::ScalableFonts | QFontComboBox::NonScalableFonts);
     const int spacingMask = (QFontComboBox::ProportionalFonts | QFontComboBox::MonospacedFonts);
 
@@ -367,7 +371,8 @@ void QFontComboBoxPrivate::_q_updateModel()
 void QFontComboBoxPrivate::_q_currentChanged(const QString &text)
 {
     Q_Q(QFontComboBox);
-    if (currentFont.families().first() != text) {
+    QStringList families = currentFont.families();
+    if (families.isEmpty() || families.first() != text) {
         currentFont.setFamilies(QStringList{text});
         emit q->currentFontChanged(currentFont);
     }

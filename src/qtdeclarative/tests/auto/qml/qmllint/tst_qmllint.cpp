@@ -72,11 +72,14 @@ private Q_SLOTS:
 
     void lazyAndDirect();
 
+    void missingBuiltinsNoCrash();
 private:
     QString runQmllint(const QString &fileToLint, std::function<void(QProcess &)> handleResult,
-                       const QStringList &extraArgs = QStringList(), bool ignoreSettings = true);
+                       const QStringList &extraArgs = QStringList(), bool ignoreSettings = true,
+                       bool addIncludeDirs = true);
     QString runQmllint(const QString &fileToLint, bool shouldSucceed,
-                       const QStringList &extraArgs = QStringList(), bool ignoreSettings = true);
+                       const QStringList &extraArgs = QStringList(), bool ignoreSettings = true,
+                       bool addIncludeDirs = true);
 
     QString m_qmllintPath;
     QString m_qmljsrootgenPath;
@@ -660,6 +663,18 @@ void TestQmllint::dirtyQmlCode_data()
             << QStringLiteral("cycleHead.qml")
             << QStringLiteral("MenuItem is part of an inheritance cycle: MenuItem -> MenuItem")
             << QString() << false;
+    QTest::newRow("missingQmltypes")
+            << QStringLiteral("missingQmltypes.qml")
+            << QStringLiteral("QML types file does not exist")
+            << QString() << false;
+    QTest::newRow("inaccessibleId")
+            << QStringLiteral("inaccessibleId.qml")
+            << QStringLiteral("Property \"objectName\" not found on type \"int\"")
+            << QString() << false;
+    QTest::newRow("inaccessibleId2")
+            << QStringLiteral("inaccessibleId2.qml")
+            << QStringLiteral("Property \"objectName\" not found on type \"int\"")
+            << QString() << false;
 }
 
 void TestQmllint::dirtyQmlCode()
@@ -807,6 +822,8 @@ void TestQmllint::cleanQmlCode_data()
     QTest::newRow("required property in Component") << QStringLiteral("requiredPropertyInComponent.qml");
     QTest::newRow("connectionNoParent") << QStringLiteral("connectionNoParent.qml"); // QTBUG-97600
     QTest::newRow("on binding in grouped property") << QStringLiteral("onBindingInGroupedProperty.qml");
+    QTest::newRow("multipleGrouped") << QStringLiteral("multiGrouped.qml");
+    QTest::newRow("ID overrides property") << QStringLiteral("accessibleId.qml");
 }
 
 void TestQmllint::cleanQmlCode()
@@ -818,14 +835,18 @@ void TestQmllint::cleanQmlCode()
 
 QString TestQmllint::runQmllint(const QString &fileToLint,
                                 std::function<void(QProcess &)> handleResult,
-                                const QStringList &extraArgs, bool ignoreSettings)
+                                const QStringList &extraArgs, bool ignoreSettings,
+                                bool addIncludeDirs)
 {
     auto qmlImportDir = QLibraryInfo::path(QLibraryInfo::QmlImportsPath);
     QStringList args;
 
-    args << (QFileInfo(fileToLint).isAbsolute() ? fileToLint : testFile(fileToLint))
-         << QStringLiteral("-I") << qmlImportDir
-         << QStringLiteral("-I") << dataDirectory();
+    args << (QFileInfo(fileToLint).isAbsolute() ? fileToLint : testFile(fileToLint));
+
+    if (addIncludeDirs) {
+        args << QStringLiteral("-I") << qmlImportDir
+             << QStringLiteral("-I") << dataDirectory();
+    }
 
     if (ignoreSettings)
         QStringLiteral("--ignore-settings");
@@ -857,7 +878,8 @@ QString TestQmllint::runQmllint(const QString &fileToLint,
 }
 
 QString TestQmllint::runQmllint(const QString &fileToLint, bool shouldSucceed,
-                                const QStringList &extraArgs, bool ignoreSettings)
+                                const QStringList &extraArgs, bool ignoreSettings,
+                                bool addIncludeDirs)
 {
     return runQmllint(
             fileToLint,
@@ -870,7 +892,7 @@ QString TestQmllint::runQmllint(const QString &fileToLint, bool shouldSucceed,
                 else
                     QVERIFY(process.exitCode() != 0);
             },
-            extraArgs, ignoreSettings);
+            extraArgs, ignoreSettings, addIncludeDirs);
 }
 
 void TestQmllint::requiredProperty()
@@ -911,11 +933,22 @@ void TestQmllint::settingsFile()
     QVERIFY(runQmllint("settings/unusedImportWarning/unused.qml", false, QStringList(), false)
                     .contains(QStringLiteral("Warning: %1:2:1: Unused import at %1:2:1")
                                       .arg(testFile("settings/unusedImportWarning/unused.qml"))));
+    QVERIFY(runQmllint("settings/bare/bare.qml", false, { "--bare" }, false, false)
+                    .contains(QStringLiteral("Failed to find the following builtins: "
+                                             "builtins.qmltypes, jsroot.qmltypes")));
+    QVERIFY(runQmllint("settings/qmltypes/qmltypes.qml", true, QStringList(), false).isEmpty());
 }
 
 void TestQmllint::lazyAndDirect()
 {
     QVERIFY(runQmllint("LazyAndDirect/Lazy.qml", true, {}, false).isEmpty());
+}
+
+void TestQmllint::missingBuiltinsNoCrash()
+{
+    QVERIFY(runQmllint("missingBuiltinsNoCrash.qml", false, { "--bare" }, false, false)
+                    .contains(QStringLiteral("Failed to find the following builtins: "
+                                             "builtins.qmltypes, jsroot.qmltypes")));
 }
 
 QTEST_MAIN(TestQmllint)

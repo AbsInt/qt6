@@ -36,6 +36,8 @@
 #include <unordered_set>
 #include <string>
 
+#include <qsemaphore.h>
+
 class tst_QHash : public QObject
 {
     Q_OBJECT
@@ -95,6 +97,10 @@ private slots:
     void fineTuningInEmptyHash();
 
     void reserveShared();
+
+    void QTBUG98265();
+
+    void detachAndReferences();
 };
 
 struct IdentityTracker {
@@ -544,6 +550,22 @@ void tst_QHash::erase()
     auto mit = h2.erase(bit);
     mit = h2.erase(h2.begin());
     QVERIFY(mit == h2.end());
+
+    h2 = QMultiHash<int, int>();
+    h2.emplace(1, 1);
+    h2.emplace(1, 2);
+    h2.emplace(3, 1);
+    h2.emplace(3, 4);
+    QMultiHash<int, int> h3 = h2;
+    auto it = h3.constFind(3);
+    ++it;
+    QVERIFY(h3.isSharedWith(h2));
+    it = h3.erase(it);
+    QVERIFY(!h3.isSharedWith(h2));
+    if (it != h3.cend()) {
+        auto it2 = h3.constFind(it.key());
+        QCOMPARE(it, it2);
+    }
 }
 
 /*
@@ -1742,6 +1764,7 @@ void tst_QHash::qmultihash_specific()
     map2.insert(48, 3);
     QCOMPARE(map1.count(), map2.count());
     QVERIFY(map1.remove(42,5));
+    QVERIFY(map1 != map2);
     QVERIFY(map2.remove(42,5));
     QVERIFY(map1 == map2);
 
@@ -2613,6 +2636,67 @@ void tst_QHash::reserveShared()
 
     QVERIFY(hash2.capacity() >= 100);
     QCOMPARE(hash.capacity(), oldCap);
+}
+
+void tst_QHash::QTBUG98265()
+{
+    QMultiHash<QUuid, QByteArray> a;
+    QMultiHash<QUuid, QByteArray> b;
+    a.insert(QUuid("3e0dfb4d-90eb-43a4-bd54-88f5b69832c1"), QByteArray());
+    b.insert(QUuid("1b710ada-3dd7-432e-b7c8-e852e59f46a0"), QByteArray());
+
+    QVERIFY(a != b);
+}
+
+/*
+    Calling functions which take a const-ref argument for a key with a reference
+    to a key inside the hash itself should keep the key valid as long as it is
+    needed. If not users may get hard-to-debug races where CoW should've
+    shielded them.
+*/
+void tst_QHash::detachAndReferences()
+{
+#if !QT_CONFIG(cxx11_future)
+    QSKIP("This test requires cxx11_future")
+#else
+    // Repeat a few times because it's not a guarantee
+    for (int i = 0; i < 50; ++i) {
+        QHash<char, char> hash;
+        hash.insert('a', 'a');
+        hash.insert('b', 'a');
+        hash.insert('c', 'a');
+        hash.insert('d', 'a');
+        hash.insert('e', 'a');
+        hash.insert('f', 'a');
+        hash.insert('g', 'a');
+
+        QSemaphore sem;
+        QSemaphore sem2;
+        std::thread th([&sem, &sem2, hash]() mutable {
+            sem.release();
+            sem2.acquire();
+            hash.reserve(100); // [2]: ...then this rehashes directly, without detaching
+        });
+
+        // The key is a reference to an entry in the hash. If we were already
+        // detached then no problem occurs! The problem happens because _after_
+        // we detach but before using the key the other thread resizes and
+        // rehashes, leaving our const-ref dangling.
+        auto it = hash.constBegin();
+        const auto &key = it.key(); // [3]: leaving our const-refs dangling
+        auto kCopy = key;
+        const auto &value = it.value();
+        auto vCopy = value;
+        sem2.release();
+        sem.acquire();
+        hash.insert(key, value); // [1]: this detaches first...
+
+        th.join();
+        QCOMPARE(hash.size(), 7);
+        QVERIFY(hash.contains(kCopy));
+        QCOMPARE(hash.value(kCopy), vCopy);
+    }
+#endif
 }
 
 QTEST_APPLESS_MAIN(tst_QHash)

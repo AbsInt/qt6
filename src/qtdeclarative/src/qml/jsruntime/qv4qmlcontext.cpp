@@ -215,7 +215,7 @@ ReturnedValue QQmlContextWrapper::getPropertyAndBase(const QQmlContextWrapper *r
 
     if (context->imports() && name->startsWithUpper()) {
         // Search for attached properties, enums and imported scripts
-        QQmlTypeNameCache::Result r = context->imports()->query(name, QQmlImport::AllowRecursion);
+        QQmlTypeNameCache::Result r = context->imports()->query<QQmlImport::AllowRecursion>(name);
 
         if (r.isValid()) {
             if (hasProperty)
@@ -306,11 +306,7 @@ ReturnedValue QQmlContextWrapper::getPropertyAndBase(const QQmlContextWrapper *r
                     QQmlData *ddata = QQmlData::get(scopeObject, false);
                     if (ddata && ddata->propertyCache) {
                         ScopedValue val(scope, base ? *base : Value::fromReturnedValue(QV4::QObjectWrapper::wrap(v4, scopeObject)));
-                        const QObjectWrapper *That = static_cast<const QObjectWrapper *>(val->objectValue());
-                        lookup->qobjectLookup.ic = That->internalClass();
-                        lookup->qobjectLookup.propertyCache = ddata->propertyCache;
-                        lookup->qobjectLookup.propertyCache->addref();
-                        lookup->qobjectLookup.propertyData = propertyData;
+                        QV4::setupQObjectLookup(lookup, ddata, propertyData, val->objectValue());
                         lookup->qmlContextPropertyGetter = QQmlContextWrapper::lookupScopeObjectProperty;
                     }
                 }
@@ -337,14 +333,12 @@ ReturnedValue QQmlContextWrapper::getPropertyAndBase(const QQmlContextWrapper *r
                 if (propertyData) {
                     if (lookup) {
                         QQmlData *ddata = QQmlData::get(contextObject, false);
-                        if (ddata && ddata->propertyCache) {
+                        if (ddata && ddata->propertyCache
+                                && lookup->qmlContextPropertyGetter != contextGetterFunction) {
                             ScopedValue val(scope, base ? *base
                                                         : Value::fromReturnedValue(QV4::QObjectWrapper::wrap(v4, contextObject)));
-                            const QObjectWrapper *That = static_cast<const QObjectWrapper *>(val->objectValue());
-                            lookup->qobjectLookup.ic = That->internalClass();
-                            lookup->qobjectLookup.propertyCache = ddata->propertyCache;
-                            lookup->qobjectLookup.propertyCache->addref();
-                            lookup->qobjectLookup.propertyData = propertyData;
+                            QV4::setupQObjectLookup(lookup, ddata, propertyData,
+                                                    val->objectValue());
                             lookup->qmlContextPropertyGetter = contextGetterFunction;
                         }
                     } else if (originalLookup) {

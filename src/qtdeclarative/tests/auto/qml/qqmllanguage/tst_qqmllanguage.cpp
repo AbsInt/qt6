@@ -51,6 +51,7 @@
 #include <private/qqmlcomponent_p.h>
 #include <private/qqmltype_p_p.h>
 #include <private/qqmlcomponentattached_p.h>
+#include <private/qv4debugging_p.h>
 
 #include "testtypes.h"
 #include <QtQuickTestUtils/private/qmlutils_p.h>
@@ -375,6 +376,7 @@ private slots:
     void jittedAsCast();
 
     void ambiguousContainingType();
+    void objectAsBroken();
 
 private:
     QQmlEngine engine;
@@ -6310,8 +6312,23 @@ void tst_qqmllanguage::bareInlineComponent()
     QVERIFY(tab1Found);
 }
 
+struct DummyDebugger : public QV4::Debugging::Debugger
+{
+    bool pauseAtNextOpportunity() const final { return false; }
+    void maybeBreakAtInstruction() final { }
+    void enteringFunction() final { }
+    void leavingFunction(const QV4::ReturnedValue &) final { }
+    void aboutToThrow() final { }
+};
+
 void tst_qqmllanguage::hangOnWarning()
 {
+    QQmlEngine engine;
+
+    // A debugger prevents the disk cache.
+    // If we load the file from disk cache we don't parse it and we don't see the warning.
+    engine.handle()->setDebugger(new DummyDebugger);
+
     QTest::ignoreMessage(QtWarningMsg,
                          qPrintable(QStringLiteral("%1:3 : Ignored annotation")
                                             .arg(testFileUrl("hangOnWarning.qml").toString())));
@@ -6458,6 +6475,21 @@ void tst_qqmllanguage::ambiguousContainingType()
         QScopedPointer<QObject> o(c.create());
         QVERIFY(!o.isNull());
     }
+}
+
+void tst_qqmllanguage::objectAsBroken()
+{
+    QQmlEngine engine;
+    QQmlComponent c(&engine, testFileUrl("asBroken.qml"));
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+    QScopedPointer<QObject> o(c.create());
+    QVERIFY(!o.isNull());
+    QVariant selfAsBroken = o->property("selfAsBroken");
+    QVERIFY(selfAsBroken.isValid());
+    QCOMPARE(selfAsBroken.metaType(), QMetaType::fromType<std::nullptr_t>());
+
+    QQmlComponent b(&engine, testFileUrl("Broken.qml"));
+    QVERIFY(b.isError());
 }
 
 QTEST_MAIN(tst_qqmllanguage)

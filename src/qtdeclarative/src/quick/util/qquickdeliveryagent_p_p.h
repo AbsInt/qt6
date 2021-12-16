@@ -76,8 +76,8 @@ struct QQuickPointingDeviceExtra {
 
 class Q_QUICK_PRIVATE_EXPORT QQuickDeliveryAgentPrivate : public QObjectPrivate
 {
-    Q_DECLARE_PUBLIC(QQuickDeliveryAgent)
 public:
+    Q_DECLARE_PUBLIC(QQuickDeliveryAgent)
     QQuickDeliveryAgentPrivate(QQuickItem *root);
     ~QQuickDeliveryAgentPrivate();
 
@@ -95,7 +95,7 @@ public:
 
     void setFocusInScope(QQuickItem *scope, QQuickItem *item, Qt::FocusReason reason, FocusOptions = { });
     void clearFocusInScope(QQuickItem *scope, QQuickItem *item, Qt::FocusReason reason, FocusOptions = { });
-    static void notifyFocusChangesRecur(QQuickItem **item, int remaining);
+    static void notifyFocusChangesRecur(QQuickItem **item, int remaining, Qt::FocusReason reason);
     void clearFocusObject();
     void updateFocusItemTransform();
 
@@ -199,7 +199,9 @@ public:
 
 #if QT_CONFIG(quick_draganddrop)
     void deliverDragEvent(QQuickDragGrabber *, QEvent *);
-    bool deliverDragEvent(QQuickDragGrabber *, QQuickItem *, QDragMoveEvent *, QVarLengthArray<QQuickItem*, 64> *currentGrabItems = nullptr);
+    bool deliverDragEvent(QQuickDragGrabber *, QQuickItem *, QDragMoveEvent *,
+                          QVarLengthArray<QQuickItem *, 64> *currentGrabItems = nullptr,
+                          QObject *formerTarget = nullptr);
 #endif
 
     static bool dragOverThreshold(qreal d, Qt::Axis axis, QMouseEvent *event, int startDragThreshold = -1);

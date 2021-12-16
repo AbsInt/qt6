@@ -42,11 +42,12 @@
 #include "qqmljsscope_p.h"
 #include "qqmljsannotation_p.h"
 #include "qqmljslogger_p.h"
+#include "qqmljsscopesbyid_p.h"
 
 #include <private/qqmljsast_p.h>
 #include <private/qqmljsdiagnosticmessage_p.h>
 #include <private/qqmljsimporter_p.h>
-
+#include <private/qv4compileddata_p.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -65,7 +66,11 @@ public:
     QQmlJSLogger &logger() { return m_logger; }
 
     QHash<QString, QQmlJSScope::ConstPtr> imports() const { return m_rootScopeImports; }
-    QHash<QString, QQmlJSScope::ConstPtr> addressableScopes() const { return m_scopesById; }
+    QQmlJSScopesById addressableScopes() const { return m_scopesById; }
+    QHash<QV4::CompiledData::Location, QQmlJSScope::ConstPtr> scopesBylocation() const
+    {
+        return m_scopesByIrLocation;
+    }
 
     static QString implicitImportDirectory(
             const QString &localFile, QQmlJSResourceFileMapper *mapper);
@@ -141,8 +146,12 @@ protected:
     QQmlJSScope::Ptr m_savedBindingOuterScope;
     QQmlJSScope::Ptr m_exportedRootScope;
     QQmlJSScope::ConstPtr m_globalScope;
-    QHash<QString, QQmlJSScope::ConstPtr> m_scopesById;
+    QQmlJSScopesById m_scopesById;
     QHash<QString, QQmlJSScope::ConstPtr> m_rootScopeImports;
+
+    // We need to record the locations as IR locations because those contain less data.
+    // This way we can look up objects by IR location later.
+    QHash<QV4::CompiledData::Location, QQmlJSScope::ConstPtr> m_scopesByIrLocation;
 
     // Maps all qmlNames to the source location of their import
     QMultiHash<QString, QQmlJS::SourceLocation> m_importTypeLocationMap;
@@ -171,7 +180,10 @@ protected:
     void checkSignals();
     void flushPendingSignalParameters();
 
-    void checkInheritanceCycle(QQmlJSScope::ConstPtr scope);
+    QQmlJSScope::ConstPtr scopeById(const QString &id, const QQmlJSScope::ConstPtr &current);
+
+    void breakInheritanceCycles(const QQmlJSScope::Ptr &scope);
+    void checkDeprecation(const QQmlJSScope::ConstPtr &scope);
     void checkGroupedAndAttachedScopes(QQmlJSScope::ConstPtr scope);
 
     QQmlJSLogger m_logger;
@@ -247,8 +259,11 @@ protected:
 private:
     void importBaseModules();
     void resolveAliases();
+
     void visitFunctionExpressionHelper(QQmlJS::AST::FunctionExpression *fexpr);
-    void processImportWarnings(const QString &what, const QQmlJS::SourceLocation &srcLocation = QQmlJS::SourceLocation());
+    void processImportWarnings(
+            const QString &what,
+            const QQmlJS::SourceLocation &srcLocation = QQmlJS::SourceLocation());
     void addImportWithLocation(const QString &name, const QQmlJS::SourceLocation &loc);
 };
 

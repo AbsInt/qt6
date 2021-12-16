@@ -62,6 +62,10 @@
 
 #include <qtgui_tracepoints_p.h>
 
+#ifdef Q_OS_WIN
+#include <QtGui/private/qwindowsfontdatabasebase_p.h>
+#endif
+
 QT_BEGIN_NAMESPACE
 
 Q_LOGGING_CATEGORY(lcFontDb, "qt.text.font.db")
@@ -2196,13 +2200,12 @@ bool QFontDatabasePrivate::isApplicationFont(const QString &fileName)
     with removeApplicationFont() or to retrieve the list of family names contained
     in the font.
 
+//! [add-application-font-doc]
     The function returns -1 if the font could not be loaded.
 
     Currently only TrueType fonts, TrueType font collections, and OpenType fonts are
     supported.
-
-    \note Adding application fonts on Unix/X11 platforms without fontconfig is
-    currently not supported.
+//! [add-application-font-doc]
 
     \sa addApplicationFontFromData(), applicationFontFamilies(), removeApplicationFont()
 */
@@ -2230,12 +2233,7 @@ int QFontDatabase::addApplicationFont(const QString &fileName)
     with removeApplicationFont() or to retrieve the list of family names contained
     in the font.
 
-    The function returns -1 if the font could not be loaded.
-
-    Currently only TrueType fonts and TrueType font collections are supported.
-
-    \b{Note:} Adding application fonts on Unix/X11 platforms without fontconfig is
-    currently not supported.
+    \include qfontdatabase.cpp add-application-font-doc
 
     \sa addApplicationFont(), applicationFontFamilies(), removeApplicationFont()
 */
@@ -2356,7 +2354,7 @@ bool QFontDatabase::removeAllApplicationFonts()
 /*!
     \internal
 */
-QFontEngine *QFontDatabasePrivate::findFont(const QFontDef &request,
+QFontEngine *QFontDatabasePrivate::findFont(const QFontDef &req,
                                             int script,
                                             bool preferScriptOverFamily)
 {
@@ -2366,6 +2364,14 @@ QFontEngine *QFontDatabasePrivate::findFont(const QFontDef &request,
         initializeDb();
 
     QFontEngine *engine;
+
+#ifdef Q_OS_WIN
+    const QFontDef request = static_cast<QWindowsFontDatabaseBase *>(
+                                     QGuiApplicationPrivate::platformIntegration()->fontDatabase())
+                                     ->sanitizeRequest(req);
+#else
+    const QFontDef &request = req;
+#endif
 
 #if defined(QT_BUILD_INTERNAL)
     // For testing purpose only, emulates an exact-matching monospace font

@@ -33,28 +33,66 @@ function(qt_get_android_sdk_jar_for_api api out_jar_location)
 endfunction()
 
 # Minimum recommend android SDK api version
-set(QT_ANDROID_API_VERSION "android-30")
+set(QT_ANDROID_API_VERSION "android-31")
 
-# Locate android.jar
-set(QT_ANDROID_JAR "${ANDROID_SDK_ROOT}/platforms/${QT_ANDROID_API_VERSION}/android.jar")
-if(NOT EXISTS "${QT_ANDROID_JAR}")
-    # Locate the highest available platform
-    file(GLOB android_platforms
-        LIST_DIRECTORIES true
-        RELATIVE "${ANDROID_SDK_ROOT}/platforms"
-        "${ANDROID_SDK_ROOT}/platforms/*")
-    # If list is not empty
-    if(android_platforms)
-        list(SORT android_platforms)
-        list(REVERSE android_platforms)
-        list(GET android_platforms 0 android_platform_latest)
+function(qt_internal_sort_android_platforms out_var)
+    if(CMAKE_VERSION GREATER_EQUAL 3.18)
+        set(platforms ${ARGN})
+        list(SORT platforms COMPARE NATURAL)
+    else()
+        # Simulate natural sorting:
+        # - prepend every platform with its version as three digits, zero-padded
+        # - regular sort
+        # - remove the padded version prefix
+        set(platforms)
+        foreach(platform IN LISTS ARGN)
+            set(version "000")
+            if(platform MATCHES ".*-([0-9]+)$")
+                set(version ${CMAKE_MATCH_1})
+                string(LENGTH "${version}" version_length)
+                math(EXPR padding_length "3 - ${version_length}")
+                string(REPEAT "0" ${padding_length} padding)
+                string(PREPEND version ${padding})
+            endif()
+            list(APPEND platforms "${version}~${platform}")
+        endforeach()
+        list(SORT platforms)
+        list(TRANSFORM platforms REPLACE "^.*~" "")
+    endif()
+    set("${out_var}" "${platforms}" PARENT_SCOPE)
+endfunction()
+
+macro(qt_internal_get_android_platform_version out_var android_platform)
+    string(REGEX REPLACE ".*-([0-9]+)$" "\\1" ${out_var} "${android_platform}")
+endmacro()
+
+# Locate the highest available platform
+file(GLOB android_platforms
+    LIST_DIRECTORIES true
+    RELATIVE "${ANDROID_SDK_ROOT}/platforms"
+    "${ANDROID_SDK_ROOT}/platforms/*")
+# If list is not empty
+if(android_platforms)
+    qt_internal_sort_android_platforms(android_platforms ${android_platforms})
+    list(REVERSE android_platforms)
+    list(GET android_platforms 0 android_platform_latest)
+
+    qt_internal_get_android_platform_version(latest_platform_version
+        "${android_platform_latest}")
+    qt_internal_get_android_platform_version(required_platform_version
+        "${QT_ANDROID_API_VERSION}")
+
+    if("${latest_platform_version}" VERSION_GREATER "${required_platform_version}")
         set(QT_ANDROID_API_VERSION ${android_platform_latest})
-        set(QT_ANDROID_JAR "${ANDROID_SDK_ROOT}/platforms/${QT_ANDROID_API_VERSION}/android.jar")
     endif()
 endif()
 
+set(QT_ANDROID_JAR "${ANDROID_SDK_ROOT}/platforms/${QT_ANDROID_API_VERSION}/android.jar")
 if(NOT EXISTS "${QT_ANDROID_JAR}")
-    message(FATAL_ERROR "No suitable Android SDK platform found. Minimum version is ${QT_ANDROID_API_VERSION}")
+    message(FATAL_ERROR
+        "No suitable Android SDK platform found in '${ANDROID_SDK_ROOT}/platforms'."
+        " Minimum version is ${QT_ANDROID_API_VERSION}"
+    )
 endif()
 
 message(STATUS "Using Android SDK API ${QT_ANDROID_API_VERSION} from ${ANDROID_SDK_ROOT}/platforms")

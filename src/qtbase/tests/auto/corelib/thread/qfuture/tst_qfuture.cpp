@@ -70,11 +70,23 @@ public:
         emit multipleArgs(value1, value2, value3);
     }
 
+    void emitNoArgPrivateSignal() { emit noArgPrivateSignal(QPrivateSignal()); }
+    void emitIntArgPrivateSignal(int value) { emit intArgPrivateSignal(value, QPrivateSignal()); }
+    void emitMultiArgsPrivateSignal(int value1, double value2, const QString &value3)
+    {
+        emit multiArgsPrivateSignal(value1, value2, value3, QPrivateSignal());
+    }
+
 signals:
     void noArgSignal();
     void intArgSignal(int value);
     void constRefArg(const QString &value);
     void multipleArgs(int value1, double value2, const QString &value3);
+
+    // Private signals
+    void noArgPrivateSignal(QPrivateSignal);
+    void intArgPrivateSignal(int value, QPrivateSignal);
+    void multiArgsPrivateSignal(int value1, double value2, const QString &value3, QPrivateSignal);
 };
 
 class LambdaThread : public QThread
@@ -142,7 +154,9 @@ private slots:
     void onFailedForMoveOnlyTypes();
 #endif
     void onCanceled();
+    void cancelContinuations();
     void continuationsWithContext();
+    void continuationsWithMoveOnlyLambda();
 #if 0
     // TODO: enable when QFuture::takeResults() is enabled
     void takeResults();
@@ -2845,6 +2859,131 @@ void tst_QFuture::onCanceled()
 #endif // QT_NO_EXCEPTIONS
 }
 
+void tst_QFuture::cancelContinuations()
+{
+    // The chain is cancelled in the middle of execution of continuations
+    {
+        QPromise<int> promise;
+
+        int checkpoint = 0;
+        auto future = promise.future().then([&](int value) {
+            ++checkpoint;
+            return value + 1;
+        }).then([&](int value) {
+            ++checkpoint;
+            promise.future().cancel();
+            return value + 1;
+        }).then([&](int value) {
+            ++checkpoint;
+            return value + 1;
+        }).onCanceled([] {
+            return -1;
+        });
+
+        promise.start();
+        promise.addResult(42);
+        promise.finish();
+
+        QCOMPARE(future.result(), -1);
+        QCOMPARE(checkpoint, 2);
+    }
+
+    // The chain is cancelled before the execution of continuations
+    {
+        auto f = QtFuture::makeReadyFuture(42);
+        f.cancel();
+
+        int checkpoint = 0;
+        auto future = f.then([&](int value) {
+            ++checkpoint;
+            return value + 1;
+        }).then([&](int value) {
+            ++checkpoint;
+            return value + 1;
+        }).then([&](int value) {
+            ++checkpoint;
+            return value + 1;
+        }).onCanceled([] {
+            return -1;
+        });
+
+        QCOMPARE(future.result(), -1);
+        QCOMPARE(checkpoint, 0);
+    }
+
+    // The chain is canceled partially, through an intermediate future
+    {
+        QPromise<int> promise;
+
+        int checkpoint = 0;
+        auto intermediate = promise.future().then([&](int value) {
+            ++checkpoint;
+            return value + 1;
+        });
+
+        auto future = intermediate.then([&](int value) {
+            ++checkpoint;
+            return value + 1;
+        }).then([&](int value) {
+            ++checkpoint;
+            return value + 1;
+        }).onCanceled([] {
+            return -1;
+        });
+
+        promise.start();
+        promise.addResult(42);
+
+        // This should cancel only the chain starting from intermediate
+        intermediate.cancel();
+
+        promise.finish();
+
+        QCOMPARE(future.result(), -1);
+        QCOMPARE(checkpoint, 1);
+    }
+
+#ifndef QT_NO_EXCEPTIONS
+    // The chain is cancelled in the middle of execution of continuations,
+    // while there's an exception in the chain, which is handeled inside
+    // the continuations.
+    {
+        QPromise<int> promise;
+
+        int checkpoint = 0;
+        auto future = promise.future().then([&](int value) {
+            ++checkpoint;
+            throw QException();
+            return value + 1;
+        }).then([&](QFuture<int> future) {
+            try {
+                auto res = future.result();
+                Q_UNUSED(res);
+            } catch (const QException &) {
+                ++checkpoint;
+            }
+            return 2;
+        }).then([&](int value) {
+            ++checkpoint;
+            promise.future().cancel();
+            return value + 1;
+        }).then([&](int value) {
+            ++checkpoint;
+            return value + 1;
+        }).onCanceled([] {
+            return -1;
+        });
+
+        promise.start();
+        promise.addResult(42);
+        promise.finish();
+
+        QCOMPARE(future.result(), -1);
+        QCOMPARE(checkpoint, 3);
+    }
+#endif // QT_NO_EXCEPTIONS
+}
+
 void tst_QFuture::continuationsWithContext()
 {
     QThread thread;
@@ -2933,6 +3072,71 @@ void tst_QFuture::continuationsWithContext()
 
     thread.quit();
     thread.wait();
+}
+
+void tst_QFuture::continuationsWithMoveOnlyLambda()
+{
+    // .then()
+    {
+        std::unique_ptr<int> uniquePtr(new int(42));
+        auto future = QtFuture::makeReadyFuture().then([p = std::move(uniquePtr)] { return *p; });
+        QCOMPARE(future.result(), 42);
+    }
+    // .then() with thread pool
+    {
+        QThreadPool pool;
+
+        std::unique_ptr<int> uniquePtr(new int(42));
+        auto future =
+                QtFuture::makeReadyFuture().then(&pool, [p = std::move(uniquePtr)] { return *p; });
+        QCOMPARE(future.result(), 42);
+    }
+    // .then() with context
+    {
+        QObject object;
+
+        std::unique_ptr<int> uniquePtr(new int(42));
+        auto future = QtFuture::makeReadyFuture().then(&object,
+                                                       [p = std::move(uniquePtr)] { return *p; });
+        QCOMPARE(future.result(), 42);
+    }
+
+    // .onCanceled()
+    {
+        std::unique_ptr<int> uniquePtr(new int(42));
+        auto future =
+                createCanceledFuture<int>().onCanceled([p = std::move(uniquePtr)] { return *p; });
+        QCOMPARE(future.result(), 42);
+    }
+
+    // .onCanceled() with context
+    {
+        QObject object;
+
+        std::unique_ptr<int> uniquePtr(new int(42));
+        auto future = createCanceledFuture<int>().onCanceled(
+                &object, [p = std::move(uniquePtr)] { return *p; });
+        QCOMPARE(future.result(), 42);
+    }
+
+#ifndef QT_NO_EXCEPTIONS
+    // .onFailed()
+    {
+        std::unique_ptr<int> uniquePtr(new int(42));
+        auto future = QtFuture::makeExceptionalFuture<int>(QException())
+                              .onFailed([p = std::move(uniquePtr)] { return *p; });
+        QCOMPARE(future.result(), 42);
+    }
+    // .onFailed() with context
+    {
+        QObject object;
+
+        std::unique_ptr<int> uniquePtr(new int(42));
+        auto future = QtFuture::makeExceptionalFuture<int>(QException())
+                              .onFailed(&object, [p = std::move(uniquePtr)] { return *p; });
+        QCOMPARE(future.result(), 42);
+    }
+#endif // QT_NO_EXCEPTIONS
 }
 
 void tst_QFuture::testSingleResult(const UniquePtr &p)
@@ -3191,7 +3395,7 @@ void tst_QFuture::signalConnect()
     {
         SenderObject sender;
         auto future =
-                QtFuture::connect(&sender, &SenderObject::noArgSignal).then([&] { return true; });
+                QtFuture::connect(&sender, &SenderObject::noArgSignal).then([] { return true; });
         sender.emitNoArg();
         QCOMPARE(future.result(), true);
     }
@@ -3230,6 +3434,39 @@ void tst_QFuture::signalConnect()
         QCOMPARE(std::get<0>(result), 42);
         QCOMPARE(std::get<1>(result), 42.5);
         QCOMPARE(std::get<2>(result), "42");
+    }
+
+    // No arg private signal
+    {
+        SenderObject sender;
+        auto future = QtFuture::connect(&sender, &SenderObject::noArgPrivateSignal).then([] {
+            return true;
+        });
+        sender.emitNoArgPrivateSignal();
+        QCOMPARE(future.result(), true);
+    }
+
+    // One arg private signal
+    {
+        SenderObject sender;
+        auto future =
+                QtFuture::connect(&sender, &SenderObject::intArgPrivateSignal).then([](int value) {
+                    return value;
+                });
+        sender.emitIntArgPrivateSignal(42);
+        QCOMPARE(future.result(), 42);
+    }
+
+    // Multi-args private signal
+    {
+        SenderObject sender;
+        auto future = QtFuture::connect(&sender, &SenderObject::multiArgsPrivateSignal)
+                              .then([](std::tuple<int, double, QString> values) { return values; });
+        sender.emitMultiArgsPrivateSignal(42, 42.5, "42");
+        const auto [i, d, s] = future.result();
+        QCOMPARE(i, 42);
+        QCOMPARE(d, 42.5);
+        QCOMPARE(s, "42");
     }
 
     // Sender destroyed

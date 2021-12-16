@@ -830,6 +830,13 @@ void QFileDialog::setOptions(Options options)
 QFileDialog::Options QFileDialog::options() const
 {
     Q_D(const QFileDialog);
+    static_assert((int)QFileDialog::ShowDirsOnly == (int)QFileDialogOptions::ShowDirsOnly);
+    static_assert((int)QFileDialog::DontResolveSymlinks == (int)QFileDialogOptions::DontResolveSymlinks);
+    static_assert((int)QFileDialog::DontConfirmOverwrite == (int)QFileDialogOptions::DontConfirmOverwrite);
+    static_assert((int)QFileDialog::DontUseNativeDialog == (int)QFileDialogOptions::DontUseNativeDialog);
+    static_assert((int)QFileDialog::ReadOnly == (int)QFileDialogOptions::ReadOnly);
+    static_assert((int)QFileDialog::HideNameFilterDetails == (int)QFileDialogOptions::HideNameFilterDetails);
+    static_assert((int)QFileDialog::DontUseCustomDirectoryIcons == (int)QFileDialogOptions::DontUseCustomDirectoryIcons);
     return QFileDialog::Options(int(d->options->options()));
 }
 
@@ -1243,8 +1250,9 @@ QStringList QFileDialogPrivate::addDefaultSuffixToFiles(const QStringList &files
         QFileInfo info(name);
         // if the filename has no suffix, add the default suffix
         const QString defaultSuffix = options->defaultSuffix();
-        if (!defaultSuffix.isEmpty() && !info.isDir() && name.lastIndexOf(QLatin1Char('.')) == -1)
+        if (!defaultSuffix.isEmpty() && !info.isDir() && !info.fileName().contains(u'.'))
             name += QLatin1Char('.') + defaultSuffix;
+
         if (info.isAbsolute()) {
             files.append(name);
         } else {
@@ -1270,8 +1278,12 @@ QList<QUrl> QFileDialogPrivate::addDefaultSuffixToUrls(const QList<QUrl> &urlsTo
         QUrl url = urlsToFix.at(i);
         // if the filename has no suffix, add the default suffix
         const QString defaultSuffix = options->defaultSuffix();
-        if (!defaultSuffix.isEmpty() && !url.path().endsWith(QLatin1Char('/')) && url.path().lastIndexOf(QLatin1Char('.')) == -1)
-            url.setPath(url.path() + QLatin1Char('.') + defaultSuffix);
+        if (!defaultSuffix.isEmpty()) {
+            const QString urlPath = url.path();
+            const auto idx = urlPath.lastIndexOf(u'/');
+            if (idx != (urlPath.size() - 1) && !QStringView{urlPath}.mid(idx + 1).contains(u'.'))
+                url.setPath(urlPath + u'.' + defaultSuffix);
+        }
         urls.append(url);
     }
     return urls;

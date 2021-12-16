@@ -60,6 +60,7 @@
 #include <android/bitmap.h>
 
 #include <QtCore/private/qjnihelpers_p.h>
+#include <QtCore/qbasicatomic.h>
 #include <QtCore/qjnienvironment.h>
 #include <QtCore/qjniobject.h>
 #include <QtCore/qresource.h>
@@ -104,7 +105,6 @@ static sem_t m_exitSemaphore, m_terminateSemaphore;
 QHash<int, AndroidSurfaceClient *> m_surfaces;
 
 static QBasicMutex m_surfacesMutex;
-static int m_surfaceId = 1;
 
 
 static QAndroidPlatformIntegration *m_androidPlatformIntegration = nullptr;
@@ -122,6 +122,8 @@ static AndroidContentFileEngineHandler *m_androidContentFileEngineHandler = null
 static const char m_qtTag[] = "Qt";
 static const char m_classErrorMsg[] = "Can't find class \"%s\"";
 static const char m_methodErrorMsg[] = "Can't find method \"%s%s\"";
+
+static QBasicAtomicInt startQtAndroidPluginCalled = Q_BASIC_ATOMIC_INITIALIZER(0);
 
 namespace QtAndroid
 {
@@ -322,6 +324,11 @@ namespace QtAndroid
         return manufacturer + QLatin1Char(' ') + model;
     }
 
+    jint generateViewId()
+    {
+        return QJniObject::callStaticMethod<jint>("android/view/View", "generateViewId", "()I");
+    }
+
     int createSurface(AndroidSurfaceClient *client, const QRect &geometry, bool onTop, int imageDepth)
     {
         QJniEnvironment env;
@@ -329,7 +336,7 @@ namespace QtAndroid
             return -1;
 
         m_surfacesMutex.lock();
-        int surfaceId = m_surfaceId++;
+        jint surfaceId = generateViewId();
         m_surfaces[surfaceId] = client;
         m_surfacesMutex.unlock();
 
@@ -352,7 +359,7 @@ namespace QtAndroid
     int insertNativeView(jobject view, const QRect &geometry)
     {
         m_surfacesMutex.lock();
-        const int surfaceId = m_surfaceId++;
+        jint surfaceId = generateViewId();
         m_surfaces[surfaceId] = nullptr; // dummy
         m_surfacesMutex.unlock();
 
@@ -545,6 +552,7 @@ static void startQtApplication(JNIEnv */*env*/, jclass /*clazz*/)
     for (int i = 0; i < m_applicationParams.size(); i++)
         params[i] = static_cast<const char *>(m_applicationParams[i].constData());
 
+    startQtAndroidPluginCalled.fetchAndAddRelease(1);
     int ret = m_main(m_applicationParams.length(), const_cast<char **>(params.data()));
 
     if (m_mainLibraryHnd) {
@@ -592,7 +600,9 @@ static void terminateQt(JNIEnv *env, jclass /*clazz*/)
         QAndroidEventDispatcherStopper::instance()->goingToStop(false);
     }
 
-    sem_wait(&m_terminateSemaphore);
+    if (startQtAndroidPluginCalled.loadAcquire())
+        sem_wait(&m_terminateSemaphore);
+
     sem_destroy(&m_terminateSemaphore);
 
     env->DeleteGlobalRef(m_applicationClass);
