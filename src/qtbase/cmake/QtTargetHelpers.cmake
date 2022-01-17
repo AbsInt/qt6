@@ -51,9 +51,18 @@ function(qt_internal_extend_target target)
         endforeach()
 
         # Set-up the target
-        target_sources("${target}" PRIVATE ${arg_SOURCES} ${dbus_sources})
-        if (arg_COMPILE_FLAGS)
-            set_source_files_properties(${arg_SOURCES} PROPERTIES COMPILE_FLAGS "${arg_COMPILE_FLAGS}")
+
+        # CMake versions less than 3.19 don't support adding the source files to the PRIVATE scope
+        # of the INTERFACE libraries. These PRIVATE sources are only needed by IDEs to display
+        # them in a project tree, so to avoid build issues and appearing the sources in
+        # INTERFACE_SOURCES property of HEADER_MODULE let's simply exclude them for compatibility
+        # with CMake versions less than 3.19.
+        if(NOT arg_HEADER_MODULE OR CMAKE_VERSION VERSION_GREATER_EQUAL "3.19")
+            target_sources("${target}" PRIVATE ${arg_SOURCES} ${dbus_sources})
+            if (arg_COMPILE_FLAGS)
+                set_source_files_properties(${arg_SOURCES} PROPERTIES
+                    COMPILE_FLAGS "${arg_COMPILE_FLAGS}")
+            endif()
         endif()
 
         set(public_visibility_option "PUBLIC")
@@ -223,7 +232,7 @@ function(qt_set_target_info_properties target)
         set(arg_TARGET_COMPANY "The Qt Company Ltd.")
     endif()
     if("${arg_TARGET_COPYRIGHT}" STREQUAL "")
-        set(arg_TARGET_COPYRIGHT "Copyright (C) 2021 The Qt Company Ltd.")
+        set(arg_TARGET_COPYRIGHT "Copyright (C) 2022 The Qt Company Ltd.")
     endif()
     set_target_properties(${target} PROPERTIES
         QT_TARGET_VERSION "${arg_TARGET_VERSION}"

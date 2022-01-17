@@ -39,6 +39,7 @@
 
 #include <QtCore/qdebug.h>
 #include <QtGui/private/qevent_p.h>
+#include <QtGui/private/qeventpoint_p.h>
 #include <QtGui/private/qguiapplication_p.h>
 #include <QtGui/qpa/qplatformtheme.h>
 #include <QtQml/private/qabstractanimationjob_p.h>
@@ -2037,7 +2038,7 @@ void QQuickDeliveryAgentPrivate::deliverMatchingPointsToItem(QQuickItem *item, b
         // update accepted new points.
         bool isPressOrRelease = pointerEvent->isBeginEvent() || pointerEvent->isEndEvent();
         for (int i = 0; i < touchEvent.pointCount(); ++i) {
-            auto &point = QMutableEventPoint::from(touchEvent.point(i));
+            auto &point = touchEvent.point(i);
             // legacy-style delivery: if the item doesn't reject the event, that means it handled ALL the points
             point.setAccepted();
             // but don't let the root of a subscene implicitly steal the grab from some other item (such as one of its children)

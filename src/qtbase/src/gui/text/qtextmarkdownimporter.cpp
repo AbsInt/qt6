@@ -426,6 +426,7 @@ int QTextMarkdownImporter::cbEnterSpan(int spanType, void *det)
     }
     case MD_SPAN_CODE:
         charFmt.setFont(m_monoFont);
+        charFmt.setFontFixedPitch(true);
         break;
     case MD_SPAN_DEL:
         charFmt.setFontStrikeOut(true);
@@ -619,6 +620,9 @@ void QTextMarkdownImporter::insertBlock()
         blockFormat.setIndent(m_listStack.count());
     if (m_doc->isEmpty()) {
         m_cursor->setBlockFormat(blockFormat);
+        m_cursor->setCharFormat(charFormat);
+    } else if (m_listItem) {
+        m_cursor->insertBlock(blockFormat, QTextCharFormat());
         m_cursor->setCharFormat(charFormat);
     } else {
         m_cursor->insertBlock(blockFormat, charFormat);

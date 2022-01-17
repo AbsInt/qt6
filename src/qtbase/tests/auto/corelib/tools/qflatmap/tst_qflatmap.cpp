@@ -26,6 +26,8 @@
 **
 ****************************************************************************/
 
+#define QT_USE_QSTRINGBUILDER
+
 #include <QTest>
 
 #include <private/qflatmap_p.h>
@@ -45,11 +47,13 @@ private slots:
     void constructing();
     void constAccess();
     void insertion();
+    void insertRValuesAndLValues();
     void removal();
     void extraction();
     void iterators();
     void statefulComparator();
     void transparency();
+    void try_emplace_and_insert_or_assign();
     void viewIterators();
     void varLengthArray();
 };
@@ -154,6 +158,42 @@ void tst_QFlatMap::insertion()
     QCOMPARE(m.size(), 10);
     QCOMPARE(m.value("narf").data(), "NARFFFFFF");
     QCOMPARE(m.value("gnampf").data(), "GNAMPF");
+}
+
+void tst_QFlatMap::insertRValuesAndLValues()
+{
+    using Map = QFlatMap<QByteArray, QByteArray>;
+    const QByteArray foo = QByteArrayLiteral("foo");
+    const QByteArray bar = QByteArrayLiteral("bar");
+
+    auto rvalue = [](const QByteArray &ba) { return ba; };
+#define lvalue(x) x
+
+    {
+        Map m;
+        QVERIFY( m.insert(lvalue(foo), lvalue(bar)).second);
+        QVERIFY(!m.insert(lvalue(foo), lvalue(bar)).second);
+    }
+
+    {
+        Map m;
+        QVERIFY( m.insert(lvalue(foo), rvalue(bar)).second);
+        QVERIFY(!m.insert(lvalue(foo), rvalue(bar)).second);
+    }
+
+    {
+        Map m;
+        QVERIFY( m.insert(rvalue(foo), lvalue(bar)).second);
+        QVERIFY(!m.insert(rvalue(foo), lvalue(bar)).second);
+    }
+
+    {
+        Map m;
+        QVERIFY( m.insert(rvalue(foo), rvalue(bar)).second);
+        QVERIFY(!m.insert(rvalue(foo), rvalue(bar)).second);
+    }
+
+#undef lvalue
 }
 
 void tst_QFlatMap::extraction()
@@ -388,6 +428,148 @@ void tst_QFlatMap::transparency()
     QCOMPARE(m.lower_bound(sv3).value(), "dree");
 }
 
+void tst_QFlatMap::try_emplace_and_insert_or_assign()
+{
+    using Map = QFlatMap<QByteArray, QByteArray>;
+
+    const QByteArray foo = QByteArrayLiteral("foo");
+    const qsizetype qqq_1 = 3;
+    const char qqq_2 = 'q';
+    const QByteArray qqq = QByteArray(qqq_1, qqq_2);
+
+    auto sb = [] (const auto &str) { return str % ""; };
+    auto rvalue = [](const auto &x) { return x; };
+#define lvalue(x) x
+#define CHECKS() \
+    do { \
+        QVERIFY(!m.try_emplace(rvalue(foo), lvalue(foo)).second); \
+        QCOMPARE(m.value(foo), qqq); \
+        QVERIFY(!m.try_emplace(lvalue(foo), lvalue(foo)).second); \
+        QCOMPARE(m.value(foo), qqq); \
+        QVERIFY(!m.try_emplace(lvalue(foo), sb(foo)).second); \
+        QCOMPARE(m.value(foo), qqq); \
+        QVERIFY(!m.try_emplace(rvalue(foo), sb(foo)).second); \
+        QCOMPARE(m.value(foo), qqq); \
+    } while (0) \
+    /* end */
+
+    {
+        Map m;
+        QVERIFY(m.try_emplace(lvalue(foo), lvalue(qqq)).second);
+        CHECKS();
+        QVERIFY(!m.insert_or_assign(lvalue(foo), lvalue(foo)).second);
+        QCOMPARE(m.value(foo), foo);
+    }
+
+    {
+        Map m;
+        QVERIFY(m.insert_or_assign(lvalue(foo), lvalue(qqq)).second);
+        CHECKS();
+        QVERIFY(!m.try_emplace(lvalue(foo), lvalue(foo)).second);
+        QCOMPARE(m.value(foo), qqq);
+    }
+
+    {
+        Map m;
+        QVERIFY(m.try_emplace(lvalue(foo), rvalue(qqq)).second);
+        CHECKS();
+        QVERIFY(!m.insert_or_assign(lvalue(foo), rvalue(foo)).second);
+        QCOMPARE(m.value(foo), foo);
+    }
+
+    {
+        Map m;
+        QVERIFY(m.insert_or_assign(lvalue(foo), rvalue(qqq)).second);
+        CHECKS();
+        QVERIFY(!m.try_emplace(lvalue(foo), rvalue(foo)).second);
+        QCOMPARE(m.value(foo), qqq);
+    }
+
+    {
+        Map m;
+        QVERIFY(m.try_emplace(lvalue(foo), qqq_1, qqq_2).second);
+        QCOMPARE(m.value(foo), qqq);
+        CHECKS();
+    }
+
+    {
+        Map m;
+        QVERIFY(m.try_emplace(lvalue(foo), sb(qqq)).second);
+        QCOMPARE(m.value(foo), qqq);
+        CHECKS();
+        QVERIFY(!m.insert_or_assign(lvalue(foo), sb(foo)).second);
+        QCOMPARE(m.value(foo), foo);
+    }
+
+    {
+        Map m;
+        QVERIFY(m.insert_or_assign(lvalue(foo), sb(qqq)).second);
+        QCOMPARE(m.value(foo), qqq);
+        CHECKS();
+        QVERIFY(!m.try_emplace(lvalue(foo), sb(foo)).second);
+        QCOMPARE(m.value(foo), qqq);
+    }
+
+    {
+        Map m;
+        QVERIFY(m.try_emplace(rvalue(foo), lvalue(qqq)).second);
+        CHECKS();
+        QVERIFY(!m.insert_or_assign(rvalue(foo), lvalue(foo)).second);
+        QCOMPARE(m.value(foo), foo);
+    }
+
+    {
+        Map m;
+        QVERIFY(m.insert_or_assign(rvalue(foo), lvalue(qqq)).second);
+        CHECKS();
+        QVERIFY(!m.try_emplace(rvalue(foo), lvalue(foo)).second);
+        QCOMPARE(m.value(foo), qqq);
+    }
+
+    {
+        Map m;
+        QVERIFY(m.try_emplace(rvalue(foo), rvalue(qqq)).second);
+        CHECKS();
+        QVERIFY(!m.insert_or_assign(rvalue(foo), rvalue(foo)).second);
+        QCOMPARE(m.value(foo), foo);
+    }
+
+    {
+        Map m;
+        QVERIFY(m.insert_or_assign(rvalue(foo), rvalue(qqq)).second);
+        CHECKS();
+        QVERIFY(!m.try_emplace(rvalue(foo), rvalue(foo)).second);
+        QCOMPARE(m.value(foo), qqq);
+    }
+
+    {
+        Map m;
+        QVERIFY(m.try_emplace(rvalue(foo), qqq_1, qqq_2).second);
+        QCOMPARE(m.value(foo), qqq);
+        CHECKS();
+    }
+
+    {
+        Map m;
+        QVERIFY(m.try_emplace(rvalue(foo), sb(qqq)).second);
+        QCOMPARE(m.value(foo), qqq);
+        CHECKS();
+        QVERIFY(!m.insert_or_assign(rvalue(foo), sb(foo)).second);
+        QCOMPARE(m.value(foo), foo);
+    }
+
+    {
+        Map m;
+        QVERIFY(m.insert_or_assign(rvalue(foo), sb(qqq)).second);
+        QCOMPARE(m.value(foo), qqq);
+        CHECKS();
+        QVERIFY(!m.try_emplace(rvalue(foo), sb(foo)).second);
+        QCOMPARE(m.value(foo), qqq);
+    }
+#undef CHECKS
+#undef lvalue
+}
+
 void tst_QFlatMap::viewIterators()
 {
     using Map = QFlatMap<QByteArray, QByteArray>;
@@ -438,8 +620,7 @@ void tst_QFlatMap::viewIterators()
 
 void tst_QFlatMap::varLengthArray()
 {
-    using Map = QFlatMap<int, QByteArray, std::less<int>,
-                         QVarLengthArray<int, 1024>, QVarLengthArray<QByteArray, 1024>>;
+    using Map = QVarLengthFlatMap<int, QByteArray, 1024>;
     Map m{ { 2, "twee" } };
     m.insert(1, "een");
     m.remove(1);

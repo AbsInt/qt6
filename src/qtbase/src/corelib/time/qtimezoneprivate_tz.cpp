@@ -42,6 +42,7 @@
 #include "qtimezone.h"
 #include "qtimezoneprivate_p.h"
 #include "private/qlocale_tools_p.h"
+#include "private/qlocking_p.h"
 
 #include <QtCore/QDataStream>
 #include <QtCore/QDateTime>
@@ -61,6 +62,10 @@
 #include <unistd.h>    // to use _SC_SYMLOOP_MAX constant
 
 QT_BEGIN_NAMESPACE
+
+#if QT_CONFIG(icu)
+static QBasicMutex s_icu_mutex;
+#endif
 
 /*
     Private
@@ -725,14 +730,8 @@ static QList<QTimeZonePrivate::Data> calculatePosixTransitions(const QByteArray 
 
 // Create the system default time zone
 QTzTimeZonePrivate::QTzTimeZonePrivate()
+    : QTzTimeZonePrivate(staticSystemTimeZoneId())
 {
-    init(systemTimeZoneId());
-}
-
-// Create a named time zone
-QTzTimeZonePrivate::QTzTimeZonePrivate(const QByteArray &ianaId)
-{
-    init(ianaId);
 }
 
 QTzTimeZonePrivate::~QTzTimeZonePrivate()
@@ -741,6 +740,9 @@ QTzTimeZonePrivate::~QTzTimeZonePrivate()
 
 QTzTimeZonePrivate *QTzTimeZonePrivate::clone() const
 {
+#if QT_CONFIG(icu)
+    const auto lock = qt_scoped_lock(s_icu_mutex);
+#endif
     return new QTzTimeZonePrivate(*this);
 }
 
@@ -959,7 +961,8 @@ QTzTimeZoneCacheEntry QTzTimeZoneCache::fetchEntry(const QByteArray &ianaId)
     return ret;
 }
 
-void QTzTimeZonePrivate::init(const QByteArray &ianaId)
+// Create a named time zone
+QTzTimeZonePrivate::QTzTimeZonePrivate(const QByteArray &ianaId)
 {
     static QTzTimeZoneCache tzCache;
     auto entry = tzCache.fetchEntry(ianaId);
@@ -1000,12 +1003,14 @@ QString QTzTimeZonePrivate::displayName(qint64 atMSecsSinceEpoch,
                                         const QLocale &locale) const
 {
 #if QT_CONFIG(icu)
+    auto lock = qt_unique_lock(s_icu_mutex);
     if (!m_icu)
         m_icu = new QIcuTimeZonePrivate(m_id);
     // TODO small risk may not match if tran times differ due to outdated files
     // TODO Some valid TZ names are not valid ICU names, use translation table?
     if (m_icu->isValid())
         return m_icu->displayName(atMSecsSinceEpoch, nameType, locale);
+    lock.unlock();
 #else
     Q_UNUSED(nameType);
     Q_UNUSED(locale);
@@ -1019,12 +1024,14 @@ QString QTzTimeZonePrivate::displayName(QTimeZone::TimeType timeType,
                                         const QLocale &locale) const
 {
 #if QT_CONFIG(icu)
+    auto lock = qt_unique_lock(s_icu_mutex);
     if (!m_icu)
         m_icu = new QIcuTimeZonePrivate(m_id);
     // TODO small risk may not match if tran times differ due to outdated files
     // TODO Some valid TZ names are not valid ICU names, use translation table?
     if (m_icu->isValid())
         return m_icu->displayName(timeType, nameType, locale);
+    lock.unlock();
 #else
     Q_UNUSED(timeType);
     Q_UNUSED(nameType);
@@ -1366,6 +1373,11 @@ private:
 }
 
 QByteArray QTzTimeZonePrivate::systemTimeZoneId() const
+{
+    return staticSystemTimeZoneId();
+}
+
+QByteArray QTzTimeZonePrivate::staticSystemTimeZoneId()
 {
     // Check TZ env var first, if not populated try find it
     QByteArray ianaId = qgetenv("TZ");

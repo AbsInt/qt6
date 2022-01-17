@@ -161,12 +161,12 @@ public:
         {
         }
 
-        reference operator*()
+        reference operator*() const
         {
             return { c->keys[i], c->values[i] };
         }
 
-        pointer operator->()
+        pointer operator->() const
         {
             return { operator*() };
         }
@@ -242,7 +242,7 @@ public:
             return b.i - a.i;
         }
 
-        reference operator[](size_type n)
+        reference operator[](size_type n) const
         {
             size_type k = i + n;
             return { c->keys[k], c->values[k] };
@@ -269,7 +269,7 @@ public:
         }
 
         const Key &key() const { return c->keys[i]; }
-        T &value() { return c->values[i]; }
+        T &value() const { return c->values[i]; }
 
     private:
         containers *c = nullptr;
@@ -298,12 +298,12 @@ public:
         {
         }
 
-        reference operator*()
+        reference operator*() const
         {
             return { c->keys[i], c->values[i] };
         }
 
-        pointer operator->()
+        pointer operator->() const
         {
             return { operator*() };
         }
@@ -379,7 +379,7 @@ public:
             return b.i - a.i;
         }
 
-        reference operator[](size_type n)
+        reference operator[](size_type n) const
         {
             size_type k = i + n;
             return { c->keys[k], c->values[k] };
@@ -406,7 +406,7 @@ public:
         }
 
         const Key &key() const { return c->keys[i]; }
-        const T &value() { return c->values[i]; }
+        const T &value() const { return c->values[i]; }
 
     private:
         const containers *c = nullptr;
@@ -439,23 +439,20 @@ public:
     }
 
     explicit QFlatMap(key_container_type &&keys, const mapped_container_type &values)
+        : c{std::move(keys), values}
     {
-        c.keys = std::move(keys);
-        c.values = values;
         ensureOrderedUnique();
     }
 
     explicit QFlatMap(const key_container_type &keys, mapped_container_type &&values)
+        : c{keys, std::move(values)}
     {
-        c.keys = keys;
-        c.values = std::move(values);
         ensureOrderedUnique();
     }
 
     explicit QFlatMap(key_container_type &&keys, mapped_container_type &&values)
+        : c{std::move(keys), std::move(values)}
     {
-        c.keys = std::move(keys);
-        c.values = std::move(values);
         ensureOrderedUnique();
     }
 
@@ -473,34 +470,30 @@ public:
 
     explicit QFlatMap(Qt::OrderedUniqueRange_t, const key_container_type &keys,
                       const mapped_container_type &values)
+        : c{keys, values}
     {
-        c.keys = keys;
-        c.values = values;
     }
 
     explicit QFlatMap(Qt::OrderedUniqueRange_t, key_container_type &&keys,
                       const mapped_container_type &values)
+        : c{std::move(keys), values}
     {
-        c.keys = std::move(keys);
-        c.values = values;
     }
 
     explicit QFlatMap(Qt::OrderedUniqueRange_t, const key_container_type &keys,
                       mapped_container_type &&values)
+        : c{keys, std::move(values)}
     {
-        c.keys = keys;
-        c.values = std::move(values);
     }
 
     explicit QFlatMap(Qt::OrderedUniqueRange_t, key_container_type &&keys,
                       mapped_container_type &&values)
+        : c{std::move(keys), std::move(values)}
     {
-        c.keys = std::move(keys);
-        c.values = std::move(values);
     }
 
     explicit QFlatMap(Qt::OrderedUniqueRange_t, std::initializer_list<value_type> lst)
-        : QFlatMap(lst.begin(), lst.end())
+        : QFlatMap(Qt::OrderedUniqueRange, lst.begin(), lst.end())
     {
     }
 
@@ -702,7 +695,7 @@ public:
         auto it = lower_bound(key);
         if (it == end() || key_compare::operator()(key, it.key())) {
             c.values.insert(toValuesIterator(it), value);
-            return { c.keys.insert(it, std::move(key)), true };
+            return { fromKeysIterator(c.keys.insert(toKeysIterator(it), std::move(key))), true };
         } else {
             *toValuesIterator(it) = value;
             return {it, false};
@@ -714,7 +707,7 @@ public:
         auto it = lower_bound(key);
         if (it == end() || key_compare::operator()(key, it.key())) {
             c.values.insert(toValuesIterator(it), std::move(value));
-            return { c.keys.insert(it, key), true };
+            return { fromKeysIterator(c.keys.insert(toKeysIterator(it), key)), true };
         } else {
             *toValuesIterator(it) = std::move(value);
             return {it, false};
@@ -731,6 +724,48 @@ public:
             *toValuesIterator(it) = std::move(value);
             return {it, false};
         }
+    }
+
+    template <typename...Args>
+    std::pair<iterator, bool> try_emplace(const Key &key, Args&&...args)
+    {
+        auto it = lower_bound(key);
+        if (it == end() || key_compare::operator()(key, it.key())) {
+            c.values.emplace(toValuesIterator(it), std::forward<Args>(args)...);
+            return { fromKeysIterator(c.keys.insert(toKeysIterator(it), key)), true };
+        } else {
+            return {it, false};
+        }
+    }
+
+    template <typename...Args>
+    std::pair<iterator, bool> try_emplace(Key &&key, Args&&...args)
+    {
+        auto it = lower_bound(key);
+        if (it == end() || key_compare::operator()(key, it.key())) {
+            c.values.emplace(toValuesIterator(it), std::forward<Args>(args)...);
+            return { fromKeysIterator(c.keys.insert(toKeysIterator(it), std::move(key))), true };
+        } else {
+            return {it, false};
+        }
+    }
+
+    template <typename M>
+    std::pair<iterator, bool> insert_or_assign(const Key &key, M &&obj)
+    {
+        auto r = try_emplace(key, std::forward<M>(obj));
+        if (!r.second)
+            *toValuesIterator(r.first) = std::forward<M>(obj);
+        return r;
+    }
+
+    template <typename M>
+    std::pair<iterator, bool> insert_or_assign(Key &&key, M &&obj)
+    {
+        auto r = try_emplace(std::move(key), std::forward<M>(obj));
+        if (!r.second)
+            *toValuesIterator(r.first) = std::forward<M>(obj);
+        return r;
     }
 
     template <class InputIt, is_compatible_iterator<InputIt> = nullptr>
@@ -971,12 +1006,13 @@ private:
                 k = i + 1;
             }
         }
-        c.keys.shrink_to_fit();
-        c.values.shrink_to_fit();
     }
 
     containers c;
 };
+
+template<class Key, class T, qsizetype N = 256, class Compare = std::less<Key>>
+using QVarLengthFlatMap = QFlatMap<Key, T, Compare, QVarLengthArray<Key, N>, QVarLengthArray<T, N>>;
 
 QT_END_NAMESPACE
 
