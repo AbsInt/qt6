@@ -131,13 +131,13 @@ class QVersionNumber
 
         void swap(SegmentStorage &other) noexcept
         {
-            qSwap(dummy, other.dummy);
+            std::swap(dummy, other.dummy);
         }
 
         explicit SegmentStorage(QList<int> &&seg)
         {
-            if (dataFitsInline(seg.begin(), seg.size()))
-                setInlineData(seg.begin(), seg.size());
+            if (dataFitsInline(seg.cbegin(), seg.size()))
+                setInlineData(seg.cbegin(), seg.size());
             else
                 pointer_segments = new QList<int>(std::move(seg));
         }
@@ -272,10 +272,10 @@ public:
 
     [[nodiscard]] Q_CORE_EXPORT QString toString() const;
 #if QT_STRINGVIEW_LEVEL < 2
-    [[nodiscard]] Q_CORE_EXPORT static Q_DECL_PURE_FUNCTION QVersionNumber fromString(const QString &string, int *suffixIndex = nullptr);
+    [[nodiscard]] Q_CORE_EXPORT static QVersionNumber fromString(const QString &string, int *suffixIndex = nullptr);
 #endif
-    [[nodiscard]] Q_CORE_EXPORT static Q_DECL_PURE_FUNCTION QVersionNumber fromString(QLatin1String string, int *suffixIndex = nullptr);
-    [[nodiscard]] Q_CORE_EXPORT static Q_DECL_PURE_FUNCTION QVersionNumber fromString(QStringView string, int *suffixIndex = nullptr);
+    [[nodiscard]] Q_CORE_EXPORT static QVersionNumber fromString(QLatin1String string, int *suffixIndex = nullptr);
+    [[nodiscard]] Q_CORE_EXPORT static QVersionNumber fromString(QStringView string, int *suffixIndex = nullptr);
 
     [[nodiscard]] friend bool operator> (const QVersionNumber &lhs, const QVersionNumber &rhs) noexcept
     { return compare(lhs, rhs) > 0; }

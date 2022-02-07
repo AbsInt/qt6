@@ -55,7 +55,6 @@
 #include "qcalendarmath_p.h"
 #include <qhash.h>
 #include <qreadwritelock.h>
-#include <qdebug.h>
 
 #include <vector>
 
@@ -342,8 +341,8 @@ void QCalendarRegistry::registerBackendLockHeld(QCalendarBackend *backend, const
     for (const auto &name : names) {
         if (byName.contains(name)) {
             Q_ASSERT(system == QCalendar::System::User);
-            qWarning() << "Cannot register name" << name << "(already in use) for"
-                       << backend->name();
+            qWarning("Cannot register name %ls (already in use) for %ls",
+                     qUtf16Printable(name), qUtf16Printable(backend->name()));
         } else {
             byName[name] = backend;
         }
@@ -379,8 +378,9 @@ const QCalendarBackend *QCalendarRegistry::fromName(QAnyStringView name)
 {
     ensurePopulated();
 
+    const QString nameU16 = name.toString();
     QReadLocker locker(&lock);
-    return byName.value(name.toString(), nullptr);
+    return byName.value(nameU16, nullptr);
 }
 
 /*
@@ -448,10 +448,15 @@ const QCalendarBackend *QCalendarRegistry::fromEnum(QCalendar::System system)
 QStringList QCalendarRegistry::backendNames(const QCalendarBackend *backend)
 {
     QStringList l;
+    l.reserve(byName.size()); // too large, but never really large, so ok
 
-    QHashIterator<CalendarName, QCalendarBackend *> i(byName);
-    while (i.findNext(const_cast<QCalendarBackend *>(backend)))
-        l.push_back(i.key());
+    // same as byName.keys(backend), except for
+    // - the missing const on mapped_type and
+    // - CalendarName != QString as the key_type
+    for (auto it = byName.cbegin(), end = byName.cend(); it != end; ++it) {
+        if (it.value() == backend)
+            l.push_back(it.key());
+    }
 
     return l;
 }
@@ -1631,3 +1636,7 @@ QStringList QCalendar::availableCalendars()
 }
 
 QT_END_NAMESPACE
+
+#ifndef QT_BOOTSTRAPPED
+#include "moc_qcalendar.cpp"
+#endif

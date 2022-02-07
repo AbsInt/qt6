@@ -24,12 +24,12 @@ function(qt_internal_extend_target target)
         set(dbus_sources "")
         foreach(adaptor ${arg_DBUS_ADAPTOR_SOURCES})
             qt_create_qdbusxml2cpp_command("${target}" "${adaptor}" ADAPTOR BASENAME "${arg_DBUS_ADAPTOR_BASENAME}" FLAGS "${arg_DBUS_ADAPTOR_FLAGS}")
-            list(APPEND dbus_sources "${sources}")
+            list(APPEND dbus_sources "${adaptor}")
         endforeach()
 
         foreach(interface ${arg_DBUS_INTERFACE_SOURCES})
             qt_create_qdbusxml2cpp_command("${target}" "${interface}" INTERFACE BASENAME "${arg_DBUS_INTERFACE_BASENAME}" FLAGS "${arg_DBUS_INTERFACE_FLAGS}")
-            list(APPEND dbus_sources "${sources}")
+            list(APPEND dbus_sources "${interface}")
         endforeach()
 
         get_target_property(target_type ${target} TYPE)
@@ -856,4 +856,21 @@ function(qt_internal_add_target_include_dirs_and_optionally_propagate target dep
     target_link_libraries("${target}" INTERFACE "$<TARGET_NAME_IF_EXISTS:${dep_target}>")
 
     qt_record_extra_third_party_dependency("${target}" "${dep_target}")
+endfunction()
+
+# The function disables one or multiple internal global definitions that are defined by the
+# qt_internal_add_global_definition function for a specific 'target'.
+function(qt_internal_undefine_global_definition target)
+    if(NOT TARGET ${target})
+        message(FATAL_ERROR "${target} is not a target.")
+    endif()
+
+    if("${ARGN}" STREQUAL "")
+        message(FATAL_ERROR "The function expects at least one definition as an argument.")
+    endif()
+
+    foreach(definition IN LISTS ARGN)
+        set(undef_property_name "QT_INTERNAL_UNDEF_${definition}")
+        set_target_properties(${target} PROPERTIES "${undef_property_name}" TRUE)
+    endforeach()
 endfunction()

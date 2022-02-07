@@ -50,7 +50,9 @@
 #if QT_CONFIG(wayland_client_primary_selection)
 #include "qwaylandprimaryselectionv1_p.h"
 #endif
+#if QT_CONFIG(tabletevent)
 #include "qwaylandtabletv2_p.h"
+#endif
 #include "qwaylandpointergestures_p.h"
 #include "qwaylandtouch_p.h"
 #include "qwaylandscreen_p.h"
@@ -425,8 +427,10 @@ QWaylandInputDevice::QWaylandInputDevice(QWaylandDisplay *display, int version, 
     if (mQDisplay->textInputMethodManager())
         mTextInputMethod.reset(new QWaylandTextInputMethod(mQDisplay, mQDisplay->textInputMethodManager()->get_text_input_method(wl_seat())));
 
+#if QT_CONFIG(tabletevent)
     if (auto *tm = mQDisplay->tabletManager())
         mTabletSeat.reset(new QWaylandTabletSeatV2(tm, this));
+#endif
 }
 
 QWaylandInputDevice::~QWaylandInputDevice()
@@ -1410,7 +1414,7 @@ void QWaylandInputDevice::Touch::touch_down(uint32_t serial,
 void QWaylandInputDevice::Touch::touch_up(uint32_t serial, uint32_t time, int32_t id)
 {
     Q_UNUSED(serial);
-    Q_UNUSED(time);
+    mParent->mTime = time;
     mParent->handleTouchPoint(id, QEventPoint::Released);
 
     if (allTouchPointsReleased()) {
@@ -1429,8 +1433,8 @@ void QWaylandInputDevice::Touch::touch_up(uint32_t serial, uint32_t time, int32_
 
 void QWaylandInputDevice::Touch::touch_motion(uint32_t time, int32_t id, wl_fixed_t x, wl_fixed_t y)
 {
-    Q_UNUSED(time);
     QPointF position(wl_fixed_to_double(x), wl_fixed_to_double(y));
+    mParent->mTime = time;
     mParent->handleTouchPoint(id, QEventPoint::Updated, position);
 }
 
@@ -1529,7 +1533,7 @@ void QWaylandInputDevice::Touch::touch_frame()
             return;
     }
 
-    QWindowSystemInterface::handleTouchEvent(window, mParent->mTouchDevice, mPendingTouchPoints);
+    QWindowSystemInterface::handleTouchEvent(window, mParent->mTime, mParent->mTouchDevice, mPendingTouchPoints, mParent->modifiers());
 
     // Prepare state for next frame
     const auto prevTouchPoints = mPendingTouchPoints;

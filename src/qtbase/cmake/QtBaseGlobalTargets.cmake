@@ -107,6 +107,11 @@ endif()
 
 qt_feature_module_end(GlobalConfig OUT_VAR_PREFIX "__GlobalConfig_")
 
+# The version script support check has to happen after we determined which linker is going
+# to be used. The linker decision happens in the qtbase/configure.cmake file that is processed
+# above.
+qt_run_linker_version_script_support()
+
 qt_generate_global_config_pri_file()
 qt_generate_global_module_pri_file()
 qt_generate_global_device_pri_file()
@@ -332,6 +337,17 @@ qt_copy_or_install(DIRECTORY cmake/
     PATTERN "tests" EXCLUDE
     PATTERN "3rdparty" EXCLUDE
 )
+
+# In prefix builds we also need to copy the files into the build config directory, so that the
+# build-dir Qt6Config.cmake finds the files when building examples as ExternalProjects.
+if(QT_WILL_INSTALL)
+    file(COPY cmake/
+        DESTINATION "${__GlobalConfig_build_dir}"
+        FILES_MATCHING PATTERN "Find*.cmake"
+        PATTERN "tests" EXCLUDE
+        PATTERN "3rdparty" EXCLUDE
+    )
+endif()
 
 if(MACOS)
     qt_copy_or_install(FILES

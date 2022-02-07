@@ -406,7 +406,7 @@ public:
     inline QString(QString &&other) noexcept
     { qSwap(d, other.d); }
     QT_MOVE_ASSIGNMENT_OPERATOR_IMPL_VIA_PURE_SWAP(QString)
-    inline void swap(QString &other) noexcept { qSwap(d, other.d); }
+    void swap(QString &other) noexcept { d.swap(other.d); }
     inline qsizetype size() const { return d.size; }
     inline qsizetype count() const { return d.size; }
     inline qsizetype length() const { return d.size; }
@@ -1101,7 +1101,7 @@ private:
                               Qt::CaseSensitivity cs = Qt::CaseSensitive) noexcept;
     static int compare_helper(const QChar *data1, qsizetype length1,
                               const char *data2, qsizetype length2,
-                              Qt::CaseSensitivity cs = Qt::CaseSensitive);
+                              Qt::CaseSensitivity cs = Qt::CaseSensitive) noexcept;
     static int localeAwareCompare_helper(const QChar *data1, qsizetype length1,
                                          const QChar *data2, qsizetype length2);
     static QString toLower_helper(const QString &str);

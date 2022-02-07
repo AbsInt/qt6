@@ -25,6 +25,23 @@ macro(pop_path_argument)
     file(TO_CMAKE_PATH "${path}" path)
 endmacro()
 
+function(is_non_empty_valid_arg arg value)
+    if(value STREQUAL "")
+        message(FATAL_ERROR "Value supplied to command line option '${arg}' is empty.")
+    elseif(value MATCHES "^-.*")
+        message(FATAL_ERROR
+                "Value supplied to command line option '${arg}' is invalid: ${value}")
+    endif()
+endfunction()
+
+function(error_in_per_repo_build arg)
+    if(NOT TOP_LEVEL)
+        message(FATAL_ERROR
+            "Using option '${arg}' is not allowed in a per-repo build, it only "
+            "works in a top-level build.")
+    endif()
+endfunction()
+
 if("${MODULE_ROOT}" STREQUAL "")
     # If MODULE_ROOT is not set, assume that we want to build qtbase or top-level.
     get_filename_component(MODULE_ROOT ".." ABSOLUTE BASE_DIR "${CMAKE_CURRENT_LIST_DIR}")
@@ -76,8 +93,19 @@ while(NOT "${configure_args}" STREQUAL "")
     elseif(arg STREQUAL "-write-options-for-conan")
         list(POP_FRONT configure_args options_json_file)
     elseif(arg STREQUAL "-skip")
-        list(POP_FRONT configure_args qtrepo)
-        push("-DBUILD_${qtrepo}=OFF")
+        error_in_per_repo_build("${arg}")
+        list(POP_FRONT configure_args qtrepos)
+        is_non_empty_valid_arg("${arg}" "${qtrepos}")
+        list(TRANSFORM qtrepos REPLACE "," ";")
+        foreach(qtrepo IN LISTS qtrepos)
+            push("-DBUILD_${qtrepo}=OFF")
+        endforeach()
+    elseif(arg STREQUAL "-submodules")
+        error_in_per_repo_build("${arg}")
+        list(POP_FRONT configure_args submodules)
+        is_non_empty_valid_arg("${arg}" "${submodules}")
+        list(TRANSFORM submodules REPLACE "," "[[;]]")
+        push("-DQT_BUILD_SUBMODULES=${submodules}")
     elseif(arg STREQUAL "-qt-host-path")
         pop_path_argument()
         push("-DQT_HOST_PATH=${path}")
@@ -151,7 +179,7 @@ defstub(qt_find_package)
 defstub(set_package_properties)
 defstub(qt_qml_find_python)
 defstub(qt_set01)
-
+defstub(qt_internal_check_if_linker_is_available)
 
 ####################################################################################################
 # Define functions/macros that are called in qt_cmdline.cmake files

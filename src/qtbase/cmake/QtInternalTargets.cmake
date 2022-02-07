@@ -6,6 +6,10 @@ function(qt_internal_set_warnings_are_errors_flags target)
         if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "3.0.0")
             list(APPEND flags -Werror -Wno-error=\#warnings -Wno-error=deprecated-declarations)
         endif()
+        if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "10.0.0")
+            # We do mixed enum arithmetic all over the place:
+            list(APPEND flags -Wno-error=deprecated-enum-enum-conversion)
+        endif()
     elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "AppleClang")
         # using AppleClang
         # Apple clang 4.0+
@@ -89,6 +93,55 @@ function(qt_internal_set_warnings_are_errors_flags target)
     target_compile_options("${target}" INTERFACE "${flags_generator_expression}")
 endfunction()
 
+# The function adds a global 'definition' to the platform internal targets and the target
+# property-based switch to disable the definition.
+# Arguments:
+#     VALUE optional value that the definition will take.
+#     SCOPE the list of scopes the definition needs to be set for. If the SCOPE is not specified the
+#        definition is added to PlatformCommonInternal target.
+#        Possible values:
+#            MODULE - set the definition for all Qt modules
+#            PLUGIN - set the definition for all Qt plugins
+#            TOOL - set the definition for all Qt tools
+#            APP - set the definition for all Qt applications
+#        TODO: Add a tests specific platform target and the definition scope for it.
+function(qt_internal_add_global_definition definition)
+    set(optional_args)
+    set(single_value_args VALUE)
+    set(multi_value_args SCOPE)
+    cmake_parse_arguments(args
+        "${optional_args}"
+        "${single_value_args}"
+        "${multi_value_args}"
+        ${ARGN}
+    )
+
+    set(scope_MODULE PlatformModuleInternal)
+    set(scope_PLUGIN PlatformPluginInternal)
+    set(scope_TOOL PlatformToolInternal)
+    set(scope_APP PlatformAppInternal)
+
+    set(undef_property_name "QT_INTERNAL_UNDEF_${definition}")
+
+    if(DEFINED arg_VALUE)
+        set(definition "${definition}=${arg_VALUE}")
+    endif()
+
+    set(definition_genex
+        "$<$<NOT:$<BOOL:$<TARGET_PROPERTY:${undef_property_name}>>>:${definition}>")
+
+    if(NOT DEFINED arg_SCOPE)
+        target_compile_definitions(PlatformCommonInternal INTERFACE "${definition_genex}")
+    else()
+        foreach(scope IN LISTS arg_SCOPE)
+            if(NOT DEFINED scope_${scope})
+                message(FATAL_ERROR "Unknown scope ${scope}.")
+            endif()
+            target_compile_definitions("${scope_${scope}}" INTERFACE "${definition_genex}")
+        endforeach()
+    endif()
+endfunction()
+
 add_library(PlatformCommonInternal INTERFACE)
 add_library(Qt::PlatformCommonInternal ALIAS PlatformCommonInternal)
 target_link_libraries(PlatformCommonInternal INTERFACE Platform)
@@ -108,6 +161,9 @@ target_link_libraries(PlatformAppInternal INTERFACE PlatformCommonInternal)
 add_library(PlatformToolInternal INTERFACE)
 add_library(Qt::PlatformToolInternal ALIAS PlatformToolInternal)
 target_link_libraries(PlatformToolInternal INTERFACE PlatformAppInternal)
+
+qt_internal_add_global_definition(QT_NO_JAVA_STYLE_ITERATORS)
+qt_internal_add_global_definition(QT_NO_NARROWING_CONVERSIONS_IN_CONNECT)
 
 if(WARNINGS_ARE_ERRORS)
     qt_internal_set_warnings_are_errors_flags(PlatformModuleInternal)
@@ -221,7 +277,10 @@ if (MSVC)
         )
     endif()
 
-    target_compile_options(PlatformCommonInternal INTERFACE -Zc:wchar_t)
+    target_compile_options(PlatformCommonInternal INTERFACE
+        -Zc:wchar_t
+        -bigobj
+    )
 
     target_compile_options(PlatformCommonInternal INTERFACE
         $<$<NOT:$<CONFIG:Debug>>:-guard:cf>
@@ -231,6 +290,10 @@ if (MSVC)
         -DYNAMICBASE -NXCOMPAT
         $<$<NOT:$<CONFIG:Debug>>:-OPT:REF -OPT:ICF -GUARD:CF>
     )
+endif()
+
+if(MINGW)
+    target_compile_options(PlatformCommonInternal INTERFACE -Wa,-mbig-obj)
 endif()
 
 if (GCC AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "9.2")
@@ -260,13 +323,11 @@ if(DEFINED QT_EXTRA_FRAMEWORKPATHS AND APPLE)
     unset(__qt_fw_flags)
 endif()
 
-if(QT_FEATURE_use_gold_linker)
-    target_link_options(PlatformCommonInternal INTERFACE "-fuse-ld=gold")
-elseif(QT_FEATURE_use_bfd_linker)
-    target_link_options(PlatformCommonInternal INTERFACE "-fuse-ld=bfd")
-elseif(QT_FEATURE_use_lld_linker)
-    target_link_options(PlatformCommonInternal INTERFACE "-fuse-ld=lld")
+qt_internal_get_active_linker_flags(__qt_internal_active_linker_flags)
+if(__qt_internal_active_linker_flags)
+    target_link_options(PlatformCommonInternal INTERFACE "${__qt_internal_active_linker_flags}")
 endif()
+unset(__qt_internal_active_linker_flags)
 
 if(QT_FEATURE_enable_gdb_index)
     target_link_options(PlatformCommonInternal INTERFACE "-Wl,--gdb-index")

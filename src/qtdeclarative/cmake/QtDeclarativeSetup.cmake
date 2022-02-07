@@ -8,7 +8,7 @@ function(qt_declarative_write_tag_header target_name)
     endif()
     find_program(git_path git)
 
-    if(tag_contents AND NOT tag_contents STREQUAL "$Format:%H$")
+    if(tag_contents AND NOT tag_contents STREQUAL "$Format:%T$")
         set(QML_COMPILE_HASH "${tag_contents}")
     elseif(git_path AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../../.git")
         execute_process(
@@ -16,7 +16,9 @@ function(qt_declarative_write_tag_header target_name)
             OUTPUT_VARIABLE QML_COMPILE_HASH
             OUTPUT_STRIP_TRAILING_WHITESPACE
             WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
-    else()
+    endif()
+    string(LENGTH "${QML_COMPILE_HASH}" QML_COMPILE_HASH_LENGTH)
+    if(QML_COMPILE_HASH_LENGTH EQUAL 0)
         set(sources_hash "")
         file(GLOB_RECURSE qtqml_source_files "${CMAKE_CURRENT_SOURCE_DIR}/*")
         foreach(file IN LISTS qtqml_source_files)
@@ -35,8 +37,6 @@ function(qt_declarative_write_tag_header target_name)
     endif()
 endfunction()
 
-find_package(PythonInterp REQUIRED)
-
 # Generate a header file containing a regular expression jit table.
 function(qt_declarative_generate_reg_exp_jit_tables consuming_target)
     set(generate_dir "${CMAKE_CURRENT_BINARY_DIR}/.generated")
@@ -51,21 +51,9 @@ function(qt_declarative_generate_reg_exp_jit_tables consuming_target)
 
     add_custom_command(
         OUTPUT "${output_file}"
-        COMMAND "${PYTHON_EXECUTABLE}" ${retgen_script_file} ${output_file}
+        COMMAND "${QT_INTERNAL_DECLARATIVE_PYTHON}" ${retgen_script_file} ${output_file}
         MAIN_DEPENDENCY ${retgen_script_file}
     )
     target_sources(${consuming_target} PRIVATE ${output_file})
     target_include_directories(${consuming_target} PRIVATE $<BUILD_INTERFACE:${generate_dir}>)
-endfunction()
-
-function(qt_qml_find_python out_var_path out_var_found)
-    find_program(QT_QML_PYTHON_PATH
-                 NAMES python python2 python3 py
-                 DOC "Qt Declarative python path")
-    if(QT_QML_PYTHON_PATH)
-        set(${out_var_path} "${QT_QML_PYTHON_PATH}" PARENT_SCOPE)
-        set(${out_var_found} "TRUE" PARENT_SCOPE)
-    else()
-        set(${out_var_found} "FALSE" PARENT_SCOPE)
-    endif()
 endfunction()

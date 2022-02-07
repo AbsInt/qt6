@@ -31,6 +31,7 @@ from conans.errors import ConanInvalidConfiguration
 import os
 import re
 import json
+import shutil
 import subprocess
 from functools import lru_cache
 from pathlib import Path
@@ -112,7 +113,7 @@ class QtConfigureOption(object):
         # The 'None' is added as a possible value. For Conan this means it is not mandatory to pass
         # this option for the build.
         if self._binary_option:
-            return ["yes", "no", None]
+            return [True, False, None]
         if self.possible_values == ["ANY"]:
             # For 'ANY' value it can not be a List type for Conan
             return "ANY"
@@ -250,16 +251,15 @@ class QtOptionParser:
         opt.update(self.extra_options_default_values)
         return opt
 
-    def is_used_option(self, conan_option_value: str) -> bool:
-        # conan install ... -o release=no  -> configure(.bat)
-        # conan install ...                -> configure(.bat)
-        # conan install ... -o release=yes -> configure(.bat) -release
-        if not conan_option_value or conan_option_value == "None" or conan_option_value == "no":
-            # Conan seems to convert None to literal 'None'?
-            return False
-        return True
+    def is_used_option(self, conan_options: Options, option_name: str) -> bool:
+        # conan install ... -o release=False -> configure(.bat)
+        # conan install ...                  -> configure(.bat)
+        # conan install ... -o release=True  -> configure(.bat) -release
+        return bool(conan_options.get_safe(option_name))
 
-    def convert_conan_option_to_qt_option(self, name: str, value: Any) -> str:
+    def convert_conan_option_to_qt_option(
+        self, conan_options: Options, name: str, value: Any
+    ) -> str:
         ret: str = ""
 
         def _find_qt_option(conan_option_name: str) -> QtConfigureOption:
@@ -280,7 +280,7 @@ class QtOptionParser:
                 return True
             return False
 
-        if self.is_used_option(value) and not _is_excluded_from_configure():
+        if self.is_used_option(conan_options, name) and not _is_excluded_from_configure():
             qt_option = _find_qt_option(name)
             if qt_option.incremental_option:
                 # e.g. -make=libs -make=examples <-> -o make=libs;examples;foo;bar
@@ -296,24 +296,23 @@ class QtOptionParser:
     def convert_conan_options_to_qt_options(self, conan_options: Options) -> List[str]:
         qt_options: List[str] = []
 
-        def _option_enabled(options: Dict[str, Any], opt: str) -> bool:
-            return opt in options and options[opt] == "yes"
+        def _option_enabled(opt: str) -> bool:
+            return bool(conan_options.get_safe(opt))
 
-        def _option_disabled(options: Dict[str, Any], opt: str) -> bool:
-            return opt in options and options[opt] == "no"
+        def _option_disabled(opt: str) -> bool:
+            return not bool(conan_options.get_safe(opt))
 
-        def _filter_overlapping_options(options: Dict[str, Any]) -> None:
-            if _option_enabled(options, "shared") or _option_disabled(options, "static"):
-                del _options["static"]  # should result only into "-shared"
-            if _option_enabled(options, "static") or _option_disabled(options, "shared"):
-                del _options["shared"]  # should result only into "-static"
+        def _filter_overlapping_options() -> None:
+            if _option_enabled("shared") or _option_disabled("static"):
+                delattr(conan_options, "static")  # should result only into "-shared"
+            if _option_enabled("static") or _option_disabled("shared"):
+                delattr(conan_options, "shared")  # should result only into "-static"
 
-        _options = {key: value for key, value in conan_options.items()}
-        _filter_overlapping_options(_options)
+        _filter_overlapping_options()
 
-        for option_name, option_value in _options.items():
+        for option_name, option_value in conan_options.items():
             qt_option = self.convert_conan_option_to_qt_option(
-                name=option_name, value=option_value
+                conan_options=conan_options, name=option_name, value=option_value
             )
             if not qt_option:
                 continue
@@ -323,15 +322,34 @@ class QtOptionParser:
     def get_cmake_args_for_configure(self, conan_options: Options) -> List[Optional[str]]:
         ret: List[Optional[str]] = []
         for option_name, option_value in conan_options.items():
-            if option_name == "cmake_args_qtbase" and self.is_used_option(option_value):
+            if option_name == "cmake_args_qtbase" and self.is_used_option(
+                conan_options, option_name
+            ):
                 ret = [ret for ret in option_value.strip(r" '\"").split()]
         return ret
+
+
+def add_cmake_prefix_path(conan_file: ConanFile, dep: str) -> None:
+    if dep not in conan_file.deps_cpp_info.deps:
+        raise QtConanError("Unable to find dependency: {0}".format(dep))
+    dep_cpp_info = conan_file.deps_cpp_info[dep]
+    cmake_args_str = str(conan_file.options.get_safe("cmake_args_qtbase", default=""))
+    _common = conan_file.python_requires["qt-conan-common"].module
+    formatted_cmake_args_str = _common.append_cmake_prefix_path(
+        cmake_args_str, dep_cpp_info.rootpath
+    )
+    print("Adjusted cmake args for qtbase build: {0}".format(formatted_cmake_args_str))
+    setattr(conan_file.options, "cmake_args_qtbase", formatted_cmake_args_str)
 
 
 def _build_qtbase(conan_file: ConanFile):
     # we call the Qt's configure(.bat) directly
     script = Path("configure.bat") if tools.os_info.is_windows else Path("configure")
     configure = Path(conan_file.build_folder).joinpath(script).resolve(strict=True)
+
+    if conan_file.options.get_safe("icu", default=False):
+        # we need to tell Qt build system where to find the ICU
+        add_cmake_prefix_path(conan_file, dep="icu")
 
     # convert the Conan options to Qt configure(.bat) arguments
     parser = conan_file._qt_option_parser
@@ -372,7 +390,6 @@ class QtBase(ConanFile):
     _qt_option_parser = QtOptionParser()
     options = _qt_option_parser.get_qt_conan_options()
     default_options = _qt_option_parser.get_default_qt_conan_options()
-    exports = "configure_options.json", "configure_features.txt", ".cmake.conf"
     exports_sources = "*", "!conan*.*"
     # use commit ID as the RREV (recipe revision)
     revision_mode = "scm"
@@ -385,14 +402,49 @@ class QtBase(ConanFile):
         _prerelease = _parse_qt_version_by_key("QT_REPO_MODULE_PRERELEASE_VERSION_SEGMENT")
         self.version = _ver + "-" + _prerelease if _prerelease else _ver
 
+    def export(self):
+        self.copy("configure_options.json")
+        self.copy("configure_features.txt")
+        self.copy(".cmake.conf")
+        _common = self.python_requires["qt-conan-common"].module
+        conf = _common.qt_sw_versions_config_folder() / _common.qt_sw_versions_config_name()
+        if not conf.exists():
+            # If using "conan export" outside Qt CI provisioned machines
+            print("Warning: Couldn't find '{0}'. 3rd party dependencies skipped.".format(conf))
+        else:
+            shutil.copy2(conf, self.export_folder)
+
+    def requirements(self):
+        parse_sw_req = self.python_requires["qt-conan-common"].module.parse_qt_sw_pkg_dependency
+        # list of tuples, (package_name, fallback version)
+        optional_requirements = [("icu", "56.1")]
+        for req_name, req_ver_fallback in optional_requirements:
+            if self.options.get_safe(req_name, default=False) == True:
+                # Note! If this conan package is being "conan export"ed outside Qt CI and the
+                # sw versions .ini file is not present then it will fall-back to default version
+                ver = parse_sw_req(
+                    config_folder=Path(self.recipe_folder),
+                    package_name=req_name,
+                    target_os=str(self.settings.os),
+                )
+                if not ver:
+                    print(
+                        "Warning: Using fallback version '{0}' for: {1}".format(
+                            req_name, req_ver_fallback
+                        )
+                    )
+                    ver = req_ver_fallback
+                requirement = "{0}/{1}@qt/everywhere".format(req_name, ver)
+                print("Setting 3rd party package requirement: {0}".format(requirement))
+                self.requires(requirement)
+
     def configure(self):
         if self.settings.compiler == "gcc" and tools.Version(self.settings.compiler.version) < "8":
             raise ConanInvalidConfiguration("Qt6 does not support GCC before 8")
 
-        def _set_default_if_not_set(option_name: str, option_value: str) -> None:
+        def _set_default_if_not_set(option_name: str, option_value: bool) -> None:
             # let it fail if option name does not exist, it means the recipe is not up to date
-            value = getattr(self.options, option_name)
-            if not value or value == "None":
+            if self.options.get_safe(option_name) in [None, "None"]:
                 setattr(self.options, option_name, option_value)
 
         def _set_build_type(build_type: str) -> None:
@@ -406,8 +458,8 @@ class QtBase(ConanFile):
                 raise QtConanError(msg)
             self.settings.build_type = build_type
 
-        def _check_mutually_exclusive_options(options: Dict[str, str]) -> None:
-            if list(options.values()).count("yes") > 1:
+        def _check_mutually_exclusive_options(options: Dict[str, bool]) -> None:
+            if list(options.values()).count(True) > 1:
                 raise QtConanError(
                     "These Qt options are mutually exclusive: {0}"
                     ". Choose only one of them and try again.".format(list(options.keys()))
@@ -419,13 +471,13 @@ class QtBase(ConanFile):
             default_options.append("framework")
 
         for item in default_options:
-            _set_default_if_not_set(item, "yes")
+            _set_default_if_not_set(item, True)
 
-        release = self.options.get_safe("release", default="no")
-        debug = self.options.get_safe("debug", default="no")
-        debug_and_release = self.options.get_safe("debug_and_release", default="no")
-        force_debug_info = self.options.get_safe("force_debug_info", default="no")
-        optimize_size = self.options.get_safe("optimize_size", default="no")
+        release = self.options.get_safe("release", default=False)
+        debug = self.options.get_safe("debug", default=False)
+        debug_and_release = self.options.get_safe("debug_and_release", default=False)
+        force_debug_info = self.options.get_safe("force_debug_info", default=False)
+        optimize_size = self.options.get_safe("optimize_size", default=False)
 
         # these options are mutually exclusive options so do a sanity check
         _check_mutually_exclusive_options(
@@ -433,28 +485,44 @@ class QtBase(ConanFile):
         )
 
         # Prioritize Qt's configure options over Settings.build_type
-        if debug_and_release == "yes":
+        if debug_and_release == True:
             # Qt build system will build both debug and release binaries
-            if force_debug_info == "yes":
+            if force_debug_info == True:
                 _set_build_type("RelWithDebInfo")
             else:
                 _set_build_type("Release")
-        elif release == "yes":
+        elif release == True:
             _check_mutually_exclusive_options(
                 {"force_debug_info": force_debug_info, "optimize_size": optimize_size}
             )
-            if force_debug_info == "yes":
+            if force_debug_info == True:
                 _set_build_type("RelWithDebInfo")
-            elif optimize_size == "yes":
+            elif optimize_size == True:
                 _set_build_type("MinSizeRel")
             else:
                 _set_build_type("Release")
-        elif debug == "yes":
+        elif debug == True:
             _set_build_type("Debug")
         else:
-            # set default that mirror the configure(.bat) default values
-            self.options.release = "yes"
-            _set_build_type("Release")
+            # As a fallback set the build type for Qt configure based on the 'build_type'
+            # defined in the conan build settings
+            build_type = self.settings.get_safe("build_type")
+            if build_type in [None, "None"]:
+                # set default that mirror the configure(.bat) default values
+                self.options.release = True
+                self.settings.build_type = "Release"
+            elif build_type == "Release":
+                self.options.release = True
+            elif build_type == "Debug":
+                self.options.debug = True
+            elif build_type == "RelWithDebInfo":
+                self.options.release = True
+                self.options.force_debug_info = True
+            elif build_type == "MinSizeRel":
+                self.options.release = True
+                self.options.optimize_size = True
+            else:
+                raise QtConanError("Unknown build_type: {0}".format(self.settings.build_type))
 
     def build(self):
         self.python_requires["qt-conan-common"].module.build_env_wrap(self, _build_qtbase)
@@ -493,6 +561,7 @@ class QtBase(ConanFile):
             "qpa",
             "translationsdir",
             "headersclean",
+            "qt_host_path",
         ]
         for item in rm_list:
             if item in self.info.options:

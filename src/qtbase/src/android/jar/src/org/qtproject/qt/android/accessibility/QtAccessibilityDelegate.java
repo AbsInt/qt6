@@ -198,13 +198,27 @@ public class QtAccessibilityDelegate extends View.AccessibilityDelegate
 
     public void notifyObjectHide(int viewId)
     {
-        invalidateVirtualViewId(viewId);
+        // If the object had accessibility focus, we need to clear it.
+        // Note: This code is mostly copied from
+        // AccessibilityNodeProvider::performAction, but we remove the
+        // focus only if the focused view id matches the one that was hidden.
+        if (m_focusedVirtualViewId == viewId) {
+            m_focusedVirtualViewId = INVALID_ID;
+            m_view.invalidate();
+            sendEventForVirtualViewId(viewId,
+                    AccessibilityEvent.TYPE_VIEW_ACCESSIBILITY_FOCUS_CLEARED);
+        }
+        // When the object is hidden, we need to notify its parent about
+        // content change, not the hidden object itself
+        final int parentId = QtNativeAccessibility.parentId(viewId);
+        invalidateVirtualViewId(parentId);
     }
 
     public void notifyObjectFocus(int viewId)
     {
         if (m_view == null)
             return;
+        m_focusedVirtualViewId = viewId;
         m_view.invalidate();
         sendEventForVirtualViewId(viewId,
                 AccessibilityEvent.TYPE_VIEW_ACCESSIBILITY_FOCUSED);

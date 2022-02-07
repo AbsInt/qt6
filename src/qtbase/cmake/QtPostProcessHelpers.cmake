@@ -519,12 +519,12 @@ function(qt_generate_build_internals_extra_cmake_code)
                      ${INSTALL_CMAKE_NAMESPACE}BuildInternals/QtBuildInternalsExtra.cmake)
 
         if(CMAKE_BUILD_TYPE)
-            # Need to force set, because CMake itself initializes a value for CMAKE_BUILD_TYPE
-            # at the start of project configuration (with an empty value),
-            # so we need to force override it.
             string(APPEND QT_EXTRA_BUILD_INTERNALS_VARS
-                "set(CMAKE_BUILD_TYPE \"${CMAKE_BUILD_TYPE}\" CACHE STRING \"Choose the type of build.\" FORCE)\n")
-
+                "
+set(__qt_internal_initial_qt_cmake_build_type \"${CMAKE_BUILD_TYPE}\")
+qt_internal_force_set_cmake_build_type_conditionally(
+    \"\${__qt_internal_initial_qt_cmake_build_type}\")
+")
         endif()
         if(CMAKE_CONFIGURATION_TYPES)
             string(APPEND multi_config_specific
@@ -546,11 +546,14 @@ function(qt_generate_build_internals_extra_cmake_code)
                 "\nset(QT_MULTI_CONFIG_FIRST_CONFIG \"${QT_MULTI_CONFIG_FIRST_CONFIG}\")\n")
         endif()
         # When building standalone tests against a multi-config Qt, we want to choose the first
-        # configuration, rather than default to Debug.
+        # configuration, rather than use CMake's default value.
+        # In the case of Windows, we definitely don't it to default to Debug, because that causes
+        # issues in the CI.
         if(multi_config_specific)
             string(APPEND QT_EXTRA_BUILD_INTERNALS_VARS "
 if(QT_BUILD_STANDALONE_TESTS)
-    set(CMAKE_BUILD_TYPE \"\${QT_MULTI_CONFIG_FIRST_CONFIG}\" CACHE STRING \"Choose the type of build.\" FORCE)
+    qt_internal_force_set_cmake_build_type_conditionally(
+        \"\${QT_MULTI_CONFIG_FIRST_CONFIG}\")
 endif()\n")
         endif()
 
@@ -591,6 +594,12 @@ endif()\n")
         if(CMAKE_CROSSCOMPILING AND QT_BUILD_TOOLS_WHEN_CROSSCOMPILING)
             string(APPEND QT_EXTRA_BUILD_INTERNALS_VARS
                 "set(QT_BUILD_TOOLS_WHEN_CROSSCOMPILING \"TRUE\" CACHE BOOL \"\" FORCE)\n")
+        endif()
+
+        if(QT_INTERNAL_CUSTOM_INSTALL_DIR)
+            file(TO_CMAKE_PATH "${QT_INTERNAL_CUSTOM_INSTALL_DIR}" qt_internal_custom_install_dir)
+            string(APPEND QT_EXTRA_BUILD_INTERNALS_VARS
+                "set(QT_INTERNAL_CUSTOM_INSTALL_DIR \"${qt_internal_custom_install_dir}\" CACHE STRING \"\")\n")
         endif()
 
         # Save the default qpa platform.
@@ -657,18 +666,6 @@ endif()\n")
             file(TO_CMAKE_PATH "${OPENSSL_ROOT_DIR}" openssl_root_cmake_path)
             string(APPEND QT_EXTRA_BUILD_INTERNALS_VARS
                    "set(OPENSSL_ROOT_DIR \"${openssl_root_cmake_path}\" CACHE STRING \"\")\n")
-        endif()
-
-        if(NOT "${CMAKE_STAGING_PREFIX}" STREQUAL "")
-            string(APPEND QT_EXTRA_BUILD_INTERNALS_VARS
-                "
-# If no explicit CMAKE_STAGING_PREFIX is provided, force set the original Qt staging prefix,
-if(\"$\{CMAKE_STAGING_PREFIX}\" STREQUAL \"\"
-   AND NOT QT_BUILD_INTERNALS_NO_FORCE_SET_STAGING_PREFIX)
-    set(CMAKE_STAGING_PREFIX \"${CMAKE_STAGING_PREFIX}\" CACHE PATH
-        \"Staging path prefix, prepended onto install directories on the host machine.\" FORCE)
-endif()
-")
         endif()
 
         qt_generate_install_prefixes(install_prefix_content)

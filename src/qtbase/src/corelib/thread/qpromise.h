@@ -41,13 +41,20 @@
 #define QPROMISE_H
 
 #include <QtCore/qglobal.h>
-#include <QtCore/qfuture.h>
+#include <QtCore/qfutureinterface.h>
 
 #include <utility>
 
 QT_REQUIRE_CONFIG(future);
 
 QT_BEGIN_NAMESPACE
+
+namespace QtPrivate {
+
+template<class T, class U>
+using EnableIfSameOrConvertible = std::enable_if_t<std::is_convertible_v<T, U>>;
+
+} // namespace QtPrivate
 
 template<typename T>
 class QPromise
@@ -66,13 +73,16 @@ public:
     {
         const int state = d.loadState();
         // If QFutureInterface has no state, there is nothing to be done
-        if (state == static_cast<int>(QFutureInterfaceBase::State::NoState))
+        if (state == static_cast<int>(QFutureInterfaceBase::State::NoState)) {
+            d.cleanContinuation();
             return;
+        }
         // Otherwise, if computation is not finished at this point, cancel
         // potential waits
         if (!(state & QFutureInterfaceBase::State::Finished)) {
             d.cancel();
             finish();  // required to finalize the state
+            d.cleanContinuation();
         }
     }
 
@@ -108,7 +118,7 @@ public:
 
     void swap(QPromise<T> &other) noexcept
     {
-        qSwap(this->d, other.d);
+        d.swap(other.d);
     }
 
 #if defined(Q_CLANG_QDOC)  // documentation-only simplified signatures

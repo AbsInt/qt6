@@ -35,6 +35,8 @@ elseif(CMAKE_CONFIGURATION_TYPES)
         message(STATUS
             "Default build configuration set to '${CMAKE_NINJA_MULTI_DEFAULT_BUILD_TYPE}'.")
     endif()
+else()
+    message(STATUS "CMAKE_BUILD_TYPE was set to: '${CMAKE_BUILD_TYPE}'")
 endif()
 
 # Appends a 'debug postfix' to library targets (not executables)
@@ -173,7 +175,6 @@ enable_testing()
 
 option(QT_BUILD_EXAMPLES "Build Qt examples" OFF)
 option(QT_BUILD_EXAMPLES_BY_DEFAULT "Should examples be built as part of the default 'all' target." ON)
-
 
 # FIXME: Support prefix builds as well QTBUG-96232
 if(QT_WILL_INSTALL)

@@ -1,5 +1,6 @@
 /****************************************************************************
 **
+** Copyright (C) 2022 The Qt Company Ltd.
 ** Copyright (C) 2013 John Layt <jlayt@kde.org>
 ** Contact: https://www.qt.io/licensing/
 **
@@ -41,8 +42,8 @@
 #include "qtimezoneprivate_p.h"
 
 #include "qdatetime.h"
-
 #include "qdebug.h"
+#include <private/qnumeric_p.h>
 
 #include <algorithm>
 
@@ -95,15 +96,15 @@ namespace {
 QDate msecsToDate(qint64 msecs)
 {
     qint64 jd = JULIAN_DAY_FOR_EPOCH;
-
-    if (qAbs(msecs) >= MSECS_PER_DAY) {
-        jd += (msecs / MSECS_PER_DAY);
+    // Corner case: don't use qAbs() because msecs may be numeric_limits<qint64>::min()
+    if (msecs >= MSECS_PER_DAY || msecs <= -MSECS_PER_DAY) {
+        jd += msecs / MSECS_PER_DAY;
         msecs %= MSECS_PER_DAY;
     }
 
     if (msecs < 0) {
-        qint64 ds = MSECS_PER_DAY - msecs - 1;
-        jd -= ds / MSECS_PER_DAY;
+        Q_ASSERT(msecs > -MSECS_PER_DAY);
+        --jd;
     }
 
     return QDate::fromJulianDay(jd);
@@ -275,11 +276,20 @@ QDate calculateTransitionLocalDate(const SYSTEMTIME &rule, int year)
     return date;
 }
 
-// Converts a date/time value into msecs
-inline qint64 timeToMSecs(QDate date, QTime time)
+// Converts a date/time value into msecs, returns true on overflow:
+inline bool timeToMSecs(QDate date, QTime time, qint64 *msecs)
 {
-    return ((date.toJulianDay() - JULIAN_DAY_FOR_EPOCH) * MSECS_PER_DAY)
-           + time.msecsSinceStartOfDay();
+    qint64 dayms = 0;
+    qint64 daySinceEpoch = date.toJulianDay() - JULIAN_DAY_FOR_EPOCH;
+    qint64 msInDay = time.msecsSinceStartOfDay();
+    if (daySinceEpoch < 0 && msInDay > 0) {
+        // In the earliest day with representable parts, take care to not
+        // underflow before an addition that would have fixed it.
+        ++daySinceEpoch;
+        msInDay -= MSECS_PER_DAY;
+    }
+    return mul_overflow(daySinceEpoch, std::integral_constant<qint64, MSECS_PER_DAY>(), &dayms)
+        || add_overflow(dayms, msInDay, msecs);
 }
 
 qint64 calculateTransitionForYear(const SYSTEMTIME &rule, int year, int bias)
@@ -289,8 +299,15 @@ qint64 calculateTransitionForYear(const SYSTEMTIME &rule, int year, int bias)
     Q_ASSERT(year);
     const QDate date = calculateTransitionLocalDate(rule, year);
     const QTime time = QTime(rule.wHour, rule.wMinute, rule.wSecond);
-    if (date.isValid() && time.isValid())
-        return timeToMSecs(date, time) + bias * 60000;
+    qint64 msecs = 0;
+    using Bound = std::numeric_limits<qint64>;
+    if (date.isValid() && time.isValid() && !timeToMSecs(date, time, &msecs)) {
+        // If bias pushes us outside representable range, clip to range - and
+        // exclude min() from range as it's invalidMSecs():
+        return bias && add_overflow(msecs, qint64(bias) * 60000, &msecs)
+            ? (bias < 0 ? Bound::min() + 1 : Bound::max())
+            : (msecs == Bound::min() ? msecs + 1 : msecs);
+    }
     return QTimeZonePrivate::invalidMSecs();
 }
 
