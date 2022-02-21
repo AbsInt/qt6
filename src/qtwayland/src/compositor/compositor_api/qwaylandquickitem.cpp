@@ -142,8 +142,8 @@ static const struct {
 };
 
 QWaylandBufferMaterialShader::QWaylandBufferMaterialShader(QWaylandBufferRef::BufferFormatEgl format)
-    : m_format(format)
 {
+    Q_UNUSED(format);
     setShaderFileName(VertexStage, QString::fromLatin1(bufferTypes[format].vertexShaderSourceFile));
     auto fragmentShaderSourceFile = QString::fromLatin1(bufferTypes[format].fragmentShaderSourceFile);
 
@@ -1369,15 +1369,15 @@ void QWaylandQuickItem::updateWindow()
     if (d->connectedWindow) {
         connect(d->connectedWindow, &QQuickWindow::beforeSynchronizing, this, &QWaylandQuickItem::beforeSync, Qt::DirectConnection);
         connect(d->connectedWindow, &QQuickWindow::screenChanged, this, &QWaylandQuickItem::updateSize); // new screen may have new dpr
-    }
 
-    if (compositor() && d->connectedWindow) {
-        QWaylandOutput *output = compositor()->outputFor(d->connectedWindow);
-        Q_ASSERT(output);
-        d->view->setOutput(output);
-    }
+        if (compositor()) {
+            QWaylandOutput *output = compositor()->outputFor(d->connectedWindow);
+            Q_ASSERT(output);
+            d->view->setOutput(output);
+        }
 
-    updateSize(); // because scaleFactor depends on devicePixelRatio, which may be different for the new window
+        updateSize(); // because scaleFactor depends on devicePixelRatio, which may be different for the new window
+    }
 }
 
 void QWaylandQuickItem::updateOutput()

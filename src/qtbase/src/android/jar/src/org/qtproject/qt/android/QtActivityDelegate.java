@@ -907,11 +907,11 @@ public class QtActivityDelegate
         m_accessibilityDelegate.notifyLocationChange();
     }
 
-    public void notifyObjectHide(int viewId)
+    public void notifyObjectHide(int viewId, int parentId)
     {
         if (m_accessibilityDelegate == null)
             return;
-        m_accessibilityDelegate.notifyObjectHide(viewId);
+        m_accessibilityDelegate.notifyObjectHide(viewId, parentId);
     }
 
     public void notifyObjectFocus(int viewId)
@@ -919,6 +919,13 @@ public class QtActivityDelegate
         if (m_accessibilityDelegate == null)
             return;
         m_accessibilityDelegate.notifyObjectFocus(viewId);
+    }
+
+    public void notifyValueChanged(int viewId, String value)
+    {
+        if (m_accessibilityDelegate == null)
+            return;
+        m_accessibilityDelegate.notifyValueChanged(viewId, value);
     }
 
     public void notifyQtAndroidPluginRunning(boolean running)

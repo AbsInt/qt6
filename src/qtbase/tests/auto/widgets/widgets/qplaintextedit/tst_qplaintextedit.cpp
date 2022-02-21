@@ -38,6 +38,7 @@
 #include <qclipboard.h>
 #include <qtextbrowser.h>
 #include <private/qwidgettextcontrol_p.h>
+#include <private/qplaintextedit_p.h>
 #include <qscrollbar.h>
 #include <qtextobject.h>
 #include <qmenu.h>
@@ -143,7 +144,7 @@ private slots:
     void layoutAfterMultiLineRemove();
     void undoCommandRemovesAndReinsertsBlock();
     void taskQTBUG_43562_lineCountCrash();
-#ifndef QT_NO_CONTEXTMENU
+#if !defined(QT_NO_CONTEXTMENU) && !defined(QT_NO_CLIPBOARD)
     void contextMenu();
 #endif
     void inputMethodCursorRect();
@@ -154,6 +155,8 @@ private slots:
     void updateCursorPositionAfterEdit();
 #endif
     void appendTextWhenInvisible();
+    void placeholderVisibility_data();
+    void placeholderVisibility();
 
 private:
     void createSelection();
@@ -1696,7 +1699,7 @@ void tst_QPlainTextEdit::taskQTBUG_43562_lineCountCrash()
     disconnect(ed->document(), SIGNAL(contentsChange(int, int, int)), 0, 0);
 }
 
-#ifndef QT_NO_CONTEXTMENU
+#if !defined(QT_NO_CONTEXTMENU) && !defined(QT_NO_CLIPBOARD)
 void tst_QPlainTextEdit::contextMenu()
 {
     ed->appendHtml(QStringLiteral("Hello <a href='http://www.qt.io'>Qt</a>"));
@@ -1730,7 +1733,7 @@ void tst_QPlainTextEdit::contextMenu()
     delete menu;
     QVERIFY(!ed->findChild<QAction *>(QStringLiteral("link-copy")));
 }
-#endif // QT_NO_CONTEXTMENU
+#endif // QT_NO_CONTEXTMENU && QT_NO_CLIPBOARD
 
 // QTBUG-51923: Verify that the cursor rectangle returned by the input
 // method query correctly reflects the viewport offset.
@@ -1835,6 +1838,108 @@ void tst_QPlainTextEdit::appendTextWhenInvisible()
     QVERIFY(maxAfterAppend != 0);
 
     QCOMPARE(maxAfterAppend, maxAfterSet);
+}
+
+enum SetupCommand {
+    ClearPlaceHolder, // set empty placeholder text
+    SetPlaceHolder, // set a non-empty placeholder text
+    ClearContent, // set empty text as content
+    SetContent // set non-empty text as content
+};
+
+void tst_QPlainTextEdit::placeholderVisibility_data()
+{
+    QTest::addColumn<QList<SetupCommand>>("setupCommands");
+    QTest::addColumn<bool>("placeholderVisible");
+    QTest::addRow("no placeholder set + no text set")
+            << QList<SetupCommand>{} << true;
+    QTest::addRow("no placeholder set + text set or text set + no placeholder set")
+            << QList<SetupCommand>{ SetContent } << false;
+    QTest::addRow("no placeholder set + text set + empty text set")
+            << QList<SetupCommand>{ SetContent , ClearContent }
+            << false;
+    QTest::addRow("no placeholder set + empty text set + text set")
+            << QList<SetupCommand>{ ClearContent, SetContent }
+            << false;
+    QTest::addRow("empty placeholder set + no text set")
+            << QList<SetupCommand>{ ClearPlaceHolder } << true;
+    QTest::addRow("empty placeholder set + text set")
+            << QList<SetupCommand>{ ClearPlaceHolder, SetContent }
+            << false;
+    QTest::addRow("empty placeholder set + text set + empty text set")
+            << QList<SetupCommand>{ ClearPlaceHolder, SetContent, ClearContent }
+            << false;
+    QTest::addRow("empty placeholder set + empty text set + text set")
+            << QList<SetupCommand>{ ClearPlaceHolder, ClearContent, SetContent }
+            << false;
+    QTest::addRow("placeholder set + no text set")
+            << QList<SetupCommand>{ SetPlaceHolder, ClearContent }
+            << true;
+    QTest::addRow("placeholder set + text set")
+            << QList<SetupCommand>{ SetPlaceHolder, SetContent }
+            << false;
+    QTest::addRow("placeholder set + text set + empty text set")
+            << QList<SetupCommand>{ SetPlaceHolder, SetContent, ClearContent }
+            << true;
+    QTest::addRow("placeholder set + empty text set + text set")
+            << QList<SetupCommand>{ SetPlaceHolder, ClearContent, SetContent }
+            << false;
+    QTest::addRow("placeholder set + text set + empty placeholder set")
+            << QList<SetupCommand>{ SetPlaceHolder, SetContent, ClearPlaceHolder}
+            << false;
+    QTest::addRow("placeholder set + empty placeholder set + text set")
+            << QList<SetupCommand>{ SetPlaceHolder, ClearPlaceHolder, SetContent }
+            << false;
+    QTest::addRow("placeholder set + empty placeholder set + empty text set")
+            << QList<SetupCommand>{ SetPlaceHolder, ClearPlaceHolder, ClearContent }
+            << false;
+    QTest::addRow("placeholder set + empty text set + empty placeholder set")
+            << QList<SetupCommand>{ SetPlaceHolder, ClearContent, ClearPlaceHolder }
+            << false;
+    QTest::addRow("text set + no placeholder set + empty text set")
+            << QList<SetupCommand>{ SetContent, ClearContent }
+            << false;
+    QTest::addRow("text set + empty placeholder set")
+            << QList<SetupCommand>{ SetContent, ClearPlaceHolder }
+            << false;
+    QTest::addRow("text set + placeholder set")
+            << QList<SetupCommand>{ SetContent, SetPlaceHolder }
+            << false;
+    QTest::addRow("text set + placeholder set + empty text set")
+            << QList<SetupCommand>{ SetContent, SetPlaceHolder, ClearContent }
+            << true;
+    QTest::addRow("text set + placeholder set + empty placeholder set")
+            << QList<SetupCommand>{ SetContent, SetPlaceHolder, ClearPlaceHolder }
+            << false;
+}
+
+void tst_QPlainTextEdit::placeholderVisibility()
+{
+    QFETCH(QList<SetupCommand>, setupCommands);
+    QFETCH(bool, placeholderVisible);
+
+    QPlainTextEdit plainTextEdit;
+    for (auto command : setupCommands) {
+        switch (command) {
+        case ClearPlaceHolder:
+            plainTextEdit.setPlaceholderText("");
+            break;
+        case SetPlaceHolder:
+            plainTextEdit.setPlaceholderText("Qt is awesome !");
+            break;
+        case ClearContent:
+            plainTextEdit.setPlainText("");
+            break;
+        case SetContent:
+            plainTextEdit.setPlainText("PlainText...");
+            break;
+        }
+    }
+    auto *plainTextEdit_d = static_cast<QPlainTextEditPrivate *>(qt_widget_private(&plainTextEdit));
+
+    plainTextEdit.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&plainTextEdit));
+    QTRY_VERIFY(plainTextEdit_d->placeholderVisible == placeholderVisible);
 }
 
 QTEST_MAIN(tst_QPlainTextEdit)

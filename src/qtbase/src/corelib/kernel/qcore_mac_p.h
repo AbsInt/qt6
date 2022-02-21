@@ -56,6 +56,7 @@
 #include <QtCore/qoperatingsystemversion.h>
 
 #ifdef Q_OS_MACOS
+#include <mach/port.h>
 struct mach_header;
 typedef int kern_return_t;
 typedef mach_port_t io_object_t;
@@ -206,6 +207,7 @@ private:
 #ifdef Q_OS_MACOS
 Q_CORE_EXPORT bool qt_mac_applicationIsInDarkMode();
 Q_CORE_EXPORT bool qt_mac_runningUnderRosetta();
+Q_CORE_EXPORT std::optional<uint32_t> qt_mac_sipConfiguration();
 #endif
 
 #ifndef QT_NO_DEBUG_STREAM

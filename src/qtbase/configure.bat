@@ -103,8 +103,8 @@ goto doneargs
 cd "%TOPQTDIR%"
 
 rem Write config.opt if we're not currently -redo'ing
-if "%rargs%" == "" (
-    echo %*>config.opt.in
+if "!rargs!" == "" (
+    echo.%*>config.opt.in
     cmake -DIN_FILE=config.opt.in -DOUT_FILE=config.opt -DIGNORE_ARGS=-top-level -P "%QTSRC%\cmake\QtWriteArgsFile.cmake"
 )
 

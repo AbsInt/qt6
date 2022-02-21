@@ -54,11 +54,12 @@
 #include <qpa/qplatformintegration.h>
 #include <qdir.h>
 
+#include <QtCore/private/qlocking_p.h>
+
 QT_BEGIN_NAMESPACE
 
-class QOpenUrlHandlerRegistry : public QObject
+class QOpenUrlHandlerRegistry
 {
-    Q_OBJECT
 public:
     QOpenUrlHandlerRegistry() = default;
 
@@ -72,24 +73,34 @@ public:
     typedef QHash<QString, Handler> HandlerHash;
     HandlerHash handlers;
 
-public Q_SLOTS:
+#if QT_VERSION < QT_VERSION_CHECK(6, 6, 0)
+    QObject context;
+
     void handlerDestroyed(QObject *handler);
+#endif
 
 };
 
 Q_GLOBAL_STATIC(QOpenUrlHandlerRegistry, handlerRegistry)
 
+#if QT_VERSION < QT_VERSION_CHECK(6, 6, 0)
 void QOpenUrlHandlerRegistry::handlerDestroyed(QObject *handler)
 {
+    const auto lock = qt_scoped_lock(mutex);
     HandlerHash::Iterator it = handlers.begin();
     while (it != handlers.end()) {
         if (it->receiver == handler) {
             it = handlers.erase(it);
+            qWarning("Please call QDesktopServices::unsetUrlHandler() before destroying a "
+                     "registered URL handler object.\n"
+                     "Support for destroying a registered URL handler object is deprecated, "
+                     "and will be removed in Qt 6.6.");
         } else {
             ++it;
         }
     }
 }
+#endif
 
 /*!
     \class QDesktopServices
@@ -252,6 +263,10 @@ bool QDesktopServices::openUrl(const QUrl &url)
     Note that the handler will always be called from within the same thread that
     calls QDesktopServices::openUrl().
 
+    You must call unsetUrlHandler() before destroying the handler object, so
+    the destruction of the handler object does not overlap with concurrent
+    invocations of openUrl() using it.
+
     \section1 iOS
 
     To use this function for receiving data from other apps on iOS you also need to
@@ -320,12 +335,19 @@ void QDesktopServices::setUrlHandler(const QString &scheme, QObject *receiver, c
     h.receiver = receiver;
     h.name = method;
     registry->handlers.insert(scheme.toLower(), h);
-    QObject::connect(receiver, SIGNAL(destroyed(QObject*)),
-                     registry, SLOT(handlerDestroyed(QObject*)));
+#if QT_VERSION < QT_VERSION_CHECK(6, 6, 0)
+    QObject::connect(receiver, &QObject::destroyed, &registry->context,
+                     [registry](QObject *obj) { registry->handlerDestroyed(obj); },
+                     Qt::DirectConnection);
+#endif
 }
 
 /*!
     Removes a previously set URL handler for the specified \a scheme.
+
+    Call this function before the handler object that was registered for \a scheme
+    is destroyed, to prevent concurrent openUrl() calls from continuing to call
+    the destroyed handler object.
 
     \sa setUrlHandler()
 */
@@ -335,7 +357,5 @@ void QDesktopServices::unsetUrlHandler(const QString &scheme)
 }
 
 QT_END_NAMESPACE
-
-#include "qdesktopservices.moc"
 
 #endif // QT_NO_DESKTOPSERVICES
