@@ -71,7 +71,7 @@ public:
     void init() const;
     void initEnums(QQmlEnginePrivate *engine) const;
     void insertEnums(const QMetaObject *metaObject) const;
-    void insertEnumsFromPropertyCache(const QQmlPropertyCache *cache) const;
+    void insertEnumsFromPropertyCache(const QQmlRefPointer<QQmlPropertyCache> &cache) const;
     void setContainingType(QQmlType *containingType);
 
     QUrl sourceUrl() const
@@ -106,7 +106,7 @@ public:
     }
 
     QQmlType resolveCompositeBaseType(QQmlEnginePrivate *engine) const;
-    QQmlPropertyCache *compositePropertyCache(QQmlEnginePrivate *engine) const;
+    QQmlRefPointer<QQmlPropertyCache> compositePropertyCache(QQmlEnginePrivate *engine) const;
 
     QQmlType::RegistrationType regType;
 
@@ -125,7 +125,9 @@ public:
         const QMetaObject *attachedPropertiesType;
         int propertyValueSourceCast;
         int propertyValueInterceptorCast;
+        int finalizerCast;
         bool registerEnumClassesUnscoped;
+        bool registerEnumsFromRelatedTypes;
     };
 
     struct QQmlSingletonTypeData

@@ -1,34 +1,37 @@
 /****************************************************************************
 **
 ** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the Qt Quick Templates 2 module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL3$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
 ** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPLv3 included in the
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
 ** packaging of this file. Please review the following information to
 ** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl.html.
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
 ** GNU General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or later as published by the Free
-** Software Foundation and appearing in the file LICENSE.GPL included in
-** the packaging of this file. Please review the following information to
-** ensure the GNU General Public License version 2.0 requirements will be
-** met: http://www.gnu.org/licenses/gpl-2.0.html.
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -166,7 +169,7 @@ QQuickSelectionRectanglePrivate::QQuickSelectionRectanglePrivate()
     m_dragHandler->setTarget(nullptr);
 
     QObject::connect(&m_scrollTimer, &QTimer::timeout, [&]{
-        if (m_topLeftHandle && m_draggedHandle == m_topLeftHandle)
+        if (m_topLeftHandle && m_draggedHandle == m_topLeftHandle.data())
             m_selectable->setSelectionStartPos(m_scrollToPoint);
         else
             m_selectable->setSelectionEndPos(m_scrollToPoint);
@@ -177,12 +180,12 @@ QQuickSelectionRectanglePrivate::QQuickSelectionRectanglePrivate()
         m_scrollSpeed = QSizeF(qAbs(dist.width() * 0.007), qAbs(dist.height() * 0.007));
     });
 
-    QObject::connect(m_tapHandler, &QQuickTapHandler::tapped, [=](QEventPoint) {
+    QObject::connect(m_tapHandler, &QQuickTapHandler::tapped, [this] {
         m_selectable->clearSelection();
         updateActiveState(false);
     });
 
-    QObject::connect(m_tapHandler, &QQuickTapHandler::longPressed, [=]() {
+    QObject::connect(m_tapHandler, &QQuickTapHandler::longPressed, [this]() {
         if (handleUnderPos(m_tapHandler->point().pressPosition()) != nullptr) {
             // Don't allow press'n'hold to start a new
             // selection if it started on top of a handle.
@@ -206,7 +209,7 @@ QQuickSelectionRectanglePrivate::QQuickSelectionRectanglePrivate()
         updateActiveState(true);
     });
 
-    QObject::connect(m_dragHandler, &QQuickDragHandler::activeChanged, [=]() {
+    QObject::connect(m_dragHandler, &QQuickDragHandler::activeChanged, [this]() {
         const QPointF pos = m_dragHandler->centroid().position();
         if (m_dragHandler->active()) {
             m_selectable->clearSelection();
@@ -223,7 +226,7 @@ QQuickSelectionRectanglePrivate::QQuickSelectionRectanglePrivate()
         }
     });
 
-    QObject::connect(m_dragHandler, &QQuickDragHandler::centroidChanged, [=]() {
+    QObject::connect(m_dragHandler, &QQuickDragHandler::centroidChanged, [this]() {
         if (!m_dragging)
             return;
         const QPointF pos = m_dragHandler->centroid().position();
@@ -250,13 +253,13 @@ QQuickItem *QQuickSelectionRectanglePrivate::handleUnderPos(const QPointF &pos)
     if (m_topLeftHandle) {
         const QPointF localPos = m_topLeftHandle->mapFromItem(handlerTarget, pos);
         if (m_topLeftHandle->contains(localPos))
-            return m_topLeftHandle;
+            return m_topLeftHandle.data();
     }
 
     if (m_bottomRightHandle) {
         const QPointF localPos = m_bottomRightHandle->mapFromItem(handlerTarget, pos);
         if (m_bottomRightHandle->contains(localPos))
-            return m_bottomRightHandle;
+            return m_bottomRightHandle.data();
     }
 
     return nullptr;
@@ -300,16 +303,14 @@ QQuickItem *QQuickSelectionRectanglePrivate::createHandle(QQmlComponent *delegat
     // Add pointer handlers to it
     QQuickDragHandler *dragHandler = new QQuickDragHandler();
     dragHandler->setTarget(nullptr);
-    dragHandler->setParent(handleItem);
-    QQuickItemPrivate::get(handleItem)->addPointerHandler(dragHandler);
+    dragHandler->setParentItem(handleItem);
 
     QQuickHoverHandler *hoverHandler = new QQuickHoverHandler();
     hoverHandler->setTarget(nullptr);
-    hoverHandler->setParent(handleItem);
+    hoverHandler->setParentItem(handleItem);
     hoverHandler->setCursorShape(Qt::SizeFDiagCursor);
-    QQuickItemPrivate::get(handleItem)->addPointerHandler(hoverHandler);
 
-    QObject::connect(dragHandler, &QQuickDragHandler::activeChanged, [=]() {
+    QObject::connect(dragHandler, &QQuickDragHandler::activeChanged, [this, corner, handleItem, dragHandler]() {
         if (dragHandler->active()) {
             const QPointF localPos = dragHandler->centroid().position();
             const QPointF pos = handleItem->mapToItem(handleItem->parentItem(), localPos);
@@ -330,7 +331,7 @@ QQuickItem *QQuickSelectionRectanglePrivate::createHandle(QQmlComponent *delegat
         }
     });
 
-    QObject::connect(dragHandler, &QQuickDragHandler::centroidChanged, [=]() {
+    QObject::connect(dragHandler, &QQuickDragHandler::centroidChanged, [this, corner, handleItem, dragHandler]() {
         if (!m_dragging)
             return;
 
@@ -356,10 +357,10 @@ void QQuickSelectionRectanglePrivate::updateHandles()
     const QRectF rect = m_selectable->selectionRectangle().normalized();
 
     if (!m_topLeftHandle && m_topLeftHandleDelegate)
-        m_topLeftHandle = createHandle(m_topLeftHandleDelegate, Qt::TopLeftCorner);
+        m_topLeftHandle.reset(createHandle(m_topLeftHandleDelegate, Qt::TopLeftCorner));
 
     if (!m_bottomRightHandle && m_bottomRightHandleDelegate)
-        m_bottomRightHandle = createHandle(m_bottomRightHandleDelegate, Qt::BottomRightCorner);
+        m_bottomRightHandle.reset(createHandle(m_bottomRightHandleDelegate, Qt::BottomRightCorner));
 
     if (m_topLeftHandle) {
         m_topLeftHandle->setX(rect.x() - (m_topLeftHandle->width() / 2));
@@ -422,6 +423,8 @@ QQuickSelectionRectangle::QQuickSelectionRectangle(QQuickItem *parent)
     : QQuickControl(*(new QQuickSelectionRectanglePrivate), parent)
 {
     Q_D(QQuickSelectionRectangle);
+    d->m_tapHandler->setParent(this);
+    d->m_dragHandler->setParent(this);
 
     QObject::connect(this, &QQuickItem::enabledChanged, [=]() {
         d->m_scrollTimer.stop();
@@ -444,8 +447,8 @@ void QQuickSelectionRectangle::setTarget(QQuickItem *target)
 
     if (d->m_selectable) {
         d->m_scrollTimer.stop();
-        d->m_tapHandler->setParent(nullptr);
-        d->m_dragHandler->setParent(nullptr);
+        d->m_tapHandler->setParent(this);
+        d->m_dragHandler->setParent(this);
         d->m_target->disconnect(this);
     }
 
@@ -460,10 +463,8 @@ void QQuickSelectionRectangle::setTarget(QQuickItem *target)
 
     if (d->m_selectable) {
         const auto handlerTarget = d->m_selectable->selectionPointerHandlerTarget();
-        d->m_dragHandler->setParent(handlerTarget);
-        d->m_tapHandler->setParent(handlerTarget);
-        QQuickItemPrivate::get(handlerTarget)->addPointerHandler(d->m_tapHandler);
-        QQuickItemPrivate::get(handlerTarget)->addPointerHandler(d->m_dragHandler);
+        d->m_dragHandler->setParentItem(handlerTarget);
+        d->m_tapHandler->setParentItem(handlerTarget);
         d->connectToTarget();
         d->updateSelectionMode();
     }

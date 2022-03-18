@@ -1,34 +1,26 @@
 /****************************************************************************
 **
 ** Copyright (C) 2017 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL3$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPLv3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl.html.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or later as published by the Free
-** Software Foundation and appearing in the file LICENSE.GPL included in
-** the packaging of this file. Please review the following information to
-** ensure the GNU General Public License version 2.0 requirements will be
-** met: http://www.gnu.org/licenses/gpl-2.0.html.
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -54,8 +46,8 @@ private slots:
     void initTestCase();
     void init();
 
-    void basicStyle();
-    void basicStyle_data();
+    void basic();
+    void basic_data();
 
     void fusion();
     void fusion_data();
@@ -105,17 +97,19 @@ static void doBenchmark(QQuickStyleHelper &styleHelper, const QUrl &url)
     qDeleteAll(objects);
 }
 
-void tst_CreationTime::basicStyle()
+void tst_CreationTime::basic()
 {
     QFETCH(QUrl, url);
     doBenchmark(styleHelper, url);
 }
 
-void tst_CreationTime::basicStyle_data()
+void tst_CreationTime::basic_data()
 {
     QTest::addColumn<QUrl>("url");
+    // Calendar is excluded because it's a singleton and can't be created.
+    // TreeViewDelegate is excluded since it's a delegate that can only be created by TreeView.
     addTestRowForEachControl(styleHelper.engine.data(), QQC2_IMPORT_PATH, "basic", "QtQuick/Controls/Basic",
-        QStringList() << "ApplicationWindow");
+        QStringList() << "ApplicationWindow" << "Calendar" << "TreeViewDelegate");
 }
 
 void tst_CreationTime::fusion()

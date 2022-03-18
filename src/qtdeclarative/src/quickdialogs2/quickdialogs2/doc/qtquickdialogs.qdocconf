@@ -13,17 +13,13 @@ qhp.QtQuickDialogs.virtualFolder = qtquickdialogs
 qhp.QtQuickDialogs.indexTitle    = Qt Quick Dialogs
 qhp.QtQuickDialogs.indexRoot     =
 
-qhp.QtQuickDialogs.filterAttributes                  = qtquickdialogs $QT_VERSION qtrefdoc
-qhp.QtQuickDialogs.customFilters.Qt.name             = QtQuickDialogs $QT_VERSION
-qhp.QtQuickDialogs.customFilters.Qt.filterAttributes = qtquickdialogs $QT_VERSION
-
 qhp.QtQuickDialogs.subprojects = qmltypes
 qhp.QtQuickDialogs.subprojects.qmltypes.title = QML Types
 qhp.QtQuickDialogs.subprojects.qmltypes.indexTitle = Qt Quick Dialogs QML Types
 qhp.QtQuickDialogs.subprojects.qmltypes.selectors = qmlclass
 qhp.QtQuickDialogs.subprojects.qmltypes.sortPages = true
 
-depends = qtcore qtgui qtdoc qtqml qtquick qtquickcontrols qtlabsplatform
+depends = qtcore qtqmlcore qtgui qtdoc qtqml qtquick qtquickcontrols qtlabsplatform
 
 # This module has no documented C++ types, clear the module header
 moduleheader =
@@ -38,3 +34,6 @@ navigation.landingpage  = "Qt Quick Dialogs"
 navigation.qmltypespage = "Qt Quick Dialogs QML Types"
 
 tagfile                 = qtquickdialogs.tags
+
+# Fail the documentation build if there are more warnings than the limit
+warninglimit = 0

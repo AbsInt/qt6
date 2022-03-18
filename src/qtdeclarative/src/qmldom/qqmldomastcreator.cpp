@@ -303,9 +303,11 @@ public:
         pushEl(p, *cPtr, program);
         // implicit imports
         // add implicit directory import
-        Import selfDirImport(QLatin1String("file://") + fInfo.canonicalPath());
-        selfDirImport.implicit = true;
-        qmlFilePtr->addImport(selfDirImport);
+        if (!fInfo.canonicalPath().isEmpty()) {
+            Import selfDirImport(QLatin1String("file://") + fInfo.canonicalPath());
+            selfDirImport.implicit = true;
+            qmlFilePtr->addImport(selfDirImport);
+        }
         for (Import i : qmlFile.environment().ownerAs<DomEnvironment>()->implicitImports()) {
             i.implicit = true;
             qmlFilePtr->addImport(i);
@@ -363,14 +365,14 @@ public:
             MethodInfo m;
             m.name = el->name.toString();
             m.typeName = toString(el->memberType);
-            m.isReadonly = el->isReadonlyMember;
+            m.isReadonly = el->isReadonly();
             m.access = MethodInfo::Public;
             m.methodType = MethodInfo::Signal;
             m.isList = el->typeModifier == QLatin1String("list");
             MethodInfo *mPtr;
             Path p = current<QmlObject>().addMethod(m, AddOption::KeepExisting, &mPtr);
             pushEl(p, *mPtr, el);
-            FileLocations::addRegion(nodeStack.last().fileLocations, u"signal", el->propertyToken);
+            FileLocations::addRegion(nodeStack.last().fileLocations, u"signal", el->propertyToken());
             MethodInfo &mInfo = std::get<MethodInfo>(currentNode().value);
             AST::UiParameterList *args = el->parameters;
             while (args) {
@@ -391,10 +393,10 @@ public:
             PropertyDefinition p;
             p.name = el->name.toString();
             p.typeName = toString(el->memberType);
-            p.isReadonly = el->isReadonlyMember;
-            p.isDefaultMember = el->isDefaultMember;
+            p.isReadonly = el->isReadonly();
+            p.isDefaultMember = el->isDefaultMember();
             p.isList = el->typeModifier == QLatin1String("list");
-            p.isRequired = el->isRequired;
+            p.isRequired = el->isRequired();
             if (!el->typeModifier.isEmpty())
                 p.typeName = el->typeModifier.toString() + QChar(u'<') + p.typeName + QChar(u'>');
             PropertyDefinition *pPtr;
@@ -402,7 +404,7 @@ public:
                     current<QmlObject>().addPropertyDef(p, AddOption::KeepExisting, &pPtr);
             pushEl(pPathFromOwner, *pPtr, el);
             FileLocations::addRegion(nodeStack.last().fileLocations, u"property",
-                                     el->propertyToken);
+                                     el->propertyToken());
             if (p.name == u"id")
                 qmlFile.addError(
                         myParseErrors()
@@ -411,10 +413,10 @@ public:
                                 .withPath(currentNodeEl().path));
             if (p.isDefaultMember)
                 FileLocations::addRegion(nodeStack.last().fileLocations, u"default",
-                                         el->defaultToken);
+                                         el->defaultToken());
             if (p.isRequired)
                 FileLocations::addRegion(nodeStack.last().fileLocations, u"required",
-                                         el->requiredToken);
+                                         el->requiredToken());
             if (el->statement) {
                 BindingType bType = BindingType::Normal;
                 SourceLocation loc = combineLocations(el->statement);
@@ -519,6 +521,15 @@ public:
             Path mPathFromOwner = current<QmlObject>().addMethod(m, AddOption::KeepExisting, &mPtr);
             pushEl(mPathFromOwner, *mPtr,
                    fDef); // add at the start and use the normal recursive visit?
+            FileLocations::Tree &fLoc = nodeStack.last().fileLocations;
+            if (fDef->lparenToken.length != 0)
+                FileLocations::addRegion(fLoc, u"leftParen", fDef->lparenToken);
+            if (fDef->rparenToken.length != 0)
+                FileLocations::addRegion(fLoc, u"rightParen", fDef->rparenToken);
+            if (fDef->lbraceToken.length != 0)
+                FileLocations::addRegion(fLoc, u"leftBrace", fDef->lbraceToken);
+            if (fDef->rbraceToken.length != 0)
+                FileLocations::addRegion(fLoc, u"rightBrace", fDef->rbraceToken);
             loadAnnotations(el);
             MethodInfo &mInfo = std::get<MethodInfo>(currentNode().value);
             AST::FormalParameterList *args = fDef->formals;
@@ -662,8 +673,9 @@ public:
                 Binding(toString(el->qualifiedId), value, bType), AddOption::KeepExisting, &bPtr);
         if (bPtr->name() == u"id")
             qmlFile.addError(myParseErrors()
-                                     .error(tr("id attributes should only be a lower case letter "
-                                               "followed by letters, numbers or underscore"))
+                                     .warning(tr("id attributes should only be a lower case letter "
+                                                 "followed by letters, numbers or underscore, "
+                                                 "assuming they refer to an id property"))
                                      .withPath(bPathFromOwner));
         pushEl(bPathFromOwner, *bPtr, el);
         FileLocations::addRegion(nodeStack.last().fileLocations, u"colon", el->colonToken);
@@ -726,9 +738,10 @@ public:
                 if (!m.hasMatch()) {
                     qmlFile.addError(
                             myParseErrors()
-                                    .error(tr("id attributes should only be a lower case letter "
-                                              "followed by letters, numbers or underscore, not %1")
-                                                   .arg(iExp->name))
+                                    .warning(
+                                            tr("id attributes should only be a lower case letter "
+                                               "followed by letters, numbers or underscore, not %1")
+                                                    .arg(iExp->name))
                                     .withPath(pathFromOwner));
                 }
             } else {
@@ -737,11 +750,11 @@ public:
                 Q_ASSERT_X(bindingPtr, className, "binding could not be retrived");
                 qmlFile.addError(
                         myParseErrors()
-                                .error(tr("id attributes should only be a lower case letter "
-                                          "followed by letters, numbers or underscore, not %1 %2")
-                                               .arg(script->code(), script->astRelocatableDump()))
-                                .withPath(pathFromOwner)
-                                .handle());
+                                .warning(tr("id attributes should only be a lower case letter "
+                                            "followed by letters, numbers or underscore, not %1 "
+                                            "%2, assuming they refer to a property")
+                                                 .arg(script->code(), script->astRelocatableDump()))
+                                .withPath(pathFromOwner));
             }
         } else {
             pathFromOwner =

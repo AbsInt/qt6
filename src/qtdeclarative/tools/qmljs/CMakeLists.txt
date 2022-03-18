@@ -36,6 +36,7 @@ qt_internal_add_app(qmljs
         Qt::CorePrivate
         Qt::QmlPrivate
 )
+
 set_target_properties(qmljs PROPERTIES WIN32_EXECUTABLE FALSE)
 
 #### Keys ignored in scope 1:.:.:qmljs.pro:<TRUE>:

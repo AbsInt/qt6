@@ -39,9 +39,7 @@
 **
 ****************************************************************************/
 
-#define QT_QMETATYPE_BC_COMPAT 1
 #include "qmetatype.h"
-#undef QT_QMETATYPE_BC_COMPAT
 #include "qmetatype_p.h"
 #include "qobjectdefs.h"
 #include "qdatetime.h"
@@ -99,6 +97,7 @@ QT_BEGIN_NAMESPACE
 
 #define NS(x) QT_PREPEND_NAMESPACE(x)
 
+QT_IMPL_METATYPE_EXTERN_TAGGED(QtMetaTypePrivate::QPairVariantInterfaceImpl, QPairVariantInterfaceImpl)
 
 namespace {
 struct DefinedTypesFilter {
@@ -530,18 +529,6 @@ bool QMetaType::isRegistered() const
     Returns id type hold by this QMetatype instance.
 */
 
-// keep in sync with version in header
-// ### Qt 7::remove BC helper
-int QMetaType::id() const
-{
-    if (d_ptr) {
-        if (int id = d_ptr->typeId.loadRelaxed())
-            return id;
-        return idHelper();
-    }
-    return 0;
-}
-
 /*!
     \internal
     The slowpath of id(). Precondition: d_ptr != nullptr
@@ -764,7 +751,7 @@ QPartialOrdering QMetaType::compare(const void *lhs, const void *rhs) const
 {
     if (!lhs || !rhs)
         return QPartialOrdering::Unordered;
-    if (d_ptr->flags & QMetaType::IsPointer)
+    if (d_ptr && d_ptr->flags & QMetaType::IsPointer)
         return threeWayCompare(*reinterpret_cast<const void * const *>(lhs),
                                *reinterpret_cast<const void * const *>(rhs));
     if (d_ptr && d_ptr->lessThan) {
@@ -1563,16 +1550,15 @@ static const struct : QMetaTypeModuleHelper
         }
         return false;
     }
-} metatypeHelper;
+} metatypeHelper = {};
 
-static const QMetaTypeModuleHelper *qMetaTypeCoreHelper = &metatypeHelper;
 Q_CORE_EXPORT const QMetaTypeModuleHelper *qMetaTypeGuiHelper = nullptr;
 Q_CORE_EXPORT const QMetaTypeModuleHelper *qMetaTypeWidgetsHelper = nullptr;
 
 static const QMetaTypeModuleHelper *qModuleHelperForType(int type)
 {
     if (type <= QMetaType::LastCoreType)
-        return qMetaTypeCoreHelper;
+        return &metatypeHelper;
     if (type >= QMetaType::FirstGuiType && type <= QMetaType::LastGuiType)
         return qMetaTypeGuiHelper;
     else if (type >= QMetaType::FirstWidgetsType && type <= QMetaType::LastWidgetsType)
@@ -1599,9 +1585,11 @@ public:
     bool insertIfNotContains(Key k, const T &f)
     {
         const QWriteLocker locker(&lock);
-        if (map.contains(k))
+        const qsizetype oldSize = map.size();
+        auto &e = map[k];
+        if (map.size() == oldSize) // already present
             return false;
-        map.insert(k, f);
+        e = f;
         return true;
     }
 
@@ -1638,7 +1626,7 @@ Q_GLOBAL_STATIC(QMetaTypeMutableViewRegistry, customTypesMutableViewRegistry)
     Registers the possibility of an implicit conversion from type From to type To in the meta
     type system. Returns \c true if the registration succeeded, otherwise false.
 
-    \snippet qmetatype/registerConverters.cpp [implicit]
+    \snippet qmetatype/registerConverters.cpp implicit
 */
 
 /*!
@@ -1648,7 +1636,7 @@ Q_GLOBAL_STATIC(QMetaTypeMutableViewRegistry, customTypesMutableViewRegistry)
     Registers a method \a function like To From::function() const as converter from type From
     to type To in the meta type system. Returns \c true if the registration succeeded, otherwise false.
 
-    \snippet qmetatype/registerConverters.cpp [member]
+    \snippet qmetatype/registerConverters.cpp member
 */
 
 /*!
@@ -1659,7 +1647,7 @@ Q_GLOBAL_STATIC(QMetaTypeMutableViewRegistry, customTypesMutableViewRegistry)
     to type To in the meta type system. Returns \c true if the registration succeeded, otherwise false.
 
     The \a ok pointer can be used by the function to indicate whether the conversion succeeded.
-    \snippet qmetatype/registerConverters.cpp [memberOk]
+    \snippet qmetatype/registerConverters.cpp memberOk
 
 */
 
@@ -1672,7 +1660,7 @@ Q_GLOBAL_STATIC(QMetaTypeMutableViewRegistry, customTypesMutableViewRegistry)
 
     \a function must take an instance of type \a From and return an instance of \a To. It can be a function
     pointer, a lambda or a functor object.
-    \snippet qmetatype/registerConverters.cpp [unaryfunc]
+    \snippet qmetatype/registerConverters.cpp unaryfunc
 */
 
 /*!
@@ -3011,24 +2999,17 @@ static const QtPrivate::QMetaTypeInterface *interfaceForType(int typeId)
 QMetaType::QMetaType(int typeId) : QMetaType(interfaceForType(typeId)) {}
 
 namespace QtPrivate {
-#ifndef QT_BOOTSTRAPPED
-
-#if defined(Q_CC_MSVC) && defined(QT_BUILD_CORE_LIB)
-#define QT_METATYPE_TEMPLATE_EXPORT Q_CORE_EXPORT
-#else
-#define QT_METATYPE_TEMPLATE_EXPORT
-#endif
+#if !defined(QT_BOOTSTRAPPED) && !defined(Q_CC_MSVC)
 
 // Explicit instantiation definition
 #define QT_METATYPE_DECLARE_TEMPLATE_ITER(TypeName, Id, Name) \
-    template class QT_METATYPE_TEMPLATE_EXPORT QMetaTypeForType<Name>;
+    template class QMetaTypeForType<Name>;
 QT_FOR_EACH_STATIC_PRIMITIVE_TYPE(QT_METATYPE_DECLARE_TEMPLATE_ITER)
 QT_FOR_EACH_STATIC_PRIMITIVE_POINTER(QT_METATYPE_DECLARE_TEMPLATE_ITER)
 QT_FOR_EACH_STATIC_CORE_CLASS(QT_METATYPE_DECLARE_TEMPLATE_ITER)
 QT_FOR_EACH_STATIC_CORE_POINTER(QT_METATYPE_DECLARE_TEMPLATE_ITER)
 QT_FOR_EACH_STATIC_CORE_TEMPLATE(QT_METATYPE_DECLARE_TEMPLATE_ITER)
 #undef QT_METATYPE_DECLARE_TEMPLATE_ITER
-#undef QT_METATYPE_TEMPLATE_EXPORT
 #endif
 }
 

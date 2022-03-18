@@ -72,7 +72,9 @@ QQmlTypePrivate::QQmlTypePrivate(QQmlType::RegistrationType type)
         extraData.cd->attachedPropertiesType = nullptr;
         extraData.cd->propertyValueSourceCast = -1;
         extraData.cd->propertyValueInterceptorCast = -1;
+        extraData.cd->finalizerCast = -1;
         extraData.cd->registerEnumClassesUnscoped = true;
+        extraData.cd->registerEnumsFromRelatedTypes = true;
         break;
     case QQmlType::SingletonType:
     case QQmlType::CompositeSingletonType:
@@ -183,7 +185,8 @@ QQmlType QQmlTypePrivate::resolveCompositeBaseType(QQmlEnginePrivate *engine) co
     return QQmlMetaType::qmlType(mo);
 }
 
-QQmlPropertyCache *QQmlTypePrivate::compositePropertyCache(QQmlEnginePrivate *engine) const
+QQmlRefPointer<QQmlPropertyCache> QQmlTypePrivate::compositePropertyCache(
+        QQmlEnginePrivate *engine) const
 {
     // similar logic to resolveCompositeBaseType
     Q_ASSERT(isComposite());
@@ -193,7 +196,7 @@ QQmlPropertyCache *QQmlTypePrivate::compositePropertyCache(QQmlEnginePrivate *en
     if (td.isNull() || !td->isComplete())
         return nullptr;
     QV4::ExecutableCompilationUnit *compilationUnit = td->compilationUnit();
-    return compilationUnit->rootPropertyCache().data();
+    return compilationUnit->rootPropertyCache();
 }
 
 static bool isPropertyRevisioned(const QMetaObject *mo, int index)
@@ -226,7 +229,6 @@ void QQmlTypePrivate::init() const
         // XXX - very inefficient
         QMetaObjectBuilder builder;
         QQmlMetaType::clone(builder, extMetaObject, extMetaObject, extMetaObject);
-        builder.setFlags(MetaObjectFlag::DynamicMetaObject);
         QMetaObject *mmo = builder.toMetaObject();
         mmo->d.superdata = mo;
         QQmlProxyMetaObject::ProxyData data = { mmo, extFunc, 0, 0 };
@@ -274,9 +276,9 @@ void QQmlTypePrivate::init() const
 
 void QQmlTypePrivate::initEnums(QQmlEnginePrivate *engine) const
 {
-    const QQmlPropertyCache *cache = (!isEnumFromCacheSetup.loadAcquire() && isComposite())
+    QQmlRefPointer<QQmlPropertyCache> cache = (!isEnumFromCacheSetup.loadAcquire() && isComposite())
             ? compositePropertyCache(engine)
-            : nullptr;
+            : QQmlRefPointer<QQmlPropertyCache>();
 
     // beware: It could be a singleton type without metaobject
     const QMetaObject *metaObject = !isEnumFromBaseSetup.loadAcquire()
@@ -304,11 +306,12 @@ void QQmlTypePrivate::initEnums(QQmlEnginePrivate *engine) const
 void QQmlTypePrivate::insertEnums(const QMetaObject *metaObject) const
 {
     // Add any enum values defined by 'related' classes
-    if (metaObject->d.relatedMetaObjects) {
-        const auto *related = metaObject->d.relatedMetaObjects;
-        if (related) {
-            while (*related)
-                insertEnums(*related++);
+    if (regType != QQmlType::CppType || extraData.cd->registerEnumsFromRelatedTypes) {
+        if (const auto *related = metaObject->d.relatedMetaObjects) {
+            while (const QMetaObject *relatedMetaObject = *related) {
+                insertEnums(relatedMetaObject);
+                ++related;
+            }
         }
     }
 
@@ -411,16 +414,19 @@ void QQmlTypePrivate::createEnumConflictReport(const QMetaObject *metaObject, co
     }
 }
 
-void QQmlTypePrivate::insertEnumsFromPropertyCache(const QQmlPropertyCache *cache) const
+void QQmlTypePrivate::insertEnumsFromPropertyCache(
+        const QQmlRefPointer<QQmlPropertyCache> &cache) const
 {
     const QMetaObject *cppMetaObject = cache->firstCppMetaObject();
 
-    while (cache && cache->metaObject() != cppMetaObject) {
+    for (QQmlPropertyCache *currentCache = cache.data();
+         currentCache && currentCache->metaObject() != cppMetaObject;
+         currentCache = currentCache->parent().data()) {
 
-        int count = cache->qmlEnumCount();
+        int count = currentCache->qmlEnumCount();
         for (int ii = 0; ii < count; ++ii) {
             QStringHash<int> *scoped = new QStringHash<int>();
-            QQmlEnumData *enumData = cache->qmlEnum(ii);
+            QQmlEnumData *enumData = currentCache->qmlEnum(ii);
 
             for (int jj = 0; jj < enumData->values.count(); ++jj) {
                 const QQmlEnumValue &value = enumData->values.at(jj);
@@ -430,7 +436,6 @@ void QQmlTypePrivate::insertEnumsFromPropertyCache(const QQmlPropertyCache *cach
             scopedEnums << scoped;
             scopedEnumIndex.insert(enumData->name, scopedEnums.count()-1);
         }
-        cache = cache->parent();
     }
     insertEnums(cppMetaObject);
 }
@@ -702,6 +707,13 @@ int QQmlType::propertyValueInterceptorCast() const
     if (!d || d->regType != CppType)
         return -1;
     return d->extraData.cd->propertyValueInterceptorCast;
+}
+
+int QQmlType::finalizerCast() const
+{
+    if (!d || d->regType != CppType)
+        return -1;
+    return d->extraData.cd->finalizerCast;
 }
 
 const char *QQmlType::interfaceIId() const

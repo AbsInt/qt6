@@ -83,12 +83,14 @@
 
 #include "qwaylandserverbufferintegration_p.h"
 #include "qwaylandserverbufferintegrationfactory_p.h"
+#include "qwaylandshellsurface_p.h"
 
 #include "qwaylandshellintegration_p.h"
 #include "qwaylandshellintegrationfactory_p.h"
 
 #include "qwaylandinputdeviceintegration_p.h"
 #include "qwaylandinputdeviceintegrationfactory_p.h"
+#include "qwaylandwindow_p.h"
 
 #if QT_CONFIG(accessibility_atspi_bridge)
 #include <QtGui/private/qspiaccessiblebridge_p.h>
@@ -119,6 +121,19 @@ QWaylandIntegration::QWaylandIntegration()
         mFailed = true;
         return;
     }
+
+    // ### Not ideal...
+    // We don't want to use QPlatformWindow::requestActivate here, since that gives a warning
+    // for most shells. Also, we don't want to put this into the specific shells that can use
+    // it, since we want to support more than one shell in one client.
+    // In addition, this will send a new requestActivate when the focus object changes, even if
+    // the focus window stays the same.
+    QObject::connect(qApp, &QGuiApplication::focusObjectChanged, qApp, [](){
+        QWindow *fw = QGuiApplication::focusWindow();
+        auto *w = fw ? static_cast<QWaylandWindow*>(fw->handle()) : nullptr;
+        if (w && w->shellSurface())
+            w->shellSurface()->requestActivate();
+    });
 }
 
 QWaylandIntegration::~QWaylandIntegration()
@@ -208,11 +223,9 @@ void QWaylandIntegration::initializePlatform()
 
 void QWaylandIntegration::initialize()
 {
-    int fd = wl_display_get_fd(mDisplay->wl_display());
-    QSocketNotifier *sn = new QSocketNotifier(fd, QSocketNotifier::Read, mDisplay.data());
-    QObject::connect(sn, SIGNAL(activated(QSocketDescriptor)), mDisplay.data(), SLOT(flushRequests()));
+    mDisplay->initEventThread();
 
-    // Call this after eventDispatcher is connected with QSocketNotifier for QWaylandDisplay::forceRoundTrip()
+    // Call this after initializing event thread for QWaylandDisplay::forceRoundTrip()
     initializePlatform();
 
     // But the aboutToBlock() and awake() should be connected after initializePlatform().
@@ -282,6 +295,14 @@ QPlatformServices *QWaylandIntegration::services() const
 QWaylandDisplay *QWaylandIntegration::display() const
 {
     return mDisplay.data();
+}
+
+Qt::KeyboardModifiers QWaylandIntegration::queryKeyboardModifiers() const
+{
+    if (auto *seat = mDisplay->currentInputDevice(); seat && seat->keyboardFocus()) {
+        return seat->modifiers();
+    }
+    return Qt::NoModifier;
 }
 
 QList<int> QWaylandIntegration::possibleKeys(const QKeyEvent *event) const
@@ -429,6 +450,7 @@ void QWaylandIntegration::initializeShellIntegration()
     } else {
         preferredShells << QLatin1String("xdg-shell");
         preferredShells << QLatin1String("wl-shell") << QLatin1String("ivi-shell");
+        preferredShells << QLatin1String("qt-shell");
     }
 
     for (const QString &preferredShell : qAsConst(preferredShells)) {
@@ -491,7 +513,11 @@ void QWaylandIntegration::reconfigureInputContext()
     if (requested.isNull()) {
         if (mDisplay->textInputMethodManager() != nullptr)
             mInputContext.reset(new QWaylandInputMethodContext(mDisplay.data()));
-        else
+#if QT_WAYLAND_TEXT_INPUT_V4_WIP
+        else if (mDisplay->textInputManagerv2() != nullptr || mDisplay->textInputManagerv4() != nullptr)
+#else //  QT_WAYLAND_TEXT_INPUT_V4_WIP
+        else if (mDisplay->textInputManagerv2() != nullptr)
+#endif // QT_WAYLAND_TEXT_INPUT_V4_WIP
             mInputContext.reset(new QWaylandInputContext(mDisplay.data()));
     } else {
         mInputContext.reset(QPlatformInputContextFactory::create(requested));

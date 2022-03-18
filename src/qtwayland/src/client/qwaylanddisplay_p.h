@@ -83,6 +83,7 @@ class QPlatformPlaceholderScreen;
 namespace QtWayland {
     class qt_surface_extension;
     class zwp_text_input_manager_v2;
+    class zwp_text_input_manager_v4;
     class qt_text_input_method_manager_v1;
 }
 
@@ -113,6 +114,7 @@ class QWaylandSurface;
 class QWaylandShellIntegration;
 class QWaylandCursor;
 class QWaylandCursorTheme;
+class EventThread;
 
 typedef void (*RegistryListener)(void *data,
                                  struct wl_registry *registry,
@@ -124,12 +126,6 @@ class Q_WAYLAND_CLIENT_EXPORT QWaylandDisplay : public QObject, public QtWayland
     Q_OBJECT
 
 public:
-    struct FrameQueue {
-        FrameQueue(wl_event_queue *q = nullptr) : queue(q), mutex(new QMutex) {}
-        wl_event_queue *queue;
-        QMutex *mutex;
-    };
-
     QWaylandDisplay(QWaylandIntegration *waylandIntegration);
     ~QWaylandDisplay(void) override;
 
@@ -180,7 +176,8 @@ public:
     QWaylandPointerGestures *pointerGestures() const { return mPointerGestures.data(); }
     QWaylandTouchExtension *touchExtension() const { return mTouchExtension.data(); }
     QtWayland::qt_text_input_method_manager_v1 *textInputMethodManager() const { return mTextInputMethodManager.data(); }
-    QtWayland::zwp_text_input_manager_v2 *textInputManager() const { return mTextInputManager.data(); }
+    QtWayland::zwp_text_input_manager_v2 *textInputManagerv2() const { return mTextInputManagerv2.data(); }
+    QtWayland::zwp_text_input_manager_v4 *textInputManagerv4() const { return mTextInputManagerv4.data(); }
     QWaylandHardwareIntegration *hardwareIntegration() const { return mHardwareIntegration.data(); }
     QWaylandXdgOutputManagerV1 *xdgOutputManager() const { return mXdgOutputManager.data(); }
 
@@ -219,20 +216,21 @@ public:
     void handleKeyboardFocusChanged(QWaylandInputDevice *inputDevice);
     void handleWindowDestroyed(QWaylandWindow *window);
 
-    wl_event_queue *createEventQueue();
-    FrameQueue createFrameQueue();
-    void destroyFrameQueue(const FrameQueue &q);
-    void dispatchQueueWhile(wl_event_queue *queue, std::function<bool()> condition, int timeout = -1);
+    wl_event_queue *frameEventQueue() { return m_frameEventQueue; };
+
+    bool isKeyboardAvailable() const;
+
+    void initEventThread();
 
 public slots:
     void blockingReadEvents();
     void flushRequests();
 
 private:
-    void checkError() const;
-
     void handleWaylandSync();
     void requestWaylandSync();
+
+    void checkTextInputProtocol();
 
     struct Listener {
         Listener() = default;
@@ -245,6 +243,9 @@ private:
     };
 
     struct wl_display *mDisplay = nullptr;
+    QScopedPointer<EventThread> m_eventThread;
+    wl_event_queue *m_frameEventQueue = nullptr;
+    QScopedPointer<EventThread> m_frameEventQueueThread;
     QtWayland::wl_compositor mCompositor;
     QScopedPointer<QWaylandShm> mShm;
     QList<QWaylandScreen *> mWaitingScreens;
@@ -288,10 +289,10 @@ private:
     QScopedPointer<QWaylandPrimarySelectionDeviceManagerV1> mPrimarySelectionManager;
 #endif
     QScopedPointer<QtWayland::qt_text_input_method_manager_v1> mTextInputMethodManager;
-    QScopedPointer<QtWayland::zwp_text_input_manager_v2> mTextInputManager;
+    QScopedPointer<QtWayland::zwp_text_input_manager_v2> mTextInputManagerv2;
+    QScopedPointer<QtWayland::zwp_text_input_manager_v4> mTextInputManagerv4;
     QScopedPointer<QWaylandHardwareIntegration> mHardwareIntegration;
     QScopedPointer<QWaylandXdgOutputManagerV1> mXdgOutputManager;
-    QSocketNotifier *mReadNotifier = nullptr;
     int mFd = -1;
     int mWritableNotificationFd = -1;
     QList<RegistryGlobal> mGlobals;
@@ -300,12 +301,12 @@ private:
     QPointer<QWaylandWindow> mLastInputWindow;
     QPointer<QWaylandWindow> mLastKeyboardFocus;
     QList<QWaylandWindow *> mActiveWindows;
-    QList<FrameQueue> mExternalQueues;
     struct wl_callback *mSyncCallback = nullptr;
     static const wl_callback_listener syncCallbackListener;
-    QReadWriteLock m_frameQueueLock;
 
     bool mClientSideInputContextRequested = !QPlatformInputContextFactory::requested().isNull();
+    QStringList mTextInputManagerList;
+    int mTextInputManagerIndex = INT_MAX;
 
     void registry_global(uint32_t id, const QString &interface, uint32_t version) override;
     void registry_global_remove(uint32_t id) override;

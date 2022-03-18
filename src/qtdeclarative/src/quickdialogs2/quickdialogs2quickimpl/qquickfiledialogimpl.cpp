@@ -1,34 +1,37 @@
 ﻿/****************************************************************************
 **
 ** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the Qt Quick Dialogs module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL3$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
 ** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPLv3 included in the
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
 ** packaging of this file. Please review the following information to
 ** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl.html.
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
 ** GNU General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or later as published by the Free
-** Software Foundation and appearing in the file LICENSE.GPL included in
-** the packaging of this file. Please review the following information to
-** ensure the GNU General Public License version 2.0 requirements will be
-** met: http://www.gnu.org/licenses/gpl-2.0.html.
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -49,6 +52,7 @@
 QT_BEGIN_NAMESPACE
 
 Q_LOGGING_CATEGORY(lcCurrentFolder, "qt.quick.dialogs.quickfiledialogimpl.currentFolder")
+Q_LOGGING_CATEGORY(lcUpdateSelectedFile, "qt.quick.dialogs.quickfiledialogimpl.updateSelectedFile")
 Q_LOGGING_CATEGORY(lcOptions, "qt.quick.dialogs.quickfiledialogimpl.options")
 Q_LOGGING_CATEGORY(lcNameFilters, "qt.quick.dialogs.quickfiledialogimpl.namefilters")
 Q_LOGGING_CATEGORY(lcAttachedNameFilters, "qt.quick.dialogs.quickfiledialogimplattached.namefilters")
@@ -80,7 +84,7 @@ void QQuickFileDialogImplPrivate::updateEnabled()
         return;
     }
 
-    openButton->setEnabled(!currentFile.isEmpty() && attached->breadcrumbBar()
+    openButton->setEnabled(!selectedFile.isEmpty() && attached->breadcrumbBar()
         && !attached->breadcrumbBar()->textField()->isVisible());
 }
 
@@ -91,22 +95,22 @@ void QQuickFileDialogImplPrivate::updateEnabled()
 
     \a oldFolderPath is the previous value of \c folder.
 */
-void QQuickFileDialogImplPrivate::updateCurrentFile(const QString &oldFolderPath)
+void QQuickFileDialogImplPrivate::updateSelectedFile(const QString &oldFolderPath)
 {
     Q_Q(QQuickFileDialogImpl);
     QQuickFileDialogImplAttached *attached = attachedOrWarn();
     if (!attached || !attached->fileDialogListView())
         return;
 
-    QString newCurrentFilePath;
-    int newCurrentFileIndex = 0;
+    QString newSelectedFilePath;
+    int newSelectedFileIndex = 0;
     const QString newFolderPath = QQmlFile::urlToLocalFileOrQrc(currentFolder);
     if (!oldFolderPath.isEmpty() && !newFolderPath.isEmpty()) {
         // If the user went up a directory (or several), we should set
-        // currentFile to be the directory that we were in (or
+        // selectedFile to be the directory that we were in (or
         // its closest ancestor that is a child of the new directory).
         // E.g. if oldFolderPath is /foo/bar/baz/abc/xyz, and newFolderPath is /foo/bar,
-        // then we want to set currentFile to be /foo/bar/baz.
+        // then we want to set selectedFile to be /foo/bar/baz.
         const int indexOfFolder = oldFolderPath.indexOf(newFolderPath);
         if (indexOfFolder != -1) {
             // [folder]
@@ -114,24 +118,24 @@ void QQuickFileDialogImplPrivate::updateCurrentFile(const QString &oldFolderPath
             // /foo/bar/baz/abc/xyz
             //         [rel...Paths]
             QStringList relativePaths = oldFolderPath.mid(indexOfFolder + newFolderPath.size()).split(QLatin1Char('/'), Qt::SkipEmptyParts);
-            newCurrentFilePath = newFolderPath + QLatin1Char('/') + relativePaths.first();
+            newSelectedFilePath = newFolderPath + QLatin1Char('/') + relativePaths.first();
 
             // Now find the index of that directory so that we can set the ListView's currentIndex to it.
             const QDir newFolderDir(newFolderPath);
             // Just to be safe...
             if (!newFolderDir.exists()) {
-                qmlWarning(q) << "Directory" << newCurrentFilePath << "doesn't exist; can't get a file entry list for it";
+                qmlWarning(q) << "Directory" << newSelectedFilePath << "doesn't exist; can't get a file entry list for it";
                 return;
             }
 
             const QFileInfoList dirs = newFolderDir.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::DirsFirst);
-            const QFileInfo newCurrentFileInfo(newCurrentFilePath);
+            const QFileInfo newSelectedFileInfo(newSelectedFilePath);
             // The directory can contain files, but since we put dirs first, that should never affect the indices.
-            newCurrentFileIndex = dirs.indexOf(newCurrentFileInfo);
+            newSelectedFileIndex = dirs.indexOf(newSelectedFileInfo);
         }
     }
 
-    if (newCurrentFilePath.isEmpty()) {
+    if (newSelectedFilePath.isEmpty()) {
         // When entering into a directory that isn't a parent of the old one, the first
         // file delegate should be selected.
         // TODO: is there a cheaper way to do this? QDirIterator doesn't support sorting,
@@ -142,13 +146,15 @@ void QQuickFileDialogImplPrivate::updateCurrentFile(const QString &oldFolderPath
         if (newFolderDir.exists()) {
             const QFileInfoList files = newFolderDir.entryInfoList(QDir::Dirs | QDir::Files | QDir::NoDotAndDotDot, QDir::DirsFirst);
             if (!files.isEmpty())
-                newCurrentFilePath = files.first().absoluteFilePath();
+                newSelectedFilePath = files.first().absoluteFilePath();
         }
     }
 
-    if (!newCurrentFilePath.isEmpty()) {
-        q->setCurrentFile(QUrl::fromLocalFile(newCurrentFilePath));
-        attached->fileDialogListView()->setCurrentIndex(newCurrentFileIndex);
+    const QUrl newSelectedFileUrl = QUrl::fromLocalFile(newSelectedFilePath);
+    qCDebug(lcUpdateSelectedFile) << "updateSelectedFile is setting selectedFile to" << newSelectedFileUrl;
+    q->setSelectedFile(newSelectedFileUrl);
+    if (!newSelectedFilePath.isEmpty()) {
+        attached->fileDialogListView()->setCurrentIndex(newSelectedFileIndex);
         if (QQuickItem *currentItem = attached->fileDialogListView()->currentItem())
             currentItem->forceActiveFocus();
     }
@@ -162,19 +168,19 @@ void QQuickFileDialogImplPrivate::handleAccept()
 void QQuickFileDialogImplPrivate::handleClick(QQuickAbstractButton *button)
 {
     Q_Q(QQuickFileDialogImpl);
-    if (buttonRole(button) == QPlatformDialogHelper::AcceptRole && currentFile.isValid()) {
+    if (buttonRole(button) == QPlatformDialogHelper::AcceptRole && selectedFile.isValid()) {
         // The "Open" button was clicked, so we need to set the file to the current file, if any.
-        const QFileInfo fileInfo(currentFile.toLocalFile());
+        const QFileInfo fileInfo(selectedFile.toLocalFile());
         if (fileInfo.isDir()) {
             // If it's a directory, navigate to it.
-            q->setCurrentFolder(currentFile);
+            q->setCurrentFolder(selectedFile);
             // Don't call accept(), because selecting a folder != accepting the dialog.
         } else {
             // Otherwise it's a file, so select it and close the dialog.
-            q->setSelectedFile(currentFile);
+            q->setSelectedFile(selectedFile);
             q->accept();
             QQuickDialogPrivate::handleClick(button);
-            emit q->fileSelected(currentFile);
+            emit q->fileSelected(selectedFile);
         }
     }
 }
@@ -206,8 +212,7 @@ void QQuickFileDialogImpl::setCurrentFolder(const QUrl &currentFolder)
 
     d->currentFolder = currentFolder;
     // Since the directory changed, the old file can no longer be selected.
-    setCurrentFile(QUrl());
-    d->updateCurrentFile(oldFolderPath);
+    d->updateSelectedFile(oldFolderPath);
     emit currentFolderChanged(d->currentFolder);
 }
 
@@ -224,24 +229,8 @@ void QQuickFileDialogImpl::setSelectedFile(const QUrl &selectedFile)
         return;
 
     d->selectedFile = selectedFile;
-    emit selectedFileChanged();
-}
-
-QUrl QQuickFileDialogImpl::currentFile() const
-{
-    Q_D(const QQuickFileDialogImpl);
-    return d->currentFile;
-}
-
-void QQuickFileDialogImpl::setCurrentFile(const QUrl &currentFile)
-{
-    Q_D(QQuickFileDialogImpl);
-    if (currentFile == d->currentFile)
-        return;
-
-    d->currentFile = currentFile;
     d->updateEnabled();
-    emit currentFileChanged(d->currentFile);
+    emit selectedFileChanged(d->selectedFile);
 }
 
 QSharedPointer<QFileDialogOptions> QQuickFileDialogImpl::options() const
@@ -429,7 +418,7 @@ void QQuickFileDialogImplAttachedPrivate::fileDialogListViewCurrentIndexChanged(
     if (!fileDialogDelegate)
         return;
 
-    fileDialogImpl->setCurrentFile(fileDialogDelegate->file());
+    fileDialogImpl->setSelectedFile(fileDialogDelegate->file());
 }
 
 QQuickFileDialogImplAttached::QQuickFileDialogImplAttached(QObject *parent)

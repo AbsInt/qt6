@@ -261,6 +261,8 @@ public:
                   std::optional<DomType> fileType = std::optional<DomType>());
     void execQueue();
 
+    void removePath(const QString &dir);
+
     std::shared_ptr<ExternalItemPair<GlobalScope>> globalScopeWithName(QString name) const
     {
         QMutexLocker l(mutex());
@@ -698,6 +700,7 @@ public:
                               Callback loadCallback = nullptr, Callback endCallback = nullptr,
                               ErrorHandler = nullptr);
     void loadBuiltins(DomItem &self, Callback callback = nullptr, ErrorHandler h = nullptr);
+    void removePath(const QString &path);
 
     std::shared_ptr<DomUniverse> universe() const;
 
@@ -793,6 +796,18 @@ private:
                                      Callback directDepsCallback, Callback endCallback);
     Callback callbackForQmldirFile(DomItem &self, Callback loadCallback,
                                    Callback directDepsCallback, Callback endCallback);
+
+    std::shared_ptr<ModuleIndex> lookupModuleInEnv(const QString &uri, int majorVersion) const;
+    // ModuleLookupResult contains the ModuleIndex pointer, and an indicator whether it was found
+    // in m_base or in m_moduleIndexWithUri
+    struct ModuleLookupResult {
+        enum Origin :  bool {FromBase, FromGlobal};
+        std::shared_ptr<ModuleIndex> module;
+        Origin fromBase = FromGlobal;
+    };
+    // helper function used by the moduleIndexWithUri methods
+    ModuleLookupResult moduleIndexWithUriHelper(DomItem &self, QString uri, int majorVersion,
+                                                    EnvLookup lookup = EnvLookup::Normal) const;
 
     const Options m_options;
     const std::shared_ptr<DomEnvironment> m_base;

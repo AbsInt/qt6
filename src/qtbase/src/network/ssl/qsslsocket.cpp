@@ -2092,6 +2092,8 @@ bool QSslSocketPrivate::verifyProtocolSupported(const char *where)
         // Should not be used when configuring QSslSocket.
         protocolName = QLatin1String("UnknownProtocol");
         Q_FALLTHROUGH();
+QT_WARNING_PUSH
+QT_WARNING_DISABLE_DEPRECATED
     case QSsl::DtlsV1_0:
     case QSsl::DtlsV1_2:
     case QSsl::DtlsV1_0OrLater:
@@ -2100,6 +2102,7 @@ bool QSslSocketPrivate::verifyProtocolSupported(const char *where)
         setErrorAndEmit(QAbstractSocket::SslInvalidUserDataError,
                         QSslSocket::tr("Attempted to use an unsupported protocol."));
         return false;
+QT_WARNING_POP
     default:
         return true;
     }
@@ -2972,21 +2975,27 @@ void QSslSocketPrivate::setRootCertOnDemandLoadingSupported(bool supported)
 */
 QList<QByteArray> QSslSocketPrivate::unixRootCertDirectories()
 {
-    return QList<QByteArray>() <<  "/etc/ssl/certs/" // (K)ubuntu, OpenSUSE, Mandriva ...
-                               << "/usr/lib/ssl/certs/" // Gentoo, Mandrake
-                               << "/usr/share/ssl/" // Centos, Redhat, SuSE
-                               << "/usr/local/ssl/" // Normal OpenSSL Tarball
-                               << "/var/ssl/certs/" // AIX
-                               << "/usr/local/ssl/certs/" // Solaris
-                               << "/etc/openssl/certs/" // BlackBerry
-                               << "/opt/openssl/certs/" // HP-UX
-                               << "/etc/ssl/"; // OpenBSD
+    const auto ba = [](const auto &cstr) constexpr {
+        return QByteArray::fromRawData(std::begin(cstr), std::size(cstr) - 1);
+    };
+    static const QByteArray dirs[] = {
+        ba("/etc/ssl/certs/"), // (K)ubuntu, OpenSUSE, Mandriva ...
+        ba("/usr/lib/ssl/certs/"), // Gentoo, Mandrake
+        ba("/usr/share/ssl/"), // Centos, Redhat, SuSE
+        ba("/usr/local/ssl/"), // Normal OpenSSL Tarball
+        ba("/var/ssl/certs/"), // AIX
+        ba("/usr/local/ssl/certs/"), // Solaris
+        ba("/etc/openssl/certs/"), // BlackBerry
+        ba("/opt/openssl/certs/"), // HP-UX
+        ba("/etc/ssl/"), // OpenBSD
+    };
+    return QList<QByteArray>::fromReadOnlyData(dirs);
 }
 
 /*!
     \internal
 */
-void QSslSocketPrivate::checkSettingSslContext(QSslSocket* socket, QSharedPointer<QSslContext> tlsContext)
+void QSslSocketPrivate::checkSettingSslContext(QSslSocket* socket, std::shared_ptr<QSslContext> tlsContext)
 {
     if (!socket)
         return;
@@ -2998,7 +3007,7 @@ void QSslSocketPrivate::checkSettingSslContext(QSslSocket* socket, QSharedPointe
 /*!
     \internal
 */
-QSharedPointer<QSslContext> QSslSocketPrivate::sslContext(QSslSocket *socket)
+std::shared_ptr<QSslContext> QSslSocketPrivate::sslContext(QSslSocket *socket)
 {
     if (!socket)
         return {};
@@ -3109,7 +3118,14 @@ QTlsBackend *QSslSocketPrivate::tlsBackendInUse()
         return nullptr;
     }
 
-    return tlsBackend = QTlsBackend::findBackend(activeBackendName);
+    tlsBackend = QTlsBackend::findBackend(activeBackendName);
+    if (tlsBackend) {
+        QObject::connect(tlsBackend, &QObject::destroyed, [] {
+            const QMutexLocker locker(&backendMutex);
+            tlsBackend = nullptr;
+        });
+    }
+    return tlsBackend;
 }
 
 /*!

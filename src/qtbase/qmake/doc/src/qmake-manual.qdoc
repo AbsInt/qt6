@@ -1150,6 +1150,8 @@
     Specifies project configuration and compiler options. The values are
     recognized internally by qmake and have special meaning.
 
+    \note The values are case-sensitive.
+
     The following \c CONFIG values control compiler and linker flags:
 
     \table
@@ -4005,6 +4007,10 @@
     For example:
 
     \snippet code/doc_src_qmake-manual.pro 65
+
+    Loops can be interrupted with \c{break()}. The \c{next()} statement skips
+    the remainder of the loop's body and continues execution with the next
+    iteration.
 
     \section2 greaterThan(variablename, value)
 

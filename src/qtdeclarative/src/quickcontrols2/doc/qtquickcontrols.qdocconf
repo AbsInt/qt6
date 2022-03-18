@@ -16,10 +16,6 @@ qhp.QtQuickControls.virtualFolder = qtquickcontrols
 qhp.QtQuickControls.indexTitle    = Qt Quick Controls
 qhp.QtQuickControls.indexRoot     =
 
-qhp.QtQuickControls.filterAttributes                  = qtquickcontrols $QT_VERSION qtrefdoc
-qhp.QtQuickControls.customFilters.Qt.name             = QtQuickControls $QT_VERSION
-qhp.QtQuickControls.customFilters.Qt.filterAttributes = qtquickcontrols $QT_VERSION
-
 qhp.QtQuickControls.subprojects = qmltypes classes examples
 qhp.QtQuickControls.subprojects.qmltypes.title = QML Types
 qhp.QtQuickControls.subprojects.qmltypes.indexTitle = Qt Quick Controls QML Types
@@ -40,6 +36,7 @@ depends = qtcore qtgui qtdoc qtqml qtqmlmodels qtquick qtsql qtwidgets qtlabspla
 # \example controls/tabs
 exampledirs += ../../../examples/quickcontrols2 \
                ../../quicktemplates2 \
+               ../ \
                snippets
 
 examples.fileextensions += "*.conf"
@@ -102,3 +99,6 @@ macro.nbsp.HTML = "&nbsp;"
 #Add output suffix to the html filenames
 outputsuffixes = QML
 outputsuffixes.QML = 2
+
+# Fail the documentation build if there are more warnings than the limit
+warninglimit = 0

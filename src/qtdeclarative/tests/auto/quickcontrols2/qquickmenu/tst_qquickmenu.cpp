@@ -1,34 +1,26 @@
 /****************************************************************************
 **
 ** Copyright (C) 2017 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL3$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPLv3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl.html.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or later as published by the Free
-** Software Foundation and appearing in the file LICENSE.GPL included in
-** the packaging of this file. Please review the following information to
-** ensure the GNU General Public License version 2.0 requirements will be
-** met: http://www.gnu.org/licenses/gpl-2.0.html.
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -37,6 +29,9 @@
 #include <QtTest/qtest.h>
 #include <QtTest/qsignalspy.h>
 #include <QtGui/qcursor.h>
+#if QT_CONFIG(shortcut)
+#include <QtGui/qkeysequence.h>
+#endif
 #include <QtGui/qstylehints.h>
 #include <QtQml/qqmlengine.h>
 #include <QtQml/qqmlcomponent.h>
@@ -81,6 +76,9 @@ private slots:
     void order();
     void popup();
     void actions();
+#if QT_CONFIG(shortcut)
+    void actionShortcuts();
+#endif
     void removeTakeItem();
     void subMenuMouse_data();
     void subMenuMouse();
@@ -1006,6 +1004,56 @@ void tst_QQuickMenu::actions()
     QCoreApplication::sendPostedEvents(menuItem1, QEvent::DeferredDelete);
     QVERIFY(menuItem1.isNull());
 }
+
+#if QT_CONFIG(shortcut)
+void tst_QQuickMenu::actionShortcuts()
+{
+    QQuickControlsApplicationHelper helper(this, QLatin1String("actionShortcuts.qml"));
+    QVERIFY2(helper.ready, helper.failureMessage());
+    QQuickWindow *window = helper.window;
+    window->show();
+    QVERIFY(QTest::qWaitForWindowActive(window));
+
+    // Try the menu's shortcut.
+    QQuickMenu *menu = window->property("menu").value<QQuickMenu *>();
+    QVERIFY(menu);
+    QPointer<QQuickAction> action1 = menu->actionAt(0);
+    QVERIFY(action1);
+    QCOMPARE(action1->shortcut(), QKeySequence(Qt::Key_A));
+
+    QSignalSpy action1TriggeredSpy(action1, SIGNAL(triggered()));
+    QVERIFY(action1TriggeredSpy.isValid());
+
+    QTest::keyClick(window, Qt::Key_A);
+    QCOMPARE(action1TriggeredSpy.count(), 1);
+
+    // Try the sub-menu.
+    QQuickMenu *subMenu = window->property("subMenu").value<QQuickMenu *>();
+    QVERIFY(subMenu);
+    QPointer<QQuickAction> subMenuAction1 = subMenu->actionAt(0);
+    QVERIFY(subMenuAction1);
+    QCOMPARE(subMenuAction1->shortcut(), QKeySequence(Qt::Key_B));
+
+    QSignalSpy subMenuAction1TriggeredSpy(subMenuAction1, SIGNAL(triggered()));
+    QVERIFY(subMenuAction1TriggeredSpy.isValid());
+
+    QTest::keyClick(window, Qt::Key_B);
+    QCOMPARE(subMenuAction1TriggeredSpy.count(), 1);
+
+    // Try the button menu.
+    QQuickMenu *buttonMenu = window->property("buttonMenu").value<QQuickMenu *>();
+    QVERIFY(buttonMenu);
+    QPointer<QQuickAction> buttonMenuAction1 = buttonMenu->actionAt(0);
+    QVERIFY(buttonMenuAction1);
+    QCOMPARE(buttonMenuAction1->shortcut(), QKeySequence(Qt::Key_C));
+
+    QSignalSpy buttonMenuAction1TriggeredSpy(buttonMenuAction1, SIGNAL(triggered()));
+    QVERIFY(buttonMenuAction1TriggeredSpy.isValid());
+
+    QTest::keyClick(window, Qt::Key_C);
+    QCOMPARE(buttonMenuAction1TriggeredSpy.count(), 1);
+}
+#endif
 
 void tst_QQuickMenu::removeTakeItem()
 {

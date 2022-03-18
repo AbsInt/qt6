@@ -7,3 +7,15 @@ windows gcc
 windows gcc
 [touchDragSliderAndFlickable]
 * # QTBUG-86729
+# QTBUG-95887
+[mouseDragSlider]
+opensuse-leap
+# QTBUG-95887
+[touchDragFlickableBehindButton]
+opensuse-leap
+# QTBUG-95887
+[mouseClickButton]
+opensuse-leap
+# QTBUG-95887
+[mouseDragFlickableBehindSlider]
+opensuse-leap

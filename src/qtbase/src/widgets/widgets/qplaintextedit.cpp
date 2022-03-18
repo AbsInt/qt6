@@ -793,7 +793,7 @@ void QPlainTextEditPrivate::init(const QString &txt)
     QObject::connect(control, SIGNAL(selectionChanged()), q, SIGNAL(selectionChanged()));
     QObject::connect(control, SIGNAL(cursorPositionChanged()), q, SLOT(_q_cursorPositionChanged()));
 
-    QObject::connect(control, SIGNAL(textChanged()), q, SLOT(_q_updatePlaceholderVisibility()));
+    QObject::connect(control, SIGNAL(textChanged()), q, SLOT(_q_textChanged()));
     QObject::connect(control, SIGNAL(textChanged()), q, SLOT(updateMicroFocus()));
 
     // set a null page size initially to avoid any relayouting until the textedit
@@ -822,7 +822,7 @@ void QPlainTextEditPrivate::init(const QString &txt)
 #endif
 }
 
-void QPlainTextEditPrivate::_q_updatePlaceholderVisibility()
+void QPlainTextEditPrivate::_q_textChanged()
 {
     Q_Q(QPlainTextEdit);
 
@@ -1368,7 +1368,8 @@ void QPlainTextEdit::setPlaceholderText(const QString &placeholderText)
     Q_D(QPlainTextEdit);
     if (d->placeholderText != placeholderText) {
         d->placeholderText = placeholderText;
-        d->_q_updatePlaceholderVisibility();
+        if (d->control->document()->isEmpty())
+            d->viewport->update();
     }
 }
 
@@ -1939,7 +1940,7 @@ void QPlainTextEdit::paintEvent(QPaintEvent *e)
 
     // keep right margin clean from full-width selection
     int maxX = offset.x() + qMax((qreal)viewportRect.width(), maximumWidth)
-               - document()->documentMargin();
+               - document()->documentMargin() + cursorWidth();
     er.setRight(qMin(er.right(), maxX));
     painter.setClipRect(er);
 
@@ -2238,8 +2239,8 @@ QVariant QPlainTextEdit::inputMethodQuery(Qt::InputMethodQuery query, QVariant a
 {
     Q_D(const QPlainTextEdit);
     switch (query) {
-        case Qt::ImHints:
-        case Qt::ImInputItemClipRectangle:
+    case Qt::ImHints:
+    case Qt::ImInputItemClipRectangle:
         return QWidget::inputMethodQuery(query);
     case Qt::ImReadOnly:
         return isReadOnly();

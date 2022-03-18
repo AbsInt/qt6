@@ -125,6 +125,8 @@ bool qQmlJSGenerateLoader(const QStringList &compiledFiles, const QString &outpu
         stream << "#include <QtQml/qqmlprivate.h>\n";
         stream << "#include <QtCore/qdir.h>\n";
         stream << "#include <QtCore/qurl.h>\n";
+        stream << "#include <QtCore/qhash.h>\n";
+        stream << "#include <QtCore/qstring.h>\n";
         stream << "\n";
 
         stream << "namespace QmlCacheGeneratedCode {\n";
@@ -157,7 +159,7 @@ bool qQmlJSGenerateLoader(const QStringList &compiledFiles, const QString &outpu
         for (int i = 0; i < compiledFiles.count(); ++i) {
             const QString qrcFile = compiledFiles.at(i);
             const QString ns = qQmlJSSymbolNamespaceForPath(qrcFile);
-            stream << "        resourcePathToCachedUnit.insert(QStringLiteral(\"" << qrcFile << "\"), &QmlCacheGeneratedCode::" << ns << "::unit);\n";
+            stream << "    resourcePathToCachedUnit.insert(QStringLiteral(\"" << qrcFile << "\"), &QmlCacheGeneratedCode::" << ns << "::unit);\n";
         }
 
         stream << "    QQmlPrivate::RegisterQmlUnitCacheHook registration;\n";

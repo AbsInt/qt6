@@ -73,6 +73,7 @@ QString ConfigStrings::IGNOREWORDS = QStringLiteral("ignorewords");
 QString ConfigStrings::IMAGEDIRS = QStringLiteral("imagedirs");
 QString ConfigStrings::IMAGES = QStringLiteral("images");
 QString ConfigStrings::INCLUDEPATHS = QStringLiteral("includepaths");
+QString ConfigStrings::INCLUSIVE = QStringLiteral("inclusive");
 QString ConfigStrings::INDEXES = QStringLiteral("indexes");
 QString ConfigStrings::LANDINGPAGE = QStringLiteral("landingpage");
 QString ConfigStrings::LANDINGTITLE = QStringLiteral("landingtitle");
@@ -222,6 +223,7 @@ QStringList MetaStack::getExpanded(const Location &location)
 
 const QString Config::dot = QLatin1String(".");
 bool Config::m_debug = false;
+bool Config::m_atomsDump = false;
 bool Config::generateExamples = true;
 QString Config::overrideOutputDir;
 QString Config::installDir;
@@ -422,6 +424,7 @@ void Config::processCommandLineOptions(const QStringList &args)
     for (const auto &format : outputFormats)
         overrideOutputFormats.insert(format);
     m_debug = m_parser.isSet(m_parser.debugOption) || qEnvironmentVariableIsSet("QDOC_DEBUG");
+    m_atomsDump = m_parser.isSet(m_parser.atomsDumpOption);
     m_showInternal = m_parser.isSet(m_parser.showInternalOption)
             || qEnvironmentVariableIsSet("QDOC_SHOW_INTERNAL");
 

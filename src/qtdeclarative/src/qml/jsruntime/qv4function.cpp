@@ -57,8 +57,8 @@ QT_BEGIN_NAMESPACE
 
 using namespace QV4;
 
-bool Function::call(const Value *thisObject, void **a, const QMetaType *types, int argc,
-                    const ExecutionContext *context)
+bool Function::call(QObject *thisObject, void **a, const QMetaType *types, int argc,
+                    ExecutionContext *context)
 {
     if (!aotFunction) {
         return QV4::convertAndCall(
@@ -70,21 +70,19 @@ bool Function::call(const Value *thisObject, void **a, const QMetaType *types, i
 
     ExecutionEngine *engine = context->engine();
     MetaTypesStackFrame frame;
-    frame.init(this, a, types, argc);
-    frame.setupJSFrame(engine->jsStackTop, Value::undefinedValue(), context->d(),
-                       thisObject ? *thisObject : Value::undefinedValue());
+    frame.init(this, thisObject, context, a, types, argc);
     frame.push(engine);
-    engine->jsStackTop += frame.requiredJSStackFrameSize();
     Moth::VME::exec(&frame, engine);
     frame.pop(engine);
     return !frame.isReturnValueUndefined();
 }
 
-ReturnedValue Function::call(const Value *thisObject, const Value *argv, int argc, const ExecutionContext *context) {
+ReturnedValue Function::call(
+        const Value *thisObject, const Value *argv, int argc, ExecutionContext *context) {
     if (aotFunction) {
         return QV4::convertAndCall(
                     context->engine(), aotFunction, thisObject, argv, argc,
-                    [this, context](const Value *thisObject,
+                    [this, context](QObject *thisObject,
                                     void **a, const QMetaType *types, int argc) {
             call(thisObject, a, types, argc, context);
         });
@@ -168,7 +166,7 @@ void Function::updateInternalClass(ExecutionEngine *engine, const QList<QByteArr
         if (duplicate == -1) {
             parameterNames.append(QString::fromUtf8(param));
         } else {
-            const QString &dup = parameterNames[duplicate];
+            const QString dup = parameterNames[duplicate];
             parameterNames.append(dup);
             parameterNames[duplicate] =
                     QString(QChar(0xfffe)) + QString::number(duplicate) + dup;

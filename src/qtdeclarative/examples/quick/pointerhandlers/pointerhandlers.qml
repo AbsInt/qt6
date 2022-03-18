@@ -65,6 +65,7 @@ Rectangle {
         Component.onCompleted: {
             addExample("tap", "TapHandler: device-agnostic tap/click detection for buttons", Qt.resolvedUrl("tapHandler.qml"))
             addExample("multibuttons", "TapHandler: gesturePolicy (99 red balloons)", Qt.resolvedUrl("multibuttons.qml"))
+            addExample("pieMenu", "TapHandler: pie menu", Qt.resolvedUrl("pieMenu.qml"))
             addExample("single point handler", "PointHandler: properties such as seat, device, modifiers, velocity, pressure", Qt.resolvedUrl("singlePointHandlerProperties.qml"))
             addExample("hover sidebar", "HoverHandler: a hierarchy of items sharing the hover state", Qt.resolvedUrl("sidebar.qml"))
             addExample("joystick", "DragHandler: move one item inside another with any pointing device", Qt.resolvedUrl("joystick.qml"))
@@ -82,13 +83,10 @@ Rectangle {
         z: 10000
         anchors.fill: parent
 
-        // TODO use Instantiator to create these... but we need to be able to set their parents to glassPane somehow (QTBUG-64546)
-        TouchpointFeedbackSprite { }
-        TouchpointFeedbackSprite { }
-        TouchpointFeedbackSprite { }
-        TouchpointFeedbackSprite { }
-        TouchpointFeedbackSprite { }
-        TouchpointFeedbackSprite { }
+        Instantiator {
+            model: 10
+            delegate: TouchpointFeedbackSprite { parent: glassPane }
+        }
 
         MouseFeedbackSprite { }
     }

@@ -424,7 +424,7 @@ protected:
 };
 
 template<typename T>
-class QMLDOM_EXPORT ListPT final : public ListPBase
+class ListPT final : public ListPBase
 {
 public:
     constexpr static DomType kindValue = DomType::ListP;
@@ -518,7 +518,7 @@ public:
     T const *as() const
     {
         if (m_options & SimpleWrapOption::ValueType) {
-            if (m_value.metaType().id() == QMetaType::fromType<T>().id())
+            if (m_value.metaType() == QMetaType::fromType<T>())
                 return reinterpret_cast<const T *>(m_value.constData());
             return nullptr;
         } else {
@@ -529,7 +529,7 @@ public:
     T *mutableAs()
     {
         if (m_options & SimpleWrapOption::ValueType) {
-            if (m_value.metaType().id() == QMetaType::fromType<T>().id())
+            if (m_value.metaType() == QMetaType::fromType<T>())
                 return reinterpret_cast<T *>(m_value.data());
             return nullptr;
         } else {
@@ -567,7 +567,7 @@ protected:
 };
 
 template<typename T>
-class QMLDOM_EXPORT SimpleObjectWrapT final : public SimpleObjectWrapBase
+class SimpleObjectWrapT final : public SimpleObjectWrapBase
 {
 public:
     constexpr static DomType kindValue = DomType::SimpleObjectWrap;
@@ -582,7 +582,7 @@ public:
     T const *asT() const
     {
         if constexpr (domTypeIsValueWrap(T::kindValue)) {
-            if (m_value.metaType().id() == QMetaType::fromType<T>().id())
+            if (m_value.metaType() == QMetaType::fromType<T>())
                 return reinterpret_cast<const T *>(m_value.constData());
             return nullptr;
         } else if constexpr (domTypeIsObjWrap(T::kindValue)) {
@@ -597,7 +597,7 @@ public:
     T *mutableAsT()
     {
         if (domTypeIsValueWrap(T::kindValue)) {
-            if (m_value.metaType().id() == QMetaType::fromType<T>().id())
+            if (m_value.metaType() == QMetaType::fromType<T>())
                 return reinterpret_cast<T *>(m_value.data());
             return nullptr;
         } else if constexpr (domTypeIsObjWrap(T::kindValue)) {
@@ -1037,6 +1037,7 @@ public:
     DomItem(std::shared_ptr<DomEnvironment>);
     DomItem(std::shared_ptr<DomUniverse>);
 
+    static DomItem fromCode(QString code, DomType fileType = DomType::QmlFile);
     void loadFile(QString filePath, QString logicalPath,
                   std::function<void(Path, DomItem &, DomItem &)> callback, LoadOptions loadOptions,
                   std::optional<DomType> fileType = std::optional<DomType>());
@@ -1176,7 +1177,7 @@ private:
     friend class AstComments;
     friend class AttachedInfo;
     friend class TestDomItem;
-    friend bool operator==(const DomItem &, const DomItem &);
+    friend QMLDOM_EXPORT bool operator==(const DomItem &, const DomItem &);
     DomType m_kind = DomType::Empty;
     std::optional<TopT> m_top;
     std::optional<OwnerT> m_owner;
@@ -1184,7 +1185,8 @@ private:
     ElementT m_element = Empty();
 };
 
-bool operator==(const DomItem &o1, const DomItem &o2);
+QMLDOM_EXPORT bool operator==(const DomItem &o1, const DomItem &o2);
+
 inline bool operator!=(const DomItem &o1, const DomItem &o2)
 {
     return !(o1 == o2);
@@ -1411,9 +1413,9 @@ void SimpleObjectWrapT<T>::writeOut(DomItem &self, OutWriter &lw) const
     writeOutWrap<T>(*asT(), self, lw);
 }
 
-QDebug operator<<(QDebug debug, const DomItem &c);
+QMLDOM_EXPORT QDebug operator<<(QDebug debug, const DomItem &c);
 
-class MutableDomItem {
+class QMLDOM_EXPORT MutableDomItem {
 public:
     using CopyOption = DomItem::CopyOption;
 
@@ -1625,7 +1627,7 @@ private:
     Path m_pathFromOwner;
 };
 
-QDebug operator<<(QDebug debug, const MutableDomItem &c);
+QMLDOM_EXPORT QDebug operator<<(QDebug debug, const MutableDomItem &c);
 
 template<typename K, typename T>
 Path insertUpdatableElementInMultiMap(Path mapPathFromOwner, QMultiMap<K, T> &mmap, K key,

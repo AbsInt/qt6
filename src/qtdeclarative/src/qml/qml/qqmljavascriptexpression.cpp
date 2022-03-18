@@ -246,17 +246,6 @@ private:
     QQmlPropertyCapture *lastPropertyCapture;
 };
 
-static inline QV4::ReturnedValue thisObject(QObject *scopeObject, QV4::ExecutionEngine *v4)
-{
-    if (scopeObject) {
-        // The result of wrap() can only be null, undefined, or an object.
-        const QV4::ReturnedValue scope = QV4::QObjectWrapper::wrap(v4, scopeObject);
-        if (QV4::Value::fromReturnedValue(scope).isManaged())
-            return scope;
-    }
-    return v4->globalObject->asReturnedValue();
-}
-
 QV4::ReturnedValue QQmlJavaScriptExpression::evaluate(QV4::CallData *callData, bool *isUndefined)
 {
     QQmlEngine *qmlEngine = engine();
@@ -272,7 +261,14 @@ QV4::ReturnedValue QQmlJavaScriptExpression::evaluate(QV4::CallData *callData, b
     QQmlJavaScriptExpressionCapture capture(this, qmlEngine);
 
     QV4::Scope scope(qmlEngine->handle());
-    callData->thisObject = thisObject(scopeObject(), scope.engine);
+
+    if (QObject *thisObject = scopeObject()) {
+        callData->thisObject = QV4::QObjectWrapper::wrap(scope.engine, thisObject);
+        if (callData->thisObject.isNullOrUndefined())
+            callData->thisObject = scope.engine->globalObject;
+    } else {
+        callData->thisObject = scope.engine->globalObject;
+    }
 
     Q_ASSERT(m_qmlScope.valueRef());
     QV4::ScopedValue result(scope, v4Function->call(
@@ -304,14 +300,14 @@ bool QQmlJavaScriptExpression::evaluate(void **a, const QMetaType *types, int ar
     QQmlJavaScriptExpressionCapture capture(this, qmlEngine);
 
     QV4::Scope scope(qmlEngine->handle());
-    QV4::ScopedValue self(scope, thisObject(scopeObject(), scope.engine));
 
     Q_ASSERT(m_qmlScope.valueRef());
     Q_ASSERT(function());
-    const bool isUndefined = !function()->call(
-                self, a, types, argc, static_cast<QV4::ExecutionContext *>(m_qmlScope.valueRef()));
+    const bool resultIsDefined = function()->call(
+                scopeObject(), a, types, argc,
+                static_cast<QV4::ExecutionContext *>(m_qmlScope.valueRef()));
 
-    return !capture.catchException(scope) && !isUndefined;
+    return !capture.catchException(scope) && resultIsDefined;
 }
 
 void QQmlPropertyCapture::captureProperty(QQmlNotifier *n)
@@ -353,7 +349,7 @@ void QQmlPropertyCapture::captureProperty(QObject *o, int c, int n, bool doNotif
     if (c >= 0) {
         const QQmlData *ddata = QQmlData::get(o, /*create=*/false);
         const QMetaObject *metaObjectForBindable = nullptr;
-        if (auto const propCache = ddata ? ddata->propertyCache : nullptr; propCache) {
+        if (auto const propCache = (ddata ? ddata->propertyCache.data() : nullptr)) {
             Q_ASSERT(propCache->property(c));
             if (propCache->property(c)->isBindable())
                 metaObjectForBindable = propCache->metaObject();

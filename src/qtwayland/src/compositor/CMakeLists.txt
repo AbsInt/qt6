@@ -7,6 +7,7 @@
 qt_internal_add_module(WaylandCompositor
     PLUGIN_TYPES wayland-graphics-integration-server wayland-hardware-layer-integration
     SOURCES
+        compat/removed_api.cpp
         ../shared/qwaylandinputmethodeventbuilder.cpp ../shared/qwaylandinputmethodeventbuilder_p.h
         ../shared/qwaylandmimehelper.cpp ../shared/qwaylandmimehelper_p.h
         ../shared/qwaylandsharedmemoryformathelper_p.h
@@ -57,9 +58,11 @@ qt_internal_add_module(WaylandCompositor
         extensions
         global
         wayland_wrapper
+    GENERATE_CPP_EXPORTS
     LIBRARIES
         Qt::CorePrivate
         Qt::GuiPrivate
+        Qt::WaylandGlobalPrivate
     PUBLIC_LIBRARIES
         Qt::Core
         Qt::Gui
@@ -67,7 +70,16 @@ qt_internal_add_module(WaylandCompositor
     PRIVATE_MODULE_INTERFACE
         Qt::CorePrivate
         Qt::GuiPrivate
+        Qt::WaylandGlobalPrivate
 )
+
+set(compositor_no_pch_sources
+    compat/removed_api.cpp
+)
+
+foreach(src ${compositor_no_pch_sources})
+    qt_update_ignore_pch_source(WaylandCompositor ${src})
+endforeach()
 
 # Resources:
 set(compositor_resource_files
@@ -87,13 +99,14 @@ qt_internal_add_resource(WaylandCompositor "compositor"
         ${compositor_resource_files}
 )
 
-
 qt6_generate_wayland_protocol_server_sources(WaylandCompositor
     FILES
         ${CMAKE_CURRENT_SOURCE_DIR}/../3rdparty/protocol/idle-inhibit-unstable-v1.xml
         ${CMAKE_CURRENT_SOURCE_DIR}/../3rdparty/protocol/ivi-application.xml
+        ${CMAKE_CURRENT_SOURCE_DIR}/../3rdparty/protocol/presentation-time.xml
         ${CMAKE_CURRENT_SOURCE_DIR}/../3rdparty/protocol/scaler.xml
         ${CMAKE_CURRENT_SOURCE_DIR}/../3rdparty/protocol/text-input-unstable-v2.xml
+        ${CMAKE_CURRENT_SOURCE_DIR}/../3rdparty/protocol/text-input-unstable-v4-wip.xml
         ${CMAKE_CURRENT_SOURCE_DIR}/../3rdparty/protocol/viewporter.xml
         ${CMAKE_CURRENT_SOURCE_DIR}/../3rdparty/protocol/wayland.xml
         ${CMAKE_CURRENT_SOURCE_DIR}/../3rdparty/protocol/xdg-decoration-unstable-v1.xml
@@ -113,6 +126,14 @@ qt6_generate_wayland_protocol_server_sources(WaylandCompositor
 
 ## Scopes:
 #####################################################################
+
+qt_internal_extend_target(WaylandCompositor CONDITION QT_FEATURE_wayland_text_input_v4_wip
+    SOURCES
+        extensions/qwaylandtextinputv4.cpp extensions/qwaylandtextinputv4.h extensions/qwaylandtextinputv4_p.h
+        extensions/qwaylandtextinputmanagerv4.cpp extensions/qwaylandtextinputmanagerv4.h extensions/qwaylandtextinputmanagerv4_p.h
+    DEFINES
+        QT_WAYLAND_TEXT_INPUT_V4_WIP=1
+)
 
 qt_internal_extend_target(WaylandCompositor CONDITION QT_FEATURE_opengl
     SOURCES
@@ -149,6 +170,7 @@ qt_internal_extend_target(WaylandCompositor CONDITION QT_FEATURE_wayland_composi
         extensions/qwaylandquickxdgoutputv1.cpp extensions/qwaylandquickxdgoutputv1.h
         extensions/qwaylandwlshellintegration.cpp extensions/qwaylandwlshellintegration_p.h
         extensions/qwaylandxdgshellintegration.cpp extensions/qwaylandxdgshellintegration_p.h
+        extensions/qwaylandpresentationtime.cpp extensions/qwaylandpresentationtime_p.h extensions/qwaylandpresentationtime_p_p.h
     LIBRARIES
         Qt::QmlPrivate
         Qt::QuickPrivate
@@ -204,3 +226,4 @@ if (TARGET Qt::Qml)
 endif()
 
 qt_record_extra_qt_main_tools_package_dependency(WaylandCompositor WaylandScannerTools "${PROJECT_VERSION}")
+qt_record_extra_qt_package_dependency(WaylandCompositor WaylandGlobalPrivate "${PROJECT_VERSION}")

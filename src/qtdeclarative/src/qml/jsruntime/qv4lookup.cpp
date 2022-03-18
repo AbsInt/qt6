@@ -41,7 +41,6 @@
 #include "qv4jscall_p.h"
 #include "qv4string_p.h"
 #include <private/qv4identifiertable_p.h>
-#include <private/qv4qobjectwrapper_p.h>
 
 QT_BEGIN_NAMESPACE
 

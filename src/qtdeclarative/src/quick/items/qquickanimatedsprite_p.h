@@ -65,7 +65,6 @@ class QSGContext;
 class QQuickSprite;
 class QQuickSpriteEngine;
 class QSGGeometryNode;
-class QQuickAnimatedSpriteMaterial;
 class QQuickAnimatedSpritePrivate;
 class QSGSpriteNode;
 class Q_QUICK_PRIVATE_EXPORT QQuickAnimatedSprite : public QQuickItem
@@ -194,7 +193,6 @@ private:
     QSGSpriteNode* initNode();
 
 private:
-    Q_DISABLE_COPY(QQuickAnimatedSprite)
     Q_DECLARE_PRIVATE(QQuickAnimatedSprite)
 };
 

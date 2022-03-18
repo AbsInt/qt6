@@ -1,34 +1,37 @@
 /****************************************************************************
 **
 ** Copyright (C) 2018 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the Qt Quick Templates 2 module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL3$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
 ** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPLv3 included in the
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
 ** packaging of this file. Please review the following information to
 ** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl.html.
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
 ** GNU General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or later as published by the Free
-** Software Foundation and appearing in the file LICENSE.GPL included in
-** the packaging of this file. Please review the following information to
-** ensure the GNU General Public License version 2.0 requirements will be
-** met: http://www.gnu.org/licenses/gpl-2.0.html.
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -742,6 +745,7 @@ void QQuickSplitViewPrivate::createHandleItem(int index)
     context->setContextObject(q);
     QQuickItem *handleItem = qobject_cast<QQuickItem*>(m_handle->beginCreate(context));
     if (handleItem) {
+        handleItem->setParent(q);
         qCDebug(qlcQQuickSplitView) << "- successfully created handle item" << handleItem << "for split item at index" << index;
 
         // Insert the item to our list of items *before* its parent is set to us,
@@ -976,10 +980,10 @@ QQuickItem *QQuickSplitViewPrivate::getContentItem()
     return new QQuickContentItem(q);
 }
 
-void QQuickSplitViewPrivate::handlePress(const QPointF &point)
+void QQuickSplitViewPrivate::handlePress(const QPointF &point, ulong timestamp)
 {
     Q_Q(QQuickSplitView);
-    QQuickContainerPrivate::handlePress(point);
+    QQuickContainerPrivate::handlePress(point, timestamp);
 
     QQuickItem *pressedItem = q->childAt(point.x(), point.y());
     const int pressedHandleIndex = m_handleItems.indexOf(pressedItem);
@@ -1029,9 +1033,9 @@ void QQuickSplitViewPrivate::handlePress(const QPointF &point)
     }
 }
 
-void QQuickSplitViewPrivate::handleMove(const QPointF &point)
+void QQuickSplitViewPrivate::handleMove(const QPointF &point, ulong timestamp)
 {
-    QQuickContainerPrivate::handleMove(point);
+    QQuickContainerPrivate::handleMove(point, timestamp);
 
     if (m_pressedHandleIndex != -1) {
         m_mousePos = point;
@@ -1041,10 +1045,10 @@ void QQuickSplitViewPrivate::handleMove(const QPointF &point)
     }
 }
 
-void QQuickSplitViewPrivate::handleRelease(const QPointF &point)
+void QQuickSplitViewPrivate::handleRelease(const QPointF &point, ulong timestamp)
 {
     Q_Q(QQuickSplitView);
-    QQuickContainerPrivate::handleRelease(point);
+    QQuickContainerPrivate::handleRelease(point, timestamp);
 
     if (m_pressedHandleIndex != -1) {
         QQuickItem *pressedHandle = m_handleItems.at(m_pressedHandleIndex);

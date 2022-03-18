@@ -1272,7 +1272,7 @@ void tst_qquickpositioners::moveTransitions(const QString &positionerObjectName)
         case ListChange::Inserted:
         case ListChange::SetCurrent:
         case ListChange::SetContentY:
-            QVERIFY(false);
+            QFAIL("Wrong change type");
             break;
          case ListChange::Polish:
             break;
@@ -1299,7 +1299,7 @@ void tst_qquickpositioners::moveTransitions(const QString &positionerObjectName)
         else if (change.type == ListChange::Removed)
             displacedIndexes = adjustIndexesForRemoveDisplaced(expectedDisplacedIndexes.indexes, change.index, change.count);
         else
-            QVERIFY(false);
+            QFAIL("Wrong change type");
         matchItemsAndIndexes(window->rootObject()->property("displacedTrans_items").toMap(), model, displacedIndexes);
 
         QVariantList listOfEmptyIntLists;

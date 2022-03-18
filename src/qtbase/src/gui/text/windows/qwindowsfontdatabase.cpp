@@ -51,7 +51,7 @@
 #include <QtCore/QDebug>
 #include <QtCore/QFile>
 #include <QtCore/QtEndian>
-#include <QtCore/private/qsystemlibrary_p.h>
+#include <QtCore/private/qduplicatetracker_p.h>
 #include <QtCore/private/qwinregistry_p.h>
 
 #include <wchar.h>
@@ -68,10 +68,6 @@
 QT_BEGIN_NAMESPACE
 
 #if QT_CONFIG(directwrite)
-// ### fixme: Consider direct linking of dwrite.dll once Windows Vista pre SP2 is dropped (QTBUG-49711)
-
-typedef HRESULT (WINAPI *DWriteCreateFactoryType)(DWRITE_FACTORY_TYPE, const IID &, IUnknown **);
-
 static inline bool useDirectWrite(QFont::HintingPreference hintingPreference,
                                   const QString &familyName = QString(),
                                   bool isColorFont = false)
@@ -499,7 +495,7 @@ namespace {
         {}
 
         QString populatedFontFamily;
-        QSet<FontAndStyle> foundFontAndStyles;
+        QDuplicateTracker<FontAndStyle> foundFontAndStyles;
         QWindowsFontDatabase *windowsFontDatabase;
     };
 }
@@ -544,7 +540,7 @@ static bool addFontToDatabase(QString familyName,
             str << " TRUETYPE";
         str << " scalable=" << scalable << " Size=" << size
                 << " Style=" << style << " Weight=" << weight
-                << " stretch=" << stretch;
+                << " stretch=" << stretch << " styleName=" << styleName;
         qCDebug(lcQpaFonts) << message;
     }
 #endif
@@ -562,7 +558,13 @@ static bool addFontToDatabase(QString familyName,
         subFamilyStyle = styleName;
         faceName = familyName; // Remember the original name for later lookups
         familyName = canonicalNames.preferredName;
-        styleName = canonicalNames.preferredStyle;
+        // Preferred style / typographic subfamily name:
+        // "If it is absent, then name ID 2 is considered to be the typographic subfamily name."
+        // From: https://docs.microsoft.com/en-us/windows/win32/directwrite/opentype-variable-fonts
+        // Name ID 2 is already stored in the styleName variable. Furthermore, for variable fonts,
+        // styleName holds the variation instance name, which should be used over name ID 2.
+        if (!canonicalNames.preferredStyle.isEmpty())
+            styleName = canonicalNames.preferredStyle;
     }
 
     QSupportedWritingSystems writingSystems;
@@ -642,10 +644,8 @@ static int QT_WIN_CALLBACK storeFont(const LOGFONT *logFont, const TEXTMETRIC *t
         signature = &reinterpret_cast<const NEWTEXTMETRICEX *>(textmetric)->ntmFontSig;
         // We get a callback for each script-type supported, but we register them all
         // at once using the signature, so we only need one call to addFontToDatabase().
-        FontAndStyle fontAndStyle = {familyName, styleName};
-        if (sfp->foundFontAndStyles.contains(fontAndStyle))
+        if (sfp->foundFontAndStyles.hasSeen({familyName, styleName}))
             return 1;
-        sfp->foundFontAndStyles.insert(fontAndStyle);
     }
     addFontToDatabase(familyName, styleName, *logFont, textmetric, signature, type, sfp);
 

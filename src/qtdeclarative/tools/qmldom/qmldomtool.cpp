@@ -47,9 +47,7 @@
 #    include <QtCore/qcommandlineparser.h>
 #endif
 
-#ifndef QT_BOOTSTRAPPED
-#    include <QtCore/qlibraryinfo.h>
-#endif
+#include <QtCore/qlibraryinfo.h>
 using namespace QQmlJS::Dom;
 
 namespace tt {
@@ -108,9 +106,18 @@ int main(int argc, char *argv[])
 
     QCommandLineOption pathToDumpOption(
             QStringList() << "path-to-dump",
-            QLatin1String("adds a path to dump (by default the root path is dumped)"),
+            QLatin1String("adds a path to dump. By default the base path of each file is dumped. "
+                          "If any path starts with $ ($env for example) then the environment (and "
+                          "not the loaded files) is used as basis."),
             QLatin1String("pathToDump"));
     parser.addOption(pathToDumpOption);
+
+    QCommandLineOption dependenciesOption(
+            QStringList() << "D"
+                          << "dependencies",
+            QLatin1String("Dependencies to load: none, required, reachable"),
+            QLatin1String("dependenciesToLoad"), QLatin1String("none"));
+    parser.addOption(dependenciesOption);
 
     QCommandLineOption reformatDirOption(
             QStringList() << "reformat-dir",
@@ -139,11 +146,12 @@ int main(int argc, char *argv[])
 
     if (parser.isSet(filterOption)) {
         qDebug() << "filters: " << parser.values(filterOption);
-        for (QString fFields : parser.values(filterOption)) {
+        for (const QString &fFields : parser.values(filterOption)) {
             if (!filter.addFilter(fFields)) {
                 return 1;
             }
         }
+        filter.setFiltred();
     }
 
     std::optional<DomType> fileType;
@@ -151,6 +159,24 @@ int main(int argc, char *argv[])
         fileType = DomType::QmlFile;
 
     Dependencies dep = Dependencies::None;
+    for (const QString &depName : parser.values(dependenciesOption)) {
+        QMetaEnum metaEnum = QMetaEnum::fromType<Dependencies>();
+        bool found = false;
+        for (int i = 0; i < metaEnum.keyCount(); ++i) {
+            if (QLatin1String(metaEnum.key(i)).compare(depName, Qt::CaseInsensitive) == 0) {
+                found = true;
+                dep = Dependencies(metaEnum.value(i));
+            }
+        }
+        if (!found) {
+            QStringList values;
+            for (int i = 0; i < metaEnum.keyCount(); ++i)
+                values.append(QString::fromUtf8(metaEnum.key(i)).toLower());
+            qDebug().noquote() << "Invalid dependencies argument, expected one of "
+                               << values.join(QLatin1Char(','));
+            return 1;
+        }
+    }
 
     int nBackups = 2;
     if (parser.isSet(nBackupsOption)) {
@@ -163,7 +189,7 @@ int main(int argc, char *argv[])
     }
 
     QList<Path> pathsToDump;
-    for (QString pStr : parser.values(pathToDumpOption)) {
+    for (const QString &pStr : parser.values(pathToDumpOption)) {
         pathsToDump.append(Path::fromString(pStr));
     }
     if (pathsToDump.isEmpty())
@@ -172,11 +198,7 @@ int main(int argc, char *argv[])
     // use host qml import path as a sane default if nothing else has been provided
     QStringList qmltypeDirs = parser.isSet(qmltypesDirsOption)
             ? parser.values(qmltypesDirsOption)
-#    ifndef QT_BOOTSTRAPPED
             : QStringList { QLibraryInfo::path(QLibraryInfo::Qml2ImportsPath) };
-#    else
-            : QStringList {};
-#    endif
 
     if (!parser.isSet(qmltypesFilesOption))
         qmltypeDirs << ".";
@@ -191,62 +213,71 @@ int main(int argc, char *argv[])
     {
         QDebug dbg = qDebug();
         dbg << "dirs:\n";
-        foreach (QString d, qmltypeDirs)
+        for (const QString &d : qAsConst(qmltypeDirs))
             dbg << "    '" << d << "'\n";
         dbg << "files:\n";
-        foreach (QString f, positionalArguments)
+        for (const QString &f : qAsConst(positionalArguments))
             dbg << "    '" << f << "'\n";
         dbg << "fieldFilter: " << filter.describeFieldsFilter();
         dbg << "\n";
     }
-    QQmlJS::Dom::DomEnvironment::Options options =
-            QQmlJS::Dom::DomEnvironment::Option::SingleThreaded;
+    DomEnvironment::Options options = DomEnvironment::Option::SingleThreaded;
     if (dep == Dependencies::None)
-        options = options | QQmlJS::Dom::DomEnvironment::Option::NoDependencies;
-    std::shared_ptr<QQmlJS::Dom::DomEnvironment> envPtr(
-            new QQmlJS::Dom::DomEnvironment(qmltypeDirs, options));
-    QQmlJS::Dom::DomItem env(envPtr);
+        options = options | DomEnvironment::Option::NoDependencies;
+    std::shared_ptr<DomEnvironment> envPtr(new DomEnvironment(qmltypeDirs, options));
+    DomItem env(envPtr);
     qDebug() << "will load\n";
     if (dep != Dependencies::None)
         env.loadBuiltins();
-    foreach (QString s, positionalArguments) {
-        env.loadFile(s, QString(), nullptr, LoadOption::DefaultLoad, fileType);
+    QList<DomItem> loadedFiles(positionalArguments.size());
+    qsizetype iPos = 0;
+    for (const QString &s : qAsConst(positionalArguments)) {
+        env.loadFile(
+                s, QString(),
+                [&loadedFiles, iPos](Path, const DomItem &, const DomItem &newIt) {
+                    loadedFiles[iPos] = newIt;
+                },
+                LoadOption::DefaultLoad, fileType);
     }
     envPtr->loadPendingDependencies(env);
     bool hadFailures = false;
     const qsizetype largestFileSizeToCheck = 32000;
+
     if (parser.isSet(reformatOption)) {
-        for (auto s : positionalArguments) {
-            DomItem qmlFile = env.path(Paths::qmlFilePath(QFileInfo(s).canonicalFilePath()));
-            if (qmlFile) {
-                qDebug() << "reformatting" << s;
-                FileWriter fw;
-                LineWriterOptions lwOptions;
-                WriteOutChecks checks = WriteOutCheck::Default;
-                if (std::shared_ptr<QmlFile> qmlFilePtr = qmlFile.ownerAs<QmlFile>())
-                    if (qmlFilePtr->code().size() > largestFileSizeToCheck)
-                        checks = WriteOutCheck::None;
-                QString target = s;
-                QString rDir = parser.value(reformatDirOption);
-                if (!rDir.isEmpty()) {
-                    QFileInfo f(s);
-                    QDir d(rDir);
-                    target = d.filePath(f.fileName());
-                }
-                MutableDomItem res = qmlFile.writeOut(target, nBackups, lwOptions, &fw, checks);
-                switch (fw.status) {
-                case FileWriter::Status::ShouldWrite:
-                case FileWriter::Status::SkippedDueToFailure:
-                    qWarning() << "failure reformatting " << s;
-                    break;
-                case FileWriter::Status::DidWrite:
-                    qDebug() << "success";
-                    break;
-                case FileWriter::Status::SkippedEqual:
-                    qDebug() << "no change";
-                }
-                hadFailures = hadFailures || !bool(res);
+        for (auto &qmlFile : loadedFiles) {
+            QString qmlFilePath = qmlFile.canonicalFilePath();
+            if (qmlFile.internalKind() != DomType::QmlFile) {
+                qWarning() << "cannot reformat" << qmlFile.internalKindStr() << "(" << qmlFilePath
+                           << ")";
+                continue;
             }
+            qDebug() << "reformatting" << qmlFilePath;
+            FileWriter fw;
+            LineWriterOptions lwOptions;
+            WriteOutChecks checks = WriteOutCheck::Default;
+            if (std::shared_ptr<QmlFile> qmlFilePtr = qmlFile.ownerAs<QmlFile>())
+                if (qmlFilePtr->code().size() > largestFileSizeToCheck)
+                    checks = WriteOutCheck::None;
+            QString target = qmlFilePath;
+            QString rDir = parser.value(reformatDirOption);
+            if (!rDir.isEmpty()) {
+                QFileInfo f(qmlFilePath);
+                QDir d(rDir);
+                target = d.filePath(f.fileName());
+            }
+            MutableDomItem res = qmlFile.writeOut(target, nBackups, lwOptions, &fw, checks);
+            switch (fw.status) {
+            case FileWriter::Status::ShouldWrite:
+            case FileWriter::Status::SkippedDueToFailure:
+                qWarning() << "failure reformatting " << qmlFilePath;
+                break;
+            case FileWriter::Status::DidWrite:
+                qDebug() << "success";
+                break;
+            case FileWriter::Status::SkippedEqual:
+                qDebug() << "no change";
+            }
+            hadFailures = hadFailures || !bool(res);
         }
     } else if (parser.isSet(dumpOption) || !parser.isSet(reformatOption)) {
         qDebug() << "will dump\n";
@@ -254,21 +285,35 @@ int main(int argc, char *argv[])
         auto sink = [&ts](QStringView v) {
             ts << v; /* ts.flush(); */
         };
-        if (pathsToDump.length() > 1)
+        qsizetype iPathToDump = 0;
+        bool globalPaths = false;
+        for (auto p : pathsToDump)
+            if (p.headKind() == Path::Kind::Root)
+                globalPaths = true;
+        if (globalPaths)
+            loadedFiles = QList<DomItem>({ env });
+        bool dumpDict = pathsToDump.size() > 1 || loadedFiles.size() > 1;
+        if (dumpDict)
             sink(u"{\n");
-        bool first = true;
-        for (Path p : pathsToDump) {
-            if (pathsToDump.length() > 1) {
-                if (first)
-                    first = false;
-                else
-                    sink(u",\n");
-                sinkEscaped(sink, p.toString());
-                sink(u":\n");
+        while (iPathToDump < pathsToDump.size()) {
+            for (auto &fileItem : loadedFiles) {
+                Path p = pathsToDump.at(iPathToDump++ % pathsToDump.size());
+                if (dumpDict) {
+                    if (iPathToDump > 1)
+                        sink(u",\n");
+                    sink(u"\"");
+                    if (fileItem.internalKind() != DomType::DomEnvironment) {
+                        sinkEscaped(sink, fileItem.canonicalFilePath(),
+                                    EscapeOptions::NoOuterQuotes);
+                        sink(u"/");
+                    }
+                    sinkEscaped(sink, p.toString(), EscapeOptions::NoOuterQuotes);
+                    sink(u"\":\n");
+                }
+                fileItem.path(p).dump(sink, 0, filter);
             }
-            env.path(p).dump(sink, 0, filter);
         }
-        if (pathsToDump.length() > 1)
+        if (dumpDict)
             sink(u"}\n");
         Qt::endl(ts).flush();
     }

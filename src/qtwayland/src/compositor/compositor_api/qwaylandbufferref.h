@@ -38,7 +38,6 @@
 #endif
 
 #include <QtWaylandCompositor/QWaylandSurface>
-#include <QtWaylandCompositor/qtwaylandcompositorglobal.h>
 
 struct wl_resource;
 
@@ -51,7 +50,7 @@ namespace QtWayland
     class ClientBuffer;
 }
 
-class Q_WAYLAND_COMPOSITOR_EXPORT QWaylandBufferRef
+class Q_WAYLANDCOMPOSITOR_EXPORT QWaylandBufferRef
 {
 public:
     QWaylandBufferRef();
@@ -64,8 +63,10 @@ public:
     bool hasContent() const;
     bool hasProtectedContent() const;
     bool isDestroyed() const;
+#if QT_WAYLANDCOMPOSITOR_REMOVED_SINCE(6, 3)
     bool operator==(const QWaylandBufferRef &ref);
     bool operator!=(const QWaylandBufferRef &ref);
+#endif
 
     struct wl_resource *wl_buffer() const;
 
@@ -107,6 +108,12 @@ private:
     class QWaylandBufferRefPrivate *const d;
     friend class QWaylandBufferRefPrivate;
     friend class QWaylandSurfacePrivate;
+
+    friend Q_WAYLANDCOMPOSITOR_EXPORT
+    bool operator==(const QWaylandBufferRef &lhs, const QWaylandBufferRef &rhs) noexcept;
+    friend inline
+    bool operator!=(const QWaylandBufferRef &lhs, const QWaylandBufferRef &rhs) noexcept
+    { return !(lhs == rhs); }
 };
 
 QT_END_NAMESPACE

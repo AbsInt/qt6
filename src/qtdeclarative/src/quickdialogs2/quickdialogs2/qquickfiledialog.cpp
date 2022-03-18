@@ -1,34 +1,37 @@
 /****************************************************************************
 **
 ** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the Qt Quick Dialogs module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL3$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
 ** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPLv3 included in the
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
 ** packaging of this file. Please review the following information to
 ** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl.html.
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
 ** GNU General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or later as published by the Free
-** Software Foundation and appearing in the file LICENSE.GPL included in
-** the packaging of this file. Please review the following information to
-** ensure the GNU General Public License version 2.0 requirements will be
-** met: http://www.gnu.org/licenses/gpl-2.0.html.
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -44,6 +47,7 @@
 
 QT_BEGIN_NAMESPACE
 
+Q_DECLARE_LOGGING_CATEGORY(lcDialogs)
 Q_LOGGING_CATEGORY(lcFileDialog, "qt.quick.dialogs.filedialog")
 
 /*!
@@ -96,13 +100,11 @@ Q_LOGGING_CATEGORY(lcFileDialog, "qt.quick.dialogs.filedialog")
 
     \include includes/fallback.qdocinc
 
-    //! \sa FolderDialog, StandardPaths
+    \sa FolderDialog, {QtCore::}{StandardPaths}
 */
 
-Q_DECLARE_LOGGING_CATEGORY(lcDialogs)
-
 QQuickFileDialog::QQuickFileDialog(QObject *parent)
-    : QQuickAbstractDialog(QPlatformTheme::FileDialog, parent),
+    : QQuickAbstractDialog(QQuickDialogType::FileDialog, parent),
       m_fileMode(OpenFile),
       m_options(QFileDialogOptions::create()),
       m_selectedNameFilter(nullptr)
@@ -157,18 +159,16 @@ void QQuickFileDialog::setFileMode(FileMode mode)
     \qmlproperty url QtQuick.Dialogs::FileDialog::selectedFile
     \readonly
 
-    This property holds the final accepted file.
+    This property holds the last file that was selected in the dialog.
 
     If there are multiple selected files, this property refers to the first
     file.
 
-    Unlike the \l currentFile property, the \c selectedFile property is not
-    updated while the user is selecting files in the dialog, but only after the
-    final selection has been made. That is, when the user has clicked
-    \uicontrol OK to accept a file. Alternatively, the
-    \l {Dialog::}{accepted()} signal can be handled to get the final selection.
+    The value of this property is updated each time the user selects a file in
+    the dialog, and when the dialog is accepted. Handle the
+    \l {Dialog::}{accepted()} signal to get the final selection.
 
-    \sa selectedFiles, currentFile, {Dialog::}{accepted()}, currentFolder
+    \sa selectedFiles, {Dialog::}{accepted()}, currentFolder
 */
 QUrl QQuickFileDialog::selectedFile() const
 {
@@ -178,15 +178,13 @@ QUrl QQuickFileDialog::selectedFile() const
 /*!
     \qmlproperty list<url> QtQuick.Dialogs::FileDialog::selectedFiles
 
-    This property holds the final accepted files.
+    This property holds the last files that were selected in the dialog.
 
-    Unlike the \l currentFiles property, the \c selectedFiles property is not
-    updated while the user is selecting files in the dialog, but only after the
-    final selection has been made. That is, when the user has clicked
-    \uicontrol OK to accept files. Alternatively, the \l {Dialog::}{accepted()}
-    signal can be handled to get the final selection.
+    The value of this property is updated each time the user selects files in
+    the dialog, and when the dialog is accepted. Handle the
+    \l {Dialog::}{accepted()} signal to get the final selection.
 
-    \sa currentFiles, {Dialog::}{accepted()}, currentFolder
+    \sa {Dialog::}{accepted()}, currentFolder
 */
 QList<QUrl> QQuickFileDialog::selectedFiles() const
 {
@@ -200,57 +198,48 @@ void QQuickFileDialog::setSelectedFiles(const QList<QUrl> &selectedFiles)
 
     bool firstChanged = m_selectedFiles.value(0) != selectedFiles.value(0);
     m_selectedFiles = selectedFiles;
-    if (firstChanged)
+    if (firstChanged) {
         emit selectedFileChanged();
+        emit currentFileChanged();
+    }
     emit selectedFilesChanged();
+    emit currentFilesChanged();
 }
 
 /*!
     \qmlproperty url QtQuick.Dialogs::FileDialog::currentFile
+    \deprecated [6.3] Use \l selectedFile instead.
 
     This property holds the currently selected file in the dialog.
-
-    Unlike the \l selectedFile property, the \c currentFile property is updated
-    while the user is selecting files in the dialog, even before the final
-    selection has been made.
 
     \sa selectedFile, currentFiles, currentFolder
 */
 QUrl QQuickFileDialog::currentFile() const
 {
-    return currentFiles().value(0);
+    return selectedFile();
 }
 
 void QQuickFileDialog::setCurrentFile(const QUrl &file)
 {
-    setCurrentFiles(QList<QUrl>() << file);
+    setSelectedFiles(QList<QUrl>() << file);
 }
 
 /*!
     \qmlproperty list<url> QtQuick.Dialogs::FileDialog::currentFiles
+    \deprecated [6.3] Use \l selectedFiles instead.
 
     This property holds the currently selected files in the dialog.
-
-    Unlike the \l selectedFiles property, the \c currentFiles property is
-    updated while the user is selecting files in the dialog, even before the
-    final selection has been made.
 
     \sa selectedFiles, currentFile, currentFolder
 */
 QList<QUrl> QQuickFileDialog::currentFiles() const
 {
-    if (QPlatformFileDialogHelper *fileDialog = qobject_cast<QPlatformFileDialogHelper *>(handle()))
-        return fileDialog->selectedFiles();
-    return m_options->initiallySelectedFiles();
+    return selectedFiles();
 }
 
 void QQuickFileDialog::setCurrentFiles(const QList<QUrl> &currentFiles)
 {
-    if (QPlatformFileDialogHelper *fileDialog = qobject_cast<QPlatformFileDialogHelper *>(handle())) {
-        for (const QUrl &file : currentFiles)
-            fileDialog->selectFile(file);
-    }
-    m_options->setInitiallySelectedFiles(currentFiles);
+    setSelectedFiles(currentFiles);
 }
 
 /*!
@@ -259,11 +248,7 @@ void QQuickFileDialog::setCurrentFiles(const QList<QUrl> &currentFiles)
     This property holds the folder where files are selected. It can be set to
     control the initial directory that is shown when the dialog is opened.
 
-\omit
-    For selecting a folder, use FolderDialog instead.
-
-    \sa FolderDialog
-\endomit
+    For selecting a folder, use \l FolderDialog instead.
 */
 QUrl QQuickFileDialog::currentFolder() const
 {
@@ -543,10 +528,14 @@ bool QQuickFileDialog::useNativeDialog() const
 void QQuickFileDialog::onCreate(QPlatformDialogHelper *dialog)
 {
     if (QPlatformFileDialogHelper *fileDialog = qobject_cast<QPlatformFileDialogHelper *>(dialog)) {
-        connect(fileDialog, &QPlatformFileDialogHelper::currentChanged, this, &QQuickFileDialog::currentFileChanged);
-        connect(fileDialog, &QPlatformFileDialogHelper::currentChanged, this, &QQuickFileDialog::currentFilesChanged);
+        connect(fileDialog, &QPlatformFileDialogHelper::currentChanged,
+                this, [this, fileDialog](){ setSelectedFiles(fileDialog->selectedFiles()); });
         connect(fileDialog, &QPlatformFileDialogHelper::directoryEntered, this, &QQuickFileDialog::currentFolderChanged);
         fileDialog->setOptions(m_options);
+
+        // Need to call this manually once on creation because QPlatformFileDialogHelper::currentChanged
+        // has already been emitted by this point (because of QQuickFileDialogImplPrivate::updateSelectedFile).
+        setSelectedFiles(fileDialog->selectedFiles());
     }
 }
 
@@ -571,8 +560,7 @@ void QQuickFileDialog::onShow(QPlatformDialogHelper *dialog)
         if (m_firstShow && initialDir.isValid() && QDir(QQmlFile::urlToLocalFileOrQrc(initialDir)).exists())
             fileDialog->setDirectory(m_options->initialDirectory());
     }
-    if (m_firstShow)
-        m_firstShow = false;
+    QQuickAbstractDialog::onShow(dialog);
 }
 
 void QQuickFileDialog::onHide(QPlatformDialogHelper *dialog)
@@ -583,6 +571,21 @@ void QQuickFileDialog::onHide(QPlatformDialogHelper *dialog)
     }
 }
 
+QUrl QQuickFileDialog::addDefaultSuffix(const QUrl &file) const
+{
+    QUrl url = file;
+    const QString path = url.path();
+    const QString suffix = m_options->defaultSuffix();
+    // Urls with "content" scheme do not require suffixes. Such schemes are
+    // used on Android.
+    const bool isContentScheme = url.scheme() == u"content"_qs;
+    if (!isContentScheme && !suffix.isEmpty() && !path.endsWith(QLatin1Char('/'))
+        && path.lastIndexOf(QLatin1Char('.')) == -1) {
+        url.setPath(path + QLatin1Char('.') + suffix);
+    }
+    return url;
+}
+
 void QQuickFileDialog::accept()
 {
     if (QPlatformFileDialogHelper *fileDialog = qobject_cast<QPlatformFileDialogHelper *>(handle())) {
@@ -590,16 +593,6 @@ void QQuickFileDialog::accept()
         setSelectedFiles(fileDialog->selectedFiles());
     }
     QQuickAbstractDialog::accept();
-}
-
-QUrl QQuickFileDialog::addDefaultSuffix(const QUrl &file) const
-{
-    QUrl url = file;
-    const QString path = url.path();
-    const QString suffix = m_options->defaultSuffix();
-    if (!suffix.isEmpty() && !path.endsWith(QLatin1Char('/')) && path.lastIndexOf(QLatin1Char('.')) == -1)
-        url.setPath(path + QLatin1Char('.') + suffix);
-    return url;
 }
 
 QList<QUrl> QQuickFileDialog::addDefaultSuffixes(const QList<QUrl> &files) const

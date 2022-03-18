@@ -102,26 +102,6 @@ size_t calculateHash(const T &t, size_t seed = 0)
     }
 }
 
-// QHash uses a power of two growth policy.
-namespace GrowthPolicy {
-inline constexpr size_t maxNumBuckets() noexcept
-{
-    return size_t(1) << (8 * sizeof(size_t) - 1);
-}
-inline constexpr size_t bucketsForCapacity(size_t requestedCapacity) noexcept
-{
-    if (requestedCapacity <= 8)
-        return 16;
-    if (requestedCapacity >= maxNumBuckets())
-        return maxNumBuckets();
-    return qNextPowerOfTwo(QIntegerForSize<sizeof(size_t)>::Unsigned(2 * requestedCapacity - 1));
-}
-inline constexpr size_t bucketForHash(size_t nBuckets, size_t hash) noexcept
-{
-    return hash & (nBuckets - 1);
-}
-}
-
 template <typename Key, typename T>
 struct Node
 {
@@ -452,6 +432,37 @@ struct Span {
         allocated = uchar(alloc);
     }
 };
+
+// QHash uses a power of two growth policy.
+namespace GrowthPolicy {
+inline constexpr size_t maxNumBuckets() noexcept
+{
+    // ensure the size of a Span does not depend on the template parameters
+    using Node1 = Node<int, int>;
+    using Node2 = Node<char, void *>;
+    using Node3 = Node<qsizetype, QHashDummyValue>;
+    static_assert(sizeof(Span<Node1>) == sizeof(Span<Node2>));
+    static_assert(sizeof(Span<Node1>) == sizeof(Span<Node3>));
+    static_assert(int(Span<Node1>::NEntries) == int(Span<Node2>::NEntries));
+    static_assert(int(Span<Node1>::NEntries) == int(Span<Node3>::NEntries));
+
+    // Maximum is 2^31-1 or 2^63-1 bytes (limited by qsizetype and ptrdiff_t)
+    size_t max = (std::numeric_limits<ptrdiff_t>::max)();
+    return max / sizeof(Span<Node1>) * Span<Node1>::NEntries;
+}
+inline constexpr size_t bucketsForCapacity(size_t requestedCapacity) noexcept
+{
+    if (requestedCapacity <= 8)
+        return 16;
+    if (requestedCapacity >= maxNumBuckets())
+        return maxNumBuckets();
+    return qNextPowerOfTwo(QIntegerForSize<sizeof(size_t)>::Unsigned(2 * requestedCapacity - 1));
+}
+inline constexpr size_t bucketForHash(size_t nBuckets, size_t hash) noexcept
+{
+    return hash & (nBuckets - 1);
+}
+} // namespace GrowthPolicy
 
 template <typename Node>
 struct iterator;
@@ -923,28 +934,64 @@ public:
         return contains(key) ? 1 : 0;
     }
 
-    Key key(const T &value, const Key &defaultKey = Key()) const noexcept
+private:
+    const Key *keyImpl(const T &value) const noexcept
     {
         if (d) {
             const_iterator i = begin();
             while (i != end()) {
                 if (i.value() == value)
-                    return i.key();
+                    return &i.key();
                 ++i;
             }
         }
 
-        return defaultKey;
+        return nullptr;
     }
-    T value(const Key &key, const T &defaultValue = T()) const noexcept
+
+public:
+    Key key(const T &value) const noexcept
+    {
+        if (auto *k = keyImpl(value))
+            return *k;
+        else
+            return Key();
+    }
+    Key key(const T &value, const Key &defaultKey) const noexcept
+    {
+        if (auto *k = keyImpl(value))
+            return *k;
+        else
+            return defaultKey;
+    }
+
+private:
+    T *valueImpl(const Key &key) const noexcept
     {
         if (d) {
             Node *n = d->findNode(key);
             if (n)
-                return n->value;
+                return &n->value;
         }
-        return defaultValue;
+        return nullptr;
     }
+public:
+    T value(const Key &key) const noexcept
+    {
+        if (T *v = valueImpl(key))
+            return *v;
+        else
+            return T();
+    }
+
+    T value(const Key &key, const T &defaultValue) const noexcept
+    {
+        if (T *v = valueImpl(key))
+            return *v;
+        else
+            return defaultValue;
+    }
+
     T &operator[](const Key &key)
     {
         const auto copy = isDetached() ? QHash() : *this; // keep 'key' alive across the detach
@@ -1446,30 +1493,63 @@ public:
         return d->findNode(key) != nullptr;
     }
 
-    Key key(const T &value, const Key &defaultKey = Key()) const noexcept
+private:
+    const Key *keyImpl(const T &value) const noexcept
     {
         if (d) {
             auto i = d->begin();
             while (i != d->end()) {
                 Chain *e = i.node()->value;
                 if (e->contains(value))
-                    return i.node()->key;
+                    return &i.node()->key;
                 ++i;
             }
         }
 
-        return defaultKey;
+        return nullptr;
     }
-    T value(const Key &key, const T &defaultValue = T()) const noexcept
+public:
+    Key key(const T &value) const noexcept
+    {
+        if (auto *k = keyImpl(value))
+            return *k;
+        else
+            return Key();
+    }
+    Key key(const T &value, const Key &defaultKey) const noexcept
+    {
+        if (auto *k = keyImpl(value))
+            return *k;
+        else
+            return defaultKey;
+    }
+
+private:
+    T *valueImpl(const Key &key) const noexcept
     {
         if (d) {
             Node *n = d->findNode(key);
             if (n) {
                 Q_ASSERT(n->value);
-                return n->value->value;
+                return &n->value->value;
             }
         }
-        return defaultValue;
+        return nullptr;
+    }
+public:
+    T value(const Key &key) const noexcept
+    {
+        if (auto *v = valueImpl(key))
+            return *v;
+        else
+            return T();
+    }
+    T value(const Key &key, const T &defaultValue) const noexcept
+    {
+        if (auto *v = valueImpl(key))
+            return *v;
+        else
+            return defaultValue;
     }
 
     T &operator[](const Key &key)
@@ -1765,8 +1845,7 @@ public:
     template <typename ...Args>
     iterator emplace(const Key &key, Args &&... args)
     {
-        Key copy = key; // Needs to be explicit for MSVC 2019
-        return emplace(std::move(copy), std::forward<Args>(args)...);
+        return emplace(Key(key), std::forward<Args>(args)...);
     }
 
     template <typename ...Args>

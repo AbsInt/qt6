@@ -68,6 +68,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
+#include <vector>
+
+#include <vector>
+#include <memory>
 
 QT_BEGIN_NAMESPACE
 
@@ -99,7 +103,7 @@ static void saveCoverageTool(const char * appname, bool testfailed, bool install
 static QElapsedTimer elapsedFunctionTime;
 static QElapsedTimer elapsedTotalTime;
 
-#define FOREACH_TEST_LOGGER for (QAbstractTestLogger *logger : *QTest::loggers())
+#define FOREACH_TEST_LOGGER for (const auto &logger : qAsConst(*QTest::loggers()))
 
 namespace QTest {
 
@@ -168,7 +172,9 @@ namespace QTest {
 
     static IgnoreResultList *ignoreResultList = nullptr;
 
-    Q_GLOBAL_STATIC(QList<QAbstractTestLogger *>, loggers)
+    static std::vector<QVariant> failOnWarningList;
+
+    Q_GLOBAL_STATIC(std::vector<std::unique_ptr<QAbstractTestLogger>>, loggers)
 
     static int verbosity = 0;
     static int maxWarnings = 2002;
@@ -202,20 +208,49 @@ namespace QTest {
         return false;
     }
 
+    static bool handleFailOnWarning(const QMessageLogContext &context, const QString &message)
+    {
+        // failOnWarnings can be called multiple times per test function, so let
+        // each call cause a failure if required.
+        for (const auto &pattern : failOnWarningList) {
+            if (pattern.metaType() == QMetaType::fromType<QString>()) {
+                if (message != pattern.toString())
+                    continue;
+            }
+#if QT_CONFIG(regularexpression)
+            else if (pattern.metaType() == QMetaType::fromType<QRegularExpression>()) {
+                if (!message.contains(pattern.toRegularExpression()))
+                    continue;
+            }
+#endif
+
+            const size_t maxMsgLen = 1024;
+            char msg[maxMsgLen] = {'\0'};
+            qsnprintf(msg, maxMsgLen, "Received a warning that resulted in a failure:\n%s",
+                      qPrintable(message));
+            QTestResult::addFailure(msg, context.file, context.line);
+            return true;
+        }
+        return false;
+    }
+
     static void messageHandler(QtMsgType type, const QMessageLogContext & context, const QString &message)
     {
         static QBasicAtomicInt counter = Q_BASIC_ATOMIC_INITIALIZER(QTest::maxWarnings);
 
-        if (QTestLog::loggerCount() == 0) {
+        if (!QTestLog::hasLoggers()) {
             // if this goes wrong, something is seriously broken.
             qInstallMessageHandler(oldMessageHandler);
-            QTEST_ASSERT(QTestLog::loggerCount() != 0);
+            QTEST_ASSERT(QTestLog::hasLoggers());
         }
 
         if (handleIgnoredMessage(type, message)) {
             // the message is expected, so just swallow it.
             return;
         }
+
+        if (type == QtWarningMsg && handleFailOnWarning(context, message))
+            return;
 
         if (type != QtFatalMsg) {
             if (counter.loadRelaxed() <= 0)
@@ -310,6 +345,11 @@ void QTestLog::clearIgnoreMessages()
     QTest::IgnoreResultList::clearList(QTest::ignoreResultList);
 }
 
+void QTestLog::clearFailOnWarnings()
+{
+    QTest::failOnWarningList.clear();
+}
+
 void QTestLog::addPass(const char *msg)
 {
     if (printAvailableTags)
@@ -400,7 +440,7 @@ void QTestLog::addSkip(const char *msg, const char *file, int line)
     ++QTest::skips;
 
     FOREACH_TEST_LOGGER
-        logger->addMessage(QAbstractTestLogger::Skip, QString::fromUtf8(msg), file, line);
+        logger->addIncident(QAbstractTestLogger::Skip, msg, file, line);
 }
 
 void QTestLog::addBenchmarkResult(const QBenchmarkResult &result)
@@ -423,7 +463,6 @@ void QTestLog::stopLogging()
     qInstallMessageHandler(QTest::oldMessageHandler);
     FOREACH_TEST_LOGGER {
         logger->stopLogging();
-        delete logger;
     }
     QTest::loggers()->clear();
     saveCoverageTool(QTestResult::currentAppName(), failCount() != 0, QTestLog::installedTestCoverage());
@@ -484,12 +523,12 @@ void QTestLog::addLogger(LogMode mode, const char *filename)
 void QTestLog::addLogger(QAbstractTestLogger *logger)
 {
     QTEST_ASSERT(logger);
-    QTest::loggers()->append(logger);
+    QTest::loggers()->emplace_back(logger);
 }
 
-int QTestLog::loggerCount()
+bool QTestLog::hasLoggers()
 {
-    return QTest::loggers()->size();
+    return !QTest::loggers()->empty();
 }
 
 bool QTestLog::loggerUsingStdout()
@@ -541,6 +580,20 @@ void QTestLog::ignoreMessage(QtMsgType type, const QRegularExpression &expressio
     QTEST_ASSERT(expression.isValid());
 
     QTest::IgnoreResultList::append(QTest::ignoreResultList, type, QVariant(expression));
+}
+#endif // QT_CONFIG(regularexpression)
+
+void QTestLog::failOnWarning(const char *msg)
+{
+    QTest::failOnWarningList.push_back(QString::fromUtf8(msg));
+}
+
+#if QT_CONFIG(regularexpression)
+void QTestLog::failOnWarning(const QRegularExpression &expression)
+{
+    QTEST_ASSERT(expression.isValid());
+
+    QTest::failOnWarningList.push_back(QVariant::fromValue(expression));
 }
 #endif // QT_CONFIG(regularexpression)
 

@@ -1,34 +1,37 @@
 /****************************************************************************
 **
 ** Copyright (C) 2017 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the Qt Quick Templates 2 module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL3$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
 ** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPLv3 included in the
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
 ** packaging of this file. Please review the following information to
 ** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl.html.
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
 ** GNU General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or later as published by the Free
-** Software Foundation and appearing in the file LICENSE.GPL included in
-** the packaging of this file. Please review the following information to
-** ensure the GNU General Public License version 2.0 requirements will be
-** met: http://www.gnu.org/licenses/gpl-2.0.html.
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -131,9 +134,9 @@ public:
     void startPressRepeat();
     void stopPressRepeat();
 
-    void handlePress(const QPointF &point) override;
-    void handleMove(const QPointF &point) override;
-    void handleRelease(const QPointF &point) override;
+    void handlePress(const QPointF &point, ulong timestamp) override;
+    void handleMove(const QPointF &point, ulong timestamp) override;
+    void handleRelease(const QPointF &point, ulong timestamp) override;
     void handleUngrab() override;
 
     void itemImplicitWidthChanged(QQuickItem *item) override;
@@ -337,10 +340,10 @@ void QQuickSpinBoxPrivate::stopPressRepeat()
     }
 }
 
-void QQuickSpinBoxPrivate::handlePress(const QPointF &point)
+void QQuickSpinBoxPrivate::handlePress(const QPointF &point, ulong timestamp)
 {
     Q_Q(QQuickSpinBox);
-    QQuickControlPrivate::handlePress(point);
+    QQuickControlPrivate::handlePress(point, timestamp);
     QQuickItem *ui = up->indicator();
     QQuickItem *di = down->indicator();
     up->setPressed(ui && ui->isEnabled() && ui->contains(ui->mapFromItem(q, point)));
@@ -352,10 +355,10 @@ void QQuickSpinBoxPrivate::handlePress(const QPointF &point)
         startRepeatDelay();
 }
 
-void QQuickSpinBoxPrivate::handleMove(const QPointF &point)
+void QQuickSpinBoxPrivate::handleMove(const QPointF &point, ulong timestamp)
 {
     Q_Q(QQuickSpinBox);
-    QQuickControlPrivate::handleMove(point);
+    QQuickControlPrivate::handleMove(point, timestamp);
     QQuickItem *ui = up->indicator();
     QQuickItem *di = down->indicator();
     up->setHovered(ui && ui->isEnabled() && ui->contains(ui->mapFromItem(q, point)));
@@ -369,10 +372,10 @@ void QQuickSpinBoxPrivate::handleMove(const QPointF &point)
         stopPressRepeat();
 }
 
-void QQuickSpinBoxPrivate::handleRelease(const QPointF &point)
+void QQuickSpinBoxPrivate::handleRelease(const QPointF &point, ulong timestamp)
 {
     Q_Q(QQuickSpinBox);
-    QQuickControlPrivate::handleRelease(point);
+    QQuickControlPrivate::handleRelease(point, timestamp);
     QQuickItem *ui = up->indicator();
     QQuickItem *di = down->indicator();
 
@@ -592,7 +595,8 @@ void QQuickSpinBox::setEditable(bool editable)
     }
     \endcode
 
-    \sa editable, textFromValue, valueFromText, {Control::locale}{locale}
+    \sa editable, textFromValue, valueFromText, {Control::locale}{locale},
+        {Validating Input Text}
 */
 QValidator *QQuickSpinBox::validator() const
 {

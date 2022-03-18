@@ -637,7 +637,10 @@ void tst_qqmlqt::openUrlExternally()
     const QUrl htmlTestFile = testFileUrl("test.html");
     QDesktopServices::setUrlHandler("test", &handler, "noteCall");
     QDesktopServices::setUrlHandler(htmlTestFile.scheme(), &handler, "noteCall");
-
+    const auto unset = qScopeGuard([&] {
+        QDesktopServices::unsetUrlHandler(htmlTestFile.scheme());
+        QDesktopServices::unsetUrlHandler("test");
+    });
     QQmlComponent component(&engine, testFileUrl("openUrlExternally.qml"));
     QScopedPointer<QObject> object(component.create());
     QVERIFY(object != nullptr);
@@ -648,9 +651,6 @@ void tst_qqmlqt::openUrlExternally()
 
     QCOMPARE(handler.called,2);
     QCOMPARE(handler.last, htmlTestFile);
-
-    QDesktopServices::unsetUrlHandler("test");
-    QDesktopServices::unsetUrlHandler(htmlTestFile.scheme());
 }
 
 void tst_qqmlqt::openUrlExternally_pragmaLibrary()
@@ -660,6 +660,10 @@ void tst_qqmlqt::openUrlExternally_pragmaLibrary()
     const QUrl htmlTestFile = testFileUrl("test.html");
     QDesktopServices::setUrlHandler("test", &handler, "noteCall");
     QDesktopServices::setUrlHandler(htmlTestFile.scheme(), &handler, "noteCall");
+    const auto unset = qScopeGuard([&] {
+        QDesktopServices::unsetUrlHandler(htmlTestFile.scheme());
+        QDesktopServices::unsetUrlHandler("test");
+    });
 
     QQmlComponent component(&engine, testFileUrl("openUrlExternally_lib.qml"));
     QScopedPointer<QObject> object(component.create());
@@ -671,9 +675,6 @@ void tst_qqmlqt::openUrlExternally_pragmaLibrary()
 
     QCOMPARE(handler.called,2);
     QCOMPARE(handler.last, htmlTestFile);
-
-    QDesktopServices::unsetUrlHandler("test");
-    QDesktopServices::unsetUrlHandler(htmlTestFile.scheme());
 }
 
 void tst_qqmlqt::md5()
@@ -931,9 +932,10 @@ void tst_qqmlqt::dateTimeFormattingVariants()
     if (variant.typeId() == QMetaType::QColor || variant.typeId() == QMetaType::Int) {
         if (method == "formatTime") {
             // formatTime has special error handling as it parses the strings itself.
-            QTest::ignoreMessage(QtWarningMsg, QRegularExpression(
-                                     "formatting.qml:18: Error: Invalid argument passed to "
-                                     "formatTime"));
+            QTest::ignoreMessage(
+                    QtWarningMsg,
+                    QRegularExpression("formatting.qml:19: Error: Invalid argument passed to "
+                                       "formatTime"));
         } else {
             QTest::ignoreMessage(QtWarningMsg,
                                  QRegularExpression("Could not convert argument 0 at"));

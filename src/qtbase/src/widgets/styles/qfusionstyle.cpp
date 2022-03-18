@@ -988,17 +988,6 @@ void QFusionStyle::drawPrimitive(PrimitiveElement elem,
 
     case PE_FrameStatusBarItem:
         break;
-    case PE_IndicatorTabClose:
-    {
-        Q_D(const QFusionStyle);
-        if (d->tabBarcloseButtonIcon.isNull())
-            d->tabBarcloseButtonIcon = proxy()->standardIcon(SP_DialogCloseButton, option, widget);
-        if ((option->state & State_Enabled) && (option->state & State_MouseOver))
-            proxy()->drawPrimitive(PE_PanelButtonCommand, option, painter, widget);
-        QPixmap pixmap = d->tabBarcloseButtonIcon.pixmap(QSize(16, 16), painter->device()->devicePixelRatio(), QIcon::Normal, QIcon::On);
-        proxy()->drawItemPixmap(painter, option->rect, Qt::AlignCenter, pixmap);
-    }
-        break;
     case PE_PanelMenu: {
         painter->save();
         const QBrush menuBackground = option->palette.base().color().lighter(108);
@@ -1666,10 +1655,7 @@ void QFusionStyle::drawControl(ControlElement element, const QStyleOption *optio
                 else
                     pixmap = menuItem->icon.pixmap(iconSize, painter->device()->devicePixelRatio(), mode);
 
-                const int pixw = pixmap.width() / pixmap.devicePixelRatio();
-                const int pixh = pixmap.height() / pixmap.devicePixelRatio();
-
-                QRect pmr(0, 0, pixw, pixh);
+                QRect pmr(QPoint(0, 0), pixmap.deviceIndependentSize().toSize());
                 pmr.moveCenter(vCheckRect.center());
                 painter->setPen(menuItem->palette.text().color());
                 if (!ignoreCheckMark && checkable && checked) {

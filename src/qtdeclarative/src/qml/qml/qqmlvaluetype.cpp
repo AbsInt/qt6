@@ -47,12 +47,11 @@
 
 QT_BEGIN_NAMESPACE
 
-QQmlValueType::QQmlValueType(int typeId, const QMetaObject *gadgetMetaObject)
-    : metaType(typeId)
+QQmlValueType::QQmlValueType(QMetaType type, const QMetaObject *gadgetMetaObject)
+    : metaType(type)
 {
     QMetaObjectBuilder builder(gadgetMetaObject);
     dynamicMetaObject = builder.toMetaObject();
-    *static_cast<QMetaObject*>(this) = *dynamicMetaObject;
 }
 
 QQmlValueType::~QQmlValueType()
@@ -113,7 +112,7 @@ void QQmlGadgetPtrWrapper::setValue(const QVariant &value)
 int QQmlGadgetPtrWrapper::metaCall(QMetaObject::Call type, int id, void **argv)
 {
     Q_ASSERT(m_gadgetPtr);
-    const QMetaObject *metaObject = valueType();
+    const QMetaObject *metaObject = valueType()->metaObject();
     QQmlMetaObject::resolveGadgetMethodOrPropertyIndex(type, &metaObject, &id);
     metaObject->d.static_metacall(static_cast<QObject *>(m_gadgetPtr), type, id, argv);
     return id;
@@ -125,9 +124,9 @@ const QQmlValueType *QQmlGadgetPtrWrapper::valueType() const
     return static_cast<const QQmlValueType *>(d->metaObject);
 }
 
-QAbstractDynamicMetaObject *QQmlValueType::toDynamicMetaObject(QObject *)
+QMetaObject *QQmlValueType::toDynamicMetaObject(QObject *)
 {
-    return this;
+    return dynamicMetaObject;
 }
 
 void QQmlValueType::objectDestroyed(QObject *)

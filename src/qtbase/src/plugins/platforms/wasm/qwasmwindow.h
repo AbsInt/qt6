@@ -39,23 +39,9 @@
 
 QT_BEGIN_NAMESPACE
 
-class QWasmCompositor;
-
 class QWasmWindow : public QPlatformWindow
 {
 public:
-    enum ResizeMode {
-        ResizeNone,
-        ResizeTopLeft,
-        ResizeTop,
-        ResizeTopRight,
-        ResizeRight,
-        ResizeBottomRight,
-        ResizeBottom,
-        ResizeBottomLeft,
-        ResizeLeft
-    };
-
     QWasmWindow(QWindow *w, QWasmCompositor *compositor, QWasmBackingStore *backingStore);
     ~QWasmWindow();
     void destroy();
@@ -92,7 +78,7 @@ public:
     QRegion resizeRegion() const;
     bool isPointOnTitle(QPoint point) const;
     bool isPointOnResizeRegion(QPoint point) const;
-    ResizeMode resizeModeAtPoint(QPoint point) const;
+    QWasmCompositor::ResizeMode resizeModeAtPoint(QPoint point) const;
     QRect maxButtonRect() const;
     QRect minButtonRect() const;
     QRect closeButtonRect() const;
@@ -122,6 +108,7 @@ protected:
     WId m_winid = 0;
     bool m_hasTitle = false;
     bool m_needsCompositor = false;
+    long m_requestAnimationFrameId = -1;
     friend class QWasmCompositor;
     friend class QWasmEventTranslator;
     bool windowIsPopupType(Qt::WindowFlags flags) const;

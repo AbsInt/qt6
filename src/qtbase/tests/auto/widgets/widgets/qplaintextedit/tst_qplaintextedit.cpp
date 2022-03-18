@@ -38,7 +38,6 @@
 #include <qclipboard.h>
 #include <qtextbrowser.h>
 #include <private/qwidgettextcontrol_p.h>
-#include <private/qplaintextedit_p.h>
 #include <qscrollbar.h>
 #include <qtextobject.h>
 #include <qmenu.h>
@@ -155,8 +154,6 @@ private slots:
     void updateCursorPositionAfterEdit();
 #endif
     void appendTextWhenInvisible();
-    void placeholderVisibility_data();
-    void placeholderVisibility();
 
 private:
     void createSelection();
@@ -1028,6 +1025,10 @@ void tst_QPlainTextEdit::copyAvailable()
 #endif
     ed->clear();
     QApplication::clipboard()->clear();
+#ifdef Q_OS_ANDROID
+    if (QNativeInterface::QAndroidApplication::sdkVersion() < 28)
+        QEXPECT_FAIL("", "Before Android 9, there's no API to clear the clipboard ", Continue);
+#endif
     QVERIFY(!ed->canPaste());
     QSignalSpy spyCopyAvailabe(ed, SIGNAL(copyAvailable(bool)));
 
@@ -1229,6 +1230,9 @@ void tst_QPlainTextEdit::canPaste()
 
 void tst_QPlainTextEdit::ensureCursorVisibleOnInitialShow()
 {
+#ifdef Q_OS_ANDROID
+    QSKIP("This test crashed on Android");
+#endif
     QString manyPagesOfPlainText;
     for (int i = 0; i < 800; ++i)
         manyPagesOfPlainText += QLatin1String("Blah blah blah blah blah blah\n");
@@ -1838,108 +1842,6 @@ void tst_QPlainTextEdit::appendTextWhenInvisible()
     QVERIFY(maxAfterAppend != 0);
 
     QCOMPARE(maxAfterAppend, maxAfterSet);
-}
-
-enum SetupCommand {
-    ClearPlaceHolder, // set empty placeholder text
-    SetPlaceHolder, // set a non-empty placeholder text
-    ClearContent, // set empty text as content
-    SetContent // set non-empty text as content
-};
-
-void tst_QPlainTextEdit::placeholderVisibility_data()
-{
-    QTest::addColumn<QList<SetupCommand>>("setupCommands");
-    QTest::addColumn<bool>("placeholderVisible");
-    QTest::addRow("no placeholder set + no text set")
-            << QList<SetupCommand>{} << true;
-    QTest::addRow("no placeholder set + text set or text set + no placeholder set")
-            << QList<SetupCommand>{ SetContent } << false;
-    QTest::addRow("no placeholder set + text set + empty text set")
-            << QList<SetupCommand>{ SetContent , ClearContent }
-            << false;
-    QTest::addRow("no placeholder set + empty text set + text set")
-            << QList<SetupCommand>{ ClearContent, SetContent }
-            << false;
-    QTest::addRow("empty placeholder set + no text set")
-            << QList<SetupCommand>{ ClearPlaceHolder } << true;
-    QTest::addRow("empty placeholder set + text set")
-            << QList<SetupCommand>{ ClearPlaceHolder, SetContent }
-            << false;
-    QTest::addRow("empty placeholder set + text set + empty text set")
-            << QList<SetupCommand>{ ClearPlaceHolder, SetContent, ClearContent }
-            << false;
-    QTest::addRow("empty placeholder set + empty text set + text set")
-            << QList<SetupCommand>{ ClearPlaceHolder, ClearContent, SetContent }
-            << false;
-    QTest::addRow("placeholder set + no text set")
-            << QList<SetupCommand>{ SetPlaceHolder, ClearContent }
-            << true;
-    QTest::addRow("placeholder set + text set")
-            << QList<SetupCommand>{ SetPlaceHolder, SetContent }
-            << false;
-    QTest::addRow("placeholder set + text set + empty text set")
-            << QList<SetupCommand>{ SetPlaceHolder, SetContent, ClearContent }
-            << true;
-    QTest::addRow("placeholder set + empty text set + text set")
-            << QList<SetupCommand>{ SetPlaceHolder, ClearContent, SetContent }
-            << false;
-    QTest::addRow("placeholder set + text set + empty placeholder set")
-            << QList<SetupCommand>{ SetPlaceHolder, SetContent, ClearPlaceHolder}
-            << false;
-    QTest::addRow("placeholder set + empty placeholder set + text set")
-            << QList<SetupCommand>{ SetPlaceHolder, ClearPlaceHolder, SetContent }
-            << false;
-    QTest::addRow("placeholder set + empty placeholder set + empty text set")
-            << QList<SetupCommand>{ SetPlaceHolder, ClearPlaceHolder, ClearContent }
-            << false;
-    QTest::addRow("placeholder set + empty text set + empty placeholder set")
-            << QList<SetupCommand>{ SetPlaceHolder, ClearContent, ClearPlaceHolder }
-            << false;
-    QTest::addRow("text set + no placeholder set + empty text set")
-            << QList<SetupCommand>{ SetContent, ClearContent }
-            << false;
-    QTest::addRow("text set + empty placeholder set")
-            << QList<SetupCommand>{ SetContent, ClearPlaceHolder }
-            << false;
-    QTest::addRow("text set + placeholder set")
-            << QList<SetupCommand>{ SetContent, SetPlaceHolder }
-            << false;
-    QTest::addRow("text set + placeholder set + empty text set")
-            << QList<SetupCommand>{ SetContent, SetPlaceHolder, ClearContent }
-            << true;
-    QTest::addRow("text set + placeholder set + empty placeholder set")
-            << QList<SetupCommand>{ SetContent, SetPlaceHolder, ClearPlaceHolder }
-            << false;
-}
-
-void tst_QPlainTextEdit::placeholderVisibility()
-{
-    QFETCH(QList<SetupCommand>, setupCommands);
-    QFETCH(bool, placeholderVisible);
-
-    QPlainTextEdit plainTextEdit;
-    for (auto command : setupCommands) {
-        switch (command) {
-        case ClearPlaceHolder:
-            plainTextEdit.setPlaceholderText("");
-            break;
-        case SetPlaceHolder:
-            plainTextEdit.setPlaceholderText("Qt is awesome !");
-            break;
-        case ClearContent:
-            plainTextEdit.setPlainText("");
-            break;
-        case SetContent:
-            plainTextEdit.setPlainText("PlainText...");
-            break;
-        }
-    }
-    auto *plainTextEdit_d = static_cast<QPlainTextEditPrivate *>(qt_widget_private(&plainTextEdit));
-
-    plainTextEdit.show();
-    QVERIFY(QTest::qWaitForWindowExposed(&plainTextEdit));
-    QTRY_VERIFY(plainTextEdit_d->placeholderVisible == placeholderVisible);
 }
 
 QTEST_MAIN(tst_QPlainTextEdit)

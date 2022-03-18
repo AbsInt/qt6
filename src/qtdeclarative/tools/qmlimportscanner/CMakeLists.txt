@@ -16,8 +16,9 @@ qt_internal_add_tool(${target_name}
         QT_NO_CAST_TO_ASCII
     PUBLIC_LIBRARIES
         Qt::QmlCompilerPrivate
-        Qt::QmlDevToolsPrivate
+        Qt::QmlPrivate
 )
+qt_internal_return_unless_building_tools()
 
 # special case begin
 # Create a dummy package that will just find Qml package, for backwards compatibility reasons.

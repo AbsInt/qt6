@@ -1,5 +1,3 @@
-# Generated from richtext.pro.
-
 if(TARGET Qt::Widgets)
-    add_subdirectory(textobject)
+    qt_internal_add_example(textobject)
 endif()

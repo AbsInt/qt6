@@ -98,21 +98,10 @@ QStringList QDesignerPluginManager::defaultPluginPaths()
 
     const QStringList path_list = QCoreApplication::libraryPaths();
 
-    const QString designer = QStringLiteral("designer");
-    for (const QString &path : path_list) {
-        QString libPath = path;
-        libPath += QDir::separator();
-        libPath += designer;
-        result.append(libPath);
-    }
+    for (const QString &path : path_list)
+        result.append(path + u"/designer"_qs);
 
-    QString homeLibPath = QDir::homePath();
-    homeLibPath += QDir::separator();
-    homeLibPath += QStringLiteral(".designer");
-    homeLibPath += QDir::separator();
-    homeLibPath += QStringLiteral("plugins");
-
-    result.append(homeLibPath);
+    result.append(qdesigner_internal::dataDirectory() + u"/plugins"_qs);
     return result;
 }
 
@@ -461,7 +450,7 @@ class QDesignerPluginManagerPrivate {
     bool addCustomWidget(QDesignerCustomWidgetInterface *c,
                          const QString &pluginPath,
                          const QString &designerLanguage);
-    void addCustomWidgets(const QObject *o,
+    void addCustomWidgets(QObject *o,
                           const QString &pluginPath,
                           const QString &designerLanguage);
 
@@ -535,7 +524,7 @@ bool QDesignerPluginManagerPrivate::addCustomWidget(QDesignerCustomWidgetInterfa
 
 // Check the plugin interface for either a custom widget or a collection and
 // add all contained custom widgets.
-void QDesignerPluginManagerPrivate::addCustomWidgets(const QObject *o,
+void QDesignerPluginManagerPrivate::addCustomWidgets(QObject *o,
                                                      const QString &pluginPath,
                                                      const QString &designerLanguage)
 {
@@ -543,7 +532,7 @@ void QDesignerPluginManagerPrivate::addCustomWidgets(const QObject *o,
         addCustomWidget(c, pluginPath, designerLanguage);
         return;
     }
-    if (const QDesignerCustomWidgetCollectionInterface *coll = qobject_cast<QDesignerCustomWidgetCollectionInterface*>(o)) {
+    if (QDesignerCustomWidgetCollectionInterface *coll = qobject_cast<QDesignerCustomWidgetCollectionInterface*>(o)) {
         const auto &collCustomWidgets = coll->customWidgets();
         for (QDesignerCustomWidgetInterface *c : collCustomWidgets)
             addCustomWidget(c, pluginPath, designerLanguage);

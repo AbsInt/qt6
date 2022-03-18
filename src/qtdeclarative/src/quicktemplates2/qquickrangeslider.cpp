@@ -1,34 +1,37 @@
 /****************************************************************************
 **
 ** Copyright (C) 2017 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the Qt Quick Templates 2 module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL3$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
 ** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPLv3 included in the
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
 ** packaging of this file. Please review the following information to
 ** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl.html.
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
 ** GNU General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or later as published by the Free
-** Software Foundation and appearing in the file LICENSE.GPL included in
-** the packaging of this file. Please review the following information to
-** ensure the GNU General Public License version 2.0 requirements will be
-** met: http://www.gnu.org/licenses/gpl-2.0.html.
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -380,9 +383,9 @@ public:
 #if QT_CONFIG(quicktemplates2_multitouch)
     bool acceptTouch(const QTouchEvent::TouchPoint &point) override;
 #endif
-    void handlePress(const QPointF &point) override;
-    void handleMove(const QPointF &point) override;
-    void handleRelease(const QPointF &point) override;
+    void handlePress(const QPointF &point, ulong timestamp) override;
+    void handleMove(const QPointF &point, ulong timestamp) override;
+    void handleRelease(const QPointF &point, ulong timestamp) override;
     void handleUngrab() override;
 
     void updateHover(const QPointF &pos);
@@ -467,10 +470,10 @@ bool QQuickRangeSliderPrivate::acceptTouch(const QTouchEvent::TouchPoint &point)
 }
 #endif
 
-void QQuickRangeSliderPrivate::handlePress(const QPointF &point)
+void QQuickRangeSliderPrivate::handlePress(const QPointF &point, ulong timestamp)
 {
     Q_Q(QQuickRangeSlider);
-    QQuickControlPrivate::handlePress(point);
+    QQuickControlPrivate::handlePress(point, timestamp);
     pressPoint = point;
 
     QQuickItem *firstHandle = first->handle();
@@ -528,10 +531,10 @@ void QQuickRangeSliderPrivate::handlePress(const QPointF &point)
     }
 }
 
-void QQuickRangeSliderPrivate::handleMove(const QPointF &point)
+void QQuickRangeSliderPrivate::handleMove(const QPointF &point, ulong timestamp)
 {
     Q_Q(QQuickRangeSlider);
-    QQuickControlPrivate::handleMove(point);
+    QQuickControlPrivate::handleMove(point, timestamp);
     QQuickRangeSliderNode *pressedNode = QQuickRangeSliderPrivate::pressedNode(touchId);
     if (pressedNode) {
         const qreal oldPos = pressedNode->position();
@@ -548,10 +551,10 @@ void QQuickRangeSliderPrivate::handleMove(const QPointF &point)
     }
 }
 
-void QQuickRangeSliderPrivate::handleRelease(const QPointF &point)
+void QQuickRangeSliderPrivate::handleRelease(const QPointF &point, ulong timestamp)
 {
     Q_Q(QQuickRangeSlider);
-    QQuickControlPrivate::handleRelease(point);
+    QQuickControlPrivate::handleRelease(point, timestamp);
     pressPoint = QPointF();
 
     QQuickRangeSliderNode *pressedNode = QQuickRangeSliderPrivate::pressedNode(touchId);
@@ -1201,7 +1204,7 @@ void QQuickRangeSlider::mousePressEvent(QMouseEvent *event)
 {
     Q_D(QQuickRangeSlider);
     QQuickControl::mousePressEvent(event);
-    d->handleMove(event->position());
+    d->handleMove(event->position(), event->timestamp());
     setKeepMouseGrab(true);
 }
 
@@ -1217,7 +1220,7 @@ void QQuickRangeSlider::touchEvent(QTouchEvent *event)
 
             switch (point.state()) {
             case QEventPoint::Pressed:
-                d->handlePress(point.position());
+                d->handlePress(point.position(), event->timestamp());
                 break;
             case QEventPoint::Updated:
                 if (!keepTouchGrab()) {
@@ -1227,10 +1230,10 @@ void QQuickRangeSlider::touchEvent(QTouchEvent *event)
                         setKeepTouchGrab(QQuickWindowPrivate::dragOverThreshold(point.position().y() - point.pressPosition().y(), Qt::YAxis, &point, qRound(d->touchDragThreshold)));
                 }
                 if (keepTouchGrab())
-                    d->handleMove(point.position());
+                    d->handleMove(point.position(), event->timestamp());
                 break;
             case QEventPoint::Released:
-                d->handleRelease(point.position());
+                d->handleRelease(point.position(), event->timestamp());
                 break;
             default:
                 break;

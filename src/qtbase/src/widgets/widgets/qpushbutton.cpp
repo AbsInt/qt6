@@ -171,7 +171,7 @@ QT_BEGIN_NAMESPACE
     and other API, and QPushButton provides GUI logic.
     See QAbstractButton for more information about the API.
 
-    \sa QToolButton, QRadioButton, QCheckBox, {fowler}{GUI Design Handbook: Push Button}
+    \sa QToolButton, QRadioButton, QCheckBox
 */
 
 /*!
@@ -525,6 +525,8 @@ void QPushButton::mouseMoveEvent(QMouseEvent *e)
             d->hovering = hit;
         }
     }
+
+    QAbstractButton::mouseMoveEvent(e);
 }
 
 /*!

@@ -40,18 +40,19 @@
 #include "qqmlpropertyvalidator_p.h"
 
 #include <private/qqmlcustomparser_p.h>
+#include <private/qqmlglobal_p.h>
 #include <private/qqmlirbuilder_p.h>
-#include <private/qqmlstringconverters_p.h>
 #include <private/qqmlpropertycachecreator_p.h>
 #include <private/qqmlpropertyresolver_p.h>
+#include <private/qqmlstringconverters_p.h>
 
 #include <QtCore/qdatetime.h>
 
 QT_BEGIN_NAMESPACE
 
-static bool isPrimitiveType(int typeId)
+static bool isPrimitiveType(QMetaType metaType)
 {
-    switch (typeId) {
+    switch (metaType.id()) {
 #define HANDLE_PRIMITIVE(Type, id, T) \
     case QMetaType::Type:
 QT_FOR_EACH_STATIC_PRIMITIVE_TYPE(HANDLE_PRIMITIVE);
@@ -150,7 +151,7 @@ QVector<QQmlError> QQmlPropertyValidator::validateObject(
     QString defaultPropertyName;
     QQmlPropertyData *defaultProperty = nullptr;
     if (obj->indexOfDefaultPropertyOrAlias != -1) {
-        QQmlPropertyCache *cache = propertyCache->parent();
+        QQmlPropertyCache *cache = propertyCache->parent().data();
         defaultPropertyName = cache->defaultPropertyName();
         defaultProperty = cache->defaultProperty();
     } else {
@@ -228,7 +229,8 @@ QVector<QQmlError> QQmlPropertyValidator::validateObject(
             return recordError(binding->location, tr("Invalid attached object assignment"));
         }
 
-        if (binding->type >= QV4::CompiledData::Binding::Type_Object && (pd || binding->isAttachedProperty())) {
+        if (binding->type >= QV4::CompiledData::Binding::Type_Object
+                && (pd || binding->isAttachedProperty() || binding->isGroupProperty())) {
             const bool populatingValueTypeGroupProperty
                     = pd
                       && QQmlMetaType::metaObjectForValueType(pd->propType())
@@ -247,10 +249,18 @@ QVector<QQmlError> QQmlPropertyValidator::validateObject(
             continue;
         }
 
-        if (binding->type == QV4::CompiledData::Binding::Type_AttachedProperty) {
-            if (instantiatingBinding && (instantiatingBinding->isAttachedProperty() || instantiatingBinding->isGroupProperty())) {
-                return recordError(binding->location, tr("Attached properties cannot be used here"));
+        if ((pd && binding->type == QV4::CompiledData::Binding::Type_AttachedProperty)
+                || (!pd && binding->type == QV4::CompiledData::Binding::Type_GroupProperty)) {
+            if (instantiatingBinding && (instantiatingBinding->isAttachedProperty()
+                                         || instantiatingBinding->isGroupProperty())) {
+                return recordError(
+                            binding->location, tr("%1 properties cannot be used here")
+                            .arg(binding->type == QV4::CompiledData::Binding::Type_AttachedProperty
+                                 ? QStringLiteral("Attached")
+                                 : QStringLiteral("Group")));
             }
+            continue;
+        } else if (binding->type == QV4::CompiledData::Binding::Type_AttachedProperty) {
             continue;
         }
 
@@ -309,21 +319,21 @@ QVector<QQmlError> QQmlPropertyValidator::validateObject(
                         return recordError(binding->location, tr("Invalid grouped property access"));
                     }
                 } else {
-                    const int typeId = pd->propType().id();
-                    if (isPrimitiveType(typeId)) {
+                    const QMetaType type = pd->propType();
+                    if (isPrimitiveType(type)) {
                         return recordError(
                                     binding->location,
                                     tr("Invalid grouped property access: Property \"%1\" with primitive type \"%2\".")
                                         .arg(name)
-                                        .arg(QString::fromLatin1(QMetaType(typeId).name()))
+                                        .arg(QString::fromUtf8(type.name()))
                                     );
                     }
 
-                    if (!enginePrivate->propertyCacheForType(typeId)) {
+                    if (!enginePrivate->propertyCacheForType(type)) {
                         return recordError(binding->location,
                                            tr("Invalid grouped property access: Property \"%1\" with type \"%2\", which is not a value type")
                                            .arg(name)
-                                           .arg(QString::fromLatin1(QMetaType(typeId).name()))
+                                           .arg(QString::fromUtf8(type.name()))
                                           );
                     }
                 }
@@ -369,7 +379,9 @@ QVector<QQmlError> QQmlPropertyValidator::validateObject(
     return noError;
 }
 
-QQmlError QQmlPropertyValidator::validateLiteralBinding(QQmlPropertyCache *propertyCache, QQmlPropertyData *property, const QV4::CompiledData::Binding *binding) const
+QQmlError QQmlPropertyValidator::validateLiteralBinding(
+        const QQmlRefPointer<QQmlPropertyCache> &propertyCache, QQmlPropertyData *property,
+        const QV4::CompiledData::Binding *binding) const
 {
     if (property->isQList()) {
         return qQmlCompileError(binding->valueLocation, tr("Cannot assign primitives to lists"));
@@ -586,7 +598,7 @@ QQmlError QQmlPropertyValidator::validateLiteralBinding(QQmlPropertyCache *prope
         };
         QVariant result;
         if (!QQml_valueTypeProvider()->createValueType(
-                    property->propType().id(),
+                    property->propType(),
                     compilationUnit->bindingValueAsString(binding), result)) {
             return warnOrError(tr("Invalid property assignment: %1 expected")
                                .arg(typeName()));
@@ -647,17 +659,17 @@ QQmlError QQmlPropertyValidator::validateLiteralBinding(QQmlPropertyCache *prope
     Returns true if from can be assigned to a (QObject) property of type
     to.
 */
-bool QQmlPropertyValidator::canCoerce(int to, QQmlPropertyCache *fromMo) const
+bool QQmlPropertyValidator::canCoerce(QMetaType to, QQmlPropertyCache *fromMo) const
 {
-    QQmlPropertyCache *toMo = enginePrivate->rawPropertyCacheForType(to);
+    QQmlRefPointer<QQmlPropertyCache> toMo = enginePrivate->rawPropertyCacheForType(to);
 
-    if (toMo == nullptr) {
+    if (toMo.isNull()) {
         // if we have an inline component from the current file,
         // it is not properly registered at this point, as registration
         // only occurs after the whole file has been validated
         // Therefore we need to check the ICs here
         for (const auto& icDatum : compilationUnit->inlineComponentData) {
-            if (icDatum.typeIds.id.id() == to) {
+            if (icDatum.typeIds.id == to) {
                 toMo = compilationUnit->propertyCaches.at(icDatum.objectIndex);
                 break;
             }
@@ -667,7 +679,7 @@ bool QQmlPropertyValidator::canCoerce(int to, QQmlPropertyCache *fromMo) const
     while (fromMo) {
         if (fromMo == toMo)
             return true;
-        fromMo = fromMo->parent();
+        fromMo = fromMo->parent().data();
     }
     return false;
 }
@@ -718,7 +730,7 @@ QQmlError QQmlPropertyValidator::validateObjectBinding(QQmlPropertyData *propert
         return noError;
     }
 
-    const int propType = property->propType().id();
+    const QMetaType propType = property->propType();
     const auto rhsType = [&]() {
         return stringAt(compilationUnit->objectAt(binding->value.objectIndex)
                         ->inheritedTypeNameIndex);
@@ -728,11 +740,12 @@ QQmlError QQmlPropertyValidator::validateObjectBinding(QQmlPropertyData *propert
         // Can only check at instantiation time if the created sub-object successfully casts to the
         // target interface.
         return noError;
-    } else if (propType == QMetaType::QVariant || propType == qMetaTypeId<QJSValue>()) {
+    } else if (propType == QMetaType::fromType<QVariant>()
+               || propType == QMetaType::fromType<QJSValue>()) {
         // We can convert everything to QVariant :)
         return noError;
     } else if (property->isQList()) {
-        const int listType = QQmlMetaType::listType(property->propType()).id();
+        const QMetaType listType = QQmlMetaType::listType(property->propType());
         if (!QQmlMetaType::isInterface(listType)) {
             QQmlPropertyCache *source = propertyCaches.at(binding->value.objectIndex);
             if (!canCoerce(listType, source)) {
@@ -748,7 +761,7 @@ QQmlError QQmlPropertyValidator::validateObjectBinding(QQmlPropertyData *propert
                                                       .arg(rhsType())
                                                       .arg(propertyName)
                                                       .arg(typeName));
-    } else if (propType == qMetaTypeId<QQmlScriptString>()) {
+    } else if (propType == QMetaType::fromType<QQmlScriptString>()) {
         return qQmlCompileError(binding->valueLocation, tr("Invalid property assignment: script expected"));
     } else if (QQmlMetaType::isValueType(property->propType())) {
         return qQmlCompileError(binding->location, tr("Cannot assign value of type \"%1\" to property \"%2\", expecting an object")
@@ -758,7 +771,8 @@ QQmlError QQmlPropertyValidator::validateObjectBinding(QQmlPropertyData *propert
         // actual property type before we applied any extensions that might
         // effect the properties on the type, but don't effect assignability
         // Not passing a version ensures that we get the raw metaObject.
-        QQmlPropertyCache *propertyMetaObject = enginePrivate->rawPropertyCacheForType(propType);
+        QQmlRefPointer<QQmlPropertyCache> propertyMetaObject
+                = enginePrivate->rawPropertyCacheForType(propType);
         if (!propertyMetaObject) {
             // if we have an inline component from the current file,
             // it is not properly registered at this point, as registration
@@ -779,7 +793,7 @@ QQmlError QQmlPropertyValidator::validateObjectBinding(QQmlPropertyData *propert
             QQmlPropertyCache *c = propertyCaches.at(binding->value.objectIndex);
             while (c && !isAssignable) {
                 isAssignable |= c == propertyMetaObject;
-                c = c->parent();
+                c = c->parent().data();
             }
 
             if (!isAssignable) {

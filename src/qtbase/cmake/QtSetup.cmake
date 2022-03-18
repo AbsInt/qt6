@@ -11,9 +11,29 @@ if(NOT FEATURE_developer_build AND INPUT_developer_build
     set(FEATURE_developer_build ON)
 endif()
 
+# Pre-calculate the no_prefix feature if it's set by configure via INPUT_no_prefix.
+# This needs to be done before qtbase/configure.cmake is processed.
+if(NOT FEATURE_no_prefix AND INPUT_no_prefix
+        AND NOT "${INPUT_no_prefix}" STREQUAL "undefined")
+    set(FEATURE_no_prefix ON)
+endif()
+
 set(_default_build_type "Release")
 if(FEATURE_developer_build)
     set(_default_build_type "Debug")
+endif()
+
+# Decide whether output should be verbose or not.
+# Default to verbose (--log-level=STATUS) in a developer-build and
+# non-verbose (--log-level=NOTICE) otherwise.
+# If a custom CMAKE_MESSAGE_LOG_LEVEL was specified, it takes priority.
+# Passing an explicit --log-level=Foo has the highest priority.
+if(NOT CMAKE_MESSAGE_LOG_LEVEL)
+    if(FEATURE_developer_build OR QT_FEATURE_developer_build)
+        set(CMAKE_MESSAGE_LOG_LEVEL "STATUS")
+    else()
+        set(CMAKE_MESSAGE_LOG_LEVEL "NOTICE")
+    endif()
 endif()
 
 # Reset content of extra build internal vars for each inclusion of QtSetup.
@@ -95,7 +115,11 @@ set(CMAKE_LINK_DEPENDS_NO_SHARED ON)
 # QtBuildInternalsExtra.cmake file.
 if (PROJECT_NAME STREQUAL "QtBase" AND NOT QT_BUILD_STANDALONE_TESTS)
     if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
-        if(FEATURE_developer_build)
+        # Handle both FEATURE_ and QT_FEATURE_ cases when they are specified on the command line
+        # explicitly. It's possible for one to be set, but not the other, because
+        # qtbase/configure.cmake is not processed by this point.
+        if(FEATURE_developer_build OR QT_FEATURE_developer_build
+            OR FEATURE_no_prefix OR QT_FEATURE_no_prefix)
             # Handle non-prefix builds by setting the CMake install prefix to point to qtbase's
             # build dir. While building another repo (like qtsvg) the CMAKE_PREFIX_PATH should be
             # set on the command line to point to the qtbase build dir.
@@ -217,7 +241,8 @@ option(QT_BUILD_MANUAL_TESTS "Build Qt manual tests" OFF)
 option(QT_BUILD_MINIMAL_STATIC_TESTS "Build minimal subset of tests for static Qt builds" OFF)
 
 ## Find host tools (if non native):
-set(QT_HOST_PATH "" CACHE PATH "Installed Qt host directory path, used for cross compiling.")
+set(QT_HOST_PATH "$ENV{QT_HOST_PATH}" CACHE PATH
+    "Installed Qt host directory path, used for cross compiling.")
 
 if (CMAKE_CROSSCOMPILING)
     if(NOT IS_DIRECTORY "${QT_HOST_PATH}")
@@ -253,9 +278,6 @@ include(QtCompilerOptimization)
 ## Compiler flags:
 include(QtCompilerFlags)
 
-## Set up non-prefix build:
-qt_set_up_nonprefix_build()
-
 qt_set_language_standards()
 
 option(QT_USE_CCACHE "Enable the use of ccache")
@@ -267,7 +289,7 @@ if(QT_USE_CCACHE)
         set(CMAKE_OBJC_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
         set(CMAKE_OBJCXX_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
     else()
-        message(WARNING "Ccache use was requested, but the program was not found.")
+        message(FATAL_ERROR "Ccache use was requested, but the program was not found.")
     endif()
 endif()
 

@@ -94,7 +94,8 @@ class ResolvedTypeReference;
 // map from name index
 struct ResolvedTypeReferenceMap: public QHash<int, ResolvedTypeReference*>
 {
-    bool addToHash(QCryptographicHash *hash, QQmlEngine *engine) const;
+    bool addToHash(QCryptographicHash *hash, QQmlEngine *engine,
+                   QHash<quintptr, QByteArray> *checksums) const;
 };
 
 class Q_QML_PRIVATE_EXPORT ExecutableCompilationUnit final: public CompiledData::CompilationUnit,
@@ -190,6 +191,15 @@ public:
     // --- interface for QQmlPropertyCacheCreator
     using CompiledObject = CompiledData::Object;
     using CompiledFunction = CompiledData::Function;
+    enum class ListPropertyAssignBehavior { Append, Replace, ReplaceIfNotDefault };
+    ListPropertyAssignBehavior listPropertyAssignBehavior() const
+    {
+        if (data->flags & CompiledData::Unit::ListPropertyAssignReplace)
+            return ListPropertyAssignBehavior::Replace;
+        if (data->flags & CompiledData::Unit::ListPropertyAssignReplaceIfNotDefault)
+            return ListPropertyAssignBehavior::ReplaceIfNotDefault;
+        return ListPropertyAssignBehavior::Append;
+    }
 
     int objectCount() const { return qmlData->nObjects; }
     const CompiledObject *objectAt(int index) const

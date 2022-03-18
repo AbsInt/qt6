@@ -1027,7 +1027,7 @@ void QQuickTextInput::setAutoScroll(bool b)
 QValidator* QQuickTextInput::validator() const
 {
 #if !QT_CONFIG(validator)
-    return 0;
+    return nullptr;
 #else
     Q_D(const QQuickTextInput);
     return d->m_validator;
@@ -1523,11 +1523,7 @@ void QQuickTextInput::inputMethodEvent(QInputMethodEvent *ev)
 {
     Q_D(QQuickTextInput);
     const bool wasComposing = d->hasImState;
-    if (d->m_readOnly) {
-        ev->ignore();
-    } else {
-        d->processInputMethodEvent(ev);
-    }
+    d->processInputMethodEvent(ev);
     if (!ev->isAccepted())
         QQuickImplicitSizeItem::inputMethodEvent(ev);
 
@@ -2001,6 +1997,8 @@ QVariant QQuickTextInput::inputMethodQuery(Qt::InputMethodQuery property, const 
         if (argument.isValid())
             return QVariant(QStringView{d->m_text}.left(d->m_cursor).right(argument.toInt()).toString());
         return QVariant(d->m_text.left(d->m_cursor));
+    case Qt::ImReadOnly:
+        return QVariant(d->m_readOnly);
     default:
         return QQuickItem::inputMethodQuery(property);
     }
@@ -2578,7 +2576,7 @@ void QQuickTextInput::moveCursorSelection(int pos, SelectionMode mode)
 
     if (mode == SelectCharacters) {
         d->moveCursor(pos, true);
-    } else if (pos != d->m_cursor){
+    } else if (pos != d->m_cursor) {
         const int cursor = d->m_cursor;
         int anchor;
         if (!d->hasSelectedText())
@@ -3299,7 +3297,7 @@ void QQuickTextInputPrivate::setSelection(int start, int length)
         m_selstart = start;
         m_selend = qMin(start + length, m_text.length());
         m_cursor = m_selend;
-    } else if (length < 0){
+    } else if (length < 0) {
         if (start == m_selend && start + length == m_selstart && m_cursor == m_selstart)
             return;
         m_selstart = qMax(start + length, 0);

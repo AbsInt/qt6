@@ -50,6 +50,8 @@
 //
 // We mean it.
 //
+
+#include <private/qtqmlcompilerglobal_p.h>
 #include <private/qv4instr_moth_p.h>
 
 QT_BEGIN_NAMESPACE
@@ -90,9 +92,11 @@ namespace Moth {
 #define BYTECODE_HANDLER_DEFINE_VIRTUAL_BYTECODE_HANDLER(instr) \
     INSTR_##instr(BYTECODE_HANDLER_DEFINE_VIRTUAL_BYTECODE_HANDLER)
 
-class ByteCodeHandler
+class Q_QMLCOMPILER_PRIVATE_EXPORT ByteCodeHandler
 {
+    Q_DISABLE_COPY_MOVE(ByteCodeHandler)
 public:
+    ByteCodeHandler() = default;
     virtual ~ByteCodeHandler();
 
     void decode(const char *code, uint len);

@@ -1,34 +1,37 @@
 /****************************************************************************
 **
 ** Copyright (C) 2017 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the Qt Quick Templates 2 module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL3$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
 ** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPLv3 included in the
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
 ** packaging of this file. Please review the following information to
 ** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl.html.
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
 ** GNU General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or later as published by the Free
-** Software Foundation and appearing in the file LICENSE.GPL included in
-** the packaging of this file. Please review the following information to
-** ensure the GNU General Public License version 2.0 requirements will be
-** met: http://www.gnu.org/licenses/gpl-2.0.html.
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -47,15 +50,6 @@
 QT_BEGIN_NAMESPACE
 
 namespace QtQuickPrivate {
-
-typedef QHash<size_t, QQmlComponentPrivate::DeferredState *> DeferredStates;
-
-static inline size_t qHash(QObject *object, const QString &propertyName)
-{
-    return ::qHash(object) + ::qHash(propertyName);
-}
-
-Q_GLOBAL_STATIC(DeferredStates, deferredStates)
 
 static void cancelDeferred(QQmlData *ddata, int propertyIndex)
 {
@@ -83,23 +77,23 @@ static bool beginDeferred(QQmlEnginePrivate *enginePriv, const QQmlProperty &pro
         if (range.first == bindings.end())
             continue;
 
-        QQmlComponentPrivate::ConstructionState *state = new QQmlComponentPrivate::ConstructionState;
-        state->completePending = true;
+        QQmlComponentPrivate::ConstructionState state;
+        state.completePending = true;
 
         QQmlContextData *creationContext = nullptr;
-        state->creator.reset(new QQmlObjectCreator(deferData->context->parent(), deferData->compilationUnit, creationContext));
+        state.creator.reset(new QQmlObjectCreator(deferData->context->parent(), deferData->compilationUnit, creationContext));
 
         enginePriv->inProgressCreations++;
 
         std::deque<const QV4::CompiledData::Binding *> reversedBindings;
         std::copy(range.first, range.second, std::front_inserter(reversedBindings));
-        state->creator->beginPopulateDeferred(deferData->context);
+        state.creator->beginPopulateDeferred(deferData->context);
         for (const QV4::CompiledData::Binding *binding : reversedBindings)
-            state->creator->populateDeferredBinding(property, deferData->deferredIdx, binding);
-        state->creator->finalizePopulateDeferred();
-        state->errors << state->creator->errors;
+            state.creator->populateDeferredBinding(property, deferData->deferredIdx, binding);
+        state.creator->finalizePopulateDeferred();
+        state.errors << state.creator->errors;
 
-        deferredState->constructionStates += state;
+        deferredState->push_back(std::move(state));
 
         // Cleanup any remaining deferred bindings for this property, also in inner contexts,
         // to avoid executing them later and overriding the property that was just populated.
@@ -110,20 +104,25 @@ static bool beginDeferred(QQmlEnginePrivate *enginePriv, const QQmlProperty &pro
     return enginePriv->inProgressCreations > wasInProgress;
 }
 
-void beginDeferred(QObject *object, const QString &property)
+void beginDeferred(QObject *object, const QString &property,
+                   QQuickUntypedDeferredPointer *delegate, bool isOwnState)
 {
     QQmlData *data = QQmlData::get(object);
     if (data && !data->deferredData.isEmpty() && !data->wasDeleted(object) && data->context) {
         QQmlEnginePrivate *ep = QQmlEnginePrivate::get(data->context->engine());
 
-        QQmlComponentPrivate::DeferredState *state = new QQmlComponentPrivate::DeferredState;
-        if (beginDeferred(ep, QQmlProperty(object, property), state))
-            deferredStates()->insert(qHash(object, property), state);
-        else
-            delete state;
+        QQmlComponentPrivate::DeferredState state;
+        if (beginDeferred(ep, QQmlProperty(object, property), &state)) {
+            if (QQmlComponentPrivate::DeferredState *delegateState = delegate->deferredState())
+                delegateState->swap(state);
+        } else if (isOwnState) {
+            delegate->clearDeferredState();
+        }
 
         // Release deferred data for those compilation units that no longer have deferred bindings
         data->releaseDeferredData();
+    } else if (isOwnState) {
+        delegate->clearDeferredState();
     }
 }
 
@@ -134,15 +133,22 @@ void cancelDeferred(QObject *object, const QString &property)
         cancelDeferred(data, QQmlProperty(object, property).index());
 }
 
-void completeDeferred(QObject *object, const QString &property)
+void completeDeferred(QObject *object, const QString &property, QQuickUntypedDeferredPointer *delegate)
 {
+    Q_UNUSED(property);
+    QQmlComponentPrivate::DeferredState *state = delegate->deferredState();
+    if (!state)
+        return;
+
     QQmlData *data = QQmlData::get(object);
-    QQmlComponentPrivate::DeferredState *state = deferredStates()->take(qHash(object, property));
-    if (data && state && !data->wasDeleted(object)) {
+    if (data && !data->wasDeleted(object)) {
+        QQmlComponentPrivate::DeferredState localState = std::move(*state);
+        delegate->clearDeferredState();
         QQmlEnginePrivate *ep = QQmlEnginePrivate::get(data->context->engine());
-        QQmlComponentPrivate::completeDeferred(ep, state);
+        QQmlComponentPrivate::completeDeferred(ep, &localState);
+    } else {
+        delegate->clearDeferredState();
     }
-    delete state;
 }
 
 } // QtQuickPrivate

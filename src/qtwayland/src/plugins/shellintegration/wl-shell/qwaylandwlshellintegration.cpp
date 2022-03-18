@@ -66,7 +66,7 @@ bool QWaylandWlShellIntegration::initialize(QWaylandDisplay *display)
                             << "\"xdg-shell\" if supported by the compositor"
                             << "by setting the environment variable QT_WAYLAND_SHELL_INTEGRATION";
 
-    return QWaylandShellIntegration::initialize(display);
+    return true;
 }
 
 QWaylandShellSurface *QWaylandWlShellIntegration::createShellSurface(QWaylandWindow *window)

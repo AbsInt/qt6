@@ -1503,10 +1503,6 @@ static void thaiAssignAttributes(const char16_t *string, qsizetype len, QCharAtt
         for (j = 1; j < cell_length; j++)
             attributes[i + j].graphemeBoundary = false;
 
-        /* Set graphemeBoundary for SARA AM */
-        if (cstr[i + cell_length - 1] == static_cast<char>(0xd3))
-            attributes[i + cell_length - 1].graphemeBoundary = true;
-
         i += cell_length;
     }
 
@@ -1698,6 +1694,8 @@ enum MymrCharClassFlags {
 
     Mymr_CF_AFTER_KINZI = 0x00100000
 };
+
+Q_DECLARE_MIXED_ENUM_OPERATORS(int, MymrCharClassValues, MymrCharClassFlags)
 
 /* Characters that get refrered to by name */
 enum MymrChar
@@ -1946,6 +1944,7 @@ enum KhmerCharClassFlags {
     CF_POS_MASK      = 0x000f0000
 };
 
+Q_DECLARE_MIXED_ENUM_OPERATORS(int, KhmerCharClassValues, KhmerCharClassFlags)
 
 /* Characters that get referred to by name */
 enum KhmerChar {

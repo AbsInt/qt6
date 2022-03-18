@@ -166,7 +166,9 @@ public:
 #endif
         ItemIsFocusScope          = 0x04,
         ItemHasContents           = 0x08,
-        ItemAcceptsDrops          = 0x10
+        ItemAcceptsDrops          = 0x10,
+        ItemIsViewport            = 0x20,
+        ItemObservesViewport      = 0x40,
         // Remember to increment the size of QQuickItemPrivate::flags
     };
     Q_DECLARE_FLAGS(Flags, Flag)
@@ -292,6 +294,7 @@ public:
 
     virtual QRectF boundingRect() const;
     virtual QRectF clipRect() const;
+    QQuickItem *viewportItem() const;
 
     bool hasActiveFocus() const;
     bool hasFocus() const;
@@ -358,6 +361,9 @@ public:
     Q_INVOKABLE void forceActiveFocus(Qt::FocusReason reason);
     Q_REVISION(2, 1) Q_INVOKABLE QQuickItem *nextItemInFocusChain(bool forward = true);
     Q_INVOKABLE QQuickItem *childAt(qreal x, qreal y) const;
+    Q_REVISION(6, 3) Q_INVOKABLE void ensurePolished();
+
+    Q_REVISION(6, 3) Q_INVOKABLE void dumpItemTree() const;
 
 #if QT_CONFIG(im)
     virtual QVariant inputMethodQuery(Qt::InputMethodQuery query) const;
@@ -460,7 +466,6 @@ protected:
     virtual void releaseResources();
     virtual void updatePolish();
 
-protected:
     QQuickItem(QQuickItemPrivate &dd, QQuickItem *parent = nullptr);
 
 private:
@@ -472,6 +477,7 @@ private:
     friend class QSGRenderer;
     friend class QAccessibleQuickItem;
     friend class QQuickAccessibleAttached;
+    friend class QQuickAnchorChanges;
     Q_DISABLE_COPY(QQuickItem)
     Q_DECLARE_PRIVATE(QQuickItem)
 };
@@ -479,8 +485,12 @@ private:
 Q_DECLARE_OPERATORS_FOR_FLAGS(QQuickItem::Flags)
 
 #ifndef QT_NO_DEBUG_STREAM
-QDebug Q_QUICK_EXPORT operator<<(QDebug debug, QQuickItem *item);
+QDebug Q_QUICK_EXPORT operator<<(QDebug debug,
+#if QT_VERSION >= QT_VERSION_CHECK(7, 0, 0)
+                                 const
 #endif
+                                 QQuickItem *item);
+#endif // QT_NO_DEBUG_STREAM
 
 QT_END_NAMESPACE
 

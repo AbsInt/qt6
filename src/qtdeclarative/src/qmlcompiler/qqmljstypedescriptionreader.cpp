@@ -54,7 +54,7 @@ QString toString(const UiQualifiedId *qualifiedId, QChar delimiter = QLatin1Char
 }
 
 bool QQmlJSTypeDescriptionReader::operator()(
-        QHash<QString, QQmlJSScope::Ptr> *objects,
+        QHash<QString, QQmlJSExportedScope> *objects,
         QStringList *dependencies)
 {
     Engine engine;
@@ -191,6 +191,7 @@ void QQmlJSTypeDescriptionReader::readDependencies(UiScriptBinding *ast)
 void QQmlJSTypeDescriptionReader::readComponent(UiObjectDefinition *ast)
 {
     QQmlJSScope::Ptr scope = QQmlJSScope::create();
+    QList<QQmlJSScope::Export> exports;
 
     UiScriptBinding *metaObjectRevisions = nullptr;
     for (UiObjectMemberList *it = ast->initializer->members; it; it = it->next) {
@@ -218,11 +219,11 @@ void QQmlJSTypeDescriptionReader::readComponent(UiObjectDefinition *ast)
             } else if (name == QLatin1String("prototype")) {
                 scope->setBaseTypeName(readStringBinding(script));
             } else if (name == QLatin1String("defaultProperty")) {
-                scope->setDefaultPropertyName(readStringBinding(script));
+                scope->setOwnDefaultPropertyName(readStringBinding(script));
             } else if (name == QLatin1String("parentProperty")) {
-                scope->setParentPropertyName(readStringBinding(script));
+                scope->setOwnParentPropertyName(readStringBinding(script));
             } else if (name == QLatin1String("exports")) {
-                readExports(script, scope);
+                exports = readExports(script);
             } else if (name == QLatin1String("interfaces")) {
                 readInterfaces(script, scope);
             } else if (name == QLatin1String("exportMetaObjectRevisions")) {
@@ -255,13 +256,17 @@ void QQmlJSTypeDescriptionReader::readComponent(UiObjectDefinition *ast)
                 }
             } else if (name == QLatin1String("extension")) {
                 scope->setExtensionTypeName(readStringBinding(script));
+            } else if (name == QLatin1String("deferredNames")) {
+                readDeferredNames(script, scope);
+            } else if (name == QLatin1String("immediateNames")) {
+                readImmediateNames(script, scope);
             } else {
                 addWarning(script->firstSourceLocation(),
                            tr("Expected only name, prototype, defaultProperty, attachedType, "
                               "valueType, exports, interfaces, isSingleton, isCreatable, "
-                              "isComposite, hasCustomParser and "
-                              "exportMetaObjectRevisions script bindings, not \"%1\".")
-                                   .arg(name));
+                              "isComposite, hasCustomParser, exportMetaObjectRevisions, "
+                              "deferredNames, and immediateNames in script bindings, not \"%1\".")
+                           .arg(name));
             }
         } else {
             addWarning(member->firstSourceLocation(),
@@ -275,8 +280,8 @@ void QQmlJSTypeDescriptionReader::readComponent(UiObjectDefinition *ast)
     }
 
     if (metaObjectRevisions)
-        readMetaObjectRevisions(metaObjectRevisions, scope);
-    m_objects->insert(scope->internalName(), scope);
+        checkMetaObjectRevisions(metaObjectRevisions, &exports);
+    m_objects->insert(scope->internalName(), {scope, exports});
 }
 
 void QQmlJSTypeDescriptionReader::readSignalOrMethod(UiObjectDefinition *ast, bool isMethod,
@@ -311,6 +316,8 @@ void QQmlJSTypeDescriptionReader::readSignalOrMethod(UiObjectDefinition *ast, bo
                 metaMethod.setRevision(readIntBinding(script));
             } else if (name == QLatin1String("isConstructor")) {
                 metaMethod.setIsConstructor(true);
+            } else if (name == QLatin1String("isJavaScriptFunction")) {
+                metaMethod.setIsJavaScriptFunction(true);
             } else if (name == QLatin1String("isList")) {
                 // TODO: Theoretically this can happen. QQmlJSMetaMethod should store it.
             } else if (name == QLatin1String("isPointer")) {
@@ -319,8 +326,9 @@ void QQmlJSTypeDescriptionReader::readSignalOrMethod(UiObjectDefinition *ast, bo
                 //       description of the type being referenced has access semantics after all.
             } else {
                 addWarning(script->firstSourceLocation(),
-                           tr("Expected only name, type, revision, isPointer, isList, and "
-                              "isConstructor in script bindings."));
+                           tr("Expected only name, type, revision, isPointer, isList, "
+                              "isConstructor, and "
+                              "isJavaScriptFunction in script bindings."));
             }
         } else {
             addWarning(member->firstSourceLocation(),
@@ -378,6 +386,8 @@ void QQmlJSTypeDescriptionReader::readProperty(UiObjectDefinition *ast, const QQ
             property.setNotify(readStringBinding(script));
         } else if (id == QLatin1String("index")) {
             property.setIndex(readIntBinding(script));
+        } else if (id == QLatin1String("privateClass")) {
+            property.setPrivateClass(readStringBinding(script));
         } else {
             addWarning(script->firstSourceLocation(),
                        tr("Expected only type, name, revision, isPointer, isReadonly, isRequired, "
@@ -614,12 +624,13 @@ ArrayPattern* QQmlJSTypeDescriptionReader::getArray(UiScriptBinding *ast)
     return arrayLit;
 }
 
-void QQmlJSTypeDescriptionReader::readExports(UiScriptBinding *ast, const QQmlJSScope::Ptr &scope)
+QList<QQmlJSScope::Export> QQmlJSTypeDescriptionReader::readExports(UiScriptBinding *ast)
 {
+    QList<QQmlJSScope::Export> exports;
     auto *arrayLit = getArray(ast);
 
     if (!arrayLit)
-        return;
+        return exports;
 
     for (PatternElementList *it = arrayLit->elements; it; it = it->next) {
         auto *stringLit = cast<StringLiteral *>(it->element->initializer);
@@ -627,7 +638,7 @@ void QQmlJSTypeDescriptionReader::readExports(UiScriptBinding *ast, const QQmlJS
         if (!stringLit) {
             addError(arrayLit->firstSourceLocation(),
                      tr("Expected array literal with only string literal members."));
-            return;
+            return exports;
         }
 
         QString exp = stringLit->value.toString();
@@ -647,8 +658,10 @@ void QQmlJSTypeDescriptionReader::readExports(UiScriptBinding *ast, const QQmlJS
         QString name = exp.mid(slashIdx + 1, spaceIdx - (slashIdx+1));
 
         // ### relocatable exports where package is empty?
-        scope->addExport(name, package, version, version);
+        exports.append(QQmlJSScope::Export(package, name, version, version));
     }
+
+    return exports;
 }
 
 void QQmlJSTypeDescriptionReader::readInterfaces(UiScriptBinding *ast, const QQmlJSScope::Ptr &scope)
@@ -674,8 +687,8 @@ void QQmlJSTypeDescriptionReader::readInterfaces(UiScriptBinding *ast, const QQm
     scope->setInterfaceNames(list);
 }
 
-void QQmlJSTypeDescriptionReader::readMetaObjectRevisions(
-        UiScriptBinding *ast, const QQmlJSScope::Ptr &scope)
+void QQmlJSTypeDescriptionReader::checkMetaObjectRevisions(
+        UiScriptBinding *ast, QList<QQmlJSScope::Export> *exports)
 {
     Q_ASSERT(ast);
 
@@ -698,8 +711,7 @@ void QQmlJSTypeDescriptionReader::readMetaObjectRevisions(
     }
 
     int exportIndex = 0;
-    QList<QQmlJSScope::Export> exports = scope->exports();
-    const int exportCount = exports.size();
+    const int exportCount = exports->size();
     for (PatternElementList *it = arrayLit->elements; it; it = it->next, ++exportIndex) {
         auto *numberLit = cast<NumericLiteral *>(it->element->initializer);
         if (!numberLit) {
@@ -723,7 +735,7 @@ void QQmlJSTypeDescriptionReader::readMetaObjectRevisions(
 
         const QTypeRevision metaObjectVersion
                 = QTypeRevision::fromEncodedVersion(metaObjectRevision);
-        const QQmlJSScope::Export &entry = exports.at(exportIndex);
+        const QQmlJSScope::Export &entry = exports->at(exportIndex);
         const QTypeRevision exportVersion = entry.version();
         if (metaObjectVersion != exportVersion) {
             addWarning(numberLit->firstSourceLocation(),
@@ -732,11 +744,44 @@ void QQmlJSTypeDescriptionReader::readMetaObjectRevisions(
                        .arg(metaObjectRevision)
                        .arg(metaObjectVersion.majorVersion()).arg(metaObjectVersion.minorVersion())
                        .arg(exportVersion.majorVersion()).arg(exportVersion.minorVersion()));
-            exports[exportIndex] = QQmlJSScope::Export(
-                        entry.package(), entry.type(), exportVersion, metaObjectVersion);
+            (*exports)[exportIndex] = QQmlJSScope::Export(entry.package(), entry.type(),
+                                                          exportVersion, metaObjectVersion);
         }
     }
-    scope->setExports(exports);
+}
+
+QStringList QQmlJSTypeDescriptionReader::readStringList(UiScriptBinding *ast)
+{
+    auto *arrayLit = getArray(ast);
+    if (!arrayLit)
+        return {};
+
+    QStringList list;
+
+    for (PatternElementList *it = arrayLit->elements; it; it = it->next) {
+        auto *stringLit = cast<StringLiteral *>(it->element->initializer);
+        if (!stringLit) {
+            addError(arrayLit->firstSourceLocation(),
+                     tr("Expected array literal with only string literal members."));
+            return {};
+        }
+
+        list << stringLit->value.toString();
+    }
+
+    return list;
+}
+
+void QQmlJSTypeDescriptionReader::readDeferredNames(UiScriptBinding *ast,
+                                                    const QQmlJSScope::Ptr &scope)
+{
+    scope->setOwnDeferredNames(readStringList(ast));
+}
+
+void QQmlJSTypeDescriptionReader::readImmediateNames(UiScriptBinding *ast,
+                                                    const QQmlJSScope::Ptr &scope)
+{
+    scope->setOwnImmediateNames(readStringList(ast));
 }
 
 void QQmlJSTypeDescriptionReader::readEnumValues(UiScriptBinding *ast, QQmlJSMetaEnum *metaEnum)

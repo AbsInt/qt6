@@ -43,6 +43,8 @@
 #include <QtCore/qscopedpointer.h>
 #include <QtCore/qstring.h>
 
+QT_BEGIN_NAMESPACE
+
 class QColorOutputPrivate;
 
 class QColorOutput
@@ -89,8 +91,11 @@ public:
     using ColorCode = QFlags<ColorCodeComponent>;
     using ColorMapping = QHash<int, ColorCode>;
 
-    QColorOutput(bool silent);
+    QColorOutput();
     ~QColorOutput();
+
+    bool isSilent() const;
+    void setSilent(bool silent);
 
     void insertMapping(int colorID, ColorCode colorCode);
 
@@ -108,5 +113,7 @@ private:
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QColorOutput::ColorCode)
+
+QT_END_NAMESPACE
 
 #endif // QCOLOROUTPUT_H

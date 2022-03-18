@@ -81,71 +81,16 @@ public:
     static void addToDebugServer(QJSEngine *q);
     static void removeFromDebugServer(QJSEngine *q);
 
-    // Locker locks the QQmlEnginePrivate data structures for read and write, if necessary.
-    // Currently, locking is only necessary if the threaded loader is running concurrently.  If it is
-    // either idle, or is running with the main thread blocked, no locking is necessary.  This way
-    // we only pay for locking when we have to.
-    // Consequently, this class should only be used to protect simple accesses or modifications of the
-    // QQmlEnginePrivate structures or operations that can be guaranteed not to start activity
-    // on the loader thread.
-    // The Locker API is identical to QMutexLocker.  Locker reuses the QQmlEnginePrivate::mutex
-    // QMutex instance and multiple Lockers are recursive in the same thread.
-    class Locker
-    {
-    public:
-        inline Locker(const QJSEngine *);
-        inline Locker(const QJSEnginePrivate *);
-        inline ~Locker();
-
-        inline void unlock();
-        inline void relock();
-
-    private:
-        const QJSEnginePrivate *m_ep;
-        quint32 m_locked:1;
-    };
-
     // Shared by QQmlEngine
     mutable QRecursiveMutex mutex;
     void uiLanguageChanged() { Q_Q(QJSEngine); if (q) q->uiLanguageChanged(); }
     Q_OBJECT_BINDABLE_PROPERTY(QJSEnginePrivate, QString, uiLanguage, &QJSEnginePrivate::uiLanguageChanged);
 
     // These methods may be called from the QML loader thread
-    inline QQmlPropertyCache *cache(QObject *obj, QTypeRevision version = QTypeRevision(), bool doRef = false);
-    inline QQmlPropertyCache *cache(const QMetaObject *obj, QTypeRevision version = QTypeRevision(), bool doRef = false);
+    inline QQmlRefPointer<QQmlPropertyCache> cache(QObject *obj, QTypeRevision version = QTypeRevision());
+    inline QQmlRefPointer<QQmlPropertyCache> cache(
+            const QMetaObject *obj, QTypeRevision version = QTypeRevision());
 };
-
-QJSEnginePrivate::Locker::Locker(const QJSEngine *e)
-: m_ep(QJSEnginePrivate::get(e))
-{
-    relock();
-}
-
-QJSEnginePrivate::Locker::Locker(const QJSEnginePrivate *e)
-: m_ep(e), m_locked(false)
-{
-    relock();
-}
-
-QJSEnginePrivate::Locker::~Locker()
-{
-    unlock();
-}
-
-void QJSEnginePrivate::Locker::unlock()
-{
-    if (m_locked) {
-        m_ep->mutex.unlock();
-        m_locked = false;
-    }
-}
-
-void QJSEnginePrivate::Locker::relock()
-{
-    Q_ASSERT(!m_locked);
-    m_ep->mutex.lock();
-    m_locked = true;
-}
 
 /*!
 Returns a QQmlPropertyCache for \a obj if one is available.
@@ -162,14 +107,14 @@ and deleted before the loader thread has a chance to use or reference it.  This
 can't currently happen as the cache holds a reference to the
 QQmlPropertyCache until the QQmlEngine is destroyed.
 */
-QQmlPropertyCache *QJSEnginePrivate::cache(QObject *obj, QTypeRevision version, bool doRef)
+QQmlRefPointer<QQmlPropertyCache> QJSEnginePrivate::cache(QObject *obj, QTypeRevision version)
 {
     if (!obj || QObjectPrivate::get(obj)->metaObject || QObjectPrivate::get(obj)->wasDeleted)
-        return nullptr;
+        return QQmlRefPointer<QQmlPropertyCache>();
 
-    Locker locker(this);
+    QMutexLocker locker(&this->mutex);
     const QMetaObject *mo = obj->metaObject();
-    return QQmlMetaType::propertyCache(mo, version, doRef);
+    return QQmlMetaType::propertyCache(mo, version);
 }
 
 /*!
@@ -181,12 +126,13 @@ exist for the lifetime of the QQmlEngine.
 
 The returned cache is not referenced, so if it is to be stored, call addref().
 */
-QQmlPropertyCache *QJSEnginePrivate::cache(const QMetaObject *metaObject, QTypeRevision version, bool doRef)
+QQmlRefPointer<QQmlPropertyCache> QJSEnginePrivate::cache(
+        const QMetaObject *metaObject, QTypeRevision version)
 {
     Q_ASSERT(metaObject);
 
-    Locker locker(this);
-    return QQmlMetaType::propertyCache(metaObject, version, doRef);
+    QMutexLocker locker(&this->mutex);
+    return QQmlMetaType::propertyCache(metaObject, version);
 }
 
 

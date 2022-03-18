@@ -409,6 +409,116 @@ private:
     QObject *m_object2;
 };
 
+class MyImmediateObject : public QObject
+{
+    Q_OBJECT
+    Q_PROPERTY(int value READ value WRITE setValue NOTIFY valueChanged)
+    Q_PROPERTY(QObject *objectProperty READ objectProperty WRITE setObjectProperty)
+    Q_PROPERTY(QObject *objectProperty2 READ objectProperty2 WRITE setObjectProperty2)
+    Q_CLASSINFO("ImmediatePropertyNames", "objectName")
+
+public:
+    int value() const { return m_value; }
+    void setValue(int v) { m_value = v; emit valueChanged(); }
+
+    QObject *objectProperty() const { return m_object; }
+    void setObjectProperty(QObject *obj) { m_object = obj; }
+
+    QObject *objectProperty2() const { return m_object2; }
+    void setObjectProperty2(QObject *obj) { m_object2 = obj; }
+
+signals:
+    void valueChanged();
+
+private:
+    int m_value = 0;
+    QObject *m_object = nullptr;
+    QObject *m_object2 = nullptr;
+};
+
+class BrokenImmediateDeferred : public QObject
+{
+    Q_OBJECT
+    Q_PROPERTY(int value MEMBER m_value)
+    Q_CLASSINFO("ImmediatePropertyNames", "objectName");
+    Q_CLASSINFO("DeferredPropertyNames", "value");
+public:
+    int m_value = 5;
+};
+
+class DerivedFromImmediate : public MyImmediateObject
+{
+    Q_OBJECT
+    Q_PROPERTY(int value2 READ value2 WRITE setValue2 NOTIFY value2Changed)
+public:
+    int value2() const { return m_value2; }
+    void setValue2(int v) { m_value2 = v; emit value2Changed(); }
+
+signals:
+    void value2Changed();
+
+private:
+    int m_value2 = 0;
+};
+
+class NonDeferredBased : public QObject
+{
+    Q_OBJECT
+    Q_PROPERTY(int baseValue READ baseValue WRITE setBaseValue NOTIFY baseValueChanged)
+signals:
+    void baseValueChanged();
+public:
+    int baseValue() const { return m_baseValue; }
+
+    void setBaseValue(int i) {
+        if (i == m_baseValue)
+            return;
+        m_baseValue = i;
+        emit baseValueChanged();
+    }
+
+private:
+    int m_baseValue = 0;
+};
+
+class DeferredChild : public NonDeferredBased
+{
+    Q_OBJECT
+    Q_CLASSINFO("DeferredPropertyNames", "baseValue")
+};
+
+class DeferredChildOverwrite : public DeferredChild
+{
+    Q_OBJECT
+    Q_CLASSINFO("DeferredPropertyNames", "")
+};
+
+class ChildDeferringParent : public QObject
+{
+    Q_OBJECT
+    Q_CLASSINFO("DeferredPropertyNames", "childValue")
+};
+
+class DeferredByParentChild : public ChildDeferringParent
+{
+    Q_OBJECT
+    Q_PROPERTY(int childValue READ childValue WRITE setchildValue NOTIFY childValueChanged)
+signals:
+    void childValueChanged();
+public:
+    int childValue() const { return m_childValue; }
+
+    void setchildValue(int i) {
+        if (i == m_childValue)
+            return;
+        m_childValue = i;
+        emit childValueChanged();
+    }
+
+private:
+    int m_childValue = 0;
+};
+
 class MyVeryDeferredObject : public QObject
 {
     Q_OBJECT
@@ -833,6 +943,26 @@ public:
 
     Q_INVOKABLE void method_unknown(NonRegisteredType) { invoke(28); }
 
+    Q_INVOKABLE void method_overload2(QQmlV4Function *v)
+    {
+        invoke(31);
+        QV4::Scope scope(v->v4engine());
+        for (int i = 0, end = v->length(); i != end; ++i) {
+            QV4::ScopedValue v4Value(scope, (*v)[i]);
+            m_actuals.append(v->v4engine()->toVariant(v4Value, QMetaType()));
+        }
+    }
+    Q_INVOKABLE void method_overload2(const QVariantList &list)
+    {
+        invoke(32);
+        m_actuals << QVariant(list);
+    }
+    Q_INVOKABLE void method_overload2(const QVariantMap &map) { invoke(33); m_actuals << map; }
+    Q_INVOKABLE void method_overload2(int a) { invoke(34); m_actuals << a; }
+    Q_INVOKABLE void method_overload2(int a, int b) { invoke(35); m_actuals << a << b; }
+    Q_INVOKABLE void method_overload2(QString a) { invoke(36); m_actuals << a; }
+    Q_INVOKABLE void method_overload2() { invoke(37); }
+
 private:
     friend class MyInvokableBaseObject;
     void invoke(int idx) { if (m_invoked != -1) m_invokedError = true; m_invoked = idx;}
@@ -926,7 +1056,7 @@ class DefaultPropertyExtendedObject : public QObject
     Q_PROPERTY(QObject *firstProperty READ firstProperty WRITE setFirstProperty)
     Q_PROPERTY(QObject *secondProperty READ secondProperty WRITE setSecondProperty)
 public:
-    DefaultPropertyExtendedObject(QObject *parent = 0) : QObject(parent), m_firstProperty(0), m_secondProperty(0) {}
+    DefaultPropertyExtendedObject(QObject *parent = nullptr) : QObject(parent), m_firstProperty(0), m_secondProperty(0) {}
 
     QObject *firstProperty() const { return m_firstProperty; }
     QObject *secondProperty() const { return m_secondProperty; }
@@ -1128,7 +1258,7 @@ class ScarceResourceObject : public QObject
     Q_OBJECT
     Q_PROPERTY(QPixmap scarceResource READ scarceResource WRITE setScarceResource NOTIFY scarceResourceChanged)
 public:
-    ScarceResourceObject(QObject *parent = 0) : QObject(parent), m_value(100, 100) { m_value.fill(Qt::blue); }
+    ScarceResourceObject(QObject *parent = nullptr) : QObject(parent), m_value(100, 100) { m_value.fill(Qt::blue); }
     ~ScarceResourceObject() {}
 
     QPixmap scarceResource() const { return m_value; }
@@ -1164,7 +1294,7 @@ class testQObjectApi : public QObject
     Q_PROPERTY (int qobjectTestWritableFinalProperty READ qobjectTestWritableFinalProperty WRITE setQObjectTestWritableFinalProperty NOTIFY qobjectTestWritableFinalPropertyChanged FINAL)
 
 public:
-    testQObjectApi(QObject* parent = 0)
+    testQObjectApi(QObject *parent = nullptr)
         : QObject(parent), m_testProperty(0), m_testWritableProperty(0), m_testWritableFinalProperty(0), m_methodCallCount(0), m_trackedObject(0)
     {
     }
@@ -1226,7 +1356,7 @@ class testQObjectApiTwo : public QObject
     Q_PROPERTY(int twoTestProperty READ twoTestProperty WRITE setTwoTestProperty NOTIFY twoTestPropertyChanged)
 
 public:
-    testQObjectApiTwo(QObject *parent = 0) : QObject(parent), m_ttp(42) {}
+    testQObjectApiTwo(QObject *parent = nullptr) : QObject(parent), m_ttp(42) {}
     ~testQObjectApiTwo() {}
 
     void setTwoTestProperty(int v) { m_ttp = v; emit twoTestPropertyChanged(); }
@@ -1244,7 +1374,7 @@ class testImportOrderApi : public QObject
     Q_OBJECT
 
 public:
-    testImportOrderApi(int value, QObject *parent = 0) : QObject(parent), m_value(value) {}
+    testImportOrderApi(int value, QObject *parent = nullptr) : QObject(parent), m_value(value) {}
 
     Q_PROPERTY(int value READ value)
 
@@ -1259,7 +1389,7 @@ class CircularReferenceObject : public QObject
     Q_OBJECT
 
 public:
-    CircularReferenceObject(QObject *parent = 0)
+    CircularReferenceObject(QObject *parent = nullptr)
         : QObject(parent), m_dtorCount(0)
     {
     }
@@ -1274,7 +1404,7 @@ public:
         m_dtorCount = dtorCount;
     }
 
-    Q_INVOKABLE CircularReferenceObject *generate(QObject *parent = 0)
+    Q_INVOKABLE CircularReferenceObject *generate(QObject *parent = nullptr)
     {
         CircularReferenceObject *retn = new CircularReferenceObject(parent);
         retn->m_dtorCount = m_dtorCount;
@@ -1309,7 +1439,7 @@ class MyDynamicCreationDestructionObject : public QObject
     Q_PROPERTY (int intProperty READ intProperty WRITE setIntProperty NOTIFY intPropertyChanged)
 
 public:
-    MyDynamicCreationDestructionObject(QObject *parent = 0) : QObject(parent), m_intProperty(0), m_dtorCount(0)
+    MyDynamicCreationDestructionObject(QObject *parent = nullptr) : QObject(parent), m_intProperty(0), m_dtorCount(0)
     {
     }
 
@@ -1481,14 +1611,14 @@ class MyDeleteObject : public QObject
     Q_PROPERTY(QObject *object2 READ object2 NOTIFY object2Changed)
 
 public:
-    MyDeleteObject() : m_nestedObject(new MyQmlObject), m_object1(0), m_object2(0) {}
+    MyDeleteObject() : m_nestedObject(new MyQmlObject), m_object1(nullptr), m_object2(nullptr) {}
 
     Q_INVOKABLE QObject *object1() const { return m_object1; }
     Q_INVOKABLE QObject *object2() const { return m_object2; }
     void setObject1(QObject *object) { m_object1 = object; }
     void setObject2(QObject *object) { m_object2 = object; emit object2Changed(); }
     QObject *nestedObject() const { return m_nestedObject; }
-    int deleteNestedObject() { delete m_nestedObject; m_nestedObject = 0; return 1; }
+    int deleteNestedObject() { delete m_nestedObject; m_nestedObject = nullptr; return 1; }
 
 signals:
     void nestedObjectChanged();
@@ -1551,7 +1681,7 @@ Q_SIGNALS:
     void done(const QString &result);
 
 private:
-    QThread *m_thread = 0;
+    QThread *m_thread = nullptr;
 };
 
 class MyUnregisteredEnumTypeObject : public QObject
@@ -1580,7 +1710,7 @@ class FallbackBindingsObject : public QObject
     Q_OBJECT
     Q_PROPERTY (int test READ test NOTIFY testChanged)
 public:
-    FallbackBindingsObject(QObject* parent = 0)
+    FallbackBindingsObject(QObject *parent = nullptr)
         : QObject(parent), m_test(100)
     {
     }
@@ -1599,7 +1729,7 @@ class FallbackBindingsDerived : public FallbackBindingsObject
     Q_OBJECT
     Q_PROPERTY (QString test READ test NOTIFY testChanged)
 public:
-    FallbackBindingsDerived(QObject* parent = 0)
+    FallbackBindingsDerived(QObject *parent = nullptr)
         : FallbackBindingsObject(parent), m_test("hello")
     {
     }
@@ -1634,7 +1764,7 @@ class FallbackBindingsAttachedDerived : public FallbackBindingsAttachedObject
     Q_OBJECT
     Q_PROPERTY (QString test READ test NOTIFY testChanged)
 public:
-    FallbackBindingsAttachedDerived(QObject* parent = 0)
+    FallbackBindingsAttachedDerived(QObject *parent = nullptr)
         : FallbackBindingsAttachedObject(parent), m_test("hello")
     {
     }

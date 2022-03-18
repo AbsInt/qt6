@@ -52,9 +52,18 @@
 //
 
 #include <QtWaylandClient/qtwaylandclientglobal.h>
-#include <QtWaylandClient/private/qwaylanddisplay_p.h>
+#include <QtWaylandClient/qwaylandclientextension.h>
+
+
+
+#include <QDebug>
+
+struct wl_surface;
+struct wl_registry;
 
 QT_BEGIN_NAMESPACE
+
+class QWindow;
 
 namespace QtWaylandClient {
 
@@ -68,26 +77,53 @@ public:
     QWaylandShellIntegration() {}
     virtual ~QWaylandShellIntegration() {}
 
-    virtual bool initialize(QWaylandDisplay *display) {
-        m_display = display;
-        return true;
-    }
+    virtual bool initialize(QWaylandDisplay *display) = 0;
     virtual QWaylandShellSurface *createShellSurface(QWaylandWindow *window) = 0;
-    virtual void handleKeyboardFocusChanged(QWaylandWindow *newFocus, QWaylandWindow *oldFocus) {
-        if (newFocus)
-            m_display->handleWindowActivated(newFocus);
-        if (oldFocus)
-            m_display->handleWindowDeactivated(oldFocus);
-    }
     virtual void *nativeResourceForWindow(const QByteArray &resource, QWindow *window) {
         Q_UNUSED(resource);
         Q_UNUSED(window);
         return nullptr;
     }
 
-protected:
-    QWaylandDisplay *m_display = nullptr;
+    static wl_surface *wlSurfaceForWindow(QWaylandWindow *window);
+
 };
+
+template <typename T>
+class Q_WAYLAND_CLIENT_EXPORT QWaylandShellIntegrationTemplate : public QWaylandShellIntegration, public QWaylandClientExtension
+{
+public:
+    QWaylandShellIntegrationTemplate(const int ver) :
+        QWaylandClientExtension(ver)
+    {
+    }
+
+    bool initialize(QWaylandDisplay *) override
+    {
+        QWaylandClientExtension::initialize();
+        return isActive();
+    }
+
+    const struct wl_interface *extensionInterface() const override
+    {
+        return T::interface();
+    }
+
+    void bind(struct ::wl_registry *registry, int id, int ver) override
+    {
+        T* instance = static_cast<T *>(this);
+        // Make sure lowest version is used of the supplied version from the
+        // developer and the version specified in the protocol and also the
+        // compositor version.
+        if (this->version() > T::interface()->version) {
+            qWarning("Supplied protocol version to QWaylandClientExtensionTemplate is higher than the version of the protocol, using protocol version instead.");
+        }
+        int minVersion = qMin(ver, qMin(T::interface()->version, this->version()));
+        setVersion(minVersion);
+        instance->init(registry, id, minVersion);
+    }
+};
+
 
 }
 

@@ -46,6 +46,7 @@
 
 #include <QtCore/qoperatingsystemversion.h>
 #include <QtCore/private/qcore_unix_p.h>
+#include <QtCore/private/qfiledevice_p.h>
 #include <QtCore/qvarlengtharray.h>
 #ifndef QT_BOOTSTRAPPED
 # include <QtCore/qstandardpaths.h>
@@ -53,8 +54,6 @@
 
 #include <pwd.h>
 #include <stdlib.h> // for realpath()
-#include <sys/types.h>
-#include <sys/stat.h>
 #include <unistd.h>
 #include <stdio.h>
 #include <errno.h>
@@ -406,10 +405,7 @@ bool QFileSystemEngine::fillMetaData(int fd, QFileSystemMetaData &data)
     data.entryFlags &= ~QFileSystemMetaData::PosixStatFlags;
     data.knownFlagsMask |= QFileSystemMetaData::PosixStatFlags;
 
-    union {
-        struct statx statxBuffer;
-        QT_STATBUF statBuffer;
-    };
+    struct statx statxBuffer;
 
     int ret = qt_fstatx(fd, &statxBuffer);
     if (ret != -ENOSYS) {
@@ -419,6 +415,8 @@ bool QFileSystemEngine::fillMetaData(int fd, QFileSystemMetaData &data)
         }
         return false;
     }
+
+    QT_STATBUF statBuffer;
 
     if (QT_FSTAT(fd, &statBuffer) == 0) {
         data.fillFromStatBuf(statBuffer);
@@ -886,6 +884,8 @@ bool QFileSystemEngine::fillMetaData(const QFileSystemEntry &entry, QFileSystemM
         if (!data.hasFlags(QFileSystemMetaData::DirectoryType))
             what |= QFileSystemMetaData::DirectoryType;
     }
+    if (what & QFileSystemMetaData::AliasType)
+        what |= QFileSystemMetaData::LinkType;
 #endif
 #ifdef UF_HIDDEN
     if (what & QFileSystemMetaData::HiddenAttribute) {
@@ -1021,8 +1021,11 @@ bool QFileSystemEngine::fillMetaData(const QFileSystemEntry &entry, QFileSystemM
 
 #if defined(Q_OS_DARWIN)
     if (what & QFileSystemMetaData::AliasType) {
-        if (entryErrno == 0 && hasResourcePropertyFlag(data, entry, kCFURLIsAliasFileKey))
-            data.entryFlags |= QFileSystemMetaData::AliasType;
+        if (entryErrno == 0 && hasResourcePropertyFlag(data, entry, kCFURLIsAliasFileKey)) {
+            // kCFURLIsAliasFileKey includes symbolic links, so filter those out
+            if (!(data.entryFlags & QFileSystemMetaData::LinkType))
+                data.entryFlags |= QFileSystemMetaData::AliasType;
+        }
         data.knownFlagsMask |= QFileSystemMetaData::AliasType;
     }
 
@@ -1112,7 +1115,8 @@ bool QFileSystemEngine::cloneFile(int srcfd, int dstfd, const QFileSystemMetaDat
 
 // Note: if \a shouldMkdirFirst is false, we assume the caller did try to mkdir
 // before calling this function.
-static bool createDirectoryWithParents(const QByteArray &nativeName, bool shouldMkdirFirst = true)
+static bool createDirectoryWithParents(const QByteArray &nativeName, mode_t mode,
+                                       bool shouldMkdirFirst = true)
 {
     // helper function to check if a given path is a directory, since mkdir can
     // fail if the dir already exists (it may have been created by another
@@ -1122,7 +1126,7 @@ static bool createDirectoryWithParents(const QByteArray &nativeName, bool should
         return QT_STAT(nativeName.constData(), &st) == 0 && (st.st_mode & S_IFMT) == S_IFDIR;
     };
 
-    if (shouldMkdirFirst && QT_MKDIR(nativeName, 0777) == 0)
+    if (shouldMkdirFirst && QT_MKDIR(nativeName, mode) == 0)
         return true;
     if (errno == EISDIR)
         return true;
@@ -1137,17 +1141,18 @@ static bool createDirectoryWithParents(const QByteArray &nativeName, bool should
         return false;
 
     QByteArray parentNativeName = nativeName.left(slash);
-    if (!createDirectoryWithParents(parentNativeName))
+    if (!createDirectoryWithParents(parentNativeName, mode))
         return false;
 
     // try again
-    if (QT_MKDIR(nativeName, 0777) == 0)
+    if (QT_MKDIR(nativeName, mode) == 0)
         return true;
     return errno == EEXIST && isDir(nativeName);
 }
 
 //static
-bool QFileSystemEngine::createDirectory(const QFileSystemEntry &entry, bool createParents)
+bool QFileSystemEngine::createDirectory(const QFileSystemEntry &entry, bool createParents,
+                                        std::optional<QFile::Permissions> permissions)
 {
     QString dirName = entry.filePath();
     Q_CHECK_FILE_NAME(dirName, false);
@@ -1158,12 +1163,13 @@ bool QFileSystemEngine::createDirectory(const QFileSystemEntry &entry, bool crea
 
     // try to mkdir this directory
     QByteArray nativeName = QFile::encodeName(dirName);
-    if (QT_MKDIR(nativeName, 0777) == 0)
+    mode_t mode = permissions ? QtPrivate::toMode_t(*permissions) : 0777;
+    if (QT_MKDIR(nativeName, mode) == 0)
         return true;
     if (!createParents)
         return false;
 
-    return createDirectoryWithParents(nativeName, false);
+    return createDirectoryWithParents(nativeName, mode, false);
 }
 
 //static
@@ -1361,10 +1367,7 @@ bool QFileSystemEngine::moveFileToTrash(const QFileSystemEntry &source,
     int counter = 0;
     QFile infoFile;
     auto makeUniqueTrashedName = [trashedName, &counter]() -> QString {
-        ++counter;
-        return QString(QLatin1String("/%1-%2"))
-                                        .arg(trashedName)
-                                        .arg(counter, 4, 10, QLatin1Char('0'));
+        return QString::asprintf("/%ls-%04d", qUtf16Printable(trashedName), ++counter);
     };
     do {
         while (QFile::exists(trashDir.filePath(filesDir) + uniqueTrashedName))
@@ -1528,40 +1531,16 @@ bool QFileSystemEngine::removeFile(const QFileSystemEntry &entry, QSystemError &
 
 }
 
-static mode_t toMode_t(QFile::Permissions permissions)
-{
-    mode_t mode = 0;
-    if (permissions & (QFile::ReadOwner | QFile::ReadUser))
-        mode |= S_IRUSR;
-    if (permissions & (QFile::WriteOwner | QFile::WriteUser))
-        mode |= S_IWUSR;
-    if (permissions & (QFile::ExeOwner | QFile::ExeUser))
-        mode |= S_IXUSR;
-    if (permissions & QFile::ReadGroup)
-        mode |= S_IRGRP;
-    if (permissions & QFile::WriteGroup)
-        mode |= S_IWGRP;
-    if (permissions & QFile::ExeGroup)
-        mode |= S_IXGRP;
-    if (permissions & QFile::ReadOther)
-        mode |= S_IROTH;
-    if (permissions & QFile::WriteOther)
-        mode |= S_IWOTH;
-    if (permissions & QFile::ExeOther)
-        mode |= S_IXOTH;
-    return mode;
-}
-
 //static
 bool QFileSystemEngine::setPermissions(const QFileSystemEntry &entry, QFile::Permissions permissions, QSystemError &error, QFileSystemMetaData *data)
 {
     Q_CHECK_FILE_NAME(entry, false);
 
-    mode_t mode = toMode_t(permissions);
+    mode_t mode = QtPrivate::toMode_t(permissions);
     bool success = ::chmod(entry.nativeFilePath().constData(), mode) == 0;
     if (success && data) {
         data->entryFlags &= ~QFileSystemMetaData::Permissions;
-        data->entryFlags |= QFileSystemMetaData::MetaDataFlag(uint(permissions));
+        data->entryFlags |= QFileSystemMetaData::MetaDataFlag(uint(permissions.toInt()));
         data->knownFlagsMask |= QFileSystemMetaData::Permissions;
     }
     if (!success)
@@ -1572,12 +1551,12 @@ bool QFileSystemEngine::setPermissions(const QFileSystemEntry &entry, QFile::Per
 //static
 bool QFileSystemEngine::setPermissions(int fd, QFile::Permissions permissions, QSystemError &error, QFileSystemMetaData *data)
 {
-    mode_t mode = toMode_t(permissions);
+    mode_t mode = QtPrivate::toMode_t(permissions);
 
     bool success = ::fchmod(fd, mode) == 0;
     if (success && data) {
         data->entryFlags &= ~QFileSystemMetaData::Permissions;
-        data->entryFlags |= QFileSystemMetaData::MetaDataFlag(uint(permissions));
+        data->entryFlags |= QFileSystemMetaData::MetaDataFlag(uint(permissions.toInt()));
         data->knownFlagsMask |= QFileSystemMetaData::Permissions;
     }
     if (!success)

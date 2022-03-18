@@ -326,7 +326,6 @@ public:
     int id;
     int indexOfDefaultPropertyOrAlias;
     bool defaultPropertyIsAlias;
-    bool isInlineComponent = false;
     quint32 flags;
 
     QV4::CompiledData::Location location;
@@ -409,11 +408,24 @@ private:
 
 struct Q_QMLCOMPILER_PRIVATE_EXPORT Pragma
 {
-    enum PragmaType {
-        PragmaSingleton = 0x1,
-        PragmaStrict    = 0x2
+    enum PragmaType
+    {
+        Singleton,
+        Strict,
+        ListPropertyAssignBehavior,
     };
-    quint32 type;
+
+    enum ListPropertyAssignBehaviorValue
+    {
+        Append,
+        Replace,
+        ReplaceIfNotDefault,
+    };
+
+    PragmaType type;
+
+    // Could become a union with type as differentiator if necessary
+    ListPropertyAssignBehaviorValue listPropertyAssignBehavior;
 
     QV4::CompiledData::Location location;
 };
@@ -586,10 +598,14 @@ private:
 
 struct Q_QMLCOMPILER_PRIVATE_EXPORT JSCodeGen : public QV4::Compiler::Codegen
 {
-    JSCodeGen(Document *document, const QSet<QString> &globalNames);
+    JSCodeGen(Document *document, const QSet<QString> &globalNames,
+              QV4::Compiler::CodegenWarningInterface *iface =
+                      QV4::Compiler::defaultCodegenWarningInterface());
 
     // Returns mapping from input functions to index in IR::Module::functions / compiledData->runtimeFunctions
-    QVector<int> generateJSCodeForFunctionsAndBindings(const QList<CompiledFunctionOrExpression> &functions);
+    QVector<int>
+    generateJSCodeForFunctionsAndBindings(const QList<CompiledFunctionOrExpression> &functions,
+                                          bool storeSourceLocation = false);
 
     bool generateCodeForComponents(const QVector<quint32> &componentRoots);
     bool compileComponent(int contextObject);
@@ -598,6 +614,142 @@ struct Q_QMLCOMPILER_PRIVATE_EXPORT JSCodeGen : public QV4::Compiler::Codegen
 private:
     Document *document;
 };
+
+// RegisterStringN ~= std::function<int(QStringView)>
+// FinalizeTranlationData ~= std::function<void(QV4::CompiledData::Binding::ValueType, QV4::CompiledData::TranslationData)>
+/*
+    \internal
+    \a base: name of the potential translation function
+    \a args: arguments to the function call
+    \a registerMainString: Takes the first argument passed to the translation function, and it's
+    result will be stored in a TranslationData's stringIndex for translation bindings and in numbeIndex
+    for string bindings.
+    \a registerCommentString: Takes the comment argument passed to some of the translation functions.
+    Result will be stored in a TranslationData's commentIndex
+    \a finalizeTranslationData: Takes the type of the binding and the previously set up TranslationData
+ */
+template<typename RegisterString1, typename RegisterString2, typename FinalizeTranslationData>
+void tryGeneratingTranslationBindingBase(QStringView base, QQmlJS::AST::ArgumentList *args,
+                                         RegisterString1 registerMainString,
+                                         RegisterString2 registerCommentString,
+                                         FinalizeTranslationData finalizeTranslationData
+                                         )
+{
+    if (base == QLatin1String("qsTr")) {
+        QV4::CompiledData::TranslationData translationData;
+        translationData.number = -1;
+        translationData.commentIndex = 0; // empty string
+        translationData.padding = 0;
+
+        if (!args || !args->expression)
+            return; // no arguments, stop
+
+        QStringView translation;
+        if (QQmlJS::AST::StringLiteral *arg1 = QQmlJS::AST::cast<QQmlJS::AST::StringLiteral *>(args->expression)) {
+            translation = arg1->value;
+        } else {
+            return; // first argument is not a string, stop
+        }
+
+        translationData.stringIndex = registerMainString(translation);
+
+        args = args->next;
+
+        if (args) {
+            QQmlJS::AST::StringLiteral *arg2 = QQmlJS::AST::cast<QQmlJS::AST::StringLiteral *>(args->expression);
+            if (!arg2)
+                return; // second argument is not a string, stop
+            translationData.commentIndex = registerCommentString(arg2->value);
+
+            args = args->next;
+            if (args) {
+                if (QQmlJS::AST::NumericLiteral *arg3 = QQmlJS::AST::cast<QQmlJS::AST::NumericLiteral *>(args->expression)) {
+                    translationData.number = int(arg3->value);
+                    args = args->next;
+                } else {
+                    return; // third argument is not a translation number, stop
+                }
+            }
+        }
+
+        if (args)
+            return; // too many arguments, stop
+
+        finalizeTranslationData(QV4::CompiledData::Binding::Type_Translation, translationData);
+    } else if (base == QLatin1String("qsTrId")) {
+        QV4::CompiledData::TranslationData translationData;
+        translationData.number = -1;
+        translationData.commentIndex = 0; // empty string, but unused
+        translationData.padding = 0;
+
+        if (!args || !args->expression)
+            return; // no arguments, stop
+
+        QStringView id;
+        if (QQmlJS::AST::StringLiteral *arg1 = QQmlJS::AST::cast<QQmlJS::AST::StringLiteral *>(args->expression)) {
+            id = arg1->value;
+        } else {
+            return; // first argument is not a string, stop
+        }
+        translationData.stringIndex = registerMainString(id);
+
+        args = args->next;
+
+        if (args) {
+            if (QQmlJS::AST::NumericLiteral *arg3 = QQmlJS::AST::cast<QQmlJS::AST::NumericLiteral *>(args->expression)) {
+                translationData.number = int(arg3->value);
+                args = args->next;
+            } else {
+                return; // third argument is not a translation number, stop
+            }
+        }
+
+        if (args)
+            return; // too many arguments, stop
+
+        finalizeTranslationData(QV4::CompiledData::Binding::Type_TranslationById, translationData);
+    } else if (base == QLatin1String("QT_TR_NOOP") || base == QLatin1String("QT_TRID_NOOP")) {
+        if (!args || !args->expression)
+            return; // no arguments, stop
+
+        QStringView str;
+        if (QQmlJS::AST::StringLiteral *arg1 = QQmlJS::AST::cast<QQmlJS::AST::StringLiteral *>(args->expression)) {
+            str = arg1->value;
+        } else {
+            return; // first argument is not a string, stop
+        }
+
+        args = args->next;
+        if (args)
+            return; // too many arguments, stop
+
+        QV4::CompiledData::TranslationData translationData;
+        translationData.number = registerMainString(str);
+        finalizeTranslationData(QV4::CompiledData::Binding::Type_String, translationData);
+    } else if (base == QLatin1String("QT_TRANSLATE_NOOP")) {
+        if (!args || !args->expression)
+            return; // no arguments, stop
+
+        args = args->next;
+        if (!args || !args->expression)
+            return; // no second arguments, stop
+
+        QStringView str;
+        if (QQmlJS::AST::StringLiteral *arg2 = QQmlJS::AST::cast<QQmlJS::AST::StringLiteral *>(args->expression)) {
+            str = arg2->value;
+        } else {
+            return; // first argument is not a string, stop
+        }
+
+        args = args->next;
+        if (args)
+            return; // too many arguments, stop
+
+        QV4::CompiledData::TranslationData fakeTranslationData;
+        fakeTranslationData.number = registerMainString(str);
+        finalizeTranslationData(QV4::CompiledData::Binding::Type_String, fakeTranslationData);
+    }
+}
 
 } // namespace QmlIR
 

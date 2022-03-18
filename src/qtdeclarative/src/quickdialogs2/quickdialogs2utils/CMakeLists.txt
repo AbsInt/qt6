@@ -7,6 +7,7 @@
 
 qt_internal_add_module(QuickDialogs2Utils
     SOURCES
+        qquickdialogtype_p.h
         qquickfilenamefilter.cpp
         qquickfilenamefilter_p.h
         qtquickdialogs2utilsglobal_p.h
@@ -20,4 +21,6 @@ qt_internal_add_module(QuickDialogs2Utils
         Qt::GuiPrivate
     PUBLIC_LIBRARIES
         Qt::Core
+    GENERATE_CPP_EXPORTS
+    GENERATE_PRIVATE_CPP_EXPORTS
 )

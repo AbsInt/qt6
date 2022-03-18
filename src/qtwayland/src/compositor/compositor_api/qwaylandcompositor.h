@@ -53,7 +53,6 @@ class QWaylandCompositorPrivate;
 class QWaylandClient;
 class QWaylandSurface;
 class QWaylandSeat;
-class QWaylandGlobalInterface;
 class QWaylandView;
 class QWaylandPointer;
 class QWaylandKeyboard;
@@ -61,11 +60,12 @@ class QWaylandTouch;
 class QWaylandSurfaceGrabber;
 class QWaylandBufferRef;
 
-Q_WAYLAND_COMPOSITOR_EXPORT Q_DECLARE_LOGGING_CATEGORY(qLcWaylandCompositor)
-Q_WAYLAND_COMPOSITOR_EXPORT Q_DECLARE_LOGGING_CATEGORY(qLcWaylandCompositorHardwareIntegration)
+Q_WAYLANDCOMPOSITOR_EXPORT Q_DECLARE_LOGGING_CATEGORY(qLcWaylandCompositor)
+Q_WAYLANDCOMPOSITOR_EXPORT Q_DECLARE_LOGGING_CATEGORY(qLcWaylandCompositorHardwareIntegration)
 Q_DECLARE_LOGGING_CATEGORY(qLcWaylandCompositorInputMethods)
+Q_DECLARE_LOGGING_CATEGORY(qLcWaylandCompositorTextInput)
 
-class Q_WAYLAND_COMPOSITOR_EXPORT QWaylandCompositor : public QWaylandObject
+class Q_WAYLANDCOMPOSITOR_EXPORT QWaylandCompositor : public QWaylandObject
 {
     Q_OBJECT
     Q_DECLARE_PRIVATE(QWaylandCompositor)

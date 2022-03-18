@@ -1,34 +1,37 @@
 /****************************************************************************
 **
 ** Copyright (C) 2017 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the Qt Quick Templates 2 module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL3$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
 ** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPLv3 included in the
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
 ** packaging of this file. Please review the following information to
 ** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl.html.
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
 ** GNU General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or later as published by the Free
-** Software Foundation and appearing in the file LICENSE.GPL included in
-** the packaging of this file. Please review the following information to
-** ensure the GNU General Public License version 2.0 requirements will be
-** met: http://www.gnu.org/licenses/gpl-2.0.html.
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -49,139 +52,118 @@
 //
 
 #include <QtCore/qglobal.h>
+#include <QtQml/private/qbipointer_p.h>
+#include <QtQml/private/qqmlcomponent_p.h>
 
 QT_BEGIN_NAMESPACE
 
-template<typename T>
-class QQuickDeferredPointer
+class QQuickUntypedDeferredPointer
 {
+    Q_DISABLE_COPY_MOVE(QQuickUntypedDeferredPointer)
 public:
-    inline QQuickDeferredPointer();
-    inline QQuickDeferredPointer(T *);
-    inline QQuickDeferredPointer(const QQuickDeferredPointer<T> &o);
+    QQmlComponentPrivate::DeferredState *deferredState() const
+    {
+        return value.isT1() ? nullptr : &value.asT2()->state;
+    }
 
-    inline bool isNull() const;
+    void clearDeferredState()
+    {
+        if (value.isT1())
+            return;
+        value.clearFlag();
+        DeferredState *state = value.asT2();
+        value = state->value;
+        delete state;
+    }
 
-    inline bool wasExecuted() const;
-    inline void setExecuted();
+    bool wasExecuted() const { return value.isT1() && value.flag(); }
+    void setExecuted()
+    {
+        Q_ASSERT(value.isT1());
+        value.setFlag();
+    }
 
-    inline bool isExecuting() const;
-    inline void setExecuting(bool);
+    bool isExecuting() const { return value.isT2() && value.flag(); }
+    bool setExecuting(bool b)
+    {
+        if (b) {
+            if (value.isT2()) {
+                // Not our state. Set the flag, but leave it alone.
+                value.setFlag();
+                return false;
+            }
 
-    inline operator T*() const;
-    inline operator bool() const;
+            value = new DeferredState {
+                QQmlComponentPrivate::DeferredState(),
+                value.asT1()
+            };
+            value.setFlag();
+            return true;
+        }
 
-    inline T *data() const;
-    inline T *operator*() const;
-    inline T *operator->() const;
+        if (value.isT2()) {
+            value.clearFlag();
+            return true;
+        }
 
-    inline QQuickDeferredPointer<T> &operator=(T *);
-    inline QQuickDeferredPointer<T> &operator=(const QQuickDeferredPointer &o);
+        return false;
+    }
+
+protected:
+    QQuickUntypedDeferredPointer() = default;
+    QQuickUntypedDeferredPointer(void *v) : value(v)
+    {
+        Q_ASSERT(value.isT1());
+        Q_ASSERT(!value.flag());
+    }
+
+    QQuickUntypedDeferredPointer &operator=(void *v)
+    {
+        if (value.isT1())
+            value = v;
+        else
+            value.asT2()->value = v;
+        return *this;
+    }
+
+    ~QQuickUntypedDeferredPointer()
+    {
+        if (value.isT2())
+            delete value.asT2();
+    }
+
+    void *data() const { return value.isT1() ? value.asT1() : value.asT2()->value; }
 
 private:
-    quintptr ptr_value = 0;
+    struct DeferredState
+    {
+        QQmlComponentPrivate::DeferredState state;
+        void *value = nullptr;
+    };
 
-    static const quintptr WasExecutedBit = 0x1;
-    static const quintptr IsExecutingBit = 0x2;
-    static const quintptr FlagsMask = WasExecutedBit | IsExecutingBit;
+    QBiPointer<void, DeferredState> value;
 };
 
 template<typename T>
-QQuickDeferredPointer<T>::QQuickDeferredPointer()
+class QQuickDeferredPointer : public QQuickUntypedDeferredPointer
 {
-}
+    Q_DISABLE_COPY_MOVE(QQuickDeferredPointer)
+public:
+    QQuickDeferredPointer() = default;
+    ~QQuickDeferredPointer() = default;
 
-template<typename T>
-QQuickDeferredPointer<T>::QQuickDeferredPointer(T *v)
-: ptr_value(quintptr(v))
-{
-    Q_ASSERT((ptr_value & FlagsMask) == 0);
-}
+    QQuickDeferredPointer(T *v) : QQuickUntypedDeferredPointer(v) {}
+    QQuickDeferredPointer<T> &operator=(T *o) {
+        QQuickUntypedDeferredPointer::operator=(o);
+        return *this;
+    }
 
-template<typename T>
-QQuickDeferredPointer<T>::QQuickDeferredPointer(const QQuickDeferredPointer<T> &o)
-: ptr_value(o.ptr_value)
-{
-}
-
-template<typename T>
-bool QQuickDeferredPointer<T>::isNull() const
-{
-    return 0 == (ptr_value & (~FlagsMask));
-}
-
-template<typename T>
-bool QQuickDeferredPointer<T>::wasExecuted() const
-{
-    return ptr_value & WasExecutedBit;
-}
-
-template<typename T>
-void QQuickDeferredPointer<T>::setExecuted()
-{
-    ptr_value |= WasExecutedBit;
-}
-
-template<typename T>
-bool QQuickDeferredPointer<T>::isExecuting() const
-{
-    return ptr_value & IsExecutingBit;
-}
-
-template<typename T>
-void QQuickDeferredPointer<T>::setExecuting(bool b)
-{
-    if (b)
-        ptr_value |= IsExecutingBit;
-    else
-        ptr_value &= ~IsExecutingBit;
-}
-
-template<typename T>
-QQuickDeferredPointer<T>::operator T*() const
-{
-    return data();
-}
-
-template<typename T>
-QQuickDeferredPointer<T>::operator bool() const
-{
-    return !isNull();
-}
-
-template<typename T>
-T *QQuickDeferredPointer<T>::data() const
-{
-    return (T *)(ptr_value & ~FlagsMask);
-}
-
-template<typename T>
-T *QQuickDeferredPointer<T>::operator*() const
-{
-    return (T *)(ptr_value & ~FlagsMask);
-}
-
-template<typename T>
-T *QQuickDeferredPointer<T>::operator->() const
-{
-    return (T *)(ptr_value & ~FlagsMask);
-}
-
-template<typename T>
-QQuickDeferredPointer<T> &QQuickDeferredPointer<T>::operator=(T *o)
-{
-    Q_ASSERT((quintptr(o) & FlagsMask) == 0);
-
-    ptr_value = quintptr(o) | (ptr_value & FlagsMask);
-    return *this;
-}
-
-template<typename T>
-QQuickDeferredPointer<T> &QQuickDeferredPointer<T>::operator=(const QQuickDeferredPointer &o)
-{
-    ptr_value = o.ptr_value;
-    return *this;
-}
+    T *data() const { return static_cast<T *>(QQuickUntypedDeferredPointer::data()); }
+    operator bool() const { return data() != nullptr; }
+    operator T*() const { return data(); }
+    T *operator*() const { return data(); }
+    T *operator->() const { return data(); }
+};
 
 QT_END_NAMESPACE
 

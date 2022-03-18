@@ -1,3 +1,4 @@
+
 /****************************************************************************
 **
 ** Copyright (C) 2019 The Qt Company Ltd.
@@ -74,7 +75,7 @@ public:
     int returnDuration = 100;
     QQuickBoundaryRule::OvershootFilter overshootFilter = QQuickBoundaryRule::OvershootFilter::None;
     bool enabled = true;
-    bool finalized = false;
+    bool completed = false;
 
     qreal easedOvershoot(qreal overshootingValue);
     void resetOvershoot();
@@ -128,7 +129,7 @@ void QQuickBoundaryReturnJob::updateState(QAbstractAnimationJob::State newState,
 
 /*!
     \qmltype BoundaryRule
-    \instantiates QQuickBoundaryRule
+//!    \instantiates QQuickBoundaryRule
     \inqmlmodule Qt.labs.animation
     \ingroup qtquick-transitions-animations
     \ingroup qtquick-interceptors
@@ -146,7 +147,8 @@ void QQuickBoundaryReturnJob::updateState(QAbstractAnimationJob::State newState,
 
     Note that a property cannot have more than one assigned BoundaryRule.
 
-    \sa {Animation and Transitions in Qt Quick}, {Qt Quick Examples - Animation#Behaviors}{Behavior example}, {Qt QML}
+    \sa {Animation and Transitions in Qt Quick}, {Qt Quick Examples - Animation#Behaviors}{Behavior
+example}, {Qt QML}
 */
 
 QQuickBoundaryRule::QQuickBoundaryRule(QObject *parent)
@@ -467,6 +469,17 @@ void QQuickBoundaryRule::setReturnDuration(int duration)
     emit returnDurationChanged();
 }
 
+void QQuickBoundaryRule::classBegin()
+{
+
+}
+
+void QQuickBoundaryRule::componentComplete()
+{
+    Q_D(QQuickBoundaryRule);
+    d->completed = true;
+}
+
 void QQuickBoundaryRule::write(const QVariant &value)
 {
     bool conversionOk = false;
@@ -476,7 +489,7 @@ void QQuickBoundaryRule::write(const QVariant &value)
         return;
     }
     Q_D(QQuickBoundaryRule);
-    bool bypass = !d->enabled || !d->finalized || QQmlEnginePrivate::designerMode();
+    bool bypass = !d->enabled || !d->completed || QQmlEnginePrivate::designerMode();
     if (bypass) {
         QQmlPropertyPrivate::write(d->property, value,
                                    QQmlPropertyData::BypassInterceptor | QQmlPropertyData::DontRemoveBinding);
@@ -492,18 +505,6 @@ void QQuickBoundaryRule::setTarget(const QQmlProperty &property)
 {
     Q_D(QQuickBoundaryRule);
     d->property = property;
-
-    QQmlEnginePrivate *engPriv = QQmlEnginePrivate::get(qmlEngine(this));
-    static int finalizedIdx = -1;
-    if (finalizedIdx < 0)
-        finalizedIdx = metaObject()->indexOfSlot("componentFinalized()");
-    engPriv->registerFinalizeCallback(this, finalizedIdx);
-}
-
-void QQuickBoundaryRule::componentFinalized()
-{
-    Q_D(QQuickBoundaryRule);
-    d->finalized = true;
 }
 
 /*!

@@ -84,7 +84,6 @@ class QPointingDevice;
 class QQuickRenderControl;
 class QQuickWindowIncubationController;
 class QQuickWindowPrivate;
-class QQuickWindowRenderLoop;
 class QSGRenderLoop;
 class QTouchEvent;
 class QRhi;
@@ -229,6 +228,7 @@ public:
     struct Redirect {
         QRhiCommandBuffer *commandBuffer = nullptr;
         QQuickWindowRenderTarget rt;
+        qreal devicePixelRatio = 1.0;
         bool renderTargetDirty = false;
     } redirect;
 

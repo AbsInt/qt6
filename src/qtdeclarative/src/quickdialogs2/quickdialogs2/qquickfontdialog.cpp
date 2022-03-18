@@ -1,34 +1,37 @@
 /****************************************************************************
 **
 ** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the Qt Quick Dialogs module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL3$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
 ** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPLv3 included in the
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
 ** packaging of this file. Please review the following information to
 ** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl.html.
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
 ** GNU General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or later as published by the Free
-** Software Foundation and appearing in the file LICENSE.GPL included in
-** the packaging of this file. Please review the following information to
-** ensure the GNU General Public License version 2.0 requirements will be
-** met: http://www.gnu.org/licenses/gpl-2.0.html.
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -93,19 +96,19 @@ QT_BEGIN_NAMESPACE
 Q_LOGGING_CATEGORY(lcFontDialog, "qt.quick.dialogs.fontdialog")
 
 QQuickFontDialog::QQuickFontDialog(QObject *parent)
-    : QQuickAbstractDialog(QPlatformTheme::FontDialog, parent),
+    : QQuickAbstractDialog(QQuickDialogType::FontDialog, parent),
       m_options(QFontDialogOptions::create())
 {
 }
 
 /*!
     \qmlproperty font QtQuick.Dialogs::FontDialog::currentFont
+    \deprecated [6.3] Use \l selectedFont instead.
 
     This property holds the currently selected font in the dialog.
 
-    Unlike the \l selectedFont property, the \c currentFont property is updated
-    while the user is selecting fonts in the dialog, even before the final
-    selection has been made.
+    The \c currentFont property is updated while the user is selecting
+    fonts in the dialog, even before the final selection has been made.
 
     \sa selectedFont
 */
@@ -127,29 +130,31 @@ void QQuickFontDialog::setCurrentFont(const QFont &font)
 /*!
     \qmlproperty font QtQuick.Dialogs::FontDialog::selectedFont
 
-    This property holds the final accepted font.
+    This property holds the currently selected font in the dialog.
 
-    Unlike the \l currentFont property, the \c selectedFont property is not updated
-    while the user is selecting fonts in the dialog, but only after the final
-    selection has been made. That is, when the user has clicked \uicontrol Open
-    to accept a font. Alternatively, the \l {Dialog::}{accepted()} signal
-    can be handled to get the final selection.
+    The \c selectedFont property is updated while the user is selecting
+    fonts in the dialog, even before the final selection has been made.
+
+    The \l {Dialog::}{accepted()} signal can be handled to get the final selection.
+    When the user has clicked \uicontrol Open to accept a font, a signal handler
+    for the \l {Dialog::}{accepted()} signal can query the selectedFont property to
+    get the final font that was selected by the user.
 
     \sa currentFont, {Dialog::}{accepted()}
 */
 
 QFont QQuickFontDialog::selectedFont() const
 {
-    return m_selectedFont;
+    if (QPlatformFontDialogHelper *fontDialog = qobject_cast<QPlatformFontDialogHelper *>(handle()))
+        return fontDialog->currentFont();
+    return QFont();
 }
 
 void QQuickFontDialog::setSelectedFont(const QFont &font)
 {
-    if (m_selectedFont == font)
-        return;
-
-    m_selectedFont = font;
-    emit selectedFontChanged();
+    if (QPlatformFontDialogHelper *fontDialog =
+        qobject_cast<QPlatformFontDialogHelper *>(handle()))
+            fontDialog->setCurrentFont(font);
 }
 
 /*!
@@ -202,8 +207,8 @@ void QQuickFontDialog::onCreate(QPlatformDialogHelper *dialog)
     if (QPlatformFontDialogHelper *fontDialog = qobject_cast<QPlatformFontDialogHelper *>(dialog)) {
         connect(fontDialog, &QPlatformFontDialogHelper::currentFontChanged, this,
                 &QQuickFontDialog::currentFontChanged);
-        connect(fontDialog, &QPlatformFontDialogHelper::fontSelected, this,
-                &QQuickFontDialog::setSelectedFont);
+        connect(fontDialog, &QPlatformFontDialogHelper::currentFontChanged, this,
+                &QQuickFontDialog::selectedFontChanged);
         fontDialog->setOptions(m_options);
     }
 }
@@ -213,13 +218,8 @@ void QQuickFontDialog::onShow(QPlatformDialogHelper *dialog)
     m_options->setWindowTitle(title());
     if (QPlatformFontDialogHelper *fontDialog = qobject_cast<QPlatformFontDialogHelper *>(dialog))
         fontDialog->setOptions(m_options); // setOptions only assigns a member and isn't virtual
-}
 
-void QQuickFontDialog::accept()
-{
-    if (auto fontDialog = qobject_cast<QPlatformFontDialogHelper *>(handle()))
-        setSelectedFont(fontDialog->currentFont());
-    QQuickAbstractDialog::accept();
+    QQuickAbstractDialog::onShow(dialog);
 }
 
 QT_END_NAMESPACE

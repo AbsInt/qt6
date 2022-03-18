@@ -73,15 +73,14 @@ inline QString linkTargetLiteral()
 {
     return QStringLiteral("linkTarget");
 }
+inline QString componentsLiteral() { return QStringLiteral("components"); }
+inline QString scriptsLiteral() { return QStringLiteral("scripts"); }
+inline QString preferLiteral() { return QStringLiteral("prefer"); }
 
 void printUsage(const QString &appNameIn)
 {
     const std::string appName = appNameIn.toStdString();
-#ifndef QT_BOOTSTRAPPED
     const QString qmlPath = QLibraryInfo::path(QLibraryInfo::QmlImportsPath);
-#else
-    const QString qmlPath = QStringLiteral("/home/user/dev/qt-install/qml");
-#endif
     std::cerr
         << "Usage: " << appName << " -rootPath path/to/app/qml/directory -importPath path/to/qt/qml/directory\n"
            "       " << appName << " -qmlFiles file1 file2 -importPath path/to/qt/qml/directory\n"
@@ -185,7 +184,6 @@ QVariantMap pluginsForModulePath(const QString &modulePath, const QString &versi
         pluginNameList.append(plugin.name);
         isOptional = plugin.optional;
     }
-
     pluginInfo[pluginsLiteral()] = pluginNameList.join(QLatin1Char(' '));
 
     if (plugins.size() > 1) {
@@ -222,15 +220,21 @@ QVariantMap pluginsForModulePath(const QString &modulePath, const QString &versi
     }
 
     QVariantList importsFromFiles;
+    QStringList componentFiles;
+    QStringList scriptFiles;
     const auto components = parser.components();
     for (const auto &component : components) {
+        const QString componentFullPath = modulePath + QLatin1Char('/') + component.fileName;
+        componentFiles.append(componentFullPath);
         importsFromFiles
-                += findQmlImportsInQmlFile(modulePath + QLatin1Char('/') + component.fileName);
+                += findQmlImportsInQmlFile(componentFullPath);
     }
     const auto scripts = parser.scripts();
     for (const auto &script : scripts) {
+        const QString scriptFullPath = modulePath + QLatin1Char('/') + script.fileName;
+        scriptFiles.append(scriptFullPath);
         importsFromFiles
-                += findQmlImportsInJavascriptFile(modulePath + QLatin1Char('/') + script.fileName);
+                += findQmlImportsInJavascriptFile(scriptFullPath);
     }
 
     for (const QVariant &import : importsFromFiles) {
@@ -245,6 +249,14 @@ QVariantMap pluginsForModulePath(const QString &modulePath, const QString &versi
 
     if (!importsAndDependencies.isEmpty())
         pluginInfo[dependenciesLiteral()] = importsAndDependencies;
+    if (!componentFiles.isEmpty())
+        pluginInfo[componentsLiteral()] = componentFiles;
+    if (!scriptFiles.isEmpty())
+        pluginInfo[scriptsLiteral()] = scriptFiles;
+
+    if (!parser.preferredPath().isEmpty())
+        pluginInfo[preferLiteral()] = parser.preferredPath();
+
     return pluginInfo;
 }
 
@@ -336,6 +348,9 @@ QVariantList findPathsForModuleImports(const QVariantList &imports)
             QString plugins = plugininfo.value(pluginsLiteral()).toString();
             bool isOptional = plugininfo.value(pluginIsOptionalLiteral(), QVariant(false)).toBool();
             QString classnames = plugininfo.value(classnamesLiteral()).toString();
+            QStringList components = plugininfo.value(componentsLiteral()).toStringList();
+            QStringList scripts = plugininfo.value(scriptsLiteral()).toStringList();
+            QString prefer = plugininfo.value(preferLiteral()).toString();
             if (!linkTarget.isEmpty())
                 import.insert(linkTargetLiteral(), linkTarget);
             if (!plugins.isEmpty())
@@ -358,6 +373,17 @@ QVariantList findPathsForModuleImports(const QVariantList &imports)
                     if (!importsCopy.contains(depImport))
                         importsCopy.append(depImport);
                 }
+            }
+            if (!components.isEmpty()) {
+                components.removeDuplicates();
+                import.insert(componentsLiteral(), components);
+            }
+            if (!scripts.isEmpty()) {
+                scripts.removeDuplicates();
+                import.insert(scriptsLiteral(), scripts);
+            }
+            if (!prefer.isEmpty()) {
+                import.insert(preferLiteral(), prefer);
             }
         }
         import.remove(versionLiteral());
@@ -589,8 +615,20 @@ QString generateCmakeIncludeFileContent(const QVariantList &importList) {
 
             const QMap<QString, QVariant> &importDict = importVariant.toMap();
             for (auto it = importDict.cbegin(); it != importDict.cend(); ++it) {
-                s << it.key().toUpper() << QLatin1Char(';')
-                  << it.value().toString() << QLatin1Char(';');
+                s << it.key().toUpper() << QLatin1Char(';');
+                // QVariant can implicitly convert QString to the QStringList with the single
+                // element, let's use this.
+                QStringList args = it.value().toStringList();
+                if (args.isEmpty()) {
+                    // This should not happen, but if it does, the result of the
+                    // 'cmake_parse_arguments' call will be incorrect, so follow up semicolon
+                    // indicates that the single-/multiarg option is empty.
+                    s << QLatin1Char(';');
+                } else {
+                    for (auto arg : args) {
+                        s << arg << QLatin1Char(';');
+                    }
+                }
             }
             s << QStringLiteral("\")\n");
             ++importsCount;
@@ -652,6 +690,7 @@ int main(int argc, char *argv[])
     QStringList qmlImportPaths;
     QStringList qrcFiles;
     bool generateCmakeContent = false;
+    QString outputFile;
 
     int i = 1;
     while (i < args.count()) {
@@ -680,6 +719,14 @@ int main(int argc, char *argv[])
              generateCmakeContent = true;
         } else if (arg == QLatin1String("-qrcFiles")) {
             argReceiver = &qrcFiles;
+        } else if (arg == QLatin1String("-output-file")) {
+            if (i >= args.count()) {
+                std::cerr << "-output-file requires an argument\n";
+                return 1;
+            }
+            outputFile = args.at(i);
+            ++i;
+            continue;
         } else {
             std::cerr << qPrintable(appName) << ": Invalid argument: \""
                 << qPrintable(arg) << "\"\n";
@@ -720,6 +767,17 @@ int main(int argc, char *argv[])
         content = QJsonDocument(QJsonArray::fromVariantList(imports)).toJson();
     }
 
-    std::cout << content.constData() << std::endl;
+    if (outputFile.isEmpty()) {
+        std::cout << content.constData() << std::endl;
+    } else {
+        QFile f(outputFile);
+        if (!f.open(QIODevice::WriteOnly | QIODevice::Text)) {
+            std::cerr << qPrintable(appName) << ": Unable to write to output file: \""
+                << qPrintable(outputFile) << "\"\n";
+            return 1;
+        }
+        QTextStream out(&f);
+        out << content << "\n";
+    }
     return 0;
 }

@@ -161,6 +161,7 @@ public slots:
     void initTestCase();
     void cleanup();
 private slots:
+    void addActionOverloads();
     void getSetCheck();
     void fontPropagation();
     void fontPropagation2();
@@ -244,6 +245,7 @@ private slots:
     void persistentWinId();
     void showNativeChild();
     void closeAndShowNativeChild();
+    void closeAndShowWithNativeChild();
     void transientParent();
     void qobject_castInDestroyedSlot();
 
@@ -664,6 +666,72 @@ void tst_QWidget::initTestCase()
 void tst_QWidget::cleanup()
 {
     QTRY_VERIFY(QApplication::topLevelWidgets().isEmpty());
+}
+
+template <typename T>
+struct ImplicitlyConvertibleTo {
+    T t;
+    operator const T() const { return t; }
+    operator T() { return t; }
+};
+
+void testFunction0() {}
+void testFunction1(bool) {}
+
+void tst_QWidget::addActionOverloads()
+{
+    // almost exhaustive check of addAction() overloads:
+    // (text), (icon, text), (icon, text, shortcut), (text, shortcut)
+    // each with a good sample of ways to QObject::connect() to
+    // QAction::triggered(bool)
+    QWidget w;
+
+    // don't just pass QString etc - that'd be too easy (think QStringBuilder)
+    ImplicitlyConvertibleTo<QString> text = {QStringLiteral("foo")};
+    ImplicitlyConvertibleTo<QIcon> icon;
+
+    const auto check = [&](auto &...args) { // don't need to perfectly-forward, only lvalues passed
+        w.addAction(args...);
+
+        w.addAction(args..., &w, SLOT(deleteLater()));
+        w.addAction(args..., &w, &QObject::deleteLater);
+        w.addAction(args..., testFunction0);
+        w.addAction(args..., &w, testFunction0);
+        w.addAction(args..., testFunction1);
+        w.addAction(args..., &w, testFunction1);
+        w.addAction(args..., [&](bool b) { w.setEnabled(b); });
+        w.addAction(args..., &w, [&](bool b) { w.setEnabled(b); });
+
+        w.addAction(args..., &w, SLOT(deleteLater()), Qt::QueuedConnection);
+        w.addAction(args..., &w, &QObject::deleteLater, Qt::QueuedConnection);
+        // doesn't exist: w.addAction(args..., testFunction0, Qt::QueuedConnection);
+        w.addAction(args..., &w, testFunction0, Qt::QueuedConnection);
+        // doesn't exist: w.addAction(args..., testFunction1, Qt::QueuedConnection);
+        w.addAction(args..., &w, testFunction1, Qt::QueuedConnection);
+        // doesn't exist: w.addAction(args..., [&](bool b) { w.setEnabled(b); }, Qt::QueuedConnection);
+        w.addAction(args..., &w, [&](bool b) { w.setEnabled(b); }, Qt::QueuedConnection);
+    };
+    const auto check1 = [&](auto &arg, auto &...args) {
+        check(arg, args...);
+        check(std::as_const(arg), args...);
+    };
+    const auto check2 = [&](auto &arg1, auto &arg2, auto &...args) {
+        check1(arg1, arg2, args...);
+        check1(arg1, std::as_const(arg2), args...);
+    };
+    [[maybe_unused]]
+    const auto check3 = [&](auto &arg1, auto &arg2, auto &arg3) {
+        check2(arg1, arg2, arg3);
+        check2(arg1, arg2, std::as_const(arg3));
+    };
+
+    check1(text);
+    check2(icon, text);
+#ifndef QT_NO_SHORTCUT
+    ImplicitlyConvertibleTo<QKeySequence> keySequence = {Qt::CTRL | Qt::Key_C};
+    check2(text, keySequence);
+    check3(icon, text, keySequence);
+#endif
 }
 
 void tst_QWidget::fontPropagation()
@@ -1188,6 +1256,8 @@ void tst_QWidget::ignoreKeyEventsWhenDisabled_QTBUG27417()
     centerOnScreen(&lineEdit);
     lineEdit.setDisabled(true);
     lineEdit.show();
+    QTest::ignoreMessage(QtWarningMsg, "Keyboard event not accepted by receiving widget");
+    QTest::ignoreMessage(QtWarningMsg, "Keyboard event not accepted by receiving widget");
     QTest::keyClick(&lineEdit, Qt::Key_A);
     QTRY_VERIFY(lineEdit.text().isEmpty());
 }
@@ -4798,6 +4868,51 @@ void tst_QWidget::closeAndShowNativeChild()
     QVERIFY(nativeChild->isHidden());
     nativeChild->show();
     QVERIFY(!nativeChild->isHidden());
+}
+
+void tst_QWidget::closeAndShowWithNativeChild()
+{
+    bool dontCreateNativeWidgetSiblings = QApplication::testAttribute(Qt::AA_DontCreateNativeWidgetSiblings);
+    auto resetAttribute = qScopeGuard([&]{
+        QApplication::setAttribute(Qt::AA_DontCreateNativeWidgetSiblings, dontCreateNativeWidgetSiblings);
+    });
+    QApplication::setAttribute(Qt::AA_DontCreateNativeWidgetSiblings);
+
+    QWidget topLevel;
+    QWidget *nativeChild = new QWidget;
+    nativeChild->setFixedSize(200, 200);
+    QWidget *nativeHiddenChild = new QWidget;
+    nativeHiddenChild->setFixedSize(200, 200);
+    QWidget *normalChild = new QWidget;
+    normalChild->setFixedSize(200, 200);
+
+    QHBoxLayout *layout = new QHBoxLayout;
+    layout->addWidget(nativeChild);
+    layout->addWidget(nativeHiddenChild);
+    layout->addWidget(normalChild);
+    topLevel.setLayout(layout);
+
+    nativeHiddenChild->hide();
+
+    topLevel.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&topLevel));
+    nativeChild->winId();
+    const QSize originalSize = topLevel.size();
+    topLevel.close();
+
+    // all children must have the same state
+    QCOMPARE(nativeChild->isHidden(), normalChild->isHidden());
+    QCOMPARE(nativeChild->isVisible(), normalChild->isVisible());
+    QCOMPARE(nativeChild->testAttribute(Qt::WA_WState_Visible),
+             normalChild->testAttribute(Qt::WA_WState_Visible));
+    QCOMPARE(nativeChild->testAttribute(Qt::WA_WState_Hidden),
+             normalChild->testAttribute(Qt::WA_WState_Hidden));
+    QCOMPARE(nativeChild->testAttribute(Qt::WA_WState_ExplicitShowHide),
+             normalChild->testAttribute(Qt::WA_WState_ExplicitShowHide));
+
+    topLevel.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&topLevel));
+    QCOMPARE(topLevel.size(), originalSize);
 }
 
 class ShowHideEventWidget : public QWidget
@@ -11692,10 +11807,6 @@ void tst_QWidget::underMouse()
 
     // Mouse leaves popup and enters topLevelWidget, should cause leave for popup
     // but no enter to topLevelWidget.
-#ifdef Q_OS_DARWIN
-    // Artificial leave event needed for Cocoa.
-    QWindowSystemInterface::handleLeaveEvent(popupWindow);
-#endif
     QTest::mouseMove(popupWindow, popupWindow->mapFromGlobal(window->mapToGlobal(inWindowPoint)));
     QApplication::processEvents();
     QVERIFY(!topLevelWidget.underMouse());
@@ -11779,9 +11890,6 @@ public:
 // when mousing over it.
 void tst_QWidget::taskQTBUG_27643_enterEvents()
 {
-#ifdef Q_OS_MACOS
-    QSKIP("QTBUG-52974: this test can crash!");
-#endif
     // Move the mouse cursor to a safe location so it won't interfere
     QCursor::setPos(m_safeCursorPos);
 
@@ -12115,6 +12223,36 @@ void tst_QWidget::closeEvent()
     widget.windowHandle()->close();
     widget.windowHandle()->close();
     QCOMPARE(widget.closeCount, 1);
+
+    CloseCountingWidget widget2;
+    widget2.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&widget2));
+    widget2.close();
+    widget2.close();
+    QCOMPARE(widget2.closeCount, 1);
+    widget2.closeCount = 0;
+
+    widget2.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&widget2));
+    widget2.close();
+    QCOMPARE(widget2.closeCount, 1);
+
+    CloseCountingWidget widget3;
+    widget3.close();
+    widget3.close();
+    QEXPECT_FAIL("", "Closing a widget without a window will unconditionally send close events", Continue);
+    QCOMPARE(widget3.closeCount, 0);
+
+    QWidget parent;
+    CloseCountingWidget child;
+    child.setParent(&parent);
+    parent.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&parent));
+    child.close();
+    QCOMPARE(child.closeCount, 1);
+    child.close();
+    QEXPECT_FAIL("", "Closing a widget without a window will unconditionally send close events", Continue);
+    QCOMPARE(child.closeCount, 1);
 }
 
 void tst_QWidget::closeWithChildWindow()
@@ -12316,10 +12454,19 @@ protected:
 
 void tst_QWidget::deleteWindowInCloseEvent()
 {
-    // Just checking if closing this widget causes a crash
+    QSignalSpy quitSpy(qApp, &QGuiApplication::lastWindowClosed);
+
+    // Closing this widget should not cause a crash
     auto widget = new DeleteOnCloseEventWidget;
-    widget->close();
-    QVERIFY(true);
+    widget->show();
+    QVERIFY(QTest::qWaitForWindowExposed(widget));
+    QTimer::singleShot(0, widget, [&]{
+        widget->close();
+    });
+    QApplication::exec();
+
+    // It should still result in a single lastWindowClosed emit
+    QCOMPARE(quitSpy.count(), 1);
 }
 
 /*!

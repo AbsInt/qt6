@@ -445,20 +445,21 @@ public:
 
     bool isValid() const;
     bool isRegistered() const;
-#if defined(QT_QMETATYPE_BC_COMPAT) || defined(Q_QDOC)
+#if QT_CORE_REMOVED_SINCE(6, 1) || defined(Q_QDOC)
     int id() const;
 #else
     // ### Qt 7: Remove traces of out of line version
     // unused int parameter is used to avoid ODR violation
     int id(int = 0) const
     {
+        // keep in sync with the version in removed_api.cpp
         if (d_ptr) {
             if (int id = d_ptr->typeId.loadRelaxed())
                 return id;
             return idHelper();
         }
         return 0;
-    };
+    }
 #endif
     constexpr qsizetype sizeOf() const;
     constexpr qsizetype alignOf() const;
@@ -732,7 +733,11 @@ public:
     static void unregisterMutableViewFunction(QMetaType from, QMetaType to);
 
     static void unregisterMetaType(QMetaType type);
+
+#if QT_VERSION < QT_VERSION_CHECK(7, 0, 0)
     const QtPrivate::QMetaTypeInterface *iface() { return d_ptr; }
+#endif
+    const QtPrivate::QMetaTypeInterface *iface() const { return d_ptr; }
 
 private:
     int idHelper() const;
@@ -1105,6 +1110,14 @@ namespace QtPrivate
         static bool registerConverter() { return false; }
     };
 
+#if QT_CONFIG(future)
+    template<typename T>
+    struct MetaTypeQFutureHelper
+    {
+        static bool registerConverter() { return false; }
+    };
+#endif
+
     Q_CORE_EXPORT bool isBuiltinType(const QByteArray &type);
 } // namespace QtPrivate
 
@@ -1213,7 +1226,7 @@ namespace QtPrivate {
 }
 
 template <typename T>
-int qRegisterNormalizedMetaType(const QT_PREPEND_NAMESPACE(QByteArray) &normalizedTypeName)
+int qRegisterNormalizedMetaTypeImplementation(const QT_PREPEND_NAMESPACE(QByteArray) &normalizedTypeName)
 {
 #ifndef QT_NO_QOBJECT
     Q_ASSERT_X(normalizedTypeName == QMetaObject::normalizedType(normalizedTypeName.constData()),
@@ -1231,12 +1244,48 @@ int qRegisterNormalizedMetaType(const QT_PREPEND_NAMESPACE(QByteArray) &normaliz
     QtPrivate::AssociativeContainerTransformationHelper<T>::registerMutableView();
     QtPrivate::MetaTypePairHelper<T>::registerConverter();
     QtPrivate::MetaTypeSmartPointerHelper<T>::registerConverter();
+#if QT_CONFIG(future)
+    QtPrivate::MetaTypeQFutureHelper<T>::registerConverter();
+#endif
 
     if (normalizedTypeName != metaType.name())
         QMetaType::registerNormalizedTypedef(normalizedTypeName, metaType);
 
     return id;
 }
+
+// This primary template calls the -Implementation, like all other specialisations should.
+// But the split allows to
+// - in a header:
+//   - define a specialization of this template calling an out-of-line function
+//     (QT_DECL_METATYPE_EXTERN{,_TAGGED})
+// - in the .cpp file:
+//   - define the out-of-line wrapper to call the -Implementation
+//     (QT_IMPL_METATYPE_EXTERN{,_TAGGED})
+// The _TAGGED variants let you choose a tag (must be a C identifier) to disambiguate
+// the out-of-line function; the non-_TAGGED variants use the passed class name as tag.
+template <typename T>
+int qRegisterNormalizedMetaType(const QT_PREPEND_NAMESPACE(QByteArray) &normalizedTypeName)
+{
+    return qRegisterNormalizedMetaTypeImplementation<T>(normalizedTypeName);
+}
+
+#define QT_DECL_METATYPE_EXTERN_TAGGED(TYPE, TAG, EXPORT) \
+    QT_BEGIN_NAMESPACE \
+    EXPORT int qRegisterNormalizedMetaType_ ## TAG (const QByteArray &); \
+    template <> inline int qRegisterNormalizedMetaType< TYPE >(const QByteArray &name) \
+    { return qRegisterNormalizedMetaType_ ## TAG (name); } \
+    QT_END_NAMESPACE \
+    Q_DECLARE_METATYPE(TYPE) \
+    /* end */
+#define QT_IMPL_METATYPE_EXTERN_TAGGED(TYPE, TAG) \
+    int qRegisterNormalizedMetaType_ ## TAG (const QByteArray &name) \
+    { return qRegisterNormalizedMetaTypeImplementation< TYPE >(name); } \
+    /* end */
+#define QT_DECL_METATYPE_EXTERN(TYPE, EXPORT) \
+    QT_DECL_METATYPE_EXTERN_TAGGED(TYPE, TYPE, EXPORT)
+#define QT_IMPL_METATYPE_EXTERN(TYPE) \
+    QT_IMPL_METATYPE_EXTERN_TAGGED(TYPE, TYPE)
 
 template <typename T>
 int qRegisterMetaType(const char *typeName)
@@ -1438,13 +1487,6 @@ struct QMetaTypeId< SINGLE_ARG_TEMPLATE<T> > \
         return newId; \
     } \
 }; \
-namespace QtPrivate { \
-template<typename T> \
-struct IsSequentialContainer<SINGLE_ARG_TEMPLATE<T> > \
-{ \
-    enum { Value = true }; \
-}; \
-} \
 QT_END_NAMESPACE
 
 #define Q_DECLARE_METATYPE_TEMPLATE_2ARG(DOUBLE_ARG_TEMPLATE) \
@@ -1541,16 +1583,26 @@ struct QMetaTypeId< SMART_POINTER<T> > \
 };\
 QT_END_NAMESPACE
 
+#define Q_DECLARE_SEQUENTIAL_CONTAINER_METATYPE(SINGLE_ARG_TEMPLATE) \
+    QT_BEGIN_NAMESPACE \
+    namespace QtPrivate { \
+    template<typename T> \
+    struct IsSequentialContainer<SINGLE_ARG_TEMPLATE<T> > \
+    { \
+        enum { Value = true }; \
+    }; \
+    } \
+    QT_END_NAMESPACE \
+    Q_DECLARE_METATYPE_TEMPLATE_1ARG(SINGLE_ARG_TEMPLATE)
+
 #define Q_DECLARE_SEQUENTIAL_CONTAINER_METATYPE_ITER(TEMPLATENAME) \
-    Q_DECLARE_METATYPE_TEMPLATE_1ARG(TEMPLATENAME)
+    Q_DECLARE_SEQUENTIAL_CONTAINER_METATYPE(TEMPLATENAME)
 
 QT_END_NAMESPACE
 
 QT_FOR_EACH_AUTOMATIC_TEMPLATE_1ARG(Q_DECLARE_SEQUENTIAL_CONTAINER_METATYPE_ITER)
 
 #undef Q_DECLARE_SEQUENTIAL_CONTAINER_METATYPE_ITER
-
-#define Q_DECLARE_SEQUENTIAL_CONTAINER_METATYPE Q_DECLARE_METATYPE_TEMPLATE_1ARG
 
 Q_DECLARE_SEQUENTIAL_CONTAINER_METATYPE(std::vector)
 Q_DECLARE_SEQUENTIAL_CONTAINER_METATYPE(std::list)
@@ -1746,7 +1798,7 @@ private:
         if (x != e)
             x++;
         return x;
-    };
+    }
     static constexpr const char *skipTemplate(const char *x, const char *e, bool stopAtComa = false)
     {
         int scopeDepth = 0;
@@ -1787,7 +1839,7 @@ private:
             x++;
         }
         return x;
-    };
+    }
 
     constexpr void append(char x)
     {
@@ -1808,7 +1860,7 @@ private:
     {
         while (*x)
             append(*x++);
-    };
+    }
 
     constexpr void normalizeIntegerTypes(const char *&begin, const char *end)
     {
@@ -1905,10 +1957,9 @@ public:
 #if defined (Q_CC_CLANG)
         if (name.find("anonymous ") != std::string_view::npos)
             return normalizeType(begin, end);
-#else
+#endif
         if (name.find("unnamed ") != std::string_view::npos)
             return normalizeType(begin, end);
-#endif
         while (begin < end) {
             if (*begin == ' ') {
                 if (last == ',' || last == '>' || last == '<' || last == '*' || last == '&') {
@@ -2358,9 +2409,13 @@ public:
 };
 #undef QT_METATYPE_CONSTEXPRLAMDA
 
-#ifndef QT_BOOTSTRAPPED
+/*
+ MSVC instantiates extern templates
+(https://developercommunity.visualstudio.com/t/c11-extern-templates-doesnt-work-for-class-templat/157868)
+ */
+#if !defined(QT_BOOTSTRAPPED) && !defined(Q_CC_MSVC)
 
-#if !defined(Q_CC_MSVC) || !defined(QT_BUILD_CORE_LIB)
+#if !defined(QT_BUILD_CORE_LIB)
 #define QT_METATYPE_TEMPLATE_EXPORT Q_CORE_EXPORT
 #else
 #define QT_METATYPE_TEMPLATE_EXPORT
@@ -2485,6 +2540,7 @@ constexpr const QtPrivate::QMetaTypeInterface *const qt_incomplete_metaTypeArray
 
 QT_END_NAMESPACE
 
-Q_DECLARE_METATYPE(QtMetaTypePrivate::QPairVariantInterfaceImpl)
+QT_DECL_METATYPE_EXTERN_TAGGED(QtMetaTypePrivate::QPairVariantInterfaceImpl,
+                               QPairVariantInterfaceImpl, Q_CORE_EXPORT)
 
 #endif // QMETATYPE_H

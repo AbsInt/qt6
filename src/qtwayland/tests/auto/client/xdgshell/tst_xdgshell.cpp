@@ -31,6 +31,7 @@
 #include <QtGui/QRasterWindow>
 #include <QtGui/qpa/qplatformnativeinterface.h>
 #include <QtWaylandClient/private/wayland-wayland-client-protocol.h>
+#include <QtWaylandClient/private/qwaylandwindow_p.h>
 
 using namespace MockCompositor;
 
@@ -56,7 +57,6 @@ private slots:
 
 void tst_xdgshell::showMinimized()
 {
-    QSKIP("TODO: This currently fails, needs a fix");
     // On xdg-shell there's really no way for the compositor to tell the window if it's minimized
     // There are wl_surface.enter events and so on, but there's really no way to differentiate
     // between a window preview and an unminimized window.
@@ -139,6 +139,7 @@ void tst_xdgshell::configureSize()
 
 void tst_xdgshell::configureStates()
 {
+    QVERIFY(qputenv("QT_WAYLAND_FRAME_CALLBACK_TIMEOUT", "0"));
     QRasterWindow window;
     window.resize(64, 48);
     window.show();
@@ -155,9 +156,12 @@ void tst_xdgshell::configureStates()
     // Toplevel windows don't know their position on xdg-shell
 //    QCOMPARE(window.frameGeometry().topLeft(), QPoint()); // TODO: this doesn't currently work when window decorations are enabled
 
-//    QEXPECT_FAIL("", "configure has already been acked, we shouldn't have to wait for isActive", Continue);
-//    QVERIFY(window.isActive());
-    QTRY_VERIFY(window.isActive()); // Just make sure it eventually get's set correctly
+    // window.windowstate() is driven by keyboard focus, however for decorations we want to follow
+    // XDGShell this is internal to QtWayland so it is queried directly
+    auto waylandWindow = static_cast<QtWaylandClient::QWaylandWindow *>(window.handle());
+    Q_ASSERT(waylandWindow);
+    QTRY_VERIFY(waylandWindow->windowStates().testFlag(
+            Qt::WindowActive)); // Just make sure it eventually get's set correctly
 
     const QSize screenSize(640, 480);
     const uint maximizedSerial = exec([=] {
@@ -187,6 +191,7 @@ void tst_xdgshell::configureStates()
     QCOMPARE(window.windowStates(), Qt::WindowNoState);
     QCOMPARE(window.frameGeometry().size(), windowedSize);
 //    QCOMPARE(window.frameGeometry().topLeft(), QPoint()); // TODO: this doesn't currently work when window decorations are enabled
+    QVERIFY(qunsetenv("QT_WAYLAND_FRAME_CALLBACK_TIMEOUT"));
 }
 
 void tst_xdgshell::popup()

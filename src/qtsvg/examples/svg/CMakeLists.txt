@@ -1,10 +1,8 @@
-# Generated from svg.pro.
-
 add_subdirectory(embedded)
 add_subdirectory(richtext)
 add_subdirectory(draganddrop)
 if(TARGET Qt::Widgets)
-    add_subdirectory(embeddedsvgviewer)
-    add_subdirectory(svggenerator)
-    add_subdirectory(svgviewer)
+    qt_internal_add_example(embeddedsvgviewer)
+    qt_internal_add_example(svggenerator)
+    qt_internal_add_example(svgviewer)
 endif()

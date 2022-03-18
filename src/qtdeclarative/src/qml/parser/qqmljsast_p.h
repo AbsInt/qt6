@@ -56,10 +56,15 @@
 
 #include <private/qqmljsmemorypool_p.h>
 
-#include <QtCore/qstring.h>
 #include <QtCore/qversionnumber.h>
 
 QT_BEGIN_NAMESPACE
+
+class QString;
+
+namespace QQmlJS {
+    class Parser;
+}
 
 #define QQMLJS_DECLARE_AST_NODE(name) \
   enum { K = Kind_##name };
@@ -253,6 +258,7 @@ public:
         Kind_UiPragma,
         Kind_UiProgram,
         Kind_UiParameterList,
+        Kind_UiPropertyAttributes,
         Kind_UiPublicMember,
         Kind_UiQualifiedId,
         Kind_UiScriptBinding,
@@ -305,12 +311,6 @@ public:
     {
         if (node)
             node->accept(visitor);
-    }
-
-    // ### Remove when we can. This is part of the qmldevtools library, though.
-    inline static void acceptChild(Node *node, BaseVisitor *visitor)
-    {
-        return accept(node, visitor);
     }
 
     virtual void accept0(BaseVisitor *visitor) = 0;
@@ -3135,8 +3135,8 @@ class QML_PARSER_EXPORT UiPragma: public Node
 public:
     QQMLJS_DECLARE_AST_NODE(UiPragma)
 
-    UiPragma(QStringView name)
-        : name(name)
+    UiPragma(QStringView name, QStringView value = {})
+        : name(name), value(value)
     { kind = K; }
 
     void accept0(BaseVisitor *visitor) override;
@@ -3149,6 +3149,7 @@ public:
 
 // attributes
     QStringView name;
+    QStringView value;
     SourceLocation pragmaToken;
     SourceLocation semicolonToken;
 };
@@ -3364,6 +3365,46 @@ public:
     SourceLocation colonToken;
 };
 
+class QML_PARSER_EXPORT UiPropertyAttributes : public Node
+{
+    QQMLJS_DECLARE_AST_NODE(UiPropertyAttributes)
+public:
+    UiPropertyAttributes() { kind = K; }
+
+    SourceLocation defaultToken() const { return m_defaultToken; }
+    bool isDefaultMember() const { return defaultToken().isValid(); }
+    SourceLocation requiredToken() const { return m_requiredToken; }
+    bool isRequired() const { return requiredToken().isValid(); }
+    SourceLocation readonlyToken() const { return m_readonlyToken; }
+    bool isReadonly() const { return readonlyToken().isValid(); }
+
+    SourceLocation propertyToken() const { return m_propertyToken; }
+
+    template <bool InvalidIsLargest = true>
+    static bool compareLocationsByBegin(const SourceLocation *& lhs, const SourceLocation *& rhs)
+    {
+        if (lhs->isValid() && rhs->isValid())
+            return lhs->begin() < rhs->begin();
+        else if (lhs->isValid())
+            return InvalidIsLargest;
+        else
+            return !InvalidIsLargest;
+    }
+
+    void accept0(BaseVisitor *) override {} // intentionally do nothing
+
+    SourceLocation firstSourceLocation() const override;
+
+    SourceLocation lastSourceLocation() const override;
+
+private:
+    friend class QQmlJS::Parser;
+    SourceLocation m_defaultToken;
+    SourceLocation m_readonlyToken;
+    SourceLocation m_requiredToken;
+    SourceLocation m_propertyToken;
+};
+
 class QML_PARSER_EXPORT UiPublicMember: public UiObjectMember
 {
 public:
@@ -3371,27 +3412,23 @@ public:
 
     UiPublicMember(UiQualifiedId *memberType,
                    QStringView name)
-        : type(Property), memberType(memberType), name(name), statement(nullptr), binding(nullptr), isDefaultMember(false), isReadonlyMember(false), parameters(nullptr)
+        : type(Property), memberType(memberType), name(name), statement(nullptr), binding(nullptr), parameters(nullptr)
     { kind = K; }
 
     UiPublicMember(UiQualifiedId *memberType,
                    QStringView name,
                    Statement *statement)
-        : type(Property), memberType(memberType), name(name), statement(statement), binding(nullptr), isDefaultMember(false), isReadonlyMember(false), parameters(nullptr)
+        : type(Property), memberType(memberType), name(name), statement(statement), binding(nullptr), parameters(nullptr)
     { kind = K; }
 
     void accept0(BaseVisitor *visitor) override;
 
     SourceLocation firstSourceLocation() const override
     {
-      if (defaultToken.isValid())
-        return defaultToken;
-      else if (readonlyToken.isValid())
-          return readonlyToken;
-      else if (requiredToken.isValid())
-          return requiredToken;
-
-      return propertyToken;
+      if (hasAttributes)
+          return m_attributes->firstSourceLocation();
+      else
+        return m_propertyToken;
     }
 
     SourceLocation lastSourceLocation() const override
@@ -3404,27 +3441,61 @@ public:
       return semicolonToken;
     }
 
+    SourceLocation defaultToken() const
+    {
+        return hasAttributes ? m_attributes->defaultToken() : SourceLocation {};
+    }
+    bool isDefaultMember() const { return defaultToken().isValid(); }
+
+    SourceLocation requiredToken() const
+    {
+        return hasAttributes ? m_attributes->requiredToken() : SourceLocation {};
+    }
+    bool isRequired() const { return requiredToken().isValid(); }
+
+    SourceLocation readonlyToken() const
+    {
+        return hasAttributes ? m_attributes->readonlyToken() : SourceLocation {};
+    }
+    bool isReadonly() const { return readonlyToken().isValid(); }
+
+    void setAttributes(UiPropertyAttributes *attributes)
+    {
+        m_attributes = attributes;
+        hasAttributes = true;
+    }
+
+    SourceLocation propertyToken() const
+    {
+        return hasAttributes ? m_attributes->propertyToken() : m_propertyToken;
+    }
+
+    void setPropertyToken(SourceLocation token)
+    {
+        m_propertyToken = token;
+        hasAttributes = false;
+    }
+
 // attributes
-    enum { Signal, Property } type;
+    enum : bool { Signal, Property } type;
+    bool hasAttributes = false;
     QStringView typeModifier;
     UiQualifiedId *memberType;
     QStringView name;
     Statement *statement; // initialized with a JS expression
     UiObjectMember *binding; // initialized with a QML object or array.
-    bool isDefaultMember;
-    bool isReadonlyMember;
-    bool isRequired = false;
     UiParameterList *parameters;
     // TODO: merge source locations
-    SourceLocation defaultToken;
-    SourceLocation readonlyToken;
-    SourceLocation propertyToken;
-    SourceLocation requiredToken;
     SourceLocation typeModifierToken;
     SourceLocation typeToken;
     SourceLocation identifierToken;
     SourceLocation colonToken;
     SourceLocation semicolonToken;
+private:
+    union {
+        SourceLocation m_propertyToken = SourceLocation {};
+        UiPropertyAttributes *m_attributes;
+    };
 };
 
 class QML_PARSER_EXPORT UiObjectDefinition: public UiObjectMember

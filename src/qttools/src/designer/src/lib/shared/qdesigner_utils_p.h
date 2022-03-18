@@ -61,6 +61,10 @@ class DesignerIconCache;
 class FormWindowBase;
 
 
+QDESIGNER_SHARED_EXPORT QString dataDirectory();
+
+QDESIGNER_SHARED_EXPORT QString legacyDataDirectory();
+
 QDESIGNER_SHARED_EXPORT void designerWarning(const QString &message);
 
 QDESIGNER_SHARED_EXPORT void reloadIconResources(DesignerIconCache *iconCache, QObject *object);

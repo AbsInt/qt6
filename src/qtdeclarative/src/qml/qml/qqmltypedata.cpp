@@ -252,7 +252,10 @@ void QQmlTypeData::createTypeAndPropertyCaches(
     pendingGroupPropertyBindings.resolveMissingPropertyCaches(engine, &m_compiledData->propertyCaches);
 }
 
-static bool addTypeReferenceChecksumsToHash(const QList<QQmlTypeData::TypeReference> &typeRefs, QCryptographicHash *hash, QQmlEngine *engine)
+static bool addTypeReferenceChecksumsToHash(
+        const QList<QQmlTypeData::TypeReference> &typeRefs,
+        QCryptographicHash *hash, QQmlEngine *engine,
+        QHash<quintptr, QByteArray> *checksums)
 {
     for (const auto &typeRef: typeRefs) {
         if (typeRef.typeData) {
@@ -261,7 +264,7 @@ static bool addTypeReferenceChecksumsToHash(const QList<QQmlTypeData::TypeRefere
         } else if (typeRef.type.isValid()) {
             const auto propertyCache = QQmlEnginePrivate::get(engine)->cache(typeRef.type.metaObject());
             bool ok = false;
-            hash->addData(propertyCache->checksum(&ok));
+            hash->addData(propertyCache->checksum(checksums, &ok));
             if (!ok)
                 return false;
         }
@@ -421,8 +424,9 @@ void QQmlTypeData::done()
 
     const auto dependencyHasher = [engine, &resolvedTypeCache, this]() {
         QCryptographicHash hash(QCryptographicHash::Md5);
-        return (resolvedTypeCache.addToHash(&hash, engine)
-                && ::addTypeReferenceChecksumsToHash(m_compositeSingletons, &hash, engine))
+        return (resolvedTypeCache.addToHash(&hash, engine, typeLoader()->checksumCache())
+                && ::addTypeReferenceChecksumsToHash(m_compositeSingletons, &hash, engine,
+                                                     typeLoader()->checksumCache()))
                 ? hash.result()
                 : QByteArray();
     };
@@ -501,7 +505,7 @@ void QQmlTypeData::done()
             auto type = QQmlMetaType::typeForUrl(finalUrlString(), hashedStringRef, false, &errors);
             Q_ASSERT(errors.empty());
             if (type.isValid()) {
-                for (auto const &icDatum : m_inlineComponentData) {
+                for (auto const &icDatum : qAsConst(m_inlineComponentData)) {
                     Q_ASSERT(icDatum.typeIds.isValid());
                     QQmlType existingType = type.lookupInlineComponentById(type.lookupInlineComponentIdByName(m_compiledData->stringAt(icDatum.nameIndex)));
                     type.associateInlineComponent(m_compiledData->stringAt(icDatum.nameIndex),
@@ -652,7 +656,6 @@ void QQmlTypeData::continueLoadFromIR()
     for (auto const& object: m_document->objects) {
         for (auto it = object->inlineComponentsBegin(); it != object->inlineComponentsEnd(); ++it) {
             QString const nameString = m_document->stringAt(it->nameIndex);
-            QByteArray const name = nameString.toUtf8();
             auto importUrl = finalUrl();
             importUrl.setFragment(QString::number(it->objectIndex));
             auto import = new QQmlImportInstance(); // Note: The cache takes ownership of the QQmlImportInstance
@@ -888,8 +891,7 @@ void QQmlTypeData::resolveTypes()
 
 QQmlError QQmlTypeData::buildTypeResolutionCaches(
         QQmlRefPointer<QQmlTypeNameCache> *typeNameCache,
-        QV4::ResolvedTypeReferenceMap *resolvedTypeCache
-        ) const
+        QV4::ResolvedTypeReferenceMap *resolvedTypeCache) const
 {
     typeNameCache->adopt(new QQmlTypeNameCache(m_importCache));
 
@@ -933,11 +935,11 @@ QQmlError QQmlTypeData::buildTypeResolutionCaches(
                 if (qmlType.isValid()) {
                     // this is required for inline components in singletons
                     auto type = qmlType.lookupInlineComponentById(qmlType.inlineComponentId()).typeId();
-                    auto typeID = type.isValid() ? type.id() : -1;
-                    auto exUnit = engine->obtainExecutableCompilationUnit(typeID);
+                    auto exUnit = engine->obtainExecutableCompilationUnit(
+                                type.isValid() ? type.id() : -1);
                     if (exUnit) {
                         ref->setCompilationUnit(exUnit);
-                        ref->setTypePropertyCache(engine->propertyCacheForType(typeID));
+                        ref->setTypePropertyCache(engine->propertyCacheForType(type));
                     }
                 }
             } else {

@@ -44,7 +44,7 @@ QT_BEGIN_NAMESPACE
 class QWaylandClientPrivate;
 class QWaylandCompositor;
 
-class Q_WAYLAND_COMPOSITOR_EXPORT QWaylandClient : public QObject
+class Q_WAYLANDCOMPOSITOR_EXPORT QWaylandClient : public QObject
 {
     Q_OBJECT
     Q_DECLARE_PRIVATE(QWaylandClient)
@@ -60,6 +60,20 @@ class Q_WAYLAND_COMPOSITOR_EXPORT QWaylandClient : public QObject
     QML_UNCREATABLE("")
 public:
     ~QWaylandClient() override;
+
+    enum TextInputProtocol {
+        NoProtocol = 0,
+        QtTextInputMethodV1 = 1,
+        TextInputV2 = 2,
+        TextInputV4 = 4,
+
+        QtTextInputMethod = QtTextInputMethodV1,
+        TextInput = TextInputV2
+    };
+    Q_DECLARE_FLAGS(TextInputProtocols, TextInputProtocol)
+
+    TextInputProtocols textInputProtocols() const;
+    void setTextInputProtocols(TextInputProtocols p);
 
     static QWaylandClient *fromWlClient(QWaylandCompositor *compositor, wl_client *wlClient);
 

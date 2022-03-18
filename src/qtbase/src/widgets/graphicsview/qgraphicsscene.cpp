@@ -244,6 +244,7 @@
 #include <QtGui/qinputmethod.h>
 #include <private/qapplication_p.h>
 #include <private/qevent_p.h>
+#include <QtGui/private/qeventpoint_p.h>
 #include <private/qobject_p.h>
 #if QT_CONFIG(graphicseffect)
 #include <private/qgraphicseffect_p.h>
@@ -5840,8 +5841,8 @@ void QGraphicsScenePrivate::updateTouchPointsForItem(QGraphicsItem *item, QTouch
         item->d_ptr->genericMapFromSceneTransform(static_cast<const QWidget *>(touchEvent->target()));
 
     for (int i = 0; i < touchEvent->pointCount(); ++i) {
-        auto &pt = QMutableEventPoint::from(touchEvent->point(i));
-        QMutableEventPoint::from(pt).setPosition(mapFromScene.map(pt.scenePosition()));
+        auto &pt = touchEvent->point(i);
+        QMutableEventPoint::setPosition(pt, mapFromScene.map(pt.scenePosition()));
     }
 }
 

@@ -35,6 +35,16 @@
 **
 ** $QT_END_LICENSE$
 **/
+
+// Suppress GCC 11 warning about maybe-uninitialized copy of
+// another Data. We're not sure if the compiler is actually right,
+// but in this type of warning, it often isn't.
+//#if defined(Q_CC_GNU) && Q_CC_GNU >= 1100
+//QT_WARNING_DISABLE_GCC("-Wmaybe-uninitialized")
+#if defined(__GNUC__) && __GNUC__ >= 11
+#  pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+#endif
+
 #include "qqmldomelements_p.h"
 #include "qqmldomcomments_p.h"
 #include "qqmldomastdumper_p.h"
@@ -64,6 +74,12 @@ QT_BEGIN_NAMESPACE
 namespace QQmlJS {
 namespace Dom {
 
+static bool uriHasSchema(QStringView importStr)
+{
+    QRegularExpression schemaRe(QStringLiteral(u"\\A[a-zA-Z][-+.a-zA-Z0-9]+:"));
+    return schemaRe.match(importStr).hasMatch();
+}
+
 namespace Paths {
 
 Path moduleIndexPath(QString uri, int majorVersion, ErrorHandler errorHandler)
@@ -73,7 +89,7 @@ Path moduleIndexPath(QString uri, int majorVersion, ErrorHandler errorHandler)
         version = QLatin1String("Latest");
     else if (majorVersion == Version::Undefined)
         version = QString();
-    if (uri.startsWith(u"file://") || uri.startsWith(u"http://") || uri.startsWith(u"https://")) {
+    if (uriHasSchema(uri)) {
         if (majorVersion != Version::Undefined)
             Path::myErrors()
                     .error(Path::tr("The module directory import %1 cannot have a version")
@@ -93,7 +109,7 @@ Path moduleIndexPath(QString uri, int majorVersion, ErrorHandler errorHandler)
 
 Path moduleScopePath(QString uri, Version version, ErrorHandler errorHandler)
 {
-    if (uri.startsWith(u"file://") || uri.startsWith(u"http://") || uri.startsWith(u"https://")) {
+    if (uriHasSchema(uri)) {
         if (version.isValid())
             Path::myErrors()
                     .error(Path::tr("The module directory import %1 cannot have a version")
@@ -313,8 +329,7 @@ QRegularExpression Import::importRe()
 
 Import Import::fromUriString(QString importStr, Version v, QString importId, ErrorHandler handler)
 {
-    if (importStr.startsWith(u"http://") || importStr.startsWith(u"https://")
-        || importStr.startsWith(u"file://")) {
+    if (uriHasSchema(importStr)) {
         return Import(importStr, v, importId);
     } else {
         auto m = importRe().match(importStr);
@@ -348,8 +363,7 @@ Import Import::fromFileString(QString importStr, QString baseDir, QString import
                               ErrorHandler handler)
 {
     Version v;
-    if (importStr.startsWith(u"http://") || importStr.startsWith(u"https://")
-        || importStr.startsWith(u"file://"))
+    if (uriHasSchema(importStr))
         return Import(importStr, v, importId);
     QFileInfo p(importStr);
     if (p.isRelative())
@@ -384,7 +398,7 @@ void Import::writeOut(DomItem &self, OutWriter &ow) const
         return;
     ow.ensureNewline();
     ow.writeRegion(u"import").space();
-    if (uri.startsWith(u"http://") || uri.startsWith(u"https://") || uri.startsWith(u"file://")) {
+    if (uriHasSchema(uri)) {
         if (uri.startsWith(u"file://")) {
             QFileInfo myPath(self.canonicalFilePath());
             QString relPath = myPath.dir().relativeFilePath(uri.mid(7));
@@ -815,21 +829,45 @@ void QmlObject::writeOut(DomItem &self, OutWriter &ow, QString onTarget) const
             }
         }
     }
-    if (counter != ow.counter())
+    if (counter != ow.counter() || !idStr().isEmpty())
         spacerId = ow.addNewlinesAutospacerCallback(2);
-    for (auto pDefs : propertyDefs.values()) {
-        for (auto pDef : pDefs.values()) {
+    QSet<QString> mergedDefBinding;
+    for (const QString &defName : propertyDefs.sortedKeys()) {
+        auto pDefs = propertyDefs.key(defName).values();
+        for (auto pDef : pDefs) {
+            const PropertyDefinition *pDefPtr = pDef.as<PropertyDefinition>();
+            Q_ASSERT(pDefPtr);
             DomItem b;
-            bindings.key(pDef.name()).visitIndexes([&b](DomItem &el) {
-                const Binding *elPtr = el.as<Binding>();
-                if (elPtr && elPtr->bindingType() == BindingType::Normal) {
-                    b = el;
-                    return false;
-                }
-                return true;
-            });
-            if (b)
+            bool uniqueDeclarationWithThisName = pDefs.length() == 1;
+            if (uniqueDeclarationWithThisName && !pDefPtr->isRequired)
+                bindings.key(pDef.name()).visitIndexes([&b, pDefPtr](DomItem &el) {
+                    const Binding *elPtr = el.as<Binding>();
+                    if (elPtr && elPtr->bindingType() == BindingType::Normal) {
+                        switch (elPtr->valueKind()) {
+                        case BindingValueKind::ScriptExpression:
+                            b = el;
+                            break;
+                        case BindingValueKind::Array:
+                            if (!pDefPtr->isDefaultMember
+                                && pDefPtr->isParametricType())
+                                b = el;
+                            break;
+                        case BindingValueKind::Object:
+                            if (!pDefPtr->isDefaultMember
+                                && !pDefPtr->isParametricType())
+                                b = el;
+                            break;
+                        case BindingValueKind::Empty:
+                            break;
+                        }
+                        return false;
+                    }
+                    return true;
+                });
+            if (b) {
+                mergedDefBinding.insert(defName);
                 b.writeOutPre(ow);
+            }
             pDef.writeOut(ow);
             if (b) {
                 ow.write(u": ");
@@ -845,10 +883,35 @@ void QmlObject::writeOut(DomItem &self, OutWriter &ow, QString onTarget) const
         }
     }
     ow.removeTextAddCallback(spacerId);
-    // check more than the name?
+    QList<DomItem> signalList, methodList;
+    for (auto ms : field(self, Fields::methods).values()) {
+        for (auto m : ms.values()) {
+            const MethodInfo *mPtr = m.as<MethodInfo>();
+            if (mPtr && mPtr->methodType == MethodInfo::MethodType::Signal)
+                signalList.append(m);
+            else
+                methodList.append(m);
+        }
+    }
+    if (counter != ow.counter())
+        spacerId = ow.addNewlinesAutospacerCallback(2);
+    for (auto &sig : signalList) {
+        ow.ensureNewline();
+        sig.writeOut(ow);
+        ow.ensureNewline();
+    }
+    ow.removeTextAddCallback(spacerId);
+    if (counter != ow.counter())
+        spacerId = ow.addNewlinesAutospacerCallback(2);
+    for (auto &method : methodList) {
+        ow.ensureNewline();
+        method.writeOut(ow);
+        ow.ensureNewline();
+    }
+    ow.removeTextAddCallback(spacerId);
     QList<DomItem> normalBindings, signalHandlers, delayedBindings;
     for (auto bName : bindings.sortedKeys()) {
-        bool skipFirstNormal = m_propertyDefs.contains(bName);
+        bool skipFirstNormal = mergedDefBinding.contains(bName);
         for (auto b : bindings.key(bName).values()) {
             const Binding *bPtr = b.as<Binding>();
             if (skipFirstNormal) {
@@ -868,22 +931,17 @@ void QmlObject::writeOut(DomItem &self, OutWriter &ow, QString onTarget) const
     }
     if (counter != ow.counter())
         spacerId = ow.addNewlinesAutospacerCallback(2);
-    for (auto b : normalBindings)
+    for (auto &b : normalBindings)
         b.writeOut(ow);
     ow.removeTextAddCallback(spacerId);
     if (counter != ow.counter())
         spacerId = ow.addNewlinesAutospacerCallback(2);
-    for (auto ms : field(self, Fields::methods).values()) {
-        for (auto m : ms.values()) {
-            ow.ensureNewline();
-            m.writeOut(ow);
-            ow.ensureNewline();
-        }
-    }
+    for (auto &b : delayedBindings)
+        b.writeOut(ow);
     ow.removeTextAddCallback(spacerId);
     if (counter != ow.counter())
         spacerId = ow.addNewlinesAutospacerCallback(2);
-    for (auto b : signalHandlers)
+    for (auto &b : signalHandlers)
         b.writeOut(ow);
     ow.removeTextAddCallback(spacerId);
     if (counter != ow.counter())
@@ -904,11 +962,6 @@ void QmlObject::writeOut(DomItem &self, OutWriter &ow, QString onTarget) const
         }
         ow.removeTextAddCallback(spacerId);
     }
-    if (counter != ow.counter())
-        spacerId = ow.addNewlinesAutospacerCallback(2);
-    for (auto b : delayedBindings)
-        b.writeOut(ow);
-    ow.removeTextAddCallback(spacerId);
     ow.decreaseIndent(1, baseIndent);
     ow.ensureNewline().write(u"}");
 }
@@ -1113,6 +1166,11 @@ bool QmltypesComponent::iterateDirectSubpaths(DomItem &self, DirectVisitor visit
     cont = cont && self.dvValueField(visitor, Fields::metaRevisions, m_metaRevisions);
     if (!fileName().isEmpty())
         cont = cont && self.dvValueField(visitor, Fields::fileName, fileName()); // remove?
+    cont = cont && self.dvValueField(visitor, Fields::interfaceNames, m_interfaceNames);
+    cont = cont && self.dvValueField(visitor, Fields::hasCustomParser, m_hasCustomParser);
+    cont = cont && self.dvValueField(visitor, Fields::valueTypeName, m_valueTypeName);
+    cont = cont && self.dvValueField(visitor, Fields::extensionTypeName, m_extensionTypeName);
+    cont = cont && self.dvValueField(visitor, Fields::accessSemantics, int(m_accessSemantics));
     return cont;
 }
 
@@ -1412,6 +1470,26 @@ void BindingValue::clearValue()
     kind = BindingValueKind::Empty;
 }
 
+ScriptExpression::ScriptExpression(QStringView code, std::shared_ptr<QQmlJS::Engine> engine,
+                                   AST::Node *ast, std::shared_ptr<AstComments> comments,
+                                   ExpressionType expressionType, SourceLocation localOffset,
+                                   int derivedFrom, QStringView preCode, QStringView postCode)
+    : OwningItem(derivedFrom),
+      m_expressionType(expressionType),
+      m_code(code),
+      m_preCode(preCode),
+      m_postCode(postCode),
+      m_engine(engine),
+      m_ast(ast),
+      m_astComments(comments),
+      m_localOffset(localOffset)
+{
+    if (m_expressionType == ExpressionType::BindingExpression)
+        if (AST::ExpressionStatement *exp = AST::cast<AST::ExpressionStatement *>(m_ast))
+            m_ast = exp->expression;
+    Q_ASSERT(m_astComments);
+}
+
 ScriptExpression::ScriptExpression(const ScriptExpression &e) : OwningItem(e)
 {
     QMutexLocker l(mutex());
@@ -1497,6 +1575,7 @@ AST::Node *firstNodeInRange(AST::Node *n, quint32 minStart = 0, quint32 maxEnd =
 void ScriptExpression::setCode(QString code, QString preCode, QString postCode)
 {
     m_codeStr = code;
+    const bool qmlMode = (m_expressionType == ExpressionType::BindingExpression);
     if (!preCode.isEmpty() || !postCode.isEmpty())
         m_codeStr = preCode + code + postCode;
     m_code = QStringView(m_codeStr).mid(preCode.length(), code.length());
@@ -1516,7 +1595,7 @@ void ScriptExpression::setCode(QString code, QString preCode, QString postCode)
         QQmlJS::Lexer lexer(m_engine.get());
         lexer.setCode(m_codeStr, /*lineno = */ 1, /*qmlMode=*/true);
         QQmlJS::Parser parser(m_engine.get());
-        if (!parser.parseScript())
+        if ((qmlMode && !parser.parse()) || (!qmlMode && !parser.parseScript()))
             addErrorLocal(domParsingErrors().error(tr("Parsing of code failed")));
         for (DiagnosticMessage msg : parser.diagnosticMessages()) {
             ErrorMessage err = domParsingErrors().errorMessage(msg);
@@ -1539,6 +1618,9 @@ void ScriptExpression::setCode(QString code, QString preCode, QString postCode)
                     m_ast = sList->statement;
             }
         }
+        if (m_expressionType == ExpressionType::BindingExpression)
+            if (AST::ExpressionStatement *exp = AST::cast<AST::ExpressionStatement *>(m_ast))
+                m_ast = exp->expression;
         AstComments::collectComments(m_engine, m_ast, m_astComments, MutableDomItem(), nullptr);
     }
 }
@@ -1592,6 +1674,11 @@ SourceLocation ScriptExpression::globalLocation(DomItem &self) const
     return SourceLocation();
 }
 
+bool PropertyDefinition::isParametricType() const
+{
+    return typeName.contains(QChar(u'<'));
+}
+
 void PropertyDefinition::writeOut(DomItem &, OutWriter &lw) const
 {
     lw.ensureNewline();
@@ -1618,6 +1705,7 @@ bool MethodInfo::iterateDirectSubpaths(DomItem &self, DirectVisitor visitor)
     if (methodType == MethodType::Method) {
         cont = cont && self.dvValueField(visitor, Fields::preCode, preCode(self));
         cont = cont && self.dvValueField(visitor, Fields::postCode, postCode(self));
+        cont = cont && self.dvValueField(visitor, Fields::isConstructor, isConstructor);
     }
     if (body)
         cont = cont && self.dvWrapField(visitor, Fields::body, body);
@@ -1634,7 +1722,18 @@ QString MethodInfo::preCode(DomItem &self) const
     MockObject standinObj(self.pathFromOwner());
     DomItem standin = self.copy(&standinObj);
     ow.itemStart(standin);
-    writePre(self, ow);
+    ow.writeRegion(u"function").space().writeRegion(u"name", name);
+    bool first = true;
+    ow.writeRegion(u"leftParen", u"(");
+    for (const MethodParameter &mp : parameters) {
+        if (first)
+            first = false;
+        else
+            ow.write(u", ");
+        ow.write(mp.name);
+    }
+    ow.writeRegion(u"rightParen", u")");
+    ow.ensureSpace().writeRegion(u"leftBrace", u"{");
     ow.itemEnd(standin);
     ow.eof();
     return res;
@@ -1643,26 +1742,6 @@ QString MethodInfo::preCode(DomItem &self) const
 QString MethodInfo::postCode(DomItem &) const
 {
     return QLatin1String("\n}\n");
-}
-
-void MethodInfo::writePre(DomItem &self, OutWriter &ow) const
-{
-    ow.writeRegion(u"function").space().writeRegion(u"name", name);
-    bool first = true;
-    ow.writeRegion(u"leftParen", u"(");
-    index_type idx = 0;
-    for (const MethodParameter &mp : parameters) {
-        DomItem arg = self.copy(SimpleObjectWrap::fromObjectRef<MethodParameter &>(
-                self.pathFromOwner().field(Fields::parameters).index(idx++),
-                *const_cast<MethodParameter *>(&mp)));
-        if (first)
-            first = false;
-        else
-            ow.write(u", ");
-        arg.writeOut(ow);
-    }
-    ow.writeRegion(u"leftParen", u")");
-    ow.ensureSpace().writeRegion(u"leftBrace", u"{");
 }
 
 void MethodInfo::writeOut(DomItem &self, OutWriter &ow) const
@@ -1687,12 +1766,28 @@ void MethodInfo::writeOut(DomItem &self, OutWriter &ow) const
             else
                 qCWarning(domLog) << "failed to cast to MethodParameter";
         }
+        ow.writeRegion(u"rightParen", u")");
         ow.decreaseIndent(1, baseIndent);
-        ow.writeRegion(u"leftParen", u")");
         return;
     } break;
     case MethodType::Method: {
-        writePre(self, ow);
+        ow.writeRegion(u"function").space().writeRegion(u"name", name);
+        bool first = true;
+        ow.writeRegion(u"leftParen", u"(");
+        for (DomItem arg : self.field(Fields::parameters).values()) {
+            if (first)
+                first = false;
+            else
+                ow.write(u", ");
+            arg.writeOut(ow);
+        }
+        ow.writeRegion(u"rightParen", u")");
+        if (!typeName.isEmpty()) {
+            ow.writeRegion(u"colon", u":");
+            ow.space();
+            ow.writeRegion(u"returnType", typeName);
+        }
+        ow.ensureSpace().writeRegion(u"leftBrace", u"{");
         int baseIndent = ow.increaseIndent();
         if (DomItem b = self.field(Fields::body)) {
             ow.ensureNewline();

@@ -44,7 +44,6 @@
 
 QT_BEGIN_NAMESPACE
 
-static const char *designerPath = "/.designer";
 static const char *defaultGridKey = "defaultGrid";
 static const char *previewKey = "Preview";
 static const char *enabledKey = "Enabled";
@@ -107,9 +106,7 @@ const QStringList &QDesignerSharedSettings::defaultFormTemplatePaths()
         // Ensure default form template paths
         const QString templatePath = QStringLiteral("/templates");
         // home
-        QString path = QDir::homePath();
-        path += QLatin1String(designerPath);
-        path += templatePath;
+        QString path = dataDirectory() + templatePath;
         if (checkTemplatePath(path, true))
             rc += path;
 
@@ -120,6 +117,26 @@ const QStringList &QDesignerSharedSettings::defaultFormTemplatePaths()
             rc += path;
     }
     return rc;
+}
+
+// Migrate templates from $HOME/.designer to standard paths in Qt 7
+// ### FIXME Qt 8: Remove (QTBUG-96005)
+void QDesignerSharedSettings::migrateTemplates()
+{
+    const QString templatePath = u"/templates"_qs;
+    QString path = dataDirectory() + templatePath;
+    if (QFileInfo::exists(path))
+        return;
+    if (!QDir().mkpath(path))
+        return;
+    QString legacyPath = legacyDataDirectory() + templatePath;
+    if (!QFileInfo::exists(path))
+        return;
+    const auto &files = QDir(legacyPath).entryInfoList(QDir::Files | QDir::NoSymLinks | QDir::Readable);
+    for (const auto &file : files) {
+        const QString newPath = path + u'/' + file.fileName();
+        QFile::copy(file.absoluteFilePath(), newPath);
+    }
 }
 
 QStringList QDesignerSharedSettings::formTemplatePaths() const

@@ -785,7 +785,7 @@ QFontEngine *loadSingleEngine(int script,
         if (style->key.stretch != 0 && request.stretch != 0
             && (request.styleName.isEmpty() || request.styleName != style->styleName)) {
             def.stretch = (request.stretch * 100 + style->key.stretch / 2) / style->key.stretch;
-        } else {
+        } else if (request.stretch == QFont::AnyStretch) {
             def.stretch = 100;
         }
 
@@ -905,6 +905,13 @@ static QtFontStyle *bestStyle(QtFontFoundry *foundry, const QtFontStyle::Key &st
     return foundry->styles[best];
 }
 
+enum {
+    FamilyMismatch      = 0x800000,
+    ScriptMismatch      = 0x080000,
+    PitchMismatch       = 0x004000,
+    StyleMismatch       = 0x002000,
+    BitmapScaledPenalty = 0x001000
+};
 
 static
 unsigned int bestFoundry(int script, unsigned int score, int styleStrategy,
@@ -1008,20 +1015,16 @@ unsigned int bestFoundry(int script, unsigned int score, int styleStrategy,
 
 
         unsigned int this_score = 0x0000;
-        enum {
-            PitchMismatch       = 0x4000,
-            StyleMismatch       = 0x2000,
-            BitmapScaledPenalty = 0x1000
-        };
+
         if (pitch != '*') {
             if ((pitch == 'm' && !family->fixedPitch)
                 || (pitch == 'p' && family->fixedPitch))
-                this_score += PitchMismatch;
+                this_score |= PitchMismatch;
         }
         if (styleKey != style->key)
-            this_score += StyleMismatch;
+            this_score |= StyleMismatch;
         if (!style->smoothScalable && px != size->pixelSize) // bitmap scaled
-            this_score += BitmapScaledPenalty;
+            this_score |= BitmapScaledPenalty;
         if (px != pixelSize) // close, but not exact, size match
             this_score += qAbs(px - pixelSize);
 
@@ -1074,13 +1077,15 @@ static int match(int script,
     qCDebug(lcFontMatch, "QFontDatabase::match\n"
              "  request:\n"
              "    family: %s [%s], script: %d\n"
+             "    styleName: %s\n"
              "    weight: %d, style: %d\n"
              "    stretch: %d\n"
              "    pixelSize: %g\n"
              "    pitch: %c",
              family_name.isEmpty() ? "-- first in script --" : family_name.toLatin1().constData(),
-             foundry_name.isEmpty() ? "-- any --" : foundry_name.toLatin1().constData(),
-             script, request.weight, request.style, request.stretch, request.pixelSize, pitch);
+             foundry_name.isEmpty() ? "-- any --" : foundry_name.toLatin1().constData(), script,
+             request.styleName.isEmpty() ? "-- any --" : request.styleName.toLatin1().constData(),
+             request.weight, request.style, request.stretch, request.pixelSize, pitch);
 
     desc->family = nullptr;
     desc->foundry = nullptr;
@@ -1104,11 +1109,14 @@ static int match(int script,
 
         if (!matchFamilyName(family_name, test.family))
             continue;
+        score &= ~FamilyMismatch;
+
         test.family->ensurePopulated();
 
         // Check if family is supported in the script we want
         if (writingSystem != QFontDatabase::Any && !familySupportsWritingSystem(test.family, writingSystem))
             continue;
+        score &= ~ScriptMismatch;
 
         // as we know the script is supported, we can be sure
         // to find a matching font here.
@@ -2408,7 +2416,7 @@ QFontEngine *QFontDatabasePrivate::findFont(const QFontDef &req,
     QList<int> blackListed;
     unsigned int score = UINT_MAX;
     int index = match(multi ? QChar::Script_Common : script, request, family_name, foundry_name, &desc, blackListed, &score);
-    if (score > 0 && QGuiApplicationPrivate::platformIntegration()->fontDatabase()->populateFamilyAliases(family_name)) {
+    if ((score & FamilyMismatch) && QGuiApplicationPrivate::platformIntegration()->fontDatabase()->populateFamilyAliases(family_name)) {
         // We populated family aliases (e.g. localized families), so try again
         index = match(multi ? QChar::Script_Common : script, request, family_name, foundry_name, &desc, blackListed);
     }

@@ -58,6 +58,8 @@
 
 QT_BEGIN_NAMESPACE
 
+Q_DECLARE_LOGGING_CATEGORY(lcSgText)
+
 QQuickTextNodeEngine::BinaryTreeNodeKey::BinaryTreeNodeKey(BinaryTreeNode *node)
     : fontEngine(QRawFontPrivate::get(node->glyphRun.rawFont())->fontEngine)
     , clipNode(node->clipNode)
@@ -706,7 +708,8 @@ void QQuickTextNodeEngine::addFrameDecorations(QTextDocument *document, QTextFra
         return;
 
     addBorder(boundingRect.adjusted(frameFormat.leftMargin(), frameFormat.topMargin(),
-                                    -frameFormat.rightMargin(), -frameFormat.bottomMargin()),
+                                    -frameFormat.rightMargin() - borderWidth,
+                                    -frameFormat.bottomMargin() - borderWidth),
               borderWidth, borderStyle, borderBrush);
     if (table != nullptr) {
         int rows = table->rows();
@@ -979,7 +982,17 @@ void QQuickTextNodeEngine::mergeFormats(QTextLayout *textLayout, QVarLengthArray
 
 }
 
-void QQuickTextNodeEngine::addTextBlock(QTextDocument *textDocument, const QTextBlock &block, const QPointF &position, const QColor &textColor, const QColor &anchorColor, int selectionStart, int selectionEnd)
+/*!
+    \internal
+    Adds the \a block from the \a textDocument at \a position if its
+    \l {QAbstractTextDocumentLayout::blockBoundingRect()}{bounding rect}
+    intersects the \a viewport, or if \c viewport is not valid
+    (i.e. use a default-constructed QRectF to skip the viewport check).
+
+    \sa QQuickItem::clipRect()
+ */
+void QQuickTextNodeEngine::addTextBlock(QTextDocument *textDocument, const QTextBlock &block, const QPointF &position,
+                                        const QColor &textColor, const QColor &anchorColor, int selectionStart, int selectionEnd, const QRectF &viewport)
 {
     Q_ASSERT(textDocument);
 #if QT_CONFIG(im)
@@ -994,6 +1007,11 @@ void QQuickTextNodeEngine::addTextBlock(QTextDocument *textDocument, const QText
 
     const QTextCharFormat charFormat = block.charFormat();
     const QRectF blockBoundingRect = textDocument->documentLayout()->blockBoundingRect(block).translated(position);
+    if (viewport.isValid()) {
+        if (!blockBoundingRect.intersects(viewport))
+            return;
+        qCDebug(lcSgText) << "adding block with length" << block.length() << ':' << blockBoundingRect << "in viewport" << viewport;
+    }
 
     if (charFormat.background().style() != Qt::NoBrush)
         m_backgrounds.append(qMakePair(blockBoundingRect, charFormat.background().color()));
@@ -1153,6 +1171,17 @@ void QQuickTextNodeEngine::addTextBlock(QTextDocument *textDocument, const QText
                                              selectionStart, selectionEnd);
     }
 #endif
+
+    // Add block decorations (so far only horizontal rules)
+    if (block.blockFormat().hasProperty(QTextFormat::BlockTrailingHorizontalRulerWidth)) {
+        auto ruleLength = qvariant_cast<QTextLength>(block.blockFormat().property(QTextFormat::BlockTrailingHorizontalRulerWidth));
+        QRectF ruleRect(0, 0, ruleLength.value(blockBoundingRect.width()), 1);
+        ruleRect.moveCenter(blockBoundingRect.center());
+        const QColor ruleColor = block.blockFormat().hasProperty(QTextFormat::BackgroundBrush)
+                               ? qvariant_cast<QBrush>(block.blockFormat().property(QTextFormat::BackgroundBrush)).color()
+                               : m_textColor;
+        m_lines.append(TextDecoration(QQuickTextNodeEngine::Unselected, ruleRect, ruleColor));
+    }
 
     setCurrentLine(QTextLine()); // Reset current line because the text layout changed
     m_hasContents = true;

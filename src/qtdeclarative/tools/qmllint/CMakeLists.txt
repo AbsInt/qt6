@@ -9,16 +9,15 @@ qt_internal_add_tool(${target_name}
     TARGET_DESCRIPTION "QML Syntax Verifier"
     TOOLS_TARGET Qml # special case
     SOURCES
-        checkidentifiers.cpp checkidentifiers.h
-        findwarnings.cpp findwarnings.h
         main.cpp
         ../shared/qqmltoolingsettings.h
         ../shared/qqmltoolingsettings.cpp
     PUBLIC_LIBRARIES
         Qt::CorePrivate
         Qt::QmlCompilerPrivate
-        Qt::QmlDevToolsPrivate
+        Qt::QmlLintPrivate
 )
+qt_internal_return_unless_building_tools()
 
 #### Keys ignored in scope 1:.:.:qmllint.pro:<TRUE>:
 # QMAKE_TARGET_DESCRIPTION = "QML" "Syntax" "Verifier"

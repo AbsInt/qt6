@@ -1,0 +1,168 @@
+set(cpp_sources
+    birthdayparty.cpp birthdayparty.h
+    cppbaseclass.h
+    dynamicmeta.h
+    objectwithmethod.h
+    person.cpp person.h
+    theme.cpp theme.h
+    timelinetheme.cpp timelinetheme.h
+)
+
+set(qml_files
+    AccessModelMethodsFromOutside.qml
+    BaseMember.qml
+    BindingExpression.qml
+    Cycle1.qml
+    Cycle2.qml
+    Cycle3.qml
+    Dummy.qml
+    Enums.qml
+    Foozle.qml
+    Loopy.qml
+    Panel.qml
+    ProgressBar/Keyframe.qml
+    ProgressBar/KeyframeGroup.qml
+    ProgressBar/ProgressBar.ui.qml
+    ProgressBar/Root.qml
+    ProgressBar/Timeline.qml
+    ProgressBar/TimelineAnimation.qml
+    RootWithoutId.qml
+    SelectionRectangle.qml
+    Test.qml
+    TestCase.qml
+    aliasLookup.qml
+    anchorsFill.qml
+    array.qml
+    asCast.qml
+    attachedBaseEnum.qml
+    bindToValueType.qml
+    blockComments.qml
+    callContextPropertyLookupResult.qml
+    childobject.qml
+    colorAsVariant.qml
+    colorString.qml
+    componentReturnType.qml
+    compositeTypeMethod.qml
+    compositesingleton.qml
+    construct.qml
+    contextParam.qml
+    conversions.qml
+    conversions2.qml
+    curlygrouped.qml
+    cycleHead.qml
+    deadShoeSize.qml
+    deadStoreLoop.qml
+    dialog.qml
+    dynamicscene.qml
+    enumInvalid.qml
+    enumScope.qml
+    enumsInOtherObject.qml
+    enumsUser.qml
+    equalsUndefined.qml
+    excessiveParameters.qml
+    extendedTypes.qml
+    failures.qml
+    fallbacklookups.qml
+    fileDialog.qml
+    functionLookup.qml
+    funcWithParams.qml
+    functionReturningVoid.qml
+    globals.qml
+    idAccess.qml
+    immediateQuit.qml
+    imports/QmlBench/Globals.qml
+    importsFromImportPath.qml
+    infinities.qml
+    invisibleBase.qml
+    intEnumCompare.qml
+    intOverflow.qml
+    interactive.qml
+    interceptor.qml
+    isnan.qml
+    jsMathObject.qml
+    jsimport.qml
+    jsmoduleimport.qml
+    layouts.qml
+    library.js
+    listIndices.qml
+    listlength.qml
+    math.qml
+    methods.qml
+    modulePrefix.qml
+    moveRegVoid.qml
+    noBindingLoop.qml
+    noQQmlData.qml
+    nonNotifyable.qml
+    noscope.qml
+    notEqualsInt.qml
+    nullAccess.qml
+    objectInVar.qml
+    outOfBounds.qml
+    overriddenMember.qml
+    ownProperty.qml
+    page.qml
+    parentProp.qml
+    popContextAfterRet.qml
+    pressAndHoldButton.qml
+    registerelimination.qml
+    revisions.qml
+    scopeVsObject.qml
+    script.js
+    script.mjs
+    shared/Slider.qml
+    shifts.qml
+    signal.qml
+    signalHandler.qml
+    specificParent.qml
+    stringLength.qml
+    testlogger.js
+    text.qml
+    themerbad.qml
+    themergood.qml
+    undefinedResets.qml
+    unknownAttached.qml
+    unknownParameter.qml
+    unusedAttached.qml
+    urlString.qml
+    valueTypeProperty.qml
+    variantlist.qml
+    voidfunction.qml
+)
+
+set(resource_files
+    ProgressBar/built-with-Qt_Large.png
+    imports/QmlBench/qmldir
+)
+
+set_source_files_properties("shared/Slider.qml"
+    PROPERTIES QT_RESOURCE_ALIAS "Slider.qml"
+)
+
+qt_add_library(codegen_test_module STATIC)
+qt_autogen_tools_initial_setup(codegen_test_module)
+
+set_target_properties(codegen_test_module PROPERTIES
+    # We really want qmlcachegen here, even if qmlsc is available
+    QT_QMLCACHEGEN_EXECUTABLE qmlcachegen
+)
+
+qt6_add_qml_module(codegen_test_module
+    VERSION 1.0
+    URI TestTypes
+    IMPORT_PATH "${CMAKE_CURRENT_SOURCE_DIR}/imports/"
+    DEPENDENCIES
+        QtQuick
+        QtQuick.Templates
+        QtQuick.Shapes
+    SOURCES
+        ${cpp_sources}
+    QML_FILES
+        ${qml_files}
+    RESOURCES
+        ${resource_files}
+    OUTPUT_DIRECTORY TestTypes # Make sure tst_qmlcachegen doesn't see our output
+)
+
+add_dependencies(codegen_test_module Qt::Quick Qt::QuickTemplates2 Qt::QuickShapesPrivate)
+
+qt_autogen_tools_initial_setup(codegen_test_moduleplugin)

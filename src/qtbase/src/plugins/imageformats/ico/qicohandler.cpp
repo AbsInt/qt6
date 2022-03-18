@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2022 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the plugins of the Qt Toolkit.
@@ -208,9 +208,7 @@ bool ICOReader::canRead(QIODevice *iodev)
 
         ICONDIR ikonDir;
         if (readIconDir(iodev, &ikonDir)) {
-            qint64 readBytes = ICONDIR_SIZE;
             if (readIconDirEntry(iodev, &ikonDir.idEntries[0])) {
-                readBytes += ICONDIRENTRY_SIZE;
                 // ICO format does not have a magic identifier, so we read 6 different values, which will hopefully be enough to identify the file.
                 if (   ikonDir.idReserved == 0
                     && (ikonDir.idType == 1 || ikonDir.idType == 2)
@@ -468,7 +466,9 @@ QImage ICOReader::iconAt(int index)
 
             static const uchar pngMagicData[] = { 137, 80, 78, 71, 13, 10, 26, 10 };
 
-            iod->seek(iconEntry.dwImageOffset);
+            if (!iod->seek(iconEntry.dwImageOffset)
+                || iconEntry.dwBytesInRes > iod->bytesAvailable())
+                return img;
 
             const QByteArray pngMagic = QByteArray::fromRawData((const char*)pngMagicData, sizeof(pngMagicData));
             const bool isPngImage = (iod->read(pngMagic.size()) == pngMagic);

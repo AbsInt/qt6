@@ -56,6 +56,8 @@ struct QmlTypesClassDescription
     bool isRootClass = false;
     bool hasCustomParser = false;
     QStringList implementsInterfaces;
+    QStringList deferredNames;
+    QStringList immediateNames;
 
     enum CollectMode {
         TopLevel,

@@ -181,7 +181,7 @@ QQuickDropAreaDrag *QQuickDropArea::drag()
 }
 
 /*!
-    \qmlproperty Object QtQuick::DropArea::drag.source
+    \qmlproperty QtObject QtQuick::DropArea::drag.source
 
     This property holds the source of a drag.
 */
@@ -370,7 +370,7 @@ void QQuickDropArea::dropEvent(QDropEvent *event)
 */
 
 /*!
-    \qmlproperty Object QtQuick::DragEvent::drag.source
+    \qmlproperty QtObject QtQuick::DragEvent::drag.source
 
     This property holds the source of a drag event.
 */
@@ -572,45 +572,30 @@ QStringList QQuickDragEvent::formats() const
     return event->mimeData()->formats();
 }
 
-void QQuickDragEvent::getDataAsString(QQmlV4Function *args)
+QString QQuickDragEvent::getDataAsString(const QString &format) const
 {
-    if (args->length() != 0) {
-        QV4::ExecutionEngine *v4 = args->v4engine();
-        QV4::Scope scope(v4);
-        QV4::ScopedValue v(scope, (*args)[0]);
-        QString format = v->toQString();
-        QString rv = QString::fromUtf8(event->mimeData()->data(format));
-        args->setReturnValue(v4->newString(rv)->asReturnedValue());
-    }
+    return QString::fromUtf8(event->mimeData()->data(format));
 }
 
-void QQuickDragEvent::getDataAsArrayBuffer(QQmlV4Function *args)
+QByteArray QQuickDragEvent::getDataAsArrayBuffer(const QString &format) const
 {
-    if (args->length() != 0) {
-        QV4::ExecutionEngine *v4 = args->v4engine();
-        QV4::Scope scope(v4);
-        QV4::ScopedValue v(scope, (*args)[0]);
-        const QString format = v->toQString();
-        args->setReturnValue(v4->newArrayBuffer(event->mimeData()->data(format))->asReturnedValue());
-    }
+    return event->mimeData()->data(format);
 }
 
-void QQuickDragEvent::acceptProposedAction(QQmlV4Function *)
+void QQuickDragEvent::acceptProposedAction()
 {
     event->acceptProposedAction();
 }
 
-void QQuickDragEvent::accept(QQmlV4Function *args)
+void QQuickDragEvent::accept()
 {
     Qt::DropAction action = event->dropAction();
+    event->setDropAction(action);
+    event->accept();
+}
 
-    if (args->length() >= 1) {
-        QV4::Scope scope(args->v4engine());
-        QV4::ScopedValue v(scope, (*args)[0]);
-        if (v->isInt32())
-            action = Qt::DropAction(v->integerValue());
-    }
-
+void QQuickDragEvent::accept(Qt::DropAction action)
+{
     // get action from arguments.
     event->setDropAction(action);
     event->accept();

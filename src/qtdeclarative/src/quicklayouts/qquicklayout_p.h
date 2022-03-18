@@ -64,7 +64,7 @@ class QQuickLayoutAttached;
 Q_DECLARE_LOGGING_CATEGORY(lcQuickLayouts)
 
 class QQuickLayoutPrivate;
-class Q_QUICKLAYOUT_PRIVATE_EXPORT QQuickLayout : public QQuickItem, public QQuickItemChangeListener
+class Q_QUICKLAYOUTS_PRIVATE_EXPORT QQuickLayout : public QQuickItem, public QQuickItemChangeListener
 
 {
     Q_OBJECT
@@ -81,7 +81,7 @@ public:
         NSizes
     };
 
-    explicit QQuickLayout(QQuickLayoutPrivate &dd, QQuickItem *parent = 0);
+    explicit QQuickLayout(QQuickLayoutPrivate &dd, QQuickItem *parent = nullptr);
     ~QQuickLayout();
 
     static QQuickLayoutAttached *qmlAttachedProperties(QObject *object);
@@ -90,7 +90,7 @@ public:
     void componentComplete() override;
     virtual QSizeF sizeHint(Qt::SizeHint whichSizeHint) const = 0;
     virtual void setAlignment(QQuickItem *item, Qt::Alignment align) = 0;
-    virtual void invalidate(QQuickItem * childItem = 0);
+    virtual void invalidate(QQuickItem * childItem = nullptr);
     virtual void updateLayoutItems() = 0;
     void ensureLayoutItemsUpdated() const;
 
@@ -177,7 +177,7 @@ protected:
 };
 
 
-class Q_QUICKLAYOUT_PRIVATE_EXPORT QQuickLayoutAttached : public QObject
+class Q_QUICKLAYOUTS_PRIVATE_EXPORT QQuickLayoutAttached : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(qreal minimumWidth READ minimumWidth WRITE setMinimumWidth NOTIFY minimumWidthChanged)

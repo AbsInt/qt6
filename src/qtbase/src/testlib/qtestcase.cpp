@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2020 The Qt Company Ltd.
+** Copyright (C) 2022 The Qt Company Ltd.
 ** Copyright (C) 2016 Intel Corporation.
 ** Contact: https://www.qt.io/licensing/
 **
@@ -85,9 +85,9 @@
 #include <cmath>
 #include <numeric>
 #include <algorithm>
-#include <condition_variable>
 #include <mutex>
 #include <chrono>
+#include <memory>
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -295,6 +295,14 @@ namespace QTestPrivate
 
 namespace QTest
 {
+
+QString Internal::formatTryTimeoutDebugMessage(q_no_char8_t::QUtf8StringView expr, int timeout, int actual)
+{
+    return QLatin1String("QTestLib: This test case check (\"%1\") failed because the requested timeout (%2 ms) was too short, %3 ms would have been sufficient this time.")
+            // ### Qt 7: remove the toString() (or earlier, when arg() can handle QUtf8StringView), passing the view directly
+            .arg(expr.toString(), QString::number(timeout), QString::number(actual));
+}
+
 extern Q_TESTLIB_EXPORT int lastMouseTimestamp;
 
 class WatchDog;
@@ -312,7 +320,7 @@ public:
 
     using MetaMethods = std::vector<QMetaMethod>;
 
-    explicit TestMethods(const QObject *o, const MetaMethods &m = MetaMethods());
+    explicit TestMethods(const QObject *o, MetaMethods m = {});
 
     void invokeTests(QObject *testObject) const;
 
@@ -331,15 +339,15 @@ private:
     MetaMethods m_methods;
 };
 
-TestMethods::TestMethods(const QObject *o, const MetaMethods &m)
+TestMethods::TestMethods(const QObject *o, MetaMethods m)
     : m_initTestCaseMethod(TestMethods::findMethod(o, "initTestCase()"))
     , m_initTestCaseDataMethod(TestMethods::findMethod(o, "initTestCase_data()"))
     , m_cleanupTestCaseMethod(TestMethods::findMethod(o, "cleanupTestCase()"))
     , m_initMethod(TestMethods::findMethod(o, "init()"))
     , m_cleanupMethod(TestMethods::findMethod(o, "cleanup()"))
-    , m_methods(m)
+    , m_methods(std::move(m))
 {
-    if (m.empty()) {
+    if (m_methods.empty()) {
         const QMetaObject *metaObject = o->metaObject();
         const int count = metaObject->methodCount();
         m_methods.reserve(count);
@@ -734,15 +742,18 @@ Q_TESTLIB_EXPORT void qtest_qParseArgs(int argc, const char *const argv[], bool 
             QTest::noCrashHandler = true;
 #if QT_CONFIG(valgrind)
         } else if (strcmp(argv[i], "-callgrind") == 0) {
-            if (QBenchmarkValgrindUtils::haveValgrind())
-                if (QFileInfo(QDir::currentPath()).isWritable()) {
-                    QBenchmarkGlobalData::current->setMode(QBenchmarkGlobalData::CallgrindParentProcess);
-                } else {
-                    fprintf(stderr, "WARNING: Current directory not writable. Using the walltime measurer.\n");
-                }
-            else {
-                fprintf(stderr, "WARNING: Valgrind not found or too old. Make sure it is installed and in your path. "
-                       "Using the walltime measurer.\n");
+            if (!QBenchmarkValgrindUtils::haveValgrind()) {
+                fprintf(stderr,
+                        "WARNING: Valgrind not found or too old. "
+                        "Make sure it is installed and in your path. "
+                        "Using the walltime measurer.\n");
+            } else if (QFileInfo(QDir::currentPath()).isWritable()) {
+                QBenchmarkGlobalData::current->setMode(
+                    QBenchmarkGlobalData::CallgrindParentProcess);
+            } else {
+                fprintf(stderr,
+                        "WARNING: Current directory not writable. "
+                        "Using the walltime measurer.\n");
             }
         } else if (strcmp(argv[i], "-callgrindchild") == 0) { // "private" option
             QBenchmarkGlobalData::current->setMode(QBenchmarkGlobalData::CallgrindChildProcess);
@@ -863,7 +874,7 @@ Q_TESTLIB_EXPORT void qtest_qParseArgs(int argc, const char *const argv[], bool 
     // If no loggers were created by the long version of the -o command-line
     // option, but a logger was requested via the old-style option, add it.
     const bool explicitLoggerRequested = logFormat != -1;
-    if (QTestLog::loggerCount() == 0 && explicitLoggerRequested)
+    if (!QTestLog::hasLoggers() && explicitLoggerRequested)
         QTestLog::addLogger(QTestLog::LogMode(logFormat), logFilename);
 
     bool addFallbackLogger = !explicitLoggerRequested;
@@ -1031,7 +1042,8 @@ class WatchDog : public QThread
         ThreadEnd,
     };
 
-    bool waitFor(std::unique_lock<QtPrivate::mutex> &m, Expectation e) {
+    bool waitFor(std::unique_lock<QtPrivate::mutex> &m, Expectation e)
+    {
         auto expectationChanged = [this, e] { return expecting.load(std::memory_order_relaxed) != e; };
         switch (e) {
         case TestFunctionEnd:
@@ -1055,7 +1067,9 @@ public:
         start();
         waitFor(locker, ThreadStart);
     }
-    ~WatchDog() {
+
+    ~WatchDog()
+    {
         {
             const auto locker = qt_scoped_lock(mutex);
             expecting.store(ThreadEnd, std::memory_order_relaxed);
@@ -1064,19 +1078,22 @@ public:
         wait();
     }
 
-    void beginTest() {
+    void beginTest()
+    {
         const auto locker = qt_scoped_lock(mutex);
         expecting.store(TestFunctionEnd, std::memory_order_relaxed);
         waitCondition.notify_all();
     }
 
-    void testFinished() {
+    void testFinished()
+    {
         const auto locker = qt_scoped_lock(mutex);
         expecting.store(TestFunctionStart, std::memory_order_relaxed);
         waitCondition.notify_all();
     }
 
-    void run() override {
+    void run() override
+    {
         auto locker = qt_unique_lock(mutex);
         expecting.store(TestFunctionStart, std::memory_order_release);
         waitCondition.notify_all();
@@ -1211,7 +1228,6 @@ bool TestMethods::invokeTest(int index, const char *data, WatchDog *watchDog) co
     QTestResult::finishedCurrentTestFunction();
     QTestResult::setSkipCurrentTest(false);
     QTestResult::setBlacklistCurrentTest(false);
-    QTestResult::setCurrentTestData(nullptr);
 
     return true;
 }
@@ -1337,9 +1353,9 @@ char *toHexRepresentation(const char *ba, int length)
 char *toPrettyCString(const char *p, int length)
 {
     bool trimmed = false;
-    QScopedArrayPointer<char> buffer(new char[256]);
+    auto buffer = std::make_unique<char[]>(256);
     const char *end = p + length;
-    char *dst = buffer.data();
+    char *dst = buffer.get();
 
     bool lastWasHexEscape = false;
     *dst++ = '"';
@@ -1349,7 +1365,7 @@ char *toPrettyCString(const char *p, int length)
         //  2 bytes: a simple escape sequence (\n)
         //  3 bytes: "" and a character
         //  4 bytes: an hex escape sequence (\xHH)
-        if (dst - buffer.data() > 246) {
+        if (dst - buffer.get() > 246) {
             // plus the quote, the three dots and NUL, it's 255 in the worst case
             trimmed = true;
             break;
@@ -1410,7 +1426,7 @@ char *toPrettyCString(const char *p, int length)
         *dst++ = '.';
     }
     *dst++ = '\0';
-    return buffer.take();
+    return buffer.release();
 }
 
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
@@ -1432,17 +1448,17 @@ char *toPrettyUnicode(const ushort *p, int length)
 */
 char *toPrettyUnicode(QStringView string)
 {
-    auto p = reinterpret_cast<const ushort *>(string.utf16());
+    auto p = string.utf16();
     auto length = string.size();
     // keep it simple for the vast majority of cases
     bool trimmed = false;
-    QScopedArrayPointer<char> buffer(new char[256]);
-    const ushort *end = p + length;
-    char *dst = buffer.data();
+    auto buffer = std::make_unique<char[]>(256);
+    const auto end = p + length;
+    char *dst = buffer.get();
 
     *dst++ = '"';
     for ( ; p != end; ++p) {
-        if (dst - buffer.data() > 245) {
+        if (dst - buffer.get() > 245) {
             // plus the quote, the three dots and NUL, it's 250, 251 or 255
             trimmed = true;
             break;
@@ -1492,7 +1508,7 @@ char *toPrettyUnicode(QStringView string)
         *dst++ = '.';
     }
     *dst++ = '\0';
-    return buffer.take();
+    return buffer.release();
 }
 
 void TestMethods::invokeTests(QObject *testObject) const
@@ -1665,11 +1681,16 @@ public:
         sigemptyset(&handledSignals);
 
         const int fatalSignals[] = {
-             SIGHUP, SIGINT, SIGQUIT, SIGILL, SIGBUS, SIGFPE, SIGSEGV, SIGPIPE, SIGTERM, 0 };
+             SIGHUP, SIGINT, SIGQUIT, SIGILL, SIGBUS, SIGFPE, SIGSEGV, SIGPIPE, SIGTERM };
 
         struct sigaction act;
         memset(&act, 0, sizeof(act));
+#  ifdef SA_SIGINFO
+        act.sa_flags |= SA_SIGINFO;
+        act.sa_sigaction = FatalSignalHandler::signal;
+#  else
         act.sa_handler = FatalSignalHandler::signal;
+#  endif
 
         // Remove the handler after it is invoked.
 #  if !defined(Q_OS_INTEGRITY)
@@ -1686,11 +1707,12 @@ public:
         // interfere with normal .bss symbols
         __attribute__((section(".lbss.altstack"), aligned(4096)))
 #    endif
-        static char alternate_stack[16 * 1024];
+        static QVarLengthArray<char, 32 * 1024> alternateStack;
+        alternateStack.resize(qMax(SIGSTKSZ, alternateStack.size()));
         stack_t stack;
         stack.ss_flags = 0;
-        stack.ss_size = sizeof alternate_stack;
-        stack.ss_sp = alternate_stack;
+        stack.ss_size = alternateStack.size();
+        stack.ss_sp = alternateStack.data();
         sigaltstack(&stack, nullptr);
         act.sa_flags |= SA_ONSTACK;
 #  endif
@@ -1698,23 +1720,31 @@ public:
         // Block all fatal signals in our signal handler so we don't try to close
         // the testlog twice.
         sigemptyset(&act.sa_mask);
-        for (int i = 0; fatalSignals[i]; ++i)
-            sigaddset(&act.sa_mask, fatalSignals[i]);
+        for (int signal : fatalSignals)
+            sigaddset(&act.sa_mask, signal);
+
+        // The destructor can only restore SIG_DFL, so only register for signals
+        // that had default handling previously.
+        const auto isDefaultHandler = [](const struct sigaction &old) {
+#  ifdef SA_SIGINFO
+            // void sa_sigaction(int, siginfo_t *, void *) is never the default:
+            if (old.sa_flags & SA_SIGINFO)
+                return false;
+#  endif
+            // Otherwise, the handler is void sa_handler(int) but may be
+            // SIG_DFL (default action) or SIG_IGN (ignore signal):
+            return old.sa_handler == SIG_DFL;
+        };
 
         struct sigaction oldact;
-
-        for (int i = 0; fatalSignals[i]; ++i) {
-            sigaction(fatalSignals[i], &act, &oldact);
-            if (
-#  ifdef SA_SIGINFO
-                oldact.sa_flags & SA_SIGINFO ||
-#  endif
-                oldact.sa_handler != SIG_DFL) {
-                sigaction(fatalSignals[i], &oldact, nullptr);
-            } else
-            {
-                sigaddset(&handledSignals, fatalSignals[i]);
-            }
+        for (int signal : fatalSignals) {
+            // Registering reveals the existing handler:
+            if (sigaction(signal, &act, &oldact))
+                continue; // Failed to set our handler; nothing to restore.
+            if (isDefaultHandler(oldact))
+                sigaddset(&handledSignals, signal);
+            else // Restore non-default handler:
+                sigaction(signal, &oldact, nullptr);
         }
 #endif // defined(Q_OS_UNIX) && !defined(Q_OS_WASM)
     }
@@ -1722,21 +1752,29 @@ public:
     ~FatalSignalHandler()
     {
 #if defined(Q_OS_UNIX) && !defined(Q_OS_WASM)
-        // Unregister any of our remaining signal handlers
+        // Restore the default signal handler in place of ours.
+        // If ours has been replaced, leave the replacement alone.
         struct sigaction act;
         memset(&act, 0, sizeof(act));
         act.sa_handler = SIG_DFL;
 
-        struct sigaction oldact;
+        auto isOurs = [](const struct sigaction &old) {
+#  ifdef SA_SIGINFO
+            return (old.sa_flags & SA_SIGINFO) && old.sa_sigaction == FatalSignalHandler::signal;
+#  else
+            return old.sa_handler == FatalSignalHandler::signal;
+#  endif
+        };
+        struct sigaction action;
 
-        for (int i = 1; i < 32; ++i) {
-            if (!sigismember(&handledSignals, i))
+        for (int signum = 1; signum < 32; ++signum) {
+            if (!sigismember(&handledSignals, signum))
                 continue;
-            sigaction(i, &act, &oldact);
+            if (sigaction(signum, nullptr, &action))
+                continue; // Failed to query present handler
 
-            // If someone overwrote it in the mean time, put it back
-            if (oldact.sa_handler != FatalSignalHandler::signal)
-                sigaction(i, &oldact, nullptr);
+            if (isOurs(action))
+                sigaction(signum, &act, nullptr);
         }
 #endif
     }
@@ -1788,7 +1826,11 @@ private:
 #endif // defined(Q_OS_WIN)
 
 #if defined(Q_OS_UNIX) && !defined(Q_OS_WASM)
+#  ifdef SA_SIGINFO
+    static void signal(int signum, siginfo_t * /* info */, void * /* ucontext */)
+#  else
     static void signal(int signum)
+#endif
     {
         const int msecsFunctionTime = qRound(QTestLog::msecsFunctionTime());
         const int msecsTotalTime = qRound(QTestLog::msecsTotalTime());
@@ -1850,7 +1892,7 @@ static void initEnvironment()
     than once, as command-line options for logging test output to files and
     executing individual test functions will not behave correctly.
 
-    Note: This function is not reentrant, only one test can run at a time. A
+    \note This function is not reentrant, only one test can run at a time. A
     test that was executed with qExec() can't run another test via qExec() and
     threads are not allowed to call qExec() simultaneously.
 
@@ -1858,11 +1900,15 @@ static void initEnvironment()
     from the arguments in \c main(), it is likely of interest to use
     QTest::qExec(QObject *, const QStringList &) since it is Unicode safe.
 
-    \sa QTEST_MAIN()
+    \sa QTEST_MAIN(), QTEST_GUILESS_MAIN(), QTEST_APPLESS_MAIN()
 */
 
 int QTest::qExec(QObject *testObject, int argc, char **argv)
 {
+    // NB: QtQuick's testing recombines qInit(), qRun() and qCleanup() to
+    // provide a replacement for qExec() that calls qRun() once for each
+    // built-in style. So think twice about moving parts between these three
+    // functions, as doing so may mess up QtQuick's testing.
     qInit(testObject, argc, argv);
     int ret = qRun();
     qCleanup();
@@ -1906,8 +1952,13 @@ void QTest::qInit(QObject *testObject, int argc, char **argv)
 
     qtest_qParseArgs(argc, argv, false);
 
-    QTestTable::globalTestTable();
-    QTestLog::startLogging();
+#if QT_CONFIG(valgrind)
+    if (QBenchmarkGlobalData::current->mode() != QBenchmarkGlobalData::CallgrindParentProcess)
+#endif
+    {
+        QTestTable::globalTestTable();
+        QTestLog::startLogging();
+    }
 }
 
 /*! \internal
@@ -1943,6 +1994,7 @@ int QTest::qRun()
             handler.reset(new FatalSignalHandler);
 
         TestMethods::MetaMethods commandLineMethods;
+        commandLineMethods.reserve(static_cast<size_t>(QTest::testFunctions.size()));
         for (const QString &tf : qAsConst(QTest::testFunctions)) {
                 const QByteArray tfB = tf.toLatin1();
                 const QByteArray signature = tfB + QByteArrayLiteral("()");
@@ -1955,7 +2007,7 @@ int QTest::qRun()
                 }
                 commandLineMethods.push_back(m);
         }
-        TestMethods test(currentTestObject, commandLineMethods);
+        TestMethods test(currentTestObject, std::move(commandLineMethods));
         test.invokeTests(currentTestObject);
     }
 
@@ -1990,8 +2042,13 @@ void QTest::qCleanup()
 {
     currentTestObject = nullptr;
 
-    QTestTable::clearGlobalTestTable();
-    QTestLog::stopLogging();
+#if QT_CONFIG(valgrind)
+    if (QBenchmarkGlobalData::current->mode() != QBenchmarkGlobalData::CallgrindParentProcess)
+#endif
+    {
+        QTestLog::stopLogging();
+        QTestTable::clearGlobalTestTable();
+    }
 
     delete QBenchmarkGlobalData::current;
     QBenchmarkGlobalData::current = nullptr;
@@ -2027,9 +2084,9 @@ int QTest::qExec(QObject *testObject, const QStringList &arguments)
 
 /*! \internal
  */
-void QTest::qFail(const char *statementStr, const char *file, int line)
+void QTest::qFail(const char *message, const char *file, int line)
 {
-    QTestResult::addFailure(statementStr, file, line);
+    QTestResult::fail(message, file, line);
 }
 
 /*! \internal
@@ -2058,12 +2115,50 @@ bool QTest::qExpectFail(const char *dataIndex, const char *comment,
     return QTestResult::expectFail(dataIndex, qstrdup(comment), mode, file, line);
 }
 
-/*! \internal
+/*!
+    \internal
+
+    Executes qFail() following a failed QVERIFY_THROWS_EXCEPTION or
+    QVERIFY_THROWS_NO_EXCEPTION, passing a suitable message created from \a expected,
+    \a what, along with \a file and \a line.
+
+    The \a expected parameter contains the type of the exception that is expected to
+    be thrown, or \nullptr, if no exception was expected.
+
+    The \a what parameter contains the result of \c{std::exception::what()}, or nullptr,
+    if a non-\c{std::exception}-derived exception was caught.
+
+    The \a file and \a line parameters hold expansions of the \c{__FILE__} and \c{__LINE__}
+    macros, respectively.
+*/
+void QTest::qCaught(const char *expected, const char *what, const char *file, int line)
+{
+    auto message = [&] {
+        const auto exType  = what ? "std::" : "unknown ";
+        const auto ofType  = expected ? " of type " : "";
+        const auto no      = expected ? "an" : "no";
+        const auto withMsg = what ? " with message " : "";
+        const auto protect = [](const char *s) { return s ? s : ""; };
+
+        return QString::asprintf("Expected %s exception%s%s to be thrown, "
+                                 "but caught %sexception%s%s",
+                                 no, ofType, protect(expected),
+                                 exType, withMsg, protect(what));
+    };
+    qFail(message().toUtf8().constData(), file, line);
+}
+
+
+#if QT_DEPRECATED_SINCE(6, 3)
+/*!
+  \internal
+  \deprecated [6.3] Use qWarning() instead
  */
 void QTest::qWarn(const char *message, const char *file, int line)
 {
     QTestLog::warn(message, file, line);
 }
+#endif
 
 /*!
     Ignores messages created by qDebug(), qInfo() or qWarning(). If the \a message
@@ -2071,9 +2166,9 @@ void QTest::qWarn(const char *message, const char *file, int line)
     test log. If the test finished and the \a message was not outputted,
     a test failure is appended to the test log.
 
-    \b {Note:} Invoking this function will only ignore one message.
-    If the message you want to ignore is outputted twice, you have to
-    call ignoreMessage() twice, too.
+    \note Invoking this function will only ignore one message. If the message
+    you want to ignore is output twice, you have to call ignoreMessage() twice,
+    too.
 
     Example:
     \snippet code/src_qtestlib_qtestcase.cpp 19
@@ -2096,15 +2191,77 @@ void QTest::ignoreMessage(QtMsgType type, const char *message)
     test log. If the test finished and the message was not outputted,
     a test failure is appended to the test log.
 
-    \b {Note:} Invoking this function will only ignore one message.
-    If the message you want to ignore is outputted twice, you have to
-    call ignoreMessage() twice, too.
+    \note Invoking this function will only ignore one message. If the message
+    you want to ignore is output twice, you have to call ignoreMessage() twice,
+    too.
 
     \since 5.3
 */
 void QTest::ignoreMessage(QtMsgType type, const QRegularExpression &messagePattern)
 {
     QTestLog::ignoreMessage(type, messagePattern);
+}
+#endif // QT_CONFIG(regularexpression)
+
+/*!
+    \since 6.3
+    \overload failOnWarning()
+
+    Appends a test failure to the test log if the \a message is output.
+
+    \sa failOnWarning()
+*/
+void QTest::failOnWarning(const char *message)
+{
+    return QTestLog::failOnWarning(message);
+}
+
+#if QT_CONFIG(regularexpression)
+/*!
+    \since 6.3
+
+    Appends a test failure to the test log for each warning that matches
+    \a messagePattern.
+
+    The test function will continue execution when a failure is added. To abort
+    the test instead, you can check \l currentTestFailed() and return early if
+    it's \c true.
+
+    For each warning, the first pattern that matches will cause a failure,
+    and the remaining patterns will be ignored.
+
+    All patterns are cleared at the end of each test function.
+
+    \code
+    void FileTest::loadFiles()
+    {
+        QTest::failOnWarning(QRegularExpression("^Failed to load"));
+
+        // Each of these will cause a test failure:
+        qWarning() << "Failed to load image";
+        qWarning() << "Failed to load video";
+    }
+    \endcode
+
+    To fail every test that triggers a given warning, pass a suitable regular
+    expression to this function in \l {Creating a Test}{init()}:
+
+    \code
+    void FileTest::init()
+    {
+        QTest::failOnWarning(QRegularExpression(".?"));
+    }
+    \endcode
+
+    \note \l ignoreMessage() takes precedence over this function, so any
+    warnings that match a pattern given to both \c ignoreMessage() and
+    \c failOnWarning() will be ignored.
+
+    \sa {Qt Test Environment Variables}{QTEST_FATAL_FAIL}
+*/
+void QTest::failOnWarning(const QRegularExpression &messagePattern)
+{
+    QTestLog::failOnWarning(messagePattern);
 }
 #endif // QT_CONFIG(regularexpression)
 
@@ -2157,9 +2314,7 @@ QSharedPointer<QTemporaryDir> QTest::qExtractTestData(const QString &dirName)
       }
 
       while (it.hasNext()) {
-          it.next();
-
-          QFileInfo fileInfo = it.fileInfo();
+          QFileInfo fileInfo = it.nextFileInfo();
 
           if (!fileInfo.isDir()) {
               const QString destination = dataPath + QLatin1Char('/') + QStringView{fileInfo.filePath()}.mid(resourcePath.length());
@@ -2311,7 +2466,7 @@ QString QTest::qFindTestData(const QString& base, const char *file, int line, co
 
 
     if (found.isEmpty()) {
-        QTest::qWarn(qPrintable(
+        QTestLog::warn(qPrintable(
             QString::fromLatin1("testdata %1 could not be located!").arg(base)),
             file, line);
     } else if (QTestLog::verboseLevel() >= 1) {
@@ -2379,7 +2534,7 @@ void QTest::addColumnInternal(int id, const char *name)
     Example:
     \snippet code/src_qtestlib_qtestcase.cpp 20
 
-    \b {Note:} This macro can only be used in a test's data function
+    \note This function can only be called as part of a test's data function
     that is invoked by the test framework.
 
     See \l {Chapter 2: Data Driven Testing}{Data Driven Testing} for
@@ -2411,7 +2566,7 @@ QTestData &QTest::newRow(const char *dataTag)
     Example:
     \snippet code/src_qtestlib_qtestcase.cpp addRow
 
-    \b {Note:} This function can only be used in a test's data function
+    \note This function can only be called as part of a test's data function
     that is invoked by the test framework.
 
     See \l {Chapter 2: Data Driven Testing}{Data Driven Testing} for
@@ -2454,8 +2609,8 @@ QTestData &QTest::addRow(const char *format, ...)
     To add custom types to the testdata, the type must be registered with
     QMetaType via \l Q_DECLARE_METATYPE().
 
-    \b {Note:} This macro can only be used in a test's data function
-    that is invoked by the test framework.
+    \note This function can only be used called as part of a test's data
+    function that is invoked by the test framework.
 
     See \l {Chapter 2: Data Driven Testing}{Data Driven Testing} for
     a more extensive example.

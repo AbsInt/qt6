@@ -43,8 +43,31 @@
 #include <private/qv4scopedvalue_p.h>
 #include <private/qv4qmlcontext_p.h>
 #include <qcolor.h>
+#include <qsignalspy.h>
 
 #include <algorithm>
+
+class WithQJSValue : public QObject
+{
+    Q_OBJECT
+    Q_PROPERTY(QJSValue v READ v WRITE setV NOTIFY vChanged)
+
+public:
+    QJSValue v() const { return m_v; }
+    void setV(const QJSValue &newV)
+    {
+        if (!m_v.strictlyEquals(newV)) {
+            m_v = newV;
+            emit vChanged();
+        }
+    }
+
+signals:
+    void vChanged();
+
+private:
+    QJSValue m_v;
+};
 
 class MyIC : public QObject, public QQmlIncubationController
 {
@@ -108,6 +131,8 @@ private slots:
     void qmlCreateObjectAutoParent_data();
     void qmlCreateObjectAutoParent();
     void qmlCreateObjectWithProperties();
+    void qmlCreateObjectClean();
+    void qmlCreateObjectDirty();
     void qmlIncubateObject();
     void qmlCreateParentReference();
     void async();
@@ -130,6 +155,8 @@ private slots:
     void testSetInitialProperties();
     void createInsideJSModule();
     void qmlErrorIsReported();
+    void initJSValueProp();
+    void qmlPropertySignalExists();
 
 private:
     QQmlEngine engine;
@@ -306,6 +333,42 @@ void tst_qqmlcomponent::qmlCreateObjectWithProperties()
         testBindingThisObj->setProperty("width", 200);
         QCOMPARE(testBindingThisObj->property("testValue").value<int>(), 200 * 3);
     }
+}
+
+void tst_qqmlcomponent::qmlCreateObjectClean()
+{
+    QQmlEngine engine;
+    QVERIFY(engine.outputWarningsToStandardError());
+    QObject::connect(&engine, &QQmlEngine::warnings, [](const QList<QQmlError> &) {
+        QFAIL("Calls with suitable parameters should not generate any warnings.");
+    });
+    QQmlComponent component(&engine, testFileUrl("createObjectClean.qml"));
+    QVERIFY2(component.errorString().isEmpty(), component.errorString().toUtf8());
+    QScopedPointer<QObject> object(component.create());
+    QVERIFY(!object.isNull());
+
+    QVERIFY(qvariant_cast<QObject *>(object->property("a")) != nullptr);
+    QVERIFY(qvariant_cast<QObject *>(object->property("b")) != nullptr);
+    QVERIFY(qvariant_cast<QObject *>(object->property("c")) != nullptr);
+    QVERIFY(qvariant_cast<QObject *>(object->property("d")) != nullptr);
+}
+
+void tst_qqmlcomponent::qmlCreateObjectDirty()
+{
+    QQmlEngine engine;
+    engine.setOutputWarningsToStandardError(false);
+    QObject::connect(&engine, &QQmlEngine::warnings, [](const QList<QQmlError> &warnings) {
+        QCOMPARE(warnings.count(), 1);
+        QCOMPARE(warnings[0].description(),
+                "QML Component: Unsuitable arguments passed to createObject(). The first argument "
+                "should be a QObject* or null, and the second argument should be a JavaScript "
+                "object or a QVariantMap");
+    });
+    QQmlComponent component(&engine, testFileUrl("createObjectDirty.qml"));
+    QVERIFY2(component.errorString().isEmpty(), component.errorString().toUtf8());
+    QScopedPointer<QObject> object(component.create());
+    QVERIFY(!object.isNull());
+    QVERIFY(qvariant_cast<QObject *>(object->property("a")) != nullptr);
 }
 
 void tst_qqmlcomponent::qmlCreateParentReference()
@@ -520,6 +583,7 @@ void tst_qqmlcomponent::recursion()
 {
     QQmlEngine engine;
     QQmlComponent component(&engine, testFileUrl("recursion.qml"));
+    QVERIFY2(component.isReady(), qPrintable(component.errorString()));
 
     QTest::ignoreMessage(QtWarningMsg, QLatin1String("QQmlComponent: Component creation is recursing - aborting").data());
     QScopedPointer<QObject> object(component.create());
@@ -871,12 +935,13 @@ void tst_qqmlcomponent::testRequiredProperties()
                  "We fail to recognized required sub-properties inside a group property, even when "
                  "that group property is used (QTBUG-96544)",
                  Abort);
-    if (shouldSucceed)
+    if (shouldSucceed) {
+        QVERIFY2(comp.isReady(), qPrintable(comp.errorString()));
         QVERIFY(obj);
-    else {
+    } else {
         QVERIFY2(!obj, "The object is valid when it shouldn't be");
         QFETCH(QString, errorMsg);
-        QVERIFY(comp.errorString().contains(errorMsg));
+        QVERIFY2(comp.errorString().contains(errorMsg), qPrintable(comp.errorString()));
     }
 }
 
@@ -1020,6 +1085,38 @@ void tst_qqmlcomponent::qmlErrorIsReported()
     QVERIFY(std::any_of(componentErrors.begin(), componentErrors.end(), [&](const QQmlError &e) {
         return errorMessage.match(e.toString()).hasMatch();
     }));
+}
+
+void tst_qqmlcomponent::initJSValueProp()
+{
+    qmlRegisterType<WithQJSValue>("ComponentTest", 1, 0, "WithQJSValue");
+    QQmlEngine engine;
+    QQmlComponent component(&engine);
+    component.setData("import ComponentTest\nWithQJSValue {}", QUrl());
+    QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+    QScopedPointer<QObject> o(component.createWithInitialProperties({{ u"v"_qs, 5}}));
+    QVERIFY(!o.isNull());
+    WithQJSValue *withQJSValue = qobject_cast<WithQJSValue *>(o.data());
+    QVERIFY(withQJSValue);
+    const QJSValue jsValue = withQJSValue->v();
+    QVERIFY(jsValue.isNumber());
+    QCOMPARE(jsValue.toInt(), 5);
+}
+
+void tst_qqmlcomponent::qmlPropertySignalExists()
+{
+    QQmlEngine engine;
+    QQmlComponent component(&engine);
+    component.setData("import QtQml; QtObject { property int p: 41; function doStuff() { p++; } }",
+                      QUrl());
+    QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+    QScopedPointer<QObject> o(component.create());
+    QVERIFY(!o.isNull());
+
+    QSignalSpy changeSignalSpy(o.get(), SIGNAL(pChanged()));
+    QVERIFY(QMetaObject::invokeMethod(o.get(), "doStuff"));
+    QCOMPARE(changeSignalSpy.count(), 1);
+    QCOMPARE(o->property("p").toInt(), 42);
 }
 
 QTEST_MAIN(tst_qqmlcomponent)

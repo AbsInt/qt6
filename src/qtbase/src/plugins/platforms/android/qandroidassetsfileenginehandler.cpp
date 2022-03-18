@@ -261,8 +261,10 @@ public:
         close();
     }
 
-    bool open(QIODevice::OpenMode openMode) override
+    bool open(QIODevice::OpenMode openMode, std::optional<QFile::Permissions> permissions) override
     {
+        Q_UNUSED(permissions);
+
         if (m_isFolder || (openMode & QIODevice::WriteOnly))
             return false;
         close();
@@ -309,19 +311,9 @@ public:
         return -1;
     }
 
-    bool isSequential() const override
-    {
-        return false;
-    }
-
     bool caseSensitive() const override
     {
         return true;
-    }
-
-    bool isRelativePath() const override
-    {
-        return false;
     }
 
     FileFlags fileFlags(FileFlags type = FileInfoAll) const override
@@ -368,7 +360,7 @@ public:
         m_fileName = cleanedAssetPath(file);
         switch (FolderIterator::fileType(m_fileName)) {
         case AssetItem::Type::File:
-            open(QIODevice::ReadOnly);
+            open(QIODevice::ReadOnly, std::nullopt);
             break;
         case AssetItem::Type::Folder:
             m_isFolder = true;

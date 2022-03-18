@@ -52,8 +52,8 @@
 //
 
 #include <private/qtqmlglobal_p.h>
-#include <qqml.h>
 
+#include <QtQml/qqml.h>
 #include <QtCore/qobject.h>
 
 QT_BEGIN_NAMESPACE
@@ -76,7 +76,7 @@ private:
     Q_INTERFACES(QQmlPropertyValueSource)
     Q_PROPERTY(QObject *target READ object WRITE setObject)
     Q_PROPERTY(QString property READ property WRITE setProperty)
-    Q_PROPERTY(QJSValue value READ value WRITE setValue)
+    Q_PROPERTY(QVariant value READ value WRITE setValue)
     Q_PROPERTY(bool when READ when WRITE setWhen)
     Q_PROPERTY(bool delayed READ delayed WRITE setDelayed REVISION(2, 8))
     Q_PROPERTY(RestorationMode restoreMode READ restoreMode WRITE setRestoreMode
@@ -84,10 +84,10 @@ private:
     Q_ENUM(RestorationMode)
     QML_NAMED_ELEMENT(Binding)
     QML_ADDED_IN_VERSION(2, 0)
+    Q_CLASSINFO("ImmediatePropertyNames", "objectName,target,property,value,when,delayed,restoreMode");
 
 public:
     QQmlBind(QObject *parent=nullptr);
-    ~QQmlBind();
 
     bool when() const;
     void setWhen(bool);
@@ -98,8 +98,8 @@ public:
     QString property() const;
     void setProperty(const QString &);
 
-    QJSValue value() const;
-    void setValue(const QJSValue &);
+    QVariant value() const;
+    void setValue(const QVariant &);
 
     bool delayed() const;
     void setDelayed(bool);

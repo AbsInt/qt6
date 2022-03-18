@@ -39,15 +39,19 @@
 //
 // We mean it.
 
-#include "qqmljsscope_p.h"
 #include "qqmljsannotation_p.h"
+#include "qqmljsimporter_p.h"
 #include "qqmljslogger_p.h"
+#include "qqmljsscope_p.h"
 #include "qqmljsscopesbyid_p.h"
+
+#include <QtCore/qvariant.h>
+#include <QtCore/qstack.h>
 
 #include <private/qqmljsast_p.h>
 #include <private/qqmljsdiagnosticmessage_p.h>
-#include <private/qqmljsimporter_p.h>
 #include <private/qv4compileddata_p.h>
+
 
 QT_BEGIN_NAMESPACE
 
@@ -55,18 +59,23 @@ struct QQmlJSResourceFileMapper;
 class QQmlJSImportVisitor : public QQmlJS::AST::Visitor
 {
 public:
-    QQmlJSImportVisitor(QQmlJSImporter *importer, const QString &implicitImportDirectory,
-                        const QStringList &qmltypesFiles = QStringList(), const QString &fileName = QString(), const QString &code = QString(), bool silent = true);
+    QQmlJSImportVisitor(QQmlJSImporter *importer, QQmlJSLogger *logger,
+                        const QString &implicitImportDirectory,
+                        const QStringList &qmldirFiles = QStringList());
+    ~QQmlJSImportVisitor();
 
     QQmlJSScope::Ptr result() const;
 
-    // TODO: Should be superseded by accessing the logger instead
-    QList<QQmlJS::DiagnosticMessage> errors() const { return m_logger.warnings() + m_logger.errors(); }
-
-    QQmlJSLogger &logger() { return m_logger; }
+    QQmlJSLogger *logger() { return m_logger; }
 
     QQmlJSImporter::ImportedTypes imports() const { return m_rootScopeImports; }
     QQmlJSScopesById addressableScopes() const { return m_scopesById; }
+    QHash<QQmlJS::SourceLocation, QQmlJSMetaSignalHandler> signalHandlers() const
+    {
+        return m_signalHandlers;
+    }
+    QSet<QQmlJSScope::ConstPtr> literalScopesToCheck() const { return m_literalScopesToCheck; }
+    QList<QQmlJSScope::ConstPtr> qmlScopes() const { return m_qmlTypes; }
     QHash<QV4::CompiledData::Location, QQmlJSScope::ConstPtr> scopesBylocation() const
     {
         return m_scopesByIrLocation;
@@ -103,6 +112,7 @@ protected:
     bool visit(QQmlJS::AST::ClassExpression *ast) override;
     void endVisit(QQmlJS::AST::ClassExpression *) override;
     bool visit(QQmlJS::AST::UiImport *import) override;
+    bool visit(QQmlJS::AST::UiPragma *pragma) override;
     bool visit(QQmlJS::AST::ClassDeclaration *ast) override;
     void endVisit(QQmlJS::AST::ClassDeclaration *ast) override;
     bool visit(QQmlJS::AST::ForStatement *ast) override;
@@ -133,21 +143,25 @@ protected:
     bool visit(QQmlJS::AST::Program *program) override;
     void endVisit(QQmlJS::AST::Program *program) override;
 
+    void endVisit(QQmlJS::AST::FieldMemberExpression *) override;
+    bool visit(QQmlJS::AST::IdentifierExpression *idexp) override;
+
+    bool visit(QQmlJS::AST::PatternElement *) override;
+
     void throwRecursionDepthError() override;
 
     QString m_implicitImportDirectory;
-    QString m_code;
-    QString m_filePath;
-    QString m_rootId;
     QStringView m_inlineComponentName;
     bool m_nextIsInlineComponent = false;
-    QStringList m_qmltypesFiles;
+    bool m_rootIsSingleton = false;
+    QStringList m_qmldirFiles;
     QQmlJSScope::Ptr m_currentScope;
     QQmlJSScope::Ptr m_savedBindingOuterScope;
     QQmlJSScope::Ptr m_exportedRootScope;
     QQmlJSScope::ConstPtr m_globalScope;
     QQmlJSScopesById m_scopesById;
     QQmlJSImporter::ImportedTypes m_rootScopeImports;
+    QList<QQmlJSScope::ConstPtr> m_qmlTypes;
 
     // We need to record the locations as IR locations because those contain less data.
     // This way we can look up objects by IR location later.
@@ -186,7 +200,8 @@ protected:
     void checkDeprecation(const QQmlJSScope::ConstPtr &scope);
     void checkGroupedAndAttachedScopes(QQmlJSScope::ConstPtr scope);
 
-    QQmlJSLogger m_logger;
+    QQmlJSLogger *m_logger;
+    bool parseLiteralBinding(const QString name, const QQmlJS::AST::Statement *statement);
 
     // Used to temporarily store annotations for functions and generators wrapped in UiSourceElements
     QVector<QQmlJSAnnotation> m_pendingMethodAnnotations;
@@ -244,21 +259,14 @@ protected:
     QHash<QQmlJSScope::Ptr, QVector<WithVisibilityScope<QPair<QString, QStringList>>>> m_signals;
 
     QHash<QQmlJS::SourceLocation, QQmlJSMetaSignalHandler> m_signalHandlers;
+    QSet<QQmlJSScope::ConstPtr> m_literalScopesToCheck;
     QQmlJS::SourceLocation m_pendingSignalHandler;
 
-    struct OutstandingConnection
-    {
-        QString targetName;
-        QQmlJSScope::Ptr scope;
-        QQmlJS::AST::UiObjectDefinition *uiod;
-    };
-
-    QVarLengthArray<OutstandingConnection, 3>
-            m_outstandingConnections; // Connections whose target we have not encountered
+    QStack<int> m_runtimeIdCounters;
 
 private:
     void importBaseModules();
-    void resolveAliases();
+    void resolveAliasesAndIds();
 
     void visitFunctionExpressionHelper(QQmlJS::AST::FunctionExpression *fexpr);
     void processImportWarnings(

@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
@@ -73,11 +73,6 @@ class QTextCursor;
 class QTextDocument;
 class QTextLength;
 
-#ifndef QT_NO_DATASTREAM
-Q_GUI_EXPORT QDataStream &operator<<(QDataStream &, const QTextLength &);
-Q_GUI_EXPORT QDataStream &operator>>(QDataStream &, QTextLength &);
-#endif
-
 #ifndef QT_NO_DEBUG_STREAM
 Q_GUI_EXPORT QDebug operator<<(QDebug, const QTextLength &);
 #endif
@@ -122,11 +117,6 @@ Q_DECLARE_TYPEINFO(QTextLength, Q_PRIMITIVE_TYPE);
 
 inline QTextLength::QTextLength(Type atype, qreal avalue)
     : lengthType(atype), fixedValueOrPercentage(avalue) {}
-
-#ifndef QT_NO_DATASTREAM
-Q_GUI_EXPORT QDataStream &operator<<(QDataStream &, const QTextFormat &);
-Q_GUI_EXPORT QDataStream &operator>>(QDataStream &, QTextFormat &);
-#endif
 
 #ifndef QT_NO_DEBUG_STREAM
 Q_GUI_EXPORT QDebug operator<<(QDebug, const QTextFormat &);
@@ -465,13 +455,23 @@ public:
 
     inline void setFontFamilies(const QStringList &families)
     { setProperty(FontFamilies, QVariant(families)); }
+#if QT_VERSION < QT_VERSION_CHECK(7, 0, 0)
     inline QVariant fontFamilies() const
     { return property(FontFamilies); }
+#else
+    inline QStringList fontFamilies() const
+    { return property(FontFamilies).toStringList(); }
+#endif
 
     inline void setFontStyleName(const QString &styleName)
     { setProperty(FontStyleName, styleName); }
+#if QT_VERSION < QT_VERSION_CHECK(7, 0, 0)
     inline QVariant fontStyleName() const
     { return property(FontStyleName); }
+#else
+    inline QStringList fontStyleName() const
+    { return property(FontStyleName).toStringList(); }
+#endif
 
     inline void setFontPointSize(qreal size)
     { setProperty(FontPointSize, size); }
@@ -614,6 +614,8 @@ public:
 protected:
     explicit QTextCharFormat(const QTextFormat &fmt);
     friend class QTextFormat;
+    friend Q_GUI_EXPORT QDataStream &operator<<(QDataStream &, const QTextCharFormat &);
+    friend Q_GUI_EXPORT QDataStream &operator>>(QDataStream &, QTextCharFormat &);
 };
 
 Q_DECLARE_SHARED(QTextCharFormat)
@@ -722,6 +724,8 @@ public:
 protected:
     explicit QTextBlockFormat(const QTextFormat &fmt);
     friend class QTextFormat;
+    friend Q_GUI_EXPORT QDataStream &operator<<(QDataStream &, const QTextBlockFormat &);
+    friend Q_GUI_EXPORT QDataStream &operator>>(QDataStream &, QTextBlockFormat &);
 };
 
 Q_DECLARE_SHARED(QTextBlockFormat)
@@ -822,13 +826,19 @@ public:
     inline qreal height() const
     { return doubleProperty(ImageHeight); }
 
-    inline void setQuality(int quality = 100);
+    inline void setQuality(int quality);
+#if QT_DEPRECATED_SINCE(6, 3)
+    QT_DEPRECATED_VERSION_X_6_3("Pass a quality value, the default is 100") inline void setQuality()
+    { setQuality(100); }
+#endif
     inline int quality() const
     { return intProperty(ImageQuality); }
 
 protected:
     explicit QTextImageFormat(const QTextFormat &format);
     friend class QTextFormat;
+    friend Q_GUI_EXPORT QDataStream &operator<<(QDataStream &, const QTextListFormat &);
+    friend Q_GUI_EXPORT QDataStream &operator>>(QDataStream &, QTextListFormat &);
 };
 
 Q_DECLARE_SHARED(QTextImageFormat)
@@ -932,6 +942,8 @@ public:
 protected:
     explicit QTextFrameFormat(const QTextFormat &fmt);
     friend class QTextFormat;
+    friend Q_GUI_EXPORT QDataStream &operator<<(QDataStream &, const QTextFrameFormat &);
+    friend Q_GUI_EXPORT QDataStream &operator>>(QDataStream &, QTextFrameFormat &);
 };
 
 Q_DECLARE_SHARED(QTextFrameFormat)
@@ -1114,6 +1126,8 @@ public:
 
 protected:
     explicit QTextTableCellFormat(const QTextFormat &fmt);
+    friend Q_GUI_EXPORT QDataStream &operator<<(QDataStream &, const QTextTableCellFormat &);
+    friend Q_GUI_EXPORT QDataStream &operator>>(QDataStream &, QTextTableCellFormat &);
     friend class QTextFormat;
 };
 

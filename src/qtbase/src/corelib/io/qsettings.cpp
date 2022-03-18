@@ -48,6 +48,7 @@
 #include "qfileinfo.h"
 #include "qmutex.h"
 #include "private/qlocking_p.h"
+#include "private/qtools_p.h"
 #include "qlibraryinfo.h"
 #include "qtemporaryfile.h"
 #include "qstandardpaths.h"
@@ -231,7 +232,7 @@ QSettingsPrivate::~QSettingsPrivate()
 
 QString QSettingsPrivate::actualKey(const QString &key) const
 {
-    QString n = normalizedKey(key);
+    auto n = normalizedKey(key);
     Q_ASSERT_X(!n.isEmpty(), "QSettings", "empty key");
     return groupPrefix + n;
 }
@@ -515,8 +516,6 @@ QVariant QSettingsPrivate::stringToVariant(const QString &s)
     return QVariant(s);
 }
 
-static const char hexDigits[] = "0123456789ABCDEF";
-
 void QSettingsPrivate::iniEscapedKey(const QString &key, QByteArray &result)
 {
     result.reserve(result.length() + key.length() * 3 / 2);
@@ -530,13 +529,13 @@ void QSettingsPrivate::iniEscapedKey(const QString &key, QByteArray &result)
             result += (char)ch;
         } else if (ch <= 0xFF) {
             result += '%';
-            result += hexDigits[ch / 16];
-            result += hexDigits[ch % 16];
+            result += QtMiscUtils::toHexUpper(ch / 16);
+            result += QtMiscUtils::toHexUpper(ch % 16);
         } else {
             result += "%U";
             QByteArray hexCode;
             for (int i = 0; i < 4; ++i) {
-                hexCode.prepend(hexDigits[ch % 16]);
+                hexCode.prepend(QtMiscUtils::toHexUpper(ch % 16));
                 ch >>= 4;
             }
             result += hexCode;
@@ -834,7 +833,7 @@ StHexEscape:
         ch -= 'a' - 'A';
     if ((ch >= '0' && ch <= '9') || (ch >= 'A' && ch <= 'F')) {
         escapeVal <<= 4;
-        escapeVal += strchr(hexDigits, ch) - hexDigits;
+        escapeVal += QtMiscUtils::fromHex(ch);
         ++i;
         goto StHexEscape;
     } else {
@@ -1202,7 +1201,7 @@ void QConfFileSettingsPrivate::set(const QString &key, const QVariant &value)
     confFile->addedKeys.insert(theKey, value);
 }
 
-bool QConfFileSettingsPrivate::get(const QString &key, QVariant *value) const
+std::optional<QVariant> QConfFileSettingsPrivate::get(const QString &key) const
 {
     QSettingsKey theKey(key, caseSensitivity);
     ParsedSettingsMap::const_iterator j;
@@ -1222,15 +1221,12 @@ bool QConfFileSettingsPrivate::get(const QString &key, QVariant *value) const
                      && !confFile->removedKeys.contains(theKey));
         }
 
-        if (found && value)
-            *value = *j;
-
         if (found)
-            return true;
+            return *j;
         if (!fallbacks)
             break;
     }
-    return false;
+    return std::nullopt;
 }
 
 QStringList QConfFileSettingsPrivate::children(const QString &prefix, ChildSpec spec) const
@@ -3148,8 +3144,7 @@ void QSettings::setValue(const QString &key, const QVariant &value)
         qWarning("QSettings::setValue: Empty key passed");
         return;
     }
-    QString k = d->actualKey(key);
-    d->set(k, value);
+    d->set(d->actualKey(key), value);
     d->requestUpdate();
 }
 
@@ -3214,8 +3209,7 @@ void QSettings::remove(const QString &key)
 bool QSettings::contains(const QString &key) const
 {
     Q_D(const QSettings);
-    QString k = d->actualKey(key);
-    return d->get(k, nullptr);
+    return d->get(d->actualKey(key)) != std::nullopt;
 }
 
 /*!
@@ -3260,6 +3254,9 @@ bool QSettings::event(QEvent *event)
 #endif
 
 /*!
+    \fn QSettings::value(const QString &key) const
+    \fn QSettings::value(const QString &key, const QVariant &defaultValue) const
+
     Returns the value for setting \a key. If the setting doesn't
     exist, returns \a defaultValue.
 
@@ -3277,17 +3274,29 @@ bool QSettings::event(QEvent *event)
 
     \sa setValue(), contains(), remove()
 */
+QVariant QSettings::value(const QString &key) const
+{
+    Q_D(const QSettings);
+    return d->value(key, nullptr);
+}
+
 QVariant QSettings::value(const QString &key, const QVariant &defaultValue) const
 {
     Q_D(const QSettings);
+    return d->value(key, &defaultValue);
+}
+
+QVariant QSettingsPrivate::value(const QString &key, const QVariant *defaultValue) const
+{
     if (key.isEmpty()) {
         qWarning("QSettings::value: Empty key passed");
         return QVariant();
     }
-    QVariant result = defaultValue;
-    QString k = d->actualKey(key);
-    d->get(k, &result);
-    return result;
+    if (std::optional r = get(actualKey(key)))
+        return std::move(*r);
+    if (defaultValue)
+        return *defaultValue;
+    return QVariant();
 }
 
 /*!

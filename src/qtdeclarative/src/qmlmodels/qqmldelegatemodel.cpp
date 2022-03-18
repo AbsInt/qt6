@@ -56,7 +56,7 @@
 
 QT_BEGIN_NAMESPACE
 
-Q_LOGGING_CATEGORY(lcItemViewDelegateRecycling, "qt.quick.itemview.delegaterecycling")
+Q_LOGGING_CATEGORY(lcItemViewDelegateRecycling, "qt.qml.delegatemodel.recycling")
 
 class QQmlDelegateModelItem;
 
@@ -164,7 +164,7 @@ QQmlDelegateModelParts::QQmlDelegateModelParts(QQmlDelegateModel *parent)
 
 /*!
     \qmltype DelegateModel
-    \instantiates QQmlDelegateModel
+//!    \instantiates QQmlDelegateModel
     \inqmlmodule QtQml.Models
     \brief Encapsulates a model and delegate.
 
@@ -733,12 +733,20 @@ QQmlDelegateModelGroup *QQmlDelegateModelPrivate::group_at(
     Groups define a sub-set of the items in a delegate model and can be used to filter
     a model.
 
-    For every group defined in a DelegateModel two attached properties are added to each
+    For every group defined in a DelegateModel two attached pseudo-properties are added to each
     delegate item.  The first of the form DelegateModel.in\e{GroupName} holds whether the
     item belongs to the group and the second DelegateModel.\e{groupName}Index holds the
     index of the item in that group.
 
     The following example illustrates using groups to select items in a model.
+
+    \note In contrast to normal attached properties, those cannot be set in a declarative way.
+    The following would result in an error:
+    \badcode
+    delegate: Rectangle {
+        DelegateModel.inSelected: true
+    }
+    \endcode
 
     \snippet delegatemodel/delegatemodelgroup.qml 0
     \keyword dm-groups-property
@@ -1025,7 +1033,8 @@ void QQDMIncubationTask::initializeRequiredProperties(QQmlDelegateModelItem *mod
                 auto propName = QString::fromUtf8(prop.name());
                 bool wasInRequired = false;
                 QQmlProperty componentProp = QQmlComponentPrivate::removePropertyFromRequired(
-                        object, propName, requiredProperties, &wasInRequired);
+                            object, propName, requiredProperties,
+                            QQmlEnginePrivate::get(incubatorPriv->enginePriv), &wasInRequired);
                 // only write to property if it was actually requested by the component
                 if (wasInRequired && prop.hasNotifySignal()) {
                     QMetaMethod changeSignal = prop.notifySignal();
@@ -1737,6 +1746,7 @@ void QQmlDelegateModel::_q_itemsRemoved(int index, int count)
         return;
 
     d->m_count -= count;
+    Q_ASSERT(d->m_count >= 0);
     const QList<QQmlDelegateModelItem *> cache = d->m_cache;
     //Prevents items being deleted in remove loop
     for (QQmlDelegateModelItem *item : cache)
@@ -2058,10 +2068,8 @@ void QQmlDelegateModel::_q_layoutChanged(const QList<QPersistentModelIndex> &par
 QQmlDelegateModelAttached *QQmlDelegateModel::qmlAttachedProperties(QObject *obj)
 {
     if (QQmlDelegateModelItem *cacheItem = QQmlDelegateModelItem::dataForObject(obj)) {
-        if (cacheItem->object == obj) { // Don't create attached item for child objects.
-            cacheItem->attached = new QQmlDelegateModelAttached(cacheItem, obj);
-            return cacheItem->attached;
-        }
+        cacheItem->attached = new QQmlDelegateModelAttached(cacheItem, obj);
+        return cacheItem->attached;
     }
     return new QQmlDelegateModelAttached(obj);
 }
@@ -2374,11 +2382,7 @@ QQmlDelegateModelItem::QQmlDelegateModelItem(
         // model item so that the QML engine can use the revision information
         // when resolving the properties (rather than falling back to just
         // inspecting the QObject in the model item directly).
-        QQmlData *qmldata = QQmlData::get(this, true);
-        if (qmldata->propertyCache)
-            qmldata->propertyCache->release();
-        qmldata->propertyCache = accessor->propertyCache.data();
-        qmldata->propertyCache->addref();
+        QQmlData::get(this, true)->propertyCache = accessor->propertyCache;
     }
 }
 
@@ -2589,6 +2593,64 @@ void QQmlDelegateModelAttached::resetCurrentIndex()
         for (int i = 1; i < m_cacheItem->metaType->groupCount; ++i)
             m_currentIndex[i] = it.index[i];
     }
+}
+
+void QQmlDelegateModelAttached::setInPersistedItems(bool inPersisted)
+{
+    setInGroup(QQmlListCompositor::Persisted, inPersisted);
+}
+
+bool QQmlDelegateModelAttached::inPersistedItems() const
+{
+    if (!m_cacheItem)
+        return false;
+    const uint groupFlag = (1 << QQmlListCompositor::Persisted);
+    return m_cacheItem->groups & groupFlag;
+}
+
+int QQmlDelegateModelAttached::persistedItemsIndex() const
+{
+    if (!m_cacheItem)
+        return -1;
+    return m_cacheItem->groupIndex(QQmlListCompositor::Persisted);
+}
+
+void QQmlDelegateModelAttached::setInGroup(QQmlListCompositor::Group group, bool inGroup)
+{
+    if (!(m_cacheItem && m_cacheItem->metaType && m_cacheItem->metaType->model))
+        return;
+    QQmlDelegateModelPrivate *model = QQmlDelegateModelPrivate::get(m_cacheItem->metaType->model);
+    const uint groupFlag = (1 << group);
+    if (inGroup == bool(m_cacheItem->groups & groupFlag))
+        return;
+
+    const int cacheIndex = model->m_cache.indexOf(m_cacheItem);
+    Compositor::iterator it = model->m_compositor.find(Compositor::Cache, cacheIndex);
+    if (inGroup)
+        model->addGroups(it, 1, Compositor::Cache, groupFlag);
+    else
+        model->removeGroups(it, 1, Compositor::Cache, groupFlag);
+    // signal emission happens in add-/removeGroups
+}
+
+void QQmlDelegateModelAttached::setInItems(bool inItems)
+{
+    setInGroup(QQmlListCompositor::Default, inItems);
+}
+
+bool QQmlDelegateModelAttached::inItems() const
+{
+    if (!m_cacheItem)
+        return false;
+    const uint groupFlag = (1 << QQmlListCompositor::Default);
+    return m_cacheItem->groups & groupFlag;
+}
+
+int QQmlDelegateModelAttached::itemsIndex() const
+{
+    if (!m_cacheItem)
+        return -1;
+    return m_cacheItem->groupIndex(QQmlListCompositor::Default);
 }
 
 /*!

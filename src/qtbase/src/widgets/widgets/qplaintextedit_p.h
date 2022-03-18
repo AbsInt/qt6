@@ -121,7 +121,7 @@ public:
 
     void init(const QString &txt = QString());
     void _q_repaintContents(const QRectF &contentsRect);
-    void _q_updatePlaceholderVisibility();
+    void _q_textChanged();
 
     inline QPoint mapToContents(const QPoint &point) const
         { return QPoint(point.x() + horizontalOffset(), point.y() + verticalOffset()); }

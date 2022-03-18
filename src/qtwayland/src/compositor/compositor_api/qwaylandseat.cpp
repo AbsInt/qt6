@@ -48,6 +48,9 @@
 
 #include "extensions/qwlqtkey_p.h"
 #include "extensions/qwaylandtextinput.h"
+#if QT_WAYLAND_TEXT_INPUT_V4_WIP
+#include "extensions/qwaylandtextinputv4.h"
+#endif // QT_WAYLAND_TEXT_INPUT_V4_WIP
 #include "extensions/qwaylandqttextinputmethod.h"
 
 QT_BEGIN_NAMESPACE
@@ -469,17 +472,33 @@ void QWaylandSeat::sendFullKeyEvent(QKeyEvent *event)
 #if QT_CONFIG(im)
     if (keyboardFocus()->inputMethodControl()->enabled()
         && event->nativeScanCode() == 0) {
-        QWaylandTextInput *textInput = QWaylandTextInput::findIn(this);
-        if (textInput) {
-            textInput->sendKeyEvent(event);
-            return;
+        if (keyboardFocus()->client()->textInputProtocols().testFlag(QWaylandClient::TextInputProtocol::TextInputV2)) {
+            QWaylandTextInput *textInput = QWaylandTextInput::findIn(this);
+            if (textInput) {
+                textInput->sendKeyEvent(event);
+                return;
+            }
         }
 
-        QWaylandQtTextInputMethod *textInputMethod = QWaylandQtTextInputMethod::findIn(this);
-        if (textInputMethod) {
-            textInputMethod->sendKeyEvent(event);
-            return;
+        if (keyboardFocus()->client()->textInputProtocols().testFlag(QWaylandClient::TextInputProtocol::QtTextInputMethodV1)) {
+            QWaylandQtTextInputMethod *textInputMethod = QWaylandQtTextInputMethod::findIn(this);
+            if (textInputMethod) {
+                textInputMethod->sendKeyEvent(event);
+                return;
+            }
         }
+
+#if QT_WAYLAND_TEXT_INPUT_V4_WIP
+        if (keyboardFocus()->client()->textInputProtocols().testFlag(QWaylandClient::TextInputProtocol::TextInputV4)) {
+            QWaylandTextInputV4 *textInputV4 = QWaylandTextInputV4::findIn(this);
+            if (textInputV4 && !event->text().isEmpty()) {
+                // it will just commit the text for text-input-unstable-v4-wip when keyPress
+                if (event->type() == QEvent::KeyPress)
+                    textInputV4->sendKeyEvent(event);
+                return;
+            }
+        }
+#endif // QT_WAYLAND_TEXT_INPUT_V4_WIP
     }
 #endif
 

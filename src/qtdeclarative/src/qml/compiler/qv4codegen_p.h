@@ -80,14 +80,29 @@ struct ControlFlow;
 struct ControlFlowCatch;
 struct ControlFlowFinally;
 
+class Q_QMLCOMPILER_PRIVATE_EXPORT CodegenWarningInterface
+{
+public:
+    virtual void reportVarUsedBeforeDeclaration(const QString &name, const QString &fileName,
+                                                QQmlJS::SourceLocation declarationLocation,
+                                                QQmlJS::SourceLocation accessLocation);
+    virtual ~CodegenWarningInterface() = default;
+};
+
+inline CodegenWarningInterface *defaultCodegenWarningInterface()
+{
+    static CodegenWarningInterface iface;
+    return &iface;
+}
+
 class Q_QMLCOMPILER_PRIVATE_EXPORT Codegen: protected QQmlJS::AST::Visitor
 {
 protected:
     using BytecodeGenerator = QV4::Moth::BytecodeGenerator;
     using Instruction = QV4::Moth::Instruction;
 public:
-    Codegen(QV4::Compiler::JSUnitGenerator *jsUnitGenerator, bool strict);
-
+    Codegen(QV4::Compiler::JSUnitGenerator *jsUnitGenerator, bool strict,
+            CodegenWarningInterface *iface = defaultCodegenWarningInterface());
 
     void generateFromProgram(const QString &fileName,
                              const QString &finalUrl,
@@ -279,14 +294,18 @@ public:
             r.name = name;
             return r;
         }
-        static Reference fromMember(const Reference &baseRef, const QString &name,
-                                    Moth::BytecodeGenerator::Label jumpLabel = Moth::BytecodeGenerator::Label(),
-                                    Moth::BytecodeGenerator::Label targetLabel = Moth::BytecodeGenerator::Label()) {
+        static Reference
+        fromMember(const Reference &baseRef, const QString &name,
+                   QQmlJS::SourceLocation sourceLocation = QQmlJS::SourceLocation(),
+                   Moth::BytecodeGenerator::Label jumpLabel = Moth::BytecodeGenerator::Label(),
+                   Moth::BytecodeGenerator::Label targetLabel = Moth::BytecodeGenerator::Label())
+        {
             Q_ASSERT(baseRef.isValid());
             Reference r(baseRef.codegen, Member);
             r.propertyBase = baseRef.asRValue();
             r.propertyNameIndex = r.codegen->registerString(name);
             r.requiresTDZCheck = baseRef.requiresTDZCheck;
+            r.sourceLocation = sourceLocation;
             r.optionalChainJumpLabel.reset(new Moth::BytecodeGenerator::Label(jumpLabel));
             r.optionalChainTargetLabel.reset(new Moth::BytecodeGenerator::Label(targetLabel));
             return r;
@@ -382,6 +401,7 @@ public:
         quint32 isVolatile:1;
         quint32 global:1;
         quint32 qmlGlobal:1;
+        QQmlJS::SourceLocation sourceLocation = QQmlJS::SourceLocation();
         QSharedPointer<Moth::BytecodeGenerator::Label> optionalChainJumpLabel;
         QSharedPointer<Moth::BytecodeGenerator::Label> optionalChainTargetLabel;
 
@@ -530,7 +550,7 @@ public:
     // Returns index in _module->functions
     virtual int defineFunction(const QString &name, QQmlJS::AST::Node *ast,
                                QQmlJS::AST::FormalParameterList *formals,
-                               QQmlJS::AST::StatementList *body);
+                               QQmlJS::AST::StatementList *body, bool storeSourceLocation = false);
 
 protected:
     void statement(QQmlJS::AST::Statement *ast);
@@ -797,6 +817,7 @@ protected:
     bool _fileNameIsUrl;
     ErrorType _errorType = NoError;
     QQmlJS::DiagnosticMessage _error;
+    CodegenWarningInterface *_interface;
 
     class TailCallBlocker
     {

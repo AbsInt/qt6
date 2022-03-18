@@ -51,11 +51,9 @@
 // We mean it.
 //
 
-#include <QtQml/qtqmlglobal.h>
-
-#include <private/qflagpointer_p.h>
 #include <private/qqmlpropertycache_p.h>
 
+#include <QtQml/qtqmlglobal.h>
 #include <QtCore/qvarlengtharray.h>
 #include <QtCore/qmetaobject.h>
 
@@ -77,7 +75,7 @@ public:
     inline QQmlMetaObject() = default;
     inline QQmlMetaObject(const QObject *);
     inline QQmlMetaObject(const QMetaObject *);
-    inline QQmlMetaObject(QQmlPropertyCache *);
+    inline QQmlMetaObject(const QQmlRefPointer<QQmlPropertyCache> &);
     inline QQmlMetaObject(const QQmlMetaObject &);
 
     inline QQmlMetaObject &operator=(const QQmlMetaObject &);
@@ -129,7 +127,7 @@ QQmlMetaObject::QQmlMetaObject(const QMetaObject *m)
 {
 }
 
-QQmlMetaObject::QQmlMetaObject(QQmlPropertyCache *m)
+QQmlMetaObject::QQmlMetaObject(const QQmlRefPointer<QQmlPropertyCache> &m)
 {
     if (m)
         _m = m->createMetaObject();

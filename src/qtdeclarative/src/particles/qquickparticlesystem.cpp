@@ -100,7 +100,7 @@ DEFINE_BOOL_CONFIG_OPTION(qmlParticlesDebug, QML_PARTICLES_DEBUG)
 
 /*!
     \qmltype ParticleSystem
-    \instantiates QQuickParticleSystem
+//!    \instantiates QQuickParticleSystem
     \inqmlmodule QtQuick.Particles
     \brief A system which includes particle painter, emitter, and affector types.
     \ingroup qtquick-particles
@@ -428,7 +428,7 @@ QQuickParticleData::QQuickParticleData()
     , rotationOwner(nullptr)
     , deformationOwner(nullptr)
     , animationOwner(nullptr)
-    , v8Datum(nullptr)
+    , v4Datum(nullptr)
 {
     x = 0;
     y = 0;
@@ -465,7 +465,7 @@ QQuickParticleData::QQuickParticleData()
 
 QQuickParticleData::~QQuickParticleData()
 {
-    delete v8Datum;
+    delete v4Datum;
 }
 
 QQuickParticleData::QQuickParticleData(const QQuickParticleData &other)
@@ -481,7 +481,7 @@ QQuickParticleData &QQuickParticleData::operator=(const QQuickParticleData &othe
     index = other.index;
     systemIndex = other.systemIndex;
     // Lazily initialized
-    v8Datum = nullptr;
+    v4Datum = nullptr;
 
     return *this;
 }
@@ -524,9 +524,9 @@ void QQuickParticleData::clone(const QQuickParticleData& other)
 
 QV4::ReturnedValue QQuickParticleData::v4Value(QQuickParticleSystem* particleSystem)
 {
-    if (!v8Datum)
-        v8Datum = new QQuickV4ParticleData(qmlEngine(particleSystem)->handle(), this, particleSystem);
-    return v8Datum->v4Value();
+    if (!v4Datum)
+        v4Datum = new QQuickV4ParticleData(qmlEngine(particleSystem)->handle(), this, particleSystem);
+    return v4Datum->v4Value();
 }
 
 void QQuickParticleData::debugDump(QQuickParticleSystem* particleSystem) const
@@ -767,10 +767,9 @@ void QQuickParticleSystem::reset()
 
     timeInt = 0;
     //Clear guarded pointers which have been deleted
-    int cleared = 0;
-    cleared += m_emitters.removeAll(nullptr);
-    cleared += m_painters.removeAll(nullptr);
-    cleared += m_affectors.removeAll(nullptr);
+    m_emitters.removeAll(nullptr);
+    m_painters.removeAll(nullptr);
+    m_affectors.removeAll(nullptr);
 
     bySysIdx.resize(0);
     initGroups();//Also clears all logical particles

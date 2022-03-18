@@ -10,11 +10,13 @@ qt_internal_add_tool(${target_name}
     TOOLS_TARGET Qml # special case
     SOURCES
         qmlformat.cpp
+        ../shared/qqmltoolingsettings.h
+        ../shared/qqmltoolingsettings.cpp
     PUBLIC_LIBRARIES
         Qt::Core
-        Qt::QmlDevToolsPrivate
         Qt::QmlDomPrivate
 )
+qt_internal_return_unless_building_tools()
 
 #### Keys ignored in scope 1:.:.:qmlformat.pro:<TRUE>:
 # QMAKE_TARGET_DESCRIPTION = "QML" "Formatter"

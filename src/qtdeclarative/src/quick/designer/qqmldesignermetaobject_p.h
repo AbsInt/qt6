@@ -58,6 +58,8 @@
 #include <private/qqmlopenmetaobject_p.h>
 #include <private/qqmlvmemetaobject_p.h>
 
+#include <memory>
+
 QT_BEGIN_NAMESPACE
 
 struct MetaPropertyData;
@@ -80,9 +82,8 @@ protected:
     QVariant propertyWriteValue(int, const QVariant &);
 
     QObject *myObject() const { return QQmlVMEMetaObject::object; }
-    QAbstractDynamicMetaObject *parent() const { return const_cast<QAbstractDynamicMetaObject *>(dynamicMetaObjectParent()); }
 
-    const QAbstractDynamicMetaObject *dynamicMetaObjectParent() const;
+    QDynamicMetaObjectData *dynamicMetaObjectParent() const;
 
     const QMetaObject *metaObjectParent() const;
 
@@ -96,9 +97,10 @@ protected:
 private:
     QQmlDesignerMetaObject(QObject *object, QQmlEngine *engine);
     void init(QObject *, QQmlEngine *engine);
+    QQmlOpenMetaObjectType *type() const { return m_openMetaObject->type(); }
 
     QPointer<QQmlContext> m_context;
-    QQmlOpenMetaObjectType *m_type;
+    std::unique_ptr<QQmlOpenMetaObject> m_openMetaObject;
     QScopedPointer<MetaPropertyData> m_data;
     //QAbstractDynamicMetaObject *m_parent;
 

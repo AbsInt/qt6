@@ -138,7 +138,8 @@ void QQmlPreviewFileEngine::setFileName(const QString &file)
     load();
 }
 
-bool QQmlPreviewFileEngine::open(QIODevice::OpenMode flags)
+bool QQmlPreviewFileEngine::open(QIODevice::OpenMode flags,
+                                 std::optional<QFile::Permissions> permissions)
 {
     switch (m_result) {
     case QQmlPreviewFileLoader::File:
@@ -146,7 +147,7 @@ bool QQmlPreviewFileEngine::open(QIODevice::OpenMode flags)
     case QQmlPreviewFileLoader::Directory:
         return false;
     case QQmlPreviewFileLoader::Fallback:
-        return m_fallback->open(flags);
+        return m_fallback->open(flags, permissions);
     default:
         Q_UNREACHABLE();
         return false;
@@ -304,9 +305,10 @@ bool QQmlPreviewFileEngine::link(const QString &newName)
     return m_fallback ? m_fallback->link(newName) : false;
 }
 
-bool QQmlPreviewFileEngine::mkdir(const QString &dirName, bool createParentDirectories) const
+bool QQmlPreviewFileEngine::mkdir(const QString &dirName, bool createParentDirectories,
+                                  std::optional<QFile::Permissions> permissions) const
 {
-    return m_fallback ? m_fallback->mkdir(dirName, createParentDirectories) : false;
+    return m_fallback ? m_fallback->mkdir(dirName, createParentDirectories, permissions) : false;
 }
 
 bool QQmlPreviewFileEngine::rmdir(const QString &dirName, bool recurseParentDirectories) const

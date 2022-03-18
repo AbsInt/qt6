@@ -344,10 +344,13 @@ void tst_qquickdesignersupport::createComponent()
 
     QVERIFY(rootItem);
 
-    QObject *testComponentObject = QQuickDesignerSupportItems::createComponent(testFileUrl("TestComponent.qml"), view->rootContext());
+    QScopedPointer<QObject> testComponentObject(
+                QQuickDesignerSupportItems::createComponent(
+                    testFileUrl("TestComponent.qml"), view->rootContext()));
     QVERIFY(testComponentObject);
 
-    QVERIFY(QQuickDesignerSupportMetaInfo::isSubclassOf(testComponentObject, "QtQuick/Item"));
+    QVERIFY(QQuickDesignerSupportMetaInfo::isSubclassOf(
+                testComponentObject.data(), "QtQuick/Item"));
 }
 
 void tst_qquickdesignersupport::basicStates()

@@ -1,6 +1,4 @@
-# Generated from wayland.pro.
-
-if(QT_FEATURE_wayland_server) # special case
+if(QT_FEATURE_wayland_server)
 if(QT_FEATURE_opengl)
     qt_internal_add_example(minimal-cpp)
 endif()
@@ -14,11 +12,13 @@ if(TARGET Qt::Quick)
     qt_internal_add_example(ivi-compositor)
     qt_internal_add_example(server-side-decoration)
     qt_internal_add_example(hwlayer-compositor)
+    qt_internal_add_example(qtshell)
 endif()
 if(TARGET Qt::Quick AND TARGET Qt::WaylandClient)
     add_subdirectory(custom-extension)
+    add_subdirectory(custom-shell)
 endif()
 if(QT_FEATURE_opengl AND TARGET Qt::Quick AND TARGET Qt::WaylandClient)
     add_subdirectory(server-buffer)
 endif()
-endif() # special case
+endif()

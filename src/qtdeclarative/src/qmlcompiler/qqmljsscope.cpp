@@ -32,7 +32,6 @@
 
 #include <QtCore/qqueue.h>
 #include <QtCore/qsharedpointer.h>
-#include <QtCore/qfileinfo.h>
 
 #include <private/qduplicatetracker_p.h>
 
@@ -122,7 +121,9 @@ void QQmlJSScope::insertJSIdentifier(const QString &name, const JavaScriptIdenti
 void QQmlJSScope::insertPropertyIdentifier(const QQmlJSMetaProperty &property)
 {
     addOwnProperty(property);
-    QQmlJSMetaMethod method(property.propertyName() + QLatin1String("Changed"), QLatin1String("void"));
+    QQmlJSMetaMethod method(property.propertyName() + u"Changed"_qs, u"void"_qs);
+    method.setMethodType(QQmlJSMetaMethod::Signal);
+    method.setIsImplicitQmlPropertyChangeSignal(true);
     addOwnMethod(method);
 }
 
@@ -144,6 +145,21 @@ QList<QQmlJSMetaMethod> QQmlJSScope::methods(const QString &name) const
 
     searchBaseAndExtensionTypes(this, [&](const QQmlJSScope *scope) {
         results.append(scope->ownMethods(name));
+        return false;
+    });
+    return results;
+}
+
+QList<QQmlJSMetaMethod> QQmlJSScope::methods(const QString &name, QQmlJSMetaMethod::Type type) const
+{
+    QList<QQmlJSMetaMethod> results;
+
+    searchBaseAndExtensionTypes(this, [&](const QQmlJSScope *scope) {
+        const auto ownMethods = scope->ownMethods(name);
+        for (const auto &method : ownMethods) {
+            if (method.methodType() == type)
+                results.append(method);
+        }
         return false;
     });
     return results;
@@ -278,7 +294,7 @@ QQmlJSScope::ImportedScope<QQmlJSScope::ConstPtr> QQmlJSScope::findType(
         return *type;
     }
 
-    const auto colonColon = name.indexOf(QStringLiteral("::"));
+    const auto colonColon = name.lastIndexOf(QStringLiteral("::"));
     if (colonColon > 0) {
         const QString outerTypeName = name.left(colonColon);
         const auto outerType = contextualTypes.constFind(outerTypeName);
@@ -435,18 +451,24 @@ void QQmlJSScope::resolveEnums(const QQmlJSScope::Ptr &self, const QQmlJSScope::
     }
 }
 
+void QQmlJSScope::resolveGeneralizedGroup(
+        const Ptr &self, const ConstPtr &baseType,
+        const QQmlJSScope::ContextualTypes &contextualTypes, QSet<QString> *usedTypes)
+{
+    // Generalized group properties are always composite,
+    // which means we expect contextualTypes to be QML names.
+    Q_ASSERT(self->isComposite());
+
+    self->m_baseType.scope = baseType;
+    resolveNonEnumTypes(self, contextualTypes, usedTypes);
+}
+
 QQmlJSScope::ConstPtr QQmlJSScope::findCurrentQMLScope(const QQmlJSScope::ConstPtr &scope)
 {
     auto qmlScope = scope;
     while (qmlScope && qmlScope->m_scopeType != QQmlJSScope::QMLScope)
         qmlScope = qmlScope->parentScope();
     return qmlScope;
-}
-
-void QQmlJSScope::addExport(const QString &name, const QString &package,
-                            const QTypeRevision &version, const QTypeRevision &revision)
-{
-    m_exports.append(Export(package, name, version, revision));
 }
 
 bool QQmlJSScope::hasProperty(const QString &name) const
@@ -513,30 +535,52 @@ bool QQmlJSScope::isPropertyLocallyRequired(const QString &name) const
     return m_requiredPropertyNames.contains(name);
 }
 
-bool QQmlJSScope::hasPropertyBinding(const QString &name) const
+bool QQmlJSScope::hasPropertyBindings(const QString &name) const
 {
     return searchBaseAndExtensionTypes(this, [&](const QQmlJSScope *scope) {
-        return scope->m_propertyBindings.contains(name);
+        return scope->hasOwnPropertyBindings(name);
     });
 }
 
-QQmlJSMetaPropertyBinding QQmlJSScope::propertyBinding(const QString &name) const
+QList<QQmlJSMetaPropertyBinding> QQmlJSScope::propertyBindings(const QString &name) const
 {
-    QQmlJSMetaPropertyBinding binding;
+    QList<QQmlJSMetaPropertyBinding> bindings;
     searchBaseAndExtensionTypes(this, [&](const QQmlJSScope *scope) {
-        const auto it = scope->m_propertyBindings.find(name);
-        if (it == scope->m_propertyBindings.end())
-            return false;
-        binding = *it;
-        return true;
+        const auto range = scope->ownPropertyBindings(name);
+        for (auto it = range.first; it != range.second; ++it)
+            bindings.append(*it);
+        return false;
     });
-    return binding;
+    return bindings;
 }
 
 bool QQmlJSScope::hasInterface(const QString &name) const
 {
     return searchBaseAndExtensionTypes(
             this, [&](const QQmlJSScope *scope) { return scope->m_interfaceNames.contains(name); });
+}
+
+bool QQmlJSScope::isNameDeferred(const QString &name) const
+{
+    bool isDeferred = false;
+
+    searchBaseAndExtensionTypes(this, [&](const QQmlJSScope *scope) {
+        const QStringList immediate = scope->ownImmediateNames();
+        if (!immediate.isEmpty()) {
+            isDeferred = !immediate.contains(name);
+            return true;
+        }
+
+        const QStringList deferred = scope->ownDeferredNames();
+        if (!deferred.isEmpty()) {
+            isDeferred = deferred.contains(name);
+            return true;
+        }
+
+        return false;
+    });
+
+    return isDeferred;
 }
 
 QString QQmlJSScope::attachedTypeName() const
@@ -575,6 +619,26 @@ bool QQmlJSScope::isResolved() const
     return m_baseTypeName.isEmpty() || !m_baseType.scope.isNull();
 }
 
+QString QQmlJSScope::defaultPropertyName() const
+{
+    QString name;
+    searchBaseAndExtensionTypes(this, [&](const QQmlJSScope *scope) {
+        name = scope->ownDefaultPropertyName();
+        return !name.isEmpty();
+    });
+    return name;
+}
+
+QString QQmlJSScope::parentPropertyName() const
+{
+    QString name;
+    searchBaseAndExtensionTypes(this, [&](const QQmlJSScope *scope) {
+        name = scope->ownParentPropertyName();
+        return !name.isEmpty();
+    });
+    return name;
+}
+
 bool QQmlJSScope::isFullyResolved() const
 {
     bool baseResolved = true;
@@ -589,12 +653,27 @@ bool QQmlJSScope::isFullyResolved() const
     return baseResolved;
 }
 
+QQmlJSScope::Import::Import(QString prefix, QString name, QTypeRevision version, bool isFile,
+                            bool isDependency) :
+    m_prefix(std::move(prefix)),
+    m_name(std::move(name)),
+    m_version(version),
+    m_isFile(isFile),
+    m_isDependency(isDependency)
+{
+}
+
+bool QQmlJSScope::Import::isValid() const
+{
+    return !m_name.isEmpty();
+}
+
 QQmlJSScope::Export::Export(
-        QString package, QString type, QTypeRevision version, QTypeRevision revision) :
-    m_package(std::move(package)),
-    m_type(std::move(type)),
-    m_version(std::move(version)),
-    m_revision(std::move(revision))
+        QString package, QString type, QTypeRevision version, QTypeRevision revision)
+    : m_package(std::move(package))
+    , m_type(std::move(type))
+    , m_version(std::move(version))
+    , m_revision(std::move(revision))
 {
 }
 
@@ -608,7 +687,12 @@ QQmlJSScope QDeferredFactory<QQmlJSScope>::create() const
     QQmlJSTypeReader typeReader(m_importer, m_filePath);
     QQmlJSScope::Ptr result = typeReader();
     m_importer->m_warnings.append(typeReader.errors());
-    result->setInternalName(QFileInfo(m_filePath).baseName());
+    result->setInternalName(internalName());
+    QQmlJSScope::resolveEnums(result, m_importer->builtinInternalNames().value(u"int"_qs).scope);
+
+    if (m_isSingleton)
+        result->setIsSingleton(true);
+
     return std::move(*result);
 }
 

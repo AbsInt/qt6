@@ -35,7 +35,7 @@
 
 QT_BEGIN_NAMESPACE
 
-QQmlDataTest *QQmlDataTest::m_instance = 0;
+QQmlDataTest *QQmlDataTest::m_instance = nullptr;
 
 QQmlDataTest::QQmlDataTest(const char *qmlTestDataDir) :
     m_qmlTestDataDir(qmlTestDataDir),
@@ -50,11 +50,17 @@ QQmlDataTest::QQmlDataTest(const char *qmlTestDataDir) :
         : QUrl::fromLocalFile(m_dataDirectory + QLatin1Char('/')))
 {
     m_instance = this;
+    if (m_cacheDir.isValid() && !qEnvironmentVariableIsSet("QML_DISK_CACHE_PATH")) {
+        m_usesOwnCacheDir = true;
+        qputenv("QML_DISK_CACHE_PATH", m_cacheDir.path().toLocal8Bit());
+    }
 }
 
 QQmlDataTest::~QQmlDataTest()
 {
-    m_instance = 0;
+    m_instance = nullptr;
+    if (m_usesOwnCacheDir)
+        qunsetenv("QML_DISK_CACHE_PATH");
 }
 
 void QQmlDataTest::initTestCase()
@@ -86,7 +92,7 @@ bool QQmlDataTest::canImportModule(const QString &importTestQmlSource) const
 
 Q_GLOBAL_STATIC(QMutex, qQmlTestMessageHandlerMutex)
 
-QQmlTestMessageHandler *QQmlTestMessageHandler::m_instance = 0;
+QQmlTestMessageHandler *QQmlTestMessageHandler::m_instance = nullptr;
 
 void QQmlTestMessageHandler::messageHandler(QtMsgType, const QMessageLogContext &context, const QString &message)
 {
@@ -115,7 +121,7 @@ QQmlTestMessageHandler::~QQmlTestMessageHandler()
     QMutexLocker locker(qQmlTestMessageHandlerMutex());
     Q_ASSERT(QQmlTestMessageHandler::m_instance);
     qInstallMessageHandler(m_oldHandler);
-    QQmlTestMessageHandler::m_instance = 0;
+    QQmlTestMessageHandler::m_instance = nullptr;
 }
 
 QT_END_NAMESPACE

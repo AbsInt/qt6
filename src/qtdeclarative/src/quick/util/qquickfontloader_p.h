@@ -52,7 +52,8 @@
 //
 
 #include <private/qtquickglobal_p.h>
-#include <qqml.h>
+
+#include <QtQml/qqml.h>
 
 #include <QtCore/qobject.h>
 #include <QtCore/qurl.h>
@@ -77,7 +78,6 @@ public:
     Q_ENUM(Status)
 
     QQuickFontLoader(QObject *parent = nullptr);
-    ~QQuickFontLoader();
 
     QUrl source() const;
     void setSource(const QUrl &url);

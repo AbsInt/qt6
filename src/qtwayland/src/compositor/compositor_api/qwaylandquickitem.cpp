@@ -32,6 +32,9 @@
 #include "qwaylandquicksurface.h"
 #include "qwaylandinputmethodcontrol.h"
 #include "qwaylandtextinput.h"
+#if QT_WAYLAND_TEXT_INPUT_V4_WIP
+#include "qwaylandtextinputv4.h"
+#endif // QT_WAYLAND_TEXT_INPUT_V4_WIP
 #include "qwaylandqttextinputmethod.h"
 #include "qwaylandquickoutput.h"
 #include <QtWaylandCompositor/qwaylandcompositor.h>
@@ -875,6 +878,10 @@ void QWaylandQuickItem::handleSubsurfaceAdded(QWaylandSurface *childSurface)
     } else {
         bool success = QMetaObject::invokeMethod(d->subsurfaceHandler, "handleSubsurfaceAdded", Q_ARG(QWaylandSurface *, childSurface));
         if (!success)
+            success = QMetaObject::invokeMethod(d->subsurfaceHandler, "handleSubsurfaceAdded",
+                                                Q_ARG(QVariant, QVariant::fromValue(childSurface)));
+
+        if (!success)
             qWarning("QWaylandQuickItem: subsurfaceHandler does not implement handleSubsurfaceAdded()");
     }
 }
@@ -926,8 +933,9 @@ void QWaylandQuickItem::handlePlaceBelow(QWaylandSurface *referenceSurface)
   \code
   ShellSurfaceItem {
       subsurfaceHandler: QtObject {
-      function handleSubsurfaceAdded(child) {
-        //create custom surface item, and connect the subsurfacePositionChanged signal
+          function handleSubsurfaceAdded(child) {
+            // create custom surface item, and connect the subsurfacePositionChanged signal
+          }
       }
   }
   \endcode
@@ -1116,13 +1124,24 @@ void QWaylandQuickItem::takeFocus(QWaylandSeat *device)
     }
     target->setKeyboardFocus(surface());
 
-    {
+    qCDebug(qLcWaylandCompositorInputMethods) << Q_FUNC_INFO << " surface:" << surface()
+        << ", client:" << surface()->client()
+        << ", textinputprotocol:" << (int)(surface()->client()->textInputProtocols());
+    if (surface()->client()->textInputProtocols().testFlag(QWaylandClient::TextInputProtocol::TextInputV2)) {
         QWaylandTextInput *textInput = QWaylandTextInput::findIn(target);
         if (textInput)
             textInput->setFocus(surface());
     }
 
-    {
+#if QT_WAYLAND_TEXT_INPUT_V4_WIP
+    if (surface()->client()->textInputProtocols().testFlag(QWaylandClient::TextInputProtocol::TextInputV4)) {
+        QWaylandTextInputV4 *textInputV4 = QWaylandTextInputV4::findIn(target);
+        if (textInputV4)
+            textInputV4->setFocus(surface());
+    }
+#endif // QT_WAYLAND_TEXT_INPUT_V4_WIP
+
+    if (surface()->client()->textInputProtocols().testFlag(QWaylandClient::TextInputProtocol::QtTextInputMethodV1)) {
         QWaylandQtTextInputMethod *textInputMethod = QWaylandQtTextInputMethod::findIn(target);
         if (textInputMethod)
             textInputMethod->setFocus(surface());
@@ -1588,20 +1607,34 @@ void QWaylandQuickItem::setInputEventsEnabled(bool enabled)
 
 void QWaylandQuickItem::lower()
 {
-    QQuickItem *parent = parentItem();
+    Q_D(QWaylandQuickItem);
+    d->lower();
+}
+
+void QWaylandQuickItemPrivate::lower()
+{
+    Q_Q(QWaylandQuickItem);
+    QQuickItem *parent = q->parentItem();
     Q_ASSERT(parent);
-    QQuickItem *bottom = parent->childItems().first();
-    if (this != bottom)
-        stackBefore(bottom);
+    QQuickItem *bottom = parent->childItems().constFirst();
+    if (q != bottom)
+        q->stackBefore(bottom);
 }
 
 void QWaylandQuickItem::raise()
 {
-    QQuickItem *parent = parentItem();
+    Q_D(QWaylandQuickItem);
+    d->raise();
+}
+
+void QWaylandQuickItemPrivate::raise()
+{
+    Q_Q(QWaylandQuickItem);
+    QQuickItem *parent = q->parentItem();
     Q_ASSERT(parent);
-    QQuickItem *top = parent->childItems().last();
-    if (this != top)
-        stackAfter(top);
+    QQuickItem *top = parent->childItems().constLast();
+    if (q != top)
+        q->stackAfter(top);
 }
 
 void QWaylandQuickItem::sendMouseMoveEvent(const QPointF &position, QWaylandSeat *seat)

@@ -409,15 +409,6 @@
    documentation. It also follows conventions like _BOOL and this documented */
 #  elif defined(sinix)
 #    define Q_CC_CDS
-
-/* The MIPSpro compiler defines __EDG */
-#  elif defined(__sgi)
-#    define Q_CC_MIPS
-#    define Q_NO_TEMPLATE_FRIENDS
-#    if defined(_COMPILER_VERSION) && (_COMPILER_VERSION >= 740)
-#      define Q_OUTOFLINE_TEMPLATE inline
-#      pragma set woff 3624,3625,3649 /* turn off some harmless warnings */
-#    endif
 #  endif
 
 /* VxWorks' DIAB toolchain has an additional EDG type C++ compiler
@@ -446,9 +437,6 @@
 #    if __SUNPRO_CC >= 0x550
 #      define Q_DECL_EXPORT     __global
 #    endif
-#    if __SUNPRO_CC < 0x5a0
-#      define Q_NO_TEMPLATE_FRIENDS
-#    endif
 #    if !defined(_BOOL)
 #      error "Compiler not supported"
 #    endif
@@ -466,26 +454,6 @@
 #    error "Compiler not supported"
 #  endif
 #  define Q_BROKEN_TEMPLATE_SPECIALIZATION
-
-#elif defined(Q_OS_HPUX)
-/* __HP_aCC was not defined in first aCC releases */
-#  if defined(__HP_aCC) || __cplusplus >= 199707L
-#    define Q_NO_TEMPLATE_FRIENDS
-#    define Q_CC_HPACC
-#    define Q_FUNC_INFO         __PRETTY_FUNCTION__
-#    if __HP_aCC-0 < 060000
-#      define QT_NO_TEMPLATE_TEMPLATE_PARAMETERS
-#      define Q_DECL_EXPORT     __declspec(dllexport)
-#      define Q_DECL_IMPORT     __declspec(dllimport)
-#    endif
-#    if __HP_aCC-0 >= 062000
-#      define Q_DECL_EXPORT     __attribute__((visibility("default")))
-#      define Q_DECL_HIDDEN     __attribute__((visibility("hidden")))
-#      define Q_DECL_IMPORT     Q_DECL_EXPORT
-#    endif
-#  else
-#    error "Compiler not supported"
-#  endif
 
 #else
 #  error "Qt has not been tested with this compiler - see http://www.qt-project.org/"
@@ -658,7 +626,7 @@
 #  endif
 #endif
 
-#if defined(Q_CC_CLANG) && !defined(Q_CC_INTEL) && !defined(Q_CC_MSVC)
+#if defined(Q_CC_CLANG) && !defined(Q_CC_INTEL)
 /* General C++ features */
 #  define Q_COMPILER_RESTRICTED_VLA
 #  if __has_feature(attribute_deprecated_with_message)
@@ -817,14 +785,11 @@
 #    endif
 #  endif
 
-#endif // Q_CC_CLANG &&  !Q_CC_INTEL && !Q_CC_MSVC
-
-#if defined(Q_CC_CLANG) && !defined(Q_CC_INTEL)
 #  ifndef Q_DECL_UNUSED
 #    define Q_DECL_UNUSED __attribute__((__unused__))
 #  endif
 #  define Q_DECL_UNUSED_MEMBER Q_DECL_UNUSED
-#endif
+#endif //  defined(Q_CC_CLANG) && !defined(Q_CC_INTEL)
 
 #if defined(Q_CC_GNU) && !defined(Q_CC_INTEL) && !defined(Q_CC_CLANG)
 #  define Q_COMPILER_RESTRICTED_VLA
@@ -929,7 +894,7 @@
 #  endif
 #endif
 
-#if defined(Q_CC_MSVC)
+#if defined(Q_CC_MSVC) && !defined(Q_CC_CLANG)
 #  if defined(__cplusplus)
        /* C++11 features supported in VC8 = VC2005: */
 #      define Q_COMPILER_VARIADIC_MACROS
@@ -987,7 +952,7 @@
 #      define Q_COMPILER_CONSTEXPR
 #    endif
 #  endif /* __cplusplus */
-#endif /* Q_CC_MSVC */
+#endif // defined(Q_CC_MSVC) && !defined(Q_CC_CLANG)
 
 #ifdef Q_COMPILER_UNICODE_STRINGS
 #  define Q_STDLIB_UNICODE_STRINGS
@@ -1146,10 +1111,8 @@
 #  define Q_DECL_DEPRECATED_X(x) [[deprecated(x)]]
 #endif
 
-#if defined(__cpp_enumerator_attributes) && __cpp_enumerator_attributes >= 201411
-#  define Q_DECL_ENUMERATOR_DEPRECATED Q_DECL_DEPRECATED
-#  define Q_DECL_ENUMERATOR_DEPRECATED_X(x) Q_DECL_DEPRECATED_X(x)
-#endif
+#define Q_DECL_ENUMERATOR_DEPRECATED Q_DECL_DEPRECATED
+#define Q_DECL_ENUMERATOR_DEPRECATED_X(x) Q_DECL_DEPRECATED_X(x)
 
 /*
  * Fallback macros to certain compiler features
@@ -1184,12 +1147,6 @@
 #endif
 #ifndef Q_DECL_DEPRECATED_X
 #  define Q_DECL_DEPRECATED_X(text) Q_DECL_DEPRECATED
-#endif
-#ifndef Q_DECL_ENUMERATOR_DEPRECATED
-#  define Q_DECL_ENUMERATOR_DEPRECATED
-#endif
-#ifndef Q_DECL_ENUMERATOR_DEPRECATED_X
-#  define Q_DECL_ENUMERATOR_DEPRECATED_X(x)
 #endif
 #ifndef Q_DECL_EXPORT
 #  define Q_DECL_EXPORT

@@ -201,6 +201,9 @@ have a scope focused item), and the other items will have their focus cleared.
 
 QQuickRootItem::QQuickRootItem()
 {
+    // child items with ItemObservesViewport can treat the window's content item
+    // as the ultimate viewport: avoid populating SG nodes that fall outside
+    setFlag(ItemIsViewport);
 }
 
 /*! \reimp */
@@ -511,6 +514,7 @@ void QQuickWindowPrivate::ensureCustomRenderTarget()
     redirect.renderTargetDirty = false;
 
     redirect.rt.reset(rhi);
+    redirect.devicePixelRatio = customRenderTarget.devicePixelRatio();
 
     // a default constructed QQuickRenderTarget means no redirection
     if (customRenderTarget.isNull())
@@ -534,7 +538,7 @@ void QQuickWindowPrivate::syncSceneGraph()
     // Calculate the dpr the same way renderSceneGraph() will.
     qreal devicePixelRatio = q->effectiveDevicePixelRatio();
     if (redirect.rt.renderTarget && !QQuickRenderControl::renderWindowFor(q))
-        devicePixelRatio = 1;
+        devicePixelRatio = redirect.devicePixelRatio;
 
     QRhiCommandBuffer *cb = nullptr;
     if (rhi) {
@@ -644,15 +648,17 @@ void QQuickWindowPrivate::renderSceneGraph(const QSize &size, const QSize &surfa
         matrixFlags |= QSGAbstractRenderer::MatrixTransformFlipY;
     const qreal devicePixelRatio = q->effectiveDevicePixelRatio();
     if (redirect.rt.renderTarget) {
-        QRect rect(QPoint(0, 0), redirect.rt.renderTarget->pixelSize());
+        const QSize pixelSize = redirect.rt.renderTarget->pixelSize();
+        QRect rect(QPoint(0, 0), pixelSize);
         renderer->setDeviceRect(rect);
         renderer->setViewportRect(rect);
         if (QQuickRenderControl::renderWindowFor(q)) {
             renderer->setProjectionMatrixToRect(QRect(QPoint(0, 0), size), matrixFlags);
             renderer->setDevicePixelRatio(devicePixelRatio);
         } else {
-            renderer->setProjectionMatrixToRect(QRect(QPoint(0, 0), rect.size()), matrixFlags);
-            renderer->setDevicePixelRatio(1);
+            const QSizeF logicalSize = pixelSize / redirect.devicePixelRatio;
+            renderer->setProjectionMatrixToRect(QRectF(QPointF(0, 0), logicalSize), matrixFlags);
+            renderer->setDevicePixelRatio(redirect.devicePixelRatio);
         }
     } else {
         QSize pixelSize;
@@ -1320,8 +1326,6 @@ QQuickItem *QQuickWindow::contentItem() const
 
     \brief The item which currently has active focus or \c null if there is
     no item with active focus.
-
-    \sa QQuickItem::forceActiveFocus(), {Keyboard Focus in Qt Quick}
 */
 QQuickItem *QQuickWindow::activeFocusItem() const
 {
@@ -1727,7 +1731,7 @@ QPair<QQuickItem*, QQuickPointerHandler*> QQuickWindowPrivate::findCursorItemAnd
 #endif
 
 /*!
-    \qmlproperty list<Object> Window::data
+    \qmlproperty list<QtObject> Window::data
     \qmldefault
 
     The data property allows you to freely mix visual children, resources
@@ -4158,7 +4162,7 @@ QDebug operator<<(QDebug debug, const QQuickWindow *win)
     QDebugStateSaver saver(debug);
     debug.nospace();
     if (!win) {
-        debug << "QQuickWindow(0)";
+        debug << "QQuickWindow(nullptr)";
         return debug;
     }
 

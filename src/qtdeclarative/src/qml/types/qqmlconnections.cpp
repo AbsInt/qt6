@@ -137,12 +137,8 @@ QQmlConnections::QQmlConnections(QObject *parent) :
 {
 }
 
-QQmlConnections::~QQmlConnections()
-{
-}
-
 /*!
-    \qmlproperty Object QtQml::Connections::target
+    \qmlproperty QtObject QtQml::Connections::target
     This property holds the object that sends the signal.
 
     If this property is not set, the \c target defaults to the parent of the Connection.

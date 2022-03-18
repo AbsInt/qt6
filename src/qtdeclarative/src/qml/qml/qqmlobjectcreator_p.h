@@ -58,6 +58,8 @@
 #include <private/qqmlprofiler_p.h>
 #include <private/qv4qmlcontext_p.h>
 #include <private/qqmlguardedcontextdata_p.h>
+#include <private/qqmlfinalizer_p.h>
+#include <private/qqmlvmemetaobject_p.h>
 
 #include <qpointer.h>
 
@@ -104,7 +106,7 @@ struct QQmlObjectCreatorSharedState : QQmlRefCount
     QFiniteStack<QQmlGuard<QObject> > allCreatedObjects;
     QV4::Value *allJavaScriptObjects; // pointer to vector on JS stack to reference JS wrappers during creation phase.
     QQmlComponentAttached *componentAttached;
-    QList<QQmlEnginePrivate::FinalizeCallback> finalizeCallbacks;
+    QList<QQmlFinalizerHook *> finalizeHooks;
     QQmlVmeProfiler profiler;
     QRecursionNode recursionNode;
     RequiredProperties requiredProperties;
@@ -139,8 +141,6 @@ public:
     QQmlRefPointer<QQmlContextData> rootContext() const { return sharedState->rootContext; }
     QQmlComponentAttached **componentAttachment() { return &sharedState->componentAttached; }
 
-    QList<QQmlEnginePrivate::FinalizeCallback> *finalizeCallbacks() { return &sharedState->finalizeCallbacks; }
-
     QList<QQmlError> errors;
 
     QQmlRefPointer<QQmlContextData> parentContextData() const
@@ -151,6 +151,11 @@ public:
 
     RequiredProperties &requiredProperties() {return sharedState->requiredProperties;}
     bool componentHadRequiredProperties() const {return sharedState->hadRequiredProperties;}
+
+    static QQmlComponent *createComponent(QQmlEngine *engine,
+                                          QV4::ExecutableCompilationUnit *compilationUnit,
+                                          int index, QObject *parent,
+                                          const QQmlRefPointer<QQmlContextData> &context);
 
 private:
     QQmlObjectCreator(QQmlRefPointer<QQmlContextData> contextData,
@@ -166,11 +171,20 @@ private:
                           const QV4::CompiledData::Binding *binding = nullptr);
 
     // If qmlProperty and binding are null, populate all properties, otherwise only the given one.
+    void populateDeferred(QObject *instance, int deferredIndex);
     void populateDeferred(QObject *instance, int deferredIndex,
-                          const QQmlPropertyPrivate *qmlProperty = nullptr,
-                          const QV4::CompiledData::Binding *binding = nullptr);
+                          const QQmlPropertyPrivate *qmlProperty,
+                          const QV4::CompiledData::Binding *binding);
 
-    void setupBindings(bool applyDeferredBindings = false);
+    enum BindingMode {
+        ApplyNone      = 0x0,
+        ApplyImmediate = 0x1,
+        ApplyDeferred  = 0x2,
+        ApplyAll       = ApplyImmediate | ApplyDeferred,
+    };
+    Q_DECLARE_FLAGS(BindingSetupFlags, BindingMode);
+
+    void setupBindings(BindingSetupFlags mode = BindingMode::ApplyImmediate);
     bool setPropertyBinding(const QQmlPropertyData *property, const QV4::CompiledData::Binding *binding);
     void setPropertyValue(const QQmlPropertyData *property, const QV4::CompiledData::Binding *binding);
     void setupFunctions();
@@ -223,6 +237,53 @@ private:
 
     typedef std::function<bool(QQmlObjectCreatorSharedState *sharedState)> PendingAliasBinding;
     std::vector<PendingAliasBinding> pendingAliasBindings;
+
+    template<typename Functor>
+    void doPopulateDeferred(QObject *instance, int deferredIndex, Functor f)
+    {
+        QQmlData *declarativeData = QQmlData::get(instance);
+        QObject *bindingTarget = instance;
+
+        QQmlRefPointer<QQmlPropertyCache> cache = declarativeData->propertyCache;
+        QQmlVMEMetaObject *vmeMetaObject = QQmlVMEMetaObject::get(instance);
+
+        QObject *scopeObject = instance;
+        qSwap(_scopeObject, scopeObject);
+
+        QV4::Scope valueScope(v4);
+        QScopedValueRollback<QV4::Value*> jsObjectGuard(sharedState->allJavaScriptObjects,
+                                                        valueScope.alloc(compilationUnit->totalObjectCount()));
+
+        Q_ASSERT(topLevelCreator);
+        QV4::QmlContext *qmlContext = static_cast<QV4::QmlContext *>(valueScope.alloc());
+
+        qSwap(_qmlContext, qmlContext);
+
+        qSwap(_propertyCache, cache);
+        qSwap(_qobject, instance);
+
+        int objectIndex = deferredIndex;
+        qSwap(_compiledObjectIndex, objectIndex);
+
+        const QV4::CompiledData::Object *obj = compilationUnit->objectAt(_compiledObjectIndex);
+        qSwap(_compiledObject, obj);
+        qSwap(_ddata, declarativeData);
+        qSwap(_bindingTarget, bindingTarget);
+        qSwap(_vmeMetaObject, vmeMetaObject);
+
+        f();
+
+        qSwap(_vmeMetaObject, vmeMetaObject);
+        qSwap(_bindingTarget, bindingTarget);
+        qSwap(_ddata, declarativeData);
+        qSwap(_compiledObject, obj);
+        qSwap(_compiledObjectIndex, objectIndex);
+        qSwap(_qobject, instance);
+        qSwap(_propertyCache, cache);
+
+        qSwap(_qmlContext, qmlContext);
+        qSwap(_scopeObject, scopeObject);
+    }
 };
 
 struct QQmlObjectCreatorRecursionWatcher

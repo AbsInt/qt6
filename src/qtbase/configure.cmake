@@ -17,7 +17,7 @@ if(TARGET ZLIB::ZLIB)
 endif()
 
 # special case end
-qt_find_package(ZSTD 1.3 PROVIDED_TARGETS ZSTD::ZSTD MODULE_NAME global QMAKE_LIB zstd)
+qt_find_package(WrapZSTD 1.3 PROVIDED_TARGETS WrapZSTD::WrapZSTD MODULE_NAME global QMAKE_LIB zstd)
 qt_find_package(WrapDBus1 1.2 PROVIDED_TARGETS dbus-1 MODULE_NAME global QMAKE_LIB dbus)
 qt_find_package(Libudev PROVIDED_TARGETS PkgConfig::Libudev MODULE_NAME global QMAKE_LIB libudev)
 
@@ -467,9 +467,17 @@ qt_feature("pkg-config" PUBLIC
 )
 qt_feature_config("pkg-config" QMAKE_PUBLIC_QT_CONFIG
     NEGATE)
-qt_feature("developer-build"
+qt_feature("developer-build" PRIVATE
     LABEL "Developer build"
     AUTODETECT OFF
+)
+qt_feature("no-prefix" PRIVATE
+    LABEL "No prefix build"
+    # The var expansion on the right hand side is on purpose
+    # because the custom condition evaluator only expands the lhs
+    CONDITION (CMAKE_INSTALL_PREFIX STREQUAL "${QtBase_BINARY_DIR}")
+              OR CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT
+    AUTODETECT QT_FEATURE_developer_build
 )
 qt_feature("private_tests" PRIVATE
     LABEL "Developer build: private_tests"
@@ -881,7 +889,12 @@ qt_feature("system-zlib" PRIVATE
 )
 qt_feature("zstd" PRIVATE
     LABEL "Zstandard support"
-    CONDITION ZSTD_FOUND
+    CONDITION WrapZSTD_FOUND
+)
+qt_feature("stdlib-libcpp" PRIVATE
+    LABEL "Using stdlib=libc++"
+    AUTODETECT OFF
+    CONDITION LINUX AND NOT ANDROID
 )
 # special case begin
 # Check whether CMake was built with zstd support.

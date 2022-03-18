@@ -53,56 +53,43 @@
 
 #include "qqmlengine.h"
 
-#include "qqmltypeloader_p.h"
-#include "qqmlimport_p.h"
-#include <private/qpodvector_p.h>
-#include "qqml.h"
-#include "qqmlvaluetype_p.h"
-#include "qqmlcontext.h"
-#include "qqmlcontextdata_p.h"
-#include "qqmlexpression.h"
-#include "qqmlproperty_p.h"
-#include "qqmlmetatype_p.h"
-#include <private/qintrusivelist_p.h>
-#include <private/qrecyclepool_p.h>
 #include <private/qfieldlist_p.h>
-#include <private/qv4engine_p.h>
+#include <private/qintrusivelist_p.h>
+#include <private/qjsengine_p.h>
 #include <private/qjsvalue_p.h>
+#include <private/qpodvector_p.h>
+#include <private/qqmldirparser_p.h>
+#include <private/qqmlimport_p.h>
+#include <private/qqmlmetatype_p.h>
+#include <private/qqmlnotifier_p.h>
+#include <private/qqmlproperty_p.h>
+#include <private/qqmltypeloader_p.h>
+#include <private/qqmlvaluetype_p.h>
+#include <private/qrecyclepool_p.h>
+#include <private/qv4engine_p.h>
+
+#include <QtQml/qqml.h>
+#include <QtQml/qqmlcontext.h>
 
 #include <QtCore/qlist.h>
-#include <QtCore/qpair.h>
-#include <QtCore/qstack.h>
+#include <QtCore/qmetaobject.h>
 #include <QtCore/qmutex.h>
+#include <QtCore/qpair.h>
+#include <QtCore/qproperty.h>
+#include <QtCore/qstack.h>
 #include <QtCore/qstring.h>
 #include <QtCore/qthread.h>
-#include <QtCore/QMetaProperty>
-
-#include <private/qobject_p.h>
-
-#include <private/qjsengine_p.h>
-#include <private/qqmldirparser_p.h>
-
-#include <qproperty.h>
 
 QT_BEGIN_NAMESPACE
 
-class QQmlContext;
-class QQmlEngine;
-class QQmlContextPrivate;
-class QQmlExpression;
-class QQmlImportDatabase;
-class QNetworkReply;
 class QNetworkAccessManager;
-class QQmlNetworkAccessManagerFactory;
-class QQmlTypeNameCache;
-class QQmlComponentAttached;
 class QQmlDelayedError;
-class QQmlObjectCreator;
-class QDir;
 class QQmlIncubator;
+class QQmlMetaObject;
+class QQmlNetworkAccessManagerFactory;
+class QQmlObjectCreator;
 class QQmlProfiler;
 class QQmlPropertyCapture;
-class QQmlMetaObject;
 
 struct QObjectForeign {
     Q_GADGET
@@ -148,7 +135,7 @@ class Q_QML_PRIVATE_EXPORT QQmlEnginePrivate : public QJSEnginePrivate
 {
     Q_DECLARE_PUBLIC(QQmlEngine)
 public:
-    QQmlEnginePrivate(QQmlEngine *);
+    explicit QQmlEnginePrivate(QQmlEngine *q) : importDatabase(q), typeLoader(q) {}
     ~QQmlEnginePrivate() override;
 
     void init();
@@ -156,50 +143,47 @@ public:
     // is just qmlClearTypeRegistrations (which can't be called while an engine exists)
     static bool baseModulesUninitialized;
 
-    QQmlPropertyCapture *propertyCapture;
+    QQmlPropertyCapture *propertyCapture = nullptr;
 
     QRecyclePool<QQmlJavaScriptExpressionGuard> jsExpressionGuardPool;
     QRecyclePool<TriggerList> qPropertyTriggerPool;
 
-    QQmlContext *rootContext;
+    QQmlContext *rootContext = nullptr;
     Q_OBJECT_BINDABLE_PROPERTY(QQmlEnginePrivate, QString, translationLanguage);
 
 #if !QT_CONFIG(qml_debug)
     static const quintptr profiler = 0;
 #else
-    QQmlProfiler *profiler;
+    QQmlProfiler *profiler = nullptr;
 #endif
 
-    bool outputWarningsToMsgLog;
+    bool outputWarningsToMsgLog = true;
 
     // Bindings that have had errors during startup
-    QQmlDelayedError *erroredBindings;
-    int inProgressCreations;
+    QQmlDelayedError *erroredBindings = nullptr;
+    int inProgressCreations = 0;
 
     QV4::ExecutionEngine *v4engine() const { return q_func()->handle(); }
 
 #if QT_CONFIG(qml_worker_script)
-    QThread *workerScriptEngine;
+    QThread *workerScriptEngine = nullptr;
 #endif
 
     QUrl baseUrl;
 
-    typedef QPair<QPointer<QObject>,int> FinalizeCallback;
-    void registerFinalizeCallback(QObject *obj, int index);
-
-    QQmlObjectCreator *activeObjectCreator;
+    QQmlObjectCreator *activeObjectCreator = nullptr;
 #if QT_CONFIG(qml_network)
     QNetworkAccessManager *createNetworkAccessManager(QObject *parent) const;
     QNetworkAccessManager *getNetworkAccessManager() const;
-    mutable QNetworkAccessManager *networkAccessManager;
-    mutable QQmlNetworkAccessManagerFactory *networkAccessManagerFactory;
+    mutable QNetworkAccessManager *networkAccessManager = nullptr;
+    mutable QQmlNetworkAccessManagerFactory *networkAccessManagerFactory = nullptr;
 #endif
     QHash<QString,QSharedPointer<QQmlImageProviderBase> > imageProviders;
     QSharedPointer<QQmlImageProviderBase> imageProvider(const QString &providerId) const;
 
     QList<QQmlAbstractUrlInterceptor *> urlInterceptors;
 
-    int scarceResourcesRefCount;
+    int scarceResourcesRefCount = 0;
     void referenceScarceResources();
     void dereferenceScarceResources();
 
@@ -207,11 +191,6 @@ public:
     QQmlTypeLoader typeLoader;
 
     QString offlineStoragePath;
-
-    mutable quint32 uniqueId;
-    inline quint32 getUniqueId() const {
-        return uniqueId++;
-    }
 
     // Unfortunate workaround to avoid a circular dependency between
     // qqmlengine_p.h and qqmlincubator_p.h
@@ -221,29 +200,24 @@ public:
         QIntrusiveListNode nextWaitingFor;
     };
     QIntrusiveList<Incubator, &Incubator::next> incubatorList;
-    unsigned int incubatorCount;
-    QQmlIncubationController *incubationController;
+    unsigned int incubatorCount = 0;
+    QQmlIncubationController *incubationController = nullptr;
     void incubate(QQmlIncubator &, const QQmlRefPointer<QQmlContextData> &);
 
     // These methods may be called from any thread
-    inline bool isEngineThread() const;
-    inline static bool isEngineThread(const QQmlEngine *);
-    template<typename T>
-    inline void deleteInEngineThread(T *);
-    template<typename T>
-    inline static void deleteInEngineThread(QQmlEnginePrivate *, T *);
     QString offlineStorageDatabaseDirectory() const;
 
     // These methods may be called from the loader thread
-    inline QQmlPropertyCache *cache(const QQmlType &, QTypeRevision version);
+    inline QQmlRefPointer<QQmlPropertyCache> cache(const QQmlType &, QTypeRevision version);
     using QJSEnginePrivate::cache;
 
     // These methods may be called from the loader thread
-    QQmlMetaObject rawMetaObjectForType(int) const;
-    QQmlMetaObject metaObjectForType(int) const;
-    QQmlPropertyCache *propertyCacheForType(int);
-    QQmlPropertyCache *rawPropertyCacheForType(int);
-    QQmlPropertyCache *rawPropertyCacheForType(int, QTypeRevision version);
+    QQmlMetaObject rawMetaObjectForType(QMetaType metaType) const;
+    QQmlMetaObject metaObjectForType(QMetaType metaType) const;
+    QQmlRefPointer<QQmlPropertyCache> propertyCacheForType(QMetaType metaType);
+    QQmlRefPointer<QQmlPropertyCache> rawPropertyCacheForType(QMetaType metaType);
+    QQmlRefPointer<QQmlPropertyCache> rawPropertyCacheForType(
+            QMetaType metaType, QTypeRevision version);
     void registerInternalCompositeType(QV4::ExecutableCompilationUnit *compilationUnit);
     void unregisterInternalCompositeType(QV4::ExecutableCompilationUnit *compilationUnit);
     QV4::ExecutableCompilationUnit *obtainExecutableCompilationUnit(int typeId);
@@ -253,7 +227,6 @@ public:
 
     template <typename T>
     T singletonInstance(const QQmlType &type);
-    void destroySingletonInstance(const QQmlType &type);
 
     void sendQuit();
     void sendExit(int retCode = 0);
@@ -273,8 +246,6 @@ public:
     inline static QQmlEnginePrivate *get(QV4::ExecutionEngine *e);
 
     static QList<QQmlError> qmlErrorFromDiagnostics(const QString &fileName, const QList<QQmlJS::DiagnosticMessage> &diagnosticMessages);
-
-    static void defineModule();
 
     static bool designerMode();
     static void activateDesignerMode();
@@ -301,6 +272,27 @@ public:
 
     void executeRuntimeFunction(const QUrl &url, qsizetype functionIndex, QObject *thisObject,
                                 int argc = 0, void **args = nullptr, QMetaType *types = nullptr);
+    void executeRuntimeFunction(const QV4::ExecutableCompilationUnit *unit, qsizetype functionIndex,
+                                QObject *thisObject, int argc = 0, void **args = nullptr,
+                                QMetaType *types = nullptr);
+    QV4::ExecutableCompilationUnit *compilationUnitFromUrl(const QUrl &url);
+    QQmlRefPointer<QQmlContextData>
+    createInternalContext(const QQmlRefPointer<QV4::ExecutableCompilationUnit> &unit,
+                          const QQmlRefPointer<QQmlContextData> &parentContext,
+                          int subComponentIndex, bool isComponentRoot);
+    static void setInternalContext(QObject *This, const QQmlRefPointer<QQmlContextData> &context,
+                                   QQmlContextData::QmlObjectKind kind)
+    {
+        Q_ASSERT(This);
+        QQmlData *ddata = QQmlData::get(This, /*create*/ true);
+        // NB: copied from QQmlObjectCreator::createInstance()
+        //
+        // the if-statement logic to determine the kind is:
+        // if (static_cast<quint32>(index) == 0 || ddata->rootObjectInCreation || isInlineComponent)
+        // then QQmlContextData::DocumentRoot. here, we pass this through qmltc
+        context->installContext(ddata, kind);
+        Q_ASSERT(qmlEngine(This));
+    }
 
 private:
     class SingletonInstances : private QHash<QQmlType, QJSValue>
@@ -312,6 +304,24 @@ private:
             insert(type, *value);
         }
 
+        void clear() {
+            for (auto it = constBegin(), end = constEnd(); it != end; ++it) {
+                QObject *instance = it.value().toQObject();
+                if (!instance)
+                    continue;
+
+                if (it.key().singletonInstanceInfo()->url.isEmpty()) {
+                    const QQmlData *ddata = QQmlData::get(instance, false);
+                    if (ddata && ddata->indestructible && ddata->explicitIndestructibleSet)
+                        continue;
+                }
+
+                delete instance;
+            }
+
+            QHash<QQmlType, QJSValue>::clear();
+        }
+
         using QHash<QQmlType, QJSValue>::value;
         using QHash<QQmlType, QJSValue>::take;
     };
@@ -319,18 +329,13 @@ private:
     SingletonInstances singletonInstances;
     QHash<int, QQmlGadgetPtrWrapper *> cachedValueTypeInstances;
 
-    // These members must be protected by a QQmlEnginePrivate::Locker as they are required by
+    // These members must be protected by the engine's mutex as they are required by
     // the threaded loader.  Only access them through their respective accessor methods.
     QHash<int, QV4::ExecutableCompilationUnit *> m_compositeTypes;
     static bool s_designerMode;
 
-    // These members is protected by the full QQmlEnginePrivate::mutex mutex
-    struct Deletable { Deletable():next(nullptr) {} virtual ~Deletable() {} Deletable *next; };
-    QFieldList<Deletable, &Deletable::next> toDeleteInEngineThread;
-    void doDeleteInEngineThread();
-
     void cleanupScarceResources();
-    QQmlPropertyCache *findPropertyCacheInCompositeTypes(int t) const;
+    QQmlRefPointer<QQmlPropertyCache> findPropertyCacheInCompositeTypes(int t) const;
 };
 
 /*
@@ -364,77 +369,17 @@ inline void QQmlEnginePrivate::dereferenceScarceResources()
 }
 
 /*!
-Returns true if the calling thread is the QQmlEngine thread.
-*/
-bool QQmlEnginePrivate::isEngineThread() const
-{
-
-    return QThread::currentThread() == q_ptr->thread();
-}
-
-/*!
-Returns true if the calling thread is the QQmlEngine \a engine thread.
-*/
-bool QQmlEnginePrivate::isEngineThread(const QQmlEngine *engine)
-{
-    Q_ASSERT(engine);
-    return QQmlEnginePrivate::get(engine)->isEngineThread();
-}
-
-/*!
-Delete \a value in the engine thread.  If the calling thread is the engine
-thread, \a value will be deleted immediately.
-
-This method should be used for *any* type that has resources that need to
-be freed in the engine thread.  This is generally types that use V8 handles.
-As there is some small overhead in checking the current thread, it is best
-practice to check if any V8 handles actually need to be freed and delete
-the instance directly if not.
-*/
-template<typename T>
-void QQmlEnginePrivate::deleteInEngineThread(T *value)
-{
-    Q_ASSERT(value);
-    if (isEngineThread()) {
-        delete value;
-    } else {
-        struct I : public Deletable {
-            I(T *value) : value(value) {}
-            ~I() override { delete value; }
-            T *value;
-        };
-        I *i = new I(value);
-        mutex.lock();
-        bool wasEmpty = toDeleteInEngineThread.isEmpty();
-        toDeleteInEngineThread.append(i);
-        mutex.unlock();
-        if (wasEmpty)
-            QCoreApplication::postEvent(q_ptr, new QEvent(QEvent::User));
-    }
-}
-
-/*!
-Delete \a value in the \a engine thread.  If the calling thread is the engine
-thread, \a value will be deleted immediately.
-*/
-template<typename T>
-void QQmlEnginePrivate::deleteInEngineThread(QQmlEnginePrivate *engine, T *value)
-{
-    Q_ASSERT(engine);
-    engine->deleteInEngineThread<T>(value);
-}
-
-/*!
 Returns a QQmlPropertyCache for \a type with \a minorVersion.
 
 The returned cache is not referenced, so if it is to be stored, call addref().
 */
-QQmlPropertyCache *QQmlEnginePrivate::cache(const QQmlType &type, QTypeRevision version)
+QQmlRefPointer<QQmlPropertyCache> QQmlEnginePrivate::cache(
+        const QQmlType &type, QTypeRevision version)
 {
     Q_ASSERT(type.isValid());
     Q_ASSERT(type.containsRevisionedAttributes());
 
-    Locker locker(this);
+    QMutexLocker locker(&this->mutex);
     return QQmlMetaType::propertyCache(type, version);
 }
 
@@ -501,6 +446,7 @@ template<typename T>
 T QQmlEnginePrivate::singletonInstance(const QQmlType &type) {
     return qobject_cast<T>(singletonInstance<QJSValue>(type).toQObject());
 }
+
 
 QT_END_NAMESPACE
 

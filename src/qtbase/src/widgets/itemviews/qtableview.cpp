@@ -1646,6 +1646,28 @@ void QTableView::paintEvent(QPaintEvent *event)
                 QLineF line(colp, dirtyArea.top(), colp, dirtyArea.bottom());
                 painter.drawLine(line.translated(0.5, 0.5));
             }
+            const bool drawWhenHidden = style()->styleHint(QStyle::SH_Table_AlwaysDrawLeftTopGridLines,
+                                                           &option, this);
+            if (drawWhenHidden && horizontalHeader->isHidden()) {
+                const int row = verticalHeader->logicalIndex(top);
+                if (!verticalHeader->isSectionHidden(row)) {
+                    const int rowY = rowViewportPosition(row) + offset.y();
+                    if (rowY == dirtyArea.top())
+                        painter.drawLine(dirtyArea.left(), rowY, dirtyArea.right(), rowY);
+                }
+            }
+            if (drawWhenHidden && verticalHeader->isHidden()) {
+                const int col = horizontalHeader->logicalIndex(left);
+                if (!horizontalHeader->isSectionHidden(col)) {
+                    int colX = columnViewportPosition(col) + offset.x();
+                    if (!isLeftToRight())
+                        colX += columnWidth(left) - 1;
+                    if (isLeftToRight() && colX == dirtyArea.left())
+                        painter.drawLine(colX, dirtyArea.top(), colX, dirtyArea.bottom());
+                    if (!isLeftToRight() && colX == dirtyArea.right())
+                        painter.drawLine(colX, dirtyArea.top(), colX, dirtyArea.bottom());
+                }
+            }
             painter.setPen(old);
         }
     }

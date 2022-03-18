@@ -38,6 +38,10 @@
 #include <QtCore/qtimeline.h>
 #include <QtCore/qrect.h>
 
+#ifdef QT_QUICK_LIB
+#    include <QtQuick/qquickitem.h>
+#endif
+
 class Interface {};
 class Interface2 {};
 class Interface3 {};
@@ -384,6 +388,62 @@ struct BValueTypeWithEnumForeign2
     QML_NAMED_ELEMENT(valueTypeWithEnum2)
 };
 
+
+namespace BaseNamespace
+{
+Q_NAMESPACE
+enum BBB {
+    D, E, F
+};
+Q_ENUM_NS(BBB)
+}
+
+struct ExtensionValueType
+{
+    Q_GADGET
+public:
+    enum EEE {
+        A, B, C
+    };
+    Q_ENUM(EEE)
+};
+
+struct DeferredPropertyNamesEmpty : public QObject
+{
+    Q_OBJECT
+    QML_ELEMENT
+    Q_CLASSINFO("DeferredPropertyNames", "")
+};
+
+struct DeferredPropertyNames : public QObject
+{
+    Q_OBJECT
+    QML_ELEMENT
+    Q_CLASSINFO("DeferredPropertyNames", "A,B,C")
+};
+
+struct ImmediatePropertyNamesEmpty : public QObject
+{
+    Q_OBJECT
+    QML_ELEMENT
+    Q_CLASSINFO("ImmediatePropertyNames", "")
+};
+
+struct ImmediatePropertyNames : public QObject
+{
+    Q_OBJECT
+    QML_ELEMENT
+    Q_CLASSINFO("ImmediatePropertyNames", "A,B,C")
+};
+
+namespace ForeignNamespace
+{
+Q_NAMESPACE
+QML_FOREIGN_NAMESPACE(BaseNamespace)
+QML_NAMESPACE_EXTENDED(ExtensionValueType)
+QML_ELEMENT
+}
+
 class DerivedFromForeignPrivate : public ForeignPrivate
 {
     Q_OBJECT
@@ -396,6 +456,39 @@ class WithMethod : public QObject
     QML_ELEMENT
 public:
     Q_INVOKABLE QQmlComponent *createAThing(int) { return nullptr; }
+};
+
+#ifdef QT_QUICK_LIB
+class ForeignRevisionedProperty : public QQuickItem
+{
+    Q_OBJECT
+    QML_ELEMENT
+
+public:
+    explicit ForeignRevisionedProperty(QQuickItem *parent = nullptr) : QQuickItem(parent) {};
+};
+#endif
+
+class AddedInLateVersion : public QObject
+{
+    Q_OBJECT
+    QML_NAMED_ELEMENT(Versioned)
+    QML_ADDED_IN_VERSION(1, 8)
+    Q_PROPERTY(int revisioned READ revisioned CONSTANT REVISION(1, 4))
+    Q_PROPERTY(int insane READ revisioned CONSTANT REVISION 17)
+public:
+    AddedInLateVersion(QObject *parent = nullptr) : QObject(parent) {}
+    int revisioned() const { return 24; }
+};
+
+class RemovedInEarlyVersion : public AddedInLateVersion
+{
+    Q_OBJECT
+    QML_NAMED_ELEMENT(Versioned)
+    QML_ADDED_IN_VERSION(1, 3)
+    QML_REMOVED_IN_VERSION(1, 8)
+public:
+    RemovedInEarlyVersion(QObject *parent = nullptr) : AddedInLateVersion(parent) {}
 };
 
 class tst_qmltyperegistrar : public QObject
@@ -427,8 +520,18 @@ private slots:
     void finalProperty();
     void parentProperty();
     void namespacesAndValueTypes();
+    void namespaceExtendedNamespace();
+    void deferredNames();
+    void immediateNames();
     void derivedFromForeignPrivate();
     void methodReturnType();
+
+#ifdef QT_QUICK_LIB
+    void foreignRevisionedProperty();
+#endif
+
+    void addRemoveVersion_data();
+    void addRemoveVersion();
 
 private:
     QByteArray qmltypesData;

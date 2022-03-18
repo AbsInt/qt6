@@ -88,7 +88,8 @@ public:
     constexpr explicit QLatin1String(const char *f, const char *l)
         : QLatin1String(f, qsizetype(l - f)) {}
     constexpr inline explicit QLatin1String(const char *s, qsizetype sz) noexcept : m_size(sz), m_data(s) {}
-    explicit QLatin1String(const QByteArray &s) noexcept : m_size(qsizetype(qstrnlen(s.constData(), s.size()))), m_data(s.constData()) {}
+    explicit QLatin1String(const QByteArray &s) noexcept : m_size(s.size()), m_data(s.constData()) {}
+    constexpr explicit QLatin1String(QByteArrayView s) noexcept : m_size(s.size()), m_data(s.data()) {}
 
     inline QString toString() const;
 
@@ -158,7 +159,9 @@ public:
     { return lastIndexOf(s, size(), cs); }
     [[nodiscard]] qsizetype lastIndexOf(QLatin1String s, qsizetype from, Qt::CaseSensitivity cs = Qt::CaseSensitive) const noexcept
     { return QtPrivate::lastIndexOf(*this, from, s, cs); }
-    [[nodiscard]] qsizetype lastIndexOf(QChar c, qsizetype from = -1, Qt::CaseSensitivity cs = Qt::CaseSensitive) const noexcept
+    [[nodiscard]] qsizetype lastIndexOf(QChar c, Qt::CaseSensitivity cs = Qt::CaseSensitive) const noexcept
+    { return lastIndexOf(c, -1, cs); }
+    [[nodiscard]] qsizetype lastIndexOf(QChar c, qsizetype from, Qt::CaseSensitivity cs = Qt::CaseSensitive) const noexcept
     { return QtPrivate::lastIndexOf(*this, from, QStringView(&c, 1), cs); }
 
     using value_type = const char;
@@ -404,7 +407,7 @@ public:
     QString &operator=(const QString &) noexcept;
     QString &operator=(QLatin1String latin1);
     inline QString(QString &&other) noexcept
-    { qSwap(d, other.d); }
+        = default;
     QT_MOVE_ASSIGNMENT_OPERATOR_IMPL_VIA_PURE_SWAP(QString)
     void swap(QString &other) noexcept { d.swap(other.d); }
     inline qsizetype size() const { return d.size; }
@@ -508,7 +511,9 @@ public:
 #endif
     [[nodiscard]] qsizetype indexOf(QStringView s, qsizetype from = 0, Qt::CaseSensitivity cs = Qt::CaseSensitive) const noexcept
     { return QtPrivate::findString(*this, from, s, cs); }
-    [[nodiscard]] qsizetype lastIndexOf(QChar c, qsizetype from = -1, Qt::CaseSensitivity cs = Qt::CaseSensitive) const;
+    [[nodiscard]] qsizetype lastIndexOf(QChar c, Qt::CaseSensitivity cs = Qt::CaseSensitive) const noexcept
+    { return lastIndexOf(c, -1, cs); }
+    [[nodiscard]] qsizetype lastIndexOf(QChar c, qsizetype from, Qt::CaseSensitivity cs = Qt::CaseSensitive) const;
     [[nodiscard]] qsizetype lastIndexOf(QLatin1String s, Qt::CaseSensitivity cs = Qt::CaseSensitive) const
     { return lastIndexOf(s, size(), cs); }
     [[nodiscard]] qsizetype lastIndexOf(QLatin1String s, qsizetype from, Qt::CaseSensitivity cs = Qt::CaseSensitive) const;
@@ -1124,7 +1129,6 @@ private:
     void replace_helper(size_t *indices, qsizetype nIndices, qsizetype blen, const QChar *after, qsizetype alen);
     friend class QStringView;
     friend class QByteArray;
-    friend class QCollator;
     friend struct QAbstractConcatenable;
 
     template <typename T> static
@@ -1411,9 +1415,9 @@ QT_ASCII_CAST_WARN inline bool QString::operator>=(const QByteArray &s) const
 { return QString::compare_helper(constData(), size(), s.constData(), s.size()) >= 0; }
 
 inline bool QByteArray::operator==(const QString &s) const
-{ return QString::compare_helper(s.constData(), s.size(), constData(), qstrnlen(constData(), size())) == 0; }
+{ return QString::compare_helper(s.constData(), s.size(), constData(), size()) == 0; }
 inline bool QByteArray::operator!=(const QString &s) const
-{ return QString::compare_helper(s.constData(), s.size(), constData(), qstrnlen(constData(), size())) != 0; }
+{ return QString::compare_helper(s.constData(), s.size(), constData(), size()) != 0; }
 inline bool QByteArray::operator<(const QString &s) const
 { return QString::compare_helper(s.constData(), s.size(), constData(), size()) > 0; }
 inline bool QByteArray::operator>(const QString &s) const
@@ -1453,12 +1457,7 @@ inline std::wstring QString::toStdWString() const
 {
     std::wstring str;
     str.resize(length());
-#if __cplusplus >= 201703L
     str.resize(toWCharArray(str.data()));
-#else
-    if (length())
-        str.resize(toWCharArray(&str.front()));
-#endif
     return str;
 }
 

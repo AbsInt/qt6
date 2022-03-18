@@ -102,7 +102,11 @@ private slots:
     void contextPropertiesTriggerReeval();
     void objectPropertiesTriggerReeval();
     void dependenciesWithFunctions();
+    void immediateProperties();
     void deferredProperties();
+    void deferredPropertiesParent();
+    void deferredPropertiesOverwrite();
+    void deferredPropertiesByParent();
     void deferredPropertiesErrors();
     void deferredPropertiesInComponents();
     void deferredPropertiesInDestruction();
@@ -1210,6 +1214,61 @@ void tst_qqmlecmascript::dependenciesWithFunctions()
     QVERIFY(object->property("success").toBool());
 }
 
+void tst_qqmlecmascript::immediateProperties()
+{
+    QQmlEngine engine;
+    {
+        QQmlComponent component(&engine, testFileUrl("immediateProperties.qml"));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        QScopedPointer<QObject> obj(component.create());
+        QVERIFY(obj);
+        MyImmediateObject *object = qobject_cast<MyImmediateObject *>(obj.data());
+        QVERIFY(object != nullptr);
+        QCOMPARE(object->objectName(), QStringLiteral("immediate"));
+        QCOMPARE(object->value(), 0);
+        QVERIFY(!object->objectProperty());
+        QVERIFY(!object->objectProperty2());
+        qmlExecuteDeferred(object);
+        QCOMPARE(object->value(), 10);
+        QVERIFY(object->objectProperty() != nullptr);
+        QVERIFY(object->objectProperty2() != nullptr);
+        MyQmlObject *qmlObject = qobject_cast<MyQmlObject *>(object->objectProperty());
+        QVERIFY(qmlObject != nullptr);
+        QCOMPARE(qmlObject->value(), 10);
+        object->setValue(19);
+        QCOMPARE(qmlObject->value(), 19);
+    }
+
+    {
+        QQmlComponent component(&engine, testFileUrl("immediateDerived.qml"));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        QScopedPointer<QObject> o(component.create());
+        DerivedFromImmediate *derived = qobject_cast<DerivedFromImmediate *>(o.data());
+        QVERIFY(derived != nullptr);
+        QCOMPARE(derived->value(), 0);
+        QCOMPARE(derived->value2(), 0);
+        qmlExecuteDeferred(derived);
+        QCOMPARE(derived->value(), 11);
+        QCOMPARE(derived->value2(), 20);
+    }
+
+    {
+        QQmlComponent component(&engine, testFileUrl("brokenImmediateDeferred.qml"));
+        QVERIFY(component.isError());
+        QVERIFY(component.errorString().contains(
+                    QStringLiteral("You cannot define both DeferredPropertyNames and "
+                                   "ImmediatePropertyNames on the same type.")));
+    }
+
+    {
+        QQmlComponent component(&engine, testFileUrl("brokenImmediateId.qml"));
+        QVERIFY(component.isError());
+        QVERIFY(component.errorString().contains(
+                    QStringLiteral("You cannot assign an id to an object assigned "
+                                   "to a deferred property.")));
+    }
+}
+
 void tst_qqmlecmascript::deferredProperties()
 {
     QQmlEngine engine;
@@ -1229,6 +1288,44 @@ void tst_qqmlecmascript::deferredProperties()
     QCOMPARE(qmlObject->value(), 10);
     object->setValue(19);
     QCOMPARE(qmlObject->value(), 19);
+}
+
+
+void tst_qqmlecmascript::deferredPropertiesParent()
+{
+    QQmlEngine engine;
+    QQmlComponent component(&engine, testFileUrl("deferredPropertiesParent.qml"));
+    QScopedPointer<QObject> obj(component.create());
+    QVERIFY2(obj, qPrintable(component.errorString()));
+    DeferredChild *object = qobject_cast<DeferredChild *>(obj.data());
+    QVERIFY(object != nullptr);
+    QCOMPARE(object->baseValue(), 0);
+    qmlExecuteDeferred(object);
+    QCOMPARE(object->baseValue(), 10);
+}
+
+void tst_qqmlecmascript::deferredPropertiesOverwrite()
+{
+    QQmlEngine engine;
+    QQmlComponent component(&engine, testFileUrl("deferredPropertiesOverwrite.qml"));
+    QScopedPointer<QObject> obj(component.create());
+    QVERIFY2(obj, qPrintable(component.errorString()));
+    DeferredChildOverwrite *object = qobject_cast<DeferredChildOverwrite *>(obj.data());
+    QVERIFY(object != nullptr);
+    QCOMPARE(object->baseValue(), 10);
+}
+
+void tst_qqmlecmascript::deferredPropertiesByParent()
+{
+    QQmlEngine engine;
+    QQmlComponent component(&engine, testFileUrl("deferredPropertiesChild.qml"));
+    QScopedPointer<QObject> obj(component.create());
+    QVERIFY2(obj, qPrintable(component.errorString()));
+    DeferredByParentChild *object = qobject_cast<DeferredByParentChild *>(obj.data());
+    QVERIFY(object != nullptr);
+    QCOMPARE(object->childValue(), 0);
+    qmlExecuteDeferred(object);
+    QCOMPARE(object->childValue(), 10);
 }
 
 // Check errors on deferred properties are correctly emitted
@@ -2661,7 +2758,7 @@ static inline bool evaluate_error(QV4::ExecutionEngine *v4, const QV4::Value &o,
     program.inheritContext = true;
 
     QV4::ScopedFunctionObject function(scope, program.run());
-    if (scope.engine->hasException) {
+    if (scope.hasException()) {
         scope.engine->catchException();
         return true;
     }
@@ -2669,7 +2766,7 @@ static inline bool evaluate_error(QV4::ExecutionEngine *v4, const QV4::Value &o,
     jsCallData.args[0] = o;
     *jsCallData.thisObject = v4->global();
     function->call(jsCallData);
-    if (scope.engine->hasException) {
+    if (scope.hasException()) {
         scope.engine->catchException();
         return true;
     }
@@ -2687,7 +2784,7 @@ static inline bool evaluate_value(QV4::ExecutionEngine *v4, const QV4::Value &o,
     program.inheritContext = true;
 
     QV4::ScopedFunctionObject function(scope, program.run());
-    if (scope.engine->hasException) {
+    if (scope.hasException()) {
         scope.engine->catchException();
         return false;
     }
@@ -2699,7 +2796,7 @@ static inline bool evaluate_value(QV4::ExecutionEngine *v4, const QV4::Value &o,
     jsCallData.args[0] = o;
     *jsCallData.thisObject = v4->global();
     value = function->call(jsCallData);
-    if (scope.engine->hasException) {
+    if (scope.hasException()) {
         scope.engine->catchException();
         return false;
     }
@@ -2718,7 +2815,7 @@ static inline QV4::ReturnedValue evaluate(QV4::ExecutionEngine *v4, const QV4::V
     program.inheritContext = true;
 
     QV4::ScopedFunctionObject function(scope, program.run());
-    if (scope.engine->hasException) {
+    if (scope.hasException()) {
         scope.engine->catchException();
         return QV4::Encode::undefined();
     }
@@ -2728,7 +2825,7 @@ static inline QV4::ReturnedValue evaluate(QV4::ExecutionEngine *v4, const QV4::V
     jsCallData.args[0] = o;
     *jsCallData.thisObject = v4->global();
     QV4::ScopedValue result(scope, function->call(jsCallData));
-    if (scope.engine->hasException) {
+    if (scope.hasException()) {
         scope.engine->catchException();
         return QV4::Encode::undefined();
     }
@@ -3310,6 +3407,47 @@ void tst_qqmlecmascript::callQtInvokables()
     QJSValue callback = qvariant_cast<QJSValue>(o->actuals().at(1));
     QVERIFY(!callback.isNull());
     QVERIFY(callback.isCallable());
+
+    o->reset();
+    QVERIFY(EVALUATE_VALUE("object.method_overload2('foo', 12, [1, 2, 3])", QV4::Primitive::undefinedValue()));
+    QCOMPARE(o->error(), false);
+    QCOMPARE(o->invoked(), 31);
+    QCOMPARE(o->actuals().count(), 3);
+    QCOMPARE(qvariant_cast<QString>(o->actuals().at(0)), QStringLiteral("foo"));
+    QCOMPARE(qvariant_cast<int>(o->actuals().at(1)), 12);
+    QCOMPARE(qvariant_cast<QVariantList>(o->actuals().at(2)), (QVariantList {1.0, 2.0, 3.0}));
+
+    o->reset();
+    QVERIFY(EVALUATE_VALUE("object.method_overload2(11, 12, {a: 1, b: 2})", QV4::Primitive::undefinedValue()));
+    QCOMPARE(o->error(), false);
+    QCOMPARE(o->invoked(), 31);
+    QCOMPARE(o->actuals().count(), 3);
+    QCOMPARE(qvariant_cast<int>(o->actuals().at(0)), 11);
+    QCOMPARE(qvariant_cast<int>(o->actuals().at(1)), 12);
+    QCOMPARE(qvariant_cast<QVariantMap>(o->actuals().at(2)),
+             (QVariantMap { {QStringLiteral("a"), 1.0}, {QStringLiteral("b"), 2.0}, }));
+
+    o->reset();
+    QVERIFY(EVALUATE_VALUE("object.method_overload2([1, 'bar', 0.2])",
+                           QV4::Primitive::undefinedValue()));
+    QCOMPARE(o->error(), false);
+    QCOMPARE(o->invoked(), 32);
+    QCOMPARE(o->actuals().count(), 1);
+    QCOMPARE(qvariant_cast<QVariantList>(o->actuals().at(0)),
+             (QVariantList {1.0, QStringLiteral("bar"), 0.2}));
+
+    o->reset();
+    QVERIFY(EVALUATE_VALUE("object.method_overload2({one: 1, two: 'bar', three: 0.2})",
+                           QV4::Primitive::undefinedValue()));
+    QCOMPARE(o->error(), false);
+    QCOMPARE(o->invoked(), 33);
+    QCOMPARE(o->actuals().count(), 1);
+    QCOMPARE(qvariant_cast<QVariantMap>(o->actuals().at(0)),
+             (QVariantMap {
+                  {QStringLiteral("one"), 1.0},
+                  {QStringLiteral("two"), QStringLiteral("bar")},
+                  {QStringLiteral("three"), 0.2}
+              }));
 }
 
 void tst_qqmlecmascript::resolveClashingProperties()
@@ -9252,6 +9390,9 @@ void tst_qqmlecmascript::hugeStack()
 
 void tst_qqmlecmascript::gcCrashRegressionTest()
 {
+#if !QT_CONFIG(process)
+    QSKIP("Depends on QProcess");
+#else
     const QString qmljs = QLibraryInfo::path(QLibraryInfo::BinariesPath) + "/qmljs";
     if (!QFile::exists(qmljs)) {
         QSKIP("Tets requires qmljs");
@@ -9295,6 +9436,7 @@ void tst_qqmlecmascript::gcCrashRegressionTest()
     QVERIFY(pid != 0);
     QVERIFY(process.waitForFinished());
     QCOMPARE(process.exitCode(), 0);
+#endif
 }
 
 void tst_qqmlecmascript::bindingOnQProperty()

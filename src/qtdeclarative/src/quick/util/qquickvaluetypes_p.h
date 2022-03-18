@@ -259,6 +259,24 @@ public:
     void setX(qreal);
     void setY(qreal);
     void setZ(qreal);
+
+    Q_INVOKABLE qreal dotProduct(const QQuaternion &q) const;
+    Q_INVOKABLE QQuaternion times(const QQuaternion &q) const;
+    Q_INVOKABLE QVector3D times(const QVector3D &vec) const;
+    Q_INVOKABLE QQuaternion times(qreal factor) const;
+    Q_INVOKABLE QQuaternion plus(const QQuaternion &q) const;
+    Q_INVOKABLE QQuaternion minus(const QQuaternion &q) const;
+
+    Q_INVOKABLE QQuaternion normalized() const;
+    Q_INVOKABLE QQuaternion inverted() const;
+    Q_INVOKABLE QQuaternion conjugated() const;
+    Q_INVOKABLE qreal length() const;
+
+    Q_INVOKABLE QVector3D toEulerAngles() const;
+    Q_INVOKABLE QVector4D toVector4d() const;
+
+    Q_INVOKABLE bool fuzzyEquals(const QQuaternion &q, qreal epsilon) const;
+    Q_INVOKABLE bool fuzzyEquals(const QQuaternion &q) const;
 };
 
 class Q_QUICK_PRIVATE_EXPORT QQuickMatrix4x4ValueType
@@ -325,6 +343,7 @@ public:
 
     Q_INVOKABLE void translate(const QVector3D &t) { v.translate(t); }
     Q_INVOKABLE void rotate(float angle, const QVector3D &axis) { v.rotate(angle, axis); }
+    Q_INVOKABLE void rotate(const QQuaternion &q) { v.rotate(q); }
     Q_INVOKABLE void scale(float s) { v.scale(s); }
     Q_INVOKABLE void scale(float sx, float sy, float sz) { v.scale(sx, sy, sz); }
     Q_INVOKABLE void scale(const QVector3D &s) { v.scale(s); }

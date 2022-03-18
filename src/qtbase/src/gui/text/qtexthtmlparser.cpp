@@ -1453,6 +1453,8 @@ void QTextHtmlParserNode::applyCssDeclarations(const QList<QCss::Declaration> &d
             applyBackgroundImage(bgImage, resourceProvider);
         } else if (bgBrush.style() != Qt::NoBrush) {
             charFormat.setBackground(bgBrush);
+            if (id == Html_hr)
+                blockFormat.setProperty(QTextFormat::BackgroundBrush, bgBrush);
         }
     }
 }
@@ -2163,7 +2165,7 @@ QList<QCss::Declaration> QTextHtmlParser::declarationsForNode(int node) const
     for (int i = 0; i < inlineStyleSheets.count(); ++i, ++idx)
         selector.styleSheets[idx] = inlineStyleSheets.at(i);
 
-    selector.medium = QLatin1String("screen");
+    selector.medium = resourceProvider ? resourceProvider->metaInformation(QTextDocument::CssMedia) : QLatin1String("screen");
 
     QCss::StyleSelector::NodePtr n;
     n.id = node;

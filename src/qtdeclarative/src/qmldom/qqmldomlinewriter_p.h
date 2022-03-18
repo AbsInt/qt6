@@ -104,7 +104,7 @@ public:
     bool useTabs = false;
 };
 
-QMLDOM_EXPORT class LineWriterOptions
+class QMLDOM_EXPORT LineWriterOptions
 {
     Q_GADGET
 public:
@@ -134,7 +134,7 @@ Q_DECLARE_OPERATORS_FOR_FLAGS(LineWriterOptions::Updates)
 using PendingSourceLocationId = QAtomicInt;
 class LineWriter;
 
-QMLDOM_EXPORT class PendingSourceLocation
+class QMLDOM_EXPORT PendingSourceLocation
 {
     Q_GADGET
 public:
@@ -149,7 +149,7 @@ public:
     bool open = true;
 };
 
-QMLDOM_EXPORT class LineWriter
+class QMLDOM_EXPORT LineWriter
 {
     Q_GADGET
 public:
@@ -228,12 +228,12 @@ protected:
 
     QList<SinkF> m_innerSinks;
     QString m_fileName;
-    int m_lineNr;
-    int m_columnNr; // columnNr (starts at 0) of committed data
-    int m_lineUtf16Offset; // utf16 offset since last newline (what is typically stores as
-                           // SourceLocation::startColumn
-    int m_currentColumnNr; // current columnNr (starts at 0)
-    int m_utf16Offset; // utf16 offset since start for committed data
+    int m_lineNr = 0;
+    int m_columnNr = 0; // columnNr (starts at 0) of committed data
+    int m_lineUtf16Offset = 0; // utf16 offset since last newline (what is typically stores as
+                               // SourceLocation::startColumn
+    int m_currentColumnNr = 0; // current columnNr (starts at 0)
+    int m_utf16Offset = 0; // utf16 offset since start for committed data
     QString m_currentLine;
     LineWriterOptions m_options;
     PendingSourceLocationId m_lastSourceLocationId;

@@ -1,34 +1,37 @@
 /****************************************************************************
 **
 ** Copyright (C) 2020 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtQuick module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL3$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
 ** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPLv3 included in the
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
 ** packaging of this file. Please review the following information to
 ** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl.html.
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
 ** GNU General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or later as published by the Free
-** Software Foundation and appearing in the file LICENSE.GPL included in
-** the packaging of this file. Please review the following information to
-** ensure the GNU General Public License version 2.0 requirements will be
-** met: http://www.gnu.org/licenses/gpl-2.0.html.
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -39,6 +42,22 @@
 #include <QtQuick/private/qquickpalettecolorprovider_p.h>
 
 QT_BEGIN_NAMESPACE
+
+static constexpr bool is_valid(QPalette::ColorGroup cg) noexcept
+{
+    // use a switch to enable "unhandled enum" warnings:
+    switch (cg) {
+    case QPalette::Active:
+    case QPalette::Disabled:
+    case QPalette::Inactive:
+        return true;
+    case QPalette::NColorGroups:
+    case QPalette::Current:
+    case QPalette::All:
+        return false;
+    }
+    Q_UNREACHABLE();
+}
 
 /*!
     \internal
@@ -281,20 +300,19 @@ QQuickColorGroup::GroupPtr QQuickPalette::colorGroup(QPalette::ColorGroup groupT
 
 QQuickColorGroup::GroupPtr QQuickPalette::findColorGroup(QPalette::ColorGroup groupTag) const
 {
-    if (auto it = m_colorGroups.find(groupTag); it != m_colorGroups.end()) {
-        return it->second;
-    }
-
-    return nullptr;
+    Q_ASSERT(is_valid(groupTag));
+    return m_colorGroups[groupTag];
 }
 
 void QQuickPalette::registerColorGroup(QQuickColorGroup *group, QPalette::ColorGroup groupTag)
 {
-    if (auto it = m_colorGroups.find(groupTag); it != m_colorGroups.end() && it->second) {
-        it->second->deleteLater();
+    Q_ASSERT(is_valid(groupTag));
+    auto &g = m_colorGroups[groupTag];
+    if (g) {
+        Q_ASSERT(g != group);
+        g->deleteLater();
     }
-
-    m_colorGroups[groupTag] = group;
+    g = group;
 
     group->setGroupTag(groupTag);
 

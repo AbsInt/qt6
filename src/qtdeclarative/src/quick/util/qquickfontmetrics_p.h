@@ -52,10 +52,12 @@
 //
 
 #include <private/qtquickglobal_p.h>
-#include <qqml.h>
 
-#include <QtGui/QFontMetricsF>
-#include <QtCore/QObject>
+#include <QtQml/qqml.h>
+
+#include <QtGui/qfontmetrics.h>
+
+#include <QtCore/qobject.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -84,7 +86,6 @@ class Q_QUICK_PRIVATE_EXPORT QQuickFontMetrics : public QObject
     QML_ADDED_IN_VERSION(2, 4)
 public:
     explicit QQuickFontMetrics(QObject *parent = nullptr);
-    ~QQuickFontMetrics();
 
     QFont font() const;
     void setFont(const QFont &font);

@@ -74,7 +74,7 @@ bool QWaylandIviShellIntegration::initialize(QWaylandDisplay *display)
         return false;
     }
 
-    return QWaylandShellIntegration::initialize(display);
+    return true;
 }
 
 /* get unique id

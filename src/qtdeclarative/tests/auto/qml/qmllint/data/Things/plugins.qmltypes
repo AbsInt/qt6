@@ -2,6 +2,11 @@ import QtQuick.tooling 1.2
 Module {
     dependencies: []
     Component {
+        name: "CustomPalette"
+        prototype: "QPalette"
+    }
+
+    Component {
         name: "SomethingEntirelyStrange"
         prototype: "QObject"
         exports: ["Things/SomethingEntirelyStrange 1.0"]
@@ -14,6 +19,7 @@ Module {
             }
         }
         Property { name: "palette"; type: "QPalette" }
+        Property { name: "palette2"; type: "CustomPalette" }
     }
     Component {
         name: "Frame"
@@ -26,10 +32,19 @@ Module {
         prototype: "QObject"
         exports: ["Things.Templates/Pane 1.0"]
         exportMetaObjectRevisions: [256]
+        deferredNames: ["contentData"]
         Property { name: "contentWidth"; type: "double" }
         Property { name: "contentHeight"; type: "double" }
         Property { name: "contentData"; type: "QObject"; isList: true; isReadonly: true }
         Property { name: "contentChildren"; type: "QQuickItem"; isList: true; isReadonly: true }
+    }
+    Component {
+        name: "WithImmediate"
+        prototype: "QObject"
+        exports: ["Things/WithImmediate 1.0"]
+        exportMetaObjectRevisions: [256]
+        immediateNames: ["contentData"]
+        Property { name: "contentData"; type: "double" }
     }
     Component {
         name: "MyScreen"

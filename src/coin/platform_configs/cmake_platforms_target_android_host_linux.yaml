@@ -52,4 +52,3 @@ Configurations:
         'CONAN_HOST_PROFILE=coin/conan/profiles/linux-x86_64-gcc',
         'CONAN_PROFILE=coin/conan/profiles/unix-android-x86_64-clang'
     ]
-

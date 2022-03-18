@@ -52,7 +52,8 @@
 //
 
 #include <private/qtquickglobal_p.h>
-#include "qquickitem.h"
+
+#include <QtQuick/qquickitem.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -63,7 +64,6 @@ class Q_QUICK_PRIVATE_EXPORT QQuickFocusScope : public QQuickItem
     QML_ADDED_IN_VERSION(2, 0)
 public:
     QQuickFocusScope(QQuickItem *parent=nullptr);
-    virtual ~QQuickFocusScope();
 };
 
 QT_END_NAMESPACE

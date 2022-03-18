@@ -1,34 +1,37 @@
 /****************************************************************************
 **
 ** Copyright (C) 2017 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the Qt Quick Templates 2 module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL3$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
 ** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPLv3 included in the
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
 ** packaging of this file. Please review the following information to
 ** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl.html.
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
 ** GNU General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or later as published by the Free
-** Software Foundation and appearing in the file LICENSE.GPL included in
-** the packaging of this file. Please review the following information to
-** ensure the GNU General Public License version 2.0 requirements will be
-** met: http://www.gnu.org/licenses/gpl-2.0.html.
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -812,9 +815,10 @@ bool QQuickSwipeDelegatePrivate::handleMouseMoveEvent(QQuickItem *item, QMouseEv
     const QPointF mappedEventPos = item->mapToItem(q, event->position().toPoint());
     const qreal distance = (mappedEventPos - pressPoint).x();
     if (!q->keepMouseGrab()) {
-        // Taken from QQuickDrawerPrivate::grabMouse; see comments there.
-        int threshold = qMax(20, QGuiApplication::styleHints()->startDragDistance() + 5);
-        const bool overThreshold = QQuickWindowPrivate::dragOverThreshold(distance, Qt::XAxis, event, threshold);
+        // We used to use the custom threshold that QQuickDrawerPrivate::grabMouse used,
+        // but since it's larger than what Flickable uses, it results in Flickable
+        // stealing events from us (QTBUG-50045), so now we use the default.
+        const bool overThreshold = QQuickWindowPrivate::dragOverThreshold(distance, Qt::XAxis, event);
         if (window && overThreshold) {
             QQuickItem *grabber = q->window()->mouseGrabberItem();
             if (!grabber || !grabber->keepMouseGrab()) {
@@ -958,7 +962,7 @@ void QQuickSwipeDelegatePrivate::forwardMouseEvent(QMouseEvent *event, QQuickIte
 {
     Q_Q(QQuickSwipeDelegate);
     QMutableSinglePointEvent localizedEvent(*event);
-    localizedEvent.mutablePoint().setPosition(localPos);
+    QMutableEventPoint::setPosition(localizedEvent.point(0), localPos);
     QGuiApplication::sendEvent(destination, &localizedEvent);
     q->setPressed(!localizedEvent.isAccepted());
 }

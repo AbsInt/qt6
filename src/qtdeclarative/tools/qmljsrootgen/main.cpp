@@ -92,7 +92,7 @@ struct State {
 };
 
 static QString buildConstructor(const QJSManagedValue &constructor, QJsonArray *classes,
-                                State *seen, const QString &name);
+                                State *seen, const QString &name, QJSManagedValue *constructed);
 
 static QString findClassName(const QJSManagedValue &value)
 {
@@ -113,6 +113,25 @@ static QString findClassName(const QJSManagedValue &value)
 
     Q_UNREACHABLE();
     return QString();
+}
+
+static QJsonValue createPublicNumberMethod(const QString &name, int numArguments)
+{
+    QJsonObject method;
+    method.insert(QStringLiteral("access"), QStringLiteral("public"));
+    method.insert(QStringLiteral("name"), name);
+    method.insert(QStringLiteral("returnType"), QStringLiteral("number"));
+    QJsonArray arguments;
+    // arguments look nicer when 1-based than 0-based.
+    for (int i = 1; i <= numArguments; ++i) {
+        QJsonObject argument;
+        argument.insert(QStringLiteral("name"), QStringLiteral("arg%1").arg(i));
+        argument.insert(QStringLiteral("type"), QStringLiteral("number"));
+        arguments.append(argument);
+    }
+    method.insert(QStringLiteral("arguments"), arguments);
+    return method;
+
 }
 
 static QString buildClass(const QJSManagedValue &value, QJsonArray *classes,
@@ -186,61 +205,8 @@ static QString buildClass(const QJSManagedValue &value, QJsonArray *classes,
 
     QJsonArray properties, methods;
 
-    for (const PropertyInfo &info : getPropertyInfos(value)) {
-        QJSManagedValue prop = checkedProperty(value, info.name);
-        if (prop.engine()->hasError()) {
-            qWarning() << "Cannot retrieve property " << info.name << "of" << name;
-            qWarning().noquote() << "    " << prop.engine()->catchError().toString();
-        }
-
-        // Method or constructor
-        if (prop.isFunction()) {
-            QV4::Scoped<QV4::FunctionObject> propFunction(scope, asManaged(prop));
-
-            QJsonObject methodObject;
-
-            methodObject.insert(QStringLiteral("access"), QStringLiteral("public"));
-            methodObject.insert(QStringLiteral("name"), info.name);
-
-            if (propFunction->isConstructor()) {
-                methodObject.insert(QStringLiteral("isConstructor"), true);
-
-                QString ctorName;
-                if (info.name.at(0).isUpper()) {
-                    ctorName = info.name;
-                } else if (info.name == QStringLiteral("constructor")) {
-                    if (name.endsWith(QStringLiteral("Prototype")))
-                        ctorName = name.chopped(strlen("Prototype"));
-                    else if (name.endsWith(QStringLiteral("PrototypeMember")))
-                        ctorName = name.chopped(strlen("PrototypeMember"));
-                    else
-                        ctorName = name;
-
-                    if (!ctorName.endsWith(QStringLiteral("Constructor")))
-                        ctorName += QStringLiteral("Constructor");
-                }
-
-                methodObject.insert(
-                            QStringLiteral("returnType"),
-                            buildConstructor(prop, classes, seen, ctorName));
-            }
-
-            const int formalParams = propFunction->getLength();
-
-            QJsonArray arguments;
-            for (int i = 0; i < formalParams; i++)
-                arguments.append(QJsonObject {});
-
-            methodObject.insert(QStringLiteral("arguments"), arguments);
-
-            methods.append(methodObject);
-
-            continue;
-        }
-
-        // ...else it's just a property
+    auto defineProperty = [&](const QJSManagedValue &prop, const PropertyInfo &info) {
         QJsonObject propertyObject;
-
         propertyObject.insert(QStringLiteral("name"), info.name);
 
         // Insert faux member entry if we're allowed to write to this
@@ -263,7 +229,86 @@ static QString buildClass(const QJSManagedValue &value, QJsonArray *classes,
                 propertyObject.insert(QStringLiteral("type"), propClassName);
             }
         }
-        properties.append(propertyObject);
+        return propertyObject;
+    };
+
+    QList<PropertyInfo> unRetrievedProperties;
+    QJSManagedValue constructed;
+    for (const PropertyInfo &info : getPropertyInfos(value)) {
+        QJSManagedValue prop = checkedProperty(value, info.name);
+        if (prop.engine()->hasError()) {
+            unRetrievedProperties.append(info);
+            prop.engine()->catchError();
+            continue;
+        }
+
+        // Method or constructor
+        if (prop.isFunction()) {
+            QV4::Scoped<QV4::FunctionObject> propFunction(scope, asManaged(prop));
+
+            QJsonObject methodObject;
+
+            methodObject.insert(QStringLiteral("access"), QStringLiteral("public"));
+            methodObject.insert(QStringLiteral("name"), info.name);
+            methodObject.insert(QStringLiteral("isJavaScriptFunction"), true);
+
+            const int formalParams = propFunction->getLength();
+            if (propFunction->isConstructor()) {
+                methodObject.insert(QStringLiteral("isConstructor"), true);
+
+                QString ctorName;
+                if (info.name.at(0).isUpper()) {
+                    ctorName = info.name;
+                } else if (info.name == QStringLiteral("constructor")) {
+                    if (name.endsWith(QStringLiteral("Prototype")))
+                        ctorName = name.chopped(strlen("Prototype"));
+                    else if (name.endsWith(QStringLiteral("PrototypeMember")))
+                        ctorName = name.chopped(strlen("PrototypeMember"));
+                    else
+                        ctorName = name;
+
+                    if (!ctorName.endsWith(QStringLiteral("Constructor")))
+                        ctorName += QStringLiteral("Constructor");
+                }
+
+                methodObject.insert(
+                            QStringLiteral("returnType"),
+                            buildConstructor(prop, classes, seen, ctorName, &constructed));
+            } else if (name == QStringLiteral("Math")) {
+                // All methods of Math return numbers when given numbers.
+                // We model this as overloads of the generic methods.
+                methods.append(createPublicNumberMethod(info.name, formalParams));
+
+                // If there is no formal parameter, it doesn't matter what you pass.
+                // You always get number back.
+                if (formalParams == 0)
+                    continue;
+            }
+
+            QJsonArray arguments;
+            for (int i = 0; i < formalParams; i++)
+                arguments.append(QJsonObject {});
+
+            methodObject.insert(QStringLiteral("arguments"), arguments);
+
+            methods.append(methodObject);
+
+            continue;
+        }
+
+        // ...else it's just a property
+        properties.append(defineProperty(prop, info));
+    }
+
+    for (const PropertyInfo &info : unRetrievedProperties) {
+        QJSManagedValue prop = checkedProperty(
+                    constructed.isUndefined() ? value : constructed, info.name);
+        if (prop.engine()->hasError()) {
+            qWarning() << "Cannot retrieve property " << info.name << "of" << name << constructed.toString();
+            qWarning().noquote() << "    " << prop.engine()->catchError().toString();
+        }
+
+        properties.append(defineProperty(prop, info));
     }
 
     classObject[QStringLiteral("properties")] = properties;
@@ -275,7 +320,7 @@ static QString buildClass(const QJSManagedValue &value, QJsonArray *classes,
 }
 
 static QString buildConstructor(const QJSManagedValue &constructor, QJsonArray *classes,
-                                State *seen, const QString &name)
+                                State *seen, const QString &name, QJSManagedValue *constructed)
 {
     QJSEngine *engine = constructor.engine();
 
@@ -285,32 +330,31 @@ static QString buildConstructor(const QJSManagedValue &constructor, QJsonArray *
     for (const auto &info : infos) {
         const QJSManagedValue member(globalObject.property(info.name), engine);
         if (member.strictlyEquals(constructor) && info.name != name)
-            return buildConstructor(constructor, classes, seen, info.name);
+            return buildConstructor(constructor, classes, seen, info.name, constructed);
     }
 
-    QJSManagedValue constructed;
     if (name == QStringLiteral("Symbol"))
         return QStringLiteral("undefined"); // Cannot construct symbols with "new";
 
     if (name == QStringLiteral("URL")) {
-        constructed = QJSManagedValue(
+        *constructed = QJSManagedValue(
                     constructor.callAsConstructor({ QJSValue(QStringLiteral("http://a.bc")) }),
                     engine);
     } else if (name == QStringLiteral("Promise")) {
-        constructed = QJSManagedValue(
+        *constructed = QJSManagedValue(
                     constructor.callAsConstructor(
                         { engine->evaluate(QStringLiteral("(function() {})")) }),
                         engine);
     } else if (name == QStringLiteral("DataView")) {
-        constructed = QJSManagedValue(
+        *constructed = QJSManagedValue(
                     constructor.callAsConstructor(
                         { engine->evaluate(QStringLiteral("new ArrayBuffer()")) }),
                         engine);
     } else if (name == QStringLiteral("Proxy")) {
-        constructed = QJSManagedValue(constructor.callAsConstructor(
+        *constructed = QJSManagedValue(constructor.callAsConstructor(
                                           { engine->newObject(), engine->newObject() }), engine);
     } else {
-        constructed = QJSManagedValue(constructor.callAsConstructor(), engine);
+        *constructed = QJSManagedValue(constructor.callAsConstructor(), engine);
     }
 
     if (engine->hasError()) {
@@ -324,7 +368,7 @@ static QString buildConstructor(const QJSManagedValue &constructor, QJsonArray *
     auto it = seen->constructors.find(name);
     if (it == seen->constructors.end()) {
         seen->constructors.insert(name, constructor.toJSValue());
-        return buildClass(constructed, classes, seen, name);
+        return buildClass(*constructed, classes, seen, name);
     } else if (!constructor.strictlyEquals(QJSManagedValue(*it, constructor.engine()))) {
         qWarning() << "Two constructors of the same name seen:" << name;
     }

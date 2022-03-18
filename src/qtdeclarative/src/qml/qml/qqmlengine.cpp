@@ -72,6 +72,7 @@
 #include <QtCore/qmutex.h>
 #include <QtCore/qthread.h>
 #include <private/qthread_p.h>
+#include <private/qqmlscriptdata_p.h>
 
 #if QT_CONFIG(qml_network)
 #include "qqmlnetworkaccessmanagerfactory.h"
@@ -239,256 +240,10 @@ QQmlImageProviderBase::~QQmlImageProviderBase()
 {
 }
 
-
-/*!
-\qmltype Qt
-\inqmlmodule QtQml
-\instantiates QQmlEnginePrivate
-\ingroup qml-utility-elements
-\keyword QmlGlobalQtObject
-\brief Provides a global object with useful enums and functions from Qt.
-
-The \c Qt object is a global object with utility functions, properties and enums.
-
-It is not instantiable; to use it, call the members of the global \c Qt object directly.
-For example:
-
-\qml
-import QtQuick 2.0
-
-Text {
-    color: Qt.rgba(1, 0, 0, 1)
-    text: Qt.md5("hello, world")
-}
-\endqml
-
-
-\section1 Enums
-
-The Qt object contains the enums available in the \l [QtCore]{Qt}{Qt Namespace}. For example, you can access
-the \l Qt::LeftButton and \l Qt::RightButton enumeration values as \c Qt.LeftButton and \c Qt.RightButton.
-
-
-\section1 Types
-
-The Qt object also contains helper functions for creating objects of specific
-data types. This is primarily useful when setting the properties of an item
-when the property has one of the following types:
-\list
-\li \c rect - use \l{Qt::rect()}{Qt.rect()}
-\li \c point - use \l{Qt::point()}{Qt.point()}
-\li \c size - use \l{Qt::size()}{Qt.size()}
-\endlist
-
-If the \c QtQuick module has been imported, the following helper functions for
-creating objects of specific data types are also available for clients to use:
-\list
-\li \c color - use \l{Qt::rgba()}{Qt.rgba()}, \l{Qt::hsla()}{Qt.hsla()}, \l{Qt::darker()}{Qt.darker()}, \l{Qt::lighter()}{Qt.lighter()} or \l{Qt::tint()}{Qt.tint()}
-\li \c font - use \l{Qt::font()}{Qt.font()}
-\li \c vector2d - use \l{Qt::vector2d()}{Qt.vector2d()}
-\li \c vector3d - use \l{Qt::vector3d()}{Qt.vector3d()}
-\li \c vector4d - use \l{Qt::vector4d()}{Qt.vector4d()}
-\li \c quaternion - use \l{Qt::quaternion()}{Qt.quaternion()}
-\li \c matrix4x4 - use \l{Qt::matrix4x4()}{Qt.matrix4x4()}
-\endlist
-
-There are also string based constructors for these types. See \l{qtqml-typesystem-basictypes.html}{QML Basic Types} for more information.
-
-\section1 Date/Time Formatters
-
-The Qt object contains several functions for formatting QDateTime, QDate and QTime values.
-
-\list
-    \li \l{Qt::formatDateTime}{string Qt.formatDateTime(datetime date, variant format)}
-    \li \l{Qt::formatDate}{string Qt.formatDate(datetime date, variant format)}
-    \li \l{Qt::formatTime}{string Qt.formatTime(datetime date, variant format)}
-\endlist
-
-The format specification is described at \l{Qt::formatDateTime}{Qt.formatDateTime}.
-
-
-\section1 Dynamic Object Creation
-The following functions on the global object allow you to dynamically create QML
-items from files or strings. See \l{Dynamic QML Object Creation from JavaScript} for an overview
-of their use.
-
-\list
-    \li \l{Qt::createComponent()}{object Qt.createComponent(url)}
-    \li \l{Qt::createQmlObject()}{object Qt.createQmlObject(string qml, object parent, string filepath)}
-\endlist
-
-
-\section1 Other Functions
-
-The following functions are also on the Qt object.
-
-\list
-    \li \l{Qt::quit()}{Qt.quit()}
-    \li \l{Qt::md5()}{Qt.md5(string)}
-    \li \l{Qt::btoa()}{string Qt.btoa(string)}
-    \li \l{Qt::atob()}{string Qt.atob(string)}
-    \li \l{Qt::binding()}{object Qt.binding(function)}
-    \li \l{Qt::locale()}{object Qt.locale()}
-    \li \l{Qt::resolvedUrl()}{string Qt.resolvedUrl(string)}
-    \li \l{Qt::openUrlExternally()}{Qt.openUrlExternally(string)}
-    \li \l{Qt::fontFamilies()}{list<string> Qt.fontFamilies()}
-\endlist
-*/
-
-/*!
-    \qmlproperty object Qt::platform
-    \since 5.1
-
-    The \c platform object provides info about the underlying platform.
-
-    Its properties are:
-
-    \table
-    \row
-    \li \c platform.os
-    \li
-
-    This read-only property contains the name of the operating system.
-
-    Possible values are:
-
-    \list
-        \li \c "android" - Android
-        \li \c "ios" - iOS
-        \li \c "tvos" - tvOS
-        \li \c "linux" - Linux
-        \li \c "osx" - \macos
-        \li \c "qnx" - QNX (since Qt 5.9.3)
-        \li \c "unix" - Other Unix-based OS
-        \li \c "windows" - Windows
-        \li \c "wasm" - WebAssembly
-    \endlist
-
-    \row
-    \li \c platform.pluginName
-    \li This is the name of the platform set on the QGuiApplication instance
-        as returned by \l QGuiApplication::platformName()
-
-    \endtable
-*/
-
-/*!
-    \qmlproperty object Qt::application
-    \since 5.1
-
-    The \c application object provides access to global application state
-    properties shared by many QML components.
-
-    It is the same as the \l Application singleton.
-
-    The following example uses the \c application object to indicate
-    whether the application is currently active:
-
-    \snippet qml/application.qml document
-
-    \note When using QML without a QGuiApplication, the following properties will be undefined:
-    \list
-    \li application.active
-    \li application.state
-    \li application.layoutDirection
-    \li application.font
-    \endlist
-*/
-
-/*!
-    \qmlproperty object Qt::inputMethod
-    \since 5.0
-
-    The \c inputMethod object allows access to application's QInputMethod object
-    and all its properties and slots. See the QInputMethod documentation for
-    further details.
-*/
-
-/*!
-    \qmlproperty object Qt::styleHints
-    \since 5.5
-
-    The \c styleHints object provides platform-specific style hints and settings.
-    See the QStyleHints documentation for further details.
-
-    \note The \c styleHints object is only available when using the Qt Quick module.
-
-    The following example uses the \c styleHints object to determine whether an
-    item should gain focus on mouse press or touch release:
-    \code
-    import QtQuick 2.4
-
-    MouseArea {
-        id: button
-
-        onPressed: {
-            if (!Qt.styleHints.setFocusOnTouchRelease)
-                button.forceActiveFocus()
-        }
-        onReleased: {
-            if (Qt.styleHints.setFocusOnTouchRelease)
-                button.forceActiveFocus()
-        }
-    }
-    \endcode
-*/
-
-/*!
-\qmlmethod object Qt::include(string url, jsobject callback)
-\deprecated
-
-This method should not be used. Use ECMAScript modules instead and the native
-JavaScript \c import and \c export statements instead.
-
-Includes another JavaScript file. This method can only be used from within JavaScript files,
-and not regular QML files.
-
-This imports all functions from \a url into the current script's namespace.
-
-Qt.include() returns an object that describes the status of the operation.  The object has
-a single property, \c {status}, that is set to one of the following values:
-
-\table
-\header \li Symbol \li Value \li Description
-\row \li result.OK \li 0 \li The include completed successfully.
-\row \li result.LOADING \li 1 \li Data is being loaded from the network.
-\row \li result.NETWORK_ERROR \li 2 \li A network error occurred while fetching the url.
-\row \li result.EXCEPTION \li 3 \li A JavaScript exception occurred while executing the included code.
-An additional \c exception property will be set in this case.
-\endtable
-
-The \c status property will be updated as the operation progresses.
-
-If provided, \a callback is invoked when the operation completes.  The callback is passed
-the same object as is returned from the Qt.include() call.
-*/
-// Qt.include() is implemented in qv4include.cpp
-
-QQmlEnginePrivate::QQmlEnginePrivate(QQmlEngine *e)
-: propertyCapture(nullptr), rootContext(nullptr),
-#if QT_CONFIG(qml_debug)
-  profiler(nullptr),
-#endif
-  outputWarningsToMsgLog(true),
-  erroredBindings(nullptr), inProgressCreations(0),
-#if QT_CONFIG(qml_worker_script)
-  workerScriptEngine(nullptr),
-#endif
-  activeObjectCreator(nullptr),
-#if QT_CONFIG(qml_network)
-  networkAccessManager(nullptr), networkAccessManagerFactory(nullptr),
-#endif
-  scarceResourcesRefCount(0), importDatabase(e), typeLoader(e),
-  uniqueId(1), incubatorCount(0), incubationController(nullptr)
-{
-}
-
 QQmlEnginePrivate::~QQmlEnginePrivate()
 {
     if (inProgressCreations)
         qWarning() << QQmlEngine::tr("There are still \"%1\" items in the process of being created at engine destruction.").arg(inProgressCreations);
-
-    doDeleteInEngineThread();
 
     if (incubationController) incubationController->d = nullptr;
     incubationController = nullptr;
@@ -525,11 +280,6 @@ void QQmlPrivate::qdeclarativeelement_destructor(QObject *o)
         // Mark this object as in the process of deletion to
         // prevent it resolving in bindings
         QQmlData::markAsDeleted(o);
-
-        // Disconnect the notifiers now - during object destruction this would be too late, since
-        // the disconnect call wouldn't be able to call disconnectNotify(), as it isn't possible to
-        // get the metaobject anymore.
-        d->disconnectNotifiers();
     }
 }
 
@@ -685,6 +435,13 @@ void QQmlData::setQueuedForDeletion(QObject *object)
                 ddata->context = nullptr;
             }
             ddata->isQueuedForDeletion = true;
+
+            // Disconnect the notifiers now - during object destruction this would be too late,
+            // since the disconnect call wouldn't be able to call disconnectNotify(), as it isn't
+            // possible to get the metaobject anymore.
+            // Also, there is no point in evaluating bindings in order to set properties on
+            // half-deleted objects.
+            ddata->disconnectNotifiers();
         }
     }
 }
@@ -705,13 +462,8 @@ void QQmlData::flushPendingBinding(int coreIndex)
                             QQmlPropertyData::DontRemoveBinding);
 }
 
-QQmlData::DeferredData::DeferredData()
-{
-}
-
-QQmlData::DeferredData::~DeferredData()
-{
-}
+QQmlData::DeferredData::DeferredData() = default;
+QQmlData::DeferredData::~DeferredData() = default;
 
 bool QQmlEnginePrivate::baseModulesUninitialized = true;
 void QQmlEnginePrivate::init()
@@ -816,9 +568,7 @@ QQmlEngine::~QQmlEngine()
     // we do this here and not in the private dtor since otherwise a crash can
     // occur (if we are the QObject parent of the QObject singleton instance)
     // XXX TODO: performance -- store list of singleton types separately?
-    const QList<QQmlType> singletonTypes = QQmlMetaType::qmlSingletonTypes();
-    for (const QQmlType &currType : singletonTypes)
-        d->destroySingletonInstance(currType);
+    d->singletonInstances.clear();
 
     delete d->rootContext;
     d->rootContext = nullptr;
@@ -870,7 +620,7 @@ QQmlEngine::~QQmlEngine()
   As a general rule of thumb, make sure that no objects created from QML
   components are alive when you clear the component cache.
 
-  \sa trimComponentCache()
+  \sa trimComponentCache(), clearSingletons()
  */
 void QQmlEngine::clearComponentCache()
 {
@@ -896,6 +646,27 @@ void QQmlEngine::trimComponentCache()
 {
     Q_D(QQmlEngine);
     d->typeLoader.trimCache();
+}
+
+/*!
+  Clears all singletons the engine owns.
+
+  This function drops all singleton instances, deleting any QObjects owned by
+  the engine among them. This is useful to make sure that no QML-created objects
+  are left before calling clearComponentCache().
+
+  QML properties holding QObject-based singleton instances become null if the
+  engine owns the singleton or retain their value if the engine doesn't own it.
+  The singletons are not automatically re-created by accessing existing
+  QML-created objects. Only when new components are instantiated, the singletons
+  are re-created.
+
+  \sa clearComponentCache()
+ */
+void QQmlEngine::clearSingletons()
+{
+    Q_D(QQmlEngine);
+    d->singletonInstances.clear();
 }
 
 /*!
@@ -980,16 +751,6 @@ QList<QQmlAbstractUrlInterceptor *> QQmlEngine::urlInterceptors() const
 {
     Q_D(const QQmlEngine);
     return d->urlInterceptors;
-}
-
-void QQmlEnginePrivate::registerFinalizeCallback(QObject *obj, int index)
-{
-    if (activeObjectCreator) {
-        activeObjectCreator->finalizeCallbacks()->append(qMakePair(QPointer<QObject>(obj), index));
-    } else {
-        void *args[] = { nullptr };
-        QMetaObject::metacall(obj, QMetaObject::InvokeMetaMethod, index, args);
-    }
 }
 
 QSharedPointer<QQmlImageProviderBase> QQmlEnginePrivate::imageProvider(const QString &providerId) const
@@ -1245,7 +1006,7 @@ template<>
 QJSValue QQmlEngine::singletonInstance<QJSValue>(int qmlTypeId)
 {
     Q_D(QQmlEngine);
-    QQmlType type = QQmlMetaType::qmlType(qmlTypeId, QQmlMetaType::TypeIdCategory::QmlType);
+    QQmlType type = QQmlMetaType::qmlTypeById(qmlTypeId);
 
     if (!type.isValid() || !type.isSingleton())
         return QJSValue();
@@ -1319,25 +1080,11 @@ void QQmlEngine::setContextForObject(QObject *object, QQmlContext *context)
 */
 bool QQmlEngine::event(QEvent *e)
 {
-    Q_D(QQmlEngine);
-    if (e->type() == QEvent::User)
-        d->doDeleteInEngineThread();
-    else if (e->type() == QEvent::LanguageChange) {
+    if (e->type() == QEvent::LanguageChange) {
         retranslate();
     }
 
     return QJSEngine::event(e);
-}
-
-void QQmlEnginePrivate::doDeleteInEngineThread()
-{
-    QFieldList<Deletable, &Deletable::next> list;
-    mutex.lock();
-    list.copyAndClear(toDeleteInEngineThread);
-    mutex.unlock();
-
-    while (Deletable *d = list.takeFirst())
-        delete d;
 }
 
 class QQmlDataExtended {
@@ -1424,8 +1171,8 @@ void QQmlData::deferData(
     const QV4::CompiledData::Binding *binding = compiledObject->bindingTable();
     for (quint32 i = 0; i < compiledObject->nBindings; ++i, ++binding) {
         const QQmlPropertyData *property = propertyData.at(i);
-        if (property && binding->flags & QV4::CompiledData::Binding::IsDeferredBinding)
-            deferData->bindings.insert(property->coreIndex(), binding);
+        if (binding->flags & QV4::CompiledData::Binding::IsDeferredBinding)
+            deferData->bindings.insert(property ? property->coreIndex() : -1, binding);
     }
 
     deferredData.append(deferData);
@@ -1563,7 +1310,7 @@ void QQmlData::destroyed(QObject *object)
         free(bindingBits);
 
     if (propertyCache)
-        propertyCache->release();
+        propertyCache = nullptr;
 
     ownContext = nullptr;
 
@@ -1618,10 +1365,10 @@ QQmlData *QQmlData::createQQmlData(QObjectPrivate *priv)
     return static_cast<QQmlData *>(priv->declarativeData);
 }
 
-QQmlPropertyCache *QQmlData::createPropertyCache(QJSEngine *engine, QObject *object)
+QQmlRefPointer<QQmlPropertyCache> QQmlData::createPropertyCache(QJSEngine *engine, QObject *object)
 {
     QQmlData *ddata = QQmlData::get(object, /*create*/true);
-    ddata->propertyCache = QJSEnginePrivate::get(engine)->cache(object, QTypeRevision {}, true);
+    ddata->propertyCache = QJSEnginePrivate::get(engine)->cache(object, QTypeRevision {});
     return ddata->propertyCache;
 }
 
@@ -1678,7 +1425,7 @@ static void dumpwarning(const QList<QQmlError> &errors)
 void QQmlEnginePrivate::warning(const QQmlError &error)
 {
     Q_Q(QQmlEngine);
-    q->warnings(QList<QQmlError>() << error);
+    emit q->warnings(QList<QQmlError>({error}));
     if (outputWarningsToMsgLog)
         dumpwarning(error);
 }
@@ -1686,7 +1433,7 @@ void QQmlEnginePrivate::warning(const QQmlError &error)
 void QQmlEnginePrivate::warning(const QList<QQmlError> &errors)
 {
     Q_Q(QQmlEngine);
-    q->warnings(errors);
+    emit q->warnings(errors);
     if (outputWarningsToMsgLog)
         dumpwarning(errors);
 }
@@ -1891,7 +1638,6 @@ bool QQmlEngine::importPlugin(const QString &filePath, const QString &uri, QList
   storage is placed.
 
   The SQL databases created with \c openDatabaseSync() are stored here.
-  \sa \l{Qt Quick Local Storage QML Types}
 
   The default is QML/OfflineStorage in the platform-standard
   user application data directory.
@@ -1899,6 +1645,8 @@ bool QQmlEngine::importPlugin(const QString &filePath, const QString &uri, QList
   Note that the path may not currently exist on the filesystem, so
   callers wanting to \e create new files at this location should create
   it first - see QDir::mkpath().
+
+  \sa {Qt Quick Local Storage QML Types}
 */
 void QQmlEngine::setOfflineStoragePath(const QString& dir)
 {
@@ -1943,14 +1691,15 @@ QString QQmlEnginePrivate::offlineStorageDatabaseDirectory() const
     return q->offlineStoragePath() + QDir::separator() + QLatin1String("Databases") + QDir::separator();
 }
 
-static QQmlPropertyCache *propertyCacheForPotentialInlineComponentType(int t, const QHash<int, QV4::ExecutableCompilationUnit *>::const_iterator &iter) {
+static QQmlRefPointer<QQmlPropertyCache> propertyCacheForPotentialInlineComponentType(
+        int t, const QHash<int, QV4::ExecutableCompilationUnit *>::const_iterator &iter) {
     if (t != (*iter)->typeIds.id.id()) {
         // this is an inline component, and what we have in the iterator is currently the parent compilation unit
         for (auto &&icDatum: (*iter)->inlineComponentData)
             if (icDatum.typeIds.id.id() == t)
                 return (*iter)->propertyCaches.at(icDatum.objectIndex);
     }
-    return (*iter)->rootPropertyCache().data();
+    return (*iter)->rootPropertyCache();
 }
 
 /*!
@@ -1958,13 +1707,12 @@ static QQmlPropertyCache *propertyCacheForPotentialInlineComponentType(int t, co
  *
  * Look up by type's baseMetaObject.
  */
-QQmlMetaObject QQmlEnginePrivate::rawMetaObjectForType(int t) const
+QQmlMetaObject QQmlEnginePrivate::rawMetaObjectForType(QMetaType metaType) const
 {
-    if (QQmlPropertyCache *composite = findPropertyCacheInCompositeTypes(t))
+    if (auto composite = findPropertyCacheInCompositeTypes(metaType.id()))
         return QQmlMetaObject(composite);
 
-    QQmlType type = QQmlMetaType::qmlType(t);
-    return QQmlMetaObject(type.baseMetaObject());
+    return QQmlMetaObject(QQmlMetaType::qmlType(metaType).baseMetaObject());
 }
 
 /*!
@@ -1972,13 +1720,12 @@ QQmlMetaObject QQmlEnginePrivate::rawMetaObjectForType(int t) const
  *
  * Look up by type's metaObject.
  */
-QQmlMetaObject QQmlEnginePrivate::metaObjectForType(int t) const
+QQmlMetaObject QQmlEnginePrivate::metaObjectForType(QMetaType metaType) const
 {
-    if (QQmlPropertyCache *composite = findPropertyCacheInCompositeTypes(t))
+    if (auto composite = findPropertyCacheInCompositeTypes(metaType.id()))
         return QQmlMetaObject(composite);
 
-    QQmlType type = QQmlMetaType::qmlType(t);
-    return QQmlMetaObject(type.metaObject());
+    return QQmlMetaObject(QQmlMetaType::qmlType(metaType).metaObject());
 }
 
 /*!
@@ -1986,13 +1733,15 @@ QQmlMetaObject QQmlEnginePrivate::metaObjectForType(int t) const
  *
  * Look up by type's metaObject and version.
  */
-QQmlPropertyCache *QQmlEnginePrivate::propertyCacheForType(int t)
+QQmlRefPointer<QQmlPropertyCache> QQmlEnginePrivate::propertyCacheForType(QMetaType metaType)
 {
-    if (QQmlPropertyCache *composite = findPropertyCacheInCompositeTypes(t))
+    if (auto composite = findPropertyCacheInCompositeTypes(metaType.id()))
         return composite;
 
-    QQmlType type = QQmlMetaType::qmlType(t);
-    return type.isValid() ? cache(type.metaObject(), type.version()) : nullptr;
+    const QQmlType type = QQmlMetaType::qmlType(metaType);
+    return type.isValid()
+            ? cache(type.metaObject(), type.version())
+            : QQmlRefPointer<QQmlPropertyCache>();
 }
 
 /*!
@@ -2002,13 +1751,15 @@ QQmlPropertyCache *QQmlEnginePrivate::propertyCacheForType(int t)
  * TODO: Is this correct? Passing a plain QTypeRevision() rather than QTypeRevision::zero() or
  *       the actual type's version seems strange. The behavior has been in place for a while.
  */
-QQmlPropertyCache *QQmlEnginePrivate::rawPropertyCacheForType(int t)
+QQmlRefPointer<QQmlPropertyCache> QQmlEnginePrivate::rawPropertyCacheForType(QMetaType metaType)
 {
-    if (QQmlPropertyCache *composite = findPropertyCacheInCompositeTypes(t))
+    if (auto composite = findPropertyCacheInCompositeTypes(metaType.id()))
         return composite;
 
-    QQmlType type = QQmlMetaType::qmlType(t);
-    return type.isValid() ? cache(type.baseMetaObject(), QTypeRevision()) : nullptr;
+    const QQmlType type = QQmlMetaType::qmlType(metaType);
+    return type.isValid()
+            ? cache(type.baseMetaObject(), QTypeRevision())
+            : QQmlRefPointer<QQmlPropertyCache>();
 }
 
 /*!
@@ -2017,14 +1768,15 @@ QQmlPropertyCache *QQmlEnginePrivate::rawPropertyCacheForType(int t)
  * Look up by QQmlType and version. We only fall back to lookup by metaobject if the type
  * has no revisiononed attributes here. Unspecified versions are interpreted as "any".
  */
-QQmlPropertyCache *QQmlEnginePrivate::rawPropertyCacheForType(int t, QTypeRevision version)
+QQmlRefPointer<QQmlPropertyCache> QQmlEnginePrivate::rawPropertyCacheForType(
+        QMetaType metaType, QTypeRevision version)
 {
-    if (QQmlPropertyCache *composite = findPropertyCacheInCompositeTypes(t))
+    if (auto composite = findPropertyCacheInCompositeTypes(metaType.id()))
         return composite;
 
-    QQmlType type = QQmlMetaType::qmlType(t);
+    const QQmlType type = QQmlMetaType::qmlType(metaType);
     if (!type.isValid())
-        return nullptr;
+        return QQmlRefPointer<QQmlPropertyCache>();
 
     if (type.containsRevisionedAttributes())
         return QQmlMetaType::propertyCache(type, version);
@@ -2032,15 +1784,15 @@ QQmlPropertyCache *QQmlEnginePrivate::rawPropertyCacheForType(int t, QTypeRevisi
     if (const QMetaObject *metaObject = type.metaObject())
         return cache(metaObject, version);
 
-    return nullptr;
+    return QQmlRefPointer<QQmlPropertyCache>();
 }
 
-QQmlPropertyCache *QQmlEnginePrivate::findPropertyCacheInCompositeTypes(int t) const
+QQmlRefPointer<QQmlPropertyCache> QQmlEnginePrivate::findPropertyCacheInCompositeTypes(int t) const
 {
-    Locker locker(this);
+    QMutexLocker locker(&this->mutex);
     auto iter = m_compositeTypes.constFind(t);
     return (iter == m_compositeTypes.constEnd())
-            ? nullptr
+            ? QQmlRefPointer<QQmlPropertyCache>()
             : propertyCacheForPotentialInlineComponentType(t, iter);
 }
 
@@ -2048,7 +1800,7 @@ void QQmlEnginePrivate::registerInternalCompositeType(QV4::ExecutableCompilation
 {
     compilationUnit->isRegisteredWithEngine = true;
 
-    Locker locker(this);
+    QMutexLocker locker(&this->mutex);
     // The QQmlCompiledData is not referenced here, but it is removed from this
     // hash in the QQmlCompiledData destructor
     m_compositeTypes.insert(compilationUnit->typeIds.id.id(), compilationUnit);
@@ -2060,7 +1812,7 @@ void QQmlEnginePrivate::unregisterInternalCompositeType(QV4::ExecutableCompilati
 {
     compilationUnit->isRegisteredWithEngine = false;
 
-    Locker locker(this);
+    QMutexLocker locker(&this->mutex);
     m_compositeTypes.remove(compilationUnit->typeIds.id.id());
     for (auto&& icDatum: compilationUnit->inlineComponentData)
         m_compositeTypes.remove(icDatum.typeIds.id.id());
@@ -2068,7 +1820,7 @@ void QQmlEnginePrivate::unregisterInternalCompositeType(QV4::ExecutableCompilati
 
 QV4::ExecutableCompilationUnit *QQmlEnginePrivate::obtainExecutableCompilationUnit(int typeId)
 {
-    Locker locker(this);
+    QMutexLocker locker(&this->mutex);
     return m_compositeTypes.value(typeId, nullptr);
 }
 
@@ -2108,10 +1860,19 @@ QJSValue QQmlEnginePrivate::singletonInstance<QJSValue>(const QQmlType &type)
 
             // if this object can use a property cache, create it now
             QQmlData::ensurePropertyCache(q, o);
+
+            // even though the object is defined in C++, qmlContext(obj) and qmlEngine(obj)
+            // should behave identically to QML singleton types. You can, however, manually
+            // assign a context; and clearSingletons() retains the contexts, in which case
+            // we don't want to see warnings about the object already having a context.
+            QQmlData *data = QQmlData::get(o, true);
+            if (!data->context) {
+                auto contextData = QQmlContextData::get(new QQmlContext(q->rootContext(), q));
+                data->context = contextData.data();
+                contextData->addOwnedObject(data);
+            }
         }
-        // even though the object is defined in C++, qmlContext(obj) and qmlEngine(obj)
-        // should behave identically to QML singleton types.
-        q->setContextForObject(o, new QQmlContext(q->rootContext(), q));
+
         value = q->newQObject(o);
         singletonInstances.convertAndInsert(v4engine(), type, &value);
     } else if (!siinfo->url.isEmpty()) {
@@ -2131,19 +1892,6 @@ QJSValue QQmlEnginePrivate::singletonInstance<QJSValue>(const QQmlType &type)
     return value;
 }
 
-void QQmlEnginePrivate::destroySingletonInstance(const QQmlType &type)
-{
-    Q_ASSERT(type.isSingleton() || type.isCompositeSingleton());
-
-    QObject* o = singletonInstances.take(type).toQObject();
-    if (o) {
-        QQmlData *ddata = QQmlData::get(o, false);
-        if (type.singletonInstanceInfo()->url.isEmpty() && ddata && ddata->indestructible && ddata->explicitIndestructibleSet)
-            return;
-        delete o;
-    }
-}
-
 bool QQmlEnginePrivate::isTypeLoaded(const QUrl &url) const
 {
     return typeLoader.isTypeLoaded(url);
@@ -2158,27 +1906,66 @@ void QQmlEnginePrivate::executeRuntimeFunction(const QUrl &url, qsizetype functi
                                                QObject *thisObject, int argc, void **args,
                                                QMetaType *types)
 {
-    Q_Q(QQmlEngine);
-    const auto unit = typeLoader.getType(url)->compilationUnit();
+    const auto unit = compilationUnitFromUrl(url);
     if (!unit)
         return;
+    executeRuntimeFunction(unit, functionIndex, thisObject, argc, args, types);
+}
 
-    Q_ASSERT(functionIndex >= 0);
+void QQmlEnginePrivate::executeRuntimeFunction(const QV4::ExecutableCompilationUnit *unit,
+                                               qsizetype functionIndex, QObject *thisObject,
+                                               int argc, void **args, QMetaType *types)
+{
+    Q_ASSERT(unit);
+    Q_ASSERT((functionIndex >= 0) && (functionIndex < unit->runtimeFunctions.length()));
     Q_ASSERT(thisObject);
 
-    if (!unit->engine)
-        unit->linkToEngine(q->handle());
-
-    if (unit->runtimeFunctions.length() <= functionIndex)
-        return;
-
-    QQmlContext *ctx = q->contextForObject(thisObject);
-    if (!ctx)
-        ctx = q->rootContext();
+    QQmlData *ddata = QQmlData::get(thisObject);
+    Q_ASSERT(ddata && ddata->outerContext);
 
     // implicitly sets the return value, if it is present
-    q->handle()->callInContext(unit->runtimeFunctions[functionIndex], thisObject,
-                               QQmlContextData::get(ctx), argc, args, types);
+    v4engine()->callInContext(unit->runtimeFunctions[functionIndex], thisObject,
+                              ddata->outerContext, argc, args, types);
+}
+
+QV4::ExecutableCompilationUnit *QQmlEnginePrivate::compilationUnitFromUrl(const QUrl &url)
+{
+    auto unit = typeLoader.getType(url)->compilationUnit();
+    if (!unit)
+        return nullptr;
+    if (!unit->engine)
+        unit->linkToEngine(v4engine());
+    return unit;
+}
+
+QQmlRefPointer<QQmlContextData>
+QQmlEnginePrivate::createInternalContext(const QQmlRefPointer<QV4::ExecutableCompilationUnit> &unit,
+                                         const QQmlRefPointer<QQmlContextData> &parentContext,
+                                         int subComponentIndex, bool isComponentRoot)
+{
+    Q_ASSERT(unit);
+
+    QQmlRefPointer<QQmlContextData> context;
+    context = QQmlContextData::createRefCounted(parentContext);
+    context->setInternal(true);
+    context->setImports(unit->typeNameCache);
+    context->initFromTypeCompilationUnit(unit, subComponentIndex);
+
+    if (isComponentRoot && unit->dependentScripts.count()) {
+        QV4::ExecutionEngine *v4 = v4engine();
+        Q_ASSERT(v4);
+        QV4::Scope scope(v4);
+
+        QV4::ScopedObject scripts(scope, v4->newArrayObject(unit->dependentScripts.count()));
+        context->setImportedScripts(QV4::PersistentValue(v4, scripts.asReturnedValue()));
+        QV4::ScopedValue v(scope);
+        for (int i = 0; i < unit->dependentScripts.count(); ++i) {
+            QQmlRefPointer<QQmlScriptData> s = unit->dependentScripts.at(i);
+            scripts->put(i, (v = s->scriptValueForContext(context)));
+        }
+    }
+
+    return context;
 }
 
 #if defined(Q_OS_WIN)

@@ -403,6 +403,8 @@ public:
         Zarma = 325,
         Zhuang = 326,
         Zulu = 327,
+        Kaingang = 328,
+        Nheengatu = 329,
 
         Afan = Oromo,
         Bengali = Bangla,
@@ -424,7 +426,7 @@ public:
         Uigur = Uyghur,
         Walamo = Wolaytta,
 
-        LastLanguage = Zulu
+        LastLanguage = Nheengatu
     };
 
     enum Script : ushort {
@@ -925,7 +927,10 @@ public:
     Q_FLAG(DataSizeFormats)
 
     QLocale();
+#if QT_STRINGVIEW_LEVEL < 2
     explicit QLocale(const QString &name);
+#endif
+    explicit QLocale(QStringView name);
     QLocale(Language language, Territory territory);
     QLocale(Language language, Script script = AnyScript, Territory territory = AnyTerritory);
     QLocale(const QLocale &other);
@@ -1083,8 +1088,29 @@ public:
 
     QStringList uiLanguages() const;
 
+    enum LanguageCodeType {
+        ISO639Part1 = 1 << 0,
+        ISO639Part2B = 1 << 1,
+        ISO639Part2T = 1 << 2,
+        ISO639Part3 = 1 << 3,
+        LegacyLanguageCode = 1 << 15,
+
+        ISO639Part2 = ISO639Part2B | ISO639Part2T,
+        ISO639Alpha2 = ISO639Part1,
+        ISO639Alpha3 = ISO639Part2 | ISO639Part3,
+        ISO639 = ISO639Alpha2 | ISO639Alpha3,
+
+        AnyLanguageCode = -1
+    };
+    Q_DECLARE_FLAGS(LanguageCodeTypes, LanguageCodeType)
+
+#if QT_CORE_REMOVED_SINCE(6, 3)
     static QString languageToCode(Language language);
     static Language codeToLanguage(QStringView languageCode) noexcept;
+#endif
+    static QString languageToCode(Language language, LanguageCodeTypes codeTypes = AnyLanguageCode);
+    static Language codeToLanguage(QStringView languageCode,
+                                   LanguageCodeTypes codeTypes = AnyLanguageCode) noexcept;
     static QString territoryToCode(Territory territory);
     static Territory codeToTerritory(QStringView territoryCode) noexcept;
 #if QT_DEPRECATED_SINCE(6, 6)
@@ -1141,6 +1167,7 @@ private:
 };
 Q_DECLARE_SHARED(QLocale)
 Q_DECLARE_OPERATORS_FOR_FLAGS(QLocale::NumberOptions)
+Q_DECLARE_OPERATORS_FOR_FLAGS(QLocale::LanguageCodeTypes)
 
 #ifndef QT_NO_DATASTREAM
 Q_CORE_EXPORT QDataStream &operator<<(QDataStream &, const QLocale &);

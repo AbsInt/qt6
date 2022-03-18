@@ -1409,7 +1409,7 @@ QV4::ReturnedValue QQuickJSContext2D::method_get_fillStyle(const QV4::FunctionOb
     QV4::Scoped<QQuickJSContext2D> r(scope, thisObject->as<QQuickJSContext2D>());
     CHECK_CONTEXT(r)
 
-    QColor color = r->d()->context()->state.fillStyle.color();
+    const QColor color = r->d()->context()->state.fillStyle.color().toRgb();
     if (color.isValid()) {
         if (color.alpha() == 255)
             RETURN_RESULT(scope.engine->newString(color.name()));
@@ -1518,7 +1518,7 @@ QV4::ReturnedValue QQuickJSContext2D::method_get_strokeStyle(const QV4::Function
     QV4::Scoped<QQuickJSContext2D> r(scope, thisObject->as<QQuickJSContext2D>());
     CHECK_CONTEXT(r)
 
-    QColor color = r->d()->context()->state.strokeStyle.color();
+    const QColor color = r->d()->context()->state.strokeStyle.color().toRgb();
     if (color.isValid()) {
         if (color.alpha() == 255)
             RETURN_RESULT(scope.engine->newString(color.name()));
@@ -2815,7 +2815,7 @@ QV4::ReturnedValue QQuickJSContext2D::method_set_font(const QV4::FunctionObject 
     CHECK_CONTEXT_SETTER(r)
 
     QV4::ScopedString s(scope, argc ? argv[0] : QV4::Value::undefinedValue(), QV4::ScopedString::Convert);
-    if (scope.engine->hasException)
+    if (scope.hasException())
         RETURN_UNDEFINED();
     QFont font = qt_font_from_string(s->toQString(), r->d()->context()->state.font);
     if (font != r->d()->context()->state.font) {
@@ -2867,7 +2867,7 @@ QV4::ReturnedValue QQuickJSContext2D::method_set_textAlign(const QV4::FunctionOb
     CHECK_CONTEXT_SETTER(r)
 
     QV4::ScopedString s(scope, argc ? argv[0] : QV4::Value::undefinedValue(), QV4::ScopedString::Convert);
-    if (scope.engine->hasException)
+    if (scope.hasException())
         RETURN_UNDEFINED();
     QString textAlign = s->toQString();
 
@@ -2934,7 +2934,7 @@ QV4::ReturnedValue QQuickJSContext2D::method_set_textBaseline(const QV4::Functio
     QV4::Scoped<QQuickJSContext2D> r(scope, *thisObject);
     CHECK_CONTEXT_SETTER(r)
     QV4::ScopedString s(scope, argc ? argv[0] : QV4::Value::undefinedValue(), QV4::ScopedString::Convert);
-    if (scope.engine->hasException)
+    if (scope.hasException())
         RETURN_UNDEFINED();
     QString textBaseline = s->toQString();
 

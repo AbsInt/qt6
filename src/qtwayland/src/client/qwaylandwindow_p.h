@@ -123,6 +123,8 @@ public:
 
     void setGeometry(const QRect &rect) override;
     void resizeFromApplyConfigure(const QSize &sizeWithMargins, const QPoint &offset = {0, 0});
+    void repositionFromApplyConfigure(const QPoint &position);
+    void setGeometryFromApplyConfigure(const QPoint &globalPosition, const QSize &sizeWithMargins);
 
     void applyConfigureWhenPossible(); //rename to possible?
 
@@ -228,17 +230,25 @@ public:
     void handleUpdate();
     void deliverUpdateRequest() override;
 
+    void setXdgActivationToken(const QString &token);
+    void requestXdgActivationToken(uint serial);
+
+    void beginFrame();
+    void endFrame();
+
 public slots:
     void applyConfigure();
 
 signals:
     void wlSurfaceCreated();
     void wlSurfaceDestroyed();
+    void xdgActivationTokenCreated(const QString &token);
 
 protected:
     virtual void doHandleFrameCallback();
     virtual QRect defaultGeometry() const;
     void sendExposeEvent(const QRect &rect);
+    QMargins clientSideMargins() const;
 
     QWaylandDisplay *mDisplay = nullptr;
     QScopedPointer<QWaylandSurface> mSurface;
@@ -274,7 +284,7 @@ protected:
     int mFrameCallbackCheckIntervalTimerId = -1;
     QElapsedTimer mFrameCallbackElapsedTimer;
     struct ::wl_callback *mFrameCallback = nullptr;
-    QWaylandDisplay::FrameQueue mFrameQueue;
+    QMutex mFrameSyncMutex;
     QWaitCondition mFrameSyncWait;
 
     // True when we have called deliverRequestUpdate, but the client has not yet attached a new buffer

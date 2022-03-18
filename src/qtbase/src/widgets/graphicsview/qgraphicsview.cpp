@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
@@ -97,7 +97,7 @@ static const int QGRAPHICSVIEW_PREALLOC_STYLE_OPTIONS = 503; // largest prime < 
     convenience functions rotate(), scale(), translate() or shear(). The most
     two common transformations are scaling, which is used to implement
     zooming, and rotation. QGraphicsView keeps the center of the view fixed
-    during a transformation. Because of the scene alignment (setAligment()),
+    during a transformation. Because of the scene alignment (setAlignment()),
     translating the view will have no visual impact.
 
     You can interact with the items on the scene by using the mouse and
@@ -294,6 +294,7 @@ static const int QGRAPHICSVIEW_PREALLOC_STYLE_OPTIONS = 503; // largest prime < 
 #include <QtWidgets/qstyleoption.h>
 
 #include <private/qevent_p.h>
+#include <QtGui/private/qeventpoint_p.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -314,7 +315,7 @@ void QGraphicsViewPrivate::translateTouchEvent(QGraphicsViewPrivate *d, QTouchEv
         auto &pt = touchEvent->point(i);
         // the scene will set the item local pos, startPos, lastPos, and rect before delivering to
         // an item, but for now those functions are returning the view's local coordinates
-        QMutableEventPoint::from(pt).setScenePosition(d->mapToScene(pt.position()));
+        QMutableEventPoint::setScenePosition(pt, d->mapToScene(pt.position()));
         // screenPos, startScreenPos, and lastScreenPos are already set
     }
 }

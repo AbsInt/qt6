@@ -654,22 +654,26 @@ void QAndroidInputContext::updateSelectionHandles()
     QPoint leftPoint(qPlatformWindow->mapToGlobal(leftRect.bottomLeft().toPoint()));
     QPoint rightPoint(qPlatformWindow->mapToGlobal(rightRect.bottomRight().toPoint()));
 
-    if (m_selectHandleWidth == 0)
-            m_selectHandleWidth = QtAndroidInput::getSelectHandleWidth() / 2;
-    int rightSideOfScreen = QtAndroid::androidPlatformIntegration()->screen()->availableGeometry().right();
-    if (leftPoint.x() < m_selectHandleWidth)
-        leftPoint.setX(m_selectHandleWidth);
+    QAndroidPlatformIntegration *platformIntegration = QtAndroid::androidPlatformIntegration();
+    if (platformIntegration) {
+        if (m_selectHandleWidth == 0)
+                m_selectHandleWidth = QtAndroidInput::getSelectHandleWidth() / 2;
 
-    if (rightPoint.x() > rightSideOfScreen - m_selectHandleWidth)
-        rightPoint.setX(rightSideOfScreen - m_selectHandleWidth);
+        int rightSideOfScreen = platformIntegration->screen()->availableGeometry().right();
+        if (leftPoint.x() < m_selectHandleWidth)
+            leftPoint.setX(m_selectHandleWidth);
 
-    QPoint editPoint(qPlatformWindow->mapToGlobal(leftRect.united(rightRect).topLeft().toPoint()));
-    uint32_t buttons = readOnly ? EditContext::CopyButton | EditContext::SelectAllButton
-                                : EditContext::AllButtons;
+        if (rightPoint.x() > rightSideOfScreen - m_selectHandleWidth)
+            rightPoint.setX(rightSideOfScreen - m_selectHandleWidth);
 
-    QtAndroidInput::updateHandles(m_handleMode, editPoint, buttons, leftPoint, rightPoint,
-                                  query.value(Qt::ImCurrentSelection).toString().isRightToLeft());
-    m_hideCursorHandleTimer.stop();
+        QPoint editPoint(qPlatformWindow->mapToGlobal(leftRect.united(rightRect).topLeft().toPoint()));
+        uint32_t buttons = readOnly ? EditContext::CopyButton | EditContext::SelectAllButton
+                                    : EditContext::AllButtons;
+
+        QtAndroidInput::updateHandles(m_handleMode, editPoint, buttons, leftPoint, rightPoint,
+                                      query.value(Qt::ImCurrentSelection).toString().isRightToLeft());
+        m_hideCursorHandleTimer.stop();
+    }
 }
 
 /*
@@ -1029,7 +1033,7 @@ jboolean QAndroidInputContext::deleteSurroundingText(jint leftLength, jint right
       absolutely not what Android's native EditText does. It deletes leftLength characters before
       min(selection start, composing region start) and rightLength characters after max(selection
       end, composing region end). There are no known keyboards that depend on this behavior, but
-      it is better to be consistent with EditText behavior, because there definetly should be no
+      it is better to be consistent with EditText behavior, because there definitely should be no
       keyboards that depend on documented behavior.
      */
     const int leftEnd =

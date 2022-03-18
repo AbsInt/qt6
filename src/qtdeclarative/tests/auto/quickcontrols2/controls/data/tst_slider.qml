@@ -946,6 +946,7 @@ TestCase {
     }
 
     function test_nullTexture() {
+        failOnWarning("No QSGTexture provided from updateSampledImage(). This is wrong.")
         var control = createTemporaryObject(slider, testCase, {width: -100})
         verify(control)
         control.visible = true

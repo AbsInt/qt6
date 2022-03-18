@@ -1063,7 +1063,7 @@ class MyUncreateableBaseClass : public QObject
     Q_PROPERTY(bool prop2 READ prop2 WRITE setprop2 REVISION 1)
     Q_PROPERTY(bool prop3 READ prop3 WRITE setprop3 REVISION 1)
 public:
-    explicit MyUncreateableBaseClass(bool /* arg */, QObject *parent = 0)
+    explicit MyUncreateableBaseClass(bool /* arg */, QObject *parent = nullptr)
         : QObject(parent), _prop1(false), _prop2(false), _prop3(false)
     {
     }
@@ -1085,7 +1085,7 @@ class MyCreateableDerivedClass : public MyUncreateableBaseClass
     Q_PROPERTY(bool prop2 READ prop2 WRITE setprop2 REVISION 1)
 
 public:
-    MyCreateableDerivedClass(QObject *parent = 0)
+    MyCreateableDerivedClass(QObject *parent = nullptr)
         : MyUncreateableBaseClass(true, parent)
     {
     }
@@ -1098,7 +1098,7 @@ class MyExtendedUncreateableBaseClass : public QObject
     Q_PROPERTY(bool prop2 READ prop2 WRITE setprop2 REVISION 1)
     Q_PROPERTY(bool prop3 READ prop3 WRITE setprop3 REVISION 1)
 public:
-    explicit MyExtendedUncreateableBaseClass(QObject *parent = 0)
+    explicit MyExtendedUncreateableBaseClass(QObject *parent = nullptr)
         : QObject(parent), _prop1(false), _prop2(false), _prop3(false)
     {
     }
@@ -1119,7 +1119,7 @@ class MyExtendedUncreateableBaseClassExtension : public QObject
     Q_OBJECT
     Q_PROPERTY(bool prop4 READ prop4 WRITE setprop4)
 public:
-    explicit MyExtendedUncreateableBaseClassExtension(QObject *parent = 0)
+    explicit MyExtendedUncreateableBaseClassExtension(QObject *parent = nullptr)
         : QObject(parent), _prop4(false)
     {
     }
@@ -1135,7 +1135,7 @@ class MyExtendedCreateableDerivedClass : public MyExtendedUncreateableBaseClass
     Q_PROPERTY(bool prop5 READ prop5 WRITE setprop5)
 
 public:
-    MyExtendedCreateableDerivedClass(QObject *parent = 0)
+    MyExtendedCreateableDerivedClass(QObject *parent = nullptr)
         : MyExtendedUncreateableBaseClass(parent), _prop5(false)
     {
     }
@@ -1366,7 +1366,7 @@ class SimpleObjectExtension : public QObject
     Q_OBJECT
     Q_PROPERTY(int extendedProperty READ extendedProperty WRITE setExtendedProperty NOTIFY extendedPropertyChanged)
 public:
-    SimpleObjectExtension(QObject *parent = 0)
+    SimpleObjectExtension(QObject *parent = nullptr)
         : QObject(parent)
         , m_extendedProperty(1584)
     {}
@@ -1438,6 +1438,12 @@ private:
     QObjectList m_list;
 };
 
+class ImmediateProperties : public QObject
+{
+    Q_OBJECT
+    Q_CLASSINFO("ImmediatePropertyNames", "objectName")
+};
+
 namespace ScopedEnumsWithNameClash
 {
 Q_NAMESPACE
@@ -1464,13 +1470,23 @@ public:
 class Extension : public QObject
 {
     Q_OBJECT
-    Q_PROPERTY(int extension READ extension CONSTANT)
+    Q_PROPERTY(int extension READ extension WRITE setExtension NOTIFY extensionChanged FINAL)
 public:
     Extension(QObject *parent = nullptr) : QObject(parent) {}
-    int extension() const { return 42; }
+    int extension() const { return ext; }
+    void setExtension(int e) {
+        if (e != ext) {
+            ext = e;
+            emit extensionChanged();
+        }
+    }
     Q_INVOKABLE int invokable() { return 123; }
+Q_SIGNALS:
+    void extensionChanged();
 public slots:
     int slot() { return 456; }
+private:
+    int ext = 42;
 };
 
 class Extended : public QObject
@@ -1723,6 +1739,154 @@ public:
     Q_ENUM(Enum)
 
     Q_INVOKABLE QList<EnumList::Enum> list() const { return { Alpha, Beta, Gamma }; }
+};
+
+
+class ValueTypeWithEnum1
+{
+    Q_GADGET
+    Q_PROPERTY(ValueTypeWithEnum1::Quality quality READ quality WRITE setQuality)
+public:
+    enum Quality
+    {
+        VeryLowQuality,
+        LowQuality,
+        NormalQuality,
+        HighQuality,
+        VeryHighQuality
+    };
+    Q_ENUM(Quality)
+
+    Quality quality() const { return m_quality; }
+    void setQuality(Quality quality) { m_quality = quality; }
+
+private:
+    Quality m_quality = HighQuality;
+};
+
+class ObjectTypeHoldingValueType1 : public QObject
+{
+    Q_OBJECT
+    Q_PROPERTY(ValueTypeWithEnum1 vv READ vv WRITE setVv NOTIFY vvChanged)
+    Q_PROPERTY(ValueTypeWithEnum1::Quality q READ q CONSTANT)
+
+public:
+    ValueTypeWithEnum1 vv() const
+    {
+        return m_vv;
+    }
+
+    void setVv(ValueTypeWithEnum1 vv)
+    {
+        if (m_vv.quality() == vv.quality())
+            return;
+
+        m_vv = vv;
+        emit vvChanged(m_vv);
+    }
+
+    ValueTypeWithEnum1::Quality q() const { return m_vv.quality(); }
+
+signals:
+    void vvChanged(ValueTypeWithEnum1 vv);
+
+private:
+    ValueTypeWithEnum1 m_vv;
+};
+
+struct ValueTypeWithEnumForeign1
+{
+    Q_GADGET
+    QML_FOREIGN(ValueTypeWithEnum1)
+    QML_NAMED_ELEMENT(valueTypeWithEnum1)
+};
+
+namespace ValueTypeWithEnumForeignNamespace1
+{
+    Q_NAMESPACE
+    QML_FOREIGN_NAMESPACE(ValueTypeWithEnum1)
+    QML_NAMED_ELEMENT(ValueTypeWithEnum1)
+};
+
+struct ObjectTypeHoldingValueTypeForeign1
+{
+    Q_GADGET
+    QML_FOREIGN(ObjectTypeHoldingValueType1)
+    QML_NAMED_ELEMENT(ObjectTypeHoldingValueType1)
+};
+
+class ValueTypeWithEnum2
+{
+    Q_GADGET
+    Q_PROPERTY(ValueTypeWithEnum2::Quality quality READ quality WRITE setQuality)
+public:
+    enum Quality
+    {
+        VeryLowQuality,
+        LowQuality,
+        NormalQuality,
+        HighQuality,
+        VeryHighQuality
+    };
+    Q_ENUM(Quality)
+
+    Quality quality() const { return m_quality; }
+    void setQuality(Quality quality) { m_quality = quality; }
+
+private:
+    Quality m_quality = HighQuality;
+};
+
+class ObjectTypeHoldingValueType2 : public QObject
+{
+    Q_OBJECT
+    Q_PROPERTY(ValueTypeWithEnum2 vv READ vv WRITE setVv NOTIFY vvChanged)
+    Q_PROPERTY(ValueTypeWithEnum2::Quality q READ q CONSTANT)
+    Q_CLASSINFO("RegisterEnumsFromRelatedTypes", "false")
+
+public:
+    ValueTypeWithEnum2 vv() const
+    {
+        return m_vv;
+    }
+
+    void setVv(ValueTypeWithEnum2 vv)
+    {
+        if (m_vv.quality() == vv.quality())
+            return;
+
+        m_vv = vv;
+        emit vvChanged(m_vv);
+    }
+
+    ValueTypeWithEnum2::Quality q() const { return m_vv.quality(); }
+
+signals:
+    void vvChanged(ValueTypeWithEnum2 vv);
+
+private:
+    ValueTypeWithEnum2 m_vv;
+};
+
+struct ValueTypeWithEnumForeign2
+{
+    Q_GADGET
+    QML_FOREIGN(ValueTypeWithEnum2)
+    QML_NAMED_ELEMENT(valueTypeWithEnum2)
+};
+
+namespace ValueTypeWithEnumForeignNamespace2
+{
+    Q_NAMESPACE
+    QML_FOREIGN_NAMESPACE(ValueTypeWithEnum2)
+    QML_NAMED_ELEMENT(ValueTypeWithEnum2)
+};
+
+struct ObjectTypeHoldingValueTypeForeign2
+{
+    Q_GADGET
+    QML_FOREIGN(ObjectTypeHoldingValueType2)
+    QML_NAMED_ELEMENT(ObjectTypeHoldingValueType2)
 };
 
 struct Large {

@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtTest module of the Qt Toolkit.
@@ -46,6 +46,7 @@
 #include <QtTest/qtestdata.h>
 #include <QtTest/qtestcase.h>
 #include <QtTest/qtestassert.h>
+#include <QtTest/qtesteventloop.h>
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -190,6 +191,7 @@ void QTestResult::finishedCurrentTestData()
         addFailure("Not all expected messages were received");
     }
     QTestLog::clearIgnoreMessages();
+    QTestLog::clearFailOnWarnings();
 }
 
 /*!
@@ -275,7 +277,6 @@ bool QTestResult::expectFail(const char *dataIndex, const char *comment,
 
     if (QTest::expectFailMode) {
         delete[] comment;
-        clearExpectFail();
         addFailure("Already expecting a fail", file, line);
         return false;
     }
@@ -316,6 +317,11 @@ static bool checkStatement(bool statement, const char *msg, const char *file, in
     return false;
 }
 
+void QTestResult::fail(const char *msg, const char *file, int line)
+{
+    checkStatement(false, msg, file, line);
+}
+
 bool QTestResult::verify(bool statement, const char *statementStr,
                          const char *description, const char *file, int line)
 {
@@ -328,10 +334,11 @@ bool QTestResult::verify(bool statement, const char *statementStr,
         QTestLog::info(msg, file, line);
     }
 
-    if (!statement && !QTest::expectFailMode)
-        qsnprintf(msg, 1024, "'%s' returned FALSE. (%s)", statementStr, description ? description : "");
-    else if (statement && QTest::expectFailMode)
-        qsnprintf(msg, 1024, "'%s' returned TRUE unexpectedly. (%s)", statementStr, description ? description : "");
+    if (statement == !!QTest::expectFailMode) {
+        qsnprintf(msg, 1024,
+                  statement ? "'%s' returned TRUE unexpectedly. (%s)" : "'%s' returned FALSE. (%s)",
+                  statementStr, description ? description : "");
+    }
 
     return checkStatement(statement, msg, file, line);
 }
@@ -498,6 +505,7 @@ bool QTestResult::compare(bool success, const char *failureMsg,
 void QTestResult::addFailure(const char *message, const char *file, int line)
 {
     clearExpectFail();
+    QTestEventLoop::instance().exitLoop();
 
     if (QTest::blacklistCurrentTest)
         QTestLog::addBFail(message, file, line);

@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2020 The Qt Company Ltd.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
@@ -1201,7 +1201,7 @@ void tst_QFileInfo::fileTimes()
     QCOMPARE(fileInfo.birthTime(), birthTime); // mustn't have changed
     QVERIFY(readTime.isValid());
 
-#if defined(Q_OS_QNX) || (defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED))
+#if defined(Q_OS_QNX) || defined(Q_OS_ANDROID)
     noAccessTime = true;
 #elif defined(Q_OS_WIN)
     //In Vista the last-access timestamp is not updated when the file is accessed/touched (by default).
@@ -1877,8 +1877,14 @@ void tst_QFileInfo::isWritable()
 void tst_QFileInfo::isExecutable()
 {
     QString appPath = QCoreApplication::applicationDirPath();
-#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
-    appPath += "/libtst_qfileinfo.so";
+#ifdef Q_OS_ANDROID
+    QDir dir(appPath);
+    QVERIFY(dir.exists());
+    dir.setNameFilters({ "libtst_qfileinfo*.so" });
+    QStringList entries = dir.entryList();
+    QCOMPARE(entries.size(), 1);
+
+    appPath += "/" + entries[0];
 #else
     appPath += "/tst_qfileinfo";
 # if defined(Q_OS_WIN)
@@ -1886,6 +1892,7 @@ void tst_QFileInfo::isExecutable()
 # endif
 #endif
     QFileInfo fi(appPath);
+    QVERIFY(fi.exists());
     QCOMPARE(fi.isExecutable(), true);
 
     QCOMPARE(QFileInfo(m_proFile).isExecutable(), false);

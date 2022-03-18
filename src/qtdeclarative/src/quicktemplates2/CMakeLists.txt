@@ -132,6 +132,8 @@ qt_internal_add_qml_module(QuickTemplates2
         Qt::Core
         Qt::Gui
         Qt::Quick
+    GENERATE_CPP_EXPORTS
+    GENERATE_PRIVATE_CPP_EXPORTS
 )
 
 qt_internal_extend_target(QuickTemplates2 CONDITION TARGET Qt::QmlModels
@@ -154,10 +156,27 @@ qt_internal_extend_target(QuickTemplates2 CONDITION QT_FEATURE_quick_tableview
         qquickheaderview_p_p.h
 )
 
+qt_internal_extend_target(QuickTemplates2 CONDITION QT_FEATURE_quick_treeview
+    SOURCES
+        qquicktreeviewdelegate.cpp qquicktreeviewdelegate_p.h
+)
+
 qt_internal_extend_target(QuickTemplates2 CONDITION QT_FEATURE_quick_listview AND QT_FEATURE_quick_pathview
     SOURCES
         qquicktumbler.cpp qquicktumbler_p.h
         qquicktumbler_p_p.h
+)
+
+qt_internal_extend_target(QuickTemplates2 CONDITION QT_FEATURE_quicktemplates2_calendar
+    SOURCES
+        qquickcalendar.cpp qquickcalendar_p.h
+        qquickcalendarmodel.cpp qquickcalendarmodel_p.h
+        qquickdayofweekmodel.cpp qquickdayofweekmodel_p.h
+        qquickdayofweekrow.cpp qquickdayofweekrow_p.h
+        qquickmonthgrid.cpp qquickmonthgrid_p.h
+        qquickmonthmodel.cpp qquickmonthmodel_p.h
+        qquickweeknumbercolumn.cpp qquickweeknumbercolumn_p.h
+        qquickweeknumbermodel.cpp qquickweeknumbermodel_p.h
 )
 
 qt_internal_extend_Target(qtquicktemplates2plugin

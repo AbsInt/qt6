@@ -56,11 +56,11 @@
 #include <QtGui/qicon.h>
 
 #include <QtCore/QPointF>
-#include <QtCore/QSharedPointer>
 #include <QtCore/private/qcoreapplication_p.h>
 
 #include <QtCore/qnativeinterface.h>
 #include <QtCore/private/qnativeinterface_p.h>
+#include <QtCore/private/qnumeric_p.h>
 #include <QtCore/private/qthread_p.h>
 
 #include <qpa/qwindowsysteminterface.h>
@@ -68,6 +68,8 @@
 #if QT_CONFIG(shortcut)
 #  include "private/qshortcutmap_p.h"
 #endif
+
+#include <memory>
 
 QT_BEGIN_NAMESPACE
 
@@ -105,10 +107,12 @@ public:
 #if QT_CONFIG(commandlineparser)
     void addQtOptions(QList<QCommandLineOption> *options) override;
 #endif
-    virtual bool shouldQuit() override;
+    bool canQuitAutomatically() override;
     void quit() override;
 
-    bool shouldQuitInternal(const QWindowList &processedWindows);
+    void maybeLastWindowClosed();
+    bool lastWindowClosed() const;
+    static bool quitOnLastWindowClosed;
 
     static void captureGlobalModifierState(QEvent *e);
     static Qt::KeyboardModifiers modifier_buttons;
@@ -204,8 +208,6 @@ public:
         return alignment;
     }
 
-    static void emitLastWindowClosed();
-
     QPixmap getPixmapCursor(Qt::CursorShape cshape);
 
     void _q_updateFocusObject(QObject *object);
@@ -223,9 +225,22 @@ public:
     static void updateBlockedStatus(QWindow *window);
     virtual bool isWindowBlocked(QWindow *window, QWindow **blockingWindow = nullptr) const;
     virtual bool popupActive() { return false; }
+    virtual bool closeAllPopups() { return false; }
 
     static Qt::MouseButton mousePressButton;
-    static QPointF lastCursorPosition;
+    static struct QLastCursorPosition {
+        constexpr inline QLastCursorPosition() noexcept : thePoint(qt_inf(), qt_inf()) {}
+        constexpr inline Q_IMPLICIT QLastCursorPosition(QPointF p) noexcept : thePoint(p) {}
+        constexpr inline Q_IMPLICIT operator QPointF() const noexcept { return thePoint; }
+        constexpr inline qreal x() const noexcept{ return thePoint.x(); }
+        constexpr inline qreal y() const noexcept{ return thePoint.y(); }
+        Q_GUI_EXPORT QPoint toPoint() const noexcept;
+
+        constexpr void reset() noexcept { *this = QLastCursorPosition{}; }
+
+    private:
+        QPointF thePoint;
+    } lastCursorPosition;
     static QWindow *currentMouseWindow;
     static QWindow *currentMousePressWindow;
     static Qt::ApplicationState applicationState;
@@ -332,8 +347,10 @@ private:
 
     static QGuiApplicationPrivate *self;
     static int m_fakeMouseSourcePointId;
-    QSharedPointer<QColorTrcLut> m_a8ColorProfile;
-    QSharedPointer<QColorTrcLut> m_a32ColorProfile;
+#ifdef Q_OS_WIN
+    std::shared_ptr<QColorTrcLut> m_a8ColorProfile;
+#endif
+    std::shared_ptr<QColorTrcLut> m_a32ColorProfile;
 
     bool ownGlobalShareContext;
 

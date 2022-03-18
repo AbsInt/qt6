@@ -61,8 +61,8 @@
 #include "qv4string_p.h"
 
 #if QT_CONFIG(qml_itemmodel)
-#include <private/qqmlmodelindexvaluetype_p.h>
 #include <QtCore/qabstractitemmodel.h>
+#include <QtCore/qitemselectionmodel.h>
 #endif
 
 QT_REQUIRE_CONFIG(qml_sequence_object);
@@ -79,13 +79,13 @@ struct Q_QML_PRIVATE_EXPORT SequencePrototype : public QV4::Object
     static ReturnedValue method_valueOf(const FunctionObject *, const Value *thisObject, const Value *argv, int argc);
     static ReturnedValue method_sort(const FunctionObject *, const Value *thisObject, const Value *argv, int argc);
 
-    static ReturnedValue newSequence(QV4::ExecutionEngine *engine, int sequenceTypeId, QObject *object, int propertyIndex, bool readOnly, bool *succeeded);
+    static ReturnedValue newSequence(QV4::ExecutionEngine *engine, QMetaType sequenceType, QObject *object, int propertyIndex, bool readOnly, bool *succeeded);
     static ReturnedValue fromVariant(QV4::ExecutionEngine *engine, const QVariant &v, bool *succeeded);
-    static ReturnedValue fromData(QV4::ExecutionEngine *engine, const QMetaType &type, const void *data, bool *succeeded);
+    static ReturnedValue fromData(QV4::ExecutionEngine *engine, QMetaType type, const void *data, bool *succeeded);
 
     static int metaTypeForSequence(const Object *object);
     static QVariant toVariant(Object *object);
-    static QVariant toVariant(const Value &array, int typeHint, bool *succeeded);
+    static QVariant toVariant(const Value &array, QMetaType typeHint, bool *succeeded);
     static void* getRawContainerPtr(const Object *object, int typeHint);
 };
 

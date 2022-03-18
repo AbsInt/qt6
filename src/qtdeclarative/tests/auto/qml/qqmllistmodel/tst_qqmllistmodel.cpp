@@ -741,9 +741,8 @@ void tst_qqmllistmodel::syncError()
     component.setData(qml.toUtf8(),
                       QUrl::fromLocalFile(QString("dummy.qml")));
     QTest::ignoreMessage(QtWarningMsg,error.toUtf8());
-    QObject *obj = component.create();
-    QVERIFY(obj);
-    delete obj;
+    QScopedPointer<QObject> obj(component.create());
+    QVERIFY2(obj, qPrintable(component.errorString()));
 }
 
 /*
@@ -1093,12 +1092,10 @@ void tst_qqmllistmodel::set_model_cache()
 {
     QQmlEngine eng;
     QQmlComponent component(&eng, testFileUrl("setmodelcachelist.qml"));
-    QObject *model = component.create();
-    QVERIFY2(component.errorString().isEmpty(), QTest::toString(component.errorString()));
+    QScopedPointer<QObject> model(component.create());
+    QVERIFY2(component.errorString().isEmpty(), qPrintable(component.errorString()));
     QVERIFY(model != nullptr);
     QVERIFY(model->property("ok").toBool());
-
-    delete model;
 }
 
 void tst_qqmllistmodel::property_changes()
@@ -1119,7 +1116,7 @@ void tst_qqmllistmodel::property_changes()
 
     QQmlExpression expr(engine.rootContext(), &model, script_setup);
     expr.evaluate();
-    QVERIFY2(!expr.hasError(), QTest::toString(expr.error().toString()));
+    QVERIFY2(!expr.hasError(), qPrintable(expr.error().toString()));
 
     QString signalHandler = "on" + QString(roleName[0].toUpper()) + roleName.mid(1, roleName.length()) + "Changed:";
     QString qml = "import QtQuick 2.0\n"
@@ -1133,13 +1130,13 @@ void tst_qqmllistmodel::property_changes()
     component.setData(qml.toUtf8(), QUrl::fromLocalFile(""));
     engine.rootContext()->setContextProperty("model", &model);
     QObject *connectionsObject = component.create();
-    QVERIFY2(component.errorString().isEmpty(), QTest::toString(component.errorString()));
+    QVERIFY2(component.errorString().isEmpty(), qPrintable(component.errorString()));
 
     QSignalSpy spyItemsChanged(&model, SIGNAL(dataChanged(QModelIndex,QModelIndex,QVector<int>)));
 
     expr.setExpression(script_change);
     expr.evaluate();
-    QVERIFY2(!expr.hasError(), QTest::toString(expr.error().toString()));
+    QVERIFY2(!expr.hasError(), qPrintable(expr.error().toString()));
 
     // test the object returned by get() emits the correct signals
     QCOMPARE(connectionsObject->property("gotSignal").toBool(), itemsChanged);
@@ -1291,15 +1288,13 @@ void tst_qqmllistmodel::signal_handlers()
 
     QQmlEngine eng;
     QQmlComponent component(&eng, testFileUrl("signalhandlers.qml"));
-    QObject *model = component.create();
-    QQmlListModel *lm = qobject_cast<QQmlListModel *>(model);
+    QScopedPointer<QObject> model(component.create());
+    QQmlListModel *lm = qobject_cast<QQmlListModel *>(model.data());
     QVERIFY(lm != nullptr);
     lm->setDynamicRoles(dynamicRoles);
-    QVERIFY2(component.errorString().isEmpty(), QTest::toString(component.errorString()));
+    QVERIFY2(component.errorString().isEmpty(), qPrintable(component.errorString()));
     QVERIFY(model != nullptr);
     QVERIFY(model->property("ok").toBool());
-
-    delete model;
 }
 
 void tst_qqmllistmodel::role_mode_data()
@@ -1581,7 +1576,7 @@ void tst_qqmllistmodel::modify_through_delegate()
         "   }\n"
         "}\n", QUrl());
 
-    QObject *scene = component.create();
+    QScopedPointer<QObject> scene(component.create());
     QQmlListModel *model = scene->findChild<QQmlListModel*>("testModel");
 
     const QHash<int, QByteArray> roleNames = model->roleNames();
@@ -1619,7 +1614,7 @@ void tst_qqmllistmodel::stringifyModelEntry()
     QQmlListModel *model = scene->findChild<QQmlListModel*>("testModel");
     QQmlExpression expr(engine.rootContext(), model, "JSON.stringify(get(0));");
     QVariant v = expr.evaluate();
-    QVERIFY2(!expr.hasError(), QTest::toString(expr.error().toString()));
+    QVERIFY2(!expr.hasError(), qPrintable(expr.error().toString()));
     const QString expectedString = QStringLiteral("{\"age\":22,\"name\":\"Joe\"}");
     QCOMPARE(v.toString(), expectedString);
 }
@@ -1641,7 +1636,7 @@ void tst_qqmllistmodel::qobjectTrackerForDynamicModelObjects()
     QQmlListModel *model = scene->findChild<QQmlListModel*>("testModel");
     QQmlExpression expr(engine.rootContext(), model, "get(0);");
     QVariant v = expr.evaluate();
-    QVERIFY2(!expr.hasError(), QTest::toString(expr.error().toString()));
+    QVERIFY2(!expr.hasError(), qPrintable(expr.error().toString()));
 
     QObject *obj = v.value<QObject*>();
     QVERIFY(obj);
@@ -1668,7 +1663,7 @@ void tst_qqmllistmodel::crash_append_empty_array()
     QSignalSpy spy(model, &QQmlListModel::rowsAboutToBeInserted);
     QQmlExpression expr(engine.rootContext(), model, "append(new Array())");
     expr.evaluate();
-    QVERIFY2(!expr.hasError(), QTest::toString(expr.error().toString()));
+    QVERIFY2(!expr.hasError(), qPrintable(expr.error().toString()));
     QCOMPARE(spy.count(), 0);
 }
 
@@ -1713,7 +1708,7 @@ void tst_qqmllistmodel::nestedListModelIteration()
                 }
             })",
             QUrl());
-    QScopedPointer<QObject>(component.create());
+    delete component.create();
 }
 
 // QTBUG-63569
@@ -1741,7 +1736,7 @@ void tst_qqmllistmodel::undefinedAppendShouldCauseError()
             QUrl());
     QTest::ignoreMessage(QtMsgType::QtWarningMsg, "<Unknown File>: faulty is undefined. Adding an object with a undefined member does not create a role for it.");
     QTest::ignoreMessage(QtMsgType::QtWarningMsg, "<Unknown File>: faulty is null. Adding an object with a null member does not create a role for it.");
-    QScopedPointer<QObject>(component.create());
+    delete component.create();
 }
 
 // QTBUG-89173
@@ -1763,7 +1758,7 @@ void tst_qqmllistmodel::nullPropertyCrash()
             })",
             QUrl());
     QTest::ignoreMessage(QtMsgType::QtWarningMsg, "<Unknown File>: c is null. Adding an object with a null member does not create a role for it.");
-    QScopedPointer<QObject>(component.create());
+    delete component.create();
 }
 
 // QTBUG-91390
@@ -1779,21 +1774,20 @@ void tst_qqmllistmodel::objectDestroyed()
                    })",
             QUrl());
 
-    QObject *obj = new QObject;
-    bool destroyed = false;
-    connect(obj, &QObject::destroyed, [&]() { destroyed = true; });
+    std::unique_ptr<QObject> obj = std::make_unique<QObject>();
+    connect(obj.get(), &QObject::destroyed, [&]() { obj.release(); });
 
-    engine.rootContext()->setContextProperty(u"contextObject"_qs, obj);
-    engine.setObjectOwnership(obj, QJSEngine::JavaScriptOwnership);
+    engine.rootContext()->setContextProperty(u"contextObject"_qs, obj.get());
+    engine.setObjectOwnership(obj.get(), QJSEngine::JavaScriptOwnership);
 
-    QScopedPointer<QObject>(component.create());
-    QVERIFY(!destroyed);
+    delete component.create();
+    QVERIFY(obj);
     engine.collectGarbage();
     QTest::qSleep(250);
-    QVERIFY(!destroyed);
+    QVERIFY(obj);
     engine.evaluate(u"model.clear();"_qs);
     engine.collectGarbage();
-    QTRY_VERIFY(destroyed);
+    QTRY_VERIFY(!obj);
 }
 
 void tst_qqmllistmodel::destroyObject()

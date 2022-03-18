@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtQuick module of the Qt Toolkit.
@@ -52,10 +52,13 @@
 //
 
 #include <private/qtquickglobal_p.h>
-#include <qqml.h>
+#include <private/qquicktext_p.h>
 
-#include <QtGui/QFontMetricsF>
-#include <QtCore/QObject>
+#include <QtCore/qobject.h>
+
+#include <QtGui/qfontmetrics.h>
+
+#include <QtQml/qqml.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -75,12 +78,13 @@ class Q_QUICK_PRIVATE_EXPORT QQuickTextMetrics : public QObject
     Q_PROPERTY(QString elidedText READ elidedText NOTIFY metricsChanged FINAL)
     Q_PROPERTY(Qt::TextElideMode elide READ elide WRITE setElide NOTIFY elideChanged FINAL)
     Q_PROPERTY(qreal elideWidth READ elideWidth WRITE setElideWidth NOTIFY elideWidthChanged FINAL)
+    Q_PROPERTY(QQuickText::RenderType renderType READ renderType WRITE setRenderType
+               NOTIFY renderTypeChanged)
     QML_NAMED_ELEMENT(TextMetrics)
     QML_ADDED_IN_VERSION(2, 4)
 
 public:
-    explicit QQuickTextMetrics(QObject *parent = 0);
-    ~QQuickTextMetrics();
+    explicit QQuickTextMetrics(QObject *parent = nullptr);
 
     QFont font() const;
     void setFont(const QFont &font);
@@ -101,12 +105,16 @@ public:
     QRectF tightBoundingRect() const;
     QString elidedText() const;
 
+    QQuickText::RenderType renderType() const;
+    void setRenderType(QQuickText::RenderType renderType);
+
 Q_SIGNALS:
     void fontChanged();
     void textChanged();
     void elideChanged();
     void elideWidthChanged();
     void metricsChanged();
+    void renderTypeChanged();
 
 private:
     QString m_text;
@@ -114,6 +122,7 @@ private:
     QFontMetricsF m_metrics;
     Qt::TextElideMode m_elide;
     qreal m_elideWidth;
+    QQuickText::RenderType m_renderType;
 };
 
 QT_END_NAMESPACE

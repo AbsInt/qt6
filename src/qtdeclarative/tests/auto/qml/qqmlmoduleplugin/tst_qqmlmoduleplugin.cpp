@@ -151,9 +151,7 @@ void registerStaticPlugin(const char *uri)
     uris.append(uri);
     md.insert(QStringLiteral("uri"), uris);
 
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-    PluginType::metaData.append(QByteArrayLiteral("QTMETADATA !"));
-    PluginType::metaData.append(char(0)); // current version
+    PluginType::metaData.append(char(1)); // current version
     PluginType::metaData.append(char(QT_VERSION_MAJOR));
     PluginType::metaData.append(char(QT_VERSION_MINOR));
     PluginType::metaData.append(char(qPluginArchRequirements()));
@@ -163,16 +161,6 @@ void registerStaticPlugin(const char *uri)
         return {reinterpret_cast<const uchar *>(PluginType::metaData.constData()), size_t(PluginType::metaData.length())};
     };
     QStaticPlugin plugin(instanceFunctor, rawMetaDataFunctor);
-#else
-    PluginType::metaData.append(QLatin1String("QTMETADATA  "));
-    PluginType::metaData.append(QJsonDocument(md).toBinaryData());
-
-    QStaticPlugin plugin;
-    plugin.instance = instanceFunctor;
-    plugin.rawMetaData = []() {
-        return PluginType::metaData.constData();
-    };
-#endif
     qRegisterStaticPluginFunction(plugin);
 };
 
@@ -370,7 +358,7 @@ void tst_qqmlmoduleplugin::remoteImportWithUnquotedUri()
     VERIFY_ERRORS(0);
 }
 
-static QByteArray msgComponentError(const QQmlComponent &c, const QQmlEngine *engine /* = 0 */)
+static QByteArray msgComponentError(const QQmlComponent &c, const QQmlEngine *engine /* = nullptr */)
 {
     QString result;
     const QList<QQmlError> errors = c.errors();
@@ -816,6 +804,7 @@ void tst_qqmlmoduleplugin::multiSingleton()
     qmlRegisterSingletonInstance("Test", 1, 0, "Tracker", &obj);
     engine.addImportPath(m_importsDirectory);
     QQmlComponent component(&engine, testFileUrl("multiSingleton.qml"));
+    QVERIFY2(component.isReady(), qPrintable(component.errorString()));
     QObject *object = component.create();
     QVERIFY(object != nullptr);
     QCOMPARE(obj.objectName(), QLatin1String("first"));

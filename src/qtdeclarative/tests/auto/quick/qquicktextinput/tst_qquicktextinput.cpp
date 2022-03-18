@@ -7081,7 +7081,7 @@ void tst_qquicktextinput::focusReason()
 
         QHash<QObject*, Qt::FocusReason> lastFocusReason;
     protected:
-        bool eventFilter(QObject *o, QEvent *e)
+        bool eventFilter(QObject *o, QEvent *e) override
         {
             if (e->type() == QEvent::FocusIn || e->type() == QEvent::FocusOut) {
                 QFocusEvent *fe = static_cast<QFocusEvent*>(e);

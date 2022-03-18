@@ -233,9 +233,18 @@ void tst_qmltyperegistrar::requiredProperty()
 
 void tst_qmltyperegistrar::hiddenAccessor()
 {
-    // No read accessor
-    QVERIFY(qmltypesData.contains(
-                "Property { name: \"hiddenRead\"; type: \"QString\"; isReadonly: true }"));
+    const auto start = qmltypesData.indexOf("name: \"hiddenRead\""); // rely on name being 1st field
+    QVERIFY(start != -1);
+    const auto end = qmltypesData.indexOf("}", start); // enclosing '}' of hiddenRead property
+    QVERIFY(end != -1);
+    QVERIFY(start < end);
+
+    const auto hiddenReadData = QByteArrayView(qmltypesData).sliced(start, end - start);
+    // QVERIFY(hiddenReadData.contains("name: \"hiddenRead\"")); // tested above by start != -1
+    QVERIFY(hiddenReadData.contains("type: \"QString\""));
+    QVERIFY(hiddenReadData.contains("read: \"hiddenRead\""));
+    QVERIFY(hiddenReadData.contains("privateClass: \"HiddenAccessorsPrivate\""));
+    QVERIFY(hiddenReadData.contains("isReadonly: true"));
 }
 
 void tst_qmltyperegistrar::finalProperty()
@@ -288,6 +297,36 @@ void tst_qmltyperegistrar::namespacesAndValueTypes()
     check(QMetaType::fromName("ValueTypeWithEnum2"), QMetaType::fromType<ValueTypeWithEnum2>());
 }
 
+void tst_qmltyperegistrar::namespaceExtendedNamespace()
+{
+    QQmlEngine engine;
+    QQmlComponent c(&engine);
+    c.setData("import QtQml\n"
+              "import QmlTypeRegistrarTest\n"
+              "QtObject {\n"
+              "    property int b: ForeignNamespace.B\n"
+              "    property int f: ForeignNamespace.F\n"
+              "}", QUrl());
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+    QScopedPointer o(c.create());
+    QVERIFY(!o.isNull());
+
+    QCOMPARE(o->property("b").toInt(), int(ExtensionValueType::B));
+    QCOMPARE(o->property("f").toInt(), int(BaseNamespace::F));
+}
+
+void tst_qmltyperegistrar::deferredNames()
+{
+    QVERIFY(qmltypesData.contains("deferredNames: [\"\"]"));
+    QVERIFY(qmltypesData.contains("deferredNames: [\"A\", \"B\", \"C\"]"));
+}
+
+void tst_qmltyperegistrar::immediateNames()
+{
+    QVERIFY(qmltypesData.contains("immediateNames: [\"\"]"));
+    QVERIFY(qmltypesData.contains("immediateNames: [\"A\", \"B\", \"C\"]"));
+}
+
 void tst_qmltyperegistrar::derivedFromForeignPrivate()
 {
     QVERIFY(qmltypesData.contains("file: \"private/foreign_p.h\""));
@@ -299,5 +338,62 @@ void tst_qmltyperegistrar::methodReturnType()
     QVERIFY(!qmltypesData.contains("QQmlComponent*"));
     QVERIFY(qmltypesData.contains("type: \"QQmlComponent\""));
 }
+
+void tst_qmltyperegistrar::addRemoveVersion_data()
+{
+    QTest::addColumn<QTypeRevision>("importVersion");
+    for (int i = 0; i < 20; ++i)
+        QTest::addRow("v1.%d.qml", i) << QTypeRevision::fromVersion(1, i);
+}
+
+void tst_qmltyperegistrar::addRemoveVersion()
+{
+    QFETCH(QTypeRevision, importVersion);
+
+    const bool creatable
+            = importVersion > QTypeRevision::fromVersion(1, 2)
+            && importVersion < QTypeRevision::fromVersion(1, 18);
+    const bool thingAccessible = importVersion > QTypeRevision::fromVersion(1, 3);
+
+    QQmlEngine engine;
+    QQmlComponent c(&engine);
+    c.setData(QStringLiteral("import QmlTypeRegistrarTest %1.%2\n"
+                             "Versioned {\n"
+                             "    property int thing: revisioned\n"
+                             "}")
+              .arg(importVersion.majorVersion()).arg(importVersion.minorVersion()).toUtf8(),
+              QUrl(QTest::currentDataTag()));
+    if (!creatable) {
+        QVERIFY(c.isError());
+        return;
+    }
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+    if (!thingAccessible) {
+        QTest::ignoreMessage(
+                    QtWarningMsg,
+                    qPrintable(QStringLiteral("%1:3: ReferenceError: revisioned is not defined")
+                               .arg(QTest::currentDataTag())));
+    }
+    QScopedPointer o(c.create());
+    QVERIFY(!o.isNull());
+    QCOMPARE(o->property("thing").toInt(), thingAccessible ? 24 : 0);
+}
+
+#ifdef QT_QUICK_LIB
+void tst_qmltyperegistrar::foreignRevisionedProperty()
+{
+    QQmlEngine engine;
+    QQmlComponent c(&engine);
+    c.setData("import QmlTypeRegistrarTest\n"
+              "ForeignRevisionedProperty {\n"
+              "    activeFocusOnTab: true\n"
+              "}",
+              QUrl());
+
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+    QScopedPointer o(c.create());
+    QVERIFY(!o.isNull());
+}
+#endif
 
 QTEST_MAIN(tst_qmltyperegistrar)

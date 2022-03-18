@@ -80,8 +80,7 @@ public:
         // Otherwise, if computation is not finished at this point, cancel
         // potential waits
         if (!(state & QFutureInterfaceBase::State::Finished)) {
-            d.cancel();
-            finish();  // required to finalize the state
+            d.cancelAndFinish(); // cancel and finalize the state
             d.cleanContinuation();
         }
     }

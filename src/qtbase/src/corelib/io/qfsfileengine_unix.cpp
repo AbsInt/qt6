@@ -39,6 +39,7 @@
 
 #include "qplatformdefs.h"
 #include "private/qabstractfileengine_p.h"
+#include "private/qfiledevice_p.h"
 #include "private/qfsfileengine_p.h"
 #include "private/qcore_unix_p.h"
 #include "qfilesystementry_p.h"
@@ -107,7 +108,16 @@ static inline QString msgOpenDirectory()
 /*!
     \internal
 */
-bool QFSFileEnginePrivate::nativeOpen(QIODevice::OpenMode openMode)
+bool QFSFileEnginePrivate::nativeOpen(QIODevice::OpenMode openMode,
+                                      std::optional<QFile::Permissions> permissions)
+{
+    return nativeOpenImpl(openMode, permissions ? QtPrivate::toMode_t(*permissions) : 0666);
+}
+
+/*!
+    \internal
+*/
+bool QFSFileEnginePrivate::nativeOpenImpl(QIODevice::OpenMode openMode, mode_t mode)
 {
     Q_Q(QFSFileEngine);
 
@@ -118,7 +128,7 @@ bool QFSFileEnginePrivate::nativeOpen(QIODevice::OpenMode openMode)
 
         // Try to open the file in unbuffered mode.
         do {
-            fd = QT_OPEN(fileEntry.nativeFilePath().constData(), flags, 0666);
+            fd = QT_OPEN(fileEntry.nativeFilePath().constData(), flags, mode);
         } while (fd == -1 && errno == EINTR);
 
         // On failure, return and report the error.
@@ -383,7 +393,7 @@ QAbstractFileEngine::FileFlags QFSFileEngine::fileFlags(FileFlags type) const
     {
         QFileSystemMetaData::MetaDataFlags queryFlags = { };
 
-        queryFlags |= QFileSystemMetaData::MetaDataFlags(uint(type))
+        queryFlags |= QFileSystemMetaData::MetaDataFlags(uint(type.toInt()))
                 & QFileSystemMetaData::Permissions;
 
         if (type & TypesMask)
@@ -409,7 +419,7 @@ QAbstractFileEngine::FileFlags QFSFileEngine::fileFlags(FileFlags type) const
         return ret;
 
     if (exists && (type & PermsMask))
-        ret |= FileFlags(uint(d->metaData.permissions()));
+        ret |= FileFlags(uint(d->metaData.permissions().toInt()));
 
     if (type & TypesMask) {
         if (d->metaData.isAlias()) {
@@ -470,7 +480,7 @@ QString QFSFileEngine::fileName(FileName file) const
         QFileSystemEntry entry(QFileSystemEngine::canonicalName(d->fileEntry, d->metaData));
         return file == CanonicalPathName ? entry.path() : entry.filePath();
     }
-    case LinkName:
+    case AbsoluteLinkTarget:
         if (d->isSymlink()) {
             QFileSystemEntry entry = QFileSystemEngine::getLinkTarget(d->fileEntry, d->metaData);
             return entry.filePath();
@@ -621,7 +631,7 @@ uchar *QFSFileEnginePrivate::map(qint64 offset, qint64 size, QFile::MemoryMapFla
                    access, sharemode, nativeHandle(), realOffset);
     if (MAP_FAILED != mapAddress) {
         uchar *address = extra + static_cast<uchar*>(mapAddress);
-        maps[address] = QPair<int,size_t>(extra, realSize);
+        maps[address] = {extra, realSize};
         return address;
     }
 
@@ -646,18 +656,19 @@ bool QFSFileEnginePrivate::unmap(uchar *ptr)
 {
 #if !defined(Q_OS_INTEGRITY)
     Q_Q(QFSFileEngine);
-    if (!maps.contains(ptr)) {
+    const auto it = std::as_const(maps).find(ptr);
+    if (it == maps.cend()) {
         q->setError(QFile::PermissionsError, qt_error_string(EACCES));
         return false;
     }
 
-    uchar *start = ptr - maps[ptr].first;
-    size_t len = maps[ptr].second;
+    uchar *start = ptr - it->start;
+    size_t len = it->length;
     if (-1 == munmap(start, len)) {
         q->setError(QFile::UnspecifiedError, qt_error_string(errno));
         return false;
     }
-    maps.remove(ptr);
+    maps.erase(it);
     return true;
 #else
     return false;

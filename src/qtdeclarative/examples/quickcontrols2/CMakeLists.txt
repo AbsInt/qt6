@@ -1,7 +1,8 @@
-# Generated from quickcontrols2.pro.
-
 qt_internal_add_example(gallery)
 add_subdirectory(chattutorial)
+if (QT_FEATURE_quicktemplates2_calendar AND TARGET Qt::Sql)
+    qt_internal_add_example(eventcalendar)
+endif()
 qt_internal_add_example(texteditor)
 qt_internal_add_example(contactlist)
 qt_internal_add_example(sidepanel)

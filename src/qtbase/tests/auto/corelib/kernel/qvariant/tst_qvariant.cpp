@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Copyright (C) 2016 Olivier Goffart <ogoffart@woboq.com>
 ** Copyright (C) 2016 Intel Corporation.
 ** Contact: https://www.qt.io/licensing/
@@ -48,9 +48,7 @@
 #include <limits.h>
 #include <float.h>
 #include <cmath>
-#if __has_include(<variant>) && __cplusplus >= 201703L
 #include <variant>
-#endif
 #include <QRegularExpression>
 #include <QDir>
 #include <QBuffer>
@@ -412,9 +410,11 @@ void tst_QVariant::isNull()
     QVariant var;
     QVERIFY( var.isNull() );
 
-    QString str1;
-    QVariant var1( str1 );
-    QVERIFY( !var1.isNull() );
+    QVariant empty = QString();
+    QVERIFY(empty.toString().isNull());
+    QVERIFY(!empty.isNull());
+    QVERIFY(empty.isValid());
+    QCOMPARE(empty.typeName(), "QString");
 
     QVariant var3( QString( "blah" ) );
     QVERIFY( !var3.isNull() );
@@ -4880,7 +4880,6 @@ void tst_QVariant::shouldDeleteVariantDataWorksForAssociative()
 
 void tst_QVariant::fromStdVariant()
 {
-#if __has_include(<variant>) && __cplusplus >= 201703L
     {
         typedef std::variant<int, bool> intorbool_t;
         intorbool_t stdvar = 5;
@@ -4911,7 +4910,6 @@ void tst_QVariant::fromStdVariant()
         QCOMPARE(qvar.type(), QVariant::Char);
         QCOMPARE(qvar.value<QChar>(), std::get<QChar>(stdvar));
     }
-#endif
 }
 
 void tst_QVariant::qt4UuidDataStream()

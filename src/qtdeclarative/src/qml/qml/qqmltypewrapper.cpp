@@ -320,7 +320,7 @@ bool QQmlTypeWrapper::virtualPut(Managed *m, PropertyKey id, const Value &value,
     Q_ASSERT(m->as<QQmlTypeWrapper>());
     QQmlTypeWrapper *w = static_cast<QQmlTypeWrapper *>(m);
     QV4::Scope scope(w);
-    if (scope.engine->hasException)
+    if (scope.hasException())
         return false;
 
     ScopedString name(scope, id.asStringOrSymbol());
@@ -408,18 +408,18 @@ ReturnedValue QQmlTypeWrapper::virtualInstanceOf(const Object *typeObject, const
         // we're a composite type; a composite type cannot be equal to a
         // non-composite object instance (Rectangle{} is never an instance of
         // CustomRectangle)
-        QQmlData *theirDData = QQmlData::get(wrapperObject, /*create=*/false);
+        QQmlData *theirDData = QQmlData::get(wrapperObject);
         Q_ASSERT(theirDData); // must exist, otherwise how do we have a QObjectWrapper for it?!
         if (!theirDData->compilationUnit)
             return Encode(false);
 
         QQmlRefPointer<QQmlTypeData> td = qenginepriv->typeLoader.getType(typeWrapper->d()->type().sourceUrl());
         if (ExecutableCompilationUnit *cu = td->compilationUnit())
-            myQmlType = qenginepriv->metaObjectForType(cu->typeIds.id.id());
+            myQmlType = qenginepriv->metaObjectForType(cu->typeIds.id);
         else
             return Encode(false); // It seems myQmlType has some errors, so we could not compile it.
     } else {
-        myQmlType = qenginepriv->metaObjectForType(myTypeId.id());
+        myQmlType = qenginepriv->metaObjectForType(myTypeId);
     }
 
     const QMetaObject *theirType = wrapperObject->metaObject();

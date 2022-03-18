@@ -38,12 +38,8 @@
 #include <memory>
 #include <vector>
 
-// mingw gcc 4.8 also takes way too long, letting the CI system abort the test
-#if defined(__MINGW32__)
-# define TST_QMETATYPE_BROKEN_COMPILER
-#endif
-
 Q_DECLARE_METATYPE(QMetaType::Type)
+Q_DECLARE_METATYPE(QPartialOrdering)
 
 namespace CheckTypeTraits
 {
@@ -1351,6 +1347,58 @@ FOR_EACH_CORE_METATYPE(RETURN_CONSTRUCT_COPY_FUNCTION)
     TypeTestFunctionGetter::get(type)();
 }
 
+void tst_QMetaType::selfCompare_data()
+{
+    qRegisterMetaType<QPartialOrdering>();
+    QTest::addColumn<int>("type");
+    QTest::addColumn<QPartialOrdering>("order");
+
+    auto orderingFor = [](QMetaType::Type t) {
+        if (t == QMetaType::UnknownType || t == QMetaType::Void)
+            return QPartialOrdering::Unordered;
+        return QPartialOrdering::Equivalent;
+    };
+
+    QTest::newRow("unknown-type") << int(QMetaType::UnknownType) << orderingFor(QMetaType::UnknownType);
+
+#define ADD_METATYPE_TEST_ROW(MetaTypeName, MetaTypeId, RealType) \
+    QTest::newRow(QMetaType::typeName(QMetaType::MetaTypeName)) << int(QMetaType::MetaTypeName) << orderingFor(QMetaType::MetaTypeName);
+FOR_EACH_CORE_METATYPE(ADD_METATYPE_TEST_ROW)
+#undef ADD_METATYPE_TEST_ROW
+}
+
+void tst_QMetaType::selfCompare()
+{
+    QFETCH(int, type);
+    QFETCH(QPartialOrdering, order);
+
+    QMetaType t(type);
+    void *v1 = t.create(nullptr);
+    void *v2 = t.create(nullptr);
+    auto scope = qScopeGuard([=] {
+        t.destroy(v1);
+        t.destroy(v2);
+    });
+
+    // all these types have an equality comparator
+    QCOMPARE(t.equals(v1, v2), order == QPartialOrdering::Equivalent);
+
+    if (t.iface() && t.iface()->lessThan)
+        QCOMPARE(t.compare(v1, v2), order);
+
+    // for the primitive types, do a memcmp() too
+    switch (type) {
+    default:
+        break;
+
+#define ADD_METATYPE_CASE(MetaTypeName, MetaTypeId, RealType) \
+    case QMetaType::MetaTypeName:
+FOR_EACH_PRIMITIVE_METATYPE(ADD_METATYPE_CASE)
+#undef ADD_METATYPE_CASE
+        QCOMPARE(memcmp(v1, v2, t.sizeOf()), 0);
+    }
+}
+
 typedef QString CustomString;
 Q_DECLARE_METATYPE(CustomString) //this line is useless
 
@@ -1557,30 +1605,7 @@ public:
 typedef MyObject* MyObjectPtr;
 Q_DECLARE_METATYPE(MyObjectPtr)
 
-#if !defined(TST_QMETATYPE_BROKEN_COMPILER)
-static QByteArray createTypeName(const char *begin, const char *va)
-{
-    QByteArray tn(begin);
-    const QList<QByteArray> args = QByteArray(va).split(',');
-    tn += args.first().trimmed();
-    if (args.size() > 1) {
-        QList<QByteArray>::const_iterator it = args.constBegin() + 1;
-        const QList<QByteArray>::const_iterator end = args.constEnd();
-        for (; it != end; ++it) {
-            tn += ",";
-            tn += it->trimmed();
-        }
-    }
-    if (tn.endsWith('>'))
-        tn += ' ';
-    tn += '>';
-    return tn;
-}
-#endif
-
-Q_DECLARE_METATYPE(const void*)
-
-void tst_QMetaType::automaticTemplateRegistration()
+void tst_QMetaType::automaticTemplateRegistration_1()
 {
 #define TEST_SEQUENTIAL_CONTAINER(CONTAINER, VALUE_TYPE) \
   { \
@@ -1755,62 +1780,6 @@ void tst_QMetaType::automaticTemplateRegistration()
     QVERIFY(qRegisterMetaType<UnregisteredTypeList>("UnregisteredTypeList") > 0);
   }
 
-#if !defined(TST_QMETATYPE_BROKEN_COMPILER)
-
-    #define FOR_EACH_STATIC_PRIMITIVE_TYPE(F) \
-        F(bool) \
-        F(int) \
-        F(qulonglong) \
-        F(double) \
-        F(short) \
-        F(char) \
-        F(ulong) \
-        F(uchar) \
-        F(float) \
-        F(QObject*) \
-        F(QString) \
-        F(CustomMovable)
-
-    #define FOR_EACH_STATIC_PRIMITIVE_TYPE2(F, SecondaryRealName) \
-        F(uint, SecondaryRealName) \
-        F(qlonglong, SecondaryRealName) \
-        F(char, SecondaryRealName) \
-        F(uchar, SecondaryRealName) \
-        F(QObject*, SecondaryRealName)
-
-    #define CREATE_AND_VERIFY_CONTAINER(CONTAINER, ...) \
-        { \
-            CONTAINER< __VA_ARGS__ > t; \
-            const QVariant v = QVariant::fromValue(t); \
-            QByteArray tn = createTypeName(#CONTAINER "<", #__VA_ARGS__); \
-            const int expectedType = ::qMetaTypeId<CONTAINER< __VA_ARGS__ > >(); \
-            const int type = QMetaType::type(tn); \
-            QCOMPARE(type, expectedType); \
-            QCOMPARE((QMetaType::fromType<CONTAINER< __VA_ARGS__ >>().id()), expectedType); \
-        }
-
-    #define FOR_EACH_1ARG_TEMPLATE_TYPE(F, TYPE) \
-        F(QList, TYPE) \
-        F(QQueue, TYPE) \
-        F(QStack, TYPE) \
-        F(QSet, TYPE)
-
-    #define PRINT_1ARG_TEMPLATE(RealName) \
-        FOR_EACH_1ARG_TEMPLATE_TYPE(CREATE_AND_VERIFY_CONTAINER, RealName)
-
-    #define FOR_EACH_2ARG_TEMPLATE_TYPE(F, RealName1, RealName2) \
-        F(QHash, RealName1, RealName2) \
-        F(QMap, RealName1, RealName2) \
-        F(std::pair, RealName1, RealName2)
-
-    #define PRINT_2ARG_TEMPLATE_INTERNAL(RealName1, RealName2) \
-        FOR_EACH_2ARG_TEMPLATE_TYPE(CREATE_AND_VERIFY_CONTAINER, RealName1, RealName2)
-
-    #define PRINT_2ARG_TEMPLATE(RealName) \
-        FOR_EACH_STATIC_PRIMITIVE_TYPE2(PRINT_2ARG_TEMPLATE_INTERNAL, RealName)
-
-    #define REGISTER_TYPEDEF(TYPE, ARG1, ARG2) \
-      qRegisterMetaType<TYPE <ARG1, ARG2>>(#TYPE "<" #ARG1 "," #ARG2 ">");
 
     REGISTER_TYPEDEF(QHash, int, uint)
     REGISTER_TYPEDEF(QMap, int, uint)
@@ -1818,9 +1787,6 @@ void tst_QMetaType::automaticTemplateRegistration()
 
     FOR_EACH_STATIC_PRIMITIVE_TYPE(
       PRINT_1ARG_TEMPLATE
-    )
-    FOR_EACH_STATIC_PRIMITIVE_TYPE(
-      PRINT_2ARG_TEMPLATE
     )
 
     CREATE_AND_VERIFY_CONTAINER(QList, QList<QMap<int, QHash<char, QList<QVariant>>>>)
@@ -1830,8 +1796,6 @@ void tst_QMetaType::automaticTemplateRegistration()
     CREATE_AND_VERIFY_CONTAINER(std::pair, void*, void*)
     CREATE_AND_VERIFY_CONTAINER(QHash, void*, void*)
     CREATE_AND_VERIFY_CONTAINER(QHash, const void*, const void*)
-
-#endif // !defined(TST_QMETATYPE_BROKEN_COMPILER)
 
 #define TEST_OWNING_SMARTPOINTER(SMARTPOINTER, ELEMENT_TYPE, FLAG_TEST, FROMVARIANTFUNCTION) \
     { \

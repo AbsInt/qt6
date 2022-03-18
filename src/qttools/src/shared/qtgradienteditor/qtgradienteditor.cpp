@@ -236,7 +236,7 @@ QtGradientEditorPrivate::QtGradientEditorPrivate(QtGradientEditor *q)
 
 QGradient QtGradientEditorPrivate::gradient() const
 {
-    QGradient *gradient = 0;
+    QGradient *gradient = nullptr;
     switch (m_ui.gradientWidget->gradientType()) {
         case QGradient::LinearGradient:
             gradient = new QLinearGradient(m_ui.gradientWidget->startLinear(),

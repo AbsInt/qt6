@@ -43,6 +43,16 @@ static QString enquote(const QString &string)
                                          .replace(QLatin1Char('"'),QLatin1String("\\\"")));
 }
 
+static QString convertPrivateClassToUsableForm(QString s)
+{
+    // typical privateClass entry in MOC looks like: ClassName::d_func(), where
+    // ClassName is a non-private class name. we don't need "::d_func()" piece
+    // so that could be removed, but we need "Private" so that ClassName becomes
+    // ClassNamePrivate (at present, simply consider this correct)
+    s.replace(u"::d_func()"_qs, u"Private"_qs);
+    return s;
+}
+
 void QmlTypesCreator::writeClassProperties(const QmlTypesClassDescription &collector)
 {
     if (!collector.file.isEmpty())
@@ -75,7 +85,23 @@ void QmlTypesCreator::writeClassProperties(const QmlTypesClassDescription &colle
         m_qml.writeArrayBinding(QLatin1String("interfaces"), interfaces);
     }
 
-    if (collector.elementName.isEmpty())
+    if (!collector.deferredNames.isEmpty()) {
+        QStringList deferredNames;
+        for (const QString &name : collector.deferredNames)
+            deferredNames << enquote(name);
+
+        m_qml.writeArrayBinding(QLatin1String("deferredNames"), deferredNames);
+    }
+
+    if (!collector.immediateNames.isEmpty()) {
+        QStringList immediateNames;
+        for (const QString &name : collector.immediateNames)
+            immediateNames << enquote(name);
+
+        m_qml.writeArrayBinding(QLatin1String("immediateNames"), immediateNames);
+    }
+
+    if (collector.elementName.isEmpty()) // e.g. if QML_ANONYMOUS
         return;
 
     QStringList exports;
@@ -180,23 +206,28 @@ void QmlTypesCreator::writeProperties(const QJsonArray &properties)
 
         writeType(obj, QLatin1String("type"));
 
-        if (!obj.contains(QStringLiteral("privateClass"))) {
-            const auto bindable = obj.constFind(QLatin1String("bindable"));
-            if (bindable != obj.constEnd())
-                m_qml.writeScriptBinding(QLatin1String("bindable"), enquote(bindable->toString()));
-            const auto read = obj.constFind(QLatin1String("read"));
-            if (read != obj.constEnd())
-                 m_qml.writeScriptBinding(QLatin1String("read"), enquote(read->toString()));
-            const auto write = obj.constFind(QLatin1String("write"));
-            if (write != obj.constEnd())
-                 m_qml.writeScriptBinding(QLatin1String("write"), enquote(write->toString()));
-            const auto notify = obj.constFind(QLatin1String("notify"));
-            if (notify != obj.constEnd())
-                m_qml.writeScriptBinding(QLatin1String("notify"), enquote(notify->toString()));
-            const auto index = obj.constFind(QLatin1String("index"));
-            if (index != obj.constEnd())
-                m_qml.writeScriptBinding(QLatin1String("index"),
-                                         QString::number(index.value().toInt()));
+        const auto bindable = obj.constFind(QLatin1String("bindable"));
+        if (bindable != obj.constEnd())
+            m_qml.writeScriptBinding(QLatin1String("bindable"), enquote(bindable->toString()));
+        const auto read = obj.constFind(QLatin1String("read"));
+        if (read != obj.constEnd())
+            m_qml.writeScriptBinding(QLatin1String("read"), enquote(read->toString()));
+        const auto write = obj.constFind(QLatin1String("write"));
+        if (write != obj.constEnd())
+            m_qml.writeScriptBinding(QLatin1String("write"), enquote(write->toString()));
+        const auto notify = obj.constFind(QLatin1String("notify"));
+        if (notify != obj.constEnd())
+            m_qml.writeScriptBinding(QLatin1String("notify"), enquote(notify->toString()));
+        const auto index = obj.constFind(QLatin1String("index"));
+        if (index != obj.constEnd()) {
+            m_qml.writeScriptBinding(QLatin1String("index"),
+                                     QString::number(index.value().toInt()));
+        }
+        const auto privateClass = obj.constFind(QLatin1String("privateClass"));
+        if (privateClass != obj.constEnd()) {
+            m_qml.writeScriptBinding(
+                    QLatin1String("privateClass"),
+                    enquote(convertPrivateClassToUsableForm(privateClass->toString())));
         }
 
         if (!obj.contains(QLatin1String("write")) && !obj.contains(QLatin1String("member")))
@@ -231,8 +262,17 @@ void QmlTypesCreator::writeMethods(const QJsonArray &methods, const QString &typ
         const auto isConstructor = obj.find(QLatin1String("isConstructor"));
         if (isConstructor != obj.constEnd() && isConstructor->toBool())
             m_qml.writeScriptBinding(QLatin1String("isConstructor"), QLatin1String("true"));
-        for (const QJsonValue argument : arguments) {
-            const QJsonObject obj = argument.toObject();
+        const auto isJavaScriptFunction = obj.find(QLatin1String("isJavaScriptFunction"));
+        if (isJavaScriptFunction != obj.constEnd() && isJavaScriptFunction->toBool())
+            m_qml.writeScriptBinding(QLatin1String("isJavaScriptFunction"), QLatin1String("true"));
+        for (qsizetype i = 0, end = arguments.size(); i != end; ++i) {
+            const QJsonObject obj = arguments[i].toObject();
+            if (i == 0 && end == 1 &&
+                    obj[QLatin1String("type")].toString() == QLatin1String("QQmlV4Function*")) {
+                m_qml.writeScriptBinding(QLatin1String("isJavaScriptFunction"),
+                                         QLatin1String("true"));
+                break;
+            }
             m_qml.writeStartObject(QLatin1String("Parameter"));
             const QString name = obj[QLatin1String("name")].toString();
             if (!name.isEmpty())

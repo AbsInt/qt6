@@ -10,6 +10,6 @@ qt_internal_add_tool(${target_name}
         qmldomtool.cpp
     PUBLIC_LIBRARIES
         Qt::CorePrivate
-        Qt::QmlDevToolsPrivate
         Qt::QmlDomPrivate
 )
+qt_internal_return_unless_building_tools()

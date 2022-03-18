@@ -60,6 +60,10 @@
 #include <wayland-cursor.h>
 #endif
 #include "qwaylandhardwareintegration_p.h"
+#include "qwaylandtextinputv2_p.h"
+#if QT_WAYLAND_TEXT_INPUT_V4_WIP
+#include "qwaylandtextinputv4_p.h"
+#endif // QT_WAYLAND_TEXT_INPUT_V4_WIP
 #include "qwaylandinputcontext_p.h"
 #include "qwaylandinputmethodcontext_p.h"
 
@@ -77,6 +81,7 @@
 #include "qwaylandqtkey_p.h"
 
 #include <QtWaylandClient/private/qwayland-text-input-unstable-v2.h>
+#include <QtWaylandClient/private/qwayland-text-input-unstable-v4-wip.h>
 #include <QtWaylandClient/private/qwayland-wp-primary-selection-unstable-v1.h>
 #include <QtWaylandClient/private/qwayland-qt-text-input-method-unstable-v1.h>
 
@@ -92,9 +97,200 @@
 
 #include <tuple> // for std::tie
 
+static void checkWaylandError(struct wl_display *display)
+{
+    int ecode = wl_display_get_error(display);
+    if ((ecode == EPIPE || ecode == ECONNRESET)) {
+        // special case this to provide a nicer error
+        qWarning("The Wayland connection broke. Did the Wayland compositor die?");
+    } else {
+        qWarning("The Wayland connection experienced a fatal error: %s", strerror(ecode));
+    }
+    _exit(1);
+}
+
 QT_BEGIN_NAMESPACE
 
 namespace QtWaylandClient {
+
+class EventThread : public QThread
+{
+    Q_OBJECT
+public:
+    enum OperatingMode {
+        EmitToDispatch, // Emit the signal, allow dispatching in a differnt thread.
+        SelfDispatch, // Dispatch the events inside this thread.
+    };
+
+    EventThread(struct wl_display * wl, struct wl_event_queue * ev_queue,
+                OperatingMode mode)
+        : m_fd(wl_display_get_fd(wl))
+        , m_pipefd{ -1, -1 }
+        , m_wldisplay(wl)
+        , m_wlevqueue(ev_queue)
+        , m_mode(mode)
+        , m_reading(true)
+        , m_quitting(false)
+    {
+        setObjectName(QStringLiteral("WaylandEventThread"));
+    }
+
+    void readAndDispatchEvents()
+    {
+        /*
+         * Dispatch pending events and flush the requests at least once. If the event thread
+         * is not reading, try to call _prepare_read() to allow the event thread to poll().
+         * If that fails, re-try dispatch & flush again until _prepare_read() is successful.
+         *
+         * This allow any call to readAndDispatchEvents() to start event thread's polling,
+         * not only the one issued from event thread's waitForReading(), which means functions
+         * called from dispatch_pending() can safely spin an event loop.
+         */
+        for (;;) {
+            if (dispatchQueuePending() < 0) {
+                checkWaylandError(m_wldisplay);
+                return;
+            }
+
+            wl_display_flush(m_wldisplay);
+
+            // We have to check if event thread is reading every time we dispatch
+            // something, as that may recursively call this function.
+            if (m_reading.loadAcquire())
+                break;
+
+            if (prepareReadQueue() == 0) {
+                QMutexLocker l(&m_mutex);
+                m_reading.storeRelease(true);
+                m_cond.wakeOne();
+                break;
+            }
+        }
+    }
+
+    void stop()
+    {
+        // We have to both write to the pipe and set the flag, as the thread may be
+        // either in the poll() or waiting for _prepare_read().
+        if (m_pipefd[1] != -1 && write(m_pipefd[1], "\0", 1) == -1)
+            qWarning("Failed to write to the pipe: %s.", strerror(errno));
+
+        {
+            QMutexLocker l(&m_mutex);
+            m_quitting = true;
+            m_cond.wakeOne();
+        }
+
+        wait();
+    }
+
+Q_SIGNALS:
+    void needReadAndDispatch();
+
+protected:
+    void run() override
+    {
+        // we use this pipe to make the loop exit otherwise if we simply used a flag on the loop condition, if stop() gets
+        // called while poll() is blocking the thread will never quit since there are no wayland messages coming anymore.
+        struct Pipe
+        {
+            Pipe(int *fds)
+                : fds(fds)
+            {
+                if (qt_safe_pipe(fds) != 0)
+                    qWarning("Pipe creation failed. Quitting may hang.");
+            }
+            ~Pipe()
+            {
+                if (fds[0] != -1) {
+                    close(fds[0]);
+                    close(fds[1]);
+                }
+            }
+
+            int *fds;
+        } pipe(m_pipefd);
+
+        // Make the main thread call wl_prepare_read(), dispatch the pending messages and flush the
+        // outbound ones. Wait until it's done before proceeding, unless we're told to quit.
+        while (waitForReading()) {
+            pollfd fds[2] = { { m_fd, POLLIN, 0 }, { m_pipefd[0], POLLIN, 0 } };
+            poll(fds, 2, -1);
+
+            if (fds[1].revents & POLLIN) {
+                // we don't really care to read the byte that was written here since we're closing down
+                wl_display_cancel_read(m_wldisplay);
+                break;
+            }
+
+            if (fds[0].revents & POLLIN)
+                wl_display_read_events(m_wldisplay);
+                // The polll was succesfull and the event thread did the wl_display_read_events(). On the next iteration of the loop
+                // the event sent to the main thread will cause it to dispatch the messages just read, unless the loop exits in which
+                // case we don't care anymore about them.
+            else
+                wl_display_cancel_read(m_wldisplay);
+        }
+    }
+
+private:
+    bool waitForReading()
+    {
+        Q_ASSERT(QThread::currentThread() == this);
+
+        m_reading.storeRelease(false);
+
+        if (m_mode == SelfDispatch) {
+            readAndDispatchEvents();
+        } else {
+            Q_EMIT needReadAndDispatch();
+
+            QMutexLocker lock(&m_mutex);
+            // m_reading might be set from our emit or some other invocation of
+            // readAndDispatchEvents().
+            while (!m_reading.loadRelaxed() && !m_quitting)
+                m_cond.wait(&m_mutex);
+        }
+
+        return !m_quitting;
+    }
+
+    int dispatchQueuePending()
+    {
+        if (m_wlevqueue)
+            return wl_display_dispatch_queue_pending(m_wldisplay, m_wlevqueue);
+        else
+            return wl_display_dispatch_pending(m_wldisplay);
+    }
+
+    int prepareReadQueue()
+    {
+        if (m_wlevqueue)
+            return wl_display_prepare_read_queue(m_wldisplay, m_wlevqueue);
+        else
+            return wl_display_prepare_read(m_wldisplay);
+    }
+
+    int m_fd;
+    int m_pipefd[2];
+    wl_display *m_wldisplay;
+    wl_event_queue *m_wlevqueue;
+    OperatingMode m_mode;
+
+    /* Concurrency note when operating in EmitToDispatch mode:
+     * m_reading is set to false inside event thread's waitForReading(), and is
+     * set to true inside main thread's readAndDispatchEvents().
+     * The lock is not taken when setting m_reading to false, as the main thread
+     * is not actively waiting for it to turn false. However, the lock is taken
+     * inside readAndDispatchEvents() before setting m_reading to true,
+     * as the event thread is actively waiting for it under the wait condition.
+     */
+
+    QAtomicInteger<bool> m_reading;
+    bool m_quitting;
+    QMutex m_mutex;
+    QWaitCondition m_cond;
+};
 
 Q_LOGGING_CATEGORY(lcQpaWayland, "qt.qpa.wayland"); // for general (uncategorized) Wayland platform logging
 
@@ -165,10 +361,18 @@ QWaylandDisplay::QWaylandDisplay(QWaylandIntegration *waylandIntegration)
     if (!mXkbContext)
         qCWarning(lcQpaWayland, "failed to create xkb context");
 #endif
+    if (!mClientSideInputContextRequested)
+        checkTextInputProtocol();
 }
 
 QWaylandDisplay::~QWaylandDisplay(void)
 {
+    if (m_eventThread)
+        m_eventThread->stop();
+
+    if (m_frameEventQueueThread)
+        m_frameEventQueueThread->stop();
+
     if (mSyncCallback)
         wl_callback_destroy(mSyncCallback);
 
@@ -199,6 +403,8 @@ void QWaylandDisplay::initialize()
         // Give wl_output.done and zxdg_output_v1.done events a chance to arrive
         forceRoundTrip();
     }
+    if (!mClientSideInputContextRequested)
+        mTextInputManagerIndex = INT_MAX;
 }
 
 void QWaylandDisplay::ensureScreen()
@@ -213,100 +419,64 @@ void QWaylandDisplay::ensureScreen()
     Q_ASSERT(!QGuiApplication::screens().empty());
 }
 
-void QWaylandDisplay::checkError() const
-{
-    int ecode = wl_display_get_error(mDisplay);
-    if ((ecode == EPIPE || ecode == ECONNRESET)) {
-        // special case this to provide a nicer error
-        qWarning("The Wayland connection broke. Did the Wayland compositor die?");
-    } else {
-        qWarning("The Wayland connection experienced a fatal error: %s", strerror(ecode));
-    }
-    _exit(1);
-}
-
+// Called in main thread, either from queued signal or directly.
 void QWaylandDisplay::flushRequests()
 {
-    if (wl_display_prepare_read(mDisplay) == 0) {
-        wl_display_read_events(mDisplay);
-    }
+    m_eventThread->readAndDispatchEvents();
+}
 
-    if (wl_display_dispatch_pending(mDisplay) < 0)
-        checkError();
+// We have to wait until we have an eventDispatcher before creating the eventThread,
+// otherwise forceRoundTrip() may block inside _events_read() because eventThread is
+// polling.
+void QWaylandDisplay::initEventThread()
+{
+    m_eventThread.reset(
+            new EventThread(mDisplay, /* default queue */ nullptr, EventThread::EmitToDispatch));
+    connect(m_eventThread.get(), &EventThread::needReadAndDispatch, this,
+            &QWaylandDisplay::flushRequests, Qt::QueuedConnection);
+    m_eventThread->start();
 
-    {
-        QReadLocker locker(&m_frameQueueLock);
-        for (const FrameQueue &q : mExternalQueues) {
-            QMutexLocker locker(q.mutex);
-            while (wl_display_prepare_read_queue(mDisplay, q.queue) != 0)
-                wl_display_dispatch_queue_pending(mDisplay, q.queue);
-            wl_display_read_events(mDisplay);
-            wl_display_dispatch_queue_pending(mDisplay, q.queue);
-        }
-    }
-
-    wl_display_flush(mDisplay);
+    // wl_display_disconnect() free this.
+    m_frameEventQueue = wl_display_create_queue(mDisplay);
+    m_frameEventQueueThread.reset(
+            new EventThread(mDisplay, m_frameEventQueue, EventThread::SelfDispatch));
+    m_frameEventQueueThread->start();
 }
 
 void QWaylandDisplay::blockingReadEvents()
 {
     if (wl_display_dispatch(mDisplay) < 0)
-        checkError();
+        checkWaylandError(mDisplay);
 }
 
-void QWaylandDisplay::destroyFrameQueue(const QWaylandDisplay::FrameQueue &q)
+void QWaylandDisplay::checkTextInputProtocol()
 {
-    QWriteLocker locker(&m_frameQueueLock);
-    auto it = std::find_if(mExternalQueues.begin(),
-                           mExternalQueues.end(),
-                           [&q] (const QWaylandDisplay::FrameQueue &other){ return other.queue == q.queue; });
-    Q_ASSERT(it != mExternalQueues.end());
-    mExternalQueues.erase(it);
-    if (q.queue != nullptr)
-        wl_event_queue_destroy(q.queue);
-    delete q.mutex;
-}
+    QStringList tips, timps; // for text input protocols and text input manager protocols
+    tips << QLatin1String(QtWayland::qt_text_input_method_v1::interface()->name)
+         << QLatin1String(QtWayland::zwp_text_input_v2::interface()->name);
+    timps << QLatin1String(QtWayland::qt_text_input_method_manager_v1::interface()->name)
+          << QLatin1String(QtWayland::zwp_text_input_manager_v2::interface()->name);
+#if QT_WAYLAND_TEXT_INPUT_V4_WIP
+    tips << QLatin1String(QtWayland::zwp_text_input_v4::interface()->name);
+    timps << QLatin1String(QtWayland::zwp_text_input_manager_v4::interface()->name);
+#endif // QT_WAYLAND_TEXT_INPUT_V4_WIP
 
-QWaylandDisplay::FrameQueue QWaylandDisplay::createFrameQueue()
-{
-    QWriteLocker locker(&m_frameQueueLock);
-    FrameQueue q{createEventQueue()};
-    mExternalQueues.append(q);
-    return q;
-}
-
-wl_event_queue *QWaylandDisplay::createEventQueue()
-{
-    return wl_display_create_queue(mDisplay);
-}
-
-void QWaylandDisplay::dispatchQueueWhile(wl_event_queue *queue, std::function<bool ()> condition, int timeout)
-{
-    if (!condition())
-        return;
-
-    QElapsedTimer timer;
-    timer.start();
-    struct pollfd pFd = qt_make_pollfd(wl_display_get_fd(mDisplay), POLLIN);
-    while (timeout == -1 || timer.elapsed() < timeout) {
-        while (wl_display_prepare_read_queue(mDisplay, queue) != 0)
-            wl_display_dispatch_queue_pending(mDisplay, queue);
-
-        wl_display_flush(mDisplay);
-
-        const int remaining = qMax(timeout - timer.elapsed(), 0ll);
-        const int pollTimeout = timeout == -1 ? -1 : remaining;
-        if (qt_poll_msecs(&pFd, 1, pollTimeout) > 0)
-            wl_display_read_events(mDisplay);
-        else
-            wl_display_cancel_read(mDisplay);
-
-        if (wl_display_dispatch_queue_pending(mDisplay, queue) < 0)
-            checkError();
-
-        if (!condition())
-            break;
+    QString tiProtocols = QString::fromLocal8Bit(qgetenv("QT_WAYLAND_TEXT_INPUT_PROTOCOL"));
+    qCDebug(lcQpaWayland) << "QT_WAYLAND_TEXT_INPUT_PROTOCOL=" << tiProtocols;
+    QStringList keys;
+    if (!tiProtocols.isEmpty()) {
+        keys = tiProtocols.split(QLatin1Char(';'));
+        QList<QString>::iterator it = keys.begin();
+        while (it != keys.end()) {
+            if (tips.contains(*it))
+                mTextInputManagerList.append(timps.at(tips.indexOf(*it)));
+            else
+                qCDebug(lcQpaWayland) << "text input: unknown protocol - " << *it;
+            ++it;
+        }
     }
+    if (mTextInputManagerList.isEmpty()) // fallback
+        mTextInputManagerList = timps;
 }
 
 QWaylandScreen *QWaylandDisplay::screenForOutput(struct wl_output *output) const
@@ -335,48 +505,89 @@ void QWaylandDisplay::registry_global(uint32_t id, const QString &interface, uin
 {
     struct ::wl_registry *registry = object();
 
-    if (interface == QStringLiteral("wl_output")) {
+    if (interface == QLatin1String(QtWayland::wl_output::interface()->name)) {
         mWaitingScreens << mWaylandIntegration->createPlatformScreen(this, version, id);
-    } else if (interface == QStringLiteral("wl_compositor")) {
+    } else if (interface == QLatin1String(QtWayland::wl_compositor::interface()->name)) {
         mCompositor.init(registry, id, qMin((int)version, 4));
-    } else if (interface == QStringLiteral("wl_shm")) {
+    } else if (interface == QLatin1String(QWaylandShm::interface()->name)) {
         mShm.reset(new QWaylandShm(this, version, id));
-    } else if (interface == QStringLiteral("wl_seat")) {
+    } else if (interface == QLatin1String(QWaylandInputDevice::interface()->name)) {
         QWaylandInputDevice *inputDevice = mWaylandIntegration->createInputDevice(this, version, id);
         mInputDevices.append(inputDevice);
 #if QT_CONFIG(wayland_datadevice)
-    } else if (interface == QStringLiteral("wl_data_device_manager")) {
-        mDndSelectionHandler.reset(new QWaylandDataDeviceManager(this, id));
+    } else if (interface == QLatin1String(QWaylandDataDeviceManager::interface()->name)) {
+        mDndSelectionHandler.reset(new QWaylandDataDeviceManager(this, version, id));
 #endif
-    } else if (interface == QStringLiteral("qt_surface_extension")) {
+    } else if (interface == QLatin1String(QtWayland::qt_surface_extension::interface()->name)) {
         mWindowExtension.reset(new QtWayland::qt_surface_extension(registry, id, 1));
-    } else if (interface == QStringLiteral("wl_subcompositor")) {
+    } else if (interface == QLatin1String(QtWayland::wl_subcompositor::interface()->name)) {
         mSubCompositor.reset(new QtWayland::wl_subcompositor(registry, id, 1));
-    } else if (interface == QStringLiteral("qt_touch_extension")) {
+    } else if (interface == QLatin1String(QWaylandTouchExtension::interface()->name)) {
         mTouchExtension.reset(new QWaylandTouchExtension(this, id));
-    } else if (interface == QStringLiteral("zqt_key_v1")) {
+    } else if (interface == QLatin1String(QWaylandQtKeyExtension::interface()->name)) {
         mQtKeyExtension.reset(new QWaylandQtKeyExtension(this, id));
 #if QT_CONFIG(tabletevent)
-    } else if (interface == QStringLiteral("zwp_tablet_manager_v2")) {
+    } else if (interface == QLatin1String(QWaylandTabletManagerV2::interface()->name)) {
         mTabletManager.reset(new QWaylandTabletManagerV2(this, id, qMin(1, int(version))));
 #endif
-    } else if (interface == QStringLiteral("zwp_pointer_gestures_v1")) {
+    } else if (interface == QLatin1String(QWaylandPointerGestures::interface()->name)) {
         mPointerGestures.reset(new QWaylandPointerGestures(this, id, 1));
 #if QT_CONFIG(wayland_client_primary_selection)
-    } else if (interface == QStringLiteral("zwp_primary_selection_device_manager_v1")) {
+    } else if (interface == QLatin1String(QWaylandPrimarySelectionDeviceManagerV1::interface()->name)) {
         mPrimarySelectionManager.reset(new QWaylandPrimarySelectionDeviceManagerV1(this, id, 1));
 #endif
-    } else if (interface == QStringLiteral("qt_text_input_method_manager_v1") && !mClientSideInputContextRequested) {
+    } else if (interface == QLatin1String(QtWayland::qt_text_input_method_manager_v1::interface()->name)
+            && (mTextInputManagerList.contains(interface) && mTextInputManagerList.indexOf(interface) < mTextInputManagerIndex)) {
+        qCDebug(lcQpaWayland) << "text input: register qt_text_input_method_manager_v1";
+        if (mTextInputManagerIndex < INT_MAX) {
+            mTextInputManagerv2.reset();
+#if QT_WAYLAND_TEXT_INPUT_V4_WIP
+            mTextInputManagerv4.reset();
+#endif // QT_WAYLAND_TEXT_INPUT_V4_WIP
+            for (QWaylandInputDevice *inputDevice : qAsConst(mInputDevices))
+                inputDevice->setTextInput(nullptr);
+        }
+
         mTextInputMethodManager.reset(new QtWayland::qt_text_input_method_manager_v1(registry, id, 1));
         for (QWaylandInputDevice *inputDevice : qAsConst(mInputDevices))
             inputDevice->setTextInputMethod(new QWaylandTextInputMethod(this, mTextInputMethodManager->get_text_input_method(inputDevice->wl_seat())));
         mWaylandIntegration->reconfigureInputContext();
-    } else if (interface == QStringLiteral("zwp_text_input_manager_v2") && !mClientSideInputContextRequested) {
-        mTextInputManager.reset(new QtWayland::zwp_text_input_manager_v2(registry, id, 1));
+        mTextInputManagerIndex = mTextInputManagerList.indexOf(interface);
+    } else if (interface == QLatin1String(QtWayland::zwp_text_input_manager_v2::interface()->name)
+            && (mTextInputManagerList.contains(interface) && mTextInputManagerList.indexOf(interface) < mTextInputManagerIndex)) {
+        qCDebug(lcQpaWayland) << "text input: register zwp_text_input_v2";
+        if (mTextInputManagerIndex < INT_MAX) {
+            mTextInputMethodManager.reset();
+#if QT_WAYLAND_TEXT_INPUT_V4_WIP
+            mTextInputManagerv4.reset();
+#endif // QT_WAYLAND_TEXT_INPUT_V4_WIP
+            for (QWaylandInputDevice *inputDevice : qAsConst(mInputDevices))
+                inputDevice->setTextInputMethod(nullptr);
+        }
+
+        mTextInputManagerv2.reset(new QtWayland::zwp_text_input_manager_v2(registry, id, 1));
         for (QWaylandInputDevice *inputDevice : qAsConst(mInputDevices))
-            inputDevice->setTextInput(new QWaylandTextInput(this, mTextInputManager->get_text_input(inputDevice->wl_seat())));
+            inputDevice->setTextInput(new QWaylandTextInputv2(this, mTextInputManagerv2->get_text_input(inputDevice->wl_seat())));
         mWaylandIntegration->reconfigureInputContext();
-    } else if (interface == QStringLiteral("qt_hardware_integration")) {
+        mTextInputManagerIndex = mTextInputManagerList.indexOf(interface);
+#if QT_WAYLAND_TEXT_INPUT_V4_WIP
+    } else if (interface == QLatin1String(QtWayland::zwp_text_input_manager_v4::interface()->name)
+            && (mTextInputManagerList.contains(interface) && mTextInputManagerList.indexOf(interface) < mTextInputManagerIndex)) {
+        qCDebug(lcQpaWayland) << "text input: register zwp_text_input_v4";
+        if (mTextInputManagerIndex < INT_MAX) {
+            mTextInputMethodManager.reset();
+            mTextInputManagerv2.reset();
+            for (QWaylandInputDevice *inputDevice : qAsConst(mInputDevices))
+                inputDevice->setTextInputMethod(nullptr);
+        }
+
+        mTextInputManagerv4.reset(new QtWayland::zwp_text_input_manager_v4(registry, id, 1));
+        for (QWaylandInputDevice *inputDevice : qAsConst(mInputDevices))
+            inputDevice->setTextInput(new QWaylandTextInputv4(this, mTextInputManagerv4->get_text_input(inputDevice->wl_seat())));
+        mWaylandIntegration->reconfigureInputContext();
+        mTextInputManagerIndex = mTextInputManagerList.indexOf(interface);
+#endif // QT_WAYLAND_TEXT_INPUT_V4_WIP
+    } else if (interface == QLatin1String(QWaylandHardwareIntegration::interface()->name)) {
         bool disableHardwareIntegration = qEnvironmentVariableIntValue("QT_WAYLAND_DISABLE_HW_INTEGRATION");
         if (!disableHardwareIntegration) {
             mHardwareIntegration.reset(new QWaylandHardwareIntegration(registry, id));
@@ -384,7 +595,7 @@ void QWaylandDisplay::registry_global(uint32_t id, const QString &interface, uin
             // qt_hardware_integration before creating windows
             forceRoundTrip();
         }
-    } else if (interface == QLatin1String("zxdg_output_manager_v1")) {
+    } else if (interface == QLatin1String(QWaylandXdgOutputManagerV1::interface()->name)) {
         mXdgOutputManager.reset(new QWaylandXdgOutputManagerV1(this, id, version));
         for (auto *screen : qAsConst(mWaitingScreens))
             screen->initXdgOutput(xdgOutputManager());
@@ -403,7 +614,7 @@ void QWaylandDisplay::registry_global_remove(uint32_t id)
     for (int i = 0, ie = mGlobals.count(); i != ie; ++i) {
         RegistryGlobal &global = mGlobals[i];
         if (global.id == id) {
-            if (global.interface == QStringLiteral("wl_output")) {
+            if (global.interface == QLatin1String(QtWayland::wl_output::interface()->name)) {
                 for (auto *screen : mWaitingScreens) {
                     if (screen->outputId() == id) {
                         mWaitingScreens.removeOne(screen);
@@ -422,13 +633,21 @@ void QWaylandDisplay::registry_global_remove(uint32_t id)
                     }
                 }
             }
-            if (global.interface == QStringLiteral("zwp_text_input_manager_v2")) {
-                mTextInputManager.reset();
+            if (global.interface == QLatin1String(QtWayland::zwp_text_input_manager_v2::interface()->name)) {
+                mTextInputManagerv2.reset();
                 for (QWaylandInputDevice *inputDevice : qAsConst(mInputDevices))
                     inputDevice->setTextInput(nullptr);
                 mWaylandIntegration->reconfigureInputContext();
             }
-            if (global.interface == QStringLiteral("qt_text_input_method_manager_v1")) {
+#if QT_WAYLAND_TEXT_INPUT_V4_WIP
+            if (global.interface == QLatin1String(QtWayland::zwp_text_input_manager_v4::interface()->name)) {
+                mTextInputManagerv4.reset();
+                for (QWaylandInputDevice *inputDevice : qAsConst(mInputDevices))
+                    inputDevice->setTextInput(nullptr);
+                mWaylandIntegration->reconfigureInputContext();
+            }
+#endif // QT_WAYLAND_TEXT_INPUT_V4_WIP
+            if (global.interface == QLatin1String(QtWayland::qt_text_input_method_manager_v1::interface()->name)) {
                 mTextInputMethodManager.reset();
                 for (QWaylandInputDevice *inputDevice : qAsConst(mInputDevices))
                     inputDevice->setTextInputMethod(nullptr);
@@ -582,14 +801,10 @@ void QWaylandDisplay::handleKeyboardFocusChanged(QWaylandInputDevice *inputDevic
     if (mLastKeyboardFocus == keyboardFocus)
         return;
 
-    if (mWaylandIntegration->mShellIntegration) {
-        mWaylandIntegration->mShellIntegration->handleKeyboardFocusChanged(keyboardFocus, mLastKeyboardFocus);
-    } else {
-        if (keyboardFocus)
-            handleWindowActivated(keyboardFocus);
-        if (mLastKeyboardFocus)
-            handleWindowDeactivated(mLastKeyboardFocus);
-    }
+    if (keyboardFocus)
+        handleWindowActivated(keyboardFocus);
+    if (mLastKeyboardFocus)
+        handleWindowDeactivated(mLastKeyboardFocus);
 
     mLastKeyboardFocus = keyboardFocus;
 }
@@ -608,6 +823,19 @@ void QWaylandDisplay::handleWaylandSync()
     QWindow *activeWindow = mActiveWindows.empty() ? nullptr : mActiveWindows.last()->window();
     if (activeWindow != QGuiApplication::focusWindow())
         QWindowSystemInterface::handleWindowActivated(activeWindow);
+
+    if (!activeWindow) {
+        if (lastInputDevice()) {
+#if QT_CONFIG(clipboard)
+            if (auto *dataDevice = lastInputDevice()->dataDevice())
+                dataDevice->invalidateSelectionOffer();
+#endif
+#if QT_CONFIG(wayland_client_primary_selection)
+            if (auto *device = lastInputDevice()->primarySelectionDevice())
+                device->invalidateSelectionOffer();
+#endif
+        }
+    }
 }
 
 const wl_callback_listener QWaylandDisplay::syncCallbackListener = {
@@ -632,6 +860,13 @@ void QWaylandDisplay::requestWaylandSync()
 QWaylandInputDevice *QWaylandDisplay::defaultInputDevice() const
 {
     return mInputDevices.isEmpty() ? 0 : mInputDevices.first();
+}
+
+bool QWaylandDisplay::isKeyboardAvailable() const
+{
+    return std::any_of(
+            mInputDevices.constBegin(), mInputDevices.constEnd(),
+            [](const QWaylandInputDevice *device) { return device->keyboard() != nullptr; });
 }
 
 #if QT_CONFIG(cursor)
@@ -674,5 +909,7 @@ QWaylandCursorTheme *QWaylandDisplay::loadCursorTheme(const QString &name, int p
 #endif // QT_CONFIG(cursor)
 
 } // namespace QtWaylandClient
+
+#include "qwaylanddisplay.moc"
 
 QT_END_NAMESPACE

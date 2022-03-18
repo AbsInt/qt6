@@ -431,7 +431,7 @@ void QDockWidgetGroupWindow::destroyOrHideIfEmpty()
     }
 
     // Make sure to reparent the possibly floating or hidden QDockWidgets to the parent
-    const auto dockWidgets = findChildren<QDockWidget *>(QString(), Qt::FindDirectChildrenOnly);
+    const auto dockWidgets = findChildren<QDockWidget *>(Qt::FindDirectChildrenOnly);
     for (QDockWidget *dw : dockWidgets) {
         bool wasFloating = dw->isFloating();
         bool wasHidden = dw->isHidden();
@@ -451,7 +451,7 @@ void QDockWidgetGroupWindow::destroyOrHideIfEmpty()
             dw->show();
     }
 #if QT_CONFIG(tabbar)
-    const auto tabBars = findChildren<QTabBar *>(QString(), Qt::FindDirectChildrenOnly);
+    const auto tabBars = findChildren<QTabBar *>(Qt::FindDirectChildrenOnly);
     for (QTabBar *tb : tabBars)
         tb->setParent(parentWidget());
 #endif
@@ -673,6 +673,31 @@ QSize QMainWindowLayoutState::minimumSize() const
 #endif // QT_CONFIG(toolbar)
 
     return result;
+}
+
+/*!
+    \internal
+
+    Returns whether the layout fits into the main window.
+*/
+bool QMainWindowLayoutState::fits() const
+{
+    Q_ASSERT(mainWindow);
+
+    QSize size;
+
+#if QT_CONFIG(dockwidget)
+    size = dockAreaLayout.minimumStableSize();
+#endif
+
+#if QT_CONFIG(toolbar)
+    size.rwidth() += toolBarAreaLayout.docks[QInternal::LeftDock].rect.width();
+    size.rwidth() += toolBarAreaLayout.docks[QInternal::RightDock].rect.width();
+    size.rheight() += toolBarAreaLayout.docks[QInternal::TopDock].rect.height();
+    size.rheight() += toolBarAreaLayout.docks[QInternal::BottomDock].rect.height();
+#endif
+
+    return size.width() <= mainWindow->width() && size.height() <= mainWindow->height();
 }
 
 void QMainWindowLayoutState::apply(bool animated)
@@ -1056,7 +1081,7 @@ void QMainWindowLayoutState::saveState(QDataStream &stream) const
     dockAreaLayout.saveState(stream);
 #if QT_CONFIG(tabbar)
     const QList<QDockWidgetGroupWindow *> floatingTabs =
-        mainWindow->findChildren<QDockWidgetGroupWindow *>(QString(), Qt::FindDirectChildrenOnly);
+        mainWindow->findChildren<QDockWidgetGroupWindow *>(Qt::FindDirectChildrenOnly);
 
     for (QDockWidgetGroupWindow *floating : floatingTabs) {
         if (floating->layoutInfo()->isEmpty())
@@ -1835,7 +1860,7 @@ QDockAreaLayoutInfo *QMainWindowLayout::dockInfo(QWidget *widget)
     if (info)
         return info;
     const auto groups =
-            parent()->findChildren<QDockWidgetGroupWindow*>(QString(), Qt::FindDirectChildrenOnly);
+            parent()->findChildren<QDockWidgetGroupWindow*>(Qt::FindDirectChildrenOnly);
     for (QDockWidgetGroupWindow *dwgw : groups) {
         info = dwgw->layoutInfo()->info(widget);
         if (info)
@@ -1974,9 +1999,45 @@ void QMainWindowLayout::setGeometry(const QRect &_r)
         r.setBottom(sbr.top() - 1);
     }
 
+    if (restoredState) {
+        /*
+            The main window was hidden and was going to be maximized or full-screened when
+            the state was restored. The state might have been for a larger window size than
+            the current size (in _r), and the window might still be in the process of being
+            shown and transitioning to the final size (there's no reliable way of knowing
+            this across different platforms). Try again with the restored state.
+        */
+        layoutState = *restoredState;
+        if (restoredState->fits()) {
+            restoredState.reset();
+            discardRestoredStateTimer.stop();
+        } else {
+            /*
+                Try again in the next setGeometry call, but discard the restored state
+                after 150ms without any further tries. That's a reasonably short amount of
+                time during which we can expect the windowing system to either have completed
+                showing the window, or resized the window once more (which then restarts the
+                timer in timerEvent).
+                If the windowing system is done, then the user won't have had a chance to
+                change the layout interactively AND trigger another resize.
+            */
+            discardRestoredStateTimer.start(150, this);
+        }
+    }
+
     layoutState.rect = r;
+
     layoutState.fitLayout();
     applyState(layoutState, false);
+}
+
+void QMainWindowLayout::timerEvent(QTimerEvent *e)
+{
+    if (e->timerId() == discardRestoredStateTimer.timerId()) {
+        discardRestoredStateTimer.stop();
+        restoredState.reset();
+    }
+    QLayout::timerEvent(e);
 }
 
 void QMainWindowLayout::addItem(QLayoutItem *)
@@ -2104,7 +2165,7 @@ bool QMainWindowLayout::plug(QLayoutItem *widgetItem)
         previousPath = currentHoveredFloat->layoutInfo()->indexOf(widget);
         // Let's remove the widget from any possible group window
         const auto groups =
-                parent()->findChildren<QDockWidgetGroupWindow*>(QString(), Qt::FindDirectChildrenOnly);
+                parent()->findChildren<QDockWidgetGroupWindow*>(Qt::FindDirectChildrenOnly);
         for (QDockWidgetGroupWindow *dwgw : groups) {
             if (dwgw == currentHoveredFloat)
                 continue;
@@ -2134,7 +2195,7 @@ bool QMainWindowLayout::plug(QLayoutItem *widgetItem)
 #if QT_CONFIG(dockwidget)
     // Let's remove the widget from any possible group window
     const auto groups =
-            parent()->findChildren<QDockWidgetGroupWindow*>(QString(), Qt::FindDirectChildrenOnly);
+            parent()->findChildren<QDockWidgetGroupWindow*>(Qt::FindDirectChildrenOnly);
     for (QDockWidgetGroupWindow *dwgw : groups) {
         QList<int> path = dwgw->layoutInfo()->indexOf(widget);
         if (!path.isEmpty())
@@ -2727,10 +2788,16 @@ QDockWidgetGroupWindow *QMainWindowLayout::createTabbedDockWindow()
 
 void QMainWindowLayout::applyState(QMainWindowLayoutState &newState, bool animate)
 {
+    // applying the state can lead to showing separator widgets, which would lead to a re-layout
+    // (even though the separator widgets are not really part of the layout)
+    // break the loop
+    if (isInApplyState)
+        return;
+    isInApplyState = true;
 #if QT_CONFIG(dockwidget) && QT_CONFIG(tabwidget)
     QSet<QTabBar*> used = newState.dockAreaLayout.usedTabBars();
     const auto groups =
-            parent()->findChildren<QDockWidgetGroupWindow*>(QString(), Qt::FindDirectChildrenOnly);
+            parent()->findChildren<QDockWidgetGroupWindow*>(Qt::FindDirectChildrenOnly);
     for (QDockWidgetGroupWindow *dwgw : groups)
         used += dwgw->layoutInfo()->usedTabBars();
 
@@ -2749,6 +2816,7 @@ void QMainWindowLayout::applyState(QMainWindowLayoutState &newState, bool animat
         usedSeparatorWidgets = usedSeps;
         for (QWidget *sepWidget : retiredSeps) {
             unusedSeparatorWidgets.append(sepWidget);
+            sepWidget->hide();
         }
     }
 
@@ -2757,6 +2825,7 @@ void QMainWindowLayout::applyState(QMainWindowLayoutState &newState, bool animat
 
 #endif // QT_CONFIG(dockwidget) && QT_CONFIG(tabwidget)
     newState.apply(dockOptions & QMainWindow::AnimatedDocks && animate);
+    isInApplyState = false;
 }
 
 void QMainWindowLayout::saveState(QDataStream &stream) const
@@ -2781,6 +2850,18 @@ bool QMainWindowLayout::restoreState(QDataStream &stream)
     if (parentWidget()->isVisible()) {
         layoutState.fitLayout();
         applyState(layoutState, false);
+    } else {
+        /*
+            The state might not fit into the size of the widget as it gets shown, but
+            if the window is expected to be maximized or full screened, then we might
+            get several resizes as part of that transition, at the end of which the
+            state might fit. So keep the restored state around for now and try again
+            later in setGeometry.
+        */
+        if ((parentWidget()->windowState() & (Qt::WindowFullScreen | Qt::WindowMaximized))
+            && !layoutState.fits()) {
+            restoredState.reset(new QMainWindowLayoutState(layoutState));
+        }
     }
 
     savedState.deleteAllLayoutItems();

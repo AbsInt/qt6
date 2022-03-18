@@ -61,7 +61,7 @@ QT_BEGIN_NAMESPACE
 
 class QBindingStorage;
 
-template<typename Class, typename T, auto Offset, auto Setter, auto Signal>
+template<typename Class, typename T, auto Offset, auto Setter, auto Signal, auto Getter>
 class QObjectCompatProperty;
 
 namespace QtPrivate {
@@ -151,6 +151,7 @@ private:
 class QUntypedPropertyBinding;
 class QPropertyBindingPrivate;
 struct QPropertyBindingDataPointer;
+struct QPropertyObserverPointer;
 
 class QUntypedPropertyData
 {
@@ -269,7 +270,7 @@ class Q_CORE_EXPORT QPropertyBindingData
     friend class QT_PREPEND_NAMESPACE(QQmlPropertyBinding);
     friend struct QT_PREPEND_NAMESPACE(QPropertyDelayedNotifications);
 
-    template<typename Class, typename T, auto Offset, auto Setter, auto Signal>
+    template<typename Class, typename T, auto Offset, auto Setter, auto Signal, auto Getter>
     friend class QT_PREPEND_NAMESPACE(QObjectCompatProperty);
 
     Q_DISABLE_COPY(QPropertyBindingData)
@@ -340,6 +341,11 @@ private:
     quintptr d() const { return d_ref(); }
     void registerWithCurrentlyEvaluatingBinding_helper(BindingEvaluationState *currentBinding) const;
     void removeBinding_helper();
+
+    enum NotificationResult { Delayed, Evaluated };
+    NotificationResult notifyObserver_helper(
+            QUntypedPropertyData *propertyDataPtr, QPropertyObserverPointer observer,
+            QBindingStorage *storage) const;
 };
 
 template <typename T, typename Tag>

@@ -51,11 +51,12 @@
 // We mean it.
 //
 
-#include <private/qtqmlglobal_p.h>
-#include <QtCore/QObject>
-#include <private/qqmlmetaobject_p.h>
 #include <private/qmetaobject_p.h>
+#include <private/qtqmlglobal_p.h>
+#include <private/qqmlmetaobject_p.h>
+
 #include <QtQml/qqml.h>
+#include <QtCore/qobject.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -171,7 +172,7 @@ T qmlobject_cast(QObject *object)
     if (object && QQmlMetaObject::canConvert(object, &reinterpret_cast<T>(object)->staticMetaObject))
         return static_cast<T>(object);
     else
-        return 0;
+        return nullptr;
 }
 
 #define IS_SIGNAL_CONNECTED(Sender, SenderType, Name, Arguments) \
@@ -220,11 +221,11 @@ inline void QQml_setParent_noEvent(QObject *object, QObject *parent)
 class Q_QML_PRIVATE_EXPORT QQmlValueTypeProvider
 {
 public:
-    bool initValueType(int, QVariant&);
-    bool createValueType(int, const QJSValue &, QVariant &);
-    bool equalValueType(int, const void *, const QVariant&);
-    bool readValueType(const QVariant&, void *, int);
-    bool writeValueType(int, const void *, QVariant&);
+    bool initValueType(QMetaType, QVariant &);
+    bool createValueType(QMetaType, const QJSValue &, QVariant &);
+    bool equalValueType(QMetaType, const void *, const QVariant &);
+    bool readValueType(QMetaType, const QVariant &, void *);
+    bool writeValueType(QMetaType, const void *, QVariant &);
 };
 
 Q_AUTOTEST_EXPORT QQmlValueTypeProvider *QQml_valueTypeProvider();

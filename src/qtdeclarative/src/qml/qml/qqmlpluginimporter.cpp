@@ -64,6 +64,7 @@ class PluginMap
     Q_DISABLE_COPY_MOVE(PluginMap)
 public:
     PluginMap() = default;
+    ~PluginMap() = default;
 
     // This is a std::unordered_map because QHash cannot handle move-only types.
     using Container = std::unordered_map<QString, QmlPlugin>;
@@ -79,6 +80,7 @@ class PluginMapPtr
     Q_DISABLE_COPY_MOVE(PluginMapPtr)
 public:
     PluginMapPtr(PluginMap *map) : map(map), locker(&map->mutex) {}
+    ~PluginMapPtr() = default;
 
     PluginMap::Container &operator*() { return map->plugins; }
     const PluginMap::Container &operator*() const { return map->plugins; }
@@ -454,7 +456,7 @@ QString QQmlPluginImporter::resolvePlugin(const QString &qmldirPluginPath, const
 
         QString resolvedPath = resolvedBasePath + prefix + baseName;
         for (const QString &suffix : suffixes) {
-            const QString absolutePath = typeLoader->absoluteFilePath(resolvedPath + suffix);
+            QString absolutePath = typeLoader->absoluteFilePath(resolvedPath + suffix);
             if (!absolutePath.isEmpty())
                 return absolutePath;
         }
@@ -485,8 +487,9 @@ QString QQmlPluginImporter::resolvePlugin(const QString &qmldirPluginPath, const
 #endif
     }
 
-    qCDebug(lcQmlImport) << "resolvePlugin" << "Could not resolve plugin"
-                         << baseName << "in" << qmldirPath;
+    qCDebug(lcQmlImport) << "resolvePlugin" << "Could not resolve dynamic plugin with base name"
+                         << baseName << "in" << qmldirPath
+                         << " file does not exist";
 
     return QString();
 }
@@ -496,8 +499,7 @@ QString QQmlPluginImporter::resolvePlugin(const QString &qmldirPluginPath, const
     \a versionUris, which is a list of all possible versioned URI combinations - see versionUriList()
     above.
  */
-bool QQmlPluginImporter::populatePluginPairVector(
-        QVector<StaticPluginPair> &result, const QStringList &versionUris)
+bool QQmlPluginImporter::populatePluginDataVector(QVector<StaticPluginData> &result, const QStringList &versionUris)
 {
     static const QVector<QStaticPlugin> plugins = makePlugins();
     for (const QStaticPlugin &plugin : plugins) {
@@ -506,7 +508,7 @@ bool QQmlPluginImporter::populatePluginPairVector(
         QObject *instance = plugin.instance();
         if (qobject_cast<QQmlEngineExtensionPlugin *>(instance)
                 || qobject_cast<QQmlExtensionPlugin *>(instance)) {
-            const QJsonArray metaTagsUriList = plugin.metaData().value(
+            QJsonArray metaTagsUriList = plugin.metaData().value(
                         QStringLiteral("uri")).toArray();
             if (metaTagsUriList.isEmpty()) {
                 if (errors) {
@@ -524,7 +526,7 @@ bool QQmlPluginImporter::populatePluginPairVector(
             // A plugin can be set up to handle multiple URIs, so go through the list:
             for (const QJsonValueRef metaTagUri : metaTagsUriList) {
                 if (versionUris.contains(metaTagUri.toString())) {
-                    result.append(qMakePair(plugin, metaTagsUriList));
+                    result.append({ plugin, metaTagsUriList });
                     break;
                 }
             }
@@ -579,16 +581,16 @@ QTypeRevision QQmlPluginImporter::importPlugins() {
             // If a module has several plugins, they must all have the same version. Start by
             // populating pluginPairs with relevant plugins to cut the list short early on:
             const QStringList versionUris = versionUriList(uri, importVersion);
-            QVector<StaticPluginPair> pluginPairs;
-            if (!populatePluginPairVector(pluginPairs, versionUris))
+            QVector<StaticPluginData> pluginPairs;
+            if (!populatePluginDataVector(pluginPairs, versionUris))
                 return QTypeRevision();
 
             for (const QString &versionUri : versionUris) {
-                for (const StaticPluginPair &pair : qAsConst(pluginPairs)) {
-                    for (const QJsonValueRef metaTagUri : pair.second) {
+                for (StaticPluginData &pair : pluginPairs) {
+                    for (QJsonValueRef metaTagUri : pair.uriList) {
                         if (versionUri == metaTagUri.toString()) {
                             staticPluginsFound++;
-                            QObject *instance = pair.first.instance();
+                            QObject *instance = pair.plugin.instance();
                             importVersion = importStaticPlugin(
                                         instance,
                                         canUseUris ? uri : QString::asprintf("%p", instance));

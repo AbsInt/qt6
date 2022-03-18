@@ -76,8 +76,8 @@ QWaylandWindow *QWaylandWindow::mMouseGrab = nullptr;
 QWaylandWindow::QWaylandWindow(QWindow *window, QWaylandDisplay *display)
     : QPlatformWindow(window)
     , mDisplay(display)
-    , mFrameQueue(mDisplay->createFrameQueue())
     , mResizeAfterSwap(qEnvironmentVariableIsSet("QT_WAYLAND_RESIZE_AFTER_SWAP"))
+    , mSurfaceLock(QReadWriteLock::Recursive)
 {
     {
         bool ok;
@@ -95,9 +95,6 @@ QWaylandWindow::QWaylandWindow(QWindow *window, QWaylandDisplay *display)
 
 QWaylandWindow::~QWaylandWindow()
 {
-    mDisplay->destroyFrameQueue(mFrameQueue);
-    mDisplay->handleWindowDestroyed(this);
-
     delete mWindowDecoration;
 
     if (mSurface)
@@ -239,6 +236,16 @@ bool QWaylandWindow::shouldCreateSubSurface() const
     return QPlatformWindow::parent() != nullptr;
 }
 
+void QWaylandWindow::beginFrame()
+{
+    mSurfaceLock.lockForRead();
+}
+
+void QWaylandWindow::endFrame()
+{
+    mSurfaceLock.unlock();
+}
+
 void QWaylandWindow::reset()
 {
     delete mShellSurface;
@@ -246,10 +253,10 @@ void QWaylandWindow::reset()
     delete mSubSurfaceWindow;
     mSubSurfaceWindow = nullptr;
 
-    invalidateSurface();
     if (mSurface) {
         emit wlSurfaceDestroyed();
         QWriteLocker lock(&mSurfaceLock);
+        invalidateSurface();
         mSurface.reset();
     }
 
@@ -265,6 +272,8 @@ void QWaylandWindow::reset()
 
     mMask = QRegion();
     mQueuedBuffer = nullptr;
+
+    mDisplay->handleWindowDestroyed(this);
 }
 
 QWaylandWindow *QWaylandWindow::fromWlSurface(::wl_surface *surface)
@@ -344,7 +353,7 @@ void QWaylandWindow::setGeometry_helper(const QRect &rect)
                 qBound(minimum.height(), rect.height(), maximum.height())));
 
     if (mSubSurfaceWindow) {
-        QMargins m = QPlatformWindow::parent()->frameMargins();
+        QMargins m = static_cast<QWaylandWindow *>(QPlatformWindow::parent())->clientSideMargins();
         mSubSurfaceWindow->set_position(rect.x() + m.left(), rect.y() + m.top());
 
         QWaylandWindow *parentWindow = mSubSurfaceWindow->parent();
@@ -374,16 +383,45 @@ void QWaylandWindow::setGeometry(const QRect &rect)
     if (isExposed() && !mInResizeFromApplyConfigure && exposeGeometry != mLastExposeGeometry)
         sendExposeEvent(exposeGeometry);
 
-    if (mShellSurface && isExposed())
+    if (mShellSurface && isExposed()) {
         mShellSurface->setWindowGeometry(windowContentGeometry());
+        if (!qt_window_private(window())->positionAutomatic)
+            mShellSurface->setWindowPosition(windowGeometry().topLeft());
+    }
 
     if (isOpaque() && mMask.isEmpty())
         setOpaqueArea(rect);
 }
 
+void QWaylandWindow::setGeometryFromApplyConfigure(const QPoint &globalPosition, const QSize &sizeWithMargins)
+{
+    QMargins margins = clientSideMargins();
+
+    QPoint positionWithoutMargins = globalPosition + QPoint(margins.left(), margins.top());
+    int widthWithoutMargins = qMax(sizeWithMargins.width() - (margins.left() + margins.right()), 1);
+    int heightWithoutMargins = qMax(sizeWithMargins.height() - (margins.top() + margins.bottom()), 1);
+
+    QRect geometry(positionWithoutMargins, QSize(widthWithoutMargins, heightWithoutMargins));
+
+    mInResizeFromApplyConfigure = true;
+    setGeometry(geometry);
+    mInResizeFromApplyConfigure = false;
+}
+
+void QWaylandWindow::repositionFromApplyConfigure(const QPoint &globalPosition)
+{
+    QMargins margins = clientSideMargins();
+    QPoint positionWithoutMargins = globalPosition + QPoint(margins.left(), margins.top());
+
+    QRect geometry(positionWithoutMargins, windowGeometry().size());
+    mInResizeFromApplyConfigure = true;
+    setGeometry(geometry);
+    mInResizeFromApplyConfigure = false;
+}
+
 void QWaylandWindow::resizeFromApplyConfigure(const QSize &sizeWithMargins, const QPoint &offset)
 {
-    QMargins margins = frameMargins();
+    QMargins margins = clientSideMargins();
 
     // Exclude shadows from margins once they are excluded from window geometry
     // 1) First resizeFromApplyConfigure() call will have sizeWithMargins equal to surfaceSize()
@@ -396,7 +434,8 @@ void QWaylandWindow::resizeFromApplyConfigure(const QSize &sizeWithMargins, cons
 
     int widthWithoutMargins = qMax(sizeWithMargins.width() - (margins.left() + margins.right()), 1);
     int heightWithoutMargins = qMax(sizeWithMargins.height() - (margins.top() + margins.bottom()), 1);
-    QRect geometry(windowGeometry().topLeft(), QSize(widthWithoutMargins, heightWithoutMargins));
+    QRect geometry(windowGeometry().topLeft() + QPoint(margins.left(), margins.top()),
+                   QSize(widthWithoutMargins, heightWithoutMargins));
 
     mOffset += offset;
     mInResizeFromApplyConfigure = true;
@@ -412,7 +451,6 @@ void QWaylandWindow::sendExposeEvent(const QRect &rect)
         qCDebug(lcQpaWayland) << "sendExposeEvent: intercepted by shell extension, not sending";
     mLastExposeGeometry = rect;
 }
-
 
 static QList<QPointer<QWaylandWindow>> activePopups;
 
@@ -450,7 +488,6 @@ void QWaylandWindow::setVisible(bool visible)
         if (window()->type() == Qt::Popup || window()->type() == Qt::ToolTip)
             activePopups << this;
         initWindow();
-        mDisplay->flushRequests();
 
         setGeometry(windowGeometry());
         // Don't flush the events here, or else the newly visible window may start drawing, but since
@@ -659,15 +696,21 @@ void QWaylandWindow::commit()
 
 const wl_callback_listener QWaylandWindow::callbackListener = {
     [](void *data, wl_callback *callback, uint32_t time) {
-        Q_UNUSED(callback);
         Q_UNUSED(time);
         auto *window = static_cast<QWaylandWindow*>(data);
+
+        Q_ASSERT(callback == window->mFrameCallback);
+        wl_callback_destroy(callback);
+        window->mFrameCallback = nullptr;
+
         window->handleFrameCallback();
     }
 };
 
 void QWaylandWindow::handleFrameCallback()
 {
+    QMutexLocker locker(&mFrameSyncMutex);
+
     mWaitingForFrameCallback = false;
     mFrameCallbackElapsedTimer.invalidate();
 
@@ -678,6 +721,8 @@ void QWaylandWindow::handleFrameCallback()
         mWaitingForUpdateDelivery = true;
         QMetaObject::invokeMethod(this, &QWaylandWindow::doHandleFrameCallback, Qt::QueuedConnection);
     }
+
+    mFrameSyncWait.notify_all();
 }
 
 void QWaylandWindow::doHandleFrameCallback()
@@ -694,8 +739,10 @@ void QWaylandWindow::doHandleFrameCallback()
 
 bool QWaylandWindow::waitForFrameSync(int timeout)
 {
-    QMutexLocker locker(mFrameQueue.mutex);
-    mDisplay->dispatchQueueWhile(mFrameQueue.queue, [&]() { return mWaitingForFrameCallback; }, timeout);
+    QMutexLocker locker(&mFrameSyncMutex);
+
+    QDeadlineTimer deadline(timeout);
+    while (mWaitingForFrameCallback && mFrameSyncWait.wait(&mFrameSyncMutex, deadline)) { }
 
     if (mWaitingForFrameCallback) {
         qCDebug(lcWaylandBackingstore) << "Didn't receive frame callback in time, window should now be inexposed";
@@ -711,7 +758,15 @@ QMargins QWaylandWindow::frameMargins() const
 {
     if (mWindowDecoration)
         return mWindowDecoration->margins();
-    return QPlatformWindow::frameMargins();
+    else if (mShellSurface)
+        return mShellSurface->serverSideFrameMargins();
+    else
+        return QPlatformWindow::frameMargins();
+}
+
+QMargins QWaylandWindow::clientSideMargins() const
+{
+    return mWindowDecoration ? mWindowDecoration->margins() : QMargins{};
 }
 
 /*!
@@ -719,7 +774,7 @@ QMargins QWaylandWindow::frameMargins() const
  */
 QSize QWaylandWindow::surfaceSize() const
 {
-    return geometry().marginsAdded(frameMargins()).size();
+    return geometry().marginsAdded(clientSideMargins()).size();
 }
 
 /*!
@@ -745,7 +800,7 @@ QRect QWaylandWindow::windowContentGeometry() const
  */
 QPointF QWaylandWindow::mapFromWlSurface(const QPointF &surfacePosition) const
 {
-    const QMargins margins = frameMargins();
+    const QMargins margins = clientSideMargins();
     return QPointF(surfacePosition.x() - margins.left(), surfacePosition.y() - margins.top());
 }
 
@@ -979,7 +1034,7 @@ void QWaylandWindow::handleMouse(QWaylandInputDevice *inputDevice, const QWaylan
 
 #if QT_CONFIG(cursor)
     if (e.type == QEvent::Enter) {
-        QRect contentGeometry = windowContentGeometry().marginsRemoved(frameMargins());
+        QRect contentGeometry = windowContentGeometry().marginsRemoved(clientSideMargins());
         if (contentGeometry.contains(e.local.toPoint()))
             restoreMouseCursor(inputDevice);
     }
@@ -993,7 +1048,7 @@ void QWaylandWindow::handleSwipeGesture(QWaylandInputDevice *inputDevice,
     switch (e.state) {
         case Qt::GestureStarted:
             if (mGestureState != GestureNotActive)
-                qCWarning(lcQpaWaylandInput) << "Unexpected gesture state. Gestures will act weird.";
+                qCWarning(lcQpaWaylandInput) << "Unexpected GestureStarted while already active";
 
             if (mWindowDecoration && !mMouseEventsInContentArea) {
                 // whole gesture sequence will be ignored
@@ -1026,7 +1081,7 @@ void QWaylandWindow::handleSwipeGesture(QWaylandInputDevice *inputDevice,
             }
 
             if (mGestureState != GestureActiveInContentArea)
-                qCWarning(lcQpaWaylandInput) << "Unexpected gesture state. Gestures will act weird.";
+                qCWarning(lcQpaWaylandInput) << "Unexpected" << (e.state == Qt::GestureFinished ? "GestureFinished" : "GestureCanceled");
 
             mGestureState = GestureNotActive;
 
@@ -1048,7 +1103,7 @@ void QWaylandWindow::handlePinchGesture(QWaylandInputDevice *inputDevice,
     switch (e.state) {
         case Qt::GestureStarted:
             if (mGestureState != GestureNotActive)
-                qCWarning(lcQpaWaylandInput) << "Unexpected gesture state. Gestures will act weird.";
+                qCWarning(lcQpaWaylandInput) << "Unexpected GestureStarted while already active";
 
             if (mWindowDecoration && !mMouseEventsInContentArea) {
                 // whole gesture sequence will be ignored
@@ -1095,7 +1150,7 @@ void QWaylandWindow::handlePinchGesture(QWaylandInputDevice *inputDevice,
             }
 
             if (mGestureState != GestureActiveInContentArea)
-                qCWarning(lcQpaWaylandInput) << "Unexpected gesture state. Gestures will act weird.";
+                qCWarning(lcQpaWaylandInput) << "Unexpected" << (e.state == Qt::GestureFinished ? "GestureFinished" : "GestureCanceled");
 
             mGestureState = GestureNotActive;
 
@@ -1212,7 +1267,8 @@ void QWaylandWindow::restoreMouseCursor(QWaylandInputDevice *device)
 
 void QWaylandWindow::requestActivateWindow()
 {
-    qCWarning(lcQpaWayland) << "Wayland does not support QWindow::requestActivate()";
+    if (mShellSurface)
+        mShellSurface->requestActivate();
 }
 
 bool QWaylandWindow::isExposed() const
@@ -1276,7 +1332,10 @@ Qt::WindowStates QWaylandWindow::windowStates() const
 void QWaylandWindow::handleWindowStatesChanged(Qt::WindowStates states)
 {
     createDecoration();
-    QWindowSystemInterface::handleWindowStateChanged(window(), states, mLastReportedWindowStates);
+    Qt::WindowStates statesWithoutActive = states & ~Qt::WindowActive;
+    Qt::WindowStates lastStatesWithoutActive = mLastReportedWindowStates & ~Qt::WindowActive;
+    QWindowSystemInterface::handleWindowStateChanged(window(), statesWithoutActive,
+                                                     lastStatesWithoutActive);
     mLastReportedWindowStates = states;
 }
 
@@ -1339,8 +1398,11 @@ void QWaylandWindow::requestUpdate()
     Q_ASSERT(hasPendingUpdateRequest()); // should be set by QPA
 
     // If we have a frame callback all is good and will be taken care of there
-    if (mWaitingForFrameCallback)
-        return;
+    {
+        QMutexLocker locker(&mFrameSyncMutex);
+        if (mWaitingForFrameCallback)
+            return;
+    }
 
     // If we've already called deliverUpdateRequest(), but haven't seen any attach+commit/swap yet
     // This is a somewhat redundant behavior and might indicate a bug in the calling code, so log
@@ -1353,7 +1415,12 @@ void QWaylandWindow::requestUpdate()
     // so use invokeMethod to delay the delivery a bit.
     QMetaObject::invokeMethod(this, [this] {
         // Things might have changed in the meantime
-        if (hasPendingUpdateRequest() && !mWaitingForFrameCallback)
+        {
+            QMutexLocker locker(&mFrameSyncMutex);
+            if (mWaitingForFrameCallback)
+                return;
+        }
+        if (hasPendingUpdateRequest())
             deliverUpdateRequest();
     }, Qt::QueuedConnection);
 }
@@ -1364,22 +1431,19 @@ void QWaylandWindow::requestUpdate()
 void QWaylandWindow::handleUpdate()
 {
     qCDebug(lcWaylandBackingstore) << "handleUpdate" << QThread::currentThread();
+
+    if (mWaitingForFrameCallback)
+        return;
+
     // TODO: Should sync subsurfaces avoid requesting frame callbacks?
     QReadLocker lock(&mSurfaceLock);
     if (!mSurface)
         return;
 
-    if (mFrameCallback) {
-        if (!isExposed())
-            return;
+    QMutexLocker locker(&mFrameSyncMutex);
 
-        wl_callback_destroy(mFrameCallback);
-        mFrameCallback = nullptr;
-    }
-
-    QMutexLocker locker(mFrameQueue.mutex);
     struct ::wl_surface *wrappedSurface = reinterpret_cast<struct ::wl_surface *>(wl_proxy_create_wrapper(mSurface->object()));
-    wl_proxy_set_queue(reinterpret_cast<wl_proxy *>(wrappedSurface), mFrameQueue.queue);
+    wl_proxy_set_queue(reinterpret_cast<wl_proxy *>(wrappedSurface), mDisplay->frameEventQueue());
     mFrameCallback = wl_surface_frame(wrappedSurface);
     wl_proxy_wrapper_destroy(wrappedSurface);
     wl_callback_add_listener(mFrameCallback, &QWaylandWindow::callbackListener, this);
@@ -1389,6 +1453,8 @@ void QWaylandWindow::handleUpdate()
     // Start a timer for handling the case when the compositor stops sending frame callbacks.
     if (mFrameCallbackTimeout > 0) {
         QMetaObject::invokeMethod(this, [this] {
+            QMutexLocker locker(&mFrameSyncMutex);
+
             if (mWaitingForFrameCallback) {
                 if (mFrameCallbackCheckIntervalTimerId < 0)
                     mFrameCallbackCheckIntervalTimerId = startTimer(mFrameCallbackTimeout);
@@ -1437,7 +1503,7 @@ bool QWaylandWindow::isOpaque() const
 
 void QWaylandWindow::setOpaqueArea(const QRegion &opaqueArea)
 {
-    const QRegion translatedOpaqueArea = opaqueArea.translated(frameMargins().left(), frameMargins().top());
+    const QRegion translatedOpaqueArea = opaqueArea.translated(clientSideMargins().left(), clientSideMargins().top());
 
     if (translatedOpaqueArea == mOpaqueArea || !mSurface)
         return;
@@ -1449,6 +1515,15 @@ void QWaylandWindow::setOpaqueArea(const QRegion &opaqueArea)
     wl_region_destroy(region);
 }
 
+void QWaylandWindow::requestXdgActivationToken(uint serial)
+{
+    mShellSurface->requestXdgActivationToken(serial);
+}
+
+void QWaylandWindow::setXdgActivationToken(const QString &token)
+{
+    mShellSurface->setXdgActivationToken(token);
+}
 }
 
 QT_END_NAMESPACE

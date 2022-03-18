@@ -243,7 +243,7 @@ QQuickGridLayoutBase::QQuickGridLayoutBase()
 
 QQuickGridLayoutBase::QQuickGridLayoutBase(QQuickGridLayoutBasePrivate &dd,
                                            Qt::Orientation orientation,
-                                           QQuickItem *parent /*= 0*/)
+                                           QQuickItem *parent /*= nullptr */)
     : QQuickLayout(dd, parent)
 {
     Q_D(QQuickGridLayoutBase);
@@ -532,7 +532,7 @@ void QQuickGridLayoutBase::rearrange(const QSizeF &size)
  ** QQuickGridLayout
  **
  **/
-QQuickGridLayout::QQuickGridLayout(QQuickItem *parent /* = 0*/)
+QQuickGridLayout::QQuickGridLayout(QQuickItem *parent /* = nullptr*/)
     : QQuickGridLayoutBase(*new QQuickGridLayoutPrivate, Qt::Horizontal, parent)
 {
 }
@@ -797,7 +797,7 @@ void QQuickGridLayout::insertLayoutItems()
  **
  **/
 QQuickLinearLayout::QQuickLinearLayout(Qt::Orientation orientation,
-                                        QQuickItem *parent /*= 0*/)
+                                        QQuickItem *parent /*= nullptr*/)
     : QQuickGridLayoutBase(*new QQuickLinearLayoutPrivate, orientation, parent)
 {
 }

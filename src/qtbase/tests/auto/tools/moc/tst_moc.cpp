@@ -89,6 +89,8 @@ const char *string_hash_hash = STRING_HASH_HASH("baz");
 
 Q_DECLARE_METATYPE(const QMetaObject*);
 
+#define TESTEXPORTMACRO Q_DECL_EXPORT
+
 namespace TestNonQNamespace {
 
 struct TestGadget {
@@ -140,6 +142,22 @@ namespace TestQNamespace {
         Q_ENUM(TestGEnum2)
     };
 
+    struct TestGadgetExport {
+        Q_GADGET_EXPORT(TESTEXPORTMACRO)
+        Q_CLASSINFO("key", "exported")
+    public:
+        enum class TestGeEnum1 {
+            Key1 = 20,
+            Key2
+        };
+        Q_ENUM(TestGeEnum1)
+        enum class TestGeEnum2 {
+            Key1 = 23,
+            Key2
+        };
+        Q_ENUM(TestGeEnum2)
+    };
+
     enum class TestFlag1 {
         None = 0,
         Flag1 = 1,
@@ -157,8 +175,6 @@ namespace TestQNamespace {
     Q_FLAG_NS(TestFlag2)
 }
 
-
-#define TESTEXPORTMACRO Q_DECL_EXPORT
 
 namespace TestExportNamespace {
     Q_NAMESPACE_EXPORT(TESTEXPORTMACRO)
@@ -312,6 +328,14 @@ public slots:
     void slotWithAReallyLongName(int)
     { }
 };
+
+#define CLASSINFO_VAARGS(...) Q_CLASSINFO("classinfo_va_args", #__VA_ARGS__)
+class TestClassinfoFromVaArgs : public QObject
+{
+    Q_OBJECT
+    CLASSINFO_VAARGS(a, b, c, d)
+};
+#undef CLASSINFO_VAARGS
 
 struct ForwardDeclaredStruct;
 
@@ -658,6 +682,7 @@ private slots:
     void task87883();
     void multilineComments();
     void classinfoWithEscapes();
+    void classinfoFromVaArgs();
     void trNoopInClassInfo();
     void ppExpressionEvaluation();
     void arrayArguments();
@@ -979,6 +1004,15 @@ void tst_Moc::classinfoWithEscapes()
 
     QMetaMethod mm = mobj->method(mobj->methodOffset());
     QCOMPARE(mm.methodSignature(), QByteArray("slotWithAReallyLongName(int)"));
+}
+
+void tst_Moc::classinfoFromVaArgs()
+{
+    const QMetaObject *mobj = &TestClassinfoFromVaArgs::staticMetaObject;
+
+    QCOMPARE(mobj->classInfoCount(), 1);
+    QCOMPARE(mobj->classInfo(0).name(), "classinfo_va_args");
+    QCOMPARE(mobj->classInfo(0).value(), "a,b,c,d");
 }
 
 void tst_Moc::trNoopInClassInfo()
@@ -1463,25 +1497,14 @@ void tst_Moc::environmentIncludePaths()
 // plugin_metadata.h contains a plugin which we register here. Since we're not building this
 // application as a plugin, we need top copy some of the initializer code found in qplugin.h:
 extern "C" QObject *qt_plugin_instance();
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-extern "C" QPluginMetaData qt_plugin_query_metadata();
+extern "C" QPluginMetaData qt_plugin_query_metadata_v2();
 class StaticPluginInstance{
 public:
     StaticPluginInstance() {
-        QStaticPlugin plugin(qt_plugin_instance, qt_plugin_query_metadata);
+        QStaticPlugin plugin(qt_plugin_instance, qt_plugin_query_metadata_v2);
         qRegisterStaticPluginFunction(plugin);
     }
 };
-#else
-extern "C" const char *qt_plugin_query_metadata();
-class StaticPluginInstance{
-public:
-    StaticPluginInstance() {
-        QStaticPlugin plugin = { &qt_plugin_instance, &qt_plugin_query_metadata };
-        qRegisterStaticPluginFunction(plugin);
-    }
-};
-#endif
 static StaticPluginInstance staticInstance;
 
 void tst_Moc::specifyMetaTagsFromCmdline() {
@@ -1564,6 +1587,7 @@ class PrivatePropertyTest : public QObject
     Q_PRIVATE_PROPERTY(PrivatePropertyTest::d, QString blub4 MEMBER mBlub NOTIFY blub4Changed)
     Q_PRIVATE_PROPERTY(PrivatePropertyTest::d, QString blub5 MEMBER mBlub NOTIFY blub5Changed)
     Q_PRIVATE_PROPERTY(PrivatePropertyTest::d, QString blub6 MEMBER mConst CONSTANT)
+    Q_PRIVATE_PROPERTY(PrivatePropertyTest::d, int zap READ zap WRITE setZap BINDABLE bindableZap)
     class MyDPointer {
     public:
         MyDPointer() : mConst("const"), mBar(0), mPlop(0) {}
@@ -1575,12 +1599,16 @@ class PrivatePropertyTest : public QObject
         void setBaz(int value) { mBaz = value; }
         QString blub() const { return mBlub; }
         void setBlub(const QString &value) { mBlub = value; }
+        int zap() { return mZap; }
+        void setZap(int zap) { mZap = zap; }
+        QBindable<int> bindableZap() { return QBindable<int>(&mZap); }
         QString mBlub;
         const QString mConst;
     private:
         int mBar;
         int mPlop;
         int mBaz;
+        QProperty<int> mZap;
     };
 public:
     PrivatePropertyTest(QObject *parent = nullptr) : QObject(parent), mFoo(0), d (new MyDPointer) {}
@@ -1612,6 +1640,12 @@ void tst_Moc::qprivateproperties()
 
     test.setProperty("baz", 4);
     QCOMPARE(test.property("baz"), QVariant::fromValue(4));
+
+    QMetaProperty zap = test.metaObject()->property(test.metaObject()->indexOfProperty("zap"));
+    QVERIFY(zap.isValid());
+    QVERIFY(zap.isBindable());
+    auto zapBindable = zap.bindable(&test);
+    QVERIFY(zapBindable.isBindable());
 }
 
 void tst_Moc::warnOnPropertyWithoutREAD()
@@ -3947,6 +3981,12 @@ void tst_Moc::testQNamespace()
     checkEnum(TestQNamespace::TestGadget::staticMetaObject.enumerator(0), "TestGEnum1",
                 {{"Key1", 13}, {"Key2", 14}});
     checkEnum(TestQNamespace::TestGadget::staticMetaObject.enumerator(1), "TestGEnum2",
+                {{"Key1", 23}, {"Key2", 24}});
+
+    QCOMPARE(TestQNamespace::TestGadgetExport::staticMetaObject.enumeratorCount(), 2);
+    checkEnum(TestQNamespace::TestGadgetExport::staticMetaObject.enumerator(0), "TestGeEnum1",
+                {{"Key1", 20}, {"Key2", 21}});
+    checkEnum(TestQNamespace::TestGadgetExport::staticMetaObject.enumerator(1), "TestGeEnum2",
                 {{"Key1", 23}, {"Key2", 24}});
 
     QMetaEnum meta = QMetaEnum::fromType<TestQNamespace::TestEnum1>();

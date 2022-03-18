@@ -370,6 +370,23 @@ endmacro()
 
 macro(qt_build_repo_begin)
     qt_build_internals_set_up_private_api()
+
+    # Prevent installation in non-prefix builds.
+    # We need to associate targets with export names, and that is only possible to do with the
+    # install(TARGETS) command. But in a non-prefix build, we don't want to install anything.
+    # To make sure that developers don't accidentally run make install, add bail out code to
+    # cmake_install.cmake.
+    if(NOT QT_WILL_INSTALL)
+        # In a top-level build, print a message only in qtbase, which is the first repository.
+        if(NOT QT_SUPERBUILD OR (PROJECT_NAME STREQUAL "QtBase"))
+            install(CODE [[message(FATAL_ERROR
+                    "Qt was configured as non-prefix build. "
+                    "Installation is not supported for this arrangement.")]])
+        endif()
+
+        install(CODE [[return()]])
+    endif()
+
     qt_enable_cmake_languages()
 
     # Add global docs targets that will work both for per-repo builds, and super builds.
@@ -610,6 +627,12 @@ macro(qt_build_tests)
             # prefix. For super builds it needs to be done in qt5/CMakeLists.txt.
             qt_set_up_fake_standalone_tests_install_prefix()
         endif()
+    else()
+        if(ANDROID)
+            # When building in-tree tests we need to specify the QT_ANDROID_ABIS list. Since we
+            # build Qt for the single ABI, build tests for this ABI only.
+            set(QT_ANDROID_ABIS "${CMAKE_ANDROID_ARCH_ABI}")
+        endif()
     endif()
 
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/auto/CMakeLists.txt")
@@ -696,12 +719,6 @@ macro(qt_internal_set_up_build_dir_package_paths)
     list(APPEND CMAKE_PREFIX_PATH "${QT_BUILD_DIR}")
     # Make sure the CMake config files do not recreate the already-existing targets
     set(QT_NO_CREATE_TARGETS TRUE)
-
-    # TODO: Remove reliance on CMAKE_FIND_ROOT_PATH_MODE_PACKAGE and instead pass any required
-    # prefixes as a combination of CMAKE_PREFIX_PATH and CMAKE_FIND_ROOT_PATH like we do in
-    # qt_internal_add_tool.
-    set(BACKUP_CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ${CMAKE_FIND_ROOT_PATH_MODE_PACKAGE})
-    set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE "BOTH")
 endmacro()
 
 macro(qt_examples_build_begin)
@@ -784,9 +801,12 @@ macro(qt_examples_build_begin)
     # Appending to CMAKE_PREFIX_PATH helps find the initial Qt6Config.cmake.
     # Appending to QT_EXAMPLES_CMAKE_PREFIX_PATH helps find components of Qt6, because those
     # find_package calls use NO_DEFAULT_PATH, and thus CMAKE_PREFIX_PATH is ignored.
+    # Appending to CMAKE_FIND_ROOT_PATH ensures the components are found while cross-compiling
+    # without setting CMAKE_FIND_ROOT_PATH_MODE_PACKAGE to BOTH.
     if(NOT QT_IS_EXTERNAL_EXAMPLES_BUILD OR NOT __qt_all_examples_ported_to_external_projects)
         qt_internal_set_up_build_dir_package_paths()
-        list(APPEND QT_EXAMPLES_CMAKE_PREFIX_PATH "${QT_BUILD_DIR}")
+        list(APPEND CMAKE_FIND_ROOT_PATH "${QT_BUILD_DIR}")
+        list(APPEND QT_EXAMPLES_CMAKE_PREFIX_PATH "${QT_BUILD_DIR}/lib/cmake")
     endif()
 
     # Because CMAKE_INSTALL_RPATH is empty by default in the repo project, examples need to have
@@ -838,8 +858,6 @@ macro(qt_examples_build_end)
             qt_autogen_tools(${target} ENABLE_AUTOGEN_TOOLS "uic")
         endif()
     endforeach()
-
-    set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ${BACKUP_CMAKE_FIND_ROOT_PATH_MODE_PACKAGE})
 
     install(CODE "
 # Restore backed up CMAKE_INSTALL_PREFIX.
@@ -921,8 +939,6 @@ function(qt_internal_add_example_external_project subdir)
         set(arg_NAME "${arg_NAME}-${short_hash}")
     endif()
 
-    # TODO: Fix 'prefix Qt' example builds not to rely on CMAKE_FIND_ROOT_PATH_MODE_PACKAGE=BOTH
-    #       for finding Qt packages when cross-compiling.
     # TODO: Fix example builds when using Conan / install prefixes are different for each repo.
     if(QT_SUPERBUILD OR QtBase_BINARY_DIR)
         # When doing a top-level build or when building qtbase,
@@ -940,27 +956,28 @@ function(qt_internal_add_example_external_project subdir)
         # for all repos except the one that is currently built. For the repo that is currently
         # built, we pick up the Config files from the current repo build dir instead.
         # For non-prefix builds, there's only one prefix, the main build dir.
+        # Both are handled by this assignment.
         set(qt_prefixes "${QT_BUILD_DIR}")
+
+        # Appending to QT_ADDITIONAL_PACKAGES_PREFIX_PATH helps find Qt6 components in
+        # non-qtbase prefix builds because we use NO_DEFAULT_PATH in find_package calls.
+        # It also handles the cross-compiling scenario where we need to adjust both the root path
+        # and prefixes, with the prefixes containing lib/cmake. This leverages the infrastructure
+        # previously added for Conan.
+        list(APPEND QT_ADDITIONAL_PACKAGES_PREFIX_PATH ${qt_prefixes})
+
+        # In a prefix build, look up all repo Config files in the install prefix,
+        # except for the current repo, which will look in the build dir (handled above).
         if(QT_WILL_INSTALL)
             list(APPEND qt_prefixes "${QT6_INSTALL_PREFIX}")
-
-            # Appending to QT_EXAMPLES_CMAKE_PREFIX_PATH helps find Qt6 components in
-            # non-qtbase prefix builds because we use NO_DEFAULT_PATH in find_package calls.
-            set(QT_EXAMPLES_CMAKE_PREFIX_PATH "${qt_prefixes}")
         endif()
     endif()
 
     set(vars_to_pass_if_defined)
     set(var_defs)
     if(QT_HOST_PATH OR CMAKE_CROSSCOMPILING)
-        # Android NDK forces CMAKE_FIND_ROOT_PATH_MODE_PACKAGE to ONLY, so we
-        # can't rely on this setting here making it through to the example
-        # project.
-        # TODO: Remove CMAKE_FIND_ROOT_PATH_MODE_PACKAGE once cross-compiling examples uses
-        # CMAKE_FIND_ROOT_PATH + CMAKE_PREFIX_PATH instead.
         list(APPEND var_defs
             -DCMAKE_TOOLCHAIN_FILE:FILEPATH=${qt_cmake_dir}/qt.toolchain.cmake
-            -DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE:STRING=BOTH
         )
     else()
         list(PREPEND CMAKE_PREFIX_PATH ${qt_prefixes})
@@ -1004,8 +1021,8 @@ function(qt_internal_add_example_external_project subdir)
         CMAKE_CONFIGURATION_TYPES:STRING
         CMAKE_PREFIX_PATH:STRING
         QT_EXAMPLES_CMAKE_PREFIX_PATH:STRING
+        QT_ADDITIONAL_PACKAGES_PREFIX_PATH:STRING
         CMAKE_FIND_ROOT_PATH:STRING
-        CMAKE_FIND_ROOT_PATH_MODE_PACKAGE:STRING
         BUILD_SHARED_LIBS:BOOL
         CMAKE_OSX_ARCHITECTURES:STRING
         CMAKE_OSX_DEPLOYMENT_TARGET:STRING

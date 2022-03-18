@@ -12,10 +12,6 @@ qhp.QtQmlXmlListModel.namespace           = org.qt-project.qtqmlxmllistmodel.$QT
 qhp.QtQmlXmlListModel.virtualFolder       = qtqmlxmllistmodel
 qhp.QtQmlXmlListModel.indexRoot           =
 
-qhp.QtQmlXmlListModel.filterAttributes    = qtqmlxmllistmodel $QT_VERSION qtrefdoc
-qhp.QtQmlXmlListModel.customFilters.Qt.name = QtQmlXmlListModel $QT_VERSION
-qhp.QtQmlXmlListModel.customFilters.Qt.filterAttributes = qtqmlxmllistmodel $QT_VERSION
-
 qhp.QtQmlXmlListModel.title      = QML Types
 qhp.QtQmlXmlListModel.indexTitle = Qt XmlListModel QML Types
 qhp.QtQmlXmlListModel.selectors  = qmlclass
@@ -34,3 +30,6 @@ exampledirs += .. \
 imagedirs += images
 
 navigation.qmltypespage = "Qt XmlListModel QML Types"
+
+# Fail the documentation build if there are more warnings than the limit
+warninglimit = 0

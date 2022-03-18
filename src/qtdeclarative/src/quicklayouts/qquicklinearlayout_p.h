@@ -64,7 +64,7 @@ QT_BEGIN_NAMESPACE
  **/
 class QQuickGridLayoutBasePrivate;
 
-class Q_QUICKLAYOUT_PRIVATE_EXPORT QQuickGridLayoutBase : public QQuickLayout
+class Q_QUICKLAYOUTS_PRIVATE_EXPORT QQuickGridLayoutBase : public QQuickLayout
 {
     Q_OBJECT
 
@@ -79,11 +79,11 @@ public:
 
     explicit QQuickGridLayoutBase(QQuickGridLayoutBasePrivate &dd,
                                   Qt::Orientation orientation,
-                                  QQuickItem *parent = 0);
+                                  QQuickItem *parent = nullptr);
 
     ~QQuickGridLayoutBase();
     void componentComplete() override;
-    void invalidate(QQuickItem *childItem = 0) override;
+    void invalidate(QQuickItem *childItem = nullptr) override;
     Qt::Orientation orientation() const;
     void setOrientation(Qt::Orientation orientation);
     QSizeF sizeHint(Qt::SizeHint whichSizeHint) const override;
@@ -148,7 +148,7 @@ public:
  **
  **/
 class QQuickGridLayoutPrivate;
-class Q_QUICKLAYOUT_PRIVATE_EXPORT QQuickGridLayout : public QQuickGridLayoutBase
+class Q_QUICKLAYOUTS_PRIVATE_EXPORT QQuickGridLayout : public QQuickGridLayoutBase
 {
     Q_OBJECT
 
@@ -160,7 +160,7 @@ class Q_QUICKLAYOUT_PRIVATE_EXPORT QQuickGridLayout : public QQuickGridLayoutBas
     QML_NAMED_ELEMENT(GridLayout)
     QML_ADDED_IN_VERSION(1, 0)
 public:
-    explicit QQuickGridLayout(QQuickItem *parent = 0);
+    explicit QQuickGridLayout(QQuickItem *parent = nullptr);
     qreal columnSpacing() const;
     void setColumnSpacing(qreal spacing);
     qreal rowSpacing() const;
@@ -213,7 +213,7 @@ class QQuickLinearLayout : public QQuickGridLayoutBase
     Q_PROPERTY(qreal spacing READ spacing WRITE setSpacing NOTIFY spacingChanged)
 public:
     explicit QQuickLinearLayout(Qt::Orientation orientation,
-                                QQuickItem *parent = 0);
+                                QQuickItem *parent = nullptr);
     void insertLayoutItem(QQuickItem *item);
     qreal spacing() const;
     void setSpacing(qreal spacing);
@@ -239,14 +239,14 @@ public:
  ** QQuickRowLayout
  **
  **/
-class Q_QUICKLAYOUT_PRIVATE_EXPORT  QQuickRowLayout : public QQuickLinearLayout
+class Q_QUICKLAYOUTS_PRIVATE_EXPORT  QQuickRowLayout : public QQuickLinearLayout
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(RowLayout)
     QML_ADDED_IN_VERSION(1, 0)
 
 public:
-    explicit QQuickRowLayout(QQuickItem *parent = 0)
+    explicit QQuickRowLayout(QQuickItem *parent = nullptr)
         : QQuickLinearLayout(Qt::Horizontal, parent) {}
 };
 
@@ -256,14 +256,14 @@ public:
  ** QQuickColumnLayout
  **
  **/
-class Q_QUICKLAYOUT_PRIVATE_EXPORT QQuickColumnLayout : public QQuickLinearLayout
+class Q_QUICKLAYOUTS_PRIVATE_EXPORT QQuickColumnLayout : public QQuickLinearLayout
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(ColumnLayout)
     QML_ADDED_IN_VERSION(1, 0)
 
 public:
-    explicit QQuickColumnLayout(QQuickItem *parent = 0)
+    explicit QQuickColumnLayout(QQuickItem *parent = nullptr)
         : QQuickLinearLayout(Qt::Vertical, parent) {}
 };
 

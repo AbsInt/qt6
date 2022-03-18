@@ -54,9 +54,9 @@ struct FrameInfo {
 class ColorRenderer : public QQuickFramebufferObject::Renderer, protected QOpenGLFunctions
 {
 public:
-    void render();
-    void synchronize(QQuickFramebufferObject *item);
-    QOpenGLFramebufferObject *createFramebufferObject(const QSize &size);
+    void render() override;
+    void synchronize(QQuickFramebufferObject *item) override;
+    QOpenGLFramebufferObject *createFramebufferObject(const QSize &size) override;
 
     QSize textureSize;
     QColor color;
@@ -73,7 +73,7 @@ class FBOItem : public QQuickFramebufferObject
     Q_PROPERTY(QSize textureSize READ textureSize WRITE setTextureSize NOTIFY textureSizeChanged)
 
 public:
-    Renderer *createRenderer() const { return new ColorRenderer(); }
+    Renderer *createRenderer() const override { return new ColorRenderer(); }
 
     void setColor(const QColor &color) { m_color = color; colorChanged(m_color); }
     QColor color() const { return m_color; }

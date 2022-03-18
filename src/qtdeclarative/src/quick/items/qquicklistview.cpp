@@ -64,8 +64,8 @@ class FxListItemSG;
 
 class QQuickListViewPrivate : public QQuickItemViewPrivate
 {
-    Q_DECLARE_PUBLIC(QQuickListView)
 public:
+    Q_DECLARE_PUBLIC(QQuickListView)
     static QQuickListViewPrivate* get(QQuickListView *item) { return item->d_func(); }
 
     Qt::Orientation layoutOrientation() const override;
@@ -157,9 +157,9 @@ public:
     QQuickListView::HeaderPositioning headerPositioning;
     QQuickListView::FooterPositioning footerPositioning;
 
-    QSmoothedAnimation *highlightPosAnimator;
-    QSmoothedAnimation *highlightWidthAnimator;
-    QSmoothedAnimation *highlightHeightAnimator;
+    std::unique_ptr<QSmoothedAnimation> highlightPosAnimator;
+    std::unique_ptr<QSmoothedAnimation> highlightWidthAnimator;
+    std::unique_ptr<QSmoothedAnimation> highlightHeightAnimator;
     qreal highlightMoveVelocity;
     qreal highlightResizeVelocity;
     int highlightResizeDuration;
@@ -201,11 +201,6 @@ public:
         , correctFlick(false), inFlickCorrection(false), wantedMousePress(false)
     {
         highlightMoveDuration = -1; //override default value set in base class
-    }
-    ~QQuickListViewPrivate() {
-        delete highlightPosAnimator;
-        delete highlightWidthAnimator;
-        delete highlightHeightAnimator;
     }
 
     friend class QQuickViewSection;
@@ -901,12 +896,17 @@ void QQuickListViewPrivate::layoutVisibleItems(int fromModelIndex)
         const qreal from = isContentFlowReversed() ? -position()-displayMarginBeginning-size() : position()-displayMarginBeginning;
         const qreal to = isContentFlowReversed() ? -position()+displayMarginEnd : position()+size()+displayMarginEnd;
 
-        FxViewItem *firstItem = *visibleItems.constBegin();
+        FxListItemSG *firstItem = static_cast<FxListItemSG *>(visibleItems.constFirst());
         bool fixedCurrent = currentItem && firstItem->item == currentItem->item;
         firstVisibleItemPosition = firstItem->position();
         qreal sum = firstItem->size();
         qreal pos = firstItem->position() + firstItem->size() + spacing;
         firstItem->setVisible(firstItem->endPosition() >= from && firstItem->position() <= to);
+
+        // setPosition will affect the position of the item, and its section, if it has one.
+        // This will prevent them from potentially overlapping.
+        if (firstItem->section())
+            firstItem->setPosition(firstItem->position());
 
         for (int i=1; i < visibleItems.count(); ++i) {
             FxListItemSG *item = static_cast<FxListItemSG*>(visibleItems.at(i));
@@ -979,14 +979,13 @@ void QQuickListViewPrivate::createHighlight(bool onDestruction)
 {
     bool changed = false;
     if (highlight) {
-        if (trackedItem == highlight)
+        if (trackedItem == highlight.get())
             trackedItem = nullptr;
-        delete highlight;
-        highlight = nullptr;
+        highlight.reset();
 
-        delete highlightPosAnimator;
-        delete highlightWidthAnimator;
-        delete highlightHeightAnimator;
+        highlightPosAnimator.reset();
+        highlightWidthAnimator.reset();
+        highlightHeightAnimator.reset();
         highlightPosAnimator = nullptr;
         highlightWidthAnimator = nullptr;
         highlightHeightAnimator = nullptr;
@@ -1001,7 +1000,8 @@ void QQuickListViewPrivate::createHighlight(bool onDestruction)
     if (currentItem) {
         QQuickItem *item = createHighlightItem();
         if (item) {
-            FxListItemSG *newHighlight = new FxListItemSG(item, q, true);
+            std::unique_ptr<FxListItemSG> newHighlight
+                    = std::make_unique<FxListItemSG>(item, q, true);
             newHighlight->trackGeometry(true);
 
             if (autoHighlight) {
@@ -1009,22 +1009,22 @@ void QQuickListViewPrivate::createHighlight(bool onDestruction)
                 newHighlight->setPosition(static_cast<FxListItemSG*>(currentItem)->itemPosition());
             }
             const QLatin1String posProp(orient == QQuickListView::Vertical ? "y" : "x");
-            highlightPosAnimator = new QSmoothedAnimation;
+            highlightPosAnimator = std::make_unique<QSmoothedAnimation>();
             highlightPosAnimator->target = QQmlProperty(item, posProp);
             highlightPosAnimator->velocity = highlightMoveVelocity;
             highlightPosAnimator->userDuration = highlightMoveDuration;
 
-            highlightWidthAnimator = new QSmoothedAnimation;
+            highlightWidthAnimator = std::make_unique<QSmoothedAnimation>();
             highlightWidthAnimator->velocity = highlightResizeVelocity;
             highlightWidthAnimator->userDuration = highlightResizeDuration;
             highlightWidthAnimator->target = QQmlProperty(item, QStringLiteral("width"));
 
-            highlightHeightAnimator = new QSmoothedAnimation;
+            highlightHeightAnimator = std::make_unique<QSmoothedAnimation>();
             highlightHeightAnimator->velocity = highlightResizeVelocity;
             highlightHeightAnimator->userDuration = highlightResizeDuration;
             highlightHeightAnimator->target = QQmlProperty(item, QStringLiteral("height"));
 
-            highlight = newHighlight;
+            highlight = std::move(newHighlight);
             changed = true;
         }
     }
@@ -1064,8 +1064,10 @@ void QQuickListViewPrivate::updateHighlight()
 
 void QQuickListViewPrivate::resetHighlightPosition()
 {
-    if (highlight && currentItem)
-        static_cast<FxListItemSG*>(highlight)->setPosition(static_cast<FxListItemSG*>(currentItem)->itemPosition());
+    if (highlight && currentItem) {
+        static_cast<FxListItemSG*>(highlight.get())->setPosition(
+                static_cast<FxListItemSG*>(currentItem)->itemPosition());
+    }
 }
 
 bool QQuickListViewPrivate::movingFromHighlight()
@@ -3429,7 +3431,7 @@ void QQuickListView::viewportMoved(Qt::Orientations orient)
                 pos = viewPos + d->highlightRangeStart;
             if (pos != d->highlight->position()) {
                 d->highlightPosAnimator->stop();
-                static_cast<FxListItemSG*>(d->highlight)->setPosition(pos);
+                static_cast<FxListItemSG*>(d->highlight.get())->setPosition(pos);
             } else {
                 d->updateHighlight();
             }

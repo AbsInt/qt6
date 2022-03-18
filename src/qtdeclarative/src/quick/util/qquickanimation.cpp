@@ -251,14 +251,8 @@ void QQuickAbstractAnimation::setRunning(bool r)
         d->running = r;
         if (r == false)
             d->avoidPropertyValueSourceStart = true;
-        else if (!d->registered) {
-            d->registered = true;
-            QQmlEnginePrivate *engPriv = QQmlEnginePrivate::get(qmlEngine(this));
-            static int finalizedIdx = -1;
-            if (finalizedIdx < 0)
-                finalizedIdx = metaObject()->indexOfSlot("componentFinalized()");
-            engPriv->registerFinalizeCallback(this, finalizedIdx);
-        }
+        else if (!d->needsDeferredSetRunning)
+            d->needsDeferredSetRunning = true;
         return;
     }
 
@@ -371,18 +365,15 @@ void QQuickAbstractAnimation::componentComplete()
 {
     Q_D(QQuickAbstractAnimation);
     d->componentComplete = true;
-}
-
-void QQuickAbstractAnimation::componentFinalized()
-{
-    Q_D(QQuickAbstractAnimation);
-    if (d->running) {
-        d->running = false;
-        setRunning(true);
-    }
-    if (d->paused) {
-        d->paused = false;
-        setPaused(true);
+    if (d->needsDeferredSetRunning) {
+        if (d->running) {
+            d->running = false;
+            setRunning(true);
+        }
+        if (d->paused) {
+            d->paused = false;
+            setPaused(true);
+        }
     }
 }
 
@@ -1138,8 +1129,8 @@ void QQuickPropertyAction::setProperty(const QString &n)
 }
 
 /*!
-    \qmlproperty Object QtQuick::PropertyAction::target
-    \qmlproperty list<Object> QtQuick::PropertyAction::targets
+    \qmlproperty QtObject QtQuick::PropertyAction::target
+    \qmlproperty list<QtObject> QtQuick::PropertyAction::targets
     \qmlproperty string QtQuick::PropertyAction::property
     \qmlproperty string QtQuick::PropertyAction::properties
 
@@ -1174,7 +1165,7 @@ QQmlListProperty<QObject> QQuickPropertyAction::targets()
 }
 
 /*!
-    \qmlproperty list<Object> QtQuick::PropertyAction::exclude
+    \qmlproperty list<QtObject> QtQuick::PropertyAction::exclude
     This property holds the objects that should not be affected by this action.
 
     \sa targets
@@ -1186,7 +1177,7 @@ QQmlListProperty<QObject> QQuickPropertyAction::exclude()
 }
 
 /*!
-    \qmlproperty any QtQuick::PropertyAction::value
+    \qmlproperty var QtQuick::PropertyAction::value
     This property holds the value to be set on the property.
 
     If the PropertyAction is defined within a \l Transition or \l Behavior,
@@ -1978,7 +1969,7 @@ void QQuickPropertyAnimationPrivate::convertVariant(QVariant &variant, QMetaType
     case QMetaType::QVector3D:
         {
         bool ok = false;
-        variant = QQmlStringConverters::variantFromString(variant.toString(), type.id(), &ok);
+        variant = QQmlStringConverters::variantFromString(variant.toString(), type, &ok);
         }
         break;
     default:
@@ -2473,9 +2464,9 @@ void QQuickPropertyAnimation::setProperties(const QString &prop)
 
 /*!
     \qmlproperty string QtQuick::PropertyAnimation::properties
-    \qmlproperty list<Object> QtQuick::PropertyAnimation::targets
+    \qmlproperty list<QtObject> QtQuick::PropertyAnimation::targets
     \qmlproperty string QtQuick::PropertyAnimation::property
-    \qmlproperty Object QtQuick::PropertyAnimation::target
+    \qmlproperty QtObject QtQuick::PropertyAnimation::target
 
     These properties are used as a set to determine which properties should be animated.
     The singular and plural forms are functionally identical, e.g.
@@ -2526,8 +2517,18 @@ void QQuickPropertyAnimation::setProperties(const QString &prop)
            Item { id: uselessItem }
            states: State {
                name: "state1"
-               PropertyChanges { target: theRect; x: 200; y: 200; z: 4 }
-               PropertyChanges { target: uselessItem; x: 10; y: 10; z: 2 }
+               PropertyChanges {
+                   theRect {
+                       x: 200
+                       y: 200
+                       z: 4
+                   }
+                   uselessItem {
+                       x: 10
+                       y: 10
+                       z: 2
+                   }
+               }
            }
            transitions: Transition {
                //animate both theRect's and uselessItem's x and y to their final values
@@ -2568,7 +2569,7 @@ QQmlListProperty<QObject> QQuickPropertyAnimation::targets()
 }
 
 /*!
-    \qmlproperty list<Object> QtQuick::PropertyAnimation::exclude
+    \qmlproperty list<QtObject> QtQuick::PropertyAnimation::exclude
     This property holds the items not to be affected by this animation.
     \sa PropertyAnimation::targets
 */

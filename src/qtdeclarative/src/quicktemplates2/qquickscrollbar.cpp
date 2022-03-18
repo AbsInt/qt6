@@ -1,34 +1,37 @@
 /****************************************************************************
 **
 ** Copyright (C) 2017 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the Qt Quick Templates 2 module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL3$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
 ** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPLv3 included in the
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
 ** packaging of this file. Please review the following information to
 ** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl.html.
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
 ** GNU General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or later as published by the Free
-** Software Foundation and appearing in the file LICENSE.GPL included in
-** the packaging of this file. Please review the following information to
-** ensure the GNU General Public License version 2.0 requirements will be
-** met: http://www.gnu.org/licenses/gpl-2.0.html.
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -162,19 +165,21 @@ static const QQuickItemPrivate::ChangeTypes verticalChangeTypes = changeTypes | 
 QQuickScrollBarPrivate::VisualArea QQuickScrollBarPrivate::visualArea() const
 {
     qreal visualPos = position;
-    if (minimumSize > size)
+
+    if (minimumSize > size && size != 1.0)
         visualPos = position / (1.0 - size) * (1.0 - minimumSize);
 
-    qreal visualSize = qBound<qreal>(0, qMax(size, minimumSize) + qMin<qreal>(0, visualPos), 1.0 - visualPos);
+    qreal visualSize = qBound<qreal>(0, qMax(size, minimumSize) + qMin<qreal>(0, visualPos),
+                                     qMax(0.0, 1.0 - visualPos));
 
-    visualPos = qBound<qreal>(0, visualPos, 1.0 - visualSize);
+    visualPos = qBound<qreal>(0, visualPos, qMax<qreal>(0, 1.0 - visualSize));
 
     return VisualArea(visualPos, visualSize);
 }
 
 qreal QQuickScrollBarPrivate::logicalPosition(qreal position) const
 {
-    if (minimumSize > size)
+    if (minimumSize > size && minimumSize != 1.0)
         return position * (1.0 - size) / (1.0 - minimumSize);
     return position;
 }
@@ -283,10 +288,10 @@ void QQuickScrollBarPrivate::itemImplicitHeightChanged(QQuickItem *item)
         emit indicatorButton->implicitIndicatorHeightChanged();
 }
 
-void QQuickScrollBarPrivate::handlePress(const QPointF &point)
+void QQuickScrollBarPrivate::handlePress(const QPointF &point, ulong timestamp)
 {
     Q_Q(QQuickScrollBar);
-    QQuickControlPrivate::handlePress(point);
+    QQuickControlPrivate::handlePress(point, timestamp);
     if (QQuickIndicatorButton *indicatorButton = q->decreaseVisual()) {
         QQuickItem *decreaseArrow = indicatorButton->indicator();
         if (decreaseArrow && decreaseArrow->contains(q->mapToItem(decreaseArrow, point + QPointF(0.5, 0.5)))) {
@@ -312,10 +317,10 @@ void QQuickScrollBarPrivate::handlePress(const QPointF &point)
     q->setPressed(true);
 }
 
-void QQuickScrollBarPrivate::handleMove(const QPointF &point)
+void QQuickScrollBarPrivate::handleMove(const QPointF &point, ulong timestamp)
 {
     Q_Q(QQuickScrollBar);
-    QQuickControlPrivate::handleMove(point);
+    QQuickControlPrivate::handleMove(point, timestamp);
 
     /*
      * handleMove() will be called as soon as you hold the mouse button down *anywhere* on the
@@ -326,16 +331,17 @@ void QQuickScrollBarPrivate::handleMove(const QPointF &point)
      */
     if (!pressed)
         return;
+
     qreal pos = qBound<qreal>(0.0, positionAt(point) - offset, 1.0 - size);
     if (snapMode == QQuickScrollBar::SnapAlways)
         pos = snapPosition(pos);
     q->setPosition(pos);
 }
 
-void QQuickScrollBarPrivate::handleRelease(const QPointF &point)
+void QQuickScrollBarPrivate::handleRelease(const QPointF &point, ulong timestamp)
 {
     Q_Q(QQuickScrollBar);
-    QQuickControlPrivate::handleRelease(point);
+    QQuickControlPrivate::handleRelease(point, timestamp);
 
     if (orientation == Qt::Vertical) {
         if (point.y() < q->topPadding() || point.y() >= (q->height() - q->bottomPadding()))
@@ -344,6 +350,7 @@ void QQuickScrollBarPrivate::handleRelease(const QPointF &point)
         if (point.x() < q->leftPadding() || point.x() >= (q->width() - q->rightPadding()))
             return;
     }
+
     qreal pos = qBound<qreal>(0.0, positionAt(point) - offset, 1.0 - size);
     if (snapMode != QQuickScrollBar::NoSnap)
         pos = snapPosition(pos);
@@ -428,11 +435,11 @@ qreal QQuickScrollBar::size() const
 void QQuickScrollBar::setSize(qreal size)
 {
     Q_D(QQuickScrollBar);
-    if (qFuzzyCompare(d->size, size))
+    if (!qt_is_finite(size) || qFuzzyCompare(d->size, size))
         return;
 
     auto oldVisualArea = d->visualArea();
-    d->size = size;
+    d->size = qBound(0.0, size, 1.0);
     if (isComponentComplete())
         d->resizeContent();
     emit sizeChanged();
@@ -460,7 +467,7 @@ qreal QQuickScrollBar::position() const
 void QQuickScrollBar::setPosition(qreal position)
 {
     Q_D(QQuickScrollBar);
-    if (qFuzzyCompare(d->position, position))
+    if (!qt_is_finite(position) || qFuzzyCompare(d->position, position))
         return;
 
     auto oldVisualArea = d->visualArea();
@@ -487,7 +494,7 @@ qreal QQuickScrollBar::stepSize() const
 void QQuickScrollBar::setStepSize(qreal step)
 {
     Q_D(QQuickScrollBar);
-    if (qFuzzyCompare(d->stepSize, step))
+    if (!qt_is_finite(step) || qFuzzyCompare(d->stepSize, step))
         return;
 
     d->stepSize = step;
@@ -731,11 +738,11 @@ qreal QQuickScrollBar::minimumSize() const
 void QQuickScrollBar::setMinimumSize(qreal minimumSize)
 {
     Q_D(QQuickScrollBar);
-    if (qFuzzyCompare(d->minimumSize, minimumSize))
+    if (!qt_is_finite(minimumSize) || qFuzzyCompare(d->minimumSize, minimumSize))
         return;
 
     auto oldVisualArea = d->visualArea();
-    d->minimumSize = minimumSize;
+    d->minimumSize = qBound(0.0, minimumSize, 1.0);
     if (isComponentComplete())
         d->resizeContent();
     emit minimumSizeChanged();
@@ -822,7 +829,7 @@ void QQuickScrollBar::mousePressEvent(QMouseEvent *event)
 {
     Q_D(QQuickScrollBar);
     QQuickControl::mousePressEvent(event);
-    d->handleMove(event->position());
+    d->handleMove(event->position(), event->timestamp());
 }
 
 #if QT_CONFIG(quicktemplates2_hover)

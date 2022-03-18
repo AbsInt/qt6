@@ -1,34 +1,37 @@
 /****************************************************************************
 **
 ** Copyright (C) 2017 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the Qt Quick Controls 2 module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL3$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
 ** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPLv3 included in the
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
 ** packaging of this file. Please review the following information to
 ** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl.html.
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
 ** GNU General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or later as published by the Free
-** Software Foundation and appearing in the file LICENSE.GPL included in
-** the packaging of this file. Please review the following information to
-** ensure the GNU General Public License version 2.0 requirements will be
-** met: http://www.gnu.org/licenses/gpl-2.0.html.
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -87,7 +90,7 @@ QColor QQuickFusionStyle::outline(QQuickPalette *palette)
 
 QColor QQuickFusionStyle::highlightedOutline(QQuickPalette *palette)
 {
-    QColor highlightedOutline = highlight(palette).darker(125);
+    QColor highlightedOutline = highlight(palette).darker(125).toHsv();
     if (highlightedOutline.value() > 160)
         highlightedOutline.setHsl(highlightedOutline.hue(), highlightedOutline.saturation(), 160);
     return highlightedOutline;
@@ -103,6 +106,7 @@ QColor QQuickFusionStyle::buttonColor(QQuickPalette *palette, bool highlighted, 
     QColor buttonColor = palette->button();
     int val = qGray(buttonColor.rgb());
     buttonColor = buttonColor.lighter(100 + qMax(1, (180 - val)/6));
+    buttonColor = buttonColor.toHsv();
     buttonColor.setHsv(buttonColor.hue(), int(buttonColor.saturation() * 0.75), buttonColor.value());
     if (highlighted)
         buttonColor = mergedColors(buttonColor, highlightedOutline(palette).lighter(130), 90);
@@ -132,16 +136,17 @@ QColor QQuickFusionStyle::gradientStop(const QColor &baseColor)
 QColor QQuickFusionStyle::mergedColors(const QColor &colorA, const QColor &colorB, int factor)
 {
     const int maxFactor = 100;
-    QColor tmp = colorA;
-    tmp.setRed((tmp.red() * factor) / maxFactor + (colorB.red() * (maxFactor - factor)) / maxFactor);
-    tmp.setGreen((tmp.green() * factor) / maxFactor + (colorB.green() * (maxFactor - factor)) / maxFactor);
-    tmp.setBlue((tmp.blue() * factor) / maxFactor + (colorB.blue() * (maxFactor - factor)) / maxFactor);
+    const auto rgbColorB = colorB.toRgb();
+    QColor tmp = colorA.toRgb();
+    tmp.setRed((tmp.red() * factor) / maxFactor + (rgbColorB.red() * (maxFactor - factor)) / maxFactor);
+    tmp.setGreen((tmp.green() * factor) / maxFactor + (rgbColorB.green() * (maxFactor - factor)) / maxFactor);
+    tmp.setBlue((tmp.blue() * factor) / maxFactor + (rgbColorB.blue() * (maxFactor - factor)) / maxFactor);
     return tmp;
 }
 
 QColor QQuickFusionStyle::grooveColor(QQuickPalette *palette)
 {
-    QColor color = buttonColor(palette);
+    QColor color = buttonColor(palette).toHsv();
     color.setHsv(color.hue(),
                  qMin(255, color.saturation()),
                  qMin<int>(255, color.value() * 0.9));

@@ -60,10 +60,13 @@ public:
     void setResourceFileMapper(QQmlJSResourceFileMapper *mapper) { m_mapper = mapper; }
 
     ImportedTypes importBuiltins();
-    void importQmltypes(const QStringList &qmltypesFiles);
+    void importQmldirs(const QStringList &qmltypesFiles);
 
     QQmlJSScope::Ptr importFile(const QString &file);
     ImportedTypes importDirectory(const QString &directory, const QString &prefix = QString());
+
+    // ### qmltc needs this. once re-written, we no longer need to expose this
+    QHash<QString, QQmlJSScope::Ptr> importedFiles() const { return m_importedFiles; }
 
     ImportedTypes importModule(
             const QString &module, const QString &prefix = QString(),
@@ -80,6 +83,8 @@ public:
 
     QStringList importPaths() const { return m_importPaths; }
     void setImportPaths(const QStringList &importPaths);
+
+    QQmlJSScope::ConstPtr jsGlobalObject() const;
 
 private:
     friend class QDeferredFactory<QQmlJSScope>;
@@ -98,8 +103,8 @@ private:
     };
 
     struct Import {
-        QHash<QString, QQmlJSScope::Ptr> objects;
-        QHash<QString, QQmlJSScope::Ptr> scripts;
+        QHash<QString, QQmlJSExportedScope> objects;
+        QHash<QString, QQmlJSExportedScope> scripts;
         QList<QQmlDirParser::Import> imports;
         QList<QQmlDirParser::Import> dependencies;
     };
@@ -108,41 +113,20 @@ private:
     bool importHelper(const QString &module, AvailableTypes *types,
                       const QString &prefix = QString(), QTypeRevision version = QTypeRevision(),
                       bool isDependency = false, bool isFile = false);
-    void processImport(const Import &import, AvailableTypes *types,
-                       const QString &prefix = QString(), QTypeRevision version = QTypeRevision());
+    void processImport(const QQmlJSScope::Import &importDescription, const Import &import,
+                       AvailableTypes *types);
     void importDependencies(const QQmlJSImporter::Import &import, AvailableTypes *types,
                             const QString &prefix = QString(),
                             QTypeRevision version = QTypeRevision(), bool isDependency = false);
-    void readQmltypes(const QString &filename, QHash<QString, QQmlJSScope::Ptr> *objects,
+    void readQmltypes(const QString &filename, QHash<QString, QQmlJSExportedScope> *objects,
                       QList<QQmlDirParser::Import> *dependencies);
     Import readQmldir(const QString &dirname);
     QQmlJSScope::Ptr localFile2ScopeTree(const QString &filePath);
 
     QStringList m_importPaths;
 
-    struct CacheKey
-    {
-        QString prefix;
-        QString name;
-        QTypeRevision version;
-        bool isFile = false;
-        bool isDependency = false;
-
-        friend inline size_t qHash(const CacheKey &key, size_t seed = 0) noexcept
-        {
-            return qHashMulti(seed, key.prefix, key.name, key.version,
-                              key.isFile, key.isDependency);
-        }
-
-        friend inline bool operator==(const CacheKey &a, const CacheKey &b)
-        {
-            return a.prefix == b.prefix && a.name == b.name && a.version == b.version
-                    && a.isFile == b.isFile && a.isDependency == b.isDependency;
-        }
-    };
-
     QHash<QPair<QString, QTypeRevision>, QString> m_seenImports;
-    QHash<CacheKey, QSharedPointer<AvailableTypes>> m_cachedImportTypes;
+    QHash<QQmlJSScope::Import, QSharedPointer<AvailableTypes>> m_cachedImportTypes;
     QHash<QString, Import> m_seenQmldirFiles;
 
     QHash<QString, QQmlJSScope::Ptr> m_importedFiles;

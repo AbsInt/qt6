@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the Qt SVG module of the Qt Toolkit.
@@ -1178,13 +1178,11 @@ static QTransform parseTransformationMatrix(QStringView value)
         } else if (state == SkewX) {
             if (points.count() != 1)
                 goto error;
-            const qreal deg2rad = qreal(0.017453292519943295769);
-            matrix.shear(qTan(points[0]*deg2rad), 0);
+            matrix.shear(qTan(qDegreesToRadians(points[0])), 0);
         } else if (state == SkewY) {
             if (points.count() != 1)
                 goto error;
-            const qreal deg2rad = qreal(0.017453292519943295769);
-            matrix.shear(0, qTan(points[0]*deg2rad));
+            matrix.shear(0, qTan(qDegreesToRadians(points[0])));
         }
     }
   error:
@@ -1342,7 +1340,7 @@ static void parseFont(QSvgNode *node,
         return;
 
     QSvgTinyDocument *doc = node->document();
-    QSvgFontStyle *fontStyle = 0;
+    QSvgFontStyle *fontStyle = nullptr;
     if (!attributes.fontFamily.isEmpty()) {
         QSvgFont *svgFont = doc->svgFont(attributes.fontFamily.toString());
         if (svgFont)
@@ -3388,7 +3386,7 @@ static QSvgNode *createUseNode(QSvgNode *parent,
     QString linkId = attributes.value(QLatin1String("xlink:href")).toString().remove(0, 1);
     const QStringView xStr = attributes.value(QLatin1String("x"));
     const QStringView yStr = attributes.value(QLatin1String("y"));
-    QSvgStructureNode *group = 0;
+    QSvgStructureNode *group = nullptr;
 
     if (linkId.isEmpty())
         linkId = attributes.value(QLatin1String("href")).toString().remove(0, 1);
@@ -3706,7 +3704,7 @@ void QSvgHandler::parse()
 bool QSvgHandler::startElement(const QString &localName,
                                const QXmlStreamAttributes &attributes)
 {
-    QSvgNode *node = 0;
+    QSvgNode *node = nullptr;
 
     pushColorCopy();
 

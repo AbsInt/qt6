@@ -183,6 +183,9 @@ struct Q_QML_EXPORT QObjectWrapper : public Object
 
     static void setProperty(ExecutionEngine *engine, QObject *object, int propertyIndex, const Value &value);
     void setProperty(ExecutionEngine *engine, int propertyIndex, const Value &value);
+    static void setProperty(
+            ExecutionEngine *engine, QObject *object,
+            const QQmlPropertyData *property, const Value &value);
 
     void destroyObject(bool lastCall);
 
@@ -195,8 +198,6 @@ struct Q_QML_EXPORT QObjectWrapper : public Object
     static bool virtualResolveLookupSetter(Object *object, ExecutionEngine *engine, Lookup *lookup, const Value &value);
 
 protected:
-    static void setProperty(ExecutionEngine *engine, QObject *object, QQmlPropertyData *property, const Value &value);
-
     static bool virtualIsEqualTo(Managed *that, Managed *o);
     static ReturnedValue create(ExecutionEngine *engine, QObject *object);
 
@@ -257,15 +258,15 @@ inline ReturnedValue QObjectWrapper::lookupGetterImpl(Lookup *lookup, ExecutionE
         if (property->isOverridden() && (!useOriginalProperty || property->isFunction() || property->isSignalHandler()))
             return revertLookup();
 
-        QQmlPropertyCache *fromMo = ddata->propertyCache;
-        QQmlPropertyCache *toMo = lookup->qobjectLookup.propertyCache;
+        const QQmlPropertyCache *fromMo = ddata->propertyCache.data();
+        const QQmlPropertyCache *toMo = lookup->qobjectLookup.propertyCache;
         bool canConvert = false;
         while (fromMo) {
             if (fromMo == toMo) {
                 canConvert = true;
                 break;
             }
-            fromMo = fromMo->parent();
+            fromMo = fromMo->parent().data();
         }
         if (!canConvert)
             return revertLookup();

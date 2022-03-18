@@ -1088,15 +1088,21 @@ Node *ClangVisitor::nodeForCommentAtLocation(CXSourceLocation loc, CXSourceLocat
   Get the include paths from the qdoc configuration database
   \a config. Call the initializeParser() in the base class.
   Get the defines list from the qdocconf database.
+
+  \note on \macos, we try to also query the system/framework
+  include paths from the compiler.
  */
 void ClangCodeParser::initializeParser()
 {
     Config &config = Config::instance();
     m_version = config.getString(CONFIG_VERSION);
-    const auto args = config.getCanonicalPathList(CONFIG_INCLUDEPATHS,
-                                                  Config::IncludePaths);
+    auto args = config.getCanonicalPathList(CONFIG_INCLUDEPATHS,
+                                            Config::IncludePaths);
+#ifdef Q_OS_MACOS
+    args.append(Utilities::getInternalIncludePaths(QStringLiteral("clang++")));
+#endif
     m_includePaths.clear();
-    for (const auto &path : args) {
+    for (const auto &path : qAsConst(args)) {
         if (!path.isEmpty())
             m_includePaths.append(path.toUtf8());
     }

@@ -95,9 +95,9 @@ private:
 
 class Q_QUICK_PRIVATE_EXPORT QQuickTableViewPrivate : public QQuickFlickablePrivate, public QQuickSelectable
 {
+public:
     Q_DECLARE_PUBLIC(QQuickTableView)
 
-public:
     class TableEdgeLoadRequest
     {
         // Whenever we need to load new rows or columns in the
@@ -444,11 +444,11 @@ public:
     QTypeRevision resolveImportVersion();
     void createWrapperModel();
 
-    void initItemCallback(int modelIndex, QObject *item);
-    void itemCreatedCallback(int modelIndex, QObject *object);
-    void itemPooledCallback(int modelIndex, QObject *object);
-    void itemReusedCallback(int modelIndex, QObject *object);
-    void modelUpdated(const QQmlChangeSet &changeSet, bool reset);
+    virtual void initItemCallback(int modelIndex, QObject *item);
+    virtual void itemCreatedCallback(int modelIndex, QObject *object);
+    virtual void itemPooledCallback(int modelIndex, QObject *object);
+    virtual void itemReusedCallback(int modelIndex, QObject *object);
+    virtual void modelUpdated(const QQmlChangeSet &changeSet, bool reset);
 
     virtual void syncWithPendingChanges();
     virtual void syncDelegate();

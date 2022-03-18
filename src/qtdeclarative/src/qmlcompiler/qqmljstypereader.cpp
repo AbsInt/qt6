@@ -82,11 +82,14 @@ QQmlJSScope::Ptr QQmlJSTypeReader::operator()()
     if (!rootNode)
         return errorResult();
 
+    QQmlJSLogger logger;
+    logger.setFileName(m_file);
+    logger.setCode(code);
+    logger.setSilent(true);
+
     QQmlJSImportVisitor membersVisitor(
-                m_importer,
-                QQmlJSImportVisitor::implicitImportDirectory(
-                    m_file, m_importer->resourceFileMapper()),
-                m_qmltypesFiles, m_file, code);
+            m_importer, &logger,
+            QQmlJSImportVisitor::implicitImportDirectory(m_file, m_importer->resourceFileMapper()));
     rootNode->accept(&membersVisitor);
     auto result = membersVisitor.result();
     Q_ASSERT(result);

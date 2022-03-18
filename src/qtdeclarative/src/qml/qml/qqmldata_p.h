@@ -57,6 +57,7 @@
 #include <private/qv4value_p.h>
 #include <private/qv4persistent_p.h>
 #include <private/qqmlrefcount_p.h>
+#include <private/qqmlpropertycache_p.h>
 #include <qqmlprivate.h>
 #include <qjsengine.h>
 #include <qvector.h>
@@ -132,7 +133,7 @@ public:
     quint32 isQueuedForDeletion:1;
     /*
      * rootObjectInCreation should be true only when creating top level CPP and QML objects,
-     * v8 GC will check this flag, only deletes the objects when rootObjectInCreation is false.
+     * v4 GC will check this flag, only deletes the objects when rootObjectInCreation is false.
      */
     quint32 rootObjectInCreation:1;
     // set when at least one of the object's properties is intercepted
@@ -223,12 +224,11 @@ public:
 
     QV4::WeakValue jsWrapper;
 
-    QQmlPropertyCache *propertyCache;
+    QQmlRefPointer<QQmlPropertyCache> propertyCache;
 
     QQmlGuardImpl *guards;
 
-    static QQmlData *get(const QObject *object, bool create = false) {
-        QObjectPrivate *priv = QObjectPrivate::get(const_cast<QObject *>(object));
+    static QQmlData *get(QObjectPrivate *priv, bool create) {
         // If QObjectData::isDeletingChildren is set then access to QObjectPrivate::declarativeData has
         // to be avoided because QObjectPrivate::currentChildBeingDeleted is in use.
         if (priv->isDeletingChildren || priv->wasDeleted) {
@@ -243,6 +243,25 @@ public:
         }
     }
 
+    static QQmlData *get(const QObjectPrivate *priv) {
+        // If QObjectData::isDeletingChildren is set then access to QObjectPrivate::declarativeData has
+        // to be avoided because QObjectPrivate::currentChildBeingDeleted is in use.
+        if (priv->isDeletingChildren || priv->wasDeleted)
+            return nullptr;
+        if (priv->declarativeData)
+            return static_cast<QQmlData *>(priv->declarativeData);
+        return nullptr;
+    }
+
+    static QQmlData *get(QObject *object, bool create) {
+        return QQmlData::get(QObjectPrivate::get(object), create);
+    }
+
+    static QQmlData *get(const QObject *object) {
+        return QQmlData::get(QObjectPrivate::get(object));
+
+    }
+
     static bool keepAliveDuringGarbageCollection(const QObject *object) {
         QQmlData *ddata = get(object);
         if (!ddata || ddata->indestructible || ddata->rootObjectInCreation)
@@ -254,6 +273,7 @@ public:
     QHash<QQmlAttachedPropertiesFunc, QObject *> *attachedProperties() const;
 
     static inline bool wasDeleted(const QObject *);
+    static inline bool wasDeleted(const QObjectPrivate *);
 
     static void markAsDeleted(QObject *);
     static void setQueuedForDeletion(QObject *);
@@ -261,7 +281,7 @@ public:
     static inline void flushPendingBinding(QObject *object, int coreIndex);
     void flushPendingBinding(int coreIndex);
 
-    static QQmlPropertyCache *ensurePropertyCache(QJSEngine *engine, QObject *object)
+    static QQmlRefPointer<QQmlPropertyCache> ensurePropertyCache(QJSEngine *engine, QObject *object)
     {
         Q_ASSERT(engine);
         QQmlData *ddata = QQmlData::get(object, /*create*/true);
@@ -278,7 +298,8 @@ private:
     mutable QQmlDataExtended *extendedData;
 
     Q_NEVER_INLINE static QQmlData *createQQmlData(QObjectPrivate *priv);
-    Q_NEVER_INLINE static QQmlPropertyCache *createPropertyCache(QJSEngine *engine, QObject *object);
+    Q_NEVER_INLINE static QQmlRefPointer<QQmlPropertyCache> createPropertyCache(
+            QJSEngine *engine, QObject *object);
 
     Q_ALWAYS_INLINE bool hasBitSet(int bit) const
     {
@@ -313,17 +334,22 @@ private:
     Q_DISABLE_COPY(QQmlData);
 };
 
+bool QQmlData::wasDeleted(const QObjectPrivate *priv)
+{
+    if (!priv || priv->wasDeleted || priv->isDeletingChildren)
+        return true;
+
+    const QQmlData *ddata = QQmlData::get(priv);
+    return ddata && ddata->isQueuedForDeletion;
+}
+
 bool QQmlData::wasDeleted(const QObject *object)
 {
     if (!object)
         return true;
 
     const QObjectPrivate *priv = QObjectPrivate::get(object);
-    if (!priv || priv->wasDeleted || priv->isDeletingChildren)
-        return true;
-
-    const QQmlData *ddata = QQmlData::get(object);
-    return ddata && ddata->isQueuedForDeletion;
+    return QQmlData::wasDeleted(priv);
 }
 
 QQmlNotifierEndpoint *QQmlData::notify(int index)

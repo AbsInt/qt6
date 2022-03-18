@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2020 The Qt Company Ltd.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Copyright (C) 2016 Intel Corporation.
 ** Contact: https://www.qt.io/licensing/
 **
@@ -44,6 +44,7 @@
 #include "private/qabstractfileiconprovider_p.h"
 #include <qpa/qplatformintegrationfactory_p.h>
 #include "private/qevent_p.h"
+#include "private/qeventpoint_p.h"
 #include "qfont.h"
 #include "qpointingdevice.h"
 #include <qpa/qplatformfontdatabase.h>
@@ -125,6 +126,7 @@
 #include <qtgui_tracepoints_p.h>
 
 #include <ctype.h>
+#include <limits>
 
 QT_BEGIN_NAMESPACE
 
@@ -137,12 +139,12 @@ QT_BEGIN_NAMESPACE
     }
 
 Q_CORE_EXPORT void qt_call_post_routines();
-Q_GUI_EXPORT bool qt_is_gui_used = true;
+Q_GUI_EXPORT bool qt_is_tty_app = false;
 
 Qt::MouseButtons QGuiApplicationPrivate::mouse_buttons = Qt::NoButton;
 Qt::KeyboardModifiers QGuiApplicationPrivate::modifier_buttons = Qt::NoModifier;
 
-QPointF QGuiApplicationPrivate::lastCursorPosition(qt_inf(), qt_inf());
+QGuiApplicationPrivate::QLastCursorPosition QGuiApplicationPrivate::lastCursorPosition;
 
 QWindow *QGuiApplicationPrivate::currentMouseWindow = nullptr;
 
@@ -179,12 +181,13 @@ QPalette *QGuiApplicationPrivate::app_pal = nullptr;        // default applicati
 
 Qt::MouseButton QGuiApplicationPrivate::mousePressButton = Qt::NoButton;
 
-static int mouseDoubleClickDistance = -1;
-static int touchDoubleTapDistance = -1;
+static int mouseDoubleClickDistance = 0;
+static int touchDoubleTapDistance = 0;
 
 QWindow *QGuiApplicationPrivate::currentMousePressWindow = nullptr;
 
 static Qt::LayoutDirection layout_direction = Qt::LayoutDirectionAuto;
+static Qt::LayoutDirection effective_layout_direction = Qt::LeftToRight;
 static bool force_reverse = false;
 
 QGuiApplicationPrivate *QGuiApplicationPrivate::self = nullptr;
@@ -209,6 +212,8 @@ QInputDeviceManager *QGuiApplicationPrivate::m_inputDeviceManager = nullptr;
 qreal QGuiApplicationPrivate::m_maxDevicePixelRatio = 0.0;
 
 static qreal fontSmoothingGamma = 1.7;
+
+bool QGuiApplicationPrivate::quitOnLastWindowClosed = true;
 
 extern void qRegisterGuiVariant();
 #if QT_CONFIG(animation)
@@ -704,7 +709,7 @@ QGuiApplication::~QGuiApplication()
     QGuiApplicationPrivate::desktopFileName = nullptr;
     QGuiApplicationPrivate::mouse_buttons = Qt::NoButton;
     QGuiApplicationPrivate::modifier_buttons = Qt::NoModifier;
-    QGuiApplicationPrivate::lastCursorPosition = {qreal(qInf()), qreal(qInf())};
+    QGuiApplicationPrivate::lastCursorPosition.reset();
     QGuiApplicationPrivate::currentMousePressWindow = QGuiApplicationPrivate::currentMouseWindow = nullptr;
     QGuiApplicationPrivate::applicationState = Qt::ApplicationInactive;
     QGuiApplicationPrivate::currentDragWindow = nullptr;
@@ -1402,16 +1407,9 @@ void QGuiApplicationPrivate::createPlatformIntegration()
     }
 
     const bool defaultIsWayland = !defaultIsXcb && platformPluginBase.startsWith("wayland");
-    bool isGnome = false;
     const QByteArray waylandPlatformName = defaultIsWayland ? platformName : "wayland";
     if (hasWaylandDisplay || isWaylandSessionType) {
-        const QByteArray currentDesktop = qgetenv("XDG_CURRENT_DESKTOP").toLower();
-        const QByteArray sessionDesktop = qgetenv("XDG_SESSION_DESKTOP").toLower();
-        isGnome = currentDesktop.contains("gnome") || sessionDesktop.contains("gnome");
-        if (isGnome)
-            preferredPlatformOrder.append(waylandPlatformName);
-        else
-            preferredPlatformOrder.prepend(waylandPlatformName);
+        preferredPlatformOrder.prepend(waylandPlatformName);
 
         if (defaultIsWayland)
             platformName.clear();
@@ -1479,14 +1477,7 @@ void QGuiApplicationPrivate::createPlatformIntegration()
         argc = j;
     }
 
-#if defined(Q_OS_UNIX) && !defined(Q_OS_DARWIN)
-    if ((hasWaylandDisplay || isWaylandSessionType) && isGnome && !platformExplicitlySelected) {
-        qInfo() << "Warning: Ignoring WAYLAND_DISPLAY on Gnome."
-                << "Use QT_QPA_PLATFORM=wayland to run on Wayland anyway.";
-    }
-#else
     Q_UNUSED(platformExplicitlySelected);
-#endif
 
     init_platform(QLatin1String(platformName), platformPluginPath, platformThemeName, argc, argv);
 
@@ -1680,8 +1671,8 @@ void QGuiApplicationPrivate::init()
     Q_UNUSED(loadTestability);
 #endif // QT_CONFIG(library)
 
-    if (layout_direction == Qt::LayoutDirectionAuto || force_reverse)
-        QGuiApplication::setLayoutDirection(qt_detectRTLLanguage() ? Qt::RightToLeft : Qt::LeftToRight);
+    // trigger changed signal and event delivery
+    QGuiApplication::setLayoutDirection(layout_direction);
 
     if (!QGuiApplicationPrivate::displayName)
         QObject::connect(q, &QGuiApplication::applicationNameChanged,
@@ -1707,7 +1698,7 @@ QGuiApplicationPrivate::~QGuiApplicationPrivate()
     QCursorData::cleanup();
 #endif
 
-    layout_direction = Qt::LeftToRight;
+    layout_direction = Qt::LayoutDirectionAuto;
 
     cleanupThreadData();
 
@@ -1947,7 +1938,9 @@ bool QGuiApplication::notify(QObject *object, QEvent *event)
 bool QGuiApplication::event(QEvent *e)
 {
     if (e->type() == QEvent::LanguageChange) {
-        setLayoutDirection(qt_detectRTLLanguage()?Qt::RightToLeft:Qt::LeftToRight);
+        // if the layout direction was set explicitly, then don't override it here
+        if (layout_direction == Qt::LayoutDirectionAuto)
+            setLayoutDirection(layout_direction);
         for (auto *topLevelWindow : QGuiApplication::topLevelWindows()) {
             if (topLevelWindow->flags() != Qt::Desktop)
                 postEvent(topLevelWindow, new QEvent(QEvent::LanguageChange));
@@ -2245,7 +2238,7 @@ void QGuiApplicationPrivate::processMouseEvent(QWindowSystemInterfacePrivate::Mo
     Q_ASSERT(devPriv->pointById(0) == persistentEPD); // we don't expect reallocation in QPlatformCursor::pointerEvenmt()
     // restore globalLastPosition to avoid invalidating the velocity calculations,
     // because the QPlatformCursor mouse event above was in native coordinates
-    QMutableEventPoint::from(persistentEPD->eventPoint).setGlobalLastPosition(lastGlobalPosition);
+    QMutableEventPoint::setGlobalLastPosition(persistentEPD->eventPoint, lastGlobalPosition);
     persistentEPD = nullptr; // incoming and synth events can cause reallocation during delivery, so don't use this again
     // ev now contains a detached copy of the QEventPoint from QPointingDevicePrivate::activePoints
     ev.setTimestamp(e->timestamp);
@@ -2349,7 +2342,7 @@ void QGuiApplicationPrivate::processKeyEvent(QWindowSystemInterfacePrivate::KeyE
     QWindow *window = e->window.data();
     modifier_buttons = e->modifiers;
     if (e->nullWindow()
-#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
+#ifdef Q_OS_ANDROID
            || e->key == Qt::Key_Back || e->key == Qt::Key_Menu
 #endif
             ) {
@@ -2385,7 +2378,7 @@ void QGuiApplicationPrivate::processKeyEvent(QWindowSystemInterfacePrivate::KeyE
 
     if (window && !window->d_func()->blockedByModalWindow)
         QGuiApplication::sendSpontaneousEvent(window, &ev);
-#if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
+#ifdef Q_OS_ANDROID
     else
         ev.setAccepted(false);
 
@@ -2426,7 +2419,7 @@ void QGuiApplicationPrivate::processEnterEvent(QWindowSystemInterfacePrivate::En
     const QPointingDevicePrivate *devPriv = QPointingDevicePrivate::get(event.pointingDevice());
     auto epd = devPriv->queryPointById(event.points().first().id());
     Q_ASSERT(epd);
-    QMutableEventPoint::from(epd->eventPoint).setVelocity({});
+    QMutableEventPoint::setVelocity(epd->eventPoint, {});
 
     QCoreApplication::sendSpontaneousEvent(e->enter.data(), &event);
 }
@@ -2804,6 +2797,9 @@ void QGuiApplicationPrivate::processContextMenuEvent(QWindowSystemInterfacePriva
 
 void QGuiApplicationPrivate::processTouchEvent(QWindowSystemInterfacePrivate::TouchEvent *e)
 {
+    if (!QInputDevicePrivate::isRegistered(e->device))
+        return;
+
     modifier_buttons = e->modifiers;
     QPointingDevice *device = const_cast<QPointingDevice *>(static_cast<const QPointingDevice *>(e->device));
     QPointingDevicePrivate *devPriv = QPointingDevicePrivate::get(device);
@@ -2816,9 +2812,7 @@ void QGuiApplicationPrivate::processTouchEvent(QWindowSystemInterfacePrivate::To
         QSet<QWindow *> windowsNeedingCancel;
 
         for (auto &epd : devPriv->activePoints.values()) {
-            auto &mut = QMutableEventPoint::from(const_cast<QEventPoint &>(epd.eventPoint));
-            QWindow *w = mut.window();
-            if (w)
+            if (QWindow *w = QMutableEventPoint::window(epd.eventPoint))
                 windowsNeedingCancel.insert(w);
         }
 
@@ -2867,7 +2861,7 @@ void QGuiApplicationPrivate::processTouchEvent(QWindowSystemInterfacePrivate::To
     for (auto &tempPt : e->points) {
         // update state
         auto epd = devPriv->pointById(tempPt.id());
-        auto &mut = QMutableEventPoint::from(epd->eventPoint);
+        auto &ep = epd->eventPoint;
         epd->eventPoint.setAccepted(false);
         switch (tempPt.state()) {
         case QEventPoint::State::Pressed:
@@ -2877,19 +2871,21 @@ void QGuiApplicationPrivate::processTouchEvent(QWindowSystemInterfacePrivate::To
             // If the QPA event didn't tell us which window, find the one under the touchpoint position.
             if (!window)
                 window = QGuiApplication::topLevelAt(tempPt.globalPosition().toPoint());
-            mut.setWindow(window);
+            QMutableEventPoint::setWindow(ep, window);
             break;
 
         case QEventPoint::State::Released:
-            if (Q_UNLIKELY(!window.isNull() && window != mut.window()))
-                qCWarning(lcPtrDispatch) << "delivering touch release to same window" << mut.window() << "not" << window.data();
-            window = mut.window();
+            if (Q_UNLIKELY(!window.isNull() && window != QMutableEventPoint::window(ep)))
+                qCWarning(lcPtrDispatch) << "delivering touch release to same window"
+                                         << QMutableEventPoint::window(ep) << "not" << window.data();
+            window = QMutableEventPoint::window(ep);
             break;
 
         default: // update or stationary
-            if (Q_UNLIKELY(!window.isNull() && window != mut.window()))
-                qCWarning(lcPtrDispatch) << "delivering touch update to same window" << mut.window() << "not" << window.data();
-            window = mut.window();
+            if (Q_UNLIKELY(!window.isNull() && window != QMutableEventPoint::window(ep)))
+                qCWarning(lcPtrDispatch) << "delivering touch update to same window"
+                                         << QMutableEventPoint::window(ep) << "not" << window.data();
+            window = QMutableEventPoint::window(ep);
             break;
         }
         // If we somehow still don't have a window, we can't deliver this touchpoint.  (should never happen)
@@ -2897,30 +2893,30 @@ void QGuiApplicationPrivate::processTouchEvent(QWindowSystemInterfacePrivate::To
             qCWarning(lcPtrDispatch) << "skipping" << &tempPt << ": no target window";
             continue;
         }
-        mut.updateFrom(tempPt);
+        QMutableEventPoint::update(tempPt, ep);
 
         Q_ASSERT(window.data() != nullptr);
 
         // make the *scene* position the same as the *global* position
-        mut.setScenePosition(tempPt.globalPosition());
+        QMutableEventPoint::setScenePosition(ep, tempPt.globalPosition());
 
         // store the scene position as local position, for now
-        mut.setPosition(window->mapFromGlobal(tempPt.globalPosition()));
+        QMutableEventPoint::setPosition(ep, window->mapFromGlobal(tempPt.globalPosition()));
 
         // setTimeStamp has side effects, so we do it last
-        mut.setTimestamp(e->timestamp);
+        QMutableEventPoint::setTimestamp(ep, e->timestamp);
 
         // add the touchpoint to the event that will be delivered to the window
         bool added = false;
         for (QMutableTouchEvent &ev : touchEvents) {
             if (ev.target() == window.data()) {
-                ev.addPoint(mut);
+                ev.addPoint(ep);
                 added = true;
                 break;
             }
         }
         if (!added) {
-            QMutableTouchEvent mte(e->touchType, device, e->modifiers, {mut});
+            QMutableTouchEvent mte(e->touchType, device, e->modifiers, {ep});
             mte.setTimestamp(e->timestamp);
             mte.setTarget(window.data());
             touchEvents.append(mte);
@@ -3541,61 +3537,67 @@ void QGuiApplicationPrivate::notifyWindowIconChanged()
     The default is \c true.
 
     If this property is \c true, the applications quits when the last visible
-    primary window (i.e. window with no parent) is closed.
+    \l{Primary and Secondary Windows}{primary window} (i.e. top level window
+    with no transient parent) is closed.
 
     \sa quit(), QWindow::close()
  */
 
 void QGuiApplication::setQuitOnLastWindowClosed(bool quit)
 {
-    QCoreApplication::setQuitLockEnabled(quit);
+    QGuiApplicationPrivate::quitOnLastWindowClosed = quit;
 }
-
-
 
 bool QGuiApplication::quitOnLastWindowClosed()
 {
-    return QCoreApplication::isQuitLockEnabled();
+    return QGuiApplicationPrivate::quitOnLastWindowClosed;
 }
 
+void QGuiApplicationPrivate::maybeLastWindowClosed()
+{
+    if (!lastWindowClosed())
+        return;
+
+    if (in_exec)
+        emit q_func()->lastWindowClosed();
+
+    if (quitOnLastWindowClosed && canQuitAutomatically())
+        quitAutomatically();
+}
 
 /*!
     \fn void QGuiApplication::lastWindowClosed()
 
     This signal is emitted from exec() when the last visible
-    primary window (i.e. window with no parent) is closed.
+    \l{Primary and Secondary Windows}{primary window} (i.e.
+    top level window with no transient parent) is closed.
 
     By default, QGuiApplication quits after this signal is emitted. This feature
     can be turned off by setting \l quitOnLastWindowClosed to \c false.
 
-    \sa QWindow::close(), QWindow::isTopLevel()
+    \sa QWindow::close(), QWindow::isTopLevel(), QWindow::transientParent()
 */
 
-void QGuiApplicationPrivate::emitLastWindowClosed()
+bool QGuiApplicationPrivate::lastWindowClosed() const
 {
-    if (qGuiApp && qGuiApp->d_func()->in_exec) {
-        emit qGuiApp->lastWindowClosed();
-    }
-}
-
-bool QGuiApplicationPrivate::shouldQuit()
-{
-    const QWindowList processedWindows;
-    return shouldQuitInternal(processedWindows);
-}
-
-bool QGuiApplicationPrivate::shouldQuitInternal(const QWindowList &processedWindows)
-{
-    /* if there is no visible top-level window left, we allow the quit */
-    QWindowList list = QGuiApplication::topLevelWindows();
-    for (int i = 0; i < list.size(); ++i) {
-        QWindow *w = list.at(i);
-        if (processedWindows.contains(w))
+    for (auto *window : QGuiApplication::topLevelWindows()) {
+        auto *windowPrivate = qt_window_private(window);
+        if (!windowPrivate->participatesInLastWindowClosed())
             continue;
-        if (w->isVisible() && !w->transientParent())
+
+        if (windowPrivate->treatAsVisible())
             return false;
-    }
-    return true;
+     }
+
+     return true;
+}
+
+bool QGuiApplicationPrivate::canQuitAutomatically()
+{
+    if (quitOnLastWindowClosed && !lastWindowClosed())
+        return false;
+
+    return QCoreApplicationPrivate::canQuitAutomatically();
 }
 
 void QGuiApplicationPrivate::quit()
@@ -3876,7 +3878,8 @@ void QGuiApplication::sync()
     \property QGuiApplication::layoutDirection
     \brief the default layout direction for this application
 
-    On system start-up, the default layout direction depends on the
+    On system start-up, or when the direction is explicitly set to
+    Qt::LayoutDirectionAuto, the default layout direction depends on the
     application's language.
 
     The notifier signal was introduced in Qt 5.4.
@@ -3886,11 +3889,15 @@ void QGuiApplication::sync()
 
 void QGuiApplication::setLayoutDirection(Qt::LayoutDirection direction)
 {
-    if (layout_direction == direction || direction == Qt::LayoutDirectionAuto)
+    layout_direction = direction;
+    if (direction == Qt::LayoutDirectionAuto)
+        direction = qt_detectRTLLanguage() ? Qt::RightToLeft : Qt::LeftToRight;
+
+    // no change to the explicitly set or auto-detected layout direction
+    if (direction == effective_layout_direction)
         return;
 
-    layout_direction = direction;
-
+    effective_layout_direction = direction;
     if (qGuiApp) {
         emit qGuiApp->layoutDirectionChanged(direction);
         QGuiApplicationPrivate::self->notifyLayoutDirectionChange();
@@ -3899,10 +3906,15 @@ void QGuiApplication::setLayoutDirection(Qt::LayoutDirection direction)
 
 Qt::LayoutDirection QGuiApplication::layoutDirection()
 {
-    // layout_direction is only ever Qt::LayoutDirectionAuto if setLayoutDirection
-    // was never called, or called with Qt::LayoutDirectionAuto (which is a no-op).
-    // In that case we return the default LeftToRight.
-    return layout_direction == Qt::LayoutDirectionAuto ? Qt::LeftToRight : layout_direction;
+    /*
+        effective_layout_direction defaults to Qt::LeftToRight, and is updated with what is
+        auto-detected by a call to setLayoutDirection(Qt::LayoutDirectionAuto). This happens in
+        QGuiApplicationPrivate::init and when the language changes (or before if the application
+        calls the static function, but then no translators are installed so the auto-detection
+        always yields Qt::LeftToRight).
+        So we can be certain that it's always the right value.
+    */
+    return effective_layout_direction;
 }
 
 /*!
@@ -4140,6 +4152,14 @@ QPixmap QGuiApplicationPrivate::getPixmapCursor(Qt::CursorShape cshape)
     return QPixmap();
 }
 
+QPoint QGuiApplicationPrivate::QLastCursorPosition::toPoint() const noexcept
+{
+    // Guard against the default initialization of qInf() (avoid UB or SIGFPE in conversion).
+    if (Q_UNLIKELY(qIsInf(thePoint.x())))
+        return QPoint(std::numeric_limits<int>::max(), std::numeric_limits<int>::max());
+    return thePoint.toPoint();
+}
+
 void QGuiApplicationPrivate::notifyThemeChanged()
 {
     updatePalette();
@@ -4165,10 +4185,8 @@ void QGuiApplicationPrivate::notifyDragStarted(const QDrag *drag)
 const QColorTrcLut *QGuiApplicationPrivate::colorProfileForA8Text()
 {
 #ifdef Q_OS_WIN
-    if (!m_a8ColorProfile){
-        QColorTrcLut *cs = QColorTrcLut::fromGamma(2.31); // This is a hard-coded thing for Windows text rendering
-        m_a8ColorProfile.reset(cs);
-    }
+    if (!m_a8ColorProfile)
+        m_a8ColorProfile = QColorTrcLut::fromGamma(2.31); // This is a hard-coded thing for Windows text rendering
     return m_a8ColorProfile.get();
 #else
     return colorProfileForA32Text();
@@ -4177,10 +4195,8 @@ const QColorTrcLut *QGuiApplicationPrivate::colorProfileForA8Text()
 
 const QColorTrcLut *QGuiApplicationPrivate::colorProfileForA32Text()
 {
-    if (!m_a32ColorProfile) {
-        QColorTrcLut *cs = QColorTrcLut::fromGamma(fontSmoothingGamma);
-        m_a32ColorProfile.reset(cs);
-    }
+    if (!m_a32ColorProfile)
+        m_a32ColorProfile = QColorTrcLut::fromGamma(fontSmoothingGamma);
     return m_a32ColorProfile.get();
 }
 

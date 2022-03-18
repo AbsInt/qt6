@@ -66,7 +66,7 @@ class PieChart : public QQuickPaintedItem
 public:
 //![1]
 
-    PieChart(QQuickItem *parent = 0);
+    PieChart(QQuickItem *parent = nullptr);
 
     QString name() const;
     void setName(const QString &name);
@@ -74,7 +74,7 @@ public:
     QColor color() const;
     void setColor(const QColor &color);
 
-    void paint(QPainter *painter);
+    void paint(QPainter *painter) override;
 
     Q_INVOKABLE void clearChart();
 

@@ -58,7 +58,7 @@ bool QWaylandFullScreenShellV1Integration::initialize(QWaylandDisplay *display)
         return false;
     }
 
-    return QWaylandShellIntegration::initialize(display);
+    return true;
 }
 
 QWaylandShellSurface *QWaylandFullScreenShellV1Integration::createShellSurface(QWaylandWindow *window)

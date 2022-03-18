@@ -131,6 +131,12 @@ struct Q_QML_PRIVATE_EXPORT Lookup {
             QQmlPropertyData *propertyData;
         } qobjectLookup;
         struct {
+            quintptr isConstant; // This is a bool, encoded as 0 or 1. Both values are ignored by gc
+            quintptr metaObject; // a (const QMetaObject* & 1) or nullptr
+            int coreIndex;
+            int notifyIndex;
+        } qobjectFallbackLookup;
+        struct {
             Heap::InternalClass *ic;
             quintptr metaObject; // a (const QMetaObject* & 1) or nullptr
             const QtPrivate::QMetaTypeInterface *metaType; // cannot use QMetaType; class must be trivial
@@ -250,8 +256,8 @@ inline void setupQObjectLookup(
         Lookup *lookup, const QQmlData *ddata, QQmlPropertyData *propertyData)
 {
     lookup->releasePropertyCache();
-    Q_ASSERT(ddata->propertyCache != nullptr);
-    lookup->qobjectLookup.propertyCache = ddata->propertyCache;
+    Q_ASSERT(!ddata->propertyCache.isNull());
+    lookup->qobjectLookup.propertyCache = ddata->propertyCache.data();
     lookup->qobjectLookup.propertyCache->addref();
     lookup->qobjectLookup.propertyData = propertyData;
 }

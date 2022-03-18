@@ -404,6 +404,20 @@ void tst_qmlcachegen::aheadOfTimeCompilation()
 
 static QQmlPrivate::CachedQmlUnit *temporaryModifiedCachedUnit = nullptr;
 
+static const char *versionCheckErrorString(QQmlMetaType::CachedUnitLookupError error)
+{
+    switch (error) {
+    case QQmlMetaType::CachedUnitLookupError::NoError:
+        return "no error";
+    case QQmlMetaType::CachedUnitLookupError::NoUnitFound:
+        return "no unit found";
+    case QQmlMetaType::CachedUnitLookupError::VersionMismatch:
+        return "version mismatch";
+    }
+
+    return "wat?";
+}
+
 void tst_qmlcachegen::versionChecksForAheadOfTimeUnits()
 {
     QVERIFY(QFile::exists(":/data/versionchecks.qml"));
@@ -415,7 +429,7 @@ void tst_qmlcachegen::versionChecksForAheadOfTimeUnits()
     const QQmlPrivate::CachedQmlUnit *originalUnit = QQmlMetaType::findCachedCompilationUnit(
             QUrl("qrc:/data/versionchecks.qml"), &error);
     QLoggingCategory::setFilterRules(QString());
-    QVERIFY(originalUnit);
+    QVERIFY2(originalUnit, versionCheckErrorString(error));
     QV4::CompiledData::Unit *tweakedUnit = (QV4::CompiledData::Unit *)malloc(originalUnit->qmlData->unitSize);
     memcpy(reinterpret_cast<void *>(tweakedUnit),
            reinterpret_cast<const void *>(originalUnit->qmlData),
@@ -762,6 +776,7 @@ void tst_qmlcachegen::inlineComponent()
     QVERIFY2(ok, errors);
     QQmlEngine engine;
     CleanlyLoadingComponent component(&engine, testFileUrl("inlineComponentWithId.qml"));
+    QVERIFY2(component.isReady(), qPrintable(component.errorString()));
     QTest::ignoreMessage(QtMsgType::QtInfoMsg, "42");
     QScopedPointer<QObject> obj(component.create());
     QVERIFY(!obj.isNull());
@@ -779,7 +794,9 @@ void tst_qmlcachegen::posthocRequired()
     CleanlyLoadingComponent component(&engine, testFileUrl("posthocrequired.qml"));
     QScopedPointer<QObject> obj(component.create());
     QVERIFY(obj.isNull() && component.isError());
-    QVERIFY(component.errorString().contains(QStringLiteral("Required property x was not initialized")));
+    QVERIFY2(component.errorString().contains(
+                 QStringLiteral("Required property x was not initialized")),
+             qPrintable(component.errorString()));
 }
 
 void tst_qmlcachegen::scriptStringCachegenInteraction()

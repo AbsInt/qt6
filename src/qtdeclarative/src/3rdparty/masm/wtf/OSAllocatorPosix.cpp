@@ -31,7 +31,6 @@
 #include <cstdlib>
 
 #include "PageAllocation.h"
-#include <dlfcn.h>
 #include <errno.h>
 #include <sys/mman.h>
 #include <wtf/Assertions.h>
@@ -98,6 +97,9 @@ static int memfdForUsage(size_t bytes, OSAllocator::Usage usage)
 void* OSAllocator::reserveUncommitted(size_t bytes, Usage usage, bool writable, bool executable)
 {
 #if OS(QNX)
+    UNUSED_PARAM(usage);
+    UNUSED_PARAM(writable);
+    UNUSED_PARAM(executable);
     // Reserve memory with PROT_NONE and MAP_LAZY so it isn't committed now.
     void* result = mmap(0, bytes, PROT_NONE, MAP_LAZY | MAP_PRIVATE | MAP_ANON, -1, 0);
     if (result == MAP_FAILED)

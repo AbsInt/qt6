@@ -52,14 +52,15 @@
 //
 
 #include "qqmlproperty.h"
-#include "qqmlengine.h"
 
 #include <private/qobject_p.h>
-#include <private/qtqmlglobal_p.h>
-#include <private/qqmlrefcount_p.h>
 #include <private/qqmlcontextdata_p.h>
 #include <private/qqmlpropertydata_p.h>
 #include <private/qqmlpropertyindex_p.h>
+#include <private/qqmlrefcount_p.h>
+#include <private/qtqmlglobal_p.h>
+
+#include <QtQml/qqmlengine.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -73,6 +74,13 @@ class QQmlBoundSignalExpression;
 class Q_QML_PRIVATE_EXPORT QQmlPropertyPrivate : public QQmlRefCount
 {
 public:
+    enum class InitFlag {
+        None        = 0x0,
+        AllowId     = 0x1,
+        AllowSignal = 0x2
+    };
+    Q_DECLARE_FLAGS(InitFlags, InitFlag);
+
     QQmlRefPointer<QQmlContextData> context;
     QPointer<QQmlEngine> engine;
     QPointer<QObject> object;
@@ -94,7 +102,7 @@ public:
 
     QQmlRefPointer<QQmlContextData> effectiveContext() const;
 
-    void initProperty(QObject *obj, const QString &name);
+    void initProperty(QObject *obj, const QString &name, InitFlags flags = InitFlag::None);
     void initDefault(QObject *obj);
 
     bool isValueType() const;
@@ -105,7 +113,7 @@ public:
     QVariant readValueProperty();
     bool writeValueProperty(const QVariant &, QQmlPropertyData::WriteFlags);
 
-    static QQmlMetaObject rawMetaObjectForType(QQmlEnginePrivate *, int);
+    static QQmlMetaObject rawMetaObjectForType(QQmlEnginePrivate *, QMetaType metaType);
     static bool writeEnumProperty(const QMetaProperty &prop, int idx, QObject *object,
                                   const QVariant &value, int flags);
     static bool writeValueProperty(QObject *,
@@ -159,6 +167,7 @@ public:
     static bool write(const QQmlProperty &that, const QVariant &, QQmlPropertyData::WriteFlags);
     static QQmlPropertyIndex propertyIndex(const QQmlProperty &that);
     static QMetaMethod findSignalByName(const QMetaObject *mo, const QByteArray &);
+    static QMetaProperty findPropertyByName(const QMetaObject *mo, const QByteArray &);
     static bool connect(const QObject *sender, int signal_index,
                         const QObject *receiver, int method_index,
                         int type = 0, int *types = nullptr);
@@ -169,11 +178,13 @@ public:
             const QVariant &value, const QQmlRefPointer<QQmlContextData> &ctxt);
     static QQmlProperty create(
             QObject *target, const QString &propertyName,
-            const QQmlRefPointer<QQmlContextData> &context);
+            const QQmlRefPointer<QQmlContextData> &context,
+            QQmlPropertyPrivate::InitFlags flags);
 
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QQmlPropertyPrivate::BindingFlags)
+Q_DECLARE_OPERATORS_FOR_FLAGS(QQmlPropertyPrivate::InitFlags);
 
 QT_END_NAMESPACE
 

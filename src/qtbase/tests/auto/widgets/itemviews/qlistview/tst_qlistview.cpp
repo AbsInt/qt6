@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
@@ -47,7 +47,7 @@
 using namespace QTestPrivate;
 
 #if defined(Q_OS_WIN)
-#  include <windows.h>
+#  include <qt_windows.h>
 #  include <QDialog>
 #  include <QGuiApplication>
 #  include <QVBoxLayout>
@@ -444,7 +444,7 @@ void tst_QListView::cursorMove()
             }
             break;
         default:
-            QVERIFY(false);
+            QFAIL(qPrintable(QStringLiteral("Unexpected key: %1").arg(key)));
         }
 
         QCoreApplication::processEvents();

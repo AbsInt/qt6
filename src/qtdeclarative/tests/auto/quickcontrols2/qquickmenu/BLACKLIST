@@ -6,9 +6,16 @@ android # QTBUG-100256
 [subMenuDisabledMouse]
 macos
 
-# QTBUG-100256
+# QTBUG-98491
+[disableWhenTriggered]
+macos
+
+# QTBUG-98491
 [subMenuPosition]
-android
+macos
+android # QTBUG-100256
+
+# QTBUG-100256
 [mouse]
 android
 [contextMenuKeyboard]

@@ -75,6 +75,8 @@ public:
         QWaylandClient *parent = nullptr;
     };
     Listener listener;
+
+    QWaylandClient::TextInputProtocols mTextInputProtocols = QWaylandClient::NoProtocol;
 };
 
 /*!
@@ -271,6 +273,19 @@ void QWaylandClient::close()
 {
     Q_D(QWaylandClient);
     d->compositor->destroyClient(this);
+}
+
+QWaylandClient::TextInputProtocols QWaylandClient::textInputProtocols() const
+{
+    Q_D(const QWaylandClient);
+    return d->mTextInputProtocols;
+}
+
+void QWaylandClient::setTextInputProtocols(TextInputProtocols p)
+{
+    Q_D(QWaylandClient);
+    if (d->mTextInputProtocols != p)
+        d->mTextInputProtocols = p;
 }
 
 QT_END_NAMESPACE

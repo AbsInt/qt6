@@ -308,8 +308,8 @@ void QQuickDeliveryAgentPrivate::removeGrabber(QQuickItem *grabber, bool mouse, 
 void QQuickDeliveryAgentPrivate::translateTouchEvent(QTouchEvent *touchEvent)
 {
     for (qsizetype i = 0; i != touchEvent->pointCount(); ++i) {
-        auto &pt = QMutableEventPoint::from(touchEvent->point(i));
-        pt.setScenePosition(pt.position());
+        auto &pt = touchEvent->point(i);
+        QMutableEventPoint::setScenePosition(pt, pt.position());
     }
 }
 
@@ -894,11 +894,11 @@ QQuickDeliveryAgentPrivate::~QQuickDeliveryAgentPrivate()
 QPointerEvent *QQuickDeliveryAgentPrivate::clonePointerEvent(QPointerEvent *event, std::optional<QPointF> transformedLocalPos)
 {
     QPointerEvent *ret = event->clone();
-    QMutableEventPoint &point = QMutableEventPoint::from(ret->point(0));
-    point.detach();
-    point.setTimestamp(event->timestamp());
+    QEventPoint &point = ret->point(0);
+    QMutableEventPoint::detach(point);
+    QMutableEventPoint::setTimestamp(point, event->timestamp());
     if (transformedLocalPos)
-        point.setPosition(*transformedLocalPos);
+        QMutableEventPoint::setPosition(point, *transformedLocalPos);
 
     return ret;
 }
@@ -942,15 +942,15 @@ bool QQuickDeliveryAgentPrivate::sendHoverEvent(QEvent::Type type, QQuickItem *i
                                       Qt::KeyboardModifiers modifiers, ulong timestamp)
 {
     auto itemPrivate = QQuickItemPrivate::get(item);
-    const QTransform transform = itemPrivate->windowToItemTransform();
-    QHoverEvent hoverEvent(type, transform.map(scenePos), transform.map(lastScenePos), modifiers);
+    const auto transform = itemPrivate->windowToItemTransform();
+    const auto transformToGlobal = itemPrivate->windowToGlobalTransform();
+    auto globalPos = transformToGlobal.map(scenePos);
+    QHoverEvent hoverEvent(type, transform.map(scenePos), globalPos, transform.map(lastScenePos), modifiers);
     hoverEvent.setTimestamp(timestamp);
     hoverEvent.setAccepted(true);
-    const QTransform transformToGlobal = itemPrivate->windowToGlobalTransform();
-    QMutableEventPoint &point = QMutableEventPoint::from(hoverEvent.point(0));
-    point.setScenePosition(scenePos);
-    point.setGlobalPosition(transformToGlobal.map(scenePos));
-    point.setGlobalLastPosition(transformToGlobal.map(lastScenePos));
+    QEventPoint &point = hoverEvent.point(0);
+    QMutableEventPoint::setScenePosition(point, scenePos);
+    QMutableEventPoint::setGlobalLastPosition(point, transformToGlobal.map(lastScenePos));
 
     hasFiltered.clear();
     if (sendFilteredMouseEvent(&hoverEvent, item, item->parentItem()))
@@ -1125,7 +1125,7 @@ bool QQuickDeliveryAgentPrivate::deliverHoverEventToItem(
 
     if (clearHover) {
         // Note: a leave should never stop propagation
-        QHoverEvent hoverEvent(QEvent::HoverLeave, scenePos, lastScenePos, modifiers);
+        QHoverEvent hoverEvent(QEvent::HoverLeave, scenePos, globalPos, lastScenePos, modifiers);
         hoverEvent.setTimestamp(timestamp);
 
         for (QQuickPointerHandler *h : itemPrivate->extra->pointerHandlers) {
@@ -1146,6 +1146,11 @@ bool QQuickDeliveryAgentPrivate::deliverHoverEventToItem(
                     // Mark the whole item as updated, even if only the handler is
                     // actually in a hovered state (because of HoverHandler.margins)
                     hoverItems[item] = currentHoverId;
+                    if (hh->isBlocking()) {
+                        qCDebug(lcHoverTrace) << "skipping rest of hover delivery due to blocking" << hh;
+                        accepted = true;
+                        break;
+                    }
                 }
             }
         }
@@ -1267,8 +1272,8 @@ bool QQuickDeliveryAgentPrivate::allUpdatedPointsAccepted(const QPointerEvent *e
 void QQuickDeliveryAgentPrivate::localizePointerEvent(QPointerEvent *ev, const QQuickItem *dest)
 {
     for (int i = 0; i < ev->pointCount(); ++i) {
-        auto &point = QMutableEventPoint::from(ev->point(i));
-        QMutableEventPoint::from(point).setPosition(dest->mapFromScene(point.scenePosition()));
+        auto &point = ev->point(i);
+        QMutableEventPoint::setPosition(point, dest->mapFromScene(point.scenePosition()));
         qCDebug(lcPtrLoc) << ev->type() << "@" << point.scenePosition() << "to"
                           << dest << "@" << dest->mapToScene(QPointF()) << "->" << point;
     }
@@ -1399,7 +1404,7 @@ bool QQuickDeliveryAgentPrivate::compressTouchEvent(QTouchEvent *event)
         delayedTouch->setTimestamp(event->timestamp());
         for (qsizetype i = 0; i < delayedTouch->pointCount(); ++i) {
             auto &tp = delayedTouch->point(i);
-            QMutableEventPoint::from(tp).detach();
+            QMutableEventPoint::detach(tp);
         }
         ++compressedTouchCount;
         qCDebug(lcTouchCmprs) << "delayed" << compressedTouchCount << delayedTouch.data();
@@ -1427,7 +1432,7 @@ bool QQuickDeliveryAgentPrivate::compressTouchEvent(QTouchEvent *event)
             }
 
             if (tpDelayed.state() == QEventPoint::State::Updated && tp.state() == QEventPoint::State::Stationary)
-                QMutableEventPoint::from(tpts[i]).setState(QEventPoint::State::Updated);
+                QMutableEventPoint::setState(tpts[i], QEventPoint::State::Updated);
         }
 
         // matching touch event? then give delayedTouch a merged set of touchpoints
@@ -1438,7 +1443,7 @@ bool QQuickDeliveryAgentPrivate::compressTouchEvent(QTouchEvent *event)
             delayedTouch->setTimestamp(event->timestamp());
             for (qsizetype i = 0; i < delayedTouch->pointCount(); ++i) {
                 auto &tp = delayedTouch->point(i);
-                QMutableEventPoint::from(tp).detach();
+                QMutableEventPoint::detach(tp);
             }
             ++compressedTouchCount;
             qCDebug(lcTouchCmprs) << "coalesced" << compressedTouchCount << delayedTouch.data();
@@ -1713,10 +1718,10 @@ void QQuickDeliveryAgentPrivate::deliverPointerEvent(QPointerEvent *event)
     if (sceneTransform) {
         originalScenePositions.resize(event->pointCount());
         for (int i = 0; i < event->pointCount(); ++i) {
-            auto &mut = QMutableEventPoint::from(event->point(i));
-            originalScenePositions[i] = mut.scenePosition();
-            mut.setScenePosition(sceneTransform->map(mut.scenePosition()));
-            qCDebug(lcPtrLoc) << q << event->type() << mut.id() << "transformed scene pos" << mut.scenePosition();
+            auto &pt = event->point(i);
+            originalScenePositions[i] = pt.scenePosition();
+            QMutableEventPoint::setScenePosition(pt, sceneTransform->map(pt.scenePosition()));
+            qCDebug(lcPtrLoc) << q << event->type() << pt.id() << "transformed scene pos" << pt.scenePosition();
         }
     } else if (isSubsceneAgent) {
         qCDebug(lcPtrLoc) << q << event->type() << "no scene transform set";
@@ -1748,7 +1753,7 @@ void QQuickDeliveryAgentPrivate::deliverPointerEvent(QPointerEvent *event)
     eventsInDelivery.pop();
     if (sceneTransform) {
         for (int i = 0; i < event->pointCount(); ++i)
-            QMutableEventPoint::from(event->point(i)).setScenePosition(originalScenePositions.at(i));
+            QMutableEventPoint::setScenePosition(event->point(i), originalScenePositions.at(i));
     }
     --pointerEventRecursionGuard;
     lastUngrabbed = nullptr;

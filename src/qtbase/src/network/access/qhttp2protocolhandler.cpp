@@ -1148,10 +1148,10 @@ void QHttp2ProtocolHandler::updateStream(Stream &stream, const HPack::HttpHeader
             statusCode = value.left(3).toInt();
             httpReply->setStatusCode(statusCode);
             m_channel->lastStatus = statusCode; // Mostly useless for http/2, needed for auth
-            httpReplyPrivate->reasonPhrase = QString::fromLatin1(value.mid(4));
+            httpReply->setReasonPhrase(QString::fromLatin1(value.mid(4)));
         } else if (name == ":version") {
-            httpReplyPrivate->majorVersion = value.at(5) - '0';
-            httpReplyPrivate->minorVersion = value.at(7) - '0';
+            httpReply->setMajorVersion(value.at(5) - '0');
+            httpReply->setMinorVersion(value.at(7) - '0');
         } else if (name == "content-length") {
             bool ok = false;
             const qlonglong length = value.toLongLong(&ok);
@@ -1161,7 +1161,7 @@ void QHttp2ProtocolHandler::updateStream(Stream &stream, const HPack::HttpHeader
             QByteArray binder(", ");
             if (name == "set-cookie")
                 binder = "\n";
-            httpReplyPrivate->fields.append(qMakePair(name, value.replace('\0', binder)));
+            httpReply->appendHeaderField(name, value.replace('\0', binder));
         }
     }
 
@@ -1237,13 +1237,8 @@ void QHttp2ProtocolHandler::updateStream(Stream &stream, const HPack::HttpHeader
             httpReply->setRedirectUrl(result.redirectUrl);
     }
 
-    if (httpReplyPrivate->isCompressed() && httpRequest.d->autoDecompress) {
+    if (httpReplyPrivate->isCompressed() && httpRequest.d->autoDecompress)
         httpReplyPrivate->removeAutoDecompressHeader();
-        httpReplyPrivate->decompressHelper.setEncoding(
-                httpReplyPrivate->headerField("content-encoding"));
-        httpReplyPrivate->decompressHelper.setDecompressedSafetyCheckThreshold(
-                httpReplyPrivate->request.minimumArchiveBombSize());
-    }
 
     if (QHttpNetworkReply::isHttpRedirect(statusCode)) {
         // Note: This status code can trigger uploadByteDevice->reset() in
@@ -1280,32 +1275,12 @@ void QHttp2ProtocolHandler::updateStream(Stream &stream, const Frame &frame,
 
     if (const auto length = frame.dataSize()) {
         const char *data = reinterpret_cast<const char *>(frame.dataBegin());
-        auto &httpRequest = stream.request();
         auto replyPrivate = httpReply->d_func();
 
         replyPrivate->totalProgress += length;
 
         const QByteArray wrapped(data, length);
-        if (httpRequest.d->autoDecompress && replyPrivate->isCompressed()) {
-            Q_ASSERT(replyPrivate->decompressHelper.isValid());
-
-            replyPrivate->decompressHelper.feed(wrapped);
-            while (replyPrivate->decompressHelper.hasData()) {
-                QByteArray output(4 * 1024, Qt::Uninitialized);
-                qint64 read = replyPrivate->decompressHelper.read(output.data(), output.size());
-                if (read > 0) {
-                    output.resize(read);
-                    replyPrivate->responseData.append(std::move(output));
-                } else if (read < 0) {
-                    finishStreamWithError(
-                            stream, QNetworkReply::ProtocolFailure,
-                            QCoreApplication::translate("QHttp", "Data corrupted"));
-                    return;
-                }
-            }
-        } else {
-            replyPrivate->responseData.append(wrapped);
-        }
+        replyPrivate->responseData.append(wrapped);
 
         if (replyPrivate->shouldEmitSignals()) {
             if (connectionType == Qt::DirectConnection) {
@@ -1401,6 +1376,8 @@ quint32 QHttp2ProtocolHandler::createNewStream(const HttpMessagePair &message, b
             streamIDs.insert(src, newStreamID);
         }
     }
+
+    QMetaObject::invokeMethod(reply, "requestSent", Qt::QueuedConnection);
 
     activeStreams.insert(newStreamID, newStream);
 

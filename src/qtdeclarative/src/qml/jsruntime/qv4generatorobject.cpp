@@ -104,7 +104,8 @@ ReturnedValue GeneratorFunction::virtualCall(const FunctionObject *f, const Valu
     // We need to set up a separate JSFrame for the generator, as it's being re-entered
     Heap::GeneratorObject *gp = g->d();
     gp->values.set(engine, engine->newArrayObject(argc));
-    gp->jsFrame.set(engine, engine->newArrayObject(CppStackFrame::requiredJSStackFrameSize(function)));
+    gp->jsFrame.set(engine, engine->newArrayObject(
+                        JSTypesStackFrame::requiredJSStackFrameSize(function)));
 
     // copy original arguments
     for (int i = 0; i < argc; i++)
@@ -188,7 +189,7 @@ ReturnedValue GeneratorPrototype::method_return(const FunctionObject *f, const V
     // a yield called with return()
     engine->throwError(Value::emptyValue());
 
-    return g->resume(engine, argc ? argv[0]: Value::undefinedValue());
+    return g->resume(engine, argc ? argv[0] : Value::undefinedValue());
 }
 
 ReturnedValue GeneratorPrototype::method_throw(const FunctionObject *f, const Value *thisObject, const Value *argv, int argc)
@@ -200,7 +201,7 @@ ReturnedValue GeneratorPrototype::method_throw(const FunctionObject *f, const Va
 
     Heap::GeneratorObject *gp = g->d();
 
-    engine->throwError(argc ? argv[0]: Value::undefinedValue());
+    engine->throwError(argc ? argv[0] : Value::undefinedValue());
 
     if (gp->state == GeneratorState::SuspendedStart || gp->state == GeneratorState::Completed) {
         gp->state = GeneratorState::Completed;

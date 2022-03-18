@@ -30,6 +30,7 @@
 #undef QT_NO_CAST_FROM_ASCII
 #undef QT_NO_CAST_TO_ASCII
 #undef QT_ASCII_CAST_WARNINGS
+#define QT_USE_QSTRINGBUILDER
 
 #include <QChar>
 #include <QLatin1String>
@@ -121,10 +122,55 @@ static QByteArray rowName(const QByteArray &data)
     return result;
 }
 
+#ifdef __cpp_char8_t
+#  define IF_CHAR8T(x) do { x; } while (false)
+#else
+#  define IF_CHAR8T(x) QSKIP("This test requires C++20 char8_t support enabled in the compiler.")
+#endif
+
 class tst_QStringApiSymmetry : public QObject
 {
     Q_OBJECT
 
+    //
+    // Overload set checks
+    //
+
+private:
+    template <typename T>
+    void overload();
+
+private Q_SLOTS:
+    void overload_char() { overload<char>(); }
+    void overload_QChar() { overload<QChar>(); }
+    void overload_char16_t() { overload<char16_t>(); }
+    void overload_QString() { overload<QString>(); }
+    void overload_QStringView() { overload<QStringView>(); }
+    void overload_QUtf8StringView() { overload<QUtf8StringView>(); }
+    void overload_QAnyStringView() { overload<QAnyStringView>(); }
+    void overload_QLatin1String() { overload<QLatin1String>(); }
+    void overload_QByteArray() { overload<QByteArray>(); }
+    void overload_const_char_star() { overload<const char*>(); }
+    void overload_const_char8_t_star() { IF_CHAR8T(overload<const char8_t*>()); }
+    void overload_const_char16_t_star() { overload<const char16_t*>(); }
+    void overload_char_array() { overload<char[10]>(); }
+    void overload_char8_t_array() { IF_CHAR8T(overload<char8_t[10]>()); }
+    void overload_char16_t_array() { overload<char16_t[10]>(); }
+    void overload_QChar_array() { overload<QChar[10]>(); }
+    void overload_std_string() { overload<std::string>(); }
+    void overload_std_u8string() { IF_CHAR8T(overload<std::u8string>()); }
+    void overload_std_u16string() { overload<std::u16string>(); }
+    void overload_QVarLengthArray_char() { overload<QVarLengthArray<char, 123>>(); }
+    void overload_QVarLengthArray_char8_t() { IF_CHAR8T((overload<QVarLengthArray<char, 321>>())); }
+    void overload_QVarLengthArray_char16_t() { overload<QVarLengthArray<char, 456>>(); }
+    void overload_QVarLengthArray_QChar() { overload<QVarLengthArray<QChar, 1023>>(); }
+    void overload_vector_char() { overload<std::vector<char>>(); }
+    void overload_vector_char8_t() { IF_CHAR8T(overload<std::vector<char8_t>>()); }
+    void overload_vector_char16_t() { overload<std::vector<char16_t>>(); }
+    void overload_vector_QChar() { overload<std::vector<QChar>>(); }
+
+    void overload_special();
+private:
     //
     // Mixed UTF-16, UTF-8, Latin-1 checks:
     //
@@ -337,6 +383,8 @@ private Q_SLOTS:
     void member_compare_QLatin1String_QChar() { member_compare_impl<QLatin1String, QChar>(); }
     void member_compare_QLatin1String_char16_t_data() { member_compare_data(false); }
     void member_compare_QLatin1String_char16_t() { member_compare_impl<QLatin1String, char16_t>(); }
+    void member_compare_QLatin1String_QLatin1Char_data() { member_compare_data(false); }
+    void member_compare_QLatin1String_QLatin1Char() { member_compare_impl<QLatin1String, QLatin1Char>(); }
     void member_compare_QLatin1String_QString_data() { member_compare_data(); }
     void member_compare_QLatin1String_QString() { member_compare_impl<QLatin1String, QString>(); }
     void member_compare_QLatin1String_QStringView_data() { member_compare_data(); }
@@ -404,6 +452,8 @@ private Q_SLOTS:
     void startsWith_QLatin1String_QChar() { startsWith_impl<QLatin1String, QChar>(); }
     void startsWith_QLatin1String_char16_t_data() { startsWith_data(false); }
     void startsWith_QLatin1String_char16_t() { startsWith_impl<QLatin1String, char16_t>(); }
+    void startsWith_QLatin1String_QLatin1Char_data() { startsWith_data(false); }
+    void startsWith_QLatin1String_QLatin1Char() { startsWith_impl<QLatin1String, QLatin1Char>(); }
 
     void endsWith_QString_QString_data() { endsWith_data(); }
     void endsWith_QString_QString() { endsWith_impl<QString, QString>(); }
@@ -437,6 +487,8 @@ private Q_SLOTS:
     void endsWith_QLatin1String_QChar() { endsWith_impl<QLatin1String, QChar>(); }
     void endsWith_QLatin1String_char16_t_data() { endsWith_data(false); }
     void endsWith_QLatin1String_char16_t() { endsWith_impl<QLatin1String, char16_t>(); }
+    void endsWith_QLatin1String_QLatin1Char_data() { endsWith_data(false); }
+    void endsWith_QLatin1String_QLatin1Char() { endsWith_impl<QLatin1String, QLatin1Char>(); }
 
 private:
     void split_data(bool rhsHasVariableLength = true);
@@ -505,6 +557,8 @@ private Q_SLOTS:
     void tok_QLatin1String_QChar() { tok_impl<QLatin1String, QChar>(); }
     void tok_QLatin1String_char16_t_data() { tok_data(false); }
     void tok_QLatin1String_char16_t() { tok_impl<QLatin1String, char16_t>(); }
+    void tok_QLatin1String_QLatin1Char_data() { tok_data(false); }
+    void tok_QLatin1String_QLatin1Char() { tok_impl<QLatin1String, QLatin1Char>(); }
 
     void tok_const_char16_t_star_QString_data() { tok_data(); }
     void tok_const_char16_t_star_QString() { tok_impl<const char16_t*, QString>(); }
@@ -649,7 +703,7 @@ private Q_SLOTS:
     void trim_trimmed_QLatin1String_data() { trimmed_data(); }
     void trim_trimmed_QLatin1String() { trimmed_impl<QLatin1String>(); }
     void trim_trimmed_QByteArray_data() { trimmed_data(); }
-    void trim_trimmed_QByteArray() { /*trimmed_impl<QByteArray>();*/ } // TODO
+    void trim_trimmed_QByteArray() { trimmed_impl<QByteArray>(); }
 
 private:
     void toNumber_data();
@@ -741,6 +795,8 @@ private Q_SLOTS:
     void indexOf_QLatin1String_QChar() { indexOf_impl<QLatin1String, QChar>(); }
     void indexOf_QLatin1String_char16_t_data() { indexOf_data(false); }
     void indexOf_QLatin1String_char16_t() { indexOf_impl<QLatin1String, char16_t>(); }
+    void indexOf_QLatin1String_QLatin1Char_data() { indexOf_data(false); }
+    void indexOf_QLatin1String_QLatin1Char() { indexOf_impl<QLatin1String, QLatin1Char>(); }
 
     void indexOf_QStringView_QString_data() { indexOf_data(); }
     void indexOf_QStringView_QString() { indexOf_impl<QStringView, QString>(); }
@@ -780,6 +836,8 @@ private Q_SLOTS:
     void contains_QLatin1String_QChar() { contains_impl<QLatin1String, QChar>(); }
     void contains_QLatin1String_char16_t_data() { contains_data(false); }
     void contains_QLatin1String_char16_t() { contains_impl<QLatin1String, char16_t>(); }
+    void contains_QLatin1String_QLatin1Char_data() { contains_data(false); }
+    void contains_QLatin1String_QLatin1Char() { contains_impl<QLatin1String, QLatin1Char>(); }
 
     void contains_QStringView_QString_data() { contains_data(); }
     void contains_QStringView_QString() { contains_impl<QStringView, QString>(); }
@@ -819,6 +877,8 @@ private Q_SLOTS:
     void lastIndexOf_QLatin1String_QChar() { lastIndexOf_impl<QLatin1String, QChar>(); }
     void lastIndexOf_QLatin1String_char16_t_data() { lastIndexOf_data(false); }
     void lastIndexOf_QLatin1String_char16_t() { lastIndexOf_impl<QLatin1String, char16_t>(); }
+    void lastIndexOf_QLatin1String_QLatin1Char_data() { lastIndexOf_data(false); }
+    void lastIndexOf_QLatin1String_QLatin1Char() { lastIndexOf_impl<QLatin1String, QLatin1Char>(); }
 
     void lastIndexOf_QStringView_QString_data() { lastIndexOf_data(); }
     void lastIndexOf_QStringView_QString() { lastIndexOf_impl<QStringView, QString>(); }
@@ -840,7 +900,158 @@ private Q_SLOTS:
     void indexOf_regexp_QString() { indexOf_contains_lastIndexOf_count_regexp_impl<QString>(); }
     void indexOf_regexp_QStringView_data() { indexOf_contains_lastIndexOf_count_regexp_data(); }
     void indexOf_regexp_QStringView() { indexOf_contains_lastIndexOf_count_regexp_impl<QStringView>(); }
+
+private:
+    void isValidUtf8_data();
+    template<typename String>
+    void isValidUtf8_impl() const;
+
+private Q_SLOTS:
+    void isValidUtf8_QByteArray_data() { isValidUtf8_data(); }
+    void isValidUtf8_QByteArray() { isValidUtf8_impl<QByteArray>(); }
+    void isValidUtf8_QByteArrayView_data() { isValidUtf8_data(); }
+    void isValidUtf8_QByteArrayView() { isValidUtf8_impl<QByteArrayView>(); }
+    void isValidUtf8_QUtf8StringView_data() { isValidUtf8_data(); }
+    void isValidUtf8_QUtf8StringView() { isValidUtf8_impl<QUtf8StringView>(); }
 };
+
+namespace help {
+
+template <typename T> constexpr qsizetype size(const T &s) { return qsizetype(s.size()); }
+
+template <> constexpr qsizetype size(const QChar&) { return 1; }
+template <> constexpr qsizetype size(const QLatin1Char&) { return 1; }
+template <> constexpr qsizetype size(const char16_t&) { return 1; }
+} // namespace help
+
+namespace {
+
+auto overload_s_a(const QString &s) { return s; }
+Q_WEAK_OVERLOAD
+auto overload_s_a(QAnyStringView s) { return s; }
+
+auto overload_sr_a(QString &&s) { return std::move(s); }
+Q_WEAK_OVERLOAD
+auto overload_sr_a(QAnyStringView s) { return s; }
+
+Q_WEAK_OVERLOAD
+auto overload_a_s(const QString &s) { return s; }
+auto overload_a_s(QAnyStringView s) { return s; }
+
+Q_WEAK_OVERLOAD
+auto overload_a_sr(QString &&s) { return std::move(s); }
+auto overload_a_sr(QAnyStringView s) { return s; }
+
+auto overload_s_v(const QString &s) { return s; }
+auto overload_s_v(QStringView s) { return s; }
+
+auto overload_sr_v(QString &&s) { return std::move(s); }
+auto overload_sr_v(QStringView s) { return s; }
+
+} // unnamed namespace
+
+template<typename T>
+void tst_QStringApiSymmetry::overload()
+{
+    // compile-only test:
+    //
+    // check the common overload sets defined above to be free of ambiguities
+    // for arguments of type T
+
+    using CT = const T;
+
+    T t = {};
+    CT ct = {};
+
+    overload_s_a(t);
+    overload_s_a(ct);
+    if constexpr (!std::is_array_v<T>) {
+        overload_s_a(T());
+        overload_s_a(CT());
+    }
+
+    overload_sr_a(t);
+    overload_sr_a(ct);
+    if constexpr (!std::is_array_v<T>) {
+        overload_sr_a(T());
+        overload_sr_a(CT());
+    }
+
+    overload_a_s(t);
+    overload_a_s(ct);
+    if constexpr (!std::is_array_v<T>) {
+        overload_a_s(T());
+        overload_a_s(CT());
+    }
+
+    overload_a_sr(t);
+    overload_a_sr(ct);
+    if constexpr (!std::is_array_v<T>) {
+        overload_a_sr(T());
+        overload_a_sr(CT());
+    }
+
+    if constexpr (std::is_convertible_v<T, QStringView> || std::is_convertible_v<T, QString>) {
+        overload_s_v(t);
+        overload_s_v(ct);
+        if constexpr (!std::is_array_v<T>) {
+            overload_s_v(T());
+            overload_s_v(CT());
+        }
+
+        overload_sr_v(t);
+        overload_sr_v(ct);
+        if constexpr (!std::is_array_v<T>) {
+            overload_sr_v(T());
+            overload_sr_v(CT());
+        }
+    }
+}
+
+void tst_QStringApiSymmetry::overload_special()
+{
+    auto check = [](auto result, auto expected) {
+        static_assert(std::is_same_v<decltype(result), decltype(expected)>);
+    };
+
+    {
+#define rvalue QStringLiteral("hello")
+        auto lvalue = rvalue;
+        auto builder = [&] { return lvalue % ""; };
+
+        // check that QString/Builder go to the QString overload in a_s(r):
+
+        check(overload_a_s(lvalue), QString());
+        check(overload_a_s(rvalue), QString());
+        check(overload_a_s(builder()), QAnyStringView()); // weak overloads must match exactly
+        check(overload_a_s(QString(builder())), QString());
+
+        check(overload_a_sr(lvalue), QAnyStringView()); // lvalue can't bind to rvalue ref
+        check(overload_a_sr(rvalue), QString());
+        check(overload_a_sr(builder()), QAnyStringView());
+        check(overload_a_sr(QString(builder())), QString());
+
+        // check that everything goes to the QString overload in s(r)_a:
+        // exception: u""
+
+        check(overload_s_a(lvalue), QString());
+        check(overload_s_a(rvalue), QString());
+        check(overload_s_a(builder()), QString());
+        check(overload_s_a(""), QString());
+        check(overload_s_a(u""), QAnyStringView());
+        check(overload_s_a(u8""), QString());
+        check(overload_s_a(QLatin1String("")), QString());
+
+        check(overload_sr_a(lvalue), QAnyStringView()); // lvalues don't bind to rvalue refs
+        check(overload_sr_a(rvalue), QString());
+        check(overload_sr_a(builder()), QString());
+        check(overload_sr_a(""), QString());
+        check(overload_sr_a(u""), QAnyStringView());
+        check(overload_sr_a(u8""), QString());
+        check(overload_sr_a(QLatin1String("")), QString());
+#undef rvalue
+    }
+}
 
 void tst_QStringApiSymmetry::compare_data(bool hasConceptOfNullAndEmpty)
 {
@@ -907,6 +1118,7 @@ template <class Str> Str  make(QStringView sf, QLatin1String l1, const QByteArra
     /*end*/
 MAKE(QChar)                  { return sv.isEmpty() ? QChar() : sv.at(0); }
 MAKE(char16_t)               { return sv.isEmpty() ? char16_t() : char16_t{sv.at(0).unicode()}; }
+MAKE(QLatin1Char)            { return l1.isEmpty() ? QLatin1Char('\0') : l1.at(0); }
 MAKE(QString)                { return sv.toString(); }
 MAKE(QStringView)            { return sv; }
 MAKE(QLatin1String)          { return l1; }
@@ -920,16 +1132,14 @@ MAKE(QAnyStringViewUsingU8)  { return {QAnyStringView{u8}}; }
 MAKE(QAnyStringViewUsingU16) { return {QAnyStringView{sv}}; }
 #undef MAKE
 
-template <typename> struct is_utf8_encoded              : std::false_type {};
-template <>         struct is_utf8_encoded<const char*> : std::true_type {};
-template <>         struct is_utf8_encoded<QByteArray>  : std::true_type {};
-template <>         struct is_utf8_encoded<QUtf8StringView> : std::true_type {};
-
-template <typename> struct is_latin1_encoded                : std::false_type {};
-template <>         struct is_latin1_encoded<QLatin1String> : std::true_type {};
+// Some types have ASCII-only case-insensitive compare, but are handled as containing
+// UTF-8 when implicitly converted to QString.
+template <typename> constexpr bool is_bytearray_like_v = false;
+template <> constexpr bool is_bytearray_like_v<const char *> = true;
+template <> constexpr bool is_bytearray_like_v<QByteArray> = true;
 
 template <typename LHS, typename RHS>
-constexpr bool has_nothrow_member_compare_v = is_utf8_encoded<LHS>::value == is_utf8_encoded<RHS>::value;
+constexpr bool has_nothrow_member_compare_v = is_bytearray_like_v<LHS> == is_bytearray_like_v<RHS>;
 
 template <typename LHS, typename RHS>
 void tst_QStringApiSymmetry::compare_impl() const
@@ -998,11 +1208,11 @@ void tst_QStringApiSymmetry::member_compare_impl() const
 
     QCOMPARE(sign(lhs.compare(rhs)),                      caseSensitiveCompareResult);
     QCOMPARE(sign(lhs.compare(rhs, Qt::CaseSensitive)),   caseSensitiveCompareResult);
-    if (is_utf8_encoded<LHS>::value && is_utf8_encoded<RHS>::value &&
+    if (is_bytearray_like_v<LHS> && is_bytearray_like_v<RHS> &&
             caseSensitiveCompareResult != caseInsensitiveCompareResult &&
             (!QtPrivate::isAscii(lhsUnicode) || !QtPrivate::isAscii(rhsUnicode)))
     {
-        QEXPECT_FAIL("", "Qt is missing a case-insensitive UTF-8/UTF-8 comparator", Continue);
+        QEXPECT_FAIL("", "The types don't support non-ASCII case-insensitive comparison", Continue);
     }
     QCOMPARE(sign(lhs.compare(rhs, Qt::CaseInsensitive)), caseInsensitiveCompareResult);
 }
@@ -1377,7 +1587,6 @@ void tst_QStringApiSymmetry::tok_impl() const
         QCOMPARE(toQStringList(tok), resultCS);
     }
 
-#ifdef __cpp_deduction_guides
     QCOMPARE(toQStringList(QStringTokenizer{haystack, needle}), resultCS);
     QCOMPARE(toQStringList(QStringTokenizer{haystack, needle, Qt::KeepEmptyParts, Qt::CaseSensitive}), resultCS);
     QCOMPARE(toQStringList(QStringTokenizer{haystack, needle, Qt::CaseInsensitive, Qt::KeepEmptyParts}), resultCIS);
@@ -1390,7 +1599,6 @@ void tst_QStringApiSymmetry::tok_impl() const
         // yet `tok` should have kept a copy alive as needed:
         QCOMPARE(toQStringList(tok), resultCS);
     }
-#endif // __cpp_deduction_guides
 
     if constexpr (has_tokenize_method_v<Haystack>) {
         QCOMPARE(toQStringList(haystack.tokenize(needle)), resultCS);
@@ -1950,6 +2158,7 @@ void tst_QStringApiSymmetry::toNumber_data()
     QTest::addRow("-32768") << QString::fromUtf8("-32768") << qint64(-32768) << true;
     QTest::addRow("100x") << QString::fromUtf8("100x") << qint64(0) << false;
     QTest::addRow("-100x") << QString::fromUtf8("-100x") << qint64(0) << false;
+    QTest::addRow("-min64") << QString::fromUtf8("--9223372036854775808") << qint64(0) << false;
 }
 
 template<typename T>
@@ -2059,7 +2268,7 @@ void tst_QStringApiSymmetry::count_impl()
 
     const auto nutf8 = needle.toUtf8();
     const auto nl1s  = needle.toLatin1();
-    const auto nl1   = nl1s.isNull() ? QLatin1String() : QLatin1String(l1s);
+    const auto nl1   = nl1s.isNull() ? QLatin1String() : QLatin1String(nl1s);
 
     const auto nref = needle.isNull() ? QStringView() : QStringView(needle);
     const auto ns = make<String>(nref, nl1, nutf8);
@@ -2253,6 +2462,9 @@ void tst_QStringApiSymmetry::indexOf_data(bool rhsHasVariableLength)
                                      << a << QLatin1String("a") << zeroPos << minus1Pos << minus1Pos;
     QTest::addRow("haystack: null, needle: a") << null << QLatin1String()
                                      << a << QLatin1String("a") << zeroPos << minus1Pos << minus1Pos;
+    QTest::addRow("haystack: anything, needle: a, large negative offset")
+            << "anything" << QLatin1String("anything") << a << QLatin1String("a") << qsizetype(-500)
+            << minus1Pos << minus1Pos;
 
 #define ROW(h, n, st, cs, cis) \
     QTest::addRow("haystack: %s, needle: %s", #h, #n) << h << QLatin1String(#h) \
@@ -2504,6 +2716,13 @@ void tst_QStringApiSymmetry::lastIndexOf_impl() const
     QCOMPARE(haystack.lastIndexOf(needle, startpos, Qt::CaseSensitive), size_type(resultCS));
     QCOMPARE(haystack.lastIndexOf(needle, startpos, Qt::CaseInsensitive), size_type(resultCIS));
 
+    if (startpos == haystack.size() ||
+        (startpos == -1 && help::size(needle) > 0)) { // -1 skips past-the-end-match w/empty needle
+        // check that calls without an explicit 'from' argument work, too:
+        QCOMPARE(haystack.lastIndexOf(needle), size_type(resultCS));
+        QCOMPARE(haystack.lastIndexOf(needle, Qt::CaseSensitive), size_type(resultCS));
+        QCOMPARE(haystack.lastIndexOf(needle, Qt::CaseInsensitive), size_type(resultCIS));
+    }
 }
 
 void tst_QStringApiSymmetry::indexOf_contains_lastIndexOf_count_regexp_data()
@@ -2731,6 +2950,76 @@ void tst_QStringApiSymmetry::indexOf_contains_lastIndexOf_count_regexp_impl() co
         result = s.lastIndexOf(regexp);
         QCOMPARE(result, lastIndexOf);
     }
+}
+
+void tst_QStringApiSymmetry::isValidUtf8_data()
+{
+    QTest::addColumn<QByteArray>("ba");
+    QTest::addColumn<bool>("valid");
+
+    int row = 0;
+    QTest::addRow("valid-%02d", row++) << QByteArray() << true;
+    QTest::addRow("valid-%02d", row++) << QByteArray("ascii") << true;
+    QTest::addRow("valid-%02d", row++)
+            << QByteArray("\xc2\xa2\xe0\xa4\xb9\xf0\x90\x8d\x88") << true; // U+00A2 U+0939 U+10348
+    QTest::addRow("valid-%02d", row++) << QByteArray("\xf4\x8f\xbf\xbf") << true; // U+10FFFF
+
+    row = 0;
+    QTest::addRow("overlong-%02d", row++) << QByteArray("\xc0\x00") << false;
+    QTest::addRow("overlong-%02d", row++) << QByteArray("\xc1\xff") << false;
+    QTest::addRow("overlong-%02d", row++) << QByteArray("\xe0\x00\x00") << false;
+    QTest::addRow("overlong-%02d", row++) << QByteArray("\xe0\xa0\x7f") << false;
+    QTest::addRow("overlong-%02d", row++) << QByteArray("\xf0\x00\x00\x00") << false;
+    QTest::addRow("overlong-%02d", row++) << QByteArray("\xf0\x90\x80\x7f") << false;
+
+    row = 0;
+    QTest::addRow("short-%02d", row++) << QByteArray("\xc2") << false;
+    QTest::addRow("short-%02d", row++) << QByteArray("x\xc2") << false;
+    QTest::addRow("short-%02d", row++) << QByteArray("x\xc2y") << false;
+    QTest::addRow("short-%02d", row++) << QByteArray("\xc2y") << false;
+    QTest::addRow("short-%02d", row++) << QByteArray("\xe0\xa4") << false;
+    QTest::addRow("short-%02d", row++) << QByteArray("x\xe0\xa4") << false;
+    QTest::addRow("short-%02d", row++) << QByteArray("x\xe0\xa4y") << false;
+    QTest::addRow("short-%02d", row++) << QByteArray("\xe0\xa4y") << false;
+    QTest::addRow("short-%02d", row++) << QByteArray("\xe0") << false;
+    QTest::addRow("short-%02d", row++) << QByteArray("x\xe0") << false;
+    QTest::addRow("short-%02d", row++) << QByteArray("x\xe0y") << false;
+    QTest::addRow("short-%02d", row++) << QByteArray("\xe0y") << false;
+    QTest::addRow("short-%02d", row++) << QByteArray("\xf4\x8f\xbf") << false;
+    QTest::addRow("short-%02d", row++) << QByteArray("x\xf4\x8f\xbf") << false;
+    QTest::addRow("short-%02d", row++) << QByteArray("x\xf4\x8f\xbfy") << false;
+    QTest::addRow("short-%02d", row++) << QByteArray("\xf4\x8f\xbfy") << false;
+    QTest::addRow("short-%02d", row++) << QByteArray("\xf4\x8f") << false;
+    QTest::addRow("short-%02d", row++) << QByteArray("x\xf4\x8f") << false;
+    QTest::addRow("short-%02d", row++) << QByteArray("x\xf4\x8fy") << false;
+    QTest::addRow("short-%02d", row++) << QByteArray("\xf4\x8fy") << false;
+    QTest::addRow("short-%02d", row++) << QByteArray("\xf4") << false;
+    QTest::addRow("short-%02d", row++) << QByteArray("x\xf4") << false;
+    QTest::addRow("short-%02d", row++) << QByteArray("x\xf4y") << false;
+    QTest::addRow("short-%02d", row++) << QByteArray("\xf4y") << false;
+
+    row = 0;
+    QTest::addRow("surrogates-%02d", row++) << QByteArray("\xed\x9f\xc0\xee\x80\x7f") << false;
+    QTest::addRow("surrogates-%02d", row++) << QByteArray("\xed\x9f\xc0") << false;
+    QTest::addRow("surrogates-%02d", row++) << QByteArray("\xee\x80\x7f") << false;
+    QTest::addRow("surrogates-%02d", row++) << QByteArray("\xee\x80\x7f\xed\x9f\xc0") << false;
+
+    row = 0;
+    QTest::addRow("other-%02d", row++) << QByteArray("\xf4\x8f\xbf\xc0") << false;
+    QTest::addRow("other-%02d", row++) << QByteArray("\xf7\x80\x80\x80") << false;
+    QTest::addRow("other-%02d", row++) << QByteArray("\xfd\xbf\xbf\xbf\xbf") << false;
+    QTest::addRow("other-%02d", row++) << QByteArray("\xfe\xbf\xbf\xbf\xbf\xbf") << false;
+    QTest::addRow("other-%02d", row++) << QByteArray("\xff\xbf\xbf\xbf\xbf\xbf\xbf") << false;
+    QTest::addRow("other-%02d", row++) << QByteArray("\x80") << false;
+    QTest::addRow("other-%02d", row++) << QByteArray("\xbf") << false;
+}
+
+template<typename String>
+void tst_QStringApiSymmetry::isValidUtf8_impl() const
+{
+    QFETCH(QByteArray, ba);
+    const String string(ba);
+    QTEST(string.isValidUtf8(), "valid");
 }
 
 QTEST_APPLESS_MAIN(tst_QStringApiSymmetry)

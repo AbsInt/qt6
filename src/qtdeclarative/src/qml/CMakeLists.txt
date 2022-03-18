@@ -158,6 +158,7 @@ qt_internal_add_qml_module(Qml
         jsruntime/qv4dataview.cpp jsruntime/qv4dataview_p.h
         jsruntime/qv4dateobject.cpp jsruntime/qv4dateobject_p.h
         jsruntime/qv4debugging_p.h
+        jsruntime/qv4domerrors.cpp jsruntime/qv4domerrors_p.h
         jsruntime/qv4engine.cpp jsruntime/qv4engine_p.h
         jsruntime/qv4enginebase_p.h
         jsruntime/qv4errorobject.cpp jsruntime/qv4errorobject_p.h
@@ -210,6 +211,7 @@ qt_internal_add_qml_module(Qml
         jsruntime/qv4setiterator.cpp jsruntime/qv4setiterator_p.h
         jsruntime/qv4setobject.cpp jsruntime/qv4setobject_p.h
         jsruntime/qv4sparsearray.cpp jsruntime/qv4sparsearray_p.h
+        jsruntime/qv4sqlerrors.cpp jsruntime/qv4sqlerrors_p.h
         jsruntime/qv4stackframe.cpp jsruntime/qv4stackframe_p.h
         jsruntime/qv4string.cpp jsruntime/qv4string_p.h
         jsruntime/qv4stringiterator.cpp jsruntime/qv4stringiterator_p.h
@@ -228,14 +230,14 @@ qt_internal_add_qml_module(Qml
         parser/qqmljsast.cpp parser/qqmljsast_p.h
         parser/qqmljsastfwd_p.h
         parser/qqmljsastvisitor.cpp parser/qqmljsastvisitor_p.h
-        parser/qqmljsengine_p.cpp parser/qqmljsengine_p.h
+        parser/qqmljsengine_p.h
         parser/qqmljsglobal_p.h
         parser/qqmljskeywords_p.h
         parser/qqmljslexer.cpp parser/qqmljslexer_p.h
         qml/ftw/qdoubleendedlist_p.h
         qml/ftw/qfieldlist_p.h
         qml/ftw/qfinitestack_p.h
-        qml/ftw/qflagpointer_p.h
+        qml/ftw/qbipointer_p.h
         qml/ftw/qhashedstring.cpp qml/ftw/qhashedstring_p.h
         qml/ftw/qintrusivelist.cpp qml/ftw/qintrusivelist_p.h
         qml/ftw/qlazilyallocated_p.h
@@ -255,6 +257,7 @@ qt_internal_add_qml_module(Qml
         qml/qqmlapplicationengine.cpp qml/qqmlapplicationengine.h qml/qqmlapplicationengine_p.h
         qml/qqmlbinding.cpp qml/qqmlbinding_p.h
         qml/qqmlboundsignal.cpp qml/qqmlboundsignal_p.h
+        qml/qqmlbuiltinfunctions.cpp qml/qqmlbuiltinfunctions_p.h
         qml/qqmlcomponent.cpp qml/qqmlcomponent.h qml/qqmlcomponent_p.h
         qml/qqmlcomponentattached_p.h
         qml/qqmlcontext.cpp qml/qqmlcontext.h qml/qqmlcontext_p.h
@@ -309,6 +312,7 @@ qt_internal_add_qml_module(Qml
         qml/qqmlpropertyresolver.cpp qml/qqmlpropertyresolver_p.h
         qml/qqmlpropertyvalidator.cpp qml/qqmlpropertyvalidator_p.h
         qml/qqmlpropertyvalueinterceptor.cpp qml/qqmlpropertyvalueinterceptor_p.h
+        qml/qqmlfinalizer.cpp qml/qqmlfinalizer_p.h
         qml/qqmlpropertyvaluesource.cpp qml/qqmlpropertyvaluesource.h
         qml/qqmlproxymetaobject.cpp qml/qqmlproxymetaobject_p.h
         qml/qqmlscriptblob.cpp qml/qqmlscriptblob_p.h
@@ -330,12 +334,9 @@ qt_internal_add_qml_module(Qml
         qml/qqmltypewrapper.cpp qml/qqmltypewrapper_p.h
         qml/qqmlvaluetype.cpp qml/qqmlvaluetype_p.h
         qml/qqmlvaluetypeproxybinding.cpp qml/qqmlvaluetypeproxybinding_p.h
-        qml/qqmlvaluetypewrapper.cpp
+        qml/qqmlvaluetypewrapper.cpp qml/qqmlvaluetypewrapper_p.h
         qml/qqmlvme.cpp qml/qqmlvme_p.h
         qml/qqmlvmemetaobject.cpp qml/qqmlvmemetaobject_p.h
-        qml/v8/qqmlbuiltinfunctions.cpp qml/v8/qqmlbuiltinfunctions_p.h
-        qml/v8/qv4domerrors.cpp qml/v8/qv4domerrors_p.h
-        qml/v8/qv4sqlerrors.cpp qml/v8/qv4sqlerrors_p.h
         qmldirparser/qqmldirparser.cpp qmldirparser/qqmldirparser_p.h
         qmldirparser/qqmlimportresolver.cpp qmldirparser/qqmlimportresolver_p.h
         qtqmlcompilerglobal.h qtqmlcompilerglobal_p.h
@@ -343,6 +344,11 @@ qt_internal_add_qml_module(Qml
         types/qqmlbind.cpp types/qqmlbind_p.h
         types/qqmlconnections.cpp types/qqmlconnections_p.h
         util/qqmlpropertymap.cpp util/qqmlpropertymap.h
+        qmltc/qqmltcobjectcreationhelper_p.h
+        qmltc/supportlibrary/qqmlcppbinding_p.h
+        qmltc/supportlibrary/qqmlcppbinding.cpp
+        qmltc/supportlibrary/qqmlcpponassignment_p.h
+        qmltc/supportlibrary/qqmlcpponassignment.cpp
     DEFINES
         BUILDING_QT__
         ENABLE_ASSEMBLER_WX_EXCLUSIVE=1
@@ -382,18 +388,23 @@ qt_internal_add_qml_module(Qml
         qmldirparser
     LIBRARIES
         Qt::CorePrivate
+        ${FWCoreFoundation}
     PUBLIC_LIBRARIES
         Qt::Core
+        Qt::QmlIntegration
     PRIVATE_MODULE_INTERFACE
         Qt::CorePrivate
     EXTRA_CMAKE_FILES
         "${CMAKE_CURRENT_LIST_DIR}/${INSTALL_CMAKE_NAMESPACE}qmldirTemplate.cmake.in"
         "${CMAKE_CURRENT_LIST_DIR}/${INSTALL_CMAKE_NAMESPACE}QmlPluginTemplate.cpp.in"
         "${CMAKE_CURRENT_LIST_DIR}/${INSTALL_CMAKE_NAMESPACE}QmlFindQmlscInternal.cmake"
+        "${CMAKE_CURRENT_LIST_DIR}/${INSTALL_CMAKE_NAMESPACE}QmlDeploySupport.cmake"
         ${extra_cmake_files}
     EXTRA_CMAKE_INCLUDES
         "${INSTALL_CMAKE_NAMESPACE}QmlFindQmlscInternal.cmake"
         ${extra_cmake_includes}
+    GENERATE_CPP_EXPORTS
+    GENERATE_PRIVATE_CPP_EXPORTS
 )
 
 # Linking to the static qml plugin should also automatically link to the worker script
@@ -574,11 +585,6 @@ qt_internal_extend_target(Qml CONDITION ANDROID
 qt_internal_extend_target(Qml CONDITION hpux-_x_ OR solaris-_x_ OR (QT_FEATURE_clock_gettime AND linux-_x_)
     LIBRARIES
         rt
-)
-
-qt_internal_extend_target(Qml CONDITION QT_FEATURE_qml_itemmodel
-    SOURCES
-        types/qqmlmodelindexvaluetype.cpp types/qqmlmodelindexvaluetype_p.h
 )
 
 qt_internal_extend_target(Qml CONDITION disassembler AND ((TEST_architecture_arch STREQUAL "i386") OR (TEST_architecture_arch STREQUAL "x86_64"))

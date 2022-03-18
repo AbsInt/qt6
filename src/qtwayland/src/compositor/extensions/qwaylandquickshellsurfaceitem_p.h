@@ -53,7 +53,7 @@ QT_BEGIN_NAMESPACE
 class QWaylandShellSurface;
 class QWaylandQuickShellSurfaceItem;
 
-class Q_WAYLAND_COMPOSITOR_EXPORT QWaylandQuickShellSurfaceItemPrivate : public QWaylandQuickItemPrivate
+class Q_WAYLANDCOMPOSITOR_EXPORT QWaylandQuickShellSurfaceItemPrivate : public QWaylandQuickItemPrivate
 {
     Q_DECLARE_PUBLIC(QWaylandQuickShellSurfaceItem)
 public:
@@ -61,13 +61,18 @@ public:
     QWaylandQuickShellSurfaceItem *maybeCreateAutoPopup(QWaylandShellSurface* shellSurface);
     static QWaylandQuickShellSurfaceItemPrivate *get(QWaylandQuickShellSurfaceItem *item) { return item->d_func(); }
 
+    void raise() override;
+    void lower() override;
+
     QWaylandQuickShellIntegration *m_shellIntegration = nullptr;
     QWaylandShellSurface *m_shellSurface = nullptr;
     QQuickItem *m_moveItem = nullptr;
     bool m_autoCreatePopupItems = true;
+    bool staysOnTop = false;
+    bool staysOnBottom = false;
 };
 
-class Q_WAYLAND_COMPOSITOR_EXPORT QWaylandQuickShellEventFilter : public QObject
+class Q_WAYLANDCOMPOSITOR_EXPORT QWaylandQuickShellEventFilter : public QObject
 {
     Q_OBJECT
 public:

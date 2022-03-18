@@ -277,6 +277,8 @@ qt_copy_or_install(FILES
                    cmake/QtWasmHelpers.cmake
                    cmake/QtWrapperScriptHelpers.cmake
                    cmake/QtWriteArgsFile.cmake
+                   cmake/modulecppexports.h.in
+                   cmake/modulecppexports_p.h.in
     DESTINATION "${__GlobalConfig_install_dir}"
 )
 

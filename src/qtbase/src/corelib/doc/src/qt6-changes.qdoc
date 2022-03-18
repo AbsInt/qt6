@@ -526,7 +526,7 @@
 
     \section2 The QMetaType class
 
-    In Qt 6, registration of comparators, and \cQDebug and \QDataStream streaming operators is
+    In Qt 6, registration of comparators, and QDebug and QDataStream streaming operators is
     done automatically. Consequently, \c QMetaType::registerEqualsComparator(),
     \c QMetaType::registerComparators(), \c qRegisterMetaTypeStreamOperators() and
     \c QMetaType::registerDebugStreamOperator() do no longer exist. Calls to those methods
@@ -591,10 +591,16 @@
     is provided to translate glob patterns into a Perl-compatible regular
     expression that can be used for that purpose.
 
-    \oldcode
+    For example, if you have code like
+
+    \code
         QRegExp wildcard("*.txt");
         wildcard.setPatternSyntax(QRegExp::Wildcard);
-    \newcode
+    \endcode
+
+    you can rewrite it as
+
+    \code
         auto wildcard = QRegularExpression(QRegularExpression::wildcardToRegularExpression("*.txt"));
     \endcode
 
@@ -624,7 +630,9 @@
     \c {QRegExp::indexIn} and a growing offset, but can now be easily implemented
     with \l QRegularExpressionMatchIterator or \l {QString::indexOf}.
 
-    \oldcode
+    For example, if you have code like
+
+    \code
         QString subject("the quick fox");
 
         int offset = 0;
@@ -633,7 +641,11 @@
             offset += re.matchedLength();
             // ...
         }
-    \newcode
+    \endcode
+
+    you can rewrite it as
+
+    \code
         QRegularExpression re("(\\w+)");
         QString subject("the quick fox");
 
@@ -662,7 +674,9 @@
     \note \l QRegularExpressionMatchIterator is not capable of performing a
     backwards search.
 
-    \oldcode
+    For example, if you have code like
+
+    \code
         int offset = -1;
         QString subject("Lorem ipsum dolor sit amet, consetetur sadipscing.");
 
@@ -671,7 +685,11 @@
             --offset;
             // ...
         }
-    \newcode
+    \endcode
+
+    you can rewrite it as
+
+    \code
         qsizetype from = -1;
         QString subject("Lorem ipsum dolor sit amet, consetetur sadipscing.");
 

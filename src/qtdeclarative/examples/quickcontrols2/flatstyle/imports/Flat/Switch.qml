@@ -78,7 +78,7 @@ T.Switch {
         border.color: Theme.lightGray
 
         Rectangle {
-            id: rectangle
+            id: nub
 
             width: Theme.baseSize * 2.6
             height: Theme.baseSize * 2.6
@@ -97,14 +97,11 @@ T.Switch {
                 when: control.checked && !control.down
 
                 PropertyChanges {
-                    target: switchHandle
-                    color: Theme.mainColor
-                    border.color: Theme.mainColor
-                }
-
-                PropertyChanges {
-                    target: rectangle
-                    x: parent.width - width
+                    switchHandle {
+                        color: Theme.mainColor
+                        border.color: Theme.mainColor
+                    }
+                    nub.x: switchHandle.width - nub.width
 
                 }
             },
@@ -113,8 +110,7 @@ T.Switch {
                 when: !control.checked && control.down
 
                 PropertyChanges {
-                    target: rectangle
-                    color: Theme.light
+                    nub.color: Theme.light
                 }
 
             },
@@ -124,15 +120,14 @@ T.Switch {
                 when: control.checked && control.down
 
                 PropertyChanges {
-                    target: rectangle
-                    x: parent.width - width
-                    color: Theme.light
-                }
-
-                PropertyChanges {
-                    target: switchHandle
-                    color: Theme.mainColorDarker
-                    border.color: Theme.mainColorDarker
+                    nub {
+                        x: switchHandle.width - nub.width
+                        color: Theme.light
+                    }
+                    switchHandle {
+                        color: Theme.mainColorDarker
+                        border.color: Theme.mainColorDarker
+                    }
                 }
             }
         ]

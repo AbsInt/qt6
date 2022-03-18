@@ -150,6 +150,9 @@ public:
     void placeAboveParent();
     void placeBelowParent();
 
+    virtual void raise();
+    virtual void lower();
+
     static QMutex *mutex;
 
     QScopedPointer<QWaylandView> view;

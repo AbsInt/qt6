@@ -84,7 +84,22 @@ private:
     QBitArray m_ba;
 };
 
-class CppParser {
+struct NamespaceStackItem
+{
+    qsizetype depth = 0; // the depth of CppParser::namespaces
+    int token = 0;       // the token that opened the namespace or class
+};
+
+struct CppParserState
+{
+    NamespaceList namespaces;
+    QStack<NamespaceStackItem> namespaceDepths;
+    NamespaceList functionContext;
+    QString functionContextUnresolved;
+    QString pendingContext;
+};
+
+class CppParser : private CppParserState {
 
 public:
     CppParser(ParseResults *results = 0);
@@ -96,14 +111,6 @@ public:
     const ParseResults *recordResults(bool isHeader);
     void deleteResults() { delete results; }
 
-    struct SavedState {
-        NamespaceList namespaces;
-        QStack<int> namespaceDepths;
-        NamespaceList functionContext;
-        QString functionContextUnresolved;
-        QString pendingContext;
-    };
-
 private:
     struct IfdefState {
         IfdefState() {}
@@ -114,7 +121,7 @@ private:
             elseLine(-1)
         {}
 
-        SavedState state;
+        CppParserState state;
         int bracketDepth, bracketDepth1st;
         int braceDepth, braceDepth1st;
         int parenDepth, parenDepth1st;
@@ -159,8 +166,8 @@ private:
     void processInclude(const QString &file, ConversionData &cd,
                         const QStringList &includeStack, QSet<QString> &inclusions);
 
-    void saveState(SavedState *state);
-    void loadState(const SavedState *state);
+    void saveState(CppParserState *state);
+    void loadState(const CppParserState &state);
 
     static QString stringifyNamespace(int start, const NamespaceList &namespaces);
     static QString stringifyNamespace(const NamespaceList &namespaces)
@@ -192,6 +199,7 @@ private:
     void enterNamespace(NamespaceList *namespaces, const HashString &name);
     void truncateNamespaces(NamespaceList *namespaces, int lenght);
     Namespace *modifyNamespace(NamespaceList *namespaces, bool haveLast = true);
+    bool isInClassDeclaration() const;
 
     // Tokenizer state
     QString yyFileName;
@@ -226,17 +234,12 @@ private:
     QString sourcetext;
     TranslatorMessage::ExtraData extra;
 
-    NamespaceList namespaces;
-    QStack<int> namespaceDepths;
-    NamespaceList functionContext;
-    QString functionContextUnresolved;
     QString prospectiveContext;
-    QString pendingContext;
     ParseResults *results;
     Translator *tor;
     bool directInclude;
 
-    SavedState savedState;
+    CppParserState savedState;
     int yyMinBraceDepth;
     bool inDefine;
 };
@@ -540,7 +543,7 @@ CppParser::TokenType CppParser::getToken()
                             yyBracketDepth = is.bracketDepth1st;
                             yyBraceDepth = is.braceDepth1st;
                             yyParenDepth = is.parenDepth1st;
-                            loadState(&is.state);
+                            loadState(is.state);
                         }
                     }
                     yyCh = getChar();
@@ -712,7 +715,7 @@ CppParser::TokenType CppParser::getToken()
             switch (yyCh) {
             case '\n':
                 if (inDefine) {
-                    loadState(&savedState);
+                    loadState(savedState);
                     prospectiveContext.clear();
                     yyBraceDepth = yyMinBraceDepth;
                     yyMinBraceDepth = 0;
@@ -883,7 +886,7 @@ CppParser::TokenType CppParser::getToken()
                 return Tok_QuestionMark;
             case '0':
                 yyCh = getChar();
-                if (yyCh == 'x') {
+                if (yyCh == 'x' || yyCh == 'X') {
                     do {
                         yyCh = getChar();
                     } while ((yyCh >= '0' && yyCh <= '9') || yyCh == '\''
@@ -920,22 +923,14 @@ CppParser::TokenType CppParser::getToken()
   utilities for the third part.
 */
 
-void CppParser::saveState(SavedState *state)
+void CppParser::saveState(CppParserState *state)
 {
-    state->namespaces = namespaces;
-    state->namespaceDepths = namespaceDepths;
-    state->functionContext = functionContext;
-    state->functionContextUnresolved = functionContextUnresolved;
-    state->pendingContext = pendingContext;
+    *state = *this;
 }
 
-void CppParser::loadState(const SavedState *state)
+void CppParser::loadState(const CppParserState &state)
 {
-    namespaces = state->namespaces;
-    namespaceDepths = state->namespaceDepths;
-    functionContext = state->functionContext;
-    functionContextUnresolved = state->functionContextUnresolved;
-    pendingContext = state->pendingContext;
+    *static_cast<CppParserState *>(this) = state;
 }
 
 Namespace *CppParser::modifyNamespace(NamespaceList *namespaces, bool haveLast)
@@ -1163,6 +1158,15 @@ void CppParser::truncateNamespaces(NamespaceList *namespaces, int length)
     if (namespaces->count() > length)
         namespaces->erase(namespaces->begin() + length, namespaces->end());
 }
+
+bool CppParser::isInClassDeclaration() const
+{
+    for (const NamespaceStackItem &item : namespaceDepths)
+        if (item.token == Tok_class)
+            return true;
+    return false;
+}
+
 
 /*
   Functions for processing include files.
@@ -1794,10 +1798,10 @@ void CppParser::parseInternal(ConversionData &cd, const QStringList &includeStac
                         yyMsg() << "Ignoring definition of undeclared qualified class\n";
                         break;
                     }
-                    namespaceDepths.push(namespaces.count());
+                    namespaceDepths.push({ namespaces.count(), Tok_class });
                     namespaces = nsl;
                 } else {
-                    namespaceDepths.push(namespaces.count());
+                    namespaceDepths.push({ namespaces.count(), Tok_class });
                 }
                 enterNamespace(&namespaces, fct);
 
@@ -1830,7 +1834,7 @@ void CppParser::parseInternal(ConversionData &cd, const QStringList &includeStac
                     ns = HashString(text);
                 }
                 if (yyTok == Tok_LeftBrace) {
-                    namespaceDepths.push(namespaces.count());
+                    namespaceDepths.push({ namespaces.count(), Tok_namespace });
                     for (const auto &nns : nestedNamespaces)
                         enterNamespace(&namespaces, nns);
                     enterNamespace(&namespaces, ns);
@@ -1863,7 +1867,7 @@ void CppParser::parseInternal(ConversionData &cd, const QStringList &includeStac
                 }
             } else if (yyTok == Tok_LeftBrace) {
                 // Anonymous namespace
-                namespaceDepths.push(namespaces.count());
+                namespaceDepths.push({ namespaces.count(), Tok_namespace });
                 metaExpected = true;
                 yyTok = getToken();
             }
@@ -1970,8 +1974,15 @@ void CppParser::parseInternal(ConversionData &cd, const QStringList &includeStac
             } else {
               notrfunc:
                 prefix.clear();
-                if (yyTok == Tok_Ident && !yyParenDepth)
-                    prospectiveContext.clear();
+                if (yyBraceDepth == namespaceDepths.count() && pendingContext.isEmpty() && !isInClassDeclaration()) {
+                    if (!prospectiveContext.isEmpty()) {
+                        pendingContext = prospectiveContext;
+                        prospectiveContext.clear();
+                    }
+                } else {
+                    if (yyTok == Tok_Ident && !yyParenDepth)
+                        prospectiveContext.clear();
+                }
             }
             metaExpected = false;
             break;
@@ -2007,7 +2018,7 @@ void CppParser::parseInternal(ConversionData &cd, const QStringList &includeStac
             if (!yyTokColonSeen) {
                 if (yyBraceDepth + 1 == namespaceDepths.count()) {
                     // class or namespace
-                    truncateNamespaces(&namespaces, namespaceDepths.pop());
+                    truncateNamespaces(&namespaces, namespaceDepths.pop().depth);
                 }
                 if (yyBraceDepth == namespaceDepths.count()) {
                     // function, class or namespace

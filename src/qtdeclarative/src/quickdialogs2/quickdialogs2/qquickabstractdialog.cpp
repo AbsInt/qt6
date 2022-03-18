@@ -1,34 +1,37 @@
 /****************************************************************************
 **
 ** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the Qt Quick Dialogs module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL3$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
 ** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPLv3 included in the
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
 ** packaging of this file. Please review the following information to
 ** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl.html.
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
 ** GNU General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or later as published by the Free
-** Software Foundation and appearing in the file LICENSE.GPL included in
-** the packaging of this file. Please review the following information to
-** ensure the GNU General Public License version 2.0 requirements will be
-** met: http://www.gnu.org/licenses/gpl-2.0.html.
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -51,16 +54,52 @@ Q_LOGGING_CATEGORY(lcDialogs, "qt.quick.dialogs")
 
     A dialog that can be backed by different implementations.
 
-    Each dialog has a handle to QPlatformDialogHelper, which is created in create().
-    The helper acts as an intermediary between the QML-facing dialog object
+    Each dialog has a QPlatformDialogHelper handle, which is created in create():
+
+    - First we attempt to create a native dialog (e.g. QWindowsFileDialogHelper) through
+      QGuiApplicationPrivate::platformTheme()->createPlatformDialogHelper().
+    - If that fails, we try to create the Qt Quick fallback dialog (e.g. QQuickPlatformFileDialog)
+      through QQuickDialogImplFactory::createPlatformDialogHelper().
+
+    The handle acts as an intermediary between the QML-facing dialog object
     and the native/widget/quick implementation:
 
-    +------------+      +------------------------------------+      +-------------------------------------+
-    |            |      |                                    |      |                                     |
-    | FileDialog |----->| Native/Widget/Quick QPlatformFile- |----->| Native OS dialog/QQuickFileDialog/  |
-    |            |      | DialogHelper subclass              |      | QQuickFileDialogImpl                |
-    |            |      |                                    |      |                                     |
-    +------------+      +------------------------------------+      +-------------------------------------+
+            +---------------------------+
+            | FileDialog created in QML |
+            +---------------------------+
+                         |
+                         |
+                         v                         +----------------------+
+                +------------------+               | attempt to create    |     +------+
+                |useNativeDialog()?|-----false---->| QQuickPlatformDialog |---->| done |
+                +------------------+               | instance and set     |     +------+
+                         |                         | m_handle to it       |
+                         |                         +----------------------+
+                         v                                  ^
+                        true                                |
+                         |                                  |
+                         v                                  |
+               +---------------------+                      |
+               | attempt to create   |                      |
+               | QWindowsFileDialog- |                      |
+               | Helper instance and |                      |
+               | set m_handle to it  |                      |
+               +---------------------+                      |
+                         |                                  |
+                         v                                  |
+                 +-----------------+                        |
+                 | m_handle valid? |--------------------->false
+                 +-----------------+
+                         |
+                         v
+                        true
+                         |
+                      +------+
+                      | done |
+                      +------+
+
+    If QWindowsFileDialogHelper is created, it creates a native dialog.
+    If QQuickPlatformDialog is created, it creates a non-native QQuickFileDialogImpl.
 */
 
 /*!
@@ -104,7 +143,7 @@ Q_LOGGING_CATEGORY(lcDialogs, "qt.quick.dialogs")
 
 Q_DECLARE_LOGGING_CATEGORY(lcDialogs)
 
-QQuickAbstractDialog::QQuickAbstractDialog(QPlatformTheme::DialogType type, QObject *parent)
+QQuickAbstractDialog::QQuickAbstractDialog(QQuickDialogType type, QObject *parent)
     : QObject(parent),
       m_type(type)
 {
@@ -122,7 +161,7 @@ QPlatformDialogHelper *QQuickAbstractDialog::handle() const
 
 /*!
     \qmldefault
-    \qmlproperty list<Object> QtQuick.Dialogs::Dialog::data
+    \qmlproperty list<QtObject> QtQuick.Dialogs::Dialog::data
 
     This default property holds the list of all objects declared as children of
     the dialog.
@@ -377,20 +416,28 @@ static const char *qmlTypeName(const QObject *object)
     return object->metaObject()->className() + qstrlen("QQuickPlatform");
 }
 
+QPlatformTheme::DialogType toPlatformDialogType(QQuickDialogType quickDialogType)
+{
+    return quickDialogType == QQuickDialogType::FolderDialog
+        ? QPlatformTheme::FileDialog : static_cast<QPlatformTheme::DialogType>(quickDialogType);
+}
+
 bool QQuickAbstractDialog::create()
 {
     qCDebug(lcDialogs) << qmlTypeName(this) << "attempting to create dialog backend of type"
-        << m_type << "with parent window" << m_parentWindow;
+        << int(m_type) << "with parent window" << m_parentWindow;
     if (m_handle)
         return m_handle.get();
 
     qCDebug(lcDialogs) << "- attempting to create a native dialog";
-    if (useNativeDialog())
-        m_handle.reset(QGuiApplicationPrivate::platformTheme()->createPlatformDialogHelper(m_type));
+    if (useNativeDialog()) {
+        m_handle.reset(QGuiApplicationPrivate::platformTheme()->createPlatformDialogHelper(
+            toPlatformDialogType(m_type)));
+    }
 
     if (!m_handle) {
         qCDebug(lcDialogs) << "- attempting to create a quick dialog";
-        m_handle.reset(QQuickDialogImplFactory::createPlatformDialogHelper(m_type, this));
+        m_handle = QQuickDialogImplFactory::createPlatformDialogHelper(m_type, this);
     }
 
     qCDebug(lcDialogs) << qmlTypeName(this) << "created ->" << m_handle.get();
@@ -414,7 +461,7 @@ bool QQuickAbstractDialog::useNativeDialog() const
         return false;
     }
 
-    if (!QGuiApplicationPrivate::platformTheme()->usePlatformNativeDialog(m_type)) {
+    if (!QGuiApplicationPrivate::platformTheme()->usePlatformNativeDialog(toPlatformDialogType(m_type))) {
         qCDebug(lcDialogs) << "  - the platform theme told us a native dialog isn't available; not using native dialog";
         return false;
     }
@@ -430,6 +477,7 @@ void QQuickAbstractDialog::onCreate(QPlatformDialogHelper *dialog)
 void QQuickAbstractDialog::onShow(QPlatformDialogHelper *dialog)
 {
     Q_UNUSED(dialog);
+    m_firstShow = false;
 }
 
 void QQuickAbstractDialog::onHide(QPlatformDialogHelper *dialog)

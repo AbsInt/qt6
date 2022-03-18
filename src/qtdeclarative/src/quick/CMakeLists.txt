@@ -222,6 +222,8 @@ qt_internal_add_qml_module(Quick
         Qt::GuiPrivate
         Qt::QmlModelsPrivate
         Qt::QmlPrivate
+    GENERATE_CPP_EXPORTS
+    GENERATE_PRIVATE_CPP_EXPORTS
 )
 
 # We need to do additional initialization, so we have to provide our own
@@ -452,6 +454,12 @@ qt_internal_extend_target(Quick CONDITION QT_FEATURE_quick_tableview
         items/qquicktableview.cpp items/qquicktableview_p.h
         items/qquicktableview_p_p.h
         items/qquickselectable_p.h
+)
+
+qt_internal_extend_target(Quick CONDITION QT_FEATURE_quick_treeview
+    SOURCES
+        items/qquicktreeview.cpp items/qquicktreeview_p.h
+        items/qquicktreeview_p_p.h
 )
 
 qt_internal_extend_target(Quick CONDITION QT_FEATURE_quick_pathview

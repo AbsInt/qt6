@@ -51,9 +51,6 @@
 // We mean it.
 //
 
-#include <functional>
-#include <type_traits>
-
 #include <QtQml/qtqmlglobal.h>
 #include <QtQml/qqmlparserstatus.h>
 #include <QtQml/qqmllist.h>
@@ -70,10 +67,15 @@
 #include <QtCore/qmetacontainer.h>
 #include <QtCore/qdebug.h>
 
+#include <functional>
+#include <type_traits>
+#include <limits>
+
 QT_BEGIN_NAMESPACE
 
 class QQmlPropertyValueInterceptor;
 class QQmlContextData;
+class QQmlFinalizerHook;
 
 namespace QQmlPrivate {
 struct CachedQmlUnit;
@@ -475,6 +477,7 @@ namespace QQmlPrivate
         QQmlCustomParser *customParser;
 
         QTypeRevision revision;
+        int finalizerCast;
         // If this is extended ensure "version" is bumped!!!
     };
 
@@ -507,6 +510,9 @@ namespace QQmlPrivate
 
         QQmlCustomParser *(*customParserFactory)();
         QVector<int> *qmlTypeIds;
+        int finalizerCast;
+
+        bool forceAnonymous;
     };
 
     struct RegisterInterface {
@@ -603,6 +609,8 @@ namespace QQmlPrivate
     };
 
     struct Q_QML_EXPORT AOTCompiledContext {
+        enum: uint { InvalidStringId = (std::numeric_limits<uint>::max)() };
+
         QQmlContextData *qmlContext;
         QObject *qmlScopeObject;
         QJSEngine *engine;
@@ -619,6 +627,7 @@ namespace QQmlPrivate
         bool captureQmlContextPropertyLookup(uint index) const;
         QMetaType lookupResultMetaType(uint index) const;
         void storeNameSloppy(uint nameIndex, void *value, QMetaType type) const;
+        QJSValue javaScriptGlobalProperty(uint nameIndex) const;
 
         // All of these lookup functions should be used as follows:
         //
@@ -659,11 +668,14 @@ namespace QQmlPrivate
         bool loadScopeObjectPropertyLookup(uint index, void *target) const;
         void initLoadScopeObjectPropertyLookup(uint index, QMetaType type) const;
 
-        bool loadTypeLookup(uint index, void *target) const;
-        void initLoadTypeLookup(uint index) const;
+        bool loadSingletonLookup(uint index, void *target) const;
+        void initLoadSingletonLookup(uint index, uint importNamespace) const;
 
         bool loadAttachedLookup(uint index, QObject *object, void *target) const;
-        void initLoadAttachedLookup(uint index, QObject *object) const;
+        void initLoadAttachedLookup(uint index, uint importNamespace, QObject *object) const;
+
+        bool loadTypeLookup(uint index, void *target) const;
+        void initLoadTypeLookup(uint index, uint importNamespace) const;
 
         bool getObjectLookup(uint index, QObject *object, void *target) const;
         void initGetObjectLookup(uint index, QObject *object, QMetaType type) const;
@@ -717,12 +729,26 @@ namespace QQmlPrivate
 
     int Q_QML_EXPORT qmlregister(RegistrationType, void *);
     void Q_QML_EXPORT qmlunregister(RegistrationType, quintptr);
+
+#if QT_DEPRECATED_SINCE(6, 3)
     struct Q_QML_EXPORT SingletonFunctor
+    {
+        QT_DEPRECATED QObject *operator()(QQmlEngine *, QJSEngine *);
+        QPointer<QObject> m_object;
+        bool alreadyCalled = false;
+    };
+#endif
+
+    struct Q_QML_EXPORT SingletonInstanceFunctor
     {
         QObject *operator()(QQmlEngine *, QJSEngine *);
 
         QPointer<QObject> m_object;
-        bool alreadyCalled = false;
+
+        // Not a QPointer, so that you cannot assign it to a different
+        // engine when the first one is deleted.
+        // That would mess up the QML contexts.
+        QQmlEngine *m_engine = nullptr;
     };
 
     static int indexOfOwnClassInfo(const QMetaObject *metaObject, const char *key, int startOffset = -1)
@@ -933,14 +959,16 @@ namespace QQmlPrivate
     template<typename T, typename E>
     void qmlRegisterTypeAndRevisions(const char *uri, int versionMajor,
                                      const QMetaObject *classInfoMetaObject,
-                                     QVector<int> *qmlTypeIds, const QMetaObject *extension)
+                                     QVector<int> *qmlTypeIds, const QMetaObject *extension,
+                                     bool forceAnonymous = false)
     {
         RegisterTypeAndRevisions type = {
-            0,
+            2,
             QmlMetaType<T>::self(),
             QmlMetaType<T>::list(),
             int(sizeof(T)),
-            Constructors<T>::createInto, nullptr,
+            Constructors<T>::createInto,
+            nullptr,
             ValueType<T, E>::create,
 
             uri,
@@ -960,7 +988,10 @@ namespace QQmlPrivate
             extension ? extension : ExtendedType<E>::staticMetaObject(),
 
             &qmlCreateCustomParser<T>,
-            qmlTypeIds
+            qmlTypeIds,
+            StaticCastSelector<T, QQmlFinalizerHook>::cast(),
+
+            forceAnonymous
         };
 
         // Initialize the extension so that we can find it by name or ID.
@@ -990,7 +1021,7 @@ namespace QQmlPrivate
     template<>
     void Q_QML_EXPORT qmlRegisterTypeAndRevisions<QQmlTypeNotAvailable, void>(
             const char *uri, int versionMajor, const QMetaObject *classInfoMetaObject,
-            QVector<int> *qmlTypeIds, const QMetaObject *);
+            QVector<int> *qmlTypeIds, const QMetaObject *, bool);
 
     constexpr QtPrivate::QMetaTypeInterface metaTypeForNamespace(
             const QtPrivate::QMetaTypeInterface::MetaObjectFn &metaObjectFunction, const char *name)

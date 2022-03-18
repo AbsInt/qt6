@@ -63,6 +63,10 @@
 #include <QtQml/private/qqmltype_p_p.h>
 #include <QtQml/private/qqmlimportresolver_p.h>
 
+#ifdef Q_OS_MACOS
+#include "private/qcore_mac_p.h"
+#endif
+
 #include <algorithm>
 #include <functional>
 
@@ -1393,6 +1397,18 @@ QTypeRevision QQmlImportsPrivate::addFileImport(
         const QString& uri, const QString &prefix, QTypeRevision version, uint flags,
         QQmlImportDatabase *database, QList<QQmlError> *errors)
 {
+    if (uri.startsWith(Slash) || uri.startsWith(Colon)) {
+        QQmlError error;
+        const QString fix = uri.startsWith(Slash) ? QLatin1String("file:") + uri
+                                                  : QLatin1String("qrc") + uri;
+        error.setDescription(QQmlImportDatabase::tr(
+                                 "\"%1\" is not a valid import URL. "
+                                 "You can pass relative paths or URLs with schema, but not "
+                                 "absolute paths or resource paths. Try \"%2\".").arg(uri, fix));
+        errors->prepend(error);
+        return QTypeRevision();
+    }
+
     Q_ASSERT(errors);
 
     QQmlImportNamespace *nameSpace = importNamespace(prefix);
@@ -1621,7 +1637,7 @@ QTypeRevision QQmlImports::addLibraryImport(
 
     qCDebug(lcQmlImport)
             << "addLibraryImport:" << qPrintable(baseUrl().toString())
-            << uri << version << "as" << prefix;
+            << uri << "version '" << version << "'" << "as" << prefix;
 
     return d->addLibraryImport(uri, prefix, version, qmldirIdentifier, qmldirUrl, flags,
                                importDb, errors);
@@ -1727,7 +1743,24 @@ QQmlImportDatabase::QQmlImportDatabase(QQmlEngine *e)
         for (int ii = paths.count() - 1; ii >= 0; --ii)
             addPluginPath(paths.at(ii));
     }
-#endif
+#elif defined(Q_OS_MACOS)
+   // Add the main bundle's Resources/qml directory as an import path, so that QML modules are
+   // found successfully when running the app from its build dir.
+   // This is where macdeployqt and our CMake deployment logic puts Qt and user qmldir files.
+   if (CFBundleRef bundleRef = CFBundleGetMainBundle()) {
+       if (QCFType<CFURLRef> urlRef = CFBundleCopyResourceURL(
+                   bundleRef,
+                   QCFString(QLatin1String("qml")), 0, 0)) {
+           if (QCFType<CFURLRef> absoluteUrlRef = CFURLCopyAbsoluteURL(urlRef)) {
+               if (QCFString path = CFURLCopyFileSystemPath(absoluteUrlRef, kCFURLPOSIXPathStyle)) {
+                   if (QFile::exists(path)) {
+                       addImportPath(QDir(path).canonicalPath());
+                   }
+               }
+           }
+       }
+   }
+#endif // Q_OS_DARWIN
 }
 
 QQmlImportDatabase::~QQmlImportDatabase()

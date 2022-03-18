@@ -1,7 +1,7 @@
 /****************************************************************************
 **
 ** Copyright (C) 2017 BogDan Vatra <bogdan@kde.org>
-** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2022 The Qt Company Ltd.
 ** Copyright (C) 2016 Olivier Goffart <ogoffart@woboq.com>
 ** Contact: https://www.qt.io/licensing/
 **
@@ -127,7 +127,6 @@ public class QtActivityDelegate
     public static final int SYSTEM_UI_VISIBILITY_FULLSCREEN = 1;
     public static final int SYSTEM_UI_VISIBILITY_TRANSLUCENT = 2;
 
-    private static String m_environmentVariables = null;
     private static String m_applicationParameters = null;
 
     private int m_currentRotation = -1; // undefined
@@ -483,7 +482,7 @@ public class QtActivityDelegate
         });
     }
 
-    String getAppIconSize(Activity a)
+    int getAppIconSize(Activity a)
     {
         int size = a.getResources().getDimensionPixelSize(android.R.dimen.app_icon_size);
         if (size < 36 || size > 512) { // check size sanity
@@ -496,7 +495,8 @@ public class QtActivityDelegate
             if (size > 512)
                 size = 512;
         }
-        return "\tQT_ANDROID_APP_ICON_SIZE=" + size;
+
+        return size;
     }
 
     public void updateSelection(int selStart, int selEnd, int candidatesStart, int candidatesEnd)
@@ -667,20 +667,16 @@ public class QtActivityDelegate
             return false;
         }
 
-        m_environmentVariables = loaderParams.getString(ENVIRONMENT_VARIABLES_KEY);
-        String additionalEnvironmentVariables = "QT_ANDROID_FONTS_MONOSPACE=Droid Sans Mono;Droid Sans;Droid Sans Fallback"
-                                              + "\tQT_ANDROID_FONTS_SERIF=Droid Serif"
-                                              + "\tHOME=" + m_activity.getFilesDir().getAbsolutePath()
-                                              + "\tTMPDIR=" + m_activity.getFilesDir().getAbsolutePath();
-
-        additionalEnvironmentVariables += "\tQT_ANDROID_FONTS=Roboto;Droid Sans;Droid Sans Fallback";
-
-        additionalEnvironmentVariables += getAppIconSize(activity);
-
-        if (m_environmentVariables != null && m_environmentVariables.length() > 0)
-            m_environmentVariables = additionalEnvironmentVariables + "\t" + m_environmentVariables;
-        else
-            m_environmentVariables = additionalEnvironmentVariables;
+        QtNative.setEnvironmentVariables(loaderParams.getString(ENVIRONMENT_VARIABLES_KEY));
+        QtNative.setEnvironmentVariable("QT_ANDROID_FONTS_MONOSPACE",
+                                        "Droid Sans Mono;Droid Sans;Droid Sans Fallback");
+        QtNative.setEnvironmentVariable("QT_ANDROID_FONTS_SERIF", "Droid Serif");
+        QtNative.setEnvironmentVariable("HOME", m_activity.getFilesDir().getAbsolutePath());
+        QtNative.setEnvironmentVariable("TMPDIR", m_activity.getFilesDir().getAbsolutePath());
+        QtNative.setEnvironmentVariable("QT_ANDROID_FONTS",
+                                        "Roboto;Droid Sans;Droid Sans Fallback");
+        QtNative.setEnvironmentVariable("QT_ANDROID_APP_ICON_SIZE",
+                                        String.valueOf(getAppIconSize(activity)));
 
         if (loaderParams.containsKey(APPLICATION_PARAMETERS_KEY))
             m_applicationParameters = loaderParams.getString(APPLICATION_PARAMETERS_KEY);
@@ -697,13 +693,27 @@ public class QtActivityDelegate
             @Override
             public void onDisplayAdded(int displayId) { }
 
+            private boolean isSimilarRotation(int r1, int r2)
+            {
+                return (r1 == r2)
+                       || (r1 == Surface.ROTATION_0 && r2 == Surface.ROTATION_180)
+                       || (r1 == Surface.ROTATION_180 && r2 == Surface.ROTATION_0)
+                       || (r1 == Surface.ROTATION_90 && r2 == Surface.ROTATION_270)
+                       || (r1 == Surface.ROTATION_270 && r2 == Surface.ROTATION_90);
+            }
+
             @Override
             public void onDisplayChanged(int displayId) {
                 Display display = (Build.VERSION.SDK_INT < Build.VERSION_CODES.R)
                         ? m_activity.getWindowManager().getDefaultDisplay()
                         : m_activity.getDisplay();
                 m_currentRotation = display.getRotation();
-                QtNative.handleOrientationChanged(m_currentRotation, m_nativeOrientation);
+                m_layout.setActivityDisplayRotation(m_currentRotation);
+                // Process orientation change only if it comes after the size
+                // change, or if the screen is rotated by 180 degrees.
+                // Otherwise it will be processed in QtLayout.
+                if (isSimilarRotation(m_currentRotation, m_layout.displayRotation()))
+                    QtNative.handleOrientationChanged(m_currentRotation, m_nativeOrientation);
                 float refreshRate = display.getRefreshRate();
                 QtNative.handleRefreshRateChanged(refreshRate);
             }
@@ -737,7 +747,9 @@ public class QtActivityDelegate
 
                     if (extras.containsKey("extraenvvars")) {
                         try {
-                            m_environmentVariables += "\t" + new String(Base64.decode(extras.getString("extraenvvars"), Base64.DEFAULT), "UTF-8");
+                            QtNative.setEnvironmentVariables(new String(
+                                    Base64.decode(extras.getString("extraenvvars"), Base64.DEFAULT),
+                                    "UTF-8"));
                         } catch (Exception e) {
                             e.printStackTrace();
                         }
@@ -782,7 +794,7 @@ public class QtActivityDelegate
                 @Override
                 public void run() {
                     try {
-                        QtNative.startApplication(m_applicationParameters, m_environmentVariables, m_mainLib);
+                        QtNative.startApplication(m_applicationParameters, m_mainLib);
                         m_started = true;
                     } catch (Exception e) {
                         e.printStackTrace();
@@ -833,6 +845,7 @@ public class QtActivityDelegate
         else
             m_nativeOrientation = Configuration.ORIENTATION_PORTRAIT;
 
+        m_layout.setNativeOrientation(m_nativeOrientation);
         QtNative.handleOrientationChanged(rotation, m_nativeOrientation);
         m_currentRotation = rotation;
 

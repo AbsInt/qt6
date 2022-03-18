@@ -27,7 +27,9 @@
 ****************************************************************************/
 
 #include <QtTest/QtTest>
+#if QT_CONFIG(process)
 #include <QtCore/qprocess.h>
+#endif
 #include <QtCore/qtemporaryfile.h>
 #include <QtQml/qqml.h>
 #include <QtQml/qqmlapplicationengine.h>
@@ -36,7 +38,7 @@
 #include <private/qv4global_p.h>
 
 #ifdef Q_OS_WIN
-#include <windows.h>
+#include <qt_windows.h>
 #endif
 
 class tst_QV4Assembler : public QQmlDataTest
@@ -66,7 +68,9 @@ void tst_QV4Assembler::initTestCase()
 
 void tst_QV4Assembler::perfMapFile()
 {
-#if !defined(Q_OS_LINUX) || defined(Q_OS_ANDROID)
+#if !QT_CONFIG(process)
+    QSKIP("Depends on QProcess");
+#elif !defined(Q_OS_LINUX) || defined(Q_OS_ANDROID)
     QSKIP("perf map files are only generated on linux");
 #else
     const QString qmljs = QLibraryInfo::path(QLibraryInfo::BinariesPath) + "/qmljs";

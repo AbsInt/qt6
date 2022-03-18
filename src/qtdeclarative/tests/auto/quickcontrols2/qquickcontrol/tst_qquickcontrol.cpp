@@ -1,34 +1,26 @@
 /****************************************************************************
 **
 ** Copyright (C) 2020 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL3$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPLv3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl.html.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or later as published by the Free
-** Software Foundation and appearing in the file LICENSE.GPL included in
-** the packaging of this file. Please review the following information to
-** ensure the GNU General Public License version 2.0 requirements will be
-** met: http://www.gnu.org/licenses/gpl-2.0.html.
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -41,6 +33,7 @@
 #include <QtQuickTestUtils/private/visualtestutils_p.h>
 #include <QtQuickTemplates2/private/qquickbutton_p.h>
 #include <QtQuickControlsTestUtils/private/qtest_quickcontrols_p.h>
+#include <QtQuick/private/qquicktext_p_p.h>
 
 using namespace QQuickVisualTestUtils;
 
@@ -54,6 +47,7 @@ public:
 private slots:
     void initTestCase() override;
     void flickable();
+    void fractionalFontSize();
 
 private:
     QScopedPointer<QPointingDevice> touchDevice;
@@ -99,6 +93,24 @@ void tst_QQuickControl::flickable()
     QTest::touchEvent(window, touchDevice.data()).release(0, QPoint(button->width() / 2, button->height() / 2));
     QTRY_COMPARE(buttonReleasedSpy.count(), 1);
     QTRY_COMPARE(buttonClickedSpy.count(), 1);
+}
+
+void tst_QQuickControl::fractionalFontSize()
+{
+    QQuickApplicationHelper helper(this, QStringLiteral("fractionalFontSize.qml"));
+    QQuickWindow *window = helper.window;
+    window->show();
+    QVERIFY(QTest::qWaitForWindowExposed(window));
+    const QQuickControl *control = window->property("control").value<QQuickControl *>();
+    QVERIFY(control);
+    QQuickText *contentItem = qobject_cast<QQuickText *>(control->contentItem());
+    QVERIFY(contentItem);
+
+    QVERIFY(!contentItem->truncated());
+
+    QVERIFY2(qFuzzyCompare(contentItem->contentWidth(),
+            QQuickTextPrivate::get(contentItem)->layout.boundingRect().width()),
+            "The QQuickText::contentWidth() doesn't match the layout's preferred text width");
 }
 
 QTEST_QUICKCONTROLS_MAIN(tst_QQuickControl)

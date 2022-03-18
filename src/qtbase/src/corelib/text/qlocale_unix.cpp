@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2020 The Qt Company Ltd.
+** Copyright (C) 2021 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
@@ -77,6 +77,8 @@ void QSystemLocaleData::readEnvironment()
 {
     QWriteLocker locker(&lock);
 
+    // See https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap08.html#tag_08_02
+    // for the semantics of each of these:
     QByteArray all = qgetenv("LC_ALL");
     QByteArray numeric  = all.isEmpty() ? qgetenv("LC_NUMERIC") : all;
     QByteArray time     = all.isEmpty() ? qgetenv("LC_TIME") : all;
@@ -111,7 +113,7 @@ Q_GLOBAL_STATIC(QSystemLocaleData, qSystemLocaleData)
 
 #ifndef QT_NO_SYSTEMLOCALE
 
-static bool contradicts(const QString &maybe, const QString &known)
+static bool contradicts(QStringView maybe, const QString &known)
 {
     if (maybe.isEmpty())
         return false;
@@ -147,11 +149,10 @@ QLocale QSystemLocale::fallbackLocale() const
 
     // ... otherwise, if the first part of LANGUAGE says more than or
     // contradicts what we have, use that:
-    QString language = qEnvironmentVariable("LANGUAGE");
-    if (!language.isEmpty()) {
-        language = language.split(QLatin1Char(':')).constFirst();
+    for (const auto &language : qEnvironmentVariable("LANGUAGE").tokenize(QLatin1Char(':'))) {
         if (contradicts(language, lang))
             return QLocale(language);
+        break; // We only look at the first entry.
     }
 
     return QLocale(lang);

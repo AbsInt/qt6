@@ -503,6 +503,9 @@ void tst_QDialog::snapToDefaultButton()
 #else
     if (!QGuiApplication::platformName().compare(QLatin1String("wayland"), Qt::CaseInsensitive))
         QSKIP("This platform does not support setting the cursor position.");
+#ifdef Q_OS_ANDROID
+    QSKIP("Android does not support cursor");
+#endif
 
     const QRect dialogGeometry(QGuiApplication::primaryScreen()->availableGeometry().topLeft()
                                + QPoint(100, 100), QSize(200, 200));
@@ -558,6 +561,10 @@ void tst_QDialog::transientParent()
 
 void tst_QDialog::dialogInGraphicsView()
 {
+#ifdef Q_OS_ANDROID
+    // QTBUG-101321
+    QSKIP("This test crashes on Android");
+#endif
     // QTBUG-49124: A dialog embedded into QGraphicsView has Qt::WA_DontShowOnScreen
     // set (as has a native dialog). It must not trigger the modal handling though
     // as not to lock up.
@@ -644,7 +651,9 @@ void tst_QDialog::virtualsOnClose()
         dialog.show();
         QVERIFY(QTest::qWaitForWindowExposed(&dialog));
         dialog.accept();
-        QCOMPARE(dialog.closeEventCount, 0); // we only hide the dialog
+        // we used to only hide the dialog, and we still don't want a
+        // closeEvent call for application-triggered calls to QDialog::done
+        QCOMPARE(dialog.closeEventCount, 0);
         QCOMPARE(dialog.acceptCount, 1);
         QCOMPARE(dialog.rejectCount, 0);
         QCOMPARE(dialog.doneCount, 1);
@@ -655,7 +664,7 @@ void tst_QDialog::virtualsOnClose()
         dialog.show();
         QVERIFY(QTest::qWaitForWindowExposed(&dialog));
         dialog.reject();
-        QCOMPARE(dialog.closeEventCount, 0); // we only hide the dialog
+        QCOMPARE(dialog.closeEventCount, 0);
         QCOMPARE(dialog.acceptCount, 0);
         QCOMPARE(dialog.rejectCount, 1);
         QCOMPARE(dialog.doneCount, 1);

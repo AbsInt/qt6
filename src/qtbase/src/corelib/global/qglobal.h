@@ -53,11 +53,11 @@
 #endif
 
 /*
-   QT_VERSION is (major << 16) + (minor << 8) + patch.
+   QT_VERSION is (major << 16) | (minor << 8) | patch.
 */
 #define QT_VERSION      QT_VERSION_CHECK(QT_VERSION_MAJOR, QT_VERSION_MINOR, QT_VERSION_PATCH)
 /*
-   can be used like #if (QT_VERSION >= QT_VERSION_CHECK(4, 4, 0))
+   can be used like #if (QT_VERSION >= QT_VERSION_CHECK(6, 4, 0))
 */
 #define QT_VERSION_CHECK(major, minor, patch) ((major<<16)|(minor<<8)|(patch))
 
@@ -67,6 +67,35 @@
 #include <QtCore/qconfig.h>
 #include <QtCore/qtcore-config.h>
 #endif
+
+/*
+   The Qt modules' export macros.
+   The options are:
+    - defined(QT_STATIC): Qt was built or is being built in static mode
+    - defined(QT_SHARED): Qt was built or is being built in shared/dynamic mode
+   If neither was defined, then QT_SHARED is implied. If Qt was compiled in static
+   mode, QT_STATIC is defined in qconfig.h. In shared mode, QT_STATIC is implied
+   for the bootstrapped tools.
+*/
+
+#ifdef QT_BOOTSTRAPPED
+#  ifdef QT_SHARED
+#    error "QT_SHARED and QT_BOOTSTRAPPED together don't make sense. Please fix the build"
+#  elif !defined(QT_STATIC)
+#    define QT_STATIC
+#  endif
+#endif
+
+#if defined(QT_SHARED) || !defined(QT_STATIC)
+#  ifdef QT_STATIC
+#    error "Both QT_SHARED and QT_STATIC defined, please make up your mind"
+#  endif
+#  ifndef QT_SHARED
+#    define QT_SHARED
+#  endif
+#endif
+
+#include <QtCore/qtcoreexports.h>
 
 /*
     The QT_CONFIG macro implements a safe compile time check for features of Qt.
@@ -96,6 +125,20 @@
 #    error "Qt requires a C++17 compiler"
 #  endif
 #endif // __cplusplus
+
+#if defined(__cplusplus) && defined(Q_CC_MSVC) && !defined(Q_CC_CLANG)
+#  if Q_CC_MSVC < 1927
+     // Check below only works with 16.7 or newer
+#    error "Qt requires at least Visual Studio 2019 version 16.7 (VC++ version 14.27). Please upgrade."
+#  endif
+
+// On MSVC we require /permissive- set by user code. Check that we are
+// under its rules -- for instance, check that std::nullptr_t->bool is
+// not an implicit conversion, as per
+// https://docs.microsoft.com/en-us/cpp/overview/cpp-conformance-improvements?view=msvc-160#nullptr_t-is-only-convertible-to-bool-as-a-direct-initialization
+static_assert(!std::is_convertible_v<std::nullptr_t, bool>,
+              "On MSVC you must pass the /permissive- option to the compiler.");
+#endif
 
 #if defined (__ELF__)
 #  define Q_OF_ELF
@@ -133,8 +176,6 @@
 #endif
 
 #ifdef __cplusplus
-
-#include <algorithm>
 
 #if !defined(QT_NAMESPACE) || defined(Q_MOC_RUN) /* user namespace */
 
@@ -449,40 +490,6 @@ constexpr inline Deprecated_t Deprecated = {};
 #endif
 
 /*
-   The Qt modules' export macros.
-   The options are:
-    - defined(QT_STATIC): Qt was built or is being built in static mode
-    - defined(QT_SHARED): Qt was built or is being built in shared/dynamic mode
-   If neither was defined, then QT_SHARED is implied. If Qt was compiled in static
-   mode, QT_STATIC is defined in qconfig.h. In shared mode, QT_STATIC is implied
-   for the bootstrapped tools.
-*/
-
-#ifdef QT_BOOTSTRAPPED
-#  ifdef QT_SHARED
-#    error "QT_SHARED and QT_BOOTSTRAPPED together don't make sense. Please fix the build"
-#  elif !defined(QT_STATIC)
-#    define QT_STATIC
-#  endif
-#endif
-
-#if defined(QT_SHARED) || !defined(QT_STATIC)
-#  ifdef QT_STATIC
-#    error "Both QT_SHARED and QT_STATIC defined, please make up your mind"
-#  endif
-#  ifndef QT_SHARED
-#    define QT_SHARED
-#  endif
-#  if defined(QT_BUILD_CORE_LIB)
-#    define Q_CORE_EXPORT Q_DECL_EXPORT
-#  else
-#    define Q_CORE_EXPORT Q_DECL_IMPORT
-#  endif
-#else
-#  define Q_CORE_EXPORT
-#endif
-
-/*
    Some classes do not permit copies to be made of an object. These
    classes contains a private copy constructor and assignment
    operator to disable copying (the compiler gives an error message).
@@ -766,59 +773,6 @@ constexpr inline qint64 qRound64(float d)
 { return d >= 0.0f ? qint64(d + 0.5f) : qint64(d - 0.5f); }
 #endif
 
-namespace QTypeTraits {
-
-namespace detail {
-template<typename T, typename U,
-         typename = std::enable_if_t<std::is_arithmetic_v<T> && std::is_arithmetic_v<U> &&
-                                     std::is_floating_point_v<T> == std::is_floating_point_v<U> &&
-                                     std::is_signed_v<T> == std::is_signed_v<U> &&
-                                     !std::is_same_v<T, bool> && !std::is_same_v<U, bool> &&
-                                     !std::is_same_v<T, char> && !std::is_same_v<U, char>>>
-struct Promoted
-{
-    using type = decltype(T() + U());
-};
-}
-
-template <typename T, typename U>
-using Promoted = typename detail::Promoted<T, U>::type;
-
-}
-
-template <typename T>
-constexpr inline const T &qMin(const T &a, const T &b) { return (a < b) ? a : b; }
-template <typename T>
-constexpr inline const T &qMax(const T &a, const T &b) { return (a < b) ? b : a; }
-template <typename T>
-constexpr inline const T &qBound(const T &min, const T &val, const T &max)
-{ return qMax(min, qMin(max, val)); }
-template <typename T, typename U>
-constexpr inline QTypeTraits::Promoted<T, U> qMin(const T &a, const U &b)
-{
-    using P = QTypeTraits::Promoted<T, U>;
-    P _a = a;
-    P _b = b;
-    return (_a < _b) ? _a : _b;
-}
-template <typename T, typename U>
-constexpr inline QTypeTraits::Promoted<T, U> qMax(const T &a, const U &b)
-{
-    using P = QTypeTraits::Promoted<T, U>;
-    P _a = a;
-    P _b = b;
-    return (_a < _b) ? _b : _a;
-}
-template <typename T, typename U>
-constexpr inline QTypeTraits::Promoted<T, U> qBound(const T &min, const U &val, const T &max)
-{ return qMax(min, qMin(max, val)); }
-template <typename T, typename U>
-constexpr inline QTypeTraits::Promoted<T, U> qBound(const T &min, const T &val, const U &max)
-{ return qMax(min, qMin(max, val)); }
-template <typename T, typename U>
-constexpr inline QTypeTraits::Promoted<T, U> qBound(const U &min, const T &val, const T &max)
-{ return qMax(min, qMin(max, val)); }
-
 #ifndef Q_FORWARD_DECLARE_OBJC_CLASS
 #  ifdef __OBJC__
 #    define Q_FORWARD_DECLARE_OBJC_CLASS(classname) @class classname
@@ -1041,6 +995,73 @@ typedef void (*QFunctionPointer)();
 #  define Q_UNIMPLEMENTED() qWarning("Unimplemented code.")
 #endif
 
+namespace QTypeTraits {
+
+namespace detail {
+template<typename T, typename U,
+         typename = std::enable_if_t<std::is_arithmetic_v<T> && std::is_arithmetic_v<U> &&
+                                     std::is_floating_point_v<T> == std::is_floating_point_v<U> &&
+                                     std::is_signed_v<T> == std::is_signed_v<U> &&
+                                     !std::is_same_v<T, bool> && !std::is_same_v<U, bool> &&
+                                     !std::is_same_v<T, char> && !std::is_same_v<U, char>>>
+struct Promoted
+{
+    using type = decltype(T() + U());
+};
+}
+
+template <typename T, typename U>
+using Promoted = typename detail::Promoted<T, U>::type;
+
+}
+
+template <typename T>
+constexpr inline const T &qMin(const T &a, const T &b) { return (a < b) ? a : b; }
+template <typename T>
+constexpr inline const T &qMax(const T &a, const T &b) { return (a < b) ? b : a; }
+template <typename T>
+constexpr inline const T &qBound(const T &min, const T &val, const T &max)
+{
+    Q_ASSERT(!(max < min));
+    return qMax(min, qMin(max, val));
+}
+template <typename T, typename U>
+constexpr inline QTypeTraits::Promoted<T, U> qMin(const T &a, const U &b)
+{
+    using P = QTypeTraits::Promoted<T, U>;
+    P _a = a;
+    P _b = b;
+    return (_a < _b) ? _a : _b;
+}
+template <typename T, typename U>
+constexpr inline QTypeTraits::Promoted<T, U> qMax(const T &a, const U &b)
+{
+    using P = QTypeTraits::Promoted<T, U>;
+    P _a = a;
+    P _b = b;
+    return (_a < _b) ? _b : _a;
+}
+template <typename T, typename U>
+constexpr inline QTypeTraits::Promoted<T, U> qBound(const T &min, const U &val, const T &max)
+{
+    Q_ASSERT(!(max < min));
+    return qMax(min, qMin(max, val));
+}
+template <typename T, typename U>
+constexpr inline QTypeTraits::Promoted<T, U> qBound(const T &min, const T &val, const U &max)
+{
+    using P = QTypeTraits::Promoted<T, U>;
+    Q_ASSERT(!(P(max) < P(min)));
+    return qMax(min, qMin(max, val));
+}
+template <typename T, typename U>
+constexpr inline QTypeTraits::Promoted<T, U> qBound(const U &min, const T &val, const T &max)
+{
+    using P = QTypeTraits::Promoted<T, U>;
+    Q_ASSERT(!(P(max) < P(min)));
+    return qMax(min, qMin(max, val));
+}
+
 [[nodiscard]] constexpr bool qFuzzyCompare(double p1, double p2)
 {
     return (qAbs(p1 - p2) * 1000000000000. <= qMin(qAbs(p1), qAbs(p2)));
@@ -1177,6 +1198,7 @@ void qAsConst(const T &&) = delete;
 // like std::exchange
 template <typename T, typename U = T>
 constexpr T qExchange(T &t, U &&newValue)
+noexcept(std::conjunction_v<std::is_nothrow_move_constructible<T>, std::is_nothrow_assignable<T &, U>>)
 {
     T old = std::move(t);
     t = std::forward<U>(newValue);
@@ -1323,6 +1345,7 @@ template <typename Ptr> inline auto qGetPtrHelper(Ptr &ptr) noexcept -> decltype
 Q_CORE_EXPORT QString qtTrId(const char *id, int n = -1);
 
 #define QT_TRID_NOOP(id) id
+#define QT_TRID_N_NOOP(id) id
 
 #endif // QT_NO_TRANSLATION
 

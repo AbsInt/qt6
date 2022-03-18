@@ -52,7 +52,8 @@
 //
 
 #include <private/qtquickglobal_p.h>
-#include "qquickitem.h"
+
+#include <QtQuick/qquickitem.h>
 
 #include <QtGui/qevent.h>
 
@@ -113,10 +114,11 @@ public:
     QList<QUrl> urls() const;
     QStringList formats() const;
 
-    Q_INVOKABLE void getDataAsString(QQmlV4Function *);
-    Q_INVOKABLE void getDataAsArrayBuffer(QQmlV4Function *);
-    Q_INVOKABLE void acceptProposedAction(QQmlV4Function *);
-    Q_INVOKABLE void accept(QQmlV4Function *);
+    Q_INVOKABLE QString getDataAsString(const QString &format) const;
+    Q_INVOKABLE QByteArray getDataAsArrayBuffer(const QString &format) const;
+    Q_INVOKABLE void acceptProposedAction();
+    Q_INVOKABLE void accept();
+    Q_INVOKABLE void accept(Qt::DropAction action);
 
 private:
     QQuickDropAreaPrivate *d;
@@ -132,7 +134,7 @@ class QQuickDropAreaDrag : public QObject
     QML_ANONYMOUS
     QML_ADDED_IN_VERSION(2, 0)
 public:
-    QQuickDropAreaDrag(QQuickDropAreaPrivate *d, QObject *parent = 0);
+    QQuickDropAreaDrag(QQuickDropAreaPrivate *d, QObject *parent = nullptr);
     ~QQuickDropAreaDrag();
 
     qreal x() const;

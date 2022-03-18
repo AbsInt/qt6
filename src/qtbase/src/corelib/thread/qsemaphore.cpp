@@ -154,7 +154,7 @@ static bool futexNeedsWake(quintptr v)
     // low 31 bits of the high word (that is, bits 32-62). If we're not, then we only
     // use futexNeedsWakeAllBit to indicate anyone is waiting.
     if constexpr (futexHasWaiterCount)
-        return (v >> 32) > (unsigned(v));
+        return unsigned(quint64(v) >> 32) > unsigned(v);
     return v >> 31;
 }
 
@@ -484,6 +484,51 @@ bool QSemaphore::tryAcquire(int n, int timeout)
     d->avail -= n;
     return true;
 }
+
+/*!
+    \fn template <typename Rep, typename Period> QSemaphore::tryAcquire(int n, std::chrono::duration<Rep, Period> timeout)
+    \overload
+    \since 6.3
+*/
+
+/*!
+    \fn bool QSemaphore::try_acquire()
+    \since 6.3
+
+    This function is provided for \c{std::counting_semaphore} compatibility.
+
+    It is equivalent to calling \c{tryAcquire(1)}, where the function returns
+    \c true on acquiring the resource successfully.
+
+    \sa tryAcquire(), try_acquire_for(), try_acquire_until()
+*/
+
+/*!
+    \fn template <typename Rep, typename Period> bool QSemaphore::try_acquire_for(const std::chrono::duration<Rep, Period> &timeout)
+    \since 6.3
+
+    This function is provided for \c{std::counting_semaphore} compatibility.
+
+    It is equivalent to calling \c{tryAcquire(1, timeout)}, where the call
+    times out on the given \a timeout value. The function returns \c true
+    on accquiring the resource successfully.
+
+    \sa tryAcquire(), try_acquire(), try_acquire_until()
+*/
+
+/*!
+    \fn template <typename Clock, typename Duration> bool QSemaphore::try_acquire_until(const std::chrono::time_point<Clock, Duration> &tp)
+    \since 6.3
+
+    This function is provided for \c{std::counting_semaphore} compatibility.
+
+    It is equivalent to calling \c{tryAcquire(1, tp - Clock::now())},
+    which means that the \a tp (time point) is recorded, ignoring the
+    adjustments to \c{Clock} while waiting. The function returns \c true
+    on acquiring the resource successfully.
+
+    \sa tryAcquire(), try_acquire(), try_acquire_for()
+*/
 
 /*!
     \class QSemaphoreReleaser

@@ -60,6 +60,7 @@ private slots:
 
     // Output format independent tests
     void autoNavigation();
+    void tocBreadcrumbs();
     void examplesManifestXmlAndQhp();
     void ignoresinceVariable();
     void templateParameters();
@@ -79,6 +80,7 @@ private slots:
     void properties();
     void testTagFile();
     void testGlobalFunctions();
+    void proxyPage();
 
 private:
     QScopedPointer<QTemporaryDir> m_outputDir;
@@ -198,8 +200,8 @@ void tst_generatedOutput::testAndCompare(const char *input, const char *outNames
             QFileInfo fileInfo(m_expectedDir.filePath(file));
             fileInfo.dir().remove(fileInfo.fileName()); // Allowed to fail
             QVERIFY(m_expectedDir.mkpath(fileInfo.dir().path()));
-            QVERIFY(QFile::copy(m_outputDir->filePath(file),
-                                fileInfo.filePath()));
+            QVERIFY2(QFile::copy(m_outputDir->filePath(file), fileInfo.filePath()),
+                     qPrintable(QStringLiteral("Failed to copy '%1'").arg(file)));
         }
         QSKIP("Regenerated expected output only.");
     }
@@ -356,6 +358,16 @@ void tst_generatedOutput::autoNavigation()
                    "qdoctests-qdocfileoutput-exhaustive.html "
                    "toc.html");
 }
+
+void tst_generatedOutput::tocBreadcrumbs()
+{
+    testAndCompare("testdata/configs/tocbreadcrumbs.qdocconf",
+                   "tocbreadcrumbs/qdoctests-qdocfileoutput.html "
+                   "tocbreadcrumbs/qdoctests-qdocfileoutput-linking.html "
+                   "tocbreadcrumbs/qdoctests-qdocfileoutput-exhaustive.html "
+                   "tocbreadcrumbs/toc-test.html");
+}
+
 
 void tst_generatedOutput::examplesManifestXmlAndQhp()
 {
@@ -530,6 +542,13 @@ void tst_generatedOutput::testTagFile()
 void tst_generatedOutput::testGlobalFunctions()
 {
     testAndCompare("testdata/configs/testglobals.qdocconf", "globals.html");
+}
+
+void tst_generatedOutput::proxyPage()
+{
+    testAndCompare("testdata/proxypage/proxypage.qdocconf",
+                   "proxypage/stdpair-proxy.html "
+                   "proxypage-docbook/stdpair-proxy.xml");
 }
 
 int main(int argc, char *argv[])

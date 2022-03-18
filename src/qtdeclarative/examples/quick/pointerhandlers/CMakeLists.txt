@@ -1,19 +1,15 @@
-# Generated from pointer.pro.
-
 cmake_minimum_required(VERSION 3.16)
 project(pointerhandlers LANGUAGES CXX)
-
-set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
 set(CMAKE_AUTOMOC ON)
 
 if(NOT DEFINED INSTALL_EXAMPLESDIR)
-  set(INSTALL_EXAMPLESDIR "examples")
+    set(INSTALL_EXAMPLESDIR "examples")
 endif()
 
 set(INSTALL_EXAMPLEDIR "${INSTALL_EXAMPLESDIR}/quick/pointerhandlers")
 
-find_package(Qt6 COMPONENTS Core Gui Quick Qml Svg)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Qml Quick Svg)
 
 add_subdirectory("../shared" "shared")
 
@@ -40,6 +36,7 @@ qt_add_qml_module(pointerhandlersexample
         "components/LeftDrawer.qml"
         "components/MomentumAnimation.qml"
         "components/MouseFeedbackSprite.qml"
+        "components/QuadPieMenu.qml"
         "components/ScrollBar.qml"
         "components/Slider.qml"
         "components/TouchpointFeedbackSprite.qml"
@@ -49,6 +46,7 @@ qt_add_qml_module(pointerhandlersexample
         "map.qml"
         "mixer.qml"
         "multibuttons.qml"
+        "pieMenu.qml"
         "pinchHandler.qml"
         "pointerhandlers.qml"
         "sidebar.qml"
@@ -63,6 +61,7 @@ qt_add_qml_module(pointerhandlersexample
         "components/images/mouse_left.png"
         "components/images/mouse_middle.png"
         "components/images/mouse_right.png"
+        "components/images/mouse_wheel_ridges.png"
         "images/arrowhead.png"
         "images/balloon.png"
         "images/cursor-airbrush.png"
@@ -82,4 +81,5 @@ install(TARGETS pointerhandlersexample
     BUNDLE DESTINATION "${INSTALL_EXAMPLEDIR}"
     LIBRARY DESTINATION "${INSTALL_EXAMPLEDIR}"
 )
+
 bundle_shared(pointerhandlersexample)

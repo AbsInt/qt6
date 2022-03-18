@@ -38,6 +38,7 @@
 #include <QFile>
 #include <QScopedPointer>
 #include <QSaveFile>
+#include <QFileInfo>
 
 #include <cstdlib>
 
@@ -73,6 +74,40 @@ static bool argumentsFromCommandLineAndFile(QStringList &allArguments, const QSt
         }
     }
     return true;
+}
+
+static int runExtract(const QString & baseName, const MetaTypesJsonProcessor &processor) {
+    if (processor.types().isEmpty()) {
+        fprintf(stderr, "Error: No types to register found in library\n");
+        return EXIT_FAILURE;
+    }
+    QFile headerFile(baseName + u".h");
+    bool ok = headerFile.open(QFile::WriteOnly);
+    if (!ok) {
+        fprintf(stderr, "Error: Cannot open %s for writing\n", qPrintable(headerFile.fileName()));
+        return EXIT_FAILURE;
+    }
+    auto prefix = QString::fromLatin1(
+            "#ifndef %1_H\n"
+            "#define %1_H\n"
+            "#include <QtQml/qqml.h>\n"
+            "#include <QtQml/qqmlmoduleregistration.h>\n").arg(baseName.toUpper());
+    const QStringList includes = processor.includes();
+    for (const QString &include: includes)
+        prefix += u"\n#include <%1>"_qs.arg(include);
+    headerFile.write((prefix + processor.extractRegisteredTypes()).toUtf8() + "\n#endif");
+
+    QFile sourceFile(baseName + u".cpp");
+    ok = sourceFile.open(QFile::WriteOnly);
+    if (!ok) {
+        fprintf(stderr, "Error: Cannot open %s for writing\n", qPrintable(sourceFile.fileName()));
+        return EXIT_FAILURE;
+    }
+    // the string split is necessaury because cmake's automoc scanner would otherwise pick up the include
+    QString code = u"#include \"%1.h\"\n#include "_qs.arg(baseName);
+    code += uR"("moc_%1.cpp")"_qs.arg(baseName);
+    sourceFile.write(code.toUtf8());
+    return EXIT_SUCCESS;
 }
 
 int main(int argc, char **argv)
@@ -137,6 +172,17 @@ int main(int argc, char **argv)
     foreignTypesOption.setValueName(QStringLiteral("foreign types"));
     parser.addOption(foreignTypesOption);
 
+    QCommandLineOption followForeignVersioningOption(QStringLiteral("follow-foreign-versioning"));
+    followForeignVersioningOption.setDescription(
+            QStringLiteral("If this option is set the versioning scheme of foreign base classes "
+                           "will be respected instead of ignored. Mostly useful for modules who "
+                           "want to follow Qt's versioning scheme."));
+    parser.addOption(followForeignVersioningOption);
+
+    QCommandLineOption extract(u"extract"_qs);
+    extract.setDescription(u"Extract QML types from a module and use QML_FOREIGN to register them"_qs);
+    parser.addOption(extract);
+
     parser.addPositionalArgument(QStringLiteral("[MOC generated json file]"),
                                  QStringLiteral("MOC generated json output."));
 
@@ -146,10 +192,35 @@ int main(int argc, char **argv)
 
     parser.process(arguments);
 
+    const QString module = parser.value(importNameOption);
+
+    MetaTypesJsonProcessor processor(parser.isSet(privateIncludesOption));
+    if (!processor.processTypes(parser.positionalArguments()))
+        return EXIT_FAILURE;
+
+    processor.postProcessTypes();
+
+    if (parser.isSet(foreignTypesOption))
+        processor.processForeignTypes(parser.value(foreignTypesOption).split(QLatin1Char(',')));
+
+    processor.postProcessForeignTypes();
+
+
+    if (parser.isSet(extract)) {
+        if (!parser.isSet(outputOption)) {
+            fprintf(stderr, "Error: The output file name must be provided\n");
+            return EXIT_FAILURE;
+        }
+        QString baseName = parser.value(outputOption);
+        return runExtract(baseName, processor);
+    }
+
     FILE *output = stdout;
     QScopedPointer<FILE, ScopedPointerFileCloser> outputFile;
 
+
     if (parser.isSet(outputOption)) {
+        // extract does its own file handling
         QString outputName = parser.value(outputOption);
 #if defined(_MSC_VER)
         if (_wfopen_s(&output, reinterpret_cast<const wchar_t *>(outputName.utf16()), L"w") != 0) {
@@ -173,30 +244,26 @@ int main(int argc, char **argv)
             "#include <QtQml/qqml.h>\n"
             "#include <QtQml/qqmlmoduleregistration.h>\n");
 
-    const QString module = parser.value(importNameOption);
-
-    MetaTypesJsonProcessor processor(parser.isSet(privateIncludesOption));
-    if (!processor.processTypes(parser.positionalArguments()))
-        return EXIT_FAILURE;
-
-    processor.postProcessTypes();
-
-    if (parser.isSet(foreignTypesOption))
-        processor.processForeignTypes(parser.value(foreignTypesOption).split(QLatin1Char(',')));
-
-    processor.postProcessForeignTypes();
-
     const QStringList includes = processor.includes();
     for (const QString &include : includes)
         fprintf(output, "\n#include <%s>", qPrintable(include));
 
     fprintf(output, "\n\n");
 
+    // Keep this in sync with _qt_internal_get_escaped_uri in CMake
     QString moduleAsSymbol = module;
-    moduleAsSymbol.replace(QLatin1Char('.'), QLatin1Char('_'));
+    moduleAsSymbol.replace(QRegularExpression(QStringLiteral("[^A-Za-z0-9]")), QStringLiteral("_"));
+
+    QString underscoredModuleAsSymbol = module;
+    underscoredModuleAsSymbol.replace(QLatin1Char('.'), QLatin1Char('_'));
+
+    if (underscoredModuleAsSymbol != moduleAsSymbol
+            || underscoredModuleAsSymbol.isEmpty()
+            || underscoredModuleAsSymbol.front().isDigit()) {
+        qWarning() << module << "is an invalid QML module URI. You cannot import this.";
+    }
 
     const QString functionName = QStringLiteral("qml_register_types_") + moduleAsSymbol;
-
     fprintf(output,
             "#if !defined(QT_STATIC)\n"
             "#define Q_QMLTYPE_EXPORT Q_DECL_EXPORT\n"
@@ -208,6 +275,7 @@ int main(int argc, char **argv)
     const auto majorVersion = parser.value(majorVersionOption);
     const auto pastMajorVersions = parser.values(pastMajorVersionOption);
     const auto minorVersion = parser.value(minorVersionOption);
+    const bool followForeignVersioning = parser.isSet(followForeignVersioningOption);
 
     for (const auto &version : pastMajorVersions) {
         fprintf(output, "\n    qmlRegisterModule(\"%s\", %s, 0);\n    qmlRegisterModule(\"%s\", %s, 254);",
@@ -223,18 +291,41 @@ int main(int argc, char **argv)
 
     const QVector<QJsonObject> types = processor.types();
     const QVector<QJsonObject> foreignTypes = processor.foreignTypes();
+    QVector<QString> typesRegisteredAnonymously;
+
+    const auto &findType = [&](const QString &name) -> QJsonValue {
+        for (const QJsonObject &type : types) {
+            if (type[QLatin1String("qualifiedClassName")] != name)
+                continue;
+            return type;
+        }
+        return QJsonValue();
+    };
+
+    const auto &findTypeForeign = [&](const QString &name) -> QJsonValue {
+        for (const QJsonObject &type : foreignTypes) {
+            if (type[QLatin1String("qualifiedClassName")] != name)
+                continue;
+            return type;
+        }
+        return QJsonValue();
+    };
+
     for (const QJsonObject &classDef : types) {
         const QString className = classDef[QLatin1String("qualifiedClassName")].toString();
 
         QString targetName = className;
+        QString extendedName;
         bool seenQmlElement = false;
-        const QJsonArray classInfos = classDef.value(QLatin1String("classInfos")).toArray();
-        for (const QJsonValue v : classInfos) {
+        QJsonArray classInfos = classDef.value(QLatin1String("classInfos")).toArray();
+        for (const QJsonValueRef v : classInfos) {
             const QString name = v[QStringLiteral("name")].toString();
             if (name == QStringLiteral("QML.Element"))
                 seenQmlElement = true;
             else if (name == QStringLiteral("QML.Foreign"))
                 targetName = v[QLatin1String("value")].toString();
+            else if (name == QStringLiteral("QML.Extended"))
+                extendedName = v[QStringLiteral("value")].toString();
         }
 
         // We want all related metatypes to be registered by name, so that we can look them up
@@ -280,11 +371,17 @@ int main(int argc, char **argv)
                         qPrintable(targetTypeName));
             }
 
+            auto metaObjectPointer = [](const QString &name) -> QString {
+                return u'&' + name + QStringLiteral("::staticMetaObject");
+            };
+
             if (seenQmlElement) {
-                fprintf(output, "\n    qmlRegisterNamespaceAndRevisions(&%s::staticMetaObject, "
-                                "\"%s\", %s, nullptr, &%s::staticMetaObject);",
-                        qPrintable(targetName), qPrintable(module), qPrintable(majorVersion),
-                        qPrintable(className));
+                fprintf(output, "\n    qmlRegisterNamespaceAndRevisions(%s, "
+                                "\"%s\", %s, nullptr, %s, %s);",
+                        qPrintable(metaObjectPointer(targetName)), qPrintable(module),
+                        qPrintable(majorVersion), qPrintable(metaObjectPointer(className)),
+                        extendedName.isEmpty() ? "nullptr"
+                                               : qPrintable(metaObjectPointer(extendedName)));
             }
         } else {
             if (seenQmlElement) {
@@ -315,6 +412,85 @@ int main(int argc, char **argv)
 
                 fprintf(output, "\n    qmlRegisterTypesAndRevisions<%s>(\"%s\", %s);",
                         qPrintable(className), qPrintable(module), qPrintable(majorVersion));
+
+                const QJsonValue superClasses = classDef[QLatin1String("superClasses")];
+
+                if (superClasses.isArray()) {
+                    for (const QJsonValueRef object : superClasses.toArray()) {
+                        if (object[QStringLiteral("access")] != QStringLiteral("public"))
+                            continue;
+
+                        QString superClassName = object[QStringLiteral("name")].toString();
+
+                        QVector<QString> classesToCheck;
+
+                        auto checkForRevisions = [&](const QString &typeName) -> void {
+                            auto type = findType(typeName);
+
+                            if (!type.isObject()) {
+                                type = findTypeForeign(typeName);
+                                if (!type.isObject())
+                                    return;
+
+                                for (const QString &section :
+                                     { QStringLiteral("properties"), QStringLiteral("signals"),
+                                       QStringLiteral("methods") }) {
+                                    bool foundRevisionEntry = false;
+                                    for (const QJsonValueRef entry : type[section].toArray()) {
+                                        if (entry.toObject().contains(QStringLiteral("revision"))) {
+                                            foundRevisionEntry = true;
+                                            break;
+                                        }
+                                    }
+                                    if (foundRevisionEntry) {
+                                        if (typesRegisteredAnonymously.contains(typeName))
+                                            break;
+
+                                        typesRegisteredAnonymously.append(typeName);
+
+                                        if (followForeignVersioning) {
+                                            fprintf(output,
+                                                    "\n    "
+                                                    "qmlRegisterAnonymousTypesAndRevisions<%s>(\"%"
+                                                    "s\", "
+                                                    "%s);",
+                                                    qPrintable(typeName), qPrintable(module),
+                                                    qPrintable(majorVersion));
+                                            break;
+                                        }
+
+                                        for (const QString &version :
+                                             pastMajorVersions + QStringList { majorVersion }) {
+                                            fprintf(output,
+                                                    "\n    "
+                                                    "qmlRegisterAnonymousType<%s, 254>(\"%s\", "
+                                                    "%s);",
+                                                    qPrintable(typeName), qPrintable(module),
+                                                    qPrintable(version));
+                                        }
+                                        break;
+                                    }
+                                }
+                            }
+
+                            const QJsonValue superClasses = type[QLatin1String("superClasses")];
+
+                            if (superClasses.isArray()) {
+                                for (const QJsonValueRef object : superClasses.toArray()) {
+                                    if (object[QStringLiteral("access")]
+                                        != QStringLiteral("public"))
+                                        continue;
+                                    classesToCheck << object[QStringLiteral("name")].toString();
+                                }
+                            }
+                        };
+
+                        checkForRevisions(superClassName);
+
+                        while (!classesToCheck.isEmpty())
+                            checkForRevisions(classesToCheck.takeFirst());
+                    }
+                }
             } else {
                 fprintf(output, "\n    QMetaType::fromType<%s%s>().id();",
                         qPrintable(className),

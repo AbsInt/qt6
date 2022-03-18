@@ -8,6 +8,7 @@ qt_get_tool_target_name(target_name qhelpgenerator)
 qt_internal_add_tool(${target_name}
     TARGET_DESCRIPTION "Qt Compressed Help File Generator"
     TOOLS_TARGET Tools # special case
+    INSTALL_DIR "${INSTALL_LIBEXECDIR}"
     SOURCES
         ../shared/collectionconfiguration.cpp ../shared/collectionconfiguration.h
         collectionconfigreader.cpp collectionconfigreader.h
@@ -20,6 +21,7 @@ qt_internal_add_tool(${target_name}
         Qt::HelpPrivate
         Qt::Network
 )
+qt_internal_return_unless_building_tools()
 
 #### Keys ignored in scope 1:.:.:qhelpgenerator.pro:<TRUE>:
 # QMAKE_TARGET_DESCRIPTION = "Qt Compressed Help File Generator"

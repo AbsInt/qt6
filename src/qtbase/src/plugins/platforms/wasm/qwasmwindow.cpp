@@ -63,6 +63,8 @@ QWasmWindow::QWasmWindow(QWindow *w, QWasmCompositor *compositor, QWasmBackingSt
 QWasmWindow::~QWasmWindow()
 {
     m_compositor->removeWindow(this);
+    if (m_requestAnimationFrameId > -1)
+        emscripten_cancel_animation_frame(m_requestAnimationFrameId);
 }
 
 void QWasmWindow::destroy()
@@ -109,8 +111,6 @@ void QWasmWindow::setGeometry(const QRect &rect)
     }
     QWindowSystemInterface::handleGeometryChange(window(), r);
     QPlatformWindow::setGeometry(r);
-
-    QWindowSystemInterface::flushWindowSystemEvents();
     invalidate();
 }
 
@@ -126,7 +126,6 @@ void QWasmWindow::setVisible(bool visible)
         else if (m_windowState & Qt::WindowMaximized)
             newGeom = platformScreen()->availableGeometry();
     }
-    QPlatformWindow::setVisible(visible);
 
     m_compositor->setVisible(this, visible);
 
@@ -275,7 +274,7 @@ bool QWasmWindow::isPointOnResizeRegion(QPoint point) const
     return resizeRegion().contains(point);
 }
 
-QWasmWindow::ResizeMode QWasmWindow::resizeModeAtPoint(QPoint point) const
+QWasmCompositor::ResizeMode QWasmWindow::resizeModeAtPoint(QPoint point) const
 {
     QPoint p1 = window()->frameGeometry().topLeft() - QPoint(5, 5);
     QPoint p2 = window()->frameGeometry().bottomRight() + QPoint(5, 5);
@@ -292,28 +291,28 @@ QWasmWindow::ResizeMode QWasmWindow::resizeModeAtPoint(QPoint point) const
     if (top.contains(point)) {
         // Top
         if (left.contains(point))
-            return ResizeTopLeft;
+            return QWasmCompositor::ResizeTopLeft;
         if (center.contains(point))
-            return ResizeTop;
+            return QWasmCompositor::ResizeTop;
         if (right.contains(point))
-            return ResizeTopRight;
+            return QWasmCompositor::ResizeTopRight;
     } else if (middle.contains(point)) {
         // Middle
         if (left.contains(point))
-            return ResizeLeft;
+            return QWasmCompositor::ResizeLeft;
         if (right.contains(point))
-            return ResizeRight;
+            return QWasmCompositor::ResizeRight;
     } else if (bottom.contains(point)) {
         // Bottom
         if (left.contains(point))
-            return ResizeBottomLeft;
+            return QWasmCompositor::ResizeBottomLeft;
         if (center.contains(point))
-            return ResizeBottom;
+            return QWasmCompositor::ResizeBottom;
         if (right.contains(point))
-            return ResizeBottomRight;
+            return QWasmCompositor::ResizeBottomRight;
     }
 
-    return ResizeNone;
+    return QWasmCompositor::ResizeNone;
 }
 
 QRect getSubControlRect(const QWasmWindow *window, QWasmCompositor::SubControls subControl)
@@ -364,7 +363,7 @@ QRegion QWasmWindow::titleControlRegion() const
 
 void QWasmWindow::invalidate()
 {
-    m_compositor->requestRedraw();
+    m_compositor->requestUpdateWindow(this);
 }
 
 QWasmCompositor::SubControls QWasmWindow::activeSubControl() const
@@ -395,16 +394,19 @@ qreal QWasmWindow::devicePixelRatio() const
 
 void QWasmWindow::requestUpdate()
 {
-    QPointer<QWindow> windowPointer(window());
-    bool registered = QWasmEventDispatcher::registerRequestUpdateCallback([=](){
-        if (windowPointer.isNull())
-            return;
+    if (m_compositor) {
+        m_compositor->requestUpdateWindow(this, QWasmCompositor::UpdateRequestDelivery);
+        return;
+    }
 
-        deliverUpdateRequest();
-    });
-
-    if (!registered)
-        QPlatformWindow::requestUpdate();
+    static auto frame = [](double time, void *context) -> int {
+        Q_UNUSED(time);
+        QWasmWindow *window = static_cast<QWasmWindow *>(context);
+        window->m_requestAnimationFrameId = -1;
+        window->deliverUpdateRequest();
+        return 0;
+    };
+    m_requestAnimationFrameId = emscripten_request_animation_frame(frame, this);
 }
 
 bool QWasmWindow::hasTitleBar() const

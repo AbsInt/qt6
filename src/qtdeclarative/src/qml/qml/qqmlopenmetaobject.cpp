@@ -99,11 +99,6 @@ QByteArray QQmlOpenMetaObjectType::propertyName(int idx) const
     return d->mob.property(idx).name();
 }
 
-QMetaObject *QQmlOpenMetaObjectType::metaObject() const
-{
-    return d->mem;
-}
-
 void QQmlOpenMetaObjectType::createProperties(const QVector<QByteArray> &names)
 {
     for (int i = 0; i < names.count(); ++i) {
@@ -229,16 +224,12 @@ public:
     }
 
     void dropPropertyCache() {
-        if (QQmlData *ddata = QQmlData::get(object, /*create*/false)) {
-            if (ddata->propertyCache) {
-                ddata->propertyCache->release();
-                ddata->propertyCache = nullptr;
-            }
-        }
+        if (QQmlData *ddata = QQmlData::get(object, /*create*/false))
+            ddata->propertyCache = nullptr;
     }
 
     QQmlOpenMetaObject *q;
-    QAbstractDynamicMetaObject *parent = nullptr;
+    QDynamicMetaObjectData *parent = nullptr;
     QVector<Property> data;
     QObject *object;
     QQmlRefPointer<QQmlOpenMetaObjectType> type;
@@ -254,7 +245,7 @@ QQmlOpenMetaObject::QQmlOpenMetaObject(QObject *obj, const QMetaObject *base)
     d->type->d->referers.insert(this);
 
     QObjectPrivate *op = QObjectPrivate::get(obj);
-    d->parent = static_cast<QAbstractDynamicMetaObject *>(op->metaObject);
+    d->parent = op->metaObject;
     *static_cast<QMetaObject *>(this) = *d->type->d->mem;
     op->metaObject = this;
 }
@@ -266,7 +257,7 @@ QQmlOpenMetaObject::QQmlOpenMetaObject(QObject *obj, QQmlOpenMetaObjectType *typ
     d->type->d->referers.insert(this);
 
     QObjectPrivate *op = QObjectPrivate::get(obj);
-    d->parent = static_cast<QAbstractDynamicMetaObject *>(op->metaObject);
+    d->parent = op->metaObject;
     *static_cast<QMetaObject *>(this) = *d->type->d->mem;
     op->metaObject = this;
 }
@@ -290,6 +281,11 @@ void QQmlOpenMetaObject::emitPropertyNotification(const QByteArray &propertyName
     if (iter == d->type->d->names.constEnd())
         return;
     activate(d->object, *iter + d->type->d->signalOffset, nullptr);
+}
+
+void QQmlOpenMetaObject::unparent()
+{
+    d->parent = nullptr;
 }
 
 int QQmlOpenMetaObject::metaCall(QObject *o, QMetaObject::Call c, int id, void **a)
@@ -319,7 +315,7 @@ int QQmlOpenMetaObject::metaCall(QObject *o, QMetaObject::Call c, int id, void *
     }
 }
 
-QAbstractDynamicMetaObject *QQmlOpenMetaObject::parent() const
+QDynamicMetaObjectData *QQmlOpenMetaObject::parent() const
 {
     return d->parent;
 }
@@ -430,7 +426,6 @@ void QQmlOpenMetaObject::setCached(bool c)
         if (!d->type->d->cache)
             d->type->d->cache = new QQmlPropertyCache(this);
         qmldata->propertyCache = d->type->d->cache;
-        d->type->d->cache->addref();
     } else {
         if (d->type->d->cache)
             d->type->d->cache->release();

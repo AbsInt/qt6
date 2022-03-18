@@ -117,6 +117,7 @@ private:
 
 class QWaylandInputMethodContext : public QPlatformInputContext
 {
+    Q_OBJECT
 public:
     QWaylandInputMethodContext(QWaylandDisplay *display);
     ~QWaylandInputMethodContext() override;

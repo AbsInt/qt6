@@ -76,6 +76,12 @@ Q_DECLARE_LOGGING_CATEGORY(lcHoverTrace)
 
 const QChar QQuickTextPrivate::elideChar = QChar(0x2026);
 
+#if !defined(QQUICKTEXT_LARGETEXT_THRESHOLD)
+  #define QQUICKTEXT_LARGETEXT_THRESHOLD 10000
+#endif
+// if QString::size() > largeTextSizeThreshold, we render more often, but only visible lines
+const int QQuickTextPrivate::largeTextSizeThreshold = QQUICKTEXT_LARGETEXT_THRESHOLD;
+
 QQuickTextPrivate::QQuickTextPrivate()
     : fontInfo(font), elideLayout(nullptr), textLine(nullptr), lineWidth(0)
     , color(0xFF000000), linkColor(0xFF0000FF), styleColor(0xFF000000)
@@ -124,6 +130,7 @@ void QQuickTextPrivate::init()
     Q_Q(QQuickText);
     q->setAcceptedMouseButtons(Qt::LeftButton);
     q->setFlag(QQuickItem::ItemHasContents);
+    q->setFlag(QQuickItem::ItemObservesViewport); // default until size is known
 }
 
 QQuickTextPrivate::~QQuickTextPrivate()
@@ -717,6 +724,7 @@ QRectF QQuickTextPrivate::setupTextLayout(qreal *const baseline)
         }
         if (lineCount) {
             lineCount = 0;
+            q->setFlag(QQuickItem::ItemObservesViewport, false);
             emit q->lineCountChanged();
         }
 
@@ -764,11 +772,15 @@ QRectF QQuickTextPrivate::setupTextLayout(qreal *const baseline)
     const bool pixelSize = font.pixelSize() != -1;
     QString layoutText = layout.text();
 
-    int largeFont = pixelSize ? font.pixelSize() : font.pointSize();
-    int smallFont = fontSizeMode() != QQuickText::FixedSize
-            ? qMin(pixelSize ? minimumPixelSize() : minimumPointSize(), largeFont)
-            : largeFont;
-    int scaledFontSize = largeFont;
+    const qreal minimumSize = pixelSize
+                            ? static_cast<qreal>(minimumPixelSize())
+                            : minimumPointSize();
+    qreal largeFont = pixelSize ? font.pixelSize() : font.pointSizeF();
+    qreal smallFont = fontSizeMode() != QQuickText::FixedSize
+                    ? qMin<qreal>(minimumSize, largeFont)
+                    : largeFont;
+    qreal scaledFontSize = largeFont;
+    const qreal sizeFittingThreshold(0.01);
 
     bool widthChanged = false;
     widthExceeded = availableWidth() <= 0 && (singlelineElide || canWrap || horizontalFit);
@@ -797,7 +809,7 @@ QRectF QQuickTextPrivate::setupTextLayout(qreal *const baseline)
             if (pixelSize)
                 scaledFont.setPixelSize(scaledFontSize);
             else
-                scaledFont.setPointSize(scaledFontSize);
+                scaledFont.setPointSizeF(scaledFontSize);
             if (layout.font() != scaledFont)
                 layout.setFont(scaledFont);
         }
@@ -809,7 +821,7 @@ QRectF QQuickTextPrivate::setupTextLayout(qreal *const baseline)
         truncated = false;
         elide = false;
         int unwrappedLineCount = 1;
-        int maxLineCount = maximumLineCount();
+        const int maxLineCount = maximumLineCount();
         height = 0;
         qreal naturalHeight = 0;
         qreal previousHeight = 0;
@@ -858,7 +870,7 @@ QRectF QQuickTextPrivate::setupTextLayout(qreal *const baseline)
             line = layout.createLine();
             if (!line.isValid()) {
                 if (singlelineElide && visibleCount == 1 && previousLine.naturalTextWidth() > previousLine.width()) {
-                    // Elide a single previousLine of  text if its width exceeds the element width.
+                    // Elide a single previousLine of text if its width exceeds the element width.
                     elide = true;
                     widthExceeded = true;
                     if (eos != -1) // There's an abbreviated string available.
@@ -1061,40 +1073,45 @@ QRectF QQuickTextPrivate::setupTextLayout(qreal *const baseline)
         if (!horizontalFit && !verticalFit)
             break;
 
+        // Can't find a better fit
+        if (qFuzzyCompare(smallFont, largeFont))
+            break;
+
         // Try and find a font size that better fits the dimensions of the element.
         if (horizontalFit) {
             if (unelidedRect.width() > lineWidth || (!verticalFit && wrapped)) {
                 widthExceeded = true;
-                largeFont = scaledFontSize - 1;
-                if (smallFont > largeFont)
-                    break;
+                largeFont = scaledFontSize;
+
                 scaledFontSize = (smallFont + largeFont) / 2;
-                if (pixelSize)
-                    scaledFont.setPixelSize(scaledFontSize);
-                else
-                    scaledFont.setPointSize(scaledFontSize);
+
                 continue;
             } else if (!verticalFit) {
                 smallFont = scaledFontSize;
-                if (smallFont == largeFont)
+
+                // Check to see if the current scaledFontSize is acceptable
+                if ((largeFont - smallFont) < sizeFittingThreshold)
                     break;
-                scaledFontSize = (smallFont + largeFont + 1) / 2;
+
+                scaledFontSize = (smallFont + largeFont) / 2;
             }
         }
 
         if (verticalFit) {
             if (truncateHeight || unelidedRect.height() > maxHeight) {
                 heightExceeded = true;
-                largeFont = scaledFontSize - 1;
-                if (smallFont > largeFont)
-                    break;
+                largeFont = scaledFontSize;
+
                 scaledFontSize = (smallFont + largeFont) / 2;
 
             } else {
                 smallFont = scaledFontSize;
-                if (smallFont == largeFont)
+
+                // Check to see if the current scaledFontSize is acceptable
+                if ((largeFont - smallFont) < sizeFittingThreshold)
                     break;
-                scaledFontSize = (smallFont + largeFont + 1) / 2;
+
+                scaledFontSize = (smallFont + largeFont) / 2;
             }
         }
     }
@@ -1745,6 +1762,7 @@ void QQuickText::setText(const QString &n)
         qDeleteAll(d->extra->imgTags);
         d->extra->imgTags.clear();
     }
+    setFlag(QQuickItem::ItemObservesViewport, n.size() > QQuickTextPrivate::largeTextSizeThreshold);
     d->updateLayout();
     setAcceptHoverEvents(d->richText || d->styledText);
     emit textChanged(d->text);
@@ -2340,7 +2358,13 @@ void QQuickText::resetBaseUrl()
         setBaseUrl(QUrl());
 }
 
-/*! \internal */
+/*!
+    Returns the extents of the text after layout.
+    If the \l style() is not \c Text.Normal, a margin is added to ensure
+    that the rendering effect will fit within this rectangle.
+
+    \sa contentWidth(), contentHeight(), clipRect()
+*/
 QRectF QQuickText::boundingRect() const
 {
     Q_D(const QQuickText);
@@ -2356,6 +2380,17 @@ QRectF QQuickText::boundingRect() const
     return rect;
 }
 
+/*!
+    Returns a rectangular area slightly larger than what is currently visible
+    in \l viewportItem(); otherwise, the rectangle \c (0, 0, width, height).
+    The text will be clipped to fit if \l clip is \c true.
+
+    \note If the \l style is not \c Text.Normal, the clip rectangle is adjusted
+    to be slightly larger, to limit clipping of the outline effect at the edges.
+    But it still looks better to set \l clip to \c false in that case.
+
+    \sa contentWidth(), contentHeight(), boundingRect()
+*/
 QRectF QQuickText::clipRect() const
 {
     Q_D(const QQuickText);
@@ -2971,6 +3006,17 @@ void QQuickText::hoverLeaveEvent(QHoverEvent *event)
 {
     Q_D(QQuickText);
     d->processHoverEvent(event);
+}
+
+bool QQuickTextPrivate::transformChanged(QQuickItem *transformedItem)
+{
+    // If there's a lot of text, we may need QQuickText::updatePaintNode() to call
+    // QQuickTextNode::addTextLayout() again to populate a different range of lines
+    if (flags & QQuickItem::ItemObservesViewport) {
+        updateType = UpdatePaintNode;
+        dirty(QQuickItemPrivate::Content);
+    }
+    return QQuickImplicitSizeItemPrivate::transformChanged(transformedItem);
 }
 
 /*!

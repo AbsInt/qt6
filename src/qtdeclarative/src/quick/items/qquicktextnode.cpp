@@ -53,6 +53,7 @@
 #include <qabstracttextdocumentlayout.h>
 #include <qxmlstream.h>
 #include <private/qquickstyledtext_p.h>
+#include <private/qquicktext_p_p.h>
 #include <private/qfont_p.h>
 #include <private/qfontengine_p.h>
 
@@ -73,6 +74,8 @@ namespace {
     };
 
 }
+
+Q_DECLARE_LOGGING_CATEGORY(lcVP)
 
 /*!
   Creates an empty QQuickTextNode
@@ -230,7 +233,9 @@ void QQuickTextNode::addTextDocument(const QPointF &position, QTextDocument *tex
                 Q_ASSERT(!engine.currentLine().isValid());
 
                 QTextBlock block = it.currentBlock();
-                engine.addTextBlock(textDocument, block, position, textColor, anchorColor, selectionStart, selectionEnd);
+                engine.addTextBlock(textDocument, block, position, textColor, anchorColor, selectionStart, selectionEnd,
+                                    (textDocument->characterCount() > QQuickTextPrivate::largeTextSizeThreshold ?
+                                         m_ownerElement->clipRect() : QRectF()));
                 ++it;
             }
         }
@@ -261,10 +266,17 @@ void QQuickTextNode::addTextLayout(const QPointF &position, QTextLayout *textLay
     QVarLengthArray<QTextLayout::FormatRange> colorChanges;
     engine.mergeFormats(textLayout, &colorChanges);
 
+    // If there's a lot of text, insert only the range of lines that can possibly be visible within the viewport.
+    QRectF viewport;
+    if (m_ownerElement->flags().testFlag(QQuickItem::ItemObservesViewport)) {
+        viewport = m_ownerElement->clipRect();
+        qCDebug(lcVP) << "text viewport" << viewport;
+    }
     lineCount = lineCount >= 0
             ? qMin(lineStart + lineCount, textLayout->lineCount())
             : textLayout->lineCount();
 
+    bool inViewport = false;
     for (int i=lineStart; i<lineCount; ++i) {
         QTextLine line = textLayout->lineAt(i);
 
@@ -279,9 +291,20 @@ void QQuickTextNode::addTextLayout(const QPointF &position, QTextLayout *textLay
             end += preeditLength;
         }
 #endif
-
-        engine.setCurrentLine(line);
-        engine.addGlyphsForRanges(colorChanges, start, end, selectionStart, selectionEnd);
+        if (viewport.isNull() || (line.y() + line.height() > viewport.top() && line.y() < viewport.bottom())) {
+            if (!inViewport && !viewport.isNull()) {
+                m_firstLineInViewport = i;
+                qCDebug(lcVP) << "first line in viewport" << i << "@" << line.y();
+            }
+            inViewport = true;
+            engine.setCurrentLine(line);
+            engine.addGlyphsForRanges(colorChanges, start, end, selectionStart, selectionEnd);
+        } else if (inViewport) {
+            Q_ASSERT(!viewport.isNull());
+            m_firstLinePastViewport = i;
+            qCDebug(lcVP) << "first omitted line past bottom of viewport" << i << "@" << line.y();
+            break; // went past the bottom of the viewport, so we're done
+        }
     }
 
     engine.addToSceneGraph(this, style, styleColor);

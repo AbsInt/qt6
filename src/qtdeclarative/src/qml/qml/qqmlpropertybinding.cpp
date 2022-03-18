@@ -38,13 +38,17 @@
 ****************************************************************************/
 
 #include "qqmlpropertybinding_p.h"
+
+#include <private/qqmlbinding_p.h>
+#include <private/qqmlglobal_p.h>
+#include <private/qqmlscriptstring_p.h>
 #include <private/qv4functionobject_p.h>
 #include <private/qv4jscall_p.h>
-#include <qqmlinfo.h>
-#include <QtCore/qloggingcategory.h>
-#include <private/qqmlscriptstring_p.h>
-#include <private/qqmlbinding_p.h>
 #include <private/qv4qmlcontext_p.h>
+
+#include <QtQml/qqmlinfo.h>
+
+#include <QtCore/qloggingcategory.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -165,8 +169,6 @@ void QQmlPropertyBindingJS::expressionChanged()
 {
     if (!asBinding()->propertyDataPtr)
         return;
-    if (QQmlData::wasDeleted(asBinding()->target()))
-        return;
     const auto currentTag = m_error.tag();
     if (currentTag == InEvaluationLoop) {
         QQmlError err;
@@ -227,10 +229,9 @@ void QQmlPropertyBinding::handleUndefinedAssignment(QQmlEnginePrivate *ep, void 
     QQmlPropertyData valueTypeData;
     QQmlData *data = QQmlData::get(target(), false);
     Q_ASSERT(data);
-    if (Q_UNLIKELY(!data->propertyCache)) {
+    if (Q_UNLIKELY(!data->propertyCache))
         data->propertyCache = ep->cache(target()->metaObject());
-        data->propertyCache->addref();
-    }
+
     propertyData = data->propertyCache->property(targetIndex().coreIndex());
     Q_ASSERT(propertyData);
     Q_ASSERT(!targetIndex().hasValueTypeIndex());
@@ -270,7 +271,7 @@ void QQmlPropertyBinding::handleUndefinedAssignment(QQmlEnginePrivate *ep, void 
         // reattach the binding (without causing a new notification)
         if (Q_UNLIKELY(bindingData->d() & QtPrivate::QPropertyBindingData::BindingBit)) {
             qCWarning(lcQQPropertyBinding) << "Resetting " << prop.name() << "due to the binding becoming undefined  caused a new binding to be installed\n"
-                       << "The old binding binding will be abandonned";
+                       << "The old binding binding will be abandoned";
             deref();
             return;
         }
@@ -298,10 +299,9 @@ QString QQmlPropertyBinding::createBindingLoopErrorDescription(QJSEnginePrivate 
     QQmlPropertyData valueTypeData;
     QQmlData *data = QQmlData::get(target(), false);
     Q_ASSERT(data);
-    if (Q_UNLIKELY(!data->propertyCache)) {
+    if (Q_UNLIKELY(!data->propertyCache))
         data->propertyCache = ep->cache(target()->metaObject());
-        data->propertyCache->addref();
-    }
+
     propertyData = data->propertyCache->property(targetIndex().coreIndex());
     Q_ASSERT(propertyData);
     Q_ASSERT(!targetIndex().hasValueTypeIndex());
@@ -335,12 +335,12 @@ void QQmlPropertyBinding::bindingErrorCallback(QPropertyBindingPrivate *that)
 
 QUntypedPropertyBinding QQmlTranslationPropertyBinding::create(const QQmlPropertyData *pd, const QQmlRefPointer<QV4::ExecutableCompilationUnit> &compilationUnit, const QV4::CompiledData::Binding *binding)
 {
-    auto translationBinding = [compilationUnit, binding](const QMetaType &metaType, void *dataPtr) -> bool {
+    auto translationBinding = [compilationUnit, binding](QMetaType metaType, void *dataPtr) -> bool {
         // Create a dependency to the translationLanguage
         QQmlEnginePrivate::get(compilationUnit->engine)->translationLanguage.value();
 
         QVariant resultVariant(compilationUnit->bindingValueAsString(binding));
-        if (metaType.id() != QMetaType::QString)
+        if (metaType != QMetaType::fromType<QString>())
             resultVariant.convert(metaType);
 
         const bool hasChanged = !metaType.equals(resultVariant.constData(), dataPtr);

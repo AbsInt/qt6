@@ -48,6 +48,8 @@ QtObject {
     property var exports: []
     property var exportMetaObjectRevisions: []
     property var interfaces: []
+    property var deferredNames: []
+    property var immediateNames: []
     property string attachedType
     property string valueType
     property string extension

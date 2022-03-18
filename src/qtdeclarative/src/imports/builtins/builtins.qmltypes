@@ -23,14 +23,6 @@ Module {
     }
 
     Component {
-        // QQmlV4Function is the name for varargs. If such parameter is declared
-        // we can invoke the method with any number of QJSValue parameters.
-        // Access semantics are not "value" because the actual QQmlV4Function object
-        // is passed as a pointer.
-        name: "QQmlV4Function"
-    }
-
-    Component {
         name: "QObject"
         accessSemantics: "reference"
         exports: ["QML/QtObject 1.0"]
@@ -149,18 +141,20 @@ Module {
     }
 
     Component {
-       name: "QVariantMap"
-       accessSemantics: "value"
+        name: "QVariantMap"
+        accessSemantics: "value"
     }
 
     Component {
-      name: "QRegularExpression"
-      extension: "RegExp"
-      accessSemantics: "value"
+        name: "QRegularExpression"
+        exports: ["QML/regexp 1.0"]
+        extension: "RegExp"
+        accessSemantics: "value"
     }
 
     Component {
-      name: "QByteArray"
-      accessSemantics: "value"
+        name: "QByteArray"
+        extension: "ArrayBuffer"
+        accessSemantics: "value"
     }
 }

@@ -51,6 +51,7 @@
 import QtQuick
 import QtTest
 import QtQuick.Controls
+import QtQuick.NativeStyle as NativeStyle
 
 TestCase {
     id: testCase
@@ -556,7 +557,7 @@ TestCase {
     }
 
     function test_warning() {
-        ignoreWarning(Qt.resolvedUrl("tst_scrollbar.qml") + ":55:1: QML TestCase: ScrollBar must be attached to a Flickable or ScrollView")
+        ignoreWarning(/.*QML TestCase: ScrollBar must be attached to a Flickable or ScrollView/)
         testCase.ScrollBar.vertical = null
     }
 
@@ -802,7 +803,14 @@ TestCase {
         compare(control.visible, true)
         compare(control.policy, ScrollBar.AsNeeded)
 
-        if (Qt.platform.pluginName !== "windows") {
+        var windowsStyle = false
+        var macOSStyle = false
+        if (control.background instanceof NativeStyle.StyleItem) {
+            windowsStyle = Qt.platform.pluginName === "windows"
+            macOSStyle = Qt.platform.pluginName === "cocoa"
+        }
+
+        if (!windowsStyle && !macOSStyle) {
             control.size = 0.5
             verify(control.state === "active" || control.contentItem.state === "active")
 
@@ -814,7 +822,7 @@ TestCase {
 
         control.policy = ScrollBar.AlwaysOn
         compare(control.visible, true)
-        if (Qt.platform.pluginName !== "windows") {
+        if (!windowsStyle && !macOSStyle) {
             verify(control.state === "active" || control.contentItem.state === "active")
         }
     }
@@ -955,5 +963,39 @@ TestCase {
         compare(vertical.position, 0.2)
         compare(vertical.visualPosition, 0.2)
         compare(vertical.contentItem.y, vertical.topPadding + 0.2 * vertical.availableHeight)
+    }
+
+    function test_setting_invalid_property_values() {
+        var control = createTemporaryObject(scrollBar, testCase, {size: 2.0, minimumSize: -1.0})
+        verify(control)
+
+        // check that the values are within the expected range
+        compare(control.size, 1.0)
+        compare(control.minimumSize, 0)
+
+        control.minimumSize = 2.0
+        compare(control.minimumSize, 1.0)
+
+        // test if setting NaN is prevented
+        control.size = NaN
+        control.minimumSize = NaN
+        compare(control.size, 1.0)
+        compare(control.minimumSize, 1.0)
+
+
+        // test if setting float infinity is prevented
+        control.size = Number.POSITIVE_INFINITY
+        control.minimumSize = Number.POSITIVE_INFINITY
+        compare(control.size, 1.0)
+        compare(control.minimumSize, 1.0)
+
+        let oldPosition = control.position;
+        let oldStepSize = control.stepSize;
+
+        control.position = NaN;
+        control.stepSize = NaN;
+
+        compare(oldPosition, control.position)
+        compare(oldStepSize, control.stepSize)
     }
 }

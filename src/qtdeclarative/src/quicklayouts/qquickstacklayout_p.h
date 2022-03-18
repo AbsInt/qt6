@@ -59,7 +59,7 @@ QT_BEGIN_NAMESPACE
 class QQuickStackLayoutPrivate;
 class QQuickStackLayoutAttached;
 
-class Q_QUICKLAYOUT_PRIVATE_EXPORT QQuickStackLayout : public QQuickLayout
+class Q_QUICKLAYOUTS_PRIVATE_EXPORT QQuickStackLayout : public QQuickLayout
 {
     Q_OBJECT
     Q_PROPERTY(int count READ count NOTIFY countChanged)
@@ -69,7 +69,7 @@ class Q_QUICKLAYOUT_PRIVATE_EXPORT QQuickStackLayout : public QQuickLayout
     QML_ATTACHED(QQuickStackLayoutAttached)
 
 public:
-    explicit QQuickStackLayout(QQuickItem *parent = 0);
+    explicit QQuickStackLayout(QQuickItem *parent = nullptr);
     int count() const;
     int currentIndex() const;
     void setCurrentIndex(int index);
@@ -78,7 +78,7 @@ public:
     void itemChange(ItemChange change, const ItemChangeData &value) override;
     QSizeF sizeHint(Qt::SizeHint whichSizeHint) const override;
     void setAlignment(QQuickItem *item, Qt::Alignment align)  override;
-    void invalidate(QQuickItem *childItem = 0)  override;
+    void invalidate(QQuickItem *childItem = nullptr)  override;
     void updateLayoutItems()  override;
     void rearrange(const QSizeF &) override;
 
@@ -92,8 +92,6 @@ public:
 signals:
     void currentIndexChanged();
     void countChanged();
-
-public slots:
 
 private:
     static void collectItemSizeHints(QQuickItem *item, QSizeF *sizeHints);

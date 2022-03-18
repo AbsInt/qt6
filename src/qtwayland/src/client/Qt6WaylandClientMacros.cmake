@@ -1,5 +1,5 @@
 function(qt6_generate_wayland_protocol_client_sources target)
-    cmake_parse_arguments(arg "" "WAYLAND_INCLUDE_DIR" "FILES" ${ARGN})
+    cmake_parse_arguments(arg "" "__QT_INTERNAL_WAYLAND_INCLUDE_DIR" "FILES" ${ARGN})
     if(DEFINED arg_UNPARSED_ARGUMENTS)
         message(FATAL_ERROR "Unknown arguments were passed to qt6_generate_wayland_protocol_client_sources: (${arg_UNPARSED_ARGUMENTS}).")
     endif()
@@ -35,8 +35,8 @@ function(qt6_generate_wayland_protocol_client_sources target)
         )
 
         set(wayland_include_dir "")
-        if(arg_WAYLAND_INCLUDE_DIR)
-            set(wayland_include_dir "${arg_WAYLAND_INCLUDE_DIR}")
+        if(arg___QT_INTERNAL_WAYLAND_INCLUDE_DIR)
+            set(wayland_include_dir "${arg___QT_INTERNAL_WAYLAND_INCLUDE_DIR}")
         else()
             get_target_property(qt_module ${target} _qt_module_interface_name)
             get_target_property(is_for_module "${target}" _qt_module_has_headers)
@@ -53,15 +53,8 @@ function(qt6_generate_wayland_protocol_client_sources target)
             DEPENDS ${protocol_file} Qt6::qtwaylandscanner
         )
 
-        # TODO: We need this hack in order to get the xcomposite plugins to build...
-        # unfortunately, it's not going to work outside QtWayland because we're using waylandclient-private includes
         set(qtwaylandscanner_code_include "")
-        set (targets_that_need_include
-            "QWaylandXCompositeEglClientBufferPlugin"
-            "QWaylandXCompositeGlxClientBufferPlugin"
-            "QWaylandXCompositeEglPlatformIntegrationPlugin"
-            "QWaylandXCompositeGlxPlatformIntegrationPlugin")
-        if ("${target}" IN_LIST targets_that_need_include OR is_for_module)
+        if (is_for_module)
             set(qtwaylandscanner_code_include "<QtWaylandClient/private/wayland-wayland-client-protocol.h>")
         endif()
 

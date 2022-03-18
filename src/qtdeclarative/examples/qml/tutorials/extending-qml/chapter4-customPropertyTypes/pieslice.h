@@ -61,12 +61,12 @@ class PieSlice : public QQuickPaintedItem
     QML_ELEMENT
 
 public:
-    PieSlice(QQuickItem *parent = 0);
+    PieSlice(QQuickItem *parent = nullptr);
 
     QColor color() const;
     void setColor(const QColor &color);
 
-    void paint(QPainter *painter);
+    void paint(QPainter *painter) override;
 
 private:
     QColor m_color;

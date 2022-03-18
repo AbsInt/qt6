@@ -75,6 +75,16 @@ using namespace QV4::Compiler;
 using namespace QQmlJS;
 using namespace QQmlJS::AST;
 
+void CodegenWarningInterface::reportVarUsedBeforeDeclaration(
+        const QString &name, const QString &fileName, QQmlJS::SourceLocation declarationLocation,
+        QQmlJS::SourceLocation accessLocation)
+{
+    qCWarning(lcQmlCompiler).nospace().noquote()
+            << fileName << ":" << accessLocation.startLine << ":" << accessLocation.startColumn
+            << " Variable \"" << name << "\" is used before its declaration at "
+            << declarationLocation.startLine << ":" << declarationLocation.startColumn << ".";
+}
+
 static inline void setJumpOutLocation(QV4::Moth::BytecodeGenerator *bytecodeGenerator,
                                       const Statement *body, const SourceLocation &fallback)
 {
@@ -94,14 +104,16 @@ static inline void setJumpOutLocation(QV4::Moth::BytecodeGenerator *bytecodeGene
     }
 }
 
-Codegen::Codegen(QV4::Compiler::JSUnitGenerator *jsUnitGenerator, bool strict)
-    : _module(nullptr)
-    , _returnAddress(-1)
-    , _context(nullptr)
-    , _labelledStatement(nullptr)
-    , jsUnitGenerator(jsUnitGenerator)
-    , _strictMode(strict)
-    , _fileNameIsUrl(false)
+Codegen::Codegen(QV4::Compiler::JSUnitGenerator *jsUnitGenerator, bool strict,
+                 CodegenWarningInterface *interface)
+    : _module(nullptr),
+      _returnAddress(-1),
+      _context(nullptr),
+      _labelledStatement(nullptr),
+      jsUnitGenerator(jsUnitGenerator),
+      _strictMode(strict),
+      _fileNameIsUrl(false),
+      _interface(interface)
 {
     jsUnitGenerator->codeGeneratorName = QStringLiteral("moth");
     pushExpr();
@@ -1293,7 +1305,9 @@ bool Codegen::visit(ArrayMemberExpression *ast)
         if (arrayIndex == UINT_MAX) {
             auto jumpLabel = ast->isOptional ? m_optionalChainLabels.take(ast) : Moth::BytecodeGenerator::Label();
 
-            setExprResult(Reference::fromMember(base, str->value.toString(), jumpLabel, targetLabel));
+            setExprResult(Reference::fromMember(base, str->value.toString(),
+                                                ast->expression->firstSourceLocation(), jumpLabel,
+                                                targetLabel));
             return false;
         }
 
@@ -1533,7 +1547,7 @@ bool Codegen::visit(BinaryExpression *ast)
             setExprResult(binopHelper(static_cast<QSOperator::Op>(ast->op), right, left));
             break;
         }
-        // intentional fall-through!
+        Q_FALLTHROUGH();
     case QSOperator::In:
     case QSOperator::InstanceOf:
     case QSOperator::As:
@@ -2057,6 +2071,9 @@ void Codegen::endVisit(CallExpression *ast)
 
 void Codegen::handleCall(Reference &base, Arguments calldata, int slotForFunction, int slotForThisObject, bool optional)
 {
+    if (base.sourceLocation.isValid())
+        bytecodeGenerator->setLocation(base.sourceLocation);
+
     //### Do we really need all these call instructions? can's we load the callee in a temp?
     if (base.type == Reference::Member) {
         if (!disable_lookups && useFastLookups) {
@@ -2260,7 +2277,7 @@ bool Codegen::visit(DeleteExpression *ast)
     case Reference::StackSlot:
         if (!expr.stackSlotIsLocalOrArgument)
             break;
-        // fall through
+        Q_FALLTHROUGH();
     case Reference::ScopedLocal:
         // Trying to delete a function argument might throw.
         if (_context->isStrict) {
@@ -2489,9 +2506,10 @@ bool Codegen::visit(FieldMemberExpression *ast)
         return false;
     }
 
-    setExprResult(Reference::fromMember(base, ast->name.toString(),
-                                        ast->isOptional ? m_optionalChainLabels.take(ast) : Moth::BytecodeGenerator::Label(),
-                                        label.has_value() ? label.value() : Moth::BytecodeGenerator::Label()));
+    setExprResult(Reference::fromMember(
+            base, ast->name.toString(), ast->lastSourceLocation(),
+            ast->isOptional ? m_optionalChainLabels.take(ast) : Moth::BytecodeGenerator::Label(),
+            label.has_value() ? label.value() : Moth::BytecodeGenerator::Label()));
 
     return false;
 }
@@ -2592,12 +2610,9 @@ Codegen::Reference Codegen::referenceForName(const QString &name, bool isLhs, co
 
         if (resolved.declarationLocation.isValid() && accessLocation.isValid()
                 && resolved.declarationLocation.begin() > accessLocation.end()) {
-            qCWarning(lcQmlCompiler).nospace().noquote()
-                    << url().toString() << ":" << accessLocation.startLine
-                    << ":" << accessLocation.startColumn << " Variable \"" << name
-                    << "\" is used before its declaration at "
-                    << resolved.declarationLocation.startLine << ":"
-                    << resolved.declarationLocation.startColumn << ".";
+            Q_ASSERT(_interface);
+            _interface->reportVarUsedBeforeDeclaration(
+                    name, url().toLocalFile(), resolved.declarationLocation, accessLocation);
         }
 
         if (resolved.isInjected && accessLocation.isValid()) {
@@ -2625,12 +2640,14 @@ Codegen::Reference Codegen::referenceForName(const QString &name, bool isLhs, co
         r.isReferenceToConst = resolved.isConst;
         r.requiresTDZCheck = resolved.requiresTDZCheck;
         r.name = name; // used to show correct name at run-time when TDZ check fails.
+        r.sourceLocation = accessLocation;
         return r;
     }
 
     Reference r = Reference::fromName(this, name);
     r.global = useFastLookups && (resolved.type == Context::ResolvedName::Global || resolved.type == Context::ResolvedName::QmlGlobal);
     r.qmlGlobal = resolved.type == Context::ResolvedName::QmlGlobal;
+    r.sourceLocation = accessLocation;
     if (!r.global && !r.qmlGlobal && m_globalNames.contains(name))
         r.global = true;
     return r;
@@ -3262,9 +3279,8 @@ static bool endsWithReturn(Module *module, Node *node)
     return false;
 }
 
-int Codegen::defineFunction(const QString &name, AST::Node *ast,
-                            AST::FormalParameterList *formals,
-                            AST::StatementList *body)
+int Codegen::defineFunction(const QString &name, AST::Node *ast, AST::FormalParameterList *formals,
+                            AST::StatementList *body, bool storeSourceLocation)
 {
     enterContext(ast);
 
@@ -3296,7 +3312,7 @@ int Codegen::defineFunction(const QString &name, AST::Node *ast,
     // AOT compilation, so mark the surrounding function as only-returning-a-closure.
     _context->returnsClosure = body && body->statement && cast<ExpressionStatement *>(body->statement) && cast<FunctionExpression *>(cast<ExpressionStatement *>(body->statement)->expression);
 
-    BytecodeGenerator bytecode(_context->line, _module->debugMode);
+    BytecodeGenerator bytecode(_context->line, _module->debugMode, storeSourceLocation);
     BytecodeGenerator *savedBytecodeGenerator;
     savedBytecodeGenerator = bytecodeGenerator;
     bytecodeGenerator = &bytecode;
@@ -4657,6 +4673,10 @@ QT_WARNING_POP
                 return;
             }
         }
+
+        if (sourceLocation.isValid())
+            codegen->bytecodeGenerator->setLocation(sourceLocation);
+
         if (!disable_lookups && global) {
             if (qmlGlobal) {
                 Instruction::LoadQmlContextPropertyLookup load;
@@ -4676,6 +4696,10 @@ QT_WARNING_POP
     case Member:
         propertyBase.loadInAccumulator();
         tdzCheck(requiresTDZCheck);
+
+        if (sourceLocation.isValid())
+            codegen->bytecodeGenerator->setLocation(sourceLocation);
+
         if (!disable_lookups && codegen->useFastLookups) {
             if (optionalChainJumpLabel->isValid()) { // If we got a valid jump label, this means it's an optional lookup
                 auto jump = codegen->bytecodeGenerator->jumpOptionalLookup(codegen->registerGetterLookup(propertyNameIndex));

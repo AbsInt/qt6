@@ -64,7 +64,7 @@ class PieSlice : public QQuickPaintedItem
 //![0]
 
 public:
-    PieSlice(QQuickItem *parent = 0);
+    PieSlice(QQuickItem *parent = nullptr);
 
     QColor color() const;
     void setColor(const QColor &color);
@@ -75,7 +75,7 @@ public:
     int angleSpan() const;
     void setAngleSpan(int span);
 
-    void paint(QPainter *painter);
+    void paint(QPainter *painter) override;
 
 private:
     QColor m_color;
