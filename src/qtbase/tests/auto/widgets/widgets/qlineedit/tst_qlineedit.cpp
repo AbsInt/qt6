@@ -3430,6 +3430,9 @@ void tst_QLineEdit::leftKeyOnSelectedText()
 
 void tst_QLineEdit::inlineCompletion()
 {
+#ifdef Q_OS_ANDROID
+    QSKIP("QCompleter does not work on Android, see QTBUG-77174");
+#endif
     if (QGuiApplication::platformName().startsWith(QLatin1String("wayland"), Qt::CaseInsensitive))
         QSKIP("Wayland: This fails. Figure out why.");
 
@@ -3827,6 +3830,9 @@ void tst_QLineEdit::task198789_currentCompletion()
 
 void tst_QLineEdit::task210502_caseInsensitiveInlineCompletion()
 {
+#ifdef Q_OS_ANDROID
+    QSKIP("QCompleter does not work on Android, see QTBUG-77174");
+#endif
     if (QGuiApplication::platformName().startsWith(QLatin1String("wayland"), Qt::CaseInsensitive))
         QSKIP("Wayland: This fails. Figure out why.");
 

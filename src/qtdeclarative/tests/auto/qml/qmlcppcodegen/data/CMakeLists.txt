@@ -1,9 +1,11 @@
 set(cpp_sources
+    ambiguous.h
     birthdayparty.cpp birthdayparty.h
     cppbaseclass.h
     dynamicmeta.h
     objectwithmethod.h
     person.cpp person.h
+    state.h
     theme.cpp theme.h
     timelinetheme.cpp timelinetheme.h
 )
@@ -30,7 +32,10 @@ set(qml_files
     SelectionRectangle.qml
     Test.qml
     TestCase.qml
+    WindowDerived.qml
     aliasLookup.qml
+    ambiguous1/Ambiguous.qml
+    ambiguous2/Ambiguous.qml
     anchorsFill.qml
     array.qml
     asCast.qml
@@ -103,6 +108,7 @@ set(qml_files
     page.qml
     parentProp.qml
     popContextAfterRet.qml
+    prefixedMetaType.qml
     pressAndHoldButton.qml
     registerelimination.qml
     revisions.qml

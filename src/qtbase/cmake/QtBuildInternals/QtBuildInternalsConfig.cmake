@@ -74,6 +74,9 @@ macro(qt_set_up_build_internals_paths)
     # building qtdeclarative, rather than having to build qtbase first (which will copy
     # QtBuild.cmake to the build dir). This is similar to qmake non-prefix builds, where the
     # source qtbase/mkspecs directory is used.
+    # TODO: Clean this up, together with qt_internal_try_compile_binary_for_strip to only use the
+    # the qtbase sources when building qtbase. And perhaps also when doing a non-prefix
+    # developer-build.
     if(EXISTS "${QT_SOURCE_TREE}/cmake")
         list(PREPEND CMAKE_MODULE_PATH "${QT_SOURCE_TREE}/cmake")
     endif()
@@ -388,6 +391,8 @@ macro(qt_build_repo_begin)
     endif()
 
     qt_enable_cmake_languages()
+
+    qt_internal_generate_binary_strip_wrapper()
 
     # Add global docs targets that will work both for per-repo builds, and super builds.
     if(NOT TARGET docs)
@@ -806,7 +811,7 @@ macro(qt_examples_build_begin)
     if(NOT QT_IS_EXTERNAL_EXAMPLES_BUILD OR NOT __qt_all_examples_ported_to_external_projects)
         qt_internal_set_up_build_dir_package_paths()
         list(APPEND CMAKE_FIND_ROOT_PATH "${QT_BUILD_DIR}")
-        list(APPEND QT_EXAMPLES_CMAKE_PREFIX_PATH "${QT_BUILD_DIR}/lib/cmake")
+        list(APPEND QT_EXAMPLES_CMAKE_PREFIX_PATH "${QT_BUILD_DIR}/${INSTALL_LIBDIR}/cmake")
     endif()
 
     # Because CMAKE_INSTALL_RPATH is empty by default in the repo project, examples need to have
@@ -891,8 +896,15 @@ unset(CMAKE_INSTALL_PREFIX)
 
     # Override the install prefix in the subdir cmake_install.cmake, so that
     # relative install(TARGETS DESTINATION) calls in example projects install where we tell them to.
-    set(CMAKE_INSTALL_PREFIX
-        "${CMAKE_INSTALL_PREFIX}/${INSTALL_EXAMPLESDIR}/${example_rel_path}")
+    # Allow customizing the installation path of the examples. Will be used in CI.
+    if(QT_INTERNAL_EXAMPLES_INSTALL_PREFIX)
+        set(qt_example_install_prefix "${QT_INTERNAL_EXAMPLES_INSTALL_PREFIX}")
+    else()
+        set(qt_example_install_prefix "${CMAKE_INSTALL_PREFIX}/${INSTALL_EXAMPLESDIR}")
+    endif()
+    file(TO_CMAKE_PATH "${qt_example_install_prefix}" qt_example_install_prefix)
+
+    set(CMAKE_INSTALL_PREFIX "${qt_example_install_prefix}/${example_rel_path}")
 
     # Make sure unclean example projects have their INSTALL_EXAMPLEDIR set to "."
     # Won't have any effect on example projects that don't use INSTALL_EXAMPLEDIR.
@@ -1047,6 +1059,10 @@ function(qt_internal_add_example_external_project subdir)
         list(APPEND var_defs -D${var_with_type}=${varForGenex})
     endforeach()
 
+    if(QT_INTERNAL_VERBOSE_EXAMPLES)
+        list(APPEND var_defs -DCMAKE_MESSAGE_LOG_LEVEL:STRING=DEBUG)
+        list(APPEND var_defs -DCMAKE_AUTOGEN_VERBOSE:BOOL=TRUE)
+    endif()
 
     set(deps "")
     list(REMOVE_DUPLICATES QT_EXAMPLE_DEPENDENCIES)
@@ -1120,16 +1136,23 @@ function(qt_internal_add_example_external_project subdir)
     #    example_source_dir, use _qt_internal_override_example_install_dir_to_dot to ensure
     #    INSTALL_EXAMPLEDIR does not interfere.
 
-    # Allow installing somewhere under the build dir.
-    if(QT_INTERNAL_CUSTOM_INSTALL_DIR)
-        set(qt_example_install_prefix "${QT_INTERNAL_CUSTOM_INSTALL_DIR}")
+    # Allow customizing the installation path of the examples. Will be used in CI.
+    if(QT_INTERNAL_EXAMPLES_INSTALL_PREFIX)
+        set(qt_example_install_prefix "${QT_INTERNAL_EXAMPLES_INSTALL_PREFIX}")
     else()
         set(qt_example_install_prefix "${CMAKE_INSTALL_PREFIX}/${INSTALL_EXAMPLESDIR}")
     endif()
+    file(TO_CMAKE_PATH "${qt_example_install_prefix}" qt_example_install_prefix)
 
     set(example_install_prefix "${qt_example_install_prefix}/${example_rel_path}")
 
     set(ep_binary_dir    "${CMAKE_CURRENT_BINARY_DIR}/${subdir}")
+
+    set(build_command "")
+    if(QT_INTERNAL_VERBOSE_EXAMPLES AND CMAKE_GENERATOR MATCHES "Ninja")
+        set(build_command BUILD_COMMAND "${CMAKE_COMMAND}" --build "." -- -v)
+    endif()
+
     ExternalProject_Add(${arg_NAME}
         EXCLUDE_FROM_ALL TRUE
         SOURCE_DIR       "${CMAKE_CURRENT_SOURCE_DIR}/${subdir}"
@@ -1138,6 +1161,7 @@ function(qt_internal_add_example_external_project subdir)
         BINARY_DIR       "${ep_binary_dir}"
         INSTALL_DIR      "${example_install_prefix}"
         INSTALL_COMMAND  ""
+        ${build_command}
         TEST_COMMAND     ""
         DEPENDS          ${deps}
         CMAKE_CACHE_ARGS ${var_defs}

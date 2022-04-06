@@ -769,12 +769,16 @@ function(_qt_internal_android_format_deployment_paths target)
         # windows paths when setting QT_* properties below, so their values are used as is when
         # generating deployment settings.
         set_target_properties(${target} PROPERTIES
-            _qt_native_qml_import_paths "$<TARGET_PROPERTY:${target},QT_QML_IMPORT_PATH>"
-            _qt_android_native_qml_root_paths "$<TARGET_PROPERTY:${target},QT_QML_ROOT_PATH>"
+            _qt_native_qml_import_paths
+                "$<GENEX_EVAL:$<TARGET_PROPERTY:${target},QT_QML_IMPORT_PATH>>"
+            _qt_android_native_qml_root_paths
+                "$<GENEX_EVAL:$<TARGET_PROPERTY:${target},QT_QML_ROOT_PATH>>"
             _qt_android_native_package_source_dir
-                "$<TARGET_PROPERTY:${target},QT_ANDROID_PACKAGE_SOURCE_DIR>"
-            _qt_android_native_extra_plugins "$<TARGET_PROPERTY:${target},QT_ANDROID_EXTRA_PLUGINS>"
-            _qt_android_native_extra_libs "$<TARGET_PROPERTY:${target},QT_ANDROID_EXTRA_LIBS>"
+                "$<GENEX_EVAL:$<TARGET_PROPERTY:${target},QT_ANDROID_PACKAGE_SOURCE_DIR>>"
+            _qt_android_native_extra_plugins
+                "$<GENEX_EVAL:$<TARGET_PROPERTY:${target},QT_ANDROID_EXTRA_PLUGINS>>"
+            _qt_android_native_extra_libs
+                "$<GENEX_EVAL:$<TARGET_PROPERTY:${target},QT_ANDROID_EXTRA_LIBS>>"
         )
     else()
         # User projects still may use windows paths inside the QT_* properties below, with
@@ -933,6 +937,14 @@ function(_qt_internal_configure_android_multiabi_target target)
             escaped_host_packages_prefix_path)
         list(APPEND extra_cmake_args
             "-DQT_ADDITIONAL_HOST_PACKAGES_PREFIX_PATH=${escaped_host_packages_prefix_path}")
+    endif()
+
+    if(NOT ANDROID_SDK_ROOT STREQUAL "")
+        list(APPEND extra_cmake_args "-DANDROID_SDK_ROOT=${ANDROID_SDK_ROOT}")
+    endif()
+
+    if(NOT ANDROID_NDK_ROOT STREQUAL "")
+        list(APPEND extra_cmake_args "-DANDROID_NDK_ROOT=${ANDROID_NDK_ROOT}")
     endif()
 
     set(missing_qt_abi_toolchains "")

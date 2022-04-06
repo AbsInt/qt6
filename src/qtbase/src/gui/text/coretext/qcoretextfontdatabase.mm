@@ -62,10 +62,13 @@
 
 QT_BEGIN_NAMESPACE
 
+QT_IMPL_METATYPE_EXTERN_TAGGED(QCFType<CGFontRef>, QCFType_CGFontRef)
+QT_IMPL_METATYPE_EXTERN_TAGGED(QCFType<CFURLRef>, QCFType_CFURLRef)
+
 // this could become a list of all languages used for each writing
 // system, instead of using the single most common language.
-static const char *languageForWritingSystem[] = {
-    0,     // Any
+static const char languageForWritingSystem[][8] = {
+    "",    // Any
     "en",  // Latin
     "el",  // Greek
     "ru",  // Cyrillic
@@ -95,12 +98,12 @@ static const char *languageForWritingSystem[] = {
     "ja",  // Japanese
     "ko",  // Korean
     "vi",  // Vietnamese
-    0, // Symbol
+    "",    // Symbol
     "sga", // Ogham
     "non", // Runic
     "man" // N'Ko
 };
-enum { LanguageCount = sizeof(languageForWritingSystem) / sizeof(const char *) };
+enum { LanguageCount = sizeof languageForWritingSystem / sizeof *languageForWritingSystem };
 
 QCoreTextFontDatabase::QCoreTextFontDatabase()
     : m_hasPopulatedAliases(false)
@@ -109,6 +112,8 @@ QCoreTextFontDatabase::QCoreTextFontDatabase()
 
 QCoreTextFontDatabase::~QCoreTextFontDatabase()
 {
+    qDeleteAll(m_themeFonts);
+
     for (CTFontDescriptorRef ref : qAsConst(m_systemFontDescriptors))
         CFRelease(ref);
 }
@@ -126,11 +131,7 @@ void QCoreTextFontDatabase::populateFontDatabase()
 
     qCDebug(lcQpaFonts) << "Populating available families took" << elapsed.restart() << "ms";
 
-    // Force creating the theme fonts to get the descriptors in m_systemFontDescriptors
-    if (m_themeFonts.isEmpty())
-        (void)themeFonts();
-
-    qCDebug(lcQpaFonts) << "Resolving theme fonts took" << elapsed.restart() << "ms";
+    populateThemeFonts();
 
     for (CTFontDescriptorRef fontDesc : m_systemFontDescriptors)
         populateFromDescriptor(fontDesc);
@@ -143,6 +144,12 @@ void QCoreTextFontDatabase::populateFontDatabase()
 bool QCoreTextFontDatabase::populateFamilyAliases(const QString &missingFamily)
 {
 #if defined(Q_OS_MACOS)
+    if (isFamilyPopulated(missingFamily)) {
+        // We got here because one of the other properties of the font mismatched,
+        // for example the style, so there's no point in populating font aliases.
+        return false;
+    }
+
     if (m_hasPopulatedAliases)
         return false;
 
@@ -190,14 +197,25 @@ bool QCoreTextFontDatabase::populateFamilyAliases(const QString &missingFamily)
 #endif
 }
 
+CTFontDescriptorRef descriptorForFamily(const QString &familyName)
+{
+    return CTFontDescriptorCreateWithAttributes(CFDictionaryRef(@{
+        (id)kCTFontFamilyNameAttribute: familyName.toNSString()
+    }));
+}
+
+CTFontDescriptorRef descriptorForFamily(const char *familyName)
+{
+    return descriptorForFamily(QString::fromLatin1(familyName));
+}
+
 void QCoreTextFontDatabase::populateFamily(const QString &familyName)
 {
-    QCFType<CFMutableDictionaryRef> attributes = CFDictionaryCreateMutable(kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
-    CFDictionaryAddValue(attributes, kCTFontFamilyNameAttribute, QCFString(familyName));
-    QCFType<CTFontDescriptorRef> nameOnlyDescriptor = CTFontDescriptorCreateWithAttributes(attributes);
-
-    // A single family might match several different fonts with different styles eg.
-    QCFType<CFArrayRef> matchingFonts = (CFArrayRef) CTFontDescriptorCreateMatchingFontDescriptors(nameOnlyDescriptor, 0);
+    // A single family might match several different fonts with different styles.
+    // We need to add them all so that the font database has the full picture,
+    // as once a family has been populated we will not populate it again.
+    QCFType<CTFontDescriptorRef> familyDescriptor = descriptorForFamily(familyName);
+    QCFType<CFArrayRef> matchingFonts = CTFontDescriptorCreateMatchingFontDescriptors(familyDescriptor, nullptr);
     if (!matchingFonts) {
         qCWarning(lcQpaFonts) << "QCoreTextFontDatabase: Found no matching fonts for family" << familyName;
         return;
@@ -313,7 +331,7 @@ static void getFontDescription(CTFontDescriptorRef font, FontDescription *fd)
     if (QCFType<CFArrayRef> languages = (CFArrayRef) CTFontDescriptorCopyAttribute(font, kCTFontLanguagesAttribute)) {
         CFIndex length = CFArrayGetCount(languages);
         for (int i = 1; i < LanguageCount; ++i) {
-            if (!languageForWritingSystem[i])
+            if (!*languageForWritingSystem[i])
                 continue;
             QCFString lang = CFStringCreateWithCString(NULL, languageForWritingSystem[i], kCFStringEncodingASCII);
             if (CFArrayContainsValue(languages, CFRangeMake(0, length), lang))
@@ -401,9 +419,15 @@ QFontEngine *QCoreTextFontDatabaseEngineFactory<QFontEngineFT>::fontEngine(const
         return QFontEngineFT::create(*fontData, fontDef.pixelSize,
             static_cast<QFont::HintingPreference>(fontDef.hintingPreference));
     } else if (NSURL *url = descriptorAttribute<NSURL>(descriptor, kCTFontURLAttribute)) {
-        Q_ASSERT(url.fileURL);
         QFontEngine::FaceId faceId;
-        faceId.filename = QString::fromNSString(url.path).toUtf8();
+
+        Q_ASSERT(url.fileURL);
+        QString faceFileName{QString::fromNSString(url.path)};
+        faceId.filename = faceFileName.toUtf8();
+
+        QString styleName = QCFString(CTFontDescriptorCopyAttribute(descriptor, kCTFontStyleNameAttribute));
+        faceId.index = QFreetypeFace::getFaceIndexByStyleName(faceFileName, styleName);
+
         return QFontEngineFT::create(fontDef, faceId);
     }
     // We end up here with a descriptor does not contain Qt font data or kCTFontURLAttribute.
@@ -424,18 +448,6 @@ template class QCoreTextFontDatabaseEngineFactory<QCoreTextFontEngine>;
 #ifndef QT_NO_FREETYPE
 template class QCoreTextFontDatabaseEngineFactory<QFontEngineFT>;
 #endif
-
-CTFontDescriptorRef descriptorForFamily(const QString &familyName)
-{
-    return CTFontDescriptorCreateWithAttributes(CFDictionaryRef(@{
-        (id)kCTFontFamilyNameAttribute: familyName.toNSString()
-    }));
-}
-
-CTFontDescriptorRef descriptorForFamily(const char *familyName)
-{
-    return descriptorForFamily(QString::fromLatin1(familyName));
-}
 
 CFArrayRef fallbacksForDescriptor(CTFontDescriptorRef descriptor)
 {
@@ -744,31 +756,43 @@ static CTFontDescriptorRef fontDescriptorFromTheme(QPlatformTheme::Font f)
     return descriptorForFontType(fontTypeFromTheme(f));
 }
 
-const QHash<QPlatformTheme::Font, QFont *> &QCoreTextFontDatabase::themeFonts() const
+void QCoreTextFontDatabase::populateThemeFonts()
 {
-    if (m_themeFonts.isEmpty()) {
-        for (long f = QPlatformTheme::SystemFont; f < QPlatformTheme::NFonts; f++) {
-            QPlatformTheme::Font ft = static_cast<QPlatformTheme::Font>(f);
-            m_themeFonts.insert(ft, themeFont(ft));
-        }
+    if (!m_themeFonts.isEmpty())
+        return;
+
+    QElapsedTimer elapsed;
+    if (lcQpaFonts().isDebugEnabled())
+        elapsed.start();
+
+    qCDebug(lcQpaFonts) << "Populating theme fonts...";
+
+    for (long f = QPlatformTheme::SystemFont; f < QPlatformTheme::NFonts; f++) {
+        QPlatformTheme::Font themeFont = static_cast<QPlatformTheme::Font>(f);
+        CTFontDescriptorRef fontDescriptor = fontDescriptorFromTheme(themeFont);
+        FontDescription fd;
+        getFontDescription(fontDescriptor, &fd);
+
+        if (!m_systemFontDescriptors.contains(fontDescriptor))
+            m_systemFontDescriptors.insert(fontDescriptor);
+        else
+            CFRelease(fontDescriptor);
+
+        QFont *font = new QFont(fd.familyName, fd.pointSize, fd.weight, fd.style == QFont::StyleItalic);
+        m_themeFonts.insert(themeFont, font);
     }
 
-    return m_themeFonts;
+    qCDebug(lcQpaFonts) << "Populating theme fonts took" << elapsed.restart() << "ms";
 }
 
 QFont *QCoreTextFontDatabase::themeFont(QPlatformTheme::Font f) const
 {
-    CTFontDescriptorRef fontDesc = fontDescriptorFromTheme(f);
-    FontDescription fd;
-    getFontDescription(fontDesc, &fd);
+    // The code paths via QFontDatabase::systemFont() or QPlatformTheme::font()
+    // do not ensure that the font database has been populated, so we need to
+    // manually populate the theme fonts lazily here just in case.
+    const_cast<QCoreTextFontDatabase*>(this)->populateThemeFonts();
 
-    if (!m_systemFontDescriptors.contains(fontDesc))
-        m_systemFontDescriptors.insert(fontDesc);
-    else
-        CFRelease(fontDesc);
-
-    QFont *font = new QFont(fd.familyName, fd.pointSize, fd.weight, fd.style == QFont::StyleItalic);
-    return font;
+    return m_themeFonts.value(f, nullptr);
 }
 
 QFont QCoreTextFontDatabase::defaultFont() const

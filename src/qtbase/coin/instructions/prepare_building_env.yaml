@@ -8,6 +8,24 @@ instructions:
     variableName: CMAKE_GENERATOR
     variableValue: Ninja
 
+  # Set path separator based on host platform.
+  # \ on Windows (double \\ for escaping the backslash)
+  # / on UNIX
+  - type: EnvironmentVariable
+    variableName: CI_PATH_SEP
+    variableValue: "\\"
+    enable_if:
+      condition: property
+      property: host.os
+      equals_value: Windows
+  - type: EnvironmentVariable
+    variableName: CI_PATH_SEP
+    variableValue: "/"
+    disable_if:
+      condition: property
+      property: host.os
+      equals_value: Windows
+
 
   # Export ICC specific env. variables
   - type: Group
@@ -308,9 +326,14 @@ instructions:
   # QNX variables
   - type: Group
     enable_if:
-      condition: property
-      property: target.os
-      equals_value: QNX
+      condition: and
+      conditions:
+        - condition: property
+          property: host.os
+          equals_value: Linux
+        - condition: property
+          property: target.os
+          equals_value: QNX
     instructions:
     - type: WriteFile
       fileContents: "#!/bin/bash\nexport TESTARGS={{.Env.TESTARGS}}\nexport TESTRUNNER={{.Env.TESTRUNNER}}\nexport COIN_CTEST_RESULTSDIR={{.Env.COIN_CTEST_RESULTSDIR}}\n$*"
@@ -323,10 +346,10 @@ instructions:
       variableValue: "{{.Env.QNX_710}}/target/qnx7"
     - type: EnvironmentVariable
       variableName: QNX_CONFIGURATION_EXCLUSIVE
-      variableValue: "{{.Env.QNX_710}}/.qnx"
+      variableValue: "{{.Env.HOME}}/.qnx"
     - type: EnvironmentVariable
       variableName: QNX_CONFIGURATION
-      variableValue: "{{.Env.QNX_710}}/.qnx"
+      variableValue: "{{.Env.HOME}}/.qnx"
     - type: PrependToEnvironmentVariable
       variableName: PATH
       variableValue: "{{.Env.QNX_710}}/host/linux/x86_64/usr/bin:"
@@ -335,17 +358,46 @@ instructions:
       variableValue: "{{.Env.QNX_710}}/host/common/bin:"
     - type: PrependToEnvironmentVariable
       variableName: PATH
-      variableValue: "{{.Env.QNX_710}}/.qnx:"
+      variableValue: "{{.Env.HOME}}/.qnx:"
     - type: EnvironmentVariable
       variableName: QNX_HOST
       variableValue: "{{.Env.QNX_710}}/host/linux/x86_64"
     - type: AppendToEnvironmentVariable
       variableName: PATH
       variableValue: ":{{.Env.QEMUARMV7_TOOLCHAIN_SYSROOT}}/../x86_64-pokysdk-linux/usr/bin:"
-      enable_if:
-        condition: property
-        property: host.os
-        equals_value: Linux
+
+  - type: Group
+    enable_if:
+      condition: and
+      conditions:
+        - condition: property
+          property: host.os
+          equals_value: Windows
+        - condition: property
+          property: target.os
+          equals_value: QNX
+    instructions:
+    - type: EnvironmentVariable
+      variableName: QNX_TARGET
+      variableValue: "{{.Env.QNX_710_CMAKE}}/target/qnx7"
+    - type: EnvironmentVariable
+      variableName: QNX_CONFIGURATION_EXCLUSIVE
+      variableValue: "{{.Env.HOMEPATH}}\\.qnx"
+    - type: EnvironmentVariable
+      variableName: QNX_CONFIGURATION
+      variableValue: "{{.Env.HOMEPATH}}\\.qnx"
+    - type: PrependToEnvironmentVariable
+      variableName: PATH
+      variableValue: "{{.Env.QNX_710}}\\host\\win64\\x86_64\\usr\\bin;"
+    - type: PrependToEnvironmentVariable
+      variableName: PATH
+      variableValue: "{{.Env.QNX_710}}\\host\\common\\bin;"
+    - type: PrependToEnvironmentVariable
+      variableName: PATH
+      variableValue: "{{.Env.HOMEPATH}}\\.qnx;"
+    - type: EnvironmentVariable
+      variableName: QNX_HOST
+      variableValue: "{{.Env.QNX_710}}\\host\\win64\\x86_64"
 
   # Enable warnings are errors
   - type: Group
@@ -406,6 +458,54 @@ instructions:
       condition: property
       property: features
       contains_value: Sccache
+
+  # Specify a custom examples installation directory, so that the built example binaries are not
+  # packaged into the artifact archive together with the Qt libraries.
+  - type: Group
+    instructions:
+      - type: AppendToEnvironmentVariable
+        variableName: COMMON_CMAKE_ARGS
+        variableValue: " -DQT_INTERNAL_EXAMPLES_INSTALL_PREFIX={{unixPathSeparators .BuildDir}}/installed_examples"
+      - type: AppendToEnvironmentVariable
+        variableName: COMMON_TARGET_CMAKE_ARGS
+        variableValue: " -DQT_INTERNAL_EXAMPLES_INSTALL_PREFIX={{unixPathSeparators .BuildDir}}/installed_examples"
+    enable_if:
+      # Only set the custom installation dir if examples are built.
+      condition: or
+      conditions:
+        # qtbase host case
+        - condition: runtime
+          env_var: CONFIGURE_ARGS
+          contains_value: "QT_BUILD_EXAMPLES=ON"
+        # qtbase target case
+        - condition: runtime
+          env_var: TARGET_CONFIGURE_ARGS
+          contains_value: "QT_BUILD_EXAMPLES=ON"
+        # non-qtbase host case
+        - condition: runtime
+          env_var: NON_QTBASE_CONFIGURE_ARGS
+          contains_value: "QT_BUILD_EXAMPLES=ON"
+        # non-qtbase target case
+        - condition: runtime
+          env_var: NON_QTBASE_TARGET_CONFIGURE_ARGS
+          contains_value: "QT_BUILD_EXAMPLES=ON"
+        # Same as above, but for configurations marked with UseConfigure
+        # qtbase host case
+        - condition: runtime
+          env_var: CONFIGURE_ARGS
+          contains_value: "-make examples"
+        # qtbase target case
+        - condition: runtime
+          env_var: TARGET_CONFIGURE_ARGS
+          contains_value: "-make examples"
+        # non-qtbase host case
+        - condition: runtime
+          env_var: NON_QTBASE_CONFIGURE_ARGS
+          contains_value: "-make examples"
+        # non-qtbase target case
+        - condition: runtime
+          env_var: NON_QTBASE_TARGET_CONFIGURE_ARGS
+          contains_value: "-make examples"
 
   - type: SetEnvironmentFromScript
     command: [C:\Utils\emsdk\emsdk_env.bat]

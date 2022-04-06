@@ -125,6 +125,8 @@ private slots:
     void objectInVar();
     void testIsnan();
     void fallbackLookups();
+    void prefixedMetaType();
+    void evadingAmbiguity();
 };
 
 void tst_QmlCppCodegen::simpleBinding()
@@ -1880,8 +1882,59 @@ void tst_QmlCppCodegen::fallbackLookups()
     QCOMPARE(singleton->objectName(), QStringLiteral("dd96"));
 }
 
+void tst_QmlCppCodegen::prefixedMetaType()
+{
+    QQmlEngine engine;
+
+    // We need to add an import path here because we cannot namespace the implicit import.
+    // The implicit import is what we use for all the other tests, even if we explicitly
+    // import TestTypes. That is because the TestTypes module is in a subdirectory "data".
+    engine.addImportPath(u":/"_qs);
+
+    const QUrl document(u"qrc:/TestTypes/prefixedMetaType.qml"_qs);
+    QQmlComponent c(&engine, document);
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+    QScopedPointer<QObject> o(c.create());
+    QVERIFY(o);
+
+    QCOMPARE(o->property("state").toInt(), 2);
+    QVERIFY(qvariant_cast<QObject *>(o->property("a")) != nullptr);
+    QVERIFY(qvariant_cast<QObject *>(o->property("b")) != nullptr);
+    QVERIFY(qvariant_cast<QObject *>(o->property("c")) == nullptr);
+
+    QVERIFY(qvariant_cast<QObject *>(o->property("d")) != nullptr);
+    QVERIFY(qvariant_cast<QObject *>(o->property("e")) != nullptr);
+    QVERIFY(qvariant_cast<QObject *>(o->property("f")) == nullptr);
+}
+
+void tst_QmlCppCodegen::evadingAmbiguity()
+{
+    QQmlEngine engine;
+
+    // We need to add an import path here because we cannot namespace the implicit import.
+    // The implicit import is what we use for all the other tests, even if we explicitly
+    // import TestTypes. That is because the TestTypes module is in a subdirectory "data".
+    engine.addImportPath(u":/"_qs);
+
+    QQmlComponent c1(&engine, QUrl(u"qrc:/TestTypes/ambiguous1/Ambiguous.qml"_qs));
+    QVERIFY2(c1.isReady(), qPrintable(c1.errorString()));
+    QScopedPointer<QObject> o1(c1.create());
+    QCOMPARE(o1->objectName(), QStringLiteral("Ambiguous"));
+    QCOMPARE(o1->property("i").toString(), QStringLiteral("Ambiguous1"));
+
+    QQmlComponent c2(&engine, QUrl(u"qrc:/TestTypes/ambiguous2/Ambiguous.qml"_qs));
+    QVERIFY2(c2.isReady(), qPrintable(c2.errorString()));
+    QScopedPointer<QObject> o2(c2.create());
+    QCOMPARE(o2->objectName(), QStringLiteral("Ambiguous"));
+    QCOMPARE(o2->property("i").toString(), QStringLiteral("Ambiguous2"));
+}
+
 void tst_QmlCppCodegen::runInterpreted()
 {
+#ifdef Q_OS_ANDROID
+    QSKIP("Can't start QProcess to run a custom user binary on Android");
+#endif
+
     if (qEnvironmentVariableIsSet("QV4_FORCE_INTERPRETER"))
         QSKIP("Already running in interpreted mode");
 

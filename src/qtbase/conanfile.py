@@ -423,7 +423,7 @@ class QtBase(ConanFile):
             if self.options.get_safe(req_name, default=False) == True:
                 # Note! If this conan package is being "conan export"ed outside Qt CI and the
                 # sw versions .ini file is not present then it will fall-back to default version
-                ver = self._shared.parse_sw_req(
+                ver = self._shared.parse_qt_sw_pkg_dependency(
                     config_folder=Path(self.recipe_folder),
                     package_name=req_name,
                     target_os=str(self.settings.os),
@@ -568,7 +568,7 @@ class QtBase(ConanFile):
             _filter = self._shared.filter_cmake_args_for_package_id
             self.info.options.cmake_args_qtbase = _filter(self.info.options.cmake_args_qtbase)
 
-   def filter_package_id_for_android(self) -> None:
+    def filter_package_id_for_android(self) -> None:
         # Instead of using Android NDK path as the option value (package_id) we parse the
         # actual version number and use that as the option value.
         android_ndk = self.options.get_safe("android_ndk")

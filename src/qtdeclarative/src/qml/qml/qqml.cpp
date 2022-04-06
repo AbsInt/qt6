@@ -1040,8 +1040,7 @@ bool AOTCompiledContext::captureLookup(uint index, QObject *object) const
         return true;
     }
 
-
-    return true;
+    return false;
 }
 
 bool AOTCompiledContext::captureQmlContextPropertyLookup(uint index) const
@@ -1399,6 +1398,8 @@ static void initTypeWrapperLookup(
             l->qmlContextPropertyGetter = qmlContextPropertyGetter;
             if (qmlContextPropertyGetter == QV4::QQmlContextWrapper::lookupSingleton)
                 l->qmlContextSingletonLookup.singletonObject = wrapper->heapObject();
+            else if (qmlContextPropertyGetter == QV4::QQmlContextWrapper::lookupType)
+                l->qmlTypeLookup.qmlTypeWrapper = wrapper->heapObject();
             return;
         }
         scope.engine->throwTypeError();

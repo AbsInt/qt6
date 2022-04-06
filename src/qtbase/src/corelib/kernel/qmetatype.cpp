@@ -211,6 +211,7 @@ const char *QtMetaTypePrivate::typedefNameForType(const QtPrivate::QMetaTypeInte
         if (it.value() == type_d && it.key() != officialName)
             otherNames << it.key();
     }
+    l.unlock();
     if (!otherNames.isEmpty())
         qWarning("QMetaType: type %s has more than one typedef alias: %s, %s",
                  type_d->name, name, otherNames.join(", ").constData());
@@ -2577,11 +2578,12 @@ static inline int qMetaTypeStaticType(const char *typeName, int length)
 */
 static int qMetaTypeCustomType_unlocked(const char *typeName, int length)
 {
-    if (auto reg = customTypeRegistry()) {
+    if (customTypeRegistry.exists()) {
+        auto reg = &*customTypeRegistry;
 #if QT_CONFIG(thread)
         Q_ASSERT(!reg->lock.tryLockForWrite());
 #endif
-        if (auto ti = reg->aliases.value(QByteArray(typeName, length), nullptr)) {
+        if (auto ti = reg->aliases.value(QByteArray::fromRawData(typeName, length), nullptr)) {
             return ti->typeId;
         }
     }
@@ -2655,7 +2657,7 @@ static inline int qMetaTypeTypeImpl(const char *typeName, int length)
 */
 
 /*!
-    \a internal
+    \internal
 
     Similar to QMetaType::type(); the only difference is that this function
     doesn't attempt to normalize the type name (i.e., the lookup will fail
@@ -2977,8 +2979,8 @@ static const QtPrivate::QMetaTypeInterface *interfaceForType(int typeId)
 {
     const QtPrivate::QMetaTypeInterface *iface = nullptr;
     if (typeId >= QMetaType::User) {
-        if (auto reg = customTypeRegistry())
-            iface = reg->getCustomType(typeId);
+        if (customTypeRegistry.exists())
+            iface = customTypeRegistry->getCustomType(typeId);
     } else {
         if (auto moduleHelper = qModuleHelperForType(typeId))
             iface = moduleHelper->interfaceForType(typeId);

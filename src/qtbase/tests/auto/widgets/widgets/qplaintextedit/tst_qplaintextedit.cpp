@@ -1025,10 +1025,6 @@ void tst_QPlainTextEdit::copyAvailable()
 #endif
     ed->clear();
     QApplication::clipboard()->clear();
-#ifdef Q_OS_ANDROID
-    if (QNativeInterface::QAndroidApplication::sdkVersion() < 28)
-        QEXPECT_FAIL("", "Before Android 9, there's no API to clear the clipboard ", Continue);
-#endif
     QVERIFY(!ed->canPaste());
     QSignalSpy spyCopyAvailabe(ed, SIGNAL(copyAvailable(bool)));
 
@@ -1230,9 +1226,6 @@ void tst_QPlainTextEdit::canPaste()
 
 void tst_QPlainTextEdit::ensureCursorVisibleOnInitialShow()
 {
-#ifdef Q_OS_ANDROID
-    QSKIP("This test crashed on Android");
-#endif
     QString manyPagesOfPlainText;
     for (int i = 0; i < 800; ++i)
         manyPagesOfPlainText += QLatin1String("Blah blah blah blah blah blah\n");
@@ -1375,7 +1368,9 @@ void tst_QPlainTextEdit::adjustScrollbars()
     ed->setFont(ff);
     ed->setMinimumSize(140, 100);
     ed->setMaximumSize(140, 100);
-    ed->show();
+    // We use showNormal() here, because otherwise on Android the widget will
+    // be shown fullscreen, and the scrollbar will not appear.
+    ed->showNormal();
     QLatin1String txt("\nabc def ghi jkl mno pqr stu vwx");
     ed->setPlainText(txt + txt + txt + txt);
 

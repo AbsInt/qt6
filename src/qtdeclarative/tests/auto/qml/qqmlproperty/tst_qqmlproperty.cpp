@@ -366,9 +366,9 @@ void tst_qqmlproperty::registeredCompositeTypeProperty()
         QVERIFY(thirdList.isValid());
 
         // check that the value returned by QQmlProperty::read() is equivalent to the list reference.
-        QQmlListReference r1(obj, "fclist", &engine);
-        QQmlListReference r2(obj, "sclistOne", &engine);
-        QQmlListReference r3(obj, "sclistTwo", &engine);
+        QQmlListReference r1(obj, "fclist");
+        QQmlListReference r2(obj, "sclistOne");
+        QQmlListReference r3(obj, "sclistTwo");
         QCOMPARE(compareVariantAndListReference(lp1e.read(), r1), 1);
         QCOMPARE(compareVariantAndListReference(lp2e.read(), r2), 1);
         QCOMPARE(compareVariantAndListReference(lp3e.read(), r3), 1);
@@ -2392,6 +2392,10 @@ void tst_qqmlproperty::compatResolveUrls()
     }
 
     QCOMPARE(qvariant_cast<QUrl>(o->property("a")), QUrl(QStringLiteral("relative/url.png")));
+
+#ifdef Q_OS_ANDROID
+    QSKIP("Can't start QProcess to run a custom user binary on Android");
+#endif
 
 #if QT_CONFIG(process)
     QProcess process;
