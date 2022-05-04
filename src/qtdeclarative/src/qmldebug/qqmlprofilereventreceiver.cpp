@@ -1,9 +1,9 @@
 /****************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2017 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
-** This file is part of the plugins of the Qt Toolkit.
+** This file is part of the QtQml module of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
@@ -37,22 +37,13 @@
 **
 ****************************************************************************/
 
-#include <qimageiohandler.h>
-#include <qstringlist.h>
-
-#ifdef QT_NO_IMAGEFORMAT_JPEG
-#undef QT_NO_IMAGEFORMAT_JPEG
-#endif
+#include "qqmlprofilereventreceiver_p.h"
 
 QT_BEGIN_NAMESPACE
 
-class QJpegPlugin : public QImageIOPlugin
-{
-    Q_OBJECT
-    Q_PLUGIN_METADATA(IID "org.qt-project.Qt.QImageIOHandlerFactoryInterface" FILE "jpeg.json")
-public:
-    Capabilities capabilities(QIODevice *device, const QByteArray &format) const override;
-    QImageIOHandler *create(QIODevice *device, const QByteArray &format = QByteArray()) const override;
-};
+QQmlProfilerEventReceiver::~QQmlProfilerEventReceiver()
+    = default;
 
 QT_END_NAMESPACE
+
+#include "moc_qqmlprofilereventreceiver_p.cpp"

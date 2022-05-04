@@ -14,7 +14,7 @@ endfunction()
 
 # poor man's yaml parser, populating $out_dependencies with all dependencies
 # in the $depends_file
-# Each entry will be in the format dependency/sha1
+# Each entry will be in the format dependency/sha1/required
 function(qt_internal_parse_dependencies depends_file out_dependencies)
     file(STRINGS "${depends_file}" lines)
     set(eof_marker "---EOF---")
@@ -47,91 +47,179 @@ function(qt_internal_parse_dependencies depends_file out_dependencies)
             string(TOUPPER "${CMAKE_MATCH_1}" required)
         endif()
     endforeach()
-    message(DEBUG "qt_internal_parse_dependencies for ${depends_file}: ${dependencies} ${revisions}")
+    message(DEBUG
+        "qt_internal_parse_dependencies for ${depends_file}\n    dependencies: ${dependencies}")
     set(${out_dependencies} "${dependencies}" PARENT_SCOPE)
 endfunction()
 
-# Load $module and populate $out_ordered with the submodules based on their dependencies
-# $ordered carries already sorted dependencies; $out_has_dependencies is left empty
-# if there are no dependencies, otherwise set to 1; Save list of dependencies for $module into
-# $out_module_dependencies. List may contain duplicates, since function checks max depth
-# dependencies.
-# Function calls itself recursively if a dependency is found that is not yet in $ordered.
-function(qt_internal_add_module_dependencies module ordered out_ordered out_has_dependencies
-                                             out_module_dependencies out_revisions)
-    set(depends_file "${CMAKE_CURRENT_SOURCE_DIR}/${module}/dependencies.yaml")
-    if(NOT EXISTS "${depends_file}")
-        set(${out_has_dependencies} "" PARENT_SCOPE)
+# Helper macro for qt_internal_resolve_module_dependencies.
+macro(qt_internal_resolve_module_dependencies_set_skipped value)
+    if(DEFINED arg_SKIPPED_VAR)
+        set(${arg_SKIPPED_VAR} ${value} PARENT_SCOPE)
+    endif()
+endmacro()
+
+# Strips tqtc- prefix from a repo name.
+function(qt_internal_normalize_repo_name repo_name out_var)
+    string(REGEX REPLACE "^tqtc-" "" normalized "${repo_name}")
+    set(${out_var} "${normalized}" PARENT_SCOPE)
+endfunction()
+
+# Checks if a directory with the given repo name exists in the current
+# source / working directory. If it doesn't, it strips the tqtc- prefix.
+function(qt_internal_use_normalized_repo_name_if_needed repo_name out_var)
+    set(base_dir "${CMAKE_CURRENT_SOURCE_DIR}")
+    set(repo_dir "${base_dir}/${repo_name}")
+    if(NOT IS_DIRECTORY "${repo_dir}")
+        qt_internal_normalize_repo_name("${repo_name}" repo_name)
+    endif()
+    set(${out_var} "${repo_name}" PARENT_SCOPE)
+endfunction()
+
+
+# Resolve the dependencies of the given module.
+# "Module" in the sense of Qt repository.
+#
+# Side effects: Sets the global properties QT_DEPS_FOR_${module} and QT_REQUIRED_DEPS_FOR_${module}
+# with the direct (required) dependencies of module.
+#
+#
+# Positional arguments:
+#
+# module is the Qt repository.
+#
+# out_ordered is where the result is stored. This is a list of all dependencies, including
+# transitive ones, in topologically sorted order. Note that ${module} itself is also part of
+# out_ordered.
+#
+# out_revisions is a list of git commit IDs for each of the dependencies in ${out_ordered}. This
+# list has the same length as ${out_ordered}.
+#
+#
+# Keyword arguments:
+#
+# PARSED_DEPENDENCIES is a list of dependencies of module in the format that
+# qt_internal_parse_dependencies returns. If this argument is not provided, dependencies.yaml of the
+# module is parsed.
+#
+# IN_RECURSION is an internal option that is set when the function is in recursion.
+#
+# REVISION is an internal value with the git commit ID that belongs to ${module}.
+#
+# SKIPPED_VAR is an output variable name that is set to TRUE if the module was skipped, to FALSE
+# otherwise.
+#
+# NORMALIZE_REPO_NAME_IF_NEEDED Will remove 'tqtc-' from the beginning of submodule dependencies
+# if a tqtc- named directory does not exist.
+function(qt_internal_resolve_module_dependencies module out_ordered out_revisions)
+    set(options IN_RECURSION NORMALIZE_REPO_NAME_IF_NEEDED)
+    set(oneValueArgs REVISION SKIPPED_VAR)
+    set(multiValueArgs PARSED_DEPENDENCIES)
+    cmake_parse_arguments(arg "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
+
+    # Clear the property that stores the repositories we've already seen.
+    if(NOT arg_IN_RECURSION)
+        set_property(GLOBAL PROPERTY _qt_internal_seen_repos)
+    endif()
+
+    # Bail out if we've seen the module already.
+    qt_internal_resolve_module_dependencies_set_skipped(FALSE)
+    get_property(seen GLOBAL PROPERTY _qt_internal_seen_repos)
+    if(module IN_LIST seen)
+        qt_internal_resolve_module_dependencies_set_skipped(TRUE)
         return()
     endif()
-    set(${out_has_dependencies} "1" PARENT_SCOPE)
-    set(dependencies "")
-    qt_internal_parse_dependencies("${depends_file}" dependencies)
-    # module hasn't been seen yet, append it
-    list(FIND ordered "${module}" pindex)
-    if (pindex EQUAL -1)
-        list(LENGTH ordered pindex)
-        list(APPEND ordered "${module}")
-        list(APPEND revisions "HEAD")
+
+    set_property(GLOBAL APPEND PROPERTY _qt_internal_seen_repos ${module})
+
+    # Set a default REVISION.
+    if("${arg_REVISION}" STREQUAL "")
+        set(arg_REVISION HEAD)
     endif()
-    set(modules_dependencies "")
+
+    # Retrieve the dependencies.
+    if(DEFINED arg_PARSED_DEPENDENCIES)
+        set(dependencies "${arg_PARSED_DEPENDENCIES}")
+    else()
+        set(depends_file "${CMAKE_CURRENT_SOURCE_DIR}/${module}/dependencies.yaml")
+        set(dependencies "")
+        if(EXISTS "${depends_file}")
+            qt_internal_parse_dependencies("${depends_file}" dependencies)
+        endif()
+    endif()
+
+    # Traverse the dependencies.
+    set(ordered)
+    set(revisions)
     foreach(dependency IN LISTS dependencies)
         if(dependency MATCHES "(.*)/([^/]+)/([^/]+)")
             set(dependency "${CMAKE_MATCH_1}")
             set(revision "${CMAKE_MATCH_2}")
             set(required "${CMAKE_MATCH_3}")
-            if(required)
-                set_property(GLOBAL APPEND PROPERTY QT_REQUIRED_DEPS_FOR_${module} ${dependency})
-            endif()
         else()
             message(FATAL_ERROR "Internal Error: wrong dependency format ${dependency}")
         endif()
-        list(APPEND modules_dependencies "${dependency}")
-        list(FIND ordered "${dependency}" dindex)
-        if (dindex EQUAL -1)
-            # dependency hasnt' been seen yet - load it
-            list(INSERT ordered ${pindex} "${dependency}")
-            list(INSERT revisions ${pindex} "${revision}")
-            qt_internal_add_module_dependencies(${dependency} "${ordered}" ordered has_dependency
-                                                "${out_module_dependencies}" revisions)
-        elseif(dindex GREATER pindex)
-            # otherwise, make sure it is before module
-            list(REMOVE_AT ordered ${dindex})
-            list(REMOVE_AT revisions ${dindex})
-            list(INSERT ordered ${pindex} "${dependency}")
-            list(INSERT revisions ${pindex} "${revision}")
+
+        set(normalize_arg "")
+        if(arg_NORMALIZE_REPO_NAME_IF_NEEDED)
+            qt_internal_use_normalized_repo_name_if_needed("${dependency}" dependency)
+            set(normalize_arg "NORMALIZE_REPO_NAME_IF_NEEDED")
+        endif()
+
+        set_property(GLOBAL APPEND PROPERTY QT_DEPS_FOR_${module} ${dependency})
+        if(required)
+            set_property(GLOBAL APPEND PROPERTY QT_REQUIRED_DEPS_FOR_${module} ${dependency})
+        endif()
+
+        qt_internal_resolve_module_dependencies(${dependency} dep_ordered dep_revisions
+            REVISION "${revision}"
+            SKIPPED_VAR skipped
+            IN_RECURSION
+            ${normalize_arg}
+        )
+        if(NOT skipped)
+            list(APPEND ordered ${dep_ordered})
+            list(APPEND revisions ${dep_revisions})
         endif()
     endforeach()
+
+    list(APPEND ordered ${module})
+    list(APPEND revisions ${arg_REVISION})
     set(${out_ordered} "${ordered}" PARENT_SCOPE)
-    set(${out_module_dependencies} ${${out_module_dependencies}} ${modules_dependencies} PARENT_SCOPE)
     set(${out_revisions} "${revisions}" PARENT_SCOPE)
 endfunction()
 
-# populates $out_all_ordered with the sequence of the modules that need
-# to be built in order to build $modules; dependencies for each module are populated
-# in variables with specified in $dependencies_map_prefix prefix
-function(qt_internal_sort_module_dependencies modules out_all_ordered dependencies_map_prefix)
-    set(ordered "")
+# Resolves the dependencies of the given modules.
+# "Module" is here used in the sense of Qt repository.
+#
+# Returns all dependencies, including transitive ones, in topologically sorted order.
+#
+# Arguments:
+# modules is the initial list of repos.
+# out_all_ordered is the variable name where the result is stored.
+#
+# See qt_internal_resolve_module_dependencies for side effects.
+function(qt_internal_sort_module_dependencies modules out_all_ordered)
+
+    # Create a fake repository "all_selected_repos" that has all repositories from the input as
+    # required dependency. The format must match what qt_internal_parse_dependencies produces.
+    set(all_selected_repos_as_parsed_dependencies)
     foreach(module IN LISTS modules)
-        set(out_ordered "")
-        if(NOT dependencies_map_prefix)
-            message(FATAL_ERROR "dependencies_map_prefix is not provided")
-        endif()
-        set(module_dependencies_list_var_name "${dependencies_map_prefix}${module}")
-        qt_internal_add_module_dependencies(${module} "${ordered}" out_ordered module_depends
-                                            "${module_dependencies_list_var_name}" revisions)
-        set(${module_dependencies_list_var_name}
-                "${${module_dependencies_list_var_name}}" PARENT_SCOPE)
-        if(NOT module_depends)
-            list(APPEND no_dependencies "${module}")
-        else()
-            set(ordered "${out_ordered}")
-        endif()
+        list(APPEND all_selected_repos_as_parsed_dependencies "${module}/HEAD/FALSE")
     endforeach()
-    if (no_dependencies)
-        list(APPEND ordered "${no_dependencies}")
-    endif()
-    message(DEBUG "qt_internal_parse_dependencies sorted ${modules}: ${ordered}")
+
+    qt_internal_resolve_module_dependencies(all_selected_repos ordered unused_revisions
+        PARSED_DEPENDENCIES ${all_selected_repos_as_parsed_dependencies}
+        NORMALIZE_REPO_NAME_IF_NEEDED
+    )
+
+    # Drop "all_selected_repos" from the output. It depends on all selected repos, thus it must be
+    # the last element in the topologically sorted list.
+    list(REMOVE_AT ordered -1)
+
+    message(DEBUG
+        "qt_internal_sort_module_dependencies
+    input modules: ${modules}\n    topo-sorted:   ${ordered}")
     set(${out_all_ordered} "${ordered}" PARENT_SCOPE)
 endfunction()
 
@@ -268,6 +356,17 @@ function(qt_internal_sync_to module)
     endif()
     qt_internal_checkout("${module}" "${revision}")
 
+    qt_internal_resolve_module_dependencies(${module} initial_dependencies initial_revisions)
+    if(initial_dependencies)
+        foreach(dependency ${initial_dependencies})
+            if(dependency MATCHES "^tqtc-")
+                message(WARNING
+                    "Handling of tqtc- repos will likely fail. Fixing this is non-trivial.")
+                break()
+            endif()
+        endforeach()
+    endif()
+
     set(revision "")
     set(checkedout "1")
     # Load all dependencies for $module, then iterate over the dependencies in reverse order,
@@ -275,19 +374,16 @@ function(qt_internal_sync_to module)
     # Repeat everything (we need to reload dependencies after each checkout) until no more checkouts
     # are done.
     while(${checkedout})
-        set(dependencies "")
-        set(revisions "")
-        set(prefix "")
-        qt_internal_add_module_dependencies(${module} "${dependencies}" dependencies has_dependencies prefix revisions)
+        qt_internal_resolve_module_dependencies(${module} dependencies revisions)
         message(DEBUG "${module} dependencies: ${dependencies}")
         message(DEBUG "${module} revisions   : ${revisions}")
 
-        if (NOT has_dependencies)
+        list(LENGTH dependencies count)
+        if (count EQUAL "0")
             message(NOTICE "Module ${module} has no dependencies")
             return()
         endif()
 
-        list(LENGTH dependencies count)
         math(EXPR count "${count} - 1")
         set(checkedout 0)
         foreach(i RANGE ${count} 0 -1 )

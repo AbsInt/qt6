@@ -4,8 +4,7 @@
 
 #### Libraries
 
-qt_find_package(WrapZLIB 1.0.8 PROVIDED_TARGETS WrapZLIB::WrapZLIB MODULE_NAME global QMAKE_LIB zlib)
-# special case begin
+qt_find_package(WrapSystemZLIB 1.0.8 PROVIDED_TARGETS WrapSystemZLIB::WrapSystemZLIB MODULE_NAME global QMAKE_LIB zlib)
 # Work around global target promotion failure when WrapZLIB is used on APPLE platforms.
 # What ends up happening is that the ZLIB::ZLIB target is not promoted to global by qt_find_package,
 # then qt_find_package(WrapSystemPNG) tries to find its dependency ZLIB::ZLIB, sees it's not global
@@ -473,11 +472,8 @@ qt_feature("developer-build" PRIVATE
 )
 qt_feature("no-prefix" PRIVATE
     LABEL "No prefix build"
-    # The var expansion on the right hand side is on purpose
-    # because the custom condition evaluator only expands the lhs
-    CONDITION (CMAKE_INSTALL_PREFIX STREQUAL "${QtBase_BINARY_DIR}")
-              OR CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT
-    AUTODETECT QT_FEATURE_developer_build
+    AUTODETECT NOT QT_WILL_INSTALL
+    CONDITION NOT QT_WILL_INSTALL
 )
 qt_feature("private_tests" PRIVATE
     LABEL "Developer build: private_tests"
@@ -630,6 +626,11 @@ qt_feature("c++2a" PUBLIC
     CONDITION QT_FEATURE_cxx20
 )
 qt_feature_config("c++2a" QMAKE_PUBLIC_QT_CONFIG)
+qt_feature("c++2b" PUBLIC
+    LABEL "C++2b"
+    AUTODETECT OFF
+)
+qt_feature_config("c++2b" QMAKE_PUBLIC_QT_CONFIG)
 qt_feature("c89"
     LABEL "C89"
 )
@@ -885,7 +886,7 @@ qt_feature("stack-protector-strong" PRIVATE
 )
 qt_feature("system-zlib" PRIVATE
     LABEL "Using system zlib"
-    CONDITION WrapZLIB_FOUND
+    CONDITION WrapSystemZLIB_FOUND
 )
 qt_feature("zstd" PRIVATE
     LABEL "Zstandard support"

@@ -43,6 +43,7 @@
 
 #include <QtCore/qatomic.h>
 #include <QtCore/qthread.h>
+#include <QtCore/private/qsimd_p.h> // for qYieldCpu()
 #include <private/qthreadpool_p.h>
 
 #ifdef interface
@@ -102,12 +103,11 @@ static inline int switch_off(QAtomicInt &a, int which)
 
 static inline int switch_from_to(QAtomicInt &a, int from, int to)
 {
-    int newValue;
-    int expected = a.loadRelaxed();
-    do {
-        newValue = (expected & ~from) | to;
-    } while (!a.testAndSetRelaxed(expected, newValue, expected));
-    return newValue;
+    const auto adjusted = [&](int old) { return (old & ~from) | to; };
+    int value = a.loadRelaxed();
+    while (!a.testAndSetRelaxed(value, adjusted(value), value))
+        qYieldCpu();
+    return value;
 }
 
 void QFutureInterfaceBase::cancel()

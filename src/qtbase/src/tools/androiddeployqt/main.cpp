@@ -1498,8 +1498,10 @@ bool updateLibsXml(Options *options)
 
                     plugin = qtDependency.relativePath;
                 }
-                if (qtDependency.relativePath.contains(QLatin1String("libQt5OpenGL"))
-                        || qtDependency.relativePath.contains(QLatin1String("libQt5Quick"))) {
+                if (qtDependency.relativePath.contains(
+                            QString::asprintf("libQt%dOpenGL", QT_VERSION_MAJOR))
+                    || qtDependency.relativePath.contains(
+                            QString::asprintf("libQt%dQuick", QT_VERSION_MAJOR))) {
                     options->usesOpenGL |= true;
                     break;
                 }
@@ -1951,10 +1953,12 @@ bool scanImports(Options *options, QSet<QString> *usedDependencies)
         fprintf(stdout, "Scanning for QML imports.\n");
 
     QString qmlImportScanner;
-    if (!options->qmlImportScannerBinaryPath.isEmpty())
+    if (!options->qmlImportScannerBinaryPath.isEmpty()) {
         qmlImportScanner = options->qmlImportScannerBinaryPath;
-    else
-        qmlImportScanner = options->qtInstallDirectory + QLatin1String("/bin/qmlimportscanner");
+    } else {
+        qmlImportScanner = options->qtInstallDirectory + QLatin1Char('/') + defaultLibexecDir()
+                + QLatin1String("/qmlimportscanner");
+    }
 #if defined(Q_OS_WIN32)
     qmlImportScanner += QLatin1String(".exe");
 #endif
@@ -2584,15 +2588,16 @@ static GradleProperties readGradleProperties(const QString &path)
 
 static bool mergeGradleProperties(const QString &path, GradleProperties properties)
 {
-    QFile::remove(path + QLatin1Char('~'));
-    QFile::rename(path, path + QLatin1Char('~'));
+    const QString oldPathStr = path + QLatin1Char('~');
+    QFile::remove(oldPathStr);
+    QFile::rename(path, oldPathStr);
     QFile file(path);
     if (!file.open(QIODevice::Truncate | QIODevice::WriteOnly | QIODevice::Text)) {
         fprintf(stderr, "Can't open file: %s for writing\n", qPrintable(file.fileName()));
         return false;
     }
 
-    QFile oldFile(path + QLatin1Char('~'));
+    QFile oldFile(oldPathStr);
     if (oldFile.open(QIODevice::ReadOnly)) {
         while (!oldFile.atEnd()) {
             QByteArray line(oldFile.readLine());
@@ -2608,6 +2613,7 @@ static bool mergeGradleProperties(const QString &path, GradleProperties properti
             file.write(line);
         }
         oldFile.close();
+        QFile::remove(oldPathStr);
     }
 
     for (GradleProperties::const_iterator it = properties.begin(); it != properties.end(); ++it)

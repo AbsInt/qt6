@@ -70,7 +70,7 @@ public:
     qsizetype m_size = 0;
 
     constexpr XmlStringRef() = default;
-    constexpr inline XmlStringRef(const QString *string, int pos, int length)
+    constexpr inline XmlStringRef(const QString *string, qsizetype pos, qsizetype length)
         : m_string(string), m_pos(pos), m_size(length)
     {
     }
@@ -124,6 +124,8 @@ using namespace QtPrivate;
 
 template <typename T> class QXmlStreamSimpleStack
 {
+    Q_DISABLE_COPY_MOVE(QXmlStreamSimpleStack)
+
     T *data;
     qsizetype tos, cap;
 public:
@@ -189,7 +191,7 @@ public:
         XmlStringRef name;
         XmlStringRef qualifiedName;
         NamespaceDeclaration namespaceDeclaration;
-        int tagStackStringStorageSize;
+        qsizetype tagStackStringStorageSize;
         qsizetype namespaceDeclarationsSize;
     };
 
@@ -197,14 +199,14 @@ public:
     QXmlStreamPrivateTagStack();
     QXmlStreamSimpleStack<NamespaceDeclaration> namespaceDeclarations;
     QString tagStackStringStorage;
-    int tagStackStringStorageSize;
-    int initialTagStackStringStorageSize;
+    qsizetype tagStackStringStorageSize;
+    qsizetype initialTagStackStringStorageSize;
     bool tagsDone;
 
     XmlStringRef addToStringStorage(QStringView s)
     {
-        int pos = tagStackStringStorageSize;
-        int sz = s.size();
+        qsizetype pos = tagStackStringStorageSize;
+        qsizetype sz = s.size();
         if (pos != tagStackStringStorage.size())
             tagStackStringStorage.resize(pos);
         tagStackStringStorage.append(s.data(), sz);

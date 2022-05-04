@@ -80,7 +80,7 @@ namespace QtAndroidAccessibility
     // Because of that almost every method here is split into two parts.
     // The _helper part is executed in the context of m_accessibilityContext
     // on the main thread. The other part is executed in Java thread.
-    static QObject *m_accessibilityContext = nullptr;
+    static QPointer<QObject> m_accessibilityContext = nullptr;
 
     // This method is called from the Qt main thread, and normally a
     // QGuiApplication instance will be used as a parent.
@@ -430,10 +430,13 @@ if (!clazz) { \
                 desc = iface->text(QAccessible::Value);
                 hasValue = !desc.isEmpty();
             }
-            if (!hasValue) {
-                if (!desc.isEmpty())
-                    desc.append(QChar(QChar::Space));
-                desc.append(textFromValue(iface));
+            if (!hasValue && iface->valueInterface()) {
+                const QString valueStr = textFromValue(iface);
+                if (!valueStr.isEmpty()) {
+                    if (!desc.isEmpty())
+                        desc.append(QChar(QChar::Space));
+                    desc.append(valueStr);
+                }
             }
         }
         return desc;

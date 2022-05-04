@@ -265,9 +265,7 @@ void ManifestWriter::generateManifestFile(const QString &manifest, const QString
 
         warnAboutUnusedAttributes(usedAttributes.keys(), example);
         writeDescription(&writer, example);
-        addWordsFromModuleNamesAsTags();
-        addTitleWordsToTags(example);
-        cleanUpTags();
+        addModuleNameAsTag();
         writeTagsElement(&writer);
 
         const QString exampleName = example->name().mid(example->name().lastIndexOf('/') + 1);
@@ -305,60 +303,17 @@ void ManifestWriter::writeTagsElement(QXmlStreamWriter *writer)
 /*!
     \internal
 
-    Clean up tags, exclude invalid and common words.
- */
-void ManifestWriter::cleanUpTags()
-{
-    QSet<QString> cleanedTags;
-
-    for (auto tag : m_tags) {
-        // strip punctuation characters from start and end
-        while (!tag.isEmpty() && tag.at(0).isPunct())
-            tag.remove(0, 1);
-        while (!tag.isEmpty() && tag.back().isPunct())
-            tag.chop(1);
-
-        if (tag.length() < 2 || tag.at(0).isDigit()
-            || tag == QLatin1String("qt") || tag == QLatin1String("the")
-            || tag == QLatin1String("and") || tag == QLatin1String("doc")
-            || tag.startsWith(QLatin1String("example")) || tag.startsWith(QLatin1String("chapter")))
-            continue;
-        cleanedTags << tag;
-    }
-    m_tags = cleanedTags;
-}
-
-/*!
-    \internal
-
-    Add the example's title as tags.
- */
-void ManifestWriter::addTitleWordsToTags(const ExampleNode *example)
-{
-    Q_ASSERT(example);
-
-    const auto &titleWords = example->title().toLower().split(QLatin1Char(' '));
-    m_tags += QSet<QString>(titleWords.cbegin(), titleWords.cend());
-}
-
-/*!
-    \internal
-
     Add words from module name as tags
-    QtQuickControls -> qt,quick,controls
-    QtOpenGL -> qt,opengl
-    QtQuick3D -> qt,quick3d
+    QtQuickControls -> quickcontrols
+    QtOpenGL -> opengl
+    QtQuick3D -> quick3d
  */
-void ManifestWriter::addWordsFromModuleNamesAsTags()
+void ManifestWriter::addModuleNameAsTag()
 {
-    // '?<=': positive lookbehind
-    QRegularExpression re("([A-Z]+[a-z0-9]*((?<=3)D|GL)?)");
-    qsizetype pos = 0;
-    QRegularExpressionMatch match;
-    while ((match = re.match(m_project, pos)).hasMatch()) {
-        m_tags << match.captured(1).toLower();
-        pos = match.capturedEnd();
-    }
+    QString moduleName = m_project;
+    if (moduleName.startsWith("Qt"))
+        moduleName = moduleName.mid(2);
+    m_tags << moduleName.toLower();
 }
 
 /*!
