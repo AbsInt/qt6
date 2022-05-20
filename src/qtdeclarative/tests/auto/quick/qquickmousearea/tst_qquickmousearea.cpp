@@ -123,6 +123,7 @@ private slots:
     void invalidClick();
     void pressedOrdering();
     void preventStealing();
+    void preventStealingListViewChild();
     void clickThrough();
     void hoverPosition();
     void hoverPropagation();
@@ -156,6 +157,7 @@ private slots:
     void settingHiddenInPressUngrabs();
     void negativeZStackingOrder();
     void containsMouseAndVisibility();
+    void doubleClickToHide();
 
 private:
     int startDragDistance() const {
@@ -1089,6 +1091,36 @@ void tst_QQuickMouseArea::preventStealing()
     QCOMPARE(flickable->contentY(), 20.);
 
     QTest::mouseRelease(&window, Qt::LeftButton, Qt::NoModifier, p);
+}
+
+// QTBUG-103522
+void tst_QQuickMouseArea::preventStealingListViewChild()
+{
+    QQuickView window;
+    QVERIFY(QQuickTest::showView(window, testFileUrl("preventStealingListViewChild.qml")));
+    QQuickFlickable *flickable = qobject_cast<QQuickFlickable*>(window.rootObject());
+    QVERIFY(flickable);
+    QQuickMouseArea *mouseArea = flickable->findChild<QQuickMouseArea*>();
+    QVERIFY(mouseArea);
+    QPoint p = mouseArea->mapToScene(mouseArea->boundingRect().center()).toPoint();
+    const int threshold = qApp->styleHints()->startDragDistance();
+
+    flickable->flick(0, -10000);
+    for (int i = 0; i < 2; ++i) {
+        QVERIFY(flickable->isMovingVertically());
+        QTest::touchEvent(&window, device).press(0, p);
+        QQuickTouchUtils::flush(&window);
+        for (int j = 0; j < 4 && !mouseArea->drag()->active(); ++j) {
+            p += QPoint(0, threshold);
+            QTest::touchEvent(&window, device).move(0, p);
+            QQuickTouchUtils::flush(&window);
+        }
+        // MouseArea should be dragged because of preventStealing; ListView does not steal the grab.
+        QVERIFY(mouseArea->drag()->active());
+        QCOMPARE(flickable->isDragging(), false);
+        QTest::touchEvent(&window, device).release(0, p);
+        QCOMPARE(mouseArea->drag()->active(), false);
+    }
 }
 
 void tst_QQuickMouseArea::clickThrough()
@@ -2343,6 +2375,29 @@ void tst_QQuickMouseArea::containsMouseAndVisibility()
     mouseArea->setVisible(true);
     QVERIFY(mouseArea->isVisible());
     QVERIFY(!mouseArea->hovered());
+}
+
+// QTBUG-35995 and QTBUG-102158
+void tst_QQuickMouseArea::doubleClickToHide()
+{
+    QQuickView window;
+    QVERIFY(QQuickTest::showView(window, testFileUrl("doubleClickToHide.qml")));
+
+    QQuickMouseArea *mouseArea = window.rootObject()->findChild<QQuickMouseArea *>();
+    QVERIFY(mouseArea);
+
+    QTest::mouseDClick(&window, Qt::LeftButton, Qt::NoModifier, {10, 10});
+
+    QCOMPARE(window.rootObject()->property("clicked").toInt(), 1);
+    QCOMPARE(window.rootObject()->property("doubleClicked").toInt(), 1);
+    QCOMPARE(mouseArea->isVisible(), false);
+    QCOMPARE(mouseArea->pressed(), false);
+    QCOMPARE(mouseArea->pressedButtons(), Qt::NoButton);
+
+    mouseArea->setVisible(true);
+
+    QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, {10, 10});
+    QCOMPARE(window.rootObject()->property("clicked").toInt(), 2);
 }
 
 QTEST_MAIN(tst_QQuickMouseArea)

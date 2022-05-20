@@ -1,6 +1,6 @@
 #############################################################################
 ##
-## Copyright (C) 2021 The Qt Company Ltd.
+## Copyright (C) 2022 The Qt Company Ltd.
 ## Contact: https://www.qt.io/licensing/
 ##
 ## This file is part of the release tools of the Qt Toolkit.
@@ -65,6 +65,15 @@ _qtdeclarative_features = [
     "quick-sprite",
     "quick-tableview",
     "quick-treeview",
+    "quickcontrols2-fusion",
+    "quickcontrols2-imagine",
+    "quickcontrols2-macos",
+    "quickcontrols2-material",
+    "quickcontrols2-universal",
+    "quickcontrols2-windows",
+    "quicktemplates2-calendar",
+    "quicktemplates2-hover",
+    "quicktemplates2-multitouch",
 ]
 
 
@@ -97,8 +106,8 @@ class QtDeclarative(ConanFile):
 
     def get_qt_leaf_module_options(self) -> Dict[str, Any]:
         """Implements abstractmethod from qt-conan-common.QtLeafModule"""
-        return {item.replace("-", "_"): ["yes", "no", None] for item in _qtdeclarative_features}
+        return self._shared.convert_qt_features_to_conan_options(_qtdeclarative_features)
 
     def get_qt_leaf_module_default_options(self) -> Dict[str, Any]:
         """Implements abstractmethod from qt-conan-common.QtLeafModule"""
-        return {item.replace("-", "_"): None for item in _qtdeclarative_features}
+        return self._shared.convert_qt_features_to_default_conan_options(_qtdeclarative_features)

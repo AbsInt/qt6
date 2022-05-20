@@ -249,6 +249,8 @@ private slots:
 
     void deepProperty();
 
+    void groupAssignmentFailure();
+
     void compositeSingletonProperties();
     void compositeSingletonSameEngine();
     void compositeSingletonDifferentEngine();
@@ -392,6 +394,7 @@ private slots:
     void ambiguousContainingType();
     void objectAsBroken();
     void componentMix();
+    void uncreatableAttached();
 
 private:
     QQmlEngine engine;
@@ -4412,6 +4415,20 @@ void tst_qqmllanguage::deepProperty()
     QCOMPARE(font.family(), QStringLiteral("test"));
 }
 
+void tst_qqmllanguage::groupAssignmentFailure()
+{
+    auto ep = std::make_unique<QQmlEngine>();
+    QTest::ignoreMessage(QtMsgType::QtWarningMsg, "QQmlComponent: Component destroyed while completion pending");
+    QTest::ignoreMessage(QtMsgType::QtWarningMsg, "This may have been caused by one of the following errors:");
+    QTest::ignoreMessage(QtMsgType::QtWarningMsg, QRegularExpression(".*Cannot set properties on b as it is null.*"));
+    QTest::ignoreMessage(QtMsgType::QtWarningMsg, QRegularExpression(".*Invalid property assignment: url expected - Assigning null to incompatible properties in QML is deprecated. This will become a compile error in future versions of Qt..*"));
+    QQmlComponent component(ep.get(), testFileUrl("groupFailure.qml"));
+    QScopedPointer<QObject> o(component.create());
+    QVERIFY(!o);
+    ep.reset();
+    // ~QQmlComponent should not crash here
+}
+
 // Tests that the implicit import has lowest precedence, in the case where
 // there are conflicting types and types only found in the local import.
 // Tests that just check one (or the root) type are in ::importsOrder
@@ -6840,6 +6857,20 @@ void tst_qqmllanguage::componentMix()
     QObject *delegate2 = qvariant_cast<QObject *>(delegated->property("delegate"));
     QVERIFY(delegate2);
     QCOMPARE(delegate2->metaObject(), &QQmlComponent::staticMetaObject);
+}
+
+void tst_qqmllanguage::uncreatableAttached()
+{
+    qmlRegisterTypesAndRevisions<ItemAttached>("ABC", 1);
+    QQmlEngine engine;
+    const QUrl url = testFileUrl("uncreatableAttached.qml");
+    QQmlComponent c(&engine, url);
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+    QTest::ignoreMessage(QtWarningMsg, "Only foo can have ItemAttached!");
+    QScopedPointer o(c.create());
+    QVERIFY(o.isNull());
+    QVERIFY(c.errorString().contains(
+                QLatin1String("Could not create attached properties object 'ItemAttached'")));
 }
 
 QTEST_MAIN(tst_qqmllanguage)

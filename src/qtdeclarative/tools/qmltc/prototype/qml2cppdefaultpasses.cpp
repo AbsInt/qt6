@@ -143,12 +143,24 @@ static bool isReservedWord(QStringView word)
     return std::binary_search(std::begin(cppKeywords), std::end(cppKeywords), word);
 }
 
+template<typename IRElement>
+quint32 irNameIndex(const IRElement &irElement)
+{
+    return irElement.nameIndex;
+}
+
+template<>
+quint32 irNameIndex<QmlIR::Alias>(const QmlIR::Alias &alias)
+{
+    return alias.nameIndex();
+}
+
 template<typename InputIterator>
 static decltype(auto) findIrElement(const QmlIR::Document *doc, InputIterator first,
                                     InputIterator last, QStringView name)
 {
     auto it = std::find_if(first, last, [&](const auto &candidate) {
-        return name == doc->stringAt(candidate.nameIndex);
+        return name == doc->stringAt(irNameIndex(candidate));
     });
     Q_ASSERT(it != last); // must be satisfied by the caller
     return *it;
@@ -287,7 +299,7 @@ void verifyTypes(const Qml2CppContext &context, QList<Qml2CppObject> &objects)
             return;
 
         // attached property is special
-        if (binding.type == QmlIR::Binding::Type_AttachedProperty) {
+        if (binding.type() == QmlIR::Binding::Type_AttachedProperty) {
             const auto [attachedObject, attachedType] = objects.at(binding.value.objectIndex);
             if (!attachedObject || !attachedType) {
                 context.recordError(binding.location,
@@ -312,8 +324,8 @@ void verifyTypes(const Qml2CppContext &context, QList<Qml2CppObject> &objects)
 
         // TODO: why isList() needed here?
         if (!p.isWritable() && !p.isList()
-            && !(binding.flags & QmlIR::Binding::InitializerForReadOnlyDeclaration)
-            && binding.type != QmlIR::Binding::Type_GroupProperty) {
+            && !binding.hasFlag(QmlIR::Binding::InitializerForReadOnlyDeclaration)
+            && binding.type() != QmlIR::Binding::Type_GroupProperty) {
             context.recordError(binding.location,
                                 u"Binding on read-only property '" + propName + u"'");
         }
@@ -888,7 +900,7 @@ static void updateImplicitComponents(const Qml2CppContext &context, Qml2CppObjec
                                      QList<Qml2CppObject> &objects, Update update)
 {
     const auto checkAndUpdate = [&](const QmlIR::Binding &binding) {
-        if (binding.type != QmlIR::Binding::Type_Object)
+        if (binding.type() != QmlIR::Binding::Type_Object)
             return;
         if (object.irObject->flags & QV4::CompiledData::Object::IsComponent) // already set
             return;
@@ -994,12 +1006,15 @@ static void setObjectId(const Qml2CppContext &context, const QList<Qml2CppObject
 
     std::for_each(irObject->bindingsBegin(), irObject->bindingsEnd(),
                   [&](const QmlIR::Binding &binding) {
-                      if (binding.type != QV4::CompiledData::Binding::Type_Object
-                          && binding.type != QV4::CompiledData::Binding::Type_AttachedProperty
-                          && binding.type != QV4::CompiledData::Binding::Type_GroupProperty) {
-                          return;
+                      switch (binding.type()) {
+                      case QV4::CompiledData::Binding::Type_Object:
+                      case QV4::CompiledData::Binding::Type_AttachedProperty:
+                      case QV4::CompiledData::Binding::Type_GroupProperty:
+                          setObjectId(context, objects, binding.value.objectIndex, idToObjectIndex);
+                          break;
+                      default:
+                          break;
                       }
-                      setObjectId(context, objects, binding.value.objectIndex, idToObjectIndex);
                   });
 }
 
@@ -1096,14 +1111,14 @@ static void setDeferred(const Qml2CppContext &context, qsizetype objectIndex,
     }
 
     const auto setRecursive = [&](QmlIR::Binding &binding) {
-        if (binding.type >= QmlIR::Binding::Type_Object)
+        if (binding.type() >= QmlIR::Binding::Type_Object)
             setDeferred(context, binding.value.objectIndex, objects); // Note: recursive call here!
 
         const QString propName = findPropertyName(context, o.type, binding);
         Q_ASSERT(!propName.isEmpty());
 
         if (o.type->isNameDeferred(propName)) {
-            binding.flags |= QV4::CompiledData::Binding::IsDeferredBinding;
+            binding.setFlag(QV4::CompiledData::Binding::IsDeferredBinding);
             o.irObject->flags |= QV4::CompiledData::Object::HasDeferredBindings;
         }
     };

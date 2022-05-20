@@ -38,7 +38,9 @@
 ****************************************************************************/
 
 #include "qwindowsfontdatabase_p.h"
-#include "qwindowsfontdatabase_ft_p.h" // for default font
+#ifndef QT_NO_FREETYPE
+#  include "qwindowsfontdatabase_ft_p.h" // for default font
+#endif
 #include "qwindowsfontengine_p.h"
 #include <QtCore/qt_windows.h>
 
@@ -51,6 +53,7 @@
 #include <QtCore/QDebug>
 #include <QtCore/QFile>
 #include <QtCore/QtEndian>
+#include <QtCore/QStandardPaths>
 #include <QtCore/private/qduplicatetracker_p.h>
 #include <QtCore/private/qwinregistry_p.h>
 
@@ -706,19 +709,44 @@ static int QT_WIN_CALLBACK populateFontFamilies(const LOGFONT *logFont, const TE
     return 1; // continue
 }
 
+namespace {
+
+QString resolveFontPath(const QString &fontPath)
+{
+    if (fontPath.isEmpty())
+        return QString();
+
+    if (QFile::exists(fontPath))
+        return fontPath;
+
+    // resolve the path relatively to Windows Fonts directory
+    return QStandardPaths::locate(QStandardPaths::FontsLocation, fontPath);
+}
+
+}
+
 void QWindowsFontDatabase::addDefaultEUDCFont()
 {
     const QString path = QWinRegistryKey(HKEY_CURRENT_USER, LR"(EUDC\1252)")
                          .stringValue(L"SystemDefaultEUDCFont");
-    if (!path.isEmpty()) {
-        QFile file(path);
-        if (!file.open(QIODevice::ReadOnly)) {
-            qCWarning(lcQpaFonts) << "Unable to open default EUDC font:" << path;
-            return;
-        }
-
-        m_eudcFonts = addApplicationFont(file.readAll(), path);
+    if (path.isEmpty()) {
+        qCDebug(lcQpaFonts) << "There's no default EUDC font specified";
+        return;
     }
+
+    const QString absolutePath = resolveFontPath(path);
+    if (absolutePath.isEmpty()) {
+        qCDebug(lcQpaFonts) << "Unable to locate default EUDC font:" << path;
+        return;
+    }
+
+    QFile file(absolutePath);
+    if (!file.open(QIODevice::ReadOnly)) {
+        qCWarning(lcQpaFonts) << "Unable to open default EUDC font:" << absolutePath;
+        return;
+    }
+
+    m_eudcFonts = addApplicationFont(file.readAll(), absolutePath);
 }
 
 void QWindowsFontDatabase::populateFontDatabase()

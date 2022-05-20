@@ -138,7 +138,8 @@ void QQuickFlickableVisibleArea::updateVisible()
     qreal pagePos = 0;
     qreal pageSize = 0;
     if (!qFuzzyIsNull(maxYBounds)) {
-        pagePos = (-p->vData.move.value() + flickable->minYExtent()) / maxYBounds;
+        qreal y = p->pixelAligned ? Round(p->vData.move.value()) : p->vData.move.value();
+        pagePos = (-y + flickable->minYExtent()) / maxYBounds;
         pageSize = viewheight / maxYBounds;
     }
 
@@ -156,7 +157,8 @@ void QQuickFlickableVisibleArea::updateVisible()
     const qreal maxxextent = -flickable->maxXExtent() + flickable->minXExtent();
     const qreal maxXBounds = maxxextent + viewwidth;
     if (!qFuzzyIsNull(maxXBounds)) {
-        pagePos = (-p->hData.move.value() + flickable->minXExtent()) / maxXBounds;
+        qreal x = p->pixelAligned ? Round(p->hData.move.value()) : p->hData.move.value();
+        pagePos = (-x + flickable->minXExtent()) / maxXBounds;
         pageSize = viewwidth / maxXBounds;
     } else {
         pagePos = 0;
@@ -1053,6 +1055,17 @@ void QQuickFlickable::setSynchronousDrag(bool v)
     }
 }
 
+/*! \internal
+    Take the velocity of the first point from the given \a event and transform
+    it to the local coordinate system (taking scale and rotation into account).
+*/
+QVector2D QQuickFlickablePrivate::firstPointLocalVelocity(QPointerEvent *event)
+{
+    QTransform transform = windowToItemTransform();
+    // rotate and scale the velocity vector from scene to local
+    return QVector2D(transform.map(event->point(0).velocity().toPointF()) - transform.map(QPointF()));
+}
+
 qint64 QQuickFlickablePrivate::computeCurrentTime(QInputEvent *event) const
 {
     if (0 != event->timestamp())
@@ -1360,9 +1373,9 @@ void QQuickFlickablePrivate::handleMoveEvent(QPointerEvent *event)
     qint64 currentTimestamp = computeCurrentTime(event);
     const auto &firstPoint = event->points().first();
     const auto &pos = firstPoint.position();
-    QVector2D deltas = QVector2D(pos - q->mapFromGlobal(firstPoint.globalPressPosition()));
+    const QVector2D deltas = QVector2D(pos - q->mapFromGlobal(firstPoint.globalPressPosition()));
+    const QVector2D velocity = firstPointLocalVelocity(event);
     bool overThreshold = false;
-    QVector2D velocity = event->point(0).velocity();
 
     if (q->yflick())
         overThreshold |= QQuickDeliveryAgentPrivate::dragOverThreshold(deltas.y(), Qt::YAxis, firstPoint);
@@ -1394,12 +1407,14 @@ void QQuickFlickablePrivate::handleReleaseEvent(QPointerEvent *event)
 
     bool canBoost = false;
     const auto pos = event->points().first().position();
-    const auto pressPos = event->points().first().pressPosition();
+    const auto pressPos = q->mapFromGlobal(event->points().first().globalPressPosition());
+    const QVector2D eventVelocity = firstPointLocalVelocity(event);
+    qCDebug(lcVel) << event->deviceType() << event->type() << "velocity" << event->points().first().velocity() << "transformed to local" << eventVelocity;
 
     qreal vVelocity = 0;
     if (elapsed < 100 && vData.velocity != 0.) {
         vVelocity = (event->device()->capabilities().testFlag(QInputDevice::Capability::Velocity)
-                ? event->point(0).velocity().y() : vData.velocity);
+                ? eventVelocity.y() : vData.velocity);
     }
     if ((vData.atBeginning && vVelocity > 0.) || (vData.atEnd && vVelocity < 0.)) {
         vVelocity /= 2;
@@ -1414,7 +1429,7 @@ void QQuickFlickablePrivate::handleReleaseEvent(QPointerEvent *event)
     qreal hVelocity = 0;
     if (elapsed < 100 && hData.velocity != 0.) {
         hVelocity = (event->device()->capabilities().testFlag(QInputDevice::Capability::Velocity)
-                     ? event->point(0).velocity().x() : hData.velocity);
+                     ? eventVelocity.x() : hData.velocity);
     }
     if ((hData.atBeginning && hVelocity > 0.) || (hData.atEnd && hVelocity < 0.)) {
         hVelocity /= 2;
@@ -3053,5 +3068,7 @@ void QQuickFlickable::setBoundsMovement(BoundsMovement movement)
 }
 
 QT_END_NAMESPACE
+
+#include "moc_qquickflickable_p_p.cpp"
 
 #include "moc_qquickflickable_p.cpp"

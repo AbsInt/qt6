@@ -321,10 +321,26 @@ void tst_QQuickDrawer::position_data()
     QTest::addColumn<QPoint>("to");
     QTest::addColumn<qreal>("position");
 
+    // We need to start swiping exactly from the selected edge, but on Android
+    // ApplicationWindow will be fullscreen instead of the defined size, so
+    // we need to extract the edge values from screen geometry.
+#ifndef Q_OS_ANDROID
+    const int rightMargin = 399;
+    const int bottomMargin = 399;
+#else
+    const QRect screenGeometry = QGuiApplication::primaryScreen()->availableGeometry();
+    const int rightMargin = screenGeometry.right();
+    const int bottomMargin = screenGeometry.bottom();
+#endif
+
     QTest::newRow("top") << Qt::TopEdge << QPoint(100, 0) << QPoint(100, 50) << QPoint(100, 150) << qreal(0.5);
     QTest::newRow("left") << Qt::LeftEdge << QPoint(0, 100) << QPoint(50, 100) << QPoint(150, 100) << qreal(0.5);
-    QTest::newRow("right") << Qt::RightEdge << QPoint(399, 100) << QPoint(350, 100) << QPoint(250, 100) << qreal(0.5);
-    QTest::newRow("bottom") << Qt::BottomEdge << QPoint(100, 399) << QPoint(100, 350) << QPoint(150, 250) << qreal(0.5);
+    QTest::newRow("right") << Qt::RightEdge << QPoint(rightMargin, 100)
+                           << QPoint(rightMargin - 50, 100) << QPoint(rightMargin - 150, 100)
+                           << qreal(0.5);
+    QTest::newRow("bottom") << Qt::BottomEdge << QPoint(100, bottomMargin)
+                            << QPoint(100, bottomMargin - 50) << QPoint(150, bottomMargin - 150)
+                            << qreal(0.5);
 }
 
 void tst_QQuickDrawer::position()
@@ -447,34 +463,34 @@ void tst_QQuickDrawer::reposition()
     QVERIFY(dimmer);
 
     QCOMPARE(geometry(dimmer), QRectF(0, 0, window->width(), window->height()));
-    QTRY_COMPARE(geometry(popupItem), QRectF(0, 0, window->width() / 2, window->height()));
+    QTRY_COMPARE(geometry(popupItem), QRectF(0, 0, window->width() / 2., window->height()));
 
     drawer->setY(100);
     QCOMPARE(geometry(dimmer), QRectF(0, 100, window->width(), window->height() - 100));
-    QCOMPARE(geometry(popupItem), QRectF(0, 100, window->width() / 2, window->height() - 100));
+    QCOMPARE(geometry(popupItem), QRectF(0, 100, window->width() / 2., window->height() - 100));
 
     drawer->setHeight(window->height());
     QCOMPARE(geometry(dimmer), QRectF(0, 100, window->width(), window->height()));
-    QCOMPARE(geometry(popupItem), QRectF(0, 100, window->width() / 2, window->height()));
+    QCOMPARE(geometry(popupItem), QRectF(0, 100, window->width() / 2., window->height()));
 
     drawer->resetHeight();
     QCOMPARE(geometry(dimmer), QRectF(0, 100, window->width(), window->height() - 100));
-    QCOMPARE(geometry(popupItem), QRectF(0, 100, window->width() / 2, window->height() - 100));
+    QCOMPARE(geometry(popupItem), QRectF(0, 100, window->width() / 2., window->height() - 100));
 
     drawer->setParentItem(window->contentItem());
     QCOMPARE(geometry(dimmer), QRectF(0, 150, window->width(), window->height() - 150));
-    QCOMPARE(geometry(popupItem), QRectF(0, 150, window->width() / 2, window->height() - 150));
+    QCOMPARE(geometry(popupItem), QRectF(0, 150, window->width() / 2., window->height() - 150));
 
     drawer->setEdge(Qt::RightEdge);
     QCOMPARE(geometry(dimmer), QRectF(0, 150, window->width(), window->height() - 150));
-    QTRY_COMPARE(geometry(popupItem), QRectF(window->width() - drawer->width(), 150, window->width() / 2, window->height() - 150));
+    QTRY_COMPARE(geometry(popupItem), QRectF(window->width() - drawer->width(), 150, window->width() / 2., window->height() - 150));
 
     window->setWidth(window->width() + 100);
     QTRY_COMPARE(geometry(dimmer), QRectF(0, 150, window->width(), window->height() - 150));
-    QTRY_COMPARE(geometry(popupItem), QRectF(window->width() - drawer->width(), 150, window->width() / 2, window->height() - 150));
+    QTRY_COMPARE(geometry(popupItem), QRectF(window->width() - drawer->width(), 150, window->width() / 2., window->height() - 150));
 
     drawer->close();
-    QTRY_COMPARE(geometry(popupItem), QRectF(window->width(), 150, window->width() / 2, window->height() - 150));
+    QTRY_COMPARE(geometry(popupItem), QRectF(window->width(), 150, window->width() / 2., window->height() - 150));
 
     QQuickDrawer *drawer2 = window->property("drawer2").value<QQuickDrawer *>();
     QVERIFY(drawer2);

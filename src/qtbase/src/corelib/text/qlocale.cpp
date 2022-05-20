@@ -40,7 +40,7 @@
 
 #include "qglobal.h"
 
-#if (defined(QT_STATIC) || defined(QT_BOOTSTRAPPED)) && defined(Q_CC_GNU) && Q_CC_GNU >= 1000
+#if (defined(QT_STATIC) || defined(QT_BOOTSTRAPPED)) && defined(Q_CC_GNU_ONLY) && Q_CC_GNU >= 1000
 QT_WARNING_DISABLE_GCC("-Wfree-nonheap-object") // false positive tracking
 #endif
 
@@ -3900,7 +3900,6 @@ bool QLocaleData::numberToCLocale(QStringView s, QLocale::NumberOptions number_o
     decltype(length) idx = 0;
 
     int digitsInGroup = 0;
-    int group_cnt = 0; // counts number of group chars
     int decpt_idx = -1;
     int last_separator_idx = -1;
     int start_of_digits_idx = -1;
@@ -3970,7 +3969,6 @@ bool QLocaleData::numberToCLocale(QStringView s, QLocale::NumberOptions number_o
                 }
 
                 last_separator_idx = idx;
-                ++group_cnt;
                 digitsInGroup = 0;
 
                 // don't add the group separator

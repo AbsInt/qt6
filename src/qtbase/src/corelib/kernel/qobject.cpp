@@ -1593,10 +1593,10 @@ void QObject::moveToThread(QThread *targetThread)
 
     QThreadData *currentData = QThreadData::current();
     QThreadData *targetData = targetThread ? QThreadData::get2(targetThread) : nullptr;
-    QThreadData *thisThreadData = d->threadData.loadRelaxed();
-    if (!thisThreadData->thread.loadAcquire() && currentData == targetData) {
+    QThreadData *thisThreadData = d->threadData.loadAcquire();
+    if (!thisThreadData->thread.loadRelaxed() && currentData == targetData) {
         // one exception to the rule: we allow moving objects with no thread affinity to the current thread
-        currentData = d->threadData;
+        currentData = thisThreadData;
     } else if (thisThreadData != currentData) {
         qWarning("QObject::moveToThread: Current thread (%p) is not the object's thread (%p).\n"
                  "Cannot move to target thread (%p)\n",
@@ -2418,6 +2418,7 @@ static bool check_method_code(int code, const QObject *object, const char *metho
     return true;
 }
 
+Q_DECL_COLD_FUNCTION
 static void err_method_notfound(const QObject *object,
                                 const char *method, const char *func)
 {
@@ -2435,6 +2436,7 @@ static void err_method_notfound(const QObject *object,
                   object->metaObject()->className(), method + 1, loc ? " in " : "", loc ? loc : "");
 }
 
+Q_DECL_COLD_FUNCTION
 static void err_info_about_objects(const char *func, const QObject *sender, const QObject *receiver)
 {
     QString a = sender ? sender->objectName() : QString();

@@ -345,6 +345,7 @@ void QQmlComponentPrivate::fromTypeData(const QQmlRefPointer<QQmlTypeData> &data
 
 RequiredProperties &QQmlComponentPrivate::requiredProperties()
 {
+    Q_ASSERT(state.creator);
     return state.creator->requiredProperties();
 }
 
@@ -447,7 +448,9 @@ QQmlComponent::~QQmlComponent()
                 qWarning().nospace().noquote() << QLatin1String("    ") << error;
         }
 
-        d->completeCreate();
+        // we might not have the creator anymore if the engine is gone
+        if (d->state.creator)
+            d->completeCreate();
     }
 
     if (d->typeData) {
@@ -1481,8 +1484,10 @@ QQmlError QQmlComponentPrivate::unsetRequiredPropertyToQQmlError(const RequiredP
     }
     error.setDescription(description);
     error.setUrl(unsetRequiredProperty.fileUrl);
-    error.setLine(qmlConvertSourceCoordinate<quint32, int>(unsetRequiredProperty.location.line));
-    error.setColumn(qmlConvertSourceCoordinate<quint32, int>(unsetRequiredProperty.location.column));
+    error.setLine(qmlConvertSourceCoordinate<quint32, int>(
+            unsetRequiredProperty.location.line()));
+    error.setColumn(qmlConvertSourceCoordinate<quint32, int>(
+            unsetRequiredProperty.location.column()));
     return  error;
 }
 
@@ -1876,3 +1881,4 @@ void QV4::QmlIncubatorObject::statusChanged(QQmlIncubator::Status s)
 QT_END_NAMESPACE
 
 #include "moc_qqmlcomponent.cpp"
+#include "moc_qqmlcomponentattached_p.cpp"

@@ -578,9 +578,6 @@ void QQuickDeliveryAgentPrivate::notifyFocusChangesRecur(QQuickItem **items, int
 {
     QPointer<QQuickItem> item(*items);
 
-    if (remaining)
-        notifyFocusChangesRecur(items + 1, remaining - 1, reason);
-
     if (item) {
         QQuickItemPrivate *itemPrivate = QQuickItemPrivate::get(item);
 
@@ -597,6 +594,9 @@ void QQuickDeliveryAgentPrivate::notifyFocusChangesRecur(QQuickItem **items, int
             emit item->activeFocusChanged(itemPrivate->activeFocus);
         }
     }
+
+    if (remaining)
+        notifyFocusChangesRecur(items + 1, remaining - 1, reason);
 }
 
 bool QQuickDeliveryAgentPrivate::clearHover(ulong timestamp)
@@ -1593,6 +1593,8 @@ void QQuickDeliveryAgentPrivate::flushFrameSynchronousEvents(QQuickWindow *win)
         deliverHoverEvent(lastMousePosition, lastMousePosition, QGuiApplication::keyboardModifiers(), 0);
         qCDebug(lcHoverTrace) << q << "frame-sync hover delivery done";
     }
+#else
+    Q_UNUSED(win);
 #endif
     if (Q_UNLIKELY(QQuickDeliveryAgentPrivate::currentEventDeliveryAgent &&
                    QQuickDeliveryAgentPrivate::currentEventDeliveryAgent != q))
@@ -1759,9 +1761,17 @@ void QQuickDeliveryAgentPrivate::deliverPointerEvent(QPointerEvent *event)
     if (event->isEndEvent())
         deliverPressOrReleaseEvent(event, true);
 
-    // failsafe: never allow touch->mouse synthesis to persist after release
-    if (event->isEndEvent() && isTouchEvent(event))
-        cancelTouchMouseSynthesis();
+    // failsafe: never allow touch->mouse synthesis to persist after all touchpoints are released,
+    // or after the touchmouse is released
+    if (isTouchEvent(event) && touchMouseId >= 0) {
+        if (static_cast<QTouchEvent *>(event)->touchPointStates() == QEventPoint::State::Released) {
+            cancelTouchMouseSynthesis();
+        } else {
+            auto touchMousePoint = event->pointById(touchMouseId);
+            if (touchMousePoint && touchMousePoint->state() == QEventPoint::State::Released)
+                cancelTouchMouseSynthesis();
+        }
+    }
 
     eventsInDelivery.pop();
     if (sceneTransform) {

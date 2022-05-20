@@ -50,6 +50,7 @@ qt_internal_add_qml_module(QuickDialogs2QuickImpl
     PLUGIN_TARGET qtquickdialogs2quickimplplugin
     DEPENDENCIES
         QtQuick/auto
+        QtQuick.Templates/auto
     SOURCES
         qquickdialogimplfactory.cpp
         qquickdialogimplfactory_p.h
@@ -71,6 +72,7 @@ qt_internal_add_qml_module(QuickDialogs2QuickImpl
         qquickplatformfontdialog_p.h
         qquickplatformfontdialog.cpp
         qtquickdialogs2quickimplforeign_p.h
+        qtquickdialogs2quickimplforeign.cpp
         qtquickdialogs2quickimplglobal_p.h
         qquickfontdialogimpl_p.h
         qquickfontdialogimpl_p_p.h

@@ -773,7 +773,7 @@ void QXcbConnection::handleXcbEvent(xcb_generic_event_t *event)
                 case XCB_XKB_NEW_KEYBOARD_NOTIFY: {
                     xcb_xkb_new_keyboard_notify_event_t *ev = &xkb_event->new_keyboard_notify;
                     if (ev->changed & XCB_XKB_NKN_DETAIL_KEYCODES)
-                        m_keyboard->updateKeymap(ev);
+                        m_keyboard->updateKeymap();
                     break;
                 }
                 default:
@@ -1231,3 +1231,5 @@ void QXcbConnectionGrabber::release()
 }
 
 QT_END_NAMESPACE
+
+#include "moc_qxcbconnection.cpp"

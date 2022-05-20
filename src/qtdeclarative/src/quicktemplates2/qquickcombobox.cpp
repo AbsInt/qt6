@@ -196,6 +196,7 @@ namespace {
     enum Highlighting { NoHighlight, Highlight };
 }
 
+// ### Qt7: Remove this class. Use QQmlDelegateModel instead.
 class QQuickComboBoxDelegateModel : public QQmlDelegateModel
 {
 public:
@@ -214,20 +215,22 @@ QQuickComboBoxDelegateModel::QQuickComboBoxDelegateModel(QQuickComboBox *combo)
 
 QVariant QQuickComboBoxDelegateModel::variantValue(int index, const QString &role)
 {
-    const QVariant model = combo->model();
-    if (model.userType() == QMetaType::QVariantList) {
-        QVariant object = model.toList().value(index);
-        if (object.userType() == QMetaType::QVariantMap) {
-            const QVariantMap data = object.toMap();
-            if (data.count() == 1 && role == QLatin1String("modelData"))
-                return data.first();
-            return data.value(role);
-        } else if (object.userType() == QMetaType::QObjectStar) {
-            const QObject *data = object.value<QObject *>();
-            if (data && role != QLatin1String("modelData"))
-                return data->property(role.toUtf8());
+    // ### Qt7: Get rid of this. Why do we special case lists of variant maps with
+    //          exactly one entry? There are many other ways of producing a list of
+    //          map-like things with exactly one entry. And what if some of the maps
+    //          in the list have more than one entry? You get inconsistent results.
+    if (role == QLatin1String("modelData")) {
+        const QVariant model = combo->model();
+        if (model.metaType() == QMetaType::fromType<QVariantList>()) {
+            const QVariant object = model.toList().value(index);
+            if (object.metaType() == QMetaType::fromType<QVariantMap>()) {
+                const QVariantMap data = object.toMap();
+                if (data.count() == 1)
+                    return data.first();
+            }
         }
     }
+
     return QQmlDelegateModel::variantValue(index, role);
 }
 
@@ -475,6 +478,7 @@ void QQuickComboBoxPrivate::updateEditText()
         const QString completed = tryComplete(text);
         if (completed.length() > text.length()) {
             input->setText(completed);
+            // This will select the text backwards.
             input->select(completed.length(), text.length());
             return;
         }
@@ -546,12 +550,22 @@ void QQuickComboBoxPrivate::acceptInput()
 {
     Q_Q(QQuickComboBox);
     int idx = q->find(extra.value().editText, Qt::MatchFixedString);
-    if (idx > -1)
+    if (idx > -1) {
+        // The item that was accepted already exists, so make it the current item.
         q->setCurrentIndex(idx);
+        // After accepting text that matches an existing entry, the selection should be cleared.
+        QQuickTextInput *input = qobject_cast<QQuickTextInput *>(contentItem);
+        if (input) {
+            const auto text = input->text();
+            input->select(text.size(), text.size());
+        }
+    }
 
     extra.value().accepting = true;
     emit q->accepted();
 
+    // The user might have added the item since it didn't exist, so check again
+    // to see if we can select that new item.
     if (idx == -1)
         q->setCurrentIndex(q->find(extra.value().editText, Qt::MatchFixedString));
     extra.value().accepting = false;

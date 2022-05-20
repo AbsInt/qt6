@@ -2299,4 +2299,60 @@ TestCase {
         compare(control.displayText, "2")
         compare(control.acceptableInput, true)
     }
+
+    function test_selectionCleared() {
+        const model = [
+            { text: "Apple" },
+            { text: "Banana" },
+            { text: "Coconut" }
+        ]
+        let control = createTemporaryObject(comboBox, testCase, { model: model, editable: true })
+        verify(control)
+
+        compare(control.displayText, "Apple")
+        compare(control.editText, "Apple")
+        compare(control.currentIndex, 0)
+
+        // Give the TextField focus and select the text.
+        let textField = control.contentItem
+        textField.forceActiveFocus()
+        textField.selectAll()
+        compare(textField.selectedText, "Apple")
+
+        // Type "B" so that Banana is selected.
+        keyPress(Qt.Key_Shift)
+        keyClick(Qt.Key_B)
+        keyRelease(Qt.Key_Shift)
+        compare(control.displayText, "Apple")
+        expectFail("", "QTBUG-102950")
+        compare(control.editText, "Banana")
+        compare(textField.selectedText, "anana")
+        compare(control.currentIndex, 0)
+
+        // Select Banana by pressing enter.
+        keyClick(Qt.Key_Return)
+        compare(control.displayText, "Banana")
+        compare(control.editText, "Banana")
+        compare(textField.selectedText, "")
+        compare(control.currentIndex, 1)
+    }
+
+    Component {
+        id: listOfGadgets
+        QtObject {
+            property var rects: [Qt.rect(1, 2, 3, 4), Qt.rect(5, 6, 7, 8)]
+        }
+    }
+
+    function test_listOfGadgetsWithRole() {
+        let model = listOfGadgets.createObject(testCase);
+        let control = createTemporaryObject(
+                comboBox, testCase, {model: model.rects, textRole: "width"});
+        verify(control);
+        compare(control.currentIndex, 0);
+        compare(control.displayText, "3");
+
+        control.currentIndex = 1;
+        compare(control.displayText, "7");
+    }
 }

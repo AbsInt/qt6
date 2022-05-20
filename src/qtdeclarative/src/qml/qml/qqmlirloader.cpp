@@ -107,9 +107,9 @@ QmlIR::Object *QQmlIRLoader::loadObject(const QV4::CompiledData::Object *seriali
                  serializedObject->location);
 
     object->indexOfDefaultPropertyOrAlias = serializedObject->indexOfDefaultPropertyOrAlias;
-    object->defaultPropertyIsAlias = serializedObject->defaultPropertyIsAlias;
-    object->flags = serializedObject->flags;
-    object->id = serializedObject->id;
+    object->defaultPropertyIsAlias = serializedObject->hasAliasAsDefaultProperty();
+    object->flags = serializedObject->flags();
+    object->id = serializedObject->objectId();
     object->locationOfIdProperty = serializedObject->locationOfIdProperty;
 
     QVector<int> functionIndices;
@@ -119,7 +119,7 @@ QmlIR::Object *QQmlIRLoader::loadObject(const QV4::CompiledData::Object *seriali
         QmlIR::Binding *b = pool->New<QmlIR::Binding>();
         *static_cast<QV4::CompiledData::Binding*>(b) = serializedObject->bindingTable()[i];
         object->bindings->append(b);
-        if (b->type == QV4::CompiledData::Binding::Type_Script) {
+        if (b->type() == QV4::CompiledData::Binding::Type_Script) {
             functionIndices.append(b->value.compiledScriptIndex);
             b->value.compiledScriptIndex = functionIndices.count() - 1;
 

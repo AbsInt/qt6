@@ -462,7 +462,7 @@ void QQuickTextAreaPrivate::readOnlyChanged(bool isReadOnly)
         accessibleAttached->set_readOnly(isReadOnly);
 #endif
 #if QT_CONFIG(cursor)
-    q_func()->setCursor(isReadOnly ? Qt::ArrowCursor : Qt::IBeamCursor);
+    q_func()->setCursor(isReadOnly && !selectByMouse ? Qt::ArrowCursor : Qt::IBeamCursor);
 #endif
 }
 
@@ -1019,7 +1019,11 @@ QSGNode *QQuickTextArea::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *
     if (d->flickable)
         clipper = d->flickable;
 
-    const QRectF cr = clipper->clipRect().adjusted(leftPadding(), topPadding(), -rightPadding(), -bottomPadding());
+    const QRectF cr = clipper->clipRect().adjusted(
+            leftPadding(), topPadding(),
+            (!d->cursorItem && effectiveHAlign() == HAlignment::AlignRight ? 1 : 0) - rightPadding(),
+            -bottomPadding());
+
     clipNode->setRect(!d->flickable ? cr : cr.translated(d->flickable->contentX(), d->flickable->contentY()));
     clipNode->update();
 

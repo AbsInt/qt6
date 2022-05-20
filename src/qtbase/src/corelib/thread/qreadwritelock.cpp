@@ -160,7 +160,7 @@ QReadWriteLock::QReadWriteLock(RecursionMode recursionMode)
 */
 QReadWriteLock::~QReadWriteLock()
 {
-    auto d = d_ptr.loadRelaxed();
+    auto d = d_ptr.loadAcquire();
     if (isUncontendedLocked(d)) {
         qWarning("QReadWriteLock: destroying locked QReadWriteLock");
         return;
@@ -450,7 +450,7 @@ void QReadWriteLock::unlock()
 /*! \internal  Helper for QWaitCondition::wait */
 QReadWriteLock::StateForWaitCondition QReadWriteLock::stateForWaitCondition() const
 {
-    QReadWriteLockPrivate *d = d_ptr.loadRelaxed();
+    QReadWriteLockPrivate *d = d_ptr.loadAcquire();
     switch (quintptr(d) & StateMask) {
     case StateLockedForRead: return LockedForRead;
     case StateLockedForWrite: return LockedForWrite;
@@ -458,6 +458,7 @@ QReadWriteLock::StateForWaitCondition QReadWriteLock::stateForWaitCondition() co
 
     if (!d)
         return Unlocked;
+    const auto lock = qt_scoped_lock(d->mutex);
     if (d->writerCount > 1)
         return RecursivelyLocked;
     else if (d->writerCount == 1)

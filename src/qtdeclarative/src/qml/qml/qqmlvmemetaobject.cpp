@@ -237,7 +237,7 @@ void QQmlVMEMetaObjectEndpoint::tryConnect()
         const QV4::CompiledData::Alias *aliasData = &metaObject->compiledObject->aliasTable()[aliasId];
         if (!aliasData->isObjectAlias()) {
             QQmlRefPointer<QQmlContextData> ctxt = metaObject->ctxt;
-            QObject *target = ctxt->idValue(aliasData->targetObjectId);
+            QObject *target = ctxt->idValue(aliasData->targetObjectId());
             if (!target)
                 return;
 
@@ -362,15 +362,15 @@ bool QQmlInterceptorMetaObject::doIntercept(QMetaObject::Call c, int id, void **
                 QVariant newValue(metaType, a[0]);
 
                 valueType->read(object, id);
-                QVariant prevComponentValue = valueProp.read(valueType);
+                QVariant prevComponentValue = valueType->readOnGadget(valueProp);
 
                 valueType->setValue(newValue);
-                QVariant newComponentValue = valueProp.read(valueType);
+                QVariant newComponentValue = valueType->readOnGadget(valueProp);
 
                 // Don't apply the interceptor if the intercepted value has not changed
                 bool updated = false;
                 if (newComponentValue != prevComponentValue) {
-                    valueProp.write(valueType, prevComponentValue);
+                    valueType->writeOnGadget(valueProp, prevComponentValue);
                     valueType->write(object, id, QQmlPropertyData::DontRemoveBinding | QQmlPropertyData::BypassInterceptor);
 
                     vi->write(newComponentValue);
@@ -760,7 +760,7 @@ int QQmlVMEMetaObject::metaCall(QObject *o, QMetaObject::Call c, int _id, void *
                         }
                         break;
                     case QV4::CompiledData::BuiltinType::InvalidBuiltin:
-                        if (property.isList) {
+                        if (property.isList()) {
                             // when reading from the list, we need to find the correct MetaObject,
                             // namely this. However, obejct->metaObject might point to any MetaObject
                             // down the inheritance hierarchy, so we need to store how far we have
@@ -866,7 +866,7 @@ int QQmlVMEMetaObject::metaCall(QObject *o, QMetaObject::Call c, int _id, void *
                             writeProperty(id, *reinterpret_cast<QVariant *>(a[0]));
                         break;
                     case QV4::CompiledData::BuiltinType::InvalidBuiltin:
-                        if (property.isList) {
+                        if (property.isList()) {
                             // Writing such a property is not supported. Content is added through the list property
                             // methods.
                         } else {
@@ -888,16 +888,18 @@ int QQmlVMEMetaObject::metaCall(QObject *o, QMetaObject::Call c, int _id, void *
             if (id < aliasCount) {
                 const QV4::CompiledData::Alias *aliasData = &compiledObject->aliasTable()[id];
 
-                if ((aliasData->flags & QV4::CompiledData::Alias::AliasPointsToPointerObject) && c == QMetaObject::ReadProperty)
-                        *reinterpret_cast<void **>(a[0]) = nullptr;
+                if (aliasData->hasFlag(QV4::CompiledData::Alias::AliasPointsToPointerObject)
+                        && c == QMetaObject::ReadProperty){
+                    *reinterpret_cast<void **>(a[0]) = nullptr;
+                }
 
                 if (ctxt.isNull())
                     return -1;
 
-                while (aliasData->aliasToLocalAlias)
+                while (aliasData->isAliasToLocalAlias())
                     aliasData = &compiledObject->aliasTable()[aliasData->localAliasIndex];
 
-                QObject *target = ctxt->idValue(aliasData->targetObjectId);
+                QObject *target = ctxt->idValue(aliasData->targetObjectId());
                 if (!target)
                     return -1;
 
@@ -1244,9 +1246,9 @@ bool QQmlVMEMetaObject::aliasTarget(int index, QObject **target, int *coreIndex,
 
     const int aliasId = index - propOffset() - compiledObject->nProperties;
     const QV4::CompiledData::Alias *aliasData = &compiledObject->aliasTable()[aliasId];
-    while (aliasData->aliasToLocalAlias)
+    while (aliasData->isAliasToLocalAlias())
         aliasData = &compiledObject->aliasTable()[aliasData->localAliasIndex];
-    *target = ctxt->idValue(aliasData->targetObjectId);
+    *target = ctxt->idValue(aliasData->targetObjectId());
     if (!*target)
         return false;
 
@@ -1274,7 +1276,7 @@ void QQmlVMEMetaObject::connectAlias(int aliasId)
     }
 
     endpoint->metaObject = this;
-    endpoint->connect(ctxt->idValueBindings(aliasData->targetObjectId));
+    endpoint->connect(ctxt->idValueBindings(aliasData->targetObjectId()));
     endpoint->tryConnect();
 }
 

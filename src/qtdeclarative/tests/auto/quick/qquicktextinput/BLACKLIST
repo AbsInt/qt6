@@ -33,3 +33,16 @@ opensuse-leap
 # QTBUG-95940
 [copyAndPasteKeySequence]
 opensuse-leap
+
+# QTBUG-103200
+[middleClickPaste]
+opensuse-leap
+[echoMode]
+opensuse-leap
+[checkCursorDelegateWhenPaddingChanged]
+opensuse-leap
+
+# QTBUG-103256
+[copyAndPasteKeySequence]
+android
+
