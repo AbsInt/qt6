@@ -46,7 +46,7 @@ qt_internal_add_module(WaylandCompositor
         global/qtwaylandcompositorglobal.h
         global/qtwaylandqmlinclude.h
         global/qwaylandcompositorextension.cpp global/qwaylandcompositorextension.h global/qwaylandcompositorextension_p.h
-        global/qwaylandquickextension.h
+        global/qwaylandquickextension.cpp global/qwaylandquickextension.h
         global/qwaylandutils_p.h
         hardware_integration/qwlclientbufferintegration.cpp hardware_integration/qwlclientbufferintegration_p.h
         wayland_wrapper/qwlbuffermanager.cpp wayland_wrapper/qwlbuffermanager_p.h
@@ -157,7 +157,7 @@ qt_internal_extend_target(WaylandCompositor CONDITION TARGET Qt::Quick
 
 qt_internal_extend_target(WaylandCompositor CONDITION QT_FEATURE_wayland_compositor_quick
     SOURCES
-        compositor_api/qwaylandcompositorquickextensions_p.h
+        compositor_api/qwaylandcompositorquickextensions.cpp compositor_api/qwaylandcompositorquickextensions_p.h
         compositor_api/qwaylandmousetracker.cpp compositor_api/qwaylandmousetracker_p.h
         compositor_api/qwaylandquickchildren.h
         compositor_api/qwaylandquickcompositor.cpp compositor_api/qwaylandquickcompositor.h

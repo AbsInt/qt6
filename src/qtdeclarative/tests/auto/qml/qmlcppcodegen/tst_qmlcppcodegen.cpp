@@ -1362,6 +1362,10 @@ void tst_QmlCppCodegen::noQQmlData()
 
 void tst_QmlCppCodegen::scopeObjectDestruction()
 {
+#ifdef Q_OS_ANDROID
+    QSKIP("crashes on Android, see QTBUG-103044.");
+#endif
+
     QQmlEngine engine;
     QQmlComponent component(&engine, QUrl(u"qrc:/TestTypes/fileDialog.qml"_qs));
 
@@ -1549,6 +1553,10 @@ void tst_QmlCppCodegen::listIndices()
     for (int i = 0; i < 3; ++i)
         QCOMPARE(list.at(i), o.data());
     QCOMPARE(o->property("numItems").toInt(), 3);
+    QCOMPARE(qvariant_cast<QObject *>(o->property("fractional")), nullptr);
+    QCOMPARE(qvariant_cast<QObject *>(o->property("negativeZero")), o.data());
+    QCOMPARE(qvariant_cast<QObject *>(o->property("infinity")), nullptr);
+    QCOMPARE(qvariant_cast<QObject *>(o->property("nan")), nullptr);
 }
 
 void tst_QmlCppCodegen::jsMathObject()

@@ -1034,7 +1034,7 @@ void QWaylandWindow::handleMouse(QWaylandInputDevice *inputDevice, const QWaylan
 
 #if QT_CONFIG(cursor)
     if (e.type == QEvent::Enter) {
-        QRect contentGeometry = windowContentGeometry().marginsRemoved(clientSideMargins());
+        QRect contentGeometry = QRect(QPoint(), surfaceSize()).marginsRemoved(clientSideMargins());
         if (contentGeometry.contains(e.local.toPoint()))
             restoreMouseCursor(inputDevice);
     }
@@ -1527,3 +1527,5 @@ void QWaylandWindow::setXdgActivationToken(const QString &token)
 }
 
 QT_END_NAMESPACE
+
+#include "moc_qwaylandwindow_p.cpp"

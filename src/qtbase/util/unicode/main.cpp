@@ -84,6 +84,47 @@ static void initAgeMap()
     }
 }
 
+static const char *east_asian_width_string =
+R"(enum class EastAsianWidth : unsigned int {
+    A,
+    F,
+    H,
+    N,
+    Na,
+    W,
+};
+
+)";
+
+enum class EastAsianWidth : unsigned int {
+    A,
+    F,
+    H,
+    N,
+    Na,
+    W,
+};
+
+static QHash<QByteArray, EastAsianWidth> eastAsianWidthMap;
+
+static void initEastAsianWidthMap()
+{
+    constexpr struct W {
+        EastAsianWidth width;
+        const char *name;
+    } widths[] = {
+        { EastAsianWidth::A,  "A"  },
+        { EastAsianWidth::F,  "F"  },
+        { EastAsianWidth::H,  "H"  },
+        { EastAsianWidth::N,  "N"  },
+        { EastAsianWidth::Na, "Na" },
+        { EastAsianWidth::W,  "W"  },
+    };
+
+    for (auto &w : widths)
+        eastAsianWidthMap.insert(w.name, w.width);
+}
+
 static QHash<QByteArray, QChar::Category> categoryMap;
 
 static void initCategoryMap()
@@ -371,10 +412,6 @@ static const char *word_break_class_string =
     "    WordBreak_MidNum,\n"
     "    WordBreak_Numeric,\n"
     "    WordBreak_ExtendNumLet,\n"
-    "    WordBreak_E_Base,\n"
-    "    WordBreak_E_Modifier,\n"
-    "    WordBreak_Glue_After_Zwj,\n"
-    "    WordBreak_E_Base_GAZ,\n"
     "    WordBreak_WSegSpace,\n"
     "\n"
     "    NumWordBreakClasses\n"
@@ -399,10 +436,6 @@ enum WordBreakClass {
     WordBreak_MidNum,
     WordBreak_Numeric,
     WordBreak_ExtendNumLet,
-    WordBreak_E_Base,
-    WordBreak_E_Modifier,
-    WordBreak_Glue_After_Zwj,
-    WordBreak_E_Base_GAZ,
     WordBreak_WSegSpace,
 
     WordBreak_Unassigned
@@ -434,10 +467,6 @@ static void initWordBreak()
         { WordBreak_MidNum, "MidNum" },
         { WordBreak_Numeric, "Numeric" },
         { WordBreak_ExtendNumLet, "ExtendNumLet" },
-        { WordBreak_E_Base, "E_Base" },
-        { WordBreak_E_Modifier, "E_Modifier" },
-        { WordBreak_Glue_After_Zwj, "Glue_After_Zwj" },
-        { WordBreak_E_Base_GAZ, "E_Base_GAZ" },
         { WordBreak_WSegSpace, "WSegSpace" },
         { WordBreak_Unassigned, 0 }
     };
@@ -886,7 +915,8 @@ static const char *property_string =
     "    ushort joining             : 3;\n"
     "    signed short digitValue    : 5;\n"
     "    signed short mirrorDiff    : 16;\n"
-    "    ushort unicodeVersion      : 8; /* 5 used */\n"
+    "    ushort unicodeVersion      : 5; /* 5 used */\n"
+    "    ushort eastAsianWidth      : 3; /* 3 used */\n"
     "    ushort nfQuickCheck        : 8;\n" // could be narrowed
     "#ifdef Q_OS_WASM\n"
     "    unsigned char              : 0; //wasm 64 packing trick\n"
@@ -933,6 +963,10 @@ static const char *methods =
     "Q_CORE_EXPORT QStringView QT_FASTCALL idnaMapping(char32_t usc4) noexcept;\n"
     "inline QStringView idnaMapping(QChar ch) noexcept\n"
     "{ return idnaMapping(ch.unicode()); }\n"
+    "\n"
+    "Q_CORE_EXPORT EastAsianWidth QT_FASTCALL eastAsianWidth(char32_t ucs4) noexcept;\n"
+    "inline EastAsianWidth eastAsianWidth(QChar ch) noexcept\n"
+    "{ return eastAsianWidth(ch.unicode()); }\n"
     "\n";
 
 static const int SizeOfPropertiesStruct = 20;
@@ -955,6 +989,7 @@ struct PropertyFlags {
                 && direction == o.direction
                 && joining == o.joining
                 && age == o.age
+                && eastAsianWidth == o.eastAsianWidth
                 && digitValue == o.digitValue
                 && mirrorDiff == o.mirrorDiff
                 && lowerCaseDiff == o.lowerCaseDiff
@@ -982,6 +1017,8 @@ struct PropertyFlags {
     QChar::JoiningType joining : 3;
     // from DerivedAge.txt
     QChar::UnicodeVersion age : 5;
+    // From EastAsianWidth.txt
+    EastAsianWidth eastAsianWidth = EastAsianWidth::N;
     int digitValue = -1;
 
     int mirrorDiff : 16;
@@ -1520,6 +1557,52 @@ static void readDerivedAge()
     }
 }
 
+static void readEastAsianWidth()
+{
+    qDebug("Reading EastAsianWidth.txt");
+
+    QFile f("data/EastAsianWidth.txt");
+    if (!f.exists() || !f.open(QFile::ReadOnly))
+        qFatal("Couldn't find or read EastAsianWidth.txt");
+
+    while (!f.atEnd()) {
+        QByteArray line = f.readLine().trimmed();
+
+        int comment = line.indexOf('#');
+        line = (comment < 0 ? line : line.left(comment)).simplified();
+
+        if (line.isEmpty())
+            continue;
+
+        QList<QByteArray> fields = line.split(';');
+        Q_ASSERT(fields.size() == 2);
+
+        // That would be split(".."), but that API does not exist.
+        const QByteArray codePoints = fields[0].trimmed().replace("..", ".");
+        QList<QByteArray> cl = codePoints.split('.');
+        Q_ASSERT(cl.size() >= 1 && cl.size() <= 2);
+
+        const QByteArray widthString = fields[1].trimmed();
+        if (!eastAsianWidthMap.contains(widthString)) {
+            qFatal("Unhandled EastAsianWidth property value for %s: %s",
+                   qPrintable(codePoints), qPrintable(widthString));
+        }
+        auto width = eastAsianWidthMap.value(widthString);
+
+        bool ok;
+        const int first = cl[0].toInt(&ok, 16);
+        const int last = ok && cl.size() == 2 ? cl[1].toInt(&ok, 16) : first;
+        Q_ASSERT(ok);
+
+        for (int codepoint = first; codepoint <= last; ++codepoint) {
+            UnicodeData &ud = UnicodeData::valueRef(codepoint);
+            // Ensure that ranges don't overlap.
+            Q_ASSERT(ud.p.eastAsianWidth == EastAsianWidth::N);
+            ud.p.eastAsianWidth = width;
+        }
+    }
+}
+
 static void readDerivedNormalizationProps()
 {
     qDebug("Reading DerivedNormalizationProps.txt");
@@ -1647,7 +1730,7 @@ static QByteArray createNormalizationCorrections()
            "    int version;\n"
            "};\n\n"
 
-           "static const NormalizationCorrection uc_normalization_corrections[] = {\n";
+           "static constexpr NormalizationCorrection uc_normalization_corrections[] = {\n";
 
     int maxVersion = 0;
     int numCorrections = 0;
@@ -2663,7 +2746,7 @@ static QByteArray createIdnaMapping()
     qsizetype memoryUsage = 0;
 
     QByteArray out =
-        "static const char16_t idnaMappingData[] = {";
+        "static constexpr char16_t idnaMappingData[] = {";
 
     int col = 0;
     for (auto c : idnaMappingData) {
@@ -2688,7 +2771,7 @@ static QByteArray createIdnaMapping()
         "    char16_t ucs[2]; // ucs[0] is offset if size > 2\n"
         "};\n"
         "static_assert(sizeof(IdnaMapEntry) == 8);\n\n"
-        "static const IdnaMapEntry idnaMap[] = {\n";
+        "static constexpr IdnaMapEntry idnaMap[] = {\n";
 
     for (auto i = idnaMappingTable.keyValueBegin(); i != idnaMappingTable.keyValueEnd(); i++) {
         const QString &mapping = i->second;
@@ -2857,7 +2940,7 @@ static QByteArray createPropertyInfo()
     Q_ASSERT(blockMap.size() == BMP_END/BMP_BLOCKSIZE +(SMP_END-BMP_END)/SMP_BLOCKSIZE); // 0x1870
     Q_ASSERT(blockMap.last() + blockMap.size() < (1<<(sizeof(unsigned short)*8)));
 
-    QByteArray out = "static const unsigned short uc_property_trie[] = {\n";
+    QByteArray out = "static constexpr unsigned short uc_property_trie[] = {\n";
     // First write the map from blockId to indices of unique blocks:
     out += "    // [0x0..0x" + QByteArray::number(BMP_END, 16) + ")";
     for (int i = 0; i < BMP_END/BMP_BLOCKSIZE; ++i) {
@@ -2910,7 +2993,7 @@ static QByteArray createPropertyInfo()
         out.chop(2);
     out += "\n};\n\n";
 
-    out += "static const Properties uc_properties[] = {";
+    out += "static constexpr Properties uc_properties[] = {";
     // keep in sync with the property declaration
     for (int i = 0; i < uniqueProperties.size(); ++i) {
         const PropertyFlags &p = uniqueProperties.at(i);
@@ -2933,8 +3016,11 @@ static QByteArray createPropertyInfo()
 //     "        signed short mirrorDiff    : 16;\n"
         out += QByteArray::number( p.mirrorDiff );
         out += ", ";
-//     "        ushort unicodeVersion      : 8; /* 5 used */\n"
+//     "        ushort unicodeVersion      : 5; /* 5 used */\n"
         out += QByteArray::number( p.age );
+        out += ", ";
+//     "        ushort eastAsianWidth      : 3;" /* 3 used */\n"
+        out += QByteArray::number( static_cast<unsigned int>(p.eastAsianWidth) );
         out += ", ";
 //     "        ushort nfQuickCheck        : 8;\n"
         out += QByteArray::number( p.nfQuickCheck );
@@ -3040,6 +3126,11 @@ static QByteArray createPropertyInfo()
            "{\n"
            "    return static_cast<IdnaStatus>(qGetProp(ucs4)->idnaStatus);\n"
            "}\n"
+           "\n"
+           "Q_CORE_EXPORT EastAsianWidth QT_FASTCALL eastAsianWidth(char32_t ucs4) noexcept\n"
+           "{\n"
+           "    return static_cast<EastAsianWidth>(qGetProp(ucs4)->eastAsianWidth);\n"
+           "}\n"
            "\n";
 
     return out;
@@ -3050,7 +3141,7 @@ static QByteArray createSpecialCaseMap()
     qDebug("createSpecialCaseMap:");
 
     QByteArray out
-         = "static const unsigned short specialCaseMap[] = {\n"
+         = "static constexpr unsigned short specialCaseMap[] = {\n"
            "    0x0, // placeholder";
 
     int i = 1;
@@ -3066,7 +3157,7 @@ static QByteArray createSpecialCaseMap()
         maxN = std::max(maxN, n);
     }
     out.chop(1);
-    out += "\n};\n\nconst unsigned int MaxSpecialCaseLength = ";
+    out += "\n};\n\nconstexpr unsigned int MaxSpecialCaseLength = ";
     out += QByteArray::number(maxN);
     out += ";\n\n";
 
@@ -3198,7 +3289,7 @@ static QByteArray createCompositionInfo()
 
     Q_ASSERT(blockMap.last() + blockMap.size() < (1<<(sizeof(unsigned short)*8)));
 
-    QByteArray out = "static const unsigned short uc_decomposition_trie[] = {\n";
+    QByteArray out = "static constexpr unsigned short uc_decomposition_trie[] = {\n";
     // first write the map
     out += "    // 0 - 0x" + QByteArray::number(BMP_END, 16);
     for (int i = 0; i < BMP_END/BMP_BLOCKSIZE; ++i) {
@@ -3262,7 +3353,7 @@ static QByteArray createCompositionInfo()
            + QByteArray::number(SMP_BLOCKSIZE-1, 16) + ")] \\\n"
            "        : 0xffff)\n\n";
 
-    out += "static const unsigned short uc_decomposition_map[] = {";
+    out += "static constexpr unsigned short uc_decomposition_map[] = {";
     for (int i = 0; i < decompositions.size(); ++i) {
         if (!(i % 8)) {
             if (out.endsWith(' '))
@@ -3398,7 +3489,7 @@ static QByteArray createLigatureInfo()
 
     Q_ASSERT(blockMap.last() + blockMap.size() < (1<<(sizeof(unsigned short)*8)));
 
-    QByteArray out = "static const unsigned short uc_ligature_trie[] = {\n";
+    QByteArray out = "static constexpr unsigned short uc_ligature_trie[] = {\n";
     // first write the map
     out += "    // 0 - 0x" + QByteArray::number(BMP_END, 16);
     for (int i = 0; i < BMP_END/BMP_BLOCKSIZE; ++i) {
@@ -3462,7 +3553,7 @@ static QByteArray createLigatureInfo()
            + QByteArray::number(SMP_BLOCKSIZE-1, 16) + ")] \\\n"
            "        : 0xffff)\n\n";
 
-    out += "static const unsigned short uc_ligature_map[] = {";
+    out += "static constexpr unsigned short uc_ligature_map[] = {";
     for (int i = 0; i < ligatures.size(); ++i) {
         if (!(i % 8)) {
             if (out.endsWith(' '))
@@ -3495,6 +3586,7 @@ QByteArray createCasingInfo()
 int main(int, char **)
 {
     initAgeMap();
+    initEastAsianWidthMap();
     initCategoryMap();
     initDecompositionMap();
     initDirectionMap();
@@ -3510,6 +3602,7 @@ int main(int, char **)
     readBidiMirroring();
     readArabicShaping();
     readDerivedAge();
+    readEastAsianWidth();
     readDerivedNormalizationProps();
     readSpecialCasing();
     readCaseFolding();
@@ -3620,6 +3713,7 @@ int main(int, char **)
     f.write("namespace QUnicodeTables {\n\n");
     f.write(property_string);
     f.write(sizeOfPropertiesStructCheck);
+    f.write(east_asian_width_string);
     f.write(grapheme_break_class_string);
     f.write(word_break_class_string);
     f.write(sentence_break_class_string);

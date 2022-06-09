@@ -391,10 +391,10 @@ void QWaylandXdgSurface::setSizeHints()
         const int minHeight = qMax(0, m_window->windowMinimumSize().height());
         m_toplevel->set_min_size(minWidth, minHeight);
 
-        int maxWidth = qMax(0, m_window->windowMaximumSize().width());
+        int maxWidth = qMax(minWidth, m_window->windowMaximumSize().width());
         if (maxWidth == QWINDOWSIZE_MAX)
             maxWidth = 0;
-        int maxHeight = qMax(0, m_window->windowMaximumSize().height());
+        int maxHeight = qMax(minHeight, m_window->windowMaximumSize().height());
         if (maxHeight == QWINDOWSIZE_MAX)
             maxHeight = 0;
         m_toplevel->set_max_size(maxWidth, maxHeight);
@@ -581,3 +581,5 @@ void QWaylandXdgShell::handleRegistryGlobal(void *data, wl_registry *registry, u
 }
 
 QT_END_NAMESPACE
+
+#include "moc_qwaylandxdgshell_p.cpp"

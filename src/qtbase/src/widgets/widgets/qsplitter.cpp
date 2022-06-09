@@ -735,6 +735,11 @@ void QSplitterPrivate::setSizes_helper(const QList<int> &sizes, bool clampNegati
     doResize();
 }
 
+/*
+    Used by various methods inserting a widget to find out if we need to show the widget
+    explicitly, which we have to if the splitter is already visible, and if the widget hasn't
+    been explicitly hidden before inserting it.
+*/
 bool QSplitterPrivate::shouldShowWidget(const QWidget *w) const
 {
     Q_Q(const QSplitter);
@@ -1178,7 +1183,7 @@ QWidget *QSplitter::replaceWidget(int index, QWidget *widget)
     QBoolBlocker b(d->blockChildAdd);
 
     const QRect geom = current->geometry();
-    const bool shouldShow = d->shouldShowWidget(current);
+    const bool wasHidden = current->isHidden();
 
     s->widget = widget;
     current->setParent(nullptr);
@@ -1188,7 +1193,10 @@ QWidget *QSplitter::replaceWidget(int index, QWidget *widget)
     // should not change. Only set the geometry on the new widget
     widget->setGeometry(geom);
     widget->lower();
-    widget->setVisible(shouldShow);
+    if (wasHidden)
+        widget->hide();
+    else if (d->shouldShowWidget(widget))
+        widget->show();
 
     return current;
 }
@@ -1682,6 +1690,7 @@ QByteArray QSplitter::saveState() const
     int version = 1;
     QByteArray data;
     QDataStream stream(&data, QIODevice::WriteOnly);
+    stream.setVersion(QDataStream::Qt_5_0);
 
     stream << qint32(SplitterMagic);
     stream << qint32(version);
@@ -1723,6 +1732,7 @@ bool QSplitter::restoreState(const QByteArray &state)
     int version = 1;
     QByteArray sd = state;
     QDataStream stream(&sd, QIODevice::ReadOnly);
+    stream.setVersion(QDataStream::Qt_5_0);
     QList<int> list;
     bool b;
     qint32 i;
