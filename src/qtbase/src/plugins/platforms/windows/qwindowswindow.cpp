@@ -1021,7 +1021,7 @@ QMargins QWindowsGeometryHint::frame(const QWindow *w, HWND hwnd, DWORD style, D
         return {};
     if (QWindowsScreenManager::isSingleScreen())
         return frameOnPrimaryScreen(w, style, exStyle);
-    auto screenManager = QWindowsContext::instance()->screenManager();
+    auto &screenManager = QWindowsContext::instance()->screenManager();
     auto screen = screenManager.screenForHwnd(hwnd);
     if (!screen)
         screen = screenManager.screens().value(0);
@@ -1048,7 +1048,7 @@ QMargins QWindowsGeometryHint::frame(const QWindow *w, const QRect &geometry,
         return frameOnPrimaryScreen(w, style, exStyle);
     }
     qreal dpi = 96;
-    auto screenManager = QWindowsContext::instance()->screenManager();
+    auto &screenManager = QWindowsContext::instance()->screenManager();
     auto screen = screenManager.screenAtDp(geometry.center());
     if (!screen)
         screen = screenManager.screens().value(0);
@@ -1969,6 +1969,14 @@ void QWindowsWindow::handleDpiChanged(HWND hwnd, WPARAM wParam, LPARAM lParam)
     }
 }
 
+void QWindowsWindow::handleDpiChangedAfterParent(HWND hwnd)
+{
+    // FIXME: refactor, do we really need this?
+    setSavedDpi(GetDpiForWindow(hwnd));
+
+    checkForScreenChanged(QWindowsWindow::FromDpiChange);
+}
+
 static QRect normalFrameGeometry(HWND hwnd)
 {
     WINDOWPLACEMENT wp;
@@ -2112,12 +2120,14 @@ static inline bool equalDpi(const QDpi &d1, const QDpi &d2)
 
 void QWindowsWindow::checkForScreenChanged(ScreenChangeMode mode)
 {
-    if (parent() || QWindowsScreenManager::isSingleScreen())
+    if ((parent() && !parent()->isForeignWindow()) || QWindowsScreenManager::isSingleScreen())
         return;
 
     QPlatformScreen *currentScreen = screen();
+    auto topLevel = isTopLevel_sys() ? m_data.hwnd : GetAncestor(m_data.hwnd, GA_ROOT);
     const QWindowsScreen *newScreen =
-        QWindowsContext::instance()->screenManager().screenForHwnd(m_data.hwnd);
+        QWindowsContext::instance()->screenManager().screenForHwnd(topLevel);
+
     if (newScreen == nullptr || newScreen == currentScreen)
         return;
     // For screens with different DPI: postpone until WM_DPICHANGE

@@ -67,6 +67,7 @@ Q_DECLARE_LOGGING_CATEGORY(lcQpaTablet)
 Q_DECLARE_LOGGING_CATEGORY(lcQpaAccessibility)
 Q_DECLARE_LOGGING_CATEGORY(lcQpaUiAutomation)
 Q_DECLARE_LOGGING_CATEGORY(lcQpaTrayIcon)
+Q_DECLARE_LOGGING_CATEGORY(lcQpaScreen)
 
 class QWindow;
 class QPlatformScreen;
@@ -157,7 +158,7 @@ public:
     static void setTabletAbsoluteRange(int a);
     void setProcessDpiAwareness(QtWindows::ProcessDpiAwareness dpiAwareness);
     static int processDpiAwareness();
-    void setProcessDpiV2Awareness();
+    bool setProcessDpiV2Awareness();
 
     static bool isDarkMode();
 

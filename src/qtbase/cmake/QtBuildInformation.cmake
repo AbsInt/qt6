@@ -1,4 +1,13 @@
 function(qt_print_feature_summary)
+    if(QT_SUPERBUILD)
+        qt_internal_set_message_log_level(message_log_level)
+        if(message_log_level)
+            # In a top-level build, ensure that the feature_summary is affected by the
+            # selected log-level.
+            set(CMAKE_MESSAGE_LOG_LEVEL "${message_log_level}")
+        endif()
+    endif()
+
     include(FeatureSummary)
     # Show which packages were found.
     feature_summary(INCLUDE_QUIET_PACKAGES
@@ -17,6 +26,15 @@ function(qt_print_build_instructions)
        QT_BUILD_STANDALONE_TESTS)
 
         return()
+    endif()
+
+    if(QT_SUPERBUILD)
+        qt_internal_set_message_log_level(message_log_level)
+        if(message_log_level)
+            # In a top-level build, ensure that qt_print_build_instructions is affected by the
+            # selected log-level.
+            set(CMAKE_MESSAGE_LOG_LEVEL "${message_log_level}")
+        endif()
     endif()
 
     set(build_command "cmake --build . --parallel")
@@ -64,30 +82,63 @@ from the build directory \n")
     set(QT_INTERNAL_BUILD_INSTRUCTIONS_SHOWN "TRUE" CACHE STRING "" FORCE)
 endfunction()
 
+function(qt_configure_print_summary_helper summary_reports force_show)
+    # We force show the summary by temporarily (within the scope of the function) resetting the
+    # current log level.
+    if(force_show)
+        set(CMAKE_MESSAGE_LOG_LEVEL "STATUS")
+    endif()
+    message(STATUS "Configure summary:\n${__qt_configure_reports}")
+endfunction()
+
 function(qt_configure_print_summary)
     # Evaluate all recorded commands.
     qt_configure_eval_commands()
 
     set(summary_file "${CMAKE_BINARY_DIR}/config.summary")
     file(WRITE "${summary_file}" "")
-    # Show Qt-specific configure summary and any notes, wranings, etc.
+
+    get_property(features_possibly_changed GLOBAL PROPERTY _qt_dirty_build)
+
+    # Show Qt-specific configuration summary.
     if(__qt_configure_reports)
-        if(NOT QT_INTERNAL_SUMMARY_INSTRUCTIONS_SHOWN)
+        # We want to show the the summary file and log level messages only on first configuration
+        # or when we detect a feature change, to keep most reconfiguration output as quiet as
+        # possible. Currently feature change detection is not entirely reliable.
+        if(NOT QT_INTERNAL_SUMMARY_INSTRUCTIONS_SHOWN OR features_possibly_changed)
             message("")
             message(
-                "-- Configuration summary has been written to ${CMAKE_BINARY_DIR}/config.summary")
+                "-- Configuration summary shown below. It has also been written to"
+                " ${CMAKE_BINARY_DIR}/config.summary")
             message(
-                "-- Configure with --log-level=STATUS or higher to increase the output verbosity.")
+                "-- Configure with --log-level=STATUS or higher to increase "
+                "CMake's message verbosity. "
+                "The log level does not persist across reconfigurations.")
         endif()
 
         # Need 2 flushes to ensure no interleaved input is printed due to a mix of message(STATUS)
         # and message(NOTICE) calls.
         execute_process(COMMAND ${CMAKE_COMMAND} -E echo " ")
-        message(STATUS "Configure summary:\n${__qt_configure_reports}")
+
+        # We want to show the configuration summary only on first configuration or when we detect
+        # a feature change, to keep most reconfiguration output as quiet as possible.
+        # Currently feature change detection is not entirely reliable.
+        if(NOT QT_INTERNAL_SUMMARY_INSTRUCTIONS_SHOWN OR features_possibly_changed)
+            set(force_show_summary TRUE)
+        else()
+            set(force_show_summary FALSE)
+        endif()
+
+        qt_configure_print_summary_helper(
+            "Configuration summary:\n${__qt_configure_reports}"
+            ${force_show_summary})
+
         execute_process(COMMAND ${CMAKE_COMMAND} -E echo " ")
 
         file(APPEND "${summary_file}" "${__qt_configure_reports}")
     endif()
+
+    # Show Qt specific notes, warnings, errors.
     if(__qt_configure_notes)
         message("${__qt_configure_notes}")
         file(APPEND "${summary_file}" "${__qt_configure_notes}")

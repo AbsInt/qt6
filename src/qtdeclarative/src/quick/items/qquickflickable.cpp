@@ -43,6 +43,8 @@
 #include "qquickwindow.h"
 #include "qquickwindow_p.h"
 #include "qquickevents_p_p.h"
+#include "qquickmousearea_p.h"
+#include "qquickdrag_p.h"
 
 #include <QtQuick/private/qquickpointerhandler_p.h>
 #include <QtQuick/private/qquicktransition_p.h>
@@ -554,8 +556,8 @@ void QQuickFlickablePrivate::updateBeginningEnd()
     const qreal maxyextent = -q->maxYExtent();
     const qreal minyextent = -q->minYExtent();
     const qreal ypos = -vData.move.value();
-    bool atBeginning = fuzzyLessThanOrEqualTo(ypos, minyextent);
-    bool atEnd = fuzzyLessThanOrEqualTo(maxyextent, ypos);
+    bool atBeginning = fuzzyLessThanOrEqualTo(ypos, std::ceil(minyextent));
+    bool atEnd = fuzzyLessThanOrEqualTo(std::floor(maxyextent), ypos);
 
     if (atBeginning != vData.atBeginning) {
         vData.atBeginning = atBeginning;
@@ -574,8 +576,8 @@ void QQuickFlickablePrivate::updateBeginningEnd()
     const qreal maxxextent = -q->maxXExtent();
     const qreal minxextent = -q->minXExtent();
     const qreal xpos = -hData.move.value();
-    atBeginning = fuzzyLessThanOrEqualTo(xpos, minxextent);
-    atEnd = fuzzyLessThanOrEqualTo(maxxextent, xpos);
+    atBeginning = fuzzyLessThanOrEqualTo(xpos, std::ceil(minxextent));
+    atEnd = fuzzyLessThanOrEqualTo(std::floor(maxxextent), xpos);
 
     if (atBeginning != hData.atBeginning) {
         hData.atBeginning = atBeginning;
@@ -1655,9 +1657,9 @@ void QQuickFlickable::wheelEvent(QWheelEvent *event)
             d->vData.addVelocitySample(instVelocity, d->maxVelocity);
             d->vData.updateVelocity();
             if ((yDelta > 0 && contentY() > -minYExtent()) || (yDelta < 0 && contentY() < -maxYExtent())) {
-                d->flickY(d->vData.velocity);
-                d->flickingStarted(false, true);
-                if (d->vData.flicking) {
+                const bool newFlick = d->flickY(d->vData.velocity);
+                if (newFlick && (d->vData.atBeginning != (yDelta > 0) || d->vData.atEnd != (yDelta < 0))) {
+                    d->flickingStarted(false, true);
                     d->vMoved = true;
                     movementStarting();
                 }
@@ -1672,9 +1674,9 @@ void QQuickFlickable::wheelEvent(QWheelEvent *event)
             d->hData.addVelocitySample(instVelocity, d->maxVelocity);
             d->hData.updateVelocity();
             if ((xDelta > 0 && contentX() > -minXExtent()) || (xDelta < 0 && contentX() < -maxXExtent())) {
-                d->flickX(d->hData.velocity);
-                d->flickingStarted(true, false);
-                if (d->hData.flicking) {
+                const bool newFlick = d->flickX(d->hData.velocity);
+                if (newFlick && (d->hData.atBeginning != (xDelta > 0) || d->hData.atEnd != (xDelta < 0))) {
+                    d->flickingStarted(true, false);
                     d->hMoved = true;
                     movementStarting();
                 }
@@ -2553,6 +2555,23 @@ bool QQuickFlickable::filterPointerEvent(QQuickItem *receiver, QPointerEvent *ev
     bool receiverDisabled = receiver && !receiver->isEnabled();
     bool stealThisEvent = d->stealMouse;
     bool receiverKeepsGrab = receiver && (receiver->keepMouseGrab() || receiver->keepTouchGrab());
+    bool receiverRelinquishGrab = false;
+
+    // Special case for MouseArea, try to guess what it does with the event
+    if (auto *mouseArea = qmlobject_cast<QQuickMouseArea *>(receiver)) {
+        bool preventStealing = mouseArea->preventStealing();
+        if (mouseArea->drag() && mouseArea->drag()->target())
+            preventStealing = true;
+        if (!preventStealing && receiverKeepsGrab) {
+            receiverRelinquishGrab = !receiverDisabled
+                    || (QQuickDeliveryAgentPrivate::isMouseEvent(event)
+                        && firstPoint.state() == QEventPoint::State::Pressed
+                        && (receiver->acceptedMouseButtons() & static_cast<QMouseEvent *>(event)->button()));
+            if (receiverRelinquishGrab)
+                receiverKeepsGrab = false;
+        }
+    }
+
     if ((stealThisEvent || contains(localPos)) && (!receiver || !receiverKeepsGrab || receiverDisabled)) {
         QScopedPointer<QPointerEvent> localizedEvent(QQuickDeliveryAgentPrivate::clonePointerEvent(event, localPos));
         localizedEvent->setAccepted(false);
@@ -2563,7 +2582,9 @@ bool QQuickFlickable::filterPointerEvent(QQuickItem *receiver, QPointerEvent *ev
         case QEventPoint::State::Pressed:
             d->handlePressEvent(localizedEvent.data());
             d->captureDelayedPress(receiver, event);
-            stealThisEvent = d->stealMouse;   // Update stealThisEvent in case changed by function call above
+            // never grab the pointing device on press during filtering: do it later, during a move
+            d->stealMouse = false;
+            stealThisEvent = false;
             break;
         case QEventPoint::State::Released:
             d->handleReleaseEvent(localizedEvent.data());
@@ -2580,7 +2601,7 @@ bool QQuickFlickable::filterPointerEvent(QQuickItem *receiver, QPointerEvent *ev
             event->setExclusiveGrabber(firstPoint, this);
         }
 
-        const bool filtered = stealThisEvent || d->delayedPressEvent || receiverDisabled;
+        const bool filtered = !receiverRelinquishGrab && (stealThisEvent || d->delayedPressEvent || receiverDisabled);
         if (filtered) {
             event->setAccepted(true);
         }
@@ -2606,18 +2627,19 @@ bool QQuickFlickable::filterPointerEvent(QQuickItem *receiver, QPointerEvent *ev
 bool QQuickFlickable::childMouseEventFilter(QQuickItem *i, QEvent *e)
 {
     Q_D(QQuickFlickable);
+    QPointerEvent *pointerEvent = e->isPointerEvent() ? static_cast<QPointerEvent *>(e) : nullptr;
 
-    auto wantsPointerEvent_helper = [this, d, i, e]() {
-        QPointerEvent *pe = static_cast<QPointerEvent *>(e);
-        QQuickDeliveryAgentPrivate::localizePointerEvent(pe, this);
-        const bool wants = d->wantsPointerEvent(pe);
+    auto wantsPointerEvent_helper = [this, d, i, pointerEvent]() {
+        Q_ASSERT(pointerEvent);
+        QQuickDeliveryAgentPrivate::localizePointerEvent(pointerEvent, this);
+        const bool wants = d->wantsPointerEvent(pointerEvent);
         // re-localize event back to \a i before returning
-        QQuickDeliveryAgentPrivate::localizePointerEvent(pe, i);
+        QQuickDeliveryAgentPrivate::localizePointerEvent(pointerEvent, i);
         return wants;
     };
 
     if (!isVisible() || !isEnabled() || !isInteractive() ||
-            (e->isPointerEvent() && !wantsPointerEvent_helper())) {
+            (pointerEvent && !wantsPointerEvent_helper())) {
         d->cancelInteraction();
         return QQuickItem::childMouseEventFilter(i, e);
     }
@@ -2629,8 +2651,8 @@ bool QQuickFlickable::childMouseEventFilter(QQuickItem *i, QEvent *e)
         qCDebug(lcFilter) << "filtering UngrabMouse" << spe->points().first() << "for" << i << "grabber is" << grabber;
         if (grabber != this)
             mouseUngrabEvent(); // A child has been ungrabbed
-    } else if (e->isPointerEvent()) {
-        return filterPointerEvent(i, static_cast<QPointerEvent *>(e));
+    } else if (pointerEvent) {
+        return filterPointerEvent(i, pointerEvent);
     }
 
     return QQuickItem::childMouseEventFilter(i, e);

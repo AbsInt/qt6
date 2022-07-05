@@ -337,7 +337,7 @@ QWindow *QWindowsScreen::topLevelAt(const QPoint &point) const
     if (QWindow *child = QWindowsScreen::windowAt(point, CWP_SKIPINVISIBLE))
         result = QWindowsWindow::topLevelOf(child);
     if (QWindowsContext::verbose > 1)
-        qCDebug(lcQpaWindows) <<__FUNCTION__ << point << result;
+        qCDebug(lcQpaScreen) <<__FUNCTION__ << point << result;
     return result;
 }
 
@@ -348,7 +348,7 @@ QWindow *QWindowsScreen::windowAt(const QPoint &screenPoint, unsigned flags)
             findPlatformWindowAt(GetDesktopWindow(), screenPoint, flags))
         result = bw->window();
     if (QWindowsContext::verbose > 1)
-        qCDebug(lcQpaWindows) <<__FUNCTION__ << screenPoint << " returns " << result;
+        qCDebug(lcQpaScreen) <<__FUNCTION__ << screenPoint << " returns " << result;
     return result;
 }
 
@@ -384,7 +384,7 @@ void QWindowsScreen::handleChanges(const QWindowsScreenData &newData)
     m_data.physicalSizeMM = newData.physicalSizeMM;
 
     if (m_data.hMonitor != newData.hMonitor) {
-        qCDebug(lcQpaWindows) << "Monitor" << m_data.name
+        qCDebug(lcQpaScreen) << "Monitor" << m_data.name
             << "has had its hMonitor handle changed from"
             << m_data.hMonitor << "to" << newData.hMonitor;
         m_data.hMonitor = newData.hMonitor;
@@ -517,8 +517,45 @@ QPlatformScreen::SubpixelAntialiasingType QWindowsScreen::subpixelAntialiasingTy
     \internal
 */
 
+extern "C" LRESULT QT_WIN_CALLBACK qDisplayChangeObserverWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
+{
+    if (message == WM_DISPLAYCHANGE) {
+        qCDebug(lcQpaScreen) << "Handling WM_DISPLAYCHANGE";
+        if (QWindowsTheme *t = QWindowsTheme::instance())
+            t->displayChanged();
+        QWindowsWindow::displayChanged();
+        QWindowsContext::instance()->screenManager().handleScreenChanges();
+    }
+
+    return DefWindowProc(hwnd, message, wParam, lParam);
+}
+
 QWindowsScreenManager::QWindowsScreenManager() = default;
 
+void QWindowsScreenManager::initialize()
+{
+    qCDebug(lcQpaScreen) << "Initializing screen manager";
+
+    auto className = QWindowsContext::instance()->registerWindowClass(
+        QWindowsContext::classNamePrefix() + QLatin1String("ScreenChangeObserverWindow"),
+        qDisplayChangeObserverWndProc);
+
+    // HWND_MESSAGE windows do not get WM_DISPLAYCHANGE, so we need to create
+    // a real top level window that we never show.
+    m_displayChangeObserver = CreateWindowEx(0, reinterpret_cast<LPCWSTR>(className.utf16()),
+        nullptr, WS_TILED, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
+        nullptr, nullptr, GetModuleHandle(nullptr), nullptr);
+    Q_ASSERT(m_displayChangeObserver);
+
+    qCDebug(lcQpaScreen) << "Created display change observer" << m_displayChangeObserver;
+
+    handleScreenChanges();
+}
+
+QWindowsScreenManager::~QWindowsScreenManager()
+{
+    DestroyWindow(m_displayChangeObserver);
+}
 
 bool QWindowsScreenManager::isSingleScreen()
 {
@@ -562,7 +599,7 @@ static void moveToVirtualScreen(QWindow *w, const QScreen *newScreen)
 
 void QWindowsScreenManager::removeScreen(int index)
 {
-    qCDebug(lcQpaWindows) << "Removing Monitor:" << m_screens.at(index)->data();
+    qCDebug(lcQpaScreen) << "Removing Monitor:" << m_screens.at(index)->data();
     QScreen *screen = m_screens.at(index)->screen();
     QScreen *primaryScreen = QGuiApplication::primaryScreen();
     // QTBUG-38650: When a screen is disconnected, Windows will automatically
@@ -614,7 +651,7 @@ bool QWindowsScreenManager::handleScreenChanges()
             m_screens.push_back(newScreen);
             QWindowSystemInterface::handleScreenAdded(newScreen,
                                                              newData.flags & QWindowsScreenData::PrimaryScreen);
-            qCDebug(lcQpaWindows) << "New Monitor: " << newData;
+            qCDebug(lcQpaScreen) << "New Monitor: " << newData;
         }    // exists
     }        // for new screens.
     // Remove deleted ones but keep main monitors if we get only the

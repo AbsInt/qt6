@@ -40,6 +40,16 @@
     sections offer guidelines for choosing the appropriate type of delegate,
     depending on the use case.
 
+    \section1 CheckDelegate Control
+
+    \image qtquickcontrols2-checkdelegate.gif
+
+    \l CheckDelegate presents a checkable control that can be toggled on
+    (checked) or off (unchecked). Check delegates are typically used to
+    select one or more options from a set of options.
+
+    \b {See also} \l {CheckBox Control}.
+
     \section1 ItemDelegate Control
 
     \image qtquickcontrols2-itemdelegate.gif
@@ -71,6 +81,15 @@
     \l SwitchDelegate presents a switchable delegate that can be toggled on or off.
 
     \b {See also} \l {Switch Control}.
+
+    \section1 TreeViewDelegate Control
+
+    \image qtquickcontrols2-treeviewdelegate.png
+
+    \l A TreeViewDelegate is a delegate that can be assigned to the delegate property
+    of a TreeView.
+
+    \b {See also} \l {TreeView Control}.
 
     \section1 Related Information
     \list

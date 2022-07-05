@@ -78,8 +78,7 @@ template <typename T>
 inline constexpr int qMetaTypeId();
 
 // F is a tuple: (QMetaType::TypeName, QMetaType::TypeNameID, RealType)
-#define QT_FOR_EACH_STATIC_PRIMITIVE_TYPE(F)\
-    F(Void, 43, void) \
+#define QT_FOR_EACH_STATIC_PRIMITIVE_NON_VOID_TYPE(F)\
     F(Bool, 1, bool) \
     F(Int, 2, int) \
     F(UInt, 3, uint) \
@@ -99,7 +98,11 @@ inline constexpr int qMetaTypeId();
     F(Nullptr, 51, std::nullptr_t) \
     F(QCborSimpleType, 52, QCborSimpleType) \
 
-#define QT_FOR_EACH_STATIC_PRIMITIVE_POINTER(F)\
+#define QT_FOR_EACH_STATIC_PRIMITIVE_TYPE(F)        \
+    QT_FOR_EACH_STATIC_PRIMITIVE_NON_VOID_TYPE(F)   \
+    F(Void, 43, void) \
+
+#define QT_FOR_EACH_STATIC_PRIMITIVE_POINTER(F)     \
     F(VoidStar, 31, void*) \
 
 #if QT_CONFIG(easingcurve)
@@ -912,13 +915,6 @@ namespace QtPrivate
         static constexpr MetaObjectFn metaObjectFunction = nullptr;
     };
 #ifndef QT_NO_QOBJECT
-    template<>
-    struct MetaObjectForType<void>
-    {
-        static constexpr const QMetaObject *value() { return nullptr; }
-        using MetaObjectFn = const QMetaObject *(*)(const QMetaTypeInterface *);
-        static constexpr MetaObjectFn metaObjectFunction = nullptr;
-    };
     template<typename T>
     struct MetaObjectForType<T*, typename std::enable_if<IsPointerToTypeDerivedFromQObject<T*>::Value>::type>
     {
@@ -2415,24 +2411,14 @@ public:
  */
 #if !defined(QT_BOOTSTRAPPED) && !defined(Q_CC_MSVC)
 
-#if !defined(QT_BUILD_CORE_LIB)
-#define QT_METATYPE_TEMPLATE_EXPORT Q_CORE_EXPORT
-#else
-#define QT_METATYPE_TEMPLATE_EXPORT
-#endif
-
-#define QT_METATYPE_DECLARE_EXTERN_TEMPLATE_ITER(TypeName, Id, Name)                               \
-    extern template class QT_METATYPE_TEMPLATE_EXPORT QMetaTypeForType<Name>;
-QT_WARNING_PUSH
-QT_WARNING_DISABLE_GCC("-Wattributes") // false positive because of QMetaTypeForType<void>
-QT_FOR_EACH_STATIC_PRIMITIVE_TYPE(QT_METATYPE_DECLARE_EXTERN_TEMPLATE_ITER)
-QT_WARNING_POP
+#define QT_METATYPE_DECLARE_EXTERN_TEMPLATE_ITER(TypeName, Id, Name)            \
+    extern template class Q_CORE_EXPORT QMetaTypeForType<Name>;
+QT_FOR_EACH_STATIC_PRIMITIVE_NON_VOID_TYPE(QT_METATYPE_DECLARE_EXTERN_TEMPLATE_ITER)
 QT_FOR_EACH_STATIC_PRIMITIVE_POINTER(QT_METATYPE_DECLARE_EXTERN_TEMPLATE_ITER)
 QT_FOR_EACH_STATIC_CORE_CLASS(QT_METATYPE_DECLARE_EXTERN_TEMPLATE_ITER)
 QT_FOR_EACH_STATIC_CORE_POINTER(QT_METATYPE_DECLARE_EXTERN_TEMPLATE_ITER)
 QT_FOR_EACH_STATIC_CORE_TEMPLATE(QT_METATYPE_DECLARE_EXTERN_TEMPLATE_ITER)
 #undef QT_METATYPE_DECLARE_EXTERN_TEMPLATE_ITER
-#undef QT_METATYPE_TEMPLATE_EXPORT
 #endif
 
 template<typename T>

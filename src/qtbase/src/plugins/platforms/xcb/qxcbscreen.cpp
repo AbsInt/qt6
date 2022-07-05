@@ -535,6 +535,7 @@ QXcbScreen::QXcbScreen(QXcbConnection *connection, QXcbVirtualDesktop *virtualDe
     , m_crtc(output ? output->crtc : XCB_NONE)
     , m_outputName(getOutputName(output))
     , m_outputSizeMillimeters(output ? QSize(output->mm_width, output->mm_height) : QSize())
+    , m_cursor(std::make_unique<QXcbCursor>(connection, this))
 {
     if (connection->isAtLeastXRandR12()) {
         xcb_randr_select_input(xcb_connection(), screen()->root, true);
@@ -554,8 +555,6 @@ QXcbScreen::QXcbScreen(QXcbConnection *connection, QXcbVirtualDesktop *virtualDe
 
     if (m_sizeMillimeters.isEmpty())
         m_sizeMillimeters = virtualDesktop->physicalSize();
-
-    m_cursor = new QXcbCursor(connection, this);
 
     updateColorSpaceAndEdid();
 }
@@ -621,6 +620,7 @@ QXcbScreen::QXcbScreen(QXcbConnection *connection, QXcbVirtualDesktop *virtualDe
     : QXcbObject(connection)
     , m_virtualDesktop(virtualDesktop)
     , m_monitor(monitorInfo)
+    , m_cursor(std::make_unique<QXcbCursor>(connection, this))
 {
     setMonitor(monitorInfo, timestamp);
 }
@@ -634,6 +634,7 @@ void QXcbScreen::setMonitor(xcb_randr_monitor_info_t *monitorInfo, xcb_timestamp
     m_crtcs.clear();
     m_output = XCB_NONE;
     m_crtc = XCB_NONE;
+    m_singlescreen = false;
 
     if (!monitorInfo) {
         m_monitor = nullptr;
@@ -714,12 +715,11 @@ void QXcbScreen::setMonitor(xcb_randr_monitor_info_t *monitorInfo, xcb_timestamp
         m_sizeMillimeters = virtualDesktop()->physicalSize();
 
     m_outputName = getName(monitorInfo);
-    if (connection()->primaryScreenNumber() == virtualDesktop()->number() && monitorInfo->primary)
-        m_primary = true;
-    else
-        m_primary = false;
-
-    m_cursor = new QXcbCursor(connection(), this);
+    m_primary = false;
+    if (connection()->primaryScreenNumber() == virtualDesktop()->number()) {
+        if (monitorInfo->primary || isPrimaryInXScreen())
+            m_primary = true;
+    }
 
     updateColorSpaceAndEdid();
 }
@@ -736,9 +736,19 @@ QString QXcbScreen::defaultName()
     return name;
 }
 
+bool QXcbScreen::isPrimaryInXScreen()
+{
+    auto primary = Q_XCB_REPLY(xcb_randr_get_output_primary, connection()->xcb_connection(), root());
+    if (!primary)
+        qWarning("failed to get the primary output of the screen");
+
+    const bool isPrimary = primary ? (m_monitor ? m_outputs.contains(primary->output) : m_output == primary->output) : false;
+
+    return isPrimary;
+}
+
 QXcbScreen::~QXcbScreen()
 {
-    delete m_cursor;
 }
 
 QString QXcbScreen::getOutputName(xcb_randr_get_output_info_reply_t *outputInfo)
@@ -905,7 +915,7 @@ QDpi QXcbScreen::logicalDpi() const
 
 QPlatformCursor *QXcbScreen::cursor() const
 {
-    return m_cursor;
+    return m_cursor.get();
 }
 
 void QXcbScreen::setOutput(xcb_randr_output_t outputId,

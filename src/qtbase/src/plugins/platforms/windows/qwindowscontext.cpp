@@ -105,6 +105,7 @@ Q_LOGGING_CATEGORY(lcQpaTablet, "qt.qpa.input.tablet")
 Q_LOGGING_CATEGORY(lcQpaAccessibility, "qt.qpa.accessibility")
 Q_LOGGING_CATEGORY(lcQpaUiAutomation, "qt.qpa.uiautomation")
 Q_LOGGING_CATEGORY(lcQpaTrayIcon, "qt.qpa.trayicon")
+Q_LOGGING_CATEGORY(lcQpaScreen, "qt.qpa.screen")
 
 int QWindowsContext::verbose = 0;
 
@@ -416,21 +417,19 @@ void QWindowsContext::setProcessDpiAwareness(QtWindows::ProcessDpiAwareness dpiA
     }
 }
 
-void QWindowsContext::setProcessDpiV2Awareness()
+bool QWindowsContext::setProcessDpiV2Awareness()
 {
     qCDebug(lcQpaWindows) << __FUNCTION__;
     const BOOL ok = SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-    if (ok) {
-        QWindowsContextPrivate::m_v2DpiAware = true;
-    } else {
+    if (!ok) {
         const HRESULT errorCode = GetLastError();
-        // ERROR_ACCESS_DENIED means set externally (MSVC manifest or external app loading Qt plugin).
-        // Silence warning in that case unless debug is enabled.
-        if (errorCode != ERROR_ACCESS_DENIED || lcQpaWindows().isDebugEnabled()) {
-            qWarning().noquote().nospace() << "setProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) failed: "
-                << QWindowsContext::comErrorString(errorCode);
-        }
+        qCWarning(lcQpaWindows).noquote().nospace() << "setProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) failed: "
+            << QWindowsContext::comErrorString(errorCode);
+        return false;
     }
+
+    QWindowsContextPrivate::m_v2DpiAware = true;
+    return true;
 }
 
 bool QWindowsContext::isDarkMode()
@@ -1127,12 +1126,6 @@ bool QWindowsContext::windowsProc(HWND hwnd, UINT message,
 #else
         return false;
 #endif
-    case QtWindows::DisplayChangedEvent:
-        if (QWindowsTheme *t = QWindowsTheme::instance())
-            t->displayChanged();
-        QWindowsWindow::displayChanged();
-        d->m_screenManager.handleScreenChanges();
-        return false;
     case QtWindows::SettingChangedEvent: {
         QWindowsWindow::settingsChanged();
         const bool darkMode = QWindowsTheme::queryDarkMode();
@@ -1357,6 +1350,9 @@ bool QWindowsContext::windowsProc(HWND hwnd, UINT message,
         return true;
     case QtWindows::DpiChangedEvent:
         platformWindow->handleDpiChanged(hwnd, wParam, lParam);
+        return true;
+    case QtWindows::DpiChangedAfterParentEvent:
+        platformWindow->handleDpiChangedAfterParent(hwnd);
         return true;
 #if QT_CONFIG(sessionmanager)
     case QtWindows::QueryEndSessionApplicationEvent: {

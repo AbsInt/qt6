@@ -74,6 +74,7 @@ set(qml_files
     functionLookup.qml
     funcWithParams.qml
     functionReturningVoid.qml
+    functionTakingVar.qml
     globals.qml
     idAccess.qml
     immediateQuit.qml
@@ -87,6 +88,7 @@ set(qml_files
     interactive.qml
     interceptor.qml
     isnan.qml
+    javaScriptArgument.qml
     jsMathObject.qml
     jsimport.qml
     jsmoduleimport.qml
@@ -128,6 +130,7 @@ set(qml_files
     text.qml
     themerbad.qml
     themergood.qml
+    throwObjectName.qml
     undefinedResets.qml
     unknownAttached.qml
     unknownParameter.qml

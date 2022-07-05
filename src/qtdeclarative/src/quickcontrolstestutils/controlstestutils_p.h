@@ -54,15 +54,15 @@ namespace QQuickControlsTestUtils
     {
     public:
         QQuickControlsApplicationHelper(QQmlDataTest *testCase, const QString &testFilePath,
-                const QStringList &qmlImportPaths = {},
-                const QVariantMap &initialProperties = {});
+                const QVariantMap &initialProperties = {},
+                const QStringList &qmlImportPaths = {});
 
         QQuickApplicationWindow *appWindow = nullptr;
     };
 
     struct QQuickStyleHelper
     {
-        bool updateStyle(const QString &style);
+        [[nodiscard]] bool updateStyle(const QString &style);
 
         QString currentStyle;
         QScopedPointer<QQmlEngine> engine;

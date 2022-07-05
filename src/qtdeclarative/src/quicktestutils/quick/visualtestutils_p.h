@@ -56,12 +56,10 @@ namespace QQuickVisualTestUtils
 
     void dumpTree(QQuickItem *parent, int depth = 0);
 
-    bool delegateVisible(QQuickItem *item);
-
     void moveMouseAway(QQuickWindow *window);
     void centerOnScreen(QQuickWindow *window);
 
-    bool delegateVisible(QQuickItem *item);
+    [[nodiscard]] bool delegateVisible(QQuickItem *item);
 
     /*
        Find an item with the specified objectName.  If index is supplied then the
@@ -77,7 +75,10 @@ namespace QQuickVisualTestUtils
                 continue;
             if (mo.cast(item) && (objectName.isEmpty() || item->objectName() == objectName)) {
                 if (index != -1) {
-                    QQmlExpression e(qmlContext(item), item, u"index"_qs);
+                    QQmlContext *context = qmlContext(item);
+                    if (!context->isValid())
+                        continue;
+                    QQmlExpression e(context, item, u"index"_qs);
                     if (e.evaluate().toInt() == index)
                         return static_cast<T*>(item);
                 } else {
@@ -163,7 +164,7 @@ namespace QQuickVisualTestUtils
         afterwards to assign the delegate.
     */
     template<typename T>
-    bool findViewDelegateItem(QQuickItemView *itemView, int index, T &delegateItem,
+    [[nodiscard]] bool findViewDelegateItem(QQuickItemView *itemView, int index, T &delegateItem,
         FindViewDelegateItemFlags flags = FindViewDelegateItemFlag::PositionViewAtIndex)
     {
         delegateItem = qobject_cast<T>(findViewDelegateItem(itemView, index, flags));
@@ -174,8 +175,8 @@ namespace QQuickVisualTestUtils
     {
     public:
         QQuickApplicationHelper(QQmlDataTest *testCase, const QString &testFilePath,
-                const QStringList &qmlImportPaths = {},
-                const QVariantMap &initialProperties = {});
+                const QVariantMap &initialProperties = {},
+                const QStringList &qmlImportPaths = {});
 
         // Return a C-style string instead of QString because that's what QTest uses for error messages,
         // so it saves code at the calling site.

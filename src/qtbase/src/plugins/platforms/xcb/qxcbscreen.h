@@ -54,6 +54,8 @@
 
 #include <QtGui/private/qedidparser_p.h>
 
+#include <memory>
+
 QT_BEGIN_NAMESPACE
 
 class QXcbConnection;
@@ -197,6 +199,7 @@ public:
     void setCrtc(xcb_randr_crtc_t crtc) { m_crtc = crtc; }
     void setMonitor(xcb_randr_monitor_info_t *monitorInfo, xcb_timestamp_t timestamp = XCB_NONE);
     QString defaultName();
+    bool isPrimaryInXScreen();
 
     void windowShown(QXcbWindow *window);
     QString windowManagerName() const { return m_virtualDesktop->windowManagerName(); }
@@ -248,7 +251,7 @@ private:
     QRect m_availableGeometry;
     QColorSpace m_colorSpace;
     Qt::ScreenOrientation m_orientation = Qt::PrimaryOrientation;
-    QXcbCursor *m_cursor;
+    std::unique_ptr<QXcbCursor> m_cursor;
     qreal m_refreshRate = 60.0;
     QEdidParser m_edid;
 

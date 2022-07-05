@@ -6532,11 +6532,15 @@ void QWidget::setFocus(Qt::FocusReason reason)
 
         QApplicationPrivate::setFocusWidget(f, reason);
 #ifndef QT_NO_ACCESSIBILITY
-        // menus update the focus manually and this would create bogus events
-        if (!(f->inherits("QMenuBar") || f->inherits("QMenu") || f->inherits("QMenuItem")))
-        {
-            QAccessibleEvent event(f, QAccessible::Focus);
-            QAccessible::updateAccessibility(&event);
+        // If the widget gets focus because its window becomes active, then the accessibility
+        // subsystem is already informed about the window opening, and also knows which child
+        // within the window has focus. Don't interrupt it by emitting another focus event.
+        if (reason != Qt::ActiveWindowFocusReason) {
+            // menus update the focus manually and this would create bogus events
+            if (!(f->inherits("QMenuBar") || f->inherits("QMenu") || f->inherits("QMenuItem"))) {
+                QAccessibleEvent event(f, QAccessible::Focus);
+                QAccessible::updateAccessibility(&event);
+            }
         }
 #endif
 #if QT_CONFIG(graphicsview)
@@ -8911,8 +8915,18 @@ bool QWidget::event(QEvent *event)
                 Qt::InputMethodQuery q = (Qt::InputMethodQuery)(int)(queries & (1<<i));
                 if (q) {
                     QVariant v = inputMethodQuery(q);
-                    if (q == Qt::ImEnabled && !v.isValid() && isEnabled())
-                        v = QVariant(true); // special case for Qt4 compatibility
+                    if (q == Qt::ImEnabled && !v.isValid() && isEnabled()) {
+                        // Qt:ImEnabled was added in Qt 5.3. So not all widgets support it, even
+                        // if they implement IM otherwise (and override inputMethodQuery()).
+                        // So for legacy reasons, we need to check by other means if IM is supported when
+                        // Qt::ImEnabled is not implemented (the query returns an invalid QVariant).
+                        // Since QWidget implements inputMethodQuery(), and return valid values for
+                        // some of the IM properties, we cannot just query for Qt::ImQueryAll.
+                        // Instead we assume that if a widget supports IM, it will implement
+                        // Qt::ImSurroundingText (which is not implemented by QWidget).
+                        const bool imEnabledFallback = inputMethodQuery(Qt::ImSurroundingText).isValid();
+                        v = QVariant(imEnabledFallback);
+                    }
                     query->setValue(q, v);
                 }
             }

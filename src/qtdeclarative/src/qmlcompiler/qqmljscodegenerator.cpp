@@ -382,8 +382,11 @@ void QQmlJSCodeGenerator::eliminateDeadStores()
 
 QString QQmlJSCodeGenerator::errorReturnValue() const
 {
-    if (m_function->returnType)
-        return conversion(m_typeResolver->voidType(), m_function->returnType, QString());
+    if (auto ret = m_function->returnType) {
+        return ret->accessSemantics() == QQmlJSScope::AccessSemantics::Reference
+                ? conversion(m_typeResolver->voidType(), ret, QString()) // produces nullptr
+                : ret->internalName() + u"()"_qs;
+    }
     return QString();
 }
 
@@ -586,8 +589,11 @@ void QQmlJSCodeGenerator::generate_LoadReg(int reg)
 void QQmlJSCodeGenerator::generate_StoreReg(int reg)
 {
     INJECT_TRACE_INFO(generate_StoreReg);
-
     Q_ASSERT(m_state.accumulatorIn.isValid());
+
+    if (isArgument(reg))
+        reject(u"writing into a function argument"_qs);
+
     const QString var = registerVariable(reg);
     m_body.setWriteRegister(var);
     if (var.isEmpty())
@@ -1613,6 +1619,7 @@ void QQmlJSCodeGenerator::generate_ThrowException()
                          m_typeResolver->jsValueType()),
                      use(m_state.accumulatorVariableIn)) + u");\n"_qs;
     m_body += u"return "_qs + errorReturnValue() + u";\n"_qs;
+    m_skipUntilNextLabel = true;
 }
 
 void QQmlJSCodeGenerator::generate_GetException()
