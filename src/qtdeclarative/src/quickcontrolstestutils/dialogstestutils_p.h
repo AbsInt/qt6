@@ -77,6 +77,19 @@
     QCOMPARE(actualPaths, expectedPaths); \
 }
 
+#define OPEN_QUICK_DIALOG() \
+QVERIFY2(dialogHelper.isWindowInitialized(), dialogHelper.failureMessage()); \
+QVERIFY(dialogHelper.waitForWindowActive()); \
+QVERIFY(dialogHelper.openDialog()); \
+QTRY_VERIFY(dialogHelper.isQuickDialogOpen());
+
+#define CLOSE_QUICK_DIALOG() \
+    do { \
+        dialogHelper.dialog->close(); \
+        QVERIFY(!dialogHelper.dialog->isVisible()); \
+        QTRY_VERIFY(!dialogHelper.quickDialog->isVisible()); \
+    } while (false)
+
 QT_BEGIN_NAMESPACE
 class QWindow;
 
@@ -122,7 +135,11 @@ public:
         return QTest::qWaitForWindowActive(appHelper.window);
     }
 
-    bool openDialog()
+    /*
+        Opens the dialog. For non-native dialogs, it is necessary to ensure that
+        isQuickDialogOpen() returns true before trying to access its internals.
+    */
+    virtual bool openDialog()
     {
         dialog->open();
         if (!dialog->isVisible()) {

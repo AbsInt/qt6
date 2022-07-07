@@ -26,6 +26,7 @@
 **
 ****************************************************************************/
 
+#include <QtCore/qloggingcategory.h>
 #include <QtTest/qtest.h>
 #include <QtTest/qsignalspy.h>
 #include <QtQml/qqmlfile.h>
@@ -36,6 +37,7 @@
 #include <QtQuickDialogs2/private/qquickfiledialog_p.h>
 #include <QtQuickDialogs2QuickImpl/private/qquickplatformfiledialog_p.h>
 #include <QtQuickDialogs2QuickImpl/private/qquickfiledialogdelegate_p.h>
+#include <QtQuickDialogs2QuickImpl/private/qquickfiledialogimpl_p_p.h>
 #include <QtQuickDialogs2QuickImpl/private/qquickfolderbreadcrumbbar_p.h>
 #include <QtQuickDialogs2QuickImpl/private/qquickfolderbreadcrumbbar_p_p.h>
 #include <QtQuickDialogs2Utils/private/qquickfilenamefilter_p.h>
@@ -50,6 +52,8 @@
 using namespace QQuickVisualTestUtils;
 using namespace QQuickDialogTestUtils;
 using namespace QQuickControlsTestUtils;
+
+Q_LOGGING_CATEGORY(lcTest, "qt.quick.dialogs.tests.quickfiledialogimpl")
 
 class tst_QQuickFileDialogImpl : public QQmlDataTest
 {
@@ -86,9 +90,11 @@ private slots:
     void chooseFolderViaEnter();
     void chooseFileAndThenFolderViaTextEdit();
     void cancelDialogWhileTextEditHasFocus();
+    void closingDialogCancels();
     void goUp();
     void goUpWhileTextEditHasFocus();
     void goIntoLargeFolder();
+    void goUpIntoLargeFolder();
     void keyAndShortcutHandling();
     void bindNameFilters();
     void changeNameFilters();
@@ -114,7 +120,15 @@ private:
     QDir tempSubSubDir;
     QScopedPointer<QFile> tempSubFile1;
     QScopedPointer<QFile> tempSubFile2;
+
+    QTemporaryDir largeTempDir;
+    QDir largeTempDirLargeSubDir;
+    const int largeTempDirLargeSubDirIndex = 80;
+
     QDir oldCurrentDir;
+
+    const QKeySequence goUpKeySequence = QKeySequence(Qt::ALT | Qt::Key_Up);
+    const QKeySequence editPathKeySequence = QKeySequence(Qt::CTRL | Qt::Key_L);
 };
 
 tst_QQuickFileDialogImpl::tst_QQuickFileDialogImpl()
@@ -171,6 +185,28 @@ void tst_QQuickFileDialogImpl::initTestCase()
     tempFile2.reset(new QFile(tempDir.path() + "/file2.txt"));
     QVERIFY(tempFile2->open(QIODevice::ReadWrite));
 
+    /*
+        Create another temporary directory that contains a large amount of folders.
+    */
+    QVERIFY(largeTempDir.isValid());
+    const static int largeFileCount = 100;
+    for (int i = 0; i < largeFileCount; ++i) {
+        QDir newDir(largeTempDir.path());
+        QVERIFY(newDir.exists());
+        // Pad with zeroes so that the directories are ordered as we expect.
+        QVERIFY(newDir.mkdir(QString::fromLatin1("dir%1").arg(i, 3, 10, QLatin1Char('0'))));
+    }
+
+    // ... and within one of those folders, more folders.
+    largeTempDirLargeSubDir = QDir(largeTempDir.path() + "/dir"
+        + QString::fromLatin1("%1").arg(largeTempDirLargeSubDirIndex, 3, 10, QLatin1Char('0')));
+    QVERIFY(largeTempDirLargeSubDir.exists());
+    for (int i = 0; i < largeFileCount; ++i) {
+        QDir newDir(largeTempDirLargeSubDir.path());
+        QVERIFY(newDir.exists());
+        QVERIFY(newDir.mkdir(QString::fromLatin1("sub-dir%1").arg(i, 3, 10, QLatin1Char('0'))));
+    }
+
     // Ensure that each test starts off in the temporary directory.
     oldCurrentDir = QDir::current();
     QDir::setCurrent(tempDir.path());
@@ -188,47 +224,105 @@ void tst_QQuickFileDialogImpl::cleanupTestCase()
     QDir::setCurrent(oldCurrentDir.path());
 }
 
+#define VERIFY_FILE_SELECTED(expectedCurrentFolderUrl, expectedCurrentFileUrl) \
+{ \
+    COMPARE_URL(dialogHelper.dialog->selectedFile(), expectedCurrentFileUrl); \
+    COMPARE_URLS(dialogHelper.dialog->selectedFiles(), { expectedCurrentFileUrl }); \
+    /* We also test the deprecated currentFile* API until it's removed. */ \
+    COMPARE_URL(dialogHelper.dialog->currentFile(), expectedCurrentFileUrl); \
+    COMPARE_URLS(dialogHelper.dialog->currentFiles(), { expectedCurrentFileUrl }); \
+    COMPARE_URL(dialogHelper.quickDialog->selectedFile(), expectedCurrentFileUrl); \
+    COMPARE_URL(dialogHelper.dialog->currentFolder(), expectedCurrentFolderUrl); \
+    COMPARE_URL(dialogHelper.quickDialog->currentFolder(), expectedCurrentFolderUrl); \
+}
+
+#define VERIFY_DELEGATE_CURRENT(expectedCurrentFileUrl, expectedCurrentIndex) \
+{ \
+    QTRY_COMPARE(dialogHelper.fileDialogListView->currentIndex(), expectedCurrentIndex); \
+    QQuickFileDialogDelegate *fileDelegate = nullptr; \
+    QTRY_VERIFY(findViewDelegateItem(dialogHelper.fileDialogListView, expectedCurrentIndex, fileDelegate)); \
+    COMPARE_URL(fileDelegate->file(), expectedCurrentFileUrl); \
+}
+
+#define VERIFY_DELEGATE_FOCUSED(expectedCurrentIndex) \
+{ \
+    QTRY_COMPARE(dialogHelper.fileDialogListView->currentIndex(), expectedCurrentIndex); \
+    QQuickFileDialogDelegate *fileDelegate = nullptr; \
+    QTRY_VERIFY(findViewDelegateItem(dialogHelper.fileDialogListView, expectedCurrentIndex, fileDelegate)); \
+    QVERIFY2(fileDelegate->hasActiveFocus(), qPrintable(QString::fromLatin1( \
+        "Expected delegate at index %1 to have focus, but %2 has it") \
+            .arg(QString::number(expectedCurrentIndex)) \
+            .arg(QDebug::toString(dialogHelper.window()->activeFocusItem())))); \
+    QVERIFY(fileDelegate->isHighlighted()); \
+}
+
+/*
+    Checks that currentFolder, selectedFile, and currentIndex are what we expect.
+
+    It also checks that the relevant delegate in the view is current, has focus, and is highlighted.
+    As the FolderListModel (the view's model) is asynchronous, we need to wait for the currentIndex to change.
+
+    Can only be called when the dialog is open.
+*/
+#define VERIFY_FILE_SELECTED_AND_FOCUSED(expectedCurrentFolderUrl, expectedCurrentFileUrl, expectedCurrentIndex) \
+VERIFY_FILE_SELECTED(expectedCurrentFolderUrl, expectedCurrentFileUrl) \
+VERIFY_DELEGATE_CURRENT(expectedCurrentFileUrl, expectedCurrentIndex) \
+VERIFY_DELEGATE_FOCUSED(expectedCurrentIndex)
+
+class FileDialogTestHelper : public DialogTestHelper<QQuickFileDialog, QQuickFileDialogImpl>
+{
+public:
+    FileDialogTestHelper(QQmlDataTest *testCase, const QString &testFilePath,
+        const QStringList &qmlImportPaths = {}, const QVariantMap &initialProperties = {});
+
+    bool openDialog() override;
+
+    QPointer<QQuickListView> fileDialogListView;
+};
+
+FileDialogTestHelper::FileDialogTestHelper(QQmlDataTest *testCase, const QString &testFilePath,
+        const QStringList &qmlImportPaths, const QVariantMap &initialProperties)
+    : DialogTestHelper(testCase, testFilePath, qmlImportPaths, initialProperties)
+{
+}
+
+bool FileDialogTestHelper::openDialog()
+{
+    if (!DialogTestHelper::openDialog())
+        return false;
+
+    fileDialogListView = quickDialog->findChild<QQuickListView*>("fileDialogListView");
+    return fileDialogListView != nullptr;
+}
+
 void tst_QQuickFileDialogImpl::defaults()
 {
-    QQuickApplicationHelper helper(this, "fileDialog.qml");
-    QVERIFY2(helper.ready, helper.failureMessage());
+    FileDialogTestHelper dialogHelper(this, "fileDialog.qml");
+    QVERIFY2(dialogHelper.isWindowInitialized(), dialogHelper.failureMessage());
+    QVERIFY(dialogHelper.waitForWindowActive());
 
-    QQuickWindow *window = helper.window;
-    window->show();
-    window->requestActivate();
-    QVERIFY(QTest::qWaitForWindowExposed(window));
-
-    QQuickFileDialog *dialog = window->property("dialog").value<QQuickFileDialog*>();
-    QVERIFY(dialog);
-    COMPARE_URL(dialog->selectedFile(), QUrl());
+    COMPARE_URL(dialogHelper.dialog->selectedFile(), QUrl());
     // It should default to the current directory.
-    COMPARE_URL(dialog->currentFolder(), QUrl::fromLocalFile(QDir().absolutePath()));
+    COMPARE_URL(dialogHelper.dialog->currentFolder(), QUrl::fromLocalFile(QDir().absolutePath()));
     // The first file in the directory should be selected, but not until the dialog is actually open,
     // as QQuickFileDialogImpl hasn't been created yet.
-    COMPARE_URL(dialog->currentFile(), QUrl());
-    COMPARE_URLS(dialog->currentFiles(), {});
-    QCOMPARE(dialog->title(), QString());
+    COMPARE_URL(dialogHelper.dialog->currentFile(), QUrl());
+    COMPARE_URLS(dialogHelper.dialog->currentFiles(), {});
+    QCOMPARE(dialogHelper.dialog->title(), QString());
 
-    dialog->open();
-    QQuickFileDialogImpl *quickDialog = window->findChild<QQuickFileDialogImpl*>();
-    QTRY_VERIFY(quickDialog->isOpened());
+    QVERIFY(dialogHelper.openDialog());
+    QTRY_VERIFY(dialogHelper.isQuickDialogOpen());
+    QQuickFileDialogImpl *quickDialog = dialogHelper.window()->findChild<QQuickFileDialogImpl*>();
     QVERIFY(quickDialog);
-    COMPARE_URL(quickDialog->currentFolder(), QUrl::fromLocalFile(QDir().absolutePath()));
-    COMPARE_URL(dialog->selectedFile(), QUrl::fromLocalFile(tempSubDir.path()));
-    COMPARE_URLS(dialog->selectedFiles(), { QUrl::fromLocalFile(tempSubDir.path()) });
-    COMPARE_URL(dialog->currentFile(), dialog->selectedFile());
-    COMPARE_URLS(dialog->currentFiles(), dialog->selectedFiles());
+    VERIFY_FILE_SELECTED_AND_FOCUSED(QUrl::fromLocalFile(QDir().absolutePath()), QUrl::fromLocalFile(tempSubDir.path()), 0);
     QCOMPARE(quickDialog->title(), QString());
 }
 
 void tst_QQuickFileDialogImpl::chooseFileViaStandardButtons()
 {
     // Open the dialog.
-    DialogTestHelper<QQuickFileDialog, QQuickFileDialogImpl> dialogHelper(this, "fileDialog.qml");
-    QVERIFY2(dialogHelper.isWindowInitialized(), dialogHelper.failureMessage());
-    QVERIFY(dialogHelper.waitForWindowActive());
-    QVERIFY(dialogHelper.openDialog());
-    QTRY_VERIFY(dialogHelper.isQuickDialogOpen());
+    FileDialogTestHelper dialogHelper(this, "fileDialog.qml");
+    OPEN_QUICK_DIALOG();
 
     // Select the delegate by clicking once.
     QSignalSpy dialogSelectedFileChangedSpy(dialogHelper.dialog, SIGNAL(selectedFileChanged()));
@@ -236,16 +330,11 @@ void tst_QQuickFileDialogImpl::chooseFileViaStandardButtons()
     QSignalSpy dialogCurrentFileChangedSpy(dialogHelper.dialog, SIGNAL(currentFileChanged()));
     QVERIFY(dialogCurrentFileChangedSpy.isValid());
 
-    auto fileDialogListView = dialogHelper.quickDialog->findChild<QQuickListView*>("fileDialogListView");
-    QVERIFY(fileDialogListView);
     QQuickFileDialogDelegate *delegate = nullptr;
-    QTRY_VERIFY(findViewDelegateItem(fileDialogListView, 2, delegate));
+    QTRY_VERIFY(findViewDelegateItem(dialogHelper.fileDialogListView, 2, delegate));
     COMPARE_URL(delegate->file(), QUrl::fromLocalFile(tempFile2->fileName()));
     QVERIFY(clickButton(delegate));
-    COMPARE_URL(dialogHelper.dialog->selectedFile(), QUrl::fromLocalFile(tempFile2->fileName()));
-    COMPARE_URL(dialogHelper.quickDialog->selectedFile(), QUrl::fromLocalFile(tempFile2->fileName()));
-    COMPARE_URL(dialogHelper.dialog->currentFile(), dialogHelper.dialog->selectedFile());
-    COMPARE_URLS(dialogHelper.dialog->currentFiles(), { dialogHelper.dialog->selectedFile() });
+    VERIFY_FILE_SELECTED_AND_FOCUSED(QUrl::fromLocalFile(tempDir.path()), QUrl::fromLocalFile(tempFile2->fileName()), 2);
     QCOMPARE(dialogSelectedFileChangedSpy.count(), 1);
     QCOMPARE(dialogCurrentFileChangedSpy.count(), 1);
 
@@ -268,17 +357,12 @@ void tst_QQuickFileDialogImpl::chooseFileViaStandardButtons()
 void tst_QQuickFileDialogImpl::chooseFileViaDoubleClick()
 {
     // Open the dialog.
-    DialogTestHelper<QQuickFileDialog, QQuickFileDialogImpl> dialogHelper(this, "fileDialog.qml");
-    QVERIFY2(dialogHelper.isWindowInitialized(), dialogHelper.failureMessage());
-    QVERIFY(dialogHelper.waitForWindowActive());
-    QVERIFY(dialogHelper.openDialog());
-    QTRY_VERIFY(dialogHelper.isQuickDialogOpen());
+    FileDialogTestHelper dialogHelper(this, "fileDialog.qml");
+    OPEN_QUICK_DIALOG();
 
     // Select the delegate by double-clicking.
-    auto fileDialogListView = dialogHelper.quickDialog->findChild<QQuickListView*>("fileDialogListView");
-    QVERIFY(fileDialogListView);
     QQuickFileDialogDelegate *delegate = nullptr;
-    QTRY_VERIFY(findViewDelegateItem(fileDialogListView, 2, delegate));
+    QTRY_VERIFY(findViewDelegateItem(dialogHelper.fileDialogListView, 2, delegate));
     COMPARE_URL(delegate->file(), QUrl::fromLocalFile(tempFile2->fileName()))
     QVERIFY(doubleClickButton(delegate));
     COMPARE_URL(dialogHelper.dialog->currentFile(), QUrl::fromLocalFile(tempFile2->fileName()))
@@ -292,14 +376,15 @@ void tst_QQuickFileDialogImpl::chooseFileViaDoubleClick()
 void tst_QQuickFileDialogImpl::chooseFileViaTextEdit()
 {
     // Open the dialog.
-    DialogTestHelper<QQuickFileDialog, QQuickFileDialogImpl> dialogHelper(this, "fileDialog.qml");
-    QVERIFY2(dialogHelper.isWindowInitialized(), dialogHelper.failureMessage());
-    QVERIFY(dialogHelper.waitForWindowActive());
-    QVERIFY(dialogHelper.openDialog());
-    QTRY_VERIFY(dialogHelper.isQuickDialogOpen());
+    FileDialogTestHelper dialogHelper(this, "fileDialog.qml");
+    OPEN_QUICK_DIALOG();
+    // Ensure that fileDialogListView has loaded its items, as we force active focus
+    // on the current item when we set it in setFileDialogListViewCurrentIndex(),
+    // which can make the TextField's visibility check
+    // below fail due to it being hidden when it loses activeFocus.
+    VERIFY_FILE_SELECTED_AND_FOCUSED(QUrl::fromLocalFile(tempDir.path()), QUrl::fromLocalFile(tempSubDir.path()), 0);
 
     // Get the text edit visible with Ctrl+L.
-    const auto editPathKeySequence = QKeySequence(Qt::CTRL | Qt::Key_L);
     QTest::keySequence(dialogHelper.window(), editPathKeySequence);
     auto breadcrumbBar = dialogHelper.quickDialog->findChild<QQuickFolderBreadcrumbBar*>();
     QVERIFY(breadcrumbBar);
@@ -323,21 +408,11 @@ void tst_QQuickFileDialogImpl::chooseFileViaTextEdit()
 void tst_QQuickFileDialogImpl::chooseFileViaEnter()
 {
     // Open the dialog.
-    DialogTestHelper<QQuickFileDialog, QQuickFileDialogImpl> dialogHelper(this, "fileDialog.qml");
-    QVERIFY2(dialogHelper.isWindowInitialized(), dialogHelper.failureMessage());
-    QVERIFY(dialogHelper.waitForWindowActive());
-    QVERIFY(dialogHelper.openDialog());
-    QTRY_VERIFY(dialogHelper.isQuickDialogOpen());
+    FileDialogTestHelper dialogHelper(this, "fileDialog.qml");
+    OPEN_QUICK_DIALOG();
 
     // Before moving down, the first delegate in the view should be selected and have focus.
-    COMPARE_URL(dialogHelper.dialog->currentFile(), QUrl::fromLocalFile(tempSubDir.path()));
-    auto fileDialogListView = dialogHelper.quickDialog->findChild<QQuickListView*>("fileDialogListView");
-    QVERIFY(fileDialogListView);
-    QCOMPARE(fileDialogListView->currentIndex(), 0);
-    QQuickFileDialogDelegate *subDirDelegate = nullptr;
-    QTRY_VERIFY(findViewDelegateItem(fileDialogListView, 0, subDirDelegate));
-    COMPARE_URL(subDirDelegate->file(), QUrl::fromLocalFile(tempSubDir.path()));
-    QVERIFY(subDirDelegate->hasActiveFocus());
+    VERIFY_FILE_SELECTED_AND_FOCUSED(QUrl::fromLocalFile(tempDir.path()), QUrl::fromLocalFile(tempSubDir.path()), 0);
 
     // Select the first file in the view by navigating with the down key.
     QTest::keyClick(dialogHelper.window(), Qt::Key_Down);
@@ -378,21 +453,16 @@ void tst_QQuickFileDialogImpl::bindCurrentFolder()
     QFETCH(QStringList, expectedVisibleFiles);
 
     // Open the dialog.
-    DialogTestHelper<QQuickFileDialog, QQuickFileDialogImpl> dialogHelper(this, "bindCurrentFolder.qml", {},
+    FileDialogTestHelper dialogHelper(this, "bindCurrentFolder.qml", {},
         {{ "initialFolder", initialFolder }});
-    QVERIFY2(dialogHelper.isWindowInitialized(), dialogHelper.failureMessage());
-    QVERIFY(dialogHelper.waitForWindowActive());
-    QVERIFY(dialogHelper.openDialog());
-    QTRY_VERIFY(dialogHelper.isQuickDialogOpen());
+    OPEN_QUICK_DIALOG();
     COMPARE_URL(dialogHelper.dialog->currentFolder(), expectedFolder);
 
-    auto fileDialogListView = dialogHelper.quickDialog->findChild<QQuickListView*>("fileDialogListView");
-    QVERIFY(fileDialogListView);
     QString failureMessage;
     // Even waiting for ListView polish and that the FolderListModel's status is ready aren't enough
     // on Windows, apparently, as sometimes there just aren't any delegates by the time we do the check.
     // So, we use QTRY_VERIFY2 each time we call this function just to be safe.
-    QTRY_VERIFY2(verifyFileDialogDelegates(fileDialogListView, expectedVisibleFiles, failureMessage), qPrintable(failureMessage));
+    QTRY_VERIFY2(verifyFileDialogDelegates(dialogHelper.fileDialogListView, expectedVisibleFiles, failureMessage), qPrintable(failureMessage));
 
     // Check that the breadcrumb bar is correct by constructing the expected files from the expectedFolder.
     auto breadcrumbBar = dialogHelper.quickDialog->findChild<QQuickFolderBreadcrumbBar*>();
@@ -403,25 +473,16 @@ void tst_QQuickFileDialogImpl::bindCurrentFolder()
 void tst_QQuickFileDialogImpl::changeFolderViaStandardButtons()
 {
     // Open the dialog.
-    DialogTestHelper<QQuickFileDialog, QQuickFileDialogImpl> dialogHelper(this, "fileDialog.qml");
-    QVERIFY2(dialogHelper.isWindowInitialized(), dialogHelper.failureMessage());
-    QVERIFY(dialogHelper.waitForWindowActive());
-    QVERIFY(dialogHelper.openDialog());
-    QTRY_VERIFY(dialogHelper.isQuickDialogOpen());
+    FileDialogTestHelper dialogHelper(this, "fileDialog.qml");
+    OPEN_QUICK_DIALOG();
 
     // Select the delegate by clicking once.
-    auto fileDialogListView = dialogHelper.quickDialog->findChild<QQuickListView*>("fileDialogListView");
-    QVERIFY(fileDialogListView);
     QQuickFileDialogDelegate *delegate = nullptr;
-    QTRY_VERIFY(findViewDelegateItem(fileDialogListView, 0, delegate));
+    QTRY_VERIFY(findViewDelegateItem(dialogHelper.fileDialogListView, 0, delegate));
     COMPARE_URL(delegate->file(), QUrl::fromLocalFile(tempSubDir.path()));
     QVERIFY(clickButton(delegate));
     // The selectedFile should change, but not currentFolder.
-    COMPARE_URL(dialogHelper.dialog->selectedFile(), QUrl::fromLocalFile(tempSubDir.path()));
-    COMPARE_URLS(dialogHelper.dialog->selectedFiles(), { QUrl::fromLocalFile(tempSubDir.path()) });
-    COMPARE_URL(dialogHelper.dialog->currentFile(), dialogHelper.dialog->selectedFile());
-    COMPARE_URLS(dialogHelper.dialog->currentFiles(), dialogHelper.dialog->selectedFiles());
-    COMPARE_URL(dialogHelper.dialog->currentFolder(), QUrl::fromLocalFile(tempDir.path()));
+    VERIFY_FILE_SELECTED_AND_FOCUSED(QUrl::fromLocalFile(tempDir.path()), QUrl::fromLocalFile(tempSubDir.path()), 0);
 
     // Click the "Open" button. The dialog should navigate to that directory, but still be open.
     QVERIFY(dialogHelper.quickDialog->footer());
@@ -454,30 +515,18 @@ void tst_QQuickFileDialogImpl::changeFolderViaDoubleClick()
     qputenv("QT_QUICK_DIALOGS_SHOW_DIRS_FIRST", showDirsFirst ? "true" : "false");
 
     // Open the dialog.
-    DialogTestHelper<QQuickFileDialog, QQuickFileDialogImpl> dialogHelper(this, "fileDialog.qml");
-    QVERIFY2(dialogHelper.isWindowInitialized(), dialogHelper.failureMessage());
-    QVERIFY(dialogHelper.waitForWindowActive());
-    QVERIFY(dialogHelper.openDialog());
-    QTRY_VERIFY(dialogHelper.isQuickDialogOpen());
+    FileDialogTestHelper dialogHelper(this, "fileDialog.qml");
+    OPEN_QUICK_DIALOG();
 
     // Select the "sub-dir" delegate by double-clicking.
-    auto fileDialogListView = dialogHelper.quickDialog->findChild<QQuickListView*>("fileDialogListView");
-    QVERIFY(fileDialogListView);
     QQuickFileDialogDelegate *subDirDelegate = nullptr;
     const int subDirIndex = showDirsFirst ? 0 : 2;
-    QTRY_VERIFY(findViewDelegateItem(fileDialogListView, subDirIndex, subDirDelegate));
+    QTRY_VERIFY(findViewDelegateItem(dialogHelper.fileDialogListView, subDirIndex, subDirDelegate));
     COMPARE_URL(subDirDelegate->file(), QUrl::fromLocalFile(tempSubDir.path()));
     QVERIFY(doubleClickButton(subDirDelegate));
     // The first file in the directory should now be selected.
     const QUrl firstFileUrl = showDirsFirst ? QUrl::fromLocalFile(tempSubSubDir.path()) : QUrl::fromLocalFile(tempSubFile1->fileName());
-    COMPARE_URL(dialogHelper.dialog->selectedFile(), firstFileUrl);
-    COMPARE_URLS(dialogHelper.dialog->selectedFiles(), { firstFileUrl });
-    COMPARE_URL(dialogHelper.dialog->currentFile(), dialogHelper.dialog->selectedFile());
-    COMPARE_URLS(dialogHelper.dialog->currentFiles(), { dialogHelper.dialog->selectedFiles() });
-    COMPARE_URL(dialogHelper.dialog->currentFolder(), QUrl::fromLocalFile(tempSubDir.path()));
-    QQuickFileDialogDelegate *firstDelegateInSubDir = nullptr;
-    QTRY_VERIFY(findViewDelegateItem(fileDialogListView, 0, firstDelegateInSubDir));
-    QCOMPARE(firstDelegateInSubDir->isHighlighted(), true);
+    VERIFY_FILE_SELECTED_AND_FOCUSED(QUrl::fromLocalFile(tempSubDir.path()), firstFileUrl, 0);
     // Since we only chose a folder, the dialog should still be open.
     QVERIFY(dialogHelper.dialog->isVisible());
 
@@ -489,11 +538,10 @@ void tst_QQuickFileDialogImpl::changeFolderViaDoubleClick()
 void tst_QQuickFileDialogImpl::chooseFolderViaTextEdit()
 {
     // Open the dialog.
-    DialogTestHelper<QQuickFileDialog, QQuickFileDialogImpl> dialogHelper(this, "fileDialog.qml");
-    QVERIFY2(dialogHelper.isWindowInitialized(), dialogHelper.failureMessage());
-    QVERIFY(dialogHelper.waitForWindowActive());
-    QVERIFY(dialogHelper.openDialog());
-    QTRY_VERIFY(dialogHelper.isQuickDialogOpen());
+    FileDialogTestHelper dialogHelper(this, "fileDialog.qml");
+    OPEN_QUICK_DIALOG();
+    // See comment in chooseFileViaTextEdit for why we check for this.
+    VERIFY_FILE_SELECTED_AND_FOCUSED(QUrl::fromLocalFile(tempDir.path()), QUrl::fromLocalFile(tempSubDir.path()), 0);
 
     // Get the text edit visible with Ctrl+L.
     const auto editPathKeySequence = QKeySequence(Qt::CTRL | Qt::Key_L);
@@ -511,16 +559,10 @@ void tst_QQuickFileDialogImpl::chooseFolderViaTextEdit()
     // Hit enter to accept.
     QTest::keyClick(dialogHelper.window(), Qt::Key_Return);
     // The first file in the directory should be selected, which is "sub-sub-dir".
-    COMPARE_URL(dialogHelper.dialog->selectedFile(), QUrl::fromLocalFile(tempSubSubDir.path()));
-    auto fileDialogListView = dialogHelper.quickDialog->findChild<QQuickListView*>("fileDialogListView");
-    QVERIFY(fileDialogListView);
-    QQuickFileDialogDelegate *subSubDirDelegate = nullptr;
-    QTRY_VERIFY(findViewDelegateItem(fileDialogListView, 0, subSubDirDelegate));
-    QCOMPARE(subSubDirDelegate->isHighlighted(), true);
-    COMPARE_URL(dialogHelper.dialog->selectedFile(), QUrl::fromLocalFile(tempSubSubDir.path()));
-    COMPARE_URLS(dialogHelper.dialog->selectedFiles(), { QUrl::fromLocalFile(tempSubSubDir.path()) });
-    COMPARE_URL(dialogHelper.dialog->currentFolder(), QUrl::fromLocalFile(tempSubDir.path()));
-    QTRY_VERIFY(dialogHelper.dialog->isVisible());
+    // Note that the TextEdit will still have focus, so we can't use VERIFY_FILE_SELECTED_AND_FOCUSED.
+    VERIFY_FILE_SELECTED(QUrl::fromLocalFile(tempSubDir.path()), QUrl::fromLocalFile(tempSubSubDir.path()));
+    VERIFY_DELEGATE_CURRENT(QUrl::fromLocalFile(tempSubSubDir.path()), 0)
+    QVERIFY(dialogHelper.dialog->isVisible());
 
     dialogHelper.dialog->close();
     QVERIFY(!dialogHelper.dialog->isVisible());
@@ -530,28 +572,16 @@ void tst_QQuickFileDialogImpl::chooseFolderViaTextEdit()
 void tst_QQuickFileDialogImpl::chooseFolderViaEnter()
 {
     // Open the dialog.
-    DialogTestHelper<QQuickFileDialog, QQuickFileDialogImpl> dialogHelper(this, "fileDialog.qml");
-    QVERIFY2(dialogHelper.isWindowInitialized(), dialogHelper.failureMessage());
-    QVERIFY(dialogHelper.waitForWindowActive());
-    QVERIFY(dialogHelper.openDialog());
-    QTRY_VERIFY(dialogHelper.isQuickDialogOpen());
+    FileDialogTestHelper dialogHelper(this, "fileDialog.qml");
+    OPEN_QUICK_DIALOG();
 
     // The first delegate in the view should be selected and have focus.
-    COMPARE_URL(dialogHelper.dialog->currentFolder(), QUrl::fromLocalFile(tempDir.path()));
-    COMPARE_URL(dialogHelper.dialog->currentFile(), QUrl::fromLocalFile(tempSubDir.path()));
-    COMPARE_URLS(dialogHelper.dialog->currentFiles(), { QUrl::fromLocalFile(tempSubDir.path()) });
-    auto fileDialogListView = dialogHelper.quickDialog->findChild<QQuickListView*>("fileDialogListView");
-    QVERIFY(fileDialogListView);
-    QQuickFileDialogDelegate *subDirDelegate = nullptr;
-    QTRY_VERIFY(findViewDelegateItem(fileDialogListView, 0, subDirDelegate));
-    COMPARE_URL(subDirDelegate->file(), QUrl::fromLocalFile(tempSubDir.path()));
-    QVERIFY(subDirDelegate->hasActiveFocus());
+    VERIFY_FILE_SELECTED_AND_FOCUSED(QUrl::fromLocalFile(tempDir.path()), QUrl::fromLocalFile(tempSubDir.path()), 0);
 
     // Select the delegate by pressing enter.
     QTest::keyClick(dialogHelper.window(), Qt::Key_Return);
-    COMPARE_URL(dialogHelper.dialog->currentFolder(), QUrl::fromLocalFile(tempSubDir.path()));
     // The first file in the new directory should be selected, which is "sub-sub-dir".
-    COMPARE_URL(dialogHelper.dialog->currentFile(), QUrl::fromLocalFile(tempSubSubDir.path()));
+    VERIFY_FILE_SELECTED_AND_FOCUSED(QUrl::fromLocalFile(tempSubDir.path()), QUrl::fromLocalFile(tempSubSubDir.path()), 0);
     // Since we only chose a folder, the dialog should still be open.
     QVERIFY(dialogHelper.dialog->isVisible());
 
@@ -563,14 +593,12 @@ void tst_QQuickFileDialogImpl::chooseFolderViaEnter()
 void tst_QQuickFileDialogImpl::chooseFileAndThenFolderViaTextEdit()
 {
     // Open the dialog.
-    DialogTestHelper<QQuickFileDialog, QQuickFileDialogImpl> dialogHelper(this, "fileDialog.qml");
-    QVERIFY2(dialogHelper.isWindowInitialized(), dialogHelper.failureMessage());
-    QVERIFY(dialogHelper.waitForWindowActive());
-    QVERIFY(dialogHelper.openDialog());
-    QTRY_VERIFY(dialogHelper.isQuickDialogOpen());
+    FileDialogTestHelper dialogHelper(this, "fileDialog.qml");
+    OPEN_QUICK_DIALOG();
+    // See comment in chooseFileViaTextEdit for why we check for this.
+    VERIFY_FILE_SELECTED_AND_FOCUSED(QUrl::fromLocalFile(tempDir.path()), QUrl::fromLocalFile(tempSubDir.path()), 0);
 
     // Get the text edit visible with Ctrl+L.
-    const auto editPathKeySequence = QKeySequence(Qt::CTRL | Qt::Key_L);
     QTest::keySequence(dialogHelper.window(), editPathKeySequence);
     auto breadcrumbBar = dialogHelper.quickDialog->findChild<QQuickFolderBreadcrumbBar*>();
     QVERIFY(breadcrumbBar);
@@ -612,17 +640,9 @@ void tst_QQuickFileDialogImpl::chooseFileAndThenFolderViaTextEdit()
     // Hit enter to accept.
     QTest::keyClick(dialogHelper.window(), Qt::Key_Return);
     // The first file in the directory should be selected, which is "sub-sub-dir".
-    COMPARE_URL(dialogHelper.dialog->selectedFile(), QUrl::fromLocalFile(tempSubSubDir.path()));
-    auto fileDialogListView = dialogHelper.quickDialog->findChild<QQuickListView*>("fileDialogListView");
-    QVERIFY(fileDialogListView);
-    QQuickFileDialogDelegate *subSubDirDelegate = nullptr;
-    QTRY_VERIFY(findViewDelegateItem(fileDialogListView, 0, subSubDirDelegate));
-    QCOMPARE(subSubDirDelegate->isHighlighted(), true);
-    // We just changed directories, so the actual selected file shouldn't change.
-    COMPARE_URL(dialogHelper.dialog->selectedFile(), QUrl::fromLocalFile(tempSubSubDir.path()));
-    COMPARE_URLS(dialogHelper.dialog->selectedFiles(), { QUrl::fromLocalFile(tempSubSubDir.path()) });
-    COMPARE_URL(dialogHelper.dialog->currentFolder(), QUrl::fromLocalFile(tempSubDir.path()));
-    QTRY_VERIFY(dialogHelper.dialog->isVisible());
+    // Note that the TextEdit will still have focus, so we can't use VERIFY_FILE_SELECTED_AND_FOCUSED.
+    VERIFY_FILE_SELECTED(QUrl::fromLocalFile(tempSubDir.path()), QUrl::fromLocalFile(tempSubSubDir.path()));
+    VERIFY_DELEGATE_CURRENT(QUrl::fromLocalFile(tempSubSubDir.path()), 0)
 
     // Close the dialog.
     dialogHelper.dialog->close();
@@ -633,14 +653,12 @@ void tst_QQuickFileDialogImpl::chooseFileAndThenFolderViaTextEdit()
 void tst_QQuickFileDialogImpl::cancelDialogWhileTextEditHasFocus()
 {
     // Open the dialog.
-    DialogTestHelper<QQuickFileDialog, QQuickFileDialogImpl> dialogHelper(this, "fileDialog.qml");
-    QVERIFY2(dialogHelper.isWindowInitialized(), dialogHelper.failureMessage());
-    QVERIFY(dialogHelper.waitForWindowActive());
-    QVERIFY(dialogHelper.openDialog());
-    QTRY_VERIFY(dialogHelper.isQuickDialogOpen());
+    FileDialogTestHelper dialogHelper(this, "fileDialog.qml");
+    OPEN_QUICK_DIALOG();
+    // See comment in chooseFileViaTextEdit for why we check for this.
+    VERIFY_FILE_SELECTED_AND_FOCUSED(QUrl::fromLocalFile(tempDir.path()), QUrl::fromLocalFile(tempSubDir.path()), 0);
 
     // Get the text edit visible with Ctrl+L.
-    const auto editPathKeySequence = QKeySequence(Qt::CTRL | Qt::Key_L);
     QTest::keySequence(dialogHelper.window(), editPathKeySequence);
     auto breadcrumbBar = dialogHelper.quickDialog->findChild<QQuickFolderBreadcrumbBar*>();
     QVERIFY(breadcrumbBar);
@@ -664,17 +682,42 @@ void tst_QQuickFileDialogImpl::cancelDialogWhileTextEditHasFocus()
     QVERIFY(!breadcrumbBar->textField()->isVisible());
 }
 
+void tst_QQuickFileDialogImpl::closingDialogCancels()
+{
+    // Open the dialog.
+    DialogTestHelper<QQuickFileDialog, QQuickFileDialogImpl> dialogHelper(this, "fileDialog.qml");
+    OPEN_QUICK_DIALOG();
+
+    QSignalSpy accepted(dialogHelper.dialog, &QQuickAbstractDialog::accepted);
+    QSignalSpy rejected(dialogHelper.dialog, &QQuickAbstractDialog::rejected);
+
+    // Accept the dialog.
+    QVERIFY(QMetaObject::invokeMethod(dialogHelper.window(), "doneAccepted"));
+    QVERIFY(!dialogHelper.dialog->isVisible());
+    QTRY_VERIFY(!dialogHelper.quickDialog->isVisible());
+    QCOMPARE(accepted.size(), 1);
+    QCOMPARE(rejected.size(), 0);
+
+    // Re-open the dialog.
+    accepted.clear();
+    OPEN_QUICK_DIALOG();
+
+    // Close the dialog.
+    CLOSE_QUICK_DIALOG();
+    QCOMPARE(accepted.size(), 0);
+    QCOMPARE(rejected.size(), 1);
+}
+
 void tst_QQuickFileDialogImpl::goUp()
 {
     // Open the dialog. Start off in "sub-dir".
-    DialogTestHelper<QQuickFileDialog, QQuickFileDialogImpl> dialogHelper(this, "bindCurrentFolder.qml", {},
+    FileDialogTestHelper dialogHelper(this, "bindCurrentFolder.qml", {},
         {{ "initialFolder", QUrl::fromLocalFile(tempSubDir.path()) }});
-    QVERIFY2(dialogHelper.isWindowInitialized(), dialogHelper.failureMessage());
-    QVERIFY(dialogHelper.waitForWindowActive());
-    QVERIFY(dialogHelper.openDialog());
-    QTRY_VERIFY(dialogHelper.isQuickDialogOpen());
+    OPEN_QUICK_DIALOG();
 
     // Go up a directory via the button next to the breadcrumb bar.
+    qCDebug(lcTest) << "going up to" << tempDir.path() << "- files in that dir:\n"
+        << QQuickFileDialogImplPrivate::get(dialogHelper.quickDialog)->fileList(QDir(tempDir.path()));
     auto breadcrumbBar = dialogHelper.quickDialog->findChild<QQuickFolderBreadcrumbBar*>();
     QVERIFY(breadcrumbBar);
     auto barListView = qobject_cast<QQuickListView*>(breadcrumbBar->contentItem());
@@ -682,38 +725,33 @@ void tst_QQuickFileDialogImpl::goUp()
     if (QQuickTest::qIsPolishScheduled(barListView))
         QVERIFY(QQuickTest::qWaitForItemPolished(barListView));
     QVERIFY(clickButton(breadcrumbBar->upButton()));
-    COMPARE_URL(dialogHelper.dialog->currentFolder(), QUrl::fromLocalFile(tempDir.path()));
     // The previous directory that we were in should now be selected (matches e.g. Windows and Ubuntu).
-    COMPARE_URL(dialogHelper.dialog->currentFile(), QUrl::fromLocalFile(tempSubDir.path()));
-    COMPARE_URLS(dialogHelper.dialog->currentFiles(), { QUrl::fromLocalFile(tempSubDir.path()) });
-    auto fileDialogListView = dialogHelper.quickDialog->findChild<QQuickListView*>("fileDialogListView");
-    QVERIFY(fileDialogListView);
-    QQuickFileDialogDelegate *subDirDelegate = nullptr;
-    QTRY_VERIFY(findViewDelegateItem(fileDialogListView, 0, subDirDelegate));
-    QCOMPARE(subDirDelegate->isHighlighted(), true);
+    VERIFY_FILE_SELECTED_AND_FOCUSED(QUrl::fromLocalFile(tempDir.path()), QUrl::fromLocalFile(tempSubDir.path()), 0);
 
     // Go up a directory via the keyboard shortcut.
-    const auto goUpKeySequence = QKeySequence(Qt::ALT | Qt::Key_Up);
-    QTest::keySequence(dialogHelper.window(), goUpKeySequence);
     QDir tempParentDir(tempDir.path());
     QVERIFY(tempParentDir.cdUp());
-    COMPARE_URL(dialogHelper.dialog->currentFolder(), QUrl::fromLocalFile(tempParentDir.path()));
-    COMPARE_URL(dialogHelper.dialog->currentFile(), QUrl::fromLocalFile(tempDir.path()));
-    COMPARE_URLS(dialogHelper.dialog->currentFiles(), { QUrl::fromLocalFile(tempDir.path()) });
+    const auto filesInTempParentDir = QQuickFileDialogImplPrivate::get(dialogHelper.quickDialog)->fileList(tempParentDir);
+    qCDebug(lcTest) << "going up to" << tempParentDir.path() << "- files in that dir:\n" << filesInTempParentDir;
+    QTest::keySequence(dialogHelper.window(), goUpKeySequence);
+    // Ubuntu on QEMU arm shows no files in /tmp even if there are.
+    if (!filesInTempParentDir.isEmpty()) {
+        const int expectedCurrentIndex = filesInTempParentDir.indexOf(QFileInfo(tempDir.path()));
+        QVERIFY(expectedCurrentIndex != -1);
+        VERIFY_FILE_SELECTED_AND_FOCUSED(QUrl::fromLocalFile(tempParentDir.path()), QUrl::fromLocalFile(tempDir.path()), expectedCurrentIndex);
+    }
 }
 
 void tst_QQuickFileDialogImpl::goUpWhileTextEditHasFocus()
 {
     // Open the dialog.
-    DialogTestHelper<QQuickFileDialog, QQuickFileDialogImpl> dialogHelper(this, "bindCurrentFolder.qml", {},
+    FileDialogTestHelper dialogHelper(this, "bindCurrentFolder.qml", {},
         {{ "initialFolder", QUrl::fromLocalFile(tempSubDir.path()) }});
-    QVERIFY2(dialogHelper.isWindowInitialized(), dialogHelper.failureMessage());
-    QVERIFY(dialogHelper.waitForWindowActive());
-    QVERIFY(dialogHelper.openDialog());
-    QTRY_VERIFY(dialogHelper.isQuickDialogOpen());
+    OPEN_QUICK_DIALOG();
+    // See comment in chooseFileViaTextEdit for why we check for this.
+    VERIFY_FILE_SELECTED_AND_FOCUSED(QUrl::fromLocalFile(tempSubDir.path()), QUrl::fromLocalFile(tempSubSubDir.path()), 0);
 
     // Get the text edit visible with Ctrl+L.
-    const auto editPathKeySequence = QKeySequence(Qt::CTRL | Qt::Key_L);
     QTest::keySequence(dialogHelper.window(), editPathKeySequence);
     auto breadcrumbBar = dialogHelper.quickDialog->findChild<QQuickFolderBreadcrumbBar*>();
     QVERIFY(breadcrumbBar);
@@ -732,82 +770,69 @@ void tst_QQuickFileDialogImpl::goUpWhileTextEditHasFocus()
     QVERIFY(!breadcrumbBar->textField()->isVisible());
     // The focus should be given to the first delegate.
     QVERIFY(dialogHelper.window()->activeFocusItem());
-    auto fileDialogListView = dialogHelper.quickDialog->findChild<QQuickListView*>("fileDialogListView");
-    QVERIFY(fileDialogListView);
     QQuickFileDialogDelegate *firstDelegate = nullptr;
-    QTRY_VERIFY(findViewDelegateItem(fileDialogListView, 0, firstDelegate));
+    QTRY_VERIFY(findViewDelegateItem(dialogHelper.fileDialogListView, 0, firstDelegate));
     QCOMPARE(dialogHelper.window()->activeFocusItem(), firstDelegate);
 }
 
 void tst_QQuickFileDialogImpl::goIntoLargeFolder()
 {
-    // Create a throwaway directory with a lot of folders within it...
-    QTemporaryDir anotherTempDir;
-    QVERIFY(anotherTempDir.isValid());
-    for (int i = 0; i < 30; ++i) {
-        QDir newDir(anotherTempDir.path());
-        QVERIFY(newDir.exists());
-        // Pad with zeroes so that the directories are ordered as we expect.
-        QVERIFY(newDir.mkdir(QString::fromLatin1("dir%1").arg(i, 2, 10, QLatin1Char('0'))));
-    }
-
-    // ... and within one of those folders, more folders.
-    QDir dir20(anotherTempDir.path() + "/dir20");
-    QVERIFY(dir20.exists());
-    for (int i = 0; i < 30; ++i) {
-        QDir newDir(dir20.path());
-        QVERIFY(newDir.exists());
-        QVERIFY(newDir.mkdir(QString::fromLatin1("subdir%1").arg(i, 2, 10, QLatin1Char('0'))));
-    }
-
-    // Open the dialog. Start off in the throwaway directory.
-    DialogTestHelper<QQuickFileDialog, QQuickFileDialogImpl> dialogHelper(this, "bindCurrentFolder.qml", {},
-        {{ "initialFolder", QUrl::fromLocalFile(anotherTempDir.path()) }});
-    QVERIFY2(dialogHelper.isWindowInitialized(), dialogHelper.failureMessage());
-    QVERIFY(dialogHelper.waitForWindowActive());
-    QVERIFY(dialogHelper.openDialog());
-    QTRY_VERIFY(dialogHelper.isQuickDialogOpen());
+    // Open the dialog. Start off in the large directory.
+    FileDialogTestHelper dialogHelper(this, "bindCurrentFolder.qml", {},
+        {{ "initialFolder", QUrl::fromLocalFile(largeTempDir.path()) }});
+    OPEN_QUICK_DIALOG();
 
     // If the screen is so tall that the contentItem is not vertically larger than the view,
     // then the test makes no sense.
-    auto fileDialogListView = dialogHelper.quickDialog->findChild<QQuickListView*>("fileDialogListView");
-    QVERIFY(fileDialogListView);
-    if (QQuickTest::qIsPolishScheduled(fileDialogListView))
-        QVERIFY(QQuickTest::qWaitForItemPolished(fileDialogListView));
+    if (QQuickTest::qIsPolishScheduled(dialogHelper.fileDialogListView))
+        QVERIFY(QQuickTest::qWaitForItemPolished(dialogHelper.fileDialogListView));
     // Just to be safe, make sure it's at least twice as big.
-    if (fileDialogListView->contentItem()->height() < fileDialogListView->height() * 2) {
-        QSKIP(qPrintable(QString::fromLatin1("Expected height of fileDialogListView's contentItem (%1)" \
+    if (dialogHelper.fileDialogListView->contentItem()->height() < dialogHelper.fileDialogListView->height() * 2) {
+        QSKIP(qPrintable(QString::fromLatin1("Expected height of dialogHelper.fileDialogListView's contentItem (%1)" \
             " to be at least twice as big as the ListView's height (%2)")
-                .arg(fileDialogListView->contentItem()->height()).arg(fileDialogListView->height())));
+                .arg(dialogHelper.fileDialogListView->contentItem()->height()).arg(dialogHelper.fileDialogListView->height())));
     }
 
-    // Scroll down to dir20. The view should be somewhere past the middle.
-    QVERIFY(QMetaObject::invokeMethod(fileDialogListView, "positionViewAtIndex", Qt::DirectConnection,
-        Q_ARG(int, 20), Q_ARG(int, QQuickItemView::PositionMode::Center)));
-    QVERIFY(fileDialogListView->contentY() > 0);
+    // Scroll down to largeTempDirLargeSubDirIndex. The view should be somewhere towards the end.
+    QVERIFY(QMetaObject::invokeMethod(dialogHelper.fileDialogListView, "positionViewAtIndex", Qt::DirectConnection,
+        Q_ARG(int, largeTempDirLargeSubDirIndex), Q_ARG(int, QQuickItemView::PositionMode::Center)));
+    QVERIFY(dialogHelper.fileDialogListView->contentY() > 0);
 
     // Go into it. The view should start at the top of the directory, not at the same contentY
     // that it had in the previous directory.
-    QQuickFileDialogDelegate *dir20Delegate = nullptr;
-    QTRY_VERIFY(findViewDelegateItem(fileDialogListView, 20, dir20Delegate));
-    COMPARE_URL(dir20Delegate->file(), QUrl::fromLocalFile(dir20.path()));
-    QVERIFY(doubleClickButton(dir20Delegate));
-    COMPARE_URL(dialogHelper.dialog->currentFolder(), QUrl::fromLocalFile(dir20.path()));
-    COMPARE_URL(dialogHelper.quickDialog->currentFolder(), QUrl::fromLocalFile(dir20.path()));
-    QCOMPARE(fileDialogListView->contentY(), 0);
+    QQuickFileDialogDelegate *subDirDelegate = nullptr;
+    QTRY_VERIFY(findViewDelegateItem(dialogHelper.fileDialogListView, largeTempDirLargeSubDirIndex, subDirDelegate));
+    COMPARE_URL(subDirDelegate->file(), QUrl::fromLocalFile(largeTempDirLargeSubDir.path()));
+    QVERIFY(doubleClickButton(subDirDelegate));
+    COMPARE_URL(dialogHelper.dialog->currentFolder(), QUrl::fromLocalFile(largeTempDirLargeSubDir.path()));
+    COMPARE_URL(dialogHelper.quickDialog->currentFolder(), QUrl::fromLocalFile(largeTempDirLargeSubDir.path()));
+    QCOMPARE(dialogHelper.fileDialogListView->contentY(), 0);
+}
+
+void tst_QQuickFileDialogImpl::goUpIntoLargeFolder()
+{
+    // Open the dialog. Start off in the large sub-directory.
+    FileDialogTestHelper dialogHelper(this, "bindCurrentFolder.qml", {},
+        {{ "initialFolder", QUrl::fromLocalFile(largeTempDirLargeSubDir.path()) }});
+    OPEN_QUICK_DIALOG();
+    // We didn't set an initial selectedFile, so the first file in the directory will be selected.
+    VERIFY_FILE_SELECTED_AND_FOCUSED(QUrl::fromLocalFile(largeTempDirLargeSubDir.path()),
+        QUrl::fromLocalFile(largeTempDirLargeSubDir.path() + "/sub-dir000"), 0);
+
+    // Go up a directory via the keyboard shortcut.
+    QTest::keySequence(dialogHelper.window(), goUpKeySequence);
+    VERIFY_FILE_SELECTED_AND_FOCUSED(QUrl::fromLocalFile(largeTempDir.path()),
+        QUrl::fromLocalFile(largeTempDirLargeSubDir.path()), largeTempDirLargeSubDirIndex);
 }
 
 void tst_QQuickFileDialogImpl::keyAndShortcutHandling()
 {
     // Open the dialog.
-    DialogTestHelper<QQuickFileDialog, QQuickFileDialogImpl> dialogHelper(this, "fileDialog.qml");
-    QVERIFY2(dialogHelper.isWindowInitialized(), dialogHelper.failureMessage());
-    QVERIFY(dialogHelper.waitForWindowActive());
-    QVERIFY(dialogHelper.openDialog());
-    QTRY_VERIFY(dialogHelper.isQuickDialogOpen());
+    FileDialogTestHelper dialogHelper(this, "fileDialog.qml");
+    OPEN_QUICK_DIALOG();
+    VERIFY_FILE_SELECTED_AND_FOCUSED(QUrl::fromLocalFile(tempDir.path()), QUrl::fromLocalFile(tempSubDir.path()), 0);
 
     // Get the text edit visible with Ctrl+L.
-    const auto editPathKeySequence = QKeySequence(Qt::CTRL | Qt::Key_L);
     QTest::keySequence(dialogHelper.window(), editPathKeySequence);
     auto breadcrumbBar = dialogHelper.quickDialog->findChild<QQuickFolderBreadcrumbBar*>();
     QVERIFY(breadcrumbBar);
@@ -842,23 +867,18 @@ void tst_QQuickFileDialogImpl::keyAndShortcutHandling()
 void tst_QQuickFileDialogImpl::bindNameFilters()
 {
     // Open the dialog.
-    DialogTestHelper<QQuickFileDialog, QQuickFileDialogImpl> dialogHelper(this, "bindTxtHtmlNameFilters.qml");
-    QVERIFY2(dialogHelper.isWindowInitialized(), dialogHelper.failureMessage());
-    QVERIFY(dialogHelper.waitForWindowActive());
-    QVERIFY(dialogHelper.openDialog());
-    QTRY_VERIFY(dialogHelper.isQuickDialogOpen());
+    FileDialogTestHelper dialogHelper(this, "bindTxtHtmlNameFilters.qml");
+    OPEN_QUICK_DIALOG();
 
     // Only "sub-dir", "text1.txt" and "text2.txt" should be visible, since *.txt is the first filter.
-    auto fileDialogListView = dialogHelper.quickDialog->findChild<QQuickListView*>("fileDialogListView");
-    QVERIFY(fileDialogListView);
     QString failureMessage;
-    QTRY_VERIFY2(verifyFileDialogDelegates(fileDialogListView,
+    QTRY_VERIFY2(verifyFileDialogDelegates(dialogHelper.fileDialogListView,
         { tempSubDir.path(), tempFile1->fileName(), tempFile2->fileName() }, failureMessage), qPrintable(failureMessage));
 }
 
 void tst_QQuickFileDialogImpl::changeNameFilters()
 {
-    DialogTestHelper<QQuickFileDialog, QQuickFileDialogImpl> dialogHelper(this, "fileDialog.qml");
+    FileDialogTestHelper dialogHelper(this, "fileDialog.qml");
     QVERIFY2(dialogHelper.isWindowInitialized(), dialogHelper.failureMessage());
     QVERIFY(dialogHelper.waitForWindowActive());
 
@@ -902,10 +922,8 @@ void tst_QQuickFileDialogImpl::changeNameFilters()
     QCOMPARE(dialogHelper.quickDialog->selectedNameFilter()->globs(), { "*.txt" });
 
     // Only "sub-dir", "text1.txt" and "text2.txt" should be visible, since *.txt is the first filter.
-    auto fileDialogListView = dialogHelper.quickDialog->findChild<QQuickListView*>("fileDialogListView");
-    QVERIFY(fileDialogListView);
     QString failureMessage;
-    QTRY_VERIFY2(verifyFileDialogDelegates(fileDialogListView,
+    QTRY_VERIFY2(verifyFileDialogDelegates(dialogHelper.fileDialogListView,
         { tempSubDir.path(), tempFile1->fileName(), tempFile2->fileName() }, failureMessage), qPrintable(failureMessage));
 
     // Open the ComboBox's popup.
@@ -926,7 +944,7 @@ void tst_QQuickFileDialogImpl::changeNameFilters()
     QTRY_VERIFY(!comboBox->popup()->isVisible());
     // Use QTRY_VERIFY2 here to fix a failure on QEMU armv7 (QT_QPA_PLATFORM=offscreen).
     // Not sure why it's necessary.
-    QTRY_VERIFY2(verifyFileDialogDelegates(fileDialogListView, { tempSubDir.path() }, failureMessage), qPrintable(failureMessage));
+    QTRY_VERIFY2(verifyFileDialogDelegates(dialogHelper.fileDialogListView, { tempSubDir.path() }, failureMessage), qPrintable(failureMessage));
 
     // Open the popup again.
     QTest::mouseClick(dialogHelper.window(), Qt::LeftButton, Qt::NoModifier, comboBoxCenterPos);
@@ -940,27 +958,22 @@ void tst_QQuickFileDialogImpl::changeNameFilters()
         QVERIFY(clickButton(txtDelegate));
     }
     QTRY_VERIFY(!comboBox->popup()->isVisible());
-    QTRY_VERIFY2(verifyFileDialogDelegates(fileDialogListView,
+    QTRY_VERIFY2(verifyFileDialogDelegates(dialogHelper.fileDialogListView,
         { tempSubDir.path(), tempFile1->fileName(), tempFile2->fileName() }, failureMessage), qPrintable(failureMessage));
 }
 
 void tst_QQuickFileDialogImpl::changeNameFiltersAfterChangingFolder()
 {
     // Open the dialog.
-    DialogTestHelper<QQuickFileDialog, QQuickFileDialogImpl> dialogHelper(this, "bindAllTxtHtmlNameFilters.qml");
-    QVERIFY2(dialogHelper.isWindowInitialized(), dialogHelper.failureMessage());
-    QVERIFY(dialogHelper.waitForWindowActive());
-    QVERIFY(dialogHelper.openDialog());
-    QTRY_VERIFY(dialogHelper.isQuickDialogOpen());
+    FileDialogTestHelper dialogHelper(this, "bindAllTxtHtmlNameFilters.qml");
+    OPEN_QUICK_DIALOG();
 
     // Go into the "sub-dir" folder.
-    auto fileDialogListView = dialogHelper.quickDialog->findChild<QQuickListView*>("fileDialogListView");
-    QVERIFY(fileDialogListView);
     QString failureMessage;
-    QTRY_VERIFY2(verifyFileDialogDelegates(fileDialogListView,
+    QTRY_VERIFY2(verifyFileDialogDelegates(dialogHelper.fileDialogListView,
         { tempSubDir.path(), tempFile1->fileName(), tempFile2->fileName() }, failureMessage), qPrintable(failureMessage));
     QQuickFileDialogDelegate *subDirDelegate = nullptr;
-    QTRY_VERIFY(findViewDelegateItem(fileDialogListView, 0, subDirDelegate));
+    QTRY_VERIFY(findViewDelegateItem(dialogHelper.fileDialogListView, 0, subDirDelegate));
     QVERIFY(doubleClickButton(subDirDelegate));
     COMPARE_URL(dialogHelper.dialog->currentFolder(), QUrl::fromLocalFile(tempSubDir.path()));
     COMPARE_URL(dialogHelper.quickDialog->currentFolder(), QUrl::fromLocalFile(tempSubDir.path()));
@@ -982,25 +995,20 @@ void tst_QQuickFileDialogImpl::changeNameFiltersAfterChangingFolder()
     }
     QTRY_VERIFY(!comboBox->popup()->isVisible());
     // There are no HTML files in "sub-dir", so there should only be the one "sub-sub-dir" delegate.
-    QTRY_VERIFY2(verifyFileDialogDelegates(fileDialogListView, { tempSubSubDir.path() }, failureMessage), qPrintable(failureMessage));
+    QTRY_VERIFY2(verifyFileDialogDelegates(dialogHelper.fileDialogListView, { tempSubSubDir.path() }, failureMessage), qPrintable(failureMessage));
 }
 
 void tst_QQuickFileDialogImpl::tabFocusNavigation()
 {
     // Open the dialog.
-    DialogTestHelper<QQuickFileDialog, QQuickFileDialogImpl> dialogHelper(this, "bindTxtHtmlNameFilters.qml");
-    QVERIFY2(dialogHelper.isWindowInitialized(), dialogHelper.failureMessage());
-    QVERIFY(dialogHelper.waitForWindowActive());
-    QVERIFY(dialogHelper.openDialog());
-    QTRY_VERIFY(dialogHelper.isQuickDialogOpen());
+    FileDialogTestHelper dialogHelper(this, "bindTxtHtmlNameFilters.qml");
+    OPEN_QUICK_DIALOG();
 
     QList<QQuickItem*> expectedFocusItems;
 
     // The initial focus should be on the first delegate.
-    auto fileDialogListView = dialogHelper.quickDialog->findChild<QQuickListView*>("fileDialogListView");
-    QVERIFY(fileDialogListView);
     QQuickFileDialogDelegate *firstDelegate = nullptr;
-    QTRY_VERIFY(findViewDelegateItem(fileDialogListView, 0, firstDelegate));
+    QTRY_VERIFY(findViewDelegateItem(dialogHelper.fileDialogListView, 0, firstDelegate));
     expectedFocusItems << firstDelegate;
 
     // Tab should move to the name filters combobox.
@@ -1027,9 +1035,9 @@ void tst_QQuickFileDialogImpl::tabFocusNavigation()
     expectedFocusItems << breadcrumbBar->upButton();
 
     // Finally, add each bread crumb delegate.
-    for (int i = 0; i < fileDialogListView->count(); ++i) {
+    for (int i = 0; i < dialogHelper.fileDialogListView->count(); ++i) {
         QQuickFileDialogDelegate *delegate = nullptr;
-        QTRY_VERIFY(findViewDelegateItem(fileDialogListView, i, delegate));
+        QTRY_VERIFY(findViewDelegateItem(dialogHelper.fileDialogListView, i, delegate));
         expectedFocusItems << delegate;
     }
 
@@ -1059,11 +1067,8 @@ void tst_QQuickFileDialogImpl::tabFocusNavigation()
 void tst_QQuickFileDialogImpl::acceptRejectLabel()
 {
     // Open the dialog.
-    DialogTestHelper<QQuickFileDialog, QQuickFileDialogImpl> dialogHelper(this, "acceptRejectLabel.qml");
-    QVERIFY2(dialogHelper.isWindowInitialized(), dialogHelper.failureMessage());
-    QVERIFY(dialogHelper.waitForWindowActive());
-    QVERIFY(dialogHelper.openDialog());
-    QTRY_VERIFY(dialogHelper.isQuickDialogOpen());
+    FileDialogTestHelper dialogHelper(this, "acceptRejectLabel.qml");
+    OPEN_QUICK_DIALOG();
 
     // Check that the accept and reject buttons' labels have changed.
     auto dialogButtonBox = dialogHelper.quickDialog->footer()->findChild<QQuickDialogButtonBox*>();
@@ -1097,11 +1102,8 @@ void tst_QQuickFileDialogImpl::acceptRejectLabel()
 void tst_QQuickFileDialogImpl::bindTitle()
 {
     // Open the dialog.
-    DialogTestHelper<QQuickFileDialog, QQuickFileDialogImpl> dialogHelper(this, "bindTitle.qml");
-    QVERIFY2(dialogHelper.isWindowInitialized(), dialogHelper.failureMessage());
-    QVERIFY(dialogHelper.waitForWindowActive());
-    QVERIFY(dialogHelper.openDialog());
-    QTRY_VERIFY(dialogHelper.isQuickDialogOpen());
+    FileDialogTestHelper dialogHelper(this, "bindTitle.qml");
+    OPEN_QUICK_DIALOG();
 
     // Open the dialog and check that the correct title is displayed.
     QQuickFileDialog *dialog = dialogHelper.window()->property("dialog").value<QQuickFileDialog*>();
@@ -1125,12 +1127,9 @@ void tst_QQuickFileDialogImpl::itemsDisabledWhenNecessary()
     QVERIFY(subDir.cd("emptyDir"));
 
     // Open the dialog.
-    DialogTestHelper<QQuickFileDialog, QQuickFileDialogImpl> dialogHelper(this, "bindCurrentFolder.qml", {},
+    FileDialogTestHelper dialogHelper(this, "bindCurrentFolder.qml", {},
         {{ "initialFolder", QUrl::fromLocalFile(subDir.path()) }});
-    QVERIFY2(dialogHelper.isWindowInitialized(), dialogHelper.failureMessage());
-    QVERIFY(dialogHelper.waitForWindowActive());
-    QVERIFY(dialogHelper.openDialog());
-    QTRY_VERIFY(dialogHelper.isQuickDialogOpen());
+    OPEN_QUICK_DIALOG();
     COMPARE_URL(dialogHelper.dialog->currentFolder(), QUrl::fromLocalFile(subDir.path()));
     COMPARE_URL(dialogHelper.quickDialog->currentFolder(), QUrl::fromLocalFile(subDir.path()));
 
@@ -1151,7 +1150,6 @@ void tst_QQuickFileDialogImpl::itemsDisabledWhenNecessary()
     COMPARE_URL(dialogHelper.quickDialog->currentFolder(), QUrl::fromLocalFile(anotherTempDir.path()));
 
     // Get the text edit visible with Ctrl+L. The Open button should now be disabled.
-    const auto editPathKeySequence = QKeySequence(Qt::CTRL | Qt::Key_L);
     QTest::keySequence(dialogHelper.window(), editPathKeySequence);
     QVERIFY(breadcrumbBar->textField()->isVisible());
     QCOMPARE(openButton->isEnabled(), false);
@@ -1176,18 +1174,13 @@ void tst_QQuickFileDialogImpl::fileMode()
     QFETCH(QQuickFileDialog::FileMode, fileMode);
 
     // Open the dialog.
-    DialogTestHelper<QQuickFileDialog, QQuickFileDialogImpl> dialogHelper(this, "fileDialog.qml");
+    FileDialogTestHelper dialogHelper(this, "fileDialog.qml");
     dialogHelper.dialog->setFileMode(fileMode);
-    QVERIFY2(dialogHelper.isWindowInitialized(), dialogHelper.failureMessage());
-    QVERIFY(dialogHelper.waitForWindowActive());
-    QVERIFY(dialogHelper.openDialog());
-    QTRY_VERIFY(dialogHelper.isQuickDialogOpen());
+    OPEN_QUICK_DIALOG();
 
     // Select the first file (not a directory).
-    auto fileDialogListView = dialogHelper.quickDialog->findChild<QQuickListView*>("fileDialogListView");
-    QVERIFY(fileDialogListView);
     QQuickFileDialogDelegate *tempFile1Delegate = nullptr;
-    QTRY_VERIFY(findViewDelegateItem(fileDialogListView, 1, tempFile1Delegate));
+    QTRY_VERIFY(findViewDelegateItem(dialogHelper.fileDialogListView, 1, tempFile1Delegate));
     COMPARE_URL(tempFile1Delegate->file(), QUrl::fromLocalFile(tempFile1->fileName()));
     QVERIFY(clickButton(tempFile1Delegate));
     COMPARE_URL(dialogHelper.dialog->currentFile(), QUrl::fromLocalFile(tempFile1->fileName()));
@@ -1203,7 +1196,7 @@ void tst_QQuickFileDialogImpl::fileMode()
 
     // Only the OpenFiles mode should allow multiple files to be selected, however.
     QQuickFileDialogDelegate *tempFile2Delegate = nullptr;
-    QTRY_VERIFY(findViewDelegateItem(fileDialogListView, 2, tempFile2Delegate));
+    QTRY_VERIFY(findViewDelegateItem(dialogHelper.fileDialogListView, 2, tempFile2Delegate));
     COMPARE_URL(tempFile2Delegate->file(), QUrl::fromLocalFile(tempFile2->fileName()));
     QTest::keyPress(dialogHelper.window(), Qt::Key_Shift);
     QVERIFY(clickButton(tempFile2Delegate));
@@ -1222,7 +1215,6 @@ void tst_QQuickFileDialogImpl::fileMode()
     }
 
     // Get the text edit visible with Ctrl+L.
-    const auto editPathKeySequence = QKeySequence(Qt::CTRL | Qt::Key_L);
     QTest::keySequence(dialogHelper.window(), editPathKeySequence);
     auto breadcrumbBar = dialogHelper.quickDialog->findChild<QQuickFolderBreadcrumbBar*>();
     QVERIFY(breadcrumbBar);
@@ -1275,25 +1267,20 @@ void tst_QQuickFileDialogImpl::defaultSuffix()
     QVERIFY(tempFile1.open(QIODevice::ReadWrite));
 
     // Open the dialog.
-    DialogTestHelper<QQuickFileDialog, QQuickFileDialogImpl> dialogHelper(this, "bindCurrentFolder.qml", {},
+    FileDialogTestHelper dialogHelper(this, "bindCurrentFolder.qml", {},
         {{ "initialFolder", QUrl::fromLocalFile(tempSubSubDir.path()) }});
     dialogHelper.dialog->setDefaultSuffix(defaultSuffix);
-    QVERIFY2(dialogHelper.isWindowInitialized(), dialogHelper.failureMessage());
-    QVERIFY(dialogHelper.waitForWindowActive());
-    QVERIFY(dialogHelper.openDialog());
-    QTRY_VERIFY(dialogHelper.isQuickDialogOpen());
+    OPEN_QUICK_DIALOG();
     COMPARE_URL(dialogHelper.dialog->currentFolder(), QUrl::fromLocalFile(tempSubSubDir.path()));
 
     // There should be one extension-less file: "file1".
-    auto fileDialogListView = dialogHelper.quickDialog->findChild<QQuickListView*>("fileDialogListView");
-    QVERIFY(fileDialogListView);
     QString failureMessage;
     const QStringList expectedVisibleFiles = { tempFile1.fileName() };
-    QTRY_VERIFY2(verifyFileDialogDelegates(fileDialogListView, expectedVisibleFiles, failureMessage), qPrintable(failureMessage));
+    QTRY_VERIFY2(verifyFileDialogDelegates(dialogHelper.fileDialogListView, expectedVisibleFiles, failureMessage), qPrintable(failureMessage));
 
     // Choose the delegate. The suffix should be added to the delegates.
     QQuickFileDialogDelegate *file1Delegate = nullptr;
-    QTRY_VERIFY(findViewDelegateItem(fileDialogListView, 0, file1Delegate));
+    QTRY_VERIFY(findViewDelegateItem(dialogHelper.fileDialogListView, 0, file1Delegate));
     COMPARE_URL(file1Delegate->file(), QUrl::fromLocalFile(tempFile1.fileName()));
     QVERIFY(doubleClickButton(file1Delegate));
     QVERIFY(!dialogHelper.dialog->isVisible());
@@ -1316,11 +1303,8 @@ void tst_QQuickFileDialogImpl::done()
     QFETCH(QQuickFileDialog::StandardCode, result);
 
     // Open the dialog.
-    DialogTestHelper<QQuickFileDialog, QQuickFileDialogImpl> dialogHelper(this, "fileDialog.qml");
-    QVERIFY2(dialogHelper.isWindowInitialized(), dialogHelper.failureMessage());
-    QVERIFY(dialogHelper.waitForWindowActive());
-    QVERIFY(dialogHelper.openDialog());
-    QTRY_VERIFY(dialogHelper.isQuickDialogOpen());
+    FileDialogTestHelper dialogHelper(this, "fileDialog.qml");
+    OPEN_QUICK_DIALOG();
 
     switch (result) {
     case QQuickFileDialog::Accepted:
@@ -1346,36 +1330,20 @@ void tst_QQuickFileDialogImpl::setSelectedFile()
     QFETCH(QQuickFileDialog::FileMode, fileMode);
 
     // Open the dialog.
+    const auto tempFile1Url = QUrl::fromLocalFile(tempFile1->fileName());
     const QVariantMap initialProperties = {
-        { "tempFile1Url", QVariant::fromValue(QUrl::fromLocalFile(tempFile1->fileName())) },
+        { "tempFile1Url", QVariant::fromValue(tempFile1Url) },
         { "fileMode", QVariant::fromValue(fileMode) }
     };
-    DialogTestHelper<QQuickFileDialog, QQuickFileDialogImpl> dialogHelper(
+    FileDialogTestHelper dialogHelper(
         this, "setSelectedFile.qml", {}, initialProperties);
-    QVERIFY2(dialogHelper.isWindowInitialized(), dialogHelper.failureMessage());
-    QVERIFY(dialogHelper.waitForWindowActive());
-    QVERIFY(dialogHelper.openDialog());
-    QTRY_VERIFY(dialogHelper.isQuickDialogOpen());
+    OPEN_QUICK_DIALOG();
 
     // The selected file should be what we set.
-    const auto tempFile1Url = QUrl::fromLocalFile(tempFile1->fileName());
-    COMPARE_URL(dialogHelper.dialog->selectedFile(), tempFile1Url);
-    COMPARE_URL(dialogHelper.quickDialog->selectedFile(), tempFile1Url);
-    COMPARE_URL(dialogHelper.dialog->currentFolder(), QUrl::fromLocalFile(tempDir.path()));
-    COMPARE_URL(dialogHelper.quickDialog->currentFolder(), QUrl::fromLocalFile(tempDir.path()));
-    // Check that the relevant delegate in the view is current and has focus.
-    auto fileDialogListView = dialogHelper.quickDialog->findChild<QQuickListView*>("fileDialogListView");
-    QVERIFY(fileDialogListView);
-    QQuickFileDialogDelegate *tempFile1Delegate = nullptr;
-    QTRY_VERIFY(findViewDelegateItem(fileDialogListView, 1, tempFile1Delegate));
-    COMPARE_URL(tempFile1Delegate->file(), tempFile1Url);
-    QCOMPARE(fileDialogListView->currentIndex(), 1);
-    QVERIFY(tempFile1Delegate->hasActiveFocus());
+    VERIFY_FILE_SELECTED_AND_FOCUSED(QUrl::fromLocalFile(tempDir.path()), tempFile1Url, 1);
 
-    // Next, we select a different file via the UI, close the dialog, set selectedFile again and check that it's still respected.
-
-    // Select the first file in the view by navigating with the down key.
-    QCOMPARE(dialogHelper.window()->activeFocusItem(), tempFile1Delegate);
+    // Select the next file in the view by navigating with the down key.
+    // We know it already has focus, as VERIFY_FILE_SELECTED_AND_FOCUSED checks that.
     QTest::keyClick(dialogHelper.window(), Qt::Key_Down);
     const auto tempFile2Url = QUrl::fromLocalFile(tempFile2->fileName());
     COMPARE_URL(dialogHelper.quickDialog->selectedFile(), tempFile2Url);
@@ -1390,20 +1358,30 @@ void tst_QQuickFileDialogImpl::setSelectedFile()
     QCOMPARE(dialogHelper.dialog->result(), QQuickFileDialog::Accepted);
 
     // Set a different initial selectedFile and re-open.
-    dialogHelper.dialog->setSelectedFile(QUrl::fromLocalFile(tempFile2->fileName()));
+    dialogHelper.dialog->setSelectedFile(QUrl::fromLocalFile(tempFile1->fileName()));
     QVERIFY(dialogHelper.openDialog());
     QTRY_VERIFY(dialogHelper.isQuickDialogOpen());
-    // TODO: move this duplicated code into a helper
-    COMPARE_URL(dialogHelper.dialog->selectedFile(), tempFile2Url);
-    COMPARE_URL(dialogHelper.quickDialog->selectedFile(), tempFile2Url);
-    COMPARE_URL(dialogHelper.dialog->currentFolder(), QUrl::fromLocalFile(tempDir.path()));
-    COMPARE_URL(dialogHelper.quickDialog->currentFolder(), QUrl::fromLocalFile(tempDir.path()));
-    // Check that the relevant delegate in the view is current and has focus.
-    QQuickFileDialogDelegate *tempFile2Delegate = nullptr;
-    QTRY_VERIFY(findViewDelegateItem(fileDialogListView, 2, tempFile2Delegate));
-    COMPARE_URL(tempFile2Delegate->file(), tempFile2Url);
-    QCOMPARE(fileDialogListView->currentIndex(), 2);
-    QVERIFY(tempFile2Delegate->hasActiveFocus());
+    VERIFY_FILE_SELECTED_AND_FOCUSED(QUrl::fromLocalFile(tempDir.path()), tempFile1Url, 1);
+
+    // Close it.
+    dialogHelper.dialog->close();
+    QVERIFY(!dialogHelper.dialog->isVisible());
+    QTRY_VERIFY(!dialogHelper.quickDialog->isVisible());
+
+    // Try to set an invalid selectedFile; it should be a no-op for modes other than SaveFile,
+    // and the previous selectedFile should still be selected.
+    const QString invalidPath = tempDir.path() + "/does-not-exist.txt";
+    if (fileMode != QQuickFileDialog::SaveFile) {
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QLatin1String(".*QML FileDialog: Cannot set ")
+            + invalidPath + QLatin1String(" as a selected file because it doesn't exist")));
+    }
+    dialogHelper.dialog->setSelectedFile(QUrl::fromLocalFile(invalidPath));
+    QVERIFY(dialogHelper.openDialog());
+    if (fileMode != QQuickFileDialog::SaveFile) {
+        VERIFY_FILE_SELECTED_AND_FOCUSED(QUrl::fromLocalFile(tempDir.path()), tempFile1Url, 1);
+    } else {
+        QTRY_COMPARE(dialogHelper.fileDialogListView->currentIndex(), -1);
+    }
 }
 
 QTEST_MAIN(tst_QQuickFileDialogImpl)
