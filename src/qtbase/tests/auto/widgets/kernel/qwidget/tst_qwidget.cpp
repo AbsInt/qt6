@@ -10078,7 +10078,7 @@ void tst_QWidget::enterLeaveOnWindowShowHide()
             if (!QTest::qWaitForWindowExposed(secondary))
                 QEXPECT_FAIL("", "Secondary window failed to show, test will fail", Abort);
             if (secondaryWindowType == Qt::Dialog && QGuiApplication::platformName() == "windows")
-                QTest::qWait(250); // on Windows, we have to wait for fade-in effects
+                QTest::qWait(1000); // on Windows, we have to wait for fade-in effects
         }
     };
 
@@ -10099,7 +10099,7 @@ void tst_QWidget::enterLeaveOnWindowShowHide()
     QVERIFY(QTest::qWaitForWindowActive(&widget));
 
     ++expectedEnter;
-    QTRY_COMPARE_WITH_TIMEOUT(widget.numEnterEvents, expectedEnter, 250);
+    QTRY_COMPARE_WITH_TIMEOUT(widget.numEnterEvents, expectedEnter, 1000);
     QCOMPARE(widget.enterPosition, widget.mapFromGlobal(cursorPos));
     QVERIFY(widget.underMouse());
 
@@ -10852,6 +10852,12 @@ void tst_QWidget::imEnabledNotImplemented()
     // But a lineedit should return true
     edit.setFocus(Qt::OtherFocusReason);
     QCOMPARE(QApplication::focusWidget(), &edit);
+    imEnabled = QApplication::inputMethod()->queryFocusObject(Qt::ImEnabled, QVariant());
+    QVERIFY(imEnabled.isValid());
+    QVERIFY(imEnabled.toBool());
+
+    // ...even if it's read-only
+    edit.setReadOnly(true);
     imEnabled = QApplication::inputMethod()->queryFocusObject(Qt::ImEnabled, QVariant());
     QVERIFY(imEnabled.isValid());
     QVERIFY(imEnabled.toBool());

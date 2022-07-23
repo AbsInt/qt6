@@ -248,16 +248,20 @@ static qreal qConvertToRealNumber(const QVariant::Private *d, bool *ok)
 // the type of d has already been set, but other field are not set
 static void customConstruct(QVariant::Private *d, const void *copy)
 {
-    QtPrivate::QMetaTypeInterface *iface = d->typeInterface();
+    const QtPrivate::QMetaTypeInterface *iface = d->typeInterface();
     if (!(iface && iface->size)) {
         *d = QVariant::Private();
         return;
     }
+    if (!iface->copyCtr || (!copy && !iface->defaultCtr)) {
+        // QVariant requires type to be copy and default constructible
+        *d = QVariant::Private();
+        qWarning("QVariant: Provided metatype does not support "
+                 "destruction, copy and default construction");
+        return;
+    }
 
     if (QVariant::Private::canUseInternalSpace(iface)) {
-        // QVariant requires type to be copy and default constructible
-        Q_ASSERT(iface->copyCtr);
-        Q_ASSERT(iface->defaultCtr);
         if (copy)
             iface->copyCtr(iface, &d->data, copy);
         else
@@ -527,11 +531,8 @@ QVariant::QVariant(const QVariant &p)
 {
     if (d.is_shared) {
         d.data.shared->ref.ref();
-        return;
-    }
-    QtPrivate::QMetaTypeInterface *iface = d.typeInterface();
-    auto other = p.constData();
-    if (iface) {
+    } else if (const QtPrivate::QMetaTypeInterface *iface = d.typeInterface()) {
+        auto other = p.constData();
         if (other)
             iface->copyCtr(iface, &d.data, other);
         else
@@ -814,6 +815,9 @@ QVariant::QVariant(const QVariant &p)
     instead to construct variants from the pointer types represented by
     \c QMetaType::VoidStar, and \c QMetaType::QObjectStar.
 
+    If \a type does not support copy and default construction, the variant will
+    be invalid.
+
     \sa QVariant::fromValue(), QMetaType::Type
 */
 QVariant::QVariant(QMetaType type, const void *copy) : d(type)
@@ -1019,7 +1023,7 @@ QVariant &QVariant::operator=(const QVariant &variant)
         d = variant.d;
     } else {
         d = variant.d;
-        QtPrivate::QMetaTypeInterface *iface = d.typeInterface();
+        const QtPrivate::QMetaTypeInterface *iface = d.typeInterface();
         const void *other = variant.constData();
         if (iface) {
             if (other)

@@ -131,8 +131,11 @@ private:
     const QKeySequence editPathKeySequence = QKeySequence(Qt::CTRL | Qt::Key_L);
 };
 
+// We don't want to fail on warnings until QTBUG-98964 is fixed,
+// as we deliberately prevent deferred execution in some of the tests here,
+// which causes warnings.
 tst_QQuickFileDialogImpl::tst_QQuickFileDialogImpl()
-    : QQmlDataTest(QT_QMLTEST_DATADIR)
+    : QQmlDataTest(QT_QMLTEST_DATADIR, FailOnWarningsPolicy::DoNotFailOnWarnings)
 {
 }
 
@@ -524,6 +527,11 @@ void tst_QQuickFileDialogImpl::changeFolderViaDoubleClick()
     QTRY_VERIFY(findViewDelegateItem(dialogHelper.fileDialogListView, subDirIndex, subDirDelegate));
     COMPARE_URL(subDirDelegate->file(), QUrl::fromLocalFile(tempSubDir.path()));
     QVERIFY(doubleClickButton(subDirDelegate));
+    const QStringList expectedVisibleFiles = showDirsFirst
+        ? QStringList { tempSubSubDir.path(), tempSubFile1->fileName(), tempSubFile2->fileName() }
+        : QStringList { tempSubFile1->fileName(), tempSubFile2->fileName(), tempSubSubDir.path() };
+    QString failureMessage;
+    QTRY_VERIFY2(verifyFileDialogDelegates(dialogHelper.fileDialogListView, expectedVisibleFiles, failureMessage), qPrintable(failureMessage));
     // The first file in the directory should now be selected.
     const QUrl firstFileUrl = showDirsFirst ? QUrl::fromLocalFile(tempSubSubDir.path()) : QUrl::fromLocalFile(tempSubFile1->fileName());
     VERIFY_FILE_SELECTED_AND_FOCUSED(QUrl::fromLocalFile(tempSubDir.path()), firstFileUrl, 0);
@@ -580,6 +588,9 @@ void tst_QQuickFileDialogImpl::chooseFolderViaEnter()
 
     // Select the delegate by pressing enter.
     QTest::keyClick(dialogHelper.window(), Qt::Key_Return);
+    const QStringList expectedVisibleFiles = { tempSubSubDir.path(), tempSubFile1->fileName(), tempSubFile2->fileName() };
+    QString failureMessage;
+    QTRY_VERIFY2(verifyFileDialogDelegates(dialogHelper.fileDialogListView, expectedVisibleFiles, failureMessage), qPrintable(failureMessage));
     // The first file in the new directory should be selected, which is "sub-sub-dir".
     VERIFY_FILE_SELECTED_AND_FOCUSED(QUrl::fromLocalFile(tempSubDir.path()), QUrl::fromLocalFile(tempSubSubDir.path()), 0);
     // Since we only chose a folder, the dialog should still be open.

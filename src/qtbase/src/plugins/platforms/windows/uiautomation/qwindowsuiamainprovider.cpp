@@ -331,14 +331,16 @@ HRESULT QWindowsUiaMainProvider::GetPatternProvider(PATTERNID idPattern, IUnknow
         break;
     case UIA_SelectionPatternId:
         // Lists of items.
-        if (accessible->role() == QAccessible::List) {
+        if (accessible->role() == QAccessible::List
+                || accessible->role() == QAccessible::PageTabList) {
             *pRetVal = new QWindowsUiaSelectionProvider(id());
         }
         break;
     case UIA_SelectionItemPatternId:
         // Items within a list and radio buttons.
         if ((accessible->role() == QAccessible::RadioButton)
-                || (accessible->role() == QAccessible::ListItem)) {
+                || (accessible->role() == QAccessible::ListItem)
+                || (accessible->role() == QAccessible::PageTab)) {
             *pRetVal = new QWindowsUiaSelectionItemProvider(id());
         }
         break;
@@ -381,7 +383,8 @@ HRESULT QWindowsUiaMainProvider::GetPatternProvider(PATTERNID idPattern, IUnknow
         if ((accessible->role() == QAccessible::MenuItem
                 && accessible->childCount() > 0
                 && accessible->child(0)->role() == QAccessible::PopupMenu)
-            || accessible->role() == QAccessible::ComboBox) {
+            || accessible->role() == QAccessible::ComboBox
+            || (accessible->role() == QAccessible::TreeItem && accessible->state().expandable)) {
             *pRetVal = new QWindowsUiaExpandCollapseProvider(id());
         }
         break;
