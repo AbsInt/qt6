@@ -397,6 +397,8 @@ private slots:
     void componentMix();
     void uncreatableAttached();
 
+    void bindableOnly();
+
 private:
     QQmlEngine engine;
     QStringList defaultImportPathList;
@@ -2169,6 +2171,22 @@ void tst_qqmllanguage::aliasProperties()
         QVERIFY(!subItem.isNull());
 
         QCOMPARE(subItem->property("y").toInt(), 1);
+    }
+
+    // Nested property bindings on group properties that are actually aliases (QTBUG-94983)
+    {
+        QQmlComponent component(&engine, testFileUrl("alias.15a.qml"));
+        VERIFY_ERRORS(0);
+
+        QScopedPointer<QObject> object(component.create());
+        QVERIFY(!object.isNull());
+
+        QPointer<QObject> subItem = qvariant_cast<QObject*>(object->property("symbol"));
+        QVERIFY(!subItem.isNull());
+
+        QPointer<QObject> subSubItem = qvariant_cast<QObject*>(subItem->property("layer"));
+
+        QCOMPARE(subSubItem->property("enabled").value<bool>(), true);
     }
 
     // Alias to sub-object with binding (QTBUG-57041)
@@ -6885,6 +6903,22 @@ void tst_qqmllanguage::uncreatableAttached()
     QVERIFY(o.isNull());
     QVERIFY(c.errorString().contains(
                 QLatin1String("Could not create attached properties object 'ItemAttached'")));
+}
+
+void tst_qqmllanguage::bindableOnly()
+{
+    qmlRegisterTypesAndRevisions<BindableOnly>("ABC", 1);
+    QQmlEngine engine;
+
+    QQmlComponent c(&engine);
+    c.setData("import ABC\nBindableOnly {\n"
+              "    data: \"sc\" + \"ore\"\n"
+              "    objectName: data\n"
+              "}", QUrl(u"bindableOnly.qml"_qs));
+    QScopedPointer<QObject> o(c.create());
+    QVERIFY(!o.isNull());
+    QCOMPARE(o->property("data").value<QByteArray>(), QByteArray("score"));
+    QCOMPARE(o->objectName(), QStringLiteral("score"));
 }
 
 QTEST_MAIN(tst_qqmllanguage)

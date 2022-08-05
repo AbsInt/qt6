@@ -2228,7 +2228,7 @@ void ExecutionEngine::setQmlEngine(QQmlEngine *engine)
 
 static void freeze_recursive(QV4::ExecutionEngine *v4, QV4::Object *object)
 {
-    if (object->as<QV4::QObjectWrapper>() || object->internalClass()->isFrozen)
+    if (object->as<QV4::QObjectWrapper>() || object->internalClass()->isFrozen())
         return;
 
     QV4::Scope scope(v4);
@@ -2337,6 +2337,8 @@ bool ExecutionEngine::metaTypeFromJS(const Value &value, QMetaType metaType, voi
     case QMetaType::QByteArray:
         if (const ArrayBuffer *ab = value.as<ArrayBuffer>())
             *reinterpret_cast<QByteArray*>(data) = ab->asByteArray();
+        else if (const String *string = value.as<String>())
+            *reinterpret_cast<QByteArray*>(data) = string->toQString().toUtf8();
         else
             *reinterpret_cast<QByteArray*>(data) = QByteArray();
         return true;
