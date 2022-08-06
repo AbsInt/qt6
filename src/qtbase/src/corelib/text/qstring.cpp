@@ -828,6 +828,8 @@ Q_CORE_EXPORT void qt_from_latin1(char16_t *dst, const char *str, size_t size) n
 #  endif
 #endif
 #if defined(__mips_dsp)
+    static_assert(sizeof(qsizetype) == sizeof(int),
+                  "oops, the assembler implementation needs to be called in a loop");
     if (size > 20)
         qt_fromlatin1_mips_asm_unroll8(dst, str, size);
     else
@@ -962,10 +964,10 @@ static void qt_to_latin1_internal(uchar *dst, const char16_t *src, qsizetype len
     // 1) neon has unsigned comparison
     // 2) packing is done to 64 bits (8 x 8bits component).
     if (length >= 16) {
-        const int chunkCount = length >> 3; // divided by 8
+        const qsizetype chunkCount = length >> 3; // divided by 8
         const uint16x8_t questionMark = vdupq_n_u16('?'); // set
         const uint16x8_t thresholdMask = vdupq_n_u16(0xff); // set
-        for (int i = 0; i < chunkCount; ++i) {
+        for (qsizetype i = 0; i < chunkCount; ++i) {
             uint16x8_t chunk = vld1q_u16((uint16_t *)src); // load
             src += 8;
 
@@ -983,6 +985,8 @@ static void qt_to_latin1_internal(uchar *dst, const char16_t *src, qsizetype len
     }
 #endif
 #if defined(__mips_dsp)
+    static_assert(sizeof(qsizetype) == sizeof(int),
+                  "oops, the assembler implementation needs to be called in a loop");
     qt_toLatin1_mips_dsp_asm(dst, src, length);
 #else
     while (length--) {
@@ -6765,9 +6769,9 @@ QString QString::asprintf(const char *cformat, ...)
     return s;
 }
 
-static void append_utf8(QString &qs, const char *cs, int len)
+static void append_utf8(QString &qs, const char *cs, qsizetype len)
 {
-    const int oldSize = qs.size();
+    const qsizetype oldSize = qs.size();
     qs.resize(oldSize + len);
     const QChar *newEnd = QUtf8::convertToUnicode(qs.data() + oldSize, QByteArrayView(cs, len));
     qs.resize(newEnd - qs.constData());
@@ -7958,7 +7962,7 @@ struct ArgEscapeData
     int occurrences;           // number of occurrences of the lowest escape sequence number
     int locale_occurrences;    // number of occurrences of the lowest escape sequence number that
                                // contain 'L'
-    int escape_len;            // total length of escape sequences which will be replaced
+    qsizetype escape_len;      // total length of escape sequences which will be replaced
 };
 
 static ArgEscapeData findArgEscapes(QStringView s)
@@ -8531,7 +8535,7 @@ static inline char16_t to_unicode(const char c) { return QLatin1Char{c}.unicode(
 template <typename Char>
 static int getEscape(const Char *uc, qsizetype *pos, qsizetype len, int maxNumber = 999)
 {
-    int i = *pos;
+    qsizetype i = *pos;
     ++i;
     if (i < len && uc[i] == QLatin1Char('L'))
         ++i;
@@ -10726,19 +10730,19 @@ qsizetype QtPrivate::count(QStringView haystack, const QRegularExpression &re)
 QString QString::toHtmlEscaped() const
 {
     QString rich;
-    const int len = length();
+    const qsizetype len = length();
     rich.reserve(qsizetype(len * 1.1));
-    for (int i = 0; i < len; ++i) {
-        if (at(i) == QLatin1Char('<'))
+    for (QChar ch : *this) {
+        if (ch == u'<')
             rich += QLatin1String("&lt;");
-        else if (at(i) == QLatin1Char('>'))
+        else if (ch == u'>')
             rich += QLatin1String("&gt;");
-        else if (at(i) == QLatin1Char('&'))
+        else if (ch == u'&')
             rich += QLatin1String("&amp;");
-        else if (at(i) == QLatin1Char('"'))
+        else if (ch == u'"')
             rich += QLatin1String("&quot;");
         else
-            rich += at(i);
+            rich += ch;
     }
     rich.squeeze();
     return rich;
