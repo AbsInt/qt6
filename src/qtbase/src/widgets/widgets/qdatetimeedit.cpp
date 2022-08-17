@@ -1630,7 +1630,7 @@ QTimeEdit::QTimeEdit(QWidget *parent)
 */
 
 QTimeEdit::QTimeEdit(QTime time, QWidget *parent)
-    : QDateTimeEdit(time, QMetaType::QTime, parent)
+    : QDateTimeEdit(time.isValid() ? time : QDATETIMEEDIT_TIME_MIN, QMetaType::QTime, parent)
 {
     connect(this, &QTimeEdit::timeChanged, this, &QTimeEdit::userTimeChanged);
 }
@@ -1700,7 +1700,7 @@ QDateEdit::QDateEdit(QWidget *parent)
 */
 
 QDateEdit::QDateEdit(QDate date, QWidget *parent)
-    : QDateTimeEdit(date, QMetaType::QDate, parent)
+    : QDateTimeEdit(date.isValid() ? date : QDATETIMEEDIT_DATE_INITIAL, QMetaType::QDate, parent)
 {
     connect(this, &QDateEdit::dateChanged, this, &QDateEdit::userDateChanged);
 }
@@ -2513,7 +2513,7 @@ void QDateTimeEditPrivate::init(const QVariant &var)
     Q_Q(QDateTimeEdit);
     switch (var.userType()) {
     case QMetaType::QDate:
-        value = var.toDate().startOfDay();
+        value = var.toDate().startOfDay(spec);
         updateTimeSpec();
         q->setDisplayFormat(defaultDateFormat);
         if (sectionNodes.isEmpty()) // ### safeguard for broken locale
@@ -2527,7 +2527,7 @@ void QDateTimeEditPrivate::init(const QVariant &var)
             q->setDisplayFormat(QLatin1String("dd/MM/yyyy hh:mm:ss"));
         break;
     case QMetaType::QTime:
-        value = QDateTime(QDATETIMEEDIT_DATE_INITIAL, var.toTime());
+        value = QDateTime(QDATETIMEEDIT_DATE_INITIAL, var.toTime(), spec);
         updateTimeSpec();
         q->setDisplayFormat(defaultTimeFormat);
         if (sectionNodes.isEmpty()) // ### safeguard for broken locale

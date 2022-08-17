@@ -1297,12 +1297,12 @@ static inline Form form(unsigned short uc) {
 static qsizetype indic_nextSyllableBoundary(QChar::Script script, const char16_t *s, qsizetype start, qsizetype end, bool *invalid)
 {
     *invalid = false;
-    IDEBUG("indic_nextSyllableBoundary: start=%d, end=%d", int(start), int(end));
+    IDEBUG("indic_nextSyllableBoundary: start=%lld, end=%lld", qlonglong(start), qlonglong(end));
     const char16_t *uc = s+start;
 
     qsizetype pos = 0;
     Form state = form(uc[pos]);
-    IDEBUG("state[%d]=%d (uc=%4x)", int(pos), state, uc[pos]);
+    IDEBUG("state[%lld]=%d (uc=%4x)", qlonglong(pos), state, uc[pos]);
     pos++;
 
     if (state != Consonant && state != IndependentVowel) {
@@ -1313,7 +1313,7 @@ static qsizetype indic_nextSyllableBoundary(QChar::Script script, const char16_t
 
     while (pos < end - start) {
         Form newState = form(uc[pos]);
-        IDEBUG("state[%d]=%d (uc=%4x)", int(pos), newState, uc[pos]);
+        IDEBUG("state[%lld]=%d (uc=%4x)", qlonglong(pos), newState, uc[pos]);
         switch (newState) {
         case Control:
             newState = state;
@@ -1478,8 +1478,8 @@ static void thaiAssignAttributes(const char16_t *string, qsizetype len, QCharAtt
     char *cstr = s;
     int *break_positions = nullptr;
     int brp[128];
-    int brp_size = 0;
-    qsizetype numbreaks, i, j, cell_length;
+    size_t brp_size = 0;
+    qsizetype numbreaks, i;
     struct thcell_t tis_cell;
 
     if (!init_libthai())
@@ -1500,7 +1500,7 @@ static void thaiAssignAttributes(const char16_t *string, qsizetype len, QCharAtt
     if (len > 128) {
         break_positions = static_cast<int *>(malloc (sizeof(int) * len));
         memset (break_positions, 0, sizeof(int) * len);
-        brp_size = len;
+        brp_size = size_t(len);
     }
     else {
         break_positions = brp;
@@ -1528,11 +1528,12 @@ static void thaiAssignAttributes(const char16_t *string, qsizetype len, QCharAtt
     /* manage grapheme boundaries */
     i = 0;
     while (i < len) {
-        cell_length = static_cast<uint>(th_next_cell(reinterpret_cast<const unsigned char *>(cstr) + i, len - i, &tis_cell, true));
+        size_t cell_length = th_next_cell(reinterpret_cast<const unsigned char *>(cstr) + i,
+                                          size_t(len - i), &tis_cell, true);
 
 
         attributes[i].graphemeBoundary = true;
-        for (j = 1; j < cell_length; j++)
+        for (size_t j = 1; j < cell_length; ++j)
             attributes[i + j].graphemeBoundary = false;
 
         i += cell_length;
@@ -1859,7 +1860,7 @@ static qsizetype myanmar_nextSyllableBoundary(const char16_t *s, qsizetype start
         if (pos == start)
             *invalid = (bool)(charClass & Mymr_CF_DOTTED_CIRCLE);
 
-        MMDEBUG("state[%d]=%d class=%8x (uc=%4x)", int(pos - start), state, charClass, *uc);
+        MMDEBUG("state[%lld]=%d class=%8x (uc=%4x)", qlonglong(pos - start), state, charClass, *uc);
 
         if (state < 0) {
             if (state < -1)
@@ -2194,7 +2195,7 @@ static qsizetype khmer_nextSyllableBoundary(const char16_t *s, qsizetype start, 
         }
         state = khmerStateTable[state][charClass & CF_CLASS_MASK];
 
-        KHDEBUG("state[%d]=%d class=%8lx (uc=%4x)", int(pos - start), state,
+        KHDEBUG("state[%lld]=%d class=%8lx (uc=%4x)", qlonglong(pos - start), state,
                 charClass, *uc );
 
         if (state < 0) {
