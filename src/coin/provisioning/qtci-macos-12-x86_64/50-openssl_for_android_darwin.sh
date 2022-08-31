@@ -2,8 +2,7 @@
 
 #############################################################################
 ##
-## Copyright (C) 2021 The Qt Company Ltd.
-## Copyright (C) 2017 Pelagicore AG
+## Copyright (C) 2022 The Qt Company Ltd.
 ## Contact: https://www.qt.io/licensing/
 ##
 ## This file is part of the provisioning scripts of the Qt Toolkit.
@@ -39,23 +38,7 @@
 ## $QT_END_LICENSE$
 ##
 #############################################################################
+set -ex
 
-# This script installs python3
-
-# shellcheck source=../unix/SetEnvVar.sh
-source "${BASH_SOURCE%/*}/../common/unix/SetEnvVar.sh"
-
-brew install --formula ${BASH_SOURCE%/*}/pyenv.rb
-
-pyenv install 3.9.7
-
-/Users/qt/.pyenv/versions/3.9.7/bin/pip3 install --user install virtualenv wheel html5lib
-
-SetEnvVar "PYTHON3_PATH" "/Users/qt/.pyenv/versions/3.9.7/bin/"
-SetEnvVar "PIP3_PATH" "/Users/qt/.pyenv/versions/3.9.7/bin/"
-
-# Install all needed packages in a special wheel cache directory
-/Users/qt/.pyenv/versions/3.9.7/bin/pip3 wheel --wheel-dir $HOME/python3-wheels -r ${BASH_SOURCE%/*}/../common/shared/requirements.txt
-SetEnvVar "PYTHON3_WHEEL_CACHE" "$HOME/python3-wheels"
-
-echo "python3 = 3.9.7" >> ~/versions.txt
+# shellcheck source=../common/unix/openssl_for_android.sh
+source "${BASH_SOURCE%/*}/../common/unix/openssl_for_android.sh"
