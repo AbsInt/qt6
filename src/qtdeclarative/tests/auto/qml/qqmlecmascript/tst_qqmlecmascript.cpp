@@ -315,6 +315,7 @@ private slots:
     void bindingBoundFunctions();
     void qpropertyAndQtBinding();
     void qpropertyBindingReplacement();
+    void qpropertyBindingNoQPropertyCapture();
     void deleteRootObjectInCreation();
     void onDestruction();
     void onDestructionViaGC();
@@ -3145,6 +3146,26 @@ void tst_qqmlecmascript::callQtInvokables()
     QCOMPARE(o->invoked(), 13);
     QCOMPARE(o->actuals().count(), 1);
     QCOMPARE(o->actuals().at(0), QVariant::fromValue((QObject *)nullptr));
+
+    {
+        o->reset();
+        QQmlComponent comp(&qmlengine, testFileUrl("qmlTypeWrapperArgs.qml"));
+        QScopedPointer<QObject> root {comp.createWithInitialProperties({{"invokableObject", QVariant::fromValue(o)}}) };
+        QVERIFY(root);
+        QCOMPARE(o->error(), false);
+        QCOMPARE(o->invoked(), 13);
+        QCOMPARE(o->actuals().count(), 1);
+        QCOMPARE(o->actuals().at(0).value<QObject *>()->metaObject()->className(), "QQmlComponentAttached");
+    }
+
+    {
+        o->reset();
+        QQmlComponent comp(&qmlengine, testFileUrl("qmlTypeWrapperArgs2.qml"));
+        QScopedPointer<QObject> root {comp.createWithInitialProperties({{"invokableObject", QVariant::fromValue(o)}}) };
+        QVERIFY(root);
+        QCOMPARE(o->error(), false);
+        QCOMPARE(o->invoked(), -1); // no function got called due to incompatible arguments
+    }
 
     o->reset();
     QVERIFY(EVALUATE_VALUE("object.method_QObject(undefined)", QV4::Primitive::undefinedValue()));
@@ -7741,6 +7762,28 @@ void tst_qqmlecmascript::qpropertyBindingReplacement()
     QScopedPointer<QObject> root(c.create());
     QVERIFY(root);
     QCOMPARE(root->objectName(), u"overwritten"_qs);
+}
+
+void tst_qqmlecmascript::qpropertyBindingNoQPropertyCapture()
+{
+
+    QQmlEngine engine;
+    QQmlComponent comp(&engine, testFileUrl("qpropertyBindingNoQPropertyCapture.qml"));
+    std::unique_ptr<QObject> root(comp.create());
+    QVERIFY2(root, qPrintable(comp.errorString()));
+    auto redRectangle = root.get();
+
+    QQmlProperty blueRectangleWidth(redRectangle, "blueRectangleWidth", &engine);
+
+    auto toggle = [&](){
+        QMetaObject::invokeMethod(root.get(), "toggle");
+    };
+
+    QCOMPARE(blueRectangleWidth.read().toInt(), 25);
+    toggle();
+    QCOMPARE(blueRectangleWidth.read().toInt(), 600);
+    toggle();
+    QCOMPARE(blueRectangleWidth.read().toInt(), 25);
 }
 
 void tst_qqmlecmascript::deleteRootObjectInCreation()
