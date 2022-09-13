@@ -44,6 +44,8 @@
 #include <QtNetwork/qtcpserver.h>
 #include <QtNetwork/qsslpresharedkeyauthenticator.h>
 
+#include <QtTest/private/qemulationdetector_p.h>
+
 #include <QTest>
 #include <QNetworkProxy>
 #include <QAuthenticator>
@@ -1681,11 +1683,28 @@ void tst_QSslSocket::serverCipherPreferences()
     if (setProxy)
         return;
 
-    // First using the default (server preference)
+    QSslCipher testedCiphers[2];
     {
+        // First using the default (server preference)
+        const auto supportedCiphers = QSslConfiguration::supportedCiphers();
+        int nSet = 0;
+        for (const auto &cipher : supportedCiphers) {
+            // Ciphersuites from TLS 1.2 and 1.3 are set separately,
+            // let's select 1.3 or above explicitly.
+            if (cipher.protocol() < QSsl::TlsV1_3)
+                continue;
+
+            testedCiphers[nSet++] = cipher;
+            if (nSet == 2)
+                break;
+        }
+
+        if (nSet != 2)
+            QSKIP("Failed to find two proper ciphersuites to test, bailing out.");
+
         SslServer server;
-        server.protocol = Test::TlsV1_0;
-        server.ciphers = {QSslCipher("AES128-SHA"), QSslCipher("AES256-SHA")};
+        server.protocol = QSsl::TlsV1_2OrLater;
+        server.ciphers = {testedCiphers[0], testedCiphers[1]};
         QVERIFY(server.listen());
 
         QEventLoop loop;
@@ -1695,8 +1714,8 @@ void tst_QSslSocket::serverCipherPreferences()
         socket = &client;
 
         auto sslConfig = socket->sslConfiguration();
-        sslConfig.setProtocol(Test::TlsV1_0OrLater);
-        sslConfig.setCiphers({QSslCipher("AES256-SHA"), QSslCipher("AES128-SHA")});
+        sslConfig.setProtocol(QSsl::TlsV1_2OrLater);
+        sslConfig.setCiphers({testedCiphers[1], testedCiphers[0]});
         socket->setSslConfiguration(sslConfig);
 
         // upon SSL wrong version error, errorOccurred will be triggered, not sslErrors
@@ -1709,17 +1728,19 @@ void tst_QSslSocket::serverCipherPreferences()
         loop.exec();
 
         QVERIFY(client.isEncrypted());
-        QCOMPARE(client.sessionCipher().name(), QString("AES128-SHA"));
+        QCOMPARE(client.sessionCipher().name(), testedCiphers[0].name());
     }
 
     {
+        if (QTestPrivate::isRunningArmOnX86())
+            QSKIP("This test is known to crash on QEMU emulation for no good reason.");
         // Now using the client preferences
         SslServer server;
         QSslConfiguration config = QSslConfiguration::defaultConfiguration();
         config.setSslOption(QSsl::SslOptionDisableServerCipherPreference, true);
         server.config = config;
-        server.protocol = Test::TlsV1_0OrLater;
-        server.ciphers = {QSslCipher("AES128-SHA"), QSslCipher("AES256-SHA")};
+        server.protocol = QSsl::TlsV1_2OrLater;
+        server.ciphers = {testedCiphers[0], testedCiphers[1]};
         QVERIFY(server.listen());
 
         QEventLoop loop;
@@ -1729,8 +1750,8 @@ void tst_QSslSocket::serverCipherPreferences()
         socket = &client;
 
         auto sslConfig = socket->sslConfiguration();
-        sslConfig.setProtocol(Test::TlsV1_0);
-        sslConfig.setCiphers({QSslCipher("AES256-SHA"), QSslCipher("AES128-SHA")});
+        sslConfig.setProtocol(QSsl::TlsV1_2OrLater);
+        sslConfig.setCiphers({testedCiphers[1], testedCiphers[0]});
         socket->setSslConfiguration(sslConfig);
 
         // upon SSL wrong version error, errorOccurred will be triggered, not sslErrors
@@ -1743,7 +1764,7 @@ void tst_QSslSocket::serverCipherPreferences()
         loop.exec();
 
         QVERIFY(client.isEncrypted());
-        QCOMPARE(client.sessionCipher().name(), QString("AES256-SHA"));
+        QCOMPARE(client.sessionCipher().name(), testedCiphers[1].name());
     }
 }
 
@@ -1825,8 +1846,10 @@ void tst_QSslSocket::setLocalCertificateChain()
     }
 
     QCOMPARE(chain.size(), 2);
-    QCOMPARE(chain[0].serialNumber(), QByteArray("10:a0:ad:77:58:f6:6e:ae:46:93:a3:43:f9:59:8a:9e"));
-    QCOMPARE(chain[1].serialNumber(), QByteArray("3b:eb:99:c5:ea:d8:0b:5d:0b:97:5d:4f:06:75:4b:e1"));
+    QCOMPARE(chain[0].serialNumber(),
+             QByteArray("58:df:33:c1:9b:bc:c5:51:7a:00:86:64:43:94:41:e2:26:ef:3f:89"));
+    QCOMPARE(chain[1].serialNumber(),
+             QByteArray("11:72:34:bc:21:e6:ca:04:24:13:f8:35:48:84:a6:e9:de:96:22:15"));
 }
 
 void tst_QSslSocket::tlsConfiguration()

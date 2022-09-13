@@ -119,6 +119,7 @@ private slots:
     void outerBindingOverridesInnerBinding();
     void aliasPropertyAndBinding();
     void aliasPropertyReset();
+    void aliasPropertyToIC();
     void nonExistentAttachedObject();
     void scope();
     void importScope();
@@ -410,6 +411,7 @@ private slots:
     void urlConstruction();
     void urlPropertyInvalid();
     void urlPropertySet();
+    void colonAfterProtocol();
     void urlSearchParamsConstruction();
     void urlSearchParamsMethods();
     void variantConversionMethod();
@@ -1933,6 +1935,24 @@ void tst_qqmlecmascript::aliasPropertyReset()
     QMetaObject::invokeMethod(object.data(), "resetAlias");
     QCOMPARE(object->property("intAlias").value<int>(), 12);
     QCOMPARE(object->property("aliasedIntIsUndefined"), QVariant(false));
+}
+
+void tst_qqmlecmascript::aliasPropertyToIC()
+{
+    QQmlEngine engine;
+    std::unique_ptr<QObject> root;
+
+    // test that a manual write (of undefined) to a resettable aliased property succeeds
+    QQmlComponent c(&engine, testFileUrl("aliasPropertyToIC.qml"));
+    root.reset(c.create());
+    QVERIFY(root);
+    auto mo = root->metaObject();
+    int aliasIndex = mo->indexOfProperty("myalias");
+    auto prop = mo->property(aliasIndex);
+    QVERIFY(prop.isAlias());
+    auto fromAlias = prop.read(root.get()).value<QObject *>();
+    auto direct = root->property("direct").value<QObject *>();
+    QCOMPARE(fromAlias, direct);
 }
 
 void tst_qqmlecmascript::componentCreation_data()
@@ -9610,7 +9630,7 @@ void tst_qqmlecmascript::urlConstruction()
     QV4::UrlObject *validUrl = ret->as<QV4::UrlObject>();
     QVERIFY(validUrl != nullptr);
 
-    QCOMPARE(validUrl->protocol(), "https");
+    QCOMPARE(validUrl->protocol(), "https:");
     QCOMPARE(validUrl->hostname(), "example.com");
     QCOMPARE(validUrl->username(), "username");
     QCOMPARE(validUrl->password(), "password");
@@ -9630,7 +9650,7 @@ void tst_qqmlecmascript::urlConstruction()
     QV4::UrlObject *validRelativeUrl = retRel->as<QV4::UrlObject>();
     QVERIFY(validRelativeUrl != nullptr);
 
-    QCOMPARE(validRelativeUrl->protocol(), "https");
+    QCOMPARE(validRelativeUrl->protocol(), "https:");
     QCOMPARE(validRelativeUrl->hostname(), "example.com");
     QCOMPARE(validRelativeUrl->username(), "username");
     QCOMPARE(validRelativeUrl->password(), "password");
@@ -9690,7 +9710,7 @@ void tst_qqmlecmascript::urlPropertySet()
     // protocol
     QVERIFY(EVALUATE("this.url.protocol = 'https';"));
 
-    QCOMPARE(url->protocol(), "https");
+    QCOMPARE(url->protocol(), "https:");
     QCOMPARE(url->href(), "https://localhost/a/b/c");
     QCOMPARE(url->origin(), "https://localhost");
 
@@ -9753,7 +9773,7 @@ void tst_qqmlecmascript::urlPropertySet()
             "this.url.href = "
             "'https://username:password@example.com:1234/path/to/something?search=value#hash';"));
 
-    QCOMPARE(url->protocol(), "https");
+    QCOMPARE(url->protocol(), "https:");
     QCOMPARE(url->hostname(), "example.com");
     QCOMPARE(url->username(), "username");
     QCOMPARE(url->password(), "password");
@@ -9767,6 +9787,57 @@ void tst_qqmlecmascript::urlPropertySet()
     QCOMPARE(url->hash(), "#hash");
 }
 
+void tst_qqmlecmascript::colonAfterProtocol()
+{
+    QQmlEngine qmlengine;
+
+    QObject *o = new QObject(&qmlengine);
+
+    QV4::ExecutionEngine *engine = qmlengine.handle();
+    QV4::Scope scope(engine);
+
+    QV4::ScopedValue object(scope, QV4::QObjectWrapper::wrap(engine, o));
+
+    QV4::ScopedValue ret(scope, EVALUATE("this.url = new URL('http://localhost/a/b/c');"));
+    QV4::UrlObject *url = ret->as<QV4::UrlObject>();
+    QVERIFY(url != nullptr);
+
+    // https without colon
+    QVERIFY(EVALUATE("this.url.protocol = 'https';"));
+    QCOMPARE(url->protocol(), "https:");
+    QCOMPARE(url->href(), "https://localhost/a/b/c");
+    QCOMPARE(url->origin(), "https://localhost");
+
+    QV4::ScopedValue retHttps(scope, EVALUATE("this.url = new URL('https://localhost/a/b/c');"));
+    QV4::UrlObject *urlHttps = retHttps->as<QV4::UrlObject>();
+    QVERIFY(urlHttps != nullptr);
+
+    // ftp with a colon
+    QVERIFY(EVALUATE("this.url.protocol = 'ftp:';"));
+    QCOMPARE(urlHttps->protocol(), "ftp:");
+    QCOMPARE(urlHttps->href(), "ftp://localhost/a/b/c");
+    QCOMPARE(urlHttps->origin(), "ftp://localhost");
+
+    QV4::ScopedValue retHttp(scope, EVALUATE("this.url = new URL('http://localhost/a/b/c');"));
+    QV4::UrlObject *ftpHttps = retHttp->as<QV4::UrlObject>();
+    QVERIFY(ftpHttps != nullptr);
+
+    // ftp with three colons
+    QVERIFY(EVALUATE("this.url.protocol = 'ftp:::';"));
+    QCOMPARE(ftpHttps->protocol(), "ftp:");
+    QCOMPARE(ftpHttps->href(), "ftp://localhost/a/b/c");
+    QCOMPARE(ftpHttps->origin(), "ftp://localhost");
+
+    QV4::ScopedValue retWss(scope, EVALUATE("this.url = new URL('wss://localhost/a/b/c');"));
+    QV4::UrlObject *urlFtpHttp = retWss->as<QV4::UrlObject>();
+    QVERIFY(urlFtpHttp != nullptr);
+
+    // ftp and http with a colon inbetween
+    QVERIFY(EVALUATE("this.url.protocol = 'ftp:http:';"));
+    QCOMPARE(urlFtpHttp->protocol(), "ftp:");
+    QCOMPARE(urlFtpHttp->href(), "ftp://localhost/a/b/c");
+    QCOMPARE(urlFtpHttp->origin(), "ftp://localhost");
+}
 
 void tst_qqmlecmascript::urlSearchParamsConstruction()
 {
