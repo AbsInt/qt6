@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of QLiteHtml.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "container_qpainter.h"
 #include "container_qpainter_p.h"
@@ -48,7 +23,6 @@
 #include <QUrl>
 
 #include <algorithm>
-#include <set>
 
 const int kDragDistance = 5;
 
@@ -58,14 +32,6 @@ using Context = QPainter;
 namespace {
 static Q_LOGGING_CATEGORY(log, "qlitehtml", QtCriticalMsg)
 }
-
-#if QT_VERSION < QT_VERSION_CHECK(5, 14, 0)
-namespace Qt {
-namespace {
-auto constexpr SkipEmptyParts = QString::SkipEmptyParts;
-}
-}
-#endif
 
 static QFont toQFont(litehtml::uint_ptr hFont)
 {
@@ -492,28 +458,7 @@ litehtml::uint_ptr DocumentContainerPrivate::create_font(const litehtml::tchar_t
                        return name;
                    });
     auto font = new QFont();
-#if (QT_VERSION >= QT_VERSION_CHECK(5, 13, 0))
     font->setFamilies(familyNames);
-#else
-    struct CompareCaseinsensitive
-    {
-        bool operator()(const QString &a, const QString &b) const
-        {
-            return a.compare(b, Qt::CaseInsensitive) < 0;
-        }
-    };
-    static const QStringList known = QFontDatabase().families();
-    static const std::set<QString, CompareCaseinsensitive> knownFamilies(known.cbegin(),
-                                                                         known.cend());
-    font->setFamily(familyNames.last());
-    for (const QString &name : qAsConst(familyNames)) {
-        const auto found = knownFamilies.find(name);
-        if (found != knownFamilies.end()) {
-            font->setFamily(*found);
-            break;
-        }
-    }
-#endif
     font->setPixelSize(size);
     font->setWeight(cssWeightToQtWeight(weight));
     font->setStyle(toQFontStyle(italic));
@@ -558,7 +503,7 @@ void DocumentContainerPrivate::draw_text(litehtml::uint_ptr hdc,
     painter->drawText(toQRect(pos), 0, QString::fromUtf8(text));
 }
 
-int DocumentContainerPrivate::pt_to_px(int pt)
+int DocumentContainerPrivate::pt_to_px(int pt) const
 {
     // magic factor of 11/12 to account for differences to webengine/webkit
     return m_paintDevice->physicalDpiY() * pt * 11 / m_paintDevice->logicalDpiY() / 12;
@@ -1383,7 +1328,7 @@ QUrl DocumentContainerPrivate::resolveUrl(const QString &url, const QString &bas
     // server relative path: "/foo/bar.css"
     // net path: "//foo.bar/blah.css"
     // fragment only: "#foo-fragment"
-    const QUrl qurl(url);
+    const QUrl qurl = QUrl::fromEncoded(url.toUtf8());
     if (qurl.scheme().isEmpty()) {
         if (url.startsWith('#')) // leave alone if just a fragment
             return qurl;
@@ -1396,7 +1341,7 @@ QUrl DocumentContainerPrivate::resolveUrl(const QString &url, const QString &bas
                                           ? serverUrl.toString(QUrl::FullyEncoded)
                                           : pageBaseUrl.toString(QUrl::FullyEncoded);
         QUrl resolvedUrl(actualBaseUrl + '/' + url);
-        resolvedUrl.setPath(QDir::cleanPath(resolvedUrl.path(QUrl::FullyEncoded)));
+        resolvedUrl.setPath(resolvedUrl.path(QUrl::FullyEncoded | QUrl::NormalizePathSegments), QUrl::TolerantMode);
         return resolvedUrl;
     }
     return qurl;

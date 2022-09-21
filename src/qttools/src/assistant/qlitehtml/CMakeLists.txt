@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 cmake_minimum_required(VERSION 3.7)
 project(qlitehtml VERSION 1.0 LANGUAGES CXX)
 
@@ -23,7 +26,7 @@ else()
     set(QLITEHTML_HEADER_PATH include/qlitehtml)
 endif()
 
-find_package(QT 5.11 NAMES Qt6 Qt5 COMPONENTS Widgets REQUIRED)
+find_package(QT 5.15 NAMES Qt6 Qt5 COMPONENTS Widgets REQUIRED)
 find_package(Qt${QT_VERSION_MAJOR} COMPONENTS Widgets REQUIRED)
 set(Qt Qt${QT_VERSION_MAJOR})
 

@@ -3,21 +3,17 @@
 #include "el_text.h"
 #include "el_space.h"
 #include "el_image.h"
+#include "utf8_strings.h"
 
 litehtml::el_before_after_base::el_before_after_base(const std::shared_ptr<litehtml::document>& doc, bool before) : html_tag(doc)
 {
 	if(before)
 	{
-		set_tagName(_t("::before"));
+		m_tag = _t("::before");
 	} else
 	{
-		set_tagName(_t("::after"));
+        m_tag = _t("::after");
 	}
-}
-
-litehtml::el_before_after_base::~el_before_after_base()
-{
-
 }
 
 void litehtml::el_before_after_base::add_style(const litehtml::style& st)
@@ -27,7 +23,7 @@ void litehtml::el_before_after_base::add_style(const litehtml::style& st)
 	tstring content = get_style_property(_t("content"), false, _t(""));
 	if(!content.empty())
 	{
-		int idx = value_index(content.c_str(), content_property_string);
+		int idx = value_index(content, content_property_string);
 		if(idx < 0)
 		{
 			tstring fnc;
@@ -132,7 +128,7 @@ void litehtml::el_before_after_base::add_text( const tstring& txt )
 
 void litehtml::el_before_after_base::add_function( const tstring& fnc, const tstring& params )
 {
-	int idx = value_index(fnc.c_str(), _t("attr;counter;url"));
+	int idx = value_index(fnc, _t("attr;counter;url"));
 	switch(idx)
 	{
 	// attr
@@ -188,10 +184,13 @@ void litehtml::el_before_after_base::add_function( const tstring& fnc, const tst
 	}
 }
 
-litehtml::tchar_t litehtml::el_before_after_base::convert_escape( const tchar_t* txt )
+litehtml::tstring litehtml::el_before_after_base::convert_escape( const tchar_t* txt )
 {
-	tchar_t* sss = 0;
-	return (tchar_t) t_strtol(txt, &sss, 16);
+    tchar_t* str_end;
+	wchar_t u_str[2];
+    u_str[0] = (wchar_t) t_strtol(txt, &str_end, 16);
+    u_str[1] = 0;
+	return litehtml::tstring(litehtml_from_wchar(u_str));
 }
 
 void litehtml::el_before_after_base::apply_stylesheet( const litehtml::css& stylesheet )

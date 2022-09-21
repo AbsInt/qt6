@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # set the following variables before adding as subdirectory into a project
 # QLITEHTML_BIN_PATH - relative install path for result DLLs
 # QLITEHTML_LIBRARY_PATH - relative install path for result dynamic libraries
@@ -23,6 +26,18 @@ if(NOT TARGET litehtml AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/litehtml/
     set(BUILD_SHARED_LIBS OFF)
 
     add_subdirectory(3rdparty/litehtml EXCLUDE_FROM_ALL)
+
+    # suppress compiler warnings from litehtml
+    set_target_properties(
+      litehtml
+      PROPERTIES
+        QT_COMPILE_OPTIONS_DISABLE_WARNINGS ON
+    )
+    set_target_properties(
+      gumbo
+      PROPERTIES
+        QT_COMPILE_OPTIONS_DISABLE_WARNINGS ON
+    )
 
     set(CMAKE_POSITION_INDEPENDENT_CODE "${ORIG_FPIC}")
     set(BUILD_SHARED_LIBS ${ORIG_BUILD_SHARED_LIBS})

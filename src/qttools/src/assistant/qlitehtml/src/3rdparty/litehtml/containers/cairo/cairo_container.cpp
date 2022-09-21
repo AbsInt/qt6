@@ -40,11 +40,11 @@ litehtml::uint_ptr cairo_container::create_font( const litehtml::tchar_t* faceNa
 		delete f;
 #else
 		fnt_name = fonts[0];
-		if (fnt_name.front() == '"')
+		if (fnt_name.front() == L'"' || fnt_name.front() == L'\'')
 		{
 			fnt_name.erase(0, 1);
 		}
-		if (fnt_name.back() == '"')
+		if (fnt_name.back() == L'"' || fnt_name.back() == L'\'')
 		{
 			fnt_name.erase(fnt_name.length() - 1, 1);
 		}
@@ -121,7 +121,7 @@ void cairo_container::draw_text( litehtml::uint_ptr hdc, const litehtml::tchar_t
 	}
 }
 
-int cairo_container::pt_to_px( int pt )
+int cairo_container::pt_to_px( int pt ) const
 {
 	HDC dc = GetDC(NULL);
 	int ret = MulDiv(pt, GetDeviceCaps(dc, LOGPIXELSY), 72);
@@ -1011,7 +1011,7 @@ litehtml::tstring cairo_container::resolve_color(const litehtml::tstring& color)
 
     for (auto& clr : colors)
     {
-        if (!t_strcasecmp(clr.name, color.c_str()))
+		if (!litehtml::t_strcasecmp(clr.name, color.c_str()))
         {
             litehtml::tchar_t  str_clr[20];
             DWORD rgb_color =  GetSysColor(clr.color_index);
