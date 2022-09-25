@@ -1,39 +1,16 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the tools applications of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 #include "qqmllanguageserver.h"
 #include "qqmlcodemodel.h"
 #include <QtCore/qfileinfo.h>
 #include <QtCore/qdir.h>
 #include <QtCore/qthreadpool.h>
+#include <QtCore/qlibraryinfo.h>
 #include <QtQmlDom/private/qqmldomtop_p.h>
 #include "textdocument.h"
 
 #include <memory>
+#include <algorithm>
 
 QT_BEGIN_NAMESPACE
 
@@ -42,6 +19,7 @@ namespace QmlLsp {
 Q_LOGGING_CATEGORY(codeModelLog, "qt.languageserver.codemodel")
 
 using namespace QQmlJS::Dom;
+using namespace Qt::StringLiterals;
 
 /*!
 \internal
@@ -63,11 +41,11 @@ synchronization here.
 
 \section2 OpenFiles
 \list
-\li snapshotByUri() returns an OpenDocumentSnapshot of an open document. From it you can get the
+\li snapshotByUrl() returns an OpenDocumentSnapshot of an open document. From it you can get the
   document, its latest valid version, scope, all connected to a specific version of the document
   and immutable. The signal updatedSnapshot() is called every time a snapshot changes (also for
   every partial change: document change, validDocument change, scope change).
-\li openDocumentByUri() is a lower level and more intrusive access to OpenDocument objects. These
+\li openDocumentByUrl() is a lower level and more intrusive access to OpenDocument objects. These
   contains the current snapshot, and shared pointer to a Utils::TextDocument. This is *always* the
   current version of the document, and has line by line support.
   Working on it is more delicate and intrusive, because you have to explicitly acquire its mutex()
@@ -98,18 +76,35 @@ indexNeedsUpdate() and openNeedUpdate(), check if there is work to do, and if ye
 worker thread (or more) that work on it exist.
 */
 
-QQmlCodeModel::QQmlCodeModel(QObject *parent)
+QQmlCodeModel::QQmlCodeModel(QObject *parent, QQmlToolingSettings *settings)
     : QObject { parent },
       m_currentEnv(std::make_shared<DomEnvironment>(QStringList(),
                                                     DomEnvironment::Option::SingleThreaded)),
       m_validEnv(std::make_shared<DomEnvironment>(QStringList(),
-                                                  DomEnvironment::Option::SingleThreaded))
+                                                  DomEnvironment::Option::SingleThreaded)),
+      m_settings(settings)
 {
 }
 
-OpenDocumentSnapshot QQmlCodeModel::snapshotByUri(const QByteArray &uri)
+QQmlCodeModel::~QQmlCodeModel()
 {
-    return openDocumentByUri(uri).snapshot;
+    while (true) {
+        bool shouldWait;
+        {
+            QMutexLocker l(&m_mutex);
+            m_state = State::Stopping;
+            m_openDocumentsToUpdate.clear();
+            shouldWait = m_nIndexInProgress != 0 || m_nUpdateInProgress != 0;
+        }
+        if (!shouldWait)
+            break;
+        QThread::yieldCurrentThread();
+    }
+}
+
+OpenDocumentSnapshot QQmlCodeModel::snapshotByUrl(const QByteArray &url)
+{
+    return openDocumentByUrl(url).snapshot;
 }
 
 int QQmlCodeModel::indexEvalProgress() const
@@ -135,7 +130,6 @@ void QQmlCodeModel::indexEnd()
     qCDebug(codeModelLog) << "indexEnd";
     m_lastIndexProgress = 0;
     m_nIndexInProgress = 0;
-    m_nUpdateInProgress = 0;
     m_toIndex.clear();
     m_indexInProgressCost = 0;
     m_indexDoneCost = 0;
@@ -151,6 +145,9 @@ void QQmlCodeModel::indexSendProgress(int progress)
 
 bool QQmlCodeModel::indexCancelled()
 {
+    QMutexLocker l(&m_mutex);
+    if (m_state == State::Stopping)
+        return true;
     return false;
 }
 
@@ -184,18 +181,10 @@ void QQmlCodeModel::indexDirectory(const QString &path, int depthLeft)
         QFileInfo fInfo(fPath);
         QString cPath = fInfo.canonicalFilePath();
         if (!cPath.isEmpty()) {
-            bool isNew = false;
-            newCurrent.loadFile(cPath, fPath,
-                                [&isNew](Path, DomItem &oldValue, DomItem &newValue) {
-                                    if (oldValue != newValue)
-                                        isNew = true;
-                                },
-                                {});
+            newCurrent.loadBuiltins();
+            newCurrent.loadFile(cPath, fPath, [](Path, DomItem &, DomItem &) {}, {});
             newCurrent.loadPendingDependencies();
-            if (isNew) {
-                newCurrent.commitToBase();
-                m_currentEnv.makeCopy(DomItem::CopyOption::EnvConnected).item();
-            }
+            newCurrent.commitToBase(m_validEnv.ownerAs<DomEnvironment>());
         }
         ++iFile;
         {
@@ -224,9 +213,7 @@ void QQmlCodeModel::addDirectory(const QString &path, int depthLeft)
         return;
     {
         QMutexLocker l(&m_mutex);
-        auto it = m_toIndex.begin();
-        auto end = m_toIndex.end();
-        while (it != end) {
+        for (auto it = m_toIndex.begin(); it != m_toIndex.end();) {
             if (it->path.startsWith(path)) {
                 if (it->path.size() == path.size())
                     return;
@@ -236,6 +223,7 @@ void QQmlCodeModel::addDirectory(const QString &path, int depthLeft)
                 }
             } else if (path.startsWith(it->path) && path.at(it->path.size()) == u'/')
                 return;
+            ++it;
         }
         m_toIndex.append({ path, depthLeft });
     }
@@ -263,49 +251,49 @@ void QQmlCodeModel::removeDirectory(const QString &path)
         currentEnvPtr->removePath(path);
 }
 
-QString QQmlCodeModel::uri2Path(const QByteArray &uri, UriLookup options)
+QString QQmlCodeModel::url2Path(const QByteArray &url, UrlLookup options)
 {
     QString res;
     {
         QMutexLocker l(&m_mutex);
-        res = m_uri2path.value(uri);
+        res = m_url2path.value(url);
     }
-    if (!res.isEmpty() && options == UriLookup::Caching)
+    if (!res.isEmpty() && options == UrlLookup::Caching)
         return res;
-    QUrl url(QString::fromUtf8(uri));
-    QFileInfo f(url.toLocalFile());
+    QUrl qurl(QString::fromUtf8(url));
+    QFileInfo f(qurl.toLocalFile());
     QString cPath = f.canonicalFilePath();
     if (cPath.isEmpty())
         cPath = f.filePath();
     {
         QMutexLocker l(&m_mutex);
         if (!res.isEmpty() && res != cPath)
-            m_path2uri.remove(res);
-        m_uri2path.insert(uri, cPath);
-        m_path2uri.insert(cPath, uri);
+            m_path2url.remove(res);
+        m_url2path.insert(url, cPath);
+        m_path2url.insert(cPath, url);
     }
     return cPath;
 }
 
-void QQmlCodeModel::newOpenFile(const QByteArray &uri, int version, const QString &docText)
+void QQmlCodeModel::newOpenFile(const QByteArray &url, int version, const QString &docText)
 {
     {
         QMutexLocker l(&m_mutex);
-        auto &openDoc = m_openDocuments[uri];
+        auto &openDoc = m_openDocuments[url];
         if (!openDoc.textDocument)
             openDoc.textDocument = std::make_shared<Utils::TextDocument>();
         QMutexLocker l2(openDoc.textDocument->mutex());
         openDoc.textDocument->setVersion(version);
         openDoc.textDocument->setPlainText(docText);
     }
-    addOpenToUpdate(uri);
+    addOpenToUpdate(url);
     openNeedUpdate();
 }
 
-OpenDocument QQmlCodeModel::openDocumentByUri(const QByteArray &uri)
+OpenDocument QQmlCodeModel::openDocumentByUrl(const QByteArray &url)
 {
     QMutexLocker l(&m_mutex);
-    return m_openDocuments.value(uri);
+    return m_openDocuments.value(url);
 }
 
 void QQmlCodeModel::indexNeedsUpdate()
@@ -338,17 +326,19 @@ bool QQmlCodeModel::indexSome()
         m_toIndex.removeLast();
     }
     bool hasMore = false;
-    auto guard = qScopeGuard([this, &hasMore]() {
-        QMutexLocker l(&m_mutex);
-        if (m_toIndex.isEmpty()) {
-            if (--m_nIndexInProgress == 0)
-                indexEnd();
-            hasMore = false;
-        } else {
-            hasMore = true;
-        }
-    });
-    indexDirectory(toIndex.path, toIndex.leftDepth);
+    {
+        auto guard = qScopeGuard([this, &hasMore]() {
+            QMutexLocker l(&m_mutex);
+            if (m_toIndex.isEmpty()) {
+                if (--m_nIndexInProgress == 0)
+                    indexEnd();
+                hasMore = false;
+            } else {
+                hasMore = true;
+            }
+        });
+        indexDirectory(toIndex.path, toIndex.leftDepth);
+    }
     return hasMore;
 }
 
@@ -415,34 +405,17 @@ void QQmlCodeModel::openUpdateEnd()
     qCDebug(codeModelLog) << "openUpdateEnd";
 }
 
-DomItem QQmlCodeModel::validDocForUpdate(DomItem &item)
+void QQmlCodeModel::newDocForOpenFile(const QByteArray &url, int version, const QString &docText)
 {
-    if (item.field(Fields::isValid).value().toBool(false)) {
-        if (auto envPtr = m_validEnv.ownerAs<DomEnvironment>()) {
-            switch (item.fileObject().internalKind()) {
-            case DomType::QmlFile:
-                envPtr->addQmlFile(item.fileObject().ownerAs<QmlFile>());
-                break;
-            case DomType::JsFile:
-                envPtr->addJsFile(item.fileObject().ownerAs<JsFile>());
-                break;
-            default:
-                qCWarning(lspServerLog)
-                        << "Unexpected file type " << item.fileObject().internalKindStr();
-                return DomItem();
-            }
-            return m_validEnv.path(item.canonicalPath());
-        }
-    }
-    return DomItem();
-}
-
-void QQmlCodeModel::newDocForOpenFile(const QByteArray &uri, int version, const QString &docText)
-{
-    qCDebug(codeModelLog) << "updating doc" << uri << "to version" << version << "("
+    qCDebug(codeModelLog) << "updating doc" << url << "to version" << version << "("
                           << docText.length() << "chars)";
     DomItem newCurrent = m_currentEnv.makeCopy(DomItem::CopyOption::EnvConnected).item();
-    QString fPath = uri2Path(uri, UriLookup::ForceLookup);
+    QStringList loadPaths = buildPathsForFileUrl(url);
+    loadPaths.append(QLibraryInfo::path(QLibraryInfo::QmlImportsPath));
+    if (std::shared_ptr<DomEnvironment> newCurrentPtr = newCurrent.ownerAs<DomEnvironment>()) {
+        newCurrentPtr->setLoadPaths(loadPaths);
+    }
+    QString fPath = url2Path(url, UrlLookup::ForceLookup);
     Path p;
     newCurrent.loadFile(
             fPath, fPath, docText, QDateTime::currentDateTimeUtc(),
@@ -450,22 +423,21 @@ void QQmlCodeModel::newDocForOpenFile(const QByteArray &uri, int version, const 
             {});
     newCurrent.loadPendingDependencies();
     if (p) {
-        newCurrent.commitToBase();
+        newCurrent.commitToBase(m_validEnv.ownerAs<DomEnvironment>());
         DomItem item = m_currentEnv.path(p);
-        DomItem vDoc = validDocForUpdate(item);
         {
             QMutexLocker l(&m_mutex);
-            OpenDocument &doc = m_openDocuments[uri];
+            OpenDocument &doc = m_openDocuments[url];
             if (!doc.textDocument) {
                 qCWarning(lspServerLog)
-                        << "ignoring update to closed document" << QString::fromUtf8(uri);
+                        << "ignoring update to closed document" << QString::fromUtf8(url);
                 return;
             } else {
                 QMutexLocker l(doc.textDocument->mutex());
                 if (doc.textDocument->version() && *doc.textDocument->version() > version) {
                     qCWarning(lspServerLog)
                             << "docUpdate: version" << version << "of document"
-                            << QString::fromUtf8(uri) << "is not the latest anymore";
+                            << QString::fromUtf8(url) << "is not the latest anymore";
                     return;
                 }
             }
@@ -473,40 +445,174 @@ void QQmlCodeModel::newDocForOpenFile(const QByteArray &uri, int version, const 
                 doc.snapshot.docVersion = version;
                 doc.snapshot.doc = item;
             } else {
-                qCWarning(lspServerLog) << "skippig update of current doc to obsolete version"
-                                        << version << "of document" << QString::fromUtf8(uri);
+                qCWarning(lspServerLog) << "skipping update of current doc to obsolete version"
+                                        << version << "of document" << QString::fromUtf8(url);
             }
-            if (vDoc) {
+            if (item.field(Fields::isValid).value().toBool(false)) {
                 if (!doc.snapshot.validDocVersion || *doc.snapshot.validDocVersion < version) {
+                    DomItem vDoc = m_validEnv.path(p);
                     doc.snapshot.validDocVersion = version;
                     doc.snapshot.validDoc = vDoc;
                 } else {
                     qCWarning(lspServerLog) << "skippig update of valid doc to obsolete version"
-                                            << version << "of document" << QString::fromUtf8(uri);
+                                            << version << "of document" << QString::fromUtf8(url);
                 }
             } else {
                 qCWarning(lspServerLog)
                         << "avoid update of validDoc to " << version << "of document"
-                        << QString::fromUtf8(uri) << "as it is invalid";
+                        << QString::fromUtf8(url) << "as it is invalid";
             }
         }
     }
     if (codeModelLog().isDebugEnabled()) {
-        qCDebug(codeModelLog) << "finished update doc of " << uri << "to version" << version;
-        snapshotByUri(uri).dump(qDebug() << "postSnapshot",
+        qCDebug(codeModelLog) << "finished update doc of " << url << "to version" << version;
+        snapshotByUrl(url).dump(qDebug() << "postSnapshot",
                                 OpenDocumentSnapshot::DumpOption::AllCode);
     }
-    // we should update the scope in the future thus call addOpen(uri)
-    emit updatedSnapshot(uri);
+    // we should update the scope in the future thus call addOpen(url)
+    emit updatedSnapshot(url);
 }
 
-void QQmlCodeModel::closeOpenFile(const QByteArray &uri)
+void QQmlCodeModel::closeOpenFile(const QByteArray &url)
 {
     QMutexLocker l(&m_mutex);
-    m_openDocuments.remove(uri);
+    m_openDocuments.remove(url);
 }
 
-void QQmlCodeModel::openUpdate(const QByteArray &uri)
+void QQmlCodeModel::setRootUrls(const QList<QByteArray> &urls)
+{
+    QMutexLocker l(&m_mutex);
+    m_rootUrls = urls;
+}
+
+void QQmlCodeModel::addRootUrls(const QList<QByteArray> &urls)
+{
+    QMutexLocker l(&m_mutex);
+    for (const QByteArray &url : urls) {
+        if (!m_rootUrls.contains(url))
+            m_rootUrls.append(url);
+    }
+}
+
+void QQmlCodeModel::removeRootUrls(const QList<QByteArray> &urls)
+{
+    QMutexLocker l(&m_mutex);
+    for (const QByteArray &url : urls)
+        m_rootUrls.removeOne(url);
+}
+
+QList<QByteArray> QQmlCodeModel::rootUrls() const
+{
+    QMutexLocker l(&m_mutex);
+    return m_rootUrls;
+}
+
+QStringList QQmlCodeModel::buildPathsForRootUrl(const QByteArray &url)
+{
+    QMutexLocker l(&m_mutex);
+    return m_buildPathsForRootUrl.value(url);
+}
+
+static bool isNotSeparator(char c)
+{
+    return c != '/';
+}
+
+QStringList QQmlCodeModel::buildPathsForFileUrl(const QByteArray &url)
+{
+    QList<QByteArray> roots;
+    {
+        QMutexLocker l(&m_mutex);
+        roots = m_buildPathsForRootUrl.keys();
+    }
+    // we want to longest match to be first, as it should override shorter matches
+    std::sort(roots.begin(), roots.end(), [](const QByteArray &el1, const QByteArray &el2) {
+        if (el1.length() > el2.length())
+            return true;
+        if (el1.length() < el2.length())
+            return false;
+        return el1 < el2;
+    });
+    QStringList buildPaths;
+    QStringList defaultValues;
+    if (!roots.isEmpty() && roots.last().isEmpty())
+        roots.removeLast();
+    QByteArray urlSlash(url);
+    if (!urlSlash.isEmpty() && isNotSeparator(urlSlash.at(urlSlash.length() - 1)))
+        urlSlash.append('/');
+    // look if the file has a know prefix path
+    for (const QByteArray &root : roots) {
+        if (urlSlash.startsWith(root)) {
+            buildPaths += buildPathsForRootUrl(root);
+            break;
+        }
+    }
+    QString path = url2Path(url);
+    if (buildPaths.isEmpty() && m_settings) {
+        // look in the settings
+        m_settings->search(path);
+        QString buildDir = QStringLiteral(u"buildDir");
+        if (m_settings->isSet(buildDir))
+            buildPaths += m_settings->value(buildDir).toString().split(',', Qt::SkipEmptyParts);
+    }
+    if (buildPaths.isEmpty()) {
+        // default values
+        buildPaths += buildPathsForRootUrl(QByteArray());
+    }
+    // env variable
+    QStringList envPaths = qEnvironmentVariable("QMLLS_BUILD_DIRS").split(',', Qt::SkipEmptyParts);
+    buildPaths += envPaths;
+    if (buildPaths.isEmpty()) {
+        // heuristic to find build dir
+        QDir d(path);
+        d.setNameFilters(QStringList({ u"build*"_s }));
+        const int maxDirDepth = 8;
+        int iDir = maxDirDepth;
+        QString dirName = d.dirName();
+        QDateTime lastModified;
+        while (d.cdUp() && --iDir > 0) {
+            for (const QFileInfo &fInfo : d.entryInfoList(QDir::Dirs)) {
+                if (fInfo.completeBaseName() == u"build"
+                    || fInfo.completeBaseName().startsWith(u"build-%1"_s.arg(dirName))) {
+                    if (iDir > 1)
+                        iDir = 1;
+                    if (!lastModified.isValid() || lastModified < fInfo.lastModified()) {
+                        buildPaths.clear();
+                        buildPaths.append(fInfo.absoluteFilePath());
+                    }
+                }
+            }
+        }
+    }
+    // add dependent build directories
+    QStringList res;
+    std::reverse(buildPaths.begin(), buildPaths.end());
+    const int maxDeps = 4;
+    while (!buildPaths.isEmpty()) {
+        QString bPath = buildPaths.last();
+        buildPaths.removeLast();
+        res += bPath;
+        if (QFile::exists(bPath + u"/_deps") && bPath.split(u"/_deps/"_s).size() < maxDeps) {
+            QDir d(bPath + u"/_deps");
+            for (const QFileInfo &fInfo : d.entryInfoList(QDir::Dirs))
+                buildPaths.append(fInfo.absoluteFilePath());
+        }
+    }
+    return res;
+}
+
+void QQmlCodeModel::setBuildPathsForRootUrl(QByteArray url, const QStringList &paths)
+{
+    QMutexLocker l(&m_mutex);
+    if (!url.isEmpty() && isNotSeparator(url.at(url.length() - 1)))
+        url.append('/');
+    if (paths.isEmpty())
+        m_buildPathsForRootUrl.remove(url);
+    else
+        m_buildPathsForRootUrl.insert(url, paths);
+}
+
+void QQmlCodeModel::openUpdate(const QByteArray &url)
 {
     bool updateDoc = false;
     bool updateScope = false;
@@ -516,7 +622,7 @@ void QQmlCodeModel::openUpdate(const QByteArray &uri)
     std::shared_ptr<Utils::TextDocument> document;
     {
         QMutexLocker l(&m_mutex);
-        OpenDocument &doc = m_openDocuments[uri];
+        OpenDocument &doc = m_openDocuments[url];
         document = doc.textDocument;
         if (!document)
             return;
@@ -542,46 +648,46 @@ void QQmlCodeModel::openUpdate(const QByteArray &uri)
         }
     }
     if (updateDoc) {
-        newDocForOpenFile(uri, *rNow, docText);
+        newDocForOpenFile(url, *rNow, docText);
     }
     if (updateScope) {
         // to do
     }
 }
 
-void QQmlCodeModel::addOpenToUpdate(const QByteArray &uri)
+void QQmlCodeModel::addOpenToUpdate(const QByteArray &url)
 {
     QMutexLocker l(&m_mutex);
-    m_openDocumentsToUpdate.insert(uri);
+    m_openDocumentsToUpdate.insert(url);
 }
 
 QDebug OpenDocumentSnapshot::dump(QDebug dbg, DumpOptions options)
 {
     dbg.noquote().nospace() << "{";
-    dbg << "  uri:" << QString::fromUtf8(uri) << "\n";
-    dbg << "  docVersion:" << (docVersion ? QString::number(*docVersion) : u"*none*"_qs) << "\n";
+    dbg << "  url:" << QString::fromUtf8(url) << "\n";
+    dbg << "  docVersion:" << (docVersion ? QString::number(*docVersion) : u"*none*"_s) << "\n";
     if (options & DumpOption::LatestCode) {
         dbg << "  doc: ------------\n"
             << doc.field(Fields::code).value().toString() << "\n==========\n";
     } else {
         dbg << u"  doc:"
-            << (doc ? u"%1chars"_qs.arg(doc.field(Fields::code).value().toString().length())
-                    : u"*none*"_qs)
+            << (doc ? u"%1chars"_s.arg(doc.field(Fields::code).value().toString().length())
+                    : u"*none*"_s)
             << "\n";
     }
     dbg << "  validDocVersion:"
-        << (validDocVersion ? QString::number(*validDocVersion) : u"*none*"_qs) << "\n";
+        << (validDocVersion ? QString::number(*validDocVersion) : u"*none*"_s) << "\n";
     if (options & DumpOption::ValidCode) {
         dbg << "  validDoc: ------------\n"
             << validDoc.field(Fields::code).value().toString() << "\n==========\n";
     } else {
         dbg << u"  validDoc:"
-            << (validDoc ? u"%1chars"_qs.arg(
+            << (validDoc ? u"%1chars"_s.arg(
                         validDoc.field(Fields::code).value().toString().length())
-                         : u"*none*"_qs)
+                         : u"*none*"_s)
             << "\n";
     }
-    dbg << "  scopeVersion:" << (scopeVersion ? QString::number(*scopeVersion) : u"*none*"_qs)
+    dbg << "  scopeVersion:" << (scopeVersion ? QString::number(*scopeVersion) : u"*none*"_s)
         << "\n";
     dbg << "  scopeDependenciesLoadTime:" << scopeDependenciesLoadTime << "\n";
     dbg << "  scopeDependenciesChanged" << scopeDependenciesChanged << "\n";

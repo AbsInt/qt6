@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtQml module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <QCoreApplication>
 #include <QStringList>
@@ -48,10 +23,6 @@
 #include <private/qresourcerelocater_p.h>
 
 #include <algorithm>
-
-QT_BEGIN_NAMESPACE
-Q_DECLARE_LOGGING_CATEGORY(lcAotCompiler);
-QT_END_NAMESPACE
 
 static bool argumentsFromCommandLineAndFile(QStringList& allArguments, const QStringList &arguments)
 {
@@ -95,6 +66,8 @@ int main(int argc, char **argv)
     parser.addHelpOption();
     parser.addVersionOption();
 
+    QCommandLineOption bareOption(QStringLiteral("bare"), QCoreApplication::translate("main", "Do not include default import directories. This may be used to run qmlcachegen on a project using a different Qt version."));
+    parser.addOption(bareOption);
     QCommandLineOption filterResourceFileOption(QStringLiteral("filter-resource-file"), QCoreApplication::translate("main", "Filter out QML/JS files from a resource file that can be cached ahead of time instead"));
     parser.addOption(filterResourceFileOption);
     QCommandLineOption resourceFileMappingOption(QStringLiteral("resource-file-mapping"), QCoreApplication::translate("main", "Path from original resource file to new one"), QCoreApplication::translate("main", "old-name=new-name"));
@@ -263,26 +236,23 @@ int main(int argc, char **argv)
             if (parser.isSet(importPathOption))
                 importPaths = parser.values(importPathOption);
 
-            importPaths.append(QLibraryInfo::path(QLibraryInfo::QmlImportsPath));
+            if (!parser.isSet(bareOption))
+                importPaths.append(QLibraryInfo::path(QLibraryInfo::QmlImportsPath));
 
             QQmlJSImporter importer(
                         importPaths, parser.isSet(resourceOption) ? &fileMapper : nullptr);
             QQmlJSLogger logger;
 
             // Always trigger the qFatal() on "pragma Strict" violations.
-            logger.setCategoryError(Log_Compiler, true);
+            logger.setCategoryLevel(Log_Compiler, QtCriticalMsg);
+            logger.setCategoryIgnored(Log_Compiler, false);
 
             // By default, we're completely silent,
             // as the lcAotCompiler category default is QtFatalMsg
-            if (lcAotCompiler().isDebugEnabled())
-                logger.setCategoryLevel(Log_Compiler, QtDebugMsg);
-            else if (lcAotCompiler().isInfoEnabled())
-                logger.setCategoryLevel(Log_Compiler, QtInfoMsg);
-            else if (lcAotCompiler().isWarningEnabled())
-                logger.setCategoryLevel(Log_Compiler, QtWarningMsg);
-            else if (lcAotCompiler().isCriticalEnabled())
-                logger.setCategoryLevel(Log_Compiler, QtCriticalMsg);
-            else
+            const bool loggingEnabled = lcAotCompiler().isDebugEnabled()
+                    || lcAotCompiler().isInfoEnabled() || lcAotCompiler().isWarningEnabled()
+                    || lcAotCompiler().isCriticalEnabled();
+            if (!loggingEnabled)
                 logger.setSilent(true);
 
             QQmlJSAotCompiler cppCodeGen(
@@ -292,6 +262,14 @@ int main(int argc, char **argv)
                                  /* storeSourceLocation */ true)) {
                 error.augment(QStringLiteral("Error compiling qml file: ")).print();
                 return EXIT_FAILURE;
+            }
+
+            QList<QQmlJS::DiagnosticMessage> warnings = importer.takeGlobalWarnings();
+
+            if (!warnings.isEmpty()) {
+                logger.log(QStringLiteral("Type warnings occurred while compiling file:"),
+                           Log_Import, QQmlJS::SourceLocation());
+                logger.processMessages(warnings, Log_Import);
             }
         }
     } else if (inputFile.endsWith(QLatin1String(".js")) || inputFile.endsWith(QLatin1String(".mjs"))) {

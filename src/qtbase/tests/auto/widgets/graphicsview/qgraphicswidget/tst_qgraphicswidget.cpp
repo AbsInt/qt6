@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 
 #include <QTest>
@@ -1744,7 +1719,7 @@ void tst_QGraphicsWidget::updateFocusChainWhenChildDie()
     view.resize(200, 150);
     view.move(availableGeometry.topLeft() + QPoint(50, 50));
     view.show();
-    QApplication::setActiveWindow(&view);
+    view.activateWindow();
     QVERIFY(QTest::qWaitForWindowActive(&view));
 
     // delete item in focus chain with no focus and verify chain
@@ -1773,13 +1748,8 @@ void tst_QGraphicsWidget::updateFocusChainWhenChildDie()
     w->setParentItem(parent);
     //We don't crash perfect
     QVERIFY(w);
-    const QPoint center(view.viewport()->width() / 2, view.viewport()->height() / 2);
-    QTest::mouseMove(view.viewport(), center);
-    QTest::mouseClick(view.viewport(), Qt::LeftButton, {}, center);
-#ifdef Q_OS_MAC
-    QEXPECT_FAIL("", "QTBUG-23699", Continue);
-#endif
-    QTRY_COMPARE(qApp->activeWindow(), static_cast<QWidget *>(&view));
+    view.activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(&view));
     QTRY_COMPARE(scene.focusItem(), static_cast<QGraphicsItem *>(w));
 }
 
@@ -2962,11 +2932,9 @@ void tst_QGraphicsWidget::respectHFW()
         view->grabMouse();
         // move both mouse cursor and set correct event in order to emulate resize
         QTest::mouseMove(view->viewport(), view->mapFromScene(60, 30), 200);
-        QMouseEvent e = QMouseEvent(QEvent::MouseMove,
-                      view->mapFromScene(60, 20),
-                      Qt::NoButton,
-                      Qt::LeftButton,
-                      Qt::NoModifier);
+        auto pos = view->mapFromScene(60, 20);
+        QMouseEvent e(QEvent::MouseMove, pos, view->mapToGlobal(pos),
+                      Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
         QApplication::sendEvent(view->viewport(), &e);
         view->releaseMouse();
     }

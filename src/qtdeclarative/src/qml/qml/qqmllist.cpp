@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtQml module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qqmllist.h"
 #include "qqmllist_p.h"
@@ -59,7 +23,8 @@ QQmlListReferencePrivate::QQmlListReferencePrivate()
 {
 }
 
-QQmlListReference QQmlListReferencePrivate::init(const QQmlListProperty<QObject> &prop, QMetaType propType, QQmlEngine *engine)
+QQmlListReference QQmlListReferencePrivate::init(
+        const QQmlListProperty<QObject> &prop, QMetaType propType)
 {
     QQmlListReference rv;
 
@@ -67,7 +32,6 @@ QQmlListReference QQmlListReferencePrivate::init(const QQmlListProperty<QObject>
 
     rv.d = new QQmlListReferencePrivate;
     rv.d->object = prop.object;
-    rv.d->setEngine(engine);
     rv.d->property = prop;
     rv.d->propertyType = propType;
 
@@ -124,6 +88,39 @@ QQmlListReference::QQmlListReference()
 {
 }
 
+#if QT_DEPRECATED_SINCE(6, 4)
+/*!
+\since 6.1
+\obsolete [6.4] Use the constructors without QQmlEngine argument instead.
+
+Constructs a QQmlListReference from a QVariant \a variant containing a QQmlListProperty. If
+\a variant does not contain a list property, an invalid QQmlListReference is created. If the object
+owning the list property is destroyed after the reference is constructed, it will automatically
+become invalid.  That is, it is safe to hold QQmlListReference instances even after the object is
+deleted.
+
+The \a engine is unused.
+*/
+QQmlListReference::QQmlListReference(const QVariant &variant, [[maybe_unused]] QQmlEngine *engine)
+    : QQmlListReference(variant)
+{}
+
+/*!
+\obsolete [6.4] Use the constructors without QQmlEngine argument instead.
+
+Constructs a QQmlListReference for \a object's \a property.  If \a property is not a list
+property, an invalid QQmlListReference is created.  If \a object is destroyed after
+the reference is constructed, it will automatically become invalid.  That is, it is safe to hold
+QQmlListReference instances even after \a object is deleted.
+
+The \a engine is unused.
+*/
+QQmlListReference::QQmlListReference(QObject *object, const char *property,
+                                     [[maybe_unused]] QQmlEngine *engine)
+    : QQmlListReference(object, property)
+{}
+#endif
+
 /*!
 \since 6.1
 
@@ -132,12 +129,8 @@ Constructs a QQmlListReference from a QVariant \a variant containing a QQmlListP
 owning the list property is destroyed after the reference is constructed, it will automatically
 become invalid.  That is, it is safe to hold QQmlListReference instances even after the object is
 deleted.
-
-The \a engine is required to look up the element type, which may be a dynamically created QML type.
-If it's omitted, only pre-registered types are available. The element type is needed when inserting
-values into the list and when the value meta type is explicitly retrieved.
 */
-QQmlListReference::QQmlListReference(const QVariant &variant, QQmlEngine *engine)
+QQmlListReference::QQmlListReference(const QVariant &variant)
     : d(nullptr)
 {
     const QMetaType t = variant.metaType();
@@ -146,7 +139,6 @@ QQmlListReference::QQmlListReference(const QVariant &variant, QQmlEngine *engine
 
     d = new QQmlListReferencePrivate;
     d->propertyType = t;
-    d->setEngine(engine);
 
     d->property.~QQmlListProperty();
     t.construct(&d->property, variant.constData());
@@ -159,26 +151,21 @@ Constructs a QQmlListReference for \a object's \a property.  If \a property is n
 property, an invalid QQmlListReference is created.  If \a object is destroyed after
 the reference is constructed, it will automatically become invalid.  That is, it is safe to hold
 QQmlListReference instances even after \a object is deleted.
-
-The \a engine is required to look up the element type, which may be a dynamically created QML type.
-If it's omitted, only pre-registered types are available. The element type is needed when inserting
-values into the list and when the value meta type is explicitly retrieved.
 */
-QQmlListReference::QQmlListReference(QObject *object, const char *property, QQmlEngine *engine)
-: d(nullptr)
+QQmlListReference::QQmlListReference(QObject *object, const char *property)
+    : d(nullptr)
 {
     if (!object || !property) return;
 
     QQmlPropertyData local;
-    QQmlPropertyData *data =
-        QQmlPropertyCache::property(engine, object, QLatin1String(property), nullptr, &local);
+    const QQmlPropertyData *data =
+        QQmlPropertyCache::property(object, QLatin1String(property), nullptr, &local);
 
     if (!data || !data->isQList()) return;
 
     d = new QQmlListReferencePrivate;
     d->object = object;
     d->propertyType = data->propType();
-    d->setEngine(engine);
 
     void *args[] = { &d->property, nullptr };
     QMetaObject::metacall(object, QMetaObject::ReadProperty, data->coreIndex(), args);

@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtQml module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**/
-#include "qqmldommoduleindex_p.h"
+// Copyright (C) 2020 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 #include "qqmldomtop_p.h"
 #include "qqmldomelements_p.h"
 
@@ -131,7 +95,6 @@ ModuleIndex::ModuleIndex(const ModuleIndex &o)
         ensureMinorVersion((*it)->version.minorVersion);
         ++it;
     }
-    QMutexLocker l(mutex());
 }
 
 ModuleIndex::~ModuleIndex()
@@ -240,9 +203,9 @@ QList<DomItem> ModuleIndex::autoExports(DomItem &self) const
         DomItem autoExports = self.path(p).field(Fields::autoExports);
         for (DomItem i : autoExports.values()) {
             if (const ModuleAutoExport *iPtr = i.as<ModuleAutoExport>()) {
-                if (!knownAutoImportUris.contains(iPtr->import.uri)
+                if (!knownAutoImportUris.contains(iPtr->import.uri.toString())
                     || !knownExports.contains(*iPtr)) {
-                    knownAutoImportUris.insert(iPtr->import.uri);
+                    knownAutoImportUris.insert(iPtr->import.uri.toString());
                     knownExports.append(*iPtr);
                     res.append(i);
                     cachedPaths.append(i.canonicalPath());
@@ -339,7 +302,7 @@ ModuleScope *ModuleIndex::ensureMinorVersion(int minorVersion)
     }
     ModuleScope *res = nullptr;
     ModuleScope *newScope = new ModuleScope(m_uri, Version(majorVersion(), minorVersion));
-    auto cleanup = qScopeGuard([&newScope] { free(newScope); });
+    auto cleanup = qScopeGuard([&newScope] { delete newScope; });
     {
         QMutexLocker l(mutex());
         auto it = m_moduleScope.find(minorVersion);
@@ -382,7 +345,7 @@ void ModuleIndex::mergeWith(std::shared_ptr<ModuleIndex> o)
 
 QList<Path> ModuleIndex::qmldirsToLoad(DomItem &self)
 {
-    Q_ASSERT(m_qmldirPaths.isEmpty() && "ModuleIndex::qmldirsToLoad called twice");
+    // this always checks the filesystem to the qmldir file to load
     DomItem env = self.environment();
     std::shared_ptr<DomEnvironment> envPtr = env.ownerAs<DomEnvironment>();
     QStringList subPathComponents = uri().split(u'.');
@@ -415,7 +378,7 @@ QList<Path> ModuleIndex::qmldirsToLoad(DomItem &self)
     }
     if (!dirPath.isEmpty()) {
         QMutexLocker l(mutex());
-        m_qmldirPaths.append(Paths::qmldirFilePath(dirPath));
+        m_qmldirPaths = QList<Path>({ Paths::qmldirFilePath(dirPath) });
     } else if (uri() != u"QML") {
         addErrorLocal(myExportErrors()
                               .warning(tr("Failed to find main qmldir file for %1 %2")

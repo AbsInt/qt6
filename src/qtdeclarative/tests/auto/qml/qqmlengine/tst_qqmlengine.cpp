@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <QQmlEngine>
 #include <QQmlContext>
@@ -93,6 +68,8 @@ private slots:
     void attachedObjectAsObject();
     void listPropertyAsQJSValue();
     void stringToColor();
+    void qobjectToString();
+    void qtNamespaceInQtObject();
 
 public slots:
     QObject *createAQObjectForOwnershipTest ()
@@ -1085,6 +1062,7 @@ void tst_qqmlengine::qrcUrls()
     {
         QQmlRefPointer<QQmlTypeData> oneQml(pEngine->typeLoader.getType(QUrl("qrc:/qrcurls.qml")));
         QVERIFY(oneQml.data() != nullptr);
+        QVERIFY(!oneQml->backupSourceCode().isValid());
         QQmlRefPointer<QQmlTypeData> twoQml(pEngine->typeLoader.getType(QUrl("qrc:///qrcurls.qml")));
         QVERIFY(twoQml.data() != nullptr);
         QCOMPARE(oneQml.data(), twoQml.data());
@@ -1093,6 +1071,7 @@ void tst_qqmlengine::qrcUrls()
     {
         QQmlRefPointer<QQmlTypeData> oneJS(pEngine->typeLoader.getType(QUrl("qrc:/qrcurls.js")));
         QVERIFY(oneJS.data() != nullptr);
+        QVERIFY(!oneJS->backupSourceCode().isValid());
         QQmlRefPointer<QQmlTypeData> twoJS(pEngine->typeLoader.getType(QUrl("qrc:///qrcurls.js")));
         QVERIFY(twoJS.data() != nullptr);
         QCOMPARE(oneJS.data(), twoJS.data());
@@ -1366,7 +1345,9 @@ void tst_qqmlengine::executeRuntimeFunction()
 
     const QUrl url = testFileUrl("runtimeFunctions.qml");
     QQmlComponent component(&engine, url);
+    QVERIFY2(component.isReady(), qPrintable(component.errorString()));
     QScopedPointer<QObject> dummy(component.create());
+    QVERIFY(dummy);
 
     // getConstantValue():
     int constant = 0;
@@ -1395,6 +1376,20 @@ void tst_qqmlengine::executeRuntimeFunction()
                        QMetaType::fromType<QString>() };
     priv->executeRuntimeFunction(url, /* index = */ 2, dummy.get(), /* argc = */ 2, a2, t2);
     QCOMPARE(concatenated, str1 + str2);
+
+    // capture `this`:
+    QCOMPARE(dummy->property("foo").toInt(), 42);
+    QCOMPARE(dummy->property("bar").toInt(), 0);
+    priv->executeRuntimeFunction(url, /* index = */ 4, dummy.get());
+    QCOMPARE(dummy->property("bar").toInt(), 1 + 42 + 1);
+
+    QCOMPARE(dummy->property("baz").toInt(), -100);
+    int y = 1;
+    void *a3[] = { nullptr, const_cast<void *>(reinterpret_cast<const void *>(&y)) };
+    QMetaType t3[] = { QMetaType::fromType<void>(), QMetaType::fromType<int>() };
+    priv->executeRuntimeFunction(url, /* index = */ 6, dummy.get(), 1, a3, t3);
+    QCOMPARE(dummy->property("bar").toInt(), -98);
+    QCOMPARE(dummy->property("baz").toInt(), -100);
 }
 
 class WithQProperty : public QObject
@@ -1552,6 +1547,58 @@ void tst_qqmlengine::stringToColor()
     QCOMPARE(variant.metaType(), metaType);
 
     QCOMPARE(color, variant);
+}
+
+class WithToString : public QObject
+{
+    Q_OBJECT
+    QML_ELEMENT
+public:
+    Q_INVOKABLE QString toString() const { return QStringLiteral("things"); }
+};
+
+class WithToNumber : public QObject
+{
+    Q_OBJECT
+    QML_ELEMENT
+public:
+    Q_INVOKABLE int toString() const { return 4; }
+};
+
+void tst_qqmlengine::qobjectToString()
+{
+    qmlRegisterTypesAndRevisions<WithToString>("WithToString", 1);
+    qmlRegisterTypesAndRevisions<WithToNumber>("WithToString", 1);
+    QQmlEngine engine;
+    QQmlComponent c(&engine);
+    c.setData(R"(
+        import WithToString
+        import QtQml
+
+        WithToString {
+            id: self
+            property QtObject weird: WithToNumber {}
+            objectName: toString() + ' ' + self.toString() + ' ' + weird.toString()
+        }
+    )", QUrl());
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+    QScopedPointer<QObject> o(c.create());
+    QCOMPARE(o->objectName(), QStringLiteral("things things 4"));
+}
+
+void tst_qqmlengine::qtNamespaceInQtObject()
+{
+    QQmlEngine engine;
+    QJSValue qtObject = engine.globalObject().property(QStringLiteral("Qt"));
+
+    // Qt namespace enums are there.
+    QCOMPARE(qtObject.property(QStringLiteral("Checked")).toInt(), 2);
+
+    // QtObject methods are also there.
+    QVERIFY(qtObject.property(QStringLiteral("rect")).isCallable());
+
+    // QObject is also there.
+    QVERIFY(qtObject.hasProperty(QStringLiteral("objectName")));
 }
 
 QTEST_MAIN(tst_qqmlengine)

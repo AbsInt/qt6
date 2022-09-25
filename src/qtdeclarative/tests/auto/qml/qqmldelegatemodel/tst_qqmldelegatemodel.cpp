@@ -1,30 +1,5 @@
-﻿/****************************************************************************
-**
-** Copyright (C) 2019 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2019 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <QtTest/qtest.h>
 #include <QtCore/QConcatenateTablesProxyModel>
@@ -50,6 +25,7 @@ private slots:
     void filterOnGroup_removeWhenCompleted();
     void contextAccessedByHandler();
     void redrawUponColumnChange();
+    void nestedDelegates();
 };
 
 class AbstractItemModel : public QAbstractItemModel
@@ -201,6 +177,34 @@ void tst_QQmlDelegateModel::redrawUponColumnChange()
     m1.removeColumn(0);
 
     QCOMPARE(item->property("text").toString(), "Coconut");
+}
+
+void tst_QQmlDelegateModel::nestedDelegates()
+{
+    QQmlEngine engine;
+    QQmlComponent c(&engine, testFileUrl("nestedDelegates.qml"));
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+    QScopedPointer<QObject> o(c.create());
+
+    QQuickItem *item = qobject_cast<QQuickItem *>(o.data());
+    QCOMPARE(item->childItems().length(), 2);
+    for (QQuickItem *child : item->childItems()) {
+        if (child->objectName() != QLatin1String("loader"))
+            continue;
+
+        QCOMPARE(child->childItems().length(), 1);
+        QQuickItem *timeMarks = child->childItems().at(0);
+        const QList<QQuickItem *> children = timeMarks->childItems();
+        QCOMPARE(children.length(), 2);
+
+        // One of them is the repeater, the other one is the rectangle
+        QVERIFY(children.at(0)->objectName() == QLatin1String("zap")
+                 || children.at(1)->objectName() == QLatin1String("zap"));
+        QVERIFY(children.at(0)->objectName().isEmpty() || children.at(1)->objectName().isEmpty());
+
+        return; // loader found
+    }
+    QFAIL("Loader not found");
 }
 
 QTEST_MAIN(tst_QQmlDelegateModel)

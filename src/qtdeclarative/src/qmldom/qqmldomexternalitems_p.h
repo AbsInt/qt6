@@ -1,40 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtQml module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**/
+// Copyright (C) 2020 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+
 #ifndef QQMLDOMEXTERNALITEMS_P_H
 #define QQMLDOMEXTERNALITEMS_P_H
 
@@ -82,7 +48,7 @@ class QMLDOM_EXPORT ExternalOwningItem: public OwningItem {
 public:
     ExternalOwningItem(QString filePath, QDateTime lastDataUpdateAt, Path pathFromTop,
                        int derivedFrom = 0, QString code = QString());
-    ExternalOwningItem(const ExternalOwningItem &o);
+    ExternalOwningItem(const ExternalOwningItem &o) = default;
     QString canonicalFilePath(DomItem &) const override;
     QString canonicalFilePath() const;
     Path canonicalPath(DomItem &) const override;
@@ -149,10 +115,7 @@ public:
     QmlDirectory(QString filePath = QString(), QStringList dirList = QStringList(),
                  QDateTime lastDataUpdateAt = QDateTime::fromMSecsSinceEpoch(0),
                  int derivedFrom = 0);
-    QmlDirectory(const QmlDirectory &o)
-        : ExternalOwningItem(o), m_exports(o.m_exports), m_qmlFiles(o.m_qmlFiles)
-    {
-    }
+    QmlDirectory(const QmlDirectory &o) = default;
 
     std::shared_ptr<QmlDirectory> makeCopy(DomItem &self) const
     {
@@ -161,9 +124,9 @@ public:
 
     bool iterateDirectSubpaths(DomItem &self, DirectVisitor visitor) override;
 
-    QMultiMap<QString, Export> exports() const { return m_exports; }
+    const QMultiMap<QString, Export> &exports() const & { return m_exports; }
 
-    QMultiMap<QString, QString> qmlFiles() const { return m_qmlFiles; }
+    const QMultiMap<QString, QString> &qmlFiles() const & { return m_qmlFiles; }
 
     bool addQmlFilePath(QString relativePath);
 
@@ -194,7 +157,7 @@ public:
                              derivedFrom, code)
     {
     }
-    QmldirFile(const QmldirFile &o);
+    QmldirFile(const QmldirFile &o) = default;
 
     static std::shared_ptr<QmldirFile> fromPathAndCode(QString path, QString code);
 
@@ -205,13 +168,17 @@ public:
 
     bool iterateDirectSubpaths(DomItem &self, DirectVisitor visitor) override;
 
-    QString uri() const { return m_uri; }
+    QmlUri uri() const { return m_uri; }
 
-    QMultiMap<QString, Export> exports() const { return m_exports; }
+    const QSet<int> &majorVersions() const & { return m_majorVersions; }
 
-    QList<Import> imports() const { return m_imports; }
+    const QMultiMap<QString, Export> &exports() const & { return m_exports; }
 
-    QList<Path> qmltypesFilePaths() const { return m_qmltypesFilePaths; }
+    const QList<Import> &imports() const & { return m_imports; }
+
+    const QList<Path> &qmltypesFilePaths() const & { return m_qmltypesFilePaths; }
+
+    QMap<QString, QString> qmlFiles() const;
 
     bool designerSupported() const { return m_qmldir.designerSupported(); }
 
@@ -220,11 +187,14 @@ public:
     QList<ModuleAutoExport> autoExports() const;
     void setAutoExports(const QList<ModuleAutoExport> &autoExport);
 
+    void ensureInModuleIndex(DomItem &self, QString uri);
+
 private:
     void parse();
     void setFromQmldir();
 
-    QString m_uri;
+    QmlUri m_uri;
+    QSet<int> m_majorVersions;
     QQmlDirParser m_qmldir;
     QList<QQmlDirParser::Plugin> m_plugins;
     QList<Import> m_imports;
@@ -251,7 +221,7 @@ public:
         : ExternalOwningItem(filePath, lastDataUpdateAt, pathFromTop, derivedFrom)
     {
     }
-    JsFile(const JsFile &o) : ExternalOwningItem(o), m_rootComponent(o.m_rootComponent) { }
+    JsFile(const JsFile &o) = default;
 
     std::shared_ptr<JsFile> makeCopy(DomItem &self) const
     {
@@ -292,7 +262,7 @@ public:
     }
     void addError(DomItem &self, ErrorMessage msg) override;
 
-    QMultiMap<QString, QmlComponent> components() const { return m_components; }
+    const QMultiMap<QString, QmlComponent> &components() const & { return m_components; }
     void setComponents(const QMultiMap<QString, QmlComponent> &components)
     {
         m_components = components;
@@ -312,15 +282,25 @@ public:
     {
         return m_ast; // avoid making it public? would make moving away from it easier
     }
-    QList<Import> imports() const { return m_imports; }
+    const QList<Import> &imports() const & { return m_imports; }
     void setImports(const QList<Import> &imports) { m_imports = imports; }
     Path addImport(const Import &i)
     {
         index_type idx = index_type(m_imports.length());
         m_imports.append(i);
-        m_importScope.addImport(
-                (i.importId.isEmpty() ? QStringList() : i.importId.split(QChar::fromLatin1('.'))),
-                i.importedPath());
+        if (i.uri.isModule()) {
+            m_importScope.addImport((i.importId.isEmpty()
+                                             ? QStringList()
+                                             : i.importId.split(QChar::fromLatin1('.'))),
+                                    i.importedPath());
+        } else {
+            QString path = i.uri.absoluteLocalPath(canonicalFilePath());
+            if (!path.isEmpty())
+                m_importScope.addImport((i.importId.isEmpty()
+                                                 ? QStringList()
+                                                 : i.importId.split(QChar::fromLatin1('.'))),
+                                        Paths::qmlDirPath(path));
+        }
         return Path::Field(Fields::imports).index(idx);
     }
     std::shared_ptr<QQmlJS::Engine> engine() const { return m_engine; }
@@ -329,7 +309,7 @@ public:
     void setAstComments(std::shared_ptr<AstComments> comm) { m_astComments = comm; }
     FileLocations::Tree fileLocationsTree() const { return m_fileLocationsTree; }
     void setFileLocationsTree(FileLocations::Tree v) { m_fileLocationsTree = v; }
-    QList<Pragma> pragmas() const { return m_pragmas; }
+    const QList<Pragma> &pragmas() const & { return m_pragmas; }
     void setPragmas(QList<Pragma> pragmas) { m_pragmas = pragmas; }
     Path addPragma(const Pragma &pragma)
     {
@@ -337,6 +317,8 @@ public:
         m_pragmas.append(pragma);
         return Path::Field(Fields::pragmas).index(idx);
     }
+    ImportScope &importScope() { return m_importScope; }
+    const ImportScope &importScope() const { return m_importScope; }
 
 private:
     friend class QmlDomAstCreator;
@@ -371,7 +353,8 @@ public:
                              derivedFrom, code)
     {
     }
-    QmltypesFile(const QmltypesFile &o);
+
+    QmltypesFile(const QmltypesFile &o) = default;
 
     void ensureInModuleIndex(DomItem &self);
 
@@ -385,8 +368,8 @@ public:
     { // builder only: not threadsafe...
         m_imports.append(i);
     }
-    QList<Import> imports() const { return m_imports; }
-    QMultiMap<QString, QmltypesComponent> components() const { return m_components; }
+    const QList<Import> &imports() const & { return m_imports; }
+    const QMultiMap<QString, QmltypesComponent> &components() const & { return m_components; }
     void setComponents(QMultiMap<QString, QmltypesComponent> c) { m_components = std::move(c); }
     Path addComponent(const QmltypesComponent &comp, AddOption option = AddOption::Overwrite,
                       QmltypesComponent **cPtr = nullptr)
@@ -396,7 +379,7 @@ public:
         return insertUpdatableElementInMultiMap(Path::Field(u"components"), m_components,
                                                 comp.name(), comp, option, cPtr);
     }
-    QMultiMap<QString, Export> exports() const { return m_exports; }
+    const QMultiMap<QString, Export> &exports() const & { return m_exports; }
     void setExports(QMultiMap<QString, Export> e) { m_exports = e; }
     Path addExport(const Export &e)
     {
@@ -406,7 +389,7 @@ public:
         return canonicalPath().field(Fields::exports).index(i);
     }
 
-    QMap<QString, QSet<int>> uris() const { return m_uris; }
+    const QMap<QString, QSet<int>> &uris() const & { return m_uris; }
     void addUri(QString uri, int majorVersion)
     {
         QSet<int> &v = m_uris[uri];

@@ -1,43 +1,7 @@
-/****************************************************************************
-**
-** Copyright (C) 2019 The Qt Company Ltd.
-** Copyright (C) 2016 Jolla Ltd, author: <gunnar.sletta@jollamobile.com>
-** Copyright (C) 2016 Robin Burchell <robin.burchell@viroteck.net>
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtQuick module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2019 The Qt Company Ltd.
+// Copyright (C) 2016 Jolla Ltd, author: <gunnar.sletta@jollamobile.com>
+// Copyright (C) 2016 Robin Burchell <robin.burchell@viroteck.net>
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qsgbatchrenderer_p.h"
 
@@ -930,11 +894,10 @@ static void qsg_wipeBuffer(Buffer *buffer)
     free(buffer->data);
 }
 
-static void qsg_wipeBatch(Batch *batch, bool separateIndexBuffer)
+static void qsg_wipeBatch(Batch *batch)
 {
     qsg_wipeBuffer(&batch->vbo);
-    if (separateIndexBuffer)
-        qsg_wipeBuffer(&batch->ibo);
+    qsg_wipeBuffer(&batch->ibo);
     delete batch->ubuf;
     batch->stencilClipState.reset();
     delete batch;
@@ -944,13 +907,12 @@ Renderer::~Renderer()
 {
     if (m_rhi) {
         // Clean up batches and buffers
-        const bool separateIndexBuffer = m_context->separateIndexBuffer();
         for (int i = 0; i < m_opaqueBatches.size(); ++i)
-            qsg_wipeBatch(m_opaqueBatches.at(i), separateIndexBuffer);
+            qsg_wipeBatch(m_opaqueBatches.at(i));
         for (int i = 0; i < m_alphaBatches.size(); ++i)
-            qsg_wipeBatch(m_alphaBatches.at(i), separateIndexBuffer);
+            qsg_wipeBatch(m_alphaBatches.at(i));
         for (int i = 0; i < m_batchPool.size(); ++i)
-            qsg_wipeBatch(m_batchPool.at(i), separateIndexBuffer);
+            qsg_wipeBatch(m_batchPool.at(i));
     }
 
     for (Node *n : qAsConst(m_nodes))
@@ -1008,8 +970,7 @@ void Renderer::map(Buffer *buffer, int byteSize, bool isIndexBuf)
     if (m_visualizer->mode() == Visualizer::VisualizeNothing) {
         // Common case, use a shared memory pool for uploading vertex data to avoid
         // excessive reevaluation
-        QDataBuffer<char> &pool = m_context->separateIndexBuffer() && isIndexBuf
-                ? m_indexUploadPool : m_vertexUploadPool;
+        QDataBuffer<char> &pool = isIndexBuf ? m_indexUploadPool : m_vertexUploadPool;
         if (byteSize > pool.size())
             pool.resize(byteSize);
         buffer->data = pool.data();
@@ -2075,11 +2036,7 @@ void Renderer::uploadBatch(Batch *b)
         ibufferSize = unmergedIndexSize;
     }
 
-    const bool separateIndexBuffer = m_context->separateIndexBuffer();
-    if (separateIndexBuffer)
-        map(&b->ibo, ibufferSize, true);
-    else
-        bufferSize += ibufferSize;
+    map(&b->ibo, ibufferSize, true);
     map(&b->vbo, bufferSize);
 
     if (Q_UNLIKELY(debug_upload())) qDebug() << " - batch" << b << " first:" << b->first << " root:"
@@ -2089,9 +2046,7 @@ void Renderer::uploadBatch(Batch *b)
     if (b->merged) {
         char *vertexData = b->vbo.data;
         char *zData = vertexData + b->vertexCount * g->sizeOfVertex();
-        char *indexData = separateIndexBuffer
-                ? b->ibo.data
-                : zData + (int(useDepthBuffer()) * b->vertexCount * sizeof(float));
+        char *indexData = b->ibo.data;
 
         quint16 iOffset16 = 0;
         quint32 iOffset32 = 0;
@@ -2103,8 +2058,8 @@ void Renderer::uploadBatch(Batch *b)
         const uint verticesInSetLimit = m_uint32IndexForRhi ? 0xfffffffe : 0xfffe;
         int indicesInSet = 0;
         b->drawSets.reset();
-        int drawSetIndices = separateIndexBuffer ? 0 : indexData - vertexData;
-        const char *indexBase = separateIndexBuffer ? b->ibo.data : b->vbo.data;
+        int drawSetIndices = 0;
+        const char *indexBase = b->ibo.data;
         b->drawSets << DrawSet(0, zData - vertexData, drawSetIndices);
         while (e) {
             verticesInSet += e->node->geometry()->vertexCount();
@@ -2138,8 +2093,7 @@ void Renderer::uploadBatch(Batch *b)
         }
     } else {
         char *vboData = b->vbo.data;
-        char *iboData = separateIndexBuffer ? b->ibo.data
-                                            : vboData + b->vertexCount * g->sizeOfVertex();
+        char *iboData = b->ibo.data;
         Element *e = b->first;
         while (e) {
             QSGGeometry *g = e->node->geometry();
@@ -2201,9 +2155,7 @@ void Renderer::uploadBatch(Batch *b)
 
         if (!b->drawSets.isEmpty()) {
             if (m_uint32IndexForRhi) {
-                const quint32 *id = (const quint32 *)(separateIndexBuffer
-                                                      ? b->ibo.data
-                                                      : b->vbo.data + b->drawSets.at(0).indices);
+                const quint32 *id = (const quint32 *) b->ibo.data;
                 {
                     QDebug iDump = qDebug();
                     iDump << "  -- Index Data, count:" << b->indexCount;
@@ -2214,9 +2166,7 @@ void Renderer::uploadBatch(Batch *b)
                     }
                 }
             } else {
-                const quint16 *id = (const quint16 *)(separateIndexBuffer
-                                                      ? b->ibo.data
-                                                      : b->vbo.data + b->drawSets.at(0).indices);
+                const quint16 *id = (const quint16 *) b->ibo.data;
                 {
                     QDebug iDump = qDebug();
                     iDump << "  -- Index Data, count:" << b->indexCount;
@@ -2237,8 +2187,7 @@ void Renderer::uploadBatch(Batch *b)
 #endif // QT_NO_DEBUG_OUTPUT
 
     unmap(&b->vbo);
-    if (separateIndexBuffer)
-        unmap(&b->ibo, true);
+    unmap(&b->ibo, true);
 
     if (Q_UNLIKELY(debug_upload())) qDebug() << "  --- vertex/index buffers unmapped, batch upload completed...";
 
@@ -2261,7 +2210,7 @@ QRhiGraphicsPipeline *Renderer::buildStencilPipeline(const Batch *batch, bool fi
     QRhiGraphicsPipeline::TargetBlend blend;
     blend.colorWrite = {};
     ps->setTargetBlends({ blend });
-    ps->setSampleCount(renderTarget()->sampleCount());
+    ps->setSampleCount(renderTarget().rt->sampleCount());
     ps->setStencilTest(true);
     QRhiGraphicsPipeline::StencilOpState stencilOp;
     if (firstStencilClipInBatch) {
@@ -2669,6 +2618,7 @@ bool Renderer::ensurePipelineState(Element *e, const ShaderManager::Shader *sms,
     ps->setFlags(flags);
     ps->setTopology(qsg_topology(m_gstate.drawMode));
     ps->setCullMode(m_gstate.cullMode);
+    ps->setPolygonMode(m_gstate.polygonMode);
 
     QRhiGraphicsPipeline::TargetBlend blend;
     blend.colorWrite = m_gstate.colorWrite;
@@ -2808,13 +2758,14 @@ static void rendererToMaterialGraphicsState(QSGMaterialShader::GraphicsPipelineS
     Q_ASSERT(int(QSGMaterialShader::GraphicsPipelineState::OneMinusSrc1Alpha) == int(QRhiGraphicsPipeline::OneMinusSrc1Alpha));
     Q_ASSERT(int(QSGMaterialShader::GraphicsPipelineState::A) == int(QRhiGraphicsPipeline::A));
     Q_ASSERT(int(QSGMaterialShader::GraphicsPipelineState::CullBack) == int(QRhiGraphicsPipeline::Back));
-
+    Q_ASSERT(int(QSGMaterialShader::GraphicsPipelineState::Line) == int(QRhiGraphicsPipeline::Line));
     dst->srcColor = QSGMaterialShader::GraphicsPipelineState::BlendFactor(src->srcColor);
     dst->dstColor = QSGMaterialShader::GraphicsPipelineState::BlendFactor(src->dstColor);
 
     dst->colorWrite = QSGMaterialShader::GraphicsPipelineState::ColorMask(int(src->colorWrite));
 
     dst->cullMode = QSGMaterialShader::GraphicsPipelineState::CullMode(src->cullMode);
+    dst->polygonMode = QSGMaterialShader::GraphicsPipelineState::PolygonMode(src->polygonMode);
 }
 
 static void materialToRendererGraphicsState(GraphicsState *dst,
@@ -2825,6 +2776,7 @@ static void materialToRendererGraphicsState(GraphicsState *dst,
     dst->dstColor = QRhiGraphicsPipeline::BlendFactor(src->dstColor);
     dst->colorWrite = QRhiGraphicsPipeline::ColorMask(int(src->colorWrite));
     dst->cullMode = QRhiGraphicsPipeline::CullMode(src->cullMode);
+    dst->polygonMode = QRhiGraphicsPipeline::PolygonMode(src->polygonMode);
 }
 
 void Renderer::updateMaterialDynamicData(ShaderManager::Shader *sms,
@@ -2861,56 +2813,85 @@ void Renderer::updateMaterialDynamicData(ShaderManager::Shader *sms,
         if (!stages)
             continue;
 
-        QSGTexture *prevTex = pd->textureBindingTable[binding];
-        QSGTexture *t = prevTex;
+        QVarLengthArray<QSGTexture *, 4> prevTex = pd->textureBindingTable[binding];
+        QVarLengthArray<QSGTexture *, 4> nextTex = prevTex;
 
-        shader->updateSampledImage(renderState, binding, &t, material, m_currentMaterial);
-        if (!t) {
+        const int count = pd->combinedImageSamplerCount[binding];
+        nextTex.resize(count);
+
+        shader->updateSampledImage(renderState, binding, nextTex.data(), material,
+                                   m_currentMaterial);
+
+        if (nextTex.contains(nullptr)) {
             qWarning("No QSGTexture provided from updateSampledImage(). This is wrong.");
             continue;
         }
 
-        QSGTexturePrivate *td = QSGTexturePrivate::get(t);
-        // prevTex may be invalid at this point, avoid dereferencing it
-        if (t != prevTex || td->hasDirtySamplerOptions()) {
-            // The QSGTexture, and so the sampler parameters, may have changed.
-            // The rhiTexture is not relevant here.
+        bool hasDirtySamplerOptions = false;
+        bool isAnisotropic = false;
+        for (QSGTexture *t : nextTex) {
+            QSGTexturePrivate *td = QSGTexturePrivate::get(t);
+            hasDirtySamplerOptions |= td->hasDirtySamplerOptions();
+            isAnisotropic |= t->anisotropyLevel() != QSGTexture::AnisotropyNone;
             td->resetDirtySamplerOptions();
-            pd->textureBindingTable[binding] = t; // does not own
-            pd->samplerBindingTable[binding] = nullptr;
-            if (t->anisotropyLevel() != QSGTexture::AnisotropyNone) // ###
-                qWarning("QSGTexture anisotropy levels are not currently supported");
-
-            const QSGSamplerDescription samplerDesc = QSGSamplerDescription::fromTexture(t);
-            QRhiSampler *sampler = nullptr;
-            auto it = m_samplers.constFind(samplerDesc);
-            if (it != m_samplers.constEnd()) {
-                sampler = *it;
-                Q_ASSERT(sampler);
-            } else {
-                sampler = newSampler(m_rhi, samplerDesc);
-                if (!sampler->create()) {
-                    qWarning("Failed to build sampler");
-                    delete sampler;
-                    continue;
-                }
-                m_samplers.insert(samplerDesc, sampler);
-            }
-            pd->samplerBindingTable[binding] = sampler; // does not own
         }
 
-        if (pd->textureBindingTable[binding] && pd->samplerBindingTable[binding]) {
-            QRhiTexture *texture = pd->textureBindingTable[binding]->rhiTexture();
-            // texture may be null if the update above failed for any reason,
-            // or if the QSGTexture chose to return null intentionally. This is
-            // valid and we still need to provide something to the shader.
-            if (!texture)
-                texture = dummyTexture();
-            QRhiSampler *sampler = pd->samplerBindingTable[binding];
-            bindings.append(QRhiShaderResourceBinding::sampledTexture(binding,
-                                                                      stages,
-                                                                      texture,
-                                                                      sampler));
+        // prevTex may be invalid at this point, avoid dereferencing it
+        if (nextTex != prevTex || hasDirtySamplerOptions) {
+
+            // The QSGTexture, and so the sampler parameters, may have changed.
+            // The rhiTexture is not relevant here.
+            pd->textureBindingTable[binding] = nextTex; // does not own
+            pd->samplerBindingTable[binding].clear();
+
+            if (isAnisotropic) // ###
+                qWarning("QSGTexture anisotropy levels are not currently supported");
+
+            QVarLengthArray<QRhiSampler *, 4> samplers;
+
+            for (QSGTexture *t : nextTex) {
+                const QSGSamplerDescription samplerDesc = QSGSamplerDescription::fromTexture(t);
+
+                QRhiSampler *sampler = m_samplers[samplerDesc];
+
+                if (!sampler) {
+                    sampler = newSampler(m_rhi, samplerDesc);
+                    if (!sampler->create()) {
+                        qWarning("Failed to build sampler");
+                        delete sampler;
+                        continue;
+                    }
+                    m_samplers[samplerDesc] = sampler;
+                }
+                samplers.append(sampler);
+            }
+
+            pd->samplerBindingTable[binding] = samplers; // does not own
+        }
+
+        if (pd->textureBindingTable[binding].count() == pd->samplerBindingTable[binding].count()) {
+
+            QVarLengthArray<QRhiShaderResourceBinding::TextureAndSampler, 4> textureSamplers;
+
+            for (int i = 0; i < pd->textureBindingTable[binding].count(); ++i) {
+
+                QRhiTexture *texture = pd->textureBindingTable[binding].at(i)->rhiTexture();
+
+                // texture may be null if the update above failed for any reason,
+                // or if the QSGTexture chose to return null intentionally. This is
+                // valid and we still need to provide something to the shader.
+                if (!texture)
+                    texture = dummyTexture();
+
+                QRhiSampler *sampler = pd->samplerBindingTable[binding].at(i);
+
+                textureSamplers.append(
+                        QRhiShaderResourceBinding::TextureAndSampler { texture, sampler });
+            }
+
+            if (!textureSamplers.isEmpty())
+                bindings.append(QRhiShaderResourceBinding::sampledTextures(
+                        binding, stages, count, textureSamplers.constData()));
         }
     }
 
@@ -3498,7 +3479,7 @@ void Renderer::render()
 {
     // Gracefully handle the lack of a render target - some autotests may rely
     // on this in odd cases.
-    if (!renderTarget())
+    if (!renderTarget().rt)
         return;
 
     prepareRenderPass(&m_mainRenderPassContext);
@@ -3666,7 +3647,7 @@ void Renderer::prepareRenderPass(RenderPassContext *ctx)
 
     if (largestVBO * 2 < m_vertexUploadPool.size())
         m_vertexUploadPool.resize(largestVBO * 2);
-    if (m_context->separateIndexBuffer() && largestIBO * 2 < m_indexUploadPool.size())
+    if (largestIBO * 2 < m_indexUploadPool.size())
         m_indexUploadPool.resize(largestIBO * 2);
 
     if (Q_UNLIKELY(debug_render())) {
@@ -3698,6 +3679,7 @@ void Renderer::prepareRenderPass(RenderPassContext *ctx)
     m_gstate.blending = false;
 
     m_gstate.cullMode = QRhiGraphicsPipeline::None;
+    m_gstate.polygonMode = QRhiGraphicsPipeline::Fill;
     m_gstate.colorWrite = QRhiGraphicsPipeline::R
             | QRhiGraphicsPipeline::G
             | QRhiGraphicsPipeline::B
@@ -3705,7 +3687,7 @@ void Renderer::prepareRenderPass(RenderPassContext *ctx)
     m_gstate.usesScissor = false;
     m_gstate.stencilTest = false;
 
-    m_gstate.sampleCount = renderTarget()->sampleCount();
+    m_gstate.sampleCount = renderTarget().rt->sampleCount();
 
     ctx->opaqueRenderBatches.clear();
     if (Q_LIKELY(renderOpaque)) {
@@ -3770,7 +3752,7 @@ void Renderer::prepareRenderPass(RenderPassContext *ctx)
 
 void Renderer::beginRenderPass(RenderPassContext *)
 {
-    commandBuffer()->beginPass(renderTarget(), m_pstate.clearColor, m_pstate.dsClear, nullptr,
+    commandBuffer()->beginPass(renderTarget().rt, m_pstate.clearColor, m_pstate.dsClear, nullptr,
                                // we cannot tell if the application will have
                                // native rendering thrown in to this pass
                                // (QQuickWindow::beginExternalCommands()), so
@@ -3922,6 +3904,8 @@ bool Renderer::prepareRhiRenderNode(Batch *batch, PreparedRenderBatch *renderBat
         opacity = opacity->parent();
     }
 
+    rd->m_rt = renderTarget();
+
     e->renderNode->prepare();
 
     renderBatch->batch = batch;
@@ -4013,7 +3997,8 @@ bool operator==(const GraphicsState &a, const GraphicsState &b) noexcept
             && a.stencilTest == b.stencilTest
             && a.sampleCount == b.sampleCount
             && a.drawMode == b.drawMode
-            && a.lineWidth == b.lineWidth;
+            && a.lineWidth == b.lineWidth
+            && a.polygonMode == b.polygonMode;
 }
 
 bool operator!=(const GraphicsState &a, const GraphicsState &b) noexcept

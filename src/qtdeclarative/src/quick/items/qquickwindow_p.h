@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtQuick module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2020 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #ifndef QQUICKWINDOW_P_H
 #define QQUICKWINDOW_P_H
@@ -115,6 +79,7 @@ public:
     QRhiTexture *texture = nullptr;
     QRhiRenderBuffer *renderBuffer = nullptr;
     QRhiRenderBuffer *depthStencil = nullptr;
+    QPaintDevice *paintDevice = nullptr;
     bool owns = false;
 };
 
@@ -170,6 +135,7 @@ public:
 
     void polishItems();
     void forcePolish();
+    void invalidateFontData(QQuickItem *item);
     void syncSceneGraph();
     void renderSceneGraph(const QSize &size, const QSize &surfaceSize = QSize());
 
@@ -184,9 +150,17 @@ public:
 
     QSGTexture *createTextureFromNativeTexture(quint64 nativeObjectHandle,
                                                int nativeLayout,
+                                               uint nativeFormat,
                                                const QSize &size,
                                                QQuickWindow::CreateTextureOptions options,
                                                TextureFromNativeTextureFlags flags = {}) const;
+    QSGTexture *createTextureFromNativeTexture(quint64 nativeObjectHandle,
+                                               int nativeLayout,
+                                               const QSize &size,
+                                               QQuickWindow::CreateTextureOptions options,
+                                               TextureFromNativeTextureFlags flags = {}) const {
+        return createTextureFromNativeTexture(nativeObjectHandle, nativeLayout, 0, size, options, flags);
+    }
 
     QQuickItem::UpdatePaintNodeData updatePaintNodeData;
 
@@ -195,7 +169,7 @@ public:
 
     QVector<QQuickItem *> itemsToPolish;
 
-    qreal devicePixelRatio;
+    qreal lastReportedItemDevicePixelRatio;
     QMetaObject::Connection physicalDpiChangedConnection;
 
     void updateDirtyNodes();
@@ -230,7 +204,6 @@ public:
     struct Redirect {
         QRhiCommandBuffer *commandBuffer = nullptr;
         QQuickWindowRenderTarget rt;
-        qreal devicePixelRatio = 1.0;
         bool renderTargetDirty = false;
     } redirect;
 
@@ -250,19 +223,6 @@ public:
     { return QQuickDeliveryAgentPrivate::dragOverThreshold(d, axis, event, startDragThreshold); }
     void clearFocusInScope(QQuickItem *scope, QQuickItem *item, Qt::FocusReason reason)
     { deliveryAgentPrivate()->clearFocusInScope(scope, item, reason); }
-    void handleTouchEvent(QTouchEvent *e)
-    {
-        // setup currentEventDeliveryAgent like in  QQuickDeliveryAgent::event
-        QQuickDeliveryAgentPrivate::currentEventDeliveryAgent = deliveryAgentPrivate()->q_func();
-        deliveryAgentPrivate()->handleTouchEvent(e);
-        QQuickDeliveryAgentPrivate::currentEventDeliveryAgent = nullptr;
-    }
-    void handleMouseEvent(QMouseEvent *e)
-    {
-        QQuickDeliveryAgentPrivate::currentEventDeliveryAgent = deliveryAgentPrivate()->q_func();
-        deliveryAgentPrivate()->handleMouseEvent(e);
-        QQuickDeliveryAgentPrivate::currentEventDeliveryAgent = nullptr;
-    }
     // ^^^ currently in use in Controls 2; TODO remove
 
     // data property
@@ -298,6 +258,7 @@ public:
     uint hasActiveSwapchain : 1;
     uint hasRenderableSwapchain : 1;
     uint swapchainJustBecameRenderable : 1;
+    bool pendingFontUpdate = false;
     bool windowEventDispatch = false;
 
 private:

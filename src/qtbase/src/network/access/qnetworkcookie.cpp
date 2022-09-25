@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtNetwork module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qnetworkcookie.h"
 #include "qnetworkcookie_p.h"
@@ -54,6 +18,10 @@
 #include "private/qobject_p.h"
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
+
+QT_IMPL_METATYPE_EXTERN(QNetworkCookie)
 
 /*!
     \class QNetworkCookie
@@ -533,11 +501,11 @@ QByteArray QNetworkCookie::toRawForm(RawForm form) const
         if (!isSessionCookie()) {
             result += "; expires=";
             result += QLocale::c().toString(d->expirationDate.toUTC(),
-                                            QLatin1String("ddd, dd-MMM-yyyy hh:mm:ss 'GMT")).toLatin1();
+                                            "ddd, dd-MMM-yyyy hh:mm:ss 'GMT"_L1).toLatin1();
         }
         if (!d->domain.isEmpty()) {
             result += "; domain=";
-            if (d->domain.startsWith(QLatin1Char('.'))) {
+            if (d->domain.startsWith(u'.')) {
                 result += '.';
                 result += QUrl::toAce(d->domain.mid(1));
             } else {
@@ -665,7 +633,7 @@ static QDateTime parseDateString(const QByteArray &dateString)
 
     // hour:minute:second.ms pm
     static const QRegularExpression timeRx(
-            u"(\\d\\d?):(\\d\\d?)(?::(\\d\\d?)(?:\\.(\\d{1,3}))?)?(?:\\s*(am|pm))?"_qs);
+            u"(\\d\\d?):(\\d\\d?)(?::(\\d\\d?)(?:\\.(\\d{1,3}))?)?(?:\\s*(am|pm))?"_s);
 
     int at = 0;
     while (at < dateString.length()) {
@@ -755,7 +723,7 @@ static QDateTime parseDateString(const QByteArray &dateString)
                 int ms = match.capturedView(4).toInt();
                 QStringView ampm = match.capturedView(5);
                 if (h < 12 && !ampm.isEmpty())
-                    if (ampm == QLatin1String("pm"))
+                    if (ampm == "pm"_L1)
                         h += 12;
                 time = QTime(h, m, s, ms);
 #ifdef PARSEDATESTRINGDEBUG
@@ -1024,7 +992,7 @@ QList<QNetworkCookie> QNetworkCookiePrivate::parseSetCookieHeaderLine(const QByt
                     if (!rawDomain.isEmpty()) {
                         QString maybeLeadingDot;
                         if (rawDomain.startsWith('.')) {
-                            maybeLeadingDot = QLatin1Char('.');
+                            maybeLeadingDot = u'.';
                             rawDomain = rawDomain.mid(1);
                         }
 
@@ -1092,9 +1060,9 @@ void QNetworkCookie::normalize(const QUrl &url)
     // don't do path checking. See QTBUG-5815
     if (d->path.isEmpty()) {
         QString pathAndFileName = url.path();
-        QString defaultPath = pathAndFileName.left(pathAndFileName.lastIndexOf(QLatin1Char('/'))+1);
+        QString defaultPath = pathAndFileName.left(pathAndFileName.lastIndexOf(u'/') + 1);
         if (defaultPath.isEmpty())
-            defaultPath = QLatin1Char('/');
+            defaultPath = u'/';
         d->path = defaultPath;
     }
 
@@ -1104,12 +1072,12 @@ void QNetworkCookie::normalize(const QUrl &url)
         QHostAddress hostAddress(d->domain);
         if (hostAddress.protocol() != QAbstractSocket::IPv4Protocol
                 && hostAddress.protocol() != QAbstractSocket::IPv6Protocol
-                && !d->domain.startsWith(QLatin1Char('.'))) {
+                && !d->domain.startsWith(u'.')) {
             // Ensure the domain starts with a dot if its field was not empty
             // in the HTTP header. There are some servers that forget the
             // leading dot and this is actually forbidden according to RFC 2109,
             // but all browsers accept it anyway so we do that as well.
-            d->domain.prepend(QLatin1Char('.'));
+            d->domain.prepend(u'.');
         }
     }
 }

@@ -1,42 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Copyright (C) 2015 Olivier Goffart <ogoffart@woboq.com>
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtWidgets module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// Copyright (C) 2015 Olivier Goffart <ogoffart@woboq.com>
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "QtWidgets/qapplication.h"
 #include "QtWidgets/qwidget.h"
@@ -2452,28 +2416,33 @@ QRect QDockAreaLayout::gapRect(QInternal::DockPosition dockPos) const
 {
     Q_ASSERT_X(mainWindow, "QDockAreaLayout::gapRect", "Called without valid mainWindow pointer.");
 
+    // Determine gap size depending on MainWindow size (QTBUG-101657)
+    const QSize gapSize = (mainWindow->size()/2).boundedTo(QSize(EmptyDropAreaSize, EmptyDropAreaSize));
+
     // Warn if main window is too small to create proper docks.
-    // Do not fail because this can be triggered by the user.
-    if (mainWindow->height() < (2 * EmptyDropAreaSize)) {
-        qCWarning(lcQpaDockWidgets, "QDockAreaLayout::gapRect: Main window height %i is too small. Docking will not be possible.",
-                  mainWindow->height());
+    // Do not fail because this can be triggered by a user making MainWindow too small
+    if (mainWindow->height() < (2 * sep)) {
+        qCWarning(lcQpaDockWidgets,
+            "QDockAreaLayout::gapRect: Main window height %i is too small. Docking will not be possible.",
+            mainWindow->height());
 
     }
-    if (mainWindow->width() < (2 * EmptyDropAreaSize)) {
-        qCWarning(lcQpaDockWidgets, "QDockAreaLayout::gapRect: Main window width %i is too small. Docking will not be possible.",
-                   mainWindow->width());
+    if (mainWindow->width() < (2 * sep)) {
+        qCWarning(lcQpaDockWidgets,
+            "QDockAreaLayout::gapRect: Main window width %i is too small. Docking will not be possible.",
+            mainWindow->width());
     }
 
     // Calculate rectangle of requested dock
     switch (dockPos) {
     case QInternal::LeftDock:
-        return QRect(rect.left(), rect.top(), EmptyDropAreaSize, rect.height());
+        return QRect(rect.left(), rect.top(), gapSize.width(), rect.height());
     case QInternal::RightDock:
-        return QRect(rect.right() - EmptyDropAreaSize, rect.top(), EmptyDropAreaSize, rect.height());
+        return QRect(rect.right() - gapSize.width(), rect.top(), gapSize.width(), rect.height());
     case QInternal::TopDock:
-        return QRect(rect.left(), rect.top(), rect.width(), EmptyDropAreaSize);
+        return QRect(rect.left(), rect.top(), rect.width(), gapSize.height());
     case QInternal::BottomDock:
-        return QRect(rect.left(), rect.bottom() - EmptyDropAreaSize, rect.width(), EmptyDropAreaSize);
+        return QRect(rect.left(), rect.bottom() - gapSize.height(), rect.width(), gapSize.height());
     case QInternal::DockCount:
         break;
     }

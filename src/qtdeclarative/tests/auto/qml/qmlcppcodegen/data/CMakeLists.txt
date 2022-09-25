@@ -14,6 +14,7 @@ set(cpp_sources
 
 set(qml_files
     AccessModelMethodsFromOutside.qml
+    BadType.qml
     BaseMember.qml
     BindingExpression.qml
     Cycle1.qml
@@ -23,6 +24,7 @@ set(qml_files
     Enums.qml
     Foozle.qml
     Loopy.qml
+    OkType.qml
     Panel.qml
     ProgressBar/Keyframe.qml
     ProgressBar/KeyframeGroup.qml
@@ -39,11 +41,14 @@ set(qml_files
     ambiguous1/Ambiguous.qml
     ambiguous2/Ambiguous.qml
     anchorsFill.qml
+    argumentConversion.qml
     array.qml
     asCast.qml
     attachedBaseEnum.qml
+    badSequence.qml
     bindToValueType.qml
     blockComments.qml
+    boundComponents.qml
     callContextPropertyLookupResult.qml
     childobject.qml
     colorAsVariant.qml
@@ -63,6 +68,7 @@ set(qml_files
     dialog.qml
     dynamicscene.qml
     enumInvalid.qml
+    enumLookup.qml
     enumScope.qml
     enumsInOtherObject.qml
     enumsUser.qml
@@ -85,6 +91,7 @@ set(qml_files
     infinities.qml
     invisibleBase.qml
     invisibleTypes.qml
+    invisibleListElementType.qml
     intEnumCompare.qml
     intOverflow.qml
     interactive.qml
@@ -108,6 +115,7 @@ set(qml_files
     nonNotifyable.qml
     noscope.qml
     notEqualsInt.qml
+    notNotString.qml
     nullAccess.qml
     objectInVar.qml
     outOfBounds.qml
@@ -119,6 +127,7 @@ set(qml_files
     prefixedMetaType.qml
     pressAndHoldButton.qml
     registerelimination.qml
+    registerPropagation.qml
     revisions.qml
     scopeVsObject.qml
     script.js
@@ -129,16 +138,22 @@ set(qml_files
     signalHandler.qml
     specificParent.qml
     stringLength.qml
+    stringToByteArray.qml
     testlogger.js
     text.qml
     themerbad.qml
     themergood.qml
     throwObjectName.qml
+    toString.qml
+    typePropertyClash.qml
+    typedArray.qml
     undefinedResets.qml
     unknownAttached.qml
     unknownParameter.qml
+    unstoredUndefined.qml
     unusedAttached.qml
     urlString.qml
+    valueTypeLists.qml
     valueTypeProperty.qml
     variantlist.qml
     voidfunction.qml

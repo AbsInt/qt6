@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtGui module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qwindowsfontenginedirectwrite_p.h"
 #include "qwindowsfontdatabase_p.h"
@@ -194,10 +158,16 @@ static DWRITE_MEASURING_MODE renderModeToMeasureMode(DWRITE_RENDERING_MODE rende
     }
 }
 
-static DWRITE_RENDERING_MODE hintingPreferenceToRenderingMode(QFont::HintingPreference hintingPreference)
+static DWRITE_RENDERING_MODE hintingPreferenceToRenderingMode(const QFontDef &fontDef)
 {
-    if (QHighDpiScaling::isActive() && hintingPreference == QFont::PreferDefaultHinting)
-        hintingPreference = QFont::PreferVerticalHinting;
+    QFont::HintingPreference hintingPreference = QFont::HintingPreference(fontDef.hintingPreference);
+    if (QHighDpiScaling::isActive() && hintingPreference == QFont::PreferDefaultHinting) {
+        // Microsoft documentation recommends using asymmetric rendering for small fonts
+        // at pixel size 16 and less, and symmetric for larger fonts.
+        hintingPreference = fontDef.pixelSize > 16.0
+                ? QFont::PreferNoHinting
+                : QFont::PreferVerticalHinting;
+    }
 
     switch (hintingPreference) {
     case QFont::PreferNoHinting:
@@ -507,7 +477,7 @@ void QWindowsFontEngineDirectWrite::recalcAdvances(QGlyphLayout *glyphs, QFontEn
     QVarLengthArray<DWRITE_GLYPH_METRICS> glyphMetrics(glyphIndices.size());
 
     HRESULT hr;
-    DWRITE_RENDERING_MODE renderMode = hintingPreferenceToRenderingMode(QFont::HintingPreference(fontDef.hintingPreference));
+    DWRITE_RENDERING_MODE renderMode = hintingPreferenceToRenderingMode(fontDef);
     if (renderMode == DWRITE_RENDERING_MODE_GDI_CLASSIC || renderMode == DWRITE_RENDERING_MODE_GDI_NATURAL) {
         hr = m_directWriteFontFace->GetGdiCompatibleGlyphMetrics(float(fontDef.pixelSize),
                                                                  1.0f,
@@ -686,21 +656,41 @@ QImage QWindowsFontEngineDirectWrite::imageForGlyph(glyph_t t,
     transform.m21 = xform.m21();
     transform.m22 = xform.m22();
 
-    DWRITE_RENDERING_MODE renderMode =
-            hintingPreferenceToRenderingMode(QFont::HintingPreference(fontDef.hintingPreference));
+    DWRITE_RENDERING_MODE renderMode = hintingPreferenceToRenderingMode(fontDef);
     DWRITE_MEASURING_MODE measureMode =
             renderModeToMeasureMode(renderMode);
 
+    DWRITE_GRID_FIT_MODE gridFitMode = fontDef.hintingPreference == QFont::PreferNoHinting
+            ? DWRITE_GRID_FIT_MODE_DISABLED
+            : DWRITE_GRID_FIT_MODE_DEFAULT;
+
+    IDWriteFactory2 *factory2 = nullptr;
+    HRESULT hr = m_fontEngineData->directWriteFactory->QueryInterface(__uuidof(IDWriteFactory2),
+                                                                      reinterpret_cast<void **>(&factory2));
     IDWriteGlyphRunAnalysis *glyphAnalysis = NULL;
-    HRESULT hr = m_fontEngineData->directWriteFactory->CreateGlyphRunAnalysis(
-                &glyphRun,
-                1.0f,
-                &transform,
-                renderMode,
-                measureMode,
-                0.0, 0.0,
-                &glyphAnalysis
-                );
+    if (!SUCCEEDED(hr)) {
+        qErrnoWarning(hr, "%s: Failed to query IDWriteFactory2 interface.", __FUNCTION__);
+        hr = m_fontEngineData->directWriteFactory->CreateGlyphRunAnalysis(
+                    &glyphRun,
+                    1.0f,
+                    &transform,
+                    renderMode,
+                    measureMode,
+                    0.0, 0.0,
+                    &glyphAnalysis
+                    );
+    } else {
+        hr = factory2->CreateGlyphRunAnalysis(
+                    &glyphRun,
+                    &transform,
+                    renderMode,
+                    measureMode,
+                    gridFitMode,
+                    DWRITE_TEXT_ANTIALIAS_MODE_CLEARTYPE,
+                    0.0, 0.0,
+                    &glyphAnalysis
+                    );
+    }
 
     if (SUCCEEDED(hr)) {
         RECT rect;
@@ -721,10 +711,7 @@ QImage QWindowsFontEngineDirectWrite::imageForGlyph(glyph_t t,
         QImage image;
         HRESULT hr = DWRITE_E_NOCOLOR;
         IDWriteColorGlyphRunEnumerator *enumerator = 0;
-        IDWriteFactory2 *factory2 = nullptr;
-        if (glyphFormat == QFontEngine::Format_ARGB
-                && SUCCEEDED(m_fontEngineData->directWriteFactory->QueryInterface(__uuidof(IDWriteFactory2),
-                                                                                  reinterpret_cast<void **>(&factory2)))) {
+        if (glyphFormat == QFontEngine::Format_ARGB && factory2 != nullptr) {
             hr = factory2->TranslateColorGlyphRun(0.0f,
                                                   0.0f,
                                                   &glyphRun,
@@ -752,15 +739,17 @@ QImage QWindowsFontEngineDirectWrite::imageForGlyph(glyph_t t,
                 }
 
                 IDWriteGlyphRunAnalysis *colorGlyphsAnalysis = NULL;
-                hr = m_fontEngineData->directWriteFactory->CreateGlyphRunAnalysis(
+                hr = factory2->CreateGlyphRunAnalysis(
                             &colorGlyphRun->glyphRun,
-                            1.0f,
                             &transform,
                             renderMode,
                             measureMode,
+                            gridFitMode,
+                            DWRITE_TEXT_ANTIALIAS_MODE_CLEARTYPE,
                             0.0, 0.0,
                             &colorGlyphsAnalysis
                             );
+
                 if (FAILED(hr)) {
                     qErrnoWarning(hr, "%s: CreateGlyphRunAnalysis failed for color run", __FUNCTION__);
                     break;
@@ -993,20 +982,39 @@ glyph_metrics_t QWindowsFontEngineDirectWrite::alphaMapBoundingBox(glyph_t glyph
     transform.m21 = matrix.m21();
     transform.m22 = matrix.m22();
 
-    DWRITE_RENDERING_MODE renderMode =
-            hintingPreferenceToRenderingMode(QFont::HintingPreference(fontDef.hintingPreference));
+    DWRITE_RENDERING_MODE renderMode = hintingPreferenceToRenderingMode(fontDef);
     DWRITE_MEASURING_MODE measureMode = renderModeToMeasureMode(renderMode);
+    DWRITE_GRID_FIT_MODE gridFitMode = fontDef.hintingPreference == QFont::PreferNoHinting
+            ? DWRITE_GRID_FIT_MODE_DISABLED
+            : DWRITE_GRID_FIT_MODE_DEFAULT;
+
+    IDWriteFactory2 *factory2 = nullptr;
+    HRESULT hr = m_fontEngineData->directWriteFactory->QueryInterface(__uuidof(IDWriteFactory2),
+                                                                      reinterpret_cast<void **>(&factory2));
 
     IDWriteGlyphRunAnalysis *glyphAnalysis = NULL;
-    HRESULT hr = m_fontEngineData->directWriteFactory->CreateGlyphRunAnalysis(
-                &glyphRun,
-                1.0f,
-                &transform,
-                renderMode,
-                measureMode,
-                0.0, 0.0,
-                &glyphAnalysis
-                );
+    if (SUCCEEDED(hr)) {
+        hr = factory2->CreateGlyphRunAnalysis(
+                    &glyphRun,
+                    &transform,
+                    renderMode,
+                    measureMode,
+                    gridFitMode,
+                    DWRITE_TEXT_ANTIALIAS_MODE_CLEARTYPE,
+                    0.0, 0.0,
+                    &glyphAnalysis
+                    );
+    } else {
+        hr = m_fontEngineData->directWriteFactory->CreateGlyphRunAnalysis(
+                    &glyphRun,
+                    1.0f,
+                    &transform,
+                    renderMode,
+                    measureMode,
+                    0.0, 0.0,
+                    &glyphAnalysis
+                    );
+    }
 
     if (SUCCEEDED(hr)) {
         RECT rect;

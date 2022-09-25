@@ -1,31 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2017 Crimson AS <info@crimson.no>
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2017 Crimson AS <info@crimson.no>
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 #include <QtTest/QtTest>
 #include <QtQml/qqmlcomponent.h>
 #include <QtQml/qqmlengine.h>
@@ -68,6 +43,8 @@ QML.  This does not include static QML language issues.
 Static QML language issues are covered in qmllanguage
 */
 
+using namespace Qt::StringLiterals;
+
 class tst_qqmlecmascript : public QQmlDataTest
 {
     Q_OBJECT
@@ -78,7 +55,7 @@ public:
 private slots:
     void initTestCase() override;
     void arrayIncludesValueType();
-    void assignBasicTypes();
+    void assignValueTypes();
     void assignDate_data();
     void assignDate();
     void assignFunctionThroughAliasToVarProperty();
@@ -500,11 +477,11 @@ void tst_qqmlecmascript::arrayIncludesValueType()
     QVERIFY(success.toBool());
 }
 
-void tst_qqmlecmascript::assignBasicTypes()
+void tst_qqmlecmascript::assignValueTypes()
 {
     QQmlEngine engine;
     {
-    QQmlComponent component(&engine, testFileUrl("assignBasicTypes.qml"));
+    QQmlComponent component(&engine, testFileUrl("assignValueTypes.qml"));
     QScopedPointer<QObject> obj(component.create());
     QVERIFY2(obj, qPrintable(component.errorString()));
     MyTypeObject *object = qobject_cast<MyTypeObject *>(obj.data());
@@ -534,7 +511,7 @@ void tst_qqmlecmascript::assignBasicTypes()
     QCOMPARE(object->urlProperty(), QUrl("main.qml"));
     }
     {
-    QQmlComponent component(&engine, testFileUrl("assignBasicTypes.2.qml"));
+    QQmlComponent component(&engine, testFileUrl("assignValueTypes.2.qml"));
     QScopedPointer<QObject> obj(component.create());
     QVERIFY2(obj, qPrintable(component.errorString()));
     MyTypeObject *object = qobject_cast<MyTypeObject *>(obj.data());
@@ -5999,17 +5976,19 @@ void tst_qqmlecmascript::sequenceConversionIndexes()
 {
     // ensure that we gracefully fail if unsupported index values are specified.
     // Qt container classes only support non-negative, signed integer index values.
+
+    // Since Qt6, on 64bit the maximum length is beyond what we can encode in a 32bit integer.
+    // Therefore we cannot test the overflow anymore.
+
     QUrl qmlFile = testFileUrl("sequenceConversion.indexes.qml");
     QQmlEngine engine;
     QQmlComponent component(&engine, qmlFile);
     QScopedPointer<QObject> object(component.create());
     QVERIFY2(object, qPrintable(component.errorString()));
-    QString w1 = qmlFile.toString() + QLatin1String(":34: Index out of range during length set");
-    QString w2 = qmlFile.toString() + QLatin1String(":41: Index out of range during indexed set");
-    QString w3 = qmlFile.toString() + QLatin1String(":48: Index out of range during indexed get");
-    QTest::ignoreMessage(QtWarningMsg, qPrintable(w1));
-    QTest::ignoreMessage(QtWarningMsg, qPrintable(w2));
-    QTest::ignoreMessage(QtWarningMsg, qPrintable(w3));
+
+    const QString w = qmlFile.toString() + QLatin1String(":59: Index out of range during length set");
+    QTest::ignoreMessage(QtWarningMsg, qPrintable(w));
+
     QMetaObject::invokeMethod(object.data(), "indexedAccess");
     QVERIFY(object->property("success").toBool());
     QMetaObject::invokeMethod(object.data(), "indexOf");
@@ -7781,7 +7760,7 @@ void tst_qqmlecmascript::qpropertyBindingReplacement()
     QQmlComponent c(&engine, testFileUrl("qpropertyBindingReplacement.qml"));
     QScopedPointer<QObject> root(c.create());
     QVERIFY(root);
-    QCOMPARE(root->objectName(), u"overwritten"_qs);
+    QCOMPARE(root->objectName(), u"overwritten"_s);
 }
 
 void tst_qqmlecmascript::qpropertyBindingNoQPropertyCapture()
@@ -9101,7 +9080,7 @@ void tst_qqmlecmascript::removeBindingsWithNoDependencies()
         QVERIFY(prop.isValid());
         QQmlAbstractBinding *vtProxyBinding = QQmlPropertyPrivate::binding(object.data(), QQmlPropertyIndex(prop.propertyIndex()));
         QVERIFY(vtProxyBinding);
-        QVERIFY(vtProxyBinding->isValueTypeProxy());
+        QVERIFY(vtProxyBinding->kind() == QQmlAbstractBinding::ValueTypeProxy);
 
         QQmlValueTypeProxyBinding *proxy = static_cast<QQmlValueTypeProxyBinding*>(vtProxyBinding);
         QVERIFY(!proxy->subBindings());
@@ -9971,14 +9950,65 @@ void tst_qqmlecmascript::cmpInThrows()
     QCOMPARE(stacktrace.at(0), QStringLiteral("%entry:14:-1:file:foo.js"));
 }
 
+class FrozenFoo : public QObject
+{
+    Q_OBJECT
+    Q_PROPERTY(QString name MEMBER m_name NOTIFY nameChanged)
+
+public:
+    FrozenFoo(QObject *parent = nullptr) : QObject(parent) {}
+    QString name() const { return m_name; }
+
+signals:
+    void nameChanged();
+
+private:
+    QString m_name{ "Foo" };
+};
+
+class FrozenObjects : public QObject
+{
+    Q_OBJECT
+    Q_PROPERTY(FrozenFoo *fooMember READ fooMember CONSTANT);
+    Q_PROPERTY(const FrozenFoo *fooMemberConst READ fooMemberConst CONSTANT);
+    Q_PROPERTY(FrozenFoo *fooMember2 READ fooMember2 CONSTANT);
+
+public:
+    FrozenObjects(QObject *parent = nullptr) : QObject(parent) {}
+
+    Q_INVOKABLE void triggerSignal() { emit fooMember2Emitted(&m_fooMember2); }
+
+    FrozenFoo *fooMember() { return &m_fooMember; }
+    FrozenFoo *fooMember2() { return &m_fooMember2; }
+
+signals:
+    void fooMember2Emitted(const FrozenFoo *fooMember2);
+
+private:
+    const FrozenFoo *fooMemberConst() const { return &m_fooMember; }
+
+    FrozenFoo m_fooMember;
+    FrozenFoo m_fooMember2;
+};
+
 void tst_qqmlecmascript::frozenQObject()
 {
+    qmlRegisterType<FrozenObjects>("test", 1, 0, "FrozenObjects");
+
     QQmlEngine engine;
-    QQmlComponent component(&engine, testFileUrl("frozenQObject.qml"));
-    QScopedPointer<QObject> root(component.create());
-    QVERIFY2(root, qPrintable(component.errorString()));
-    QVERIFY(root->property("caughtException").toBool());
-    QVERIFY(root->property("nameCorrect").toBool());
+    QQmlComponent component1(&engine, testFileUrl("frozenQObject.qml"));
+    QScopedPointer<QObject> root1(component1.create());
+    QVERIFY2(root1, qPrintable(component1.errorString()));
+    QVERIFY(root1->property("caughtException").toBool());
+    QVERIFY(root1->property("nameCorrect").toBool());
+
+    QQmlComponent component2(&engine, testFileUrl("frozenQObject2.qml"));
+    QScopedPointer<QObject> root2(component2.create());
+    FrozenObjects *frozenObjects = qobject_cast<FrozenObjects *>(root2.data());
+    QVERIFY2(frozenObjects, qPrintable(component2.errorString()));
+    QVERIFY(frozenObjects->property("caughtSignal").toBool());
+    QCOMPARE(frozenObjects->fooMember()->name(), QStringLiteral("Jane"));
+    QCOMPARE(frozenObjects->fooMember2()->name(), QStringLiteral("Jane"));
 }
 
 struct ConstPointer : QObject

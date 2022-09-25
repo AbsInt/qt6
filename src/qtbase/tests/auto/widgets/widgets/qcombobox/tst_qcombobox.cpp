@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2020 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <QTest>
 #include <QSignalSpy>
@@ -170,6 +145,7 @@ private slots:
     void checkMenuItemPosWhenStyleSheetIsSet();
     void checkEmbeddedLineEditWhenStyleSheetIsSet();
     void propagateStyleChanges();
+    void buttonPressKeys();
     void clearModel();
 
 private:
@@ -1482,14 +1458,12 @@ void tst_QComboBox::setCurrentText()
     else
         QCOMPARE(testWidget->currentText(), QString("foo"));
 
-#ifndef QT_NO_PROPERTIES
     // verify WRITE for currentText property
     testWidget->setCurrentIndex(0);
     const QByteArray n("currentText");
     QCOMPARE(testWidget->property(n).toString(), QString("foo"));
     testWidget->setProperty(n, QString("bar"));
     QCOMPARE(testWidget->property(n).toString(), QString("bar"));
-#endif
 }
 
 void tst_QComboBox::currentTextChanged_data()
@@ -3601,9 +3575,29 @@ void tst_QComboBox::propagateStyleChanges()
     QVERIFY(frameStyle.inquired);
 }
 
+void tst_QComboBox::buttonPressKeys()
+{
+    QComboBox comboBox;
+    comboBox.setEditable(false);
+    comboBox.addItem(QString::number(1));
+    comboBox.addItem(QString::number(2));
+    const auto buttonPressKeys = QGuiApplicationPrivate::platformTheme()
+                                         ->themeHint(QPlatformTheme::ButtonPressKeys)
+                                         .value<QList<Qt::Key>>();
+    for (int i = 0; i < buttonPressKeys.length(); ++i) {
+        QTest::keyClick(&comboBox, buttonPressKeys[i]);
+        // On some platforms, a window will not be immediately visible,
+        // but take some event-loop iterations to complete.
+        // Using QTRY_VERIFY to deal with that.
+        QTRY_VERIFY(comboBox.view()->isVisible());
+        comboBox.hidePopup();
+    }
+}
+
 void tst_QComboBox::clearModel()
 {
-    QStringListModel model({ QLatin1String("one"), QLatin1String("two"), QLatin1String("three") });
+    using namespace Qt::StringLiterals;
+    QStringListModel model({ "one"_L1, "two"_L1, "three"_L1 });
 
     QComboBox combo;
     combo.setModel(&model);

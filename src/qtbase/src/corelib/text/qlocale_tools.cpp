@@ -1,42 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Copyright (C) 2016 Intel Corporation.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// Copyright (C) 2016 Intel Corporation.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qlocale_tools_p.h"
 #include "qdoublescanprint_p.h"
@@ -407,30 +371,42 @@ double qt_asciiToDouble(const char *num, qsizetype numLen, bool &ok, int &proces
     return d;
 }
 
-/* Detect base if 0 and, if base is hex, skip over 0x prefix */
+/* Detect base if 0 and, if base is hex or bin, skip over 0x/0b prefixes */
 static auto scanPrefix(const char *p, const char *stop, int base)
 {
-    if (p < stop && *p >= '0' && *p <= '9') {
-        if (*p == '0') {
-            const char *x = p + 1;
-            if (x < stop && (*x == 'x' || *x == 'X')) {
-                if (base == 0)
-                    base = 16;
-                if (base == 16)
-                    p += 2;
-            } else if (base == 0) {
-                base = 8;
-            }
-        } else if (base == 0) {
-            base = 10;
-        }
-        Q_ASSERT(base);
-    }
     struct R
     {
         const char *next;
         int base;
     };
+    if (p < stop && *p >= '0' && *p <= '9') {
+        if (*p == '0') {
+            const char *x_or_b = p + 1;
+            if (x_or_b < stop) {
+                switch (*x_or_b) {
+                case 'b':
+                case 'B':
+                    if (base == 0)
+                        base = 2;
+                    if (base == 2)
+                        p += 2;
+                    return R{p, base};
+                case 'x':
+                case 'X':
+                    if (base == 0)
+                        base = 16;
+                    if (base == 16)
+                        p += 2;
+                    return R{p, base};
+                }
+            }
+            if (base == 0)
+                base = 8;
+        } else if (base == 0) {
+            base = 10;
+        }
+        Q_ASSERT(base);
+    }
     return R{p, base};
 }
 
@@ -635,7 +611,7 @@ QString qdtoa(qreal d, int *decpt, int *sign)
     if (decpt)
         *decpt = nonNullDecpt;
 
-    return QLatin1String(result, length);
+    return QLatin1StringView(result, length);
 }
 
 static QLocaleData::DoubleForm resolveFormat(int precision, int decpt, qsizetype length)
@@ -712,7 +688,7 @@ static T dtoString(double d, QLocaleData::DoubleForm form, int precision, bool u
     int length = 0;
     int decpt = 0;
     qt_doubleToAscii(d, form, precision, buffer.data(), buffer.length(), negative, length, decpt);
-    QLatin1String view(buffer.data(), buffer.data() + length);
+    QLatin1StringView view(buffer.data(), length);
     const bool succinct = form == QLocaleData::DFSignificantDigits;
     qsizetype total = (negative ? 1 : 0) + length;
     if (qIsFinite(d)) {

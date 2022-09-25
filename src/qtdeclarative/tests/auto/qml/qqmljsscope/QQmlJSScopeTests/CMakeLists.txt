@@ -9,7 +9,9 @@ qt6_add_qml_module(qqmljsscope_test_module
     VERSION 1.0
     URI QQmlJSScopeTests
     SOURCES
+        singleton.h singleton.cpp
         extensiontypes.h
+        typewithproperties.h
 )
 
 qt_autogen_tools_initial_setup(qqmljsscope_test_moduleplugin)

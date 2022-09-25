@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtQml module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**/
-
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 // Suppress GCC 11 warning about maybe-uninitialized copy of
 // another Data. We're not sure if the compiler is actually right,
 // but in this type of warning, it often isn't.
@@ -65,20 +29,17 @@
 #include <QtCore/QRegularExpression>
 #include <QtCore/QDir>
 #include <QtCore/QBasicMutex>
+#include <QtCore/QUrl>
 
 #include <optional>
 #include <limits>
 
 QT_BEGIN_NAMESPACE
 
+using namespace Qt::StringLiterals;
+
 namespace QQmlJS {
 namespace Dom {
-
-static bool uriHasSchema(QStringView importStr)
-{
-    QRegularExpression schemaRe(QStringLiteral(u"\\A[a-zA-Z][-+.a-zA-Z0-9]+:"));
-    return schemaRe.match(importStr).hasMatch();
-}
 
 namespace Paths {
 
@@ -89,41 +50,17 @@ Path moduleIndexPath(QString uri, int majorVersion, ErrorHandler errorHandler)
         version = QLatin1String("Latest");
     else if (majorVersion == Version::Undefined)
         version = QString();
-    if (uriHasSchema(uri)) {
-        if (majorVersion != Version::Undefined)
-            Path::myErrors()
-                    .error(Path::tr("The module directory import %1 cannot have a version")
-                                   .arg(uri))
-                    .handle(errorHandler);
-        version = QString();
-    } else {
-        QRegularExpression moduleRe(QLatin1String(R"(\A\w+(?:\.\w+)*\Z)"));
-        auto m = moduleRe.match(uri);
-        if (!m.isValid())
-            Path::myErrors()
-                    .error(Path::tr("Invalid module name in import %1").arg(uri))
-                    .handle(errorHandler);
-    }
+    QRegularExpression moduleRe(QLatin1String(R"(\A\w+(?:\.\w+)*\Z)"));
+    auto m = moduleRe.match(uri);
+    if (!m.isValid())
+        Path::myErrors()
+                .error(Path::tr("Invalid module name in import %1").arg(uri))
+                .handle(errorHandler);
     return Path::Root(PathRoot::Env).field(Fields::moduleIndexWithUri).key(uri).key(version);
 }
 
-Path moduleScopePath(QString uri, Version version, ErrorHandler errorHandler)
+Path moduleScopePath(QString uri, Version version, ErrorHandler)
 {
-    if (uriHasSchema(uri)) {
-        if (version.isValid())
-            Path::myErrors()
-                    .error(Path::tr("The module directory import %1 cannot have a version")
-                                   .arg(uri))
-                    .handle(errorHandler);
-        version = {};
-    } else {
-        QRegularExpression moduleRe(QLatin1String(R"(\A\w+(?:\.\w+)*\Z)"));
-        auto m = moduleRe.match(uri);
-        if (!m.isValid())
-            Path::myErrors()
-                    .error(Path::tr("Invalid module name in import %1").arg(uri))
-                    .handle(errorHandler);
-    }
     return Path::Root(PathRoot::Env)
             .field(Fields::moduleIndexWithUri)
             .key(uri)
@@ -329,60 +266,41 @@ QRegularExpression Import::importRe()
 
 Import Import::fromUriString(QString importStr, Version v, QString importId, ErrorHandler handler)
 {
-    if (uriHasSchema(importStr)) {
-        return Import(importStr, v, importId);
-    } else {
-        auto m = importRe().match(importStr);
-        if (m.hasMatch()) {
-            if (v.majorVersion == Version::Undefined && v.minorVersion == Version::Undefined)
-                v = Version::fromString(m.captured(2));
-            else if (!m.captured(u"version").isEmpty())
-                domParsingErrors()
-                        .warning(tr("Version %1 in import string '%2' overridden by explicit "
-                                    "version %3")
-                                         .arg(m.captured(2), importStr, v.stringValue()))
-                        .handle(handler);
-            if (importId.isEmpty())
-                importId = m.captured(u"importId");
-            else if (!m.captured(u"importId").isEmpty())
-                domParsingErrors()
-                        .warning(tr("namespace %1 in import string '%2' overridden by explicit "
-                                    "importId %3")
-                                         .arg(m.captured(u"importId"), importStr, importId))
-                        .handle(handler);
-            return Import(m.captured(u"uri").trimmed(), v, importId);
-        }
-        domParsingErrors()
-                .error(tr("Unexpected URI format in import '%1'").arg(importStr))
-                .handle(handler);
-        return Import();
+    auto m = importRe().match(importStr);
+    if (m.hasMatch()) {
+        if (v.majorVersion == Version::Undefined && v.minorVersion == Version::Undefined)
+            v = Version::fromString(m.captured(2));
+        else if (!m.captured(u"version").isEmpty())
+            domParsingErrors()
+                    .warning(tr("Version %1 in import string '%2' overridden by explicit "
+                                "version %3")
+                                     .arg(m.captured(2), importStr, v.stringValue()))
+                    .handle(handler);
+        if (importId.isEmpty())
+            importId = m.captured(u"importId");
+        else if (!m.captured(u"importId").isEmpty())
+            domParsingErrors()
+                    .warning(tr("namespace %1 in import string '%2' overridden by explicit "
+                                "importId %3")
+                                     .arg(m.captured(u"importId"), importStr, importId))
+                    .handle(handler);
+        return Import(QmlUri::fromUriString(m.captured(u"uri").trimmed()), v, importId);
     }
+    domParsingErrors()
+            .error(tr("Unexpected URI format in import '%1'").arg(importStr))
+            .handle(handler);
+    return Import();
 }
 
-Import Import::fromFileString(QString importStr, QString baseDir, QString importId,
-                              ErrorHandler handler)
+Import Import::fromFileString(QString importStr, QString importId, ErrorHandler)
 {
-    Version v;
-    if (uriHasSchema(importStr))
-        return Import(importStr, v, importId);
-    QFileInfo p(importStr);
-    if (p.isRelative())
-        p = QFileInfo(QDir(baseDir).filePath(importStr));
-    QString path = p.canonicalFilePath();
-    if (path.isEmpty()) {
-        domParsingErrors()
-                .warning(tr("Non existing directory or file referred in URI of import '%1'")
-                                 .arg(importStr))
-                .handle(handler);
-        path = p.filePath();
-    }
-    return Import(QLatin1String("file://") + path, v, importId);
+    return Import(QmlUri::fromDirectoryString(importStr), Version(), importId);
 }
 
 bool Import::iterateDirectSubpaths(DomItem &self, DirectVisitor visitor)
 {
     bool cont = true;
-    cont = cont && self.dvValueField(visitor, Fields::uri, uri);
+    cont = cont && self.dvValueField(visitor, Fields::uri, uri.toString());
     cont = cont && self.dvWrapField(visitor, Fields::version, version);
     if (!importId.isEmpty())
         cont = cont && self.dvValueField(visitor, Fields::importId, importId);
@@ -392,22 +310,14 @@ bool Import::iterateDirectSubpaths(DomItem &self, DirectVisitor visitor)
     return cont;
 }
 
-void Import::writeOut(DomItem &self, OutWriter &ow) const
+void Import::writeOut(DomItem &, OutWriter &ow) const
 {
     if (implicit)
         return;
     ow.ensureNewline();
     ow.writeRegion(u"import").space();
-    if (uriHasSchema(uri)) {
-        if (uri.startsWith(u"file://")) {
-            QFileInfo myPath(self.canonicalFilePath());
-            QString relPath = myPath.dir().relativeFilePath(uri.mid(7));
-            ow.writeRegion(u"uri", dumperToString([relPath](Sink s) { sinkEscaped(s, relPath); }));
-        } else {
-            ow.writeRegion(u"uri", dumperToString([this](Sink s) { sinkEscaped(s, this->uri); }));
-        }
-    } else {
-        ow.writeRegion(u"uri", uri);
+    ow.writeRegion(u"uri", uri.toString());
+    if (uri.isModule()) {
         QString vString = version.stringValue();
         if (!vString.isEmpty())
             ow.space().write(vString);
@@ -636,6 +546,127 @@ bool QmlObject::iterateSubOwners(DomItem &self, function_ref<bool(DomItem &)> vi
         return true;
     });
     return cont;
+}
+
+static QStringList dotExpressionToList(std::shared_ptr<ScriptExpression> expr)
+{
+    QStringList res;
+    AST::Node *node = (expr ? expr->ast() : nullptr);
+    while (node) {
+        switch (node->kind) {
+        case AST::Node::Kind_IdentifierExpression: {
+            AST::IdentifierExpression *id = AST::cast<AST::IdentifierExpression *>(node);
+            res.prepend(id->name.toString());
+            return res;
+        }
+        case AST::Node::Kind_FieldMemberExpression: {
+            AST::FieldMemberExpression *id = AST::cast<AST::FieldMemberExpression *>(node);
+            res.prepend(id->name.toString());
+            node = id->base;
+            break;
+        }
+        default:
+            qCDebug(writeOutLog).noquote() << "Could not convert dot expression to list for:\n"
+                                           << expr->astRelocatableDump();
+            return QStringList();
+        }
+    }
+    return res;
+}
+
+LocallyResolvedAlias QmlObject::resolveAlias(DomItem &self,
+                                             std::shared_ptr<ScriptExpression> accessSequence) const
+{
+    QStringList accessSequenceList = dotExpressionToList(accessSequence);
+    return resolveAlias(self, accessSequenceList);
+}
+
+LocallyResolvedAlias QmlObject::resolveAlias(DomItem &self, const QStringList &accessSequence) const
+{
+    LocallyResolvedAlias res;
+    QSet<QString> visitedAlias;
+    if (accessSequence.isEmpty()) {
+        return res;
+    } else if (accessSequence.size() > 3) {
+        res.status = LocallyResolvedAlias::Status::TooDeep;
+        return res;
+    }
+    QString idName = accessSequence.first();
+    DomItem idTarget = self.component()
+                               .field(Fields::ids)
+                               .key(idName)
+                               .index(0)
+                               .field(Fields::referredObject)
+                               .get();
+    if (!idTarget)
+        return res;
+    res.baseObject = idTarget;
+    res.accessedPath = accessSequence.mid(1);
+    res.typeName = idTarget.name();
+    res.status = LocallyResolvedAlias::Status::ResolvedObject;
+    // check if it refers to locally defined props/objs
+    while (!res.accessedPath.isEmpty()) {
+        QString pNow = res.accessedPath.first();
+        DomItem defNow = res.baseObject.propertyDefs().key(pNow).index(0);
+        if (const PropertyDefinition *defNowPtr = defNow.as<PropertyDefinition>()) {
+            if (defNowPtr->isAlias()) {
+                res.typeName = QString();
+                ++res.nAliases;
+                QString aliasPath = defNow.canonicalPath().toString();
+                if (visitedAlias.contains(aliasPath)) {
+                    res.status = LocallyResolvedAlias::Status::Loop;
+                    return res;
+                }
+                visitedAlias.insert(aliasPath);
+                DomItem valNow = res.baseObject.bindings().key(pNow).index(0);
+                if (std::shared_ptr<ScriptExpression> exp =
+                            valNow.field(Fields::value).ownerAs<ScriptExpression>()) {
+                    QStringList expList = dotExpressionToList(exp);
+                    if (expList.isEmpty()) {
+                        res.status = LocallyResolvedAlias::Status::Invalid;
+                        return res;
+                    } else if (expList.size() > 3) {
+                        res.status = LocallyResolvedAlias::Status::TooDeep;
+                        return res;
+                    }
+                    idName = expList.first();
+                    idTarget = self.component()
+                                       .field(Fields::ids)
+                                       .key(idName)
+                                       .index(0)
+                                       .field(Fields::referredObject)
+                                       .get();
+                    res.baseObject = idTarget;
+                    res.accessedPath = expList.mid(1) + res.accessedPath.mid(1);
+                    if (!idTarget) {
+                        res.status = LocallyResolvedAlias::Status::Invalid;
+                        return res;
+                    }
+                    res.status = LocallyResolvedAlias::Status::ResolvedObject;
+                    res.typeName = idTarget.name();
+                } else {
+                    res.status = LocallyResolvedAlias::Status::Invalid;
+                    return res;
+                }
+            } else {
+                res.localPropertyDef = defNow;
+                res.typeName = defNowPtr->typeName;
+                res.accessedPath = res.accessedPath.mid(1);
+                DomItem valNow = res.baseObject.bindings().key(pNow).index(0).field(Fields::value);
+                if (valNow.internalKind() == DomType::QmlObject) {
+                    res.baseObject = valNow;
+                    res.typeName = valNow.name();
+                    res.status = LocallyResolvedAlias::Status::ResolvedObject;
+                } else {
+                    res.status = LocallyResolvedAlias::Status::ResolvedProperty;
+                    return res;
+                }
+            }
+        } else {
+            return res;
+        }
+    }
+    return res;
 }
 
 MutableDomItem QmlObject::addPropertyDef(MutableDomItem &self, PropertyDefinition propertyDef,
@@ -979,7 +1010,8 @@ Binding::Binding(QString name, std::shared_ptr<ScriptExpression> value, BindingT
 Binding::Binding(QString name, QString scriptCode, BindingType bindingType)
     : Binding(name,
               std::make_unique<BindingValue>(std::shared_ptr<ScriptExpression>(new ScriptExpression(
-                      scriptCode, ScriptExpression::ExpressionType::BindingExpression))),
+                      scriptCode, ScriptExpression::ExpressionType::BindingExpression, 0,
+                      Binding::preCodeForName(name), Binding::postCodeForName(name)))),
               bindingType)
 {
 }
@@ -1237,11 +1269,6 @@ void EnumDecl::updatePathFromOwner(Path newPath)
 {
     DomElement::updatePathFromOwner(newPath);
     updatePathFromOwnerQList(m_annotations, newPath.field(Fields::annotations));
-}
-
-QList<QmlObject> EnumDecl::annotations() const
-{
-    return m_annotations;
 }
 
 void EnumDecl::setAnnotations(QList<QmlObject> annotations)
@@ -1576,6 +1603,10 @@ void ScriptExpression::setCode(QString code, QString preCode, QString postCode)
 {
     m_codeStr = code;
     const bool qmlMode = (m_expressionType == ExpressionType::BindingExpression);
+    if (qmlMode && preCode.isEmpty()) {
+        preCode = Binding::preCodeForName(u"binding");
+        postCode = Binding::postCodeForName(u"binding");
+    }
     if (!preCode.isEmpty() || !postCode.isEmpty())
         m_codeStr = preCode + code + postCode;
     m_code = QStringView(m_codeStr).mid(preCode.length(), code.length());
@@ -1878,6 +1909,150 @@ void EnumItem::writeOut(DomItem &self, OutWriter &ow) const
     }
     if (myIndex >= 0 && self.container().indexes() != myIndex + 1)
         ow.writeRegion(u"comma", u",");
+}
+
+QmlUri QmlUri::fromString(const QString &str)
+{
+    if (str.startsWith(u'"'))
+        return fromDirectoryString(str.mid(1, str.length() - 2)
+                                           .replace(u"\\\""_s, u"\""_s)
+                                           .replace(u"\\\\"_s, u"\\"_s));
+    else
+        return fromUriString(str);
+}
+
+QmlUri QmlUri::fromUriString(const QString &str)
+{
+    QRegularExpression moduleUriRe(QLatin1String(R"(\A\w+(?:\.\w+)*\Z)"));
+    return QmlUri((moduleUriRe.match(str).hasMatch() ? Kind::ModuleUri : Kind::Invalid), str);
+}
+
+QmlUri QmlUri::fromDirectoryString(const QString &str)
+{
+    QUrl url(str);
+    if (url.isValid() && url.scheme().length() > 1)
+        return QmlUri(url);
+    if (!str.isEmpty()) {
+        QFileInfo path(str);
+        return QmlUri((path.isRelative() ? Kind::RelativePath : Kind::AbsolutePath), str);
+    }
+    return {};
+}
+
+bool QmlUri::isValid() const
+{
+    return m_kind != Kind::Invalid;
+}
+
+bool QmlUri::isDirectory() const
+{
+    switch (m_kind) {
+    case Kind::Invalid:
+    case Kind::ModuleUri:
+        break;
+    case Kind::DirectoryUrl:
+    case Kind::RelativePath:
+    case Kind::AbsolutePath:
+        return true;
+    }
+    return false;
+}
+
+bool QmlUri::isModule() const
+{
+    return m_kind == Kind::ModuleUri;
+}
+
+QString QmlUri::moduleUri() const
+{
+    if (m_kind == Kind::ModuleUri)
+        return std::get<QString>(m_value);
+    return QString();
+}
+
+QString QmlUri::localPath() const
+{
+    switch (m_kind) {
+    case Kind::Invalid:
+    case Kind::ModuleUri:
+        break;
+    case Kind::DirectoryUrl: {
+        const QUrl &url = std::get<QUrl>(m_value);
+        if (url.scheme().compare(u"file", Qt::CaseInsensitive) == 0)
+            return url.path();
+        break;
+    }
+    case Kind::RelativePath:
+    case Kind::AbsolutePath:
+        return std::get<QString>(m_value);
+    }
+    return QString();
+}
+
+QString QmlUri::absoluteLocalPath(const QString &basePath) const
+{
+    switch (m_kind) {
+    case Kind::Invalid:
+    case Kind::ModuleUri:
+        break;
+    case Kind::DirectoryUrl: {
+        const QUrl &url = std::get<QUrl>(m_value);
+        if (url.scheme().compare(u"file", Qt::CaseInsensitive) == 0)
+            return url.path();
+        break;
+    }
+    case Kind::RelativePath: {
+        if (!basePath.isEmpty())
+            return QDir(basePath).filePath(std::get<QString>(m_value));
+        break;
+    }
+    case Kind::AbsolutePath:
+        return std::get<QString>(m_value);
+    }
+    return QString();
+}
+
+QUrl QmlUri::directoryUrl() const
+{
+    if (m_kind == Kind::DirectoryUrl)
+        return std::get<QUrl>(m_value);
+    return QUrl {};
+}
+
+QString QmlUri::directoryString() const
+{
+    switch (m_kind) {
+    case Kind::Invalid:
+    case Kind::ModuleUri:
+        break;
+    case Kind::DirectoryUrl:
+        return std::get<QUrl>(m_value).toString(); // set formatting? options?
+    case Kind::RelativePath:
+    case Kind::AbsolutePath:
+        return std::get<QString>(m_value);
+    }
+    return QString();
+}
+
+QString QmlUri::toString() const
+{
+    switch (m_kind) {
+    case Kind::Invalid:
+        break;
+    case Kind::ModuleUri:
+        return std::get<QString>(m_value);
+    case Kind::DirectoryUrl:
+    case Kind::RelativePath:
+    case Kind::AbsolutePath:
+        return u"\""_s + directoryString().replace(u'\\', u"\\\\"_s).replace(u'"', u"\\\""_s)
+                + u"\""_s;
+    }
+    return QString();
+}
+
+QmlUri::Kind QmlUri::kind() const
+{
+    return m_kind;
 }
 
 } // end namespace Dom

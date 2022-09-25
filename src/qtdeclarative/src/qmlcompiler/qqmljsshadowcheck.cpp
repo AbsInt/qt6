@@ -1,34 +1,11 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the tools applications of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "qqmljsshadowcheck_p.h"
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 /*!
  * \internal
@@ -58,18 +35,22 @@ void QQmlJSShadowCheck::run(
     m_annotations = annotations;
     m_function = function;
     m_error = error;
-    m_state = initialState(function, m_typeResolver);
+    m_state = initialState(function);
     decode(m_function->code.constData(), static_cast<uint>(m_function->code.length()));
 }
 
 void QQmlJSShadowCheck::generate_LoadProperty(int nameIndex)
 {
-    checkShadowing(m_state.accumulatorIn, m_jsUnitGenerator->stringForIndex(nameIndex));
+    auto accumulatorIn = m_state.registers.find(Accumulator);
+    if (accumulatorIn != m_state.registers.end())
+        checkShadowing(accumulatorIn.value(), m_jsUnitGenerator->stringForIndex(nameIndex));
 }
 
 void QQmlJSShadowCheck::generate_GetLookup(int index)
 {
-    checkShadowing(m_state.accumulatorIn, m_jsUnitGenerator->lookupName(index));
+    auto accumulatorIn = m_state.registers.find(Accumulator);
+    if (accumulatorIn != m_state.registers.end())
+        checkShadowing(accumulatorIn.value(), m_jsUnitGenerator->lookupName(index));
 }
 
 void QQmlJSShadowCheck::generate_StoreProperty(int nameIndex, int base)
@@ -85,7 +66,9 @@ void QQmlJSShadowCheck::generate_SetLookup(int index, int base)
 QV4::Moth::ByteCodeHandler::Verdict QQmlJSShadowCheck::startInstruction(QV4::Moth::Instr::Type)
 {
     m_state = nextStateFromAnnotations(m_state, *m_annotations);
-    return ProcessInstruction;
+    return (m_state.hasSideEffects() || m_state.changedRegisterIndex() != InvalidRegister)
+            ? ProcessInstruction
+            : SkipInstruction;
 }
 
 void QQmlJSShadowCheck::endInstruction(QV4::Moth::Instr::Type)
@@ -121,8 +104,8 @@ void QQmlJSShadowCheck::checkShadowing(
             return; // Only properties and methods can be shadowed
         }
 
-        setError(u"Member %1 of %2 can be shadowed"_qs
-                         .arg(memberName, m_state.accumulatorIn.descriptiveName()));
+        setError(u"Member %1 of %2 can be shadowed"_s
+                         .arg(memberName, m_state.accumulatorIn().descriptiveName()));
         return;
     }
     default:

@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2019 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtQml module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2019 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qqml.h"
 
@@ -147,6 +111,30 @@ QObject *qmlAttachedPropertiesObject(QObject *object, QQmlAttachedPropertiesFunc
         return nullptr;
 
     return resolveAttachedProperties(func, data, object, create);
+}
+
+QObject *qmlExtendedObject(QObject *object)
+{
+    return QQmlPrivate::qmlExtendedObject(object, 0);
+}
+
+QObject *QQmlPrivate::qmlExtendedObject(QObject *object, int index)
+{
+    if (!object)
+        return nullptr;
+
+    void *result = nullptr;
+    QObjectPrivate *d = QObjectPrivate::get(object);
+    if (!d->metaObject)
+        return nullptr;
+
+    const int id = d->metaObject->metaCall(
+                object, QMetaObject::CustomCall,
+                QQmlProxyMetaObject::extensionObjectId(index), &result);
+    if (id != QQmlProxyMetaObject::extensionObjectId(index))
+        return nullptr;
+
+    return static_cast<QObject *>(result);
 }
 
 int qmlRegisterUncreatableMetaObject(const QMetaObject &staticMetaObject,
@@ -482,7 +470,7 @@ int QQmlPrivate::qmlregister(RegistrationType type, void *data)
                 noCreateReason = QLatin1String("Type cannot be created in QML.");
         }
 
-        RegisterType revisionRegistration = {
+        RegisterType typeRevision = {
             1,
             type.typeId,
             type.listId,
@@ -507,6 +495,16 @@ int QQmlPrivate::qmlregister(RegistrationType type, void *data)
             type.structVersion > 0 ? type.finalizerCast : -1
         };
 
+        QQmlPrivate::RegisterSequentialContainer sequenceRevision = {
+            0,
+            type.uri,
+            type.version,
+            nullptr,
+            type.listId,
+            type.structVersion > 1 ? type.listMetaSequence : QMetaSequence(),
+            QTypeRevision(),
+        };
+
         const QTypeRevision added = revisionClassInfo(
                     type.classInfoMetaObject, "QML.AddedInVersion",
                     QTypeRevision::fromVersion(type.version.majorVersion(), 0));
@@ -524,24 +522,33 @@ int QQmlPrivate::qmlregister(RegistrationType type, void *data)
             if (revision.hasMajorVersion() && revision.majorVersion() > type.version.majorVersion())
                 break;
 
-            assignVersions(&revisionRegistration, revision, type.version);
+            assignVersions(&typeRevision, revision, type.version);
 
             // When removed or before added, we still add revisions, but anonymous ones
-            if (revisionRegistration.version < added
-                    || (removed.isValid() && !(revisionRegistration.version < removed))) {
-                revisionRegistration.elementName = nullptr;
-                revisionRegistration.create = nullptr;
-                revisionRegistration.userdata = nullptr;
+            if (typeRevision.version < added
+                    || (removed.isValid() && !(typeRevision.version < removed))) {
+                typeRevision.elementName = nullptr;
+                typeRevision.create = nullptr;
+                typeRevision.userdata = nullptr;
             } else {
-                revisionRegistration.elementName = elementName;
-                revisionRegistration.create = creatable ? type.create : nullptr;
-                revisionRegistration.userdata = type.userdata;
+                typeRevision.elementName = elementName;
+                typeRevision.create = creatable ? type.create : nullptr;
+                typeRevision.userdata = type.userdata;
             }
 
-            revisionRegistration.customParser = type.customParserFactory();
-            const int id = qmlregister(TypeRegistration, &revisionRegistration);
+            typeRevision.customParser = type.customParserFactory();
+            const int id = qmlregister(TypeRegistration, &typeRevision);
             if (type.qmlTypeIds)
                 type.qmlTypeIds->append(id);
+
+            if (sequenceRevision.metaSequence != QMetaSequence()) {
+                sequenceRevision.version = typeRevision.version;
+                sequenceRevision.revision = typeRevision.revision;
+                const int id = QQmlPrivate::qmlregister(
+                            QQmlPrivate::SequentialContainerRegistration, &sequenceRevision);
+                if (type.qmlTypeIds)
+                    type.qmlTypeIds->append(id);
+            }
         }
         break;
     }
@@ -599,12 +606,11 @@ int QQmlPrivate::qmlregister(RegistrationType type, void *data)
     case SequentialContainerAndRevisionsRegistration: {
         const RegisterSequentialContainerAndRevisions &type
                 = *reinterpret_cast<RegisterSequentialContainerAndRevisions *>(data);
-        const char *elementName = classElementName(type.classInfoMetaObject);
         RegisterSequentialContainer revisionRegistration = {
             0,
             type.uri,
             type.version,
-            elementName,
+            nullptr,
             type.typeId,
             type.metaSequence,
             QTypeRevision()
@@ -613,10 +619,8 @@ int QQmlPrivate::qmlregister(RegistrationType type, void *data)
         const QTypeRevision added = revisionClassInfo(
                     type.classInfoMetaObject, "QML.AddedInVersion",
                     QTypeRevision::fromMinorVersion(0));
-        const QTypeRevision removed = revisionClassInfo(
-                    type.classInfoMetaObject, "QML.RemovedInVersion");
-        QList<QTypeRevision> revisions = revisionClassInfos(type.classInfoMetaObject,
-                                                            "QML.ExtraVersion");
+        QList<QTypeRevision> revisions = revisionClassInfos(
+                    type.classInfoMetaObject, "QML.ExtraVersion");
         revisions.append(added);
         uniqueRevisions(&revisions, type.version, added);
 
@@ -625,12 +629,6 @@ int QQmlPrivate::qmlregister(RegistrationType type, void *data)
                 continue;
             if (revision.hasMajorVersion() && revision.majorVersion() > type.version.majorVersion())
                 break;
-
-            // When removed, we still add revisions, but anonymous ones
-            if (removed.isValid() && !(revision < removed))
-                revisionRegistration.typeName = nullptr;
-            else
-                revisionRegistration.typeName = elementName;
 
             assignVersions(&revisionRegistration, revision, type.version);
             const int id = qmlregister(SequentialContainerRegistration, &revisionRegistration);
@@ -702,40 +700,42 @@ void QQmlPrivate::qmlunregister(RegistrationType type, quintptr data)
 
 namespace QQmlPrivate {
 template<>
-void qmlRegisterTypeAndRevisions<QQmlTypeNotAvailable, void>(const char *uri, int versionMajor,
-                                                             const QMetaObject *classInfoMetaObject,
-                                                             QVector<int> *qmlTypeIds,
-                                                             const QMetaObject *extension, bool)
+void qmlRegisterTypeAndRevisions<QQmlTypeNotAvailable, void>(
+        const char *uri, int versionMajor, const QMetaObject *classInfoMetaObject,
+        QVector<int> *qmlTypeIds, const QMetaObject *extension, bool)
 {
     using T = QQmlTypeNotAvailable;
 
-    RegisterTypeAndRevisions type = { 1,
-                                      QMetaType::fromType<T *>(),
-                                      QMetaType::fromType<QQmlListProperty<T>>(),
-                                      0,
-                                      nullptr,
-                                      nullptr,
-                                      nullptr,
+    RegisterTypeAndRevisions type = {
+        3,
+        QmlMetaType<T>::self(),
+        QmlMetaType<T>::list(),
+        0,
+        nullptr,
+        nullptr,
+        nullptr,
 
-                                      uri,
-                                      QTypeRevision::fromMajorVersion(versionMajor),
+        uri,
+        QTypeRevision::fromMajorVersion(versionMajor),
 
-                                      &QQmlTypeNotAvailable::staticMetaObject,
-                                      classInfoMetaObject,
+        &QQmlTypeNotAvailable::staticMetaObject,
+        classInfoMetaObject,
 
-                                      attachedPropertiesFunc<T>(),
-                                      attachedPropertiesMetaObject<T>(),
+        attachedPropertiesFunc<T>(),
+        attachedPropertiesMetaObject<T>(),
 
-                                      StaticCastSelector<T, QQmlParserStatus>::cast(),
-                                      StaticCastSelector<T, QQmlPropertyValueSource>::cast(),
-                                      StaticCastSelector<T, QQmlPropertyValueInterceptor>::cast(),
+        StaticCastSelector<T, QQmlParserStatus>::cast(),
+        StaticCastSelector<T, QQmlPropertyValueSource>::cast(),
+        StaticCastSelector<T, QQmlPropertyValueInterceptor>::cast(),
 
-                                      nullptr,
-                                      extension,
-                                      qmlCreateCustomParser<T>,
-                                      qmlTypeIds,
-                                      QQmlPrivate::StaticCastSelector<T, QQmlFinalizerHook>::cast(),
-                                      false };
+        nullptr,
+        extension,
+        qmlCreateCustomParser<T>,
+        qmlTypeIds,
+        QQmlPrivate::StaticCastSelector<T, QQmlFinalizerHook>::cast(),
+        false,
+        QmlMetaType<T>::sequence(),
+    };
 
     qmlregister(TypeAndRevisionsRegistration, &type);
 }
@@ -893,8 +893,7 @@ static ObjectPropertyResult storeFallbackProperty(QV4::Lookup *l, QObject *objec
     return ObjectPropertyResult::OK;
 }
 
-static bool isTypeCompatible(QMetaType lookupType, QMetaType propertyType,
-                             const AOTCompiledContext *aotContext)
+static bool isTypeCompatible(QMetaType lookupType, QMetaType propertyType)
 {
     if (!lookupType.isValid()) {
         // If type is invalid, then the calling code depends on the lookup
@@ -909,18 +908,17 @@ static bool isTypeCompatible(QMetaType lookupType, QMetaType propertyType,
 
         const QMetaObject *typeMetaObject = lookupType.metaObject();
         const QMetaObject *foundMetaObject = propertyType.metaObject();
-        if (!foundMetaObject) {
-            if (QQmlEngine *engine = aotContext->qmlEngine()) {
-                foundMetaObject = QQmlEnginePrivate::get(engine)->metaObjectForType(
-                            propertyType).metaObject();
-            }
-        }
+        if (!foundMetaObject)
+            foundMetaObject = QQmlMetaType::metaObjectForType(propertyType).metaObject();
 
         while (foundMetaObject && foundMetaObject != typeMetaObject)
             foundMetaObject = foundMetaObject->superClass();
 
         if (!foundMetaObject)
             return false;
+    } else if (lookupType == QMetaType::fromType<int>()
+               && propertyType.flags() & QMetaType::IsEnumeration) {
+        return true;
     } else if (propertyType != lookupType) {
         return false;
     }
@@ -952,10 +950,9 @@ static ObjectLookupResult initObjectLookup(
     if (ddata->isQueuedForDeletion)
         return ObjectLookupResult::Failure;
 
-    QQmlPropertyData *property;
+    const QQmlPropertyData *property;
     if (!ddata->propertyCache) {
-        property = QQmlPropertyCache::property(
-                    aotContext->engine, object, name, aotContext->qmlContext, nullptr);
+        property = QQmlPropertyCache::property(object, name, aotContext->qmlContext, nullptr);
     } else {
         property = ddata->propertyCache->property(
                     name.getPointer(), object, aotContext->qmlContext);
@@ -972,7 +969,7 @@ static ObjectLookupResult initObjectLookup(
             return ObjectLookupResult::Failure;
 
         const QMetaProperty property = metaObject->property(coreIndex);
-        if (!isTypeCompatible(type, property.metaType(), aotContext))
+        if (!isTypeCompatible(type, property.metaType()))
             return ObjectLookupResult::Failure;
 
         l->releasePropertyCache();
@@ -984,7 +981,7 @@ static ObjectLookupResult initObjectLookup(
         return ObjectLookupResult::Fallback;
     }
 
-    if (!isTypeCompatible(type, property->propType(), aotContext))
+    if (!isTypeCompatible(type, property->propType()))
         return ObjectLookupResult::Failure;
 
     Q_ASSERT(ddata->propertyCache);
@@ -1478,7 +1475,8 @@ bool AOTCompiledContext::loadTypeLookup(uint index, void *target) const
                 ->compilationUnit()->typeIds.id;
     }
 
-    *static_cast<const QMetaObject **>(target) = ep->metaObjectForType(metaType).metaObject();
+    *static_cast<const QMetaObject **>(target)
+            = QQmlMetaType::metaObjectForType(metaType).metaObject();
     return true;
 }
 

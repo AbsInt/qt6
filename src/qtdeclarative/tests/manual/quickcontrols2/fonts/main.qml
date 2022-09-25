@@ -1,100 +1,91 @@
-/****************************************************************************
-**
-** Copyright (C) 2017 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:BSD$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** BSD License Usage
-** Alternatively, you may use this file under the terms of the BSD license
-** as follows:
-**
-** "Redistribution and use in source and binary forms, with or without
-** modification, are permitted provided that the following conditions are
-** met:
-**   * Redistributions of source code must retain the above copyright
-**     notice, this list of conditions and the following disclaimer.
-**   * Redistributions in binary form must reproduce the above copyright
-**     notice, this list of conditions and the following disclaimer in
-**     the documentation and/or other materials provided with the
-**     distribution.
-**   * Neither the name of The Qt Company Ltd nor the names of its
-**     contributors may be used to endorse or promote products derived
-**     from this software without specific prior written permission.
-**
-**
-** THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-** "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-** LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-** A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-** OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-** SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-** LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-** DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-** THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-** (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-** OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE."
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2017 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR BSD-3-Clause
 
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Templates as T
+import QtQuick.Dialogs
 import QtQuick.Layouts
 
 ApplicationWindow {
+    id: window
     visible: true
-    width: 480
+    width: 640
     height: 640
-    title: qsTr("Hello World")
+    title: qsTr("Font and Color Inheritance Test")
+    font.pointSize: pointSizeSlider.value
+    font.family: fontDialog.selectedFont.family
+    palette.text: textColorDialog.selectedColor
+    palette.buttonText: buttonTextColorDialog.selectedColor
+    SystemPalette { id: systemPalette }
 
     header: ToolBar {
-        Slider {
-            from: 16
-            to: 48
-            stepSize: 1
-            onValueChanged: control.font.pointSize = value
+        RowLayout {
+            width: parent.width
+            Slider {
+                id: pointSizeSlider
+                from: 6
+                to: 48
+                value: 12
+                stepSize: 1
+            }
+            Label {
+                text: pointSizeSlider.value + " pt " + font.family
+            }
+            Button {
+                text: "Font…"
+                palette.buttonText: systemPalette.buttonText
+                onClicked: fontDialog.open()
+                FontDialog { id: fontDialog }
+                Component.onCompleted: fontDialog.selectedFont = window.font
+            }
+            Item { Layout.fillWidth: true }
+            Button {
+                text: "Text…"
+                palette.buttonText: textColorDialog.selectedColor
+                onClicked: textColorDialog.open()
+                ColorDialog { id: textColorDialog }
+                Component.onCompleted: textColorDialog.selectedColor = systemPalette.text
+                Layout.margins: 3
+                Layout.alignment: Qt.AlignRight
+            }
+            Button {
+                text: "Buttons…"
+                onClicked: buttonTextColorDialog.open()
+                ColorDialog { id: buttonTextColorDialog }
+                Component.onCompleted: buttonTextColorDialog.selectedColor = systemPalette.buttonText
+                Layout.margins: 3
+                Layout.alignment: Qt.AlignRight
+            }
         }
     }
 
     Flickable {
         anchors.fill: parent
-        contentWidth: control.width
-        contentHeight: control.height
+        contentWidth: layout.implicitWidth + 40
+        contentHeight: layout.implicitHeight + 40
 
-        T.Control {
-            id: control
-            width: layout.implicitWidth + 40
-            height: layout.implicitHeight + 40
-            ColumnLayout {
-                id: layout
-                anchors.fill: parent
-                anchors.margins: 20
-                Button { text: "Button" }
-                CheckBox { text: "CheckBox" }
-                GroupBox { title: "GroupBox" }
-                RadioButton { text: "RadioButton" }
-                Switch { text: "Switch" }
-                TabButton {
-                    text: "TabButton"
-                    font.pointSize: control.font.pointSize
-                }
-                TextField { placeholderText: "TextField" }
-                TextArea { placeholderText: "TextArea" }
-                ToolButton { text: "ToolButton" }
-                Tumbler { model: 3 }
+        ColumnLayout {
+            id: layout
+            anchors.fill: parent
+            anchors.margins: 20
+            Label {
+                text: "Label with **Bold** *Italics* _Underline_ ~~Strikethrough~~ `Mono`"
+                textFormat: Label.MarkdownText
             }
+            Button { text: "Button" }
+            GroupBox {
+                title: "GroupBox"
+                ColumnLayout {
+                    RadioButton { text: "RadioButton" }
+                    CheckBox { text: "CheckBox" }
+                }
+            }
+            Switch { text: "Switch" }
+            TabButton { text: "TabButton" }
+            TextField { placeholderText: "TextField" }
+            TextArea { placeholderText: "TextArea" }
+            ToolButton { text: "ToolButton" }
+            Tumbler { model: 3 }
         }
 
         ScrollBar.vertical: ScrollBar { }

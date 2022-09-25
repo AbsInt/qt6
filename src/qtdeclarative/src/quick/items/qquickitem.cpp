@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtQuick module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qquickitem.h"
 
@@ -61,6 +25,7 @@
 #include <QtCore/private/qnumeric_p.h>
 #include <QtGui/qpa/qplatformtheme.h>
 #include <QtCore/qloggingcategory.h>
+#include <QtCore/private/qduplicatetracker_p.h>
 
 #include <private/qqmlglobal_p.h>
 #include <private/qqmlengine_p.h>
@@ -96,6 +61,9 @@ Q_DECLARE_LOGGING_CATEGORY(lcPtr)
 Q_DECLARE_LOGGING_CATEGORY(lcTransient)
 Q_LOGGING_CATEGORY(lcHandlerParent, "qt.quick.handler.parent")
 Q_LOGGING_CATEGORY(lcVP, "qt.quick.viewport")
+
+// after 100ms, a mouse/non-mouse cursor conflict is resolved in favor of the mouse handler
+static const quint64 kCursorOverrideTimeout = 100;
 
 void debugFocusTree(QQuickItem *item, QQuickItem *scope = nullptr, int depth = 1)
 {
@@ -2393,6 +2361,8 @@ QQuickItem::~QQuickItem()
 
     delete d->_anchors; d->_anchors = nullptr;
     delete d->_stateGroup; d->_stateGroup = nullptr;
+
+    d->isQuickItem = false;
 }
 
 /*!
@@ -2535,6 +2505,7 @@ QQuickItem* QQuickItemPrivate::nextPrevItemInTabFocusChain(QQuickItem *item, boo
     QQuickItem *current = item;
     qCDebug(lcFocus) << "QQuickItemPrivate::nextPrevItemInTabFocusChain: startItem:" << startItem;
     qCDebug(lcFocus) << "QQuickItemPrivate::nextPrevItemInTabFocusChain: firstFromItem:" << firstFromItem;
+    QDuplicateTracker<QQuickItem *> cycleDetector;
     do {
         qCDebug(lcFocus) << "QQuickItemPrivate::nextPrevItemInTabFocusChain: current:" << current;
         qCDebug(lcFocus) << "QQuickItemPrivate::nextPrevItemInTabFocusChain: from:" << from;
@@ -2601,7 +2572,10 @@ QQuickItem* QQuickItemPrivate::nextPrevItemInTabFocusChain(QQuickItem *item, boo
         // traversed all of the chain (by compare the [current] item with [startItem])
         // Since the [startItem] might be promoted to its parent if it is invisible,
         // we still have to check [current] item with original start item
-        if ((current == startItem || current == originalStartItem) && from == firstFromItem) {
+        // We might also run into a cycle before we reach firstFromItem again
+        // but note that we have to ignore current if we are meant to skip it
+        if (((current == startItem || current == originalStartItem) && from == firstFromItem) ||
+                (!skip && cycleDetector.hasSeen(current))) {
             // wrapped around, avoid endless loops
             if (item == contentItem) {
                 qCDebug(lcFocus) << "QQuickItemPrivate::nextPrevItemInTabFocusChain: looped, return contentItem";
@@ -3239,6 +3213,8 @@ QQuickItemPrivate::~QQuickItemPrivate()
 void QQuickItemPrivate::init(QQuickItem *parent)
 {
     Q_Q(QQuickItem);
+
+    isQuickItem = true;
 
     baselineOffset = 0.0;
 
@@ -5333,7 +5309,7 @@ QPointF QQuickItemPrivate::adjustedPosForTransform(const QPointF &centroidParent
     mat = mat * startMatrix;
 
     QPointF xformOriginPoint = q->transformOriginPoint();
-    QPointF pos = mat * xformOriginPoint;
+    QPointF pos = mat.map(xformOriginPoint);
     pos -= xformOriginPoint;
 
     return pos;
@@ -6331,6 +6307,15 @@ void QQuickItem::setVisible(bool v)
 
     Setting this property to \c false automatically causes \l activeFocus to be
     set to \c false, and this item will longer receive keyboard events.
+
+    \note Hover events are enabled separately by \l setAcceptHoverEvents().
+    Thus, a disabled item can continue to receive hover events, even when this
+    property is \c false. This makes it possible to show informational feedback
+    (such as \l ToolTip) even when an interactive item is disabled.
+    The same is also true for any \l {HoverHandlers}{QQuickHoverHandler}
+    added as children of the item. A HoverHandler can, however, be
+    \l{disabled}{QQuickHoverHandler::enabled} explicitly, or for example
+    be bound to the \c enabled state of the item.
 
     \sa visible
 */
@@ -7937,6 +7922,7 @@ void QQuickItem::setCursor(const QCursor &cursor)
     Q_D(QQuickItem);
 
     Qt::CursorShape oldShape = d->extra.isAllocated() ? d->extra->cursor.shape() : Qt::ArrowCursor;
+    qCDebug(lcHoverTrace) << oldShape << "->" << cursor.shape();
 
     if (oldShape != cursor.shape() || oldShape >= Qt::LastCursor || cursor.shape() >= Qt::LastCursor) {
         d->extra.value().cursor = cursor;
@@ -7973,6 +7959,7 @@ void QQuickItem::setCursor(const QCursor &cursor)
 void QQuickItem::unsetCursor()
 {
     Q_D(QQuickItem);
+    qCDebug(lcHoverTrace) << "clearing cursor";
     if (!d->hasCursor)
         return;
     d->hasCursor = false;
@@ -8024,27 +8011,82 @@ QCursor QQuickItemPrivate::effectiveCursor(const QQuickPointerHandler *handler) 
     Returns the Pointer Handler that is currently attempting to set the cursor shape,
     or null if there is no such handler.
 
+    If there are multiple handlers attempting to set the cursor:
+    \list
+    \li an active handler has the highest priority (e.g. a DragHandler being dragged)
+    \li any HoverHandler that is reacting to a non-mouse device has priority for
+        kCursorOverrideTimeout ms (a tablet stylus is jittery so that's enough)
+    \li otherwise a HoverHandler that is reacting to the mouse, if any
+    \endlist
+
+    Within each category, if there are multiple handlers, the last-added one wins
+    (the one that is declared at the bottom wins, because users may intuitively
+    think it's "on top" even though there is no Z-order; or, one that is added
+    in a specific use case overrides an imported component).
+
     \sa QtQuick::PointerHandler::cursor
 */
 QQuickPointerHandler *QQuickItemPrivate::effectiveCursorHandler() const
 {
     if (!hasPointerHandlers())
         return nullptr;
-    QQuickPointerHandler *retHoverHandler = nullptr;
+    QQuickPointerHandler* activeHandler = nullptr;
+    QQuickPointerHandler* mouseHandler = nullptr;
+    QQuickPointerHandler* nonMouseHandler = nullptr;
     for (QQuickPointerHandler *h : extra->pointerHandlers) {
         if (!h->isCursorShapeExplicitlySet())
             continue;
         QQuickHoverHandler *hoverHandler = qmlobject_cast<QQuickHoverHandler *>(h);
-        // For now, we don't expect multiple hover handlers in one Item, so we choose the first one found;
-        // but a future use case could be to have different cursors for different tablet stylus devices.
-        // In that case, this function needs more information: which device did the event come from.
-        // TODO Qt 6: add QPointerDevice* as argument to this function? (it doesn't exist yet in Qt 5)
-        if (!retHoverHandler && hoverHandler)
-            retHoverHandler = hoverHandler;
+        // Prioritize any HoverHandler that is reacting to a non-mouse device.
+        // Otherwise, choose the first hovered handler that is found.
+        // TODO maybe: there was an idea to add QPointerDevice* as argument to this function
+        // and check the device type, but why? HoverHandler already does that.
+        if (!activeHandler && hoverHandler && hoverHandler->isHovered()) {
+            qCDebug(lcHoverTrace) << hoverHandler << hoverHandler->acceptedDevices() << "wants to set cursor" << hoverHandler->cursorShape();
+            if (hoverHandler->acceptedDevices().testFlag(QPointingDevice::DeviceType::Mouse)) {
+                // If there's a conflict, the last-added HoverHandler wins.  Maybe the user is overriding a default...
+                if (mouseHandler && mouseHandler->cursorShape() != hoverHandler->cursorShape()) {
+                    qCDebug(lcHoverTrace) << "mouse cursor conflict:" << mouseHandler << "wants" << mouseHandler->cursorShape()
+                                          << "but" << hoverHandler << "wants" << hoverHandler->cursorShape();
+                }
+                mouseHandler = hoverHandler;
+            } else {
+                // If there's a conflict, the last-added HoverHandler wins.
+                if (nonMouseHandler && nonMouseHandler->cursorShape() != hoverHandler->cursorShape()) {
+                    qCDebug(lcHoverTrace) << "non-mouse cursor conflict:" << nonMouseHandler << "wants" << nonMouseHandler->cursorShape()
+                                          << "but" << hoverHandler << "wants" << hoverHandler->cursorShape();
+                }
+                nonMouseHandler = hoverHandler;
+            }
+        }
         if (!hoverHandler && h->active())
-            return h;
+            activeHandler = h;
     }
-    return retHoverHandler;
+    if (activeHandler) {
+        qCDebug(lcHoverTrace) << "active handler choosing cursor" << activeHandler << activeHandler->cursorShape();
+        return activeHandler;
+    }
+    // Mouse events are often synthetic; so if a HoverHandler for a non-mouse device wanted to set the cursor,
+    // let it win, unless more than kCursorOverrideTimeout ms have passed
+    // since the last time the non-mouse handler actually reacted to an event.
+    // We could miss the fact that a tablet stylus has left proximity, because we don't deliver proximity events to windows.
+    if (nonMouseHandler) {
+        if (mouseHandler) {
+            const bool beforeTimeout =
+                QQuickPointerHandlerPrivate::get(mouseHandler)->lastEventTime <
+                QQuickPointerHandlerPrivate::get(nonMouseHandler)->lastEventTime + kCursorOverrideTimeout;
+            QQuickPointerHandler *winner = (beforeTimeout ? nonMouseHandler : mouseHandler);
+            qCDebug(lcHoverTrace) << "non-mouse handler reacted last time:" << QQuickPointerHandlerPrivate::get(nonMouseHandler)->lastEventTime
+                                  << "and mouse handler reacted at time:" << QQuickPointerHandlerPrivate::get(mouseHandler)->lastEventTime
+                                  << "choosing cursor according to" << winner << winner->cursorShape();
+            return winner;
+        }
+        qCDebug(lcHoverTrace) << "non-mouse handler choosing cursor" << nonMouseHandler << nonMouseHandler->cursorShape();
+        return nonMouseHandler;
+    }
+    if (mouseHandler)
+        qCDebug(lcHoverTrace) << "mouse handler choosing cursor" << mouseHandler << mouseHandler->cursorShape();
+    return mouseHandler;
 }
 
 #endif
@@ -8604,12 +8646,6 @@ bool QQuickItem::event(QEvent *ev)
     Q_D(QQuickItem);
 
     switch (ev->type()) {
-#if 0
-    case QEvent::PolishRequest:
-        d->polishScheduled = false;
-        updatePolish();
-        break;
-#endif
 #if QT_CONFIG(im)
     case QEvent::InputMethodQuery: {
         QInputMethodQueryEvent *query = static_cast<QInputMethodQueryEvent *>(ev);
@@ -8700,14 +8736,18 @@ bool QQuickItem::event(QEvent *ev)
 #endif // gestures
     case QEvent::LanguageChange:
     case QEvent::LocaleChange:
-        for (QQuickItem *item : d->childItems)
+        for (QQuickItem *item : qAsConst(d->childItems))
             QCoreApplication::sendEvent(item, ev);
         break;
     case QEvent::WindowActivate:
     case QEvent::WindowDeactivate:
         if (d->providesPalette())
             d->setCurrentColorGroup();
-        for (QQuickItem *item : d->childItems)
+        for (QQuickItem *item : qAsConst(d->childItems))
+            QCoreApplication::sendEvent(item, ev);
+        break;
+    case QEvent::ApplicationPaletteChange:
+        for (QQuickItem *item : qAsConst(d->childItems))
             QCoreApplication::sendEvent(item, ev);
         break;
     default:
@@ -8902,8 +8942,8 @@ void QQuickItemPrivate::localizedTouchEvent(const QTouchEvent *event, bool isFil
                 // So hopefully if we start from one passive grabber and go up the parent chain from there,
                 // we will find any filtering parent items that exist.
                 auto handler = qmlobject_cast<QQuickPointerHandler *>(pg.first());
-                Q_ASSERT(handler);
-                pointGrabber = handler->parentItem();
+                if (handler)
+                    pointGrabber = handler->parentItem();
             }
         }
 
@@ -9014,7 +9054,7 @@ QQuickItemLayer::QQuickItemLayer(QQuickItem *item)
     , m_smooth(false)
     , m_componentComplete(true)
     , m_wrapMode(QQuickShaderEffectSource::ClampToEdge)
-    , m_format(QQuickShaderEffectSource::RGBA)
+    , m_format(QQuickShaderEffectSource::RGBA8)
     , m_name("source")
     , m_effectComponent(nullptr)
     , m_effect(nullptr)
@@ -9228,20 +9268,18 @@ void QQuickItemLayer::setMipmap(bool mipmap)
 /*!
     \qmlproperty enumeration QtQuick::Item::layer.format
 
-    This property defines the internal format of the texture.
+    This property defines the format of the backing texture.
     Modifying this property makes most sense when the \a layer.effect is also
-    specified. Depending on the OpenGL implementation, this property might
-    allow you to save some texture memory.
+    specified.
 
     \list
-    \li ShaderEffectSource.Alpha - GL_ALPHA;
-    \li ShaderEffectSource.RGB - GL_RGB
-    \li ShaderEffectSource.RGBA - GL_RGBA
+    \li ShaderEffectSource.RGBA8
+    \li ShaderEffectSource.RGBA16F
+    \li ShaderEffectSource.RGBA32F
+    \li ShaderEffectSource.Alpha - Starting with Qt 6.0, this value is not in use and has the same effect as RGBA8 in practice.
+    \li ShaderEffectSource.RGB - Starting with Qt 6.0, this value is not in use and has the same effect as RGBA8 in practice.
+    \li ShaderEffectSource.RGBA - Starting with Qt 6.0, this value is not in use and has the same effect as RGBA8 in practice.
     \endlist
-
-    \note ShaderEffectSource.RGB and ShaderEffectSource.Alpha should
-    be used with caution, as support for these formats in the underlying
-    hardware and driver is often not present.
 
     \sa {Item Layers}
  */

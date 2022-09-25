@@ -1,43 +1,7 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Copyright (C) 2016 Intel Corporation.
-** Copyright (C) 2019 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Giuseppe D'Angelo <giuseppe.dangelo@kdab.com>
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2022 The Qt Company Ltd.
+// Copyright (C) 2016 Intel Corporation.
+// Copyright (C) 2019 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Giuseppe D'Angelo <giuseppe.dangelo@kdab.com>
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qbytearray.h"
 #include "qbytearraymatcher.h"
@@ -70,7 +34,7 @@
 
 QT_BEGIN_NAMESPACE
 
-const char QByteArray::_empty = '\0';
+Q_CONSTINIT const char QByteArray::_empty = '\0';
 
 // ASCII case system, used by QByteArray::to{Upper,Lower}() and qstr(n)icmp():
 static constexpr inline uchar asciiUpper(uchar c)
@@ -272,7 +236,7 @@ int qstricmp(const char *str1, const char *str2)
         max += offset;
         do {
             uchar c = s1[offset];
-            if (int res = asciiLower(c) - asciiLower(s2[offset]))
+            if (int res = QtMiscUtils::caseCompareAscii(c, s2[offset]))
                 return res;
             if (!c)
                 return 0;
@@ -355,7 +319,7 @@ int qstrnicmp(const char *str1, const char *str2, size_t len)
         return s1 ? 1 : (s2 ? -1 : 0);
     for (; len--; ++s1, ++s2) {
         const uchar c = *s1;
-        if (int res = asciiLower(c) - asciiLower(*s2))
+        if (int res = QtMiscUtils::caseCompareAscii(c, *s2))
             return res;
         if (!c)                                // strings are equal
             break;
@@ -396,7 +360,7 @@ int qstrnicmp(const char *str1, qsizetype len1, const char *str2, qsizetype len2
             if (!c)
                 return 1;
 
-            if (int res = asciiLower(s1[i]) - asciiLower(c))
+            if (int res = QtMiscUtils::caseCompareAscii(s1[i], c))
                 return res;
         }
         return s2[i] ? -1 : 0;
@@ -404,7 +368,7 @@ int qstrnicmp(const char *str1, qsizetype len1, const char *str2, qsizetype len2
         // not null-terminated
         const qsizetype len = qMin(len1, len2);
         for (qsizetype i = 0; i < len; ++i) {
-            if (int res = asciiLower(s1[i]) - asciiLower(s2[i]))
+            if (int res = QtMiscUtils::caseCompareAscii(s1[i], s2[i]))
                 return res;
         }
         if (len1 == len2)
@@ -638,6 +602,7 @@ QByteArray qCompress(const uchar* data, qsizetype nbytes, int compressionLevel)
 */
 
 #ifndef QT_NO_COMPRESS
+Q_DECL_COLD_FUNCTION
 static QByteArray invalidCompressedData()
 {
     qWarning("qUncompress: Input data is corrupted");
@@ -668,13 +633,14 @@ QByteArray qUncompress(const uchar* data, qsizetype nbytes)
                                  (data[2] <<  8) | (data[3]      ));
     size_t len = qMax(expectedSize, 1ul);
     constexpr size_t maxPossibleSize = MaxAllocSize - sizeof(QByteArray::Data);
-    if (Q_UNLIKELY(len >= maxPossibleSize)) {
+    if (len >= maxPossibleSize) {
         // QByteArray does not support that huge size anyway.
         return invalidCompressedData();
     }
 
-    QByteArray::DataPointer d(QByteArray::Data::allocate(len));
-    if (Q_UNLIKELY(d.data() == nullptr))
+    Q_ASSERT(len <= size_t((std::numeric_limits<qsizetype>::max)()));
+    QByteArray::DataPointer d(QByteArray::Data::allocate(qsizetype(len)));
+    if (d.data() == nullptr) // allocation failed
         return invalidCompressedData();
 
     forever {
@@ -699,13 +665,13 @@ QByteArray qUncompress(const uchar* data, qsizetype nbytes)
             static_assert(maxPossibleSize <= (std::numeric_limits<decltype(len)>::max)() / 2,
                           "oops, next line may overflow");
             len *= 2;
-            if (Q_UNLIKELY(len >= maxPossibleSize)) {
+            if (len >= maxPossibleSize) {
                 // QByteArray does not support that huge size anyway.
                 return invalidCompressedData();
             } else {
                 // grow the block
                 d->reallocate(d->allocatedCapacity()*2, QArrayData::Grow);
-                if (Q_UNLIKELY(d.data() == nullptr))
+                if (d.data() == nullptr) // reallocation failed
                     return invalidCompressedData();
             }
             continue;
@@ -1784,6 +1750,31 @@ void QByteArray::resize(qsizetype size)
 }
 
 /*!
+    \since 6.4
+
+    Sets the size of the byte array to \a newSize bytes.
+
+    If \a newSize is greater than the current size, the byte array is
+    extended to make it \a newSize bytes with the extra bytes added to
+    the end. The new bytes are initialized to \a c.
+
+    If \a newSize is less than the current size, bytes beyond position
+    \a newSize are excluded from the byte array.
+
+    \note While resize() will grow the capacity if needed, it never shrinks
+    capacity. To shed excess capacity, use squeeze().
+
+    \sa size(), truncate(), squeeze()
+*/
+void QByteArray::resize(qsizetype newSize, char c)
+{
+    const auto old = d.size;
+    resize(newSize);
+    if (old < d.size)
+        memset(d.data() + old, c, d.size - old);
+}
+
+/*!
     Sets every byte in the byte array to \a ch. If \a size is different from -1
     (the default), the byte array is resized to size \a size beforehand.
 
@@ -1843,26 +1834,6 @@ void QByteArray::reallocGrowData(qsizetype n)
 void QByteArray::expand(qsizetype i)
 {
     resize(qMax(i + 1, size()));
-}
-
-/*!
-   \internal
-   Return a QByteArray that is sure to be '\\0'-terminated.
-
-   By default, all QByteArray have an extra NUL at the end,
-   guaranteeing that assumption. However, if QByteArray::fromRawData
-   is used, then the NUL is there only if the user put it there. We
-   can't be sure.
-*/
-QByteArray QByteArray::nulTerminated() const
-{
-    // is this fromRawData?
-    if (d.isMutable())
-        return *this;           // no, then we're sure we're zero terminated
-
-    QByteArray copy(*this);
-    copy.detach();
-    return copy;
 }
 
 /*!
@@ -2683,12 +2654,14 @@ qsizetype QByteArray::count(char ch) const
     return static_cast<int>(countCharHelper(*this, ch));
 }
 
+#if QT_DEPRECATED_SINCE(6, 4)
 /*! \fn qsizetype QByteArray::count() const
-
+    \deprecated [6.4] Use size() or length() instead.
     \overload
 
     Same as size().
 */
+#endif
 
 /*!
     \fn int QByteArray::compare(QByteArrayView bv, Qt::CaseSensitivity cs = Qt::CaseSensitive) const
@@ -2980,11 +2953,7 @@ QByteArray QByteArray::mid(qsizetype pos, qsizetype len) const
     \sa isLower(), toUpper(), {Character Case}
 */
 
-// prevent the compiler from inlining the function in each of
-// toLower and toUpper when the only difference is the table being used
-// (even with constant propagation, there's no gain in performance).
 template <typename T>
-Q_NEVER_INLINE
 static QByteArray toCase_template(T &input, uchar (*lookup)(uchar))
 {
     // find the first bad character in input
@@ -3537,11 +3506,6 @@ QByteArray QByteArray::rightJustified(qsizetype width, char fill, bool truncate)
     return result;
 }
 
-bool QByteArray::isNull() const noexcept
-{
-    return d->isNull();
-}
-
 auto QtPrivate::toSignedInteger(QByteArrayView data, int base) -> ParsedNumber<qlonglong>
 {
 #if defined(QT_CHECK_RANGE)
@@ -3585,8 +3549,9 @@ auto QtPrivate::toUnsignedInteger(QByteArrayView data, int base) -> ParsedNumber
 
     If \a base is 0, the base is determined automatically using the following
     rules: If the byte array begins with "0x", it is assumed to be hexadecimal
-    (base 16); otherwise, if it begins with "0", it is assumed to be octal (base
-    8); otherwise it is assumed to be decimal.
+    (base 16); otherwise, if it begins with "0b", it is assumed to be binary
+    (base 2); otherwise, if it begins with "0", it is assumed to be octal
+    (base 8); otherwise it is assumed to be decimal.
 
     Returns 0 if the conversion fails.
 
@@ -3596,6 +3561,8 @@ auto QtPrivate::toUnsignedInteger(QByteArrayView data, int base) -> ParsedNumber
     \note The conversion of the number is performed in the default C locale,
     regardless of the user's locale. Use QLocale to perform locale-aware
     conversions between numbers and strings.
+
+    \note Support for the "0b" prefix was added in Qt 6.4.
 
     \sa number()
 */
@@ -3612,8 +3579,9 @@ qlonglong QByteArray::toLongLong(bool *ok, int base) const
 
     If \a base is 0, the base is determined automatically using the following
     rules: If the byte array begins with "0x", it is assumed to be hexadecimal
-    (base 16); otherwise, if it begins with "0", it is assumed to be octal (base
-    8); otherwise it is assumed to be decimal.
+    (base 16); otherwise, if it begins with "0b", it is assumed to be binary
+    (base 2); otherwise, if it begins with "0", it is assumed to be octal
+    (base 8); otherwise it is assumed to be decimal.
 
     Returns 0 if the conversion fails.
 
@@ -3623,6 +3591,8 @@ qlonglong QByteArray::toLongLong(bool *ok, int base) const
     \note The conversion of the number is performed in the default C locale,
     regardless of the user's locale. Use QLocale to perform locale-aware
     conversions between numbers and strings.
+
+    \note Support for the "0b" prefix was added in Qt 6.4.
 
     \sa number()
 */
@@ -3639,8 +3609,9 @@ qulonglong QByteArray::toULongLong(bool *ok, int base) const
 
     If \a base is 0, the base is determined automatically using the following
     rules: If the byte array begins with "0x", it is assumed to be hexadecimal
-    (base 16); otherwise, if it begins with "0", it is assumed to be octal (base
-    8); otherwise it is assumed to be decimal.
+    (base 16); otherwise, if it begins with "0b", it is assumed to be binary
+    (base 2); otherwise, if it begins with "0", it is assumed to be octal
+    (base 8); otherwise it is assumed to be decimal.
 
     Returns 0 if the conversion fails.
 
@@ -3652,6 +3623,8 @@ qulonglong QByteArray::toULongLong(bool *ok, int base) const
     \note The conversion of the number is performed in the default C locale,
     regardless of the user's locale. Use QLocale to perform locale-aware
     conversions between numbers and strings.
+
+    \note Support for the "0b" prefix was added in Qt 6.4.
 
     \sa number()
 */
@@ -3668,8 +3641,9 @@ int QByteArray::toInt(bool *ok, int base) const
 
     If \a base is 0, the base is determined automatically using the following
     rules: If the byte array begins with "0x", it is assumed to be hexadecimal
-    (base 16); otherwise, if it begins with "0", it is assumed to be octal (base
-    8); otherwise it is assumed to be decimal.
+    (base 16); otherwise, if it begins with "0b", it is assumed to be binary
+    (base 2); otherwise, if it begins with "0", it is assumed to be octal
+    (base 8); otherwise it is assumed to be decimal.
 
     Returns 0 if the conversion fails.
 
@@ -3679,6 +3653,8 @@ int QByteArray::toInt(bool *ok, int base) const
     \note The conversion of the number is performed in the default C locale,
     regardless of the user's locale. Use QLocale to perform locale-aware
     conversions between numbers and strings.
+
+    \note Support for the "0b" prefix was added in Qt 6.4.
 
     \sa number()
 */
@@ -3697,8 +3673,9 @@ uint QByteArray::toUInt(bool *ok, int base) const
 
     If \a base is 0, the base is determined automatically using the following
     rules: If the byte array begins with "0x", it is assumed to be hexadecimal
-    (base 16); otherwise, if it begins with "0", it is assumed to be octal (base
-    8); otherwise it is assumed to be decimal.
+    (base 16); otherwise, if it begins with "0b", it is assumed to be binary
+    (base 2); otherwise, if it begins with "0", it is assumed to be octal
+    (base 8); otherwise it is assumed to be decimal.
 
     Returns 0 if the conversion fails.
 
@@ -3710,6 +3687,8 @@ uint QByteArray::toUInt(bool *ok, int base) const
     \note The conversion of the number is performed in the default C locale,
     regardless of the user's locale. Use QLocale to perform locale-aware
     conversions between numbers and strings.
+
+    \note Support for the "0b" prefix was added in Qt 6.4.
 
     \sa number()
 */
@@ -3727,8 +3706,9 @@ long QByteArray::toLong(bool *ok, int base) const
 
     If \a base is 0, the base is determined automatically using the following
     rules: If the byte array begins with "0x", it is assumed to be hexadecimal
-    (base 16); otherwise, if it begins with "0", it is assumed to be octal (base
-    8); otherwise it is assumed to be decimal.
+    (base 16); otherwise, if it begins with "0b", it is assumed to be binary
+    (base 2); otherwise, if it begins with "0", it is assumed to be octal
+    (base 8); otherwise it is assumed to be decimal.
 
     Returns 0 if the conversion fails.
 
@@ -3738,6 +3718,8 @@ long QByteArray::toLong(bool *ok, int base) const
     \note The conversion of the number is performed in the default C locale,
     regardless of the user's locale. Use QLocale to perform locale-aware
     conversions between numbers and strings.
+
+    \note Support for the "0b" prefix was added in Qt 6.4.
 
     \sa number()
 */
@@ -3752,9 +3734,10 @@ ulong QByteArray::toULong(bool *ok, int base) const
     digits beyond 9; A is ten, B is eleven and so on.
 
     If \a base is 0, the base is determined automatically using the following
-    rules: If the byte array begins with "0x", it is assumed to be hexadecimal;
-    otherwise, if it begins with "0", it is assumed to be octal; otherwise it is
-    assumed to be decimal.
+    rules: If the byte array begins with "0x", it is assumed to be hexadecimal
+    (base 16); otherwise, if it begins with "0b", it is assumed to be binary
+    (base 2); otherwise, if it begins with "0", it is assumed to be octal
+    (base 8); otherwise it is assumed to be decimal.
 
     Returns 0 if the conversion fails.
 
@@ -3764,6 +3747,8 @@ ulong QByteArray::toULong(bool *ok, int base) const
     \note The conversion of the number is performed in the default C locale,
     regardless of the user's locale. Use QLocale to perform locale-aware
     conversions between numbers and strings.
+
+    \note Support for the "0b" prefix was added in Qt 6.4.
 
     \sa number()
 */
@@ -3779,9 +3764,10 @@ short QByteArray::toShort(bool *ok, int base) const
     letters for digits beyond 9; A is ten, B is eleven and so on.
 
     If \a base is 0, the base is determined automatically using the following
-    rules: If the byte array begins with "0x", it is assumed to be hexadecimal;
-    otherwise, if it begins with "0", it is assumed to be octal; otherwise it is
-    assumed to be decimal.
+    rules: If the byte array begins with "0x", it is assumed to be hexadecimal
+    (base 16); otherwise, if it begins with "0b", it is assumed to be binary
+    (base 2); otherwise, if it begins with "0", it is assumed to be octal
+    (base 8); otherwise it is assumed to be decimal.
 
     Returns 0 if the conversion fails.
 
@@ -3791,6 +3777,8 @@ short QByteArray::toShort(bool *ok, int base) const
     \note The conversion of the number is performed in the default C locale,
     regardless of the user's locale. Use QLocale to perform locale-aware
     conversions between numbers and strings.
+
+    \note Support for the "0b" prefix was added in Qt 6.4.
 
     \sa number()
 */
@@ -4192,7 +4180,7 @@ QByteArray QByteArray::number(double n, char format, int precision)
 {
     QLocaleData::DoubleForm form = QLocaleData::DFDecimal;
 
-    switch (asciiLower(format)) {
+    switch (QtMiscUtils::toAsciiLower(format)) {
         case 'f':
             form = QLocaleData::DFDecimal;
             break;
@@ -4511,7 +4499,7 @@ static void q_fromPercentEncoding(QByteArray *ba, char percent)
     const char *inputPtr = data;
 
     qsizetype i = 0;
-    qsizetype len = ba->count();
+    qsizetype len = ba->size();
     qsizetype outlen = 0;
     int a, b;
     char c;
@@ -4542,20 +4530,17 @@ static void q_fromPercentEncoding(QByteArray *ba, char percent)
         ba->truncate(outlen);
 }
 
-void q_fromPercentEncoding(QByteArray *ba)
-{
-    q_fromPercentEncoding(ba, '%');
-}
-
 /*!
-    \since 4.4
+    \since 6.4
 
-    Returns a decoded copy of the URI/URL-style percent-encoded \a input.
-    The \a percent parameter allows you to replace the '%' character for
-    another (for instance, '_' or '=').
+    Decodes URI/URL-style percent-encoding.
+
+    Returns a byte array containing the decoded text. The \a percent parameter
+    allows use of a different character than '%' (for instance, '_' or '=') as
+    the escape character.
 
     For example:
-    \snippet code/src_corelib_text_qbytearray.cpp 51
+    \snippet code/src_corelib_text_qbytearray.cpp 54
 
     \note Given invalid input (such as a string containing the sequence "%G5",
     which is not a valid hexadecimal number) the output will be invalid as
@@ -4563,16 +4548,33 @@ void q_fromPercentEncoding(QByteArray *ba)
 
     \sa toPercentEncoding(), QUrl::fromPercentEncoding()
 */
-QByteArray QByteArray::fromPercentEncoding(const QByteArray &input, char percent)
+QByteArray QByteArray::percentDecoded(char percent) const
 {
-    if (input.isNull())
-        return QByteArray();       // preserve null
-    if (input.isEmpty())
-        return QByteArray(input.data(), 0);
+    if (isEmpty())
+        return *this; // Preserves isNull().
 
-    QByteArray tmp = input;
+    QByteArray tmp = *this;
     q_fromPercentEncoding(&tmp, percent);
     return tmp;
+}
+
+/*!
+    \since 4.4
+
+    Decodes \a input from URI/URL-style percent-encoding.
+
+    Returns a byte array containing the decoded text. The \a percent parameter
+    allows use of a different character than '%' (for instance, '_' or '=') as
+    the escape character. Equivalent to input.percentDecoded(percent).
+
+    For example:
+    \snippet code/src_corelib_text_qbytearray.cpp 51
+
+    \sa percentDecoded()
+*/
+QByteArray QByteArray::fromPercentEncoding(const QByteArray &input, char percent)
+{
+    return input.percentDecoded(percent);
 }
 
 /*! \fn QByteArray QByteArray::fromStdString(const std::string &str)
@@ -4582,6 +4584,10 @@ QByteArray QByteArray::fromPercentEncoding(const QByteArray &input, char percent
 
     \sa toStdString(), QString::fromStdString()
 */
+QByteArray QByteArray::fromStdString(const std::string &s)
+{
+    return QByteArray(s.data(), qsizetype(s.size()));
+}
 
 /*!
     \fn std::string QByteArray::toStdString() const
@@ -4595,68 +4601,9 @@ QByteArray QByteArray::fromPercentEncoding(const QByteArray &input, char percent
 
     \sa fromStdString(), QString::toStdString()
 */
-
-static inline bool q_strchr(const char str[], char chr)
+std::string QByteArray::toStdString() const
 {
-    if (!str) return false;
-
-    const char *ptr = str;
-    char c;
-    while ((c = *ptr++))
-        if (c == chr)
-            return true;
-    return false;
-}
-
-static void q_toPercentEncoding(QByteArray *ba, const char *dontEncode, const char *alsoEncode, char percent)
-{
-    if (ba->isEmpty())
-        return;
-
-    QByteArray input = *ba;
-    qsizetype len = input.count();
-    const char *inputData = input.constData();
-    char *output = nullptr;
-    qsizetype length = 0;
-
-    for (qsizetype i = 0; i < len; ++i) {
-        unsigned char c = *inputData++;
-        if (((c >= 0x61 && c <= 0x7A) // ALPHA
-             || (c >= 0x41 && c <= 0x5A) // ALPHA
-             || (c >= 0x30 && c <= 0x39) // DIGIT
-             || c == 0x2D // -
-             || c == 0x2E // .
-             || c == 0x5F // _
-             || c == 0x7E // ~
-             || q_strchr(dontEncode, c))
-            && !q_strchr(alsoEncode, c)) {
-            if (output)
-                output[length] = c;
-            ++length;
-        } else {
-            if (!output) {
-                // detach now
-                ba->resize(len*3); // worst case
-                output = ba->data();
-            }
-            output[length++] = percent;
-            output[length++] = QtMiscUtils::toHexUpper((c & 0xf0) >> 4);
-            output[length++] = QtMiscUtils::toHexUpper(c & 0xf);
-        }
-    }
-    if (output)
-        ba->truncate(length);
-}
-
-void q_toPercentEncoding(QByteArray *ba, const char *exclude, const char *include)
-{
-    q_toPercentEncoding(ba, exclude, include, '%');
-}
-
-void q_normalizePercentEncoding(QByteArray *ba, const char *exclude)
-{
-    q_fromPercentEncoding(ba, '%');
-    q_toPercentEncoding(ba, exclude, nullptr, '%');
+    return std::string(data(), size_t(size()));
 }
 
 /*!
@@ -4691,19 +4638,42 @@ QByteArray QByteArray::toPercentEncoding(const QByteArray &exclude, const QByteA
     if (isEmpty())
         return QByteArray(data(), 0);
 
-    QByteArray include2 = include;
-    if (percent != '%')                        // the default
-        if ((percent >= 0x61 && percent <= 0x7A) // ALPHA
-            || (percent >= 0x41 && percent <= 0x5A) // ALPHA
-            || (percent >= 0x30 && percent <= 0x39) // DIGIT
-            || percent == 0x2D // -
-            || percent == 0x2E // .
-            || percent == 0x5F // _
-            || percent == 0x7E) // ~
-        include2 += percent;
+    const auto contains = [](const QByteArray &view, char c) {
+        // As view.contains(c), but optimised to bypass a lot of overhead:
+        return view.size() > 0 && memchr(view.data(), c, view.size()) != nullptr;
+    };
 
     QByteArray result = *this;
-    q_toPercentEncoding(&result, exclude.nulTerminated().constData(), include2.nulTerminated().constData(), percent);
+    char *output = nullptr;
+    qsizetype length = 0;
+
+    for (unsigned char c : *this) {
+        if (char(c) != percent
+            && ((c >= 0x61 && c <= 0x7A) // ALPHA
+                || (c >= 0x41 && c <= 0x5A) // ALPHA
+                || (c >= 0x30 && c <= 0x39) // DIGIT
+                || c == 0x2D // -
+                || c == 0x2E // .
+                || c == 0x5F // _
+                || c == 0x7E // ~
+                || contains(exclude, c))
+            && !contains(include, c)) {
+            if (output)
+                output[length] = c;
+            ++length;
+        } else {
+            if (!output) {
+                // detach now
+                result.resize(size() * 3); // worst case
+                output = result.data();
+            }
+            output[length++] = percent;
+            output[length++] = QtMiscUtils::toHexUpper((c & 0xf0) >> 4);
+            output[length++] = QtMiscUtils::toHexUpper(c & 0xf);
+        }
+    }
+    if (output)
+        result.truncate(length);
 
     return result;
 }
@@ -4804,11 +4774,13 @@ QByteArray QByteArray::toPercentEncoding(const QByteArray &exclude, const QByteA
     \sa QStringLiteral
 */
 
+#if QT_DEPRECATED_SINCE(6, 8)
 /*!
   \fn QtLiterals::operator""_qba(const char *str, size_t size)
 
   \relates QByteArray
   \since 6.2
+  \deprecated [6.8] Use \c _ba from Qt::StringLiterals namespace instead.
 
   Literal operator that creates a QByteArray out of the first \a size characters
   in the char string literal \a str.
@@ -4825,6 +4797,32 @@ QByteArray QByteArray::toPercentEncoding(const QByteArray &exclude, const QByteA
   \endcode
 
   \sa QByteArrayLiteral, QtLiterals::operator""_qs(const char16_t *str, size_t size)
+*/
+#endif // QT_DEPRECATED_SINCE(6, 8)
+
+/*!
+    \fn Qt::Literals::StringLiterals::operator""_ba(const char *str, size_t size)
+
+    \relates QByteArray
+    \since 6.4
+
+    Literal operator that creates a QByteArray out of the first \a size characters
+    in the char string literal \a str.
+
+    The QByteArray is created at compile time, and the generated string data is stored
+    in the read-only segment of the compiled object file. Duplicate literals may share
+    the same read-only memory. This functionality is interchangeable with
+    QByteArrayLiteral, but saves typing when many string literals are present in the
+    code.
+
+    The following code creates a QByteArray:
+    \code
+    using namespace Qt::Literals::StringLiterals;
+
+    auto str = "hello"_ba;
+    \endcode
+
+    \sa Qt::Literals::StringLiterals
 */
 
 /*!

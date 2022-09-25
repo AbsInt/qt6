@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtGui module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include <QtGui/private/qtguiglobal_p.h>
 #include "qdebug.h"
@@ -120,7 +84,7 @@ private:
         for (int i = start + 1; i < end; ++i) {
             if (m_analysis[i].bidiLevel == m_analysis[start].bidiLevel
                 && m_analysis[i].flags == m_analysis[start].flags
-                && (m_analysis[i].script == m_analysis[start].script || m_string[i] == QLatin1Char('.'))
+                && (m_analysis[i].script == m_analysis[start].script || m_string[i] == u'.')
                 && m_analysis[i].flags < QScriptAnalysis::SpaceTabOrObject
                 && i - start < MaxItemLength)
                 continue;
@@ -1247,9 +1211,9 @@ enum JustificationClass {
     Adds an inter character justification opportunity after the number or letter
     character and a space justification opportunity after the space character.
 */
-static inline void qt_getDefaultJustificationOpportunities(const ushort *string, int length, const QGlyphLayout &g, ushort *log_clusters, int spaceAs)
+static inline void qt_getDefaultJustificationOpportunities(const ushort *string, qsizetype length, const QGlyphLayout &g, ushort *log_clusters, int spaceAs)
 {
-    int str_pos = 0;
+    qsizetype str_pos = 0;
     while (str_pos < length) {
         int glyph_pos = log_clusters[str_pos];
 
@@ -1281,7 +1245,7 @@ static inline void qt_getDefaultJustificationOpportunities(const ushort *string,
     }
 }
 
-static inline void qt_getJustificationOpportunities(const ushort *string, int length, const QScriptItem &si, const QGlyphLayout &g, ushort *log_clusters)
+static inline void qt_getJustificationOpportunities(const ushort *string, qsizetype length, const QScriptItem &si, const QGlyphLayout &g, ushort *log_clusters)
 {
     Q_ASSERT(length > 0 && g.numGlyphs > 0);
 
@@ -1353,10 +1317,6 @@ void QTextEngine::shapeLine(const QScriptLine &line)
         x += si.width;
     }
 }
-
-#if QT_CONFIG(harfbuzz)
-extern bool qt_useHarfbuzzNG(); // defined in qfontengine.cpp
-#endif
 
 static void applyVisibilityRules(ushort ucs, QGlyphLayout *glyphs, uint glyphPosition, QFontEngine *fontEngine)
 {
@@ -1521,7 +1481,7 @@ void QTextEngine::shapeText(int item) const
     }
 
 #if QT_CONFIG(harfbuzz)
-    if (Q_LIKELY(shapingEnabled && qt_useHarfbuzzNG())) {
+    if (Q_LIKELY(shapingEnabled)) {
         si.num_glyphs = shapeTextWithHarfbuzzNG(si, string, itemLength, fontEngine, itemBoundaries, kerningEnabled, letterSpacing != 0);
     } else
 #endif
@@ -1582,8 +1542,7 @@ void QTextEngine::shapeText(int item) const
     QGlyphLayout glyphs = shapedGlyphs(&si);
 
 #if QT_CONFIG(harfbuzz)
-    if (Q_LIKELY(qt_useHarfbuzzNG()))
-        qt_getJustificationOpportunities(string, itemLength, si, glyphs, logClusters(&si));
+    qt_getJustificationOpportunities(string, itemLength, si, glyphs, logClusters(&si));
 #endif
 
     if (letterSpacing != 0) {
@@ -2974,7 +2933,7 @@ static QString stringMidRetainingBidiCC(const QString &string,
     return prefix + ellidePrefix + QStringView{string}.mid(midStart, midLength) + ellideSuffix + suffix;
 }
 
-QString QTextEngine::elidedText(Qt::TextElideMode mode, const QFixed &width, int flags, int from, int count) const
+QString QTextEngine::elidedText(Qt::TextElideMode mode, QFixed width, int flags, int from, int count) const
 {
 //    qDebug() << "elidedText; available width" << width.toReal() << "text width:" << this->width(0, layoutData->string.length()).toReal();
 
@@ -2993,14 +2952,14 @@ QString QTextEngine::elidedText(Qt::TextElideMode mode, const QFixed &width, int
 
             const int end = si.position + length(&si);
             for (int i = si.position; i < end - 1; ++i) {
-                if (layoutData->string.at(i) == QLatin1Char('&')
+                if (layoutData->string.at(i) == u'&'
                     && !attributes[i + 1].whiteSpace && attributes[i + 1].graphemeBoundary) {
                     const int gp = logClusters[i - si.position];
                     glyphs.attributes[gp].dontPrint = true;
                     // emulate grapheme cluster
                     attributes[i] = attributes[i + 1];
                     memset(attributes + i + 1, 0, sizeof(QCharAttributes));
-                    if (layoutData->string.at(i + 1) == QLatin1Char('&'))
+                    if (layoutData->string.at(i + 1) == u'&')
                         ++i;
                 }
             }
@@ -3209,7 +3168,7 @@ QFixed QTextEngine::calculateTabWidth(int item, QFixed x) const
         for (const QTextOption::Tab &tabSpec : qAsConst(tabArray)) {
             QFixed tab = QFixed::fromReal(tabSpec.position) * dpiScale;
             if (tab > x) {  // this is the tab we need.
-                int tabSectionEnd = layoutData->string.count();
+                int tabSectionEnd = layoutData->string.length();
                 if (tabSpec.type == QTextOption::RightTab || tabSpec.type == QTextOption::CenterTab) {
                     // find next tab to calculate the width required.
                     tab = QFixed::fromReal(tabSpec.position);

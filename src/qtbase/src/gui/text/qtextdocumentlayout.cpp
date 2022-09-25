@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtGui module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qtextdocumentlayout_p.h"
 #include "qtextdocument_p.h"
@@ -581,7 +545,7 @@ public:
                      QTextLayoutStruct *layoutStruct, int layoutFrom, int layoutTo, const QTextBlockFormat *previousBlockFormat);
     void layoutFlow(QTextFrame::Iterator it, QTextLayoutStruct *layoutStruct, int layoutFrom, int layoutTo, QFixed width = 0);
 
-    void floatMargins(const QFixed &y, const QTextLayoutStruct *layoutStruct, QFixed *left, QFixed *right) const;
+    void floatMargins(QFixed y, const QTextLayoutStruct *layoutStruct, QFixed *left, QFixed *right) const;
     QFixed findY(QFixed yFrom, const QTextLayoutStruct *layoutStruct, QFixed requiredWidth) const;
 
     QList<QCheckPoint> checkPoints;
@@ -830,7 +794,7 @@ QTextDocumentLayoutPrivate::hitTest(const QTextBlock &bl, const QFixedPoint &poi
     textrect.translate(tl->position());
     qCDebug(lcHit) << "    checking block" << bl.position() << "point=" << point.toPointF() << "    tlrect" << textrect;
     *position = bl.position();
-    if (point.y.toReal() < textrect.top()) {
+    if (point.y.toReal() < textrect.top() - bl.blockFormat().topMargin()) {
         qCDebug(lcHit) << "    before pos=" << *position;
         return PointBefore;
     } else if (point.y.toReal() > textrect.bottom()) {
@@ -2182,7 +2146,7 @@ void QTextDocumentLayoutPrivate::drawListItem(const QPointF &offset, QPainter *p
 
     QRectF r(pos, size);
 
-    qreal xoff = fontMetrics.horizontalAdvance(QLatin1Char(' '));
+    qreal xoff = fontMetrics.horizontalAdvance(u' ');
     if (dir == Qt::LeftToRight)
         xoff = -xoff - size.width();
     r.translate( xoff, (fontMetrics.height() / 2) - (size.height() / 2));
@@ -3667,7 +3631,7 @@ void QTextDocumentLayoutPrivate::layoutBlock(const QTextBlock &bl, int blockPosi
     }
 }
 
-void QTextDocumentLayoutPrivate::floatMargins(const QFixed &y, const QTextLayoutStruct *layoutStruct,
+void QTextDocumentLayoutPrivate::floatMargins(QFixed y, const QTextLayoutStruct *layoutStruct,
                                               QFixed *left, QFixed *right) const
 {
 //     qDebug() << "floatMargins y=" << y;
@@ -3790,7 +3754,7 @@ void QTextDocumentLayout::documentChanged(int from, int oldLength, int length)
      for (; blockIt.isValid() && blockIt != endIt; blockIt = blockIt.next())
          blockIt.clearLayout();
 
-    if (d->docPrivate->pageSize.isNull())
+    if (!d->docPrivate->canLayout())
         return;
 
     QRectF updateRect;
@@ -4068,7 +4032,7 @@ QRectF QTextDocumentLayout::tableCellBoundingRect(QTextTable *table, const QText
 QRectF QTextDocumentLayout::tableBoundingRect(QTextTable *table) const
 {
     Q_D(const QTextDocumentLayout);
-    if (d->docPrivate->pageSize.isNull())
+    if (!d->docPrivate->canLayout())
         return QRectF();
     d->ensureLayoutFinished();
 
@@ -4095,7 +4059,7 @@ QRectF QTextDocumentLayout::tableBoundingRect(QTextTable *table) const
 QRectF QTextDocumentLayout::frameBoundingRect(QTextFrame *frame) const
 {
     Q_D(const QTextDocumentLayout);
-    if (d->docPrivate->pageSize.isNull())
+    if (!d->docPrivate->canLayout())
         return QRectF();
     d->ensureLayoutFinished();
     return d->frameBoundingRectInternal(frame);
@@ -4124,7 +4088,7 @@ QRectF QTextDocumentLayoutPrivate::frameBoundingRectInternal(QTextFrame *frame) 
 QRectF QTextDocumentLayout::blockBoundingRect(const QTextBlock &block) const
 {
     Q_D(const QTextDocumentLayout);
-    if (d->docPrivate->pageSize.isNull() || !block.isValid() || !block.isVisible())
+    if (!d->docPrivate->canLayout() || !block.isValid() || !block.isVisible())
         return QRectF();
     d->ensureLayoutedByPosition(block.position() + block.length());
     QTextFrame *frame = d->document->frameAt(block.position());

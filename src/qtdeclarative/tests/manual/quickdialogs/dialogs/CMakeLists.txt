@@ -4,7 +4,7 @@ if (NOT QT_BUILD_STANDALONE_TESTS AND NOT QT_BUILDING_QT)
     find_package(Qt6BuildInternals COMPONENTS STANDALONE_TEST)
 endif()
 
-qt_internal_add_manual_test(dialogs
+qt_internal_add_manual_test(tst_manual_dialogs
     GUI
     SOURCES
         dialogs.cpp
@@ -17,16 +17,17 @@ qt_internal_add_manual_test(dialogs
 # Resources:
 set(qmake_immediate_resource_files
     "dialogs.qml"
+    "ColorDialogPage.qml"
     "FileDialogPage.qml"
     "FolderDialogPage.qml"
     "FontDialogPage.qml"
-    "StringListView.qml"
     "MessageDialogPage.qml"
+    "StringListView.qml"
     "qmldir"
     "Theme.qml"
 )
 
-qt_internal_add_resource(dialogs "qmake_immediate"
+qt_internal_add_resource(tst_manual_dialogs "qmake_immediate"
     PREFIX
         "/"
     FILES

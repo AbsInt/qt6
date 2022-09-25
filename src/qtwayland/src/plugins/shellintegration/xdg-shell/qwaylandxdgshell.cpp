@@ -1,42 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2017 The Qt Company Ltd.
-** Copyright (C) 2017 Eurogiciel, author: <philippe.coval@eurogiciel.fr>
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the config.tests of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2017 The Qt Company Ltd.
+// Copyright (C) 2017 Eurogiciel, author: <philippe.coval@eurogiciel.fr>
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qwaylandxdgshell_p.h"
 
@@ -210,12 +174,17 @@ QtWayland::xdg_toplevel::resize_edge QWaylandXdgSurface::Toplevel::convertToResi
                 | ((edges & Qt::RightEdge) ? resize_edge_right : 0));
 }
 
-QWaylandXdgSurface::Popup::Popup(QWaylandXdgSurface *xdgSurface, QWaylandXdgSurface *parent,
+QWaylandXdgSurface::Popup::Popup(QWaylandXdgSurface *xdgSurface, QWaylandWindow *parent,
                                  QtWayland::xdg_positioner *positioner)
-    : xdg_popup(xdgSurface->get_popup(parent->object(), positioner->object()))
-    , m_xdgSurface(xdgSurface)
+    : m_xdgSurface(xdgSurface)
+    , m_parentXdgSurface(qobject_cast<QWaylandXdgSurface *>(parent->shellSurface()))
     , m_parent(parent)
 {
+
+    init(xdgSurface->get_popup(m_parentXdgSurface ? m_parentXdgSurface->object() : nullptr, positioner->object()));
+    if (m_parent) {
+        m_parent->addChildPopup(m_xdgSurface->window());
+    }
 }
 
 QWaylandXdgSurface::Popup::~Popup()
@@ -223,10 +192,14 @@ QWaylandXdgSurface::Popup::~Popup()
     if (isInitialized())
         destroy();
 
+    if (m_parent) {
+        m_parent->removeChildPopup(m_xdgSurface->window());
+    }
+
     if (m_grabbing) {
         auto *shell = m_xdgSurface->m_shell;
         Q_ASSERT(shell->m_topmostGrabbingPopup == this);
-        shell->m_topmostGrabbingPopup = m_parent->m_popup;
+        shell->m_topmostGrabbingPopup = m_parentXdgSurface ? m_parentXdgSurface->m_popup : nullptr;
         m_grabbing = false;
 
         // Synthesize Qt enter/leave events for popup
@@ -432,12 +405,12 @@ void QWaylandXdgSurface::setPopup(QWaylandWindow *parent)
 {
     Q_ASSERT(!m_toplevel && !m_popup);
 
-    auto parentXdgSurface = static_cast<QWaylandXdgSurface *>(parent->shellSurface());
-
     auto positioner = new QtWayland::xdg_positioner(m_shell->create_positioner());
     // set_popup expects a position relative to the parent
-    QPoint transientPos = m_window->geometry().topLeft(); // this is absolute
-    transientPos -= parent->geometry().topLeft();
+    QPoint topLeftMargins = QPoint(m_window->customMargins().left(), m_window->customMargins().top());
+    QPoint parentMargins = QPoint(parent->customMargins().left(), parent->customMargins().top());
+    QPoint transientPos = m_window->geometry().topLeft() + topLeftMargins; // this is absolute
+    transientPos -= parent->geometry().topLeft() + parentMargins;
     if (parent->decoration()) {
         transientPos.setX(transientPos.x() + parent->decoration()->margins(QWaylandAbstractDecoration::ShadowsExcluded).left());
         transientPos.setY(transientPos.y() + parent->decoration()->margins(QWaylandAbstractDecoration::ShadowsExcluded).top());
@@ -445,19 +418,20 @@ void QWaylandXdgSurface::setPopup(QWaylandWindow *parent)
     positioner->set_anchor_rect(transientPos.x(), transientPos.y(), 1, 1);
     positioner->set_anchor(QtWayland::xdg_positioner::anchor_top_left);
     positioner->set_gravity(QtWayland::xdg_positioner::gravity_bottom_right);
-    positioner->set_size(m_window->geometry().width(), m_window->geometry().height());
+    positioner->set_size(m_window->windowContentGeometry().width(), m_window->windowContentGeometry().height());
     positioner->set_constraint_adjustment(QtWayland::xdg_positioner::constraint_adjustment_slide_x
         | QtWayland::xdg_positioner::constraint_adjustment_slide_y
         | QtWayland::xdg_positioner::constraint_adjustment_flip_x
         | QtWayland::xdg_positioner::constraint_adjustment_flip_y);
-    m_popup = new Popup(this, parentXdgSurface, positioner);
+    m_popup = new Popup(this, parent, positioner);
     positioner->destroy();
+
     delete positioner;
 }
 
 void QWaylandXdgSurface::setGrabPopup(QWaylandWindow *parent, QWaylandInputDevice *device, int serial)
 {
-    auto parentXdgSurface = static_cast<QWaylandXdgSurface *>(parent->shellSurface());
+    auto parentXdgSurface = qobject_cast<QWaylandXdgSurface *>(parent->shellSurface());
     auto *top = m_shell->m_topmostGrabbingPopup;
 
     if (top && top->m_xdgSurface != parentXdgSurface) {

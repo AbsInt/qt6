@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtQml module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2020 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "metatypesjsonprocessor.h"
 
@@ -33,6 +8,7 @@
 #include <QtCore/qjsondocument.h>
 #include <QtCore/qqueue.h>
 
+using namespace Qt::StringLiterals;
 
 bool MetaTypesJsonProcessor::processTypes(const QStringList &files)
 {
@@ -150,9 +126,9 @@ QString MetaTypesJsonProcessor::extractRegisteredTypes() const
             const auto value = entry[u"value"].toString();
             if (name == u"QML.Element") {
                 if (value == u"auto") {
-                    qmlElement = u"QML_NAMED_ELEMENT("_qs + className + u")"_qs;
+                    qmlElement = u"QML_NAMED_ELEMENT("_s + className + u")"_s;
                 } else if (value == u"anonymous") {
-                    qmlElement = u"QML_ANONYMOUS"_qs;
+                    qmlElement = u"QML_ANONYMOUS"_s;
                 } else {
                     qmlElement = u"QML_NAMED_ELEMENT(" + value + u")";
                 }
@@ -161,19 +137,19 @@ QString MetaTypesJsonProcessor::extractRegisteredTypes() const
             } else if (name == u"QML.UncreatableReason") {
                 qmlUncreatable = u"QML_UNCREATABLE(\"" + value + u"\")";
             } else if (name == u"QML.Attached") {
-                qmlAttached = u"QML_ATTACHED("_qs + value + u")";
+                qmlAttached = u"QML_ATTACHED("_s + value + u")";
             } else if (name == u"QML.Singleton") {
                 isSingleton = true;
             }
         }
         if (qmlElement.isEmpty())
             continue; // no relevant entries found
-        const QString spaces = u"    "_qs;
-        registrationHelper += u"\nstruct "_qs + foreignClassName + u"{\n    Q_GADGET\n"_qs;
-        registrationHelper += spaces + u"QML_FOREIGN(" + className + u")\n"_qs;
-        registrationHelper += spaces + qmlElement + u"\n"_qs;
+        const QString spaces = u"    "_s;
+        registrationHelper += u"\nstruct "_s + foreignClassName + u"{\n    Q_GADGET\n"_s;
+        registrationHelper += spaces + u"QML_FOREIGN(" + className + u")\n"_s;
+        registrationHelper += spaces + qmlElement + u"\n"_s;
         if (isSingleton)
-            registrationHelper += spaces + u"QML_SINGLETON\n"_qs;
+            registrationHelper += spaces + u"QML_SINGLETON\n"_s;
         if (isExplicitlyUncreatable) {
             if (qmlUncreatable.isEmpty())
                 registrationHelper += spaces + uR"(QML_UNCREATABLE(""))" + u"n";
@@ -351,6 +327,7 @@ void MetaTypesJsonProcessor::processTypes(const QJsonObject &types)
                     && !include.endsWith(QLatin1String(".hpp"))
                     && !include.endsWith(QLatin1String(".hxx"))
                     && !include.endsWith(QLatin1String(".hh"))
+                    && !include.endsWith(u".py")
                     && include.contains(QLatin1Char('.'))) {
                 fprintf(stderr,
                         "Class %s is declared in %s, which appears not to be a header.\n"

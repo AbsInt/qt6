@@ -1,7 +1,3 @@
 [active]
 opensuse-42.3
 opensuse-leap
-
-# QTBUG-103200
-[state]
-opensuse-leap

@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <QtTest/QtTest>
 #include <QtQuick/qquickview.h>
@@ -44,6 +19,7 @@
 #include <QtGui/qstandarditemmodel.h>
 #include <QStringListModel>
 #include <QFile>
+#include <QEvent>
 
 #include <QtQuickTestUtils/private/qmlutils_p.h>
 #include <QtQuickTestUtils/private/viewtestutils_p.h>
@@ -725,13 +701,13 @@ void tst_QQuickPathView::consecutiveModelChanges()
                 pathview->setCurrentIndex(changes[i].index);
                 break;
         case ListChange::Polish:
-                QQuickTest::qWaitForItemPolished(pathview);
+                QQuickTest::qWaitForPolish(pathview);
                 break;
             default:
                 continue;
         }
     }
-    QQuickTest::qWaitForItemPolished(pathview);
+    QQuickTest::qWaitForPolish(pathview);
 
     QCOMPARE(findItems<QQuickItem>(pathview, "wrapper").count(), count);
     QCOMPARE(pathview->count(), count);
@@ -1403,7 +1379,7 @@ void tst_QQuickPathView::package()
     QSKIP("QTBUG-27170 view does not reliably receive polish without a running animation");
 #endif
 
-    QQuickTest::qWaitForItemPolished(pathView);
+    QQuickTest::qWaitForPolish(pathView);
     QQuickItem *item = findItem<QQuickItem>(pathView, "pathItem");
     QVERIFY(item);
     QVERIFY(item->scale() != 1.0);
@@ -1540,7 +1516,8 @@ void tst_QQuickPathView::mouseDrag()
     QTest::qWait(100);
 
     {
-        QMouseEvent mv(QEvent::MouseMove, QPoint(50,100), Qt::LeftButton, Qt::LeftButton,Qt::NoModifier);
+        QMouseEvent mv(QEvent::MouseMove, QPoint(50,100), window->mapToGlobal(QPoint(50,100)),
+                       Qt::LeftButton, Qt::LeftButton,Qt::NoModifier);
         QGuiApplication::sendEvent(window.data(), &mv);
     }
     // first move beyond threshold does not trigger drag
@@ -1554,7 +1531,8 @@ void tst_QQuickPathView::mouseDrag()
     QCOMPARE(dragEndedSpy.count(), 0);
 
     {
-        QMouseEvent mv(QEvent::MouseMove, QPoint(90,100), Qt::LeftButton, Qt::LeftButton,Qt::NoModifier);
+        QMouseEvent mv(QEvent::MouseMove, QPoint(90,100), window->mapToGlobal(QPoint(90,100)),
+                       Qt::LeftButton, Qt::LeftButton,Qt::NoModifier);
         QGuiApplication::sendEvent(window.data(), &mv);
     }
     // next move beyond threshold does trigger drag
@@ -1925,7 +1903,8 @@ void tst_QQuickPathView::cancelDrag()
     // steal mouse grab - cancels PathView dragging
     auto mouse = QPointingDevice::primaryPointingDevice();
     auto mousePriv = QPointingDevicePrivate::get(const_cast<QPointingDevice *>(mouse));
-    QMouseEvent fakeMouseEv(QEvent::MouseMove, QPoint(130, 100), Qt::NoButton, Qt::LeftButton, Qt::NoModifier, mouse);
+    QMouseEvent fakeMouseEv(QEvent::MouseMove, QPoint(130, 100), QPoint(130, 100),
+                            Qt::NoButton, Qt::LeftButton, Qt::NoModifier, mouse);
     mousePriv->setExclusiveGrabber(&fakeMouseEv, fakeMouseEv.points().first(), nullptr);
 
     // returns to a snap point.
@@ -2750,7 +2729,6 @@ void tst_QQuickPathView::requiredPropertiesInDelegate()
     }
     {
         QScopedPointer<QQuickView> window(createView());
-        QTest::ignoreMessage(QtMsgType::QtWarningMsg, QRegularExpression("Writing to \"name\" broke the binding to the underlying model"));
         window->setSource(testFileUrl("delegateWithRequiredProperties.3.qml"));
         window->show();
         QTRY_VERIFY(window->rootObject()->property("working").toBool());

@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtQml module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qqmlbinding_p.h"
 
@@ -69,7 +33,7 @@ QT_BEGIN_NAMESPACE
 
 QQmlBinding *QQmlBinding::create(const QQmlPropertyData *property, const QQmlScriptString &script, QObject *obj, QQmlContext *ctxt)
 {
-    QQmlBinding *b = newBinding(QQmlEnginePrivate::get(ctxt), property);
+    QQmlBinding *b = newBinding(property);
 
     if (ctxt && !ctxt->isValid())
         return b;
@@ -125,7 +89,7 @@ QQmlBinding *QQmlBinding::create(
         const QQmlPropertyData *property, const QString &str, QObject *obj,
         const QQmlRefPointer<QQmlContextData> &ctxt, const QString &url, quint16 lineNumber)
 {
-    QQmlBinding *b = newBinding(QQmlEnginePrivate::get(ctxt), property);
+    QQmlBinding *b = newBinding(property);
 
     b->setNotifyOnValueChanged(true);
     b->QQmlJavaScriptExpression::setContext(ctxt);
@@ -147,7 +111,7 @@ QQmlBinding *QQmlBinding::create(QMetaType propertyType, QV4::Function *function
                                  const QQmlRefPointer<QQmlContextData> &ctxt,
                                  QV4::ExecutionContext *scope)
 {
-    QQmlBinding *b = newBinding(QQmlEnginePrivate::get(ctxt), propertyType);
+    QQmlBinding *b = newBinding(propertyType);
 
     b->setNotifyOnValueChanged(true);
     b->QQmlJavaScriptExpression::setContext(ctxt);
@@ -175,7 +139,7 @@ void QQmlBinding::update(QQmlPropertyData::WriteFlags flags)
 
     // Check for a binding update loop
     if (Q_UNLIKELY(updatingFlag())) {
-        QQmlPropertyData *d = nullptr;
+        const QQmlPropertyData *d = nullptr;
         QQmlPropertyData vtd;
         getPropertyData(&d, &vtd);
         Q_ASSERT(d);
@@ -236,7 +200,7 @@ protected:
                   QQmlPropertyData::WriteFlags flags, QV4::Scope &) override final
     {
         Q_ASSERT(!m_targetIndex.hasValueTypeIndex());
-        QQmlPropertyData *pd = nullptr;
+        const QQmlPropertyData *pd = nullptr;
         getPropertyData(&pd, nullptr);
         QQmlBinding *thisPtr = this;
         pd->writeProperty(m_target.data(), &thisPtr, flags);
@@ -314,7 +278,7 @@ protected:
     Q_ALWAYS_INLINE bool write(void *result, QMetaType type, bool isUndefined,
                                QQmlPropertyData::WriteFlags flags) override final
     {
-        QQmlPropertyData *pd;
+        const QQmlPropertyData *pd;
         QQmlPropertyData vpd;
         getPropertyData(&pd, &vpd);
         Q_ASSERT(pd);
@@ -338,7 +302,7 @@ protected:
     {
         Q_ASSERT(targetObject());
 
-        QQmlPropertyData *pd;
+        const QQmlPropertyData *pd;
         QQmlPropertyData vpd;
         getPropertyData(&pd, &vpd);
         Q_ASSERT(pd);
@@ -427,7 +391,7 @@ public:
 
         Q_ASSERT(targetObject());
 
-        QQmlPropertyData *pd;
+        const QQmlPropertyData *pd;
         QQmlPropertyData vpd;
         getPropertyData(&pd, &vpd);
         Q_ASSERT(pd);
@@ -532,7 +496,10 @@ Q_NEVER_INLINE bool QQmlBinding::slowWrite(const QQmlPropertyData &core,
 
     if (isUndefined) {
     } else if (core.isQList()) {
-        value = v4engine->toVariant(result, QMetaType::fromType<QList<QObject *> >());
+        if (core.propType().flags() & QMetaType::IsQmlList)
+            value = v4engine->toVariant(result, QMetaType::fromType<QList<QObject *> >());
+        else
+            value = v4engine->toVariant(result, core.propType());
     } else if (result.isNull() && core.isQObject()) {
         value = QVariant::fromValue((QObject *)nullptr);
     } else if (core.propType() == QMetaType::fromType<QList<QUrl>>()) {
@@ -605,8 +572,7 @@ void QQmlBinding::handleWriteError(const void *result, QMetaType resultType, QMe
     if (resultType.flags() & QMetaType::PointerToQObject) {
         if (QObject *o = *(QObject *const *)result) {
             valueType = o->metaObject()->className();
-            QQmlMetaObject propertyMetaObject = QQmlPropertyPrivate::rawMetaObjectForType(
-                        QQmlEnginePrivate::get(engine()), metaType);
+            QQmlMetaObject propertyMetaObject = QQmlPropertyPrivate::rawMetaObjectForType(metaType);
             if (!propertyMetaObject.isNull())
                 propertyType = propertyMetaObject.className();
         }
@@ -663,12 +629,7 @@ void QQmlBinding::setEnabled(bool e, QQmlPropertyData::WriteFlags flags)
     const bool wasEnabled = enabledFlag();
     setEnabledFlag(e);
     setNotifyOnValueChanged(e);
-
-    m_nextBinding.setTag(m_nextBinding.tag().setFlag(CanUseAccessor)); // Always use accessors, only not when:
-    if (auto interceptorMetaObject = QQmlInterceptorMetaObject::get(targetObject())) {
-        if (!m_targetIndex.isValid() || interceptorMetaObject->intercepts(m_targetIndex))
-            m_nextBinding.setTag(m_nextBinding.tag().setFlag(CanUseAccessor, false));
-    }
+    updateCanUseAccessor();
 
     if (e && !wasEnabled)
         update(flags);
@@ -677,85 +638,6 @@ void QQmlBinding::setEnabled(bool e, QQmlPropertyData::WriteFlags flags)
 QString QQmlBinding::expression() const
 {
     return QStringLiteral("function() { [native code] }");
-}
-
-void QQmlBinding::setTarget(const QQmlProperty &prop)
-{
-    auto pd = QQmlPropertyPrivate::get(prop);
-    setTarget(prop.object(), pd->core, &pd->valueTypeData);
-}
-
-bool QQmlBinding::setTarget(QObject *object, const QQmlPropertyData &core, const QQmlPropertyData *valueType)
-{
-    return setTarget(object, core.coreIndex(), core.isAlias(),
-                     valueType ? valueType->coreIndex() : -1);
-}
-
-bool QQmlBinding::setTarget(QObject *object, int coreIndex, bool coreIsAlias, int valueTypeIndex)
-{
-    m_target = object;
-
-    if (!object) {
-        m_targetIndex = QQmlPropertyIndex();
-        return false;
-    }
-
-    for (bool isAlias = coreIsAlias; isAlias;) {
-        QQmlVMEMetaObject *vme = QQmlVMEMetaObject::getForProperty(object, coreIndex);
-
-        int aValueTypeIndex;
-        if (!vme->aliasTarget(coreIndex, &object, &coreIndex, &aValueTypeIndex)) {
-            // can't resolve id (yet)
-            m_target = nullptr;
-            m_targetIndex = QQmlPropertyIndex();
-            return false;
-        }
-        if (valueTypeIndex == -1)
-            valueTypeIndex = aValueTypeIndex;
-
-        QQmlData *data = QQmlData::get(object, false);
-        if (!data || !data->propertyCache) {
-            m_target = nullptr;
-            m_targetIndex = QQmlPropertyIndex();
-            return false;
-        }
-        QQmlPropertyData *propertyData = data->propertyCache->property(coreIndex);
-        Q_ASSERT(propertyData);
-
-        m_target = object;
-        isAlias = propertyData->isAlias();
-        coreIndex = propertyData->coreIndex();
-    }
-    m_targetIndex = QQmlPropertyIndex(coreIndex, valueTypeIndex);
-
-    QQmlData *data = QQmlData::get(m_target.data(), true);
-    if (!data->propertyCache)
-        data->propertyCache = QQmlEnginePrivate::get(engine())->cache(m_target->metaObject());
-
-    return true;
-}
-
-void QQmlBinding::getPropertyData(QQmlPropertyData **propertyData, QQmlPropertyData *valueTypeData) const
-{
-    Q_ASSERT(propertyData);
-
-    QQmlData *data = QQmlData::get(m_target.data(), false);
-    Q_ASSERT(data);
-
-    if (Q_UNLIKELY(!data->propertyCache))
-        data->propertyCache = QQmlEnginePrivate::get(engine())->cache(m_target->metaObject());
-
-    *propertyData = data->propertyCache->property(m_targetIndex.coreIndex());
-    Q_ASSERT(*propertyData);
-
-    if (Q_UNLIKELY(m_targetIndex.hasValueTypeIndex() && valueTypeData)) {
-        const QMetaObject *valueTypeMetaObject = QQmlMetaType::metaObjectForValueType((*propertyData)->propType());
-        Q_ASSERT(valueTypeMetaObject);
-        QMetaProperty vtProp = valueTypeMetaObject->property(m_targetIndex.valueTypeIndex());
-        valueTypeData->setFlags(QQmlPropertyData::flagsForProperty(vtProp));
-        valueTypeData->setPropType(vtProp.metaType());
-        valueTypeData->setCoreIndex(m_targetIndex.valueTypeIndex());
-    }
 }
 
 QVector<QQmlProperty> QQmlBinding::dependencies() const
@@ -803,15 +685,15 @@ class QObjectPointerBinding: public QQmlNonbindingBinding
     QQmlMetaObject targetMetaObject;
 
 public:
-    QObjectPointerBinding(QQmlEnginePrivate *engine, QMetaType propertyType)
-        : targetMetaObject(QQmlPropertyPrivate::rawMetaObjectForType(engine, propertyType))
+    QObjectPointerBinding(QMetaType propertyType)
+        : targetMetaObject(QQmlPropertyPrivate::rawMetaObjectForType(propertyType))
     {}
 
 protected:
     Q_ALWAYS_INLINE bool write(void *result, QMetaType type, bool isUndefined,
                                QQmlPropertyData::WriteFlags flags) override final
     {
-        QQmlPropertyData *pd;
+        const QQmlPropertyData *pd;
         QQmlPropertyData vtpd;
         getPropertyData(&pd, &vtpd);
         if (Q_UNLIKELY(isUndefined || vtpd.isValid()))
@@ -833,11 +715,8 @@ protected:
             if (resultMo.isNull())
                 resultMo = resultObject->metaObject();
         } else if (type == QMetaType::fromType<QVariant>()) {
-            QVariant value = *static_cast<QVariant *>(result);
-            QQmlEngine *qmlEngine = engine();
-            Q_ASSERT(qmlEngine);
-            resultMo = QQmlPropertyPrivate::rawMetaObjectForType(
-                        QQmlEnginePrivate::get(qmlEngine), value.metaType());
+            const QVariant value = *static_cast<QVariant *>(result);
+            resultMo = QQmlPropertyPrivate::rawMetaObjectForType(value.metaType());
             if (resultMo.isNull())
                 return slowWrite(*pd, vtpd, result, type, isUndefined, flags);
             resultObject = *static_cast<QObject *const *>(value.constData());
@@ -853,7 +732,7 @@ protected:
     Q_ALWAYS_INLINE bool write(const QV4::Value &result, bool isUndefined,
                                QQmlPropertyData::WriteFlags flags) override final
     {
-        QQmlPropertyData *pd;
+        const QQmlPropertyData *pd;
         QQmlPropertyData vtpd;
         getPropertyData(&pd, &vtpd);
         if (Q_UNLIKELY(isUndefined || vtpd.isValid()))
@@ -875,11 +754,8 @@ protected:
                 resultMo = resultObject->metaObject();
             }
         } else if (auto variant = result.as<QV4::VariantObject>()) {
-            QVariant value = variant->d()->data();
-            QQmlEngine *qmlEngine = engine();
-            Q_ASSERT(qmlEngine);
-            resultMo = QQmlPropertyPrivate::rawMetaObjectForType(
-                        QQmlEnginePrivate::get(qmlEngine), value.metaType());
+            const QVariant value = variant->d()->data();
+            resultMo = QQmlPropertyPrivate::rawMetaObjectForType(value.metaType());
             if (resultMo.isNull())
                 return slowWrite(*pd, vtpd, result, isUndefined, flags);
             resultObject = *static_cast<QObject *const *>(value.constData());
@@ -896,7 +772,7 @@ private:
     using QQmlBinding::slowWrite;
 
     template<typename SlowWrite>
-    bool compareAndSet(const QQmlMetaObject &resultMo, QObject *resultObject, QQmlPropertyData *pd,
+    bool compareAndSet(const QQmlMetaObject &resultMo, QObject *resultObject, const QQmlPropertyData *pd,
                        QQmlPropertyData::WriteFlags flags, const SlowWrite &slowWrite) const
     {
         if (QQmlMetaObject::canConvert(resultMo, targetMetaObject)) {
@@ -912,15 +788,15 @@ private:
     }
 };
 
-QQmlBinding *QQmlBinding::newBinding(QQmlEnginePrivate *engine, const QQmlPropertyData *property)
+QQmlBinding *QQmlBinding::newBinding(const QQmlPropertyData *property)
 {
-    return newBinding(engine, property ? property->propType() : QMetaType());
+    return newBinding(property ? property->propType() : QMetaType());
 }
 
-QQmlBinding *QQmlBinding::newBinding(QQmlEnginePrivate *engine, QMetaType propertyType)
+QQmlBinding *QQmlBinding::newBinding(QMetaType propertyType)
 {
     if (propertyType.flags() & QMetaType::PointerToQObject)
-        return new QObjectPointerBinding(engine, propertyType);
+        return new QObjectPointerBinding(propertyType);
 
     if (propertyType == QMetaType::fromType<QQmlBinding *>())
         return new QQmlBindingBinding;

@@ -1,32 +1,8 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the Qt Linguist of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2020 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "lupdatepreprocessoraction.h"
+#include "filesignificancecheck.h"
 
 #include <clang/Lex/MacroArgs.h>
 #include <clang/Basic/TokenKinds.h>
@@ -41,7 +17,7 @@ void LupdatePPCallbacks::MacroExpands(const clang::Token &token,
 
     const auto &sm = m_preprocessor.getSourceManager();
     llvm::StringRef fileName = sm.getFilename(sourceRange.getBegin());
-    if (fileName != m_inputFile)
+    if (!LupdatePrivate::isFileSignificant(fileName.str()))
         return;
 
     const QString funcName = QString::fromStdString(m_preprocessor.getSpelling(token));
@@ -67,6 +43,7 @@ void LupdatePPCallbacks::MacroExpands(const clang::Token &token,
     store.callType = QStringLiteral("MacroExpands");
     store.funcName = funcName;
     store.lupdateLocationFile = toQt(fileName);
+    store.lupdateInputFile = toQt(m_inputFile);
     store.lupdateLocationLine = sm.getExpansionLineNumber(sourceRange.getBegin());
     store.locationCol = sm.getExpansionColumnNumber(sourceRange.getBegin());
 
@@ -159,20 +136,49 @@ void LupdatePPCallbacks::SourceRangeSkipped(clang::SourceRange sourceRange,
 
     const auto &sm = m_preprocessor.getSourceManager();
     llvm::StringRef fileName = sm.getFilename(sourceRange.getBegin());
-    if (fileName != m_inputFile)
+
+    if (!LupdatePrivate::isFileSignificant(fileName.str()))
         return;
+
     const char *begin = sm.getCharacterData(sourceRange.getBegin());
     const char *end = sm.getCharacterData(sourceRange.getEnd());
     llvm::StringRef skippedText = llvm::StringRef(begin, end - begin);
-    if (ClangCppParser::containsTranslationInformation(skippedText)) {
+    if (ClangCppParser::stringContainsTranslationInformation(skippedText)) {
         qCDebug(lcClang) << "SourceRangeSkipped: skipped text:" << skippedText.str();
         unsigned int beginLine = sm.getExpansionLineNumber(sourceRange.getBegin());
         unsigned int endLine = sm.getExpansionLineNumber(sourceRange.getEnd());
         qWarning("%s Code with translation information has been skipped "
                  "between lines %d and %d",
-                 m_inputFile.c_str(), beginLine, endLine);
+                 fileName.str().c_str(), beginLine, endLine);
     }
+}
 
+// To list the included files
+void LupdatePPCallbacks::InclusionDirective(clang::SourceLocation /*hashLoc*/,
+    const clang::Token & /*includeTok*/, clang::StringRef /*fileName*/, bool /*isAngled*/,
+    clang::CharSourceRange /*filenameRange*/, const clang::FileEntry *file,
+    clang::StringRef /*searchPath*/, clang::StringRef /*relativePath*/,
+    const clang::Module */*imported*/, clang::SrcMgr::CharacteristicKind /*fileType*/)
+{
+    if (!file)
+        return;
+
+    clang::StringRef fileNameRealPath = file->tryGetRealPathName();
+    if (!LupdatePrivate::isFileSignificant(fileNameRealPath.str()))
+        return;
+
+    TranslationRelatedStore store;
+    store.callType = QStringLiteral("InclusionDirective");
+    store.lupdateLocationFile = toQt(fileNameRealPath);
+    store.lupdateLocationLine = 1;
+    store.locationCol = 1;
+    store.lupdateInputFile = toQt(m_inputFile);
+    // do not fill the store.funcName. There is no function at this point
+    // the information is retrieved here to look for TRANSLATOR comments in header files
+    // when traversing the AST
+
+    if (store.isValid())
+        m_ppStores.emplace_back(std::move(store));
 }
 
 QT_END_NAMESPACE

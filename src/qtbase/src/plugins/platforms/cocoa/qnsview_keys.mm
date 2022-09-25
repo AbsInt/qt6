@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2018 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the plugins of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2018 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 // This file is included from qnsview.mm, and only used to organize the code
 
@@ -51,6 +15,10 @@
 
     // We will send a key event unless the input method handles it
     QBoolBlocker sendKeyEventGuard(m_sendKeyEvent, true);
+
+    // Assume we should send key events with text, unless told
+    // otherwise by doCommandBySelector.
+    m_sendKeyEventWithoutText = false;
 
     if (keyEvent.type == QEvent::KeyPress) {
 
@@ -112,6 +80,8 @@
     bool accepted = true;
     if (m_sendKeyEvent && m_composingText.isEmpty()) {
         KeyEvent keyEvent(nsevent);
+        if (m_sendKeyEventWithoutText)
+            keyEvent.text = {};
         qCDebug(lcQpaKeys) << "Sending as" << keyEvent;
         accepted = keyEvent.sendWindowSystemEvent(window);
     }
@@ -265,11 +235,7 @@ KeyEvent::KeyEvent(NSEvent *nsevent)
             key = QAppleKeyMapper::fromCocoaKey(character);
         }
 
-        // Ignore text for the U+F700-U+F8FF range. This is used by Cocoa when
-        // delivering function keys (e.g. arrow keys, backspace, F1-F35, etc.)
-        if (!(modifiers & (Qt::ControlModifier | Qt::MetaModifier))
-            && (character.unicode() < 0xf700 || character.unicode() > 0xf8ff))
-            text = QString::fromNSString(characters);
+        text = QString::fromNSString(characters);
 
         isRepeat = nsevent.ARepeat;
     }

@@ -1,43 +1,7 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Copyright (C) 2022 Intel Corporation.
-** Copyright (C) 2019 Mail.ru Group.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// Copyright (C) 2022 Intel Corporation.
+// Copyright (C) 2019 Mail.ru Group.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qstringlist.h"
 #if QT_CONFIG(regularexpression)
@@ -45,6 +9,7 @@
 #endif
 #include "qunicodetables_p.h"
 #include <private/qstringconverter_p.h>
+#include <private/qtools_p.h>
 #include "qlocale_tools_p.h"
 #include "private/qsimd_p.h"
 #include <qnumeric.h>
@@ -78,7 +43,7 @@
 #include "qstringalgorithms_p.h"
 #include "qthreadstorage.h"
 
-#include "qbytearraymatcher.h" // Helper for comparison of QLatin1String
+#include "qbytearraymatcher.h" // Helper for comparison of QLatin1StringView
 
 #include <algorithm>
 #include <functional>
@@ -109,12 +74,19 @@
 
 QT_BEGIN_NAMESPACE
 
+using namespace Qt::StringLiterals;
+
 const char16_t QString::_empty = 0;
 
 // in qstringmatcher.cpp
 qsizetype qFindStringBoyerMoore(QStringView haystack, qsizetype from, QStringView needle, Qt::CaseSensitivity cs);
 
 namespace {
+enum StringComparisonMode {
+    CompareStringsForEquality,
+    CompareStringsForOrdering
+};
+
 inline bool qIsUpper(char ch)
 {
     return ch >= 'A' && ch <= 'Z';
@@ -125,13 +97,6 @@ inline bool qIsDigit(char ch)
     return ch >= '0' && ch <= '9';
 }
 
-inline char qToLower(char ch)
-{
-    if (ch >= 'A' && ch <= 'Z')
-        return ch - 'A' + 'a';
-    else
-        return ch;
-}
 template <typename Pointer>
 char32_t foldCaseHelper(Pointer ch, Pointer start) = delete;
 
@@ -290,6 +255,36 @@ static qsizetype qLastIndexOf(Haystack haystack0, qsizetype from,
     }
     return -1;
 }
+
+template <typename Haystack, typename Needle>
+bool qt_starts_with_impl(Haystack haystack, Needle needle, Qt::CaseSensitivity cs) noexcept
+{
+    if (haystack.isNull())
+        return needle.isNull();
+    const auto haystackLen = haystack.size();
+    const auto needleLen = needle.size();
+    if (haystackLen == 0)
+        return needleLen == 0;
+    if (needleLen > haystackLen)
+        return false;
+
+    return QtPrivate::compareStrings(haystack.left(needleLen), needle, cs) == 0;
+}
+
+template <typename Haystack, typename Needle>
+bool qt_ends_with_impl(Haystack haystack, Needle needle, Qt::CaseSensitivity cs) noexcept
+{
+    if (haystack.isNull())
+        return needle.isNull();
+    const auto haystackLen = haystack.size();
+    const auto needleLen = needle.size();
+    if (haystackLen == 0)
+        return needleLen == 0;
+    if (haystackLen < needleLen)
+        return false;
+
+    return QtPrivate::compareStrings(haystack.right(needleLen), needle, cs) == 0;
+}
 } // unnamed namespace
 
 /*
@@ -329,14 +324,7 @@ extern "C" void qt_fromlatin1_mips_asm_unroll8 (char16_t*, const char*, uint);
 extern "C" void qt_toLatin1_mips_dsp_asm(uchar *dst, const char16_t *src, int length);
 #endif
 
-static inline bool qt_starts_with(QStringView haystack, QStringView needle, Qt::CaseSensitivity cs);
-static inline bool qt_starts_with(QStringView haystack, QLatin1String needle, Qt::CaseSensitivity cs);
-static inline bool qt_starts_with(QStringView haystack, QChar needle, Qt::CaseSensitivity cs);
-static inline bool qt_ends_with(QStringView haystack, QStringView needle, Qt::CaseSensitivity cs);
-static inline bool qt_ends_with(QStringView haystack, QLatin1String needle, Qt::CaseSensitivity cs);
-static inline bool qt_ends_with(QStringView haystack, QChar needle, Qt::CaseSensitivity cs);
-
-#if defined(__SSE2__) && defined(Q_CC_GNU) && !defined(Q_CC_INTEL)
+#if defined(__SSE2__) && defined(Q_CC_GNU)
 #  if defined(__SANITIZE_ADDRESS__) && Q_CC_GNU < 800 && !defined(Q_CC_CLANG)
 #     warning "The __attribute__ on below will likely cause a build failure with your GCC version. Your choices are:"
 #     warning "1) disable ASan;"
@@ -505,8 +493,8 @@ const char16_t *QtPrivate::qustrchr(QStringView str, char16_t c) noexcept
     }
 
     return UnrollTailLoop<3>::exec(e - n, e,
-                                   [=](int i) { return n[i] == c; },
-                                   [=](int i) { return n + i; });
+                                   [=](qsizetype i) { return n[i] == c; },
+                                   [=](qsizetype i) { return n + i; });
 #  endif
 #elif defined(__ARM_NEON__)
     const uint16x8_t vmask = { 1, 1 << 1, 1 << 2, 1 << 3, 1 << 4, 1 << 5, 1 << 6, 1 << 7 };
@@ -710,7 +698,7 @@ bool qt_is_ascii(const char *&ptr, const char *end) noexcept
     return true;
 }
 
-bool QtPrivate::isAscii(QLatin1String s) noexcept
+bool QtPrivate::isAscii(QLatin1StringView s) noexcept
 {
     const char *ptr = s.begin();
     const char *end = s.end();
@@ -824,7 +812,7 @@ Q_CORE_EXPORT void qt_from_latin1(char16_t *dst, const char *str, size_t size) n
     dst += offset;
     str += offset;
 #  if !defined(__OPTIMIZE_SIZE__)
-    return UnrollTailLoop<7>::exec(int(size), [=](int i) { dst[i] = (uchar)str[i]; });
+    return UnrollTailLoop<7>::exec(qsizetype(size), [=](qsizetype i) { dst[i] = (uchar)str[i]; });
 #  endif
 #endif
 #if defined(__mips_dsp)
@@ -951,7 +939,7 @@ static void qt_to_latin1_internal(uchar *dst, const char16_t *src, qsizetype len
     src += offset;
 
 #  if !defined(__OPTIMIZE_SIZE__)
-    return UnrollTailLoop<3>::exec(length, [=](int i) {
+    return UnrollTailLoop<3>::exec(length, [=](qsizetype i) {
         if (Checked)
             dst[i] = (src[i]>0xff) ? '?' : (uchar) src[i];
         else
@@ -999,7 +987,7 @@ static void qt_to_latin1_internal(uchar *dst, const char16_t *src, qsizetype len
 #endif
 }
 
-static void qt_to_latin1(uchar *dst, const char16_t *src, qsizetype length)
+void qt_to_latin1(uchar *dst, const char16_t *src, qsizetype length)
 {
     qt_to_latin1_internal<true>(dst, src, length);
 }
@@ -1009,52 +997,45 @@ void qt_to_latin1_unchecked(uchar *dst, const char16_t *src, qsizetype length)
     qt_to_latin1_internal<false>(dst, src, length);
 }
 
-// Unicode case-insensitive comparison
-static int ucstricmp(const QChar *a, const QChar *ae, const QChar *b, const QChar *be)
+// Unicode case-insensitive comparison (argument order matches QStringView)
+Q_NEVER_INLINE static int ucstricmp(qsizetype alen, const char16_t *a, qsizetype blen, const char16_t *b)
 {
     if (a == b)
-        return (ae - be);
-
-    const QChar *e = ae;
-    if (be - b < ae - a)
-        e = a + (be - b);
+        return (alen - blen);
 
     char32_t alast = 0;
     char32_t blast = 0;
-    while (a < e) {
+    qsizetype l = qMin(alen, blen);
+    qsizetype i;
+    for (i = 0; i < l; ++i) {
 //         qDebug() << Qt::hex << alast << blast;
 //         qDebug() << Qt::hex << "*a=" << *a << "alast=" << alast << "folded=" << foldCase (*a, alast);
 //         qDebug() << Qt::hex << "*b=" << *b << "blast=" << blast << "folded=" << foldCase (*b, blast);
-        int diff = foldCase(a->unicode(), alast) - foldCase(b->unicode(), blast);
+        int diff = foldCase(a[i], alast) - foldCase(b[i], blast);
         if ((diff))
             return diff;
-        ++a;
-        ++b;
     }
-    if (a == ae) {
-        if (b == be)
+    if (i == alen) {
+        if (i == blen)
             return 0;
         return -1;
     }
     return 1;
 }
 
-// Case-insensitive comparison between a Unicode string and a QLatin1String
-static int ucstricmp(const QChar *a, const QChar *ae, const char *b, const char *be)
+// Case-insensitive comparison between a QStringView and a QLatin1StringView
+// (argument order matches those types)
+Q_NEVER_INLINE static int ucstricmp(qsizetype alen, const char16_t *a, qsizetype blen, const char *b)
 {
-    auto e = ae;
-    if (be - b < ae - a)
-        e = a + (be - b);
-
-    while (a < e) {
-        int diff = foldCase(a->unicode()) - foldCase(char16_t{uchar(*b)});
+    qsizetype l = qMin(alen, blen);
+    qsizetype i;
+    for (i = 0; i < l; ++i) {
+        int diff = foldCase(a[i]) - foldCase(char16_t{uchar(b[i])});
         if ((diff))
             return diff;
-        ++a;
-        ++b;
     }
-    if (a == ae) {
-        if (b == be)
+    if (i == alen) {
+        if (i == blen)
             return 0;
         return -1;
     }
@@ -1062,7 +1043,7 @@ static int ucstricmp(const QChar *a, const QChar *ae, const char *b, const char 
 }
 
 // Case-insensitive comparison between a Unicode string and a UTF-8 string
-static int ucstricmp8(const char *utf8, const char *utf8end, const QChar *utf16, const QChar *utf16end)
+Q_NEVER_INLINE static int ucstricmp8(const char *utf8, const char *utf8end, const QChar *utf16, const QChar *utf16end)
 {
     auto src1 = reinterpret_cast<const uchar *>(utf8);
     auto end1 = reinterpret_cast<const uchar *>(utf8end);
@@ -1098,28 +1079,17 @@ extern "C" int qt_ucstrncmp_mips_dsp_asm(const char16_t *a,
 #endif
 
 // Unicode case-sensitive compare two same-sized strings
-static int ucstrncmp(const QChar *a, const QChar *b, size_t l)
+template <StringComparisonMode Mode>
+static int ucstrncmp(const char16_t *a, const char16_t *b, size_t l)
 {
-#ifdef __OPTIMIZE_SIZE__
-    const QChar *end = a + l;
-    while (a < end) {
-        if (int diff = (int)a->unicode() - (int)b->unicode())
-            return diff;
-        ++a;
-        ++b;
-    }
-    return 0;
-#else
-#if defined(__mips_dsp)
+#ifndef __OPTIMIZE_SIZE__
+#  if defined(__mips_dsp)
     static_assert(sizeof(uint) == sizeof(size_t));
     if (l >= 8) {
-        return qt_ucstrncmp_mips_dsp_asm(reinterpret_cast<const char16_t*>(a),
-                                         reinterpret_cast<const char16_t*>(b),
-                                         l);
+        return qt_ucstrncmp_mips_dsp_asm(a, b, l);
     }
-#endif // __mips_dsp
-#ifdef __SSE2__
-    const QChar *end = a + l;
+#  elif defined(__SSE2__)
+    const char16_t *end = a + l;
     qptrdiff offset = 0;
 
     // Using the PMOVMSKB instruction, we get two bits for each character
@@ -1130,8 +1100,12 @@ static int ucstrncmp(const QChar *a, const QChar *b, size_t l)
         uint mask = ~uint(_mm_movemask_epi8(result));
         if (ushort(mask) == 0)
             return false;
-        uint idx = qCountTrailingZeroBits(mask);
-        retval = a[offset + idx / 2].unicode() - b[offset + idx / 2].unicode();
+        if (Mode == CompareStringsForEquality) {
+            retval = 1;
+        } else {
+            uint idx = qCountTrailingZeroBits(mask);
+            retval = a[offset + idx / 2] - b[offset + idx / 2];
+        }
         return true;
     };
 
@@ -1154,8 +1128,10 @@ static int ucstrncmp(const QChar *a, const QChar *b, size_t l)
         mask = ~mask;
         if (mask) {
             // found a different character
+            if (Mode == CompareStringsForEquality)
+                return 1;
             uint idx = qCountTrailingZeroBits(mask);
-            return a[offset + idx / 2].unicode() - b[offset + idx / 2].unicode();
+            return a[offset + idx / 2] - b[offset + idx / 2];
         }
     }
 
@@ -1183,13 +1159,12 @@ static int ucstrncmp(const QChar *a, const QChar *b, size_t l)
     l &= 3;
 
     const auto lambda = [=](size_t i) -> int {
-        return a[offset + i].unicode() - b[offset + i].unicode();
+        return a[offset + i] - b[offset + i];
     };
     return UnrollTailLoop<3>::exec(l, 0, lambda, lambda);
-#endif
-#ifdef __ARM_NEON__
+#  elif defined(__ARM_NEON__)
     if (l >= 8) {
-        const QChar *end = a + l;
+        const char16_t *end = a + l;
         const uint16x8_t mask = { 1, 1 << 1, 1 << 2, 1 << 3, 1 << 4, 1 << 5, 1 << 6, 1 << 7 };
         while (end - a > 7) {
             uint16x8_t da = vld1q_u16(reinterpret_cast<const uint16_t *>(a));
@@ -1198,8 +1173,10 @@ static int ucstrncmp(const QChar *a, const QChar *b, size_t l)
             uint8_t r = ~(uint8_t)vaddvq_u16(vandq_u16(vceqq_u16(da, db), mask));
             if (r) {
                 // found a different QChar
+                if (Mode == CompareStringsForEquality)
+                    return 1;
                 uint idx = qCountTrailingZeroBits(r);
-                return (int)a[idx].unicode() - (int)b[idx].unicode();
+                return a[idx] - b[idx];
             }
             a += 8;
             b += 8;
@@ -1207,62 +1184,24 @@ static int ucstrncmp(const QChar *a, const QChar *b, size_t l)
         l &= 7;
     }
     const auto lambda = [=](size_t i) -> int {
-        return a[i].unicode() - b[i].unicode();
+        return a[i] - b[i];
     };
     return UnrollTailLoop<7>::exec(l, 0, lambda, lambda);
-#endif // __ARM_NEON__
-    if (!l)
-        return 0;
+#  endif // MIPS DSP or __SSE2__ or __ARM_NEON__
+#endif // __OPTIMIZE_SIZE__
 
-    // check alignment
-    if ((reinterpret_cast<quintptr>(a) & 2) == (reinterpret_cast<quintptr>(b) & 2)) {
-        // both addresses have the same alignment
-        if (reinterpret_cast<quintptr>(a) & 2) {
-            // both addresses are not aligned to 4-bytes boundaries
-            // compare the first character
-            if (*a != *b)
-                return a->unicode() - b->unicode();
-            --l;
-            ++a;
-            ++b;
-
-            // now both addresses are 4-bytes aligned
-        }
-
-        // both addresses are 4-bytes aligned
-        // do a fast 32-bit comparison
-        const quint32 *da = reinterpret_cast<const quint32 *>(a);
-        const quint32 *db = reinterpret_cast<const quint32 *>(b);
-        const quint32 *e = da + (l >> 1);
-        for ( ; da != e; ++da, ++db) {
-            if (*da != *db) {
-                a = reinterpret_cast<const QChar *>(da);
-                b = reinterpret_cast<const QChar *>(db);
-                if (*a != *b)
-                    return a->unicode() - b->unicode();
-                return a[1].unicode() - b[1].unicode();
-            }
-        }
-
-        // do we have a tail?
-        a = reinterpret_cast<const QChar *>(da);
-        b = reinterpret_cast<const QChar *>(db);
-        return (l & 1) ? a->unicode() - b->unicode() : 0;
-    } else {
-        // one of the addresses isn't 4-byte aligned but the other is
-        const QChar *e = a + l;
-        for ( ; a != e; ++a, ++b) {
-            if (*a != *b)
-                return a->unicode() - b->unicode();
-        }
+    for (size_t i = 0; i < l; ++i) {
+        if (int diff = a[i] - b[i])
+            return diff;
     }
     return 0;
-#endif
 }
 
-static int ucstrncmp(const QChar *a, const uchar *c, size_t l)
+template <StringComparisonMode Mode>
+static int ucstrncmp(const char16_t *a, const char *b, size_t l)
 {
-    const char16_t *uc = reinterpret_cast<const char16_t *>(a);
+    const uchar *c = reinterpret_cast<const uchar *>(b);
+    const char16_t *uc = a;
     const char16_t *e = uc + l;
 
 #ifdef __SSE2__
@@ -1278,8 +1217,12 @@ static int ucstrncmp(const QChar *a, const uchar *c, size_t l)
         uint mask = ~uint(_mm_movemask_epi8(result));
         if (ushort(mask) == 0)
             return false;
-        uint idx = qCountTrailingZeroBits(mask);
-        retval = uc[offset + idx / 2] - c[offset + idx / 2];
+        if (Mode == CompareStringsForEquality) {
+            retval = 1;
+        } else {
+            uint idx = qCountTrailingZeroBits(mask);
+            retval = uc[offset + idx / 2] - c[offset + idx / 2];
+        }
         return true;
     };
 #  endif
@@ -1315,6 +1258,8 @@ static int ucstrncmp(const QChar *a, const uchar *c, size_t l)
 #  endif
         if (mask) {
             // found a different character
+            if (Mode == CompareStringsForEquality)
+                return 1;
             uint idx = qCountTrailingZeroBits(mask);
             return uc[offset + idx / 2] - c[offset + idx / 2];
         }
@@ -1376,20 +1321,29 @@ constexpr int lencmp(qsizetype lhs, qsizetype rhs) noexcept
            /* else */  -1 ;
 }
 
-// Unicode case-sensitive comparison
-static int ucstrcmp(const QChar *a, size_t alen, const QChar *b, size_t blen)
+// Unicode case-sensitive equality
+template <typename Char2>
+static bool ucstreq(const char16_t *a, size_t alen, const Char2 *b, size_t blen)
 {
-    if (a == b && alen == blen)
-        return 0;
-    const size_t l = qMin(alen, blen);
-    int cmp = ucstrncmp(a, b, l);
-    return cmp ? cmp : lencmp(alen, blen);
+    if (alen != blen)
+        return false;
+    if constexpr (std::is_same_v<decltype(a), decltype(b)>) {
+        if (a == b)
+            return true;
+    }
+    return ucstrncmp<CompareStringsForEquality>(a, b, alen) == 0;
 }
 
-static int ucstrcmp(const QChar *a, size_t alen, const char *b, size_t blen)
+// Unicode case-sensitive comparison
+template <typename Char2>
+static int ucstrcmp(const char16_t *a, size_t alen, const Char2 *b, size_t blen)
 {
+    if constexpr (std::is_same_v<decltype(a), decltype(b)>) {
+        if (a == b && alen == blen)
+            return 0;
+    }
     const size_t l = qMin(alen, blen);
-    const int cmp = ucstrncmp(a, reinterpret_cast<const uchar*>(b), l);
+    int cmp = ucstrncmp<CompareStringsForOrdering>(a, b, l);
     return cmp ? cmp : lencmp(alen, blen);
 }
 
@@ -1414,7 +1368,7 @@ static constexpr uchar latin1Lower[256] = {
 };
 static int latin1nicmp(const char *lhsChar, qsizetype lSize, const char *rhsChar, qsizetype rSize)
 {
-    // We're called with QLatin1String's .data() and .size():
+    // We're called with QLatin1StringView's .data() and .size():
     Q_ASSERT(lSize >= 0 && rSize >= 0);
     if (!lSize)
         return rSize ? -1 : 0;
@@ -1433,20 +1387,20 @@ static int latin1nicmp(const char *lhsChar, qsizetype lSize, const char *rhsChar
 }
 bool QtPrivate::equalStrings(QStringView lhs, QStringView rhs) noexcept
 {
-    return ucstrcmp(lhs.begin(), lhs.size(), rhs.begin(), rhs.size()) == 0;
+    return ucstreq(lhs.utf16(), lhs.size(), rhs.utf16(), rhs.size());
 }
 
-bool QtPrivate::equalStrings(QStringView lhs, QLatin1String rhs) noexcept
+bool QtPrivate::equalStrings(QStringView lhs, QLatin1StringView rhs) noexcept
 {
-    return ucstrcmp(lhs.begin(), lhs.size(), rhs.begin(), rhs.size()) == 0;
+    return ucstreq(lhs.utf16(), lhs.size(), rhs.latin1(), rhs.size());
 }
 
-bool QtPrivate::equalStrings(QLatin1String lhs, QStringView rhs) noexcept
+bool QtPrivate::equalStrings(QLatin1StringView lhs, QStringView rhs) noexcept
 {
     return QtPrivate::equalStrings(rhs, lhs);
 }
 
-bool QtPrivate::equalStrings(QLatin1String lhs, QLatin1String rhs) noexcept
+bool QtPrivate::equalStrings(QLatin1StringView lhs, QLatin1StringView rhs) noexcept
 {
     return lhs.size() == rhs.size() && (!lhs.size() || memcmp(lhs.data(), rhs.data(), lhs.size()) == 0);
 }
@@ -1461,13 +1415,13 @@ bool QtPrivate::equalStrings(QStringView lhs, QBasicUtf8StringView<false> rhs) n
     return QtPrivate::equalStrings(rhs, lhs);
 }
 
-bool QtPrivate::equalStrings(QLatin1String lhs, QBasicUtf8StringView<false> rhs) noexcept
+bool QtPrivate::equalStrings(QLatin1StringView lhs, QBasicUtf8StringView<false> rhs) noexcept
 {
     QString r = rhs.toString();
     return QtPrivate::equalStrings(lhs, r); // ### optimize!
 }
 
-bool QtPrivate::equalStrings(QBasicUtf8StringView<false> lhs, QLatin1String rhs) noexcept
+bool QtPrivate::equalStrings(QBasicUtf8StringView<false> lhs, QLatin1StringView rhs) noexcept
 {
     return QtPrivate::equalStrings(rhs, lhs);
 }
@@ -1507,8 +1461,8 @@ bool QAnyStringView::equal(QAnyStringView lhs, QAnyStringView rhs) noexcept
 int QtPrivate::compareStrings(QStringView lhs, QStringView rhs, Qt::CaseSensitivity cs) noexcept
 {
     if (cs == Qt::CaseSensitive)
-        return ucstrcmp(lhs.begin(), lhs.size(), rhs.begin(), rhs.size());
-    return ucstricmp(lhs.begin(), lhs.end(), rhs.begin(), rhs.end());
+        return ucstrcmp(lhs.utf16(), lhs.size(), rhs.utf16(), rhs.size());
+    return ucstricmp(lhs.size(), lhs.utf16(), rhs.size(), rhs.utf16());
 }
 
 /*!
@@ -1528,11 +1482,11 @@ int QtPrivate::compareStrings(QStringView lhs, QStringView rhs, Qt::CaseSensitiv
 
     \sa {Comparing Strings}
 */
-int QtPrivate::compareStrings(QStringView lhs, QLatin1String rhs, Qt::CaseSensitivity cs) noexcept
+int QtPrivate::compareStrings(QStringView lhs, QLatin1StringView rhs, Qt::CaseSensitivity cs) noexcept
 {
     if (cs == Qt::CaseSensitive)
-        return ucstrcmp(lhs.begin(), lhs.size(), rhs.begin(), rhs.size());
-    return ucstricmp(lhs.begin(), lhs.end(), rhs.begin(), rhs.end());
+        return ucstrcmp(lhs.utf16(), lhs.size(), rhs.latin1(), rhs.size());
+    return ucstricmp(lhs.size(), lhs.utf16(), rhs.size(), rhs.latin1());
 }
 
 /*!
@@ -1552,7 +1506,7 @@ int QtPrivate::compareStrings(QStringView lhs, QBasicUtf8StringView<false> rhs, 
     \since 5.10
     \overload
 */
-int QtPrivate::compareStrings(QLatin1String lhs, QStringView rhs, Qt::CaseSensitivity cs) noexcept
+int QtPrivate::compareStrings(QLatin1StringView lhs, QStringView rhs, Qt::CaseSensitivity cs) noexcept
 {
     return -compareStrings(rhs, lhs, cs);
 }
@@ -1574,7 +1528,7 @@ int QtPrivate::compareStrings(QLatin1String lhs, QStringView rhs, Qt::CaseSensit
 
     \sa {Comparing Strings}
 */
-int QtPrivate::compareStrings(QLatin1String lhs, QLatin1String rhs, Qt::CaseSensitivity cs) noexcept
+int QtPrivate::compareStrings(QLatin1StringView lhs, QLatin1StringView rhs, Qt::CaseSensitivity cs) noexcept
 {
     if (lhs.isEmpty())
         return lencmp(qsizetype(0), rhs.size());
@@ -1591,7 +1545,7 @@ int QtPrivate::compareStrings(QLatin1String lhs, QLatin1String rhs, Qt::CaseSens
     \since 6.0
     \overload
 */
-int QtPrivate::compareStrings(QLatin1String lhs, QBasicUtf8StringView<false> rhs, Qt::CaseSensitivity cs) noexcept
+int QtPrivate::compareStrings(QLatin1StringView lhs, QBasicUtf8StringView<false> rhs, Qt::CaseSensitivity cs) noexcept
 {
     return compareStrings(lhs, rhs.toString(), cs); // ### optimize!
 }
@@ -1615,7 +1569,7 @@ int QtPrivate::compareStrings(QBasicUtf8StringView<false> lhs, QStringView rhs, 
     \since 6.0
     \overload
 */
-int QtPrivate::compareStrings(QBasicUtf8StringView<false> lhs, QLatin1String rhs, Qt::CaseSensitivity cs) noexcept
+int QtPrivate::compareStrings(QBasicUtf8StringView<false> lhs, QLatin1StringView rhs, Qt::CaseSensitivity cs) noexcept
 {
     return -compareStrings(rhs, lhs, cs);
 }
@@ -1680,6 +1634,10 @@ static int qArgDigitValue(QChar ch) noexcept
     return -1;
 }
 
+#if QT_CONFIG(regularexpression)
+Q_DECL_COLD_FUNCTION
+void qtWarnAboutInvalidRegularExpression(const QString &pattern, const char *where);
+#endif
 
 /*!
   \macro QT_RESTRICTED_CAST_FROM_ASCII
@@ -1691,7 +1649,7 @@ static int qArgDigitValue(QChar ch) noexcept
   and the \c{QString::operator=(const char (&ch)[N])} assignment operator.
   This gives most of the type-safety benefits of \l QT_NO_CAST_FROM_ASCII
   but does not require user code to wrap character and string literals
-  with QLatin1Char, QLatin1String or similar.
+  with QLatin1Char, QLatin1StringView or similar.
 
   Using this macro together with source strings outside the 7-bit range,
   non-literals, or literals with embedded NUL characters is undefined.
@@ -1996,7 +1954,7 @@ static int qArgDigitValue(QChar ch) noexcept
 
     You then need to explicitly call fromUtf8(), fromLatin1(),
     or fromLocal8Bit() to construct a QString from an
-    8-bit string, or use the lightweight QLatin1String class, for
+    8-bit string, or use the lightweight QLatin1StringView class, for
     example:
 
     \snippet code/src_corelib_text_qstring.cpp 1
@@ -2078,7 +2036,7 @@ static int qArgDigitValue(QChar ch) noexcept
     time. Constructing a QString out of the literal does then not cause
     any overhead at runtime.
 
-    A slightly less efficient way is to use QLatin1String. This class wraps
+    A slightly less efficient way is to use QLatin1StringView. This class wraps
     a C string literal, precalculates it length at compile time and can
     then be used for faster comparison with QStrings and conversion to
     QStrings than a regular C string literal.
@@ -2157,7 +2115,7 @@ static int qArgDigitValue(QChar ch) noexcept
     Such considerations, the configuration of such behavior or any mitigation
     are outside the scope of the Qt API.
 
-    \sa fromRawData(), QChar, QStringView, QLatin1String, QByteArray
+    \sa fromRawData(), QChar, QStringView, QLatin1StringView, QByteArray
 */
 
 /*! \typedef QString::ConstIterator
@@ -2356,9 +2314,9 @@ static int qArgDigitValue(QChar ch) noexcept
 /*!
     \fn QString::QString()
 
-    Constructs a null string. Null strings are also empty.
+    Constructs a null string. Null strings are also considered empty.
 
-    \sa isEmpty()
+    \sa isEmpty(), isNull(), {Distinction Between Null and Empty Strings}
 */
 
 /*!
@@ -2564,7 +2522,7 @@ QString::QString(qsizetype size, Qt::Initialization)
     }
 }
 
-/*! \fn QString::QString(QLatin1String str)
+/*! \fn QString::QString(QLatin1StringView str)
 
     Constructs a copy of the Latin-1 string \a str.
 
@@ -2837,13 +2795,13 @@ QString &QString::operator=(const QString &other) noexcept
     \since 5.2
 */
 
-/*! \fn QString &QString::operator=(QLatin1String str)
+/*! \fn QString &QString::operator=(QLatin1StringView str)
 
     \overload operator=()
 
     Assigns the Latin-1 string \a str to this string.
 */
-QString &QString::operator=(QLatin1String other)
+QString &QString::operator=(QLatin1StringView other)
 {
     const qsizetype capacityAtEnd = capacity() - d.freeSpaceAtBegin();
     if (isDetached() && other.size() <= capacityAtEnd) { // assumes d->alloc == 0 -> !isDetached() (sharedNull)
@@ -2963,14 +2921,14 @@ QString &QString::operator=(QChar ch)
 */
 
 /*!
-    \fn QString &QString::insert(qsizetype position, QLatin1String str)
+    \fn QString &QString::insert(qsizetype position, QLatin1StringView str)
     \overload insert()
 
     Inserts the Latin-1 string \a str at the given index \a position.
 
     \include qstring.cpp string-grow-at-insertion
 */
-QString &QString::insert(qsizetype i, QLatin1String str)
+QString &QString::insert(qsizetype i, QLatin1StringView str)
 {
     const char *s = str.latin1();
     if (i < 0 || !s || !(*s))
@@ -3104,7 +3062,7 @@ QString &QString::append(const QChar *str, qsizetype len)
 
   Appends the Latin-1 string \a str to this string.
 */
-QString &QString::append(QLatin1String str)
+QString &QString::append(QLatin1StringView str)
 {
     const char *s = str.latin1();
     const qsizetype len = str.size();
@@ -3177,7 +3135,7 @@ QString &QString::append(QChar ch)
     \sa append(), insert()
 */
 
-/*! \fn QString &QString::prepend(QLatin1String str)
+/*! \fn QString &QString::prepend(QLatin1StringView str)
 
     \overload prepend()
 
@@ -3337,7 +3295,7 @@ QString &QString::remove(const QString &str, Qt::CaseSensitivity cs)
 
   \sa replace()
 */
-QString &QString::remove(QLatin1String str, Qt::CaseSensitivity cs)
+QString &QString::remove(QLatin1StringView str, Qt::CaseSensitivity cs)
 {
     removeStringImpl(*this, str, cs);
     return *this;
@@ -3735,7 +3693,7 @@ QString& QString::replace(QChar before, QChar after, Qt::CaseSensitivity cs)
 
   \note The text is not rescanned after a replacement.
 */
-QString &QString::replace(QLatin1String before, QLatin1String after, Qt::CaseSensitivity cs)
+QString &QString::replace(QLatin1StringView before, QLatin1StringView after, Qt::CaseSensitivity cs)
 {
     qsizetype alen = after.size();
     qsizetype blen = before.size();
@@ -3758,7 +3716,7 @@ QString &QString::replace(QLatin1String before, QLatin1String after, Qt::CaseSen
 
   \note The text is not rescanned after a replacement.
 */
-QString &QString::replace(QLatin1String before, const QString &after, Qt::CaseSensitivity cs)
+QString &QString::replace(QLatin1StringView before, const QString &after, Qt::CaseSensitivity cs)
 {
     qsizetype blen = before.size();
     QVarLengthArray<char16_t> b(blen);
@@ -3778,7 +3736,7 @@ QString &QString::replace(QLatin1String before, const QString &after, Qt::CaseSe
 
   \note The text is not rescanned after a replacement.
 */
-QString &QString::replace(const QString &before, QLatin1String after, Qt::CaseSensitivity cs)
+QString &QString::replace(const QString &before, QLatin1StringView after, Qt::CaseSensitivity cs)
 {
     qsizetype alen = after.size();
     QVarLengthArray<char16_t> a(alen);
@@ -3798,7 +3756,7 @@ QString &QString::replace(const QString &before, QLatin1String after, Qt::CaseSe
 
   \note The text is not rescanned after a replacement.
 */
-QString &QString::replace(QChar c, QLatin1String after, Qt::CaseSensitivity cs)
+QString &QString::replace(QChar c, QLatin1StringView after, Qt::CaseSensitivity cs)
 {
     qsizetype alen = after.size();
     QVarLengthArray<char16_t> a(alen);
@@ -3818,7 +3776,7 @@ QString &QString::replace(QChar c, QLatin1String after, Qt::CaseSensitivity cs)
 */
 
 /*!
-    \fn bool QString::operator==(const QString &s1, QLatin1String s2)
+    \fn bool QString::operator==(const QString &s1, QLatin1StringView s2)
 
     \overload operator==()
 
@@ -3827,7 +3785,7 @@ QString &QString::replace(QChar c, QLatin1String after, Qt::CaseSensitivity cs)
 */
 
 /*!
-    \fn bool QString::operator==(QLatin1String s1, const QString &s2)
+    \fn bool QString::operator==(QLatin1StringView s1, const QString &s2)
 
     \overload operator==()
 
@@ -3876,7 +3834,7 @@ QString &QString::replace(QChar c, QLatin1String after, Qt::CaseSensitivity cs)
 */
 
 /*!
-    \fn bool QString::operator<(const QString &s1, QLatin1String s2)
+    \fn bool QString::operator<(const QString &s1, QLatin1StringView s2)
 
     \overload operator<()
 
@@ -3885,7 +3843,7 @@ QString &QString::replace(QChar c, QLatin1String after, Qt::CaseSensitivity cs)
 */
 
 /*!
-    \fn bool QString::operator<(QLatin1String s1, const QString &s2)
+    \fn bool QString::operator<(QLatin1StringView s1, const QString &s2)
 
     \overload operator<()
 
@@ -3932,7 +3890,7 @@ QString &QString::replace(QChar c, QLatin1String after, Qt::CaseSensitivity cs)
 */
 
 /*!
-    \fn bool QString::operator<=(const QString &s1, QLatin1String s2)
+    \fn bool QString::operator<=(const QString &s1, QLatin1StringView s2)
 
     \overload operator<=()
 
@@ -3941,7 +3899,7 @@ QString &QString::replace(QChar c, QLatin1String after, Qt::CaseSensitivity cs)
 */
 
 /*!
-    \fn bool QString::operator<=(QLatin1String s1, const QString &s2)
+    \fn bool QString::operator<=(QLatin1StringView s1, const QString &s2)
 
     \overload operator<=()
 
@@ -3985,7 +3943,7 @@ QString &QString::replace(QChar c, QLatin1String after, Qt::CaseSensitivity cs)
 */
 
 /*!
-    \fn bool QString::operator>(const QString &s1, QLatin1String s2)
+    \fn bool QString::operator>(const QString &s1, QLatin1StringView s2)
 
     \overload operator>()
 
@@ -3994,7 +3952,7 @@ QString &QString::replace(QChar c, QLatin1String after, Qt::CaseSensitivity cs)
 */
 
 /*!
-    \fn bool QString::operator>(QLatin1String s1, const QString &s2)
+    \fn bool QString::operator>(QLatin1StringView s1, const QString &s2)
 
     \overload operator>()
 
@@ -4038,7 +3996,7 @@ QString &QString::replace(QChar c, QLatin1String after, Qt::CaseSensitivity cs)
 */
 
 /*!
-    \fn bool QString::operator>=(const QString &s1, QLatin1String s2)
+    \fn bool QString::operator>=(const QString &s1, QLatin1StringView s2)
 
     \overload operator>=()
 
@@ -4047,7 +4005,7 @@ QString &QString::replace(QChar c, QLatin1String after, Qt::CaseSensitivity cs)
 */
 
 /*!
-    \fn bool QString::operator>=(QLatin1String s1, const QString &s2)
+    \fn bool QString::operator>=(QLatin1StringView s1, const QString &s2)
 
     \overload operator>=()
 
@@ -4090,7 +4048,7 @@ QString &QString::replace(QChar c, QLatin1String after, Qt::CaseSensitivity cs)
     \sa {Comparing Strings}
 */
 
-/*! \fn bool QString::operator!=(const QString &s1, QLatin1String s2)
+/*! \fn bool QString::operator!=(const QString &s1, QLatin1StringView s2)
 
     Returns \c true if string \a s1 is not equal to string \a s2.
     Otherwise returns \c false.
@@ -4184,7 +4142,7 @@ qsizetype QString::indexOf(const QString &str, qsizetype from, Qt::CaseSensitivi
   \sa lastIndexOf(), contains(), count()
 */
 
-qsizetype QString::indexOf(QLatin1String str, qsizetype from, Qt::CaseSensitivity cs) const
+qsizetype QString::indexOf(QLatin1StringView str, qsizetype from, Qt::CaseSensitivity cs) const
 {
     return QtPrivate::findString(QStringView(unicode(), size()), from, str, cs);
 }
@@ -4274,13 +4232,13 @@ qsizetype QString::lastIndexOf(const QString &str, qsizetype from, Qt::CaseSensi
 
   \sa indexOf(), contains(), count()
 */
-qsizetype QString::lastIndexOf(QLatin1String str, qsizetype from, Qt::CaseSensitivity cs) const
+qsizetype QString::lastIndexOf(QLatin1StringView str, qsizetype from, Qt::CaseSensitivity cs) const
 {
     return QtPrivate::lastIndexOf(*this, from, str, cs);
 }
 
 /*!
-  \fn qsizetype QString::lastIndexOf(QLatin1String str, Qt::CaseSensitivity cs = Qt::CaseSensitive) const
+  \fn qsizetype QString::lastIndexOf(QLatin1StringView str, Qt::CaseSensitivity cs = Qt::CaseSensitive) const
   \since 6.2
   \overload lastIndexOf()
 
@@ -4382,7 +4340,7 @@ Q_DECLARE_TYPEINFO(QStringCapture, Q_PRIMITIVE_TYPE);
 QString &QString::replace(const QRegularExpression &re, const QString &after)
 {
     if (!re.isValid()) {
-        qWarning("QString::replace: invalid QRegularExpression object");
+        qtWarnAboutInvalidRegularExpression(re.pattern(), "QString::replace");
         return *this;
     }
 
@@ -4402,7 +4360,7 @@ QString &QString::replace(const QRegularExpression &re, const QString &after)
     const QChar *ac = after.unicode();
 
     for (qsizetype i = 0; i < al - 1; i++) {
-        if (ac[i] == QLatin1Char('\\')) {
+        if (ac[i] == u'\\') {
             int no = ac[i + 1].digitValue();
             if (no > 0 && no <= numCaptures) {
                 QStringCapture backReference;
@@ -4552,7 +4510,7 @@ qsizetype QString::count(QStringView str, Qt::CaseSensitivity cs) const
     \sa indexOf(), count()
 */
 
-/*! \fn bool QString::contains(QLatin1String str, Qt::CaseSensitivity cs = Qt::CaseSensitive) const
+/*! \fn bool QString::contains(QLatin1StringView str, Qt::CaseSensitivity cs = Qt::CaseSensitive) const
     \since 5.3
 
     \overload contains()
@@ -4700,13 +4658,14 @@ qsizetype QString::count(const QRegularExpression &re) const
 }
 #endif // QT_CONFIG(regularexpression)
 
+#if QT_DEPRECATED_SINCE(6, 4)
 /*! \fn qsizetype QString::count() const
-
+    \deprecated [6.4] Use size() or length() instead.
     \overload count()
 
     Same as size().
 */
-
+#endif
 
 /*!
     \enum QString::SectionFlag
@@ -4906,7 +4865,7 @@ static QString extractSections(const QList<qt_section_chunk> &sections, qsizetyp
 QString QString::section(const QRegularExpression &re, qsizetype start, qsizetype end, SectionFlags flags) const
 {
     if (!re.isValid()) {
-        qWarning("QString::section: invalid QRegularExpression object");
+        qtWarnAboutInvalidRegularExpression(re.pattern(), "QString::section");
         return QString();
     }
 
@@ -5088,15 +5047,15 @@ QString QString::mid(qsizetype position, qsizetype n) const
 */
 bool QString::startsWith(const QString& s, Qt::CaseSensitivity cs) const
 {
-    return qt_starts_with(*this, s, cs);
+    return qt_starts_with_impl(QStringView(*this), QStringView(s), cs);
 }
 
 /*!
   \overload startsWith()
  */
-bool QString::startsWith(QLatin1String s, Qt::CaseSensitivity cs) const
+bool QString::startsWith(QLatin1StringView s, Qt::CaseSensitivity cs) const
 {
-    return qt_starts_with(*this, s, cs);
+    return qt_starts_with_impl(QStringView(*this), s, cs);
 }
 
 /*!
@@ -5107,7 +5066,11 @@ bool QString::startsWith(QLatin1String s, Qt::CaseSensitivity cs) const
 */
 bool QString::startsWith(QChar c, Qt::CaseSensitivity cs) const
 {
-    return qt_starts_with(*this, c, cs);
+    if (!size())
+        return false;
+    if (cs == Qt::CaseSensitive)
+        return at(0) == c;
+    return foldCase(at(0)) == foldCase(c);
 }
 
 /*!
@@ -5137,7 +5100,7 @@ bool QString::startsWith(QChar c, Qt::CaseSensitivity cs) const
 */
 bool QString::endsWith(const QString &s, Qt::CaseSensitivity cs) const
 {
-    return qt_ends_with(*this, s, cs);
+    return qt_ends_with_impl(QStringView(*this), QStringView(s), cs);
 }
 
 /*!
@@ -5156,9 +5119,9 @@ bool QString::endsWith(const QString &s, Qt::CaseSensitivity cs) const
 /*!
     \overload endsWith()
 */
-bool QString::endsWith(QLatin1String s, Qt::CaseSensitivity cs) const
+bool QString::endsWith(QLatin1StringView s, Qt::CaseSensitivity cs) const
 {
-    return qt_ends_with(*this, s, cs);
+    return qt_ends_with_impl(QStringView(*this), s, cs);
 }
 
 /*!
@@ -5169,7 +5132,11 @@ bool QString::endsWith(QLatin1String s, Qt::CaseSensitivity cs) const
  */
 bool QString::endsWith(QChar c, Qt::CaseSensitivity cs) const
 {
-    return qt_ends_with(*this, c, cs);
+    if (!size())
+        return false;
+    if (cs == Qt::CaseSensitive)
+        return at(size() - 1) == c;
+    return foldCase(at(size() - 1)) == foldCase(c);
 }
 
 /*!
@@ -5263,6 +5230,7 @@ QByteArray QtPrivate::convertToLatin1(QStringView string)
     return qt_convert_to_latin1(string);
 }
 
+Q_NEVER_INLINE
 static QByteArray qt_convert_to_latin1(QStringView string)
 {
     if (Q_UNLIKELY(string.isNull()))
@@ -5284,27 +5252,26 @@ QByteArray QString::toLatin1_helper_inplace(QString &s)
 
     // We can return our own buffer to the caller.
     // Conversion to Latin-1 always shrinks the buffer by half.
-    const char16_t *data = s.d.data();
-    qsizetype length = s.d.size;
+    // This relies on the fact that we use QArrayData for everything behind the scenes
 
-    // Move the d pointer over to the bytearray.
+    // First, do the in-place conversion. Since isDetached() == true, the data
+    // was allocated by QArrayData, so the null terminator must be there.
+    qsizetype length = s.size();
+    char16_t *sdata = s.d->data();
+    Q_ASSERT(sdata[length] == u'\0');
+    qt_to_latin1(reinterpret_cast<uchar *>(sdata), sdata, length + 1);
+
+    // Move the internals over to the byte array.
     // Kids, avert your eyes. Don't try this at home.
+    auto ba_d = std::move(s.d).reinterpreted<char>();
 
-    // this relies on the fact that we use QArrayData for everything behind the scenes which has the same layout
-    static_assert(sizeof(QByteArray::DataPointer) == sizeof(QString::DataPointer), "sizes have to be equal");
-    QByteArray::DataPointer ba_d(reinterpret_cast<QByteArray::Data *>(s.d.d_ptr()), reinterpret_cast<char *>(s.d.data()), length);
-    ba_d.ref();
-    s.clear();
+    // Some sanity checks
+    Q_ASSERT(ba_d.d->allocatedCapacity() >= ba_d.size);
+    Q_ASSERT(s.isNull());
+    Q_ASSERT(s.isEmpty());
+    Q_ASSERT(s.constData() == QString().constData());
 
-    char *ddata = ba_d.data();
-
-    // multiply the allocated capacity by sizeof(char16_t)
-    ba_d.d_ptr()->alloc *= sizeof(char16_t);
-
-    // do the in-place conversion
-    qt_to_latin1(reinterpret_cast<uchar *>(ddata), data, length);
-    ddata[length] = '\0';
-    return QByteArray(ba_d);
+    return QByteArray(std::move(ba_d));
 }
 
 /*!
@@ -5767,7 +5734,7 @@ namespace {
 
 /*!
     \fn QStringView QtPrivate::trimmed(QStringView s)
-    \fn QLatin1String QtPrivate::trimmed(QLatin1String s)
+    \fn QLatin1StringView QtPrivate::trimmed(QLatin1StringView s)
     \internal
     \relates QStringView
     \since 5.10
@@ -5778,14 +5745,14 @@ namespace {
     \c true. This includes the ASCII characters '\\t', '\\n', '\\v',
     '\\f', '\\r', and ' '.
 
-    \sa QString::trimmed(), QStringView::trimmed(), QLatin1String::trimmed()
+    \sa QString::trimmed(), QStringView::trimmed(), QLatin1StringView::trimmed()
 */
 QStringView QtPrivate::trimmed(QStringView s) noexcept
 {
     return qt_trimmed(s);
 }
 
-QLatin1String QtPrivate::trimmed(QLatin1String s) noexcept
+QLatin1StringView QtPrivate::trimmed(QLatin1StringView s) noexcept
 {
     return qt_trimmed(s);
 }
@@ -6043,7 +6010,7 @@ QString& QString::fill(QChar ch, qsizetype size)
     \sa append(), prepend()
 */
 
-/*! \fn QString &QString::operator+=(QLatin1String str)
+/*! \fn QString &QString::operator+=(QLatin1StringView str)
 
     \overload operator+=()
 
@@ -6204,7 +6171,7 @@ QString& QString::fill(QChar ch, qsizetype size)
 */
 
 /*!
-    \fn int QString::compare(const QString &s1, QLatin1String s2, Qt::CaseSensitivity cs)
+    \fn int QString::compare(const QString &s1, QLatin1StringView s2, Qt::CaseSensitivity cs)
     \since 4.2
     \overload compare()
 
@@ -6213,7 +6180,7 @@ QString& QString::fill(QChar ch, qsizetype size)
 */
 
 /*!
-    \fn int QString::compare(QLatin1String s1, const QString &s2, Qt::CaseSensitivity cs = Qt::CaseSensitive)
+    \fn int QString::compare(QLatin1StringView s1, const QString &s2, Qt::CaseSensitivity cs = Qt::CaseSensitive)
 
     \since 4.2
     \overload compare()
@@ -6278,7 +6245,7 @@ int QString::compare_helper(const QChar *data1, qsizetype length1, const QChar *
 
     Same as compare(*this, \a other, \a cs).
 */
-int QString::compare(QLatin1String other, Qt::CaseSensitivity cs) const noexcept
+int QString::compare(QLatin1StringView other, Qt::CaseSensitivity cs) const noexcept
 {
     return QtPrivate::compareStrings(*this, other, cs);
 }
@@ -6314,8 +6281,8 @@ int QString::compare_helper(const QChar *data1, qsizetype length1, const char *d
     \internal
     \since 4.5
 */
-int QLatin1String::compare_helper(const QChar *data1, qsizetype length1, QLatin1String s2,
-                                  Qt::CaseSensitivity cs) noexcept
+int QLatin1StringView::compare_helper(const QChar *data1, qsizetype length1, QLatin1StringView s2,
+                                      Qt::CaseSensitivity cs) noexcept
 {
     Q_ASSERT(length1 >= 0);
     Q_ASSERT(data1 || length1 == 0);
@@ -6869,11 +6836,11 @@ QString QString::vasprintf(const char *cformat, va_list ap)
         ++c;
 
         if (*c == '\0') {
-            result.append(QLatin1Char('%')); // a % at the end of the string - treat as non-escape text
+            result.append(u'%'); // a % at the end of the string - treat as non-escape text
             break;
         }
         if (*c == '%') {
-            result.append(QLatin1Char('%')); // %%
+            result.append(u'%'); // %%
             ++c;
             continue;
         }
@@ -6881,7 +6848,7 @@ QString QString::vasprintf(const char *cformat, va_list ap)
         uint flags = parse_flag_characters(c);
 
         if (*c == '\0') {
-            result.append(QLatin1String(escape_start)); // incomplete escape, treat as non-escape text
+            result.append(QLatin1StringView(escape_start)); // incomplete escape, treat as non-escape text
             break;
         }
 
@@ -6897,7 +6864,7 @@ QString QString::vasprintf(const char *cformat, va_list ap)
         }
 
         if (*c == '\0') {
-            result.append(QLatin1String(escape_start)); // incomplete escape, treat as non-escape text
+            result.append(QLatin1StringView(escape_start)); // incomplete escape, treat as non-escape text
             break;
         }
 
@@ -6916,14 +6883,14 @@ QString QString::vasprintf(const char *cformat, va_list ap)
         }
 
         if (*c == '\0') {
-            result.append(QLatin1String(escape_start)); // incomplete escape, treat as non-escape text
+            result.append(QLatin1StringView(escape_start)); // incomplete escape, treat as non-escape text
             break;
         }
 
         const LengthMod length_mod = parse_length_modifier(c);
 
         if (*c == '\0') {
-            result.append(QLatin1String(escape_start)); // incomplete escape, treat as non-escape text
+            result.append(QLatin1StringView(escape_start)); // incomplete escape, treat as non-escape text
             break;
         }
 
@@ -6970,7 +6937,7 @@ QString QString::vasprintf(const char *cformat, va_list ap)
                     flags |= QLocaleData::CapitalEorX;
 
                 int base = 10;
-                switch (qToLower(*c)) {
+                switch (QtMiscUtils::toAsciiLower(*c)) {
                     case 'o':
                         base = 8; break;
                     case 'u':
@@ -7001,7 +6968,7 @@ QString QString::vasprintf(const char *cformat, va_list ap)
                     flags |= QLocaleData::CapitalEorX;
 
                 QLocaleData::DoubleForm form = QLocaleData::DFDecimal;
-                switch (qToLower(*c)) {
+                switch (QtMiscUtils::toAsciiLower(*c)) {
                     case 'e': form = QLocaleData::DFExponent; break;
                     case 'a':                             // not supported - decimal form used instead
                     case 'f': form = QLocaleData::DFDecimal; break;
@@ -7100,9 +7067,10 @@ QString QString::vasprintf(const char *cformat, va_list ap)
     If \a ok is not \nullptr, failure is reported by setting *\a{ok}
     to \c false, and success by setting *\a{ok} to \c true.
 
-    If \a base is 0, the C language convention is used: if the string
-    begins with "0x", base 16 is used; otherwise, if the string begins with "0",
-    base 8 is used; otherwise, base 10 is used.
+    If \a base is 0, the C language convention is used: if the string begins
+    with "0x", base 16 is used; otherwise, if the string begins with "0b", base
+    2 is used; otherwise, if the string begins with "0", base 8 is used;
+    otherwise, base 10 is used.
 
     The string conversion will always happen in the 'C' locale. For
     locale-dependent conversion use QLocale::toLongLong()
@@ -7112,6 +7080,8 @@ QString QString::vasprintf(const char *cformat, va_list ap)
     \snippet qstring/main.cpp 74
 
     This function ignores leading and trailing whitespace.
+
+    \note Support for the "0b" prefix was added in Qt 6.4.
 
     \sa number(), toULongLong(), toInt(), QLocale::toLongLong()
 */
@@ -7142,9 +7112,10 @@ qlonglong QString::toIntegral_helper(QStringView string, bool *ok, int base)
     If \a ok is not \nullptr, failure is reported by setting *\a{ok}
     to \c false, and success by setting *\a{ok} to \c true.
 
-    If \a base is 0, the C language convention is used: if the string
-    begins with "0x", base 16 is used; otherwise, if the string begins with "0",
-    base 8 is used; otherwise, base 10 is used.
+    If \a base is 0, the C language convention is used: if the string begins
+    with "0x", base 16 is used; otherwise, if the string begins with "0b", base
+    2 is used; otherwise, if the string begins with "0", base 8 is used;
+    otherwise, base 10 is used.
 
     The string conversion will always happen in the 'C' locale. For
     locale-dependent conversion use QLocale::toULongLong()
@@ -7154,6 +7125,8 @@ qlonglong QString::toIntegral_helper(QStringView string, bool *ok, int base)
     \snippet qstring/main.cpp 79
 
     This function ignores leading and trailing whitespace.
+
+    \note Support for the "0b" prefix was added in Qt 6.4.
 
     \sa number(), toLongLong(), QLocale::toULongLong()
 */
@@ -7185,9 +7158,10 @@ qulonglong QString::toIntegral_helper(QStringView string, bool *ok, uint base)
     If \a ok is not \nullptr, failure is reported by setting *\a{ok}
     to \c false, and success by setting *\a{ok} to \c true.
 
-    If \a base is 0, the C language convention is used: if the string
-    begins with "0x", base 16 is used; otherwise, if the string begins with "0",
-    base 8 is used; otherwise, base 10 is used.
+    If \a base is 0, the C language convention is used: if the string begins
+    with "0x", base 16 is used; otherwise, if the string begins with "0b", base
+    2 is used; otherwise, if the string begins with "0", base 8 is used;
+    otherwise, base 10 is used.
 
     The string conversion will always happen in the 'C' locale. For
     locale-dependent conversion use QLocale::toLongLong()
@@ -7197,6 +7171,8 @@ qulonglong QString::toIntegral_helper(QStringView string, bool *ok, uint base)
     \snippet qstring/main.cpp 73
 
     This function ignores leading and trailing whitespace.
+
+    \note Support for the "0b" prefix was added in Qt 6.4.
 
     \sa number(), toULong(), toInt(), QLocale::toInt()
 */
@@ -7211,9 +7187,10 @@ qulonglong QString::toIntegral_helper(QStringView string, bool *ok, uint base)
     If \a ok is not \nullptr, failure is reported by setting *\a{ok}
     to \c false, and success by setting *\a{ok} to \c true.
 
-    If \a base is 0, the C language convention is used: if the string
-    begins with "0x", base 16 is used; otherwise, if the string begins with "0",
-    base 8 is used; otherwise, base 10 is used.
+    If \a base is 0, the C language convention is used: if the string begins
+    with "0x", base 16 is used; otherwise, if the string begins with "0b", base
+    2 is used; otherwise, if the string begins with "0", base 8 is used;
+    otherwise, base 10 is used.
 
     The string conversion will always happen in the 'C' locale. For
     locale-dependent conversion use QLocale::toULongLong()
@@ -7223,6 +7200,8 @@ qulonglong QString::toIntegral_helper(QStringView string, bool *ok, uint base)
     \snippet qstring/main.cpp 78
 
     This function ignores leading and trailing whitespace.
+
+    \note Support for the "0b" prefix was added in Qt 6.4.
 
     \sa number(), QLocale::toUInt()
 */
@@ -7236,9 +7215,10 @@ qulonglong QString::toIntegral_helper(QStringView string, bool *ok, uint base)
     If \a ok is not \nullptr, failure is reported by setting *\a{ok}
     to \c false, and success by setting *\a{ok} to \c true.
 
-    If \a base is 0, the C language convention is used: if the string
-    begins with "0x", base 16 is used; otherwise, if the string begins with "0",
-    base 8 is used; otherwise, base 10 is used.
+    If \a base is 0, the C language convention is used: if the string begins
+    with "0x", base 16 is used; otherwise, if the string begins with "0b", base
+    2 is used; otherwise, if the string begins with "0", base 8 is used;
+    otherwise, base 10 is used.
 
     The string conversion will always happen in the 'C' locale. For
     locale-dependent conversion use QLocale::toInt()
@@ -7248,6 +7228,8 @@ qulonglong QString::toIntegral_helper(QStringView string, bool *ok, uint base)
     \snippet qstring/main.cpp 72
 
     This function ignores leading and trailing whitespace.
+
+    \note Support for the "0b" prefix was added in Qt 6.4.
 
     \sa number(), toUInt(), toDouble(), QLocale::toInt()
 */
@@ -7261,9 +7243,10 @@ qulonglong QString::toIntegral_helper(QStringView string, bool *ok, uint base)
     If \a ok is not \nullptr, failure is reported by setting *\a{ok}
     to \c false, and success by setting *\a{ok} to \c true.
 
-    If \a base is 0, the C language convention is used: if the string
-    begins with "0x", base 16 is used; otherwise, if the string begins with "0",
-    base 8 is used; otherwise, base 10 is used.
+    If \a base is 0, the C language convention is used: if the string begins
+    with "0x", base 16 is used; otherwise, if the string begins with "0b", base
+    2 is used; otherwise, if the string begins with "0", base 8 is used;
+    otherwise, base 10 is used.
 
     The string conversion will always happen in the 'C' locale. For
     locale-dependent conversion use QLocale::toUInt()
@@ -7273,6 +7256,8 @@ qulonglong QString::toIntegral_helper(QStringView string, bool *ok, uint base)
     \snippet qstring/main.cpp 77
 
     This function ignores leading and trailing whitespace.
+
+    \note Support for the "0b" prefix was added in Qt 6.4.
 
     \sa number(), toInt(), QLocale::toUInt()
 */
@@ -7287,9 +7272,10 @@ qulonglong QString::toIntegral_helper(QStringView string, bool *ok, uint base)
     If \a ok is not \nullptr, failure is reported by setting *\a{ok}
     to \c false, and success by setting *\a{ok} to \c true.
 
-    If \a base is 0, the C language convention is used: if the string
-    begins with "0x", base 16 is used; otherwise, if the string begins with "0",
-    base 8 is used; otherwise, base 10 is used.
+    If \a base is 0, the C language convention is used: if the string begins
+    with "0x", base 16 is used; otherwise, if the string begins with "0b", base
+    2 is used; otherwise, if the string begins with "0", base 8 is used;
+    otherwise, base 10 is used.
 
     The string conversion will always happen in the 'C' locale. For
     locale-dependent conversion use QLocale::toShort()
@@ -7299,6 +7285,8 @@ qulonglong QString::toIntegral_helper(QStringView string, bool *ok, uint base)
     \snippet qstring/main.cpp 76
 
     This function ignores leading and trailing whitespace.
+
+    \note Support for the "0b" prefix was added in Qt 6.4.
 
     \sa number(), toUShort(), toInt(), QLocale::toShort()
 */
@@ -7313,9 +7301,10 @@ qulonglong QString::toIntegral_helper(QStringView string, bool *ok, uint base)
     If \a ok is not \nullptr, failure is reported by setting *\a{ok}
     to \c false, and success by setting *\a{ok} to \c true.
 
-    If \a base is 0, the C language convention is used: if the string
-    begins with "0x", base 16 is used; if the string begins with "0",
-    base 8 is used; otherwise, base 10 is used.
+    If \a base is 0, the C language convention is used: if the string begins
+    with "0x", base 16 is used; otherwise, if the string begins with "0b", base
+    2 is used; otherwise, if the string begins with "0", base 8 is used;
+    otherwise, base 10 is used.
 
     The string conversion will always happen in the 'C' locale. For
     locale-dependent conversion use QLocale::toUShort()
@@ -7325,6 +7314,8 @@ qulonglong QString::toIntegral_helper(QStringView string, bool *ok, uint base)
     \snippet qstring/main.cpp 80
 
     This function ignores leading and trailing whitespace.
+
+    \note Support for the "0b" prefix was added in Qt 6.4.
 
     \sa number(), toShort(), QLocale::toUShort()
 */
@@ -7589,7 +7580,7 @@ QString QString::number(double n, char format, int precision)
 {
     QLocaleData::DoubleForm form = QLocaleData::DFDecimal;
 
-    switch (qToLower(format)) {
+    switch (QtMiscUtils::toAsciiLower(format)) {
         case 'f':
             form = QLocaleData::DFDecimal;
             break;
@@ -7709,7 +7700,7 @@ static ResultList splitString(const String &source, const QRegularExpression &re
 {
     ResultList list;
     if (!re.isValid()) {
-        qWarning("QString::split: invalid QRegularExpression object");
+        qtWarnAboutInvalidRegularExpression(re.pattern(), "QString::split");
         return list;
     }
 
@@ -8211,7 +8202,7 @@ QString QString::arg(QStringView a, int fieldWidth, QChar fillChar) const
     is printed and the result is undefined. Place-marker numbers must be
     in the range 1 to 99.
 */
-QString QString::arg(QLatin1String a, int fieldWidth, QChar fillChar) const
+QString QString::arg(QLatin1StringView a, int fieldWidth, QChar fillChar) const
 {
     QVarLengthArray<char16_t> utf16(a.size());
     qt_from_latin1(utf16.data(), a.data(), a.size());
@@ -8316,13 +8307,13 @@ QString QString::arg(qlonglong a, int fieldWidth, int base, QChar fillChar) cons
 
     unsigned flags = QLocaleData::NoFlags;
     // ZeroPadded sorts out left-padding when the fill is zero, to the right of sign:
-    if (fillChar == QLatin1Char('0'))
+    if (fillChar == u'0')
         flags = QLocaleData::ZeroPadded;
 
     QString arg;
     if (d.occurrences > d.locale_occurrences) {
         arg = QLocaleData::c()->longLongToString(a, -1, base, fieldWidth, flags);
-        Q_ASSERT(fillChar != QLatin1Char('0') || !qIsFinite(a)
+        Q_ASSERT(fillChar != u'0' || !qIsFinite(a)
                  || fieldWidth <= arg.length());
     }
 
@@ -8332,7 +8323,7 @@ QString QString::arg(qlonglong a, int fieldWidth, int base, QChar fillChar) cons
         if (!(locale.numberOptions() & QLocale::OmitGroupSeparator))
             flags |= QLocaleData::GroupDigits;
         localeArg = locale.d->m_data->longLongToString(a, -1, base, fieldWidth, flags);
-        Q_ASSERT(fillChar != QLatin1Char('0') || !qIsFinite(a)
+        Q_ASSERT(fillChar != u'0' || !qIsFinite(a)
                  || fieldWidth <= localeArg.length());
     }
 
@@ -8364,13 +8355,13 @@ QString QString::arg(qulonglong a, int fieldWidth, int base, QChar fillChar) con
 
     unsigned flags = QLocaleData::NoFlags;
     // ZeroPadded sorts out left-padding when the fill is zero, to the right of sign:
-    if (fillChar == QLatin1Char('0'))
+    if (fillChar == u'0')
         flags = QLocaleData::ZeroPadded;
 
     QString arg;
     if (d.occurrences > d.locale_occurrences) {
         arg = QLocaleData::c()->unsLongLongToString(a, -1, base, fieldWidth, flags);
-        Q_ASSERT(fillChar != QLatin1Char('0') || !qIsFinite(a)
+        Q_ASSERT(fillChar != u'0' || !qIsFinite(a)
                  || fieldWidth <= arg.length());
     }
 
@@ -8380,7 +8371,7 @@ QString QString::arg(qulonglong a, int fieldWidth, int base, QChar fillChar) con
         if (!(locale.numberOptions() & QLocale::OmitGroupSeparator))
             flags |= QLocaleData::GroupDigits;
         localeArg = locale.d->m_data->unsLongLongToString(a, -1, base, fieldWidth, flags);
-        Q_ASSERT(fillChar != QLatin1Char('0') || !qIsFinite(a)
+        Q_ASSERT(fillChar != u'0' || !qIsFinite(a)
                  || fieldWidth <= localeArg.length());
     }
 
@@ -8464,14 +8455,14 @@ QString QString::arg(double a, int fieldWidth, char format, int precision, QChar
 
     unsigned flags = QLocaleData::NoFlags;
     // ZeroPadded sorts out left-padding when the fill is zero, to the right of sign:
-    if (fillChar == QLatin1Char('0'))
+    if (fillChar == u'0')
         flags |= QLocaleData::ZeroPadded;
 
     if (qIsUpper(format))
         flags |= QLocaleData::CapitalEorX;
 
     QLocaleData::DoubleForm form = QLocaleData::DFDecimal;
-    switch (qToLower(format)) {
+    switch (QtMiscUtils::toAsciiLower(format)) {
     case 'f':
         form = QLocaleData::DFDecimal;
         break;
@@ -8492,7 +8483,7 @@ QString QString::arg(double a, int fieldWidth, char format, int precision, QChar
     if (d.occurrences > d.locale_occurrences) {
         arg = QLocaleData::c()->doubleToString(a, precision, form, fieldWidth,
                                                flags | QLocaleData::ZeroPadExponent);
-        Q_ASSERT(fillChar != QLatin1Char('0') || !qIsFinite(a)
+        Q_ASSERT(fillChar != u'0' || !qIsFinite(a)
                  || fieldWidth <= arg.length());
     }
 
@@ -8508,7 +8499,7 @@ QString QString::arg(double a, int fieldWidth, char format, int precision, QChar
         if (numberOptions & QLocale::IncludeTrailingZeroesAfterDot)
             flags |= QLocaleData::AddTrailingZeroes;
         localeArg = locale.d->m_data->doubleToString(a, precision, form, fieldWidth, flags);
-        Q_ASSERT(fillChar != QLatin1Char('0') || !qIsFinite(a)
+        Q_ASSERT(fillChar != u'0' || !qIsFinite(a)
                  || fieldWidth <= localeArg.length());
     }
 
@@ -8523,7 +8514,7 @@ static int getEscape(const Char *uc, qsizetype *pos, qsizetype len, int maxNumbe
 {
     qsizetype i = *pos;
     ++i;
-    if (i < len && uc[i] == QLatin1Char('L'))
+    if (i < len && uc[i] == u'L')
         ++i;
     if (i < len) {
         int escape = to_unicode(uc[i]) - '0';
@@ -8585,11 +8576,11 @@ struct Part
     Part() = default; // for QVarLengthArray; do not use
     constexpr Part(QStringView s, int num = -1)
         : tag{QtPrivate::ArgBase::U16}, number{num}, data{s.utf16()}, size{s.size()} {}
-    constexpr Part(QLatin1String s, int num = -1)
+    constexpr Part(QLatin1StringView s, int num = -1)
         : tag{QtPrivate::ArgBase::L1}, number{num}, data{s.data()}, size{s.size()} {}
 
     void reset(QStringView s) noexcept { *this = {s, number}; }
-    void reset(QLatin1String s) noexcept { *this = {s, number}; }
+    void reset(QLatin1StringView s) noexcept { *this = {s, number}; }
 
     QtPrivate::ArgBase::Tag tag;
     int number;
@@ -8619,7 +8610,7 @@ static ParseResult parseMultiArgFormatString(StringView s)
     qsizetype last = 0;
 
     while (i < end) {
-        if (uc[i] == QLatin1Char('%')) {
+        if (uc[i] == u'%') {
             qsizetype percent = i;
             int number = getEscape(uc, &i, len);
             if (number != -1) {
@@ -8684,7 +8675,7 @@ static qsizetype resolveStringRefsAndReturnTotalSize(ParseResult &parts, const A
 
 } // unnamed namespace
 
-Q_ALWAYS_INLINE QString to_string(QLatin1String s) noexcept { return s; }
+Q_ALWAYS_INLINE QString to_string(QLatin1StringView s) noexcept { return s; }
 Q_ALWAYS_INLINE QString to_string(QStringView s) noexcept { return s.toString(); }
 
 template <typename StringView>
@@ -8736,7 +8727,7 @@ QString QtPrivate::argToQString(QStringView pattern, size_t n, const ArgBase **a
     return argToQStringImpl(pattern, n, args);
 }
 
-QString QtPrivate::argToQString(QLatin1String pattern, size_t n, const ArgBase **args)
+QString QtPrivate::argToQString(QLatin1StringView pattern, size_t n, const ArgBase **args)
 {
     return argToQStringImpl(pattern, n, args);
 }
@@ -8993,9 +8984,9 @@ QString &QString::setRawData(const QChar *unicode, qsizetype size)
     \sa toUcs4(), toStdWString(), toStdU16String()
 */
 
-/*! \class QLatin1String
+/*! \class QLatin1StringView
     \inmodule QtCore
-    \brief The QLatin1String class provides a thin wrapper around an US-ASCII/Latin-1 encoded string literal.
+    \brief The QLatin1StringView class provides a thin wrapper around an US-ASCII/Latin-1 encoded string literal.
 
     \ingroup string-processing
     \reentrant
@@ -9021,9 +9012,9 @@ QString &QString::setRawData(const QChar *unicode, qsizetype size)
     Applications that define \l QT_NO_CAST_FROM_ASCII (as explained
     in the QString documentation) don't have access to QString's
     \c{const char *} API. To provide an efficient way of specifying
-    constant Latin-1 strings, Qt provides the QLatin1String, which is
+    constant Latin-1 strings, Qt provides the QLatin1StringView, which is
     just a very thin wrapper around a \c{const char *}. Using
-    QLatin1String, the example code above becomes
+    QLatin1StringView, the example code above becomes
 
     \snippet code/src_corelib_text_qstring.cpp 5
 
@@ -9031,16 +9022,16 @@ QString &QString::setRawData(const QChar *unicode, qsizetype size)
     benefits as the first version of the code, and is faster than
     converting the Latin-1 strings using QString::fromLatin1().
 
-    Thanks to the QString(QLatin1String) constructor,
-    QLatin1String can be used everywhere a QString is expected. For
+    Thanks to the QString(QLatin1StringView) constructor,
+    QLatin1StringView can be used everywhere a QString is expected. For
     example:
 
     \snippet code/src_corelib_text_qstring.cpp 6
 
-    \note If the function you're calling with a QLatin1String
-    argument isn't actually overloaded to take QLatin1String, the
+    \note If the function you're calling with a QLatin1StringView
+    argument isn't actually overloaded to take QLatin1StringView, the
     implicit conversion to QString will trigger a memory allocation,
-    which is usually what you want to avoid by using QLatin1String
+    which is usually what you want to avoid by using QLatin1StringView
     in the first place. In those cases, using QStringLiteral may be
     the better option.
 
@@ -9049,102 +9040,124 @@ QString &QString::setRawData(const QChar *unicode, qsizetype size)
 */
 
 /*!
-    \typedef QLatin1String::value_type
+    \class QLatin1String
+    \inmodule QtCore
+    \brief QLatin1String is the same as QLatin1StringView.
+
+    QLatin1String is a view to a Latin-1 string. It's the same as
+    QLatin1StringView and is kept for compatibility reasons. It is
+    recommended to use QLatin1StringView instead.
+
+    Please see the QLatin1StringView documentation for details.
+*/
+
+/*!
+    \typedef QLatin1StringView::value_type
     \since 5.10
 
     Alias for \c{const char}. Provided for compatibility with the STL.
 */
 
 /*!
-    \typedef QLatin1String::difference_type
+    \typedef QLatin1StringView::difference_type
     \since 5.10
 
     Alias for \c{qsizetype}. Provided for compatibility with the STL.
 */
 
 /*!
-    \typedef QLatin1String::size_type
+    \typedef QLatin1StringView::size_type
     \since 5.10
 
     Alias for \c{qsizetype}. Provided for compatibility with the STL.
 
     \note In version prior to Qt 6, this was an alias for \c{int},
-    restricting the amount of data that could be held in a QLatin1String
+    restricting the amount of data that could be held in a QLatin1StringView
     on 64-bit architectures.
 */
 
 /*!
-    \typedef QLatin1String::reference
+    \typedef QLatin1StringView::reference
     \since 5.10
 
     Alias for \c{value_type &}. Provided for compatibility with the STL.
 */
 
 /*!
-    \typedef QLatin1String::const_reference
+    \typedef QLatin1StringView::const_reference
     \since 5.11
 
     Alias for \c{reference}. Provided for compatibility with the STL.
 */
 
 /*!
-    \typedef QLatin1String::iterator
+    \typedef QLatin1StringView::iterator
     \since 5.10
 
-    QLatin1String does not support mutable iterators, so this is the same
+    QLatin1StringView does not support mutable iterators, so this is the same
     as const_iterator.
 
     \sa const_iterator, reverse_iterator
 */
 
 /*!
-    \typedef QLatin1String::const_iterator
+    \typedef QLatin1StringView::const_iterator
     \since 5.10
 
     \sa iterator, const_reverse_iterator
 */
 
 /*!
-    \typedef QLatin1String::reverse_iterator
+    \typedef QLatin1StringView::reverse_iterator
     \since 5.10
 
-    QLatin1String does not support mutable reverse iterators, so this is the
+    QLatin1StringView does not support mutable reverse iterators, so this is the
     same as const_reverse_iterator.
 
     \sa const_reverse_iterator, iterator
 */
 
 /*!
-    \typedef QLatin1String::const_reverse_iterator
+    \typedef QLatin1StringView::const_reverse_iterator
     \since 5.10
 
     \sa reverse_iterator, const_iterator
 */
 
-/*! \fn QLatin1String::QLatin1String()
+/*! \fn QLatin1StringView::QLatin1StringView()
     \since 5.6
 
-    Constructs a QLatin1String object that stores a nullptr.
+    Constructs a QLatin1StringView object that stores a \nullptr.
+
+    \sa data(), isEmpty(), isNull(), {Distinction Between Null and Empty Strings}
 */
 
-/*! \fn QLatin1String::QLatin1String(const char *str)
+/*! \fn QLatin1StringView::QLatin1StringView(std::nullptr_t)
+    \since 6.4
 
-    Constructs a QLatin1String object that stores \a str.
+    Constructs a QLatin1StringView object that stores a \nullptr.
+
+    \sa data(), isEmpty(), isNull(), {Distinction Between Null and Empty Strings}
+*/
+
+/*! \fn QLatin1StringView::QLatin1StringView(const char *str)
+
+    Constructs a QLatin1StringView object that stores \a str.
 
     The string data is \e not copied. The caller must be able to
     guarantee that \a str will not be deleted or modified as long as
-    the QLatin1String object exists.
+    the QLatin1StringView object exists.
 
     \sa latin1()
 */
 
-/*! \fn QLatin1String::QLatin1String(const char *str, qsizetype size)
+/*! \fn QLatin1StringView::QLatin1StringView(const char *str, qsizetype size)
 
-    Constructs a QLatin1String object that stores \a str with \a size.
+    Constructs a QLatin1StringView object that stores \a str with \a size.
 
     The string data is \e not copied. The caller must be able to
     guarantee that \a str will not be deleted or modified as long as
-    the QLatin1String object exists.
+    the QLatin1StringView object exists.
 
     \note: any null ('\\0') bytes in the byte array will be included in this
     string, which will be converted to Unicode null characters (U+0000) if this
@@ -9154,10 +9167,10 @@ QString &QString::setRawData(const QChar *unicode, qsizetype size)
 */
 
 /*!
-    \fn QLatin1String::QLatin1String(const char *first, const char *last)
+    \fn QLatin1StringView::QLatin1StringView(const char *first, const char *last)
     \since 5.10
 
-    Constructs a QLatin1String object that stores \a first with length
+    Constructs a QLatin1StringView object that stores \a first with length
     (\a last - \a first).
 
     The range \c{[first,last)} must remain valid for the lifetime of
@@ -9171,25 +9184,25 @@ QString &QString::setRawData(const QChar *unicode, qsizetype size)
     INT_MAX}.
 */
 
-/*! \fn QLatin1String::QLatin1String(const QByteArray &str)
+/*! \fn QLatin1StringView::QLatin1StringView(const QByteArray &str)
 
-    Constructs a QLatin1String object that stores \a str.
+    Constructs a QLatin1StringView object that stores \a str.
 
     The string data is \e not copied. The caller must be able to
     guarantee that \a str will not be deleted or modified as long as
-    the QLatin1String object exists.
+    the QLatin1StringView object exists.
 
     \sa latin1()
 */
 
-/*! \fn QLatin1String::QLatin1String(QByteArrayView str)
+/*! \fn QLatin1StringView::QLatin1StringView(QByteArrayView str)
     \since 6.3
 
-    Constructs a QLatin1String object that stores \a str.
+    Constructs a QLatin1StringView object that stores \a str.
 
     The string data is \e not copied. The caller must be able to
     guarantee that the data which \a str is pointing to will not
-    be deleted or modified as long as the QLatin1String object
+    be deleted or modified as long as the QLatin1StringView object
     exists. The size is obtained from \a str as-is, without checking
     for a null-terminator.
 
@@ -9201,7 +9214,7 @@ QString &QString::setRawData(const QChar *unicode, qsizetype size)
 */
 
 /*!
-    \fn QString QLatin1String::toString() const
+    \fn QString QLatin1StringView::toString() const
     \since 6.0
 
     Converts this Latin-1 string into a QString. Equivalent to
@@ -9210,44 +9223,73 @@ QString &QString::setRawData(const QChar *unicode, qsizetype size)
     \endcode
 */
 
-/*! \fn const char *QLatin1String::latin1() const
+/*! \fn const char *QLatin1StringView::latin1() const
 
-    Returns the Latin-1 string stored in this object.
+    Returns the start of the Latin-1 string referenced by this object.
 */
 
-/*! \fn const char *QLatin1String::data() const
+/*! \fn const char *QLatin1StringView::data() const
 
-    Returns the Latin-1 string stored in this object.
+    Returns the start of the Latin-1 string referenced by this object.
 */
 
-/*! \fn qsizetype QLatin1String::size() const
+/*! \fn const char *QLatin1StringView::constData() const
+    \since 6.4
 
-    Returns the size of the Latin-1 string stored in this object.
+    Returns the start of the Latin-1 string referenced by this object.
+
+    This function is provided for compatibility with other Qt containers.
+
+    \sa data()
+*/
+
+/*! \fn qsizetype QLatin1StringView::size() const
+
+    Returns the size of the Latin-1 string referenced by this object.
 
     \note In version prior to Qt 6, this function returned \c{int},
-    restricting the amount of data that could be held in a QLatin1String
+    restricting the amount of data that could be held in a QLatin1StringView
     on 64-bit architectures.
 */
 
-/*! \fn bool QLatin1String::isNull() const
+/*! \fn qsizetype QLatin1StringView::length() const
+    \since 6.4
+
+    Same as size().
+
+    This function is provided for compatibility with other Qt containers.
+*/
+
+/*! \fn bool QLatin1StringView::isNull() const
     \since 5.10
 
-    Returns whether the Latin-1 string stored in this object is null
+    Returns whether the Latin-1 string referenced by this object is null
     (\c{data() == nullptr}) or not.
 
     \sa isEmpty(), data()
 */
 
-/*! \fn bool QLatin1String::isEmpty() const
+/*! \fn bool QLatin1StringView::isEmpty() const
     \since 5.10
 
-    Returns whether the Latin-1 string stored in this object is empty
+    Returns whether the Latin-1 string referenced by this object is empty
     (\c{size() == 0}) or not.
 
     \sa isNull(), size()
 */
 
-/*! \fn QLatin1Char QLatin1String::at(qsizetype pos) const
+/*! \fn bool QLatin1StringView::empty() const
+    \since 6.4
+
+    Returns whether the Latin-1 string referenced by this object is empty
+    (\c{size() == 0}) or not.
+
+    This function is provided for STL compatibility.
+
+    \sa isEmpty(), isNull(), size()
+*/
+
+/*! \fn QLatin1Char QLatin1StringView::at(qsizetype pos) const
     \since 5.8
 
     Returns the character at position \a pos in this object.
@@ -9258,7 +9300,7 @@ QString &QString::setRawData(const QChar *unicode, qsizetype size)
     \sa operator[]()
 */
 
-/*! \fn QLatin1Char QLatin1String::operator[](qsizetype pos) const
+/*! \fn QLatin1Char QLatin1StringView::operator[](qsizetype pos) const
     \since 5.8
 
     Returns the character at position \a pos in this object.
@@ -9270,7 +9312,7 @@ QString &QString::setRawData(const QChar *unicode, qsizetype size)
 */
 
 /*!
-    \fn QLatin1Char QLatin1String::front() const
+    \fn QLatin1Char QLatin1StringView::front() const
     \since 5.10
 
     Returns the first character in the string.
@@ -9285,7 +9327,22 @@ QString &QString::setRawData(const QChar *unicode, qsizetype size)
 */
 
 /*!
-    \fn QLatin1Char QLatin1String::back() const
+    \fn QLatin1Char QLatin1StringView::first() const
+    \since 6.4
+
+    Returns the first character in the string.
+    Same as \c{at(0)} or front().
+
+    This function is provided for compatibility with other Qt containers.
+
+    \warning Calling this function on an empty string constitutes
+    undefined behavior.
+
+    \sa last(), front(), back()
+*/
+
+/*!
+    \fn QLatin1Char QLatin1StringView::back() const
     \since 5.10
 
     Returns the last character in the string.
@@ -9300,10 +9357,25 @@ QString &QString::setRawData(const QChar *unicode, qsizetype size)
 */
 
 /*!
-    \fn int QLatin1String::compare(QStringView str, Qt::CaseSensitivity cs) const
-    \fn int QLatin1String::compare(QLatin1String l1, Qt::CaseSensitivity cs) const
-    \fn int QLatin1String::compare(QChar ch) const
-    \fn int QLatin1String::compare(QChar ch, Qt::CaseSensitivity cs) const
+    \fn QLatin1Char QLatin1StringView::last() const
+    \since 6.4
+
+    Returns the last character in the string.
+    Same as \c{at(size() - 1)} or back().
+
+    This function is provided for compatibility with other Qt containers.
+
+    \warning Calling this function on an empty string constitutes
+    undefined behavior.
+
+    \sa first(), back(), front()
+*/
+
+/*!
+    \fn int QLatin1StringView::compare(QStringView str, Qt::CaseSensitivity cs) const
+    \fn int QLatin1StringView::compare(QLatin1StringView l1, Qt::CaseSensitivity cs) const
+    \fn int QLatin1StringView::compare(QChar ch) const
+    \fn int QLatin1StringView::compare(QChar ch, Qt::CaseSensitivity cs) const
     \since 5.14
 
     Returns an integer that compares to zero as this Latin-1 string compares to the
@@ -9317,13 +9389,13 @@ QString &QString::setRawData(const QChar *unicode, qsizetype size)
 
 
 /*!
-    \fn bool QLatin1String::startsWith(QStringView str, Qt::CaseSensitivity cs) const
+    \fn bool QLatin1StringView::startsWith(QStringView str, Qt::CaseSensitivity cs) const
     \since 5.10
-    \fn bool QLatin1String::startsWith(QLatin1String l1, Qt::CaseSensitivity cs) const
+    \fn bool QLatin1StringView::startsWith(QLatin1StringView l1, Qt::CaseSensitivity cs) const
     \since 5.10
-    \fn bool QLatin1String::startsWith(QChar ch) const
+    \fn bool QLatin1StringView::startsWith(QChar ch) const
     \since 5.10
-    \fn bool QLatin1String::startsWith(QChar ch, Qt::CaseSensitivity cs) const
+    \fn bool QLatin1StringView::startsWith(QChar ch, Qt::CaseSensitivity cs) const
     \since 5.10
 
     Returns \c true if this Latin-1 string starts with string-view \a str,
@@ -9337,13 +9409,13 @@ QString &QString::setRawData(const QChar *unicode, qsizetype size)
 */
 
 /*!
-    \fn bool QLatin1String::endsWith(QStringView str, Qt::CaseSensitivity cs) const
+    \fn bool QLatin1StringView::endsWith(QStringView str, Qt::CaseSensitivity cs) const
     \since 5.10
-    \fn bool QLatin1String::endsWith(QLatin1String l1, Qt::CaseSensitivity cs) const
+    \fn bool QLatin1StringView::endsWith(QLatin1StringView l1, Qt::CaseSensitivity cs) const
     \since 5.10
-    \fn bool QLatin1String::endsWith(QChar ch) const
+    \fn bool QLatin1StringView::endsWith(QChar ch) const
     \since 5.10
-    \fn bool QLatin1String::endsWith(QChar ch, Qt::CaseSensitivity cs) const
+    \fn bool QLatin1StringView::endsWith(QChar ch, Qt::CaseSensitivity cs) const
     \since 5.10
 
     Returns \c true if this Latin-1 string ends with string-view \a str,
@@ -9357,9 +9429,9 @@ QString &QString::setRawData(const QChar *unicode, qsizetype size)
 */
 
 /*!
-    \fn qsizetype QLatin1String::indexOf(QStringView str, qsizetype from = 0, Qt::CaseSensitivity cs = Qt::CaseSensitive) const
-    \fn qsizetype QLatin1String::indexOf(QLatin1String l1, qsizetype from = 0, Qt::CaseSensitivity cs = Qt::CaseSensitive) const
-    \fn qsizetype QLatin1String::indexOf(QChar c, qsizetype from = 0, Qt::CaseSensitivity cs = Qt::CaseSensitive) const
+    \fn qsizetype QLatin1StringView::indexOf(QStringView str, qsizetype from = 0, Qt::CaseSensitivity cs = Qt::CaseSensitive) const
+    \fn qsizetype QLatin1StringView::indexOf(QLatin1StringView l1, qsizetype from = 0, Qt::CaseSensitivity cs = Qt::CaseSensitive) const
+    \fn qsizetype QLatin1StringView::indexOf(QChar c, qsizetype from = 0, Qt::CaseSensitivity cs = Qt::CaseSensitive) const
     \since 5.14
 
     Returns the index position of the first occurrence of the string-view
@@ -9377,9 +9449,9 @@ QString &QString::setRawData(const QChar *unicode, qsizetype size)
 */
 
 /*!
-    \fn bool QLatin1String::contains(QStringView str, Qt::CaseSensitivity cs) const
-    \fn bool QLatin1String::contains(QLatin1String l1, Qt::CaseSensitivity cs) const
-    \fn bool QLatin1String::contains(QChar c, Qt::CaseSensitivity cs) const
+    \fn bool QLatin1StringView::contains(QStringView str, Qt::CaseSensitivity cs) const
+    \fn bool QLatin1StringView::contains(QLatin1StringView l1, Qt::CaseSensitivity cs) const
+    \fn bool QLatin1StringView::contains(QChar c, Qt::CaseSensitivity cs) const
     \since 5.14
 
     Returns \c true if this Latin-1 string contains an occurrence of the
@@ -9394,9 +9466,9 @@ QString &QString::setRawData(const QChar *unicode, qsizetype size)
 */
 
 /*!
-    \fn qsizetype QLatin1String::lastIndexOf(QStringView str, qsizetype from, Qt::CaseSensitivity cs) const
-    \fn qsizetype QLatin1String::lastIndexOf(QLatin1String l1, qsizetype from, Qt::CaseSensitivity cs) const
-    \fn qsizetype QLatin1String::lastIndexOf(QChar c, qsizetype from, Qt::CaseSensitivity cs) const
+    \fn qsizetype QLatin1StringView::lastIndexOf(QStringView str, qsizetype from, Qt::CaseSensitivity cs) const
+    \fn qsizetype QLatin1StringView::lastIndexOf(QLatin1StringView l1, qsizetype from, Qt::CaseSensitivity cs) const
+    \fn qsizetype QLatin1StringView::lastIndexOf(QChar c, qsizetype from, Qt::CaseSensitivity cs) const
     \since 5.14
 
     Returns the index position of the last occurrence of the string-view \a str,
@@ -9423,8 +9495,8 @@ QString &QString::setRawData(const QChar *unicode, qsizetype size)
 */
 
 /*!
-    \fn qsizetype QLatin1String::lastIndexOf(QStringView str, Qt::CaseSensitivity cs = Qt::CaseSensitive) const
-    \fn qsizetype QLatin1String::lastIndexOf(QLatin1String l1, Qt::CaseSensitivity cs = Qt::CaseSensitive) const
+    \fn qsizetype QLatin1StringView::lastIndexOf(QStringView str, Qt::CaseSensitivity cs = Qt::CaseSensitive) const
+    \fn qsizetype QLatin1StringView::lastIndexOf(QLatin1StringView l1, Qt::CaseSensitivity cs = Qt::CaseSensitive) const
     \since 6.2
     \overload lastIndexOf()
 
@@ -9437,13 +9509,29 @@ QString &QString::setRawData(const QChar *unicode, qsizetype size)
 */
 
 /*!
-    \fn qsizetype QLatin1String::lastIndexOf(QChar ch, Qt::CaseSensitivity cs) const
+    \fn qsizetype QLatin1StringView::lastIndexOf(QChar ch, Qt::CaseSensitivity cs) const
     \since 6.3
     \overload
 */
 
 /*!
-    \fn QLatin1String::const_iterator QLatin1String::begin() const
+    \fn qsizetype QLatin1StringView::count(QStringView str, Qt::CaseSensitivity cs) const
+    \fn qsizetype QLatin1StringView::count(QLatin1StringView l1, Qt::CaseSensitivity cs) const
+    \fn qsizetype QLatin1StringView::count(QChar ch, Qt::CaseSensitivity cs) const
+    \since 6.4
+
+    Returns the number of (potentially overlapping) occurrences of the
+    string-view \a str, Latin-1 string \a l1, or character \a ch,
+    respectively, in this Latin-1 string.
+
+    If \a cs is Qt::CaseSensitive (default), the search is
+    case sensitive; otherwise the search is case insensitive.
+
+    \sa contains(), indexOf()
+*/
+
+/*!
+    \fn QLatin1StringView::const_iterator QLatin1StringView::begin() const
     \since 5.10
 
     Returns a const \l{STL-style iterators}{STL-style iterator} pointing to the
@@ -9455,7 +9543,7 @@ QString &QString::setRawData(const QChar *unicode, qsizetype size)
 */
 
 /*!
-    \fn QLatin1String::const_iterator QLatin1String::cbegin() const
+    \fn QLatin1StringView::const_iterator QLatin1StringView::cbegin() const
     \since 5.10
 
     Same as begin().
@@ -9466,7 +9554,18 @@ QString &QString::setRawData(const QChar *unicode, qsizetype size)
 */
 
 /*!
-    \fn QLatin1String::const_iterator QLatin1String::end() const
+    \fn QLatin1StringView::const_iterator QLatin1StringView::constBegin() const
+    \since 6.4
+
+    Same as begin().
+
+    This function is provided for compatibility with other Qt containers.
+
+    \sa constEnd(), begin(), cbegin(), data()
+*/
+
+/*!
+    \fn QLatin1StringView::const_iterator QLatin1StringView::end() const
     \since 5.10
 
     Returns a const \l{STL-style iterators}{STL-style iterator} pointing just
@@ -9477,7 +9576,7 @@ QString &QString::setRawData(const QChar *unicode, qsizetype size)
     \sa begin(), cend(), rend()
 */
 
-/*! \fn QLatin1String::const_iterator QLatin1String::cend() const
+/*! \fn QLatin1StringView::const_iterator QLatin1StringView::cend() const
     \since 5.10
 
     Same as end().
@@ -9487,8 +9586,18 @@ QString &QString::setRawData(const QChar *unicode, qsizetype size)
     \sa cbegin(), end(), crend()
 */
 
+/*! \fn QLatin1StringView::const_iterator QLatin1StringView::constEnd() const
+    \since 6.4
+
+    Same as end().
+
+    This function is provided for compatibility with other Qt containers.
+
+    \sa constBegin(), end(), cend(), crend()
+*/
+
 /*!
-    \fn QLatin1String::const_reverse_iterator QLatin1String::rbegin() const
+    \fn QLatin1StringView::const_reverse_iterator QLatin1StringView::rbegin() const
     \since 5.10
 
     Returns a const \l{STL-style iterators}{STL-style} reverse iterator pointing
@@ -9500,7 +9609,7 @@ QString &QString::setRawData(const QChar *unicode, qsizetype size)
 */
 
 /*!
-    \fn QLatin1String::const_reverse_iterator QLatin1String::crbegin() const
+    \fn QLatin1StringView::const_reverse_iterator QLatin1StringView::crbegin() const
     \since 5.10
 
     Same as rbegin().
@@ -9511,7 +9620,7 @@ QString &QString::setRawData(const QChar *unicode, qsizetype size)
 */
 
 /*!
-    \fn QLatin1String::const_reverse_iterator QLatin1String::rend() const
+    \fn QLatin1StringView::const_reverse_iterator QLatin1StringView::rend() const
     \since 5.10
 
     Returns a \l{STL-style iterators}{STL-style} reverse iterator pointing just
@@ -9523,7 +9632,7 @@ QString &QString::setRawData(const QChar *unicode, qsizetype size)
 */
 
 /*!
-    \fn QLatin1String::const_reverse_iterator QLatin1String::crend() const
+    \fn QLatin1StringView::const_reverse_iterator QLatin1StringView::crend() const
     \since 5.10
 
     Same as rend().
@@ -9534,7 +9643,7 @@ QString &QString::setRawData(const QChar *unicode, qsizetype size)
 */
 
 /*!
-    \fn QLatin1String QLatin1String::mid(qsizetype start, qsizetype length) const
+    \fn QLatin1StringView QLatin1StringView::mid(qsizetype start, qsizetype length) const
     \since 5.8
 
     Returns the substring of length \a length starting at position
@@ -9553,7 +9662,7 @@ QString &QString::setRawData(const QChar *unicode, qsizetype size)
 */
 
 /*!
-    \fn QLatin1String QLatin1String::left(qsizetype length) const
+    \fn QLatin1StringView QLatin1StringView::left(qsizetype length) const
     \since 5.8
 
     If you know that \a length cannot be out of bounds, use first() instead in
@@ -9569,7 +9678,7 @@ QString &QString::setRawData(const QChar *unicode, qsizetype size)
 */
 
 /*!
-    \fn QLatin1String QLatin1String::right(qsizetype length) const
+    \fn QLatin1StringView QLatin1StringView::right(qsizetype length) const
     \since 5.8
 
     If you know that \a length cannot be out of bounds, use last() instead in
@@ -9585,7 +9694,7 @@ QString &QString::setRawData(const QChar *unicode, qsizetype size)
 */
 
 /*!
-    \fn QLatin1String QLatin1String::first(qsizetype n) const
+    \fn QLatin1StringView QLatin1StringView::first(qsizetype n) const
     \since 6.0
 
     Returns a Latin-1 string that contains the first \a n characters
@@ -9597,7 +9706,7 @@ QString &QString::setRawData(const QChar *unicode, qsizetype size)
 */
 
 /*!
-    \fn QLatin1String QLatin1String::last(qsizetype n) const
+    \fn QLatin1StringView QLatin1StringView::last(qsizetype n) const
     \since 6.0
 
     Returns a Latin-1 string that contains the last \a n characters
@@ -9609,7 +9718,7 @@ QString &QString::setRawData(const QChar *unicode, qsizetype size)
 */
 
 /*!
-    \fn QLatin1String QLatin1String::sliced(qsizetype pos, qsizetype n) const
+    \fn QLatin1StringView QLatin1StringView::sliced(qsizetype pos, qsizetype n) const
     \since 6.0
 
     Returns a Latin-1 string that points to \a n characters of this
@@ -9622,7 +9731,7 @@ QString &QString::setRawData(const QChar *unicode, qsizetype size)
 */
 
 /*!
-    \fn QLatin1String QLatin1String::sliced(qsizetype pos) const
+    \fn QLatin1StringView QLatin1StringView::sliced(qsizetype pos) const
     \since 6.0
 
     Returns a Latin-1 string starting at position \a pos in this
@@ -9634,7 +9743,7 @@ QString &QString::setRawData(const QChar *unicode, qsizetype size)
 */
 
 /*!
-    \fn QLatin1String QLatin1String::chopped(qsizetype length) const
+    \fn QLatin1StringView QLatin1StringView::chopped(qsizetype length) const
     \since 5.10
 
     Returns the substring of length size() - \a length starting at the
@@ -9648,7 +9757,7 @@ QString &QString::setRawData(const QChar *unicode, qsizetype size)
 */
 
 /*!
-    \fn void QLatin1String::truncate(qsizetype length)
+    \fn void QLatin1StringView::truncate(qsizetype length)
     \since 5.10
 
     Truncates this string to length \a length.
@@ -9661,7 +9770,7 @@ QString &QString::setRawData(const QChar *unicode, qsizetype size)
 */
 
 /*!
-    \fn void QLatin1String::chop(qsizetype length)
+    \fn void QLatin1StringView::chop(qsizetype length)
     \since 5.10
 
     Truncates this string by \a length characters.
@@ -9674,7 +9783,7 @@ QString &QString::setRawData(const QChar *unicode, qsizetype size)
 */
 
 /*!
-    \fn QLatin1String QLatin1String::trimmed() const
+    \fn QLatin1StringView QLatin1StringView::trimmed() const
     \since 5.10
 
     Strips leading and trailing whitespace and returns the result.
@@ -9685,7 +9794,7 @@ QString &QString::setRawData(const QChar *unicode, qsizetype size)
 */
 
 /*!
-    \fn bool QLatin1String::operator==(const char *other) const
+    \fn bool QLatin1StringView::operator==(const char *other) const
     \since 4.3
 
     Returns \c true if the string is equal to const char pointer \a other;
@@ -9703,7 +9812,7 @@ QString &QString::setRawData(const QChar *unicode, qsizetype size)
 */
 
 /*!
-    \fn bool QLatin1String::operator==(const QByteArray &other) const
+    \fn bool QLatin1StringView::operator==(const QByteArray &other) const
     \since 5.0
     \overload
 
@@ -9717,7 +9826,7 @@ QString &QString::setRawData(const QChar *unicode, qsizetype size)
 */
 
 /*!
-    \fn bool QLatin1String::operator!=(const char *other) const
+    \fn bool QLatin1StringView::operator!=(const char *other) const
     \since 4.3
 
     Returns \c true if this string is not equal to const char pointer \a other;
@@ -9735,7 +9844,7 @@ QString &QString::setRawData(const QChar *unicode, qsizetype size)
 */
 
 /*!
-    \fn bool QLatin1String::operator!=(const QByteArray &other) const
+    \fn bool QLatin1StringView::operator!=(const QByteArray &other) const
     \since 5.0
     \overload operator!=()
 
@@ -9749,7 +9858,7 @@ QString &QString::setRawData(const QChar *unicode, qsizetype size)
 */
 
 /*!
-    \fn bool QLatin1String::operator>(const char *other) const
+    \fn bool QLatin1StringView::operator>(const char *other) const
     \since 4.3
 
     Returns \c true if this string is lexically greater than const char pointer
@@ -9767,7 +9876,7 @@ QString &QString::setRawData(const QChar *unicode, qsizetype size)
 */
 
 /*!
-    \fn bool QLatin1String::operator>(const QByteArray &other) const
+    \fn bool QLatin1StringView::operator>(const QByteArray &other) const
     \since 5.0
     \overload
 
@@ -9781,7 +9890,7 @@ QString &QString::setRawData(const QChar *unicode, qsizetype size)
 */
 
 /*!
-    \fn bool QLatin1String::operator<(const char *other) const
+    \fn bool QLatin1StringView::operator<(const char *other) const
     \since 4.3
 
     Returns \c true if this string is lexically less than const char pointer
@@ -9799,7 +9908,7 @@ QString &QString::setRawData(const QChar *unicode, qsizetype size)
 */
 
 /*!
-    \fn bool QLatin1String::operator<(const QByteArray &other) const
+    \fn bool QLatin1StringView::operator<(const QByteArray &other) const
     \since 5.0
     \overload
 
@@ -9813,7 +9922,7 @@ QString &QString::setRawData(const QChar *unicode, qsizetype size)
 */
 
 /*!
-    \fn bool QLatin1String::operator>=(const char *other) const
+    \fn bool QLatin1StringView::operator>=(const char *other) const
     \since 4.3
 
     Returns \c true if this string is lexically greater than or equal to
@@ -9831,7 +9940,7 @@ QString &QString::setRawData(const QChar *unicode, qsizetype size)
 */
 
 /*!
-    \fn bool QLatin1String::operator>=(const QByteArray &other) const
+    \fn bool QLatin1StringView::operator>=(const QByteArray &other) const
     \since 5.0
     \overload
 
@@ -9845,7 +9954,7 @@ QString &QString::setRawData(const QChar *unicode, qsizetype size)
 */
 
 /*!
-    \fn bool QLatin1String::operator<=(const char *other) const
+    \fn bool QLatin1StringView::operator<=(const char *other) const
     \since 4.3
 
     Returns \c true if this string is lexically less than or equal to
@@ -9863,7 +9972,7 @@ QString &QString::setRawData(const QChar *unicode, qsizetype size)
 */
 
 /*!
-    \fn bool QLatin1String::operator<=(const QByteArray &other) const
+    \fn bool QLatin1StringView::operator<=(const QByteArray &other) const
     \since 5.0
     \overload
 
@@ -9876,189 +9985,248 @@ QString &QString::setRawData(const QChar *unicode, qsizetype size)
     go through QObject::tr(), for example.
 */
 
-/*! \fn bool QLatin1String::operator==(QLatin1String s1, QLatin1String s2)
+/*! \fn bool QLatin1StringView::operator==(QLatin1StringView s1, QLatin1StringView s2)
 
     Returns \c true if string \a s1 is lexically equal to string \a s2;
     otherwise returns \c false.
 */
-/*! \fn bool QLatin1String::operator!=(QLatin1String s1, QLatin1String s2)
+/*! \fn bool QLatin1StringView::operator!=(QLatin1StringView s1, QLatin1StringView s2)
 
     Returns \c true if string \a s1 is lexically not equal to string \a s2;
     otherwise returns \c false.
 */
-/*! \fn bool QLatin1String::operator<(QLatin1String s1, QLatin1String s2)
+/*! \fn bool QLatin1StringView::operator<(QLatin1StringView s1, QLatin1StringView s2)
 
     Returns \c true if string \a s1 is lexically less than string \a s2;
     otherwise returns \c false.
 */
-/*! \fn bool QLatin1String::operator<=(QLatin1String s1, QLatin1String s2)
+/*! \fn bool QLatin1StringView::operator<=(QLatin1StringView s1, QLatin1StringView s2)
 
     Returns \c true if string \a s1 is lexically less than or equal to
     string \a s2; otherwise returns \c false.
 */
-/*! \fn bool QLatin1String::operator>(QLatin1String s1, QLatin1String s2)
+/*! \fn bool QLatin1StringView::operator>(QLatin1StringView s1, QLatin1StringView s2)
 
     Returns \c true if string \a s1 is lexically greater than string \a s2;
     otherwise returns \c false.
 */
-/*! \fn bool QLatin1String::operator>=(QLatin1String s1, QLatin1String s2)
+/*! \fn bool QLatin1StringView::operator>=(QLatin1StringView s1, QLatin1StringView s2)
 
     Returns \c true if string \a s1 is lexically greater than or equal
     to string \a s2; otherwise returns \c false.
 */
 
-/*! \fn bool QLatin1String::operator==(QChar ch, QLatin1String s)
+/*! \fn bool QLatin1StringView::operator==(QChar ch, QLatin1StringView s)
 
     Returns \c true if char \a ch is lexically equal to string \a s;
     otherwise returns \c false.
 */
-/*! \fn bool QLatin1String::operator<(QChar ch, QLatin1String s)
+/*! \fn bool QLatin1StringView::operator<(QChar ch, QLatin1StringView s)
 
     Returns \c true if char \a ch is lexically less than string \a s;
     otherwise returns \c false.
 */
-/*! \fn bool QLatin1String::operator>(QChar ch, QLatin1String s)
+/*! \fn bool QLatin1StringView::operator>(QChar ch, QLatin1StringView s)
     Returns \c true if char \a ch is lexically greater than string \a s;
     otherwise returns \c false.
 */
-/*! \fn bool QLatin1String::operator!=(QChar ch, QLatin1String s)
+/*! \fn bool QLatin1StringView::operator!=(QChar ch, QLatin1StringView s)
 
     Returns \c true if char \a ch is lexically not equal to string \a s;
     otherwise returns \c false.
 */
-/*! \fn bool QLatin1String::operator<=(QChar ch, QLatin1String s)
+/*! \fn bool QLatin1StringView::operator<=(QChar ch, QLatin1StringView s)
 
     Returns \c true if char \a ch is lexically less than or equal to
     string \a s; otherwise returns \c false.
 */
-/*! \fn bool QLatin1String::operator>=(QChar ch, QLatin1String s)
+/*! \fn bool QLatin1StringView::operator>=(QChar ch, QLatin1StringView s)
 
     Returns \c true if char \a ch is lexically greater than or equal to
     string \a s; otherwise returns \c false.
 */
 
-/*! \fn bool QLatin1String::operator==(QLatin1String s, QChar ch)
+/*! \fn bool QLatin1StringView::operator==(QLatin1StringView s, QChar ch)
 
     Returns \c true if string \a s is lexically equal to char \a ch;
     otherwise returns \c false.
 */
-/*! \fn bool QLatin1String::operator<(QLatin1String s, QChar ch)
+/*! \fn bool QLatin1StringView::operator<(QLatin1StringView s, QChar ch)
 
     Returns \c true if string \a s is lexically less than char \a ch;
     otherwise returns \c false.
 */
-/*! \fn bool QLatin1String::operator>(QLatin1String s, QChar ch)
+/*! \fn bool QLatin1StringView::operator>(QLatin1StringView s, QChar ch)
 
     Returns \c true if string \a s is lexically greater than char \a ch;
     otherwise returns \c false.
 */
-/*! \fn bool QLatin1String::operator!=(QLatin1String s, QChar ch)
+/*! \fn bool QLatin1StringView::operator!=(QLatin1StringView s, QChar ch)
 
     Returns \c true if string \a s is lexically not equal to char \a ch;
     otherwise returns \c false.
 */
-/*! \fn bool QLatin1String::operator<=(QLatin1String s, QChar ch)
+/*! \fn bool QLatin1StringView::operator<=(QLatin1StringView s, QChar ch)
 
     Returns \c true if string \a s is lexically less than or equal to
     char \a ch; otherwise returns \c false.
 */
-/*! \fn bool QLatin1String::operator>=(QLatin1String s, QChar ch)
+/*! \fn bool QLatin1StringView::operator>=(QLatin1StringView s, QChar ch)
 
     Returns \c true if string \a s is lexically greater than or equal to
     char \a ch; otherwise returns \c false.
 */
 
-/*! \fn bool QLatin1String::operator==(QStringView s1, QLatin1String s2)
+/*! \fn bool QLatin1StringView::operator==(QStringView s1, QLatin1StringView s2)
 
     Returns \c true if string view \a s1 is lexically equal to string \a s2;
     otherwise returns \c false.
 */
-/*! \fn bool QLatin1String::operator<(QStringView s1, QLatin1String s2)
+/*! \fn bool QLatin1StringView::operator<(QStringView s1, QLatin1StringView s2)
 
     Returns \c true if string view \a s1 is lexically less than string \a s2;
     otherwise returns \c false.
 */
-/*! \fn bool QLatin1String::operator>(QStringView s1, QLatin1String s2)
+/*! \fn bool QLatin1StringView::operator>(QStringView s1, QLatin1StringView s2)
 
     Returns \c true if string view \a s1 is lexically greater than string \a s2;
     otherwise returns \c false.
 */
-/*! \fn bool QLatin1String::operator!=(QStringView s1, QLatin1String s2)
+/*! \fn bool QLatin1StringView::operator!=(QStringView s1, QLatin1StringView s2)
 
     Returns \c true if string view \a s1 is lexically not equal to string \a s2;
     otherwise returns \c false.
 */
-/*! \fn bool QLatin1String::operator<=(QStringView s1, QLatin1String s2)
+/*! \fn bool QLatin1StringView::operator<=(QStringView s1, QLatin1StringView s2)
 
     Returns \c true if string view \a s1 is lexically less than or equal to
     string \a s2; otherwise returns \c false.
 */
-/*! \fn bool QLatin1String::operator>=(QStringView s1, QLatin1String s2)
+/*! \fn bool QLatin1StringView::operator>=(QStringView s1, QLatin1StringView s2)
 
     Returns \c true if string view \a s1 is lexically greater than or equal to
     string \a s2; otherwise returns \c false.
 */
 
-/*! \fn bool QLatin1String::operator==(QLatin1String s1, QStringView s2)
+/*! \fn bool QLatin1StringView::operator==(QLatin1StringView s1, QStringView s2)
 
     Returns \c true if string \a s1 is lexically equal to string view \a s2;
     otherwise returns \c false.
 */
-/*! \fn bool QLatin1String::operator<(QLatin1String s1, QStringView s2)
+/*! \fn bool QLatin1StringView::operator<(QLatin1StringView s1, QStringView s2)
 
     Returns \c true if string \a s1 is lexically less than string view \a s2;
     otherwise returns \c false.
 */
-/*! \fn bool QLatin1String::operator>(QLatin1String s1, QStringView s2)
+/*! \fn bool QLatin1StringView::operator>(QLatin1StringView s1, QStringView s2)
 
     Returns \c true if string \a s1 is lexically greater than string view \a s2;
     otherwise returns \c false.
 */
-/*! \fn bool QLatin1String::operator!=(QLatin1String s1, QStringView s2)
+/*! \fn bool QLatin1StringView::operator!=(QLatin1StringView s1, QStringView s2)
 
     Returns \c true if string \a s1 is lexically not equal to string view \a s2;
     otherwise returns \c false.
 */
-/*! \fn bool QLatin1String::operator<=(QLatin1String s1, QStringView s2)
+/*! \fn bool QLatin1StringView::operator<=(QLatin1StringView s1, QStringView s2)
 
     Returns \c true if string \a s1 is lexically less than or equal to
     string view \a s2; otherwise returns \c false.
 */
-/*! \fn bool QLatin1String::operator>=(QLatin1String s1, QStringView s2)
+/*! \fn bool QLatin1StringView::operator>=(QLatin1StringView s1, QStringView s2)
 
     Returns \c true if string \a s1 is lexically greater than or equal to
     string view \a s2; otherwise returns \c false.
 */
 
-/*! \fn bool QLatin1String::operator==(const char *s1, QLatin1String s2)
+/*! \fn bool QLatin1StringView::operator==(const char *s1, QLatin1StringView s2)
 
     Returns \c true if const char pointer \a s1 is lexically equal to
     string \a s2; otherwise returns \c false.
 */
-/*! \fn bool QLatin1String::operator<(const char *s1, QLatin1String s2)
+/*! \fn bool QLatin1StringView::operator<(const char *s1, QLatin1StringView s2)
 
     Returns \c true if const char pointer \a s1 is lexically less than
     string \a s2; otherwise returns \c false.
 */
-/*! \fn bool QLatin1String::operator>(const char *s1, QLatin1String s2)
+/*! \fn bool QLatin1StringView::operator>(const char *s1, QLatin1StringView s2)
 
     Returns \c true if const char pointer \a s1 is lexically greater than
     string \a s2; otherwise returns \c false.
 */
-/*! \fn bool QLatin1String::operator!=(const char *s1, QLatin1String s2)
+/*! \fn bool QLatin1StringView::operator!=(const char *s1, QLatin1StringView s2)
 
     Returns \c true if const char pointer \a s1 is lexically not equal to
     string \a s2; otherwise returns \c false.
 */
-/*! \fn bool QLatin1String::operator<=(const char *s1, QLatin1String s2)
+/*! \fn bool QLatin1StringView::operator<=(const char *s1, QLatin1StringView s2)
 
     Returns \c true if const char pointer \a s1 is lexically less than or
     equal to string \a s2; otherwise returns \c false.
 */
-/*! \fn bool QLatin1String::operator>=(const char *s1, QLatin1String s2)
+/*! \fn bool QLatin1StringView::operator>=(const char *s1, QLatin1StringView s2)
 
     Returns \c true if const char pointer \a s1 is lexically greater than or
     equal to string \a s2; otherwise returns \c false.
+*/
+
+/*!
+    \fn qlonglong QLatin1StringView::toLongLong(bool *ok, int base) const
+    \fn qulonglong QLatin1StringView::toULongLong(bool *ok, int base) const
+    \fn int QLatin1StringView::toInt(bool *ok, int base) const
+    \fn uint QLatin1StringView::toUInt(bool *ok, int base) const
+    \fn long QLatin1StringView::toLong(bool *ok, int base) const
+    \fn ulong QLatin1StringView::toULong(bool *ok, int base) const
+    \fn short QLatin1StringView::toShort(bool *ok, int base) const
+    \fn ushort QLatin1StringView::toUShort(bool *ok, int base) const
+
+    \since 6.4
+
+    Returns this QLatin1StringView converted to a corresponding numeric value using
+    base \a base, which is ten by default. Bases 0 and 2 through 36 are supported,
+    using letters for digits beyond 9; A is ten, B is eleven and so on.
+
+    If \a base is 0, the base is determined automatically using the following
+    rules: if the Latin-1 string begins with "0x", the rest of it is read as
+    hexadecimal (base 16); otherwise, if it begins with "0b", the rest of it is
+    read as binary (base 2); otherwise, if it begins with "0", the rest of it is
+    read as octal (base 8); otherwise it is read as decimal.
+
+    Returns 0 if the conversion fails.
+
+    If \a ok is not \nullptr, failure is reported by setting *\a{ok}
+    to \c false, and success by setting *\a{ok} to \c true.
+
+//! [latin1-numeric-conversion-note]
+    \note The conversion of the number is performed in the default C locale,
+    regardless of the user's locale. Use QLocale to perform locale-aware
+    conversions between numbers and strings.
+
+    This function ignores leading and trailing spacing characters.
+//! [latin1-numeric-conversion-note]
+
+    \note Support for the "0b" prefix was added in Qt 6.4.
+*/
+
+/*!
+    \fn double QLatin1StringView::toDouble(bool *ok) const
+    \fn float QLatin1StringView::toFloat(bool *ok) const
+    \since 6.4
+
+    Returns this QLatin1StringView converted to a corresponding floating-point value.
+
+    Returns an infinity if the conversion overflows or 0.0 if the
+    conversion fails for other reasons (e.g. underflow).
+
+    If \a ok is not \nullptr, failure is reported by setting *\a{ok}
+    to \c false, and success by setting *\a{ok} to \c true.
+
+    \warning The QLatin1StringView content may only contain valid numerical
+    characters which includes the plus/minus sign, the character e used in
+    scientific notation, and the decimal point. Including the unit or additional
+    characters leads to a conversion error.
+
+    \include qstring.cpp latin1-numeric-conversion-note
 */
 
 #if !defined(QT_NO_DATASTREAM) || defined(QT_BOOTSTRAPPED)
@@ -10143,7 +10311,7 @@ QDataStream &operator>>(QDataStream &in, QString &str)
                 qbswap<sizeof(*data)>(data, len, data);
             }
         } else {
-            str = QString(QLatin1String(""));
+            str = QString(QLatin1StringView(""));
         }
     }
     return in;
@@ -10255,46 +10423,94 @@ qsizetype QtPrivate::count(QStringView haystack, QChar ch, Qt::CaseSensitivity c
     return num;
 }
 
-template <typename Haystack, typename Needle>
-bool qt_starts_with_impl(Haystack haystack, Needle needle, Qt::CaseSensitivity cs) noexcept
+qsizetype QtPrivate::count(QLatin1StringView haystack, QLatin1StringView needle, Qt::CaseSensitivity cs)
 {
-    if (haystack.isNull())
-        return needle.isNull();
-    const auto haystackLen = haystack.size();
-    const auto needleLen = needle.size();
-    if (haystackLen == 0)
-        return needleLen == 0;
-    if (needleLen > haystackLen)
-        return false;
+    qsizetype num = 0;
+    qsizetype i = -1;
 
-    return QtPrivate::compareStrings(haystack.left(needleLen), needle, cs) == 0;
+    // TODO: use Boyer-Moore searcher for case-insensitive search too
+    // when QTBUG-100236 is done
+    if (cs == Qt::CaseSensitive) {
+        QByteArrayMatcher matcher(needle);
+        while ((i = matcher.indexIn(haystack, i + 1)) != -1)
+            ++num;
+    } else {
+        while ((i = QtPrivate::findString(haystack, i + 1, needle, cs)) != -1)
+            ++num;
+    }
+    return num;
 }
 
-static inline bool qt_starts_with(QStringView haystack, QStringView needle, Qt::CaseSensitivity cs)
+qsizetype QtPrivate::count(QLatin1StringView haystack, QStringView needle, Qt::CaseSensitivity cs)
 {
-    return qt_starts_with_impl(haystack, needle, cs);
+    if (haystack.size() < needle.size())
+        return 0;
+
+    if (!QtPrivate::isLatin1(needle)) // won't find non-L1 UTF-16 needles in a L1 haystack!
+        return 0;
+
+    qsizetype num = 0;
+    qsizetype i = -1;
+
+    // TODO: use Boyer-Moore searcher for case-insensitive search too
+    // when QTBUG-100236 is done
+    if (cs == Qt::CaseSensitive) {
+        QVarLengthArray<uchar> s(needle.size());
+        qt_to_latin1_unchecked(s.data(), needle.utf16(), needle.size());
+
+        QByteArrayMatcher matcher(s);
+        while ((i = matcher.indexIn(haystack, i + 1)) != -1)
+            ++num;
+    } else {
+        while ((i = QtPrivate::findString(haystack, i + 1, needle, cs)) != -1)
+            ++num;
+    }
+    return num;
 }
 
-static inline bool qt_starts_with(QStringView haystack, QLatin1String needle, Qt::CaseSensitivity cs)
+qsizetype QtPrivate::count(QStringView haystack, QLatin1StringView needle, Qt::CaseSensitivity cs)
 {
-    return qt_starts_with_impl(haystack, needle, cs);
+    if (haystack.size() < needle.size())
+        return -1;
+
+    QVarLengthArray<char16_t> s(needle.size());
+    qt_from_latin1(s.data(), needle.latin1(), size_t(needle.size()));
+
+    return QtPrivate::count(haystack, QStringView(s.data(), s.size()), cs);
 }
 
-static inline bool qt_starts_with(QStringView haystack, QChar needle, Qt::CaseSensitivity cs)
+qsizetype QtPrivate::count(QLatin1StringView haystack, QChar needle, Qt::CaseSensitivity cs) noexcept
 {
-    return haystack.size()
-           && (cs == Qt::CaseSensitive ? haystack.front() == needle
-                                       : foldCase(haystack.front()) == foldCase(needle));
+    // non-L1 needles cannot possibly match in L1-only haystacks
+    if (needle.unicode() > 0xff)
+        return 0;
+
+    qsizetype num = 0;
+    if (cs == Qt::CaseSensitive) {
+        const char needleL1 = needle.toLatin1();
+        for (char c : haystack) {
+            if (c == needleL1)
+                ++num;
+        }
+    } else {
+        auto toLower = [](char ch) { return latin1Lower[uchar(ch)]; };
+        const uchar ch = toLower(needle.toLatin1());
+        for (char c : haystack) {
+            if (toLower(c) == ch)
+                ++num;
+        }
+    }
+    return num;
 }
 
 /*!
     \fn bool QtPrivate::startsWith(QStringView haystack, QStringView needle, Qt::CaseSensitivity cs)
     \since 5.10
-    \fn bool QtPrivate::startsWith(QStringView haystack, QLatin1String needle, Qt::CaseSensitivity cs)
+    \fn bool QtPrivate::startsWith(QStringView haystack, QLatin1StringView needle, Qt::CaseSensitivity cs)
     \since 5.10
-    \fn bool QtPrivate::startsWith(QLatin1String haystack, QStringView needle, Qt::CaseSensitivity cs)
+    \fn bool QtPrivate::startsWith(QLatin1StringView haystack, QStringView needle, Qt::CaseSensitivity cs)
     \since 5.10
-    \fn bool QtPrivate::startsWith(QLatin1String haystack, QLatin1String needle, Qt::CaseSensitivity cs)
+    \fn bool QtPrivate::startsWith(QLatin1StringView haystack, QLatin1StringView needle, Qt::CaseSensitivity cs)
     \since 5.10
     \internal
     \relates QStringView
@@ -10305,7 +10521,7 @@ static inline bool qt_starts_with(QStringView haystack, QChar needle, Qt::CaseSe
     If \a cs is Qt::CaseSensitive (the default), the search is case-sensitive;
     otherwise the search is case-insensitive.
 
-    \sa QtPrivate::endsWith(), QString::endsWith(), QStringView::endsWith(), QLatin1String::endsWith()
+    \sa QtPrivate::endsWith(), QString::endsWith(), QStringView::endsWith(), QLatin1StringView::endsWith()
 */
 
 bool QtPrivate::startsWith(QStringView haystack, QStringView needle, Qt::CaseSensitivity cs) noexcept
@@ -10313,61 +10529,29 @@ bool QtPrivate::startsWith(QStringView haystack, QStringView needle, Qt::CaseSen
     return qt_starts_with_impl(haystack, needle, cs);
 }
 
-bool QtPrivate::startsWith(QStringView haystack, QLatin1String needle, Qt::CaseSensitivity cs) noexcept
+bool QtPrivate::startsWith(QStringView haystack, QLatin1StringView needle, Qt::CaseSensitivity cs) noexcept
 {
     return qt_starts_with_impl(haystack, needle, cs);
 }
 
-bool QtPrivate::startsWith(QLatin1String haystack, QStringView needle, Qt::CaseSensitivity cs) noexcept
+bool QtPrivate::startsWith(QLatin1StringView haystack, QStringView needle, Qt::CaseSensitivity cs) noexcept
 {
     return qt_starts_with_impl(haystack, needle, cs);
 }
 
-bool QtPrivate::startsWith(QLatin1String haystack, QLatin1String needle, Qt::CaseSensitivity cs) noexcept
+bool QtPrivate::startsWith(QLatin1StringView haystack, QLatin1StringView needle, Qt::CaseSensitivity cs) noexcept
 {
     return qt_starts_with_impl(haystack, needle, cs);
-}
-
-template <typename Haystack, typename Needle>
-bool qt_ends_with_impl(Haystack haystack, Needle needle, Qt::CaseSensitivity cs) noexcept
-{
-    if (haystack.isNull())
-        return needle.isNull();
-    const auto haystackLen = haystack.size();
-    const auto needleLen = needle.size();
-    if (haystackLen == 0)
-        return needleLen == 0;
-    if (haystackLen < needleLen)
-        return false;
-
-    return QtPrivate::compareStrings(haystack.right(needleLen), needle, cs) == 0;
-}
-
-static inline bool qt_ends_with(QStringView haystack, QStringView needle, Qt::CaseSensitivity cs)
-{
-    return qt_ends_with_impl(haystack, needle, cs);
-}
-
-static inline bool qt_ends_with(QStringView haystack, QLatin1String needle, Qt::CaseSensitivity cs)
-{
-    return qt_ends_with_impl(haystack, needle, cs);
-}
-
-static inline bool qt_ends_with(QStringView haystack, QChar needle, Qt::CaseSensitivity cs)
-{
-    return haystack.size()
-           && (cs == Qt::CaseSensitive ? haystack.back() == needle
-                                       : foldCase(haystack.back()) == foldCase(needle));
 }
 
 /*!
     \fn bool QtPrivate::endsWith(QStringView haystack, QStringView needle, Qt::CaseSensitivity cs)
     \since 5.10
-    \fn bool QtPrivate::endsWith(QStringView haystack, QLatin1String needle, Qt::CaseSensitivity cs)
+    \fn bool QtPrivate::endsWith(QStringView haystack, QLatin1StringView needle, Qt::CaseSensitivity cs)
     \since 5.10
-    \fn bool QtPrivate::endsWith(QLatin1String haystack, QStringView needle, Qt::CaseSensitivity cs)
+    \fn bool QtPrivate::endsWith(QLatin1StringView haystack, QStringView needle, Qt::CaseSensitivity cs)
     \since 5.10
-    \fn bool QtPrivate::endsWith(QLatin1String haystack, QLatin1String needle, Qt::CaseSensitivity cs)
+    \fn bool QtPrivate::endsWith(QLatin1StringView haystack, QLatin1StringView needle, Qt::CaseSensitivity cs)
     \since 5.10
     \internal
     \relates QStringView
@@ -10378,7 +10562,7 @@ static inline bool qt_ends_with(QStringView haystack, QChar needle, Qt::CaseSens
     If \a cs is Qt::CaseSensitive (the default), the search is case-sensitive;
     otherwise the search is case-insensitive.
 
-    \sa QtPrivate::startsWith(), QString::endsWith(), QStringView::endsWith(), QLatin1String::endsWith()
+    \sa QtPrivate::startsWith(), QString::endsWith(), QStringView::endsWith(), QLatin1StringView::endsWith()
 */
 
 bool QtPrivate::endsWith(QStringView haystack, QStringView needle, Qt::CaseSensitivity cs) noexcept
@@ -10386,17 +10570,17 @@ bool QtPrivate::endsWith(QStringView haystack, QStringView needle, Qt::CaseSensi
     return qt_ends_with_impl(haystack, needle, cs);
 }
 
-bool QtPrivate::endsWith(QStringView haystack, QLatin1String needle, Qt::CaseSensitivity cs) noexcept
+bool QtPrivate::endsWith(QStringView haystack, QLatin1StringView needle, Qt::CaseSensitivity cs) noexcept
 {
     return qt_ends_with_impl(haystack, needle, cs);
 }
 
-bool QtPrivate::endsWith(QLatin1String haystack, QStringView needle, Qt::CaseSensitivity cs) noexcept
+bool QtPrivate::endsWith(QLatin1StringView haystack, QStringView needle, Qt::CaseSensitivity cs) noexcept
 {
     return qt_ends_with_impl(haystack, needle, cs);
 }
 
-bool QtPrivate::endsWith(QLatin1String haystack, QLatin1String needle, Qt::CaseSensitivity cs) noexcept
+bool QtPrivate::endsWith(QLatin1StringView haystack, QLatin1StringView needle, Qt::CaseSensitivity cs) noexcept
 {
     return qt_ends_with_impl(haystack, needle, cs);
 }
@@ -10476,7 +10660,7 @@ qsizetype QtPrivate::findString(QStringView haystack0, qsizetype from, QStringVi
     return -1;
 }
 
-qsizetype QtPrivate::findString(QStringView haystack, qsizetype from, QLatin1String needle, Qt::CaseSensitivity cs) noexcept
+qsizetype QtPrivate::findString(QStringView haystack, qsizetype from, QLatin1StringView needle, Qt::CaseSensitivity cs) noexcept
 {
     if (haystack.size() < needle.size())
         return -1;
@@ -10486,7 +10670,7 @@ qsizetype QtPrivate::findString(QStringView haystack, qsizetype from, QLatin1Str
     return QtPrivate::findString(haystack, from, QStringView(reinterpret_cast<const QChar*>(s.constData()), s.size()), cs);
 }
 
-qsizetype QtPrivate::findString(QLatin1String haystack, qsizetype from, QStringView needle, Qt::CaseSensitivity cs) noexcept
+qsizetype QtPrivate::findString(QLatin1StringView haystack, qsizetype from, QStringView needle, Qt::CaseSensitivity cs) noexcept
 {
     if (haystack.size() < needle.size())
         return -1;
@@ -10496,15 +10680,15 @@ qsizetype QtPrivate::findString(QLatin1String haystack, qsizetype from, QStringV
 
     if (needle.size() == 1) {
         const char n = needle.front().toLatin1();
-        return QtPrivate::findString(haystack, from, QLatin1String(&n, 1), cs);
+        return QtPrivate::findString(haystack, from, QLatin1StringView(&n, 1), cs);
     }
 
     QVarLengthArray<char> s(needle.size());
     qt_to_latin1_unchecked(reinterpret_cast<uchar *>(s.data()), needle.utf16(), needle.size());
-    return QtPrivate::findString(haystack, from, QLatin1String(s.data(), s.size()), cs);
+    return QtPrivate::findString(haystack, from, QLatin1StringView(s.data(), s.size()), cs);
 }
 
-qsizetype QtPrivate::findString(QLatin1String haystack, qsizetype from, QLatin1String needle, Qt::CaseSensitivity cs) noexcept
+qsizetype QtPrivate::findString(QLatin1StringView haystack, qsizetype from, QLatin1StringView needle, Qt::CaseSensitivity cs) noexcept
 {
     if (from < 0)
         from += haystack.size();
@@ -10554,7 +10738,7 @@ qsizetype QtPrivate::findString(QLatin1String haystack, qsizetype from, QLatin1S
         for (auto it = std::find_if(begin + from, end, ciMatch); it < end;
              it = std::find_if(it + 1, end, ciMatch)) {
             // In this comparison we skip the first character because we know it's a match
-            if (!nlen1 || QLatin1String(it + 1, nlen1).compare(needle.sliced(1), cs) == 0)
+            if (!nlen1 || QLatin1StringView(it + 1, nlen1).compare(needle.sliced(1), cs) == 0)
                 return std::distance(begin, it);
         }
         return -1;
@@ -10588,17 +10772,17 @@ qsizetype QtPrivate::lastIndexOf(QStringView haystack, qsizetype from, QStringVi
     return qLastIndexOf(haystack, from, needle, cs);
 }
 
-qsizetype QtPrivate::lastIndexOf(QStringView haystack, qsizetype from, QLatin1String needle, Qt::CaseSensitivity cs) noexcept
+qsizetype QtPrivate::lastIndexOf(QStringView haystack, qsizetype from, QLatin1StringView needle, Qt::CaseSensitivity cs) noexcept
 {
     return qLastIndexOf(haystack, from, needle, cs);
 }
 
-qsizetype QtPrivate::lastIndexOf(QLatin1String haystack, qsizetype from, QStringView needle, Qt::CaseSensitivity cs) noexcept
+qsizetype QtPrivate::lastIndexOf(QLatin1StringView haystack, qsizetype from, QStringView needle, Qt::CaseSensitivity cs) noexcept
 {
     return qLastIndexOf(haystack, from, needle, cs);
 }
 
-qsizetype QtPrivate::lastIndexOf(QLatin1String haystack, qsizetype from, QLatin1String needle, Qt::CaseSensitivity cs) noexcept
+qsizetype QtPrivate::lastIndexOf(QLatin1StringView haystack, qsizetype from, QLatin1StringView needle, Qt::CaseSensitivity cs) noexcept
 {
     return qLastIndexOf(haystack, from, needle, cs);
 }
@@ -10607,7 +10791,7 @@ qsizetype QtPrivate::lastIndexOf(QLatin1String haystack, qsizetype from, QLatin1
 qsizetype QtPrivate::indexOf(QStringView viewHaystack, const QString *stringHaystack, const QRegularExpression &re, qsizetype from, QRegularExpressionMatch *rmatch)
 {
     if (!re.isValid()) {
-        qWarning("QString(View)::indexOf: invalid QRegularExpression object");
+        qtWarnAboutInvalidRegularExpression(re.pattern(), "QString(View)::indexOf");
         return -1;
     }
 
@@ -10632,7 +10816,7 @@ qsizetype QtPrivate::indexOf(QStringView haystack, const QRegularExpression &re,
 qsizetype QtPrivate::lastIndexOf(QStringView viewHaystack, const QString *stringHaystack, const QRegularExpression &re, qsizetype from, QRegularExpressionMatch *rmatch)
 {
     if (!re.isValid()) {
-        qWarning("QString(View)::lastIndexOf: invalid QRegularExpression object");
+        qtWarnAboutInvalidRegularExpression(re.pattern(), "QString(View)::lastIndexOf");
         return -1;
     }
 
@@ -10664,7 +10848,7 @@ qsizetype QtPrivate::lastIndexOf(QStringView haystack, const QRegularExpression 
 bool QtPrivate::contains(QStringView viewHaystack, const QString *stringHaystack, const QRegularExpression &re, QRegularExpressionMatch *rmatch)
 {
     if (!re.isValid()) {
-        qWarning("QString(View)::contains: invalid QRegularExpression object");
+        qtWarnAboutInvalidRegularExpression(re.pattern(), "QString(View)::contains");
         return false;
     }
     QRegularExpressionMatch m = stringHaystack
@@ -10684,7 +10868,7 @@ bool QtPrivate::contains(QStringView haystack, const QRegularExpression &re, QRe
 qsizetype QtPrivate::count(QStringView haystack, const QRegularExpression &re)
 {
     if (!re.isValid()) {
-        qWarning("QString(View)::count: invalid QRegularExpression object");
+        qtWarnAboutInvalidRegularExpression(re.pattern(), "QString(View)::count");
         return 0;
     }
     qsizetype count = 0;
@@ -10720,13 +10904,13 @@ QString QString::toHtmlEscaped() const
     rich.reserve(qsizetype(len * 1.1));
     for (QChar ch : *this) {
         if (ch == u'<')
-            rich += QLatin1String("&lt;");
+            rich += "&lt;"_L1;
         else if (ch == u'>')
-            rich += QLatin1String("&gt;");
+            rich += "&gt;"_L1;
         else if (ch == u'&')
-            rich += QLatin1String("&amp;");
+            rich += "&amp;"_L1;
         else if (ch == u'"')
-            rich += QLatin1String("&quot;");
+            rich += "&quot;"_L1;
         else
             rich += ch;
     }
@@ -10763,10 +10947,10 @@ QString QString::toHtmlEscaped() const
   significantly speed up creation of QString instances from data known at
   compile time.
 
-  \note QLatin1String can still be more efficient than QStringLiteral
+  \note QLatin1StringView can still be more efficient than QStringLiteral
   when the string is passed to a function that has an overload taking
-  QLatin1String and this overload avoids conversion to QString.  For
-  instance, QString::operator==() can compare to a QLatin1String
+  QLatin1StringView and this overload avoids conversion to QString.  For
+  instance, QString::operator==() can compare to a QLatin1StringView
   directly:
 
   \snippet code/src_corelib_text_qstring.cpp 11
@@ -10778,11 +10962,13 @@ QString QString::toHtmlEscaped() const
   \sa QByteArrayLiteral
 */
 
+#if QT_DEPRECATED_SINCE(6, 8)
 /*!
   \fn QtLiterals::operator""_qs(const char16_t *str, size_t size)
 
   \relates QString
   \since 6.2
+  \deprecated [6.8] Use \c _s from Qt::StringLiterals namespace instead.
 
   Literal operator that creates a QString out of the first \a size characters in
   the char16_t string literal \a str.
@@ -10800,11 +10986,56 @@ QString QString::toHtmlEscaped() const
 
   \sa QStringLiteral, QtLiterals::operator""_qba(const char *str, size_t size)
 */
+#endif // QT_DEPRECATED_SINCE(6, 8)
+
+/*!
+    \fn Qt::Literals::StringLiterals::operator""_s(const char16_t *str, size_t size)
+
+    \relates QString
+    \since 6.4
+
+    Literal operator that creates a QString out of the first \a size characters in
+    the char16_t string literal \a str.
+
+    The QString is created at compile time, and the generated string data is stored
+    in the read-only segment of the compiled object file. Duplicate literals may
+    share the same read-only memory. This functionality is interchangeable with
+    QStringLiteral, but saves typing when many string literals are present in the
+    code.
+
+    The following code creates a QString:
+    \code
+    using namespace Qt::Literals::StringLiterals;
+
+    auto str = u"hello"_s;
+    \endcode
+
+    \sa Qt::Literals::StringLiterals
+*/
+
+/*!
+    \fn Qt::Literals::StringLiterals::operator""_L1(const char *str, size_t size)
+
+    \relates QLatin1StringView
+    \since 6.4
+
+    Literal operator that creates a QLatin1StringView out of the first \a size
+    characters in the char string literal \a str.
+
+    The following code creates a QLatin1StringView:
+    \code
+    using namespace Qt::Literals::StringLiterals;
+
+    auto str = "hello"_L1;
+    \endcode
+
+    \sa Qt::Literals::StringLiterals
+*/
 
 /*!
     \internal
  */
-void QAbstractConcatenable::appendLatin1To(QLatin1String in, QChar *out) noexcept
+void QAbstractConcatenable::appendLatin1To(QLatin1StringView in, QChar *out) noexcept
 {
     qt_from_latin1(reinterpret_cast<char16_t *>(out), in.data(), size_t(in.size()));
 }

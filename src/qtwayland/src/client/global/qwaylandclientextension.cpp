@@ -1,41 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2017 Erik Larsson.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtWaylandCompositor module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2017 Erik Larsson.
+// Copyright (C) 2021 David Redondo <qt@david-redondo.de>
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qwaylandclientextension.h"
 #include "qwaylandclientextension_p.h"
@@ -47,6 +12,8 @@
 #include <QtCore/QDebug>
 
 QT_BEGIN_NAMESPACE
+
+using RegistryGlobal = QtWaylandClient::QWaylandDisplay::RegistryGlobal;
 
 QWaylandClientExtensionPrivate::QWaylandClientExtensionPrivate()
 {
@@ -60,23 +27,41 @@ QWaylandClientExtensionPrivate::QWaylandClientExtensionPrivate()
         qWarning() << "This application requires a Wayland platform plugin";
 }
 
-void QWaylandClientExtensionPrivate::handleRegistryGlobal(void *data, ::wl_registry *registry, uint32_t id,
-                                                          const QString &interface, uint32_t version)
+void QWaylandClientExtensionPrivate::globalAdded(const RegistryGlobal &global)
 {
-    QWaylandClientExtension *extension = static_cast<QWaylandClientExtension *>(data);
-    if (interface == QLatin1String(extension->extensionInterface()->name) && !extension->d_func()->active) {
-        extension->bind(registry, id, version);
-        extension->d_func()->active = true;
-        emit extension->activeChanged();
+    Q_Q(QWaylandClientExtension);
+    if (!active && global.interface == QLatin1String(q->extensionInterface()->name)) {
+        q->bind(global.registry, global.id, global.version);
+        active = true;
+        emit q->activeChanged();
+    }
+}
+
+void QWaylandClientExtensionPrivate::globalRemoved(const RegistryGlobal &global)
+{
+    Q_Q(QWaylandClientExtension);
+    if (active && global.interface == QLatin1String(q->extensionInterface()->name)) {
+        active = false;
+        emit q->activeChanged();
     }
 }
 
 void QWaylandClientExtension::initialize()
 {
     Q_D(QWaylandClientExtension);
-    if (!d->registered) {
-        d->waylandIntegration->display()->addRegistryListener(&QWaylandClientExtensionPrivate::handleRegistryGlobal, this);
-        d->registered = true;
+    if (d->active) {
+        return;
+    }
+    const QtWaylandClient::QWaylandDisplay *display = d->waylandIntegration->display();
+    const auto globals = display->globals();
+    auto global =
+            std::find_if(globals.cbegin(), globals.cend(), [this](const RegistryGlobal &global) {
+                return global.interface == QLatin1String(extensionInterface()->name);
+            });
+    if (global != globals.cend()) {
+        bind(global->registry, global->id, global->version);
+        d->active = true;
+        emit activeChanged();
     }
 }
 
@@ -85,17 +70,17 @@ QWaylandClientExtension::QWaylandClientExtension(const int ver)
 {
     Q_D(QWaylandClientExtension);
     d->version = ver;
-
-    // The registry listener uses virtual functions and we don't want it to be called from
-    // the constructor.
+    auto display = d->waylandIntegration->display();
+    QObjectPrivate::connect(display, &QtWaylandClient::QWaylandDisplay::globalAdded, d,
+                            &QWaylandClientExtensionPrivate::globalAdded);
+    QObjectPrivate::connect(display, &QtWaylandClient::QWaylandDisplay::globalRemoved, d,
+                            &QWaylandClientExtensionPrivate::globalRemoved);
+    // This function uses virtual functions and we don't want it to be called from the constructor.
     QMetaObject::invokeMethod(this, "initialize", Qt::QueuedConnection);
 }
 
 QWaylandClientExtension::~QWaylandClientExtension()
 {
-    Q_D(QWaylandClientExtension);
-    if (d->registered && !QCoreApplication::closingDown())
-        d->waylandIntegration->display()->removeListener(&QWaylandClientExtensionPrivate::handleRegistryGlobal, this);
 }
 
 QtWaylandClient::QWaylandIntegration *QWaylandClientExtension::integration() const

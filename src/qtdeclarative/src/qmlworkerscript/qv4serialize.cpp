@@ -1,50 +1,12 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtQml module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qv4serialize_p.h"
 
 #include <private/qv4value_p.h>
 #include <private/qv4dateobject_p.h>
 #include <private/qv4regexpobject_p.h>
-#if QT_CONFIG(qml_sequence_object)
 #include <private/qv4sequenceobject_p.h>
-#endif
 #include <private/qv4objectproto_p.h>
 #include <private/qv4qobjectwrapper_p.h>
 
@@ -82,9 +44,7 @@ enum Type {
     WorkerRegexp,
     WorkerListModel,
     WorkerUrl,
-#if QT_CONFIG(qml_sequence_object)
     WorkerSequence
-#endif
 };
 
 static inline quint32 valueheader(Type type, quint32 size = 0)
@@ -244,26 +204,27 @@ void Serialize::serialize(QByteArray &data, const QV4::Value &v, ExecutionEngine
         }
         // No other QObject's are allowed to be sent
         push(data, valueheader(WorkerUndefined));
-    } else if (const Object *o = v.as<Object>()) {
-#if QT_CONFIG(qml_sequence_object)
-        if (o->isListType()) {
-            // valid sequence.  we generate a length (sequence length + 1 for the sequence type)
-            uint seqLength = ScopedValue(scope, o->get(engine->id_length()))->toUInt32();
-            uint length = seqLength + 1;
-            if (length > 0xFFFFFF) {
-                push(data, valueheader(WorkerUndefined));
-                return;
-            }
-            reserve(data, sizeof(quint32) + length * sizeof(quint32));
-            push(data, valueheader(WorkerSequence, length));
-            serialize(data, QV4::Value::fromInt32(QV4::SequencePrototype::metaTypeForSequence(o)), engine); // sequence type
-            ScopedValue val(scope);
-            for (uint ii = 0; ii < seqLength; ++ii)
-                serialize(data, (val = o->get(ii)), engine); // sequence elements
-
+    } else if (const Sequence *s = v.as<Sequence>()) {
+        // valid sequence.  we generate a length (sequence length + 1 for the sequence type)
+        uint seqLength = ScopedValue(scope, s->get(engine->id_length()))->toUInt32();
+        uint length = seqLength + 1;
+        if (length > 0xFFFFFF) {
+            push(data, valueheader(WorkerUndefined));
             return;
         }
-#endif
+        reserve(data, sizeof(quint32) + length * sizeof(quint32));
+        push(data, valueheader(WorkerSequence, length));
+
+        // sequence type
+        serialize(data, QV4::Value::fromInt32(
+                                QV4::SequencePrototype::metaTypeForSequence(s).id()), engine);
+
+        ScopedValue val(scope);
+        for (uint ii = 0; ii < seqLength; ++ii)
+            serialize(data, (val = s->get(ii)), engine); // sequence elements
+
+        return;
+    } else if (const Object *o = v.as<Object>()) {
         const QVariant variant = engine->toVariant(v, QMetaType::fromType<QUrl>(), false);
         if (variant.userType() == QMetaType::QUrl) {
             serializeString(data, variant.value<QUrl>().toString(), WorkerUrl);
@@ -419,7 +380,6 @@ ReturnedValue Serialize::deserialize(const char *&data, ExecutionEngine *engine)
         agent->setProperty("engine", QVariant::fromValue(engine));
         return rv->asReturnedValue();
     }
-#if QT_CONFIG(qml_sequence_object)
     case WorkerSequence:
     {
         ScopedValue value(scope);
@@ -438,7 +398,6 @@ ReturnedValue Serialize::deserialize(const char *&data, ExecutionEngine *engine)
         QVariant seqVariant = QV4::SequencePrototype::toVariant(array, QMetaType(sequenceType), &succeeded);
         return QV4::SequencePrototype::fromVariant(engine, seqVariant, &succeeded);
     }
-#endif
     }
     Q_ASSERT(!"Unreachable");
     return QV4::Encode::undefined();

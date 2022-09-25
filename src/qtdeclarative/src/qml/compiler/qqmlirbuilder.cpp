@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the tools applications of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qqmlirbuilder_p.h"
 
@@ -53,6 +17,8 @@
 #endif
 
 QT_USE_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 static const quint32 emptyStringIndex = 0;
 using namespace QmlIR;
@@ -109,7 +75,7 @@ bool Parameter::initType(QV4::CompiledData::ParameterType *paramType, const QV4:
     const QString typeName = stringGenerator->stringForIndex(typeNameIndex);
     auto builtinType = stringToBuiltinType(typeName);
     if (builtinType == QV4::CompiledData::BuiltinType::InvalidBuiltin) {
-        if (typeName.isEmpty() || !typeName.at(0).isUpper()) {
+        if (typeName.isEmpty()) {
             paramType->set(false, 0);
             return false;
         }
@@ -135,23 +101,10 @@ QV4::CompiledData::BuiltinType Parameter::stringToBuiltinType(const QString &typ
         { "real", strlen("real"), QV4::CompiledData::BuiltinType::Real },
         { "string", strlen("string"), QV4::CompiledData::BuiltinType::String },
         { "url", strlen("url"), QV4::CompiledData::BuiltinType::Url },
-        { "color", strlen("color"), QV4::CompiledData::BuiltinType::Color },
-        // Internally QTime, QDate and QDateTime are all supported.
-        // To be more consistent with JavaScript we expose only
-        // QDateTime as it matches closely with the Date JS type.
-        // We also call it "date" to match.
-        // { "time", strlen("time"), Property::Time },
-        // { "date", strlen("date"), Property::Date },
         { "date", strlen("date"), QV4::CompiledData::BuiltinType::DateTime },
         { "rect", strlen("rect"), QV4::CompiledData::BuiltinType::Rect },
         { "point", strlen("point"), QV4::CompiledData::BuiltinType::Point },
         { "size", strlen("size"), QV4::CompiledData::BuiltinType::Size },
-        { "font", strlen("font"), QV4::CompiledData::BuiltinType::Font },
-        { "vector2d", strlen("vector2d"), QV4::CompiledData::BuiltinType::Vector2D },
-        { "vector3d", strlen("vector3d"), QV4::CompiledData::BuiltinType::Vector3D },
-        { "vector4d", strlen("vector4d"), QV4::CompiledData::BuiltinType::Vector4D },
-        { "quaternion", strlen("quaternion"), QV4::CompiledData::BuiltinType::Quaternion },
-        { "matrix4x4", strlen("matrix4x4"), QV4::CompiledData::BuiltinType::Matrix4x4 },
         { "variant", strlen("variant"), QV4::CompiledData::BuiltinType::Var },
         { "var", strlen("var"), QV4::CompiledData::BuiltinType::Var }
     };
@@ -599,7 +552,7 @@ bool IRBuilder::visit(QQmlJS::AST::UiInlineComponent *ast)
     Q_ASSERT(idx > 0);
     Object* definedObject = _objects.at(idx);
     definedObject->flags |= QV4::CompiledData::Object::IsInlineComponentRoot;
-    definedObject->flags |= QV4::CompiledData::Object::InPartOfInlineComponent;
+    definedObject->flags |= QV4::CompiledData::Object::IsPartOfInlineComponent;
     auto inlineComponent = New<InlineComponent>();
     inlineComponent->nameIndex = registerString(ast->name.toString());
     inlineComponent->objectIndex = idx;
@@ -717,7 +670,7 @@ bool IRBuilder::defineQMLObject(
     _object->init(pool, registerString(asString(qualifiedTypeNameId)), emptyStringIndex, location);
     _object->declarationsOverride = declarationsOverride;
     if (insideInlineComponent) {
-        _object->flags |= QV4::CompiledData::Object::InPartOfInlineComponent;
+        _object->flags |= QV4::CompiledData::Object::IsPartOfInlineComponent;
     }
 
     // A new object is also a boundary for property declarations.
@@ -818,6 +771,28 @@ bool IRBuilder::visit(QQmlJS::AST::UiPragma *node)
             pragma->type = Pragma::Singleton;
         } else if (node->name == QStringLiteral("Strict")) {
             pragma->type = Pragma::Strict;
+        } else if (node->name == QStringLiteral("ComponentBehavior")) {
+            for (const Pragma *prev : _pragmas) {
+                if (prev->type != Pragma::ComponentBehavior)
+                    continue;
+                recordError(node->pragmaToken,
+                            QCoreApplication::translate(
+                                    "QQmlParser", "Multiple component behavior pragmas found"));
+                return false;
+            }
+
+            pragma->type = Pragma::ComponentBehavior;
+            if (node->value == QLatin1String("Bound")) {
+                pragma->componentBehavior = Pragma::Bound;
+            } else if (node->value == QLatin1String("Unbound")) {
+                pragma->componentBehavior = Pragma::Unbound;
+            } else {
+                recordError(node->pragmaToken,
+                            QCoreApplication::translate(
+                                    "QQmlParser", "Unknown component behavior '%1' in pragma")
+                                    .arg(node->value));
+                return false;
+            }
         } else if (node->name == QStringLiteral("ListPropertyAssignBehavior")) {
             for (const Pragma *prev : _pragmas) {
                 if (prev->type != Pragma::ListPropertyAssignBehavior)
@@ -981,29 +956,18 @@ bool IRBuilder::visit(QQmlJS::AST::UiPublicMember *node)
             property->setIsReadOnly(node->isReadonly());
             property->setIsRequired(node->isRequired());
 
-            QV4::CompiledData::BuiltinType builtinPropertyType = Parameter::stringToBuiltinType(memberType);
-            bool typeFound = builtinPropertyType != QV4::CompiledData::BuiltinType::InvalidBuiltin;
-            if (typeFound)
+            const QV4::CompiledData::BuiltinType builtinPropertyType
+                    = Parameter::stringToBuiltinType(memberType);
+            if (builtinPropertyType != QV4::CompiledData::BuiltinType::InvalidBuiltin)
                 property->setBuiltinType(builtinPropertyType);
-
-            if (!typeFound && memberType.at(0).isUpper()) {
-                const QStringView &typeModifier = node->typeModifier;
-
+            else
                 property->setCustomType(registerString(memberType));
-                if (typeModifier == QLatin1String("list")) {
-                    property->setIsList(true);
-                } else if (!typeModifier.isEmpty()) {
-                    recordError(node->typeModifierToken, QCoreApplication::translate("QQmlParser","Invalid property type modifier"));
-                    return false;
-                }
-                typeFound = true;
-            } else if (!node->typeModifier.isNull()) {
-                recordError(node->typeModifierToken, QCoreApplication::translate("QQmlParser","Unexpected property type modifier"));
-                return false;
-            }
 
-            if (!typeFound) {
-                recordError(node->typeToken, QCoreApplication::translate("QQmlParser","Expected property type"));
+            const QStringView &typeModifier = node->typeModifier;
+            if (typeModifier == QLatin1String("list")) {
+                property->setIsList(true);
+            } else if (!typeModifier.isEmpty()) {
+                recordError(node->typeModifierToken, QCoreApplication::translate("QQmlParser","Invalid property type modifier"));
                 return false;
             }
 
@@ -1192,7 +1156,7 @@ void IRBuilder::setBindingValue(QV4::CompiledData::Binding *binding, QQmlJS::AST
         if (exprStmt)
             nodeForString = exprStmt->expression;
         if (asStringRef(nodeForString) == u"undefined")
-            binding->stringIndex = registerString(u"undefined"_qs);
+            binding->stringIndex = registerString(u"undefined"_s);
         else
             binding->stringIndex = emptyStringIndex;
     }
@@ -1566,6 +1530,17 @@ void QmlUnitGenerator::generate(Document &output, const QV4::CompiledData::Depen
             case Pragma::Strict:
                 createdUnit->flags |= Unit::IsStrict;
                 break;
+            case Pragma::ComponentBehavior:
+                // ### Qt7: Change the default to Bound by reverting the meaning of the flag.
+                switch (p->componentBehavior) {
+                case Pragma::Bound:
+                    createdUnit->flags |= Unit::ComponentsBound;
+                    break;
+                case Pragma::Unbound:
+                    // this is the default
+                    break;
+                }
+                break;
             case Pragma::ListPropertyAssignBehavior:
                 switch (p->listPropertyAssignBehavior) {
                 case Pragma::Replace:
@@ -1920,61 +1895,24 @@ QVector<int> JSCodeGen::generateJSCodeForFunctionsAndBindings(
     return runtimeFunctionIndices;
 }
 
-bool JSCodeGen::generateCodeForComponents(const QVector<quint32> &componentRoots)
+bool JSCodeGen::generateRuntimeFunctions(QmlIR::Object *object, bool storeSourceLocation)
 {
-    for (int i = 0; i < componentRoots.count(); ++i) {
-        if (!compileComponent(componentRoots.at(i)))
-            return false;
-    }
-
-    return compileComponent(/*root object*/0);
-}
-
-bool JSCodeGen::compileComponent(int contextObject)
-{
-    const QmlIR::Object *obj = document->objects.at(contextObject);
-    if (obj->flags & QV4::CompiledData::Object::IsComponent) {
-        Q_ASSERT(obj->bindingCount() == 1);
-        const QV4::CompiledData::Binding *componentBinding = obj->firstBinding();
-        Q_ASSERT(componentBinding->type() == QV4::CompiledData::Binding::Type_Object);
-        contextObject = componentBinding->value.objectIndex;
-    }
-
-    return compileJavaScriptCodeInObjectsRecursively(contextObject, contextObject);
-}
-
-bool JSCodeGen::compileJavaScriptCodeInObjectsRecursively(int objectIndex, int scopeObjectIndex)
-{
-    QmlIR::Object *object = document->objects.at(objectIndex);
-    if (object->flags & QV4::CompiledData::Object::IsComponent)
+    if (object->functionsAndExpressions->count == 0)
         return true;
 
-    for (auto it = object->inlineComponentsBegin(); it != object->inlineComponentsEnd(); ++it)
-        compileComponent(it->objectIndex);
-
-    if (object->functionsAndExpressions->count > 0) {
-        QList<QmlIR::CompiledFunctionOrExpression> functionsToCompile;
-        for (QmlIR::CompiledFunctionOrExpression *foe = object->functionsAndExpressions->first; foe; foe = foe->next)
-            functionsToCompile << *foe;
-        const QVector<int> runtimeFunctionIndices = generateJSCodeForFunctionsAndBindings(functionsToCompile);
-        if (hasError())
-            return false;
-
-        object->runtimeFunctionIndices.allocate(document->jsParserEngine.pool(),
-                                                runtimeFunctionIndices);
+    QList<QmlIR::CompiledFunctionOrExpression> functionsToCompile;
+    functionsToCompile.reserve(object->functionsAndExpressions->count);
+    for (QmlIR::CompiledFunctionOrExpression *foe = object->functionsAndExpressions->first; foe;
+         foe = foe->next) {
+        functionsToCompile << *foe;
     }
 
-    for (const QmlIR::Binding *binding = object->firstBinding(); binding; binding = binding->next) {
-        const Binding::Type bindingType = binding->type();
-        if (bindingType < QV4::CompiledData::Binding::Type_Object)
-            continue;
+    const auto runtimeFunctionIndices =
+            generateJSCodeForFunctionsAndBindings(functionsToCompile, storeSourceLocation);
+    if (hasError())
+        return false;
 
-        int target = binding->value.objectIndex;
-        int scope = bindingType == QV4::CompiledData::Binding::Type_Object ? target : scopeObjectIndex;
-
-        if (!compileJavaScriptCodeInObjectsRecursively(binding->value.objectIndex, scope))
-            return false;
-    }
-
+    object->runtimeFunctionIndices.allocate(document->jsParserEngine.pool(),
+                                            runtimeFunctionIndices);
     return true;
 }

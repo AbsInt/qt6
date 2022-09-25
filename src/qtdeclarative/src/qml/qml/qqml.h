@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtQml module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #ifndef QQML_H
 #define QQML_H
@@ -615,6 +579,7 @@ Q_QML_EXPORT QQmlAttachedPropertiesFunc qmlAttachedPropertiesFunction(QObject *,
                                                                       const QMetaObject *);
 Q_QML_EXPORT QObject *qmlAttachedPropertiesObject(QObject *, QQmlAttachedPropertiesFunc func,
                                                   bool create = true);
+Q_QML_EXPORT QObject *qmlExtendedObject(QObject *);
 
 //The C++ version of protected namespaces in qmldir
 Q_QML_EXPORT bool qmlProtectModule(const char* uri, int majVersion);
@@ -843,35 +808,37 @@ inline void qmlRegisterNamespaceAndRevisions(const QMetaObject *metaObject,
                                              const QMetaObject *classInfoMetaObject,
                                              const QMetaObject *extensionMetaObject)
 {
-    QQmlPrivate::RegisterTypeAndRevisions type = { 1,
-                                                   QMetaType(),
-                                                   QMetaType(),
-                                                   0,
-                                                   nullptr,
-                                                   nullptr,
-                                                   nullptr,
+    QQmlPrivate::RegisterTypeAndRevisions type = {
+        3,
+        QMetaType(),
+        QMetaType(),
+        0,
+        nullptr,
+        nullptr,
+        nullptr,
 
-                                                   uri,
-                                                   QTypeRevision::fromMajorVersion(versionMajor),
+        uri,
+        QTypeRevision::fromMajorVersion(versionMajor),
 
-                                                   metaObject,
-                                                   (classInfoMetaObject ? classInfoMetaObject
-                                                                        : metaObject),
+        metaObject,
+        (classInfoMetaObject ? classInfoMetaObject : metaObject),
 
-                                                   nullptr,
-                                                   nullptr,
+        nullptr,
+        nullptr,
 
-                                                   -1,
-                                                   -1,
-                                                   -1,
+        -1,
+        -1,
+        -1,
 
-                                                   nullptr,
-                                                   extensionMetaObject,
+        nullptr,
+        extensionMetaObject,
 
-                                                   &qmlCreateCustomParser<void>,
-                                                   qmlTypeIds,
-                                                   -1,
-                                                   false };
+        &qmlCreateCustomParser<void>,
+        qmlTypeIds,
+        -1,
+        false,
+        QMetaSequence()
+    };
 
     qmlregister(QQmlPrivate::TypeAndRevisionsRegistration, &type);
 }

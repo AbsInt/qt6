@@ -1,34 +1,10 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtQml module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2020 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "qqmljscompiler_p.h"
 
 #include <private/qqmlirbuilder_p.h>
+#include <private/qqmljsbasicblocks_p.h>
 #include <private/qqmljscodegenerator_p.h>
 #include <private/qqmljsfunctioninitializer_p.h>
 #include <private/qqmljsimportvisitor_p.h>
@@ -46,6 +22,8 @@
 #include <limits>
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 Q_LOGGING_CATEGORY(lcAotCompiler, "qt.qml.compiler.aot", QtFatalMsg);
 
@@ -252,19 +230,12 @@ bool qCompileQmlFile(QmlIR::Document &irDocument, const QString &inputFileName,
         for (QmlIR::Object *object: qAsConst(irDocument.objects)) {
             if (object->functionsAndExpressions->count == 0 && object->bindingCount() == 0)
                 continue;
-            QList<QmlIR::CompiledFunctionOrExpression> functionsToCompile;
-            for (QmlIR::CompiledFunctionOrExpression *foe = object->functionsAndExpressions->first; foe; foe = foe->next)
-                functionsToCompile << *foe;
-            const QVector<int> runtimeFunctionIndices =
-                    v4CodeGen.generateJSCodeForFunctionsAndBindings(functionsToCompile,
-                                                                    storeSourceLocation);
-            if (v4CodeGen.hasError()) {
+
+            if (!v4CodeGen.generateRuntimeFunctions(object, storeSourceLocation)) {
+                Q_ASSERT(v4CodeGen.hasError());
                 error->appendDiagnostic(inputFileName, v4CodeGen.error());
                 return false;
             }
-
-            QQmlJS::MemoryPool *pool = irDocument.jsParserEngine.pool();
-            object->runtimeFunctionIndices.allocate(pool, runtimeFunctionIndices);
 
             if (!aotCompiler)
                 continue;
@@ -285,6 +256,12 @@ bool qCompileQmlFile(QmlIR::Document &irDocument, const QString &inputFileName,
                       std::back_inserter(bindingsAndFunctions));
             std::copy(object->functionsBegin(), object->functionsEnd(),
                       std::back_inserter(bindingsAndFunctions));
+
+            QList<QmlIR::CompiledFunctionOrExpression> functionsToCompile;
+            for (QmlIR::CompiledFunctionOrExpression *foe = object->functionsAndExpressions->first;
+                 foe; foe = foe->next) {
+                functionsToCompile << *foe;
+            }
 
             // AOT-compile bindings and functions in the same order as above so that the runtime
             // class indices match
@@ -342,7 +319,8 @@ bool qCompileQmlFile(QmlIR::Document &irDocument, const QString &inputFileName,
                                            << diagnosticErrorMessage(inputFileName, *error);
                 } else if (auto *func = std::get_if<QQmlJSAotFunction>(&result)) {
                     qCDebug(lcAotCompiler) << "Generated code:" << func->code;
-                    aotFunctionsByIndex[runtimeFunctionIndices[bindingOrFunction.index()]] = *func;
+                    aotFunctionsByIndex[object->runtimeFunctionIndices[bindingOrFunction.index()]] =
+                            *func;
                 }
             });
         }
@@ -670,26 +648,17 @@ QQmlJS::DiagnosticMessage QQmlJSAotCompiler::diagnose(
         const QString &message, QtMsgType type, const QQmlJS::SourceLocation &location) const
 {
     if (isStrict(m_document)
-            && (type == QtWarningMsg || type == QtCriticalMsg || type == QtFatalMsg)
-            && m_logger->isCategoryError(Log_Compiler)) {
+        && (type == QtWarningMsg || type == QtCriticalMsg || type == QtFatalMsg)
+        && !m_logger->isCategoryIgnored(Log_Compiler)
+        && m_logger->categoryLevel(Log_Compiler) == QtCriticalMsg) {
         qFatal("%s:%d: (strict mode) %s",
                qPrintable(QFileInfo(m_resourcePath).fileName()),
                location.startLine, qPrintable(message));
     }
 
-    switch (type) {
-    case QtDebugMsg:
-    case QtInfoMsg:
-        m_logger->logInfo(message, Log_Compiler, location);
-        break;
-    case QtWarningMsg:
-        m_logger->logWarning(message, Log_Compiler, location);
-        break;
-    case QtCriticalMsg:
-    case QtFatalMsg:
-        m_logger->logCritical(message, Log_Compiler, location);
-        break;
-    }
+    // TODO: this is a special place that explicitly sets the severity through
+    // logger's private function
+    m_logger->log(message, Log_Compiler, location, type);
 
     return QQmlJS::DiagnosticMessage {
         message,
@@ -743,21 +712,21 @@ QQmlJSAotFunction QQmlJSAotCompiler::globalCode() const
 {
     QQmlJSAotFunction global;
     global.includes = {
-        u"QtQml/qjsengine.h"_qs,
-        u"QtQml/qjsprimitivevalue.h"_qs,
-        u"QtQml/qjsvalue.h"_qs,
-        u"QtQml/qqmlcomponent.h"_qs,
-        u"QtQml/qqmlcontext.h"_qs,
-        u"QtQml/qqmlengine.h"_qs,
+        u"QtQml/qjsengine.h"_s,
+        u"QtQml/qjsprimitivevalue.h"_s,
+        u"QtQml/qjsvalue.h"_s,
+        u"QtQml/qqmlcomponent.h"_s,
+        u"QtQml/qqmlcontext.h"_s,
+        u"QtQml/qqmlengine.h"_s,
 
-        u"QtCore/qdatetime.h"_qs,
-        u"QtCore/qobject.h"_qs,
-        u"QtCore/qstring.h"_qs,
-        u"QtCore/qstringlist.h"_qs,
-        u"QtCore/qurl.h"_qs,
-        u"QtCore/qvariant.h"_qs,
+        u"QtCore/qdatetime.h"_s,
+        u"QtCore/qobject.h"_s,
+        u"QtCore/qstring.h"_s,
+        u"QtCore/qstringlist.h"_s,
+        u"QtCore/qurl.h"_s,
+        u"QtCore/qvariant.h"_s,
 
-        u"type_traits"_qs
+        u"type_traits"_s
     };
     return global;
 }
@@ -777,6 +746,9 @@ QQmlJSAotFunction QQmlJSAotCompiler::doCompile(
     auto typePropagationResult = propagator.run(function, error);
     if (error->isValid())
         return compileError();
+
+    QQmlJSBasicBlocks basicBlocks(m_unitGenerator, &m_typeResolver, m_logger);
+    typePropagationResult = basicBlocks.run(function, typePropagationResult);
 
     QQmlJSShadowCheck shadowCheck(m_unitGenerator, &m_typeResolver, m_logger);
     shadowCheck.run(&typePropagationResult, function, error);

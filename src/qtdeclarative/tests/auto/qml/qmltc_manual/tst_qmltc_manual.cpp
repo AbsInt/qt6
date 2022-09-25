@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <qtest.h>
 #include <QDebug>
@@ -39,9 +14,17 @@
 #include <QtCore/qproperty.h>
 #include <QtQuickTestUtils/private/qmlutils_p.h>
 
+#include <QtCore/qobjectdefs.h>
+#include <QtCore/qmetaobject.h>
+
 #include <private/qqmlengine_p.h>
 #include <private/qqmltypedata_p.h>
 #include <private/qqmlvmemetaobject_p.h>
+#include <private/qqmlanybinding_p.h>
+#include <private/qquickitem_p.h>
+#include <private/qv4qmlcontext_p.h>
+#include <private/qqmlproperty_p.h>
+#include <private/qquickanchors_p.h>
 
 #include <array>
 #include <memory>
@@ -61,10 +44,10 @@ private slots:
     void changingBindings();
     void propertyAlias();
     void propertyChangeHandler();
-    void propertyReturningFunction();
     void locallyImported();
     void localImport();
     void neighbors();
+    void anchors();
 
 private:
     void signalHandlers_impl(const QUrl &url);
@@ -297,21 +280,6 @@ void tst_qmltc_manual::propertyChangeHandler()
     QCOMPARE(created.property("watcher").toInt(), 96);
 }
 
-void tst_qmltc_manual::propertyReturningFunction()
-{
-    QQmlEngine e;
-    ANON_propertyReturningFunction::url = testFileUrl("propertyReturningFunction.qml");
-    ANON_propertyReturningFunction created(&e);
-
-    QCOMPARE(created.getCounter(), 0);
-    QVariant function = created.getF();
-    Q_UNUSED(function); // ignored as it can't be used currently
-    QCOMPARE(created.getCounter(), 0);
-
-    created.property("f");
-    QCOMPARE(created.getCounter(), 0);
-}
-
 void tst_qmltc_manual::locallyImported()
 {
     QQmlEngine e;
@@ -496,6 +464,19 @@ void tst_qmltc_manual::neighbors()
     }
 }
 
+void tst_qmltc_manual::anchors()
+{
+    QQmlEngine e;
+    ANON_anchors::url = testFileUrl("anchors.qml");
+    ANON_anchors created(&e);
+
+    QQuickAnchors *anchors =
+            static_cast<QQuickItemPrivate *>(QObjectPrivate::get(&created))->anchors();
+    QCOMPARE(anchors->topMargin(), 42);
+    created.setValue(7);
+    QCOMPARE(anchors->topMargin(), 7);
+}
+
 // test workaround: hardcode runtime function indices. because they could be
 // rather unexpected and passing wrong ones leads to UB and flakiness.
 //
@@ -531,8 +512,6 @@ static constexpr int PROPERTY_ALIAS_GET_ALIAS_VALUE = 7;
 static constexpr int PROPERTY_CHANGE_HANDLER_P_BINDING = 0;
 static constexpr int PROPERTY_CHANGE_HANDLER_ON_P_CHANGED = 1;
 
-static constexpr int PROPERTY_RETURNING_FUNCTION_F_BINDING = 0;
-
 static constexpr int LOCALLY_IMPORTED_GET_MAGIC_VALUE = 0;
 static constexpr int LOCALLY_IMPORTED_ON_COMPLETED = 1;
 
@@ -541,6 +520,8 @@ static constexpr int LOCAL_IMPORT_LOCAL_GET_MAGIC_VALUE = 1;
 
 static constexpr int NEIGHBOUR_IDS_CHILD1_P2_BINDING = 0;
 static constexpr int NEIGHBOUR_IDS_CHILD2_P_BINDING = 1;
+
+static constexpr int ANCHORS_ANCHORS_TOP_MARGIN_BINDING = 0;
 };
 
 // test utility function for type erasure. the "real" code would be
@@ -563,6 +544,35 @@ static void typeEraseArguments(std::array<void *, Size> &a, std::array<QMetaType
     a = { /* all values, including return value */ const_cast<void *>(
             reinterpret_cast<const void *>(std::addressof(std::forward<IOArgs>(args))))... };
     t = { /* types */ QMetaType::fromType<std::decay_t<IOArgs>>()... };
+}
+
+// test utility that fetches a QV4::Function from the engine
+inline QV4::Function *getRuntimeFunction(QQmlEngine *engine, const QUrl &url, qsizetype index)
+{
+    QQmlEnginePrivate *priv = QQmlEnginePrivate::get(engine);
+    Q_ASSERT(priv);
+    const auto unit = priv->compilationUnitFromUrl(url);
+    return unit->runtimeFunctions.value(index, nullptr);
+}
+
+// test utility that sets up the binding call arguments
+template<typename CreateBinding>
+inline decltype(auto) createBindingInScope(QQmlEngine *qmlengine, QObject *thisObject,
+                                           CreateBinding create)
+{
+    QV4::ExecutionEngine *v4 = qmlengine->handle();
+    Q_ASSERT(v4);
+
+    QQmlContext *ctx = qmlengine->contextForObject(thisObject);
+    if (!ctx)
+        ctx = qmlengine->rootContext();
+    QV4::Scope scope(v4);
+    QV4::ExecutionContext *executionCtx = v4->scriptContext();
+    QQmlRefPointer<QQmlContextData> ctxtdata = QQmlContextData::get(ctx);
+    QV4::Scoped<QV4::QmlContext> qmlContext(
+            scope, QV4::QmlContext::create(executionCtx, ctxtdata, thisObject));
+
+    return create(ctxtdata, qmlContext);
 }
 
 ContextRegistrator::ContextRegistrator(QQmlEngine *engine, QObject *This)
@@ -858,27 +868,6 @@ void ANON_propertyChangeHandler::ANON_propertyChangeHandler_p_changeHandler::ope
 
 QUrl ANON_propertyChangeHandler::url = QUrl(); // workaround
 
-ANON_propertyReturningFunction::ANON_propertyReturningFunction(QQmlEngine *e, QObject *parent)
-    : QObject(parent), ContextRegistrator(e, this)
-{
-    QPropertyBinding<QVariant> ANON_propertyReturningFunction_f_binding(
-            [&]() {
-                QQmlEnginePrivate *e = QQmlEnginePrivate::get(qmlEngine(this));
-                const auto index = FunctionIndices::PROPERTY_RETURNING_FUNCTION_F_BINDING;
-                constexpr int argc = 0;
-                QVariant ret {};
-                std::array<void *, argc + 1> a {};
-                std::array<QMetaType, argc + 1> t {};
-                typeEraseArguments(a, t, ret);
-                e->executeRuntimeFunction(url, index, this, argc, a.data(), t.data());
-                return ret;
-            },
-            QT_PROPERTY_DEFAULT_BINDING_LOCATION);
-    bindableF().setBinding(ANON_propertyReturningFunction_f_binding);
-}
-
-QUrl ANON_propertyReturningFunction::url = QUrl(); // workaround
-
 LocallyImported::LocallyImported(QObject *parent) : QObject(parent) { }
 
 LocallyImported::LocallyImported(QQmlEngine *e, QObject *parent) : LocallyImported(parent)
@@ -1171,6 +1160,64 @@ void ANON_neighbors::finalize(QQmlEngine *e)
 }
 
 QUrl ANON_neighbors::url = QUrl(); // workaround
+
+ANON_anchors::ANON_anchors(QObject *parent) : QQuickItem()
+{
+    setParent(parent);
+}
+
+ANON_anchors::ANON_anchors(QQmlEngine *e, QObject *parent) : ANON_anchors(parent)
+{
+    // NB: use e->rootContext() as this object is document root
+    init(e, QQmlContextData::get(e->rootContext()));
+}
+
+QQmlRefPointer<QQmlContextData>
+ANON_anchors::init(QQmlEngine *e, const QQmlRefPointer<QQmlContextData> &parentContext)
+{
+    constexpr int componentIndex = 0; // root index
+    auto context = ContextRegistrator::create(e, url, parentContext, componentIndex);
+    ContextRegistrator::set(this, context, QQmlContextData::DocumentRoot);
+    finalize(e); // call here because it's document root
+    return context;
+}
+
+void ANON_anchors::finalize(QQmlEngine *e)
+{
+    Q_UNUSED(e);
+
+    this->value = 42;
+
+    // create binding (in a proper way) on Item's anchors through
+    // QQmlAnyBinding. if this is achievable through C++, then compiler could do
+    // it as well (by generating roughly the same code).
+    const QMetaObject *mo = this->metaObject();
+    QVERIFY(mo);
+    // fetching QMetaProperty is possible through the compiler
+    QMetaProperty anchorsProperty = mo->property(mo->indexOfProperty("anchors"));
+    QQuickAnchors *anchors = qvariant_cast<QQuickAnchors *>(anchorsProperty.read(this));
+    QVERIFY(anchors);
+
+    // below is binding-specific code that is part of a special qmltc library
+    auto v4Func = getRuntimeFunction(qmlEngine(this), url,
+                                     FunctionIndices::ANCHORS_ANCHORS_TOP_MARGIN_BINDING);
+    QVERIFY(v4Func);
+    const QMetaObject *anchorsMo = anchors->metaObject();
+    QVERIFY(anchorsMo);
+    QMetaProperty topMarginProperty = anchorsMo->property(anchorsMo->indexOfProperty("topMargin"));
+    QVERIFY(QByteArray(topMarginProperty.name()) == "topMargin");
+
+    createBindingInScope(
+            qmlEngine(this), this,
+            [&](const QQmlRefPointer<QQmlContextData> &ctxt, QV4::ExecutionContext *scope) {
+                QQmlBinding *binding = QQmlBinding::create(topMarginProperty.metaType(), v4Func,
+                                                           this, ctxt, scope);
+                binding->setTarget(anchors, topMarginProperty.propertyIndex(), false, -1);
+                QQmlPropertyPrivate::setBinding(binding);
+            });
+}
+
+QUrl ANON_anchors::url = QUrl(); // workaround
 
 QTEST_MAIN(tst_qmltc_manual)
 

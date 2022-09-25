@@ -1,31 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2002-2007 Detlev Offenbach <detlev@die-offenbachs.de>
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the Qt Linguist of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2002-2007 Detlev Offenbach <detlev@die-offenbachs.de>
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <translator.h>
 #include "lupdate.h"
@@ -515,33 +490,57 @@ static bool parseTranslate(QByteArray *text, QByteArray *context, QByteArray *co
     if (match(Tok_RightParen))
         return true;
 
-    // look for comment
-    if (!match(Tok_Comma) || !matchStringOrNone(comment))
+    // not a comma or a right paren, illegal syntax
+    if (!match(Tok_Comma))
         return false;
+
+    // python accepts trailing commas within parenthesis, so allow a comma with nothing after
+    if (match(Tok_RightParen))
+        return true;
+
+    // check for comment
+    if (!matchStringOrNone(comment))
+        return false; // not a comment, or a trailing comma... something is wrong
 
     if (match(Tok_RightParen))
         return true;
 
-    // look for encoding
+    // not a comma or a right paren, illegal syntax
     if (!match(Tok_Comma))
         return false;
 
-    if (matchEncoding(utf8)) {
-        if (!match(Tok_RightParen)) {
-            // look for the plural quantifier,
-            // this can be a number, an identifier or a function call,
-            // so for simplicity we mark it as plural if we know we have a comma instead of an
-            // right parentheses.
-            *plural = match(Tok_Comma);
-        }
+    // python accepts trailing commas within parenthesis, so allow a comma with nothing after
+    if (match(Tok_RightParen))
         return true;
+
+    // look for optional encoding information
+    if (matchEncoding(utf8)) {
+        if (match(Tok_RightParen))
+            return true;
+
+        // not a comma or a right paren, illegal syntax
+        if (!match(Tok_Comma))
+            return false;
+
+        // python accepts trailing commas within parenthesis, so allow a comma with nothing after
+        if (match(Tok_RightParen))
+            return true;
     }
 
-    // This can be a QTranslator::translate("context", "source", "comment", n) plural translation
-    if (!matchExpression() || !match(Tok_RightParen))
+    // Must be a plural expression
+    if (!matchExpression())
         return false;
+
     *plural = true;
-    return true;
+
+    // Ignore any trailing comma here
+    match(Tok_Comma);
+
+    // This must be the end, or there are too many parameters
+    if (match(Tok_RightParen))
+        return true;
+
+    return false;
 }
 
 static inline void setMessageParameters(TranslatorMessage *message)

@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtQuick module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qquickshadereffectsource_p.h"
 
@@ -184,7 +148,7 @@ QQuickShaderEffectSource::QQuickShaderEffectSource(QQuickItem *parent)
     , m_wrapMode(ClampToEdge)
     , m_sourceItem(nullptr)
     , m_textureSize(0, 0)
-    , m_format(RGBA)
+    , m_format(RGBA8)
     , m_samples(0)
     , m_live(true)
     , m_hideSource(false)
@@ -414,18 +378,18 @@ void QQuickShaderEffectSource::setTextureSize(const QSize &size)
 /*!
     \qmlproperty enumeration QtQuick::ShaderEffectSource::format
 
-    This property defines the internal OpenGL format of the texture.
+    This property defines the format of the backing texture.
     Modifying this property makes most sense when the item is used as a
-    source texture of a \l ShaderEffect. Depending on the OpenGL
-    implementation, this property might allow you to save some texture memory.
+    source texture of a \l ShaderEffect.
 
     \list
-    \li ShaderEffectSource.Alpha - GL_ALPHA
-    \li ShaderEffectSource.RGB - GL_RGB
-    \li ShaderEffectSource.RGBA - GL_RGBA
+    \li ShaderEffectSource.RGBA8
+    \li ShaderEffectSource.RGBA16F
+    \li ShaderEffectSource.RGBA32F
+    \li ShaderEffectSource.Alpha - Starting with Qt 6.0, this value is not in use and has the same effect as RGBA8 in practice.
+    \li ShaderEffectSource.RGB - Starting with Qt 6.0, this value is not in use and has the same effect as RGBA8 in practice.
+    \li ShaderEffectSource.RGBA - Starting with Qt 6.0, this value is not in use and has the same effect as RGBA8 in practice.
     \endlist
-
-    \note Some OpenGL implementations do not support the GL_ALPHA format.
 */
 
 QQuickShaderEffectSource::Format QQuickShaderEffectSource::format() const
@@ -676,6 +640,20 @@ public:
     }
 };
 
+static QSGLayer::Format toLayerFormat(QQuickShaderEffectSource::Format format)
+{
+    switch (format) {
+    case QQuickShaderEffectSource::RGBA8:
+        return QSGLayer::RGBA8;
+    case QQuickShaderEffectSource::RGBA16F:
+        return QSGLayer::RGBA16F;
+    case QQuickShaderEffectSource::RGBA32F:
+        return QSGLayer::RGBA32F;
+    default:
+        return QSGLayer::RGBA8;
+    }
+}
+
 QSGNode *QQuickShaderEffectSource::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
 {
     if (!m_sourceItem || m_sourceItem->width() <= 0 || m_sourceItem->height() <= 0) {
@@ -714,7 +692,7 @@ QSGNode *QQuickShaderEffectSource::updatePaintNode(QSGNode *oldNode, UpdatePaint
     m_texture->setDevicePixelRatio(d->window->effectiveDevicePixelRatio());
     m_texture->setSize(textureSize);
     m_texture->setRecursive(m_recursive);
-    m_texture->setFormat(m_format);
+    m_texture->setFormat(toLayerFormat(m_format));
     m_texture->setHasMipmaps(m_mipmap);
     m_texture->setMirrorHorizontal(m_textureMirroring & MirrorHorizontally);
     m_texture->setMirrorVertical(m_textureMirroring & MirrorVertically);
@@ -791,7 +769,7 @@ void QQuickShaderEffectSource::itemChange(ItemChange change, const ItemChangeDat
     QQuickItem::itemChange(change, value);
 }
 
+QT_END_NAMESPACE
+
 #include "qquickshadereffectsource.moc"
 #include "moc_qquickshadereffectsource_p.cpp"
-
-QT_END_NAMESPACE

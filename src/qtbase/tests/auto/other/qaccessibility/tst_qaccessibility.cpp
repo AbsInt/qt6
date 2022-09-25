@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 
 #include <QtCore/qglobal.h>
@@ -188,6 +163,7 @@ public slots:
     void cleanup();
 private slots:
     void eventTest();
+    void eventWithChildTest();
     void customWidget();
     void deletedWidget();
     void subclassedWidget();
@@ -235,6 +211,7 @@ private slots:
     void treeTest();
     void tableTest();
 
+    void uniqueIdTest();
     void calendarWidgetTest();
     void dockWidgetTest();
     void comboBoxTest();
@@ -376,6 +353,33 @@ void tst_QAccessibility::eventTest()
     objectHolder.reset();
 
     QTestAccessibility::clearEvents();
+}
+
+void tst_QAccessibility::eventWithChildTest()
+{
+    // make sure that QAccessibleEvent created using either of the two QAccessibleEvent
+    // behaves the same when the same underlying QObject is used
+    QWidget widget;
+    QWidget childWidget(&widget);
+
+    // QAccessibleEvent constructor called with the QObject*
+    QAccessibleEvent event1(&widget, QAccessible::Focus);
+
+    // QAccessibleEvent constructor called with the QAccessibleInterface* for the same QObject*
+    QAccessibleInterface *iface = QAccessible::queryAccessibleInterface(&widget);
+    QAccessibleEvent event2(iface, QAccessible::Focus);
+
+    QVERIFY(event1.accessibleInterface() != nullptr);
+    QVERIFY(event2.accessibleInterface() != nullptr);
+    QCOMPARE(event1.accessibleInterface(), event2.accessibleInterface());
+
+    // set same child for both
+    event1.setChild(0);
+    event2.setChild(0);
+
+    QVERIFY(event1.accessibleInterface() != nullptr);
+    QVERIFY(event2.accessibleInterface() != nullptr);
+    QCOMPARE(event1.accessibleInterface(), event2.accessibleInterface());
 }
 
 void tst_QAccessibility::customWidget()
@@ -1408,9 +1412,7 @@ void tst_QAccessibility::tabWidgetTest()
 
     QAccessibleInterface* stackChild1Interface = stackWidgetInterface->child(0);
     QVERIFY(stackChild1Interface);
-#ifndef Q_CC_INTEL
     QCOMPARE(stackChild1Interface->childCount(), 0);
-#endif
     QCOMPARE(stackChild1Interface->role(), QAccessible::StaticText);
     QCOMPARE(stackChild1Interface->text(QAccessible::Name), QLatin1String("Page 1"));
     QCOMPARE(label1, stackChild1Interface->object());
@@ -1418,9 +1420,7 @@ void tst_QAccessibility::tabWidgetTest()
     // Navigation in stack widgets should be consistent
     QAccessibleInterface* parent = stackChild1Interface->parent();
     QVERIFY(parent);
-#ifndef Q_CC_INTEL
     QCOMPARE(parent->childCount(), 2);
-#endif
     QCOMPARE(parent->role(), QAccessible::LayeredPane);
 
     QAccessibleInterface* stackChild2Interface = stackWidgetInterface->child(1);
@@ -1432,9 +1432,7 @@ void tst_QAccessibility::tabWidgetTest()
 
     parent = stackChild2Interface->parent();
     QVERIFY(parent);
-#ifndef Q_CC_INTEL
     QCOMPARE(parent->childCount(), 2);
-#endif
     QCOMPARE(parent->role(), QAccessible::LayeredPane);
 
     QTestAccessibility::clearEvents();
@@ -3388,6 +3386,25 @@ void tst_QAccessibility::tableTest()
     QTestAccessibility::clearEvents();
 }
 
+void tst_QAccessibility::uniqueIdTest()
+{
+    // Test that an ID isn't reassigned to another interface right away when an accessible interface
+    // that has just been created is removed from the cache and deleted before the next
+    // accessible interface is registered.
+    // For example for AT-SPI, that would result in the same object path being used, and thus
+    // data from the old and new interface can get confused due to caching.
+    QWidget widget1;
+    QAccessibleInterface *iface1 = QAccessible::queryAccessibleInterface(&widget1);
+    QAccessible::Id id1 = QAccessible::uniqueId(iface1);
+    QAccessible::deleteAccessibleInterface(id1);
+
+    QWidget widget2;
+    QAccessibleInterface *iface2 = QAccessible::queryAccessibleInterface(&widget2);
+    QAccessible::Id id2 = QAccessible::uniqueId(iface2);
+
+    QVERIFY(id1 != id2);
+}
+
 void tst_QAccessibility::calendarWidgetTest()
 {
 #if QT_CONFIG(calendarwidget)
@@ -3848,7 +3865,7 @@ void tst_QAccessibility::bridgeTest()
     POINT pt{nativePos.x(), nativePos.y()};
 
     // Initialize COM stuff.
-    HRESULT hr = CoInitialize(nullptr);
+    HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
     QVERIFY(SUCCEEDED(hr));
 
     // Get UI Automation interface.

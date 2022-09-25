@@ -23,4 +23,3 @@ ci b2qt 32bit
 # QTBUG-100991
 [line::test_cap]
 android
-

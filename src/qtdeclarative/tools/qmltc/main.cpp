@@ -1,37 +1,12 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the tools applications of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "qmltccommandlineutils.h"
-#include "prototype/codegenerator.h"
-#include "prototype/visitor.h"
-#include "prototype/typeresolver.h"
+#include "qmltcvisitor.h"
+#include "qmltctyperesolver.h"
 
-#include <QtQml/private/qqmlirbuilder_p.h>
+#include "qmltccompiler.h"
+
 #include <private/qqmljscompiler_p.h>
 #include <private/qqmljsresourcefilemapper_p.h>
 
@@ -40,16 +15,33 @@
 #include <QtCore/qhashfunctions.h>
 #include <QtCore/qfileinfo.h>
 #include <QtCore/qlibraryinfo.h>
-#if QT_CONFIG(commandlineparser)
-#    include <QtCore/qcommandlineparser.h>
-#endif
+#include <QtCore/qcommandlineparser.h>
+
+#include <QtQml/private/qqmljslexer_p.h>
+#include <QtQml/private/qqmljsparser_p.h>
+#include <QtQml/private/qqmljsengine_p.h>
+#include <QtQml/private/qqmljsastvisitor_p.h>
+#include <QtQml/private/qqmljsast_p.h>
+#include <QtQml/private/qqmljsdiagnosticmessage_p.h>
 
 #include <cstdlib> // EXIT_SUCCESS, EXIT_FAILURE
 
+using namespace Qt::StringLiterals;
+
 void setupLogger(QQmlJSLogger &logger) // prepare logger to work with compiler
 {
-    // TODO: support object bindings and change to setCategoryLevel(QtInfoMsg)
-    logger.setCategoryError(Log_Compiler, true);
+    const QSet<QQmlJSLoggerCategory> exceptions {
+        Log_ControlsSanity, // this category is just weird
+        Log_UnusedImport, // not critical
+    };
+
+    for (int i = 0; i <= static_cast<int>(QQmlJSLoggerCategory_Last); ++i) {
+        const auto c = static_cast<QQmlJSLoggerCategory>(i);
+        if (exceptions.contains(c))
+            continue;
+        logger.setCategoryLevel(c, QtCriticalMsg);
+        logger.setCategoryIgnored(c, false);
+    }
 }
 
 int main(int argc, char **argv)
@@ -58,52 +50,51 @@ int main(int argc, char **argv)
     // random seeding.
     qSetGlobalQHashSeed(0);
     QCoreApplication app(argc, argv);
-    QCoreApplication::setApplicationName(u"qmltc"_qs);
+    QCoreApplication::setApplicationName(u"qmltc"_s);
     QCoreApplication::setApplicationVersion(QStringLiteral(QT_VERSION_STR));
 
-#if QT_CONFIG(commandlineparser)
     // command-line parsing:
     QCommandLineParser parser;
     parser.addHelpOption();
     parser.addVersionOption();
 
+    QCommandLineOption bareOption {
+        u"bare"_s,
+        QCoreApplication::translate(
+                "main", "Do not include default import directories. This may be used to run "
+                        "qmltc on a project using a different Qt version.")
+    };
+    parser.addOption(bareOption);
+
     QCommandLineOption importPathOption {
-        u"I"_qs, QCoreApplication::translate("main", "Look for QML modules in specified directory"),
+        u"I"_s, QCoreApplication::translate("main", "Look for QML modules in specified directory"),
         QCoreApplication::translate("main", "import directory")
     };
     parser.addOption(importPathOption);
     QCommandLineOption qmldirOption {
-        u"i"_qs, QCoreApplication::translate("main", "Include extra qmldir files"),
+        u"i"_s, QCoreApplication::translate("main", "Include extra qmldir files"),
         QCoreApplication::translate("main", "qmldir file")
     };
     parser.addOption(qmldirOption);
     QCommandLineOption outputCppOption {
-        u"impl"_qs, QCoreApplication::translate("main", "Generated C++ source file path"),
+        u"impl"_s, QCoreApplication::translate("main", "Generated C++ source file path"),
         QCoreApplication::translate("main", "cpp path")
     };
     parser.addOption(outputCppOption);
     QCommandLineOption outputHOption {
-        u"header"_qs, QCoreApplication::translate("main", "Generated C++ header file path"),
+        u"header"_s, QCoreApplication::translate("main", "Generated C++ header file path"),
         QCoreApplication::translate("main", "h path")
     };
     parser.addOption(outputHOption);
-
-    QCommandLineOption resourcePathOption {
-        u"resource-path"_qs,
-        QCoreApplication::translate(
-                "main", "Qt resource file path corresponding to the file being compiled"),
-        QCoreApplication::translate("main", "resource path")
-    };
-    parser.addOption(resourcePathOption);
     QCommandLineOption resourceOption {
-        u"resource"_qs,
+        u"resource"_s,
         QCoreApplication::translate(
                 "main", "Qt resource file that might later contain one of the compiled files"),
         QCoreApplication::translate("main", "resource file name")
     };
     parser.addOption(resourceOption);
     QCommandLineOption namespaceOption {
-        u"namespace"_qs, QCoreApplication::translate("main", "Namespace of the generated C++ code"),
+        u"namespace"_s, QCoreApplication::translate("main", "Namespace of the generated C++ code"),
         QCoreApplication::translate("main", "namespace")
     };
     parser.addOption(namespaceOption);
@@ -116,7 +107,7 @@ int main(int argc, char **argv)
             parser.showHelp();
         } else {
             fprintf(stderr, "%s\n",
-                    qPrintable(u"Too many input files specified: '"_qs + sources.join(u"' '"_qs)
+                    qPrintable(u"Too many input files specified: '"_s + sources.join(u"' '"_s)
                                + u'\''));
         }
         return EXIT_FAILURE;
@@ -140,96 +131,123 @@ int main(int argc, char **argv)
         return EXIT_FAILURE;
 
     QStringList importPaths = parser.values(importPathOption);
-    importPaths.append(QLibraryInfo::path(QLibraryInfo::QmlImportsPath));
+    if (!parser.isSet(bareOption))
+        importPaths.append(QLibraryInfo::path(QLibraryInfo::QmlImportsPath));
     QStringList qmldirFiles = parser.values(qmldirOption);
 
     QString outputCppFile;
     if (!parser.isSet(outputCppOption)) {
-        outputCppFile = url.first(url.size() - 3) + u"cpp"_qs;
+        outputCppFile = url.first(url.size() - 3) + u"cpp"_s;
     } else {
         outputCppFile = parser.value(outputCppOption);
     }
 
     QString outputHFile;
     if (!parser.isSet(outputHOption)) {
-        outputHFile = url.first(url.size() - 3) + u"h"_qs;
+        outputHFile = url.first(url.size() - 3) + u"h"_s;
     } else {
         outputHFile = parser.value(outputHOption);
     }
 
-    if (!parser.isSet(resourceOption) && !parser.isSet(resourcePathOption)) {
+    if (!parser.isSet(resourceOption)) {
         fprintf(stderr, "No resource paths for file: %s\n", qPrintable(inputFile));
         return EXIT_FAILURE;
     }
 
     // main logic:
-    QmlIR::Document document(false); // used by QmltcTypeResolver/QQmlJSTypeResolver
-    // NB: JS unit generated here is ignored, so use noop function
-    QQmlJSSaveFunction noop([](auto &&...) { return true; });
-    QQmlJSCompileError error;
-    if (!qCompileQmlFile(document, url, noop, nullptr, &error)) {
-        error.augment(u"Error compiling qml file: "_qs).print();
+    QQmlJS::Engine engine;
+    QQmlJS::Lexer lexer(&engine);
+    lexer.setCode(sourceCode, /*lineno = */ 1);
+    QQmlJS::Parser qmlParser(&engine);
+    if (!qmlParser.parse()) {
+        const auto diagnosticMessages = qmlParser.diagnosticMessages();
+        for (const QQmlJS::DiagnosticMessage &m : diagnosticMessages) {
+            fprintf(stderr, "%s\n",
+                    qPrintable(QStringLiteral("%1:%2:%3: %4")
+                                       .arg(inputFile)
+                                       .arg(m.loc.startLine)
+                                       .arg(m.loc.startColumn)
+                                       .arg(m.message)));
+        }
         return EXIT_FAILURE;
     }
 
     const QStringList resourceFiles = parser.values(resourceOption);
     QQmlJSResourceFileMapper mapper(resourceFiles);
 
+    const auto firstQml = [](const QStringList &paths) {
+        auto it = std::find_if(paths.cbegin(), paths.cend(),
+                               [](const QString &x) { return x.endsWith(u".qml"_s); });
+        if (it == paths.cend())
+            return QString();
+        return *it;
+    };
     // verify that we can map current file to qrc (then use the qrc path later)
     const QStringList paths = mapper.resourcePaths(QQmlJSResourceFileMapper::localFileFilter(url));
-    QString resolvedResourcePath;
-    if (paths.size() != 1) {
-        if (parser.isSet(resourcePathOption)) {
-            qWarning("--resource-path option is deprecated. Prefer --resource along with "
-                     "automatically generated resource file");
-            resolvedResourcePath = parser.value(resourcePathOption);
-        } else if (paths.isEmpty()) {
-            fprintf(stderr, "Failed to find a resource path for file: %s\n", qPrintable(inputFile));
-            return EXIT_FAILURE;
-        } else if (paths.size() > 1) {
-            fprintf(stderr, "Too many (expected 1) resource paths for file: %s\n",
-                    qPrintable(inputFile));
+    if (paths.isEmpty()) {
+        fprintf(stderr, "Failed to find a resource path for file: %s\n", qPrintable(inputFile));
+        return EXIT_FAILURE;
+    } else if (paths.size() > 1) {
+        bool good = !firstQml(paths).isEmpty();
+        good &= std::any_of(paths.cbegin(), paths.cend(),
+                            [](const QString &x) { return x.endsWith(u".h"_s); });
+        if (!good || paths.size() > 2) {
+            fprintf(stderr, "Unexpected resource paths for file: %s\n", qPrintable(inputFile));
             return EXIT_FAILURE;
         }
-    } else {
-        resolvedResourcePath = paths.first();
     }
 
-    Options options;
-    options.outputCppFile = parser.value(outputCppOption);
-    options.outputHFile = parser.value(outputHOption);
-    options.resourcePath = resolvedResourcePath;
-    options.outNamespace = parser.value(namespaceOption);
+    QmltcCompilerInfo info;
+    info.outputCppFile = parser.value(outputCppOption);
+    info.outputHFile = parser.value(outputHOption);
+    info.resourcePath = firstQml(paths);
+    info.outputNamespace = parser.value(namespaceOption);
+
+    if (info.outputCppFile.isEmpty()) {
+        fprintf(stderr, "An output C++ file is required. Pass one using --impl");
+        return EXIT_FAILURE;
+    }
+    if (info.outputHFile.isEmpty()) {
+        fprintf(stderr, "An output C++ header file is required. Pass one using --header");
+        return EXIT_FAILURE;
+    }
 
     QQmlJSImporter importer { importPaths, &mapper };
+    auto createQmltcVisitor = [](const QQmlJSScope::Ptr &root, QQmlJSImporter *importer,
+                                 QQmlJSLogger *logger, const QString &implicitImportDirectory,
+                                 const QStringList &qmldirFiles) -> QQmlJSImportVisitor * {
+        return new QmltcVisitor(root, importer, logger, implicitImportDirectory, qmldirFiles);
+    };
+    importer.setImportVisitorCreator(createQmltcVisitor);
+
     QQmlJSLogger logger;
     logger.setFileName(url);
     logger.setCode(sourceCode);
     setupLogger(logger);
 
-    QQmlJSScope::Ptr target = QQmlJSScope::create();
-    Qmltc::Visitor visitor(target, &importer, &logger,
-                           QQmlJSImportVisitor::implicitImportDirectory(url, &mapper), qmldirFiles);
-    Qmltc::TypeResolver typeResolver { &importer };
-    typeResolver.init(visitor, document.program);
+    QmltcVisitor visitor(QQmlJSScope::create(), &importer, &logger,
+                         QQmlJSImportVisitor::implicitImportDirectory(url, &mapper), qmldirFiles);
+    visitor.setMode(QmltcVisitor::Compile);
+    QmltcTypeResolver typeResolver { &importer };
+    typeResolver.init(&visitor, qmlParser.rootNode());
 
-    if (logger.hasWarnings() || logger.hasErrors())
+    if (logger.hasErrors())
         return EXIT_FAILURE;
 
-    CodeGenerator generator(url, &logger, &document, &typeResolver);
-    generator.generate(options);
+    QList<QQmlJS::DiagnosticMessage> warnings = importer.takeGlobalWarnings();
+    if (!warnings.isEmpty()) {
+        logger.log(QStringLiteral("Type warnings occurred while compiling file:"), Log_Import,
+                   QQmlJS::SourceLocation());
+        logger.processMessages(warnings, Log_Import);
+        // Log_Import is critical for the compiler
+        return EXIT_FAILURE;
+    }
 
-    if (logger.hasWarnings() || logger.hasErrors())
+    QmltcCompiler compiler(url, &typeResolver, &visitor, &logger);
+    compiler.compile(info);
+
+    if (logger.hasErrors())
         return EXIT_FAILURE;
 
     return EXIT_SUCCESS;
-#else
-    // we need the parser at least for --resource-path option (and maybe for
-    // something else in the future), so just fail here if QCommandLine parser
-    // is unavailable
-    fprintf(stderr,
-            "qmltc requires commandlineparser feature enabled. Rebuild Qt with that feature "
-            "present if you want to use this tool\n");
-    return EXIT_FAILURE;
-#endif
 }

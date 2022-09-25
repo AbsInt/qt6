@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the plugins of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include <AppKit/AppKit.h>
 #include <QuartzCore/QuartzCore.h>
@@ -76,7 +40,7 @@ Q_LOGGING_CATEGORY(lcCocoaNotifications, "qt.qpa.cocoa.notifications");
 
 static void qRegisterNotificationCallbacks()
 {
-    static const QLatin1String notificationHandlerPrefix(Q_NOTIFICATION_PREFIX);
+    static const QLatin1StringView notificationHandlerPrefix(Q_NOTIFICATION_PREFIX);
 
     NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
 
@@ -694,7 +658,7 @@ void QCocoaWindow::applyWindowState(Qt::WindowStates requestedState)
     if (!isContentView())
         return;
 
-    const Qt::WindowState currentState = windowState();
+    const Qt::WindowState currentState = QWindowPrivate::effectiveState(windowState());
     const Qt::WindowState newState = QWindowPrivate::effectiveState(requestedState);
 
     if (newState == currentState)
@@ -726,9 +690,10 @@ void QCocoaWindow::applyWindowState(Qt::WindowStates requestedState)
     switch (currentState) {
     case Qt::WindowMinimized:
         [nsWindow deminiaturize:sender];
-        Q_ASSERT_X(windowState() != Qt::WindowMinimized, "QCocoaWindow",
-            "[NSWindow deminiaturize:] is synchronous");
-        break;
+        // Deminiaturizing is not synchronous, so we need to wait for the
+        // NSWindowDidMiniaturizeNotification before continuing to apply
+        // the new state.
+        return;
     case Qt::WindowFullScreen: {
         toggleFullScreen();
         // Exiting fullscreen is not synchronous, so we need to wait for the
@@ -762,23 +727,27 @@ void QCocoaWindow::applyWindowState(Qt::WindowStates requestedState)
     }
 }
 
-Qt::WindowState QCocoaWindow::windowState() const
+Qt::WindowStates QCocoaWindow::windowState() const
 {
-    // FIXME: Support compound states (Qt::WindowStates)
-
+    Qt::WindowStates states = Qt::WindowNoState;
     NSWindow *window = m_view.window;
+
     if (window.miniaturized)
-        return Qt::WindowMinimized;
-    if (window.qt_fullScreen)
-        return Qt::WindowFullScreen;
-    if ((window.zoomed && !isTransitioningToFullScreen())
-        || (m_lastReportedWindowState == Qt::WindowMaximized && isTransitioningToFullScreen()))
-        return Qt::WindowMaximized;
+        states |= Qt::WindowMinimized;
+
+    // Full screen and maximized are mutually exclusive, as macOS
+    // will report a full screen window as zoomed.
+    if (window.qt_fullScreen) {
+        states |= Qt::WindowFullScreen;
+    } else if ((window.zoomed && !isTransitioningToFullScreen())
+        || (m_lastReportedWindowState == Qt::WindowMaximized && isTransitioningToFullScreen())) {
+        states |= Qt::WindowMaximized;
+    }
 
     // Note: We do not report Qt::WindowActive, even if isActive()
     // is true, as QtGui does not expect this window state to be set.
 
-    return Qt::WindowNoState;
+    return states;
 }
 
 void QCocoaWindow::toggleMaximized()
@@ -894,12 +863,20 @@ void QCocoaWindow::windowDidDeminiaturize()
     if (!isContentView())
         return;
 
+    Qt::WindowState requestedState = window()->windowState();
+
     handleWindowStateChanged();
+
+    if (requestedState != windowState() && requestedState != Qt::WindowMinimized) {
+        // We were only going out of minimized as an intermediate step before
+        // progressing into the final step, so re-sync the desired state.
+       applyWindowState(requestedState);
+    }
 }
 
 void QCocoaWindow::handleWindowStateChanged(HandleFlags flags)
 {
-    Qt::WindowState currentState = windowState();
+    Qt::WindowStates currentState = windowState();
     if (!(flags & HandleUnconditionally) && currentState == m_lastReportedWindowState)
         return;
 
@@ -2060,6 +2037,6 @@ QDebug operator<<(QDebug debug, const QCocoaWindow *window)
 }
 #endif // !QT_NO_DEBUG_STREAM
 
-#include "moc_qcocoawindow.cpp"
-
 QT_END_NAMESPACE
+
+#include "moc_qcocoawindow.cpp"

@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtQml module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qqmlbuiltinfunctions_p.h"
 
@@ -143,7 +107,7 @@ creating objects of specific data types are also available for clients to use:
 \li \c matrix4x4 - use \l{Qt::matrix4x4()}{Qt.matrix4x4()}
 \endlist
 
-There are also string based constructors for these types. See \l{qtqml-typesystem-basictypes.html}{QML Basic Types} for more information.
+There are also string based constructors for these types. See \l{qtqml-typesystem-valuetypes.html}{QML Value Types} for more information.
 
 \section1 Date/Time Formatters
 
@@ -250,6 +214,8 @@ The following functions are also on the Qt object.
     \qmlproperty object Qt::inputMethod
     \since 5.0
 
+    It is the same as the \l InputMethod singleton.
+
     The \c inputMethod object allows access to application's QInputMethod object
     and all its properties and slots. See the QInputMethod documentation for
     further details.
@@ -260,28 +226,11 @@ The following functions are also on the Qt object.
     \since 5.5
 
     The \c styleHints object provides platform-specific style hints and settings.
-    See the QStyleHints documentation for further details.
+    See the \l QStyleHints documentation for further details.
+
+    You should access StyleHints via \l Application::styleHints instead.
 
     \note The \c styleHints object is only available when using the Qt Quick module.
-
-    The following example uses the \c styleHints object to determine whether an
-    item should gain focus on mouse press or touch release:
-    \code
-    import QtQuick 2.4
-
-    MouseArea {
-        id: button
-
-        onPressed: {
-            if (!Qt.styleHints.setFocusOnTouchRelease)
-                button.forceActiveFocus()
-        }
-        onReleased: {
-            if (Qt.styleHints.setFocusOnTouchRelease)
-                button.forceActiveFocus()
-        }
-    }
-    \endcode
 */
 
 /*!
@@ -435,7 +384,7 @@ QVariant QtObject::hsva(double h, double s, double v, double a) const
     Returns \c true if both \a lhs and \a rhs yield equal color values. Both
     arguments may be either color values or string values. If a string value
     is supplied it must be convertible to a color, as described for the
-    \l{colorbasictypedocs}{color} basic type.
+    \l{colorvaluetypedocs}{color} value type.
 */
 bool QtObject::colorEqual(const QVariant &lhs, const QVariant &rhs) const
 {
@@ -503,7 +452,7 @@ QSizeF QtObject::size(double w, double h) const
 
     Returns a font with the properties specified in the \a fontSpecifier object
     or the nearest matching font.  The \a fontSpecifier object should contain
-    key-value pairs where valid keys are the \l{fontbasictypedocs}{font} type's
+    key-value pairs where valid keys are the \l{fontvaluetypedocs}{font} type's
     subproperty names, and the values are valid values for each subproperty.
     Invalid keys will be ignored.
 */

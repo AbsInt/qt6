@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2019 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtQml module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2019 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #ifndef QQMLMETATYPEDATA_P_H
 #define QQMLMETATYPEDATA_P_H
@@ -83,8 +47,9 @@ struct QQmlMetaTypeData
             // a module via QQmlPrivate::RegisterCompositeType
     typedef QMultiHash<const QMetaObject *, QQmlTypePrivate *> MetaObjects;
     MetaObjects metaObjectToType;
-    QVector<QHash<QTypeRevision, QQmlRefPointer<QQmlPropertyCache>>> typePropertyCaches;
+    QVector<QHash<QTypeRevision, QQmlPropertyCache::ConstPtr>> typePropertyCaches;
     QHash<int, QQmlValueType *> metaTypeToValueType;
+    QHash<const QtPrivate::QMetaTypeInterface *, QV4::ExecutableCompilationUnit *> compositeTypes;
 
     struct VersionedUri {
         VersionedUri() = default;
@@ -129,15 +94,16 @@ struct QQmlMetaTypeData
     QList<QQmlPrivate::AutoParentFunction> parentFunctions;
     QVector<QQmlPrivate::QmlUnitCacheLookupFunction> lookupCachedQmlUnit;
 
-    QHash<const QMetaObject *, QQmlRefPointer<QQmlPropertyCache>> propertyCaches;
+    QHash<const QMetaObject *, QQmlPropertyCache::ConstPtr> propertyCaches;
 
-    QQmlRefPointer<QQmlPropertyCache> propertyCacheForVersion(int index, QTypeRevision version) const;
+    QQmlPropertyCache::ConstPtr propertyCacheForVersion(int index, QTypeRevision version) const;
     void setPropertyCacheForVersion(
-            int index, QTypeRevision version, const QQmlRefPointer<QQmlPropertyCache> &cache);
+            int index, QTypeRevision version, const QQmlPropertyCache::ConstPtr &cache);
     void clearPropertyCachesForVersion(int index);
 
-    QQmlRefPointer<QQmlPropertyCache> propertyCache(const QMetaObject *metaObject, QTypeRevision version);
-    QQmlRefPointer<QQmlPropertyCache> propertyCache(const QQmlType &type, QTypeRevision version);
+    QQmlPropertyCache::ConstPtr propertyCache(const QMetaObject *metaObject, QTypeRevision version);
+    QQmlPropertyCache::ConstPtr propertyCache(const QQmlType &type, QTypeRevision version);
+    QQmlPropertyCache::ConstPtr findPropertyCacheInCompositeTypes(QMetaType t) const;
 
     void setTypeRegistrationFailures(QStringList *failures)
     {

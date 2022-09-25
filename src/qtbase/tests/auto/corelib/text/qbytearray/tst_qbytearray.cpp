@@ -1,31 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Copyright (C) 2016 Intel Corporation.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2022 The Qt Company Ltd.
+// Copyright (C) 2016 Intel Corporation.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <QTest>
 
@@ -129,6 +104,7 @@ private slots:
     void reserve();
     void reserveExtended_data();
     void reserveExtended();
+    void resize();
     void movablity_data();
     void movablity();
     void literals();
@@ -629,7 +605,7 @@ void tst_QByteArray::base64_2GiB()
             }
             {
                 auto r = QByteArray::fromBase64Encoding(output);
-                QCOMPARE(r.decodingStatus, QByteArray::Base64DecodingStatus::Ok);
+                QCOMPARE_EQ(r.decodingStatus, QByteArray::Base64DecodingStatus::Ok);
                 QCOMPARE(r.decoded.size(), inputSize);
                 QCOMPARE(sv(r.decoded).find_first_not_of(inputChar),
                          std::string_view::npos);
@@ -1695,15 +1671,15 @@ void tst_QByteArray::toFromPercentEncoding()
 
     QByteArray data = arr.toPercentEncoding();
     QCOMPARE(data, QByteArray("Qt%20is%20great%21"));
-    QCOMPARE(QByteArray::fromPercentEncoding(data), arr);
+    QCOMPARE(data.percentDecoded(), arr);
 
     data = arr.toPercentEncoding("! ", "Qt");
     QCOMPARE(data, QByteArray("%51%74 is grea%74!"));
-    QCOMPARE(QByteArray::fromPercentEncoding(data), arr);
+    QCOMPARE(data.percentDecoded(), arr);
 
     data = arr.toPercentEncoding(QByteArray(), "abcdefghijklmnopqrstuvwxyz", 'Q');
     QCOMPARE(data, QByteArray("Q51Q74Q20Q69Q73Q20Q67Q72Q65Q61Q74Q21"));
-    QCOMPARE(QByteArray::fromPercentEncoding(data, 'Q'), arr);
+    QCOMPARE(data.percentDecoded('Q'), arr);
 
     // verify that to/from percent encoding preserves nullity
     arr = "";
@@ -1719,8 +1695,16 @@ void tst_QByteArray::toFromPercentEncoding()
     QVERIFY(arr.isNull());
     QVERIFY(arr.toPercentEncoding().isEmpty());
     QVERIFY(arr.toPercentEncoding().isNull());
-    QVERIFY(QByteArray::fromPercentEncoding(QByteArray()).isEmpty());
-    QVERIFY(QByteArray::fromPercentEncoding(QByteArray()).isNull());
+    QVERIFY(QByteArray().percentDecoded().isEmpty());
+    QVERIFY(QByteArray().percentDecoded().isNull());
+
+    // Verify that literal % in the string to be encoded does round-trip:
+    arr = "Qt%20is%20great%21";
+    data = arr.toPercentEncoding();
+    QCOMPARE(data.percentDecoded(), arr);
+    arr = "87% of all statistics are made up!";
+    data = arr.toPercentEncoding();
+    QCOMPARE(data.percentDecoded(), arr);
 }
 
 void tst_QByteArray::fromPercentEncoding_data()
@@ -1742,7 +1726,7 @@ void tst_QByteArray::fromPercentEncoding()
     QFETCH(QByteArray, encodedString);
     QFETCH(QByteArray, decodedString);
 
-    QCOMPARE(QByteArray::fromPercentEncoding(encodedString), decodedString);
+    QCOMPARE(encodedString.percentDecoded(), decodedString);
 }
 
 void tst_QByteArray::toPercentEncoding_data()
@@ -1803,7 +1787,7 @@ void tst_QByteArray::pecentEncodingRoundTrip()
 
     QByteArray encodedData = original.toPercentEncoding(excludeInEncoding, includeInEncoding);
     QCOMPARE(encodedData, encoded);
-    QCOMPARE(QByteArray::fromPercentEncoding(encodedData), original);
+    QCOMPARE(encodedData.percentDecoded(), original);
 }
 
 struct StringComparisonData
@@ -2126,6 +2110,23 @@ void tst_QByteArray::reserveExtended()
     QCOMPARE(array.capacity(), array.size());
 }
 
+void tst_QByteArray::resize()
+{
+    QByteArray ba;
+    ba.resize(15);
+    QCOMPARE(ba.size(), qsizetype(15));
+    ba.resize(10);
+    QCOMPARE(ba.size(), 10);
+    ba.resize(0);
+    QCOMPARE(ba.size(), 0);
+    ba.resize(5, 'a');
+    QCOMPARE(ba.size(), 5);
+    QCOMPARE(ba, "aaaaa");
+    ba.resize(10, 'b');
+    QCOMPARE(ba.size(), 10);
+    QCOMPARE(ba, "aaaaabbbbb");
+}
+
 void tst_QByteArray::movablity_data()
 {
     QTest::addColumn<QByteArray>("array");
@@ -2232,25 +2233,52 @@ void tst_QByteArray::literals()
 
 void tst_QByteArray::userDefinedLiterals()
 {
-    QByteArray str = "abcd"_qba;
+    {
+        using namespace Qt::StringLiterals;
+        QByteArray str = "abcd"_ba;
 
-    QVERIFY(str.length() == 4);
-    QCOMPARE(str.capacity(), 0);
-    QVERIFY(str == "abcd");
-    QVERIFY(!str.data_ptr()->isMutable());
+        QVERIFY(str.length() == 4);
+        QCOMPARE(str.capacity(), 0);
+        QVERIFY(str == "abcd");
+        QVERIFY(!str.data_ptr()->isMutable());
 
-    const char *s = str.constData();
-    QByteArray str2 = str;
-    QVERIFY(str2.constData() == s);
-    QCOMPARE(str2.capacity(), 0);
+        const char *s = str.constData();
+        QByteArray str2 = str;
+        QVERIFY(str2.constData() == s);
+        QCOMPARE(str2.capacity(), 0);
 
-    // detach on non const access
-    QVERIFY(str.data() != s);
-    QVERIFY(str.capacity() >= str.length());
+        // detach on non const access
+        QVERIFY(str.data() != s);
+        QVERIFY(str.capacity() >= str.length());
 
-    QVERIFY(str2.constData() == s);
-    QVERIFY(str2.data() != s);
-    QVERIFY(str2.capacity() >= str2.length());
+        QVERIFY(str2.constData() == s);
+        QVERIFY(str2.data() != s);
+        QVERIFY(str2.capacity() >= str2.length());
+    }
+
+#if QT_DEPRECATED_SINCE(6, 8)
+    {
+        QT_IGNORE_DEPRECATIONS(QByteArray str = "abcd"_qba;)
+
+        QVERIFY(str.length() == 4);
+        QCOMPARE(str.capacity(), 0);
+        QVERIFY(str == "abcd");
+        QVERIFY(!str.data_ptr()->isMutable());
+
+        const char *s = str.constData();
+        QByteArray str2 = str;
+        QVERIFY(str2.constData() == s);
+        QCOMPARE(str2.capacity(), 0);
+
+        // detach on non const access
+        QVERIFY(str.data() != s);
+        QVERIFY(str.capacity() >= str.length());
+
+        QVERIFY(str2.constData() == s);
+        QVERIFY(str2.data() != s);
+        QVERIFY(str2.capacity() >= str2.length());
+    }
+#endif // QT_DEPRECATED_SINCE(6, 8)
 }
 
 void tst_QByteArray::toUpperLower_data()
@@ -2558,7 +2586,12 @@ void tst_QByteArray::length()
 
     QCOMPARE(src.length(), res);
     QCOMPARE(src.size(), res);
+#if QT_DEPRECATED_SINCE(6, 4)
+QT_WARNING_PUSH
+QT_WARNING_DISABLE_DEPRECATED
     QCOMPARE(src.count(), res);
+QT_WARNING_POP
+#endif
 }
 
 void tst_QByteArray::length_data()

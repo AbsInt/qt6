@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the Qt Designer of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 /* Note: This is a copy of qtbase/src/tools/rcc/rcc.cpp. */
 
@@ -91,7 +66,7 @@ public:
 
     RCCFileInfo(const QString &name = QString(), const QFileInfo &fileInfo = QFileInfo(),
                 QLocale::Language language = QLocale::C,
-                QLocale::Country country = QLocale::AnyCountry,
+                QLocale::Territory territory = QLocale::AnyTerritory,
                 uint flags = NoFlags,
                 int compressLevel = CONSTANT_COMPRESSLEVEL_DEFAULT,
                 int compressThreshold = CONSTANT_COMPRESSTHRESHOLD_DEFAULT);
@@ -107,7 +82,7 @@ public:
     int m_flags;
     QString m_name;
     QLocale::Language m_language;
-    QLocale::Country m_country;
+    QLocale::Territory m_territory;
     QFileInfo m_fileInfo;
     RCCFileInfo *m_parent;
     QHash<QString, RCCFileInfo*> m_children;
@@ -120,13 +95,13 @@ public:
 };
 
 RCCFileInfo::RCCFileInfo(const QString &name, const QFileInfo &fileInfo,
-    QLocale::Language language, QLocale::Country country, uint flags,
+    QLocale::Language language, QLocale::Territory territory, uint flags,
     int compressLevel, int compressThreshold)
 {
     m_name = name;
     m_fileInfo = fileInfo;
     m_language = language;
-    m_country = country;
+    m_territory = territory;
     m_flags = flags;
     m_parent = nullptr;
     m_nameOffset = 0;
@@ -158,7 +133,7 @@ void RCCFileInfo::writeDataInfo(RCCResourceLibrary &lib)
             lib.writeString("  // ");
             lib.writeByteArray(resourceName().toLocal8Bit());
             lib.writeString(" [");
-            lib.writeByteArray(QByteArray::number(m_country));
+            lib.writeByteArray(QByteArray::number(m_territory));
             lib.writeString("::");
             lib.writeByteArray(QByteArray::number(m_language));
             lib.writeString("[\n  ");
@@ -190,7 +165,7 @@ void RCCFileInfo::writeDataInfo(RCCResourceLibrary &lib)
         lib.writeNumber2(m_flags);
 
         // locale
-        lib.writeNumber2(m_country);
+        lib.writeNumber2(m_territory);
         lib.writeNumber2(m_language);
 
         //data offset
@@ -365,7 +340,7 @@ bool RCCResourceLibrary::interpretResourceFile(QIODevice *inputDevice,
 
     QString prefix;
     QLocale::Language language = QLocale::c().language();
-    QLocale::Country country = QLocale::c().country();
+    QLocale::Territory territory = QLocale::c().territory();
     QString alias;
     int compressLevel = m_compressLevel;
     int compressThreshold = m_compressThreshold;
@@ -387,7 +362,7 @@ bool RCCResourceLibrary::interpretResourceFile(QIODevice *inputDevice,
 
                     QXmlStreamAttributes attributes = reader.attributes();
                     language = QLocale::c().language();
-                    country = QLocale::c().country();
+                    territory = QLocale::c().territory();
 
                     if (attributes.hasAttribute(m_strings.ATTRIBUTE_LANG)) {
                         QString attribute = attributes.value(m_strings.ATTRIBUTE_LANG).toString();
@@ -395,9 +370,9 @@ bool RCCResourceLibrary::interpretResourceFile(QIODevice *inputDevice,
                         language = lang.language();
                         if (2 == attribute.length()) {
                             // Language only
-                            country = QLocale::AnyCountry;
+                            territory = QLocale::AnyTerritory;
                         } else {
-                            country = lang.country();
+                            territory = lang.territory();
                         }
                     }
 
@@ -494,7 +469,7 @@ bool RCCResourceLibrary::interpretResourceFile(QIODevice *inputDevice,
                                 RCCFileInfo(alias.section(slash, -1),
                                             file,
                                             language,
-                                            country,
+                                            territory,
                                             RCCFileInfo::NoFlags,
                                             compressLevel,
                                             compressThreshold)
@@ -523,7 +498,7 @@ bool RCCResourceLibrary::interpretResourceFile(QIODevice *inputDevice,
                                         RCCFileInfo(child.fileName(),
                                                     child,
                                                     language,
-                                                    country,
+                                                    territory,
                                                     RCCFileInfo::NoFlags,
                                                     compressLevel,
                                                     compressThreshold)
@@ -558,7 +533,7 @@ bool RCCResourceLibrary::interpretResourceFile(QIODevice *inputDevice,
         if (!ignoreErrors && m_format == Binary) {
             // create dummy entry, otherwise loading with QResource will crash
             m_root = new RCCFileInfo(QString(), QFileInfo(),
-                    QLocale::C, QLocale::AnyCountry, RCCFileInfo::Directory);
+                    QLocale::C, QLocale::AnyTerritory, RCCFileInfo::Directory);
         }
     }
 
@@ -574,7 +549,7 @@ bool RCCResourceLibrary::addFile(const QString &alias, const RCCFileInfo &file)
         return false;
     }
     if (!m_root)
-        m_root = new RCCFileInfo(QString(), QFileInfo(), QLocale::C, QLocale::AnyCountry, RCCFileInfo::Directory);
+        m_root = new RCCFileInfo(QString(), QFileInfo(), QLocale::C, QLocale::AnyTerritory, RCCFileInfo::Directory);
 
     RCCFileInfo *parent = m_root;
     const QStringList nodes = alias.split(QLatin1Char('/'));
@@ -583,7 +558,7 @@ bool RCCResourceLibrary::addFile(const QString &alias, const RCCFileInfo &file)
         if (node.isEmpty())
             continue;
         if (!parent->m_children.contains(node)) {
-            RCCFileInfo *s = new RCCFileInfo(node, QFileInfo(), QLocale::C, QLocale::AnyCountry, RCCFileInfo::Directory);
+            RCCFileInfo *s = new RCCFileInfo(node, QFileInfo(), QLocale::C, QLocale::AnyTerritory, RCCFileInfo::Directory);
             s->m_parent = parent;
             parent->m_children.insert(node, s);
             parent = s;

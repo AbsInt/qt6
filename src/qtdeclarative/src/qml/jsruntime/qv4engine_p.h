@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtQml module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 #ifndef QV4ENGINE_H
 #define QV4ENGINE_H
 
@@ -60,6 +24,7 @@
 #include <private/qqmldelayedcallqueue_p.h>
 #include <QtCore/qelapsedtimer.h>
 #include <QtCore/qmutex.h>
+#include <QtCore/qset.h>
 
 #include "qv4function_p.h"
 #include <private/qv4compileddata_p.h>
@@ -219,9 +184,7 @@ public:
         URIErrorProto,
         PromiseProto,
         VariantProto,
-#if QT_CONFIG(qml_sequence_object)
         SequenceProto,
-#endif
         SharedArrayBufferProto,
         ArrayBufferProto,
         DataViewProto,
@@ -342,9 +305,7 @@ public:
     Object *uRIErrorPrototype() const { return reinterpret_cast<Object *>(jsObjects + URIErrorProto); }
     Object *promisePrototype() const { return reinterpret_cast<Object *>(jsObjects + PromiseProto); }
     Object *variantPrototype() const { return reinterpret_cast<Object *>(jsObjects + VariantProto); }
-#if QT_CONFIG(qml_sequence_object)
     Object *sequencePrototype() const { return reinterpret_cast<Object *>(jsObjects + SequenceProto); }
-#endif
 
     Object *sharedArrayBufferPrototype() const { return reinterpret_cast<Object *>(jsObjects + SharedArrayBufferProto); }
     Object *arrayBufferPrototype() const { return reinterpret_cast<Object *>(jsObjects + ArrayBufferProto); }
@@ -769,8 +730,10 @@ public:
 
     bool diskCacheEnabled() const;
 
-    void callInContext(Function *function, QObject *self, QQmlRefPointer<QQmlContextData> ctxtdata,
+    void callInContext(QV4::Function *function, QObject *self, QV4::ExecutionContext *ctxt,
                        int argc, void **args, QMetaType *types);
+    QV4::ReturnedValue callInContext(QV4::Function *function, QObject *self,
+                                     QV4::ExecutionContext *ctxt, int argc, const QV4::Value *argv);
 
 private:
     QV4::ReturnedValue fromData(QMetaType type, const void *ptr, const QVariant *variant = nullptr);

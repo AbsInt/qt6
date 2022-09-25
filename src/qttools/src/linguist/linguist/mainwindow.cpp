@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the Qt Linguist of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2020 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 /*  TRANSLATOR MainWindow
 
@@ -275,10 +250,6 @@ MainWindow::MainWindow()
     : QMainWindow(0, Qt::Window),
       m_assistantProcess(0),
       m_printer(0),
-      m_findMatchCase(Qt::CaseInsensitive),
-      m_findIgnoreAccelerators(true),
-      m_findSkipObsolete(false),
-      m_findUseRegExp(false),
       m_findWhere(DataModel::NoLocation),
       m_translationSettingsDialog(0),
       m_settingCurrentMessage(false),
@@ -573,6 +544,7 @@ void MainWindow::modelCountChanged()
 
     m_ui.actionFind->setEnabled(m_dataModel->contextCount() > 0);
     m_ui.actionFindNext->setEnabled(false);
+    m_ui.actionFindPrev->setEnabled(false);
 
     m_formPreviewView->setSourceContext(-1, 0);
 }
@@ -979,23 +951,26 @@ bool MainWindow::searchItem(DataModel::FindLocation where, const QString &search
 
     QString text = searchWhat;
 
-    if (m_findIgnoreAccelerators)
+    if (m_findOptions.testFlag(FindDialog::IgnoreAccelerators))
         // FIXME: This removes too much. The proper solution might be too slow, though.
         text.remove(QLatin1Char('&'));
 
-    if (m_findUseRegExp)
+    if (m_findOptions.testFlag(FindDialog::UseRegExp))
         return m_findDialog->getRegExp().match(text).hasMatch();
     else
-        return text.indexOf(m_findText, 0, m_findMatchCase) >= 0;
+        return text.indexOf(m_findText, 0, m_findOptions.testFlag(FindDialog::MatchCase)
+                            ? Qt::CaseSensitive : Qt::CaseInsensitive) >= 0;
 }
 
-void MainWindow::findAgain()
+void MainWindow::findAgain(FindDirection direction)
 {
     if (m_dataModel->contextCount() == 0)
         return;
 
     const QModelIndex &startIndex = m_messageView->currentIndex();
-    QModelIndex index = nextMessage(startIndex);
+    QModelIndex index = (direction == FindNext
+            ? nextMessage(startIndex)
+            : prevMessage(startIndex));
 
     while (index.isValid()) {
         QModelIndex realIndex = m_sortedMessagesModel->mapToSource(index);
@@ -1003,8 +978,13 @@ void MainWindow::findAgain()
         bool hadMessage = false;
         for (int i = 0; i < m_dataModel->modelCount(); ++i) {
             if (MessageItem *m = m_dataModel->messageItem(dataIndex, i)) {
-                if (m_findSkipObsolete && m->isObsolete())
+                if (m_findStatusFilter != -1 && m_findStatusFilter != m->type())
                     continue;
+
+                if (m_findOptions.testFlag(FindDialog::SkipObsolete)
+                        && m->isObsolete())
+                    continue;
+
                 bool found = true;
                 do {
                     if (!hadMessage) {
@@ -1050,7 +1030,9 @@ void MainWindow::findAgain()
         if (index == startIndex)
             break;
 
-        index = nextMessage(index);
+        index = (direction == FindNext
+                    ? nextMessage(index)
+                    : prevMessage(index));
     }
 
     qApp->beep();
@@ -1776,22 +1758,21 @@ bool MainWindow::doNext(bool checkUnfinished)
 }
 
 void MainWindow::findNext(const QString &text, DataModel::FindLocation where,
-                          bool matchCase, bool ignoreAccelerators, bool skipObsolete, bool useRegExp)
+                          FindDialog::FindOptions options, int statusFilter)
 {
     if (text.isEmpty())
         return;
     m_findText = text;
     m_findWhere = where;
-    m_findMatchCase = matchCase ? Qt::CaseSensitive : Qt::CaseInsensitive;
-    m_findIgnoreAccelerators = ignoreAccelerators;
-    m_findSkipObsolete = skipObsolete;
-    m_findUseRegExp = useRegExp;
-    if (m_findUseRegExp) {
-        m_findDialog->getRegExp().setPatternOptions(matchCase
+    m_findOptions = options;
+    m_findStatusFilter = statusFilter;
+    if (options.testFlag(FindDialog::UseRegExp)) {
+        m_findDialog->getRegExp().setPatternOptions(options.testFlag(FindDialog::MatchCase)
                                                     ? QRegularExpression::NoPatternOption
                                                     : QRegularExpression::CaseInsensitiveOption);
     }
     m_ui.actionFindNext->setEnabled(true);
+    m_ui.actionFindPrev->setEnabled(true);
     findAgain();
 }
 
@@ -1905,7 +1886,9 @@ void MainWindow::setupMenuBar()
     connect(m_ui.actionFind, &QAction::triggered,
             m_findDialog, &FindDialog::find);
     connect(m_ui.actionFindNext, &QAction::triggered,
-            this, &MainWindow::findAgain);
+            this, [this] {findAgain(FindNext);});
+    connect(m_ui.actionFindPrev, &QAction::triggered,
+            this, [this] {findAgain(FindPrev);});
     connect(m_ui.actionSearchAndTranslate, &QAction::triggered,
             this, &MainWindow::showTranslateDialog);
     connect(m_ui.actionBatchTranslation, &QAction::triggered,
@@ -1982,8 +1965,8 @@ void MainWindow::setupMenuBar()
     // Window menu
     QMenu *windowMenu = new QMenu(tr("&Window"), this);
     menuBar()->insertMenu(m_ui.menuHelp->menuAction(), windowMenu);
-    windowMenu->addAction(tr("Minimize"), this,
-        &QWidget::showMinimized, QKeySequence(tr("Ctrl+M")));
+    windowMenu->addAction(tr("Minimize"), QKeySequence(tr("Ctrl+M")),
+        this, &QWidget::showMinimized);
 #endif
 
     // Help

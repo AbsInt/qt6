@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtGui module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2020 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qpointingdevice.h"
 #include "qpointingdevice_p.h"
@@ -50,6 +14,8 @@
 #include <private/qdebug_p.h>
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 Q_LOGGING_CATEGORY(lcPointerGrab, "qt.pointer.grab");
 
@@ -149,7 +115,7 @@ Q_LOGGING_CATEGORY(lcPointerGrab, "qt.pointer.grab");
     Creates a new invalid pointing device instance as a child of \a parent.
 */
 QPointingDevice::QPointingDevice(QObject *parent)
-    : QInputDevice(*(new QPointingDevicePrivate(QLatin1String("unknown"), -1,
+    : QInputDevice(*(new QPointingDevicePrivate("unknown"_L1, -1,
                                               DeviceType::Unknown, PointerType::Unknown,
                                               Capability::None, 0, 0)), parent)
 {
@@ -305,7 +271,7 @@ const QPointingDevice *QPointingDevice::primaryPointingDevice(const QString& sea
         qCDebug(lcQpaInputDevices) << "no mouse-like devices registered for seat" << seatName
                                    << "The platform plugin should have provided one via "
                                       "QWindowSystemInterface::registerInputDevice(). Creating a default mouse for now.";
-        mouse = new QPointingDevice(QLatin1String("core pointer"), 1, DeviceType::Mouse,
+        mouse = new QPointingDevice("core pointer"_L1, 1, DeviceType::Mouse,
                                     PointerType::Generic, Capability::Position, 1, 3, seatName,
                                     QPointingDeviceUniqueId(), QCoreApplication::instance());
         QInputDevicePrivate::registerDevice(mouse);
@@ -672,9 +638,9 @@ const QPointingDevice *QPointingDevicePrivate::tabletDevice(QInputDevice::Device
                                    << deviceType << pointerType << Qt::hex << uniqueId.numericId()
                                    << "The platform plugin should have provided one via "
                                       "QWindowSystemInterface::registerInputDevice(). Creating a default one for now.";
-        dev = new QPointingDevice(QLatin1String("fake tablet"), 2, deviceType, pointerType,
-                                                   QInputDevice::Capability::Position | QInputDevice::Capability::Pressure,
-                                                   1, 1, QString(), uniqueId, QCoreApplication::instance());
+        dev = new QPointingDevice("fake tablet"_L1, 2, deviceType, pointerType,
+                                  QInputDevice::Capability::Position | QInputDevice::Capability::Pressure,
+                                  1, 1, QString(), uniqueId, QCoreApplication::instance());
         QInputDevicePrivate::registerDevice(dev);
     }
     return dev;

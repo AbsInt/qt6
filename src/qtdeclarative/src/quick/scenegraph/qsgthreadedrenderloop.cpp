@@ -1,42 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Copyright (C) 2016 Jolla Ltd, author: <gunnar.sletta@jollamobile.com>
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtQuick module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// Copyright (C) 2016 Jolla Ltd, author: <gunnar.sletta@jollamobile.com>
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 
 #include <QtCore/QMutex>
@@ -118,15 +82,6 @@
 QT_BEGIN_NAMESPACE
 
 #define QSG_RT_PAD "                    (RT) %s"
-
-static inline int qsgrl_animation_interval() {
-    qreal refreshRate = QGuiApplication::primaryScreen()->refreshRate();
-    // To work around that some platforms wrongfully return 0 or something
-    // bogus for refreshrate
-    if (refreshRate < 1)
-        return 16;
-    return int(1000 / refreshRate);
-}
 
 extern Q_GUI_EXPORT QImage qt_gl_read_framebuffer(const QSize &size, bool alpha_format, bool include_alpha);
 
@@ -290,7 +245,6 @@ public:
         // The SDP 6.6.0 x86 MESA driver requires a larger stack than the default.
         setStackSize(1024 * 1024);
 #endif
-        vsyncDelta = qsgrl_animation_interval();
     }
 
     ~QSGRenderThread()
@@ -348,8 +302,6 @@ public:
     bool syncResultedInChanges;
 
     volatile bool active;
-
-    float vsyncDelta;
 
     QMutex mutex;
     QWaitCondition waitCondition;
@@ -648,9 +600,6 @@ void QSGRenderThread::syncAndRender()
     Q_QUICK_SG_PROFILE_START(QQuickProfiler::SceneGraphRenderLoopFrame);
     Q_TRACE(QSG_sync_entry);
 
-    QElapsedTimer waitTimer;
-    waitTimer.start();
-
     qCDebug(QSG_LOG_RENDERLOOP, QSG_RT_PAD, "syncAndRender()");
 
     if (profileFrames) {
@@ -673,7 +622,8 @@ void QSGRenderThread::syncAndRender()
     // updatePaintNode() on the items and they may want to do resource updates.
     // Also relevant for applications that connect to the before/afterSynchronizing
     // signals and want to do graphics stuff already there.
-    if (cd->swapchain && windowSize.width() > 0 && windowSize.height() > 0) {
+    const bool hasValidSwapChain = (cd->swapchain && windowSize.width() > 0 && windowSize.height() > 0);
+    if (hasValidSwapChain) {
         // always prefer what the surface tells us, not the QWindow
         const QSize effectiveOutputSize = cd->swapchain->surfacePixelSize();
         // An update request could still be delivered right before we get an
@@ -772,7 +722,7 @@ void QSGRenderThread::syncAndRender()
 
     // Zero size windows do not initialize a swapchain and
     // rendercontext. So no sync or render can be done then.
-    const bool canRender = d->renderer && cd->swapchain && windowSize.width() > 0 && windowSize.height() > 0;
+    const bool canRender = d->renderer && hasValidSwapChain;
 
     if (canRender) {
         if (!syncRequested) // else this was already done in sync()
@@ -787,16 +737,14 @@ void QSGRenderThread::syncAndRender()
                                   QQuickProfiler::SceneGraphRenderLoopRender);
         Q_TRACE(QSG_swap_entry);
 
-        if (cd->swapchain) {
-            QRhi::FrameOpResult frameResult = rhi->endFrame(cd->swapchain);
-            if (frameResult != QRhi::FrameOpSuccess) {
-                if (frameResult == QRhi::FrameOpDeviceLost)
-                    handleDeviceLoss();
-                else if (frameResult == QRhi::FrameOpError)
-                    qWarning("Failed to end frame");
-                if (frameResult == QRhi::FrameOpDeviceLost || frameResult == QRhi::FrameOpSwapChainOutOfDate)
-                    QCoreApplication::postEvent(window, new QEvent(QEvent::Type(QQuickWindowPrivate::FullUpdateRequest)));
-            }
+        QRhi::FrameOpResult frameResult = rhi->endFrame(cd->swapchain);
+        if (frameResult != QRhi::FrameOpSuccess) {
+            if (frameResult == QRhi::FrameOpDeviceLost)
+                handleDeviceLoss();
+            else if (frameResult == QRhi::FrameOpError)
+                qWarning("Failed to end frame");
+            if (frameResult == QRhi::FrameOpDeviceLost || frameResult == QRhi::FrameOpSwapChainOutOfDate)
+                QCoreApplication::postEvent(window, new QEvent(QEvent::Type(QQuickWindowPrivate::FullUpdateRequest)));
         }
         d->fireFrameSwapped();
     } else {
@@ -816,7 +764,7 @@ void QSGRenderThread::syncAndRender()
 
     // beforeFrameBegin - afterFrameEnd must always come in pairs; if there was
     // no before due to 0 size then there shouldn't be an after either
-   if (canRender)
+   if (hasValidSwapChain)
         emit window->afterFrameEnd();
 
     // Though it would be more correct to put this block directly after
@@ -852,8 +800,6 @@ void QSGRenderThread::syncAndRender()
     Q_TRACE(QSG_swap_exit);
     Q_QUICK_SG_PROFILE_END(QQuickProfiler::SceneGraphRenderLoopFrame,
                            QQuickProfiler::SceneGraphRenderLoopSwap);
-
-    QSGRhiProfileConnection::instance()->send(rhi);
 }
 
 
@@ -900,8 +846,6 @@ void QSGRenderThread::ensureRhi()
         if (rhi) {
             rhiDeviceLost = false;
             rhiSampleCount = rhiSupport->chooseSampleCountForWindowWithRhi(window, rhi);
-            if (rhiSupport->isProfilingRequested())
-                QSGRhiProfileConnection::instance()->initialize(rhi); // ### this breaks down with multiple windows
         } else {
             if (!rhiDeviceLost) {
                 rhiDoomed = true;
@@ -936,10 +880,13 @@ void QSGRenderThread::ensureRhi()
         if (alpha)
             flags |= QRhiSwapChain::SurfaceHasPreMulAlpha;
 
-        // Request NoVSync if swap interval was set to 0. What this means in
-        // practice is another question, but at least we tried.
-        if (requestedFormat.swapInterval() == 0)
+        // Request NoVSync if swap interval was set to 0 (either by the app or
+        // by QSG_NO_VSYNC). What this means in practice is another question,
+        // but at least we tried.
+        if (requestedFormat.swapInterval() == 0) {
+            qCDebug(QSG_LOG_INFO, "Swap interval is 0, attempting to disable vsync when presenting.");
             flags |= QRhiSwapChain::NoVSync;
+        }
 
         cd->swapchain = rhi->newSwapChain();
         static bool depthBufferEnabled = qEnvironmentVariableIsEmpty("QSG_NO_DEPTH_BUFFER");
@@ -951,6 +898,7 @@ void QSGRenderThread::ensureRhi()
             cd->swapchain->setDepthStencil(cd->depthStencilForSwapchain);
         }
         cd->swapchain->setWindow(window);
+        QSGRhiSupport::instance()->applySwapChainFormat(cd->swapchain);
         qCDebug(QSG_LOG_INFO, "MSAA sample count for the swapchain is %d. Alpha channel requested = %s.",
                 rhiSampleCount, alpha ? "yes" : "no");
         cd->swapchain->setSampleCount(rhiSampleCount);
@@ -1020,10 +968,6 @@ QSGThreadedRenderLoop::QSGThreadedRenderLoop()
     : sg(QSGContext::createDefaultContext())
     , m_animation_timer(0)
 {
-#if defined(QSG_RENDER_LOOP_DEBUG)
-    qsgrl_timer.start();
-#endif
-
     m_animation_driver = sg->createAnimationDriver(this);
 
     connect(m_animation_driver, SIGNAL(started()), this, SLOT(animationStarted()));
@@ -1094,12 +1038,18 @@ void QSGThreadedRenderLoop::animationStopped()
 void QSGThreadedRenderLoop::startOrStopAnimationTimer()
 {
     int exposedWindows = 0;
+    int unthrottledWindows = 0;
+    int badVSync = 0;
     const Window *theOne = nullptr;
     for (int i=0; i<m_windows.size(); ++i) {
         const Window &w = m_windows.at(i);
         if (w.window->isVisible() && w.window->isExposed()) {
             ++exposedWindows;
             theOne = &w;
+            if (w.actualWindowFormat.swapInterval() == 0)
+                ++unthrottledWindows;
+            if (w.badVSync)
+                ++badVSync;
         }
     }
 
@@ -1115,17 +1065,28 @@ void QSGThreadedRenderLoop::startOrStopAnimationTimer()
     // same path as the no-windows case since polishAndSync() is now called
     // potentially for multiple windows over time so it cannot take care of
     // advancing the animation driver anymore.
+    //
+    // On top, another case: a window with vsync disabled should disable all the
+    // good stuff and go with the system timer.
+    //
+    // Similarly, if there is at least one window where we determined that
+    // vsync based blocking is not working as expected, that should make us
+    // choose the timer based way.
 
-    if (m_animation_timer != 0 && (exposedWindows == 1 || !m_animation_driver->isRunning())) {
-        qCDebug(QSG_LOG_RENDERLOOP, "*** Stopping non-render thread animation timer");
+    const bool canUseVSyncBasedAnimation = exposedWindows == 1 && unthrottledWindows == 0 && badVSync == 0;
+
+    if (m_animation_timer != 0 && (canUseVSyncBasedAnimation || !m_animation_driver->isRunning())) {
+        qCDebug(QSG_LOG_RENDERLOOP, "*** Stopping system (not vsync-based) animation timer (exposedWindows=%d unthrottledWindows=%d badVSync=%d)",
+                exposedWindows, unthrottledWindows, badVSync);
         killTimer(m_animation_timer);
         m_animation_timer = 0;
         // If animations are running, make sure we keep on animating
         if (m_animation_driver->isRunning())
             postUpdateRequest(const_cast<Window *>(theOne));
-    } else if (m_animation_timer == 0 && exposedWindows != 1 && m_animation_driver->isRunning()) {
-        qCDebug(QSG_LOG_RENDERLOOP, "*** Starting non-render thread animation timer");
-        m_animation_timer = startTimer(qsgrl_animation_interval());
+    } else if (m_animation_timer == 0 && !canUseVSyncBasedAnimation && m_animation_driver->isRunning()) {
+        qCDebug(QSG_LOG_RENDERLOOP, "*** Starting system (not vsync-based) animation timer (exposedWindows=%d unthrottledWindows=%d badVSync=%d)",
+                exposedWindows, unthrottledWindows, badVSync);
+        m_animation_timer = startTimer(int(sg->vsyncIntervalForAnimationDriver(m_animation_driver)));
     }
 }
 
@@ -1150,6 +1111,17 @@ void QSGThreadedRenderLoop::hide(QQuickWindow *window)
     releaseResources(window);
 }
 
+void QSGThreadedRenderLoop::resize(QQuickWindow *window)
+{
+    qCDebug(QSG_LOG_RENDERLOOP) << "reisze()" << window;
+
+    Window *w = windowFor(m_windows, window);
+    if (!w)
+        return;
+
+    w->psTimeAccumulator = 0.0f;
+    w->psTimeSampleCount = 0;
+}
 
 /*
     If the window is first hide it, then perform a complete cleanup
@@ -1257,7 +1229,10 @@ void QSGThreadedRenderLoop::handleExposure(QQuickWindow *window)
         win.thread = new QSGRenderThread(this, renderContext);
         win.updateDuringSync = false;
         win.forceRenderPass = true; // also covered by polishAndSync(inExpose=true), but doesn't hurt
+        win.badVSync = false;
         win.timeBetweenPolishAndSyncs.start();
+        win.psTimeAccumulator = 0.0f;
+        win.psTimeSampleCount = 0;
         m_windows << win;
         w = &m_windows.last();
     }
@@ -1266,14 +1241,14 @@ void QSGThreadedRenderLoop::handleExposure(QQuickWindow *window)
     // specialcasing exposure in polishAndSync.
     w->thread->window = window;
 
+#ifndef QT_NO_DEBUG
     if (w->window->width() <= 0 || w->window->height() <= 0
         || (w->window->isTopLevel() && !w->window->geometry().intersects(w->window->screen()->availableGeometry()))) {
-#ifndef QT_NO_DEBUG
         qWarning().noquote().nospace() << "QSGThreadedRenderLoop: expose event received for window "
             << w->window << " with invalid geometry: " << w->window->geometry()
             << " on " << w->window->screen();
-#endif
     }
+#endif
 
     // Because we are going to bind a GL context to it, make sure it
     // is created.
@@ -1511,10 +1486,64 @@ void QSGThreadedRenderLoop::polishAndSync(Window *w, bool inExpose)
     qint64 polishTime = 0;
     qint64 waitTime = 0;
     qint64 syncTime = 0;
+
+    const qint64 elapsedSinceLastMs = w->timeBetweenPolishAndSyncs.restart();
+
+    if (w->actualWindowFormat.swapInterval() != 0) {
+        w->psTimeAccumulator += elapsedSinceLastMs;
+        w->psTimeSampleCount += 1;
+        // cannot be too high because we'd then delay recognition of broken vsync at start
+        static const int PS_TIME_SAMPLE_LENGTH = 20;
+        if (w->psTimeSampleCount > PS_TIME_SAMPLE_LENGTH) {
+            const float t = w->psTimeAccumulator / w->psTimeSampleCount;
+            const float vsyncRate = sg->vsyncIntervalForAnimationDriver(m_animation_driver);
+
+            // What this means is that the last PS_TIME_SAMPLE_LENGTH frames
+            // average to an elapsed time of t milliseconds, whereas the animation
+            // driver (assuming a single window, vsync-based advancing) assumes a
+            // vsyncRate milliseconds for a frame. If now we see that the elapsed
+            // time is way too low (less than half of the approx. expected value),
+            // then we assume that something is wrong with vsync.
+            //
+            // This will not capture everything. Consider a 144 Hz screen with 6.9
+            // ms vsync rate, the half of that is below the default 5 ms timer of
+            // QWindow::requestUpdate(), so this will not trigger even if the
+            // graphics stack does not throttle. But then the whole workaround is
+            // not that important because the animations advance anyway closer to
+            // what's expected (e.g. advancing as if 6-7 ms passed after ca. 5 ms),
+            // the gap is a lot smaller than with the 60 Hz case (animations
+            // advancing as if 16 ms passed after just ca. 5 ms) The workaround
+            // here is present mainly for virtual machines and other broken
+            // environments, most of which will persumably report a 60 Hz screen.
+
+            const float threshold = vsyncRate * 0.5f;
+            const bool badVSync = t < threshold;
+            if (badVSync && !w->badVSync) {
+                // Once we determine something is wrong with the frame rate, set
+                // the flag for the rest of the lifetime of the window. This is
+                // saner and more deterministic than allowing it to be turned on
+                // and off. (a window resize can take up time, leading to higher
+                // elapsed times, thus unnecessarily starting to switch modes,
+                // while some platforms seem to have advanced logic (and adaptive
+                // refresh rates an whatnot) that can eventually start throttling
+                // an unthrottled window, potentially leading to a continuous
+                // switching of modes back and forth which is not desirable.
+                w->badVSync = true;
+                qCDebug(QSG_LOG_INFO, "Window %p is determined to have broken vsync throttling (%f < %f) "
+                                      "switching to system timer to drive gui thread animations to remedy this "
+                                      "(however, render thread animators will likely advance at an incorrect rate).",
+                        w->window, t, threshold);
+                startOrStopAnimationTimer();
+            }
+
+            w->psTimeAccumulator = 0.0f;
+            w->psTimeSampleCount = 0;
+        }
+    }
+
     const bool profileFrames = QSG_LOG_TIME_RENDERLOOP().isDebugEnabled();
     if (profileFrames) {
         timer.start();
-        const qint64 elapsedSinceLastMs = w->timeBetweenPolishAndSyncs.restart();
         qCDebug(QSG_LOG_TIME_RENDERLOOP, "[window %p][gui thread] polishAndSync: start, elapsed since last call: %d ms",
                 window,
                 int(elapsedSinceLastMs));
@@ -1685,7 +1714,7 @@ void QSGThreadedRenderLoop::postJob(QQuickWindow *window, QRunnable *job)
         delete job;
 }
 
+QT_END_NAMESPACE
+
 #include "qsgthreadedrenderloop.moc"
 #include "moc_qsgthreadedrenderloop_p.cpp"
-
-QT_END_NAMESPACE

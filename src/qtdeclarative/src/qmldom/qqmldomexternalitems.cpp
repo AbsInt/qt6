@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtQml module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**/
-#include "qqmldomexternalitems_p.h"
+// Copyright (C) 2020 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qqmldomtop_p.h"
 #include "qqmldomoutwriter_p.h"
@@ -58,6 +22,8 @@
 
 QT_BEGIN_NAMESPACE
 
+using namespace Qt::StringLiterals;
+
 namespace QQmlJS {
 namespace Dom {
 
@@ -67,14 +33,6 @@ ExternalOwningItem::ExternalOwningItem(QString filePath, QDateTime lastDataUpdat
       m_canonicalFilePath(filePath),
       m_code(code),
       m_path(path)
-{}
-
-ExternalOwningItem::ExternalOwningItem(const ExternalOwningItem &o)
-    : OwningItem(o),
-      m_canonicalFilePath(o.m_canonicalFilePath),
-      m_code(o.m_code),
-      m_path(o.m_path),
-      m_isValid(o.m_isValid)
 {}
 
 QString ExternalOwningItem::canonicalFilePath(DomItem &) const
@@ -104,17 +62,6 @@ ErrorGroups QmldirFile::myParsingErrors()
     return res;
 }
 
-QmldirFile::QmldirFile(const QmldirFile &o)
-    : ExternalOwningItem(o),
-      m_uri(o.m_uri),
-      m_qmldir(o.m_qmldir),
-      m_plugins(o.m_plugins),
-      m_qmltypesFilePaths(o.m_qmltypesFilePaths)
-{
-    m_imports += o.m_imports;
-    m_exports += o.m_exports;
-}
-
 std::shared_ptr<QmldirFile> QmldirFile::fromPathAndCode(QString path, QString code)
 {
     QString canonicalFilePath = QFileInfo(path).canonicalFilePath();
@@ -140,9 +87,9 @@ void QmldirFile::parse()
 
 void QmldirFile::setFromQmldir()
 {
-    m_uri = m_qmldir.typeNamespace();
-    if (m_uri.isEmpty())
-        m_uri = QStringLiteral(u"file://") + canonicalFilePath();
+    m_uri = QmlUri::fromUriString(m_qmldir.typeNamespace());
+    if (m_uri.isValid())
+        m_uri = QmlUri::fromDirectoryString(canonicalFilePath());
     Path exportsPath = Path::Field(Fields::exports);
     QDir baseDir = QFileInfo(canonicalFilePath()).dir();
     int majorVersion = Version::Undefined;
@@ -166,8 +113,10 @@ void QmldirFile::setFromQmldir()
                         el.version.hasMinorVersion() ? el.version.minorVersion() : 0);
         exp.typeName = el.typeName;
         exp.typePath = Paths::qmlFileObjectPath(canonicalExportFilePath);
-        exp.uri = uri();
+        exp.uri = uri().toString();
         m_exports.insert(exp.typeName, exp);
+        if (exp.version.majorVersion > 0)
+            m_majorVersions.insert(exp.version.majorVersion);
     }
     for (auto const &el : m_qmldir.scripts()) {
         QString exportFilePath = baseDir.filePath(el.fileName);
@@ -183,9 +132,11 @@ void QmldirFile::setFromQmldir()
                 Version((el.version.hasMajorVersion() ? el.version.majorVersion() : majorVersion),
                         el.version.hasMinorVersion() ? el.version.minorVersion() : 0);
         exp.typePath = Paths::jsFilePath(canonicalExportFilePath).field(Fields::rootComponent);
-        exp.uri = uri();
+        exp.uri = uri().toString();
         exp.typeName = el.nameSpace;
         m_exports.insert(exp.typeName, exp);
+        if (exp.version.majorVersion > 0)
+            m_majorVersions.insert(exp.version.majorVersion);
     }
     for (QQmlDirParser::Import const &imp : m_qmldir.imports()) {
         QString uri = imp.module;
@@ -199,8 +150,9 @@ void QmldirFile::setFromQmldir()
                         (imp.version.hasMinorVersion() ? imp.version.minorVersion()
                                                        : int(Version::Latest)));
         }
-        m_imports.append(Import(uri, v));
-        m_autoExports.append(ModuleAutoExport { Import(uri, v), isAutoImport });
+        m_imports.append(Import(QmlUri::fromUriString(uri), v));
+        m_autoExports.append(
+                ModuleAutoExport { Import(QmlUri::fromUriString(uri), v), isAutoImport });
     }
     for (QQmlDirParser::Import const &imp : m_qmldir.dependencies()) {
         QString uri = imp.module;
@@ -210,7 +162,7 @@ void QmldirFile::setFromQmldir()
                 (imp.version.hasMajorVersion() ? imp.version.majorVersion() : int(Version::Latest)),
                 (imp.version.hasMinorVersion() ? imp.version.minorVersion()
                                                : int(Version::Latest)));
-        m_imports.append(Import(uri, v));
+        m_imports.append(Import(QmlUri::fromUriString(uri), v));
     }
     bool hasInvalidTypeinfo = false;
     for (auto const &el : m_qmldir.typeInfos()) {
@@ -236,7 +188,7 @@ void QmldirFile::setFromQmldir()
         }
     }
     bool hasErrors = false;
-    for (auto const &el : m_qmldir.errors(uri())) {
+    for (auto const &el : m_qmldir.errors(uri().toString())) {
         ErrorMessage msg = myParsingErrors().errorMessage(el);
         addErrorLocal(msg);
         if (msg.level == ErrorLevel::Error || msg.level == ErrorLevel::Fatal)
@@ -256,6 +208,22 @@ void QmldirFile::setAutoExports(const QList<ModuleAutoExport> &autoExport)
     m_autoExports = autoExport;
 }
 
+void QmldirFile::ensureInModuleIndex(DomItem &self, QString uri)
+{
+    // ModuleIndex keeps the various sources of types from a given module uri import
+    // this method ensures that all major versions that are contained in this qmldir
+    // file actually have a ModuleIndex. This is required so that when importing the
+    // latest version the correct "lastest major version" is found, for example for
+    // qml only modules (qmltypes files also register their versions)
+    DomItem env = self.environment();
+    if (std::shared_ptr<DomEnvironment> envPtr = env.ownerAs<DomEnvironment>()) {
+        for (int majorV : m_majorVersions) {
+            auto mIndex = envPtr->moduleIndexWithUri(env, uri, majorV, EnvLookup::Normal,
+                                                     Changeable::Writable);
+        }
+    }
+}
+
 QCborValue pluginData(QQmlDirParser::Plugin &pl, QStringList cNames)
 {
     QCborArray names;
@@ -269,7 +237,7 @@ QCborValue pluginData(QQmlDirParser::Plugin &pl, QStringList cNames)
 bool QmldirFile::iterateDirectSubpaths(DomItem &self, DirectVisitor visitor)
 {
     bool cont = ExternalOwningItem::iterateDirectSubpaths(self, visitor);
-    cont = cont && self.dvValueField(visitor, Fields::uri, uri());
+    cont = cont && self.dvValueField(visitor, Fields::uri, uri().toString());
     cont = cont && self.dvValueField(visitor, Fields::designerSupported, designerSupported());
     cont = cont && self.dvReferencesField(visitor, Fields::qmltypesFiles, m_qmltypesFilePaths);
     cont = cont && self.dvWrapField(visitor, Fields::exports, m_exports);
@@ -283,8 +251,40 @@ bool QmldirFile::iterateDirectSubpaths(DomItem &self, DirectVisitor visitor)
                     return list.subDataItem(p, pluginData(plugin, cNames));
                 }));
     });
+    // add qmlfiles as map because this way they are presented the same way as
+    // the qmlfiles in a directory
+    cont = cont && self.dvItemField(visitor, Fields::qmlFiles, [this, &self]() {
+        const QMap<QString, QString> typeFileMap = qmlFiles();
+        return self.subMapItem(Map(
+                self.pathFromOwner().field(Fields::qmlFiles),
+                [typeFileMap](DomItem &map, QString typeV) {
+                    QString path = typeFileMap.value(typeV);
+                    if (path.isEmpty())
+                        return DomItem();
+                    else
+                        return map.subReferencesItem(
+                                PathEls::Key(typeV),
+                                QList<Path>({ Paths::qmlFileObjectPath(path) }));
+                },
+                [typeFileMap](DomItem &) {
+                    return QSet<QString>(typeFileMap.keyBegin(), typeFileMap.keyEnd());
+                },
+                QStringLiteral(u"QList<Reference>")));
+    });
     cont = cont && self.dvWrapField(visitor, Fields::autoExports, m_autoExports);
     return cont;
+}
+
+QMap<QString, QString> QmldirFile::qmlFiles() const
+{
+    // add qmlfiles as map because this way they are presented the same way as
+    // the qmlfiles in a directory which gives them as fileName->list of references to files
+    // this is done only to ensure that they are loaded as dependencies
+    QMap<QString, QString> res;
+    for (const auto &e : m_exports)
+        res.insert(e.typeName + QStringLiteral(u"-") + e.version.stringValue(),
+                   e.typePath[2].headName());
+    return res;
 }
 
 std::shared_ptr<OwningItem> QmlFile::doCopy(DomItem &) const
@@ -300,12 +300,11 @@ QmlFile::QmlFile(const QmlFile &o)
       m_astComments(o.m_astComments),
       m_comments(o.m_comments),
       m_fileLocationsTree(o.m_fileLocationsTree),
+      m_components(o.m_components),
+      m_pragmas(o.m_pragmas),
+      m_imports(o.m_imports),
       m_importScope(o.m_importScope)
 {
-    m_pragmas += o.m_pragmas;
-    m_components += o.m_components;
-    m_imports += o.m_imports;
-    Q_ASSERT(m_astComments);
     if (m_astComments)
         m_astComments = std::shared_ptr<AstComments>(new AstComments(*m_astComments));
 }
@@ -336,11 +335,9 @@ ErrorGroups QmlFile::myParsingErrors()
 bool QmlFile::iterateDirectSubpaths(DomItem &self, DirectVisitor visitor)
 {
     bool cont = ExternalOwningItem::iterateDirectSubpaths(self, visitor);
-    cont = cont && self.dvValueField(visitor, Fields::isValid, m_isValid);
     cont = cont && self.dvWrapField(visitor, Fields::components, m_components);
     cont = cont && self.dvWrapField(visitor, Fields::pragmas, m_pragmas);
     cont = cont && self.dvWrapField(visitor, Fields::imports, m_imports);
-    cont = cont && self.dvWrapField(visitor, Fields::importScope, m_importScope);
     cont = cont && self.dvWrapField(visitor, Fields::importScope, m_importScope);
     cont = cont && self.dvWrapField(visitor, Fields::fileLocationsTree, m_fileLocationsTree);
     cont = cont && self.dvWrapField(visitor, Fields::comments, m_comments);
@@ -384,13 +381,6 @@ bool GlobalScope::iterateDirectSubpaths(DomItem &self, DirectVisitor visitor)
 {
     bool cont = ExternalOwningItem::iterateDirectSubpaths(self, visitor);
     return cont;
-}
-
-QmltypesFile::QmltypesFile(const QmltypesFile &o) : ExternalOwningItem(o), m_uris(o.m_uris)
-{
-    m_imports += o.m_imports;
-    m_components += o.m_components;
-    m_exports += o.m_exports;
 }
 
 void QmltypesFile::ensureInModuleIndex(DomItem &self)
@@ -448,15 +438,23 @@ bool QmlDirectory::iterateDirectSubpaths(DomItem &self, DirectVisitor visitor)
     cont = cont && self.dvWrapField(visitor, Fields::exports, m_exports);
     cont = cont && self.dvItemField(visitor, Fields::qmlFiles, [this, &self]() -> DomItem {
         QDir baseDir(canonicalFilePath());
-        return self.subMapItem(Map::fromMultiMapRef<QString>(
-                self.pathFromOwner().field(Fields::qmlFiles), m_qmlFiles,
-                [baseDir](DomItem &map, const PathEls::PathComponent &p,
-                          QString &rPath) -> DomItem {
-                    return map.subReferenceItem(
-                            p,
-                            Paths::qmlFilePath(
-                                    QFileInfo(baseDir.filePath(rPath)).canonicalFilePath()));
-                }));
+        return self.subMapItem(Map(
+                self.pathFromOwner().field(Fields::qmlFiles),
+                [this, baseDir](DomItem &map, QString key) -> DomItem {
+                    QList<Path> res;
+                    auto it = m_qmlFiles.find(key);
+                    while (it != m_qmlFiles.end() && it.key() == key) {
+                        res.append(Paths::qmlFilePath(
+                                QFileInfo(baseDir.filePath(it.value())).canonicalFilePath()));
+                        ++it;
+                    }
+                    return map.subReferencesItem(PathEls::Key(key), res);
+                },
+                [this](DomItem &) {
+                    auto keys = m_qmlFiles.keys();
+                    return QSet<QString>(keys.begin(), keys.end());
+                },
+                u"List<Reference>"_s));
     });
     return cont;
 }
@@ -464,7 +462,7 @@ bool QmlDirectory::iterateDirectSubpaths(DomItem &self, DirectVisitor visitor)
 bool QmlDirectory::addQmlFilePath(QString relativePath)
 {
     QRegularExpression qmlFileRe(QRegularExpression::anchoredPattern(
-            uR"((?<compName>[a-zA-z0-9_]+)\.(?:qml|ui|qmlannotation))"));
+            uR"((?<compName>[a-zA-z0-9_]+)\.(?:qml|qmlannotation))"));
     QRegularExpressionMatch m = qmlFileRe.match(relativePath);
     if (m.hasMatch() && !m_qmlFiles.values(m.captured(u"compName")).contains(relativePath)) {
         m_qmlFiles.insert(m.captured(u"compName"), relativePath);

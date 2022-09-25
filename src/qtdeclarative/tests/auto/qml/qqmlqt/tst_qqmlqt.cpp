@@ -1,30 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+
 #include <private/qqmlengine_p.h>
 
 #include <qtest.h>
@@ -766,8 +742,10 @@ void tst_qqmlqt::dateTimeConversion()
     QDate date(2008,12,24);
     QTime time(14,15,38,200);
     QDateTime dateTime(date, time);
-    //Note that when converting Date to QDateTime they can argue over historical DST data when converting to local time.
-    //Tests should use UTC or recent dates.
+    QDateTime dateTime0(QDate(2021, 7, 1).startOfDay());
+    QDateTime dateTime0utc(QDate(2021, 7, 1).startOfDay(Qt::UTC));
+    QDateTime dateTime1(QDate(2021, 7, 31).startOfDay());
+    QDateTime dateTime1utc(QDate(2021, 7, 31).startOfDay(Qt::UTC));
     QDateTime dateTime2(QDate(2852,12,31), QTime(23,59,59,500));
     QDateTime dateTime3(QDate(2000,1,1), QTime(0,0,0,0));
     QDateTime dateTime4(QDate(2001,2,2), QTime(0,0,0,0));
@@ -781,10 +759,15 @@ void tst_qqmlqt::dateTimeConversion()
     QQmlEngine eng;
     QQmlComponent component(&eng, testFileUrl("dateTimeConversion.qml"));
     QScopedPointer<QObject> obj(component.create());
+    QVERIFY2(obj != nullptr, qPrintable(component.errorString()));
 
     QCOMPARE(obj->property("qdate").toDate(), date);
     QCOMPARE(obj->property("qtime").toTime(), time);
     QCOMPARE(obj->property("qdatetime").toDateTime(), dateTime);
+    QCOMPARE(obj->property("qdatetime0").toDateTime(), dateTime0);
+    QCOMPARE(obj->property("qdatetime0utc").toDateTime(), dateTime0utc);
+    QCOMPARE(obj->property("qdatetime1").toDateTime(), dateTime1);
+    QCOMPARE(obj->property("qdatetime1utc").toDateTime(), dateTime1utc);
     QCOMPARE(obj->property("qdatetime2").toDateTime(), dateTime2);
     QCOMPARE(obj->property("qdatetime3").toDateTime(), dateTime3);
     QCOMPARE(obj->property("qdatetime4").toDateTime(), dateTime4);
@@ -1407,7 +1390,7 @@ void tst_qqmlqt::timeRoundtrip_data()
     // Local timezone:
     QTest::newRow("localtime") << QTime(0, 0, 0);
 
-#if defined(Q_OS_WIN) || defined(Q_OS_ANDROID) || defined(Q_OS_MACOS)
+#if defined(Q_OS_WIN) || defined(Q_OS_ANDROID)
     qInfo("Omitting the tests that depend on setting local time's zone");
 #else
     // No DST:

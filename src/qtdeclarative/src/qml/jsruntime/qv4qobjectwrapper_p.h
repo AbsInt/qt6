@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtQml module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #ifndef QV4QOBJECTWRAPPER_P_H
 #define QV4QOBJECTWRAPPER_P_H
@@ -110,7 +74,7 @@ DECLARE_HEAP_OBJECT(QObjectMethod, FunctionObject) {
     void init(QV4::ExecutionContext *scope);
     void destroy()
     {
-        if (methods != reinterpret_cast<QQmlPropertyData *>(&_singleMethod))
+        if (methods != reinterpret_cast<const QQmlPropertyData *>(&_singleMethod))
             delete[] methods;
         qObj.destroy();
         FunctionObject::destroy();
@@ -167,16 +131,16 @@ struct Q_QML_EXPORT QObjectWrapper : public Object
             RevisionMode revisionMode, bool *hasProperty = nullptr,
             bool includeImports = false) const;
     \
-    static ReturnedValue getQmlProperty(
-            ExecutionEngine *engine, const QQmlRefPointer<QQmlContextData> &qmlContext,
+    static ReturnedValue getQmlProperty(ExecutionEngine *engine, const QQmlRefPointer<QQmlContextData> &qmlContext,
             QObject *object, String *name, RevisionMode revisionMode, bool *hasProperty = nullptr,
-            QQmlPropertyData **property = nullptr);
+            const QQmlPropertyData **property = nullptr);
 
     static bool setQmlProperty(
             ExecutionEngine *engine, const QQmlRefPointer<QQmlContextData> &qmlContext,
             QObject *object, String *name, RevisionMode revisionMode, const Value &value);
 
     static ReturnedValue wrap(ExecutionEngine *engine, QObject *object);
+    static ReturnedValue wrapConst(ExecutionEngine *engine, QObject *object);
     static void markWrapper(QObject *object, MarkStack *markStack);
 
     using Object::get;
@@ -189,7 +153,8 @@ struct Q_QML_EXPORT QObjectWrapper : public Object
 
     void destroyObject(bool lastCall);
 
-    static ReturnedValue getProperty(ExecutionEngine *engine, QObject *object, QQmlPropertyData *property);
+    static ReturnedValue getProperty(
+            ExecutionEngine *engine, QObject *object, const QQmlPropertyData *property);
 
     static ReturnedValue virtualResolveLookupGetter(const Object *object, ExecutionEngine *engine, Lookup *lookup);
     static ReturnedValue lookupAttached(Lookup *l, ExecutionEngine *engine, const Value &object);
@@ -201,12 +166,10 @@ protected:
     static bool virtualIsEqualTo(Managed *that, Managed *o);
     static ReturnedValue create(ExecutionEngine *engine, QObject *object);
 
-    static QQmlPropertyData *findProperty(
-            ExecutionEngine *engine, QObject *o, const QQmlRefPointer<QQmlContextData> &qmlContext,
+    static const QQmlPropertyData *findProperty(QObject *o, const QQmlRefPointer<QQmlContextData> &qmlContext,
             String *name, RevisionMode revisionMode, QQmlPropertyData *local);
 
-    QQmlPropertyData *findProperty(
-            ExecutionEngine *engine, const QQmlRefPointer<QQmlContextData> &qmlContext,
+    const QQmlPropertyData *findProperty(const QQmlRefPointer<QQmlContextData> &qmlContext,
             String *name, RevisionMode revisionMode, QQmlPropertyData *local) const;
 
     static ReturnedValue virtualGet(const Managed *m, PropertyKey id, const Value *receiver, bool *hasProperty);
@@ -219,6 +182,7 @@ protected:
 
 private:
     Q_NEVER_INLINE static ReturnedValue wrap_slowPath(ExecutionEngine *engine, QObject *object);
+    Q_NEVER_INLINE static ReturnedValue wrapConst_slowPath(ExecutionEngine *engine, QObject *object);
 };
 
 inline ReturnedValue QObjectWrapper::wrap(ExecutionEngine *engine, QObject *object)
@@ -233,6 +197,15 @@ inline ReturnedValue QObjectWrapper::wrap(ExecutionEngine *engine, QObject *obje
     }
 
     return wrap_slowPath(engine, object);
+}
+
+// Unfortunately we still need a non-const QObject* here because QQmlData needs to register itself in QObjectPrivate.
+inline ReturnedValue QObjectWrapper::wrapConst(ExecutionEngine *engine, QObject *object)
+{
+    if (Q_UNLIKELY(QQmlData::wasDeleted(object)))
+        return QV4::Encode::null();
+
+    return wrapConst_slowPath(engine, object);
 }
 
 template <typename ReversalFunctor>
@@ -253,8 +226,8 @@ inline ReturnedValue QObjectWrapper::lookupGetterImpl(Lookup *lookup, ExecutionE
     if (!ddata)
         return revertLookup();
 
-    QQmlPropertyData *property = lookup->qobjectLookup.propertyData;
-    if (ddata->propertyCache != lookup->qobjectLookup.propertyCache) {
+    const QQmlPropertyData *property = lookup->qobjectLookup.propertyData;
+    if (ddata->propertyCache.data() != lookup->qobjectLookup.propertyCache) {
         if (property->isOverridden() && (!useOriginalProperty || property->isFunction() || property->isSignalHandler()))
             return revertLookup();
 
@@ -330,23 +303,32 @@ struct Q_QML_EXPORT QmlSignalHandler : public QV4::Object
     static void initProto(ExecutionEngine *v4);
 };
 
+using QObjectBiPointer = QBiPointer<QObject, const QObject>;
+
 class MultiplyWrappedQObjectMap : public QObject,
-                                  private QHash<QObject*, QV4::WeakValue>
+                                  private QHash<QObjectBiPointer, QV4::WeakValue>
 {
     Q_OBJECT
 public:
-    typedef QHash<QObject*, QV4::WeakValue>::ConstIterator ConstIterator;
-    typedef QHash<QObject*, QV4::WeakValue>::Iterator Iterator;
+    typedef QHash<QObjectBiPointer, QV4::WeakValue>::ConstIterator ConstIterator;
+    typedef QHash<QObjectBiPointer, QV4::WeakValue>::Iterator Iterator;
 
-    using value_type = QHash<QObject*, QV4::WeakValue>::value_type;
+    using value_type = QHash<QObjectBiPointer, QV4::WeakValue>::value_type;
 
-    ConstIterator begin() const { return QHash<QObject*, QV4::WeakValue>::constBegin(); }
-    Iterator begin() { return QHash<QObject*, QV4::WeakValue>::begin(); }
-    ConstIterator end() const { return QHash<QObject*, QV4::WeakValue>::constEnd(); }
-    Iterator end() { return QHash<QObject*, QV4::WeakValue>::end(); }
+    ConstIterator begin() const { return QHash<QObjectBiPointer, QV4::WeakValue>::constBegin(); }
+    Iterator begin() { return QHash<QObjectBiPointer, QV4::WeakValue>::begin(); }
+    ConstIterator end() const { return QHash<QObjectBiPointer, QV4::WeakValue>::constEnd(); }
+    Iterator end() { return QHash<QObjectBiPointer, QV4::WeakValue>::end(); }
 
-    void insert(QObject *key, Heap::Object *value);
-    ReturnedValue value(QObject *key) const
+    template<typename Pointer>
+    void insert(Pointer key, Heap::Object *value)
+    {
+        QHash<QObjectBiPointer, WeakValue>::operator[](key).set(value->internalClass->engine, value);
+        connect(key, SIGNAL(destroyed(QObject*)), this, SLOT(removeDestroyedObject(QObject*)));
+    }
+
+    template<typename Pointer>
+    ReturnedValue value(Pointer key) const
     {
         ConstIterator it = find(key);
         return it == end()
@@ -355,8 +337,24 @@ public:
     }
 
     Iterator erase(Iterator it);
-    void remove(QObject *key);
-    void mark(QObject *key, MarkStack *markStack);
+
+    template<typename Pointer>
+    void remove(Pointer key)
+    {
+        Iterator it = find(key);
+        if (it == end())
+            return;
+        erase(it);
+    }
+
+    template<typename Pointer>
+    void mark(Pointer key, MarkStack *markStack)
+    {
+        Iterator it = find(key);
+        if (it == end())
+            return;
+        it->markOnce(markStack);
+    }
 
 private Q_SLOTS:
     void removeDestroyedObject(QObject*);

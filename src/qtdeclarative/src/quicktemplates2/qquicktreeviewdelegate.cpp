@@ -1,45 +1,9 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the Qt Quick Templates 2 module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qquicktreeviewdelegate_p.h"
 
-#include <QtQuickTemplates2/private/qquickabstractbutton_p_p.h>
+#include <QtQuickTemplates2/private/qquickitemdelegate_p_p.h>
 #include <QtQuick/private/qquicktaphandler_p.h>
 #include <QtQuick/private/qquicktreeview_p_p.h>
 
@@ -47,7 +11,7 @@ QT_BEGIN_NAMESPACE
 
 /*!
     \qmltype TreeViewDelegate
-    \inherits AbstractButton
+    \inherits ItemDelegate
     \inqmlmodule QtQuick.Controls
     \since 6.3
     \ingroup qtquickcontrols2-delegates
@@ -69,7 +33,7 @@ QT_BEGIN_NAMESPACE
     }
     \endcode
 
-    TreeViewDelegate inherits \l AbstractButton, which means that
+    TreeViewDelegate inherits \l ItemDelegate, which means that
     it's composed of three items: a \l[QML]{Control::}{background},
     a \l [QML]{Control::}{contentItem}, and an
     \l [QML]{AbstractButton::}{indicator}. TreeViewDelegate takes care
@@ -98,6 +62,40 @@ QT_BEGIN_NAMESPACE
     controlled with \l leftMargin. The space between the indicator and the contentItem
     is controlled with \l [QML]{Control::}{spacing}. And the space to the right of the
     contentItem is controlled with \l rightMargin.
+
+    \section2 Interacting with pointers
+    TreeViewDelegate inherits \l ItemDelegate. This means that it will emit signals
+    such as \l {AbstractButton::clicked()}{clicked} when the user clicks on the delegate.
+    If needed, you could connect to that signal to implement application specific
+    functionality, in addition to the default expand/collapse behavior (and even set \l
+    {TableView::pointerNavigationEnabled}{pointerNavigationEnabled} to \c false, to
+    disable the default behavior as well).
+
+    But the ItemDelegate API does not give you information about the position of the
+    click, or which modifiers are being held. If this is needed, a better approach would
+    be to use pointer handlers, for example:
+
+    \code
+    TreeView {
+        id: treeView
+        delegate: TreeViewDelegate {
+            TapHandler {
+                acceptedButtons: Qt.RightButton
+                onTapped: someContextMenu.open()
+            }
+
+            TapHandler {
+                acceptedModifiers: Qt.ControlModifier
+                onTapped: {
+                    if (treeView.isExpanded(row))
+                        treeView.collapseRecursively(row)
+                    else
+                        treeView.expandRecursively(row)
+                }
+            }
+        }
+    }
+    \endcode
 
     \sa TreeView
 */
@@ -144,6 +142,22 @@ QT_BEGIN_NAMESPACE
 */
 
 /*!
+    \qmlproperty bool QtQuick.Controls::TreeViewDelegate::current
+
+    This property holds if the delegate represent the
+    \l {QItemSelectionModel::currentIndex()}{current index}
+    in the \l {TableView::selectionModel}{selection model}.
+*/
+
+/*!
+    \qmlproperty bool QtQuick.Controls::TreeViewDelegate::selected
+
+    This property holds if the delegate represent a
+    \l {QItemSelectionModel::selection()}{selected index}
+    in the \l {TableView::selectionModel}{selection model}.
+*/
+
+/*!
     \qmlproperty real QtQuick.Controls::TreeViewDelegate::indentation
 
     This property holds the space a child is indented horizontally
@@ -170,24 +184,65 @@ QT_BEGIN_NAMESPACE
     \sa leftMargin, indentation, {QQuickControl::}{spacing}
 */
 
-class QQuickTreeViewDelegatePrivate : public QQuickAbstractButtonPrivate
+using namespace Qt::Literals::StringLiterals;
+
+class QQuickTreeViewDelegatePrivate : public QQuickItemDelegatePrivate
 {
 public:
     Q_DECLARE_PUBLIC(QQuickTreeViewDelegate)
 
     void updateIndicatorVisibility();
+    void updateIndicatorPointerHandlers();
+    void toggleExpanded();
     QPalette defaultPalette() const override;
 
 public:
     QPointer<QQuickTreeView> m_treeView;
+    QPointer<QQuickTapHandler> m_tapHandlerOnIndicator;
     qreal m_indentation = 18;
     qreal m_leftMargin = 0;
     qreal m_rightMargin = 0;
     bool m_isTreeNode = false;
     bool m_expanded = false;
-    bool m_hasChildren = 0;
+    bool m_current = false;
+    bool m_selected = false;
+    bool m_hasChildren = false;
+    bool m_pressOnTopOfIndicator = false;
     int m_depth = 0;
 };
+
+void QQuickTreeViewDelegatePrivate::toggleExpanded()
+{
+    Q_Q(QQuickTreeViewDelegate);
+
+    auto view = q->treeView();
+    if (!view)
+        return;
+    if (!view->pointerNavigationEnabled())
+        return;
+
+    const int row = qmlContext(q)->contextProperty(u"row"_s).toInt();
+    view->toggleExpanded(row);
+}
+
+void QQuickTreeViewDelegatePrivate::updateIndicatorPointerHandlers()
+{
+    Q_Q(QQuickTreeViewDelegate);
+
+    // Remove the tap handler that was installed
+    // on the previous indicator
+    delete m_tapHandlerOnIndicator.data();
+
+    auto indicator = q->indicator();
+    if (!indicator)
+        return;
+
+    m_tapHandlerOnIndicator = new QQuickTapHandler(indicator);
+    m_tapHandlerOnIndicator->setAcceptedModifiers(Qt::NoModifier);
+    // Work-around to block taps from passing through to TreeView.
+    m_tapHandlerOnIndicator->setGesturePolicy(QQuickTapHandler::ReleaseWithinBounds);
+    connect(m_tapHandlerOnIndicator, &QQuickTapHandler::tapped, this, &QQuickTreeViewDelegatePrivate::toggleExpanded);
+}
 
 void QQuickTreeViewDelegatePrivate::updateIndicatorVisibility()
 {
@@ -200,45 +255,60 @@ void QQuickTreeViewDelegatePrivate::updateIndicatorVisibility()
 }
 
 QQuickTreeViewDelegate::QQuickTreeViewDelegate(QQuickItem *parent)
-    : QQuickAbstractButton(*(new QQuickTreeViewDelegatePrivate), parent)
+    : QQuickItemDelegate(*(new QQuickTreeViewDelegatePrivate), parent)
 {
+    Q_D(QQuickTreeViewDelegate);
+
+    auto tapHandler = new QQuickTapHandler(this);
+    tapHandler->setAcceptedModifiers(Qt::NoModifier);
+    QObjectPrivate::connect(tapHandler, &QQuickTapHandler::doubleTapped, d_func(), &QQuickTreeViewDelegatePrivate::toggleExpanded);
+    QObjectPrivate::connect(this, &QQuickAbstractButton::indicatorChanged, d, &QQuickTreeViewDelegatePrivate::updateIndicatorPointerHandlers);
+
+    // Since we override mousePressEvent to avoid QQuickAbstractButton from blocking
+    // pointer handlers, we inform the button about its pressed state from the tap
+    // handler instead. This will ensure that we emit button signals like
+    // pressed, clicked, and doubleClicked.
+    connect(tapHandler, &QQuickTapHandler::pressedChanged, [this, d, tapHandler] {
+        auto view = treeView();
+        if (view && !view->pointerNavigationEnabled())
+            return;
+
+        const QQuickHandlerPoint p = tapHandler->point();
+        if (tapHandler->isPressed())
+            d->handlePress(p.position(), 0);
+        else if (tapHandler->tapCount() > 0)
+            d->handleRelease(p.position(), 0);
+        else
+            d->handleUngrab();
+
+        if (tapHandler->tapCount() > 1 && !tapHandler->isPressed())
+            emit doubleClicked();
+    });
 }
 
 void QQuickTreeViewDelegate::geometryChange(const QRectF &newGeometry, const QRectF &oldGeometry)
 {
     Q_D(QQuickTreeViewDelegate);
 
-    QQuickAbstractButton::geometryChange(newGeometry, oldGeometry);
+    QQuickItemDelegate::geometryChange(newGeometry, oldGeometry);
     d->updateIndicatorVisibility();
 }
 
 void QQuickTreeViewDelegate::mousePressEvent(QMouseEvent *event)
 {
-    QQuickAbstractButton::mousePressEvent(event);
+    Q_D(QQuickTreeViewDelegate);
 
-    if (event->buttons() != Qt::LeftButton || event->modifiers() != Qt::NoModifier) {
-        // Allow application to add its own pointer handlers that does something
-        // other than plain expand/collapse if e.g holding down modifier keys.
+    const auto view = d->m_treeView;
+    if (view && view->pointerNavigationEnabled()) {
+        // Ignore mouse events so that we don't block our own pointer handlers, or
+        // pointer handlers in e.g TreeView, TableView, or SelectionRectangle. Instead
+        // we call out to the needed mouse handling functions in QAbstractButton directly
+        // from our pointer handlers, to ensure that continue to work as a button.
         event->ignore();
         return;
     }
 
-    const auto indicator = QQuickAbstractButton::indicator();
-    if (indicator && indicator->isVisible()) {
-        const auto posInIndicator = mapToItem(indicator, event->position());
-        if (indicator->contains(posInIndicator)) {
-            const int row = qmlContext(this)->contextProperty(QStringLiteral("row")).toInt();
-            treeView()->toggleExpanded(row);
-        }
-    }
-}
-
-void QQuickTreeViewDelegate::mouseDoubleClickEvent(QMouseEvent *event)
-{
-    QQuickAbstractButton::mouseDoubleClickEvent(event);
-
-    const int row = qmlContext(this)->contextProperty(QStringLiteral("row")).toInt();
-    treeView()->toggleExpanded(row);
+    QQuickItemDelegate::mousePressEvent(event);
 }
 
 QPalette QQuickTreeViewDelegatePrivate::defaultPalette() const
@@ -313,6 +383,36 @@ void QQuickTreeViewDelegate::setExpanded(bool expanded)
     emit expandedChanged();
 }
 
+bool QQuickTreeViewDelegate::current() const
+{
+    return d_func()->m_current;
+}
+
+void QQuickTreeViewDelegate::setCurrent(bool current)
+{
+    Q_D(QQuickTreeViewDelegate);
+    if (d->m_current == current)
+        return;
+
+    d->m_current = current;
+    emit currentChanged();
+}
+
+bool QQuickTreeViewDelegate::selected() const
+{
+    return d_func()->m_selected;
+}
+
+void QQuickTreeViewDelegate::setSelected(bool selected)
+{
+    Q_D(QQuickTreeViewDelegate);
+    if (d->m_selected == selected)
+        return;
+
+    d->m_selected = selected;
+    emit selectedChanged();
+}
+
 int QQuickTreeViewDelegate::depth() const
 {
     return d_func()->m_depth;
@@ -345,8 +445,10 @@ void QQuickTreeViewDelegate::setTreeView(QQuickTreeView *treeView)
 
 void QQuickTreeViewDelegate::componentComplete()
 {
-    QQuickAbstractButton::componentComplete();
-    d_func()->updateIndicatorVisibility();
+    Q_D(QQuickTreeViewDelegate);
+    QQuickItemDelegate::componentComplete();
+    d->updateIndicatorVisibility();
+    d->updateIndicatorPointerHandlers();
 }
 
 qreal QQuickTreeViewDelegate::leftMargin() const

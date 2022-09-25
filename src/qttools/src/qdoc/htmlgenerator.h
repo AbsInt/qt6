@@ -1,36 +1,12 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the tools applications of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #ifndef HTMLGENERATOR_H
 #define HTMLGENERATOR_H
 
 #include "codemarker.h"
 #include "xmlgenerator.h"
+#include "filesystem/fileresolver.hpp"
 
 #include <QtCore/qhash.h>
 #include <QtCore/qregularexpression.h>
@@ -47,7 +23,7 @@ class ManifestWriter;
 class HtmlGenerator : public XmlGenerator
 {
 public:
-    HtmlGenerator() = default;
+    HtmlGenerator(FileResolver& file_resolver);
     ~HtmlGenerator() override;
 
     void initializeGenerator() override;
@@ -59,12 +35,12 @@ public:
     static QString protect(const QString &string);
 
 protected:
-    void generateExampleFilePage(const Node *en, const QString &file, CodeMarker *marker) override;
+    void generateExampleFilePage(const Node *en, ResolvedFile resolved_file, CodeMarker *marker) override;
     qsizetype generateAtom(const Atom *atom, const Node *relative, CodeMarker *marker) override;
     void generateCppReferencePage(Aggregate *aggregate, CodeMarker *marker) override;
     void generateProxyPage(Aggregate *aggregate, CodeMarker *marker) override;
     void generateQmlTypePage(QmlTypeNode *qcn, CodeMarker *marker) override;
-    void generateQmlBasicTypePage(QmlBasicTypeNode *qbtn, CodeMarker *marker) override;
+    void generateQmlBasicTypePage(QmlValueTypeNode *qbtn, CodeMarker *marker) override;
     void generatePageNode(PageNode *pn, CodeMarker *marker) override;
     void generateCollectionNode(CollectionNode *cn, CodeMarker *marker) override;
     void generateGenericCollectionPage(CollectionNode *cn, CodeMarker *marker) override;

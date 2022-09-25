@@ -1,29 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2017 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the documentation of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:FDL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Free Documentation License Usage
-** Alternatively, this file may be used under the terms of the GNU Free
-** Documentation License version 1.3 as published by the Free Software
-** Foundation and appearing in the file included in the packaging of
-** this file. Please review the following information to ensure
-** the GNU Free Documentation License version 1.3 requirements
-** will be met: https://www.gnu.org/licenses/fdl-1.3.html.
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2017 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
 
 /*!
   \macro QML_ELEMENT
@@ -398,6 +374,8 @@
   provide further properties, methods, and enumerations in QML. This takes
   effect if the type is exposed to QML using a \l QML_ELEMENT or
   \l QML_NAMED_ELEMENT() macro.
+
+  \warning Members of \a EXTENDED_TYPE are implicitly treated as FINAL.
 
   \sa QML_ELEMENT, QML_NAMED_ELEMENT(), QML_EXTENDED_NAMESPACE(),
       {Registering Extension Objects}
@@ -989,6 +967,16 @@
     attachment object instance has previously been created for \a attachee.
 
     \sa QML_ATTACHED(), {Providing Attached Properties}
+*/
+
+/*!
+    \fn QObject *qmlExtendedObject(const QObject *base)
+    \relates QQmlEngine
+
+    This function returns the extension object that belongs to \a base, if there is any.
+    Otherwise it returns \c nullptr.
+
+    \sa QML_EXTENDED
 */
 
 /*!

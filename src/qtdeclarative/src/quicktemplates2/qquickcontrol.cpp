@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2017 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the Qt Quick Templates 2 module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2017 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qquickcontrol_p.h"
 #include "qquickcontrol_p_p.h"
@@ -182,12 +146,6 @@ bool QQuickControlPrivate::acceptTouch(const QTouchEvent::TouchPoint &point)
         return true;
     }
 
-    // If the control is on a Flickable that has a pressDelay, then the press is never
-    // sent as a touch event, therefore we need to check for this case.
-    if (touchId == -1 && pressWasTouch && point.state() == QEventPoint::Released &&
-        point.position() == previousPressPos) {
-        return true;
-    }
     return false;
 }
 #endif
@@ -200,14 +158,17 @@ static void setActiveFocus(QQuickControl *control, Qt::FocusReason reason)
     control->forceActiveFocus(reason);
 }
 
-void QQuickControlPrivate::handlePress(const QPointF &, ulong)
+bool QQuickControlPrivate::handlePress(const QPointF &, ulong)
 {
     Q_Q(QQuickControl);
-    if ((focusPolicy & Qt::ClickFocus) == Qt::ClickFocus && !QGuiApplication::styleHints()->setFocusOnTouchRelease())
+    if ((focusPolicy & Qt::ClickFocus) == Qt::ClickFocus && !QGuiApplication::styleHints()->setFocusOnTouchRelease()) {
         setActiveFocus(q, Qt::MouseFocusReason);
+        return true;
+    }
+    return true;
 }
 
-void QQuickControlPrivate::handleMove(const QPointF &point, ulong)
+bool QQuickControlPrivate::handleMove(const QPointF &point, ulong)
 {
 #if QT_CONFIG(quicktemplates2_hover)
     Q_Q(QQuickControl);
@@ -215,16 +176,19 @@ void QQuickControlPrivate::handleMove(const QPointF &point, ulong)
 #else
     Q_UNUSED(point);
 #endif
+    return true;
 }
 
-void QQuickControlPrivate::handleRelease(const QPointF &, ulong)
+bool QQuickControlPrivate::handleRelease(const QPointF &, ulong)
 {
     Q_Q(QQuickControl);
-    if ((focusPolicy & Qt::ClickFocus) == Qt::ClickFocus && QGuiApplication::styleHints()->setFocusOnTouchRelease())
+    bool accepted = true;
+    if ((focusPolicy & Qt::ClickFocus) == Qt::ClickFocus && QGuiApplication::styleHints()->setFocusOnTouchRelease()) {
         setActiveFocus(q, Qt::MouseFocusReason);
+        accepted = true;
+    }
     touchId = -1;
-    pressWasTouch = false;
-    previousPressPos = QPointF();
+    return accepted;
 }
 
 void QQuickControlPrivate::handleUngrab()
@@ -384,15 +348,26 @@ void QQuickControlPrivate::resizeBackground()
     resizingBackground = true;
 
     QQuickItemPrivate *p = QQuickItemPrivate::get(background);
+    bool changeWidth = false;
+    bool changeHeight = false;
     if (((!p->widthValid() || !extra.isAllocated() || !extra->hasBackgroundWidth) && qFuzzyIsNull(background->x()))
             || (extra.isAllocated() && (extra->hasLeftInset || extra->hasRightInset))) {
         background->setX(getLeftInset());
-        background->setWidth(width - getLeftInset() - getRightInset());
+        changeWidth = !p->width.hasBinding();
     }
     if (((!p->heightValid() || !extra.isAllocated() || !extra->hasBackgroundHeight) && qFuzzyIsNull(background->y()))
             || (extra.isAllocated() && (extra->hasTopInset || extra->hasBottomInset))) {
         background->setY(getTopInset());
-        background->setHeight(height - getTopInset() - getBottomInset());
+        changeHeight = !p->height.hasBinding();
+    }
+    if (changeHeight || changeWidth) {
+        auto newWidth = changeWidth ?
+            width.valueBypassingBindings() - getLeftInset() - getRightInset() :
+            p->width.valueBypassingBindings();
+        auto newHeight = changeHeight ?
+            height.valueBypassingBindings() - getTopInset() - getBottomInset() :
+            p->height.valueBypassingBindings();
+        background->setSize({newWidth, newHeight});
     }
 
     resizingBackground = false;
@@ -525,7 +500,7 @@ QQuickAccessibleAttached *QQuickControlPrivate::accessibleAttached(const QObject
 /*!
     \internal
 
-    Returns the font that the control w inherits from its ancestors and
+    Returns the font that the control \a item inherits from its ancestors and
     QGuiApplication::font.
 */
 QFont QQuickControlPrivate::parentFont(const QQuickItem *item)
@@ -533,13 +508,13 @@ QFont QQuickControlPrivate::parentFont(const QQuickItem *item)
     QQuickItem *p = item->parentItem();
     while (p) {
         if (QQuickControl *control = qobject_cast<QQuickControl *>(p))
-            return control->font();
+            return QQuickControlPrivate::get(control)->resolvedFont;
         else if (QQuickLabel *label = qobject_cast<QQuickLabel *>(p))
-            return label->font();
+            return label->QQuickText::font();
         else if (QQuickTextField *textField = qobject_cast<QQuickTextField *>(p))
-            return textField->font();
+            return textField->QQuickTextInput::font();
         else if (QQuickTextArea *textArea = qobject_cast<QQuickTextArea *>(p))
-            return textArea->font();
+            return textArea->QQuickTextEdit::font();
 
         p = p->parentItem();
     }
@@ -1001,12 +976,15 @@ void QQuickControl::itemChange(QQuickItem::ItemChange change, const QQuickItem::
     \endcode
 
     For the full list of available font properties, see the
-    \l [QtQuick]{font}{font QML Basic Type} documentation.
+    \l [QtQuick]{font}{font QML Value Type} documentation.
 */
 QFont QQuickControl::font() const
 {
     Q_D(const QQuickControl);
-    return d->resolvedFont;
+    QFont font = d->resolvedFont;
+    // The resolveMask should inherit from the requestedFont
+    font.setResolveMask(d->extra.value().requestedFont.resolveMask());
+    return font;
 }
 
 void QQuickControl::setFont(const QFont &font)
@@ -1607,7 +1585,6 @@ void QQuickControl::setBackground(QQuickItem *background)
         text: qsTr("Button")
         contentItem: Label {
             text: control.text
-            font: control.font
             verticalAlignment: Text.AlignVCenter
         }
     }
@@ -2007,26 +1984,19 @@ void QQuickControl::hoverLeaveEvent(QHoverEvent *event)
 void QQuickControl::mousePressEvent(QMouseEvent *event)
 {
     Q_D(QQuickControl);
-    d->handlePress(event->position(), event->timestamp());
-    if (event->source() == Qt::MouseEventSynthesizedByQt) {
-        d->pressWasTouch = true;
-        d->previousPressPos = event->position();
-    }
-    event->accept();
+    event->setAccepted(d->handlePress(event->position(), event->timestamp()));
 }
 
 void QQuickControl::mouseMoveEvent(QMouseEvent *event)
 {
     Q_D(QQuickControl);
-    d->handleMove(event->position(), event->timestamp());
-    event->accept();
+    event->setAccepted(d->handleMove(event->position(), event->timestamp()));
 }
 
 void QQuickControl::mouseReleaseEvent(QMouseEvent *event)
 {
     Q_D(QQuickControl);
-    d->handleRelease(event->position(), event->timestamp());
-    event->accept();
+    event->setAccepted(d->handleRelease(event->position(), event->timestamp()));
 }
 
 void QQuickControl::mouseUngrabEvent()

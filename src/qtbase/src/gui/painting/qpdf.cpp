@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtGui module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qpdf_p.h"
 
@@ -77,6 +41,8 @@ static void initResources()
 }
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 inline QPaintEngine::PaintEngineFeatures qt_pdf_decide_features()
 {
@@ -1115,6 +1081,9 @@ void QPdfEngine::updateState(const QPaintEngineState &state)
 
     QPaintEngine::DirtyFlags flags = state.state();
 
+    if (flags & DirtyHints)
+        flags |= DirtyBrush;
+
     if (flags & DirtyTransform)
         d->stroker.matrix = state.transform();
 
@@ -1735,11 +1704,11 @@ int QPdfEnginePrivate::writeXmpDcumentMetaData()
         else if (offset > 0)
             tzStr = QString::asprintf("+%02d:%02d", hours , mins);
         else
-            tzStr = QLatin1String("Z");
+            tzStr = "Z"_L1;
 
         const QString metaDataDate = timeStr + tzStr;
 
-        QFile metaDataFile(QLatin1String(":/qpdf/qpdfa_metadata.xml"));
+        QFile metaDataFile(":/qpdf/qpdfa_metadata.xml"_L1);
         metaDataFile.open(QIODevice::ReadOnly);
         metaDataContent = QString::fromUtf8(metaDataFile.readAll()).arg(producer.toHtmlEscaped(),
                                                                         title.toHtmlEscaped(),
@@ -1765,7 +1734,7 @@ int QPdfEnginePrivate::writeOutputIntent()
 {
     const int colorProfile = addXrefEntry(-1);
     {
-        QFile colorProfileFile(QLatin1String(":/qpdf/sRGB2014.icc"));
+        QFile colorProfileFile(":/qpdf/sRGB2014.icc"_L1);
         colorProfileFile.open(QIODevice::ReadOnly);
         const QByteArray colorProfileData = colorProfileFile.readAll();
 
@@ -1860,8 +1829,7 @@ void QPdfEnginePrivate::writeAttachmentRoot()
                  , attachmentID);
         if (!attachment.mimeType.isEmpty())
             xprintf("/Subtype/%s\n",
-                    attachment.mimeType.replace(QLatin1String("/"),
-                                                QLatin1String("#2F")).toLatin1().constData());
+                    attachment.mimeType.replace("/"_L1, "#2F"_L1).toLatin1().constData());
         xprintf(">>\nendobj\n");
     }
 
@@ -1993,7 +1961,7 @@ void QPdfEnginePrivate::embedFont(QFontSubset *font)
         QByteArray cidSetStream(font->nGlyphs() / 8 + 1, 0);
         int byteCounter = 0;
         int bitCounter = 0;
-        for (int i = 0; i < font->nGlyphs(); ++i) {
+        for (qsizetype i = 0; i < font->nGlyphs(); ++i) {
             cidSetStream.data()[byteCounter] |= (1 << (7 - bitCounter));
 
             bitCounter++;
@@ -2182,7 +2150,7 @@ int QPdfEnginePrivate::addXrefEntry(int object, bool printostr)
     return object;
 }
 
-void QPdfEnginePrivate::printString(const QString &string)
+void QPdfEnginePrivate::printString(QStringView string)
 {
     if (string.isEmpty()) {
         write("()");
@@ -2193,9 +2161,9 @@ void QPdfEnginePrivate::printString(const QString &string)
     // Unicode UTF-16 with a Unicode byte order mark as the first character
     // (0xfeff), with the high-order byte first.
     QByteArray array("(\xfe\xff");
-    const ushort *utf16 = string.utf16();
+    const char16_t *utf16 = string.utf16();
 
-    for (int i=0; i < string.size(); ++i) {
+    for (qsizetype i = 0; i < string.size(); ++i) {
         char part[2] = {char((*(utf16 + i)) >> 8), char((*(utf16 + i)) & 0xff)};
         for(int j=0; j < 2; ++j) {
             if (part[j] == '(' || part[j] == ')' || part[j] == '\\')
@@ -2749,18 +2717,22 @@ int QPdfEnginePrivate::addBrushPattern(const QTransform &m, bool *specifyColor, 
     *specifyColor = true;
     *gStateObject = 0;
 
-    QTransform matrix = m;
+    const Qt::BrushStyle style = brush.style();
+    const bool isCosmetic = style >= Qt::Dense1Pattern && style <= Qt::DiagCrossPattern
+                            && !q->painter()->testRenderHint(QPainter::NonCosmeticBrushPatterns);
+    QTransform matrix;
+    if (!isCosmetic)
+        matrix = m;
     matrix.translate(brushOrigin.x(), brushOrigin.y());
     matrix = matrix * pageMatrix();
-    //qDebug() << brushOrigin << matrix;
 
-    Qt::BrushStyle style = brush.style();
     if (style == Qt::LinearGradientPattern || style == Qt::RadialGradientPattern) {// && style <= Qt::ConicalGradientPattern) {
         *specifyColor = false;
         return gradientBrush(brush, matrix, gStateObject);
     }
 
-    matrix = brush.transform() * matrix;
+    if (!isCosmetic)
+        matrix = brush.transform() * matrix;
 
     if ((!brush.isOpaque() && brush.style() < Qt::LinearGradientPattern) || opacity != 1.0)
         *gStateObject = addConstantAlphaObject(qRound(brush.color().alpha() * opacity),
@@ -3109,7 +3081,7 @@ void QPdfEnginePrivate::drawTextItem(const QPointF &p, const QTextItemInt &ti)
             x += .3*y;
         x /= stretch;
         char buf[5];
-        int g = font->addGlyph(glyphs[i]);
+        qsizetype g = font->addGlyph(glyphs[i]);
         *currentPage << x - last_x << last_y - y << "Td <"
                      << QPdf::toHex((ushort)g, buf) << "> Tj\n";
         last_x = x;
@@ -3129,7 +3101,7 @@ void QPdfEnginePrivate::drawTextItem(const QPointF &p, const QTextItemInt &ti)
                 x += .3*y;
             x /= stretch;
             char buf[5];
-            int g = font->addGlyph(glyphs[i]);
+            qsizetype g = font->addGlyph(glyphs[i]);
             *currentPage << x - last_x << last_y - y << "Td <"
                         << QPdf::toHex((ushort)g, buf) << "> Tj\n";
             last_x = x;

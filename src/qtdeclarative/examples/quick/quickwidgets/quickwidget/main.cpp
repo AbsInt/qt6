@@ -1,61 +1,18 @@
-/****************************************************************************
-**
-** Copyright (C) 2017 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the examples of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:BSD$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** BSD License Usage
-** Alternatively, you may use this file under the terms of the BSD license
-** as follows:
-**
-** "Redistribution and use in source and binary forms, with or without
-** modification, are permitted provided that the following conditions are
-** met:
-**   * Redistributions of source code must retain the above copyright
-**     notice, this list of conditions and the following disclaimer.
-**   * Redistributions in binary form must reproduce the above copyright
-**     notice, this list of conditions and the following disclaimer in
-**     the documentation and/or other materials provided with the
-**     distribution.
-**   * Neither the name of The Qt Company Ltd nor the names of its
-**     contributors may be used to endorse or promote products derived
-**     from this software without specific prior written permission.
-**
-**
-** THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-** "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-** LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-** A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-** OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-** SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-** LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-** DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-** THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-** (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-** OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE."
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2017 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR BSD-3-Clause
 
+#include <QApplication>
+#include <QCommandLineParser>
 #include <QQuickWidget>
 #include <QQuickItem>
 #include <QQmlError>
-#include <QtWidgets>
-#include "fbitem.h"
-
-static bool optMultipleSample = false;
-static bool optCoreProfile = false;
+#include <QMdiArea>
+#include <QLCDNumber>
+#include <QFileDialog>
+#include <QStatusBar>
+#include <QMainWindow>
+#include <QMenuBar>
+#include <QPushButton>
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -74,14 +31,12 @@ private:
     QQuickWidget *m_quickWidget;
 };
 
+static bool optMultipleSample = false;
+
 MainWindow::MainWindow()
    : m_quickWidget(new QQuickWidget)
 {
     QSurfaceFormat format;
-    if (optCoreProfile) {
-        format.setVersion(4, 4);
-        format.setProfile(QSurfaceFormat::CoreProfile);
-    }
     if (optMultipleSample)
         format.setSamples(4);
     m_quickWidget->setFormat(format);
@@ -120,23 +75,45 @@ MainWindow::MainWindow()
 
 void MainWindow::createQuickWidgetsInTabs(QMdiArea *mdiArea)
 {
+    // A QQuickWidget should work like any other widget when it comes to being
+    // in layouts, in tab widgets, MDI areas, etc. It can also be freely
+    // reparented and made top-level.
+
     QTabWidget *tabWidget = new QTabWidget;
-
     const QSize size(400, 400);
+    const QString msgToTopLevel = QLatin1String("Break out to top-level window");
+    const QString msgFromTopLevel = QLatin1String("Move back under tab widget");
 
-    QQuickWidget *w = new QQuickWidget;
-    w->resize(size);
-    w->setResizeMode(QQuickWidget::SizeRootObjectToView);
-    w->setSource(QUrl("qrc:quickwidget/rotatingsquaretab.qml"));
-
-    tabWidget->addTab(w, tr("Plain Quick content"));
-
-    w = new QQuickWidget;
-    w->resize(size);
-    w->setResizeMode(QQuickWidget::SizeRootObjectToView);
-    w->setSource(QUrl("qrc:quickwidget/customgl.qml"));
-
-    tabWidget->addTab(w, tr("Custom OpenGL drawing"));
+    static const int N = 4;
+    static const QColor colorTab[N] = { Qt::green, Qt::blue, Qt::yellow, Qt::magenta };
+    for (int i = 0; i < N; ++i) {
+        QQuickWidget *widget = new QQuickWidget;
+        widget->resize(size);
+        widget->setResizeMode(QQuickWidget::SizeRootObjectToView);
+        QObject::connect(widget, &QQuickWidget::statusChanged, widget, [widget, i] {
+            if (widget->status() == QQuickWidget::Ready) {
+                if (QQuickItem *rootItem = widget->rootObject()) {
+                    rootItem->setProperty("rectColor", colorTab[i]);
+                }
+            }
+        });
+        widget->setSource(QUrl("qrc:quickwidget/rotatingsquare.qml"));
+        widget->setWindowTitle(QString::asprintf("Tab %d", i + 1));
+        QPushButton *btn = new QPushButton(msgToTopLevel, widget);
+        connect(btn, &QPushButton::clicked, widget, [=] {
+            if (widget->parent()) {
+                widget->setAttribute(Qt::WA_DeleteOnClose, true);
+                widget->setParent(nullptr);
+                widget->show();
+                btn->setText(msgFromTopLevel);
+            } else {
+                widget->setAttribute(Qt::WA_DeleteOnClose, false);
+                tabWidget->addTab(widget, widget->windowTitle());
+                btn->setText(msgToTopLevel);
+            }
+        });
+        tabWidget->addTab(widget, QString::asprintf("Tab %d", i + 1));
+    }
 
     mdiArea->addSubWindow(tabWidget);
     tabWidget->show();
@@ -197,25 +174,20 @@ int main(int argc, char **argv)
 {
     QApplication app(argc, argv);
 
-    // this example and QQuickWidget are only functional when rendering with OpenGL
-    QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
-
     QCoreApplication::setApplicationName("Qt QQuickWidget Example");
     QCoreApplication::setOrganizationName("QtProject");
     QCoreApplication::setApplicationVersion(QT_VERSION_STR);
+
     QCommandLineParser parser;
     parser.setApplicationDescription(QCoreApplication::applicationName());
     parser.addHelpOption();
     parser.addVersionOption();
     QCommandLineOption multipleSampleOption("multisample", "Multisampling");
     parser.addOption(multipleSampleOption);
-    QCommandLineOption coreProfileOption("coreprofile", "Use core profile");
-    parser.addOption(coreProfileOption);
 
     parser.process(app);
 
     optMultipleSample = parser.isSet(multipleSampleOption);
-    optCoreProfile = parser.isSet(coreProfileOption);
 
     MainWindow mainWindow;
     mainWindow.show();

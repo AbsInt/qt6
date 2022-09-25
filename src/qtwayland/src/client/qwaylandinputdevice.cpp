@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the plugins of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qwaylandinputdevice_p.h"
 
@@ -59,6 +23,7 @@
 #include "qwaylandcursor_p.h"
 #include "qwaylanddisplay_p.h"
 #include "qwaylandshmbackingstore_p.h"
+#include "qwaylandtextinputv1_p.h"
 #include "qwaylandtextinputv2_p.h"
 #if QT_WAYLAND_TEXT_INPUT_V4_WIP
 #include "qwaylandtextinputv4_p.h"
@@ -426,6 +391,12 @@ QWaylandInputDevice::QWaylandInputDevice(QWaylandDisplay *display, int version, 
         setPrimarySelectionDevice(psm->createDevice(this));
 #endif
 
+    if (mQDisplay->textInputManagerv1()) {
+        auto textInput = new QWaylandTextInputv1(mQDisplay, mQDisplay->textInputManagerv1()->create_text_input());
+        textInput->setSeat(wl_seat());
+        mTextInput.reset(textInput);
+    }
+
     if (mQDisplay->textInputManagerv2())
         mTextInput.reset(new QWaylandTextInputv2(mQDisplay, mQDisplay->textInputManagerv2()->get_text_input(wl_seat())));
 
@@ -710,7 +681,7 @@ void QWaylandInputDevice::Pointer::pointer_enter(uint32_t serial, struct wl_surf
     connect(mFocus.data(), &QObject::destroyed, this, &Pointer::handleFocusDestroyed);
 
     mSurfacePos = QPointF(wl_fixed_to_double(sx), wl_fixed_to_double(sy));
-    mGlobalPos = window->window()->mapToGlobal(mSurfacePos.toPoint());
+    mGlobalPos = window->mapToGlobal(mSurfacePos.toPoint());
 
     mParent->mSerial = serial;
     mEnterSerial = serial;
@@ -776,7 +747,7 @@ void QWaylandInputDevice::Pointer::pointer_motion(uint32_t time, wl_fixed_t surf
 
     QPointF pos(wl_fixed_to_double(surface_x), wl_fixed_to_double(surface_y));
     QPointF delta = pos - pos.toPoint();
-    QPointF global = window->window()->mapToGlobal(pos.toPoint());
+    QPointF global = window->mapToGlobal(pos.toPoint());
     global += delta;
 
     mSurfacePos = pos;
@@ -788,7 +759,7 @@ void QWaylandInputDevice::Pointer::pointer_motion(uint32_t time, wl_fixed_t surf
         // We can't know the true position since we're getting events for another surface,
         // so we just set it outside of the window boundaries.
         pos = QPointF(-1, -1);
-        global = grab->window()->mapToGlobal(pos.toPoint());
+        global = grab->mapToGlobal(pos.toPoint());
         window = grab;
     }
     setFrameEvent(new MotionEvent(window, time, pos, global, mButtons, mParent->modifiers()));
@@ -868,7 +839,7 @@ void QWaylandInputDevice::Pointer::pointer_button(uint32_t serial, uint32_t time
     QPointF global = mGlobalPos;
     if (grab && grab != focusWindow()) {
         pos = QPointF(-1, -1);
-        global = grab->window()->mapToGlobal(pos.toPoint());
+        global = grab->mapToGlobal(pos.toPoint());
 
         window = grab;
     }
@@ -1480,7 +1451,7 @@ void QWaylandInputDevice::handleTouchPoint(int id, QEventPoint::State state, con
         // TODO: This doesn't account for high dpi scaling for the delta, but at least it matches
         // what we have for mouse input.
         QPointF delta = localPosition - localPosition.toPoint();
-        QPointF globalPosition = win->window()->mapToGlobal(localPosition.toPoint()) + delta;
+        QPointF globalPosition = win->mapToGlobal(localPosition.toPoint()) + delta;
         tp.area.moveCenter(globalPosition);
     }
 

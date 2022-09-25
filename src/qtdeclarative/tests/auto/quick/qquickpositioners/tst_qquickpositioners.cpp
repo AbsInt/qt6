@@ -1,33 +1,9 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 #include <QtTest/QtTest>
 #include <QtQuick/qquickview.h>
 #include <qqmlengine.h>
+#include <QtQml/qqmlcomponent.h>
 #include <QtQuick/private/qquickrectangle_p.h>
 #include <QtQuick/private/qquickpositioners_p.h>
 #include <QtQuick/private/qquicktransition_p.h>
@@ -1065,7 +1041,7 @@ void tst_qquickpositioners::populateTransitions(const QString &positionerObjectN
         QTRY_COMPARE(window->rootObject()->property("populateTransitionsDone").toInt(), 0);
         QTRY_COMPARE(window->rootObject()->property("addTransitionsDone").toInt(), model.count());
     } else {
-        QVERIFY(QQuickTest::qWaitForItemPolished(positioner));
+        QVERIFY(QQuickTest::qWaitForPolish(positioner));
         QTRY_COMPARE(window->rootObject()->property("populateTransitionsDone").toInt(), 0);
         QTRY_COMPARE(window->rootObject()->property("addTransitionsDone").toInt(), 0);
     }
@@ -1132,7 +1108,7 @@ void tst_qquickpositioners::addTransitions(const QString &positionerObjectName)
     QQuickItem *positioner = window->rootObject()->findChild<QQuickItem*>(positionerObjectName);
     QVERIFY(positioner);
     positioner->findChild<QQuickItem*>("repeater")->setProperty("model", QVariant::fromValue(&model));
-    QVERIFY(QQuickTest::qWaitForItemPolished(positioner));
+    QVERIFY(QQuickTest::qWaitForPolish(positioner));
 
     for (int i = 0; i < initialItemCount; i++)
         model.addItem("Original item" + QString::number(i), "");
@@ -1258,7 +1234,7 @@ void tst_qquickpositioners::moveTransitions(const QString &positionerObjectName)
     QQuickItem *positioner = window->rootObject()->findChild<QQuickItem*>(positionerObjectName);
     QVERIFY(positioner);
     positioner->findChild<QQuickItem*>("repeater")->setProperty("model", QVariant::fromValue(&model));
-    QVERIFY(QQuickTest::qWaitForItemPolished(positioner));
+    QVERIFY(QQuickTest::qWaitForPolish(positioner));
 
     switch (change.type) {
         case ListChange::Removed:
@@ -1267,7 +1243,7 @@ void tst_qquickpositioners::moveTransitions(const QString &positionerObjectName)
             break;
         case ListChange::Moved:
             model.moveItems(change.index, change.to, change.count);
-            QVERIFY(QQuickTest::qWaitForItemPolished(positioner));
+            QVERIFY(QQuickTest::qWaitForPolish(positioner));
             break;
         case ListChange::Inserted:
         case ListChange::SetCurrent:
@@ -3822,7 +3798,7 @@ void tst_qquickpositioners::test_mirroring()
             QQuickItem *positionerB = itemB->parentItem();
             positionerA->setWidth(positionerA->width() * 2);
             positionerB->setWidth(positionerB->width() * 2);
-            QVERIFY(QQuickTest::qWaitForItemPolished(positionerA) && QQuickTest::qWaitForItemPolished(positionerB));
+            QVERIFY(QQuickTest::qWaitForPolish(positionerA) && QQuickTest::qWaitForPolish(positionerB));
             QTRY_COMPARE(itemA->x(), itemB->x());
         }
 

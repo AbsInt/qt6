@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtQml module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #ifndef QQMLBINDING_P_H
 #define QQMLBINDING_P_H
@@ -95,14 +59,11 @@ public:
             const QV4::CompiledData::Binding *binding, QObject *obj,
             const QQmlRefPointer<QQmlContextData> &ctxt);
 
+    Kind kind() const final { return QQmlAbstractBinding::QmlBinding; }
+
     ~QQmlBinding() override;
 
     bool mustCaptureBindableProperty() const final {return true;}
-
-    void setTarget(const QQmlProperty &);
-    bool setTarget(QObject *, const QQmlPropertyData &, const QQmlPropertyData *valueType);
-    bool setTarget(QObject *, int coreIndex, bool coreIsAlias, int valueTypeIndex);
-
     void refresh() override;
 
     void setEnabled(bool, QQmlPropertyData::WriteFlags flags = QQmlPropertyData::DontRemoveBinding) override;
@@ -140,7 +101,6 @@ protected:
     virtual void doUpdate(const DeleteWatcher &watcher,
                           QQmlPropertyData::WriteFlags flags, QV4::Scope &scope) = 0;
 
-    void getPropertyData(QQmlPropertyData **propertyData, QQmlPropertyData *valueTypeData) const;
     int getPropertyType() const;
 
     bool slowWrite(const QQmlPropertyData &core, const QQmlPropertyData &valueTypeData,
@@ -156,38 +116,13 @@ protected:
     }
 
 private:
-    inline bool updatingFlag() const;
-    inline void setUpdatingFlag(bool);
-    inline bool enabledFlag() const;
-    inline void setEnabledFlag(bool);
-
-    static QQmlBinding *newBinding(QQmlEnginePrivate *engine, const QQmlPropertyData *property);
-    static QQmlBinding *newBinding(QQmlEnginePrivate *engine, QMetaType propertyType);
+    static QQmlBinding *newBinding(const QQmlPropertyData *property);
+    static QQmlBinding *newBinding(QMetaType propertyType);
 
     QQmlSourceLocation *m_sourceLocation = nullptr; // used for Qt.binding() created functions
     QV4::PersistentValue m_boundFunction; // used for Qt.binding() that are created from a bound function object
     void handleWriteError(const void *result, QMetaType resultType, QMetaType metaType);
 };
-
-bool QQmlBinding::updatingFlag() const
-{
-    return m_target.tag().testFlag(UpdatingBinding);
-}
-
-void QQmlBinding::setUpdatingFlag(bool v)
-{
-    m_target.setTag(m_target.tag().setFlag(UpdatingBinding, v));
-}
-
-bool QQmlBinding::enabledFlag() const
-{
-    return m_target.tag().testFlag(BindingEnabled);
-}
-
-void QQmlBinding::setEnabledFlag(bool v)
-{
-    m_target.setTag(m_target.tag().setFlag(BindingEnabled, v));
-}
 
 QT_END_NAMESPACE
 

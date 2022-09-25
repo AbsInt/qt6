@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <qtest.h>
 #include <QUrl>
@@ -802,6 +777,7 @@ void tst_qqmllistreference::engineTypes()
 {
     QQmlEngine engine;
     QQmlComponent component(&engine, testFileUrl("engineTypes.qml"));
+    QVERIFY2(component.isReady(), qPrintable(component.errorString()));
 
     QObject *o = component.create();
     QVERIFY(o);
@@ -824,7 +800,7 @@ void tst_qqmllistreference::engineTypes()
     const QMetaProperty prop = m->property(index);
     const QVariant var = prop.read(o);
 
-    QQmlListReference fromVar(var, &engine);
+    QQmlListReference fromVar(var);
     QVERIFY(fromVar.isValid());
     QCOMPARE(fromVar.count(), 2);
     QCOMPARE(fromVar.listElementType(), ref.listElementType());
@@ -880,19 +856,11 @@ void tst_qqmllistreference::compositeListProperty()
     QVERIFY(!i1.isNull());
     QVERIFY(!i2.isNull());
 
-    // Without engine
+    // We know the element type now.
     QQmlListReference list1(object.data(), "items");
-    QCOMPARE(list1.listElementType(), nullptr);
-
-    // Doesn't work because element type is unknown.
-    QVERIFY(!list1.append(i1.data()));
-    QVERIFY(!list1.replace(0, i2.data()));
-
-    // With engine
-    QQmlListReference list2(object.data(), "items", &engine);
-    QVERIFY(list2.listElementType() != nullptr);
-    QVERIFY(list2.append(i1.data()));
-    QVERIFY(list2.replace(0, i2.data()));
+    QVERIFY(list1.listElementType() != nullptr);
+    QVERIFY(list1.append(i1.data()));
+    QVERIFY(list1.replace(0, i2.data()));
 }
 
 void tst_qqmllistreference::nullItems()

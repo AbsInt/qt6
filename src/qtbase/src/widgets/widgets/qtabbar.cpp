@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtWidgets module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "private/qlayoutengine_p.h"
 #if QT_CONFIG(itemviews)
@@ -57,7 +21,7 @@
 #include "qwhatsthis.h"
 #endif
 #include "private/qtextengine_p.h"
-#ifndef QT_NO_ACCESSIBILITY
+#if QT_CONFIG(accessibility)
 #include "qaccessible.h"
 #endif
 #ifdef Q_OS_MACOS
@@ -69,6 +33,8 @@
 #include "private/qtabbar_p.h"
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 namespace {
 class CloseButton : public QAbstractButton
@@ -406,12 +372,12 @@ void QTabBarPrivate::init()
 {
     Q_Q(QTabBar);
     leftB = new QToolButton(q);
-    leftB->setObjectName(u"ScrollLeftButton"_qs);
+    leftB->setObjectName(u"ScrollLeftButton"_s);
     leftB->setAutoRepeat(true);
     QObject::connect(leftB, SIGNAL(clicked()), q, SLOT(_q_scrollTabs()));
     leftB->hide();
     rightB = new QToolButton(q);
-    rightB->setObjectName(u"ScrollRightButton"_qs);
+    rightB->setObjectName(u"ScrollRightButton"_s);
     rightB->setAutoRepeat(true);
     QObject::connect(rightB, SIGNAL(clicked()), q, SLOT(_q_scrollTabs()));
     rightB->hide();
@@ -424,7 +390,7 @@ void QTabBarPrivate::init()
 #endif
         q->setFocusPolicy(Qt::TabFocus);
 
-#ifndef QT_NO_ACCESSIBILITY
+#if QT_CONFIG(accessibility)
     leftB->setAccessibleName(QTabBar::tr("Scroll Left"));
     rightB->setAccessibleName(QTabBar::tr("Scroll Right"));
 #endif
@@ -960,7 +926,7 @@ int QTabBar::addTab(const QIcon& icon, const QString &text)
 
 /*!
     Inserts a new tab with text \a text at position \a index. If \a
-    index is out of range, the new tab is appened. Returns the new
+    index is out of range, the new tab is appended. Returns the new
     tab's index.
 */
 int QTabBar::insertTab(int index, const QString &text)
@@ -1439,7 +1405,7 @@ void QTabBar::setCurrentIndex(int index)
         // If the size hint depends on whether the tab is selected (for instance a style
         // sheet rule that sets a bold font on the 'selected' tab) then we need to
         // re-layout the entire tab bar. To minimize the cost, do that only if the
-        // size hint changes for the tab that becomes the current tab (the old curent tab
+        // size hint changes for the tab that becomes the current tab (the old current tab
         // will most certainly do the same). QTBUG-6905
         if (tabRect(index).size() != tabSizeHint(index))
             d->layoutTabs();
@@ -1450,7 +1416,7 @@ void QTabBar::setCurrentIndex(int index)
             d->layoutTab(oldIndex);
         }
         d->layoutTab(index);
-#ifndef QT_NO_ACCESSIBILITY
+#if QT_CONFIG(accessibility)
         if (QAccessible::isActive()) {
             if (hasFocus()) {
                 QAccessibleEvent focusEvent(this, QAccessible::Focus);
@@ -1549,7 +1515,7 @@ static QString computeElidedText(Qt::TextElideMode mode, const QString &text)
     if (text.length() <= 3)
         return text;
 
-    static const QLatin1String Ellipses("...");
+    static const auto Ellipses = "..."_L1;
     QString ret;
     switch (mode) {
     case Qt::ElideRight:
@@ -2837,7 +2803,7 @@ QWidget *QTabBar::tabButton(int index, ButtonPosition position) const
     return nullptr;
 }
 
-#ifndef QT_NO_ACCESSIBILITY
+#if QT_CONFIG(accessibility)
 /*!
     Sets the accessibleName of the tab at position \a index to \a name.
 */
@@ -2863,7 +2829,7 @@ QString QTabBar::accessibleTabName(int index) const
         return tab->accessibleName;
     return QString();
 }
-#endif // QT_NO_ACCESSIBILITY
+#endif // QT_CONFIG(accessibility)
 
 CloseButton::CloseButton(QWidget *parent)
     : QAbstractButton(parent)

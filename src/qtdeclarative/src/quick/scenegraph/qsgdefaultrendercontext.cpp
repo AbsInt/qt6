@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtQuick module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qsgdefaultrendercontext_p.h"
 
@@ -58,11 +22,9 @@ QSGDefaultRenderContext::QSGDefaultRenderContext(QSGContext *context)
     : QSGRenderContext(context)
     , m_rhi(nullptr)
     , m_maxTextureSize(0)
-    , m_serializedRender(false)
     , m_rhiAtlasManager(nullptr)
     , m_currentFrameCommandBuffer(nullptr)
     , m_currentFrameRenderPass(nullptr)
-    , m_separateIndexBuffer(false)
     , m_useDepthBufferFor2D(true)
     , m_glyphCacheResourceUpdates(nullptr)
 {
@@ -87,14 +49,25 @@ void QSGDefaultRenderContext::initialize(const QSGRenderContext::InitParams *par
     m_maxTextureSize = m_rhi->resourceLimit(QRhi::TextureSizeMax);
     if (!m_rhiAtlasManager)
         m_rhiAtlasManager = new QSGRhiAtlasTexture::Manager(this, m_initParams.initialSurfacePixelSize, m_initParams.maybeSurface);
-    // unlike OpenGL (and like WebGL), QRhi does not guarantee buffer usage types can be mixed
-    m_separateIndexBuffer = true;
 
     m_glyphCacheResourceUpdates = nullptr;
 
     m_sg->renderContextInitialized(this);
 
     emit initialized();
+}
+
+void QSGDefaultRenderContext::invalidateGlyphCaches()
+{
+    auto it = m_glyphCaches.begin();
+    while (it != m_glyphCaches.end()) {
+        if (!(*it)->isActive()) {
+            delete *it;
+            it = m_glyphCaches.erase(it);
+        } else {
+            ++it;
+        }
+    }
 }
 
 void QSGDefaultRenderContext::invalidate()
@@ -169,53 +142,24 @@ void QSGDefaultRenderContext::prepareSync(qreal devicePixelRatio,
     m_currentFrameCommandBuffer = cb;
 }
 
-static QBasicMutex qsg_framerender_mutex;
-
-void QSGDefaultRenderContext::beginNextFrame(QSGRenderer *renderer,
+void QSGDefaultRenderContext::beginNextFrame(QSGRenderer *renderer, const QSGRenderTarget &renderTarget,
                                              RenderPassCallback mainPassRecordingStart,
                                              RenderPassCallback mainPassRecordingEnd,
                                              void *callbackUserData)
 {
+    renderer->setRenderTarget(renderTarget);
     renderer->setRenderPassRecordingCallbacks(mainPassRecordingStart, mainPassRecordingEnd, callbackUserData);
+
+    m_currentFrameCommandBuffer = renderTarget.cb; // usually the same as what was passed to prepareSync() but cannot count on that having been called
+    m_currentFrameRenderPass = renderTarget.rpDesc;
 }
 
 void QSGDefaultRenderContext::renderNextFrame(QSGRenderer *renderer)
 {
-    if (m_serializedRender)
-        qsg_framerender_mutex.lock();
-
     renderer->renderScene();
-
-    if (m_serializedRender)
-        qsg_framerender_mutex.unlock();
 }
 
 void QSGDefaultRenderContext::endNextFrame(QSGRenderer *renderer)
-{
-    Q_UNUSED(renderer);
-}
-
-void QSGDefaultRenderContext::beginNextRhiFrame(QSGRenderer *renderer, QRhiRenderTarget *rt, QRhiRenderPassDescriptor *rp,
-                                                QRhiCommandBuffer *cb,
-                                                RenderPassCallback mainPassRecordingStart,
-                                                RenderPassCallback mainPassRecordingEnd,
-                                                void *callbackUserData)
-{
-    renderer->setRenderTarget(rt);
-    renderer->setRenderPassDescriptor(rp);
-    renderer->setCommandBuffer(cb);
-    renderer->setRenderPassRecordingCallbacks(mainPassRecordingStart, mainPassRecordingEnd, callbackUserData);
-
-    m_currentFrameCommandBuffer = cb; // usually the same as what was passed to prepareSync() but cannot count on that having been called
-    m_currentFrameRenderPass = rp;
-}
-
-void QSGDefaultRenderContext::renderNextRhiFrame(QSGRenderer *renderer)
-{
-    renderer->renderScene();
-}
-
-void QSGDefaultRenderContext::endNextRhiFrame(QSGRenderer *renderer)
 {
     Q_UNUSED(renderer);
     m_currentFrameCommandBuffer = nullptr;

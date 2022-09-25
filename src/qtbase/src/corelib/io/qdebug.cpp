@@ -1,42 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Copyright (C) 2016 Intel Corporation.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// Copyright (C) 2016 Intel Corporation.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #ifdef QT_NO_DEBUG
 #undef QT_NO_DEBUG
@@ -197,7 +161,7 @@ QByteArray QtDebugUtils::toPrintable(const char *data, qint64 len, qsizetype max
 QDebug::~QDebug()
 {
     if (stream && !--stream->ref) {
-        if (stream->space && stream->buffer.endsWith(QLatin1Char(' ')))
+        if (stream->space && stream->buffer.endsWith(u' '))
             stream->buffer.chop(1);
         if (stream->message_output) {
             qt_message_output(stream->type,
@@ -223,7 +187,7 @@ void QDebug::putUcs4(uint ucs4)
             stream->ts << "\\u" << qSetFieldWidth(4);
         else
             stream->ts << "\\U" << qSetFieldWidth(8);
-        stream->ts << Qt::hex << qSetPadChar(QLatin1Char('0')) << ucs4 << Qt::reset;
+        stream->ts << Qt::hex << qSetPadChar(u'0') << ucs4 << Qt::reset;
     }
     maybeQuote('\'');
 }
@@ -241,7 +205,7 @@ static inline bool isPrintable(uchar c)
 template <typename Char>
 static inline void putEscapedString(QTextStreamPrivate *d, const Char *begin, size_t length, bool isUnicode = true)
 {
-    QChar quote(QLatin1Char('"'));
+    QChar quote(u'"');
     d->write(&quote, 1);
 
     bool lastWasHexEscape = false;
@@ -251,7 +215,7 @@ static inline void putEscapedString(QTextStreamPrivate *d, const Char *begin, si
         if (Q_UNLIKELY(lastWasHexEscape)) {
             if (fromHex(*p) != -1) {
                 // yes, insert it
-                QChar quotes[] = { QLatin1Char('"'), QLatin1Char('"') };
+                QChar quotes[] = { quote, quote };
                 d->write(quotes, 2);
             }
             lastWasHexEscape = false;
@@ -730,7 +694,7 @@ QDebug &QDebug::resetFormat()
 */
 
 /*!
-    \fn QDebug &QDebug::operator<<(QLatin1String t)
+    \fn QDebug &QDebug::operator<<(QLatin1StringView t)
 
     Writes the string, \a t, to the stream and returns a reference to the
     stream. Normally, QDebug prints the string inside quotes and transforms
@@ -985,7 +949,7 @@ public:
     {
         const bool currentSpaces = m_stream->space;
         if (currentSpaces && !m_spaces)
-            if (m_stream->buffer.endsWith(QLatin1Char(' ')))
+            if (m_stream->buffer.endsWith(u' '))
                 m_stream->buffer.chop(1);
 
         m_stream->space = m_spaces;

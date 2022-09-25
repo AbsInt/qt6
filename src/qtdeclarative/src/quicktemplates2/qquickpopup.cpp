@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2017 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the Qt Quick Templates 2 module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2017 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qquickpopup_p.h"
 #include "qquickpopup_p_p.h"
@@ -237,15 +201,22 @@ Q_LOGGING_CATEGORY(lcPopup, "qt.quick.controls.popup")
 
     \section1 Back/Escape Event Handling
 
-    By default, a Popup will close if the Escape or Back keys are pressed. This
-    can be problematic for popups which contain items that want to handle those
-    events themselves. There are two solutions to this:
+    By default, a Popup will close if:
+    \list
+    \li It has \l activeFocus,
+    \li Its \l closePolicy is \c {Popup.CloseOnEscape}, and
+    \li The user presses the key sequence for QKeySequence::Cancel (typically
+        the Escape key)
+    \endlist
+
+    To prevent this from happening, either:
 
     \list
-    \li Set Popup's \l closePolicy to a value that does not include
+    \li Don't give the popup \l focus.
+    \li Set the popup's \l closePolicy to a value that does not include
         \c {Popup.CloseOnEscape}.
-    \li Handle \l {Keys}' \l {Keys::}{shortcutOverride} signal and accept the
-        event before Popup can.
+    \li Handle \l {Keys}' \l {Keys::}{escapePressed} signal in a child item of
+        the popup so that it gets the event before the Popup.
     \endlist
 
     \sa {Popup Controls}, {Customizing Popup}, ApplicationWindow
@@ -744,11 +715,9 @@ static QQuickItem *createDimmer(QQmlComponent *component, QQuickPopup *popup, QQ
 {
     QQuickItem *item = nullptr;
     if (component) {
-        QQmlContext *creationContext = component->creationContext();
-        if (!creationContext)
-            creationContext = qmlContext(popup);
-        QQmlContext *context = new QQmlContext(creationContext, popup);
-        context->setContextObject(popup);
+        QQmlContext *context = component->creationContext();
+        if (!context)
+            context = qmlContext(popup);
         item = qobject_cast<QQuickItem*>(component->beginCreate(context));
     }
 
@@ -906,7 +875,6 @@ QQuickPopup::~QQuickPopup()
 {
     Q_D(QQuickPopup);
     setParentItem(nullptr);
-    d->popupItem->ungrabShortcut();
 
     // If the popup is destroyed before the exit transition finishes,
     // the necessary cleanup (removing modal dimmers that block mouse events,
@@ -2066,8 +2034,6 @@ void QQuickPopup::setScale(qreal scale)
     not result in the first closing.
 
     The default value is \c {Popup.CloseOnEscape | Popup.CloseOnPressOutside}.
-    This default value may interfere with existing shortcuts in the application
-    that makes use of the \e Escape key.
 
     \note There is a known limitation that the \c Popup.CloseOnReleaseOutside
         and \c Popup.CloseOnReleaseOutsideParent policies only work with
@@ -2086,12 +2052,6 @@ void QQuickPopup::setClosePolicy(ClosePolicy policy)
     if (d->closePolicy == policy)
         return;
     d->closePolicy = policy;
-    if (isVisible()) {
-        if (policy & QQuickPopup::CloseOnEscape)
-            d->popupItem->grabShortcut();
-        else
-            d->popupItem->ungrabShortcut();
-    }
     emit closePolicyChanged();
 }
 
@@ -2501,13 +2461,6 @@ void QQuickPopup::componentComplete()
 
     d->complete = true;
     d->popupItem->componentComplete();
-
-    if (isVisible()) {
-        if (d->closePolicy & QQuickPopup::CloseOnEscape)
-            d->popupItem->grabShortcut();
-        else
-            d->popupItem->ungrabShortcut();
-    }
 }
 
 bool QQuickPopup::isComponentComplete() const
@@ -2536,10 +2489,27 @@ void QQuickPopup::focusOutEvent(QFocusEvent *event)
 void QQuickPopup::keyPressEvent(QKeyEvent *event)
 {
     Q_D(QQuickPopup);
-    event->accept();
+    if (!hasActiveFocus())
+        return;
 
-    if (hasActiveFocus() && (event->key() == Qt::Key_Tab || event->key() == Qt::Key_Backtab))
+#if QT_CONFIG(shortcut)
+    if (d->closePolicy.testFlag(QQuickPopup::CloseOnEscape)
+        && (event->matches(QKeySequence::Cancel)
+#if defined(Q_OS_ANDROID)
+        || event->key() == Qt::Key_Back
+#endif
+        )) {
+        event->accept();
+        if (d->interactive)
+            d->closeOrReject();
+        return;
+    }
+#endif
+
+    if (hasActiveFocus() && (event->key() == Qt::Key_Tab || event->key() == Qt::Key_Backtab)) {
+        event->accept();
         QQuickItemPrivate::focusNextPrev(d->popupItem, event->key() == Qt::Key_Tab);
+    }
 }
 
 void QQuickPopup::keyReleaseEvent(QKeyEvent *event)
@@ -2666,24 +2636,14 @@ void QQuickPopup::geometryChange(const QRectF &newGeometry, const QRectF &oldGeo
     }
 }
 
-void QQuickPopup::itemChange(QQuickItem::ItemChange change, const QQuickItem::ItemChangeData &data)
+void QQuickPopup::itemChange(QQuickItem::ItemChange change, const QQuickItem::ItemChangeData &)
 {
-    Q_D(QQuickPopup);
-
     switch (change) {
     case QQuickItem::ItemActiveFocusHasChanged:
         emit activeFocusChanged();
         break;
     case QQuickItem::ItemOpacityHasChanged:
         emit opacityChanged();
-        break;
-    case QQuickItem::ItemVisibleHasChanged:
-        if (isComponentComplete() && d->closePolicy & CloseOnEscape) {
-            if (data.boolValue)
-                d->popupItem->grabShortcut();
-            else
-                d->popupItem->ungrabShortcut();
-        }
         break;
     default:
         break;

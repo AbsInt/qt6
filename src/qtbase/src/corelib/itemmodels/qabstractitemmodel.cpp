@@ -1,42 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Copyright (C) 2020 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Giuseppe D'Angelo <giuseppe.dangelo@kdab.com>
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2022 The Qt Company Ltd.
+// Copyright (C) 2020 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Giuseppe D'Angelo <giuseppe.dangelo@kdab.com>
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qabstractitemmodel.h"
 #include <private/qabstractitemmodel_p.h>
@@ -50,6 +14,7 @@
 #  include <qregularexpression.h>
 #endif
 #include <qstack.h>
+#include <qmap.h>
 #include <qbitarray.h>
 #include <qdatetime.h>
 #include <qloggingcategory.h>
@@ -768,7 +733,7 @@ void QAbstractItemModelPrivate::invalidatePersistentIndex(const QModelIndex &ind
 }
 
 using DefaultRoleNames = QHash<int, QByteArray>;
-Q_GLOBAL_STATIC_WITH_ARGS(DefaultRoleNames, qDefaultRoleNames, (
+Q_GLOBAL_STATIC(DefaultRoleNames, qDefaultRoleNames,
     {
         { Qt::DisplayRole,    "display"    },
         { Qt::DecorationRole, "decoration" },
@@ -776,7 +741,7 @@ Q_GLOBAL_STATIC_WITH_ARGS(DefaultRoleNames, qDefaultRoleNames, (
         { Qt::ToolTipRole,    "toolTip"    },
         { Qt::StatusTipRole,  "statusTip"  },
         { Qt::WhatsThisRole,  "whatsThis"  },
-    }))
+    })
 
 const QHash<int,QByteArray> &QAbstractItemModelPrivate::defaultRoleNames()
 {
@@ -1859,13 +1824,13 @@ QAbstractItemModel::~QAbstractItemModel()
 */
 
 /*!
-    \fn void QAbstractItemModel::rowsMoved(const QModelIndex &parent, int start, int end, const QModelIndex &destination, int row)
+    \fn void QAbstractItemModel::rowsMoved(const QModelIndex &sourceParent, int sourceStart, int sourceEnd, const QModelIndex &destinationParent, int destinationRow)
     \since 4.6
 
     This signal is emitted after rows have been moved within the
-    model. The items between \a start and \a end
-    inclusive, under the given \a parent item have been moved to \a destination
-    starting at the row \a row.
+    model. The items between \a sourceStart and \a sourceEnd
+    inclusive, under the given \a sourceParent item have been moved to \a destinationParent
+    starting at the row \a destinationRow.
 
     \b{Note:} Components connected to this signal use it to adapt to changes
     in the model's dimensions. It can only be emitted by the QAbstractItemModel
@@ -1891,13 +1856,13 @@ QAbstractItemModel::~QAbstractItemModel()
 */
 
 /*!
-    \fn void QAbstractItemModel::columnsMoved(const QModelIndex &parent, int start, int end, const QModelIndex &destination, int column)
+    \fn void QAbstractItemModel::columnsMoved(const QModelIndex &sourceParent, int sourceStart, int sourceEnd, const QModelIndex &destinationParent, int destinationColumn)
     \since 4.6
 
     This signal is emitted after columns have been moved within the
-    model. The items between \a start and \a end
-    inclusive, under the given \a parent item have been moved to \a destination
-    starting at the column \a column.
+    model. The items between \a sourceStart and \a sourceEnd
+    inclusive, under the given \a sourceParent item have been moved to \a destinationParent
+    starting at the column \a destinationColumn.
 
     \b{Note:} Components connected to this signal use it to adapt to changes
     in the model's dimensions. It can only be emitted by the QAbstractItemModel

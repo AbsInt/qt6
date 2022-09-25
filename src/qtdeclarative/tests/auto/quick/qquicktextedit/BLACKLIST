@@ -12,18 +12,6 @@ macos ci
 [hAlignVisual]
 sles
 
-# QTBUG-103200
-[keyEventPropagation]
-opensuse-leap
-[inFlickableTouch]
-opensuse-leap
-[inFlickableMouse]
-opensuse-leap
-
-# QTBUG-100991
-[selectionOnFocusOut]
-android
-
 # QTBUG-103098
 [hAlignVisual]
 android
@@ -34,3 +22,6 @@ android
 [transparentSelectionColor]
 android
 
+# QTBUG-100991
+[selectionOnFocusOut]
+android

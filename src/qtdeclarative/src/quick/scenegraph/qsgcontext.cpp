@@ -1,44 +1,9 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtQuick module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include <QtQuick/private/qsgcontext_p.h>
 #include <QtQuick/private/qsgtexture_p.h>
+#include <QtQuick/private/qsgrenderer_p.h>
 #include <QtQuick/private/qquickpixmapcache_p.h>
 #include <QtQuick/private/qsgadaptationlayer_p.h>
 
@@ -128,8 +93,17 @@ public:
         , m_good(0)
     {
         QScreen *screen = QGuiApplication::primaryScreen();
+        if (screen) {
+            qreal refreshRate = screen->refreshRate();
+            // To work around that some platforms wrongfully return 0 or something
+            // bogus for the refresh rate.
+            if (refreshRate < 1)
+                refreshRate = 60;
+            m_vsync = 1000.0f / float(refreshRate);
+        } else {
+            m_vsync = 16.67f;
+        }
         if (screen && !qsg_useConsistentTiming()) {
-            m_vsync = 1000.0 / screen->refreshRate();
             if (m_vsync <= 0)
                 m_mode = TimerMode;
         } else {
@@ -180,7 +154,7 @@ public:
 
             m_time += m_vsync;
 
-            if (delta > m_vsync * 1.25) {
+            if (delta > m_vsync * 1.25f) {
                 m_lag += (delta / m_vsync);
                 m_bad++;
                // We tolerate one bad frame without resorting to timer based. This is
@@ -197,7 +171,7 @@ public:
             }
 
         } else {
-            if (delta < 1.25 * m_vsync) {
+            if (delta < 1.25f * m_vsync) {
                 ++m_good;
             } else {
                 m_good = 0;
@@ -218,12 +192,14 @@ public:
         advanceAnimation();
     }
 
+    float vsyncInterval() const { return m_vsync; } // this should always return something sane, regardless of m_mode
+
     double m_time;
-    double m_vsync;
+    float m_vsync;
     Mode m_mode;
     QElapsedTimer m_timer;
     QElapsedTimer m_wallTime;
-    double m_lag;
+    float m_lag;
     int m_bad;
     int m_good;
 };
@@ -297,6 +273,15 @@ QAnimationDriver *QSGContext::createAnimationDriver(QObject *parent)
     return new QSGAnimationDriver(parent);
 }
 
+/*!
+    \return the vsync rate (such as, 16.68 ms or similar), if applicable, for
+    the \a driver that was created by createAnimationDriver().
+ */
+float QSGContext::vsyncIntervalForAnimationDriver(QAnimationDriver *driver)
+{
+    return static_cast<QSGAnimationDriver *>(driver)->vsyncInterval();
+}
+
 QSize QSGContext::minimumFBOSize() const
 {
     return QSize(1, 1);
@@ -350,43 +335,18 @@ void QSGRenderContext::prepareSync(qreal devicePixelRatio,
     Q_UNUSED(config);
 }
 
-void QSGRenderContext::beginNextFrame(QSGRenderer *renderer,
+void QSGRenderContext::beginNextFrame(QSGRenderer *renderer, const QSGRenderTarget &renderTarget,
                                       RenderPassCallback mainPassRecordingStart,
                                       RenderPassCallback mainPassRecordingEnd,
                                       void *callbackUserData)
 {
-    Q_UNUSED(renderer);
+    renderer->setRenderTarget(renderTarget);
     Q_UNUSED(mainPassRecordingStart);
     Q_UNUSED(mainPassRecordingEnd);
     Q_UNUSED(callbackUserData);
 }
 
 void QSGRenderContext::endNextFrame(QSGRenderer *renderer)
-{
-    Q_UNUSED(renderer);
-}
-
-void QSGRenderContext::beginNextRhiFrame(QSGRenderer *renderer,
-                                         QRhiRenderTarget *rt, QRhiRenderPassDescriptor *rp, QRhiCommandBuffer *cb,
-                                         RenderPassCallback mainPassRecordingStart,
-                                         RenderPassCallback mainPassRecordingEnd,
-                                         void *callbackUserData)
-{
-    Q_UNUSED(renderer);
-    Q_UNUSED(rt);
-    Q_UNUSED(rp);
-    Q_UNUSED(cb);
-    Q_UNUSED(mainPassRecordingStart);
-    Q_UNUSED(mainPassRecordingEnd);
-    Q_UNUSED(callbackUserData);
-}
-
-void QSGRenderContext::renderNextRhiFrame(QSGRenderer *renderer)
-{
-    Q_UNUSED(renderer);
-}
-
-void QSGRenderContext::endNextRhiFrame(QSGRenderer *renderer)
 {
     Q_UNUSED(renderer);
 }
@@ -412,6 +372,10 @@ QSGDistanceFieldGlyphCache *QSGRenderContext::distanceFieldGlyphCache(const QRaw
     return nullptr;
 }
 
+void QSGRenderContext::invalidateGlyphCaches()
+{
+
+}
 
 void QSGRenderContext::registerFontengineForCleanup(QFontEngine *engine)
 {
@@ -473,7 +437,7 @@ QSGTexture *QSGRenderContext::compressedTextureForFactory(const QSGCompressedTex
     return nullptr;
 }
 
+QT_END_NAMESPACE
+
 #include "qsgcontext.moc"
 #include "moc_qsgcontext_p.cpp"
-
-QT_END_NAMESPACE

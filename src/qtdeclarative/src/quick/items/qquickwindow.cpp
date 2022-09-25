@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtQuick module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2020 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qquickwindow.h"
 #include "qquickwindow_p.h"
@@ -53,6 +17,7 @@
 #include <private/qquickrendercontrol_p.h>
 #include <private/qquickanimatorcontroller_p.h>
 #include <private/qquickprofiler_p.h>
+#include <private/qquicktextinterface_p.h>
 
 #include <private/qguiapplication_p.h>
 
@@ -88,6 +53,7 @@
 
 QT_BEGIN_NAMESPACE
 
+Q_DECLARE_LOGGING_CATEGORY(lcHoverTrace)
 Q_DECLARE_LOGGING_CATEGORY(lcMouse)
 Q_DECLARE_LOGGING_CATEGORY(lcTouch)
 Q_DECLARE_LOGGING_CATEGORY(lcPtr)
@@ -163,10 +129,6 @@ private:
     int m_incubation_time;
     int m_timer;
 };
-
-#include "qquickwindow.moc"
-#include "moc_qquickwindow_p.cpp"
-
 
 #if QT_CONFIG(accessibility)
 /*!
@@ -428,12 +390,18 @@ static void updatePixelRatioHelper(QQuickItem *item, float pixelRatio)
 void QQuickWindow::physicalDpiChanged()
 {
     Q_D(QQuickWindow);
-    const qreal newPixelRatio = screen()->devicePixelRatio();
-    if (qFuzzyCompare(newPixelRatio, d->devicePixelRatio))
+    const qreal newPixelRatio = effectiveDevicePixelRatio();
+    if (qFuzzyCompare(newPixelRatio, d->lastReportedItemDevicePixelRatio))
         return;
-    d->devicePixelRatio = newPixelRatio;
+    d->lastReportedItemDevicePixelRatio = newPixelRatio;
     if (d->contentItem)
         updatePixelRatioHelper(d->contentItem, newPixelRatio);
+}
+
+void QQuickWindow::handleFontDatabaseChanged()
+{
+    Q_D(QQuickWindow);
+    d->pendingFontUpdate = true;
 }
 
 void QQuickWindow::handleScreenChanged(QScreen *screen)
@@ -488,12 +456,16 @@ void forceUpdate(QQuickItem *item)
 
 void QQuickWindowRenderTarget::reset(QRhi *rhi)
 {
-    if (rhi && owns) {
-        delete renderTarget;
-        delete rpDesc;
-        delete texture;
-        delete renderBuffer;
-        delete depthStencil;
+    if (owns) {
+        if (rhi) {
+            delete renderTarget;
+            delete rpDesc;
+            delete texture;
+            delete renderBuffer;
+            delete depthStencil;
+        }
+
+        delete paintDevice;
     }
 
     renderTarget = nullptr;
@@ -501,20 +473,31 @@ void QQuickWindowRenderTarget::reset(QRhi *rhi)
     texture = nullptr;
     renderBuffer = nullptr;
     depthStencil = nullptr;
+    paintDevice = nullptr;
     owns = false;
+}
+
+void QQuickWindowPrivate::invalidateFontData(QQuickItem *item)
+{
+    QQuickTextInterface *textItem = qobject_cast<QQuickTextInterface *>(item);
+    if (textItem != nullptr)
+        textItem->invalidate();
+
+    QList<QQuickItem *> children = item->childItems();
+    for (QQuickItem *child : children)
+        invalidateFontData(child);
 }
 
 void QQuickWindowPrivate::ensureCustomRenderTarget()
 {
     // resolve() can be expensive when importing an existing native texture, so
     // it is important to only do it when the QQuickRenderTarget* was really changed
-    if (!redirect.renderTargetDirty || !rhi)
+    if (!redirect.renderTargetDirty)
         return;
 
     redirect.renderTargetDirty = false;
 
     redirect.rt.reset(rhi);
-    redirect.devicePixelRatio = customRenderTarget.devicePixelRatio();
 
     // a default constructed QQuickRenderTarget means no redirection
     if (customRenderTarget.isNull())
@@ -535,11 +518,6 @@ void QQuickWindowPrivate::syncSceneGraph()
 
     ensureCustomRenderTarget();
 
-    // Calculate the dpr the same way renderSceneGraph() will.
-    qreal devicePixelRatio = q->effectiveDevicePixelRatio();
-    if (redirect.rt.renderTarget && !QQuickRenderControl::renderWindowFor(q))
-        devicePixelRatio = redirect.devicePixelRatio;
-
     QRhiCommandBuffer *cb = nullptr;
     if (rhi) {
         if (redirect.commandBuffer)
@@ -547,12 +525,18 @@ void QQuickWindowPrivate::syncSceneGraph()
         else
             cb = swapchain->currentFrameCommandBuffer();
     }
-    context->prepareSync(devicePixelRatio, cb, graphicsConfig);
+    context->prepareSync(q->effectiveDevicePixelRatio(), cb, graphicsConfig);
 
     animationController->beforeNodeSync();
 
     emit q->beforeSynchronizing();
     runAndClearJobs(&beforeSynchronizingJobs);
+
+    if (pendingFontUpdate) {
+        QFont::cleanup();
+        invalidateFontData(contentItem);
+    }
+
     if (!renderer) {
         forceUpdate(contentItem);
 
@@ -579,6 +563,11 @@ void QQuickWindowPrivate::syncSceneGraph()
 
     renderer->setVisualizationMode(visualizationMode);
 
+    if (pendingFontUpdate) {
+        context->invalidateGlyphCaches();
+        pendingFontUpdate = false;
+    }
+
     emit q->afterSynchronizing();
     runAndClearJobs(&afterSynchronizingJobs);
 }
@@ -601,8 +590,10 @@ void QQuickWindowPrivate::renderSceneGraph(const QSize &size, const QSize &surfa
     if (!renderer)
         return;
 
+    ensureCustomRenderTarget();
+
+    QSGRenderTarget sgRenderTarget;
     if (rhi) {
-        ensureCustomRenderTarget();
         QRhiRenderTarget *rt;
         QRhiRenderPassDescriptor *rp;
         QRhiCommandBuffer *cb;
@@ -627,72 +618,53 @@ void QQuickWindowPrivate::renderSceneGraph(const QSize &size, const QSize &surfa
             rp = rpDescForSwapchain;
             cb = swapchain->currentFrameCommandBuffer();
         }
-        context->beginNextRhiFrame(renderer, rt, rp, cb,
-                                   emitBeforeRenderPassRecording,
-                                   emitAfterRenderPassRecording,
-                                   q);
+        sgRenderTarget.rt = rt;
+        sgRenderTarget.rpDesc = rp;
+        sgRenderTarget.cb = cb;
     } else {
-        context->beginNextFrame(renderer,
-                                emitBeforeRenderPassRecording,
-                                emitAfterRenderPassRecording,
-                                q);
+        sgRenderTarget.paintDevice = redirect.rt.paintDevice;
     }
+
+    context->beginNextFrame(renderer,
+                            sgRenderTarget,
+                            emitBeforeRenderPassRecording,
+                            emitAfterRenderPassRecording,
+                            q);
 
     animationController->advance();
     emit q->beforeRendering();
     runAndClearJobs(&beforeRenderingJobs);
 
     QSGAbstractRenderer::MatrixTransformFlags matrixFlags;
-    const bool flipY = rhi ? !rhi->isYUpInNDC() : false;
+    bool flipY = rhi ? !rhi->isYUpInNDC() : false;
+    if (!customRenderTarget.isNull() && customRenderTarget.mirrorVertically())
+        flipY = !flipY;
     if (flipY)
         matrixFlags |= QSGAbstractRenderer::MatrixTransformFlipY;
-    const qreal devicePixelRatio = q->effectiveDevicePixelRatio();
-    if (redirect.rt.renderTarget) {
-        const QSize pixelSize = redirect.rt.renderTarget->pixelSize();
-        QRect rect(QPoint(0, 0), pixelSize);
-        renderer->setDeviceRect(rect);
-        renderer->setViewportRect(rect);
-        if (QQuickRenderControl::renderWindowFor(q)) {
-            renderer->setProjectionMatrixToRect(QRect(QPoint(0, 0), size), matrixFlags);
-            renderer->setDevicePixelRatio(devicePixelRatio);
-        } else {
-            const QSizeF logicalSize = pixelSize / redirect.devicePixelRatio;
-            renderer->setProjectionMatrixToRect(QRectF(QPointF(0, 0), logicalSize), matrixFlags);
-            renderer->setDevicePixelRatio(redirect.devicePixelRatio);
-        }
-    } else {
-        QSize pixelSize;
-        QSizeF logicalSize;
-        if (surfaceSize.isEmpty()) {
-            pixelSize = size * devicePixelRatio;
-            logicalSize = size;
-        } else {
-            pixelSize = surfaceSize;
-            logicalSize = QSizeF(surfaceSize) / devicePixelRatio;
-        }
-        QRect rect(QPoint(0, 0), pixelSize);
-        renderer->setDeviceRect(rect);
-        renderer->setViewportRect(rect);
-        renderer->setProjectionMatrixToRect(QRectF(QPoint(0, 0), logicalSize), matrixFlags);
-        renderer->setDevicePixelRatio(devicePixelRatio);
-    }
 
-    if (rhi) {
-        context->renderNextRhiFrame(renderer);
-    } else {
-        // This is the software backend (or some custom scenegraph context
-        // plugin) in practice, because the default implementation always
-        // hits the QRhi-based path in Qt 6.
-        context->renderNextFrame(renderer);
-    }
+    const qreal devicePixelRatio = q->effectiveDevicePixelRatio();
+    QSize pixelSize;
+    if (redirect.rt.renderTarget)
+        pixelSize = redirect.rt.renderTarget->pixelSize();
+    else if (redirect.rt.paintDevice)
+        pixelSize = QSize(redirect.rt.paintDevice->width(), redirect.rt.paintDevice->height());
+    else if (surfaceSize.isEmpty())
+        pixelSize = size * devicePixelRatio;
+    else
+        pixelSize = surfaceSize;
+    QSizeF logicalSize = QSizeF(pixelSize) / devicePixelRatio;
+
+    renderer->setDevicePixelRatio(devicePixelRatio);
+    renderer->setDeviceRect(QRect(QPoint(0, 0), pixelSize));
+    renderer->setViewportRect(QRect(QPoint(0, 0), pixelSize));
+    renderer->setProjectionMatrixToRect(QRectF(QPointF(0, 0), logicalSize), matrixFlags);
+
+    context->renderNextFrame(renderer);
 
     emit q->afterRendering();
     runAndClearJobs(&afterRenderingJobs);
 
-    if (rhi)
-        context->endNextRhiFrame(renderer);
-    else
-        context->endNextFrame(renderer);
+    context->endNextFrame(renderer);
 
     if (renderer && renderer->hasVisualizationModeWithContinuousUpdate()) {
         // For the overdraw visualizer. This update is not urgent so avoid a
@@ -705,7 +677,7 @@ void QQuickWindowPrivate::renderSceneGraph(const QSize &size, const QSize &surfa
 QQuickWindowPrivate::QQuickWindowPrivate()
     : contentItem(nullptr)
     , dirtyItemList(nullptr)
-    , devicePixelRatio(0)
+    , lastReportedItemDevicePixelRatio(0)
     , context(nullptr)
     , renderer(nullptr)
     , windowManager(nullptr)
@@ -769,8 +741,13 @@ void QQuickWindowPrivate::init(QQuickWindow *c, QQuickRenderControl *control)
 
     Q_ASSERT(windowManager || renderControl);
 
+    QObject::connect(static_cast<QGuiApplication *>(QGuiApplication::instance()),
+                     &QGuiApplication::fontDatabaseChanged,
+                     q,
+                     &QQuickWindow::handleFontDatabaseChanged);
+
     if (QScreen *screen = q->screen()) {
-        devicePixelRatio = screen->devicePixelRatio();
+        lastReportedItemDevicePixelRatio = q->effectiveDevicePixelRatio();
         // if the screen changes, then QQuickWindow::handleScreenChanged disconnects
         // and connects to the new screen
         physicalDpiChangedConnection = QObject::connect(screen, &QScreen::physicalDotsPerInchChanged,
@@ -1352,13 +1329,13 @@ QObject *QQuickWindow::focusObject() const
 }
 
 /*! \reimp */
-bool QQuickWindow::event(QEvent *e)
+bool QQuickWindow::event(QEvent *event)
 {
     Q_D(QQuickWindow);
 
     // bypass QWindow::event dispatching of input events: deliveryAgent takes care of it
     QQuickDeliveryAgent *da = d->deliveryAgent;
-    if (e->isPointerEvent()) {
+    if (event->isPointerEvent()) {
         /*
             We can't bypass the virtual functions like mousePressEvent() tabletEvent() etc.,
             for the sake of code that subclasses QQuickWindow and overrides them, even though
@@ -1372,11 +1349,11 @@ bool QQuickWindow::event(QEvent *e)
         if (d->windowEventDispatch)
             return false;
         {
-            const bool wasAccepted = e->isAccepted();
+            const bool wasAccepted = event->isAccepted();
             QBoolBlocker windowEventDispatchGuard(d->windowEventDispatch, true);
-            qCDebug(lcPtr) << "dispatching to window functions in case of override" << e;
-            QWindow::event(e);
-            if (e->isAccepted() && !wasAccepted)
+            qCDebug(lcPtr) << "dispatching to window functions in case of override" << event;
+            QWindow::event(event);
+            if (event->isAccepted() && !wasAccepted)
                 return true;
         }
         /*
@@ -1386,9 +1363,9 @@ bool QQuickWindow::event(QEvent *e)
             QWindow::touchEvent(), which will ignore(); in that case, we need to continue
             with the usual delivery below, so we need to undo the ignore().
         */
-        auto pe = static_cast<QPointerEvent *>(e);
+        auto pe = static_cast<QPointerEvent *>(event);
         if (QQuickDeliveryAgentPrivate::isTouchEvent(pe))
-            e->accept();
+            event->accept();
         // end of dispatch to user-overridden virtual window functions
 
         /*
@@ -1415,17 +1392,10 @@ bool QQuickWindow::event(QEvent *e)
                 auto insert = [&](QQuickDeliveryAgent *ptda, const QEventPoint &pt) {
                     if (pt.state() == QEventPoint::Pressed)
                         pe->clearPassiveGrabbers(pt);
-                    auto danpit = deliveryAgentsNeedingPoints.find(ptda);
-                    if (danpit == deliveryAgentsNeedingPoints.end()) {
-                        deliveryAgentsNeedingPoints.insert(ptda, QList<QEventPoint>() << pt);
-                    } else {
-                        auto &ptList = danpit.value();
-                        auto ptid = pt.id();
-                        auto alreadyThere = std::find_if(ptList.constBegin(), ptList.constEnd(),
-                            [ptid] (const QEventPoint &pep) { return pep.id() == ptid; });
-                        if (alreadyThere == ptList.constEnd())
-                            danpit.value().append(pt);
-                    }
+                    auto &ptList = deliveryAgentsNeedingPoints[ptda];
+                    auto idEquals = [](auto id) { return [id] (const auto &e) { return e.id() == id; }; };
+                    if (std::none_of(ptList.cbegin(), ptList.cend(), idEquals(pt.id())))
+                        ptList.append(pt);
                 };
 
                 for (const auto &pt : pe->points()) {
@@ -1495,7 +1465,7 @@ bool QQuickWindow::event(QEvent *e)
         // If we didn't handle it in the block above, handle it now.
         // TODO should we deliver to all DAs at once then, since we don't know which one should get it?
         // or fix QTBUG-90851 so that the event always has points?
-        bool ret = (da && da->event(e));
+        bool ret = (da && da->event(event));
 
         // failsafe: never allow any kind of grab to persist after release,
         // unless we're waiting for a synth event from QtGui (as with most tablet events)
@@ -1520,12 +1490,12 @@ bool QQuickWindow::event(QEvent *e)
 
         if (ret)
             return true;
-    } else if (e->isInputEvent()) {
-        if (da && da->event(e))
+    } else if (event->isInputEvent()) {
+        if (da && da->event(event))
             return true;
     }
 
-    switch (e->type()) {
+    switch (event->type()) {
     // a few more types that are not QInputEvents, but QQuickDeliveryAgent needs to handle them anyway
     case QEvent::FocusAboutToChange:
     case QEvent::Enter:
@@ -1540,20 +1510,20 @@ bool QQuickWindow::event(QEvent *e)
 #endif
         if (d->inDestructor)
             return false;
-        if (da && da->event(e))
+        if (da && da->event(event))
             return true;
         break;
     case QEvent::LanguageChange:
     case QEvent::LocaleChange:
         if (d->contentItem)
-            QCoreApplication::sendEvent(d->contentItem, e);
+            QCoreApplication::sendEvent(d->contentItem, event);
         break;
     case QEvent::UpdateRequest:
         if (d->windowManager)
             d->windowManager->handleUpdateRequest(this);
         break;
     case QEvent::PlatformSurface:
-        if ((static_cast<QPlatformSurfaceEvent *>(e))->surfaceEventType() == QPlatformSurfaceEvent::SurfaceAboutToBeDestroyed) {
+        if ((static_cast<QPlatformSurfaceEvent *>(event))->surfaceEventType() == QPlatformSurfaceEvent::SurfaceAboutToBeDestroyed) {
             // Ensure that the rendering thread is notified before
             // the QPlatformWindow is destroyed.
             if (d->windowManager)
@@ -1566,21 +1536,25 @@ bool QQuickWindow::event(QEvent *e)
         Q_FALLTHROUGH();
     case QEvent::WindowActivate:
         if (d->contentItem)
-            QCoreApplication::sendEvent(d->contentItem, e);
+            QCoreApplication::sendEvent(d->contentItem, event);
         break;
+    case QEvent::ApplicationPaletteChange:
+        d->inheritPalette(QGuiApplication::palette());
+        if (d->contentItem)
+            QCoreApplication::sendEvent(d->contentItem, event);
     default:
         break;
     }
 
-    if (e->type() == QEvent::Type(QQuickWindowPrivate::FullUpdateRequest))
+    if (event->type() == QEvent::Type(QQuickWindowPrivate::FullUpdateRequest))
         update();
-    else if (e->type() == QEvent::Type(QQuickWindowPrivate::TriggerContextCreationFailure))
+    else if (event->type() == QEvent::Type(QQuickWindowPrivate::TriggerContextCreationFailure))
         d->windowManager->handleContextCreationFailure(this);
 
-    if (e->isPointerEvent())
+    if (event->isPointerEvent())
         return true;
     else
-        return QWindow::event(e);
+        return QWindow::event(event);
 }
 
 /*! \reimp */
@@ -1692,10 +1666,14 @@ void QQuickWindowPrivate::updateCursor(const QPointF &scenePos, QQuickItem *root
         QWindow *window = renderWindow ? renderWindow : q;
         cursorItem = cursorItemAndHandler.first;
         cursorHandler = cursorItemAndHandler.second;
-        if (cursorItem)
-            window->setCursor(QQuickItemPrivate::get(cursorItem)->effectiveCursor(cursorHandler));
-        else
+        if (cursorItem) {
+            const auto cursor = QQuickItemPrivate::get(cursorItem)->effectiveCursor(cursorHandler);
+            qCDebug(lcHoverTrace) << "setting cursor" << cursor << "from" << cursorHandler << "or" << cursorItem;
+            window->setCursor(cursor);
+        } else {
+            qCDebug(lcHoverTrace) << "unsetting cursor";
             window->unsetCursor();
+        }
     }
 }
 
@@ -2437,9 +2415,6 @@ bool QQuickWindow::isSceneGraphInitialized() const
     scenegraph is about to render the next frame. Therefore change the target
     only when necessary.
 
-    \note This function should not be used when using the \c software backend.
-    Instead, use grabWindow() to render the content into a QImage.
-
     \note The window does not take ownership of any native objects referenced
     in \a target.
 
@@ -2558,7 +2533,7 @@ QImage QQuickWindow::grabWindow()
         if (d->windowManager && (d->windowManager->flags() & QSGRenderLoop::SupportsGrabWithoutExpose))
             return d->windowManager->grab(this);
 
-        if (!isSceneGraphInitialized() && QSGRhiSupport::instance()->isRhiEnabled()) {
+        if (!isSceneGraphInitialized()) {
             // We do not have rendering up and running. Forget the render loop,
             // do a frame completely offscreen and synchronously into a
             // texture. This can be *very* slow due to all the device/context
@@ -3044,6 +3019,7 @@ QSGTexture *QQuickWindow::createTextureFromImage(const QImage &image, CreateText
 
 QSGTexture *QQuickWindowPrivate::createTextureFromNativeTexture(quint64 nativeObjectHandle,
                                                                 int nativeLayout,
+                                                                uint nativeFormat,
                                                                 const QSize &size,
                                                                 QQuickWindow::CreateTextureOptions options,
                                                                 TextureFromNativeTextureFlags flags) const
@@ -3052,7 +3028,7 @@ QSGTexture *QQuickWindowPrivate::createTextureFromNativeTexture(quint64 nativeOb
         return nullptr;
 
     QSGPlainTexture *texture = new QSGPlainTexture;
-    texture->setTextureFromNativeTexture(rhi, nativeObjectHandle, nativeLayout,
+    texture->setTextureFromNativeTexture(rhi, nativeObjectHandle, nativeLayout, nativeFormat,
                                          size, options, flags);
     texture->setHasAlphaChannel(options & QQuickWindow::TextureHasAlphaChannel);
     // note that the QRhiTexture does not (and cannot) own the native object
@@ -3748,21 +3724,31 @@ void QQuickWindow::runJobsAfterSwap()
 }
 
 /*!
- * Returns the device pixel ratio for this window.
- *
- * This is different from QWindow::devicePixelRatio() in that it supports
- * redirected rendering via QQuickRenderControl. When using a
- * QQuickRenderControl, the QQuickWindow is often not created, meaning it is
- * never shown and there is no underlying native window created in the
- * windowing system. As a result, querying properties like the device pixel
- * ratio cannot give correct results. Use this function instead.
- *
- * \sa QWindow::devicePixelRatio()
+    Returns the device pixel ratio for this window.
+
+    This is different from QWindow::devicePixelRatio() in that it supports
+    redirected rendering via QQuickRenderControl and QQuickRenderTarget. When
+    using a QQuickRenderControl, the QQuickWindow is often not fully created,
+    meaning it is never shown and there is no underlying native window created
+    in the windowing system. As a result, querying properties like the device
+    pixel ratio cannot give correct results. This function takes into account
+    both QQuickRenderControl::renderWindowFor() and
+    QQuickRenderTarget::devicePixelRatio(). When no redirection is in effect,
+    the result is same as QWindow::devicePixelRatio().
+
+    \sa QQuickRenderControl, QQuickRenderTarget, setRenderTarget(), QWindow::devicePixelRatio()
  */
 qreal QQuickWindow::effectiveDevicePixelRatio() const
 {
+    Q_D(const QQuickWindow);
     QWindow *w = QQuickRenderControl::renderWindowFor(const_cast<QQuickWindow *>(this));
-    return w ? w->devicePixelRatio() : devicePixelRatio();
+    if (w)
+        return w->devicePixelRatio();
+
+    if (!d->customRenderTarget.isNull())
+        return d->customRenderTarget.devicePixelRatio();
+
+    return devicePixelRatio();
 }
 
 /*!
@@ -4192,6 +4178,8 @@ QDebug operator<<(QDebug debug, const QQuickWindow *win)
 }
 #endif
 
-#include "moc_qquickwindow.cpp"
-
 QT_END_NAMESPACE
+
+#include "qquickwindow.moc"
+#include "moc_qquickwindow_p.cpp"
+#include "moc_qquickwindow.cpp"

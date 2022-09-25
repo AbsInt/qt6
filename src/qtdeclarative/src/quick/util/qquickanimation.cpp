@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtQuick module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qquickanimation_p.h"
 #include "qquickanimation_p_p.h"
@@ -173,7 +137,8 @@ void QQuickAbstractAnimationPrivate::commence()
     if (animationInstance) {
         if (q->threadingModel() == QQuickAbstractAnimation::RenderThread)
             animationInstance = new QQuickAnimatorProxyJob(animationInstance, q);
-        animationInstance->addAnimationChangeListener(this, QAbstractAnimationJob::Completion);
+        animationInstance->addAnimationChangeListener(this,
+            QAbstractAnimationJob::Completion | QAbstractAnimationJob::CurrentLoop);
         emit q->started();
         animationInstance->start();
     }
@@ -1950,6 +1915,35 @@ QAbstractAnimationJob* QQuickParallelAnimation::transition(QQuickStateActions &a
     return initInstance(ag);
 }
 
+void QQuickPropertyAnimationPrivate::animationCurrentLoopChanged(QAbstractAnimationJob *)
+{
+    Q_Q(QQuickPropertyAnimation);
+    // We listen to current loop changes in order to restart the animation if e.g. from, to, etc.
+    // are modified while the animation is running.
+    // Restarting is a bit drastic but there is a lot of stuff that commence() (and therefore
+    // QQuickPropertyAnimation::transition() and QQuickPropertyAnimation::createTransitionActions())
+    // does, so we want to avoid trying to take a shortcut and just restart the whole thing.
+    if (ourPropertiesDirty) {
+        ourPropertiesDirty = false;
+
+        // We use animationInstance everywhere for simplicity - if we defined the job parameter
+        // it would be deleted as soon as we call stop().
+        Q_ASSERT(animationInstance);
+        const int currentLoop = animationInstance->currentLoop();
+
+        QSignalBlocker signalBlocker(q);
+        q->stop();
+        q->start();
+
+        Q_ASSERT(animationInstance);
+        // We multiply it ourselves here instead of just saving currentTime(), because otherwise
+        // it seems to accumulate, and changing our properties while the animation is running
+        // can result in the animation starting mid-way through a loop, which is not we want;
+        // we want it to start from the beginning.
+        animationInstance->setCurrentTime(currentLoop * animationInstance->duration());
+    }
+}
+
 //convert a variant from string type to another animatable type
 void QQuickPropertyAnimationPrivate::convertVariant(QVariant &variant, QMetaType type)
 {
@@ -2090,6 +2084,12 @@ void QQuickBulkValueAnimator::debugAnimation(QDebug d) const
     Note that PropertyAnimation inherits the abstract \l Animation type.
     This includes additional properties and methods for controlling the animation.
 
+    \section1 Modifying Properties Duration Animations
+
+    Since Qt 6.4, it is possible to set the \l from, \l to, \l duration, and
+    \l easing properties on a top-level animation while it is running. The
+    animation will take the changes into account on the next loop.
+
     \sa {Animation and Transitions in Qt Quick}, {Qt Quick Examples - Animation}
 */
 
@@ -2130,6 +2130,8 @@ void QQuickPropertyAnimation::setDuration(int duration)
     if (d->duration == duration)
         return;
     d->duration = duration;
+    if (d->componentComplete && d->running)
+        d->ourPropertiesDirty = true;
     emit durationChanged(duration);
 }
 
@@ -2157,6 +2159,8 @@ void QQuickPropertyAnimation::setFrom(const QVariant &f)
         return;
     d->from = f;
     d->fromIsDefined = f.isValid();
+    if (d->componentComplete && d->running)
+        d->ourPropertiesDirty = true;
     emit fromChanged();
 }
 
@@ -2184,6 +2188,8 @@ void QQuickPropertyAnimation::setTo(const QVariant &t)
         return;
     d->to = t;
     d->toIsDefined = t.isValid();
+    if (d->componentComplete && d->running)
+        d->ourPropertiesDirty = true;
     emit toChanged();
 }
 
@@ -2414,6 +2420,8 @@ void QQuickPropertyAnimation::setEasing(const QEasingCurve &e)
         return;
 
     d->easing = e;
+    if (d->componentComplete && d->running)
+        d->ourPropertiesDirty = true;
     emit easingChanged(e);
 }
 

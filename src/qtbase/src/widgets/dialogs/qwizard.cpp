@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtWidgets module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qwizard.h"
 #include <QtWidgets/private/qtwidgetsglobal_p.h>
@@ -80,6 +44,8 @@
 #include <algorithm>
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 // These fudge terms were needed a few places to obtain pixel-perfect results
 const int GapBetweenLogoAndRightEdge = 5;
@@ -206,7 +172,7 @@ QWizardField::QWizardField(QWizardPage *page, const QString &spec, QObject *obje
     : page(page), name(spec), mandatory(false), object(object), property(property),
       changedSignal(changedSignal)
 {
-    if (name.endsWith(QLatin1Char('*'))) {
+    if (name.endsWith(u'*')) {
         name.chop(1);
         mandatory = true;
     }
@@ -383,7 +349,7 @@ void QWizardHeader::setup(const QWizardLayoutInfo &info, const QString &title,
     logoLabel->setPixmap(logo);
 
     subTitleLabel->setTextFormat(subTitleFormat);
-    subTitleLabel->setText(QLatin1String("Pq\nPq"));
+    subTitleLabel->setText("Pq\nPq"_L1);
     int desiredSubTitleHeight = subTitleLabel->sizeHint().height();
     subTitleLabel->setText(subTitle);
 
@@ -1049,7 +1015,7 @@ void QWizardPrivate::recreateLayout(const QWizardLayoutInfo &info)
 
         if (aero) {
             // ### hardcoded for now:
-            titleFont = QFont(QLatin1String("Segoe UI"), 12);
+            titleFont = QFont("Segoe UI"_L1, 12);
             QPalette pal(titleLabel->palette());
             pal.setColor(QPalette::Text, QColor(0x00, 0x33, 0x99));
             titleLabel->setPalette(pal);
@@ -1365,11 +1331,11 @@ static QString object_name_for_button(QWizard::WizardButton which)
 {
     switch (which) {
     case QWizard::CommitButton:
-        return QLatin1String("qt_wizard_") + QLatin1String("commit");
+        return "qt_wizard_commit"_L1;
     case QWizard::FinishButton:
-        return QLatin1String("qt_wizard_") + QLatin1String("finish");
+        return "qt_wizard_finish"_L1;
     case QWizard::CancelButton:
-        return QLatin1String("qt_wizard_") + QLatin1String("cancel");
+        return "qt_wizard_cancel"_L1;
     case QWizard::BackButton:
     case QWizard::NextButton:
     case QWizard::HelpButton:
@@ -1377,7 +1343,7 @@ static QString object_name_for_button(QWizard::WizardButton which)
     case QWizard::CustomButton2:
     case QWizard::CustomButton3:
         // Make navigation buttons detectable as passive interactor in designer
-        return QLatin1String("__qt__passive_wizardbutton") + QString::number(which);
+        return "__qt__passive_wizardbutton"_L1 + QString::number(which);
     case QWizard::Stretch:
     case QWizard::NoButton:
     //case QWizard::NStandardButtons:
@@ -3139,6 +3105,42 @@ void QWizard::next()
             d->switchToPage(next, QWizardPrivate::Forward);
         }
     }
+}
+
+/*!
+    Sets currentId to \a id, without visiting the pages between currentId and \a id.
+
+    Returns without page change, if
+    \list
+    \li wizard holds no pages
+    \li current page is invalid
+    \li given page equals currentId()
+    \li given page is out of range
+    \endlist
+
+    Note: If pages have been forward skipped and \a id is 0, page visiting history
+    will be deleted
+*/
+
+void QWizard::setCurrentId(int id)
+{
+    Q_D(QWizard);
+
+    if (d->current == -1)
+        return;
+
+    if (currentId() == id)
+        return;
+
+    if (!validateCurrentPage())
+        return;
+
+    if (id < 0 || Q_UNLIKELY(!d->pageMap.contains(id))) {
+        qWarning("QWizard::setCurrentId: No such page: %d", id);
+        return;
+    }
+
+    d->switchToPage(id, (id < currentId()) ? QWizardPrivate::Backward : QWizardPrivate::Forward);
 }
 
 /*!

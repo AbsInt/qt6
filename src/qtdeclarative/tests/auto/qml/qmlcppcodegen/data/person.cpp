@@ -1,30 +1,14 @@
-/******************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the Qt JavaScript to C++ compiler.
-**
-** $QT_BEGIN_LICENSE:COMM$
-**
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** $QT_END_LICENSE$
-**
-******************************************************************************/
+// Copyright (C) 2022 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "person.h"
 
+using namespace Qt::StringLiterals;
+
 Person::Person(QObject *parent)
-    : QObject(parent), m_name(u"Bart"_qs), m_shoeSize(0)
+    : QObject(parent), m_name(u"Bart"_s), m_shoeSize(0)
 {
-    m_things.append(u"thing"_qs);
+    m_things.append(u"thing"_s);
     m_things.append(30);
 }
 
@@ -43,7 +27,7 @@ void Person::setName(const QString &n)
 
 void Person::resetName()
 {
-    setName(u"Bart"_qs);
+    setName(u"Bart"_s);
 }
 
 int Person::shoeSize() const
@@ -70,4 +54,34 @@ void Person::setThings(const QVariantList &things)
         return;
     m_things = things;
     emit thingsChanged();
+}
+
+QList<Barzle *> Person::barzles() const
+{
+    return m_barzles;
+}
+
+void Person::setBarzles(const QList<Barzle *> &barzles)
+{
+    if (m_barzles == barzles)
+        return;
+    m_barzles = barzles;
+    emit barzlesChanged();
+}
+
+QBindable<QByteArray> Person::dataBindable()
+{
+    return QBindable<QByteArray>(&m_data);
+}
+
+void Person::setData(const QByteArray &data)
+{
+    if (data != m_data.value())
+        emit dataChanged();
+    m_data.setValue(data);
+}
+
+QByteArray Person::data() const
+{
+    return m_data;
 }

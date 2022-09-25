@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtWidgets module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2020 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qcombobox.h"
 
@@ -81,11 +45,13 @@
 # include <private/qeffects_p.h>
 #endif
 #include <private/qstyle_p.h>
-#ifndef QT_NO_ACCESSIBILITY
+#if QT_CONFIG(accessibility)
 #include "qaccessible.h"
 #endif
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 QComboBoxPrivate::QComboBoxPrivate()
     : QWidgetPrivate(),
@@ -159,8 +125,7 @@ QStyleOptionMenuItem QComboMenuDelegate::getStyleOption(const QStyleOptionViewIt
         menuOption.palette.setBrush(QPalette::All, QPalette::Window,
                                     qvariant_cast<QBrush>(index.data(Qt::BackgroundRole)));
     }
-    menuOption.text = index.model()->data(index, Qt::DisplayRole).toString()
-                           .replace(QLatin1Char('&'), QLatin1String("&&"));
+    menuOption.text = index.model()->data(index, Qt::DisplayRole).toString().replace(u'&', "&&"_L1);
     menuOption.reservedShortcutWidth = 0;
     menuOption.maxIconWidth =  option.decorationSize.width() + 4;
     menuOption.menuRect = option.rect;
@@ -399,7 +364,7 @@ QSize QComboBoxPrivate::recomputeSizeHint(QSize &sh) const
             case QComboBox::AdjustToContents:
             case QComboBox::AdjustToContentsOnFirstShow:
                 if (count == 0) {
-                    sh.rwidth() = 7 * fm.horizontalAdvance(QLatin1Char('x'));
+                    sh.rwidth() = 7 * fm.horizontalAdvance(u'x');
                 } else {
                     for (int i = 0; i < count; ++i) {
                         if (!q->itemIcon(i).isNull()) {
@@ -419,7 +384,7 @@ QSize QComboBoxPrivate::recomputeSizeHint(QSize &sh) const
                 hasIcon = !q->itemIcon(i).isNull();
         }
         if (minimumContentsLength > 0)
-            sh.setWidth(qMax(sh.width(), minimumContentsLength * fm.horizontalAdvance(QLatin1Char('X')) + (hasIcon ? iconSize.width() + 4 : 0)));
+            sh.setWidth(qMax(sh.width(), minimumContentsLength * fm.horizontalAdvance(u'X') + (hasIcon ? iconSize.width() + 4 : 0)));
         if (!placeholderText.isEmpty())
             sh.setWidth(qMax(sh.width(), fm.boundingRect(placeholderText).width()));
 
@@ -1118,7 +1083,7 @@ void QComboBoxPrivate::_q_dataChanged(const QModelIndex &topLeft, const QModelIn
             emit q->currentTextChanged(text);
         }
         q->update();
-#ifndef QT_NO_ACCESSIBILITY
+#if QT_CONFIG(accessibility)
         QAccessibleValueChangeEvent event(q, text);
         QAccessible::updateAccessibility(&event);
 #endif
@@ -1421,7 +1386,7 @@ void QComboBoxPrivate::_q_emitCurrentIndexChanged(const QModelIndex &index)
     // signal lineEdit.textChanged already connected to signal currentTextChanged, so don't emit double here
     if (!lineEdit)
         emit q->currentTextChanged(text);
-#ifndef QT_NO_ACCESSIBILITY
+#if QT_CONFIG(accessibility)
     QAccessibleValueChangeEvent event(q, text);
     QAccessible::updateAccessibility(&event);
 #endif
@@ -2914,7 +2879,7 @@ void QComboBox::clear()
 {
     Q_D(QComboBox);
     d->model->removeRows(0, d->model->rowCount(d->root), d->root);
-#ifndef QT_NO_ACCESSIBILITY
+#if QT_CONFIG(accessibility)
     QAccessibleValueChangeEvent event(this, QString());
     QAccessible::updateAccessibility(&event);
 #endif
@@ -2928,7 +2893,7 @@ void QComboBox::clearEditText()
     Q_D(QComboBox);
     if (d->lineEdit)
         d->lineEdit->clear();
-#ifndef QT_NO_ACCESSIBILITY
+#if QT_CONFIG(accessibility)
     QAccessibleValueChangeEvent event(this, QString());
     QAccessible::updateAccessibility(&event);
 #endif
@@ -2942,7 +2907,7 @@ void QComboBox::setEditText(const QString &text)
     Q_D(QComboBox);
     if (d->lineEdit)
         d->lineEdit->setText(text);
-#ifndef QT_NO_ACCESSIBILITY
+#if QT_CONFIG(accessibility)
     QAccessibleValueChangeEvent event(this, text);
     QAccessible::updateAccessibility(&event);
 #endif
@@ -3208,7 +3173,23 @@ void QComboBox::keyPressEvent(QKeyEvent *e)
 
     Move move = NoMove;
     int newIndex = currentIndex();
-    switch (e->key()) {
+
+    bool pressLikeButton = !d->lineEdit;
+#ifdef QT_KEYPAD_NAVIGATION
+    pressLikeButton |= QApplicationPrivate::keypadNavigationEnabled() && !hasEditFocus();
+#endif
+    auto key = e->key();
+    if (pressLikeButton) {
+        const auto buttonPressKeys = QGuiApplicationPrivate::platformTheme()
+                                             ->themeHint(QPlatformTheme::ButtonPressKeys)
+                                             .value<QList<Qt::Key>>();
+        if (buttonPressKeys.contains(key)) {
+            showPopup();
+            return;
+        }
+    }
+
+    switch (key) {
     case Qt::Key_Up:
         if (e->modifiers() & Qt::ControlModifier)
             break; // pass to line edit for auto completion
@@ -3250,26 +3231,11 @@ void QComboBox::keyPressEvent(QKeyEvent *e)
             return;
         }
         break;
-    case Qt::Key_Space:
-        if (!d->lineEdit) {
-            showPopup();
-            return;
-        }
-        break;
-    case Qt::Key_Enter:
-    case Qt::Key_Return:
     case Qt::Key_Escape:
         if (!d->lineEdit)
             e->ignore();
         break;
 #ifdef QT_KEYPAD_NAVIGATION
-    case Qt::Key_Select:
-        if (QApplicationPrivate::keypadNavigationEnabled()
-                && (!hasEditFocus() || !d->lineEdit)) {
-            showPopup();
-            return;
-        }
-        break;
     case Qt::Key_Left:
     case Qt::Key_Right:
         if (QApplicationPrivate::keypadNavigationEnabled() && !hasEditFocus())

@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtQml module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #ifndef QQMLMETATYPE_P_H
 #define QQMLMETATYPE_P_H
@@ -51,10 +15,11 @@
 // We mean it.
 //
 
-#include <private/qtqmlglobal_p.h>
-#include <private/qqmltype_p.h>
-#include <private/qqmlproxymetaobject_p.h>
 #include <private/qqmldirparser_p.h>
+#include <private/qqmlmetaobject_p.h>
+#include <private/qqmlproxymetaobject_p.h>
+#include <private/qqmltype_p.h>
+#include <private/qtqmlglobal_p.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -121,6 +86,8 @@ public:
 class Q_QML_PRIVATE_EXPORT QQmlMetaType
 {
     friend struct CompositeMetaTypeIds;
+    friend class QQmlDesignerMetaObject;
+
     static CompositeMetaTypeIds registerInternalCompositeType(const QByteArray &className);
     static void unregisterInternalCompositeType(const CompositeMetaTypeIds &typeIds);
 
@@ -144,6 +111,8 @@ public:
                                QTypeRevision version = QTypeRevision());
 
     static void unregisterType(int type);
+
+    static void registerMetaObjectForType(const QMetaObject *metaobject, QQmlTypePrivate *type);
 
     static void registerModule(const char *uri, QTypeRevision version);
     static bool protectModule(const QString &uri, QTypeRevision version,
@@ -171,12 +140,24 @@ public:
     static QQmlType qmlTypeById(int qmlTypeId);
 
     static QQmlType qmlType(QMetaType metaType);
+    static QQmlType qmlListType(QMetaType metaType);
+
     static QQmlType qmlType(const QUrl &unNormalizedUrl, bool includeNonFileImports = false);
 
-    static QQmlRefPointer<QQmlPropertyCache> propertyCache(
+    static QQmlPropertyCache::ConstPtr propertyCache(
+            QObject *object, QTypeRevision version = QTypeRevision());
+    static QQmlPropertyCache::ConstPtr propertyCache(
             const QMetaObject *metaObject, QTypeRevision version = QTypeRevision());
-    static QQmlRefPointer<QQmlPropertyCache> propertyCache(
+    static QQmlPropertyCache::ConstPtr propertyCache(
             const QQmlType &type, QTypeRevision version);
+
+    // These methods may be called from the loader thread
+    static QQmlMetaObject rawMetaObjectForType(QMetaType metaType);
+    static QQmlMetaObject metaObjectForType(QMetaType metaType);
+    static QQmlPropertyCache::ConstPtr propertyCacheForType(QMetaType metaType);
+    static QQmlPropertyCache::ConstPtr rawPropertyCacheForType(QMetaType metaType);
+    static QQmlPropertyCache::ConstPtr rawPropertyCacheForType(
+            QMetaType metaType, QTypeRevision version);
 
     static void freeUnusedTypesAndCaches();
 
@@ -187,7 +168,7 @@ public:
 
     static QObject *toQObject(const QVariant &, bool *ok = nullptr);
 
-    static QMetaType listType(QMetaType type);
+    static QMetaType listValueType(QMetaType type);
     static QQmlAttachedPropertiesFunc attachedPropertiesFunc(QQmlEnginePrivate *,
                                                              const QMetaObject *);
     static bool isInterface(QMetaType type);
@@ -259,6 +240,11 @@ public:
     static bool isValueType(QMetaType type);
     static QQmlValueType *valueType(QMetaType metaType);
     static const QMetaObject *metaObjectForValueType(QMetaType type);
+
+    static QQmlPropertyCache::ConstPtr findPropertyCacheInCompositeTypes(QMetaType t);
+    static void registerInternalCompositeType(QV4::ExecutableCompilationUnit *compilationUnit);
+    static void unregisterInternalCompositeType(QV4::ExecutableCompilationUnit *compilationUnit);
+    static QV4::ExecutableCompilationUnit *obtainExecutableCompilationUnit(QMetaType type);
 };
 
 Q_DECLARE_TYPEINFO(QQmlMetaType, Q_RELOCATABLE_TYPE);
@@ -268,30 +254,33 @@ inline const QMetaObject *dynamicQmlListMarker(const QtPrivate::QMetaTypeInterfa
     return nullptr;
 };
 
+inline const QMetaObject *dynamicQmlMetaObject(const QtPrivate::QMetaTypeInterface *iface) {
+    return QQmlMetaType::metaObjectForType(QMetaType(iface)).metaObject();
+};
+
 // metatype interface for composite QML types
 struct QQmlMetaTypeInterface : QtPrivate::QMetaTypeInterface
 {
     const QByteArray name;
-    template <typename T>
-    QQmlMetaTypeInterface(const QByteArray &name, T *)
+    QQmlMetaTypeInterface(const QByteArray &name)
         : QMetaTypeInterface {
             /*.revision=*/ 0,
-            /*.alignment=*/ alignof(T),
-            /*.size=*/ sizeof(T),
-            /*.flags=*/ QtPrivate::QMetaTypeTypeFlags<T>::Flags,
+            /*.alignment=*/ alignof(QObject *),
+            /*.size=*/ sizeof(QObject *),
+            /*.flags=*/ QtPrivate::QMetaTypeTypeFlags<QObject *>::Flags,
             /*.typeId=*/ 0,
-            /*.metaObject=*/ nullptr,//QtPrivate::MetaObjectForType<T>::value(),
+            /*.metaObjectFn=*/ &dynamicQmlMetaObject,
             /*.name=*/ name.constData(),
-            /*.defaultCtr=*/ [](const QMetaTypeInterface *, void *addr) { new (addr) T(); },
-            /*.copyCtr=*/ [](const QMetaTypeInterface *, void *addr, const void *other) {
-                    new (addr) T(*reinterpret_cast<const T *>(other));
-                },
-            /*.moveCtr=*/ [](const QMetaTypeInterface *, void *addr, void *other) {
-                    new (addr) T(std::move(*reinterpret_cast<T *>(other)));
-                },
-            /*.dtor=*/ [](const QMetaTypeInterface *, void *addr) {
-                reinterpret_cast<T *>(addr)->~T();
+            /*.defaultCtr=*/ [](const QMetaTypeInterface *, void *addr) {
+                *static_cast<QObject **>(addr) = nullptr;
             },
+            /*.copyCtr=*/ [](const QMetaTypeInterface *, void *addr, const void *other) {
+                *static_cast<QObject **>(addr) = *static_cast<QObject *const *>(other);
+            },
+            /*.moveCtr=*/ [](const QMetaTypeInterface *, void *addr, void *other) {
+                *static_cast<QObject **>(addr) = *static_cast<QObject **>(other);
+            },
+            /*.dtor=*/ [](const QMetaTypeInterface *, void *) {},
             /*.equals*/ nullptr,
             /*.lessThan*/ nullptr,
             /*.debugStream=*/ nullptr,
@@ -308,25 +297,28 @@ struct QQmlListMetaTypeInterface : QtPrivate::QMetaTypeInterface
     const QByteArray name;
     // if this interface is for list<type>; valueType stores the interface for type
     const QtPrivate::QMetaTypeInterface *valueType;
-    template<typename T>
-    QQmlListMetaTypeInterface(const QByteArray &name, T *, const QtPrivate::QMetaTypeInterface * valueType)
+    QQmlListMetaTypeInterface(const QByteArray &name, const QtPrivate::QMetaTypeInterface *valueType)
         : QMetaTypeInterface {
             /*.revision=*/ 0,
-            /*.alignment=*/ alignof(T),
-            /*.size=*/ sizeof(T),
-            /*.flags=*/ QtPrivate::QMetaTypeTypeFlags<T>::Flags,
+            /*.alignment=*/ alignof(QQmlListProperty<QObject>),
+            /*.size=*/ sizeof(QQmlListProperty<QObject>),
+            /*.flags=*/ QtPrivate::QMetaTypeTypeFlags<QQmlListProperty<QObject>>::Flags,
             /*.typeId=*/ 0,
             /*.metaObjectFn=*/ &dynamicQmlListMarker,
             /*.name=*/ name.constData(),
-            /*.defaultCtr=*/ [](const QMetaTypeInterface *, void *addr) { new (addr) T(); },
+            /*.defaultCtr=*/ [](const QMetaTypeInterface *, void *addr) {
+                new (addr) QQmlListProperty<QObject> ();
+            },
             /*.copyCtr=*/ [](const QMetaTypeInterface *, void *addr, const void *other) {
-                    new (addr) T(*reinterpret_cast<const T *>(other));
-                },
+                new (addr) QQmlListProperty<QObject>(
+                        *static_cast<const QQmlListProperty<QObject> *>(other));
+            },
             /*.moveCtr=*/ [](const QMetaTypeInterface *, void *addr, void *other) {
-                    new (addr) T(std::move(*reinterpret_cast<T *>(other)));
-                },
+                new (addr) QQmlListProperty<QObject>(
+                        std::move(*static_cast<QQmlListProperty<QObject> *>(other)));
+            },
             /*.dtor=*/ [](const QMetaTypeInterface *, void *addr) {
-                reinterpret_cast<T *>(addr)->~T();
+                static_cast<QQmlListProperty<QObject> *>(addr)->~QQmlListProperty<QObject>();
             },
             /*.equals*/ nullptr,
             /*.lessThan*/ nullptr,

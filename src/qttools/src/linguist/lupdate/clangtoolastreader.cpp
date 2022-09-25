@@ -1,32 +1,8 @@
-/****************************************************************************
-**
-** Copyright (C) 2019 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the Qt Linguist of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2019 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "clangtoolastreader.h"
+#include "filesignificancecheck.h"
 #include "translator.h"
 
 #include <QLibraryInfo>
@@ -358,7 +334,7 @@ bool LupdateVisitor::VisitCallExpr(clang::CallExpr *callExpression)
     }
 
     // Checking that the CallExpression is from the input file we're interested in
-    if (info.Filename != m_inputFile)
+    if (!LupdatePrivate::isFileSignificant(info.Filename))
         return true;
 
     qCDebug(lcClang) << "************************** VisitCallExpr ****************";
@@ -437,16 +413,21 @@ bool LupdateVisitor::VisitCallExpr(clang::CallExpr *callExpression)
     return true;
 }
 
+void LupdateVisitor::processIsolatedComments()
+{
+    auto &sourceMgr = m_context->getSourceManager();
+    processIsolatedComments(sourceMgr.getMainFileID()) ;
+}
+
 /*
     Retrieve the comments not associated with tr calls.
 */
-void LupdateVisitor::processIsolatedComments()
+void LupdateVisitor::processIsolatedComments(const clang::FileID file)
 {
     qCDebug(lcClang) << "==== processIsolatedComments ====";
     auto &sourceMgr = m_context->getSourceManager();
 
 #if (LUPDATE_CLANG_VERSION >= LUPDATE_CLANG_VERSION_CHECK(10,0,0))
-    const clang::FileID file = sourceMgr.getMainFileID();
     const auto commentsInThisFile = m_context->Comments.getCommentsInFile(file);
     if (!commentsInThisFile)
         return;
@@ -456,6 +437,7 @@ void LupdateVisitor::processIsolatedComments()
         tmp.emplace_back(commentInFile.second);
     clang::ArrayRef<clang::RawComment *> rawComments = tmp;
 #else
+    Q_UNUSED(file);
     clang::ArrayRef<clang::RawComment *> rawComments = m_context->getRawCommentList().getComments();
 #endif
 
@@ -469,13 +451,15 @@ void LupdateVisitor::processIsolatedComments()
     // They are not associated to any tr calls
     // Each one needs its own entry in the m_stores->AST translation store
     for (const auto &rawComment : rawComments) {
-        if (sourceMgr.getFilename(rawComment->getBeginLoc()).str() != m_inputFile)
+        if (!LupdatePrivate::isFileSignificant(sourceMgr.getFilename(rawComment->getBeginLoc()).str()))
             continue;
         // Comments not separated by an empty line will be part of the same Raw comments
         // Each one needs to be saved with its line number.
         // The store is used here only to pass this information.
         TranslationRelatedStore store;
         store.lupdateLocationLine = sourceMgr.getPresumedLoc(rawComment->getBeginLoc(), false).getLine();
+        store.lupdateLocationFile = QString::fromStdString(
+                    sourceMgr.getPresumedLoc(rawComment->getBeginLoc(), false).getFilename());
         QString comment = toQt(rawComment->getRawText(sourceMgr));
         qCDebug(lcClang) << " raw Comment : \n" << comment;
         setInfoFromRawComment(comment, &store);
@@ -719,7 +703,7 @@ void LupdateVisitor::setInfoFromRawComment(const QString &commentString,
                 newStore.contextArg = comment.left(index).trimmed();
                 newStore.lupdateComment = comment.mid(index).trimmed();
             }
-            newStore.lupdateLocationFile = QString::fromStdString(m_inputFile);
+            newStore.lupdateLocationFile = store->lupdateLocationFile;
             newStore.lupdateLocationLine = storeLine;
             newStore.locationCol = 0;
             newStore.printStore();
@@ -734,17 +718,32 @@ void LupdateVisitor::setInfoFromRawComment(const QString &commentString,
 
 void LupdateVisitor::processPreprocessorCalls()
 {
-    m_macro = (m_stores->Preprocessor.size() > 0);
-    for (const auto &store : m_stores->Preprocessor)
-        processPreprocessorCall(store);
+    QString inputFile = toQt(m_inputFile);
+    for (const auto &store : m_stores->Preprocessor) {
+        if (store.lupdateInputFile == inputFile)
+            processPreprocessorCall(store);
+    }
+
+    if (m_qDeclareTrMacroAll.size() > 0 || m_noopTranslationMacroAll.size() > 0)
+        m_macro = true;
 }
 
 void LupdateVisitor::processPreprocessorCall(TranslationRelatedStore store)
 {
+    // To get the comments around the macros
     const std::vector<QString> rawComments = rawCommentsFromSourceLocation(store
         .callLocation(m_context->getSourceManager()));
+    // to pick up the raw comments in the files collected from the preprocessing.
     for (const auto &rawComment : rawComments)
         setInfoFromRawComment(rawComment, &store);
+
+    // Processing the isolated comments (TRANSLATOR) in the files included in the main input file.
+    if (store.callType.contains(QStringLiteral("InclusionDirective"))) {
+        auto &sourceMgr = m_context->getSourceManager();
+        const clang::FileID file = sourceMgr.getDecomposedLoc(store.callLocation(sourceMgr)).first;
+        processIsolatedComments(file);
+        return;
+    }
 
     if (store.isValid()) {
         if (store.funcName.contains(QStringLiteral("Q_DECLARE_TR_FUNCTIONS")))
@@ -763,7 +762,7 @@ bool LupdateVisitor::VisitNamedDecl(clang::NamedDecl *namedDeclaration)
     if (!fullLocation.isValid() || !fullLocation.getFileEntry())
         return true;
 
-    if (fullLocation.getFileEntry()->getName() != m_inputFile)
+    if (!LupdatePrivate::isFileSignificant(fullLocation.getFileEntry()->getName().str()))
         return true;
 
     qCDebug(lcClang) << "NamedDecl Name:   " << namedDeclaration->getQualifiedNameAsString();
@@ -837,16 +836,16 @@ void LupdateVisitor::findContextForTranslationStoresFromPP(clang::NamedDecl *nam
     }
 }
 
-void LupdateVisitor::generateOuput()
+void LupdateVisitor::generateOutput()
 {
-    qCDebug(lcClang) << "=================m_trCallserateOuput============================";
+    qCDebug(lcClang) << "=================generateOutput============================";
     m_noopTranslationMacroAll.erase(std::remove_if(m_noopTranslationMacroAll.begin(),
-        m_noopTranslationMacroAll.end(), [this](const TranslationRelatedStore &store) {
+        m_noopTranslationMacroAll.end(), [](const TranslationRelatedStore &store) {
         // Macros not located in the currently visited file are missing context (and it's normal),
         // so an output is only generated for macros present in the currently visited file.
         // If context could not be found, it is warned against in ClangCppParser::collectMessages
         // (where it is possible to order the warnings and print them consistantly)
-        if ( m_inputFile != qPrintable(store.lupdateLocationFile))
+        if (!LupdatePrivate::isFileSignificant(store.lupdateLocationFile.toStdString()))
             return true;
         return false;
       }), m_noopTranslationMacroAll.end());

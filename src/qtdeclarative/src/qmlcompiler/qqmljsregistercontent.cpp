@@ -1,51 +1,28 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the tools applications of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "qqmljsregistercontent_p.h"
 #include "qqmljstyperesolver_p.h"
 
 QT_BEGIN_NAMESPACE
 
+using namespace Qt::StringLiterals;
+
 QString QQmlJSRegisterContent::descriptiveName() const
 {
     if (m_storedType.isNull())
-        return u"(invalid type)"_qs;
+        return u"(invalid type)"_s;
 
-    QString result = m_storedType->internalName() + u" of "_qs;
+    QString result = m_storedType->internalName() + u" of "_s;
     const auto scope = [this]() -> QString {
         if (m_scope.isNull())
-            return u"(invalid type)::"_qs;
+            return u"(invalid type)::"_s;
         return (m_scope->internalName().isEmpty()
-                        ? (m_scope->fileName().isEmpty()
-                                   ? u"??"_qs
-                                   : (u"(component in "_qs + m_scope->fileName() + u")"_qs))
+                        ? (m_scope->filePath().isEmpty()
+                                   ? u"??"_s
+                                   : (u"(component in "_s + m_scope->filePath() + u")"_s))
                         : m_scope->internalName())
-                + u"::"_qs;
+                + u"::"_s;
     };
 
     switch (m_content.index()) {
@@ -53,28 +30,32 @@ QString QQmlJSRegisterContent::descriptiveName() const
         return result + std::get<QQmlJSScope::ConstPtr>(m_content)->internalName();
     case Property: {
         const QQmlJSMetaProperty prop = std::get<QQmlJSMetaProperty>(m_content);
-        return result + scope() + prop.propertyName() + u" with type "_qs + prop.typeName();
+        return result + scope() + prop.propertyName() + u" with type "_s + prop.typeName();
     }
     case Method: {
         const auto methods = std::get<QList<QQmlJSMetaMethod>>(m_content);
         if (methods.isEmpty())
-            return result + scope() + u"(unknown method)"_qs;
+            return result + scope() + u"(unknown method)"_s;
         else
-            return result + scope() + methods[0].methodName() + u"(...)"_qs;
+            return result + scope() + methods[0].methodName() + u"(...)"_s;
     }
     case Enum: {
         const auto e = std::get<std::pair<QQmlJSMetaEnum, QString>>(m_content);
         if (e.second.isEmpty())
             return result + scope() + e.first.name();
         else
-            return result + scope() + e.first.name() + u"::"_qs + e.second;
+            return result + scope() + e.first.name() + u"::"_s + e.second;
     }
     case ImportNamespace: {
-        return u"import namespace %1"_qs.arg(std::get<uint>(m_content));
+        return u"import namespace %1"_s.arg(std::get<uint>(m_content));
+    }
+    case Conversion: {
+        return u"conversion to %1"_s.arg(
+                    std::get<ConvertedTypes>(m_content).result->internalName());
     }
     }
     Q_UNREACHABLE();
-    return result + u"wat?"_qs;
+    return result + u"wat?"_s;
 }
 
 bool QQmlJSRegisterContent::isList() const
@@ -88,6 +69,9 @@ bool QQmlJSRegisterContent::isList() const
         return prop.isList()
                 || prop.type()->accessSemantics() == QQmlJSScope::AccessSemantics::Sequence;
     }
+    case Conversion:
+        return std::get<ConvertedTypes>(m_content).result->accessSemantics()
+                == QQmlJSScope::AccessSemantics::Sequence;
     default:
         return false;
     }
@@ -158,10 +142,15 @@ QQmlJSRegisterContent QQmlJSRegisterContent::create(const QQmlJSScope::ConstPtr 
     return result;
 }
 
-bool operator==(const QQmlJSRegisterContent &a, const QQmlJSRegisterContent &b)
+QQmlJSRegisterContent QQmlJSRegisterContent::create(const QQmlJSScope::ConstPtr &storedType,
+                                                    const QList<QQmlJSScope::ConstPtr> origins,
+                                                    const QQmlJSScope::ConstPtr &conversion,
+                                                    ContentVariant variant,
+                                                    const QQmlJSScope::ConstPtr &scope)
 {
-    return a.m_storedType == b.m_storedType && a.m_variant == b.m_variant && a.m_scope == b.m_scope
-            && a.m_content == b.m_content;
+    QQmlJSRegisterContent result(storedType, scope, variant);
+    result.m_content = ConvertedTypes { origins, conversion };
+    return result;
 }
 
 QT_END_NAMESPACE

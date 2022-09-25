@@ -25,7 +25,7 @@ set_property(CACHE INPUT_libpng PROPERTY STRINGS undefined no qt system)
 
 
 #### Libraries
-qt_set01(X11_SUPPORTED LINUX OR HPUX OR FREEBSD OR NETBSD OR OPENBSD OR SOLARIS) # special case
+qt_set01(X11_SUPPORTED LINUX OR HPUX OR FREEBSD OR NETBSD OR OPENBSD OR SOLARIS OR HURD) # special case
 qt_find_package(ATSPI2 PROVIDED_TARGETS PkgConfig::ATSPI2 MODULE_NAME gui QMAKE_LIB atspi)
 qt_find_package(DirectFB PROVIDED_TARGETS PkgConfig::DirectFB MODULE_NAME gui QMAKE_LIB directfb)
 qt_find_package(Libdrm PROVIDED_TARGETS Libdrm::Libdrm MODULE_NAME gui QMAKE_LIB drm)
@@ -1173,7 +1173,6 @@ qt_feature("accessibility" PUBLIC
     SECTION "Utilities"
     LABEL "Accessibility"
     PURPOSE "Provides accessibility support."
-    CONDITION QT_FEATURE_properties
 )
 qt_feature_definition("accessibility" "QT_NO_ACCESSIBILITY" NEGATE VALUE "1")
 qt_feature("multiprocess" PRIVATE

@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtQml module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qqmlopenmetaobject_p.h"
 #include <private/qqmlpropertycache_p.h>
@@ -43,6 +7,7 @@
 #include <private/qqmlmetatype_p.h>
 #include <private/qmetaobjectbuilder_p.h>
 #include <qdebug.h>
+#include <QtCore/qset.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -50,7 +15,7 @@ QT_BEGIN_NAMESPACE
 class QQmlOpenMetaObjectTypePrivate
 {
 public:
-    QQmlOpenMetaObjectTypePrivate() : mem(nullptr), cache(nullptr) {}
+    QQmlOpenMetaObjectTypePrivate() : mem(nullptr) {}
 
     void init(const QMetaObject *metaObj);
 
@@ -59,7 +24,13 @@ public:
     QHash<QByteArray, int> names;
     QMetaObjectBuilder mob;
     QMetaObject *mem;
-    QQmlPropertyCache *cache;
+
+    // TODO: We need to make sure that this does not escape into other threads.
+    //       In particular, all its non-const uses are probably wrong. You should
+    //       only set the open metaobject to "cached" once it's not going to be
+    //       modified anymore.
+    QQmlPropertyCache::Ptr cache;
+
     QSet<QQmlOpenMetaObject*> referers;
 };
 
@@ -73,8 +44,6 @@ QQmlOpenMetaObjectType::~QQmlOpenMetaObjectType()
 {
     if (d->mem)
         free(d->mem);
-    if (d->cache)
-        d->cache->release();
     delete d;
 }
 
@@ -124,13 +93,13 @@ void QQmlOpenMetaObjectType::createProperties(const QVector<QByteArray> &names)
 
 int QQmlOpenMetaObjectType::createProperty(const QByteArray &name)
 {
-    int id = d->mob.propertyCount();
-    d->mob.addSignal("__" + QByteArray::number(id) + "()");
-    QMetaPropertyBuilder build = d->mob.addProperty(name, "QVariant", id);
-    propertyCreated(id, build);
+    const int signalIdx = d->mob.addSignal(
+                "__" + QByteArray::number(d->mob.propertyCount()) + "()").index();
+    QMetaPropertyBuilder build = d->mob.addProperty(name, "QVariant", signalIdx);
+    propertyCreated(build.index(), build);
     free(d->mem);
     d->mem = d->mob.toMetaObject();
-    d->names.insert(name, id);
+    d->names.insert(name, build.index());
     QSet<QQmlOpenMetaObject*>::iterator it = d->referers.begin();
     while (it != d->referers.end()) {
         QQmlOpenMetaObject *omo = *it;
@@ -140,7 +109,7 @@ int QQmlOpenMetaObjectType::createProperty(const QByteArray &name)
         ++it;
     }
 
-    return d->propertyOffset + id;
+    return d->propertyOffset + build.index();
 }
 
 void QQmlOpenMetaObjectType::propertyCreated(int id, QMetaPropertyBuilder &builder)
@@ -226,7 +195,7 @@ public:
 
     void dropPropertyCache() {
         if (QQmlData *ddata = QQmlData::get(object, /*create*/false))
-            ddata->propertyCache = nullptr;
+            ddata->propertyCache.reset();
     }
 
     QQmlOpenMetaObject *q;
@@ -251,7 +220,8 @@ QQmlOpenMetaObject::QQmlOpenMetaObject(QObject *obj, const QMetaObject *base)
     op->metaObject = this;
 }
 
-QQmlOpenMetaObject::QQmlOpenMetaObject(QObject *obj, QQmlOpenMetaObjectType *type)
+QQmlOpenMetaObject::QQmlOpenMetaObject(
+        QObject *obj, const QQmlRefPointer<QQmlOpenMetaObjectType> &type)
 : d(new QQmlOpenMetaObjectPrivate(this, obj))
 {
     d->type = type;
@@ -428,12 +398,11 @@ void QQmlOpenMetaObject::setCached(bool c)
         // we cannot leak it to other places before we're done with it. Yes, it's still
         // terrible.
         if (!d->type->d->cache)
-            d->type->d->cache = QQmlPropertyCache::createStandalone(this).take();
+            d->type->d->cache = QQmlPropertyCache::createStandalone(this);
         qmldata->propertyCache = d->type->d->cache;
     } else {
-        if (d->type->d->cache)
-            d->type->d->cache->release();
-        qmldata->propertyCache = nullptr;
+        d->type->d->cache.reset();
+        qmldata->propertyCache.reset();
     }
 }
 

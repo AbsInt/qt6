@@ -5,7 +5,3 @@ macos
 # QTBUG-98491
 [subMenuPosition]
 macos
-
-# QTBUG-103200
-[Basic::contextMenuKeyboard]
-opensuse-leap

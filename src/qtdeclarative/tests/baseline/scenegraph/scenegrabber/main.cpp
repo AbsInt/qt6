@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <QtCore/QTimer>
 #include <QtCore/QDebug>
@@ -35,6 +10,7 @@
 
 #include <QtQuick/QQuickView>
 #include <QtQuick/QQuickItem>
+#include <QtQuickControls2/qquickstyle.h>
 
 #ifdef Q_OS_WIN
 #  include <fcntl.h>
@@ -161,7 +137,7 @@ int main(int argc, char *argv[])
     QGuiApplication a(argc, argv);
 
     // Parse command line
-    QString ifile, ofile;
+    QString ifile, ofile, style;
     bool noText = false;
     bool justShow = false;
     QStringList args = a.arguments();
@@ -184,13 +160,20 @@ int main(int argc, char *argv[])
         else if (ifile.isEmpty()) {
             ifile = arg;
         }
+        else if (arg == "-style") {
+            if (i < args.size()-1)
+                style = args.at(++i);
+            else
+                argError = true;
+        }
         else {
             argError = true;
             break;
         }
     }
     if (argError || ifile.isEmpty() || (ofile.isEmpty() && !justShow)) {
-        qWarning() << "Usage:" << args.at(0).toLatin1().constData() << "[-notext] <qml-infile> {-o <outfile or - for ppm on stdout>|-viewonly}";
+        qWarning() << "Usage:" << args.at(0).toLatin1().constData()
+                   << "[-notext] [-style stylename] <qml-infile> {-o <outfile or - for ppm on stdout>|-viewonly}";
         return 1;
     }
 
@@ -200,6 +183,9 @@ int main(int argc, char *argv[])
         return 1;
     }
     // End parsing
+
+    if (!style.isEmpty())
+        QQuickStyle::setStyle(style);
 
     GrabbingView v(ofile);
     v.setSource(QUrl::fromLocalFile(ifile));

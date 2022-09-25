@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtQuick module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qsgdefaultcontext_p.h"
 
@@ -208,6 +172,7 @@ QSurfaceFormat QSGDefaultContext::defaultSurfaceFormat() const
     static bool useDepth = qEnvironmentVariableIsEmpty("QSG_NO_DEPTH_BUFFER");
     static bool useStencil = qEnvironmentVariableIsEmpty("QSG_NO_STENCIL_BUFFER");
     static bool enableDebug = qEnvironmentVariableIsSet("QSG_OPENGL_DEBUG");
+    static bool disableVSync = qEnvironmentVariableIsSet("QSG_NO_VSYNC");
     if (useDepth && format.depthBufferSize() == -1)
         format.setDepthBufferSize(24);
     else if (!useDepth)
@@ -221,6 +186,8 @@ QSurfaceFormat QSGDefaultContext::defaultSurfaceFormat() const
     if (QQuickWindow::hasDefaultAlphaBuffer())
         format.setAlphaBufferSize(8);
     format.setSwapBehavior(QSurfaceFormat::DoubleBuffer);
+    if (disableVSync) // swapInterval defaults to 1, it has no -1 special value
+        format.setSwapInterval(0);
     return format;
 }
 
@@ -264,18 +231,12 @@ QSGSpriteNode *QSGDefaultContext::createSpriteNode()
 
 QSGGuiThreadShaderEffectManager *QSGDefaultContext::createGuiThreadShaderEffectManager()
 {
-    if (QSGRhiSupport::instance()->isRhiEnabled())
-        return new QSGRhiGuiThreadShaderEffectManager;
-
-    return nullptr;
+    return new QSGRhiGuiThreadShaderEffectManager;
 }
 
 QSGShaderEffectNode *QSGDefaultContext::createShaderEffectNode(QSGRenderContext *renderContext)
 {
-    if (QSGRhiSupport::instance()->isRhiEnabled())
-        return new QSGRhiShaderEffectNode(static_cast<QSGDefaultRenderContext *>(renderContext));
-
-    return nullptr;
+    return new QSGRhiShaderEffectNode(static_cast<QSGDefaultRenderContext *>(renderContext));
 }
 
 QSGRendererInterface::GraphicsApi QSGDefaultContext::graphicsApi() const
@@ -307,17 +268,17 @@ void *QSGDefaultContext::getResource(QQuickWindow *window, Resource resource) co
 
 QSGRendererInterface::ShaderType QSGDefaultContext::shaderType() const
 {
-    return QSGRhiSupport::instance()->isRhiEnabled() ? RhiShader : GLSL;
+    return RhiShader;
 }
 
 QSGRendererInterface::ShaderCompilationTypes QSGDefaultContext::shaderCompilationType() const
 {
-    return QSGRhiSupport::instance()->isRhiEnabled() ? OfflineCompilation : RuntimeCompilation;
+    return OfflineCompilation;
 }
 
 QSGRendererInterface::ShaderSourceTypes QSGDefaultContext::shaderSourceType() const
 {
-    return QSGRhiSupport::instance()->isRhiEnabled() ? ShaderSourceFile : (ShaderSourceString | ShaderSourceFile);
+    return ShaderSourceFile;
 }
 
 QT_END_NAMESPACE

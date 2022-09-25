@@ -1,36 +1,12 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the tools applications of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #ifndef GENERATOR_H
 #define GENERATOR_H
 
 #include "text.h"
 #include "utilities.h"
+#include "filesystem/fileresolver.hpp"
 
 #include <QtCore/qlist.h>
 #include <QtCore/qmap.h>
@@ -41,7 +17,6 @@
 QT_BEGIN_NAMESPACE
 
 typedef QMultiMap<QString, Node *> NodeMultiMap;
-typedef QMap<Node *, NodeMultiMap> ParentMaps;
 
 class Aggregate;
 class CodeMarker;
@@ -50,7 +25,7 @@ class FunctionNode;
 class Location;
 class Node;
 class QDocDatabase;
-class QmlBasicTypeNode;
+class QmlValueTypeNode;
 
 class Generator
 {
@@ -65,7 +40,7 @@ public:
         BindableProperty
     };
 
-    Generator();
+    Generator(FileResolver& file_resolver);
     virtual ~Generator();
 
     virtual bool canHandleFormat(const QString &format) { return format == this->format(); }
@@ -86,7 +61,6 @@ public:
     static const QString &outputSubdir() { return s_outSubdir; }
     static void terminate();
     static const QStringList &outputFileNames() { return s_outFileNames; }
-    static void augmentImageDirs(QSet<QString> &moreImageDirs);
     static bool noLinkErrors() { return s_noLinkErrors; }
     static bool autolinkErrors() { return s_autolinkErrors; }
     static QString defaultModuleName() { return s_project; }
@@ -94,7 +68,7 @@ public:
     static bool useOutputSubdirs() { return s_useOutputSubdirs; }
     static void setQmlTypeContext(QmlTypeNode *t) { s_qmlTypeContext = t; }
     static QmlTypeNode *qmlTypeContext() { return s_qmlTypeContext; }
-    static QString cleanRef(const QString &ref);
+    static QString cleanRef(const QString &ref, bool xmlCompliant = false);
     static QString plainCode(const QString &markedCode);
     virtual QString fileBase(const Node *node) const;
 
@@ -105,11 +79,7 @@ protected:
     void beginSubPage(const Node *node, const QString &fileName);
     void endSubPage();
     [[nodiscard]] virtual QString fileExtension() const = 0;
-    virtual void generateExampleFilePage(const Node *, const QString &, CodeMarker *) {}
-    virtual void generateExampleFilePage(const Node *node, const QString &str)
-    {
-        generateExampleFilePage(node, str, nullptr);
-    }
+    virtual void generateExampleFilePage(const Node *, ResolvedFile, CodeMarker * = nullptr) {}
     virtual void generateAlsoList(const Node *node, CodeMarker *marker);
     virtual void generateAlsoList(const Node *node) { generateAlsoList(node, nullptr); }
     virtual qsizetype generateAtom(const Atom *, const Node *, CodeMarker *) { return 0; }
@@ -121,7 +91,7 @@ protected:
     virtual void generateCppReferencePage(Aggregate *, CodeMarker *) {}
     virtual void generateProxyPage(Aggregate *, CodeMarker *) {}
     virtual void generateQmlTypePage(QmlTypeNode *, CodeMarker *) {}
-    virtual void generateQmlBasicTypePage(QmlBasicTypeNode *, CodeMarker *) {}
+    virtual void generateQmlBasicTypePage(QmlValueTypeNode *, CodeMarker *) {}
     virtual void generatePageNode(PageNode *, CodeMarker *) {}
     virtual void generateCollectionNode(CollectionNode *, CodeMarker *) {}
     virtual void generateGenericCollectionPage(CollectionNode *, CodeMarker *) {}
@@ -142,7 +112,6 @@ protected:
     {
         return generateText(text, relative, nullptr);
     };
-    virtual QString imageFileName(const Node *relative, const QString &fileBase);
     virtual int skipAtoms(const Atom *atom, Atom::AtomType type) const;
 
     static bool matchAhead(const Atom *atom, Atom::AtomType expectedAtomType);
@@ -179,7 +148,6 @@ protected:
     QString outFileName();
     bool parseArg(const QString &src, const QString &tag, int *pos, int n, QStringView *contents,
                   QStringView *par1 = nullptr, bool debug = false);
-    void setImageFileExtensions(const QStringList &extensions);
     void unknownAtom(const Atom *atom);
     int appendSortedQmlNames(Text &text, const Node *base, const NodeList &subs);
 
@@ -199,19 +167,19 @@ protected:
     void appendSignature(Text &text, const Node *node);
     void signatureList(const NodeList &nodes, const Node *relative, CodeMarker *marker);
 
-    void addImageToCopy(const ExampleNode *en, const QString &file);
+    void addImageToCopy(const ExampleNode *en, const ResolvedFile& resolved_file);
+    // TODO: This seems to be used as the predicate in std::sort calls.
+    // Remove it as it is unneded.
+    // Indeed, it could be replaced by std::less and, furthemore,
+    // std::sort already defaults to operator< when no predicate is
+    // provided.
     static bool comparePaths(const QString &a, const QString &b) { return (a < b); }
 
 private:
     static Generator *s_currentGenerator;
-    static QStringList s_exampleDirs;
-    static QStringList s_exampleImgExts;
     static QMap<QString, QMap<QString, QString>> s_fmtLeftMaps;
     static QMap<QString, QMap<QString, QString>> s_fmtRightMaps;
     static QList<Generator *> s_generators;
-    static QStringList s_imageDirs;
-    static QStringList s_imageFiles;
-    static QMap<QString, QStringList> s_imgFileExts;
     static QString s_project;
     static QString s_outDir;
     static QString s_outSubdir;
@@ -229,6 +197,8 @@ private:
     static void copyTemplateFiles(const QString &configVar, const QString &subDir);
 
 protected:
+    FileResolver& file_resolver;
+
     QDocDatabase *m_qdb { nullptr };
     bool m_inLink { false };
     bool m_inContents { false };

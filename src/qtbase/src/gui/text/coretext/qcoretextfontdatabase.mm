@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the plugins of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qglobal.h"
 
@@ -63,6 +27,8 @@
 #include <QtGui/qpa/qwindowsysteminterface.h>
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 QT_IMPL_METATYPE_EXTERN_TAGGED(QCFType<CGFontRef>, QCFType_CGFontRef)
 QT_IMPL_METATYPE_EXTERN_TAGGED(QCFType<CFURLRef>, QCFType_CFURLRef)
@@ -110,6 +76,12 @@ enum { LanguageCount = sizeof languageForWritingSystem / sizeof *languageForWrit
 QCoreTextFontDatabase::QCoreTextFontDatabase()
     : m_hasPopulatedAliases(false)
 {
+#if defined(Q_OS_MACOS)
+    m_fontSetObserver = QMacNotificationObserver(nil, NSFontSetChangedNotification, [] {
+        qCDebug(lcQpaFonts) << "Fonts have changed";
+        QPlatformFontDatabase::repopulateFontDatabase();
+    });
+#endif
 }
 
 QCoreTextFontDatabase::~QCoreTextFontDatabase()
@@ -136,6 +108,9 @@ void QCoreTextFontDatabase::populateFontDatabase()
         for (auto fontDescriptor : m_systemFontDescriptors.value(familyName))
             populateFromDescriptor(fontDescriptor, familyName);
     }
+
+    // The font database now has a reference to the original descriptors
+    m_systemFontDescriptors.clear();
 
     qCDebug(lcQpaFonts) << "Populating system descriptors took" << elapsed.restart() << "ms";
 
@@ -236,7 +211,7 @@ void QCoreTextFontDatabase::invalidate()
 
     qDeleteAll(m_themeFonts);
     m_themeFonts.clear();
-    QWindowSystemInterface::handleThemeChange<QWindowSystemInterface::SynchronousDelivery>(nullptr);
+    QWindowSystemInterface::handleThemeChange<QWindowSystemInterface::SynchronousDelivery>();
 }
 
 struct FontDescription {
@@ -528,7 +503,7 @@ QStringList QCoreTextFontDatabase::fallbacksForFamily(const QString &family, QFo
     Q_UNUSED(style);
 
     qCDebug(lcQpaFonts).nospace() << "Resolving fallbacks families for"
-        << (!family.isEmpty() ? qPrintable(QLatin1String(" family '%1' with").arg(family)) : "")
+        << (!family.isEmpty() ? qPrintable(" family '%1' with"_L1.arg(family)) : "")
         << " style hint " << styleHint;
 
     QMacAutoReleasePool pool;
@@ -577,7 +552,7 @@ QStringList QCoreTextFontDatabase::fallbacksForFamily(const QString &family, QFo
     // of the required glyphs, or representing them by question marks.
     // Move these to the end, so that the proper fonts are preferred.
     for (const char *family : { ".Apple Symbols Fallback", ".Noto Sans Universal" }) {
-        int index = fallbackList.indexOf(QLatin1String(family));
+        int index = fallbackList.indexOf(QLatin1StringView(family));
         if (index >= 0)
             fallbackList.move(index, fallbackList.size() - 1);
     }
@@ -644,7 +619,7 @@ QStringList QCoreTextFontDatabase::addApplicationFont(const QByteArray &fontData
 
 bool QCoreTextFontDatabase::isPrivateFontFamily(const QString &family) const
 {
-    if (family.startsWith(QLatin1Char('.')) || family == QLatin1String("LastResort"))
+    if (family.startsWith(u'.') || family == "LastResort"_L1)
         return true;
 
     return QPlatformFontDatabase::isPrivateFontFamily(family);

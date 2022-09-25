@@ -2,6 +2,9 @@ pragma Strict
 import QtQuick 6
 
 Item {
-    height: !(parent && parent.visible) ? 100 : 0
+    property bool a: !x
     width: !(parent && state) ? 100 : 0
+
+    property font f
+    property bool b: !(parent || f)
 }

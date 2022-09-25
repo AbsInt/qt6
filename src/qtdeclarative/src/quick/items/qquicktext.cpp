@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtQuick module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qquicktext_p.h"
 #include "qquicktext_p_p.h"
@@ -2445,21 +2409,23 @@ void QQuickText::geometryChange(const QRectF &newGeometry, const QRectF &oldGeom
         goto geomChangeDone;
 
     if (!(widthChanged || widthMaximum) && !d->isLineLaidOutConnected()) { // only height has changed
-        if (!verticalPositionChanged && newGeometry.height() > oldGeometry.height()) {
-            if (!d->heightExceeded && !qFuzzyIsNull(oldGeometry.height())) {
-                // Height is adequate and growing, and it wasn't 0 previously.
-                goto geomChangeDone;
-            }
-            if (d->lineCount == d->maximumLineCount())  // Reached maximum line and height is growing.
-                goto geomChangeDone;
-        } else if (newGeometry.height() < oldGeometry.height()) {
-            if (d->lineCount < 2 && !verticalScale && newGeometry.height() > 0)  // A single line won't be truncated until the text is 0 height.
-                goto geomChangeDone;
+        if (!verticalPositionChanged) {
+            if (newGeometry.height() > oldGeometry.height()) {
+                if (!d->heightExceeded && !qFuzzyIsNull(oldGeometry.height())) {
+                    // Height is adequate and growing, and it wasn't 0 previously.
+                    goto geomChangeDone;
+                }
+                if (d->lineCount == d->maximumLineCount())  // Reached maximum line and height is growing.
+                    goto geomChangeDone;
+            } else if (newGeometry.height() < oldGeometry.height()) {
+                if (d->lineCount < 2 && !verticalScale && newGeometry.height() > 0)  // A single line won't be truncated until the text is 0 height.
+                    goto geomChangeDone;
 
-            if (!verticalScale // no scaling, no eliding, and either unwrapped, or no maximum line count.
-                    && d->elideMode != QQuickText::ElideRight
-                    && !(d->maximumLineCountValid && d->widthExceeded)) {
-                goto geomChangeDone;
+                if (!verticalScale // no scaling, no eliding, and either unwrapped, or no maximum line count.
+                        && d->elideMode != QQuickText::ElideRight
+                        && !(d->maximumLineCountValid && d->widthExceeded)) {
+                    goto geomChangeDone;
+                }
             }
         }
     } else if (!heightChanged && widthMaximum) {
@@ -3006,6 +2972,13 @@ void QQuickText::hoverLeaveEvent(QHoverEvent *event)
 {
     Q_D(QQuickText);
     d->processHoverEvent(event);
+}
+
+void QQuickText::invalidate()
+{
+    Q_D(QQuickText);
+    d->textHasChanged = true;
+    d->updateLayout();
 }
 
 bool QQuickTextPrivate::transformChanged(QQuickItem *transformedItem)

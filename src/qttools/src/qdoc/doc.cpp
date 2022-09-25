@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the tools applications of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "doc.h"
 
@@ -39,6 +14,8 @@
 #include "text.h"
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 DocUtilities &Doc::m_utilities = DocUtilities::instance();
 
@@ -72,11 +49,11 @@ Doc::Doc(const Location &start_loc, const Location &end_loc, const QString &sour
     parser.parse(source, m_priv, metaCommandSet, topics);
 
     if (Config::instance().getAtomsDump()) {
-        start_loc.information(u"==== Atoms Structure for block comment starting at %1 ===="_qs.arg(
+        start_loc.information(u"==== Atoms Structure for block comment starting at %1 ===="_s.arg(
                 start_loc.toString()));
         body().dump();
         end_loc.information(
-                u"==== Ending atoms Structure for block comment ending at %1 ===="_qs.arg(
+                u"==== Ending atoms Structure for block comment ending at %1 ===="_s.arg(
                         end_loc.toString()));
     }
 }
@@ -312,10 +289,10 @@ QStringMultiMap *Doc::metaTagMap() const
     return m_priv && m_priv->extra ? &m_priv->extra->m_metaMap : nullptr;
 }
 
-void Doc::initialize()
+void Doc::initialize(FileResolver& file_resolver)
 {
     Config &config = Config::instance();
-    DocParser::initialize(config);
+    DocParser::initialize(config, file_resolver);
 
     QStringMap reverseAliasMap;
 
@@ -423,47 +400,26 @@ void Doc::trimCStyleComment(Location &location, QString &str)
     str = str.mid(3, str.length() - 5);
 }
 
-QString Doc::resolveFile(const Location &location, const QString &fileName,
-                         QString *userFriendlyFilePath)
+CodeMarker *Doc::quoteFromFile(const Location &location, Quoter &quoter, ResolvedFile resolved_file)
 {
-    const QString result =
-            Config::findFile(location, DocParser::s_exampleFiles, DocParser::s_exampleDirs,
-                             fileName, userFriendlyFilePath);
-    qCDebug(lcQdoc).noquote().nospace()
-            << __FUNCTION__ << "(location=" << location.fileName() << ':' << location.lineNo()
-            << ", fileName=\"" << fileName << "\"), resolved to \"" << result;
-    return result;
-}
-
-CodeMarker *Doc::quoteFromFile(const Location &location, Quoter &quoter, const QString &fileName)
-{
+    // TODO: quoteFromFile should not care about modifying a stateful
+    // quoter from the outside, instead, it should produce a quoter
+    // that allows the caller to retrieve the required information
+    // about the quoted file.
+    //
+    // When changing the way in which quoting works, this kind of
+    // spread resposability should be removed, together with quoteFromFile.
     quoter.reset();
 
     QString code;
-
-    QString userFriendlyFilePath;
-    const QString filePath = resolveFile(location, fileName, &userFriendlyFilePath);
-    if (filePath.isEmpty()) {
-        QString details = QLatin1String("Example directories: ")
-                + DocParser::s_exampleDirs.join(QLatin1Char(' '));
-        if (!DocParser::s_exampleFiles.isEmpty())
-            details += QLatin1String(", example files: ")
-                    + DocParser::s_exampleFiles.join(QLatin1Char(' '));
-        location.warning(QStringLiteral("Cannot find file to quote from: '%1'").arg(fileName),
-                         details);
-    } else {
-        QFile inFile(filePath);
-        if (!inFile.open(QFile::ReadOnly)) {
-            location.warning(QStringLiteral("Cannot open file to quote from: '%1'")
-                                     .arg(userFriendlyFilePath));
-        } else {
-            QTextStream inStream(&inFile);
-            code = DocParser::untabifyEtc(inStream.readAll());
-        }
+    {
+        QFile input_file{resolved_file.get_path()};
+        input_file.open(QFile::ReadOnly);
+        code = DocParser::untabifyEtc(QTextStream{&input_file}.readAll());
     }
 
-    CodeMarker *marker = CodeMarker::markerForFileName(fileName);
-    quoter.quoteFromFile(userFriendlyFilePath, code, marker->markedUpCode(code, nullptr, location));
+    CodeMarker *marker = CodeMarker::markerForFileName(resolved_file.get_path());
+    quoter.quoteFromFile(resolved_file.get_path(), code, marker->markedUpCode(code, nullptr, location));
     return marker;
 }
 

@@ -48,6 +48,3 @@ imagedirs   += images
 
 navigation.landingpage = "Qt SVG"
 navigation.cppclassespage = "Qt SVG C++ Classes"
-
-# Fail the documentation build if there are more warnings than the limit
-warninglimit = 0

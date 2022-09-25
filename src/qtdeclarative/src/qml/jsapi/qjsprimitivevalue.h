@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtQml module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2020 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #ifndef QJSPRIMITIVEVALUE_H
 #define QJSPRIMITIVEVALUE_H
@@ -162,9 +126,10 @@ public:
     Q_IMPLICIT constexpr QJSPrimitiveValue(int value) noexcept : d(value) {}
     Q_IMPLICIT constexpr QJSPrimitiveValue(double value) noexcept : d(value) {}
     Q_IMPLICIT QJSPrimitiveValue(QString string) noexcept : d(std::move(string)) {}
-    explicit QJSPrimitiveValue(const QVariant &variant) noexcept
+
+    explicit QJSPrimitiveValue(const QMetaType type, const void *value) noexcept
     {
-        switch (variant.typeId()) {
+        switch (type.id()) {
         case QMetaType::UnknownType:
             d = QJSPrimitiveUndefined();
             break;
@@ -172,21 +137,26 @@ public:
             d = QJSPrimitiveNull();
             break;
         case QMetaType::Bool:
-            d = variant.toBool();
+            d = *static_cast<const bool *>(value);
             break;
         case QMetaType::Int:
-            d = variant.toInt();
+            d = *static_cast<const int *>(value);
             break;
         case QMetaType::Double:
-            d = variant.toDouble();
+            d = *static_cast<const double *>(value);
             break;
         case QMetaType::QString:
-            d = variant.toString();
+            d = *static_cast<const QString *>(value);
             break;
         default:
             // Unsupported. Remains undefined.
             break;
         }
+    }
+
+    explicit QJSPrimitiveValue(const QVariant &variant) noexcept
+        : QJSPrimitiveValue(variant.metaType(), variant.data())
+    {
     }
 
     constexpr bool toBoolean() const
@@ -812,6 +782,37 @@ private:
 
     QJSPrimitiveValuePrivate d;
 };
+
+namespace QQmlPrivate {
+    // TODO: Make this constexpr once std::isnan is constexpr.
+    inline double jsExponentiate(double base, double exponent)
+    {
+        constexpr double qNaN = std::numeric_limits<double>::quiet_NaN();
+        constexpr double inf = std::numeric_limits<double>::infinity();
+
+        if (qIsNull(exponent))
+            return 1.0;
+
+        if (std::isnan(exponent))
+            return qNaN;
+
+        if (QJSNumberCoercion::equals(base, 1.0) || QJSNumberCoercion::equals(base, -1.0))
+            return std::isinf(exponent) ? qNaN : std::pow(base, exponent);
+
+        if (!qIsNull(base))
+            return std::pow(base, exponent);
+
+        if (std::copysign(1.0, base) > 0.0)
+            return exponent < 0.0 ? inf : std::pow(base, exponent);
+
+        if (exponent < 0.0)
+            return QJSNumberCoercion::equals(std::fmod(-exponent, 2.0), 1.0) ? -inf : inf;
+
+        return QJSNumberCoercion::equals(std::fmod(exponent, 2.0), 1.0)
+                ? std::copysign(0, -1.0)
+                : 0.0;
+    }
+}
 
 QT_END_NAMESPACE
 

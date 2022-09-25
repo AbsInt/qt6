@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtWidgets module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2020 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qfileinfogatherer_p.h"
 #include <qdebug.h>
@@ -50,6 +14,8 @@
 #endif
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 #ifdef QT_BUILD_INTERNAL
 static QBasicAtomicInt fetchedRoot = Q_BASIC_ATOMIC_INITIALIZER(false);
@@ -68,9 +34,9 @@ static QString translateDriveName(const QFileInfo &drive)
 {
     QString driveName = drive.absoluteFilePath();
 #ifdef Q_OS_WIN
-    if (driveName.startsWith(QLatin1Char('/'))) // UNC host
+    if (driveName.startsWith(u'/')) // UNC host
         return drive.fileName();
-    if (driveName.endsWith(QLatin1Char('/')))
+    if (driveName.endsWith(u'/'))
         driveName.chop(1);
 #endif // Q_OS_WIN
     return driveName;
@@ -162,7 +128,7 @@ void QFileInfoGatherer::fetchExtendedInformation(const QString &path, const QStr
 #if QT_CONFIG(filesystemwatcher)
     if (files.isEmpty()
         && !path.isEmpty()
-        && !path.startsWith(QLatin1String("//")) /*don't watch UNC path*/) {
+        && !path.startsWith("//"_L1) /*don't watch UNC path*/) {
         if (!watchedDirectories().contains(path))
             watchPaths(QStringList(path));
     }
@@ -176,7 +142,7 @@ void QFileInfoGatherer::fetchExtendedInformation(const QString &path, const QStr
 */
 void QFileInfoGatherer::updateFile(const QString &filePath)
 {
-    QString dir = filePath.mid(0, filePath.lastIndexOf(QLatin1Char('/')));
+    QString dir = filePath.mid(0, filePath.lastIndexOf(u'/'));
     QString fileName = filePath.mid(dir.length() + 1);
     fetchExtendedInformation(dir, QStringList(fileName));
 }

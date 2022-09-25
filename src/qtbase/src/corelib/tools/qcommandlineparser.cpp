@@ -1,48 +1,13 @@
-/****************************************************************************
-**
-** Copyright (C) 2013 Laszlo Papp <lpapp@kde.org>
-** Copyright (C) 2013 David Faure <faure@kde.org>
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2013 Laszlo Papp <lpapp@kde.org>
+// Copyright (C) 2013 David Faure <faure@kde.org>
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qcommandlineparser.h"
 
 #include <qcoreapplication.h>
 #include <private/qcoreapplication_p.h>
 #include <qhash.h>
+#include <qvarlengtharray.h>
 #include <qlist.h>
 #include <qdebug.h>
 #if defined(Q_OS_WIN) && !defined(QT_BOOTSTRAPPED)
@@ -52,6 +17,8 @@
 #include <stdlib.h>
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 extern void Q_CORE_EXPORT qt_call_post_routines();
 
@@ -592,7 +559,7 @@ static void showParserMessage(const QString &message, MessageType type)
 void QCommandLineParser::process(const QStringList &arguments)
 {
     if (!d->parse(arguments)) {
-        showParserMessage(QCoreApplication::applicationName() + QLatin1String(": ") + errorText() + QLatin1Char('\n'), ErrorMessage);
+        showParserMessage(QCoreApplication::applicationName() + ": "_L1 + errorText() + u'\n', ErrorMessage);
         qt_call_post_routines();
         ::exit(EXIT_FAILURE);
     }
@@ -1017,8 +984,8 @@ QStringList QCommandLineParser::unknownOptionNames() const
 */
 Q_NORETURN void QCommandLineParser::showVersion()
 {
-    showParserMessage(QCoreApplication::applicationName() + QLatin1Char(' ')
-                      + QCoreApplication::applicationVersion() + QLatin1Char('\n'),
+    showParserMessage(QCoreApplication::applicationName() + u' '
+                      + QCoreApplication::applicationVersion() + u'\n',
                       UsageMessage);
     qt_call_post_routines();
     ::exit(EXIT_SUCCESS);
@@ -1059,8 +1026,8 @@ QString QCommandLineParser::helpText() const
 
 static QString wrapText(const QString &names, int optionNameMaxWidth, const QString &description)
 {
-    const QLatin1Char nl('\n');
-    const QLatin1String indentation("  ");
+    const auto nl = u'\n';
+    const auto indentation = "  "_L1;
 
     // In case the list of option names is very long, wrap it as well
     int nameIndex = 0;
@@ -1102,7 +1069,7 @@ static QString wrapText(const QString &names, int optionNameMaxWidth, const QStr
         if (breakAt != -1) {
             const int numChars = breakAt - lineStart;
             //qDebug() << "breakAt=" << description.at(breakAt) << "breakAtSpace=" << breakAtSpace << lineStart << "to" << breakAt << description.mid(lineStart, numChars);
-            text += indentation + nextNameSection().leftJustified(optionNameMaxWidth) + QLatin1Char(' ');
+            text += indentation + nextNameSection().leftJustified(optionNameMaxWidth) + u' ';
             text += QStringView{description}.mid(lineStart, numChars) + nl;
             x = 0;
             lastBreakable = -1;
@@ -1131,9 +1098,9 @@ QString QCommandLineParserPrivate::helpText(bool includeQtOptions) const
     if (includeQtOptions && qApp)
         qApp->d_func()->addQtOptions(&options);
     if (!options.isEmpty())
-        usage += QLatin1Char(' ') + QCommandLineParser::tr("[options]");
+        usage += u' ' + QCommandLineParser::tr("[options]");
     for (const PositionalArgumentDefinition &arg : positionalArgumentDefinitions)
-        usage += QLatin1Char(' ') + arg.syntax;
+        usage += u' ' + arg.syntax;
     text += QCommandLineParser::tr("Usage: %1").arg(usage) + nl;
     if (!description.isEmpty())
         text += description + nl;
@@ -1150,13 +1117,13 @@ QString QCommandLineParserPrivate::helpText(bool includeQtOptions) const
         QString optionNamesString;
         for (const QString &optionName : optionNames) {
             const int numDashes = optionName.length() == 1 ? 1 : 2;
-            optionNamesString += QLatin1String("--", numDashes) + optionName + QLatin1String(", ");
+            optionNamesString += QLatin1StringView("--", numDashes) + optionName + ", "_L1;
         }
         if (!optionNames.isEmpty())
             optionNamesString.chop(2); // remove trailing ", "
         const auto valueName = option.valueName();
         if (!valueName.isEmpty())
-            optionNamesString += QLatin1String(" <") + valueName + QLatin1Char('>');
+            optionNamesString += " <"_L1 + valueName + u'>';
         optionNameList.append(optionNamesString);
         longestOptionNameString = qMax(longestOptionNameString, optionNamesString.length());
     }

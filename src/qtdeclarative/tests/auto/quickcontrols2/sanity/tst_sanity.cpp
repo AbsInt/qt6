@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2017 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2017 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <QtTest>
 #include <QtQml>
@@ -40,10 +15,11 @@
 #include <QtQml/private/qqmlmetatype_p.h>
 #include <QtQuickTestUtils/private/visualtestutils_p.h>
 #include <QtQuickControlsTestUtils/private/controlstestutils_p.h>
-#include <QtQmlLint/private/qqmllinter_p.h>
+#include <QtQmlCompiler/private/qqmljslinter_p.h>
 
 using namespace QQuickVisualTestUtils;
 using namespace QQuickControlsTestUtils;
+using namespace Qt::StringLiterals;
 
 class tst_Sanity : public QObject
 {
@@ -63,7 +39,7 @@ private:
     QMap<QString, QString> installedQmlFiles;
     QStringList m_importPaths;
 
-    QQmlLinter m_linter;
+    QQmlJSLinter m_linter;
     QMap<QString, QQmlJSLogger::Option> m_options;
 };
 
@@ -76,11 +52,11 @@ tst_Sanity::tst_Sanity()
     // Mainly because a lot of false positives are generated because we are linting files from
     // different modules directly without their generated qmldirs.
     for (const QString &key : m_options.keys())
-        m_options[key].setLevel(u"disable"_qs);
+        m_options[key].setLevel(u"disable"_s);
 
-    m_options[u"deferred-property-id"_qs].setLevel(u"warning"_qs);
-    m_options[u"controls-sanity"_qs].setLevel(u"warning"_qs);
-    m_options[u"multiple-attached-objects"_qs].setLevel(u"warning"_qs);
+    m_options[u"deferred-property-id"_s].setLevel(u"warning"_s);
+    m_options[u"controls-sanity"_s].setLevel(u"warning"_s);
+    m_options[u"multiple-attached-objects"_s].setLevel(u"warning"_s);
 }
 
 void tst_Sanity::initTestCase()
@@ -107,6 +83,7 @@ void tst_Sanity::initTestCase()
         { "material", "QtQuick/Controls/Material" },
         { "universal", "QtQuick/Controls/Universal" },
         // TODO: add native styles: QTBUG-87108
+        { "ios", "QtQuick/Controls/iOS" }
     };
     for (const auto &stylePathPair : styleRelativePaths) {
         forEachControl(&engine, QQC2_IMPORT_PATH, stylePathPair.first, stylePathPair.second, QStringList(),
@@ -129,10 +106,13 @@ void tst_Sanity::qmllint()
 {
     QFETCH(QString, control);
     QFETCH(QString, filePath);
+    if (control == "ios/ProgressBar.qml")
+        QEXPECT_FAIL("", "ios/ProgressBar.qml uses JS as workaround for  QTBUG-38932.", Abort);
 
     QJsonArray output;
     bool success =
-            m_linter.lintFile(filePath, nullptr, true, &output, m_importPaths, {}, {}, m_options);
+            m_linter.lintFile(filePath, nullptr, true, &output, m_importPaths, {}, {}, m_options)
+            == QQmlJSLinter::LintSuccess;
 
     QVERIFY2(success, qPrintable(QJsonDocument(output).toJson(QJsonDocument::Compact)));
 }

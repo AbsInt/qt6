@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the tools applications of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #ifndef TREE_H
 #define TREE_H
@@ -52,7 +27,7 @@ public:
     enum TargetType { Unknown, Target, Keyword, Contents, Class, Function, Page, Subtitle };
 
     TargetRec(QString name, TargetRec::TargetType type, Node *node, int priority)
-        : m_node(node), m_ref(std::move(name)), m_priority(priority)
+        : m_node(node), m_ref(std::move(name)), m_type(type), m_priority(priority)
     {
         // Discard the dedicated ref for keywords - they always
         // link to the top of the QDoc comment they appear in
@@ -65,20 +40,14 @@ public:
 
     Node *m_node { nullptr };
     QString m_ref {};
+    TargetType m_type {};
     int m_priority {};
-};
-
-struct TargetLoc
-{
-public:
-    TargetLoc() = default;
 };
 
 typedef QMultiMap<QString, TargetRec *> TargetMap;
 typedef QMultiMap<QString, PageNode *> PageNodeMultiMap;
 typedef QMap<QString, QmlTypeNode *> QmlTypeMap;
 typedef QMultiMap<QString, const ExampleNode *> ExampleNodeMap;
-typedef QList<TargetLoc *> TargetList;
 
 class Tree
 {
@@ -113,7 +82,8 @@ private: // The rest of the class is private.
     Node *findNodeRecursive(const QStringList &path, int pathIndex, const Node *start,
                             bool (Node::*)() const) const;
     const Node *findNodeForTarget(const QStringList &path, const QString &target, const Node *node,
-                                  int flags, Node::Genus genus, QString &ref) const;
+                                  int flags, Node::Genus genus, QString &ref,
+                                  TargetRec::TargetType *targetType = nullptr) const;
     const Node *matchPathAndTarget(const QStringList &path, int idx, const QString &target,
                                    const Node *node, int flags, Node::Genus genus,
                                    QString &ref) const;
@@ -129,7 +99,7 @@ private: // The rest of the class is private.
     void insertTarget(const QString &name, const QString &title, TargetRec::TargetType type,
                       Node *node, int priority);
     void resolveTargets(Aggregate *root);
-    const Node *findUnambiguousTarget(const QString &target, Node::Genus genus, QString &ref) const;
+    const TargetRec *findUnambiguousTarget(const QString &target, Node::Genus genus) const;
     [[nodiscard]] const PageNode *findPageNodeByTitle(const QString &title) const;
 
     void addPropertyFunction(PropertyNode *property, const QString &funcName,

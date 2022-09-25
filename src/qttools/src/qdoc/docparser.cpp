@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the tools applications of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 #include "docparser.h"
 
 #include "codemarker.h"
@@ -41,6 +16,7 @@
 
 #include <cctype>
 #include <climits>
+#include <functional>
 
 QT_BEGIN_NAMESPACE
 
@@ -98,10 +74,8 @@ enum {
     CMD_LINK,
     CMD_LIST,
     CMD_META,
-    CMD_NEWCODE,
     CMD_NOTE,
     CMD_O,
-    CMD_OLDCODE,
     CMD_OMIT,
     CMD_OMITVALUE,
     CMD_OVERLOAD,
@@ -111,7 +85,6 @@ enum {
     CMD_QUOTATION,
     CMD_QUOTEFILE,
     CMD_QUOTEFROMFILE,
-    CMD_QUOTEFUNCTION,
     CMD_RAW,
     CMD_ROW,
     CMD_SA,
@@ -206,10 +179,8 @@ static struct
              { "link", CMD_LINK, nullptr },
              { "list", CMD_LIST, nullptr },
              { "meta", CMD_META, nullptr },
-             { "newcode", CMD_NEWCODE, nullptr },
              { "note", CMD_NOTE, nullptr },
              { "o", CMD_O, nullptr },
-             { "oldcode", CMD_OLDCODE, nullptr },
              { "omit", CMD_OMIT, nullptr },
              { "omitvalue", CMD_OMITVALUE, nullptr },
              { "overload", CMD_OVERLOAD, nullptr },
@@ -219,7 +190,6 @@ static struct
              { "quotation", CMD_QUOTATION, nullptr },
              { "quotefile", CMD_QUOTEFILE, nullptr },
              { "quotefromfile", CMD_QUOTEFROMFILE, nullptr },
-             { "quotefunction", CMD_QUOTEFUNCTION, nullptr },
              { "raw", CMD_RAW, nullptr },
              { "row", CMD_ROW, nullptr },
              { "sa", CMD_SA, nullptr },
@@ -258,12 +228,10 @@ static struct
              { nullptr, 0, nullptr } };
 
 int DocParser::s_tabSize;
-QStringList DocParser::s_exampleFiles;
-QStringList DocParser::s_exampleDirs;
-QStringList DocParser::s_sourceFiles;
-QStringList DocParser::s_sourceDirs;
 QStringList DocParser::s_ignoreWords;
 bool DocParser::s_quoting = false;
+FileResolver* DocParser::file_resolver{nullptr};
+
 
 static QString cleanLink(const QString &link)
 {
@@ -273,13 +241,9 @@ static QString cleanLink(const QString &link)
     return link.mid(colonPos + 1).simplified();
 }
 
-void DocParser::initialize(const Config &config)
+void DocParser::initialize(const Config &config, FileResolver& file_resolver)
 {
     s_tabSize = config.getInt(CONFIG_TABSIZE);
-    s_exampleFiles = config.getCanonicalPathList(CONFIG_EXAMPLES);
-    s_exampleDirs = config.getCanonicalPathList(CONFIG_EXAMPLEDIRS);
-    s_sourceFiles = config.getCanonicalPathList(CONFIG_SOURCES);
-    s_sourceDirs = config.getCanonicalPathList(CONFIG_SOURCEDIRS);
     s_ignoreWords = config.getStringList(CONFIG_IGNOREWORDS);
 
     int i = 0;
@@ -297,15 +261,14 @@ void DocParser::initialize(const Config &config)
     for (const auto &format : config.getOutputFormats())
         DocParser::s_quoting = DocParser::s_quoting
                 || config.getBool(format + Config::dot + CONFIG_QUOTINGINFORMATION);
+
+    // KLUDGE: file_resolver is temporarily a pointer. See the
+    // comment for file_resolver in the header file for more context.
+    DocParser::file_resolver = &file_resolver;
 }
 
 void DocParser::terminate()
 {
-    s_exampleFiles.clear();
-    s_exampleDirs.clear();
-    s_sourceFiles.clear();
-    s_sourceDirs.clear();
-
     int i = 0;
     while (cmds[i].english) {
         delete cmds[i].alias;
@@ -752,10 +715,6 @@ void DocParser::parse(const QString &source, DocPrivate *docPrivate,
                     p1 = getArgument();
                     m_private->extra->m_metaMap.insert(p1, getArgument());
                     break;
-                case CMD_NEWCODE:
-                    location().warning(
-                            QStringLiteral("Unexpected '\\%1'").arg(cmdName(CMD_NEWCODE)));
-                    break;
                 case CMD_NOTE:
                     leavePara();
                     enterPara(Atom::NoteLeft, Atom::NoteRight);
@@ -801,14 +760,6 @@ void DocParser::parse(const QString &source, DocPrivate *docPrivate,
                         location().warning(
                                 QStringLiteral("Command '\\%1' outside of '\\%2' and '\\%3'")
                                         .arg(cmdName(cmd), cmdName(CMD_LIST), cmdName(CMD_TABLE)));
-                    break;
-                case CMD_OLDCODE:
-                    location().warning(QStringLiteral("'\\oldcode' and '\\newcode' are deprecated. "
-                                                      "They will be removed in Qt 6.4."));
-
-                    leavePara();
-                    append(Atom::CodeOld, getCode(CMD_OLDCODE, marker));
-                    append(Atom::CodeNew, getCode(CMD_NEWCODE, marker));
                     break;
                 case CMD_OMIT:
                     getUntilEnd(cmd);
@@ -874,8 +825,9 @@ void DocParser::parse(const QString &source, DocPrivate *docPrivate,
                     break;
                 case CMD_QUOTEFILE: {
                     leavePara();
+
                     QString fileName = getArgument();
-                    Doc::quoteFromFile(location(), m_quoter, fileName);
+                    quoteFromFile(fileName);
                     if (s_quoting) {
                         append(Atom::CodeQuoteCommand, cmdStr);
                         append(Atom::CodeQuoteArgument, fileName);
@@ -891,22 +843,7 @@ void DocParser::parse(const QString &source, DocPrivate *docPrivate,
                         append(Atom::CodeQuoteCommand, cmdStr);
                         append(Atom::CodeQuoteArgument, arg);
                     }
-                    Doc::quoteFromFile(location(), m_quoter, arg);
-                    break;
-                }
-                case CMD_QUOTEFUNCTION: {
-                    leavePara();
-                    marker = quoteFromFile();
-                    p1 = getRestOfLine();
-                    if (s_quoting) {
-                        append(Atom::CodeQuoteCommand, cmdStr);
-                        append(Atom::CodeQuoteArgument, slashed(marker->functionEndRegExp(p1)));
-                    }
-                    m_quoter.quoteTo(location(), cmdStr, slashed(marker->functionBeginRegExp(p1)));
-                    append(Atom::Code,
-                           m_quoter.quoteUntil(location(), cmdStr,
-                                               slashed(marker->functionEndRegExp(p1))));
-                    m_quoter.reset();
+                    quoteFromFile(arg);
                     break;
                 }
                 case CMD_RAW:
@@ -1002,7 +939,8 @@ void DocParser::parse(const QString &source, DocPrivate *docPrivate,
                         append(Atom::SnippetLocation, snippet);
                         append(Atom::SnippetIdentifier, identifier);
                     }
-                    marker = Doc::quoteFromFile(location(), m_quoter, snippet);
+                    marker = CodeMarker::markerForFileName(snippet);
+                    quoteFromFile(snippet);
                     appendToCode(m_quoter.quoteSnippet(location(), identifier), marker->atomType());
                     break;
                 }
@@ -1492,13 +1430,108 @@ bool DocParser::openCommand(int cmd)
 
 /*!
     Returns \c true if \a word qualifies for auto-linking.
+
+    A word qualifies for auto-linking if either:
+
+    \list
+        \li It is composed of only upper and lowercase characters
+        \li AND It contains at least one uppercase character that is not
+        the first character of word
+        \li AND it contains at least two lowercase characters
+    \endlist
+
+    Or
+
+    \list
+        \li It is composed only of uppercase characters, lowercase
+        characters, characters in [_@] and the \c {"::"} sequence.
+        \li It contains at least one uppercase character that is not
+        the first character of word or it contains at least one
+        lowercase character
+        \li AND it contains at least one character in [_@] or it
+        contains at least one \c {"::"} sequence.
+    \endlist
+
+    Inserting or suffixing, but not prefixing, any sequence in [0-9]+
+    in a word that qualifies for auto-linking by the above rules
+    preserves the auto-linkability of the word.
+
+    Suffixing the sequence \c {"()"} to a word that qualifies for
+    auto-linking by the above rules preserves the auto-linkability of
+    a word.
+
+    FInally, a word qualifies for auto-linking if:
+
+    \list
+        \li It is composed of only uppercase characters, lowercase
+        characters and the sequence \c {"()"}
+        \li AND it contains one lowercase character and a sequence of zero, one
+        or two upper or lowercase characters
+        \li AND it contains exactly one sequence \c {"()"}
+        \li AND it contains one sequence \c {"()"} as the last two
+        characters of word
+    \endlist
+
+    For example, \c {"fOo"}, \c {"FooBar"} and \c {"foobaR"} qualify
+    for auto-linking by the first rule.
+
+    \c {"QT_DEBUG"}, \c {"::Qt"} and \c {"std::move"} qualifies for
+    auto-linking by the second rule.
+
+    \c {"SIMDVector256"} qualifies by suffixing \c {"SIMDVector"},
+    which qualifies by the first rule, with the sequence \c {"256"}
+
+    \c {"FooBar::Bar()"} qualifies by suffixing \c {"FooBar::Bar"},
+    which qualifies by the first and second rule, with the sequence \c
+    {"()"}.
+
+    \c {"Foo()"} and \c {"a()"} qualifies by the last rule.
+
+    Instead, \c {"Q"}, \c {"flower"}, \c {"_"} and \c {"()"} do not
+    qualify for auto-linking.
+
+    The rules are intended as a heuristic to catch common cases in the
+    Qt documentation where a word might represent an important
+    documented element such as a class or a method that could be
+    linked to while at the same time avoiding catching common words
+    such as \c {"A"} or \c {"Nonetheless"}.
+
+    The heuristic assumes that Qt's codebase respects a style where
+    camelCasing is the standard for most of the elements, a function
+    call is identified by the use of parenthesis and certain elements,
+    such as macros, might be fully uppercase.
+
+    Furthemore, it assumes that the Qt codebase is written in a
+    language that has an identifier grammar similar to the one for
+    C++.
 */
 inline bool DocParser::isAutoLinkString(const QString &word)
 {
     qsizetype start = 0;
-    return isAutoLinkString(word, start);
+    return isAutoLinkString(word, start) && (start == word.length());
 }
 
+/*!
+    Returns \c true if a prefix of a substring of \a word qualifies
+    for auto-linking.
+
+    Respects the same parsing rules as the unary overload.
+
+    \a curPos defines the offset, from the first character of \ word,
+    at which the parsed substring starts.
+
+    When the call completes, \a curPos represents the offset, from the
+    first character of word, that is the successor of the offset of
+    the last parsed character.
+
+    If the return value of the call is \c true, it is guaranteed that
+    the prefix of the substring of \word that contains the characters
+    from the initial value of \a curPos and up to but not including \a
+    curPos qualifies for auto-linking.
+
+    If \a curPos is initially zero, the considered substring is the
+    entirety of \a word.
+*/
 bool DocParser::isAutoLinkString(const QString &word, qsizetype &curPos)
 {
     qsizetype len = word.size();
@@ -1529,22 +1562,18 @@ bool DocParser::isAutoLinkString(const QString &word, qsizetype &curPos)
             ++numStrangeSymbols;
             curPos += 2;
         } else if (latin1Ch == '(') {
-            if (curPos > startPos) {
-                if ((curPos < len - 1) && (word.at(curPos + 1) == QLatin1Char(')'))) {
-                    ++numStrangeSymbols;
-                    m_position += 2;
-                    break;
-                } else {
-                    break;
-                }
-            } else {
-                break;
+            if ((curPos < len - 1) && (word.at(curPos + 1) == QLatin1Char(')'))) {
+                ++numStrangeSymbols;
+                m_position += 2;
             }
-        } else {
+
+            break;
+       } else {
             break;
         }
     }
-    return ((numUppercase >= 1 && numLowercase >= 2) || numStrangeSymbols > 0);
+
+    return ((numUppercase >= 1 && numLowercase >= 2) || (numStrangeSymbols > 0 && (numUppercase + numLowercase >= 1)));
 }
 
 bool DocParser::closeCommand(int endCmd)
@@ -1814,9 +1843,56 @@ void DocParser::leaveTableRow()
     }
 }
 
-CodeMarker *DocParser::quoteFromFile()
+void DocParser::quoteFromFile(const QString& filename)
 {
-    return Doc::quoteFromFile(location(), m_quoter, getArgument());
+    // KLUDGE: We dereference file_resolver as it is temporarily a pointer.
+    // See the comment for file_resolver in the header files for more context.
+    //
+    // We spefically dereference it, instead of using the arrow
+    // operator, to better represent that we do not consider this as
+    // an actual pointer, as it should not be.
+    //
+    // Do note that we are considering it informally safe to
+    // dereference the pointer, as we expect it to always hold a value
+    // at this point, but actual enforcement of this appears nowhere
+    // in the codebase.
+    auto maybe_resolved_file{(*file_resolver).resolve(filename)};
+    if (!maybe_resolved_file) {
+        // TODO: [uncentralized-admonition][failed-resolve-file]
+        // This warning is required in multiple places.
+        // To ensure the consistency of the warning and avoid
+        // duplicating code everywhere, provide a centralized effort
+        // where the warning message can be generated (but not
+        // issued).
+        // The current format is based on what was used before, review
+        // it when it is moved out.
+        QString details = std::transform_reduce(
+            (*file_resolver).get_search_directories().cbegin(),
+            (*file_resolver).get_search_directories().cend(),
+            u"Searched directories:"_qs,
+            std::plus(),
+            [](const DirectoryPath& directory_path){ return " " + directory_path.value(); }
+        );
+
+        location().warning(u"Cannot find file to quote from: %1"_qs.arg(filename), details);
+
+        // REMARK: The following is duplicated from
+        // Doc::quoteFromFile. If, for some reason (such as a file
+        // that is inaccessible), the quoting fails but, previously,
+        // the logic duplicated here was still run.
+        // This is not true anymore as quoteFromFile does require a
+        // resolved file to be run now.
+        // It is not entirely clear if this is required for the
+        // semantics of DocParser to be preserved, but for the sake of
+        // avoiding premature breakages this was retained.
+        // Do note that this should be considered temporary as the
+        // quoter state, if any will be preserved, should not be
+        // managed in such a spread and unlocal way.
+        m_quoter.reset();
+
+        CodeMarker *marker = CodeMarker::markerForFileName(QString{});
+        m_quoter.quoteFromFile(filename, QString{}, marker->markedUpCode(QString{}, nullptr, location()));
+    } else Doc::quoteFromFile(location(), m_quoter, *maybe_resolved_file);
 }
 
 /*!
@@ -2373,10 +2449,6 @@ int DocParser::endCmdFor(int cmd)
         return CMD_ENDLINK;
     case CMD_LIST:
         return CMD_ENDLIST;
-    case CMD_NEWCODE:
-        return CMD_ENDCODE;
-    case CMD_OLDCODE:
-        return CMD_NEWCODE;
     case CMD_OMIT:
         return CMD_ENDOMIT;
     case CMD_QUOTATION:
@@ -2479,13 +2551,6 @@ QString DocParser::dedent(int level, const QString &str)
         }
     }
     return result;
-}
-
-QString DocParser::slashed(const QString &str)
-{
-    QString result = str;
-    result.replace(QLatin1Char('/'), "\\/");
-    return QLatin1Char('/') + result + QLatin1Char('/');
 }
 
 /*!

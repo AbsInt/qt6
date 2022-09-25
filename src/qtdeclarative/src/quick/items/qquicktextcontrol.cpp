@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtGui module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qquicktextcontrol_p.h"
 #include "qquicktextcontrol_p_p.h"
@@ -72,6 +36,7 @@
 #include <qmetaobject.h>
 
 #include <private/qqmlglobal_p.h>
+#include <private/qquickdeliveryagent_p_p.h>
 
 // ### these should come from QStyleHints
 const int textCursorWidth = 1;
@@ -115,6 +80,7 @@ QQuickTextControlPrivate::QQuickTextControlPrivate()
       hasImState(false),
       cursorRectangleChanged(false),
       hoveredMarker(false),
+      selectByTouchDrag(false),
       lastSelectionStart(-1),
       lastSelectionEnd(-1)
 {}
@@ -1040,6 +1006,9 @@ void QQuickTextControlPrivate::mousePressEvent(QMouseEvent *e, const QPointF &po
             cursor.clearSelection();
         }
     }
+
+    if (!selectByTouchDrag && !QQuickDeliveryAgentPrivate::isEventFromMouseOrTouchpad(e))
+        return;
     if (interactionFlags & Qt::TextEditable)
         blockWithMarkerUnderMousePress = q->blockWithMarkerAt(pos);
     if (e->button() & Qt::MiddleButton) {
@@ -1110,6 +1079,9 @@ void QQuickTextControlPrivate::mousePressEvent(QMouseEvent *e, const QPointF &po
 
 void QQuickTextControlPrivate::mouseMoveEvent(QMouseEvent *e, const QPointF &mousePos)
 {
+    if (!selectByTouchDrag && !QQuickDeliveryAgentPrivate::isEventFromMouseOrTouchpad(e))
+        return;
+
     Q_Q(QQuickTextControl);
 
     if ((e->buttons() & Qt::LeftButton)) {
@@ -1190,6 +1162,7 @@ void QQuickTextControlPrivate::mouseReleaseEvent(QMouseEvent *e, const QPointF &
 
     const QTextCursor oldSelection = cursor;
     const int oldCursorPos = cursor.position();
+    const bool isMouse = QQuickDeliveryAgentPrivate::isEventFromMouseOrTouchpad(e);
 
     if (mousePressed) {
         mousePressed = false;
@@ -1205,6 +1178,8 @@ void QQuickTextControlPrivate::mouseReleaseEvent(QMouseEvent *e, const QPointF &
             q->insertFromMimeData(md);
 #endif
     }
+    if (!isMouse && !selectByTouchDrag && interactionFlags.testFlag(Qt::TextEditable))
+        setCursorPosition(pos);
 
     repaintOldAndNewSelection(oldSelection);
 
@@ -1213,7 +1188,8 @@ void QQuickTextControlPrivate::mouseReleaseEvent(QMouseEvent *e, const QPointF &
         q->updateCursorRectangle(true);
     }
 
-    if ((interactionFlags & Qt::TextEditable) && (e->button() & Qt::LeftButton) && blockWithMarkerUnderMousePress.isValid()) {
+    if ((isMouse || selectByTouchDrag) && interactionFlags.testFlag(Qt::TextEditable) &&
+            (e->button() & Qt::LeftButton) && blockWithMarkerUnderMousePress.isValid()) {
         QTextBlock block = q->blockWithMarkerAt(pos);
         if (block == blockWithMarkerUnderMousePress) {
             auto fmt = block.blockFormat();
@@ -1251,7 +1227,8 @@ void QQuickTextControlPrivate::mouseDoubleClickEvent(QMouseEvent *e, const QPoin
 {
     Q_Q(QQuickTextControl);
 
-    if (e->button() == Qt::LeftButton && (interactionFlags & Qt::TextSelectableByMouse)) {
+    if (e->button() == Qt::LeftButton && (interactionFlags & Qt::TextSelectableByMouse)
+            && (selectByTouchDrag || QQuickDeliveryAgentPrivate::isEventFromMouseOrTouchpad(e))) {
 #if QT_CONFIG(im)
         commitPreedit();
 #endif
@@ -1644,6 +1621,14 @@ void QQuickTextControl::setWordSelectionEnabled(bool enabled)
     Q_D(QQuickTextControl);
     d->wordSelectionEnabled = enabled;
 }
+
+#if QT_VERSION < QT_VERSION_CHECK(7, 0, 0)
+void QQuickTextControl::setTouchDragSelectionEnabled(bool enabled)
+{
+    Q_D(QQuickTextControl);
+    d->selectByTouchDrag = enabled;
+}
+#endif
 
 QMimeData *QQuickTextControl::createMimeDataFromSelection() const
 {

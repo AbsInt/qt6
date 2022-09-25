@@ -1,31 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Marc Mutz <marc.mutz@kdab.com>
-** Copyright (C) 2019 Mail.ru Group.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2020 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Marc Mutz <marc.mutz@kdab.com>
+// Copyright (C) 2019 Mail.ru Group.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #undef QT_NO_CAST_FROM_ASCII
 #undef QT_NO_CAST_TO_ASCII
@@ -40,6 +15,7 @@
 #include <QStringTokenizer>
 #include <QStringView>
 #include <QTest>
+#include <QVarLengthArray>
 
 #include "../../../../shared/localechange.h"
 
@@ -440,6 +416,10 @@ private Q_SLOTS:
     void member_localeAwareCompare_QString_QString() { member_localeAwareCompare_impl<QString, QString>(); }
     void member_localeAwareCompare_QString_QStringView_data() { member_localeAwareCompare_data(); }
     void member_localeAwareCompare_QString_QStringView() { member_localeAwareCompare_impl<QString, QStringView>(); }
+    void member_localeAwareCompare_QStringView_QString_data() { member_localeAwareCompare_data(); }
+    void member_localeAwareCompare_QStringView_QString() { member_localeAwareCompare_impl<QStringView, QString>(); }
+    void member_localeAwareCompare_QStringView_QStringView_data() { member_localeAwareCompare_data(); }
+    void member_localeAwareCompare_QStringView_QStringView() { member_localeAwareCompare_impl<QStringView, QStringView>(); }
 
 private:
     void startsWith_data(bool rhsIsQChar = false);
@@ -748,6 +728,8 @@ private Q_SLOTS:
     void toNumber_QStringView() { toNumber_impl<QStringView>(); }
     void toNumber_QByteArray_data() { toNumber_data(); }
     void toNumber_QByteArray() { toNumber_impl<QByteArray>(); }
+    void toNumber_QLatin1String_data() { toNumber_data(); }
+    void toNumber_QLatin1String() { toNumber_impl<QLatin1String>(); }
 
     void toNumberWithBases_QString_data() { toNumberWithBases_data(); }
     void toNumberWithBases_QString() { toNumberWithBases_impl<QString>(); }
@@ -755,18 +737,49 @@ private Q_SLOTS:
     void toNumberWithBases_QStringView() { toNumberWithBases_impl<QStringView>(); }
     void toNumberWithBases_QByteArray_data() { toNumberWithBases_data(); }
     void toNumberWithBases_QByteArray() { toNumberWithBases_impl<QByteArray>(); }
+    void toNumberWithBases_QLatin1String_data() { toNumberWithBases_data(); }
+    void toNumberWithBases_QLatin1String() { toNumberWithBases_impl<QLatin1String>(); }
 
 private:
     void count_data();
-    template <typename String> void count_impl();
+    template<typename Haystack, typename Needle>
+    void count_impl();
 
 private Q_SLOTS:
-    void count_QString_data() { count_data(); }
-    void count_QString() { count_impl<QString>(); }
-    void count_QStringView_data() { count_data(); }
-    void count_QStringView() { count_impl<QStringView>(); }
-    void count_QByteArray_data() { count_data(); }
-    void count_QByteArray() { count_impl<QByteArray>(); }
+    void count_QString_QString_data() { count_data(); }
+    void count_QString_QString() { count_impl<QString, QString>(); }
+    void count_QString_QLatin1String_data() { count_data(); }
+    void count_QString_QLatin1String() { count_impl<QString, QLatin1String>(); }
+    void count_QString_QStringView_data() { count_data(); }
+    void count_QString_QStringView() { count_impl<QString, QStringView>(); }
+    void count_QString_QChar_data() { count_data(); }
+    void count_QString_QChar() { count_impl<QString, QChar>(); }
+    void count_QString_char16_t_data() { count_data(); }
+    void count_QString_char16_t() { count_impl<QString, char16_t>(); }
+
+    void count_QStringView_QString_data() { count_data(); }
+    void count_QStringView_QString() { count_impl<QStringView, QString>(); }
+    void count_QStringView_QLatin1String_data() { count_data(); }
+    void count_QStringView_QLatin1String() { count_impl<QStringView, QLatin1String>(); }
+    void count_QStringView_QStringView_data() { count_data(); }
+    void count_QStringView_QStringView() { count_impl<QStringView, QStringView>(); }
+    void count_QStringView_QChar_data() { count_data(); }
+    void count_QStringView_QChar() { count_impl<QStringView, QChar>(); }
+    void count_QStringView_char16_t_data() { count_data(); }
+    void count_QStringView_char16_t() { count_impl<QStringView, char16_t>(); }
+
+    void count_QLatin1String_QString_data() { count_data(); }
+    void count_QLatin1String_QString() { count_impl<QLatin1String, QString>(); }
+    void count_QLatin1String_QLatin1String_data() { count_data(); }
+    void count_QLatin1String_QLatin1String() { count_impl<QLatin1String, QLatin1String>(); }
+    void count_QLatin1String_QStringView_data() { count_data(); }
+    void count_QLatin1String_QStringView() { count_impl<QLatin1String, QStringView>(); }
+    void count_QLatin1String_QChar_data() { count_data(); }
+    void count_QLatin1String_QChar() { count_impl<QLatin1String, QChar>(); }
+    void count_QLatin1String_char16_t_data() { count_data(); }
+    void count_QLatin1String_char16_t() { count_impl<QLatin1String, char16_t>(); }
+    void count_QLatin1String_QLatin1Char_data() { count_data(); }
+    void count_QLatin1String_QLatin1Char() { count_impl<QLatin1String, QLatin1Char>(); }
 
     //
     // UTF-16-only checks:
@@ -1202,11 +1215,11 @@ void tst_QStringApiSymmetry::compare_impl() const
 
     auto icResult = sign(
             QAnyStringView::compare(QAnyStringView(lhs), QAnyStringView(rhs), Qt::CaseInsensitive));
-    QCOMPARE(icResult, caseInsensitiveCompareResult);
+    QCOMPARE_EQ(icResult, caseInsensitiveCompareResult);
 
     auto scResult = sign(
             QAnyStringView::compare(QAnyStringView(lhs), QAnyStringView(rhs), Qt::CaseSensitive));
-    QCOMPARE(scResult, caseSensitiveCompareResult);
+    QCOMPARE_EQ(scResult, caseSensitiveCompareResult);
 
 #define CHECK(op) \
     do { \
@@ -1249,15 +1262,15 @@ void tst_QStringApiSymmetry::member_compare_impl() const
     if constexpr (has_nothrow_member_compare_v<LHS, RHS>)
         QVERIFY(noexcept(lhs.compare(rhs, Qt::CaseSensitive)));
 
-    QCOMPARE(sign(lhs.compare(rhs)),                      caseSensitiveCompareResult);
-    QCOMPARE(sign(lhs.compare(rhs, Qt::CaseSensitive)),   caseSensitiveCompareResult);
+    QCOMPARE_EQ(sign(lhs.compare(rhs)),                      caseSensitiveCompareResult);
+    QCOMPARE_EQ(sign(lhs.compare(rhs, Qt::CaseSensitive)),   caseSensitiveCompareResult);
     if (is_bytearray_like_v<LHS> && is_bytearray_like_v<RHS> &&
             caseSensitiveCompareResult != caseInsensitiveCompareResult &&
             (!QtPrivate::isAscii(lhsUnicode) || !QtPrivate::isAscii(rhsUnicode)))
     {
         QEXPECT_FAIL("", "The types don't support non-ASCII case-insensitive comparison", Continue);
     }
-    QCOMPARE(sign(lhs.compare(rhs, Qt::CaseInsensitive)), caseInsensitiveCompareResult);
+    QCOMPARE_EQ(sign(lhs.compare(rhs, Qt::CaseInsensitive)), caseInsensitiveCompareResult);
 }
 
 void tst_QStringApiSymmetry::localeAwareCompare_data()
@@ -1557,7 +1570,7 @@ void tst_QStringApiSymmetry::localeAwareCompare_impl()
     const auto rhs = make<RHS>(s2);
 
     // qDebug() << s1.toUtf8().toHex(' ') << "as" << result << "to" << s2.toUtf8().toHex(' ');
-    QCOMPARE(sign(QString::localeAwareCompare(lhs, rhs)), result);
+    QCOMPARE_EQ(sign(QString::localeAwareCompare(lhs, rhs)), result);
 }
 
 template<typename LHS, typename RHS>
@@ -1577,7 +1590,7 @@ void tst_QStringApiSymmetry::member_localeAwareCompare_impl()
     const auto rhs = make<RHS>(s2);
 
     // qDebug() << s1.toUtf8().toHex(' ') << "as" << result << "to" << s2.toUtf8().toHex(' ');
-    QCOMPARE(sign(lhs.localeAwareCompare(rhs)), result);
+    QCOMPARE_EQ(sign(lhs.localeAwareCompare(rhs)), result);
 }
 
 static QString empty = QLatin1String("");
@@ -1696,9 +1709,9 @@ void tst_QStringApiSymmetry::startsWith_impl() const
     const auto haystack = make<Haystack>(haystackU16, haystackL1, haystackU8);
     const auto needle = make<Needle>(needleU16, needleL1, needleU8);
 
-    QCOMPARE(haystack.startsWith(needle), resultCS);
-    QCOMPARE(haystack.startsWith(needle, Qt::CaseSensitive), resultCS);
-    QCOMPARE(haystack.startsWith(needle, Qt::CaseInsensitive), resultCIS);
+    QCOMPARE_EQ(haystack.startsWith(needle), resultCS);
+    QCOMPARE_EQ(haystack.startsWith(needle, Qt::CaseSensitive), resultCS);
+    QCOMPARE_EQ(haystack.startsWith(needle, Qt::CaseInsensitive), resultCIS);
 }
 
 void tst_QStringApiSymmetry::endsWith_data(bool rhsHasVariableLength)
@@ -1783,9 +1796,9 @@ void tst_QStringApiSymmetry::endsWith_impl() const
     const auto haystack = make<Haystack>(haystackU16, haystackL1, haystackU8);
     const auto needle = make<Needle>(needleU16, needleL1, needleU8);
 
-    QCOMPARE(haystack.endsWith(needle), resultCS);
-    QCOMPARE(haystack.endsWith(needle, Qt::CaseSensitive), resultCS);
-    QCOMPARE(haystack.endsWith(needle, Qt::CaseInsensitive), resultCIS);
+    QCOMPARE_EQ(haystack.endsWith(needle), resultCS);
+    QCOMPARE_EQ(haystack.endsWith(needle, Qt::CaseSensitive), resultCS);
+    QCOMPARE_EQ(haystack.endsWith(needle, Qt::CaseInsensitive), resultCIS);
 }
 
 void tst_QStringApiSymmetry::split_data(bool rhsHasVariableLength)
@@ -1898,11 +1911,11 @@ void tst_QStringApiSymmetry::split_impl() const
     const auto haystack = make<Haystack>(haystackU16, haystackL1, haystackU8);
     const auto needle = make<Needle>(needleU16, needleL1, needleU8);
 
-    QCOMPARE(toQStringList(haystack.split(needle)), resultCS);
-    QCOMPARE(toQStringList(haystack.split(needle, Qt::KeepEmptyParts, Qt::CaseSensitive)), resultCS);
-    QCOMPARE(toQStringList(haystack.split(needle, Qt::KeepEmptyParts, Qt::CaseInsensitive)), resultCIS);
-    QCOMPARE(toQStringList(haystack.split(needle, Qt::SkipEmptyParts, Qt::CaseSensitive)), skippedResultCS);
-    QCOMPARE(toQStringList(haystack.split(needle, Qt::SkipEmptyParts, Qt::CaseInsensitive)), skippedResultCIS);
+    QCOMPARE_EQ(toQStringList(haystack.split(needle)), resultCS);
+    QCOMPARE_EQ(toQStringList(haystack.split(needle, Qt::KeepEmptyParts, Qt::CaseSensitive)), resultCS);
+    QCOMPARE_EQ(toQStringList(haystack.split(needle, Qt::KeepEmptyParts, Qt::CaseInsensitive)), resultCIS);
+    QCOMPARE_EQ(toQStringList(haystack.split(needle, Qt::SkipEmptyParts, Qt::CaseSensitive)), skippedResultCS);
+    QCOMPARE_EQ(toQStringList(haystack.split(needle, Qt::SkipEmptyParts, Qt::CaseInsensitive)), skippedResultCIS);
 }
 
 void tst_QStringApiSymmetry::tok_data(bool rhsHasVariableLength)
@@ -1937,44 +1950,44 @@ void tst_QStringApiSymmetry::tok_impl() const
     const auto haystack = make<Haystack>(haystackU16, haystackL1, haystackU8);
     const auto needle = make<Needle>(needleU16, needleL1, needleU8);
 
-    QCOMPARE(toQStringList(qTokenize(haystack, needle)), resultCS);
-    QCOMPARE(toQStringList(qTokenize(haystack, needle, Qt::KeepEmptyParts, Qt::CaseSensitive)), resultCS);
-    QCOMPARE(toQStringList(qTokenize(haystack, needle, Qt::CaseInsensitive, Qt::KeepEmptyParts)), resultCIS);
-    QCOMPARE(toQStringList(qTokenize(haystack, needle, Qt::SkipEmptyParts, Qt::CaseSensitive)), skippedResultCS);
-    QCOMPARE(toQStringList(qTokenize(haystack, needle, Qt::CaseInsensitive, Qt::SkipEmptyParts)), skippedResultCIS);
+    QCOMPARE_EQ(toQStringList(qTokenize(haystack, needle)), resultCS);
+    QCOMPARE_EQ(toQStringList(qTokenize(haystack, needle, Qt::KeepEmptyParts, Qt::CaseSensitive)), resultCS);
+    QCOMPARE_EQ(toQStringList(qTokenize(haystack, needle, Qt::CaseInsensitive, Qt::KeepEmptyParts)), resultCIS);
+    QCOMPARE_EQ(toQStringList(qTokenize(haystack, needle, Qt::SkipEmptyParts, Qt::CaseSensitive)), skippedResultCS);
+    QCOMPARE_EQ(toQStringList(qTokenize(haystack, needle, Qt::CaseInsensitive, Qt::SkipEmptyParts)), skippedResultCIS);
 
     {
         const auto tok = qTokenize(deepCopied(haystack), deepCopied(needle));
         // here, the temporaries returned from deepCopied() have already been destroyed,
         // yet `tok` should have kept a copy alive as needed:
-        QCOMPARE(toQStringList(tok), resultCS);
+        QCOMPARE_EQ(toQStringList(tok), resultCS);
     }
 
-    QCOMPARE(toQStringList(QStringTokenizer{haystack, needle}), resultCS);
-    QCOMPARE(toQStringList(QStringTokenizer{haystack, needle, Qt::KeepEmptyParts, Qt::CaseSensitive}), resultCS);
-    QCOMPARE(toQStringList(QStringTokenizer{haystack, needle, Qt::CaseInsensitive, Qt::KeepEmptyParts}), resultCIS);
-    QCOMPARE(toQStringList(QStringTokenizer{haystack, needle, Qt::SkipEmptyParts, Qt::CaseSensitive}), skippedResultCS);
-    QCOMPARE(toQStringList(QStringTokenizer{haystack, needle, Qt::CaseInsensitive, Qt::SkipEmptyParts}), skippedResultCIS);
+    QCOMPARE_EQ(toQStringList(QStringTokenizer{haystack, needle}), resultCS);
+    QCOMPARE_EQ(toQStringList(QStringTokenizer{haystack, needle, Qt::KeepEmptyParts, Qt::CaseSensitive}), resultCS);
+    QCOMPARE_EQ(toQStringList(QStringTokenizer{haystack, needle, Qt::CaseInsensitive, Qt::KeepEmptyParts}), resultCIS);
+    QCOMPARE_EQ(toQStringList(QStringTokenizer{haystack, needle, Qt::SkipEmptyParts, Qt::CaseSensitive}), skippedResultCS);
+    QCOMPARE_EQ(toQStringList(QStringTokenizer{haystack, needle, Qt::CaseInsensitive, Qt::SkipEmptyParts}), skippedResultCIS);
 
     {
         const auto tok = QStringTokenizer{deepCopied(haystack), deepCopied(needle)};
         // here, the temporaries returned from deepCopied() have already been destroyed,
         // yet `tok` should have kept a copy alive as needed:
-        QCOMPARE(toQStringList(tok), resultCS);
+        QCOMPARE_EQ(toQStringList(tok), resultCS);
     }
 
     if constexpr (has_tokenize_method_v<Haystack>) {
-        QCOMPARE(toQStringList(haystack.tokenize(needle)), resultCS);
-        QCOMPARE(toQStringList(haystack.tokenize(needle, Qt::KeepEmptyParts, Qt::CaseSensitive)), resultCS);
-        QCOMPARE(toQStringList(haystack.tokenize(needle, Qt::CaseInsensitive, Qt::KeepEmptyParts)), resultCIS);
-        QCOMPARE(toQStringList(haystack.tokenize(needle, Qt::SkipEmptyParts, Qt::CaseSensitive)), skippedResultCS);
-        QCOMPARE(toQStringList(haystack.tokenize(needle, Qt::CaseInsensitive, Qt::SkipEmptyParts)), skippedResultCIS);
+        QCOMPARE_EQ(toQStringList(haystack.tokenize(needle)), resultCS);
+        QCOMPARE_EQ(toQStringList(haystack.tokenize(needle, Qt::KeepEmptyParts, Qt::CaseSensitive)), resultCS);
+        QCOMPARE_EQ(toQStringList(haystack.tokenize(needle, Qt::CaseInsensitive, Qt::KeepEmptyParts)), resultCIS);
+        QCOMPARE_EQ(toQStringList(haystack.tokenize(needle, Qt::SkipEmptyParts, Qt::CaseSensitive)), skippedResultCS);
+        QCOMPARE_EQ(toQStringList(haystack.tokenize(needle, Qt::CaseInsensitive, Qt::SkipEmptyParts)), skippedResultCIS);
 
         {
             const auto tok = deepCopied(haystack).tokenize(deepCopied(needle));
             // here, the temporaries returned from deepCopied() have already been destroyed,
             // yet `tok` should have kept a copy alive as needed:
-            QCOMPARE(toQStringList(tok), resultCS);
+            QCOMPARE_EQ(toQStringList(tok), resultCS);
         }
     }
 }
@@ -2033,25 +2046,25 @@ void tst_QStringApiSymmetry::mid_impl()
         const auto mid = s.mid(pos);
         const auto mid2 = s.mid(pos, n);
 
-        QCOMPARE(mid, result);
-        QCOMPARE(mid.isNull(), result.isNull());
-        QCOMPARE(mid.isEmpty(), result.isEmpty());
+        QCOMPARE_EQ(mid, result);
+        QCOMPARE_EQ(mid.isNull(), result.isNull());
+        QCOMPARE_EQ(mid.isEmpty(), result.isEmpty());
 
-        QCOMPARE(mid2, result2);
-        QCOMPARE(mid2.isNull(), result2.isNull());
-        QCOMPARE(mid2.isEmpty(), result2.isEmpty());
+        QCOMPARE_EQ(mid2, result2);
+        QCOMPARE_EQ(mid2.isNull(), result2.isNull());
+        QCOMPARE_EQ(mid2.isEmpty(), result2.isEmpty());
     }
     {
         const auto mid = detached(s).mid(pos);
         const auto mid2 = detached(s).mid(pos, n);
 
-        QCOMPARE(mid, result);
-        QCOMPARE(mid.isNull(), result.isNull());
-        QCOMPARE(mid.isEmpty(), result.isEmpty());
+        QCOMPARE_EQ(mid, result);
+        QCOMPARE_EQ(mid.isNull(), result.isNull());
+        QCOMPARE_EQ(mid.isEmpty(), result.isEmpty());
 
-        QCOMPARE(mid2, result2);
-        QCOMPARE(mid2.isNull(), result2.isNull());
-        QCOMPARE(mid2.isEmpty(), result2.isEmpty());
+        QCOMPARE_EQ(mid2, result2);
+        QCOMPARE_EQ(mid2.isNull(), result2.isNull());
+        QCOMPARE_EQ(mid2.isEmpty(), result2.isEmpty());
     }
 }
 
@@ -2104,16 +2117,16 @@ void tst_QStringApiSymmetry::left_impl()
     {
         const auto left = s.left(n);
 
-        QCOMPARE(left, result);
-        QCOMPARE(left.isNull(), result.isNull());
-        QCOMPARE(left.isEmpty(), result.isEmpty());
+        QCOMPARE_EQ(left, result);
+        QCOMPARE_EQ(left.isNull(), result.isNull());
+        QCOMPARE_EQ(left.isEmpty(), result.isEmpty());
     }
     {
         const auto left = detached(s).left(n);
 
-        QCOMPARE(left, result);
-        QCOMPARE(left.isNull(), result.isNull());
-        QCOMPARE(left.isEmpty(), result.isEmpty());
+        QCOMPARE_EQ(left, result);
+        QCOMPARE_EQ(left.isNull(), result.isNull());
+        QCOMPARE_EQ(left.isEmpty(), result.isEmpty());
     }
 }
 
@@ -2166,16 +2179,16 @@ void tst_QStringApiSymmetry::right_impl()
     {
         const auto right = s.right(n);
 
-        QCOMPARE(right, result);
-        QCOMPARE(right.isNull(), result.isNull());
-        QCOMPARE(right.isEmpty(), result.isEmpty());
+        QCOMPARE_EQ(right, result);
+        QCOMPARE_EQ(right.isNull(), result.isNull());
+        QCOMPARE_EQ(right.isEmpty(), result.isEmpty());
     }
     {
         const auto right = detached(s).right(n);
 
-        QCOMPARE(right, result);
-        QCOMPARE(right.isNull(), result.isNull());
-        QCOMPARE(right.isEmpty(), result.isEmpty());
+        QCOMPARE_EQ(right, result);
+        QCOMPARE_EQ(right.isNull(), result.isNull());
+        QCOMPARE_EQ(right.isEmpty(), result.isEmpty());
     }
 }
 
@@ -2235,30 +2248,30 @@ void tst_QStringApiSymmetry::sliced_impl()
     {
         const auto sliced = s.sliced(pos);
 
-        QCOMPARE(sliced, result);
-        QCOMPARE(sliced.isNull(), result.isNull());
-        QCOMPARE(sliced.isEmpty(), result.isEmpty());
+        QCOMPARE_EQ(sliced, result);
+        QCOMPARE_EQ(sliced.isNull(), result.isNull());
+        QCOMPARE_EQ(sliced.isEmpty(), result.isEmpty());
     }
     {
         const auto sliced = s.sliced(pos, n);
 
-        QCOMPARE(sliced, result2);
-        QCOMPARE(sliced.isNull(), result2.isNull());
-        QCOMPARE(sliced.isEmpty(), result2.isEmpty());
+        QCOMPARE_EQ(sliced, result2);
+        QCOMPARE_EQ(sliced.isNull(), result2.isNull());
+        QCOMPARE_EQ(sliced.isEmpty(), result2.isEmpty());
     }
     {
         const auto sliced = detached(s).sliced(pos);
 
-        QCOMPARE(sliced, result);
-        QCOMPARE(sliced.isNull(), result.isNull());
-        QCOMPARE(sliced.isEmpty(), result.isEmpty());
+        QCOMPARE_EQ(sliced, result);
+        QCOMPARE_EQ(sliced.isNull(), result.isNull());
+        QCOMPARE_EQ(sliced.isEmpty(), result.isEmpty());
     }
     {
         const auto sliced = detached(s).sliced(pos, n);
 
-        QCOMPARE(sliced, result2);
-        QCOMPARE(sliced.isNull(), result2.isNull());
-        QCOMPARE(sliced.isEmpty(), result2.isEmpty());
+        QCOMPARE_EQ(sliced, result2);
+        QCOMPARE_EQ(sliced.isNull(), result2.isNull());
+        QCOMPARE_EQ(sliced.isEmpty(), result2.isEmpty());
     }
 }
 
@@ -2306,24 +2319,24 @@ void tst_QStringApiSymmetry::first_impl()
     {
         const auto first = s.first(n);
 
-        QCOMPARE(first, result);
-        QCOMPARE(first.isNull(), result.isNull());
-        QCOMPARE(first.isEmpty(), result.isEmpty());
+        QCOMPARE_EQ(first, result);
+        QCOMPARE_EQ(first.isNull(), result.isNull());
+        QCOMPARE_EQ(first.isEmpty(), result.isEmpty());
     }
     {
         const auto first = detached(s).first(n);
 
-        QCOMPARE(first, result);
-        QCOMPARE(first.isNull(), result.isNull());
-        QCOMPARE(first.isEmpty(), result.isEmpty());
+        QCOMPARE_EQ(first, result);
+        QCOMPARE_EQ(first.isNull(), result.isNull());
+        QCOMPARE_EQ(first.isEmpty(), result.isEmpty());
     }
     {
         auto first = s;
         first.truncate(n);
 
-        QCOMPARE(first, result);
-        QCOMPARE(first.isNull(), result.isNull());
-        QCOMPARE(first.isEmpty(), result.isEmpty());
+        QCOMPARE_EQ(first, result);
+        QCOMPARE_EQ(first.isNull(), result.isNull());
+        QCOMPARE_EQ(first.isEmpty(), result.isEmpty());
     }
 }
 
@@ -2371,16 +2384,16 @@ void tst_QStringApiSymmetry::last_impl()
     {
         const auto last = s.last(n);
 
-        QCOMPARE(last, result);
-        QCOMPARE(last.isNull(), result.isNull());
-        QCOMPARE(last.isEmpty(), result.isEmpty());
+        QCOMPARE_EQ(last, result);
+        QCOMPARE_EQ(last.isNull(), result.isNull());
+        QCOMPARE_EQ(last.isEmpty(), result.isEmpty());
     }
     {
         const auto last = detached(s).last(n);
 
-        QCOMPARE(last, result);
-        QCOMPARE(last.isNull(), result.isNull());
-        QCOMPARE(last.isEmpty(), result.isEmpty());
+        QCOMPARE_EQ(last, result);
+        QCOMPARE_EQ(last.isNull(), result.isNull());
+        QCOMPARE_EQ(last.isEmpty(), result.isEmpty());
     }
 }
 
@@ -2428,24 +2441,24 @@ void tst_QStringApiSymmetry::chop_impl()
     {
         const auto chopped = s.chopped(n);
 
-        QCOMPARE(chopped, result);
-        QCOMPARE(chopped.isNull(), result.isNull());
-        QCOMPARE(chopped.isEmpty(), result.isEmpty());
+        QCOMPARE_EQ(chopped, result);
+        QCOMPARE_EQ(chopped.isNull(), result.isNull());
+        QCOMPARE_EQ(chopped.isEmpty(), result.isEmpty());
     }
     {
         const auto chopped = detached(s).chopped(n);
 
-        QCOMPARE(chopped, result);
-        QCOMPARE(chopped.isNull(), result.isNull());
-        QCOMPARE(chopped.isEmpty(), result.isEmpty());
+        QCOMPARE_EQ(chopped, result);
+        QCOMPARE_EQ(chopped.isNull(), result.isNull());
+        QCOMPARE_EQ(chopped.isEmpty(), result.isEmpty());
     }
     {
         auto chopped = s;
         chopped.chop(n);
 
-        QCOMPARE(chopped, result);
-        QCOMPARE(chopped.isNull(), result.isNull());
-        QCOMPARE(chopped.isEmpty(), result.isEmpty());
+        QCOMPARE_EQ(chopped, result);
+        QCOMPARE_EQ(chopped.isNull(), result.isNull());
+        QCOMPARE_EQ(chopped.isEmpty(), result.isEmpty());
     }
 }
 
@@ -2487,21 +2500,21 @@ void tst_QStringApiSymmetry::trimmed_impl()
     const auto ref = unicode.isNull() ? QStringView() : QStringView(unicode);
     const auto s = make<String>(ref, l1, utf8);
 
-    QCOMPARE(s.isNull(), unicode.isNull());
+    QCOMPARE_EQ(s.isNull(), unicode.isNull());
 
     {
         const auto trimmed = s.trimmed();
 
-        QCOMPARE(trimmed, result);
-        QCOMPARE(trimmed.isNull(), result.isNull());
-        QCOMPARE(trimmed.isEmpty(), result.isEmpty());
+        QCOMPARE_EQ(trimmed, result);
+        QCOMPARE_EQ(trimmed.isNull(), result.isNull());
+        QCOMPARE_EQ(trimmed.isEmpty(), result.isEmpty());
     }
     {
         const auto trimmed = detached(s).trimmed();
 
-        QCOMPARE(trimmed, result);
-        QCOMPARE(trimmed.isNull(), result.isNull());
-        QCOMPARE(trimmed.isEmpty(), result.isEmpty());
+        QCOMPARE_EQ(trimmed, result);
+        QCOMPARE_EQ(trimmed.isNull(), result.isNull());
+        QCOMPARE_EQ(trimmed.isEmpty(), result.isEmpty());
     }
 }
 
@@ -2551,57 +2564,57 @@ void tst_QStringApiSymmetry::toNumber_impl()
     qint64 n = 0;
 
     n = s.toShort(&is_ok);
-    QCOMPARE(is_ok, ok && inRange<short>(result));
+    QCOMPARE_EQ(is_ok, ok && inRange<short>(result));
     if (is_ok)
-        QCOMPARE(n, result);
+        QCOMPARE_EQ(n, result);
 
     n = s.toUShort(&is_ok);
-    QCOMPARE(is_ok, ok && inRange<ushort>(result));
+    QCOMPARE_EQ(is_ok, ok && inRange<ushort>(result));
     if (is_ok)
-        QCOMPARE(n, result);
+        QCOMPARE_EQ(n, result);
 
     n = s.toInt(&is_ok);
-    QCOMPARE(is_ok, ok && inRange<int>(result));
+    QCOMPARE_EQ(is_ok, ok && inRange<int>(result));
     if (is_ok)
-        QCOMPARE(n, result);
+        QCOMPARE_EQ(n, result);
 
     n = s.toUInt(&is_ok);
-    QCOMPARE(is_ok, ok && inRange<uint>(result));
+    QCOMPARE_EQ(is_ok, ok && inRange<uint>(result));
     if (is_ok)
-        QCOMPARE(n, result);
+        QCOMPARE_EQ(n, result);
 
     n = s.toLong(&is_ok);
-    QCOMPARE(is_ok, ok && inRange<long>(result));
+    QCOMPARE_EQ(is_ok, ok && inRange<long>(result));
     if (is_ok)
-        QCOMPARE(n, result);
+        QCOMPARE_EQ(n, result);
 
     n = s.toULong(&is_ok);
-    QCOMPARE(is_ok, ok && inRange<ulong>(result));
+    QCOMPARE_EQ(is_ok, ok && inRange<ulong>(result));
     if (is_ok)
-        QCOMPARE(n, result);
+        QCOMPARE_EQ(n, result);
 
     n = s.toLongLong(&is_ok);
-    QCOMPARE(is_ok, ok && inRange<qlonglong>(result));
+    QCOMPARE_EQ(is_ok, ok && inRange<qlonglong>(result));
     if (is_ok)
-        QCOMPARE(n, result);
+        QCOMPARE_EQ(n, result);
 
     n = s.toULongLong(&is_ok);
-    QCOMPARE(is_ok, ok && inRange<qulonglong>(result));
+    QCOMPARE_EQ(is_ok, ok && inRange<qulonglong>(result));
     if (is_ok)
-        QCOMPARE(n, result);
+        QCOMPARE_EQ(n, result);
 
     if (qint64(float(n)) == n) {
         float f = s.toFloat(&is_ok);
-        QCOMPARE(is_ok, ok);
+        QCOMPARE_EQ(is_ok, ok);
         if (is_ok)
-            QCOMPARE(qint64(f), result);
+            QCOMPARE_EQ(qint64(f), result);
     }
 
     if (qint64(double(n)) == n) {
         double d = s.toDouble(&is_ok);
-        QCOMPARE(is_ok, ok);
+        QCOMPARE_EQ(is_ok, ok);
         if (is_ok)
-            QCOMPARE(qint64(d), result);
+            QCOMPARE_EQ(qint64(d), result);
     }
 }
 
@@ -2616,7 +2629,7 @@ void tst_QStringApiSymmetry::toNumberWithBases_data()
         const char prefix[3];
         int base;
     } bases[] = {
-        { "",    2 }, // should be {"0b", 2}, but Qt lacks support for the 0b prefix (QTBUG-85002)
+        { "0b",  2 },
         { "0",   8 },
         { "",   10 },
         { "0x", 16 },
@@ -2624,7 +2637,7 @@ void tst_QStringApiSymmetry::toNumberWithBases_data()
 
     const auto check = [&](const char *input, qint64 n2, qint64 n8, qint64 n10, qint64 n16, bool result) {
         for (const auto &e : bases) {
-            const QString data = QLatin1String(e.prefix) + QString::fromUtf8(input);
+            const QString data = QLatin1StringView(e.prefix) + QString::fromUtf8(input);
             const auto row = [&](int base) {
                 const auto select = [&](int base) {
                     switch (base) {
@@ -2639,8 +2652,6 @@ void tst_QStringApiSymmetry::toNumberWithBases_data()
                         << data << base << select(e.base /* NOT base! */) << result;
             };
             row(e.base); // explicit base
-            if (e.base == 2)
-                continue; // Qt doesn't know 0b (yet, QTBUG-85002), so nothing to auto-detect
             row(0);      // automatically detected base
         }
     };
@@ -2672,44 +2683,44 @@ void tst_QStringApiSymmetry::toNumberWithBases_impl()
     qint64 n = 0;
 
     n = s.toShort(&is_ok, base);
-    QCOMPARE(is_ok, ok && inRange<short>(result));
+    QCOMPARE_EQ(is_ok, ok && inRange<short>(result));
     if (is_ok)
-        QCOMPARE(n, result);
+        QCOMPARE_EQ(n, result);
 
     n = s.toUShort(&is_ok, base);
-    QCOMPARE(is_ok, ok && inRange<ushort>(result));
+    QCOMPARE_EQ(is_ok, ok && inRange<ushort>(result));
     if (is_ok)
-        QCOMPARE(n, result);
+        QCOMPARE_EQ(n, result);
 
     n = s.toInt(&is_ok, base);
-    QCOMPARE(is_ok, ok && inRange<int>(result));
+    QCOMPARE_EQ(is_ok, ok && inRange<int>(result));
     if (is_ok)
-        QCOMPARE(n, result);
+        QCOMPARE_EQ(n, result);
 
     n = s.toUInt(&is_ok, base);
-    QCOMPARE(is_ok, ok && inRange<uint>(result));
+    QCOMPARE_EQ(is_ok, ok && inRange<uint>(result));
     if (is_ok)
-        QCOMPARE(n, result);
+        QCOMPARE_EQ(n, result);
 
     n = s.toLong(&is_ok, base);
-    QCOMPARE(is_ok, ok && inRange<long>(result));
+    QCOMPARE_EQ(is_ok, ok && inRange<long>(result));
     if (is_ok)
-        QCOMPARE(n, result);
+        QCOMPARE_EQ(n, result);
 
     n = s.toULong(&is_ok, base);
-    QCOMPARE(is_ok, ok && inRange<ulong>(result));
+    QCOMPARE_EQ(is_ok, ok && inRange<ulong>(result));
     if (is_ok)
-        QCOMPARE(n, result);
+        QCOMPARE_EQ(n, result);
 
     n = s.toLongLong(&is_ok, base);
-    QCOMPARE(is_ok, ok && inRange<qlonglong>(result));
+    QCOMPARE_EQ(is_ok, ok && inRange<qlonglong>(result));
     if (is_ok)
-        QCOMPARE(n, result);
+        QCOMPARE_EQ(n, result);
 
     n = s.toULongLong(&is_ok, base);
-    QCOMPARE(is_ok, ok && inRange<qulonglong>(result));
+    QCOMPARE_EQ(is_ok, ok && inRange<qulonglong>(result));
     if (is_ok)
-        QCOMPARE(n, result);
+        QCOMPARE_EQ(n, result);
 }
 
 void tst_QStringApiSymmetry::count_data()
@@ -2722,7 +2733,7 @@ void tst_QStringApiSymmetry::count_data()
     QTest::addRow("xyzaaaxyz") << QString::fromUtf8("xyzaaaxyz") << QString::fromUtf8("xyz") << qsizetype(2);
 }
 
-template <typename String>
+template<typename Haystack, typename Needle>
 void tst_QStringApiSymmetry::count_impl()
 {
     QFETCH(const QString, data);
@@ -2734,18 +2745,16 @@ void tst_QStringApiSymmetry::count_impl()
     const auto l1   = l1s.isNull() ? QLatin1String() : QLatin1String(l1s);
 
     const auto ref = data.isNull() ? QStringView() : QStringView(data);
-    const auto s = make<String>(ref, l1, utf8);
+    const auto s = make<Haystack>(ref, l1, utf8);
 
     const auto nutf8 = needle.toUtf8();
     const auto nl1s  = needle.toLatin1();
     const auto nl1   = nl1s.isNull() ? QLatin1String() : QLatin1String(nl1s);
 
     const auto nref = needle.isNull() ? QStringView() : QStringView(needle);
-    const auto ns = make<String>(nref, nl1, nutf8);
+    const auto ns = make<Needle>(nref, nl1, nutf8);
 
-    QCOMPARE(s.count(ns), result);
-    if (ns.length() == 1)
-        QCOMPARE(s.count(ns.data()[0]), result);
+    QCOMPARE_EQ(s.count(ns), result);
 }
 
 //
@@ -2787,9 +2796,9 @@ void tst_QStringApiSymmetry::toLocal8Bit_impl()
 
     const auto result = str.toLocal8Bit();
 
-    QCOMPARE(result, local);
-    QCOMPARE(unicode.isEmpty(), result.isEmpty());
-    QCOMPARE(unicode.isNull(), result.isNull());
+    QCOMPARE_EQ(result, local);
+    QCOMPARE_EQ(unicode.isEmpty(), result.isEmpty());
+    QCOMPARE_EQ(unicode.isNull(), result.isNull());
 }
 
 void tst_QStringApiSymmetry::toLatin1_data()
@@ -2822,9 +2831,9 @@ void tst_QStringApiSymmetry::toLatin1_impl()
 
     const auto result = str.toLatin1();
 
-    QCOMPARE(result, latin1);
-    QCOMPARE(unicode.isEmpty(), result.isEmpty());
-    QCOMPARE(unicode.isNull(), result.isNull());
+    QCOMPARE_EQ(result, latin1);
+    QCOMPARE_EQ(unicode.isEmpty(), result.isEmpty());
+    QCOMPARE_EQ(unicode.isNull(), result.isNull());
 }
 
 void tst_QStringApiSymmetry::toUtf8_data()
@@ -2855,9 +2864,9 @@ void tst_QStringApiSymmetry::toUtf8_impl()
 
     const auto result = str.toUtf8();
 
-    QCOMPARE(result, utf8);
-    QCOMPARE(unicode.isEmpty(), result.isEmpty());
-    QCOMPARE(unicode.isNull(), result.isNull());
+    QCOMPARE_EQ(result, utf8);
+    QCOMPARE_EQ(unicode.isEmpty(), result.isEmpty());
+    QCOMPARE_EQ(unicode.isNull(), result.isNull());
 }
 
 void tst_QStringApiSymmetry::toUcs4_data()
@@ -2893,8 +2902,8 @@ void tst_QStringApiSymmetry::toUcs4_impl()
 
     const auto result = str.toUcs4();
 
-    QCOMPARE(result, ucs4);
-    QCOMPARE(unicode.isEmpty(), ucs4.isEmpty());
+    QCOMPARE_EQ(result, ucs4);
+    QCOMPARE_EQ(unicode.isEmpty(), ucs4.isEmpty());
 }
 
 void tst_QStringApiSymmetry::indexOf_data(bool rhsHasVariableLength)
@@ -2993,9 +3002,9 @@ void tst_QStringApiSymmetry::indexOf_impl() const
 
     using size_type = typename Haystack::size_type;
 
-    QCOMPARE(haystack.indexOf(needle, startpos), size_type(resultCS));
-    QCOMPARE(haystack.indexOf(needle, startpos, Qt::CaseSensitive), size_type(resultCS));
-    QCOMPARE(haystack.indexOf(needle, startpos, Qt::CaseInsensitive), size_type(resultCIS));
+    QCOMPARE_EQ(haystack.indexOf(needle, startpos), size_type(resultCS));
+    QCOMPARE_EQ(haystack.indexOf(needle, startpos, Qt::CaseSensitive), size_type(resultCS));
+    QCOMPARE_EQ(haystack.indexOf(needle, startpos, Qt::CaseInsensitive), size_type(resultCIS));
 }
 
 static QString ABCDEFGHIEfGEFG = QStringLiteral("ABCDEFGHIEfGEFG");
@@ -3066,9 +3075,9 @@ void tst_QStringApiSymmetry::contains_impl() const
     const auto haystack = make<Haystack>(QStringView(haystackU16), haystackL1, haystackU8);
     const auto needle = make<Needle>(QStringView(needleU16), needleL1, needleU8);
 
-    QCOMPARE(haystack.contains(needle), resultCS);
-    QCOMPARE(haystack.contains(needle, Qt::CaseSensitive), resultCS);
-    QCOMPARE(haystack.contains(needle, Qt::CaseInsensitive), resultCIS);
+    QCOMPARE_EQ(haystack.contains(needle), resultCS);
+    QCOMPARE_EQ(haystack.contains(needle, Qt::CaseSensitive), resultCS);
+    QCOMPARE_EQ(haystack.contains(needle, Qt::CaseInsensitive), resultCIS);
 }
 
 void tst_QStringApiSymmetry::lastIndexOf_data(bool rhsHasVariableLength)
@@ -3178,16 +3187,16 @@ void tst_QStringApiSymmetry::lastIndexOf_impl() const
 
     using size_type = typename Haystack::size_type;
 
-    QCOMPARE(haystack.lastIndexOf(needle, startpos), size_type(resultCS));
-    QCOMPARE(haystack.lastIndexOf(needle, startpos, Qt::CaseSensitive), size_type(resultCS));
-    QCOMPARE(haystack.lastIndexOf(needle, startpos, Qt::CaseInsensitive), size_type(resultCIS));
+    QCOMPARE_EQ(haystack.lastIndexOf(needle, startpos), size_type(resultCS));
+    QCOMPARE_EQ(haystack.lastIndexOf(needle, startpos, Qt::CaseSensitive), size_type(resultCS));
+    QCOMPARE_EQ(haystack.lastIndexOf(needle, startpos, Qt::CaseInsensitive), size_type(resultCIS));
 
     if (startpos == haystack.size() ||
         (startpos == -1 && help::size(needle) > 0)) { // -1 skips past-the-end-match w/empty needle
         // check that calls without an explicit 'from' argument work, too:
-        QCOMPARE(haystack.lastIndexOf(needle), size_type(resultCS));
-        QCOMPARE(haystack.lastIndexOf(needle, Qt::CaseSensitive), size_type(resultCS));
-        QCOMPARE(haystack.lastIndexOf(needle, Qt::CaseInsensitive), size_type(resultCIS));
+        QCOMPARE_EQ(haystack.lastIndexOf(needle), size_type(resultCS));
+        QCOMPARE_EQ(haystack.lastIndexOf(needle, Qt::CaseSensitive), size_type(resultCS));
+        QCOMPARE_EQ(haystack.lastIndexOf(needle, Qt::CaseInsensitive), size_type(resultCIS));
     }
 }
 
@@ -3395,7 +3404,7 @@ void tst_QStringApiSymmetry::indexOf_contains_lastIndexOf_count_regexp_impl() co
     // indexOf
     String s = subject;
     qsizetype result = s.indexOf(regexp, leftFrom);
-    QCOMPARE(result, indexOf);
+    QCOMPARE_EQ(result, indexOf);
 
     // contains
     if (result >= 0)
@@ -3405,16 +3414,16 @@ void tst_QStringApiSymmetry::indexOf_contains_lastIndexOf_count_regexp_impl() co
 
     // count
     if (leftFrom >= 0)
-        QCOMPARE(s.mid(leftFrom).count(regexp), count);
+        QCOMPARE_EQ(s.mid(leftFrom).count(regexp), count);
     else
-        QCOMPARE(s.mid(leftFrom + s.size()).count(regexp), count);
+        QCOMPARE_EQ(s.mid(leftFrom + s.size()).count(regexp), count);
 
     // lastIndexOf
     result = s.lastIndexOf(regexp, rightFrom);
-    QCOMPARE(result, lastIndexOf);
+    QCOMPARE_EQ(result, lastIndexOf);
     if (rightFrom == s.size()) {
         result = s.lastIndexOf(regexp);
-        QCOMPARE(result, lastIndexOf);
+        QCOMPARE_EQ(result, lastIndexOf);
     }
 }
 

@@ -2,10 +2,12 @@
 
 if(QT_FEATURE_qml_devtools)
     add_subdirectory(qmldom)
-    add_subdirectory(qmllint)
+    if(QT_FEATURE_commandlineparser)
+        add_subdirectory(qmllint)
+        add_subdirectory(qmltc)
+    endif()
     add_subdirectory(qmlimportscanner)
     add_subdirectory(qmlformat)
-    add_subdirectory(qmltc)
     if (TARGET Qt::LanguageServerPrivate
             AND NOT WASM AND NOT IOS AND NOT ANDROID AND NOT QNX AND NOT INTEGRITY AND NOT WEBOS)
         add_subdirectory(qmlls)

@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtQuick module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #ifndef QSGRENDERER_P_H
 #define QSGRENDERER_P_H
@@ -67,6 +31,18 @@ class QRhiResourceUpdateBatch;
 
 Q_QUICK_PRIVATE_EXPORT bool qsg_test_and_clear_fatal_render_error();
 Q_QUICK_PRIVATE_EXPORT void qsg_set_fatal_renderer_error();
+
+class Q_QUICK_PRIVATE_EXPORT QSGRenderTarget
+{
+public:
+    // non-explicit ctor for compatibility with setRenderTarget(QRhiRenderTarget*) calls
+    QSGRenderTarget(QRhiRenderTarget *rt = nullptr) : rt(rt) { }
+
+    QRhiRenderTarget *rt = nullptr;
+    QRhiRenderPassDescriptor *rpDesc = nullptr;
+    QRhiCommandBuffer *cb = nullptr;
+    QPaintDevice *paintDevice = nullptr;
+};
 
 class Q_QUICK_PRIVATE_EXPORT QSGRenderer : public QSGAbstractRenderer
 {
@@ -105,19 +81,14 @@ public:
     QRhiResourceUpdateBatch *currentResourceUpdateBatch() const { return m_current_resource_update_batch; }
     QRhi *currentRhi() const { return m_rhi; }
 
-    void setRenderTarget(QRhiRenderTarget *rt) { m_rt = rt; }
-    QRhiRenderTarget *renderTarget() const { return m_rt; }
+    void setRenderTarget(const QSGRenderTarget &rt) { m_rt = rt; }
+    const QSGRenderTarget &renderTarget() const { return m_rt; }
 
-    void setCommandBuffer(QRhiCommandBuffer *cb) { m_cb = cb; }
-    QRhiCommandBuffer *commandBuffer() const { return m_cb; }
+    void setCommandBuffer(QRhiCommandBuffer *cb) { m_rt.cb = cb; }
+    QRhiCommandBuffer *commandBuffer() const { return m_rt.cb; }
 
-    void setRenderPassDescriptor(QRhiRenderPassDescriptor *rpDesc) { m_rp_desc = rpDesc; }
-    QRhiRenderPassDescriptor *renderPassDescriptor() const { return m_rp_desc; }
-
-    void setExternalRenderPassDescriptor(QRhiRenderPassDescriptor *rpDesc) {
-        // no differentiation needed anymore
-        setRenderPassDescriptor(rpDesc);
-    }
+    void setRenderPassDescriptor(QRhiRenderPassDescriptor *rpDesc) { m_rt.rpDesc = rpDesc; }
+    QRhiRenderPassDescriptor *renderPassDescriptor() const { return m_rt.rpDesc; }
 
     void setRenderPassRecordingCallbacks(QSGRenderContext::RenderPassCallback start,
                                          QSGRenderContext::RenderPassCallback end,
@@ -151,9 +122,7 @@ protected:
     QByteArray *m_current_uniform_data;
     QRhiResourceUpdateBatch *m_current_resource_update_batch;
     QRhi *m_rhi;
-    QRhiRenderTarget *m_rt;
-    QRhiCommandBuffer *m_cb;
-    QRhiRenderPassDescriptor *m_rp_desc;
+    QSGRenderTarget m_rt;
     struct {
         QSGRenderContext::RenderPassCallback start = nullptr;
         QSGRenderContext::RenderPassCallback end = nullptr;

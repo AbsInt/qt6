@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtGui module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2020 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qaccessible.h"
 
@@ -59,6 +23,8 @@
 #include <private/qfactoryloader_p.h>
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 Q_LOGGING_CATEGORY(lcAccessibilityCore, "qt.accessibility.core");
 
@@ -309,7 +275,7 @@ Q_LOGGING_CATEGORY(lcAccessibilityCore, "qt.accessibility.core");
     \value AlertMessage     An object that is used to alert the user.
     \value Animation        An object that displays an animation.
     \value Application      The application's main window.
-    \value Assistant        An object that provids interactive help.
+    \value Assistant        An object that provides interactive help.
     \value Border           An object that represents a border.
     \value ButtonDropDown   A button that drops down a list of items.
     \value ButtonDropGrid   A button that drops down a grid.
@@ -453,7 +419,7 @@ Q_LOGGING_CATEGORY(lcAccessibilityCore, "qt.accessibility.core");
     \sa QAccessibleInterface::interface_cast(), QAccessibleTextInterface, QAccessibleValueInterface, QAccessibleActionInterface, QAccessibleTableInterface, QAccessibleTableCellInterface
 */
 
-#ifndef QT_NO_ACCESSIBILITY
+#if QT_CONFIG(accessibility)
 
 /*!
     Destroys the QAccessibleInterface.
@@ -471,7 +437,7 @@ QAccessibleInterface::~QAccessibleInterface()
 
 /* accessible widgets plugin discovery stuff */
 Q_GLOBAL_STATIC_WITH_ARGS(QFactoryLoader, loader,
-    (QAccessibleFactoryInterface_iid, QLatin1String("/accessible")))
+    (QAccessibleFactoryInterface_iid, "/accessible"_L1))
 typedef QHash<QString, QAccessiblePlugin*> QAccessiblePluginsHash;
 Q_GLOBAL_STATIC(QAccessiblePluginsHash, qAccessiblePlugins)
 
@@ -701,7 +667,7 @@ QAccessibleInterface *QAccessible::queryAccessibleInterface(QObject *object)
         mo = mo->superClass();
     };
     while (mo) {
-        const QString cn = QLatin1String(mo->className());
+        const QString cn = QLatin1StringView(mo->className());
 
         // Check if the class has a InterfaceFactory installed.
         for (int i = qAccessibleFactories()->count(); i > 0; --i) {
@@ -1862,16 +1828,16 @@ Q_GUI_EXPORT QDebug operator<<(QDebug d, const QAccessibleInterface *iface)
         QStringList stateStrings;
         QAccessible::State st = iface->state();
         if (st.focusable)
-            stateStrings << QLatin1String("focusable");
+            stateStrings << "focusable"_L1;
         if (st.focused)
-            stateStrings << QLatin1String("focused");
+            stateStrings << "focused"_L1;
         if (st.selected)
-            stateStrings << QLatin1String("selected");
+            stateStrings << "selected"_L1;
         if (st.invisible)
-            stateStrings << QLatin1String("invisible");
+            stateStrings << "invisible"_L1;
 
         if (!stateStrings.isEmpty())
-            d << stateStrings.join(QLatin1Char('|'));
+            d << stateStrings.join(u'|');
 
         if (!st.invisible)
             d << "rect=" << iface->rect();
@@ -3019,7 +2985,8 @@ QAccessibleHyperlinkInterface::~QAccessibleHyperlinkInterface()
 
 }
 
-#endif // QT_NO_ACCESSIBILITY
+#endif // QT_CONFIG(accessibility)
 
 QT_END_NAMESPACE
 
+#include "moc_qaccessible_base.cpp"

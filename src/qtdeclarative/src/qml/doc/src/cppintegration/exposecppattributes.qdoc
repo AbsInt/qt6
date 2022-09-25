@@ -1,29 +1,5 @@
-﻿/****************************************************************************
-**
-** Copyright (C) 2017 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the documentation of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:FDL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Free Documentation License Usage
-** Alternatively, this file may be used under the terms of the GNU Free
-** Documentation License version 1.3 as published by the Free Software
-** Foundation and appearing in the file included in the packaging of
-** this file. Please review the following information to ensure
-** the GNU Free Documentation License version 1.3 requirements
-** will be met: https://www.gnu.org/licenses/fdl-1.3.html.
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2017 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
 /*!
 \page qtqml-cppintegration-exposecppattributes.html
 \title Exposing Attributes of C++ Types to QML
@@ -32,9 +8,9 @@
 QML can easily be extended with functionality defined in C++ code. Due to the
 tight integration of the QML engine with the \l{The Meta-Object System}{Qt
 meta-object system}, any functionality that is appropriately exposed by a
-QObject-derived class is accessible from QML code. This enables C++ data and
-functions to be accessible directly from QML, often with little or no
-modification.
+QObject-derived class or a Q_GADGET type is accessible from QML code. This
+enables C++ data and functions to be accessible directly from QML, often with
+little or no modification.
 
 The QML engine has the ability to introspect QObject instances through the
 meta-object system. This means any QML code can access the following members of
@@ -46,7 +22,7 @@ an instance of a QObject-derived class:
 \li Signals
 \endlist
 
-(Additionally, enums are available if they have been declared with Q_ENUMS.
+(Additionally, enums are available if they have been declared with Q_ENUM.
 See \l{qtqml-cppintegration-data.html}{Data Type Conversion Between QML and C++}
 for more details.)
 
@@ -56,7 +32,12 @@ system}{registered with the QML type system}. However, if a class is to be
 used in a way that requires the engine to access additional type information
 — for example, if the class itself is to be used as a method parameter or
 property, or if one of its enum types is to be used in this way — then the
-class may need to be registered.
+class may need to be registered. Registration is recommended for all types you
+use in QML, as only registered types can be analyzed at compile time.
+
+Registration is required for Q_GADGET types, as they don't derive from a known
+common base and can't be made available automatically. Without registration,
+their properties and methods are inaccessible.
 
 Also note that a number of the important concepts covered in this document are
 demonstrated in the \l{Writing QML Extensions with C++} tutorial.
@@ -88,7 +69,7 @@ A \e property can be specified for any QObject-derived class using the
 Q_PROPERTY() macro. A property is a class data member with an associated read
 function and optional write function.
 
-All properties of a QObject-derived class are accessible from QML.
+All properties of a QObject-derived or Q_GADGET class are accessible from QML.
 
 For example, below is a \c Message class with an \c author property. As
 specified by the Q_PROPERTY macro call, this property is readable through

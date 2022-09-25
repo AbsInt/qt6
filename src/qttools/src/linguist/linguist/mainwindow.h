@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the Qt Linguist of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
@@ -33,6 +8,7 @@
 #include "ui_mainwindow.h"
 #include "recentfiles.h"
 #include "messagemodel.h"
+#include "finddialog.h"
 
 #include <QtCore/QHash>
 #include <QtCore/QMap>
@@ -57,7 +33,6 @@ class QTreeView;
 
 class BatchTranslationDialog;
 class ErrorsView;
-class FindDialog;
 class FocusWatcher;
 class FormPreviewView;
 class MessageEditor;
@@ -72,6 +47,7 @@ class MainWindow : public QMainWindow
     Q_OBJECT
 public:
     enum {PhraseCloseMenu, PhraseEditMenu, PhrasePrintMenu};
+    enum FindDirection {FindNext, FindPrev};
 
     MainWindow();
     ~MainWindow();
@@ -107,7 +83,6 @@ private slots:
     void print();
     void closeFile();
     bool closeAll();
-    void findAgain();
     void showTranslateDialog();
     void showBatchTranslateDialog();
     void showTranslationSettings();
@@ -155,7 +130,7 @@ private slots:
     void prevUnfinished();
     void nextUnfinished();
     void findNext(const QString &text, DataModel::FindLocation where,
-                  bool matchCase, bool ignoreAccelerators, bool skipObsolete, bool regularExp);
+                  FindDialog::FindOptions options, int statusFilter);
     void revalidate();
     void toggleStatistics();
     void toggleVisualizeWhitespace();
@@ -170,6 +145,7 @@ private:
     QModelIndex prevMessage(const QModelIndex &currentIndex, bool checkUnfinished = false) const;
     bool doNext(bool checkUnfinished);
     bool doPrev(bool checkUnfinished);
+    void findAgain(FindDirection direction = FindNext);
 
     void updateStatistics();
     void initViewHeaders();
@@ -227,10 +203,8 @@ private:
 
     FindDialog *m_findDialog;
     QString m_findText;
-    Qt::CaseSensitivity m_findMatchCase;
-    bool m_findIgnoreAccelerators;
-    bool m_findSkipObsolete;
-    bool m_findUseRegExp;
+    FindDialog::FindOptions m_findOptions;
+    int m_findStatusFilter = -1;
     DataModel::FindLocation m_findWhere;
 
     TranslateDialog *m_translateDialog;

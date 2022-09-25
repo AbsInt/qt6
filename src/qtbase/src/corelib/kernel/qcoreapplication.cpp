@@ -1,42 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Copyright (C) 2021 Intel Corporation.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// Copyright (C) 2021 Intel Corporation.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qcoreapplication.h"
 #include "qcoreapplication_p.h"
@@ -138,17 +102,13 @@
 
 QT_BEGIN_NAMESPACE
 
+using namespace Qt::StringLiterals;
+
 #if defined(Q_OS_WIN) || defined(Q_OS_MAC)
 extern QString qAppFileName();
 #endif
 
-#if QT_VERSION >= QT_VERSION_CHECK(7, 0, 0)
-# error "Bump QCoreApplicatoinPrivate::app_compile_version to QT_VERSION_CHECK(7, 0, 0)"
-#endif
-// We don't know exactly, but it's at least 6.0.0:
-int QCoreApplicationPrivate::app_compile_version = QT_VERSION_CHECK(6, 0, 0);
-
-bool QCoreApplicationPrivate::setuidAllowed = false;
+Q_CONSTINIT bool QCoreApplicationPrivate::setuidAllowed = false;
 
 #if !defined(Q_OS_WIN)
 #ifdef Q_OS_DARWIN
@@ -205,7 +165,7 @@ QString QCoreApplicationPrivate::appVersion() const
 }
 #endif // !Q_OS_WIN
 
-QString *QCoreApplicationPrivate::cachedApplicationFilePath = nullptr;
+Q_CONSTINIT QString *QCoreApplicationPrivate::cachedApplicationFilePath = nullptr;
 
 bool QCoreApplicationPrivate::checkInstance(const char *function)
 {
@@ -255,7 +215,7 @@ void QCoreApplicationPrivate::processCommandLineArguments()
 
 // Support for introspection
 
-extern "C" void Q_CORE_EXPORT qt_startup_hook()
+extern "C" void Q_DECL_EXPORT_OVERRIDABLE qt_startup_hook()
 {
 }
 
@@ -263,8 +223,8 @@ typedef QList<QtStartUpFunction> QStartUpFuncList;
 Q_GLOBAL_STATIC(QStartUpFuncList, preRList)
 typedef QList<QtCleanUpFunction> QVFuncList;
 Q_GLOBAL_STATIC(QVFuncList, postRList)
-static QBasicMutex globalRoutinesMutex;
-static bool preRoutinesCalled = false;
+Q_CONSTINIT static QBasicMutex globalRoutinesMutex;
+Q_CONSTINIT static bool preRoutinesCalled = false;
 
 /*!
     \internal
@@ -351,22 +311,22 @@ void Q_CORE_EXPORT qt_call_post_routines()
 #ifndef QT_NO_QOBJECT
 
 // app starting up if false
-bool QCoreApplicationPrivate::is_app_running = false;
+Q_CONSTINIT bool QCoreApplicationPrivate::is_app_running = false;
  // app closing down if true
-bool QCoreApplicationPrivate::is_app_closing = false;
+Q_CONSTINIT bool QCoreApplicationPrivate::is_app_closing = false;
 
-Q_CORE_EXPORT uint qGlobalPostedEventsCount()
+qsizetype qGlobalPostedEventsCount()
 {
-    QThreadData *currentThreadData = QThreadData::current();
-    return currentThreadData->postEventList.size() - currentThreadData->postEventList.startOffset;
+    const QPostEventList &l = QThreadData::current()->postEventList;
+    return l.size() - l.startOffset;
 }
 
-QAbstractEventDispatcher *QCoreApplicationPrivate::eventDispatcher = nullptr;
+Q_CONSTINIT QAbstractEventDispatcher *QCoreApplicationPrivate::eventDispatcher = nullptr;
 
 #endif // QT_NO_QOBJECT
 
-QCoreApplication *QCoreApplication::self = nullptr;
-uint QCoreApplicationPrivate::attribs =
+Q_CONSTINIT QCoreApplication *QCoreApplication::self = nullptr;
+Q_CONSTINIT uint QCoreApplicationPrivate::attribs =
     (1 << Qt::AA_SynthesizeMouseForUnhandledTouchEvents) |
     (1 << Qt::AA_SynthesizeMouseForUnhandledTabletEvents);
 
@@ -401,7 +361,7 @@ struct QCoreApplicationData {
 Q_GLOBAL_STATIC(QCoreApplicationData, coreappdata)
 
 #ifndef QT_NO_QOBJECT
-static bool quitLockEnabled = true;
+Q_CONSTINIT static bool quitLockEnabled = true;
 #endif
 
 #if defined(Q_OS_WIN)
@@ -433,7 +393,7 @@ static inline bool contains(int argc, char **argv, const char *needle)
 }
 #endif // Q_OS_WIN
 
-QCoreApplicationPrivate::QCoreApplicationPrivate(int &aargc, char **aargv, uint flags)
+QCoreApplicationPrivate::QCoreApplicationPrivate(int &aargc, char **aargv)
     :
 #ifndef QT_NO_QOBJECT
       QObjectPrivate(),
@@ -453,7 +413,6 @@ QCoreApplicationPrivate::QCoreApplicationPrivate(int &aargc, char **aargv, uint 
     , q_ptr(nullptr)
 #endif
 {
-    app_compile_version = flags & 0xffffff;
     static const char *const empty = "";
     if (argc == 0 || argv == nullptr) {
         argc = 0;
@@ -533,7 +492,7 @@ void QCoreApplicationPrivate::eventDispatcherReady()
 {
 }
 
-QBasicAtomicPointer<QThread> QCoreApplicationPrivate::theMainThread = Q_BASIC_ATOMIC_INITIALIZER(nullptr);
+Q_CONSTINIT QBasicAtomicPointer<QThread> QCoreApplicationPrivate::theMainThread = Q_BASIC_ATOMIC_INITIALIZER(nullptr);
 QThread *QCoreApplicationPrivate::mainThread()
 {
     Q_ASSERT(theMainThread.loadRelaxed() != nullptr);
@@ -572,7 +531,7 @@ void QCoreApplicationPrivate::appendApplicationPathToLibraryPaths()
     if (!app_libpaths)
         coreappdata()->app_libpaths.reset(app_libpaths = new QStringList);
     QString app_location = QCoreApplication::applicationFilePath();
-    app_location.truncate(app_location.lastIndexOf(QLatin1Char('/')));
+    app_location.truncate(app_location.lastIndexOf(u'/'));
     app_location = QDir(app_location).canonicalPath();
     if (QFile::exists(app_location) && !app_libpaths->contains(app_location))
         app_libpaths->append(app_location);
@@ -589,7 +548,7 @@ QString qAppName()
 void QCoreApplicationPrivate::initLocale()
 {
 #if defined(Q_OS_UNIX) && !defined(QT_BOOTSTRAPPED)
-    static bool qt_locale_initialized = false;
+    Q_CONSTINIT static bool qt_locale_initialized = false;
     if (qt_locale_initialized)
         return;
     qt_locale_initialized = true;
@@ -748,13 +707,13 @@ QCoreApplication::QCoreApplication(QCoreApplicationPrivate &p)
 */
 QCoreApplication::QCoreApplication(int &argc, char **argv
 #ifndef Q_QDOC
-                                   , int _internal
+                                   , int
 #endif
                                    )
 #ifdef QT_NO_QOBJECT
-    : d_ptr(new QCoreApplicationPrivate(argc, argv, _internal))
+    : d_ptr(new QCoreApplicationPrivate(argc, argv))
 #else
-    : QObject(*new QCoreApplicationPrivate(argc, argv, _internal))
+    : QObject(*new QCoreApplicationPrivate(argc, argv))
 #endif
 {
     d_func()->q_ptr = this;
@@ -1060,7 +1019,7 @@ bool QCoreApplication::notifyInternal2(QObject *receiver, QEvent *event)
     // equivalent to QThreadData::current(), just without the function
     // call overhead.
     QObjectPrivate *d = receiver->d_func();
-    QThreadData *threadData = d->threadData;
+    QThreadData *threadData = d->threadData.loadAcquire();
     QScopedScopeLevelCounter scopeLevelCounter(threadData);
     if (!selfRequired)
         return doNotify(receiver, event);
@@ -1371,7 +1330,7 @@ int QCoreApplication::exec()
     if (!QCoreApplicationPrivate::checkInstance("exec"))
         return -1;
 
-    QThreadData *threadData = self->d_func()->threadData;
+    QThreadData *threadData = self->d_func()->threadData.loadAcquire();
     if (threadData != QThreadData::current()) {
         qWarning("%s::exec: Must be called from the main thread", self->metaObject()->className());
         return -1;
@@ -2177,20 +2136,20 @@ static void replacePercentN(QString *result, int n)
     if (n >= 0) {
         qsizetype percentPos = 0;
         qsizetype len = 0;
-        while ((percentPos = result->indexOf(QLatin1Char('%'), percentPos + len)) != -1) {
+        while ((percentPos = result->indexOf(u'%', percentPos + len)) != -1) {
             len = 1;
             if (percentPos + len == result->length())
                 break;
             QString fmt;
-            if (result->at(percentPos + len) == QLatin1Char('L')) {
+            if (result->at(percentPos + len) == u'L') {
                 ++len;
                 if (percentPos + len == result->length())
                     break;
-                fmt = QLatin1String("%L1");
+                fmt = "%L1"_L1;
             } else {
-                fmt = QLatin1String("%1");
+                fmt = "%1"_L1;
             }
-            if (result->at(percentPos + len) == QLatin1Char('n')) {
+            if (result->at(percentPos + len) == u'n') {
                 fmt = fmt.arg(n);
                 ++len;
                 result->replace(percentPos, len, fmt);
@@ -2286,7 +2245,7 @@ QString QCoreApplication::translate(const char *context, const char *sourceText,
     Q_UNUSED(disambiguation);
     QString ret = QString::fromUtf8(sourceText);
     if (n >= 0)
-        ret.replace(QLatin1String("%n"), QString::number(n));
+        ret.replace("%n"_L1, QString::number(n));
     return ret;
 }
 
@@ -2402,13 +2361,13 @@ QString QCoreApplication::applicationFilePath()
     if (absPath.isEmpty() && !arguments().isEmpty()) {
         QString argv0 = QFile::decodeName(arguments().at(0).toLocal8Bit());
 
-        if (!argv0.isEmpty() && argv0.at(0) == QLatin1Char('/')) {
+        if (!argv0.isEmpty() && argv0.at(0) == u'/') {
             /*
               If argv0 starts with a slash, it is already an absolute
               file path.
             */
             absPath = argv0;
-        } else if (argv0.contains(QLatin1Char('/'))) {
+        } else if (argv0.contains(u'/')) {
             /*
               If argv0 contains one or more slashes, it is a file path
               relative to the current directory.
@@ -2767,9 +2726,6 @@ QStringList QCoreApplication::libraryPathsLocked()
             }
         };
         setPathsFromEnv(qEnvironmentVariable("QT_PLUGIN_PATH"));
-#ifdef Q_OS_ANDROID
-        setPathsFromEnv(qEnvironmentVariable("QT_BUNDLED_LIBS_PATH"));
-#endif
 #ifdef Q_OS_DARWIN
         // Check the main bundle's PlugIns directory as this is a standard location for Apple OSes.
         // Note that the QLibraryInfo::PluginsPath below will coincidentally be the same as this value

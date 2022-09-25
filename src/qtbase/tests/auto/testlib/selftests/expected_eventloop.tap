@@ -8,7 +8,7 @@ not ok 2 - fail()
   file: qtbase/tests/auto/testlib/selftests/eventloop/tst_eventloop.cpp
   line: 0
   ...
-not ok 3 - fail()
+not ok 2 - fail()
   ---
   type: QVERIFY
   message: )
@@ -20,7 +20,7 @@ not ok 3 - fail()
   file: qtbase/tests/auto/testlib/selftests/eventloop/tst_eventloop.cpp
   line: 0
   ...
-not ok 4 - skip()
+not ok 3 - skip()
   ---
   type: QVERIFY
   message: Earlier test failed to clean up
@@ -32,7 +32,7 @@ not ok 4 - skip()
   file: qtbase/tests/auto/testlib/selftests/eventloop/tst_eventloop.cpp
   line: 0
   ...
-not ok 5 - skip()
+not ok 3 - skip()
   ---
   type: QVERIFY
   message: )
@@ -44,7 +44,7 @@ not ok 5 - skip()
   file: qtbase/tests/auto/testlib/selftests/eventloop/tst_eventloop.cpp
   line: 0
   ...
-not ok 6 - pass()
+not ok 4 - pass()
   ---
   type: QVERIFY
   message: Earlier test failed to clean up
@@ -56,7 +56,7 @@ not ok 6 - pass()
   file: qtbase/tests/auto/testlib/selftests/eventloop/tst_eventloop.cpp
   line: 0
   ...
-not ok 7 - pass()
+not ok 4 - pass()
   ---
   type: QVERIFY
   message: )
@@ -68,8 +68,8 @@ not ok 7 - pass()
   file: qtbase/tests/auto/testlib/selftests/eventloop/tst_eventloop.cpp
   line: 0
   ...
-ok 8 - cleanupTestCase()
-1..8
-# tests 8
+ok 5 - cleanupTestCase()
+1..5
+# tests 5
 # pass 2
-# fail 6
+# fail 3

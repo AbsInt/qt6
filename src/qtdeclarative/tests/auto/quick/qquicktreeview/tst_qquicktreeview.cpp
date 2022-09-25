@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtQuick module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include <QtTest/QtTest>
 #include <QtQuickTest/quicktest.h>
@@ -73,7 +37,7 @@ using namespace QQuickVisualTestUtils;
 
 #define WAIT_UNTIL_POLISHED_ARG(item) \
     QVERIFY(QQuickTest::qIsPolishScheduled(item)); \
-    QVERIFY(QQuickTest::qWaitForItemPolished(item))
+    QVERIFY(QQuickTest::qWaitForPolish(item))
 #define WAIT_UNTIL_POLISHED WAIT_UNTIL_POLISHED_ARG(treeView)
 
 // ########################################################
@@ -90,15 +54,31 @@ private:
 private slots:
     void initTestCase() override;
     void showTreeView();
+    void invalidArguments();
     void expandAndCollapseRoot();
     void toggleExpanded();
     void expandAndCollapseChildren();
     void expandChildPendingToBeVisible();
+    void expandRecursivelyRoot_data();
+    void expandRecursivelyRoot();
+    void expandRecursivelyChild_data();
+    void expandRecursivelyChild();
+    void expandRecursivelyWholeTree();
+    void collapseRecursivelyRoot();
+    void collapseRecursivelyChild();
+    void collapseRecursivelyWholeTree();
+    void expandToIndex();
     void requiredPropertiesRoot();
     void requiredPropertiesChildren();
     void emptyModel();
     void updatedModifiedModel();
     void insertRows();
+    void toggleExpandedUsingArrowKeys();
+    void selectionBehaviorCells_data();
+    void selectionBehaviorCells();
+    void selectionBehaviorRows();
+    void selectionBehaviorColumns();
+    void selectionBehaviorDisabled();
 };
 
 tst_qquicktreeview::tst_qquicktreeview()
@@ -120,14 +100,47 @@ void tst_qquicktreeview::showTreeView()
     QCOMPARE(treeViewPrivate->loadedRows.count(), 1);
 }
 
+
+void tst_qquicktreeview::invalidArguments()
+{
+    // Check that we handle gracefully invalid arguments
+    LOAD_TREEVIEW("normaltreeview.qml");
+
+    treeView->expand(-2);
+    QCOMPARE(treeView->rows(), 1);
+    treeView->expandRecursively(200);
+    QCOMPARE(treeView->rows(), 1);
+    treeView->expandRecursively(-2);
+    QCOMPARE(treeView->rows(), 1);
+    treeView->expandRecursively(200);
+    QCOMPARE(treeView->rows(), 1);
+
+    treeView->collapse(-2);
+    QCOMPARE(treeView->rows(), 1);
+    treeView->collapseRecursively(200);
+    QCOMPARE(treeView->rows(), 1);
+    treeView->collapseRecursively(-2);
+    QCOMPARE(treeView->rows(), 1);
+    treeView->collapseRecursively(200);
+    QCOMPARE(treeView->rows(), 1);
+}
+
 void tst_qquicktreeview::expandAndCollapseRoot()
 {
     LOAD_TREEVIEW("normaltreeview.qml");
     // Check that the view only has one row loaded so far (the root of the tree)
     QCOMPARE(treeViewPrivate->loadedRows.count(), 1);
 
+    QSignalSpy expandedSpy(treeView, SIGNAL(expanded(int, int)));
+
     // Expand the root
     treeView->expand(0);
+
+    QCOMPARE(expandedSpy.count(), 1);
+    auto signalArgs = expandedSpy.takeFirst();
+    QVERIFY(signalArgs.at(0).toInt() == 0);
+    QVERIFY(signalArgs.at(1).toInt() == 1);
+
     WAIT_UNTIL_POLISHED;
     // We now expect 5 rows, the root pluss it's 4 children
     QCOMPARE(treeViewPrivate->loadedRows.count(), 5);
@@ -163,14 +176,23 @@ void tst_qquicktreeview::expandAndCollapseChildren()
     LOAD_TREEVIEW("normaltreeview.qml");
 
     const int childCount = 4;
+    QSignalSpy expandedSpy(treeView, SIGNAL(expanded(int, int)));
 
     // Expand the last child of a parent recursively four times
     for (int level = 0; level < 4; ++level) {
         const int nodeToExpand = level * childCount;
         const int firstChildRow = nodeToExpand + 1; // (+ 1 for the root)
         const int lastChildRow = firstChildRow + 4;
+
         treeView->expand(nodeToExpand);
+
+        QCOMPARE(expandedSpy.count(), 1);
+        auto signalArgs = expandedSpy.takeFirst();
+        QVERIFY(signalArgs.at(0).toInt() == nodeToExpand);
+        QVERIFY(signalArgs.at(1).toInt() == 1);
+
         WAIT_UNTIL_POLISHED;
+
         QCOMPARE(treeView->rows(), lastChildRow);
 
         auto childItem1 = treeViewPrivate->loadedTableItem(QPoint(0, firstChildRow))->item;
@@ -381,7 +403,587 @@ void tst_qquicktreeview::expandChildPendingToBeVisible()
 
     // Now the view have updated to show
     // all the rows that has been expanded.
-    QCOMPARE(treeView->rows(), 9);
+       QCOMPARE(treeView->rows(), 9);
+}
+
+void tst_qquicktreeview::expandRecursivelyRoot_data()
+{
+    QTest::addColumn<int>("rowToExpand");
+    QTest::addColumn<int>("depth");
+
+    QTest::newRow("0, -1") << 0 << -1;
+    QTest::newRow("0, 0") << 0 << 0;
+    QTest::newRow("0, 1") << 0 << 1;
+    QTest::newRow("0, 2") << 0 << 2;
+}
+
+void tst_qquicktreeview::expandRecursivelyRoot()
+{
+    // Check that we can expand the root node (row 0), and that
+    // all its children are expanded recursively down to the
+    // given depth.
+    QFETCH(int, rowToExpand);
+    QFETCH(int, depth);
+
+    LOAD_TREEVIEW("normaltreeview.qml");
+    QSignalSpy spy(treeView, SIGNAL(expanded(int, int)));
+
+    treeView->expandRecursively(rowToExpand, depth);
+
+    if (depth == 0) {
+        QCOMPARE(spy.count(), 0);
+    } else {
+
+        QCOMPARE(spy.count(), 1);
+        const auto signalArgs = spy.takeFirst();
+        QVERIFY(signalArgs.at(0).toInt() == rowToExpand);
+        QVERIFY(signalArgs.at(1).toInt() == depth);
+    }
+
+    WAIT_UNTIL_POLISHED;
+
+    const int rowToExpandDepth = treeView->depth(rowToExpand);
+    const int effectiveMaxDepth = depth != -1 ? rowToExpandDepth + depth : model->maxDepth();
+
+    if (depth > 0 || depth == -1)
+        QVERIFY(treeView->isExpanded(rowToExpand));
+    else
+        QVERIFY(!treeView->isExpanded(rowToExpand));
+
+    // Check that all rows after rowToExpand, that are also
+    // children of that row, is expanded (down to depth)
+    for (int currentRow = rowToExpand + 1; currentRow < treeView->rows(); ++currentRow) {
+        const auto modelIndex = treeView->modelIndex(0, currentRow);
+        const int currentDepth = treeView->depth(currentRow);
+        const bool isChild = currentDepth > rowToExpandDepth;
+        const bool isExpandable = model->rowCount(modelIndex) > 0;
+        const bool shouldBeExpanded = isChild && isExpandable && currentDepth < effectiveMaxDepth;
+        QCOMPARE(treeView->isExpanded(currentRow), shouldBeExpanded);
+    }
+}
+
+void tst_qquicktreeview::expandRecursivelyChild_data()
+{
+    QTest::addColumn<int>("rowToExpand");
+    QTest::addColumn<int>("depth");
+
+    QTest::newRow("5, -1") << 4 << -1;
+    QTest::newRow("5, 0") << 4 << 0;
+    QTest::newRow("5, 1") << 4 << 1;
+    QTest::newRow("5, 2") << 4 << 2;
+    QTest::newRow("5, 3") << 4 << 3;
+}
+
+void tst_qquicktreeview::expandRecursivelyChild()
+{
+    // Check that we can first expand the root node, and the expand
+    // recursive the first child node with children (row 4), and that all
+    // its children of that node are expanded recursively according to depth.
+    QFETCH(int, rowToExpand);
+    QFETCH(int, depth);
+
+    LOAD_TREEVIEW("normaltreeview.qml");
+    QSignalSpy spy(treeView, SIGNAL(expanded(int, int)));
+
+    treeView->expand(0);
+
+    QCOMPARE(spy.count(), 1);
+    auto signalArgs = spy.takeFirst();
+    QVERIFY(signalArgs.at(0).toInt() == 0);
+    QVERIFY(signalArgs.at(1).toInt() == 1);
+
+    treeView->expandRecursively(rowToExpand, depth);
+
+    if (depth == 0) {
+        QCOMPARE(spy.count(), 0);
+    } else {
+        QCOMPARE(spy.count(), 1);
+        signalArgs = spy.takeFirst();
+        QVERIFY(signalArgs.at(0).toInt() == rowToExpand);
+        QVERIFY(signalArgs.at(1).toInt() == depth);
+    }
+
+    WAIT_UNTIL_POLISHED;
+
+    const bool rowToExpandDepth = treeView->depth(rowToExpand);
+    const int effectiveMaxDepth = depth != -1 ? rowToExpandDepth + depth : model->maxDepth();
+
+    // Check that all rows before rowToExpand is not expanded
+    // (except the root node)
+    for (int currentRow = 1; currentRow < rowToExpand; ++currentRow)
+        QVERIFY(!treeView->isExpanded(currentRow));
+
+    // Check if rowToExpand is expanded
+    if (depth > 0 || depth == -1)
+        QVERIFY(treeView->isExpanded(rowToExpand));
+    else
+        QVERIFY(!treeView->isExpanded(rowToExpand));
+
+    // Check that all rows after rowToExpand that is also
+    // children of that row is expanded (down to depth)
+    for (int currentRow = rowToExpand + 1; currentRow < treeView->rows(); ++currentRow) {
+        const int currentDepth = treeView->depth(currentRow);
+        const bool isChild = currentDepth > rowToExpandDepth;
+        const auto modelIndex = treeView->modelIndex(0, currentRow);
+        const bool isExpandable = model->rowCount(modelIndex) > 0;
+        const bool shouldBeExpanded = isChild && isExpandable && currentDepth < effectiveMaxDepth;
+        QCOMPARE(treeView->isExpanded(currentRow), shouldBeExpanded);
+    }
+}
+
+void tst_qquicktreeview::expandRecursivelyWholeTree()
+{
+    // Check that we expand the whole tree recursively by passing -1, -1
+    LOAD_TREEVIEW("normaltreeview.qml");
+    QSignalSpy spy(treeView, SIGNAL(expanded(int, int)));
+    treeView->expandRecursively(-1, -1);
+
+    QCOMPARE(spy.count(), 1);
+    auto signalArgs = spy.takeFirst();
+    QVERIFY(signalArgs.at(0).toInt() == -1);
+    QVERIFY(signalArgs.at(1).toInt() == -1);
+
+    WAIT_UNTIL_POLISHED;
+
+    // Check that all rows that have children are expanded
+    for (int currentRow = 0; currentRow < treeView->rows(); ++currentRow) {
+        const auto modelIndex = treeView->modelIndex(0, currentRow);
+        const bool isExpandable = model->rowCount(modelIndex) > 0;
+        QCOMPARE(treeView->isExpanded(currentRow), isExpandable);
+    }
+}
+
+void tst_qquicktreeview::collapseRecursivelyRoot()
+{
+    // Check that we can collapse the root node (row 0), and that
+    // all its children are collapsed recursively down to the leaves.
+    LOAD_TREEVIEW("normaltreeview.qml");
+    treeView->expandRecursively();
+    WAIT_UNTIL_POLISHED;
+
+    // Verify that the tree is now fully expanded
+    const int expectedRowCount = 1 + (model->maxDepth() * 4); // root + 4 children per level
+    QCOMPARE(treeView->rows(), expectedRowCount);
+
+    QSignalSpy spy(treeView, SIGNAL(collapsed(int, bool)));
+
+    // Collapse the whole tree again. This time, only the root should end up visible
+    treeView->collapseRecursively();
+
+    QCOMPARE(spy.count(), 1);
+    const auto signalArgs = spy.takeFirst();
+    QVERIFY(signalArgs.at(0).toInt() == -1);
+    QVERIFY(signalArgs.at(1).toBool() == true);
+
+    WAIT_UNTIL_POLISHED;
+
+    QCOMPARE(treeView->rows(), 1);
+
+    // We need to check that all descendants are collapsed as well. But since they're
+    // now no longer visible in the view, we need to expand each parent one by one again to make
+    // them visible, and check that the child inside that has children is still collapsed.
+    // We can do that by simply iterate over the rows in the view as we expand.
+    int currentRow = 0;
+    while (currentRow < treeView->rows()) {
+        const QModelIndex currentIndex = treeView->modelIndex(0, currentRow);
+        if (model->hasChildren(currentIndex)) {
+            QVERIFY(!treeView->isExpanded(currentRow));
+            treeView->expand(currentRow);
+            WAIT_UNTIL_POLISHED;
+        }
+        currentRow++;
+    }
+
+    // Sanity check that we ended up with all rows expanded again
+    QCOMPARE(currentRow, expectedRowCount);
+}
+
+void tst_qquicktreeview::collapseRecursivelyChild()
+{
+    // Check that we can collapse a child node (row 4), and that all its children
+    // are collapsed recursively down to the leaves (without touching the root).
+    LOAD_TREEVIEW("normaltreeview.qml");
+    treeView->expandRecursively();
+    WAIT_UNTIL_POLISHED;
+
+    // Verify that the tree is now fully expanded
+    const int expectedRowCount = 1 + (model->maxDepth() * 4); // root + 4 children per level
+    QCOMPARE(treeView->rows(), expectedRowCount);
+
+    QSignalSpy spy(treeView, SIGNAL(collapsed(int, bool)));
+
+    // Collapse the 4th child recursive
+    const int rowToCollapse = 4;
+    QCOMPARE(model->data(treeView->modelIndex(0, rowToCollapse), Qt::DisplayRole), QStringLiteral("3, 0"));
+    treeView->collapseRecursively(rowToCollapse);
+
+    QCOMPARE(spy.count(), 1);
+    const auto signalArgs = spy.takeFirst();
+    QVERIFY(signalArgs.at(0).toInt() == rowToCollapse);
+    QVERIFY(signalArgs.at(1).toBool() == true);
+
+    WAIT_UNTIL_POLISHED;
+
+    QCOMPARE(treeView->rows(), 5); // root + 4 children
+
+    // We need to check that all descendants are collapsed as well. But since they're
+    // now no longer visible in the view, we need to expand each parent one by one again to make
+    // them visible, and check that the child inside that has children is still collapsed.
+    // We can do that by simply iterate over the rows in the view as we expand.
+    int currentRow = 1; // start at first child
+    while (currentRow < treeView->rows()) {
+        const QModelIndex currentIndex = treeView->modelIndex(0, currentRow);
+        if (model->hasChildren(currentIndex)) {
+            QVERIFY(!treeView->isExpanded(currentRow));
+            treeView->expand(currentRow);
+            WAIT_UNTIL_POLISHED;
+        }
+        currentRow++;
+    }
+
+    // Sanity check that we ended up with all rows expanded again
+    QCOMPARE(currentRow, expectedRowCount);
+}
+
+void tst_qquicktreeview::collapseRecursivelyWholeTree()
+{
+    // Check that we collapse the whole tree recursively by passing -1
+    LOAD_TREEVIEW("normaltreeview.qml");
+    QSignalSpy spy(treeView, SIGNAL(collapsed(int, bool)));
+    treeView->expandRecursively();
+    treeView->collapseRecursively();
+
+    QCOMPARE(spy.count(), 1);
+    auto signalArgs = spy.takeFirst();
+    QVERIFY(signalArgs.at(0).toInt() == -1);
+    QVERIFY(signalArgs.at(1).toBool() == true);
+
+    WAIT_UNTIL_POLISHED;
+
+    QCOMPARE(treeView->rows(), 1); // root
+}
+
+void tst_qquicktreeview::expandToIndex()
+{
+    // Check that expandToIndex(index) expands the tree so
+    // that index becomes visible in the view
+    LOAD_TREEVIEW("normaltreeview.qml");
+    QSignalSpy spy(treeView, SIGNAL(expanded(int, int)));
+
+    const QModelIndex root = model->index(0, 0);
+    const QModelIndex child1 = model->index(3, 0, root);
+    const QModelIndex child2 = model->index(3, 0, child1);
+
+    QVERIFY(model->hasChildren(root));
+    QVERIFY(model->hasChildren(child1));
+    QVERIFY(model->hasChildren(child2));
+
+    QVERIFY(!treeView->isExpanded(treeView->rowAtIndex(root)));
+    QVERIFY(!treeView->isExpanded(treeView->rowAtIndex(child1)));
+    QVERIFY(!treeView->isExpanded(treeView->rowAtIndex(child2)));
+
+    const QModelIndex childToExpand = model->index(1, 0, child2);
+    treeView->expandToIndex(childToExpand);
+
+    QVERIFY(treeView->isExpanded(treeView->rowAtIndex(root)));
+    QVERIFY(treeView->isExpanded(treeView->rowAtIndex(child1)));
+    QVERIFY(treeView->isExpanded(treeView->rowAtIndex(child2)));
+
+    QCOMPARE(spy.count(), 1);
+    auto signalArgs = spy.takeFirst();
+    QVERIFY(signalArgs.at(0).toInt() == 0);
+    QVERIFY(signalArgs.at(1).toInt() == 3);
+
+    WAIT_UNTIL_POLISHED;
+
+    // The view should now have 13 rows:
+    // root + 3 expanded nodes that each have 4 children
+    QCOMPARE(treeView->rows(), 13);
+}
+
+void tst_qquicktreeview::toggleExpandedUsingArrowKeys()
+{
+    // Check that you can use the left and right arrow key to
+    // expand and collapse nodes in the tree.
+    LOAD_TREEVIEW("normaltreeview.qml");
+
+    treeView->setFocus(true);
+    QQuickWindow *window = treeView->window();
+
+    // Start by making cell 0, 0 current
+    treeView->selectionModel()->setCurrentIndex(treeView->modelIndex(0, 0), QItemSelectionModel::NoUpdate);
+
+    // Expand row 0
+    const int row0 = 0;
+    QCOMPARE(treeView->rows(), 1);
+    QVERIFY(!treeView->isExpanded(row0));
+    QTest::keyPress(window, Qt::Key_Right);
+    QVERIFY(treeView->isExpanded(row0));
+
+    // A polish event was scheduled, but since the call to keyPress() processes
+    // events, WAIT_UNTIL_POLISHED will be unreliable. So use QTRY_COMPARE instead.
+    QTRY_COMPARE(treeView->rows(), 5);
+
+    // Hitting Key_Right again should be a no-op
+    QTest::keyPress(window, Qt::Key_Right);
+    QVERIFY(treeView->isExpanded(row0));
+    QCOMPARE(treeView->selectionModel()->currentIndex(), treeView->modelIndex(0, row0));
+
+    // Move down to row 1 and try to expand it. Since Row 1
+    // doesn't have children, expanding it will be a no-op.
+    // And also, it shouldn't move currentIndex to the next
+    // column either, it should stay in the tree column.
+    const int row1 = 1;
+    QVERIFY(!treeView->isExpanded(row1));
+    QTest::keyPress(window, Qt::Key_Down);
+    QTest::keyPress(window, Qt::Key_Right);
+    QVERIFY(!treeView->isExpanded(row1));
+    QCOMPARE(treeView->selectionModel()->currentIndex(), treeView->modelIndex(0, row1));
+
+    // Move down to row 4 and expand it
+    const int row4 = 4;
+    QCOMPARE(treeView->rows(), 5);
+    while (treeView->currentRow() != row4)
+        QTest::keyPress(window, Qt::Key_Down);
+    QVERIFY(!treeView->isExpanded(row4));
+    QTest::keyPress(window, Qt::Key_Right);
+    QVERIFY(treeView->isExpanded(row4));
+    QCOMPARE(treeView->selectionModel()->currentIndex(), treeView->modelIndex(0, row4));
+
+    // Move up again to row 0 and collapse it
+    while (treeView->currentRow() != row0)
+        QTest::keyPress(window, Qt::Key_Up);
+    QVERIFY(treeView->isExpanded(row0));
+    QTest::keyPress(window, Qt::Key_Left);
+    QVERIFY(!treeView->isExpanded(row0));
+    QTRY_COMPARE(treeView->rows(), 1);
+
+    // Hitting Key_Left again should be a no-op
+    QTest::keyPress(window, Qt::Key_Left);
+    QVERIFY(!treeView->isExpanded(row0));
+    QCOMPARE(treeView->selectionModel()->currentIndex(), treeView->modelIndex(0, row0));
+}
+
+void tst_qquicktreeview::selectionBehaviorCells_data()
+{
+    QTest::addColumn<QPoint>("startCell");
+    QTest::addColumn<QPoint>("endCellDist");
+
+    QTest::newRow("QPoint(0, 0), QPoint(0, 0)") << QPoint(0, 0) << QPoint(0, 0);
+
+    QTest::newRow("QPoint(0, 1), QPoint(0, 1)") << QPoint(0, 1) << QPoint(0, 1);
+    QTest::newRow("QPoint(0, 2), QPoint(0, 2)") << QPoint(0, 2) << QPoint(0, 2);
+
+    QTest::newRow("QPoint(2, 2), QPoint(0, 0)") << QPoint(2, 2) << QPoint(0, 0);
+    QTest::newRow("QPoint(2, 2), QPoint(1, 0)") << QPoint(2, 2) << QPoint(1, 0);
+    QTest::newRow("QPoint(2, 2), QPoint(2, 0)") << QPoint(2, 2) << QPoint(2, 0);
+    QTest::newRow("QPoint(2, 2), QPoint(-1, 0)") << QPoint(2, 2) << QPoint(-1, 0);
+    QTest::newRow("QPoint(2, 2), QPoint(-2, 0)") << QPoint(2, 2) << QPoint(-2, 0);
+    QTest::newRow("QPoint(2, 2), QPoint(0, 1)") << QPoint(2, 2) << QPoint(0, 1);
+    QTest::newRow("QPoint(2, 2), QPoint(0, 2)") << QPoint(2, 2) << QPoint(0, 2);
+    QTest::newRow("QPoint(2, 2), QPoint(0, -1)") << QPoint(2, 2) << QPoint(0, -1);
+    QTest::newRow("QPoint(2, 2), QPoint(0, -2)") << QPoint(2, 2) << QPoint(0, -2);
+
+    QTest::newRow("QPoint(2, 2), QPoint(1, 1)") << QPoint(2, 2) << QPoint(1, 1);
+    QTest::newRow("QPoint(2, 2), QPoint(1, 2)") << QPoint(2, 2) << QPoint(1, 2);
+    QTest::newRow("QPoint(2, 2), QPoint(1, -1)") << QPoint(2, 2) << QPoint(1, -1);
+    QTest::newRow("QPoint(2, 2), QPoint(1, -2)") << QPoint(2, 2) << QPoint(1, -2);
+
+    QTest::newRow("QPoint(2, 2), QPoint(-1, 1)") << QPoint(2, 2) << QPoint(-1, 1);
+    QTest::newRow("QPoint(2, 2), QPoint(-1, 2)") << QPoint(2, 2) << QPoint(-1, 2);
+    QTest::newRow("QPoint(2, 2), QPoint(-1, -1)") << QPoint(2, 2) << QPoint(-1, -1);
+    QTest::newRow("QPoint(2, 2), QPoint(-1, -2)") << QPoint(2, 2) << QPoint(-1, -2);
+}
+
+void tst_qquicktreeview::selectionBehaviorCells()
+{
+    // Check that the TreeView implement the overridden updateSelection()
+    // function correctly wrt QQuickTableView::SelectCells.
+    QFETCH(QPoint, startCell);
+    QFETCH(QPoint, endCellDist);
+    LOAD_TREEVIEW("normaltreeview.qml");
+
+    const auto selectionModel = treeView->selectionModel();
+    treeView->expand(0);
+
+    WAIT_UNTIL_POLISHED;
+
+    QCOMPARE(selectionModel->hasSelection(), false);
+    treeView->setSelectionBehavior(QQuickTableView::SelectCells);
+
+    const QPoint endCell = startCell + endCellDist;
+    const QPoint endCellWrapped = startCell - endCellDist;
+
+    const QQuickItem *startItem = treeView->itemAtCell(startCell);
+    const QQuickItem *endItem = treeView->itemAtCell(endCell);
+    const QQuickItem *endItemWrapped = treeView->itemAtCell(endCellWrapped);
+    QVERIFY(startItem);
+    QVERIFY(endItem);
+    QVERIFY(endItemWrapped);
+
+    const QPointF startPos(startItem->x(), startItem->y());
+    const QPointF endPos(endItem->x(), endItem->y());
+    const QPointF endPosWrapped(endItemWrapped->x(), endItemWrapped->y());
+
+    treeViewPrivate->setSelectionStartPos(startPos);
+    treeViewPrivate->setSelectionEndPos(endPos);
+
+    QCOMPARE(selectionModel->hasSelection(), true);
+
+    const int x1 = qMin(startCell.x(), endCell.x());
+    const int x2 = qMax(startCell.x(), endCell.x());
+    const int y1 = qMin(startCell.y(), endCell.y());
+    const int y2 = qMax(startCell.y(), endCell.y());
+
+    for (int x = x1; x < x2; ++x) {
+        for (int y = y1; y < y2; ++y) {
+            const auto index = treeView->modelIndex(x, y);
+            QVERIFY(selectionModel->isSelected(index));
+        }
+    }
+
+    const int expectedCount = (x2 - x1 + 1) * (y2 - y1 + 1);
+    const int actualCount = selectionModel->selectedIndexes().count();
+    QCOMPARE(actualCount, expectedCount);
+
+    // Wrap the selection
+    treeViewPrivate->setSelectionEndPos(endPosWrapped);
+
+    for (int x = x2; x < x1; ++x) {
+        for (int y = y2; y < y1; ++y) {
+            const auto index = model->index(y, x);
+            QVERIFY(selectionModel->isSelected(index));
+        }
+    }
+
+    const int actualCountAfterWrap = selectionModel->selectedIndexes().count();
+    QCOMPARE(actualCountAfterWrap, expectedCount);
+
+    treeViewPrivate->clearSelection();
+    QCOMPARE(selectionModel->hasSelection(), false);
+}
+
+void tst_qquicktreeview::selectionBehaviorRows()
+{
+    // Check that the TreeView implement the overridden updateSelection()
+    // function correctly wrt QQuickTableView::SelectionRows.
+    LOAD_TREEVIEW("normaltreeview.qml");
+
+    const auto selectionModel = treeView->selectionModel();
+    QCOMPARE(treeView->selectionBehavior(), QQuickTableView::SelectRows);
+    treeView->expand(0);
+    treeView->setInteractive(false);
+
+    WAIT_UNTIL_POLISHED;
+
+    QCOMPARE(selectionModel->hasSelection(), false);
+
+    // Drag from row 0 to row 3
+    treeViewPrivate->setSelectionStartPos(QPointF(0, 0));
+    treeViewPrivate->setSelectionEndPos(QPointF(80, 60));
+
+    QCOMPARE(selectionModel->hasSelection(), true);
+
+    const int expectedCount = treeView->columns() * 3; // all columns * three rows
+    int actualCount = selectionModel->selectedIndexes().count();
+    QCOMPARE(actualCount, expectedCount);
+
+    for (int x = 0; x < treeView->columns(); ++x) {
+        for (int y = 0; y < 3; ++y) {
+            const auto index = treeView->modelIndex(x, y);
+            QVERIFY(selectionModel->isSelected(index));
+        }
+    }
+
+    selectionModel->clear();
+    QCOMPARE(selectionModel->hasSelection(), false);
+
+    // Drag from row 3 to row 0 (and overshoot mouse)
+    treeViewPrivate->setSelectionStartPos(QPointF(80, 60));
+    treeViewPrivate->setSelectionEndPos(QPointF(-10, -10));
+
+    QCOMPARE(selectionModel->hasSelection(), true);
+
+    actualCount = selectionModel->selectedIndexes().count();
+    QCOMPARE(actualCount, expectedCount);
+
+    for (int x = 0; x < treeView->columns(); ++x) {
+        for (int y = 0; y < 3; ++y) {
+            const auto index = treeView->modelIndex(x, y);
+            QVERIFY(selectionModel->isSelected(index));
+        }
+    }
+}
+
+void tst_qquicktreeview::selectionBehaviorColumns()
+{
+    // Check that the TreeView implement the overridden updateSelection()
+    // function correctly wrt QQuickTableView::SelectColumns.
+    LOAD_TREEVIEW("normaltreeview.qml");
+
+    const auto selectionModel = treeView->selectionModel();
+    treeView->setSelectionBehavior(QQuickTableView::SelectColumns);
+    treeView->expand(0);
+
+    WAIT_UNTIL_POLISHED;
+
+    QCOMPARE(selectionModel->hasSelection(), false);
+
+    // Drag from column 0 to column 3
+    treeViewPrivate->setSelectionStartPos(QPointF(0, 0));
+    treeViewPrivate->setSelectionEndPos(QPointF(225, 90));
+
+    QCOMPARE(selectionModel->hasSelection(), true);
+
+    const int expectedCount = treeView->rows() * 3; // all rows * three columns
+    int actualCount = selectionModel->selectedIndexes().count();
+    QCOMPARE(actualCount, expectedCount);
+
+    for (int x = 0; x < 3; ++x) {
+        for (int y = 0; y < treeView->rows(); ++y) {
+            const auto index = treeView->modelIndex(x, y);
+            QVERIFY(selectionModel->isSelected(index));
+        }
+    }
+
+    selectionModel->clear();
+    QCOMPARE(selectionModel->hasSelection(), false);
+
+    // Drag from column 3 to column 0 (and overshoot mouse)
+    treeViewPrivate->setSelectionStartPos(QPointF(225, 90));
+    treeViewPrivate->setSelectionEndPos(QPointF(-10, -10));
+
+    QCOMPARE(selectionModel->hasSelection(), true);
+
+    actualCount = selectionModel->selectedIndexes().count();
+    QCOMPARE(actualCount, expectedCount);
+
+    for (int x = 0; x < 3; ++x) {
+        for (int y = 0; y < treeView->rows(); ++y) {
+            const auto index = treeView->modelIndex(x, y);
+            QVERIFY(selectionModel->isSelected(index));
+        }
+    }
+}
+
+void tst_qquicktreeview::selectionBehaviorDisabled()
+{
+    // Check that the TreeView implement the overridden updateSelection()
+    // function correctly wrt QQuickTableView::SelectionDisabled.
+    LOAD_TREEVIEW("normaltreeview.qml");
+
+    const auto selectionModel = treeView->selectionModel();
+    treeView->setSelectionBehavior(QQuickTableView::SelectionDisabled);
+
+    WAIT_UNTIL_POLISHED;
+
+    QCOMPARE(selectionModel->hasSelection(), false);
+
+    // Drag from column 0 to column 3
+    treeViewPrivate->setSelectionStartPos(QPointF(0, 0));
+    treeViewPrivate->setSelectionEndPos(QPointF(60, 60));
+
+    QCOMPARE(selectionModel->hasSelection(), false);
 }
 
 QTEST_MAIN(tst_qquicktreeview)

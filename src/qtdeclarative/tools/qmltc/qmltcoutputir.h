@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the tools applications of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #ifndef QMLTCOUTPUTIR_H
 #define QMLTCOUTPUTIR_H
@@ -92,6 +67,7 @@ struct QmltcMethodBase
     QStringList body; // C++ function code
     QQmlJSMetaMethod::Access access = QQmlJSMetaMethod::Public; // access specifier
     QStringList declarationPrefixes;
+    QStringList modifiers; // cv-qualifiers, ref-qualifier, noexcept, attributes
 };
 
 // Represents QML -> C++ compiled function
@@ -99,12 +75,20 @@ struct QmltcMethod : QmltcMethodBase
 {
     QString returnType; // C++ return type
     QQmlJSMetaMethod::Type type = QQmlJSMetaMethod::Method; // Qt function type
+
+    // TODO: should be a better way to handle this
+    bool userVisible = false; // tells if a function is prioritized during the output generation
 };
 
 // Represents C++ ctor of a type
 struct QmltcCtor : QmltcMethodBase
 {
     QStringList initializerList; // C++ ctor's initializer list
+};
+
+// Represents C++ dtor of a type
+struct QmltcDtor : QmltcMethodBase
+{
 };
 
 // Represents QML -> C++ compiled type
@@ -120,10 +104,17 @@ struct QmltcType
     QList<QmltcType> children; // these are pretty much always empty
 
     // special member functions:
-    QmltcCtor basicCtor = {}; // does basic contruction
-    QmltcCtor fullCtor = {}; // calls basicCtor, calls init
-    QmltcMethod init = {}; // starts object initialization (context setup), calls finalize
-    QmltcMethod finalize = {}; // finalizes object (bindings, special interface calls, etc.)
+    QmltcCtor baselineCtor {}; // does basic contruction
+    QmltcCtor externalCtor {}; // calls basicCtor, calls init
+    QmltcMethod init {}; // starts object initialization (context setup), calls finalize
+    QmltcMethod beginClass {}; // calls QQmlParserStatus::classBegin()
+    QmltcMethod endInit {}; // ends object initialization (with "simple" bindings setup)
+    QmltcMethod setComplexBindings {}; // sets up "complex" (e.g. script) bindings
+    QmltcMethod completeComponent {}; // calls QQmlParserStatus::componentComplete()
+    QmltcMethod finalizeComponent {}; // calls QQmlFinalizerHook::componentFinalized()
+    QmltcMethod handleOnCompleted {}; // calls Component.onCompleted
+
+    std::optional<QmltcDtor> dtor {};
 
     // member functions: methods, signals and slots
     QList<QmltcMethod> functions;
@@ -132,7 +123,10 @@ struct QmltcType
     QList<QmltcProperty> properties;
 
     // QML document root specific:
-    std::optional<QmltcVariable> typeCount; // the number of QML types defined in a document
+    std::optional<QmltcMethod> typeCount; // the number of QML types defined in a document
+
+    // TODO: only needed for binding callables - should not be needed, generally
+    bool ignoreInit = false; // specifies whether init and externalCtor should be ignored
 };
 
 // Represents whole QML program, compiled to C++

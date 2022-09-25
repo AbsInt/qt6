@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
-**
-** This file is part of the QtQuick module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2020 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 #include "qquickpalettecolorprovider_p.h"
 
 #include <QtQuick/private/qquickabstractpaletteprovider_p.h>
@@ -56,7 +20,6 @@ class DefaultPalettesProvider : public QQuickAbstractPaletteProvider
 {
 public:
     QPalette defaultPalette() const override { static QPalette p; return p; }
-    QPalette parentPalette() const override  { return defaultPalette();     }
 };
 
 static std::default_delete<const QQuickAbstractPaletteProvider> defaultDeleter() { return {}; }
@@ -73,10 +36,10 @@ const QColor &QQuickPaletteColorProvider::color(QPalette::ColorGroup group, QPal
 
 bool QQuickPaletteColorProvider::setColor(QPalette::ColorGroup g, QPalette::ColorRole r, QColor c)
 {
-    m_requestedPalette.value() = m_resolvedPalette;
+    ensureRequestedPalette();
     m_requestedPalette->setColor(g, r, c);
 
-    return inheritPalette(paletteProvider()->parentPalette());
+    return updateInheritedPalette();
 }
 
 bool QQuickPaletteColorProvider::resetColor(QPalette::ColorGroup group, QPalette::ColorRole role)
@@ -90,7 +53,7 @@ bool QQuickPaletteColorProvider::resetColor(QPalette::ColorGroup group, QPalette
 bool QQuickPaletteColorProvider::fromQPalette(QPalette p)
 {
     m_requestedPalette.value() = std::move(p);
-    return inheritPalette(paletteProvider()->parentPalette());
+    return updateInheritedPalette();
 }
 
 QPalette QQuickPaletteColorProvider::palette() const
@@ -113,7 +76,7 @@ void QQuickPaletteColorProvider::setPaletteProvider(const QQuickAbstractPaletteP
 bool QQuickPaletteColorProvider::copyColorGroup(QPalette::ColorGroup cg,
                                                 const QQuickPaletteColorProvider &p)
 {
-    m_requestedPalette.value() = m_resolvedPalette;
+    ensureRequestedPalette();
 
     auto srcPalette = p.palette();
     for (int roleIndex = QPalette::WindowText; roleIndex < QPalette::NColorRoles; ++roleIndex) {
@@ -123,7 +86,7 @@ bool QQuickPaletteColorProvider::copyColorGroup(QPalette::ColorGroup cg,
         }
     }
 
-    return inheritPalette(paletteProvider()->parentPalette());
+    return updateInheritedPalette();
 }
 
 bool QQuickPaletteColorProvider::reset()
@@ -131,21 +94,59 @@ bool QQuickPaletteColorProvider::reset()
     return fromQPalette(QPalette());
 }
 
-bool QQuickPaletteColorProvider::inheritPalette(const QPalette &p)
+/*! \internal
+    Merge the given \a palette with the existing requested palette, remember
+    that it is the inherited palette (in case updateInheritedPalette() is
+    called later), and update the stored palette (to be returned from
+    \l palette()) if the result is different. Returns whether the stored
+    palette got changed.
+*/
+bool QQuickPaletteColorProvider::inheritPalette(const QPalette &palette)
 {
-    auto inheritedMask = m_requestedPalette.isAllocated() ? m_requestedPalette->resolveMask() | p.resolveMask() : p.resolveMask();
-    QPalette parentPalette = m_requestedPalette.isAllocated() ? m_requestedPalette->resolve(p) : p;
+    m_lastInheritedPalette.value() = palette;
+    return doInheritPalette(palette);
+}
+
+/*! \internal
+    Merge the given \a palette with the existing requested palette, and update
+    the stored palette (to be returned from \l palette()) if the result is
+    different. Returns whether the stored palette got changed.
+*/
+bool QQuickPaletteColorProvider::doInheritPalette(const QPalette &palette)
+{
+    auto inheritedMask = m_requestedPalette.isAllocated() ? m_requestedPalette->resolveMask() | palette.resolveMask()
+                                                          : palette.resolveMask();
+    QPalette parentPalette = m_requestedPalette.isAllocated() ? m_requestedPalette->resolve(palette) : palette;
     parentPalette.setResolveMask(inheritedMask);
 
     auto tmpResolvedPalette = parentPalette.resolve(paletteProvider()->defaultPalette());
     tmpResolvedPalette.setResolveMask(tmpResolvedPalette.resolveMask() | inheritedMask);
 
     bool changed = notEq(tmpResolvedPalette, m_resolvedPalette);
-    if (changed) {
+    if (changed)
         std::swap(tmpResolvedPalette, m_resolvedPalette);
-    }
 
     return changed;
+}
+
+/*! \internal
+    Update the stored palette (to be returned from \l palette()) from the
+    parent palette. Returns whether the stored palette got changed.
+*/
+bool QQuickPaletteColorProvider::updateInheritedPalette()
+{
+    // Use last inherited palette as parentPalette's fallbackPalette: it's useful when parentPalette doesn't exist.
+    const QPalette &p = m_lastInheritedPalette.isAllocated() ? m_lastInheritedPalette.value()
+                                                             : paletteProvider()->defaultPalette();
+    return doInheritPalette(paletteProvider()->parentPalette(p));
+}
+
+void QQuickPaletteColorProvider::ensureRequestedPalette()
+{
+    if (m_requestedPalette.isAllocated())
+        return;
+
+    m_requestedPalette.value() = QPalette();
 }
 
 QT_END_NAMESPACE

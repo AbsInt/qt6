@@ -1,36 +1,13 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the tools applications of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 #include "textsynchronization.h"
 #include "qqmllanguageserver.h"
 
 #include "textdocument.h"
 
 using namespace QLspSpecification;
+using namespace Qt::StringLiterals;
+
 QT_BEGIN_NAMESPACE
 
 TextSynchronization::TextSynchronization(QmlLsp::QQmlCodeModel *codeModel, QObject *parent)
@@ -40,26 +17,26 @@ TextSynchronization::TextSynchronization(QmlLsp::QQmlCodeModel *codeModel, QObje
 
 void TextSynchronization::didCloseTextDocument(const DidCloseTextDocumentParams &params)
 {
-    m_codeModel->closeOpenFile(params.textDocument.uri);
+    m_codeModel->closeOpenFile(QmlLsp::lspUriToQmlUrl(params.textDocument.uri));
 }
 
 void TextSynchronization::didOpenTextDocument(const DidOpenTextDocumentParams &params)
 {
     const TextDocumentItem &item = params.textDocument;
-    const QString fileName = m_codeModel->uri2Path(item.uri);
-
-    m_codeModel->newOpenFile(item.uri, item.version, item.text);
+    const QString fileName = m_codeModel->url2Path(QmlLsp::lspUriToQmlUrl(item.uri));
+    m_codeModel->newOpenFile(QmlLsp::lspUriToQmlUrl(item.uri), item.version,
+                             QString::fromUtf8(item.text));
 }
 
 void TextSynchronization::didDidChangeTextDocument(const DidChangeTextDocumentParams &params)
 {
-    QByteArray uri = params.textDocument.uri;
-    const QString fileName = m_codeModel->uri2Path(uri);
-    auto openDoc = m_codeModel->openDocumentByUri(uri);
+    QByteArray url = QmlLsp::lspUriToQmlUrl(params.textDocument.uri);
+    const QString fileName = m_codeModel->url2Path(url);
+    auto openDoc = m_codeModel->openDocumentByUrl(url);
     std::shared_ptr<Utils::TextDocument> document = openDoc.textDocument;
     if (!document) {
         qCWarning(lspServerLog) << "Ingnoring changes to non open or closed document"
-                                << QString::fromUtf8(uri);
+                                << QString::fromUtf8(url);
         return;
     }
     const auto &changes = params.contentChanges;
@@ -67,7 +44,7 @@ void TextSynchronization::didDidChangeTextDocument(const DidChangeTextDocumentPa
         QMutexLocker l(document->mutex());
         for (const auto &change : changes) {
             if (!change.range) {
-                document->setPlainText(change.text);
+                document->setPlainText(QString::fromUtf8(change.text));
                 continue;
             }
 
@@ -79,12 +56,14 @@ void TextSynchronization::didDidChangeTextDocument(const DidChangeTextDocumentPa
             const int end =
                     document->findBlockByNumber(rangeEnd.line).position() + rangeEnd.character;
 
-            document->setPlainText(
-                    document->toPlainText().replace(start, end - start, change.text));
+            document->setPlainText(document->toPlainText().replace(start, end - start,
+                                                                   QString::fromUtf8(change.text)));
         }
         document->setVersion(params.textDocument.version);
+        qCDebug(lspServerLog).noquote()
+                << "text is\n:----------" << document->toPlainText() << "\n_________";
     }
-    m_codeModel->addOpenToUpdate(uri);
+    m_codeModel->addOpenToUpdate(url);
     m_codeModel->openNeedUpdate();
 }
 
@@ -105,7 +84,7 @@ void TextSynchronization::registerHandlers(QLanguageServer *server, QLanguageSer
 
 QString TextSynchronization::name() const
 {
-    return u"TextSynchonization"_qs;
+    return u"TextSynchonization"_s;
 }
 
 void TextSynchronization::setupCapabilities(const QLspSpecification::InitializeParams &,

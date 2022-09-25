@@ -1,43 +1,7 @@
-/****************************************************************************
-**
-** Copyright (C) 2017 The Qt Company Ltd.
-** Copyright (C) 2014 BlackBerry Limited. All rights reserved.
-** Copyright (C) 2016 Richard J. Moore <rich@kde.org>
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtNetwork module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2017 The Qt Company Ltd.
+// Copyright (C) 2014 BlackBerry Limited. All rights reserved.
+// Copyright (C) 2016 Richard J. Moore <rich@kde.org>
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 /****************************************************************************
 **
@@ -80,6 +44,8 @@
 #include <algorithm>
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 /*
     Note to maintainer:
@@ -583,8 +549,8 @@ struct LibGreaterThan
     typedef bool result_type;
     result_type operator()(QStringView lhs, QStringView rhs) const
     {
-        const auto lhsparts = lhs.split(QLatin1Char('.'));
-        const auto rhsparts = rhs.split(QLatin1Char('.'));
+        const auto lhsparts = lhs.split(u'.');
+        const auto rhsparts = rhs.split(u'.');
         Q_ASSERT(lhsparts.count() > 1 && rhsparts.count() > 1);
 
         // note: checking rhs < lhs, the same as lhs > rhs
@@ -615,8 +581,7 @@ static QStringList libraryPathList()
 {
     QStringList paths;
 #  ifdef Q_OS_DARWIN
-    paths = QString::fromLatin1(qgetenv("DYLD_LIBRARY_PATH"))
-            .split(QLatin1Char(':'), Qt::SkipEmptyParts);
+    paths = QString::fromLatin1(qgetenv("DYLD_LIBRARY_PATH")).split(u':', Qt::SkipEmptyParts);
 
     // search in .app/Contents/Frameworks
     UInt32 packageType;
@@ -627,15 +592,14 @@ static QStringList libraryPathList()
         paths << bundleUrl.resolved(frameworksUrl).path();
     }
 #  else
-    paths = QString::fromLatin1(qgetenv("LD_LIBRARY_PATH"))
-            .split(QLatin1Char(':'), Qt::SkipEmptyParts);
+    paths = QString::fromLatin1(qgetenv("LD_LIBRARY_PATH")).split(u':', Qt::SkipEmptyParts);
 #  endif
-    paths << QLatin1String("/lib") << QLatin1String("/usr/lib") << QLatin1String("/usr/local/lib");
-    paths << QLatin1String("/lib64") << QLatin1String("/usr/lib64") << QLatin1String("/usr/local/lib64");
-    paths << QLatin1String("/lib32") << QLatin1String("/usr/lib32") << QLatin1String("/usr/local/lib32");
+    paths << "/lib"_L1 << "/usr/lib"_L1 << "/usr/local/lib"_L1;
+    paths << "/lib64"_L1 << "/usr/lib64"_L1 << "/usr/local/lib64"_L1;
+    paths << "/lib32"_L1 << "/usr/lib32"_L1 << "/usr/local/lib32"_L1;
 
 #if defined(Q_OS_ANDROID)
-    paths << QLatin1String("/system/lib");
+    paths << "/system/lib"_L1;
 #elif defined(Q_OS_LINUX)
     // discover paths of already loaded libraries
     QDuplicateTracker<QString> loadedPaths;
@@ -647,7 +611,7 @@ static QStringList libraryPathList()
 }
 
 Q_NEVER_INLINE
-static QStringList findAllLibs(QLatin1String filter)
+static QStringList findAllLibs(QLatin1StringView filter)
 {
     const QStringList paths = libraryPathList();
     QStringList found;
@@ -659,7 +623,7 @@ static QStringList findAllLibs(QLatin1String filter)
 
         std::sort(entryList.begin(), entryList.end(), LibGreaterThan());
         for (const QString &entry : qAsConst(entryList))
-            found << path + QLatin1Char('/') + entry;
+            found << path + u'/' + entry;
     }
 
     return found;
@@ -667,12 +631,12 @@ static QStringList findAllLibs(QLatin1String filter)
 
 static QStringList findAllLibSsl()
 {
-    return findAllLibs(QLatin1String("libssl.*"));
+    return findAllLibs("libssl.*"_L1);
 }
 
 static QStringList findAllLibCrypto()
 {
-    return findAllLibs(QLatin1String("libcrypto.*"));
+    return findAllLibs("libcrypto.*"_L1);
 }
 # endif
 
@@ -682,7 +646,7 @@ struct LoadedOpenSsl {
     std::unique_ptr<QSystemLibrary> ssl, crypto;
 };
 
-static bool tryToLoadOpenSslWin32Library(QLatin1String ssleay32LibName, QLatin1String libeay32LibName, LoadedOpenSsl &result)
+static bool tryToLoadOpenSslWin32Library(QLatin1StringView ssleay32LibName, QLatin1StringView libeay32LibName, LoadedOpenSsl &result)
 {
     auto ssleay32 = std::make_unique<QSystemLibrary>(ssleay32LibName);
     if (!ssleay32->load(false)) {
@@ -723,8 +687,8 @@ static LoadedOpenSsl loadOpenSsl()
 #define QT_SSL_SUFFIX
 #endif
 
-    tryToLoadOpenSslWin32Library(QLatin1String("libssl-" QT_OPENSSL_VERSION QT_SSL_SUFFIX),
-                                 QLatin1String("libcrypto-" QT_OPENSSL_VERSION QT_SSL_SUFFIX), result);
+    tryToLoadOpenSslWin32Library("libssl-" QT_OPENSSL_VERSION QT_SSL_SUFFIX ""_L1,
+                                 "libcrypto-" QT_OPENSSL_VERSION QT_SSL_SUFFIX ""_L1, result);
 
 #undef QT_SSL_SUFFIX
     return result;
@@ -781,8 +745,8 @@ static LoadedOpenSsl loadOpenSsl()
 #endif
 #if defined(SHLIB_VERSION_NUMBER) && !defined(Q_OS_QNX) // on QNX, the libs are always libssl.so and libcrypto.so
     // first attempt: the canonical name is libssl.so.<SHLIB_VERSION_NUMBER>
-    libssl->setFileNameAndVersion(QLatin1String("ssl"), QLatin1String(SHLIB_VERSION_NUMBER));
-    libcrypto->setFileNameAndVersion(QLatin1String("crypto"), QLatin1String(SHLIB_VERSION_NUMBER));
+    libssl->setFileNameAndVersion("ssl"_L1, SHLIB_VERSION_NUMBER ""_L1);
+    libcrypto->setFileNameAndVersion("crypto"_L1, SHLIB_VERSION_NUMBER ""_L1);
     if (libcrypto->load() && libssl->load()) {
         // libssl.so.<SHLIB_VERSION_NUMBER> and libcrypto.so.<SHLIB_VERSION_NUMBER> found
         return result;
@@ -810,11 +774,11 @@ static LoadedOpenSsl loadOpenSsl()
 
     static QString suffix = QString::fromLatin1(openSSLSuffix("_1_1"));
 
-    libssl->setFileNameAndVersion(QLatin1String("ssl") + suffix, -1);
-    libcrypto->setFileNameAndVersion(QLatin1String("crypto") + suffix, -1);
+    libssl->setFileNameAndVersion("ssl"_L1 + suffix, -1);
+    libcrypto->setFileNameAndVersion("crypto"_L1 + suffix, -1);
 # else
-    libssl->setFileNameAndVersion(QLatin1String("ssl"), -1);
-    libcrypto->setFileNameAndVersion(QLatin1String("crypto"), -1);
+    libssl->setFileNameAndVersion("ssl"_L1, -1);
+    libcrypto->setFileNameAndVersion("crypto"_L1, -1);
 # endif
     if (libcrypto->load() && libssl->load()) {
         // libssl.so.0 and libcrypto.so.0 found
@@ -868,9 +832,9 @@ static LoadedOpenSsl loadOpenSsl()
 }
 #endif
 
-static QBasicMutex symbolResolveMutex;
-static QBasicAtomicInt symbolsResolved = Q_BASIC_ATOMIC_INITIALIZER(false);
-static bool triedToResolveSymbols = false;
+Q_CONSTINIT static QBasicMutex symbolResolveMutex;
+Q_CONSTINIT static QBasicAtomicInt symbolsResolved = Q_BASIC_ATOMIC_INITIALIZER(false);
+Q_CONSTINIT static bool triedToResolveSymbols = false;
 
 bool q_resolveOpenSslSymbols()
 {

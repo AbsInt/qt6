@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the Qt Quick Controls 2 module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2020 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 /*
   Note: The qdoc comments for QMacStyle are contained in
@@ -1277,24 +1241,24 @@ bool QMacStylePrivate::CocoaControl::getCocoaButtonTypeAndBezelStyle(NSButtonTyp
 {
     switch (type) {
     case Button_CheckBox:
-        *buttonType = NSSwitchButton;
-        *bezelStyle = NSRegularSquareBezelStyle;
+        *buttonType = NSButtonTypeSwitch;
+        *bezelStyle = NSBezelStyleRegularSquare;
         break;
     case Button_Disclosure:
-        *buttonType = NSOnOffButton;
-        *bezelStyle = NSDisclosureBezelStyle;
+        *buttonType = NSButtonTypeOnOff;
+        *bezelStyle = NSBezelStyleDisclosure;
         break;
     case Button_RadioButton:
-        *buttonType = NSRadioButton;
-        *bezelStyle = NSRegularSquareBezelStyle;
+        *buttonType = NSButtonTypeRadio;
+        *bezelStyle = NSBezelStyleRegularSquare;
         break;
     case Button_SquareButton:
-        *buttonType = NSPushOnPushOffButton;
-        *bezelStyle = NSShadowlessSquareBezelStyle;
+        *buttonType = NSButtonTypePushOnPushOff;
+        *bezelStyle = NSBezelStyleShadowlessSquare;
         break;
     case Button_PushButton:
-        *buttonType = NSPushOnPushOffButton;
-        *bezelStyle = NSRoundedBezelStyle;
+        *buttonType = NSButtonTypePushOnPushOff;
+        *bezelStyle = NSBezelStyleRounded;
         break;
     default:
         return false;
@@ -1613,8 +1577,8 @@ NSCell *QMacStylePrivate::cocoaCell(CocoaControl cocoaControl) const
             break;
         case Button_Disclosure: {
             NSButtonCell *bc = [[NSButtonCell alloc] init];
-            bc.buttonType = NSOnOffButton;
-            bc.bezelStyle = NSDisclosureBezelStyle;
+            bc.buttonType = NSButtonTypeOnOff;
+            bc.bezelStyle = NSBezelStyleDisclosure;
             cell = bc;
             break;
         }
@@ -2479,7 +2443,7 @@ QPixmap QMacStyle::standardPixmap(StandardPixmap standardPixmap, const QStyleOpt
             size = 64;
             break;
     }
-    return icon.pixmap(opt->window, QSize(size, size));
+    return icon.pixmap(QSize(size, size), opt->window->devicePixelRatio());
 }
 
 void QMacStyle::drawPrimitive(PrimitiveElement pe, const QStyleOption *opt, QPainter *p) const
@@ -2780,8 +2744,8 @@ void QMacStyle::drawPrimitive(PrimitiveElement pe, const QStyleOption *opt, QPai
         const auto cw = QMacStylePrivate::CocoaControl(ct, cs);
         auto *tb = static_cast<NSButton *>(d->cocoaControl(cw));
         tb.enabled = isEnabled;
-        tb.state = (opt->state & State_NoChange) ? NSMixedState :
-                   (opt->state & State_On) ? NSOnState : NSOffState;
+        tb.state = (opt->state & State_NoChange) ? NSControlStateValueMixed :
+                   (opt->state & State_On) ? NSControlStateValueOn : NSControlStateValueOff;
         [tb highlight:isPressed];
         const auto vOffset = [=] {
             // As measured
@@ -2804,7 +2768,7 @@ void QMacStyle::drawPrimitive(PrimitiveElement pe, const QStyleOption *opt, QPai
             break;
         const auto cw = QMacStylePrivate::CocoaControl(QMacStylePrivate::Button_Disclosure, QStyleHelper::SizeLarge);
         NSButtonCell *triangleCell = static_cast<NSButtonCell *>(d->cocoaCell(cw));
-        [triangleCell setState:(opt->state & State_Open) ? NSOnState : NSOffState];
+        [triangleCell setState:(opt->state & State_Open) ? NSControlStateValueOn : NSControlStateValueOff];
 //        bool viewHasFocus = (w && w->hasFocus()) || (opt->state & State_HasFocus);
         bool viewHasFocus = false;
         [triangleCell setBackgroundStyle:((opt->state & State_Selected) && viewHasFocus) ? NSBackgroundStyleDark : NSBackgroundStyleLight];
@@ -3023,7 +2987,8 @@ void QMacStyle::drawControl(ControlElement ce, const QStyleOption *opt, QPainter
                 if (opt->state & State_Enabled)
                     mode = QIcon::Normal;
                 int iconExtent = proxy()->pixelMetric(PM_SmallIconSize);
-                QPixmap pixmap = header->icon.pixmap(opt->window, QSize(iconExtent, iconExtent), mode);
+                QPixmap pixmap = header->icon.pixmap(QSize(iconExtent, iconExtent),
+                                                     opt->window->devicePixelRatio(), mode);
 
                 QRect pixr = header->rect;
                 pixr.setY(header->rect.center().y() - (pixmap.height() / pixmap.devicePixelRatio() - 1) / 2);
@@ -3074,9 +3039,9 @@ void QMacStyle::drawControl(ControlElement ce, const QStyleOption *opt, QPainter
                                                                             : QIcon::Disabled;
                         QIcon::State iconState = (tb->state & State_On) ? QIcon::On
                                                                          : QIcon::Off;
-                        QPixmap pixmap = tb->icon.pixmap(opt->window,
-                                                         tb->rect.size().boundedTo(tb->iconSize),
-                                                         iconMode, iconState);
+                        QPixmap pixmap = tb->icon.pixmap(tb->rect.size().boundedTo(tb->iconSize),
+                                                         opt->window->devicePixelRatio(), iconMode,
+                                                         iconState);
 
                         // Draw the text if it's needed.
                         if (tb->toolButtonStyle != Qt::ToolButtonIconOnly) {
@@ -3180,7 +3145,7 @@ void QMacStyle::drawControl(ControlElement ce, const QStyleOption *opt, QPainter
 
             pb.enabled = isEnabled;
             [pb highlight:isPressed];
-            pb.state = isHighlighted && !isPressed ? NSOnState : NSOffState;
+            pb.state = isHighlighted && !isPressed ? NSControlStateValueOn : NSControlStateValueOff;
             d->drawNSViewInRect(pb, frameRect, p, ^(CGContextRef, const CGRect &r) {
                 QMacAutoReleasePool pool;
                 [pb.cell drawBezelWithFrame:r inView:pb.superview];
@@ -3247,7 +3212,8 @@ void QMacStyle::drawControl(ControlElement ce, const QStyleOption *opt, QPainter
                     QIcon::State state = QIcon::Off;
                     if (btn.state & State_On)
                         state = QIcon::On;
-                    QPixmap pixmap = btn.icon.pixmap(opt->window, btn.iconSize, mode, state);
+                    QPixmap pixmap = btn.icon.pixmap(btn.iconSize, opt->window->devicePixelRatio(),
+                                                     mode, state);
                     int pixmapWidth = pixmap.width() / pixmap.devicePixelRatio();
                     int pixmapHeight = pixmap.height() / pixmap.devicePixelRatio();
                     contentW += pixmapWidth + QMacStylePrivate::PushButtonContentPadding;
@@ -3376,7 +3342,7 @@ void QMacStyle::drawControl(ControlElement ce, const QStyleOption *opt, QPainter
             pb.enabled = isEnabled;
             [pb highlight:isPressed];
             // Set off state when inactive. See needsInactiveHack for when it's selected
-            pb.state = (isActive && isSelected && !isPressed) ? NSOnState : NSOffState;
+            pb.state = (isActive && isSelected && !isPressed) ? NSControlStateValueOn : NSControlStateValueOff;
 
             const auto drawBezelBlock = ^(CGContextRef ctx, const CGRect &r) {
                 QMacAutoReleasePool pool;
@@ -3681,7 +3647,7 @@ void QMacStyle::drawControl(ControlElement ce, const QStyleOption *opt, QPainter
 //                    iconSize = comboBox->iconSize();
 //                }
 //#endif
-                QPixmap pixmap = mi->icon.pixmap(opt->window, iconSize, mode);
+                QPixmap pixmap = mi->icon.pixmap(iconSize, opt->window->devicePixelRatio(), mode);
                 int pixw = pixmap.width() / pixmap.devicePixelRatio();
                 int pixh = pixmap.height() / pixmap.devicePixelRatio();
                 QRect cr(xpos, mi->rect.y(), checkcol, mi->rect.height());
@@ -3787,10 +3753,12 @@ void QMacStyle::drawControl(ControlElement ce, const QStyleOption *opt, QPainter
             if (!mi->icon.isNull()) {
                 int iconExtent = proxy()->pixelMetric(PM_SmallIconSize);
                 drawItemPixmap(p, mi->rect,
-                                  Qt::AlignCenter | Qt::TextHideMnemonic | Qt::TextDontClip
-                                  | Qt::TextSingleLine,
-                                  mi->icon.pixmap(opt->window, QSize(iconExtent, iconExtent),
-                          (mi->state & State_Enabled) ? QIcon::Normal : QIcon::Disabled));
+                               Qt::AlignCenter | Qt::TextHideMnemonic | Qt::TextDontClip
+                                       | Qt::TextSingleLine,
+                               mi->icon.pixmap(QSize(iconExtent, iconExtent),
+                                               opt->window->devicePixelRatio(),
+                                               (mi->state & State_Enabled) ? QIcon::Normal
+                                                                           : QIcon::Disabled));
             } else {
                 drawItemText(p, mi->rect,
                                 Qt::AlignCenter | Qt::TextHideMnemonic | Qt::TextDontClip
@@ -4935,7 +4903,10 @@ void QMacStyle::drawComplexControl(ComplexControl cc, const QStyleOptionComplex 
                     const auto iconPos = tr.x() - titlebar->icon.actualSize(iconSize).width() - qRound(titleBarIconTitleSpacing);
                     // Only render the icon if it'll be fully visible
                     if (iconPos < tr.right() - titleBarIconTitleSpacing)
-                        p->drawPixmap(iconPos, tr.y(), titlebar->icon.pixmap(opt->window, iconSize, QIcon::Normal));
+                        p->drawPixmap(iconPos, tr.y(),
+                                      titlebar->icon.pixmap(iconSize,
+                                                            opt->window->devicePixelRatio(),
+                                                            QIcon::Normal));
                 }
 
                 if (!titlebar->text.isEmpty())
@@ -5019,12 +4990,12 @@ void QMacStyle::drawComplexControl(ComplexControl cc, const QStyleOptionComplex 
                         const auto cs = d->effectiveAquaSizeConstrain(opt);
                         const auto cw = QMacStylePrivate::CocoaControl(ct, cs);
                         auto *pb = static_cast<NSButton *>(d->cocoaControl(cw));
-                        pb.bezelStyle = NSShadowlessSquareBezelStyle; // TODO Use NSTexturedRoundedBezelStyle in the future.
+                        pb.bezelStyle = NSBezelStyleShadowlessSquare; // TODO Use NSTexturedRoundedBezelStyle in the future.
                         pb.frame = opt->rect.toCGRect();
-                        pb.buttonType = NSPushOnPushOffButton;
+                        pb.buttonType = NSButtonTypePushOnPushOff;
                         pb.enabled = isEnabled;
                         [pb highlight:isPressed];
-                        pb.state = isHighlighted && !isPressed ? NSOnState : NSOffState;
+                        pb.state = isHighlighted && !isPressed ? NSControlStateValueOn : NSControlStateValueOff;
                         const auto buttonRect = proxy()->subControlRect(cc, tb, SC_ToolButton);
                         d->drawNSViewInRect(pb, buttonRect, p, ^(CGContextRef, const CGRect &rect) {
                             QMacAutoReleasePool pool;

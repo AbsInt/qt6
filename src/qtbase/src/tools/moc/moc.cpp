@@ -1,31 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Copyright (C) 2019 Olivier Goffart <ogoffart@woboq.com>
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the tools applications of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// Copyright (C) 2019 Olivier Goffart <ogoffart@woboq.com>
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "moc.h"
 #include "generator.h"
@@ -42,6 +17,8 @@
 #include <private/qduplicatetracker_p.h>
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 // only moc needs this function
 static QByteArray normalizeType(const QByteArray &ba)
@@ -1111,7 +1088,6 @@ void Moc::generate(FILE *out, FILE *jsonOutput)
     if (classList.size() && classList.constFirst().classname == "Qt")
         fprintf(out, "#include <QtCore/qobject.h>\n");
 
-    fprintf(out, "#include <QtCore/qbytearray.h>\n"); // For QByteArrayData
     fprintf(out, "#include <QtCore/qmetatype.h>\n");  // For QMetaType::Type
     if (mustIncludeQPluginH)
         fprintf(out, "#include <QtCore/qplugin.h>\n");
@@ -1130,6 +1106,12 @@ void Moc::generate(FILE *out, FILE *jsonOutput)
             " much.)\"\n", QT_VERSION_STR);
     fprintf(out, "#endif\n\n");
 
+#if QT_VERSION <= QT_VERSION_CHECK(7, 0, 0)
+    fprintf(out, "#ifndef Q_CONSTINIT\n"
+            "#define Q_CONSTINIT\n"
+            "#endif\n\n");
+#endif
+
     fprintf(out, "QT_BEGIN_MOC_NAMESPACE\n");
     fprintf(out, "QT_WARNING_PUSH\n");
     fprintf(out, "QT_WARNING_DISABLE_DEPRECATED\n");
@@ -1146,8 +1128,8 @@ void Moc::generate(FILE *out, FILE *jsonOutput)
 
     if (jsonOutput) {
         QJsonObject mocData;
-        mocData[QLatin1String("outputRevision")] = mocOutputRevision;
-        mocData[QLatin1String("inputFile")] = QLatin1String(fn.constData());
+        mocData["outputRevision"_L1] = mocOutputRevision;
+        mocData["inputFile"_L1] = QLatin1StringView(fn.constData());
 
         QJsonArray classesJsonFormatted;
 
@@ -1155,7 +1137,7 @@ void Moc::generate(FILE *out, FILE *jsonOutput)
             classesJsonFormatted.append(cdef.toJson());
 
         if (!classesJsonFormatted.isEmpty())
-            mocData[QLatin1String("classes")] = classesJsonFormatted;
+            mocData["classes"_L1] = classesJsonFormatted;
 
         QJsonDocument jsonDoc(mocData);
         fputs(jsonDoc.toJson().constData(), jsonOutput);
@@ -1923,19 +1905,19 @@ void Moc::checkProperties(ClassDef *cdef)
 QJsonObject ClassDef::toJson() const
 {
     QJsonObject cls;
-    cls[QLatin1String("className")] = QString::fromUtf8(classname.constData());
-    cls[QLatin1String("qualifiedClassName")] = QString::fromUtf8(qualified.constData());
+    cls["className"_L1] = QString::fromUtf8(classname.constData());
+    cls["qualifiedClassName"_L1] = QString::fromUtf8(qualified.constData());
 
     QJsonArray classInfos;
     for (const auto &info: qAsConst(classInfoList)) {
         QJsonObject infoJson;
-        infoJson[QLatin1String("name")] = QString::fromUtf8(info.name);
-        infoJson[QLatin1String("value")] = QString::fromUtf8(info.value);
+        infoJson["name"_L1] = QString::fromUtf8(info.name);
+        infoJson["value"_L1] = QString::fromUtf8(info.value);
         classInfos.append(infoJson);
     }
 
     if (classInfos.size())
-        cls[QLatin1String("classInfos")] = classInfos;
+        cls["classInfos"_L1] = classInfos;
 
     const auto appendFunctions = [&cls](const QString &type, const QList<FunctionDef> &funcs) {
         QJsonArray jsonFuncs;
@@ -1947,10 +1929,10 @@ QJsonObject ClassDef::toJson() const
             cls[type] = jsonFuncs;
     };
 
-    appendFunctions(QLatin1String("signals"), signalList);
-    appendFunctions(QLatin1String("slots"), slotList);
-    appendFunctions(QLatin1String("constructors"), constructorList);
-    appendFunctions(QLatin1String("methods"), methodList);
+    appendFunctions("signals"_L1, signalList);
+    appendFunctions("slots"_L1, slotList);
+    appendFunctions("constructors"_L1, constructorList);
+    appendFunctions("methods"_L1, methodList);
 
     QJsonArray props;
 
@@ -1958,14 +1940,14 @@ QJsonObject ClassDef::toJson() const
         props.append(propDef.toJson());
 
     if (!props.isEmpty())
-        cls[QLatin1String("properties")] = props;
+        cls["properties"_L1] = props;
 
     if (hasQObject)
-        cls[QLatin1String("object")] = true;
+        cls["object"_L1] = true;
     if (hasQGadget)
-        cls[QLatin1String("gadget")] = true;
+        cls["gadget"_L1] = true;
     if (hasQNamespace)
-        cls[QLatin1String("namespace")] = true;
+        cls["namespace"_L1] = true;
 
     QJsonArray superClasses;
 
@@ -1973,33 +1955,33 @@ QJsonObject ClassDef::toJson() const
         const auto name = super.first;
         const auto access = super.second;
         QJsonObject superCls;
-        superCls[QLatin1String("name")] = QString::fromUtf8(name);
+        superCls["name"_L1] = QString::fromUtf8(name);
         FunctionDef::accessToJson(&superCls, access);
         superClasses.append(superCls);
     }
 
     if (!superClasses.isEmpty())
-        cls[QLatin1String("superClasses")] = superClasses;
+        cls["superClasses"_L1] = superClasses;
 
     QJsonArray enums;
     for (const EnumDef &enumDef: qAsConst(enumList))
         enums.append(enumDef.toJson(*this));
     if (!enums.isEmpty())
-        cls[QLatin1String("enums")] = enums;
+        cls["enums"_L1] = enums;
 
     QJsonArray ifaces;
     for (const QList<Interface> &ifaceList : interfaceList) {
         QJsonArray jsonList;
         for (const Interface &iface: ifaceList) {
             QJsonObject ifaceJson;
-            ifaceJson[QLatin1String("id")] = QString::fromUtf8(iface.interfaceId);
-            ifaceJson[QLatin1String("className")] = QString::fromUtf8(iface.className);
+            ifaceJson["id"_L1] = QString::fromUtf8(iface.interfaceId);
+            ifaceJson["className"_L1] = QString::fromUtf8(iface.className);
             jsonList.append(ifaceJson);
         }
         ifaces.append(jsonList);
     }
     if (!ifaces.isEmpty())
-        cls[QLatin1String("interfaces")] = ifaces;
+        cls["interfaces"_L1] = ifaces;
 
     return cls;
 }
@@ -2007,22 +1989,22 @@ QJsonObject ClassDef::toJson() const
 QJsonObject FunctionDef::toJson() const
 {
     QJsonObject fdef;
-    fdef[QLatin1String("name")] = QString::fromUtf8(name);
+    fdef["name"_L1] = QString::fromUtf8(name);
     if (!tag.isEmpty())
-        fdef[QLatin1String("tag")] = QString::fromUtf8(tag);
-    fdef[QLatin1String("returnType")] = QString::fromUtf8(normalizedType);
+        fdef["tag"_L1] = QString::fromUtf8(tag);
+    fdef["returnType"_L1] = QString::fromUtf8(normalizedType);
 
     QJsonArray args;
     for (const ArgumentDef &arg: arguments)
         args.append(arg.toJson());
 
     if (!args.isEmpty())
-        fdef[QLatin1String("arguments")] = args;
+        fdef["arguments"_L1] = args;
 
     accessToJson(&fdef, access);
 
     if (revision > 0)
-        fdef[QLatin1String("revision")] = revision;
+        fdef["revision"_L1] = revision;
 
     return fdef;
 }
@@ -2030,30 +2012,30 @@ QJsonObject FunctionDef::toJson() const
 void FunctionDef::accessToJson(QJsonObject *obj, FunctionDef::Access acs)
 {
     switch (acs) {
-    case Private: (*obj)[QLatin1String("access")] = QLatin1String("private"); break;
-    case Public: (*obj)[QLatin1String("access")] = QLatin1String("public"); break;
-    case Protected: (*obj)[QLatin1String("access")] = QLatin1String("protected"); break;
+    case Private: (*obj)["access"_L1] = "private"_L1; break;
+    case Public: (*obj)["access"_L1] = "public"_L1; break;
+    case Protected: (*obj)["access"_L1] = "protected"_L1; break;
     }
 }
 
 QJsonObject ArgumentDef::toJson() const
 {
     QJsonObject arg;
-    arg[QLatin1String("type")] = QString::fromUtf8(normalizedType);
+    arg["type"_L1] = QString::fromUtf8(normalizedType);
     if (!name.isEmpty())
-        arg[QLatin1String("name")] = QString::fromUtf8(name);
+        arg["name"_L1] = QString::fromUtf8(name);
     return arg;
 }
 
 QJsonObject PropertyDef::toJson() const
 {
     QJsonObject prop;
-    prop[QLatin1String("name")] = QString::fromUtf8(name);
-    prop[QLatin1String("type")] = QString::fromUtf8(type);
+    prop["name"_L1] = QString::fromUtf8(name);
+    prop["type"_L1] = QString::fromUtf8(type);
 
     const auto jsonify = [&prop](const char *str, const QByteArray &member) {
         if (!member.isEmpty())
-            prop[QLatin1String(str)] = QString::fromUtf8(member);
+            prop[QLatin1StringView(str)] = QString::fromUtf8(member);
     };
 
     jsonify("member", member);
@@ -2072,7 +2054,7 @@ QJsonObject PropertyDef::toJson() const
             value = false;
         else
             value = QString::fromUtf8(boolOrString); // function name to query at run-time
-        prop[QLatin1String(str)] = value;
+        prop[QLatin1StringView(str)] = value;
     };
 
     jsonifyBoolOrString("designable", designable);
@@ -2080,12 +2062,12 @@ QJsonObject PropertyDef::toJson() const
     jsonifyBoolOrString("stored", stored);
     jsonifyBoolOrString("user", user);
 
-    prop[QLatin1String("constant")] = constant;
-    prop[QLatin1String("final")] = final;
-    prop[QLatin1String("required")] = required;
-    prop[QLatin1String("index")] = relativeIndex;
+    prop["constant"_L1] = constant;
+    prop["final"_L1] = final;
+    prop["required"_L1] = required;
+    prop["index"_L1] = relativeIndex;
     if (revision > 0)
-        prop[QLatin1String("revision")] = revision;
+        prop["revision"_L1] = revision;
 
     return prop;
 }
@@ -2093,17 +2075,17 @@ QJsonObject PropertyDef::toJson() const
 QJsonObject EnumDef::toJson(const ClassDef &cdef) const
 {
     QJsonObject def;
-    def[QLatin1String("name")] = QString::fromUtf8(name);
+    def["name"_L1] = QString::fromUtf8(name);
     if (!enumName.isEmpty())
-        def[QLatin1String("alias")] = QString::fromUtf8(enumName);
-    def[QLatin1String("isFlag")] = cdef.enumDeclarations.value(name);
-    def[QLatin1String("isClass")] = isEnumClass;
+        def["alias"_L1] = QString::fromUtf8(enumName);
+    def["isFlag"_L1] = cdef.enumDeclarations.value(name);
+    def["isClass"_L1] = isEnumClass;
 
     QJsonArray valueArr;
     for (const QByteArray &value: values)
         valueArr.append(QString::fromUtf8(value));
     if (!valueArr.isEmpty())
-        def[QLatin1String("values")] = valueArr;
+        def["values"_L1] = valueArr;
 
     return def;
 }

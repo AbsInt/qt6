@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtQml module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qqmlproperty.h"
 #include "qqmlproperty_p.h"
@@ -152,8 +116,10 @@ QQmlProperty::QQmlProperty(QObject *obj)
 QQmlProperty::QQmlProperty(QObject *obj, QQmlContext *ctxt)
 : d(new QQmlPropertyPrivate)
 {
-    d->context = ctxt?QQmlContextData::get(ctxt):nullptr;
-    d->engine = ctxt?ctxt->engine():nullptr;
+    if (ctxt) {
+        d->context = QQmlContextData::get(ctxt);
+        d->engine = ctxt->engine();
+    }
     d->initDefault(obj);
 }
 
@@ -204,12 +170,15 @@ QQmlProperty::QQmlProperty(QObject *obj, const QString &name)
 QQmlProperty::QQmlProperty(QObject *obj, const QString &name, QQmlContext *ctxt)
 : d(new QQmlPropertyPrivate)
 {
-    d->context = ctxt?QQmlContextData::get(ctxt):nullptr;
-    d->engine = ctxt?ctxt->engine():nullptr;
+    if (ctxt) {
+        d->context = QQmlContextData::get(ctxt);
+        d->engine = ctxt->engine();
+    }
+
     d->initProperty(obj, name);
     if (!isValid()) {
         d->object = nullptr;
-        d->context = nullptr;
+        d->context.reset();
         d->engine = nullptr;
     }
 }
@@ -226,7 +195,7 @@ QQmlProperty::QQmlProperty(QObject *obj, const QString &name, QQmlEngine *engine
     d->initProperty(obj, name);
     if (!isValid()) {
         d->object = nullptr;
-        d->context = nullptr;
+        d->context.reset();
         d->engine = nullptr;
     }
 }
@@ -243,7 +212,7 @@ QQmlProperty QQmlPropertyPrivate::create(QObject *target, const QString &propert
     d->initProperty(target, propertyName, flags);
     if (!result.isValid()) {
         d->object = nullptr;
-        d->context = nullptr;
+        d->context.reset();
         d->engine = nullptr;
     }
     return result;
@@ -325,8 +294,8 @@ void QQmlPropertyPrivate::initProperty(QObject *obj, const QString &name,
             }
 
             QQmlPropertyData local;
-            QQmlPropertyData *property = currentObject
-                    ? QQmlPropertyCache::property(engine, currentObject, pathName, context, &local)
+            const QQmlPropertyData *property = currentObject
+                    ? QQmlPropertyCache::property(currentObject, pathName, context, &local)
                     : nullptr;
 
             if (!property) {
@@ -406,7 +375,7 @@ void QQmlPropertyPrivate::initProperty(QObject *obj, const QString &name,
         const QString changed = QStringLiteral("Changed");
         if (signalName.endsWith(changed)) {
             const QStringView propName = signalName.first(signalName.length() - changed.length());
-            QQmlPropertyData *d = ddata->propertyCache->property(propName, currentObject, context);
+            const QQmlPropertyData *d = ddata->propertyCache->property(propName, currentObject, context);
             while (d && d->isFunction())
                 d = ddata->propertyCache->overrideData(d);
 
@@ -431,7 +400,7 @@ void QQmlPropertyPrivate::initProperty(QObject *obj, const QString &name,
 
         if (ddata && ddata->propertyCache) {
             // Try method
-            QQmlPropertyData *d = ddata->propertyCache->property(
+            const QQmlPropertyData *d = ddata->propertyCache->property(
                         signalName, currentObject, context);
 
             // ### Qt7: This code treats methods as signals. It should use d->isSignal().
@@ -454,7 +423,7 @@ void QQmlPropertyPrivate::initProperty(QObject *obj, const QString &name,
     }
 
     if (ddata && ddata->propertyCache) {
-        QQmlPropertyData *property = ddata->propertyCache->property(
+        const QQmlPropertyData *property = ddata->propertyCache->property(
                     terminal, currentObject, context);
 
         // Technically, we might find an override that is not a function.
@@ -888,7 +857,7 @@ static void removeOldBinding(QObject *object, QQmlPropertyIndex index, QQmlPrope
     if (!oldBinding)
         return;
 
-    if (valueTypeIndex != -1 && oldBinding->isValueTypeProxy())
+    if (valueTypeIndex != -1 && oldBinding->kind() == QQmlAbstractBinding::ValueTypeProxy)
         oldBinding = static_cast<QQmlValueTypeProxyBinding *>(oldBinding.data())->binding(index);
 
     if (!oldBinding)
@@ -943,9 +912,8 @@ QQmlPropertyPrivate::binding(QObject *object, QQmlPropertyIndex index)
         binding = binding->nextBinding();
 
     if (binding && valueTypeIndex != -1) {
-        if (binding->isValueTypeProxy()) {
+        if (binding->kind() == QQmlAbstractBinding::ValueTypeProxy)
             binding = static_cast<QQmlValueTypeProxyBinding *>(binding)->binding(index);
-        }
     }
 
     return binding;
@@ -960,7 +928,7 @@ void QQmlPropertyPrivate::findAliasTarget(QObject *object, QQmlPropertyIndex bin
         int coreIndex = bindingIndex.coreIndex();
         int valueTypeIndex = bindingIndex.valueTypeIndex();
 
-        QQmlPropertyData *propertyData =
+        const QQmlPropertyData *propertyData =
             data->propertyCache?data->propertyCache->property(coreIndex):nullptr;
         if (propertyData && propertyData->isAlias()) {
             QQmlVMEMetaObject *vme = QQmlVMEMetaObject::getForProperty(object, coreIndex);
@@ -1008,7 +976,7 @@ void QQmlPropertyPrivate::setBinding(QQmlAbstractBinding *binding, BindingFlags 
     int coreIndex = index.coreIndex();
     QQmlData *data = QQmlData::get(object, true);
     if (data->propertyCache) {
-        QQmlPropertyData *propertyData = data->propertyCache->property(coreIndex);
+        const QQmlPropertyData *propertyData = data->propertyCache->property(coreIndex);
         Q_ASSERT(propertyData);
     }
 #endif
@@ -1183,7 +1151,7 @@ QVariant QQmlPropertyPrivate::readValueProperty()
 
         QQmlListProperty<QObject> prop;
         core.readProperty(object, &prop);
-        return QVariant::fromValue(QQmlListReferencePrivate::init(prop, core.propType(), engine));
+        return QVariant::fromValue(QQmlListReferencePrivate::init(prop, core.propType()));
 
     } else if (core.isQObject()) {
 
@@ -1384,11 +1352,11 @@ bool QQmlPropertyPrivate::write(
         } else {
             varType = variantMetaType;
         }
-        QQmlMetaObject valMo = rawMetaObjectForType(enginePriv, varType);
+        QQmlMetaObject valMo = rawMetaObjectForType(varType);
         if (valMo.isNull() || !varType.flags().testFlag(QMetaType::PointerToQObject))
             return false;
         QObject *o = *static_cast<QObject *const *>(val.constData());
-        QQmlMetaObject propMo = rawMetaObjectForType(enginePriv, propertyMetaType);
+        QQmlMetaObject propMo = rawMetaObjectForType(propertyMetaType);
 
         if (o)
             valMo = o;
@@ -1457,50 +1425,54 @@ bool QQmlPropertyPrivate::write(
                 : urlSequence(value);
         return property.writeProperty(object, &urlSeq, flags);
     } else if (property.isQList()) {
-        QQmlMetaObject listType;
-
-        if (enginePriv) {
-            listType = enginePriv->rawMetaObjectForType(QQmlMetaType::listType(propertyMetaType));
-        } else {
-            const QQmlType type = QQmlMetaType::qmlType(QQmlMetaType::listType(propertyMetaType));
-            if (!type.isValid())
+        if (propertyMetaType.flags() & QMetaType::IsQmlList) {
+            QMetaType listValueType = QQmlMetaType::listValueType(propertyMetaType);
+            QQmlMetaObject valueMetaObject = QQmlMetaType::rawMetaObjectForType(listValueType);
+            if (valueMetaObject.isNull())
                 return false;
-            listType = type.baseMetaObject();
-        }
-        if (listType.isNull())
-            return false;
 
-        QQmlListProperty<void> prop;
-        property.readProperty(object, &prop);
+            QQmlListProperty<void> prop;
+            property.readProperty(object, &prop);
 
-        if (!prop.clear)
-            return false;
+            if (!prop.clear)
+                return false;
 
-        prop.clear(&prop);
+            prop.clear(&prop);
 
-        if (variantMetaType == QMetaType::fromType<QQmlListReference>()) {
-            QQmlListReference qdlr = value.value<QQmlListReference>();
+            if (variantMetaType == QMetaType::fromType<QQmlListReference>()) {
+                QQmlListReference qdlr = value.value<QQmlListReference>();
 
-            for (qsizetype ii = 0; ii < qdlr.count(); ++ii) {
-                QObject *o = qdlr.at(ii);
-                if (o && !QQmlMetaObject::canConvert(o, listType))
+                for (qsizetype ii = 0; ii < qdlr.count(); ++ii) {
+                    QObject *o = qdlr.at(ii);
+                    if (o && !QQmlMetaObject::canConvert(o, valueMetaObject))
+                        o = nullptr;
+                    prop.append(&prop, o);
+                }
+            } else if (variantMetaType == QMetaType::fromType<QList<QObject *>>()) {
+                const QList<QObject *> &list = qvariant_cast<QList<QObject *> >(value);
+
+                for (qsizetype ii = 0; ii < list.count(); ++ii) {
+                    QObject *o = list.at(ii);
+                    if (o && !QQmlMetaObject::canConvert(o, valueMetaObject))
+                        o = nullptr;
+                    prop.append(&prop, o);
+                }
+            } else {
+                QObject *o = QQmlMetaType::toQObject(value);
+                if (o && !QQmlMetaObject::canConvert(o, valueMetaObject))
                     o = nullptr;
                 prop.append(&prop, o);
             }
-        } else if (variantMetaType == QMetaType::fromType<QList<QObject *>>()) {
-            const QList<QObject *> &list = qvariant_cast<QList<QObject *> >(value);
-
-            for (qsizetype ii = 0; ii < list.count(); ++ii) {
-                QObject *o = list.at(ii);
-                if (o && !QQmlMetaObject::canConvert(o, listType))
-                    o = nullptr;
-                prop.append(&prop, o);
-            }
+        } else if (variantMetaType == propertyMetaType) {
+            QVariant v = value;
+            property.writeProperty(object, v.data(), flags);
         } else {
-            QObject *o = QQmlMetaType::toQObject(value);
-            if (o && !QQmlMetaObject::canConvert(o, listType))
-                o = nullptr;
-            prop.append(&prop, o);
+            QVariant list(propertyMetaType);
+            const QQmlType type = QQmlMetaType::qmlType(propertyMetaType);
+            const QMetaSequence sequence = type.listMetaSequence();
+            if (sequence.canAddValue())
+                sequence.addValue(list.data(), value.data());
+            property.writeProperty(object, list.data(), flags);
         }
     } else if (variantMetaType == QMetaType::fromType<QJSValue>()) {
         QJSValue jsValue = qvariant_cast<QJSValue>(value);
@@ -1593,19 +1565,13 @@ bool QQmlPropertyPrivate::write(
     return true;
 }
 
-QQmlMetaObject QQmlPropertyPrivate::rawMetaObjectForType(
-            QQmlEnginePrivate *engine, QMetaType metaType)
+QQmlMetaObject QQmlPropertyPrivate::rawMetaObjectForType(QMetaType metaType)
 {
     if (metaType.flags() & QMetaType::PointerToQObject) {
         if (const QMetaObject *metaObject = metaType.metaObject())
             return metaObject;
     }
-    if (engine)
-        return engine->rawMetaObjectForType(metaType);
-    const QQmlType type = QQmlMetaType::qmlType(metaType);
-    if (type.isValid())
-        return QQmlMetaObject(type.baseMetaObject());
-    return QQmlMetaObject();
+    return QQmlMetaType::rawMetaObjectForType(metaType);
 }
 
 /*!
@@ -1853,7 +1819,7 @@ static inline void flush_vme_signal(const QObject *object, int index, bool index
 {
     QQmlData *data = QQmlData::get(object);
     if (data && data->propertyCache) {
-        QQmlPropertyData *property = indexInSignalRange ? data->propertyCache->signal(index)
+        const QQmlPropertyData *property = indexInSignalRange ? data->propertyCache->signal(index)
                                                         : data->propertyCache->method(index);
 
         if (property && property->isVMESignal()) {

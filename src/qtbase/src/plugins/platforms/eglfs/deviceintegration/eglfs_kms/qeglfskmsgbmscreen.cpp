@@ -1,43 +1,7 @@
-/****************************************************************************
-**
-** Copyright (C) 2017 The Qt Company Ltd.
-** Copyright (C) 2015 Pier Luigi Fiorini <pierluigi.fiorini@gmail.com>
-** Copyright (C) 2016 Pelagicore AG
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the plugins of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2017 The Qt Company Ltd.
+// Copyright (C) 2015 Pier Luigi Fiorini <pierluigi.fiorini@gmail.com>
+// Copyright (C) 2016 Pelagicore AG
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qeglfskmsgbmscreen_p.h"
 #include "qeglfskmsgbmdevice_p.h"
@@ -55,6 +19,8 @@
 QT_BEGIN_NAMESPACE
 
 Q_DECLARE_LOGGING_CATEGORY(qLcEglfsKmsDebug)
+
+QMutex QEglFSKmsGbmScreen::m_nonThreadedFlipMutex;
 
 static inline uint32_t drmFormatToGbmFormat(uint32_t drmFormat)
 {
@@ -95,7 +61,7 @@ QEglFSKmsGbmScreen::FrameBuffer *QEglFSKmsGbmScreen::framebufferForBufferObject(
     uint32_t offsets[4] = { 0 };
     uint32_t pixelFormat = gbmFormatToDrmFormat(gbm_bo_get_format(bo));
 
-    QScopedPointer<FrameBuffer> fb(new FrameBuffer);
+    auto fb = std::make_unique<FrameBuffer>();
     qCDebug(qLcEglfsKmsDebug, "Adding FB, size %ux%u, DRM format 0x%x, stride %u, handle %u",
             width, height, pixelFormat, strides[0], handles[0]);
 
@@ -107,8 +73,8 @@ QEglFSKmsGbmScreen::FrameBuffer *QEglFSKmsGbmScreen::framebufferForBufferObject(
         return nullptr;
     }
 
-    gbm_bo_set_user_data(bo, fb.data(), bufferDestroyedHandler);
-    return fb.take();
+    gbm_bo_set_user_data(bo, fb.get(), bufferDestroyedHandler);
+    return fb.release();
 }
 
 QEglFSKmsGbmScreen::QEglFSKmsGbmScreen(QEglFSKmsDevice *device, const QKmsOutput &output, bool headless)
@@ -263,6 +229,18 @@ void QEglFSKmsGbmScreen::ensureModeSet(uint32_t fb)
     }
 }
 
+void QEglFSKmsGbmScreen::nonThreadedPageFlipHandler(int fd,
+                                                    unsigned int sequence,
+                                                    unsigned int tv_sec,
+                                                    unsigned int tv_usec,
+                                                    void *user_data)
+{
+    Q_UNUSED(fd);
+    QEglFSKmsGbmScreen *screen = static_cast<QEglFSKmsGbmScreen *>(user_data);
+    screen->flipFinished();
+    screen->pageFlipped(sequence, tv_sec, tv_usec);
+}
+
 void QEglFSKmsGbmScreen::waitForFlip()
 {
     if (m_headless || m_cloneSource)
@@ -272,12 +250,24 @@ void QEglFSKmsGbmScreen::waitForFlip()
     if (!m_gbm_bo_next)
         return;
 
-    m_flipMutex.lock();
-    device()->eventReader()->startWaitFlip(this, &m_flipMutex, &m_flipCond);
-    m_flipCond.wait(&m_flipMutex);
-    m_flipMutex.unlock();
-
-    flipFinished();
+    QEglFSKmsGbmDevice *dev = static_cast<QEglFSKmsGbmDevice *>(device());
+    if (dev->usesEventReader()) {
+        m_flipMutex.lock();
+        dev->eventReader()->startWaitFlip(this, &m_flipMutex, &m_flipCond);
+        m_flipCond.wait(&m_flipMutex);
+        m_flipMutex.unlock();
+        flipFinished();
+    } else {
+        QMutexLocker lock(&m_nonThreadedFlipMutex);
+        while (m_gbm_bo_next) {
+            drmEventContext drmEvent;
+            memset(&drmEvent, 0, sizeof(drmEvent));
+            drmEvent.version = 2;
+            drmEvent.vblank_handler = nullptr;
+            drmEvent.page_flip_handler = nonThreadedPageFlipHandler;
+            drmHandleEvent(device()->fd(), &drmEvent);
+        }
+    }
 
 #if QT_CONFIG(drm_atomic)
     device()->threadLocalAtomicReset();

@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtNetwork module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qhttpnetworkconnection_p.h"
 #include <private/qabstractsocket_p.h>
@@ -65,6 +29,8 @@
 
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 const int QHttpNetworkConnectionPrivate::defaultHttpChannelCount = 6;
 
@@ -265,8 +231,9 @@ void QHttpNetworkConnectionPrivate::prepareRequest(HttpMessagePair &messagePair)
         const qint64 contentLength = request.contentLength();
         const qint64 uploadDeviceSize = uploadByteDevice->size();
         if (contentLength != -1 && uploadDeviceSize != -1) {
-            // both values known, take the smaller one.
-            request.setContentLength(qMin(uploadDeviceSize, contentLength));
+            // Both values known: use the smaller one.
+            if (uploadDeviceSize < contentLength)
+                request.setContentLength(uploadDeviceSize);
         } else if (contentLength == -1 && uploadDeviceSize != -1) {
             // content length not supplied by user, but the upload device knows it
             request.setContentLength(uploadDeviceSize);
@@ -317,12 +284,12 @@ void QHttpNetworkConnectionPrivate::prepareRequest(HttpMessagePair &messagePair)
     if (value.isEmpty()) {
         QString systemLocale = QLocale::system().name().replace(QChar::fromLatin1('_'),QChar::fromLatin1('-'));
         QString acceptLanguage;
-        if (systemLocale == QLatin1String("C"))
+        if (systemLocale == "C"_L1)
             acceptLanguage = QString::fromLatin1("en,*");
-        else if (systemLocale.startsWith(QLatin1String("en-")))
-            acceptLanguage = systemLocale + QLatin1String(",*");
+        else if (systemLocale.startsWith("en-"_L1))
+            acceptLanguage = systemLocale + ",*"_L1;
         else
-            acceptLanguage = systemLocale + QLatin1String(",en,*");
+            acceptLanguage = systemLocale + ",en,*"_L1;
         request.setHeaderField("Accept-Language", std::move(acceptLanguage).toLatin1());
     }
 
@@ -566,7 +533,7 @@ QHttpNetworkConnectionPrivate::parseRedirectResponse(QHttpNetworkReply *reply)
 
     // Check redirect url protocol
     const QUrl priorUrl(reply->request().url());
-    if (redirectUrl.scheme() == QLatin1String("http") || redirectUrl.scheme() == QLatin1String("https")) {
+    if (redirectUrl.scheme() == "http"_L1 || redirectUrl.scheme() == "https"_L1) {
         switch (reply->request().redirectPolicy()) {
         case QNetworkRequest::NoLessSafeRedirectPolicy:
             // Here we could handle https->http redirects as InsecureProtocolError.

@@ -1,44 +1,7 @@
-/****************************************************************************
-**
-** Copyright (C) 2017 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the Qt Quick Templates 2 module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2017 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qquickicon_p.h"
-#include "qtaggedpointer.h"
 
 #include <private/qqmlcontextdata_p.h>
 #include <private/qqmldata_p.h>
@@ -66,22 +29,7 @@ public:
     int width = 0;
     int height = 0;
     QColor color = Qt::transparent;
-
-    // we want DoCache as the default, and thus as the zero value
-    // so that the tagged pointer can be zero initialized
-    enum CacheStatus : bool { DoCache, SkipCaching };
-    static_assert (DoCache == 0);
-    /* We use a QTaggedPointer here to save space:
-       - Without it, we would need an additional boolean, which due to
-         alignment would increase the class size by sizeof(void *)
-       - The pointer part stores the "owner" of the QQuickIcon, i.e.
-         an object which has an icon property. We need the owner to
-         access its context to resolve relative url's in the way users
-         expect.
-       - The tag bits are used to track whether caching is enabled.
-     */
-    QTaggedPointer<QObject, CacheStatus> ownerAndCache = nullptr;
-
+    bool cache = true;
 };
 
 QQuickIcon::QQuickIcon()
@@ -112,7 +60,7 @@ bool QQuickIcon::operator==(const QQuickIcon &other) const
                             && d->width == other.d->width
                             && d->height == other.d->height
                             && d->color == other.d->color
-                            && d->ownerAndCache == other.d->ownerAndCache);
+                            && d->cache == other.d->cache);
 }
 
 bool QQuickIcon::operator!=(const QQuickIcon &other) const
@@ -258,24 +206,23 @@ void QQuickIcon::resetColor()
 
 bool QQuickIcon::cache() const
 {
-    return d->ownerAndCache.tag() == QQuickIconPrivate::DoCache;
+    return d->cache;
 }
 
 void QQuickIcon::setCache(bool cache)
 {
-    const auto cacheState = cache ? QQuickIconPrivate::DoCache : QQuickIconPrivate::SkipCaching;
-    if ((d->resolveMask & QQuickIconPrivate::CacheResolved) && d->ownerAndCache.tag() == cacheState)
+    if ((d->resolveMask & QQuickIconPrivate::CacheResolved) && d->cache == cache)
         return;
 
     d.detach();
-    d->ownerAndCache.setTag(cacheState);
+    d->cache = cache;
     d->resolveMask |= QQuickIconPrivate::CacheResolved;
 }
 
 void QQuickIcon::resetCache()
 {
     d.detach();
-    d->ownerAndCache.setTag(QQuickIconPrivate::DoCache);
+    d->cache = true;
     d->resolveMask &= ~QQuickIconPrivate::CacheResolved;
 }
 
@@ -302,9 +249,7 @@ QQuickIcon QQuickIcon::resolve(const QQuickIcon &other) const
         resolved.d->color = other.d->color;
 
     if (!(d->resolveMask & QQuickIconPrivate::CacheResolved))
-        resolved.d->ownerAndCache.setTag(other.d->ownerAndCache.tag());
-
-    // owner does not change when resolving an icon
+        resolved.d->cache = other.d->cache;
 
     return resolved;
 }

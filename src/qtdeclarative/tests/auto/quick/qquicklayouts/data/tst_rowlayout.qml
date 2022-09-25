@@ -1,56 +1,11 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:BSD$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** BSD License Usage
-** Alternatively, you may use this file under the terms of the BSD license
-** as follows:
-**
-** "Redistribution and use in source and binary forms, with or without
-** modification, are permitted provided that the following conditions are
-** met:
-**   * Redistributions of source code must retain the above copyright
-**     notice, this list of conditions and the following disclaimer.
-**   * Redistributions in binary form must reproduce the above copyright
-**     notice, this list of conditions and the following disclaimer in
-**     the documentation and/or other materials provided with the
-**     distribution.
-**   * Neither the name of The Qt Company Ltd nor the names of its
-**     contributors may be used to endorse or promote products derived
-**     from this software without specific prior written permission.
-**
-**
-** THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-** "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-** LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-** A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-** OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-** SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-** LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-** DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-** THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-** (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-** OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE."
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2020 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR BSD-3-Clause
 
 import QtQuick 2.2
 import QtTest 1.0
 import QtQuick.Layouts 1.0
+
+import org.qtproject.Test
 
 Item {
     id: container
@@ -322,11 +277,12 @@ Item {
             compare(row.implicitHeight, 6);
             var r2 = row.children[2]
             r2.implicitWidth = 20
-            verify(waitForRendering(row))
+            waitForItemPolished(row)
             compare(row.implicitWidth, 50 + 10 + 20)
             var r3 = rectangle_Component.createObject(container)
             r3.implicitWidth = 30
             r3.parent = row
+            waitForItemPolished(row)
             compare(row.implicitWidth, 50 + 10 + 20 + 30)
             row.destroy()
         }
@@ -443,12 +399,14 @@ Item {
             compare(layout.implicitHeight, 0)
 
             var rect0 = layoutItem_Component.createObject(layout)
+            waitForItemPolished(layout)
             compare(layout.implicitWidth, 20)
             compare(layout.implicitHeight, 20)
 
             var rect1 = layoutItem_Component.createObject(layout)
             rect1.Layout.preferredWidth = 30;
             rect1.Layout.preferredHeight = 30;
+            waitForItemPolished(layout)
             compare(layout.implicitWidth, 50)
             compare(layout.implicitHeight, 30)
 
@@ -458,25 +416,30 @@ Item {
             var rect3 = layoutItem_Component.createObject(col)
             rect3.Layout.fillHeight = true
 
+            waitForItemPolished(layout)
             compare(layout.implicitWidth, 70)
             compare(col.implicitHeight, 40)
             compare(layout.implicitHeight, 40)
 
             rect3.destroy()
             wait(0)     // this will hopefully effectuate the destruction of the object
+            waitForItemPolished(layout)
 
             col.destroy()
             wait(0)
+            waitForItemPolished(layout)
             compare(layout.implicitWidth, 50)
             compare(layout.implicitHeight, 30)
 
             rect0.destroy()
             wait(0)
+            waitForItemPolished(layout)
             compare(layout.implicitWidth, 30)
             compare(layout.implicitHeight, 30)
 
             rect1.destroy()
             wait(0)
+            waitForItemPolished(layout)
             compare(layout.implicitWidth, 0)
             compare(layout.implicitHeight, 0)
         }
@@ -523,7 +486,7 @@ Item {
             var layout = layout_alignment_Component.createObject(container);
             layout.width = 100;
             layout.height = 40;
-
+            waitForItemPolished(layout)
             compare(itemRect(layout.children[0]), [ 0,  0, 20, 40]);
             compare(itemRect(layout.children[1]), [20, 10, 20, 20]);
             compare(itemRect(layout.children[2]), [40,  0, 20, 20]);
@@ -580,7 +543,7 @@ Item {
             layout.children[0].Layout.minimumWidth = data.widthHints[0];
             layout.children[0].Layout.preferredWidth = data.widthHints[1];
             layout.children[0].Layout.maximumWidth = data.widthHints[2];
-            wait(0);    // Trigger processEvents() (allow LayoutRequest to be processed)
+            waitForItemPolished(layout)
             var normalizedResult = [layout.Layout.minimumWidth, layout.implicitWidth, layout.Layout.maximumWidth]
             compare(normalizedResult, data.expected);
             layout.destroy();
@@ -667,6 +630,7 @@ Item {
             child.Layout.preferredWidth = data.childHints[1]
             child.Layout.maximumWidth = data.childHints[2]
 
+            waitForItemPolished(layout)
             var effectiveSizeHintResult = [layout.Layout.minimumWidth, layout.implicitWidth, layout.Layout.maximumWidth]
             compare(effectiveSizeHintResult, data.expected)
             layout.destroy()
@@ -677,38 +641,49 @@ Item {
             var child = layout.children[0].children[0]
 
             child.Layout.minimumWidth = -1
+            waitForItemPolished(layout)
             compare(itemSizeHints(layout), [0, 2, 3])
             child.Layout.preferredWidth = -1
+            waitForItemPolished(layout)
             compare(itemSizeHints(layout), [0, 1, 3])
             child.Layout.maximumWidth = -1
+            waitForItemPolished(layout)
             compare(itemSizeHints(layout), [0, 1, Number.POSITIVE_INFINITY])
             layout.Layout.maximumWidth = 1000
+            waitForItemPolished(layout)
             compare(itemSizeHints(layout), [0, 1, 1000])
             layout.Layout.maximumWidth = -1
+            waitForItemPolished(layout)
             compare(itemSizeHints(layout), [0, 1, Number.POSITIVE_INFINITY])
 
             layout.implicitWidthChangedCount = 0
             child.Layout.minimumWidth = 10
+            waitForItemPolished(layout)
             compare(itemSizeHints(layout), [10, 10, Number.POSITIVE_INFINITY])
             compare(layout.implicitWidthChangedCount, 1)
 
             child.Layout.preferredWidth = 20
+            waitForItemPolished(layout)
             compare(itemSizeHints(layout), [10, 20, Number.POSITIVE_INFINITY])
             compare(layout.implicitWidthChangedCount, 2)
 
             child.Layout.maximumWidth = 30
+            waitForItemPolished(layout)
             compare(itemSizeHints(layout), [10, 20, 30])
             compare(layout.implicitWidthChangedCount, 2)
 
             child.Layout.maximumWidth = 15
+            waitForItemPolished(layout)
             compare(itemSizeHints(layout), [10, 15, 15])
             compare(layout.implicitWidthChangedCount, 3)
 
             child.Layout.maximumWidth = 30
+            waitForItemPolished(layout)
             compare(itemSizeHints(layout), [10, 20, 30])
             compare(layout.implicitWidthChangedCount, 4)
 
             layout.Layout.maximumWidth = 29
+            waitForItemPolished(layout)
             compare(layout.Layout.maximumWidth, 29)
             layout.Layout.maximumWidth = -1
             compare(layout.Layout.maximumWidth, 30)
@@ -769,6 +744,7 @@ Item {
             var r = layout.children[0]
             r.Layout.preferredWidth = 20
             r.Layout.preferredHeight = 30
+            waitForItemPolished(layout)
             compare(layout.implicitWidth, 20)
             compare(layout.implicitHeight, 30)
 
@@ -816,7 +792,7 @@ Item {
                 r.Layout.minimumWidth = data.minimumWidth
             if (data.maximumWidth !== undefined)
                 r.Layout.maximumWidth = data.maximumWidth
-
+            waitForItemPolished(layout)
             layout.width = 100
 
             compare(r.width, data.expectedWidth)
@@ -994,16 +970,21 @@ Item {
             compare(grid.visible, true)     // LAYOUT SHOWN
             compare(grid.implicitWidth, 2);
             child.visible = false
+            waitForItemPolished(layout)
             compare(grid.implicitWidth, 0);
             child.visible = true
+            waitForItemPolished(layout)
             compare(grid.implicitWidth, 2);
 
             grid.visible = false            // LAYOUT HIDDEN
+            waitForItemPolished(layout)
             compare(grid.implicitWidth, 2);
             child.visible = false
             expectFail('', 'If GridLayout is hidden, GridLayout is not notified when child is explicitly hidden')
+            waitForItemPolished(grid)
             compare(grid.implicitWidth, 0);
             child.visible = true
+            waitForItemPolished(grid)
             compare(grid.implicitWidth, 2);
 
             layout.destroy();
@@ -1262,12 +1243,8 @@ Item {
 
         function test_dependentWidth_QTBUG_87253()
         {
-            var warningMsg = new RegExp("Qt Quick Layouts: Detected recursive rearrange. "
-                                      + "Aborting after two iterations.")
-            for (var i = 0; i < 10; ++i) {
-                ignoreWarning(warningMsg)
-            }
             var layout = createTemporaryObject(layout_dependentWidth_QTBUG_87253_Component, container)
+            // Do not crash
             waitForRendering(layout)
         }
 
@@ -1303,5 +1280,50 @@ Item {
             compare(layout.spy.count, 2)
             compare(layout.implicitWidth, 42)
         }
+
+        //---------------------------
+        Component {
+            id: rowlayoutCausesBindingLoop_Component
+            Item {
+                id: root
+                width: 100
+                height: 100
+                property real maxWidth : Math.max(header.implicitWidth, content.implicitWidth)
+
+                RowLayout {
+                    id: header
+                    y: 0
+
+                    Rectangle {
+                        color: "red"
+                        implicitWidth: 10
+                        implicitHeight: 10
+                    }
+                }
+                Rectangle {
+                    id: content
+                    y: 10
+                    implicitWidth: 42
+                    implicitHeight: 10
+                    color: Qt.rgba(root.maxWidth/66, 0, 1, 1)
+                }
+            }
+        }
+        function test_bindingLoop() {
+            var rootItem = createTemporaryObject(rowlayoutCausesBindingLoop_Component, container)
+            waitForRendering(rootItem)
+            var header = rootItem.children[0]
+            var content = rootItem.children[1]
+            var rect = header.children[0]
+            rect.implicitWidth = 20
+            content.implicitWidth = 66
+            waitForItemPolished(header)
+            compare(rootItem.maxWidth, 66)
+
+            // Should not trigger a binding loop
+            verify(!BindingLoopDetector.bindingLoopDetected, "Detected binding loop")
+            BindingLoopDetector.reset()
+        }
     }
+
 }

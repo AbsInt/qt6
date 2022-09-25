@@ -1,35 +1,11 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <QTest>
 
 #include <qhash.h>
 #include <qmap.h>
+#include <qset.h>
 
 #include <algorithm>
 #include <vector>
@@ -37,6 +13,8 @@
 #include <string>
 
 #include <qsemaphore.h>
+
+using namespace Qt::StringLiterals;
 
 class tst_QHash : public QObject
 {
@@ -581,14 +559,40 @@ void tst_QHash::erase()
 */
 void tst_QHash::erase_edge_case()
 {
+    QHashSeed::setDeterministicGlobalSeed();
+    auto resetSeed = qScopeGuard([&]() {
+        QHashSeed::resetRandomGlobalSeed();
+    });
+
     QHash<int, int> h1;
     h1.reserve(2);
-    h1.d->seed = 10230148258692185509ull;
-    h1.insert(3, 4);
-    h1.insert(5, 6);
+    qsizetype capacity = h1.capacity();
+    // Beholden to QHash internals:
+    qsizetype numBuckets = capacity << 1;
+
+    // Find some keys which will both be slotted into the last bucket:
+    int keys[2];
+    int index = 0;
+    for (qsizetype i = 0; i < numBuckets * 4 && index < 2; ++i) {
+        const size_t hash = qHash(i, QHashSeed::globalSeed());
+        const size_t bucketForHash = QHashPrivate::GrowthPolicy::bucketForHash(numBuckets, hash);
+        if (qsizetype(bucketForHash) == numBuckets - 1)
+            keys[index++] = i;
+    }
+    QCOMPARE(index, 2); // Sanity check. If this fails then the test needs an update!
+
+    // As mentioned earlier these are both calculated to be in the last bucket:
+    h1.insert(keys[0], 4);
+    h1.insert(keys[1], 6);
+    // As a sanity-check, make sure that the key we inserted last is the first one (because its
+    // allocation to the last bucket would make it wrap around):
+    // NOTE: If this fails this then this test may need an update!!!
+    QCOMPARE(h1.constBegin().key(), keys[1]);
+    // Then we delete the last entry:
     QHash<int, int>::iterator it1 = h1.begin();
     ++it1;
     it1 = h1.erase(it1);
+    // Now, since we deleted the last entry, the iterator should be at the end():
     QVERIFY(it1 == h1.end());
 }
 
@@ -1625,9 +1629,9 @@ void tst_QHash::rehash_isnt_quadratic()
 {
     // this test should be incredibly slow if rehash() is quadratic
     for (int j = 0; j < 5; ++j) {
-        QMultiHash<int, int> testHash;
+        QHash<int, int> testHash;
         for (int i = 0; i < 500000; ++i)
-            testHash.insert(1, 1);
+            testHash.insert(i, 1);
     }
 }
 
@@ -2744,7 +2748,7 @@ void tst_QHash::lookupUsingKeyIterator()
     qsizetype rehashLimit = minCapacity == 64 ? 63 : 8;
 
     for (char16_t c = u'a'; c <= u'a' + rehashLimit; ++c)
-        hash.insert(QString(QChar(c)), u"h"_qs);
+        hash.insert(QString(QChar(c)), u"h"_s);
 
     for (auto it = hash.keyBegin(), end = hash.keyEnd(); it != end; ++it)
         QVERIFY(!hash[*it].isEmpty());

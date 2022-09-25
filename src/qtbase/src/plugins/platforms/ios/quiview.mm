@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the plugins of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "quiview.h"
 
@@ -631,13 +595,33 @@ inline ulong getTimeStamp(UIEvent *event)
     return Qt::Key_unknown;
 }
 
-- (bool)processPresses:(NSSet *)presses withType:(QEvent::Type)type {
+- (bool)isControlKey:(Qt::Key)key
+{
+    switch (key) {
+    case Qt::Key_Up:
+    case Qt::Key_Down:
+    case Qt::Key_Left:
+    case Qt::Key_Right:
+        return true;
+    default:
+        break;
+    }
+
+    return false;
+}
+
+- (bool)handlePresses:(NSSet<UIPress *> *)presses eventType:(QEvent::Type)type
+{
     // Presses on Menu button will generate a Menu key event. By default, not handling
     // this event will cause the application to return to Headboard (tvOS launcher).
     // When handling the event (for example, as a back button), both press and
     // release events must be handled accordingly.
+    if (!qApp->focusWindow())
+        return false;
 
-    bool handled = false;
+    bool eventHandled = false;
+    const bool imEnabled = QIOSInputContext::instance()->inputMethodAccepted();
+
     for (UIPress* press in presses) {
         Qt::KeyboardModifiers qtModifiers = Qt::NoModifier;
         if (@available(ios 13.4, *))
@@ -646,26 +630,15 @@ inline ulong getTimeStamp(UIEvent *event)
         int key = [self mapPressTypeToKey:press withModifiers:qtModifiers text:text];
         if (key == Qt::Key_unknown)
             continue;
-        if (QWindowSystemInterface::handleKeyEvent(self.platformWindow->window(), type, key,
-                                                   qtModifiers, text)) {
-            handled = true;
-        }
+        if (imEnabled && ![self isControlKey:Qt::Key(key)])
+            continue;
+
+        bool keyHandled = QWindowSystemInterface::handleKeyEvent(
+                    self.platformWindow->window(), type, key, qtModifiers, text);
+        eventHandled = eventHandled || keyHandled;
     }
 
-    return handled;
-}
-
-- (BOOL)handlePresses:(NSSet<UIPress *> *)presses eventType:(QEvent::Type)type
-{
-    bool handlePress = false;
-    if (qApp->focusWindow()) {
-        QInputMethodQueryEvent queryEvent(Qt::ImEnabled);
-        if (qApp->focusObject() && QCoreApplication::sendEvent(qApp->focusObject(), &queryEvent))
-            handlePress = queryEvent.value(Qt::ImEnabled).toBool();
-        if (!handlePress && [self processPresses:presses withType:type])
-            return true;
-    }
-    return false;
+    return eventHandled;
 }
 
 - (void)pressesBegan:(NSSet<UIPress *> *)presses withEvent:(UIPressesEvent *)event
@@ -677,14 +650,14 @@ inline ulong getTimeStamp(UIEvent *event)
 - (void)pressesChanged:(NSSet<UIPress *> *)presses withEvent:(UIPressesEvent *)event
 {
     if (![self handlePresses:presses eventType:QEvent::KeyPress])
-        [super pressesBegan:presses withEvent:event];
+        [super pressesChanged:presses withEvent:event];
     [super pressesChanged:presses withEvent:event];
 }
 
 - (void)pressesEnded:(NSSet<UIPress *> *)presses withEvent:(UIPressesEvent *)event
 {
     if (![self handlePresses:presses eventType:QEvent::KeyRelease])
-        [super pressesBegan:presses withEvent:event];
+        [super pressesEnded:presses withEvent:event];
     [super pressesEnded:presses withEvent:event];
 }
 
@@ -780,7 +753,7 @@ inline ulong getTimeStamp(UIEvent *event)
 @end
 #endif
 
-#ifndef QT_NO_ACCESSIBILITY
+#if QT_CONFIG(accessibility)
 // Include category as an alternative to using -ObjC (Apple QA1490)
 #include "quiview_accessibility.mm"
 #endif

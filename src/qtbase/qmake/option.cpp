@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the qmake application of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "option.h"
 #include "cachekeys.h"
@@ -109,12 +84,15 @@ static Option::QMAKE_MODE default_mode(QString progname)
     return Option::QMAKE_GENERATE_MAKEFILE;
 }
 
-static QString detectProjectFile(const QString &path)
+static QString detectProjectFile(const QString &path, QString *singleProFileCandidate = nullptr)
 {
     QString ret;
     QDir dir(path);
-    if(dir.exists(dir.dirName() + Option::pro_ext)) {
-        ret = dir.filePath(dir.dirName()) + Option::pro_ext;
+    const QString candidate = dir.filePath(dir.dirName() + Option::pro_ext);
+    if (singleProFileCandidate)
+        *singleProFileCandidate = candidate;
+    if (QFile::exists(candidate)) {
+        ret = candidate;
     } else { //last try..
         QStringList profiles = dir.entryList(QStringList("*" + Option::pro_ext));
         if(profiles.count() == 1)
@@ -221,7 +199,7 @@ Option::parseCommandLine(QStringList &args, QMakeCmdLineParserState &state)
                     fprintf(stdout,
                             "QMake version %s\n"
                             "Using Qt version %s in %s\n",
-                            QMAKE_VERSION_STR, QT_VERSION_STR,
+                            QMAKE_VERSION_STR, qVersion(),
                             QMakeLibraryInfo::path(QLibraryInfo::LibrariesPath)
                                     .toLatin1()
                                     .constData());
@@ -288,11 +266,20 @@ Option::parseCommandLine(QStringList &args, QMakeCmdLineParserState &state)
                     if(Option::qmake_mode == Option::QMAKE_GENERATE_MAKEFILE ||
                        Option::qmake_mode == Option::QMAKE_GENERATE_PRL) {
                         if(fi.isDir()) {
-                            QString proj = detectProjectFile(arg);
-                            if (!proj.isNull())
-                                arg = proj;
+                            QString singleProFileCandidate;
+                            QString proj = detectProjectFile(arg, &singleProFileCandidate);
+                            if (proj.isNull()) {
+                                fprintf(stderr, "***Cannot detect .pro file in directory '%s'.\n\n"
+                                        "QMake expects the file '%s' "
+                                        "or exactly one .pro file in the given directory.\n",
+                                        qUtf8Printable(arg),
+                                        qUtf8Printable(singleProFileCandidate));
+                                return Option::QMAKE_CMDLINE_ERROR;
+                            }
+                            Option::mkfile::project_files.append(proj);
+                        } else {
+                            Option::mkfile::project_files.append(arg);
                         }
-                        Option::mkfile::project_files.append(arg);
                     } else if(Option::qmake_mode == Option::QMAKE_GENERATE_PROJECT) {
                         Option::projfile::project_dirs.append(arg);
                     } else {
@@ -619,7 +606,7 @@ public:
         *data = nullptr;
     }
 };
-static QList<QMakeCacheClearItem*> cache_items;
+Q_CONSTINIT static QList<QMakeCacheClearItem*> cache_items;
 
 void
 qmakeClearCaches()

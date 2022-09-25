@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtQml module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**/
-#include "qqmldomastcreator_p.h"
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 #include "qqmldomelements_p.h"
 #include "qqmldomtop_p.h"
 #include "qqmldomerrormessage_p.h"
@@ -232,8 +196,8 @@ class QmlDomAstCreator final : public AST::Visitor
             case DomType::MethodInfo:
                 break;
             default:
-                qDebug() << "unexpected type" << domTypeToString(currentNode().kind);
-                Q_ASSERT(false);
+                qCWarning(domLog) << "unexpected type" << domTypeToString(currentNode().kind);
+                Q_UNREACHABLE();
             }
             base = currentNodeEl().fileLocations;
             if (p.length() > 2) {
@@ -248,11 +212,11 @@ class QmlDomAstCreator final : public AST::Visitor
                     p = p.last();
                 else {
                     qCWarning(domLog) << "unexpected path to QmlObject in createMap" << p;
-                    Q_ASSERT(false);
+                    Q_UNREACHABLE();
                 }
             } else {
                 qCWarning(domLog) << "unexpected path to QmlObject in createMap" << p;
-                Q_ASSERT(false);
+                Q_UNREACHABLE();
             }
             break;
         case DomType::EnumItem:
@@ -274,7 +238,7 @@ class QmlDomAstCreator final : public AST::Visitor
             break;
         default:
             qCWarning(domLog) << "Unexpected type in createMap:" << domTypeToString(k);
-            Q_ASSERT(false);
+            Q_UNREACHABLE();
             break;
         }
         return createMap(base, p, n);
@@ -304,7 +268,7 @@ public:
         // implicit imports
         // add implicit directory import
         if (!fInfo.canonicalPath().isEmpty()) {
-            Import selfDirImport(QLatin1String("file://") + fInfo.canonicalPath());
+            Import selfDirImport(QmlUri::fromDirectoryString(fInfo.canonicalPath()));
             selfDirImport.implicit = true;
             qmlFilePtr->addImport(selfDirImport);
         }
@@ -352,7 +316,6 @@ public:
             createMap(DomType::Import,
                       qmlFilePtr->addImport(Import::fromFileString(
                               el->fileName.toString(),
-                              QFileInfo(qmlFilePtr->canonicalFilePath()).dir().absolutePath(),
                               el->importId.toString())),
                       el);
         return true;
@@ -365,14 +328,22 @@ public:
             MethodInfo m;
             m.name = el->name.toString();
             m.typeName = toString(el->memberType);
+#if QT_VERSION >= QT_VERSION_CHECK(6, 3, 0)
             m.isReadonly = el->isReadonly();
+#else
+            m.isReadonly = el->readonlyToken.isValid();
+#endif
             m.access = MethodInfo::Public;
             m.methodType = MethodInfo::Signal;
             m.isList = el->typeModifier == QLatin1String("list");
             MethodInfo *mPtr;
             Path p = current<QmlObject>().addMethod(m, AddOption::KeepExisting, &mPtr);
             pushEl(p, *mPtr, el);
+#if QT_VERSION >= QT_VERSION_CHECK(6, 3, 0)
             FileLocations::addRegion(nodeStack.last().fileLocations, u"signal", el->propertyToken());
+#else
+            FileLocations::addRegion(nodeStack.last().fileLocations, u"signal", el->propertyToken);
+#endif
             MethodInfo &mInfo = std::get<MethodInfo>(currentNode().value);
             AST::UiParameterList *args = el->parameters;
             while (args) {
@@ -393,30 +364,50 @@ public:
             PropertyDefinition p;
             p.name = el->name.toString();
             p.typeName = toString(el->memberType);
+#if QT_VERSION >= QT_VERSION_CHECK(6, 3, 0)
             p.isReadonly = el->isReadonly();
             p.isDefaultMember = el->isDefaultMember();
-            p.isList = el->typeModifier == QLatin1String("list");
             p.isRequired = el->isRequired();
+#else
+            p.isReadonly = el->readonlyToken.isValid();
+            p.isDefaultMember = el->defaultToken.isValid();
+            p.isRequired = el->requiredToken.isValid();
+#endif
+            p.isList = el->typeModifier == QLatin1String("list");
             if (!el->typeModifier.isEmpty())
                 p.typeName = el->typeModifier.toString() + QChar(u'<') + p.typeName + QChar(u'>');
             PropertyDefinition *pPtr;
             Path pPathFromOwner =
                     current<QmlObject>().addPropertyDef(p, AddOption::KeepExisting, &pPtr);
             pushEl(pPathFromOwner, *pPtr, el);
+#if QT_VERSION >= QT_VERSION_CHECK(6, 3, 0)
             FileLocations::addRegion(nodeStack.last().fileLocations, u"property",
                                      el->propertyToken());
+#else
+            FileLocations::addRegion(nodeStack.last().fileLocations, u"property",
+                                     el->propertyToken);
+#endif
             if (p.name == u"id")
                 qmlFile.addError(
                         myParseErrors()
                                 .warning(tr("id is a special attribute, that should not be "
                                             "used as property name"))
                                 .withPath(currentNodeEl().path));
+#if QT_VERSION >= QT_VERSION_CHECK(6, 3, 0)
             if (p.isDefaultMember)
                 FileLocations::addRegion(nodeStack.last().fileLocations, u"default",
                                          el->defaultToken());
             if (p.isRequired)
                 FileLocations::addRegion(nodeStack.last().fileLocations, u"required",
                                          el->requiredToken());
+#else
+            if (p.isDefaultMember)
+                FileLocations::addRegion(nodeStack.last().fileLocations, u"default",
+                                         el->defaultToken);
+            if (p.isRequired)
+                FileLocations::addRegion(nodeStack.last().fileLocations, u"required",
+                                         el->requiredToken);
+#endif
             if (el->statement) {
                 BindingType bType = BindingType::Normal;
                 SourceLocation loc = combineLocations(el->statement);
@@ -484,7 +475,7 @@ public:
             *mPtr = m;
         } break;
         default:
-            Q_ASSERT(false);
+            Q_UNREACHABLE();
         }
         removeCurrentNode({});
     }
@@ -564,8 +555,8 @@ public:
             }
             return false;
         } else {
-            qCWarning(creatorLog) << "source el:" << static_cast<AST::Node *>(el);
-            Q_ASSERT(false);
+            qCWarning(creatorLog) << "unhandled source el:" << static_cast<AST::Node *>(el);
+            Q_UNREACHABLE();
         }
         return true;
     }
@@ -617,7 +608,7 @@ public:
                 sPathFromOwner = std::get<QmlObject>(containingObject.value).addChild(scope, &sPtr);
                 break;
             default:
-                Q_ASSERT(false);
+                Q_UNREACHABLE();
             }
         }
         Q_ASSERT_X(sPtr, className, "could not recover new scope");
@@ -648,16 +639,16 @@ public:
                 if (p[p.length() - 2] == Path::Field(Fields::objects))
                     std::get<QmlComponent>(containingObject.value).m_objects[idx] = obj;
                 else
-                    Q_ASSERT(false);
+                    Q_UNREACHABLE();
                 break;
             case DomType::QmlObject:
                 if (p[p.length() - 2] == Path::Field(Fields::children))
                     std::get<QmlObject>(containingObject.value).m_children[idx] = obj;
                 else
-                    Q_ASSERT(false);
+                    Q_UNREACHABLE();
                 break;
             default:
-                Q_ASSERT(false);
+                Q_UNREACHABLE();
             }
         }
         removeCurrentNode(DomType::QmlObject);
@@ -747,7 +738,7 @@ public:
             } else {
                 pathFromOwner = current<QmlObject>().addBinding(bindingV, AddOption::KeepExisting,
                                                                 &bindingPtr);
-                Q_ASSERT_X(bindingPtr, className, "binding could not be retrived");
+                Q_ASSERT_X(bindingPtr, className, "binding could not be retrieved");
                 qmlFile.addError(
                         myParseErrors()
                                 .warning(tr("id attributes should only be a lower case letter "
@@ -759,14 +750,14 @@ public:
         } else {
             pathFromOwner =
                     current<QmlObject>().addBinding(bindingV, AddOption::KeepExisting, &bindingPtr);
-            Q_ASSERT_X(bindingPtr, className, "binding could not be retrived");
+            Q_ASSERT_X(bindingPtr, className, "binding could not be retrieved");
         }
         if (bindingPtr)
             pushEl(pathFromOwner, *bindingPtr, el);
         else if (idPtr)
             pushEl(pathFromOwner, *idPtr, el);
         else
-            Q_ASSERT(false);
+            Q_UNREACHABLE();
         loadAnnotations(el);
         // avoid duplicate colon location for id?
         FileLocations::addRegion(nodeStack.last().fileLocations, u"colon", el->colonToken);
@@ -789,7 +780,7 @@ public:
             Id *idPtr = valueFromMultimap(comp.m_ids, id.name, idx);
             *idPtr = id;
         } else {
-            Q_ASSERT(false);
+            Q_UNREACHABLE();
         }
         removeCurrentNode({});
     }
@@ -945,7 +936,7 @@ public:
         default:
             qCWarning(domLog) << "Unexpected container object for annotation:"
                               << domTypeToString(containingElement.kind);
-            Q_ASSERT(false);
+            Q_UNREACHABLE();
         }
         pushEl(pathFromOwner, *aPtr, el);
         return true;
@@ -973,7 +964,7 @@ public:
             std::get<MethodInfo>(containingElement.value).annotations[currentIndex()] = a;
             break;
         default:
-            Q_ASSERT(false);
+            Q_UNREACHABLE();
         }
         removeCurrentNode(DomType::QmlObject);
     }

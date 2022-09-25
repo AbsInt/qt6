@@ -1,40 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtQml module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+
 #ifndef QQMLDOMELEMENTS_P_H
 #define QQMLDOMELEMENTS_P_H
 
@@ -260,6 +226,38 @@ inline bool operator>=(const Version &v1, const Version &v2)
     return v1.compare(v2) >= 0;
 }
 
+class QMLDOM_EXPORT QmlUri
+{
+public:
+    enum class Kind { Invalid, ModuleUri, DirectoryUrl, RelativePath, AbsolutePath };
+    QmlUri() = default;
+    static QmlUri fromString(const QString &importStr);
+    static QmlUri fromUriString(const QString &importStr);
+    static QmlUri fromDirectoryString(const QString &importStr);
+    bool isValid() const;
+    bool isDirectory() const;
+    bool isModule() const;
+    QString moduleUri() const;
+    QString localPath() const;
+    QString absoluteLocalPath(const QString &basePath = QString()) const;
+    QUrl directoryUrl() const;
+    QString directoryString() const;
+    QString toString() const;
+    Kind kind() const;
+
+    friend bool operator==(const QmlUri &i1, const QmlUri &i2)
+    {
+        return i1.m_kind == i2.m_kind && i1.m_value == i2.m_value;
+    }
+    friend bool operator!=(const QmlUri &i1, const QmlUri &i2) { return !(i1 == i2); }
+
+private:
+    QmlUri(const QUrl &url) : m_kind(Kind::DirectoryUrl), m_value(url) { }
+    QmlUri(Kind kind, const QString &value) : m_kind(kind), m_value(value) { }
+    Kind m_kind = Kind::Invalid;
+    std::variant<QString, QUrl> m_value;
+};
+
 class QMLDOM_EXPORT Import
 {
     Q_DECLARE_TR_FUNCTIONS(Import)
@@ -268,38 +266,27 @@ public:
 
     static Import fromUriString(QString importStr, Version v = Version(),
                                 QString importId = QString(), ErrorHandler handler = nullptr);
-    static Import fromFileString(QString importStr, QString baseDir = QString(),
-                                 QString importId = QString(), ErrorHandler handler = nullptr);
+    static Import fromFileString(QString importStr, QString importId = QString(),
+                                 ErrorHandler handler = nullptr);
 
-    Import(QString uri = QString(), Version version = Version(), QString importId = QString())
+    Import(QmlUri uri = QmlUri(), Version version = Version(), QString importId = QString())
         : uri(uri), version(version), importId(importId)
     {
     }
 
     bool iterateDirectSubpaths(DomItem &self, DirectVisitor);
-    bool isDirectoryImport() const
-    {
-        return uri.startsWith(u"http://") || uri.startsWith(u"https://")
-                || uri.startsWith(u"file://");
-    }
-    QString filePath() const
-    {
-        if (uri.startsWith(u"file://"))
-            return uri.mid(7);
-        return QString();
-    }
-    bool isSpecialImport() const { return uri.startsWith(u"<"); }
     Path importedPath() const
     {
-        if (isDirectoryImport()) {
-            if (!filePath().isEmpty()) {
-                return Paths::qmlDirPath(filePath());
+        if (uri.isDirectory()) {
+            QString path = uri.absoluteLocalPath();
+            if (!path.isEmpty()) {
+                return Paths::qmlDirPath(path);
             } else {
                 Q_ASSERT_X(false, "Import", "url imports not supported");
-                return Paths::qmldirFilePath(uri);
+                return Paths::qmldirFilePath(uri.directoryString());
             }
         } else {
-            return Paths::moduleScopePath(uri, version);
+            return Paths::moduleScopePath(uri.moduleUri(), version);
         }
     }
     Import baseImport() const { return Import { uri, version }; }
@@ -315,7 +302,7 @@ public:
 
     static QRegularExpression importRe();
 
-    QString uri;
+    QmlUri uri;
     Version version;
     QString importId;
     RegionComments comments;
@@ -558,11 +545,13 @@ public:
             return true;
         return false;
     }
-    QString preCode() const
+    static QString preCodeForName(QStringView n)
     {
-        return QStringLiteral(u"QtObject{\n  %1: ").arg(m_name.split(u'.').last());
+        return QStringLiteral(u"QtObject{\n  %1: ").arg(n.split(u'.').last());
     }
-    QString postCode() const { return QStringLiteral(u"\n}\n"); }
+    static QString postCodeForName(QStringView) { return QStringLiteral(u"\n}\n"); }
+    QString preCode() const { return preCodeForName(m_name); }
+    QString postCode() const { return postCodeForName(m_name); }
 
 private:
     friend class QmlDomAstCreator;
@@ -593,6 +582,27 @@ public:
     RegionComments comments;
 };
 
+struct QMLDOM_EXPORT LocallyResolvedAlias
+{
+    enum class Status { Invalid, ResolvedProperty, ResolvedObject, Loop, TooDeep };
+    bool valid()
+    {
+        switch (status) {
+        case Status::ResolvedProperty:
+        case Status::ResolvedObject:
+            return true;
+        default:
+            return false;
+        }
+    }
+    DomItem baseObject;
+    DomItem localPropertyDef;
+    QString typeName;
+    QStringList accessedPath;
+    Status status = Status::Invalid;
+    int nAliases = 0;
+};
+
 class QMLDOM_EXPORT PropertyDefinition : public AttributeInfo
 {
 public:
@@ -603,7 +613,7 @@ public:
         bool cont = AttributeInfo::iterateDirectSubpaths(self, visitor);
         cont = cont && self.dvValueField(visitor, Fields::isPointer, isPointer);
         cont = cont && self.dvValueField(visitor, Fields::isFinal, isFinal);
-        cont = cont && self.dvValueField(visitor, Fields::isAlias, isAlias);
+        cont = cont && self.dvValueField(visitor, Fields::isAlias, isAlias());
         cont = cont && self.dvValueField(visitor, Fields::isDefaultMember, isDefaultMember);
         cont = cont && self.dvValueField(visitor, Fields::isRequired, isRequired);
         cont = cont && self.dvValueField(visitor, Fields::read, read);
@@ -614,14 +624,9 @@ public:
         return cont;
     }
 
-    Path typePath() const
-    {
-        Path res = Path::Current(PathCurrent::Types);
-        for (QString el : typeName.split(QChar::fromLatin1('.')))
-            res = res.key(el);
-        return res;
-    }
+    Path typePath() const { return Paths::lookupTypePath(typeName); }
 
+    bool isAlias() const { return typeName == u"alias"; }
     bool isParametricType() const;
     void writeOut(DomItem &self, OutWriter &lw) const;
 
@@ -631,7 +636,6 @@ public:
     QString notify;
     bool isFinal = false;
     bool isPointer = false;
-    bool isAlias = false;
     bool isDefaultMember = false;
     bool isRequired = false;
 };
@@ -738,7 +742,7 @@ public:
 
     QString name() const { return m_name; }
     void setName(QString name) { m_name = name; }
-    QList<EnumItem> values() const { return m_values; }
+    const QList<EnumItem> &values() const & { return m_values; }
     bool isFlag() const { return m_isFlag; }
     void setIsFlag(bool flag) { m_isFlag = flag; }
     QString alias() const { return m_alias; }
@@ -751,7 +755,7 @@ public:
     }
     void updatePathFromOwner(Path newP) override;
 
-    QList<QmlObject> annotations() const;
+    const QList<QmlObject> &annotations() const & { return m_annotations; }
     void setAnnotations(QList<QmlObject> annotations);
     Path addAnnotation(const QmlObject &child, QmlObject **cPtr = nullptr);
     void writeOut(DomItem &self, OutWriter &lw) const override;
@@ -788,11 +792,11 @@ public:
 
     QString idStr() const { return m_idStr; }
     QString name() const { return m_name; }
-    QList<Path> prototypePaths() const { return m_prototypePaths; }
+    const QList<Path> &prototypePaths() const & { return m_prototypePaths; }
     Path nextScopePath() const { return m_nextScopePath; }
-    QMultiMap<QString, PropertyDefinition> propertyDefs() const { return m_propertyDefs; }
-    QMultiMap<QString, Binding> bindings() const { return m_bindings; }
-    QMultiMap<QString, MethodInfo> methods() const { return m_methods; }
+    const QMultiMap<QString, PropertyDefinition> &propertyDefs() const & { return m_propertyDefs; }
+    const QMultiMap<QString, Binding> &bindings() const & { return m_bindings; }
+    const QMultiMap<QString, MethodInfo> &methods() const & { return m_methods; }
     QList<QmlObject> children() const { return m_children; }
     QList<QmlObject> annotations() const { return m_annotations; }
 
@@ -868,6 +872,10 @@ public:
     void writeOut(DomItem &self, OutWriter &ow, QString onTarget) const;
     void writeOut(DomItem &self, OutWriter &lw) const override { writeOut(self, lw, QString()); }
 
+    LocallyResolvedAlias resolveAlias(DomItem &self,
+                                      std::shared_ptr<ScriptExpression> accessSequence) const;
+    LocallyResolvedAlias resolveAlias(DomItem &self, const QStringList &accessSequence) const;
+
 private:
     friend class QmlDomAstCreator;
     QString m_idStr;
@@ -929,8 +937,8 @@ public:
     DomItem field(DomItem &self, QStringView name);
 
     QString name() const { return m_name; }
-    QMultiMap<QString, EnumDecl> enumerations() const { return m_enumerations; }
-    QList<QmlObject> objects() const { return m_objects; }
+    const QMultiMap<QString, EnumDecl> &enumerations() const & { return m_enumerations; }
+    const QList<QmlObject> &objects() const & { return m_objects; }
     bool isSingleton() const { return m_isSingleton; }
     bool isCreatable() const { return m_isCreatable; }
     bool isComposite() const { return m_isComposite; }
@@ -991,21 +999,23 @@ public:
 
     QmltypesComponent(Path pathFromOwner = Path()) : Component(pathFromOwner) { }
     bool iterateDirectSubpaths(DomItem &, DirectVisitor) override;
-    QList<Export> exports() const { return m_exports; }
+    const QList<Export> &exports() const & { return m_exports; }
     QString fileName() const { return m_fileName; }
     void setExports(QList<Export> exports) { m_exports = exports; }
     void addExport(const Export &exportedEntry) { m_exports.append(exportedEntry); }
     void setFileName(QString fileName) { m_fileName = fileName; }
-    QList<int> metaRevisions() const { return m_metaRevisions; }
+    const QList<int> &metaRevisions() const & { return m_metaRevisions; }
     void setMetaRevisions(QList<int> metaRevisions) { m_metaRevisions = metaRevisions; }
     void setInterfaceNames(const QStringList& interfaces) { m_interfaceNames = interfaces; }
-    QStringList interfaceNames() const { return m_interfaceNames; }
+    const QStringList &interfaceNames() const & { return m_interfaceNames; }
     QString extensionTypeName() const { return m_extensionTypeName; }
     void setExtensionTypeName(const QString &name) { m_extensionTypeName =  name; }
     QString valueTypeName() const { return m_valueTypeName; }
     void setValueTypeName(const QString &name) { m_valueTypeName = name; }
     bool hasCustomParser() const { return m_hasCustomParser; }
     void setHasCustomParser(bool v) { m_hasCustomParser = v; }
+    bool extensionIsNamespace() const { return m_extensionIsNamespace; }
+    void setExtensionIsNamespace(bool v) { m_extensionIsNamespace = v; }
     QQmlJSScope::AccessSemantics accessSemantics() const { return m_accessSemantics; }
     void setAccessSemantics(QQmlJSScope::AccessSemantics v) { m_accessSemantics = v; }
 private:
@@ -1014,6 +1024,7 @@ private:
     QString m_fileName; // remove?
     QStringList m_interfaceNames;
     bool m_hasCustomParser = false;
+    bool m_extensionIsNamespace = false;
     QString m_valueTypeName;
     QString m_extensionTypeName;
     QQmlJSScope::AccessSemantics m_accessSemantics;
@@ -1039,7 +1050,7 @@ public:
 
     bool iterateDirectSubpaths(DomItem &self, DirectVisitor) override;
 
-    QMultiMap<QString, Id> ids() const { return m_ids; }
+    const QMultiMap<QString, Id> &ids() const & { return m_ids; }
     Path nextComponentPath() const { return m_nextComponentPath; }
     void setIds(QMultiMap<QString, Id> ids) { m_ids = ids; }
     void setNextComponentPath(Path p) { m_nextComponentPath = p; }
@@ -1080,9 +1091,9 @@ public:
     ImportScope() = default;
     ~ImportScope() = default;
 
-    QList<Path> importSourcePaths() const { return m_importSourcePaths; }
+    const QList<Path> &importSourcePaths() const & { return m_importSourcePaths; }
 
-    QMap<QString, ImportScope> subImports() const { return m_subImports; }
+    const QMap<QString, ImportScope> &subImports() const & { return m_subImports; }
 
     QList<Path> allSources(DomItem &self) const;
 

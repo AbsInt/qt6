@@ -1,31 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2019 Thibaut Cuvelier
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the tools applications of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2019 Thibaut Cuvelier
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #ifndef DOCBOOKGENERATOR_H
 #define DOCBOOKGENERATOR_H
@@ -33,6 +8,7 @@
 #include "codemarker.h"
 #include "config.h"
 #include "xmlgenerator.h"
+#include "filesystem/fileresolver.hpp"
 
 #include <QtCore/qhash.h>
 #include <QtCore/qxmlstream.h>
@@ -46,7 +22,7 @@ class FunctionNode;
 class DocBookGenerator : public XmlGenerator
 {
 public:
-    explicit DocBookGenerator() = default;
+    explicit DocBookGenerator(FileResolver& file_resolver);
 
     void initializeGenerator() override;
     QString format() override;
@@ -61,7 +37,7 @@ protected:
     using Generator::generateQmlTypePage;
     void generateQmlTypePage(QmlTypeNode *qcn);
     using Generator::generateQmlBasicTypePage;
-    void generateQmlBasicTypePage(QmlBasicTypeNode *qbtn);
+    void generateQmlBasicTypePage(QmlValueTypeNode *qbtn);
     using Generator::generateCollectionNode;
     void generateCollectionNode(CollectionNode *cn);
     using Generator::generateGenericCollectionPage;
@@ -129,7 +105,7 @@ private:
     void generateClassHierarchy(const Node *relative, NodeMultiMap &classMap);
     void generateFunctionIndex(const Node *relative);
     void generateLegaleseList(const Node *relative);
-    void generateExampleFilePage(const Node *en, const QString &file) override;
+    void generateExampleFilePage(const Node *en, ResolvedFile resolved_file, CodeMarker* = nullptr) override;
     void generateOverloadedSignal(const Node *node);
     bool generateQmlText(const Text &text, const Node *relative) override;
     void generateRequiredLinks(const Node *node);
@@ -140,9 +116,10 @@ private:
     void generateLink(const Atom *atom);
     void beginLink(const QString &link, const Node *node, const Node *relative);
     void endLink();
+    void writeXmlId(const QString &id);
+    void writeXmlId(const Node *node);
     inline void newLine();
-    void startSectionBegin();
-    void startSectionBegin(const QString &id);
+    void startSectionBegin(const QString &id = "");
     void startSectionEnd();
     void startSection(const QString &id, const QString &title);
     void endSection();
@@ -159,6 +136,7 @@ private:
     int currentSectionLevel {};
     QStack<int> sectionLevels {};
     QString m_qflagsHref {};
+    bool m_inTeletype { false };
 
     QString m_project {};
     QString m_projectDescription {};

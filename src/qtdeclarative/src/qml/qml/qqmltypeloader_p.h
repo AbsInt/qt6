@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtQml module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #ifndef QQMLTYPELOADER_P_H
 #define QQMLTYPELOADER_P_H
@@ -87,52 +51,63 @@ public:
         Blob(const QUrl &url, QQmlDataBlob::Type type, QQmlTypeLoader *loader);
         ~Blob() override;
 
-        const QQmlImports &imports() const { return m_importCache; }
+        const QQmlImports *imports() const { return m_importCache.data(); }
 
         void setCachedUnitStatus(QQmlMetaType::CachedUnitLookupError status) { m_cachedUnitStatus = status; }
 
         struct PendingImport
         {
-            QV4::CompiledData::Import::ImportType type = QV4::CompiledData::Import::ImportType::ImportLibrary;
-
             QString uri;
             QString qualifier;
 
-            QTypeRevision version;
-
+            QV4::CompiledData::Import::ImportType type
+                = QV4::CompiledData::Import::ImportType::ImportLibrary;
             QV4::CompiledData::Location location;
 
+            QQmlImports::ImportFlags flags;
             int priority = 0;
 
+            QTypeRevision version;
+
             PendingImport() = default;
-            PendingImport(Blob *blob, const QV4::CompiledData::Import *import);
+            PendingImport(Blob *blob, const QV4::CompiledData::Import *import,
+                          QQmlImports::ImportFlags flags);
         };
         using PendingImportPtr = std::shared_ptr<PendingImport>;
 
     protected:
-        bool addImport(const QV4::CompiledData::Import *import, uint flags,
+        bool addImport(const QV4::CompiledData::Import *import, QQmlImports::ImportFlags,
                        QList<QQmlError> *errors);
-        bool addImport(PendingImportPtr import, uint flags, QList<QQmlError> *errors);
+        bool addImport(PendingImportPtr import, QList<QQmlError> *errors);
 
         bool fetchQmldir(const QUrl &url, PendingImportPtr import, int priority, QList<QQmlError> *errors);
         bool updateQmldir(const QQmlRefPointer<QQmlQmldirData> &data, PendingImportPtr import, QList<QQmlError> *errors);
 
     private:
+        bool addScriptImport(PendingImportPtr import);
+        bool addFileImport(PendingImportPtr import, QList<QQmlError> *errors);
+        bool addLibraryImport(PendingImportPtr import, QList<QQmlError> *errors);
+
         virtual bool qmldirDataAvailable(const QQmlRefPointer<QQmlQmldirData> &, QList<QQmlError> *);
 
         virtual void scriptImported(const QQmlRefPointer<QQmlScriptBlob> &, const QV4::CompiledData::Location &, const QString &, const QString &) {}
 
         void dependencyComplete(QQmlDataBlob *) override;
 
-        bool loadImportDependencies(PendingImportPtr currentImport, const QString &qmldirUri, QList<QQmlError> *errors);
+        bool loadImportDependencies(
+                PendingImportPtr currentImport, const QString &qmldirUri,
+                QQmlImports::ImportFlags flags, QList<QQmlError> *errors);
 
     protected:
+        bool loadDependentImports(
+                const QList<QQmlDirParser::Import> &imports, const QString &qualifier,
+                QTypeRevision version, QQmlImports::ImportFlags flags, QList<QQmlError> *errors);
         virtual QString stringAt(int) const { return QString(); }
 
         bool isDebugging() const;
         bool diskCacheEnabled() const;
 
-        QQmlImports m_importCache;
+        QQmlRefPointer<QQmlImports> m_importCache;
         QVector<PendingImportPtr> m_unresolvedImports;
         QVector<QQmlRefPointer<QQmlQmldirData>> m_qmldirs;
         QQmlMetaType::CachedUnitLookupError m_cachedUnitStatus = QQmlMetaType::CachedUnitLookupError::NoError;

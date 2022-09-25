@@ -1,34 +1,10 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "controlstestutils_p.h"
 
 #include <QtTest/qsignalspy.h>
+#include <QtQml/qqmlcomponent.h>
 #include <QtQuickControls2/qquickstyle.h>
 #include <QtQuickTemplates2/private/qquickabstractbutton_p.h>
 #include <QtQuickTemplates2/private/qquickapplicationwindow_p.h>
@@ -41,11 +17,19 @@ QQuickControlsTestUtils::QQuickControlsApplicationHelper::QQuickControlsApplicat
         appWindow = qobject_cast<QQuickApplicationWindow*>(cleanup.data());
 }
 
+/*!
+    \internal
+
+    If \a style is different from the current style, this function will
+    recreate the QML engine, clear type registrations and set the new style.
+
+    Returns \c true if successful or if \c style is already set.
+*/
 bool QQuickControlsTestUtils::QQuickStyleHelper::updateStyle(const QString &style)
 {
     // If it's not the first time a style has been set and the new style is not different, do nothing.
     if (!currentStyle.isEmpty() && style == currentStyle)
-        return false;
+        return true;
 
     engine.reset();
     currentStyle = style;
@@ -55,8 +39,9 @@ bool QQuickControlsTestUtils::QQuickStyleHelper::updateStyle(const QString &styl
 
     QQmlComponent component(engine.data());
     component.setData(QString::fromUtf8("import QtQuick\nimport QtQuick.Controls\n Control { }").toUtf8(), QUrl());
-
-    return true;
+    if (!component.isReady())
+        qWarning() << "Failed to load component:" << component.errorString();
+    return component.isReady();
 }
 
 void QQuickControlsTestUtils::forEachControl(QQmlEngine *engine, const QString &qqc2ImportPath,
@@ -179,4 +164,17 @@ bool QQuickControlsTestUtils::doubleClickButton(QQuickAbstractButton *button)
     }
 
     return true;
+}
+
+/*!
+    Allows creating QQmlComponents in C++, which is useful for tests that need
+    to check if items created from the component have the correct QML context.
+*/
+Q_INVOKABLE QQmlComponent *QQuickControlsTestUtils::ComponentCreator::createComponent(const QByteArray &data)
+{
+    std::unique_ptr<QQmlComponent> component(new QQmlComponent(qmlEngine(this)));
+    component->setData(data, QUrl());
+    if (component->isError())
+        qmlWarning(this) << "Failed to create component from the following data:\n" << data;
+    return component.release();
 }

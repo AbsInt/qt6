@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the tools applications of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "node.h"
 
@@ -110,7 +85,8 @@ void Node::initialize()
     goals.insert("qmlsignal", Node::Function);
     goals.insert("qmlsignalhandler", Node::Function);
     goals.insert("qmlmethod", Node::Function);
-    goals.insert("qmlbasictype", Node::QmlBasicType);
+    goals.insert("qmlvaluetype", Node::QmlValueType);
+    goals.insert("qmlbasictype", Node::QmlValueType); // deprecated!
     goals.insert("sharedcomment", Node::SharedComment);
     goals.insert("collection", Node::Collection);
 }
@@ -138,7 +114,7 @@ bool Node::changeType(NodeType from, NodeType to)
         case QmlType:
         case QmlModule:
         case QmlProperty:
-        case QmlBasicType:
+        case QmlValueType:
             setGenus(Node::QML);
             break;
         case JsType:
@@ -786,7 +762,7 @@ Node::PageType Node::getPageType(Node::NodeType t)
     case Node::Variable:
     case Node::QmlType:
     case Node::QmlProperty:
-    case Node::QmlBasicType:
+    case Node::QmlValueType:
     case Node::JsType:
     case Node::JsProperty:
     case Node::JsBasicType:
@@ -836,7 +812,7 @@ Node::Genus Node::getGenus(Node::NodeType t)
     case Node::QmlType:
     case Node::QmlModule:
     case Node::QmlProperty:
-    case Node::QmlBasicType:
+    case Node::QmlValueType:
         return Node::QML;
     case Node::JsType:
     case Node::JsModule:
@@ -931,7 +907,7 @@ QString Node::nodeTypeString(NodeType t)
 
     case QmlType:
         return QLatin1String("QML type");
-    case QmlBasicType:
+    case QmlValueType:
         return QLatin1String("QML basic type");
     case QmlModule:
         return QLatin1String("QML module");
@@ -1012,7 +988,7 @@ bool Node::fromFlagValue(FlagValue fv, bool defaultValue)
  */
 void Node::setLink(LinkType linkType, const QString &link, const QString &desc)
 {
-    QPair<QString, QString> linkPair;
+    std::pair<QString, QString> linkPair;
     linkPair.first = link;
     linkPair.second = desc;
     m_linkMap[linkType] = linkPair;
@@ -1562,7 +1538,7 @@ void Node::setDeprecatedSince(const QString &sinceVersion)
   \c false. I don't know what the tag is used for.
  */
 
-/*! \fn const QMap<LinkType, QPair<QString, QString> > &Node::links() const
+/*! \fn const QMap<LinkType, std::pair<QString, QString> > &Node::links() const
   Returns a reference to this node's link map. The link map should
   probably be moved to the PageNode, because it contains links to the
   start page, next page, previous page, and contents page, and these

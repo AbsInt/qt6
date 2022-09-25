@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2018 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2018 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <QtTest/QtTest>
 #include <QtQuickTest/quicktest.h>
@@ -38,6 +13,7 @@
 #include <QtQml/qqmlcontext.h>
 #include <QtQml/qqmlexpression.h>
 #include <QtQml/qqmlincubator.h>
+#include <QtQml/qqmlcomponent.h>
 #include <QtQmlModels/private/qqmlobjectmodel_p.h>
 #include <QtQmlModels/private/qqmllistmodel_p.h>
 
@@ -80,7 +56,7 @@ Q_DECLARE_METATYPE(QMarginsF);
 
 #define WAIT_UNTIL_POLISHED_ARG(item) \
     QVERIFY(QQuickTest::qIsPolishScheduled(item)); \
-    QVERIFY(QQuickTest::qWaitForItemPolished(item))
+    QVERIFY(QQuickTest::qWaitForPolish(item))
 #define WAIT_UNTIL_POLISHED WAIT_UNTIL_POLISHED_ARG(tableView)
 
 class tst_QQuickTableView : public QQmlDataTest
@@ -196,6 +172,14 @@ private slots:
     void positionViewAtRowClamped();
     void positionViewAtColumnClamped_data();
     void positionViewAtColumnClamped();
+    void positionViewAtCellWithAnimation();
+    void positionViewAtCell_VisibleAndContain_data();
+    void positionViewAtCell_VisibleAndContain();
+    void positionViewAtCell_VisibleAndContain_SubRect_data();
+    void positionViewAtCell_VisibleAndContain_SubRect();
+    void positionViewAtCellForLargeCells_data();
+    void positionViewAtCellForLargeCells();
+    void positionViewAtCellForLargeCellsUsingSubrect();
     void itemAtCell_data();
     void itemAtCell();
     void leftRightTopBottomProperties_data();
@@ -206,10 +190,31 @@ private slots:
     void checkSelectionModelWithRequiredSelectedProperty();
     void checkSelectionModelWithUnrequiredSelectedProperty();
     void removeAndAddSelectionModel();
-    void testSelectableStartPosEndPos_data();
-    void testSelectableStartPosEndPos();
+    void warnOnWrongModelInSelectionModel();
+    void selectionBehaviorCells_data();
+    void selectionBehaviorCells();
+    void selectionBehaviorRows();
+    void selectionBehaviorColumns();
+    void selectionBehaviorDisabled();
     void testSelectableStartPosEndPosOutsideView();
     void testSelectableScrollTowardsPos();
+    void setCurrentIndexFromSelectionModel();
+    void clearSelectionOnTap();
+    void moveCurrentIndexUsingArrowKeys();
+    void moveCurrentIndexUsingHomeAndEndKeys();
+    void moveCurrentIndexUsingPageUpDownKeys();
+    void setCurrentIndexOnFirstKeyPress_data();
+    void setCurrentIndexOnFirstKeyPress();
+    void setCurrentIndexFromMouse();
+    void showMarginsWhenNavigatingToEnd();
+    void disableKeyNavigation();
+    void disablePointerNavigation();
+    void selectUsingArrowKeys();
+    void selectUsingHomeAndEndKeys();
+    void selectUsingPageUpDownKeys();
+    void testDeprecatedApi();
+    void alternatingRows();
+    void boundDelegateComponent();
 };
 
 tst_QQuickTableView::tst_QQuickTableView()
@@ -376,9 +381,9 @@ void tst_QQuickTableView::checkColumnWidthWithoutProvider()
 
     WAIT_UNTIL_POLISHED;
 
-    for (const int column : tableViewPrivate->loadedColumns.keys()) {
+    for (const int column : tableViewPrivate->loadedColumns) {
         const qreal expectedColumnWidth = tableViewPrivate->sizeHintForColumn(column);
-        for (const int row : tableViewPrivate->loadedRows.keys()) {
+        for (const int row : tableViewPrivate->loadedRows) {
             const auto item = tableViewPrivate->loadedTableItem(QPoint(column, row))->item;
             QCOMPARE(item->width(), expectedColumnWidth);
         }
@@ -512,9 +517,9 @@ void tst_QQuickTableView::checkRowHeightWithoutProvider()
 
     WAIT_UNTIL_POLISHED;
 
-    for (const int row : tableViewPrivate->loadedRows.keys()) {
+    for (const int row : tableViewPrivate->loadedRows) {
         const qreal expectedRowHeight = tableViewPrivate->sizeHintForRow(row);
-        for (const int column : tableViewPrivate->loadedColumns.keys()) {
+        for (const int column : tableViewPrivate->loadedColumns) {
             const auto item = tableViewPrivate->loadedTableItem(QPoint(column, row))->item;
             QCOMPARE(item->height(), expectedRowHeight);
         }
@@ -2480,10 +2485,10 @@ void tst_QQuickTableView::hideRowsAndColumns()
     QCOMPARE(tableViewPrivate->loadedRows.count(), expectedRowCount);
     QCOMPARE(tableViewPrivate->loadedColumns.count(), expectedColumnCount);
 
-    for (const int row : tableViewPrivate->loadedRows.keys())
+    for (const int row : tableViewPrivate->loadedRows)
         QVERIFY(!rowsToHideList.contains(row));
 
-    for (const int column : tableViewPrivate->loadedColumns.keys())
+    for (const int column : tableViewPrivate->loadedColumns)
         QVERIFY(!columnsToHideList.contains(column));
 }
 
@@ -2577,9 +2582,21 @@ void tst_QQuickTableView::checkThatRevisionedPropertiesCannotBeUsedInOldImports(
 void tst_QQuickTableView::checkSyncView_rootView_data()
 {
     QTest::addColumn<qreal>("flickToPos");
+    QTest::addColumn<qreal>("rowSpacing");
+    QTest::addColumn<qreal>("columnSpacing");
+    QTest::addColumn<qreal>("leftMargin");
+    QTest::addColumn<qreal>("rightMargin");
+    QTest::addColumn<qreal>("topMargin");
+    QTest::addColumn<qreal>("bottomMargin");
 
-    QTest::newRow("pos:110") << 110.;
-    QTest::newRow("pos:2010") << 2010.;
+    QTest::newRow("pos:110") << 110. << 0. << 0. << 0. << 0. << 0. << 0.;
+    QTest::newRow("pos:2010") << 2010. << 0. << 0. << 0. << 0. << 0. << 0.;
+
+    QTest::newRow("pos:110, spacing") << 110. << 10. << 20. << 0. << 0. << 0. << 0.;
+    QTest::newRow("pos:2010, spacing") << 2010. << 10. << 20. << 0. << 0. << 0. << 0.;
+
+    QTest::newRow("pos:110, margins") << 110. << 0. << 0. << 10. << 10. << 20. << 20.;
+    QTest::newRow("pos:2010, margins") << 2010. << 0. << 0. << 10. << 10. << 20. << 20.;
 }
 
 void tst_QQuickTableView::checkSyncView_rootView()
@@ -2588,6 +2605,13 @@ void tst_QQuickTableView::checkSyncView_rootView()
     // no other view as syncView), all the other tableviews will sync
     // their content view position according to their syncDirection flag.
     QFETCH(qreal, flickToPos);
+    QFETCH(qreal, rowSpacing);
+    QFETCH(qreal, columnSpacing);
+    QFETCH(qreal, leftMargin);
+    QFETCH(qreal, rightMargin);
+    QFETCH(qreal, topMargin);
+    QFETCH(qreal, bottomMargin);
+
     LOAD_TABLEVIEW("syncviewsimple.qml");
     GET_QML_TABLEVIEW(tableViewH);
     GET_QML_TABLEVIEW(tableViewV);
@@ -2600,18 +2624,32 @@ void tst_QQuickTableView::checkSyncView_rootView()
     for (auto view : views)
         view->setModel(model);
 
+    tableView->setRowSpacing(rowSpacing);
+    tableView->setColumnSpacing(columnSpacing);
+    tableView->setLeftMargin(leftMargin);
+    tableView->setRightMargin(rightMargin);
+    tableView->setTopMargin(topMargin);
+    tableView->setBottomMargin(bottomMargin);
     tableView->setContentX(flickToPos);
     tableView->setContentY(flickToPos);
 
     WAIT_UNTIL_POLISHED;
 
-    // Check that geometry properties are mirrored
+    // Check that geometry properties are mirrored accoring to sync direction
     QCOMPARE(tableViewH->columnSpacing(), tableView->columnSpacing());
     QCOMPARE(tableViewH->rowSpacing(), 0);
     QCOMPARE(tableViewH->contentWidth(), tableView->contentWidth());
+    QCOMPARE(tableViewH->leftMargin(), tableView->leftMargin());
+    QCOMPARE(tableViewH->rightMargin(), tableView->rightMargin());
+    QCOMPARE(tableViewH->topMargin(), 0);
+    QCOMPARE(tableViewH->bottomMargin(), 0);
     QCOMPARE(tableViewV->columnSpacing(), 0);
     QCOMPARE(tableViewV->rowSpacing(), tableView->rowSpacing());
     QCOMPARE(tableViewV->contentHeight(), tableView->contentHeight());
+    QCOMPARE(tableViewV->topMargin(), tableView->topMargin());
+    QCOMPARE(tableViewV->bottomMargin(), tableView->bottomMargin());
+    QCOMPARE(tableViewV->leftMargin(), 0);
+    QCOMPARE(tableViewV->rightMargin(), 0);
 
     // Check that viewport is in sync after the flick
     QCOMPARE(tableView->contentX(), flickToPos);
@@ -3069,9 +3107,10 @@ void tst_QQuickTableView::replaceModel()
 void tst_QQuickTableView::cellAtPos_data()
 {
     QTest::addColumn<QPointF>("contentStartPos");
-    QTest::addColumn<QPointF>("position");
+    QTest::addColumn<QPointF>("localPos");
     QTest::addColumn<bool>("includeSpacing");
     QTest::addColumn<QPoint>("expectedCell");
+    QTest::addColumn<QSizeF>("margins");
 
     const int spacing = 10;
     const QPointF cellSize(100, 50);
@@ -3084,80 +3123,97 @@ void tst_QQuickTableView::cellAtPos_data()
         return QPointF(x, y);
     };
 
-    QTest::newRow("1") << QPointF(0, 0) << cellStart(0, 0) << false << QPoint(0, 0);
-    QTest::newRow("2") << QPointF(0, 0) << cellStart(1, 0) << false << QPoint(1, 0);
-    QTest::newRow("3") << QPointF(0, 0) << cellStart(0, 1) << false << QPoint(0, 1);
-    QTest::newRow("4") << QPointF(0, 0) << cellStart(1, 1) << false << QPoint(1, 1);
+    QTest::newRow("1") << QPointF(0, 0) << cellStart(0, 0) << false << QPoint(0, 0) << QSizeF(0, 0);
+    QTest::newRow("2") << QPointF(0, 0) << cellStart(1, 0) << false << QPoint(1, 0) << QSizeF(0, 0);
+    QTest::newRow("3") << QPointF(0, 0) << cellStart(0, 1) << false << QPoint(0, 1) << QSizeF(0, 0);
+    QTest::newRow("4") << QPointF(0, 0) << cellStart(1, 1) << false << QPoint(1, 1) << QSizeF(0, 0);
 
-    QTest::newRow("5") << QPointF(0, 0) << cellStart(1, 1) - quadSpace << false << QPoint(-1, -1);
-    QTest::newRow("6") << QPointF(0, 0) << cellStart(0, 0) + cellSize + quadSpace << false << QPoint(-1, -1);
-    QTest::newRow("7") << QPointF(0, 0) << cellStart(0, 1) + cellSize + quadSpace << false << QPoint(-1, -1);
+    QTest::newRow("5") << QPointF(0, 0) << cellStart(1, 1) - quadSpace << false << QPoint(-1, -1) << QSizeF(0, 0);
+    QTest::newRow("6") << QPointF(0, 0) << cellStart(0, 0) + cellSize + quadSpace << false << QPoint(-1, -1) << QSizeF(0, 0);
+    QTest::newRow("7") << QPointF(0, 0) << cellStart(0, 1) + cellSize + quadSpace << false << QPoint(-1, -1) << QSizeF(0, 0);
 
-    QTest::newRow("8") << QPointF(0, 0) << cellStart(1, 1) - quadSpace << true << QPoint(1, 1);
-    QTest::newRow("9") << QPointF(0, 0) << cellStart(0, 0) + cellSize + quadSpace << true << QPoint(0, 0);
-    QTest::newRow("10") << QPointF(0, 0) << cellStart(0, 1) + cellSize + quadSpace << true << QPoint(0, 1);
+    QTest::newRow("8") << QPointF(0, 0) << cellStart(1, 1) - quadSpace << true << QPoint(1, 1) << QSizeF(0, 0);
+    QTest::newRow("9") << QPointF(0, 0) << cellStart(0, 0) + cellSize + quadSpace << true << QPoint(0, 0) << QSizeF(0, 0);
+    QTest::newRow("10") << QPointF(0, 0) << cellStart(0, 1) + cellSize + quadSpace << true << QPoint(0, 1) << QSizeF(0, 0);
 
-    QTest::newRow("11") << cellStart(50, 50) << cellStart(0, 0) << false << QPoint(50, 50);
-    QTest::newRow("12") << cellStart(50, 50) << cellStart(4, 4) << false << QPoint(54, 54);
-    QTest::newRow("13") << cellStart(50, 50) << cellStart(4, 4) - quadSpace << false << QPoint(-1, -1);
-    QTest::newRow("14") << cellStart(50, 50) << cellStart(4, 4) + cellSize + quadSpace << false << QPoint(-1, -1);
-    QTest::newRow("15") << cellStart(50, 50) << cellStart(4, 4) - quadSpace << true << QPoint(54, 54);
-    QTest::newRow("16") << cellStart(50, 50) << cellStart(4, 4) + cellSize + quadSpace << true << QPoint(54, 54);
+    QTest::newRow("11") << cellStart(50, 50) << cellStart(50, 50) << false << QPoint(50, 50) << QSizeF(0, 0);
+    QTest::newRow("12") << cellStart(50, 50) << cellStart(54, 54) << false << QPoint(54, 54) << QSizeF(0, 0);
+    QTest::newRow("13") << cellStart(50, 50) << cellStart(54, 54) - quadSpace << false << QPoint(-1, -1) << QSizeF(0, 0);
+    QTest::newRow("14") << cellStart(50, 50) << cellStart(54, 54) + cellSize + quadSpace << false << QPoint(-1, -1) << QSizeF(0, 0);
+    QTest::newRow("15") << cellStart(50, 50) << cellStart(54, 54) - quadSpace << true << QPoint(54, 54) << QSizeF(0, 0);
+    QTest::newRow("16") << cellStart(50, 50) << cellStart(54, 54) + cellSize + quadSpace << true << QPoint(54, 54) << QSizeF(0, 0);
 
-    QTest::newRow("17") << cellStart(50, 50) + halfCell << cellStart(0, 0) << false << QPoint(50, 50);
-    QTest::newRow("18") << cellStart(50, 50) + halfCell << cellStart(1, 1) << false << QPoint(51, 51);
-    QTest::newRow("19") << cellStart(50, 50) + halfCell << cellStart(4, 4) << false << QPoint(54, 54);
+    QTest::newRow("17") << cellStart(50, 50) + halfCell << cellStart(50, 50) << false << QPoint(50, 50) << QSizeF(0, 0);
+    QTest::newRow("18") << cellStart(50, 50) + halfCell << cellStart(51, 51) << false << QPoint(51, 51) << QSizeF(0, 0);
+    QTest::newRow("19") << cellStart(50, 50) + halfCell << cellStart(54, 54) << false << QPoint(54, 54) << QSizeF(0, 0);
+
+    QTest::newRow("20") << QPointF(0, 0) << cellStart(0, 0) << false << QPoint(0, 0) << QSizeF(150, 150);
+    QTest::newRow("20") << QPointF(0, 0) << cellStart(5, 5) << false << QPoint(5, 5) << QSizeF(150, 150);
+
+    QTest::newRow("20") << QPointF(-150, -150) << cellStart(0, 0) << false << QPoint(0, 0) << QSizeF(150, 150);
+    QTest::newRow("21") << QPointF(-150, -150) << cellStart(4, 0) + halfCell << false << QPoint(4, 0) << QSizeF(150, 150);
+    QTest::newRow("22") << QPointF(-150, -150) << cellStart(0, 4) + halfCell << false << QPoint(0, 4) << QSizeF(150, 150);
+    QTest::newRow("23") << QPointF(-150, -150) << cellStart(4, 4) + halfCell << false << QPoint(4, 4) << QSizeF(150, 150);
 }
 
 void tst_QQuickTableView::cellAtPos()
 {
     QFETCH(QPointF, contentStartPos);
-    QFETCH(QPointF, position);
+    QFETCH(QPointF, localPos);
     QFETCH(bool, includeSpacing);
     QFETCH(QPoint, expectedCell);
+    QFETCH(QSizeF, margins);
 
     LOAD_TABLEVIEW("plaintableview.qml");
     auto model = TestModelAsVariant(100, 100);
     tableView->setModel(model);
     tableView->setRowSpacing(10);
     tableView->setColumnSpacing(10);
+    tableView->setLeftMargin(margins.width());
+    tableView->setLeftMargin(margins.height());
+    tableView->setTopMargin(margins.height());
     tableView->setContentX(contentStartPos.x());
     tableView->setContentY(contentStartPos.y());
 
     WAIT_UNTIL_POLISHED;
 
-    QPoint cell = tableView->cellAtPos(position, includeSpacing);
+    QPoint cell = tableView->cellAtPosition(localPos, includeSpacing);
     QCOMPARE(cell, expectedCell);
 }
 
 void tst_QQuickTableView::positionViewAtRow_data()
 {
     QTest::addColumn<int>("row");
-    QTest::addColumn<Qt::AlignmentFlag>("alignment");
+    QTest::addColumn<QQuickTableView::PositionModeFlag>("alignment");
     QTest::addColumn<qreal>("offset");
+    QTest::addColumn<QRectF>("subRect");
     QTest::addColumn<qreal>("contentYStartPos");
 
-    QTest::newRow("AlignTop 0") << 0 << Qt::AlignTop << 0. << 0.;
-    QTest::newRow("AlignTop 1") << 1 << Qt::AlignTop << 0. << 0.;
-    QTest::newRow("AlignTop 1") << 1 << Qt::AlignTop << 0. << 50.;
-    QTest::newRow("AlignTop 50") << 50 << Qt::AlignTop << 0. << -1.;
-    QTest::newRow("AlignTop 0") << 0 << Qt::AlignTop << 0. << -1.;
-    QTest::newRow("AlignTop 1") << 1 << Qt::AlignTop << -10. << 0.;
-    QTest::newRow("AlignTop 1") << 1 << Qt::AlignTop << -10. << 50.;
-    QTest::newRow("AlignTop 50") << 50 << Qt::AlignTop << -10. << -1.;
+    QRectF subRects[] = { QRectF(), QRectF(11, 12, 13, 14) };
 
-    QTest::newRow("AlignBottom 50") << 50 << Qt::AlignBottom << 0. << -1.;
-    QTest::newRow("AlignBottom 98") << 98 << Qt::AlignBottom << 0. << -1.;
-    QTest::newRow("AlignBottom 99") << 99 << Qt::AlignBottom << 0. << -1.;
-    QTest::newRow("AlignBottom 50") << 40 << Qt::AlignBottom << 10. << -1.;
-    QTest::newRow("AlignBottom 40") << 50 << Qt::AlignBottom << -10. << -1.;
-    QTest::newRow("AlignBottom 98") << 98 << Qt::AlignBottom << 10. << -1.;
-    QTest::newRow("AlignBottom 99") << 99 << Qt::AlignBottom << -10. << -1.;
+    for (auto subRect : subRects) {
+        QTest::newRow("AlignTop 0") << 0 << QQuickTableView::AlignTop << 0. << subRect << 0.;
+        QTest::newRow("AlignTop 1") << 1 << QQuickTableView::AlignTop << 0. << subRect << 0.;
+        QTest::newRow("AlignTop 1") << 1 << QQuickTableView::AlignTop << 0. << subRect << 50.;
+        QTest::newRow("AlignTop 50") << 50 << QQuickTableView::AlignTop << 0. << subRect << -1.;
+        QTest::newRow("AlignTop 0") << 0 << QQuickTableView::AlignTop << 0. << subRect << -1.;
+        QTest::newRow("AlignTop 1") << 1 << QQuickTableView::AlignTop << -10. << subRect << 0.;
+        QTest::newRow("AlignTop 1") << 1 << QQuickTableView::AlignTop << -10. << subRect << 50.;
+        QTest::newRow("AlignTop 50") << 50 << QQuickTableView::AlignTop << -10. << subRect << -1.;
 
-    QTest::newRow("AlignCenter 40") << 40 << Qt::AlignCenter << 0. << -1.;
-    QTest::newRow("AlignCenter 50") << 50 << Qt::AlignCenter << 0. << -1.;
-    QTest::newRow("AlignCenter 40") << 40 << Qt::AlignCenter << 10. << -1.;
-    QTest::newRow("AlignCenter 50") << 50 << Qt::AlignCenter << -10. << -1.;
+        QTest::newRow("AlignBottom 50") << 50 << QQuickTableView::AlignBottom << 0. << subRect << -1.;
+        QTest::newRow("AlignBottom 98") << 98 << QQuickTableView::AlignBottom << 0. << subRect << -1.;
+        QTest::newRow("AlignBottom 99") << 99 << QQuickTableView::AlignBottom << 0. << subRect << -1.;
+        QTest::newRow("AlignBottom 50") << 40 << QQuickTableView::AlignBottom << 10. << subRect << -1.;
+        QTest::newRow("AlignBottom 40") << 50 << QQuickTableView::AlignBottom << -10. << subRect << -1.;
+        QTest::newRow("AlignBottom 98") << 98 << QQuickTableView::AlignBottom << 10. << subRect << -1.;
+        QTest::newRow("AlignBottom 99") << 99 << QQuickTableView::AlignBottom << -10. << subRect << -1.;
+
+        QTest::newRow("AlignCenter 40") << 40 << QQuickTableView::AlignCenter << 0. << subRect << -1.;
+        QTest::newRow("AlignCenter 50") << 50 << QQuickTableView::AlignCenter << 0. << subRect << -1.;
+        QTest::newRow("AlignCenter 40") << 40 << QQuickTableView::AlignCenter << 10. << subRect << -1.;
+        QTest::newRow("AlignCenter 50") << 50 << QQuickTableView::AlignCenter << -10. << subRect << -1.;
+    }
 }
 
 void tst_QQuickTableView::positionViewAtRow()
@@ -3167,8 +3223,9 @@ void tst_QQuickTableView::positionViewAtRow()
     // For this test, we only check cells that can be placed exactly
     // according to the given alignment.
     QFETCH(int, row);
-    QFETCH(Qt::AlignmentFlag, alignment);
+    QFETCH(QQuickTableView::PositionModeFlag, alignment);
     QFETCH(qreal, offset);
+    QFETCH(QRectF, subRect);
     QFETCH(qreal, contentYStartPos);
 
     LOAD_TABLEVIEW("plaintableview.qml");
@@ -3179,24 +3236,26 @@ void tst_QQuickTableView::positionViewAtRow()
 
     WAIT_UNTIL_POLISHED;
 
-    tableView->positionViewAtRow(row, alignment, offset);
+    tableView->positionViewAtRow(row, alignment, offset, subRect);
 
-    WAIT_UNTIL_POLISHED;
+    if (!tableView->isRowLoaded(row))
+        WAIT_UNTIL_POLISHED;
 
     const QPoint cell(0, row);
     const int modelIndex = tableViewPrivate->modelIndexAtCell(cell);
     QVERIFY(tableViewPrivate->loadedItems.contains(modelIndex));
-    const auto geometry = tableViewPrivate->loadedTableItem(cell)->geometry();
+    const QRectF cellRect = tableViewPrivate->loadedTableItem(cell)->geometry();
+    const QRectF alignmentRect = subRect.isValid() ? subRect.translated(cellRect.topLeft()) : cellRect;
 
     switch (alignment) {
-    case Qt::AlignTop:
-        QCOMPARE(geometry.y(), tableView->contentY() - offset);
+    case QQuickTableView::AlignTop:
+        QCOMPARE(alignmentRect.y(), tableView->contentY() - offset);
         break;
-    case Qt::AlignBottom:
-        QCOMPARE(geometry.bottom(), tableView->contentY() + tableView->height() - offset);
+    case QQuickTableView::AlignBottom:
+        QCOMPARE(alignmentRect.bottom(), tableView->contentY() + tableView->height() - offset);
         break;
-    case Qt::AlignCenter:
-        QCOMPARE(geometry.y(), tableView->contentY() + (tableView->height() / 2) - (geometry.height() / 2) - offset);
+    case QQuickTableView::AlignCenter:
+        QCOMPARE(alignmentRect.y(), tableView->contentY() + (tableView->height() / 2) - (alignmentRect.height() / 2) - offset);
         break;
     default:
         Q_UNREACHABLE();
@@ -3206,28 +3265,33 @@ void tst_QQuickTableView::positionViewAtRow()
 void tst_QQuickTableView::positionViewAtColumn_data()
 {
     QTest::addColumn<int>("column");
-    QTest::addColumn<Qt::AlignmentFlag>("alignment");
+    QTest::addColumn<QQuickTableView::PositionModeFlag>("alignment");
     QTest::addColumn<qreal>("offset");
+    QTest::addColumn<QRectF>("subRect");
     QTest::addColumn<qreal>("contentXStartPos");
 
-    QTest::newRow("AlignLeft 0") << 0 << Qt::AlignLeft << 0. << 0.;
-    QTest::newRow("AlignLeft 1") << 1 << Qt::AlignLeft << 0. << 0.;
-    QTest::newRow("AlignLeft 1") << 1 << Qt::AlignLeft << 0. << 50.;
-    QTest::newRow("AlignLeft 50") << 50 << Qt::AlignLeft << 0. << -1.;
-    QTest::newRow("AlignLeft 0") << 0 << Qt::AlignLeft << 0. << -1.;
-    QTest::newRow("AlignLeft 1") << 1 << Qt::AlignLeft << -10. << 0.;
-    QTest::newRow("AlignLeft 1") << 1 << Qt::AlignLeft << -10. << 50.;
-    QTest::newRow("AlignLeft 50") << 50 << Qt::AlignLeft << -10. << -1.;
+    QRectF subRects[] = { QRectF(), QRectF(11, 12, 13, 14) };
 
-    QTest::newRow("AlignRight 50") << 50 << Qt::AlignRight << 0. << -1.;
-    QTest::newRow("AlignRight 99") << 99 << Qt::AlignRight << 0. << -1.;
-    QTest::newRow("AlignRight 50") << 50 << Qt::AlignRight << 10. << -1.;
-    QTest::newRow("AlignRight 99") << 99 << Qt::AlignRight << -10. << -1.;
+    for (auto subRect : subRects) {
+        QTest::newRow("AlignLeft 0") << 0 << QQuickTableView::AlignLeft << 0. << subRect << 0.;
+        QTest::newRow("AlignLeft 1") << 1 << QQuickTableView::AlignLeft << 0. << subRect << 0.;
+        QTest::newRow("AlignLeft 1") << 1 << QQuickTableView::AlignLeft << 0. << subRect << 50.;
+        QTest::newRow("AlignLeft 50") << 50 << QQuickTableView::AlignLeft << 0. << subRect << -1.;
+        QTest::newRow("AlignLeft 0") << 0 << QQuickTableView::AlignLeft << 0. << subRect << -1.;
+        QTest::newRow("AlignLeft 1") << 1 << QQuickTableView::AlignLeft << -10. << subRect << 0.;
+        QTest::newRow("AlignLeft 1") << 1 << QQuickTableView::AlignLeft << -10. << subRect << 50.;
+        QTest::newRow("AlignLeft 50") << 50 << QQuickTableView::AlignLeft << -10. << subRect << -1.;
 
-    QTest::newRow("AlignCenter 40") << 50 << Qt::AlignCenter << 0. << -1.;
-    QTest::newRow("AlignCenter 50") << 50 << Qt::AlignCenter << 0. << -1.;
-    QTest::newRow("AlignCenter 40") << 50 << Qt::AlignCenter << 10. << -1.;
-    QTest::newRow("AlignCenter 50") << 50 << Qt::AlignCenter << -10. << -1.;
+        QTest::newRow("AlignRight 50") << 50 << QQuickTableView::AlignRight << 0. << subRect << -1.;
+        QTest::newRow("AlignRight 99") << 99 << QQuickTableView::AlignRight << 0. << subRect << -1.;
+        QTest::newRow("AlignRight 50") << 50 << QQuickTableView::AlignRight << 10. << subRect << -1.;
+        QTest::newRow("AlignRight 99") << 99 << QQuickTableView::AlignRight << -10. << subRect << -1.;
+
+        QTest::newRow("AlignCenter 40") << 50 << QQuickTableView::AlignCenter << 0. << subRect << -1.;
+        QTest::newRow("AlignCenter 50") << 50 << QQuickTableView::AlignCenter << 0. << subRect << -1.;
+        QTest::newRow("AlignCenter 40") << 50 << QQuickTableView::AlignCenter << 10. << subRect << -1.;
+        QTest::newRow("AlignCenter 50") << 50 << QQuickTableView::AlignCenter << -10. << subRect << -1.;
+    }
 }
 
 void tst_QQuickTableView::positionViewAtColumn()
@@ -3237,8 +3301,9 @@ void tst_QQuickTableView::positionViewAtColumn()
     // For this test, we only check cells that can be placed exactly
     // according to the given alignment.
     QFETCH(int, column);
-    QFETCH(Qt::AlignmentFlag, alignment);
+    QFETCH(QQuickTableView::PositionModeFlag, alignment);
     QFETCH(qreal, offset);
+    QFETCH(QRectF, subRect);
     QFETCH(qreal, contentXStartPos);
 
     LOAD_TABLEVIEW("plaintableview.qml");
@@ -3249,24 +3314,26 @@ void tst_QQuickTableView::positionViewAtColumn()
 
     WAIT_UNTIL_POLISHED;
 
-    tableView->positionViewAtColumn(column, alignment, offset);
+    tableView->positionViewAtColumn(column, alignment, offset, subRect);
 
-    WAIT_UNTIL_POLISHED;
+    if (!tableView->isColumnLoaded(column))
+        WAIT_UNTIL_POLISHED;
 
     const QPoint cell(column, 0);
     const int modelIndex = tableViewPrivate->modelIndexAtCell(cell);
     QVERIFY(tableViewPrivate->loadedItems.contains(modelIndex));
-    const auto geometry = tableViewPrivate->loadedTableItem(cell)->geometry();
+    const QRectF cellRect = tableViewPrivate->loadedTableItem(cell)->geometry();
+    const QRectF alignmentRect = subRect.isValid() ? subRect.translated(cellRect.topLeft()) : cellRect;
 
     switch (alignment) {
-    case Qt::AlignLeft:
-        QCOMPARE(geometry.x(), tableView->contentX() - offset);
+    case QQuickTableView::AlignLeft:
+        QCOMPARE(alignmentRect.x(), tableView->contentX() - offset);
         break;
-    case Qt::AlignRight:
-        QCOMPARE(geometry.right(), tableView->contentX() + tableView->width() - offset);
+    case QQuickTableView::AlignRight:
+        QCOMPARE(alignmentRect.right(), tableView->contentX() + tableView->width() - offset);
         break;
-    case Qt::AlignCenter:
-        QCOMPARE(geometry.x(), tableView->contentX() + (tableView->width() / 2) - (geometry.width() / 2) - offset);
+    case QQuickTableView::AlignCenter:
+        QCOMPARE(alignmentRect.x(), tableView->contentX() + (tableView->width() / 2) - (alignmentRect.width() / 2) - offset);
         break;
     default:
         Q_UNREACHABLE();
@@ -3276,37 +3343,42 @@ void tst_QQuickTableView::positionViewAtColumn()
 void tst_QQuickTableView::positionViewAtRowClamped_data()
 {
     QTest::addColumn<int>("row");
-    QTest::addColumn<Qt::AlignmentFlag>("alignment");
+    QTest::addColumn<QQuickTableView::PositionModeFlag>("alignment");
     QTest::addColumn<qreal>("offset");
+    QTest::addColumn<QRectF>("subRect");
     QTest::addColumn<qreal>("contentYStartPos");
 
-    QTest::newRow("AlignTop 0") << 0 << Qt::AlignTop << -10. << 0.;
-    QTest::newRow("AlignTop 0") << 0 << Qt::AlignTop << -10. << -1.;
-    QTest::newRow("AlignTop 99") << 99 << Qt::AlignTop << 0. << -1.;
-    QTest::newRow("AlignTop 99") << 99 << Qt::AlignTop << -10. << -1.;
+    QRectF subRects[] = { QRectF(), QRectF(1, 2, 3, 4) };
 
-    QTest::newRow("AlignBottom 0") << 0 << Qt::AlignBottom << 0. << 0.;
-    QTest::newRow("AlignBottom 1") << 1 << Qt::AlignBottom << 0. << 0.;
-    QTest::newRow("AlignBottom 1") << 1 << Qt::AlignBottom << 0. << 50.;
-    QTest::newRow("AlignBottom 0") << 0 << Qt::AlignBottom << 0. << -1.;
+    for (auto subRect : subRects) {
+        QTest::newRow("AlignTop 0") << 0 << QQuickTableView::AlignTop << -10. << subRect << 0.;
+        QTest::newRow("AlignTop 0") << 0 << QQuickTableView::AlignTop << -10. << subRect << -1.;
+        QTest::newRow("AlignTop 99") << 99 << QQuickTableView::AlignTop << 0. << subRect << -1.;
+        QTest::newRow("AlignTop 99") << 99 << QQuickTableView::AlignTop << -10. << subRect << -1.;
 
-    QTest::newRow("AlignBottom 0") << 0 << Qt::AlignBottom << 10. << 0.;
-    QTest::newRow("AlignBottom 1") << 1 << Qt::AlignBottom << 10. << 0.;
-    QTest::newRow("AlignBottom 1") << 1 << Qt::AlignBottom << 10. << 50.;
-    QTest::newRow("AlignBottom 0") << 0 << Qt::AlignBottom << 10. << -1.;
-    QTest::newRow("AlignBottom 99") << 99 << Qt::AlignBottom << 10. << -1.;
+        QTest::newRow("AlignBottom 0") << 0 << QQuickTableView::AlignBottom << 0. << subRect << 0.;
+        QTest::newRow("AlignBottom 1") << 1 << QQuickTableView::AlignBottom << 0. << subRect << 0.;
+        QTest::newRow("AlignBottom 1") << 1 << QQuickTableView::AlignBottom << 0. << subRect << 50.;
+        QTest::newRow("AlignBottom 0") << 0 << QQuickTableView::AlignBottom << 0. << subRect << -1.;
 
-    QTest::newRow("AlignCenter 0") << 0 << Qt::AlignCenter << 0. << 0.;
-    QTest::newRow("AlignCenter 1") << 1 << Qt::AlignCenter << 0. << 0.;
-    QTest::newRow("AlignCenter 1") << 1 << Qt::AlignCenter << 0. << 50.;
-    QTest::newRow("AlignCenter 0") << 0 << Qt::AlignCenter << 0. << -1.;
-    QTest::newRow("AlignCenter 99") << 99 << Qt::AlignCenter << 0. << -1.;
+        QTest::newRow("AlignBottom 0") << 0 << QQuickTableView::AlignBottom << 10. << subRect << 0.;
+        QTest::newRow("AlignBottom 1") << 1 << QQuickTableView::AlignBottom << 10. << subRect << 0.;
+        QTest::newRow("AlignBottom 1") << 1 << QQuickTableView::AlignBottom << 10. << subRect << 50.;
+        QTest::newRow("AlignBottom 0") << 0 << QQuickTableView::AlignBottom << 10. << subRect << -1.;
+        QTest::newRow("AlignBottom 99") << 99 << QQuickTableView::AlignBottom << 50. << subRect << -1.;
 
-    QTest::newRow("AlignCenter 0") << 0 << Qt::AlignCenter << -10. << 0.;
-    QTest::newRow("AlignCenter 1") << 1 << Qt::AlignCenter << -10. << 0.;
-    QTest::newRow("AlignCenter 1") << 1 << Qt::AlignCenter << -10. << 50.;
-    QTest::newRow("AlignCenter 0") << 0 << Qt::AlignCenter << -10. << -1.;
-    QTest::newRow("AlignCenter 99") << 99 << Qt::AlignCenter << -10. << -1.;
+        QTest::newRow("AlignCenter 0") << 0 << QQuickTableView::AlignCenter << 0. << subRect << 0.;
+        QTest::newRow("AlignCenter 1") << 1 << QQuickTableView::AlignCenter << 0. << subRect << 0.;
+        QTest::newRow("AlignCenter 1") << 1 << QQuickTableView::AlignCenter << 0. << subRect << 50.;
+        QTest::newRow("AlignCenter 0") << 0 << QQuickTableView::AlignCenter << 0. << subRect << -1.;
+        QTest::newRow("AlignCenter 99") << 99 << QQuickTableView::AlignCenter << 0. << subRect << -1.;
+
+        QTest::newRow("AlignCenter 0") << 0 << QQuickTableView::AlignCenter << -10. << subRect << 0.;
+        QTest::newRow("AlignCenter 1") << 1 << QQuickTableView::AlignCenter << -10. << subRect << 0.;
+        QTest::newRow("AlignCenter 1") << 1 << QQuickTableView::AlignCenter << -10. << subRect << 50.;
+        QTest::newRow("AlignCenter 0") << 0 << QQuickTableView::AlignCenter << -10. << subRect << -1.;
+        QTest::newRow("AlignCenter 99") << 99 << QQuickTableView::AlignCenter << -10. << subRect << -1.;
+    }
 }
 
 void tst_QQuickTableView::positionViewAtRowClamped()
@@ -3318,8 +3390,9 @@ void tst_QQuickTableView::positionViewAtRowClamped()
     // table should be flicked to the edge of the viewport, close to the
     // requested alignment.
     QFETCH(int, row);
-    QFETCH(Qt::AlignmentFlag, alignment);
+    QFETCH(QQuickTableView::PositionModeFlag, alignment);
     QFETCH(qreal, offset);
+    QFETCH(QRectF, subRect);
     QFETCH(qreal, contentYStartPos);
 
     LOAD_TABLEVIEW("plaintableview.qml");
@@ -3328,11 +3401,13 @@ void tst_QQuickTableView::positionViewAtRowClamped()
     if (contentYStartPos >= 0)
         tableView->setContentY(contentYStartPos);
 
-    WAIT_UNTIL_POLISHED;
+    if (!tableView->isRowLoaded(row))
+        WAIT_UNTIL_POLISHED;
 
-    tableView->positionViewAtRow(row, alignment, offset);
+    tableView->positionViewAtRow(row, alignment, offset, subRect);
 
-    WAIT_UNTIL_POLISHED;
+    if (!tableView->isRowLoaded(row))
+        WAIT_UNTIL_POLISHED;
 
     QCOMPARE(tableView->contentY(), row < 50 ? 0 : tableView->contentHeight() - tableView->height());
 }
@@ -3340,37 +3415,42 @@ void tst_QQuickTableView::positionViewAtRowClamped()
 void tst_QQuickTableView::positionViewAtColumnClamped_data()
 {
     QTest::addColumn<int>("column");
-    QTest::addColumn<Qt::AlignmentFlag>("alignment");
+    QTest::addColumn<QQuickTableView::PositionModeFlag>("alignment");
     QTest::addColumn<qreal>("offset");
+    QTest::addColumn<QRectF>("subRect");
     QTest::addColumn<qreal>("contentXStartPos");
 
-    QTest::newRow("AlignLeft 0") << 0 << Qt::AlignLeft << -10. << 0.;
-    QTest::newRow("AlignLeft 0") << 0 << Qt::AlignLeft << -10. << -1.;
-    QTest::newRow("AlignLeft 99") << 99 << Qt::AlignLeft << 0. << -1.;
-    QTest::newRow("AlignLeft 99") << 99 << Qt::AlignLeft << -10. << -1.;
+    QRectF subRects[] = { QRectF(), QRectF(1, 2, 3, 4) };
 
-    QTest::newRow("AlignRight 0") << 0 << Qt::AlignRight << 0. << 0.;
-    QTest::newRow("AlignRight 1") << 1 << Qt::AlignRight << 0. << 0.;
-    QTest::newRow("AlignRight 1") << 1 << Qt::AlignRight << 0. << 50.;
-    QTest::newRow("AlignRight 0") << 0 << Qt::AlignRight << 0. << -1.;
+    for (auto subRect : subRects) {
+        QTest::newRow("AlignLeft 0") << 0 << QQuickTableView::AlignLeft << -10. << subRect << 0.;
+        QTest::newRow("AlignLeft 0") << 0 << QQuickTableView::AlignLeft << -10. << subRect << -1.;
+        QTest::newRow("AlignLeft 99") << 99 << QQuickTableView::AlignLeft << 0. << subRect << -1.;
+        QTest::newRow("AlignLeft 99") << 99 << QQuickTableView::AlignLeft << -10. << subRect << -1.;
 
-    QTest::newRow("AlignRight 0") << 0 << Qt::AlignRight << 10. << 0.;
-    QTest::newRow("AlignRight 1") << 1 << Qt::AlignRight << 10. << 0.;
-    QTest::newRow("AlignRight 1") << 1 << Qt::AlignRight << 10. << 50.;
-    QTest::newRow("AlignRight 0") << 0 << Qt::AlignRight << 10. << -1.;
-    QTest::newRow("AlignRight 99") << 99 << Qt::AlignRight << 10. << -1.;
+        QTest::newRow("AlignRight 0") << 0 << QQuickTableView::AlignRight << 0. << subRect << 0.;
+        QTest::newRow("AlignRight 1") << 1 << QQuickTableView::AlignRight << 0. << subRect << 0.;
+        QTest::newRow("AlignRight 1") << 1 << QQuickTableView::AlignRight << 0. << subRect << 50.;
+        QTest::newRow("AlignRight 0") << 0 << QQuickTableView::AlignRight << 0. << subRect << -1.;
 
-    QTest::newRow("AlignCenter 0") << 0 << Qt::AlignCenter << 0. << 0.;
-    QTest::newRow("AlignCenter 1") << 1 << Qt::AlignCenter << 0. << 0.;
-    QTest::newRow("AlignCenter 1") << 1 << Qt::AlignCenter << 0. << 50.;
-    QTest::newRow("AlignCenter 0") << 0 << Qt::AlignCenter << 0. << -1.;
-    QTest::newRow("AlignCenter 99") << 99 << Qt::AlignCenter << 0. << -1.;
+        QTest::newRow("AlignRight 0") << 0 << QQuickTableView::AlignRight << 10. << subRect << 0.;
+        QTest::newRow("AlignRight 1") << 1 << QQuickTableView::AlignRight << 10. << subRect << 0.;
+        QTest::newRow("AlignRight 1") << 1 << QQuickTableView::AlignRight << 10. << subRect << 50.;
+        QTest::newRow("AlignRight 0") << 0 << QQuickTableView::AlignRight << 10. << subRect << -1.;
+        QTest::newRow("AlignRight 99") << 99 << QQuickTableView::AlignRight << 100. << subRect << -1.;
 
-    QTest::newRow("AlignCenter 0") << 0 << Qt::AlignCenter << -10. << 0.;
-    QTest::newRow("AlignCenter 1") << 1 << Qt::AlignCenter << -10. << 0.;
-    QTest::newRow("AlignCenter 1") << 1 << Qt::AlignCenter << -10. << 50.;
-    QTest::newRow("AlignCenter 0") << 0 << Qt::AlignCenter << -10. << -1.;
-    QTest::newRow("AlignCenter 99") << 99 << Qt::AlignCenter << -10. << -1.;
+        QTest::newRow("AlignCenter 0") << 0 << QQuickTableView::AlignCenter << 0. << subRect << 0.;
+        QTest::newRow("AlignCenter 1") << 1 << QQuickTableView::AlignCenter << 0. << subRect << 0.;
+        QTest::newRow("AlignCenter 1") << 1 << QQuickTableView::AlignCenter << 0. << subRect << 50.;
+        QTest::newRow("AlignCenter 0") << 0 << QQuickTableView::AlignCenter << 0. << subRect << -1.;
+        QTest::newRow("AlignCenter 99") << 99 << QQuickTableView::AlignCenter << 0. << subRect << -1.;
+
+        QTest::newRow("AlignCenter 0") << 0 << QQuickTableView::AlignCenter << -10. << subRect << 0.;
+        QTest::newRow("AlignCenter 1") << 1 << QQuickTableView::AlignCenter << -10. << subRect << 0.;
+        QTest::newRow("AlignCenter 1") << 1 << QQuickTableView::AlignCenter << -10. << subRect << 50.;
+        QTest::newRow("AlignCenter 0") << 0 << QQuickTableView::AlignCenter << -10. << subRect << -1.;
+        QTest::newRow("AlignCenter 99") << 99 << QQuickTableView::AlignCenter << -10. << subRect << -1.;
+    }
 }
 
 void tst_QQuickTableView::positionViewAtColumnClamped()
@@ -3382,8 +3462,9 @@ void tst_QQuickTableView::positionViewAtColumnClamped()
     // table should be flicked to the edge of the viewport, close to the
     // requested alignment.
     QFETCH(int, column);
-    QFETCH(Qt::AlignmentFlag, alignment);
+    QFETCH(QQuickTableView::PositionModeFlag, alignment);
     QFETCH(qreal, offset);
+    QFETCH(QRectF, subRect);
     QFETCH(qreal, contentXStartPos);
 
     LOAD_TABLEVIEW("plaintableview.qml");
@@ -3394,11 +3475,327 @@ void tst_QQuickTableView::positionViewAtColumnClamped()
 
     WAIT_UNTIL_POLISHED;
 
-    tableView->positionViewAtColumn(column, alignment, offset);
+    tableView->positionViewAtColumn(column, alignment, offset, subRect);
+
+    if (!tableView->isColumnLoaded(column))
+        WAIT_UNTIL_POLISHED;
+
+    QCOMPARE(tableView->contentX(), column < 50 ? 0 : tableView->contentWidth() - tableView->width());
+}
+
+void tst_QQuickTableView::positionViewAtCellWithAnimation()
+{
+    // Check that when we flick to already loaded cell in the
+    // table, this will start the animation, and the view will
+    // be position correctly after the expected duration.
+
+    LOAD_TABLEVIEW("plaintableview.qml");
+    auto model = TestModelAsVariant(100, 100);
+    tableView->setModel(model);
+    tableView->setAnimate(true);
 
     WAIT_UNTIL_POLISHED;
 
-    QCOMPARE(tableView->contentX(), column < 50 ? 0 : tableView->contentWidth() - tableView->width());
+    QPoint cell(tableView->rightColumn(), tableView->bottomRow());
+    const QRectF cellGeometry = tableViewPrivate->loadedTableItem(cell)->geometry();
+    const int modelIndex = tableViewPrivate->modelIndexAtCell(cell);
+
+    QVERIFY(tableViewPrivate->loadedItems.contains(modelIndex));
+    QVERIFY(!tableViewPrivate->positionXAnimation.isRunning());
+    QVERIFY(!tableViewPrivate->positionYAnimation.isRunning());
+
+    // Animate the cell to the top left location in the view
+    tableView->positionViewAtCell(cell, QQuickTableView::AlignTop | QQuickTableView::AlignLeft);
+
+    // Wait for animation to finish
+    QVERIFY(tableViewPrivate->positionXAnimation.isRunning());
+    QVERIFY(tableViewPrivate->positionYAnimation.isRunning());
+    QTRY_COMPARE(tableViewPrivate->positionXAnimation.isRunning(), false);
+    QTRY_COMPARE(tableViewPrivate->positionYAnimation.isRunning(), false);
+
+    // Check that the cell is now placed in the top left corner
+    QVERIFY(tableViewPrivate->loadedItems.contains(modelIndex));
+    QPointF expectedPos = tableView->mapToItem(tableView->contentItem(), QPointF(0, 0));
+    QCOMPARE(cellGeometry.x(), expectedPos.x());
+    QCOMPARE(cellGeometry.y(), expectedPos.y());
+
+    // Animate the cell to the top right location in the view
+    tableView->positionViewAtCell(cell, QQuickTableView::AlignTop | QQuickTableView::AlignRight);
+
+    // Wait for animation to finish
+    QVERIFY(tableViewPrivate->positionXAnimation.isRunning());
+    QVERIFY(!tableViewPrivate->positionYAnimation.isRunning());
+    QTRY_COMPARE(tableViewPrivate->positionXAnimation.isRunning(), false);
+
+    // Check that the cell is now placed in the top right corner
+    QVERIFY(tableViewPrivate->loadedItems.contains(modelIndex));
+    expectedPos = tableView->mapToItem(tableView->contentItem(), QPointF(tableView->width(), 0));
+    QCOMPARE(cellGeometry.right(), expectedPos.x());
+    QCOMPARE(cellGeometry.y(), expectedPos.y());
+
+    // Animate the cell to the bottom left location in the view
+    tableView->positionViewAtCell(cell, QQuickTableView::AlignBottom | QQuickTableView::AlignLeft);
+
+    // Wait for animation to finish
+    QVERIFY(tableViewPrivate->positionXAnimation.isRunning());
+    QVERIFY(tableViewPrivate->positionYAnimation.isRunning());
+    QTRY_COMPARE(tableViewPrivate->positionXAnimation.isRunning(), false);
+    QTRY_COMPARE(tableViewPrivate->positionYAnimation.isRunning(), false);
+
+    // Check that the cell is now placed in the bottom left corner
+    QVERIFY(tableViewPrivate->loadedItems.contains(modelIndex));
+    expectedPos = tableView->mapToItem(tableView->contentItem(), QPointF(0, tableView->height()));
+    QCOMPARE(cellGeometry.x(), expectedPos.x());
+    QCOMPARE(cellGeometry.bottom(), expectedPos.y());
+
+    // Animate the cell to the bottom right location in the view
+    tableView->positionViewAtCell(cell, QQuickTableView::AlignBottom | QQuickTableView::AlignRight);
+
+    // Wait for animation to finish
+    QVERIFY(tableViewPrivate->positionXAnimation.isRunning());
+    QVERIFY(!tableViewPrivate->positionYAnimation.isRunning());
+    QTRY_COMPARE(tableViewPrivate->positionXAnimation.isRunning(), false);
+
+    // Check that the cell is now placed in the bottom right corner
+    QVERIFY(tableViewPrivate->loadedItems.contains(modelIndex));
+    expectedPos = tableView->mapToItem(tableView->contentItem(), QPointF(tableView->width(), tableView->height()));
+    QCOMPARE(cellGeometry.right(), expectedPos.x());
+    QCOMPARE(cellGeometry.bottom(), expectedPos.y());
+}
+
+void tst_QQuickTableView::positionViewAtCell_VisibleAndContain_data()
+{
+    QTest::addColumn<QPoint>("cell");
+    QTest::addColumn<QQuickTableView::PositionModeFlag>("mode");
+    QTest::addColumn<QPointF>("offset");
+
+    QTest::newRow("99, 99, Contain") << QPoint{99, 99} << QQuickTableView::Contain << QPointF{0, 0};
+    QTest::newRow("0, 0, Contain") << QPoint{0, 0} << QQuickTableView::Contain << QPointF{0, 0};
+    QTest::newRow("5, 0, Contain") << QPoint{5, 0} << QQuickTableView::Contain << QPointF{0, 0};
+    QTest::newRow("0, 7, Contain") << QPoint{0, 7} << QQuickTableView::Contain << QPointF{0, 0};
+    QTest::newRow("1, 1, Contain") << QPoint{1, 1} << QQuickTableView::Contain << QPointF{0, 0};
+    QTest::newRow("10, 10, Contain") << QPoint{10, 10} << QQuickTableView::Contain << QPointF{0, 0};
+
+    QTest::newRow("99, 99, Visible") << QPoint{99, 99} << QQuickTableView::Visible << QPointF{0, 0};
+    QTest::newRow("0, 0, Visible") << QPoint{0, 0} << QQuickTableView::Visible << QPointF{0, 0};
+    QTest::newRow("5, 1, Visible") << QPoint{5, 1} << QQuickTableView::Visible << QPointF{0, 0};
+    QTest::newRow("1, 7, Visible") << QPoint{1, 7} << QQuickTableView::Visible << QPointF{0, 0};
+    QTest::newRow("1, 1, Visible") << QPoint{1, 1} << QQuickTableView::Visible << QPointF{0, 0};
+    QTest::newRow("10, 10, Visible") << QPoint{10, 10} << QQuickTableView::Visible << QPointF{0, 0};
+
+    QTest::newRow("99, 99, Contain, margins") << QPoint{99, 99} << QQuickTableView::Contain << QPointF{10, 10};
+    QTest::newRow("0, 0, Contain, margins") << QPoint{0, 0} << QQuickTableView::Contain << QPointF{10, 10};
+    QTest::newRow("5, 0, Contain, margins") << QPoint{5, 1} << QQuickTableView::Contain << QPointF{10, 10};
+    QTest::newRow("1, 7, Contain, margins") << QPoint{1, 7} << QQuickTableView::Contain << QPointF{10, 10};
+    QTest::newRow("1, 1, Contain, margins") << QPoint{1, 1} << QQuickTableView::Contain << QPointF{10, 10};
+    QTest::newRow("10, 10, Contain, margins") << QPoint{10, 10} << QQuickTableView::Contain << QPointF{10, 10};
+}
+
+void tst_QQuickTableView::positionViewAtCell_VisibleAndContain()
+{
+    // Check that the PositionModes "Visible" and "Contain" works according
+    // to the documentation.
+    QFETCH(QPoint, cell);
+    QFETCH(QQuickTableView::PositionModeFlag, mode);
+    QFETCH(QPointF, offset);
+
+    LOAD_TABLEVIEW("plaintableview.qml");
+    auto model = TestModelAsVariant(100, 100);
+    tableView->setModel(model);
+    tableView->setAnimate(true);
+
+    WAIT_UNTIL_POLISHED;
+
+    const bool cellIsVisible = tableView->itemAtCell(cell) != nullptr;
+    bool cellIsCompletelyVisible = false;
+    if (cellIsVisible) {
+        const QRectF cellRect = tableViewPrivate->loadedTableItem(cell)->geometry();
+        QRectF viewportRect = tableViewPrivate->viewportRect;
+        viewportRect.adjust(offset.x(), offset.y(), -offset.x(), -offset.y());
+        cellIsCompletelyVisible = viewportRect.contains(cellRect);
+    }
+
+    tableView->positionViewAtCell(cell, mode, offset);
+
+    if (cellIsCompletelyVisible || (cellIsVisible && mode == QQuickTableView::Visible)) {
+        // Nothing to do!
+        QVERIFY(!tableViewPrivate->positionXAnimation.isRunning());
+        QVERIFY(!tableViewPrivate->positionYAnimation.isRunning());
+        QVERIFY(!QQuickTest::qIsPolishScheduled(tableView));
+    } else if (cellIsVisible) {
+        // TableView will scroll towards the cell, unless it'a already at the correct place
+        QTRY_COMPARE(tableViewPrivate->positionXAnimation.isRunning(), false);
+        QTRY_COMPARE(tableViewPrivate->positionYAnimation.isRunning(), false);
+    } else {
+        // TableView will rebuild on top of the cell
+        QVERIFY(!tableViewPrivate->positionXAnimation.isRunning());
+        QVERIFY(!tableViewPrivate->positionYAnimation.isRunning());
+        WAIT_UNTIL_POLISHED;
+    }
+
+    QVERIFY(tableView->itemAtCell(cell));
+}
+
+void tst_QQuickTableView::positionViewAtCell_VisibleAndContain_SubRect_data()
+{
+    QTest::addColumn<QPoint>("cell");
+    QTest::addColumn<QQuickTableView::PositionModeFlag>("mode");
+    QTest::addColumn<QRectF>("subRect");
+    QTest::addColumn<QPointF>("contentStartPos");
+
+    QRectF subRects[] = { QRectF(0, 0, 10, 10),
+                          QRectF(10, 10, 10, 10),
+                          QRectF(80, 30, 10, 10),
+                          QRectF(90, 40, 10, 10),
+                          QRectF(0, 0, 100, 50) };
+
+    for (auto subRect : subRects) {
+        QTest::newRow("99, 99, Contain") << QPoint{99, 99} << QQuickTableView::Contain << subRect << QPointF(0, 0);
+        QTest::newRow("0, 0, Contain") << QPoint{0, 0} << QQuickTableView::Contain << subRect << QPointF(0, 0);
+        QTest::newRow("0, 0, Contain, start: 50, 25") << QPoint{0, 0} << QQuickTableView::Contain << subRect << QPointF(50, 25);
+        QTest::newRow("5, 0, Contain") << QPoint{5, 0} << QQuickTableView::Contain << subRect << QPointF(0, 0);
+        QTest::newRow("0, 7, Contain") << QPoint{0, 7} << QQuickTableView::Contain << subRect << QPointF(0, 0);
+        QTest::newRow("5, 7, Contain, start: -50, -25") << QPoint{5, 7} << QQuickTableView::Contain << subRect << QPointF(-50, -25);
+
+        QTest::newRow("99, 99, Visible") << QPoint{99, 99} << QQuickTableView::Visible << subRect << QPointF(0, 0);
+        QTest::newRow("0, 0, Visible") << QPoint{0, 0} << QQuickTableView::Visible << subRect << QPointF(0, 0);
+        QTest::newRow("0, 0, Visible, start: 50, 25") << QPoint{0, 0} << QQuickTableView::Visible << subRect << QPointF(50, 25);
+        QTest::newRow("5, 1, Visible") << QPoint{5, 1} << QQuickTableView::Visible << subRect << QPointF(0, 0);
+        QTest::newRow("1, 7, Visible") << QPoint{1, 7} << QQuickTableView::Visible << subRect << QPointF(0, 0);
+        QTest::newRow("5, 7, Visible, start: -50, -25") << QPoint{5, 7} << QQuickTableView::Visible << subRect << QPointF(-50, -25);
+    }
+}
+
+void tst_QQuickTableView::positionViewAtCell_VisibleAndContain_SubRect()
+{
+    // Check that the PositionModes "Visible" and "Contain" works when using subrects
+    QFETCH(QPoint, cell);
+    QFETCH(QQuickTableView::PositionModeFlag, mode);
+    QFETCH(QRectF, subRect);
+    QFETCH(QPointF, contentStartPos);
+
+    LOAD_TABLEVIEW("plaintableview.qml");
+    auto model = TestModelAsVariant(100, 100);
+    tableView->setModel(model);
+    tableView->setAnimate(true);
+    tableView->setContentX(contentStartPos.x());
+    tableView->setContentY(contentStartPos.y());
+
+    WAIT_UNTIL_POLISHED;
+
+    const bool cellIsVisible = tableView->itemAtCell(cell) != nullptr;
+    bool subRectIsVisible = false;
+    bool subRectIsContained = false;
+
+    if (cellIsVisible) {
+        const QRectF cellRect = tableViewPrivate->loadedTableItem(cell)->geometry();
+        const QRectF alignmentRect = subRect.translated(cellRect.topLeft());
+        const QRectF viewportRect = tableViewPrivate->viewportRect;
+        subRectIsVisible = viewportRect.intersects(alignmentRect);
+        subRectIsContained = viewportRect.contains(alignmentRect);
+    }
+
+    tableView->positionViewAtCell(cell, mode, QPointF(), subRect);
+
+    if (cellIsVisible) {
+        if ((mode == QQuickTableView::Visible && subRectIsVisible) ||
+                (mode == QQuickTableView::Contain && subRectIsContained)) {
+            // The mode is already fulfilled, so verify that no animation (or rebuild) runs
+            QVERIFY(!tableViewPrivate->positionXAnimation.isRunning());
+            QVERIFY(!tableViewPrivate->positionYAnimation.isRunning());
+            QVERIFY(!QQuickTest::qIsPolishScheduled(tableView));
+        } else {
+            // TableView will scroll towards the cell
+            QVERIFY(tableViewPrivate->positionXAnimation.isRunning()
+                    || tableViewPrivate->positionYAnimation.isRunning());
+            QTRY_VERIFY(!tableViewPrivate->positionXAnimation.isRunning()
+                        && !tableViewPrivate->positionYAnimation.isRunning());
+        }
+    } else {
+        // The cell is not loaded, so TableView will rebuild
+        WAIT_UNTIL_POLISHED;
+    }
+
+    // Check that the subRect is now visible inside the viewport, according to the mode
+    QVERIFY(tableView->itemAtCell(cell));
+    const QRectF cellRectAfterPositioning = tableViewPrivate->loadedTableItem(cell)->geometry();
+    const QRectF alignmentRectAfterPositioning = subRect.translated(cellRectAfterPositioning.topLeft());
+    const QRectF viewportRect = tableViewPrivate->viewportRect;
+
+    if (mode == QQuickTableView::Visible)
+        QVERIFY(viewportRect.intersects(alignmentRectAfterPositioning));
+    else // QQuickTableView::Contain
+        QVERIFY(viewportRect.contains(alignmentRectAfterPositioning));
+}
+
+void tst_QQuickTableView::positionViewAtCellForLargeCells_data()
+{
+    QTest::addColumn<qreal>("cellSize");
+
+    QTest::newRow("200") << 200.;
+    QTest::newRow("800") << 800.;
+}
+
+void tst_QQuickTableView::positionViewAtCellForLargeCells()
+{
+    // Position the view on a cell outside the viewport. When the cells are larger
+    // than the viewport, check that TableView.Contain will place the cell top-left.
+    // When the cells are smaller than the viewport, it should be placed bottom-right.
+    QFETCH(qreal, cellSize);
+
+    LOAD_TABLEVIEW("plaintableview.qml");
+
+    auto model = TestModelAsVariant(10, 10);
+    tableView->setModel(model);
+
+    view->rootObject()->setProperty("delegateWidth", cellSize);
+    view->rootObject()->setProperty("delegateHeight", cellSize);
+
+    WAIT_UNTIL_POLISHED;
+
+    const QPoint cell(5, 5);
+    tableView->positionViewAtCell(cell, QQuickTableView::Contain);
+
+    WAIT_UNTIL_POLISHED;
+
+    const QQuickItem *item = tableView->itemAtCell(cell);
+    QVERIFY(item);
+
+    QPointF expectedPos;
+    if (cellSize > tableView->width()) {
+        expectedPos = tableView->mapToItem(tableView->contentItem(), QPointF(0, 0));
+    } else {
+        expectedPos = tableView->mapToItem(tableView->contentItem(), QPointF(tableView->width(), tableView->height()));
+        expectedPos -= QPointF(item->width(), item->height());
+    }
+
+    QCOMPARE(item->x(), expectedPos.x());
+    QCOMPARE(item->y(), expectedPos.y());
+}
+
+void tst_QQuickTableView::positionViewAtCellForLargeCellsUsingSubrect()
+{
+    // Position the view on a cell outside the viewport. When a cell is larger
+    // than the viewport, TableView.Contain will normally place it top-left.
+    // But if we specify a subRect that is close to the bottom-right edge (and
+    // the subRect is smaller than the viewport), TableView should align
+    // bottom-right of the subRect instead.
+    LOAD_TABLEVIEW("plaintableview.qml");
+
+    auto model = TestModelAsVariant(10, 10);
+    tableView->setModel(model);
+    tableView->setAnimate(false);
+
+    const qreal cellSize = 800;
+    view->rootObject()->setProperty("delegateWidth", cellSize);
+    view->rootObject()->setProperty("delegateHeight", cellSize);
+
+    WAIT_UNTIL_POLISHED;
+
+    const QRectF subRect(cellSize - 100, cellSize - 100, 10, 10);
+    tableView->positionViewAtCell(QPoint(0, 0), QQuickTableView::Contain, QPointF(), subRect);
+    QCOMPARE(tableView->contentX(), -(tableView->width() - subRect.right()));
+    QCOMPARE(tableView->contentY(), -(tableView->height() - subRect.bottom()));
 }
 
 void tst_QQuickTableView::itemAtCell_data()
@@ -3664,7 +4061,29 @@ void tst_QQuickTableView::removeAndAddSelectionModel()
     QCOMPARE(selected, true);
 }
 
-void tst_QQuickTableView::testSelectableStartPosEndPos_data()
+void tst_QQuickTableView::warnOnWrongModelInSelectionModel()
+{
+    // The model set on the SelectionModel should always match the model
+    // set on TableView. This is normally handled automatically, but it's
+    // possible to circumvent. This test will check that we warn if that happens.
+    LOAD_TABLEVIEW("tableviewwithselected1.qml");
+
+    TestModel model1(10, 10);
+    TestModel model2(10, 10);
+
+    tableView->setModel(QVariant::fromValue(&model1));
+    QItemSelectionModel selectionModel;
+    tableView->setSelectionModel(&selectionModel);
+
+    // Set a different model
+    selectionModel.setModel(&model2);
+
+    // And change currentIndex. This will produce a warning.
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression(".*model differs.*"));
+    selectionModel.setCurrentIndex(model2.index(0, 0), QItemSelectionModel::NoUpdate);
+}
+
+void tst_QQuickTableView::selectionBehaviorCells_data()
 {
     QTest::addColumn<QPoint>("endCellDist");
 
@@ -3690,7 +4109,7 @@ void tst_QQuickTableView::testSelectableStartPosEndPos_data()
     QTest::newRow("diagonal bottom right to top left") << QPoint(2, -2);
 }
 
-void tst_QQuickTableView::testSelectableStartPosEndPos()
+void tst_QQuickTableView::selectionBehaviorCells()
 {
     // Check that the TableView implement QQuickSelectableInterface setSelectionStartPos, setSelectionEndPos
     // and clearSelection correctly. Do this by calling setSelectionStartPos/setSelectionEndPos on top of
@@ -3707,6 +4126,7 @@ void tst_QQuickTableView::testSelectableStartPosEndPos()
     WAIT_UNTIL_POLISHED;
 
     QCOMPARE(selectionModel.hasSelection(), false);
+    QCOMPARE(tableView->selectionBehavior(), QQuickTableView::SelectCells);
 
     const QPoint startCell(5, 5);
     const QPoint endCell = startCell + endCellDist;
@@ -3758,6 +4178,138 @@ void tst_QQuickTableView::testSelectableStartPosEndPos()
     QCOMPARE(actualCountAfterWrap, expectedCount);
 
     tableViewPrivate->clearSelection();
+    QCOMPARE(selectionModel.hasSelection(), false);
+}
+
+void tst_QQuickTableView::selectionBehaviorRows()
+{
+    // Check that the TableView implement QQuickSelectableInterface setSelectionStartPos, setSelectionEndPos
+    // and clearSelection correctly for QQuickTableView::SelectRows.
+    LOAD_TABLEVIEW("tableviewwithselected1.qml");
+
+    TestModel model(10, 10);
+    QItemSelectionModel selectionModel(&model);
+
+    tableView->setModel(QVariant::fromValue(&model));
+    tableView->setSelectionModel(&selectionModel);
+    tableView->setSelectionBehavior(QQuickTableView::SelectRows);
+
+    WAIT_UNTIL_POLISHED;
+
+    QCOMPARE(selectionModel.hasSelection(), false);
+
+    // Drag from row 0 to row 3
+    tableViewPrivate->setSelectionStartPos(QPointF(0, 0));
+    tableViewPrivate->setSelectionEndPos(QPointF(60, 60));
+
+    QCOMPARE(selectionModel.hasSelection(), true);
+
+    const int expectedCount = 10 * 3; // all columns * three rows
+    int actualCount = selectionModel.selectedIndexes().count();
+    QCOMPARE(actualCount, expectedCount);
+
+    for (int x = 0; x < tableView->columns(); ++x) {
+        for (int y = 0; y < 3; ++y) {
+            const auto index = model.index(y, x);
+            QVERIFY(selectionModel.isSelected(index));
+        }
+    }
+
+    selectionModel.clear();
+    QCOMPARE(selectionModel.hasSelection(), false);
+
+    // Drag from row 3 to row 0 (and overshoot mouse)
+    tableViewPrivate->setSelectionStartPos(QPointF(60, 60));
+    tableViewPrivate->setSelectionEndPos(QPointF(-10, -10));
+
+    QCOMPARE(selectionModel.hasSelection(), true);
+
+    actualCount = selectionModel.selectedIndexes().count();
+    QCOMPARE(actualCount, expectedCount);
+
+    for (int x = 0; x < tableView->columns(); ++x) {
+        for (int y = 0; y < 3; ++y) {
+            const auto index = model.index(y, x);
+            QVERIFY(selectionModel.isSelected(index));
+        }
+    }
+}
+
+void tst_QQuickTableView::selectionBehaviorColumns()
+{
+    // Check that the TableView implement QQuickSelectableInterface setSelectionStartPos, setSelectionEndPos
+    // and clearSelection correctly for QQuickTableView::SelectColumns.
+    LOAD_TABLEVIEW("tableviewwithselected1.qml");
+
+    TestModel model(10, 10);
+    QItemSelectionModel selectionModel(&model);
+
+    tableView->setModel(QVariant::fromValue(&model));
+    tableView->setSelectionModel(&selectionModel);
+    tableView->setSelectionBehavior(QQuickTableView::SelectColumns);
+
+    WAIT_UNTIL_POLISHED;
+
+    QCOMPARE(selectionModel.hasSelection(), false);
+
+    // Drag from column 0 to column 3
+    tableViewPrivate->setSelectionStartPos(QPointF(0, 0));
+    tableViewPrivate->setSelectionEndPos(QPointF(60, 60));
+
+    QCOMPARE(selectionModel.hasSelection(), true);
+
+    const int expectedCount = 10 * 3; // all rows * three columns
+    int actualCount = selectionModel.selectedIndexes().count();
+    QCOMPARE(actualCount, expectedCount);
+
+    for (int x = 0; x < 3; ++x) {
+        for (int y = 0; y < tableView->rows(); ++y) {
+            const auto index = model.index(y, x);
+            QVERIFY(selectionModel.isSelected(index));
+        }
+    }
+
+    selectionModel.clear();
+    QCOMPARE(selectionModel.hasSelection(), false);
+
+    // Drag from column 3 to column 0 (and overshoot mouse)
+    tableViewPrivate->setSelectionStartPos(QPointF(60, 60));
+    tableViewPrivate->setSelectionEndPos(QPointF(-10, -10));
+
+    QCOMPARE(selectionModel.hasSelection(), true);
+
+    actualCount = selectionModel.selectedIndexes().count();
+    QCOMPARE(actualCount, expectedCount);
+
+    for (int x = 0; x < 3; ++x) {
+        for (int y = 0; y < tableView->rows(); ++y) {
+            const auto index = model.index(y, x);
+            QVERIFY(selectionModel.isSelected(index));
+        }
+    }
+}
+
+void tst_QQuickTableView::selectionBehaviorDisabled()
+{
+    // Check that the TableView implement QQuickSelectableInterface setSelectionStartPos, setSelectionEndPos
+    // and clearSelection correctly for QQuickTableView::SelectionDisabled.
+    LOAD_TABLEVIEW("tableviewwithselected1.qml");
+
+    TestModel model(10, 10);
+    QItemSelectionModel selectionModel(&model);
+
+    tableView->setModel(QVariant::fromValue(&model));
+    tableView->setSelectionModel(&selectionModel);
+    tableView->setSelectionBehavior(QQuickTableView::SelectionDisabled);
+
+    WAIT_UNTIL_POLISHED;
+
+    QCOMPARE(selectionModel.hasSelection(), false);
+
+    // Drag from column 0 to column 3
+    tableViewPrivate->setSelectionStartPos(QPointF(0, 0));
+    tableViewPrivate->setSelectionEndPos(QPointF(60, 60));
+
     QCOMPARE(selectionModel.hasSelection(), false);
 }
 
@@ -3855,6 +4407,944 @@ void tst_QQuickTableView::testSelectableScrollTowardsPos()
     tableViewPrivate->scrollTowardsSelectionPoint(topLeft, step);
     QCOMPARE(tableView->contentX(), 0);
     QCOMPARE(tableView->contentY(), 0);
+}
+
+void tst_QQuickTableView::setCurrentIndexFromSelectionModel()
+{
+    LOAD_TABLEVIEW("tableviewwithselected1.qml");
+
+    TestModel model(40, 40);
+    QItemSelectionModel selectionModel(&model);
+
+    tableView->setModel(QVariant::fromValue(&model));
+    tableView->setSelectionModel(&selectionModel);
+    tableView->setFocus(true);
+    const char kCurrent[] = "current";
+
+    WAIT_UNTIL_POLISHED;
+
+    // Check that all delegates have current set to false upon start
+    for (auto fxItem : tableViewPrivate->loadedItems)
+        QVERIFY(!fxItem->item->property(kCurrent).toBool());
+
+    // Start by making cell 0, 0 current
+    const QPoint cell0_0(0, 0);
+    selectionModel.setCurrentIndex(tableView->modelIndex(cell0_0), QItemSelectionModel::NoUpdate);
+    QVERIFY(tableView->itemAtCell(cell0_0)->property(kCurrent).toBool());
+
+    // Move currentIndex to a cell outside the viewport by accessing the selection
+    // model directly, scroll to it, and check current status.
+    const QPoint cellAtEnd(tableView->columns() - 1, tableView->rows() - 1);
+    selectionModel.setCurrentIndex(tableView->modelIndex(cellAtEnd), QItemSelectionModel::NoUpdate);
+    QVERIFY(!tableView->itemAtCell(cell0_0)->property(kCurrent).toBool());
+
+    tableView->positionViewAtCell(cellAtEnd, QQuickTableView::AlignBottom | QQuickTableView::AlignRight);
+    WAIT_UNTIL_POLISHED;
+    QVERIFY(tableView->itemAtCell(cellAtEnd));
+    QVERIFY(tableView->itemAtCell(cellAtEnd)->property(kCurrent).toBool());
+}
+
+void tst_QQuickTableView::clearSelectionOnTap()
+{
+    LOAD_TABLEVIEW("tableviewwithselected2.qml");
+
+    TestModel model(40, 40);
+    tableView->setModel(QVariant::fromValue(&model));
+
+    WAIT_UNTIL_POLISHED;
+
+    // Select root item
+    const auto index = tableView->selectionModel()->model()->index(0, 0);
+    tableView->selectionModel()->select(index, QItemSelectionModel::Select);
+    QCOMPARE(tableView->selectionModel()->selectedIndexes().count(), 1);
+
+    // Click on a cell. This should remove the selection
+    const auto item = tableView->itemAtCell(0, 0);
+    QVERIFY(item);
+    QPoint localPos = QPoint(item->width() / 2, item->height() / 2);
+    QPoint pos = item->window()->contentItem()->mapFromItem(item, localPos).toPoint();
+    QTest::mouseClick(item->window(), Qt::LeftButton, Qt::NoModifier, pos);
+    QCOMPARE(tableView->selectionModel()->selectedIndexes().count(), 0);
+}
+
+void tst_QQuickTableView::moveCurrentIndexUsingArrowKeys()
+{
+    LOAD_TABLEVIEW("tableviewwithselected1.qml");
+
+    TestModel model(40, 40);
+    QItemSelectionModel selectionModel(&model);
+
+    tableView->setModel(QVariant::fromValue(&model));
+    tableView->setSelectionModel(&selectionModel);
+    tableView->setFocus(true);
+    QQuickWindow *window = tableView->window();
+    const char kCurrent[] = "current";
+
+    WAIT_UNTIL_POLISHED;
+
+    // Check that all delegates have current set to false upon start
+    for (auto fxItem : tableViewPrivate->loadedItems)
+        QVERIFY(!fxItem->item->property(kCurrent).toBool());
+
+    QCOMPARE(tableView->currentColumn(), -1);
+    QCOMPARE(tableView->currentRow(), -1);
+
+    // Start by making cell 0, 0 current
+    const QPoint cell0_0(0, 0);
+    selectionModel.setCurrentIndex(tableView->modelIndex(cell0_0), QItemSelectionModel::NoUpdate);
+    QVERIFY(tableView->itemAtCell(cell0_0)->property(kCurrent).toBool());
+
+    // Trying to move the index out of the table with the keys should be a no-op:
+    QTest::keyPress(window, Qt::Key_Left);
+    QVERIFY(tableView->itemAtCell(cell0_0)->property(kCurrent).toBool());
+    QCOMPARE(tableView->currentColumn(), cell0_0.x());
+    QCOMPARE(tableView->currentRow(), cell0_0.y());
+    QCOMPARE(selectionModel.currentIndex(), tableView->modelIndex(cell0_0));
+    QTest::keyPress(window, Qt::Key_Up);
+    QVERIFY(tableView->itemAtCell(cell0_0)->property(kCurrent).toBool());
+    QCOMPARE(tableView->currentColumn(), cell0_0.x());
+    QCOMPARE(tableView->currentRow(), cell0_0.y());
+
+    // Move currentIndex right
+    const QPoint cell1_0(1, 0);
+    QTest::keyPress(window, Qt::Key_Right);
+    QCOMPARE(selectionModel.currentIndex(), tableView->modelIndex(cell1_0));
+    QVERIFY(!tableView->itemAtCell(cell0_0)->property(kCurrent).toBool());
+    QVERIFY(tableView->itemAtCell(cell1_0)->property(kCurrent).toBool());
+    QCOMPARE(tableView->currentColumn(), cell1_0.x());
+    QCOMPARE(tableView->currentRow(), cell1_0.y());
+
+    // Move currentIndex left
+    QTest::keyPress(window, Qt::Key_Left);
+    QCOMPARE(selectionModel.currentIndex(), tableView->modelIndex(cell0_0));
+    QVERIFY(tableView->itemAtCell(cell0_0)->property(kCurrent).toBool());
+    QVERIFY(!tableView->itemAtCell(cell1_0)->property(kCurrent).toBool());
+    QCOMPARE(tableView->currentColumn(), cell0_0.x());
+    QCOMPARE(tableView->currentRow(), cell0_0.y());
+
+    // Move currentIndex down
+    const QPoint cell0_1(0, 1);
+    QTest::keyPress(window, Qt::Key_Down);
+    QCOMPARE(selectionModel.currentIndex(), tableView->modelIndex(cell0_1));
+    QVERIFY(!tableView->itemAtCell(cell0_0)->property(kCurrent).toBool());
+    QVERIFY(tableView->itemAtCell(cell0_1)->property(kCurrent).toBool());
+    QCOMPARE(tableView->currentColumn(), cell0_1.x());
+    QCOMPARE(tableView->currentRow(), cell0_1.y());
+
+    // Move currentIndex up
+    QTest::keyPress(window, Qt::Key_Up);
+    QCOMPARE(selectionModel.currentIndex(), tableView->modelIndex(cell0_0));
+    QVERIFY(tableView->itemAtCell(cell0_0)->property(kCurrent).toBool());
+    QVERIFY(!tableView->itemAtCell(cell0_1)->property(kCurrent).toBool());
+    QCOMPARE(tableView->currentColumn(), cell0_0.x());
+    QCOMPARE(tableView->currentRow(), cell0_0.y());
+}
+
+void tst_QQuickTableView::moveCurrentIndexUsingHomeAndEndKeys()
+{
+    LOAD_TABLEVIEW("tableviewwithselected1.qml");
+
+    TestModel model(40, 40);
+    QItemSelectionModel selectionModel(&model);
+
+    tableView->setModel(QVariant::fromValue(&model));
+    tableView->setSelectionModel(&selectionModel);
+    tableView->setFocus(true);
+    QQuickWindow *window = tableView->window();
+    const char kCurrent[] = "current";
+
+    WAIT_UNTIL_POLISHED;
+
+    // Check that all delegates have current set to false upon start
+    for (auto fxItem : tableViewPrivate->loadedItems)
+        QVERIFY(!fxItem->item->property(kCurrent).toBool());
+
+    QCOMPARE(tableView->currentColumn(), -1);
+    QCOMPARE(tableView->currentRow(), -1);
+
+    const QPoint cell0_0(0, 0);
+    const QPoint cellHorEnd(tableView->columns() - 1, 0);
+
+    // Start by making cell 0, 0 current
+    selectionModel.setCurrentIndex(tableView->modelIndex(cell0_0), QItemSelectionModel::NoUpdate);
+    QVERIFY(tableView->itemAtCell(cell0_0)->property(kCurrent).toBool());
+    QCOMPARE(tableView->currentColumn(), cell0_0.x());
+    QCOMPARE(tableView->currentRow(), cell0_0.y());
+
+    // Move currentIndex to end
+    QTest::keyPress(window, Qt::Key_End);
+    QCOMPARE(selectionModel.currentIndex(), tableView->modelIndex(cellHorEnd));
+    QTRY_VERIFY(tableView->itemAtCell(cellHorEnd));
+    QVERIFY(tableView->itemAtCell(cellHorEnd)->property(kCurrent).toBool());
+    QCOMPARE(tableView->currentColumn(), cellHorEnd.x());
+    QCOMPARE(tableView->currentRow(), cellHorEnd.y());
+
+    // Move currentIndex to end once more is a no-op
+    QTest::keyPress(window, Qt::Key_End);
+    QCOMPARE(selectionModel.currentIndex(), tableView->modelIndex(cellHorEnd));
+    QVERIFY(tableView->itemAtCell(cellHorEnd)->property(kCurrent).toBool());
+    QCOMPARE(tableView->currentColumn(), cellHorEnd.x());
+    QCOMPARE(tableView->currentRow(), cellHorEnd.y());
+
+    // Move currentIndex to home
+    QTest::keyPress(window, Qt::Key_Home);
+    QCOMPARE(selectionModel.currentIndex(), tableView->modelIndex(cell0_0));
+    QTRY_VERIFY(tableView->itemAtCell(cell0_0));
+    QVERIFY(tableView->itemAtCell(cell0_0)->property(kCurrent).toBool());
+    QCOMPARE(tableView->currentColumn(), cell0_0.x());
+    QCOMPARE(tableView->currentRow(), cell0_0.y());
+
+    // Move currentIndex to home once more is a no-op
+    QTest::keyPress(window, Qt::Key_Home);
+    QCOMPARE(selectionModel.currentIndex(), tableView->modelIndex(cell0_0));
+    QVERIFY(tableView->itemAtCell(cell0_0)->property(kCurrent).toBool());
+    QCOMPARE(tableView->currentColumn(), cell0_0.x());
+    QCOMPARE(tableView->currentRow(), cell0_0.y());
+}
+
+void tst_QQuickTableView::moveCurrentIndexUsingPageUpDownKeys()
+{
+    LOAD_TABLEVIEW("tableviewwithselected1.qml");
+
+    TestModel model(40, 40);
+    QItemSelectionModel selectionModel(&model);
+
+    tableView->setModel(QVariant::fromValue(&model));
+    tableView->setSelectionModel(&selectionModel);
+    tableView->setFocus(true);
+    QQuickWindow *window = tableView->window();
+    const char kCurrent[] = "current";
+
+    WAIT_UNTIL_POLISHED;
+
+    // Check that all delegates have current set to false upon start
+    for (auto fxItem : tableViewPrivate->loadedItems)
+        QVERIFY(!fxItem->item->property(kCurrent).toBool());
+
+    QCOMPARE(tableView->currentColumn(), -1);
+    QCOMPARE(tableView->currentRow(), -1);
+
+    // Start by making cell 0, 0 current
+    const QPoint cell0_0(0, 0);
+    selectionModel.setCurrentIndex(tableView->modelIndex(cell0_0), QItemSelectionModel::NoUpdate);
+    QVERIFY(tableView->itemAtCell(cell0_0)->property(kCurrent).toBool());
+    QCOMPARE(tableView->currentColumn(), cell0_0.x());
+    QCOMPARE(tableView->currentRow(), cell0_0.y());
+
+    // Move currentIndex page down
+    const QPoint bottomCell(0, tableView->bottomRow());
+    QTest::keyPress(window, Qt::Key_PageDown);
+    QCOMPARE(selectionModel.currentIndex(), tableView->modelIndex(bottomCell));
+    QVERIFY(tableView->itemAtCell(cell0_0));
+    QVERIFY(tableView->itemAtCell(bottomCell));
+    QVERIFY(!tableView->itemAtCell(cell0_0)->property(kCurrent).toBool());
+    QVERIFY(tableView->itemAtCell(bottomCell)->property(kCurrent).toBool());
+    QCOMPARE(tableView->currentColumn(), bottomCell.x());
+    QCOMPARE(tableView->currentRow(), bottomCell.y());
+
+    // Move currentIndex page up
+    QTest::keyPress(window, Qt::Key_PageUp);
+    QCOMPARE(selectionModel.currentIndex(), tableView->modelIndex(cell0_0));
+    QVERIFY(tableView->itemAtCell(cell0_0));
+    QVERIFY(tableView->itemAtCell(bottomCell));
+    QVERIFY(tableView->itemAtCell(cell0_0)->property(kCurrent).toBool());
+    QVERIFY(!tableView->itemAtCell(bottomCell)->property(kCurrent).toBool());
+    QCOMPARE(tableView->currentColumn(), cell0_0.x());
+    QCOMPARE(tableView->currentRow(), cell0_0.y());
+
+    // Move currentIndex page down a second. The second time will cause a fast-flick.
+    const QPoint bottomCellPageTwo(0, 38);
+    QTest::keyPress(window, Qt::Key_PageDown);
+    QTest::keyPress(window, Qt::Key_PageDown);
+    QCOMPARE(selectionModel.currentIndex(), tableView->modelIndex(bottomCellPageTwo));
+    QTRY_VERIFY(tableView->itemAtCell(bottomCellPageTwo));
+    QVERIFY(tableView->itemAtCell(bottomCellPageTwo)->property(kCurrent).toBool());
+    QCOMPARE(tableView->currentColumn(), bottomCellPageTwo.x());
+    QCOMPARE(tableView->currentRow(), bottomCellPageTwo.y());
+
+    // Move currentIndex page down a third time. This will hit the end of the table
+    // before a whole page can be reached.
+    const QPoint cellVerEnd(0, tableView->rows() - 1);
+    QTest::keyPress(window, Qt::Key_PageDown);
+    QCOMPARE(selectionModel.currentIndex(), tableView->modelIndex(cellVerEnd));
+    QTRY_VERIFY(tableView->itemAtCell(cellVerEnd));
+    QVERIFY(tableView->itemAtCell(cellVerEnd)->property(kCurrent).toBool());
+    QCOMPARE(tableView->currentColumn(), cellVerEnd.x());
+    QCOMPARE(tableView->currentRow(), cellVerEnd.y());
+
+    // Move currentIndex page down once more is a no-op
+    QTest::keyPress(window, Qt::Key_PageDown);
+    QVERIFY(tableView->itemAtCell(cellVerEnd)->property(kCurrent).toBool());
+    QCOMPARE(tableView->currentColumn(), cellVerEnd.x());
+    QCOMPARE(tableView->currentRow(), cellVerEnd.y());
+
+    // Move currentIndex page up
+    const QPoint cellTop1(0, tableView->topRow());
+    QTest::keyPress(window, Qt::Key_PageUp);
+    QCOMPARE(selectionModel.currentIndex(), tableView->modelIndex(cellTop1));
+    QVERIFY(tableView->itemAtCell(cellTop1));
+    QVERIFY(tableView->itemAtCell(cellTop1)->property(kCurrent).toBool());
+    QCOMPARE(tableView->currentColumn(), cellTop1.x());
+    QCOMPARE(tableView->currentRow(), cellTop1.y());
+
+    // Move currentIndex page up a second time. This will cause a fast-flick, which
+    // happens to end up on row 1.
+    const QPoint cell0_1(0, 1);
+    QTest::keyPress(window, Qt::Key_PageUp);
+    QCOMPARE(selectionModel.currentIndex(), tableView->modelIndex(cell0_1));
+    QTRY_VERIFY(tableView->itemAtCell(cell0_1));
+    QVERIFY(tableView->itemAtCell(cell0_1)->property(kCurrent).toBool());
+    QCOMPARE(tableView->currentColumn(), cell0_1.x());
+    QCOMPARE(tableView->currentRow(), cell0_1.y());
+
+    // Move currentIndex page up a third time. This will bring the table
+    // all the way to the top.
+    QTest::keyPress(window, Qt::Key_PageUp);
+    QCOMPARE(selectionModel.currentIndex(), tableView->modelIndex(cell0_0));
+    QTRY_VERIFY(tableView->itemAtCell(cell0_0));
+    QVERIFY(tableView->itemAtCell(cell0_0)->property(kCurrent).toBool());
+    QCOMPARE(tableView->currentColumn(), cell0_0.x());
+    QCOMPARE(tableView->currentRow(), cell0_0.y());
+
+    // Move currentIndex page up once more. This will be a no-op.
+    QTest::keyPress(window, Qt::Key_PageUp);
+    QCOMPARE(selectionModel.currentIndex(), tableView->modelIndex(cell0_0));
+    QVERIFY(tableView->itemAtCell(cell0_0)->property(kCurrent).toBool());
+    QCOMPARE(tableView->currentColumn(), cell0_0.x());
+    QCOMPARE(tableView->currentRow(), cell0_0.y());
+
+    // Move currentIndex to a cell outside the viewport by accessing the selection
+    // model directly, scroll to it, and check current status.
+    const QPoint cellAtEnd(tableView->columns() - 1, tableView->rows() - 1);
+    selectionModel.setCurrentIndex(tableView->modelIndex(cellAtEnd), QItemSelectionModel::NoUpdate);
+    tableView->positionViewAtCell(cellAtEnd, QQuickTableView::AlignBottom | QQuickTableView::AlignRight);
+    QTRY_VERIFY(tableView->itemAtCell(cellAtEnd));
+    QVERIFY(tableView->itemAtCell(cellAtEnd)->property(kCurrent).toBool());
+    QCOMPARE(tableView->currentColumn(), cellAtEnd.x());
+    QCOMPARE(tableView->currentRow(), cellAtEnd.y());
+}
+
+void tst_QQuickTableView::setCurrentIndexOnFirstKeyPress_data()
+{
+    QTest::addColumn<Qt::Key>("arrowKey");
+
+    QTest::newRow("left") << Qt::Key_Left;
+    QTest::newRow("right") << Qt::Key_Right;
+    QTest::newRow("up") << Qt::Key_Up;
+    QTest::newRow("down") << Qt::Key_Down;
+}
+
+void tst_QQuickTableView::setCurrentIndexOnFirstKeyPress()
+{
+    // Check that TableView has focus, but no cell is current, the
+    // first key press on any of the arrow keys will assign the
+    // top left cell to be current.
+    QFETCH(Qt::Key, arrowKey);
+    LOAD_TABLEVIEW("tableviewwithselected1.qml");
+
+    TestModel model(2, 2);
+    QItemSelectionModel selectionModel(&model);
+
+    tableView->setModel(QVariant::fromValue(&model));
+    tableView->setSelectionModel(&selectionModel);
+    tableView->setFocus(true);
+    QQuickWindow *window = tableView->window();
+    const char kCurrent[] = "current";
+
+    WAIT_UNTIL_POLISHED;
+
+    // Check that all delegates have current set to false upon start
+    for (auto fxItem : tableViewPrivate->loadedItems)
+        QVERIFY(!fxItem->item->property(kCurrent).toBool());
+
+    QCOMPARE(tableView->currentColumn(), -1);
+    QCOMPARE(tableView->currentRow(), -1);
+
+    // Pressing a random key, e.g 'a', should not change current index
+    QTest::keyPress(window, Qt::Key_A);
+    QVERIFY(!selectionModel.currentIndex().isValid());
+    QCOMPARE(tableView->currentColumn(), -1);
+    QCOMPARE(tableView->currentRow(), -1);
+
+    // Press the given arrow key
+    const QPoint topLeftCell(0, 0);
+    QTest::keyPress(window, arrowKey);
+    QCOMPARE(selectionModel.currentIndex(), tableView->modelIndex(topLeftCell));
+    QVERIFY(tableView->itemAtCell(topLeftCell)->property(kCurrent).toBool());
+    QCOMPARE(tableView->currentColumn(), topLeftCell.x());
+    QCOMPARE(tableView->currentRow(), topLeftCell.y());
+}
+
+void tst_QQuickTableView::setCurrentIndexFromMouse()
+{
+    LOAD_TABLEVIEW("tableviewwithselected1.qml");
+
+    TestModel model(40, 40);
+    QItemSelectionModel selectionModel(&model);
+
+    tableView->setModel(QVariant::fromValue(&model));
+    tableView->setSelectionModel(&selectionModel);
+    tableView->setFocus(true);
+    QQuickWindow *window = tableView->window();
+    QQuickItem *contentItem = window->contentItem();
+    const char kCurrent[] = "current";
+
+    WAIT_UNTIL_POLISHED;
+
+    // Check that all delegates have current set to false upon start
+    for (auto fxItem : tableViewPrivate->loadedItems)
+        QVERIFY(!fxItem->item->property(kCurrent).toBool());
+
+    QCOMPARE(tableView->currentColumn(), -1);
+    QCOMPARE(tableView->currentRow(), -1);
+
+    // Click on cell 0, 0
+    const QPoint cell0_0(0, 0);
+    const auto item0_0 = tableView->itemAtCell(cell0_0);
+    QVERIFY(item0_0);
+    QPoint pos = contentItem->mapFromItem(item0_0, QPointF(5, 5)).toPoint();
+    QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, pos);
+    QCOMPARE(selectionModel.currentIndex(), tableView->modelIndex(cell0_0));
+    QVERIFY(item0_0->property(kCurrent).toBool());
+    QCOMPARE(tableView->currentColumn(), cell0_0.x());
+    QCOMPARE(tableView->currentRow(), cell0_0.y());
+
+    // Click on cell 1, 2
+    const QPoint cell1_2(1, 2);
+    auto item1_2 = tableView->itemAtCell(cell1_2);
+    QVERIFY(item1_2);
+    pos = contentItem->mapFromItem(item1_2, QPointF(5, 5)).toPoint();
+    QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, pos);
+    QCOMPARE(selectionModel.currentIndex(), tableView->modelIndex(cell1_2));
+    QVERIFY(!item0_0->property(kCurrent).toBool());
+    QVERIFY(item1_2->property(kCurrent).toBool());
+    QCOMPARE(tableView->currentColumn(), cell1_2.x());
+    QCOMPARE(tableView->currentRow(), cell1_2.y());
+
+    // Position the view at the end of the table, and click on the bottom-right cell
+    const QPoint cellAtEnd(tableView->columns() - 1, tableView->rows() - 1);
+    tableView->positionViewAtCell(cellAtEnd, QQuickTableView::AlignBottom | QQuickTableView::AlignRight);
+    WAIT_UNTIL_POLISHED;
+    auto itemAtEnd = tableView->itemAtCell(cellAtEnd);
+    QVERIFY(itemAtEnd);
+    QVERIFY(!itemAtEnd->property(kCurrent).toBool());
+    pos = contentItem->mapFromItem(itemAtEnd, QPointF(5, 5)).toPoint();
+    QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, pos);
+    QCOMPARE(selectionModel.currentIndex(), tableView->modelIndex(cellAtEnd));
+    QVERIFY(itemAtEnd->property(kCurrent).toBool());
+    QCOMPARE(tableView->currentColumn(), cellAtEnd.x());
+    QCOMPARE(tableView->currentRow(), cellAtEnd.y());
+}
+
+void tst_QQuickTableView::showMarginsWhenNavigatingToEnd()
+{
+    LOAD_TABLEVIEW("plaintableview.qml");
+
+    TestModel model(40, 40);
+    QItemSelectionModel selectionModel(&model);
+
+    tableView->setModel(QVariant::fromValue(&model));
+    tableView->setSelectionModel(&selectionModel);
+    tableView->setAnimate(false);
+    tableView->setFocus(true);
+
+    QQuickWindow *window = tableView->window();
+
+    WAIT_UNTIL_POLISHED;
+
+    const qreal margin = 10;
+    tableView->setLeftMargin(margin);
+    tableView->setRightMargin(margin);
+    tableView->setTopMargin(margin);
+    tableView->setBottomMargin(margin);
+
+    selectionModel.setCurrentIndex(tableView->modelIndex(QPoint(1, 1)), QItemSelectionModel::NoUpdate);
+
+    // move to cell 0, 1
+    QCOMPARE(tableView->contentX(), 0);
+    QTest::keyPress(window, Qt::Key_Left);
+    QCOMPARE(tableView->contentX(), -margin);
+
+    // move to cell 0, 0
+    QCOMPARE(tableView->contentY(), 0);
+    QTest::keyPress(window, Qt::Key_Up);
+    QCOMPARE(tableView->contentY(), -margin);
+
+    selectionModel.setCurrentIndex(tableView->modelIndex(QPoint(38, 38)), QItemSelectionModel::NoUpdate);
+    tableView->positionViewAtCell(tableView->cellAtIndex(selectionModel.currentIndex()), QQuickTableView::Contain);
+
+    WAIT_UNTIL_POLISHED;
+
+    // move to cell 39, 38
+    QTest::keyPress(window, Qt::Key_Right);
+    const qreal cellRightEdge = tableViewPrivate->loadedTableOuterRect.right();
+    QCOMPARE(tableView->contentX(), cellRightEdge + margin - tableView->width());
+
+    // move to cell 39, 39
+    QTest::keyPress(window, Qt::Key_Down);
+    const qreal cellBottomEdge = tableViewPrivate->loadedTableOuterRect.bottom();
+    QCOMPARE(tableView->contentY(), cellBottomEdge + margin - tableView->height());
+}
+
+void tst_QQuickTableView::disablePointerNavigation()
+{
+    LOAD_TABLEVIEW("tableviewwithselected1.qml");
+
+    TestModel model(40, 40);
+    QItemSelectionModel selectionModel(&model);
+
+    tableView->setModel(QVariant::fromValue(&model));
+    tableView->setSelectionModel(&selectionModel);
+    tableView->setFocus(true);
+    tableView->setPointerNavigationEnabled(false);
+    QQuickWindow *window = tableView->window();
+    QQuickItem *contentItem = window->contentItem();
+
+    WAIT_UNTIL_POLISHED;
+
+    QVERIFY(!selectionModel.currentIndex().isValid());
+
+    // Click on cell 0, 0, nothing should happen
+    const QPoint cell0_0(0, 0);
+    const auto item0_0 = tableView->itemAtCell(cell0_0);
+    QVERIFY(item0_0);
+    QPoint pos = contentItem->mapFromItem(item0_0, QPointF(5, 5)).toPoint();
+    QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, pos);
+    QVERIFY(!selectionModel.currentIndex().isValid());
+    QVERIFY(!item0_0->property("current").toBool());
+    QCOMPARE(tableView->currentColumn(), -1);
+    QCOMPARE(tableView->currentRow(), -1);
+
+    // Enable navigation, and try again
+    tableView->setPointerNavigationEnabled(true);
+    QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, pos);
+    QCOMPARE(selectionModel.currentIndex(), tableView->modelIndex(0, 0));
+    QVERIFY(item0_0->property("current").toBool());
+    QCOMPARE(tableView->currentColumn(), cell0_0.x());
+    QCOMPARE(tableView->currentRow(), cell0_0.y());
+
+    // Set an invalid current index in the selection model
+    selectionModel.setCurrentIndex(QModelIndex(), QItemSelectionModel::NoUpdate);
+    QVERIFY(!item0_0->property("current").toBool());
+    QCOMPARE(tableView->currentColumn(), -1);
+    QCOMPARE(tableView->currentRow(), -1);
+}
+
+void tst_QQuickTableView::disableKeyNavigation()
+{
+    LOAD_TABLEVIEW("tableviewwithselected1.qml");
+
+    TestModel model(40, 40);
+    QItemSelectionModel selectionModel(&model);
+
+    tableView->setModel(QVariant::fromValue(&model));
+    tableView->setSelectionModel(&selectionModel);
+    tableView->setKeyNavigationEnabled(false);
+    tableView->setFocus(true);
+    QQuickWindow *window = tableView->window();
+    const char kCurrent[] = "current";
+
+    WAIT_UNTIL_POLISHED;
+
+    // Start by making cell 1, 1 current
+    const QPoint cell1_1(1, 1);
+    selectionModel.setCurrentIndex(tableView->modelIndex(cell1_1), QItemSelectionModel::NoUpdate);
+    QCOMPARE(tableView->itemAtCell(cell1_1)->property(kCurrent).toBool(), true);
+
+    // Try to move currentIndex right by pressing Key_Right. Nothing should happen.
+    const QPoint cell2_1(2, 1);
+    QTest::keyPress(window, Qt::Key_Right);
+    QCOMPARE(selectionModel.currentIndex(), tableView->modelIndex(cell1_1));
+    QVERIFY(tableView->itemAtCell(cell1_1)->property(kCurrent).toBool());
+    QVERIFY(!tableView->itemAtCell(cell2_1)->property(kCurrent).toBool());
+
+    // Enable navigation, and try again
+    tableView->setKeyNavigationEnabled(true);
+    QTest::keyPress(window, Qt::Key_Right);
+    QCOMPARE(selectionModel.currentIndex(), tableView->modelIndex(cell2_1));
+    QVERIFY(!tableView->itemAtCell(cell1_1)->property(kCurrent).toBool());
+    QVERIFY(tableView->itemAtCell(cell2_1)->property(kCurrent).toBool());
+}
+
+void tst_QQuickTableView::selectUsingArrowKeys()
+{
+    // Select cells in the view using the keyboard
+    // by going in a square around cell 1, 1
+    LOAD_TABLEVIEW("tableviewwithselected1.qml");
+
+    TestModel model(40, 40);
+    QItemSelectionModel selectionModel(&model);
+
+    tableView->setModel(QVariant::fromValue(&model));
+    tableView->setSelectionModel(&selectionModel);
+    tableView->setFocus(true);
+    QQuickWindow *window = tableView->window();
+    const char kSelected[] = "selected";
+
+    WAIT_UNTIL_POLISHED;
+
+    // Check that all delegates have selected set to false upon start
+    for (auto fxItem : tableViewPrivate->loadedItems)
+        QCOMPARE(fxItem->item->property(kSelected).toBool(), false);
+
+    // Start by making cell 1, 1 current
+    const QPoint cell1_1(1, 1);
+    selectionModel.setCurrentIndex(tableView->modelIndex(cell1_1), QItemSelectionModel::NoUpdate);
+    QCOMPARE(tableView->itemAtCell(cell1_1)->property(kSelected).toBool(), false);
+
+    // Move currentIndex right while holding down shift to select
+    const QPoint cell2_1(2, 1);
+    QTest::keyPress(window, Qt::Key_Right, Qt::ShiftModifier);
+    QVERIFY(selectionModel.isSelected(tableView->modelIndex(cell1_1)));
+    QVERIFY(selectionModel.isSelected(tableView->modelIndex(cell2_1)));
+    QVERIFY(tableView->itemAtCell(cell1_1)->property(kSelected).toBool());
+    QVERIFY(tableView->itemAtCell(cell2_1)->property(kSelected).toBool());
+
+    // Move currentIndex down while holding down shift to select
+    const QPoint cell2_2(2, 2);
+    const QPoint cell1_2(1, 2);
+    QTest::keyPress(window, Qt::Key_Down, Qt::ShiftModifier);
+    QVERIFY(selectionModel.isSelected(tableView->modelIndex(cell1_1)));
+    QVERIFY(selectionModel.isSelected(tableView->modelIndex(cell2_1)));
+    QVERIFY(selectionModel.isSelected(tableView->modelIndex(cell2_2)));
+    QVERIFY(selectionModel.isSelected(tableView->modelIndex(cell1_2)));
+    QVERIFY(tableView->itemAtCell(cell1_1)->property(kSelected).toBool());
+    QVERIFY(tableView->itemAtCell(cell2_1)->property(kSelected).toBool());
+    QVERIFY(tableView->itemAtCell(cell2_2)->property(kSelected).toBool());
+    QVERIFY(tableView->itemAtCell(cell1_2)->property(kSelected).toBool());
+
+    // Move currentIndex left while holding down shift to select
+    QTest::keyPress(window, Qt::Key_Left, Qt::ShiftModifier);
+    QVERIFY(selectionModel.isSelected(tableView->modelIndex(cell1_1)));
+    QVERIFY(selectionModel.isSelected(tableView->modelIndex(cell1_2)));
+    QVERIFY(!selectionModel.isSelected(tableView->modelIndex(cell2_1)));
+    QVERIFY(!selectionModel.isSelected(tableView->modelIndex(cell2_2)));
+    QVERIFY(tableView->itemAtCell(cell1_1)->property(kSelected).toBool());
+    QVERIFY(tableView->itemAtCell(cell1_2)->property(kSelected).toBool());
+    QVERIFY(!tableView->itemAtCell(cell2_1)->property(kSelected).toBool());
+    QVERIFY(!tableView->itemAtCell(cell2_2)->property(kSelected).toBool());
+
+    // Move currentIndex left while holding down shift to select
+    const QPoint cell0_1(0, 1);
+    const QPoint cell0_2(0, 2);
+    QTest::keyPress(window, Qt::Key_Left, Qt::ShiftModifier);
+    QVERIFY(selectionModel.isSelected(tableView->modelIndex(cell0_1)));
+    QVERIFY(selectionModel.isSelected(tableView->modelIndex(cell0_2)));
+    QVERIFY(selectionModel.isSelected(tableView->modelIndex(cell1_1)));
+    QVERIFY(selectionModel.isSelected(tableView->modelIndex(cell1_2)));
+    QVERIFY(tableView->itemAtCell(cell0_1)->property(kSelected).toBool());
+    QVERIFY(tableView->itemAtCell(cell0_2)->property(kSelected).toBool());
+    QVERIFY(tableView->itemAtCell(cell1_1)->property(kSelected).toBool());
+    QVERIFY(tableView->itemAtCell(cell1_2)->property(kSelected).toBool());
+
+    // Move currentIndex up while holding down shift to select
+    QTest::keyPress(window, Qt::Key_Up, Qt::ShiftModifier);
+    QVERIFY(selectionModel.isSelected(tableView->modelIndex(cell0_1)));
+    QVERIFY(selectionModel.isSelected(tableView->modelIndex(cell1_1)));
+    QVERIFY(!selectionModel.isSelected(tableView->modelIndex(cell0_2)));
+    QVERIFY(!selectionModel.isSelected(tableView->modelIndex(cell1_2)));
+    QVERIFY(tableView->itemAtCell(cell0_1)->property(kSelected).toBool());
+    QVERIFY(tableView->itemAtCell(cell1_1)->property(kSelected).toBool());
+    QVERIFY(!tableView->itemAtCell(cell0_2)->property(kSelected).toBool());
+    QVERIFY(!tableView->itemAtCell(cell1_2)->property(kSelected).toBool());
+
+    // Move currentIndex up while holding down shift to select
+    const QPoint cell0_0(0, 0);
+    const QPoint cell1_0(1, 0);
+    QTest::keyPress(window, Qt::Key_Up, Qt::ShiftModifier);
+    QVERIFY(selectionModel.isSelected(tableView->modelIndex(cell0_0)));
+    QVERIFY(selectionModel.isSelected(tableView->modelIndex(cell0_1)));
+    QVERIFY(selectionModel.isSelected(tableView->modelIndex(cell1_0)));
+    QVERIFY(selectionModel.isSelected(tableView->modelIndex(cell1_1)));
+    QVERIFY(tableView->itemAtCell(cell0_0)->property(kSelected).toBool());
+    QVERIFY(tableView->itemAtCell(cell0_1)->property(kSelected).toBool());
+    QVERIFY(tableView->itemAtCell(cell1_0)->property(kSelected).toBool());
+    QVERIFY(tableView->itemAtCell(cell1_1)->property(kSelected).toBool());
+
+    // Move currentIndex right while holding down shift to select
+    QTest::keyPress(window, Qt::Key_Right, Qt::ShiftModifier);
+    QVERIFY(!selectionModel.isSelected(tableView->modelIndex(cell0_0)));
+    QVERIFY(!selectionModel.isSelected(tableView->modelIndex(cell0_1)));
+    QVERIFY(selectionModel.isSelected(tableView->modelIndex(cell1_0)));
+    QVERIFY(selectionModel.isSelected(tableView->modelIndex(cell1_1)));
+    QVERIFY(!tableView->itemAtCell(cell0_0)->property(kSelected).toBool());
+    QVERIFY(!tableView->itemAtCell(cell0_1)->property(kSelected).toBool());
+    QVERIFY(tableView->itemAtCell(cell1_0)->property(kSelected).toBool());
+    QVERIFY(tableView->itemAtCell(cell1_1)->property(kSelected).toBool());
+
+    // Finally, move currentIndex _without_ shift, which should clear the selection
+    QTest::keyPress(window, Qt::Key_Right);
+    QVERIFY(!selectionModel.isSelected(tableView->modelIndex(cell1_0)));
+    QVERIFY(!selectionModel.isSelected(tableView->modelIndex(cell1_1)));
+    QVERIFY(!tableView->itemAtCell(cell1_0)->property(kSelected).toBool());
+    QVERIFY(!tableView->itemAtCell(cell1_1)->property(kSelected).toBool());
+}
+
+void tst_QQuickTableView::selectUsingHomeAndEndKeys()
+{
+    // Select cells in the view by using the home and end keys
+    LOAD_TABLEVIEW("tableviewwithselected1.qml");
+
+    TestModel model(4, 40);
+    QItemSelectionModel selectionModel(&model);
+
+    tableView->setModel(QVariant::fromValue(&model));
+    tableView->setSelectionModel(&selectionModel);
+    tableView->setFocus(true);
+    QQuickWindow *window = tableView->window();
+    const char kSelected[] = "selected";
+
+    WAIT_UNTIL_POLISHED;
+
+    // Check that all delegates have selected set to false upon start
+    for (auto fxItem : tableViewPrivate->loadedItems)
+        QVERIFY(!fxItem->item->property(kSelected).toBool());
+
+    // Start by making cell 0, 0 current
+    const QPoint cell0_0(0, 0);
+    selectionModel.setCurrentIndex(tableView->modelIndex(cell0_0), QItemSelectionModel::NoUpdate);
+    QVERIFY(!tableView->itemAtCell(cell0_0)->property(kSelected).toBool());
+
+    // Move currentIndex to the end while holding down shift to select
+    const QPoint cellAtHorEnd(tableView->columns() - 1, 0);
+    QTest::keyPress(window, Qt::Key_End, Qt::ShiftModifier);
+    QTRY_VERIFY(tableView->itemAtCell(cellAtHorEnd));
+    for (int c = 0; c <= cellAtHorEnd.x(); ++c) {
+        const QPoint cell(c, cellAtHorEnd.y());
+        QVERIFY(selectionModel.isSelected(tableView->modelIndex(cell)));
+        const QQuickItem *item = tableView->itemAtCell(cell);
+        if (item)
+            QVERIFY(item->property(kSelected).toBool());
+    }
+
+    // Move currentIndex to home while holding down shift to select.
+    // This should result in only the first cell being selected.
+    const QPoint cellAtHome(0, 0);
+    QTest::keyPress(window, Qt::Key_Home, Qt::ShiftModifier);
+    QVERIFY(selectionModel.isSelected(tableView->modelIndex(cellAtHome)));
+    QTRY_VERIFY(tableView->itemAtCell(cellAtHome));
+    QVERIFY(tableView->itemAtCell(cellAtHome)->property(kSelected).toBool());
+    for (int c = 1; c <= cellAtHorEnd.x(); ++c) {
+        const QPoint cell(c, cellAtHorEnd.y());
+        QVERIFY(!selectionModel.isSelected(tableView->modelIndex(cell)));
+        const QQuickItem *item = tableView->itemAtCell(cell);
+        if (item)
+            QVERIFY(!item->property(kSelected).toBool());
+    }
+
+    // Reverse the test, by starting from cellAtHorEnd
+    selectionModel.setCurrentIndex(tableView->modelIndex(cellAtHorEnd), QItemSelectionModel::Clear);
+    tableView->positionViewAtCell(cellAtHorEnd, QQuickTableView::AlignTop | QQuickTableView::AlignRight);
+    WAIT_UNTIL_POLISHED;
+    QQuickItem *itemAtHorEnd = tableView->itemAtCell(cellAtHorEnd);
+    QVERIFY(itemAtHorEnd);
+    QCOMPARE(itemAtHorEnd->property(kSelected).toBool(), false);
+
+    // Move currentIndex home while holding down shift to select
+    QTest::keyPress(window, Qt::Key_Home, Qt::ShiftModifier);
+    QTRY_VERIFY(tableView->itemAtCell(cellAtHome));
+    for (int c = 0; c <= cellAtHorEnd.x(); ++c) {
+        const QPoint cell(c, cellAtHorEnd.y());
+        QVERIFY(selectionModel.isSelected(tableView->modelIndex(cell)));
+        const QQuickItem *item = tableView->itemAtCell(cell);
+        if (item)
+            QVERIFY(item->property(kSelected).toBool());
+    }
+
+    // Move currentIndex to end while holding down shift to select.
+    // This should result in only cellAtHorEnd being selected.
+    QTest::keyPress(window, Qt::Key_End, Qt::ShiftModifier);
+    QVERIFY(selectionModel.isSelected(tableView->modelIndex(cellAtHorEnd)));
+    QTRY_VERIFY(tableView->itemAtCell(cellAtHorEnd));
+    QVERIFY(tableView->itemAtCell(cellAtHorEnd)->property(kSelected).toBool());
+    for (int c = 0; c < cellAtHorEnd.x(); ++c) {
+        const QPoint cell(c, cellAtHorEnd.y());
+        QVERIFY(!selectionModel.isSelected(tableView->modelIndex(cell)));
+        const QQuickItem *item = tableView->itemAtCell(cell);
+        if (item)
+            QVERIFY(!item->property(kSelected).toBool());
+    }
+}
+
+void tst_QQuickTableView::selectUsingPageUpDownKeys()
+{
+    // Select cells in the view by using the page up and down keys
+    LOAD_TABLEVIEW("tableviewwithselected1.qml");
+
+    TestModel model(30, 3);
+    QItemSelectionModel selectionModel(&model);
+
+    tableView->setModel(QVariant::fromValue(&model));
+    tableView->setSelectionModel(&selectionModel);
+    tableView->setFocus(true);
+    QQuickWindow *window = tableView->window();
+    const char kSelected[] = "selected";
+
+    WAIT_UNTIL_POLISHED;
+
+    // Check that all delegates have selected set to false upon start
+    for (auto fxItem : tableViewPrivate->loadedItems)
+        QVERIFY(!fxItem->item->property(kSelected).toBool());
+
+    // Start by making cell 0, 0 current
+    const QPoint cell0_0(0, 0);
+    selectionModel.setCurrentIndex(tableView->modelIndex(cell0_0), QItemSelectionModel::NoUpdate);
+    QVERIFY(!tableView->itemAtCell(cell0_0)->property(kSelected).toBool());
+
+    // Move currentIndex page down while holding down shift to select
+    const QPoint cellAtBottom(0, tableView->bottomRow());
+    QTest::keyPress(window, Qt::Key_PageDown, Qt::ShiftModifier);
+    QVERIFY(tableView->itemAtCell(cellAtBottom));
+    for (int r = 0; r <= cellAtBottom.y(); ++r) {
+        const QPoint cell(cellAtBottom.x(), r);
+        QVERIFY(selectionModel.isSelected(tableView->modelIndex(cell)));
+        const QQuickItem *item = tableView->itemAtCell(cell);
+        if (item)
+            QVERIFY(item->property(kSelected).toBool());
+    }
+
+    // Move currentIndex page up while holding down shift to select
+    const QPoint cellAtTop(0, 0);
+    QTest::keyPress(window, Qt::Key_PageUp, Qt::ShiftModifier);
+    QVERIFY(tableView->itemAtCell(cellAtTop));
+    QVERIFY(tableView->itemAtCell(cellAtTop)->property(kSelected).toBool());
+    for (int r = 1; r <= cellAtBottom.y(); ++r) {
+        const QPoint cell(cellAtBottom.x(), r);
+        QVERIFY(!selectionModel.isSelected(tableView->modelIndex(cell)));
+        const QQuickItem *item = tableView->itemAtCell(cell);
+        if (item)
+            QVERIFY(!item->property(kSelected).toBool());
+    }
+
+    // Move currentIndex page down twice while holding down shift to select.
+    // This will select all cells in the first column, even the ones that are initially hidden.
+    const QPoint cellAtVerEnd(0, tableView->rows() - 1);
+    QTest::keyPress(window, Qt::Key_PageDown, Qt::ShiftModifier);
+    QTest::keyPress(window, Qt::Key_PageDown, Qt::ShiftModifier);
+    QTRY_VERIFY(tableView->itemAtCell(cellAtVerEnd));
+    QCOMPARE(tableView->bottomRow(), cellAtVerEnd.y());
+    for (int r = 0; r <= cellAtBottom.y(); ++r) {
+        const QPoint cell(cellAtBottom.x(), r);
+        QVERIFY(selectionModel.isSelected(tableView->modelIndex(cell)));
+        const QQuickItem *item = tableView->itemAtCell(cell);
+        if (item)
+            QVERIFY(item->property(kSelected).toBool());
+    }
+
+    // Reverse the test, by starting from cellAtVerEnd
+    selectionModel.clearSelection();
+    QVERIFY(!tableView->itemAtCell(cellAtVerEnd)->property(kSelected).toBool());
+
+    // Move currentIndex page up while holding down shift to select
+    const QPoint cellAtTopRow(0, tableView->topRow());
+    QTest::keyPress(window, Qt::Key_PageUp, Qt::ShiftModifier);
+    QTRY_VERIFY(tableView->itemAtCell(cellAtTopRow));
+    for (int r = cellAtTopRow.y(); r <= cellAtVerEnd.y(); ++r) {
+        const QPoint cell(cellAtBottom.x(), r);
+        QVERIFY(selectionModel.isSelected(tableView->modelIndex(cell)));
+        const QQuickItem *item = tableView->itemAtCell(cell);
+        if (item)
+            QVERIFY(item->property(kSelected).toBool());
+    }
+
+    // Move currentIndex page up once more while holding down shift to select.
+    // This will bring currentIndex to the top.
+    QTest::keyPress(window, Qt::Key_PageUp, Qt::ShiftModifier);
+    QTRY_VERIFY(tableView->itemAtCell(cellAtTop));
+    for (int r = cellAtTop.y(); r <= cellAtVerEnd.y(); ++r) {
+        const QPoint cell(cellAtBottom.x(), r);
+        QVERIFY(selectionModel.isSelected(tableView->modelIndex(cell)));
+        const QQuickItem *item = tableView->itemAtCell(cell);
+        if (item)
+            QVERIFY(item->property(kSelected).toBool());
+    }
+}
+
+void tst_QQuickTableView::testDeprecatedApi()
+{
+    // Check that you can still use Qt.Alignment as second argument
+    // to positionViewAtCell() (for backwards compatibility before Qt 6.4)
+    LOAD_TABLEVIEW("deprecatedapi.qml");
+
+    TestModel model(200, 200);
+    QItemSelectionModel selectionModel(&model);
+
+    tableView->setModel(QVariant::fromValue(&model));
+    tableView->setSelectionModel(&selectionModel);
+
+    WAIT_UNTIL_POLISHED;
+
+    QMetaObject::invokeMethod(tableView, "positionUsingDeprecatedEnum");
+
+    WAIT_UNTIL_POLISHED;
+
+    QCOMPARE(tableView->rightColumn(), model.columnCount() - 1);
+    QCOMPARE(tableView->bottomRow(), model.rowCount() - 1);
+}
+
+void tst_QQuickTableView::alternatingRows()
+{
+    // Check that you can set 'alternate'
+    LOAD_TABLEVIEW("plaintableview.qml");
+
+    QVERIFY(tableView->alternatingRows());
+    tableView->setAlternatingRows(false);
+    QVERIFY(!tableView->alternatingRows());
+    tableView->setAlternatingRows(true);
+    QVERIFY(tableView->alternatingRows());
+}
+
+void tst_QQuickTableView::boundDelegateComponent()
+{
+    QQmlEngine engine;
+    const QUrl url(testFileUrl("boundDelegateComponent.qml"));
+    QQmlComponent c(&engine, url);
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+
+    QTest::ignoreMessage(
+            QtWarningMsg, qPrintable(QLatin1String("%1:14: ReferenceError: index is not defined")
+                                             .arg(url.toString())));
+
+    QScopedPointer<QObject> o(c.create());
+    QVERIFY(!o.isNull());
+
+    QQmlContext *context = qmlContext(o.data());
+
+    QObject *inner = context->objectForName(QLatin1String("tableView"));
+    QVERIFY(inner != nullptr);
+    QQuickTableView *tableView = qobject_cast<QQuickTableView *>(inner);
+    QVERIFY(tableView != nullptr);
+    QObject *item = tableView->itemAtCell(0, 0);
+    QVERIFY(item);
+    QCOMPARE(item->objectName(), QLatin1String("fooouterundefined"));
+
+    QObject *inner2 = context->objectForName(QLatin1String("tableView2"));
+    QVERIFY(inner2 != nullptr);
+    QQuickTableView *tableView2 = qobject_cast<QQuickTableView *>(inner2);
+    QVERIFY(tableView2 != nullptr);
+    QObject *item2 = tableView2->itemAtCell(0, 0);
+    QVERIFY(item2);
+    QCOMPARE(item2->objectName(), QLatin1String("fooouter0"));
+
+    QQmlComponent *comp = qobject_cast<QQmlComponent *>(
+            context->objectForName(QLatin1String("outerComponent")));
+    QVERIFY(comp != nullptr);
+
+    for (int i = 0; i < 3 * 2; ++i) {
+        QTest::ignoreMessage(
+                QtWarningMsg,
+                qPrintable(QLatin1String("%1:50:21: ReferenceError: model is not defined")
+                                   .arg(url.toString())));
+    }
+
+    QScopedPointer<QObject> outerItem(comp->create(context));
+    QVERIFY(!outerItem.isNull());
+    QQuickTableView *innerTableView = qobject_cast<QQuickTableView *>(
+            qmlContext(outerItem.data())->objectForName(QLatin1String("innerTableView")));
+    QVERIFY(innerTableView != nullptr);
+    QCOMPARE(innerTableView->rows(), 3);
+    for (int i = 0; i < 3; ++i)
+        QVERIFY(innerTableView->itemAtCell(0, i)->objectName().isEmpty());
 }
 
 QTEST_MAIN(tst_QQuickTableView)

@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <qrasterwindow.h>
 #include <qpa/qwindowsysteminterface.h>
@@ -110,6 +85,7 @@ private slots:
     void generatedMouseMove();
     void keepPendingUpdateRequests();
     void activateDeactivateEvent();
+    void qobject_castOnDestruction();
     void touchToMouseTranslationByPopup();
 
 private:
@@ -2085,8 +2061,6 @@ void tst_QWindow::initialSize()
     w.setTitle(QLatin1String(QTest::currentTestFunction()));
     w.setWidth(m_testWindowSize.width());
     w.showNormal();
-    if (isPlatformWayland())
-        QEXPECT_FAIL("", "Wayland: This fails. See QTBUG-66818.", Abort);
     QTRY_COMPARE(w.width(), m_testWindowSize.width());
     QTRY_VERIFY(w.height() > 0);
     }
@@ -2262,6 +2236,9 @@ void tst_QWindow::modalWindowModallity()
 
 void tst_QWindow::modalWindowPosition()
 {
+    if (isPlatformWayland())
+        QSKIP("Window position not queryable on Wayland");
+
     QWindow window;
     window.setTitle(QLatin1String(QTest::currentTestFunction()));
     window.setGeometry(QRect(m_availableTopLeft + QPoint(100, 100), m_testWindowSize));
@@ -2270,8 +2247,6 @@ void tst_QWindow::modalWindowPosition()
     window.setModality(Qt::WindowModal);
     window.show();
     QVERIFY(QTest::qWaitForWindowExposed(&window));
-    if (isPlatformWayland())
-        QEXPECT_FAIL("", "Wayland: This fails. See QTBUG-100888.", Abort);
     QCOMPARE(window.geometry(), origGeo);
 }
 
@@ -2726,6 +2701,19 @@ void tst_QWindow::activateDeactivateEvent()
     QVERIFY(QTest::qWaitForWindowActive(&w2));
     QCOMPARE(w1.deactivateCount, 1);
     QCOMPARE(w2.activateCount, 1);
+}
+
+// Test that in a slot connected to destroyed() the emitter is
+// is no longer a QWindow.
+void tst_QWindow::qobject_castOnDestruction()
+{
+    QWindow window;
+    QObject::connect(&window, &QObject::destroyed, [](QObject *object)
+    {
+        QVERIFY(!qobject_cast<QWindow *>(object));
+        QVERIFY(!dynamic_cast<QWindow *>(object));
+        QVERIFY(!object->isWindowType());
+    });
 }
 
 void tst_QWindow::touchToMouseTranslationByPopup()

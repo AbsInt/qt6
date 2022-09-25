@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtQuick module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include <math.h>
 #include <QtCore/qstack.h>
@@ -517,6 +481,32 @@ void QQmlTreeModelToTableModel::expandRow(int n)
     expandPendingRows();
 }
 
+void QQmlTreeModelToTableModel::expandRecursively(int row, int depth)
+{
+    Q_ASSERT(depth == -1 || depth > 0);
+    const int startDepth = depthAtRow(row);
+
+    auto expandHelp = [this, depth, startDepth] (const auto expandHelp, const QModelIndex &index) -> void {
+        const int rowToExpand = itemIndex(index);
+        if (!m_expandedItems.contains(index))
+            expandRow(rowToExpand);
+
+        if (depth != -1 && depthAtRow(rowToExpand) == startDepth + depth - 1)
+            return;
+
+        const int childCount = m_model->rowCount(index);
+        for (int childRow = 0; childRow < childCount; ++childRow) {
+            const QModelIndex childIndex = m_model->index(childRow, 0, index);
+            if (m_model->hasChildren(childIndex))
+                expandHelp(expandHelp, childIndex);
+        }
+    };
+
+    const QModelIndex index = m_items[row].index;
+    if (index.isValid())
+        expandHelp(expandHelp, index);
+}
+
 void QQmlTreeModelToTableModel::expandPendingRows(bool doInsertRows)
 {
     while (!m_itemsToExpand.isEmpty()) {
@@ -535,6 +525,30 @@ void QQmlTreeModelToTableModel::expandPendingRows(bool doInsertRows)
         // pair per expansion (same as we do for collapsing).
         showModelChildItems(item, 0, childrenCount - 1, doInsertRows, false);
     }
+}
+
+void QQmlTreeModelToTableModel::collapseRecursively(int row)
+{
+    auto collapseHelp = [this] (const auto collapseHelp, const QModelIndex &index) -> void {
+        if (m_expandedItems.contains(index)) {
+            const int rowToCollapse = itemIndex(index);
+            if (rowToCollapse != -1)
+                collapseRow(rowToCollapse);
+            else
+                m_expandedItems.remove(index);
+        }
+
+        const int childCount = m_model->rowCount(index);
+        for (int childRow = 0; childRow < childCount; ++childRow) {
+            const QModelIndex childIndex = m_model->index(childRow, 0, index);
+            if (m_model->hasChildren(childIndex))
+                collapseHelp(collapseHelp, childIndex);
+        }
+    };
+
+    const QModelIndex index = m_items[row].index;
+    if (index.isValid())
+        collapseHelp(collapseHelp, index);
 }
 
 void QQmlTreeModelToTableModel::collapseRow(int n)
@@ -558,8 +572,13 @@ void QQmlTreeModelToTableModel::collapseRow(int n)
     removeVisibleRows(n + 1, lastIndex);
 }
 
-int QQmlTreeModelToTableModel::lastChildIndex(const QModelIndex &index)
+int QQmlTreeModelToTableModel::lastChildIndex(const QModelIndex &index) const
 {
+    // The purpose of this function is to return the row of the last decendant of a node N.
+    // But note: index should point to the last child of N, and not N itself!
+    // This means that if index is not expanded, the last child will simply be index itself.
+    // Otherwise, since the tree underneath index can be of any depth, it will instead find
+    // the first sibling of N, get its table row, and simply return the row above.
     if (!m_expandedItems.contains(index))
         return itemIndex(index);
 

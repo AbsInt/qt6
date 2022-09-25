@@ -1,36 +1,12 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the tools applications of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "qqmljstyperesolver_p.h"
 
-#include <private/qqmljsimporter_p.h>
-#include <private/qqmljsimportvisitor_p.h>
-#include <private/qqmljslogger_p.h>
+#include "qqmljsimporter_p.h"
+#include "qqmljsimportvisitor_p.h"
+#include "qqmljslogger_p.h"
+#include "qqmljsutils_p.h"
 #include <private/qv4value_p.h>
 
 #include <private/qduplicatetracker_p.h>
@@ -39,81 +15,65 @@
 
 QT_BEGIN_NAMESPACE
 
+using namespace Qt::StringLiterals;
+
 Q_LOGGING_CATEGORY(lcTypeResolver, "qt.qml.compiler.typeresolver", QtInfoMsg);
 
-template<typename Action>
-static bool searchBaseAndExtensionTypes(const QQmlJSScope::ConstPtr type, const Action &check)
-{
-    if (!type)
-        return false;
-
-    const bool isValueType = (type->accessSemantics() == QQmlJSScope::AccessSemantics::Value);
-
-    QDuplicateTracker<QQmlJSScope::ConstPtr> seen;
-    for (QQmlJSScope::ConstPtr scope = type; scope && !seen.hasSeen(scope);
-         scope = scope->baseType()) {
-
-        QDuplicateTracker<QQmlJSScope::ConstPtr> seenExtensions;
-        // Extensions override the types they extend. However, usually base
-        // types of extensions are ignored. The unusual cases are when we
-        // have a value type or when we have the QObject type, in which case
-        // we also study the extension's base type hierarchy.
-        const bool isQObject = scope->internalName() == QLatin1String("QObject");
-        QQmlJSScope::ConstPtr extension = scope->extensionType();
-        do {
-            if (!extension || seenExtensions.hasSeen(extension))
-                break;
-            if (check(extension, QQmlJSTypeResolver::Extension))
-                return true;
-            extension = extension->baseType();
-        } while (isValueType || isQObject);
-
-        if (check(scope, QQmlJSTypeResolver::Base))
-            return true;
-    }
-
-    return false;
-}
-
 QQmlJSTypeResolver::QQmlJSTypeResolver(QQmlJSImporter *importer)
+    : m_typeTracker(std::make_unique<TypeTracker>())
 {
     const QQmlJSImporter::ImportedTypes builtinTypes = importer->builtinInternalNames();
-    m_voidType = builtinTypes[u"void"_qs].scope;
-    m_realType = builtinTypes[u"double"_qs].scope;
-    m_floatType = builtinTypes[u"float"_qs].scope;
-    m_intType = builtinTypes[u"int"_qs].scope;
-    m_boolType = builtinTypes[u"bool"_qs].scope;
-    m_stringType = builtinTypes[u"QString"_qs].scope;
-    m_urlType = builtinTypes[u"QUrl"_qs].scope;
-    m_dateTimeType = builtinTypes[u"QDateTime"_qs].scope;
-    m_variantListType = builtinTypes[u"QVariantList"_qs].scope;
-    m_varType = builtinTypes[u"QVariant"_qs].scope;
-    m_jsValueType = builtinTypes[u"QJSValue"_qs].scope;
+    m_voidType = builtinTypes[u"void"_s].scope;
+    m_nullType = builtinTypes[u"std::nullptr_t"_s].scope;
+    m_realType = builtinTypes[u"double"_s].scope;
+    m_floatType = builtinTypes[u"float"_s].scope;
+    m_intType = builtinTypes[u"int"_s].scope;
+    m_boolType = builtinTypes[u"bool"_s].scope;
+    m_stringType = builtinTypes[u"QString"_s].scope;
+    m_stringListType = builtinTypes[u"QStringList"_s].scope;
+    m_byteArrayType = builtinTypes[u"QByteArray"_s].scope;
+    m_urlType = builtinTypes[u"QUrl"_s].scope;
+    m_dateTimeType = builtinTypes[u"QDateTime"_s].scope;
+    m_variantListType = builtinTypes[u"QVariantList"_s].scope;
+    m_varType = builtinTypes[u"QVariant"_s].scope;
+    m_jsValueType = builtinTypes[u"QJSValue"_s].scope;
+
+    QQmlJSScope::Ptr emptyListType = QQmlJSScope::create();
+    emptyListType->setInternalName(u"void*"_s);
+    emptyListType->setAccessSemantics(QQmlJSScope::AccessSemantics::Sequence);
+    m_emptyListType = emptyListType;
 
     QQmlJSScope::Ptr jsPrimitiveType = QQmlJSScope::create();
-    jsPrimitiveType->setInternalName(u"QJSPrimitiveValue"_qs);
-    jsPrimitiveType->setFileName(u"qjsprimitivevalue.h"_qs);
+    jsPrimitiveType->setInternalName(u"QJSPrimitiveValue"_s);
+    jsPrimitiveType->setFilePath(u"qjsprimitivevalue.h"_s);
     jsPrimitiveType->setAccessSemantics(QQmlJSScope::AccessSemantics::Value);
     m_jsPrimitiveType = jsPrimitiveType;
 
     QQmlJSScope::Ptr listPropertyType = QQmlJSScope::create();
-    listPropertyType->setInternalName(u"QQmlListProperty<QObject>"_qs);
-    listPropertyType->setFileName(u"qqmllist.h"_qs);
+    listPropertyType->setInternalName(u"QQmlListProperty<QObject>"_s);
+    listPropertyType->setFilePath(u"qqmllist.h"_s);
     listPropertyType->setAccessSemantics(QQmlJSScope::AccessSemantics::Sequence);
+    listPropertyType->setValueTypeName(u"QObject"_s);
+    QQmlJSScope::resolveTypes(listPropertyType, builtinTypes);
     m_listPropertyType = listPropertyType;
 
     QQmlJSScope::Ptr metaObjectType = QQmlJSScope::create();
-    metaObjectType->setInternalName(u"const QMetaObject"_qs);
-    metaObjectType->setFileName(u"qmetaobject.h"_qs);
+    metaObjectType->setInternalName(u"const QMetaObject"_s);
+    metaObjectType->setFilePath(u"qmetaobject.h"_s);
     metaObjectType->setAccessSemantics(QQmlJSScope::AccessSemantics::Reference);
     m_metaObjectType = metaObjectType;
 
+    QQmlJSScope::Ptr functionType = QQmlJSScope::create();
+    functionType->setInternalName(u"function"_s);
+    functionType->setAccessSemantics(QQmlJSScope::AccessSemantics::Value);
+    m_functionType = functionType;
+
     m_jsGlobalObject = importer->jsGlobalObject();
-    auto numberMethods = m_jsGlobalObject->methods(u"Number"_qs);
+    auto numberMethods = m_jsGlobalObject->methods(u"Number"_s);
     Q_ASSERT(numberMethods.length() == 1);
     m_numberPrototype = numberMethods[0].returnType()->baseType();
     Q_ASSERT(m_numberPrototype);
-    Q_ASSERT(m_numberPrototype->internalName() == u"NumberPrototype"_qs);
+    Q_ASSERT(m_numberPrototype->internalName() == u"NumberPrototype"_s);
 }
 
 /*!
@@ -151,6 +111,41 @@ QQmlJSScope::ConstPtr QQmlJSTypeResolver::scopeForId(
         const QString &id, const QQmlJSScope::ConstPtr &referrer) const
 {
     return m_objectsById.scope(id, referrer);
+}
+
+QQmlJSScope::ConstPtr QQmlJSTypeResolver::listType(
+        const QQmlJSScope::ConstPtr &elementType, ListMode mode) const
+{
+    if (elementType.isNull())
+        return QQmlJSScope::ConstPtr();
+
+    auto it = m_typeTracker->listTypes.find(elementType);
+    if (it != m_typeTracker->listTypes.end())
+        return *it;
+
+    switch (elementType->accessSemantics()) {
+    case QQmlJSScope::AccessSemantics::Reference:
+        if (mode == UseListReference)
+            return m_listPropertyType;
+        if (elementType->internalName() != u"QObject"_s)
+            return listType(genericType(elementType), mode);
+        Q_FALLTHROUGH();
+    case QQmlJSScope::AccessSemantics::Value: {
+        QQmlJSScope::Ptr listType = QQmlJSScope::create();
+        listType->setAccessSemantics(QQmlJSScope::AccessSemantics::Sequence);
+        listType->setValueTypeName(elementType->internalName());
+        listType->setInternalName(u"QList<%1>"_s.arg(elementType->augmentedInternalName()));
+        listType->setFilePath(elementType->filePath());
+        const QQmlJSImportedScope element = {elementType, QTypeRevision()};
+        QQmlJSScope::resolveTypes(listType, {{elementType->internalName(), element}});
+        Q_ASSERT(equals(listType->valueType(), elementType));
+        m_typeTracker->listTypes[elementType] = listType;
+        return listType;
+    }
+    default:
+        break;
+    }
+    return QQmlJSScope::ConstPtr();
 }
 
 QQmlJSScope::ConstPtr QQmlJSTypeResolver::typeFromAST(QQmlJS::AST::Type *type) const
@@ -207,12 +202,12 @@ QQmlJSTypeResolver::typeForBinaryOperation(QSOperator::Op oper, const QQmlJSRegi
     case QSOperator::Op::Add: {
         const auto leftContents = containedType(left);
         const auto rightContents = containedType(right);
-        if (leftContents == stringType() || rightContents == stringType())
+        if (equals(leftContents, stringType()) || equals(rightContents, stringType()))
             return QQmlJSRegisterContent::create(stringType(), stringType(),
                                                  QQmlJSRegisterContent::Builtin);
 
         const QQmlJSScope::ConstPtr result = merge(leftContents, rightContents);
-        if (result == boolType())
+        if (equals(result, boolType()))
             return QQmlJSRegisterContent::create(intType(), intType(),
                                                  QQmlJSRegisterContent::Builtin);
         if (isNumeric(result))
@@ -224,7 +219,7 @@ QQmlJSTypeResolver::typeForBinaryOperation(QSOperator::Op oper, const QQmlJSRegi
     }
     case QSOperator::Op::Sub: {
         const QQmlJSScope::ConstPtr result = merge(containedType(left), containedType(right));
-        if (result == boolType())
+        if (equals(result, boolType()))
             return QQmlJSRegisterContent::create(intType(), intType(),
                                                  QQmlJSRegisterContent::Builtin);
         return QQmlJSRegisterContent::create(realType(), realType(),
@@ -245,9 +240,8 @@ QQmlJSTypeResolver::typeForBinaryOperation(QSOperator::Op oper, const QQmlJSRegi
     return merge(left, right);
 }
 
-QQmlJSRegisterContent
-QQmlJSTypeResolver::typeForUnaryOperation(UnaryOperator oper,
-                                          const QQmlJSRegisterContent &operand) const
+QQmlJSRegisterContent QQmlJSTypeResolver::typeForArithmeticUnaryOperation(
+        UnaryOperator oper, const QQmlJSRegisterContent &operand) const
 {
     // For now, we are only concerned with the unary arithmetic operators.
     // The boolean and bitwise ones are special cased elsewhere.
@@ -269,31 +263,24 @@ bool QQmlJSTypeResolver::isNumeric(const QQmlJSRegisterContent &type) const
 
 bool QQmlJSTypeResolver::isIntegral(const QQmlJSRegisterContent &type) const
 {
-    return containedType(type) == m_intType;
-}
-
-bool QQmlJSTypeResolver::canHoldUndefined(const QQmlJSRegisterContent &content) const
-{
-    const auto canBeUndefined = [this](const QQmlJSScope::ConstPtr &type) {
-        return type == m_voidType || type == m_varType
-                || type == m_jsValueType || type == m_jsPrimitiveType;
-    };
-
-    return canBeUndefined(content.storedType()) && canBeUndefined(containedType(content));
+    return equals(containedType(type), m_intType);
 }
 
 bool QQmlJSTypeResolver::isPrimitive(const QQmlJSScope::ConstPtr &type) const
 {
-    return type == m_intType || type == m_realType || type == m_floatType || type == m_boolType
-            || type == m_voidType || type == m_stringType || type == m_jsPrimitiveType;
+    return equals(type, m_intType) || equals(type, m_realType) || equals(type, m_floatType)
+            || equals(type, m_boolType) || equals(type, m_voidType) || equals(type, m_nullType)
+            || equals(type, m_stringType) || equals(type, m_jsPrimitiveType);
 }
 
 bool QQmlJSTypeResolver::isNumeric(const QQmlJSScope::ConstPtr &type) const
 {
-    return searchBaseAndExtensionTypes(
-                type, [&](const QQmlJSScope::ConstPtr &scope, BaseOrExtension) {
-        return scope == m_numberPrototype;
-    });
+    return QQmlJSUtils::searchBaseAndExtensionTypes(
+            type, [&](const QQmlJSScope::ConstPtr &scope, QQmlJSScope::ExtensionKind mode) {
+                if (mode == QQmlJSScope::ExtensionNamespace)
+                    return false;
+                return equals(scope, m_numberPrototype);
+            });
 }
 
 QQmlJSScope::ConstPtr
@@ -303,14 +290,107 @@ QQmlJSTypeResolver::containedType(const QQmlJSRegisterContent &container) const
         return container.type();
     if (container.isProperty()) {
         const QQmlJSMetaProperty prop = container.property();
-        return prop.isList() ? listPropertyType() : QQmlJSScope::ConstPtr(prop.type());
+        return prop.isList()
+                ? listType(prop.type(), UseListReference)
+                : QQmlJSScope::ConstPtr(prop.type());
     }
     if (container.isEnumeration())
         return container.enumeration().type();
     if (container.isMethod())
-        return jsValueType();
-    if (container.isImportNamespace())
-        return container.scopeType();
+        return container.storedType(); // Methods can only be stored in QJSValue.
+    if (container.isImportNamespace()) {
+        switch (container.variant()) {
+        case QQmlJSRegisterContent::ScopeModulePrefix:
+            return container.storedType(); // We don't store scope module prefixes
+        case QQmlJSRegisterContent::ObjectModulePrefix:
+            return container.scopeType();  // We need to pass the original object through.
+        default:
+            Q_UNREACHABLE();
+        }
+    }
+    if (container.isConversion())
+        return container.conversionResult();
+
+    Q_UNREACHABLE();
+    return {};
+}
+
+void QQmlJSTypeResolver::trackListPropertyType(
+        const QQmlJSScope::ConstPtr &trackedListElementType) const
+{
+    if (m_cloneMode == QQmlJSTypeResolver::DoNotCloneTypes)
+        return;
+
+    if (m_typeTracker->trackedTypes.contains(trackedListElementType)
+            && !m_typeTracker->listTypes.contains(trackedListElementType)) {
+        const QQmlJSScope::ConstPtr list = listType(
+                comparableType(trackedListElementType), UseListReference);
+        QQmlJSScope::Ptr clone = QQmlJSScope::clone(list);
+        m_typeTracker->listTypes[trackedListElementType] = clone;
+        m_typeTracker->trackedTypes[clone] = { list, QQmlJSScope::ConstPtr(), clone };
+    }
+}
+
+QQmlJSScope::ConstPtr QQmlJSTypeResolver::trackedType(const QQmlJSScope::ConstPtr &type) const
+{
+    if (m_cloneMode == QQmlJSTypeResolver::DoNotCloneTypes)
+        return type;
+
+    // If origin is in fact an already tracked type, track the original of that one instead.
+    const auto it = m_typeTracker->trackedTypes.find(type);
+    QQmlJSScope::ConstPtr orig = (it == m_typeTracker->trackedTypes.end()) ? type : it->original;
+
+    QQmlJSScope::Ptr clone = QQmlJSScope::clone(orig);
+    m_typeTracker->trackedTypes[clone] = { std::move(orig), QQmlJSScope::ConstPtr(), clone };
+    return clone;
+}
+
+QQmlJSRegisterContent QQmlJSTypeResolver::transformed(
+        const QQmlJSRegisterContent &origin,
+        QQmlJSScope::ConstPtr (QQmlJSTypeResolver::*op)(const QQmlJSScope::ConstPtr &) const) const
+{
+    if (origin.isType()) {
+        return QQmlJSRegisterContent::create(
+                    (this->*op)(origin.storedType()), (this->*op)(origin.type()),
+                    origin.variant(), (this->*op)(origin.scopeType()));
+    }
+
+    if (origin.isProperty()) {
+        QQmlJSMetaProperty prop = origin.property();
+        prop.setType((this->*op)(prop.type()));
+        if (prop.isList())
+            trackListPropertyType(prop.type());
+        return QQmlJSRegisterContent::create(
+                    (this->*op)(origin.storedType()), prop,
+                    origin.variant(), (this->*op)(origin.scopeType()));
+    }
+
+    if (origin.isEnumeration()) {
+        QQmlJSMetaEnum enumeration = origin.enumeration();
+        enumeration.setType((this->*op)(enumeration.type()));
+        return QQmlJSRegisterContent::create(
+                    (this->*op)(origin.storedType()), enumeration, origin.enumMember(),
+                    origin.variant(), (this->*op)(origin.scopeType()));
+    }
+
+    if (origin.isMethod()) {
+        return QQmlJSRegisterContent::create(
+                    (this->*op)(origin.storedType()),  origin.method(), origin.variant(),
+                    (this->*op)(origin.scopeType()));
+    }
+
+    if (origin.isImportNamespace()) {
+        return QQmlJSRegisterContent::create(
+                    (this->*op)(origin.storedType()), origin.importNamespace(),
+                    origin.variant(), (this->*op)(origin.scopeType()));
+    }
+
+    if (origin.isConversion()) {
+        return QQmlJSRegisterContent::create(
+                    (this->*op)(origin.storedType()), origin.conversionOrigins(),
+                    (this->*op)(origin.conversionResult()),
+                    origin.variant(), (this->*op)(origin.scopeType()));
+    }
 
     Q_UNREACHABLE();
     return {};
@@ -334,15 +414,14 @@ QQmlJSRegisterContent QQmlJSTypeResolver::referenceTypeForName(
 
     if (const auto attached = type->attachedType()) {
         if (!genericType(attached)) {
-            m_logger->logWarning(u"Cannot resolve generic base of attached %1"_qs.arg(
-                                     attached->internalName()),
-                                 Log_Compiler, attached->sourceLocation());
+            m_logger->log(u"Cannot resolve generic base of attached %1"_s.arg(
+                                  attached->internalName()),
+                          Log_Compiler, attached->sourceLocation());
             return {};
         } else if (type->accessSemantics() != QQmlJSScope::AccessSemantics::Reference) {
-            m_logger->logWarning(
-                        u"Cannot retrieve attached object for non-reference type %1"_qs.arg(
-                            type->internalName()),
-                        Log_Compiler, type->sourceLocation());
+            m_logger->log(u"Cannot retrieve attached object for non-reference type %1"_s.arg(
+                                  type->internalName()),
+                          Log_Compiler, type->sourceLocation());
             return {};
         } else {
             // We don't know yet whether we need the attached or the plain object. In direct
@@ -375,7 +454,77 @@ QQmlJSRegisterContent QQmlJSTypeResolver::referenceTypeForName(
     return QQmlJSRegisterContent();
 }
 
-QString QQmlJSTypeResolver::containedTypeName(const QQmlJSRegisterContent &container) const
+QQmlJSRegisterContent QQmlJSTypeResolver::original(const QQmlJSRegisterContent &type) const
+{
+    return transformed(type, &QQmlJSTypeResolver::originalType);
+}
+
+QQmlJSRegisterContent QQmlJSTypeResolver::tracked(const QQmlJSRegisterContent &type) const
+{
+    return transformed(type, &QQmlJSTypeResolver::trackedType);
+}
+
+QQmlJSScope::ConstPtr QQmlJSTypeResolver::trackedContainedType(
+        const QQmlJSRegisterContent &container) const
+{
+    const QQmlJSScope::ConstPtr type = containedType(container);
+    return m_typeTracker->trackedTypes.contains(type) ? type : QQmlJSScope::ConstPtr();
+}
+
+QQmlJSScope::ConstPtr QQmlJSTypeResolver::originalContainedType(
+        const QQmlJSRegisterContent &container) const
+{
+    return originalType(containedType(container));
+}
+
+void QQmlJSTypeResolver::adjustTrackedType(
+        const QQmlJSScope::ConstPtr &tracked, const QQmlJSScope::ConstPtr &conversion) const
+{
+    if (m_cloneMode == QQmlJSTypeResolver::DoNotCloneTypes)
+        return;
+
+    const auto it = m_typeTracker->trackedTypes.find(tracked);
+    Q_ASSERT(it != m_typeTracker->trackedTypes.end());
+    it->replacement = comparableType(conversion);
+    *it->clone = std::move(*QQmlJSScope::clone(conversion));
+}
+
+void QQmlJSTypeResolver::adjustTrackedType(
+        const QQmlJSScope::ConstPtr &tracked, const QList<QQmlJSScope::ConstPtr> &conversions) const
+{
+    if (m_cloneMode == QQmlJSTypeResolver::DoNotCloneTypes)
+        return;
+
+    const auto it = m_typeTracker->trackedTypes.find(tracked);
+    Q_ASSERT(it != m_typeTracker->trackedTypes.end());
+    QQmlJSScope::Ptr mutableTracked = it->clone;
+    QQmlJSScope::ConstPtr result;
+    for (const QQmlJSScope::ConstPtr &type : conversions)
+        result = merge(type, result);
+
+    // If we cannot convert to the new type without the help of e.g. lookupResultMetaType(),
+    // we better not change the type.
+    if (canPrimitivelyConvertFromTo(tracked, result)) {
+        it->replacement = comparableType(result);
+        *mutableTracked = std::move(*QQmlJSScope::clone(result));
+    }
+}
+
+void QQmlJSTypeResolver::generalizeType(const QQmlJSScope::ConstPtr &type) const
+{
+    if (m_cloneMode == QQmlJSTypeResolver::DoNotCloneTypes)
+        return;
+
+    const auto it = m_typeTracker->trackedTypes.find(type);
+    Q_ASSERT(it != m_typeTracker->trackedTypes.end());
+    *it->clone = std::move(*QQmlJSScope::clone(genericType(type)));
+    if (it->replacement)
+        it->replacement = genericType(it->replacement);
+    it->original = genericType(it->original);
+}
+
+QString QQmlJSTypeResolver::containedTypeName(const QQmlJSRegisterContent &container,
+                                              bool useFancyName) const
 {
     QQmlJSScope::ConstPtr type;
 
@@ -390,70 +539,37 @@ QString QQmlJSTypeResolver::containedTypeName(const QQmlJSRegisterContent &conta
         break;
     }
 
-    return type->internalName().isEmpty() ? type->baseTypeName() : type->internalName();
+    QString typeName = type->internalName().isEmpty() ? type->baseTypeName() : type->internalName();
+
+    if (useFancyName)
+        return QQmlJSScope::prettyName(typeName);
+
+    return typeName;
 }
 
 bool QQmlJSTypeResolver::canConvertFromTo(const QQmlJSScope::ConstPtr &from,
                                           const QQmlJSScope::ConstPtr &to) const
 {
+    if (canPrimitivelyConvertFromTo(from, to))
+        return true;
+
     // ### need a generic solution for custom cpp types:
-    // if (from->m_hasBoolOverload && to == boolType)
+    // if (from->m_hasBoolOverload && equals(to, boolType))
     //    return true;
 
-    if (from == to)
-        return true;
-    if (from == m_varType || to == m_varType)
-        return true;
-    if (from == m_jsValueType || to == m_jsValueType)
-        return true;
-    if (isNumeric(from) && isNumeric(to))
-        return true;
-    if (from == m_intType && to == m_boolType)
-        return true;
-    if (from->accessSemantics() == QQmlJSScope::AccessSemantics::Reference && to == m_boolType)
-        return true;
-
-    // Yes, our String has number constructors.
-    if (isNumeric(from) && to == m_stringType)
-        return true;
-
-    // We can always convert between strings and urls.
-    if ((from == m_stringType && to == m_urlType) || (from == m_urlType && to == m_stringType))
-        return true;
-
     // All of these types have QString conversions that require a certain format
-    // TODO: Actually verify these strings or deprecate them
-    if (from == m_stringType && !to.isNull()) {
+    // TODO: Actually verify these strings or deprecate them.
+    //       Some of those type are builtins or should be builtins. We should add code for them
+    //       in QQmlJSCodeGenerator::conversion().
+    if (equals(from, m_stringType) && !to.isNull()) {
         const QString toTypeName = to->internalName();
-        if (to == m_dateTimeType || toTypeName == u"QTime"_qs || toTypeName == u"QDate"_qs
-            || toTypeName == u"QPoint"_qs || toTypeName == u"QPointF"_qs
-            || toTypeName == u"QSize"_qs || toTypeName == u"QSizeF"_qs || toTypeName == u"QRect"_qs
-            || toTypeName == u"QRectF"_qs || toTypeName == u"QColor"_qs) {
+        if (toTypeName == u"QTime"_s || toTypeName == u"QDate"_s
+                || toTypeName == u"QPoint"_s || toTypeName == u"QPointF"_s
+                || toTypeName == u"QSize"_s || toTypeName == u"QSizeF"_s
+                || toTypeName == u"QRect"_s || toTypeName == u"QRectF"_s
+                || toTypeName == u"QColor"_s) {
             return true;
         }
-    }
-
-    if (from == m_voidType)
-        return true;
-
-    if (to.isNull())
-        return false;
-
-    if (from == m_jsPrimitiveType) {
-        // You can cast any primitive (in particular null) to a nullptr
-        return isPrimitive(to) || to->accessSemantics() == QQmlJSScope::AccessSemantics::Reference;
-    }
-
-    if (to == m_jsPrimitiveType)
-        return isPrimitive(from);
-
-    const bool matchByName = !to->isComposite();
-    Q_ASSERT(!matchByName || !to->internalName().isEmpty());
-    for (auto baseType = from; baseType; baseType = baseType->baseType()) {
-        if (baseType == to)
-            return true;
-        if (matchByName && baseType->internalName() == to->internalName())
-            return true;
     }
 
     return false;
@@ -474,38 +590,61 @@ static QQmlJSRegisterContent::ContentVariant mergeVariants(QQmlJSRegisterContent
 QQmlJSRegisterContent QQmlJSTypeResolver::merge(const QQmlJSRegisterContent &a,
                                                 const QQmlJSRegisterContent &b) const
 {
+    QList<QQmlJSScope::ConstPtr> origins;
+    if (a.isConversion())
+        origins.append(a.conversionOrigins());
+    else
+        origins.append(containedType(a));
+
+    if (b.isConversion())
+        origins.append(b.conversionOrigins());
+    else
+        origins.append(containedType(b));
+
+    std::sort(origins.begin(), origins.end());
+    const auto erase = std::unique(origins.begin(), origins.end());
+    origins.erase(erase, origins.end());
+
     return QQmlJSRegisterContent::create(
-            merge(a.storedType(), b.storedType()),
-            merge(containedType(a), containedType(b)), mergeVariants(a.variant(), b.variant()),
-            merge(a.scopeType(), b.scopeType()));
-}
-
-static QQmlJSScope::ConstPtr commonBaseType(const QQmlJSScope::ConstPtr &a,
-                                            const QQmlJSScope::ConstPtr &b)
-{
-    for (QQmlJSScope::ConstPtr aBase = a; aBase; aBase = aBase->baseType()) {
-        for (QQmlJSScope::ConstPtr bBase = b; bBase; bBase = bBase->baseType()) {
-            if (aBase == bBase)
-                return aBase;
-        }
-    }
-
-    return {};
+                merge(a.storedType(), b.storedType()),
+                origins,
+                merge(containedType(a), containedType(b)),
+                mergeVariants(a.variant(), b.variant()),
+                merge(a.scopeType(), b.scopeType()));
 }
 
 QQmlJSScope::ConstPtr QQmlJSTypeResolver::merge(const QQmlJSScope::ConstPtr &a,
                                                 const QQmlJSScope::ConstPtr &b) const
 {
-    if (a == b)
+    if (a.isNull())
+        return b;
+
+    if (b.isNull())
         return a;
 
-    if (a == jsValueType() || a == varType())
+    const auto commonBaseType = [this](
+            const QQmlJSScope::ConstPtr &a, const QQmlJSScope::ConstPtr &b) {
+        for (QQmlJSScope::ConstPtr aBase = a; aBase; aBase = aBase->baseType()) {
+            for (QQmlJSScope::ConstPtr bBase = b; bBase; bBase = bBase->baseType()) {
+                if (equals(aBase, bBase))
+                    return aBase;
+            }
+        }
+
+        return QQmlJSScope::ConstPtr();
+    };
+
+
+    if (equals(a, b))
         return a;
-    if (b == jsValueType() || b == varType())
+
+    if (equals(a, jsValueType()) || equals(a, varType()))
+        return a;
+    if (equals(b, jsValueType()) || equals(b, varType()))
         return b;
 
     auto canConvert = [&](const QQmlJSScope::ConstPtr &from, const QQmlJSScope::ConstPtr &to) {
-        return (a == from && b == to) || (b == from && a == to);
+        return (equals(a, from) && equals(b, to)) || (equals(b, from) && equals(a, to));
     };
 
     if (isNumeric(a) && isNumeric(b))
@@ -521,7 +660,35 @@ QQmlJSScope::ConstPtr QQmlJSTypeResolver::merge(const QQmlJSScope::ConstPtr &a,
     if (auto commonBase = commonBaseType(a, b))
         return commonBase;
 
+    if (equals(a, nullType()) && b->accessSemantics() == QQmlJSScope::AccessSemantics::Reference)
+        return b;
+
+    if (equals(b, nullType()) && a->accessSemantics() == QQmlJSScope::AccessSemantics::Reference)
+        return a;
+
     return varType();
+}
+
+bool QQmlJSTypeResolver::canHoldUndefined(const QQmlJSRegisterContent &content) const
+{
+    const auto canBeUndefined = [this](const QQmlJSScope::ConstPtr &type) {
+        return equals(type, m_voidType) || equals(type, m_varType)
+                || equals(type, m_jsValueType) || equals(type, m_jsPrimitiveType);
+    };
+
+    if (!canBeUndefined(content.storedType()))
+        return false;
+
+    if (!content.isConversion())
+        return canBeUndefined(containedType(content));
+
+    const auto origins = content.conversionOrigins();
+    for (const auto &origin : origins) {
+        if (canBeUndefined(origin))
+            return true;
+    }
+
+    return false;
 }
 
 QQmlJSScope::ConstPtr QQmlJSTypeResolver::genericType(const QQmlJSScope::ConstPtr &type,
@@ -530,47 +697,63 @@ QQmlJSScope::ConstPtr QQmlJSTypeResolver::genericType(const QQmlJSScope::ConstPt
     if (type->isScript())
         return m_jsValueType;
 
-    if (type == m_metaObjectType)
+    if (equals(type, m_metaObjectType))
         return m_metaObjectType;
 
     if (type->accessSemantics() == QQmlJSScope::AccessSemantics::Reference) {
-        for (auto base = type; base; base = base->baseType()) {
+        QString unresolvedBaseTypeName;
+        for (auto base = type; base;) {
             // QObject and QQmlComponent are the two required base types.
             // Any QML type system has to define those, or use the ones from builtins.
             // As QQmlComponent is derived from QObject, we can restrict ourselves to the latter.
             // This results in less if'ery when retrieving a QObject* from somewhere and deciding
             // what it is.
-            if (base->internalName() == u"QObject"_qs) {
+            if (base->internalName() == u"QObject"_s) {
                 return base;
             } else if (allowComponent == ComponentIsGeneric::Yes
-                       && base->internalName() == u"QQmlComponent"_qs) {
+                       && base->internalName() == u"QQmlComponent"_s) {
                 return base;
+            }
+
+            if (auto baseBase = base->baseType()) {
+                base = baseBase;
+            } else {
+                unresolvedBaseTypeName = base->baseTypeName();
+                break;
             }
         }
 
-        m_logger->logWarning(u"Object type %1 is not derived from QObject or QQmlComponent"_qs.arg(
-                                     type->internalName()),
-                             Log_Compiler);
+        m_logger->log(u"Object type %1 is not derived from QObject or QQmlComponent. "
+                      "You may need to fully qualify all names in C++ so that moc can see them. "
+                      "You may also need to add qt_extract_metatypes(<target containing %2>)."_s
+                      .arg(type->internalName(), unresolvedBaseTypeName),
+                      Log_Compiler, type->sourceLocation());
 
         // Reference types that are not QObject or QQmlComponent are likely JavaScript objects.
         // We don't want to deal with those, but m_jsValueType is the best generic option.
         return m_jsValueType;
     }
 
-    if (type == voidType())
-        return jsPrimitiveType();
-
-    if (isPrimitive(type) || type == m_jsValueType || type == m_listPropertyType
-        || type == m_urlType || type == m_dateTimeType || type == m_variantListType
-        || type == m_varType) {
+    if (isPrimitive(type) || equals(type, m_jsValueType) || equals(type, m_listPropertyType)
+            || equals(type, m_urlType) || equals(type, m_dateTimeType)
+            || equals(type, m_variantListType) || equals(type, m_varType)
+            || equals(type, m_stringListType) || equals(type, m_emptyListType)
+            || equals(type, m_byteArrayType)) {
         return type;
     }
+
+    if (type->scopeType() == QQmlJSScope::EnumScope)
+        return m_intType;
 
     if (isNumeric(type))
         return m_realType;
 
-    if (type->scopeType() == QQmlJSScope::EnumScope)
-        return m_intType;
+    if (type->accessSemantics() == QQmlJSScope::AccessSemantics::Sequence) {
+        if (equals(type, m_listPropertyType))
+            return type;
+        if (const QQmlJSScope::ConstPtr valueType = type->valueType())
+            return listType(genericType(valueType), UseQObjectList);
+    }
 
     return m_varType;
 }
@@ -580,58 +763,20 @@ QQmlJSRegisterContent QQmlJSTypeResolver::globalType(const QQmlJSScope::ConstPtr
     return QQmlJSRegisterContent::create(storedType(type), type, QQmlJSRegisterContent::Unknown);
 }
 
-static QQmlJSRegisterContent::ContentVariant
-scopeContentVariant(QQmlJSTypeResolver::BaseOrExtension mode, bool isMethod)
+static QQmlJSRegisterContent::ContentVariant scopeContentVariant(QQmlJSScope::ExtensionKind mode,
+                                                                 bool isMethod)
 {
     switch (mode) {
-    case QQmlJSTypeResolver::Base:
+    case QQmlJSScope::NotExtension:
         return isMethod ? QQmlJSRegisterContent::ScopeMethod : QQmlJSRegisterContent::ScopeProperty;
-    case QQmlJSTypeResolver::Extension:
+    case QQmlJSScope::ExtensionType:
         return isMethod ? QQmlJSRegisterContent::ExtensionScopeMethod
                         : QQmlJSRegisterContent::ExtensionScopeProperty;
+    case QQmlJSScope::ExtensionNamespace:
+        break;
     }
     Q_UNREACHABLE();
     return QQmlJSRegisterContent::Unknown;
-}
-
-static bool isAssignedToDefaultProperty(const QQmlJSScope::ConstPtr &parent,
-                                        const QQmlJSScope::ConstPtr &child)
-{
-    QString defaultPropertyName;
-    QQmlJSMetaProperty defaultProperty;
-    if (!searchBaseAndExtensionTypes(
-                parent, [&](const QQmlJSScope::ConstPtr &scope,
-                            QQmlJSTypeResolver::BaseOrExtension mode) {
-        Q_UNUSED(mode);
-        defaultPropertyName = scope->defaultPropertyName();
-        defaultProperty = scope->property(defaultPropertyName);
-        return !defaultPropertyName.isEmpty();
-    })) {
-        return false;
-    }
-
-    QQmlJSScope::ConstPtr bindingHolder = parent;
-    while (bindingHolder->property(defaultPropertyName) != defaultProperty) {
-        // Only traverse the base type hierarchy here, not the extended types.
-        // Extensions cannot hold bindings.
-        bindingHolder = bindingHolder->baseType();
-
-        // Consequently, the default property may be inaccessibly
-        // hidden in some extension via shadowing.
-        // Nothing can be assigned to it then.
-        if (!bindingHolder)
-            return false;
-    }
-
-    const QList<QQmlJSMetaPropertyBinding> defaultPropBindings
-            = bindingHolder->propertyBindings(defaultPropertyName);
-    for (const QQmlJSMetaPropertyBinding &binding : defaultPropBindings) {
-        if (binding.bindingType() == QQmlJSMetaPropertyBinding::Object
-            && binding.objectType() == child) {
-            return true;
-        }
-    }
-    return false;
 }
 
 static bool isRevisionAllowed(int memberRevision, const QQmlJSScope::ConstPtr &scope)
@@ -654,6 +799,23 @@ static bool isRevisionAllowed(int memberRevision, const QQmlJSScope::ConstPtr &s
 QQmlJSRegisterContent QQmlJSTypeResolver::scopedType(const QQmlJSScope::ConstPtr &scope,
                                                      const QString &name) const
 {
+    const auto isAssignedToDefaultProperty = [this](const QQmlJSScope::ConstPtr &parent,
+                                                    const QQmlJSScope::ConstPtr &child) {
+        const QString defaultPropertyName = parent->defaultPropertyName();
+        if (defaultPropertyName.isEmpty()) // no reason to search for bindings
+            return false;
+
+        const QList<QQmlJSMetaPropertyBinding> defaultPropBindings =
+                parent->propertyBindings(defaultPropertyName);
+        for (const QQmlJSMetaPropertyBinding &binding : defaultPropBindings) {
+            if (binding.bindingType() == QQmlJSMetaPropertyBinding::Object
+                && equals(binding.objectType(), child)) {
+                return true;
+            }
+        }
+        return false;
+    };
+
     if (QQmlJSScope::ConstPtr identified = scopeForId(name, scope)) {
         return QQmlJSRegisterContent::create(storedType(identified), identified,
                                              QQmlJSRegisterContent::ObjectById, scope);
@@ -661,8 +823,10 @@ QQmlJSRegisterContent QQmlJSTypeResolver::scopedType(const QQmlJSScope::ConstPtr
 
     if (QQmlJSScope::ConstPtr base = QQmlJSScope::findCurrentQMLScope(scope)) {
         QQmlJSRegisterContent result;
-        if (searchBaseAndExtensionTypes(
-                    base, [&](const QQmlJSScope::ConstPtr &found, BaseOrExtension mode) {
+        if (QQmlJSUtils::searchBaseAndExtensionTypes(
+                    base, [&](const QQmlJSScope::ConstPtr &found, QQmlJSScope::ExtensionKind mode) {
+                        if (mode == QQmlJSScope::ExtensionNamespace) // no use for it here
+                            return false;
                         if (found->hasOwnProperty(name)) {
                             QQmlJSMetaProperty prop = found->ownProperty(name);
                             if (!isRevisionAllowed(prop.revision(), scope))
@@ -676,7 +840,9 @@ QQmlJSRegisterContent QQmlJSTypeResolver::scopedType(const QQmlJSScope::ConstPtr
                                 }
                             }
                             result = QQmlJSRegisterContent::create(
-                                    prop.isList() ? listPropertyType() : storedType(prop.type()),
+                                    prop.isList()
+                                            ? listType(prop.type(), UseListReference)
+                                            : storedType(prop.type()),
                                     prop, scopeContentVariant(mode, false), scope);
                             return true;
                         }
@@ -722,19 +888,23 @@ QQmlJSRegisterContent QQmlJSTypeResolver::scopedType(const QQmlJSScope::ConstPtr
 }
 
 bool QQmlJSTypeResolver::checkEnums(const QQmlJSScope::ConstPtr &scope, const QString &name,
-                                    QQmlJSRegisterContent *result, BaseOrExtension mode) const
+                                    QQmlJSRegisterContent *result,
+                                    QQmlJSScope::ExtensionKind mode) const
 {
     // You can't have lower case enum names in QML, even if we know the enums here.
     if (name.isEmpty() || !name.at(0).isUpper())
         return false;
+
+    const bool inExtension =
+            (mode == QQmlJSScope::ExtensionType) || (mode == QQmlJSScope::ExtensionNamespace);
 
     const auto enums = scope->ownEnumerations();
     for (const auto &enumeration : enums) {
         if (enumeration.name() == name) {
             *result = QQmlJSRegisterContent::create(
                     storedType(intType()), enumeration, QString(),
-                    mode == Extension ? QQmlJSRegisterContent::ExtensionObjectEnum
-                                      : QQmlJSRegisterContent::ObjectEnum,
+                    inExtension ? QQmlJSRegisterContent::ExtensionObjectEnum
+                                : QQmlJSRegisterContent::ObjectEnum,
                     scope);
             return true;
         }
@@ -742,8 +912,8 @@ bool QQmlJSTypeResolver::checkEnums(const QQmlJSScope::ConstPtr &scope, const QS
         if (enumeration.hasKey(name)) {
             *result = QQmlJSRegisterContent::create(
                     storedType(intType()), enumeration, name,
-                    mode == Extension ? QQmlJSRegisterContent::ExtensionObjectEnum
-                                      : QQmlJSRegisterContent::ObjectEnum,
+                    inExtension ? QQmlJSRegisterContent::ExtensionObjectEnum
+                                : QQmlJSRegisterContent::ObjectEnum,
                     scope);
             return true;
         }
@@ -752,12 +922,87 @@ bool QQmlJSTypeResolver::checkEnums(const QQmlJSScope::ConstPtr &scope, const QS
     return false;
 }
 
+bool QQmlJSTypeResolver::canPrimitivelyConvertFromTo(
+        const QQmlJSScope::ConstPtr &from, const QQmlJSScope::ConstPtr &to) const
+{
+    if (equals(from, to))
+        return true;
+    if (equals(from, m_varType) || equals(to, m_varType))
+        return true;
+    if (equals(from, m_jsValueType) || equals(to, m_jsValueType))
+        return true;
+    if (isNumeric(from) && isNumeric(to))
+        return true;
+    if (isNumeric(from) && equals(to, m_boolType))
+        return true;
+    if (from->accessSemantics() == QQmlJSScope::AccessSemantics::Reference
+            && equals(to, m_boolType)) {
+        return true;
+    }
+
+    // Yes, our String has number constructors.
+    if (isNumeric(from) && equals(to, m_stringType))
+        return true;
+
+    // We can always convert between strings and urls.
+    if ((equals(from, m_stringType) && equals(to, m_urlType))
+            || (equals(from, m_urlType) && equals(to, m_stringType))) {
+        return true;
+    }
+
+    // We can always convert between strings and byte arrays.
+    if ((equals(from, m_stringType) && equals(to, m_byteArrayType))
+            || (equals(from, m_byteArrayType) && equals(to, m_stringType))) {
+        return true;
+    }
+
+    if (equals(from, m_voidType) || equals(to, m_voidType))
+        return true;
+
+    if (to.isNull())
+        return false;
+
+    if (equals(from, m_stringType) && equals(to, m_dateTimeType))
+        return true;
+
+    if (equals(from, m_nullType)
+            && to->accessSemantics() == QQmlJSScope::AccessSemantics::Reference) {
+        return true;
+    }
+
+    if (equals(from, m_jsPrimitiveType)) {
+        // You can cast any primitive to a nullptr
+        return isPrimitive(to) || to->accessSemantics() == QQmlJSScope::AccessSemantics::Reference;
+    }
+
+    if (equals(to, m_jsPrimitiveType))
+        return isPrimitive(from);
+
+    if (equals(from, m_emptyListType) || equals(from, m_variantListType))
+        return to->accessSemantics() == QQmlJSScope::AccessSemantics::Sequence;
+
+    const bool matchByName = !to->isComposite();
+    Q_ASSERT(!matchByName || !to->internalName().isEmpty());
+    for (auto baseType = from; baseType; baseType = baseType->baseType()) {
+        if (equals(baseType, to))
+            return true;
+        if (matchByName && baseType->internalName() == to->internalName())
+            return true;
+    }
+
+    // We can convert anything that fits into QJSPrimitiveValue
+    if (canConvertFromTo(from, m_jsPrimitiveType) && canConvertFromTo(m_jsPrimitiveType, to))
+        return true;
+
+    return false;
+}
+
 QQmlJSRegisterContent QQmlJSTypeResolver::lengthProperty(
         bool isWritable, const QQmlJSScope::ConstPtr &scope) const
 {
     QQmlJSMetaProperty prop;
-    prop.setPropertyName(u"length"_qs);
-    prop.setTypeName(u"int"_qs);
+    prop.setPropertyName(u"length"_s);
+    prop.setTypeName(u"int"_s);
     prop.setType(intType());
     prop.setIsWritable(isWritable);
     return QQmlJSRegisterContent::create(intType(), prop, QQmlJSRegisterContent::Builtin, scope);
@@ -768,60 +1013,81 @@ QQmlJSRegisterContent QQmlJSTypeResolver::memberType(const QQmlJSScope::ConstPtr
 {
     QQmlJSRegisterContent result;
 
-    if (type == jsValueType()) {
+    if (equals(type, jsValueType())) {
         QQmlJSMetaProperty prop;
         prop.setPropertyName(name);
-        prop.setTypeName(u"QJSValue"_qs);
+        prop.setTypeName(u"QJSValue"_s);
         prop.setType(jsValueType());
         prop.setIsWritable(true);
         return QQmlJSRegisterContent::create(jsValueType(), prop,
                                              QQmlJSRegisterContent::JavaScriptObjectProperty, type);
     }
 
-    if ((type == stringType() || type->accessSemantics() == QQmlJSScope::AccessSemantics::Sequence)
-            && name == u"length"_qs) {
-        return lengthProperty(type != stringType(), type);
+    if ((equals(type, stringType())
+         || type->accessSemantics() == QQmlJSScope::AccessSemantics::Sequence)
+            && name == u"length"_s) {
+        return lengthProperty(!equals(type, stringType()), type);
     }
 
-    const auto check = [&](const QQmlJSScope::ConstPtr &scope, BaseOrExtension mode) {
-        if (scope->hasOwnProperty(name)) {
-            const auto prop = scope->ownProperty(name);
-            result = QQmlJSRegisterContent::create(
-                    prop.isList() ? listPropertyType() : storedType(prop.type()), prop,
-                    mode == Base ? QQmlJSRegisterContent::ObjectProperty
-                                 : QQmlJSRegisterContent::ExtensionObjectProperty,
-                    scope);
-            return true;
-        }
+    const auto check = [&](const QQmlJSScope::ConstPtr &scope, QQmlJSScope::ExtensionKind mode) {
+        if (mode != QQmlJSScope::ExtensionNamespace) {
+            if (scope->hasOwnProperty(name)) {
+                const auto prop = scope->ownProperty(name);
+                result = QQmlJSRegisterContent::create(
+                        prop.isList()
+                                ? listType(prop.type(), UseListReference)
+                                : storedType(prop.type()),
+                        prop,
+                        mode == QQmlJSScope::NotExtension
+                                ? QQmlJSRegisterContent::ObjectProperty
+                                : QQmlJSRegisterContent::ExtensionObjectProperty,
+                        scope);
+                return true;
+            }
 
-        if (scope->hasOwnMethod(name)) {
-            const auto methods = scope->ownMethods(name);
-            result = QQmlJSRegisterContent::create(
-                    jsValueType(), methods,
-                    mode == Base ? QQmlJSRegisterContent::ObjectMethod
-                                 : QQmlJSRegisterContent::ExtensionObjectMethod,
-                    scope);
-            return true;
+            if (scope->hasOwnMethod(name)) {
+                const auto methods = scope->ownMethods(name);
+                result = QQmlJSRegisterContent::create(
+                        jsValueType(), methods,
+                        mode == QQmlJSScope::NotExtension
+                                ? QQmlJSRegisterContent::ObjectMethod
+                                : QQmlJSRegisterContent::ExtensionObjectMethod,
+                        scope);
+                return true;
+            }
+
+            if (std::optional<QQmlJSScope::JavaScriptIdentifier> identifier =
+                        scope->findJSIdentifier(name);
+                identifier.has_value()) {
+                QQmlJSMetaProperty prop;
+                prop.setPropertyName(name);
+                prop.setTypeName(u"QJSValue"_s);
+                prop.setType(jsValueType());
+                prop.setIsWritable(!identifier->isConst);
+
+                result = QQmlJSRegisterContent::create(
+                        jsValueType(), prop, QQmlJSRegisterContent::JavaScriptObject, type);
+                return true;
+            }
         }
 
         return checkEnums(scope, name, &result, mode);
     };
 
-    if (searchBaseAndExtensionTypes(type, check))
+    if (QQmlJSUtils::searchBaseAndExtensionTypes(type, check))
         return result;
 
     if (QQmlJSScope::ConstPtr attachedBase = typeForName(name)) {
         if (QQmlJSScope::ConstPtr attached = attachedBase->attachedType()) {
             if (!genericType(attached)) {
-                m_logger->logWarning(u"Cannot resolve generic base of attached %1"_qs.arg(
-                                             attached->internalName()),
-                                     Log_Compiler);
+                m_logger->log(u"Cannot resolve generic base of attached %1"_s.arg(
+                                      attached->internalName()),
+                              Log_Compiler, attached->sourceLocation());
                 return {};
             } else if (type->accessSemantics() != QQmlJSScope::AccessSemantics::Reference) {
-                m_logger->logWarning(
-                        u"Cannot retrieve attached object for non-reference type %1"_qs.arg(
-                                type->internalName()),
-                        Log_Compiler);
+                m_logger->log(u"Cannot retrieve attached object for non-reference type %1"_s.arg(
+                                      type->internalName()),
+                              Log_Compiler, type->sourceLocation());
                 return {};
             } else {
                 return QQmlJSRegisterContent::create(storedType(attached), attached,
@@ -839,10 +1105,10 @@ QQmlJSRegisterContent QQmlJSTypeResolver::memberEnumType(const QQmlJSScope::Cons
 {
     QQmlJSRegisterContent result;
 
-    if (searchBaseAndExtensionTypes(type,
-                                    [&](const QQmlJSScope::ConstPtr &scope, BaseOrExtension mode) {
-                                        return checkEnums(scope, name, &result, mode);
-                                    })) {
+    if (QQmlJSUtils::searchBaseAndExtensionTypes(
+                type, [&](const QQmlJSScope::ConstPtr &scope, QQmlJSScope::ExtensionKind mode) {
+                    return checkEnums(scope, name, &result, mode);
+                })) {
         return result;
     }
 
@@ -864,8 +1130,8 @@ QQmlJSRegisterContent QQmlJSTypeResolver::memberType(const QQmlJSRegisterContent
     }
     if (type.isProperty()) {
         const auto prop = type.property();
-        if (prop.isList() && name == u"length"_qs)
-            return lengthProperty(true, listPropertyType());
+        if (prop.isList() && name == u"length"_s)
+            return lengthProperty(true, listType(prop.type(), UseListReference));
         return memberType(prop.type(), name);
     }
     if (type.isEnumeration()) {
@@ -877,7 +1143,7 @@ QQmlJSRegisterContent QQmlJSTypeResolver::memberType(const QQmlJSRegisterContent
     }
     if (type.isMethod()) {
         QQmlJSMetaProperty prop;
-        prop.setTypeName(u"QJSValue"_qs);
+        prop.setTypeName(u"QJSValue"_s);
         prop.setPropertyName(name);
         prop.setType(jsValueType());
         prop.setIsWritable(true);
@@ -887,10 +1153,10 @@ QQmlJSRegisterContent QQmlJSTypeResolver::memberType(const QQmlJSRegisterContent
     }
     if (type.isImportNamespace()) {
         if (type.scopeType()->accessSemantics() != QQmlJSScope::AccessSemantics::Reference) {
-            m_logger->logWarning(
-                    u"Cannot use non-reference type %1 as base of namespaced attached type"_qs.arg(
+            m_logger->log(
+                    u"Cannot use non-reference type %1 as base of namespaced attached type"_s.arg(
                             type.scopeType()->internalName()),
-                    Log_Type);
+                    Log_Type, type.scopeType()->sourceLocation());
             return {};
         }
 
@@ -898,12 +1164,16 @@ QQmlJSRegisterContent QQmlJSTypeResolver::memberType(const QQmlJSRegisterContent
                     name, type.scopeType(),
                     type.variant() == QQmlJSRegisterContent::ObjectModulePrefix);
     }
+    if (type.isConversion()) {
+        const auto result = memberType(type.conversionResult(), name);
+        return result.isValid() ? result : memberEnumType(type.scopeType(), name);
+    }
 
     Q_UNREACHABLE();
     return {};
 }
 
-QQmlJSRegisterContent QQmlJSTypeResolver::valueType(const QQmlJSRegisterContent &listType) const
+QQmlJSRegisterContent QQmlJSTypeResolver::valueType(const QQmlJSRegisterContent &list) const
 {
     QQmlJSScope::ConstPtr scope;
     QQmlJSScope::ConstPtr value;
@@ -911,18 +1181,22 @@ QQmlJSRegisterContent QQmlJSTypeResolver::valueType(const QQmlJSRegisterContent 
     auto valueType = [this](const QQmlJSScope::ConstPtr &scope) {
         if (scope->accessSemantics() == QQmlJSScope::AccessSemantics::Sequence)
             return scope->valueType();
-        else if (scope == m_jsValueType || scope == m_varType)
+        else if (equals(scope, m_jsValueType) || equals(scope, m_varType))
             return m_jsValueType;
+        else if (equals(scope, m_stringType))
+            return m_stringType;
         return QQmlJSScope::ConstPtr();
     };
 
-    if (listType.isType()) {
-        scope = listType.type();
+    if (list.isType()) {
+        scope = list.type();
         value = valueType(scope);
-    } else if (listType.isProperty()) {
-        const auto prop = listType.property();
+    } else if (list.isConversion()) {
+        value = valueType(list.conversionResult());
+    } else if (list.isProperty()) {
+        const auto prop = list.property();
         if (prop.isList()) {
-            scope = m_listPropertyType;
+            scope = listType(prop.type(), UseListReference);
             value = prop.type();
         } else {
             scope = prop.type();
@@ -934,19 +1208,12 @@ QQmlJSRegisterContent QQmlJSTypeResolver::valueType(const QQmlJSRegisterContent 
         return {};
 
     QQmlJSMetaProperty property;
-    property.setPropertyName(u"[]"_qs);
+    property.setPropertyName(u"[]"_s);
     property.setTypeName(value->internalName());
     property.setType(value);
 
-    QQmlJSScope::ConstPtr stored;
-
-    // Special handling of stored type here: List lookup can always produce undefined
-    if (isPrimitive(value))
-        stored = jsPrimitiveType();
-    else
-        stored = jsValueType();
-
-    return QQmlJSRegisterContent::create(stored, property, QQmlJSRegisterContent::ListValue, scope);
+    return QQmlJSRegisterContent::create(
+            storedType(value), property, QQmlJSRegisterContent::ListValue, scope);
 }
 
 QQmlJSRegisterContent QQmlJSTypeResolver::returnType(
@@ -957,19 +1224,29 @@ QQmlJSRegisterContent QQmlJSTypeResolver::returnType(
     return QQmlJSRegisterContent::create(storedType(type), type, variant);
 }
 
+bool QQmlJSTypeResolver::registerIsStoredIn(
+        const QQmlJSRegisterContent &reg, const QQmlJSScope::ConstPtr &type) const
+{
+    return equals(reg.storedType(), type);
+}
+
 bool QQmlJSTypeResolver::registerContains(const QQmlJSRegisterContent &reg,
                                           const QQmlJSScope::ConstPtr &type) const
 {
     if (reg.isType())
-        return reg.type() == type;
+        return equals(reg.type(), type);
+    if (reg.isConversion())
+        return equals(reg.conversionResult(), type);
     if (reg.isProperty()) {
         const auto prop = reg.property();
-        return prop.isList() ? type == listPropertyType() : prop.type() == type;
+        return prop.isList()
+                ? equals(type, listType(prop.type(), UseListReference))
+                : equals(type, prop.type());
     }
     if (reg.isEnumeration())
-        return type == intType();
+        return equals(type, intType());
     if (reg.isMethod())
-        return type == jsValueType();
+        return equals(type, jsValueType());
     return false;
 }
 
@@ -977,8 +1254,8 @@ QQmlJSScope::ConstPtr QQmlJSTypeResolver::storedType(const QQmlJSScope::ConstPtr
 {
     if (type.isNull())
         return {};
-    if (type == voidType())
-        return jsPrimitiveType();
+    if (equals(type, voidType()))
+        return type;
     if (type->isScript())
         return jsValueType();
     if (type->isComposite()) {
@@ -988,9 +1265,50 @@ QQmlJSScope::ConstPtr QQmlJSTypeResolver::storedType(const QQmlJSScope::ConstPtr
         // If we can't find the non-composite base, we really don't know what it is.
         return genericType(type);
     }
-    if (type->fileName().isEmpty())
+    if (type->filePath().isEmpty())
         return genericType(type);
     return type;
+}
+
+QQmlJSScope::ConstPtr QQmlJSTypeResolver::originalType(const QQmlJSScope::ConstPtr &type) const
+{
+    const auto it = m_typeTracker->trackedTypes.find(type);
+    return it == m_typeTracker->trackedTypes.end() ? type : it->original;
+}
+
+/*!
+ * \internal
+ *
+ * Compares the origin types of \a a and \a b. A straight a == b would compare the identity
+ * of the pointers. However, since we clone types to keep track of them, we need a separate
+ * way to compare the clones. Usually you'd do *a == *b for that, but as QQmlJSScope is rather
+ * large, we offer an optimization here that uses the type tracking we already have in place.
+ */
+bool QQmlJSTypeResolver::equals(const QQmlJSScope::ConstPtr &a, const QQmlJSScope::ConstPtr &b) const
+{
+    return comparableType(a) == comparableType(b);
+}
+
+QQmlJSRegisterContent QQmlJSTypeResolver::convert(
+        const QQmlJSRegisterContent &from, const QQmlJSRegisterContent &to) const
+{
+    if (from.isConversion()) {
+        return QQmlJSRegisterContent::create(
+                    to.storedType(), from.conversionOrigins(), containedType(to), from.variant(),
+                    from.scopeType());
+    }
+
+    return QQmlJSRegisterContent::create(
+                to.storedType(), QList<QQmlJSScope::ConstPtr>{containedType(from)},
+                containedType(to), from.variant(), from.scopeType());
+}
+
+QQmlJSScope::ConstPtr QQmlJSTypeResolver::comparableType(const QQmlJSScope::ConstPtr &type) const
+{
+    const auto it = m_typeTracker->trackedTypes.constFind(type);
+    if (it == m_typeTracker->trackedTypes.constEnd())
+        return type;
+    return it->replacement ? it->replacement : it->original;
 }
 
 QT_END_NAMESPACE

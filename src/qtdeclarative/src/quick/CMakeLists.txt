@@ -78,6 +78,7 @@ qt_internal_add_qml_module(Quick
         items/qquickstateoperations.cpp items/qquickstateoperations_p.h
         items/qquicktext.cpp items/qquicktext_p.h
         items/qquicktext_p_p.h
+        items/qquicktextinterface_p.h
         items/qquicktextcontrol.cpp items/qquicktextcontrol_p.h
         items/qquicktextcontrol_p_p.h
         items/qquicktextdocument.cpp items/qquicktextdocument.h items/qquicktextdocument_p.h
@@ -165,6 +166,7 @@ qt_internal_add_qml_module(Quick
         scenegraph/util/qsgtextureprovider.cpp scenegraph/util/qsgtextureprovider.h
         scenegraph/util/qsgtexturereader.cpp scenegraph/util/qsgtexturereader_p.h
         scenegraph/util/qsgvertexcolormaterial.cpp scenegraph/util/qsgvertexcolormaterial.h
+        util/qminimalflatset_p.h
         util/qquickanimation.cpp util/qquickanimation_p.h
         util/qquickanimation_p_p.h
         util/qquickanimationcontroller.cpp util/qquickanimationcontroller_p.h
@@ -201,6 +203,7 @@ qt_internal_add_qml_module(Quick
         util/qquicktransitionmanager_p_p.h
         util/qquickvalidator.cpp util/qquickvalidator_p.h
         util/qquickvaluetypes.cpp util/qquickvaluetypes_p.h
+        util/qquickframeanimation.cpp util/qquickframeanimation_p.h
     DEFINES
         QT_NO_FOREACH
         QT_NO_INTEGER_EVENT_COORDINATES
@@ -394,6 +397,7 @@ qt_internal_extend_target(Quick CONDITION QT_FEATURE_opengl OR QT_FEATURE_opengl
 qt_internal_extend_target(Quick CONDITION IOS OR MACOS
     SOURCES
         scenegraph/coreapi/qsgtexture_mac.mm
+        scenegraph/qsgrhisupport_mac.mm
 )
 
 qt_internal_extend_target(Quick CONDITION QT_FEATURE_thread
@@ -508,6 +512,10 @@ qt_internal_extend_target(Quick CONDITION QT_FEATURE_wheelevent
         handlers/qquickwheelhandler_p_p.h
 )
 
+qt_internal_extend_target(Quick CONDITION QT_FEATURE_im
+    SOURCES
+        util/qquickinputmethod.cpp util/qquickinputmethod_p.h
+)
 
 qt_internal_create_tracepoints(Quick qtquick.tracepoints)
 qt_internal_add_docs(Quick

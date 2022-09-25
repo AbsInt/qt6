@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "../../../shared/highdpi.h"
 
@@ -83,6 +58,7 @@
 #include <QtTest/private/qtesthelpers_p.h>
 
 using namespace QTestPrivate;
+using namespace Qt::StringLiterals;
 
 #if defined(Q_OS_WIN)
 #  include <QtCore/qt_windows.h>
@@ -204,6 +180,7 @@ private slots:
     void reparent();
     void setScreen();
     void windowState();
+    void resizePropagation();
     void showMaximized();
     void showFullScreen();
     void showMinimized();
@@ -247,7 +224,7 @@ private slots:
     void closeAndShowNativeChild();
     void closeAndShowWithNativeChild();
     void transientParent();
-    void qobject_castInDestroyedSlot();
+    void qobject_castOnDestruction();
 
     void showHideEvent_data();
     void showHideEvent();
@@ -334,6 +311,8 @@ private slots:
     void doubleRepaint();
     void resizeInPaintEvent();
     void opaqueChildren();
+
+    void dumpObjectTree();
 
     void setMaskInResizeEvent();
     void moveInResizeEvent();
@@ -473,8 +452,8 @@ void tst_QWidget::getSetCheck()
     QVERIFY(var1.data() != obj1.style());
     QVERIFY(obj1.style() != nullptr); // style can never be 0 for a widget
 
-    const QRegularExpression negativeNotPossible(u"^.*Negative sizes \\(.*\\) are not possible$"_qs);
-    const QRegularExpression largestAllowedSize(u"^.*The largest allowed size is \\(.*\\)$"_qs);
+    const QRegularExpression negativeNotPossible(u"^.*Negative sizes \\(.*\\) are not possible$"_s);
+    const QRegularExpression largestAllowedSize(u"^.*The largest allowed size is \\(.*\\)$"_s);
     // int QWidget::minimumWidth()
     // void QWidget::setMinimumWidth(int)
     obj1.setMinimumWidth(0);
@@ -615,7 +594,7 @@ void tst_QWidget::getSetCheck()
 #if defined (Q_OS_WIN)
     obj1.setWindowFlags(Qt::FramelessWindowHint | Qt::WindowSystemMenuHint);
     const HWND handle = reinterpret_cast<HWND>(obj1.winId());   // explicitly create window handle
-    QVERIFY(GetWindowLong(handle, GWL_STYLE) & LONG(WS_POPUP));
+    QVERIFY(GetWindowLongPtr(handle, GWL_STYLE) & LONG_PTR(WS_POPUP));
 #endif
 }
 
@@ -2699,6 +2678,102 @@ void tst_QWidget::windowState()
     QTRY_COMPARE(widget1.size(), size);
 }
 
+// Test propagation of size and state from platform window to QWidget
+// Windows and linux/XCB only
+void tst_QWidget::resizePropagation()
+{
+#if !defined(Q_OS_LINUX) && !defined(Q_OS_WIN)
+    QSKIP("resizePropagation test is designed for Linux/XCB and Windows only");
+#endif
+    const bool xcb = (m_platform == QStringLiteral("xcb"));
+#ifdef Q_OS_LINUX
+    if (!xcb)
+        QSKIP("resizePropagation test is designed for XCB only");
+#endif
+
+    // Platform specific notes:
+    // Linux/XCB:
+    // - Unless maximized, a widget and its corresponding window can have different sizes
+    // - windowStateChanged can be fired multiple times (QTBUG-102478) when widget is maximized
+    //
+    // Windows:
+    // When a widget is maximized after it has been resized, the widget retains its original size,
+    // while the window shows maximum size
+
+    // Initialize widget and signal spy for window handle
+    QWidget widget;
+    widget.showMaximized();
+    QWindow *window = widget.windowHandle();
+    QTRY_VERIFY(window);
+    QSignalSpy spy(window, &QWindow::windowStateChanged);
+    int count = 0;
+
+    const QSize screenSize = QGuiApplication::primaryScreen()->size();
+    const QSize size1 = QSize(screenSize.width() * 0.5, screenSize.height() * 0.5);
+    const QSize size2 = QSize(screenSize.width() * 0.625, screenSize.height() * 0.833);
+
+    auto verifyResize = [&](const QSize &size, Qt::WindowState windowState, bool checkCountIncrement, bool checkTargetSize)
+    {
+        // Capture count of latest async signals
+        if (!checkCountIncrement)
+            count = spy.count();
+
+        // Resize if required
+        if (size.isValid())
+            widget.resize(size);
+
+        // Wait for the widget anyway
+        QVERIFY(QTest::qWaitForWindowExposed(&widget));
+
+        // Check signal count and qDebug output for fail analysis
+        if (checkCountIncrement) {
+            QTRY_VERIFY(spy.count() > count);
+            qDebug() << "spy count:" << spy.count() << "previous count:" << count;
+            count = spy.count();
+        } else {
+            qDebug() << spy << widget.windowState() << window->windowState();
+            QCOMPARE(spy.count(), count);
+        }
+
+        // QTRY necessary because state changes are propagated async
+        QTRY_COMPARE(widget.windowState(), windowState);
+        QTRY_COMPARE(window->windowState(), windowState);
+
+        // Check target size with fail or warning
+        if (checkTargetSize) {
+            QCOMPARE(widget.size(), window->size());
+        } else if (widget.size() != window->size()) {
+            qWarning() << m_platform << "size mismtach tolerated. Widget:"
+                       << widget.size() << "Window:" << window->size();
+        }
+    };
+
+    // test state and size consistency of maximized window
+    verifyResize(QSize(), Qt::WindowMaximized, true, true);
+    if (QTest::currentTestFailed())
+        return;
+
+    // test state transition, state and size consistency after resize
+    verifyResize(size1, Qt::WindowNoState, true, !xcb );
+    if (QTest::currentTestFailed())
+        return;
+
+    // test unchanged state, state and size consistency after resize
+    verifyResize(size2, Qt::WindowNoState, false, !xcb);
+    if (QTest::currentTestFailed())
+        return;
+
+    // test state transition, state and size consistency after maximize
+    widget.showMaximized();
+    verifyResize(QSize(), Qt::WindowMaximized, true, xcb);
+    if (QTest::currentTestFailed())
+        return;
+
+#ifdef Q_OS_WIN
+    QCOMPARE(widget.size(), size2);
+#endif
+}
+
 void tst_QWidget::showMaximized()
 {
     QWidget plain;
@@ -4027,7 +4102,7 @@ void tst_QWidget::restoreVersion1Geometry()
     QVERIFY(f.exists());
     f.open(QIODevice::ReadOnly);
     const QByteArray savedGeometry = f.readAll();
-    QCOMPARE(savedGeometry.count(), 46);
+    QCOMPARE(savedGeometry.size(), 46);
     f.close();
 
     QWidget widget;
@@ -4239,7 +4314,8 @@ void tst_QWidget::testDeletionInEventHandlers()
     w = new Widget;
     w->show();
     w->deleteThis = true;
-    QMouseEvent me(QEvent::MouseButtonRelease, QPoint(1, 1), Qt::LeftButton, Qt::LeftButton, Qt::KeyboardModifiers());
+    QMouseEvent me(QEvent::MouseButtonRelease, QPoint(1, 1), w->mapToGlobal(QPoint(1, 1)),
+                   Qt::LeftButton, Qt::LeftButton, Qt::KeyboardModifiers());
     qApp->notify(w, &me);
     QVERIFY(w.isNull());
     delete w;
@@ -4278,7 +4354,8 @@ void tst_QWidget::testDeletionInEventHandlers()
     w->setMouseTracking(true);
     w->show();
     w->deleteThis = true;
-    QMouseEvent me2 = QMouseEvent(QEvent::MouseMove, QPoint(0, 0), Qt::NoButton, Qt::NoButton, Qt::NoModifier);
+    QMouseEvent me2 = QMouseEvent(QEvent::MouseMove, QPoint(0, 0), w->mapToGlobal(QPoint(0, 0)),
+                                  Qt::NoButton, Qt::NoButton, Qt::NoModifier);
     QApplication::sendEvent(w, &me2);
     QVERIFY(w.isNull());
     delete w;
@@ -5398,34 +5475,74 @@ void tst_QWidget::scrollNativeChildren()
 
 #endif // Mac OS
 
-class DestroyedSlotChecker : public QObject
+/*
+    This class is used as a slot object to test two different steps of
+    QWidget destruction.
+
+    The first step is connecting the destroyed() signal to an object of
+    this class (through its operator()). In widgets, destroyed() is
+    emitted by ~QWidget, and not by ~QObject. This means that in our
+    operator() we expect the sender of the signal to still be a
+    QWidget.
+
+    The connection realized at the first step means that now there's
+    an instance of this class owned by the sender object. That instance
+    is destroyed when the signal/slot connections are destroyed.
+    That happens in ~QObject, not in ~QWidget. Therefore, in the
+    destructor of this class, check that indeed the target is no longer
+    a QWidget but just a QObject.
+*/
+class QObjectCastChecker
 {
-    Q_OBJECT
-
 public:
-    bool wasQWidget = false;
-
-public slots:
-    void destroyedSlot(QObject *object)
+    explicit QObjectCastChecker(QWidget *target)
+        : m_target(target)
     {
-        wasQWidget = (qobject_cast<QWidget *>(object) != nullptr || object->isWidgetType());
     }
+
+    ~QObjectCastChecker()
+    {
+        if (!m_target)
+            return;
+
+        // When ~QObject is reached, check that indeed the object is no
+        // longer a QWidget. This relies on slots being disconnected in
+        // ~QObject (and this "slot object" being destroyed there).
+        QVERIFY(!qobject_cast<QWidget *>(m_target));
+        QVERIFY(!dynamic_cast<QWidget *>(m_target));
+        QVERIFY(!m_target->isWidgetType());
+    }
+
+    QObjectCastChecker(QObjectCastChecker &&other) noexcept
+        : m_target(qExchange(other.m_target, nullptr))
+    {}
+
+    QT_MOVE_ASSIGNMENT_OPERATOR_IMPL_VIA_MOVE_AND_SWAP(QObjectCastChecker)
+
+    void swap(QObjectCastChecker &other) noexcept
+    {
+        qSwap(m_target, other.m_target);
+    }
+
+    void operator()(QObject *object) const
+    {
+        // Test that in a slot connected to destroyed() the emitter is
+        // still a QWidget. This is because ~QWidget() itself emits the
+        // signal.
+        QVERIFY(qobject_cast<QWidget *>(object));
+        QVERIFY(dynamic_cast<QWidget *>(object));
+        QVERIFY(object->isWidgetType());
+    }
+
+private:
+    Q_DISABLE_COPY(QObjectCastChecker)
+    QObject *m_target;
 };
 
-/*
-    Test that qobject_cast<QWidget*> returns 0 in a slot
-    connected to QObject::destroyed.
-*/
-void tst_QWidget::qobject_castInDestroyedSlot()
+void tst_QWidget::qobject_castOnDestruction()
 {
-    DestroyedSlotChecker checker;
-
-    QWidget *widget = new QWidget();
-
-    QObject::connect(widget, &QObject::destroyed, &checker, &DestroyedSlotChecker::destroyedSlot);
-    delete widget;
-
-    QVERIFY(checker.wasQWidget);
+    QWidget widget;
+    QObject::connect(&widget, &QObject::destroyed, QObjectCastChecker(&widget));
 }
 
 // Since X11 WindowManager operations are all async, and we have no way to know if the window
@@ -9036,6 +9153,45 @@ void tst_QWidget::opaqueChildren()
     QCOMPARE(qt_widget_private(&grandChild)->getOpaqueChildren(), QRegion());
 }
 
+void tst_QWidget::dumpObjectTree()
+{
+    QWidget w;
+    w.setWindowTitle(QLatin1String(QTest::currentTestFunction()));
+    Q_SET_OBJECT_NAME(w);
+    w.move(100, 100);
+    w.resize(200, 200);
+
+    QLineEdit le(&w);
+    Q_SET_OBJECT_NAME(le);
+    le.resize(200, 200);
+
+    {
+        const char * const expected[] = {
+            "QWidget::w I",
+            "    QLineEdit::le I",
+            "        QWidgetLineControl:: ",
+        };
+        for (const char *line : expected)
+            QTest::ignoreMessage(QtDebugMsg, line);
+        w.dumpObjectTree();
+    }
+
+    QTestPrivate::androidCompatibleShow(&w);
+    QApplication::setActiveWindow(&w);
+    QVERIFY(QTest::qWaitForWindowActive(&w));
+
+    {
+        const char * const expected[] = {
+            "QWidget::w <200x200+100+100>",
+            "    QLineEdit::le F<200x200+0+0>",
+            "        QWidgetLineControl:: ",
+        };
+        for (const char *line : expected)
+            QTest::ignoreMessage(QtDebugMsg, line);
+        w.dumpObjectTree();
+    }
+}
+
 class MaskSetWidget : public QWidget
 {
     Q_OBJECT
@@ -10196,7 +10352,7 @@ void tst_QWidget::taskQTBUG_4055_sendSyntheticEnterLeave()
     QTRY_COMPARE(child.numEnterEvents, 1);
     QCOMPARE(child.numMouseMoveEvents, 0);
 
-    // Sending synthetic enter/leave trough the parent's mousePressEvent handler.
+    // Sending synthetic enter/leave through the parent's mousePressEvent handler.
     parent.child = &child;
 
     child.hide();

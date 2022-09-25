@@ -1,23 +1,5 @@
-/******************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the Qt JavaScript to C++ compiler.
-**
-** $QT_BEGIN_LICENSE:COMM$
-**
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** $QT_END_LICENSE$
-**
-******************************************************************************/
+// Copyright (C) 2022 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #ifndef CPPBASECLASS_H
 #define CPPBASECLASS_H
@@ -31,8 +13,20 @@ class CppBaseClass : public QObject
     Q_OBJECT
     Q_PROPERTY(int cppProp MEMBER cppProp BINDABLE cppPropBindable FINAL)
     Q_PROPERTY(int cppProp2 MEMBER cppProp2 BINDABLE cppProp2Bindable FINAL)
+    Q_PROPERTY(QList<int> boo MEMBER boo FINAL CONSTANT)
+    Q_PROPERTY(QList<qreal> hoo MEMBER hoo FINAL CONSTANT)
     QML_ELEMENT
 public:
+    CppBaseClass(QObject *parent = nullptr)
+        : QObject(parent)
+    {
+        boo.append(16);
+        boo.append(17);
+
+        hoo.append(0.25);
+        hoo.append(13.5);
+    }
+
     QProperty<int> cppProp;
     QBindable<int> cppPropBindable() { return QBindable<int>(&cppProp); }
 
@@ -40,6 +34,10 @@ public:
     QBindable<int> cppProp2Bindable() { return QBindable<int>(&cppProp2); }
 
     Q_INVOKABLE void doCall(QObject *foo);
+
+private:
+    QList<int> boo;
+    QList<qreal> hoo;
 };
 
 inline void CppBaseClass::doCall(QObject *foo)

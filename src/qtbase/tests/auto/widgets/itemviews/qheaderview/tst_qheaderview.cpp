@@ -1,31 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Copyright (C) 2012 Thorbjørn Lund Martsum - tmartsum[at]gmail.com
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// Copyright (C) 2012 Thorbjørn Lund Martsum - tmartsum[at]gmail.com
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <QHeaderView>
 #include <QProxyStyle>
@@ -171,7 +146,6 @@ private slots:
     void moveSectionAndReset();
     void moveSectionAndRemove();
     void saveRestore();
-    void restoreQt4State();
     void QTBUG99487_saveRestoreQt5Compat();
     void restoreToMoreColumns();
     void restoreToMoreColumnsNoMovedColumns();
@@ -1797,46 +1771,6 @@ void tst_QHeaderView::saveRestore()
 void tst_QHeaderView::QTBUG99487_saveRestoreQt5Compat()
 {
     saveRestoreImpl(qt5SavedSate, SaveRestoreOption::DoNotCheckGeneratedState);
-}
-
-void tst_QHeaderView::restoreQt4State()
-{
-#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
-    // QTBUG-40462
-    // Setting from Qt4, where information about multiple sections were grouped together in one
-    // sectionItem object
-    QStandardItemModel m(4, 10);
-    QHeaderView h2(Qt::Vertical);
-    QByteArray settings_qt4 =
-      QByteArray::fromHex("000000ff00000000000000010000000100000000010000000000000000000000000000"
-                          "0000000003e80000000a0101000100000000000000000000000064ffffffff00000081"
-                          "0000000000000001000003e80000000a00000000");
-    QVERIFY(h2.restoreState(settings_qt4));
-    int sectionItemsLengthTotal = 0;
-    for (int i = 0; i < h2.count(); ++i)
-        sectionItemsLengthTotal += h2.sectionSize(i);
-    QCOMPARE(sectionItemsLengthTotal, h2.length());
-
-    // Buggy setting where sum(sectionItems) != length. Check false is returned and this corrupted
-    // state isn't restored
-    QByteArray settings_buggy_length =
-      QByteArray::fromHex("000000ff000000000000000100000000000000050100000000000000000000000a4000"
-                          "000000010000000600000258000000fb0000000a010100010000000000000000000000"
-                          "0064ffffffff00000081000000000000000a000000d30000000100000000000000c800"
-                          "000001000000000000008000000001000000000000005c00000001000000000000003c"
-                          "0000000100000000000002580000000100000000000000000000000100000000000002"
-                          "580000000100000000000002580000000100000000000003c000000001000000000000"
-                          "03e8");
-    int old_length = h2.length();
-    QByteArray old_state = h2.saveState();
-    // Check setting is correctly recognized as corrupted
-    QVERIFY(!h2.restoreState(settings_buggy_length));
-    // Check nothing has been actually restored
-    QCOMPARE(h2.length(), old_length);
-    QCOMPARE(h2.saveState(), old_state);
-#else
-    QSKIP("Qt4 compatibility no longer needed in Qt6");
-#endif
 }
 
 void tst_QHeaderView::restoreToMoreColumns()

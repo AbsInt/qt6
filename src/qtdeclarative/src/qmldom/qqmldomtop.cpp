@@ -1,40 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtQml module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**/
+// Copyright (C) 2020 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+
 #include "qqmldomtop_p.h"
 #include "qqmldomexternalitems_p.h"
 #include "qqmldommock_p.h"
@@ -65,6 +31,8 @@
 #include <memory>
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 namespace QQmlJS {
 namespace Dom {
@@ -158,7 +126,7 @@ DomUniverse::DomUniverse(QString universeName, Options options):
 std::shared_ptr<DomUniverse> DomUniverse::guaranteeUniverse(std::shared_ptr<DomUniverse> univ)
 {
     const auto next = [] {
-        static std::atomic<int> counter(0);
+        Q_CONSTINIT static std::atomic<int> counter(0);
         return counter.fetch_add(1, std::memory_order_relaxed) + 1;
     };
     if (univ)
@@ -375,7 +343,7 @@ void DomUniverse::execQueue()
     DomItem newValue; // current ExternalItemPair
     DomItem univ = DomItem(topPtr);
     QFileInfo path(canonicalPath);
-    QList<ErrorMessage> messages;
+    QVector<ErrorMessage> messages;
 
     if (t.kind == DomType::QmlFile || t.kind == DomType::QmltypesFile
         || t.kind == DomType::QmldirFile || t.kind == DomType::QmlDirectory) {
@@ -769,23 +737,32 @@ void LoadInfo::doAddDependencies(DomItem &self)
     // sychronous add of all dependencies
     DomItem el = self.path(elementCanonicalPath());
     if (el.internalKind() == DomType::ExternalItemInfo) {
-        DomItem currentImports = el.field(Fields::currentItem).field(Fields::imports);
+        DomItem currentFile = el.field(Fields::currentItem);
+        DomItem currentImports = currentFile.field(Fields::imports);
+        QString currentFilePath = currentFile.canonicalFilePath();
         int iEnd = currentImports.indexes();
         for (int i = 0; i < iEnd; ++i) {
             DomItem import = currentImports.index(i);
             if (const Import *importPtr = import.as<Import>()) {
-                if (!importPtr->filePath().isEmpty()) {
-                    addDependency(self,
-                                  Dependency { QString(), importPtr->version, importPtr->filePath(),
-                                               DomType::Empty });
+                if (importPtr->uri.isDirectory()) {
+                    QString path = importPtr->uri.absoluteLocalPath(currentFilePath);
+                    if (!path.isEmpty()) {
+                        addDependency(self,
+                                      Dependency { QString(), importPtr->version, path,
+                                                   DomType::QmlDirectory });
+                    } else {
+                        self.addError(DomEnvironment::myErrors().error(
+                                tr("Ignoring dependencies for non resolved path import %1")
+                                        .arg(importPtr->uri.toString())));
+                    }
                 } else {
                     addDependency(self,
-                                  Dependency { importPtr->uri, importPtr->version, QString(),
-                                               DomType::ModuleIndex });
+                                  Dependency { importPtr->uri.moduleUri(), importPtr->version,
+                                               QString(), DomType::ModuleIndex });
                 }
             }
         }
-        DomItem currentQmltypesFiles = el.field(Fields::currentItem).field(Fields::qmltypesFiles);
+        DomItem currentQmltypesFiles = currentFile.field(Fields::qmltypesFiles);
         int qEnd = currentQmltypesFiles.indexes();
         for (int i = 0; i < qEnd; ++i) {
             DomItem qmltypesRef = currentQmltypesFiles.index(i);
@@ -797,7 +774,7 @@ void LoadInfo::doAddDependencies(DomItem &self)
                                                DomType::QmltypesFile });
             }
         }
-        DomItem currentQmlFiles = el.field(Fields::currentItem).field(Fields::qmlFiles);
+        DomItem currentQmlFiles = currentFile.field(Fields::qmlFiles);
         currentQmlFiles.visitKeys([this, &self](QString, DomItem &els) {
             return els.visitIndexes([this, &self](DomItem &el) {
                 if (const Reference *ref = el.as<Reference>()) {
@@ -811,16 +788,26 @@ void LoadInfo::doAddDependencies(DomItem &self)
             });
         });
     } else if (shared_ptr<ModuleIndex> elPtr = el.ownerAs<ModuleIndex>()) {
-        for (Path qmldirPath : elPtr->qmldirsToLoad(el)) {
+        const auto qmldirs = elPtr->qmldirsToLoad(el);
+        for (const Path &qmldirPath : qmldirs) {
             Path canonicalPath = qmldirPath[2];
             if (canonicalPath && !canonicalPath.headName().isEmpty())
                 addDependency(self,
                               Dependency { QString(), Version(), canonicalPath.headName(),
                                            DomType::QmldirFile });
         }
+        QString uri = elPtr->uri();
+        addEndCallback(self, [uri, qmldirs](Path, DomItem &, DomItem &newV) {
+            for (const Path &p : qmldirs) {
+                DomItem qmldir = newV.path(p);
+                if (std::shared_ptr<QmldirFile> qmldirFilePtr = qmldir.ownerAs<QmldirFile>()) {
+                    qmldirFilePtr->ensureInModuleIndex(qmldir, uri);
+                }
+            }
+        });
     } else if (!el) {
         self.addError(DomEnvironment::myErrors().error(
-                tr("Ignoring dependencies for empty (invalid) type")
+                tr("Ignoring dependencies for empty (invalid) type %1")
                         .arg(domTypeToString(el.internalKind()))));
     } else {
         self.addError(
@@ -1152,7 +1139,8 @@ bool DomEnvironment::iterateDirectSubpaths(DomItem &self, DirectVisitor visitor)
                 },
                 [this](DomItem &) {
                     QSet<QString> res;
-                    for (const Path &p : loadInfoPaths())
+                    const auto infoPaths = loadInfoPaths();
+                    for (const Path &p : infoPaths)
                         res.insert(p.toString());
                     return res;
                 },
@@ -1388,10 +1376,7 @@ void DomEnvironment::loadModuleDependency(DomItem &self, QString uri, Version v,
                                           Callback loadCallback, Callback endCallback,
                                           ErrorHandler errorHandler)
 {
-    if (uri.startsWith(u"file://") || uri.startsWith(u"http://") || uri.startsWith(u"https://")) {
-        self.addError(myErrors().error(tr("directory import not yet handled (%1)").arg(uri)));
-        return;
-    }
+    Q_ASSERT(!uri.contains(u'/'));
     Path p = Paths::moduleIndexPath(uri, v.majorVersion);
     if (v.majorVersion == Version::Latest) {
         // load both the latest .<version> directory, and the common one
@@ -1403,10 +1388,12 @@ void DomEnvironment::loadModuleDependency(DomItem &self, QString uri, Version v,
         QString subPathV = subPathComponents.join(u'/');
         QRegularExpression vRe(QRegularExpression::anchoredPattern(
                 QRegularExpression::escape(lastComponent) + QStringLiteral(u"\\.([0-9]*)")));
-        for (QString path : loadPaths()) {
+        const auto lPaths = loadPaths();
+        for (const QString &path : lPaths) {
             QDir dir(path + (subPathV.isEmpty() ? QStringLiteral(u"") : QStringLiteral(u"/"))
                      + subPathV);
-            for (QString dirNow : dir.entryList(QDir::Dirs | QDir::NoDotAndDotDot)) {
+            const auto eList = dir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+            for (const QString &dirNow : eList) {
                 auto m = vRe.match(dirNow);
                 if (m.hasMatch()) {
                     int majorV = m.captured(1).toInt();
@@ -1471,7 +1458,8 @@ void DomEnvironment::loadModuleDependency(DomItem &self, QString uri, Version v,
 void DomEnvironment::loadBuiltins(DomItem &self, Callback callback, ErrorHandler h)
 {
     QString builtinsName = QLatin1String("builtins.qmltypes");
-    for (QString path : loadPaths()) {
+    const auto lPaths = loadPaths();
+    for (const QString &path : lPaths) {
         QDir dir(path);
         QFileInfo fInfo(dir.filePath(builtinsName));
         if (fInfo.isFile()) {
@@ -1735,7 +1723,8 @@ std::shared_ptr<ExternalItemInfoBase> DomEnvironment::qmlDirWithPath(DomItem &se
 QSet<QString> DomEnvironment::qmlDirPaths(DomItem &self, EnvLookup options) const
 {
     QSet<QString> res = qmlDirectoryPaths(self, options);
-    for (QString p : qmldirFilePaths(self, options)) {
+    const auto qmldirFiles = qmldirFilePaths(self, options);
+    for (const QString &p : qmldirFiles) {
         if (p.endsWith(u"/qmldir")) {
             res.insert(p.left(p.length() - 7));
         } else {
@@ -2059,7 +2048,7 @@ DomEnvironment::addGlobalScope(std::shared_ptr<GlobalScope> scope, AddOption opt
                                         mutex());
 }
 
-bool DomEnvironment::commitToBase(DomItem &self)
+bool DomEnvironment::commitToBase(DomItem &self, shared_ptr<DomEnvironment> validEnvPtr)
 {
     if (!base())
         return false;
@@ -2111,6 +2100,37 @@ bool DomEnvironment::commitToBase(DomItem &self)
             }
         }
     }
+    if (validEnvPtr) {
+        QMutexLocker lValid(
+                validEnvPtr->mutex()); // be more careful about makeCopy calls with lock?
+        validEnvPtr->m_globalScopeWithName.insert(my_globalScopeWithName);
+        validEnvPtr->m_qmlDirectoryWithPath.insert(my_qmlDirectoryWithPath);
+        validEnvPtr->m_qmldirFileWithPath.insert(my_qmldirFileWithPath);
+        for (auto it = my_qmlFileWithPath.cbegin(), end = my_qmlFileWithPath.cend(); it != end;
+             ++it) {
+            if (it.value() && it.value()->current && it.value()->current->isValid())
+                validEnvPtr->m_qmlFileWithPath.insert(it.key(), it.value());
+        }
+        for (auto it = my_jsFileWithPath.cbegin(), end = my_jsFileWithPath.cend(); it != end;
+             ++it) {
+            if (it.value() && it.value()->current && it.value()->current->isValid())
+                validEnvPtr->m_jsFileWithPath.insert(it.key(), it.value());
+        }
+        validEnvPtr->m_qmltypesFileWithPath.insert(my_qmltypesFileWithPath);
+        validEnvPtr->m_loadInfos.insert(my_loadInfos);
+        for (auto it = my_moduleIndexWithUri.cbegin(), end = my_moduleIndexWithUri.cend();
+             it != end; ++it) {
+            QMap<int, shared_ptr<ModuleIndex>> &myVersions =
+                    validEnvPtr->m_moduleIndexWithUri[it.key()];
+            for (auto it2 = it.value().cbegin(), end2 = it.value().cend(); it2 != end2; ++it2) {
+                auto oldV = myVersions.value(it2.key());
+                DomItem it2Obj = self.copy(it2.value());
+                auto newV = it2.value()->makeCopy(it2Obj);
+                newV->mergeWith(oldV);
+                myVersions.insert(it2.key(), newV);
+            }
+        }
+    }
     return true;
 }
 
@@ -2129,16 +2149,16 @@ void DomEnvironment::loadPendingDependencies(DomItem &self)
         }
         if (loadInfo) {
             auto cleanup = qScopeGuard([this, elToDo, &self] {
-                QList<Callback> endCallbakcs;
+                QList<Callback> endCallbacks;
                 {
                     QMutexLocker l(mutex());
                     m_inProgress.removeOne(elToDo);
                     if (m_inProgress.isEmpty() && m_loadsWithWork.isEmpty()) {
-                        endCallbakcs = m_allLoadedCallback;
+                        endCallbacks = m_allLoadedCallback;
                         m_allLoadedCallback.clear();
                     }
                 }
-                for (Callback cb : endCallbakcs)
+                for (const Callback &cb : qAsConst(endCallbacks))
                     cb(self.canonicalPath(), self, self);
             });
             DomItem loadInfoObj = self.copy(loadInfo);
@@ -2201,6 +2221,12 @@ std::shared_ptr<DomEnvironment> DomEnvironment::base() const
     return m_base;
 }
 
+void DomEnvironment::setLoadPaths(const QStringList &v)
+{
+    QMutexLocker l(mutex());
+    m_loadPaths = v;
+}
+
 QStringList DomEnvironment::loadPaths() const
 {
     QMutexLocker l(mutex());
@@ -2214,8 +2240,8 @@ QString DomEnvironment::globalScopeName() const
 
 QList<Import> DomEnvironment::defaultImplicitImports()
 {
-    return QList<Import>({ Import::fromUriString(QLatin1String("QML"), Version(1, 0)),
-                           Import(QLatin1String("QtQml"), Version(6, 0)) });
+    return QList<Import>({ Import::fromUriString(u"QML"_s, Version(1, 0)),
+                           Import(QmlUri::fromUriString(u"QtQml"_s), Version(6, 0)) });
 }
 
 QList<Import> DomEnvironment::implicitImports() const

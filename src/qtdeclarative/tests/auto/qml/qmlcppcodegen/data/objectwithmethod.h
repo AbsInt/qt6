@@ -1,23 +1,5 @@
-/******************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the Qt JavaScript to C++ compiler.
-**
-** $QT_BEGIN_LICENSE:COMM$
-**
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** $QT_END_LICENSE$
-**
-******************************************************************************/
+// Copyright (C) 2022 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #ifndef OBJECTWITHMETOD_H
 #define OBJECTWITHMETOD_H
@@ -58,14 +40,14 @@ class OverriddenObjectName : public ObjectWithMethod
 public:
     OverriddenObjectName(QObject *parent = nullptr) : ObjectWithMethod(parent)
     {
-        m_objectName = u"borschtsch"_qs;
+        m_objectName = QStringLiteral("borschtsch");
         nothing = 77;
     }
 
     QString objectName() const { return m_objectName.value(); }
     void setObjectName(const QString &objectName) { m_objectName.setValue(objectName); }
     QBindable<QString> objectNameBindable() { return QBindable<QString>(&m_objectName); }
-    Q_INVOKABLE QString doThing() const { return u"7"_qs; }
+    Q_INVOKABLE QString doThing() const { return QStringLiteral("7"); }
 
     int fff() const { return nothing.value(); }
     QBindable<int> nothingBindable() { return QBindable<int>(&nothing); }

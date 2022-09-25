@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2019 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtQml module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2019 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qqmltype_p_p.h"
 
@@ -185,7 +149,7 @@ QQmlType QQmlTypePrivate::resolveCompositeBaseType(QQmlEnginePrivate *engine) co
     return QQmlMetaType::qmlType(mo);
 }
 
-QQmlRefPointer<QQmlPropertyCache> QQmlTypePrivate::compositePropertyCache(
+QQmlPropertyCache::ConstPtr QQmlTypePrivate::compositePropertyCache(
         QQmlEnginePrivate *engine) const
 {
     // similar logic to resolveCompositeBaseType
@@ -232,6 +196,7 @@ void QQmlTypePrivate::init() const
         mmo->d.superdata = mo;
         QQmlProxyMetaObject::ProxyData data = { mmo, extFunc, 0, 0 };
         metaObjects << data;
+        QQmlMetaType::registerMetaObjectForType(mmo, const_cast<QQmlTypePrivate *>(this));
     };
 
     if (regType == QQmlType::SingletonType)
@@ -275,9 +240,9 @@ void QQmlTypePrivate::init() const
 
 void QQmlTypePrivate::initEnums(QQmlEnginePrivate *engine) const
 {
-    QQmlRefPointer<QQmlPropertyCache> cache = (!isEnumFromCacheSetup.loadAcquire() && isComposite())
+    QQmlPropertyCache::ConstPtr cache = (!isEnumFromCacheSetup.loadAcquire() && isComposite())
             ? compositePropertyCache(engine)
-            : QQmlRefPointer<QQmlPropertyCache>();
+            : QQmlPropertyCache::ConstPtr();
 
     // beware: It could be a singleton type without metaobject
     const QMetaObject *metaObject = !isEnumFromBaseSetup.loadAcquire()
@@ -414,11 +379,11 @@ void QQmlTypePrivate::createEnumConflictReport(const QMetaObject *metaObject, co
 }
 
 void QQmlTypePrivate::insertEnumsFromPropertyCache(
-        const QQmlRefPointer<QQmlPropertyCache> &cache) const
+        const QQmlPropertyCache::ConstPtr &cache) const
 {
     const QMetaObject *cppMetaObject = cache->firstCppMetaObject();
 
-    for (QQmlPropertyCache *currentCache = cache.data();
+    for (const QQmlPropertyCache *currentCache = cache.data();
          currentCache && currentCache->metaObject() != cppMetaObject;
          currentCache = currentCache->parent().data()) {
 
@@ -479,25 +444,34 @@ QString QQmlType::qmlTypeName() const
     return d->name;
 }
 
+/*!
+   \internal
+   Allocates and initializes an object if the type is creatable.
+   Returns a pointer to the object, or nullptr if the type was
+   not creatable.
+ */
 QObject *QQmlType::create() const
+{
+    void *unused;
+    return create(&unused, 0);
+}
+
+/*!
+   \internal
+   \brief Like create without arguments, but allocates some extra space after the object.
+   \param memory An out-only argument. *memory will point to the start of the additionally
+                 allocated memory.
+   \param additionalMemory The amount of extra memory in bytes that shoudld be allocated.
+
+   \note This function is used to allocate the QQmlData next to the object in the
+   QQmlObjectCreator.
+
+   \overload
+ */
+QObject *QQmlType::create(void **memory, size_t additionalMemory) const
 {
     if (!d || !isCreatable())
         return nullptr;
-
-    d->init();
-
-    QObject *rv = (QObject *)operator new(d->extraData.cd->allocationSize);
-
-    d->extraData.cd->newFunc(rv, d->extraData.cd->userdata);
-
-    createProxy(rv);
-    return rv;
-}
-
-void QQmlType::create(QObject **out, void **memory, size_t additionalMemory) const
-{
-    if (!d || !isCreatable())
-        return;
 
     d->init();
 
@@ -505,8 +479,8 @@ void QQmlType::create(QObject **out, void **memory, size_t additionalMemory) con
     d->extraData.cd->newFunc(rv, d->extraData.cd->userdata);
 
     createProxy(rv);
-    *out = rv;
     *memory = ((char *)rv) + d->extraData.cd->allocationSize;
+    return rv;
 }
 
 QQmlType::SingletonInstanceInfo *QQmlType::singletonInstanceInfo() const
@@ -639,6 +613,11 @@ QMetaType QQmlType::typeId() const
 QMetaType QQmlType::qListTypeId() const
 {
     return d ? d->listId : QMetaType{};
+}
+
+QMetaSequence QQmlType::listMetaSequence() const
+{
+    return isSequentialContainer() ? *d->extraData.ld : QMetaSequence();
 }
 
 const QMetaObject *QQmlType::metaObject() const

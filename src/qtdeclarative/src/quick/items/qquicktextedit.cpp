@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtQuick module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qquicktextedit_p.h"
 #include "qquicktextedit_p_p.h"
@@ -67,6 +31,7 @@
 QT_BEGIN_NAMESPACE
 
 Q_DECLARE_LOGGING_CATEGORY(lcVP)
+Q_LOGGING_CATEGORY(lcTextEdit, "qt.quick.textedit")
 
 /*!
     \qmltype TextEdit
@@ -104,9 +69,12 @@ TextEdit {
     A particular look and feel might use smooth scrolling (eg. using SmoothedAnimation), might have a visible
     scrollbar, or a scrollbar that fades in to show location, etc.
 
-    Clipboard support is provided by the cut(), copy(), and paste() functions, and the selection can
-    be handled in a traditional "mouse" mechanism by setting selectByMouse, or handled completely
-    from QML by manipulating selectionStart and selectionEnd, or using selectAll() or selectWord().
+    Clipboard support is provided by the cut(), copy(), and paste() functions.
+    Text can be selected by mouse in the usual way, unless \l selectByMouse is
+    set to \c false; and by keyboard with the \c {Shift+arrow} key
+    combinations, unless \l selectByKeyboard is set to \c false. To select text
+    programmatically, you can set the \l selectionStart and \l selectionEnd
+    properties, or use \l selectAll() or \l selectWord().
 
     You can translate between cursor positions (characters from the start of the document) and pixel
     points using positionAt() and positionToRectangle().
@@ -435,6 +403,23 @@ void QQuickTextEdit::setText(const QString &text)
     setFlag(QQuickItem::ItemObservesViewport, text.size() > QQuickTextEditPrivate::largeTextSizeThreshold);
 }
 
+void QQuickTextEdit::invalidate()
+{
+    QMetaObject::invokeMethod(this, &QQuickTextEdit::q_invalidate);
+}
+
+void QQuickTextEdit::q_invalidate()
+{
+    Q_D(QQuickTextEdit);
+    if (isComponentComplete()) {
+        if (d->document != nullptr)
+            d->document->markContentsDirty(0, d->document->characterCount());
+        invalidateFontCaches();
+        d->updateType = QQuickTextEditPrivate::UpdateAll;
+        update();
+    }
+}
+
 /*!
     \qmlproperty string QtQuick::TextEdit::preeditText
     \readonly
@@ -501,21 +486,31 @@ void QQuickTextEdit::setTextFormat(TextFormat format)
     if (format == d->format)
         return;
 
-    bool wasRich = d->richText;
+    const bool wasRich = d->richText;
+    const bool wasMarkdown = d->markdownText;
     d->richText = format == RichText || (format == AutoText && (wasRich || Qt::mightBeRichText(text())));
     d->markdownText = format == MarkdownText;
 
-#if QT_CONFIG(texthtmlparser)
     if (isComponentComplete()) {
-        if (wasRich && !d->richText) {
+#if QT_CONFIG(texthtmlparser)
+        if (wasRich && !d->richText && !d->markdownText) {
             d->control->setPlainText(!d->textCached ? d->control->toHtml() : d->text);
             updateSize();
         } else if (!wasRich && d->richText) {
             d->control->setHtml(!d->textCached ? d->control->toPlainText() : d->text);
             updateSize();
         }
-    }
 #endif
+#if QT_CONFIG(textmarkdownwriter) && QT_CONFIG(textmarkdownreader)
+        if (wasMarkdown && !d->markdownText && !d->richText) {
+            d->control->setPlainText(!d->textCached ? d->control->toMarkdown() : d->text);
+            updateSize();
+        } else if (!wasMarkdown && d->markdownText) {
+            d->control->setMarkdownText(!d->textCached ? d->control->toPlainText() : d->text);
+            updateSize();
+        }
+#endif
+    }
 
     d->format = format;
     d->control->setAcceptRichText(d->format != PlainText);
@@ -1348,7 +1343,7 @@ QString QQuickTextEdit::selectedText() const
 {
     Q_D(const QQuickTextEdit);
 #if QT_CONFIG(texthtmlparser)
-    return d->richText
+    return d->richText || d->markdownText
             ? d->control->textCursor().selectedText()
             : d->control->textCursor().selection().toPlainText();
 #else
@@ -1519,6 +1514,11 @@ void QQuickTextEdit::componentComplete()
         d->control->setHtml(d->text);
     else
 #endif
+#if QT_CONFIG(textmarkdownreader)
+    if (d->markdownText)
+        d->control->setMarkdownText(d->text);
+    else
+#endif
     if (!d->text.isEmpty()) {
         if (d->markdownText)
             d->control->setMarkdownText(d->text);
@@ -1534,6 +1534,7 @@ void QQuickTextEdit::componentComplete()
     }
     if (d->cursorComponent && isCursorVisible())
         QQuickTextUtil::createCursor(d);
+    polish();
 }
 
 /*!
@@ -1576,12 +1577,25 @@ void QQuickTextEdit::setSelectByKeyboard(bool on)
 /*!
     \qmlproperty bool QtQuick::TextEdit::selectByMouse
 
-    Defaults to false.
+    Defaults to \c true since Qt 6.4.
 
-    If true, the user can use the mouse to select text in some
-    platform-specific way. Note that for some platforms this may
-    not be an appropriate interaction; it may conflict with how
-    the text needs to behave inside a Flickable, for example.
+    If \c true, the user can use the mouse to select text in the usual way.
+
+    \note In versions prior to 6.4, the default was \c false; but if you
+    enabled this property, you could also select text on a touchscreen by
+    dragging your finger across it. This interfered with flicking when TextEdit
+    was used inside a Flickable. However, Qt has supported text selection
+    handles on mobile platforms, and on embedded platforms using Qt Virtual
+    Keyboard, since version 5.7, via QInputMethod. Most users would be
+    surprised if finger dragging selected text rather than flicking the parent
+    Flickable. Therefore, selectByMouse now really means what it says: if
+    \c true, you can select text by dragging \e only with a mouse, whereas
+    the platform is expected to provide selection handles on touchscreens.
+    If this change does not suit your application, you can set \c selectByMouse
+    to \c false, or import an older API version (for example
+    \c {import QtQuick 6.3}) to revert to the previous behavior. The option to
+    revert behavior by changing the import version will be removed in a later
+    version of Qt.
 */
 bool QQuickTextEdit::selectByMouse() const
 {
@@ -1919,6 +1933,8 @@ Handles the given mouse \a event.
 void QQuickTextEdit::mousePressEvent(QMouseEvent *event)
 {
     Q_D(QQuickTextEdit);
+    const bool isMouse = QQuickDeliveryAgentPrivate::isEventFromMouseOrTouchpad(event);
+    setKeepMouseGrab(d->selectByMouse && isMouse);
     d->control->processEvent(event, QPointF(-d->xoff, -d->yoff));
     if (d->focusOnPress){
         bool hadActiveFocus = hasActiveFocus();
@@ -2086,19 +2102,24 @@ QSGNode *QQuickTextEdit::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *
     Q_UNUSED(updatePaintNodeData);
     Q_D(QQuickTextEdit);
 
-    if (d->updateType != QQuickTextEditPrivate::UpdatePaintNode && oldNode != nullptr) {
+    if (d->updateType != QQuickTextEditPrivate::UpdatePaintNode
+          && d->updateType != QQuickTextEditPrivate::UpdateAll
+          && oldNode != nullptr) {
         // Update done in preprocess() in the nodes
         d->updateType = QQuickTextEditPrivate::UpdateNone;
         return oldNode;
     }
 
-    d->updateType = QQuickTextEditPrivate::UpdateNone;
+    if (!oldNode || d->updateType == QQuickTextEditPrivate::UpdateAll) {
+        delete oldNode;
+        oldNode = nullptr;
 
-    if (!oldNode) {
         // If we had any QQuickTextNode node references, they were deleted along with the root node
         // But here we must delete the Node structures in textNodeMap
         d->textNodeMap.clear();
     }
+
+    d->updateType = QQuickTextEditPrivate::UpdateNone;
 
     RootNode *rootNode = static_cast<RootNode *>(oldNode);
     TextNodeIterator nodeIterator = d->textNodeMap.begin();
@@ -2430,9 +2451,10 @@ void QQuickTextEditPrivate::init()
     document = new QQuickTextDocumentWithImageResources(q);
 
     control = new QQuickTextControl(document, q);
-    control->setTextInteractionFlags(Qt::LinksAccessibleByMouse | Qt::TextSelectableByKeyboard | Qt::TextEditable);
+    control->setTextInteractionFlags(Qt::LinksAccessibleByMouse | Qt::TextSelectableByMouse | Qt::TextSelectableByKeyboard | Qt::TextEditable);
     control->setAcceptRichText(false);
     control->setCursorIsFocusIndicator(true);
+    q->setKeepMouseGrab(true);
 
     qmlobject_connect(control, QQuickTextControl, SIGNAL(updateCursorRequest()), q, QQuickTextEdit, SLOT(updateCursor()));
     qmlobject_connect(control, QQuickTextControl, SIGNAL(selectionChanged()), q, QQuickTextEdit, SIGNAL(selectedTextChanged()));
@@ -2487,8 +2509,8 @@ void QQuickTextEdit::q_textChanged()
     updateSize();
 
     markDirtyNodesForRange(0, d->document->characterCount(), 0);
-    polish();
     if (isComponentComplete()) {
+        polish();
         d->updateType = QQuickTextEditPrivate::UpdatePaintNode;
         update();
     }
@@ -2537,8 +2559,8 @@ void QQuickTextEdit::q_contentsChange(int pos, int charsRemoved, int charsAdded)
 
     markDirtyNodesForRange(pos, editRange, delta);
 
-    polish();
     if (isComponentComplete()) {
+        polish();
         d->updateType = QQuickTextEditPrivate::UpdatePaintNode;
         update();
     }
@@ -2566,8 +2588,8 @@ void QQuickTextEdit::updateSelection()
     // No need for node updates when we go from an empty selection to another empty selection
     if (d->control->textCursor().hasSelection() || d->hadSelection) {
         markDirtyNodesForRange(qMin(d->lastSelectionStart, d->control->textCursor().selectionStart()), qMax(d->control->textCursor().selectionEnd(), d->lastSelectionEnd), 0);
-        polish();
         if (isComponentComplete()) {
+            polish();
             d->updateType = QQuickTextEditPrivate::UpdatePaintNode;
             update();
         }
@@ -2711,8 +2733,8 @@ void QQuickTextEdit::updateWholeDocument()
             node.setDirty();
     }
 
-    polish();
     if (isComponentComplete()) {
+        polish();
         d->updateType = QQuickTextEditPrivate::UpdatePaintNode;
         update();
     }
@@ -2723,8 +2745,8 @@ void QQuickTextEdit::invalidateBlock(const QTextBlock &block)
     Q_D(QQuickTextEdit);
     markDirtyNodesForRange(block.position(), block.position() + block.length(), 0);
 
-    polish();
     if (isComponentComplete()) {
+        polish();
         d->updateType = QQuickTextEditPrivate::UpdatePaintNode;
         update();
     }
@@ -2733,8 +2755,8 @@ void QQuickTextEdit::invalidateBlock(const QTextBlock &block)
 void QQuickTextEdit::updateCursor()
 {
     Q_D(QQuickTextEdit);
-    polish();
-    if (isComponentComplete()) {
+    if (isComponentComplete() && isVisible()) {
+        polish();
         d->updateType = QQuickTextEditPrivate::UpdatePaintNode;
         update();
     }
@@ -2924,7 +2946,7 @@ QString QQuickTextEdit::getText(int start, int end) const
     cursor.setPosition(start, QTextCursor::MoveAnchor);
     cursor.setPosition(end, QTextCursor::KeepAnchor);
 #if QT_CONFIG(texthtmlparser)
-    return d->richText
+    return d->richText || d->markdownText
             ? cursor.selectedText()
             : cursor.selection().toPlainText();
 #else
@@ -2957,6 +2979,12 @@ QString QQuickTextEdit::getFormattedText(int start, int end) const
 #else
         return cursor.selection().toPlainText();
 #endif
+    } else if (d->markdownText) {
+#if QT_CONFIG(textmarkdownwriter)
+        return cursor.selection().toMarkdown();
+#else
+        return cursor.selection().toPlainText();
+#endif
     } else {
         return cursor.selection().toPlainText();
     }
@@ -2978,6 +3006,12 @@ void QQuickTextEdit::insert(int position, const QString &text)
     if (d->richText) {
 #if QT_CONFIG(texthtmlparser)
         cursor.insertHtml(text);
+#else
+        cursor.insertText(text);
+#endif
+    } else if (d->markdownText) {
+#if QT_CONFIG(textmarkdownreader)
+        cursor.insertMarkdown(text);
 #else
         cursor.insertText(text);
 #endif
@@ -3126,15 +3160,21 @@ void QQuickTextEdit::append(const QString &text)
     if (!d->document->isEmpty())
         cursor.insertBlock();
 
-#if QT_CONFIG(texthtmlparser)
     if (d->format == RichText || (d->format == AutoText && Qt::mightBeRichText(text))) {
+#if QT_CONFIG(texthtmlparser)
         cursor.insertHtml(text);
+#else
+        cursor.insertText(text);
+#endif
+    } else if (d->format == MarkdownText) {
+#if QT_CONFIG(textmarkdownreader)
+        cursor.insertMarkdown(text);
+#else
+        cursor.insertText(text);
+#endif
     } else {
         cursor.insertText(text);
     }
-#else
-    cursor.insertText(text);
-#endif // texthtmlparser
 
     cursor.endEditBlock();
     d->control->updateCursorRectangle(false);
@@ -3334,6 +3374,26 @@ QDebug operator<<(QDebug debug, const QQuickTextEditPrivate::Node &n)
 }
 #endif
 
+#if QT_VERSION < QT_VERSION_CHECK(7, 0, 0)
+void QQuickTextEdit::setOldSelectionDefault()
+{
+    Q_D(QQuickTextEdit);
+    d->selectByMouse = false;
+    setKeepMouseGrab(false);
+    d->control->setTextInteractionFlags(d->control->textInteractionFlags() & ~Qt::TextSelectableByMouse);
+    d->control->setTouchDragSelectionEnabled(true);
+    qCDebug(lcTextEdit, "pre-6.4 behavior chosen: selectByMouse defaults false; if enabled, touchscreen acts like a mouse");
+}
+
+// TODO in 6.7.0: remove the note about versions prior to 6.4 in selectByMouse() documentation
+QQuickPre64TextEdit::QQuickPre64TextEdit(QQuickItem *parent)
+    : QQuickTextEdit(parent)
+{
+    setOldSelectionDefault();
+}
+#endif
+
 QT_END_NAMESPACE
 
 #include "moc_qquicktextedit_p.cpp"
+

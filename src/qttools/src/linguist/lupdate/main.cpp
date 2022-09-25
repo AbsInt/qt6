@@ -1,31 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Copyright (C) 2016 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Marc Mutz <marc.mutz@kdab.com>
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the Qt Linguist of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// Copyright (C) 2016 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Marc Mutz <marc.mutz@kdab.com>
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "lupdate.h"
 #if QT_CONFIG(clangcpp)
@@ -49,9 +24,12 @@
 
 #include <iostream>
 
+using namespace Qt::StringLiterals;
+
 bool useClangToParseCpp = false;
 QString commandLineCompilationDatabaseDir; // for the path to the json file passed as a command line argument.
                                     // Has priority over what is in the .pro file and passed to the project.
+QStringList rootDirs;
 
 // Can't have an array of QStaticStringData<N> for different N, so
 // use QString, which requires constructor calls. Doesn't matter
@@ -309,6 +287,10 @@ static void printUsage()
         "           A directory specified on the command line takes precedence.\n"
         "           If no path is given, the compilation database will be searched\n"
         "           in all parent paths of the first input file.\n"
+        "    -project-roots <directory>...\n"
+        "           Specify one or more project root directories.\n"
+        "           Only files below a project root are considered for translation when using\n"
+        "           the -clang-parser option.\n"
         "    @lst-file\n"
         "           Read additional file names (one per line) or includepaths (one per\n"
         "           line, and prefixed with -I) from lst-file.\n"
@@ -622,6 +604,10 @@ private:
         ConversionData cd;
         cd.m_noUiLines = options & NoUiLines;
         cd.m_projectRoots = projectRoots(projectFile, sources);
+        QStringList projectRootDirs;
+        for (auto dir : cd.m_projectRoots)
+            projectRootDirs.append(dir);
+        cd.m_rootDirs = projectRootDirs;
         cd.m_includePath = prj.includePaths;
         cd.m_excludes = prj.excluded;
         cd.m_sourceIsUtf16 = options & SourceIsUtf16;
@@ -748,11 +734,11 @@ int main(int argc, char **argv)
         } else if (arg == QLatin1String("-project")) {
             ++i;
             if (i == argc) {
-                printErr(u"The option -project requires a parameter.\n"_qs);
+                printErr(u"The option -project requires a parameter.\n"_s);
                 return 1;
             }
             if (!projectDescriptionFile.isEmpty()) {
-                printErr(u"The option -project must appear only once.\n"_qs);
+                printErr(u"The option -project must appear only once.\n"_s);
                 return 1;
             }
             projectDescriptionFile = args[i];
@@ -761,7 +747,7 @@ int main(int argc, char **argv)
         } else if (arg == QLatin1String("-target-language")) {
             ++i;
             if (i == argc) {
-                printErr(u"The option -target-language requires a parameter.\n"_qs);
+                printErr(u"The option -target-language requires a parameter.\n"_s);
                 return 1;
             }
             targetLanguage = args[i];
@@ -769,7 +755,7 @@ int main(int argc, char **argv)
         } else if (arg == QLatin1String("-source-language")) {
             ++i;
             if (i == argc) {
-                printErr(u"The option -source-language requires a parameter.\n"_qs);
+                printErr(u"The option -source-language requires a parameter.\n"_s);
                 return 1;
             }
             sourceLanguage = args[i];
@@ -777,7 +763,7 @@ int main(int argc, char **argv)
         } else if (arg == QLatin1String("-disable-heuristic")) {
             ++i;
             if (i == argc) {
-                printErr(u"The option -disable-heuristic requires a parameter.\n"_qs);
+                printErr(u"The option -disable-heuristic requires a parameter.\n"_s);
                 return 1;
             }
             arg = args[i];
@@ -788,14 +774,14 @@ int main(int argc, char **argv)
             } else if (arg == QLatin1String("number")) {
                 options &= ~HeuristicNumber;
             } else {
-                printErr(u"Invalid heuristic name passed to -disable-heuristic.\n"_qs);
+                printErr(u"Invalid heuristic name passed to -disable-heuristic.\n"_s);
                 return 1;
             }
             continue;
         } else if (arg == QLatin1String("-locations")) {
             ++i;
             if (i == argc) {
-                printErr(u"The option -locations requires a parameter.\n"_qs);
+                printErr(u"The option -locations requires a parameter.\n"_s);
                 return 1;
             }
             if (args[i] == QLatin1String("none")) {
@@ -805,7 +791,7 @@ int main(int argc, char **argv)
             } else if (args[i] == QLatin1String("absolute")) {
                 options |= AbsoluteLocations;
             } else {
-                printErr(u"Invalid parameter passed to -locations.\n"_qs);
+                printErr(u"Invalid parameter passed to -locations.\n"_s);
                 return 1;
             }
             continue;
@@ -839,7 +825,7 @@ int main(int argc, char **argv)
         } else if (arg == QLatin1String("-extensions")) {
             ++i;
             if (i == argc) {
-                printErr(u"The -extensions option should be followed by an extension list.\n"_qs);
+                printErr(u"The -extensions option should be followed by an extension list.\n"_s);
                 return 1;
             }
             extensions = args[i];
@@ -847,7 +833,7 @@ int main(int argc, char **argv)
         } else if (arg == QLatin1String("-tr-function-alias")) {
             ++i;
             if (i == argc) {
-                printErr(u"The -tr-function-alias option should be followed by a list of function=alias mappings.\n"_qs);
+                printErr(u"The -tr-function-alias option should be followed by a list of function=alias mappings.\n"_s);
                 return 1;
             }
             if (!handleTrFunctionAliases(args[i]))
@@ -856,7 +842,7 @@ int main(int argc, char **argv)
         } else if (arg == QLatin1String("-pro")) {
             ++i;
             if (i == argc) {
-                printErr(u"The -pro option should be followed by a filename of .pro file.\n"_qs);
+                printErr(u"The -pro option should be followed by a filename of .pro file.\n"_s);
                 return 1;
             }
             QString file = QDir::cleanPath(QFileInfo(args[i]).absoluteFilePath());
@@ -866,7 +852,7 @@ int main(int argc, char **argv)
         } else if (arg == QLatin1String("-pro-out")) {
             ++i;
             if (i == argc) {
-                printErr(u"The -pro-out option should be followed by a directory name.\n"_qs);
+                printErr(u"The -pro-out option should be followed by a directory name.\n"_s);
                 return 1;
             }
             outDir = QDir::cleanPath(QFileInfo(args[i]).absoluteFilePath());
@@ -875,7 +861,7 @@ int main(int argc, char **argv)
             if (arg.length() == 2) {
                 ++i;
                 if (i == argc) {
-                    printErr(u"The -I option should be followed by a path.\n"_qs);
+                    printErr(u"The -I option should be followed by a path.\n"_s);
                     return 1;
                 }
                 includePath += args[i];
@@ -892,6 +878,14 @@ int main(int argc, char **argv)
                  i++;
                  commandLineCompilationDatabaseDir = args[i];
              }
+            continue;
+        }
+        else if (arg == QLatin1String("-project-roots")) {
+            while ((i + 1) != argc && !args[i + 1].startsWith(QLatin1String("-"))) {
+                 i++;
+                 rootDirs << args[i];
+             }
+            rootDirs.removeDuplicates();
             continue;
         }
 #endif
@@ -913,7 +907,7 @@ int main(int argc, char **argv)
 
                 if (lineContent.startsWith(QLatin1String("-I"))) {
                     if (lineContent.length() == 2) {
-                        printErr(u"The -I option should be followed by a path.\n"_qs);
+                        printErr(u"The -I option should be followed by a path.\n"_s);
                         return 1;
                     }
                     includePath += lineContent.mid(2);
@@ -1021,11 +1015,11 @@ int main(int argc, char **argv)
 
     if (!targetLanguage.isEmpty() && tsFileNames.count() != 1)
         printErr(u"lupdate warning: -target-language usually only"
-                  " makes sense with exactly one TS file.\n"_qs);
+                  " makes sense with exactly one TS file.\n"_s);
 
     QString errorString;
     if (!proFiles.isEmpty()) {
-        runInternalQtTool(u"lupdate-pro"_qs, app.arguments().mid(1));
+        runInternalQtTool(u"lupdate-pro"_s, app.arguments().mid(1));
         return 0;
     }
 
@@ -1048,7 +1042,7 @@ int main(int argc, char **argv)
     if (projectDescription.empty()) {
         if (tsFileNames.isEmpty())
             printErr(u"lupdate warning:"
-                      " no TS files specified. Only diagnostics will be produced.\n"_qs);
+                      " no TS files specified. Only diagnostics will be produced.\n"_s);
 
         Translator fetchedTor;
         ConversionData cd;
@@ -1058,6 +1052,7 @@ int main(int argc, char **argv)
         cd.m_includePath = includePath;
         cd.m_allCSources = allCSources;
         cd.m_compilationDatabaseDir = commandLineCompilationDatabaseDir;
+        cd.m_rootDirs = rootDirs;
         for (const QString &resource : qAsConst(resourceFiles))
             sourceFiles << getResources(resource);
         processSources(fetchedTor, sourceFiles, cd, &fail);

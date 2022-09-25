@@ -23,7 +23,7 @@
 <db:para><db:emphasis role="bold">All your text belong to bold</db:emphasis> ...And this is an examble of only <db:emphasis role="bold">bold</db:emphasis> being, well, bold.</db:para>
 <db:programlisting language="cpp">    ...
 </db:programlisting>
-<db:programlisting language="js">&lt;@comment&gt;// If I knew JavaScript, this is where I would write it.&lt;/@comment&gt;
+<db:programlisting language="js">// If I knew JavaScript, this is where I would write it.
 </db:programlisting>
 <db:para>And if I knew qmltext, I guess this is where that would go. </db:para>
 <db:title>This a caption</db:title>
@@ -52,7 +52,7 @@
 <db:para>The code above doesn't compile</db:para>
 </db:note>
 <db:warning>
-<db:para>The following commands have yet to be tested: footnote link sincelist header index topicref // or just don’t care, remove it image inlineimage printline printto printuntil // what’s the difference between printto and printuntil??? quotefile quotefromfile quotefunction skipline skipto skipuntil span snippet codeline overload sub sup tableofcontents tt uicontrol endmapref endomit underline unicode</db:para>
+<db:para>The following commands have yet to be tested: footnote link sincelist header index topicref // or just don’t care, remove it image inlineimage printline printto printuntil // what’s the difference between printto and printuntil??? quotefile quotefromfile skipline skipto skipuntil span snippet codeline overload sub sup tableofcontents tt uicontrol endmapref endomit underline unicode</db:para>
 </db:warning>
 </db:section>
 </db:section>

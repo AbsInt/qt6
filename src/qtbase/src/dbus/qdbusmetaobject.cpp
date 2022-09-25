@@ -1,42 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Copyright (C) 2016 Intel Corporation.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtDBus module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// Copyright (C) 2016 Intel Corporation.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qdbusmetaobject_p.h"
 
@@ -58,6 +22,8 @@
 #ifndef QT_NO_DBUS
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 class QDBusMetaObjectGenerator
 {
@@ -144,8 +110,8 @@ static int registerComplexDBusType(const QByteArray &typeName)
         {}
     };
 
-    static QBasicMutex mutex;
-    static struct Hash : QHash<QByteArray, QMetaType>
+    Q_CONSTINIT static QBasicMutex mutex;
+    Q_CONSTINIT static struct Hash : QHash<QByteArray, QMetaType>
     {
         ~Hash()
         {
@@ -177,7 +143,7 @@ QDBusMetaObjectGenerator::findType(const QByteArray &signature,
         QString annotationName = QString::fromLatin1("org.qtproject.QtDBus.QtTypeName");
         if (id >= 0)
             annotationName += QString::fromLatin1(".%1%2")
-                              .arg(QLatin1String(direction))
+                              .arg(QLatin1StringView(direction))
                               .arg(id);
 
         // extract from annotations:
@@ -189,7 +155,7 @@ QDBusMetaObjectGenerator::findType(const QByteArray &signature,
             annotationName = QString::fromLatin1("com.trolltech.QtDBus.QtTypeName");
             if (id >= 0)
                 annotationName += QString::fromLatin1(".%1%2")
-                                  .arg(QLatin1String(direction))
+                                  .arg(QLatin1StringView(direction))
                                   .arg(id);
             typeName = annotations.value(annotationName).toLatin1();
         }
@@ -305,7 +271,7 @@ void QDBusMetaObjectGenerator::parseMethods()
             prototype.append(')');
 
         // check the async tag
-        if (m.annotations.value(QLatin1String(ANNOTATION_NO_WAIT)) == QLatin1String("true"))
+        if (m.annotations.value(ANNOTATION_NO_WAIT ""_L1) == "true"_L1)
             mm.tag = "Q_NOREPLY";
 
         // meta method flags
@@ -411,9 +377,9 @@ void QDBusMetaObjectGenerator::write(QDBusMetaObject *obj)
     // with a few modifications to make it cleaner
 
     QString className = interface;
-    className.replace(QLatin1Char('.'), QLatin1String("::"));
+    className.replace(u'.', "::"_L1);
     if (className.isEmpty())
-        className = QLatin1String("QDBusInterface");
+        className = "QDBusInterface"_L1;
 
     QVarLengthArray<int> idata;
     idata.resize(sizeof(QDBusMetaObjectPrivate) / sizeof(int));
@@ -513,8 +479,8 @@ void QDBusMetaObjectGenerator::write(QDBusMetaObject *obj)
                     // Output parameters are references; type id not available
                     typeName = QMetaType(type).name();
                     typeName.append('&');
+                    type = QMetaType::UnknownType;
                 }
-                Q_ASSERT(type != QMetaType::UnknownType);
                 int typeInfo;
                 if (!typeName.isEmpty())
                     typeInfo = IsUnresolvedType | strings.enter(typeName);
@@ -591,7 +557,7 @@ void QDBusMetaObjectGenerator::writeWithoutXml(const QString &interface)
 {
     // no XML definition
     QString tmp(interface);
-    tmp.replace(QLatin1Char('.'), QLatin1String("::"));
+    tmp.replace(u'.', "::"_L1);
     QByteArray name(tmp.toLatin1());
 
     QDBusMetaObjectPrivate *header = new QDBusMetaObjectPrivate;
@@ -630,13 +596,13 @@ QDBusMetaObject *QDBusMetaObject::createMetaObject(const QString &interface, con
         bool us = it.key() == interface;
 
         QDBusMetaObject *obj = cache.value(it.key(), 0);
-        if ( !obj && ( us || !interface.startsWith( QLatin1String("local.") ) ) ) {
+        if (!obj && (us || !interface.startsWith("local."_L1 ))) {
             // not in cache; create
             obj = new QDBusMetaObject;
             QDBusMetaObjectGenerator generator(it.key(), it.value().constData());
             generator.write(obj);
 
-            if ( (obj->cached = !it.key().startsWith( QLatin1String("local.") )) )
+            if ((obj->cached = !it.key().startsWith("local."_L1)))
                 // cache it
                 cache.insert(it.key(), obj);
             else if (!us)
@@ -672,7 +638,7 @@ QDBusMetaObject *QDBusMetaObject::createMetaObject(const QString &interface, con
             merged.properties.insert(it.value()->properties);
         }
 
-        merged.name = QLatin1String("local.Merged");
+        merged.name = "local.Merged"_L1;
         merged.introspection.clear();
 
         we = new QDBusMetaObject;
@@ -684,8 +650,7 @@ QDBusMetaObject *QDBusMetaObject::createMetaObject(const QString &interface, con
 
     // mark as an error
     error = QDBusError(QDBusError::UnknownInterface,
-        QLatin1String("Interface '%1' was not found")
-                       .arg(interface));
+                       "Interface '%1' was not found"_L1.arg(interface));
     return nullptr;
 }
 

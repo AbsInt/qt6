@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #ifndef TESTCLASSES_H
 #define TESTCLASSES_H
@@ -311,33 +286,6 @@ public:
             pChangeHandler;
 };
 
-class ANON_propertyReturningFunction : public QObject, public ContextRegistrator
-{
-    Q_OBJECT
-    QML_ANONYMOUS
-    Q_PROPERTY(int counter READ getCounter WRITE setCounter)
-    Q_PROPERTY(QVariant f READ getF WRITE setF BINDABLE bindableF)
-
-public:
-    // test workaround: the url is resolved by the test base class, so use
-    // member variable to store the resolved url used as argument in engine
-    // evaluation of runtime functions
-    static QUrl url;
-
-    ANON_propertyReturningFunction(QQmlEngine *e, QObject *parent = nullptr);
-
-    int getCounter() { return counter.value(); }
-    QVariant getF() { return f.value(); }
-
-    void setCounter(int counter_) { counter.setValue(counter_); }
-    void setF(QVariant f_) { f.setValue(f_); }
-
-    QBindable<QVariant> bindableF() { return QBindable<QVariant>(&f); }
-
-    QProperty<int> counter;
-    QProperty<QVariant> f;
-};
-
 class LocallyImported : public QObject
 {
     Q_OBJECT
@@ -473,6 +421,36 @@ public:
     QQmlRefPointer<QQmlContextData> init(QQmlEngine *e,
                                          const QQmlRefPointer<QQmlContextData> &parentContext);
     void finalize(QQmlEngine *e);
+};
+
+class ANON_anchors : public QQuickItem
+{
+    Q_OBJECT
+    QML_ANONYMOUS
+    Q_PROPERTY(int value READ getValue WRITE setValue NOTIFY valueChanged)
+protected:
+    ANON_anchors(QObject *parent = nullptr);
+
+public:
+    // test workaround: the url is resolved by the test base class, so use
+    // member variable to store the resolved url used as argument in engine
+    // evaluation of runtime functions
+    static QUrl url;
+
+    ANON_anchors(QQmlEngine *e, QObject *parent = nullptr);
+    QQmlRefPointer<QQmlContextData> init(QQmlEngine *e,
+                                         const QQmlRefPointer<QQmlContextData> &parentContext);
+    void finalize(QQmlEngine *e);
+
+    QProperty<int> value;
+    int getValue() { return value; }
+    void setValue(int v)
+    {
+        value = v;
+        Q_EMIT valueChanged();
+    }
+Q_SIGNALS:
+    void valueChanged();
 };
 
 #endif // TESTCLASSES_H

@@ -1,46 +1,12 @@
-﻿/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the Qt Quick Dialogs module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qquickfiledialogimpl_p.h"
 #include "qquickfiledialogimpl_p_p.h"
 
 #include <QtCore/qloggingcategory.h>
+#include <QtGui/private/qguiapplication_p.h>
+#include <QtGui/qpa/qplatformtheme.h>
 #include <QtQml/qqmlinfo.h>
 #include <QtQml/qqmlfile.h>
 #include <QtQuick/private/qquickitemview_p_p.h>
@@ -144,7 +110,15 @@ void QQuickFileDialogImplPrivate::updateSelectedFile(const QString &oldFolderPat
         }
     }
 
-    if (newSelectedFilePath.isEmpty()) {
+    static const bool preselectFirstFile = []() {
+        const QVariant envVar = qEnvironmentVariable("QT_QUICK_DIALOGS_PRESELECT_FIRST_FILE");
+        if (envVar.isValid() && envVar.canConvert<bool>())
+            return envVar.toBool();
+        return QGuiApplicationPrivate::platformTheme()->themeHint(
+            QPlatformTheme::PreselectFirstFileInDirectory).toBool();
+    }();
+
+    if (preselectFirstFile && newSelectedFilePath.isEmpty()) {
         // When entering into a directory that isn't a parent of the old one, the first
         // file delegate should be selected.
         // TODO: is there a cheaper way to do this? QDirIterator doesn't support sorting,
@@ -392,6 +366,12 @@ void QQuickFileDialogImpl::setOptions(const QSharedPointer<QFileDialogOptions> &
     if (d->options) {
         d->selectedNameFilter->setOptions(options);
         d->setNameFilters(options->nameFilters());
+
+        if (auto attached = d->attachedOrWarn()) {
+            const bool isSaveMode = d->options->fileMode() == QFileDialogOptions::AnyFile;
+            attached->fileNameLabel()->setVisible(isSaveMode);
+            attached->fileNameTextField()->setVisible(isSaveMode);
+        }
     }
 }
 
@@ -475,6 +455,19 @@ void QQuickFileDialogImpl::selectNameFilter(const QString &filter)
     Q_D(QQuickFileDialogImpl);
     d->selectedNameFilter->update(filter);
     emit filterSelected(filter);
+}
+
+QString QQuickFileDialogImpl::fileName() const
+{
+    return selectedFile().fileName();
+}
+void QQuickFileDialogImpl::setFileName(const QString &fileName)
+{
+    const QString previous = selectedFile().fileName();
+    if (previous == fileName)
+        return;
+
+    setSelectedFile(QUrl(currentFolder().path() + u'/' + fileName));
 }
 
 void QQuickFileDialogImpl::componentComplete()
@@ -578,6 +571,15 @@ void QQuickFileDialogImplAttachedPrivate::fileDialogListViewCurrentIndexChanged(
         fileDialogImplPrivate->tryUpdateFileDialogListViewCurrentIndex(indexOfSelectedFileInFileDialogListView);
         fileDialogImplPrivate->setCurrentIndexToInitiallySelectedFile = false;
     }
+}
+
+void QQuickFileDialogImplAttachedPrivate::fileNameChangedByUser()
+{
+    auto fileDialogImpl = qobject_cast<QQuickFileDialogImpl *>(parent);
+    if (!fileDialogImpl)
+        return;
+
+    fileDialogImpl->setFileName(fileNameTextField->text());
 }
 
 QQuickFileDialogImplAttached::QQuickFileDialogImplAttached(QObject *parent)
@@ -707,6 +709,48 @@ void QQuickFileDialogImplAttached::setBreadcrumbBar(QQuickFolderBreadcrumbBar *b
 
     d->breadcrumbBar = breadcrumbBar;
     emit breadcrumbBarChanged();
+}
+
+QQuickLabel *QQuickFileDialogImplAttached::fileNameLabel() const
+{
+    Q_D(const QQuickFileDialogImplAttached);
+    return d->fileNameLabel;
+}
+
+void QQuickFileDialogImplAttached::setFileNameLabel(QQuickLabel *fileNameLabel)
+{
+    Q_D(QQuickFileDialogImplAttached);
+    if (fileNameLabel == d->fileNameLabel)
+        return;
+
+    d->fileNameLabel = fileNameLabel;
+
+    emit fileNameLabelChanged();
+}
+
+QQuickTextField *QQuickFileDialogImplAttached::fileNameTextField() const
+{
+    Q_D(const QQuickFileDialogImplAttached);
+    return d->fileNameTextField;
+}
+
+void QQuickFileDialogImplAttached::setFileNameTextField(QQuickTextField *fileNameTextField)
+{
+    Q_D(QQuickFileDialogImplAttached);
+    if (fileNameTextField == d->fileNameTextField)
+        return;
+
+    if (d->fileNameTextField)
+        QObjectPrivate::disconnect(d->fileNameTextField, &QQuickTextField::editingFinished,
+            d, &QQuickFileDialogImplAttachedPrivate::fileNameChangedByUser);
+
+    d->fileNameTextField = fileNameTextField;
+
+    if (d->fileNameTextField)
+        QObjectPrivate::connect(d->fileNameTextField, &QQuickTextField::editingFinished,
+            d, &QQuickFileDialogImplAttachedPrivate::fileNameChangedByUser);
+
+    emit fileNameTextFieldChanged();
 }
 
 QT_END_NAMESPACE

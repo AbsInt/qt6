@@ -1,40 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtQml module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**/
+// Copyright (C) 2020 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+
 #ifndef QMLDOMITEM_H
 #define QMLDOMITEM_H
 
@@ -341,9 +307,7 @@ public:
     DomItem key(DomItem &self, QString name) const override;
 
     template<typename T>
-    static Map fromMultiMapRef(
-            Path pathFromOwner, QMultiMap<QString, T> &mmap,
-            std::function<DomItem(DomItem &, const PathEls::PathComponent &c, T &)> elWrapper);
+    static Map fromMultiMapRef(Path pathFromOwner, QMultiMap<QString, T> &mmap);
     template<typename T>
     static Map
     fromMapRef(Path pathFromOwner, QMap<QString, T> &mmap,
@@ -881,7 +845,7 @@ public:
                          LookupOptions = LookupOption::Normal, ErrorHandler h = nullptr,
                          QSet<quintptr> *visited = nullptr, QList<Path> *visitedRefs = nullptr);
     bool visitLocalSymbolsNamed(QString name, function_ref<bool(DomItem &)> visitor);
-    QSet<QString> localSymbolNames();
+    QSet<QString> localSymbolNames(LocalSymbolsTypes lTypes = LocalSymbolsType::All);
     bool visitLookup1(QString symbolName, function_ref<bool(DomItem &)> visitor,
                       LookupOptions = LookupOption::Normal, ErrorHandler h = nullptr,
                       QSet<quintptr> *visited = nullptr, QList<Path> *visitedRefs = nullptr);
@@ -903,7 +867,7 @@ public:
     DomItem fileLocationsTree();
     DomItem fileLocations();
     MutableDomItem makeCopy(CopyOption option = CopyOption::EnvConnected);
-    bool commitToBase();
+    bool commitToBase(std::shared_ptr<DomEnvironment> validPtr = nullptr);
     DomItem refreshed() { return top().path(canonicalPath()); }
     QCborValue value();
 
@@ -1193,13 +1157,11 @@ inline bool operator!=(const DomItem &o1, const DomItem &o2)
 }
 
 template<typename T>
-Map Map::fromMultiMapRef(
-        Path pathFromOwner, QMultiMap<QString, T> &mmap,
-        std::function<DomItem(DomItem &, const PathEls::PathComponent &, T &)> elWrapper)
+Map Map::fromMultiMapRef(Path pathFromOwner, QMultiMap<QString, T> &mmap)
 {
     return Map(
             pathFromOwner,
-            [&mmap, elWrapper](DomItem &self, QString key) {
+            [&mmap](DomItem &self, QString key) {
                 auto it = mmap.find(key);
                 auto end = mmap.cend();
                 if (it == end)
@@ -1524,7 +1486,10 @@ public:
     {
         return item().makeCopy(option);
     }
-    bool commitToBase() { return item().commitToBase(); }
+    bool commitToBase(std::shared_ptr<DomEnvironment> validEnvPtr = nullptr)
+    {
+        return item().commitToBase(validEnvPtr);
+    }
     QString canonicalFilePath() { return item().canonicalFilePath(); }
 
     MutableDomItem refreshed() { return MutableDomItem(item().refreshed()); }
@@ -1930,9 +1895,7 @@ DomItem DomItem::wrap(const PathEls::PathComponent &c, T &obj)
     } else if constexpr (IsMultiMap<BaseT>::value) {
         if constexpr (std::is_same_v<typename BaseT::key_type, QString>) {
             return subMapItem(Map::fromMultiMapRef<typename BaseT::mapped_type>(
-                    pathFromOwner().appendComponent(c), obj,
-                    [](DomItem &map, const PathEls::PathComponent &p,
-                       typename BaseT::mapped_type &el) { return map.wrap(p, el); }));
+                    pathFromOwner().appendComponent(c), obj));
         } else {
             Q_ASSERT_X(false, "DomItem::wrap", "non string keys not supported (try .toString()?)");
         }

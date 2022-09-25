@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtQml module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 #ifndef QV4LOOKUP_H
 #define QV4LOOKUP_H
 
@@ -127,8 +91,8 @@ struct Q_QML_PRIVATE_EXPORT Lookup {
         struct {
             Heap::InternalClass *ic;
             Heap::InternalClass *qmlTypeIc; // only used when lookup goes through QQmlTypeWrapper
-            QQmlPropertyCache *propertyCache;
-            QQmlPropertyData *propertyData;
+            const QQmlPropertyCache *propertyCache;
+            const QQmlPropertyData *propertyData;
         } qobjectLookup;
         struct {
             quintptr isConstant; // This is a bool, encoded as 0 or 1. Both values are ignored by gc
@@ -241,7 +205,7 @@ struct Q_QML_PRIVATE_EXPORT Lookup {
                 || setter == setterQObject
                 || qmlContextPropertyGetter == QQmlContextWrapper::lookupScopeObjectProperty
                 || qmlContextPropertyGetter == QQmlContextWrapper::lookupContextObjectProperty) {
-            if (QQmlPropertyCache *pc = qobjectLookup.propertyCache)
+            if (const QQmlPropertyCache *pc = qobjectLookup.propertyCache)
                 pc->release();
         }
     }
@@ -253,7 +217,7 @@ Q_STATIC_ASSERT(std::is_standard_layout<Lookup>::value);
 Q_STATIC_ASSERT(offsetof(Lookup, getter) == 0);
 
 inline void setupQObjectLookup(
-        Lookup *lookup, const QQmlData *ddata, QQmlPropertyData *propertyData)
+        Lookup *lookup, const QQmlData *ddata, const QQmlPropertyData *propertyData)
 {
     lookup->releasePropertyCache();
     Q_ASSERT(!ddata->propertyCache.isNull());
@@ -263,7 +227,7 @@ inline void setupQObjectLookup(
 }
 
 inline void setupQObjectLookup(
-        Lookup *lookup, const QQmlData *ddata, QQmlPropertyData *propertyData,
+        Lookup *lookup, const QQmlData *ddata, const QQmlPropertyData *propertyData,
         const Object *self)
 {
     lookup->qobjectLookup.ic = self->internalClass();
@@ -272,7 +236,7 @@ inline void setupQObjectLookup(
 
 
 inline void setupQObjectLookup(
-        Lookup *lookup, const QQmlData *ddata, QQmlPropertyData *propertyData,
+        Lookup *lookup, const QQmlData *ddata, const QQmlPropertyData *propertyData,
         const Object *self, const Object *qmlType)
 {
     lookup->qobjectLookup.qmlTypeIc = qmlType->internalClass();

@@ -1,42 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Copyright (C) 2016 Intel Corporation.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// Copyright (C) 2016 Intel Corporation.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qurl_p.h"
 
@@ -49,6 +13,8 @@
 #include <algorithm>
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 // needed by the punycode encoder/decoder
 static const uint base = 36;
@@ -137,7 +103,7 @@ Q_AUTOTEST_EXPORT void qt_punycodeEncoder(QStringView in, QString *output)
 
     // if basic code points were copied, add the delimiter character.
     if (h > 0)
-        *output += QLatin1Char{'-'};
+        *output += u'-';
 
     // compute the input length in Unicode code points.
     uint inputLength = 0;
@@ -198,7 +164,7 @@ Q_AUTOTEST_EXPORT void qt_punycodeEncoder(QStringView in, QString *output)
     }
 
     // prepend ACE prefix
-    output->insert(outLen, QLatin1String("xn--"));
+    output->insert(outLen, "xn--"_L1);
     return;
 }
 
@@ -215,13 +181,13 @@ Q_AUTOTEST_EXPORT QString qt_punycodeDecoder(const QString &pc)
         return QString();
 
     // strip any ACE prefix
-    int start = pc.startsWith(QLatin1String("xn--")) ? 4 : 0;
+    int start = pc.startsWith("xn--"_L1) ? 4 : 0;
     if (!start)
         return pc;
 
     // find the last delimiter character '-' in the input array. copy
     // all data before this delimiter directly to the output array.
-    int delimiterPos = pc.lastIndexOf(QLatin1Char{'-'});
+    int delimiterPos = pc.lastIndexOf(u'-');
     auto output = delimiterPos < 4 ? std::u32string()
                                    : pc.mid(start, delimiterPos - start).toStdU32String();
 
@@ -350,7 +316,7 @@ static constexpr auto idn_whitelist = qOffsetStringArray(
     "xn--xkc2al3hye2a"          // Sri Lanka
 );
 
-static QStringList *user_idn_whitelist = nullptr;
+Q_CONSTINIT static QStringList *user_idn_whitelist = nullptr;
 
 static bool lessThan(const QChar *a, int l, const char *c)
 {
@@ -383,7 +349,7 @@ static bool equal(const QChar *a, int l, const char *b)
 
 static bool qt_is_idn_enabled(QStringView aceDomain)
 {
-    auto idx = aceDomain.lastIndexOf(QLatin1Char('.'));
+    auto idx = aceDomain.lastIndexOf(u'.');
     if (idx == -1)
         return false;
 
@@ -747,14 +713,14 @@ bool DomainValidityChecker::checkLabel(const QString &label, QUrl::AceProcessing
         // This assumes that the first two characters are in BMP, but that's ok
         // because non-BMP characters are unlikely to be used for specifying
         // future extensions.
-        if (label[2] == QLatin1Char('-') && label[3] == QLatin1Char('-'))
+        if (label[2] == u'-' && label[3] == u'-')
             return false;
     }
 
-    if (label.startsWith(QLatin1Char('-')) || label.endsWith(QLatin1Char('-')))
+    if (label.startsWith(u'-') || label.endsWith(u'-'))
         return false;
 
-    if (label.contains(QLatin1Char('.')))
+    if (label.contains(u'.'))
         return false;
 
     QStringIterator iter(label);
@@ -871,7 +837,7 @@ static bool checkAsciiDomainName(const QString &normalizedDomain, AceLeadingDot 
             if (!validateAsciiLabel(label))
                 return false;
 
-            hasPunycode = hasPunycode || label.startsWith(QLatin1String("xn--"));
+            hasPunycode = hasPunycode || label.startsWith("xn--"_L1);
         }
 
         lastIdx = idx + 1;
@@ -966,7 +932,7 @@ QStringList QUrl::idnWhitelist()
         list.reserve(idn_whitelist.count());
         int i = 0;
         while (i < idn_whitelist.count()) {
-            list << QLatin1String(idn_whitelist.at(i));
+            list << QLatin1StringView(idn_whitelist.at(i));
             ++i;
         }
         return list;

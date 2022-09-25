@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtGui module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qpalette.h"
 #include "qguiapplication.h"
@@ -971,6 +935,17 @@ qint64 QPalette::cacheKey() const
     return (((qint64) d->data->ser_no) << 32) | ((qint64) (d->detach_no));
 }
 
+static constexpr QPalette::ResolveMask allResolveMask()
+{
+    QPalette::ResolveMask mask = {0};
+    for (int role = 0; role < int(QPalette::NColorRoles); ++role) {
+        for (int grp = 0; grp < int(QPalette::NColorGroups); ++grp) {
+            mask |= (QPalette::ResolveMask(1) << bitPosition(QPalette::ColorGroup(grp), QPalette::ColorRole(role)));
+        }
+    }
+    return mask;
+}
+
 /*!
     Returns a new QPalette that is a union of this instance and \a other.
     Color roles set in this instance take precedence.
@@ -983,6 +958,9 @@ QPalette QPalette::resolve(const QPalette &other) const
         o.setResolveMask(d->resolveMask);
         return o;
     }
+
+    if (d->resolveMask == allResolveMask())
+        return *this;
 
     QPalette palette(*this);
     palette.detach();
@@ -1219,47 +1197,6 @@ void QPalette::setColorGroup(ColorGroup cg, const QBrush &foreground, const QBru
     setBrush(cg, ToolTipText, toolTipText);
 }
 
-Q_GUI_EXPORT QPalette qt_fusionPalette()
-{
-    QColor backGround(239, 239, 239);
-    QColor light = backGround.lighter(150);
-    QColor mid(backGround.darker(130));
-    QColor midLight = mid.lighter(110);
-    QColor base = Qt::white;
-    QColor disabledBase(backGround);
-    QColor dark = backGround.darker(150);
-    QColor darkDisabled = QColor(209, 209, 209).darker(110);
-    QColor text = Qt::black;
-    QColor hightlightedText = Qt::white;
-    QColor disabledText = QColor(190, 190, 190);
-    QColor button = backGround;
-    QColor shadow = dark.darker(135);
-    QColor disabledShadow = shadow.lighter(150);
-    QColor placeholder = text;
-    placeholder.setAlpha(128);
-
-    QPalette fusionPalette(Qt::black,backGround,light,dark,mid,text,base);
-    fusionPalette.setBrush(QPalette::Midlight, midLight);
-    fusionPalette.setBrush(QPalette::Button, button);
-    fusionPalette.setBrush(QPalette::Shadow, shadow);
-    fusionPalette.setBrush(QPalette::HighlightedText, hightlightedText);
-
-    fusionPalette.setBrush(QPalette::Disabled, QPalette::Text, disabledText);
-    fusionPalette.setBrush(QPalette::Disabled, QPalette::WindowText, disabledText);
-    fusionPalette.setBrush(QPalette::Disabled, QPalette::ButtonText, disabledText);
-    fusionPalette.setBrush(QPalette::Disabled, QPalette::Base, disabledBase);
-    fusionPalette.setBrush(QPalette::Disabled, QPalette::Dark, darkDisabled);
-    fusionPalette.setBrush(QPalette::Disabled, QPalette::Shadow, disabledShadow);
-
-    fusionPalette.setBrush(QPalette::Active, QPalette::Highlight, QColor(48, 140, 198));
-    fusionPalette.setBrush(QPalette::Inactive, QPalette::Highlight, QColor(48, 140, 198));
-    fusionPalette.setBrush(QPalette::Disabled, QPalette::Highlight, QColor(145, 145, 145));
-
-    fusionPalette.setBrush(QPalette::PlaceholderText, placeholder);
-
-    return fusionPalette;
-}
-
 #ifndef QT_NO_DEBUG_STREAM
 static QString groupsToString(const QPalette &p, QPalette::ColorRole cr)
 {
@@ -1271,8 +1208,8 @@ static QString groupsToString(const QPalette &p, QPalette::ColorRole cr)
 
         if (p.isBrushSet(cg, cr)) {
             const auto &color = p.color(cg, cr);
-            groupString += QString::fromUtf8(groupEnum.valueToKey(cg)) + QLatin1Char(':') +
-                           color.name(QColor::HexArgb) + QLatin1Char(',');
+            groupString += QString::fromUtf8(groupEnum.valueToKey(cg)) + u':' +
+                           color.name(QColor::HexArgb) + u',';
         }
     }
     groupString.chop(1);

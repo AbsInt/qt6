@@ -13,7 +13,7 @@ Configurations:
     Template: 'qtci-linux-Ubuntu-20.04-x86_64-50'
     Compiler: 'GCC'
     Features: ['Sccache', 'Documentation', 'TestDocs', 'UseConfigure']
-    Configure arguments: '-make examples -developer-build -no-warnings-are-errors -qtlibinfix TestInfix -qtnamespace TestNamespace'
+    Configure arguments: '-make examples -developer-build -c++std c++20 -linker gold -no-warnings-are-errors -qtlibinfix TestInfix -qtnamespace TestNamespace'
 -
     Id: 'Ubuntu-20.04-host'
     Template: 'qtci-linux-Ubuntu-20.04-x86_64-50'
@@ -27,14 +27,14 @@ Configurations:
     Id: 'OpenSUSE-15.3-host'
     Template: 'qtci-linux-openSUSE-15.3-x86_64-50'
     Compiler: 'GCC'
-    Features: ['Sccache', 'UseConfigure']
+    Features: ['Sccache', 'WarningsAreErrors', 'UseConfigure']
     Configure arguments: '-nomake examples -developer-build'
     Environment variables: [
         'PATH={{.Env.CMAKE_MIN_SUPPORTED_BIN_PATH}}:{{.Env.PATH}}',
-        'CONAN_PROFILE=coin/conan/profiles/linux-developer-x86_64-gcc',
+        'CONAN_PROFILE=coin/conan/profiles/ci-linux-x86_64-gcc-debug-developer'
     ]
 -
-    Template: 'qtci-linux-SLES-15_SP3-x86_64-51'
+    Template: 'qtci-linux-SLES-15_SP4-x86_64-50'
     Compiler: 'GCC'
     Features: ['Sccache', 'DisableTests', 'UseConfigure']
     Configure arguments: '-nomake examples -static -no-sql-mysql'
@@ -49,7 +49,7 @@ Configurations:
     Environment variables: [
         'CMAKE_ARGS=-DFEATURE_msvc_obj_debug_info=ON -DOPENSSL_ROOT_DIR={{.Env.OPENSSL_INCLUDE_x64}}\.. -DPostgreSQL_ROOT={{.Env.POSTGRESQL_LIB_x64}}\..',
         'LLVM_INSTALL_DIR={{.Env.LLVM_INSTALL_DIR_msvc}}',
-        'CONAN_PROFILE=coin/conan/profiles/windows-x86_64-msvc2019_64']
+        'CONAN_PROFILE=coin/conan/profiles/ci-windows-x86_64-msvc2019_64']
 -
     Template: 'qtci-windows-11_21H2-x86_64-52'
     Compiler: 'MSVC2019'
@@ -80,10 +80,11 @@ Configurations:
     Id: 'Windows10_21H2-MSVC2019-x64-host'
     Template: 'qtci-windows-10_21H2-x86_64-51'
     Compiler: 'MSVC2019'
-    Features: ['Sccache', "DebugAndRelease", 'UseConfigure']
+    Features: ['Sccache', 'Conan', "DebugAndRelease", 'WarningsAreErrors', 'UseConfigure']
     Configure arguments: '-debug-and-release -make examples -developer-build -force-debug-info -qt-zlib'
     Environment variables: [
-        'CMAKE_ARGS=-DFEATURE_msvc_obj_debug_info=ON -DOPENSSL_ROOT_DIR={{.Env.OPENSSL_INCLUDE_x64}}\..'
+        'CMAKE_ARGS=-DFEATURE_msvc_obj_debug_info=ON -DOPENSSL_ROOT_DIR={{.Env.OPENSSL_INCLUDE_x64}}\..',
+        'CONAN_PROFILE=coin/conan/profiles/ci-windows-x86_64-msvc2019_64-developer'
     ]
 -
     Template: 'qtci-windows-10_21H2-x86_64-51'
@@ -94,8 +95,8 @@ Configurations:
     Environment variables: [
         'TARGET_CONFIGURE_ARGS=-debug-and-release -force-debug-info -platform win32-arm64-msvc',
         'TARGET_CMAKE_ARGS=-DFEATURE_msvc_obj_debug_info=ON -DOPENSSL_ROOT_DIR={{.Env.OPENSSL_ROOT_DIR_x64_arm64}}',
-        'CONAN_HOST_PROFILE=coin/conan/profiles/windows-x86_64-msvc2019_64',
-        'CONAN_PROFILE=coin/conan/profiles/windows-arm64-msvc2019_64',
+        'CONAN_HOST_PROFILE=coin/conan/profiles/ci-windows-x86_64-msvc2019_64-developer',
+        'CONAN_PROFILE=coin/conan/profiles/ci-windows-arm64-msvc2019_64',
         'OPENSSL_CONF_x64={{.Env.OPENSSL_CONF_x64_arm64}}',
         'OPENSSL_INCLUDE_x64={{.Env.OPENSSL_INCLUDE_x64_arm64}}',
         'OPENSSL_LIB_x64={{.Env.OPENSSL_LIB_x64_arm64}}'
@@ -104,7 +105,7 @@ Configurations:
     Id: 'Windows11_21H2-MSVC2019-x64-host'
     Template: 'qtci-windows-11_21H2-x86_64-52'
     Compiler: 'MSVC2019'
-    Features: ['Sccache', "DebugAndRelease", 'UseConfigure']
+    Features: ['Sccache', "DebugAndRelease", 'WarningsAreErrors', 'UseConfigure']
     Configure arguments: '-debug-and-release -make examples -developer-build -force-debug-info -qt-zlib'
     Environment variables: [
         'CMAKE_ARGS=-DFEATURE_msvc_obj_debug_info=ON -DOPENSSL_ROOT_DIR={{.Env.OPENSSL_INCLUDE_x64}}\..'
@@ -117,17 +118,19 @@ Configurations:
     Platform dependency: 'Windows11_21H2-MSVC2019-x64-host'
     Environment variables: [
         'TARGET_CONFIGURE_ARGS=-debug-and-release -force-debug-info -platform win32-arm64-msvc',
-        'TARGET_CMAKE_ARGS=-DFEATURE_msvc_obj_debug_info=ON'
+        'TARGET_CMAKE_ARGS=-DFEATURE_msvc_obj_debug_info=ON',
+        'CONAN_HOST_PROFILE=coin/conan/profiles/ci-windows-x86_64-msvc2019_64',
+        'CONAN_PROFILE=coin/conan/profiles/ci-windows-arm64-msvc2019_64'
     ]
 -
     Id: 'RHEL-8.4-host'
     Template: 'qtci-linux-RHEL-8.4-x86_64-50'
     Compiler: 'GCC'
-    Features: ['Packaging', 'Sccache', 'UseConfigure']
+    Features: ['Packaging', 'Sccache', 'UseConfigure', 'InstallQt5Dependencies']
     Configure arguments: '-nomake examples -release -force-debug-info -headersclean -separate-debug-info -qt-libjpeg -qt-libpng -qt-pcre -qt-harfbuzz -qt-doubleconversion -no-libudev -bundled-xcb-xinput'
     Environment variables: [
         'CMAKE_ARGS=-DOpenGL_GL_PREFERENCE=LEGACY',
-        'CONAN_PROFILE=coin/conan/profiles/linux-x86_64-gcc'
+        'CONAN_PROFILE=coin/conan/profiles/ci-linux-x86_64-gcc'
     ]
 -
     Id: 'ios-universal'
@@ -140,8 +143,8 @@ Configurations:
     Features: ['Packaging', 'Sccache', 'DebugAndRelease', 'DisableTests', 'UseConfigure']
     Environment variables: [
         'TARGET_CONFIGURE_ARGS=-debug-and-release -nomake examples -platform macx-ios-clang',
-        'CONAN_HOST_PROFILE=coin/conan/profiles/macos-universal-clang',
-        'CONAN_PROFILE=coin/conan/profiles/macos-ios-arm64-clang'
+        'CONAN_HOST_PROFILE=coin/conan/profiles/ci-macos-universal-clang',
+        'CONAN_PROFILE=coin/conan/profiles/ci-macos-ios-arm64-clang'
     ]
 -
     Id: 'Windows10_21H2-Mingw11-x64-host'
@@ -154,7 +157,7 @@ Configurations:
         'CMAKE_ARGS=-DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DOPENSSL_ROOT_DIR={{.Env.OPENSSL_INCLUDE_x64}}\.. -DPostgreSQL_ROOT={{.Env.POSTGRESQL_LIB_x64}}\..',
         'NON_QTBASE_CMAKE_ARGS=-DFEATURE_system_tiff=OFF',
         'LLVM_INSTALL_DIR={{.Env.LLVM_INSTALL_DIR_mingw}}',
-        'CONAN_PROFILE=coin/conan/profiles/windows-x86_64-mingw'
+        'CONAN_PROFILE=coin/conan/profiles/ci-windows-x86_64-mingw'
     ]
 -
     Id: 'Windows10_21H2-LLVM-x64-host'
@@ -183,7 +186,7 @@ Configurations:
 -
     Template: 'qtci-windows-10_21H2-x86_64-51'
     Compiler: 'Mingw'
-    Features: ['Sccache', 'UseConfigure']
+    Features: ['Sccache', 'WarningsAreErrors', 'UseConfigure']
     Configure arguments: '-developer-build -release -force-debug-info -separate-debug-info -make examples -qt-zlib -qt-freetype -qt-libjpeg'
     Environment variables: [
         'Path={{.Env.MINGW1120}}\bin;{{.Env.Path}}',
@@ -194,7 +197,7 @@ Configurations:
 -
     Template: 'qtci-windows-11_21H2-x86_64-52'
     Compiler: 'Mingw'
-    Features: ['Sccache', 'UseConfigure']
+    Features: ['Sccache', 'WarningsAreErrors', 'UseConfigure']
     Configure arguments: '-developer-build -release -force-debug-info -separate-debug-info -make examples -qt-zlib -qt-freetype -qt-libjpeg'
     Environment variables: [
         'Path={{.Env.MINGW1120}}\bin;{{.Env.Path}}',

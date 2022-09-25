@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the Qt Quick Layouts module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #ifndef QQUICKLAYOUT_P_H
 #define QQUICKLAYOUT_P_H
@@ -53,6 +17,8 @@
 
 #include <QPointer>
 #include <QQuickItem>
+#include <QtCore/qflags.h>
+
 #include <QtQuickLayouts/private/qquicklayoutglobal_p.h>
 #include <private/qquickitem_p.h>
 #include <QtQuick/private/qquickitemchangelistener_p.h>
@@ -81,6 +47,13 @@ public:
         NSizes
     };
 
+    enum EnsureLayoutItemsUpdatedOption {
+        Recursive                     = 0b001,
+        ApplySizeHints                = 0b010
+    };
+
+    Q_DECLARE_FLAGS(EnsureLayoutItemsUpdatedOptions, EnsureLayoutItemsUpdatedOption)
+
     explicit QQuickLayout(QQuickLayoutPrivate &dd, QQuickItem *parent = nullptr);
     ~QQuickLayout();
 
@@ -92,7 +65,8 @@ public:
     virtual void setAlignment(QQuickItem *item, Qt::Alignment align) = 0;
     virtual void invalidate(QQuickItem * childItem = nullptr);
     virtual void updateLayoutItems() = 0;
-    void ensureLayoutItemsUpdated() const;
+
+    void ensureLayoutItemsUpdated(EnsureLayoutItemsUpdatedOptions options = {}) const;
 
     // iterator
     virtual QQuickItem *itemAt(int index) const = 0;
@@ -102,7 +76,7 @@ public:
 
     static void effectiveSizeHints_helper(QQuickItem *item, QSizeF *cachedSizeHints, QQuickLayoutAttached **info, bool useFallbackToWidthOrHeight);
     static QLayoutPolicy::Policy effectiveSizePolicy_helper(QQuickItem *item, Qt::Orientation orientation, QQuickLayoutAttached *info);
-    bool shouldIgnoreItem(QQuickItem *child, QQuickLayoutAttached *&info, QSizeF *sizeHints) const;
+    bool shouldIgnoreItem(QQuickItem *child) const;
     void checkAnchors(QQuickItem *item) const;
 
     void itemChange(ItemChange change, const ItemChangeData &value) override;
@@ -133,7 +107,7 @@ protected:
         NOrientations
     };
 
-protected slots:
+protected Q_SLOTS:
     void invalidateSenderItem();
 
 private:
@@ -145,15 +119,17 @@ private:
     friend class QQuickLayoutAttached;
 };
 
+Q_DECLARE_OPERATORS_FOR_FLAGS(QQuickLayout::EnsureLayoutItemsUpdatedOptions)
 
 class QQuickLayoutPrivate : public QQuickItemPrivate
 {
     Q_DECLARE_PUBLIC(QQuickLayout)
 public:
-    QQuickLayoutPrivate() : m_dirty(true), m_dirtyArrangement(true), m_isReady(false), m_disableRearrange(true), m_hasItemChangeListeners(false) {}
-
-    qreal getImplicitWidth() const override;
-    qreal getImplicitHeight() const override;
+    QQuickLayoutPrivate() : m_dirty(true)
+                          , m_dirtyArrangement(true)
+                          , m_isReady(false)
+                          , m_disableRearrange(true)
+                          , m_hasItemChangeListeners(false) {}
 
     void applySizeHints() const;
 
@@ -302,7 +278,7 @@ public:
         return false;
     }
 
-signals:
+Q_SIGNALS:
     void minimumWidthChanged();
     void minimumHeightChanged();
     void preferredWidthChanged();

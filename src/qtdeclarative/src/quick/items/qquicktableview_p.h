@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2018 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtQuick module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2018 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #ifndef QQUICKTABLEVIEW_P_H
 #define QQUICKTABLEVIEW_P_H
@@ -89,12 +53,41 @@ class Q_QUICK_PRIVATE_EXPORT QQuickTableView : public QQuickFlickable, public QQ
     Q_PROPERTY(int topRow READ topRow NOTIFY topRowChanged REVISION(6, 0))
     Q_PROPERTY(int bottomRow READ bottomRow NOTIFY bottomRowChanged REVISION(6, 0))
     Q_PROPERTY(QItemSelectionModel *selectionModel READ selectionModel WRITE setSelectionModel NOTIFY selectionModelChanged REVISION(6, 2))
+    Q_PROPERTY(bool animate READ animate WRITE setAnimate NOTIFY animateChanged REVISION(6, 4))
+    Q_PROPERTY(bool keyNavigationEnabled READ keyNavigationEnabled WRITE setKeyNavigationEnabled NOTIFY keyNavigationEnabledChanged REVISION(6, 4))
+    Q_PROPERTY(bool pointerNavigationEnabled READ pointerNavigationEnabled WRITE setPointerNavigationEnabled NOTIFY pointerNavigationEnabledChanged REVISION(6, 4))
+    Q_PROPERTY(int currentRow READ currentRow NOTIFY currentRowChanged REVISION(6, 4) FINAL)
+    Q_PROPERTY(int currentColumn READ currentColumn NOTIFY currentColumnChanged REVISION(6, 4) FINAL)
+    Q_PROPERTY(bool alternatingRows READ alternatingRows WRITE setAlternatingRows NOTIFY alternatingRowsChanged REVISION(6, 4) FINAL)
+    Q_PROPERTY(SelectionBehavior selectionBehavior READ selectionBehavior WRITE setSelectionBehavior NOTIFY selectionBehaviorChanged REVISION(6, 4) FINAL)
 
     QML_NAMED_ELEMENT(TableView)
     QML_ADDED_IN_VERSION(2, 12)
     QML_ATTACHED(QQuickTableViewAttached)
 
 public:
+    enum PositionModeFlag {
+        AlignLeft = Qt::AlignLeft,
+        AlignRight = Qt::AlignRight,
+        AlignHCenter = Qt::AlignHCenter,
+        AlignTop = Qt::AlignTop,
+        AlignBottom = Qt::AlignBottom,
+        AlignVCenter = Qt::AlignVCenter,
+        AlignCenter = AlignVCenter | AlignHCenter,
+        Visible = 0x01000,
+        Contain = 0x02000
+    };
+    Q_FLAG(PositionModeFlag)
+    Q_DECLARE_FLAGS(PositionMode, PositionModeFlag)
+
+    enum SelectionBehavior {
+        SelectionDisabled,
+        SelectCells,
+        SelectRows,
+        SelectColumns
+    };
+    Q_ENUM(SelectionBehavior)
+
     QQuickTableView(QQuickItem *parent = nullptr);
     ~QQuickTableView() override;
     int rows() const;
@@ -133,20 +126,43 @@ public:
     QItemSelectionModel *selectionModel() const;
     void setSelectionModel(QItemSelectionModel *selectionModel);
 
+    bool animate() const;
+    void setAnimate(bool animate);
+
+    bool keyNavigationEnabled() const;
+    void setKeyNavigationEnabled(bool enabled);
+    bool pointerNavigationEnabled() const;
+    void setPointerNavigationEnabled(bool enabled);
+
     int leftColumn() const;
     int rightColumn() const;
     int topRow() const;
     int bottomRow() const;
 
+    int currentRow() const;
+    int currentColumn() const;
+
+    bool alternatingRows() const;
+    void setAlternatingRows(bool alternatingRows);
+
+    SelectionBehavior selectionBehavior() const;
+    void setSelectionBehavior(SelectionBehavior selectionBehavior);
+
     Q_INVOKABLE void forceLayout();
-    Q_INVOKABLE void positionViewAtCell(const QPoint &cell, Qt::Alignment alignment, const QPointF &offset = QPointF());
-    Q_INVOKABLE void positionViewAtCell(int column, int row, Qt::Alignment alignment, const QPointF &offset = QPointF());
-    Q_INVOKABLE void positionViewAtRow(int row, Qt::Alignment alignment, qreal offset = 0);
-    Q_INVOKABLE void positionViewAtColumn(int column, Qt::Alignment alignment, qreal offset = 0);
+    Q_INVOKABLE void positionViewAtCell(const QPoint &cell, PositionMode mode, const QPointF &offset = QPointF(), const QRectF &subRect = QRectF());
+    Q_INVOKABLE void positionViewAtCell(int column, int row, PositionMode mode, const QPointF &offset = QPointF(), const QRectF &subRect = QRectF());
+    Q_INVOKABLE void positionViewAtRow(int row, PositionMode mode, qreal offset = 0, const QRectF &subRect = QRectF());
+    Q_INVOKABLE void positionViewAtColumn(int column, PositionMode mode, qreal offset = 0, const QRectF &subRect = QRectF());
     Q_INVOKABLE QQuickItem *itemAtCell(const QPoint &cell) const;
     Q_INVOKABLE QQuickItem *itemAtCell(int column, int row) const;
+
+    Q_REVISION(6, 4) Q_INVOKABLE QPoint cellAtPosition(const QPointF &position, bool includeSpacing = false) const;
+    Q_REVISION(6, 4) Q_INVOKABLE QPoint cellAtPosition(qreal x, qreal y, bool includeSpacing = false) const;
+#if QT_DEPRECATED_SINCE(6, 4)
+    QT_DEPRECATED_VERSION_X_6_4("Use cellAtPosition() instead")
     Q_INVOKABLE QPoint cellAtPos(const QPointF &position, bool includeSpacing = false) const;
     Q_INVOKABLE QPoint cellAtPos(qreal x, qreal y, bool includeSpacing = false) const;
+#endif
 
     Q_REVISION(6, 2) Q_INVOKABLE bool isColumnLoaded(int column) const;
     Q_REVISION(6, 2) Q_INVOKABLE bool isRowLoaded(int row) const;
@@ -155,6 +171,12 @@ public:
     Q_REVISION(6, 2) Q_INVOKABLE qreal rowHeight(int row) const;
     Q_REVISION(6, 2) Q_INVOKABLE qreal implicitColumnWidth(int column) const;
     Q_REVISION(6, 2) Q_INVOKABLE qreal implicitRowHeight(int row) const;
+
+    Q_REVISION(6, 4) Q_INVOKABLE virtual QModelIndex modelIndex(const QPoint &cell) const;
+    Q_REVISION(6, 4) Q_INVOKABLE virtual QModelIndex modelIndex(int column, int row) const;
+    Q_REVISION(6, 4) Q_INVOKABLE virtual QPoint cellAtIndex(const QModelIndex &index) const;
+    Q_REVISION(6, 4) Q_INVOKABLE int rowAtIndex(const QModelIndex &index) const;
+    Q_REVISION(6, 4) Q_INVOKABLE int columnAtIndex(const QModelIndex &index) const;
 
     static QQuickTableViewAttached *qmlAttachedProperties(QObject *);
 
@@ -175,10 +197,18 @@ Q_SIGNALS:
     Q_REVISION(6, 0) void topRowChanged();
     Q_REVISION(6, 0) void bottomRowChanged();
     Q_REVISION(6, 2) void selectionModelChanged();
+    Q_REVISION(6, 4) void animateChanged();
+    Q_REVISION(6, 4) void keyNavigationEnabledChanged();
+    Q_REVISION(6, 4) void pointerNavigationEnabledChanged();
+    Q_REVISION(6, 4) void currentRowChanged();
+    Q_REVISION(6, 4) void currentColumnChanged();
+    Q_REVISION(6, 4) void alternatingRowsChanged();
+    Q_REVISION(6, 4) void selectionBehaviorChanged();
 
 protected:
     void geometryChange(const QRectF &newGeometry, const QRectF &oldGeometry) override;
     void viewportMoved(Qt::Orientations orientation) override;
+    void keyPressEvent(QKeyEvent *e) override;
 
 protected:
     QQuickTableView(QQuickTableViewPrivate &dd, QQuickItem *parent);
@@ -222,6 +252,8 @@ private:
 
     friend class QQuickTableViewPrivate;
 };
+
+Q_DECLARE_OPERATORS_FOR_FLAGS(QQuickTableView::PositionMode)
 
 QT_END_NAMESPACE
 

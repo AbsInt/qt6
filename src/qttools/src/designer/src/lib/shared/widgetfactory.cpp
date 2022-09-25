@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the Qt Designer of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "widgetfactory_p.h"
 #include "widgetdatabase_p.h"
@@ -71,6 +46,14 @@
 #include <QtCore/qmetaobject.h>
 #include <QtCore/qpointer.h>
 
+#if QT_CONFIG(abstractbutton)
+#  include <QtWidgets/qabstractbutton.h>
+#endif
+
+#if QT_CONFIG(itemviews)
+#  include <QtWidgets/qabstractitemview.h>
+#endif
+
 #ifdef QT_OPENGLWIDGETS_LIB
 #  include <QtOpenGLWidgets/qopenglwidget.h>
 #endif
@@ -93,6 +76,59 @@ static inline bool isAxWidget(const QObject *o)
 static const char *formEditorDynamicProperty = "_q_formEditorObject";
 
 namespace qdesigner_internal {
+
+#if QT_CONFIG(abstractbutton)
+
+class QDesignerAbstractButton : public QAbstractButton
+{
+public:
+    using QAbstractButton::QAbstractButton;
+
+protected:
+    void paintEvent(QPaintEvent *) override {}
+};
+
+#endif
+
+#if QT_CONFIG(itemviews)
+
+class QDesignerAbstractItemView : public QAbstractItemView
+{
+public:
+    using QAbstractItemView::QAbstractItemView;
+
+    QRect visualRect(const QModelIndex &) const override
+    {
+        return QRect(QPoint(), QSize(10, 10));
+    }
+
+    void scrollTo(const QModelIndex &, ScrollHint = EnsureVisible) override {}
+
+    QModelIndex indexAt(const QPoint &) const override
+    {
+        return {};
+    }
+
+protected:
+    QModelIndex moveCursor(CursorAction, Qt::KeyboardModifiers) override
+    {
+        return {};
+    }
+
+    int horizontalOffset() const override { return 0; }
+    int verticalOffset() const override { return 0; }
+
+    bool isIndexHidden(const QModelIndex &) const override { return false; }
+
+    void setSelection(const QRect &, QItemSelectionModel::SelectionFlags) override {}
+
+    QRegion visualRegionForSelection(const QItemSelection &) const override
+    {
+        return QRegion(QRect(QPoint(), QSize(10, 10)));
+    }
+};
+
+#endif // QT_CONFIG(itemviews)
 
 // A friendly SpinBox that grants access to its QLineEdit
 class FriendlySpinBox : public QAbstractSpinBox {
@@ -334,6 +370,14 @@ QWidget *WidgetFactory::createWidget(const QString &widgetName, QWidget *parentW
         // 2) Special widgets
         if (widgetName == m_strings.m_line) {
             w = new Line(parentWidget);
+#if QT_CONFIG(abstractbutton)
+        } else if (widgetName == u"QAbstractButton") {
+            w = new QDesignerAbstractButton(parentWidget);
+#endif
+#if QT_CONFIG(itemviews)
+        } else if (widgetName == u"QAbstractItemView") {
+            w = new QDesignerAbstractItemView(parentWidget);
+#endif
         } else if (widgetName == m_strings.m_qDockWidget) {
             w = new QDesignerDockWidget(parentWidget);
         } else if (widgetName == m_strings.m_qMenuBar) {

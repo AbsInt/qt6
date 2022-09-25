@@ -6,9 +6,3 @@
 
 [position]
 opensuse-leap
-
-# QTBUG-103200
-[Material::dragMargin]
-opensuse-leap
-[Imagine::dragMargin]
-opensuse-leap

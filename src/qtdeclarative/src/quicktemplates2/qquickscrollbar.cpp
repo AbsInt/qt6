@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2017 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the Qt Quick Templates 2 module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2017 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qquickscrollbar_p.h"
 #include "qquickscrollbar_p_p.h"
@@ -81,7 +45,7 @@ QT_BEGIN_NAMESPACE
     \list
     \li \l orientation
     \li \l position
-    \li \l {ScrollBar::} {size}
+    \li \l size
     \li \l active
     \endlist
 
@@ -169,10 +133,12 @@ QQuickScrollBarPrivate::VisualArea QQuickScrollBarPrivate::visualArea() const
     if (minimumSize > size && size != 1.0)
         visualPos = position / (1.0 - size) * (1.0 - minimumSize);
 
-    qreal visualSize = qBound<qreal>(0, qMax(size, minimumSize) + qMin<qreal>(0, visualPos),
-                                     qMax(0.0, 1.0 - visualPos));
+    qreal maximumSize = qMax<qreal>(0.0, 1.0 - visualPos);
+    qreal visualSize =  qMax<qreal>(minimumSize,
+                                    qMin<qreal>(qMax(size, minimumSize) + qMin<qreal>(0, visualPos),
+                                                maximumSize));
 
-    visualPos = qBound<qreal>(0, visualPos, qMax<qreal>(0, 1.0 - visualSize));
+    visualPos = qMax<qreal>(0,qMin<qreal>(visualPos,qMax<qreal>(0, 1.0 - visualSize)));
 
     return VisualArea(visualPos, visualSize);
 }
@@ -288,7 +254,7 @@ void QQuickScrollBarPrivate::itemImplicitHeightChanged(QQuickItem *item)
         emit indicatorButton->implicitIndicatorHeightChanged();
 }
 
-void QQuickScrollBarPrivate::handlePress(const QPointF &point, ulong timestamp)
+bool QQuickScrollBarPrivate::handlePress(const QPointF &point, ulong timestamp)
 {
     Q_Q(QQuickScrollBar);
     QQuickControlPrivate::handlePress(point, timestamp);
@@ -297,7 +263,7 @@ void QQuickScrollBarPrivate::handlePress(const QPointF &point, ulong timestamp)
         if (decreaseArrow && decreaseArrow->contains(q->mapToItem(decreaseArrow, point + QPointF(0.5, 0.5)))) {
             indicatorButton->setPressed(true);
             q->decrease();
-            return;
+            return true;
         }
     }
 
@@ -306,7 +272,7 @@ void QQuickScrollBarPrivate::handlePress(const QPointF &point, ulong timestamp)
         if (increaseArrow && increaseArrow->contains(q->mapToItem(increaseArrow, point + QPointF(0.5, 0.5)))) {
             increaseObject->setPressed(true);
             q->increase();
-            return;
+            return true;
         }
     }
 
@@ -315,9 +281,10 @@ void QQuickScrollBarPrivate::handlePress(const QPointF &point, ulong timestamp)
     if (offset < 0 || offset > sz)
         offset = sz / 2;
     q->setPressed(true);
+    return true;
 }
 
-void QQuickScrollBarPrivate::handleMove(const QPointF &point, ulong timestamp)
+bool QQuickScrollBarPrivate::handleMove(const QPointF &point, ulong timestamp)
 {
     Q_Q(QQuickScrollBar);
     QQuickControlPrivate::handleMove(point, timestamp);
@@ -330,33 +297,35 @@ void QQuickScrollBarPrivate::handleMove(const QPointF &point, ulong timestamp)
      * scrollbar gently.
      */
     if (!pressed)
-        return;
+        return true;
 
-    qreal pos = qBound<qreal>(0.0, positionAt(point) - offset, 1.0 - size);
+    qreal pos = qMax<qreal>(0.0, qMin<qreal>(positionAt(point) - offset, 1.0 - size));
     if (snapMode == QQuickScrollBar::SnapAlways)
         pos = snapPosition(pos);
     q->setPosition(pos);
+    return true;
 }
 
-void QQuickScrollBarPrivate::handleRelease(const QPointF &point, ulong timestamp)
+bool QQuickScrollBarPrivate::handleRelease(const QPointF &point, ulong timestamp)
 {
     Q_Q(QQuickScrollBar);
     QQuickControlPrivate::handleRelease(point, timestamp);
 
     if (orientation == Qt::Vertical) {
         if (point.y() < q->topPadding() || point.y() >= (q->height() - q->bottomPadding()))
-            return;
+            return true;
     } else /* orientation == Qt::Horizontal */{
         if (point.x() < q->leftPadding() || point.x() >= (q->width() - q->rightPadding()))
-            return;
+            return true;
     }
 
-    qreal pos = qBound<qreal>(0.0, positionAt(point) - offset, 1.0 - size);
+    qreal pos = qMax<qreal>(0.0, qMin<qreal>(positionAt(point) - offset, 1.0 - size));
     if (snapMode != QQuickScrollBar::NoSnap)
         pos = snapPosition(pos);
     q->setPosition(pos);
     offset = 0.0;
     q->setPressed(false);
+    return true;
 }
 
 void QQuickScrollBarPrivate::handleUngrab()
@@ -435,11 +404,20 @@ qreal QQuickScrollBar::size() const
 void QQuickScrollBar::setSize(qreal size)
 {
     Q_D(QQuickScrollBar);
-    if (!qt_is_finite(size) || qFuzzyCompare(d->size, size))
+    if (!qt_is_finite(size))
         return;
+    size = qBound(0.0, size, 1.0);
+    if (qFuzzyCompare(d->size, size))
+        return;
+    d->size = size;
 
     auto oldVisualArea = d->visualArea();
     d->size = qBound(0.0, size, 1.0);
+    if (d->size + d->position > 1.0) {
+        setPosition(1.0 - d->size);
+        oldVisualArea = d->visualArea();
+    }
+
     if (isComponentComplete())
         d->resizeContent();
     emit sizeChanged();
@@ -450,6 +428,11 @@ void QQuickScrollBar::setSize(qreal size)
     \qmlproperty real QtQuick.Controls::ScrollBar::position
 
     This property holds the position of the scroll bar, scaled to \c {0.0 - 1.0}.
+
+    The largest valid scrollbar position is \c {(1.0 - size)}. This gives
+    correct behavior for the most used case where moving the scrollbar
+    to the end will put the end of the document at the lower end of the
+    visible area of the connected Flickable.
 
     \sa {Flickable::visibleArea.yPosition}{Flickable::visibleArea}
 

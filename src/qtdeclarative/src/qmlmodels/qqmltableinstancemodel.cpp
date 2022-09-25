@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2018 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtQml module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2018 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qqmltableinstancemodel_p.h"
 #include "qqmlabstractdelegatecomponent_p.h"
@@ -65,13 +29,7 @@ void QQmlTableInstanceModel::deleteModelItemLater(QQmlDelegateModelItem *modelIt
 
     delete modelItem->object;
     modelItem->object = nullptr;
-
-    if (modelItem->contextData) {
-        modelItem->contextData->invalidate();
-        Q_ASSERT(modelItem->contextData->refCount() == 1);
-        modelItem->contextData = nullptr;
-    }
-
+    modelItem->contextData.reset();
     modelItem->deleteLater();
 }
 
@@ -103,8 +61,7 @@ QQmlTableInstanceModel::~QQmlTableInstanceModel()
         if (modelItem->object) {
             delete modelItem->object;
             modelItem->object = nullptr;
-            modelItem->contextData->invalidate();
-            modelItem->contextData = nullptr;
+            modelItem->contextData.reset();
         }
     }
 
@@ -331,17 +288,31 @@ void QQmlTableInstanceModel::incubateModelItem(QQmlDelegateModelItem *modelItem,
         modelItem->incubationTask = new QQmlTableInstanceModelIncubationTask(this, modelItem, incubationMode);
 
         QQmlContext *creationContext = modelItem->delegate->creationContext();
-        QQmlRefPointer<QQmlContextData> ctxt = QQmlContextData::createRefCounted(
-                    QQmlContextData::get(creationContext  ? creationContext : m_qmlContext.data()));
-        ctxt->setContextObject(modelItem);
-        modelItem->contextData = ctxt;
+        const QQmlRefPointer<QQmlContextData> componentContext
+                = QQmlContextData::get(creationContext  ? creationContext : m_qmlContext.data());
 
-        QQmlComponentPrivate::get(modelItem->delegate)->incubateObject(
-                    modelItem->incubationTask,
-                    modelItem->delegate,
-                    m_qmlContext->engine(),
-                    ctxt,
-                    QQmlContextData::get(m_qmlContext));
+        QQmlComponentPrivate *cp = QQmlComponentPrivate::get(modelItem->delegate);
+        if (cp->isBound()) {
+            modelItem->contextData = componentContext;
+            cp->incubateObject(
+                        modelItem->incubationTask,
+                        modelItem->delegate,
+                        m_qmlContext->engine(),
+                        componentContext,
+                        QQmlContextData::get(m_qmlContext));
+        } else {
+            QQmlRefPointer<QQmlContextData> ctxt = QQmlContextData::createRefCounted(
+                        QQmlContextData::get(creationContext  ? creationContext : m_qmlContext.data()));
+            ctxt->setContextObject(modelItem);
+            modelItem->contextData = ctxt;
+
+            cp->incubateObject(
+                        modelItem->incubationTask,
+                        modelItem->delegate,
+                        m_qmlContext->engine(),
+                        ctxt,
+                        QQmlContextData::get(m_qmlContext));
+        }
     }
 
     // Remove the temporary guard
@@ -461,7 +432,7 @@ void QQmlTableInstanceModel::setModel(const QVariant &model)
     drainReusableItemsPool(0);
     if (auto const aim = abstractItemModel())
         disconnect(aim, &QAbstractItemModel::dataChanged, this, &QQmlTableInstanceModel::dataChangedCallback);
-    m_adaptorModel.setModel(model, this);
+    m_adaptorModel.setModel(model);
     if (auto const aim = abstractItemModel())
         connect(aim, &QAbstractItemModel::dataChanged, this, &QQmlTableInstanceModel::dataChangedCallback);
 }

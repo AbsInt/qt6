@@ -2,7 +2,7 @@ Version: 2
 Configurations:
 -
     Id: 'sles-15-static'
-    Template: 'qtci-linux-SLES-15_SP3-x86_64-51'
+    Template: 'qtci-linux-SLES-15_SP4-x86_64-50'
     Compiler: 'GCC'
     Features: ['Sccache', 'MinimalStaticTests', 'UseConfigure']
     Configure arguments: '-nomake examples -static -no-sql-mysql'

@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the tools applications of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2020 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "qqmldomtypesreader_p.h"
 #include "qqmldomelements_p.h"
@@ -96,7 +71,7 @@ void QmltypesReader::insertSignalOrMethod(const QQmlJSMetaMethod &metaMethod,
         methodInfo.methodType = MethodInfo::MethodType::Signal;
         break;
     default:
-        Q_ASSERT(false);
+        Q_UNREACHABLE();
     }
     QStringList pNames = metaMethod.parameterNames();
     QStringList pTypes = metaMethod.parameterTypeNames();
@@ -143,7 +118,16 @@ void QmltypesReader::insertComponent(const QQmlJSScope::Ptr &jsScope,
 {
     QmltypesComponent comp;
     QMap<int, QmlObject> objects;
-    objects.insert(0, QmlObject());
+    {
+        bool hasExports = false;
+        for (const QQmlJSScope::Export &jsE : exportsList) {
+            int metaRev = jsE.version().toEncodedVersion<int>();
+            hasExports = true;
+            objects.insert(metaRev, QmlObject());
+        }
+        if (!hasExports)
+            objects.insert(0, QmlObject());
+    }
     bool incrementedPath = false;
     QString prototype;
     QString defaultPropertyName;
@@ -174,17 +158,13 @@ void QmltypesReader::insertComponent(const QQmlJSScope::Ptr &jsScope,
             ++it;
         }
     }
-    comp.setFileName(jsScope->fileName());
+    comp.setFileName(jsScope->filePath());
     comp.setName(jsScope->internalName());
     m_currentPath = m_currentPath.key(comp.name())
                             .index(qmltypesFilePtr()->components().values(comp.name()).length());
     incrementedPath = true;
     prototype = jsScope->baseTypeName();
-#if QT_VERSION <= 0x060200
-    defaultPropertyName = jsScope->defaultPropertyName();
-#else
     defaultPropertyName = jsScope->ownDefaultPropertyName();
-#endif // QT_VERSION <= 0x060200
     comp.setInterfaceNames(jsScope->interfaceNames());
     QString typeName = jsScope->ownAttachedTypeName();
     comp.setAttachedTypeName(typeName);
@@ -197,6 +177,7 @@ void QmltypesReader::insertComponent(const QQmlJSScope::Ptr &jsScope,
     comp.setValueTypeName(jsScope->valueTypeName());
     comp.setAccessSemantics(jsScope->accessSemantics());
     comp.setExtensionTypeName(jsScope->extensionTypeName());
+    comp.setExtensionIsNamespace(jsScope->extensionIsNamespace());
     Path exportSourcePath = qmltypesFile().canonicalPath();
     QMap<int, Path> revToPath;
     auto it = objects.end();
@@ -208,26 +189,8 @@ void QmltypesReader::insertComponent(const QQmlJSScope::Ptr &jsScope,
                             .field(Fields::components)
                             .key(comp.name())
                             .index(qmltypesFilePtr()->components().values(comp.name()).length());
+
     // emit & map objs
-
-    // exports:
-    QList<Export> exports;
-    int iExport = 0;
-    for (const QQmlJSScope::Export &jsE : exportsList) {
-        int metaRev = jsE.version().toEncodedVersion<int>();
-        ++iExport;
-        Export e;
-        e.uri = jsE.package();
-        e.typeName = jsE.type();
-        auto v = jsE.version();
-        e.version = Version((v.hasMajorVersion() ? v.majorVersion() : Version::Latest),
-                            (v.hasMinorVersion() ? v.minorVersion() : Version::Latest));
-        e.typePath = revToPath.value(metaRev);
-        objects[metaRev];
-        e.exportSourcePath = exportSourcePath;
-        comp.addExport(e);
-    }
-
     while (it != begin) {
         --it;
         if (it.key() < 0) {
@@ -249,6 +212,24 @@ void QmltypesReader::insertComponent(const QQmlJSScope::Ptr &jsScope,
     }
     comp.setMetaRevisions(metaRevs);
 
+    // exports:
+    QList<Export> exports;
+    for (const QQmlJSScope::Export &jsE : exportsList) {
+        auto v = jsE.version();
+        int metaRev = v.toEncodedVersion<int>();
+        Export e;
+        e.uri = jsE.package();
+        e.typeName = jsE.type();
+        e.version = Version((v.hasMajorVersion() ? v.majorVersion() : Version::Latest),
+                            (v.hasMinorVersion() ? v.minorVersion() : Version::Latest));
+        e.typePath = revToPath.value(metaRev);
+        if (!e.typePath) {
+            qCWarning(domLog) << "could not find version" << metaRev << "in" << revToPath.keys();
+        }
+        e.exportSourcePath = exportSourcePath;
+        comp.addExport(e);
+    }
+
     if (comp.name().isEmpty()) {
         addError(myParseErrors()
                          .error(tr("Component definition is missing a name binding."))
@@ -265,17 +246,10 @@ bool QmltypesReader::parse()
     QQmlJSTypeDescriptionReader reader(qmltypesFilePtr()->canonicalFilePath(),
                                        qmltypesFilePtr()->code());
     QStringList dependencies;
-#if QT_VERSION < QT_VERSION_CHECK(6, 3, 0)
-    QHash<QString, QQmlJSScope::Ptr> objects;
-    m_isValid = reader(&objects, &dependencies);
-    for (const auto &obj : qAsConst(objects))
-        insertComponent(obj, obj->exports());
-#else
     QHash<QString, QQmlJSExportedScope> objects;
     m_isValid = reader(&objects, &dependencies);
     for (const auto &obj : qAsConst(objects))
         insertComponent(obj.scope, obj.exports);
-#endif
     qmltypesFilePtr()->setIsValid(m_isValid);
     return m_isValid;
 }

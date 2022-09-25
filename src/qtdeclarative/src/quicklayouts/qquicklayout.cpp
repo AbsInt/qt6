@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the Qt Quick Layouts module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qquicklayout_p.h"
 #include <QEvent>
@@ -697,28 +661,10 @@ QQuickItem *QQuickLayoutAttached::item() const
     return qobject_cast<QQuickItem *>(parent());
 }
 
-qreal QQuickLayoutPrivate::getImplicitWidth() const
+void QQuickLayoutPrivate::applySizeHints() const
 {
     Q_Q(const QQuickLayout);
-    if (q->invalidated()) {
-        QQuickLayoutPrivate *that = const_cast<QQuickLayoutPrivate*>(this);
-        that->implicitWidth = q->sizeHint(Qt::PreferredSize).width();
-    }
-    return implicitWidth;
-}
 
-qreal QQuickLayoutPrivate::getImplicitHeight() const
-{
-    Q_Q(const QQuickLayout);
-    if (q->invalidated()) {
-        QQuickLayoutPrivate *that = const_cast<QQuickLayoutPrivate*>(this);
-        that->implicitHeight = q->sizeHint(Qt::PreferredSize).height();
-    }
-    return implicitHeight;
-}
-
-void QQuickLayoutPrivate::applySizeHints() const {
-    Q_Q(const QQuickLayout);
     QQuickLayout *that = const_cast<QQuickLayout*>(q);
     QQuickLayoutAttached *info = attachedLayoutObject(that, true);
 
@@ -766,16 +712,10 @@ void QQuickLayout::updatePolish()
     // Might have become "undirty" before we reach this updatePolish()
     // (e.g. if somebody queried for implicitWidth it will immediately
     // calculate size hints)
-    if (invalidated()) {
-        // Ensure that all invalidated layouts are synced and valid again. Since
-        // ensureLayoutItemsUpdated() will also call applySizeHints(), and sizeHint() will call its
-        // childrens sizeHint(), and sizeHint() will call ensureLayoutItemsUpdated(), this will be done
-        // recursive as we want.
-        // Note that we need to call ensureLayoutItemsUpdated() *before* we query width() and height(),
-        // because width()/height() might return their implicitWidth/implicitHeight (e.g. for a layout
-        // with no explicitly specified size, (nor anchors.fill: parent))
-        ensureLayoutItemsUpdated();
-    }
+    // Note that we need to call ensureLayoutItemsUpdated() *before* we query width() and height(),
+    // because width()/height() might return their implicitWidth/implicitHeight (e.g. for a layout
+    // with no explicitly specified size, (nor anchors.fill: parent))
+    ensureLayoutItemsUpdated(QQuickLayout::ApplySizeHints | QQuickLayout::Recursive);
     rearrange(QSizeF(width(), height()));
     m_inUpdatePolish = false;
     qCDebug(lcQuickLayouts) << "updatePolish() LEAVING" << this;
@@ -818,26 +758,12 @@ void QQuickLayout::invalidate(QQuickItem * /*childItem*/)
     }
 }
 
-bool QQuickLayout::shouldIgnoreItem(QQuickItem *child, QQuickLayoutAttached *&info, QSizeF *sizeHints) const
+bool QQuickLayout::shouldIgnoreItem(QQuickItem *child) const
 {
-    bool ignoreItem = true;
     QQuickItemPrivate *childPrivate = QQuickItemPrivate::get(child);
-    if (childPrivate->explicitVisible) {
-        effectiveSizeHints_helper(child, sizeHints, &info, true);
-        QSizeF effectiveMaxSize = sizeHints[Qt::MaximumSize];
-        if (!effectiveMaxSize.isNull()) {
-            QSizeF &prefS = sizeHints[Qt::PreferredSize];
-            if (effectiveSizePolicy_helper(child, Qt::Horizontal, info) == QLayoutPolicy::Fixed)
-                effectiveMaxSize.setWidth(prefS.width());
-            if (effectiveSizePolicy_helper(child, Qt::Vertical, info) == QLayoutPolicy::Fixed)
-                effectiveMaxSize.setHeight(prefS.height());
-        }
-        ignoreItem = effectiveMaxSize.isNull();
-    }
-
+    bool ignoreItem = !childPrivate->explicitVisible;
     if (!ignoreItem && childPrivate->isTransparentForPositioner())
         ignoreItem = true;
-
     return ignoreItem;
 }
 
@@ -848,14 +774,35 @@ void QQuickLayout::checkAnchors(QQuickItem *item) const
         qmlWarning(item) << "Detected anchors on an item that is managed by a layout. This is undefined behavior; use Layout.alignment instead.";
 }
 
-void QQuickLayout::ensureLayoutItemsUpdated() const
+void QQuickLayout::ensureLayoutItemsUpdated(EnsureLayoutItemsUpdatedOptions options) const
 {
     Q_D(const QQuickLayout);
     if (!invalidated())
         return;
+    qCDebug(lcQuickLayouts) << "ENTER QQuickLayout::ensureLayoutItemsUpdated()" << this << options;
+    QQuickLayoutPrivate *priv = const_cast<QQuickLayoutPrivate*>(d);
+
+    // breadth-first
+    // must update the root first, and continue towards the leaf nodes.
+    // Otherwise, we wouldn't know which children to traverse to
     const_cast<QQuickLayout*>(this)->updateLayoutItems();
+
+    // make invalidate() return true
     d->m_dirty = false;
-    d->applySizeHints();
+
+    if (options & Recursive) {
+        for (int i = 0; i < itemCount(); ++i) {
+            QQuickItem *itm = itemAt(i);
+            if (QQuickLayout *lay = qobject_cast<QQuickLayout*>(itm)) {
+                lay->ensureLayoutItemsUpdated(options);
+            }
+        }
+    }
+
+    // size hints are updated depth-first (parent size hints depends on their childrens size hints)
+    if (options & ApplySizeHints)
+        priv->applySizeHints();
+    qCDebug(lcQuickLayouts) << "LEAVE QQuickLayout::ensureLayoutItemsUpdated()" << this;
 }
 
 
@@ -917,6 +864,7 @@ bool QQuickLayout::isReady() const
 void QQuickLayout::deactivateRecur()
 {
     if (d_func()->m_hasItemChangeListeners) {
+        ensureLayoutItemsUpdated();
         for (int i = 0; i < itemCount(); ++i) {
             QQuickItem *item = itemAt(i);
             // When deleting a layout with children, there is no reason for the children to inform the layout that their

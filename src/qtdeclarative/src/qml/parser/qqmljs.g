@@ -1,41 +1,5 @@
-----------------------------------------------------------------------------
---
 -- Copyright (C) 2016 The Qt Company Ltd.
--- Contact: http://www.qt.io/licensing/
---
--- This file is part of the QtQml module of the Qt Toolkit.
---
--- $QT_BEGIN_LICENSE:LGPL$
--- Commercial License Usage
--- Licensees holding valid commercial Qt licenses may use this file in
--- accordance with the commercial license agreement provided with the
--- Software or, alternatively, in accordance with the terms contained in
--- a written agreement between you and The Qt Company. For licensing terms
--- and conditions see https://www.qt.io/terms-conditions. For further
--- information use the contact form at https://www.qt.io/contact-us.
---
--- GNU Lesser General Public License Usage
--- Alternatively, this file may be used under the terms of the GNU Lesser
--- General Public License version 3 as published by the Free Software
--- Foundation and appearing in the file LICENSE.LGPL3 included in the
--- packaging of this file. Please review the following information to
--- ensure the GNU Lesser General Public License version 3 requirements
--- will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
---
--- GNU General Public License Usage
--- Alternatively, this file may be used under the terms of the GNU
--- General Public License version 2.0 or (at your option) the GNU General
--- Public license version 3 or any later version approved by the KDE Free
--- Qt Foundation. The licenses are as published by the Free Software
--- Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
--- included in the packaging of this file. Please review the following
--- information to ensure the GNU General Public License requirements will
--- be met: https://www.gnu.org/licenses/gpl-2.0.html and
--- https://www.gnu.org/licenses/gpl-3.0.html.
---
--- $QT_END_LICENSE$
---
-----------------------------------------------------------------------------
+-- SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 %parser         QQmlJSGrammar
 %decl           qqmljsparser_p.h
@@ -132,44 +96,9 @@
 
 %start TopLevel
 
-/./****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtQml module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+/.// Copyright (C) 2016 The Qt Company Ltd.
+// Contact: https://www.qt.io/licensing/
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include <private/qqmljsengine_p.h>
 #include <private/qqmljslexer_p.h>
@@ -183,44 +112,9 @@
 
 ./
 
-/:/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtQml module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+/:// Copyright (C) 2016 The Qt Company Ltd.
+// Contact: https://www.qt.io/licensing/
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 
 //
@@ -474,6 +368,7 @@ protected:
     SavedToken *last_token = nullptr;
 
     int functionNestingLevel = 0;
+    int classNestingLevel = 0;
 
     enum CoverExpressionType {
         CE_Invalid,
@@ -1421,9 +1316,26 @@ UiObjectMemberWithScriptStatement: UiPropertyAttributes UiPropertyType QmlIdenti
     } break;
 ./
 
+UiObjectMemberWithScriptStatement: UiPropertyAttributes T_IDENTIFIER T_LT UiPropertyType T_GT QmlIdentifier T_COLON UiScriptStatement OptionalSemicolon;
+/.
+    case $rule_number: {
+        AST::UiPublicMember *node = new (pool) AST::UiPublicMember(sym(4).UiQualifiedId->finish(), stringRef(6), sym(8).Statement);
+        node->typeModifier = stringRef(2);
+        auto attributes = sym(1).UiPropertyAttributes;
+        if (attributes->isRequired())
+            diagnostic_messages.append(compileError(attributes->requiredToken(), QLatin1String("Required properties with initializer do not make sense."), QtCriticalMsg));
+        node->setAttributes(attributes);
+        node->typeModifierToken = loc(2);
+        node->typeToken = loc(4);
+        node->identifierToken = loc(6);
+        node->colonToken = loc(7);
+        sym(1).Node = node;
+    } break;
+./
+
 UiObjectMember: UiObjectMemberWithScriptStatement;
 
-UiObjectMemberWithArray: UiPropertyAttributes T_IDENTIFIER T_LT UiPropertyType T_GT QmlIdentifier T_COLON T_LBRACKET UiArrayMemberList T_RBRACKET Semicolon;
+UiObjectMemberWithArray: UiPropertyAttributes T_IDENTIFIER T_LT UiPropertyType T_GT QmlIdentifier T_COLON ExpressionStatementLookahead T_LBRACKET UiArrayMemberList T_RBRACKET Semicolon;
 /.
     case $rule_number: {
         AST::UiPublicMember *node = new (pool) AST::UiPublicMember(sym(4).UiQualifiedId->finish(), stringRef(6));
@@ -1441,10 +1353,10 @@ UiObjectMemberWithArray: UiPropertyAttributes T_IDENTIFIER T_LT UiPropertyType T
         propertyName->identifierToken = loc(6);
         propertyName->next = nullptr;
 
-        AST::UiArrayBinding *binding = new (pool) AST::UiArrayBinding(propertyName, sym(9).UiArrayMemberList->finish());
+        AST::UiArrayBinding *binding = new (pool) AST::UiArrayBinding(propertyName, sym(10).UiArrayMemberList->finish());
         binding->colonToken = loc(7);
-        binding->lbracketToken = loc(8);
-        binding->rbracketToken = loc(10);
+        binding->lbracketToken = loc(9);
+        binding->rbracketToken = loc(11);
 
         node->binding = binding;
 
@@ -4367,16 +4279,16 @@ ClassDeclaration_Default: ClassDeclaration;
 ClassLBrace: T_LBRACE;
 /.
     case $rule_number: {
-        lexer->setStaticIsKeyword(true);
+        if (++classNestingLevel == 1)
+            lexer->setStaticIsKeyword(true);
     } break;
 ./
 
 ClassRBrace: T_RBRACE;
-/. case $rule_number: ./
-ClassStaticQualifier: T_STATIC;
 /.
     case $rule_number: {
-        lexer->setStaticIsKeyword(false);
+        if (--classNestingLevel == 0)
+            lexer->setStaticIsKeyword(false);
     } break;
 ./
 
@@ -4431,10 +4343,9 @@ ClassElement: MethodDefinition;
     } break;
 ./
 
-ClassElement: ClassStaticQualifier MethodDefinition;
+ClassElement: T_STATIC MethodDefinition;
 /.
     case $rule_number: {
-        lexer->setStaticIsKeyword(true);
         AST::ClassElementList *node = new (pool) AST::ClassElementList(sym(2).PatternProperty, true);
         sym(1).Node = node;
     } break;

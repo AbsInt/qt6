@@ -1,48 +1,12 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtWidgets module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include <qmenubar.h>
 
 #include <qstyle.h>
 #include <qlayout.h>
 #include <qapplication.h>
-#ifndef QT_NO_ACCESSIBILITY
+#if QT_CONFIG(accessibility)
 # include <qaccessible.h>
 #endif
 #include <qpainter.h>
@@ -71,6 +35,8 @@
 
 QT_BEGIN_NAMESPACE
 
+using namespace Qt::StringLiterals;
+
 class QMenuBarExtension : public QToolButton
 {
 public:
@@ -83,7 +49,7 @@ public:
 QMenuBarExtension::QMenuBarExtension(QWidget *parent)
     : QToolButton(parent)
 {
-    setObjectName(QLatin1String("qt_menubar_ext_button"));
+    setObjectName("qt_menubar_ext_button"_L1);
     setAutoRaise(true);
 #if QT_CONFIG(menu)
     setPopupMode(QToolButton::InstantPopup);
@@ -529,14 +495,14 @@ void QMenuBarPrivate::_q_actionHovered()
     Q_Q(QMenuBar);
     if (QAction *action = qobject_cast<QAction *>(q->sender())) {
         emit q->hovered(action);
-#ifndef QT_NO_ACCESSIBILITY
+#if QT_CONFIG(accessibility)
         if (QAccessible::isActive()) {
             int actionIndex = actions.indexOf(action);
             QAccessibleEvent focusEvent(q, QAccessible::Focus);
             focusEvent.setChild(actionIndex);
             QAccessible::updateAccessibility(&focusEvent);
         }
-#endif //QT_NO_ACCESSIBILITY
+#endif // QT_CONFIG(accessibility)
     }
 }
 
@@ -1105,7 +1071,7 @@ void QMenuBar::keyPressEvent(QKeyEvent *e)
                 QAction *act = d->actions.at(i);
                 QString s = act->text();
                 if (!s.isEmpty()) {
-                    int ampersand = s.indexOf(QLatin1Char('&'));
+                    qsizetype ampersand = s.indexOf(u'&');
                     if (ampersand >= 0) {
                         if (s[ampersand+1].toUpper() == c) {
                             clashCount++;

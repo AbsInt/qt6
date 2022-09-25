@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2019 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtQuick module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2019 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qsgrhilayer_p.h"
 
@@ -159,9 +123,29 @@ void QSGRhiLayer::setSize(const QSize &size)
     markDirtyTexture();
 }
 
-void QSGRhiLayer::setFormat(uint format)
+void QSGRhiLayer::setFormat(Format format)
 {
-    Q_UNUSED(format);
+    QRhiTexture::Format rhiFormat = QRhiTexture::RGBA8;
+    switch (format) {
+    case RGBA16F:
+        rhiFormat = QRhiTexture::RGBA16F;
+        break;
+    case RGBA32F:
+        rhiFormat = QRhiTexture::RGBA32F;
+        break;
+    default:
+        break;
+    }
+
+    if (rhiFormat == m_format)
+        return;
+
+    if (m_rhi->isTextureFormatSupported(rhiFormat)) {
+        m_format = rhiFormat;
+        markDirtyTexture();
+    } else {
+        qWarning("QSGRhiLayer: Attempted to set unsupported texture format %d", int(rhiFormat));
+    }
 }
 
 void QSGRhiLayer::setLive(bool live)
@@ -243,7 +227,7 @@ void QSGRhiLayer::grab()
     if (effectiveSamples <= 1)
         effectiveSamples = m_context->msaaSampleCount();
 
-    const bool needsNewRt = !m_rt || m_rt->pixelSize() != m_size || (m_recursive && !m_secondaryTexture);
+    const bool needsNewRt = !m_rt || m_rt->pixelSize() != m_size || (m_recursive && !m_secondaryTexture) || (m_texture && m_texture->format() != m_format);
     const bool mipmapSettingChanged = m_texture && m_texture->flags().testFlag(QRhiTexture::MipMapped) != m_mipmap;
     const bool msaaSettingChanged = (effectiveSamples > 1 && !m_msaaColorBuffer) || (effectiveSamples <= 1 && m_msaaColorBuffer);
 
@@ -408,15 +392,15 @@ void QSGRhiLayer::grab()
 
     // render with our own "sub-renderer" (this will just add a render pass to the command buffer)
     if (m_multisampling) {
-        m_context->renderNextRhiFrame(m_renderer);
+        m_context->renderNextFrame(m_renderer);
     } else {
         if (m_recursive) {
-            m_context->renderNextRhiFrame(m_renderer);
+            m_context->renderNextFrame(m_renderer);
             if (!resourceUpdates)
                 resourceUpdates = m_rhi->nextResourceUpdateBatch();
             resourceUpdates->copyTexture(m_texture, m_secondaryTexture);
         } else {
-            m_context->renderNextRhiFrame(m_renderer);
+            m_context->renderNextFrame(m_renderer);
         }
     }
 

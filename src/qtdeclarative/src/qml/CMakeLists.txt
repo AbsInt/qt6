@@ -32,6 +32,7 @@ qt_internal_add_qml_module(Qml
     URI "QtQml"
     VERSION "${PROJECT_VERSION}"
     DESIGNER_SUPPORTED
+    __QT_INTERNAL_SYSTEM_MODULE
     PLUGIN_TARGET qmlplugin
     CLASS_NAME QtQmlPlugin
     IMPORTS ${module_dynamic_qml_imports}
@@ -157,7 +158,7 @@ qt_internal_add_qml_module(Qml
         jsruntime/qv4context.cpp jsruntime/qv4context_p.h
         jsruntime/qv4dataview.cpp jsruntime/qv4dataview_p.h
         jsruntime/qv4dateobject.cpp jsruntime/qv4dateobject_p.h
-        jsruntime/qv4debugging_p.h
+        jsruntime/qv4debugging.cpp jsruntime/qv4debugging_p.h
         jsruntime/qv4domerrors.cpp jsruntime/qv4domerrors_p.h
         jsruntime/qv4engine.cpp jsruntime/qv4engine_p.h
         jsruntime/qv4enginebase_p.h
@@ -222,6 +223,7 @@ qt_internal_add_qml_module(Qml
         jsruntime/qv4value.cpp jsruntime/qv4value_p.h
         jsruntime/qv4variantobject.cpp jsruntime/qv4variantobject_p.h
         jsruntime/qv4vme_moth.cpp jsruntime/qv4vme_moth_p.h
+        jsruntime/qv4sequenceobject.cpp jsruntime/qv4sequenceobject_p.h
         jsruntime/qv4vtable_p.h
         memory/qv4heap_p.h
         memory/qv4mm.cpp memory/qv4mm_p.h
@@ -272,7 +274,7 @@ qt_internal_add_qml_module(Qml
         qml/qqmlenumvalue_p.h
         qml/qqmlerror.cpp qml/qqmlerror.h
         qml/qqmlexpression.cpp qml/qqmlexpression.h qml/qqmlexpression_p.h
-        qml/qqmlextensioninterface.h
+        qml/qqmlextensioninterface.cpp qml/qqmlextensioninterface.h
         qml/qqmlextensionplugin.cpp qml/qqmlextensionplugin.h qml/qqmlextensionplugin_p.h
         qml/qqmlfile.cpp qml/qqmlfile.h
         qml/qqmlfileselector.cpp qml/qqmlfileselector.h qml/qqmlfileselector_p.h
@@ -310,6 +312,7 @@ qt_internal_add_qml_module(Qml
         qml/qqmlpropertydata_p.h
         qml/qqmlpropertyindex_p.h
         qml/qqmlpropertyresolver.cpp qml/qqmlpropertyresolver_p.h
+        qml/qqmlpropertytopropertybinding.cpp qml/qqmlpropertytopropertybinding_p.h
         qml/qqmlpropertyvalidator.cpp qml/qqmlpropertyvalidator_p.h
         qml/qqmlpropertyvalueinterceptor.cpp qml/qqmlpropertyvalueinterceptor_p.h
         qml/qqmlfinalizer.cpp qml/qqmlfinalizer_p.h
@@ -344,7 +347,9 @@ qt_internal_add_qml_module(Qml
         types/qqmlbind.cpp types/qqmlbind_p.h
         types/qqmlconnections.cpp types/qqmlconnections_p.h
         util/qqmlpropertymap.cpp util/qqmlpropertymap.h
+
         qmltc/qqmltcobjectcreationhelper_p.h
+        qmltc/qqmltcobjectcreationhelper.cpp
         qmltc/supportlibrary/qqmlcppbinding_p.h
         qmltc/supportlibrary/qqmlcppbinding.cpp
         qmltc/supportlibrary/qqmlcpponassignment_p.h
@@ -399,6 +404,8 @@ qt_internal_add_qml_module(Qml
         "${CMAKE_CURRENT_LIST_DIR}/${INSTALL_CMAKE_NAMESPACE}QmlPluginTemplate.cpp.in"
         "${CMAKE_CURRENT_LIST_DIR}/${INSTALL_CMAKE_NAMESPACE}QmlFindQmlscInternal.cmake"
         "${CMAKE_CURRENT_LIST_DIR}/${INSTALL_CMAKE_NAMESPACE}QmlDeploySupport.cmake"
+        "${CMAKE_CURRENT_LIST_DIR}/${INSTALL_CMAKE_NAMESPACE}QmlModuleDirMappingTemplate.qrc.in"
+        "${CMAKE_CURRENT_LIST_DIR}/${INSTALL_CMAKE_NAMESPACE}QmltcFileMappingTemplate.qrc.in"
         ${extra_cmake_files}
     EXTRA_CMAKE_INCLUDES
         "${INSTALL_CMAKE_NAMESPACE}QmlFindQmlscInternal.cmake"
@@ -522,9 +529,9 @@ qt_internal_extend_target(Qml CONDITION QT_FEATURE_qml_debug
         debugger/qqmldebugconnector.cpp
         debugger/qqmldebugpluginmanager_p.h
         debugger/qqmldebugserver.cpp debugger/qqmldebugserver_p.h
-        debugger/qqmldebugserverconnection_p.h
+        debugger/qqmldebugserverconnection.cpp debugger/qqmldebugserverconnection_p.h
         debugger/qqmldebugservice.cpp debugger/qqmldebugservice_p.h
-        debugger/qqmldebugservicefactory_p.h
+        debugger/qqmldebugservicefactory.cpp debugger/qqmldebugservicefactory_p.h
         debugger/qqmldebugserviceinterfaces.cpp
         debugger/qqmlprofiler.cpp
         debugger/qqmlprofilerdefinitions_p.h
@@ -534,11 +541,6 @@ qt_internal_extend_target(Qml CONDITION QT_FEATURE_qml_debug
 qt_internal_extend_target(Qml CONDITION QT_FEATURE_qml_debug AND QT_FEATURE_translation
     SOURCES
         debugger/qqmldebugtranslationprotocol_p.h
-)
-
-qt_internal_extend_target(Qml CONDITION QT_FEATURE_qml_sequence_object
-    SOURCES
-        jsruntime/qv4sequenceobject.cpp jsruntime/qv4sequenceobject_p.h
 )
 
 qt_internal_extend_target(Qml CONDITION UNIX

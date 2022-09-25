@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtNetwork module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qsslsocket_openssl_symbols_p.h"
 #include "qx509_openssl_p.h"
@@ -60,6 +24,8 @@
 
 QT_BEGIN_NAMESPACE
 
+using namespace Qt::StringLiterals;
+
 namespace  {
 
 QSsl::AlertLevel tlsAlertLevel(int value)
@@ -83,9 +49,9 @@ QSsl::AlertLevel tlsAlertLevel(int value)
 
 QString tlsAlertDescription(int value)
 {
-    QString description = QLatin1String(q_SSL_alert_desc_string_long(value));
+    QString description = QLatin1StringView(q_SSL_alert_desc_string_long(value));
     if (!description.size())
-        description = QLatin1String("no description provided");
+        description = "no description provided"_L1;
     return description;
 }
 
@@ -822,7 +788,7 @@ void TlsCryptographOpenSSL::continueHandshake()
         debugLineClientRandom.append(masterKey.toHex().toUpper());
         debugLineClientRandom.append("\n");
 
-        QString sslKeyFile = QDir::tempPath() + QLatin1String("/qt-ssl-keys");
+        QString sslKeyFile = QDir::tempPath() + "/qt-ssl-keys"_L1;
         QFile file(sslKeyFile);
         if (!file.open(QIODevice::Append))
             qCWarning(lcTlsBackend) << "could not open file" << sslKeyFile << "for appending";

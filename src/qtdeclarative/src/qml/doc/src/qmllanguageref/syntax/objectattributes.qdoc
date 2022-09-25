@@ -1,29 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2017 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the documentation of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:FDL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Free Documentation License Usage
-** Alternatively, this file may be used under the terms of the GNU Free
-** Documentation License version 1.3 as published by the Free Software
-** Foundation and appearing in the file included in the packaging of
-** this file. Please review the following information to ensure
-** the GNU Free Documentation License version 1.3 requirements
-** will be met: https://www.gnu.org/licenses/fdl-1.3.html.
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2017 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
 
 /*!
 \page qtqml-syntax-objectattributes.html
@@ -56,6 +32,7 @@ The set of QML object-type attribute types is as follows:
 These attributes are discussed in detail below.
 
 \section2 The \e id Attribute
+\keyword QML.id
 
 Every QML object type has exactly one \e id attribute. This attribute is
 provided by the language itself, and cannot be redefined or overridden by any
@@ -150,7 +127,7 @@ Rectangle {
 
 \section4 Valid Types in Custom Property Definitions
 
-Any of the \l {QML Basic Types} aside from the \l enumeration type can be used
+Any of the \l {QML Value Types} aside from the \l enumeration type can be used
 as custom property types. For example, these are all valid property declarations:
 
 \qml
@@ -164,11 +141,11 @@ Item {
 (Enumeration values are simply whole number values and can be referred to with
 the \l int type instead.)
 
-Some basic types are provided by the \c QtQuick module and thus cannot be used
-as property types unless the module is imported. See the \l {QML Basic Types}
+Some value types are provided by the \c QtQuick module and thus cannot be used
+as property types unless the module is imported. See the \l {QML Value Types}
 documentation for more details.
 
-Note the \l var basic type is a generic placeholder type that can hold any
+Note the \l var value type is a generic placeholder type that can hold any
 type of value, including lists and objects:
 
 \code
@@ -329,7 +306,7 @@ even though properties of the \c color type store colors and not strings,
 you are able to assign the string \c "red" to a color property, without an
 error being reported.
 
-See \l {QML Basic Types} for a list of the types of properties that are
+See \l {QML Value Types} for a list of the types of properties that are
 supported by default.  Additionally, any available \l {QML Object Types}
 {QML object type} may also be used as a property type.
 
@@ -430,11 +407,10 @@ Text {
 }
 \endcode
 
-Grouped property types are basic types which have subproperties.  Some of these
-basic types are provided by the QML language, while others may only be used if
-the Qt Quick module is imported.  See the documentation about
-\l{QML Basic Types} for more information.
-
+Grouped property types are types which have subproperties. If a grouped property
+type is an object type (as opposed to a value type), the property that holds it
+must be read-only. This is to prevent you from replacing the object the
+subproperties belong to.
 
 \section3 Property Aliases
 
@@ -1146,7 +1122,7 @@ Text {
 }
 \endqml
 
-More information on enumeration usage in QML can be found in the \l {QML Basic Types} \l enumeration documentation.
+More information on enumeration usage in QML can be found in the \l {QML Value Types} \l enumeration documentation.
 
 The ability to declare enumerations in QML was introduced in Qt 5.10.
 

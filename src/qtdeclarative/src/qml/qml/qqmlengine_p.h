@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtQml module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #ifndef QQMLENGINE_P_H
 #define QQMLENGINE_P_H
@@ -98,7 +62,7 @@ struct QObjectForeign {
     QML_FOREIGN(QObject)
     QML_NAMED_ELEMENT(QtObject)
     QML_ADDED_IN_VERSION(2, 0)
-    Q_CLASSINFO("QML.Root", "QML")
+    Q_CLASSINFO("QML.OmitFromQmlTypes", "true")
 };
 
 // This needs to be declared here so that the pool for it can live in QQmlEnginePrivate.
@@ -180,6 +144,7 @@ public:
     mutable QNetworkAccessManager *networkAccessManager = nullptr;
     mutable QQmlNetworkAccessManagerFactory *networkAccessManagerFactory = nullptr;
 #endif
+    mutable QRecursiveMutex imageProviderMutex;
     QHash<QString,QSharedPointer<QQmlImageProviderBase> > imageProviders;
     QSharedPointer<QQmlImageProviderBase> imageProvider(const QString &providerId) const;
 
@@ -208,21 +173,6 @@ public:
 
     // These methods may be called from any thread
     QString offlineStorageDatabaseDirectory() const;
-
-    // These methods may be called from the loader thread
-    inline QQmlRefPointer<QQmlPropertyCache> cache(const QQmlType &, QTypeRevision version);
-    using QJSEnginePrivate::cache;
-
-    // These methods may be called from the loader thread
-    QQmlMetaObject rawMetaObjectForType(QMetaType metaType) const;
-    QQmlMetaObject metaObjectForType(QMetaType metaType) const;
-    QQmlRefPointer<QQmlPropertyCache> propertyCacheForType(QMetaType metaType);
-    QQmlRefPointer<QQmlPropertyCache> rawPropertyCacheForType(QMetaType metaType);
-    QQmlRefPointer<QQmlPropertyCache> rawPropertyCacheForType(
-            QMetaType metaType, QTypeRevision version);
-    void registerInternalCompositeType(QV4::ExecutableCompilationUnit *compilationUnit);
-    void unregisterInternalCompositeType(QV4::ExecutableCompilationUnit *compilationUnit);
-    QV4::ExecutableCompilationUnit *obtainExecutableCompilationUnit(int typeId);
 
     bool isTypeLoaded(const QUrl &url) const;
     bool isScriptLoaded(const QUrl &url) const;
@@ -331,13 +281,9 @@ private:
     SingletonInstances singletonInstances;
     QHash<int, QQmlGadgetPtrWrapper *> cachedValueTypeInstances;
 
-    // These members must be protected by the engine's mutex as they are required by
-    // the threaded loader.  Only access them through their respective accessor methods.
-    QHash<int, QV4::ExecutableCompilationUnit *> m_compositeTypes;
     static bool s_designerMode;
 
     void cleanupScarceResources();
-    QQmlRefPointer<QQmlPropertyCache> findPropertyCacheInCompositeTypes(int t) const;
 };
 
 /*
@@ -368,21 +314,6 @@ inline void QQmlEnginePrivate::dereferenceScarceResources()
             cleanupScarceResources();
         }
     }
-}
-
-/*!
-Returns a QQmlPropertyCache for \a type with \a minorVersion.
-
-The returned cache is not referenced, so if it is to be stored, call addref().
-*/
-QQmlRefPointer<QQmlPropertyCache> QQmlEnginePrivate::cache(
-        const QQmlType &type, QTypeRevision version)
-{
-    Q_ASSERT(type.isValid());
-    Q_ASSERT(type.containsRevisionedAttributes());
-
-    QMutexLocker locker(&this->mutex);
-    return QQmlMetaType::propertyCache(type, version);
 }
 
 QV4::ExecutionEngine *QQmlEnginePrivate::getV4Engine(QQmlEngine *e)

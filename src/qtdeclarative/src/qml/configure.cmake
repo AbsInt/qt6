@@ -114,7 +114,7 @@ qt_feature("qml-jit" PRIVATE
     LABEL "QML just-in-time compiler"
     PURPOSE "Provides a JIT for QML and JavaScript"
     AUTODETECT NOT IOS AND NOT TVOS
-    CONDITION ( ( ( TEST_architecture_arch STREQUAL i386 ) AND TEST_pointer_32bit AND QT_FEATURE_sse2 ) OR ( ( TEST_architecture_arch STREQUAL x86_64 ) AND TEST_pointer_64bit AND QT_FEATURE_sse2 ) OR ( ( TEST_architecture_arch STREQUAL arm ) AND TEST_pointer_32bit AND TEST_arm_fp AND TEST_arm_thumb AND ( LINUX OR IOS OR TVOS OR QNX ) ) OR ( ( TEST_architecture_arch STREQUAL arm64 ) AND TEST_pointer_64bit AND TEST_arm_fp AND ( LINUX OR IOS OR TVOS OR QNX OR INTEGRITY ) ) )
+    CONDITION ( ( ( TEST_architecture_arch STREQUAL i386 ) AND TEST_pointer_32bit AND QT_FEATURE_sse2 ) OR ( ( TEST_architecture_arch STREQUAL x86_64 ) AND TEST_pointer_64bit AND QT_FEATURE_sse2 ) OR ( ( TEST_architecture_arch STREQUAL arm ) AND TEST_pointer_32bit AND TEST_arm_fp AND TEST_arm_thumb AND ( ANDROID OR LINUX OR IOS OR TVOS OR QNX ) ) OR ( ( TEST_architecture_arch STREQUAL arm64 ) AND TEST_pointer_64bit AND TEST_arm_fp AND ( ANDROID OR LINUX OR IOS OR TVOS OR QNX OR INTEGRITY ) ) )
 )
 # special case begin
 # When doing macOS universal builds, JIT needs to be disabled for the ARM slice.
@@ -162,11 +162,6 @@ qt_feature("qml-devtools" PRIVATE
     LABEL "QML Development Tools"
     PURPOSE "Provides the QmlDevtools library and various utilities."
 )
-qt_feature("qml-sequence-object" PRIVATE
-    SECTION "QML"
-    LABEL "QML sequence object"
-    PURPOSE "Supports mapping sequence types into QML."
-)
 qt_feature("qml-xml-http-request" PRIVATE
     SECTION "QML"
     LABEL "QML XML http request"
@@ -211,7 +206,6 @@ qt_configure_add_summary_section(NAME "Qt QML")
 qt_configure_add_summary_entry(ARGS "qml-network")
 qt_configure_add_summary_entry(ARGS "qml-debug")
 qt_configure_add_summary_entry(ARGS "qml-jit")
-qt_configure_add_summary_entry(ARGS "qml-sequence-object")
 qt_configure_add_summary_entry(ARGS "qml-xml-http-request")
 qt_configure_add_summary_entry(ARGS "qml-locale")
 qt_configure_end_summary_section() # end of "Qt QML" section

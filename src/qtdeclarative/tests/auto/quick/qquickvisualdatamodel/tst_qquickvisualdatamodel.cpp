@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2018 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2018 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 #include <QtQuickTestUtils/private/qmlutils_p.h>
 #include <QtQuickTestUtils/private/visualtestutils_p.h>
 #include <QtQuickTestUtils/private/viewtestutils_p.h>
@@ -438,6 +413,7 @@ private slots:
     void noDoubleDelegateUpdate();
     void checkFilterGroupForDelegate();
     void readFromProxyObject();
+    void noWarningOnObjectDeletion();
 
 private:
     template <int N> void groups_verify(
@@ -4404,6 +4380,106 @@ void tst_qquickvisualdatamodel::readFromProxyObject()
 
     QCOMPARE(window->property("name").metaType(), QMetaType(QMetaType::QString));
     QTRY_VERIFY(window->property("name").toString() != QLatin1String("wrong"));
+}
+
+
+class ComponentEntity : public QObject
+{
+    Q_OBJECT
+
+public:
+    ComponentEntity(QObject *parent = nullptr) : QObject(parent)
+    {
+        QQmlEngine::setObjectOwnership(this, QQmlEngine::CppOwnership);
+    }
+};
+
+class InventoryModel : public QAbstractListModel
+{
+    Q_OBJECT
+
+public:
+    InventoryModel() {
+        for (int i = 0; i < 10; ++i) {
+            QSharedPointer<ComponentEntity> entity(new ComponentEntity());
+            entity->setObjectName(QString::fromLatin1("Item %1").arg(i));
+            mContents.append(entity);
+        }
+    }
+
+    int rowCount(const QModelIndex &) const override { return mContents.size(); }
+
+    QVariant data(const QModelIndex &index, int role) const override
+    {
+        if (!checkIndex(index, CheckIndexOption::IndexIsValid))
+            return {};
+
+        auto entity = mContents.at(index.row()).data();
+        switch (role) {
+        case ItemNameRole: return entity->objectName();
+        case EntityRole: return QVariant::fromValue(entity);
+        }
+
+        return {};
+    }
+
+    Q_INVOKABLE void removeLast() {
+        const int index = rowCount(QModelIndex()) - 1;
+        if (index < 0)
+            return;
+
+        const auto item = mContents.at(index);
+        beginRemoveRows(QModelIndex(), index, index);
+        mContents.takeLast();
+        endRemoveRows();
+    }
+
+    enum InventoryModelRoles {
+        ItemNameRole = Qt::UserRole,
+        EntityRole
+    };
+
+    virtual QHash<int, QByteArray> roleNames() const override {
+        QHash<int, QByteArray> names;
+        names.insert(ItemNameRole, "itemName");
+        names.insert(EntityRole, "entity");
+        return names;
+    }
+
+private:
+    QVector<QSharedPointer<ComponentEntity>> mContents;
+};
+
+
+static QString lastWarning;
+static QtMessageHandler oldHandler;
+static void warningsHandler(QtMsgType type, const QMessageLogContext &ctxt, const QString &msg)
+{
+    if (type == QtWarningMsg)
+        lastWarning = msg;
+    else
+        oldHandler(type, ctxt, msg);
+}
+
+void tst_qquickvisualdatamodel::noWarningOnObjectDeletion()
+{
+    qmlRegisterType<InventoryModel>("TestTypes", 1, 0, "InventoryModel");
+    qmlRegisterUncreatableType<ComponentEntity>("TestTypes", 1, 0, "ComponentEntity", "no");
+
+    oldHandler = qInstallMessageHandler(warningsHandler);
+    const auto guard = qScopeGuard([&]() { qInstallMessageHandler(oldHandler); });
+
+    {
+        QQmlEngine engine;
+        QQmlComponent component(&engine, testFileUrl("objectDeletion.qml"));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        QScopedPointer<QObject> o(component.create());
+        QVERIFY(!o.isNull());
+        for (int i = 0; i < 5; ++i)
+            o->metaObject()->invokeMethod(o.data(), "removeLast");
+    }
+
+    QVERIFY2(lastWarning.isEmpty(), qPrintable(lastWarning));
 }
 
 QTEST_MAIN(tst_qquickvisualdatamodel)

@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2019 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtQuick module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2019 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qsgmaterial.h"
 #include "qsgrenderer_p.h"
@@ -212,9 +176,9 @@ QShader QSGMaterialShaderPrivate::loadShader(const QString &filename)
 void QSGMaterialShaderPrivate::clearCachedRendererData()
 {
     for (int i = 0; i < MAX_SHADER_RESOURCE_BINDINGS; ++i)
-        textureBindingTable[i] = nullptr;
+        textureBindingTable[i].clear();
     for (int i = 0; i < MAX_SHADER_RESOURCE_BINDINGS; ++i)
-        samplerBindingTable[i] = nullptr;
+        samplerBindingTable[i].clear();
 }
 
 static inline QRhiShaderResourceBinding::StageFlags toSrbStage(QShader::Stage stage)
@@ -237,6 +201,7 @@ void QSGMaterialShaderPrivate::prepare(QShader::Variant vertexShaderVariant)
     ubufSize = 0;
     ubufStages = { };
     memset(static_cast<void *>(combinedImageSamplerBindings), 0, sizeof(combinedImageSamplerBindings));
+    memset(static_cast<void *>(combinedImageSamplerCount), 0, sizeof(combinedImageSamplerCount));
     vertexShader = fragmentShader = nullptr;
     masterUniformData.clear();
 
@@ -310,11 +275,22 @@ void QSGMaterialShaderPrivate::prepare(QShader::Variant vertexShaderVariant)
         const int imageSamplersCount = imageSamplers.count();
         for (int i = 0; i < imageSamplersCount; ++i) {
             const QShaderDescription::InOutVariable &var(imageSamplers[i]);
-            if (var.binding >= 0 && var.binding < MAX_SHADER_RESOURCE_BINDINGS)
+
+            if (var.binding < 0)
+                continue;
+
+            if (var.binding < MAX_SHADER_RESOURCE_BINDINGS) {
                 combinedImageSamplerBindings[var.binding] |= toSrbStage(it->shader.stage());
-            else
+
+                int count = 1;
+                for (int dim : var.arrayDims)
+                    count *= dim;
+
+                combinedImageSamplerCount[var.binding] = count;
+            } else {
                 qWarning("Encountered invalid combined image sampler (%s) binding %d",
                          var.name.constData(), var.binding);
+            }
         }
 
         if (it.key() == QShader::VertexStage)
@@ -417,6 +393,37 @@ void QSGMaterialShader::setFlags(Flags flags)
 }
 
 /*!
+    Returns the number of elements in the combined image sampler variable at \a
+    binding. This value is introspected from the shader code.  The variable may
+    be an array, and may have more than one dimension.
+
+    The count reflects the total number of combined image sampler items in the
+    variable. In the following example, the count for \c{srcA} is 1, \c{srcB}
+    is 4, and \c{srcC} is 6.
+
+    \badcode
+    layout (binding = 0) uniform sampler2D srcA;
+    layout (binding = 1) uniform sampler2D srcB[4];
+    layout (binding = 2) uniform sampler2D srcC[2][3];
+    \endcode
+
+    This count is the number of QSGTexture pointers in the texture parameter
+    of \l{QSGMaterialShader::updateSampledImage}.
+
+    \sa QSGMaterialShader::updateSampledImage
+    \since 6.4
+ */
+int QSGMaterialShader::combinedImageSamplerCount(int binding) const
+{
+    Q_D(const QSGMaterialShader);
+
+    if (binding >= 0 && binding < d->MAX_SHADER_RESOURCE_BINDINGS)
+        return d->combinedImageSamplerCount[binding];
+
+    return 0;
+}
+
+/*!
     This function is called by the scene graph to get the contents of the
     shader program's uniform buffer updated. The implementation is not expected
     to perform any real graphics operations, it is merely responsible for
@@ -451,27 +458,35 @@ bool QSGMaterialShader::updateUniformData(RenderState &state,
 }
 
 /*!
-    This function is called by the scene graph to prepare using a sampled image
-    in the shader, typically in form of a combined image sampler.
+    This function is called by the scene graph to prepare use of sampled images
+    in the shader, typically in the form of combined image samplers.
 
     \a binding is the binding number of the sampler. The function is called for
     each combined image sampler variable in the shader code associated with the
     QSGMaterialShader.
 
-    When *\a{texture} is null, it must be set to a QSGTexture pointer before
-    returning. When non-null, it is up to the material to decide if a new
-    \c{QSGTexture *} is stored to it, or if it updates some parameters on the
-    already known QSGTexture. The ownership of the QSGTexture is not
-    transferred.
+    \a{texture} is an array of QSGTexture pointers. The number of elements in
+    the array matches the number of elements in the image sampler variable
+    specified in the shader code. This variable may be an array, and may have
+    more than one dimension.  The number of elements in the array may be
+    found via \l{QSGMaterialShader::combinedImageSamplerCount}
+
+    When an element in \a{texture} is null, it must be set to a valid
+    QSGTexture pointer before returning. When non-null, it is up to the
+    material to decide if a new \c{QSGTexture *} is stored to it, or if it
+    updates some parameters on the already known QSGTexture. The ownership of
+    the QSGTexture is not transferred.
 
     The current rendering \a state is passed from the scene graph. Where
     relevant, it is up to the material to trigger enqueuing texture data
-    uploads.
+    uploads via QSGTexture::commitTextureOperations().
 
     The subclass specific state can be extracted from \a newMaterial.
 
     \a oldMaterial can be used to minimize changes. When \a oldMaterial is null,
     this shader was just activated.
+
+    \sa QSGMaterialShader::combinedImageSamplerCount
  */
 void QSGMaterialShader::updateSampledImage(RenderState &state,
                                            int binding,
@@ -630,6 +645,23 @@ bool QSGMaterialShader::updateGraphicsPipelineState(RenderState &state, Graphics
     \value CullNone
     \value CullFront
     \value CullBack
+ */
+
+/*!
+    \enum QSGMaterialShader::GraphicsPipelineState::PolygonMode
+    \since 6.4
+    \brief Specifies the polygon rasterization mode
+
+    Polygon Mode (Triangle Fill Mode in Metal, Fill Mode in D3D) specifies
+    the fill mode used when rasterizing polygons.  Polygons may be drawn as
+    solids (Fill), or as a wire mesh (Line).
+
+    \warning OpenGL ES does not support the \c{Line} polygon mode. OpenGL ES
+    will rasterize all polygons as filled no matter what polygon mode is set.
+    Using \c{Line} will make your application non-portable.
+
+    \value Fill The interior of the polygon is filled (default)
+    \value Line Boundary edges of the polygon are drawn as line segments.
  */
 
 /*!

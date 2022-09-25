@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtQml module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2020 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qqmlpropertybinding_p.h"
 
@@ -180,7 +144,7 @@ void QQmlPropertyBindingJS::expressionChanged()
         const auto ctxt = context();
         QQmlEngine *engine = ctxt ? ctxt->engine() : nullptr;
         if (engine)
-            err.setDescription(asBinding()->createBindingLoopErrorDescription(QQmlEnginePrivate::get(engine)));
+            err.setDescription(asBinding()->createBindingLoopErrorDescription());
         else
             err.setDescription(QString::fromLatin1("Binding loop detected"));
         err.setObject(asBinding()->target());
@@ -227,12 +191,12 @@ static QtPrivate::QPropertyBindingData *bindingDataFromPropertyData(QUntypedProp
 
 void QQmlPropertyBinding::handleUndefinedAssignment(QQmlEnginePrivate *ep, void *dataPtr)
 {
-    QQmlPropertyData *propertyData = nullptr;
+    const QQmlPropertyData *propertyData = nullptr;
     QQmlPropertyData valueTypeData;
     QQmlData *data = QQmlData::get(target(), false);
     Q_ASSERT(data);
     if (Q_UNLIKELY(!data->propertyCache))
-        data->propertyCache = ep->cache(target()->metaObject());
+        data->propertyCache = QQmlMetaType::propertyCache(target()->metaObject());
 
     propertyData = data->propertyCache->property(targetIndex().coreIndex());
     Q_ASSERT(propertyData);
@@ -295,14 +259,14 @@ void QQmlPropertyBinding::handleUndefinedAssignment(QQmlEnginePrivate *ep, void 
     }
 }
 
-QString QQmlPropertyBinding::createBindingLoopErrorDescription(QJSEnginePrivate *ep)
+QString QQmlPropertyBinding::createBindingLoopErrorDescription()
 {
-    QQmlPropertyData *propertyData = nullptr;
+    const QQmlPropertyData *propertyData = nullptr;
     QQmlPropertyData valueTypeData;
     QQmlData *data = QQmlData::get(target(), false);
     Q_ASSERT(data);
     if (Q_UNLIKELY(!data->propertyCache))
-        data->propertyCache = ep->cache(target()->metaObject());
+        data->propertyCache = QQmlMetaType::propertyCache(target()->metaObject());
 
     propertyData = data->propertyCache->property(targetIndex().coreIndex());
     Q_ASSERT(propertyData);
@@ -318,7 +282,6 @@ void QQmlPropertyBinding::bindingErrorCallback(QPropertyBindingPrivate *that)
     auto engine = qmlEngine(target);
     if (!engine)
         return;
-    auto ep = QQmlEnginePrivate::get(engine);
 
     auto error = This->bindingError();
     QQmlError qmlError;
@@ -328,11 +291,11 @@ void QQmlPropertyBinding::bindingErrorCallback(QPropertyBindingPrivate *that)
     qmlError.setUrl(QUrl {location.sourceFile});
     auto description = error.description();
     if (error.type() == QPropertyBindingError::BindingLoop) {
-        description = This->createBindingLoopErrorDescription(ep);
+        description = This->createBindingLoopErrorDescription();
     }
     qmlError.setDescription(description);
     qmlError.setObject(target);
-    ep->warning(qmlError);
+    QQmlEnginePrivate::get(engine)->warning(qmlError);
 }
 
 QUntypedPropertyBinding QQmlTranslationPropertyBinding::create(const QQmlPropertyData *pd, const QQmlRefPointer<QV4::ExecutableCompilationUnit> &compilationUnit, const QV4::CompiledData::Binding *binding)

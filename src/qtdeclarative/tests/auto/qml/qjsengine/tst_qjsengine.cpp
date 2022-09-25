@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 
 #include <QtTest/QtTest>
@@ -49,6 +24,8 @@
 #define NO_INLINE __attribute__((noinline))
 #endif
 
+using namespace Qt::StringLiterals;
+
 Q_DECLARE_METATYPE(QList<int>)
 Q_DECLARE_METATYPE(QObjectList)
 
@@ -69,6 +46,8 @@ private slots:
     void newArray_HooliganTask233836();
     void toScriptValueBuiltin_data();
     void toScriptValueBuiltin();
+    void toScriptValueQmlBuiltin_data();
+    void toScriptValueQmlBuiltin();
     void toScriptValueQtQml_data();
     void toScriptValueQtQml();
     void toScriptValuenotroundtripped_data();
@@ -281,6 +260,7 @@ private slots:
     void urlObject();
     void thisInConstructor();
     void forOfAndGc();
+    void staticInNestedClasses();
 
 public:
     Q_INVOKABLE QJSValue throwingCppMethod1();
@@ -581,6 +561,36 @@ void tst_QJSEngine::toScriptValueBuiltin()
     QCOMPARE(input, output);
 }
 
+void tst_QJSEngine::toScriptValueQmlBuiltin_data()
+{
+    QTest::addColumn<QVariant>("input");
+
+    QTest::newRow("QList<QVariant>") << QVariant(QList<QVariant>{true, 5, 13.2f, 42.24, QString("world"), QUrl("htt://a.com"), QDateTime::currentDateTime(), QRegularExpression("a*b*c"), QByteArray("hello")});
+    QTest::newRow("QList<bool>") << QVariant::fromValue(QList<bool>{true, false, true, false});
+    QTest::newRow("QList<int>") << QVariant::fromValue(QList<int>{1, 2, 3, 4});
+    QTest::newRow("QList<float>") << QVariant::fromValue(QList<float>{1.1f, 2.2f, 3.3f, 4.4f});
+    QTest::newRow("QList<double>") << QVariant::fromValue(QList<double>{1.1, 2.2, 3.3, 4.4});
+    QTest::newRow("QList<QString>") << QVariant::fromValue(QList<QString>{"a", "b", "c", "d"});
+    QTest::newRow("QList<QUrl>") << QVariant::fromValue(QList<QUrl>{QUrl("htt://a.com"), QUrl("file:///tmp/b/"), QUrl("c.foo"), QUrl("/some/d")});
+    QTest::newRow("QList<QDateTime>") << QVariant::fromValue(QList<QDateTime>{QDateTime::currentDateTime(), QDateTime::fromMSecsSinceEpoch(300), QDateTime()});
+    QTest::newRow("QList<QRegularExpression>") << QVariant::fromValue(QList<QRegularExpression>{QRegularExpression("abcd"), QRegularExpression("a[b|c]d$"), QRegularExpression("a*b*d")});
+    QTest::newRow("QList<QByteArray>") << QVariant::fromValue(QList<QByteArray>{QByteArray("aaa"), QByteArray("bbb"), QByteArray("ccc")});
+}
+
+void tst_QJSEngine::toScriptValueQmlBuiltin()
+{
+    QFETCH(QVariant, input);
+
+    // We need the type registrations in QQmlEngine::init() for this.
+    QQmlEngine engine;
+
+    QJSValue outputJS = engine.toScriptValue(input);
+    QVariant output = engine.fromScriptValue<QVariant>(outputJS);
+
+    QVERIFY(output.convert(input.metaType()));
+    QCOMPARE(input, output);
+}
+
 void tst_QJSEngine::toScriptValueQtQml_data()
 {
     QTest::addColumn<QVariant>("input");
@@ -593,10 +603,7 @@ void tst_QJSEngine::toScriptValueQtQml_data()
     QTest::newRow("std::vector<QString>") << QVariant::fromValue(std::vector<QString>{"a", "b", "c", "d"});
     QTest::newRow("std::vector<QUrl>") << QVariant::fromValue(std::vector<QUrl>{QUrl("htt://a.com"), QUrl("file:///tmp/b/"), QUrl("c.foo"), QUrl("/some/d")});
 
-    QTest::newRow("QList<int>") << QVariant::fromValue(QList<int>{1, 2, 3, 4});
-    QTest::newRow("QList<bool>") << QVariant::fromValue(QList<bool>{true, false, true, false});
-    QTest::newRow("QStringList") << QVariant::fromValue(QStringList{"a", "b", "c", "d"});
-    QTest::newRow("QList<QUrl>") << QVariant::fromValue(QList<QUrl>{QUrl("htt://a.com"), QUrl("file:///tmp/b/"), QUrl("c.foo"), QUrl("/some/d")});
+    QTest::newRow("QList<QPoint>") << QVariant::fromValue(QList<QPointF>() << QPointF(42.24, 24.42) << QPointF(42.24, 24.42));
 
     static const QStandardItemModel model(4, 4);
     QTest::newRow("QModelIndexList") << QVariant::fromValue(QModelIndexList{ model.index(1, 2), model.index(2, 3), model.index(3, 1), model.index(3, 2)});
@@ -644,8 +651,6 @@ void tst_QJSEngine::toScriptValuenotroundtripped_data()
 
     QTest::newRow("QList<QObject*>") << QVariant::fromValue(QList<QObject*>() << this) << QVariant(QVariantList() << QVariant::fromValue<QObject *>(this));
     QTest::newRow("QObjectList") << QVariant::fromValue(QObjectList() << this) << QVariant(QVariantList() << QVariant::fromValue<QObject *>(this));
-    QTest::newRow("QList<QPoint>") << QVariant::fromValue(QList<QPointF>() << QPointF(42.24, 24.42) << QPointF(42.24, 24.42)) << QVariant(QVariantList() << QPointF(42.24, 24.42) << QPointF(42.24, 24.42));
-    QTest::newRow("QVector<QPoint>") << QVariant::fromValue(QVector<QPointF>() << QPointF(42.24, 24.42) << QPointF(42.24, 24.42)) << QVariant(QVariantList() << QPointF(42.24, 24.42) << QPointF(42.24, 24.42));
     QTest::newRow("VoidStar") << QVariant(QMetaType(QMetaType::VoidStar), nullptr) << QVariant(QMetaType(QMetaType::Nullptr), nullptr);
 }
 
@@ -3720,21 +3725,21 @@ void tst_QJSEngine::dynamicProperties()
 {
     {
         QJSEngine engine;
-        QObject *obj = new QObject;
-        QJSValue wrapper = engine.newQObject(obj);
+        QScopedPointer<QObject> obj(new QObject);
+        QJSValue wrapper = engine.newQObject(obj.data());
         wrapper.setProperty("someRandomProperty", 42);
         QCOMPARE(wrapper.property("someRandomProperty").toInt(), 42);
-        QVERIFY(!qmlContext(obj));
+        QVERIFY(!qmlContext(obj.data()));
     }
     {
         QQmlEngine qmlEngine;
         QQmlComponent component(&qmlEngine);
         component.setData("import QtQml 2.0; QtObject { property QtObject subObject: QtObject {} }", QUrl());
-        QObject *root = component.create(nullptr);
+        QScopedPointer<QObject> root(component.create(nullptr));
         QVERIFY(root);
-        QVERIFY(qmlContext(root));
+        QVERIFY(qmlContext(root.data()));
 
-        QJSValue wrapper = qmlEngine.newQObject(root);
+        QJSValue wrapper = qmlEngine.newQObject(root.data());
         wrapper.setProperty("someRandomProperty", 42);
         QVERIFY(!wrapper.hasProperty("someRandomProperty"));
 
@@ -5199,11 +5204,11 @@ void tst_QJSEngine::concatAfterUnshift()
             test = test.concat([])
             return test
             })()
-    )"_qs);
+    )"_s);
     QVERIFY2(!value.isError(), qPrintable(value.toString()));
     QVERIFY(value.isArray());
-    QCOMPARE(value.property(0).toString(), u"val1"_qs);
-    QCOMPARE(value.property(1).toString(), u"val2"_qs);
+    QCOMPARE(value.property(0).toString(), u"val1"_s);
+    QCOMPARE(value.property(1).toString(), u"val2"_s);
 }
 
 void tst_QJSEngine::sortSparseArray()
@@ -5565,6 +5570,22 @@ void tst_QJSEngine::forOfAndGc()
     QScopedPointer<QObject> o(c.create());
 
     QTRY_VERIFY(o->property("count").toInt() > 32768);
+}
+
+void tst_QJSEngine::staticInNestedClasses()
+{
+    QJSEngine engine;
+    const QString program = uR"(
+        class Tester {
+            constructor() {
+                new (class {})();
+            }
+            static get test() { return "a" }
+        }
+        Tester.test
+    )"_s;
+
+    QCOMPARE(engine.evaluate(program).toString(), u"a"_s);
 }
 
 QTEST_MAIN(tst_QJSEngine)

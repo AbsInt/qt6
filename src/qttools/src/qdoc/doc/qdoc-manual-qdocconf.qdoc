@@ -1,29 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the documentation of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:FDL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Free Documentation License Usage
-** Alternatively, this file may be used under the terms of the GNU Free
-** Documentation License version 1.3 as published by the Free Software
-** Foundation and appearing in the file included in the packaging of
-** this file. Please review the following information to ensure
-** the GNU Free Documentation License version 1.3 requirements
-** will be met: https://www.gnu.org/licenses/fdl-1.3.html.
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
 
 /*!
     \page 21-0-qdoc-configuration.html
@@ -165,12 +141,11 @@
 
     \list
     \li \l {alias-variable} {alias}
-    \li \l {Cpp.ignoredirectives-variable} {Cpp.ignoredirectives}
-    \li \l {Cpp.ignoretokens-variable} {Cpp.ignoretokens}
     \li \l {defines-variable} {defines}
     \li \l {depends-variable} {depends}
     \li \l {exampledirs-variable} {exampledirs}
     \li \l {examples-variable} {examples}
+    \li \l {examplesinstallpath-variable} {examplesinstallpath}
     \li \l {examples.fileextensions-variable} {examples.fileextensions}
     \li \l {excludedirs-variable} {excludedirs}
     \li \l {excludefiles-variable} {excludefiles}
@@ -216,7 +191,6 @@
 
     \list
     \li \l {Generic Configuration Variables}
-    \li \l {C++ Specific Configuration Variables}
     \li \l {Format-specific Configuration Variables}
     \endlist
 
@@ -370,7 +344,7 @@
     \endcode
 
     With above, QDoc will search for a file
-    \c {$T_INSTALL_DOCS/qtdoc/qtdoc.index} for a dependency to \c qtdoc.
+    \c {$QT_INSTALL_DOCS/qtdoc/qtdoc.index} for a dependency to \c qtdoc.
     If an index file for a dependency is not found, QDoc will output a
     warning.
 
@@ -465,6 +439,58 @@
     \endcode
 
     See also \l {exampledirs-variable} {exampledirs}.
+
+    \target examplesinstallpath-variable
+    \section1 examplesinstallpath
+
+    The \c examplesinstallpath variable sets the root path for this
+    project's examples under the \e installed example directory.
+
+    Assuming a root install path of \c QT_INSTALL_EXAMPLES for all
+    examples, then the path
+
+    \badcode
+    <QT_INSTALL_EXAMPLES>/<examplesinstallpath>/<example_path>
+    \endcode
+
+    will be used to refer to a path of a single example within this
+    documentation project. These paths are recorded in the
+    \l {Example Manifest Files} {example manifest file}, read by Qt
+    Creator.
+
+    To ensure correct paths, \c examplesinstallpath must match with
+    one of the directories listed in \l {exampledirs-variable}
+    {exampledirs}. The path passed as an argument for each
+    \l {example-command} {\\example} command is relative to
+    the path in \e exampledirs.
+
+    For example:
+
+    \badcode
+    exampledirs = ./snippets \
+                  ../../../examples/mymodule
+
+    examplesinstallpath = mymodule
+    \endcode
+
+    And given a following \\example command:
+
+    \badcode *
+    /*!
+        \example basic/hello
+        ...
+    \1/
+    \endcode
+
+    Then, the path \c {mymodule/basic/hello} is recorded in the manifest file
+    for this example.
+
+    \note It is possible to override \c examplesinstallpath for an individual
+          \l {example-command}{\\example} using the \l {meta-command}{\\meta}
+          command.
+
+    \b {See also}: \l {exampledirs}, \l {example-command} {\\example}, and
+    \l {meta-command}{\\meta}.
 
     \target examples.fileextensions-variable
     \section1 examples.fileextensions
@@ -647,8 +673,7 @@
 
     In the specified directories, QDoc will only read the files with
     the \c fileextensions specified in the \l {headers.fileextensions}
-    {\c headers.fileextensions} variable. The default extensions are
-    *.ch, *.h, *.h++, *.hh, *.hpp, and *.hxx". The files specified by
+    {\c headers.fileextensions} variable. The files specified by
     \l {headers} {\c headers} will be read without taking into account
     their fileextensions.
 
@@ -1292,8 +1317,7 @@
 
     In the specified directories, QDoc will only read the files with
     the \c fileextensions specified in the \l {sources.fileextensions}
-    {\c sources.fileextensions} variable. The default extensions are
-    *.c++, *.cc, *.cpp and *.cxx. The files specified by \l {sources}
+    {\c sources.fileextensions} variable. The files specified by \l {sources}
     {\c sources} will be read independent of their fileextensions.
 
     See also \l {sources-variable} {sources} and
@@ -1354,7 +1378,8 @@
     variable. In this way QDoc avoid spending time reading irrelevant
     files.
 
-    The default extensions are *.c++, *.cc, *.cpp and *.cxx.
+    The default extensions are *.c++, *.cc, *.cpp, *.cxx, *.mm, *.qml
+    and *.qdoc.
 
     The extensions are given as standard wildcard expressions. You
     can add a file extension to the filter using '+='. For example:
@@ -1496,7 +1521,7 @@
 /*!
     \page 22-creating-help-project-files.html
     \previouspage Generic Configuration Variables
-    \nextpage C++ Specific Configuration Variables
+    \nextpage Format-specific Configuration Variables
 
     \title Creating Help Project Files
 
@@ -1623,118 +1648,8 @@
 */
 
 /*!
-    \page 23-qdoc-configuration-cppvariables.html
-    \previouspage Creating Help Project Files
-    \nextpage Format-specific Configuration Variables
-
-    \title C++ Specific Configuration Variables
-
-    The C++ specific configuration variables are provided to avoid
-    erroneous documentation due to non-standard C++ constructs.
-
-    \target Cpp.ignoredirectives-variable
-    \section1 Cpp.ignoredirectives
-    The \c Cpp.ignoredirectives variable makes QDoc ignore the
-    specified non-standard constructs, within C++ source code.
-
-    If not specified by the \tt {\l Cpp.ignoretokens} or \tt {\l
-    Cpp.ignoredirectives} variables, non-standard constructs
-    (typically macros) can result in erroneous documentation.
-
-    \badcode
-    Cpp.ignoredirectives = Q_DECLARE_INTERFACE \
-                           Q_DECLARE_OPERATORS_FOR_FLAGS \
-                           Q_DECLARE_PRIVATE \
-                           Q_DECLARE_PUBLIC \
-                           Q_DISABLE_COPY \
-                           Q_DUMMY_COMPARISON_OPERATOR \
-                           Q_ENUMS \
-                           Q_FLAGS \
-                           Q_INTERFACES \
-                           __attribute__
-    \endcode
-
-    makes sure that when processing the code below, for example, QDoc
-    will simply ignore the 'Q_ENUMS' and 'Q_FLAGS' expressions:
-
-    \code
-        class Q_CORE_EXPORT Qt {
-            Q_OBJECT
-            Q_ENUMS(Orientation TextFormat BackgroundMode
-                    DateFormat ScrollBarPolicy FocusPolicy
-                    ContextMenuPolicy CaseSensitivity
-                    LayoutDirection ArrowType)
-            Q_ENUMS(ToolButtonStyle)
-            Q_FLAGS(Alignment)
-            Q_FLAGS(Orientations)
-            Q_FLAGS(DockWidgetAreas)
-
-          public:
-            ...
-        };
-    \endcode
-
-    The Q_OBJECT macro, however, is an exception: QDoc recognizes this
-    particular non-standard construct, so there is no need specifying
-    it using the \tt {\l Cpp.ignoredirectives} variable.
-
-    Regarding the Q_CORE_EXPORT macro; see the documentation of the
-    \tt {\l Cpp.ignoretokens} variable.
-
-    See also \l Cpp.ignoretokens.
-
-    \target Cpp.ignoretokens-variable
-    \section1 Cpp.ignoretokens
-
-    The \c Cpp.ignoretokens variable makes QDoc ignore the specified
-    non-standard constructs, within C++ source code.
-
-    If not specified by the \tt {\l Cpp.ignoretokens} or \tt {\l
-    Cpp.ignoredirectives} variables, non-standard constructs
-    (typically macros) can result in erroneous documentation.
-
-    In \l qtgui.qdocconf:
-
-    \badcode
-    Cpp.ignoretokens = QAXFACTORY_EXPORT \
-                       QM_EXPORT_CANVAS \
-                       ...
-                       Q_COMPAT_EXPORT \
-                       Q_CORE_EXPORT \
-                       Q_EXPLICIT \
-                       Q_EXPORT \
-                       ...
-                       Q_XML_EXPORT
-    \endcode
-
-    makes sure that when processing the code below, for example, QDoc
-    will simply ignore the 'Q_CORE_EXPORT' expression:
-
-    \code
-        class Q_CORE_EXPORT Qt {
-            Q_OBJECT
-            Q_ENUMS(Orientation TextFormat BackgroundMode
-                    DateFormat ScrollBarPolicy FocusPolicy
-                    ContextMenuPolicy CaseSensitivity
-                    LayoutDirection ArrowType)
-            Q_ENUMS(ToolButtonStyle)
-            Q_FLAGS(Alignment)
-            Q_FLAGS(Orientations)
-            Q_FLAGS(DockWidgetAreas)
-          public:
-            ...
-        };
-    \endcode
-
-    Regarding the Q_OBJECT, Q_ENUMS and Q_FLAGS macros; see the
-    documentation of the \tt {\l Cpp.ignoredirectives} variable.
-
-    See also \l Cpp.ignoredirectives.
-*/
-
-/*!
     \page 24-qdoc-configuration-htmlvariables.html
-    \previouspage C++ Specific Configuration Variables
+    \previouspage Creating Help Project Files
     \nextpage Supporting Derived Projects
 
     \keyword HTML Specific Configuration Variables

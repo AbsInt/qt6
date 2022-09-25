@@ -1,7 +1,3 @@
-# QTBUG-103200
-[touchDrag]
-opensuse-leap
-
 # QTBUG-103064
 [touchDragMulti]
 android
@@ -11,4 +7,3 @@ android
 android
 [touchPassiveGrabbers]
 android
-

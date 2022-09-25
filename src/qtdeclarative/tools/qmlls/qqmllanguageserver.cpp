@@ -1,44 +1,22 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the tools applications of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 #include "qqmllanguageserver.h"
 
 #include "textsynchronization.h"
 
 #include "qlanguageserver.h"
+#include "lspcustomtypes.h"
 #include <QtCore/qdir.h>
 
 #include <iostream>
+#include <algorithm>
 
 QT_BEGIN_NAMESPACE
 
 namespace QmlLsp {
 
 using namespace QLspSpecification;
+using namespace Qt::StringLiterals;
 /*!
 \internal
 \class QmlLsp::QQmlLanguageServer
@@ -62,13 +40,20 @@ is thread safe. All the methods of the server() obect are also threadsafe.
 
 The code model starts other threads to update its state, see its documentation for more information.
 */
-QQmlLanguageServer::QQmlLanguageServer(std::function<void(const QByteArray &)> sendData)
-    : m_server(sendData),
+QQmlLanguageServer::QQmlLanguageServer(std::function<void(const QByteArray &)> sendData,
+                                       QQmlToolingSettings *settings)
+    : m_codeModel(nullptr, settings),
+      m_server(sendData),
       m_textSynchronization(&m_codeModel),
-      m_lint(&m_server, &m_codeModel)
+      m_lint(&m_server, &m_codeModel),
+      m_workspace(&m_codeModel),
+      m_completionSupport(&m_codeModel)
 {
     m_server.addServerModule(this);
     m_server.addServerModule(&m_textSynchronization);
+    m_server.addServerModule(&m_lint);
+    m_server.addServerModule(&m_workspace);
+    m_server.addServerModule(&m_completionSupport);
     m_server.finishSetup();
     qCWarning(lspServerLog) << "Did Setup";
 }
@@ -83,18 +68,35 @@ void QQmlLanguageServer::registerHandlers(QLanguageServer *server,
     QObject::connect(server, &QLanguageServer::runStatusChanged, [](QLanguageServer::RunStatus r) {
         qCDebug(lspServerLog) << "runStatus" << int(r);
     });
+    protocol->typedRpc()->registerNotificationHandler<Notifications::AddBuildDirsParams>(
+            QByteArray(Notifications::AddBuildDirsMethod),
+            [this](const QByteArray &, const Notifications::AddBuildDirsParams &params) {
+                for (const auto &buildDirs : params.buildDirsToSet) {
+                    QStringList dirPaths;
+                    dirPaths.resize(buildDirs.buildDirs.size());
+                    std::transform(buildDirs.buildDirs.begin(), buildDirs.buildDirs.end(),
+                                   dirPaths.begin(), [](const QByteArray &utf8Str) {
+                                       return QString::fromUtf8(utf8Str);
+                                   });
+                    m_codeModel.setBuildPathsForRootUrl(buildDirs.baseUri, dirPaths);
+                }
+            });
 }
 
 void QQmlLanguageServer::setupCapabilities(const QLspSpecification::InitializeParams &clientInfo,
                                            QLspSpecification::InitializeResult &serverInfo)
 {
     Q_UNUSED(clientInfo);
-    Q_UNUSED(serverInfo);
+    QJsonObject expCap;
+    if (serverInfo.capabilities.experimental->isObject())
+        expCap = serverInfo.capabilities.experimental->toObject();
+    expCap.insert(u"addBuildDirs"_s, QJsonObject({ { u"supported"_s, true } }));
+    serverInfo.capabilities.experimental = expCap;
 }
 
 QString QQmlLanguageServer::name() const
 {
-    return u"QQmlLanguageServer"_qs;
+    return u"QQmlLanguageServer"_s;
 }
 
 void QQmlLanguageServer::errorExit()
@@ -114,6 +116,11 @@ int QQmlLanguageServer::returnValue() const
     return m_returnValue;
 }
 
+QQmlCodeModel *QQmlLanguageServer::codeModel()
+{
+    return &m_codeModel;
+}
+
 QLanguageServer *QQmlLanguageServer::server()
 {
     return &m_server;
@@ -127,6 +134,11 @@ TextSynchronization *QQmlLanguageServer::textSynchronization()
 QmlLintSuggestions *QQmlLanguageServer::lint()
 {
     return &m_lint;
+}
+
+WorkspaceHandlers *QQmlLanguageServer::worspace()
+{
+    return &m_workspace;
 }
 
 } // namespace QmlLsp

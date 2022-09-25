@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the tools applications of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 #include "qqmllanguageserver.h"
 #include <QtCore/qdebug.h>
 #include <QtCore/qfile.h>
@@ -43,6 +18,8 @@
 #include <QtCore/qthreadpool.h>
 #include <QtCore/qtimer.h>
 
+#include <QtJsonRpc/private/qhttpmessagestreamparser_p.h>
+
 #include <QtQmlCompiler/private/qqmljsresourcefilemapper_p.h>
 #include <QtQmlCompiler/private/qqmljscompiler_p.h>
 #include <QtQmlCompiler/private/qqmljslogger_p.h>
@@ -55,8 +32,6 @@
 #ifndef QT_BOOTSTRAPPED
 #    include <QtCore/qlibraryinfo.h>
 #endif
-
-#include "qlanguageserver_p.h"
 
 #include <iostream>
 #ifdef Q_OS_WIN32
@@ -76,12 +51,40 @@ public:
     void run()
     {
         auto guard = qScopeGuard([this]() { emit eof(); });
-        char data[256];
-        auto buffer = static_cast<char *>(data);
-        while (std::cin.get(buffer[0])) { // should poll/select and process events
-            const int read = std::cin.readsome(buffer + 1, 255) + 1;
-            emit receivedData(QByteArray(buffer, read));
+        const constexpr qsizetype bufSize = 1024;
+        qsizetype bytesInBuf = 0;
+        char bufferData[2 * bufSize];
+        char *buffer = static_cast<char *>(bufferData);
+
+        auto trySend = [this, &bytesInBuf, buffer]() {
+            if (bytesInBuf == 0)
+                return;
+            qsizetype toSend = bytesInBuf;
+            bytesInBuf = 0;
+            QByteArray dataToSend(buffer, toSend);
+            emit receivedData(dataToSend);
+        };
+        QHttpMessageStreamParser streamParser(
+                [](const QByteArray &, const QByteArray &) { /* just a header, do nothing */ },
+                [&trySend](const QByteArray &) {
+                    // message body
+                    trySend();
+                },
+                [&trySend](QtMsgType, QString) {
+                    // there was an error
+                    trySend();
+                },
+                QHttpMessageStreamParser::UNBUFFERED);
+
+        while (std::cin.get(buffer[bytesInBuf])) { // should poll/select and process events
+            qsizetype readNow = std::cin.readsome(buffer + bytesInBuf + 1, bufSize) + 1;
+            QByteArray toAdd(buffer + bytesInBuf, readNow);
+            bytesInBuf += readNow;
+            if (bytesInBuf >= bufSize)
+                trySend();
+            streamParser.receiveData(toAdd);
         }
+        trySend();
     }
 signals:
     void receivedData(const QByteArray &data);
@@ -126,13 +129,14 @@ int main(int argv, char *argc[])
 
     qSetGlobalQHashSeed(0);
     QCoreApplication app(argv, argc);
-    QCoreApplication::setApplicationName("qmllanguageserver");
+    QCoreApplication::setApplicationName("qmlls");
     QCoreApplication::setApplicationVersion(QT_VERSION_STR);
 #if QT_CONFIG(commandlineparser)
     QCommandLineParser parser;
-    QQmlToolingSettings settings(QLatin1String("qmllanguageserver"));
+    QQmlToolingSettings settings(QLatin1String("qmlls"));
     parser.setApplicationDescription(QLatin1String(R"(QML languageserver)"));
 
+    parser.addHelpOption();
     QCommandLineOption waitOption(QStringList() << "w"
                                                 << "wait",
                                   QLatin1String("Waits the given number of seconds before startup"),
@@ -151,7 +155,30 @@ int main(int argv, char *argc[])
                                      QLatin1String("logFile"));
     parser.addOption(logFileOption);
 
+    QString buildDir = QStringLiteral(u"buildDir");
+    QCommandLineOption buildDirOption(
+            QStringList() << "b"
+                          << "build-dir",
+            QLatin1String("Adds a build dir to look up for qml information"), buildDir);
+    parser.addOption(buildDirOption);
+    settings.addOption(buildDir);
+
+    QCommandLineOption writeDefaultsOption(
+            QStringList() << "write-defaults",
+            QLatin1String("Writes defaults settings to .qmlls.ini and exits (Warning: This "
+                          "will overwrite any existing settings and comments!)"));
+    parser.addOption(writeDefaultsOption);
+
+    QCommandLineOption ignoreSettings(QStringList() << "ignore-settings",
+                                      QLatin1String("Ignores all settings files and only takes "
+                                                    "command line options into consideration"));
+    parser.addOption(ignoreSettings);
+
     parser.process(app);
+
+    if (parser.isSet(writeDefaultsOption)) {
+        return settings.writeDefaults() ? 0 : 1;
+    }
     if (parser.isSet(logFileOption)) {
         QString fileName = parser.value(logFileOption);
         qInfo() << "will log to" << fileName;
@@ -178,11 +205,15 @@ int main(int argv, char *argc[])
     }
 #endif
     QMutex writeMutex;
-    QQmlLanguageServer qmlServer([&writeMutex](const QByteArray &data) {
-        QMutexLocker l(&writeMutex);
-        std::cout.write(data.constData(), data.length());
-        std::cout.flush();
-    });
+    QQmlLanguageServer qmlServer(
+            [&writeMutex](const QByteArray &data) {
+                QMutexLocker l(&writeMutex);
+                std::cout.write(data.constData(), data.length());
+                std::cout.flush();
+            },
+            (parser.isSet(ignoreSettings) ? nullptr : &settings));
+    if (parser.isSet(buildDirOption))
+        qmlServer.codeModel()->setBuildPathsForRootUrl(QByteArray(), parser.values(buildDirOption));
     StdinReader *r = new StdinReader;
     QObject::connect(r, &StdinReader::receivedData, qmlServer.server(),
                      &QLanguageServer::receiveData);

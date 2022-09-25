@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the tools applications of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include <QCoreApplication>
 #include <QFile>
@@ -123,6 +87,7 @@ private:
     QByteArray m_scannerName;
     QByteArray m_headerPath;
     QByteArray m_prefix;
+    QByteArray m_buildMacro;
     QList <QByteArray> m_includes;
     QXmlStreamReader *m_xml = nullptr;
 };
@@ -156,6 +121,8 @@ bool Scanner::parseArguments(int argc, char **argv)
                 m_headerPath = option.mid(14);
             } else if (option.startsWith("--prefix=")) {
                 m_prefix = option.mid(10);
+            } else if (option.startsWith("--build-macro=")) {
+                m_buildMacro = option.mid(14);
             } else if (option.startsWith("--add-include=")) {
                 auto include = option.mid(14);
                 if (!include.isEmpty())
@@ -473,6 +440,26 @@ bool Scanner::process()
     for (auto b : qAsConst(m_includes))
         printf("#include %s\n", b.constData());
 
+    auto printExportMacro = [this](const char *prefix, const QByteArray &preProcessorProtocolName) {
+        QByteArray exportMacro = prefix + preProcessorProtocolName + "_EXPORT";
+        printf("#if !defined(%s)\n", exportMacro.constData());
+        printf("#  if defined(QT_SHARED) && !defined(QT_STATIC)\n");
+        if (m_buildMacro.isEmpty()) {
+            printf("#    define %s Q_DECL_EXPORT\n", exportMacro.constData());
+        } else {
+            printf("#    if defined(%s)\n", m_buildMacro.constData());
+            printf("#      define %s Q_DECL_EXPORT\n", exportMacro.constData());
+            printf("#    else\n");
+            printf("#      define %s Q_DECL_IMPORT\n", exportMacro.constData());
+            printf("#    endif\n");
+        }
+        printf("#  else\n");
+        printf("#    define %s\n", exportMacro.constData());
+        printf("#  endif\n");
+        printf("#endif\n");
+        return exportMacro;
+    };
+
     if (m_option == ServerHeader) {
         QByteArray inclusionGuard = QByteArray("QT_WAYLAND_SERVER_") + preProcessorProtocolName.constData();
         printf("#ifndef %s\n", inclusionGuard.constData());
@@ -501,17 +488,8 @@ bool Scanner::process()
         printf("QT_WARNING_DISABLE_GCC(\"-Wmissing-field-initializers\")\n");
         printf("QT_WARNING_DISABLE_CLANG(\"-Wmissing-field-initializers\")\n");
         QByteArray serverExport;
-        if (m_headerPath.size()) {
-            serverExport = QByteArray("Q_WAYLAND_SERVER_") + preProcessorProtocolName + "_EXPORT";
-            printf("\n");
-            printf("#if !defined(%s)\n", serverExport.constData());
-            printf("#  if defined(QT_SHARED)\n");
-            printf("#    define %s Q_DECL_EXPORT\n", serverExport.constData());
-            printf("#  else\n");
-            printf("#    define %s\n", serverExport.constData());
-            printf("#  endif\n");
-            printf("#endif\n");
-        }
+        if (m_headerPath.size())
+            serverExport = printExportMacro("Q_WAYLAND_SERVER_", preProcessorProtocolName);
         printf("\n");
         printf("namespace QtWaylandServer {\n");
 
@@ -996,18 +974,9 @@ bool Scanner::process()
         printf("QT_WARNING_DISABLE_GCC(\"-Wmissing-field-initializers\")\n");
 
         QByteArray clientExport;
+        if (m_headerPath.size())
+            clientExport = printExportMacro("Q_WAYLAND_CLIENT_", preProcessorProtocolName);
 
-        if (m_headerPath.size()) {
-            clientExport = QByteArray("Q_WAYLAND_CLIENT_") + preProcessorProtocolName + "_EXPORT";
-            printf("\n");
-            printf("#if !defined(%s)\n", clientExport.constData());
-            printf("#  if defined(QT_SHARED)\n");
-            printf("#    define %s Q_DECL_EXPORT\n", clientExport.constData());
-            printf("#  else\n");
-            printf("#    define %s\n", clientExport.constData());
-            printf("#  endif\n");
-            printf("#endif\n");
-        }
         printf("\n");
         printf("namespace QtWayland {\n");
 

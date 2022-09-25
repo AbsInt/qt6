@@ -1,30 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the V4VM module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+
 #include "test262runner.h"
 
 #include <qfile.h>
@@ -38,6 +14,7 @@
 #include "private/qv4globalobject_p.h"
 #include "private/qqmlbuiltinfunctions_p.h"
 #include "private/qv4arraybuffer_p.h"
+#include <QtCore/QLoggingCategory>
 
 #include "qrunnable.h"
 
@@ -87,10 +64,10 @@ static ReturnedValue method_detachArrayBuffer(const FunctionObject *f, const Val
     if (!a)
         return scope.engine->throwTypeError();
 
-    if (a->isShared())
+    if (a->hasSharedArrayData())
         return scope.engine->throwTypeError();
 
-    a->d()->detachArrayBuffer();
+    a->d()->detachArrayData();
 
     return Encode::null();
 }
@@ -109,6 +86,9 @@ static void initD262(ExecutionEngine *e)
 }
 
 QT_END_NAMESPACE
+
+Q_DECLARE_LOGGING_CATEGORY(lcJsTest);
+Q_LOGGING_CATEGORY(lcJsTest, "qt.v4.ecma262.tests", QtWarningMsg);
 
 Test262Runner::Test262Runner(const QString &command, const QString &dir)
     : command(command), testDir(dir)
@@ -665,10 +645,12 @@ void Test262Runner::addResult(TestCase result)
         ;
     } else if (result.strictResult == TestCase::Crashes) {
         qDebug() << "FAIL:" << test << "crashed in strict mode!";
-    } else if ((result.strictResult == TestCase::Fails) && (result.strictExpectation == TestCase::Fails)) {
-        qDebug() << "PASS:" << test << "failed in strict mode as expected";
-    } else if ((result.strictResult == TestCase::Passes) == (result.strictExpectation == TestCase::Passes)) {
-        qDebug() << "PASS:" << test << "passed in strict mode";
+    } else if (result.strictResult == TestCase::Fails
+               && result.strictExpectation == TestCase::Fails) {
+        qCDebug(lcJsTest) << "PASS:" << test << "failed in strict mode as expected";
+    } else if ((result.strictResult == TestCase::Passes)
+               == (result.strictExpectation == TestCase::Passes)) {
+        qCDebug(lcJsTest) << "PASS:" << test << "passed in strict mode";
     } else if (!(result.strictExpectation == TestCase::Fails)) {
         qDebug() << "FAIL:" << test << "failed in strict mode";
     } else {
@@ -679,10 +661,12 @@ void Test262Runner::addResult(TestCase result)
         ;
     } else if (result.sloppyResult == TestCase::Crashes) {
         qDebug() << "FAIL:" << test << "crashed in sloppy mode!";
-    } else if ((result.sloppyResult == TestCase::Fails) && (result.sloppyExpectation == TestCase::Fails)) {
-        qDebug() << "PASS:" << test << "failed in sloppy mode as expected";
-    } else if ((result.sloppyResult == TestCase::Passes) == (result.sloppyExpectation == TestCase::Passes)) {
-        qDebug() << "PASS:" << test << "passed in sloppy mode";
+    } else if (result.sloppyResult == TestCase::Fails
+               && result.sloppyExpectation == TestCase::Fails) {
+        qCDebug(lcJsTest) << "PASS:" << test << "failed in sloppy mode as expected";
+    } else if ((result.sloppyResult == TestCase::Passes)
+               == (result.sloppyExpectation == TestCase::Passes)) {
+        qCDebug(lcJsTest) << "PASS:" << test << "passed in sloppy mode";
     } else if (!(result.sloppyExpectation == TestCase::Fails)) {
         qDebug() << "FAIL:" << test << "failed in sloppy mode";
     } else {
@@ -700,7 +684,7 @@ TestData Test262Runner::getTestData(const TestCase &testCase)
     QByteArray content = testFile.readAll();
     content.replace(QByteArrayLiteral("\r\n"), "\n");
 
-//    qDebug() << "parsing test file" << test;
+    qCDebug(lcJsTest) << "parsing test file" << testCase.test;
 
     TestData data(testCase);
     parseYaml(content, &data);

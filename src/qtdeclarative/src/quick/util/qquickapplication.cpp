@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtQuick module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include <QtQuick/private/qquickapplication_p.h>
 
@@ -212,6 +176,32 @@ QT_BEGIN_NAMESPACE
  */
 
 /*!
+    \qmlproperty StyleHints Application::styleHints
+
+    The \c styleHints property provides platform-specific style hints and settings.
+    See the \l QStyleHints documentation for further details.
+
+    The following example uses \c styleHints to determine whether an
+    item should gain focus on mouse press or touch release:
+    \code
+    import QtQuick
+
+    MouseArea {
+        id: button
+
+        onPressed: {
+            if (!Application.styleHints.setFocusOnTouchRelease)
+                button.forceActiveFocus()
+        }
+        onReleased: {
+            if (Application.styleHints.setFocusOnTouchRelease)
+                button.forceActiveFocus()
+        }
+    }
+    \endcode
+ */
+
+/*!
     \qmlsignal Application::aboutToQuit()
 
     This signal is emitted when the application is about to quit the main
@@ -273,6 +263,11 @@ QFont QQuickApplication::font() const
 QString QQuickApplication::displayName() const
 {
     return QGuiApplication::applicationDisplayName();
+}
+
+QStyleHints *QQuickApplication::styleHints()
+{
+    return QGuiApplication::styleHints();
 }
 
 void QQuickApplication::setDisplayName(const QString &displayName)

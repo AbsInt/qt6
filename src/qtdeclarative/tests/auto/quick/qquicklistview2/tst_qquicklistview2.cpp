@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <QtTest/QtTest>
 #include <QtQuick/qquickview.h>
@@ -62,6 +37,8 @@ private slots:
     void sectionsNoOverlap();
     void metaSequenceAsModel();
     void noCrashOnIndexChange();
+    void innerRequired();
+    void boundDelegateComponent();
     void tapDelegateDuringFlicking_data();
     void tapDelegateDuringFlicking();
     void flickDuringFlicking_data();
@@ -92,7 +69,7 @@ void tst_QQuickListView2::urlListModel()
     QQuickListView *view = window->rootObject()->property("view").value<QQuickListView*>();
     QVERIFY(view);
     if (QQuickTest::qIsPolishScheduled(view))
-        QVERIFY(QQuickTest::qWaitForItemPolished(view));
+        QVERIFY(QQuickTest::qWaitForPolish(view));
     QCOMPARE(view->count(), model.size());
 }
 
@@ -156,7 +133,7 @@ void tst_QQuickListView2::dragDelegateWithMouseArea()
     else
         listview->setVerticalLayoutDirection(static_cast<QQuickItemView::VerticalLayoutDirection>(layoutDirection));
 
-    QVERIFY(QQuickTest::qWaitForItemPolished(listview));
+    QVERIFY(QQuickTest::qWaitForPolish(listview));
 
     auto contentPosition = [&](QQuickListView *listview) {
         return (listview->orientation() == QQuickListView::Horizontal ? listview->contentX(): listview->contentY());
@@ -209,16 +186,16 @@ void tst_QQuickListView2::QTBUG_92809()
 
     QQuickListView *listview = findItem<QQuickListView>(window->rootObject(), "list");
     QTRY_VERIFY(listview != nullptr);
-    QVERIFY(QQuickTest::qWaitForItemPolished(listview));
+    QVERIFY(QQuickTest::qWaitForPolish(listview));
     listview->setCurrentIndex(1);
-    QVERIFY(QQuickTest::qWaitForItemPolished(listview));
+    QVERIFY(QQuickTest::qWaitForPolish(listview));
     listview->setCurrentIndex(2);
-    QVERIFY(QQuickTest::qWaitForItemPolished(listview));
+    QVERIFY(QQuickTest::qWaitForPolish(listview));
     listview->setCurrentIndex(3);
-    QVERIFY(QQuickTest::qWaitForItemPolished(listview));
+    QVERIFY(QQuickTest::qWaitForPolish(listview));
     QTest::qWait(500);
     listview->setCurrentIndex(10);
-    QVERIFY(QQuickTest::qWaitForItemPolished(listview));
+    QVERIFY(QQuickTest::qWaitForPolish(listview));
     QTest::qWait(500);
     int currentIndex = listview->currentIndex();
     QTRY_COMPARE(currentIndex, 9);
@@ -234,10 +211,10 @@ void tst_QQuickListView2::footerUpdate()
 
     QQuickListView *listview = findItem<QQuickListView>(window->rootObject(), "list");
     QTRY_VERIFY(listview != nullptr);
-    QVERIFY(QQuickTest::qWaitForItemPolished(listview));
+    QVERIFY(QQuickTest::qWaitForPolish(listview));
     QQuickItem *footer = listview->footerItem();
     QTRY_VERIFY(footer);
-    QVERIFY(QQuickTest::qWaitForItemPolished(footer));
+    QVERIFY(QQuickTest::qWaitForPolish(footer));
     QTRY_COMPARE(footer->y(), 0);
 }
 
@@ -254,7 +231,7 @@ void tst_QQuickListView2::sectionsNoOverlap()
 
     QQuickItem *contentItem = listview->contentItem();
     QTRY_VERIFY(contentItem != nullptr);
-    QVERIFY(QQuickTest::qWaitForItemPolished(listview));
+    QVERIFY(QQuickTest::qWaitForPolish(listview));
 
     const unsigned int sectionCount = 2, normalDelegateCount = 2;
     const unsigned int expectedSectionHeight = 48;
@@ -315,6 +292,80 @@ void tst_QQuickListView2::noCrashOnIndexChange()
     QObject *items = qvariant_cast<QObject *>(delegateModel->property("items"));
     QCOMPARE(items->property("name").toString(), QStringLiteral("items"));
     QCOMPARE(items->property("count").toInt(), 4);
+}
+
+void tst_QQuickListView2::innerRequired()
+{
+    QQmlEngine engine;
+    const QUrl url(testFileUrl("innerRequired.qml"));
+    QQmlComponent component(&engine, url);
+    QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+
+    QScopedPointer<QObject> o(component.create());
+    QVERIFY2(!o.isNull(), qPrintable(component.errorString()));
+
+    QQuickListView *a = qobject_cast<QQuickListView *>(
+            qmlContext(o.data())->objectForName(QStringLiteral("listView")));
+    QVERIFY(a);
+
+    QCOMPARE(a->count(), 2);
+    QCOMPARE(a->itemAtIndex(0)->property("age").toInt(), 8);
+    QCOMPARE(a->itemAtIndex(0)->property("text").toString(), u"meow");
+    QCOMPARE(a->itemAtIndex(1)->property("age").toInt(), 5);
+    QCOMPARE(a->itemAtIndex(1)->property("text").toString(), u"woof");
+}
+
+void tst_QQuickListView2::boundDelegateComponent()
+{
+    QQmlEngine engine;
+    const QUrl url(testFileUrl("boundDelegateComponent.qml"));
+    QQmlComponent c(&engine, url);
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+
+    QTest::ignoreMessage(
+            QtWarningMsg, qPrintable(QLatin1String("%1:12: ReferenceError: index is not defined")
+                                             .arg(url.toString())));
+
+    QScopedPointer<QObject> o(c.create());
+    QVERIFY(!o.isNull());
+
+    QQmlContext *context = qmlContext(o.data());
+
+    QObject *inner = context->objectForName(QLatin1String("listView"));
+    QVERIFY(inner != nullptr);
+    QQuickListView *listView = qobject_cast<QQuickListView *>(inner);
+    QVERIFY(listView != nullptr);
+    QObject *item = listView->itemAtIndex(0);
+    QVERIFY(item);
+    QCOMPARE(item->objectName(), QLatin1String("fooouterundefined"));
+
+    QObject *inner2 = context->objectForName(QLatin1String("listView2"));
+    QVERIFY(inner2 != nullptr);
+    QQuickListView *listView2 = qobject_cast<QQuickListView *>(inner2);
+    QVERIFY(listView2 != nullptr);
+    QObject *item2 = listView2->itemAtIndex(0);
+    QVERIFY(item2);
+    QCOMPARE(item2->objectName(), QLatin1String("fooouter0"));
+
+    QQmlComponent *comp = qobject_cast<QQmlComponent *>(
+            context->objectForName(QLatin1String("outerComponent")));
+    QVERIFY(comp != nullptr);
+
+    for (int i = 0; i < 3; ++i) {
+        QTest::ignoreMessage(
+                QtWarningMsg,
+                qPrintable(QLatin1String("%1:47:21: ReferenceError: model is not defined")
+                                   .arg(url.toString())));
+    }
+
+    QScopedPointer<QObject> outerItem(comp->create(context));
+    QVERIFY(!outerItem.isNull());
+    QQuickListView *innerListView = qobject_cast<QQuickListView *>(
+            qmlContext(outerItem.data())->objectForName(QLatin1String("innerListView")));
+    QVERIFY(innerListView != nullptr);
+    QCOMPARE(innerListView->count(), 3);
+    for (int i = 0; i < 3; ++i)
+        QVERIFY(innerListView->itemAtIndex(i)->objectName().isEmpty());
 }
 
 void tst_QQuickListView2::tapDelegateDuringFlicking_data()

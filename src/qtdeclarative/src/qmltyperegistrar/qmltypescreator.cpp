@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2019 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtQml module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2019 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "qmltypescreator.h"
 #include "qmltypesclassdescription.h"
@@ -35,6 +10,8 @@
 #include <QtCore/qfile.h>
 #include <QtCore/qjsondocument.h>
 #include <QtCore/qversionnumber.h>
+
+using namespace Qt::StringLiterals;
 
 static QString enquote(const QString &string)
 {
@@ -49,7 +26,7 @@ static QString convertPrivateClassToUsableForm(QString s)
     // ClassName is a non-private class name. we don't need "::d_func()" piece
     // so that could be removed, but we need "Private" so that ClassName becomes
     // ClassNamePrivate (at present, simply consider this correct)
-    s.replace(u"::d_func()"_qs, u"Private"_qs);
+    s.replace(u"::d_func()"_s, u"Private"_s);
     return s;
 }
 
@@ -77,6 +54,9 @@ void QmlTypesCreator::writeClassProperties(const QmlTypesClassDescription &colle
     if (!collector.extensionType.isEmpty())
         m_qml.writeScriptBinding(QLatin1String("extension"), enquote(collector.extensionType));
 
+    if (collector.extensionIsNamespace)
+        m_qml.writeScriptBinding(QLatin1String("extensionIsNamespace"), QLatin1String("true"));
+
     if (!collector.implementsInterfaces.isEmpty()) {
         QStringList interfaces;
         for (const QString &interface : collector.implementsInterfaces)
@@ -103,6 +83,12 @@ void QmlTypesCreator::writeClassProperties(const QmlTypesClassDescription &colle
 
     if (collector.elementName.isEmpty()) // e.g. if QML_ANONYMOUS
         return;
+
+    if (!collector.sequenceValueType.isEmpty()) {
+        qWarning() << "Ignoring name of sequential container:" << collector.elementName;
+        qWarning() << "Sequential containers are anonymous. Use QML_ANONYMOUS to register them.";
+        return;
+    }
 
     QStringList exports;
     QStringList metaObjects;
@@ -156,6 +142,32 @@ void QmlTypesCreator::writeType(const QJsonObject &property, const QString &key)
     bool isList = false;
     bool isPointer = false;
 
+    auto handleList = [&](QLatin1String list) {
+        if (!type.startsWith(list) || !type.endsWith(QLatin1Char('>')))
+            return false;
+
+        const int listSize = list.size();
+        const QString elementType = type.mid(listSize, type.size() - listSize - 1).trimmed();
+
+        // QQmlListProperty internally constructs the pointer. Passing an explicit '*' will
+        // produce double pointers. QList is only for value types. We can't handle QLists
+        // of pointers (unless specially registered, but then they're not isList).
+        if (elementType.endsWith(QLatin1Char('*')))
+            return false;
+
+        isList = true;
+        type = elementType;
+        return true;
+    };
+
+    if (!handleList(QLatin1String("QQmlListProperty<"))
+            && !handleList(QLatin1String("QList<"))) {
+        if (type.endsWith(QLatin1Char('*'))) {
+            isPointer = true;
+            type = type.left(type.size() - 1);
+        }
+    }
+
     if (type == QLatin1String("qreal")) {
 #ifdef QT_COORD_TYPE_STRING
         type = QLatin1String(QT_COORD_TYPE_STRING)
@@ -170,19 +182,6 @@ void QmlTypesCreator::writeType(const QJsonObject &property, const QString &key)
         type = QLatin1String("qlonglong");
     } else if (type == QLatin1String("quint64")) {
         type = QLatin1String("qulonglong");
-    } else {
-
-        const QLatin1String listProperty("QQmlListProperty<");
-        if (type.startsWith(listProperty)) {
-            isList = true;
-            const int listPropertySize = listProperty.size();
-            type = type.mid(listPropertySize, type.size() - listPropertySize - 1);
-        }
-
-        if (type.endsWith(QLatin1Char('*'))) {
-            isPointer = true;
-            type = type.left(type.size() - 1);
-        }
     }
 
     m_qml.writeScriptBinding(typeKey, enquote(type));
@@ -336,88 +335,25 @@ static QJsonArray members(const QJsonObject *classDef,
 
 void QmlTypesCreator::writeComponents()
 {
-    const QLatin1String nameKey("name");
     const QLatin1String signalsKey("signals");
     const QLatin1String enumsKey("enums");
     const QLatin1String propertiesKey("properties");
     const QLatin1String slotsKey("slots");
     const QLatin1String methodsKey("methods");
-    const QLatin1String accessKey("access");
-    const QLatin1String typeKey("type");
-    const QLatin1String returnTypeKey("returnType");
-    const QLatin1String argumentsKey("arguments");
-
-    const QLatin1String destroyedName("destroyed");
-    const QLatin1String deleteLaterName("deleteLater");
-    const QLatin1String toStringName("toString");
-    const QLatin1String destroyName("destroy");
-    const QLatin1String delayName("delay");
 
     const QLatin1String signalElement("Signal");
     const QLatin1String componentElement("Component");
     const QLatin1String methodElement("Method");
 
-    const QLatin1String publicAccess("public");
-    const QLatin1String intType("int");
-    const QLatin1String stringType("string");
-
-    auto writeRootClass = [&](const QJsonObject *classDef) {
-        // Hide destroyed() signals
-        QJsonArray componentSignals = members(classDef, signalsKey, m_version);
-        for (auto it = componentSignals.begin(); it != componentSignals.end();) {
-            if (it->toObject().value(nameKey).toString() == destroyedName)
-                it = componentSignals.erase(it);
-            else
-                ++it;
-        }
-        writeMethods(componentSignals, signalElement);
-
-        // Hide deleteLater() methods
-        QJsonArray componentMethods = members(classDef, methodsKey, m_version);
-        const QJsonArray componentSlots = members(classDef, slotsKey, m_version);
-        for (const QJsonValue componentSlot : componentSlots)
-            componentMethods.append(componentSlot);
-        for (auto it = componentMethods.begin(); it != componentMethods.end();) {
-            if (it->toObject().value(nameKey).toString() == deleteLaterName)
-                it = componentMethods.erase(it);
-            else
-                ++it;
-        }
-
-        // Add toString()
-        QJsonObject toStringMethod;
-        toStringMethod.insert(nameKey, toStringName);
-        toStringMethod.insert(accessKey, publicAccess);
-        toStringMethod.insert(returnTypeKey, stringType);
-        componentMethods.append(toStringMethod);
-
-        // Add destroy()
-        QJsonObject destroyMethod;
-        destroyMethod.insert(nameKey, destroyName);
-        destroyMethod.insert(accessKey, publicAccess);
-        componentMethods.append(destroyMethod);
-
-        // Add destroy(int)
-        QJsonObject destroyMethodWithArgument;
-        destroyMethodWithArgument.insert(nameKey, destroyName);
-        destroyMethodWithArgument.insert(accessKey, publicAccess);
-        QJsonObject delayArgument;
-        delayArgument.insert(nameKey, delayName);
-        delayArgument.insert(typeKey, intType);
-        QJsonArray destroyArguments;
-        destroyArguments.append(delayArgument);
-        destroyMethodWithArgument.insert(argumentsKey, destroyArguments);
-        componentMethods.append(destroyMethodWithArgument);
-
-        writeMethods(componentMethods, methodElement);
-    };
-
     for (const QJsonObject &component : m_ownTypes) {
-        m_qml.writeStartObject(componentElement);
-
         QmlTypesClassDescription collector;
         collector.collect(&component, m_ownTypes, m_foreignTypes,
                           QmlTypesClassDescription::TopLevel, m_version);
+
+        if (collector.omitFromQmlTypes)
+            continue;
+
+        m_qml.writeStartObject(componentElement);
 
         writeClassProperties(collector);
 
@@ -426,13 +362,9 @@ void QmlTypesCreator::writeComponents()
 
             writeProperties(members(classDef, propertiesKey, m_version));
 
-            if (collector.isRootClass) {
-                writeRootClass(classDef);
-            } else {
-                writeMethods(members(classDef, signalsKey, m_version), signalElement);
-                writeMethods(members(classDef, slotsKey, m_version), methodElement);
-                writeMethods(members(classDef, methodsKey, m_version), methodElement);
-            }
+            writeMethods(members(classDef, signalsKey, m_version), signalElement);
+            writeMethods(members(classDef, slotsKey, m_version), methodElement);
+            writeMethods(members(classDef, methodsKey, m_version), methodElement);
         }
         m_qml.writeEndObject();
 

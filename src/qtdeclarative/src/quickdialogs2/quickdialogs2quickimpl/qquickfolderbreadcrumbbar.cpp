@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the Qt Quick Dialogs module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qquickfolderbreadcrumbbar_p.h"
 #include "qquickfolderbreadcrumbbar_p_p.h"
@@ -71,13 +35,19 @@ QQuickItem *QQuickFolderBreadcrumbBarPrivate::createDelegateItem(QQmlComponent *
     Q_Q(QQuickFolderBreadcrumbBar);
     // If we don't use the correct context, it won't be possible to refer to
     // the control's id from within the delegates.
-    QQmlContext *creationContext = component->creationContext();
+    QQmlContext *context = component->creationContext();
     // The component might not have been created in QML, in which case
     // the creation context will be null and we have to create it ourselves.
-    if (!creationContext)
-        creationContext = qmlContext(q);
-    QQmlContext *context = new QQmlContext(creationContext, q);
-    context->setContextObject(q);
+    if (!context)
+        context = qmlContext(q);
+
+    // If we have initial properties we assume that all necessary information is passed via
+    // initial properties.
+    if (!component->isBound() && initialProperties.isEmpty()) {
+        context = new QQmlContext(context, q);
+        context->setContextObject(q);
+    }
+
     QQuickItem *item = qobject_cast<QQuickItem*>(component->createWithInitialProperties(initialProperties, context));
     if (item)
         QQml_setParent_noEvent(item, q);
@@ -367,29 +337,11 @@ void QQuickFolderBreadcrumbBarPrivate::textFieldActiveFocusChanged()
 void QQuickFolderBreadcrumbBarPrivate::handleTextFieldShown()
 {
 #if QT_CONFIG(shortcut)
-    Q_Q(QQuickFolderBreadcrumbBar);
     if (editPathToggleShortcutId == 0)
         return;
 
-    QGuiApplicationPrivate *appPrivate = QGuiApplicationPrivate::instance();
-    qCDebug(lcShortcuts) << "text field was shown; grabbing/ungrabbing relevant shortcuts...";
-
-    // Disable the back/escape shortcuts for QQuickPopup so that the TextField can get them.
-    auto popupItem = qobject_cast<QQuickPopupItem*>(dialog->popupItem());
-    popupItem->ungrabShortcut();
-
-    appPrivate->shortcutMap.removeShortcut(editPathToggleShortcutId, q);
-    editPathToggleShortcutId = 0;
-
-    editPathBackShortcutId = appPrivate->shortcutMap.addShortcut(
-        q, Qt::Key_Back, Qt::WindowShortcut, QQuickShortcutContext::matcher);
-    editPathEscapeShortcutId = appPrivate->shortcutMap.addShortcut(
-        q, Qt::Key_Escape, Qt::WindowShortcut, QQuickShortcutContext::matcher);
-
-    qCDebug(lcShortcuts).nospace() << "... shortcut IDs:"
-        << " editPathToggleShortcutId=" << editPathToggleShortcutId
-        << " editPathBackShortcutId=" << editPathBackShortcutId
-        << " editPathEscapeShortcutId=" << editPathEscapeShortcutId;
+    qCDebug(lcShortcuts) << "text field was shown; ungrabbing edit path shortcut";
+    ungrabEditPathShortcut();
 #endif
 }
 
@@ -405,55 +357,25 @@ void QQuickFolderBreadcrumbBarPrivate::handleTextFieldHidden()
     Q_Q(QQuickFolderBreadcrumbBar);
 
     QGuiApplicationPrivate *appPrivate = QGuiApplicationPrivate::instance();
-    qCDebug(lcShortcuts) << "text field was hidden; grabbing/ungrabbing relevant shortcuts...";
+    qCDebug(lcShortcuts) << "text field was hidden; grabbing edit path shortcut";
 
     if (editPathToggleShortcutId == 0) {
         editPathToggleShortcutId = appPrivate->shortcutMap.addShortcut(
             q, Qt::CTRL | Qt::Key_L, Qt::WindowShortcut, QQuickShortcutContext::matcher);
     }
 
-    // When the bar is first completed, this function is called, since the text field starts off hidden.
-    // If removeShortcut is called with a zero id, all shortcuts for the given object will be removed,
-    // and we don't want that.
-    if (editPathBackShortcutId != 0) {
-        appPrivate->shortcutMap.removeShortcut(editPathBackShortcutId, q);
-        editPathBackShortcutId = 0;
-    }
-    if (editPathEscapeShortcutId != 0) {
-        appPrivate->shortcutMap.removeShortcut(editPathEscapeShortcutId, q);
-        editPathEscapeShortcutId = 0;
-    }
-
-    // Re-enable the back/escape shortcuts for QQuickPopup now that TextField no longer needs them.
-    auto popupItem = qobject_cast<QQuickPopupItem*>(dialog->popupItem());
-    if (popupItem)
-        popupItem->grabShortcut();
-
-    qCDebug(lcShortcuts).nospace() << "... shortcut IDs: "
-        << " editPathToggleShortcutId=" << editPathToggleShortcutId
-        << " editPathBackShortcutId=" << editPathBackShortcutId
-        << " editPathEscapeShortcutId=" << editPathEscapeShortcutId;
+    qCDebug(lcShortcuts).nospace() << "... editPathToggleShortcutId=" << editPathToggleShortcutId;
 #endif
 }
 
-void QQuickFolderBreadcrumbBarPrivate::ungrabEditPathShortcuts()
+void QQuickFolderBreadcrumbBarPrivate::ungrabEditPathShortcut()
 {
 #if QT_CONFIG(shortcut)
     Q_Q(QQuickFolderBreadcrumbBar);
     QGuiApplicationPrivate *appPrivate = QGuiApplicationPrivate::instance();
-    qCDebug(lcShortcuts) << "ungrabbing all edit path shortcuts";
-
     if (editPathToggleShortcutId != 0) {
         appPrivate->shortcutMap.removeShortcut(editPathToggleShortcutId, q);
         editPathToggleShortcutId = 0;
-    }
-    if (editPathBackShortcutId != 0) {
-        appPrivate->shortcutMap.removeShortcut(editPathBackShortcutId, q);
-        editPathBackShortcutId = 0;
-    }
-    if (editPathEscapeShortcutId != 0) {
-        appPrivate->shortcutMap.removeShortcut(editPathEscapeShortcutId, q);
-        editPathEscapeShortcutId = 0;
     }
 #endif
 }
@@ -756,9 +678,7 @@ bool QQuickFolderBreadcrumbBar::event(QEvent *event)
     Q_D(QQuickFolderBreadcrumbBar);
     if (event->type() == QEvent::Shortcut) {
         QShortcutEvent *shortcutEvent = static_cast<QShortcutEvent *>(event);
-        if (shortcutEvent->shortcutId() == d->editPathToggleShortcutId
-                || shortcutEvent->shortcutId() == d->editPathBackShortcutId
-                || shortcutEvent->shortcutId() == d->editPathEscapeShortcutId) {
+        if (shortcutEvent->shortcutId() == d->editPathToggleShortcutId) {
             d->toggleTextFieldVisibility();
             return true;
         } else if (shortcutEvent->shortcutId() == d->goUpShortcutId) {
@@ -767,6 +687,18 @@ bool QQuickFolderBreadcrumbBar::event(QEvent *event)
     }
 #endif
     return QQuickItem::event(event);
+}
+
+void QQuickFolderBreadcrumbBar::keyPressEvent(QKeyEvent *event)
+{
+    Q_D(QQuickFolderBreadcrumbBar);
+
+    if (event->matches(QKeySequence::Cancel) && d->textField->isVisible()) {
+        d->toggleTextFieldVisibility();
+        event->accept();
+    } else {
+        QQuickContainer::keyPressEvent(event);
+    }
 }
 
 void QQuickFolderBreadcrumbBar::componentComplete()
@@ -804,8 +736,8 @@ void QQuickFolderBreadcrumbBar::itemChange(QQuickItem::ItemChange change, const 
             if (d->contentItem)
                 d->contentItem->setVisible(true);
 
-            // We also need to ungrab all shortcuts when we're not visible.
-            d->ungrabEditPathShortcuts();
+            // We also need to ungrab the edit path shortcut when we're not visible.
+            d->ungrabEditPathShortcut();
 
             if (d->goUpShortcutId != 0) {
                 QGuiApplicationPrivate::instance()->shortcutMap.removeShortcut(d->goUpShortcutId, this);

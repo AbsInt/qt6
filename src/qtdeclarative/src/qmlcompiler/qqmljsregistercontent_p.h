@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the tools applications of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #ifndef QQMLJSREGISTERCONTENT_P_H
 #define QQMLJSREGISTERCONTENT_P_H
@@ -39,7 +14,7 @@
 //
 // We mean it.
 
-#include <QtQmlCompiler/private/qqmljsscope_p.h>
+#include "qqmljsscope_p.h"
 #include <QtCore/qhash.h>
 #include <QtCore/qstring.h>
 
@@ -47,7 +22,7 @@
 
 QT_BEGIN_NAMESPACE
 
-class QQmlJSRegisterContent
+class Q_QMLCOMPILER_PRIVATE_EXPORT QQmlJSRegisterContent
 {
 public:
     enum ContentVariant {
@@ -90,7 +65,12 @@ public:
 
     QString descriptiveName() const;
 
-    friend bool operator==(const QQmlJSRegisterContent &a, const QQmlJSRegisterContent &b);
+    friend bool operator==(const QQmlJSRegisterContent &a, const QQmlJSRegisterContent &b)
+    {
+        return a.m_storedType == b.m_storedType && a.m_variant == b.m_variant
+                && a.m_scope == b.m_scope && a.m_content == b.m_content;
+    }
+
     friend bool operator!=(const QQmlJSRegisterContent &a, const QQmlJSRegisterContent &b)
     {
         return !(a == b);
@@ -101,6 +81,7 @@ public:
     bool isEnumeration() const { return m_content.index() == Enum; }
     bool isMethod() const { return m_content.index() == Method; }
     bool isImportNamespace() const { return m_content.index() == ImportNamespace; }
+    bool isConversion() const { return m_content.index() == Conversion; }
     bool isList() const;
 
     bool isWritable() const;
@@ -121,6 +102,16 @@ public:
     QList<QQmlJSMetaMethod> method() const { return std::get<QList<QQmlJSMetaMethod>>(m_content); }
     uint importNamespace() const { return std::get<uint>(m_content); }
 
+    QQmlJSScope::ConstPtr conversionResult() const
+    {
+        return std::get<ConvertedTypes>(m_content).result;
+    }
+
+    QList<QQmlJSScope::ConstPtr> conversionOrigins() const
+    {
+        return std::get<ConvertedTypes>(m_content).origins;
+    }
+
     ContentVariant variant() const { return m_variant; }
 
     friend size_t qHash(const QQmlJSRegisterContent &registerContent, size_t seed = 0)
@@ -139,6 +130,8 @@ public:
             return qHash(std::get<QList<QQmlJSMetaMethod>>(registerContent.m_content), seed);
         case ImportNamespace:
             return qHash(std::get<uint>(registerContent.m_content), seed);
+        case Conversion:
+            return qHash(std::get<ConvertedTypes>(registerContent.m_content), seed);
         }
 
         Q_UNREACHABLE();
@@ -167,6 +160,12 @@ public:
                                         uint importNamespaceStringId, ContentVariant variant,
                                         const QQmlJSScope::ConstPtr &scope = {});
 
+    static QQmlJSRegisterContent create(const QQmlJSScope::ConstPtr &storedType,
+                                        const QList<QQmlJSScope::ConstPtr> origins,
+                                        const QQmlJSScope::ConstPtr &conversion,
+                                        ContentVariant variant,
+                                        const QQmlJSScope::ConstPtr &scope = {});
+
     QQmlJSRegisterContent storedIn(const QQmlJSScope::ConstPtr &newStoredType) const
     {
         QQmlJSRegisterContent result = *this;
@@ -175,14 +174,36 @@ public:
     }
 
 private:
-    enum ContentKind { Type, Property, Enum, Method, ImportNamespace };
+    enum ContentKind { Type, Property, Enum, Method, ImportNamespace, Conversion };
+
+    struct ConvertedTypes
+    {
+        QList<QQmlJSScope::ConstPtr> origins;
+        QQmlJSScope::ConstPtr result;
+
+        friend size_t qHash(const ConvertedTypes &types, size_t seed = 0)
+        {
+            return qHashMulti(seed, types.origins, types.result);
+        }
+
+        friend bool operator==(const ConvertedTypes &a, const ConvertedTypes &b)
+        {
+            return a.origins == b.origins && a.result == b.result;
+        }
+
+        friend bool operator!=(const ConvertedTypes &a, const ConvertedTypes &b)
+        {
+            return !(a == b);
+        }
+    };
 
     using Content = std::variant<
         QQmlJSScope::ConstPtr,
         QQmlJSMetaProperty,
         std::pair<QQmlJSMetaEnum, QString>,
         QList<QQmlJSMetaMethod>,
-        uint
+        uint,
+        ConvertedTypes
     >;
 
     QQmlJSRegisterContent(const QQmlJSScope::ConstPtr &storedType,

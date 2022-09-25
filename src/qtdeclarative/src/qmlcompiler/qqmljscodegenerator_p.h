@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the tools applications of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #ifndef QQMLJSCODEGENERATOR_P_H
 #define QQMLJSCODEGENERATOR_P_H
@@ -52,7 +27,7 @@
 
 QT_BEGIN_NAMESPACE
 
-class QQmlJSCodeGenerator : public QQmlJSCompilePass
+class Q_QMLCOMPILER_PRIVATE_EXPORT QQmlJSCodeGenerator : public QQmlJSCompilePass
 {
 public:
     QQmlJSCodeGenerator(const QV4::Compiler::Context *compilerContext,
@@ -65,56 +40,26 @@ public:
                           QQmlJS::DiagnosticMessage *error);
 
 protected:
-    enum class JumpMode { None, Conditional, Unconditional };
-
-    class Section
-    {
-    public:
-        Section &operator+=(const QString &code) { m_code += code; return *this; }
-        Section &operator+=(const QChar &code) { m_code += code; return *this; }
-
-        bool addReadRegister(const QString &name)
-        {
-            if (m_readRegisters.contains(name))
-                return false;
-            m_readRegisters.append(name);
-            return true;
-        }
-
-        void setWriteRegister(const QString &name) { m_writeRegister = name; }
-        void setHasSideEffects(bool hasSideEffects) { m_hasSideEffects = hasSideEffects; }
-        void setLabel(const QString &label) { m_label = label; }
-        void setJump(const QString &target, JumpMode mode)
-        {
-            m_jumpTarget = target;
-            m_jumpMode = mode;
-        }
-
-        bool readsRegister(const QString &name) const { return m_readRegisters.contains(name); }
-
-        QString code() const { return m_code; }
-        QString writeRegister() const { return m_writeRegister; }
-        QStringList readRegisters() const { return m_readRegisters; }
-        bool hasSideEffects() const { return m_hasSideEffects; }
-
-        QString label() const { return m_label; }
-        JumpMode jumpMode() const { return m_jumpMode; }
-        QString jumpTarget() const { return m_jumpTarget; }
-
-    private:
-        QString m_code;
-        QString m_writeRegister;
-        QString m_label;
-        QStringList m_readRegisters;
-        QString m_jumpTarget;
-        JumpMode m_jumpMode = JumpMode::None;
-        bool m_hasSideEffects = false;
-    };
-
     struct CodegenState : public State
     {
         QString accumulatorVariableIn;
         QString accumulatorVariableOut;
+    };
+
+    // This is an RAII helper we can use to automatically convert the result of "inflexible"
+    // operations to the desired type. For example GetLookup can only retrieve the type of
+    // the property we're looking up. If we want to store a different type, we need to convert.
+    struct Q_QMLCOMPILER_PRIVATE_EXPORT AccumulatorConverter
+    {
+        Q_DISABLE_COPY_MOVE(AccumulatorConverter);
+        AccumulatorConverter(QQmlJSCodeGenerator *generator);
+        ~AccumulatorConverter();
+
+    private:
+        const QQmlJSRegisterContent accumulatorOut;
+        const QString accumulatorVariableIn;
+        const QString accumulatorVariableOut;
+        QQmlJSCodeGenerator *generator = nullptr;
     };
 
     virtual QString metaObject(const QQmlJSScope::ConstPtr &objectType);
@@ -258,12 +203,6 @@ protected:
     Verdict startInstruction(QV4::Moth::Instr::Type) override;
     void endInstruction(QV4::Moth::Instr::Type) override;
 
-    const QString &use(const QString &variable)
-    {
-        m_body.addReadRegister(variable);
-        return variable;
-    }
-
     void addInclude(const QString &include)
     {
         Q_ASSERT(!include.isEmpty());
@@ -272,16 +211,16 @@ protected:
 
     QString conversion(const QQmlJSRegisterContent &from,
                        const QQmlJSRegisterContent &to,
-                       const QString &variable) const
+                       const QString &variable)
     {
         return conversion(from.storedType(), to.storedType(), variable);
     }
 
     QString conversion(const QQmlJSScope::ConstPtr &from,
                        const QQmlJSScope::ConstPtr &to,
-                       const QString &variable) const;
+                       const QString &variable);
 
-    QString errorReturnValue() const;
+    QString errorReturnValue();
     void reject(const QString &thing);
 
     QString metaTypeFromType(const QQmlJSScope::ConstPtr &type) const;
@@ -299,77 +238,44 @@ protected:
     void generateEnumLookup(int index);
 
     QString registerVariable(int index) const;
+    QString changedRegisterVariable() const;
     QQmlJSRegisterContent registerType(int index) const;
 
-    Section m_body;
+    QString m_body;
     CodegenState m_state;
 
+    void resetState() { m_state = CodegenState(); }
+
 private:
-    enum class ReadMode { NoRead, SelfRead, Preserve };
-    using RequiredRegisters = QList<QHash<QString, ReadMode>>;
-
-    struct BasicBlock
-    {
-        int beginSection = -1;
-        int endSection = -1;
-
-        QString label;
-        QString jumpTarget;
-        QQmlJSCodeGenerator::JumpMode jumpMode = QQmlJSCodeGenerator::JumpMode::None;
-
-        QList<int> previousBlocks;
-        int jumpTargetBlock = -1;
-    };
-
     void generateExceptionCheck();
     void generateEqualityOperation(int lhs, const QString &function, bool invert);
     void generateCompareOperation(int lhs, const QString &cppOperator);
     void generateArithmeticOperation(int lhs, const QString &cppOperator);
-    void generateJumpCodeWithTypeConversions(int relativeOffset, JumpMode mode);
+    void generateJumpCodeWithTypeConversions(int relativeOffset);
+    void generateUnaryOperation(const QString &cppOperator);
+    void generateInPlaceOperation(const QString &cppOperator);
     void generateMoveOutVar(const QString &outVar);
     void generateTypeLookup(int index);
+    void generateOutputVariantConversion(const QQmlJSScope::ConstPtr &containedType);
     void rejectIfNonQObjectOut(const QString &error);
 
     QString eqIntExpression(int lhsConst);
     QString argumentsList(int argc, int argv, QString *outVar);
     QString castTargetName(const QQmlJSScope::ConstPtr &type) const;
 
-    void protectAccumulator();
-
-    QList<BasicBlock> findBasicBlocks(const QList<Section> &sections);
-    RequiredRegisters dropPreserveCycles(
-            const QList<BasicBlock> &basicBlocks, const RequiredRegisters &requiredRegisters);
-    void eliminateDeadStores();
-
     bool inlineMathMethod(const QString &name, int argc, int argv);
     QQmlJSScope::ConstPtr mathObject() const
     {
-        return m_typeResolver->jsGlobalObject()->property(u"Math"_qs).type();
-    }
-
-    bool isArgument(int registerIndex) const
-    {
-        return registerIndex >= QV4::CallData::OffsetCount && registerIndex < firstRegisterIndex();
-    }
-
-    int firstRegisterIndex() const
-    {
-        return QV4::CallData::OffsetCount + m_function->argumentTypes.count();
+        using namespace Qt::StringLiterals;
+        return m_typeResolver->jsGlobalObject()->property(u"Math"_s).type();
     }
 
     int nextJSLine(uint line) const;
-    void nextSection()
-    {
-        if (!m_body.code().isEmpty())
-            m_sections.append(std::move(m_body));
-        m_body = Section();
-    }
 
     QStringList m_sourceCodeLines;
 
     // map from instruction offset to sequential label number
     QHash<int, QString> m_labels;
-    QList<Section> m_sections;
 
     const QV4::Compiler::Context *m_context = nullptr;
     const InstructionAnnotations *m_annotations = nullptr;

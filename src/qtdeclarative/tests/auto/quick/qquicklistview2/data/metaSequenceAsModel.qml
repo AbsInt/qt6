@@ -1,9 +1,9 @@
 import QtQuick
-import Test
 
-ListViewWithSequences {
+ListView {
     id: view
-    rects: [ Qt.rect(1, 2, 3, 4), Qt.rect(5, 6, 7, 8) ]
+    property list<rect> rects: [ Qt.rect(1, 2, 3, 4), Qt.rect(5, 6, 7, 8) ]
+    property list<string> texts
 
     model: rects
     delegate: Item {

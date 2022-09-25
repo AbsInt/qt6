@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the tools applications of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 #ifndef QQMLCODEMODEL_H
 #define QQMLCODEMODEL_H
 
@@ -34,6 +9,7 @@
 #include <QtQmlCompiler/private/qqmljsscope_p.h>
 #include "qlanguageserver_p.h"
 #include "textdocument.h"
+#include "../shared/qqmltoolingsettings.h"
 
 #include <functional>
 #include <memory>
@@ -52,7 +28,8 @@ public:
         AllCode = LatestCode | ValidCode
     };
     Q_DECLARE_FLAGS(DumpOptions, DumpOption)
-    QByteArray uri;
+    QStringList searchPath;
+    QByteArray url;
     std::optional<int> docVersion;
     QQmlJS::Dom::DomItem doc;
     std::optional<int> validDocVersion;
@@ -83,13 +60,15 @@ class QQmlCodeModel : public QObject
 {
     Q_OBJECT
 public:
-    enum class UriLookup { Caching, ForceLookup };
+    enum class UrlLookup { Caching, ForceLookup };
+    enum class State { Running, Stopping };
 
-    explicit QQmlCodeModel(QObject *parent = nullptr);
+    explicit QQmlCodeModel(QObject *parent = nullptr, QQmlToolingSettings *settings = nullptr);
+    ~QQmlCodeModel();
     QQmlJS::Dom::DomItem currentEnv();
     QQmlJS::Dom::DomItem validEnv();
-    OpenDocumentSnapshot snapshotByUri(const QByteArray &uri);
-    OpenDocument openDocumentByUri(const QByteArray &uri);
+    OpenDocumentSnapshot snapshotByUrl(const QByteArray &url);
+    OpenDocument openDocumentByUrl(const QByteArray &url);
 
     void openNeedUpdate();
     void indexNeedsUpdate();
@@ -97,14 +76,21 @@ public:
     void addOpenToUpdate(const QByteArray &);
     void removeDirectory(const QString &path);
     // void updateDocument(const OpenDocument &doc);
-    QString uri2Path(const QByteArray &uri, UriLookup options = UriLookup::Caching);
-    void newOpenFile(const QByteArray &uri, int version, const QString &docText);
-    void newDocForOpenFile(const QByteArray &uri, int version, const QString &docText);
-    void closeOpenFile(const QByteArray &uri);
+    QString url2Path(const QByteArray &url, UrlLookup options = UrlLookup::Caching);
+    void newOpenFile(const QByteArray &url, int version, const QString &docText);
+    void newDocForOpenFile(const QByteArray &url, int version, const QString &docText);
+    void closeOpenFile(const QByteArray &url);
+    void setRootUrls(const QList<QByteArray> &urls);
+    QList<QByteArray> rootUrls() const;
+    void addRootUrls(const QList<QByteArray> &urls);
+    QStringList buildPathsForRootUrl(const QByteArray &url);
+    QStringList buildPathsForFileUrl(const QByteArray &url);
+    void setBuildPathsForRootUrl(QByteArray url, const QStringList &paths);
+    void removeRootUrls(const QList<QByteArray> &urls);
+    QQmlToolingSettings *settings();
 signals:
-    void updatedSnapshot(const QByteArray &uri);
+    void updatedSnapshot(const QByteArray &url);
 private:
-    QQmlJS::Dom::DomItem validDocForUpdate(QQmlJS::Dom::DomItem &item);
     void indexDirectory(const QString &path, int depthLeft);
     int indexEvalProgress() const; // to be called in the mutex
     void indexStart(); // to be called in the mutex
@@ -118,6 +104,7 @@ private:
     void openUpdateEnd();
     void openUpdate(const QByteArray &);
     mutable QMutex m_mutex;
+    State m_state = State::Running;
     int m_lastIndexProgress = 0;
     int m_nIndexInProgress = 0;
     QList<ToIndex> m_toIndex;
@@ -128,9 +115,12 @@ private:
     QQmlJS::Dom::DomItem m_validEnv;
     QByteArray m_lastOpenDocumentUpdated;
     QSet<QByteArray> m_openDocumentsToUpdate;
-    QHash<QByteArray, QString> m_uri2path;
-    QHash<QString, QByteArray> m_path2uri;
+    QHash<QByteArray, QStringList> m_buildPathsForRootUrl;
+    QList<QByteArray> m_rootUrls;
+    QHash<QByteArray, QString> m_url2path;
+    QHash<QString, QByteArray> m_path2url;
     QHash<QByteArray, OpenDocument> m_openDocuments;
+    QQmlToolingSettings *m_settings;
 };
 
 } // namespace QmlLsp

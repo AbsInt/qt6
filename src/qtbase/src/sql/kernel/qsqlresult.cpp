@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtSql module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qsqlresult.h"
 
@@ -55,6 +19,8 @@
 
 QT_BEGIN_NAMESPACE
 
+using namespace Qt::StringLiterals;
+
 QString QSqlResultPrivate::holderAt(int index) const
 {
     return holders.size() > index ? holders.at(index).holderName : fieldSerial(index);
@@ -62,7 +28,7 @@ QString QSqlResultPrivate::holderAt(int index) const
 
 QString QSqlResultPrivate::fieldSerial(int i) const
 {
-    return QString(QLatin1String(":%1")).arg(i);
+    return QString(":%1"_L1).arg(i);
 }
 
 static bool qIsAlnum(QChar ch)
@@ -86,7 +52,7 @@ QString QSqlResultPrivate::positionalToNamedBinding(const QString &query) const
         QChar ch = query.at(i);
         if (!closingQuote.isNull()) {
             if (ch == closingQuote) {
-                if (closingQuote == QLatin1Char(']')
+                if (closingQuote == u']'
                     && i + 1 < n && query.at(i + 1) == closingQuote) {
                     // consume the extra character. don't close.
                     ++i;
@@ -97,13 +63,13 @@ QString QSqlResultPrivate::positionalToNamedBinding(const QString &query) const
             }
             result += ch;
         } else {
-            if (ch == QLatin1Char('?')) {
+            if (ch == u'?') {
                 result += fieldSerial(count++);
             } else {
-                if (ch == QLatin1Char('\'') || ch == QLatin1Char('"') || ch == QLatin1Char('`'))
+                if (ch == u'\'' || ch == u'"' || ch == u'`')
                     closingQuote = ch;
-                else if (!ignoreBraces && ch == QLatin1Char('['))
-                    closingQuote = QLatin1Char(']');
+                else if (!ignoreBraces && ch == u'[')
+                    closingQuote = u']';
                 result += ch;
             }
         }
@@ -118,7 +84,7 @@ QString QSqlResultPrivate::namedToPositionalBinding(const QString &query)
     // caller to make sure that it is not using named bindings for the wrong
     // parts of the query since Interbase uses them literally
     if (sqldriver->dbmsType() == QSqlDriver::Interbase &&
-        query.trimmed().startsWith(QLatin1String("EXECUTE BLOCK"), Qt::CaseInsensitive))
+        query.trimmed().startsWith("EXECUTE BLOCK"_L1, Qt::CaseInsensitive))
         return query;
 
     int n = query.size();
@@ -134,7 +100,7 @@ QString QSqlResultPrivate::namedToPositionalBinding(const QString &query)
         QChar ch = query.at(i);
         if (!closingQuote.isNull()) {
             if (ch == closingQuote) {
-                if (closingQuote == QLatin1Char(']')
+                if (closingQuote == u']'
                         && i + 1 < n && query.at(i + 1) == closingQuote) {
                     // consume the extra character. don't close.
                     ++i;
@@ -146,8 +112,8 @@ QString QSqlResultPrivate::namedToPositionalBinding(const QString &query)
             result += ch;
             ++i;
         } else {
-            if (ch == QLatin1Char(':')
-                    && (i == 0 || query.at(i - 1) != QLatin1Char(':'))
+            if (ch == u':'
+                    && (i == 0 || query.at(i - 1) != u':')
                     && (i + 1 < n && qIsAlnum(query.at(i + 1)))) {
                 int pos = i + 2;
                 while (pos < n && qIsAlnum(query.at(pos)))
@@ -155,13 +121,13 @@ QString QSqlResultPrivate::namedToPositionalBinding(const QString &query)
                 QString holder(query.mid(i, pos - i));
                 indexes[holder].append(count++);
                 holders.append(QHolder(holder, i));
-                result += QLatin1Char('?');
+                result += u'?';
                 i = pos;
             } else {
-                if (ch == QLatin1Char('\'') || ch == QLatin1Char('"') || ch == QLatin1Char('`'))
+                if (ch == u'\'' || ch == u'"' || ch == u'`')
                     closingQuote = ch;
-                else if (!ignoreBraces && ch == QLatin1Char('['))
-                    closingQuote = QLatin1Char(']');
+                else if (!ignoreBraces && ch == u'[')
+                    closingQuote = u']';
                 result += ch;
                 ++i;
             }
@@ -667,7 +633,7 @@ bool QSqlResult::exec()
         for (i = d->holders.count() - 1; i >= 0; --i) {
             holder = d->holders.at(i).holderName;
             val = d->values.value(d->indexes.value(holder).value(0,-1));
-            QSqlField f(QLatin1String(""), val.metaType());
+            QSqlField f(""_L1, val.metaType());
             if (QSqlResultPrivate::isVariantNull(val))
                 f.setValue(QVariant());
             else
@@ -677,14 +643,14 @@ bool QSqlResult::exec()
         }
     } else {
         QString val;
-        int i = 0;
+        qsizetype i = 0;
         int idx = 0;
         for (idx = 0; idx < d->values.count(); ++idx) {
-            i = query.indexOf(QLatin1Char('?'), i);
+            i = query.indexOf(u'?', i);
             if (i == -1)
                 continue;
             QVariant var = d->values.value(idx);
-            QSqlField f(QLatin1String(""), var.metaType());
+            QSqlField f(""_L1, var.metaType());
             if (QSqlResultPrivate::isVariantNull(var))
                 f.clear();
             else

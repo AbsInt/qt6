@@ -1,55 +1,12 @@
-/****************************************************************************
-**
-** Copyright (C) 2017 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the Qt Quick Templates 2 module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2017 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qquickpopupitem_p_p.h"
 #include "qquickapplicationwindow_p.h"
-#include "qquickshortcutcontext_p_p.h"
 #include "qquickpage_p_p.h"
 #include "qquickcontentitem_p.h"
 #include "qquickpopup_p_p.h"
 #include "qquickdeferredexecute_p_p.h"
-
-#include <QtCore/qloggingcategory.h>
-#if QT_CONFIG(shortcut)
-#  include <QtGui/private/qshortcutmap_p.h>
-#endif
-#include <QtGui/private/qguiapplication_p.h>
 
 #if QT_CONFIG(accessibility)
 #include <QtQuick/private/qquickaccessibleattached_p.h>
@@ -156,34 +113,6 @@ QQuickPopupItem::QQuickPopupItem(QQuickPopup *popup)
 #endif
 }
 
-void QQuickPopupItem::grabShortcut()
-{
-#if QT_CONFIG(shortcut)
-    Q_D(QQuickPopupItem);
-    QGuiApplicationPrivate *pApp = QGuiApplicationPrivate::instance();
-    if (!d->backId)
-        d->backId = pApp->shortcutMap.addShortcut(this, Qt::Key_Back, Qt::WindowShortcut, QQuickShortcutContext::matcher);
-    if (!d->escapeId)
-        d->escapeId = pApp->shortcutMap.addShortcut(this, Qt::Key_Escape, Qt::WindowShortcut, QQuickShortcutContext::matcher);
-#endif
-}
-
-void QQuickPopupItem::ungrabShortcut()
-{
-#if QT_CONFIG(shortcut)
-    Q_D(QQuickPopupItem);
-    QGuiApplicationPrivate *pApp = QGuiApplicationPrivate::instance();
-    if (d->backId) {
-        pApp->shortcutMap.removeShortcut(d->backId, this);
-        d->backId = 0;
-    }
-    if (d->escapeId) {
-        pApp->shortcutMap.removeShortcut(d->escapeId, this);
-        d->escapeId = 0;
-    }
-#endif
-}
-
 QQuickPalette *QQuickPopupItemPrivate::palette() const
 {
     return QQuickPopupPrivate::get(popup)->palette();
@@ -209,33 +138,15 @@ bool QQuickPopupItemPrivate::providesPalette() const
     return QQuickPopupPrivate::get(popup)->providesPalette();
 }
 
-QPalette QQuickPopupItemPrivate::parentPalette() const
+QPalette QQuickPopupItemPrivate::parentPalette(const QPalette &fallbackPalette) const
 {
-    return QQuickPopupPrivate::get(popup)->parentPalette();
+    return QQuickPopupPrivate::get(popup)->parentPalette(fallbackPalette);
 }
 
 void QQuickPopupItem::updatePolish()
 {
     Q_D(QQuickPopupItem);
     return QQuickPopupPrivate::get(d->popup)->reposition();
-}
-
-bool QQuickPopupItem::event(QEvent *event)
-{
-#if QT_CONFIG(shortcut)
-    Q_D(QQuickPopupItem);
-    if (event->type() == QEvent::Shortcut) {
-        QShortcutEvent *se = static_cast<QShortcutEvent *>(event);
-        if (se->shortcutId() == d->escapeId || se->shortcutId() == d->backId) {
-            QQuickPopupPrivate *p = QQuickPopupPrivate::get(d->popup);
-            if (p->interactive) {
-                p->closeOrReject();
-                return true;
-            }
-        }
-    }
-#endif
-    return QQuickItem::event(event);
 }
 
 bool QQuickPopupItem::childMouseEventFilter(QQuickItem *child, QEvent *event)

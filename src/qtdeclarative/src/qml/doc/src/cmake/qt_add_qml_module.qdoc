@@ -1,29 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the documentation of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:FDL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Free Documentation License Usage
-** Alternatively, this file may be used under the terms of the GNU Free
-** Documentation License version 1.3 as published by the Free Software
-** Foundation and appearing in the file included in the packaging of
-** this file. Please review the following information to ensure
-** the GNU Free Documentation License version 1.3 requirements
-** will be met: https://www.gnu.org/licenses/fdl-1.3.html.
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
 
 /*!
 \page qt_add_qml_module.html
@@ -52,6 +28,7 @@ qt_add_qml_module(
     [TYPEINFO typeinfo]
     [IMPORTS ...]
     [OPTIONAL_IMPORTS ...]
+    [DEFAULT_IMPORTS ...]
     [DEPENDENCIES ...]
     [IMPORT_PATH ...]
     [SOURCES ...]
@@ -60,6 +37,7 @@ qt_add_qml_module(
     [OUTPUT_TARGETS out_targets_var]
     [DESIGNER_SUPPORTED]
     [FOLLOW_FOREIGN_VERSIONING]
+    [NAMESPACE namespace]
     [NO_PLUGIN_OPTIONAL]
     [NO_CREATE_PLUGIN_TARGET]
     [NO_GENERATE_PLUGIN_SOURCE]
@@ -69,6 +47,8 @@ qt_add_qml_module(
     [NO_CACHEGEN]
     [NO_RESOURCE_TARGET_PATH]
     [NO_IMPORT_SCAN]
+    [ENABLE_TYPE_COMPILER]
+    [TYPE_COMPILER_NAMESPACE namespace]
 )
 
 \endcode
@@ -313,6 +293,40 @@ to the QML file containing the \c {pragma Singleton} statement.
 See \l{qt_target_qml_sources_example}{qt_target_qml_sources()} for an example on
 how to set the \c QT_QML_SINGLETON_TYPE property.
 
+\target qmltc-cmake
+\section2 Compiling QML to C++ with QML Type Compiler
+
+If a QML module has \c{.qml} files, you can compile them to C++ using \l{QML
+Type Compiler}{qmltc}. Unlike \l{qmlcachegen-auto}{bytecode compilation}, you
+have to explicitly enable qmltc via \l{ENABLE_TYPE_COMPILER} argument. In which
+case, \c{.qml} files specified under \c{QML_FILES} would be compiled. Files
+ending with \c{.js} and \c{.mjs} are ignored as qmltc does not compile
+JavaScript code. Additionally, files marked with QT_QML_SKIP_TYPE_COMPILER
+source file property are also skipped.
+
+By default, qmltc creates lower-case \c{.h} and \c{.cpp} files for a given
+\c{.qml} file. For example, \c{Foo.qml} ends up being compiled into \c{foo.h}
+and \c{foo.cpp}.
+
+The created C++ files are placed into a dedicated \c{.qmltc/<target>/}
+sub-directory of the \c BINARY_DIR of the \c target. These files are then
+automatically added to the target sources and compiled as Qt C++ code along with
+other source files.
+
+While processing QML_FILES, the following source file properties are respected:
+\list
+    \li \c{QT_QMLTC_FILE_BASENAME}: use this source file property to specify a
+        non-default .h and .cpp file name, which might be useful to e.g. resolve
+        conflicting file names (imagine you have main.qml that is being
+        compiled, but main.h already exists, so #include "main.h" might not do
+        what you expect it to do). QT_QMLTC_FILE_BASENAME is expected to be a
+        file name (without extension), so any preceding directory is ignored.
+        Unlike in the case of default behavior, the QT_QMLTC_FILE_BASENAME is
+        not lower-cased.
+    \li \c{QT_QML_SKIP_TYPE_COMPILER}: use this source file property to
+        specify that a QML file must be ignored by qmltc.
+\endlist
+
 \section1 Arguments
 
 The \c target specifies the name of the backing target for the QML module.
@@ -486,6 +500,15 @@ like \c qmllint. Versions can be specified in the same way as for \c IMPORTS.
 Each module listed here will be added as an \c{optional import} entry in the
 generated \l{Module Definition qmldir Files}{qmldir} file.
 
+\c DEFAULT_IMPORTS specifies which of the optional imports are the default entries
+that should be loaded by tooling. One entry should be specified for every group of
+\c OPTIONAL_IMPORTS in the module. As optional imports are only resolved at runtime,
+tooling like qmllint cannot in general know which of the optional imports should
+be resolved. To remedy this, you can specify one of the optional imports as the
+default import;  tooling will then pick it. If you have one optional import that
+gets used at runtime without any further configuration, that is an ideal candidate
+for the default import.
+
 \c DEPENDENCIES provides a list of other QML modules that this module depends
 on, but doesn't necessarily import. It would typically be used for dependencies
 that only exist at the C++ level, such as a module registering a class to QML
@@ -554,6 +577,9 @@ with other modules you're basing types on. In that case you might want your cust
 types to not expose properties from a module's base type version greater than the one being
 imported.
 
+If a namespace is given with the \c NAMESPACE keyword, the plugin and registration
+code will be generated into a C++ namespace of this name.
+
 For static Qt builds, \c{qmlimportscanner} is run at configure time to scan the
 \c{.qml} files of a QML module and identify the QML imports it uses (see
 \l{qt6_import_qml_plugins}{qt_import_qml_plugins()}). For non-static Qt builds,
@@ -564,4 +590,13 @@ to provide the information needed by deployment scripts (see
 responsibility of ensuring all required plugins are instantiated and linked for
 static builds. For non-static builds the project must manually work out
 and deploy all QML modules used by an executable target.
+
+\target ENABLE_TYPE_COMPILER
+\c ENABLE_TYPE_COMPILER can be used to compile \c{.qml} files to C++ source code
+with \l{QML Type Compiler}{qmltc}.
+
+\c TYPE_COMPILER_NAMESPACE argument defines a namespace, in which the generated
+C++ code resides. By default, no namespace is specified for user projects. The
+code generated from Qt's own sources is put under a QT_NAMESPACE namespace.
+
 */

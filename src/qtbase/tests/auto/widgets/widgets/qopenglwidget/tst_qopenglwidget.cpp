@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <QtOpenGLWidgets/QOpenGLWidget>
 #include <QtGui/QOpenGLFunctions>
@@ -37,11 +12,15 @@
 #include <QtWidgets/QVBoxLayout>
 #include <QtWidgets/QPushButton>
 #include <QtWidgets/QStackedWidget>
+#include <QtWidgets/QTabWidget>
+#include <QtWidgets/QLabel>
 #include <QTest>
 #include <QSignalSpy>
 #include <private/qguiapplication_p.h>
 #include <private/qstatictext_p.h>
 #include <private/qopengltextureglyphcache_p.h>
+#include <qpa/qplatformintegration.h>
+#include <private/qguiapplication_p.h>
 #include <qpa/qplatformintegration.h>
 
 class tst_QOpenGLWidget : public QObject
@@ -58,6 +37,7 @@ private slots:
     void reparentToAlreadyCreated();
     void reparentToNotYetCreated();
     void reparentHidden();
+    void reparentTopLevel();
     void asViewport();
     void requestUpdate();
     void fboRedirect();
@@ -210,7 +190,7 @@ void tst_QOpenGLWidget::createNonTopLevel()
 class PainterWidget : public QOpenGLWidget, protected QOpenGLFunctions
 {
 public:
-    PainterWidget(QWidget *parent)
+    PainterWidget(QWidget *parent = nullptr)
         : QOpenGLWidget(parent), m_clear(false) { }
 
     void initializeGL() override {
@@ -325,6 +305,70 @@ void tst_QOpenGLWidget::reparentHidden()
 
     QOpenGLContext *newContext = glw->context();
     QVERIFY(originalContext != newContext);
+}
+
+void tst_QOpenGLWidget::reparentTopLevel()
+{
+#ifdef Q_OS_ANDROID
+    QSKIP("Crashes on Android, figure out why (QTBUG-102043)");
+#endif
+    // no GL content yet, just an ordinary tab widget, top-level
+    QTabWidget tabWidget;
+    tabWidget.resize(640, 480);
+    tabWidget.addTab(new QLabel("Dummy page"), "Page 1");
+    tabWidget.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&tabWidget));
+
+    PainterWidget *glw1 = new PainterWidget;
+    // add child GL widget as a tab page
+    {
+        QSignalSpy frameSwappedSpy(glw1, &QOpenGLWidget::frameSwapped);
+        tabWidget.setCurrentIndex(tabWidget.addTab(glw1, "OpenGL widget 1"));
+        QTRY_VERIFY(frameSwappedSpy.count() > 0);
+    }
+
+    PainterWidget *glw2 = new PainterWidget;
+    // add child GL widget #2 as a tab page
+    {
+        QSignalSpy frameSwappedSpy(glw2, &QOpenGLWidget::frameSwapped);
+        tabWidget.setCurrentIndex(tabWidget.addTab(glw2, "OpenGL widget 2"));
+        QTRY_VERIFY(frameSwappedSpy.count() > 0);
+    }
+
+    QImage image = glw2->grabFramebuffer();
+    QVERIFY(image.pixel(20, 10) == qRgb(0, 0, 255));
+
+    // now delete GL widget #2
+    {
+        QSignalSpy frameSwappedSpy(glw1, &QOpenGLWidget::frameSwapped);
+        delete glw2;
+        QTRY_VERIFY(frameSwappedSpy.count() > 0);
+    }
+
+    image = glw1->grabFramebuffer();
+    QVERIFY(image.pixel(20, 10) == qRgb(0, 0, 255));
+
+    // make the GL widget top-level
+    {
+        QSignalSpy frameSwappedSpy(glw1, &QOpenGLWidget::frameSwapped);
+        glw1->setParent(nullptr);
+        glw1->show();
+        QVERIFY(QTest::qWaitForWindowExposed(glw1));
+        QTRY_VERIFY(frameSwappedSpy.count() > 0);
+    }
+
+    image = glw1->grabFramebuffer();
+    QVERIFY(image.pixel(20, 10) == qRgb(0, 0, 255));
+
+    // back to a child widget by readding to the tab widget
+    {
+        QSignalSpy frameSwappedSpy(glw1, &QOpenGLWidget::frameSwapped);
+        tabWidget.setCurrentIndex(tabWidget.addTab(glw1, "Re-added OpenGL widget 1"));
+        QTRY_VERIFY(frameSwappedSpy.count() > 0);
+    }
+
+    image = glw1->grabFramebuffer();
+    QVERIFY(image.pixel(20, 10) == qRgb(0, 0, 255));
 }
 
 class CountingGraphicsView : public QGraphicsView
@@ -610,8 +654,8 @@ void tst_QOpenGLWidget::stackWidgetOpaqueChildIsVisible()
 #ifdef Q_OS_ANDROID
     QSKIP("Crashes on Android, figure out why (QTBUG-102043)");
 #endif
-    if (QGuiApplication::platformName().startsWith(QLatin1String("wayland"), Qt::CaseInsensitive))
-        QSKIP("Wayland: This fails. Figure out why.");
+    if (!QGuiApplicationPrivate::platformIntegration()->hasCapability(QPlatformIntegration::WindowActivation))
+        QSKIP("Platform does not support window activation");
     if (QGuiApplication::platformName().startsWith(QLatin1String("offscreen"), Qt::CaseInsensitive))
         QSKIP("Offscreen: This fails.");
 

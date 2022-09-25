@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtQml module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qv4vme_moth_p.h"
 
@@ -360,7 +324,7 @@ static inline QV4::Value &stackValue(QV4::Value *stack, size_t slot, const JSTyp
 #undef CHECK_EXCEPTION
 #endif
 #define CHECK_EXCEPTION \
-    if (engine->hasException || engine->isInterrupted.loadAcquire()) \
+    if (engine->hasException || engine->isInterrupted.loadRelaxed()) \
         goto handleUnwind
 
 static inline Heap::CallContext *getScope(QV4::Value *stack, int level)
@@ -459,7 +423,11 @@ void VME::exec(MetaTypesStackFrame *frame, ExecutionEngine *engine)
             memcpy(transformedArguments, frame->argv(), frame->argc() * sizeof(void *));
         }
 
-        Q_ASSERT(argumentType.sizeOf() > 0);
+        if (argumentType.sizeOf() == 0) {
+            transformedArguments[i] = nullptr;
+            continue;
+        }
+
         Q_ALLOCA_VAR(void, arg, argumentType.sizeOf());
 
         if (argumentType == QMetaType::fromType<QVariant>()) {
@@ -467,6 +435,11 @@ void VME::exec(MetaTypesStackFrame *frame, ExecutionEngine *engine)
                 new (arg) QVariant(frame->argTypes()[i], frame->argv()[i]);
             else
                 new (arg) QVariant();
+        } else if (argumentType == QMetaType::fromType<QJSPrimitiveValue>()) {
+            if (frame->argc() > i)
+                new (arg) QJSPrimitiveValue(frame->argTypes()[i], frame->argv()[i]);
+            else
+                new (arg) QJSPrimitiveValue();
         } else {
             argumentType.construct(arg);
             if (frame->argc() > i)
@@ -495,6 +468,7 @@ void VME::exec(MetaTypesStackFrame *frame, ExecutionEngine *engine)
 
     aotContext.engine = engine->jsEngine();
     aotContext.compilationUnit = function->executableCompilationUnit();
+
     function->aotFunction->functionPtr(
                 &aotContext, transformedResult ? transformedResult : frame->returnValue(),
                 transformedArguments ? transformedArguments : frame->argv());
@@ -519,8 +493,11 @@ void VME::exec(MetaTypesStackFrame *frame, ExecutionEngine *engine)
 
     if (transformedArguments) {
         for (int i = 0; i < numFunctionArguments; ++i) {
-            if (i >= frame->argc() || transformedArguments[i] != frame->argv()[i])
-                function->aotFunction->argumentTypes[i].destruct(transformedArguments[i]);
+            void *arg = transformedArguments[i];
+            if (arg == nullptr)
+                continue;
+            if (i >= frame->argc() || arg != frame->argv()[i])
+                function->aotFunction->argumentTypes[i].destruct(arg);
         }
     }
 }
@@ -1524,7 +1501,7 @@ QV4::ReturnedValue VME::interpret(JSTypesStackFrame *frame, ExecutionEngine *eng
         // We do start the exception handler in case of isInterrupted. The exception handler will
         // immediately abort, due to the same isInterrupted. We don't skip the exception handler
         // because the current behavior is easier to implement in the JIT.
-        Q_ASSERT(engine->hasException || engine->isInterrupted.loadAcquire() || frame->unwindLevel);
+        Q_ASSERT(engine->hasException || engine->isInterrupted.loadRelaxed() || frame->unwindLevel);
         if (!frame->unwindHandler) {
             acc = Encode::undefined();
             return acc;

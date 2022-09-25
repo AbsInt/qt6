@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the tools applications of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #ifndef QQMLJSTYPEPROPAGATOR_P_H
 #define QQMLJSTYPEPROPAGATOR_P_H
@@ -43,14 +18,18 @@
 #include <private/qqmljsscope_p.h>
 #include <private/qqmljscompilepass_p.h>
 
-
 QT_BEGIN_NAMESPACE
 
-struct QQmlJSTypePropagator : public QQmlJSCompilePass
+namespace QQmlSA {
+class PassManager;
+};
+
+struct Q_QMLCOMPILER_PRIVATE_EXPORT QQmlJSTypePropagator : public QQmlJSCompilePass
 {
     QQmlJSTypePropagator(const QV4::Compiler::JSUnitGenerator *unitGenerator,
                          const QQmlJSTypeResolver *typeResolver, QQmlJSLogger *logger,
-                         QQmlJSTypeInfo *typeInfo = nullptr);
+                         QQmlJSTypeInfo *typeInfo = nullptr,
+                         QQmlSA::PassManager *passManager = nullptr);
 
     InstructionAnnotations run(const Function *m_function, QQmlJS::DiagnosticMessage *error);
 
@@ -210,13 +189,13 @@ private:
 
     void handleUnqualifiedAccess(const QString &name, bool isMethod) const;
     void checkDeprecated(QQmlJSScope::ConstPtr scope, const QString &name, bool isMethod) const;
-    bool checkRestricted(const QString &propertyName) const;
+    bool isRestricted(const QString &propertyName) const;
     bool isCallingProperty(QQmlJSScope::ConstPtr scope, const QString &name) const;
     bool isMissingPropertyType(QQmlJSScope::ConstPtr scope, const QString &type) const;
     QQmlJS::SourceLocation getCurrentSourceLocation() const;
     QQmlJS::SourceLocation getCurrentBindingSourceLocation() const;
 
-    void propagateBinaryOperation(QSOperator::Op op, int lhs);
+    QQmlJSRegisterContent propagateBinaryOperation(QSOperator::Op op, int lhs);
     void propagateCall(const QList<QQmlJSMetaMethod> &methods, int argc, int argv);
     void propagatePropertyLookup(const QString &name);
     void propagateScopeLookupCall(const QString &functionName, int argc, int argv);
@@ -225,19 +204,33 @@ private:
 
     QString registerName(int registerIndex) const;
 
-    void setRegister(int index, QQmlJSRegisterContent content);
-    void setRegister(int index, const QQmlJSScope::ConstPtr &content);
-
     QQmlJSRegisterContent checkedInputRegister(int reg);
     QQmlJSMetaMethod bestMatchForCall(const QList<QQmlJSMetaMethod> &methods, int argc, int argv,
                                       QStringList *errors);
 
+    void setAccumulator(const QQmlJSRegisterContent &content);
+    void setRegister(int index, const QQmlJSRegisterContent &content);
+    void mergeRegister(int index, const QQmlJSRegisterContent &a, const QQmlJSRegisterContent &b);
+
+    void addReadRegister(int index, const QQmlJSRegisterContent &convertTo);
+    void addReadAccumulator(const QQmlJSRegisterContent &convertTo)
+    {
+        addReadRegister(Accumulator, convertTo);
+    }
+
+    void recordEqualsNullType();
+    void recordEqualsIntType();
+    void recordEqualsType(int lhs);
+    void recordCompareType(int lhs);
+
     QQmlJSRegisterContent m_returnType;
     QQmlJSTypeInfo *m_typeInfo = nullptr;
+    QQmlSA::PassManager *m_passManager = nullptr;
 
     // Not part of the state, as the back jumps are the reason for running multiple passes
     QMultiHash<int, ExpectedRegisterState> m_jumpOriginRegisterStateByTargetInstructionOffset;
 
+    InstructionAnnotations m_prevStateAnnotations;
     PassState m_state;
 };
 

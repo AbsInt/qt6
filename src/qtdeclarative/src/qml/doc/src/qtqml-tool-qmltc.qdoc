@@ -1,34 +1,11 @@
-/****************************************************************************
-**
-** Copyright (C) 2022 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the documentation of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:FDL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Free Documentation License Usage
-** Alternatively, this file may be used under the terms of the GNU Free
-** Documentation License version 1.3 as published by the Free Software
-** Foundation and appearing in the file included in the packaging of
-** this file. Please review the following information to ensure
-** the GNU Free Documentation License version 1.3 requirements
-** will be met: https://www.gnu.org/licenses/fdl-1.3.html.
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2022 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
 
 /*!
 \page qtqml-tool-qmltc.html
 \title QML Type Compiler
 \brief A tool to compile QML types to C++ ahead of time.
+\keyword qmltc
 
 The QML Type Compiler, \c qmltc, is a tool shipped with Qt to translate QML
 types into C++ types that are \e{ahead-of-time} compiled as part of the user
@@ -48,8 +25,7 @@ In order to enable qmltc:
 \list
     \li Create a \l{qt_add_qml_module}{proper QML module} for your application.
 
-    \li Invoke qmltc, for example, through the \l{qt_target_compile_qml_to_cpp}
-    {CMake API}.
+    \li Invoke qmltc, for example, through the \l{qmltc-cmake}{CMake API}.
 
     \li \c{#include} the generated header file(s) in the application source
     code.
@@ -99,8 +75,8 @@ require a CMake-driven build flow as well since this flow is centered around
 proper QML modules and their infrastructure.
 
 The easy way to add qmltc compilation is by using the dedicated
-\l{qt_target_compile_qml_to_cpp}{CMake API} as part of a QML module creation for
-the application. Consider a simple application directory structure:
+\l{qmltc-cmake}{CMake API} as part of a QML module creation for the application.
+Consider a simple application directory structure:
 
 \badcode
 .
@@ -123,7 +99,7 @@ Then the CMake code would usually look similar to the following:
 \codeline
 \snippet qmltc/CMakeLists.txt qmltc-compile-to-cpp
 
-\section3 Using the generated C++
+\section3 Using the Generated C++
 
 Unlike in the case of QQmlComponent instantiation, the output of qmltc, being
 C++ code, is used directly by the application. Generally, constructing a new
@@ -133,27 +109,36 @@ or, for example, combined with QQuickWindow to be drawn on screen. Given a
 \c{myApp.qml} file, the application code (in both cases) would typically look
 like this:
 
-\table 100 %
-
-\header
-    \li Using QQmlComponent
-    \li Using qmltc-generated class
-\row
-    \li \snippet qmltc/tst_qmltc_examples.cpp qqmlcomponent-include
-    \li \snippet qmltc/tst_qmltc_examples.cpp qmltc-include
-\row
-    \li \snippet qmltc/tst_qmltc_examples.cpp qqmlcomponent-app-code-0
-        \codeline
-        \snippet qmltc/tst_qmltc_examples.cpp qqmlcomponent-app-code-1
-        \codeline
-        \snippet qmltc/tst_qmltc_examples.cpp qqmlcomponent-app-code-2
-        \codeline
-        \snippet qmltc/tst_qmltc_examples.cpp qmltc-app-exec
-
-    \li \snippet qmltc/tst_qmltc_examples.cpp qmltc-app-code
-        \codeline
-        \snippet qmltc/tst_qmltc_examples.cpp qmltc-app-exec
-\endtable
+\if defined(onlinedocs)
+    \tab {generated-c++}{tab-qqmlcomponent}{Using QQmlComponent}{checked}
+    \tab {generated-c++}{tab-qmltc}{Using qmltc-generated class}{}
+    \tabcontent {tab-qqmlcomponent}
+\else
+   \section4 Using QQmlComponent
+\endif
+\snippet qmltc/tst_qmltc_examples.cpp qqmlcomponent-include
+\codeline
+\snippet qmltc/tst_qmltc_examples.cpp qqmlcomponent-app-code-0
+\codeline
+\snippet qmltc/tst_qmltc_examples.cpp qqmlcomponent-app-code-1
+\codeline
+\snippet qmltc/tst_qmltc_examples.cpp qqmlcomponent-app-code-2
+\codeline
+\snippet qmltc/tst_qmltc_examples.cpp qmltc-app-exec
+\if defined(onlinedocs)
+    \endtabcontent
+    \tabcontent {tab-qmltc}
+\else
+    \section4 Using qmltc-generated class
+\endif
+\snippet qmltc/tst_qmltc_examples.cpp qmltc-include
+\codeline
+\snippet qmltc/tst_qmltc_examples.cpp qmltc-app-code
+\codeline
+\snippet qmltc/tst_qmltc_examples.cpp qmltc-app-exec
+\if defined(onlinedocs)
+    \endtabcontent
+\endif
 
 \section2 QML engine
 
@@ -170,7 +155,7 @@ import path to scan for - would be completely ignored by the ahead-of-time qmltc
 procedure.
 
 \note To add import paths to the qmltc compilation, consider using a relevant
-argument of the \l{qt_target_compile_qml_to_cpp}{CMake command} instead.
+argument of the \l{qmltc-cmake}{CMake command} instead.
 
 Generally, you can think of it this way: QQmlEngine involves the application
 process to run, while qmltc does not as it operates \e{before} your application
@@ -196,8 +181,8 @@ inspecting the corresponding QML document.
 However, the generated code is still somewhat confusing, especially given that
 your application should use the qmltc output on the C++ side directly. There are
 two parts of the generated code: CMake build files structure and the generated
-C++ format. The former is covered in the \l{qt_target_compile_qml_to_cpp}{CMake
-API of qmltc} and the latter is covered here.
+C++ format. The former is covered in the \l{qmltc-cmake}{CMake API of qmltc} and
+the latter is covered here.
 
 Consider a simple HelloWorld type, that has a \c hello property, a function to
 print that property, and a signal emitted when the object of that type is

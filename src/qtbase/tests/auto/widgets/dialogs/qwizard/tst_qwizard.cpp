@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 
 #include <QFont>
@@ -89,6 +64,7 @@ private slots:
     void sideWidget();
     void objectNames_data();
     void objectNames();
+    void changePages();
 
     // task-specific tests below me:
     void task177716_disableCommitButton();
@@ -2717,6 +2693,45 @@ void tst_QWizard::taskQTBUG_46894_nextButtonShortcut()
 
         QCOMPARE(wizard.button(QWizard::NextButton)->shortcut(),
                  QKeySequence::mnemonic(wizard.button(QWizard::NextButton)->text()));
+    }
+}
+
+/* setCurrentId(int) method was added in QTBUG99488 */
+void tst_QWizard::changePages()
+{
+    QWizard wizard;
+
+    QList<QWizardPage*> pages;
+    for (int i = 0; i < 4; ++i) {
+        QWizardPage *page = new QWizardPage;
+        wizard.addPage(page);
+        pages.append(page);
+    }
+
+    wizard.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&wizard));
+
+    // Verify default page
+    QCOMPARE(wizard.currentPage(), pages.at(0));
+
+    wizard.next();
+    QVERIFY(wizard.currentId() == 1);
+    wizard.back();
+    QVERIFY(wizard.currentId() == 0);
+
+    // Test illegal page
+    QTest::ignoreMessage(QtMsgType::QtWarningMsg, "QWizard::setCurrentId: No such page: 5");
+    wizard.setCurrentId(5);
+    QCOMPARE(wizard.currentId(), 0);
+
+    for (int i = 0; i < 4; ++i) {
+        wizard.setCurrentId(i);
+        QCOMPARE(wizard.currentPage(), pages.at(i));
+    }
+
+    for (int i = 3; i >= 0; --i) {
+        wizard.setCurrentId(i);
+        QCOMPARE(wizard.currentPage(), pages.at(i));
     }
 }
 

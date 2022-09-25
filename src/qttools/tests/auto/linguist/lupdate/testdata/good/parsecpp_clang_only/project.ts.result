@@ -2,6 +2,14 @@
 <!DOCTYPE TS>
 <TS version="2.1">
 <context>
+    <name>Class</name>
+    <message>
+        <location filename="test_header_only.h" line="36"/>
+        <source>translation_in_hearder</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
     <name>CommentOnSameLineExtraComment</name>
     <message>
         <location filename="test_sameLineComments.cpp" line="46"/>
@@ -55,16 +63,16 @@
     </message>
 </context>
 <context>
-    <name>GluedNumber1</name>
+    <name>FooChild</name>
     <message>
-        <location filename="test_isolatedComments.cpp" line="58"/>
-        <source></source>
-        <comment>blabla</comment>
+        <location filename="test_QT_TR_NOOP_context_with_comments.h" line="35"/>
+        <source>context FooChild. noop with comments</source>
+        <extracomment>Some comments</extracomment>
         <translation type="unfinished"></translation>
     </message>
 </context>
 <context>
-    <name>GluedNumber2</name>
+    <name>GluedNumber1</name>
     <message>
         <location filename="test_isolatedComments.cpp" line="59"/>
         <source></source>
@@ -73,7 +81,7 @@
     </message>
 </context>
 <context>
-    <name>GluedNumber3</name>
+    <name>GluedNumber2</name>
     <message>
         <location filename="test_isolatedComments.cpp" line="60"/>
         <source></source>
@@ -82,9 +90,18 @@
     </message>
 </context>
 <context>
-    <name>GluedNumber4</name>
+    <name>GluedNumber3</name>
     <message>
         <location filename="test_isolatedComments.cpp" line="61"/>
+        <source></source>
+        <comment>blabla</comment>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
+    <name>GluedNumber4</name>
+    <message>
+        <location filename="test_isolatedComments.cpp" line="62"/>
         <source></source>
         <comment>//     whatever we have here</comment>
         <translation type="unfinished"></translation>
@@ -93,7 +110,7 @@
 <context>
     <name>GluedNumber5</name>
     <message>
-        <location filename="test_isolatedComments.cpp" line="68"/>
+        <location filename="test_isolatedComments.cpp" line="69"/>
         <source></source>
         <comment>//     whatever2 we2 have2 here2</comment>
         <translation type="unfinished"></translation>
@@ -102,7 +119,7 @@
 <context>
     <name>GluedOnSameLineOne</name>
     <message>
-        <location filename="test_isolatedComments.cpp" line="75"/>
+        <location filename="test_isolatedComments.cpp" line="76"/>
         <source></source>
         <comment>blabla</comment>
         <translation type="unfinished"></translation>
@@ -111,7 +128,7 @@
 <context>
     <name>GluedOnSameLineTwo</name>
     <message>
-        <location filename="test_isolatedComments.cpp" line="75"/>
+        <location filename="test_isolatedComments.cpp" line="76"/>
         <source></source>
         <comment>blabla</comment>
         <translation type="unfinished"></translation>
@@ -135,7 +152,7 @@
 <context>
     <name>MULTIPLELINE</name>
     <message>
-        <location filename="test_isolatedComments.cpp" line="30"/>
+        <location filename="test_isolatedComments.cpp" line="32"/>
         <source></source>
         <comment>first line second line</comment>
         <translation type="unfinished"></translation>
@@ -144,13 +161,13 @@
 <context>
     <name>MultipleAppearance</name>
     <message>
-        <location filename="test_isolatedComments.cpp" line="54"/>
+        <location filename="test_isolatedComments.cpp" line="55"/>
         <source></source>
         <comment>first appearance</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="test_isolatedComments.cpp" line="56"/>
+        <location filename="test_isolatedComments.cpp" line="57"/>
         <source></source>
         <comment>second appearance</comment>
         <translation type="unfinished"></translation>
@@ -159,7 +176,7 @@
 <context>
     <name>MultipleLineFourthTry</name>
     <message>
-        <location filename="test_isolatedComments.cpp" line="47"/>
+        <location filename="test_isolatedComments.cpp" line="48"/>
         <source></source>
         <comment>first line second line</comment>
         <translation type="unfinished"></translation>
@@ -168,7 +185,7 @@
 <context>
     <name>MultipleLineSecondTry</name>
     <message>
-        <location filename="test_isolatedComments.cpp" line="35"/>
+        <location filename="test_isolatedComments.cpp" line="36"/>
         <source></source>
         <comment>first line second line</comment>
         <translation type="unfinished"></translation>
@@ -177,7 +194,7 @@
 <context>
     <name>MultipleLineThirdTry</name>
     <message>
-        <location filename="test_isolatedComments.cpp" line="41"/>
+        <location filename="test_isolatedComments.cpp" line="42"/>
         <source></source>
         <comment>first line second line</comment>
         <translation type="unfinished"></translation>
@@ -225,6 +242,15 @@
         <location filename="test_QT_TR_NOOP_context.cpp" line="75"/>
         <location filename="test_QT_TR_NOOP_context_bis.cpp" line="75"/>
         <source>context WithQDeclareTr::Nested. noop</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
+    <name>inHeader</name>
+    <message>
+        <location filename="test_isolatedComments.h" line="29"/>
+        <source></source>
+        <comment>how to pick this up Not triggering visit from AST visitor</comment>
         <translation type="unfinished"></translation>
     </message>
 </context>

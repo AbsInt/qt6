@@ -1,31 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 Research In Motion.
-** Copyright (C) 2019 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the tools applications of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 Research In Motion.
+// Copyright (C) 2019 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "conf.h"
 
@@ -61,6 +36,7 @@
 #include <qqmlfileselector.h>
 
 #include <private/qtqmlglobal_p.h>
+#include <private/qqmlimport_p.h>
 #if QT_CONFIG(qml_animation)
 #include <private/qabstractanimation_p.h>
 #endif
@@ -113,23 +89,23 @@ static void loadConf(const QString &override, bool quiet) // Terminates app on f
         QFileInfo fi;
         fi.setFile(QStandardPaths::locate(QStandardPaths::AppDataLocation, defaultFileName));
         if (fi.exists()) {
-            settingsUrl = QUrl::fromLocalFile(fi.absoluteFilePath());
+            settingsUrl = QQmlImports::urlFromLocalFileOrQrcOrUrl(fi.absoluteFilePath());
         } else {
             // ### If different built-in configs are needed per-platform, just apply QFileSelector to the qrc conf.qml path
             fi.setFile(confResourcePath + defaultFileName);
-            settingsUrl = QUrl::fromLocalFile(fi.absoluteFilePath());
+            settingsUrl = QQmlImports::urlFromLocalFileOrQrcOrUrl(fi.absoluteFilePath());
             builtIn = true;
         }
     } else {
         QFileInfo fi;
         fi.setFile(confResourcePath + override + QLatin1String(".qml"));
         if (fi.exists()) {
-            settingsUrl = QUrl::fromLocalFile(fi.absoluteFilePath());
+            settingsUrl = QQmlImports::urlFromLocalFileOrQrcOrUrl(fi.absoluteFilePath());
             builtIn = true;
         } else {
             fi.setFile(QDir(QStandardPaths::locate(QStandardPaths::AppConfigLocation, override, QStandardPaths::LocateDirectory)), customConfFileName);
             if (fi.exists())
-                settingsUrl = QUrl::fromLocalFile(fi.absoluteFilePath());
+                settingsUrl = QQmlImports::urlFromLocalFileOrQrcOrUrl(fi.absoluteFilePath());
             else
                 fi.setFile(override);
             if (!fi.exists()) {
@@ -137,7 +113,7 @@ static void loadConf(const QString &override, bool quiet) // Terminates app on f
                        qPrintable(QDir::toNativeSeparators(fi.absoluteFilePath())));
                 exit(1);
             }
-            settingsUrl = QUrl::fromLocalFile(fi.absoluteFilePath());
+            settingsUrl = QQmlImports::urlFromLocalFileOrQrcOrUrl(fi.absoluteFilePath());
         }
     }
 

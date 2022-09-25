@@ -1,127 +1,33 @@
-/****************************************************************************
-**
-** Copyright (C) 2019 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtQuick module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2019 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qsgrhisupport_p.h"
 #include "qsgcontext_p.h"
-#  include "qsgdefaultrendercontext_p.h"
+#include "qsgdefaultrendercontext_p.h"
 
 #include <QtQuick/private/qquickitem_p.h>
 #include <QtQuick/private/qquickwindow_p.h>
 
 #include <QtGui/qwindow.h>
+
 #if QT_CONFIG(vulkan)
-#include <QtGui/qvulkaninstance.h>
+#include <QtGui/private/qvulkandefaultinstance_p.h>
 #endif
 
 #include <QOperatingSystemVersion>
+#include <QLockFile>
 #include <QOffscreenSurface>
 
-#include <QtQml/private/qqmlengine_p.h>
+#ifdef Q_OS_WIN
+#include <dxgiformat.h>
+#endif
+
+#include <memory>
 
 QT_BEGIN_NAMESPACE
 
-#if QT_CONFIG(vulkan)
-QVulkanInstance *s_vulkanInstance = nullptr;
-#endif
-
-QVulkanInstance *QSGRhiSupport::defaultVulkanInstance()
-{
-#if QT_CONFIG(vulkan)
-    QSGRhiSupport *inst = QSGRhiSupport::instance();
-    if (!inst->isRhiEnabled() || inst->rhiBackend() != QRhi::Vulkan)
-        return nullptr;
-
-    if (!s_vulkanInstance) {
-        s_vulkanInstance = new QVulkanInstance;
-
-        // With a Vulkan implementation >= 1.1 we can check what
-        // vkEnumerateInstanceVersion() says and request 1.2 or 1.1 based on the
-        // result. To prevent future surprises, be conservative and ignore any > 1.2
-        // versions for now. For 1.0 implementations nothing will be requested, the
-        // default 0 in VkApplicationInfo means 1.0.
-        //
-        // Vulkan 1.0 is actually sufficient for 99% of Qt Quick (3D)'s
-        // functionality. In addition, Vulkan implementations tend to enable 1.1 and 1.2
-        // functionality regardless of the VkInstance API request. However, the
-        // validation layer seems to take this fairly seriously, so we should be
-        // prepared for using 1.1 and 1.2 features in a fully correct manner. This also
-        // helps custom Vulkan code in applications, which is not under out control; it
-        // is ideal if Vulkan 1.1 and 1.2 are usable without requiring such applications
-        // to create their own QVulkanInstance just to be able to make an appropriate
-        // setApiVersion() call on it.
-
-        const QVersionNumber supportedVersion = s_vulkanInstance->supportedApiVersion();
-        if (supportedVersion >= QVersionNumber(1, 2))
-            s_vulkanInstance->setApiVersion(QVersionNumber(1, 2));
-        else if (supportedVersion >= QVersionNumber(1, 1))
-            s_vulkanInstance->setApiVersion(QVersionNumber(1, 2));
-        qCDebug(QSG_LOG_INFO) << "Requesting Vulkan API" << s_vulkanInstance->apiVersion()
-                              << "Instance-level version was reported as" << supportedVersion;
-
-        if (inst->isDebugLayerRequested())
-            s_vulkanInstance->setLayers({ "VK_LAYER_KHRONOS_validation" });
-
-        s_vulkanInstance->setExtensions(QRhiVulkanInitParams::preferredInstanceExtensions());
-
-        if (!s_vulkanInstance->create()) {
-            qWarning("Failed to create Vulkan instance");
-            delete s_vulkanInstance;
-            s_vulkanInstance = nullptr;
-        }
-    }
-    return s_vulkanInstance;
-#else
-    return nullptr;
-#endif
-}
-
-void QSGRhiSupport::cleanupDefaultVulkanInstance()
-{
-#if QT_CONFIG(vulkan)
-    delete s_vulkanInstance;
-    s_vulkanInstance = nullptr;
-#endif
-}
-
 QSGRhiSupport::QSGRhiSupport()
     : m_settingsApplied(false),
-      m_enableRhi(false),
       m_debugLayer(false),
       m_profile(false),
       m_shaderEffectDebug(false),
@@ -143,7 +49,6 @@ void QSGRhiSupport::applySettings()
 
     if (m_requested.valid) {
         // explicit rhi backend request from C++ (e.g. via QQuickWindow)
-        m_enableRhi = true;
         switch (m_requested.api) {
         case QSGRendererInterface::OpenGLRhi:
             m_rhiBackend = QRhi::OpenGLES2;
@@ -165,10 +70,6 @@ void QSGRhiSupport::applySettings()
             break;
         }
     } else {
-
-        // There is no other way in Qt 6. The direct OpenGL rendering path of Qt 5 has been removed.
-        m_enableRhi = true;
-
         // check env.vars., fall back to platform-specific defaults when backend is not set
         const QByteArray rhiBackend = qgetenv("QSG_RHI_BACKEND");
         if (rhiBackend == QByteArrayLiteral("gl")
@@ -201,12 +102,9 @@ void QSGRhiSupport::applySettings()
 
             // Now that we established our initial choice, we may want to opt
             // for another backend under certain special circumstances.
-            if (m_enableRhi) // guard because this may do actual graphics calls on some platforms
-                adjustToPlatformQuirks();
+            adjustToPlatformQuirks();
         }
     }
-
-    Q_ASSERT(m_enableRhi); // cannot be anything else in Qt 6
 
     // At this point the RHI backend is fixed, it cannot be changed once we
     // return from this function. This is because things like the QWindow
@@ -233,6 +131,17 @@ void QSGRhiSupport::applySettings()
     if (m_killDeviceFrameCount > 0 && m_rhiBackend == QRhi::D3D11)
         qDebug("Graphics device will be reset every %d frames", m_killDeviceFrameCount);
 
+    QByteArray hdrRequest = qgetenv("QSG_RHI_HDR");
+    if (!hdrRequest.isEmpty()) {
+        hdrRequest = hdrRequest.toLower();
+        if (hdrRequest == QByteArrayLiteral("scrgb") || hdrRequest == QByteArrayLiteral("extendedsrgblinear"))
+            m_swapChainFormat = QRhiSwapChain::HDRExtendedSrgbLinear;
+        else if (hdrRequest == QByteArrayLiteral("hdr10"))
+            m_swapChainFormat = QRhiSwapChain::HDR10;
+        else
+            qWarning("Unknown HDR mode '%s'", hdrRequest.constData());
+    }
+
     const QString backendName = rhiBackendName();
     qCDebug(QSG_LOG_INFO,
             "Using QRhi with backend %s\n"
@@ -247,21 +156,14 @@ void QSGRhiSupport::applySettings()
 void QSGRhiSupport::adjustToPlatformQuirks()
 {
 #if defined(Q_OS_MACOS) || defined(Q_OS_IOS)
-
-    // ### For now just create a throwaway QRhi instance. This will be replaced
-    // by a more lightweight way, once a helper function is added gui/rhi.
-
     // A macOS VM may not have Metal support at all. We have to decide at this
     // point, it will be too late afterwards, and the only way is to see if
     // MTLCreateSystemDefaultDevice succeeds.
     if (m_rhiBackend == QRhi::Metal) {
         QRhiMetalInitParams rhiParams;
-        QRhi *tempRhi = QRhi::create(m_rhiBackend, &rhiParams, {});
-        if (!tempRhi) {
+        if (!QRhi::probe(m_rhiBackend, &rhiParams)) {
             m_rhiBackend = QRhi::OpenGLES2;
             qCDebug(QSG_LOG_INFO, "Metal does not seem to be supported. Falling back to OpenGL.");
-        } else {
-            delete tempRhi;
         }
     }
 #endif
@@ -273,6 +175,473 @@ void QSGRhiSupport::checkEnvQSgInfo()
     if (qEnvironmentVariableIsSet("QSG_INFO"))
         const_cast<QLoggingCategory &>(QSG_LOG_INFO()).setEnabled(QtDebugMsg, true);
 }
+
+
+#if QT_CONFIG(opengl)
+#ifndef GL_BGRA
+#define GL_BGRA                           0x80E1
+#endif
+
+#ifndef GL_R8
+#define GL_R8                             0x8229
+#endif
+
+#ifndef GL_RG8
+#define GL_RG8                            0x822B
+#endif
+
+#ifndef GL_RG
+#define GL_RG                             0x8227
+#endif
+
+#ifndef GL_R16
+#define GL_R16                            0x822A
+#endif
+
+#ifndef GL_RG16
+#define GL_RG16                           0x822C
+#endif
+
+#ifndef GL_RED
+#define GL_RED                            0x1903
+#endif
+
+#ifndef GL_RGBA8
+#define GL_RGBA8                          0x8058
+#endif
+
+#ifndef GL_RGBA32F
+#define GL_RGBA32F                        0x8814
+#endif
+
+#ifndef GL_RGBA16F
+#define GL_RGBA16F                        0x881A
+#endif
+
+#ifndef GL_R16F
+#define GL_R16F                           0x822D
+#endif
+
+#ifndef GL_R32F
+#define GL_R32F                           0x822E
+#endif
+
+#ifndef GL_DEPTH_COMPONENT16
+#define GL_DEPTH_COMPONENT16              0x81A5
+#endif
+
+#ifndef GL_DEPTH_COMPONENT24
+#define GL_DEPTH_COMPONENT24              0x81A6
+#endif
+
+#ifndef GL_DEPTH_COMPONENT32F
+#define GL_DEPTH_COMPONENT32F             0x8CAC
+#endif
+
+#ifndef GL_DEPTH24_STENCIL8
+#define GL_DEPTH24_STENCIL8               0x88F0
+#endif
+
+#ifndef GL_DEPTH_STENCIL
+#define GL_DEPTH_STENCIL                  0x84F9
+#endif
+
+#ifndef GL_RGB10_A2
+#define GL_RGB10_A2                       0x8059
+#endif
+
+QRhiTexture::Format QSGRhiSupport::toRhiTextureFormatFromGL(uint format)
+{
+    auto rhiFormat = QRhiTexture::UnknownFormat;
+    switch (format) {
+    case GL_RGBA:
+        Q_FALLTHROUGH();
+    case GL_RGBA8:
+    case 0:
+        rhiFormat = QRhiTexture::RGBA8;
+        break;
+    case GL_BGRA:
+        rhiFormat = QRhiTexture::BGRA8;
+        break;
+    case GL_R16:
+        rhiFormat = QRhiTexture::R16;
+        break;
+    case GL_RG16:
+        rhiFormat = QRhiTexture::RG16;
+        break;
+    case GL_RED:
+        Q_FALLTHROUGH();
+    case GL_R8:
+        rhiFormat = QRhiTexture::R8;
+        break;
+    case GL_RG:
+        Q_FALLTHROUGH();
+    case GL_RG8:
+        rhiFormat = QRhiTexture::RG8;
+        break;
+    case GL_ALPHA:
+        rhiFormat = QRhiTexture::RED_OR_ALPHA8;
+        break;
+    case GL_RGBA16F:
+        rhiFormat = QRhiTexture::RGBA16F;
+        break;
+    case GL_RGBA32F:
+        rhiFormat = QRhiTexture::RGBA32F;
+        break;
+    case GL_R16F:
+        rhiFormat = QRhiTexture::R16F;
+        break;
+    case GL_R32F:
+        rhiFormat = QRhiTexture::R32F;
+        break;
+    case GL_RGB10_A2:
+        rhiFormat = QRhiTexture::RGB10A2;
+        break;
+    case GL_DEPTH_COMPONENT:
+        Q_FALLTHROUGH();
+    case GL_DEPTH_COMPONENT16:
+        rhiFormat = QRhiTexture::D16;
+        break;
+    case GL_DEPTH_COMPONENT24:
+        rhiFormat = QRhiTexture::D24;
+        break;
+    case GL_DEPTH_STENCIL:
+        Q_FALLTHROUGH();
+    case GL_DEPTH24_STENCIL8:
+        rhiFormat = QRhiTexture::D24S8;
+        break;
+    case GL_DEPTH_COMPONENT32F:
+        rhiFormat = QRhiTexture::D32F;
+        break;
+    default:
+        qWarning("GL format %d is not supported", format);
+        break;
+    }
+    return rhiFormat;
+}
+#endif
+
+#if QT_CONFIG(vulkan)
+QRhiTexture::Format QSGRhiSupport::toRhiTextureFormatFromVulkan(uint format, QRhiTexture::Flags *flags)
+{
+    auto rhiFormat = QRhiTexture::UnknownFormat;
+    bool sRGB = false;
+    switch (format) {
+    case VK_FORMAT_R8G8B8A8_SRGB:
+        sRGB = true;
+        Q_FALLTHROUGH();
+    case VK_FORMAT_R8G8B8A8_UNORM:
+    case VK_FORMAT_UNDEFINED:
+        rhiFormat = QRhiTexture::RGBA8;
+        break;
+    case VK_FORMAT_B8G8R8A8_SRGB:
+        sRGB = true;
+        Q_FALLTHROUGH();
+    case VK_FORMAT_B8G8R8A8_UNORM:
+        rhiFormat = QRhiTexture::BGRA8;
+        break;
+    case VK_FORMAT_R8_SRGB:
+        sRGB = true;
+        Q_FALLTHROUGH();
+    case VK_FORMAT_R8_UNORM:
+        rhiFormat = QRhiTexture::R8;
+        break;
+    case VK_FORMAT_R8G8_SRGB:
+        sRGB = true;
+        Q_FALLTHROUGH();
+    case VK_FORMAT_R8G8_UNORM:
+        rhiFormat = QRhiTexture::RG8;
+        break;
+    case VK_FORMAT_R16_UNORM:
+        rhiFormat = QRhiTexture::R16;
+        break;
+    case VK_FORMAT_R16G16_UNORM:
+        rhiFormat = QRhiTexture::RG16;
+        break;
+    case VK_FORMAT_R16G16B16A16_SFLOAT:
+        rhiFormat = QRhiTexture::RGBA16F;
+        break;
+    case VK_FORMAT_R32G32B32A32_SFLOAT:
+        rhiFormat = QRhiTexture::RGBA32F;
+        break;
+    case VK_FORMAT_R16_SFLOAT:
+        rhiFormat = QRhiTexture::R16F;
+        break;
+    case VK_FORMAT_R32_SFLOAT:
+        rhiFormat = QRhiTexture::R32F;
+        break;
+    case VK_FORMAT_A2B10G10R10_UNORM_PACK32: // intentionally
+        Q_FALLTHROUGH();
+    case VK_FORMAT_A2R10G10B10_UNORM_PACK32:
+        rhiFormat = QRhiTexture::RGB10A2;
+        break;
+    case VK_FORMAT_D16_UNORM:
+        rhiFormat = QRhiTexture::D16;
+        break;
+    case VK_FORMAT_X8_D24_UNORM_PACK32:
+        rhiFormat = QRhiTexture::D24;
+        break;
+    case VK_FORMAT_D24_UNORM_S8_UINT:
+        rhiFormat = QRhiTexture::D24S8;
+        break;
+    case VK_FORMAT_D32_SFLOAT:
+        rhiFormat = QRhiTexture::D32F;
+        break;
+    case VK_FORMAT_BC1_RGB_SRGB_BLOCK:
+        sRGB = true;
+        Q_FALLTHROUGH();
+    case VK_FORMAT_BC1_RGB_UNORM_BLOCK:
+        rhiFormat = QRhiTexture::BC1;
+        break;
+    case VK_FORMAT_BC2_SRGB_BLOCK:
+        sRGB = true;
+        Q_FALLTHROUGH();
+    case VK_FORMAT_BC2_UNORM_BLOCK:
+        rhiFormat = QRhiTexture::BC2;
+        break;
+    case VK_FORMAT_BC3_SRGB_BLOCK:
+        sRGB = true;
+        Q_FALLTHROUGH();
+    case VK_FORMAT_BC3_UNORM_BLOCK:
+        rhiFormat = QRhiTexture::BC3;
+        break;
+    case VK_FORMAT_BC4_UNORM_BLOCK:
+        rhiFormat = QRhiTexture::BC4;
+        break;
+    case VK_FORMAT_BC5_UNORM_BLOCK:
+        rhiFormat = QRhiTexture::BC5;
+        break;
+    case VK_FORMAT_BC6H_UFLOAT_BLOCK:
+        rhiFormat = QRhiTexture::BC6H;
+        break;
+    case VK_FORMAT_BC7_SRGB_BLOCK:
+        sRGB = true;
+        Q_FALLTHROUGH();
+    case VK_FORMAT_BC7_UNORM_BLOCK:
+        rhiFormat = QRhiTexture::BC7;
+        break;
+    case VK_FORMAT_ETC2_R8G8B8_SRGB_BLOCK:
+        sRGB = true;
+        Q_FALLTHROUGH();
+    case VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK:
+        rhiFormat = QRhiTexture::ETC2_RGB8;
+        break;
+    case VK_FORMAT_ETC2_R8G8B8A1_SRGB_BLOCK:
+        sRGB = true;
+        Q_FALLTHROUGH();
+    case VK_FORMAT_ETC2_R8G8B8A1_UNORM_BLOCK:
+        rhiFormat = QRhiTexture::ETC2_RGB8A1;
+        break;
+    case VK_FORMAT_ETC2_R8G8B8A8_SRGB_BLOCK:
+        sRGB = true;
+        Q_FALLTHROUGH();
+    case VK_FORMAT_ETC2_R8G8B8A8_UNORM_BLOCK:
+        rhiFormat = QRhiTexture::ETC2_RGBA8;
+        break;
+    case VK_FORMAT_ASTC_4x4_SRGB_BLOCK:
+        sRGB = true;
+        Q_FALLTHROUGH();
+    case VK_FORMAT_ASTC_4x4_UNORM_BLOCK:
+        rhiFormat = QRhiTexture::ASTC_4x4;
+        break;
+    case VK_FORMAT_ASTC_5x4_SRGB_BLOCK:
+        sRGB = true;
+        Q_FALLTHROUGH();
+    case VK_FORMAT_ASTC_5x4_UNORM_BLOCK:
+        rhiFormat = QRhiTexture::ASTC_5x4;
+        break;
+    case VK_FORMAT_ASTC_5x5_SRGB_BLOCK:
+        sRGB = true;
+        Q_FALLTHROUGH();
+    case VK_FORMAT_ASTC_5x5_UNORM_BLOCK:
+        rhiFormat = QRhiTexture::ASTC_5x5;
+        break;
+    case VK_FORMAT_ASTC_6x5_SRGB_BLOCK:
+        sRGB = true;
+        Q_FALLTHROUGH();
+    case VK_FORMAT_ASTC_6x5_UNORM_BLOCK:
+        rhiFormat = QRhiTexture::ASTC_6x5;
+        break;
+    case VK_FORMAT_ASTC_6x6_SRGB_BLOCK:
+        sRGB = true;
+        Q_FALLTHROUGH();
+    case VK_FORMAT_ASTC_6x6_UNORM_BLOCK:
+        rhiFormat = QRhiTexture::ASTC_6x6;
+        break;
+    case VK_FORMAT_ASTC_8x5_SRGB_BLOCK:
+        sRGB = true;
+        Q_FALLTHROUGH();
+    case VK_FORMAT_ASTC_8x5_UNORM_BLOCK:
+        rhiFormat = QRhiTexture::ASTC_8x5;
+        break;
+    case VK_FORMAT_ASTC_8x6_SRGB_BLOCK:
+        sRGB = true;
+        Q_FALLTHROUGH();
+    case VK_FORMAT_ASTC_8x6_UNORM_BLOCK:
+        rhiFormat = QRhiTexture::ASTC_8x6;
+        break;
+    case VK_FORMAT_ASTC_8x8_SRGB_BLOCK:
+        sRGB = true;
+        Q_FALLTHROUGH();
+    case VK_FORMAT_ASTC_8x8_UNORM_BLOCK:
+        rhiFormat = QRhiTexture::ASTC_8x8;
+        break;
+    case VK_FORMAT_ASTC_10x5_SRGB_BLOCK:
+        sRGB = true;
+        Q_FALLTHROUGH();
+    case VK_FORMAT_ASTC_10x5_UNORM_BLOCK:
+        rhiFormat = QRhiTexture::ASTC_10x5;
+        break;
+    case VK_FORMAT_ASTC_10x6_SRGB_BLOCK:
+        sRGB = true;
+        Q_FALLTHROUGH();
+    case VK_FORMAT_ASTC_10x6_UNORM_BLOCK:
+        rhiFormat = QRhiTexture::ASTC_10x6;
+        break;
+    case VK_FORMAT_ASTC_10x8_SRGB_BLOCK:
+        sRGB = true;
+        Q_FALLTHROUGH();
+    case VK_FORMAT_ASTC_10x8_UNORM_BLOCK:
+        rhiFormat = QRhiTexture::ASTC_10x8;
+        break;
+    case VK_FORMAT_ASTC_10x10_SRGB_BLOCK:
+        sRGB = true;
+        Q_FALLTHROUGH();
+    case VK_FORMAT_ASTC_10x10_UNORM_BLOCK:
+        rhiFormat = QRhiTexture::ASTC_10x10;
+        break;
+    case VK_FORMAT_ASTC_12x10_SRGB_BLOCK:
+        sRGB = true;
+        Q_FALLTHROUGH();
+    case VK_FORMAT_ASTC_12x10_UNORM_BLOCK:
+        rhiFormat = QRhiTexture::ASTC_12x10;
+        break;
+    case VK_FORMAT_ASTC_12x12_SRGB_BLOCK:
+        sRGB = true;
+        Q_FALLTHROUGH();
+    case VK_FORMAT_ASTC_12x12_UNORM_BLOCK:
+        rhiFormat = QRhiTexture::ASTC_12x12;
+        break;
+    default:
+        qWarning("VkFormat %d is not supported", format);
+        break;
+    }
+    if (sRGB)
+        (*flags) |=(QRhiTexture::sRGB);
+    return rhiFormat;
+}
+#endif
+
+#ifdef Q_OS_WIN
+QRhiTexture::Format QSGRhiSupport::toRhiTextureFormatFromD3D11(uint format, QRhiTexture::Flags *flags)
+{
+    auto rhiFormat = QRhiTexture::UnknownFormat;
+    bool sRGB = false;
+    switch (format) {
+    case DXGI_FORMAT_R8G8B8A8_UNORM_SRGB:
+        sRGB = true;
+        Q_FALLTHROUGH();
+    case DXGI_FORMAT_R8G8B8A8_UNORM:
+    case DXGI_FORMAT_UNKNOWN:
+        rhiFormat = QRhiTexture::RGBA8;
+        break;
+    case DXGI_FORMAT_B8G8R8A8_UNORM_SRGB:
+        sRGB = true;
+        Q_FALLTHROUGH();
+    case DXGI_FORMAT_B8G8R8A8_UNORM:
+        rhiFormat = QRhiTexture::BGRA8;
+        break;
+    case DXGI_FORMAT_R8_UNORM:
+        rhiFormat = QRhiTexture::R8;
+        break;
+    case DXGI_FORMAT_R8G8_UNORM:
+        rhiFormat = QRhiTexture::RG8;
+        break;
+    case DXGI_FORMAT_R16_UNORM:
+        rhiFormat = QRhiTexture::R16;
+        break;
+    case DXGI_FORMAT_R16G16_UNORM:
+        rhiFormat = QRhiTexture::RG16;
+        break;
+    case DXGI_FORMAT_R16G16B16A16_FLOAT:
+        rhiFormat = QRhiTexture::RGBA16F;
+        break;
+    case DXGI_FORMAT_R32G32B32A32_FLOAT:
+        rhiFormat = QRhiTexture::RGBA32F;
+        break;
+    case DXGI_FORMAT_R16_FLOAT:
+        rhiFormat = QRhiTexture::R16F;
+        break;
+    case DXGI_FORMAT_R32_FLOAT:
+        rhiFormat = QRhiTexture::R32F;
+        break;
+    case DXGI_FORMAT_R10G10B10A2_UNORM:
+        rhiFormat = QRhiTexture::RGB10A2;
+        break;
+    case DXGI_FORMAT_R16_TYPELESS:
+        rhiFormat = QRhiTexture::D16;
+        break;
+    case DXGI_FORMAT_R24_UNORM_X8_TYPELESS:
+        rhiFormat = QRhiTexture::D24;
+        break;
+    case DXGI_FORMAT_D24_UNORM_S8_UINT:
+        rhiFormat = QRhiTexture::D24S8;
+        break;
+    case DXGI_FORMAT_R32_TYPELESS:
+        rhiFormat = QRhiTexture::D32F;
+        break;
+    case DXGI_FORMAT_BC1_UNORM_SRGB:
+        sRGB = true;
+        Q_FALLTHROUGH();
+    case DXGI_FORMAT_BC1_UNORM:
+        rhiFormat = QRhiTexture::BC1;
+        break;
+    case DXGI_FORMAT_BC2_UNORM_SRGB:
+        sRGB = true;
+        Q_FALLTHROUGH();
+    case DXGI_FORMAT_BC2_UNORM:
+        rhiFormat = QRhiTexture::BC2;
+        break;
+    case DXGI_FORMAT_BC3_UNORM_SRGB:
+        sRGB = true;
+        Q_FALLTHROUGH();
+    case DXGI_FORMAT_BC3_UNORM:
+        rhiFormat = QRhiTexture::BC3;
+        break;
+    case DXGI_FORMAT_BC4_UNORM:
+        rhiFormat = QRhiTexture::BC4;
+        break;
+    case DXGI_FORMAT_BC5_UNORM:
+        rhiFormat = QRhiTexture::BC5;
+        break;
+    case DXGI_FORMAT_BC6H_UF16:
+        rhiFormat = QRhiTexture::BC6H;
+        break;
+    case DXGI_FORMAT_BC7_UNORM_SRGB:
+        sRGB = true;
+        Q_FALLTHROUGH();
+    case DXGI_FORMAT_BC7_UNORM:
+        rhiFormat = QRhiTexture::BC7;
+        break;
+    default:
+        qWarning("DXGI_FORMAT %d is not supported", format);
+        break;
+    }
+    if (sRGB)
+        (*flags) |=(QRhiTexture::sRGB);
+    return rhiFormat;
+}
+#endif
+
+#if defined(Q_OS_MACOS) || defined(Q_OS_IOS)
+namespace QSGRhiSupportMac {
+    QRhiTexture::Format toRhiTextureFormatFromMetal(uint format, QRhiTexture::Flags *flags);
+}
+QRhiTexture::Format QSGRhiSupport::toRhiTextureFormatFromMetal(uint format, QRhiTexture::Flags *flags)
+{
+    return QSGRhiSupportMac::toRhiTextureFormatFromMetal(format, flags);
+}
+#endif
 
 void QSGRhiSupport::configure(QSGRendererInterface::GraphicsApi api)
 {
@@ -304,30 +673,24 @@ QSGRhiSupport *QSGRhiSupport::instance()
 
 QString QSGRhiSupport::rhiBackendName() const
 {
-    if (m_enableRhi) {
-        switch (m_rhiBackend) {
-        case QRhi::Null:
-            return QLatin1String("Null");
-        case QRhi::Vulkan:
-            return QLatin1String("Vulkan");
-        case QRhi::OpenGLES2:
-            return QLatin1String("OpenGL");
-        case QRhi::D3D11:
-            return QLatin1String("D3D11");
-        case QRhi::Metal:
-            return QLatin1String("Metal");
-        default:
-            return QLatin1String("Unknown");
-        }
+    switch (m_rhiBackend) {
+    case QRhi::Null:
+        return QLatin1String("Null");
+    case QRhi::Vulkan:
+        return QLatin1String("Vulkan");
+    case QRhi::OpenGLES2:
+        return QLatin1String("OpenGL");
+    case QRhi::D3D11:
+        return QLatin1String("D3D11");
+    case QRhi::Metal:
+        return QLatin1String("Metal");
+    default:
+        return QLatin1String("Unknown");
     }
-    return QLatin1String("Unknown (RHI not enabled)");
 }
 
 QSGRendererInterface::GraphicsApi QSGRhiSupport::graphicsApi() const
 {
-    if (!m_enableRhi)
-        return QSGRendererInterface::OpenGL;
-
     switch (m_rhiBackend) {
     case QRhi::Null:
         return QSGRendererInterface::NullRhi;
@@ -346,9 +709,6 @@ QSGRendererInterface::GraphicsApi QSGRhiSupport::graphicsApi() const
 
 QSurface::SurfaceType QSGRhiSupport::windowSurfaceType() const
 {
-    if (!m_enableRhi)
-        return QSurface::OpenGLSurface;
-
     switch (m_rhiBackend) {
     case QRhi::Vulkan:
         return QSurface::VulkanSurface;
@@ -513,9 +873,9 @@ const void *QSGRhiSupport::rifResource(QSGRendererInterface::Resource res,
     }
 }
 
-int QSGRhiSupport::chooseSampleCountForWindowWithRhi(QWindow *window, QRhi *rhi)
+int QSGRhiSupport::chooseSampleCount(int samples, QRhi *rhi)
 {
-    int msaaSampleCount = qMax(QSurfaceFormat::defaultFormat().samples(), window->requestedFormat().samples());
+    int msaaSampleCount = samples;
     if (qEnvironmentVariableIsSet("QSG_SAMPLES"))
         msaaSampleCount = qEnvironmentVariableIntValue("QSG_SAMPLES");
     msaaSampleCount = qMax(1, msaaSampleCount);
@@ -536,6 +896,11 @@ int QSGRhiSupport::chooseSampleCountForWindowWithRhi(QWindow *window, QRhi *rhi)
         }
     }
     return msaaSampleCount;
+}
+
+int QSGRhiSupport::chooseSampleCountForWindowWithRhi(QWindow *window, QRhi *rhi)
+{
+    return chooseSampleCount(qMax(QSurfaceFormat::defaultFormat().samples(), window->requestedFormat().samples()), rhi);
 }
 
 // must be called on the main thread
@@ -565,12 +930,23 @@ void QSGRhiSupport::prepareWindowForRhi(QQuickWindow *window)
         // always be under the application's control then (since the default
         // instance we could create here would not be configurable by the
         // application in any way, and that is often not acceptable).
-        if (!window->vulkanInstance() && !wd->renderControl)
-            window->setVulkanInstance(QSGRhiSupport::defaultVulkanInstance());
+        if (!window->vulkanInstance() && !wd->renderControl) {
+            QVulkanInstance *vkinst = QVulkanDefaultInstance::instance();
+            if (vkinst)
+                qCDebug(QSG_LOG_INFO) << "Got Vulkan instance from QVulkanDefaultInstance, requested api version was" << vkinst->apiVersion();
+            else
+                qCDebug(QSG_LOG_INFO) << "No Vulkan instance from QVulkanDefaultInstance, expect problems";
+            window->setVulkanInstance(vkinst);
+        }
     }
 #else
     Q_UNUSED(window);
 #endif
+}
+
+static inline QString pipelineCacheLockFileName(const QString &name)
+{
+    return name + QLatin1String(".lck");
 }
 
 void QSGRhiSupport::preparePipelineCache(QRhi *rhi)
@@ -578,19 +954,28 @@ void QSGRhiSupport::preparePipelineCache(QRhi *rhi)
     if (m_pipelineCacheLoad.isEmpty())
         return;
 
+    QLockFile lock(pipelineCacheLockFileName(m_pipelineCacheLoad));
+    if (!lock.lock()) {
+        qWarning("Could not create pipeline cache lock file '%s'",
+                 qPrintable(lock.fileName()));
+        return;
+    }
+
     QFile f(m_pipelineCacheLoad);
-    if (f.open(QIODevice::ReadOnly)) {
-        qCDebug(QSG_LOG_INFO, "Attempting to seed pipeline cache from '%s'",
-                qPrintable(m_pipelineCacheLoad));
-        rhi->setPipelineCacheData(f.readAll());
-    } else {
+    if (!f.open(QIODevice::ReadOnly)) {
         qWarning("Could not open pipeline cache source file '%s'",
                  qPrintable(m_pipelineCacheLoad));
+        return;
     }
+
+    qCDebug(QSG_LOG_INFO, "Attempting to seed pipeline cache from '%s'",
+            qPrintable(m_pipelineCacheLoad));
+
+    rhi->setPipelineCacheData(f.readAll());
 }
 
 // must be called on the render thread
-QSGRhiSupport::RhiCreateResult QSGRhiSupport::createRhi(QQuickWindow *window, QOffscreenSurface *offscreenSurface)
+QSGRhiSupport::RhiCreateResult QSGRhiSupport::createRhi(QQuickWindow *window, QSurface *offscreenSurface)
 {
     QRhi *rhi = nullptr;
     QQuickWindowPrivate *wd = QQuickWindowPrivate::get(window);
@@ -639,6 +1024,8 @@ QSGRhiSupport::RhiCreateResult QSGRhiSupport::createRhi(QQuickWindow *window, QO
 #endif
 #if QT_CONFIG(vulkan)
     if (backend == QRhi::Vulkan) {
+        if (isDebugLayerRequested())
+            QVulkanDefaultInstance::setFlag(QVulkanDefaultInstance::EnableValidation, true);
         QRhiVulkanInitParams rhiParams;
         prepareWindowForRhi(window); // sets a vulkanInstance if not yet present
         rhiParams.inst = window->vulkanInstance();
@@ -694,6 +1081,12 @@ QSGRhiSupport::RhiCreateResult QSGRhiSupport::createRhi(QQuickWindow *window, QO
             rhi = QRhi::create(backend, &rhiParams, flags, &importDev);
         } else {
             rhi = QRhi::create(backend, &rhiParams, flags);
+            if (!rhi && !flags.testFlag(QRhi::PreferSoftwareRenderer)) {
+                qCDebug(QSG_LOG_INFO, "Failed to create a D3D device with default settings; "
+                                      "attempting to get a software rasterizer backed device instead");
+                flags |= QRhi::PreferSoftwareRenderer;
+                rhi = QRhi::create(backend, &rhiParams, flags);
+            }
         }
     }
 #endif
@@ -728,14 +1121,20 @@ void QSGRhiSupport::destroyRhi(QRhi *rhi)
 
     if (!rhi->isDeviceLost()) {
         if (!m_pipelineCacheSave.isEmpty()) {
-            QFile f(m_pipelineCacheSave);
-            if (f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-                qCDebug(QSG_LOG_INFO, "Writing pipeline cache contents to '%s'",
-                        qPrintable(m_pipelineCacheSave));
-                f.write(rhi->pipelineCacheData());
+            QLockFile lock(pipelineCacheLockFileName(m_pipelineCacheSave));
+            if (lock.lock()) {
+                QFile f(m_pipelineCacheSave);
+                if (f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+                    qCDebug(QSG_LOG_INFO, "Writing pipeline cache contents to '%s'",
+                            qPrintable(m_pipelineCacheSave));
+                    f.write(rhi->pipelineCacheData());
+                } else {
+                    qWarning("Could not open pipeline cache output file '%s'",
+                             qPrintable(m_pipelineCacheSave));
+                }
             } else {
-                qWarning("Could not open pipeline cache output file '%s'",
-                         qPrintable(m_pipelineCacheSave));
+                qWarning("Could not create pipeline cache lock file '%s'",
+                         qPrintable(lock.fileName()));
             }
         }
     }
@@ -795,8 +1194,8 @@ QImage QSGRhiSupport::grabOffscreen(QQuickWindow *window)
         qWarning("Failed to initialize QRhi for offscreen readback");
         return QImage();
     }
-    QScopedPointer<QRhi> rhiOwner(rhiResult.rhi);
-    QRhi *rhi = rhiResult.own ? rhiOwner.data() : rhiOwner.take();
+    std::unique_ptr<QRhi> rhiOwner(rhiResult.rhi);
+    QRhi *rhi = rhiResult.own ? rhiOwner.get() : rhiOwner.release();
 
     const QSize pixelSize = window->size() * window->devicePixelRatio();
     QScopedPointer<QRhiTexture> texture(rhi->newTexture(QRhiTexture::RGBA8, pixelSize, 1,
@@ -967,60 +1366,63 @@ QImage QSGRhiSupport::grabOffscreenForProtectedContent(QQuickWindow *window)
 }
 #endif
 
-QSGRhiProfileConnection *QSGRhiProfileConnection::instance()
+void QSGRhiSupport::applySwapChainFormat(QRhiSwapChain *scWithWindowSet)
 {
-    static QSGRhiProfileConnection inst;
-    return &inst;
-}
-
-void QSGRhiProfileConnection::initialize(QRhi *rhi)
-{
-#ifdef RHI_REMOTE_PROFILER
-    const QString profHost = qEnvironmentVariable("QSG_RHI_PROFILE_HOST");
-    if (!profHost.isEmpty()) {
-        if (!QQmlEnginePrivate::qml_debugging_enabled) {
-            qWarning("RHI profiling cannot be enabled without QML debugging, for security reasons. "
-                     "Set CONFIG+=qml_debug in the application project.");
-            return;
-        }
-        int profPort = qEnvironmentVariableIntValue("QSG_RHI_PROFILE_PORT");
-        if (!profPort)
-            profPort = 30667;
-        qCDebug(QSG_LOG_INFO, "Sending RHI profiling output to %s:%d", qPrintable(profHost), profPort);
-        m_profConn.reset(new QTcpSocket);
-        QObject::connect(m_profConn.data(), &QAbstractSocket::errorOccurred, m_profConn.data(),
-                         [this](QAbstractSocket::SocketError socketError) { qWarning("  RHI profiler error: %d (%s)",
-                                                                                     socketError, qPrintable(m_profConn->errorString())); });
-        m_profConn->connectToHost(profHost, profPort);
-        m_profConn->waitForConnected(); // blocking wait because we want to send stuff already from the init below
-        rhi->profiler()->setDevice(m_profConn.data());
-        m_lastMemStatWrite.start();
+    const char *fmtStr = "unknown";
+    switch (m_swapChainFormat) {
+    case QRhiSwapChain::SDR:
+        fmtStr = "SDR";
+        break;
+    case QRhiSwapChain::HDRExtendedSrgbLinear:
+        fmtStr = "scRGB";
+        break;
+    case QRhiSwapChain::HDR10:
+        fmtStr = "HDR10";
+        break;
+    default:
+        break;
     }
-#else
-    Q_UNUSED(rhi);
-#endif
-}
 
-void QSGRhiProfileConnection::cleanup()
-{
-#ifdef RHI_REMOTE_PROFILER
-    m_profConn.reset();
-#endif
-}
-
-void QSGRhiProfileConnection::send(QRhi *rhi)
-{
-#ifdef RHI_REMOTE_PROFILER
-    if (m_profConn) {
-        // do this every 5 sec at most
-        if (m_lastMemStatWrite.elapsed() >= 5000) {
-            rhi->profiler()->addVMemAllocatorStats();
-            m_lastMemStatWrite.restart();
+    if (!scWithWindowSet->isFormatSupported(m_swapChainFormat)) {
+        if (m_swapChainFormat != QRhiSwapChain::SDR) {
+            qCDebug(QSG_LOG_INFO, "Requested a %s swapchain but it is reported to be unsupported with the current display(s). "
+                                  "In multi-screen configurations make sure the window is located on a HDR-enabled screen. "
+                                  "Request ignored, using SDR swapchain.", fmtStr);
         }
+        return;
     }
-#else
-    Q_UNUSED(rhi);
+
+    scWithWindowSet->setFormat(m_swapChainFormat);
+
+    if (m_swapChainFormat != QRhiSwapChain::SDR) {
+        qCDebug(QSG_LOG_INFO, "Creating %s swapchain", fmtStr);
+        qCDebug(QSG_LOG_INFO) << "HDR output info:" << scWithWindowSet->hdrInfo();
+    }
+}
+
+QRhiTexture::Format QSGRhiSupport::toRhiTextureFormat(uint nativeFormat, QRhiTexture::Flags *flags) const
+{
+    switch (m_rhiBackend) {
+#if QT_CONFIG(vulkan)
+    case QRhi::Vulkan:
+        return toRhiTextureFormatFromVulkan(nativeFormat, flags);
 #endif
+#if QT_CONFIG(opengl)
+    case QRhi::OpenGLES2:
+        Q_UNUSED(flags);
+        return toRhiTextureFormatFromGL(nativeFormat);
+#endif
+#ifdef Q_OS_WIN
+    case QRhi::D3D11:
+        return toRhiTextureFormatFromD3D11(nativeFormat, flags);
+#endif
+#if defined(Q_OS_MACOS) || defined(Q_OS_IOS)
+    case QRhi::Metal:
+        return toRhiTextureFormatFromMetal(nativeFormat, flags);
+#endif
+    default:
+        return QRhiTexture::UnknownFormat;
+    }
 }
 
 QT_END_NAMESPACE

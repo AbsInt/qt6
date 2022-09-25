@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtWidgets module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 /*
   Note: The qdoc comments for QMacStyle are contained in
@@ -353,7 +317,7 @@ static const int closeButtonSize = 14;
 static const qreal closeButtonCornerRadius = 2.0;
 #endif // QT_CONFIG(tabbar)
 
-#ifndef QT_NO_ACCESSIBILITY // This ifdef to avoid "unused function" warning.
+#if QT_CONFIG(accessibility) // This ifdef to avoid "unused function" warning.
 QBrush brushForToolButton(bool isOnKeyWindow)
 {
     // When a toolbutton in a toolbar is in the 'ON' state, we draw a
@@ -364,7 +328,7 @@ QBrush brushForToolButton(bool isOnKeyWindow)
 
     return isOnKeyWindow ? QColor(0, 0, 0, 28) : QColor(0, 0, 0, 21);
 }
-#endif // QT_NO_ACCESSIBILITY
+#endif // QT_CONFIG(accessibility)
 
 
 static const int headerSectionArrowHeight = 6;
@@ -2894,7 +2858,7 @@ int QMacStyle::styleHint(StyleHint sh, const QStyleOption *opt, const QWidget *w
     case SH_ScrollBar_Transient:
         if ((qobject_cast<const QScrollBar *>(w) && w->parent() &&
                 qobject_cast<QAbstractScrollArea*>(w->parent()->parent()))
-#ifndef QT_NO_ACCESSIBILITY
+#if QT_CONFIG(accessibility)
                 || (opt && QStyleHelper::hasAncestor(opt->styleObject, QAccessible::ScrollBar))
 #endif
         ) {
@@ -3569,7 +3533,7 @@ void QMacStyle::drawControl(ControlElement ce, const QStyleOption *opt, QPainter
         if (const QStyleOptionToolButton *tb = qstyleoption_cast<const QStyleOptionToolButton *>(opt)) {
             QStyleOptionToolButton myTb = *tb;
             myTb.state &= ~State_AutoRaise;
-#ifndef QT_NO_ACCESSIBILITY
+#if QT_CONFIG(accessibility)
             if (QStyleHelper::hasAncestor(opt->styleObject, QAccessible::ToolBar)) {
                 QRect cr = tb->rect;
                 int shiftX = 0;
@@ -3659,7 +3623,7 @@ void QMacStyle::drawControl(ControlElement ce, const QStyleOption *opt, QPainter
                     QCommonStyle::drawControl(ce, &myTb, p, w);
                 }
             } else
-#endif // QT_NO_ACCESSIBILITY
+#endif // QT_CONFIG(accessibility)
             {
                 QCommonStyle::drawControl(ce, &myTb, p, w);
             }
@@ -5729,7 +5693,7 @@ void QMacStyle::drawComplexControl(ComplexControl cc, const QStyleOptionComplex 
     case CC_ToolButton:
         if (const QStyleOptionToolButton *tb
                 = qstyleoption_cast<const QStyleOptionToolButton *>(opt)) {
-#ifndef QT_NO_ACCESSIBILITY
+#if QT_CONFIG(accessibility)
             if (QStyleHelper::hasAncestor(opt->styleObject, QAccessible::ToolBar)) {
                 if (tb->subControls & SC_ToolButtonMenu) {
                     QStyleOption arrowOpt = *tb;
@@ -5755,7 +5719,7 @@ void QMacStyle::drawComplexControl(ComplexControl cc, const QStyleOptionComplex 
                 }
                 proxy()->drawControl(CE_ToolButtonLabel, opt, p, widget);
             } else
-#endif // QT_NO_ACCESSIBILITY
+#endif // QT_CONFIG(accessibility)
             {
                 auto bflags = tb->state;
                 if (tb->subControls & SC_ToolButton)
@@ -6237,7 +6201,7 @@ QRect QMacStyle::subControlRect(ComplexControl cc, const QStyleOptionComplex *op
     case CC_ToolButton:
         ret = QCommonStyle::subControlRect(cc, opt, sc, widget);
         if (sc == SC_ToolButtonMenu) {
-#ifndef QT_NO_ACCESSIBILITY
+#if QT_CONFIG(accessibility)
             if (QStyleHelper::hasAncestor(opt->styleObject, QAccessible::ToolBar))
                 ret.adjust(-toolButtonArrowMargin, 0, 0, 0);
 #endif

@@ -14,5 +14,5 @@ FAIL!  : tst_EventLoop::pass() '!std::exchange(m_inTestFunction, true)' returned
 FAIL!  : tst_EventLoop::pass() 'loop.timeout()' returned FALSE. (QTestEventLoop exited prematurely in cleanup())
    Loc: [qtbase/tests/auto/testlib/selftests/eventloop/tst_eventloop.cpp(0)]
 PASS   : tst_EventLoop::cleanupTestCase()
-Totals: 2 passed, 6 failed, 0 skipped, 0 blacklisted, 0ms
+Totals: 2 passed, 3 failed, 0 skipped, 0 blacklisted, 0ms
 ********* Finished testing of tst_EventLoop *********

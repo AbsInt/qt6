@@ -1,6 +1,6 @@
 #############################################################################
 ##
-## Copyright (C) 2021 The Qt Company Ltd.
+## Copyright (C) 2022 The Qt Company Ltd.
 ## Contact: https://www.qt.io/licensing/
 ##
 ## This file is part of the provisioning scripts of the Qt Toolkit.
@@ -40,22 +40,17 @@
 . "$PSScriptRoot\..\common\windows\helpers.ps1"
 
 # This script installs LLVM-Mingw by mstorsjo
+# https://github.com/mstorsjo/llvm-mingw/releases/tag/20220323
 
-$zip = Get-DownloadLocation "llvm-mingw-20210423-ucrt-x86_64.zip"
-$url_cache = "http://ci-files01-hki.intra.qt.io/input/windows/llvm-mingw-20210423-ucrt-x86_64.zip"
-$url_official = "https://github.com/mstorsjo/llvm-mingw/releases/download/20210423/llvm-mingw-20210423-ucrt-x86_64.zip"
+$zip = Get-DownloadLocation "llvm-mingw-20220323-ucrt-x86_64.zip"
+$url_cache = "http://ci-files01-hki.intra.qt.io/input/windows/llvm-mingw-20220323-ucrt-x86_64.zip"
+$url_official = "https://github.com/mstorsjo/llvm-mingw/releases/download/20220323/llvm-mingw-20220323-ucrt-x86_64.zip"
 
 Download $url_official $url_cache $zip
-Verify-Checksum $zip "da9fb1e4a74747b6c410240cec0d488e428fd338"
+Verify-Checksum $zip "2b55846635f9e57fd37a19e0ba4183b3176ad57f"
 Extract-7Zip $zip C:\
 
-Rename-Item C:\llvm-mingw-20210423-ucrt-x86_64 C:\llvm-mingw
+Rename-Item C:\llvm-mingw-20220323-ucrt-x86_64 C:\llvm-mingw
 
-# Due to https://github.com/mstorsjo/llvm-mingw/issues/199
-Remove-Item C:\llvm-mingw\aarch64-w64-mingw32\lib\libc++.dll.a
-Remove-Item C:\llvm-mingw\x86_64-w64-mingw32\lib\libc++.dll.a
-Remove-Item C:\llvm-mingw\armv7-w64-mingw32\lib\libc++.dll.a
-Remove-Item C:\llvm-mingw\i686-w64-mingw32\lib\libc++.dll.a
-
-Write-Output "llvm-mingw = 12" >> ~/versions.txt
+Write-Output "llvm-mingw = 14.0.0" >> ~/versions.txt
 Remove-Item -Path $zip

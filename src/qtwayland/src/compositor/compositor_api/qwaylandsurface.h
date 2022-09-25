@@ -1,32 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2017-2015 Pier Luigi Fiorini <pierluigi.fiorini@gmail.com>
-** Copyright (C) 2017 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtWaylandCompositor module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 or (at your option) any later version
-** approved by the KDE Free Qt Foundation. The licenses are as published by
-** the Free Software Foundation and appearing in the file LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2017-2015 Pier Luigi Fiorini <pierluigi.fiorini@gmail.com>
+// Copyright (C) 2017 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #ifndef QWAYLANDSURFACE_H
 #define QWAYLANDSURFACE_H
@@ -78,6 +52,7 @@ class Q_WAYLANDCOMPOSITOR_EXPORT QWaylandSurface : public QWaylandObject
     Q_PROPERTY(bool hasContent READ hasContent NOTIFY hasContentChanged)
     Q_PROPERTY(bool cursorSurface READ isCursorSurface WRITE markAsCursorSurface NOTIFY cursorSurfaceChanged)
     Q_PROPERTY(bool inhibitsIdle READ inhibitsIdle NOTIFY inhibitsIdleChanged REVISION(1, 14))
+    Q_PROPERTY(bool isOpaque READ isOpaque NOTIFY isOpaqueChanged REVISION(6, 4))
     Q_MOC_INCLUDE("qwaylanddrag.h")
     Q_MOC_INCLUDE("qwaylandcompositor.h")
 
@@ -138,6 +113,7 @@ public:
     bool isCursorSurface() const;
 
     bool inhibitsIdle() const;
+    bool isOpaque() const;
 
 #if QT_CONFIG(im)
     QWaylandInputMethodControl *inputMethodControl() const;
@@ -170,6 +146,7 @@ Q_SIGNALS:
     void dragStarted(QWaylandDrag *drag);
     void cursorSurfaceChanged();
     Q_REVISION(14) void inhibitsIdleChanged();
+    Q_REVISION(6, 4) void isOpaqueChanged();
 
     void configure(bool hasBuffer);
     void redraw();

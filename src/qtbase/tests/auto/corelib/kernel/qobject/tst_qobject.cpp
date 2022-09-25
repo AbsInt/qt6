@@ -1,32 +1,7 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Copyright (C) 2020 Olivier Goffart <ogoffart@woboq.com>
-** Copyright (C) 2021 Intel Corporation.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// Copyright (C) 2020 Olivier Goffart <ogoffart@woboq.com>
+// Copyright (C) 2021 Intel Corporation.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 // This test actually wants to practice narrowing conditions, so never define this.
 #ifdef QT_NO_NARROWING_CONVERSIONS_IN_CONNECT
@@ -4534,6 +4509,17 @@ void tst_QObject::pointerConnect()
     con = connect(&r1, &ReceiverObject::slot4 , &s, &SenderObject::signal4);
     QVERIFY(!con);
     QVERIFY(!QObject::disconnect(con));
+
+    //connect an arbitrary PMF to a slot
+    QTest::ignoreMessage(QtWarningMsg, "QObject::connect: signal not found in ReceiverObject");
+    con = connect(&r1, &ReceiverObject::reset, &r1, &ReceiverObject::slot1);
+    QVERIFY(!con);
+    QVERIFY(!QObject::disconnect(con));
+
+    QTest::ignoreMessage(QtWarningMsg, "QObject::connect: signal not found in ReceiverObject");
+    con = connect(&r1, &ReceiverObject::reset, &r1, [](){});
+    QVERIFY(!con);
+    QVERIFY(!QObject::disconnect(con));
 }
 
 void tst_QObject::pointerDisconnect()
@@ -7054,7 +7040,7 @@ void tst_QObject::checkArgumentsForNarrowing()
 {
     // Clang and ICC masquerade as GCC, so introduce a more strict define
     // for exactly GCC (to exclude/include it from some tests).
-#if defined(Q_CC_GNU) && !defined(Q_CC_CLANG) && !defined(Q_CC_INTEL)
+#if defined(Q_CC_GNU) && !defined(Q_CC_CLANG)
 #define Q_CC_EXACTLY_GCC Q_CC_GNU
 #endif
 

@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the Qt Quick Dialogs module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qquickfiledialog_p.h"
 
@@ -47,6 +11,8 @@
 #include <QtQuickDialogs2Utils/private/qquickfilenamefilter_p.h>
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 Q_DECLARE_LOGGING_CATEGORY(lcDialogs)
 Q_LOGGING_CATEGORY(lcFileDialog, "qt.quick.dialogs.filedialog")
@@ -299,6 +265,7 @@ void QQuickFileDialog::setCurrentFolder(const QUrl &currentFolder)
     \value FileDialog.DontConfirmOverwrite Don't ask for confirmation if an existing file is selected. By default confirmation is requested.
     \value FileDialog.ReadOnly Indicates that the dialog doesn't allow creating directories.
     \value FileDialog.HideNameFilterDetails Indicates if the file name filter details are hidden or not.
+    \value FileDialog.DontUseNativeDialog Forces the dialog to use a non-native quick implementation.
 */
 QFileDialogOptions::FileDialogOptions QQuickFileDialog::options() const
 {
@@ -603,7 +570,7 @@ QUrl QQuickFileDialog::addDefaultSuffix(const QUrl &file) const
     const QString suffix = m_options->defaultSuffix();
     // Urls with "content" scheme do not require suffixes. Such schemes are
     // used on Android.
-    const bool isContentScheme = url.scheme() == u"content"_qs;
+    const bool isContentScheme = url.scheme() == u"content"_s;
     if (!isContentScheme && !suffix.isEmpty() && !path.endsWith(QLatin1Char('/'))
         && path.lastIndexOf(QLatin1Char('.')) == -1) {
         url.setPath(path + QLatin1Char('.') + suffix);

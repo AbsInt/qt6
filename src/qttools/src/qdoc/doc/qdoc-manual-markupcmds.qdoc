@@ -1,29 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the documentation of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:FDL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Free Documentation License Usage
-** Alternatively, this file may be used under the terms of the GNU Free
-** Documentation License version 1.3 as published by the Free Software
-** Foundation and appearing in the file included in the packaging of
-** this file. Please review the following information to ensure
-** the GNU Free Documentation License version 1.3 requirements
-** will be met: https://www.gnu.org/licenses/fdl-1.3.html.
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2020 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
 
 /*!
     \page 03-qdoc-commands-markup.html
@@ -67,10 +43,8 @@
     \li \l {list-command} {\\list}
     \li \l {meta-command} {\\meta}
     \li \l {noautolist-command} {\\noautolist}
-    \li \l {newcode-command} {\\newcode, deprecated}
     \li \l {li-command} {\\o} (deprecated, use \\li)
     \li \l {note-command} {\\note}
-    \li \l {oldcode-command} {\\oldcode, deprecated}
     \li \l {omit-command} {\\omit}
     \li \l {printline-command} {\\printline}
     \li \l {printto-command} {\\printto}
@@ -974,18 +948,6 @@
     language, but should still be styled similarly to a \\code paragraph.
 
     Like \\code, \\badcode accepts also optional parameters.
-
-    \target newcode-command
-    \section1 \\newcode
-
-    The \\newcode command is deprecated and marked for
-    removal in Qt 6.4.
-
-    \target oldcode-command
-    \section1 \\oldcode
-
-    The \\oldcode command is deprecated and marked for
-    removal in Qt 6.4.
 
     \target qml-command
     \section1 \\qml
@@ -3276,25 +3238,28 @@
     and namespaces. This information will then appear in a table at the top of
     the class or namespace documentation page. For example:
 
-        \code
-        / *!
-            \namespace Foo
-            \inheaderfile Bar
-            \qtcmakepackage Baz
-            \brief A namespace.
+    \badcode *
+    /*!
+        \namespace Foo
+        \inheaderfile Bar
+        \qtcmakepackage Baz
+        \brief A namespace.
 
-            [...]
-        * /
-        \endcode
+        ...
+    \1/
+    \endcode
 
     QDoc will output this as
 
     \raw HTML
+        <blockquote>
         <h1 class="title">Foo Namespace</h1>
-        <p>A namespace. <a href="#details">More...</a></p>
+        <p>A namespace. <a>More...</a></p>
         <div class="table"><table class="alignedsummary">
-        <tr><td class="memItemLeft rightAlign topAlign"> Header:</td><td class="memItemRight bottomAlign"> <span class="preprocessor">#include &lt;Bar&gt;</span>
-        </td></tr><tr><td class="memItemLeft rightAlign topAlign"> CMake:</td><td class="memItemRight bottomAlign"> find_package(Qt6 REQUIRED COMPONENTS Baz)</td></tr>
+        <tr><td class="memItemLeft rightAlign topAlign"> Header:</td><td class="memItemRight bottomAlign"> <span class="preprocessor">#include &lt;Bar&gt;</span></td></tr>
+        <tr><td class="memItemLeft rightAlign topAlign"> CMake:</td><td class="memItemRight bottomAlign"> find_package(Qt6 REQUIRED COMPONENTS Baz)</td></tr>
+        </table></div>
+        </blockquote>
     \endraw
 
 

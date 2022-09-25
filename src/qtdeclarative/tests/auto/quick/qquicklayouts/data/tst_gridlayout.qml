@@ -1,52 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:BSD$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** BSD License Usage
-** Alternatively, you may use this file under the terms of the BSD license
-** as follows:
-**
-** "Redistribution and use in source and binary forms, with or without
-** modification, are permitted provided that the following conditions are
-** met:
-**   * Redistributions of source code must retain the above copyright
-**     notice, this list of conditions and the following disclaimer.
-**   * Redistributions in binary form must reproduce the above copyright
-**     notice, this list of conditions and the following disclaimer in
-**     the documentation and/or other materials provided with the
-**     distribution.
-**   * Neither the name of The Qt Company Ltd nor the names of its
-**     contributors may be used to endorse or promote products derived
-**     from this software without specific prior written permission.
-**
-**
-** THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-** "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-** LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-** A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-** OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-** SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-** LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-** DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-** THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-** (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-** OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE."
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2020 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR BSD-3-Clause
 
 import QtQuick 2.6
 import QtTest 1.0
@@ -985,8 +938,10 @@ Item {
 
             // reset left|rightMargin. It should then use the generic "margins" property
             c0.Layout.leftMargin = undefined
+            waitForItemPolished(layout)
             compare(layout.implicitWidth, 10 + 20 + 4 + 4 + 20 + 6)
             c0.Layout.bottomMargin = undefined
+            waitForItemPolished(layout)
             compare(layout.implicitHeight, 3 + 20 + 10 + 4 + 20 + 5)
         }
 
@@ -1202,6 +1157,53 @@ Item {
             verify(isPolishScheduled(layout))
             verify(waitForItemPolished(layout))
             // Shouldn't be any warnings, but no way to verify this currently: QTBUG-70029
+        }
+
+        // ------------------
+        Component {
+            id: hfw_Component
+            GridLayout {
+                columns: 2
+
+                Text {
+                    text: "Description:"
+                }
+                TextEdit {
+                    Layout.fillWidth: true
+                    wrapMode: TextEdit.WordWrap
+                    text: "Lorem ipsum dolor sit amet, consectetur adipiscing elit."
+                          + " Mauris fermentum a ante et feugiat. Nam tortor velit, sagittis et nunc a, mattis efficitur dui."
+                          + " Quisque nec blandit lacus. Morbi eget mi arcu."
+
+                }
+                Rectangle {
+                    color: "lightgray"
+                    Layout.row: 1
+                    Layout.column: 0
+                    Layout.columnSpan: 2
+                    Layout.fillWidth: true
+                    implicitHeight: 2
+                }
+            }
+        }
+        function test_hfw() {
+            // Test to see how layouts handle height-for-width items
+            // For TextEdit, changing the width will update its implicitHeight to match what's
+            // needed in order to display it's full text
+            // Therefore, reducing the width of the layout should also increase its implicitHeight.
+            var layout = createTemporaryObject(hfw_Component, container)
+            verify(layout)
+            verify(waitForItemPolished(layout))
+            var initialImplicitHeight = layout.implicitHeight
+            var oldImplicitHeight = initialImplicitHeight
+            for (var w = layout.width - 100; w >= 200; w -= 100) {
+                layout.width = w
+                // will trigger a change in implicitHeight, which will trigger a polish event
+                verify(waitForItemPolished(layout))
+                verify(layout.implicitHeight >= oldImplicitHeight)
+                oldImplicitHeight = layout.implicitHeight
+            }
+            verify(layout.implicitHeight > initialImplicitHeight)
         }
     }
 }

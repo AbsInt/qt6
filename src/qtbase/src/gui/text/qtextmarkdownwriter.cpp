@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2019 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtGui module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2019 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qtextmarkdownwriter_p.h"
 #include "qtextdocumentlayout_p.h"
@@ -53,17 +17,19 @@
 
 QT_BEGIN_NAMESPACE
 
+using namespace Qt::StringLiterals;
+
 Q_LOGGING_CATEGORY(lcMDW, "qt.text.markdown.writer")
 
-static const QChar Space = QLatin1Char(' ');
-static const QChar Tab = QLatin1Char('\t');
-static const QChar Newline = QLatin1Char('\n');
-static const QChar CarriageReturn = QLatin1Char('\r');
+static const QChar Space = u' ';
+static const QChar Tab = u'\t';
+static const QChar Newline = u'\n';
+static const QChar CarriageReturn = u'\r';
 static const QChar LineBreak = u'\x2028';
-static const QChar DoubleQuote = QLatin1Char('"');
-static const QChar Backtick = QLatin1Char('`');
-static const QChar Backslash = QLatin1Char('\\');
-static const QChar Period = QLatin1Char('.');
+static const QChar DoubleQuote = u'"';
+static const QChar Backtick = u'`';
+static const QChar Backslash = u'\\';
+static const QChar Period = u'.';
 
 QTextMarkdownWriter::QTextMarkdownWriter(QTextStream &stream, QTextDocument::MarkdownFeatures features)
   : m_stream(stream), m_features(features)
@@ -95,7 +61,7 @@ void QTextMarkdownWriter::writeTable(const QAbstractItemModel *table)
     }
     m_stream << "|" << Qt::endl;
     for (int col = 0; col < tableColumnWidths.length(); ++col)
-        m_stream << '|' << QString(tableColumnWidths[col], QLatin1Char('-'));
+        m_stream << '|' << QString(tableColumnWidths[col], u'-');
     m_stream << '|'<< Qt::endl;
 
     // write the body
@@ -166,7 +132,7 @@ void QTextMarkdownWriter::writeFrame(const QTextFrame *frame)
                     if (tableRow == 0) {
                         m_stream << Newline;
                         for (int col = 0; col < tableColumnWidths.length(); ++col)
-                            m_stream << '|' << QString(tableColumnWidths[col], QLatin1Char('-'));
+                            m_stream << '|' << QString(tableColumnWidths[col], u'-');
                         m_stream << '|';
                     }
                     m_stream << Newline << "|";
@@ -252,11 +218,11 @@ static int nearestWordWrapIndex(const QString &s, int before)
     if (lcMDW().isDebugEnabled()) {
         QString frag = s.mid(fragBegin, 30);
         qCDebug(lcMDW) << frag << before;
-        qCDebug(lcMDW) << QString(before - fragBegin, Period) + QLatin1Char('<');
+        qCDebug(lcMDW) << QString(before - fragBegin, Period) + u'<';
     }
     for (int i = before - 1; i >= 0; --i) {
         if (s.at(i).isSpace()) {
-            qCDebug(lcMDW) << QString(i - fragBegin, Period) + QLatin1Char('^') << i;
+            qCDebug(lcMDW) << QString(i - fragBegin, Period) + u'^' << i;
             return i;
         }
     }
@@ -290,7 +256,7 @@ static void maybeEscapeFirstChar(QString &s)
     char firstChar = sTrimmed.at(0).toLatin1();
     if (firstChar == '*' || firstChar == '+' || firstChar == '-') {
         int i = s.indexOf(QLatin1Char(firstChar));
-        s.insert(i, QLatin1Char('\\'));
+        s.insert(i, u'\\');
     }
 }
 
@@ -429,7 +395,7 @@ int QTextMarkdownWriter::writeBlock(const QTextBlock &block, bool wrap, bool ign
                 numberStr += Space;
             prefix += numberStr;
         } else {
-            prefix += QLatin1String(bullet) + Space;
+            prefix += QLatin1StringView(bullet) + Space;
         }
         m_stream << prefix;
     } else if (blockFmt.hasProperty(QTextFormat::BlockTrailingHorizontalRulerWidth)) {
@@ -443,7 +409,7 @@ int QTextMarkdownWriter::writeBlock(const QTextBlock &block, bool wrap, bool ign
         if (!m_fencedCodeBlock) {
             QString fenceChar = blockFmt.stringProperty(QTextFormat::BlockCodeFence);
             if (fenceChar.isEmpty())
-                fenceChar = QLatin1String("`");
+                fenceChar = "`"_L1;
             m_codeBlockFence = QString(3, fenceChar.at(0));
             if (blockFmt.hasProperty(QTextFormat::BlockIndent))
                 m_codeBlockFence = QString(m_wrappedLineIndent, Space) + m_codeBlockFence;
@@ -505,12 +471,12 @@ int QTextMarkdownWriter::writeBlock(const QTextBlock &block, bool wrap, bool ign
             QTextImageFormat ifmt = fmt.toImageFormat();
             QString desc = ifmt.stringProperty(QTextFormat::ImageAltText);
             if (desc.isEmpty())
-                desc = QLatin1String("image");
-            QString s = QLatin1String("![") + desc + QLatin1String("](") + ifmt.name();
+                desc = "image"_L1;
+            QString s = "!["_L1 + desc + "]("_L1 + ifmt.name();
             QString title = ifmt.stringProperty(QTextFormat::ImageTitle);
             if (!title.isEmpty())
                 s += Space + DoubleQuote + title + DoubleQuote;
-            s += QLatin1Char(')');
+            s += u')';
             if (wrap && col + s.length() > ColumnLimit) {
                 m_stream << Newline << wrapIndentString;
                 col = m_wrappedLineIndent;
@@ -518,13 +484,19 @@ int QTextMarkdownWriter::writeBlock(const QTextBlock &block, bool wrap, bool ign
             m_stream << s;
             col += s.length();
         } else if (fmt.hasProperty(QTextFormat::AnchorHref)) {
-            QString s = QLatin1Char('[') + fragmentText + QLatin1String("](") +
-                    fmt.property(QTextFormat::AnchorHref).toString();
-            if (fmt.hasProperty(QTextFormat::TextToolTip)) {
-                s += Space;
-                s += createLinkTitle(fmt.property(QTextFormat::TextToolTip).toString());
+            const auto href = fmt.property(QTextFormat::AnchorHref).toString();
+            const bool hasToolTip = fmt.hasProperty(QTextFormat::TextToolTip);
+            QString s;
+            if (!hasToolTip && href == fragmentText && !QUrl(href, QUrl::StrictMode).scheme().isEmpty()) {
+                s = u'<' + href + u'>';
+            } else {
+                s = u'[' + fragmentText + "]("_L1 + href;
+                if (hasToolTip) {
+                    s += Space;
+                    s += createLinkTitle(fmt.property(QTextFormat::TextToolTip).toString());
+                }
+                s += u')';
             }
-            s += QLatin1Char(')');
             if (wrap && col + s.length() > ColumnLimit) {
                 m_stream << Newline << wrapIndentString;
                 col = m_wrappedLineIndent;
@@ -546,22 +518,22 @@ int QTextMarkdownWriter::writeBlock(const QTextBlock &block, bool wrap, bool ign
                 }
                 if (!blockFmt.headingLevel() && !mono) {
                     if (fontInfo.bold() != bold) {
-                        markers += QLatin1String("**");
+                        markers += "**"_L1;
                         bold = fontInfo.bold();
                     }
                     if (fontInfo.italic() != italic) {
-                        markers += QLatin1Char('*');
+                        markers += u'*';
                         italic = fontInfo.italic();
                     }
                     if (fontInfo.strikeOut() != strikeOut) {
-                        markers += QLatin1String("~~");
+                        markers += "~~"_L1;
                         strikeOut = fontInfo.strikeOut();
                     }
                     if (fontInfo.underline() != underline) {
                         // Markdown doesn't support underline, but the parser will treat a single underline
                         // the same as a single asterisk, and the marked fragment will be rendered in italics.
                         // That will have to do.
-                        markers += QLatin1Char('_');
+                        markers += u'_';
                         underline = fontInfo.underline();
                     }
                 }

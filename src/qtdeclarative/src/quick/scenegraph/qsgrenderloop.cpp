@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtQuick module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qsgrenderloop_p.h"
 #include "qsgthreadedrenderloop_p.h"
@@ -105,11 +69,6 @@ void QSGRenderLoop::cleanup()
     }
     delete s_instance;
     s_instance = nullptr;
-
-#ifdef ENABLE_DEFAULT_BACKEND
-    QSGRhiSupport::cleanupDefaultVulkanInstance();
-    QSGRhiProfileConnection::instance()->cleanup();
-#endif
 }
 
 QSurface::SurfaceType QSGRenderLoop::windowSurfaceType() const
@@ -210,7 +169,7 @@ QSGRenderLoop *QSGRenderLoop::instance()
             QSGRhiSupport *rhiSupport = QSGRhiSupport::instance();
 
             QSGRenderLoopType loopType;
-            if (rhiSupport->isRhiEnabled() && rhiSupport->rhiBackend() != QRhi::OpenGLES2) {
+            if (rhiSupport->rhiBackend() != QRhi::OpenGLES2) {
                 loopType = ThreadedRenderLoop;
             } else {
                 if (QGuiApplicationPrivate::platformIntegration()->hasCapability(QPlatformIntegration::ThreadedOpenGL))
@@ -219,25 +178,23 @@ QSGRenderLoop *QSGRenderLoop::instance()
                     loopType = BasicRenderLoop;
             }
 
-            if (rhiSupport->isRhiEnabled()) {
-                switch (rhiSupport->rhiBackend()) {
-                case QRhi::Null:
-                    loopType = BasicRenderLoop;
-                    break;
+            switch (rhiSupport->rhiBackend()) {
+            case QRhi::Null:
+                loopType = BasicRenderLoop;
+                break;
 
-                case QRhi::D3D11:
-                    // The threaded loop's model may not be suitable for DXGI
-                    // due to the possibility of having the main thread (with
-                    // the Windows message pump) blocked while issuing a
-                    // Present on the render thread. However, according to the
-                    // docs this can be a problem for fullscreen swapchains
-                    // only. So leave threaded enabled by default for now and
-                    // revisit later if there are problems.
-                    break;
+            case QRhi::D3D11:
+                // The threaded loop's model may not be suitable for DXGI
+                // due to the possibility of having the main thread (with
+                // the Windows message pump) blocked while issuing a
+                // Present on the render thread. However, according to the
+                // docs this can be a problem for fullscreen swapchains
+                // only. So leave threaded enabled by default for now and
+                // revisit later if there are problems.
+                break;
 
-                default:
-                    break;
-                }
+            default:
+                break;
             }
 
             // The environment variables can always override. This is good
@@ -463,9 +420,6 @@ bool QSGGuiThreadRenderLoop::ensureRhi(QQuickWindow *window, WindowData &data)
         ownRhi = rhiResult.own;
 
         if (rhi) {
-            if (rhiSupport->isProfilingRequested())
-                QSGRhiProfileConnection::instance()->initialize(rhi);
-
             data.rhiDeviceLost = false;
 
             ok = true;
@@ -515,10 +469,13 @@ bool QSGGuiThreadRenderLoop::ensureRhi(QQuickWindow *window, WindowData &data)
         if (alpha)
             flags |= QRhiSwapChain::SurfaceHasPreMulAlpha;
 
-        // Request NoVSync if swap interval was set to 0. What this means in
-        // practice is another question, but at least we tried.
-        if (requestedFormat.swapInterval() == 0)
+        // Request NoVSync if swap interval was set to 0 (either by the app or
+        // by QSG_NO_VSYNC). What this means in practice is another question,
+        // but at least we tried.
+        if (requestedFormat.swapInterval() == 0) {
+            qCDebug(QSG_LOG_INFO, "Swap interval is 0, attempting to disable vsync when presenting.");
             flags |= QRhiSwapChain::NoVSync;
+        }
 
         cd->swapchain = rhi->newSwapChain();
         static bool depthBufferEnabled = qEnvironmentVariableIsEmpty("QSG_NO_DEPTH_BUFFER");
@@ -530,6 +487,7 @@ bool QSGGuiThreadRenderLoop::ensureRhi(QQuickWindow *window, WindowData &data)
             cd->swapchain->setDepthStencil(cd->depthStencilForSwapchain);
         }
         cd->swapchain->setWindow(window);
+        rhiSupport->applySwapChainFormat(cd->swapchain);
         qCDebug(QSG_LOG_INFO, "MSAA sample count for the swapchain is %d. Alpha channel requested = %s",
                 data.sampleCount, alpha ? "yes" : "no");
         cd->swapchain->setSampleCount(data.sampleCount);
@@ -719,8 +677,6 @@ void QSGGuiThreadRenderLoop::renderWindow(QQuickWindow *window)
                 int(data.timeBetweenRenders.restart()));
     }
 
-    QSGRhiProfileConnection::instance()->send(rhi);
-
     // Might have been set during syncSceneGraph()
     if (data.updatePending)
         maybeUpdate(window);
@@ -825,7 +781,7 @@ void QSGGuiThreadRenderLoop::handleUpdateRequest(QQuickWindow *window)
 
 #endif // ENABLE_DEFAULT_BACKEND
 
+QT_END_NAMESPACE
+
 #include "qsgrenderloop.moc"
 #include "moc_qsgrenderloop_p.cpp"
-
-QT_END_NAMESPACE

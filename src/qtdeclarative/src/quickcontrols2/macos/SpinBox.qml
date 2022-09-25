@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the Qt Quick Controls 2 module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2020 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 import QtQuick
 import QtQuick.Templates as T
@@ -44,28 +8,12 @@ import QtQuick.NativeStyle as NativeStyle
 T.SpinBox {
     id: control
 
-    property bool __nativeBackground: background instanceof NativeStyle.StyleItem
-    property bool nativeIndicators: up.indicator.hasOwnProperty("_qt_default")
-                                    && down.indicator.hasOwnProperty("_qt_default")
-
-    font.pixelSize: background.styleFont(control).pixelSize
-
-    implicitWidth: Math.max(implicitBackgroundWidth + leftInset + rightInset,
-                            90 /* minimum */ )
-    implicitHeight: Math.max(implicitBackgroundHeight, up.implicitIndicatorHeight + down.implicitIndicatorHeight)
+    implicitWidth: Math.max(implicitContentWidth + leftInset + rightInset)
+    implicitHeight: Math.max(implicitContentHeight, up.implicitIndicatorHeight + down.implicitIndicatorHeight)
                     + topInset + bottomInset
 
     spacing: 2
-
-    // Push the background right to make room for the indicators
-    rightInset: nativeIndicators ? up.implicitIndicatorWidth + spacing : 0
-
-    leftPadding: __nativeBackground ? background.contentPadding.left: 0
-    topPadding: __nativeBackground ? background.contentPadding.top: 0
-    rightPadding: (__nativeBackground ? background.contentPadding.right : 0) + rightInset
-    bottomPadding: __nativeBackground ? background.contentPadding.bottom: 0
-
-    readonly property Item __focusFrameTarget: contentItem
+    rightPadding: up.implicitIndicatorWidth + spacing
 
     validator: IntValidator {
         locale: control.locale.name
@@ -73,7 +21,7 @@ T.SpinBox {
         top: Math.max(control.from, control.to)
     }
 
-    contentItem: TextInput {
+    contentItem: TextField {
         text: control.displayText
         font: control.font
         color: control.palette.text
@@ -81,6 +29,7 @@ T.SpinBox {
         selectedTextColor: control.palette.highlightedText
         horizontalAlignment: Qt.AlignLeft
         verticalAlignment: Qt.AlignVCenter
+        implicitWidth: 100 // From IB XCode
 
         topPadding: 2
         bottomPadding: 2
@@ -90,15 +39,12 @@ T.SpinBox {
         readOnly: !control.editable
         validator: control.validator
         inputMethodHints: control.inputMethodHints
-
-        readonly property Item __focusFrameControl: control
     }
 
     NativeStyle.SpinBox {
         id: upAndDown
         control: control
         subControl: NativeStyle.SpinBox.Up
-        visible: nativeIndicators
         x: up.indicator.x
         y: up.indicator.y
         useNinePatchImage: false
@@ -109,7 +55,6 @@ T.SpinBox {
         y: (parent.height / 2) - height
         implicitWidth: upAndDown.width
         implicitHeight: upAndDown.height / 2
-        property bool _qt_default
     }
 
     down.indicator: Item {
@@ -117,13 +62,5 @@ T.SpinBox {
         y: up.indicator.y + upAndDown.height / 2
         implicitWidth: upAndDown.width
         implicitHeight: upAndDown.height / 2
-        property bool _qt_default
-    }
-
-    background: NativeStyle.SpinBox {
-        control: control
-        subControl: NativeStyle.SpinBox.Frame
-        contentWidth: contentItem.implicitWidth
-        contentHeight: contentItem.implicitHeight
     }
 }

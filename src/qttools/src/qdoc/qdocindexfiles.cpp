@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the tools applications of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "qdocindexfiles.h"
 
@@ -251,7 +226,7 @@ void QDocIndexFiles::readIndexSection(QXmlStreamReader &reader, Node *current,
             QString bases = attributes.value(QLatin1String("bases")).toString();
             if (!bases.isEmpty())
                 m_basesList.append(
-                        QPair<ClassNode *, QString>(static_cast<ClassNode *>(node), bases));
+                        std::pair<ClassNode *, QString>(static_cast<ClassNode *>(node), bases));
         }
         if (!indexUrl.isEmpty())
             location = Location(indexUrl + QLatin1Char('/') + name.toLower() + ".html");
@@ -314,8 +289,9 @@ void QDocIndexFiles::readIndexSection(QXmlStreamReader &reader, Node *current,
         else if (!indexUrl.isNull())
             location = Location(name);
         node = qmlTypeNode;
-    } else if (elementName == QLatin1String("qmlbasictype")) {
-        auto *qbtn = new QmlBasicTypeNode(parent, name);
+    } else if (elementName == QLatin1String("qmlvaluetype")
+               || elementName == QLatin1String("qmlbasictype")) {
+        auto *qbtn = new QmlValueTypeNode(parent, name);
         qbtn->setTitle(attributes.value(QLatin1String("title")).toString());
         if (attributes.hasAttribute(QLatin1String("location")))
             name = attributes.value("location").toString();
@@ -325,7 +301,7 @@ void QDocIndexFiles::readIndexSection(QXmlStreamReader &reader, Node *current,
             location = Location(name);
         node = qbtn;
     } else if (elementName == QLatin1String("jsbasictype")) {
-        auto *qbtn = new QmlBasicTypeNode(parent, name);
+        auto *qbtn = new QmlValueTypeNode(parent, name);
         qbtn->setGenus(Node::JS);
         qbtn->setTitle(attributes.value(QLatin1String("title")).toString());
         if (attributes.hasAttribute(QLatin1String("location")))
@@ -890,8 +866,8 @@ bool QDocIndexFiles::generateIndexSection(QXmlStreamWriter &writer, Node *node,
             logicalModuleName = node->logicalModule()->logicalModuleName();
         qmlFullBaseName = node->qmlFullBaseName();
         break;
-    case Node::QmlBasicType:
-        nodeName = "qmlbasictype";
+    case Node::QmlValueType:
+        nodeName = "qmlvaluetype";
         break;
     case Node::JsBasicType:
         nodeName = "jsbasictype";

@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the plugins of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qwaylanddisplay_p.h"
 
@@ -60,6 +24,7 @@
 #include <wayland-cursor.h>
 #endif
 #include "qwaylandhardwareintegration_p.h"
+#include "qwaylandtextinputv1_p.h"
 #include "qwaylandtextinputv2_p.h"
 #if QT_WAYLAND_TEXT_INPUT_V4_WIP
 #include "qwaylandtextinputv4_p.h"
@@ -80,6 +45,7 @@
 #endif
 #include "qwaylandqtkey_p.h"
 
+#include <QtWaylandClient/private/qwayland-text-input-unstable-v1.h>
 #include <QtWaylandClient/private/qwayland-text-input-unstable-v2.h>
 #include <QtWaylandClient/private/qwayland-text-input-unstable-v4-wip.h>
 #include <QtWaylandClient/private/qwayland-wp-primary-selection-unstable-v1.h>
@@ -214,6 +180,9 @@ protected:
         // Make the main thread call wl_prepare_read(), dispatch the pending messages and flush the
         // outbound ones. Wait until it's done before proceeding, unless we're told to quit.
         while (waitForReading()) {
+            if (!m_reading.loadRelaxed())
+                break;
+
             pollfd fds[2] = { { m_fd, POLLIN, 0 }, { m_pipefd[0], POLLIN, 0 } };
             poll(fds, 2, -1);
 
@@ -391,6 +360,9 @@ QWaylandDisplay::~QWaylandDisplay(void)
 #endif
     if (mDisplay)
         wl_display_disconnect(mDisplay);
+
+    if (m_frameEventQueue)
+        wl_event_queue_destroy(m_frameEventQueue);
 }
 
 // Steps which is called just after constructor. This separates registry_global() out of the constructor
@@ -453,9 +425,11 @@ void QWaylandDisplay::checkTextInputProtocol()
 {
     QStringList tips, timps; // for text input protocols and text input manager protocols
     tips << QLatin1String(QtWayland::qt_text_input_method_v1::interface()->name)
-         << QLatin1String(QtWayland::zwp_text_input_v2::interface()->name);
+         << QLatin1String(QtWayland::zwp_text_input_v2::interface()->name)
+         << QLatin1String(QtWayland::zwp_text_input_v1::interface()->name);
     timps << QLatin1String(QtWayland::qt_text_input_method_manager_v1::interface()->name)
-          << QLatin1String(QtWayland::zwp_text_input_manager_v2::interface()->name);
+          << QLatin1String(QtWayland::zwp_text_input_manager_v2::interface()->name)
+          << QLatin1String(QtWayland::zwp_text_input_manager_v1::interface()->name);
 #if QT_WAYLAND_TEXT_INPUT_V4_WIP
     tips << QLatin1String(QtWayland::zwp_text_input_v4::interface()->name);
     timps << QLatin1String(QtWayland::zwp_text_input_manager_v4::interface()->name);
@@ -540,6 +514,7 @@ void QWaylandDisplay::registry_global(uint32_t id, const QString &interface, uin
             && (mTextInputManagerList.contains(interface) && mTextInputManagerList.indexOf(interface) < mTextInputManagerIndex)) {
         qCDebug(lcQpaWayland) << "text input: register qt_text_input_method_manager_v1";
         if (mTextInputManagerIndex < INT_MAX) {
+            mTextInputManagerv1.reset();
             mTextInputManagerv2.reset();
 #if QT_WAYLAND_TEXT_INPUT_V4_WIP
             mTextInputManagerv4.reset();
@@ -553,11 +528,34 @@ void QWaylandDisplay::registry_global(uint32_t id, const QString &interface, uin
             inputDevice->setTextInputMethod(new QWaylandTextInputMethod(this, mTextInputMethodManager->get_text_input_method(inputDevice->wl_seat())));
         mWaylandIntegration->reconfigureInputContext();
         mTextInputManagerIndex = mTextInputManagerList.indexOf(interface);
+    } else if (interface == QLatin1String(QtWayland::zwp_text_input_manager_v1::interface()->name)
+               && (mTextInputManagerList.contains(interface) && mTextInputManagerList.indexOf(interface) < mTextInputManagerIndex)) {
+        qCDebug(lcQpaWayland) << "text input: register zwp_text_input_v1";
+        if (mTextInputManagerIndex < INT_MAX) {
+            mTextInputMethodManager.reset();
+            mTextInputManagerv2.reset();
+#if QT_WAYLAND_TEXT_INPUT_V4_WIP
+            mTextInputManagerv4.reset();
+#endif // QT_WAYLAND_TEXT_INPUT_V4_WIP
+            for (QWaylandInputDevice *inputDevice : qAsConst(mInputDevices))
+                inputDevice->setTextInputMethod(nullptr);
+        }
+
+        mTextInputManagerv1.reset(new QtWayland::zwp_text_input_manager_v1(registry, id, 1));
+        for (QWaylandInputDevice *inputDevice : qAsConst(mInputDevices)) {
+            auto textInput = new QWaylandTextInputv1(this, mTextInputManagerv1->create_text_input());
+            textInput->setSeat(inputDevice->wl_seat());
+            inputDevice->setTextInput(textInput);
+        }
+
+        mWaylandIntegration->reconfigureInputContext();
+        mTextInputManagerIndex = mTextInputManagerList.indexOf(interface);
     } else if (interface == QLatin1String(QtWayland::zwp_text_input_manager_v2::interface()->name)
             && (mTextInputManagerList.contains(interface) && mTextInputManagerList.indexOf(interface) < mTextInputManagerIndex)) {
         qCDebug(lcQpaWayland) << "text input: register zwp_text_input_v2";
         if (mTextInputManagerIndex < INT_MAX) {
             mTextInputMethodManager.reset();
+            mTextInputManagerv1.reset();
 #if QT_WAYLAND_TEXT_INPUT_V4_WIP
             mTextInputManagerv4.reset();
 #endif // QT_WAYLAND_TEXT_INPUT_V4_WIP
@@ -603,6 +601,7 @@ void QWaylandDisplay::registry_global(uint32_t id, const QString &interface, uin
     }
 
     mGlobals.append(RegistryGlobal(id, interface, version, registry));
+    emit globalAdded(mGlobals.back());
 
     const auto copy = mRegistryListeners; // be prepared for listeners unregistering on notification
     for (Listener l : copy)
@@ -633,6 +632,12 @@ void QWaylandDisplay::registry_global_remove(uint32_t id)
                     }
                 }
             }
+            if (global.interface == QLatin1String(QtWayland::zwp_text_input_manager_v1::interface()->name)) {
+                mTextInputManagerv1.reset();
+                for (QWaylandInputDevice *inputDevice : qAsConst(mInputDevices))
+                    inputDevice->setTextInput(nullptr);
+                mWaylandIntegration->reconfigureInputContext();
+            }
             if (global.interface == QLatin1String(QtWayland::zwp_text_input_manager_v2::interface()->name)) {
                 mTextInputManagerv2.reset();
                 for (QWaylandInputDevice *inputDevice : qAsConst(mInputDevices))
@@ -653,7 +658,7 @@ void QWaylandDisplay::registry_global_remove(uint32_t id)
                     inputDevice->setTextInputMethod(nullptr);
                 mWaylandIntegration->reconfigureInputContext();
             }
-            mGlobals.removeAt(i);
+            emit globalRemoved(mGlobals.takeAt(i));
             break;
         }
     }
@@ -694,50 +699,9 @@ uint32_t QWaylandDisplay::currentTimeMillisec()
     return 0;
 }
 
-static void
-sync_callback(void *data, struct wl_callback *callback, uint32_t serial)
-{
-    Q_UNUSED(serial);
-    bool *done = static_cast<bool *>(data);
-
-    *done = true;
-
-    // If the wl_callback done event is received after the condition check in the while loop in
-    // forceRoundTrip(), but before the call to processEvents, the call to processEvents may block
-    // forever if no more events are posted (eventhough the callback is handled in response to the
-    // aboutToBlock signal). Hence, we wake up the event dispatcher so forceRoundTrip may return.
-    // (QTBUG-64696)
-    if (auto *dispatcher = QThread::currentThread()->eventDispatcher())
-        dispatcher->wakeUp();
-
-    wl_callback_destroy(callback);
-}
-
-static const struct wl_callback_listener sync_listener = {
-    sync_callback
-};
-
 void QWaylandDisplay::forceRoundTrip()
 {
-    // wl_display_roundtrip() works on the main queue only,
-    // but we use a separate one, so basically reimplement it here
-    int ret = 0;
-    bool done = false;
-    wl_callback *callback = wl_display_sync(mDisplay);
-    wl_callback_add_listener(callback, &sync_listener, &done);
-    flushRequests();
-    if (QThread::currentThread()->eventDispatcher()) {
-        while (!done && ret >= 0) {
-            QThread::currentThread()->eventDispatcher()->processEvents(QEventLoop::WaitForMoreEvents);
-            ret = wl_display_dispatch_pending(mDisplay);
-        }
-    } else {
-        while (!done && ret >= 0)
-            ret = wl_display_dispatch(mDisplay);
-    }
-
-    if (ret == -1 && !done)
-        wl_callback_destroy(callback);
+     wl_display_roundtrip(mDisplay);
 }
 
 bool QWaylandDisplay::supportsWindowDecoration() const
@@ -914,8 +878,7 @@ QWaylandCursorTheme *QWaylandDisplay::loadCursorTheme(const QString &name, int p
 
 } // namespace QtWaylandClient
 
-#include "qwaylanddisplay.moc"
-
 QT_END_NAMESPACE
 
+#include "qwaylanddisplay.moc"
 #include "moc_qwaylanddisplay_p.cpp"

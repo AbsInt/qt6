@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 #include <qtest.h>
 #include <QtTest/QSignalSpy>
 #include <QtQuickTestUtils/private/testhttpserver_p.h>
@@ -37,6 +12,7 @@
 #include <QtQml/qqmlexpression.h>
 #include <QtQml/qqmlcomponent.h>
 #include <QtGui/qguiapplication.h>
+#include <QtGui/private/qguiapplication_p.h>
 #include <private/qquickflickable_p.h>
 #include <private/qquickrectangle_p.h>
 #include <private/qquicktextedit_p.h>
@@ -60,10 +36,6 @@
 #include <QtGui/qstylehints.h>
 #include <qmath.h>
 
-#ifdef Q_OS_MAC
-#include <Carbon/Carbon.h>
-#endif
-
 Q_DECLARE_METATYPE(QQuickTextEdit::SelectionMode)
 Q_DECLARE_METATYPE(Qt::Key)
 DEFINE_BOOL_CONFIG_OPTION(qmlDisableDistanceField, QML_DISABLE_DISTANCEFIELD)
@@ -73,22 +45,6 @@ Q_LOGGING_CATEGORY(lcTests, "qt.quick.tests")
 static bool isPlatformWayland()
 {
     return !QGuiApplication::platformName().compare(QLatin1String("wayland"), Qt::CaseInsensitive);
-}
-
-QString createExpectedFileIfNotFound(const QString& filebasename, const QImage& actual)
-{
-    // XXX This will be replaced by some clever persistent platform image store.
-    QString persistent_dir = QQmlDataTest::instance()->dataDirectory();
-    QString arch = "unknown-architecture"; // QTest needs to help with this.
-
-    QString expectfile = persistent_dir + QDir::separator() + filebasename + QLatin1Char('-') + arch + ".png";
-
-    if (!QFile::exists(expectfile)) {
-        actual.save(expectfile);
-        qWarning() << "created" << expectfile;
-    }
-
-    return expectfile;
 }
 
 typedef QPair<int, QChar> Key;
@@ -241,6 +197,15 @@ private slots:
 
     void keyEventPropagation();
 
+    void markdown();
+#if QT_CONFIG(clipboard)
+    void pasteHtmlIntoMarkdown();
+#endif
+
+    void touchscreenDoesNotSelect_data();
+    void touchscreenDoesNotSelect();
+    void touchscreenSetsFocusAndMovesCursor();
+
 private:
     void simulateKeys(QWindow *window, const QList<Key> &keys);
 #if QT_CONFIG(shortcut)
@@ -248,6 +213,8 @@ private:
 #endif
 
     void simulateKey(QWindow *, int key, Qt::KeyboardModifiers modifiers = {});
+    bool isMainFontFixed();
+    static bool hasWindowActivation();
 
     QStringList standard;
     QStringList richText;
@@ -686,6 +653,19 @@ void tst_qquicktextedit::textFormat()
         QCOMPARE(textObject->textFormat(), QQuickTextEdit::PlainText);
     }
     {
+        QQmlComponent textComponent(&engine);
+        textComponent.setData("import QtQuick 2.0\nTextEdit { text: \"_Hello_\"; textFormat: Text.MarkdownText }", QUrl::fromLocalFile(""));
+        QQuickTextEdit *textObject = qobject_cast<QQuickTextEdit*>(textComponent.create());
+
+        QVERIFY(textObject != nullptr);
+        QCOMPARE(textObject->textFormat(), QQuickTextEdit::MarkdownText);
+        QVERIFY(textObject->textDocument());
+        auto doc = textObject->textDocument()->textDocument();
+        QVERIFY(doc);
+        QTextCursor cursor(doc);
+        QVERIFY(cursor.charFormat().fontUnderline());
+    }
+    {
         QQmlComponent component(&engine);
         component.setData("import QtQuick 2.0\n TextEdit {}", QUrl());
         QScopedPointer<QObject> object(component.create());
@@ -706,6 +686,10 @@ void tst_qquicktextedit::textFormat()
         edit->setTextFormat(QQuickTextEdit::PlainText);
         QCOMPARE(edit->textFormat(), QQuickTextEdit::PlainText);
         QCOMPARE(spy.count(), 2);
+
+        edit->setTextFormat(QQuickTextEdit::MarkdownText);
+        QCOMPARE(edit->textFormat(), QQuickTextEdit::MarkdownText);
+        QCOMPARE(spy.count(), 3);
     }
 }
 
@@ -998,9 +982,8 @@ void tst_qquicktextedit::hAlignVisual()
     const int centeredSection3End = centeredSection3 + sectionWidth;
 
     {
-        if ((QGuiApplication::platformName() == QLatin1String("offscreen"))
-            || (QGuiApplication::platformName() == QLatin1String("minimal")))
-            QSKIP("Skipping due to grabWindow not functional on offscreen/minimal platforms");
+        if (QGuiApplication::platformName() == QLatin1String("minimal"))
+            QSKIP("Skipping due to grabWindow not functional on minimal platforms");
 
         // Left Align
         QImage image = view.grabWindow();
@@ -2114,7 +2097,7 @@ void tst_qquicktextedit::mouseSelection_data()
     // import installed
     QTest::newRow("on") << testFile("mouseselection_true.qml") << 4 << 9 << "45678" << true << true << 1;
     QTest::newRow("off") << testFile("mouseselection_false.qml") << 4 << 9 << QString() << true << true << 1;
-    QTest::newRow("default") << testFile("mouseselection_default.qml") << 4 << 9 << QString() << true << true << 1;
+    QTest::newRow("default") << testFile("mouseselectionmode_default.qml") << 4 << 9 << "45678" << true << true << 1;
     QTest::newRow("off word selection") << testFile("mouseselection_false_words.qml") << 4 << 9 << QString() << true << true << 1;
     QTest::newRow("on word selection (4,9)") << testFile("mouseselection_true_words.qml") << 4 << 9 << "0123456789" << true << true << 1;
 
@@ -2287,6 +2270,7 @@ void tst_qquicktextedit::mouseSelectionMode()
     QVERIFY(window.rootObject() != nullptr);
     QQuickTextEdit *textEditObject = qobject_cast<QQuickTextEdit *>(window.rootObject());
     QVERIFY(textEditObject != nullptr);
+    textEditObject->setSelectByMouse(true);
 
     // press-and-drag-and-release from x1 to x2
     int x1 = 10;
@@ -2780,7 +2764,8 @@ void tst_qquicktextedit::cursorDelegate()
     const QPoint point2 = textEditObject->positionToRectangle(10).center().toPoint();
     QTest::qWait(400);  //ensure this isn't treated as a double-click
     QTest::mousePress(&view, Qt::LeftButton, Qt::NoModifier, point1);
-    QMouseEvent mv(QEvent::MouseMove, point2, Qt::LeftButton, Qt::LeftButton,Qt::NoModifier);
+    QMouseEvent mv(QEvent::MouseMove, point2, view.mapToGlobal(point2),
+                   Qt::LeftButton, Qt::LeftButton,Qt::NoModifier);
     QGuiApplication::sendEvent(&view, &mv);
     QTest::mouseRelease(&view, Qt::LeftButton, Qt::NoModifier, point2);
     QTest::qWait(50);
@@ -3394,6 +3379,21 @@ void tst_qquicktextedit::simulateKey(QWindow *view, int key, Qt::KeyboardModifie
     QGuiApplication::sendEvent(view, &release);
 }
 
+bool tst_qquicktextedit::isMainFontFixed()
+{
+    bool ret = QFontInfo(QGuiApplication::font()).fixedPitch();
+    if (ret) {
+        qCWarning(lcTests) << "QFontDatabase::GeneralFont is monospaced: markdown writing is likely to use too many backticks"
+                           << QFontDatabase::systemFont(QFontDatabase::GeneralFont);
+    }
+    return ret;
+}
+
+bool tst_qquicktextedit::hasWindowActivation()
+{
+    return (QGuiApplicationPrivate::platformIntegration()->hasCapability(QPlatformIntegration::WindowActivation));
+}
+
 void tst_qquicktextedit::textInput()
 {
     QQuickView view(testFileUrl("inputMethodEvent.qml"));
@@ -3817,8 +3817,7 @@ void tst_qquicktextedit::largeTextObservesViewport()
 {
     if ((QGuiApplication::platformName() == QLatin1String("offscreen"))
         || (QGuiApplication::platformName() == QLatin1String("minimal")))
-        QSKIP("Skipping due to few fonts installed on offscreen/minimal platforms");
-
+        QSKIP("Skipping due to grabWindow not functional on offscreen/minimal platforms");
     QFETCH(QString, text);
     QFETCH(QQuickTextEdit::TextFormat, textFormat);
     QFETCH(bool, parentIsViewport);
@@ -3900,7 +3899,7 @@ void tst_qquicktextedit::renderingAroundSelection()
     QTest::mouseMove(&window, p2);
     QTest::mouseRelease(&window, Qt::LeftButton, Qt::NoModifier, p2);
     // ensure that QQuickTextEdit::updatePaintNode() has a chance to run
-    QTRY_VERIFY(renderSpy.count() > renderCount);
+    QTRY_COMPARE_GT(renderSpy.count(), renderCount);
 
     if (lcTests().isDebugEnabled())
         QTest::qWait(500); // for visual check; not needed in CI
@@ -4693,6 +4692,22 @@ void tst_qquicktextedit::append_data()
             << standard.at(0) + QString("\nHello")
             << 0 << 0 << 0
             << false << false;
+
+    QTest::newRow("markdown into markdown")
+            << QString("**Hello**") << QQuickTextEdit::MarkdownText
+            << 0 << 0
+            << QString(" *world*")
+            << QString("Hello\u2029world")
+            << 0 << 0 << 0
+            << false << false;
+
+    QTest::newRow("rich text into markdown")
+            << QString("**Hello**") << QQuickTextEdit::MarkdownText
+            << 0 << 0
+            << QString(" <i>world</i>")
+            << QString("Hello\u2029world")
+            << 0 << 0 << 0
+            << false << false;
 }
 
 void tst_qquicktextedit::append()
@@ -4726,8 +4741,9 @@ void tst_qquicktextedit::append()
 
     textEdit->append(appendText);
 
-    if (textFormat == QQuickTextEdit::RichText || (textFormat == QQuickTextEdit::AutoText && (
-            Qt::mightBeRichText(text) || Qt::mightBeRichText(appendText)))) {
+    if (textFormat == QQuickTextEdit::RichText || textFormat == QQuickTextEdit::MarkdownText ||
+            (textFormat == QQuickTextEdit::AutoText &&
+             (Qt::mightBeRichText(text) || Qt::mightBeRichText(appendText)))) {
         QCOMPARE(textEdit->getText(0, expectedText.length()), expectedText);
     } else {
         QCOMPARE(textEdit->text(), expectedText);
@@ -4907,6 +4923,39 @@ void tst_qquicktextedit::insert_data()
             << standard.at(0)
             << 0 << 0 << 0
             << false << false;
+
+    const QString markdownBaseString("# Hello\nWorld\n");
+    QTest::newRow("markdown into markdown at end")
+            << markdownBaseString << QQuickTextEdit::MarkdownText
+            << 0 << 0 << 11
+            << QString("\n## Other\ntext")
+            << QString("Hello\u2029World\u2029Other\u2029text")
+            << 0 << 0 << 0
+            << false << false;
+
+    QTest::newRow("markdown into markdown in the middle")
+            << markdownBaseString << QQuickTextEdit::MarkdownText
+            << 0 << 0 << 6
+            << QString("## Other\ntext\n")
+            << QString("Hello\u2029Other\u2029text\u2029World")
+            << 0 << 0 << 0
+            << false << false;
+
+    QTest::newRow("markdown into markdown in the middle no newlines")
+            << markdownBaseString << QQuickTextEdit::MarkdownText
+            << 0 << 0 << 6
+            << QString("## Other\ntext")
+            << QString("Hello\u2029Other\u2029textWorld")
+            << 0 << 0 << 0
+            << false << false;
+
+    QTest::newRow("markdown with bold span into markdown")
+            << QString("# Heading\n text") << QQuickTextEdit::MarkdownText
+            << 0 << 0 << 8
+            << QString("*Body*")
+            << QString("Heading\u2029Bodytext")
+            << 0 << 0 << 0
+            << false << false;
 }
 
 void tst_qquicktextedit::insert()
@@ -4941,12 +4990,13 @@ void tst_qquicktextedit::insert()
 
     textEdit->insert(insertPosition, insertText);
 
-    if (textFormat == QQuickTextEdit::RichText || (textFormat == QQuickTextEdit::AutoText && (
-            Qt::mightBeRichText(text) || Qt::mightBeRichText(insertText)))) {
+    if (textFormat == QQuickTextEdit::RichText || textFormat == QQuickTextEdit::MarkdownText ||
+            (textFormat == QQuickTextEdit::AutoText &&
+                (Qt::mightBeRichText(text) || Qt::mightBeRichText(insertText)))) {
         QCOMPARE(textEdit->getText(0, expectedText.length()), expectedText);
+        qCDebug(lcTests) << "with formatting:" << textEdit->getFormattedText(0, 100);
     } else {
         QCOMPARE(textEdit->text(), expectedText);
-
     }
     QCOMPARE(textEdit->length(), expectedText.length());
 
@@ -6209,9 +6259,8 @@ void tst_qquicktextedit::keys_shortcutoverride()
 
 void tst_qquicktextedit::transparentSelectionColor()
 {
-    if ((QGuiApplication::platformName() == QLatin1String("offscreen"))
-        || (QGuiApplication::platformName() == QLatin1String("minimal")))
-        QSKIP("Skipping due to grabToImage not functional on offscreen/minimal platforms");
+    if (QGuiApplication::platformName() == QLatin1String("minimal"))
+        QSKIP("Skipping due to grabWindow not functional on minimal platforms");
 
     QQuickView view;
     view.setSource(testFileUrl("transparentSelectionColor.qml"));
@@ -6272,6 +6321,166 @@ void tst_qquicktextedit::keyEventPropagation()
     QCOMPARE(upSpy.count(), 1);
     upKey = upSpy.takeFirst();
     QCOMPARE(upKey.at(0).toInt(), Qt::Key_Right);
+}
+
+void tst_qquicktextedit::markdown()
+{
+    QQuickView window;
+    QVERIFY(QQuickTest::showView(window, testFileUrl("markdown.qml")));
+    QQuickTextEdit *te = qobject_cast<QQuickTextEdit *>(window.rootObject());
+    QVERIFY(te);
+    QVERIFY(te->textDocument());
+    auto doc = te->textDocument()->textDocument();
+    QVERIFY(doc);
+    const QString mdSource("# Heading\n\nBody\n\n");
+
+    // Component.onCompleted has pre-populated a string in italics
+    QCOMPARE(te->text(), "*whee*\n\n");
+    QCOMPARE(te->getText(0, 100), "whee");
+    QCOMPARE(te->getFormattedText(0, 100), "*whee*\n\n");
+    QVERIFY(QTextCursor(doc).charFormat().font().italic());
+
+    if (isMainFontFixed())
+        QSKIP("fixed-pitch main font (QTBUG-103484)");
+    te->clear();
+    te->insert(0, mdSource);
+    QCOMPARE(te->text(), mdSource);
+    QCOMPARE(te->getText(0, 12), "Heading\u2029Body");
+    QCOMPARE(te->getFormattedText(0, 12), "# Heading\n\nBody\n\n");
+    QCOMPARE(QTextCursor(doc).blockFormat().headingLevel(), 1);
+
+    te->selectAll();
+    QCOMPARE(te->selectedText(), "Heading\u2029Body");
+
+    te->clear();
+    te->setText(mdSource);
+    QCOMPARE(te->text(), mdSource);
+    QCOMPARE(te->getText(0, 12), "Heading\u2029Body");
+    QCOMPARE(te->getFormattedText(0, 12), "# Heading\n\nBody\n\n");
+    QCOMPARE(QTextCursor(doc).blockFormat().headingLevel(), 1);
+
+    te->insert(12, "_text_");
+    QCOMPARE(te->text(), "# Heading\n\nBody_text_\n\n");
+    QCOMPARE(te->getText(0, 100), "Heading\u2029Bodytext");
+    QCOMPARE(te->getFormattedText(0, 100), "# Heading\n\nBody_text_\n\n");
+    QTextCursor cursor(doc);
+    cursor.movePosition(QTextCursor::End);
+    QVERIFY(cursor.charFormat().fontUnderline());
+}
+
+#if QT_CONFIG(clipboard)
+void tst_qquicktextedit::pasteHtmlIntoMarkdown()
+{
+    if (isMainFontFixed())
+        QSKIP("fixed-pitch main font (QTBUG-103484)");
+    QQuickView window;
+    QVERIFY(QQuickTest::showView(window, testFileUrl("markdown.qml")));
+    QQuickTextEdit *te = qobject_cast<QQuickTextEdit *>(window.rootObject());
+    QVERIFY(te);
+    QVERIFY(te->textDocument());
+    auto doc = te->textDocument()->textDocument();
+    QVERIFY(doc);
+
+    QMimeData *mData = new QMimeData; // not a leak: if it's stack-allocated, we get a double free
+    mData->setHtml("<b>Hello <i>world</i></b>");
+    QGuiApplication::clipboard()->setMimeData(mData);
+
+    te->selectAll();
+    te->paste();
+    QTRY_COMPARE(te->text(), "**Hello *world***\n\n");
+    QCOMPARE(te->getFormattedText(0, 100), "**Hello *world***\n\n");
+    QCOMPARE(te->textFormat(), QQuickTextEdit::MarkdownText);
+    QCOMPARE(te->getText(0, 100), "Hello world");
+
+    QGuiApplication::clipboard()->clear();
+    te->selectAll();
+    te->copy();
+    QTRY_VERIFY(QGuiApplication::clipboard()->mimeData()->hasHtml());
+    QVERIFY(QGuiApplication::clipboard()->mimeData()->hasText());
+    const auto *md = QGuiApplication::clipboard()->mimeData();
+    qCDebug(lcTests) << "mime types available" << md->formats();
+    qCDebug(lcTests) << "HTML" << md->html();
+    // QTextDocumentFragment::toHtml() is subject to change, so we don't QCOMPARE this verbose HTML
+    QVERIFY(md->html().toLatin1().startsWith('<'));
+}
+#endif
+
+void tst_qquicktextedit::touchscreenDoesNotSelect_data()
+{
+    QTest::addColumn<QUrl>("src");
+    QTest::addColumn<bool>("mouseOnly");
+    QTest::newRow("new") << testFileUrl("mouseselectionmode_default.qml") << true;
+#if QT_VERSION < QT_VERSION_CHECK(7, 0, 0)
+    QTest::newRow("old") << testFileUrl("mouseselection_old_default.qml") << false;
+#endif
+}
+
+void tst_qquicktextedit::touchscreenDoesNotSelect()
+{
+    QFETCH(QUrl, src);
+    QFETCH(bool, mouseOnly);
+
+    QQuickView window;
+    QVERIFY(QQuickTest::showView(window, src));
+
+    QQuickTextEdit *textEditObject = qobject_cast<QQuickTextEdit *>(window.rootObject());
+    QVERIFY(textEditObject != nullptr);
+    QCOMPARE(textEditObject->selectByMouse(), mouseOnly);
+    textEditObject->setSelectByMouse(true); // enable selection with pre-6.4 import version
+
+    // press-drag-and-release from x1 to x2
+    int x1 = 10;
+    int x2 = 70;
+    int y = QFontMetrics(textEditObject->font()).height() / 2;
+    QTest::touchEvent(&window, touchDevice).press(0, QPoint(x1,y), &window);
+    QTest::touchEvent(&window, touchDevice).move(0, QPoint(x2,y), &window);
+    QTest::touchEvent(&window, touchDevice).release(0, QPoint(x2,y), &window);
+    QQuickTouchUtils::flush(&window);
+    // if the import version is old enough, fall back to old behavior: touch swipe _does_ select text
+    QCOMPARE(textEditObject->selectedText().isEmpty(), mouseOnly);
+}
+
+void tst_qquicktextedit::touchscreenSetsFocusAndMovesCursor()
+{
+    if (!hasWindowActivation())
+        QSKIP("Window activation is not supported");
+    QQuickView window;
+    QVERIFY(QQuickTest::showView(window, testFileUrl("twoInAColumn.qml")));
+    window.requestActivate();
+    QVERIFY(QTest::qWaitForWindowActive(&window));
+
+    QQuickTextEdit *top = window.rootObject()->findChild<QQuickTextEdit*>("top");
+    QVERIFY(top);
+    QQuickTextEdit *bottom = window.rootObject()->findChild<QQuickTextEdit*>("bottom");
+    QVERIFY(bottom);
+    const auto len = bottom->text().length();
+
+    // tap the bottom field
+    QPoint p1 = bottom->mapToScene({6, 6}).toPoint();
+    QTest::touchEvent(&window, touchDevice).press(0, p1, &window);
+    QQuickTouchUtils::flush(&window);
+    QCOMPARE(qApp->focusObject(), bottom);
+    // text cursor is at 0 by default, on press
+    QCOMPARE(bottom->cursorPosition(), 0);
+    // so typing a character prepends it
+    QVERIFY(!bottom->text().startsWith('q'));
+    QTest::keyClick(&window, Qt::Key_Q);
+    QVERIFY(bottom->text().startsWith('q'));
+    QCOMPARE(bottom->text().length(), len + 1);
+    QTest::touchEvent(&window, touchDevice).release(0, p1, &window);
+    QQuickTouchUtils::flush(&window);
+    // the cursor gets moved on release, as long as TextInput's grab wasn't stolen (e.g. by Flickable)
+    QVERIFY(bottom->cursorPosition() < 5);
+
+    // press-drag-and-release from p1 to p2 on the top field
+    p1 = top->mapToScene({6, 6}).toPoint();
+    QPoint p2 = top->mapToScene({76, 6}).toPoint();
+    QTest::touchEvent(&window, touchDevice).press(0, p1, &window);
+    QTest::touchEvent(&window, touchDevice).move(0, p2, &window);
+    QTest::touchEvent(&window, touchDevice).release(0, p2, &window);
+    QQuickTouchUtils::flush(&window);
+    QCOMPARE(qApp->focusObject(), top);
+    QVERIFY(top->selectedText().isEmpty());
 }
 
 QTEST_MAIN(tst_qquicktextedit)

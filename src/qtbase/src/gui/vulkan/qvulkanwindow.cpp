@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2017 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtGui module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2017 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qvulkanwindow_p.h"
 #include "qvulkanfunctions.h"
@@ -47,7 +11,7 @@
 
 QT_BEGIN_NAMESPACE
 
-Q_LOGGING_CATEGORY(lcGuiVk, "qt.vulkan")
+Q_DECLARE_LOGGING_CATEGORY(lcGuiVk)
 
 /*!
   \class QVulkanWindow
@@ -211,6 +175,15 @@ Q_LOGGING_CATEGORY(lcGuiVk, "qt.vulkan")
 
   When it comes to device features, QVulkanWindow enables all Vulkan 1.0
   features that are reported as supported from vkGetPhysicalDeviceFeatures().
+  As an exception to this rule, \c robustBufferAccess is never enabled. Use the
+  callback mechanism described below, if enabling that feature is desired.
+
+  Just enabling the 1.0 core features is not always sufficient, and therefore
+  full control over the VkPhysicalDeviceFeatures used for device creation is
+  possible too by registering a callback function with
+  setEnabledFeaturesModifier(). When set, the callback function is invoked,
+  letting it alter the VkPhysicalDeviceFeatures, instead of enabling only the
+  1.0 core features.
 
   \sa QVulkanInstance, QWindow
  */
@@ -729,10 +702,16 @@ void QVulkanWindowPrivate::init()
     devInfo.enabledExtensionCount = devExts.count();
     devInfo.ppEnabledExtensionNames = devExts.constData();
 
-    // Enable all 1.0 features.
     VkPhysicalDeviceFeatures features;
     memset(&features, 0, sizeof(features));
-    f->vkGetPhysicalDeviceFeatures(physDev, &features);
+    if (enabledFeaturesModifier) {
+        enabledFeaturesModifier(features);
+    } else {
+        // Enable all supported 1.0 core features, except ones that likely
+        // involve a performance penalty.
+        f->vkGetPhysicalDeviceFeatures(physDev, &features);
+        features.robustBufferAccess = VK_FALSE;
+    }
     devInfo.pEnabledFeatures = &features;
 
     // Device layers are not supported by QVulkanWindow since that's an already deprecated
@@ -755,7 +734,7 @@ void QVulkanWindowPrivate::init()
                 err = f->vkEnumerateDeviceLayerProperties(physDev, &count, layerProps.data());
                 if (err == VK_SUCCESS) {
                     for (const VkLayerProperties &prop : layerProps) {
-                        if (!strncmp(prop.layerName, stdValNamePtr, stdValName.count())) {
+                        if (!strncmp(prop.layerName, stdValNamePtr, stdValName.size())) {
                             devInfo.enabledLayerCount = 1;
                             devInfo.ppEnabledLayerNames = &stdValNamePtr;
                             break;
@@ -1634,6 +1613,44 @@ void QVulkanWindow::setQueueCreateInfoModifier(const QueueCreateInfoModifier &mo
     d->queueCreateInfoModifier = modifier;
 }
 
+/*!
+    \typedef QVulkanWindow::EnabledFeaturesModifier
+
+    A function that is called during graphics initialization to alter the
+    VkPhysicalDeviceFeatures that is passed in when creating a Vulkan device
+    object.
+
+    By default QVulkanWindow enables all Vulkan 1.0 core features that the
+    physical device reports as supported, with certain exceptions. In
+    praticular, \c robustBufferAccess is always disabled in order to avoid
+    unexpected performance hits.
+
+    This however is not always sufficient when working with Vulkan 1.1 or 1.2
+    features and extensions. Hence this callback mechanism.
+
+    The VkPhysicalDeviceFeatures reference passed in is all zeroed out at the
+    point when the function is invoked. It is up to the function to change
+    members to true, or set up \c pNext chains as it sees fit.
+
+    \note When setting up \c pNext chains, make sure the referenced objects
+    have a long enough lifetime, for example by storing them as member
+    variables in the QVulkanWindow subclass.
+
+    \sa setEnabledFeaturesModifier()
+ */
+
+/*!
+    Sets the enabled device features modification function \a modifier.
+
+    \sa EnabledFeaturesModifier
+
+    \since 6.4
+ */
+void QVulkanWindow::setEnabledFeaturesModifier(const EnabledFeaturesModifier &modifier)
+{
+    Q_D(QVulkanWindow);
+    d->enabledFeaturesModifier = modifier;
+}
 
 /*!
     Returns true if this window has successfully initialized all Vulkan

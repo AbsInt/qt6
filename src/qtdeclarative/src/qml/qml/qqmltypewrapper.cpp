@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtQml module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qqmltypewrapper_p.h"
 
@@ -389,14 +353,13 @@ ReturnedValue QQmlTypeWrapper::virtualInstanceOf(const Object *typeObject, const
 {
     Q_ASSERT(typeObject->as<QV4::QQmlTypeWrapper>());
     const QV4::QQmlTypeWrapper *typeWrapper = static_cast<const QV4::QQmlTypeWrapper *>(typeObject);
-    QV4::ExecutionEngine *engine = typeObject->internalClass()->engine;
-    QQmlEnginePrivate *qenginepriv = QQmlEnginePrivate::get(engine->qmlEngine());
 
     // can only compare a QObject* against a QML type
     const QObjectWrapper *wrapper = var.as<QObjectWrapper>();
     if (!wrapper)
         return QV4::Encode(false);
 
+    QV4::ExecutionEngine *engine = typeObject->internalClass()->engine;
     // in case the wrapper outlived the QObject*
     const QObject *wrapperObject = wrapper->object();
     if (!wrapperObject)
@@ -413,13 +376,14 @@ ReturnedValue QQmlTypeWrapper::virtualInstanceOf(const Object *typeObject, const
         if (!theirDData->compilationUnit)
             return Encode(false);
 
+        QQmlEnginePrivate *qenginepriv = QQmlEnginePrivate::get(engine->qmlEngine());
         QQmlRefPointer<QQmlTypeData> td = qenginepriv->typeLoader.getType(typeWrapper->d()->type().sourceUrl());
         if (ExecutableCompilationUnit *cu = td->compilationUnit())
-            myQmlType = qenginepriv->metaObjectForType(cu->typeIds.id);
+            myQmlType = QQmlMetaType::metaObjectForType(cu->typeIds.id);
         else
             return Encode(false); // It seems myQmlType has some errors, so we could not compile it.
     } else {
-        myQmlType = qenginepriv->metaObjectForType(myTypeId);
+        myQmlType = QQmlMetaType::metaObjectForType(myTypeId);
     }
 
     const QMetaObject *theirType = wrapperObject->metaObject();
@@ -452,7 +416,7 @@ ReturnedValue QQmlTypeWrapper::virtualResolveLookupGetter(const Object *object, 
                     if (!includeEnums || !name->startsWithUpper()) {
                         QQmlData *ddata = QQmlData::get(qobjectSingleton, false);
                         if (ddata && ddata->propertyCache) {
-                            QQmlPropertyData *property = ddata->propertyCache->property(name.getPointer(), qobjectSingleton, qmlContext);
+                            const QQmlPropertyData *property = ddata->propertyCache->property(name.getPointer(), qobjectSingleton, qmlContext);
                             if (property) {
                                 ScopedValue val(scope, Value::fromReturnedValue(QV4::QObjectWrapper::wrap(engine, qobjectSingleton)));
                                 setupQObjectLookup(lookup, ddata, property,

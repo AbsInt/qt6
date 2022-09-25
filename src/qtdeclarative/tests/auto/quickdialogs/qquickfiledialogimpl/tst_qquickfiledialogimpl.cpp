@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <QtCore/qloggingcategory.h>
 #include <QtTest/qtest.h>
@@ -111,6 +86,8 @@ private slots:
     void done();
     void setSelectedFile_data();
     void setSelectedFile();
+    void selectNewFileViaTextField_data();
+    void selectNewFileViaTextField();
 
 private:
     QTemporaryDir tempDir;
@@ -734,7 +711,7 @@ void tst_QQuickFileDialogImpl::goUp()
     auto barListView = qobject_cast<QQuickListView*>(breadcrumbBar->contentItem());
     QVERIFY(barListView);
     if (QQuickTest::qIsPolishScheduled(barListView))
-        QVERIFY(QQuickTest::qWaitForItemPolished(barListView));
+        QVERIFY(QQuickTest::qWaitForPolish(barListView));
     QVERIFY(clickButton(breadcrumbBar->upButton()));
     // The previous directory that we were in should now be selected (matches e.g. Windows and Ubuntu).
     VERIFY_FILE_SELECTED_AND_FOCUSED(QUrl::fromLocalFile(tempDir.path()), QUrl::fromLocalFile(tempSubDir.path()), 0);
@@ -772,7 +749,7 @@ void tst_QQuickFileDialogImpl::goUpWhileTextEditHasFocus()
     auto barListView = qobject_cast<QQuickListView*>(breadcrumbBar->contentItem());
     QVERIFY(barListView);
     if (QQuickTest::qIsPolishScheduled(barListView))
-        QVERIFY(QQuickTest::qWaitForItemPolished(barListView));
+        QVERIFY(QQuickTest::qWaitForPolish(barListView));
     QVERIFY(clickButton(breadcrumbBar->upButton()));
     // The path should have changed to the parent directory.
     COMPARE_URL(dialogHelper.dialog->currentFolder(), QUrl::fromLocalFile(tempDir.path()));
@@ -796,7 +773,7 @@ void tst_QQuickFileDialogImpl::goIntoLargeFolder()
     // If the screen is so tall that the contentItem is not vertically larger than the view,
     // then the test makes no sense.
     if (QQuickTest::qIsPolishScheduled(dialogHelper.fileDialogListView))
-        QVERIFY(QQuickTest::qWaitForItemPolished(dialogHelper.fileDialogListView));
+        QVERIFY(QQuickTest::qWaitForPolish(dialogHelper.fileDialogListView));
     // Just to be safe, make sure it's at least twice as big.
     if (dialogHelper.fileDialogListView->contentItem()->height() < dialogHelper.fileDialogListView->height() * 2) {
         QSKIP(qPrintable(QString::fromLatin1("Expected height of dialogHelper.fileDialogListView's contentItem (%1)" \
@@ -1395,6 +1372,48 @@ void tst_QQuickFileDialogImpl::setSelectedFile()
         VERIFY_FILE_SELECTED_AND_FOCUSED(QUrl::fromLocalFile(tempDir.path()), tempFile1Url, 1);
     } else {
         QTRY_COMPARE(dialogHelper.fileDialogListView->currentIndex(), -1);
+    }
+}
+
+void tst_QQuickFileDialogImpl::selectNewFileViaTextField_data()
+{
+    fileMode_data();
+}
+void tst_QQuickFileDialogImpl::selectNewFileViaTextField()
+{
+    QFETCH(QQuickFileDialog::FileMode, fileMode);
+
+    // Open the dialog.
+    FileDialogTestHelper dialogHelper(this, "fileDialog.qml");
+    dialogHelper.dialog->setFileMode(fileMode);
+
+    if (fileMode == QQuickFileDialog::SaveFile)
+        dialogHelper.dialog->setSelectedFile(QUrl());
+
+    OPEN_QUICK_DIALOG();
+    QQuickTest::qWaitForPolish(dialogHelper.window());
+
+    const QQuickTextField *fileNameTextField =
+            dialogHelper.quickDialog->findChild<QQuickTextField *>("fileNameTextField");
+    QVERIFY(fileNameTextField);
+
+    QVERIFY2(fileNameTextField->isVisible() == (fileMode == QQuickFileDialog::SaveFile),
+             "The TextField for file name should only be visible when the FileMode is 'SaveFile'");
+
+    if (fileMode == QQuickFileDialog::SaveFile) {
+        const QPoint textFieldCenterPos =
+                fileNameTextField->mapToScene({ fileNameTextField->width() / 2, fileNameTextField->height() / 2 }).toPoint();
+
+        QTest::mouseClick(dialogHelper.window(), Qt::LeftButton, Qt::NoModifier, textFieldCenterPos);
+        QTRY_VERIFY(fileNameTextField->hasActiveFocus());
+
+        const QByteArray newFileName("foo.txt");
+        for (const auto &c : newFileName)
+            QTest::keyClick(dialogHelper.window(), c);
+        QTest::keyClick(dialogHelper.window(), Qt::Key_Enter);
+
+        QTRY_COMPARE(fileNameTextField->text(), newFileName);
+        QCOMPARE(dialogHelper.dialog->selectedFile().fileName(), newFileName);
     }
 }
 

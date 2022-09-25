@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtQuick module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #ifndef QSGADAPTATIONLAYER_P_H
 #define QSGADAPTATIONLAYER_P_H
@@ -53,6 +17,7 @@
 
 #include <QtQuick/qsgnode.h>
 #include <QtQuick/qsgtexture.h>
+#include <QtQuick/qquickpainteditem.h>
 #include <QtCore/qobject.h>
 #include <QtCore/qrect.h>
 #include <QtGui/qbrush.h>
@@ -90,7 +55,7 @@ class QRhiTexture;
 class Q_QUICK_PRIVATE_EXPORT QSGNodeVisitorEx
 {
 public:
-    virtual ~QSGNodeVisitorEx() {}
+    virtual ~QSGNodeVisitorEx();
 
     // visit(...) returns true if the children are supposed to be
     // visisted and false if they're supposed to be skipped by the visitor.
@@ -128,6 +93,7 @@ class Q_QUICK_PRIVATE_EXPORT QSGVisitableNode : public QSGGeometryNode
 {
 public:
     QSGVisitableNode() { setFlag(IsVisitableNode); }
+    ~QSGVisitableNode() override;
 
     virtual void accept(QSGNodeVisitorEx *) = 0;
 };
@@ -135,6 +101,8 @@ public:
 class Q_QUICK_PRIVATE_EXPORT QSGInternalRectangleNode : public QSGVisitableNode
 {
 public:
+    ~QSGInternalRectangleNode() override;
+
     virtual void setRect(const QRectF &rect) = 0;
     virtual void setColor(const QColor &color) = 0;
     virtual void setPenColor(const QColor &color) = 0;
@@ -154,6 +122,8 @@ public:
 class Q_QUICK_PRIVATE_EXPORT QSGInternalImageNode : public QSGVisitableNode
 {
 public:
+    ~QSGInternalImageNode() override;
+
     virtual void setTargetRect(const QRectF &rect) = 0;
     virtual void setInnerTargetRect(const QRectF &rect) = 0;
     virtual void setInnerSourceRect(const QRectF &rect) = 0;
@@ -177,6 +147,7 @@ public:
 class Q_QUICK_PRIVATE_EXPORT QSGPainterNode : public QSGVisitableNode
 {
 public:
+    ~QSGPainterNode() override;
 
     virtual void setPreferredRenderTarget(QQuickPaintedItem::RenderTarget target) = 0;
     virtual void setSize(const QSize &size) = 0;
@@ -201,6 +172,13 @@ class Q_QUICK_EXPORT QSGLayer : public QSGDynamicTexture
 {
     Q_OBJECT
 public:
+    ~QSGLayer() override;
+
+    enum Format {
+        RGBA8 = 1,
+        RGBA16F,
+        RGBA32F
+    };
     virtual void setItem(QSGNode *item) = 0;
     virtual void setRect(const QRectF &rect) = 0;
     virtual void setSize(const QSize &size) = 0;
@@ -208,7 +186,7 @@ public:
     virtual QImage toImage() const = 0;
     virtual void setLive(bool live) = 0;
     virtual void setRecursive(bool recursive) = 0;
-    virtual void setFormat(uint format) = 0;
+    virtual void setFormat(Format format) = 0;
     virtual void setHasMipmaps(bool mipmap) = 0;
     virtual void setDevicePixelRatio(qreal ratio) = 0;
     virtual void setMirrorHorizontal(bool mirror) = 0;
@@ -230,6 +208,8 @@ protected:
 class Q_QUICK_PRIVATE_EXPORT QSGSpriteNode : public QSGVisitableNode
 {
 public:
+    ~QSGSpriteNode() override;
+
     virtual void setTexture(QSGTexture *texture) = 0;
     virtual void setTime(float time) = 0;
     virtual void setSourceA(const QPoint &source) = 0;
@@ -251,6 +231,8 @@ class Q_QUICK_PRIVATE_EXPORT QSGGuiThreadShaderEffectManager : public QObject
     Q_OBJECT
 
 public:
+    ~QSGGuiThreadShaderEffectManager() override;
+
     enum Status {
         Compiled,
         Uncompiled,
@@ -274,7 +256,6 @@ public:
             Texture // for APIs with separate texture and sampler objects
         };
         struct Variable {
-            Variable() {}
             VariableType type = Constant;
             QByteArray name;
             uint offset = 0; // for cbuffer members
@@ -310,6 +291,8 @@ class Q_QUICK_PRIVATE_EXPORT QSGShaderEffectNode : public QObject, public QSGVis
     Q_OBJECT
 
 public:
+    ~QSGShaderEffectNode() override;
+
     enum DirtyShaderFlag {
         DirtyShaders = 0x01,
         DirtyShaderConstant = 0x02,
@@ -384,6 +367,7 @@ public:
     };
 
     QSGGlyphNode() {}
+    ~QSGGlyphNode() override;
 
     virtual void setGlyphs(const QPointF &position, const QGlyphRun &glyphs) = 0;
     virtual void setColor(const QColor &color) = 0;
@@ -411,7 +395,7 @@ protected:
 class Q_QUICK_PRIVATE_EXPORT QSGDistanceFieldGlyphConsumer
 {
 public:
-    virtual ~QSGDistanceFieldGlyphConsumer() {}
+    virtual ~QSGDistanceFieldGlyphConsumer();
 
     virtual void invalidateGlyphs(const QVector<quint32> &glyphs) = 0;
     QIntrusiveListNode node;
@@ -489,6 +473,7 @@ public:
 
     virtual bool eightBitFormatIsAlphaSwizzled() const = 0;
     virtual bool screenSpaceDerivativesSupported() const = 0;
+    virtual bool isActive() const;
 
 protected:
     struct GlyphPosition {

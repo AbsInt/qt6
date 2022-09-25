@@ -1,4 +1,4 @@
-add_subdirectory(data)
+add_subdirectory(QmltcTests)
 
 set(test_sources
     nameconflict.h nameconflict.cpp
@@ -14,7 +14,6 @@ set(qmltc_module_libs
     #   automatic type registration that comes from the plugin)
     qmltc_test_moduleplugin
 )
-
 qt_internal_add_test(tst_qmltc_diskcache
     SOURCES ${test_sources}
     LIBRARIES ${qmltc_module_libs}

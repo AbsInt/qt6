@@ -51,6 +51,7 @@ set(qml_files
     "ToolButton.qml"
     "ToolSeparator.qml"
     "ToolTip.qml"
+    "TreeViewDelegate.qml"
     "Tumbler.qml"
     "VerticalHeaderView.qml"
 )
@@ -93,6 +94,8 @@ qt_internal_add_qml_module(qtquickcontrols2fusionstyleplugin
     VERSION "${PROJECT_VERSION}"
     PAST_MAJOR_VERSIONS 2
     CLASS_NAME QtQuickControls2FusionStylePlugin
+    DEPENDENCIES
+        QtQuick/auto
     IMPORTS
         QtQuick.Controls.Basic/auto
     PLUGIN_TARGET qtquickcontrols2fusionstyleplugin

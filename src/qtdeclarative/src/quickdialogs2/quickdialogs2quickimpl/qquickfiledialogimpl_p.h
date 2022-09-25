@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the Qt Quick Dialogs module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #ifndef QQUICKFILEDIALOGIMPL_P_H
 #define QQUICKFILEDIALOGIMPL_P_H
@@ -60,6 +24,8 @@ QT_BEGIN_NAMESPACE
 
 class QQuickComboBox;
 class QQuickDialogButtonBox;
+class QQuickTextField;
+class QQuickLabel;
 
 class QQuickFileDialogImplAttached;
 class QQuickFileDialogImplAttachedPrivate;
@@ -74,6 +40,7 @@ class Q_QUICKDIALOGS2QUICKIMPL_PRIVATE_EXPORT QQuickFileDialogImpl : public QQui
     Q_PROPERTY(QUrl selectedFile READ selectedFile WRITE setSelectedFile NOTIFY selectedFileChanged FINAL)
     Q_PROPERTY(QStringList nameFilters READ nameFilters NOTIFY nameFiltersChanged FINAL)
     Q_PROPERTY(QQuickFileNameFilter *selectedNameFilter READ selectedNameFilter CONSTANT)
+    Q_PROPERTY(QString fileName READ fileName WRITE setFileName NOTIFY selectedFileChanged FINAL)
     QML_NAMED_ELEMENT(FileDialogImpl)
     QML_ATTACHED(QQuickFileDialogImplAttached)
     QML_ADDED_IN_VERSION(6, 2)
@@ -110,6 +77,9 @@ public:
     void setAcceptLabel(const QString &label);
     void setRejectLabel(const QString &label);
 
+    QString fileName() const;
+    void setFileName(const QString &fileName);
+
 public Q_SLOTS:
     void selectNameFilter(const QString &filter);
 
@@ -135,8 +105,12 @@ class Q_QUICKDIALOGS2QUICKIMPL_PRIVATE_EXPORT QQuickFileDialogImplAttached : pub
     Q_PROPERTY(QQuickComboBox *nameFiltersComboBox READ nameFiltersComboBox WRITE setNameFiltersComboBox NOTIFY nameFiltersComboBoxChanged)
     Q_PROPERTY(QQuickListView *fileDialogListView READ fileDialogListView WRITE setFileDialogListView NOTIFY fileDialogListViewChanged)
     Q_PROPERTY(QQuickFolderBreadcrumbBar *breadcrumbBar READ breadcrumbBar WRITE setBreadcrumbBar NOTIFY breadcrumbBarChanged)
+    Q_PROPERTY(QQuickLabel *fileNameLabel READ fileNameLabel WRITE setFileNameLabel NOTIFY fileNameLabelChanged FINAL)
+    Q_PROPERTY(QQuickTextField *fileNameTextField READ fileNameTextField WRITE setFileNameTextField NOTIFY fileNameTextFieldChanged FINAL)
     Q_MOC_INCLUDE(<QtQuickTemplates2/private/qquickdialogbuttonbox_p.h>)
     Q_MOC_INCLUDE(<QtQuickTemplates2/private/qquickcombobox_p.h>)
+    Q_MOC_INCLUDE(<QtQuickTemplates2/private/qquicktextfield_p.h>)
+    Q_MOC_INCLUDE(<QtQuickTemplates2/private/qquicklabel_p.h>)
 
 public:
     explicit QQuickFileDialogImplAttached(QObject *parent = nullptr);
@@ -156,11 +130,19 @@ public:
     QQuickFolderBreadcrumbBar *breadcrumbBar() const;
     void setBreadcrumbBar(QQuickFolderBreadcrumbBar *breadcrumbBar);
 
+    QQuickLabel *fileNameLabel() const;
+    void setFileNameLabel(QQuickLabel *fileNameLabel);
+
+    QQuickTextField *fileNameTextField() const;
+    void setFileNameTextField(QQuickTextField *fileNameTextField);
+
 Q_SIGNALS:
     void buttonBoxChanged();
     void nameFiltersComboBoxChanged();
     void fileDialogListViewChanged();
     void breadcrumbBarChanged();
+    void fileNameLabelChanged();
+    void fileNameTextFieldChanged();
 
 private:
     Q_DISABLE_COPY(QQuickFileDialogImplAttached)

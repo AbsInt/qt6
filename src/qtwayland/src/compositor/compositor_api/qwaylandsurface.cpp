@@ -1,32 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2017-2015 Pier Luigi Fiorini <pierluigi.fiorini@gmail.com>
-** Copyright (C) 2017 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtWaylandCompositor module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 or (at your option) any later version
-** approved by the KDE Free Qt Foundation. The licenses are as published by
-** the Free Software Foundation and appearing in the file LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2017-2015 Pier Luigi Fiorini <pierluigi.fiorini@gmail.com>
+// Copyright (C) 2017 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include "qwaylandsurface.h"
 #include "qwaylandsurface_p.h"
@@ -257,6 +231,7 @@ void QWaylandSurfacePrivate::surface_commit(Resource *)
     QSize surfaceSize = bufferSize / bufferScale;
     sourceGeometry = !pending.sourceGeometry.isValid() ? QRect(QPoint(), surfaceSize) : pending.sourceGeometry;
     destinationSize = pending.destinationSize.isEmpty() ? sourceGeometry.size().toSize() : pending.destinationSize;
+    QRect destinationRect(QPoint(), destinationSize);
     if (!pending.damageInBufferCoordinates || pending.bufferScale == 1) {
         // pending.damage is already in surface coordinates
         damage = pending.damage.intersected(QRect(QPoint(), destinationSize));
@@ -272,13 +247,19 @@ void QWaylandSurfacePrivate::surface_commit(Resource *)
         };
         damage = {};
         for (const QRect &r : pending.damage) {
-            damage |= xform(r, bufferScale).intersected(QRect{{}, destinationSize});
+            damage |= xform(r, bufferScale).intersected(destinationRect);
         }
     }
     hasContent = bufferRef.hasContent();
     frameCallbacks << pendingFrameCallbacks;
-    inputRegion = pending.inputRegion.intersected(QRect(QPoint(), destinationSize));
-    opaqueRegion = pending.opaqueRegion.intersected(QRect(QPoint(), destinationSize));
+    inputRegion = pending.inputRegion.intersected(destinationRect);
+    opaqueRegion = pending.opaqueRegion.intersected(destinationRect);
+    bool becameOpaque = opaqueRegion.boundingRect().contains(destinationRect);
+    if (becameOpaque != isOpaque) {
+        isOpaque = becameOpaque;
+        emit q->isOpaqueChanged();
+    }
+
     QPoint offsetForNextFrame = pending.offset;
 
     if (viewport)
@@ -855,6 +836,27 @@ bool QWaylandSurface::inhibitsIdle() const
 {
     Q_D(const QWaylandSurface);
     return !d->idleInhibitors.isEmpty();
+}
+
+/*!
+ *  \qmlproperty bool QtWaylandCompositor::WaylandSurface::isOpaque
+ *  \since 6.4
+ *
+ *  This property holds whether the surface is fully opaque, as reported by the
+ *  client through the set_opaque_region request.
+ */
+
+/*!
+ *  \property QWaylandSurface::isOpaque
+ *  \since 6.4
+ *
+ *  This property holds whether the surface is fully opaque, as reported by the
+ *  client through the set_opaque_region request.
+ */
+bool QWaylandSurface::isOpaque() const
+{
+    Q_D(const QWaylandSurface);
+    return d->isOpaque;
 }
 
 #if QT_CONFIG(im)

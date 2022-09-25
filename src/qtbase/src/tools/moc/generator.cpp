@@ -1,32 +1,7 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Copyright (C) 2019 Olivier Goffart <ogoffart@woboq.com>
-** Copyright (C) 2018 Intel Corporation.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the tools applications of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2020 The Qt Company Ltd.
+// Copyright (C) 2019 Olivier Goffart <ogoffart@woboq.com>
+// Copyright (C) 2018 Intel Corporation.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "generator.h"
 #include "cbordevice.h"
@@ -271,8 +246,15 @@ void Generator::generateCode()
     registerPropertyStrings();
     registerEnumStrings();
 
+    const bool hasStaticMetaCall =
+            (cdef->hasQObject || !cdef->methodList.isEmpty()
+             || !cdef->propertyList.isEmpty() || !cdef->constructorList.isEmpty());
+
     QByteArray qualifiedClassNameIdentifier = cdef->qualified;
     qualifiedClassNameIdentifier.replace(':', '_');
+
+    // ensure the qt_meta_stringdata_XXXX_t type is local
+    fprintf(out, "namespace {\n");
 
 //
 // Build stringdata struct
@@ -291,7 +273,7 @@ void Generator::generateCode()
             "    uint(sizeof(qt_meta_stringdata_%s_t::offsetsAndSizes) + ofs), len \n",
             qualifiedClassNameIdentifier.constData());
 
-    fprintf(out, "static const qt_meta_stringdata_%s_t qt_meta_stringdata_%s = {\n",
+    fprintf(out, "Q_CONSTINIT static const qt_meta_stringdata_%s_t qt_meta_stringdata_%s = {\n",
             qualifiedClassNameIdentifier.constData(), qualifiedClassNameIdentifier.constData());
     fprintf(out, "    {");
     {
@@ -319,14 +301,16 @@ void Generator::generateCode()
 
 // Terminate stringdata struct
     fprintf(out, "\n};\n");
-    fprintf(out, "#undef QT_MOC_LITERAL\n\n");
+    fprintf(out, "#undef QT_MOC_LITERAL\n");
+
+    fprintf(out, "} // unnamed namespace\n\n");
 
 //
 // build the data array
 //
 
     int index = MetaObjectPrivateFieldCount;
-    fprintf(out, "static const uint qt_meta_data_%s[] = {\n", qualifiedClassNameIdentifier.constData());
+    fprintf(out, "Q_CONSTINIT static const uint qt_meta_data_%s[] = {\n", qualifiedClassNameIdentifier.constData());
     fprintf(out, "\n // content:\n");
     fprintf(out, "    %4d,       // revision\n", int(QMetaObjectPrivate::OutputRevision));
     fprintf(out, "    %4d,       // classname\n", stridx(cdef->qualified));
@@ -430,15 +414,6 @@ void Generator::generateCode()
     fprintf(out, "\n       0        // eod\n};\n\n");
 
 //
-// Generate internal qt_static_metacall() function
-//
-    const bool hasStaticMetaCall =
-            (cdef->hasQObject || !cdef->methodList.isEmpty()
-             || !cdef->propertyList.isEmpty() || !cdef->constructorList.isEmpty());
-    if (hasStaticMetaCall)
-        generateStaticMetacall();
-
-//
 // Build extra array
 //
     QList<QByteArray> extraList;
@@ -503,7 +478,7 @@ void Generator::generateCode()
 //
 
     if (!extraList.isEmpty()) {
-        fprintf(out, "static const QMetaObject::SuperData qt_meta_extradata_%s[] = {\n",
+        fprintf(out, "Q_CONSTINIT static const QMetaObject::SuperData qt_meta_extradata_%s[] = {\n",
                 qualifiedClassNameIdentifier.constData());
         for (int i = 0; i < extraList.count(); ++i) {
             fprintf(out, "    QMetaObject::SuperData::link<%s::staticMetaObject>(),\n", extraList.at(i).constData());
@@ -514,14 +489,15 @@ void Generator::generateCode()
 //
 // Finally create and initialize the static meta object
 //
-    fprintf(out, "const QMetaObject %s::staticMetaObject = { {\n", cdef->qualified.constData());
+    fprintf(out, "Q_CONSTINIT const QMetaObject %s::staticMetaObject = { {\n",
+            cdef->qualified.constData());
 
     if (isQObject)
         fprintf(out, "    nullptr,\n");
     else if (cdef->superclassList.size() && !cdef->hasQGadget && !cdef->hasQNamespace) // for qobject, we know the super class must have a static metaobject
         fprintf(out, "    QMetaObject::SuperData::link<%s::staticMetaObject>(),\n", purestSuperClass.constData());
     else if (cdef->superclassList.size()) // for gadgets we need to query at compile time for it
-        fprintf(out, "    QtPrivate::MetaObjectForType<%s>::value(),\n", purestSuperClass.constData());
+        fprintf(out, "    QtPrivate::MetaObjectForType<%s>::value,\n", purestSuperClass.constData());
     else
         fprintf(out, "    nullptr,\n");
     fprintf(out, "    qt_meta_stringdata_%s.offsetsAndSizes,\n"
@@ -537,62 +513,70 @@ void Generator::generateCode()
     else
         fprintf(out, "    qt_meta_extradata_%s,\n", qualifiedClassNameIdentifier.constData());
 
-    bool needsComma = false;
+    const char *comma = "";
     const bool requireCompleteness = requireCompleteTypes || cdef->requireCompleteMethodTypes;
+    auto stringForType = [requireCompleteness](const QByteArray &type, bool forceComplete) -> QByteArray {
+        const char *forceCompleteType = forceComplete ? ", std::true_type>" : ", std::false_type>";
+        if (requireCompleteness)
+            return type;
+        return "QtPrivate::TypeAndForceComplete<" % type % forceCompleteType;
+    };
     if (!requireCompleteness) {
-        fprintf(out, "qt_incomplete_metaTypeArray<qt_meta_stringdata_%s_t\n", qualifiedClassNameIdentifier.constData());
-        needsComma = true;
+        fprintf(out, "    qt_incomplete_metaTypeArray<qt_meta_stringdata_%s_t", qualifiedClassNameIdentifier.constData());
+        comma = ",";
     } else {
-        fprintf(out, "qt_metaTypeArray<\n");
+        fprintf(out, "    qt_metaTypeArray<");
     }
     // metatypes for properties
     for (int i = 0; i < cdef->propertyList.count(); ++i) {
         const PropertyDef &p = cdef->propertyList.at(i);
-        if (requireCompleteness)
-            fprintf(out, "%s%s", needsComma ? ", " : "", p.type.data());
-        else
-            fprintf(out, "%sQtPrivate::TypeAndForceComplete<%s, std::true_type>", needsComma ? ", " : "", p.type.data());
-        needsComma = true;
+        fprintf(out, "%s\n        // property '%s'\n        %s",
+                comma, p.name.constData(), stringForType(p.type, true).constData());
+        comma = ",";
     }
+
     // type name for the Q_OJBECT/GADGET itself, void for namespaces
     auto ownType = !cdef->hasQNamespace ? cdef->classname.data() : "void";
-    if (requireCompleteness)
-        fprintf(out, "%s%s", needsComma ? ", " : "", ownType);
-    else
-        fprintf(out, "%sQtPrivate::TypeAndForceComplete<%s, std::true_type>", needsComma ? ", " : "", ownType);
+    fprintf(out, "%s\n        // Q_OBJECT / Q_GADGET\n        %s",
+            comma, stringForType(ownType, true).constData());
+    comma = ",";
 
     // metatypes for all exposed methods
-    // no need to check for needsComma any longer, as we always need one due to the classname being present
+    // because we definitely printed something above, this section doesn't need comma control
     for (const QList<FunctionDef> &methodContainer :
     { cdef->signalList, cdef->slotList, cdef->methodList }) {
         for (int i = 0; i< methodContainer.count(); ++i) {
             const FunctionDef& fdef = methodContainer.at(i);
-            if (requireCompleteness)
-                fprintf(out, ", %s", fdef.type.name.data());
-            else
-                fprintf(out, ", QtPrivate::TypeAndForceComplete<%s, std::false_type>", fdef.type.name.data());
-            for (const auto &argument: fdef.arguments) {
-                if (requireCompleteness)
-                    fprintf(out, ", %s", argument.type.name.data());
-                else
-                    fprintf(out, ", QtPrivate::TypeAndForceComplete<%s, std::false_type>", argument.type.name.data());
-            }
+            fprintf(out, ",\n        // method '%s'\n        %s",
+                    fdef.name.constData(), stringForType(fdef.type.name, false).constData());
+            for (const auto &argument: fdef.arguments)
+                fprintf(out, ",\n        %s", stringForType(argument.type.name, false).constData());
         }
-        fprintf(out, "\n");
     }
+
+    // but constructors have no return types, so this needs comma control again
     for (int i = 0; i< cdef->constructorList.count(); ++i) {
         const FunctionDef& fdef = cdef->constructorList.at(i);
+        if (fdef.arguments.isEmpty())
+            continue;
+
+        fprintf(out, "%s\n        // constructor '%s'", comma, fdef.name.constData());
+        comma = "";
         for (const auto &argument: fdef.arguments) {
-            if (requireCompleteness)
-                fprintf(out, ", %s", argument.type.name.data());
-            else
-                fprintf(out, ", QtPrivate::TypeAndForceComplete<%s, std::false_type>", argument.type.name.data());
+            fprintf(out, "%s\n        %s", comma,
+                    stringForType(argument.type.name, false).constData());
+            comma = ",";
         }
     }
-    fprintf(out, "\n");
-    fprintf(out, ">,\n");
+    fprintf(out, "\n    >,\n");
 
     fprintf(out, "    nullptr\n} };\n\n");
+
+//
+// Generate internal qt_static_metacall() function
+//
+    if (hasStaticMetaCall)
+        generateStaticMetacall();
 
     if (!cdef->hasQObject)
         return;
@@ -998,8 +982,6 @@ void Generator::generateMetacall()
     }
 
     if (cdef->propertyList.size()) {
-
-        fprintf(out, "\n#ifndef QT_NO_PROPERTIES\n    ");
         if (needElse)
             fprintf(out, "else ");
         fprintf(out,
@@ -1008,7 +990,6 @@ void Generator::generateMetacall()
             "            || _c == QMetaObject::RegisterPropertyMetaType) {\n"
             "        qt_static_metacall(this, _c, _id, _a);\n"
             "        _id -= %d;\n    }", int(cdef->propertyList.count()));
-        fprintf(out, "\n#endif // QT_NO_PROPERTIES");
     }
     if (methodList.size() || cdef->propertyList.size())
         fprintf(out, "\n    ");
@@ -1016,6 +997,7 @@ void Generator::generateMetacall()
 }
 
 
+// ### Qt 7 (6.x?): remove
 QMultiMap<QByteArray, int> Generator::automaticPropertyMetaTypesHelper()
 {
     QMultiMap<QByteArray, int> automaticPropertyMetaTypes;
@@ -1258,8 +1240,6 @@ void Generator::generateStaticMetacall()
             needReset |= !p.reset.isEmpty();
             hasBindableProperties |= !p.bind.isEmpty();
         }
-        fprintf(out, "\n#ifndef QT_NO_PROPERTIES\n    ");
-
         if (needElse)
             fprintf(out, "else ");
         fprintf(out, "if (_c == QMetaObject::ReadProperty) {\n");
@@ -1404,7 +1384,6 @@ void Generator::generateStaticMetacall()
             fprintf(out, "        }\n");
         }
         fprintf(out, "    }");
-        fprintf(out, "\n#endif // QT_NO_PROPERTIES");
         needElse = true;
     }
 
@@ -1421,7 +1400,7 @@ void Generator::generateStaticMetacall()
     if (!isUsed_a)
         fprintf(out, "    (void)_a;\n");
 
-    fprintf(out, "}\n\n");
+    fprintf(out, "}\n");
 }
 
 void Generator::generateSignal(FunctionDef *def,int index)
@@ -1608,7 +1587,7 @@ void Generator::generatePluginMetaData()
 
     // compatibility with Qt 6.0-6.2
     fprintf(out, "#else\nQT_PLUGIN_METADATA_SECTION\n"
-          "static constexpr unsigned char qt_pluginMetaData_%s[] = {\n"
+          "Q_CONSTINIT static constexpr unsigned char qt_pluginMetaData_%s[] = {\n"
           "    'Q', 'T', 'M', 'E', 'T', 'A', 'D', 'A', 'T', 'A', ' ', '!',\n"
           "    // metadata version, Qt version, architectural requirements\n"
           "    0, QT_VERSION_MAJOR, QT_VERSION_MINOR, qPluginArchRequirements(),",

@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2017 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the Qt Quick Templates 2 module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2017 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qquickabstractbutton_p.h"
 #include "qquickabstractbutton_p_p.h"
@@ -51,6 +15,7 @@
 #  include <QtGui/private/qshortcutmap_p.h>
 #endif
 #include <QtGui/private/qguiapplication_p.h>
+#include <QtGui/qpa/qplatformtheme.h>
 #include <QtQuick/private/qquickevents_p_p.h>
 #include <QtQml/qqmllist.h>
 
@@ -137,7 +102,7 @@ void QQuickAbstractButtonPrivate::setMovePoint(const QPointF &point)
         emit q->pressYChanged();
 }
 
-void QQuickAbstractButtonPrivate::handlePress(const QPointF &point, ulong timestamp)
+bool QQuickAbstractButtonPrivate::handlePress(const QPointF &point, ulong timestamp)
 {
     Q_Q(QQuickAbstractButton);
     QQuickControlPrivate::handlePress(point, timestamp);
@@ -152,9 +117,10 @@ void QQuickAbstractButtonPrivate::handlePress(const QPointF &point, ulong timest
         startPressAndHold();
     else
         stopPressAndHold();
+    return true;
 }
 
-void QQuickAbstractButtonPrivate::handleMove(const QPointF &point, ulong timestamp)
+bool QQuickAbstractButtonPrivate::handleMove(const QPointF &point, ulong timestamp)
 {
     Q_Q(QQuickAbstractButton);
     QQuickControlPrivate::handleMove(point, timestamp);
@@ -165,9 +131,10 @@ void QQuickAbstractButtonPrivate::handleMove(const QPointF &point, ulong timesta
         stopPressRepeat();
     else if (holdTimer > 0 && (!pressed || QLineF(pressPoint, point).length() > QGuiApplication::styleHints()->startDragDistance()))
         stopPressAndHold();
+    return true;
 }
 
-void QQuickAbstractButtonPrivate::handleRelease(const QPointF &point, ulong timestamp)
+bool QQuickAbstractButtonPrivate::handleRelease(const QPointF &point, ulong timestamp)
 {
     Q_Q(QQuickAbstractButton);
     // Store this here since the base class' handleRelease clears it.
@@ -215,6 +182,7 @@ void QQuickAbstractButtonPrivate::handleRelease(const QPointF &point, ulong time
     }
 
     wasDoubleClick = false;
+    return true;
 }
 
 void QQuickAbstractButtonPrivate::handleUngrab()
@@ -235,7 +203,8 @@ void QQuickAbstractButtonPrivate::handleUngrab()
 
 bool QQuickAbstractButtonPrivate::acceptKeyClick(Qt::Key key) const
 {
-    return key == Qt::Key_Space;
+    const auto buttonPressKeys = QGuiApplicationPrivate::platformTheme()->themeHint(QPlatformTheme::ButtonPressKeys).value<QList<Qt::Key>>();
+    return buttonPressKeys.contains(key);
 }
 
 bool QQuickAbstractButtonPrivate::isPressAndHoldConnected()

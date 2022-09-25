@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtQml module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qqmldirparser_p.h"
 
@@ -241,6 +205,23 @@ bool QQmlDirParser::parse(const QString &source)
                                                           "not %1.").arg(sections[1]));
                 continue;
             }
+        } else if (sections[0] == QLatin1String("default")) {
+            if (sectionCount < 2) {
+                reportError(lineNumber, 0,
+                            QStringLiteral("default directive requires further "
+                                           "arguments, but none were provided."));
+                continue;
+            }
+            if (sections[1] == QLatin1String("import")) {
+                if (!readImport(sections + 1, sectionCount - 1,
+                                Import::Flags({ Import::Optional, Import::OptionalDefault })))
+                    continue;
+            } else {
+                reportError(lineNumber, 0,
+                            QStringLiteral("only optional imports can have a a defaultl, "
+                                           "not %1.")
+                                    .arg(sections[1]));
+            }
         } else if (sections[0] == QLatin1String("classname")) {
             if (sectionCount < 2) {
                 reportError(lineNumber, 0,
@@ -296,6 +277,16 @@ bool QQmlDirParser::parse(const QString &source)
                 reportError(lineNumber, 0, QStringLiteral("designersupported does not expect any argument"));
             else
                 _designerSupported = true;
+        } else if (sections[0] == QLatin1String("static")) {
+            if (sectionCount != 1)
+                reportError(lineNumber, 0, QStringLiteral("static does not expect any argument"));
+            else
+                _isStaticModule = true;
+        } else if (sections[0] == QLatin1String("system")) {
+            if (sectionCount != 1)
+                reportError(lineNumber, 0, QStringLiteral("system does not expect any argument"));
+            else
+                _isSystemModule = true;
         } else if (sections[0] == QLatin1String("import")
                    || sections[0] == QLatin1String("depends")) {
             if (!readImport(sections, sectionCount, Import::Default))

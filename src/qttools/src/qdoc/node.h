@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the tools applications of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #ifndef NODE_H
 #define NODE_H
@@ -40,7 +15,6 @@
 #include <QtCore/qdir.h>
 #include <QtCore/qlist.h>
 #include <QtCore/qmap.h>
-#include <QtCore/qpair.h>
 #include <QtCore/qstringlist.h>
 
 QT_BEGIN_NAMESPACE
@@ -96,7 +70,7 @@ public:
         QmlType,
         QmlModule,
         QmlProperty,
-        QmlBasicType,
+        QmlValueType,
         JsType,
         JsModule,
         JsProperty,
@@ -192,7 +166,7 @@ public:
     [[nodiscard]] bool isProxyNode() const { return m_nodeType == Proxy; }
     [[nodiscard]] bool isPublic() const { return m_access == Access::Public; }
     [[nodiscard]] bool isProtected() const { return m_access == Access::Protected; }
-    [[nodiscard]] bool isQmlBasicType() const { return m_nodeType == QmlBasicType; }
+    [[nodiscard]] bool isQmlBasicType() const { return m_nodeType == QmlValueType; }
     [[nodiscard]] bool isQmlModule() const { return m_nodeType == QmlModule; }
     [[nodiscard]] bool isQmlNode() const { return genus() == QML; }
     [[nodiscard]] bool isQmlProperty() const { return m_nodeType == QmlProperty; }
@@ -308,7 +282,7 @@ public:
     void setDeprecatedSince(const QString &sinceVersion);
     [[nodiscard]] const QString &deprecatedSince() const { return m_deprecatedSince; }
 
-    [[nodiscard]] const QMap<LinkType, QPair<QString, QString>> &links() const { return m_linkMap; }
+    [[nodiscard]] const QMap<LinkType, std::pair<QString, QString>> &links() const { return m_linkMap; }
     void setLink(LinkType linkType, const QString &link, const QString &desc);
     [[nodiscard]] const Node *navigationParent() const { return m_navParent; }
     void setNavigationParent(const Node *parent) { m_navParent = parent; }
@@ -387,7 +361,7 @@ private:
     Location m_declLocation {};
     Location m_defLocation {};
     Doc m_doc {};
-    QMap<LinkType, QPair<QString, QString>> m_linkMap {};
+    QMap<LinkType, std::pair<QString, QString>> m_linkMap {};
     QString m_fileNameBase {};
     QString m_physicalModuleName {};
     QString m_url {};

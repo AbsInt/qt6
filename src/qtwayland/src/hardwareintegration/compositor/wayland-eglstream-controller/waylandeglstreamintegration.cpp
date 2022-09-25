@@ -1,31 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2019 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtWaylandCompositor module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 or (at your option) any later version
-** approved by the KDE Free Qt Foundation. The licenses are as published by
-** the Free Software Foundation and appearing in the file LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2019 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include "waylandeglstreamintegration.h"
 #include "waylandeglstreamcontroller.h"
@@ -155,6 +129,7 @@ public:
 
     EGLDisplay egl_display = EGL_NO_DISPLAY;
     bool display_bound = false;
+    ::wl_display *wlDisplay = nullptr;
     QOffscreenSurface *offscreenSurface = nullptr;
     QOpenGLContext *localContext = nullptr;
     QList<QOpenGLTexture *> orphanedTextures;
@@ -282,7 +257,13 @@ WaylandEglStreamClientBufferIntegration::WaylandEglStreamClientBufferIntegration
 
 WaylandEglStreamClientBufferIntegration::~WaylandEglStreamClientBufferIntegration()
 {
+    Q_D(WaylandEglStreamClientBufferIntegration);
     WaylandEglStreamClientBufferIntegrationPrivate::shuttingDown = true;
+    if (d->egl_unbind_wayland_display != nullptr && d->display_bound) {
+        Q_ASSERT(d->wlDisplay != nullptr);
+        if (!d->egl_unbind_wayland_display(d->egl_display, d->wlDisplay))
+            qCWarning(qLcWaylandCompositorHardwareIntegration) << "eglUnbindWaylandDisplayWL failed";
+    }
 }
 
 void WaylandEglStreamClientBufferIntegration::attachEglStreamConsumer(struct ::wl_resource *wl_surface, struct ::wl_resource *wl_buffer)
@@ -336,14 +317,10 @@ void WaylandEglStreamClientBufferIntegration::initializeHardware(struct wl_displ
 
     if (d->egl_bind_wayland_display && d->egl_unbind_wayland_display) {
         d->display_bound = d->egl_bind_wayland_display(d->egl_display, display);
-        if (!d->display_bound) {
-            if (!ignoreBindDisplay) {
-                qWarning("QtCompositor: Failed to initialize EGL display. Could not bind Wayland display.");
-                return;
-            } else {
-                qWarning("QtCompositor: Could not bind Wayland display. Ignoring.");
-            }
-        }
+        if (!d->display_bound)
+            qCDebug(qLcWaylandCompositorHardwareIntegration) << "Wayland display already bound by other client buffer integration.";
+
+        d->wlDisplay = display;
     }
 
     d->eglStreamController = new WaylandEglStreamController(display, this);

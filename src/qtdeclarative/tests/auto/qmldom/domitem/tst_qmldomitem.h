@@ -1,40 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtQml module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**/
+// Copyright (C) 2020 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+
 #ifndef TST_QMLDOMITEM_H
 #define TST_QMLDOMITEM_H
 #include <QtQmlDom/private/qqmldomitem_p.h>
@@ -53,6 +19,7 @@
 #include <memory>
 
 QT_BEGIN_NAMESPACE
+
 namespace QQmlJS {
 namespace Dom {
 
@@ -80,6 +47,8 @@ public:
 private slots:
     void initTestCase()
     {
+        baseDir = QLatin1String(QT_QMLTEST_DATADIR) + QLatin1String("/domitem");
+        qmltypeDirs = QStringList({ baseDir, QLibraryInfo::path(QLibraryInfo::QmlImportsPath) });
         universePtr =
                 std::shared_ptr<DomUniverse>(new DomUniverse(QStringLiteral(u"dummyUniverse")));
         envPtr = std::shared_ptr<DomEnvironment>(new DomEnvironment(
@@ -241,8 +210,7 @@ private slots:
         // QCOMPARE(&(*it), &(*it3));
         QCOMPARE(&(*it4), &(*it5));
         // QCOMPARE(&(*it4), &(*it6));
-        DomItem map1 =
-                env.subMapItem(Map::fromMultiMapRef<int>(Path::Field(u"mmap"), mmap, &wrapInt));
+        DomItem map1 = env.subMapItem(Map::fromMultiMapRef<int>(Path::Field(u"mmap"), mmap));
         QCOMPARE(map1[u"b"].index(0).value().toInteger(), 2);
         QVERIFY(!map1[u"b"].index(2));
         QVERIFY(!map1[u"c"]);
@@ -424,15 +392,11 @@ private slots:
         QCOMPARE(obj1_1.environment(), env);
         QCOMPARE(obj1_1.owner(), tOwner);
     }
-    void testLoadDep()
+    void testLoadNoDep()
     {
 #ifdef Q_OS_ANDROID
         QSKIP("Test uncompatible with Android (QTBUG-100171)");
 #endif
-        QString baseDir = QLatin1String(QT_QMLTEST_DATADIR) + QLatin1String("/domitem");
-        QStringList qmltypeDirs =
-                QStringList({ baseDir, QLibraryInfo::path(QLibraryInfo::Qml2ImportsPath) });
-
         auto univPtr = std::shared_ptr<QQmlJS::Dom::DomUniverse>(
                 new QQmlJS::Dom::DomUniverse(QLatin1String("univ1")));
         auto envPtr = std::shared_ptr<QQmlJS::Dom::DomEnvironment>(new QQmlJS::Dom::DomEnvironment(
@@ -475,6 +439,7 @@ private slots:
 
         {
             DomItem width = obj1.field(Fields::bindings).key(QLatin1String("width")).index(0);
+            QCOMPARE(width.field(Fields::value).qmlObject(), obj1);
             DomItem w = obj1.bindings().key(QLatin1String("width"));
             QVERIFY(w.indexes() > 0);
             QCOMPARE(w.indexes(), 1);
@@ -516,11 +481,124 @@ private slots:
         }
     }
 
+    void testLoadDep()
+    {
+#ifdef Q_OS_ANDROID
+        QSKIP("Test uncompatible with Android (QTBUG-100171)");
+#endif
+        auto univPtr = std::shared_ptr<QQmlJS::Dom::DomUniverse>(
+                new QQmlJS::Dom::DomUniverse(QLatin1String("univ1")));
+        auto envPtr = std::shared_ptr<QQmlJS::Dom::DomEnvironment>(new QQmlJS::Dom::DomEnvironment(
+                qmltypeDirs, QQmlJS::Dom::DomEnvironment::Option::SingleThreaded, univPtr));
+        QQmlJS::Dom::DomItem env(envPtr);
+        QVERIFY(env);
+        QString testFile1 = baseDir + QLatin1String("/test1.qml");
+        DomItem tFile;
+        env.loadBuiltins();
+        env.loadFile(
+                testFile1, QString(),
+                [&tFile](Path, const DomItem &, const DomItem &newIt) { tFile = newIt; },
+                LoadOption::DefaultLoad);
+        env.loadFile(baseDir, QString(), {}, LoadOption::DefaultLoad);
+        env.loadPendingDependencies();
+
+        QVERIFY(tFile);
+        tFile = tFile.field(Fields::currentItem);
+        QVERIFY(tFile);
+        DomItem comp1 = tFile.field(Fields::components).key(QString()).index(0);
+        QVERIFY(comp1);
+        DomItem obj1 = comp1.field(Fields::objects).index(0);
+        QVERIFY(obj1);
+
+        {
+            using namespace Qt::StringLiterals;
+
+            QList<DomItem> rect =
+                    obj1.lookup(u"Rectangle"_s, LookupType::Type, LookupOption::Normal);
+            QList<DomItem> rect2 =
+                    obj1.lookup(u"Rectangle"_s, LookupType::Symbol, LookupOption::Normal);
+            QList<DomItem> rectAs =
+                    obj1.lookup(u"QQ.Rectangle"_s, LookupType::Symbol, LookupOption::Normal);
+
+            QVERIFY(rect.length() == 1);
+            QVERIFY(rect2.length() == 1);
+            QVERIFY(rectAs.length() == 1);
+            QCOMPARE(rect.first().internalKind(), DomType::Export);
+            QCOMPARE(rect.first(), rect2.first());
+            QCOMPARE(rect.first(), rectAs.first());
+            DomItem rect3 = rect.first().proceedToScope();
+            QCOMPARE(rect3.internalKind(), DomType::QmlObject);
+            QList<DomItem> rects;
+            obj1.resolve(
+                    Path::Current(PathCurrent::Lookup).field(Fields::type).key(u"Rectangle"_s),
+                    [&rects](Path, DomItem &el) {
+                        rects.append(el);
+                        return true;
+                    },
+                    {});
+            QVERIFY(rects.length() == 1);
+            for (DomItem &el : rects) {
+                QCOMPARE(rect.first(), el);
+            }
+        }
+        {
+            QString fPath = tFile.canonicalFilePath();
+            QString fPath2 = fPath.mid(0, fPath.lastIndexOf(u'/')) % u"/MySingleton.qml";
+            Path p2 = Paths::qmlFileObjectPath(fPath2);
+            DomItem f2 = env.path(p2);
+            QVERIFY2(f2, "Directory dependencies did not load MySingleton.qml");
+        }
+    }
+
+    void testImports()
+    {
+#ifdef Q_OS_ANDROID
+        QSKIP("Test uncompatible with Android (QTBUG-100171)");
+#endif
+        using namespace Qt::StringLiterals;
+
+        QString testFile1 = baseDir + QLatin1String("/TestImports.qml");
+        DomItem env = DomEnvironment::create(
+                QStringList(),
+                QQmlJS::Dom::DomEnvironment::Option::SingleThreaded
+                        | QQmlJS::Dom::DomEnvironment::Option::NoDependencies);
+
+        DomItem tFile;
+        env.loadFile(
+                testFile1, QString(),
+                [&tFile](Path, DomItem &, DomItem &newIt) { tFile = newIt.fileObject(); },
+                LoadOption::DefaultLoad);
+        env.loadPendingDependencies();
+
+        QVERIFY(tFile);
+        QList<QmlUri> importedModules;
+        for (auto &import : tFile.field(Fields::imports).values()) {
+            if (const Import *importPtr = import.as<Import>()) {
+                if (!importPtr->implicit)
+                    importedModules.append(importPtr->uri);
+            }
+        }
+        QCOMPARE(importedModules.at(0).moduleUri(), u"QtQuick"_s);
+        QCOMPARE(importedModules.at(0).directoryString(), u""_s);
+        QCOMPARE(importedModules.at(1).directoryString(), u"../.."_s);
+        QCOMPARE(importedModules.at(1).localPath(), u"../.."_s);
+        QCOMPARE(importedModules.at(1).absoluteLocalPath(), QString());
+        QCOMPARE(importedModules.at(1).absoluteLocalPath(u"/bla/bla"_s), u"/bla/bla/../..");
+        QCOMPARE(importedModules.at(2).directoryString(), u"../dommerging"_s);
+        QCOMPARE(importedModules.at(2).localPath(), u"../dommerging"_s);
+        QCOMPARE(importedModules.at(2).absoluteLocalPath(), QString());
+        QCOMPARE(importedModules.at(2).absoluteLocalPath(u"/bla/bla"_s),
+                 u"/bla/bla/../dommerging");
+        QCOMPARE(importedModules.at(3).directoryString(), u"C:/some/path"_s);
+        QCOMPARE(importedModules.at(3).localPath(), u"C:/some/path"_s);
+        QCOMPARE(importedModules.at(4).directoryString(), u"http://bla.com/"_s);
+        QCOMPARE(importedModules.at(4).directoryUrl().toString(), u"http://bla.com/"_s);
+        QCOMPARE(importedModules.at(5).absoluteLocalPath(), u"/absolute/path"_s);
+        QVERIFY(QmlUri::fromDirectoryString("QtQuick") != importedModules.at(0));
+        QCOMPARE(QmlUri::fromUriString("QtQuick"), importedModules.at(0));
+    }
     void testDeepCopy()
     {
-        QString baseDir = QLatin1String(QT_QMLTEST_DATADIR) + QLatin1String("/domitem");
-        QStringList qmltypeDirs =
-                QStringList({ baseDir, QLibraryInfo::path(QLibraryInfo::Qml2ImportsPath) });
         QString testFile = baseDir + QLatin1String("/test1.qml");
 
         DomItem env = DomEnvironment::create(
@@ -571,7 +649,110 @@ private slots:
         QCOMPARE(obj.name(), u"MyItem");
     }
 
+    static void checkAliases(DomItem &qmlObj)
+    {
+        using namespace Qt::StringLiterals;
+
+        if (const QmlObject *qmlObjPtr = qmlObj.as<QmlObject>()) {
+            auto pDefs = qmlObjPtr->propertyDefs();
+            auto i = pDefs.constBegin();
+            while (i != pDefs.constEnd()) {
+                if (i.value().isAlias()) {
+                    QString propName = i.key();
+                    DomItem value = qmlObj.bindings().key(propName).index(0).field(Fields::value);
+                    LocallyResolvedAlias rAlias =
+                            qmlObjPtr->resolveAlias(qmlObj, value.ownerAs<ScriptExpression>());
+                    if (propName.startsWith(u"a")) {
+                        QCOMPARE(rAlias.baseObject.internalKind(), DomType::QmlObject);
+                        switch (propName.last(1).at(0).unicode()) {
+                        case u'i':
+                            QCOMPARE(rAlias.status, LocallyResolvedAlias::Status::ResolvedProperty);
+                            QCOMPARE(rAlias.typeName, u"int"_s);
+                            QVERIFY(rAlias.accessedPath.isEmpty());
+                            QCOMPARE(rAlias.localPropertyDef.internalKind(),
+                                     DomType::PropertyDefinition);
+                            break;
+                        case u'r':
+                            QCOMPARE(rAlias.status, LocallyResolvedAlias::Status::ResolvedProperty);
+                            QCOMPARE(rAlias.typeName, u"real"_s);
+                            QVERIFY(rAlias.accessedPath.isEmpty());
+                            QCOMPARE(rAlias.localPropertyDef.internalKind(),
+                                     DomType::PropertyDefinition);
+                            break;
+                        case u'I':
+                            QCOMPARE(rAlias.status, LocallyResolvedAlias::Status::ResolvedObject);
+                            QCOMPARE(rAlias.typeName, u"Item"_s);
+                            QCOMPARE(rAlias.accessedPath, QStringList { u"objectName"_s });
+                            QVERIFY(!rAlias.localPropertyDef);
+                            break;
+                        case u'q':
+                            QCOMPARE(rAlias.status, LocallyResolvedAlias::Status::ResolvedObject);
+                            QCOMPARE(rAlias.typeName, u"QtObject"_s);
+                            QCOMPARE(rAlias.accessedPath, QStringList { u"objectName"_s });
+                            QVERIFY(!rAlias.localPropertyDef);
+                            break;
+                        case u'Q':
+                            QCOMPARE(rAlias.status, LocallyResolvedAlias::Status::ResolvedObject);
+                            QCOMPARE(rAlias.typeName, u"QtObject"_s);
+                            QCOMPARE(rAlias.accessedPath, QStringList { u"objectName"_s });
+                            QVERIFY(rAlias.localPropertyDef);
+                            break;
+                        default:
+                            Q_ASSERT(false);
+                        }
+                    } else if (propName.startsWith(u"loop")) {
+                        QCOMPARE(rAlias.status, LocallyResolvedAlias::Status::Loop);
+                    } else if (propName.startsWith(u"tooDeep")) {
+                        QCOMPARE(rAlias.status, LocallyResolvedAlias::Status::TooDeep);
+                    } else if (propName.startsWith(u"invalid")) {
+                        QCOMPARE(rAlias.status, LocallyResolvedAlias::Status::Invalid);
+                    } else if (propName.startsWith(u"objRef")) {
+                        QCOMPARE(rAlias.status, LocallyResolvedAlias::Status::ResolvedObject);
+                    } else {
+                        Q_ASSERT(false);
+                    }
+                }
+                ++i;
+            }
+            for (DomItem obj : qmlObj.children().values()) {
+                if (obj.as<QmlObject>())
+                    checkAliases(obj);
+            }
+        }
+    }
+
+    void testAliasResolve_data()
+    {
+        QTest::addColumn<QString>("inFile");
+
+        QTest::newRow("aliasProperties") << QStringLiteral(u"aliasProperties.qml");
+        QTest::newRow("invalidAliasProperties") << QStringLiteral(u"invalidAliasProperties.qml");
+    }
+    void testAliasResolve()
+    {
+        using namespace Qt::StringLiterals;
+
+        QFETCH(QString, inFile);
+        QString testFile1 = baseDir + u"/"_s + inFile;
+        DomItem env = DomEnvironment::create(
+                QStringList(),
+                QQmlJS::Dom::DomEnvironment::Option::SingleThreaded
+                        | QQmlJS::Dom::DomEnvironment::Option::NoDependencies);
+
+        DomItem tFile;
+        env.loadFile(
+                testFile1, QString(),
+                [&tFile](Path, DomItem &, DomItem &newIt) { tFile = newIt.fileObject(); },
+                LoadOption::DefaultLoad);
+        env.loadPendingDependencies();
+
+        DomItem rootObj = tFile.qmlObject(GoTo::MostLikely);
+        checkAliases(rootObj);
+    }
+
 private:
+    QString baseDir;
+    QStringList qmltypeDirs;
     std::shared_ptr<DomUniverse> universePtr;
     std::shared_ptr<DomEnvironment> envPtr;
     DomItem env;

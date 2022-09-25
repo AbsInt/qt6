@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2019 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtQml module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2019 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qqmlmetatypedata_p.h"
 
@@ -51,6 +15,9 @@ QQmlMetaTypeData::QQmlMetaTypeData()
 
 QQmlMetaTypeData::~QQmlMetaTypeData()
 {
+    for (auto iter = compositeTypes.cbegin(), end = compositeTypes.cend(); iter != end; ++iter)
+        iter.value()->isRegistered = false;
+
     propertyCaches.clear();
     // Do this before the attached properties disappear.
     types.clear();
@@ -116,16 +83,16 @@ bool QQmlMetaTypeData::registerModuleTypes(const QString &uri)
     return false;
 }
 
-QQmlRefPointer<QQmlPropertyCache> QQmlMetaTypeData::propertyCacheForVersion(
+QQmlPropertyCache::ConstPtr QQmlMetaTypeData::propertyCacheForVersion(
         int index, QTypeRevision version) const
 {
     return (index < typePropertyCaches.length())
             ? typePropertyCaches.at(index).value(version)
-            : QQmlRefPointer<QQmlPropertyCache>();
+            : QQmlPropertyCache::ConstPtr();
 }
 
 void QQmlMetaTypeData::setPropertyCacheForVersion(int index, QTypeRevision version,
-                                                  const QQmlRefPointer<QQmlPropertyCache> &cache)
+                                                  const QQmlPropertyCache::ConstPtr &cache)
 {
     if (index >= typePropertyCaches.length())
         typePropertyCaches.resize(index + 1);
@@ -138,12 +105,13 @@ void QQmlMetaTypeData::clearPropertyCachesForVersion(int index)
         typePropertyCaches[index].clear();
 }
 
-QQmlRefPointer<QQmlPropertyCache> QQmlMetaTypeData::propertyCache(const QMetaObject *metaObject, QTypeRevision version)
+QQmlPropertyCache::ConstPtr QQmlMetaTypeData::propertyCache(
+        const QMetaObject *metaObject, QTypeRevision version)
 {
-    if (QQmlRefPointer<QQmlPropertyCache> rv = propertyCaches.value(metaObject))
+    if (QQmlPropertyCache::ConstPtr rv = propertyCaches.value(metaObject))
         return rv;
 
-    QQmlRefPointer<QQmlPropertyCache> rv;
+    QQmlPropertyCache::ConstPtr rv;
     if (const QMetaObject *superMeta = metaObject->superClass())
         rv = propertyCache(superMeta, version)->copyAndAppend(metaObject, version);
     else
@@ -156,7 +124,7 @@ QQmlRefPointer<QQmlPropertyCache> QQmlMetaTypeData::propertyCache(const QMetaObj
     return rv;
 }
 
-QQmlRefPointer<QQmlPropertyCache> QQmlMetaTypeData::propertyCache(
+QQmlPropertyCache::ConstPtr QQmlMetaTypeData::propertyCache(
         const QQmlType &type, QTypeRevision version)
 {
     Q_ASSERT(type.isValid());
@@ -196,9 +164,8 @@ QQmlRefPointer<QQmlPropertyCache> QQmlMetaTypeData::propertyCache(
         return pc;
     }
 
-    QQmlRefPointer<QQmlPropertyCache> raw = propertyCache(type.metaObject(), combinedVersion);
-
-    bool hasCopied = false;
+    QQmlPropertyCache::ConstPtr raw = propertyCache(type.metaObject(), combinedVersion);
+    QQmlPropertyCache::Ptr copied;
 
     for (int ii = 0; ii < types.count(); ++ii) {
         const QQmlType &currentType = types.at(ii);
@@ -209,14 +176,11 @@ QQmlRefPointer<QQmlPropertyCache> QQmlMetaTypeData::propertyCache(
         int moIndex = types.count() - 1 - ii;
 
         if (raw->allowedRevision(moIndex) != rev) {
-            if (!hasCopied) {
-                // TODO: The copy should be mutable, and the original should be const
-                //       Considering this, the setAllowedRevision() below does not violate
-                //       the immutability of already published property caches.
-                raw = raw->copy();
-                hasCopied = true;
+            if (copied.isNull()) {
+                copied = raw->copy();
+                raw = copied;
             }
-            raw->setAllowedRevision(moIndex, rev);
+            copied->setAllowedRevision(moIndex, rev);
         }
     }
 
@@ -242,12 +206,12 @@ QQmlRefPointer<QQmlPropertyCache> QQmlMetaTypeData::propertyCache(
          !overloadError && iter != raw->stringCache.end();
          ++iter) {
 
-        QQmlPropertyData *d = *iter;
+        const QQmlPropertyData *d = *iter;
         if (raw->isAllowedInRevision(d))
             continue; // Not excluded - no problems
 
         // check that a regular "name" overload isn't happening
-        QQmlPropertyData *current = d;
+        const QQmlPropertyData *current = d;
         while (!overloadError && current) {
             current = d->overrideData(current);
             if (current && raw->isAllowedInRevision(current))
@@ -269,6 +233,27 @@ QQmlRefPointer<QQmlPropertyCache> QQmlMetaTypeData::propertyCache(
         setPropertyCacheForVersion(type.index(), maxVersion, raw);
 
     return raw;
+}
+
+static QQmlPropertyCache::ConstPtr propertyCacheForPotentialInlineComponentType(
+        QMetaType t,
+        const QHash<const QtPrivate::QMetaTypeInterface *,
+                    QV4::ExecutableCompilationUnit *>::const_iterator &iter) {
+    if (t != (*iter)->typeIds.id) {
+        // this is an inline component, and what we have in the iterator is currently the parent compilation unit
+        for (auto &&icDatum: (*iter)->inlineComponentData)
+            if (icDatum.typeIds.id == t)
+                return (*iter)->propertyCaches.at(icDatum.objectIndex);
+    }
+    return (*iter)->rootPropertyCache();
+}
+
+QQmlPropertyCache::ConstPtr QQmlMetaTypeData::findPropertyCacheInCompositeTypes(QMetaType t) const
+{
+    auto iter = compositeTypes.constFind(t.iface());
+    return (iter == compositeTypes.constEnd())
+            ? QQmlPropertyCache::ConstPtr()
+            : propertyCacheForPotentialInlineComponentType(t, iter);
 }
 
 QT_END_NAMESPACE

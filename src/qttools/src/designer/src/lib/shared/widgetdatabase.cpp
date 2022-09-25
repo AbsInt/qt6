@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the Qt Designer of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "widgetdatabase_p.h"
 #include "widgetfactory_p.h"
@@ -40,12 +15,19 @@
 #include <QtDesigner/abstractformeditor.h>
 
 #include <QtUiPlugin/customwidget.h>
+#include <QtWidgets/QtWidgets>
+#ifdef QT_OPENGLWIDGETS_LIB
+#include <QtOpenGLWidgets/qopenglwidget.h>
+#endif
 
 #include <QtCore/qxmlstream.h>
 
+#include <QtCore/qcoreapplication.h>
 #include <QtCore/qscopedpointer.h>
 #include <QtCore/qdebug.h>
 #include <QtCore/qmetaobject.h>
+#include <QtCore/qset.h>
+#include <QtCore/qstring.h>
 #include <QtCore/qtextstream.h>
 #include <QtCore/qcoreapplication.h>
 
@@ -56,6 +38,8 @@ namespace {
 }
 
 namespace qdesigner_internal {
+
+using namespace Qt::StringLiterals;
 
 // ----------------------------------------------------------
 WidgetDataBaseItem::WidgetDataBaseItem(const QString &name, const QString &group)
@@ -247,6 +231,27 @@ WidgetDataBaseItem *WidgetDataBaseItem::clone(const QDesignerWidgetDataBaseItemI
     return rc;
 }
 
+QString WidgetDataBaseItem::baseClassName() const
+{
+    return m_extends.isEmpty() ? m_baseClassName : m_extends;
+}
+
+void WidgetDataBaseItem::setBaseClassName(const QString &b)
+{
+    m_baseClassName = b;
+}
+
+static void addWidgetItem(WidgetDataBase *wdb, const char *name, const QMetaObject &mo,
+                          const char *comment)
+{
+    auto *item = new WidgetDataBaseItem(QString::fromUtf8(name));
+    if (auto *base = mo.superClass())
+        item->setBaseClassName(QString::fromUtf8(base->className()));
+    if (comment[0])
+        item->setToolTip(QString::fromUtf8(comment));
+    wdb->append(item);
+}
+
 // ----------------------------------------------------------
 WidgetDataBase::WidgetDataBase(QDesignerFormEditorInterface *core, QObject *parent)
     : QDesignerWidgetDataBaseInterface(parent),
@@ -254,7 +259,7 @@ WidgetDataBase::WidgetDataBase(QDesignerFormEditorInterface *core, QObject *pare
 {
 #define DECLARE_LAYOUT(L, C)
 #define DECLARE_COMPAT_WIDGET(W, C) DECLARE_WIDGET(W, C)
-#define DECLARE_WIDGET(W, C) append(new WidgetDataBaseItem(QString::fromUtf8(#W)));
+#define DECLARE_WIDGET(W, C) addWidgetItem(this, #W, W::staticMetaObject, C);
 
 #include <widgets.table>
 
@@ -262,6 +267,24 @@ WidgetDataBase::WidgetDataBase(QDesignerFormEditorInterface *core, QObject *pare
 #undef DECLARE_LAYOUT
 #undef DECLARE_WIDGET
 #undef DECLARE_WIDGET_1
+
+    const QString msgAbstractClass =
+        QCoreApplication::translate("WidgetDataBase",
+                                    "Abstract base class that cannot be instantiated. For promotion/custom widget usage only.");
+
+#if QT_CONFIG(abstractbutton)
+    auto *abItem = new WidgetDataBaseItem(u"QAbstractButton"_s);
+    abItem->setToolTip(msgAbstractClass);
+    abItem->setBaseClassName(u"QWidget"_s);
+    append(abItem);
+#endif // QT_CONFIG(abstractbutton)
+
+#if QT_CONFIG(itemviews)
+    auto *aivItem = new WidgetDataBaseItem(u"QAbstractItemView"_s);
+    aivItem->setBaseClassName(u"QAbstractScrollArea"_s);
+    aivItem->setToolTip(msgAbstractClass);
+    append(aivItem);
+#endif // QT_CONFIG(itemviews)
 
     append(new WidgetDataBaseItem(QString::fromUtf8("Line")));
     append(new WidgetDataBaseItem(QString::fromUtf8("Spacer")));

@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2020 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2020 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <QtTest/qtest.h>
 #include <QtTest/qsignalspy.h>
@@ -48,6 +23,7 @@ private slots:
     void initTestCase() override;
     void flickable();
     void fractionalFontSize();
+    void resizeBackgroundKeepsBindings();
 
 private:
     QScopedPointer<QPointingDevice> touchDevice;
@@ -88,9 +64,12 @@ void tst_QQuickControl::flickable()
     QSignalSpy buttonClickedSpy(button, SIGNAL(clicked()));
     QVERIFY(buttonClickedSpy.isValid());
 
-    QTest::touchEvent(window, touchDevice.data()).press(0, QPoint(button->width() / 2, button->height() / 2));
+    QPoint p(button->width() / 2, button->height() / 2);
+    QTest::touchEvent(window, touchDevice.data()).press(0, p);
     QTRY_COMPARE(buttonPressedSpy.count(), 1);
-    QTest::touchEvent(window, touchDevice.data()).release(0, QPoint(button->width() / 2, button->height() / 2));
+    p += QPoint(1, 1); // less than the drag threshold
+    QTest::touchEvent(window, touchDevice.data()).move(0, p);
+    QTest::touchEvent(window, touchDevice.data()).release(0, p);
     QTRY_COMPARE(buttonReleasedSpy.count(), 1);
     QTRY_COMPARE(buttonClickedSpy.count(), 1);
 }
@@ -111,6 +90,20 @@ void tst_QQuickControl::fractionalFontSize()
     QVERIFY2(qFuzzyCompare(contentItem->contentWidth(),
             QQuickTextPrivate::get(contentItem)->layout.boundingRect().width()),
             "The QQuickText::contentWidth() doesn't match the layout's preferred text width");
+}
+
+void tst_QQuickControl::resizeBackgroundKeepsBindings()
+{
+    QQuickApplicationHelper helper(this, QStringLiteral("resizeBackgroundKeepsBindings.qml"));
+    QQuickWindow *window = helper.window;
+    window->show();
+    QVERIFY(QTest::qWaitForWindowExposed(window));
+    auto ctxt = qmlContext(window);
+    QVERIFY(ctxt);
+    auto background = qobject_cast<QQuickItem *>(ctxt->objectForName("background"));
+    QVERIFY(background);
+    QCOMPARE(background->height(), 4);
+    QVERIFY(background->bindableHeight().hasBinding());
 }
 
 QTEST_QUICKCONTROLS_MAIN(tst_QQuickControl)

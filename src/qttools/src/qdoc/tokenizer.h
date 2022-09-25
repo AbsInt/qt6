@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the tools applications of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2021 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #ifndef TOKENIZER_H
 #define TOKENIZER_H
@@ -140,6 +115,8 @@ private:
 
     inline int getChar()
     {
+        using namespace Qt::StringLiterals;
+
         if (m_ch == EOF)
             return EOF;
         if (m_lexLen < yyLexBufSize - 1) {
@@ -147,8 +124,8 @@ private:
             m_lex[m_lexLen] = '\0';
         } else if (!token_too_long_warning_was_issued) {
             location().warning(
-                u"The content is too long.\n"_qs,
-                u"The maximum amount of characters for this content is %1.\n"_qs.arg(yyLexBufSize) +
+                u"The content is too long.\n"_s,
+                u"The maximum amount of characters for this content is %1.\n"_s.arg(yyLexBufSize) +
                 "Consider splitting it or reducing its size."
             );
 

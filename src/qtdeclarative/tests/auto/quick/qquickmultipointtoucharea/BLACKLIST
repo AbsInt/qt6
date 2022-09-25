@@ -4,9 +4,3 @@ ubuntu-22.04
 [nested]
 ubuntu-20.04
 ubuntu-22.04
-
-# QTBUG-103200
-[inFlickable2]
-opensuse-leap
-[mouseGestureStarted]
-opensuse-leap

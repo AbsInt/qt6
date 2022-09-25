@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2017 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the Qt Quick Templates 2 module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2017 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qquickdrawer_p.h"
 #include "qquickdrawer_p_p.h"
@@ -302,29 +266,36 @@ static bool isWithinDragMargin(const QQuickDrawer *drawer, const QPointF &pos)
 bool QQuickDrawerPrivate::startDrag(QEvent *event)
 {
     Q_Q(QQuickDrawer);
+    delayedEnterTransition = false;
     if (!window || !interactive || dragMargin < 0.0 || qFuzzyIsNull(dragMargin))
         return false;
 
     switch (event->type()) {
     case QEvent::MouseButtonPress:
-        if (isWithinDragMargin(q, static_cast<QMouseEvent *>(event)->scenePosition())) {
-            prepareEnterTransition();
-            reposition();
-            return handleMouseEvent(window->contentItem(), static_cast<QMouseEvent *>(event));
+        if (QMouseEvent *mouseEvent = static_cast<QMouseEvent *>(event); isWithinDragMargin(q, mouseEvent->scenePosition())) {
+            // watch future events and grab the mouse once it has moved
+            // sufficiently fast or far (in grabMouse).
+            delayedEnterTransition = true;
+            mouseEvent->addPassiveGrabber(mouseEvent->point(0), popupItem);
+            handleMouseEvent(window->contentItem(), mouseEvent);
+            return false;
         }
         break;
 
 #if QT_CONFIG(quicktemplates2_multitouch)
     case QEvent::TouchBegin:
-    case QEvent::TouchUpdate:
-        for (const QTouchEvent::TouchPoint &point : static_cast<QTouchEvent *>(event)->points()) {
+    case QEvent::TouchUpdate: {
+        auto *touchEvent = static_cast<QTouchEvent *>(event);
+        for (const QTouchEvent::TouchPoint &point : touchEvent->points()) {
             if (point.state() == QEventPoint::Pressed && isWithinDragMargin(q, point.scenePosition())) {
-                prepareEnterTransition();
-                reposition();
-                return handleTouchEvent(window->contentItem(), static_cast<QTouchEvent *>(event));
+                delayedEnterTransition = true;
+                touchEvent->addPassiveGrabber(point, popupItem);
+                handleTouchEvent(window->contentItem(), touchEvent);
+                return false;
             }
         }
         break;
+    }
 #endif
 
     default:
@@ -372,6 +343,12 @@ bool QQuickDrawerPrivate::grabMouse(QQuickItem *item, QMouseEvent *event)
     }
 
     if (overThreshold) {
+        if (delayedEnterTransition) {
+            prepareEnterTransition();
+            reposition();
+            delayedEnterTransition = false;
+        }
+
         popupItem->grabMouse();
         popupItem->setKeepMouseGrab(true);
         offset = offsetAt(movePoint);
@@ -418,7 +395,12 @@ bool QQuickDrawerPrivate::grabTouch(QQuickItem *item, QTouchEvent *event)
         }
 
         if (overThreshold) {
-            popupItem->grabTouchPoints(QList<int>() << touchId);
+            if (delayedEnterTransition) {
+                prepareEnterTransition();
+                reposition();
+                delayedEnterTransition = false;
+            }
+            event->setExclusiveGrabber(point, popupItem);
             popupItem->setKeepTouchGrab(true);
             offset = offsetAt(movePoint);
         }

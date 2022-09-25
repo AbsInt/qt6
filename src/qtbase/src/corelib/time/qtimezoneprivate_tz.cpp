@@ -1,43 +1,7 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Copyright (C) 2019 Crimson AS <info@crimson.no>
-** Copyright (C) 2013 John Layt <jlayt@kde.org>
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2022 The Qt Company Ltd.
+// Copyright (C) 2019 Crimson AS <info@crimson.no>
+// Copyright (C) 2013 John Layt <jlayt@kde.org>
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qtimezone.h"
 #include "qtimezoneprivate_p.h"
@@ -48,6 +12,7 @@
 #include <QtCore/QDateTime>
 #include <QtCore/QFile>
 #include <QtCore/QCache>
+#include <QtCore/QMap>
 #include <QtCore/QMutex>
 
 #include <qdebug.h>
@@ -63,8 +28,10 @@
 
 QT_BEGIN_NAMESPACE
 
+using namespace Qt::StringLiterals;
+
 #if QT_CONFIG(icu)
-static QBasicMutex s_icu_mutex;
+Q_CONSTINIT static QBasicMutex s_icu_mutex;
 #endif
 
 /*
@@ -122,7 +89,7 @@ static QTzTimeZoneHash loadTzTimeZones()
 }
 
 // Hash of available system tz files as loaded by loadTzTimeZones()
-Q_GLOBAL_STATIC_WITH_ARGS(const QTzTimeZoneHash, tzZones, (loadTzTimeZones()));
+Q_GLOBAL_STATIC(const QTzTimeZoneHash, tzZones, loadTzTimeZones());
 
 /*
     The following is copied and modified from tzfile.h which is in the public domain.
@@ -549,7 +516,7 @@ PosixZone PosixZone::parse(const char *&pos, const char *end)
     pos = zoneEnd;
     // UTC+hh:mm:ss or GMT+hh:mm:ss should be read as offsets from UTC, not as a
     // POSIX rule naming a zone as UTC or GMT and specifying a non-zero offset.
-    if (offset != 0 && (name == QLatin1String("UTC") || name == QLatin1String("GMT")))
+    if (offset != 0 && (name =="UTC"_L1 || name == "GMT"_L1))
         return invalid();
     return {std::move(name), offset};
 }
@@ -762,9 +729,9 @@ QTzTimeZoneCacheEntry QTzTimeZoneCache::findEntry(const QByteArray &ianaId)
             return ret;
     } else {
         // Open named tz, try modern path first, if fails try legacy path
-        tzif.setFileName(QLatin1String("/usr/share/zoneinfo/") + QString::fromLocal8Bit(ianaId));
+        tzif.setFileName("/usr/share/zoneinfo/"_L1 + QString::fromLocal8Bit(ianaId));
         if (!tzif.open(QIODevice::ReadOnly)) {
-            tzif.setFileName(QLatin1String("/usr/lib/zoneinfo/") + QString::fromLocal8Bit(ianaId));
+            tzif.setFileName("/usr/lib/zoneinfo/"_L1 + QString::fromLocal8Bit(ianaId));
             if (!tzif.open(QIODevice::ReadOnly)) {
                 // ianaId may be a POSIX rule, taken from $TZ or /etc/TZ
                 auto check = validatePosixRule(ianaId);
@@ -1316,7 +1283,7 @@ private:
     {
         // On most distros /etc/localtime is a symlink to a real file so extract
         // name from the path
-        const QLatin1String zoneinfo("/zoneinfo/");
+        const auto zoneinfo = "/zoneinfo/"_L1;
         QString path = QStringLiteral("/etc/localtime");
         long iteration = getSymloopMax();
         // Symlink may point to another symlink etc. before being under zoneinfo/
@@ -1386,7 +1353,7 @@ QByteArray QTzTimeZonePrivate::staticSystemTimeZoneId()
         ianaId = ianaId.mid(1);
 
     if (ianaId.isEmpty()) {
-        thread_local static ZoneNameReader reader;
+        Q_CONSTINIT thread_local static ZoneNameReader reader;
         ianaId = reader.name();
     }
 

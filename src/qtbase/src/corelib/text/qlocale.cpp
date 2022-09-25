@@ -1,42 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2022 The Qt Company Ltd.
-** Copyright (C) 2021 Intel Corporation.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtCore module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2022 The Qt Company Ltd.
+// Copyright (C) 2021 Intel Corporation.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qglobal.h"
 
@@ -68,6 +32,7 @@ QT_WARNING_DISABLE_GCC("-Wfree-nonheap-object") // false positive tracking
 #include "qvarlengtharray.h"
 #include "qstringbuilder.h"
 #include "private/qnumeric_p.h"
+#include "private/qtools_p.h"
 #include <cmath>
 #ifndef QT_NO_SYSTEMLOCALE
 #   include "qmutex.h"
@@ -81,10 +46,20 @@ QT_WARNING_DISABLE_GCC("-Wfree-nonheap-object") // false positive tracking
 #include "private/qgregoriancalendar_p.h"
 #include "qcalendar.h"
 
+#include <q20iterator.h>
+
 QT_BEGIN_NAMESPACE
 
+QT_IMPL_METATYPE_EXTERN_TAGGED(QList<Qt::DayOfWeek>, QList_Qt__DayOfWeek)
 #ifndef QT_NO_SYSTEMLOCALE
-static QSystemLocale *_systemLocale = nullptr;
+QT_IMPL_METATYPE_EXTERN_TAGGED(QSystemLocale::CurrencyToStringArgument,
+                               QSystemLocale__CurrencyToStringArgument)
+#endif
+
+using namespace Qt::StringLiterals;
+
+#ifndef QT_NO_SYSTEMLOCALE
+Q_CONSTINIT static QSystemLocale *_systemLocale = nullptr;
 class QSystemLocaleSingleton: public QSystemLocale
 {
 public:
@@ -92,8 +67,22 @@ public:
 };
 
 Q_GLOBAL_STATIC(QSystemLocaleSingleton, QSystemLocale_globalSystemLocale)
-static QLocaleData systemLocaleData;
+Q_CONSTINIT static QLocaleData systemLocaleData = {};
 #endif
+
+static_assert(ascii_isspace(' '));
+static_assert(ascii_isspace('\t'));
+static_assert(ascii_isspace('\n'));
+static_assert(ascii_isspace('\v'));
+static_assert(ascii_isspace('\f'));
+static_assert(ascii_isspace('\r'));
+static_assert(!ascii_isspace('\0'));
+static_assert(!ascii_isspace('\a'));
+static_assert(!ascii_isspace('a'));
+static_assert(!ascii_isspace('\177'));
+static_assert(!ascii_isspace(uchar('\200')));
+static_assert(!ascii_isspace(uchar('\xA0')));
+static_assert(!ascii_isspace(uchar('\377')));
 
 /******************************************************************************
 ** Helpers for accessing Qt locale database
@@ -214,46 +203,46 @@ QLocale::Territory QLocalePrivate::codeToTerritory(QStringView code) noexcept
     return QLocale::AnyTerritory;
 }
 
-QLatin1String QLocalePrivate::languageToCode(QLocale::Language language,
-                                             QLocale::LanguageCodeTypes codeTypes)
+QLatin1StringView QLocalePrivate::languageToCode(QLocale::Language language,
+                                                 QLocale::LanguageCodeTypes codeTypes)
 {
     if (language == QLocale::AnyLanguage || language > QLocale::LastLanguage)
-        return QLatin1String();
+        return {};
     if (language == QLocale::C)
-        return QLatin1String("C");
+        return "C"_L1;
 
     const LanguageCodeEntry &i = languageCodeList[language];
 
     if (codeTypes.testFlag(QLocale::ISO639Part1) && i.part1.isValid())
-        return QLatin1String(i.part1.code, 2);
+        return {i.part1.code, 2};
 
     if (codeTypes.testFlag(QLocale::ISO639Part2B) && i.part2B.isValid())
-        return QLatin1String(i.part2B.code, 3);
+        return {i.part2B.code, 3};
 
     if (codeTypes.testFlag(QLocale::ISO639Part2T) && i.part2T.isValid())
-        return QLatin1String(i.part2T.code, 3);
+        return {i.part2T.code, 3};
 
     if (codeTypes.testFlag(QLocale::ISO639Part3))
-        return QLatin1String(i.part3.code, 3);
+        return {i.part3.code, 3};
 
-    return QLatin1String();
+    return {};
 }
 
-QLatin1String QLocalePrivate::scriptToCode(QLocale::Script script)
+QLatin1StringView QLocalePrivate::scriptToCode(QLocale::Script script)
 {
     if (script == QLocale::AnyScript || script > QLocale::LastScript)
-        return QLatin1String();
+        return {};
     const unsigned char *c = script_code_list + 4 * script;
-    return QLatin1String(reinterpret_cast<const char *>(c), 4);
+    return {reinterpret_cast<const char *>(c), 4};
 }
 
-QLatin1String QLocalePrivate::territoryToCode(QLocale::Territory territory)
+QLatin1StringView QLocalePrivate::territoryToCode(QLocale::Territory territory)
 {
     if (territory == QLocale::AnyTerritory || territory > QLocale::LastTerritory)
-        return QLatin1String();
+        return {};
 
     const unsigned char *c = territory_code_list + 3 * territory;
-    return QLatin1String(reinterpret_cast<const char*>(c), c[2] == 0 ? 2 : 3);
+    return {reinterpret_cast<const char*>(c), c[2] == 0 ? 2 : 3};
 }
 
 namespace {
@@ -474,9 +463,9 @@ QByteArray QLocalePrivate::bcp47Name(char separator) const
     return m_data->id().withLikelySubtagsRemoved().name(separator);
 }
 
-static int findLocaleIndexById(const QLocaleId &localeId)
+static qsizetype findLocaleIndexById(const QLocaleId &localeId)
 {
-    quint16 idx = locale_index[localeId.language_id];
+    qsizetype idx = locale_index[localeId.language_id];
     // If there are no locales for specified language (so we we've got the
     // default language, which has no associated script or country), give up:
     if (localeId.language_id && idx == 0)
@@ -493,14 +482,14 @@ static int findLocaleIndexById(const QLocaleId &localeId)
     return -1;
 }
 
-int QLocaleData::findLocaleIndex(QLocaleId lid)
+qsizetype QLocaleData::findLocaleIndex(QLocaleId lid)
 {
     QLocaleId localeId = lid;
     QLocaleId likelyId = localeId.withLikelySubtagsAdded();
     const ushort fallback = likelyId.language_id;
 
     // Try a straight match with the likely data:
-    int index = findLocaleIndexById(likelyId);
+    qsizetype index = findLocaleIndexById(likelyId);
     if (index >= 0)
         return index;
     QVarLengthArray<QLocaleId, 6> tried;
@@ -635,22 +624,22 @@ QString qt_readEscapedFormatString(QStringView format, qsizetype *idx)
 {
     qsizetype &i = *idx;
 
-    Q_ASSERT(format.at(i) == QLatin1Char('\''));
+    Q_ASSERT(format.at(i) == u'\'');
     ++i;
     if (i == format.size())
         return QString();
     if (format.at(i).unicode() == '\'') { // "''" outside of a quoted string
         ++i;
-        return QLatin1String("'");
+        return "'"_L1;
     }
 
     QString result;
 
     while (i < format.size()) {
         if (format.at(i).unicode() == '\'') {
-            if (format.mid(i + 1).startsWith(QLatin1Char('\''))) {
+            if (format.mid(i + 1).startsWith(u'\'')) {
                 // "''" inside a quoted string
-                result.append(QLatin1Char('\''));
+                result.append(u'\'');
                 i += 2;
             } else {
                 break;
@@ -692,7 +681,7 @@ qsizetype qt_repeatCount(QStringView s)
     return j;
 }
 
-static const QLocaleData *default_data = nullptr;
+Q_CONSTINIT static const QLocaleData *default_data = nullptr;
 
 static const QLocaleData *const c_data = locale_data;
 static QLocalePrivate *c_private()
@@ -789,7 +778,7 @@ static const QLocaleData *systemData()
       one thread.
     */
     {
-        static QBasicMutex systemDataMutex;
+        Q_CONSTINIT static QBasicMutex systemDataMutex;
         systemDataMutex.lock();
         if (systemLocaleData.m_language_id == 0)
             updateSystemPrivate();
@@ -809,7 +798,7 @@ static const QLocaleData *defaultData()
     return default_data;
 }
 
-static uint defaultIndex()
+static qsizetype defaultIndex()
 {
     const QLocaleData *const data = defaultData();
 #ifndef QT_NO_SYSTEMLOCALE
@@ -847,18 +836,18 @@ QDataStream &operator>>(QDataStream &ds, QLocale &l)
 }
 #endif // QT_NO_DATASTREAM
 
-static const int locale_data_size = sizeof(locale_data)/sizeof(QLocaleData) - 1;
+static constexpr qsizetype locale_data_size = q20::ssize(locale_data) - 1; // trailing guard
 
-QBasicAtomicInt QLocalePrivate::s_generation = Q_BASIC_ATOMIC_INITIALIZER(0);
-Q_GLOBAL_STATIC_WITH_ARGS(QSharedDataPointer<QLocalePrivate>, defaultLocalePrivate,
-                          (new QLocalePrivate(defaultData(), defaultIndex())))
+Q_CONSTINIT QBasicAtomicInt QLocalePrivate::s_generation = Q_BASIC_ATOMIC_INITIALIZER(0);
+Q_GLOBAL_STATIC(QSharedDataPointer<QLocalePrivate>, defaultLocalePrivate,
+                new QLocalePrivate(defaultData(), defaultIndex()))
 
 static QLocalePrivate *localePrivateByName(QStringView name)
 {
     if (name == u"C")
         return c_private();
-    const int index = QLocaleData::findLocaleIndex(QLocaleId::fromName(name));
-    Q_ASSERT(index >= 0 && size_t(index) < std::size(locale_data) - 1);
+    const qsizetype index = QLocaleData::findLocaleIndex(QLocaleId::fromName(name));
+    Q_ASSERT(index >= 0 && index < locale_data_size);
     return new QLocalePrivate(locale_data + index, index,
                               locale_data[index].m_language_id == QLocale::C
                               ? QLocale::OmitGroupSeparator : QLocale::DefaultNumberOptions);
@@ -870,8 +859,8 @@ static QLocalePrivate *findLocalePrivate(QLocale::Language language, QLocale::Sc
     if (language == QLocale::C)
         return c_private();
 
-    int index = QLocaleData::findLocaleIndex(QLocaleId { language, script, territory });
-    Q_ASSERT(index >= 0 && size_t(index) < std::size(locale_data) - 1);
+    qsizetype index = QLocaleData::findLocaleIndex(QLocaleId { language, script, territory });
+    Q_ASSERT(index >= 0 && index < locale_data_size);
     const QLocaleData *data = locale_data + index;
 
     QLocale::NumberOptions numberOptions = QLocale::DefaultNumberOptions;
@@ -1021,9 +1010,9 @@ QLocale::QLocale(QStringView name)
 }
 
 /*!
+    \fn QLocale::QLocale(const QString &name)
     \overload
 */
-QLocale::QLocale(const QString &name) : QLocale(qToStringViewIgnoringNull(name)) {}
 
 /*!
     Constructs a QLocale object initialized with the default locale.
@@ -1354,7 +1343,7 @@ QString QLocale::name() const
     if (c == AnyTerritory)
         return d->languageCode();
 
-    return d->languageCode() + QLatin1Char('_') + d->territoryCode();
+    return d->languageCode() + u'_' + d->territoryCode();
 }
 
 static qlonglong toIntegral_helper(const QLocaleData *d, QStringView str, bool *ok,
@@ -1547,8 +1536,8 @@ QLocale::Script QLocale::codeToScript(QStringView scriptCode) noexcept
 QString QLocale::languageToString(Language language)
 {
     if (language > QLocale::LastLanguage)
-        return QLatin1String("Unknown");
-    return QLatin1String(language_name_list + language_name_index[language]);
+        return "Unknown"_L1;
+    return QLatin1StringView(language_name_list + language_name_index[language]);
 }
 
 /*!
@@ -1561,8 +1550,8 @@ QString QLocale::languageToString(Language language)
 QString QLocale::territoryToString(QLocale::Territory territory)
 {
     if (territory > QLocale::LastTerritory)
-        return QLatin1String("Unknown");
-    return QLatin1String(territory_name_list + territory_name_index[territory]);
+        return "Unknown"_L1;
+    return QLatin1StringView(territory_name_list + territory_name_index[territory]);
 }
 
 #if QT_DEPRECATED_SINCE(6, 6)
@@ -1589,8 +1578,8 @@ QString QLocale::countryToString(Country country)
 QString QLocale::scriptToString(QLocale::Script script)
 {
     if (script > QLocale::LastScript)
-        return QLatin1String("Unknown");
-    return QLatin1String(script_name_list + script_name_index[script]);
+        return "Unknown"_L1;
+    return QLatin1StringView(script_name_list + script_name_index[script]);
 }
 
 /*!
@@ -2331,7 +2320,7 @@ QString QLocale::dateTimeFormat(FormatType format) const
         }
     }
 #endif
-    return dateFormat(format) + QLatin1Char(' ') + timeFormat(format);
+    return dateFormat(format) + u' ' + timeFormat(format);
 }
 
 #if QT_CONFIG(datestring)
@@ -2623,14 +2612,6 @@ static bool qIsUpper(char c)
     return c >= 'A' && c <= 'Z';
 }
 
-static char qToLower(char c)
-{
-    if (c >= 'A' && c <= 'Z')
-        return c - 'A' + 'a';
-    else
-        return c;
-}
-
 /*!
     \overload
     Returns a string representing the floating-point number \a f.
@@ -2645,22 +2626,24 @@ static char qToLower(char c)
     \row \li \c 'e' \li format as [-]9.9e[+|-]999
     \row \li \c 'E' \li format as [-]9.9E[+|-]999
     \row \li \c 'f' \li format as [-]9.9
+    \row \li \c 'F' \li same as \c 'f' except for INF and NAN (see below)
     \row \li \c 'g' \li use \c 'e' or \c 'f' format, whichever is more concise
-    \row \li \c 'G' \li use \c 'E' or \c 'f' format, whichever is more concise
+    \row \li \c 'G' \li use \c 'E' or \c 'F' format, whichever is more concise
     \endtable
 
-    For the \c 'e', \c 'E', and \c 'f' formats, the \a precision represents the
-    number of digits \e after the decimal point. For the \c 'g' and \c 'G'
-    formats, the \a precision represents the maximum number of significant
-    digits (trailing zeroes are omitted). The special \a precision value
-    QLocale::FloatingPointShortest selects the shortest representation that,
-    when read as a number, gets back the original floating-point value. Aside
-    from that, any negative \a precision is ignored in favor of the default, 6.
+    For the \c 'e', \c 'E', \c 'f' and \c 'F' formats, the \a precision
+    represents the number of digits \e after the decimal point. For the \c 'g'
+    and \c 'G' formats, the \a precision represents the maximum number of
+    significant digits (trailing zeroes are omitted). The special \a precision
+    value QLocale::FloatingPointShortest selects the shortest representation
+    that, when read as a number, gets back the original floating-point
+    value. Aside from that, any negative \a precision is ignored in favor of the
+    default, 6.
 
     For the \c 'e', \c 'f' and \c 'g' formats, positive infinity is represented
     as "inf", negative infinity as "-inf" and floating-point NaN (not-a-number)
-    values are represented as "nan". For the \c 'E' and \c 'G' formats, "INF"
-    and "NAN" are used instead. This does not vary with locale.
+    values are represented as "nan". For the \c 'E', \c 'F' and \c 'G' formats,
+    "INF" and "NAN" are used instead. This does not vary with locale.
 
     \sa toDouble(), numberOptions(), exponential(), decimalPoint(), zeroDigit(),
         positiveSign(), percent(), toCurrencyString(), formattedDataSize(),
@@ -2672,7 +2655,7 @@ QString QLocale::toString(double f, char format, int precision) const
     QLocaleData::DoubleForm form = QLocaleData::DFDecimal;
     uint flags = qIsUpper(format) ? QLocaleData::CapitalEorX : 0;
 
-    switch (qToLower(format)) {
+    switch (QtMiscUtils::toAsciiLower(format)) {
         case 'f':
             form = QLocaleData::DFDecimal;
             break;
@@ -3498,7 +3481,7 @@ QString QCalendarBackend::dateTimeToString(QStringView format, const QDateTime &
                 QString text = time.hour() < 12 ? locale.amText() : locale.pmText();
                 used = true;
                 repeat = 1;
-                if (format.mid(i + 1).startsWith(QLatin1Char('p'), Qt::CaseInsensitive))
+                if (format.mid(i + 1).startsWith(u'p', Qt::CaseInsensitive))
                     ++repeat;
                 if (c.unicode() == 'A' && (repeat == 1 || format.at(i + 1).unicode() == 'P'))
                     text = std::move(text).toUpper();
@@ -3538,7 +3521,7 @@ QString QCalendarBackend::dateTimeToString(QStringView format, const QDateTime &
             }
         }
         if (!used)
-            result.append(QString(repeat, c));
+            result.resize(result.size() + repeat, c);
         i += repeat;
     }
 
@@ -4279,7 +4262,7 @@ QString QLocale::toCurrencyString(qlonglong value, const QString &symbol) const
     QString sym = symbol.isNull() ? currencySymbol() : symbol;
     if (sym.isEmpty())
         sym = currencySymbol(QLocale::CurrencyIsoCode);
-    return range.getData(currency_format_data).arg(str, sym);
+    return range.viewData(currency_format_data).arg(str, sym);
 }
 
 /*!
@@ -4334,7 +4317,7 @@ QString QLocale::toCurrencyString(double value, const QString &symbol, int preci
     QString sym = symbol.isNull() ? currencySymbol() : symbol;
     if (sym.isEmpty())
         sym = currencySymbol(QLocale::CurrencyIsoCode);
-    return range.getData(currency_format_data).arg(str, sym);
+    return range.viewData(currency_format_data).arg(str, sym);
 }
 
 /*!
@@ -4393,16 +4376,16 @@ QString QLocale::formattedDataSize(qint64 bytes, int precision, DataSizeFormats 
     // We don't support sizes in units larger than exbibytes because
     // the number of bytes would not fit into qint64.
     Q_ASSERT(power <= 6 && power >= 0);
-    QString unit;
+    QStringView unit;
     if (power > 0) {
         QLocaleData::DataRange range = (format & DataSizeSIQuantifiers)
             ? d->m_data->byteAmountSI() : d->m_data->byteAmountIEC();
-        unit = range.getListEntry(byte_unit_data, power - 1);
+        unit = range.viewListEntry(byte_unit_data, power - 1);
     } else {
-        unit = d->m_data->byteCount().getData(byte_unit_data);
+        unit = d->m_data->byteCount().viewData(byte_unit_data);
     }
 
-    return number + QLatin1Char(' ') + unit;
+    return number + u' ' + unit;
 }
 
 /*!
@@ -4414,10 +4397,10 @@ QString QLocale::formattedDataSize(qint64 bytes, int precision, DataSizeFormats 
     The return value represents locale names that the user expects to see the
     UI translation in.
 
-    Most like you do not need to use this function directly, but just pass the
+    Most likely you do not need to use this function directly, but just pass the
     QLocale object to the QTranslator::load() function.
 
-    The first item in the list is the most preferred one.
+    Earlier items in the list are to be preferred over later ones.
 
     \sa QTranslator, bcp47Name()
 */
@@ -4425,8 +4408,11 @@ QStringList QLocale::uiLanguages() const
 {
     QStringList uiLanguages;
     QList<QLocale> locales;
-#ifndef QT_NO_SYSTEMLOCALE
-    if (d->m_data == &systemLocaleData) {
+#ifdef QT_NO_SYSTEMLOCALE
+    constexpr bool isSystem = false;
+#else
+    const bool isSystem = d->m_data == &systemLocaleData;
+    if (isSystem) {
         uiLanguages = systemLocale()->query(QSystemLocale::UILanguages).toStringList();
         // ... but we need to include likely-adjusted forms of each of those, too:
         for (const auto &entry : std::as_const(uiLanguages))
@@ -4463,7 +4449,7 @@ QStringList QLocale::uiLanguages() const
 
         qsizetype j;
         QByteArray prior;
-        if (i < uiLanguages.size()) {
+        if (isSystem && i < uiLanguages.size()) {
             // Adding likely-adjusted forms to system locale's list.
             // Name the locale is derived from:
             prior = uiLanguages.at(i).toLatin1();
@@ -4474,7 +4460,7 @@ QStringList QLocale::uiLanguages() const
             uiLanguages.append(locale.name());
             continue;
         } else {
-            // Plain locale, not system locale; just append.
+            // Plain locale or empty system uiLanguages; just append.
             const QString name = locale.bcp47Name();
             uiLanguages.append(name);
             prior = name.toLatin1();
@@ -4485,9 +4471,11 @@ QStringList QLocale::uiLanguages() const
         const QLocaleId min = max.withLikelySubtagsRemoved();
         id.script_id = 0; // For re-use as script-less variant.
 
-        // Include version with all likely sub-tags (last) if distinct from the rest:
-        if (max != min && max != id && max.name() != prior)
-            uiLanguages.insert(j, QString::fromLatin1(max.name()));
+        // Include minimal version (last) unless it's what our locale is derived from:
+        if (min.name() != prior)
+            uiLanguages.insert(j, QString::fromLatin1(min.name()));
+        else if (!isSystem)
+            --j; // bcp47Name() matches min(): put more specific forms *before* it.
 
         // Include scriptless version if likely-equivalent and distinct:
         if (data->m_script_id && id != min && id.name() != prior
@@ -4495,9 +4483,9 @@ QStringList QLocale::uiLanguages() const
             uiLanguages.insert(j, QString::fromLatin1(id.name()));
         }
 
-        // Include minimal version (first) unless it's what our locale is derived from:
-        if (min.name() != prior)
-            uiLanguages.insert(j, QString::fromLatin1(min.name()));
+        // Include version with all likely sub-tags (first) if distinct from the rest:
+        if (max != min && max != id && max.name() != prior)
+            uiLanguages.insert(j, QString::fromLatin1(max.name()));
     }
     return uiLanguages;
 }

@@ -1,31 +1,6 @@
-/****************************************************************************
-**
-** Copyright (C) 2021 The Qt Company Ltd.
-** Copyright (C) 2020 Intel Corporation.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2022 The Qt Company Ltd.
+// Copyright (C) 2020 Intel Corporation.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #ifdef QT_NO_CAST_FROM_ASCII
 # undef QT_NO_CAST_FROM_ASCII
@@ -977,7 +952,9 @@ void tst_QString::length()
     QFETCH(QString, s1);
     QTEST(s1.length(), "res");
     QTEST(s1.size(), "res");
-    QTEST(s1.count(), "res");
+#if QT_DEPRECATED_SINCE(6, 4)
+    QT_IGNORE_DEPRECATIONS(QTEST(s1.count(), "res");)
+#endif
 }
 
 #include <qfile.h>
@@ -1728,14 +1705,18 @@ void tst_QString::indexOf2()
 #if QT_CONFIG(regularexpression)
 void tst_QString::indexOfInvalidRegex()
 {
-    QTest::ignoreMessage(QtWarningMsg, "QString(View)::indexOf: invalid QRegularExpression object");
+    static const QRegularExpression ignoreMessagePattern(
+        "^QString\\(View\\)::indexOf\\(\\): called on an invalid QRegularExpression object"
+    );
+
+    QTest::ignoreMessage(QtWarningMsg, ignoreMessagePattern);
     QCOMPARE(QString("invalid regex\\").indexOf(QRegularExpression("invalid regex\\")), -1);
-    QTest::ignoreMessage(QtWarningMsg, "QString(View)::indexOf: invalid QRegularExpression object");
+    QTest::ignoreMessage(QtWarningMsg, ignoreMessagePattern);
     QCOMPARE(QString("invalid regex\\").indexOf(QRegularExpression("invalid regex\\"), -1, nullptr), -1);
 
     QRegularExpressionMatch match;
     QVERIFY(!match.hasMatch());
-    QTest::ignoreMessage(QtWarningMsg, "QString(View)::indexOf: invalid QRegularExpression object");
+    QTest::ignoreMessage(QtWarningMsg, ignoreMessagePattern);
     QCOMPARE(QString("invalid regex\\").indexOf(QRegularExpression("invalid regex\\"), -1, &match), -1);
     QVERIFY(!match.hasMatch());
 }
@@ -1854,14 +1835,18 @@ void tst_QString::lastIndexOf()
 #if QT_CONFIG(regularexpression)
 void tst_QString::lastIndexOfInvalidRegex()
 {
-    QTest::ignoreMessage(QtWarningMsg, "QString(View)::lastIndexOf: invalid QRegularExpression object");
+    static const QRegularExpression ignoreMessagePattern(
+        "^QString\\(View\\)::lastIndexOf\\(\\): called on an invalid QRegularExpression object"
+    );
+
+    QTest::ignoreMessage(QtWarningMsg, ignoreMessagePattern);
     QCOMPARE(QString("invalid regex\\").lastIndexOf(QRegularExpression("invalid regex\\"), 0), -1);
-    QTest::ignoreMessage(QtWarningMsg, "QString(View)::lastIndexOf: invalid QRegularExpression object");
+    QTest::ignoreMessage(QtWarningMsg, ignoreMessagePattern);
     QCOMPARE(QString("invalid regex\\").lastIndexOf(QRegularExpression("invalid regex\\"), -1, nullptr), -1);
 
     QRegularExpressionMatch match;
     QVERIFY(!match.hasMatch());
-    QTest::ignoreMessage(QtWarningMsg, "QString(View)::lastIndexOf: invalid QRegularExpression object");
+    QTest::ignoreMessage(QtWarningMsg, ignoreMessagePattern);
     QCOMPARE(QString("invalid regex\\").lastIndexOf(QRegularExpression("invalid regex\\"), -1, &match), -1);
     QVERIFY(!match.hasMatch());
 }
@@ -1869,6 +1854,10 @@ void tst_QString::lastIndexOfInvalidRegex()
 
 void tst_QString::count()
 {
+    static const QRegularExpression ignoreMessagePattern(
+        "^QString\\(View\\)::count\\(\\): called on an invalid QRegularExpression object"
+    );
+
     QString a;
     a="ABCDEFGHIEfGEFG"; // 15 chars
     QCOMPARE(a.count('A'),1);
@@ -1884,7 +1873,7 @@ void tst_QString::count()
     QCOMPARE(a.count(QRegularExpression("")), 16);
     QCOMPARE(a.count(QRegularExpression("[FG][HI]")), 1);
     QCOMPARE(a.count(QRegularExpression("[G][HE]")), 2);
-    QTest::ignoreMessage(QtWarningMsg, "QString(View)::count: invalid QRegularExpression object");
+    QTest::ignoreMessage(QtWarningMsg, ignoreMessagePattern);
     QCOMPARE(a.count(QRegularExpression("invalid regex\\")), 0);
 #endif
 
@@ -1894,7 +1883,9 @@ void tst_QString::count()
     QCOMPARE(a.count( QStringView(), Qt::CaseInsensitive), 16);
 
     QString nullStr;
-    QCOMPARE(nullStr.count(), 0);
+#if QT_DEPRECATED_SINCE(6, 4)
+    QT_IGNORE_DEPRECATIONS(QCOMPARE(nullStr.count(), 0);)
+#endif
     QCOMPARE(nullStr.count('A'), 0);
     QCOMPARE(nullStr.count("AB"), 0);
     QCOMPARE(nullStr.count(view), 0);
@@ -1903,12 +1894,14 @@ void tst_QString::count()
 #if QT_CONFIG(regularexpression)
     QCOMPARE(nullStr.count(QRegularExpression("")), 1);
     QCOMPARE(nullStr.count(QRegularExpression("[FG][HI]")), 0);
-    QTest::ignoreMessage(QtWarningMsg, "QString(View)::count: invalid QRegularExpression object");
+    QTest::ignoreMessage(QtWarningMsg, ignoreMessagePattern);
     QCOMPARE(nullStr.count(QRegularExpression("invalid regex\\")), 0);
 #endif
 
     QString emptyStr("");
-    QCOMPARE(emptyStr.count(), 0);
+#if QT_DEPRECATED_SINCE(6, 4)
+    QT_IGNORE_DEPRECATIONS(QCOMPARE(emptyStr.count(), 0);)
+#endif
     QCOMPARE(emptyStr.count('A'), 0);
     QCOMPARE(emptyStr.count("AB"), 0);
     QCOMPARE(emptyStr.count(view), 0);
@@ -1917,13 +1910,17 @@ void tst_QString::count()
 #if QT_CONFIG(regularexpression)
     QCOMPARE(emptyStr.count(QRegularExpression("")), 1);
     QCOMPARE(emptyStr.count(QRegularExpression("[FG][HI]")), 0);
-    QTest::ignoreMessage(QtWarningMsg, "QString(View)::count: invalid QRegularExpression object");
+    QTest::ignoreMessage(QtWarningMsg, ignoreMessagePattern);
     QCOMPARE(emptyStr.count(QRegularExpression("invalid regex\\")), 0);
 #endif
 }
 
 void tst_QString::contains()
 {
+    static const QRegularExpression ignoreMessagePattern(
+        "^QString\\(View\\)::contains\\(\\): called on an invalid QRegularExpression object"
+    );
+
     QString a;
     a="ABCDEFGHIEfGEFG"; // 15 chars
     QVERIFY(a.contains('A'));
@@ -1990,7 +1987,7 @@ void tst_QString::contains()
         QVERIFY(!a.contains(QRegularExpression("ZZZ"), 0));
     }
 
-    QTest::ignoreMessage(QtWarningMsg, "QString(View)::contains: invalid QRegularExpression object");
+    QTest::ignoreMessage(QtWarningMsg, ignoreMessagePattern);
     QVERIFY(!a.contains(QRegularExpression("invalid regex\\")));
 #endif
 
@@ -2657,7 +2654,7 @@ void tst_QString::insert_special_cases()
     QCOMPARE(a.insert(1, QLatin1String("ontr")), montreal);
     QCOMPARE(a.insert(4, ""), montreal);
     QCOMPARE(a.insert(3, QLatin1String("")), montreal);
-    QCOMPARE(a.insert(3, QLatin1String(0)), montreal);
+    QCOMPARE(a.insert(3, QLatin1String(nullptr)), montreal);
     QCOMPARE(a.insert(3, static_cast<const char *>(0)), montreal);
     QCOMPARE(a.insert(0, QLatin1String("a")), QLatin1String("aMontreal"));
 
@@ -3229,13 +3226,17 @@ void tst_QString::replace_string_extra()
 #if QT_CONFIG(regularexpression)
 void tst_QString::replace_regexp()
 {
+    static const QRegularExpression ignoreMessagePattern(
+        "^QString::replace\\(\\): called on an invalid QRegularExpression object"
+    );
+
     QFETCH( QString, string );
     QFETCH( QString, regexp );
     QFETCH( QString, after );
 
     QRegularExpression regularExpression(regexp);
     if (!regularExpression.isValid())
-        QTest::ignoreMessage(QtWarningMsg, "QString::replace: invalid QRegularExpression object");
+        QTest::ignoreMessage(QtWarningMsg, ignoreMessagePattern);
     string.replace(regularExpression, after);
     QTEST(string, "result");
 }
@@ -3350,6 +3351,10 @@ void tst_QString::remove_regexp_data()
 
 void tst_QString::remove_regexp()
 {
+    static const QRegularExpression ignoreMessagePattern(
+        "^QString::replace\\(\\): called on an invalid QRegularExpression object"
+    );
+
     QFETCH( QString, string );
     QFETCH( QString, regexp );
     QTEST(QString(), "after"); // non-empty replacement text tests should go in replace_regexp_data()
@@ -3357,7 +3362,7 @@ void tst_QString::remove_regexp()
     QRegularExpression regularExpression(regexp);
     // remove() delegates to replace(), which produces this warning:
     if (!regularExpression.isValid())
-        QTest::ignoreMessage(QtWarningMsg, "QString::replace: invalid QRegularExpression object");
+        QTest::ignoreMessage(QtWarningMsg, ignoreMessagePattern);
     string.remove(regularExpression);
     QTEST(string, "result");
 }
@@ -4221,7 +4226,7 @@ void tst_QString::startsWith()
     QVERIFY( !a.startsWith(QLatin1String("C")) );
     QVERIFY( !a.startsWith(QLatin1String("ABCDEF")) );
     QVERIFY( a.startsWith(QLatin1String("")) );
-    QVERIFY( a.startsWith(QLatin1String(0)) );
+    QVERIFY( a.startsWith(QLatin1String(nullptr)) );
 
     QVERIFY( a.startsWith("A", Qt::CaseSensitive) );
     QVERIFY( a.startsWith("A", Qt::CaseInsensitive) );
@@ -4256,7 +4261,7 @@ void tst_QString::startsWith()
     QVERIFY( !a.startsWith(QLatin1String("c"), Qt::CaseInsensitive) );
     QVERIFY( !a.startsWith(QLatin1String("abcdef"), Qt::CaseInsensitive) );
     QVERIFY( a.startsWith(QLatin1String(""), Qt::CaseInsensitive) );
-    QVERIFY( a.startsWith(QLatin1String(0), Qt::CaseInsensitive) );
+    QVERIFY( a.startsWith(QLatin1String(nullptr), Qt::CaseInsensitive) );
     QVERIFY( a.startsWith('A', Qt::CaseSensitive) );
     QVERIFY( a.startsWith(QLatin1Char('A'), Qt::CaseSensitive) );
     QVERIFY( a.startsWith(QChar('A'), Qt::CaseSensitive) );
@@ -4277,7 +4282,7 @@ void tst_QString::startsWith()
     QVERIFY( !a.startsWith("ABC") );
 
     QVERIFY( a.startsWith(QLatin1String("")) );
-    QVERIFY( a.startsWith(QLatin1String(0)) );
+    QVERIFY( a.startsWith(QLatin1String(nullptr)) );
     QVERIFY( !a.startsWith(QLatin1String("ABC")) );
 
     QVERIFY( !a.startsWith(QLatin1Char(0)) );
@@ -4290,7 +4295,7 @@ void tst_QString::startsWith()
     QVERIFY( !a.startsWith("ABC") );
 
     QVERIFY( !a.startsWith(QLatin1String("")) );
-    QVERIFY( a.startsWith(QLatin1String(0)) );
+    QVERIFY( a.startsWith(QLatin1String(nullptr)) );
     QVERIFY( !a.startsWith(QLatin1String("ABC")) );
 
     QVERIFY( !a.startsWith(QLatin1Char(0)) );
@@ -4337,7 +4342,7 @@ void tst_QString::endsWith()
     QVERIFY( !a.endsWith(QLatin1String("C")) );
     QVERIFY( !a.endsWith(QLatin1String("ABCDEF")) );
     QVERIFY( a.endsWith(QLatin1String("")) );
-    QVERIFY( a.endsWith(QLatin1String(0)) );
+    QVERIFY( a.endsWith(QLatin1String(nullptr)) );
 
     QVERIFY( a.endsWith("B", Qt::CaseSensitive) );
     QVERIFY( a.endsWith("B", Qt::CaseInsensitive) );
@@ -4372,7 +4377,7 @@ void tst_QString::endsWith()
     QVERIFY( !a.endsWith(QLatin1String("c"), Qt::CaseInsensitive) );
     QVERIFY( !a.endsWith(QLatin1String("abcdef"), Qt::CaseInsensitive) );
     QVERIFY( a.endsWith(QLatin1String(""), Qt::CaseInsensitive) );
-    QVERIFY( a.endsWith(QLatin1String(0), Qt::CaseInsensitive) );
+    QVERIFY( a.endsWith(QLatin1String(nullptr), Qt::CaseInsensitive) );
     QVERIFY( a.endsWith('B', Qt::CaseSensitive) );
     QVERIFY( a.endsWith(QLatin1Char('B'), Qt::CaseSensitive) );
     QVERIFY( a.endsWith(QChar('B'), Qt::CaseSensitive) );
@@ -4386,7 +4391,7 @@ void tst_QString::endsWith()
     TEST_VIEW_ENDS_WITH(QLatin1String("C"), false);
     TEST_VIEW_ENDS_WITH(QLatin1String("ABCDEF"), false);
     TEST_VIEW_ENDS_WITH(QLatin1String(""), true);
-    TEST_VIEW_ENDS_WITH(QLatin1String(0), true);
+    TEST_VIEW_ENDS_WITH(QLatin1String(nullptr), true);
 #undef TEST_VIEW_ENDS_WITH
 
     a = "";
@@ -4398,7 +4403,7 @@ void tst_QString::endsWith()
     QVERIFY( !a.endsWith(QChar()) );
 
     QVERIFY( a.endsWith(QLatin1String("")) );
-    QVERIFY( a.endsWith(QLatin1String(0)) );
+    QVERIFY( a.endsWith(QLatin1String(nullptr)) );
     QVERIFY( !a.endsWith(QLatin1String("ABC")) );
 
     a = QString();
@@ -4407,7 +4412,7 @@ void tst_QString::endsWith()
     QVERIFY( !a.endsWith("ABC") );
 
     QVERIFY( !a.endsWith(QLatin1String("")) );
-    QVERIFY( a.endsWith(QLatin1String(0)) );
+    QVERIFY( a.endsWith(QLatin1String(nullptr)) );
     QVERIFY( !a.endsWith(QLatin1String("ABC")) );
 
     QVERIFY( !a.endsWith(QLatin1Char(0)) );
@@ -5715,8 +5720,8 @@ void tst_QString::operator_smaller()
     QVERIFY( foo > empty );
     QVERIFY( !(foo < empty) );
 
-    QVERIFY( !(null < QLatin1String(0)) );
-    QVERIFY( !(null > QLatin1String(0)) );
+    QVERIFY( !(null < QLatin1String(nullptr)) );
+    QVERIFY( !(null > QLatin1String(nullptr)) );
     QVERIFY( !(null < QLatin1String("")) );
     QVERIFY( !(null > QLatin1String("")) );
 
@@ -5725,28 +5730,28 @@ void tst_QString::operator_smaller()
     QVERIFY( !(empty < QLatin1String("")) );
     QVERIFY( !(empty > QLatin1String("")) );
 
-    QVERIFY( !(QLatin1String(0) < null) );
-    QVERIFY( !(QLatin1String(0) > null) );
+    QVERIFY( !(QLatin1String(nullptr) < null) );
+    QVERIFY( !(QLatin1String(nullptr) > null) );
     QVERIFY( !(QLatin1String("") < null) );
     QVERIFY( !(QLatin1String("") > null) );
 
-    QVERIFY( !(QLatin1String(0) < empty) );
-    QVERIFY( !(QLatin1String(0) > empty) );
+    QVERIFY( !(QLatin1String(nullptr) < empty) );
+    QVERIFY( !(QLatin1String(nullptr) > empty) );
     QVERIFY( !(QLatin1String("") < empty) );
     QVERIFY( !(QLatin1String("") > empty) );
 
-    QVERIFY( QLatin1String(0) < foo );
-    QVERIFY( !(QLatin1String(0) > foo) );
+    QVERIFY( QLatin1String(nullptr) < foo );
+    QVERIFY( !(QLatin1String(nullptr) > foo) );
     QVERIFY( QLatin1String("") < foo );
     QVERIFY( !(QLatin1String("") > foo) );
 
-    QVERIFY( foo > QLatin1String(0) );
-    QVERIFY( !(foo < QLatin1String(0)) );
+    QVERIFY( foo > QLatin1String(nullptr) );
+    QVERIFY( !(foo < QLatin1String(nullptr)) );
     QVERIFY( foo > QLatin1String("") );
     QVERIFY( !(foo < QLatin1String("")) );
 
-    QVERIFY( QLatin1String(0) == empty);
-    QVERIFY( QLatin1String(0) == null);
+    QVERIFY( QLatin1String(nullptr) == empty);
+    QVERIFY( QLatin1String(nullptr) == null);
     QVERIFY( QLatin1String("") == empty);
     QVERIFY( QLatin1String("") == null);
 
@@ -6440,6 +6445,11 @@ void tst_QString::nanAndInf()
     QCOMPARE(form.arg(-qInf(), 6, 'f', 3, '0'), u"00-inf");
     QCOMPARE(form.arg(-qInf(), -6, 'f', 3, '0'), u"-inf00");
     QCOMPARE(form.arg(qQNaN(), -5, 'f', 3, '0'), u"nan00");
+    QCOMPARE(form.arg(qInf(), 5, 'F', 3, '0'), u"00INF");
+    QCOMPARE(form.arg(qInf(), -5, 'F', 3, '0'), u"INF00");
+    QCOMPARE(form.arg(-qInf(), 6, 'F', 3, '0'), u"00-INF");
+    QCOMPARE(form.arg(-qInf(), -6, 'F', 3, '0'), u"-INF00");
+    QCOMPARE(form.arg(qQNaN(), -5, 'F', 3, '0'), u"NAN00");
     QCOMPARE(form.arg(qInf(), 5, 'e', 3, '0'), u"00inf");
     QCOMPARE(form.arg(qInf(), -5, 'e', 3, '0'), u"inf00");
     QCOMPARE(form.arg(-qInf(), 6, 'e', 3, '0'), u"00-inf");
@@ -6516,7 +6526,7 @@ void tst_QString::arg_fillChar()
     QFETCH(IntList, widths);
     QFETCH(QString, fillChars);
     QFETCH(QString, expected);
-    QCOMPARE(replaceValues.count(), fillChars.count());
+    QCOMPARE(replaceValues.count(), fillChars.size());
     QCOMPARE(replaceValues.count(), widths.count());
 
     QString actual = pattern;
@@ -7035,25 +7045,52 @@ void tst_QString::literals()
 
 void tst_QString::userDefinedLiterals()
 {
-    QString str = u"abcd"_qs;
+    {
+        using namespace Qt::StringLiterals;
+        QString str = u"abcd"_s;
 
-    QVERIFY(str.length() == 4);
-    QCOMPARE(str.capacity(), 0);
-    QVERIFY(str == QLatin1String("abcd"));
-    QVERIFY(!str.data_ptr()->isMutable());
+        QVERIFY(str.length() == 4);
+        QCOMPARE(str.capacity(), 0);
+        QVERIFY(str == QLatin1String("abcd"));
+        QVERIFY(!str.data_ptr()->isMutable());
 
-    const QChar *s = str.constData();
-    QString str2 = str;
-    QVERIFY(str2.constData() == s);
-    QCOMPARE(str2.capacity(), 0);
+        const QChar *s = str.constData();
+        QString str2 = str;
+        QVERIFY(str2.constData() == s);
+        QCOMPARE(str2.capacity(), 0);
 
-    // detach on non const access
-    QVERIFY(str.data() != s);
-    QVERIFY(str.capacity() >= str.length());
+        // detach on non const access
+        QVERIFY(str.data() != s);
+        QVERIFY(str.capacity() >= str.length());
 
-    QVERIFY(str2.constData() == s);
-    QVERIFY(str2.data() != s);
-    QVERIFY(str2.capacity() >= str2.length());
+        QVERIFY(str2.constData() == s);
+        QVERIFY(str2.data() != s);
+        QVERIFY(str2.capacity() >= str2.length());
+    }
+
+#if QT_DEPRECATED_SINCE(6, 8)
+    {
+        QT_IGNORE_DEPRECATIONS(QString str = u"abcd"_qs;)
+
+        QVERIFY(str.length() == 4);
+        QCOMPARE(str.capacity(), 0);
+        QVERIFY(str == QLatin1String("abcd"));
+        QVERIFY(!str.data_ptr()->isMutable());
+
+        const QChar *s = str.constData();
+        QString str2 = str;
+        QVERIFY(str2.constData() == s);
+        QCOMPARE(str2.capacity(), 0);
+
+        // detach on non const access
+        QVERIFY(str.data() != s);
+        QVERIFY(str.capacity() >= str.length());
+
+        QVERIFY(str2.constData() == s);
+        QVERIFY(str2.data() != s);
+        QVERIFY(str2.capacity() >= str2.length());
+    }
+#endif // QT_DEPRECATED_SINCE(6, 8)
 }
 
 void tst_QString::eightBitLiterals_data()
@@ -7300,7 +7337,7 @@ void tst_QString::assignQLatin1String()
     QVERIFY(empty.isEmpty());
     QVERIFY(!empty.isNull());
 
-    QString null = QLatin1String(0);
+    QString null = QLatin1String(nullptr);
     QVERIFY(null.isEmpty());
     QVERIFY(null.isNull());
 

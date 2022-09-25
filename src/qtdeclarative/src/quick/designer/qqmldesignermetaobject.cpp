@@ -1,41 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the QtQuick module of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:LGPL$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPL3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or (at your option) the GNU General
-** Public license version 3 or any later version approved by the KDE Free
-** Qt Foundation. The licenses are as published by the Free Software
-** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-2.0.html and
-** https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qqmldesignermetaobject_p.h"
 
@@ -78,13 +42,13 @@ struct MetaPropertyData {
     QVector<QPair<QVariant, bool> > m_data;
 };
 
-static QQmlRefPointer<QQmlPropertyCache> cacheForObject(QObject *object, QQmlEngine *engine)
+static QQmlPropertyCache::ConstPtr cacheForObject(QObject *object)
 {
     QQmlVMEMetaObject *metaObject = QQmlVMEMetaObject::get(object);
     if (metaObject)
         return metaObject->cache;
 
-    return QQmlEnginePrivate::get(engine)->cache(object);
+    return QQmlMetaType::propertyCache(object);
 }
 
 QQmlDesignerMetaObject* QQmlDesignerMetaObject::getNodeInstanceMetaObject(QObject *object, QQmlEngine *engine)
@@ -107,7 +71,7 @@ QQmlDesignerMetaObject* QQmlDesignerMetaObject::getNodeInstanceMetaObject(QObjec
     return mo;
 }
 
-void QQmlDesignerMetaObject::init(QObject *object, QQmlEngine *)
+void QQmlDesignerMetaObject::init(QObject *object)
 {
     //Creating QQmlOpenMetaObjectType
     m_openMetaObject = std::make_unique<QQmlOpenMetaObject>(object, metaObjectParent());
@@ -118,24 +82,25 @@ void QQmlDesignerMetaObject::init(QObject *object, QQmlEngine *)
     QObjectPrivate *op = QObjectPrivate::get(object);
     op->metaObject = this;
 
-    cache = QQmlPropertyCache::createStandalone(metaObject);
+    m_cache = QQmlPropertyCache::createStandalone(metaObject);
+    cache = m_cache;
 
     nodeInstanceMetaObjectList.insert(this, true);
 }
 
 QQmlDesignerMetaObject::QQmlDesignerMetaObject(QObject *object, QQmlEngine *engine)
-    : QQmlVMEMetaObject(engine->handle(), object, cacheForObject(object, engine), /*qml compilation unit*/nullptr, /*qmlObjectId*/-1),
+    : QQmlVMEMetaObject(engine->handle(), object, cacheForObject(object), /*qml compilation unit*/nullptr, /*qmlObjectId*/-1),
       m_context(engine->contextForObject(object)),
       m_data(new MetaPropertyData)
 {
-    init(object, engine);
+    init(object);
 
     QQmlData *ddata = QQmlData::get(object, false);
     //Assign cache to object
     if (ddata && ddata->propertyCache) {
-        cache->setParent(ddata->propertyCache);
-        cache->invalidate(metaObject);
-        ddata->propertyCache = cache;
+        m_cache->setParent(ddata->propertyCache);
+        m_cache->invalidate(metaObject);
+        ddata->propertyCache = m_cache;
     }
 
 }
@@ -156,7 +121,7 @@ void QQmlDesignerMetaObject::createNewDynamicProperty(const QString &name)
     Q_ASSERT(id >= 0);
 
     //Updating cache
-    cache->invalidate(metaObject);
+    m_cache->invalidate(metaObject);
 
     QQmlProperty property(myObject(), name, m_context);
     Q_ASSERT(property.isValid());

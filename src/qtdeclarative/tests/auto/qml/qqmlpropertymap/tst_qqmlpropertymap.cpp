@@ -1,30 +1,5 @@
-/****************************************************************************
-**
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: https://www.qt.io/licensing/
-**
-** This file is part of the test suite of the Qt Toolkit.
-**
-** $QT_BEGIN_LICENSE:GPL-EXCEPT$
-** Commercial License Usage
-** Licensees holding valid commercial Qt licenses may use this file in
-** accordance with the commercial license agreement provided with the
-** Software or, alternatively, in accordance with the terms contained in
-** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see https://www.qt.io/terms-conditions. For further
-** information use the contact form at https://www.qt.io/contact-us.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 3 as published by the Free Software
-** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
-** included in the packaging of this file. Please review the following
-** information to ensure the GNU General Public License requirements will
-** be met: https://www.gnu.org/licenses/gpl-3.0.html.
-**
-** $QT_END_LICENSE$
-**
-****************************************************************************/
+// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 #include <qtest.h>
 #include <QtQuickTestUtils/private/qmlutils_p.h>
 #include <QtQml/qqmlengine.h>
@@ -34,6 +9,8 @@
 #include <QtQuick/private/qquicktext_p.h>
 #include <QSignalSpy>
 #include <QDebug>
+
+using namespace Qt::StringLiterals;
 
 class tst_QQmlPropertyMap : public QQmlDataTest
 {
@@ -65,6 +42,7 @@ private slots:
     void lookupsInSubTypes();
     void freeze();
     void cachedSignals();
+    void signalIndices();
 };
 
 class LazyPropertyMap : public QQmlPropertyMap, public QQmlParserStatus
@@ -603,10 +581,10 @@ public:
     Map(QObject *parent = nullptr)
         : QQmlPropertyMap(this, parent)
     {
-        insert( "a", u"yayayaya"_qs );
-        insert( "b", u"yayayayb"_qs);
-        insert( "c", u"yayayayc"_qs);
-        insert( "d", u"yayayayd"_qs);
+        insert( "a", u"yayayaya"_s );
+        insert( "b", u"yayayayb"_s);
+        insert( "c", u"yayayayc"_s);
+        insert( "d", u"yayayayd"_s);
 
         freeze();
     }
@@ -622,18 +600,59 @@ void tst_QQmlPropertyMap::cachedSignals()
     QVERIFY2(c.isReady(), qPrintable(c.errorString()));
     QScopedPointer<QObject> o(c.create());
     QVERIFY(!o.isNull());
-    QCOMPARE(o->property("text").toString(), u"yayayayc"_qs);
-    foo.setProperty("c", u"something"_qs);
-    QCOMPARE(o->property("text").toString(), u"something"_qs);
-    foo.insert("c", u"other"_qs);
-    QCOMPARE(o->property("text").toString(), u"other"_qs);
+    QCOMPARE(o->property("text").toString(), u"yayayayc"_s);
+    foo.setProperty("c", u"something"_s);
+    QCOMPARE(o->property("text").toString(), u"something"_s);
+    foo.insert("c", u"other"_s);
+    QCOMPARE(o->property("text").toString(), u"other"_s);
     QTest::ignoreMessage(
                 QtWarningMsg,
-                qPrintable(url.toString() + u":4:5: Unable to assign [undefined] to QString"_qs));
+                qPrintable(url.toString() + u":4:5: Unable to assign [undefined] to QString"_s));
     foo.clear("c");
-    QCOMPARE(o->property("text").toString(), u"other"_qs);
-    foo.insert("c", u"final"_qs);
-    QCOMPARE(o->property("text").toString(), u"final"_qs);
+    QCOMPARE(o->property("text").toString(), u"other"_s);
+    foo.insert("c", u"final"_s);
+    QCOMPARE(o->property("text").toString(), u"final"_s);
+}
+
+class NastyMap: public QQmlPropertyMap
+{
+    Q_OBJECT
+    Q_PROPERTY(int a READ a WRITE setA NOTIFY aChanged)
+    Q_PROPERTY(int b MEMBER m_b CONSTANT)
+
+public:
+
+    int a() const { return m_a; }
+    void setA(int a)
+    {
+        if (a != m_a) {
+            m_a = a;
+            emit aChanged();
+        }
+    }
+
+signals:
+    void aChanged();
+    void extraSignal();
+
+private:
+    int m_a = 0;
+    int m_b = 7;
+};
+
+void tst_QQmlPropertyMap::signalIndices()
+{
+    NastyMap map;
+    map.insert(QLatin1String("key1"), 100);
+    const QMetaObject *mo = map.metaObject();
+    const int propertyIndex = mo->indexOfProperty("key1");
+    const QMetaProperty property = mo->property(propertyIndex);
+    const int signalIndex = property.notifySignalIndex();
+    const QMetaMethod method = mo->method(signalIndex);
+
+    QSignalSpy spy(&map, method);
+    map.insert(QLatin1String("key1"), 200);
+    QCOMPARE(spy.count(), 1);
 }
 
 QTEST_MAIN(tst_QQmlPropertyMap)
