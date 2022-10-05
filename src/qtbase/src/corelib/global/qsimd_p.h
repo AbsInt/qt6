@@ -206,14 +206,15 @@ asm(
 // The Intel Core 4th generation was codenamed "Haswell" and introduced AVX2,
 // BMI1, BMI2, FMA, LZCNT, MOVBE, which makes it a good divider for a
 // sub-target for us. The first AMD processor with AVX2 support (Zen) has the
-// same features. This feature set was chosen as the version 3 of the x86-64
-// ISA (x86-64-v3) and is supported by GCC and Clang.
+// same features, but had already introduced BMI1 in the previous generation.
+// This feature set was chosen as the version 3 of the x86-64 ISA (x86-64-v3)
+// and is supported by GCC and Clang.
 //
 // macOS's fat binaries support the "x86_64h" sub-architecture and the GNU libc
 // ELF loader also supports a "haswell/" subdir (e.g., /usr/lib/haswell).
-#  define ARCH_HASWELL_MACROS       (__AVX2__ + __BMI__ + __BMI2__ + __FMA__ + __LZCNT__)
+#  define ARCH_HASWELL_MACROS       (__AVX2__ + __BMI2__ + __FMA__ + __LZCNT__)
 #  if ARCH_HASWELL_MACROS != 0
-#    if ARCH_HASWELL_MACROS != 5
+#    if ARCH_HASWELL_MACROS != 4
 #      error "Please enable all x86-64-v3 extensions; you probably want to use -march=haswell or -march=x86-64-v3 instead of -mavx2"
 #    endif
 static_assert(ARCH_HASWELL_MACROS, "Undeclared identifiers indicate which features are missing.");
@@ -223,8 +224,10 @@ static_assert(ARCH_HASWELL_MACROS, "Undeclared identifiers indicate which featur
 
 // x86-64 sub-architecture version 4
 //
-// Similar to the above, x86-64-v4 marches the AVX512 variant of the Intel Core
-// 6th generation (codename "Skylake").
+// Similar to the above, x86-64-v4 matches the AVX512 variant of the Intel Core
+// 6th generation (codename "Skylake"). AMD Zen4 is the their first processor
+// with AVX512 support and it includes all of these too.
+//
 #  define ARCH_SKX_MACROS           (__AVX512F__ + __AVX512BW__ + __AVX512CD__ + __AVX512DQ__ + __AVX512VL__)
 #  if ARCH_SKX_MACROS != 0
 #    if ARCH_SKX_MACROS != 5
