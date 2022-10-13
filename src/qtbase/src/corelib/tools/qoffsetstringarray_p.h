@@ -20,6 +20,7 @@
 
 #include <QByteArrayView>
 
+#include <QtCore/q20algorithm.h>
 #include <array>
 #include <limits>
 #include <string_view>
@@ -69,16 +70,6 @@ private:
 };
 
 namespace QtPrivate {
-// std::copy is not constexpr in C++17
-template <typename II, typename OO>
-static constexpr OO copyData(II input, qsizetype n, OO output)
-{
-    using E = decltype(+*output);
-    for (qsizetype i = 0; i < n; ++i)
-        output[i] = E(input[i]);
-    return output + n;
-}
-
 template <size_t Highest> constexpr auto minifyValue()
 {
     if constexpr (Highest <= (std::numeric_limits<quint8>::max)()) {
@@ -100,7 +91,7 @@ constexpr auto makeStaticString(Extractor extract, const T &... entries)
     const char *strings[] = { extract(entries).operator const char *()... };
     size_t lengths[] = { sizeof(extract(T{}))... };
     for (size_t i = 0; i < std::size(strings); ++i) {
-        copyData(strings[i], lengths[i], result.begin() + offset);
+        q20::copy_n(strings[i], lengths[i], result.begin() + offset);
         offset += lengths[i];
     }
     return result;
@@ -110,7 +101,7 @@ template <size_t N> struct StaticString
 {
     char value[N] = {};
     constexpr StaticString() = default;
-    constexpr StaticString(const char (&s)[N])  { copyData(s, N, value); }
+    constexpr StaticString(const char (&s)[N])  { q20::copy_n(s, N, value); }
     constexpr operator const char *() const     { return value; }
 };
 
@@ -136,7 +127,9 @@ constexpr auto qOffsetStringArray(StringExtractor extractString, const T &... en
 
     // prepend zero
     std::array<MinifiedOffsetType, Count + 1> minifiedOffsetList = {};
-    QtPrivate::copyData(fullOffsetList.begin(), Count, minifiedOffsetList.begin() + 1);
+    q20::transform(fullOffsetList.begin(), fullOffsetList.end(),
+                   minifiedOffsetList.begin() + 1,
+                   [] (auto e) { return MinifiedOffsetType(e); });
 
     std::array staticString = QtPrivate::makeStaticString<StringLength>(extractString, entries...);
     return QOffsetStringArray(staticString, minifiedOffsetList);
