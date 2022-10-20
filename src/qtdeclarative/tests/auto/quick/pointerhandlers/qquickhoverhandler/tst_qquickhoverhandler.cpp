@@ -481,6 +481,9 @@ void tst_HoverHandler::deviceCursor_data()
 
 void tst_HoverHandler::deviceCursor()
 {
+#if !QT_CONFIG(tabletevent)
+    QSKIP("This test depends on QTabletEvent delivery.");
+#endif
     QFETCH(bool, synthMouseForTabletEvents);
     QFETCH(bool, earlierTabletBeforeMouse);
     qApp->setAttribute(Qt::AA_SynthesizeMouseForUnhandledTabletEvents, synthMouseForTabletEvents);
@@ -504,7 +507,6 @@ void tst_HoverHandler::deviceCursor()
 
     QPoint point(100, 100);
 
-#if QT_CONFIG(tabletevent)
     const qint64 stylusId = 1234567890;
     QElapsedTimer timer;
     timer.start();
@@ -539,29 +541,30 @@ void tst_HoverHandler::deviceCursor()
     testStylusDevice(QInputDevice::DeviceType::Airbrush, QPointingDevice::PointerType::Eraser,
                      Qt::OpenHandCursor, airbrushEraserHandler);
 
-    QTest::qWait(200);
     qCDebug(lcPointerTests) << "---- no more tablet events, now we send a mouse move";
-#endif
 
     // move the mouse: the mouse-specific HoverHandler gets to set the cursor only if
-    // more than kCursorOverrideTimeout ms have elapsed
-    QTest::mouseMove(&window, point);
-    QTRY_COMPARE(mouseHandler->isHovered(), true);
+    // more than kCursorOverrideTimeout ms have elapsed (100ms)
+    QTest::mouseMove(&window, point, 100);
+    QTRY_IMPL(mouseHandler->isHovered() == true, 500);
     const bool afterTimeout =
             QQuickPointerHandlerPrivate::get(airbrushEraserHandler)->lastEventTime + 100 <
             QQuickPointerHandlerPrivate::get(mouseHandler)->lastEventTime;
     qCDebug(lcPointerTests) << "airbrush handler reacted last time:" << QQuickPointerHandlerPrivate::get(airbrushEraserHandler)->lastEventTime
                             << "and the mouse handler reacted at time:" << QQuickPointerHandlerPrivate::get(mouseHandler)->lastEventTime
                             << "so > 100 ms have elapsed?" << afterTimeout;
+    if (afterTimeout)
+        QCOMPARE(mouseHandler->isHovered(), true);
+    else
+        QSKIP("Failed to delay mouse move 100ms after the previous tablet event");
+
 #if QT_CONFIG(cursor)
     QCOMPARE(window.cursor().shape(), afterTimeout ? Qt::IBeamCursor : Qt::OpenHandCursor);
 #endif
     QCOMPARE(stylusHandler->isHovered(), false);
     QCOMPARE(eraserHandler->isHovered(), false);
     QCOMPARE(aibrushHandler->isHovered(), false);
-#if QT_CONFIG(tabletevent)
     QCOMPARE(airbrushEraserHandler->isHovered(), true); // there was no fresh QTabletEvent to tell it not to be hovered
-#endif
 }
 
 QTEST_MAIN(tst_HoverHandler)

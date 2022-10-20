@@ -432,7 +432,9 @@ static bool setupSlider(NSSlider *slider, const QStyleOptionSlider *sl)
     // NSSlider seems to cache values based on tracking and the last layout of the
     // NSView, resulting in incorrect knob rects that break the interaction with
     // multiple sliders. So completely reinitialize the slider.
+    const auto controlSize = slider.controlSize;
     [slider initWithFrame:sl->rect.toCGRect()];
+    slider.controlSize = controlSize;
 
     slider.minValue = sl->minimum;
     slider.maxValue = sl->maximum;
@@ -3933,8 +3935,13 @@ void QMacStyle::drawControl(ControlElement ce, const QStyleOption *opt, QPainter
 
             pb.enabled = isEnabled;
             [pb highlight:isPressed];
+
             // Set off state when inactive. See needsInactiveHack for when it's selected
-            pb.state = (isActive && isSelected && !isPressed) ? NSControlStateValueOn : NSControlStateValueOff;
+            // On macOS 12, don't set the Off state for selected tabs as it draws a gray backgorund even when highlighted
+            if (QOperatingSystemVersion::current() > QOperatingSystemVersion::MacOSBigSur)
+                pb.state = (isActive && isSelected) ? NSControlStateValueOn : NSControlStateValueOff;
+            else
+                pb.state = (isActive && isSelected && !isPressed) ? NSControlStateValueOn : NSControlStateValueOff;
 
             const auto drawBezelBlock = ^(CGContextRef ctx, const CGRect &r) {
                 CGContextClipToRect(ctx, opt->rect.toCGRect());

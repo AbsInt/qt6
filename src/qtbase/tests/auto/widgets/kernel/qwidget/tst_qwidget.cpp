@@ -5606,8 +5606,8 @@ void tst_QWidget::setWindowGeometry_data()
 
 void tst_QWidget::setWindowGeometry()
 {
-    if (m_platform == QStringLiteral("xcb"))
-         QSKIP("X11: Skip this test due to Window manager positioning issues.");
+    if (m_platform == QStringLiteral("xcb") || m_platform.startsWith(QLatin1String("wayland"), Qt::CaseInsensitive))
+         QSKIP("X11/Wayland: Skip this test due to Window manager positioning issues.");
 
     QFETCH(Rects, rects);
     QFETCH(int, windowFlags);
@@ -7465,7 +7465,8 @@ void tst_QWidget::renderChildFillsBackground()
 #ifndef Q_OS_ANDROID
     // On Android all widgets are shown maximized, so the pixmaps
     // will be similar
-    QEXPECT_FAIL("", "This test fails on all platforms", Continue);
+    if (!m_platform.startsWith(QLatin1String("wayland"), Qt::CaseInsensitive))
+        QEXPECT_FAIL("", "This test fails on all platforms", Continue);
 #endif
     QCOMPARE(childPixmap, windowPixmap);
 }
@@ -7528,6 +7529,9 @@ void tst_QWidget::renderInvisible()
 {
     if (m_platform == QStringLiteral("xcb"))
         QSKIP("QTBUG-26424");
+
+    if (m_platform.startsWith(QLatin1String("wayland"), Qt::CaseInsensitive))
+        QSKIP("Wayland: Skip this test, see also QTBUG-107157");
 
     QScopedPointer<QCalendarWidget> calendar(new QCalendarWidget);
     calendar->move(m_availableTopLeft + QPoint(100, 100));
@@ -9154,6 +9158,9 @@ void tst_QWidget::opaqueChildren()
 
 void tst_QWidget::dumpObjectTree()
 {
+    if (!QGuiApplicationPrivate::platformIntegration()->hasCapability(QPlatformIntegration::WindowActivation))
+        QSKIP("QWindow::requestActivate() is not supported.");
+
     QWidget w;
     w.setWindowTitle(QLatin1String(QTest::currentTestFunction()));
     Q_SET_OBJECT_NAME(w);
@@ -10181,6 +10188,9 @@ void tst_QWidget::enterLeaveOnWindowShowHide_data()
 */
 void tst_QWidget::enterLeaveOnWindowShowHide()
 {
+    if (!QGuiApplicationPrivate::platformIntegration()->hasCapability(QPlatformIntegration::WindowActivation))
+        QSKIP("QWindow::requestActivate() is not supported.");
+
     QFETCH(Qt::WindowType, windowType);
     class Widget : public QWidget
     {
@@ -10957,6 +10967,9 @@ void tst_QWidget::focusProxy()
 
 void tst_QWidget::imEnabledNotImplemented()
 {
+    if (!QGuiApplicationPrivate::platformIntegration()->hasCapability(QPlatformIntegration::WindowActivation))
+        QSKIP("QWindow::requestActivate() is not supported.");
+
     // Check that a plain widget doesn't report that it supports IM. Only
     // widgets that implements either Qt::ImEnabled, or the Qt4 backup
     // solution, Qt::ImSurroundingText, should do so.
@@ -11477,6 +11490,9 @@ public:
 
 void tst_QWidget::touchEventSynthesizedMouseEvent()
 {
+    if (m_platform.startsWith(QLatin1String("wayland"), Qt::CaseInsensitive))
+        QSKIP("This test failed on Wayland. See also QTBUG-107157.");
+
     {
         // Simple case, we ignore the touch events, we get mouse events instead
         TouchMouseWidget widget;
@@ -12761,6 +12777,9 @@ void tst_QWidget::setParentChangesFocus()
 
 void tst_QWidget::activateWhileModalHidden()
 {
+    if (!QGuiApplicationPrivate::platformIntegration()->hasCapability(QPlatformIntegration::WindowActivation))
+        QSKIP("QWindow::requestActivate() is not supported.");
+
     QDialog dialog;
     dialog.setWindowModality(Qt::ApplicationModal);
     dialog.show();

@@ -1450,6 +1450,9 @@ void tst_QWidget_window::mouseMoveWithPopup_data()
 
 void tst_QWidget_window::mouseMoveWithPopup()
 {
+    if (QGuiApplication::platformName().startsWith(QLatin1String("wayland"), Qt::CaseInsensitive))
+        QSKIP("Wayland: Skip this test, see also QTBUG-107154");
+
     QFETCH(Qt::WindowType, windowType);
 
     class Window : public QWidget
@@ -1627,6 +1630,9 @@ void tst_QWidget_window::mouseMoveWithPopup()
 
 void tst_QWidget_window::resetFocusObjectOnDestruction()
 {
+    if (!QGuiApplicationPrivate::platformIntegration()->hasCapability(QPlatformIntegration::WindowActivation))
+        QSKIP("QWindow::requestActivate() is not supported.");
+
     QSignalSpy focusObjectChangedSpy(qApp, &QGuiApplication::focusObjectChanged);
 
     // single top level widget that has focus
