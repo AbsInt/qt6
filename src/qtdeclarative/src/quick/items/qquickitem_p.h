@@ -248,7 +248,7 @@ public:
 
     void localizedTouchEvent(const QTouchEvent *event, bool isFiltering, QMutableTouchEvent *localized);
     bool hasPointerHandlers() const;
-    bool hasHoverHandlers() const;
+    bool hasEnabledHoverHandlers() const;
     virtual void addPointerHandler(QQuickPointerHandler *h);
     virtual void removePointerHandler(QQuickPointerHandler *h);
 
@@ -323,6 +323,11 @@ public:
         QQuickItemChangeListener *listener;
         ChangeTypes types;
         QQuickGeometryChange gTypes;  //NOTE: not used for ==
+
+#ifndef QT_NO_DEBUG_STREAM
+    private:
+        friend QDebug operator<<(QDebug debug, const QQuickItemPrivate::ChangeListener &listener);
+#endif // QT_NO_DEBUG_STREAM
     };
 
     // call QQuickItemChangeListener PMF

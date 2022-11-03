@@ -3040,6 +3040,14 @@ QString &QString::append(const QString &str)
 }
 
 /*!
+    \fn QString &QString::append(QStringView v)
+    \overload append()
+    \since 6.0
+
+    Appends the given string view \a v to this string and returns the result.
+*/
+
+/*!
   \overload append()
   \since 5.0
 
@@ -6872,6 +6880,7 @@ QString QString::vasprintf(const char *cformat, va_list ap)
         int precision = -1; // -1 means unspecified
         if (*c == '.') {
             ++c;
+            precision = 0;
             if (qIsDigit(*c)) {
                 precision = parse_field_width(c, formatEnd - c);
             } else if (*c == '*') { // can't parse this in another function, not portably, at least

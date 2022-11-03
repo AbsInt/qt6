@@ -61,6 +61,7 @@ Q_DECLARE_LOGGING_CATEGORY(lcPtr)
 Q_DECLARE_LOGGING_CATEGORY(lcTransient)
 Q_LOGGING_CATEGORY(lcHandlerParent, "qt.quick.handler.parent")
 Q_LOGGING_CATEGORY(lcVP, "qt.quick.viewport")
+Q_LOGGING_CATEGORY(lcChangeListeners, "qt.quick.item.changelisteners")
 
 // after 100ms, a mouse/non-mouse cursor conflict is resolved in favor of the mouse handler
 static const quint64 kCursorOverrideTimeout = 100;
@@ -3895,9 +3896,23 @@ void QQuickItem::updatePolish()
 {
 }
 
+#define PRINT_LISTENERS() \
+do { \
+    qDebug().nospace() << q_func() << " (" << this \
+        << ") now has the following listeners:"; \
+    for (const auto &listener : std::as_const(changeListeners)) { \
+        const auto objectPrivate = dynamic_cast<QObjectPrivate*>(listener.listener); \
+        qDebug().nospace() << "- " << listener << " (QObject: " << (objectPrivate ? objectPrivate->q_func() : nullptr) << ")"; \
+    } \
+} \
+while (false)
+
 void QQuickItemPrivate::addItemChangeListener(QQuickItemChangeListener *listener, ChangeTypes types)
 {
     changeListeners.append(ChangeListener(listener, types));
+
+    if (lcChangeListeners().isDebugEnabled())
+        PRINT_LISTENERS();
 }
 
 void QQuickItemPrivate::updateOrAddItemChangeListener(QQuickItemChangeListener *listener, ChangeTypes types)
@@ -3908,12 +3923,18 @@ void QQuickItemPrivate::updateOrAddItemChangeListener(QQuickItemChangeListener *
         changeListeners[index].types = changeListener.types;
     else
         changeListeners.append(changeListener);
+
+    if (lcChangeListeners().isDebugEnabled())
+        PRINT_LISTENERS();
 }
 
 void QQuickItemPrivate::removeItemChangeListener(QQuickItemChangeListener *listener, ChangeTypes types)
 {
     ChangeListener change(listener, types);
     changeListeners.removeOne(change);
+
+    if (lcChangeListeners().isDebugEnabled())
+        PRINT_LISTENERS();
 }
 
 void QQuickItemPrivate::updateOrAddGeometryChangeListener(QQuickItemChangeListener *listener,
@@ -3925,6 +3946,9 @@ void QQuickItemPrivate::updateOrAddGeometryChangeListener(QQuickItemChangeListen
         changeListeners[index].gTypes = change.gTypes;  //we may have different GeometryChangeTypes
     else
         changeListeners.append(change);
+
+    if (lcChangeListeners().isDebugEnabled())
+        PRINT_LISTENERS();
 }
 
 void QQuickItemPrivate::updateOrRemoveGeometryChangeListener(QQuickItemChangeListener *listener,
@@ -3938,6 +3962,9 @@ void QQuickItemPrivate::updateOrRemoveGeometryChangeListener(QQuickItemChangeLis
         if (index > -1)
             changeListeners[index].gTypes = change.gTypes;  //we may have different GeometryChangeTypes
     }
+
+    if (lcChangeListeners().isDebugEnabled())
+        PRINT_LISTENERS();
 }
 
 /*!
@@ -7876,11 +7903,14 @@ void QQuickItemPrivate::setHasHoverInChild(bool hasHover)
     if (!hasHover && subtreeHoverEnabled) {
         if (hoverEnabled)
             return; // nope! sorry, I need hover myself
+        if (hasEnabledHoverHandlers())
+            return; // nope! sorry, this item has enabled HoverHandlers
+
         for (QQuickItem *otherChild : qAsConst(childItems)) {
             QQuickItemPrivate *otherChildPrivate = QQuickItemPrivate::get(otherChild);
             if (otherChildPrivate->subtreeHoverEnabled || otherChildPrivate->hoverEnabled)
                 return; // nope! sorry, something else wants it kept on.
-            if (otherChildPrivate->hasHoverHandlers())
+            if (otherChildPrivate->hasEnabledHoverHandlers())
                 return; // nope! sorry, we have pointer handlers which are interested.
         }
     }
@@ -9011,12 +9041,12 @@ bool QQuickItemPrivate::hasPointerHandlers() const
     return extra.isAllocated() && !extra->pointerHandlers.isEmpty();
 }
 
-bool QQuickItemPrivate::hasHoverHandlers() const
+bool QQuickItemPrivate::hasEnabledHoverHandlers() const
 {
     if (!hasPointerHandlers())
         return false;
     for (QQuickPointerHandler *h : extra->pointerHandlers)
-        if (qmlobject_cast<QQuickHoverHandler *>(h))
+        if (auto *hh = qmlobject_cast<QQuickHoverHandler *>(h); hh && hh->enabled())
             return true;
     return false;
 }
@@ -9643,6 +9673,13 @@ void QV4::Heap::QQuickItemWrapper::markObjects(QV4::Heap::Base *that, QV4::MarkS
 quint64 QQuickItemPrivate::_q_createJSWrapper(QV4::ExecutionEngine *engine)
 {
     return (engine->memoryManager->allocate<QQuickItemWrapper>(q_func()))->asReturnedValue();
+}
+
+QDebug operator<<(QDebug debug, const QQuickItemPrivate::ChangeListener &listener)
+{
+   QDebugStateSaver stateSaver(debug);
+   debug.nospace() << "ChangeListener listener=" << listener.listener << " types=" << listener.types;
+   return debug;
 }
 
 QT_END_NAMESPACE
