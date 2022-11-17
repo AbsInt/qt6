@@ -32,7 +32,7 @@ void LinuxDmabuf::zwp_linux_dmabuf_v1_bind_resource(Resource *resource)
         // send DRM_FORMAT_MOD_INVALID when no modifiers are supported for a format
         if (modifiers.isEmpty())
             modifiers << DRM_FORMAT_MOD_INVALID;
-        for (const auto &modifier : qAsConst(modifiers)) {
+        for (const auto &modifier : std::as_const(modifiers)) {
             if (resource->version() >= ZWP_LINUX_DMABUF_V1_MODIFIER_SINCE_VERSION) {
                 const uint32_t modifier_lo = modifier & 0xFFFFFFFF;
                 const uint32_t modifier_hi = modifier >> 32;
@@ -92,7 +92,7 @@ bool LinuxDmabufParams::handleCreateParams(Resource *resource, int width, int he
     // check for holes in plane sequence
     auto planeIds = m_planes.keys();
     std::sort(planeIds.begin(), planeIds.end());
-    for (int i = 0; i < planeIds.count(); ++i) {
+    for (int i = 0; i < planeIds.size(); ++i) {
         if (uint(i) != planeIds[i]) {
             wl_resource_post_error(resource->handle,
                                    ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_INCOMPLETE,

@@ -147,7 +147,7 @@ public:
     {}
     bool isClean() override
     {
-        for (auto *device : qAsConst(m_devices)) {
+        for (auto *device : std::as_const(m_devices)) {
             // The client should not leak selection offers, i.e. if this fails, there is a missing
             // zwp_primary_selection_offer_v1.destroy request
             if (!device->m_sentSelectionOffers.empty())
@@ -409,7 +409,7 @@ void tst_primaryselectionv1::destroysSelectionOnLeave()
         keyboard()->sendLeave(surface);
     });
 
-    QTRY_COMPARE(selectionChangedSpy.count(), 1);
+    QTRY_COMPARE(selectionChangedSpy.size(), 1);
     QVERIFY(!QGuiApplication::clipboard()->mimeData(QClipboard::Selection)->hasText());
 }
 

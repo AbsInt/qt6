@@ -218,12 +218,12 @@ inline static bool isSupportedSvgFeature(const QString &str)
         "http://www.w3.org/Graphics/SVG/feature/1.2/#ExternalResourcesRequiredAttribute"
     };
 
-    if (str.length() <= MAX_WORD_LENGTH && str.length() >= MIN_WORD_LENGTH) {
+    if (str.size() <= MAX_WORD_LENGTH && str.size() >= MIN_WORD_LENGTH) {
         const char16_t unicode44 = str.at(44).unicode();
         const char16_t unicode45 = str.at(45).unicode();
         if (unicode44 >= sizeof(asso_values) || unicode45 >= sizeof(asso_values))
             return false;
-        const int key = str.length()
+        const int key = str.size()
                         + asso_values[unicode45]
                         + asso_values[unicode44];
         if (key <= MAX_HASH_VALUE && key >= 0)
@@ -328,7 +328,7 @@ QRectF QSvgStructureNode::bounds(QPainter *p, QSvgExtraStates &states) const
     QRectF bounds;
     if (!m_recursing) {
         QScopedValueRollback<bool> guard(m_recursing, true);
-        for (QSvgNode *node : qAsConst(m_renderers))
+        for (QSvgNode *node : std::as_const(m_renderers))
             bounds |= node->transformedBounds(p, states);
     }
     return bounds;

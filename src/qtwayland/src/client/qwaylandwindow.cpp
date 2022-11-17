@@ -132,7 +132,7 @@ void QWaylandWindow::initWindow()
                     mShellSurface->setAppId(fi.baseName());
                 } else {
                     QString appId;
-                    for (int i = 0; i < domainName.count(); ++i)
+                    for (int i = 0; i < domainName.size(); ++i)
                         appId.prepend(QLatin1Char('.')).prepend(domainName.at(i));
                     appId.append(fi.baseName());
                     mShellSurface->setAppId(appId);
@@ -288,9 +288,9 @@ void QWaylandWindow::setWindowTitle(const QString &title)
         const int maxLength = libwaylandMaxBufferSize / 3 - 100;
 
         auto truncated = QStringView{formatted}.left(maxLength);
-        if (truncated.length() < formatted.length()) {
+        if (truncated.size() < formatted.size()) {
             qCWarning(lcQpaWayland) << "Window titles longer than" << maxLength << "characters are not supported."
-                                    << "Truncating window title (from" << formatted.length() << "chars)";
+                                    << "Truncating window title (from" << formatted.size() << "chars)";
         }
         mShellSurface->setTitle(truncated.toString());
     }
@@ -559,7 +559,7 @@ void QWaylandWindow::sendRecursiveExposeEvent()
         return;
     sendExposeEvent(QRect(QPoint(), geometry().size()));
 
-    for (QWaylandSubSurface *subSurface : qAsConst(mChildren)) {
+    for (QWaylandSubSurface *subSurface : std::as_const(mChildren)) {
         auto subWindow = subSurface->window();
         subWindow->sendRecursiveExposeEvent();
     }
@@ -924,7 +924,7 @@ bool QWaylandWindow::createDecoration()
     }
 
     if (hadDecoration != mWindowDecorationEnabled) {
-        for (QWaylandSubSurface *subsurf : qAsConst(mChildren)) {
+        for (QWaylandSubSurface *subsurf : std::as_const(mChildren)) {
             QPoint pos = subsurf->window()->geometry().topLeft();
             QMargins m = frameMargins();
             subsurf->set_position(pos.x() + m.left(), pos.y() + m.top());
