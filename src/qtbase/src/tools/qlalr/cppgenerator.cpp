@@ -214,7 +214,7 @@ void CppGenerator::operator () ()
     }
 
   auto rule = grammar.rules.begin();
-  for (int i = 0; i < used_rules.count (); ++i, ++rule)
+  for (int i = 0; i < used_rules.size(); ++i, ++rule)
     {
       if (! used_rules.testBit (i))
         {
@@ -413,7 +413,7 @@ void CppGenerator::generateDecl (QTextStream &out)
       << "public:" << Qt::endl
       << "    enum VariousConstants {" << Qt::endl;
 
-  for (const Name &t : qAsConst(grammar.terminals))
+  for (const Name &t : std::as_const(grammar.terminals))
     {
       QString name = *t;
       int value = std::distance (grammar.names.begin (), t);

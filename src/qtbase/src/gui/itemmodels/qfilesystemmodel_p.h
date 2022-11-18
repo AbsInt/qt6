@@ -92,7 +92,7 @@ public:
         inline bool isDir() const {
             if (info)
                 return info->isDir();
-            if (children.count() > 0)
+            if (children.size() > 0)
                 return true;
             return false;
         }
@@ -146,7 +146,7 @@ public:
         void updateIcon(QAbstractFileIconProvider *iconProvider, const QString &path) {
             if (info)
                 info->icon = iconProvider->icon(QFileInfo(path));
-            for (QFileSystemNode *child : qAsConst(children)) {
+            for (QFileSystemNode *child : std::as_const(children)) {
                 //On windows the root (My computer) has no path so we don't want to add a / for nothing (e.g. /C:/)
                 if (!path.isEmpty()) {
                     if (path.endsWith(u'/'))
@@ -161,7 +161,7 @@ public:
         void retranslateStrings(QAbstractFileIconProvider *iconProvider, const QString &path) {
             if (info)
                 info->displayType = iconProvider->type(QFileInfo(path));
-            for (QFileSystemNode *child : qAsConst(children)) {
+            for (QFileSystemNode *child : std::as_const(children)) {
                 //On windows the root (My computer) has no path so we don't want to add a / for nothing (e.g. /C:/)
                 if (!path.isEmpty()) {
                     if (path.endsWith(u'/'))
@@ -209,7 +209,7 @@ public:
     inline int translateVisibleLocation(QFileSystemNode *parent, int row) const {
         if (sortOrder != Qt::AscendingOrder) {
             if (parent->dirtyChildrenIndex == -1)
-                return parent->visibleChildren.count() - row - 1;
+                return parent->visibleChildren.size() - row - 1;
 
             if (row < parent->dirtyChildrenIndex)
                 return parent->dirtyChildrenIndex - row - 1;

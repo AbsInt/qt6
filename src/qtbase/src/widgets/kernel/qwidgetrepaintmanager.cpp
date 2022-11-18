@@ -302,7 +302,7 @@ void QWidgetRepaintManager::removeDirtyWidget(QWidget *w)
     needsFlushWidgets.removeAll(w);
 
     QWidgetPrivate *wd = w->d_func();
-    const int n = wd->children.count();
+    const int n = wd->children.size();
     for (int i = 0; i < n; ++i) {
         if (QWidget *child = qobject_cast<QWidget*>(wd->children.at(i)))
             removeDirtyWidget(child);
@@ -565,7 +565,7 @@ static void findAllTextureWidgetsRecursively(QWidget *tlw, QWidget *widget)
         if (!tl->isEmpty())
             QWidgetPrivate::get(tlw)->topData()->widgetTextures.push_back(std::move(tl));
         // Native child widgets, if there was any, get their own separate QPlatformTextureList.
-        for (QWidget *ncw : qAsConst(nativeChildren)) {
+        for (QWidget *ncw : std::as_const(nativeChildren)) {
             if (QWidgetPrivate::get(ncw)->textureChildSeen)
                 findAllTextureWidgetsRecursively(tlw, ncw);
         }
@@ -808,7 +808,7 @@ void QWidgetRepaintManager::paintAndFlush()
         // texture content changes. Check if we have such widgets in the special
         // dirty list.
         QVarLengthArray<QWidget *, 16> paintPending;
-        const int numPaintPending = dirtyRenderToTextureWidgets.count();
+        const int numPaintPending = dirtyRenderToTextureWidgets.size();
         paintPending.reserve(numPaintPending);
         for (int i = 0; i < numPaintPending; ++i) {
             QWidget *w = dirtyRenderToTextureWidgets.at(i);
@@ -850,7 +850,7 @@ void QWidgetRepaintManager::paintAndFlush()
             }
         }
     }
-    for (int i = 0; i < dirtyRenderToTextureWidgets.count(); ++i)
+    for (int i = 0; i < dirtyRenderToTextureWidgets.size(); ++i)
         resetWidget(dirtyRenderToTextureWidgets.at(i));
     dirtyRenderToTextureWidgets.clear();
 
@@ -1032,7 +1032,7 @@ void QWidgetRepaintManager::flush(QWidget *widget, const QRegion &region, QPlatf
     if (widget != tlw)
         offset += widget->mapTo(tlw, QPoint());
 
-    if (widget->d_func()->usesRhiFlush) {
+    if (tlw->d_func()->usesRhiFlush) {
         QRhi *rhi = store->handle()->rhi();
         qCDebug(lcWidgetPainting) << "Flushing" << region << "of" << widget
                                   << "with QRhi" << rhi
@@ -1133,7 +1133,7 @@ QRegion QWidgetRepaintManager::staticContents(QWidget *parent, const QRect &with
         return region;
 
     const bool clipToRect = !withinClipRect.isEmpty();
-    const int count = staticWidgets.count();
+    const int count = staticWidgets.size();
     for (int i = 0; i < count; ++i) {
         QWidget *w = staticWidgets.at(i);
         QWidgetPrivate *wd = w->d_func();

@@ -226,7 +226,7 @@ void QXcbConnection::xi2SetupSlavePointerDevice(void *info, bool removeExisting,
     auto *deviceInfo = reinterpret_cast<xcb_input_xi_device_info_t *>(info);
     if (removeExisting) {
 #if QT_CONFIG(tabletevent)
-        for (int i = 0; i < m_tabletData.count(); ++i) {
+        for (int i = 0; i < m_tabletData.size(); ++i) {
             if (m_tabletData.at(i).deviceId == deviceInfo->deviceid) {
                 m_tabletData.remove(i);
                 break;
@@ -792,7 +792,7 @@ void QXcbConnection::xi2ProcessTouch(void *xiDevEvent, QXcbWindow *platformWindo
     qreal nx = -1.0, ny = -1.0;
     qreal w = 0.0, h = 0.0;
     bool majorAxisIsY = touchPoint.area.height() > touchPoint.area.width();
-    for (const TouchDeviceData::ValuatorClassInfo &vci : qAsConst(dev->valuatorInfo)) {
+    for (const TouchDeviceData::ValuatorClassInfo &vci : std::as_const(dev->valuatorInfo)) {
         double value;
         if (!xi2GetValuatorValueIfSet(xiDeviceEvent, vci.number, &value))
             continue;
@@ -1023,7 +1023,7 @@ bool QXcbConnection::xi2SetMouseGrabEnabled(xcb_window_t w, bool grab)
         }
 #endif // QT_CONFIG(gestures) && QT_XCB_HAS_TOUCHPAD_GESTURES
 
-        for (int id : qAsConst(m_xiMasterPointerIds)) {
+        for (int id : std::as_const(m_xiMasterPointerIds)) {
             xcb_generic_error_t *error = nullptr;
             auto cookie = xcb_input_xi_grab_device(xcb_connection(), w, XCB_CURRENT_TIME, XCB_CURSOR_NONE, id,
                                                    XCB_INPUT_GRAB_MODE_22_ASYNC, XCB_INPUT_GRAB_MODE_22_ASYNC,
@@ -1041,7 +1041,7 @@ bool QXcbConnection::xi2SetMouseGrabEnabled(xcb_window_t w, bool grab)
             free(reply);
         }
     } else { // ungrab
-        for (int id : qAsConst(m_xiMasterPointerIds)) {
+        for (int id : std::as_const(m_xiMasterPointerIds)) {
             auto cookie = xcb_input_xi_ungrab_device_checked(xcb_connection(), XCB_CURRENT_TIME, id);
             xcb_generic_error_t *error = xcb_request_check(xcb_connection(), cookie);
             if (error) {
@@ -1627,7 +1627,7 @@ void QXcbConnection::xi2ReportTabletEvent(const void *event, TabletData *tabletD
 
 QXcbConnection::TabletData *QXcbConnection::tabletDataForDevice(int id)
 {
-    for (int i = 0; i < m_tabletData.count(); ++i) {
+    for (int i = 0; i < m_tabletData.size(); ++i) {
         if (m_tabletData.at(i).deviceId == id)
             return &m_tabletData[i];
     }

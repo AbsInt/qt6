@@ -920,7 +920,7 @@ void tst_QSplitter::task187373_addAbstractScrollAreas_data()
         "QTreeView"
     };
 
-    for (const auto &className : qAsConst(classNames)) {
+    for (const auto &className : std::as_const(classNames)) {
         QTest::newRow(qPrintable(className + " 1")) << className << false << true;
         QTest::newRow(qPrintable(className + " 2")) << className << true << false;
         QTest::newRow(qPrintable(className + " 3")) << className << true << true;
@@ -1063,7 +1063,7 @@ void tst_QSplitter::taskQTBUG_102249_moveNonPressed()
                    Qt::NoButton, Qt::MouseButtons(Qt::LeftButton),
                    Qt::NoModifier);
     qApp->sendEvent(s.handle(0), &me);
-    QCOMPARE(spyMove.count(), 0);
+    QCOMPARE(spyMove.size(), 0);
 }
 
 void tst_QSplitter::setLayout()

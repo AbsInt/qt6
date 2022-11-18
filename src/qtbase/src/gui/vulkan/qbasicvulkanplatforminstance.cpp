@@ -150,7 +150,7 @@ void QBasicPlatformVulkanInstance::init(QLibrary *lib)
         QList<VkLayerProperties> layerProps(layerCount);
         m_vkEnumerateInstanceLayerProperties(&layerCount, layerProps.data());
         m_supportedLayers.reserve(layerCount);
-        for (const VkLayerProperties &p : qAsConst(layerProps)) {
+        for (const VkLayerProperties &p : std::as_const(layerProps)) {
             QVulkanLayer layer;
             layer.name = p.layerName;
             layer.version = p.implementationVersion;
@@ -169,7 +169,7 @@ void QBasicPlatformVulkanInstance::init(QLibrary *lib)
         QList<VkExtensionProperties> extProps(extCount);
         m_vkEnumerateInstanceExtensionProperties(nullptr, &extCount, extProps.data());
         m_supportedExtensions.reserve(extCount);
-        for (const VkExtensionProperties &p : qAsConst(extProps)) {
+        for (const VkExtensionProperties &p : std::as_const(extProps)) {
             QVulkanExtension ext;
             ext.name = p.extensionName;
             ext.version = p.specVersion;
@@ -246,13 +246,13 @@ void QBasicPlatformVulkanInstance::initInstance(QVulkanInstance *instance, const
 
         // No clever stuff with QSet and friends: the order for layers matters
         // and the user-provided order must be kept.
-        for (int i = 0; i < m_enabledLayers.count(); ++i) {
+        for (int i = 0; i < m_enabledLayers.size(); ++i) {
             const QByteArray &layerName(m_enabledLayers[i]);
             if (!m_supportedLayers.contains(layerName))
                 m_enabledLayers.removeAt(i--);
         }
         qDebug(lcPlatVk) << "Enabling Vulkan instance layers:" << m_enabledLayers;
-        for (int i = 0; i < m_enabledExtensions.count(); ++i) {
+        for (int i = 0; i < m_enabledExtensions.size(); ++i) {
             const QByteArray &extName(m_enabledExtensions[i]);
             if (!m_supportedExtensions.contains(extName))
                 m_enabledExtensions.removeAt(i--);
@@ -266,18 +266,18 @@ void QBasicPlatformVulkanInstance::initInstance(QVulkanInstance *instance, const
         instInfo.flags = 0x00000001; // VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR
 
         QList<const char *> layerNameVec;
-        for (const QByteArray &ba : qAsConst(m_enabledLayers))
+        for (const QByteArray &ba : std::as_const(m_enabledLayers))
             layerNameVec.append(ba.constData());
         if (!layerNameVec.isEmpty()) {
-            instInfo.enabledLayerCount = layerNameVec.count();
+            instInfo.enabledLayerCount = layerNameVec.size();
             instInfo.ppEnabledLayerNames = layerNameVec.constData();
         }
 
         QList<const char *> extNameVec;
-        for (const QByteArray &ba : qAsConst(m_enabledExtensions))
+        for (const QByteArray &ba : std::as_const(m_enabledExtensions))
             extNameVec.append(ba.constData());
         if (!extNameVec.isEmpty()) {
-            instInfo.enabledExtensionCount = extNameVec.count();
+            instInfo.enabledExtensionCount = extNameVec.size();
             instInfo.ppEnabledExtensionNames = extNameVec.constData();
         }
 

@@ -186,7 +186,7 @@ void processNetlinkRequest(int sock, struct nlmsghdr *hdr, char *buf, size_t buf
 uint QNetworkInterfaceManager::interfaceIndexFromName(const QString &name)
 {
     uint index = 0;
-    if (name.length() >= IFNAMSIZ)
+    if (name.size() >= IFNAMSIZ)
         return index;
 
     int socket = qt_safe_socket(AF_INET, SOCK_DGRAM, 0);
@@ -309,7 +309,7 @@ static void getAddresses(int sock, char *buf, QList<QNetworkInterfacePrivate *> 
 
         // find the interface this is relevant to
         QNetworkInterfacePrivate *iface = nullptr;
-        for (auto candidate : qAsConst(result)) {
+        for (auto candidate : std::as_const(result)) {
             if (candidate->index != int(ifa->ifa_index))
                 continue;
             iface = candidate;

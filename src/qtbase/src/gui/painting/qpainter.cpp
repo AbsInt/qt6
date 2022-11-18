@@ -381,7 +381,7 @@ void QPainterPrivate::draw_helper(const QPainterPath &originalPath, DrawOperatio
 
     if (q->hasClipping()) {
         bool hasPerspectiveTransform = false;
-        for (const QPainterClipInfo &info : qAsConst(state->clipInfo)) {
+        for (const QPainterClipInfo &info : std::as_const(state->clipInfo)) {
             if (info.matrix.type() == QTransform::TxProject) {
                 hasPerspectiveTransform = true;
                 break;
@@ -1616,7 +1616,7 @@ void QPainter::restore()
         tmp->clipPath = QPainterPath();
         d->engine->updateState(*tmp);
         // replay the list of clip states,
-        for (const QPainterClipInfo &info : qAsConst(d->state->clipInfo)) {
+        for (const QPainterClipInfo &info : std::as_const(d->state->clipInfo)) {
             tmp->matrix = info.matrix;
             tmp->matrix *= d->state->redirectionMatrix;
             tmp->clipOperation = info.operation;
@@ -2478,7 +2478,7 @@ QRegion QPainter::clipRegion() const
         const_cast<QPainter *>(this)->d_ptr->updateInvMatrix();
 
     // ### Falcon: Use QPainterPath
-    for (const QPainterClipInfo &info : qAsConst(d->state->clipInfo)) {
+    for (const QPainterClipInfo &info : std::as_const(d->state->clipInfo)) {
         switch (info.clipType) {
 
         case QPainterClipInfo::RegionClip: {
@@ -2645,7 +2645,7 @@ QRectF QPainter::clipBoundingRect() const
     // fast.
     QRectF bounds;
     bool first = true;
-    for (const QPainterClipInfo &info : qAsConst(d->state->clipInfo)) {
+    for (const QPainterClipInfo &info : std::as_const(d->state->clipInfo)) {
          QRectF r;
 
          if (info.clipType == QPainterClipInfo::RectClip)
@@ -5591,7 +5591,7 @@ void QPainter::drawText(const QPointF &p, const QString &str, int tf, int justif
     }
     engine.itemize();
     QScriptLine line;
-    line.length = str.length();
+    line.length = str.size();
     engine.shapeLine(line);
 
     int nItems = engine.layoutData->items.size();
@@ -5646,7 +5646,7 @@ void QPainter::drawText(const QRect &r, int flags, const QString &str, QRect *br
 
     Q_D(QPainter);
 
-    if (!d->engine || str.length() == 0 || pen().style() == Qt::NoPen)
+    if (!d->engine || str.size() == 0 || pen().style() == Qt::NoPen)
         return;
 
     if (!d->extended)
@@ -5733,7 +5733,7 @@ void QPainter::drawText(const QRectF &r, int flags, const QString &str, QRectF *
 
     Q_D(QPainter);
 
-    if (!d->engine || str.length() == 0 || pen().style() == Qt::NoPen)
+    if (!d->engine || str.size() == 0 || pen().style() == Qt::NoPen)
         return;
 
     if (!d->extended)
@@ -5852,7 +5852,7 @@ void QPainter::drawText(const QRectF &r, const QString &text, const QTextOption 
 
     Q_D(QPainter);
 
-    if (!d->engine || text.length() == 0 || pen().style() == Qt::NoPen)
+    if (!d->engine || text.size() == 0 || pen().style() == Qt::NoPen)
         return;
 
     if (!d->extended)
@@ -6343,7 +6343,7 @@ QRectF QPainter::boundingRect(const QRectF &r, const QString &text, const QTextO
 {
     Q_D(QPainter);
 
-    if (!d->engine || text.length() == 0)
+    if (!d->engine || text.size() == 0)
         return QRectF(r.x(),r.y(), 0,0);
 
     QRectF br;
@@ -7133,7 +7133,7 @@ start_lengthVariant:
     // compatible behaviour to the old implementation. Replace
     // tabs by spaces
     int old_offset = offset;
-    for (; offset < text.length(); offset++) {
+    for (; offset < text.size(); offset++) {
         QChar chr = text.at(offset);
         if (chr == u'\r' || (singleline && chr == u'\n')) {
             text[offset] = u' ';

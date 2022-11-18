@@ -629,7 +629,7 @@ bool QOpenGLShader::compileSourceCode(const char *source)
             // Append #line directive in order to compensate for text insertion
             lineDirective = QStringLiteral("#line %1\n").arg(versionDirectivePosition.line).toUtf8();
             sourceChunks.append(lineDirective.constData());
-            sourceChunkLengths.append(GLint(lineDirective.length()));
+            sourceChunkLengths.append(GLint(lineDirective.size()));
         }
 
         // Append rest of shader code
@@ -1230,7 +1230,7 @@ void QOpenGLShaderProgram::removeAllShaders()
 {
     Q_D(QOpenGLShaderProgram);
     d->removingShaders = true;
-    for (QOpenGLShader *shader : qAsConst(d->shaders)) {
+    for (QOpenGLShader *shader : std::as_const(d->shaders)) {
         if (d->programGuard && d->programGuard->id()
             && shader && shader->d_func()->shaderGuard)
         {
@@ -3727,7 +3727,7 @@ bool QOpenGLShaderProgramPrivate::isCacheDisabled() const
 bool QOpenGLShaderProgramPrivate::compileCacheable()
 {
     Q_Q(QOpenGLShaderProgram);
-    for (const QOpenGLProgramBinaryCache::ShaderDesc &shader : qAsConst(binaryProgram.shaders)) {
+    for (const QOpenGLProgramBinaryCache::ShaderDesc &shader : std::as_const(binaryProgram.shaders)) {
         auto s = std::make_unique<QOpenGLShader>(qt_shaderStageToType(shader.stage), q);
         if (!s->compileSourceCode(shader.source)) {
             log = s->log();
@@ -3749,7 +3749,7 @@ bool QOpenGLShaderProgramPrivate::linkBinary()
     const QByteArray cacheKey = binaryProgram.cacheKey();
     if (lcOpenGLProgramDiskCache().isEnabled(QtDebugMsg))
         qCDebug(lcOpenGLProgramDiskCache, "program with %d shaders, cache key %s",
-                int(binaryProgram.shaders.count()), cacheKey.constData());
+                int(binaryProgram.shaders.size()), cacheKey.constData());
 
     bool needsCompile = true;
     if (binCache.load(cacheKey, q->programId())) {

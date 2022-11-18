@@ -164,7 +164,7 @@ void QMakeSourceFileInfo::setDependencyPaths(const QList<QMakeLocalFileName> &l)
 {
     // Ensure that depdirs does not contain the same paths several times, to minimize the stats
     QList<QMakeLocalFileName> ll;
-    for (int i = 0; i < l.count(); ++i) {
+    for (int i = 0; i < l.size(); ++i) {
         if (!ll.contains(l.at(i)))
             ll.append(l.at(i));
     }
@@ -788,7 +788,7 @@ bool QMakeSourceFileInfo::findDeps(SourceFile *file)
                         }
                     }
                     if(!exists) { //path lookup
-                        for (const QMakeLocalFileName &depdir : qAsConst(depdirs)) {
+                        for (const QMakeLocalFileName &depdir : std::as_const(depdirs)) {
                             QMakeLocalFileName f(depdir.real() + Option::dir_sep + lfn.real());
                             QFileInfo fi(findFileInfo(f));
                             if(fi.exists() && !fi.isDir()) {

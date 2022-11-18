@@ -368,7 +368,7 @@ QTypeRevision Moc::parseRevision()
     revisionString.remove(0, 1);
     revisionString.chop(1);
     const QList<QByteArray> majorMinor = revisionString.split(',');
-    switch (majorMinor.length()) {
+    switch (majorMinor.size()) {
     case 1: {
         bool ok = false;
         const int revision = revisionString.toInt(&ok);
@@ -595,6 +595,12 @@ void Moc::parse()
                     QByteArray nsName = lexem();
                     QByteArrayList nested;
                     while (test(SCOPE)) {
+                        /* treat (C++20's) namespace A::inline B {} as A::B
+                           this is mostly to not break compilation when encountering such
+                           a construct in a header; the interaction of Qt's meta-macros with
+                           inline namespaces is still rather poor.
+                        */
+                        test(INLINE);
                         next(IDENTIFIER);
                         nested.append(nsName);
                         nsName = lexem();
@@ -967,7 +973,7 @@ void Moc::parse()
             classHash.insert(def.qualified, def.qualified);
         }
     }
-    for (const auto &n : qAsConst(namespaceList)) {
+    for (const auto &n : std::as_const(namespaceList)) {
         if (!n.hasQNamespace)
             continue;
         ClassDef def;
@@ -1060,7 +1066,7 @@ static QByteArrayList requiredQtContainers(const QList<ClassDef> &classes)
 void Moc::generate(FILE *out, FILE *jsonOutput)
 {
     QByteArray fn = filename;
-    int i = filename.length()-1;
+    int i = filename.size()-1;
     while (i > 0 && filename.at(i - 1) != '/' && filename.at(i - 1) != '\\')
         --i;                                // skip path
     if (i >= 0)
@@ -1133,7 +1139,7 @@ void Moc::generate(FILE *out, FILE *jsonOutput)
 
         QJsonArray classesJsonFormatted;
 
-        for (const ClassDef &cdef: qAsConst(classList))
+        for (const ClassDef &cdef: std::as_const(classList))
             classesJsonFormatted.append(cdef.toJson());
 
         if (!classesJsonFormatted.isEmpty())
@@ -1309,7 +1315,7 @@ void Moc::parsePropertyAttributes(PropertyDef &propDef)
         QByteArray v, v2;
         if (test(LPAREN)) {
             v = lexemUntil(RPAREN);
-            v = v.mid(1, v.length() - 2); // removes the '(' and ')'
+            v = v.mid(1, v.size() - 2); // removes the '(' and ')'
         } else if (test(INTEGER_LITERAL)) {
             v = lexem();
             if (l != "REVISION")
@@ -1590,7 +1596,7 @@ void Moc::parseInterfaces(ClassDef *def)
             }
         }
         // resolve from classnames to interface ids
-        for (int i = 0; i < iface.count(); ++i) {
+        for (int i = 0; i < iface.size(); ++i) {
             const QByteArray iid = interface2IdMap.value(iface.at(i).className);
             if (iid.isEmpty())
                 error("Undefined interface");
@@ -1786,7 +1792,7 @@ void Moc::checkSuperClasses(ClassDef *def)
 #endif
         return;
     }
-    for (int i = 1; i < def->superclassList.count(); ++i) {
+    for (int i = 1; i < def->superclassList.size(); ++i) {
         const QByteArray superClass = def->superclassList.at(i).first;
         if (knownQObjectClasses.contains(superClass)) {
             const QByteArray msg
@@ -1802,7 +1808,7 @@ void Moc::checkSuperClasses(ClassDef *def)
 
         if (interface2IdMap.contains(superClass)) {
             bool registeredInterface = false;
-            for (int i = 0; i < def->interfaceList.count(); ++i)
+            for (int i = 0; i < def->interfaceList.size(); ++i)
                 if (def->interfaceList.at(i).constFirst().className == superClass) {
                     registeredInterface = true;
                     break;
@@ -1829,8 +1835,8 @@ void Moc::checkProperties(ClassDef *cdef)
     // specify get function, for compatibility we accept functions
     // returning pointers, or const char * for QByteArray.
     //
-    QDuplicateTracker<QByteArray> definedProperties(cdef->propertyList.count());
-    for (int i = 0; i < cdef->propertyList.count(); ++i) {
+    QDuplicateTracker<QByteArray> definedProperties(cdef->propertyList.size());
+    for (int i = 0; i < cdef->propertyList.size(); ++i) {
         PropertyDef &p = cdef->propertyList[i];
         if (definedProperties.hasSeen(p.name)) {
             QByteArray msg = "The property '" + p.name + "' is defined multiple times in class " + cdef->classname + ".";
@@ -1852,7 +1858,7 @@ void Moc::checkProperties(ClassDef *cdef)
             continue;
         }
 
-        for (int j = 0; j < cdef->publicList.count(); ++j) {
+        for (int j = 0; j < cdef->publicList.size(); ++j) {
             const FunctionDef &f = cdef->publicList.at(j);
             if (f.name != p.read)
                 continue;
@@ -1879,7 +1885,7 @@ void Moc::checkProperties(ClassDef *cdef)
         }
         if (!p.notify.isEmpty()) {
             int notifyId = -1;
-            for (int j = 0; j < cdef->signalList.count(); ++j) {
+            for (int j = 0; j < cdef->signalList.size(); ++j) {
                 const FunctionDef &f = cdef->signalList.at(j);
                 if (f.name != p.notify) {
                     continue;
@@ -1893,7 +1899,7 @@ void Moc::checkProperties(ClassDef *cdef)
                 int index = cdef->nonClassSignalList.indexOf(p.notify);
                 if (index == -1) {
                     cdef->nonClassSignalList << p.notify;
-                    p.notifyId = -1 - cdef->nonClassSignalList.count();
+                    p.notifyId = -1 - cdef->nonClassSignalList.size();
                 } else {
                     p.notifyId = -2 - index;
                 }
@@ -1909,7 +1915,7 @@ QJsonObject ClassDef::toJson() const
     cls["qualifiedClassName"_L1] = QString::fromUtf8(qualified.constData());
 
     QJsonArray classInfos;
-    for (const auto &info: qAsConst(classInfoList)) {
+    for (const auto &info: std::as_const(classInfoList)) {
         QJsonObject infoJson;
         infoJson["name"_L1] = QString::fromUtf8(info.name);
         infoJson["value"_L1] = QString::fromUtf8(info.value);
@@ -1936,7 +1942,7 @@ QJsonObject ClassDef::toJson() const
 
     QJsonArray props;
 
-    for (const PropertyDef &propDef: qAsConst(propertyList))
+    for (const PropertyDef &propDef: std::as_const(propertyList))
         props.append(propDef.toJson());
 
     if (!props.isEmpty())
@@ -1951,7 +1957,7 @@ QJsonObject ClassDef::toJson() const
 
     QJsonArray superClasses;
 
-    for (const auto &super: qAsConst(superclassList)) {
+    for (const auto &super: std::as_const(superclassList)) {
         const auto name = super.first;
         const auto access = super.second;
         QJsonObject superCls;
@@ -1964,7 +1970,7 @@ QJsonObject ClassDef::toJson() const
         cls["superClasses"_L1] = superClasses;
 
     QJsonArray enums;
-    for (const EnumDef &enumDef: qAsConst(enumList))
+    for (const EnumDef &enumDef: std::as_const(enumList))
         enums.append(enumDef.toJson(*this));
     if (!enums.isEmpty())
         cls["enums"_L1] = enums;

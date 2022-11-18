@@ -219,9 +219,9 @@ void QMimeBinaryProvider::addFileNameMatches(const QString &fileName, QMimeGlobM
         const int reverseSuffixTreeOffset = m_cacheFile->getUint32(PosReverseSuffixTreeOffset);
         const int numRoots = m_cacheFile->getUint32(reverseSuffixTreeOffset);
         const int firstRootOffset = m_cacheFile->getUint32(reverseSuffixTreeOffset + 4);
-        matchSuffixTree(result, m_cacheFile, numRoots, firstRootOffset, lowerFileName, lowerFileName.length() - 1, false);
+        matchSuffixTree(result, m_cacheFile, numRoots, firstRootOffset, lowerFileName, lowerFileName.size() - 1, false);
         if (result.m_matchingMimeTypes.isEmpty())
-            matchSuffixTree(result, m_cacheFile, numRoots, firstRootOffset, fileName, fileName.length() - 1, true);
+            matchSuffixTree(result, m_cacheFile, numRoots, firstRootOffset, fileName, fileName.size() - 1, true);
     }
     // Check complex globs (e.g. "callgrind.out[0-9]*" or "README*")
     if (result.m_matchingMimeTypes.isEmpty())
@@ -448,11 +448,11 @@ void QMimeBinaryProvider::addAllMimeTypes(QList<QMimeType> &result)
 {
     loadMimeTypeList();
     if (result.isEmpty()) {
-        result.reserve(m_mimetypeNames.count());
-        for (const QString &name : qAsConst(m_mimetypeNames))
+        result.reserve(m_mimetypeNames.size());
+        for (const QString &name : std::as_const(m_mimetypeNames))
             result.append(mimeTypeForNameUnchecked(name));
     } else {
-        for (const QString &name : qAsConst(m_mimetypeNames))
+        for (const QString &name : std::as_const(m_mimetypeNames))
             if (std::find_if(result.constBegin(), result.constEnd(), [name](const QMimeType &mime) -> bool { return mime.name() == name; })
                     == result.constEnd())
                 result.append(mimeTypeForNameUnchecked(name));
@@ -680,7 +680,7 @@ void QMimeXMLProvider::findByMagic(const QByteArray &data, int *accuracyPtr, QMi
 {
     QString candidateName;
     bool foundOne = false;
-    for (const QMimeMagicRuleMatcher &matcher : qAsConst(m_magicMatchers)) {
+    for (const QMimeMagicRuleMatcher &matcher : std::as_const(m_magicMatchers)) {
         if (matcher.matches(data)) {
             const int priority = matcher.priority();
             if (priority > *accuracyPtr) {
@@ -700,7 +700,7 @@ void QMimeXMLProvider::ensureLoaded()
     const QString packageDir = m_directory + QStringLiteral("/packages");
     QDir dir(packageDir);
     const QStringList files = dir.entryList(QDir::Files | QDir::NoDotAndDotDot);
-    allFiles.reserve(files.count());
+    allFiles.reserve(files.size());
     for (const QString &xmlFile : files)
         allFiles.append(packageDir + u'/' + xmlFile);
 
@@ -716,7 +716,7 @@ void QMimeXMLProvider::ensureLoaded()
 
     //qDebug() << "Loading" << m_allFiles;
 
-    for (const QString &file : qAsConst(allFiles))
+    for (const QString &file : std::as_const(allFiles))
         load(file);
 }
 

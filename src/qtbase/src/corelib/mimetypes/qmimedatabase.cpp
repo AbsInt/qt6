@@ -357,7 +357,7 @@ QMimeType QMimeDatabasePrivate::mimeTypeForFileNameAndData(const QString &fileNa
 
     // Pass 1) Try to match on the file name
     QMimeGlobMatchResult candidatesByName = findByFileName(fileName);
-    if (candidatesByName.m_allMatchingMimeTypes.count() == 1) {
+    if (candidatesByName.m_allMatchingMimeTypes.size() == 1) {
         const QMimeType mime = mimeTypeForName(candidatesByName.m_matchingMimeTypes.at(0));
         if (mime.isValid())
             return mime;
@@ -386,7 +386,7 @@ QMimeType QMimeDatabasePrivate::mimeTypeForFileNameAndData(const QString &fileNa
                 if (candidatesByName.m_matchingMimeTypes.contains(sniffedMime)) {
                     return candidateByData;
                 }
-                for (const QString &m : qAsConst(candidatesByName.m_allMatchingMimeTypes)) {
+                for (const QString &m : std::as_const(candidatesByName.m_allMatchingMimeTypes)) {
                     if (inherits(m, sniffedMime)) {
                         // We have magic + pattern pointing to this, so it's a pretty good match
                         return mimeTypeForName(m);
@@ -399,7 +399,7 @@ QMimeType QMimeDatabasePrivate::mimeTypeForFileNameAndData(const QString &fileNa
             }
         }
 
-        if (candidatesByName.m_allMatchingMimeTypes.count() > 1) {
+        if (candidatesByName.m_allMatchingMimeTypes.size() > 1) {
             candidatesByName.m_matchingMimeTypes.sort(); // make it deterministic
             const QMimeType mime = mimeTypeForName(candidatesByName.m_matchingMimeTypes.at(0));
             if (mime.isValid())
@@ -652,7 +652,7 @@ QList<QMimeType> QMimeDatabase::mimeTypesForFileName(const QString &fileName) co
 
     const QStringList matches = d->mimeTypeForFileName(fileName);
     QList<QMimeType> mimes;
-    mimes.reserve(matches.count());
+    mimes.reserve(matches.size());
     for (const QString &mime : matches)
         mimes.append(d->mimeTypeForName(mime));
     return mimes;

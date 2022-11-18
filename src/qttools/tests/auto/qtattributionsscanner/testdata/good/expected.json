@@ -29,7 +29,7 @@
         "Homepage": "www.qt.io",
         "Id": "complete",
         "License": "License",
-        "LicenseFile": "%{PWD}/complete/LICENSE",
+        "LicenseFile": "%{PWD}/complete/../../../../../../LICENSES/BSD-3-Clause.txt",
         "LicenseId": "xxx",
         "Name": "Complete",
         "PackageComment": "just a test package",
@@ -40,6 +40,27 @@
         ],
         "QtUsage": "Multi\nLine\nUsage",
         "Version": "1.0"
+    },
+    {
+        "Copyright": "Copyright",
+        "CopyrightFile": "",
+        "Description": "",
+        "DownloadLocation": "",
+        "Files": "",
+        "Homepage": "",
+        "Id": "licenses-dir",
+        "License": "BSD 3-Clause \"New\" or \"Revised\" License",
+        "LicenseFile": "%{LICENSES_DIR}/BSD-3-Clause.txt",
+        "LicenseId": "BSD-3-Clause",
+        "Name": "LicensesDir",
+        "PackageComment": "",
+        "Path": "%{PWD}/licenses-dir",
+        "QDocModule": "qtest",
+        "QtParts": [
+            "libs"
+        ],
+        "QtUsage": "Usage",
+        "Version": ""
     },
     {
         "Copyright": "Copyright",

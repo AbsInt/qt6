@@ -513,7 +513,7 @@ void WriteInitialization::acceptUI(DomUI *node)
 
     if (!m_buddies.empty())
         m_output << language::openQtConfig(shortcutConfigKey());
-    for (const Buddy &b : qAsConst(m_buddies)) {
+    for (const Buddy &b : std::as_const(m_buddies)) {
         const QString buddyVarName = m_driver->widgetVariableName(b.buddyAttributeName);
         if (buddyVarName.isEmpty()) {
             fprintf(stderr, "%s: Warning: Buddy assignment: '%s' is not a valid widget.\n",
@@ -601,7 +601,7 @@ void WriteInitialization::addWizardPage(const QString &pageVarName, const DomWid
 
 void WriteInitialization::acceptWidget(DomWidget *node)
 {
-    m_layoutMarginType = m_widgetChain.count() == 1 ? TopLevelMargin : ChildMargin;
+    m_layoutMarginType = m_widgetChain.size() == 1 ? TopLevelMargin : ChildMargin;
     const QString className = node->attributeClass();
     const QString varName = m_driver->findOrInsertWidget(node);
 
@@ -977,7 +977,7 @@ void WriteInitialization::writePropertyList(const QString &varName,
     if (value.isEmpty())
         return;
     const QStringList list = value.split(u',');
-    const int count =  list.count();
+    const int count =  list.size();
     for (int i = 0; i < count; i++) {
         if (list.at(i) != defaultValue) {
             m_output << m_indent << varName << language::derefPointer << setFunction
@@ -1180,7 +1180,7 @@ void WriteInitialization::writeProperties(const QString &varName,
                                           const DomPropertyList &lst,
                                           unsigned flags)
 {
-    const bool isTopLevel = m_widgetChain.count() == 1;
+    const bool isTopLevel = m_widgetChain.size() == 1;
 
     if (m_uic->customWidgetsInfo()->extends(className, "QAxWidget")) {
         DomPropertyMap properties = propertyMap(lst);
@@ -2329,7 +2329,7 @@ void WriteInitialization::initializeTreeWidget(DomWidget *w)
     QString tempName = disableSorting(w, varName);
 
     const auto items = initializeTreeWidgetItems(w->elementItem());
-    for (int i = 0; i < items.count(); i++) {
+    for (int i = 0; i < items.size(); i++) {
         Item *itm = items[i];
         itm->writeSetupUi(varName);
         QString parentPath;
@@ -2734,7 +2734,7 @@ QString WriteInitialization::Item::writeSetupUi(const QString &parent, Item::Emp
             m_setupUiStream << language::closeQtConfig(it.key());
         ++it;
     }
-    for (Item *child : qAsConst(m_children))
+    for (Item *child : std::as_const(m_children))
         child->writeSetupUi(uniqueName);
     return uniqueName;
 }

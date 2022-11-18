@@ -70,7 +70,7 @@ void tst_QOpenGLWidget::create()
     QSignalSpy frameSwappedSpy(w.data(), SIGNAL(frameSwapped()));
     w->show();
     QVERIFY(QTest::qWaitForWindowExposed(w.data()));
-    QVERIFY(frameSwappedSpy.count() > 0);
+    QVERIFY(frameSwappedSpy.size() > 0);
 
     QVERIFY(w->isValid());
     QVERIFY(w->context());
@@ -165,7 +165,7 @@ void tst_QOpenGLWidget::createNonTopLevel()
     w.resize(400, 400);
     w.show();
     QVERIFY(QTest::qWaitForWindowExposed(&w));
-    QVERIFY(frameSwappedSpy.count() > 0);
+    QVERIFY(frameSwappedSpy.size() > 0);
 
     QVERIFY(glw->m_resizeCalled);
     glw->m_resizeCalled = false;
@@ -326,7 +326,7 @@ void tst_QOpenGLWidget::reparentTopLevel()
     {
         QSignalSpy frameSwappedSpy(glw1, &QOpenGLWidget::frameSwapped);
         tabWidget.setCurrentIndex(tabWidget.addTab(glw1, "OpenGL widget 1"));
-        QTRY_VERIFY(frameSwappedSpy.count() > 0);
+        QTRY_VERIFY(frameSwappedSpy.size() > 0);
     }
 
     PainterWidget *glw2 = new PainterWidget;
@@ -334,7 +334,7 @@ void tst_QOpenGLWidget::reparentTopLevel()
     {
         QSignalSpy frameSwappedSpy(glw2, &QOpenGLWidget::frameSwapped);
         tabWidget.setCurrentIndex(tabWidget.addTab(glw2, "OpenGL widget 2"));
-        QTRY_VERIFY(frameSwappedSpy.count() > 0);
+        QTRY_VERIFY(frameSwappedSpy.size() > 0);
     }
 
     QImage image = glw2->grabFramebuffer();
@@ -344,7 +344,7 @@ void tst_QOpenGLWidget::reparentTopLevel()
     {
         QSignalSpy frameSwappedSpy(glw1, &QOpenGLWidget::frameSwapped);
         delete glw2;
-        QTRY_VERIFY(frameSwappedSpy.count() > 0);
+        QTRY_VERIFY(frameSwappedSpy.size() > 0);
     }
 
     image = glw1->grabFramebuffer();
@@ -356,7 +356,7 @@ void tst_QOpenGLWidget::reparentTopLevel()
         glw1->setParent(nullptr);
         glw1->show();
         QVERIFY(QTest::qWaitForWindowExposed(glw1));
-        QTRY_VERIFY(frameSwappedSpy.count() > 0);
+        QTRY_VERIFY(frameSwappedSpy.size() > 0);
     }
 
     image = glw1->grabFramebuffer();
@@ -366,7 +366,7 @@ void tst_QOpenGLWidget::reparentTopLevel()
     {
         QSignalSpy frameSwappedSpy(glw1, &QOpenGLWidget::frameSwapped);
         tabWidget.setCurrentIndex(tabWidget.addTab(glw1, "Re-added OpenGL widget 1"));
-        QTRY_VERIFY(frameSwappedSpy.count() > 0);
+        QTRY_VERIFY(frameSwappedSpy.size() > 0);
     }
 
     image = glw1->grabFramebuffer();
@@ -530,39 +530,132 @@ void tst_QOpenGLWidget::nativeWindow()
 #ifdef Q_OS_ANDROID
     QSKIP("Crashes on Android, figure out why (QTBUG-102043)");
 #endif
-    QScopedPointer<ClearWidget> w(new ClearWidget(0, 800, 600));
-    w->resize(800, 600);
-    w->show();
-    w->winId();
-    QVERIFY(QTest::qWaitForWindowExposed(w.data()));
 
-    QImage image = w->grabFramebuffer();
-    QVERIFY(!image.isNull());
-    QCOMPARE(image.width(), w->width());
-    QCOMPARE(image.height(), w->height());
-    QVERIFY(image.pixel(30, 40) == qRgb(255, 0, 0));
-    QVERIFY(w->internalWinId());
+    // NB these tests do not fully verify that native child widgets are fully
+    // functional since there is no guarantee that the content is composed and
+    // presented correctly as we can only do verification with
+    // grabFramebuffer() here which only exercises a part of the pipeline.
 
-    // Now as a native child.
-    QWidget nativeParent;
-    nativeParent.resize(800, 600);
-    nativeParent.setAttribute(Qt::WA_NativeWindow);
-    ClearWidget *child = new ClearWidget(0, 800, 600);
-    child->setClearColor(0, 1, 0);
-    child->setParent(&nativeParent);
-    child->resize(400, 400);
-    child->move(23, 34);
-    nativeParent.show();
-    QVERIFY(QTest::qWaitForWindowExposed(&nativeParent));
+    {
+        QScopedPointer<ClearWidget> w(new ClearWidget(nullptr, 800, 600));
+        w->resize(800, 600);
+        w->show();
+        w->winId();
+        QVERIFY(QTest::qWaitForWindowExposed(w.data()));
 
-    QVERIFY(nativeParent.internalWinId());
-    QVERIFY(!child->internalWinId());
+        QImage image = w->grabFramebuffer();
+        QVERIFY(!image.isNull());
+        QCOMPARE(image.width(), w->width());
+        QCOMPARE(image.height(), w->height());
+        QVERIFY(image.pixel(30, 40) == qRgb(255, 0, 0));
+        QVERIFY(w->internalWinId());
+    }
 
-    image = child->grabFramebuffer();
-    QVERIFY(!image.isNull());
-    QCOMPARE(image.width(), child->width());
-    QCOMPARE(image.height(), child->height());
-    QVERIFY(image.pixel(30, 40) == qRgb(0, 255, 0));
+    // Now as a native child
+    {
+        QWidget topLevel;
+        topLevel.resize(800, 600);
+
+        ClearWidget *child = new ClearWidget(nullptr, 800, 600);
+        child->setParent(&topLevel);
+
+        // make it a native child (native window, but not top-level -> no backingstore)
+        child->winId();
+
+        child->setClearColor(0, 1, 0);
+        child->resize(400, 400);
+        child->move(23, 34);
+
+        topLevel.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&topLevel));
+
+        QVERIFY(topLevel.internalWinId());
+        QVERIFY(child->internalWinId());
+
+        QImage image = child->grabFramebuffer();
+        QVERIFY(!image.isNull());
+        QCOMPARE(image.width(), child->width());
+        QCOMPARE(image.height(), child->height());
+        QVERIFY(image.pixel(30, 40) == qRgb(0, 255, 0));
+    }
+
+    // Now the same with WA_NativeWindow instead
+    {
+        QWidget topLevel;
+        topLevel.resize(800, 600);
+
+        ClearWidget *child = new ClearWidget(nullptr, 800, 600);
+        child->setParent(&topLevel);
+
+        // make it a native child (native window, but not top-level -> no backingstore)
+        child->setAttribute(Qt::WA_NativeWindow);
+
+        child->setClearColor(0, 1, 0);
+        child->resize(400, 400);
+        child->move(23, 34);
+
+        topLevel.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&topLevel));
+
+        QVERIFY(child->internalWinId());
+
+        QImage image = child->grabFramebuffer();
+        QCOMPARE(image.width(), child->width());
+        QCOMPARE(image.height(), child->height());
+        QVERIFY(image.pixel(30, 40) == qRgb(0, 255, 0));
+    }
+
+    // Now as a child of a native child
+    {
+        QWidget topLevel;
+        topLevel.resize(800, 600);
+
+        QWidget *container = new QWidget(&topLevel);
+        // make it a native child (native window, but not top-level -> no backingstore)
+        container->winId();
+
+        ClearWidget *child = new ClearWidget(nullptr, 800, 600);
+        // set the parent separately, this is important, see next test case
+        child->setParent(container);
+        child->setClearColor(0, 1, 0);
+        child->resize(400, 400);
+        child->move(23, 34);
+
+        topLevel.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&topLevel));
+
+        QVERIFY(topLevel.internalWinId());
+        QVERIFY(container->internalWinId());
+        QVERIFY(!child->internalWinId());
+
+        QImage image = child->grabFramebuffer();
+        QCOMPARE(image.width(), child->width());
+        QCOMPARE(image.height(), child->height());
+        QVERIFY(image.pixel(30, 40) == qRgb(0, 255, 0));
+    }
+
+    // Again as a child of a native child, but this time specifying the parent
+    // upon construction, not with an explicit setParent() call afterwards.
+    {
+        QWidget topLevel;
+        topLevel.resize(800, 600);
+        QWidget *container = new QWidget(&topLevel);
+        container->winId();
+        // parent it right away
+        ClearWidget *child = new ClearWidget(container, 800, 600);
+        child->setClearColor(0, 1, 0);
+        child->resize(400, 400);
+        child->move(23, 34);
+        topLevel.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&topLevel));
+        QVERIFY(topLevel.internalWinId());
+        QVERIFY(container->internalWinId());
+        QVERIFY(!child->internalWinId());
+        QImage image = child->grabFramebuffer();
+        QCOMPARE(image.width(), child->width());
+        QCOMPARE(image.height(), child->height());
+        QVERIFY(image.pixel(30, 40) == qRgb(0, 255, 0));
+    }
 }
 
 static inline QString msgRgbMismatch(unsigned actual, unsigned expected)

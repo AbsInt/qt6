@@ -35,7 +35,7 @@ Q_LOGGING_CATEGORY(lcDnd, "qt.gui.dnd")
 static QWindow* topLevelAt(const QPoint &pos)
 {
     QWindowList list = QGuiApplication::topLevelWindows();
-    for (int i = list.count()-1; i >= 0; --i) {
+    for (int i = list.size()-1; i >= 0; --i) {
         QWindow *w = list.at(i);
         if (w->isVisible() && w->handle() && w->geometry().contains(pos) && !qobject_cast<QShapedPixmapWindow*>(w))
             return w;
@@ -309,7 +309,7 @@ static inline QPoint fromNativeGlobalPixels(const QPoint &point)
 #ifndef QT_NO_HIGHDPISCALING
     QPoint res = point;
     if (QHighDpiScaling::isActive()) {
-        for (const QScreen *s : qAsConst(QGuiApplicationPrivate::screen_list)) {
+        for (const QScreen *s : std::as_const(QGuiApplicationPrivate::screen_list)) {
             if (s->handle()->geometry().contains(point)) {
                 res = QHighDpi::fromNativePixels(point, s);
                 break;

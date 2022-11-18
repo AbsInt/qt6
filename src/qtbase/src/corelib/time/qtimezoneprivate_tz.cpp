@@ -357,7 +357,7 @@ static QDate calculatePosixDate(const QByteArray &dateRule, int year)
     if (dateRule.at(0) == 'M') {
         // nth week in month format "Mmonth.week.dow"
         QList<QByteArray> dateParts = dateRule.split('.');
-        if (dateParts.count() > 2) {
+        if (dateParts.size() > 2) {
             int month = dateParts.at(0).mid(1).toInt(&ok);
             int week = ok ? dateParts.at(1).toInt(&ok) : 0;
             int dow = ok ? dateParts.at(2).toInt(&ok) : 0;
@@ -392,27 +392,28 @@ static int parsePosixTime(const char *begin, const char *end)
     int hour, min = 0, sec = 0;
 
     const int maxHour = 137; // POSIX's extended range.
-    bool ok = false;
-    const char *cut = begin;
-    hour = qstrntoll(begin, end - begin, &cut, 10, &ok);
-    if (!ok || hour < -maxHour || hour > maxHour || cut > begin + 2)
+    auto r = qstrntoll(begin, end - begin, 10);
+    hour = r.result;
+    if (!r.ok() || hour < -maxHour || hour > maxHour || r.endptr > begin + 2)
         return INT_MIN;
-    begin = cut;
+    begin = r.endptr;
     if (begin < end && *begin == ':') {
         // minutes
         ++begin;
-        min = qstrntoll(begin, end - begin, &cut, 10, &ok);
-        if (!ok || min < 0 || min > 59 || cut > begin + 2)
+        r = qstrntoll(begin, end - begin, 10);
+        min = r.result;
+        if (!r.ok() || min < 0 || min > 59 || r.endptr > begin + 2)
             return INT_MIN;
 
-        begin = cut;
+        begin = r.endptr;
         if (begin < end && *begin == ':') {
             // seconds
             ++begin;
-            sec = qstrntoll(begin, end - begin, &cut, 10, &ok);
-            if (!ok || sec < 0 || sec > 59 || cut > begin + 2)
+            r = qstrntoll(begin, end - begin, 10);
+            sec = r.result;
+            if (!r.ok() || sec < 0 || sec > 59 || r.endptr > begin + 2)
                 return INT_MIN;
-            begin = cut;
+            begin = r.endptr;
         }
     }
 
@@ -527,7 +528,7 @@ static auto validatePosixRule(const QByteArray &posixRule)
     // http://www.gnu.org/software/libc/manual/html_node/TZ-Variable.html
     // See also calculatePosixTransition()'s reference.
     const auto parts = posixRule.split(',');
-    const struct { bool isValid, hasDst; } fail{false, false}, good{true, parts.count() > 1};
+    const struct { bool isValid, hasDst; } fail{false, false}, good{true, parts.size() > 1};
     const QByteArray &zoneinfo = parts.at(0);
     if (zoneinfo.isEmpty())
         return fail;
@@ -549,13 +550,13 @@ static auto validatePosixRule(const QByteArray &posixRule)
         return fail;
 
     if (good.hasDst) {
-        if (parts.count() != 3 || parts.at(1).isEmpty() || parts.at(2).isEmpty())
+        if (parts.size() != 3 || parts.at(1).isEmpty() || parts.at(2).isEmpty())
             return fail;
         for (int i = 1; i < 3; ++i) {
             const auto tran = parts.at(i).split('/');
             if (!calculatePosixDate(tran.at(0), 1972).isValid())
                 return fail;
-            if (tran.count() > 1) {
+            if (tran.size() > 1) {
                 const auto time = tran.at(1);
                 if (parsePosixTime(time.begin(), time.end()) == INT_MIN)
                     return fail;
@@ -596,7 +597,7 @@ static QList<QTimeZonePrivate::Data> calculatePosixTransitions(const QByteArray 
     }
 
     // If only the name part, or no DST specified, then no transitions
-    if (parts.count() == 1 || !dstZone.hasValidOffset()) {
+    if (parts.size() == 1 || !dstZone.hasValidOffset()) {
         QTimeZonePrivate::Data data;
         data.atMSecsSinceEpoch = lastTranMSecs;
         data.offsetFromUtc = stdZone.offset;
@@ -606,19 +607,19 @@ static QList<QTimeZonePrivate::Data> calculatePosixTransitions(const QByteArray 
         result << data;
         return result;
     }
-    if (parts.count() < 3 || parts.at(1).isEmpty() || parts.at(2).isEmpty())
+    if (parts.size() < 3 || parts.at(1).isEmpty() || parts.at(2).isEmpty())
         return result; // Malformed.
 
     // Get the std to dst transition details
     const int twoOClock = 7200; // Default transition time, when none specified
     const auto dstParts = parts.at(1).split('/');
     const QByteArray dstDateRule = dstParts.at(0);
-    const int dstTime = dstParts.count() < 2 ? twoOClock : parsePosixTransitionTime(dstParts.at(1));
+    const int dstTime = dstParts.size() < 2 ? twoOClock : parsePosixTransitionTime(dstParts.at(1));
 
     // Get the dst to std transition details
     const auto stdParts = parts.at(2).split('/');
     const QByteArray stdDateRule = stdParts.at(0);
-    const int stdTime = stdParts.count() < 2 ? twoOClock : parsePosixTransitionTime(stdParts.at(1));
+    const int stdTime = stdParts.size() < 2 ? twoOClock : parsePosixTransitionTime(stdParts.at(1));
 
     if (dstDateRule.isEmpty() || stdDateRule.isEmpty() || dstTime == INT_MIN || stdTime == INT_MIN)
         return result; // Malformed.
@@ -827,7 +828,7 @@ QTzTimeZoneCacheEntry QTzTimeZoneCache::findEntry(const QByteArray &ianaId)
     // Offsets are stored as total offset, want to know separate UTC and DST offsets
     // so find the first non-dst transition to use as base UTC Offset
     int utcOffset = ret.m_preZoneRule.stdOffset;
-    for (const QTzTransition &tran : qAsConst(tranList)) {
+    for (const QTzTransition &tran : std::as_const(tranList)) {
         if (!typeList.at(tran.tz_typeind).tz_isdst) {
             utcOffset = typeList.at(tran.tz_typeind).tz_gmtoff;
             break;
@@ -835,7 +836,7 @@ QTzTimeZoneCacheEntry QTzTimeZoneCache::findEntry(const QByteArray &ianaId)
     }
 
     // Now for each transition time calculate and store our rule:
-    const int tranCount = tranList.count();;
+    const int tranCount = tranList.size();;
     ret.m_tranTimes.reserve(tranCount);
     // The DST offset when in effect: usually stable, usually an hour:
     int lastDstOff = 3600;

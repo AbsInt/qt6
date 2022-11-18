@@ -44,7 +44,7 @@ QMenu *QAccessibleMenu::menu() const
 
 int QAccessibleMenu::childCount() const
 {
-    return menu()->actions().count();
+    return menu()->actions().size();
 }
 
 QAccessibleInterface *QAccessibleMenu::childAt(int x, int y) const
@@ -85,7 +85,7 @@ QAccessibleInterface *QAccessibleMenu::parent() const
         const QList<QObject *> associatedObjects = menuAction->associatedObjects();
         parentCandidates.reserve(associatedObjects.size() + 1);
         parentCandidates << menu()->parentWidget() << associatedObjects;
-        for (QObject *object : qAsConst(parentCandidates)) {
+        for (QObject *object : std::as_const(parentCandidates)) {
             if (qobject_cast<QMenu*>(object)
 #if QT_CONFIG(menubar)
                 || qobject_cast<QMenuBar*>(object)
@@ -123,7 +123,7 @@ QMenuBar *QAccessibleMenuBar::menuBar() const
 
 int QAccessibleMenuBar::childCount() const
 {
-    return menuBar()->actions().count();
+    return menuBar()->actions().size();
 }
 
 QAccessibleInterface *QAccessibleMenuBar::child(int index) const

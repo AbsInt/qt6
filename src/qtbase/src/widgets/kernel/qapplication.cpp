@@ -1181,7 +1181,7 @@ void QApplicationPrivate::handlePaletteChanged(const char *className)
     }
 
 #if QT_CONFIG(graphicsview)
-    for (auto scene : qAsConst(scene_list))
+    for (auto scene : std::as_const(scene_list))
         QCoreApplication::sendEvent(scene, &event);
 #endif
 
@@ -2070,7 +2070,7 @@ void QApplicationPrivate::dispatchEnterLeave(QWidget* enter, QWidget* leave, con
         const QPointF globalPos = qIsInf(globalPosF.x())
             ? QPointF(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX)
             : globalPosF;
-        const QPointF windowPos = qAsConst(enterList).back()->window()->mapFromGlobal(globalPos);
+        const QPointF windowPos = std::as_const(enterList).back()->window()->mapFromGlobal(globalPos);
         for (auto it = enterList.crbegin(), end = enterList.crend(); it != end; ++it) {
             auto *w = *it;
             if (!QApplication::activeModalWidget() || QApplicationPrivate::tryModalHelper(w, nullptr)) {
@@ -2179,7 +2179,7 @@ bool QApplicationPrivate::isWindowBlocked(QWindow *window, QWindow **blockingWin
         return false;
     }
 
-    for (int i = 0; i < modalWindowList.count(); ++i) {
+    for (int i = 0; i < modalWindowList.size(); ++i) {
         QWindow *modalWindow = modalWindowList.at(i);
 
         // A window is not blocked by another modal window if the two are
@@ -3230,7 +3230,7 @@ bool QApplication::notify(QObject *receiver, QEvent *e)
                     break;
                 w = w->parentWidget();
             }
-            for (QGesture *g : qAsConst(allGestures))
+            for (QGesture *g : std::as_const(allGestures))
                 gestureEvent->setAccepted(g, false);
             gestureEvent->m_accept = false; // to make sure we check individual gestures
             break;
@@ -3381,7 +3381,7 @@ void QApplicationPrivate::closePopup(QWidget *popup)
          qt_popup_down = nullptr;
      }
 
-    if (QApplicationPrivate::popupWidgets->count() == 0) { // this was the last popup
+    if (QApplicationPrivate::popupWidgets->size() == 0) { // this was the last popup
         delete QApplicationPrivate::popupWidgets;
         QApplicationPrivate::popupWidgets = nullptr;
         qt_popup_down_closed = false;
@@ -3426,7 +3426,7 @@ void QApplicationPrivate::closePopup(QWidget *popup)
 
         // can become nullptr due to setFocus() above
         if (QApplicationPrivate::popupWidgets &&
-            QApplicationPrivate::popupWidgets->count() == 1) // grab mouse/keyboard
+            QApplicationPrivate::popupWidgets->size() == 1) // grab mouse/keyboard
             grabForPopup(aw);
     }
 
@@ -3441,7 +3441,7 @@ void QApplicationPrivate::openPopup(QWidget *popup)
         popupWidgets = new QWidgetList;
     popupWidgets->append(popup); // add to end of list
 
-    if (QApplicationPrivate::popupWidgets->count() == 1) // grab mouse/keyboard
+    if (QApplicationPrivate::popupWidgets->size() == 1) // grab mouse/keyboard
         grabForPopup(popup);
 
     // popups are not focus-handled by the window system (the first
@@ -3449,7 +3449,7 @@ void QApplicationPrivate::openPopup(QWidget *popup)
     // new popup gets the focus
     if (popup->focusWidget()) {
         popup->focusWidget()->setFocus(Qt::PopupFocusReason);
-    } else if (popupWidgets->count() == 1) { // this was the first popup
+    } else if (popupWidgets->size() == 1) { // this was the first popup
         if (QWidget *fw = QApplication::focusWidget()) {
             QFocusEvent e(QEvent::FocusOut, Qt::PopupFocusReason);
             QCoreApplication::sendEvent(fw, &e);

@@ -970,7 +970,7 @@ QCborStreamReader::Type QCborStreamReader::parentContainerType() const
 {
     if (d->containerStack.isEmpty())
         return Invalid;
-    return Type(cbor_value_get_type(&qAsConst(d->containerStack).top()));
+    return Type(cbor_value_get_type(&std::as_const(d->containerStack).top()));
 }
 
 /*!
@@ -1309,7 +1309,7 @@ QCborStreamReader::StringResult<QString> QCborStreamReader::_readString_helper()
     if (r.status == Error) {
         result.data.clear();
     } else {
-        Q_ASSERT(r.data == result.data.length());
+        Q_ASSERT(r.data == result.data.size());
         if (r.status == EndOfString && lastError() == QCborError::NoError)
             preparse();
     }
@@ -1341,7 +1341,7 @@ QCborStreamReader::StringResult<QByteArray> QCborStreamReader::_readByteArray_he
     if (r.status == Error) {
         result.data.clear();
     } else {
-        Q_ASSERT(r.data == result.data.length());
+        Q_ASSERT(r.data == result.data.size());
         if (r.status == EndOfString && lastError() == QCborError::NoError)
             preparse();
     }

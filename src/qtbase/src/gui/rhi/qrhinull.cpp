@@ -382,9 +382,9 @@ QRhi::FrameOpResult QRhiNull::finish()
 void QRhiNull::simulateTextureUpload(const QRhiResourceUpdateBatchPrivate::TextureOp &u)
 {
     QNullTexture *texD = QRHI_RES(QNullTexture, u.dst);
-    for (int layer = 0, maxLayer = u.subresDesc.count(); layer < maxLayer; ++layer) {
+    for (int layer = 0, maxLayer = u.subresDesc.size(); layer < maxLayer; ++layer) {
         for (int level = 0; level < QRhi::MAX_MIP_LEVELS; ++level) {
-            for (const QRhiTextureSubresourceUploadDescription &subresDesc : qAsConst(u.subresDesc[layer][level])) {
+            for (const QRhiTextureSubresourceUploadDescription &subresDesc : std::as_const(u.subresDesc[layer][level])) {
                 if (!subresDesc.image().isNull()) {
                     const QImage src = subresDesc.image();
                     QPainter painter(&texD->image[layer][level]);

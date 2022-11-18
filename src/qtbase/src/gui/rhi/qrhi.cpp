@@ -3262,7 +3262,7 @@ void QRhiImplementation::updateLayoutDesc(QRhiShaderResourceBindings *srb)
     srb->m_layoutDescHash = 0;
     srb->m_layoutDesc.clear();
     auto layoutDescAppender = std::back_inserter(srb->m_layoutDesc);
-    for (const QRhiShaderResourceBinding &b : qAsConst(srb->m_bindings)) {
+    for (const QRhiShaderResourceBinding &b : std::as_const(srb->m_bindings)) {
         const QRhiShaderResourceBinding::Data *d = b.data();
         srb->m_layoutDescHash ^= uint(d->binding) ^ uint(d->stage) ^ uint(d->type)
             ^ uint(d->arraySize());
@@ -4963,9 +4963,9 @@ QRhiImplementation::~QRhiImplementation()
     if (!resources.isEmpty()) {
         if (leakCheck) {
             qWarning("QRhi %p going down with %d unreleased resources that own native graphics objects. This is not nice.",
-                     q, int(resources.count()));
+                     q, int(resources.size()));
         }
-        for (QRhiResource *res : qAsConst(resources)) {
+        for (QRhiResource *res : std::as_const(resources)) {
             if (leakCheck)
                 qWarning("  %s resource %p (%s)", resourceTypeStr(res), res, res->m_objectName.constData());
 
@@ -5583,7 +5583,7 @@ void QRhi::addCleanupCallback(const CleanupCallback &callback)
  */
 void QRhi::runCleanup()
 {
-    for (const CleanupCallback &f : qAsConst(d->cleanupCallbacks))
+    for (const CleanupCallback &f : std::as_const(d->cleanupCallbacks))
         f(this);
 
     d->cleanupCallbacks.clear();
@@ -6018,7 +6018,7 @@ QRhiResourceUpdateBatch *QRhi::nextResourceUpdateBatch()
 
     QRhiResourceUpdateBatch *u = nextFreeBatch();
     if (!u) {
-        const int oldSize = d->resUpdPool.count();
+        const int oldSize = d->resUpdPool.size();
         const int newSize = oldSize + qMin(4, qMax(0, 64 - oldSize));
         d->resUpdPool.resize(newSize);
         for (int i = oldSize; i < newSize; ++i)

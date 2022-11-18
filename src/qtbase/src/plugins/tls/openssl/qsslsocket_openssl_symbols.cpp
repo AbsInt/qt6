@@ -551,7 +551,7 @@ struct LibGreaterThan
     {
         const auto lhsparts = lhs.split(u'.');
         const auto rhsparts = rhs.split(u'.');
-        Q_ASSERT(lhsparts.count() > 1 && rhsparts.count() > 1);
+        Q_ASSERT(lhsparts.size() > 1 && rhsparts.size() > 1);
 
         // note: checking rhs < lhs, the same as lhs > rhs
         return std::lexicographical_compare(rhsparts.begin() + 1, rhsparts.end(),
@@ -622,7 +622,7 @@ static QStringList findAllLibs(QLatin1StringView filter)
         QStringList entryList = dir.entryList(filters, QDir::Files);
 
         std::sort(entryList.begin(), entryList.end(), LibGreaterThan());
-        for (const QString &entry : qAsConst(entryList))
+        for (const QString &entry : std::as_const(entryList))
             found << path + u'/' + entry;
     }
 

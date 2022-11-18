@@ -343,7 +343,7 @@ void QSettingsPrivate::requestUpdate()
 QStringList QSettingsPrivate::variantListToStringList(const QVariantList &l)
 {
     QStringList result;
-    result.reserve(l.count());
+    result.reserve(l.size());
     for (auto v : l)
         result.append(variantToString(v));
     return result;
@@ -356,9 +356,9 @@ QVariant QSettingsPrivate::stringListToVariantList(const QStringList &l)
         const QString &str = outStringList.at(i);
 
         if (str.startsWith(u'@')) {
-            if (str.length() < 2 || str.at(1) != u'@') {
+            if (str.size() < 2 || str.at(1) != u'@') {
                 QVariantList variantList;
-                variantList.reserve(l.count());
+                variantList.reserve(l.size());
                 for (const auto &s : l)
                     variantList.append(stringToVariant(s));
                 return variantList;
@@ -511,7 +511,7 @@ QVariant QSettingsPrivate::stringToVariant(const QString &s)
 
 void QSettingsPrivate::iniEscapedKey(const QString &key, QByteArray &result)
 {
-    result.reserve(result.length() + key.length() * 3 / 2);
+    result.reserve(result.size() + key.size() * 3 / 2);
     for (qsizetype i = 0; i < key.size(); ++i) {
         uint ch = key.at(i).unicode();
 
@@ -540,7 +540,7 @@ bool QSettingsPrivate::iniUnescapedKey(QByteArrayView key, QString &result)
 {
     const QString decoded = QString::fromUtf8(key);
     const qsizetype size = decoded.size();
-    result.reserve(result.length() + size);
+    result.reserve(result.size() + size);
     qsizetype i = 0;
     bool lowercaseOnly = true;
     while (i < size) {
@@ -735,7 +735,7 @@ StSkipSpaces:
     // fallthrough
 
 StNormal:
-    qsizetype chopLimit = stringResult.length();
+    qsizetype chopLimit = stringResult.size();
     while (i < str.size()) {
         switch (str.at(i)) {
         case '\\':
@@ -773,7 +773,7 @@ StNormal:
             } else {
                 // the character is skipped
             }
-            chopLimit = stringResult.length();
+            chopLimit = stringResult.size();
             break;
         case '"':
             ++i;
@@ -860,7 +860,7 @@ end:
 
 QStringList QSettingsPrivate::splitArgs(const QString &s, qsizetype idx)
 {
-    qsizetype l = s.length();
+    qsizetype l = s.size();
     Q_ASSERT(l > 0);
     Q_ASSERT(s.at(idx) == u'(');
     Q_ASSERT(s.at(l - 1) == u')');
@@ -1085,16 +1085,16 @@ QConfFileSettingsPrivate::QConfFileSettingsPrivate(QSettings::Format format,
         QStringList paths;
         if (!application.isEmpty()) {
             paths.reserve(dirs.size() * 2);
-            for (const auto &dir : qAsConst(dirs))
+            for (const auto &dir : std::as_const(dirs))
                 paths.append(dir + u'/' + appFile);
         } else {
             paths.reserve(dirs.size());
         }
-        for (const auto &dir : qAsConst(dirs))
+        for (const auto &dir : std::as_const(dirs))
             paths.append(dir + u'/' + orgFile);
 
         // Note: No check for existence of files is done intentionally.
-        for (const auto &path : qAsConst(paths))
+        for (const auto &path : std::as_const(paths))
             confFiles.append(QConfFile::fromName(path, false));
     } else
 #endif // Q_XDG_PLATFORM && !QT_NO_STANDARDPATHS
@@ -1127,7 +1127,7 @@ QConfFileSettingsPrivate::~QConfFileSettingsPrivate()
     ConfFileHash *usedHash = usedHashFunc();
     ConfFileCache *unusedCache = unusedCacheFunc();
 
-    for (auto conf_file : qAsConst(confFiles)) {
+    for (auto conf_file : std::as_const(confFiles)) {
         if (!conf_file->ref.deref()) {
             if (conf_file->size == 0) {
                 delete conf_file;
@@ -1201,7 +1201,7 @@ std::optional<QVariant> QConfFileSettingsPrivate::get(const QString &key) const
     ParsedSettingsMap::const_iterator j;
     bool found = false;
 
-    for (auto confFile : qAsConst(confFiles)) {
+    for (auto confFile : std::as_const(confFiles)) {
         const auto locker = qt_scoped_lock(confFile->mutex);
 
         if (!confFile->addedKeys.isEmpty()) {
@@ -1230,7 +1230,7 @@ QStringList QConfFileSettingsPrivate::children(const QString &prefix, ChildSpec 
     QSettingsKey thePrefix(prefix, caseSensitivity);
     qsizetype startPos = prefix.size();
 
-    for (auto confFile : qAsConst(confFiles)) {
+    for (auto confFile : std::as_const(confFiles)) {
         const auto locker = qt_scoped_lock(confFile->mutex);
 
         if (thePrefix.isEmpty())
@@ -1281,7 +1281,7 @@ void QConfFileSettingsPrivate::sync()
     // people probably won't be checking the status a whole lot, so in case of
     // error we just try to go on and make the best of it
 
-    for (auto confFile : qAsConst(confFiles)) {
+    for (auto confFile : std::as_const(confFiles)) {
         const auto locker = qt_scoped_lock(confFile->mutex);
         syncConfFile(confFile);
     }
@@ -1515,7 +1515,7 @@ bool QConfFileSettingsPrivate::readIniLine(QByteArrayView data, qsizetype &dataP
                                            qsizetype &lineStart, qsizetype &lineLen,
                                            qsizetype &equalsPos)
 {
-    qsizetype dataLen = data.length();
+    qsizetype dataLen = data.size();
     bool inQuotes = false;
 
     equalsPos = -1;
@@ -1643,7 +1643,7 @@ bool QConfFileSettingsPrivate::readIniFile(QByteArrayView data,
         ++position;
     }
 
-    Q_ASSERT(lineStart == data.length());
+    Q_ASSERT(lineStart == data.size());
     FLUSH_CURRENT_SECTION();
 
     return ok;

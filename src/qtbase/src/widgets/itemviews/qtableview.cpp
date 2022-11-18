@@ -907,7 +907,7 @@ void QTableViewPrivate::drawAndClipSpans(const QRegion &area, QPainter *painter,
         }
     }
 
-    for (QSpanCollection::Span *span : qAsConst(visibleSpans)) {
+    for (QSpanCollection::Span *span : std::as_const(visibleSpans)) {
         int row = span->top();
         int col = span->left();
         QModelIndex index = model->index(row, col, root);
@@ -2197,7 +2197,7 @@ QModelIndexList QTableView::selectedIndexes() const
     QModelIndexList modelSelected;
     if (d->selectionModel)
         modelSelected = d->selectionModel->selectedIndexes();
-    for (int i = 0; i < modelSelected.count(); ++i) {
+    for (int i = 0; i < modelSelected.size(); ++i) {
         QModelIndex index = modelSelected.at(i);
         if (!isIndexHidden(index) && index.parent() == d->root)
             viewSelected.append(index);

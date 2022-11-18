@@ -13,7 +13,8 @@
 #include <QtCore/qvariant.h>
 
 #include <iostream>
-#include <optional>
+
+using namespace Qt::Literals::StringLiterals;
 
 namespace Scanner {
 
@@ -23,45 +24,59 @@ static void missingPropertyWarning(const QString &filePath, const QString &prope
                                 QDir::toNativeSeparators(filePath), property)) << std::endl;
 }
 
-static void validatePackage(Package &p, const QString &filePath, LogLevel logLevel)
+static bool validatePackage(Package &p, const QString &filePath, LogLevel logLevel)
 {
+    bool validPackage = true;
+
     if (p.qtParts.isEmpty())
         p.qtParts << QStringLiteral("libs");
 
-    if (logLevel != SilentLog) {
-        if (p.name.isEmpty()) {
-            if (p.id.startsWith(QLatin1String("chromium-"))) // Ignore invalid README.chromium files
-                return;
+    if (p.name.isEmpty()) {
+        if (p.id.startsWith(QLatin1String("chromium-"))) // Ignore invalid README.chromium files
+            return false;
 
+        if (logLevel != SilentLog)
             missingPropertyWarning(filePath, QStringLiteral("Name"));
-        }
+        validPackage = false;
+    }
 
-        if (p.id.isEmpty())
+    if (p.id.isEmpty()) {
+        if (logLevel != SilentLog)
             missingPropertyWarning(filePath, QStringLiteral("Id"));
-        if (p.license.isEmpty())
+        validPackage = false;
+    }
+    if (p.license.isEmpty()) {
+        if (logLevel != SilentLog)
             missingPropertyWarning(filePath, QStringLiteral("License"));
+        validPackage = false;
+    }
 
-        if (!p.copyright.isEmpty() && !p.copyrightFile.isEmpty()) {
+    if (!p.copyright.isEmpty() && !p.copyrightFile.isEmpty()) {
+        if (logLevel != SilentLog) {
             std::cerr << qPrintable(tr("File %1: Properties 'Copyright' and 'CopyrightFile' are "
                                        "mutually exclusive.")
                                             .arg(QDir::toNativeSeparators(filePath)))
                       << std::endl;
-        }
-
-        for (const QString &part : qAsConst(p.qtParts)) {
-            if (part != QLatin1String("examples")
-                    && part != QLatin1String("tests")
-                    && part != QLatin1String("tools")
-                    && part != QLatin1String("libs")
-                    && logLevel != SilentLog) {
-                std::cerr << qPrintable(tr("File %1: Property 'QtPart' contains unknown element "
-                                           "'%2'. Valid entries are 'examples', 'tests', 'tools' "
-                                           "and 'libs'.").arg(
-                                            QDir::toNativeSeparators(filePath), part))
-                          << std::endl;
-            }
+            validPackage = false;
         }
     }
+
+    for (const QString &part : qAsConst(p.qtParts)) {
+        if (part != QLatin1String("examples")
+            && part != QLatin1String("tests")
+            && part != QLatin1String("tools")
+            && part != QLatin1String("libs")
+            && logLevel != SilentLog) {
+            std::cerr << qPrintable(tr("File %1: Property 'QtPart' contains unknown element "
+                                       "'%2'. Valid entries are 'examples', 'tests', 'tools' "
+                                       "and 'libs'.").arg(
+                                           QDir::toNativeSeparators(filePath), part))
+                      << std::endl;
+            validPackage = false;
+        }
+    }
+
+    return validPackage;
 }
 
 static std::optional<QStringList> toStringList(const QJsonValue &value)
@@ -77,10 +92,85 @@ static std::optional<QStringList> toStringList(const QJsonValue &value)
     return result;
 }
 
+// Extracts SPDX license ids from a SPDX license expression.
+// For "(BSD-3-Clause AND BeerWare)" this function returns { "BSD-3-Clause", "BeerWare" }.
+static QStringList extractLicenseIdsFromSPDXExpression(QString expression)
+{
+    const QStringList spdxOperators = {
+        u"AND"_s,
+        u"OR"_s,
+        u"WITH"_s
+    };
+
+    // Replace parentheses with spaces. We're not interested in grouping.
+    const QRegularExpression parensRegex(u"[()]"_s);
+    expression.replace(parensRegex, u" "_s);
+
+    // Split the string at space boundaries to extract tokens.
+    QStringList result;
+    for (const QString &token : expression.split(QLatin1Char(' '), Qt::SkipEmptyParts)) {
+        if (spdxOperators.contains(token))
+            continue;
+
+        // Remove the unary + operator, if present.
+        if (token.endsWith(QLatin1Char('+')))
+            result.append(token.mid(0, token.length() - 1));
+        else
+            result.append(token);
+    }
+    return result;
+}
+
+// Starting at packageDir, look for a LICENSES subdirectory in the directory hierarchy upwards.
+// Return a default-constructed QString if the directory was not found.
+static QString locateLicensesDir(const QString &packageDir)
+{
+    static const QString licensesSubDir = u"LICENSES"_s;
+    QDir dir(packageDir);
+    while (true) {
+        if (dir.cd(licensesSubDir))
+            return dir.path();
+        if (dir.isRoot())
+            break;
+        dir.cdUp();
+    }
+    return {};
+}
+
+// Locates the license files that belong to the licenses mentioned in LicenseId and stores them in
+// the specified package object.
+static bool autoDetectLicenseFiles(Package &p)
+{
+    const QString licensesDirPath = locateLicensesDir(p.path);
+    const QStringList licenseIds = extractLicenseIdsFromSPDXExpression(p.licenseId);
+    if (!licenseIds.isEmpty() && licensesDirPath.isEmpty()) {
+        std::cerr << qPrintable(tr("LICENSES directory could not be located.")) << std::endl;
+        return false;
+    }
+
+    bool success = true;
+    QDir licensesDir(licensesDirPath);
+    for (const QString &id : licenseIds) {
+        QString fileName = id + u".txt";
+        if (licensesDir.exists(fileName)) {
+            p.licenseFiles.append(licensesDir.filePath(fileName));
+        } else {
+            std::cerr << qPrintable(tr("Expected license file not found: %1").arg(
+                                        QDir::toNativeSeparators(licensesDir.filePath(fileName))))
+                      << std::endl;
+            success = false;
+        }
+    }
+
+    return success;
+}
+
 // Transforms a JSON object into a Package object
-static Package readPackage(const QJsonObject &object, const QString &filePath, LogLevel logLevel)
+static std::optional<Package> readPackage(const QJsonObject &object, const QString &filePath,
+                                          LogLevel logLevel)
 {
     Package p;
+    bool validPackage = true;
     const QString directory = QFileInfo(filePath).absolutePath();
     p.path = directory;
 
@@ -92,6 +182,7 @@ static Package readPackage(const QJsonObject &object, const QString &filePath, L
             if (logLevel != SilentLog)
                 std::cerr << qPrintable(tr("File %1: Expected JSON string as value of %2.").arg(
                                             QDir::toNativeSeparators(filePath), key)) << std::endl;
+            validPackage = false;
             continue;
         }
         const QString value = iter.value().toString();
@@ -117,10 +208,14 @@ static Package readPackage(const QJsonObject &object, const QString &filePath, L
             p.licenseFiles = QStringList(QDir(directory).absoluteFilePath(value));
         } else if (key == QLatin1String("LicenseFiles")) {
             auto strings = toStringList(iter.value());
-            if (!strings && (logLevel != SilentLog))
-                std::cerr << qPrintable(tr("File %1: Expected JSON array of strings in %2.")
-                                                .arg(QDir::toNativeSeparators(filePath), key))
-                          << std::endl;
+            if (!strings) {
+                if (logLevel != SilentLog)
+                    std::cerr << qPrintable(tr("File %1: Expected JSON array of strings in %2.")
+                                                    .arg(QDir::toNativeSeparators(filePath), key))
+                              << std::endl;
+                validPackage = false;
+                continue;
+            }
             const QDir dir(directory);
             for (auto iter : strings.value())
                 p.licenseFiles.push_back(dir.absoluteFilePath(iter));
@@ -138,19 +233,54 @@ static Package readPackage(const QJsonObject &object, const QString &filePath, L
             p.qtUsage = value;
         } else if (key == QLatin1String("QtParts")) {
             auto parts = toStringList(iter.value());
-            if (!parts && (logLevel != SilentLog))
-                std::cerr << qPrintable(tr("File %1: Expected JSON array of strings in %2.")
-                                                .arg(QDir::toNativeSeparators(filePath), key))
-                          << std::endl;
+            if (!parts) {
+                if (logLevel != SilentLog) {
+                    std::cerr << qPrintable(tr("File %1: Expected JSON array of strings in %2.")
+                                                    .arg(QDir::toNativeSeparators(filePath), key))
+                              << std::endl;
+                }
+                validPackage = false;
+                continue;
+            }
             p.qtParts = parts.value();
         } else {
-            if (logLevel != SilentLog)
+            if (logLevel != SilentLog) {
                 std::cerr << qPrintable(tr("File %1: Unknown key %2.").arg(
                                             QDir::toNativeSeparators(filePath), key)) << std::endl;
+            }
+            validPackage = false;
         }
     }
 
-    validatePackage(p, filePath, logLevel);
+    if (!p.copyrightFile.isEmpty()) {
+        QFile file(p.copyrightFile);
+        if (!file.open(QIODevice::ReadOnly)) {
+            std::cerr << qPrintable(tr("File %1: Cannot open 'CopyrightFile' %2.\n")
+                                            .arg(QDir::toNativeSeparators(filePath))
+                                            .arg(QDir::toNativeSeparators(p.copyrightFile)));
+            validPackage = false;
+        }
+        p.copyrightFileContents = QString::fromUtf8(file.readAll());
+    }
+
+    foreach (const QString &licenseFile, p.licenseFiles) {
+        QFile file(licenseFile);
+        if (!file.open(QIODevice::ReadOnly)) {
+            if (logLevel != SilentLog) {
+                std::cerr << qPrintable(tr("File %1: Cannot open 'LicenseFile' %2.\n")
+                                                .arg(QDir::toNativeSeparators(filePath))
+                                                .arg(QDir::toNativeSeparators(licenseFile)));
+            }
+            validPackage = false;
+        }
+        p.licenseFilesContents << QString::fromUtf8(file.readAll()).trimmed();
+    }
+
+    if (p.licenseFiles.isEmpty() && !autoDetectLicenseFiles(p))
+        return std::nullopt;
+
+    if (!validatePackage(p, filePath, logLevel) || !validPackage)
+        return std::nullopt;
 
     return p;
 }
@@ -225,14 +355,16 @@ static Package parseChromiumFile(QFile &file, const QString &filePath, LogLevel 
             p.licenseFiles = QStringList(entries.at(0).absoluteFilePath());
     }
 
-    validatePackage(p, filePath, logLevel);
+    // let's ignore warnings regarding Chromium files for now
+    Q_UNUSED(validatePackage(p, filePath, logLevel));
 
     return p;
 }
 
-QList<Package> readFile(const QString &filePath, LogLevel logLevel)
+std::optional<QList<Package>> readFile(const QString &filePath, LogLevel logLevel)
 {
     QList<Package> packages;
+    bool errorsFound = false;
 
     if (logLevel == VerboseLog) {
         std::cerr << qPrintable(tr("Reading file %1...").arg(
@@ -243,7 +375,7 @@ QList<Package> readFile(const QString &filePath, LogLevel logLevel)
         if (logLevel != SilentLog)
             std::cerr << qPrintable(tr("Could not open file %1.").arg(
                                         QDir::toNativeSeparators(file.fileName()))) << std::endl;
-        return QList<Package>();
+        return std::nullopt;
     }
 
     if (filePath.endsWith(QLatin1String(".json"))) {
@@ -255,47 +387,68 @@ QList<Package> readFile(const QString &filePath, LogLevel logLevel)
                                             QDir::toNativeSeparators(file.fileName()),
                                             jsonParseError.errorString()))
                           << std::endl;
-            return QList<Package>();
+            return std::nullopt;
         }
 
         if (document.isObject()) {
-            packages << readPackage(document.object(), file.fileName(), logLevel);
+            std::optional<Package> p = readPackage(document.object(), file.fileName(), logLevel);
+            if (p) {
+                packages << *p;
+            } else {
+                errorsFound = true;
+            }
         } else if (document.isArray()) {
             QJsonArray array = document.array();
             for (int i = 0, size = array.size(); i < size; ++i) {
                 QJsonValue value = array.at(i);
                 if (value.isObject()) {
-                    packages << readPackage(value.toObject(), file.fileName(), logLevel);
+                    std::optional<Package> p =
+                            readPackage(value.toObject(), file.fileName(), logLevel);
+                    if (p) {
+                        packages << *p;
+                    } else {
+                        errorsFound = true;
+                    }
                 } else {
-                    if (logLevel != SilentLog)
+                    if (logLevel != SilentLog) {
                         std::cerr << qPrintable(tr("File %1: Expecting JSON object in array.")
                                         .arg(QDir::toNativeSeparators(file.fileName())))
                                   << std::endl;
+                    }
+                    errorsFound = true;
                 }
             }
         } else {
-            if (logLevel != SilentLog)
+            if (logLevel != SilentLog) {
                 std::cerr << qPrintable(tr("File %1: Expecting JSON object in array.").arg(
                                             QDir::toNativeSeparators(file.fileName()))) << std::endl;
+            }
+            errorsFound = true;
         }
     } else if (filePath.endsWith(QLatin1String(".chromium"))) {
         Package chromiumPackage = parseChromiumFile(file, filePath, logLevel);
         if (!chromiumPackage.name.isEmpty()) // Skip invalid README.chromium files
             packages << chromiumPackage;
     } else {
-        if (logLevel != SilentLog)
+        if (logLevel != SilentLog) {
             std::cerr << qPrintable(tr("File %1: Unsupported file type.")
                             .arg(QDir::toNativeSeparators(file.fileName())))
                       << std::endl;
+        }
+        errorsFound = true;
     }
 
+    if (errorsFound)
+        return std::nullopt;
     return packages;
 }
 
-QList<Package> scanDirectory(const QString &directory, InputFormats inputFormats, LogLevel logLevel)
+std::optional<QList<Package>> scanDirectory(const QString &directory, InputFormats inputFormats,
+                                            LogLevel logLevel)
 {
     QDir dir(directory);
     QList<Package> packages;
+    bool errorsFound = false;
 
     QStringList nameFilters = QStringList();
     if (inputFormats & InputFormat::QtAttributions)
@@ -314,12 +467,23 @@ QList<Package> scanDirectory(const QString &directory, InputFormats inputFormats
     const QFileInfoList entries = dir.entryInfoList();
     for (const QFileInfo &info : entries) {
         if (info.isDir()) {
-            packages += scanDirectory(info.filePath(), inputFormats, logLevel);
+            std::optional<QList<Package>> ps =
+                    scanDirectory(info.filePath(), inputFormats, logLevel);
+            if (!ps)
+                errorsFound = true;
+            else
+                packages += *ps;
         } else {
-            packages += readFile(info.filePath(), logLevel);
+            std::optional p = readFile(info.filePath(), logLevel);
+            if (!p)
+                errorsFound = true;
+            else
+                packages += *p;
         }
     }
 
+    if (errorsFound)
+        return std::nullopt;
     return packages;
 }
 

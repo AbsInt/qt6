@@ -1083,30 +1083,30 @@ static bool q_evaluateRhiConfigRecursive(const QWidget *w, QPlatformBackingStore
             *outType = QBackingStoreRhiSupport::surfaceTypeForConfig(config);
         return true;
     }
-    QObjectList children = w->children();
-    for (int i = 0; i < children.size(); i++) {
-        if (children.at(i)->isWidgetType()) {
-            const QWidget *childWidget = qobject_cast<const QWidget *>(children.at(i));
-            if (childWidget) {
-                if (q_evaluateRhiConfigRecursive(childWidget, outConfig, outType))
-                    return true;
-            }
+    for (const QObject *child : w->children()) {
+        if (const QWidget *childWidget = qobject_cast<const QWidget *>(child)) {
+            if (q_evaluateRhiConfigRecursive(childWidget, outConfig, outType))
+                return true;
         }
     }
     return false;
 }
 
-// First tries q_evaluateRhiConfigRecursive, then if that did not indicate that rhi is wanted,
-// then checks env.vars or something else to see if we need to force using rhi-based composition.
 bool q_evaluateRhiConfig(const QWidget *w, QPlatformBackingStoreRhiConfig *outConfig, QSurface::SurfaceType *outType)
 {
-    if (q_evaluateRhiConfigRecursive(w, outConfig, outType)) {
-        qCDebug(lcWidgetPainting) << "Tree with root" << w << "evaluates to flushing with QRhi";
+    // First, check env.vars. or other means that force the usage of rhi-based
+    // flushing with a specific graphics API. This takes precedence over what
+    // the widgets themselves declare. This is global, applying to all
+    // top-levels.
+    if (QBackingStoreRhiSupport::checkForceRhi(outConfig, outType)) {
+        qCDebug(lcWidgetPainting) << "Tree with root" << w << "evaluated to forced flushing with QRhi";
         return true;
     }
 
-    if (QBackingStoreRhiSupport::checkForceRhi(outConfig, outType)) {
-        qCDebug(lcWidgetPainting) << "Tree with root" << w << "evaluated to forced flushing with QRhi";
+    // Otherwise, check the widget hierarchy to see if there is a child (or
+    // ourselves) that declare the need for rhi-based composition.
+    if (q_evaluateRhiConfigRecursive(w, outConfig, outType)) {
+        qCDebug(lcWidgetPainting) << "Tree with root" << w << "evaluates to flushing with QRhi";
         return true;
     }
 
@@ -1432,7 +1432,7 @@ QWidget::~QWidget()
 
 #ifndef QT_NO_ACTION
     // remove all actions from this widget
-    for (auto action : qAsConst(d->actions)) {
+    for (auto action : std::as_const(d->actions)) {
         QActionPrivate *apriv = action->d_func();
         apriv->associatedObjects.removeAll(this);
     }
@@ -3133,7 +3133,7 @@ void QWidget::addAction(QAction *action)
 */
 void QWidget::addActions(const QList<QAction *> &actions)
 {
-    for(int i = 0; i < actions.count(); i++)
+    for(int i = 0; i < actions.size(); i++)
         insertAction(nullptr, actions.at(i));
 }
 
@@ -3182,7 +3182,7 @@ void QWidget::insertAction(QAction *before, QAction *action)
 */
 void QWidget::insertActions(QAction *before, const QList<QAction*> &actions)
 {
-    for(int i = 0; i < actions.count(); ++i)
+    for(int i = 0; i < actions.size(); ++i)
         insertAction(before, actions.at(i));
 }
 
@@ -9036,7 +9036,7 @@ bool QWidget::event(QEvent *event)
             break;
 #if QT_CONFIG(menu)
         case Qt::ActionsContextMenu:
-            if (d->actions.count()) {
+            if (d->actions.size()) {
                 QMenu::exec(d->actions, static_cast<QContextMenuEvent *>(event)->globalPos(),
                             nullptr, this);
                 break;
@@ -9266,7 +9266,7 @@ bool QWidget::event(QEvent *event)
         break;
     case QEvent::DynamicPropertyChange: {
         const QByteArray &propName = static_cast<QDynamicPropertyChangeEvent *>(event)->propertyName();
-        if (propName.length() == 13 && !qstrncmp(propName, "_q_customDpi", 12)) {
+        if (propName.size() == 13 && !qstrncmp(propName, "_q_customDpi", 12)) {
             uint value = property(propName.constData()).toUInt();
             if (!d->extra)
                 d->createExtra();
@@ -10723,7 +10723,10 @@ void QWidget::setParent(QWidget *parent, Qt::WindowFlags f)
     QWidget *newtlw = window();
     if (oldtlw != newtlw) {
         QSurface::SurfaceType surfaceType = QSurface::RasterSurface;
-        if (q_evaluateRhiConfig(newtlw, nullptr, &surfaceType)) {
+        // Only evaluate the reparented subtree. While it might be tempting to
+        // do it on newtlw instead, the performance implications of that are
+        // problematic when it comes to large widget trees.
+        if (q_evaluateRhiConfig(this, nullptr, &surfaceType)) {
             newtlw->d_func()->usesRhiFlush = true;
             if (QWindow *w = newtlw->windowHandle()) {
                 if (w->surfaceType() != surfaceType) {

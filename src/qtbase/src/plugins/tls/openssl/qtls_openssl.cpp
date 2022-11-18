@@ -577,7 +577,7 @@ bool TlsCryptographOpenSSL::startHandshake()
     auto configuration = q->sslConfiguration();
     if (!errorsReportedFromCallback) {
         const auto &peerCertificateChain = configuration.peerCertificateChain();
-        for (const auto &currentError : qAsConst(lastErrors)) {
+        for (const auto &currentError : std::as_const(lastErrors)) {
             emit q->peerVerifyError(QTlsPrivate::X509CertificateOpenSSL::openSSLErrorToQSslError(currentError.code,
                                     peerCertificateChain.value(currentError.depth)));
             if (q->state() != QAbstractSocket::ConnectedState)
@@ -697,7 +697,7 @@ bool TlsCryptographOpenSSL::startHandshake()
 
     // Translate errors from the error list into QSslErrors.
     errors.reserve(errors.size() + errorList.size());
-    for (const auto &error : qAsConst(errorList))
+    for (const auto &error : std::as_const(errorList))
         errors << X509CertificateOpenSSL::openSSLErrorToQSslError(error.code, peerCertificateChain.value(error.depth));
 
     if (!errors.isEmpty()) {
@@ -1726,11 +1726,11 @@ unsigned TlsCryptographOpenSSL::pskClientTlsCallback(const char *hint, char *ide
         return 0;
 
     // Copy data back into OpenSSL
-    const int identityLength = qMin(authenticator.identity().length(), authenticator.maximumIdentityLength());
+    const int identityLength = qMin(authenticator.identity().size(), authenticator.maximumIdentityLength());
     std::memcpy(identity, authenticator.identity().constData(), identityLength);
     identity[identityLength] = 0;
 
-    const int pskLength = qMin(authenticator.preSharedKey().length(), authenticator.maximumPreSharedKeyLength());
+    const int pskLength = qMin(authenticator.preSharedKey().size(), authenticator.maximumPreSharedKeyLength());
     std::memcpy(psk, authenticator.preSharedKey().constData(), pskLength);
     return pskLength;
 }
@@ -1752,7 +1752,7 @@ unsigned TlsCryptographOpenSSL::pskServerTlsCallback(const char *identity, unsig
         return 0;
 
     // Copy data back into OpenSSL
-    const int pskLength = qMin(authenticator.preSharedKey().length(), authenticator.maximumPreSharedKeyLength());
+    const int pskLength = qMin(authenticator.preSharedKey().size(), authenticator.maximumPreSharedKeyLength());
     std::memcpy(psk, authenticator.preSharedKey().constData(), pskLength);
     return pskLength;
 }
