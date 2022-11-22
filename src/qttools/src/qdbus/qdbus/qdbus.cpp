@@ -164,7 +164,7 @@ static void listInterface(const QString &service, const QString &path, const QSt
         QList<QByteArray> types = mm.parameterTypes();
         QList<QByteArray> names = mm.parameterNames();
         bool first = true;
-        for (int i = 0; i < types.count(); ++i) {
+        for (int i = 0; i < types.size(); ++i) {
             printf("%s%s",
                    first ? "" : ", ",
                    types.at(i).constData());
@@ -274,17 +274,17 @@ static int placeCall(const QString &service, const QString &path, const QString 
 
             QMetaMethod mm = mo->method(knownIds.takeFirst());
             QList<QByteArray> types = mm.parameterTypes();
-            for (int i = 0; i < types.count(); ++i) {
+            for (int i = 0; i < types.size(); ++i) {
                 if (types.at(i).endsWith('&')) {
                     // reference (and not a reference to const): output argument
                     // we're done with the inputs
-                    while (types.count() > i)
+                    while (types.size() > i)
                         types.removeLast();
                     break;
                 }
             }
 
-            for (int i = 0; !args.isEmpty() && i < types.count(); ++i) {
+            for (int i = 0; !args.isEmpty() && i < types.size(); ++i) {
                 const QMetaType metaType = QMetaType::fromName(types.at(i));
                 if (!metaType.isValid()) {
                     fprintf(stderr, "Cannot call method '%s' because type '%s' is unknown to this tool\n",
@@ -338,7 +338,7 @@ static int placeCall(const QString &service, const QString &path, const QString 
                 }
                 params += p;
             }
-            if (params.count() == types.count() && args.isEmpty())
+            if (params.size() == types.size() && args.isEmpty())
                 matchFound = true;
             else if (knownIds.isEmpty()) {
                 fprintf(stderr, "Invalid number of parameters\n");
@@ -386,7 +386,7 @@ static bool globServices(QDBusConnectionInterface *bus, const QString &glob)
 
     QStringList names = bus->registeredServiceNames();
     names.sort();
-    for (const QString &name : qAsConst(names))
+    for (const QString &name : std::as_const(names))
         if (pattern.match(name).hasMatch())
             printf("%s\n", qPrintable(name));
 

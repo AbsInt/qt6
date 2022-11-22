@@ -8,7 +8,7 @@ QT_BEGIN_NAMESPACE
 
 void QQuickShapeSoftwareRenderer::beginSync(int totalCount, bool *countChanged)
 {
-    if (m_sp.count() != totalCount) {
+    if (m_sp.size() != totalCount) {
         m_sp.resize(totalCount);
         m_accDirty |= DirtyList;
         *countChanged = true;
@@ -155,7 +155,7 @@ void QQuickShapeSoftwareRenderer::updateNode()
     if (!m_accDirty)
         return;
 
-    const int count = m_sp.count();
+    const int count = m_sp.size();
     const bool listChanged = m_accDirty & DirtyList;
     if (listChanged)
         m_node->m_sp.resize(count);
@@ -224,7 +224,7 @@ void QQuickShapeSoftwareRenderNode::render(const RenderState *state)
     p->setTransform(matrix()->toTransform());
     p->setOpacity(inheritedOpacity());
 
-    for (const ShapePathRenderData &d : qAsConst(m_sp)) {
+    for (const ShapePathRenderData &d : std::as_const(m_sp)) {
         p->setPen(d.strokeWidth >= 0.0f && d.pen.color() != Qt::transparent ? d.pen : Qt::NoPen);
         p->setBrush(d.brush.color() != Qt::transparent ? d.brush : Qt::NoBrush);
         p->drawPath(d.path);

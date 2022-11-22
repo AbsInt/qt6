@@ -558,7 +558,7 @@ QColor PropertyEditor::propertyColor(QtProperty *property) const
         else if (isLayoutGroup(groupProperty))
             pair = m_layoutColor;
         else
-            pair = m_colors[groupIdx % m_colors.count()];
+            pair = m_colors[groupIdx % m_colors.size()];
     }
     if (!m_brightness)
         return pair.first;
@@ -571,7 +571,7 @@ void PropertyEditor::fillView()
         for (auto itProperty = m_nameToProperty.cbegin(), end = m_nameToProperty.cend(); itProperty != end; ++itProperty)
             m_currentBrowser->addProperty(itProperty.value());
     } else {
-        for (QtProperty *group : qAsConst(m_groups)) {
+        for (QtProperty *group : std::as_const(m_groups)) {
             QtBrowserItem *item = m_currentBrowser->addProperty(group);
             if (m_currentBrowser == m_treeBrowser)
                 m_treeBrowser->setBackgroundColor(item, propertyColor(group));

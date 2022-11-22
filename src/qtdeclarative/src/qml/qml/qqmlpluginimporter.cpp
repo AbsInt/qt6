@@ -91,7 +91,7 @@ static QStringList versionUriList(const QString &uri, QTypeRevision version)
 {
     QStringList result;
     for (int mode = QQmlImports::FullyVersioned; mode <= QQmlImports::Unversioned; ++mode) {
-        int index = uri.length();
+        int index = uri.size();
         do {
             QString versionUri = uri;
             versionUri.insert(index, QQmlImports::versionString(
@@ -129,7 +129,7 @@ static bool unloadPlugin(const std::pair<const QString, QmlPlugin> &plugin)
 void qmlClearEnginePlugins()
 {
     PluginMapPtr plugins(qmlPluginsById());
-    for (const auto &plugin : qAsConst(*plugins))
+    for (const auto &plugin : std::as_const(*plugins))
         unloadPlugin(plugin);
     plugins->clear();
 }
@@ -395,7 +395,7 @@ QString QQmlPluginImporter::resolvePlugin(const QString &qmldirPluginPath, const
     if (!qmldirPluginPathIsRelative)
         searchPaths.prepend(qmldirPluginPath);
 
-    for (const QString &pluginPath : qAsConst(searchPaths)) {
+    for (const QString &pluginPath : std::as_const(searchPaths)) {
         QString resolvedBasePath;
         if (pluginPath == QLatin1String(".")) {
             if (qmldirPluginPathIsRelative && !qmldirPluginPath.isEmpty()
@@ -501,7 +501,7 @@ bool QQmlPluginImporter::populatePluginDataVector(QVector<StaticPluginData> &res
 
 QTypeRevision QQmlPluginImporter::importPlugins() {
     const auto qmldirPlugins = qmldir->plugins();
-    const int qmldirPluginCount = qmldirPlugins.count();
+    const int qmldirPluginCount = qmldirPlugins.size();
     QTypeRevision importVersion = version;
 
     // If the path contains a version marker or if we have more than one plugin,
@@ -550,7 +550,7 @@ QTypeRevision QQmlPluginImporter::importPlugins() {
                 return QTypeRevision();
 
             for (const QString &versionUri : versionUris) {
-                for (const StaticPluginData &pair : qAsConst(pluginPairs)) {
+                for (const StaticPluginData &pair : std::as_const(pluginPairs)) {
                     for (const QJsonValueConstRef metaTagUri : pair.uriList) {
                         if (versionUri == metaTagUri.toString()) {
                             staticPluginsFound++;

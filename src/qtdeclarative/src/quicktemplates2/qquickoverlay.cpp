@@ -41,7 +41,7 @@ QList<QQuickPopup *> QQuickOverlayPrivate::stackingOrderPopups() const
     const QList<QQuickItem *> children = paintOrderChildItems();
 
     QList<QQuickPopup *> popups;
-    popups.reserve(children.count());
+    popups.reserve(children.size());
 
     for (auto it = children.crbegin(), end = children.crend(); it != end; ++it) {
         QQuickPopup *popup = qobject_cast<QQuickPopup *>((*it)->parent());
@@ -389,7 +389,7 @@ void QQuickOverlay::geometryChange(const QRectF &newGeometry, const QRectF &oldG
 {
     Q_D(QQuickOverlay);
     QQuickItem::geometryChange(newGeometry, oldGeometry);
-    for (QQuickPopup *popup : qAsConst(d->allPopups))
+    for (QQuickPopup *popup : std::as_const(d->allPopups))
         QQuickPopupPrivate::get(popup)->resizeOverlay();
 }
 

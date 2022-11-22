@@ -89,7 +89,7 @@ static void doBenchmark(QQmlEngine *engine, const QUrl &url)
     QVERIFY2(object.data(), qPrintable(component.errorString()));
 
     QObjectList objects;
-    for (QObject *object : qAsConst(*qt_qobjects())) {
+    for (QObject *object : std::as_const(*qt_qobjects())) {
         if (qobject_cast<T *>(object))
             objects += object;
     }
@@ -99,7 +99,7 @@ static void doBenchmark(QQmlEngine *engine, const QUrl &url)
             qInfo() << "\t" << object;
     }
 
-    QTest::setBenchmarkResult(objects.count(), QTest::Events);
+    QTest::setBenchmarkResult(objects.size(), QTest::Events);
 }
 
 void tst_ObjectCount::qobjects()

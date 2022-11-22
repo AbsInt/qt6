@@ -138,7 +138,7 @@ void QQmlConnections::setTarget(QObject *obj)
     if (d->targetSet && d->target == obj)
         return;
     d->targetSet = true; // even if setting to 0, it is *set*
-    for (QQmlBoundSignal *s : qAsConst(d->boundsignals)) {
+    for (QQmlBoundSignal *s : std::as_const(d->boundsignals)) {
         // It is possible that target is being changed due to one of our signal
         // handlers -> use deleteLater().
         if (s->isNotifying())
@@ -174,7 +174,7 @@ void QQmlConnections::setEnabled(bool enabled)
 
     d->enabled = enabled;
 
-    for (QQmlBoundSignal *s : qAsConst(d->boundsignals))
+    for (QQmlBoundSignal *s : std::as_const(d->boundsignals))
         s->setEnabled(d->enabled);
 
     emit enabledChanged();
@@ -203,11 +203,11 @@ void QQmlConnections::setIgnoreUnknownSignals(bool ignore)
 
 void QQmlConnectionsParser::verifyBindings(const QQmlRefPointer<QV4::ExecutableCompilationUnit> &compilationUnit, const QList<const QV4::CompiledData::Binding *> &props)
 {
-    for (int ii = 0; ii < props.count(); ++ii) {
+    for (int ii = 0; ii < props.size(); ++ii) {
         const QV4::CompiledData::Binding *binding = props.at(ii);
         const QString &propName = compilationUnit->stringAt(binding->propertyNameIndex);
 
-        const bool thirdCharacterIsValid = (propName.length() >= 2)
+        const bool thirdCharacterIsValid = (propName.size() >= 2)
                 && (propName.at(2).isUpper() || propName.at(2) == u'_');
         if (!propName.startsWith(QLatin1String("on")) || !thirdCharacterIsValid) {
             error(props.at(ii), QQmlConnections::tr("Cannot assign to non-existent property \"%1\"").arg(propName));
@@ -304,7 +304,7 @@ void QQmlConnections::connectSignalsToMethods()
             signal->takeExpression(expression);
             d->boundsignals += signal;
         } else if (!d->ignoreUnknownSignals
-                   && propName.startsWith(QLatin1String("on")) && propName.length() > 2
+                   && propName.startsWith(QLatin1String("on")) && propName.size() > 2
                    && propName.at(2).isUpper()) {
             qmlWarning(this) << tr("Detected function \"%1\" in Connections element. "
                                    "This is probably intended to be a signal handler but no "
@@ -321,7 +321,7 @@ void QQmlConnections::connectSignalsToBindings()
     QQmlData *ddata = QQmlData::get(this);
     QQmlRefPointer<QQmlContextData> ctxtdata = ddata ? ddata->outerContext : nullptr;
 
-    for (const QV4::CompiledData::Binding *binding : qAsConst(d->bindings)) {
+    for (const QV4::CompiledData::Binding *binding : std::as_const(d->bindings)) {
         Q_ASSERT(binding->type() == QV4::CompiledData::Binding::Type_Script);
         QString propName = d->compilationUnit->stringAt(binding->propertyNameIndex);
 

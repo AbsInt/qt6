@@ -1251,7 +1251,7 @@ void DocBookGenerator::generateCompactList(ListType listType, const Node *relati
         return;
 
     const int NumParagraphs = 37; // '0' to '9', 'A' to 'Z', '_'
-    qsizetype commonPrefixLen = commonPrefix.length();
+    qsizetype commonPrefixLen = commonPrefix.size();
 
     /*
       Divide the data into 37 paragraphs: 0, ..., 9, A, ..., Z,
@@ -1296,7 +1296,7 @@ void DocBookGenerator::generateCompactList(ListType listType, const Node *relati
     int paragraphOffset[NumParagraphs + 1]; // 37 + 1
     paragraphOffset[0] = 0;
     for (int i = 0; i < NumParagraphs; i++) // i = 0..36
-        paragraphOffset[i + 1] = paragraphOffset[i] + paragraph[i].count();
+        paragraphOffset[i + 1] = paragraphOffset[i] + paragraph[i].size();
 
     // No table of contents in DocBook.
 
@@ -1306,8 +1306,8 @@ void DocBookGenerator::generateCompactList(ListType listType, const Node *relati
     QString previousName;
     bool multipleOccurrences = false;
 
-    for (int i = 0; i < nmm.count(); i++) {
-        while ((curParNr < NumParagraphs) && (curParOffset == paragraph[curParNr].count())) {
+    for (int i = 0; i < nmm.size(); i++) {
+        while ((curParNr < NumParagraphs) && (curParOffset == paragraph[curParNr].size())) {
             ++curParNr;
             curParOffset = 0;
         }
@@ -1400,7 +1400,7 @@ void DocBookGenerator::generateCompactList(ListType listType, const Node *relati
         newLine();
         curParOffset++;
     }
-    if (nmm.count() > 0) {
+    if (nmm.size() > 0) {
         m_writer->writeEndElement(); // variablelist
     }
 }
@@ -1901,7 +1901,7 @@ void DocBookGenerator::generateSortedNames(const ClassNode *cn, const QList<Rela
     int index = 0;
     for (const QString &className : classNames) {
         generateFullName(classMap.value(className), cn);
-        m_writer->writeCharacters(Utilities::comma(index++, classNames.count()));
+        m_writer->writeCharacters(Utilities::comma(index++, classNames.size()));
     }
 }
 
@@ -1921,7 +1921,7 @@ void DocBookGenerator::generateSortedQmlNames(const Node *base, const NodeList &
 
     for (const QString &name : names) {
         generateFullName(classMap.value(name), base);
-        m_writer->writeCharacters(Utilities::comma(index++, names.count()));
+        m_writer->writeCharacters(Utilities::comma(index++, names.size()));
     }
 }
 
@@ -1990,7 +1990,7 @@ void DocBookGenerator::generateRequisites(const Aggregate *aggregate)
                     else if ((*r).m_access == Access::Private)
                         m_writer->writeCharacters(" (private)");
                     m_writer->writeCharacters(
-                            Utilities::comma(index++, classe->baseClasses().count()));
+                            Utilities::comma(index++, classe->baseClasses().size()));
                 }
                 ++r;
             }
@@ -2439,7 +2439,7 @@ void DocBookGenerator::generateFileList(const ExampleNode *en, bool images)
 
     m_writer->writeStartElement(dbNamespace, "itemizedlist");
 
-    for (const auto &path : qAsConst(paths)) {
+    for (const auto &path : std::as_const(paths)) {
         auto maybe_resolved_file{file_resolver.resolve(path)};
         if (!maybe_resolved_file) {
             // TODO: [uncentralized-admonition][failed-resolve-file]
@@ -3086,7 +3086,7 @@ void DocBookGenerator::generateDocBookSynopsis(const Node *node)
                             m_writer->writeCharacters(" (private)");
                         }
                         m_writer->writeCharacters(
-                                Utilities::comma(index++, classe->baseClasses().count()));
+                                Utilities::comma(index++, classe->baseClasses().size()));
                     }
                     ++r;
                 }
@@ -3656,7 +3656,7 @@ void DocBookGenerator::generateAddendum(const Node *node, Addendum type, CodeMar
         if (nodes.isEmpty())
             return;
         std::sort(nodes.begin(), nodes.end(), Node::nodeNameLessThan);
-        for (const auto node : qAsConst(nodes)) {
+        for (const auto node : std::as_const(nodes)) {
             QString msg;
             const auto pn = static_cast<const PropertyNode *>(node);
             switch (pn->role(fn)) {
@@ -4294,7 +4294,7 @@ void DocBookGenerator::generateProxyPage(Aggregate *aggregate)
     Sections sections(aggregate);
     SectionVector *detailsSections = &sections.stdDetailsSections();
 
-    for (const auto &section : qAsConst(*detailsSections)) {
+    for (const auto &section : std::as_const(*detailsSections)) {
         if (section.isEmpty())
             continue;
 

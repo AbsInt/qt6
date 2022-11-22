@@ -1084,7 +1084,7 @@ void HtmlGenerator::generateCppReferencePage(Aggregate *aggregate, CodeMarker *m
 
     bool needOtherSection = false;
 
-    for (const auto &section : qAsConst(*summarySections)) {
+    for (const auto &section : std::as_const(*summarySections)) {
         if (section.members().isEmpty() && section.reimplementedMembers().isEmpty()) {
             if (!section.inheritedMembers().isEmpty())
                 needOtherSection = true;
@@ -1113,7 +1113,7 @@ void HtmlGenerator::generateCppReferencePage(Aggregate *aggregate, CodeMarker *m
         out() << "<h3>Additional Inherited Members</h3>\n"
                  "<ul>\n";
 
-        for (const auto &section : qAsConst(*summarySections)) {
+        for (const auto &section : std::as_const(*summarySections)) {
             if (section.members().isEmpty() && !section.inheritedMembers().isEmpty())
                 generateSectionInheritedList(section, aggregate);
         }
@@ -1141,7 +1141,7 @@ void HtmlGenerator::generateCppReferencePage(Aggregate *aggregate, CodeMarker *m
         generateExtractionMark(aggregate, EndMark);
     }
 
-    for (const auto &section : qAsConst(*detailsSections)) {
+    for (const auto &section : std::as_const(*detailsSections)) {
         bool headerGenerated = false;
         if (section.isEmpty())
             continue;
@@ -1241,7 +1241,7 @@ void HtmlGenerator::generateProxyPage(Aggregate *aggregate, CodeMarker *marker)
         generateExtractionMark(aggregate, EndMark);
     }
 
-    for (const auto &section : qAsConst(*detailsSections)) {
+    for (const auto &section : std::as_const(*detailsSections)) {
         if (section.isEmpty())
             continue;
 
@@ -1631,7 +1631,7 @@ void HtmlGenerator::generateNavigationBar(const QString &title, const Node *node
             // If no nav. parent was found but the page is in a single group, use that
             if (navNodes.empty()) {
                 QStringList groups = static_cast<const PageNode *>(node)->groupNames();
-                if (groups.length() == 1) {
+                if (groups.size() == 1) {
                     const Node *groupNode =
                             m_qdb->findNodeByNameAndType(QStringList(groups[0]), &Node::isGroup);
                     if (groupNode && !groupNode->title().isEmpty())
@@ -1954,7 +1954,7 @@ void HtmlGenerator::addInheritsToMap(QMap<QString, Text> &requisites, Text *text
                 } else if (cls.m_access == Access::Private) {
                     *text << " (private)";
                 }
-                *text << Utilities::comma(index++, classe->baseClasses().count());
+                *text << Utilities::comma(index++, classe->baseClasses().size());
             }
         }
         *text << Atom::ParaRight;
@@ -2237,7 +2237,7 @@ void HtmlGenerator::generateTableOfContents(const Node *node, CodeMarker *marker
         }
         out() << "<li class=\"level" << sectionNumber << "\"><a href=\"#" << registerRef("details")
               << "\">Detailed Description</a></li>\n";
-        for (const auto &entry : qAsConst(toc)) {
+        for (const auto &entry : std::as_const(toc)) {
             if (entry->string().toInt() == 1) {
                 detailsBase = 1;
                 break;
@@ -2246,7 +2246,7 @@ void HtmlGenerator::generateTableOfContents(const Node *node, CodeMarker *marker
     } else if (sections
                && (node->isClassNode() || node->isNamespace() || node->isQmlType() ||
                    node->isJsType() || node->isQmlBasicType() || node->isJsBasicType())) {
-        for (const auto &section : qAsConst(*sections)) {
+        for (const auto &section : std::as_const(*sections)) {
             if (!section.members().isEmpty()) {
                 openUnorderedList();
                 out() << "<li class=\"level" << sectionNumber << "\"><a href=\"#"
@@ -2573,7 +2573,7 @@ void HtmlGenerator::generateAnnotatedList(const Node *relative, CodeMarker *mark
     NodeList nodes = nmm.values();
     std::sort(nodes.begin(), nodes.end(), Node::nodeNameLessThan);
 
-    for (const auto *node : qAsConst(nodes)) {
+    for (const auto *node : std::as_const(nodes)) {
         if (++row % 2 == 1)
             out() << "<tr class=\"odd topAlign\">";
         else
@@ -2641,7 +2641,7 @@ void HtmlGenerator::generateCompactList(ListType listType, const Node *relative,
         return;
 
     const int NumParagraphs = 37; // '0' to '9', 'A' to 'Z', '_'
-    qsizetype commonPrefixLen = commonPrefix.length();
+    qsizetype commonPrefixLen = commonPrefix.size();
 
     /*
       Divide the data into 37 paragraphs: 0, ..., 9, A, ..., Z,
@@ -2685,7 +2685,7 @@ void HtmlGenerator::generateCompactList(ListType listType, const Node *relative,
     qsizetype paragraphOffset[NumParagraphs + 1]; // 37 + 1
     paragraphOffset[0] = 0;
     for (int i = 0; i < NumParagraphs; i++) // i = 0..36
-        paragraphOffset[i + 1] = paragraphOffset[i] + paragraph[i].count();
+        paragraphOffset[i + 1] = paragraphOffset[i] + paragraph[i].size();
 
     /*
       Output the alphabet as a row of links.
@@ -2711,8 +2711,8 @@ void HtmlGenerator::generateCompactList(ListType listType, const Node *relative,
     QString previousName;
     bool multipleOccurrences = false;
 
-    for (int i = 0; i < nmm.count(); i++) {
-        while ((curParNr < NumParagraphs) && (curParOffset == paragraph[curParNr].count())) {
+    for (int i = 0; i < nmm.size(); i++) {
+        while ((curParNr < NumParagraphs) && (curParOffset == paragraph[curParNr].size())) {
             ++curParNr;
             curParOffset = 0;
         }
@@ -2787,7 +2787,7 @@ void HtmlGenerator::generateCompactList(ListType listType, const Node *relative,
         out() << "</dd>\n";
         curParOffset++;
     }
-    if (nmm.count() > 0)
+    if (nmm.size() > 0)
         out() << "</dl>\n";
 
     out() << "</div>\n";
@@ -2949,7 +2949,7 @@ void HtmlGenerator::generateSection(const NodeVector &nv, const Node *relative, 
     if (!nv.isEmpty()) {
         bool twoColumn = false;
         if (nv.first()->isProperty()) {
-            twoColumn = (nv.count() >= 5);
+            twoColumn = (nv.size() >= 5);
             alignNames = false;
         }
         if (alignNames) {
@@ -2969,7 +2969,7 @@ void HtmlGenerator::generateSection(const NodeVector &nv, const Node *relative, 
             if (alignNames) {
                 out() << "<tr><td class=\"memItemLeft rightAlign topAlign\"> ";
             } else {
-                if (twoColumn && i == (nv.count() + 1) / 2)
+                if (twoColumn && i == (nv.size() + 1) / 2)
                     out() << "</ul></td><td class=\"topAlign\"><ul>\n";
                 out() << "<li class=\"fn\">";
             }
@@ -3003,9 +3003,9 @@ void HtmlGenerator::generateSectionList(const Section &section, const Node *rela
         bool twoColumn = false;
         if (section.style() == Section::AllMembers) {
             alignNames = false;
-            twoColumn = (members.count() >= 16);
+            twoColumn = (members.size() >= 16);
         } else if (members.first()->isProperty()) {
-            twoColumn = (members.count() >= 5);
+            twoColumn = (members.size() >= 5);
             alignNames = false;
         }
         if (alignNames) {
@@ -3025,7 +3025,7 @@ void HtmlGenerator::generateSectionList(const Section &section, const Node *rela
             if (alignNames) {
                 out() << "<tr><td class=\"memItemLeft topAlign rightAlign\"> ";
             } else {
-                if (twoColumn && i == (members.count() + 1) / 2)
+                if (twoColumn && i == (members.size() + 1) / 2)
                     out() << "</ul></td><td class=\"topAlign\"><ul>\n";
                 out() << "<li class=\"fn\">";
             }
@@ -3240,7 +3240,7 @@ QString HtmlGenerator::highlightedCode(const QString &markedCode, const Node *re
                 bool handled = false;
                 for (int k = 0; k != nTags; ++k) {
                     const QLatin1String &tag = spanTags[2 * k];
-                    if (i + tag.size() <= src.length() && tag == QStringView(src).mid(i, tag.size())) {
+                    if (i + tag.size() <= src.size() && tag == QStringView(src).mid(i, tag.size())) {
                         html += spanTags[2 * k + 1];
                         i += tag.size();
                         handled = true;
@@ -3259,7 +3259,7 @@ QString HtmlGenerator::highlightedCode(const QString &markedCode, const Node *re
                 bool handled = false;
                 for (int k = 0; k != nTags; ++k) {
                     const QLatin1String &tag = spanTags[2 * k];
-                    if (i + tag.size() <= src.length() && tag == QStringView(src).mid(i, tag.size())) {
+                    if (i + tag.size() <= src.size() && tag == QStringView(src).mid(i, tag.size())) {
                         html += QLatin1String("</span>");
                         i += tag.size();
                         handled = true;
@@ -3314,7 +3314,7 @@ QString HtmlGenerator::protect(const QString &string)
     html += (x);
 
     QString html;
-    qsizetype n = string.length();
+    qsizetype n = string.size();
 
     for (int i = 0; i < n; ++i) {
         QChar ch = string.at(i);

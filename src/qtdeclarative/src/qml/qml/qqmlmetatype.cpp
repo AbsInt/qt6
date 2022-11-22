@@ -322,7 +322,7 @@ int QQmlMetaType::registerAutoParentFunction(const QQmlPrivate::RegisterAutoPare
 
     data->parentFunctions.append(function.function);
 
-    return data->parentFunctions.count() - 1;
+    return data->parentFunctions.size() - 1;
 }
 
 void QQmlMetaType::unregisterAutoParentFunction(const QQmlPrivate::AutoParentFunction &function)
@@ -390,7 +390,7 @@ static bool checkRegistration(
         // There can also be types that aren't even gadgets, and there can be types for namespaces.
         // We cannot check those, but namespaces should be uppercase.
 
-        int typeNameLen = typeName.length();
+        int typeNameLen = typeName.size();
         for (int ii = 0; ii < typeNameLen; ++ii) {
             if (!(typeName.at(ii).isLetterOrNumber() || typeName.at(ii) == u'_')) {
                 QString failure(QCoreApplication::translate("qmlRegisterType", "Invalid QML %1 name \"%2\""));
@@ -834,7 +834,7 @@ QQmlMetaType::RegistrationResult QQmlMetaType::registerPluginTypes(
 
         if (!failures.isEmpty()) {
             if (errors) {
-                for (const QString &failure : qAsConst(failures)) {
+                for (const QString &failure : std::as_const(failures)) {
                     QQmlError error;
                     error.setDescription(failure);
                     errors->prepend(error);
@@ -1148,7 +1148,7 @@ QQmlType QQmlMetaType::qmlType(const QString &qualifiedName, QTypeRevision versi
         return QQmlType();
 
     QHashedStringRef module(qualifiedName.constData(), slash);
-    QHashedStringRef name(qualifiedName.constData() + slash + 1, qualifiedName.length() - slash - 1);
+    QHashedStringRef name(qualifiedName.constData() + slash + 1, qualifiedName.size() - slash - 1);
 
     return qmlType(name, module, version);
 }
@@ -1406,7 +1406,7 @@ void QQmlMetaType::registerMetaObjectForType(const QMetaObject *metaobject, QQml
 
 static bool hasActiveInlineComponents(const QQmlTypePrivate *d)
 {
-    for (const QQmlType &ic : qAsConst(d->objectIdToICType)) {
+    for (const QQmlType &ic : std::as_const(d->objectIdToICType)) {
         const QQmlTypePrivate *icPriv = ic.priv();
         if (icPriv && icPriv->count() > 1)
             return true;
@@ -1471,7 +1471,7 @@ QList<QString> QQmlMetaType::qmlTypeNames()
     const QQmlMetaTypeDataPtr data;
 
     QList<QString> names;
-    names.reserve(data->nameToType.count());
+    names.reserve(data->nameToType.size());
     QQmlMetaTypeData::Names::ConstIterator it = data->nameToType.cbegin();
     while (it != data->nameToType.cend()) {
         QQmlType t(*it);
@@ -1513,7 +1513,7 @@ QList<QQmlType> QQmlMetaType::qmlSingletonTypes()
     const QQmlMetaTypeDataPtr data;
 
     QList<QQmlType> retn;
-    for (const auto t : qAsConst(data->nameToType)) {
+    for (const auto t : std::as_const(data->nameToType)) {
         QQmlType type(t);
         if (type.isSingleton())
             retn.append(type);
@@ -1525,7 +1525,7 @@ const QQmlPrivate::CachedQmlUnit *QQmlMetaType::findCachedCompilationUnit(const 
 {
     const QQmlMetaTypeDataPtr data;
 
-    for (const auto lookup : qAsConst(data->lookupCachedQmlUnit)) {
+    for (const auto lookup : std::as_const(data->lookupCachedQmlUnit)) {
         if (const QQmlPrivate::CachedQmlUnit *unit = lookup(uri)) {
             QString error;
             if (!QV4::ExecutableCompilationUnit::verifyHeader(unit->qmlData, QDateTime(), &error)) {

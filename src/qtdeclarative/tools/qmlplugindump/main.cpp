@@ -496,7 +496,7 @@ public:
             }
         }
 
-        for (const QMetaObject *meta : qAsConst(objectsToMerge)) {
+        for (const QMetaObject *meta : std::as_const(objectsToMerge)) {
             for (int index = meta->enumeratorOffset(); index < meta->enumeratorCount(); ++index)
                 dump(meta->enumerator(index));
 
@@ -629,11 +629,11 @@ private:
 
         if (typeName->endsWith('*')) {
             *isPointer = true;
-            typeName->truncate(typeName->length() - 1);
+            typeName->truncate(typeName->size() - 1);
             removePointerAndList(typeName, isList, isPointer);
         } else if (typeName->startsWith(declListPrefix)) {
             *isList = true;
-            typeName->truncate(typeName->length() - 1); // get rid of the suffix '>'
+            typeName->truncate(typeName->size() - 1); // get rid of the suffix '>'
             *typeName = typeName->mid(declListPrefix.size());
             removePointerAndList(typeName, isList, isPointer);
         }
@@ -885,7 +885,7 @@ static bool getDependencies(const QQmlEngine &engine, const QString &pluginImpor
 
     if (!importScanner.waitForFinished()) {
         std::cerr << "failure to start " << qPrintable(command);
-        for (const QString &arg : qAsConst(commandArgs))
+        for (const QString &arg : std::as_const(commandArgs))
             std::cerr << ' ' << qPrintable(arg);
         std::cerr << std::endl;
         return false;
@@ -920,18 +920,18 @@ bool dependencyBetter(const QString &lhs, const QString &rhs)
     if (leftModule > rightModule)
         return false;
 
-    if (leftSegments.length() == 1)
+    if (leftSegments.size() == 1)
         return false;
-    if (rightSegments.length() == 1)
+    if (rightSegments.size() == 1)
         return true;
 
     const QStringList leftVersion = leftSegments.at(1).split(QLatin1Char('.'));
     const QStringList rightVersion = rightSegments.at(1).split(QLatin1Char('.'));
 
     auto compareSegment = [&](int segmentIndex) {
-        if (leftVersion.length() <= segmentIndex)
-            return rightVersion.length() > segmentIndex ? 1 : 0;
-        if (rightVersion.length() <= segmentIndex)
+        if (leftVersion.size() <= segmentIndex)
+            return rightVersion.size() > segmentIndex ? 1 : 0;
+        if (rightVersion.size() <= segmentIndex)
             return -1;
 
         bool leftOk = false;
@@ -1198,7 +1198,7 @@ int main(int argc, char *argv[])
     // load the QtQml builtins and the dependencies
     {
         QByteArray code(qtQmlImportString.toUtf8());
-        for (const QString &moduleToImport : qAsConst(dependencies)) {
+        for (const QString &moduleToImport : std::as_const(dependencies)) {
             code.append("\nimport ");
             code.append(moduleToImport.toUtf8());
         }
@@ -1262,7 +1262,7 @@ int main(int argc, char *argv[])
                         QString::number(qtObjectType.version().minorVersion())).toUtf8();
         }
         // avoid importing dependencies?
-        for (const QString &moduleToImport : qAsConst(dependencies)) {
+        for (const QString &moduleToImport : std::as_const(dependencies)) {
             importCode.append("\nimport ");
             importCode.append(moduleToImport.toUtf8());
         }
@@ -1299,7 +1299,7 @@ int main(int argc, char *argv[])
             it->erase(std::unique(it->begin(), it->end()), it->end());
         }
 
-        for (const QMetaObject *mo : qAsConst(candidates)) {
+        for (const QMetaObject *mo : std::as_const(candidates)) {
             if (mo->className() != QLatin1String("Qt"))
                 metas.insert(mo);
         }
@@ -1327,13 +1327,13 @@ int main(int argc, char *argv[])
 
     // put the metaobjects into a map so they are always dumped in the same order
     QMap<QString, const QMetaObject *> nameToMeta;
-    for (const QMetaObject *meta : qAsConst(metas))
+    for (const QMetaObject *meta : std::as_const(metas))
         nameToMeta.insert(convertToId(meta), meta);
 
     Dumper dumper(&qml);
     if (relocatable)
         dumper.setRelocatableModuleUri(pluginImportUri);
-    for (const QMetaObject *meta : qAsConst(nameToMeta)) {
+    for (const QMetaObject *meta : std::as_const(nameToMeta)) {
         dumper.dump(QQmlEnginePrivate::get(&engine), meta, uncreatableMetas.contains(meta), singletonMetas.contains(meta));
     }
 

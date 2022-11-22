@@ -106,7 +106,7 @@ static Ending ending(QString str, QLocale::Language lang)
     if (str.isEmpty())
         return End_None;
 
-    switch (str.at(str.length() - 1).unicode()) {
+    switch (str.at(str.size() - 1).unicode()) {
     case 0x002e: // full stop
         if (str.endsWith(QLatin1String("...")))
             return End_Ellipsis;
@@ -624,7 +624,7 @@ bool MainWindow::openFiles(const QStringList &names, bool globalReadWrite)
                 {
                     case QMessageBox::Cancel:
                         delete dm;
-                        for (const OpenedFile &op : qAsConst(opened))
+                        for (const OpenedFile &op : std::as_const(opened))
                             delete op.dataModel;
                         return false;
                     case QMessageBox::Yes:
@@ -644,13 +644,13 @@ bool MainWindow::openFiles(const QStringList &names, bool globalReadWrite)
             waitCursor = false;
         }
         if (!closeAll()) {
-            for (const OpenedFile &op : qAsConst(opened))
+            for (const OpenedFile &op : std::as_const(opened))
                 delete op.dataModel;
             return false;
         }
     }
 
-    for (const OpenedFile &op : qAsConst(opened)) {
+    for (const OpenedFile &op : std::as_const(opened)) {
         if (op.langGuessed) {
             if (waitCursor) {
                 QApplication::restoreOverrideCursor();
@@ -668,7 +668,7 @@ bool MainWindow::openFiles(const QStringList &names, bool globalReadWrite)
     m_contextView->setUpdatesEnabled(false);
     m_messageView->setUpdatesEnabled(false);
     int totalCount = 0;
-    for (const OpenedFile &op : qAsConst(opened)) {
+    for (const OpenedFile &op : std::as_const(opened)) {
         m_phraseDict.append(QHash<QString, QList<Phrase *> >());
         m_dataModel->append(op.dataModel, op.readWrite);
         if (op.readWrite)
@@ -732,7 +732,7 @@ static QString fileFilters(bool allFirst)
     static const QString pattern(QLatin1String("%1 (*.%2);;"));
     QStringList allExtensions;
     QString filter;
-    for (const Translator::FileFormat &format : qAsConst(Translator::registeredFileFormats())) {
+    for (const Translator::FileFormat &format : std::as_const(Translator::registeredFileFormats())) {
         if (format.fileType == Translator::FileFormat::TranslationSource && format.priority >= 0) {
             filter.append(pattern.arg(format.description(), format.extension));
             allExtensions.append(QLatin1String("*.") + format.extension);
@@ -1163,7 +1163,7 @@ void MainWindow::newPhraseBook()
 
 bool MainWindow::isPhraseBookOpen(const QString &name)
 {
-    for (const PhraseBook *pb : qAsConst(m_phraseBooks)) {
+    for (const PhraseBook *pb : std::as_const(m_phraseBooks)) {
         if (pb->fileName() == name)
             return true;
     }
@@ -1180,7 +1180,7 @@ void MainWindow::openPhraseBook()
         m_phraseBookDir = QFileInfo(name).absolutePath();
         if (!isPhraseBookOpen(name)) {
             if (PhraseBook *phraseBook = doOpenPhraseBook(name)) {
-                int n = phraseBook->phrases().count();
+                int n = phraseBook->phrases().size();
                 statusBar()->showMessage(tr("%n phrase(s) loaded.", 0, n), MessageMS);
             }
         }
@@ -1260,7 +1260,7 @@ void MainWindow::addToPhraseBook()
 {
     QStringList phraseBookList;
     QHash<QString, PhraseBook *> phraseBookHash;
-    for (PhraseBook *pb : qAsConst(m_phraseBooks)) {
+    for (PhraseBook *pb : std::as_const(m_phraseBooks)) {
         if (pb->language() != QLocale::C && m_dataModel->language(m_currentIndex.model()) != QLocale::C) {
             if (pb->language() != m_dataModel->language(m_currentIndex.model()))
                 continue;
@@ -2354,7 +2354,7 @@ bool MainWindow::maybeSavePhraseBook(PhraseBook *pb)
 
 bool MainWindow::maybeSavePhraseBooks()
 {
-    for (PhraseBook *phraseBook : qAsConst(m_phraseBooks))
+    for (PhraseBook *phraseBook : std::as_const(m_phraseBooks))
         if (!maybeSavePhraseBook(phraseBook))
             return false;
     return true;
@@ -2395,7 +2395,7 @@ void MainWindow::updatePhraseDictInternal(int model)
     QHash<QString, QList<Phrase *> > &pd = m_phraseDict[model];
 
     pd.clear();
-    for (PhraseBook *pb : qAsConst(m_phraseBooks)) {
+    for (PhraseBook *pb : std::as_const(m_phraseBooks)) {
         bool before;
         if (pb->language() != QLocale::C && m_dataModel->language(model) != QLocale::C) {
             if (pb->language() != m_dataModel->language(model))
@@ -2407,7 +2407,7 @@ void MainWindow::updatePhraseDictInternal(int model)
         const auto phrases = pb->phrases();
         for (Phrase *p : phrases) {
             QString f = friendlyString(p->source());
-            if (f.length() > 0) {
+            if (f.size() > 0) {
                 f = f.split(QLatin1Char(' ')).first();
                 if (!pd.contains(f)) {
                     pd.insert(f, QList<Phrase *>());
@@ -2488,7 +2488,7 @@ void MainWindow::updateDanger(const MultiDataIndex &index, bool verbose)
             QStringList translations = m->translations();
 
             // Truncated variants are permitted to be "denormalized"
-            for (int i = 0; i < translations.count(); ++i) {
+            for (int i = 0; i < translations.size(); ++i) {
                 int sep = translations.at(i).indexOf(QChar(Translator::BinaryVariantSeparator));
                 if (sep >= 0)
                     translations[i].truncate(sep);
@@ -2497,7 +2497,7 @@ void MainWindow::updateDanger(const MultiDataIndex &index, bool verbose)
             if (m_ui.actionAccelerators->isChecked()) {
                 bool sk = haveMnemonic(source);
                 bool tk = true;
-                for (int i = 0; i < translations.count() && tk; ++i) {
+                for (int i = 0; i < translations.size() && tk; ++i) {
                     tk &= haveMnemonic(translations[i]);
                 }
 
@@ -2513,7 +2513,7 @@ void MainWindow::updateDanger(const MultiDataIndex &index, bool verbose)
             }
             if (m_ui.actionSurroundingWhitespace->isChecked()) {
                 bool whitespaceok = true;
-                for (int i = 0; i < translations.count() && whitespaceok; ++i) {
+                for (int i = 0; i < translations.size() && whitespaceok; ++i) {
                     whitespaceok &= (leadingWhitespace(source) == leadingWhitespace(translations[i]));
                     whitespaceok &= (trailingWhitespace(source) == trailingWhitespace(translations[i]));
                 }
@@ -2526,7 +2526,7 @@ void MainWindow::updateDanger(const MultiDataIndex &index, bool verbose)
             }
             if (m_ui.actionEndingPunctuation->isChecked()) {
                 bool endingok = true;
-                for (int i = 0; i < translations.count() && endingok; ++i) {
+                for (int i = 0; i < translations.size() && endingok; ++i) {
                     endingok &= (ending(source, m_dataModel->sourceLanguage(mi)) ==
                                 ending(translations[i], m_dataModel->language(mi)));
                 }
@@ -2543,7 +2543,7 @@ void MainWindow::updateDanger(const MultiDataIndex &index, bool verbose)
                 QStringList lookupWords = fsource.split(QLatin1Char(' '));
 
                 bool phraseFound;
-                for (const QString &s : qAsConst(lookupWords)) {
+                for (const QString &s : std::as_const(lookupWords)) {
                     if (m_phraseDict[mi].contains(s)) {
                         phraseFound = true;
                         const auto phrases = m_phraseDict[mi].value(s);
@@ -2577,14 +2577,14 @@ void MainWindow::updateDanger(const MultiDataIndex &index, bool verbose)
                 // between place markers in the source text and the translation text.
                 QHash<int, int> placeMarkerIndexes;
                 QString translation;
-                int numTranslations = translations.count();
+                int numTranslations = translations.size();
                 for (int pass = 0; pass < numTranslations + 1; ++pass) {
                     const QChar *uc_begin = source.unicode();
-                    const QChar *uc_end = uc_begin + source.length();
+                    const QChar *uc_end = uc_begin + source.size();
                     if (pass >= 1) {
                         translation = translations[pass - 1];
                         uc_begin = translation.unicode();
-                        uc_end = uc_begin + translation.length();
+                        uc_end = uc_begin + translation.size();
                     }
                     const QChar *c = uc_begin;
                     while (c < uc_end) {
@@ -2603,7 +2603,7 @@ void MainWindow::updateDanger(const MultiDataIndex &index, bool verbose)
                     }
                 }
 
-                for (int i : qAsConst(placeMarkerIndexes)) {
+                for (int i : std::as_const(placeMarkerIndexes)) {
                     if (i != 0) {
                         if (verbose)
                             m_errorsView->addError(mi, ErrorsView::PlaceMarkersDiffer);

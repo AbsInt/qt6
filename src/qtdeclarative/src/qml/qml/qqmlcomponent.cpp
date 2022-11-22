@@ -350,7 +350,7 @@ bool QQmlComponentPrivate::setInitialProperty(
         QV4::ScopedObject object(scope, QV4::QObjectWrapper::wrap(scope.engine, base));
         QV4::ScopedString segment(scope);
 
-        for (int i = 0; i < properties.length() - 1; ++i) {
+        for (int i = 0; i < properties.size() - 1; ++i) {
             segment = scope.engine->newString(properties.at(i));
             object = object->get(segment);
             if (scope.engine->hasException)
@@ -408,7 +408,7 @@ QQmlComponent::~QQmlComponent()
 
         if (isError()) {
             qWarning() << "This may have been caused by one of the following errors:";
-            for (const QQmlError &error : qAsConst(d->state.errors))
+            for (const QQmlError &error : std::as_const(d->state.errors))
                 qWarning().nospace().noquote() << QLatin1String("    ") << error;
         }
 
@@ -924,7 +924,7 @@ QObject *QQmlComponentPrivate::beginCreate(QQmlRefPointer<QQmlContextData> conte
     Q_Q(QQmlComponent);
     auto cleanup = qScopeGuard([this] {
         if (!state.errors.isEmpty() && lcQmlComponentGeneral().isDebugEnabled()) {
-            for (const auto &e : qAsConst(state.errors)) {
+            for (const auto &e : std::as_const(state.errors)) {
                 qCDebug(lcQmlComponentGeneral) << "QQmlComponent: " << e.toString();
             }
         }
@@ -996,7 +996,7 @@ void QQmlComponentPrivate::beginDeferred(QQmlEnginePrivate *enginePriv,
 
     deferredState->reserve(ddata->deferredData.size());
 
-    for (QQmlData::DeferredData *deferredData : qAsConst(ddata->deferredData)) {
+    for (QQmlData::DeferredData *deferredData : std::as_const(ddata->deferredData)) {
         enginePriv->inProgressCreations++;
 
         ConstructionState state;
@@ -1341,7 +1341,7 @@ static void QQmlComponent_setQmlParent(QObject *me, QObject *parent)
         QList<APF> functions = QQmlMetaType::parentFunctions();
 
         bool needParent = false;
-        for (int ii = 0; ii < functions.count(); ++ii) {
+        for (int ii = 0; ii < functions.size(); ++ii) {
             QQmlPrivate::AutoParentResult res = functions.at(ii)(me, parent);
             if (res == QQmlPrivate::Parented) {
                 needParent = false;
@@ -1420,7 +1420,7 @@ void QQmlComponentPrivate::setInitialProperties(QV4::ExecutionEngine *engine, QV
         object = o;
         const QStringList properties = name->toQString().split(QLatin1Char('.'));
         bool isTopLevelProperty = properties.size() == 1;
-        for (int i = 0; i < properties.length() - 1; ++i) {
+        for (int i = 0; i < properties.size() - 1; ++i) {
             name = engine->newString(properties.at(i));
             object = object->get(name);
             if (engine->hasException || !object) {
@@ -1586,7 +1586,7 @@ QObject *QQmlComponent::createObject(QObject *parent, const QVariantMap &propert
 
     if (!d->requiredProperties().empty()) {
         QList<QQmlError> errors;
-        for (const auto &requiredProperty: qAsConst(d->requiredProperties())) {
+        for (const auto &requiredProperty: std::as_const(d->requiredProperties())) {
             errors.push_back(QQmlComponentPrivate::unsetRequiredPropertyToQQmlError(
                     requiredProperty));
         }

@@ -419,7 +419,7 @@ QQuickMultiPointTouchArea::QQuickMultiPointTouchArea(QQuickItem *parent)
 QQuickMultiPointTouchArea::~QQuickMultiPointTouchArea()
 {
     clearTouchLists();
-    for (QObject *obj : qAsConst(_touchPoints)) {
+    for (QObject *obj : std::as_const(_touchPoints)) {
         QQuickTouchPoint *dtp = static_cast<QQuickTouchPoint*>(obj);
         if (!dtp->isQmlDefined())
             delete dtp;
@@ -578,9 +578,9 @@ void QQuickMultiPointTouchArea::updateTouchData(QEvent *event, RemapEventPoints 
         break;
     }
 
-    int numTouchPoints = touchPoints.count();
+    int numTouchPoints = touchPoints.size();
     //always remove released touches, and make sure we handle all releases before adds.
-    for (const QEventPoint &p : qAsConst(touchPoints)) {
+    for (const QEventPoint &p : std::as_const(touchPoints)) {
         QEventPoint::State touchPointState = p.state();
         int id = p.id();
         if (touchPointState & QEventPoint::State::Released) {
@@ -625,7 +625,7 @@ void QQuickMultiPointTouchArea::updateTouchData(QEvent *event, RemapEventPoints 
         if (!_stealMouse /* !ignoring gesture*/) {
             bool offerGrab = false;
             const int dragThreshold = QGuiApplication::styleHints()->startDragDistance();
-            for (const QEventPoint &p : qAsConst(touchPoints)) {
+            for (const QEventPoint &p : std::as_const(touchPoints)) {
                 if (p.state() == QEventPoint::State::Released)
                     continue;
                 const QPointF &currentPos = p.scenePosition();
@@ -659,7 +659,7 @@ void QQuickMultiPointTouchArea::updateTouchData(QEvent *event, RemapEventPoints 
 
 void QQuickMultiPointTouchArea::clearTouchLists()
 {
-    for (QObject *obj : qAsConst(_releasedTouchPoints)) {
+    for (QObject *obj : std::as_const(_releasedTouchPoints)) {
         QQuickTouchPoint *dtp = static_cast<QQuickTouchPoint*>(obj);
         if (!dtp->isQmlDefined()) {
             _touchPoints.remove(dtp->pointId());
@@ -676,7 +676,7 @@ void QQuickMultiPointTouchArea::clearTouchLists()
 void QQuickMultiPointTouchArea::addTouchPoint(const QEventPoint *p)
 {
     QQuickTouchPoint *dtp = nullptr;
-    for (QQuickTouchPoint* tp : qAsConst(_touchPrototypes)) {
+    for (QQuickTouchPoint* tp : std::as_const(_touchPrototypes)) {
         if (!tp->inUse()) {
             tp->setInUse(true);
             dtp = tp;
@@ -696,7 +696,7 @@ void QQuickMultiPointTouchArea::addTouchPoint(const QEventPoint *p)
 void QQuickMultiPointTouchArea::addTouchPoint(const QMouseEvent *e)
 {
     QQuickTouchPoint *dtp = nullptr;
-    for (QQuickTouchPoint *tp : qAsConst(_touchPrototypes)) {
+    for (QQuickTouchPoint *tp : std::as_const(_touchPrototypes)) {
         if (!tp->inUse()) {
             tp->setInUse(true);
             dtp = tp;
@@ -743,7 +743,7 @@ void QQuickMultiPointTouchArea::setTouchEventsEnabled(bool enable)
 
 void QQuickMultiPointTouchArea::addTouchPrototype(QQuickTouchPoint *prototype)
 {
-    int id = _touchPrototypes.count();
+    int id = _touchPrototypes.size();
     prototype->setPointId(id);
     _touchPrototypes.insert(id, prototype);
 }
@@ -796,7 +796,7 @@ void QQuickMultiPointTouchArea::mousePressEvent(QMouseEvent *event)
     if (event->source() != Qt::MouseEventNotSynthesized && event->source() != Qt::MouseEventSynthesizedByQt)
         return;
 
-    if (_touchPoints.count() >= _minimumTouchPoints - 1 && _touchPoints.count() < _maximumTouchPoints) {
+    if (_touchPoints.size() >= _minimumTouchPoints - 1 && _touchPoints.size() < _maximumTouchPoints) {
         updateTouchData(event);
     }
 }
@@ -844,13 +844,13 @@ void QQuickMultiPointTouchArea::ungrab(bool normalRelease)
     if (!normalRelease)
         ungrabTouchPoints();
 
-    if (_touchPoints.count()) {
-        for (QObject *obj : qAsConst(_touchPoints))
+    if (_touchPoints.size()) {
+        for (QObject *obj : std::as_const(_touchPoints))
             static_cast<QQuickTouchPoint*>(obj)->setPressed(false);
         if (!normalRelease)
             emit canceled(_touchPoints.values());
         clearTouchLists();
-        for (QObject *obj : qAsConst(_touchPoints)) {
+        for (QObject *obj : std::as_const(_touchPoints)) {
             QQuickTouchPoint *dtp = static_cast<QQuickTouchPoint*>(obj);
             if (!dtp->isQmlDefined())
                 delete dtp;

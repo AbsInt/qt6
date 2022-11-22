@@ -72,7 +72,7 @@ void QQmlQtQuick2DebugStatesDelegate::buildStatesList(bool cleanList,
         m_allStates.clear();
 
     //only root context has all instances
-    for (int ii = 0; ii < instances.count(); ++ii) {
+    for (int ii = 0; ii < instances.size(); ++ii) {
         buildStatesList(instances.at(ii));
     }
 }
@@ -84,7 +84,7 @@ void QQmlQtQuick2DebugStatesDelegate::buildStatesList(QObject *obj)
     }
 
     QObjectList children = obj->children();
-    for (int ii = 0; ii < children.count(); ++ii) {
+    for (int ii = 0; ii < children.size(); ++ii) {
         buildStatesList(children.at(ii));
     }
 }
@@ -99,7 +99,7 @@ void QQmlQtQuick2DebugStatesDelegate::updateBinding(QQmlContext *context,
     typedef QPointer<QQuickState> QuickStatePointer;
     QObject *object = property.object();
     QString propertyName = property.name();
-    for (const QuickStatePointer& statePointer : qAsConst(m_allStates)) {
+    for (const QuickStatePointer& statePointer : std::as_const(m_allStates)) {
         if (QQuickState *state = statePointer.data()) {
             // here we assume that the revert list on itself defines the base state
             if (state->isStateActive() && state->containsPropertyInRevertList(object, propertyName)) {

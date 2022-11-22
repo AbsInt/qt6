@@ -830,7 +830,7 @@ inline void QQmlPropertyCacheAliasCreator<ObjectContainer>::appendAliasPropertie
     do {
         QVector<int> pendingObjects;
 
-        for (int objectIndex: qAsConst(objectsWithAliases)) {
+        for (int objectIndex: std::as_const(objectsWithAliases)) {
             const CompiledObject &object = *objectContainer->objectAt(objectIndex);
 
             if (allAliasTargetsExist(object)) {
@@ -1013,8 +1013,8 @@ inline QQmlError QQmlPropertyCacheAliasCreator<ObjectContainer>::appendAliasesTo
     QQmlPropertyCache::Ptr propertyCache = propertyCaches->ownAt(objectIndex);
     Q_ASSERT(propertyCache);
 
-    int effectiveSignalIndex = propertyCache->signalHandlerIndexCacheStart + propertyCache->propertyIndexCache.count();
-    int effectivePropertyIndex = propertyCache->propertyIndexCacheStart + propertyCache->propertyIndexCache.count();
+    int effectiveSignalIndex = propertyCache->signalHandlerIndexCacheStart + propertyCache->propertyIndexCache.size();
+    int effectivePropertyIndex = propertyCache->propertyIndexCacheStart + propertyCache->propertyIndexCache.size();
 
     int aliasIndex = 0;
     auto alias = object.aliasesBegin();

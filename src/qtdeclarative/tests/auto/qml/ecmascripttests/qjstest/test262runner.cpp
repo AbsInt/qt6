@@ -179,17 +179,17 @@ bool Test262Runner::report()
     }
     if (!crashes.isEmpty()) {
         qDebug() << "    Encountered" << crashes.size() << "crashes in the following files:";
-        for (const QString &f : qAsConst(crashes))
+        for (const QString &f : std::as_const(crashes))
             qDebug() << "        " << f;
     }
     if (!unexpectedFailures.isEmpty()) {
         qDebug() << "    Encountered" << unexpectedFailures.size() << "unexpected failures in the following files:";
-        for (const QString &f : qAsConst(unexpectedFailures))
+        for (const QString &f : std::as_const(unexpectedFailures))
             qDebug() << "        " << f;
     }
     if (!unexpectedPasses.isEmpty()) {
         qDebug() << "    Encountered" << unexpectedPasses.size() << "unexpected passes in the following files:";
-        for (const QString &f : qAsConst(unexpectedPasses))
+        for (const QString &f : std::as_const(unexpectedPasses))
             qDebug() << "        " << f;
     }
     return crashes.isEmpty() && unexpectedFailures.isEmpty() && unexpectedPasses.isEmpty();
@@ -207,7 +207,7 @@ bool Test262Runner::loadTests()
     QString harness = "harness";
     QString intl402 = "intl402";
 
-    int pathlen = dir.path().length() + 1;
+    int pathlen = dir.path().size() + 1;
     QDirIterator it(dir, QDirIterator::Subdirectories);
     while (it.hasNext()) {
         QString file = it.next().mid(pathlen);
@@ -458,7 +458,7 @@ void Test262Runner::writeTestExpectations()
     QTemporaryFile expectations;
     expectations.open();
 
-    for (auto c : qAsConst(testCases)) {
+    for (auto c : std::as_const(testCases)) {
         TestExpectationLine line = TestExpectationLine::fromTestCase(c);
         expectations.write(line.toLine());
     }
@@ -494,7 +494,7 @@ static bool executeTest(const QByteArray &data, bool runAsModule = false, const 
             QFile f(url.toLocalFile());
             if (f.open(QIODevice::ReadOnly)) {
                 QByteArray content = harnessForModules + f.readAll();
-                module = vm.compileModule(url.toString(), QString::fromUtf8(content.constData(), content.length()), QFileInfo(f).lastModified());
+                module = vm.compileModule(url.toString(), QString::fromUtf8(content.constData(), content.size()), QFileInfo(f).lastModified());
                 if (vm.hasException)
                     break;
                 vm.injectModule(module);
@@ -692,7 +692,7 @@ TestData Test262Runner::getTestData(const TestCase &testCase)
     data.harness += harness("assert.js");
     data.harness += harness("sta.js");
 
-    for (QByteArray inc : qAsConst(data.includes)) {
+    for (QByteArray inc : std::as_const(data.includes)) {
         inc = inc.trimmed();
         data.harness += harness(inc);
     }
@@ -726,7 +726,7 @@ YamlSection::YamlSection(const QByteArray &yaml, const char *sectionName)
     start += static_cast<int>(strlen(sectionName));
     int end = yaml.indexOf('\n', start + 1);
     if (end < 0)
-        end = yaml.length();
+        end = yaml.size();
 
     int s = yaml.indexOf('[', start);
     if (s > 0 && s < end) {

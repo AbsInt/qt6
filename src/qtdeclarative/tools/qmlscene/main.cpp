@@ -86,7 +86,7 @@ void RenderStatistics::updateStats()
 
 void RenderStatistics::printTotalStats()
 {
-    int count = timePerFrame.count();
+    int count = timePerFrame.size();
     if (count == 0)
         return;
 
@@ -311,7 +311,7 @@ static void loadDummyDataFiles(QQmlEngine &engine, const QString& directory)
 
         if (dummyData) {
             fprintf(stderr, "Loaded dummy data: %s\n", qPrintable(dir.filePath(qml)));
-            qml.truncate(qml.length()-4);
+            qml.truncate(qml.size()-4);
             engine.rootContext()->setContextProperty(qml, dummyData);
             dummyData->setParent(&engine);
         }
@@ -454,7 +454,7 @@ int main(int argc, char ** argv)
     }
     QSurfaceFormat::setDefaultFormat(surfaceFormat);
 
-    for (Qt::ApplicationAttribute a : qAsConst(options.applicationAttributes))
+    for (Qt::ApplicationAttribute a : std::as_const(options.applicationAttributes))
         QCoreApplication::setAttribute(a);
     QScopedPointer<QGuiApplication> app;
 #ifdef QT_WIDGETS_LIB

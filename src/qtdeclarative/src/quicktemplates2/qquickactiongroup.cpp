@@ -128,7 +128,7 @@ public:
 
 void QQuickActionGroupPrivate::clear()
 {
-    for (QQuickAction *action : qAsConst(actions)) {
+    for (QQuickAction *action : std::as_const(actions)) {
         QQuickActionPrivate::get(action)->group = nullptr;
         QObjectPrivate::disconnect(action, &QQuickAction::triggered, this, &QQuickActionGroupPrivate::actionTriggered);
         QObjectPrivate::disconnect(action, &QQuickAction::checkedChanged, this, &QQuickActionGroupPrivate::_q_updateCurrent);
@@ -170,7 +170,7 @@ void QQuickActionGroupPrivate::actions_append(QQmlListProperty<QQuickAction> *pr
 qsizetype QQuickActionGroupPrivate::actions_count(QQmlListProperty<QQuickAction> *prop)
 {
     QQuickActionGroupPrivate *p = static_cast<QQuickActionGroupPrivate *>(prop->data);
-    return p->actions.count();
+    return p->actions.size();
 }
 
 QQuickAction *QQuickActionGroupPrivate::actions_at(QQmlListProperty<QQuickAction> *prop, qsizetype index)
@@ -307,7 +307,7 @@ void QQuickActionGroup::setEnabled(bool enabled)
     if (d->enabled == enabled)
         return;
 
-    for (QQuickAction *action : qAsConst(d->actions)) {
+    for (QQuickAction *action : std::as_const(d->actions)) {
         if (d->changeEnabled(action, enabled))
             emit action->enabledChanged(enabled);
     }

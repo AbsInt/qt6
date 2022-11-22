@@ -211,7 +211,7 @@ void QmlProfilerData::computeQmlTime()
     qint64 level0Start = -1;
     int level = 0;
 
-    for (const QQmlProfilerEvent &event : qAsConst(d->events)) {
+    for (const QQmlProfilerEvent &event : std::as_const(d->events)) {
         const QQmlProfilerEventType &type = d->eventTypes.at(event.typeIndex());
         if (type.message() != MaximumMessage)
             continue;
@@ -248,7 +248,7 @@ bool compareStartTimes(const QQmlProfilerEvent &t1, const QQmlProfilerEvent &t2)
 
 void QmlProfilerData::sortStartTimes()
 {
-    if (d->events.count() < 2)
+    if (d->events.size() < 2)
         return;
 
     // assuming startTimes is partially sorted
@@ -510,7 +510,7 @@ bool QmlProfilerData::save(const QString &filename)
         }
     };
 
-    for (const QQmlProfilerEvent &event : qAsConst(d->events)) {
+    for (const QQmlProfilerEvent &event : std::as_const(d->events)) {
         const QQmlProfilerEventType &type = d->eventTypes.at(event.typeIndex());
 
         if (type.rangeType() != MaximumRangeType) {
@@ -523,7 +523,7 @@ bool QmlProfilerData::save(const QString &filename)
             }
             case RangeEnd: {
                 QStack<qint64> &ends = rangeEnds[type.rangeType()];
-                if (starts.length() > ends.length()) {
+                if (starts.size() > ends.size()) {
                     ends.push(event.timestamp());
                     if (--level == 0)
                         sendPending();
@@ -542,7 +542,7 @@ bool QmlProfilerData::save(const QString &filename)
     }
 
     for (int i = 0; i < MaximumRangeType; ++i) {
-        while (rangeEnds[i].length() < rangeStarts[i].length()) {
+        while (rangeEnds[i].size() < rangeStarts[i].size()) {
             rangeEnds[i].push(d->traceEndTime);
             --level;
         }
@@ -597,7 +597,7 @@ void QmlProfilerData::setState(QmlProfilerData::State state)
 
 int QmlProfilerData::numLoadedEventTypes() const
 {
-    return d->eventTypes.length();
+    return d->eventTypes.size();
 }
 
 #include "moc_qmlprofilerdata.cpp"

@@ -91,7 +91,7 @@ private:
         reinterpret_cast<QList<T *> *>(p->data)->append(v);
     }
     static qsizetype qlist_count(QQmlListProperty *p) {
-        return reinterpret_cast<QList<T *> *>(p->data)->count();
+        return reinterpret_cast<QList<T *> *>(p->data)->size();
     }
     static T *qlist_at(QQmlListProperty *p, qsizetype idx) {
         return reinterpret_cast<QList<T *> *>(p->data)->at(idx);
@@ -118,7 +118,7 @@ private:
             for (qsizetype i = 0; i < length; ++i)
                 stash.append(i == idx ? v : list->at(list, i));
             list->clear(list);
-            for (T *item : qAsConst(stash))
+            for (T *item : std::as_const(stash))
                 list->append(list, item);
         } else {
             stash.reserve(length - idx - 1);
@@ -149,7 +149,7 @@ private:
         for (qsizetype i = 0; i < length; ++i)
             stash.append(list->at(list, i));
         list->clear(list);
-        for (T *item : qAsConst(stash))
+        for (T *item : std::as_const(stash))
             list->append(list, item);
     }
 };

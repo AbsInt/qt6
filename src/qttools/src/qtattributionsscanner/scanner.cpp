@@ -61,7 +61,7 @@ static bool validatePackage(Package &p, const QString &filePath, LogLevel logLev
         }
     }
 
-    for (const QString &part : qAsConst(p.qtParts)) {
+    for (const QString &part : std::as_const(p.qtParts)) {
         if (part != QLatin1String("examples")
             && part != QLatin1String("tests")
             && part != QLatin1String("tools")
@@ -298,7 +298,7 @@ static Package parseChromiumFile(QFile &file, const QString &filePath, LogLevel 
         QString line = in.readLine().trimmed();
         QStringList parts = line.split(QStringLiteral(":"));
 
-        if (parts.count() < 2)
+        if (parts.size() < 2)
             continue;
 
         QString key = parts.at(0);

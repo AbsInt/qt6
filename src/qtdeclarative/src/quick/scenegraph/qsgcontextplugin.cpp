@@ -81,7 +81,7 @@ QSGAdaptationBackendData *contextFactory()
         const QStringList args = QGuiApplication::arguments();
         QString requestedBackend = backendData->quickWindowBackendRequest; // empty or set via QQuickWindow::setSceneGraphBackend()
 
-        for (int index = 0; index < args.count(); ++index) {
+        for (int index = 0; index < args.size(); ++index) {
             if (args.at(index).startsWith(QLatin1String("--device="))) {
                 requestedBackend = args.at(index).mid(9);
                 break;
@@ -129,7 +129,7 @@ QSGAdaptationBackendData *contextFactory()
             qCDebug(QSG_LOG_INFO, "Loading backend %s", qUtf8Printable(requestedBackend));
 
             // First look for a built-in adaptation.
-            for (QSGContextFactoryInterface *builtInBackend : qAsConst(backendData->builtIns)) {
+            for (QSGContextFactoryInterface *builtInBackend : std::as_const(backendData->builtIns)) {
                 if (builtInBackend->keys().contains(requestedBackend)) {
                     backendData->factory = builtInBackend;
                     backendData->name = requestedBackend;

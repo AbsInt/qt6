@@ -285,7 +285,7 @@ void QQuickText::imageDownloadFinished()
 
     if (d->extra.isAllocated() && d->extra->nbActiveDownloads == 0) {
         bool needToUpdateLayout = false;
-        for (QQuickStyledTextImgTag *img : qAsConst(d->extra->visibleImgTags)) {
+        for (QQuickStyledTextImgTag *img : std::as_const(d->extra->visibleImgTags)) {
             if (!img->size.isValid()) {
                 img->size = img->pix->implicitSize();
                 needToUpdateLayout = true;
@@ -617,7 +617,7 @@ void QQuickTextPrivate::elideFormats(
 {
     const int end = start + length;
     const QVector<QTextLayout::FormatRange> formats = layout.formats();
-    for (int i = 0; i < formats.count(); ++i) {
+    for (int i = 0; i < formats.size(); ++i) {
         QTextLayout::FormatRange format = formats.at(i);
         const int formatLength = qMin(format.start + format.length, end) - qMax(format.start, start);
         if (formatLength > 0) {
@@ -641,7 +641,7 @@ QString QQuickTextPrivate::elidedText(qreal lineWidth, const QTextLine &line, QT
         QString elideText = layout.text().mid(line.textStart(), line.textLength());
         if (!styledText) {
             // QFontMetrics won't help eliding styled text.
-            elideText[elideText.length() - 1] = elideChar;
+            elideText[elideText.size() - 1] = elideChar;
             // Appending the elide character may push the line over the maximum width
             // in which case the elided text will need to be elided.
             QFontMetricsF metrics(layout.font());
@@ -797,7 +797,7 @@ QRectF QQuickTextPrivate::setupTextLayout(qreal *const baseline)
             if (noBreakLastLine && visibleCount == maxLineCount)
                 layout.engine()->option.setWrapMode(QTextOption::WrapAnywhere);
             if (customLayout) {
-                setupCustomLineGeometry(line, naturalHeight, layoutText.length());
+                setupCustomLineGeometry(line, naturalHeight, layoutText.size());
             } else {
                 setLineGeometry(line, lineWidth, naturalHeight);
             }
@@ -911,8 +911,8 @@ QRectF QQuickTextPrivate::setupTextLayout(qreal *const baseline)
                 // implicit width.
                 const int eol = line.isValid()
                         ? line.textStart() + line.textLength()
-                        : layoutText.length();
-                if (eol < layoutText.length() && layoutText.at(eol) != QChar::LineSeparator)
+                        : layoutText.size();
+                if (eol < layoutText.size() && layoutText.at(eol) != QChar::LineSeparator)
                     line = layout.createLine();
                 for (; line.isValid() && unwrappedLineCount <= maxLineCount; ++unwrappedLineCount)
                     line = layout.createLine();
@@ -1109,18 +1109,18 @@ QRectF QQuickTextPrivate::setupTextLayout(qreal *const baseline)
             QVector<QTextLayout::FormatRange> formats;
             switch (elideMode) {
             case QQuickText::ElideRight:
-                elideFormats(elideStart, elideText.length() - 1, 0, &formats);
+                elideFormats(elideStart, elideText.size() - 1, 0, &formats);
                 break;
             case QQuickText::ElideLeft:
-                elideFormats(elideEnd - elideText.length() + 1, elideText.length() - 1, 1, &formats);
+                elideFormats(elideEnd - elideText.size() + 1, elideText.size() - 1, 1, &formats);
                 break;
             case QQuickText::ElideMiddle: {
                 const int index = elideText.indexOf(elideChar);
                 if (index != -1) {
                     elideFormats(elideStart, index, 0, &formats);
                     elideFormats(
-                            elideEnd - elideText.length() + index + 1,
-                            elideText.length() - index - 1,
+                            elideEnd - elideText.size() + index + 1,
+                            elideText.size() - index - 1,
                             index + 1,
                             &formats);
                 }
@@ -1140,7 +1140,7 @@ QRectF QQuickTextPrivate::setupTextLayout(qreal *const baseline)
         QTextLine elidedLine = elideLayout->createLine();
         elidedLine.setPosition(QPointF(0, height));
         if (customLayout) {
-            setupCustomLineGeometry(elidedLine, height, elideText.length(), visibleCount - 1);
+            setupCustomLineGeometry(elidedLine, height, elideText.size(), visibleCount - 1);
         } else {
             setLineGeometry(elidedLine, lineWidth, height);
         }
@@ -1194,7 +1194,7 @@ void QQuickTextPrivate::setLineGeometry(QTextLine &line, qreal lineWidth, qreal 
     QList<QQuickStyledTextImgTag *> imagesInLine;
 
     if (extra.isAllocated()) {
-        for (QQuickStyledTextImgTag *image : qAsConst(extra->imgTags)) {
+        for (QQuickStyledTextImgTag *image : std::as_const(extra->imgTags)) {
             if (image->position >= line.textStart() &&
                 image->position < line.textStart() + line.textLength()) {
 
@@ -1232,7 +1232,7 @@ void QQuickTextPrivate::setLineGeometry(QTextLine &line, qreal lineWidth, qreal 
         }
     }
 
-    for (QQuickStyledTextImgTag *image : qAsConst(imagesInLine)) {
+    for (QQuickStyledTextImgTag *image : std::as_const(imagesInLine)) {
         totalLineHeight = qMax(totalLineHeight, textTop + image->pos.y() + image->size.height());
         const int leadX = line.cursorToX(image->position);
         const int trailX = line.cursorToX(image->position, QTextLine::Trailing);
@@ -2511,7 +2511,7 @@ QSGNode *QQuickText::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *data
             node->addTextLayout(QPointF(dx, dy), d->elideLayout, color, d->style, styleColor, linkColor);
 
         if (d->extra.isAllocated()) {
-            for (QQuickStyledTextImgTag *img : qAsConst(d->extra->visibleImgTags)) {
+            for (QQuickStyledTextImgTag *img : std::as_const(d->extra->visibleImgTags)) {
                 QQuickPixmap *pix = img->pix;
                 if (pix && pix->isReady())
                     node->addImage(QRectF(img->pos.x() + dx, img->pos.y() + dy, pix->width(), pix->height()), pix->image());

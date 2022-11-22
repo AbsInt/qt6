@@ -103,7 +103,7 @@ to have them tested by the examples() test.
 */
 void tst_examples::namingConvention(const QDir &d)
 {
-    for (int ii = 0; ii < excludedDirs.count(); ++ii) {
+    for (int ii = 0; ii < excludedDirs.size(); ++ii) {
         QString s = excludedDirs.at(ii);
         if (d.absolutePath().endsWith(s))
             return;
@@ -157,7 +157,7 @@ void tst_examples::namingConvention()
 
 QStringList tst_examples::findQmlFiles(const QDir &d)
 {
-    for (int ii = 0; ii < excludedDirs.count(); ++ii) {
+    for (int ii = 0; ii < excludedDirs.size(); ++ii) {
         QString s = excludedDirs.at(ii);
         if (d.absolutePath().endsWith(s))
             return QStringList();
@@ -172,7 +172,7 @@ QStringList tst_examples::findQmlFiles(const QDir &d)
         foreach (const QString &file, files) {
             if (file.at(0).isLower()) {
                 bool superContinue = false;
-                for (int ii = 0; ii < excludedFiles.count(); ++ii) {
+                for (int ii = 0; ii < excludedFiles.size(); ++ii) {
                     QString e = excludedFiles.at(ii);
                     if (d.absoluteFilePath(file).endsWith(e)) {
                         superContinue = true;
@@ -223,7 +223,7 @@ void tst_examples::sgexamples_data()
     QStringList files;
     files << findQmlFiles(examplesDir);
 
-    for (const QString &file : qAsConst(files))
+    for (const QString &file : std::as_const(files))
         QTest::newRow(qPrintable(repoSourceDir.relativeFilePath(file))) << file;
 }
 
@@ -273,7 +273,7 @@ void tst_examples::sgsnippets_data()
 
     QStringList files;
     files << findQmlFiles(snippetsDir);
-    for (const QString &file : qAsConst(files))
+    for (const QString &file : std::as_const(files))
         QTest::newRow(qPrintable(repoSourceDir.relativeFilePath(file))) << file;
 
     // Add Quick snippets.
@@ -283,7 +283,7 @@ void tst_examples::sgsnippets_data()
 
     files.clear();
     files << findQmlFiles(snippetsDir);
-    for (const QString &file : qAsConst(files))
+    for (const QString &file : std::as_const(files))
         QTest::newRow(qPrintable(repoSourceDir.relativeFilePath(file))) << file;
 }
 

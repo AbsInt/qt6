@@ -281,7 +281,7 @@ void QDBusViewer::callMethod(const BusSignature &sig)
     QMetaMethod method;
     for (int i = 0; i < mo->methodCount(); ++i) {
         const QString signature = QString::fromLatin1(mo->method(i).methodSignature());
-        if (signature.startsWith(sig.mName) && signature.at(sig.mName.length()) == QLatin1Char('('))
+        if (signature.startsWith(sig.mName) && signature.at(sig.mName.size()) == QLatin1Char('('))
             if (getDbusSignature(mo->method(i)) == sig.mTypeSig)
                 method = mo->method(i);
     }
@@ -298,7 +298,7 @@ void QDBusViewer::callMethod(const BusSignature &sig)
     const QList<QByteArray> paramTypes = method.parameterTypes();
     const QList<QByteArray> paramNames = method.parameterNames();
     QList<int> types; // remember the low-level D-Bus type
-    for (int i = 0; i < paramTypes.count(); ++i) {
+    for (int i = 0; i < paramTypes.size(); ++i) {
         const QByteArray paramType = paramTypes.at(i);
         if (paramType.endsWith('&'))
             continue; // ignore OUT parameters
@@ -319,7 +319,7 @@ void QDBusViewer::callMethod(const BusSignature &sig)
 
     // Try to convert the values we got as closely as possible to the
     // dbus signature. This is especially important for those input as strings
-    for (int i = 0; i < args.count(); ++i) {
+    for (int i = 0; i < args.size(); ++i) {
         QVariant a = args.at(i);
         int desttype = types.at(i);
         if (desttype < int(QMetaType::User) && desttype != qMetaTypeId<QVariantMap>()) {
@@ -445,7 +445,7 @@ void QDBusViewer::dumpMessage(const QDBusMessage &message)
         out += QLatin1String("&nbsp;&nbsp;(no arguments)");
     } else {
         out += QLatin1String("&nbsp;&nbsp;Arguments: ");
-        for (const QVariant &arg : qAsConst(args)) {
+        for (const QVariant &arg : std::as_const(args)) {
             QString str = QDBusUtil::argumentToString(arg).toHtmlEscaped();
             // turn object paths into clickable links
             str.replace(objectPathRegExp, QLatin1String("[ObjectPath: <a href=\"qdbus://bus\\1\">\\1</a>]"));

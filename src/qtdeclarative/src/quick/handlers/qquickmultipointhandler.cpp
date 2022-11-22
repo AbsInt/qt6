@@ -51,7 +51,7 @@ bool QQuickMultiPointHandler::wantsPointerEvent(QPointerEvent *event)
     // currentPoints, because we don't want to lose the pressPosition, and do
     // not want to reshuffle the order either).
     const auto candidatePoints = eligiblePoints(event);
-    if (candidatePoints.count() != d->currentPoints.count()) {
+    if (candidatePoints.size() != d->currentPoints.size()) {
         d->currentPoints.clear();
         if (active()) {
             setActive(false);
@@ -64,7 +64,7 @@ bool QQuickMultiPointHandler::wantsPointerEvent(QPointerEvent *event)
 
     ret = ret || (candidatePoints.size() >= minimumPointCount() && candidatePoints.size() <= maximumPointCount());
     if (ret) {
-        const int c = candidatePoints.count();
+        const int c = candidatePoints.size();
         d->currentPoints.resize(c);
         for (int i = 0; i < c; ++i) {
             d->currentPoints[i].reset(event, candidatePoints[i]);
@@ -265,7 +265,7 @@ bool QQuickMultiPointHandler::hasCurrentPoints(QPointerEvent *event)
         return false;
     // TODO optimize: either ensure the points are sorted,
     // or use std::equal with a predicate
-    for (const QQuickHandlerPoint &p : qAsConst(d->currentPoints)) {
+    for (const QQuickHandlerPoint &p : std::as_const(d->currentPoints)) {
         const QEventPoint *ep = event->pointById(p.id());
         if (!ep)
             return false;
@@ -302,7 +302,7 @@ QVector<QQuickMultiPointHandler::PointData> QQuickMultiPointHandler::angles(cons
 {
     Q_D(const QQuickMultiPointHandler);
     QVector<PointData> angles;
-    angles.reserve(d->currentPoints.count());
+    angles.reserve(d->currentPoints.size());
     for (const QQuickHandlerPoint &p : d->currentPoints) {
         qreal angle = QLineF(ref, p.scenePosition()).angle();
         angles.append(PointData(p.id(), -angle));     // convert to clockwise, to be consistent with QQuickItem::rotation
@@ -362,7 +362,7 @@ bool QQuickMultiPointHandler::grabPoints(QPointerEvent *event, const QVector<QEv
         }
     }
     if (allowed) {
-        for (const auto &point : qAsConst(points))
+        for (const auto &point : std::as_const(points))
             setExclusiveGrab(event, point);
     }
     return allowed;

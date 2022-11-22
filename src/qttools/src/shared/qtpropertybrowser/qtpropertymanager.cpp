@@ -405,12 +405,12 @@ void QtMetaEnumProvider::initLocale()
 
         if (!territories.isEmpty() && !m_languageToIndex.contains(language)) {
             territories = sortTerritories(territories);
-            int langIdx = m_languageEnumNames.count();
+            int langIdx = m_languageEnumNames.size();
             m_indexToLanguage[langIdx] = language;
             m_languageToIndex[language] = langIdx;
             QStringList territoryNames;
             int territoryIdx = 0;
-            for (QLocale::Territory territory : qAsConst(territories)) {
+            for (QLocale::Territory territory : std::as_const(territories)) {
                 territoryNames << QLocale::territoryToString(territory);
                 m_indexToTerritory[langIdx][territoryIdx] = territory;
                 m_territoryToIndex[language][territory] = territoryIdx;
@@ -4693,7 +4693,7 @@ QString QtEnumPropertyManager::valueText(const QtProperty *property) const
     const QtEnumPropertyManagerPrivate::Data &data = it.value();
 
     const int v = data.val;
-    if (v >= 0 && v < data.enumNames.count())
+    if (v >= 0 && v < data.enumNames.size())
         return data.enumNames.at(v);
     return QString();
 }
@@ -4731,10 +4731,10 @@ void QtEnumPropertyManager::setValue(QtProperty *property, int val)
 
     QtEnumPropertyManagerPrivate::Data data = it.value();
 
-    if (val >= data.enumNames.count())
+    if (val >= data.enumNames.size())
         return;
 
-    if (val < 0 && data.enumNames.count() > 0)
+    if (val < 0 && data.enumNames.size() > 0)
         return;
 
     if (val < 0)
@@ -4776,7 +4776,7 @@ void QtEnumPropertyManager::setEnumNames(QtProperty *property, const QStringList
 
     data.val = -1;
 
-    if (enumNames.count() > 0)
+    if (enumNames.size() > 0)
         data.val = 0;
 
     it.value() = data;
@@ -5052,7 +5052,7 @@ void QtFlagPropertyManager::setValue(QtProperty *property, int val)
     if (data.val == val)
         return;
 
-    if (val > (1 << data.flagNames.count()) - 1)
+    if (val > (1 << data.flagNames.size()) - 1)
         return;
 
     if (val < 0)
@@ -5101,7 +5101,7 @@ void QtFlagPropertyManager::setFlagNames(QtProperty *property, const QStringList
 
     const auto pfit = d_ptr->m_propertyToFlags.find(property);
     if (pfit != d_ptr->m_propertyToFlags.end()) {
-        for (QtProperty *prop : qAsConst(pfit.value())) {
+        for (QtProperty *prop : std::as_const(pfit.value())) {
             if (prop) {
                 delete prop;
                 d_ptr->m_flagToProperty.remove(prop);
@@ -5141,7 +5141,7 @@ void QtFlagPropertyManager::uninitializeProperty(QtProperty *property)
 {
     const auto it = d_ptr->m_propertyToFlags.find(property);
     if (it != d_ptr->m_propertyToFlags.end()) {
-        for (QtProperty *prop : qAsConst(it.value()))  {
+        for (QtProperty *prop : std::as_const(it.value()))  {
             if (prop) {
                 d_ptr->m_flagToProperty.remove(prop);
                 delete prop;

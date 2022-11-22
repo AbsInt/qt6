@@ -66,7 +66,7 @@ void QQmlJSFunctionInitializer::populateSignature(
         arguments = ast->formals->formals();
 
     if (function->argumentTypes.isEmpty()) {
-        for (const QQmlJS::AST::BoundName &argument : qAsConst(arguments)) {
+        for (const QQmlJS::AST::BoundName &argument : std::as_const(arguments)) {
             if (argument.typeAnnotation) {
                 if (const auto type = m_typeResolver->typeFromAST(argument.typeAnnotation->type)) {
                     function->argumentTypes.append(
@@ -97,7 +97,7 @@ void QQmlJSFunctionInitializer::populateSignature(
         }
     }
 
-    for (int i = QQmlJSCompilePass::FirstArgument + function->argumentTypes.length();
+    for (int i = QQmlJSCompilePass::FirstArgument + function->argumentTypes.size();
          i < context->registerCountInFunction; ++i) {
         function->registerTypes.append(m_typeResolver->tracked(
                                            m_typeResolver->globalType(m_typeResolver->voidType())));

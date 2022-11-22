@@ -93,7 +93,7 @@ void tst_focus::navigation()
     QVERIFY(QTest::qWaitForWindowActive(&view));
     QVERIFY(QGuiApplication::focusWindow() == &view);
 
-    for (const QString &name : qAsConst(order)) {
+    for (const QString &name : std::as_const(order)) {
         QKeyEvent event(QEvent::KeyPress, key, Qt::NoModifier);
         QGuiApplication::sendEvent(&view, &event);
         QVERIFY(event.isAccepted());
@@ -421,7 +421,7 @@ void tst_focus::visualFocus()
 
     QQuickItem *column = view.rootObject();
     QVERIFY(column);
-    QCOMPARE(column->childItems().count(), 2);
+    QCOMPARE(column->childItems().size(), 2);
 
     QQuickControl *button = qobject_cast<QQuickControl *>(column->childItems().first());
     QVERIFY(button);

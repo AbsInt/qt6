@@ -981,7 +981,7 @@ void QQuickImageParticle::resetColor()
 {
     m_explicitColor = false;
     for (auto groupId : groupIds()) {
-        for (QQuickParticleData* d : qAsConst(m_system->groupData[groupId]->data)) {
+        for (QQuickParticleData* d : std::as_const(m_system->groupData[groupId]->data)) {
             if (d->colorOwner == this) {
                 d->colorOwner = nullptr;
             }
@@ -1000,7 +1000,7 @@ void QQuickImageParticle::resetRotation()
 {
     m_explicitRotation = false;
     for (auto groupId : groupIds()) {
-        for (QQuickParticleData* d : qAsConst(m_system->groupData[groupId]->data)) {
+        for (QQuickParticleData* d : std::as_const(m_system->groupData[groupId]->data)) {
             if (d->rotationOwner == this) {
                 d->rotationOwner = nullptr;
             }
@@ -1017,7 +1017,7 @@ void QQuickImageParticle::resetDeformation()
 {
     m_explicitDeformation = false;
     for (auto groupId : groupIds()) {
-        for (QQuickParticleData* d : qAsConst(m_system->groupData[groupId]->data)) {
+        for (QQuickParticleData* d : std::as_const(m_system->groupData[groupId]->data)) {
             if (d->deformationOwner == this) {
                 d->deformationOwner = nullptr;
             }
@@ -1042,7 +1042,7 @@ void QQuickImageParticle::createEngine()
 {
     if (m_spriteEngine)
         delete m_spriteEngine;
-    if (m_sprites.count()) {
+    if (m_sprites.size()) {
         m_spriteEngine = new QQuickSpriteEngine(m_sprites, this);
         connect(m_spriteEngine, SIGNAL(stateChanged(int)),
                 this, SLOT(spriteAdvance(int)), Qt::DirectConnection);
@@ -1244,7 +1244,7 @@ void QQuickImageParticle::finishBuildParticleNodes(QSGNode** node)
 
     m_debugMode = m_system->m_debugMode;
 
-    if (m_sprites.count() || m_bypassOptimizations) {
+    if (m_sprites.size() || m_bypassOptimizations) {
         perfLevel = Sprites;
     } else if (m_colorTable || m_sizeTable || m_opacityTable) {
         perfLevel = Tabled;
@@ -1261,7 +1261,7 @@ void QQuickImageParticle::finishBuildParticleNodes(QSGNode** node)
 
     for (auto groupId : groupIds()) {
         //For sharing higher levels, need to have highest used so it renders
-        for (QQuickParticlePainter* p : qAsConst(m_system->groupData[groupId]->painters)) {
+        for (QQuickParticlePainter* p : std::as_const(m_system->groupData[groupId]->painters)) {
             QQuickImageParticle* other = qobject_cast<QQuickImageParticle*>(p);
             if (other){
                 if (other->perfLevel > perfLevel) {
@@ -1616,7 +1616,7 @@ void QQuickImageParticle::spritesUpdate(qreal time)
     ImageMaterialData *state = getState(m_material);
     // Sprite progression handled CPU side, so as to have per-frame control.
     for (auto groupId : groupIds()) {
-        for (QQuickParticleData* mainDatum : qAsConst(m_system->groupData[groupId]->data)) {
+        for (QQuickParticleData* mainDatum : std::as_const(m_system->groupData[groupId]->data)) {
             QSGGeometryNode *node = m_nodes[groupId];
             if (!node)
                 continue;
@@ -1624,7 +1624,7 @@ void QQuickImageParticle::spritesUpdate(qreal time)
             //      This is particularly important for cut-up sprites.
             QQuickParticleData* datum = (mainDatum->animationOwner == this ? mainDatum : getShadowDatum(mainDatum));
             int spriteIdx = 0;
-            for (int i = 0; i<m_startsIdx.count(); i++) {
+            for (int i = 0; i<m_startsIdx.size(); i++) {
                 if (m_startsIdx[i].second == groupId){
                     spriteIdx = m_startsIdx[i].first + datum->index;
                     break;
@@ -1677,12 +1677,12 @@ void QQuickImageParticle::spritesUpdate(qreal time)
 
 void QQuickImageParticle::spriteAdvance(int spriteIdx)
 {
-    if (!m_startsIdx.count())//Probably overly defensive
+    if (!m_startsIdx.size())//Probably overly defensive
         return;
 
     int gIdx = -1;
     int i;
-    for (i = 0; i<m_startsIdx.count(); i++) {
+    for (i = 0; i<m_startsIdx.size(); i++) {
         if (spriteIdx < m_startsIdx[i].first) {
             gIdx = m_startsIdx[i-1].second;
             break;

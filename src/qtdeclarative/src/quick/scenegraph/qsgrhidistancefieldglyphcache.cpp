@@ -35,7 +35,7 @@ QSGRhiDistanceFieldGlyphCache::~QSGRhiDistanceFieldGlyphCache()
     // A plain delete should work, but just in case commitResourceUpdates was
     // not called and something is enqueued on the update batch for a texture,
     // defer until the end of the frame.
-    for (int i = 0; i < m_textures.count(); ++i) {
+    for (int i = 0; i < m_textures.size(); ++i) {
         if (m_textures[i].texture)
             m_textures[i].texture->deleteLater();
     }
@@ -43,7 +43,7 @@ QSGRhiDistanceFieldGlyphCache::~QSGRhiDistanceFieldGlyphCache()
     delete m_areaAllocator;
 
     // should be empty, but just in case
-    for (QRhiTexture *t : qAsConst(m_pendingDispose))
+    for (QRhiTexture *t : std::as_const(m_pendingDispose))
         t->deleteLater();
 }
 
@@ -526,7 +526,7 @@ void QSGRhiDistanceFieldGlyphCache::commitResourceUpdates(QRhiResourceUpdateBatc
     }
 
     // now let's assume the resource updates will be committed in this frame
-    for (QRhiTexture *t : qAsConst(m_pendingDispose))
+    for (QRhiTexture *t : std::as_const(m_pendingDispose))
         t->deleteLater(); // will be deleted after the frame is submitted -> safe
 
     m_pendingDispose.clear();
