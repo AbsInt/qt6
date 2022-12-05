@@ -258,7 +258,8 @@ void DocParser::initialize(const Config &config, FileResolver& file_resolver)
 
     // If any of the formats define quotinginformation, activate quoting
     DocParser::s_quoting = config.getBool(CONFIG_QUOTINGINFORMATION);
-    for (const auto &format : config.getOutputFormats())
+    const auto &outputFormats = config.getOutputFormats();
+    for (const auto &format : outputFormats)
         DocParser::s_quoting = DocParser::s_quoting
                 || config.getBool(format + Config::dot + CONFIG_QUOTINGINFORMATION);
 
@@ -1871,7 +1872,7 @@ void DocParser::quoteFromFile(const QString& filename)
             (*file_resolver).get_search_directories().cend(),
             u"Searched directories:"_qs,
             std::plus(),
-            [](const DirectoryPath& directory_path){ return " " + directory_path.value(); }
+            [](const DirectoryPath &directory_path) -> QString { return u' ' + directory_path.value(); }
         );
 
         location().warning(u"Cannot find file to quote from: %1"_qs.arg(filename), details);

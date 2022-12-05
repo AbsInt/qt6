@@ -437,6 +437,7 @@ private:
     const bool m_windowsAnimationsEnabled;
     QPointingDevice *m_touchScreen;
     const int m_fuzz;
+    QPalette simplePalette();
 };
 
 // Testing get/set functions
@@ -3706,7 +3707,8 @@ void tst_QWidget::raise()
 
     for (int i = 0; i < 5; ++i)
         child2->raise();
-    QTest::qWait(50);
+    QVERIFY(QTest::qWaitForWindowExposed(child2));
+    QApplication::processEvents(); // process events that could be triggered by raise();
 
     for (UpdateWidget *child : std::as_const(allChildren)) {
         int expectedPaintEvents = child == child2 ? 1 : 0;
@@ -3735,6 +3737,7 @@ void tst_QWidget::raise()
     onTop->show();
     QVERIFY(QTest::qWaitForWindowExposed(&topLevel));
     QTRY_VERIFY(onTop->numPaintEvents > 0);
+    QApplication::processEvents(); // process remaining paint events if there's more than one
     onTop->reset();
 
     // Reset all the children.
@@ -3743,7 +3746,8 @@ void tst_QWidget::raise()
 
     for (int i = 0; i < 5; ++i)
         child3->raise();
-    QTest::qWait(50);
+    QVERIFY(QTest::qWaitForWindowExposed(child3));
+    QApplication::processEvents(); // process events that could be triggered by raise();
 
     QCOMPARE(onTop->numPaintEvents, 0);
     QCOMPARE(onTop->numZOrderChangeEvents, 0);
@@ -4486,22 +4490,20 @@ class StaticWidget : public QWidget
 Q_OBJECT
 public:
     bool partial = false;
-    bool gotPaintEvent = false;
     QRegion paintedRegion;
 
-    explicit StaticWidget(QWidget *parent = nullptr) : QWidget(parent)
+    explicit StaticWidget(const QPalette &palette, QWidget *parent = nullptr) : QWidget(parent)
     {
         setAttribute(Qt::WA_StaticContents);
         setAttribute(Qt::WA_OpaquePaintEvent);
-        setPalette(Qt::red); // Make sure we have an opaque palette.
+        setPalette(palette);
         setAutoFillBackground(true);
     }
 
     void paintEvent(QPaintEvent *e) override
     {
         paintedRegion += e->region();
-        gotPaintEvent = true;
-//        qDebug() << "paint" << e->region();
+        ++paintEvents;
         // Look for a full update, set partial to false if found.
         for (QRect r : e->region()) {
             partial = (r != rect());
@@ -4509,6 +4511,28 @@ public:
                 break;
         }
     }
+
+    // Wait timeout ms until at least one paint event has been consumed
+    // and the counter is no longer increasing.
+    // => making sure to consume multiple paint events relating to one operation
+    // before returning true.
+    bool waitForPaintEvent(int timeout = 100)
+    {
+        QDeadlineTimer deadline(timeout);
+        int count = -1;
+        while (!deadline.hasExpired() && count != paintEvents) {
+            count = paintEvents;
+            QCoreApplication::processEvents();
+            if (count == paintEvents && count > 0) {
+                paintEvents = 0;
+                return true;
+            }
+        }
+        paintEvents = 0;
+        return false;
+    }
+private:
+    int paintEvents = 0;
 };
 
 /*
@@ -4517,99 +4541,75 @@ public:
 */
 void tst_QWidget::optimizedResizeMove()
 {
-    if (m_platform == QStringLiteral("wayland"))
-        QSKIP("Wayland: This fails. Figure out why.");
     QWidget parent;
-    parent.setWindowTitle(QLatin1String(QTest::currentTestFunction()));
+    parent.setPalette(simplePalette());
+    parent.setWindowTitle(QTest::currentTestFunction());
     parent.resize(400, 400);
 
-    StaticWidget staticWidget(&parent);
-    staticWidget.gotPaintEvent = false;
+    StaticWidget staticWidget(simplePalette(), &parent);
     staticWidget.move(150, 150);
     staticWidget.resize(150, 150);
     parent.show();
     QVERIFY(QTest::qWaitForWindowExposed(&parent));
-    QTRY_VERIFY(staticWidget.gotPaintEvent);
+    QVERIFY(staticWidget.waitForPaintEvent());
 
-    staticWidget.gotPaintEvent = false;
     staticWidget.move(staticWidget.pos() + QPoint(10, 10));
-    QTest::qWait(20);
-    QCOMPARE(staticWidget.gotPaintEvent, false);
+    QVERIFY(!staticWidget.waitForPaintEvent());
 
-    staticWidget.gotPaintEvent = false;
     staticWidget.move(staticWidget.pos() + QPoint(-10, -10));
-    QTest::qWait(20);
-    QCOMPARE(staticWidget.gotPaintEvent, false);
+    QVERIFY(!staticWidget.waitForPaintEvent());
 
-    staticWidget.gotPaintEvent = false;
     staticWidget.move(staticWidget.pos() + QPoint(-10, 10));
-    QTest::qWait(20);
-    QCOMPARE(staticWidget.gotPaintEvent, false);
+    QVERIFY(!staticWidget.waitForPaintEvent());
 
-    staticWidget.gotPaintEvent = false;
     staticWidget.resize(staticWidget.size() + QSize(10, 10));
-    QTRY_VERIFY(staticWidget.gotPaintEvent);
+    QVERIFY(staticWidget.waitForPaintEvent());
     QCOMPARE(staticWidget.partial, true);
 
-    staticWidget.gotPaintEvent = false;
     staticWidget.resize(staticWidget.size() + QSize(-10, -10));
-    QTest::qWait(20);
-    QCOMPARE(staticWidget.gotPaintEvent, false);
+    QVERIFY(!staticWidget.waitForPaintEvent());
 
-    staticWidget.gotPaintEvent = false;
     staticWidget.resize(staticWidget.size() + QSize(10, -10));
-    QTRY_VERIFY(staticWidget.gotPaintEvent);
+    QVERIFY(staticWidget.waitForPaintEvent());
     QCOMPARE(staticWidget.partial, true);
 
-    staticWidget.gotPaintEvent = false;
     staticWidget.move(staticWidget.pos() + QPoint(10, 10));
     staticWidget.resize(staticWidget.size() + QSize(-10, -10));
-    QTest::qWait(20);
-    QCOMPARE(staticWidget.gotPaintEvent, false);
+    QVERIFY(!staticWidget.waitForPaintEvent());
 
-    staticWidget.gotPaintEvent = false;
     staticWidget.move(staticWidget.pos() + QPoint(10, 10));
     staticWidget.resize(staticWidget.size() + QSize(10, 10));
-    QTRY_VERIFY(staticWidget.gotPaintEvent);
+    QVERIFY(staticWidget.waitForPaintEvent());
     QCOMPARE(staticWidget.partial, true);
 
-    staticWidget.gotPaintEvent = false;
     staticWidget.move(staticWidget.pos() + QPoint(-10, -10));
     staticWidget.resize(staticWidget.size() + QSize(-10, -10));
-    QTest::qWait(20);
-    QCOMPARE(staticWidget.gotPaintEvent, false);
+    QVERIFY(!staticWidget.waitForPaintEvent());
 
     staticWidget.setAttribute(Qt::WA_StaticContents, false);
-    staticWidget.gotPaintEvent = false;
     staticWidget.move(staticWidget.pos() + QPoint(-10, -10));
     staticWidget.resize(staticWidget.size() + QSize(-10, -10));
-    QTRY_VERIFY(staticWidget.gotPaintEvent);
+    QVERIFY(staticWidget.waitForPaintEvent());
     QCOMPARE(staticWidget.partial, false);
     staticWidget.setAttribute(Qt::WA_StaticContents, true);
 
     staticWidget.setAttribute(Qt::WA_StaticContents, false);
-    staticWidget.gotPaintEvent = false;
     staticWidget.move(staticWidget.pos() + QPoint(10, 10));
-    QTest::qWait(20);
-    QCOMPARE(staticWidget.gotPaintEvent, false);
+    QVERIFY(!staticWidget.waitForPaintEvent());
     staticWidget.setAttribute(Qt::WA_StaticContents, true);
 }
 
 void tst_QWidget::optimizedResize_topLevel()
 {
-    if (QGuiApplication::platformName().startsWith(QLatin1String("wayland"), Qt::CaseInsensitive))
-        QSKIP("Wayland: This fails. Figure out why.");
-
     if (QHighDpiScaling::isActive())
         QSKIP("Skip due to rounding errors in the regions.");
-    StaticWidget topLevel;
+    StaticWidget topLevel(simplePalette());
+    topLevel.setPalette(simplePalette());
     topLevel.setWindowTitle(QLatin1String(QTest::currentTestFunction()));
-    topLevel.gotPaintEvent = false;
     topLevel.show();
     QVERIFY(QTest::qWaitForWindowExposed(&topLevel));
-    QTRY_VERIFY(topLevel.gotPaintEvent);
+    QVERIFY(topLevel.waitForPaintEvent());
 
-    topLevel.gotPaintEvent = false;
     topLevel.partial = false;
     topLevel.paintedRegion = QRegion();
 
@@ -4634,7 +4634,7 @@ void tst_QWidget::optimizedResize_topLevel()
     QRegion expectedUpdateRegion(topLevel.rect());
     expectedUpdateRegion -= QRect(QPoint(), topLevel.size() - QSize(10, 10));
 
-    QTRY_VERIFY(topLevel.gotPaintEvent);
+    QVERIFY(topLevel.waitForPaintEvent());
     if (m_platform == QStringLiteral("xcb") || m_platform == QStringLiteral("offscreen"))
         QSKIP("QTBUG-26424");
     QCOMPARE(topLevel.partial, true);
@@ -5214,6 +5214,7 @@ void tst_QWidget::update()
     Q_CHECK_PAINTEVENTS
 
     UpdateWidget w;
+    w.setPalette(simplePalette());
     w.setWindowTitle(QLatin1String(QTest::currentTestFunction()));
     w.resize(100, 100);
     centerOnScreen(&w);
@@ -5227,6 +5228,7 @@ void tst_QWidget::update()
     w.reset();
 
     UpdateWidget child(&w);
+    child.setPalette(simplePalette());
     child.setGeometry(10, 10, 80, 80);
     child.show();
 
@@ -5298,6 +5300,7 @@ void tst_QWidget::update()
 
     // overlapping sibling
     UpdateWidget sibling(&w);
+    sibling.setPalette(simplePalette());
     child.setGeometry(10, 10, 20, 20);
     sibling.setGeometry(15, 15, 20, 20);
     sibling.show();
@@ -5377,9 +5380,11 @@ void tst_QWidget::isOpaque()
 {
 #ifndef Q_OS_MACOS
     QWidget w;
+    w.setPalette(simplePalette());
     QVERIFY(::isOpaque(&w));
 
     QWidget child(&w);
+    child.setPalette(simplePalette());
     QVERIFY(!::isOpaque(&child));
 
     child.setAutoFillBackground(true);
@@ -5461,6 +5466,7 @@ void tst_QWidget::scroll()
     const int h = qMin(500, screen->availableGeometry().height() / 2);
 
     UpdateWidget updateWidget;
+    updateWidget.setPalette(simplePalette());
     updateWidget.resize(w, h);
     updateWidget.reset();
     updateWidget.move(m_availableTopLeft);
@@ -8562,6 +8568,7 @@ void tst_QWidget::updateWhileMinimized()
     QSKIP("Platform does not support showMinimized()");
 #endif
     UpdateWidget widget;
+    widget.setPalette(simplePalette());
     widget.setWindowTitle(QLatin1String(QTest::currentTestFunction()));
    // Filter out activation change and focus events to avoid update() calls in QWidget.
     widget.updateOnActivationChangeAndFocusIn = false;
@@ -9135,6 +9142,7 @@ void tst_QWidget::doubleRepaint()
         QSKIP("Not having window server access causes the wrong number of repaints to be issues");
 #endif
    UpdateWidget widget;
+   widget.setPalette(simplePalette());
    widget.setWindowTitle(QLatin1String(QTest::currentTestFunction()));
    centerOnScreen(&widget);
    widget.setFocusPolicy(Qt::StrongFocus);
@@ -9166,6 +9174,7 @@ void tst_QWidget::resizeInPaintEvent()
     QWidget window;
     window.setWindowTitle(QLatin1String(QTest::currentTestFunction()));
     UpdateWidget widget(&window);
+    widget.setPalette(simplePalette());
     window.resize(200, 200);
     window.show();
     QApplication::setActiveWindow(&window);
@@ -9297,6 +9306,7 @@ public slots:
 void tst_QWidget::setMaskInResizeEvent()
 {
     UpdateWidget w;
+    w.setPalette(simplePalette());
     w.setWindowTitle(QLatin1String(QTest::currentTestFunction()));
     w.reset();
     w.resize(200, 200);
@@ -9376,6 +9386,7 @@ void tst_QWidget::immediateRepaintAfterInvalidateBackingStore()
         QSKIP("We don't support immediate repaint right after show on other platforms.");
 
     QScopedPointer<UpdateWidget> widget(new UpdateWidget);
+    widget->setPalette(simplePalette());
     widget->setWindowTitle(QLatin1String(QTest::currentTestFunction()));
     centerOnScreen(widget.data());
     widget->show();
@@ -9827,6 +9838,7 @@ void tst_QWidget::setClearAndResizeMask()
         QSKIP("Wayland: This fails. Figure out why.");
 
     UpdateWidget topLevel;
+    topLevel.setPalette(simplePalette());
     topLevel.setWindowTitle(QLatin1String(QTest::currentTestFunction()));
     topLevel.resize(160, 160);
     centerOnScreen(&topLevel);
@@ -9861,6 +9873,7 @@ void tst_QWidget::setClearAndResizeMask()
     }
 
     UpdateWidget child(&topLevel);
+    child.setPalette(simplePalette());
     child.setAutoFillBackground(true); // NB! Opaque child.
     child.setPalette(Qt::red);
     child.resize(100, 100);
@@ -10661,6 +10674,7 @@ void tst_QWidget::focusWidget_task254563()
 void tst_QWidget::destroyBackingStore()
 {
     UpdateWidget w;
+    w.setPalette(simplePalette());
     w.setWindowTitle(QLatin1String(QTest::currentTestFunction()));
     centerOnScreen(&w);
     w.reset();
@@ -12367,6 +12381,7 @@ void tst_QWidget::resizeStaticContentsChildWidget_QTBUG35282()
     widget.resize(200,200);
 
     UpdateWidget childWidget(&widget);
+    childWidget.setPalette(simplePalette());
     childWidget.setAttribute(Qt::WA_StaticContents);
     childWidget.setAttribute(Qt::WA_OpaquePaintEvent);
     childWidget.setGeometry(250, 250, 500, 500);
@@ -12465,60 +12480,54 @@ void tst_QWidget::testForOutsideWSRangeFlag()
     }
 }
 
-class TabletWidget : public QWidget
-{
-public:
-    TabletWidget(QWidget *parent) : QWidget(parent) { }
-
-    int tabletEventCount = 0;
-    int pressEventCount = 0;
-    int moveEventCount = 0;
-    int releaseEventCount = 0;
-    int trackingChangeEventCount = 0;
-    qint64 uid = -1;
-
-protected:
-    void tabletEvent(QTabletEvent *event) override {
-        ++tabletEventCount;
-        uid = event->pointingDevice()->uniqueId().numericId();
-        switch (event->type()) {
-        case QEvent::TabletMove:
-            ++moveEventCount;
-            break;
-        case QEvent::TabletPress:
-            ++pressEventCount;
-            break;
-        case QEvent::TabletRelease:
-            ++releaseEventCount;
-            break;
-        default:
-            break;
-        }
-    }
-
-    bool event(QEvent *ev) override {
-        if (ev->type() == QEvent::TabletTrackingChange)
-            ++trackingChangeEventCount;
-        return QWidget::event(ev);
-    }
-};
-
 void tst_QWidget::tabletTracking()
 {
-    QWidget parent;
-    parent.setWindowTitle(QLatin1String(QTest::currentTestFunction()));
-    parent.resize(200,200);
-    // QWidgetWindow::handleTabletEvent doesn't deliver tablet events to the window's widget, only to a child.
-    // So it doesn't do any good to show a TabletWidget directly: it needs a parent.
-    TabletWidget widget(&parent);
+    class TabletWidget : public QWidget
+    {
+    public:
+        using QWidget::QWidget;
+
+        int tabletEventCount = 0;
+        int pressEventCount = 0;
+        int moveEventCount = 0;
+        int releaseEventCount = 0;
+        int trackingChangeEventCount = 0;
+        qint64 uid = -1;
+
+    protected:
+        void tabletEvent(QTabletEvent *event) override {
+            ++tabletEventCount;
+            uid = event->pointingDevice()->uniqueId().numericId();
+            switch (event->type()) {
+            case QEvent::TabletMove:
+                ++moveEventCount;
+                break;
+            case QEvent::TabletPress:
+                ++pressEventCount;
+                break;
+            case QEvent::TabletRelease:
+                ++releaseEventCount;
+                break;
+            default:
+                break;
+            }
+        }
+
+        bool event(QEvent *ev) override {
+            if (ev->type() == QEvent::TabletTrackingChange)
+                ++trackingChangeEventCount;
+            return QWidget::event(ev);
+        }
+    } widget;
+    widget.setWindowTitle(QLatin1String(QTest::currentTestFunction()));
     widget.resize(200,200);
-    parent.showNormal();
-    QVERIFY(QTest::qWaitForWindowExposed(&parent));
+    widget.showNormal();
+    QVERIFY(QTest::qWaitForWindowExposed(&widget));
     widget.setAttribute(Qt::WA_TabletTracking);
     QTRY_COMPARE(widget.trackingChangeEventCount, 1);
     QVERIFY(widget.hasTabletTracking());
 
-    QWindow *window = parent.windowHandle();
+    QWindow *window = widget.windowHandle();
     QPointF local(10, 10);
     QPointF global = window->mapToGlobal(local.toPoint());
     QPointF deviceLocal = QHighDpi::toNativeLocalPosition(local, window);
@@ -12961,6 +12970,35 @@ void tst_QWidget::activateWhileModalHidden()
     QVERIFY(QTest::qWaitForWindowActive(&window));
     QVERIFY(window.isActiveWindow());
     QCOMPARE(QApplication::activeWindow(), &window);
+}
+
+// Create a simple palette to prevent multiple paint events
+QPalette tst_QWidget::simplePalette()
+{
+    static QPalette simplePalette = []{
+        const QColor windowText = Qt::black;
+        const QColor backGround = QColor(239, 239, 239);
+        const QColor light = backGround.lighter(150);
+        const QColor mid = (backGround.darker(130));
+        const QColor midLight = mid.lighter(110);
+        const QColor base = Qt::white;
+        const QColor dark = backGround.darker(150);
+        const QColor text = Qt::black;
+        const QColor highlight = QColor(48, 140, 198);
+        const QColor hightlightedText = Qt::white;
+        const QColor button = backGround;
+        const QColor shadow = dark.darker(135);
+
+        QPalette defaultPalette(windowText, backGround, light, dark, mid, text, base);
+        defaultPalette.setBrush(QPalette::Midlight, midLight);
+        defaultPalette.setBrush(QPalette::Button, button);
+        defaultPalette.setBrush(QPalette::Shadow, shadow);
+        defaultPalette.setBrush(QPalette::HighlightedText, hightlightedText);
+        defaultPalette.setBrush(QPalette::Active, QPalette::Highlight, highlight);
+        return defaultPalette;
+    }();
+
+    return simplePalette;
 }
 
 #ifdef Q_OS_ANDROID

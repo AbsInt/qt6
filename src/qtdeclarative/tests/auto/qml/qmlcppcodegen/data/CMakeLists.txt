@@ -50,6 +50,7 @@ set(qml_files
     blockComments.qml
     boundComponents.qml
     callContextPropertyLookupResult.qml
+    callWithSpread.qml
     childobject.qml
     colorAsVariant.qml
     colorString.qml
@@ -117,6 +118,7 @@ set(qml_files
     notEqualsInt.qml
     notNotString.qml
     nullAccess.qml
+    nullComparison.qml
     objectInVar.qml
     outOfBounds.qml
     overriddenMember.qml
@@ -136,6 +138,7 @@ set(qml_files
     shifts.qml
     signal.qml
     signalHandler.qml
+    signalIndexMismatch.qml
     specificParent.qml
     stringLength.qml
     stringToByteArray.qml

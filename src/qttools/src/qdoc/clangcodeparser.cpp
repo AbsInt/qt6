@@ -38,7 +38,7 @@ static CXTranslationUnit_Flags flags_ = static_cast<CXTranslationUnit_Flags>(0);
 static CXIndex index_ = nullptr;
 
 QByteArray ClangCodeParser::s_fn;
-constexpr const char *fnDummyFileName = "/fn_dummyfile.cpp";
+constexpr const char fnDummyFileName[] = "/fn_dummyfile.cpp";
 
 #ifndef QT_NO_DEBUG_STREAM
 template<class T>
@@ -166,6 +166,48 @@ static Access fromCX_CXXAccessSpecifier(CX_CXXAccessSpecifier spec)
 /*!
    Returns the spelling in the file for a source range
  */
+
+struct FileCacheEntry
+{
+    QByteArray fileName;
+    QByteArray content;
+};
+
+static inline QString fromCache(const QByteArray &cache,
+                                unsigned int offset1, unsigned int offset2)
+{
+    return QString::fromUtf8(cache.mid(offset1, offset2 - offset1));
+}
+
+static QString readFile(CXFile cxFile, unsigned int offset1, unsigned int offset2)
+{
+    using FileCache = QList<FileCacheEntry>;
+    static FileCache cache;
+
+    CXString cxFileName = clang_getFileName(cxFile);
+    const QByteArray fileName = clang_getCString(cxFileName);
+    clang_disposeString(cxFileName);
+
+    for (const auto &entry : std::as_const(cache)) {
+        if (fileName == entry.fileName)
+            return fromCache(entry.content, offset1, offset2);
+    }
+
+    // "fn_dummyfile.cpp" comes with varying cxFile values
+    if (fileName == fnDummyFileName)
+        return fromCache(ClangCodeParser::fn(), offset1, offset2);
+
+    QFile file(QString::fromUtf8(fileName));
+    if (file.open(QIODeviceBase::ReadOnly)) { // binary to match clang offsets
+        FileCacheEntry entry{fileName, file.readAll()};
+        cache.prepend(entry);
+        while (cache.size() > 5)
+            cache.removeLast();
+        return fromCache(entry.content, offset1, offset2);
+    }
+    return {};
+}
+
 static QString getSpelling(CXSourceRange range)
 {
     auto start = clang_getRangeStart(range);
@@ -177,14 +219,8 @@ static QString getSpelling(CXSourceRange range)
 
     if (file1 != file2 || offset2 <= offset1)
         return QString();
-    QFile file(fromCXString(clang_getFileName(file1)));
-    if (!file.open(QFile::ReadOnly)) {
-        if (file.fileName() == fnDummyFileName)
-            return QString::fromUtf8(ClangCodeParser::fn().mid(offset1, offset2 - offset1));
-        return QString();
-    }
-    file.seek(offset1);
-    return QString::fromUtf8(file.read(offset2 - offset1));
+
+    return readFile(file1, offset1, offset2);
 }
 
 /*!
@@ -1171,7 +1207,17 @@ void ClangCodeParser::parseHeaderFile(const Location & /*location*/, const QStri
 }
 
 static const char *defaultArgs_[] = {
+/*
+  https://bugreports.qt.io/browse/QTBUG-94365
+  An unidentified bug in Clang 15.x causes parsing failures due to errors in
+  the AST. This replicates only with C++20 support enabled - avoid the issue
+  by using C++17 with Clang 15.
+ */
+#if LIBCLANG_VERSION_MAJOR == 15
+    "-std=c++17",
+#else
     "-std=c++20",
+#endif
 #ifndef Q_OS_WIN
     "-fPIC",
 #else
@@ -1498,7 +1544,7 @@ void ClangCodeParser::parseSourceFile(const Location & /*location*/, const QStri
             } else if (CodeParser::isWorthWarningAbout(doc)) {
                 bool future = false;
                 if (doc.metaCommandsUsed().contains(COMMAND_SINCE)) {
-                    QString sinceVersion = doc.metaCommandArgs(COMMAND_SINCE)[0].first;
+                    QString sinceVersion = doc.metaCommandArgs(COMMAND_SINCE).at(0).first;
                     if (getUnpatchedVersion(sinceVersion) > getUnpatchedVersion(m_version))
                         future = true;
                 }
