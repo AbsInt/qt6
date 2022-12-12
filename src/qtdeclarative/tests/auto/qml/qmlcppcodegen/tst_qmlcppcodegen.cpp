@@ -2,6 +2,7 @@
 
 #include <data/birthdayparty.h>
 #include <data/cppbaseclass.h>
+#include <data/enumproblems.h>
 #include <data/objectwithmethod.h>
 
 #include <QtQml/private/qqmlengine_p.h>
@@ -137,6 +138,8 @@ private slots:
     void nullComparison();
     void signalIndexMismatch();
     void callWithSpread();
+    void enumConversion();
+    void enumProblems();
 };
 
 void tst_QmlCppCodegen::simpleBinding()
@@ -2504,6 +2507,38 @@ void tst_QmlCppCodegen::callWithSpread()
     QScopedPointer<QObject> o(c.create());
     QVERIFY(!o.isNull());
 };
+
+void tst_QmlCppCodegen::enumConversion()
+{
+    QQmlEngine engine;
+
+    QQmlComponent c(&engine, QUrl(u"qrc:/TestTypes/enumConversion.qml"_s));
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+
+    QScopedPointer<QObject> o(c.create());
+    QVERIFY(o);
+    QCOMPARE(o->property("test").toInt(), 0x04);
+    QCOMPARE(o->property("test_1").toBool(), true);
+};
+
+void tst_QmlCppCodegen::enumProblems()
+{
+    QQmlEngine engine;
+    QQmlComponent c(&engine, QUrl(u"qrc:/TestTypes/enumProblems.qml"_s));
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+    QScopedPointer<QObject> outer(c.create());
+    QVERIFY(!outer.isNull());
+    QObject *inner = outer->property("o").value<QObject *>();
+    QVERIFY(inner);
+
+    Foo *bar = inner->property("bar").value<Foo *>();
+    QVERIFY(bar);
+    QCOMPARE(bar->type(), Foo::Component);
+
+    Foo *fighter = inner->property("fighter").value<Foo *>();
+    QVERIFY(fighter);
+    QCOMPARE(fighter->type(), Foo::Fighter);
+}
 
 QTEST_MAIN(tst_QmlCppCodegen)
 

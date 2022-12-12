@@ -32,7 +32,7 @@ QT_BEGIN_NAMESPACE
 
 using namespace Qt::StringLiterals;
 
-using ModuleBitset = std::bitset<62>;
+using ModuleBitset = std::bitset<76>;
 
 enum QtModule
 #if defined(Q_COMPILER_CLASS_ENUM) || defined(Q_CC_MSVC)
@@ -100,7 +100,21 @@ enum QtModule
     QtMqttModule,
     QtPdfModule,
     QtPdfQuickModule,
-    QtPdfWidgetsModule
+    QtPdfWidgetsModule,
+    QtDBusModule,
+    QtStateMachineModule,
+    Qt3DLogicModule,
+    QtPositioningQuickModule,
+    QtSensorsQuickModule,
+    QtWebEngineQuickModule,
+    QtWebViewQuickModule,
+    QtQuickControlsModule,
+    QtQuickDialogsModule,
+    QtQuickLayoutsModule,
+    QtQuickShapesModule,
+    QtQuickTestModule,
+    QtQuickTimelineModule,
+    QtQuick3DModule
 };
 
 struct QtModuleEntry {
@@ -163,16 +177,30 @@ static QtModuleEntry qtModuleEntries[] = {
     { QtWebViewModule, "webview", "Qt6WebView", nullptr },
     { QtShaderToolsModule, "shadertools", "Qt6ShaderTools", nullptr },
     { QtUiToolsModule, "uitools", "Qt6UiTools", nullptr },
-    { QtCore5CompatModule, "core5compat", "Qt6Core5Compat", nullptr},
-    { QtChartsModule, "charts", "Qt6Charts", nullptr},
-    { QtDataVisualizationModule, "datavisualization", "Qt6DataVisualization", nullptr},
-    { QtRemoteObjectsModule, "remoteobjects", "Qt6RemoteObjects", nullptr},
-    { QtScxmlModule, "scxml", "Qt6Scxml", nullptr},
+    { QtCore5CompatModule, "core5compat", "Qt6Core5Compat", nullptr },
+    { QtChartsModule, "charts", "Qt6Charts", nullptr },
+    { QtDataVisualizationModule, "datavisualization", "Qt6DataVisualization", nullptr },
+    { QtRemoteObjectsModule, "remoteobjects", "Qt6RemoteObjects", nullptr },
+    { QtScxmlModule, "scxml", "Qt6Scxml", nullptr },
     { QtNetworkAuthorizationModule, "networkauthorization", "Qt6NetworkAuth", nullptr },
-    { QtMqttModule, "mqtt", "Qt6Mqtt", nullptr},
-    { QtPdfModule, "pdf", "Qt6Pdf", nullptr},
-    { QtPdfQuickModule, "pdfquick", "Qt6PdfQuick", nullptr},
-    { QtPdfWidgetsModule, "pdfwidgets", "Qt6PdfWidgets", nullptr}
+    { QtMqttModule, "mqtt", "Qt6Mqtt", nullptr },
+    { QtPdfModule, "pdf", "Qt6Pdf", nullptr },
+    { QtPdfQuickModule, "pdfquick", "Qt6PdfQuick", nullptr },
+    { QtPdfWidgetsModule, "pdfwidgets", "Qt6PdfWidgets", nullptr },
+    { QtDBusModule, "dbus", "Qt6DBus", nullptr },
+    { QtStateMachineModule, "statemachine", "Qt6StateMachine", nullptr },
+    { Qt3DLogicModule, "3dlogic", "Qt63DLogic", nullptr },
+    { QtPositioningQuickModule, "positioningquick", "Qt6PositioningQuick", nullptr },
+    { QtSensorsQuickModule, "sensorsquick", "Qt6SensorsQuick", nullptr },
+    { QtWebEngineQuickModule, "webenginequick", "Qt6WebEngineQuick", nullptr },
+    { QtWebViewQuickModule, "webviewquick", "Qt6WebViewQuick", nullptr },
+    { QtQuickControlsModule, "quickcontrols", "Qt6QuickControls2", nullptr },
+    { QtQuickDialogsModule, "quickdialogs", "Qt6QuickDialogs2", nullptr },
+    { QtQuickLayoutsModule, "quicklayouts", "Qt6QuickLayouts", nullptr },
+    { QtQuickShapesModule, "quickshapes", "Qt6QuickShapes", nullptr },
+    { QtQuickTestModule, "quicktest", "Qt6QuickTest", nullptr },
+    { QtQuickTimelineModule, "quicktimeline", "Qt6QuickTimeline", nullptr },
+    { QtQuick3DModule, "quick3d", "Qt6Quick3D", nullptr }
 };
 
 enum QtPlugin {
@@ -695,7 +723,8 @@ static inline QString helpText(const QCommandLineParser &p)
     QString moduleHelp =
         "\n\nQt libraries can be added by passing their name (-xml) or removed by passing\n"
         "the name prepended by --no- (--no-xml). Available libraries:\n"_L1;
-    moduleHelp += lineBreak(QString::fromLatin1(formatQtModules(0xFFFFFFFFFFFFFFFFull, true)));
+    ModuleBitset mask;
+    moduleHelp += lineBreak(QString::fromLatin1(formatQtModules(mask.set(), true)));
     moduleHelp += u'\n';
     result.replace(moduleStart, argumentsStart - moduleStart, moduleHelp);
     return result;
@@ -992,6 +1021,8 @@ QStringList findQtPlugins(ModuleBitset *usedQtModules, const ModuleBitset &disab
                 case WindowsDesktopMsvc:
                 case WindowsDesktopMinGW:
                     filter = QStringLiteral("qwindows");
+                    if (!infix.isEmpty())
+                        filter += infix;
                     break;
                 case Unix:
                     filter = QStringLiteral("libqxcb");
