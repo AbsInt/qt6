@@ -71,10 +71,6 @@ public:
         QmlModule,
         QmlProperty,
         QmlValueType,
-        JsType,
-        JsModule,
-        JsProperty,
-        JsBasicType,
         SharedComment,
         Collection,
         Proxy
@@ -127,7 +123,6 @@ public:
 
     [[nodiscard]] NodeType nodeType() const { return m_nodeType; }
     [[nodiscard]] QString nodeTypeString() const;
-    bool changeType(NodeType from, NodeType to);
 
     [[nodiscard]] Genus genus() const { return m_genus; }
     void setGenus(Genus t) { m_genus = t; }
@@ -152,11 +147,6 @@ public:
     [[nodiscard]] bool isGroup() const { return m_nodeType == Group; }
     [[nodiscard]] bool isHeader() const { return m_nodeType == HeaderFile; }
     [[nodiscard]] bool isIndexNode() const { return m_indexNodeFlag; }
-    [[nodiscard]] bool isJsBasicType() const { return m_nodeType == JsBasicType; }
-    [[nodiscard]] bool isJsModule() const { return m_nodeType == JsModule; }
-    [[nodiscard]] bool isJsNode() const { return genus() == JS; }
-    [[nodiscard]] bool isJsProperty() const { return m_nodeType == JsProperty; }
-    [[nodiscard]] bool isJsType() const { return m_nodeType == JsType; }
     [[nodiscard]] bool isModule() const { return m_nodeType == Module; }
     [[nodiscard]] bool isNamespace() const { return m_nodeType == Namespace; }
     [[nodiscard]] bool isPage() const { return m_nodeType == Page; }
@@ -170,7 +160,7 @@ public:
     [[nodiscard]] bool isQmlModule() const { return m_nodeType == QmlModule; }
     [[nodiscard]] bool isQmlNode() const { return genus() == QML; }
     [[nodiscard]] bool isQmlProperty() const { return m_nodeType == QmlProperty; }
-    [[nodiscard]] bool isQmlType() const { return m_nodeType == QmlType; }
+    [[nodiscard]] bool isQmlType() const { return m_nodeType == QmlType || m_nodeType == QmlValueType; }
     [[nodiscard]] bool isRelatedNonmember() const { return m_relatedNonmember; }
     [[nodiscard]] bool isStruct() const { return m_nodeType == Struct; }
     [[nodiscard]] bool isSharedCommentNode() const { return m_nodeType == SharedComment; }

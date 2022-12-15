@@ -148,15 +148,6 @@ private:
         return nullptr;
     }
 
-    Aggregate *lookupQmlBasicType(const QString &name)
-    {
-        for (const auto *tree : searchOrder()) {
-            Aggregate *a = tree->lookupQmlBasicType(name);
-            if (a)
-                return a;
-        }
-        return nullptr;
-    }
     void clearSearchOrder() { m_searchOrder.clear(); }
     void newPrimaryTree(const QString &module);
     void setPrimaryTree(const QString &t);
@@ -184,12 +175,10 @@ public:
     const CNMap &groups() { return primaryTree()->groups(); }
     const CNMap &modules() { return primaryTree()->modules(); }
     const CNMap &qmlModules() { return primaryTree()->qmlModules(); }
-    const CNMap &jsModules() { return primaryTree()->jsModules(); }
 
     CollectionNode *addGroup(const QString &name) { return primaryTree()->addGroup(name); }
     CollectionNode *addModule(const QString &name) { return primaryTree()->addModule(name); }
     CollectionNode *addQmlModule(const QString &name) { return primaryTree()->addQmlModule(name); }
-    CollectionNode *addJsModule(const QString &name) { return primaryTree()->addJsModule(name); }
 
     CollectionNode *addToGroup(const QString &name, Node *node)
     {
@@ -203,10 +192,6 @@ public:
     {
         return primaryTree()->addToQmlModule(name, node);
     }
-    CollectionNode *addToJsModule(const QString &name, Node *node)
-    {
-        return primaryTree()->addToJsModule(name, node);
-    }
 
     void addExampleNode(ExampleNode *n) { primaryTree()->addExampleNode(n); }
     ExampleNodeMap &exampleNodeMap() { return primaryTree()->exampleNodeMap(); }
@@ -214,7 +199,6 @@ public:
     QmlTypeNode *findQmlType(const QString &name);
     QmlTypeNode *findQmlType(const QString &qmid, const QString &name);
     QmlTypeNode *findQmlType(const ImportRec &import, const QString &name);
-    Aggregate *findQmlBasicType(const QString &qmid, const QString &name);
 
     static NodeMultiMap &obsoleteClasses() { return s_obsoleteClasses; }
     static NodeMultiMap &obsoleteQmlTypes() { return s_obsoleteQmlTypes; }
