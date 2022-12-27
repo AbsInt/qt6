@@ -257,14 +257,14 @@ void QQuickStateGroupPrivate::clear_transitions(QQmlListProperty<QQuickTransitio
   This property is often used in scripts to change between states. For
   example:
 
-  \js
+  \qml
   function toggle() {
       if (button.state == 'On')
           button.state = 'Off';
       else
           button.state = 'On';
   }
-  \endjs
+  \endqml
 
   If the state group is in its base state (i.e. no explicit state has been
   set), \c state will be a blank string. Likewise, you can return a
@@ -353,11 +353,10 @@ bool QQuickStateGroupPrivate::updateAutoState()
                 if (abstractBinding && abstractBinding->kind() == QQmlAbstractBinding::QmlBinding) {
                     QQmlBinding *binding = static_cast<QQmlBinding *>(abstractBinding);
                     if (binding->hasValidContext()) {
-                        QVariant evalResult = binding->evaluate();
-                        if (evalResult.metaType() == QMetaType::fromType<QJSValue>())
-                            whenValue = evalResult.value<QJSValue>().toBool();
-                        else
-                            whenValue = evalResult.toBool();
+                        const auto boolType = QMetaType::fromType<bool>();
+                        const bool isUndefined = !binding->evaluate(&whenValue, boolType);
+                        if (isUndefined)
+                            whenValue = false;
                     }
                 }
 

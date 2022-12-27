@@ -5542,8 +5542,8 @@ bool QQuickItemPrivate::anyPointerHandlerWants(const QPointerEvent *event, const
 /*!
     \internal
     Deliver the \a event to all this item's PointerHandlers, but skip
-    HoverHandlers if the event is a QMouseEvent (they are visited in
-    QQuickDeliveryAgentPrivate::deliverHoverEventToItem()), and skip handlers
+    HoverHandlers if the event is a QMouseEvent or QWheelEvent (they are visited
+    in QQuickDeliveryAgentPrivate::deliverHoverEventToItem()), and skip handlers
     that are in QQuickPointerHandlerPrivate::deviceDeliveryTargets().
     If \a avoidGrabbers is true, also skip delivery to any handler that
     is exclusively or passively grabbing any point within \a event
@@ -5555,7 +5555,7 @@ bool QQuickItemPrivate::handlePointerEvent(QPointerEvent *event, bool avoidGrabb
     if (extra.isAllocated()) {
         for (QQuickPointerHandler *handler : extra->pointerHandlers) {
             bool avoidThisHandler = false;
-            if (QQuickDeliveryAgentPrivate::isMouseEvent(event) &&
+            if (QQuickDeliveryAgentPrivate::isMouseOrWheelEvent(event) &&
                     qmlobject_cast<const QQuickHoverHandler *>(handler)) {
                 avoidThisHandler = true;
             } else if (avoidGrabbers) {
@@ -9585,7 +9585,8 @@ void QQuickItemLayer::itemSiblingOrderChanged(QQuickItem *)
 void QQuickItemLayer::itemVisibilityChanged(QQuickItem *)
 {
     QQuickItem *l = m_effect ? (QQuickItem *) m_effect : (QQuickItem *) m_effectSource;
-    Q_ASSERT(l);
+    if (!l)
+        return;
     l->setVisible(m_item->isVisible());
 }
 
@@ -9594,21 +9595,24 @@ void QQuickItemLayer::updateZ()
     if (!m_componentComplete || !m_enabled)
         return;
     QQuickItem *l = m_effect ? (QQuickItem *) m_effect : (QQuickItem *) m_effectSource;
-    Q_ASSERT(l);
+    if (!l)
+        return;
     l->setZ(m_item->z());
 }
 
 void QQuickItemLayer::updateOpacity()
 {
     QQuickItem *l = m_effect ? (QQuickItem *) m_effect : (QQuickItem *) m_effectSource;
-    Q_ASSERT(l);
+    if (!l)
+        return;
     l->setOpacity(m_item->opacity());
 }
 
 void QQuickItemLayer::updateGeometry()
 {
     QQuickItem *l = m_effect ? (QQuickItem *) m_effect : (QQuickItem *) m_effectSource;
-    Q_ASSERT(l);
+    if (!l)
+        return;
     // Avoid calling QQuickImage::boundingRect() or other overrides
     // which may not be up-to-date at this time (QTBUG-104442, 104536)
     QRectF bounds = m_item->QQuickItem::boundingRect();
@@ -9623,7 +9627,8 @@ void QQuickItemLayer::updateMatrix()
     if (!m_componentComplete || !m_enabled)
         return;
     QQuickItem *l = m_effect ? (QQuickItem *) m_effect : (QQuickItem *) m_effectSource;
-    Q_ASSERT(l);
+    if (!l)
+        return;
     QQuickItemPrivate *ld = QQuickItemPrivate::get(l);
     l->setScale(m_item->scale());
     l->setRotation(m_item->rotation());

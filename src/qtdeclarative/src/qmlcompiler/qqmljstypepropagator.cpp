@@ -666,6 +666,10 @@ void QQmlJSTypePropagator::generate_StoreElement(int base, int index)
         addReadAccumulator(jsValue);
         addReadRegister(base, jsValue);
         addReadRegister(index, jsValue);
+
+        // Writing to a JS array can have side effects all over the place since it's
+        // passed by reference.
+        m_state.setHasSideEffects(true);
         return;
     }
 
@@ -1028,8 +1032,9 @@ void QQmlJSTypePropagator::generate_CallProperty(int nameIndex, int base, int ar
 
     if (m_passManager != nullptr) {
         // TODO: Should there be an analyzeCall() in the future? (w. corresponding onCall in Pass)
-        m_passManager->analyzeRead(m_typeResolver->containedType(m_state.accumulatorIn()),
-                                   propertyName, m_function->qmlScope, getCurrentSourceLocation());
+        m_passManager->analyzeRead(
+                    m_typeResolver->containedType(callBase),
+                    propertyName, m_function->qmlScope, getCurrentSourceLocation());
     }
 
     addReadRegister(base, callBase);
