@@ -180,11 +180,13 @@ public:
         return qHashRange(begin(), end(), seed);
     }
 protected:
+    void growBy(qsizetype prealloc, void *array, qsizetype increment)
+    { reallocate_impl(prealloc, array, size(), (std::max)(size() * 2, increment)); }
     template <typename...Args>
     reference emplace_back_impl(qsizetype prealloc, void *array, Args&&...args)
     {
         if (size() == capacity()) // ie. size() != 0
-            reallocate_impl(prealloc, array, size(), size() << 1);
+            growBy(prealloc, array, 1);
         reference r = *new (end()) T(std::forward<Args>(args)...);
         ++s;
         return r;
@@ -207,8 +209,14 @@ protected:
 
     void append_impl(qsizetype prealloc, void *array, const T *buf, qsizetype n);
     void reallocate_impl(qsizetype prealloc, void *array, qsizetype size, qsizetype alloc, const T *v = nullptr);
-    void resize_impl(qsizetype prealloc, void *array, qsizetype sz, const T *v = nullptr)
-    { reallocate_impl(prealloc, array, sz, qMax(sz, capacity()), v); }
+    void resize_impl(qsizetype prealloc, void *array, qsizetype sz, const T &v)
+    {
+        reallocate_impl(prealloc, array, sz, qMax(sz, capacity()), &v);
+    }
+    void resize_impl(qsizetype prealloc, void *array, qsizetype sz)
+    {
+        reallocate_impl(prealloc, array, sz, qMax(sz, capacity()));
+    }
 
     bool isValidIterator(const const_iterator &i) const
     {
@@ -378,7 +386,7 @@ public:
     template <typename U = T, if_copyable<U> = true>
 #endif
     void resize(qsizetype sz, const T &v)
-    { Base::resize_impl(Prealloc, this->array, sz, &v); }
+    { Base::resize_impl(Prealloc, this->array, sz, v); }
     inline void clear() { resize(0); }
     void squeeze() { reallocate(size(), size()); }
 
@@ -695,7 +703,7 @@ Q_OUTOFLINE_TEMPLATE void QVLABase<T>::append_impl(qsizetype prealloc, void *arr
     const qsizetype asize = size() + increment;
 
     if (asize >= capacity())
-        reallocate_impl(prealloc, array, size(), qMax(size() * 2, asize));
+        growBy(prealloc, array, increment);
 
     if constexpr (QTypeInfo<T>::isComplex)
         std::uninitialized_copy_n(abuf, increment, end());
@@ -836,7 +844,7 @@ Q_OUTOFLINE_TEMPLATE auto QVLABase<T>::emplace_impl(qsizetype prealloc, void *ar
 
     qsizetype offset = qsizetype(before - cbegin());
     if (size() == capacity())
-        reallocate_impl(prealloc, array, size(), size() * 2);
+        growBy(prealloc, array, 1);
     if constexpr (!QTypeInfo<T>::isRelocatable) {
         T *b = begin() + offset;
         T *i = end();

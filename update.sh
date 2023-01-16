@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # get fresh toplevel module with right branch
-git clone --single-branch --branch "$1" http://code.qt.io/qt/qt5.git || exit 1
+git clone --single-branch --branch "$1" https://code.qt.io/qt/qt5.git || exit 1
 
 cd qt5 || exit 1
 
