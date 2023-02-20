@@ -172,6 +172,13 @@ public:
     template <typename Predicate>
     qsizetype removeIf(Predicate pred);
 
+    void clear()
+    {
+        if constexpr (QTypeInfo<T>::isComplex)
+            std::destroy_n(data(), size());
+        s = 0;
+    }
+
     iterator erase(const_iterator begin, const_iterator end);
     iterator erase(const_iterator pos) { return erase(pos, pos + 1); }
 
@@ -211,6 +218,10 @@ protected:
     void reallocate_impl(qsizetype prealloc, void *array, qsizetype size, qsizetype alloc);
     void resize_impl(qsizetype prealloc, void *array, qsizetype sz, const T &v)
     {
+        if (QtPrivate::q_points_into_range(&v, begin(), end())) {
+            resize_impl(prealloc, array, sz, T(v));
+            return;
+        }
         reallocate_impl(prealloc, array, sz, qMax(sz, capacity()));
         while (size() < sz) {
             new (data() + size()) T(v);
@@ -400,7 +411,10 @@ public:
 #endif
     void resize(qsizetype sz, const T &v)
     { Base::resize_impl(Prealloc, this->array, sz, v); }
+    using Base::clear;
+#ifdef Q_QDOC
     inline void clear() { resize(0); }
+#endif
     void squeeze() { reallocate(size(), size()); }
 
     using Base::capacity;

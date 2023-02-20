@@ -26,6 +26,11 @@ QT_BEGIN_NAMESPACE
 
 using namespace Qt::StringLiterals;
 
+// non-standard ODBC SQL data type from SQL Server sometimes used instead of SQL_TIME
+#ifndef SQL_SS_TIME2
+#define SQL_SS_TIME2 (-154)
+#endif
+
 // undefine this to prevent initial check of the ODBC driver
 #define ODBC_CHECK_DRIVER
 
@@ -358,6 +363,7 @@ static QMetaType qDecodeODBCType(SQLSMALLINT sqltype, bool isSigned = true)
     case SQL_TYPE_DATE:
         type = QMetaType::QDate;
         break;
+    case SQL_SS_TIME2:
     case SQL_TIME:
     case SQL_TYPE_TIME:
         type = QMetaType::QTime;
@@ -712,10 +718,15 @@ static QSqlField qMakeFieldInfo(const SQLHANDLE hStmt, int i, QString *errorMess
     f.setAutoValue(isAutoValue(hStmt, i));
     QVarLengthArray<SQLTCHAR> tableName(TABLENAMESIZE);
     SQLSMALLINT tableNameLen;
-    r = SQLColAttribute(hStmt, i + 1, SQL_DESC_BASE_TABLE_NAME, tableName.data(),
-                        TABLENAMESIZE, &tableNameLen, 0);
+    r = SQLColAttribute(hStmt,
+                        i + 1,
+                        SQL_DESC_BASE_TABLE_NAME,
+                        tableName.data(),
+                        SQLSMALLINT(tableName.size() * sizeof(SQLTCHAR)), // SQLColAttribute needs/returns size in bytes
+                        &tableNameLen,
+                        0);
     if (r == SQL_SUCCESS)
-        f.setTableName(fromSQLTCHAR(tableName, tableNameLen));
+        f.setTableName(fromSQLTCHAR(tableName, tableNameLen / sizeof(SQLTCHAR)));
     return f;
 }
 
