@@ -849,29 +849,12 @@ Q_OUTOFLINE_TEMPLATE auto QVLABase<T>::emplace_impl(qsizetype prealloc, void *ar
     Q_ASSERT(size() <= capacity());
     Q_ASSERT(capacity() > 0);
 
-    qsizetype offset = qsizetype(before - cbegin());
-    if (size() == capacity())
-        growBy(prealloc, array, 1);
-    if constexpr (!QTypeInfo<T>::isRelocatable) {
-        T *b = begin() + offset;
-        T *i = end();
-        T *j = i + 1;
-        // The new end-element needs to be constructed, the rest must be move assigned
-        if (i != b) {
-            new (--j) T(std::move(*--i));
-            while (i != b)
-                *--j = std::move(*--i);
-            *b = T(std::forward<Args>(args)...);
-        } else {
-            new (b) T(std::forward<Args>(args)...);
-        }
-    } else {
-        T *b = begin() + offset;
-        memmove(static_cast<void *>(b + 1), static_cast<const void *>(b), (size() - offset) * sizeof(T));
-        new (b) T(std::forward<Args>(args)...);
-    }
-    this->s += 1;
-    return data() + offset;
+    const qsizetype offset = qsizetype(before - cbegin());
+    emplace_back_impl(prealloc, array, std::forward<Args>(args)...);
+    const auto b = begin() + offset;
+    const auto e = end();
+    QtPrivate::q_rotate(b, e - 1, e);
+    return b;
 }
 
 template <class T>

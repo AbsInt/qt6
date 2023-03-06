@@ -141,6 +141,8 @@ private slots:
     void enumConversion();
     void enumProblems();
     void storeElementSideEffects();
+    void undefinedToDouble();
+    void enumFromBadSingleton();
 };
 
 void tst_QmlCppCodegen::simpleBinding()
@@ -1965,8 +1967,19 @@ void tst_QmlCppCodegen::typedArray()
              QList<int>({1, 2, 3, 4}));
     QCOMPARE(qvariant_cast<QList<QDateTime>>(o->property("values4")),
              QList<QDateTime>({date, date, date}));
-    QCOMPARE(qvariant_cast<QList<double>>(o->property("values5")),
-             QList<double>({1, 2, 3.4, 30, 0, 0}));
+    {
+        const QList<double> actual
+                = qvariant_cast<QList<double>>(o->property("values5"));
+        const QList<double> expected
+                = QList<double>({1, 2, 3.4, 30, std::numeric_limits<double>::quiet_NaN(), 0});
+        QCOMPARE(actual.size(), expected.size());
+        for (qsizetype i = 0, end = actual.size(); i != end; ++i) {
+            if (std::isnan(expected[i]))
+                QVERIFY(std::isnan(actual[i]));
+            else
+                QCOMPARE(actual[i], expected[i]);
+        }
+    }
     date = QDateTime::currentDateTime();
     o->setProperty("aDate", date);
     QCOMPARE(qvariant_cast<QList<QDateTime>>(o->property("values4")),
@@ -2556,6 +2569,42 @@ void tst_QmlCppCodegen::storeElementSideEffects()
     QVERIFY(prop.isArray());
     QCOMPARE(prop.property(0).toInt(), 10);
 };
+
+void tst_QmlCppCodegen::undefinedToDouble()
+{
+    QQmlEngine engine;
+    QQmlComponent c(&engine, QUrl(u"qrc:/TestTypes/undefinedToDouble.qml"_s));
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+    QScopedPointer<QObject> o(c.create());
+    QVERIFY(!o.isNull());
+    const QVariant d = o->property("d");
+    QCOMPARE(d.metaType(), QMetaType::fromType<double>());
+    QVERIFY(std::isnan(d.toDouble()));
+}
+
+void tst_QmlCppCodegen::enumFromBadSingleton()
+{
+    QQmlEngine e;
+    const QUrl url(u"qrc:/TestTypes/enumFromBadSingleton.qml"_s);
+    QQmlComponent c(&e, url);
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+
+#if QT_DEPRECATED_SINCE(6,4)
+    QTest::ignoreMessage(
+                QtWarningMsg, qPrintable(
+                    url.toString()
+                    + u":5:5: TypeError: Cannot read property 'TestA' of undefined"_s));
+#else
+    QTest::ignoreMessage(
+                QtWarningMsg, qPrintable(
+                    url.toString()
+                    + u":5:5: ReferenceError: DummyObjekt is not defined"_s));
+#endif
+
+    QScopedPointer<QObject> o(c.create());
+    QVERIFY(o);
+    QVERIFY(o->objectName().isEmpty());
+}
 
 QTEST_MAIN(tst_QmlCppCodegen)
 

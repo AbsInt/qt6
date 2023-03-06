@@ -475,6 +475,21 @@ QThreadPool *QThreadPool::globalInstance()
 }
 
 /*!
+    Returns the QThreadPool instance for Qt Gui.
+    \internal
+*/
+QThreadPool *QThreadPoolPrivate::qtGuiInstance()
+{
+    Q_CONSTINIT static QPointer<QThreadPool> guiInstance;
+    Q_CONSTINIT static QBasicMutex theMutex;
+
+    const QMutexLocker locker(&theMutex);
+    if (guiInstance.isNull() && !QCoreApplication::closingDown())
+        guiInstance = new QThreadPool();
+    return guiInstance;
+}
+
+/*!
     Reserves a thread and uses it to run \a runnable, unless this thread will
     make the current thread count exceed maxThreadCount().  In that case,
     \a runnable is added to a run queue instead. The \a priority argument can
@@ -590,12 +605,14 @@ bool QThreadPool::tryStart(std::function<void()> functionToRun)
 int QThreadPool::expiryTimeout() const
 {
     Q_D(const QThreadPool);
+    QMutexLocker locker(&d->mutex);
     return d->expiryTimeout;
 }
 
 void QThreadPool::setExpiryTimeout(int expiryTimeout)
 {
     Q_D(QThreadPool);
+    QMutexLocker locker(&d->mutex);
     if (d->expiryTimeout == expiryTimeout)
         return;
     d->expiryTimeout = expiryTimeout;
@@ -616,6 +633,7 @@ void QThreadPool::setExpiryTimeout(int expiryTimeout)
 int QThreadPool::maxThreadCount() const
 {
     Q_D(const QThreadPool);
+    QMutexLocker locker(&d->mutex);
     return d->requestedMaxThreadCount;
 }
 
@@ -685,12 +703,14 @@ void QThreadPool::reserveThread()
 void QThreadPool::setStackSize(uint stackSize)
 {
     Q_D(QThreadPool);
+    QMutexLocker locker(&d->mutex);
     d->stackSize = stackSize;
 }
 
 uint QThreadPool::stackSize() const
 {
     Q_D(const QThreadPool);
+    QMutexLocker locker(&d->mutex);
     return d->stackSize;
 }
 
@@ -711,12 +731,14 @@ uint QThreadPool::stackSize() const
 void QThreadPool::setThreadPriority(QThread::Priority priority)
 {
     Q_D(QThreadPool);
+    QMutexLocker locker(&d->mutex);
     d->threadPriority = priority;
 }
 
 QThread::Priority QThreadPool::threadPriority() const
 {
     Q_D(const QThreadPool);
+    QMutexLocker locker(&d->mutex);
     return d->threadPriority;
 }
 

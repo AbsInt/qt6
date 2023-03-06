@@ -1606,12 +1606,18 @@ function(qt6_add_qml_plugin target)
         )
     endif()
 
+    get_target_property(install_rpath ${target} INSTALL_RPATH)
     # Ignore any CMAKE_INSTALL_RPATH and set a better default RPATH on platforms
     # that support it, if allowed. Projects will often set CMAKE_INSTALL_RPATH
     # for executables or backing libraries, but forget about plugins. Because
     # the path for QML plugins depends on their URI, it is unlikely that
     # CMAKE_INSTALL_RPATH would ever be intended for use with QML plugins.
-    if(NOT WIN32 AND NOT QT_NO_QML_PLUGIN_RPATH)
+    #
+    # Avoid setting INSTALL_RPATH if it was set before. This is mostly
+    # applicable for the Qml plugins built in Qt tree, that got INSTALL_RPATH
+    # from the qt_internal_add_plugin function, but also can be the case for the
+    # user Qml plugins created manually.
+    if(NOT WIN32 AND NOT QT_NO_QML_PLUGIN_RPATH AND NOT install_rpath)
         # Construct a relative path from a default install location (assumed to
         # be qml/target-path) to ${CMAKE_INSTALL_LIBDIR}. This would be
         # applicable for Apple too (although unusual) if this is a bare install
@@ -2047,6 +2053,12 @@ function(qt6_target_qml_sources target)
 
                 get_source_file_property(qml_file_singleton ${qml_file_src} QT_QML_SINGLETON_TYPE)
                 get_source_file_property(qml_file_internal  ${qml_file_src} QT_QML_INTERNAL_TYPE)
+
+                if (qml_file_singleton AND qml_file_internal)
+                   message(FATAL_ERROR
+                       "${qml_file_src} is marked as both internal and as a "
+                       "singleton, but singletons cannot be internal!")
+                endif()
 
                 if (NOT qml_file_versions)
                     set(qml_file_versions ${qml_module_files_versions})
