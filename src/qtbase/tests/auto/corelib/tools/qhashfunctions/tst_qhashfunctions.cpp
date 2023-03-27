@@ -55,7 +55,9 @@ private Q_SLOTS:
 
     void enum_int_consistent_hash_qtbug108032();
 
+#if QT_DEPRECATED_SINCE(6, 6)
     void setGlobalQHashSeed();
+#endif
 };
 
 void tst_QHashFunctions::consistent()
@@ -383,8 +385,10 @@ void tst_QHashFunctions::enum_int_consistent_hash_qtbug108032()
     QCOMPARE(qHash(E3, seed), qHash(int(E3), seed));
 }
 
+#if QT_DEPRECATED_SINCE(6, 6)
 void tst_QHashFunctions::setGlobalQHashSeed()
 {
+QT_WARNING_PUSH QT_WARNING_DISABLE_DEPRECATED
     // Setter works as advertised
     qSetGlobalQHashSeed(0);
     QCOMPARE(qGlobalQHashSeed(), 0);
@@ -397,7 +401,9 @@ void tst_QHashFunctions::setGlobalQHashSeed()
     // Reset works as advertised
     qSetGlobalQHashSeed(-1);
     QVERIFY(qGlobalQHashSeed() > 0);
+QT_WARNING_POP
 }
+#endif // QT_DEPRECATED_SINCE(6, 6)
 
 QTEST_APPLESS_MAIN(tst_QHashFunctions)
 #include "tst_qhashfunctions.moc"

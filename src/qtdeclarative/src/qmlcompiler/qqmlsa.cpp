@@ -31,16 +31,49 @@ GenericPass::GenericPass(PassManager *manager)
     d->manager = manager;
 }
 
-void GenericPass::emitWarning(QAnyStringView message, QQmlJS::SourceLocation srcLocation)
+void GenericPass::emitWarning(QAnyStringView diagnostic, LoggerWarningId id,
+                              QQmlJS::SourceLocation srcLocation)
 {
-    d->manager->m_visitor->logger()->log(message.toString(), Log_Plugin, srcLocation);
+    d->manager->m_visitor->logger()->log(diagnostic.toString(), id, srcLocation);
+}
+
+
+void GenericPass::emitWarning(QAnyStringView diagnostic, LoggerWarningId id,
+                              QQmlJS::SourceLocation srcLocation, const FixSuggestion &fix)
+{
+    d->manager->m_visitor->logger()->log(diagnostic.toString(), id, srcLocation, true, true, fix);
+}
+
+Element GenericPass::resolveTypeInFileScope(QAnyStringView typeName)
+{
+    return d->manager->m_visitor->imports().type(typeName.toString()).scope;
 }
 
 Element GenericPass::resolveType(QAnyStringView moduleName, QAnyStringView typeName)
 {
     auto typeImporter = d->manager->m_visitor->importer();
     auto module = typeImporter->importModule(moduleName.toString());
-    return module[typeName.toString()].scope;
+    return module.type(typeName.toString()).scope;
+}
+
+Element GenericPass::resolveLiteralType(const QQmlJSMetaPropertyBinding &binding)
+{
+    return binding.literalType(d->manager->m_typeResolver);
+}
+
+Element GenericPass::resolveIdToElement(QAnyStringView id, const Element &context)
+{
+    return d->manager->m_visitor->addressableScopes().scope(id.toString(), context);
+}
+
+QString GenericPass::resolveElementToId(const Element &element, const Element &context)
+{
+    return d->manager->m_visitor->addressableScopes().id(element, context);
+}
+
+QString GenericPass::sourceCode(QQmlJS::SourceLocation location)
+{
+    return d->manager->m_visitor->logger()->code().mid(location.offset, location.length);
 }
 
 /*!
@@ -83,7 +116,7 @@ bool PassManager::registerPropertyPass(std::shared_ptr<PropertyPass> pass,
     if (!moduleName.isEmpty() && !typeName.isEmpty()) {
         auto typeImporter = m_visitor->importer();
         auto module = typeImporter->importModule(moduleName.toString());
-        auto element = module[typeName.toString()].scope;
+        auto element = module.type(typeName.toString()).scope;
 
         if (element.isNull())
             return false;
@@ -184,7 +217,17 @@ void PassManager::analyzeBinding(const Element &element, const QQmlSA::Element &
 
 bool PassManager::hasImportedModule(QAnyStringView module) const
 {
-    return m_visitor->imports().contains(u"$module$." + module.toString());
+    return m_visitor->imports().hasType(u"$module$." + module.toString());
+}
+
+bool PassManager::isCategoryEnabled(LoggerWarningId category) const
+{
+    return !m_visitor->logger()->isCategoryIgnored(category);
+}
+
+void PassManager::setCategoryEnabled(LoggerWarningId category, bool enabled)
+{
+    m_visitor->logger()->setCategoryIgnored(category, !enabled);
 }
 
 QSet<PropertyPass *> PassManager::findPropertyUsePasses(const QQmlSA::Element &element,
@@ -221,13 +264,14 @@ QSet<PropertyPass *> PassManager::findPropertyUsePasses(const QQmlSA::Element &e
 }
 
 void DebugElementPass::run(const Element &element) {
-    emitWarning(u"Type: " + element->baseTypeName());
+    emitWarning(u"Type: " + element->baseTypeName(), qmlPlugin);
     if (auto bindings = element->propertyBindings(u"objectName"_s); !bindings.isEmpty()) {
-        emitWarning(u"is named: " + bindings.first().stringValue());
+        emitWarning(u"is named: " + bindings.first().stringValue(), qmlPlugin);
     }
     if (auto defPropName = element->defaultPropertyName(); !defPropName.isEmpty()) {
         emitWarning(u"binding " + QString::number(element->propertyBindings(defPropName).size())
-                    + u" elements to property "_s + defPropName);
+                            + u" elements to property "_s + defPropName,
+                    qmlPlugin);
     }
 }
 
@@ -282,7 +326,7 @@ void DebugPropertyPass::onRead(const QQmlSA::Element &element, const QString &pr
                         + u' ' + propertyName + u' ' + readScope->internalName() + u' '
                         + QString::number(location.startLine) + u':'
                         + QString::number(location.startColumn),
-                location);
+                qmlPlugin, location);
 }
 
 void DebugPropertyPass::onBinding(const QQmlSA::Element &element, const QString &propertyName,
@@ -303,7 +347,7 @@ void DebugPropertyPass::onBinding(const QQmlSA::Element &element, const QString 
                                                                   : bindingScope->internalName())
                         + u"' "_s + QString::number(location.startLine) + u':'
                         + QString::number(location.startColumn),
-                location);
+                qmlPlugin, location);
 }
 
 void DebugPropertyPass::onWrite(const QQmlSA::Element &element, const QString &propertyName,
@@ -314,7 +358,7 @@ void DebugPropertyPass::onWrite(const QQmlSA::Element &element, const QString &p
                         + value->internalName() + u' ' + writeScope->internalName() + u' '
                         + QString::number(location.startLine) + u':'
                         + QString::number(location.startColumn),
-                location);
+                qmlPlugin, location);
 }
 }
 

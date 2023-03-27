@@ -52,7 +52,7 @@ Q_LOGGING_CATEGORY(lcDragHandler, "qt.quick.handler.drag")
 
     At this time, drag-and-drop is not yet supported.
 
-    \sa Drag, MouseArea
+    \sa Drag, MouseArea, {Pointer Handlers Example}
 */
 
 QQuickDragHandler::QQuickDragHandler(QQuickItem *parent)
@@ -95,13 +95,13 @@ void QQuickDragHandler::onGrabChanged(QQuickPointerHandler *grabber, QPointingDe
 
     This property holds the snap mode.
 
-    The snap mode configures snapping of the \l target item's center to the event point.
+    The snap mode configures snapping of the \l target item's center to the \l eventPoint.
 
     Possible values:
     \value DragHandler.SnapNever Never snap
-    \value DragHandler.SnapAuto The \l target snaps if the event point was pressed outside of the \l target
+    \value DragHandler.SnapAuto The \l target snaps if the \l eventPoint was pressed outside of the \l target
                                 item \e and the \l target is a descendant of \l {PointerHandler::}{parent} item (default)
-    \value DragHandler.SnapWhenPressedOutsideTarget The \l target snaps if the event point was pressed outside of the \l target
+    \value DragHandler.SnapWhenPressedOutsideTarget The \l target snaps if the \l eventPoint was pressed outside of the \l target
     \value DragHandler.SnapAlways Always snap
 */
 QQuickDragHandler::SnapMode QQuickDragHandler::snapMode() const
@@ -120,7 +120,10 @@ void QQuickDragHandler::setSnapMode(QQuickDragHandler::SnapMode mode)
 void QQuickDragHandler::onActiveChanged()
 {
     QQuickMultiPointHandler::onActiveChanged();
-    if (active()) {
+    const bool curActive = active();
+    m_xAxis.onActiveChanged(curActive, 0);
+    m_yAxis.onActiveChanged(curActive, 0);
+    if (curActive) {
         if (auto parent = parentItem()) {
             if (QQuickDeliveryAgentPrivate::isTouchEvent(currentEvent()))
                 parent->setKeepTouchGrab(true);
@@ -129,7 +132,6 @@ void QQuickDragHandler::onActiveChanged()
             // mouse grab too, whenever dragging occurs in an enabled direction
             parent->setKeepMouseGrab(true);
         }
-        m_startTranslation = m_persistentTranslation;
     } else {
         m_pressTargetPos = QPointF();
         m_pressedInsideTarget = false;
@@ -283,23 +285,26 @@ void QQuickDragHandler::enforceAxisConstraints(QPointF *localPos)
 
 void QQuickDragHandler::setPersistentTranslation(const QVector2D &trans)
 {
-    if (trans == m_persistentTranslation)
+    if (trans == persistentTranslation())
         return;
 
-    m_persistentTranslation = trans;
-    emit translationChanged();
+    m_xAxis.updateValue(m_xAxis.activeValue(), trans.x());
+    m_yAxis.updateValue(m_yAxis.activeValue(), trans.y());
+    emit translationChanged({});
 }
 
 void QQuickDragHandler::setActiveTranslation(const QVector2D &trans)
 {
-    if (trans == m_activeTranslation)
+    if (trans == activeTranslation())
         return;
 
-    m_activeTranslation = trans;
-    m_persistentTranslation = m_startTranslation + trans;
-    qCDebug(lcDragHandler) << "translation: start" << m_startTranslation
-                           << "active" << m_activeTranslation << "accumulated" << m_persistentTranslation;
-    emit translationChanged();
+    const QVector2D delta = trans - activeTranslation();
+    m_xAxis.updateValue(trans.x(), m_xAxis.persistentValue() + delta.x(), delta.x());
+    m_yAxis.updateValue(trans.y(), m_yAxis.persistentValue() + delta.y(), delta.y());
+
+    qCDebug(lcDragHandler) << "translation: delta" << delta
+                           << "active" << trans << "accumulated" << persistentTranslation();
+    emit translationChanged(delta);
 }
 
 /*!
@@ -307,6 +312,7 @@ void QQuickDragHandler::setActiveTranslation(const QVector2D &trans)
     \qmlproperty real QtQuick::DragHandler::xAxis.minimum
     \qmlproperty real QtQuick::DragHandler::xAxis.maximum
     \qmlproperty bool QtQuick::DragHandler::xAxis.enabled
+    \qmlproperty real QtQuick::DragHandler::xAxis.activeValue
 
     \c xAxis controls the constraints for horizontal dragging.
 
@@ -315,13 +321,19 @@ void QQuickDragHandler::setActiveTranslation(const QVector2D &trans)
     \c maximum is the maximum acceptable value of \l {Item::x}{x} to be
     applied to the \l {PointerHandler::target} {target}.
     If \c enabled is true, horizontal dragging is allowed.
- */
+    \c activeValue is the same as \l {QtQuick::DragHandler::activeTranslation}{activeTranslation.x}.
+
+    The \c activeValueChanged signal is emitted when \c activeValue changes, to
+    provide the increment by which it changed.
+    This is intended for incrementally adjusting one property via multiple handlers.
+*/
 
 /*!
     \qmlpropertygroup QtQuick::DragHandler::yAxis
     \qmlproperty real QtQuick::DragHandler::yAxis.minimum
     \qmlproperty real QtQuick::DragHandler::yAxis.maximum
     \qmlproperty bool QtQuick::DragHandler::yAxis.enabled
+    \qmlproperty real QtQuick::DragHandler::yAxis.activeValue
 
     \c yAxis controls the constraints for vertical dragging.
 
@@ -330,7 +342,14 @@ void QQuickDragHandler::setActiveTranslation(const QVector2D &trans)
     \c maximum is the maximum acceptable value of \l {Item::y}{y} to be
     applied to the \l {PointerHandler::target} {target}.
     If \c enabled is true, vertical dragging is allowed.
- */
+    \c activeValue is the same as \l {QtQuick::DragHandler::activeTranslation}{activeTranslation.y}.
+
+    The \c activeValueChanged signal is emitted when \c activeValue changes, to
+    provide the increment by which it changed.
+    This is intended for incrementally adjusting one property via multiple handlers:
+
+    \snippet pointerHandlers/rotateViaWheelOrDrag.qml 0
+*/
 
 /*!
     \readonly

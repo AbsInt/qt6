@@ -50,7 +50,12 @@ function SetEnvVar {
     echo "Setting environment variable $name to $path."
 
     if uname -a |grep -q "Ubuntu"; then
-        echo "export $name=$path" >> ~/.profile
+        if lsb_release -a |grep "Ubuntu 22.04"; then
+            echo "export $name=$path" >> ~/.bashrc
+            echo "export $name=$path" >> ~/.bash_profile
+        else
+            echo "export $name=$path" >> ~/.profile
+        fi
     else
         echo "export $name=$path" >> ~/.bashrc
         echo "export $name=$path" >> ~/.zshrc

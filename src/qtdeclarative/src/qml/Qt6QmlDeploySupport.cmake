@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # NOTE: This code should only ever be executed in script mode. It expects to be
 #       used either as part of an install(CODE) call or called by a script
 #       invoked via cmake -P as a POST_BUILD step. It would not normally be
@@ -6,8 +9,6 @@
 
 cmake_minimum_required(VERSION 3.16...3.21)
 
-# This function is currently in Technical Preview.
-# Its signature and behavior might change.
 function(qt_deploy_qml_imports)
     set(no_value_options
         NO_QT_IMPORTS
@@ -143,14 +144,26 @@ function(_qt_internal_deploy_qml_imports_for_target)
             # file names, so account for those. There should never be plugin
             # libraries for more than one QML module in the directory, so we
             # shouldn't need to worry about matching plugins we don't want.
-            set(dest_qmldir "${QT_DEPLOY_PREFIX}/${arg_QML_DIR}/${entry_RELATIVEPATH}")
+            set(relative_qmldir "${arg_QML_DIR}/${entry_RELATIVEPATH}")
+            if("${CMAKE_INSTALL_PREFIX}" STREQUAL "")
+                set(install_qmldir "./${relative_qmldir}")
+            else()
+                set(install_qmldir "${CMAKE_INSTALL_PREFIX}/${relative_qmldir}")
+            endif()
+            set(dest_qmldir "${QT_DEPLOY_PREFIX}/${relative_qmldir}")
             if(arg_BUNDLE)
+                if("${CMAKE_INSTALL_PREFIX}" STREQUAL "")
+                    set(install_plugin "./${arg_PLUGINS_DIR}")
+                else()
+                    set(install_plugin "${CMAKE_INSTALL_PREFIX}/${arg_PLUGINS_DIR}")
+                endif()
                 set(dest_plugin "${QT_DEPLOY_PREFIX}/${arg_PLUGINS_DIR}")
             else()
+                set(install_plugin "${install_qmldir}")
                 set(dest_plugin "${dest_qmldir}")
             endif()
 
-            file(INSTALL "${entry_PATH}/qmldir" DESTINATION "${dest_qmldir}")
+            file(INSTALL "${entry_PATH}/qmldir" DESTINATION "${install_qmldir}")
 
             if(__QT_DEPLOY_POST_BUILD)
                 # We are being invoked as a post-build step. The plugin might
@@ -182,14 +195,38 @@ function(_qt_internal_deploy_qml_imports_for_target)
             file(GLOB files LIST_DIRECTORIES false "${entry_PATH}/*${entry_PLUGIN}*")
             list(FILTER files
                  INCLUDE REGEX "^(.*/)?(lib)?${entry_PLUGIN}.*\\.(so|dylib|dll)(\\.[0-9]+)*$")
-            file(INSTALL ${files} DESTINATION "${dest_plugin}" USE_SOURCE_PERMISSIONS)
+            file(INSTALL ${files} DESTINATION "${install_plugin}" USE_SOURCE_PERMISSIONS)
 
             get_filename_component(dest_plugin_abs "${dest_plugin}" ABSOLUTE)
-            file(RELATIVE_PATH rel_path "${install_prefix_abs}" "${dest_plugin_abs}")
-            foreach(file IN LISTS files)
-                get_filename_component(filename "${file}" NAME)
-                list(APPEND plugins_found "${rel_path}/${filename}")
-            endforeach()
+            if(__QT_DEPLOY_TOOL STREQUAL "GRD")
+                # Use the full plugin path for deployment. This is necessary for file(GRD) to
+                # resolve the dependencies of the plugins.
+                list(APPEND plugins_found ${files})
+            else()
+                # Use relative paths for the plugins. If we used full paths here, macdeployqt would
+                # modify the RPATHS of plugins in the Qt installation.
+                file(RELATIVE_PATH rel_path "${install_prefix_abs}" "${dest_plugin_abs}")
+                foreach(file IN LISTS files)
+                    get_filename_component(filename "${file}" NAME)
+                    list(APPEND plugins_found "${rel_path}/${filename}")
+                endforeach()
+            endif()
+
+            if(__QT_DEPLOY_TOOL STREQUAL "GRD" AND __QT_DEPLOY_MUST_ADJUST_PLUGINS_RPATH)
+                # The RPATHs of the installed plugins do not match Qt's original lib directory.
+                # We must set the RPATH to point to QT_DEPLOY_LIBDIR.
+                _qt_internal_get_rpath_origin(rpath_origin)
+                foreach(file_path IN LISTS files)
+                    get_filename_component(file_name ${file_path} NAME)
+                    file(RELATIVE_PATH rel_lib_dir "${dest_plugin}"
+                        "${QT_DEPLOY_PREFIX}/${QT_DEPLOY_LIB_DIR}"
+                    )
+                    _qt_internal_set_rpath(
+                        FILE "${dest_plugin}/${file_name}"
+                        NEW_RPATH "${rpath_origin}/${rel_lib_dir}"
+                    )
+                endforeach()
+            endif()
 
             if(arg_BUNDLE)
                 # Actual plugin binaries will be in PlugIns, but qmldir files

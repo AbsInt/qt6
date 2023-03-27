@@ -130,7 +130,7 @@ VersionDialog::VersionDialog(QWidget *parent)
 #endif
             )
 {
-    setWindowFlags((windowFlags() & ~Qt::WindowContextHelpButtonHint) | Qt::MSWindowsFixedSizeDialogHint);
+    setWindowFlag(Qt::MSWindowsFixedSizeDialogHint, true);
     QGridLayout *layout = new QGridLayout(this);
     VersionLabel *label = new VersionLabel(this);
     QLabel *lbl = new QLabel(this);
@@ -140,7 +140,7 @@ VersionDialog::VersionDialog(QWidget *parent)
 
     lbl->setText(tr("%1"
                     "<br/>Copyright (C) %2 The Qt Company Ltd."
-                    ).arg(version, QStringLiteral("2022")));
+                    ).arg(version, QStringLiteral("2023")));
 
     lbl->setWordWrap(true);
     lbl->setOpenExternalLinks(true);

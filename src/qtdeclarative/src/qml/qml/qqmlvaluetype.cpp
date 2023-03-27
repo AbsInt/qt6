@@ -43,11 +43,12 @@ void QQmlGadgetPtrWrapper::read(QObject *obj, int idx)
     QMetaObject::metacall(obj, QMetaObject::ReadProperty, idx, a);
 }
 
-void QQmlGadgetPtrWrapper::write(QObject *obj, int idx, QQmlPropertyData::WriteFlags flags) const
+void QQmlGadgetPtrWrapper::write(
+        QObject *obj, int idx, QQmlPropertyData::WriteFlags flags, int internalIndex) const
 {
     Q_ASSERT(m_gadgetPtr);
     int status = -1;
-    void *a[] = { m_gadgetPtr, nullptr, &status, &flags };
+    void *a[] = { m_gadgetPtr, nullptr, &status, &flags, &internalIndex };
     QMetaObject::metacall(obj, QMetaObject::WriteProperty, idx, a);
 }
 
@@ -384,7 +385,7 @@ void QQmlEasingValueType::setBezierCurve(const QVariantList &customCurveVariant)
     if (customCurveVariant.isEmpty())
         return;
 
-    if ((customCurveVariant.count() % 6) != 0)
+    if ((customCurveVariant.size() % 6) != 0)
         return;
 
     auto convert = [](const QVariant &v, qreal &r) {

@@ -1,4 +1,15 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 add_subdirectory(cmake)
+
+# For now, only build a subset of CMake auto tests when QT_BUILD_MINIMAL_STATIC_TEST
+# is specified and the build is targeting iOS. QT_BUILD_MINIMAL_STATIC_TEST is used in our CI.
+# Regular tests shouldn't be built because the CI will try to run them and fail due to missing
+# simulator support.
+if(IOS AND QT_BUILD_MINIMAL_STATIC_TESTS)
+    return()
+endif()
 
 if(TARGET Qt::Quick)
     add_subdirectory(qml)
@@ -31,6 +42,6 @@ if(TARGET Qt::QmlDomPrivate AND NOT CMAKE_CROSSCOMPILING)
     add_subdirectory(qmlls)
 endif()
 if(TARGET Qt::QuickTemplates2)
-    add_subdirectory(quickcontrols2)
+    add_subdirectory(quickcontrols)
     add_subdirectory(quickdialogs)
 endif()

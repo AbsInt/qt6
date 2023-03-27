@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 qt_internal_add_qml_module(QmlCore
     URI "QtCore"
     VERSION "${PROJECT_VERSION}"
@@ -5,13 +8,15 @@ qt_internal_add_qml_module(QmlCore
     PLUGIN_TARGET qtqmlcoreplugin
     CLASS_NAME QtQmlCorePlugin
     DEPENDENCIES
-        QtQml
+        QtQml/auto
     SOURCES
         qqmlsysteminformation_p.h
         qqmlsysteminformation.cpp
         qqmlstandardpaths_p.h
         qqmlstandardpaths.cpp
         qqmlcoreglobal_p.h
+        qqmlsettings_p.h
+        qqmlsettings.cpp
     DEFINES
         QT_BUILD_QML_CORE_LIB
     PUBLIC_LIBRARIES

@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Generated from qmleasing.pro.
 
 #####################################################################
@@ -13,7 +16,7 @@ qt_internal_add_app(qmleasing
         properties.ui
         segmentproperties.cpp segmentproperties.h
         splineeditor.cpp splineeditor.h
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Gui
         Qt::Qml
         Qt::Quick

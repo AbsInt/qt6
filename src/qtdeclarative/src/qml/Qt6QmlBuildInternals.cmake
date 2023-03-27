@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 #
 # QtDeclarative Specific extensions
 #
@@ -28,8 +31,6 @@ macro(qt_internal_get_internal_add_qml_module_keywords
         PLUGIN_TARGET
         TYPEINFO
         CLASS_NAME
-        CLASSNAME  # TODO: Remove once all other repos have been updated to use
-                   #       CLASS_NAME instead.
         TYPE_COMPILER_NAMESPACE
     )
     set(${multi_args}
@@ -116,12 +117,12 @@ function(qt_internal_add_qml_module target)
         ${qml_module_internal_multi_args}
     )
 
-    qt_parse_all_arguments(arg "qt_internal_add_qml_module"
+    cmake_parse_arguments(PARSE_ARGV 1 arg
         "${option_args}"
         "${single_args}"
         "${multi_args}"
-        ${ARGN}
     )
+    _qt_internal_validate_all_args_are_parsed(arg)
 
     set(QT_QML_OUTPUT_DIRECTORY "${QT_BUILD_DIR}/${INSTALL_QMLDIR}")
     string(REPLACE "." "/" target_path ${arg_URI})
@@ -135,18 +136,6 @@ function(qt_internal_add_qml_module target)
         unset(arg_PLUGIN_TARGET)
     elseif(NOT arg_PLUGIN_TARGET)
         set(arg_PLUGIN_TARGET ${target}plugin)
-    endif()
-
-    # TODO: Support for old keyword, remove once all repos no longer use CLASSNAME
-    if(arg_CLASSNAME)
-        if(arg_CLASS_NAME AND NOT arg_CLASSNAME STREQUAL arg_CLASS_NAME)
-            message(FATAL_ERROR
-                "Both CLASSNAME and CLASS_NAME were given and were different. "
-                "Update call site to only use CLASS_NAME."
-            )
-        endif()
-        set(arg_CLASS_NAME "${arg_CLASSNAME}")
-        unset(arg_CLASSNAME)
     endif()
 
     set(plugin_args "")
@@ -196,7 +185,6 @@ function(qt_internal_add_qml_module target)
                 OUTPUT_DIRECTORY
                 INSTALL_DIRECTORY
                 CLASS_NAME
-                CLASSNAME
             ALL_ARGS
                 ${option_args}
                 ${single_args}
@@ -316,12 +304,18 @@ function(qt_internal_add_qml_module target)
     # Update the backing and plugin targets with qml-specific things.
     qt6_add_qml_module(${target}
         ${add_qml_module_args}
-        __QT_INTERNAL_INSTALL_METATYPES_JSON
         OUTPUT_DIRECTORY ${arg_OUTPUT_DIRECTORY}
         RESOURCE_PREFIX "/qt-project.org/imports"
         OUTPUT_TARGETS output_targets
         FOLLOW_FOREIGN_VERSIONING
     )
+
+    if(TARGET "${target}" AND NOT target STREQUAL "Qml")
+        qt_internal_add_autogen_sync_header_dependencies(${target} Qml)
+    endif()
+    if(TARGET "${arg_PLUGIN_TARGET}" AND NOT target STREQUAL arg_PLUGIN_TARGET)
+        qt_internal_add_autogen_sync_header_dependencies(${arg_PLUGIN_TARGET} Qml)
+    endif()
 
     if(output_targets)
         set(plugin_export_targets)

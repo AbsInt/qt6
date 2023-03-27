@@ -15,7 +15,6 @@
 // We mean it.
 //
 
-#include "qqmlerror.h"
 #include <private/qrecursionwatcher_p.h>
 
 #include <QtCore/QStack>
@@ -116,8 +115,7 @@ bool QQmlInstantiationInterrupt::shouldInterrupt() const
     case Flag:
         return !runWhile->load(std::memory_order_acquire) || (nsecs && timer.nsecsElapsed() > nsecs);
     }
-    Q_UNREACHABLE();
-    return false;
+    Q_UNREACHABLE_RETURN(false);
 }
 
 QT_END_NAMESPACE

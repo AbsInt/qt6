@@ -13,10 +13,12 @@
 #include <QtQuick/private/qquickpalette_p.h>
 #include <QtQuickTestUtils/private/qmlutils_p.h>
 #include <QtQuickTestUtils/private/testhttpserver_p.h>
+#include <private/qqmlcomponent_p.h>
 #include <private/qqmlguardedcontextdata_p.h>
 #include <private/qv4qmlcontext_p.h>
-#include <private/qv4scopedvalue_p.h>
 #include <private/qv4qmlcontext_p.h>
+#include <private/qv4scopedvalue_p.h>
+#include <private/qv4executablecompilationunit_p.h>
 #include <qcolor.h>
 #include <qsignalspy.h>
 
@@ -136,6 +138,13 @@ private slots:
     void qmlPropertySignalExists();
     void componentTypes();
     void boundComponent();
+    void loadFromModule_data();
+    void loadFromModule();
+    void loadFromModuleThenCreateWithIncubator();
+    void loadFromModuleFailures_data();
+    void loadFromModuleFailures();
+    void loadFromModuleRequired();
+    void loadFromQrc();
 
 private:
     QQmlEngine engine;
@@ -265,6 +274,16 @@ void tst_qqmlcomponent::qmlCreateObjectAutoParent()
 void tst_qqmlcomponent::qmlCreateObjectWithProperties()
 {
     QQmlEngine engine;
+
+    QTest::ignoreMessage(
+            QtMsgType::QtWarningMsg,
+            QRegularExpression(".*createObjectWithScript.qml: Setting initial properties failed: "
+                               "Item does not have a property called not_i"));
+    QTest::ignoreMessage(
+            QtMsgType::QtWarningMsg,
+            QRegularExpression(
+                    ".*createObjectWithScript.qml:42:13: Required property i was not initialized"));
+
     QQmlComponent component(&engine, testFileUrl("createObjectWithScript.qml"));
     QVERIFY2(component.errorString().isEmpty(), component.errorString().toUtf8());
     QScopedPointer<QObject> object(component.create());
@@ -312,6 +331,16 @@ void tst_qqmlcomponent::qmlCreateObjectWithProperties()
         QCOMPARE(testBindingThisObj->property("testValue").value<int>(), 900);
         testBindingThisObj->setProperty("width", 200);
         QCOMPARE(testBindingThisObj->property("testValue").value<int>(), 200 * 3);
+    }
+
+    {
+        QScopedPointer<QObject> badRequired(object->property("badRequired").value<QObject *>());
+        QVERIFY(!badRequired);
+
+        QScopedPointer<QObject> goodRequired(object->property("goodRequired").value<QObject *>());
+        QVERIFY(goodRequired);
+        QCOMPARE(goodRequired->parent(), object.data());
+        QCOMPARE(goodRequired->property("i").value<int>(), 42);
     }
 }
 
@@ -1025,11 +1054,64 @@ void tst_qqmlcomponent::testSetInitialProperties()
         // createWithInitialProperties: setting a nonexistent property
         QQmlComponent comp(&eng);
         comp.loadUrl(testFileUrl("allJSONTypes.qml"));
+        const QRegularExpression errorMessage { QStringLiteral(
+                ".*allJSONTypes.qml: Setting initial properties failed: Item does not have a "
+                "property called notThePropertiesYoureLookingFor") };
+        QTest::ignoreMessage(QtMsgType::QtWarningMsg, errorMessage);
         QScopedPointer<QObject> obj {
             comp.createWithInitialProperties(QVariantMap { {"notThePropertiesYoureLookingFor", 42} })
         };
         QVERIFY(obj);
-        QVERIFY(comp.errorString().contains("Setting initial properties failed: Item does not have a property called notThePropertiesYoureLookingFor"));
+        QVERIFY(comp.isReady()); // despite the error, the component is still ready
+
+        // QTBUG-101439: repeated creation succeeds as well
+        QScopedPointer<QObject> objEmpty { comp.create() };
+        QVERIFY(objEmpty);
+    }
+
+    {
+        QQmlComponent comp(&eng);
+        comp.loadUrl(testFileUrl("requiredNotSet.qml"));
+        QTest::ignoreMessage(
+                QtMsgType::QtWarningMsg,
+                QRegularExpression(".*requiredNotSet.qml: Setting initial properties failed: Item "
+                                   "does not have a property called not_i"));
+        QScopedPointer<QObject> obj { comp.createWithInitialProperties(
+                QVariantMap { { QLatin1String("not_i"), QJsonValue { 42 } } }) };
+        QVERIFY(!obj);
+        QVERIFY(comp.isError());
+        QVERIFY(comp.errorString().contains("Required property i was not initialized"));
+
+        QScopedPointer<QObject> objGood { comp.createWithInitialProperties(
+                QVariantMap { { QLatin1String("i"), QJsonValue { 42 } } }) };
+        QVERIFY2(objGood, qPrintable(comp.errorString()));
+        QCOMPARE(objGood->property("i"), 42);
+    }
+
+    // QJSValue unpacking - QTBUG-101440
+    {
+        QQmlComponent comp(&eng);
+        comp.setData(R"(
+            import QtQml
+            QtObject {
+                property int x
+                property int y: func ? func() : -1
+                property var func // special
+            }
+        )", QUrl());
+
+        QJSValue data = eng.evaluate("({ \"x\": 42, \"func\": (function() { return 42; }) })");
+        QVERIFY(data.isObject());
+        QVariant var = data.toVariant();
+        QCOMPARE(var.typeId(), QMetaType::QVariantMap);
+        QVariantMap properties = var.toMap();
+        QScopedPointer<QObject> object { comp.createWithInitialProperties(properties) };
+        QVERIFY(object);
+        QCOMPARE(object->property("x"), 42);
+        QCOMPARE(object->property("y"), 42);
+        QJSValue func = eng.toScriptValue(object->property("func"));
+        QVERIFY(func.isCallable());
+        QCOMPARE(func.call().toInt(), 42);
     }
 }
 
@@ -1163,12 +1245,14 @@ void tst_qqmlcomponent::boundComponent()
     {
         QQmlComponent component(&engine, testFileUrl("nestedBoundComponent.qml"));
         QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        QVERIFY(component.isBound());
 
         QScopedPointer<QObject> o(component.create());
         QVERIFY(!o.isNull());
 
         QQmlComponent *nestedComponent = o->property("c").value<QQmlComponent *>();
         QVERIFY(nestedComponent != nullptr);
+        QVERIFY(nestedComponent->isBound());
 
         QObject *nestedObject = o->property("o").value<QObject *>();
         QVERIFY(nestedObject != nullptr);
@@ -1187,6 +1271,7 @@ void tst_qqmlcomponent::boundComponent()
     {
         QQmlComponent component(&engine, testFileUrl("BoundInlineComponent.qml"));
         QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        QVERIFY(component.isBound());
 
         QScopedPointer<QObject> o(component.create());
         QVERIFY2(!o.isNull(), qPrintable(component.errorString()));
@@ -1200,12 +1285,158 @@ void tst_qqmlcomponent::boundComponent()
     {
         QQmlComponent component(&engine, testFileUrl("boundInlineComponentUser.qml"));
         QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        QVERIFY(!component.isBound());
         QScopedPointer<QObject> o(component.create());
         QVERIFY(o.isNull());
 
         QVERIFY(component.errorString().contains(
                 QLatin1String("Cannot instantiate bound inline component in different file")));
+
     }
+
+    {
+        QQmlComponent component(&engine);
+        QVERIFY(!component.isBound());
+
+        component.setData("pragma ComponentBehavior: Bound\nsyntax error", QUrl());
+        QCOMPARE(component.errorString(), ":2 Syntax error\n"_L1);
+        QVERIFY(!component.isBound());
+    }
+}
+
+void tst_qqmlcomponent::loadFromModule_data()
+{
+    using namespace Qt::StringLiterals;
+
+    QTest::addColumn<QString>("uri");
+    QTest::addColumn<QString>("typeName");
+    QTest::addColumn<QString>("classNameRe");
+
+    QTest::addRow("Item") << u"QtQuick"_s << u"Item"_s << u"QQuickItem"_s;
+#if defined(HAS_CONTROLS)
+    QTest::addRow("Button") << u"QtQuick.Controls"_s << u"Button"_s << u"Button_QMLTYPE_\\d+"_s;
+    QTest::addRow("Basic.Button") << u"QtQuick.Controls.Basic"_s << u"Button"_s << u"Button_QMLTYPE_\\d+"_s;
+#endif
+
+    QTest::addRow("IC") << u"test"_s << u"TestComponentWithIC"_s << u"TestComponentWithIC"_s; // sanity check for next test
+    QTest::addRow("IC") << u"test"_s << u"TestComponentWithIC.InnerIC"_s << u"InnerIC"_s;
+
+    QTest::addRow("plainQML") << u"plainqml"_s << u"Plain"_s << u"Plain"_s;
+}
+
+void tst_qqmlcomponent::loadFromModule()
+{
+    QFETCH(QString, uri);
+    QFETCH(QString, typeName);
+    QFETCH(QString, classNameRe);
+    QQmlEngine engine;
+    QQmlComponent component(&engine);
+    QCOMPARE(component.progress(), 0);
+    QSignalSpy progressSpy(&component, &QQmlComponent::progressChanged);
+    component.loadFromModule(uri, typeName);
+    QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+
+    // verify that we changed the progress correctly to 1
+    QVERIFY(!progressSpy.isEmpty() || progressSpy.wait());
+    QCOMPARE(progressSpy.last().at(0).toDouble(), 1.0);
+
+    std::unique_ptr<QObject> object(component.create());
+    QVERIFY(object);
+    QRegularExpression classNameMatcher(classNameRe);
+    const char *name = object->metaObject()->className();
+    QVERIFY2(classNameMatcher.match(name).hasMatch(),
+             name);
+}
+
+struct CallVerifyingIncubtor : QQmlIncubator
+{
+    void setInitialState(QObject *) override { setInitialStateCalled = true; }
+    void statusChanged(QQmlIncubator::Status status) override { lastStatus = status; }
+
+    QQmlIncubator::Status lastStatus = QQmlIncubator::Null;
+    bool setInitialStateCalled = false;
+};
+
+void tst_qqmlcomponent::loadFromModuleThenCreateWithIncubator()
+{
+    QQmlEngine engine;
+    QQmlComponent comp(&engine);
+    comp.loadFromModule("QtQuick", "Rectangle");
+    CallVerifyingIncubtor incubator;
+    comp.create(incubator);
+    std::unique_ptr<QObject> object { incubator.object() };
+    QVERIFY(incubator.setInitialStateCalled);
+    QVERIFY(incubator.isReady());
+    QCOMPARE(incubator.lastStatus, QQmlIncubator::Ready);
+    QCOMPARE(object->metaObject()->className(), "QQuickRectangle");
+}
+
+void tst_qqmlcomponent::loadFromModuleFailures_data()
+{
+
+    QTest::addColumn<QString>("uri");
+    QTest::addColumn<QString>("typeName");
+    QTest::addColumn<QString>("errorMsg");
+
+    QTest::addRow("noSuchModule") << "Does.Not.Exist"
+                                  << "Type"
+                                  << "No module named \"Does.Not.Exist\" found";
+    QTest::addRow("noSuchType") << "QtQml"
+                                << "NoSuchType"
+                                << "Module \"QtQml\" contains no type named \"NoSuchType\"";
+    QTest::addRow("CppSingleton") << u"QtQuick"_s
+                                  << u"Application"_s
+                                  << u"Application is a singleton, and cannot be loaded"_s;
+}
+
+void tst_qqmlcomponent::loadFromModuleFailures()
+{
+    QFETCH(QString, uri);
+    QFETCH(QString, typeName);
+    QFETCH(QString, errorMsg);
+
+    QQmlEngine engine;
+    QQmlComponent component(&engine);
+    QSignalSpy errorSpy(&component, &QQmlComponent::statusChanged);
+    component.loadFromModule(uri, typeName);
+    QVERIFY(!errorSpy.isEmpty());
+    QCOMPARE(errorSpy.first().first().value<QQmlComponent::Status>(),
+             QQmlComponent::Error);
+    QVERIFY(!component.errors().isEmpty());
+    QCOMPARE(component.errors().constFirst().description(),
+             errorMsg);
+}
+
+struct SingleRequiredProperty : QObject
+{
+    Q_OBJECT
+    Q_PROPERTY(int i MEMBER i REQUIRED)
+
+    int i = 42;
+};
+
+void tst_qqmlcomponent::loadFromModuleRequired()
+{
+
+    QQmlEngine engine;
+    qmlRegisterType<SingleRequiredProperty>("qqmlcomponenttest", 1, 0, "SingleRequiredProperty");
+    QQmlComponent component(&engine, "qqmlcomponenttest", "SingleRequiredProperty");
+    QVERIFY2(!component.isError(), qPrintable(component.errorString()));
+
+    QScopedPointer<QObject> root(component.create());
+    QVERIFY(!root);
+}
+
+void tst_qqmlcomponent::loadFromQrc()
+{
+    QQmlEngine engine;
+    QQmlComponent component(&engine, QStringLiteral(":/qt/qml/test/data/withAot.qml"));
+    QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+
+    QQmlComponentPrivate *p = QQmlComponentPrivate::get(&component);
+    QVERIFY(p);
+    QVERIFY(p->compilationUnit);
+    QVERIFY(p->compilationUnit->aotCompiledFunctions);
 }
 
 QTEST_MAIN(tst_qqmlcomponent)

@@ -8,7 +8,9 @@
 #include "qquickwindow_p.h"
 #include "qquickevents_p_p.h"
 #include "qquickmousearea_p.h"
+#if QT_CONFIG(quick_draganddrop)
 #include "qquickdrag_p.h"
+#endif
 
 #include <QtQuick/private/qquickpointerhandler_p.h>
 #include <QtQuick/private/qquicktransition_p.h>
@@ -434,6 +436,14 @@ void QQuickFlickablePrivate::fixupY()
     fixup(vData, q->minYExtent(), q->maxYExtent());
 }
 
+/*!
+    \internal
+
+    Adjusts the contentItem's position via the timeline.
+    This function is used by QQuickFlickablePrivate::fixup in order to
+    position the contentItem back into the viewport, in case flicking,
+    dragging or geometry adjustments moved it outside of bounds.
+*/
 void QQuickFlickablePrivate::adjustContentPos(AxisData &data, qreal toPos)
 {
     Q_Q(QQuickFlickable);
@@ -477,6 +487,16 @@ void QQuickFlickablePrivate::clearTimeline()
         vData.transitionToBounds->stopTransition();
 }
 
+/*!
+    \internal
+
+    This function should be called after the contentItem has been moved, either programmatically,
+    or by the timeline (as a result of a flick).
+    It ensures that the contentItem will be moved back into bounds,
+    in case it was flicked outside of the visible area.
+
+    The positional adjustment will usually be animated by the timeline, unless the fixupMode is set to Immediate.
+*/
 void QQuickFlickablePrivate::fixup(AxisData &data, qreal minExtent, qreal maxExtent)
 {
     if (data.move.value() >= minExtent || maxExtent > minExtent) {
@@ -516,6 +536,15 @@ static bool fuzzyLessThanOrEqualTo(qreal a, qreal b)
     return a <= b || qFuzzyCompare(a, b);
 }
 
+/*!
+    \internal
+
+    This function's main purpose is to update the atBeginning and atEnd flags
+    in hData and vData. It should be called when the contentItem has moved,
+    to ensure that hData and vData are up to date.
+
+    The origin will also be updated, if AxisData::markExtentsDirty has been called
+*/
 void QQuickFlickablePrivate::updateBeginningEnd()
 {
     Q_Q(QQuickFlickable);
@@ -1358,10 +1387,14 @@ void QQuickFlickablePrivate::handleMoveEvent(QPointerEvent *event)
     const QVector2D velocity = firstPointLocalVelocity(event);
     bool overThreshold = false;
 
-    if (q->yflick())
-        overThreshold |= QQuickDeliveryAgentPrivate::dragOverThreshold(deltas.y(), Qt::YAxis, firstPoint);
-    if (q->xflick())
-        overThreshold |= QQuickDeliveryAgentPrivate::dragOverThreshold(deltas.x(), Qt::XAxis, firstPoint);
+    if (event->pointCount() == 1) {
+        if (q->yflick())
+            overThreshold |= QQuickDeliveryAgentPrivate::dragOverThreshold(deltas.y(), Qt::YAxis, firstPoint);
+        if (q->xflick())
+            overThreshold |= QQuickDeliveryAgentPrivate::dragOverThreshold(deltas.x(), Qt::XAxis, firstPoint);
+    } else {
+        qCDebug(lcFilter) << q->objectName() << "ignoring multi-touch" << event;
+    }
 
     drag(currentTimestamp, event->type(), pos, deltas, overThreshold, false, false, velocity);
 }
@@ -1426,7 +1459,7 @@ void QQuickFlickablePrivate::handleReleaseEvent(QPointerEvent *event)
 
     bool flickedVertically = false;
     vVelocity *= flickBoost;
-    bool isVerticalFlickAllowed = q->yflick() && qAbs(vVelocity) > MinimumFlickVelocity && qAbs(pos.y() - pressPos.y()) > FlickThreshold;
+    bool isVerticalFlickAllowed = q->yflick() && qAbs(vVelocity) > _q_MinimumFlickVelocity && qAbs(pos.y() - pressPos.y()) > FlickThreshold;
     if (isVerticalFlickAllowed) {
         velocityTimeline.reset(vData.smoothVelocity);
         vData.smoothVelocity.setValue(-vVelocity);
@@ -1435,7 +1468,7 @@ void QQuickFlickablePrivate::handleReleaseEvent(QPointerEvent *event)
 
     bool flickedHorizontally = false;
     hVelocity *= flickBoost;
-    bool isHorizontalFlickAllowed = q->xflick() && qAbs(hVelocity) > MinimumFlickVelocity && qAbs(pos.x() - pressPos.x()) > FlickThreshold;
+    bool isHorizontalFlickAllowed = q->xflick() && qAbs(hVelocity) > _q_MinimumFlickVelocity && qAbs(pos.x() - pressPos.x()) > FlickThreshold;
     if (isHorizontalFlickAllowed) {
         velocityTimeline.reset(hData.smoothVelocity);
         hData.smoothVelocity.setValue(-hVelocity);
@@ -1775,6 +1808,15 @@ void QQuickFlickablePrivate::replayDelayedPress()
 }
 
 //XXX pixelAligned ignores the global position of the Flickable, i.e. assumes Flickable itself is pixel aligned.
+
+/*!
+    \internal
+
+    This function is called from the timeline,
+    when advancement in the timeline is modifying the hData.move value.
+    The \a x argument is the newly updated value in hData.move.
+    The purpose of the function is to update the x position of the contentItem.
+*/
 void QQuickFlickablePrivate::setViewportX(qreal x)
 {
     Q_Q(QQuickFlickable);
@@ -1802,6 +1844,14 @@ void QQuickFlickablePrivate::setViewportX(qreal x)
     }
 }
 
+/*!
+    \internal
+
+    This function is called from the timeline,
+    when advancement in the timeline is modifying the vData.move value.
+    The \a y argument is the newly updated value in vData.move.
+    The purpose of the function is to update the y position of the contentItem.
+*/
 void QQuickFlickablePrivate::setViewportY(qreal y)
 {
     Q_Q(QQuickFlickable);
@@ -2454,6 +2504,13 @@ qreal QQuickFlickable::vHeight() const
         return d->vData.viewSize;
 }
 
+/*!
+    \internal
+
+    The setFlickableDirection function can be used to set constraints on which axis the contentItem can be flicked along.
+
+    \return true if the flickable is allowed to flick in the horizontal direction, otherwise returns false
+*/
 bool QQuickFlickable::xflick() const
 {
     Q_D(const QQuickFlickable);
@@ -2465,6 +2522,13 @@ bool QQuickFlickable::xflick() const
     return d->flickableDirection & QQuickFlickable::HorizontalFlick;
 }
 
+/*!
+    \internal
+
+    The setFlickableDirection function can be used to set constraints on which axis the contentItem can be flicked along.
+
+    \return true if the flickable is allowed to flick in the vertical direction, otherwise returns false.
+*/
 bool QQuickFlickable::yflick() const
 {
     Q_D(const QQuickFlickable);
@@ -2524,11 +2588,17 @@ bool QQuickFlickable::filterPointerEvent(QQuickItem *receiver, QPointerEvent *ev
           QQuickDeliveryAgentPrivate::isTabletEvent(event)))
         return false; // don't filter hover events or wheel events, for example
     Q_ASSERT_X(receiver != this, "", "Flickable received a filter event for itself");
-    qCDebug(lcFilter) << objectName() << "filtering" << event << "for" << receiver;
     Q_D(QQuickFlickable);
     // If a touch event contains a new press point, don't steal right away: watch the movements for a while
     if (isTouch && static_cast<QTouchEvent *>(event)->touchPointStates().testFlag(QEventPoint::State::Pressed))
         d->stealMouse = false;
+    // If multiple touchpoints are within bounds, don't grab: it's probably meant for multi-touch interaction in some child
+    if (event->pointCount() > 1) {
+        qCDebug(lcFilter) << objectName() << "ignoring multi-touch" << event << "for" << receiver;
+        d->stealMouse = false;
+    } else {
+        qCDebug(lcFilter) << objectName() << "filtering" << event << "for" << receiver;
+    }
     const auto &firstPoint = event->points().first();
     QPointF localPos = mapFromScene(firstPoint.scenePosition());
     bool receiverDisabled = receiver && !receiver->isEnabled();
@@ -2539,8 +2609,10 @@ bool QQuickFlickable::filterPointerEvent(QQuickItem *receiver, QPointerEvent *ev
     // Special case for MouseArea, try to guess what it does with the event
     if (auto *mouseArea = qmlobject_cast<QQuickMouseArea *>(receiver)) {
         bool preventStealing = mouseArea->preventStealing();
+#if QT_CONFIG(quick_draganddrop)
         if (mouseArea->drag() && mouseArea->drag()->target())
             preventStealing = true;
+#endif
         if (!preventStealing && receiverKeepsGrab) {
             receiverRelinquishGrab = !receiverDisabled
                     || (QQuickDeliveryAgentPrivate::isMouseEvent(event)

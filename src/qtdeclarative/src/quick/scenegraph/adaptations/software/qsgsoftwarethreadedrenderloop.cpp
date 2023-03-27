@@ -29,23 +29,6 @@
 
 QT_BEGIN_NAMESPACE
 
-// Passed from the RL to the RT when a window is removed obscured and should be
-// removed from the render loop.
-const QEvent::Type WM_Obscure           = QEvent::Type(QEvent::User + 1);
-
-// Passed from the RL to RT when GUI has been locked, waiting for sync.
-const QEvent::Type WM_RequestSync       = QEvent::Type(QEvent::User + 2);
-
-// Passed by the RL to the RT to maybe release resource if no windows are
-// rendering.
-const QEvent::Type WM_TryRelease        = QEvent::Type(QEvent::User + 4);
-
-// Passed by the RL to the RT when a QQuickWindow::grabWindow() is called.
-const QEvent::Type WM_Grab              = QEvent::Type(QEvent::User + 5);
-
-// Passed by the window when there is a render job to run.
-const QEvent::Type WM_PostJob           = QEvent::Type(QEvent::User + 6);
-
 class QSGSoftwareWindowEvent : public QEvent
 {
 public:
@@ -57,7 +40,7 @@ class QSGSoftwareTryReleaseEvent : public QSGSoftwareWindowEvent
 {
 public:
     QSGSoftwareTryReleaseEvent(QQuickWindow *win, bool destroy)
-        : QSGSoftwareWindowEvent(win, WM_TryRelease), destroying(destroy) { }
+        : QSGSoftwareWindowEvent(win, QEvent::Type(WM_TryRelease)), destroying(destroy) { }
     bool destroying;
 };
 
@@ -65,7 +48,7 @@ class QSGSoftwareSyncEvent : public QSGSoftwareWindowEvent
 {
 public:
     QSGSoftwareSyncEvent(QQuickWindow *c, bool inExpose, bool force)
-        : QSGSoftwareWindowEvent(c, WM_RequestSync)
+        : QSGSoftwareWindowEvent(c, QEvent::Type(WM_RequestSync))
         , size(c->size())
         , dpr(c->effectiveDevicePixelRatio())
         , syncInExpose(inExpose)
@@ -80,7 +63,7 @@ class QSGSoftwareGrabEvent : public QSGSoftwareWindowEvent
 {
 public:
     QSGSoftwareGrabEvent(QQuickWindow *c, QImage *result)
-        : QSGSoftwareWindowEvent(c, WM_Grab), image(result) { }
+        : QSGSoftwareWindowEvent(c, QEvent::Type(WM_Grab)), image(result) { }
     QImage *image;
 };
 
@@ -88,7 +71,7 @@ class QSGSoftwareJobEvent : public QSGSoftwareWindowEvent
 {
 public:
     QSGSoftwareJobEvent(QQuickWindow *c, QRunnable *postedJob)
-        : QSGSoftwareWindowEvent(c, WM_PostJob), job(postedJob) { }
+        : QSGSoftwareWindowEvent(c, QEvent::Type(WM_PostJob)), job(postedJob) { }
     ~QSGSoftwareJobEvent() { delete job; }
     QRunnable *job;
 };
@@ -294,7 +277,7 @@ bool QSGSoftwareRenderThread::event(QEvent *e)
             rc->initialize(nullptr);
             wd->syncSceneGraph();
             rc->endSync();
-            wd->renderSceneGraph(wme->window->size());
+            wd->renderSceneGraph();
             *wme->image = backingStore->handle()->toImage();
         }
         qCDebug(QSG_RASTER_LOG_RENDERLOOP, "RT - WM_Grab - waking gui to handle result");
@@ -473,7 +456,7 @@ void QSGSoftwareRenderThread::syncAndRender()
         auto softwareRenderer = static_cast<QSGSoftwareRenderer*>(wd->renderer);
         if (softwareRenderer)
             softwareRenderer->setBackingStore(backingStore);
-        wd->renderSceneGraph(exposedWindow->size());
+        wd->renderSceneGraph();
 
         Q_TRACE(QSG_render_exit);
         Q_QUICK_SG_PROFILE_RECORD(QQuickProfiler::SceneGraphRenderLoopFrame,
@@ -516,11 +499,11 @@ void QSGSoftwareRenderThread::syncAndRender()
                            QQuickProfiler::SceneGraphRenderLoopSwap);
 }
 
-template<class T> T *windowFor(const QVector<T> &list, QQuickWindow *window)
+QSGSoftwareThreadedRenderLoop::WindowData *QSGSoftwareThreadedRenderLoop::windowFor(QQuickWindow *window)
 {
-    for (const T &t : list) {
+    for (const auto &t : std::as_const(m_windows)) {
         if (t.window == window)
-            return const_cast<T *>(&t);
+            return const_cast<WindowData *>(&t);
     }
     return nullptr;
 }
@@ -552,7 +535,7 @@ void QSGSoftwareThreadedRenderLoop::hide(QQuickWindow *window)
     qCDebug(QSG_RASTER_LOG_RENDERLOOP) << "hide" << window;
 
     if (window->isExposed())
-        handleObscurity(windowFor(m_windows, window));
+        handleObscurity(windowFor(window));
 
     releaseResources(window);
 }
@@ -569,7 +552,7 @@ void QSGSoftwareThreadedRenderLoop::windowDestroyed(QQuickWindow *window)
 {
     qCDebug(QSG_RASTER_LOG_RENDERLOOP) << "window destroyed" << window;
 
-    WindowData *w = windowFor(m_windows, window);
+    WindowData *w = windowFor(window);
     if (!w)
         return;
 
@@ -603,7 +586,7 @@ void QSGSoftwareThreadedRenderLoop::exposureChanged(QQuickWindow *window)
     if (window->isExposed()) {
         handleExposure(window);
     } else {
-        WindowData *w = windowFor(m_windows, window);
+        WindowData *w = windowFor(window);
         if (w)
             handleObscurity(w);
     }
@@ -613,13 +596,13 @@ QImage QSGSoftwareThreadedRenderLoop::grab(QQuickWindow *window)
 {
     qCDebug(QSG_RASTER_LOG_RENDERLOOP) << "grab" << window;
 
-    WindowData *w = windowFor(m_windows, window);
+    WindowData *w = windowFor(window);
     // Have to support invisible (but created()'ed) windows as well.
     // Unlike with GL, leaving that case for QQuickWindow to handle is not feasible.
     const bool tempExpose = !w;
     if (tempExpose) {
         handleExposure(window);
-        w = windowFor(m_windows, window);
+        w = windowFor(window);
         Q_ASSERT(w);
     }
 
@@ -650,7 +633,7 @@ QImage QSGSoftwareThreadedRenderLoop::grab(QQuickWindow *window)
 
 void QSGSoftwareThreadedRenderLoop::update(QQuickWindow *window)
 {
-    WindowData *w = windowFor(m_windows, window);
+    WindowData *w = windowFor(window);
     if (!w)
         return;
 
@@ -667,7 +650,7 @@ void QSGSoftwareThreadedRenderLoop::update(QQuickWindow *window)
 
 void QSGSoftwareThreadedRenderLoop::maybeUpdate(QQuickWindow *window)
 {
-    WindowData *w = windowFor(m_windows, window);
+    WindowData *w = windowFor(window);
     if (w)
         scheduleUpdate(w);
 }
@@ -676,7 +659,7 @@ void QSGSoftwareThreadedRenderLoop::handleUpdateRequest(QQuickWindow *window)
 {
     qCDebug(QSG_RASTER_LOG_RENDERLOOP) << "handleUpdateRequest" << window;
 
-    WindowData *w = windowFor(m_windows, window);
+    WindowData *w = windowFor(window);
     if (w)
         polishAndSync(w, false);
 }
@@ -700,14 +683,14 @@ void QSGSoftwareThreadedRenderLoop::releaseResources(QQuickWindow *window)
 {
     qCDebug(QSG_RASTER_LOG_RENDERLOOP) << "releaseResources" << window;
 
-    WindowData *w = windowFor(m_windows, window);
+    WindowData *w = windowFor(window);
     if (w)
         handleResourceRelease(w, false);
 }
 
 void QSGSoftwareThreadedRenderLoop::postJob(QQuickWindow *window, QRunnable *job)
 {
-    WindowData *w = windowFor(m_windows, window);
+    WindowData *w = windowFor(window);
     if (w && w->thread && w->thread->exposedWindow)
         w->thread->postEvent(new QSGSoftwareJobEvent(window, job));
     else
@@ -791,7 +774,7 @@ void QSGSoftwareThreadedRenderLoop::handleExposure(QQuickWindow *window)
 {
     qCDebug(QSG_RASTER_LOG_RENDERLOOP) << "handleExposure" << window;
 
-    WindowData *w = windowFor(m_windows, window);
+    WindowData *w = windowFor(window);
     if (!w) {
         qCDebug(QSG_RASTER_LOG_RENDERLOOP, "adding window to list");
         WindowData win;
@@ -851,7 +834,7 @@ void QSGSoftwareThreadedRenderLoop::handleObscurity(QSGSoftwareThreadedRenderLoo
 
     if (w->thread->isRunning()) {
         w->thread->mutex.lock();
-        w->thread->postEvent(new QSGSoftwareWindowEvent(w->window, WM_Obscure));
+        w->thread->postEvent(new QSGSoftwareWindowEvent(w->window, QEvent::Type(WM_Obscure)));
         w->thread->waitCondition.wait(&w->thread->mutex);
         w->thread->mutex.unlock();
     }
@@ -919,9 +902,9 @@ void QSGSoftwareThreadedRenderLoop::polishAndSync(QSGSoftwareThreadedRenderLoop:
     }
 
     // Flush pending touch events.
-    QQuickWindowPrivate::get(window)->flushFrameSynchronousEvents();
+    QQuickWindowPrivate::get(window)->deliveryAgentPrivate()->flushFrameSynchronousEvents(window);
     // The delivery of the event might have caused the window to stop rendering
-    w = windowFor(m_windows, window);
+    w = windowFor(window);
     if (!w || !w->thread || !w->thread->exposedWindow) {
         qCDebug(QSG_RASTER_LOG_RENDERLOOP, "polishAndSync - removed after touch event flushing, abort");
         return;

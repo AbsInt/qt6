@@ -42,7 +42,12 @@ private slots:
     void gesturePolicyDragWithinBounds_data();
     void gesturePolicyDragWithinBounds();
     void touchMultiTap();
+    void mouseMultiTap_data();
     void mouseMultiTap();
+    void mouseMultiTapLeftRight_data();
+    void mouseMultiTapLeftRight();
+    void singleTapDoubleTap_data();
+    void singleTapDoubleTap();
     void touchLongPress();
     void mouseLongPress();
     void buttonsMultiTouch();
@@ -56,7 +61,7 @@ private slots:
 private:
     void createView(QScopedPointer<QQuickView> &window, const char *fileName,
                     QWindow *parent = nullptr);
-    QPointingDevice *touchDevice = QTest::createTouchDevice();
+    QPointingDevice *touchDevice = QTest::createTouchDevice(); // TODO const after fixing QTBUG-107864
     void mouseEvent(QEvent::Type type, Qt::MouseButton button, const QPoint &point,
                     QWindow *targetWindow, QWindow *mapToWindow);
 };
@@ -127,7 +132,7 @@ void tst_TapHandler::touchGesturePolicyDragThreshold()
     QTest::touchEvent(window, touchDevice).release(1, p1, window);
     QQuickTouchUtils::flush(window);
     QTRY_VERIFY(!buttonDragThreshold->property("pressed").toBool());
-    QCOMPARE(dragThresholdTappedSpy.count(), 1);
+    QCOMPARE(dragThresholdTappedSpy.size(), 1);
     QCOMPARE(buttonDragThreshold->property("tappedPosition").toPoint(), p1);
     QCOMPARE(tapHandler->point().position(), QPointF());
 
@@ -148,7 +153,7 @@ void tst_TapHandler::touchGesturePolicyDragThreshold()
     QTest::touchEvent(window, touchDevice).release(1, p1, window);
     QQuickTouchUtils::flush(window);
     QVERIFY(!buttonDragThreshold->property("pressed").toBool());
-    QCOMPARE(dragThresholdTappedSpy.count(), 0);
+    QCOMPARE(dragThresholdTappedSpy.size(), 0);
 }
 
 void tst_TapHandler::mouseGesturePolicyDragThreshold()
@@ -173,7 +178,7 @@ void tst_TapHandler::mouseGesturePolicyDragThreshold()
     QVERIFY(buttonDragThreshold->property("pressed").toBool());
     QTest::mouseRelease(window, Qt::LeftButton, Qt::NoModifier, p1);
     QTRY_VERIFY(!buttonDragThreshold->property("pressed").toBool());
-    QTRY_COMPARE(dragThresholdTappedSpy.count(), 1);
+    QTRY_COMPARE(dragThresholdTappedSpy.size(), 1);
     QCOMPARE(buttonDragThreshold->property("tappedPosition").toPoint(), p1);
     QCOMPARE(tapHandler->point().position(), QPointF());
 
@@ -190,7 +195,7 @@ void tst_TapHandler::mouseGesturePolicyDragThreshold()
     QTRY_VERIFY(!buttonDragThreshold->property("pressed").toBool());
     QTest::mouseRelease(window, Qt::LeftButton, Qt::NoModifier, p1);
     QVERIFY(!buttonDragThreshold->property("pressed").toBool());
-    QCOMPARE(dragThresholdTappedSpy.count(), 0);
+    QCOMPARE(dragThresholdTappedSpy.size(), 0);
 }
 
 void tst_TapHandler::touchMouseGesturePolicyDragThreshold()
@@ -210,8 +215,8 @@ void tst_TapHandler::touchMouseGesturePolicyDragThreshold()
     QTest::mousePress(window, Qt::LeftButton, Qt::NoModifier, p1);
     QTRY_VERIFY(buttonDragThreshold->property("pressed").toBool());
     QTest::mouseMove(window, p2);
-    QTRY_COMPARE(canceledSpy.count(), 1);
-    QCOMPARE(tappedSpy.count(), 0);
+    QTRY_COMPARE(canceledSpy.size(), 1);
+    QCOMPARE(tappedSpy.size(), 0);
     QCOMPARE(buttonDragThreshold->property("pressed").toBool(), false);
     QTest::mouseRelease(window, Qt::LeftButton, Qt::NoModifier, p2);
 
@@ -222,7 +227,7 @@ void tst_TapHandler::touchMouseGesturePolicyDragThreshold()
     QTest::touchEvent(window, touchDevice).release(1, p1, window);
     QQuickTouchUtils::flush(window);
     QTRY_VERIFY(!buttonDragThreshold->property("pressed").toBool());
-    QCOMPARE(tappedSpy.count(), 1);
+    QCOMPARE(tappedSpy.size(), 1);
 
     // Press touch, drag it outside the button, release
     QTest::touchEvent(window, touchDevice).press(1, p1, window);
@@ -233,16 +238,16 @@ void tst_TapHandler::touchMouseGesturePolicyDragThreshold()
     QTRY_COMPARE(buttonDragThreshold->property("pressed").toBool(), false);
     QTest::touchEvent(window, touchDevice).release(1, p2, window);
     QQuickTouchUtils::flush(window);
-    QTRY_COMPARE(canceledSpy.count(), 2);
-    QCOMPARE(tappedSpy.count(), 1); // didn't increase
+    QTRY_COMPARE(canceledSpy.size(), 2);
+    QCOMPARE(tappedSpy.size(), 1); // didn't increase
     QCOMPARE(buttonDragThreshold->property("pressed").toBool(), false);
 
     // Press and release mouse, verify that it still works
     QTest::mousePress(window, Qt::LeftButton, Qt::NoModifier, p1);
     QTRY_VERIFY(buttonDragThreshold->property("pressed").toBool());
     QTest::mouseRelease(window, Qt::LeftButton, Qt::NoModifier, p1);
-    QTRY_COMPARE(tappedSpy.count(), 2);
-    QCOMPARE(canceledSpy.count(), 2); // didn't increase
+    QTRY_COMPARE(tappedSpy.size(), 2);
+    QCOMPARE(canceledSpy.size(), 2); // didn't increase
     QCOMPARE(buttonDragThreshold->property("pressed").toBool(), false);
 }
 
@@ -268,7 +273,7 @@ void tst_TapHandler::touchGesturePolicyWithinBounds()
     QTest::touchEvent(window, touchDevice).release(1, p1, window);
     QQuickTouchUtils::flush(window);
     QTRY_VERIFY(!buttonWithinBounds->property("pressed").toBool());
-    QCOMPARE(withinBoundsTappedSpy.count(), 1);
+    QCOMPARE(withinBoundsTappedSpy.size(), 1);
 
     // WithinBounds button is no longer pressed if touchpoint leaves bounds
     withinBoundsTappedSpy.clear();
@@ -283,7 +288,7 @@ void tst_TapHandler::touchGesturePolicyWithinBounds()
     QTest::touchEvent(window, touchDevice).release(1, p1, window);
     QQuickTouchUtils::flush(window);
     QVERIFY(!buttonWithinBounds->property("pressed").toBool());
-    QCOMPARE(withinBoundsTappedSpy.count(), 0);
+    QCOMPARE(withinBoundsTappedSpy.size(), 0);
 }
 
 void tst_TapHandler::mouseGesturePolicyWithinBounds()
@@ -305,7 +310,7 @@ void tst_TapHandler::mouseGesturePolicyWithinBounds()
     QVERIFY(buttonWithinBounds->property("pressed").toBool());
     QTest::mouseRelease(window, Qt::LeftButton, Qt::NoModifier, p1);
     QTRY_VERIFY(!buttonWithinBounds->property("pressed").toBool());
-    QCOMPARE(withinBoundsTappedSpy.count(), 1);
+    QCOMPARE(withinBoundsTappedSpy.size(), 1);
 
     // WithinBounds button is no longer pressed if touchpoint leaves bounds
     withinBoundsTappedSpy.clear();
@@ -317,7 +322,7 @@ void tst_TapHandler::mouseGesturePolicyWithinBounds()
     QTRY_VERIFY(!buttonWithinBounds->property("pressed").toBool());
     QTest::mouseRelease(window, Qt::LeftButton, Qt::NoModifier, p1);
     QVERIFY(!buttonWithinBounds->property("pressed").toBool());
-    QCOMPARE(withinBoundsTappedSpy.count(), 0);
+    QCOMPARE(withinBoundsTappedSpy.size(), 0);
 }
 
 void tst_TapHandler::touchGesturePolicyReleaseWithinBounds()
@@ -351,7 +356,7 @@ void tst_TapHandler::touchGesturePolicyReleaseWithinBounds()
     QTest::touchEvent(window, touchDevice).release(1, p1, window);
     QQuickTouchUtils::flush(window);
     QTRY_VERIFY(!buttonReleaseWithinBounds->property("pressed").toBool());
-    QCOMPARE(releaseWithinBoundsTappedSpy.count(), 1);
+    QCOMPARE(releaseWithinBoundsTappedSpy.size(), 1);
 
     // ReleaseWithinBounds button does not emit tapped if released out of bounds
     releaseWithinBoundsTappedSpy.clear();
@@ -366,7 +371,7 @@ void tst_TapHandler::touchGesturePolicyReleaseWithinBounds()
     QTest::touchEvent(window, touchDevice).release(1, p1, window);
     QQuickTouchUtils::flush(window);
     QTRY_VERIFY(!buttonReleaseWithinBounds->property("pressed").toBool());
-    QCOMPARE(releaseWithinBoundsTappedSpy.count(), 0);
+    QCOMPARE(releaseWithinBoundsTappedSpy.size(), 0);
 }
 
 void tst_TapHandler::mouseGesturePolicyReleaseWithinBounds()
@@ -395,7 +400,7 @@ void tst_TapHandler::mouseGesturePolicyReleaseWithinBounds()
     QVERIFY(buttonReleaseWithinBounds->property("pressed").toBool());
     QTest::mouseRelease(window, Qt::LeftButton, Qt::NoModifier, p1);
     QTRY_VERIFY(!buttonReleaseWithinBounds->property("pressed").toBool());
-    QCOMPARE(releaseWithinBoundsTappedSpy.count(), 1);
+    QCOMPARE(releaseWithinBoundsTappedSpy.size(), 1);
 
     // ReleaseWithinBounds button does not emit tapped if released out of bounds
     releaseWithinBoundsTappedSpy.clear();
@@ -407,7 +412,7 @@ void tst_TapHandler::mouseGesturePolicyReleaseWithinBounds()
     QVERIFY(buttonReleaseWithinBounds->property("pressed").toBool());
     QTest::mouseRelease(window, Qt::LeftButton, Qt::NoModifier, p1);
     QTRY_VERIFY(!buttonReleaseWithinBounds->property("pressed").toBool());
-    QCOMPARE(releaseWithinBoundsTappedSpy.count(), 0);
+    QCOMPARE(releaseWithinBoundsTappedSpy.size(), 0);
 }
 
 void tst_TapHandler::gesturePolicyDragWithinBounds_data()
@@ -417,12 +422,14 @@ void tst_TapHandler::gesturePolicyDragWithinBounds_data()
     QTest::addColumn<QPoint>("dragDistance");
     QTest::addColumn<QString>("expectedFeedback");
 
+    const QPointingDevice *constTouchDevice = touchDevice;
+
     QTest::newRow("mouse: click") << QPointingDevice::primaryPointingDevice() << QPoint(200, 200) << QPoint(0, 0) << "middle";
-    QTest::newRow("touch: tap") << touchDevice << QPoint(200, 200) << QPoint(0, 0) << "middle";
+    QTest::newRow("touch: tap") << constTouchDevice << QPoint(200, 200) << QPoint(0, 0) << "middle";
     QTest::newRow("mouse: drag up") << QPointingDevice::primaryPointingDevice() << QPoint(200, 200) << QPoint(0, -20) << "top";
-    QTest::newRow("touch: drag up") << touchDevice << QPoint(200, 200) << QPoint(0, -20) << "top";
+    QTest::newRow("touch: drag up") << constTouchDevice << QPoint(200, 200) << QPoint(0, -20) << "top";
     QTest::newRow("mouse: drag out to cancel") << QPointingDevice::primaryPointingDevice() << QPoint(435, 200) << QPoint(10, 0) << "canceled";
-    QTest::newRow("touch: drag out to cancel") << touchDevice << QPoint(435, 200) << QPoint(10, 0) << "canceled";
+    QTest::newRow("touch: drag out to cancel") << constTouchDevice << QPoint(435, 200) << QPoint(10, 0) << "canceled";
 }
 
 void tst_TapHandler::gesturePolicyDragWithinBounds()
@@ -450,7 +457,7 @@ void tst_TapHandler::gesturePolicyDragWithinBounds()
 
     QCOMPARE(window.rootObject()->property("feedbackText"), expectedFeedback);
     if (expectedCanceled)
-        QCOMPARE(canceledSpy.count(), 1);
+        QCOMPARE(canceledSpy.size(), 1);
 }
 
 void tst_TapHandler::touchMultiTap()
@@ -472,7 +479,7 @@ void tst_TapHandler::touchMultiTap()
     QTest::touchEvent(window, touchDevice).release(1, p1, window);
     QQuickTouchUtils::flush(window);
     QTRY_VERIFY(!button->property("pressed").toBool());
-    QCOMPARE(tappedSpy.count(), 1);
+    QCOMPARE(tappedSpy.size(), 1);
 
     // Tap again in exactly the same place (not likely with touch in the real world)
     QTest::touchEvent(window, touchDevice).press(1, p1, window);
@@ -481,7 +488,7 @@ void tst_TapHandler::touchMultiTap()
     QTest::touchEvent(window, touchDevice).release(1, p1, window);
     QQuickTouchUtils::flush(window);
     QTRY_VERIFY(!button->property("pressed").toBool());
-    QCOMPARE(tappedSpy.count(), 2);
+    QCOMPARE(tappedSpy.size(), 2);
 
     // Tap a third time, nearby
     p1 += QPoint(dragThreshold, dragThreshold);
@@ -491,7 +498,7 @@ void tst_TapHandler::touchMultiTap()
     QTest::touchEvent(window, touchDevice).release(1, p1, window);
     QQuickTouchUtils::flush(window);
     QTRY_VERIFY(!button->property("pressed").toBool());
-    QCOMPARE(tappedSpy.count(), 3);
+    QCOMPARE(tappedSpy.size(), 3);
 
     // Tap a fourth time, drifting farther away
     p1 += QPoint(dragThreshold, dragThreshold);
@@ -501,11 +508,35 @@ void tst_TapHandler::touchMultiTap()
     QTest::touchEvent(window, touchDevice).release(1, p1, window);
     QQuickTouchUtils::flush(window);
     QTRY_VERIFY(!button->property("pressed").toBool());
-    QCOMPARE(tappedSpy.count(), 4);
+    QCOMPARE(tappedSpy.size(), 4);
+}
+
+void tst_TapHandler::mouseMultiTap_data()
+{
+    QTest::addColumn<QQuickTapHandler::ExclusiveSignals>("exclusiveSignals");
+    QTest::addColumn<int>("expectedSingleTaps");
+    QTest::addColumn<int>("expectedSingleTapsAfterMovingAway");
+    QTest::addColumn<int>("expectedSingleTapsAfterWaiting");
+    QTest::addColumn<int>("expectedDoubleTaps");
+
+    QTest::newRow("NotExclusive")        << QQuickTapHandler::ExclusiveSignals(QQuickTapHandler::NotExclusive)
+                                         << 1 << 2 << 3 << 1;
+    QTest::newRow("SingleTap")           << QQuickTapHandler::ExclusiveSignals(QQuickTapHandler::SingleTap)
+                                         << 1 << 2 << 3 << 0;
+    QTest::newRow("DoubleTap")           << QQuickTapHandler::ExclusiveSignals(QQuickTapHandler::DoubleTap)
+                                         << 0 << 0 << 0 << 1;
+    QTest::newRow("SingleTap|DoubleTap") << QQuickTapHandler::ExclusiveSignals(QQuickTapHandler::SingleTap | QQuickTapHandler::DoubleTap)
+                                         << 0 << 0 << 0 << 0;
 }
 
 void tst_TapHandler::mouseMultiTap()
 {
+    QFETCH(QQuickTapHandler::ExclusiveSignals, exclusiveSignals);
+    QFETCH(int, expectedSingleTaps);
+    QFETCH(int, expectedSingleTapsAfterMovingAway);
+    QFETCH(int, expectedSingleTapsAfterWaiting);
+    QFETCH(int, expectedDoubleTaps);
+
     const int dragThreshold = QGuiApplication::styleHints()->startDragDistance();
     QScopedPointer<QQuickView> windowPtr;
     createView(windowPtr, "buttons.qml");
@@ -513,38 +544,203 @@ void tst_TapHandler::mouseMultiTap()
 
     QQuickItem *button = window->rootObject()->findChild<QQuickItem*>("DragThreshold");
     QVERIFY(button);
+    QQuickTapHandler *tapHandler = button->findChild<QQuickTapHandler*>();
+    QVERIFY(tapHandler);
+    tapHandler->setExclusiveSignals(exclusiveSignals);
     QSignalSpy tappedSpy(button, SIGNAL(tapped()));
+    QSignalSpy singleTapSpy(tapHandler, &QQuickTapHandler::singleTapped);
+    QSignalSpy doubleTapSpy(tapHandler, &QQuickTapHandler::doubleTapped);
 
-    // Tap once
+    // Click once
     QPoint p1 = button->mapToScene(QPointF(2, 2)).toPoint();
-    QTest::mousePress(window, Qt::LeftButton, Qt::NoModifier, p1);
+    QTest::mousePress(window, Qt::LeftButton, Qt::NoModifier, p1, 10);
     QTRY_VERIFY(button->property("pressed").toBool());
-    QTest::mouseRelease(window, Qt::LeftButton, Qt::NoModifier, p1);
+    QTest::mouseRelease(window, Qt::LeftButton, Qt::NoModifier, p1, 10);
     QTRY_VERIFY(!button->property("pressed").toBool());
-    QCOMPARE(tappedSpy.count(), 1);
+    QCOMPARE(tappedSpy.size(), 1);
+    // If exclusiveSignals == SingleTap | DoubleTap:
+    // This would be a single-click if we waited longer than the double-click interval,
+    // but it's too early for the signal at this moment; and we're going to click again.
+    // If exclusiveSignals == DoubleTap: singleTapped() won't happen.
+    // Otherwise: we got singleTapped() immediately.
+    QCOMPARE(singleTapSpy.size(), expectedSingleTaps);
+    QCOMPARE(tapHandler->timeHeld(), -1);
 
-    // Tap again in exactly the same place (not likely with touch in the real world)
-    QTest::mousePress(window, Qt::LeftButton, Qt::NoModifier, p1);
-    QTRY_VERIFY(button->property("pressed").toBool());
-    QTest::mouseRelease(window, Qt::LeftButton, Qt::NoModifier, p1);
-    QTRY_VERIFY(!button->property("pressed").toBool());
-    QCOMPARE(tappedSpy.count(), 2);
+    // Click again in exactly the same place
+    QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, p1, 10);
+    QCOMPARE(tappedSpy.size(), 2);
+    QCOMPARE(singleTapSpy.size(), expectedSingleTaps);
+    QCOMPARE(doubleTapSpy.size(), expectedDoubleTaps);
 
-    // Tap a third time, nearby
+    // Click a third time, nearby: that'll be a triple-click
+    p1 += QPoint(1, 1);
+    QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, p1, 10);
+    QCOMPARE(tappedSpy.size(), 3);
+    QCOMPARE(singleTapSpy.size(), expectedSingleTaps);
+    QCOMPARE(doubleTapSpy.size(), expectedDoubleTaps);
+    QCOMPARE(tapHandler->tapCount(), 3);
+
+    // Click a fourth time, drifting farther away: treated as a separate click, regardless of timing
     p1 += QPoint(dragThreshold, dragThreshold);
-    QTest::mousePress(window, Qt::LeftButton, Qt::NoModifier, p1);
-    QTRY_VERIFY(button->property("pressed").toBool());
-    QTest::mouseRelease(window, Qt::LeftButton, Qt::NoModifier, p1);
-    QTRY_VERIFY(!button->property("pressed").toBool());
-    QCOMPARE(tappedSpy.count(), 3);
+    QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, p1); // default delay to prevent double-click
+    QCOMPARE(tappedSpy.size(), 4);
+    QCOMPARE(tapHandler->tapCount(), 1);
+    QTRY_COMPARE(singleTapSpy.size(), expectedSingleTapsAfterMovingAway);
 
-    // Tap a fourth time, drifting farther away
-    p1 += QPoint(dragThreshold, dragThreshold);
-    QTest::mousePress(window, Qt::LeftButton, Qt::NoModifier, p1);
-    QTRY_VERIFY(button->property("pressed").toBool());
-    QTest::mouseRelease(window, Qt::LeftButton, Qt::NoModifier, p1);
-    QTRY_VERIFY(!button->property("pressed").toBool());
-    QCOMPARE(tappedSpy.count(), 4);
+    // Click a fifth time later on at the same place: treated as a separate click
+    QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, p1);
+    QCOMPARE(tappedSpy.size(), 5);
+    QCOMPARE(tapHandler->tapCount(), 1);
+    QCOMPARE(singleTapSpy.size(), expectedSingleTapsAfterWaiting);
+}
+
+void tst_TapHandler::mouseMultiTapLeftRight_data()
+{
+    QTest::addColumn<QQuickTapHandler::ExclusiveSignals>("exclusiveSignals");
+    QTest::addColumn<int>("expectedSingleTaps");
+    QTest::addColumn<int>("expectedDoubleTaps");
+    QTest::addColumn<int>("expectedTabCount2");
+    QTest::addColumn<int>("expectedTabCount3");
+
+    QTest::newRow("NotExclusive")        << QQuickTapHandler::ExclusiveSignals(QQuickTapHandler::NotExclusive)
+                                         << 3 << 0 << 1 << 1;
+    QTest::newRow("SingleTap")           << QQuickTapHandler::ExclusiveSignals(QQuickTapHandler::SingleTap)
+                                         << 3 << 0 << 1 << 1;
+    QTest::newRow("DoubleTap")           << QQuickTapHandler::ExclusiveSignals(QQuickTapHandler::DoubleTap)
+                                         << 0 << 0 << 1 << 1;
+    QTest::newRow("SingleTap|DoubleTap") << QQuickTapHandler::ExclusiveSignals(QQuickTapHandler::SingleTap | QQuickTapHandler::DoubleTap)
+                                         << 0 << 0 << 1 << 1;
+}
+
+void tst_TapHandler::mouseMultiTapLeftRight() //QTBUG-111557
+{
+    QFETCH(QQuickTapHandler::ExclusiveSignals, exclusiveSignals);
+    QFETCH(int, expectedSingleTaps);
+    QFETCH(int, expectedDoubleTaps);
+    QFETCH(int, expectedTabCount2);
+    QFETCH(int, expectedTabCount3);
+
+    QScopedPointer<QQuickView> windowPtr;
+    createView(windowPtr, "buttons.qml");
+    QQuickView * window = windowPtr.data();
+
+    QQuickItem *button = window->rootObject()->findChild<QQuickItem*>("DragThreshold");
+    QVERIFY(button);
+    QQuickTapHandler *tapHandler = button->findChild<QQuickTapHandler*>();
+    QVERIFY(tapHandler);
+    tapHandler->setExclusiveSignals(exclusiveSignals);
+    tapHandler->setAcceptedButtons(Qt::LeftButton | Qt::RightButton);
+    QSignalSpy tappedSpy(button, SIGNAL(tapped()));
+    QSignalSpy singleTapSpy(tapHandler, &QQuickTapHandler::singleTapped);
+    QSignalSpy doubleTapSpy(tapHandler, &QQuickTapHandler::doubleTapped);
+
+    // Click once with the left button
+    QPoint p1 = button->mapToScene(QPointF(2, 2)).toPoint();
+    QTest::mousePress(window, Qt::LeftButton, Qt::NoModifier, p1, 10);
+    QTest::mouseRelease(window, Qt::LeftButton, Qt::NoModifier, p1, 10);
+
+    // Click again with the right button -> should reset tabCount()
+    QTest::mousePress(window, Qt::RightButton, Qt::NoModifier, p1, 10);
+    QTest::mouseRelease(window, Qt::RightButton, Qt::NoModifier, p1, 10);
+
+    QCOMPARE(tapHandler->tapCount(), expectedTabCount2);
+
+    // Click again with the left button -> should reset tabCount()
+    QTest::mousePress(window, Qt::LeftButton, Qt::NoModifier, p1, 10);
+    QTest::mouseRelease(window, Qt::LeftButton, Qt::NoModifier, p1, 10);
+
+    QCOMPARE(tapHandler->tapCount(), expectedTabCount3);
+    QCOMPARE(singleTapSpy.size(), expectedSingleTaps);
+    QCOMPARE(doubleTapSpy.size(), expectedDoubleTaps);
+}
+
+void tst_TapHandler::singleTapDoubleTap_data()
+{
+    QTest::addColumn<QPointingDevice::DeviceType>("deviceType");
+    QTest::addColumn<QQuickTapHandler::ExclusiveSignals>("exclusiveSignals");
+    QTest::addColumn<int>("expectedEndingSingleTapCount");
+    QTest::addColumn<int>("expectedDoubleTapCount");
+
+    QTest::newRow("mouse:NotExclusive")
+            << QPointingDevice::DeviceType::Mouse
+            << QQuickTapHandler::ExclusiveSignals(QQuickTapHandler::NotExclusive)
+            << 1 << 1;
+    QTest::newRow("mouse:SingleTap")
+            << QPointingDevice::DeviceType::Mouse
+            << QQuickTapHandler::ExclusiveSignals(QQuickTapHandler::SingleTap)
+            << 1 << 0;
+    QTest::newRow("mouse:DoubleTap")
+            << QPointingDevice::DeviceType::Mouse
+            << QQuickTapHandler::ExclusiveSignals(QQuickTapHandler::DoubleTap)
+            << 0 << 1;
+    QTest::newRow("mouse:SingleTap|DoubleTap")
+            << QPointingDevice::DeviceType::Mouse
+            << QQuickTapHandler::ExclusiveSignals(QQuickTapHandler::SingleTap | QQuickTapHandler::DoubleTap)
+            << 0 << 1;
+    QTest::newRow("touch:NotExclusive")
+            << QPointingDevice::DeviceType::TouchScreen
+            << QQuickTapHandler::ExclusiveSignals(QQuickTapHandler::NotExclusive)
+            << 1 << 1;
+    QTest::newRow("touch:SingleTap")
+            << QPointingDevice::DeviceType::TouchScreen
+            << QQuickTapHandler::ExclusiveSignals(QQuickTapHandler::SingleTap)
+            << 1 << 0;
+    QTest::newRow("touch:DoubleTap")
+            << QPointingDevice::DeviceType::TouchScreen
+            << QQuickTapHandler::ExclusiveSignals(QQuickTapHandler::DoubleTap)
+            << 0 << 1;
+    QTest::newRow("touch:SingleTap|DoubleTap")
+            << QPointingDevice::DeviceType::TouchScreen
+            << QQuickTapHandler::ExclusiveSignals(QQuickTapHandler::SingleTap | QQuickTapHandler::DoubleTap)
+            << 0 << 1;
+}
+
+void tst_TapHandler::singleTapDoubleTap()
+{
+    QFETCH(QPointingDevice::DeviceType, deviceType);
+    QFETCH(QQuickTapHandler::ExclusiveSignals, exclusiveSignals);
+    QFETCH(int, expectedEndingSingleTapCount);
+    QFETCH(int, expectedDoubleTapCount);
+
+    QScopedPointer<QQuickView> windowPtr;
+    createView(windowPtr, "buttons.qml");
+    QQuickView * window = windowPtr.data();
+
+    QQuickItem *button = window->rootObject()->findChild<QQuickItem*>("DragThreshold");
+    QVERIFY(button);
+    QQuickTapHandler *tapHandler = button->findChild<QQuickTapHandler*>();
+    QVERIFY(tapHandler);
+    tapHandler->setExclusiveSignals(exclusiveSignals);
+    QSignalSpy tappedSpy(tapHandler, &QQuickTapHandler::tapped);
+    QSignalSpy singleTapSpy(tapHandler, &QQuickTapHandler::singleTapped);
+    QSignalSpy doubleTapSpy(tapHandler, &QQuickTapHandler::doubleTapped);
+
+    auto tap = [window, tapHandler, deviceType, this](const QPoint &p1) {
+        switch (static_cast<QPointingDevice::DeviceType>(deviceType)) {
+        case QPointingDevice::DeviceType::Mouse:
+            QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, p1, 10);
+            break;
+        case QPointingDevice::DeviceType::TouchScreen:
+            QTest::touchEvent(window, touchDevice).press(0, p1, window);
+            QTRY_VERIFY(tapHandler->isPressed());
+            QTest::touchEvent(window, touchDevice).release(0, p1, window);
+            break;
+        default:
+            break;
+        }
+    };
+
+    // tap once
+    const QPoint p1 = button->mapToScene(QPointF(2, 2)).toPoint();
+    tap(p1);
+    QCOMPARE(tappedSpy.size(), 1);
+    QCOMPARE(doubleTapSpy.size(), 0);
+
+    // tap again immediately afterwards
+    tap(p1);
+    QTRY_COMPARE(doubleTapSpy.size(), expectedDoubleTapCount);
+    QCOMPARE(tappedSpy.size(), 2);
+    QCOMPARE(singleTapSpy.size(), expectedEndingSingleTapCount);
 }
 
 void tst_TapHandler::touchLongPress()
@@ -564,24 +760,24 @@ void tst_TapHandler::touchLongPress()
 
     // Reduce the threshold so that we can get a long press quickly
     tapHandler->setLongPressThreshold(0.5);
-    QCOMPARE(longPressThresholdChangedSpy.count(), 1);
+    QCOMPARE(longPressThresholdChangedSpy.size(), 1);
 
     // Press and hold
     QPoint p1 = button->mapToScene(button->clipRect().center()).toPoint();
     QTest::touchEvent(window, touchDevice).press(1, p1, window);
     QQuickTouchUtils::flush(window);
     QTRY_VERIFY(button->property("pressed").toBool());
-    QTRY_COMPARE(longPressedSpy.count(), 1);
+    QTRY_COMPARE(longPressedSpy.size(), 1);
     timeHeldSpy.wait(); // the longer we hold it, the more this will occur
-    qDebug() << "held" << tapHandler->timeHeld() << "secs; timeHeld updated" << timeHeldSpy.count() << "times";
-    QVERIFY(timeHeldSpy.count() > 0);
+    qDebug() << "held" << tapHandler->timeHeld() << "secs; timeHeld updated" << timeHeldSpy.size() << "times";
+    QVERIFY(timeHeldSpy.size() > 0);
     QVERIFY(tapHandler->timeHeld() > 0.4); // Should be > 0.5 but slow CI and timer granularity can interfere
 
     // Release and verify that tapped was not emitted
     QTest::touchEvent(window, touchDevice).release(1, p1, window);
     QQuickTouchUtils::flush(window);
     QTRY_VERIFY(!button->property("pressed").toBool());
-    QCOMPARE(tappedSpy.count(), 0);
+    QCOMPARE(tappedSpy.size(), 0);
 }
 
 void tst_TapHandler::mouseLongPress()
@@ -601,22 +797,22 @@ void tst_TapHandler::mouseLongPress()
 
     // Reduce the threshold so that we can get a long press quickly
     tapHandler->setLongPressThreshold(0.5);
-    QCOMPARE(longPressThresholdChangedSpy.count(), 1);
+    QCOMPARE(longPressThresholdChangedSpy.size(), 1);
 
     // Press and hold
     QPoint p1 = button->mapToScene(button->clipRect().center()).toPoint();
     QTest::mousePress(window, Qt::LeftButton, Qt::NoModifier, p1);
     QTRY_VERIFY(button->property("pressed").toBool());
-    QTRY_COMPARE(longPressedSpy.count(), 1);
+    QTRY_COMPARE(longPressedSpy.size(), 1);
     timeHeldSpy.wait(); // the longer we hold it, the more this will occur
-    qDebug() << "held" << tapHandler->timeHeld() << "secs; timeHeld updated" << timeHeldSpy.count() << "times";
-    QVERIFY(timeHeldSpy.count() > 0);
+    qDebug() << "held" << tapHandler->timeHeld() << "secs; timeHeld updated" << timeHeldSpy.size() << "times";
+    QVERIFY(timeHeldSpy.size() > 0);
     QVERIFY(tapHandler->timeHeld() > 0.4); // Should be > 0.5 but slow CI and timer granularity can interfere
 
     // Release and verify that tapped was not emitted
     QTest::mouseRelease(window, Qt::LeftButton, Qt::NoModifier, p1, 500);
     QTRY_VERIFY(!button->property("pressed").toBool());
-    QCOMPARE(tappedSpy.count(), 0);
+    QCOMPARE(tappedSpy.size(), 0);
 }
 
 void tst_TapHandler::buttonsMultiTouch()
@@ -678,11 +874,11 @@ void tst_TapHandler::buttonsMultiTouch()
     touchSeq.stationary(2).stationary(3).release(1, p1, window).commit();
     QQuickTouchUtils::flush(window);
     QTRY_VERIFY(!buttonDragThreshold->property("pressed").toBool());
-    QCOMPARE(dragThresholdTappedSpy.count(), 1);
+    QCOMPARE(dragThresholdTappedSpy.size(), 1);
     QVERIFY(buttonWithinBounds->property("pressed").toBool());
-    QCOMPARE(withinBoundsTappedSpy.count(), 0);
+    QCOMPARE(withinBoundsTappedSpy.size(), 0);
     QVERIFY(buttonReleaseWithinBounds->property("pressed").toBool());
-    QCOMPARE(releaseWithinBoundsTappedSpy.count(), 0);
+    QCOMPARE(releaseWithinBoundsTappedSpy.size(), 0);
     touchSeq.stationary(2).stationary(3).press(1, p1, window).commit();
     QQuickTouchUtils::flush(window);
     QTRY_VERIFY(buttonDragThreshold->property("pressed").toBool());
@@ -693,11 +889,11 @@ void tst_TapHandler::buttonsMultiTouch()
     touchSeq.stationary(1).stationary(3).release(2, p2, window).commit();
     QQuickTouchUtils::flush(window);
     QTRY_VERIFY(!buttonWithinBounds->property("pressed").toBool());
-    QCOMPARE(withinBoundsTappedSpy.count(), 1);
+    QCOMPARE(withinBoundsTappedSpy.size(), 1);
     QVERIFY(buttonDragThreshold->property("pressed").toBool());
-    QCOMPARE(dragThresholdTappedSpy.count(), 1);
+    QCOMPARE(dragThresholdTappedSpy.size(), 1);
     QVERIFY(buttonReleaseWithinBounds->property("pressed").toBool());
-    QCOMPARE(releaseWithinBoundsTappedSpy.count(), 0);
+    QCOMPARE(releaseWithinBoundsTappedSpy.size(), 0);
     touchSeq.stationary(1).stationary(3).press(2, p2, window).commit();
     QQuickTouchUtils::flush(window);
     QVERIFY(buttonDragThreshold->property("pressed").toBool());
@@ -707,11 +903,11 @@ void tst_TapHandler::buttonsMultiTouch()
     // can release bottom button and press again: others stay pressed the whole time
     touchSeq.stationary(1).stationary(2).release(3, p3, window).commit();
     QQuickTouchUtils::flush(window);
-    QCOMPARE(releaseWithinBoundsTappedSpy.count(), 1);
+    QCOMPARE(releaseWithinBoundsTappedSpy.size(), 1);
     QVERIFY(buttonWithinBounds->property("pressed").toBool());
-    QCOMPARE(withinBoundsTappedSpy.count(), 1);
+    QCOMPARE(withinBoundsTappedSpy.size(), 1);
     QVERIFY(!buttonReleaseWithinBounds->property("pressed").toBool());
-    QCOMPARE(dragThresholdTappedSpy.count(), 1);
+    QCOMPARE(dragThresholdTappedSpy.size(), 1);
     touchSeq.stationary(1).stationary(2).press(3, p3, window).commit();
     QQuickTouchUtils::flush(window);
     QTRY_VERIFY(buttonDragThreshold->property("pressed").toBool());
@@ -740,18 +936,18 @@ void tst_TapHandler::componentUserBehavioralOverride()
     // Press
     QPoint p1 = button->mapToScene(button->clipRect().center()).toPoint();
     QTest::mousePress(window, Qt::LeftButton, Qt::NoModifier, p1);
-    QTRY_COMPARE(userPressedChangedSpy.count(), 1);
-    QCOMPARE(innerPressedChangedSpy.count(), 0);
-    QCOMPARE(innerGrabChangedSpy.count(), 0);
-    QCOMPARE(userGrabChangedSpy.count(), 1);
+    QTRY_COMPARE(userPressedChangedSpy.size(), 1);
+    QCOMPARE(innerPressedChangedSpy.size(), 0);
+    QCOMPARE(innerGrabChangedSpy.size(), 0);
+    QCOMPARE(userGrabChangedSpy.size(), 1);
 
     // Release
     QTest::mouseRelease(window, Qt::LeftButton, Qt::NoModifier, p1);
-    QTRY_COMPARE(userPressedChangedSpy.count(), 2);
-    QCOMPARE(innerPressedChangedSpy.count(), 0);
-    QCOMPARE(tappedSpy.count(), 1); // only because the override handler makes that happen
-    QCOMPARE(innerGrabChangedSpy.count(), 0);
-    QCOMPARE(userGrabChangedSpy.count(), 2);
+    QTRY_COMPARE(userPressedChangedSpy.size(), 2);
+    QCOMPARE(innerPressedChangedSpy.size(), 0);
+    QCOMPARE(tappedSpy.size(), 1); // only because the override handler makes that happen
+    QCOMPARE(innerGrabChangedSpy.size(), 0);
+    QCOMPARE(userGrabChangedSpy.size(), 2);
 }
 
 void tst_TapHandler::rightLongPressIgnoreWheel()
@@ -782,14 +978,14 @@ void tst_TapHandler::rightLongPressIgnoreWheel()
     QWheelEvent wheelEvent(p1, p1, QPoint(0, 0), QPoint(0, 0),
                            Qt::NoButton, Qt::NoModifier, Qt::ScrollEnd, false, Qt::MouseEventNotSynthesized);
     QGuiApplication::sendEvent(window, &wheelEvent);
-    QTRY_COMPARE(longPressedSpy.count(), 1);
+    QTRY_COMPARE(longPressedSpy.size(), 1);
     QCOMPARE(tap->isPressed(), true);
-    QCOMPARE(tappedSpy.count(), 0);
+    QCOMPARE(tappedSpy.size(), 0);
 
     // Release
     QTest::mouseRelease(window, Qt::RightButton, Qt::NoModifier, p1, 500);
     QTRY_COMPARE(tap->isPressed(), false);
-    QCOMPARE(tappedSpy.count(), 0);
+    QCOMPARE(tappedSpy.size(), 0);
 }
 
 void tst_TapHandler::negativeZStackingOrder() // QTBUG-83114
@@ -807,8 +1003,8 @@ void tst_TapHandler::negativeZStackingOrder() // QTBUG-83114
     QSignalSpy clickSpyChild(childTapHandler, &QQuickTapHandler::tapped);
 
     QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, QPoint(150, 100));
-    QCOMPARE(clickSpyChild.count(), 1);
-    QCOMPARE(clickSpyParent.count(), 1);
+    QCOMPARE(clickSpyChild.size(), 1);
+    QCOMPARE(clickSpyParent.size(), 1);
     auto order = root->property("taps").toList();
     QVERIFY(order.at(0) == "childTapHandler");
     QVERIFY(order.at(1) == "parentTapHandler");
@@ -817,8 +1013,8 @@ void tst_TapHandler::negativeZStackingOrder() // QTBUG-83114
     childTapHandler->parentItem()->setZ(-1);
     root->setProperty("taps", QVariantList());
     QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, QPoint(150, 100));
-    QCOMPARE(clickSpyChild.count(), 2);
-    QCOMPARE(clickSpyParent.count(), 2);
+    QCOMPARE(clickSpyChild.size(), 2);
+    QCOMPARE(clickSpyParent.size(), 2);
     order = root->property("taps").toList();
     QVERIFY(order.at(0) == "parentTapHandler");
     QVERIFY(order.at(1) == "childTapHandler");
@@ -876,12 +1072,12 @@ void tst_TapHandler::nestedDoubleTap() // QTBUG-102625
 
     QTest::mouseDClick(&window, Qt::LeftButton, Qt::NoModifier, QPoint(150, 100));
 
-    QCOMPARE(childSpy.count(), 1);
+    QCOMPARE(childSpy.size(), 1);
     // If the child gets by with a passive grab, both handlers see tap and double-tap.
     // If the child takes an exclusive grab and stops event propagation, the parent doesn't see them.
-    QCOMPARE(parentSpy.count(),
+    QCOMPARE(parentSpy.size(),
              childGesturePolicy == QQuickTapHandler::GesturePolicy::DragThreshold ? 1 : 0);
-    QCOMPARE(root->property("taps").toList().count(),
+    QCOMPARE(root->property("taps").toList().size(),
              childGesturePolicy == QQuickTapHandler::GesturePolicy::DragThreshold ? 4 : 2);
 }
 

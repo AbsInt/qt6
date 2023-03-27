@@ -61,6 +61,12 @@ void QQmlJSFunctionInitializer::populateSignature(
         error->message = message;
     };
 
+    if (!m_typeResolver->canCallJSFunctions()) {
+        signatureError(u"Ignoring type annotations as requested "
+                       "by pragma FunctionSignatureBehavior"_s);
+        return;
+    }
+
     QQmlJS::AST::BoundNames arguments;
     if (ast->formals)
         arguments = ast->formals->formals();
@@ -84,6 +90,20 @@ void QQmlJSFunctionInitializer::populateSignature(
                             m_typeResolver->tracked(
                                 m_typeResolver->globalType(m_typeResolver->varType())));
                 signatureError(u"Functions without type annotations won't be compiled"_s);
+            }
+        }
+    } else {
+        for (qsizetype i = 0, end = arguments.size(); i != end; ++i) {
+            const QQmlJS::AST::BoundName &argument = arguments[i];
+            if (argument.typeAnnotation) {
+                if (const auto type = m_typeResolver->typeFromAST(argument.typeAnnotation->type)) {
+                    if (!m_typeResolver->registerContains(function->argumentTypes[i], type)) {
+                        signatureError(u"Type annotation %1 on signal handler "
+                                        "contradicts signal argument type %2"_s
+                                       .arg(argument.typeAnnotation->type->toString(),
+                                            function->argumentTypes[i].descriptiveName()));
+                    }
+                }
             }
         }
     }
@@ -121,7 +141,9 @@ static void diagnose(
 
 QQmlJSCompilePass::Function QQmlJSFunctionInitializer::run(
         const QV4::Compiler::Context *context,
-        const QString &propertyName, const QmlIR::Binding &irBinding,
+        const QString &propertyName,
+        QQmlJS::AST::Node *astNode,
+        const QmlIR::Binding &irBinding,
         QQmlJS::DiagnosticMessage *error)
 {
     QQmlJS::SourceLocation bindingLocation;
@@ -147,8 +169,25 @@ QQmlJSCompilePass::Function QQmlJSFunctionInitializer::run(
         } else {
             const auto methods = m_objectType->methods(signalName);
             for (const auto &method : methods) {
+                if (method.isCloned())
+                    continue;
                 if (method.methodType() == QQmlJSMetaMethod::Signal) {
                     function.isSignalHandler = true;
+                    const auto arguments = method.parameters();
+                    for (qsizetype i = 0, end = arguments.size(); i < end; ++i) {
+                        const auto &type = arguments[i].type();
+                        if (type.isNull()) {
+                            diagnose(u"Cannot resolve the argument type %1."_s.arg(
+                                             arguments[i].typeName()),
+                                     QtDebugMsg, bindingLocation, error);
+                            function.argumentTypes.append(
+                                        m_typeResolver->tracked(
+                                            m_typeResolver->globalType(m_typeResolver->varType())));
+                        } else {
+                            function.argumentTypes.append(m_typeResolver->tracked(
+                                                              m_typeResolver->globalType(type)));
+                        }
+                    }
                     break;
                 }
             }
@@ -169,15 +208,20 @@ QQmlJSCompilePass::Function QQmlJSFunctionInitializer::run(
         }
 
         const auto property = m_objectType->property(propertyName);
-        function.returnType = property.isList()
-                ? m_typeResolver->listType(property.type(), QQmlJSTypeResolver::UseQObjectList)
-                : QQmlJSScope::ConstPtr(property.type());
-
-
-        if (!function.returnType) {
-            diagnose(u"Cannot resolve property type %1 for binding on %2"_s.arg(
-                         property.typeName(), propertyName),
-                     QtWarningMsg, bindingLocation, error);
+        if (const QQmlJSScope::ConstPtr propertyType = property.type()) {
+            function.returnType = propertyType->isListProperty()
+                    ? m_typeResolver->qObjectListType()
+                    : propertyType;
+        } else {
+            QString message = u"Cannot resolve property type %1 for binding on %2."_s
+                    .arg(property.typeName(), propertyName);
+            if (m_objectType->isNameDeferred(propertyName)) {
+                // If the property doesn't exist but the name is deferred, then
+                // it's deferred via the presence of immediate names. Those are
+                // most commonly used to enable generalized grouped properties.
+                message += u" You may want use ID-based grouped properties here.";
+            }
+            diagnose(message, QtWarningMsg, bindingLocation, error);
         }
 
         if (!property.bindable().isEmpty() && !property.isPrivate())
@@ -185,8 +229,6 @@ QQmlJSCompilePass::Function QQmlJSFunctionInitializer::run(
     }
 
     QQmlJS::MemoryPool pool;
-    auto astNode = m_currentObject->functionsAndExpressions->slowAt(
-                irBinding.value.compiledScriptIndex)->node;
     auto ast = astNode->asFunctionDefinition();
     if (!ast) {
         QQmlJS::AST::Statement *stmt = astNode->statementCast();
@@ -212,7 +254,7 @@ QQmlJSCompilePass::Function QQmlJSFunctionInitializer::run(
 
 QQmlJSCompilePass::Function QQmlJSFunctionInitializer::run(
         const QV4::Compiler::Context *context,
-        const QString &functionName, const QmlIR::Function &irFunction,
+        const QString &functionName, QQmlJS::AST::Node *astNode,
         QQmlJS::DiagnosticMessage *error)
 {
     Q_UNUSED(functionName);
@@ -220,7 +262,6 @@ QQmlJSCompilePass::Function QQmlJSFunctionInitializer::run(
     QQmlJSCompilePass::Function function;
     function.qmlScope = m_scopeType;
 
-    auto astNode = m_currentObject->functionsAndExpressions->slowAt(irFunction.index)->node;
     auto ast = astNode->asFunctionDefinition();
     Q_ASSERT(ast);
 

@@ -1,4 +1,5 @@
-# Generated from linguist.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## linguist App:
@@ -46,7 +47,7 @@ qt_internal_add_app(linguist
         QT_NO_CAST_TO_ASCII
     INCLUDE_DIRECTORIES
         ../shared
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::CorePrivate
         Qt::Gui
         Qt::GuiPrivate
@@ -129,10 +130,8 @@ set_target_properties(linguist PROPERTIES
     QT_TARGET_DESCRIPTION "Qt Linguist"
 )
 
-# special case begin
 file(GLOB phrasebooks_files "${CMAKE_CURRENT_SOURCE_DIR}/../phrasebooks/*")
 qt_install(FILES ${phrasebooks_files} DESTINATION "${INSTALL_DATADIR}/phrasebooks")
-# special case end
 
 qt_internal_extend_target(linguist CONDITION QT_PRODUCT___contains___OpenSource._x_
     DEFINES

@@ -3,12 +3,14 @@
 
 /*!
     \example customwidgetplugin
+    \meta category {Desktop}
+    \meta tags {widgets,designer}
     \ingroup examples-designer
-    \title Custom Widget Plugin Example
+    \title Custom Widget Plugin
 
     \brief Creating a custom widget plugin for Qt Designer.
 
-    \image customwidgetplugin-example.png
+    \image customwidgetplugin-example.webp
 
     In this example, the custom widget used is based on the
     \l{widgets/analogclock}{Analog Clock example}, and does not provide any custom

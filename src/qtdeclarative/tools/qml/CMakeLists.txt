@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Generated from qml.pro.
 
 #####################################################################
@@ -9,7 +12,7 @@ qt_internal_add_app(qml
     SOURCES
         conf.h
         main.cpp
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::CorePrivate
         Qt::QmlPrivate
 )
@@ -42,6 +45,7 @@ qt_internal_add_resource(qml qml
 
 # Turn the tool into its own self-contained qml module
 qt6_add_qml_module(qml
+    RESOURCE_PREFIX "/qt-project.org"
     URI QmlRuntime.Config
     VERSION 1.0
 )

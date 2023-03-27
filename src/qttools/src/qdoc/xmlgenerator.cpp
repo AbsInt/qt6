@@ -39,6 +39,27 @@ bool XmlGenerator::isThreeColumnEnumValueTable(const Atom *atom)
 }
 
 /*!
+  Determines whether the list atom should be shown with just one column (value).
+ */
+bool XmlGenerator::isOneColumnValueTable(const Atom *atom)
+{
+    if (atom->type() != Atom::ListLeft || atom->string() != ATOM_LIST_VALUE)
+        return false;
+
+    while (atom && atom->type() != Atom::ListTagRight)
+        atom = atom->next();
+
+    if (atom) {
+        if (!matchAhead(atom, Atom::ListItemLeft))
+            return false;
+        if (!atom->next())
+            return false;
+        return matchAhead(atom->next(), Atom::ListItemRight);
+    }
+    return false;
+}
+
+/*!
   Header offset depending on the type of the node
  */
 int XmlGenerator::hOffset(const Node *node)
@@ -206,19 +227,21 @@ std::pair<QString, QString> XmlGenerator::getTableWidthAttr(const Atom *atom)
  */
 QString XmlGenerator::registerRef(const QString &ref, bool xmlCompliant)
 {
-    QString clean = Generator::cleanRef(ref, xmlCompliant);
+    QString cleanRef = Generator::cleanRef(ref, xmlCompliant);
 
     for (;;) {
-        QString &prevRef = refMap[clean.toLower()];
+        QString &prevRef = refMap[cleanRef.toLower()];
         if (prevRef.isEmpty()) {
+            // This reference has never been met before for this document: register it.
             prevRef = ref;
             break;
         } else if (prevRef == ref) {
+            // This exact same reference was already found. This case typically occurs within refForNode.
             break;
         }
-        clean += QLatin1Char('x');
+        cleanRef += QLatin1Char('x');
     }
-    return clean;
+    return cleanRef;
 }
 
 /*!
@@ -257,7 +280,7 @@ QString XmlGenerator::refForNode(const Node *node)
             break;
         default:
             if (fn->hasOneAssociatedProperty() && fn->doc().isEmpty()) {
-                return refForNode(fn->firstAssociatedProperty());
+                return refForNode(fn->associatedProperties()[0]);
             } else {
                 ref = fn->name();
                 if (fn->overloadNumber() != 0)

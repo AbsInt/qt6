@@ -18,6 +18,7 @@
 #include <private/qqmljavascriptexpression_p.h>
 #include <private/qqmlpropertydata_p.h>
 #include <private/qv4alloca_p.h>
+#include <private/qqmltranslation_p.h>
 
 #include <QtCore/qproperty.h>
 
@@ -222,6 +223,10 @@ public:
     static QUntypedPropertyBinding Q_QML_PRIVATE_EXPORT create(const QQmlPropertyData *pd,
                                           const QQmlRefPointer<QV4::ExecutableCompilationUnit> &compilationUnit,
                                           const QV4::CompiledData::Binding *binding);
+    static QUntypedPropertyBinding Q_QML_PRIVATE_EXPORT
+    create(const QMetaType &pd,
+           const QQmlRefPointer<QV4::ExecutableCompilationUnit> &compilationUnit,
+           const QQmlTranslation &translationData);
 };
 
 inline const QQmlPropertyBinding *QQmlPropertyBindingJS::asBinding() const
@@ -393,7 +398,7 @@ bool QQmlPropertyBinding::evaluate(QMetaType metaType, void *dataPtr)
         break;
     }
 
-    QVariant resultVariant(scope.engine->toVariant(result, metaType));
+    QVariant resultVariant(QV4::ExecutionEngine::toVariant(result, metaType));
     resultVariant.convert(metaType);
     const bool hasChanged = !metaType.equals(resultVariant.constData(), dataPtr);
     metaType.destruct(dataPtr);

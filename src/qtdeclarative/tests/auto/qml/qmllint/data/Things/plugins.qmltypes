@@ -18,6 +18,14 @@ Module {
                 "CCC": 2
             }
         }
+        Enum {
+            name: "TheEnum"
+            scoped: false
+            values: {
+                "V1": 0,
+                "V2": 1
+            }
+        }
         Property { name: "palette"; type: "QPalette" }
         Property { name: "palette2"; type: "CustomPalette" }
     }
@@ -87,5 +95,13 @@ Module {
        ]
        Property { name: "foo"; type: "string" }
        hasCustomParser: true
+    }
+    Component {
+        file: "mediaplayer-qml.h"
+        name: "MediaPlayerStateMachine"
+        accessSemantics: "value"
+        exports: ["Mediaplayer/MediaPlayerStateMachine 1.0"]
+        isCreatable: false
+        exportMetaObjectRevisions: [256]
     }
 }

@@ -1,7 +1,8 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 cmake_minimum_required(VERSION 3.16)
 project(quickwidget LANGUAGES CXX)
-
-set(CMAKE_AUTOMOC ON)
 
 if(NOT DEFINED INSTALL_EXAMPLESDIR)
     set(INSTALL_EXAMPLESDIR "examples")
@@ -11,16 +12,15 @@ set(INSTALL_EXAMPLEDIR "${INSTALL_EXAMPLESDIR}/quick/quickwidgets/quickwidget")
 
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Quick QuickWidgets Widgets)
 
+qt_standard_project_setup(REQUIRES 6.5)
+
 qt_add_executable(quickwidget
+    WIN32
+    MACOSX_BUNDLE
     main.cpp
 )
 
-set_target_properties(quickwidget PROPERTIES
-    WIN32_EXECUTABLE TRUE
-    MACOSX_BUNDLE TRUE
-)
-
-target_link_libraries(quickwidget PUBLIC
+target_link_libraries(quickwidget PRIVATE
     Qt::Core
     Qt::Gui
     Qt::Quick
@@ -30,7 +30,6 @@ target_link_libraries(quickwidget PUBLIC
 
 qt_add_qml_module(quickwidget
     URI QuickWidgetExample
-    VERSION 1.0
     QML_FILES
         rotatingsquare.qml
     RESOURCE_PREFIX /quickwidget

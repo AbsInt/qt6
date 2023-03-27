@@ -47,8 +47,7 @@ Q_STATIC_ASSERT(std::is_standard_layout< FunctionData >::value);
 struct Q_QML_EXPORT Function : public FunctionData {
 protected:
     Function(ExecutionEngine *engine, ExecutableCompilationUnit *unit,
-             const CompiledData::Function *function, const QQmlPrivate::AOTCompiledFunction *aotFunction);
-    Function(ExecutionEngine *engine, const QQmlPrivate::AOTCompiledFunction *aotFunction);
+             const CompiledData::Function *function, const QQmlPrivate::TypedFunction *aotFunction);
     ~Function();
 
 public:
@@ -75,20 +74,19 @@ public:
     typedef ReturnedValue (*JittedCode)(CppStackFrame *, ExecutionEngine *);
     JittedCode jittedCode;
     JSC::MacroAssemblerCodeRef *codeRef;
-    const QQmlPrivate::AOTCompiledFunction *aotFunction = nullptr;
+    const QQmlPrivate::TypedFunction *typedFunction = nullptr;
 
     // first nArguments names in internalClass are the actual arguments
     Heap::InternalClass *internalClass;
-    uint nFormals;
     int interpreterCallCount = 0;
-    bool isEval = false;
+    quint16 nFormals;
+    enum Kind : quint8 { JsUntyped, JsTyped, AotCompiled, Eval };
+    Kind kind = JsUntyped;
     bool detectedInjectedParameters = false;
 
     static Function *create(ExecutionEngine *engine, ExecutableCompilationUnit *unit,
                             const CompiledData::Function *function,
-                            const QQmlPrivate::AOTCompiledFunction *aotFunction);
-    static Function *create(ExecutionEngine *engine,
-                            const QQmlPrivate::AOTCompiledFunction *aotFunction);
+                            const QQmlPrivate::TypedFunction *aotFunction);
     void destroy();
 
     // used when dynamically assigning signal handlers (QQmlConnection)

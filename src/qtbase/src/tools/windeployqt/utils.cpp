@@ -15,6 +15,7 @@
 #include <QtCore/QStandardPaths>
 #if defined(Q_OS_WIN)
 #  include <QtCore/qt_windows.h>
+#  include <QtCore/private/qsystemerror_p.h>
 #  include <shlwapi.h>
 #  include <delayimp.h>
 #else // Q_OS_WIN
@@ -61,7 +62,7 @@ bool createSymbolicLink(const QFileInfo &source, const QString &target, QString 
     return true;
 }
 
-bool createDirectory(const QString &directory, QString *errorMessage)
+bool createDirectory(const QString &directory, QString *errorMessage, bool dryRun)
 {
     const QFileInfo fi(directory);
     if (fi.isDir())
@@ -73,11 +74,13 @@ bool createDirectory(const QString &directory, QString *errorMessage)
     }
     if (optVerboseLevel)
         std::wcout << "Creating " << QDir::toNativeSeparators(directory) << "...\n";
-    QDir dir;
-    if (!dir.mkpath(directory)) {
-        *errorMessage = QString::fromLatin1("Could not create directory %1.").
-                        arg(QDir::toNativeSeparators(directory));
-        return false;
+    if (!dryRun) {
+        QDir dir;
+        if (!dir.mkpath(directory)) {
+            *errorMessage = QString::fromLatin1("Could not create directory %1.")
+                                    .arg(QDir::toNativeSeparators(directory));
+            return false;
+        }
     }
     return true;
 }
@@ -116,22 +119,6 @@ QStringList findSharedLibraries(const QDir &directory, Platform platform,
 }
 
 #ifdef Q_OS_WIN
-QString winErrorMessage(unsigned long error)
-{
-    QString rc = QString::fromLatin1("#%1: ").arg(error);
-    char16_t *lpMsgBuf;
-
-    const DWORD len = FormatMessage(
-            FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
-            NULL, error, 0, reinterpret_cast<LPTSTR>(&lpMsgBuf), 0, NULL);
-    if (len) {
-        rc = QString::fromUtf16(lpMsgBuf, int(len));
-        LocalFree(lpMsgBuf);
-    } else {
-        rc += QString::fromLatin1("<unknown error>");
-    }
-    return rc;
-}
 
 // Case-Normalize file name via GetShortPathNameW()/GetLongPathNameW()
 QString normalizeFileName(const QString &name)
@@ -263,8 +250,10 @@ bool runProcess(const QString &binary, const QStringList &args,
             CloseHandle(si.hStdOutput);
         if (stdErr)
             CloseHandle(si.hStdError);
-        if (errorMessage)
-            *errorMessage = QStringLiteral("CreateProcessW failed: ") + winErrorMessage(GetLastError());
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("CreateProcessW failed: ")
+                + QSystemError::windowsString();
+        }
         return false;
     }
 
@@ -750,7 +739,11 @@ inline void determineDebugAndDependentLibs(const ImageNtHeader *nth, const void 
         } else {
             // When an MSVC debug entry is present, check whether the debug runtime
             // is actually used to detect -release / -force-debug-info builds.
-            *isDebugIn = hasDebugEntry && checkMsvcDebugRuntime(dependentLibraries) != MsvcReleaseRuntime;
+            const MsvcDebugRuntimeResult msvcrt = checkMsvcDebugRuntime(dependentLibraries);
+            if (msvcrt == NoMsvcRuntime)
+                *isDebugIn = hasDebugEntry;
+            else
+                *isDebugIn = hasDebugEntry && msvcrt == MsvcDebugRuntime;
         }
     }
 }
@@ -778,19 +771,22 @@ bool readPeExecutable(const QString &peExecutableFileName, QString *errorMessage
         hFile = CreateFile(reinterpret_cast<const WCHAR*>(peExecutableFileName.utf16()), GENERIC_READ, FILE_SHARE_READ, NULL,
                              OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
         if (hFile == INVALID_HANDLE_VALUE || hFile == NULL) {
-            *errorMessage = QString::fromLatin1("Cannot open '%1': %2").arg(peExecutableFileName, winErrorMessage(GetLastError()));
+            *errorMessage = QString::fromLatin1("Cannot open '%1': %2")
+                .arg(peExecutableFileName, QSystemError::windowsString());
             break;
         }
 
         hFileMap = CreateFileMapping(hFile, NULL, PAGE_READONLY, 0, 0, NULL);
         if (hFileMap == NULL) {
-            *errorMessage = QString::fromLatin1("Cannot create file mapping of '%1': %2").arg(peExecutableFileName, winErrorMessage(GetLastError()));
+            *errorMessage = QString::fromLatin1("Cannot create file mapping of '%1': %2")
+                .arg(peExecutableFileName, QSystemError::windowsString());
             break;
         }
 
         fileMemory = MapViewOfFile(hFileMap, FILE_MAP_READ, 0, 0, 0);
         if (!fileMemory) {
-            *errorMessage = QString::fromLatin1("Cannot map '%1': %2").arg(peExecutableFileName, winErrorMessage(GetLastError()));
+            *errorMessage = QString::fromLatin1("Cannot map '%1': %2")
+                .arg(peExecutableFileName, QSystemError::windowsString());
             break;
         }
 

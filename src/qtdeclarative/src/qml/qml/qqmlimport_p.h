@@ -38,6 +38,7 @@ class QQmlImportNamespace;
 class QQmlImportDatabase;
 class QQmlTypeLoader;
 class QQmlTypeLoaderQmldirContent;
+class QTypeRevision;
 
 const QLoggingCategory &lcQmlImport();
 
@@ -47,13 +48,25 @@ namespace QQmlImport {
 
 struct QQmlImportInstance
 {
+    enum Precedence {
+        Lowest = std::numeric_limits<quint8>::max(),
+        Implicit = Lowest / 2,
+        Highest = 0,
+    };
+
     QString uri; // e.g. QtQuick
     QString url; // the base path of the import
     QQmlType containingType; // points to the containing type for inline components
     QTypeRevision version; // the version imported
+
     bool isLibrary; // true means that this is not a file import
+
+    // not covered by precedence. You can set a component as implicitly imported after the fact.
     bool implicitlyImported = false;
     bool isInlineComponent = false;
+
+    quint8 precedence = 0;
+
     QQmlDirComponents qmlDirComponents; // a copy of the components listed in the qmldir
     QQmlDirScripts qmlDirScripts; // a copy of the scripts in the qmldir
 
@@ -109,11 +122,9 @@ class Q_QML_PRIVATE_EXPORT QQmlImports : public QQmlRefCount
 public:
     enum ImportVersion { FullyVersioned, PartiallyVersioned, Unversioned };
 
-    enum ImportFlag {
+    enum ImportFlag : quint8 {
         ImportNoFlag        = 0x0,
         ImportIncomplete    = 0x1,
-        ImportLowPrecedence = 0x2,
-        ImportImplicit      = 0x4
     };
     Q_DECLARE_FLAGS(ImportFlags, ImportFlag)
 
@@ -133,15 +144,6 @@ public:
             QQmlType::RegistrationType registrationType = QQmlType::AnyRegistrationType,
             bool *typeRecursionDetected = nullptr) const;
 
-    bool resolveType(
-            QQmlImportNamespace *ns, const QHashedStringRef &type, QQmlType *type_return,
-            QTypeRevision *version_return,
-            QQmlType::RegistrationType registrationType = QQmlType::AnyRegistrationType) const
-    {
-        return ns->resolveType(m_typeLoader, type, version_return, type_return, nullptr, nullptr,
-                               registrationType);
-    }
-
     QTypeRevision addImplicitImport(
             QQmlImportDatabase *importDb, QString *localQmldir, QList<QQmlError> *errors)
     {
@@ -149,10 +151,10 @@ public:
         qCDebug(lcQmlImport) << "addImplicitImport:" << qPrintable(baseUrl().toString());
 
         const ImportFlags flags =
-                ImportFlags(!isLocal(baseUrl()) ? ImportIncomplete : ImportNoFlag) | ImportImplicit;
+                ImportFlags(!isLocal(baseUrl()) ? ImportIncomplete : ImportNoFlag);
         return addFileImport(
                     importDb, QLatin1String("."), QString(), QTypeRevision(),
-                    flags, localQmldir, errors);
+                    flags, QQmlImportInstance::Implicit, localQmldir, errors);
     }
 
     bool addInlineComponentImport(
@@ -161,13 +163,13 @@ public:
 
     QTypeRevision addFileImport(
             QQmlImportDatabase *importDb, const QString &uri, const QString &prefix,
-            QTypeRevision version, ImportFlags flags, QString *localQmldir,
+            QTypeRevision version, ImportFlags flags, quint16 precedence, QString *localQmldir,
             QList<QQmlError> *errors);
 
     QTypeRevision addLibraryImport(
             QQmlImportDatabase *importDb, const QString &uri, const QString &prefix,
             QTypeRevision version, const QString &qmldirIdentifier, const QString &qmldirUrl,
-            ImportFlags flags, QList<QQmlError> *errors);
+            ImportFlags flags, quint16 precedence, QList<QQmlError> *errors);
 
     QTypeRevision updateQmldirContent(
             QQmlImportDatabase *importDb, const QString &uri, const QString &prefix,
@@ -212,6 +214,8 @@ public:
 
     static void setDesignerSupportRequired(bool b);
 
+    static QTypeRevision validVersion(QTypeRevision version = QTypeRevision());
+
 private:
     friend class QQmlImportDatabase;
 
@@ -241,7 +245,7 @@ private:
     QQmlImportInstance *addImportToNamespace(
             QQmlImportNamespace *nameSpace, const QString &uri, const QString &url,
             QTypeRevision version, QV4::CompiledData::Import::ImportType type,
-            QList<QQmlError> *errors, ImportFlags flags);
+            QList<QQmlError> *errors, quint16 precedence);
 
     QUrl m_baseUrl;
     QString m_base;

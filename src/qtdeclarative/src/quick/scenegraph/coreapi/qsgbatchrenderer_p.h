@@ -259,7 +259,7 @@ inline QDebug operator << (QDebug d, const Rect &r) {
 }
 
 struct Buffer {
-    int size;
+    quint32 size;
     // Data is only valid while preparing the upload. Exception is if we are using the
     // broken IBO workaround or we are using a visualization mode.
     char *data;
@@ -597,6 +597,8 @@ struct GraphicsState
     bool blending = false;
     QRhiGraphicsPipeline::BlendFactor srcColor = QRhiGraphicsPipeline::One;
     QRhiGraphicsPipeline::BlendFactor dstColor = QRhiGraphicsPipeline::OneMinusSrcAlpha;
+    QRhiGraphicsPipeline::BlendFactor srcAlpha = QRhiGraphicsPipeline::One;
+    QRhiGraphicsPipeline::BlendFactor dstAlpha = QRhiGraphicsPipeline::OneMinusSrcAlpha;
     QRhiGraphicsPipeline::ColorMask colorWrite = QRhiGraphicsPipeline::ColorMask(0xF);
     QRhiGraphicsPipeline::CullMode cullMode = QRhiGraphicsPipeline::None;
     bool usesScissor = false;
@@ -641,13 +643,11 @@ size_t qHash(const GraphicsPipelineStateKey &k, size_t seed = 0) noexcept;
 struct ShaderManagerShader
 {
     ~ShaderManagerShader() {
-        delete programRhi.program;
+        delete materialShader;
     }
-    struct {
-        QSGMaterialShader *program = nullptr;
-        QRhiVertexInputLayout inputLayout;
-        QVarLengthArray<QRhiGraphicsShaderStage, 2> shaderStages;
-    } programRhi;
+    QSGMaterialShader *materialShader = nullptr;
+    QRhiVertexInputLayout inputLayout;
+    QVarLengthArray<QRhiGraphicsShaderStage, 2> stages;
     float lastOpacity;
 };
 
@@ -777,7 +777,7 @@ private:
     friend class RhiVisualizer;
 
     void destroyGraphicsResources();
-    void map(Buffer *buffer, int size, bool isIndexBuf = false);
+    void map(Buffer *buffer, quint32 byteSize, bool isIndexBuf = false);
     void unmap(Buffer *buffer, bool isIndexBuf = false);
 
     void buildRenderListsFromScratch();

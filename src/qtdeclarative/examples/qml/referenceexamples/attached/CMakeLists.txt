@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 cmake_minimum_required(VERSION 3.16)
 project(attached LANGUAGES CXX)
 
@@ -30,7 +33,6 @@ target_link_libraries(attached PUBLIC
 
 qt_add_qml_module(attached
     URI People
-    VERSION 1.0
     QML_FILES example.qml
     NO_RESOURCE_TARGET_PATH
 )

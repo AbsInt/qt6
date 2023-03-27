@@ -1,56 +1,46 @@
-# Generated from text.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
-#####################################################################
-## text Binary:
-#####################################################################
+cmake_minimum_required(VERSION 3.16)
+project(text_manual_test LANGUAGES CXX)
 
-qt_internal_add_manual_test(text
-    GUI
-    SOURCES
-        main.cpp
-    PUBLIC_LIBRARIES
+# Skip building this test in a top-level build configured with -make tests
+# to avoid configuration errors like
+#  CMake Error: AUTOMOC for target tst_template_full_path: The "moc"
+#  executable ".../qtbase/libexec/moc" does not exist.
+#
+# It happens because targets are added using non-internal API which do not call
+# qt_autogen_tools_initial_setup.
+if(QT_SUPERBUILD)
+    return()
+endif()
+
+set(CMAKE_INCLUDE_CURRENT_DIR ON)
+
+set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTORCC ON)
+set(CMAKE_AUTOUIC ON)
+
+find_package(Qt6 COMPONENTS Core Gui Quick QuickControls2)
+
+qt_add_executable(text_manual_test
+    main.cpp
+)
+target_link_libraries(text_manual_test PUBLIC
         Qt::Gui
-        Qt::Qml
         Qt::Quick
+        Qt::QuickControls2
 )
 
-# Resources:
-set(qml_resource_files
+set(qmake_immediate_resource_files
+    "Rule.qml"
     "SignalIndicator.qml"
-    "main.qml"
     "textInputPropertiesAndSignals.qml"
 )
 
-qt_internal_add_resource(text "qml"
+qt6_add_resources(text_manual_test "qml"
     PREFIX
         "/"
     FILES
-        ${qml_resource_files}
+        ${qmake_immediate_resource_files}
 )
-
-set(quick_shared_resource_files
-    "../../../examples/quick/shared/Button.qml"
-    "../../../examples/quick/shared/CheckBox.qml"
-    "../../../examples/quick/shared/Label.qml"
-    "../../../examples/quick/shared/LauncherList.qml"
-    "../../../examples/quick/shared/SimpleLauncherDelegate.qml"
-    "../../../examples/quick/shared/Slider.qml"
-    "../../../examples/quick/shared/TextField.qml"
-    "../../../examples/quick/shared/images/back.png"
-    "../../../examples/quick/shared/images/checkmark.png"
-    "../../../examples/quick/shared/images/next.png"
-    "../../../examples/quick/shared/images/slider_handle.png"
-)
-
-qt_internal_add_resource(text "quick_shared"
-    PREFIX
-        "/quick/shared"
-    BASE
-        "../../../examples/quick/shared"
-    FILES
-        ${quick_shared_resource_files}
-)
-
-
-#### Keys ignored in scope 1:.:.:text.pro:<TRUE>:
-# TEMPLATE = "app"

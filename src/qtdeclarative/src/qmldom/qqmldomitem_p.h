@@ -34,6 +34,9 @@
 #include <QtCore/QDateTime>
 #include <QtCore/QMutex>
 #include <QtCore/QCborValue>
+#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
+#include <QtCore/QTimeZone>
+#endif
 #include <QtQml/private/qqmljssourcelocation_p.h>
 
 #include <memory>
@@ -1259,6 +1262,12 @@ class QMLDOM_EXPORT OwningItem: public DomBase {
 protected:
     virtual std::shared_ptr<OwningItem> doCopy(DomItem &self) const = 0;
 
+    // Temporary alias until QMLDom supports nothing older than 6.5:
+#if QT_VERSION < QT_VERSION_CHECK(6, 5, 0)
+    static constexpr auto UTC = Qt::UTC;
+#else
+    static constexpr auto UTC = QTimeZone::UTC;
+#endif
 public:
     OwningItem(const OwningItem &o);
     OwningItem(int derivedFrom=0);
@@ -2061,24 +2070,6 @@ inline DomItem DomBase::key(DomItem &self, QString name) const
                 return true;
             });
     return res;
-}
-
-inline DomItem DomItem::subReferencesItem(const PathEls::PathComponent &c, QList<Path> paths)
-{
-    return subListItem(
-            List::fromQList<Path>(pathFromOwner().appendComponent(c), paths,
-                                  [](DomItem &list, const PathEls::PathComponent &p, Path &el) {
-                                      return list.subReferenceItem(p, el);
-                                  }));
-}
-
-inline DomItem DomItem::subReferenceItem(const PathEls::PathComponent &c, Path referencedObject)
-{
-    if (domTypeIsOwningItem(internalKind()))
-        return DomItem(m_top, m_owner, m_ownerPath, Reference(referencedObject, Path(c)));
-    else
-        return DomItem(m_top, m_owner, m_ownerPath,
-                       Reference(referencedObject, pathFromOwner().appendComponent(c)));
 }
 
 inline DomItem DomItem::subListItem(const List &list)

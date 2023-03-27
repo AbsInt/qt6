@@ -22,8 +22,9 @@
 #include <QColor>
 #include <QBrush>
 #include <QElapsedTimer>
-#include <private/qopenglcontext_p.h>
-
+#if QT_CONFIG(opengl)
+# include <private/qopenglcontext_p.h>
+#endif
 QT_BEGIN_NAMESPACE
 
 class QSGPlainTexture;
@@ -64,6 +65,7 @@ public:
     virtual void setStrokeStyle(int index, QQuickShapePath::StrokeStyle strokeStyle,
                                 qreal dashOffset, const QVector<qreal> &dashPattern) = 0;
     virtual void setFillGradient(int index, QQuickShapeGradient *gradient) = 0;
+    virtual void setTriangulationScale(qreal) { }
 
     // Render thread, with gui blocked
     virtual void updateNode() = 0;
@@ -149,6 +151,7 @@ public:
     bool async = false;
     bool enableVendorExts = false;
     bool syncTimingActive = false;
+    qreal triangulationScale = 1.0;
 };
 
 struct QQuickShapeGradientCacheKey

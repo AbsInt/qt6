@@ -3,17 +3,12 @@ QT_FOR_CONFIG += qml
 
 qtHaveModule(quick) {
     SUBDIRS += \
-        qmlextensionplugins \
-        xmlhttprequest
-
-    qtConfig(qml-network): \
-        SUBDIRS += networkaccessmanagerfactory
+        qmlextensionplugins
 }
 
 SUBDIRS += \
           referenceexamples \
-          tutorials \
-          shell
+          tutorials
 
 EXAMPLE_FILES = \
     dynamicscene \

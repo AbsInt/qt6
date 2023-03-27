@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 #####################################################################
 ## qmldom Tool:
 #####################################################################
@@ -8,7 +11,7 @@ qt_internal_add_tool(${target_name}
     TOOLS_TARGET Qml # special case
     SOURCES
         qmldomtool.cpp
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::CorePrivate
         Qt::QmlDomPrivate
 )

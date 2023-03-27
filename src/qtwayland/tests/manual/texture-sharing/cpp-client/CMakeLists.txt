@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Generated from cpp-client.pro.
 
 #####################################################################
@@ -7,11 +10,12 @@
 qt_internal_add_manual_test(cpp-client
     GUI
     SOURCES
-        ../../../../src/imports/texture-sharing/texturesharingextension.cpp ../../../../src/imports/texture-sharing/texturesharingextension.h
+        ../../../../src/imports/texture-sharing/texturesharingextension.cpp
+        ../../../../src/imports/texture-sharing/texturesharingextension_p.h
         main.cpp
     INCLUDE_DIRECTORIES
         ../../../../src/imports/texture-sharing
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Gui
         Qt::GuiPrivate
         Qt::OpenGL

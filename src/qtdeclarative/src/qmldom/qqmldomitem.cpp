@@ -18,22 +18,31 @@
 #include <QtQml/private/qqmljsastvisitor_p.h>
 #include <QtQml/private/qqmljsast_p.h>
 
+#include <QtCore/QCborArray>
+#include <QtCore/QCborMap>
 #include <QtCore/QDebug>
 #include <QtCore/QDir>
 #include <QtCore/QFile>
 #include <QtCore/QFileInfo>
-#include <QtCore/QPair>
-#include <QtCore/QScopeGuard>
-#include <QtCore/QMutexLocker>
-#include <QtCore/QCborMap>
-#include <QtCore/QCborArray>
-#include <QtCore/QJsonValue>
 #include <QtCore/QJsonDocument>
+#include <QtCore/QJsonValue>
+#include <QtCore/QMutexLocker>
+#include <QtCore/QPair>
 #include <QtCore/QRegularExpression>
+#include <QtCore/QScopeGuard>
 #include <QtCore/QtGlobal>
+#if QT_VERSION < QT_VERSION_CHECK(6, 5, 0)
+namespace {
+static constexpr auto UTC = Qt::UTC;
+}
+#else
+#include <QtCore/QTimeZone>
+namespace {
+static constexpr auto UTC = QTimeZone::UTC;
+}
+#endif
 
 QT_BEGIN_NAMESPACE
-
 
 namespace QQmlJS {
 namespace Dom {
@@ -1139,8 +1148,8 @@ DomItem DomItem::writeOutForFile(OutWriter &ow, WriteOutChecks extraChecks)
                | WriteOutCheck::ReparseStable)) {
             DomItem newEnv = environment().makeCopy().item();
             if (std::shared_ptr<DomEnvironment> newEnvPtr = newEnv.ownerAs<DomEnvironment>()) {
-                std::shared_ptr<QmlFile> newFilePtr(
-                        new QmlFile(canonicalFilePath(), ow.writtenStr));
+                auto newFilePtr = std::make_shared<QmlFile>(
+                        canonicalFilePath(), ow.writtenStr);
                 newEnvPtr->addQmlFile(newFilePtr, AddOption::Overwrite);
                 DomItem newFile = newEnv.copy(newFilePtr, Path());
                 if (newFilePtr->isValid()) {
@@ -1350,7 +1359,7 @@ bool DomItem::visitPrototypeChain(function_ref<bool(DomItem &)> visitor,
                                         .withItem(*this)
                                         .handle(h);
                     } else {
-                        if (protos.length() > 1) {
+                        if (protos.size() > 1) {
                             QStringList protoPaths;
                             for (DomItem &p : protos)
                                 protoPaths.append(p.canonicalPath().toString());
@@ -1646,7 +1655,7 @@ bool DomItem::visitLookup1(QString symbolName, function_ref<bool(DomItem &)> vis
                            LookupOptions opts, ErrorHandler h, QSet<quintptr> *visited,
                            QList<Path> *visitedRefs)
 {
-    bool typeLookupInQmlFile = symbolName.length() > 1 && symbolName.at(0).isUpper()
+    bool typeLookupInQmlFile = symbolName.size() > 1 && symbolName.at(0).isUpper()
             && fileObject().internalKind() == DomType::QmlFile;
     if (typeLookupInQmlFile) {
         // shortcut to lookup types (scope chain would find them too, but after looking
@@ -1685,7 +1694,12 @@ public:
         CppTypeInfo res;
         QRegularExpression reTarget = QRegularExpression(QRegularExpression::anchoredPattern(
                 uR"(QList<(?<list>[a-zA-Z_0-9:]+) *(?<listPtr>\*?)>|QMap< *(?<mapKey>[a-zA-Z_0-9:]+) *, *(?<mapValue>[a-zA-Z_0-9:]+) *(?<mapPtr>\*?)>|(?<baseType>[a-zA-Z_0-9:]+) *(?<ptr>\*?))"));
+
+#if QT_VERSION < QT_VERSION_CHECK(6, 4, 0)
         QRegularExpressionMatch m = reTarget.match(target);
+#else
+        QRegularExpressionMatch m = reTarget.matchView(target);
+#endif
         if (!m.hasMatch()) {
             DomItem::myResolveErrors()
                     .error(tr("Unexpected complex CppType %1").arg(target))
@@ -1732,7 +1746,7 @@ bool DomItem::visitLookup(QString target, function_ref<bool(DomItem &)> visitor,
     case LookupType::Symbol:
     case LookupType::Type: {
         QStringList subpath = target.split(QChar::fromLatin1('.'));
-        if (subpath.length() == 1) {
+        if (subpath.size() == 1) {
             return visitLookup1(subpath.first(), visitor, opts, errorHandler, visited, visitedRefs);
         } else {
             return visitLookup1(
@@ -1741,16 +1755,16 @@ bool DomItem::visitLookup(QString target, function_ref<bool(DomItem &)> visitor,
                         QVector<ResolveToDo> lookupToDos({ ResolveToDo {
                                 newIt, 1 } }); // invariant: always increase pathIndex to guarantee
                                                // end even with only partial visited match
-                        QList<QSet<quintptr>> lookupVisited(subpath.length() + 1);
+                        QList<QSet<quintptr>> lookupVisited(subpath.size() + 1);
                         while (!lookupToDos.isEmpty()) {
                             ResolveToDo tNow = lookupToDos.takeFirst();
                             auto vNow = qMakePair(tNow.item.id(), tNow.pathIndex);
                             DomItem subNow = tNow.item;
                             int iSubPath = tNow.pathIndex;
-                            Q_ASSERT(iSubPath < subpath.length());
+                            Q_ASSERT(iSubPath < subpath.size());
                             QString subPathNow = subpath[iSubPath++];
                             DomItem scope = subNow.proceedToScope();
-                            if (iSubPath < subpath.length()) {
+                            if (iSubPath < subpath.size()) {
                                 if (vNow.first != 0) {
                                     if (lookupVisited[vNow.second].contains(vNow.first))
                                         continue;
@@ -1975,17 +1989,17 @@ MutableDomItem DomItem::makeCopy(DomItem::CopyOption option)
     DomItem env = environment();
     std::shared_ptr<DomEnvironment> newEnvPtr;
     if (std::shared_ptr<DomEnvironment> envPtr = env.ownerAs<DomEnvironment>()) {
-        newEnvPtr = std::shared_ptr<DomEnvironment>(
-                new DomEnvironment(envPtr, envPtr->loadPaths(), envPtr->options()));
+        newEnvPtr = std::make_shared<DomEnvironment>(
+                envPtr, envPtr->loadPaths(), envPtr->options());
         DomBase *eBase = envPtr.get();
         if (std::holds_alternative<DomEnvironment *>(m_element) && eBase
             && std::get<DomEnvironment *>(m_element) == eBase)
             return MutableDomItem(DomItem(newEnvPtr));
     } else if (std::shared_ptr<DomUniverse> univPtr = top().ownerAs<DomUniverse>()) {
-        newEnvPtr = std::shared_ptr<DomEnvironment>(new DomEnvironment(
+        newEnvPtr = std::make_shared<DomEnvironment>(
                 QStringList(),
                 DomEnvironment::Option::SingleThreaded | DomEnvironment::Option::NoDependencies,
-                univPtr));
+                univPtr);
     } else {
         Q_ASSERT(false);
         return {};
@@ -2218,7 +2232,7 @@ QDateTime DomItem::createdAt()
     if (m_owner)
         return std::visit([](auto &&ow) { return ow->createdAt(); }, *m_owner);
     else
-        return QDateTime::fromMSecsSinceEpoch(0);
+        return QDateTime::fromMSecsSinceEpoch(0, UTC);
 }
 
 QDateTime DomItem::frozenAt()
@@ -2226,7 +2240,7 @@ QDateTime DomItem::frozenAt()
     if (m_owner)
         return std::visit([](auto &&ow) { return ow->frozenAt(); }, *m_owner);
     else
-        return QDateTime::fromMSecsSinceEpoch(0);
+        return QDateTime::fromMSecsSinceEpoch(0, UTC);
 }
 
 QDateTime DomItem::lastDataUpdateAt()
@@ -2234,7 +2248,7 @@ QDateTime DomItem::lastDataUpdateAt()
     if (m_owner)
         return std::visit([](auto &&ow) { return ow->lastDataUpdateAt(); }, *m_owner);
     else
-        return QDateTime::fromMSecsSinceEpoch(0);
+        return QDateTime::fromMSecsSinceEpoch(0, UTC);
 }
 
 void DomItem::addError(ErrorMessage msg)
@@ -2297,6 +2311,25 @@ bool DomItem::iterateDirectSubpaths(DirectVisitor v)
 {
     return visitMutableEl(
             [this, v](auto &&el) mutable { return el->iterateDirectSubpaths(*this, v); });
+}
+
+DomItem DomItem::subReferencesItem(const PathEls::PathComponent &c, QList<Path> paths)
+{
+    return subListItem(
+                List::fromQList<Path>(pathFromOwner().appendComponent(c), paths,
+                                      [](DomItem &list, const PathEls::PathComponent &p, Path &el) {
+                    return list.subReferenceItem(p, el);
+                }));
+}
+
+DomItem DomItem::subReferenceItem(const PathEls::PathComponent &c, Path referencedObject)
+{
+    if (domTypeIsOwningItem(internalKind())) {
+        return DomItem(m_top, m_owner, m_ownerPath, Reference(referencedObject, Path(c)));
+    } else {
+        return DomItem(m_top, m_owner, m_ownerPath,
+                       Reference(referencedObject, pathFromOwner().appendComponent(c)));
+    }
 }
 
 shared_ptr<DomTop> DomItem::topPtr()
@@ -2438,7 +2471,7 @@ DomItem DomItem::fromCode(QString code, DomType fileType)
 
     DomItem tFile;
     env.loadFile(
-            QString(), QString(), code, QDateTime::currentDateTime(),
+            QString(), QString(), code, QDateTime::currentDateTimeUtc(),
             [&tFile](Path, const DomItem &, const DomItem &newIt) { tFile = newIt; },
             LoadOption::DefaultLoad, fileType);
     env.loadPendingDependencies();
@@ -2930,19 +2963,28 @@ OwningItems), Access to the rest is *not* controlled, it should either be by a s
 
 */
 
-OwningItem::OwningItem(int derivedFrom):
-    m_derivedFrom(derivedFrom), m_revision(nextRevision()),
-    m_createdAt(QDateTime::currentDateTime()), m_lastDataUpdateAt(m_createdAt), m_frozenAt(QDateTime::fromMSecsSinceEpoch(0))
+OwningItem::OwningItem(int derivedFrom)
+    : m_derivedFrom(derivedFrom),
+      m_revision(nextRevision()),
+      m_createdAt(QDateTime::currentDateTimeUtc()),
+      m_lastDataUpdateAt(m_createdAt),
+      m_frozenAt(QDateTime::fromMSecsSinceEpoch(0, UTC))
 {}
 
-OwningItem::OwningItem(int derivedFrom, QDateTime lastDataUpdateAt):
-    m_derivedFrom(derivedFrom), m_revision(nextRevision()),
-    m_createdAt(QDateTime::currentDateTime()), m_lastDataUpdateAt(lastDataUpdateAt), m_frozenAt(QDateTime::fromMSecsSinceEpoch(0))
+OwningItem::OwningItem(int derivedFrom, QDateTime lastDataUpdateAt)
+    : m_derivedFrom(derivedFrom),
+      m_revision(nextRevision()),
+      m_createdAt(QDateTime::currentDateTimeUtc()),
+      m_lastDataUpdateAt(lastDataUpdateAt),
+      m_frozenAt(QDateTime::fromMSecsSinceEpoch(0, UTC))
 {}
 
-OwningItem::OwningItem(const OwningItem &o):
-    m_derivedFrom(o.revision()), m_revision(nextRevision()),
-    m_createdAt(QDateTime::currentDateTime()),   m_lastDataUpdateAt(o.lastDataUpdateAt()), m_frozenAt(QDateTime::fromMSecsSinceEpoch(0))
+OwningItem::OwningItem(const OwningItem &o)
+    : m_derivedFrom(o.revision()),
+      m_revision(nextRevision()),
+      m_createdAt(QDateTime::currentDateTimeUtc()),
+      m_lastDataUpdateAt(o.lastDataUpdateAt()),
+      m_frozenAt(QDateTime::fromMSecsSinceEpoch(0, UTC))
 {
     QMultiMap<Path, ErrorMessage> my_errors;
     {
@@ -3020,7 +3062,7 @@ bool OwningItem::frozen() const
 bool OwningItem::freeze()
 {
     if (!frozen()) {
-        m_frozenAt = QDateTime::currentDateTime();
+        m_frozenAt = QDateTime::currentDateTimeUtc();
         if (m_frozenAt <= m_createdAt)
             m_frozenAt = m_createdAt.addSecs(1);
         return true;
@@ -3257,8 +3299,8 @@ MutableDomItem MutableDomItem::setCode(QString code)
     switch (it.internalKind()) {
     case DomType::Binding:
         if (Binding *b = mutableAs<Binding>()) {
-            std::shared_ptr<ScriptExpression> exp(new ScriptExpression(
-                    code, ScriptExpression::ExpressionType::BindingExpression));
+            auto exp = std::make_shared<ScriptExpression>(
+                    code, ScriptExpression::ExpressionType::BindingExpression);
             b->setValue(std::make_unique<BindingValue>(exp));
             return field(Fields::value);
         }
@@ -3267,15 +3309,15 @@ MutableDomItem MutableDomItem::setCode(QString code)
         if (MethodInfo *m = mutableAs<MethodInfo>()) {
             QString pre = m->preCode(it);
             QString post = m->preCode(it);
-            m->body = std::shared_ptr<ScriptExpression>(new ScriptExpression(
-                    code, ScriptExpression::ExpressionType::FunctionBody, 0, pre, post));
+            m->body = std::make_shared<ScriptExpression>(
+                    code, ScriptExpression::ExpressionType::FunctionBody, 0, pre, post);
             return field(Fields::body);
         }
         break;
     case DomType::MethodParameter:
         if (MethodParameter *p = mutableAs<MethodParameter>()) {
-            p->defaultValue = std::shared_ptr<ScriptExpression>(
-                    new ScriptExpression(code, ScriptExpression::ExpressionType::ArgInitializer));
+            p->defaultValue = std::make_shared<ScriptExpression>(
+                    code, ScriptExpression::ExpressionType::ArgInitializer);
             return field(Fields::defaultValue);
         }
         break;
@@ -3371,7 +3413,7 @@ MutableDomItem MutableDomItem::addPreComment(const Comment &comment, QString reg
     MutableDomItem rC = field(Fields::comments);
     if (auto rcPtr = rC.mutableAs<RegionComments>()) {
         auto &preList = rcPtr->regionComments[regionName].preComments;
-        idx = preList.length();
+        idx = preList.size();
         preList.append(comment);
         MutableDomItem res = path(Path::Field(Fields::comments)
                                           .field(Fields::regionComments)
@@ -3390,7 +3432,7 @@ MutableDomItem MutableDomItem::addPostComment(const Comment &comment, QString re
     MutableDomItem rC = field(Fields::comments);
     if (auto rcPtr = rC.mutableAs<RegionComments>()) {
         auto &postList = rcPtr->regionComments[regionName].postComments;
-        idx = postList.length();
+        idx = postList.size();
         postList.append(comment);
         MutableDomItem res = path(Path::Field(Fields::comments)
                                           .field(Fields::regionComments)

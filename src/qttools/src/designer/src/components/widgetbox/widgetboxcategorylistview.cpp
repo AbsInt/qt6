@@ -138,8 +138,7 @@ void WidgetBoxCategoryModel::setViewMode(QListView::ViewMode vm)
 
 int WidgetBoxCategoryModel::indexOfWidget(const QString &name)
 {
-    const int count = m_items.size();
-    for (int  i = 0; i < count; i++)
+    for (qsizetype i = 0, count = m_items.size(); i < count; ++i)
         if (m_items.at(i).widget.name() == name)
             return i;
     return -1;
@@ -148,9 +147,8 @@ int WidgetBoxCategoryModel::indexOfWidget(const QString &name)
 QDesignerWidgetBoxInterface::Category WidgetBoxCategoryModel::category() const
 {
     QDesignerWidgetBoxInterface::Category rc;
-    const WidgetBoxCategoryEntrys::const_iterator cend = m_items.constEnd();
-    for (WidgetBoxCategoryEntrys::const_iterator it = m_items.constBegin(); it != cend; ++it)
-        rc.addWidget(it->widget);
+    for (const auto &c : m_items)
+        rc.addWidget(c.widget);
     return rc;
 }
 

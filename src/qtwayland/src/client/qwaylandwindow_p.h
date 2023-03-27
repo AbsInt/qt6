@@ -28,10 +28,12 @@
 #include <QtCore/QMap> // for QVariantMap
 
 #include <qpa/qplatformwindow.h>
+#include <qpa/qplatformwindow_p.h>
 
 #include <QtWaylandClient/private/qwayland-wayland.h>
 #include <QtWaylandClient/private/qwaylanddisplay_p.h>
 #include <QtWaylandClient/qtwaylandclientglobal.h>
+#include <QtWaylandClient/private/qwaylandshellsurface_p.h>
 
 struct wl_egl_window;
 
@@ -48,13 +50,17 @@ class QWaylandSubSurface;
 class QWaylandAbstractDecoration;
 class QWaylandInputDevice;
 class QWaylandScreen;
+class QWaylandShellIntegration;
 class QWaylandShmBackingStore;
 class QWaylandPointerEvent;
 class QWaylandPointerGestureSwipeEvent;
 class QWaylandPointerGesturePinchEvent;
 class QWaylandSurface;
+class QWaylandFractionalScale;
+class QWaylandViewport;
 
-class Q_WAYLANDCLIENT_EXPORT QWaylandWindow : public QObject, public QPlatformWindow
+class Q_WAYLANDCLIENT_EXPORT QWaylandWindow : public QNativeInterface::Private::QWaylandWindow,
+                                              public QPlatformWindow
 {
     Q_OBJECT
 public:
@@ -112,18 +118,24 @@ public:
     bool waitForFrameSync(int timeout);
 
     QMargins frameMargins() const override;
-    QMargins customMargins() const;
-    void setCustomMargins(const QMargins &margins);
+    QMargins clientSideMargins() const;
+    void setCustomMargins(const QMargins &margins) override;
     QSize surfaceSize() const;
+    QMargins windowContentMargins() const;
     QRect windowContentGeometry() const;
     QPointF mapFromWlSurface(const QPointF &surfacePosition) const;
 
     QWaylandSurface *waylandSurface() const { return mSurface.data(); }
     ::wl_surface *wlSurface();
+    ::wl_surface *surface() const override
+    {
+        return const_cast<QWaylandWindow *>(this)->wlSurface();
+    }
     static QWaylandWindow *fromWlSurface(::wl_surface *surface);
 
     QWaylandDisplay *display() const { return mDisplay; }
     QWaylandShellSurface *shellSurface() const;
+    std::any _surfaceRole() const override;
     QWaylandSubSurface *subSurfaceWindow() const;
     QWaylandScreen *waylandScreen() const;
 
@@ -142,6 +154,9 @@ public:
     void lower() override;
 
     void setMask(const QRegion &region) override;
+
+    void setAlertState(bool enabled) override;
+    bool isAlertState() const override;
 
     qreal scale() const;
     qreal devicePixelRatio() const override;
@@ -189,6 +204,9 @@ public:
     void setBackingStore(QWaylandShmBackingStore *backingStore) { mBackingStore = backingStore; }
     QWaylandShmBackingStore *backingStore() const { return mBackingStore; }
 
+    void setShellIntegration(QWaylandShellIntegration *shellIntegration);
+    QWaylandShellIntegration *shellIntegration() const { return mShellIntegration; }
+
     bool setKeyboardGrabEnabled(bool) override { return false; }
     void propagateSizeHints() override;
     void addAttachOffset(const QPoint point);
@@ -202,7 +220,7 @@ public:
     void deliverUpdateRequest() override;
 
     void setXdgActivationToken(const QString &token);
-    void requestXdgActivationToken(uint serial);
+    void requestXdgActivationToken(uint serial) override;
 
     void beginFrame();
     void endFrame();
@@ -217,20 +235,21 @@ public slots:
 signals:
     void wlSurfaceCreated();
     void wlSurfaceDestroyed();
-    void xdgActivationTokenCreated(const QString &token);
 
 protected:
     virtual void doHandleFrameCallback();
     virtual QRect defaultGeometry() const;
     void sendExposeEvent(const QRect &rect);
-    QMargins clientSideMargins() const;
 
     QWaylandDisplay *mDisplay = nullptr;
 
     // mSurface can be written by the main thread. Other threads should claim a read lock for access
     mutable QReadWriteLock mSurfaceLock;
     QScopedPointer<QWaylandSurface> mSurface;
+    QScopedPointer<QWaylandFractionalScale> mFractionalScale;
+    QScopedPointer<QWaylandViewport> mViewport;
 
+    QWaylandShellIntegration *mShellIntegration = nullptr;
     QWaylandShellSurface *mShellSurface = nullptr;
     QWaylandSubSurface *mSubSurfaceWindow = nullptr;
     QList<QWaylandSubSurface *> mChildren;
@@ -281,7 +300,7 @@ protected:
 
     bool mSentInitialResize = false;
     QPoint mOffset;
-    int mScale = 1;
+    qreal mScale = 1;
     QPlatformScreen *mLastReportedScreen = nullptr;
 
     QIcon mWindowIcon;
@@ -311,6 +330,7 @@ private:
     QPlatformScreen *calculateScreenFromSurfaceEvents() const;
     void setOpaqueArea(const QRegion &opaqueArea);
     bool isOpaque() const;
+    void updateViewport();
 
     void handleMouseEventWithDecoration(QWaylandInputDevice *inputDevice, const QWaylandPointerEvent &e);
     void handleScreensChanged();

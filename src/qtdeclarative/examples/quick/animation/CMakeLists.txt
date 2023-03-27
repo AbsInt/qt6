@@ -1,7 +1,8 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 cmake_minimum_required(VERSION 3.16)
 project(animation LANGUAGES CXX)
-
-set(CMAKE_AUTOMOC ON)
 
 if(NOT DEFINED INSTALL_EXAMPLESDIR)
     set(INSTALL_EXAMPLESDIR "examples")
@@ -11,18 +12,17 @@ set(INSTALL_EXAMPLEDIR "${INSTALL_EXAMPLESDIR}/quick/animation")
 
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Qml Quick)
 
+qt_standard_project_setup(REQUIRES 6.5)
+
 add_subdirectory("../shared" "shared")
 
 qt_add_executable(animationexample
+    WIN32
+    MACOSX_BUNDLE
     main.cpp
 )
 
-set_target_properties(animationexample PROPERTIES
-    WIN32_EXECUTABLE TRUE
-    MACOSX_BUNDLE TRUE
-)
-
-target_link_libraries(animationexample PUBLIC
+target_link_libraries(animationexample PRIVATE
     Qt::Core
     Qt::Gui
     Qt::Qml
@@ -33,7 +33,6 @@ add_dependencies(animationexample animation_shared)
 
 qt_add_qml_module(animationexample
     URI animation
-    VERSION 1.0
     QML_FILES
         "animation.qml"
         "basics/animators.qml"

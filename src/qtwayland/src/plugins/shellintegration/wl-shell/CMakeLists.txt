@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Generated from wl-shell.pro.
 
 #####################################################################
@@ -14,6 +17,8 @@ qt_internal_add_module(WlShellIntegrationPrivate
         Qt::GuiPrivate
         Qt::WaylandClientPrivate
         Wayland::Client
+    PRIVATE_HEADER_FILTERS
+        "^qwayland-.*\.h|^wayland-.*-protocol\.h"
 )
 
 qt6_generate_wayland_protocol_client_sources(WlShellIntegrationPrivate

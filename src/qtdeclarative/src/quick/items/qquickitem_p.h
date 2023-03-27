@@ -108,6 +108,7 @@ class Q_QUICK_PRIVATE_EXPORT QQuickItemLayer : public QObject, public QQuickItem
     Q_PROPERTY(QRectF sourceRect READ sourceRect WRITE setSourceRect NOTIFY sourceRectChanged)
     Q_PROPERTY(bool mipmap READ mipmap WRITE setMipmap NOTIFY mipmapChanged)
     Q_PROPERTY(bool smooth READ smooth WRITE setSmooth NOTIFY smoothChanged)
+    Q_PROPERTY(bool live READ live WRITE setLive NOTIFY liveChanged REVISION(6, 5))
     Q_PROPERTY(QQuickShaderEffectSource::WrapMode wrapMode READ wrapMode WRITE setWrapMode NOTIFY wrapModeChanged)
     Q_PROPERTY(QQuickShaderEffectSource::Format format READ format WRITE setFormat NOTIFY formatChanged)
     Q_PROPERTY(QByteArray samplerName READ name WRITE setName NOTIFY nameChanged)
@@ -132,6 +133,9 @@ public:
 
     bool smooth() const { return m_smooth; }
     void setSmooth(bool s);
+
+    bool live() const { return m_live; }
+    void setLive(bool live);
 
     QSize size() const { return m_size; }
     void setSize(const QSize &size);
@@ -178,6 +182,7 @@ Q_SIGNALS:
     void nameChanged(const QByteArray &name);
     void effectChanged(QQmlComponent *component);
     void smoothChanged(bool smooth);
+    void liveChanged(bool live);
     void formatChanged(QQuickShaderEffectSource::Format format);
     void sourceRectChanged(const QRectF &sourceRect);
     void textureMirroringChanged(QQuickShaderEffectSource::TextureMirroring mirroring);
@@ -196,6 +201,7 @@ private:
     bool m_enabled;
     bool m_mipmap;
     bool m_smooth;
+    bool m_live;
     bool m_componentComplete;
     QQuickShaderEffectSource::WrapMode m_wrapMode;
     QQuickShaderEffectSource::Format m_format;
@@ -244,7 +250,9 @@ public:
     QQuickAnchorLine verticalCenter() const;
     QQuickAnchorLine baseline() const;
 
+#if QT_CONFIG(quick_shadereffect)
     QQuickItemLayer *layer() const;
+#endif
 
     void localizedTouchEvent(const QTouchEvent *event, bool isFiltering, QMutableTouchEvent *localized);
     bool hasPointerHandlers() const;
@@ -383,15 +391,17 @@ public:
         int hideRefCount;
         // updated recursively for child items as well
         int recursiveEffectRefCount;
+        // Mask contains() method index
+        int maskContainsIndex;
+
+        // Contains mask
+        QPointer<QObject> mask;
 
         QSGOpacityNode *opacityNode;
         QQuickDefaultClipNode *clipNode;
         QSGRootNode *rootNode;
         // subsceneDeliveryAgent is set only if this item is the root of a subscene, not on all items within.
         QQuickDeliveryAgent *subsceneDeliveryAgent = nullptr;
-
-        // Mask contains() method
-        QMetaMethod maskContains;
 
         QObjectList resourcesList;
 
@@ -402,7 +412,7 @@ public:
         Qt::MouseButtons acceptedMouseButtons;
         Qt::MouseButtons acceptedMouseButtonsWithoutHandlers;
 
-        QQuickItem::TransformOrigin origin:5;
+        uint origin:5; // QQuickItem::TransformOrigin
         uint transparentForPositioner : 1;
 
         // 26 bits padding
@@ -415,9 +425,6 @@ public:
     Q_DECLARE_FLAGS(ExtraDataTags, ExtraDataTag)
 
     QLazilyAllocated<ExtraData, ExtraDataTags> extra;
-    // Contains mask
-    QPointer<QObject> mask;
-    QPointer<QQuickItem> quickMask;
     // If the mask is an Item, inform it that it's being used as a mask (true) or is no longer being used (false)
     virtual void registerAsContainmentMask(QQuickItem * /* maskedItem */, bool /* set */) { }
 
@@ -441,53 +448,54 @@ public:
 
     // Bit 0
     quint32 flags:7;
-    bool widthValidFlag:1;
-    bool heightValidFlag:1;
-    bool componentComplete:1;
-    bool keepMouse:1;
-    bool keepTouch:1;
-    bool hoverEnabled:1;
-    bool smooth:1;
-    bool antialiasing:1;
-    bool focus:1;
+    quint32 widthValidFlag:1;
+    quint32 heightValidFlag:1;
+    quint32 componentComplete:1;
+    quint32 keepMouse:1;
+    quint32 keepTouch:1;
+    quint32 hoverEnabled:1;
+    quint32 smooth:1;
+    quint32 antialiasing:1;
+    quint32 focus:1;
     // Bit 16
-    bool activeFocus:1;
-    bool notifiedFocus:1;
-    bool notifiedActiveFocus:1;
-    bool filtersChildMouseEvents:1;
-    bool explicitVisible:1;
-    bool effectiveVisible:1;
-    bool explicitEnable:1;
-    bool effectiveEnable:1;
-    bool polishScheduled:1;
-    bool inheritedLayoutMirror:1;
-    bool effectiveLayoutMirror:1;
-    bool isMirrorImplicit:1;
-    bool inheritMirrorFromParent:1;
-    bool inheritMirrorFromItem:1;
-    bool isAccessible:1;
-    bool culled:1;
+    quint32 activeFocus:1;
+    quint32 notifiedFocus:1;
+    quint32 notifiedActiveFocus:1;
+    quint32 filtersChildMouseEvents:1;
+    quint32 explicitVisible:1;
+    quint32 effectiveVisible:1;
+    quint32 explicitEnable:1;
+    quint32 effectiveEnable:1;
+    quint32 polishScheduled:1;
+    quint32 inheritedLayoutMirror:1;
+    quint32 effectiveLayoutMirror:1;
+    quint32 isMirrorImplicit:1;
+    quint32 inheritMirrorFromParent:1;
+    quint32 inheritMirrorFromItem:1;
+    quint32 isAccessible:1;
+    quint32 culled:1;
     // Bit 32
-    bool hasCursor:1;
-    bool subtreeCursorEnabled:1;
-    bool subtreeHoverEnabled:1;
-    bool activeFocusOnTab:1;
-    bool implicitAntialiasing:1;
-    bool antialiasingValid:1;
+    quint32 hasCursor:1;
+    quint32 subtreeCursorEnabled:1;
+    quint32 subtreeHoverEnabled:1;
+    quint32 activeFocusOnTab:1;
+    quint32 implicitAntialiasing:1;
+    quint32 antialiasingValid:1;
     // isTabFence: When true, the item acts as a fence within the tab focus chain.
     // This means that the item and its children will be skipped from the tab focus
     // chain when navigating from its parent or any of its siblings. Similarly,
     // when any of the item's descendants gets focus, the item constrains the tab
     // focus chain and prevents tabbing outside.
-    bool isTabFence:1;
-    bool replayingPressEvent:1;
-    bool touchEnabled:1;
-    bool hasCursorHandler:1;
+    quint32 isTabFence:1;
+    quint32 replayingPressEvent:1;
+    quint32 touchEnabled:1;
+    quint32 hasCursorHandler:1;
     // set true when this item does not expect events via a subscene delivery agent; false otherwise
-    bool maybeHasSubsceneDeliveryAgent:1;
+    quint32 maybeHasSubsceneDeliveryAgent:1;
     // set true if this item or any child wants QQuickItemPrivate::transformChanged() to visit all children
     // (e.g. when parent has ItemIsViewport and child has ItemObservesViewport)
-    bool subtreeTransformChangedEnabled:1;
+    quint32 subtreeTransformChangedEnabled:1;
+    quint32 inDestructor:1; // has entered ~QQuickItem
 
     enum DirtyType {
         TransformOrigin         = 0x00000001,
@@ -1007,7 +1015,8 @@ void QQuickItemPrivate::markSortedChildrenDirty(QQuickItem *child)
 
 QQuickItem::TransformOrigin QQuickItemPrivate::origin() const
 {
-    return extra.isAllocated()?extra->origin:QQuickItem::Center;
+    return extra.isAllocated() ? QQuickItem::TransformOrigin(extra->origin)
+                               : QQuickItem::Center;
 }
 
 QSGTransformNode *QQuickItemPrivate::itemNode()

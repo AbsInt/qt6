@@ -277,6 +277,7 @@ default locations to be searched by the engine. By default, this list contains:
 \li The location specified by QLibraryInfo::QmlImportsPath
 \li Paths specified by the \c QML_IMPORT_PATH environment variable
 \li The qrc:/qt-project.org/imports path inside the resources.
+\li The qrc:/qt/qml path inside the resources (since Qt 6.5).
 \endlist
 
 Additional import paths can be added through QQmlEngine::addImportPath() or the
@@ -290,6 +291,11 @@ is a semicolon (;), on other platforms it is a colon (:). This means that you
 cannot specify resource paths or URLs in QML_IMPORT_PATH, as they contain
 colons themselves. However, you can add resource paths and URLs by calling
 QQmlEngine::addImportPath() programatically.
+
+\note It is recommended that applications and libraries put their modules
+under "qrc:/qt/qml". This happens by default when the module is created
+with  \l{qt_add_qml_module}{qt_add_qml_module()} and \l{QTP0001} is
+enabled.
 
 
 \section1 Debugging

@@ -21,7 +21,6 @@
 #include "qv4scopedvalue_p.h"
 #include "qv4value_p.h"
 #include "qv4internalclass_p.h"
-#include "qv4string_p.h"
 
 QT_BEGIN_NAMESPACE
 
@@ -344,6 +343,9 @@ public:
     ReturnedValue resolveLookupSetter(ExecutionEngine *engine, Lookup *lookup, const Value &value)
     { return vtable()->resolveLookupSetter(this, engine, lookup, value); }
 
+    int metacall(QMetaObject::Call call, int index, void **a)
+    { return vtable()->metacall(this, call, index, a); }
+
 protected:
     static ReturnedValue virtualGet(const Managed *m, PropertyKey id, const Value *receiver,bool *hasProperty);
     static bool virtualPut(Managed *m, PropertyKey id, const Value &value, Value *receiver);
@@ -360,6 +362,7 @@ protected:
     static ReturnedValue virtualInstanceOf(const Object *typeObject, const Value &var);
     static ReturnedValue virtualResolveLookupGetter(const Object *object, ExecutionEngine *engine, Lookup *lookup);
     static bool virtualResolveLookupSetter(Object *object, ExecutionEngine *engine, Lookup *lookup, const Value &value);
+    static int virtualMetacall(Object *object, QMetaObject::Call call, int index, void **a);
 public:
     // qv4runtime uses this directly
     static ReturnedValue checkedInstanceOf(ExecutionEngine *engine, const FunctionObject *typeObject, const Value &var);
@@ -468,7 +471,12 @@ inline void Object::push_back(const Value &v)
 {
     arrayCreate();
 
-    uint idx = getLength();
+    const auto length = getLength();
+    if (Q_UNLIKELY(length == std::numeric_limits<uint>::max())) {
+        engine()->throwRangeError(QLatin1String("Too many elements."));
+        return;
+    }
+    uint idx = uint(length);
     arrayReserve(idx + 1);
     arrayPut(idx, v);
     setArrayLengthUnchecked(idx + 1);

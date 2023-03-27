@@ -34,7 +34,8 @@ enum QDocAttr {
     QDocAttrFile,
     QDocAttrImage,
     QDocAttrDocument,
-    QDocAttrExternalPage
+    QDocAttrExternalPage,
+    QDocAttrAttribution
 };
 
 static Node *root_ = nullptr;
@@ -309,26 +310,19 @@ void QDocIndexFiles::readIndexSection(QXmlStreamReader &reader, Node *current,
         node = collectionNode;
     } else if (elementName == QLatin1String("page")) {
         QDocAttr subtype = QDocAttrNone;
-        Node::PageType ptype = Node::NoPageType;
         QString attr = attributes.value(QLatin1String("subtype")).toString();
         if (attr == QLatin1String("attribution")) {
-            subtype = QDocAttrDocument;
-            ptype = Node::AttributionPage;
+            subtype = QDocAttrAttribution;
         } else if (attr == QLatin1String("example")) {
             subtype = QDocAttrExample;
-            ptype = Node::ExamplePage;
         } else if (attr == QLatin1String("file")) {
             subtype = QDocAttrFile;
-            ptype = Node::NoPageType;
         } else if (attr == QLatin1String("image")) {
             subtype = QDocAttrImage;
-            ptype = Node::NoPageType;
         } else if (attr == QLatin1String("page")) {
             subtype = QDocAttrDocument;
-            ptype = Node::ArticlePage;
         } else if (attr == QLatin1String("externalpage")) {
             subtype = QDocAttrExternalPage;
-            ptype = Node::ArticlePage;
         } else
             goto done;
 
@@ -347,8 +341,11 @@ void QDocIndexFiles::readIndexSection(QXmlStreamReader &reader, Node *current,
             pageNode = new ExampleNode(parent, name);
         else if (subtype == QDocAttrExternalPage)
             pageNode = new ExternalPageNode(parent, name);
-        else
-            pageNode = new PageNode(parent, name, ptype);
+        else {
+            pageNode = new PageNode(parent, name);
+            if (subtype == QDocAttrAttribution) pageNode->markAttribution();
+        }
+
         pageNode->setTitle(attributes.value(QLatin1String("title")).toString());
 
         if (attributes.hasAttribute(QLatin1String("location")))
@@ -401,7 +398,7 @@ void QDocIndexFiles::readIndexSection(QXmlStreamReader &reader, Node *current,
         auto *propNode = new PropertyNode(parent, name);
         node = propNode;
         if (attributes.value(QLatin1String("bindable")) == QLatin1String("true"))
-            propNode->setPropertyType(PropertyNode::Bindable);
+            propNode->setPropertyType(PropertyNode::PropertyType::BindableProperty);
 
         if (!indexUrl.isEmpty())
             location = Location(indexUrl + QLatin1Char('/') + parent->name().toLower() + ".html");
@@ -426,6 +423,13 @@ void QDocIndexFiles::readIndexSection(QXmlStreamReader &reader, Node *current,
             fn->setStatic(attributes.value(QLatin1String("static")) == QLatin1String("true"));
             fn->setFinal(attributes.value(QLatin1String("final")) == QLatin1String("true"));
             fn->setOverride(attributes.value(QLatin1String("override")) == QLatin1String("true"));
+
+            if (attributes.value(QLatin1String("explicit")) == QLatin1String("true"))
+                fn->markExplicit();
+
+            if (attributes.value(QLatin1String("constexpr")) == QLatin1String("true"))
+                fn->markConstexpr();
+
             qsizetype refness = attributes.value(QLatin1String("refness")).toUInt();
             if (refness == 1)
                 fn->setRef(true);
@@ -962,23 +966,12 @@ bool QDocIndexFiles::generateIndexSection(QXmlStreamWriter &writer, Node *node,
     case Node::Page:
     case Node::Example:
     case Node::ExternalPage: {
-        /*
-          Page nodes (anything that generates a doc page)
-          no longer have a subtype. Some of the subtypes
-          (Example, External, and Header) have been promoted
-          to be node types. They have become subclasses of
-          PageNode or, in the case of Header, a subclass of
-          Aggregate. The processing for other subtypes that
-          have not (yet) been promoted to be node types is
-          determined by the PageType enum.
-        */
         if (node->isExample())
             writer.writeAttribute("subtype", "example");
         else if (node->isExternalPage())
             writer.writeAttribute("subtype", "externalpage");
         else
-            writer.writeAttribute("subtype",
-                    (node->pageType() == Node::AttributionPage) ? "attribution" : "page");
+            writer.writeAttribute("subtype", (static_cast<PageNode*>(node)->isAttribution() ? "attribution" : "page"));
 
         const auto *pageNode = static_cast<const PageNode *>(node);
         writer.writeAttribute("title", pageNode->title());
@@ -1013,45 +1006,18 @@ bool QDocIndexFiles::generateIndexSection(QXmlStreamWriter &writer, Node *node,
     case Node::Property: {
         const auto *propertyNode = static_cast<const PropertyNode *>(node);
 
-        if (propertyNode->propertyType() == PropertyNode::Bindable)
+        if (propertyNode->propertyType() == PropertyNode::PropertyType::BindableProperty)
             writer.writeAttribute("bindable", "true");
 
         if (!brief.isEmpty())
             writer.writeAttribute("brief", brief);
-        const auto &getters = propertyNode->getters();
-        for (const auto *fnNode : getters) {
-            if (fnNode) {
-                const auto *functionNode = static_cast<const FunctionNode *>(fnNode);
-                writer.writeStartElement("getter");
-                writer.writeAttribute("name", functionNode->name());
-                writer.writeEndElement(); // getter
-            }
-        }
-        const auto &setters = propertyNode->setters();
-        for (const auto *fnNode : setters) {
-            if (fnNode) {
-                const auto *functionNode = static_cast<const FunctionNode *>(fnNode);
-                writer.writeStartElement("setter");
-                writer.writeAttribute("name", functionNode->name());
-                writer.writeEndElement(); // setter
-            }
-        }
-        const auto &resetters = propertyNode->resetters();
-        for (const auto *fnNode : resetters) {
-            if (fnNode) {
-                const auto *functionNode = static_cast<const FunctionNode *>(fnNode);
-                writer.writeStartElement("resetter");
-                writer.writeAttribute("name", functionNode->name());
-                writer.writeEndElement(); // resetter
-            }
-        }
-        const auto &notifiers = propertyNode->notifiers();
-        for (const auto *fnNode : notifiers) {
-            if (fnNode) {
-                const auto *functionNode = static_cast<const FunctionNode *>(fnNode);
-                writer.writeStartElement("notifier");
-                writer.writeAttribute("name", functionNode->name());
-                writer.writeEndElement(); // notifier
+        // Property access function names
+        for (qsizetype i{0}; i < (qsizetype)PropertyNode::FunctionRole::NumFunctionRoles; ++i) {
+            auto role{(PropertyNode::FunctionRole)i};
+            for (const auto *fnNode : propertyNode->functions(role)) {
+                writer.writeStartElement(PropertyNode::roleName(role));
+                writer.writeAttribute("name", fnNode->name());
+                writer.writeEndElement();
             }
         }
     } break;
@@ -1236,6 +1202,10 @@ void QDocIndexFiles::generateFunctionSection(QXmlStreamWriter &writer, FunctionN
         writer.writeAttribute("static", fn->isStatic() ? "true" : "false");
         writer.writeAttribute("final", fn->isFinal() ? "true" : "false");
         writer.writeAttribute("override", fn->isOverride() ? "true" : "false");
+
+        if (fn->isExplicit()) writer.writeAttribute("explicit", "true");
+        if (fn->isConstexpr()) writer.writeAttribute("constexpr", "true");
+
         /*
           This ensures that for functions that have overloads,
           the first function written is the one that is not an

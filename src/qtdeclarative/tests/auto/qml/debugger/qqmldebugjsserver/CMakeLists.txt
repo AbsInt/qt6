@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Generated from qqmldebugjsserver.pro.
 
 #####################################################################
@@ -15,7 +18,7 @@ qt_internal_add_executable(qqmldebugjsserver
         QT_QML_DEBUG_NO_WARNING
     INCLUDE_DIRECTORIES
         ../shared
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Gui
         Qt::Qml
         Qt::Test

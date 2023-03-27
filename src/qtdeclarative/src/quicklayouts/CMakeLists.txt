@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 qt_internal_add_qml_module(QuickLayouts
     URI "QtQuick.Layouts"
     VERSION "${PROJECT_VERSION}"
@@ -5,7 +8,7 @@ qt_internal_add_qml_module(QuickLayouts
     PLUGIN_TARGET qquicklayoutsplugin
     CLASS_NAME QtQuickLayoutsPlugin
     DEPENDENCIES
-        QtQuick
+        QtQuick/auto
     SOURCES
         qquickgridlayoutengine.cpp qquickgridlayoutengine_p.h
         qquicklayout.cpp qquicklayout_p.h

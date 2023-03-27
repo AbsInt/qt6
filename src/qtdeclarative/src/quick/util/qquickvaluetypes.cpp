@@ -10,6 +10,11 @@
 
 QT_BEGIN_NAMESPACE
 
+QQuickColorValueType::QQuickColorValueType(const QString &string)
+    : v(QColor::fromString(string))
+{
+}
+
 QVariant QQuickColorValueType::create(const QJSValue &params)
 {
     return params.isString() ? QColor::fromString(params.toString()) : QVariant();
@@ -168,10 +173,10 @@ QVariant createValueTypeFromNumberString(const QString &s)
 
     QVarLengthArray<float, NumParams> parameters;
     bool ok = true;
-    for (qsizetype prev = 0, next = s.indexOf(u','), length = s.length(); ok && prev < length;) {
+    for (qsizetype prev = 0, next = s.indexOf(u','), length = s.size(); ok && prev < length;) {
         parameters.append(s.mid(prev, next - prev).toFloat(&ok));
         prev = next + 1;
-        next = (parameters.length() == NumParams - 1) ? length : s.indexOf(u',', prev);
+        next = (parameters.size() == NumParams - 1) ? length : s.indexOf(u',', prev);
     }
 
     if (!ok)
@@ -755,6 +760,16 @@ QMatrix4x4 QQuickMatrix4x4ValueType::inverted() const
 QMatrix4x4 QQuickMatrix4x4ValueType::transposed() const
 {
     return v.transposed();
+}
+
+QPointF QQuickMatrix4x4ValueType::map(const QPointF p) const
+{
+    return v.map(p);
+}
+
+QRectF QQuickMatrix4x4ValueType::mapRect(const QRectF r) const
+{
+    return v.mapRect(r);
 }
 
 bool QQuickMatrix4x4ValueType::fuzzyEquals(const QMatrix4x4 &m, qreal epsilon) const

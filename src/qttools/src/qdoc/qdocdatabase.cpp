@@ -127,7 +127,7 @@ void QDocForest::setPrimaryTree(const QString &t)
     m_primaryTree = findTree(T);
     m_forest.remove(T);
     if (m_primaryTree == nullptr)
-        qDebug() << "ERROR: Could not set primary tree to:" << t;
+        qCCritical(lcQdoc) << "Error: Could not set primary tree to" << t;
 }
 
 /*!
@@ -407,12 +407,9 @@ void QDocDatabase::destroyQdocDB()
 
   \note Do not add QML basic types into this list as it will
         break linking to those types.
-
-  Also calls Node::initialize() to initialize the search goal map.
  */
 void QDocDatabase::initializeDB()
 {
-    Node::initialize();
     s_typeNodeMap.insert("accepted", nullptr);
     s_typeNodeMap.insert("actionPerformed", nullptr);
     s_typeNodeMap.insert("activated", nullptr);
@@ -967,14 +964,16 @@ void QDocDatabase::resolveStuff()
         primaryTreeRoot()->resolveQmlInheritance();
         primaryTree()->resolveTargets(primaryTreeRoot());
         primaryTree()->resolveCppToQmlLinks();
-        primaryTree()->resolveUsingClauses();
+        primaryTree()->resolveUsingClauses(*primaryTreeRoot());
+        primaryTree()->resolveSince(*primaryTreeRoot());
     }
     if (config.singleExec() && config.generating()) {
         primaryTree()->resolveBaseClasses(primaryTreeRoot());
         primaryTree()->resolvePropertyOverriddenFromPtrs(primaryTreeRoot());
         primaryTreeRoot()->resolveQmlInheritance();
         primaryTree()->resolveCppToQmlLinks();
-        primaryTree()->resolveUsingClauses();
+        primaryTree()->resolveUsingClauses(*primaryTreeRoot());
+        primaryTree()->resolveSince(*primaryTreeRoot());
     }
     if (!config.preparing()) {
         resolveNamespaces();
@@ -1235,7 +1234,7 @@ void QDocDatabase::readIndexes(const QStringList &indexFiles)
         if (!isLoaded(fn))
             filesToRead << file;
         else
-            qDebug() << "This index file is already in memory:" << file;
+            qCCritical(lcQdoc) << "Index file" << file << "is already in memory.";
     }
     QDocIndexFiles::qdocIndexFiles()->readIndexes(filesToRead);
 }
@@ -1285,6 +1284,34 @@ Node *QDocDatabase::findNodeInOpenNamespace(QStringList &path, bool (Node::*isMa
         }
     }
     return n;
+}
+
+/*!
+    Returns the collection node representing the module that \a relative
+    node belongs to, or \c nullptr if there is no such module in the
+    primary tree.
+*/
+const CollectionNode *QDocDatabase::getModuleNode(const Node *relative)
+{
+    Node::NodeType moduleType{Node::Module};
+    QString moduleName;
+    switch (relative->genus())
+    {
+    case Node::CPP:
+        moduleType = Node::Module;
+        moduleName = relative->physicalModuleName();
+        break;
+    case Node::QML:
+        moduleType = Node::QmlModule;
+        moduleName = relative->logicalModuleName();
+        break;
+    default:
+        return nullptr;
+    }
+    if (moduleName.isEmpty())
+        return nullptr;
+
+    return primaryTree()->getCollection(moduleName, moduleType);
 }
 
 /*!
@@ -1358,16 +1385,121 @@ void QDocDatabase::mergeCollections(CollectionNode *c)
     if (c == nullptr)
         return;
 
+    // REMARK: This form of merging is usually called during the
+    // generation phase om-the-fly when a source-of-truth collection
+    // is required.
+    // In practice, this means a collection could be merged many, many
+    // times during the lifetime of a generation.
+    // To avoid repeating the merging process each time, which could
+    // be time consuming, we use a small flag that is set directly on
+    // the collection to bail-out early.
+    //
+    // The merging process is only meaningful for collections when the
+    // collection references are spread troughout multiple projects.
+    // The part of information that exists in other project is read
+    // before the generation phase, such that when the generation
+    // phase comes, we already have all the information we need for
+    // merging such that we can consider all version of a certain
+    // collection node immutable, making the caching inherently
+    // correct at any point of the generation.
+    //
+    // This implies that this operation is unsafe if it is performed
+    // before all the index files are loaded.
+    // Indeed, this is a prerequisite, with the current structure, to
+    // perform this optmization.
+    //
+    // At the current time, this is true and is expected not to
+    // change.
+    //
+    // Do note that this is not applied to the other overload of
+    // mergeCollections as we cannot as safely ensure its consistency
+    // and, as the result of the merging depends on multiple
+    // parameters, it would require an actual memoization of the call.
+    //
+    // Note that this is a defensive optimization and we are assuming
+    // that it is effective based on heuristical data. As this is
+    // expected to disappear, at least in its current form, in the
+    // future, a more thorough analysis was not performed.
+    if (c->isMerged()) {
+        return;
+    }
+
     for (auto *tree : searchOrder()) {
         CollectionNode *cn = tree->getCollection(c->name(), c->nodeType());
         if (cn && cn != c) {
             if ((cn->isQmlModule())
                 && cn->logicalModuleIdentifier() != c->logicalModuleIdentifier())
                 continue;
+
             for (auto *node : cn->members())
                 c->addMember(node);
+
+            // REMARK: The merging process is performed to ensure that
+            // references to the collection in external projects are
+            // taken into account before consuming the collection.
+            //
+            // This works by having QDoc construct empty collections
+            // as soon as a reference to a collection is encountered
+            // and filling details later on when its definition is
+            // found.
+            //
+            // This initially-empty collection is always saved to the
+            // primaryTree and it is the collection that is directly
+            // accessible to consumers during the generation process.
+            //
+            // Nonetheless, when the definition for the collection is
+            // not in the same project as the one that is being
+            // compiled, its details will never be filled in.
+            //
+            // Indeed, the details will live in the index file for the
+            // project where the collection is defined, if any, and
+            // the node for it, which has complete information, will
+            // live in some non-primaryTree.
+            //
+            // The merging process itself is used by consumers during
+            // the generation process because they access the
+            // primaryTree version of the collection expecting a
+            // source-of-truth.
+            // To ensure that this is the case for usages that
+            // requires linking, we need to merge not only the members
+            // of the collection that reside in external versions of
+            // the collection; but some of the data that reside in the
+            // definition of the collection intself, namely the title
+            // and the url.
+            //
+            // A collection that contains the data of a definition is
+            // always marked as seen, hence we use that to discern
+            // whether we are working with a placeholder node or not,
+            // and fill in the data if we encounter a node that
+            // represents a definition.
+            //
+            // The way in which QDoc works implies that collection are
+            // globally scoped between projects.
+            // The repetition of the definition for the same
+            // collection is warned for as a duplicate documentation,
+            // such that we can expect a single valid source of truth
+            // for a given collection in each project.
+            // It is currently unknown if this warning is applicable
+            // when the repeated collection is defined in two
+            // different projects.
+            //
+            // As QDoc implicitly would not correctly support this
+            // case, we assume that only one declaration exists for
+            // each collection, such that the first encoutered one
+            // must be the source of truth and that there is no need
+            // to copy any data after the first copy is performed.
+            // KLUDGE: Note that this process is done as a hackish
+            // solution to QTBUG-104237 and should not be considered
+            // final or dependable.
+            if (!c->wasSeen() && cn->wasSeen()) {
+                c->markSeen();
+                c->setTitle(cn->title());
+                c->setUrl(cn->url());
+            }
         }
     }
+
+    c->markMerged();
 }
 
 /*!
@@ -1465,51 +1597,152 @@ void QDocDatabase::updateNavigation()
     const QString configVar = CONFIG_NAVIGATION +
                               Config::dot +
                               CONFIG_TOCTITLES;
+
+    // TODO: [direct-configuration-access]
+    // The configuration is currently a singleton with some generally
+    // global mutable state.
+    //
+    // Accessing the data in this form complicates testing and
+    // requires tests that inhibit any test parallelization, as the
+    // tests are not self contained.
+    //
+    // This should be generally avoived. Possibly, we should strive
+    // for Config to be a POD type that generally is scoped to
+    // main and whose data is destructured into dependencies when
+    // the dependencies are constructed.
     bool inclusive =
             Config::instance().getBool(configVar +
                                        Config::dot +
                                        CONFIG_INCLUSIVE);
 
+    // TODO: [direct-configuration-access]
     const auto tocTitles = Config::instance().getStringList(configVar);
 
     for (const auto &tocTitle : tocTitles) {
-        if (const auto tocPage = findNodeForTarget(tocTitle, nullptr)) {
+        if (const auto candidateTarget = findNodeForTarget(tocTitle, nullptr); candidateTarget && candidateTarget->isPageNode()) {
+            auto tocPage{static_cast<const PageNode*>(candidateTarget)};
+
             Text body = tocPage->doc().body();
+
             auto *atom = body.firstAtom();
-            std::pair<Node *, Atom *> prev { nullptr, nullptr };
-            std::stack<const Node *> tocStack;
+
+            std::pair<PageNode *, Atom *> prev { nullptr, nullptr };
+
+            std::stack<const PageNode *> tocStack;
             tocStack.push(inclusive ? tocPage : nullptr);
+
             bool inItem = false;
+
+            // TODO: Understand how much we use this form of looping over atoms.
+            // If it is used a few times we might consider providing
+            // an iterator for Text to make use of a simpler
+            // range-for loop.
             while (atom) {
                 switch (atom->type()) {
-                case Atom::ListItemLeft:
-                    // Not known if we're going to have a link, push a temporary
-                    tocStack.push(nullptr);
-                    inItem = true;
-                    break;
-                case Atom::ListItemRight:
-                    tocStack.pop();
-                    inItem = false;
-                    break;
-                case Atom::Link: {
-                    if (!inItem)
+                    case Atom::ListItemLeft:
+                        // Not known if we're going to have a link, push a temporary
+                        tocStack.push(nullptr);
+                        inItem = true;
                         break;
-                    QString ref;
-                    auto page = const_cast<Node *>(findNodeForAtom(atom, nullptr, ref));
-                    // ignore self-references
-                    if (page && page == prev.first)
+                    case Atom::ListItemRight:
+                        tocStack.pop();
+                        inItem = false;
                         break;
-                    if (page && page->isPageNode()) {
+                    case Atom::Link: {
+                        if (!inItem)
+                            break;
+
+                        // TODO: [unnecessary-output-parameter]
+                        // We currently need an lvalue string to
+                        // pass to findNodeForAtom, as the
+                        // outparameter ref.
+                        //
+                        // Apart from the general problems with output
+                        // parameters, we shouldn't be forced to
+                        // instanciate an unnecessary object at call
+                        // site.
+                        //
+                        // Understand what the correct way to avoid this is.
+                        // This requires changes to findNodeForAtom
+                        // and should be addressed in the context of
+                        // revising that method.
+                        QString unused{};
+                        // TODO: Having to const cast is really a code
+                        // smell and could result in undefined
+                        // behavior in some specific cases (e.g point
+                        // to something that is actually const).
+                        //
+                        // We should understand how to sequence the
+                        // code so that we have access to mutable data
+                        // when we need it and "freeze" the data
+                        // afterwards.
+                        //
+                        // If it we expect this form of mutability at
+                        // this point we should expose a non-const API
+                        // for the database, possibly limited to a
+                        // very specific scope of execution.
+                        //
+                        // Understand what the correct sequencing for
+                        // this processing is and revise this part.
+                        auto candidatePage = const_cast<Node *>(findNodeForAtom(atom, nullptr, unused));
+                        if (!candidatePage || !candidatePage->isPageNode()) break;
+
+                        auto page{static_cast<PageNode*>(candidatePage)};
+
+                        // ignore self-references
+                        if (page == prev.first) break;
+
                         if (prev.first) {
-                            prev.first->setLink(Node::NextLink,
-                                                page->title(),
-                                                atom->linkText());
-                            page->setLink(Node::PreviousLink,
-                                          prev.first->title(),
-                                          prev.second->linkText());
+                            prev.first->setLink(
+                                Node::NextLink,
+                                page->title(),
+                                // TODO: [possible-assertion-failure][imprecise-types][atoms-link]
+                                // As with other structures in QDoc we
+                                // are able to call methods that are
+                                // valid only on very specific states.
+                                //
+                                // For some of those calls we have
+                                // some defensive programming measures
+                                // that allow us to at least identify
+                                // the error during debugging, while
+                                // for others this may currently hide
+                                // some logic error.
+                                //
+                                // To avoid those cases, we should
+                                // strive to move those cases to a
+                                // compilation error, requiring a
+                                // statically analyzable state that
+                                // represents the current model.
+                                //
+                                // This would ensure that those
+                                // lingering class of bugs are
+                                // eliminated completely, forces a
+                                // more explicit codebase where the
+                                // current capabilities do not depend
+                                // on runtime values might not be
+                                // generally visible, and does not
+                                // require us to incur into the
+                                // required state, which may be rare,
+                                // simplifying our abilities to
+                                // evaluate all possible states.
+                                //
+                                // For linking atoms, LinkAtom is
+                                // available and might be a good
+                                // enough solution to move linkText
+                                // to.
+                                atom->linkText()
+                            );
+                            page->setLink(
+                                Node::PreviousLink,
+                                prev.first->title(),
+                                // TODO: [possible-assertion-failure][imprecise-types][atoms-link]
+                                prev.second->linkText()
+                            );
                         }
+
                         if (page == tocPage)
                             break;
+
                         // Find the navigation parent from the stack; we may have null pointers
                         // for non-link list items, so skip those.
                         qsizetype popped = 0;
@@ -1517,20 +1750,20 @@ void QDocDatabase::updateNavigation()
                             tocStack.pop();
                             ++popped;
                         }
+
                         page->setNavigationParent(tocStack.empty() ? nullptr : tocStack.top());
+
                         while (--popped > 0)
                             tocStack.push(nullptr);
+
                         tocStack.push(page);
                         prev = { page, atom };
                     }
-                }
-                    break;
-                default:
-                    break;
+                        break;
+                    default:
+                        break;
                 }
 
-                if (atom == body.lastAtom())
-                    break;
                 atom = atom->next();
             }
         } else {

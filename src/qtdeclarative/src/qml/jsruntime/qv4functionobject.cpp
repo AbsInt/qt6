@@ -2,13 +2,10 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qv4object_p.h"
-#include "qv4objectproto_p.h"
-#include "qv4stringobject_p.h"
 #include "qv4function_p.h"
 #include "qv4symbol_p.h"
 #include <private/qv4mm_p.h>
 
-#include "qv4arrayobject_p.h"
 #include "qv4scopedvalue_p.h"
 #include "qv4argumentsobject_p.h"
 
@@ -27,7 +24,6 @@
 
 #include <QtCore/QDebug>
 #include <algorithm>
-#include "qv4profiling_p.h"
 
 using namespace QV4;
 
@@ -494,7 +490,7 @@ DEFINE_OBJECT_VTABLE(ArrowFunction);
 void ArrowFunction::virtualCallWithMetaTypes(const FunctionObject *fo, QObject *thisObject,
                                              void **a, const QMetaType *types, int argc)
 {
-    if (!fo->function()->aotFunction) {
+    if (fo->function()->kind != Function::AotCompiled) {
         QV4::convertAndCall(fo->engine(), thisObject, a, types, argc,
                             [fo](const Value *thisObject, const Value *argv, int argc) {
             return ArrowFunction::virtualCall(fo, thisObject, argv, argc);
@@ -511,16 +507,9 @@ void ArrowFunction::virtualCallWithMetaTypes(const FunctionObject *fo, QObject *
     frame.pop(scope.engine);
 }
 
-ReturnedValue ArrowFunction::virtualCall(const FunctionObject *fo, const Value *thisObject, const Value *argv, int argc)
+static ReturnedValue qfoDoCall(const QV4::FunctionObject *fo, const QV4::Value *thisObject,
+                               const QV4::Value *argv, int argc)
 {
-    if (const auto *aotFunction = fo->function()->aotFunction) {
-        return QV4::convertAndCall(
-                    fo->engine(), aotFunction, thisObject, argv, argc,
-                    [fo](QObject *thisObject, void **a, const QMetaType *types, int argc) {
-            ArrowFunction::virtualCallWithMetaTypes(fo, thisObject, a, types, argc);
-        });
-    }
-
     ExecutionEngine *engine = fo->engine();
     JSTypesStackFrame frame;
     frame.init(fo->function(), argv, argc, true);
@@ -541,6 +530,30 @@ ReturnedValue ArrowFunction::virtualCall(const FunctionObject *fo, const Value *
     frame.pop(engine);
 
     return result;
+}
+
+ReturnedValue ArrowFunction::virtualCall(const QV4::FunctionObject *fo, const Value *thisObject,
+                                         const QV4::Value *argv, int argc)
+{
+    Function *function = fo->function();
+    switch (function->kind) {
+    case Function::AotCompiled:
+        return QV4::convertAndCall(
+                    fo->engine(), function->typedFunction, thisObject, argv, argc,
+                    [fo](QObject *thisObject, void **a, const QMetaType *types, int argc) {
+            ArrowFunction::virtualCallWithMetaTypes(fo, thisObject, a, types, argc);
+        });
+    case Function::JsTyped:
+        return QV4::coerceAndCall(
+                    fo->engine(), function->typedFunction, thisObject, argv, argc,
+                    [fo](const Value *thisObject, const Value *argv, int argc) {
+            return qfoDoCall(fo, thisObject, argv, argc);
+        });
+    default:
+        break;
+    }
+
+    return qfoDoCall(fo, thisObject, argv, argc);
 }
 
 void Heap::ArrowFunction::init(QV4::ExecutionContext *scope, Function *function, QV4::String *n)

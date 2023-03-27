@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Generated from qmltypememory.pro.
 
 #####################################################################
@@ -11,7 +14,7 @@ qt_internal_add_manual_test(qmltypememory
         testdriver.cpp testdriver.h
     INCLUDE_DIRECTORIES
         .
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Gui
         Qt::Qml
 )

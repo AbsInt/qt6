@@ -15,7 +15,6 @@
 //
 
 #include "qv4global_p.h"
-#include "qv4managed_p.h"
 #include "qv4context_p.h"
 #include "qv4stackframe_p.h"
 #include <private/qintrusivelist_p.h>
@@ -25,10 +24,12 @@
 #include <QtCore/qelapsedtimer.h>
 #include <QtCore/qmutex.h>
 #include <QtCore/qset.h>
+#include <QtCore/qprocessordetection.h>
 
 #include "qv4function_p.h"
 #include <private/qv4compileddata_p.h>
 #include <private/qv4executablecompilationunit_p.h>
+#include <private/qv4stacklimits_p.h>
 
 namespace WTF {
 class BumpPointerAllocator;
@@ -487,7 +488,8 @@ public:
     // calling preserve() on the object which removes it from this scarceResource list.
     class ScarceResourceData {
     public:
-        ScarceResourceData(const QVariant &data = QVariant()) : data(data) {}
+        ScarceResourceData() = default;
+        ScarceResourceData(const QMetaType type, const void *data) : data(type, data) {}
         QVariant data;
         QIntrusiveListNode node;
     };
@@ -546,9 +548,11 @@ public:
     Heap::ArrayBuffer *newArrayBuffer(const QByteArray &array);
     Heap::ArrayBuffer *newArrayBuffer(size_t length);
 
-    Heap::DateObject *newDateObject(const Value &value);
-    Heap::DateObject *newDateObject(const QDateTime &dt);
-    Heap::DateObject *newDateObjectFromTime(QTime t);
+    Heap::DateObject *newDateObject(double dateTime);
+    Heap::DateObject *newDateObject(const QDateTime &dateTime);
+    Heap::DateObject *newDateObject(QDate date, Heap::Object *parent, int index, uint flags);
+    Heap::DateObject *newDateObject(QTime time, Heap::Object *parent, int index, uint flags);
+    Heap::DateObject *newDateObject(QDateTime dateTime, Heap::Object *parent, int index, uint flags);
 
     Heap::RegExpObject *newRegExpObject(const QString &pattern, int flags);
     Heap::RegExpObject *newRegExpObject(RegExp *re);
@@ -576,7 +580,7 @@ public:
     Heap::Object *newPromiseObject(const QV4::FunctionObject *thisObject, const QV4::PromiseCapability *capability);
     Promise::ReactionHandler *getPromiseReactionHandler();
 
-    Heap::Object *newVariantObject(const QVariant &v);
+    Heap::Object *newVariantObject(const QMetaType type, const void *data);
 
     Heap::Object *newForInIteratorObject(Object *o);
     Heap::Object *newSetIteratorObject(Object *o);
@@ -638,10 +642,13 @@ public:
     QQmlError catchExceptionAsQmlError();
 
     // variant conversions
-    QVariant toVariant(const QV4::Value &value, QMetaType typeHint, bool createJSValueForObjects = true);
+    static QVariant toVariant(
+            const QV4::Value &value, QMetaType typeHint, bool createJSValueForObjects = true);
     QV4::ReturnedValue fromVariant(const QVariant &);
+    QV4::ReturnedValue fromVariant(
+            const QVariant &variant, Heap::Object *parent, int property, uint flags);
 
-    QVariantMap variantMapFromJS(const QV4::Object *o);
+    static QVariantMap variantMapFromJS(const QV4::Object *o);
 
     static bool metaTypeFromJS(const Value &value, QMetaType type, void *data);
     QV4::ReturnedValue metaTypeToJS(QMetaType type, const void *data);
@@ -658,7 +665,8 @@ public:
         if (!m_canAllocateExecutableMemory)
             return false;
         if (f) {
-            return !f->aotFunction && !f->isGenerator()
+            return f->kind != Function::AotCompiled
+                    && !f->isGenerator()
                     && f->interpreterCallCount >= s_jitCallCountThreshold;
         }
         return true;
@@ -674,6 +682,7 @@ public:
     void createQtObject();
 
     void freezeObject(const QV4::Value &value);
+    void lockObject(const QV4::Value &value);
 
     // Return the list of illegal id names (the names of the properties on the global object)
     const QSet<QString> &illegalNames() const;
@@ -715,19 +724,18 @@ public:
     QQmlRefPointer<ExecutableCompilationUnit> compileModule(
             const QUrl &url, const QString &sourceCode, const QDateTime &sourceTimeStamp);
 
-    mutable QMutex moduleMutex;
-    QHash<QUrl, QQmlRefPointer<ExecutableCompilationUnit>> modules;
+    void injectCompiledModule(const QQmlRefPointer<ExecutableCompilationUnit> &moduleUnit);
+    QV4::Value *registerNativeModule(const QUrl &url, const QV4::Value &module);
 
-    // QV4::PersistentValue would be preferred, but using QHash will create copies,
-    // and QV4::PersistentValue doesn't like creating copies.
-    // Instead, we allocate a raw pointer using the same manual memory management
-    // technique in QV4::PersistentValue.
-    QHash<QUrl, QV4::Value*> nativeModules;
+    struct Module {
+        QQmlRefPointer<ExecutableCompilationUnit> compiled;
 
-    void injectModule(const QQmlRefPointer<ExecutableCompilationUnit> &moduleUnit);
-    QQmlRefPointer<ExecutableCompilationUnit> moduleForUrl(const QUrl &_url, const ExecutableCompilationUnit *referrer = nullptr) const;
-    QQmlRefPointer<ExecutableCompilationUnit> loadModule(const QUrl &_url, const ExecutableCompilationUnit *referrer = nullptr);
-    void registerModule(const QString &name, const QJSValue &module);
+        // We can pass a raw value pointer here, but nowhere else. See below.
+        Value *native = nullptr;
+    };
+
+    Module moduleForUrl(const QUrl &_url, const ExecutableCompilationUnit *referrer = nullptr) const;
+    Module loadModule(const QUrl &_url, const ExecutableCompilationUnit *referrer = nullptr);
 
     bool diskCacheEnabled() const;
 
@@ -736,12 +744,72 @@ public:
     QV4::ReturnedValue callInContext(QV4::Function *function, QObject *self,
                                      QV4::ExecutionContext *ctxt, int argc, const QV4::Value *argv);
 
+    QV4::ReturnedValue fromData(
+            QMetaType type, const void *ptr,
+            Heap::Object *parent = nullptr, int property = -1, uint flags = 0);
+
+
+    static void setMaxCallDepth(int maxCallDepth) { s_maxCallDepth = maxCallDepth; }
+    static int maxCallDepth() { return s_maxCallDepth; }
+
+    template<typename Value>
+    static QJSPrimitiveValue createPrimitive(const Value &v)
+    {
+        if (v->isUndefined())
+            return QJSPrimitiveValue(QJSPrimitiveUndefined());
+        if (v->isNull())
+            return QJSPrimitiveValue(QJSPrimitiveNull());
+        if (v->isBoolean())
+            return QJSPrimitiveValue(v->toBoolean());
+        if (v->isInteger())
+            return QJSPrimitiveValue(v->integerValue());
+        if (v->isDouble())
+            return QJSPrimitiveValue(v->doubleValue());
+        bool ok;
+        const QString result = v->toQString(&ok);
+        return ok ? QJSPrimitiveValue(result) : QJSPrimitiveValue(QJSPrimitiveUndefined());
+    }
+
 private:
     template<int Frames>
     friend struct ExecutionEngineCallDepthRecorder;
 
-    QV4::ReturnedValue fromData(QMetaType type, const void *ptr, const QVariant *variant = nullptr);
     static void initializeStaticMembers();
+
+    bool inStack(const void *current) const
+    {
+#if Q_STACK_GROWTH_DIRECTION > 0
+        return current < cppStackLimit && current >= cppStackBase;
+#else
+        return current > cppStackLimit && current <= cppStackBase;
+#endif
+    }
+
+    bool hasCppStackOverflow()
+    {
+        if (s_maxCallDepth >= 0)
+            return callDepth >= s_maxCallDepth;
+
+        if (inStack(currentStackPointer()))
+            return false;
+
+        // Double check the stack limits on failure.
+        // We may have moved to a different thread.
+        const StackProperties stack = stackProperties();
+        cppStackBase = stack.base;
+        cppStackLimit = stack.softLimit;
+        return !inStack(currentStackPointer());
+    }
+
+    bool hasJsStackOverflow() const
+    {
+        return jsStackTop > jsStackLimit;
+    }
+
+    bool hasStackOverflow()
+    {
+        return hasJsStackOverflow() || hasCppStackOverflow();
+    }
 
     static int s_maxCallDepth;
     static int s_jitCallCountThreshold;
@@ -771,9 +839,20 @@ private:
     QHash<QString, quint32> m_consoleCount;
 
     QVector<Deletable *> m_extensionData;
+
+    mutable QMutex moduleMutex;
+    QHash<QUrl, QQmlRefPointer<ExecutableCompilationUnit>> modules;
+
+    // QV4::PersistentValue would be preferred, but using QHash will create copies,
+    // and QV4::PersistentValue doesn't like creating copies.
+    // Instead, we allocate a raw pointer using the same manual memory management
+    // technique in QV4::PersistentValue.
+    QHash<QUrl, Value *> nativeModules;
 };
 
-#define CHECK_STACK_LIMITS(v4) if ((v4)->checkStackLimits()) return Encode::undefined(); \
+#define CHECK_STACK_LIMITS(v4) \
+    if (v4->checkStackLimits()) \
+        return Encode::undefined(); \
     ExecutionEngineCallDepthRecorder _executionEngineCallDepthRecorder(v4);
 
 template<int Frames = 1>
@@ -781,15 +860,27 @@ struct ExecutionEngineCallDepthRecorder
 {
     ExecutionEngine *ee;
 
-    ExecutionEngineCallDepthRecorder(ExecutionEngine *e): ee(e) { ee->callDepth += Frames; }
-    ~ExecutionEngineCallDepthRecorder() { ee->callDepth -= Frames; }
+    ExecutionEngineCallDepthRecorder(ExecutionEngine *e): ee(e)
+    {
+        if (ExecutionEngine::s_maxCallDepth >= 0)
+            ee->callDepth += Frames;
+    }
 
-    bool hasOverflow() const { return ee->callDepth >= ExecutionEngine::s_maxCallDepth; }
+    ~ExecutionEngineCallDepthRecorder()
+    {
+        if (ExecutionEngine::s_maxCallDepth >= 0)
+            ee->callDepth -= Frames;
+    }
+
+    bool hasOverflow() const
+    {
+        return ee->hasCppStackOverflow();
+    }
 };
 
 inline bool ExecutionEngine::checkStackLimits()
 {
-    if (Q_UNLIKELY((jsStackTop > jsStackLimit) || (callDepth >= s_maxCallDepth))) {
+    if (Q_UNLIKELY(hasStackOverflow())) {
         throwRangeError(QStringLiteral("Maximum call stack size exceeded."));
         return true;
     }

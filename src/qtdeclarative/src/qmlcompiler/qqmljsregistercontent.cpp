@@ -54,8 +54,7 @@ QString QQmlJSRegisterContent::descriptiveName() const
                     std::get<ConvertedTypes>(m_content).result->internalName());
     }
     }
-    Q_UNREACHABLE();
-    return result + u"wat?"_s;
+    Q_UNREACHABLE_RETURN(result + u"wat?"_s);
 }
 
 bool QQmlJSRegisterContent::isList() const
@@ -64,11 +63,9 @@ bool QQmlJSRegisterContent::isList() const
     case Type:
         return std::get<QQmlJSScope::ConstPtr>(m_content)->accessSemantics()
                 == QQmlJSScope::AccessSemantics::Sequence;
-    case Property: {
-        const auto prop = std::get<QQmlJSMetaProperty>(m_content);
-        return prop.isList()
-                || prop.type()->accessSemantics() == QQmlJSScope::AccessSemantics::Sequence;
-    }
+    case Property:
+        return std::get<QQmlJSMetaProperty>(m_content).type()->accessSemantics()
+                == QQmlJSScope::AccessSemantics::Sequence;
     case Conversion:
         return std::get<ConvertedTypes>(m_content).result->accessSemantics()
                 == QQmlJSScope::AccessSemantics::Sequence;

@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Generated from xdgshell.pro.
 
 #####################################################################
@@ -20,6 +23,8 @@ qt_internal_add_qml_module(WaylandCompositorXdgShell
         Qt::Gui
         Qt::WaylandCompositor
 )
+
+qt_internal_add_autogen_sync_header_dependencies(WaylandCompositorXdgShell WaylandCompositor)
 
 #### Keys ignored in scope 1:.:.:xdgshell.pro:<TRUE>:
 # CXX_MODULE = "qml"

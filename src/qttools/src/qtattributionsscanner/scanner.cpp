@@ -29,25 +29,25 @@ static bool validatePackage(Package &p, const QString &filePath, LogLevel logLev
     bool validPackage = true;
 
     if (p.qtParts.isEmpty())
-        p.qtParts << QStringLiteral("libs");
+        p.qtParts << u"libs"_s;
 
     if (p.name.isEmpty()) {
-        if (p.id.startsWith(QLatin1String("chromium-"))) // Ignore invalid README.chromium files
+        if (p.id.startsWith("chromium-"_L1)) // Ignore invalid README.chromium files
             return false;
 
         if (logLevel != SilentLog)
-            missingPropertyWarning(filePath, QStringLiteral("Name"));
+            missingPropertyWarning(filePath, u"Name"_s);
         validPackage = false;
     }
 
     if (p.id.isEmpty()) {
         if (logLevel != SilentLog)
-            missingPropertyWarning(filePath, QStringLiteral("Id"));
+            missingPropertyWarning(filePath, u"Id"_s);
         validPackage = false;
     }
     if (p.license.isEmpty()) {
         if (logLevel != SilentLog)
-            missingPropertyWarning(filePath, QStringLiteral("License"));
+            missingPropertyWarning(filePath, u"License"_s);
         validPackage = false;
     }
 
@@ -61,18 +61,47 @@ static bool validatePackage(Package &p, const QString &filePath, LogLevel logLev
         validPackage = false;
     }
 
+    if (p.securityCritical && p.downloadLocation.isEmpty()) {
+        if (logLevel != SilentLog)
+            missingPropertyWarning(filePath, u"DownloadLocation"_s);
+        validPackage = false;
+    }
+
     for (const QString &part : std::as_const(p.qtParts)) {
-        if (part != QLatin1String("examples")
-            && part != QLatin1String("tests")
-            && part != QLatin1String("tools")
-            && part != QLatin1String("libs")
-            && logLevel != SilentLog) {
-            std::cerr << qPrintable(tr("File %1: Property 'QtPart' contains unknown element "
-                                       "'%2'. Valid entries are 'examples', 'tests', 'tools' "
-                                       "and 'libs'.").arg(
-                                           QDir::toNativeSeparators(filePath), part))
-                      << std::endl;
+        if (part != "examples"_L1 && part != "tests"_L1
+            && part != "tools"_L1 && part != "libs"_L1) {
+
+            if (logLevel != SilentLog) {
+                std::cerr << qPrintable(tr("File %1: Property 'QtPart' contains unknown element "
+                                           "'%2'. Valid entries are 'examples', 'tests', 'tools' "
+                                           "and 'libs'.").arg(
+                                            QDir::toNativeSeparators(filePath), part))
+                          << std::endl;
+            }
             validPackage = false;
+        }
+    }
+
+    const QDir dir = p.path;
+    if (!dir.exists()) {
+        std::cerr << qPrintable(
+                tr("File %1: Directory '%2' does not exist.")
+                        .arg(QDir::toNativeSeparators(filePath), QDir::toNativeSeparators(p.path)))
+                  << std::endl;
+        validPackage = false;
+    } else {
+        for (const QString &file : std::as_const(p.files)) {
+            if (!dir.exists(file)) {
+                if (logLevel != SilentLog) {
+                    std::cerr << qPrintable(
+                            tr("File %1: Path '%2' does not exist in directory '%3'.")
+                                    .arg(QDir::toNativeSeparators(filePath),
+                                         QDir::toNativeSeparators(file),
+                                         QDir::toNativeSeparators(p.path)))
+                              << std::endl;
+                }
+                validPackage = false;
+            }
         }
     }
 
@@ -114,7 +143,7 @@ static QStringList extractLicenseIdsFromSPDXExpression(QString expression)
 
         // Remove the unary + operator, if present.
         if (token.endsWith(QLatin1Char('+')))
-            result.append(token.mid(0, token.length() - 1));
+            result.append(token.mid(0, token.size() - 1));
         else
             result.append(token);
     }
@@ -128,11 +157,12 @@ static QString locateLicensesDir(const QString &packageDir)
     static const QString licensesSubDir = u"LICENSES"_s;
     QDir dir(packageDir);
     while (true) {
+        if (!dir.exists())
+            break;
         if (dir.cd(licensesSubDir))
             return dir.path();
-        if (dir.isRoot())
+        if (dir.isRoot() || !dir.cdUp())
             break;
-        dir.cdUp();
     }
     return {};
 }
@@ -177,9 +207,8 @@ static std::optional<Package> readPackage(const QJsonObject &object, const QStri
     for (auto iter = object.constBegin(); iter != object.constEnd(); ++iter) {
         const QString key = iter.key();
 
-        if (!iter.value().isString() && key != QLatin1String("QtParts")
-            && key != QLatin1String("Files")
-            && key != QLatin1String("LicenseFiles")) {
+        if (!iter.value().isString() && key != "QtParts"_L1 && key != "SecurityCritical"_L1
+            && key != "Files"_L1 && key != "LicenseFiles"_L1 && key != "Comment"_L1) {
             if (logLevel != SilentLog)
                 std::cerr << qPrintable(tr("File %1: Expected JSON string as value of %2.").arg(
                                             QDir::toNativeSeparators(filePath), key)) << std::endl;
@@ -187,11 +216,11 @@ static std::optional<Package> readPackage(const QJsonObject &object, const QStri
             continue;
         }
         const QString value = iter.value().toString();
-        if (key == QLatin1String("Name")) {
+        if (key == "Name"_L1) {
             p.name = value;
-        } else if (key == QLatin1String("Path")) {
+        } else if (key == "Path"_L1) {
             p.path = QDir(directory).absoluteFilePath(value);
-        } else if (key == QLatin1String("Files")) {
+        } else if (key == "Files"_L1) {
             QJsonValueConstRef jsonValue = iter.value();
             if (jsonValue.isArray()) {
                 auto maybeStringList = toStringList(jsonValue);
@@ -208,21 +237,26 @@ static std::optional<Package> readPackage(const QJsonObject &object, const QStri
                     continue;
                 }
             }
-        } else if (key == QLatin1String("Id")) {
+        } else if (key == "Comment"_L1) {
+            // Accepted purely to record details of potential interest doing
+            // updates in future. Value is an arbitrary object. Any number of
+            // Comment entries may be present: JSON doesn't require names to be
+            // unique, albeit some linters may kvetch.
+        } else if (key == "Id"_L1) {
             p.id = value;
-        } else if (key == QLatin1String("Homepage")) {
+        } else if (key == "Homepage"_L1) {
             p.homepage = value;
-        } else if (key == QLatin1String("Version")) {
+        } else if (key == "Version"_L1) {
             p.version = value;
-        } else if (key == QLatin1String("DownloadLocation")) {
+        } else if (key == "DownloadLocation"_L1) {
             p.downloadLocation = value;
-        } else if (key == QLatin1String("License")) {
+        } else if (key == "License"_L1) {
             p.license = value;
-        } else if (key == QLatin1String("LicenseId")) {
+        } else if (key == "LicenseId"_L1) {
             p.licenseId = value;
-        } else if (key == QLatin1String("LicenseFile")) {
+        } else if (key == "LicenseFile"_L1) {
             p.licenseFiles = QStringList(QDir(directory).absoluteFilePath(value));
-        } else if (key == QLatin1String("LicenseFiles")) {
+        } else if (key == "LicenseFiles"_L1) {
             auto strings = toStringList(iter.value());
             if (!strings) {
                 if (logLevel != SilentLog)
@@ -235,19 +269,28 @@ static std::optional<Package> readPackage(const QJsonObject &object, const QStri
             const QDir dir(directory);
             for (const auto &iter : std::as_const(strings.value()))
                 p.licenseFiles.push_back(dir.absoluteFilePath(iter));
-        } else if (key == QLatin1String("Copyright")) {
+        } else if (key == "Copyright"_L1) {
             p.copyright = value;
-        } else if (key == QLatin1String("CopyrightFile")) {
+        } else if (key == "CopyrightFile"_L1) {
             p.copyrightFile = QDir(directory).absoluteFilePath(value);
-        } else if (key == QLatin1String("PackageComment")) {
+        } else if (key == "PackageComment"_L1) {
             p.packageComment = value;
-        } else if (key == QLatin1String("QDocModule")) {
+        } else if (key == "QDocModule"_L1) {
             p.qdocModule = value;
-        } else if (key == QLatin1String("Description")) {
+        } else if (key == "Description"_L1) {
             p.description = value;
-        } else if (key == QLatin1String("QtUsage")) {
+        } else if (key == "QtUsage"_L1) {
             p.qtUsage = value;
-        } else if (key == QLatin1String("QtParts")) {
+        } else if (key == "SecurityCritical"_L1) {
+            if (!iter.value().isBool()) {
+                std::cerr << qPrintable(tr("File %1: Expected JSON boolean in %2.")
+                                                .arg(QDir::toNativeSeparators(filePath), key))
+                          << std::endl;
+                validPackage = false;
+                continue;
+            }
+            p.securityCritical = iter.value().toBool();
+        } else if (key == "QtParts"_L1) {
             auto parts = toStringList(iter.value());
             if (!parts) {
                 if (logLevel != SilentLog) {
@@ -312,7 +355,7 @@ static Package parseChromiumFile(QFile &file, const QString &filePath, LogLevel 
     QTextStream in(&file);
     while (!in.atEnd()) {
         QString line = in.readLine().trimmed();
-        QStringList parts = line.split(QStringLiteral(":"));
+        QStringList parts = line.split(u":"_s);
 
         if (parts.size() < 2)
             continue;
@@ -323,14 +366,14 @@ static Package parseChromiumFile(QFile &file, const QString &filePath, LogLevel 
 
         fields[key] = value;
 
-        if (line == QLatin1String("Description:")) { // special field : should handle multi-lines values
+        if (line == "Description:"_L1) { // special field : should handle multi-lines values
             while (!in.atEnd()) {
                 QString line = in.readLine().trimmed();
 
-                if (line.startsWith(QLatin1String("Local Modifications:"))) // Don't include this part
+                if (line.startsWith("Local Modifications:"_L1)) // Don't include this part
                     break;
 
-                fields[key] += line + QStringLiteral("\n");
+                fields[key] += line + u"\n"_s;
             }
 
             break;
@@ -340,30 +383,30 @@ static Package parseChromiumFile(QFile &file, const QString &filePath, LogLevel 
     // Construct the Package object
     Package p;
 
-    QString shortName = fields.contains(QLatin1String("Short Name"))
-            ? fields[QLatin1String("Short Name")]
-            : fields[QLatin1String("Name")];
-    QString version = fields[QStringLiteral("Version")];
+    QString shortName = fields.contains("Short Name"_L1)
+            ? fields["Short Name"_L1]
+            : fields["Name"_L1];
+    QString version = fields[u"Version"_s];
 
-    p.id =  QStringLiteral("chromium-") + shortName.toLower().replace(QChar::Space, QStringLiteral("-"));
-    p.name = fields[QStringLiteral("Name")];
+    p.id =  u"chromium-"_s + shortName.toLower().replace(QChar::Space, u"-"_s);
+    p.name = fields[u"Name"_s];
     if (version != QLatin1Char('0')) // "0" : not applicable
         p.version = version;
-    p.license = fields[QStringLiteral("License")];
-    p.homepage = fields[QStringLiteral("URL")];
-    p.qdocModule = QStringLiteral("qtwebengine");
-    p.qtUsage = QStringLiteral("Used in Qt WebEngine");
-    p.description = fields[QStringLiteral("Description")].trimmed();
+    p.license = fields[u"License"_s];
+    p.homepage = fields[u"URL"_s];
+    p.qdocModule = u"qtwebengine"_s;
+    p.qtUsage = u"Used in Qt WebEngine"_s;
+    p.description = fields[u"Description"_s].trimmed();
     p.path = directory;
 
-    QString licenseFile = fields[QStringLiteral("License File")];
-    if (licenseFile != QString() && licenseFile != QLatin1String("NOT_SHIPPED")) {
+    QString licenseFile = fields[u"License File"_s];
+    if (licenseFile != QString() && licenseFile != "NOT_SHIPPED"_L1) {
         p.licenseFiles = QStringList(QDir(directory).absoluteFilePath(licenseFile));
     } else {
         // Look for a LICENSE or COPYING file as a fallback
         QDir dir = directory;
 
-        dir.setNameFilters({ QStringLiteral("LICENSE"), QStringLiteral("COPYING") });
+        dir.setNameFilters({ u"LICENSE"_s, u"COPYING"_s });
         dir.setFilter(QDir::Files | QDir::NoDotAndDotDot);
 
         const QFileInfoList entries = dir.entryInfoList();
@@ -394,7 +437,7 @@ std::optional<QList<Package>> readFile(const QString &filePath, LogLevel logLeve
         return std::nullopt;
     }
 
-    if (filePath.endsWith(QLatin1String(".json"))) {
+    if (filePath.endsWith(".json"_L1)) {
         QJsonParseError jsonParseError;
         const QJsonDocument document = QJsonDocument::fromJson(file.readAll(), &jsonParseError);
         if (document.isNull()) {
@@ -441,7 +484,7 @@ std::optional<QList<Package>> readFile(const QString &filePath, LogLevel logLeve
             }
             errorsFound = true;
         }
-    } else if (filePath.endsWith(QLatin1String(".chromium"))) {
+    } else if (filePath.endsWith(".chromium"_L1)) {
         Package chromiumPackage = parseChromiumFile(file, filePath, logLevel);
         if (!chromiumPackage.name.isEmpty()) // Skip invalid README.chromium files
             packages << chromiumPackage;
@@ -468,14 +511,11 @@ std::optional<QList<Package>> scanDirectory(const QString &directory, InputForma
 
     QStringList nameFilters = QStringList();
     if (inputFormats & InputFormat::QtAttributions)
-        nameFilters << QStringLiteral("qt_attribution.json");
+        nameFilters << u"qt_attribution.json"_s;
     if (inputFormats & InputFormat::ChromiumAttributions)
-        nameFilters << QStringLiteral("README.chromium");
-    if (qEnvironmentVariableIsSet("QT_ATTRIBUTIONSSCANNER_TEST")) {
-        nameFilters
-                << QStringLiteral("qt_attribution_test.json")
-                << QStringLiteral("README_test.chromium");
-    }
+        nameFilters << u"README.chromium"_s;
+    if (qEnvironmentVariableIsSet("QT_ATTRIBUTIONSSCANNER_TEST"))
+        nameFilters << u"qt_attribution_test.json"_s << u"README_test.chromium"_s;
 
     dir.setNameFilters(nameFilters);
     dir.setFilter(QDir::AllDirs | QDir::NoDotAndDotDot | QDir::Files);

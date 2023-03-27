@@ -103,7 +103,7 @@ const litehtml::tchar_t* litehtml::html_tag::get_attr( const tchar_t* name, cons
 
 litehtml::elements_vector litehtml::html_tag::select_all( const tstring& selector )
 {
-	css_selector sel(media_query_list::ptr(nullptr));
+	css_selector sel(media_query_list::ptr(nullptr), _t(""));
 	sel.parse(selector);
 	
 	return select_all(sel);
@@ -132,7 +132,7 @@ void litehtml::html_tag::select_all(const css_selector& selector, elements_vecto
 
 litehtml::element::ptr litehtml::html_tag::select_one( const tstring& selector )
 {
-	css_selector sel(media_query_list::ptr(nullptr));
+	css_selector sel(media_query_list::ptr(nullptr), _t(""));
 	sel.parse(selector);
 
 	return select_one(sel);
@@ -179,19 +179,19 @@ void litehtml::html_tag::apply_stylesheet( const litehtml::css& stylesheet )
 							element::ptr el = get_element_after();
 							if(el)
 							{
-								el->add_style(*sel->m_style);
+								el->add_style(sel->m_style, sel->m_baseurl);
 							}
 						} else if(apply & select_match_with_before)
 						{
 							element::ptr el = get_element_before();
 							if(el)
 							{
-								el->add_style(*sel->m_style);
+								el->add_style(sel->m_style, sel->m_baseurl);
 							}
 						}
 						else
 						{
-							add_style(*sel->m_style);
+							add_style(sel->m_style, sel->m_baseurl);
 							us->m_used = true;
 						}
 					}
@@ -200,18 +200,18 @@ void litehtml::html_tag::apply_stylesheet( const litehtml::css& stylesheet )
 					element::ptr el = get_element_after();
 					if(el)
 					{
-						el->add_style(*sel->m_style);
+						el->add_style(sel->m_style, sel->m_baseurl);
 					}
 				} else if(apply & select_match_with_before)
 				{
 					element::ptr el = get_element_before();
 					if(el)
 					{
-						el->add_style(*sel->m_style);
+						el->add_style(sel->m_style, sel->m_baseurl);
 					}
 				} else
 				{
-					add_style(*sel->m_style);
+					add_style(sel->m_style, sel->m_baseurl);
 					us->m_used = true;
 				}
 			}
@@ -282,7 +282,7 @@ litehtml::uint_ptr litehtml::html_tag::get_font(font_metrics* fm)
 	return m_font;
 }
 
-const litehtml::tchar_t* litehtml::html_tag::get_style_property( const tchar_t* name, bool inherited, const tchar_t* def /*= 0*/ )
+const litehtml::tchar_t* litehtml::html_tag::get_style_property( const tchar_t* name, bool inherited, const tchar_t* def /*= 0*/ ) const
 {
 	const tchar_t* ret = m_style.get_property(name);
 	element::ptr el_parent = parent();
@@ -308,19 +308,19 @@ void litehtml::html_tag::parse_styles(bool is_reparse)
 
 	if(style)
 	{
-		m_style.add(style, nullptr);
+		m_style.add(style, nullptr, this);
 	}
 
 	init_font();
 	document::ptr doc = get_document();
 
 	m_el_position	= (element_position)	value_index(get_style_property(_t("position"),		false,	_t("static")),		element_position_strings,	element_position_fixed);
-	m_text_align	= (text_align)			value_index(get_style_property(_t("text-align"),		true,	_t("left")),		text_align_strings,			text_align_left);
+	m_text_align	= (text_align)			value_index(get_style_property(_t("text-align"),	true,	_t("left")),		text_align_strings,			text_align_left);
 	m_overflow		= (overflow)			value_index(get_style_property(_t("overflow"),		false,	_t("visible")),		overflow_strings,			overflow_visible);
 	m_white_space	= (white_space)			value_index(get_style_property(_t("white-space"),	true,	_t("normal")),		white_space_strings,		white_space_normal);
 	m_display		= (style_display)		value_index(get_style_property(_t("display"),		false,	_t("inline")),		style_display_strings,		display_inline);
 	m_visibility	= (visibility)			value_index(get_style_property(_t("visibility"),	true,	_t("visible")),		visibility_strings,			visibility_visible);
-	m_box_sizing	= (box_sizing)			value_index(get_style_property(_t("box-sizing"),		false,	_t("content-box")),	box_sizing_strings,			box_sizing_content_box);
+	m_box_sizing	= (box_sizing)			value_index(get_style_property(_t("box-sizing"),	false,	_t("content-box")),	box_sizing_strings,			box_sizing_content_box);
 
 	if(m_el_position != element_position_static)
 	{
@@ -339,15 +339,23 @@ void litehtml::html_tag::parse_styles(bool is_reparse)
 
 	m_clear = (element_clear) value_index(get_style_property(_t("clear"), false, _t("none")), element_clear_strings, clear_none);
 
-	if (m_float != float_none)
+	if (m_display != display_none &&
+		m_display != display_table &&
+		m_display != display_inline_table)
 	{
-		// reset display in to block for floating elements
-		if (m_display != display_none)
+		// reset display into block for floating elements
+		if (m_float != float_none)
+		{
+			m_display = display_block;
+		}
+		// fix elements with absolute/fixed positions
+		else if (m_el_position == element_position_absolute || m_el_position == element_position_fixed)
 		{
 			m_display = display_block;
 		}
 	}
-	else if (m_display == display_table ||
+
+	if (m_display == display_table ||
 		m_display == display_inline_table ||
 		m_display == display_table_caption ||
 		m_display == display_table_cell ||
@@ -360,14 +368,6 @@ void litehtml::html_tag::parse_styles(bool is_reparse)
 	{
 		doc->add_tabular(shared_from_this());
 	}
-	// fix inline boxes with absolute/fixed positions
-	else if (m_display != display_none && is_inline_box())
-	{
-		if (m_el_position == element_position_absolute || m_el_position == element_position_fixed)
-		{
-			m_display = display_block;
-		}
-	}
 
 	m_css_text_indent.fromString(	get_style_property(_t("text-indent"),	true,	_t("0")),	_t("0"));
 
@@ -378,10 +378,10 @@ void litehtml::html_tag::parse_styles(bool is_reparse)
 	doc->cvt_units(m_css_height, m_font_size);
 
 	m_css_min_width.fromString(		get_style_property(_t("min-width"),		false,	_t("0")));
-	m_css_min_height.fromString(	get_style_property(_t("min-height"),		false,	_t("0")));
+	m_css_min_height.fromString(	get_style_property(_t("min-height"),	false,	_t("0")));
 
 	m_css_max_width.fromString(		get_style_property(_t("max-width"),		false,	_t("none")),	_t("none"));
-	m_css_max_height.fromString(	get_style_property(_t("max-height"),		false,	_t("none")),	_t("none"));
+	m_css_max_height.fromString(	get_style_property(_t("max-height"),	false,	_t("none")),	_t("none"));
 	
 	doc->cvt_units(m_css_min_width, m_font_size);
 	doc->cvt_units(m_css_min_height, m_font_size);
@@ -391,23 +391,23 @@ void litehtml::html_tag::parse_styles(bool is_reparse)
 	m_css_offsets.top.fromString(		get_style_property(_t("top"),				false,	_t("auto")), _t("auto"));
 	m_css_offsets.bottom.fromString(	get_style_property(_t("bottom"),			false,	_t("auto")), _t("auto"));
 
-	doc->cvt_units(m_css_offsets.left, m_font_size);
-	doc->cvt_units(m_css_offsets.right, m_font_size);
+	doc->cvt_units(m_css_offsets.left,		m_font_size);
+	doc->cvt_units(m_css_offsets.right,		m_font_size);
 	doc->cvt_units(m_css_offsets.top,		m_font_size);
 	doc->cvt_units(m_css_offsets.bottom,	m_font_size);
 
 	m_css_margins.left.fromString(		get_style_property(_t("margin-left"),		false,	_t("0")), _t("auto"));
 	m_css_margins.right.fromString(		get_style_property(_t("margin-right"),		false,	_t("0")), _t("auto"));
-	m_css_margins.top.fromString(		get_style_property(_t("margin-top"),			false,	_t("0")), _t("auto"));
+	m_css_margins.top.fromString(		get_style_property(_t("margin-top"),		false,	_t("0")), _t("auto"));
 	m_css_margins.bottom.fromString(	get_style_property(_t("margin-bottom"),		false,	_t("0")), _t("auto"));
 
 	m_css_padding.left.fromString(		get_style_property(_t("padding-left"),		false,	_t("0")), _t(""));
 	m_css_padding.right.fromString(		get_style_property(_t("padding-right"),		false,	_t("0")), _t(""));
 	m_css_padding.top.fromString(		get_style_property(_t("padding-top"),		false,	_t("0")), _t(""));
-	m_css_padding.bottom.fromString(	get_style_property(_t("padding-bottom"),		false,	_t("0")), _t(""));
+	m_css_padding.bottom.fromString(	get_style_property(_t("padding-bottom"),	false,	_t("0")), _t(""));
 
 	m_css_borders.left.width.fromString(	get_style_property(_t("border-left-width"),		false,	_t("medium")), border_width_strings);
-	m_css_borders.right.width.fromString(	get_style_property(_t("border-right-width"),		false,	_t("medium")), border_width_strings);
+	m_css_borders.right.width.fromString(	get_style_property(_t("border-right-width"),	false,	_t("medium")), border_width_strings);
 	m_css_borders.top.width.fromString(		get_style_property(_t("border-top-width"),		false,	_t("medium")), border_width_strings);
 	m_css_borders.bottom.width.fromString(	get_style_property(_t("border-bottom-width"),	false,	_t("medium")), border_width_strings);
 
@@ -441,23 +441,23 @@ void litehtml::html_tag::parse_styles(bool is_reparse)
 	doc->cvt_units(m_css_borders.radius.bottom_right_y,			m_font_size);
 	doc->cvt_units(m_css_borders.radius.top_left_x,				m_font_size);
 	doc->cvt_units(m_css_borders.radius.top_left_y,				m_font_size);
-	doc->cvt_units(m_css_borders.radius.top_right_x,				m_font_size);
-	doc->cvt_units(m_css_borders.radius.top_right_y,				m_font_size);
+	doc->cvt_units(m_css_borders.radius.top_right_x,			m_font_size);
+	doc->cvt_units(m_css_borders.radius.top_right_y,			m_font_size);
 
-	doc->cvt_units(m_css_text_indent,								m_font_size);
+	doc->cvt_units(m_css_text_indent,							m_font_size);
 
-	m_margins.left		= doc->cvt_units(m_css_margins.left,		m_font_size);
-	m_margins.right		= doc->cvt_units(m_css_margins.right,		m_font_size);
+	m_margins.left		= doc->cvt_units(m_css_margins.left,	m_font_size);
+	m_margins.right		= doc->cvt_units(m_css_margins.right,	m_font_size);
 	m_margins.top		= doc->cvt_units(m_css_margins.top,		m_font_size);
 	m_margins.bottom	= doc->cvt_units(m_css_margins.bottom,	m_font_size);
 
-	m_padding.left		= doc->cvt_units(m_css_padding.left,		m_font_size);
-	m_padding.right		= doc->cvt_units(m_css_padding.right,		m_font_size);
+	m_padding.left		= doc->cvt_units(m_css_padding.left,	m_font_size);
+	m_padding.right		= doc->cvt_units(m_css_padding.right,	m_font_size);
 	m_padding.top		= doc->cvt_units(m_css_padding.top,		m_font_size);
 	m_padding.bottom	= doc->cvt_units(m_css_padding.bottom,	m_font_size);
 
-	m_borders.left		= doc->cvt_units(m_css_borders.left.width,	m_font_size);
-	m_borders.right		= doc->cvt_units(m_css_borders.right.width,	m_font_size);
+	m_borders.left		= doc->cvt_units(m_css_borders.left.width,		m_font_size);
+	m_borders.right		= doc->cvt_units(m_css_borders.right.width,		m_font_size);
 	m_borders.top		= doc->cvt_units(m_css_borders.top.width,		m_font_size);
 	m_borders.bottom	= doc->cvt_units(m_css_borders.bottom.width,	m_font_size);
 
@@ -473,7 +473,7 @@ void litehtml::html_tag::parse_styles(bool is_reparse)
 		m_lh_predefined = false;
 	} else
 	{
-		m_line_height =  doc->cvt_units(line_height,	m_font_size, m_font_size);
+		m_line_height =  doc->cvt_units(line_height, m_font_size, m_font_size);
 		m_lh_predefined = false;
 	}
 
@@ -788,8 +788,6 @@ int litehtml::html_tag::select(const css_element_selector& selector, bool apply_
 		case select_pseudo_class:
 			if(apply_pseudo)
 			{
-				if (!el_parent) return select_no_match;
-
 				tstring selector_param;
 				tstring	selector_name;
 
@@ -813,37 +811,37 @@ int litehtml::html_tag::select(const css_element_selector& selector, bool apply_
 				switch(pseudo_selector)
 				{
 				case pseudo_class_only_child:
-					if (!el_parent->is_only_child(shared_from_this(), false))
+					if (!el_parent || !el_parent->is_only_child(shared_from_this(), false))
 					{
 						return select_no_match;
 					}
 					break;
 				case pseudo_class_only_of_type:
-					if (!el_parent->is_only_child(shared_from_this(), true))
+					if (!el_parent || !el_parent->is_only_child(shared_from_this(), true))
 					{
 						return select_no_match;
 					}
 					break;
 				case pseudo_class_first_child:
-					if (!el_parent->is_nth_child(shared_from_this(), 0, 1, false))
+					if (!el_parent || !el_parent->is_nth_child(shared_from_this(), 0, 1, false))
 					{
 						return select_no_match;
 					}
 					break;
 				case pseudo_class_first_of_type:
-					if (!el_parent->is_nth_child(shared_from_this(), 0, 1, true))
+					if (!el_parent || !el_parent->is_nth_child(shared_from_this(), 0, 1, true))
 					{
 						return select_no_match;
 					}
 					break;
 				case pseudo_class_last_child:
-					if (!el_parent->is_nth_last_child(shared_from_this(), 0, 1, false))
+					if (!el_parent || !el_parent->is_nth_last_child(shared_from_this(), 0, 1, false))
 					{
 						return select_no_match;
 					}
 					break;
 				case pseudo_class_last_of_type:
-					if (!el_parent->is_nth_last_child(shared_from_this(), 0, 1, true))
+					if (!el_parent || !el_parent->is_nth_last_child(shared_from_this(), 0, 1, true))
 					{
 						return select_no_match;
 					}
@@ -853,7 +851,7 @@ int litehtml::html_tag::select(const css_element_selector& selector, bool apply_
 				case pseudo_class_nth_last_child:
 				case pseudo_class_nth_last_of_type:
 					{
-						if(selector_param.empty()) return select_no_match;
+						if(!el_parent || selector_param.empty()) return select_no_match;
 
 						int num = 0;
 						int off = 0;
@@ -1088,9 +1086,9 @@ int litehtml::html_tag::get_line_left( int y )
 {
 	if(is_floats_holder())
 	{
-		if(m_cahe_line_left.is_valid && m_cahe_line_left.hash == y)
+		if(m_cache_line_left.is_valid && m_cache_line_left.hash == y)
 		{
-			return m_cahe_line_left.val;
+			return m_cache_line_left.val;
 		}
 
 		int w = 0;
@@ -1105,7 +1103,7 @@ int litehtml::html_tag::get_line_left( int y )
 				}
 			}
 		}
-		m_cahe_line_left.set_value(y, w);
+		m_cache_line_left.set_value(y, w);
 		return w;
 	}
 	element::ptr el_parent = parent();
@@ -1125,32 +1123,32 @@ int litehtml::html_tag::get_line_right( int y, int def_right )
 {
 	if(is_floats_holder())
 	{
-		if(m_cahe_line_right.is_valid && m_cahe_line_right.hash == y)
+		if(m_cache_line_right.is_valid && m_cache_line_right.hash == y)
 		{
-			if(m_cahe_line_right.is_default)
+			if(m_cache_line_right.is_default)
 			{
 				return def_right;
 			} else
 			{
-				return std::min(m_cahe_line_right.val, def_right);
+				return std::min(m_cache_line_right.val, def_right);
 			}
 		}
 
 		int w = def_right;
-		m_cahe_line_right.is_default = true;
+		m_cache_line_right.is_default = true;
 		for(const auto& fb : m_floats_right)
 		{
 			if(y >= fb.pos.top() && y < fb.pos.bottom())
 			{
 				w = std::min(w, fb.pos.left());
-				m_cahe_line_right.is_default = false;
+				m_cache_line_right.is_default = false;
 				if(w > fb.pos.left())
 				{
 					break;
 				}
 			}
 		}
-		m_cahe_line_right.set_value(y, w);
+		m_cache_line_right.set_value(y, w);
 		return w;
 	}
 	element::ptr el_parent = parent();
@@ -1320,7 +1318,7 @@ void litehtml::html_tag::add_float(const element::ptr &el, int x, int y)
 					m_floats_left.push_back(std::move(fb));
 				}
 			}
-			m_cahe_line_left.invalidate();
+			m_cache_line_left.invalidate();
 		} else if(fb.float_side == float_right)
 		{
 			if(m_floats_right.empty())
@@ -1343,7 +1341,7 @@ void litehtml::html_tag::add_float(const element::ptr &el, int x, int y)
 					m_floats_right.push_back(fb);
 				}
 			}
-			m_cahe_line_right.invalidate();
+			m_cache_line_right.invalidate();
 		}
 	} else
 	{
@@ -1619,7 +1617,9 @@ void litehtml::html_tag::calc_outlines( int parent_width )
 
 void litehtml::html_tag::calc_auto_margins(int parent_width)
 {
-	if (get_element_position() != element_position_absolute && (m_display == display_block || m_display == display_table))
+	if ((m_display == display_block || m_display == display_table) &&
+		get_element_position() != element_position_absolute &&
+		m_float == float_none)
 	{
 		if (m_css_margins.left.is_predefined() && m_css_margins.right.is_predefined())
 		{
@@ -1950,7 +1950,7 @@ void litehtml::html_tag::init_font()
 		m_font_size = parent_sz;
 
 		css_length sz;
-		sz.fromString(str, font_size_strings);
+		sz.fromString(str, font_size_strings, -1);
 		if(sz.is_predefined())
 		{
 			int idx_in_table = doc_font_size - 9;
@@ -1961,7 +1961,7 @@ void litehtml::html_tag::init_font()
 					m_font_size = font_size_table[idx_in_table][sz.predef()];
 				} else
 				{
-					m_font_size = doc_font_size;
+					m_font_size = parent_sz;
 				}
 			} else			
 			{
@@ -1986,7 +1986,7 @@ void litehtml::html_tag::init_font()
 					m_font_size = doc_font_size * 2;
 					break;
 				default:
-					m_font_size = doc_font_size;
+					m_font_size = parent_sz;
 					break;
 				}
 			}
@@ -2969,7 +2969,7 @@ void litehtml::html_tag::draw_list_marker( uint_ptr hdc, const position &pos )
 	{
 		lm.pos.y = pos.y;
 		lm.pos.height = pos.height;
-		lm.index = (unsigned char) get_attr(_t("list_index"), _t(""))[0];
+		lm.index = t_atoi(get_attr(_t("list_index"), _t("0")));
 	}
 	else
 	{
@@ -3629,7 +3629,7 @@ void litehtml::html_tag::update_floats(int dy, const element::ptr &parent)
 		}
 		if(reset_cache)
 		{
-			m_cahe_line_left.invalidate();
+			m_cache_line_left.invalidate();
 		}
 		reset_cache = false;
 		for(auto fb = m_floats_right.rbegin(); fb != m_floats_right.rend(); fb++)
@@ -3642,7 +3642,7 @@ void litehtml::html_tag::update_floats(int dy, const element::ptr &parent)
 		}
 		if(reset_cache)
 		{
-			m_cahe_line_right.invalidate();
+			m_cache_line_right.invalidate();
 		}
 	} else
 	{
@@ -3701,9 +3701,9 @@ litehtml::element::ptr litehtml::html_tag::get_element_after()
 	return el;
 }
 
-void litehtml::html_tag::add_style( const litehtml::style& st )
+void litehtml::html_tag::add_style(const tstring& style, const tstring& baseurl)
 {
-	m_style.combine(st);
+	m_style.add(style.c_str(), baseurl.c_str(), this);
 }
 
 bool litehtml::html_tag::have_inline_child() const
@@ -3754,19 +3754,19 @@ void litehtml::html_tag::refresh_styles()
 							element::ptr el = get_element_after();
 							if(el)
 							{
-								el->add_style(*usel->m_selector->m_style);
+								el->add_style(usel->m_selector->m_style, usel->m_selector->m_baseurl);
 							}
 						} else if(apply & select_match_with_before)
 						{
 							element::ptr el = get_element_before();
 							if(el)
 							{
-								el->add_style(*usel->m_selector->m_style);
+								el->add_style(usel->m_selector->m_style, usel->m_selector->m_baseurl);
 							}
 						}
 						else
 						{
-							add_style(*usel->m_selector->m_style);
+							add_style(usel->m_selector->m_style, usel->m_selector->m_baseurl);
 							usel->m_used = true;
 						}
 					}
@@ -3775,18 +3775,18 @@ void litehtml::html_tag::refresh_styles()
 					element::ptr el = get_element_after();
 					if(el)
 					{
-						el->add_style(*usel->m_selector->m_style);
+						el->add_style(usel->m_selector->m_style, usel->m_selector->m_baseurl);
 					}
 				} else if(apply & select_match_with_before)
 				{
 					element::ptr el = get_element_before();
 					if(el)
 					{
-						el->add_style(*usel->m_selector->m_style);
+						el->add_style(usel->m_selector->m_style, usel->m_selector->m_baseurl);
 					}
 				} else
 				{
-					add_style(*usel->m_selector->m_style);
+					add_style(usel->m_selector->m_style, usel->m_selector->m_baseurl);
 					usel->m_used = true;
 				}
 			}
@@ -4072,8 +4072,8 @@ int litehtml::html_tag::render_box(int x, int y, int max_width, bool second_pass
 	m_floats_left.clear();
 	m_floats_right.clear();
 	m_boxes.clear();
-	m_cahe_line_left.invalidate();
-	m_cahe_line_right.invalidate();
+	m_cache_line_left.invalidate();
+	m_cache_line_right.invalidate();
 
 	element_position el_position;
 

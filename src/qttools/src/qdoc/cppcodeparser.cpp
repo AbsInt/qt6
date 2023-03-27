@@ -24,6 +24,8 @@
 
 #include <algorithm>
 
+using namespace Qt::Literals::StringLiterals;
+
 QT_BEGIN_NAMESPACE
 
 /* qmake ignore Q_OBJECT */
@@ -260,26 +262,7 @@ Node *CppCodeParser::processTopicCommand(const Doc &doc, const QString &command,
         cn->markSeen();
         return cn;
     } else if (command == COMMAND_PAGE) {
-        Node::PageType ptype = Node::ArticlePage;
-        QStringList args = arg.first.split(QLatin1Char(' '));
-        if (args.size() > 1) {
-            QString t = args[1].toLower();
-            if (t == "howto")
-                ptype = Node::HowToPage;
-            else if (t == "api")
-                ptype = Node::ApiPage;
-            else if (t == "example")
-                ptype = Node::ExamplePage;
-            else if (t == "overview")
-                ptype = Node::OverviewPage;
-            else if (t == "tutorial")
-                ptype = Node::TutorialPage;
-            else if (t == "faq")
-                ptype = Node::FAQPage;
-            else if (t == "attribution")
-                ptype = Node::AttributionPage;
-        }
-        auto *pn = new PageNode(m_qdb->primaryTreeRoot(), args[0], ptype);
+        auto *pn = new PageNode(m_qdb->primaryTreeRoot(), arg.first.split(' ').front());
         pn->setLocation(doc.startLocation());
         return pn;
     } else if (command == COMMAND_QMLTYPE ||
@@ -452,8 +435,21 @@ void CppCodeParser::processMetaCommand(const Doc &doc, const QString &command,
 {
     QString arg = argPair.first;
     if (command == COMMAND_INHEADERFILE) {
-        if (node->isAggregate())
-            static_cast<Aggregate *>(node)->addIncludeFile(arg);
+        // TODO: [incorrect-constructs][header-arg]
+        // The emptiness check for arg is required as,
+        // currently, DocParser fancies passing (without any warning)
+        // incorrect constructs doen the chain, such as an
+        // "\inheaderfile" command with no argument.
+        //
+        // As it is the case here, we require further sanity checks to
+        // preserve some of the semantic for the later phases.
+        // This generally has a ripple effect on the whole codebase,
+        // making it more complex and increasesing the surface of bugs.
+        //
+        // The following emptiness check should be removed as soon as
+        // DocParser is enhanced with correct semantics.
+        if (node->isAggregate() && !arg.isEmpty())
+            static_cast<Aggregate *>(node)->setIncludeFile(arg);
         else
             doc.location().warning(QStringLiteral("Ignored '\\%1'").arg(COMMAND_INHEADERFILE));
     } else if (command == COMMAND_OVERLOAD) {
@@ -630,8 +626,45 @@ void CppCodeParser::processMetaCommand(const Doc &doc, const QString &command,
             doc.location().warning(
                     QStringLiteral("Command '\\%1' is only meaningful in '\\module'.")
                             .arg(COMMAND_QTCMAKEPACKAGE));
+    } else if (command == COMMAND_MODULESTATE ) {
+        if (!node->isModule() && !node->isQmlModule()) {
+            doc.location().warning(
+                    QStringLiteral(
+                            "Command '\\%1' is only meaningful in '\\module' and '\\qmlmodule'.")
+                            .arg(COMMAND_MODULESTATE));
+        } else {
+            static_cast<CollectionNode*>(node)->setState(arg);
+        }
     } else if (command == COMMAND_NOAUTOLIST) {
-        node->setNoAutoList(true);
+        if (!node->isCollectionNode() && !node->isExample()) {
+            doc.location().warning(
+                    QStringLiteral(
+                            "Command '\\%1' is only meaningful in '\\module', '\\qmlmodule', `\\group` and `\\example`.")
+                            .arg(COMMAND_NOAUTOLIST));
+        } else {
+            static_cast<PageNode*>(node)->setNoAutoList(true);
+        }
+    } else if (command == COMMAND_ATTRIBUTION) {
+        // TODO: This condition is not currently exact enough, as it
+        // will allow any non-aggregate `PageNode` to use the command,
+        // For example, an `ExampleNode`.
+        //
+        // The command is intended only for internal usage by
+        // "qattributionscanner" and should only work on `PageNode`s
+        // that are generated from a "\page" command.
+        //
+        // It is already possible to provide a more restricted check,
+        // albeit in a somewhat dirty way. It is not expected that
+        // this warning will have any particular use.
+        // If it so happens that a case where the too-broad scope of
+        // the warning is a problem or hides a bug, modify the
+        // condition to be restrictive enough.
+        // Otherwise, wait until a more torough look at QDoc's
+        // internal representations an way to enable "Attribution
+        // Pages" is performed before looking at the issue again.
+        if (!node->isTextPageNode()) {
+            doc.location().warning(u"Command '\\%1' is only meaningful in '\\%2'"_s.arg(COMMAND_ATTRIBUTION, COMMAND_PAGE));
+        } else { static_cast<PageNode*>(node)->markAttribution(); }
     }
 }
 
@@ -912,14 +945,28 @@ void CppCodeParser::processMetaCommands(NodeList &nodes, DocList &docs)
             checkModuleInclusion(node);
             if (node->isAggregate()) {
                 auto *aggregate = static_cast<Aggregate *>(node);
-                if (aggregate->includeFiles().isEmpty()) {
+
+                if (!aggregate->includeFile()) {
                     Aggregate *parent = aggregate;
                     while (parent->physicalModuleName().isEmpty() && (parent->parent() != nullptr))
                         parent = parent->parent();
+
                     if (parent == aggregate)
-                        aggregate->addIncludeFile(aggregate->name());
-                    else
-                        aggregate->setIncludeFiles(parent->includeFiles());
+                        // TODO: Understand if the name can be empty.
+                        // In theory it should not be possible as
+                        // there would be no aggregate to refer to
+                        // such that this code is never reached.
+                        //
+                        // If the name can be empty, this would
+                        // endanger users of the include file down the
+                        // line, forcing them to ensure that, further
+                        // to there being an actual include file, that
+                        // include file is not an empty string, such
+                        // that we would require a different way to
+                        // generate the include file here.
+                        aggregate->setIncludeFile(aggregate->name());
+                    else if (aggregate->includeFile())
+                        aggregate->setIncludeFile(*parent->includeFile());
                 }
             }
         }

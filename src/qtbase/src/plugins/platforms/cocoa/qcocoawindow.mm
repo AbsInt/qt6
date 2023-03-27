@@ -98,24 +98,7 @@ Q_CONSTRUCTOR_FUNCTION(qRegisterNotificationCallbacks)
 const int QCocoaWindow::NoAlertRequest = -1;
 QPointer<QCocoaWindow> QCocoaWindow::s_windowUnderMouse;
 
-QCocoaWindow::QCocoaWindow(QWindow *win, WId nativeHandle)
-    : QPlatformWindow(win)
-    , m_view(nil)
-    , m_nsWindow(nil)
-    , m_lastReportedWindowState(Qt::WindowNoState)
-    , m_windowModality(Qt::NonModal)
-    , m_initialized(false)
-    , m_inSetVisible(false)
-    , m_inSetGeometry(false)
-    , m_inSetStyleMask(false)
-    , m_menubar(nullptr)
-    , m_frameStrutEventsEnabled(false)
-    , m_registerTouchCount(0)
-    , m_resizableTransientParent(false)
-    , m_alertRequest(NoAlertRequest)
-    , m_drawContentBorderGradient(false)
-    , m_topContentBorderThickness(0)
-    , m_bottomContentBorderThickness(0)
+QCocoaWindow::QCocoaWindow(QWindow *win, WId nativeHandle) : QPlatformWindow(win)
 {
     qCDebug(lcQpaWindow) << "QCocoaWindow::QCocoaWindow" << window();
 
@@ -146,6 +129,8 @@ void QCocoaWindow::initialize()
     setGeometry(initialGeometry);
 
     recreateWindowIfNeeded();
+
+    setMask(QHighDpi::toNativeLocalRegion(window()->mask(), window()));
 
     m_initialized = true;
 }
@@ -558,8 +543,6 @@ void QCocoaWindow::updateTitleBarButtons(Qt::WindowFlags windowFlags)
     if (!isContentView())
         return;
 
-    NSWindow *window = m_view.window;
-
     static constexpr std::pair<NSWindowButton, Qt::WindowFlags> buttons[] = {
         { NSWindowCloseButton, Qt::WindowCloseButtonHint },
         { NSWindowMiniaturizeButton, Qt::WindowMinimizeButtonHint},
@@ -575,13 +558,24 @@ void QCocoaWindow::updateTitleBarButtons(Qt::WindowFlags windowFlags)
         if (button == NSWindowZoomButton && isFixedSize())
             enabled = false;
 
-        [window standardWindowButton:button].enabled = enabled;
+        // Mimic what macOS natively does for parent windows of modal
+        // sheets, which is to disable the close button, but leave the
+        // other buttons as they were.
+        if (button == NSWindowCloseButton && enabled
+            && QWindowPrivate::get(window())->blockedByModalWindow) {
+            enabled = false;
+            // If we end up having no enabled buttons, our workaround
+            // should not be a reason for hiding all of them.
+            hideButtons = false;
+        }
+
+        [m_view.window standardWindowButton:button].enabled = enabled;
         hideButtons &= !enabled;
     }
 
     // Hide buttons in case we disabled all of them
     for (const auto &[button, buttonHint] : buttons)
-        [window standardWindowButton:button].hidden = hideButtons;
+        [m_view.window standardWindowButton:button].hidden = hideButtons;
 }
 
 void QCocoaWindow::setWindowFlags(Qt::WindowFlags flags)
@@ -1093,28 +1087,14 @@ void QCocoaWindow::setMask(const QRegion &region)
     }
 }
 
-bool QCocoaWindow::setKeyboardGrabEnabled(bool grab)
+bool QCocoaWindow::setKeyboardGrabEnabled(bool)
 {
-    qCDebug(lcQpaWindow) << "QCocoaWindow::setKeyboardGrabEnabled" << window() << grab;
-    if (!isContentView())
-        return false;
-
-    if (grab && ![m_view.window isKeyWindow])
-        [m_view.window makeKeyWindow];
-
-    return true;
+    return false; // FIXME (QTBUG-106597)
 }
 
-bool QCocoaWindow::setMouseGrabEnabled(bool grab)
+bool QCocoaWindow::setMouseGrabEnabled(bool)
 {
-    qCDebug(lcQpaWindow) << "QCocoaWindow::setMouseGrabEnabled" << window() << grab;
-    if (!isContentView())
-        return false;
-
-    if (grab && ![m_view.window isKeyWindow])
-        [m_view.window makeKeyWindow];
-
-    return true;
+    return false; // FIXME (QTBUG-106597)
 }
 
 WId QCocoaWindow::winId() const
@@ -1538,22 +1518,12 @@ void QCocoaWindow::recreateWindowIfNeeded()
         setWindowTitle(window()->title());
         setWindowFilePath(window()->filePath()); // Also sets window icon
         setWindowState(window()->windowState());
+        setOpacity(window()->opacity());
     } else {
         // Child windows have no NSWindow, re-parent to superview instead
         [parentCocoaWindow->m_view addSubview:m_view];
         [m_view setHidden:!window()->isVisible()];
     }
-
-    const qreal opacity = qt_window_private(window())->opacity;
-    if (!qFuzzyCompare(opacity, qreal(1.0)))
-        setOpacity(opacity);
-
-    setMask(QHighDpi::toNativeLocalRegion(window()->mask(), window()));
-
-    // top-level QWindows may have an attached NSToolBar, call
-    // update function which will attach to the NSWindow.
-    if (!parentWindow && !isEmbeddedView)
-        updateNSToolbar();
 }
 
 void QCocoaWindow::requestUpdate()
@@ -1843,16 +1813,6 @@ void QCocoaWindow::registerTouch(bool enable)
         m_view.allowedTouchTypes &= ~NSTouchTypeMaskIndirect;
 }
 
-void QCocoaWindow::setContentBorderThickness(int topThickness, int bottomThickness)
-{
-    m_topContentBorderThickness = topThickness;
-    m_bottomContentBorderThickness = bottomThickness;
-    bool enable = (topThickness > 0 || bottomThickness > 0);
-    m_drawContentBorderGradient = enable;
-
-    applyContentBorderThickness();
-}
-
 void QCocoaWindow::registerContentBorderArea(quintptr identifier, int upper, int lower)
 {
     m_contentBorderAreas.insert(identifier, BorderRange(identifier, upper, lower));
@@ -1889,7 +1849,7 @@ void QCocoaWindow::applyContentBorderThickness(NSWindow *window)
     // Find consecutive registered border areas, starting from the top.
     std::vector<BorderRange> ranges(m_contentBorderAreas.cbegin(), m_contentBorderAreas.cend());
     std::sort(ranges.begin(), ranges.end());
-    int effectiveTopContentBorderThickness = m_topContentBorderThickness;
+    int effectiveTopContentBorderThickness = 0;
     for (BorderRange range : ranges) {
         // Skip disiabled ranges (typically hidden tool bars)
         if (!m_enabledContentBorderAreas.value(range.identifier, false))
@@ -1904,7 +1864,7 @@ void QCocoaWindow::applyContentBorderThickness(NSWindow *window)
             break;
     }
 
-    int effectiveBottomContentBorderThickness = m_bottomContentBorderThickness;
+    int effectiveBottomContentBorderThickness = 0;
 
     [window setStyleMask:[window styleMask] | NSWindowStyleMaskTexturedBackground];
     window.titlebarAppearsTransparent = YES;
@@ -1924,21 +1884,6 @@ void QCocoaWindow::applyContentBorderThickness(NSWindow *window)
     [window setAutorecalculatesContentBorderThickness:NO forEdge:NSMinYEdge];
 
     [[[window contentView] superview] setNeedsDisplay:YES];
-}
-
-void QCocoaWindow::updateNSToolbar()
-{
-    if (!isContentView())
-        return;
-
-    NSToolbar *toolbar = QCocoaIntegration::instance()->toolbar(window());
-    const NSWindow *window = m_view.window;
-
-    if (window.toolbar == toolbar)
-       return;
-
-    window.toolbar = toolbar;
-    window.showsToolbarButton = YES;
 }
 
 bool QCocoaWindow::testContentBorderAreaPosition(int position) const
@@ -1987,6 +1932,9 @@ bool QCocoaWindow::shouldRefuseKeyWindowAndFirstResponder()
     if (window()->flags() & (Qt::WindowDoesNotAcceptFocus | Qt::WindowTransparentForInput))
         return true;
 
+    if (QWindowPrivate::get(window())->blockedByModalWindow)
+        return true;
+
     if (m_inSetVisible) {
         QVariant showWithoutActivating = window()->property("_q_showWithoutActivating");
         if (showWithoutActivating.isValid() && showWithoutActivating.toBool())
@@ -1994,6 +1942,20 @@ bool QCocoaWindow::shouldRefuseKeyWindowAndFirstResponder()
     }
 
     return false;
+}
+
+bool QCocoaWindow::windowEvent(QEvent *event)
+{
+    switch (event->type()) {
+    case QEvent::WindowBlocked:
+    case QEvent::WindowUnblocked:
+        updateTitleBarButtons(window()->flags());
+        break;
+    default:
+        break;
+    }
+
+    return QPlatformWindow::windowEvent(event);
 }
 
 QPoint QCocoaWindow::bottomLeftClippedByNSWindowOffset() const

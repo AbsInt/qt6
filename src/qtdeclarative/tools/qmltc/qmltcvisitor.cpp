@@ -61,8 +61,9 @@ static bool isOrUnderComponent(QQmlJSScope::ConstPtr type)
 {
     Q_ASSERT(type->isComposite()); // we're dealing with composite types here
     for (; type; type = type->parentScope()) {
-        if (isExplicitComponent(type) || isImplicitComponent(type))
+        if (isExplicitComponent(type) || isImplicitComponent(type)) {
             return true;
+        }
     }
     return false;
 }
@@ -102,7 +103,10 @@ void QmltcVisitor::findCppIncludes()
 
         // look in type's base type
         auto base = type->baseType();
-        Q_ASSERT(base || !type->isComposite());
+        if (!base && type->isComposite())
+            // in this case, qqmljsimportvisitor would have already print an error message
+            // about the missing type, so just return silently without crashing
+            return;
         if (!base || visitType(base))
             return;
         addCppInclude(base);
@@ -155,9 +159,9 @@ void QmltcVisitor::findCppIncludes()
             for (const QQmlJSMetaMethod &m : methods) {
                 findInType(m.returnType());
 
-                const auto parameters = m.parameterTypes();
+                const auto parameters = m.parameters();
                 for (const auto &param : parameters)
-                    findInType(param);
+                    findInType(param.type());
             }
         }
 
@@ -175,7 +179,9 @@ static void addCleanQmlTypeName(QStringList *names, const QQmlJSScope::ConstPtr 
     Q_ASSERT(!scope->baseTypeName().isEmpty());
     // the scope is guaranteed to be a new QML type, so any prefixes (separated
     // by dots) should be import namespaces
-    names->append(scope->baseTypeName().replace(u'.', u'_'));
+    const std::optional<QString> &inlineComponentName = scope->inlineComponentName();
+    QString name = inlineComponentName ? *inlineComponentName : scope->baseTypeName();
+    names->append(name.replace(u'.', u'_'));
 }
 
 bool QmltcVisitor::visit(QQmlJS::AST::UiObjectDefinition *object)
@@ -185,7 +191,7 @@ bool QmltcVisitor::visit(QQmlJS::AST::UiObjectDefinition *object)
     if (!QQmlJSImportVisitor::visit(object))
         return false;
 
-    if (processingRoot) {
+    if (processingRoot || m_currentScope->isInlineComponent()) {
         Q_ASSERT(rootScopeIsValid());
         setRootFilePath();
     }
@@ -194,11 +200,16 @@ bool QmltcVisitor::visit(QQmlJS::AST::UiObjectDefinition *object)
     if (m_currentScope->scopeType() != QQmlJSScope::QMLScope)
         return true;
 
+    if (m_currentScope->isInlineComponent()) {
+        m_inlineComponentNames.append(m_currentRootName);
+        m_inlineComponents[m_currentRootName] = m_currentScope;
+    }
+
     if (m_currentScope != m_exportedRootScope) // not document root
         addCleanQmlTypeName(&m_qmlTypeNames, m_currentScope);
     // give C++-relevant internal names to QMLScopes, we can use them later in compiler
     m_currentScope->setInternalName(uniqueNameFromPieces(m_qmlTypeNames, m_qmlTypeNameCounts));
-    m_qmlTypesWithQmlBases.append(m_currentScope);
+    m_qmlTypesWithQmlBases[m_currentRootName].append(m_currentScope);
 
     return true;
 }
@@ -220,7 +231,7 @@ bool QmltcVisitor::visit(QQmlJS::AST::UiObjectBinding *uiob)
     // give C++-relevant internal names to QMLScopes, we can use them later in compiler
     m_currentScope->setInternalName(uniqueNameFromPieces(m_qmlTypeNames, m_qmlTypeNameCounts));
 
-    m_qmlTypesWithQmlBases.append(m_currentScope);
+    m_qmlTypesWithQmlBases[m_currentRootName].append(m_currentScope);
     return true;
 }
 
@@ -267,12 +278,12 @@ bool QmltcVisitor::visit(QQmlJS::AST::UiPublicMember *publicMember)
                         methods.isEmpty() ? u"no signal"_s : u"too many signals"_s;
                 m_logger->log(
                         u"internal error: %1 found for property '%2'"_s.arg(errorString, name),
-                        Log_Compiler, publicMember->identifierToken);
+                        qmlCompiler, publicMember->identifierToken);
                 return false;
             } else if (methods[0].methodType() != QQmlJSMetaMethod::Signal) {
                 m_logger->log(u"internal error: method %1 of property %2 must be a signal"_s.arg(
                                       notifyName, name),
-                              Log_Compiler, publicMember->identifierToken);
+                              qmlCompiler, publicMember->identifierToken);
                 return false;
             }
         }
@@ -299,10 +310,6 @@ bool QmltcVisitor::visit(QQmlJS::AST::UiInlineComponent *component)
 {
     if (!QQmlJSImportVisitor::visit(component))
         return false;
-    m_logger->log(u"Inline components are not supported"_s, Log_Compiler,
-                  component->firstSourceLocation());
-    // despite the failure, return true here so that we do not assert in
-    // QQmlJSImportVisitor::endVisit(UiInlineComponent)
     return true;
 }
 
@@ -327,8 +334,9 @@ void QmltcVisitor::endVisit(QQmlJS::AST::UiProgram *program)
 
     findCppIncludes();
 
-    for (const QQmlJSScope::ConstPtr &type : m_pureQmlTypes)
-        checkForNamingCollisionsWithCpp(type);
+    for (const QList<QQmlJSScope::ConstPtr> &qmlTypes : m_pureQmlTypes)
+        for (const QQmlJSScope::ConstPtr &type : qmlTypes)
+            checkForNamingCollisionsWithCpp(type);
 }
 
 QQmlJSScope::ConstPtr fetchType(const QQmlJSMetaPropertyBinding &binding)
@@ -345,10 +353,7 @@ QQmlJSScope::ConstPtr fetchType(const QQmlJSMetaPropertyBinding &binding)
     default:
         return {};
     }
-    // coverity complains about the unreachable return below,
-    // some compilers; some compilers complain without it
-    Q_UNREACHABLE();
-    return {};
+    Q_UNREACHABLE_RETURN({});
 }
 
 template<typename Predicate>
@@ -422,6 +427,11 @@ void QmltcVisitor::postVisitResolve(
         const QHash<QQmlJSScope::ConstPtr, QList<QQmlJSMetaPropertyBinding>> &qmlIrOrderedBindings)
 {
 
+    // add the document root (that is not an inline component), as we usually
+    // want to iterate on all inline components, followed by the document root
+    m_inlineComponentNames.append(RootDocumentNameType());
+    m_inlineComponents[RootDocumentNameType()] = m_exportedRootScope;
+
     // match scopes to indices of QmlIR::Object from QmlIR::Document
     qsizetype count = 0;
     const auto setIndex = [&](const QQmlJSScope::Ptr &current) {
@@ -450,7 +460,10 @@ void QmltcVisitor::postVisitResolve(
         }
         return false;
     };
-    iterateBindings(m_exportedRootScope, qmlIrOrderedBindings, findDeferred);
+    for (const auto &inlineComponentName : m_inlineComponentNames) {
+        iterateBindings(m_inlineComponents[inlineComponentName], qmlIrOrderedBindings,
+                        findDeferred);
+    }
 
     const auto isOrUnderDeferred = [&deferredTypes](QQmlJSScope::ConstPtr type) {
         for (; type; type = type->parentScope()) {
@@ -461,7 +474,6 @@ void QmltcVisitor::postVisitResolve(
     };
 
     // find all "pure" QML types
-    m_pureQmlTypes.reserve(m_qmlTypes.size());
     QList<QQmlJSScope::ConstPtr> explicitComponents;
     for (qsizetype i = 0; i < m_qmlTypes.size(); ++i) {
         const QQmlJSScope::ConstPtr &type = m_qmlTypes.at(i);
@@ -479,15 +491,28 @@ void QmltcVisitor::postVisitResolve(
             }
         }
 
-        m_creationIndices[type] = m_pureQmlTypes.size();
-        m_pureQmlTypes.append(type);
+        const InlineComponentOrDocumentRootName inlineComponent =
+                type->enclosingInlineComponentName();
+        QList<QQmlJSScope::ConstPtr> &pureQmlTypes = m_pureQmlTypes[inlineComponent];
+        m_creationIndices[type] = pureQmlTypes.size();
+        pureQmlTypes.append(type);
+    }
+
+    // update the typeCounts
+    for (const auto &inlineComponent : m_inlineComponentNames) {
+        m_inlineComponentTypeCount[inlineComponent] = m_pureQmlTypes[inlineComponent].size();
     }
 
     // add explicit components to the object creation indices
     {
-        qsizetype index = 0;
-        for (const QQmlJSScope::ConstPtr &c : std::as_const(explicitComponents))
-            m_creationIndices[c] = m_pureQmlTypes.size() + index++;
+        QHash<InlineComponentOrDocumentRootName, qsizetype> index;
+        for (const QQmlJSScope::ConstPtr &c : std::as_const(explicitComponents)) {
+            const InlineComponentOrDocumentRootName inlineComponent =
+                    c->enclosingInlineComponentName();
+            m_creationIndices[c] =
+                    m_pureQmlTypes[inlineComponent].size() + index[inlineComponent]++;
+            m_inlineComponentTypeCount[inlineComponent]++;
+        }
     }
 
     // m_qmlTypesWithQmlBases should contain the types to be compiled.
@@ -500,20 +525,24 @@ void QmltcVisitor::postVisitResolve(
     // only known after visitation is over!
 
     // filter step:
-    QList<QQmlJSScope::ConstPtr> filteredQmlTypesWithQmlBases;
-    filteredQmlTypesWithQmlBases.reserve(m_qmlTypesWithQmlBases.size());
-    std::copy_if(m_qmlTypesWithQmlBases.cbegin(), m_qmlTypesWithQmlBases.cend(),
-                 std::back_inserter(filteredQmlTypesWithQmlBases),
-                 [&](const QQmlJSScope::ConstPtr &type) {
-                     auto base = type->baseType();
-                     return base && base->isComposite() && !isOrUnderComponent(type)
-                             && !isOrUnderDeferred(type);
-                 });
-    qSwap(m_qmlTypesWithQmlBases, filteredQmlTypesWithQmlBases);
+    for (const auto &inlineComponent : m_inlineComponentNames) {
+        QList<QQmlJSScope::ConstPtr> filteredQmlTypesWithQmlBases;
+        QList<QQmlJSScope::ConstPtr> &unfilteredQmlTypesWithQmlBases =
+                m_qmlTypesWithQmlBases[inlineComponent];
+        filteredQmlTypesWithQmlBases.reserve(unfilteredQmlTypesWithQmlBases.size());
+        std::copy_if(unfilteredQmlTypesWithQmlBases.cbegin(), unfilteredQmlTypesWithQmlBases.cend(),
+                     std::back_inserter(filteredQmlTypesWithQmlBases),
+                     [&](const QQmlJSScope::ConstPtr &type) {
+                         auto base = type->baseType();
+                         return base && base->isComposite() && !isOrUnderComponent(type)
+                                 && !isOrUnderDeferred(type);
+                     });
+        qSwap(unfilteredQmlTypesWithQmlBases, filteredQmlTypesWithQmlBases);
+    }
 
     // count QmlIR::Objects in the document - the amount is used to calculate
     // object indices of implicit components
-    int qmlScopeCount = 0;
+    QHash<InlineComponentOrDocumentRootName, qsizetype> qmlScopeCount;
     const auto countQmlScopes = [&](const QQmlJSScope::ConstPtr &scope) {
         if (scope->isArrayScope()) // special kind of QQmlJSScope::QMLScope
             return;
@@ -521,7 +550,7 @@ void QmltcVisitor::postVisitResolve(
         case QQmlJSScope::QMLScope:
         case QQmlJSScope::GroupedPropertyScope:
         case QQmlJSScope::AttachedPropertyScope: {
-            ++qmlScopeCount;
+            ++qmlScopeCount[scope->enclosingInlineComponentName()];
             break;
         }
         default:
@@ -531,10 +560,9 @@ void QmltcVisitor::postVisitResolve(
     };
     // order doesn't matter (so re-use QQmlJSUtils)
     QQmlJSUtils::traverseFollowingQmlIrObjectStructure(m_exportedRootScope, countQmlScopes);
-    Q_ASSERT(qmlScopeCount >= int(m_qmlTypes.size()));
 
     // figure synthetic indices of QQmlComponent-wrapped types
-    int syntheticCreationIndex = 0;
+    int syntheticCreationIndex;
     const auto addSyntheticIndex = [&](const QQmlJSScope::ConstPtr &type) {
         // explicit component
         if (isExplicitComponent(type)) {
@@ -543,30 +571,40 @@ void QmltcVisitor::postVisitResolve(
         }
         // implicit component
         if (isImplicitComponent(type)) {
-            const int index = int(qmlScopeCount) + syntheticCreationIndex++;
+            const int index =
+                    qmlScopeCount[type->enclosingInlineComponentName()] + syntheticCreationIndex++;
             m_syntheticTypeIndices[type] = index;
             return true;
         }
         return false;
     };
-    iterateTypes(m_exportedRootScope, qmlIrOrderedBindings, addSyntheticIndex);
+
+    for (const auto &inlineComponentName : m_inlineComponentNames) {
+        syntheticCreationIndex = 0; // reset for each inline component
+        iterateTypes(m_inlineComponents[inlineComponentName], qmlIrOrderedBindings,
+                     addSyntheticIndex);
+    }
 
     // figure runtime object ids for non-component wrapped types
-    int currentId = 0;
+    int currentId;
     const auto setRuntimeId = [&](const QQmlJSScope::ConstPtr &type) {
         // any type wrapped in an implicit component shouldn't be processed
         // here. even if it has id, it doesn't need to be set by qmltc
-        if (type->isComponentRootElement())
+        if (type->isComponentRootElement()) {
             return true;
+        }
 
-        if (m_typesWithId.contains(type))
+        if (m_typesWithId.contains(type)) {
             m_typesWithId[type] = currentId++;
+        }
 
-        // otherwise we need to `return true` here
-        Q_ASSERT(!type->isInlineComponent());
         return false;
     };
-    iterateTypes(m_exportedRootScope, qmlIrOrderedBindings, setRuntimeId);
+
+    for (const auto &inlineComponentName : m_inlineComponentNames) {
+        currentId = 0; // reset for each inline component
+        iterateTypes(m_inlineComponents[inlineComponentName], qmlIrOrderedBindings, setRuntimeId);
+    }
 }
 
 static void setAliasData(QQmlJSMetaProperty *alias, const QQmlJSUtils::ResolvedAlias &origin)
@@ -579,8 +617,12 @@ static void setAliasData(QQmlJSMetaProperty *alias, const QQmlJSUtils::ResolvedA
         return;
     if (origin.property.isWritable() && alias->write().isEmpty())
         alias->setWrite(compiledData.write);
-    if (!origin.property.notify().isEmpty() && alias->notify().isEmpty())
+
+    // the engine always compiles a notify for properties/aliases defined in qml code
+    // Yes, this generated notify will never be emitted.
+    if (alias->notify().isEmpty())
         alias->setNotify(compiledData.notify);
+
     if (!origin.property.bindable().isEmpty() && alias->bindable().isEmpty())
         alias->setBindable(compiledData.bindable);
 }
@@ -602,7 +644,7 @@ void QmltcVisitor::setupAliases()
                                                     QQmlJSUtils::AliasResolutionVisitor {});
             if (result.kind == QQmlJSUtils::AliasTarget_Invalid) {
                 m_logger->log(QStringLiteral("Cannot resolve alias \"%1\"").arg(p.propertyName()),
-                              Log_Alias, current->sourceLocation());
+                              qmlUnresolvedAlias, current->sourceLocation());
                 continue;
             }
             setAliasData(&p, result);
@@ -724,7 +766,7 @@ void QmltcVisitor::checkForNamingCollisionsWithCpp(const QQmlJSScope::ConstPtr &
         if (!isReserved(name))
             return;
         m_logger->log(errorPrefix + u" '" + name + u"' is a reserved C++ word, consider renaming",
-                      Log_Compiler, type->sourceLocation());
+                      qmlCompiler, type->sourceLocation());
     };
 
     const auto enums = type->ownEnumerations();
@@ -757,9 +799,12 @@ void QmltcVisitor::checkForNamingCollisionsWithCpp(const QQmlJSScope::ConstPtr &
     // this information in QQmlJSMetaPropertyBinding currently
 }
 
+/*! \internal
+ *  Sets the file paths for the document and the inline components roots.
+ */
 void QmltcVisitor::setRootFilePath()
 {
-    const QString filePath = m_exportedRootScope->filePath();
+    const QString filePath = m_currentScope->filePath();
     if (filePath.endsWith(u".h")) // assume the correct path is set
         return;
     Q_ASSERT(filePath.endsWith(u".qml"_s));
@@ -777,35 +822,20 @@ void QmltcVisitor::setRootFilePath()
         return;
     }
     // NB: get the file name to avoid prefixes
-    m_exportedRootScope->setFilePath(QFileInfo(*firstHeader).fileName());
+    m_currentScope->setFilePath(QFileInfo(*firstHeader).fileName());
 }
 
-/*! \internal
-
-    Returns a source directory path for a corresponding \a path which is either
-    a source directory path (rarely - when processing currently-compiled file)
-    or a build directory path (mostly - when importing a module/file).
-*/
 QString QmltcVisitor::sourceDirectoryPath(const QString &path)
 {
-    const QStringList resourcePaths = m_importer->resourceFileMapper()->resourcePaths(
-            QQmlJSResourceFileMapper::localFileFilter(path));
-    // path could be pointing to a source directory already
-    const QString uniquePrefix = u"/qt_qml_module_dir_mapping/"_s;
-    if (resourcePaths.size() != 1 || !resourcePaths[0].startsWith(uniquePrefix)) {
-        // found nothing or path is a source directory path already. either way
-        // return the input here and let the caller take care of it
-        const QString matchedPaths =
-                resourcePaths.isEmpty() ? u"<none>"_s : resourcePaths.join(u", ");
-        qCDebug(lcQmltcCompiler,
-                "Path %s is not a build directory path. Resource paths that matched:\n%s",
-                path.toUtf8().constData(), matchedPaths.toUtf8().constData());
-        return path;
-    }
-    QString sourceDirPath = resourcePaths[0];
-    sourceDirPath.remove(0, uniquePrefix.size());
-    Q_ASSERT(QFileInfo(sourceDirPath).exists());
-    return sourceDirPath;
+    auto result = QQmlJSUtils::sourceDirectoryPath(m_importer, path);
+    if (const QString *srcDirPath = std::get_if<QString>(&result))
+        return *srcDirPath;
+
+    const QQmlJS::DiagnosticMessage *error = std::get_if<QQmlJS::DiagnosticMessage>(&result);
+    Q_ASSERT(error);
+    qCDebug(lcQmltcCompiler, "%s", error->message.toUtf8().constData());
+    // return input as a fallback
+    return path;
 }
 
 QT_END_NAMESPACE

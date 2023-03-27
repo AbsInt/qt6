@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Generated from client.pro.
 
 add_subdirectory(shared)
@@ -14,6 +17,7 @@ if (NOT WEBOS)
     add_subdirectory(output)
     add_subdirectory(primaryselectionv1)
     add_subdirectory(seatv4)
+    add_subdirectory(seatv7)
     add_subdirectory(seat)
     add_subdirectory(surface)
     add_subdirectory(tabletv2)
@@ -21,8 +25,10 @@ if (NOT WEBOS)
     add_subdirectory(xdgdecorationv1)
     add_subdirectory(xdgoutput)
     add_subdirectory(xdgshell)
+    add_subdirectory(scaling)
 endif()
 add_subdirectory(multithreaded)
+
 if(QT_FEATURE_im)
     add_subdirectory(inputcontext)
 endif()

@@ -57,7 +57,7 @@ public:
         const void *m_data;
     };
 
-    struct Q_QUICK_EXPORT GraphicsPipelineState {
+    struct GraphicsPipelineState {
         enum BlendFactor {
             Zero,
             One,
@@ -106,6 +106,9 @@ public:
         QColor blendConstant;
         CullMode cullMode;
         PolygonMode polygonMode;
+        bool separateBlendFactors;
+        BlendFactor srcAlpha;
+        BlendFactor dstAlpha;
         // This struct is extensible while keeping BC since apps only ever get
         // a ptr to the struct, it is not created by them.
     };

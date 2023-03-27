@@ -1818,8 +1818,7 @@ public:
 
     int c()
     {
-        Q_UNREACHABLE();
-        return 1111;
+        Q_UNREACHABLE_RETURN(1111);
     }
 };
 
@@ -2213,22 +2212,213 @@ private:
 class BindableOnly : public QObject
 {
     Q_OBJECT
-    Q_PROPERTY(QByteArray data READ data WRITE setData BINDABLE dataBindable FINAL)
+    Q_PROPERTY(int score BINDABLE scoreBindable READ default WRITE default FINAL)
+    Q_PROPERTY(QByteArray data READ default WRITE default BINDABLE dataBindable FINAL)
     QML_ELEMENT
 public:
     BindableOnly(QObject *parent = nullptr)
         : QObject(parent)
+        , m_score(4)
     {}
-
+    QBindable<int> scoreBindable() { return QBindable<int>(&m_score); }
     QBindable<QByteArray> dataBindable() { return QBindable<QByteArray>(&m_data); }
 
-    QByteArray data() const { return m_data.value(); }
-    void setData(const QByteArray &newData) { m_data.setValue(newData); }
-
 private:
+    QProperty<int> m_score;
     QProperty<QByteArray> m_data;
 };
 
 void registerTypes();
+
+class AttachMe : public QObject
+{
+    Q_OBJECT
+    Q_PROPERTY(bool abc READ abc WRITE setAbc NOTIFY abcChanged)
+    QML_ANONYMOUS
+
+    bool m_abc;
+signals:
+    void abcChanged();
+
+public:
+    AttachMe(QObject *parent) : QObject(parent) { }
+    bool abc() const { return m_abc; }
+    void setAbc(bool abc) { m_abc = abc; }
+};
+
+class AnotherAttachMe : public QObject
+{
+    Q_OBJECT
+    Q_PROPERTY(QString anotherAbc READ anotherAbc WRITE setAnotherAbc NOTIFY anotherAbcChanged)
+    QML_ANONYMOUS
+
+    QString m_anotherAbc;
+signals:
+    void anotherAbcChanged();
+
+public:
+    AnotherAttachMe(QObject *parent) : QObject(parent) { }
+    QString anotherAbc() const { return m_anotherAbc; }
+    void setAnotherAbc(const QString &abc) { m_anotherAbc = abc; }
+};
+
+class OriginalQmlAttached : public QObject
+{
+    Q_OBJECT
+    QML_ATTACHED(AttachMe)
+    QML_ELEMENT
+
+public:
+    static AttachMe *qmlAttachedProperties(QObject *object) { return new AttachMe(object); }
+};
+
+class LeakingQmlAttached : public OriginalQmlAttached
+{
+    Q_OBJECT
+    QML_ELEMENT
+};
+
+class DerivedQmlAttached : public OriginalQmlAttached
+{
+    Q_OBJECT
+    QML_ELEMENT
+    QML_ATTACHED(AnotherAttachMe)
+
+public:
+    static AnotherAttachMe *qmlAttachedProperties(QObject *object)
+    {
+        return new AnotherAttachMe(object);
+    }
+};
+
+class OriginalSingleton : public QObject
+{
+    Q_OBJECT
+    QML_ELEMENT
+    QML_SINGLETON
+
+private:
+    Q_PROPERTY(QString abc READ abc WRITE setAbc NOTIFY abcChanged)
+
+    QString m_abc;
+signals:
+    void abcChanged(const QString &);
+
+public:
+    Q_INVOKABLE int mm() { return 5; }
+    QString abc() const { return m_abc; }
+    void setAbc(const QString &abc)
+    {
+        m_abc = abc;
+        emit abcChanged(abc);
+    }
+};
+
+class LeakingSingleton : public OriginalSingleton
+{
+    Q_OBJECT
+    QML_ELEMENT
+};
+
+class DerivedSingleton : public OriginalSingleton
+{
+    Q_OBJECT
+    QML_ELEMENT
+    QML_SINGLETON
+    Q_PROPERTY(QString anotherAbc READ anotherAbc WRITE setAnotherAbc NOTIFY anotherAbcChanged)
+
+    QString m_anotherAbc;
+signals:
+    void anotherAbcChanged(const QString &);
+
+public:
+    QString anotherAbc() const { return m_anotherAbc; }
+    void setAnotherAbc(const QString &abc)
+    {
+        m_anotherAbc = abc;
+        emit anotherAbcChanged(abc);
+    }
+};
+
+class Foreigner : public QObject
+{
+    Q_OBJECT
+
+private:
+    Q_PROPERTY(QString abc READ abc WRITE setAbc NOTIFY abcChanged)
+
+    QString m_abc;
+signals:
+    void abcChanged(const QString &);
+
+public:
+    QString abc() const { return m_abc; }
+    void setAbc(const QString &abc)
+    {
+        m_abc = abc;
+        emit abcChanged(abc);
+    }
+};
+
+class ForeignerForeign
+{
+    Q_GADGET
+    QML_ELEMENT
+    QML_FOREIGN(Foreigner)
+};
+
+class LeakingForeignerForeign : public QObject, public ForeignerForeign
+{
+    Q_OBJECT
+    QML_ELEMENT
+    Q_PROPERTY(QString anotherAbc READ anotherAbc WRITE setAnotherAbc NOTIFY anotherAbcChanged)
+
+    QString m_anotherAbc;
+signals:
+    void anotherAbcChanged(const QString &);
+
+public:
+    QString anotherAbc() const { return m_anotherAbc; }
+    void setAnotherAbc(const QString &abc)
+    {
+        m_anotherAbc = abc;
+        emit anotherAbcChanged(abc);
+    }
+};
+
+struct ValueTypeWithLength
+{
+    Q_GADGET
+    QML_VALUE_TYPE(withLength)
+    QML_CONSTRUCTIBLE_VALUE
+
+    Q_PROPERTY(int length READ length CONSTANT)
+
+public:
+    ValueTypeWithLength() = default;
+    Q_INVOKABLE ValueTypeWithLength(int length) : m_length(length) {}
+    Q_INVOKABLE QString toString() const { return QStringLiteral("no"); }
+
+    int length() const { return m_length; }
+
+private:
+    int m_length = 19;
+};
+
+class GetterObject : public QObject {
+    Q_OBJECT
+    QML_ELEMENT
+    QML_SINGLETON
+public:
+    explicit GetterObject(QObject *parent = nullptr) : QObject{parent} {}
+
+    // always returns a 0 as uint64_t
+    Q_INVOKABLE uint64_t getFalse() const { return 0; }
+    Q_INVOKABLE uint64_t getTrue() const { return 1; }
+
+    Q_INVOKABLE quint64 getQFalse() const { return 0; }
+    Q_INVOKABLE quint64 getQTrue() const { return 1; }
+};
+
 
 #endif // TESTTYPES_H

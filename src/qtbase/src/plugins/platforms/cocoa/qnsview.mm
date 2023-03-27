@@ -21,6 +21,7 @@
 #include <QtCore/QPointer>
 #include <QtCore/QSet>
 #include <QtCore/qsysinfo.h>
+#include <QtCore/private/qcore_mac_p.h>
 #include <QtGui/QAccessible>
 #include <QtGui/QImage>
 #include <private/qguiapplication_p.h>
@@ -33,6 +34,7 @@
 #include "qcocoaglcontext.h"
 #endif
 #include "qcocoaintegration.h"
+#include <QtGui/private/qmacmimeregistry_p.h>
 
 // Private interface
 @interface QNSView ()
@@ -81,6 +83,7 @@ QT_NAMESPACE_ALIAS_OBJC_CLASS(QNSViewMouseMoveHelper);
 @end
 
 @interface QNSView (ComplexText) <NSTextInputClient>
+@property (readonly) QObject* focusObject;
 @end
 
 @implementation QNSView {
@@ -107,6 +110,7 @@ QT_NAMESPACE_ALIAS_OBJC_CLASS(QNSViewMouseMoveHelper);
     // Text
     QString m_composingText;
     QPointer<QObject> m_composingFocusObject;
+    NSDraggingContext m_lastSeenContext;
 }
 
 - (instancetype)initWithCocoaWindow:(QCocoaWindow *)platformWindow
@@ -128,6 +132,7 @@ QT_NAMESPACE_ALIAS_OBJC_CLASS(QNSViewMouseMoveHelper);
         m_lastKeyDead = false;
         m_sendKeyEvent = false;
         m_currentlyInterpretedKeyEvent = nil;
+        m_lastSeenContext = NSDraggingContextWithinApplication;
     }
     return self;
 }

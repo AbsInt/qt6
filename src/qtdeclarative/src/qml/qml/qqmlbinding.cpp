@@ -3,9 +3,7 @@
 
 #include "qqmlbinding_p.h"
 
-#include "qqml.h"
 #include "qqmlcontext.h"
-#include "qqmlinfo.h"
 #include "qqmldata_p.h"
 
 #include <private/qqmldebugserviceinterfaces_p.h>
@@ -187,91 +185,8 @@ QV4::ReturnedValue QQmlBinding::evaluate(bool *isUndefined)
     return QQmlJavaScriptExpression::evaluate(jsCall.callData(scope), isUndefined);
 }
 
-
-// QQmlBindingBinding is for target properties which are of type "binding" (instead of, say, int or
-// double). The reason for being is that GenericBinding::fastWrite needs a compile-time constant
-// expression for the switch for the compiler to generate the optimal code, but
-// qMetaTypeId<QQmlBinding *>() needs to be used for the ID. So QQmlBinding::newBinding uses that
-// to instantiate this class.
-class QQmlBindingBinding: public QQmlBinding
-{
-protected:
-    void doUpdate(const DeleteWatcher &,
-                  QQmlPropertyData::WriteFlags flags, QV4::Scope &) override final
-    {
-        Q_ASSERT(!m_targetIndex.hasValueTypeIndex());
-        const QQmlPropertyData *pd = nullptr;
-        getPropertyData(&pd, nullptr);
-        QQmlBinding *thisPtr = this;
-        pd->writeProperty(m_target.data(), &thisPtr, flags);
-    }
-};
-
-// For any target that's not a binding, we have a common doUpdate. However, depending on the type
-// of the target property, there is a specialized write method.
-class QQmlNonbindingBinding: public QQmlBinding
-{
-protected:
-    void doUpdate(const DeleteWatcher &watcher,
-                  QQmlPropertyData::WriteFlags flags, QV4::Scope &scope) override
-    {
-        auto ep = QQmlEnginePrivate::get(scope.engine);
-        ep->referenceScarceResources();
-
-        bool error = false;
-        auto canWrite = [&]() { return !watcher.wasDeleted() && isAddedToObject() && !hasError(); };
-        const QV4::Function *v4Function = function();
-        if (v4Function && v4Function->aotFunction && !hasBoundFunction()) {
-            const auto returnType = v4Function->aotFunction->returnType;
-            if (returnType == QMetaType::fromType<QVariant>()) {
-                // It expects uninitialized memory
-                Q_ALLOCA_VAR(QVariant, result, sizeof(QVariant));
-                const bool isUndefined = !evaluate(result, returnType);
-                if (canWrite())
-                    error = !write(result->data(), result->metaType(), isUndefined, flags);
-                result->~QVariant();
-            } else {
-                const auto size = returnType.sizeOf();
-                if (Q_LIKELY(size > 0)) {
-                    Q_ALLOCA_VAR(void, result, size);
-                    const bool isUndefined = !evaluate(result, returnType);
-                    if (canWrite())
-                        error = !write(result, returnType, isUndefined, flags);
-                    returnType.destruct(result);
-                } else if (canWrite()) {
-                    error = !write(QV4::Encode::undefined(), true, flags);
-                }
-            }
-        } else {
-            bool isUndefined = false;
-            QV4::ScopedValue result(scope, evaluate(&isUndefined));
-            if (canWrite())
-                error = !write(result, isUndefined, flags);
-        }
-
-        if (!watcher.wasDeleted()) {
-
-            if (error) {
-                delayedError()->setErrorLocation(sourceLocation());
-                delayedError()->setErrorObject(m_target.data());
-            }
-
-            if (hasError()) {
-                if (!delayedError()->addError(ep)) ep->warning(this->error(engine()));
-            } else {
-                clearError();
-            }
-        }
-
-        ep->dereferenceScarceResources();
-    }
-
-    virtual bool write(const QV4::Value &result, bool isUndefined, QQmlPropertyData::WriteFlags flags) = 0;
-    virtual bool write(void *result, QMetaType type, bool isUndefined, QQmlPropertyData::WriteFlags flags) = 0;
-};
-
 template<int StaticPropType>
-class GenericBinding: public QQmlNonbindingBinding
+class GenericBinding: public QQmlBinding
 {
 protected:
     // Returns true if successful, false if an error description was set on expression
@@ -360,20 +275,14 @@ protected:
 
 class QQmlTranslationBinding : public GenericBinding<QMetaType::QString>, public QPropertyObserver {
 public:
-    QQmlTranslationBinding(const QQmlRefPointer<QV4::ExecutableCompilationUnit> &compilationUnit, const QV4::CompiledData::Binding *binding)
+    QQmlTranslationBinding(const QQmlRefPointer<QV4::ExecutableCompilationUnit> &compilationUnit)
         : QPropertyObserver(&QQmlTranslationBinding::onLanguageChange)
     {
         setCompilationUnit(compilationUnit);
-        m_binding = binding;
         setSource(QQmlEnginePrivate::get(compilationUnit->engine)->translationLanguage);
     }
 
-    QQmlSourceLocation sourceLocation() const override final
-    {
-        return QQmlSourceLocation(
-                m_compilationUnit->fileName(), m_binding->valueLocation.line(),
-                m_binding->valueLocation.column());
-    }
+    virtual QString bindingValue() const = 0;
 
     static void onLanguageChange(QPropertyObserver *observer, QUntypedPropertyData *)
     { static_cast<QQmlTranslationBinding *>(observer)->update(); }
@@ -387,7 +296,7 @@ public:
         if (!isAddedToObject() || hasError())
             return;
 
-        const QString result = m_compilationUnit->bindingValueAsString(m_binding);
+        const QString result = this->bindingValue();
 
         Q_ASSERT(targetObject());
 
@@ -404,9 +313,56 @@ public:
     }
 
     bool hasDependencies() const override final { return true; }
+};
 
-private:
+class QQmlTranslationBindingFromBinding : public QQmlTranslationBinding
+{
     const QV4::CompiledData::Binding *m_binding;
+
+public:
+    QQmlTranslationBindingFromBinding(
+            const QQmlRefPointer<QV4::ExecutableCompilationUnit> &compilationUnit,
+            const QV4::CompiledData::Binding *binding)
+        : QQmlTranslationBinding(compilationUnit), m_binding(binding)
+    {
+    }
+
+    QString bindingValue() const override
+    {
+        return this->m_compilationUnit->bindingValueAsString(m_binding);
+    }
+
+    QQmlSourceLocation sourceLocation() const override final
+    {
+        return QQmlSourceLocation(m_compilationUnit->fileName(), m_binding->valueLocation.line(),
+                                  m_binding->valueLocation.column());
+    }
+};
+
+class QQmlTranslationBindingFromTranslationInfo : public QQmlTranslationBinding
+{
+    QQmlTranslation m_translationData;
+
+    quint16 m_line;
+    quint16 m_column;
+
+public:
+    QQmlTranslationBindingFromTranslationInfo(
+            const QQmlRefPointer<QV4::ExecutableCompilationUnit> &compilationUnit,
+            const QQmlTranslation &translationData, quint16 line, quint16 column)
+        : QQmlTranslationBinding(compilationUnit),
+          m_translationData(translationData),
+          m_line(line),
+          m_column(column)
+    {
+    }
+
+    virtual QString bindingValue() const override { return m_translationData.translate(); }
+
+    QQmlSourceLocation sourceLocation() const override final
+    {
+        return QQmlSourceLocation(m_compilationUnit->fileName(), m_line, m_column);
+    }
 };
 
 QQmlBinding *QQmlBinding::createTranslationBinding(
@@ -414,7 +370,7 @@ QQmlBinding *QQmlBinding::createTranslationBinding(
         const QV4::CompiledData::Binding *binding, QObject *obj,
         const QQmlRefPointer<QQmlContextData> &ctxt)
 {
-    QQmlTranslationBinding *b = new QQmlTranslationBinding(unit, binding);
+    QQmlTranslationBinding *b = new QQmlTranslationBindingFromBinding(unit, binding);
 
     b->setNotifyOnValueChanged(true);
     b->QQmlJavaScriptExpression::setContext(ctxt);
@@ -422,7 +378,34 @@ QQmlBinding *QQmlBinding::createTranslationBinding(
 #if QT_CONFIG(translation) && QT_CONFIG(qml_debug)
     if (QQmlDebugTranslationService *service
                  = QQmlDebugConnector::service<QQmlDebugTranslationService>()) {
-        service->foundTranslationBinding({unit, binding, b->scopeObject(), ctxt});
+        service->foundTranslationBinding(
+                TranslationBindingInformation::create(unit, binding, b->scopeObject(), ctxt));
+    }
+#endif
+    return b;
+}
+
+QQmlBinding *QQmlBinding::createTranslationBinding(
+        const QQmlRefPointer<QV4::ExecutableCompilationUnit> &unit,
+        const QQmlRefPointer<QQmlContextData> &ctxt, const QString &propertyName,
+        const QQmlTranslation &translationData, const QQmlSourceLocation &location, QObject *obj)
+{
+    QQmlTranslationBinding *b = new QQmlTranslationBindingFromTranslationInfo(
+            unit, translationData, location.column, location.line);
+
+    b->setNotifyOnValueChanged(true);
+    b->QQmlJavaScriptExpression::setContext(ctxt);
+    b->setScopeObject(obj);
+
+#if QT_CONFIG(translation) && QT_CONFIG(qml_debug)
+    QString originString;
+    if (QQmlDebugTranslationService *service =
+                QQmlDebugConnector::service<QQmlDebugTranslationService>()) {
+        service->foundTranslationBinding({ unit, b->scopeObject(), ctxt,
+
+                                           propertyName, translationData,
+
+                                           location.line, location.column });
     }
 #endif
     return b;
@@ -483,9 +466,6 @@ Q_NEVER_INLINE bool QQmlBinding::slowWrite(const QQmlPropertyData &core,
                                            const QV4::Value &result,
                                            bool isUndefined, QQmlPropertyData::WriteFlags flags)
 {
-    QQmlEngine *qmlEngine = engine();
-    QV4::ExecutionEngine *v4engine = qmlEngine->handle();
-
     const QMetaType metaType = valueTypeData.isValid() ? valueTypeData.propType() : core.propType();
     const int type = metaType.id();
 
@@ -497,19 +477,19 @@ Q_NEVER_INLINE bool QQmlBinding::slowWrite(const QQmlPropertyData &core,
     if (isUndefined) {
     } else if (core.isQList()) {
         if (core.propType().flags() & QMetaType::IsQmlList)
-            value = v4engine->toVariant(result, QMetaType::fromType<QList<QObject *> >());
+            value = QV4::ExecutionEngine::toVariant(result, QMetaType::fromType<QList<QObject*>>());
         else
-            value = v4engine->toVariant(result, core.propType());
+            value = QV4::ExecutionEngine::toVariant(result, core.propType());
     } else if (result.isNull() && core.isQObject()) {
         value = QVariant::fromValue((QObject *)nullptr);
     } else if (core.propType() == QMetaType::fromType<QList<QUrl>>()) {
         const QVariant resultVariant
-                = v4engine->toVariant(result, QMetaType::fromType<QList<QUrl>>());
+                = QV4::ExecutionEngine::toVariant(result, QMetaType::fromType<QList<QUrl>>());
         value = QVariant::fromValue(QQmlPropertyPrivate::resolveUrlsOnAssignment()
                                     ? QQmlPropertyPrivate::urlSequence(resultVariant, context())
                                     : QQmlPropertyPrivate::urlSequence(resultVariant));
     } else if (!isVarProperty && metaType != QMetaType::fromType<QJSValue>()) {
-        value = v4engine->toVariant(result, metaType);
+        value = QV4::ExecutionEngine::toVariant(result, metaType);
     }
 
     if (hasError()) {
@@ -526,9 +506,10 @@ Q_NEVER_INLINE bool QQmlBinding::slowWrite(const QQmlPropertyData &core,
         QQmlVMEMetaObject *vmemo = QQmlVMEMetaObject::get(m_target.data());
         Q_ASSERT(vmemo);
         vmemo->setVMEProperty(core.coreIndex(), result);
-    } else if (isUndefined && core.isResettable()) {
-        void *args[] = { nullptr };
-        QMetaObject::metacall(m_target.data(), QMetaObject::ResetProperty, core.coreIndex(), args);
+    } else if (isUndefined
+               && (valueTypeData.isValid() ? valueTypeData.isResettable() : core.isResettable())) {
+        QQmlPropertyPrivate::resetValueProperty(
+                    m_target.data(), core, valueTypeData, context(), flags);
     } else if (isUndefined && type == QMetaType::QVariant) {
         QQmlPropertyPrivate::writeValueProperty(m_target.data(), core, valueTypeData, QVariant(), context(), flags);
     } else if (metaType == QMetaType::fromType<QJSValue>()) {
@@ -611,7 +592,7 @@ QVariant QQmlBinding::evaluate()
 
     ep->dereferenceScarceResources();
 
-    return scope.engine->toVariant(result, QMetaType::fromType<QList<QObject*> >());
+    return QV4::ExecutionEngine::toVariant(result, QMetaType::fromType<QList<QObject*> >());
 }
 
 void QQmlBinding::expressionChanged()
@@ -680,7 +661,60 @@ bool QQmlBinding::hasDependencies() const
     return !activeGuards.isEmpty() || qpropertyChangeTriggers;
 }
 
-class QObjectPointerBinding: public QQmlNonbindingBinding
+void QQmlBinding::doUpdate(const DeleteWatcher &watcher, QQmlPropertyData::WriteFlags flags, QV4::Scope &scope)
+{
+    auto ep = QQmlEnginePrivate::get(scope.engine);
+    ep->referenceScarceResources();
+
+    bool error = false;
+    auto canWrite = [&]() { return !watcher.wasDeleted() && isAddedToObject() && !hasError(); };
+    const QV4::Function *v4Function = function();
+    if (v4Function && v4Function->kind == QV4::Function::AotCompiled && !hasBoundFunction()) {
+        const auto returnType = v4Function->typedFunction->returnType;
+        if (returnType == QMetaType::fromType<QVariant>()) {
+            // It expects uninitialized memory
+            Q_ALLOCA_VAR(QVariant, result, sizeof(QVariant));
+            const bool isUndefined = !evaluate(result, returnType);
+            if (canWrite())
+                error = !write(result->data(), result->metaType(), isUndefined, flags);
+            result->~QVariant();
+        } else {
+            const auto size = returnType.sizeOf();
+            if (Q_LIKELY(size > 0)) {
+                Q_ALLOCA_VAR(void, result, size);
+                const bool isUndefined = !evaluate(result, returnType);
+                if (canWrite())
+                    error = !write(result, returnType, isUndefined, flags);
+                returnType.destruct(result);
+            } else if (canWrite()) {
+                error = !write(QV4::Encode::undefined(), true, flags);
+            }
+        }
+    } else {
+        bool isUndefined = false;
+        QV4::ScopedValue result(scope, evaluate(&isUndefined));
+        if (canWrite())
+            error = !write(result, isUndefined, flags);
+    }
+
+    if (!watcher.wasDeleted()) {
+
+        if (error) {
+            delayedError()->setErrorLocation(sourceLocation());
+            delayedError()->setErrorObject(m_target.data());
+        }
+
+        if (hasError()) {
+            if (!delayedError()->addError(ep)) ep->warning(this->error(engine()));
+        } else {
+            clearError();
+        }
+    }
+
+    ep->dereferenceScarceResources();
+}
+
+class QObjectPointerBinding: public QQmlBinding
 {
     QQmlMetaObject targetMetaObject;
 
@@ -797,9 +831,6 @@ QQmlBinding *QQmlBinding::newBinding(QMetaType propertyType)
 {
     if (propertyType.flags() & QMetaType::PointerToQObject)
         return new QObjectPointerBinding(propertyType);
-
-    if (propertyType == QMetaType::fromType<QQmlBinding *>())
-        return new QQmlBindingBinding;
 
     switch (propertyType.id()) {
     case QMetaType::Bool:

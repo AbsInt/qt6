@@ -51,7 +51,7 @@ private Q_SLOTS:
     void ios() { runTest("iOS"); }
 #endif
     void native_data() { setupTestSuite(); }
-    void native() { runTest(QQuickStyle::name()); }
+    void native() { runTest(); }
 
 private:
     void test();
@@ -123,32 +123,33 @@ void tst_Baseline_Controls::initTestCase()
     // See also qwidgetbaselinetest.cpp
     QPalette palette;
     QFont font;
-    QByteArray appearanceBytes;
+    QByteArray colorSchemeBytes;
     {
-        QDataStream appearanceStream(&appearanceBytes, QIODevice::WriteOnly);
-        appearanceStream << palette << font;
+        QDataStream colorSchemeStream(&colorSchemeBytes, QIODevice::WriteOnly);
+        colorSchemeStream << palette << font;
         const qreal screenDpr = QGuiApplication::primaryScreen()->devicePixelRatio();
         if (screenDpr != 1.0) {
             qWarning() << "DPR is" << screenDpr << "- images will not be compared to 1.0 baseline!";
-            appearanceStream << screenDpr;
+            colorSchemeStream << screenDpr;
         }
     }
-    const quint16 appearanceId = qChecksum(appearanceBytes);
+    const quint16 colorSchemeId = qChecksum(colorSchemeBytes);
 
     const QColor windowColor = palette.window().color();
     const QColor textColor = palette.text().color();
-    const QString appearanceIdString = (windowColor.value() > textColor.value()
+    const QString colorSchemeIdStr = (windowColor.value() > textColor.value()
                                         ? QString("light-%1") : QString("dark-%1"))
-                                        .arg(appearanceId, 0, 16);
-    QBaselineTest::addClientProperty("AppearanceID", appearanceIdString);
+                                        .arg(colorSchemeId, 0, 16);
+    QBaselineTest::addClientProperty("AppearanceID", colorSchemeIdStr);
 
     QByteArray msg;
     if (!QBaselineTest::connectToBaselineServer(&msg))
         QSKIP(msg);
 
     // let users know where they can find the results
-    qDebug() << "PlatformName computed to be:" << platformName;
-    qDebug() << "Appearance ID computed as:" << appearanceIdString;
+    qInfo("PlatformName computed to be  : %s", qPrintable(platformName));
+    qInfo("Color Scheme computed as    : %s", qPrintable(colorSchemeIdStr));
+    qInfo("Native style name is         : %s", qPrintable(QQuickStyle::name()));
 }
 
 void tst_Baseline_Controls::init()
@@ -199,7 +200,10 @@ void tst_Baseline_Controls::runTest(const QString& style)
 
     QImage screenShot;
     QString errorMessage;
-    if (renderAndGrab(qmlFile, QStringList{"-style", style}, &screenShot, &errorMessage)) {
+    QStringList args;
+    if (!style.isEmpty())
+        args.append({"-style", style});
+    if (renderAndGrab(qmlFile, args, &screenShot, &errorMessage)) {
         consecutiveErrors = 0;
     } else {
         if (++consecutiveErrors >= 3)

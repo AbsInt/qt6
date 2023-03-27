@@ -21,6 +21,8 @@
 #include <QtWaylandClient/qtwaylandclientglobal.h>
 #include <QtCore/private/qglobal_p.h>
 
+#include <any>
+
 struct wl_surface;
 
 QT_BEGIN_NAMESPACE
@@ -71,9 +73,16 @@ public:
     virtual void setXdgActivationToken(const QString &token);
     virtual void requestXdgActivationToken(quint32 serial);
 
+    virtual void setAlertState(bool enabled) { Q_UNUSED(enabled); }
+    virtual bool isAlertState() const { return false; }
+
+    virtual QString externWindowHandle() { return QString(); }
+
     inline QWaylandWindow *window() { return m_window; }
     QPlatformWindow *platformWindow();
     struct wl_surface *wlSurface();
+
+    virtual std::any surfaceRole() const { return std::any(); };
 
 protected:
     void resizeFromApplyConfigure(const QSize &sizeWithMargins, const QPoint &offset = {0, 0});

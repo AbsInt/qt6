@@ -16,6 +16,8 @@
 
 QT_BEGIN_NAMESPACE
 
+namespace QV4 { struct ExecutionEngine; }
+
 struct QJSPrimitiveUndefined {};
 struct QJSPrimitiveNull {};
 
@@ -91,7 +93,11 @@ class QJSPrimitiveValue
         static constexpr double op(double lhs, double rhs) { return lhs * rhs; }
         static bool opOverflow(int lhs, int rhs, int *result)
         {
-            return qMulOverflow(lhs, rhs, result);
+            // compare mul_int32 in qv4math_p.h
+            auto hadOverflow = qMulOverflow(lhs, rhs, result);
+            if (((lhs < 0) ^ (rhs < 0)) && (*result == 0))
+                return true; // result must be negative 0, does not fit into int
+            return hadOverflow;
         }
 
         using StringNaNOperators::op;
@@ -118,6 +124,9 @@ public:
     };
 
     constexpr Type type() const { return Type(d.type()); }
+
+    // Prevent casting from Type to int
+    QJSPrimitiveValue(Type) = delete;
 
     Q_IMPLICIT constexpr QJSPrimitiveValue() noexcept = default;
     Q_IMPLICIT constexpr QJSPrimitiveValue(QJSPrimitiveUndefined undefined) noexcept : d(undefined) {}
@@ -227,8 +236,7 @@ public:
         case String: return asString();
         }
 
-        Q_UNREACHABLE();
-        return QString();
+        Q_UNREACHABLE_RETURN(QString());
     }
 
     QVariant toVariant() const
@@ -242,8 +250,7 @@ public:
         case String:    return QVariant(asString());
         }
 
-        Q_UNREACHABLE();
-        return QVariant();
+        Q_UNREACHABLE_RETURN(QVariant());
     }
 
     friend inline QJSPrimitiveValue operator+(const QJSPrimitiveValue &lhs,
@@ -521,6 +528,7 @@ public:
 private:
     friend class QJSManagedValue;
     friend class QJSValue;
+    friend struct QV4::ExecutionEngine;
 
     constexpr bool asBoolean() const { return d.getBool(); }
     constexpr int asInteger() const { return d.getInt(); }
@@ -629,8 +637,7 @@ private:
             break;
         }
 
-        Q_UNREACHABLE();
-        return QJSPrimitiveUndefined();
+        Q_UNREACHABLE_RETURN(QJSPrimitiveUndefined());
     }
 
     constexpr bool isNanOrUndefined() const
@@ -742,8 +749,7 @@ private:
             else if constexpr (std::is_same_v<T, QString>)
                 return getString();
 
-            Q_UNREACHABLE();
-            return T();
+            Q_UNREACHABLE_RETURN(T());
         }
 
     private:

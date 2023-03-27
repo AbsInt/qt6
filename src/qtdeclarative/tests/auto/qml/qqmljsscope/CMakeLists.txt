@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Collect test data
 file(GLOB_RECURSE test_data_glob
     RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}
@@ -15,6 +18,9 @@ qt_internal_add_test(tst_qqmljsscope
 
         qqmljsscope_test_module
         qqmljsscope_test_moduleplugin
+
+        qualified_names_test_module
+        qualified_names_test_moduleplugin
     TESTDATA
         ${test_data}
 )
@@ -28,12 +34,13 @@ endif()
 
 qt_internal_extend_target(tst_qqmljsscope CONDITION ANDROID OR IOS
     DEFINES
-        QT_QMLTEST_DATADIR=\\\":/data\\\"
+        QT_QMLTEST_DATADIR=":/data"
 )
 
 qt_internal_extend_target(tst_qqmljsscope CONDITION NOT ANDROID AND NOT IOS
     DEFINES
-        QT_QMLTEST_DATADIR=\\\"${CMAKE_CURRENT_SOURCE_DIR}/data\\\"
+        QT_QMLTEST_DATADIR="${CMAKE_CURRENT_SOURCE_DIR}/data"
 )
 
 add_subdirectory(QQmlJSScopeTests)
+add_subdirectory(QualifiedNamesTests)

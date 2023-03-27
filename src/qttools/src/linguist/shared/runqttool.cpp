@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "runqttool.h"
+#include "fmt.h"
 
 #include "profileutils.h"
 
@@ -16,10 +17,6 @@
 #include <sys/wait.h>
 #endif
 
-class FMT {
-    Q_DECLARE_TR_FUNCTIONS(Linguist)
-};
-
 static QString qtToolFilePath(const QString &toolName, QLibraryInfo::LibraryPath location)
 {
     QString filePath = QLibraryInfo::path(location) + QLatin1Char('/') + toolName;
@@ -29,7 +26,7 @@ static QString qtToolFilePath(const QString &toolName, QLibraryInfo::LibraryPath
     return QDir::cleanPath(filePath);
 }
 
-static void printErr(const QString &out)
+static void rtPrintErr(const QString &out)
 {
     std::cerr << qUtf8Printable(out);
 }
@@ -89,7 +86,7 @@ std::unique_ptr<QTemporaryFile> createProjectDescription(QStringList args)
 {
     std::unique_ptr<QTemporaryFile> file(new QTemporaryFile(QStringLiteral("XXXXXX.json")));
     if (!file->open()) {
-        printErr(FMT::tr("Cannot create temporary file: %1\n").arg(file->errorString()));
+        rtPrintErr(FMT::tr("Cannot create temporary file: %1\n").arg(file->errorString()));
         exit(1);
     }
     file->close();

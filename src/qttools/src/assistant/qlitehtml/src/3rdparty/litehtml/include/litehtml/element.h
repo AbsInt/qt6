@@ -89,6 +89,8 @@ namespace litehtml
 		int							get_inline_shift_left();
 		int							get_inline_shift_right();
 		void						apply_relative_shift(int parent_width);
+		// returns true for elements inside a table (but outside cells) that don't participate in table rendering
+		bool						is_table_skip() const;
 
 		std::shared_ptr<document>	get_document() const;
 
@@ -136,6 +138,7 @@ namespace litehtml
 		virtual void				refresh_styles();
 		virtual bool				is_white_space() const;
         virtual bool                is_space() const;
+		virtual bool				is_comment() const;
 		virtual bool				is_body() const;
 		virtual bool				is_break() const;
 		virtual int					get_base_line();
@@ -160,7 +163,7 @@ namespace litehtml
 		virtual void				parse_styles(bool is_reparse = false);
 		virtual void				draw(uint_ptr hdc, int x, int y, const position* clip);
 		virtual void				draw_background( uint_ptr hdc, int x, int y, const position* clip );
-		virtual const tchar_t*		get_style_property(const tchar_t* name, bool inherited, const tchar_t* def = nullptr);
+		virtual const tchar_t*		get_style_property(const tchar_t* name, bool inherited, const tchar_t* def = nullptr) const;
 		virtual uint_ptr			get_font(font_metrics* fm = nullptr);
 		virtual int					get_font_size() const;
 		virtual void				get_text(tstring& text);
@@ -196,7 +199,7 @@ namespace litehtml
 		virtual bool				get_predefined_height(int& p_height) const;
 		virtual void				calc_document_size(litehtml::size& sz, int x = 0, int y = 0);
 		virtual void				get_redraw_box(litehtml::position& pos, int x = 0, int y = 0);
-		virtual void				add_style(const litehtml::style& st);
+		virtual void				add_style(const tstring& style, const tstring& baseurl);
 		virtual element::ptr		get_element_by_point(int x, int y, int client_x, int client_y);
 		virtual element::ptr		get_child_by_point(int x, int y, int client_x, int client_y, draw_flag flag, int zindex);
 		virtual const background*	get_background(bool own_only = false);

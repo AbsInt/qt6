@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 if(TARGET Qt::Quick)
     set (quick_sources
         quick/geometrytestutils.cpp
@@ -28,6 +31,7 @@ qt_internal_add_module(QuickTestUtilsPrivate
     PUBLIC_LIBRARIES
         Qt::Core
         Qt::Test
+        Qt::Network
         Qt::Qml
         Qt::QmlPrivate
 )

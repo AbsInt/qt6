@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 #####################################################################
 ## QmlWorkerScript Module:
 #####################################################################
@@ -8,6 +11,8 @@ qt_internal_add_qml_module(QmlWorkerScript
     DESIGNER_SUPPORTED
     PLUGIN_TARGET workerscriptplugin
     CLASS_NAME QtQmlWorkerScriptPlugin
+    DEPENDENCIES
+        QtQml.Base/auto
     SOURCES
         qquickworkerscript.cpp qquickworkerscript_p.h
         qtqmlworkerscriptglobal.h qtqmlworkerscriptglobal_p.h

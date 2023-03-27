@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Generated from wip-cpp-compositor.pro.
 
 #####################################################################
@@ -10,7 +13,7 @@ qt_internal_add_manual_test(wip-cpp-compositor
         compositor.cpp compositor.h
         main.cpp
         window.cpp window.h
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Gui
         Qt::WaylandCompositor
 )

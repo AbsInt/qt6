@@ -4,7 +4,6 @@
 
 import QtQml
 import QtQuick
-import QtQuick.Window as Window
 import QtWayland.Compositor
 import QtWayland.Compositor.XdgShell
 import QtWayland.Compositor.WlShell
@@ -31,7 +30,7 @@ WaylandCompositor {
             surfaceArea.color: "lightsteelblue"
             text: name
             compositor: comp
-            screen: modelData
+            screen: emulated ? Qt.application.screens[0] : modelData
             Component.onCompleted: if (!comp.defaultOutput) comp.defaultOutput = this
             position: Qt.point(virtualX, virtualY)
             windowed: emulated
@@ -54,11 +53,11 @@ WaylandCompositor {
     }
 
     WlShell {
-        onWlShellSurfaceCreated: handleShellSurfaceCreated(shellSurface)
+        onWlShellSurfaceCreated: (shellSurface) => handleShellSurfaceCreated(shellSurface)
     }
 
     XdgShell {
-        onToplevelCreated: handleShellSurfaceCreated(xdgSurface)
+        onToplevelCreated: (toplevel, xdgSurface) => handleShellSurfaceCreated(xdgSurface)
     }
 
     function createShellSurfaceItem(shellSurface, moveItem, output) {

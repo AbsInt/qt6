@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 #####################################################################
 ## QuickParticles Module:
 #####################################################################
@@ -8,7 +11,7 @@ qt_internal_add_qml_module(QuickParticlesPrivate
     PLUGIN_TARGET particlesplugin
     CLASS_NAME QtQuick2ParticlesPlugin
     DEPENDENCIES
-        QtQuick
+        QtQuick/auto
     INTERNAL_MODULE
     SOURCES
         qquickage.cpp qquickage_p.h
@@ -66,26 +69,128 @@ qt_internal_add_resource(QuickParticlesPrivate "particles"
     FILES
         ${particles_resource_files}
 )
-set(particles1_resource_files
-    "shaders_ng/imageparticle_colored.frag.qsb"
-    "shaders_ng/imageparticle_colored.vert.qsb"
-    "shaders_ng/imageparticle_coloredpoint.frag.qsb"
-    "shaders_ng/imageparticle_coloredpoint.vert.qsb"
-    "shaders_ng/imageparticle_deformed.frag.qsb"
-    "shaders_ng/imageparticle_deformed.vert.qsb"
-    "shaders_ng/imageparticle_simplepoint.frag.qsb"
-    "shaders_ng/imageparticle_simplepoint.vert.qsb"
-    "shaders_ng/imageparticle_sprite.frag.qsb"
-    "shaders_ng/imageparticle_sprite.vert.qsb"
-    "shaders_ng/imageparticle_tabled.frag.qsb"
-    "shaders_ng/imageparticle_tabled.vert.qsb"
-)
 
-qt_internal_add_resource(QuickParticlesPrivate "particles1"
+qt_internal_add_shaders(QuickParticlesPrivate "particles_shaders1"
+    SILENT
+    BATCHABLE
+    PRECOMPILE
+    OPTIMIZED
+    GLSL
+        "150,120,100es,300es"
     PREFIX
         "/particles"
     FILES
-        ${particles1_resource_files}
+        "shaders_ng/imageparticle.vert"
+        "shaders_ng/imageparticle.frag"
+    OUTPUTS
+        "shaders_ng/imageparticle_simplepoint.vert.qsb"
+        "shaders_ng/imageparticle_simplepoint.frag.qsb"
+    DEFINES
+        POINT
+)
+
+qt_internal_add_shaders(QuickParticlesPrivate "particles_shaders2"
+    SILENT
+    BATCHABLE
+    PRECOMPILE
+    OPTIMIZED
+    GLSL
+        "150,120,100es,300es"
+    PREFIX
+        "/particles"
+    FILES
+        "shaders_ng/imageparticle.vert"
+        "shaders_ng/imageparticle.frag"
+    OUTPUTS
+        "shaders_ng/imageparticle_coloredpoint.vert.qsb"
+        "shaders_ng/imageparticle_coloredpoint.frag.qsb"
+    DEFINES
+        POINT
+        COLOR
+)
+
+qt_internal_add_shaders(QuickParticlesPrivate "particles_shaders3"
+    SILENT
+    BATCHABLE
+    PRECOMPILE
+    OPTIMIZED
+    GLSL
+        "150,120,100es,300es"
+    PREFIX
+        "/particles"
+    FILES
+        "shaders_ng/imageparticle.vert"
+        "shaders_ng/imageparticle.frag"
+    OUTPUTS
+        "shaders_ng/imageparticle_colored.vert.qsb"
+        "shaders_ng/imageparticle_colored.frag.qsb"
+    DEFINES
+        COLOR
+)
+
+qt_internal_add_shaders(QuickParticlesPrivate "particles_shaders4"
+    SILENT
+    BATCHABLE
+    PRECOMPILE
+    OPTIMIZED
+    GLSL
+        "150,120,100es,300es"
+    PREFIX
+        "/particles"
+    FILES
+        "shaders_ng/imageparticle.vert"
+        "shaders_ng/imageparticle.frag"
+    OUTPUTS
+        "shaders_ng/imageparticle_deformed.vert.qsb"
+        "shaders_ng/imageparticle_deformed.frag.qsb"
+    DEFINES
+        DEFORM
+        COLOR
+)
+
+qt_internal_add_shaders(QuickParticlesPrivate "particles_shaders5"
+    SILENT
+    BATCHABLE
+    PRECOMPILE
+    OPTIMIZED
+    GLSL
+        "150,120,100es,300es"
+    PREFIX
+        "/particles"
+    FILES
+        "shaders_ng/imageparticle.vert"
+        "shaders_ng/imageparticle.frag"
+    OUTPUTS
+        "shaders_ng/imageparticle_tabled.vert.qsb"
+        "shaders_ng/imageparticle_tabled.frag.qsb"
+    DEFINES
+        TABLE
+        DEFORM
+        COLOR
+)
+
+qt_internal_add_shaders(QuickParticlesPrivate "particles_shaders6"
+    SILENT
+    BATCHABLE
+    PRECOMPILE
+    OPTIMIZED
+    GLSL
+        "150,120,100es,300es"
+    PREFIX
+        "/particles"
+    FILES
+        "shaders_ng/imageparticle.vert"
+        "shaders_ng/imageparticle.frag"
+    OUTPUTS
+        "shaders_ng/imageparticle_sprite.vert.qsb"
+        "shaders_ng/imageparticle_sprite.frag.qsb"
+    DEFINES
+        SPRITE
+        TABLE
+        DEFORM
+        COLOR
+    ZORDER_LOC
+        8
 )
 
 qt_internal_extend_target(QuickParticlesPrivate CONDITION MSVC

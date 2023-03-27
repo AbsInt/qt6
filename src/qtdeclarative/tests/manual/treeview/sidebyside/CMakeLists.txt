@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Generated from auto.pro.
 
 if (NOT QT_BUILD_STANDALONE_TESTS AND NOT QT_BUILDING_QT)
@@ -16,7 +19,7 @@ qt_internal_add_manual_test(treeview_sidebyside
         testmodel.cpp testmodel.h
         uicallback.h
         main.cpp
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Gui
         Qt::Qml
         Qt::Quick
@@ -25,7 +28,7 @@ qt_internal_add_manual_test(treeview_sidebyside
 )
 
 qt_internal_extend_target(treeview_sidebyside CONDITION TARGET Qt::Widgets
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Widgets
 )
 

@@ -3,6 +3,7 @@
 #include <QtJsonRpc/private/qjsonrpcprotocol_p.h>
 #include <QtLanguageServer/private/qlanguageserverprotocol_p.h>
 #include <QtQuickTestUtils/private/qmlutils_p.h>
+#include <QtCore/private/qduplicatetracker_p.h>
 
 #include <QtCore/qobject.h>
 #include <QtCore/qprocess.h>
@@ -34,6 +35,9 @@ class tst_QmllsCompletions : public QQmlDataTest
     using ExpectedCompletion = QPair<QString, CompletionItemKind>;
     using ExpectedCompletions = QList<ExpectedCompletion>;
 
+    using ExpectedDocumentation = std::tuple<QString, QString, QString>;
+    using ExpectedDocumentations = QList<ExpectedDocumentation>;
+
     Q_OBJECT
 public:
     tst_QmllsCompletions();
@@ -43,6 +47,8 @@ private slots:
     void initTestCase() final;
     void completions_data();
     void completions();
+    void function_documentations_data();
+    void function_documentations();
     void buildDir();
     void cleanupTestCase();
 
@@ -66,7 +72,7 @@ tst_QmllsCompletions::tst_QmllsCompletions()
             [this]() { qWarning() << "LSPerr" << m_server.readAllStandardError(); });
 
     m_qmllsPath =
-            QLibraryInfo::path(QLibraryInfo::LibraryExecutablesPath) + QLatin1String("/qmlls");
+            QLibraryInfo::path(QLibraryInfo::BinariesPath) + QLatin1String("/qmlls");
 #ifdef Q_OS_WIN
     m_qmllsPath += QLatin1String(".exe");
 #endif
@@ -201,7 +207,11 @@ void tst_QmllsCompletions::completions_data()
                               << ExpectedCompletions({
                                          { u"Rectangle"_s, CompletionItemKind::Field },
                                          { u"vector4d"_s, CompletionItemKind::Field },
-                                         { u"lala()"_s, CompletionItemKind{ 0 } },
+                                         { u"lala()"_s, CompletionItemKind::Function },
+                                         { u"longfunction()"_s, CompletionItemKind::Function },
+                                         { u"documentedFunction()"_s,
+                                           CompletionItemKind::Function },
+                                         { u"lala()"_s, CompletionItemKind { 0 } },
                                          { u"width"_s, CompletionItemKind::Field },
                                  })
                               << QStringList({ u"import"_s });
@@ -221,7 +231,7 @@ void tst_QmllsCompletions::completions_data()
                                  << QStringList({ u"foo"_s, u"import"_s, u"Rectangle"_s });
 
     QTest::newRow("asCompletions")
-            << uri << 17 << 8
+            << uri << 25 << 8
             << ExpectedCompletions({
                        { u"Rectangle"_s, CompletionItemKind::Field },
                })
@@ -249,13 +259,32 @@ void tst_QmllsCompletions::checkCompletions(QByteArray uri, int lineNr, int char
                 }
 
                 QSet<QString> labels;
+                QDuplicateTracker<QByteArray> modulesTracker;
+                QDuplicateTracker<QByteArray> keywordsTracker;
+                QDuplicateTracker<QByteArray> classesTracker;
+                QDuplicateTracker<QByteArray> fieldsTracker;
+                QDuplicateTracker<QByteArray> propertiesTracker;
 
-                if (const QList<CompletionItem> *cItems =
-                            std::get_if<QList<CompletionItem>>(&res)) {
-                    for (const CompletionItem &c : *cItems) {
-                        labels << c.label;
+                for (const CompletionItem &c : *cItems) {
+                    if (c.kind->toInt() == int(CompletionItemKind::Module)) {
+                        QVERIFY2(!modulesTracker.hasSeen(c.label), "Duplicate module: " + c.label);
+                    } else if (c.kind->toInt() == int(CompletionItemKind::Keyword)) {
+                        QVERIFY2(!keywordsTracker.hasSeen(c.label),
+                                 "Duplicate keyword: " + c.label);
+                    } else if (c.kind->toInt() == int(CompletionItemKind::Class)) {
+                        QVERIFY2(!classesTracker.hasSeen(c.label), "Duplicate class: " + c.label);
+                    } else if (c.kind->toInt() == int(CompletionItemKind::Field)) {
+                        QVERIFY2(!fieldsTracker.hasSeen(c.label), "Duplicate field: " + c.label);
+                    } else if (c.kind->toInt() == int(CompletionItemKind::Property)) {
+                        QVERIFY2(!propertiesTracker.hasSeen(c.label),
+                                 "Duplicate property: " + c.label);
+                        QVERIFY2(c.insertText == c.label + u": "_s,
+                                 "a property should end with a colon with a space for "
+                                 "'insertText', for better coding experience");
                     }
+                    labels << c.label;
                 }
+
                 for (const ExpectedCompletion &exp : expected) {
                     QVERIFY2(labels.contains(exp.first),
                              u"no %1 in %2"_s
@@ -285,7 +314,7 @@ void tst_QmllsCompletions::checkCompletions(QByteArray uri, int lineNr, int char
                                                      "Completion item '%1' has wrong kind '%2'")
                                                      .arg(c.label)
                                                      .arg(QMetaEnum::fromType<CompletionItemKind>()
-                                                                  .valueToKey((int)kind))));
+                                                                  .valueToKey(int(kind)))));
                         }
                     }
                 }
@@ -311,6 +340,105 @@ void tst_QmllsCompletions::completions()
     QFETCH(QStringList, notExpected);
 
     QTEST_CHECKED(checkCompletions(uri, lineNr, character, expected, notExpected));
+}
+
+void tst_QmllsCompletions::function_documentations_data()
+{
+    QTest::addColumn<QByteArray>("uri");
+    QTest::addColumn<int>("lineNr");
+    QTest::addColumn<int>("character");
+    QTest::addColumn<ExpectedDocumentations>("expectedDocs");
+
+    QByteArray uri = testFileUrl("completions/Yyy.qml").toString().toUtf8();
+
+    QTest::newRow("longfunction")
+            << uri << 5 << 14
+            << ExpectedDocumentations{
+                   std::make_tuple(u"lala()"_s, u"returns void"_s, u"lala()"_s),
+                   std::make_tuple(u"longfunction()"_s, u"returns string"_s,
+                                   uR"(longfunction(a, b, c = "c", d = "d"))"_s),
+                   std::make_tuple(u"documentedFunction()"_s, u"returns string"_s,
+                                   uR"(// documentedFunction: is documented
+// returns 'Good'
+documentedFunction(arg1, arg2 = "Qt"))"_s),
+               };
+}
+
+void tst_QmllsCompletions::function_documentations()
+{
+    QFETCH(QByteArray, uri);
+    QFETCH(int, lineNr);
+    QFETCH(int, character);
+    QFETCH(ExpectedDocumentations, expectedDocs);
+
+    CompletionParams cParams;
+    cParams.position.line = lineNr;
+    cParams.position.character = character;
+    cParams.textDocument.uri = uri;
+    std::shared_ptr<bool> didFinish = std::make_shared<bool>(false);
+    auto clean = [didFinish]() { *didFinish = true; };
+
+    m_protocol.requestCompletion(
+            cParams,
+            [clean, uri, expectedDocs](auto res) {
+                const QList<CompletionItem> *cItems = std::get_if<QList<CompletionItem>>(&res);
+
+                if (!cItems) {
+                    return;
+                }
+
+                for (const ExpectedDocumentation &exp : expectedDocs) {
+                    bool hasFoundExpected = false;
+                    const auto expectedLabel = std::get<0>(exp);
+                    for (const CompletionItem &c : *cItems) {
+                        if (c.kind->toInt() != int(CompletionItemKind::Function)) {
+                            // Only check functions.
+                            continue;
+                        }
+
+                        if (c.label == expectedLabel) {
+                            hasFoundExpected = true;
+                        }
+                    }
+
+                    QVERIFY2(hasFoundExpected,
+                             qPrintable(u"expected completion label '%1' wasn't found"_s.arg(
+                                     expectedLabel)));
+                }
+
+                for (const CompletionItem &c : *cItems) {
+                    if (c.kind->toInt() != int(CompletionItemKind::Function)) {
+                        // Only check functions.
+                        continue;
+                    }
+
+                    QVERIFY(c.documentation != std::nullopt);
+                    // We currently don't support 'MarkupContent', change this when we do.
+                    QVERIFY(c.documentation->index() == 0);
+                    const QByteArray cDoc = std::get<0>(*c.documentation);
+
+                    for (const ExpectedDocumentation &exp : expectedDocs) {
+                        const auto &[label, details, docs] = exp;
+
+                        if (c.label != label)
+                            continue;
+
+                        QVERIFY2(c.detail == details,
+                                 qPrintable(u"Completion item '%1' has wrong details '%2'"_s
+                                                    .arg(label).arg(*c.detail)));
+                        QVERIFY2(cDoc == docs,
+                                 qPrintable(u"Completion item '%1' has wrong documentation '%2'"_s
+                                                    .arg(label).arg(cDoc)));
+                    }
+                }
+                clean();
+            },
+            [clean](const ResponseError &err) {
+                ProtocolBase::defaultResponseErrorHandler(err);
+                QVERIFY2(false, "error computing the completion");
+                clean();
+            });
+    QTRY_VERIFY_WITH_TIMEOUT(*didFinish, 30000);
 }
 
 void tst_QmllsCompletions::buildDir()

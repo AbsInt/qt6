@@ -1,3 +1,10 @@
+# QTBUG-109488 temporary fix
+[largeTextObservesViewport]
+linux
+windows
+android
+darwin
+
 [mouseSelection]
 opensuse-leap
 
@@ -25,3 +32,7 @@ android
 # QTBUG-100991
 [selectionOnFocusOut]
 android
+
+# QTBUG-108346
+[pasteHtmlIntoMarkdown]
+ubuntu-20.04

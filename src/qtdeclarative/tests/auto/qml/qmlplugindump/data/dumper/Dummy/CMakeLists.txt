@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Generated from dummy.pro.
 
 #####################################################################
@@ -10,7 +13,7 @@ qt_internal_add_cmake_library(Dummy
     SOURCES
         dummy.cpp dummy.h
         dummy_plugin.cpp dummy_plugin.h
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Core
         Qt::Gui
         Qt::Qml

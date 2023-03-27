@@ -124,6 +124,9 @@ private slots:
     void viewport();
 
     void qobject_castOnDestruction();
+    void signalsOnDestruction_data();
+    void signalsOnDestruction();
+    void visibleChanged();
 
 private:
     QQmlEngine engine;
@@ -2694,15 +2697,17 @@ void tst_QQuickItem::mapCoordinates()
             Q_RETURN_ARG(QVariant, result), Q_ARG(QVariant, x), Q_ARG(QVariant, y)));
     QCOMPARE(result.value<QPointF>(), -QPointF(150,150) + QPointF(x, y));
 
-    QString warning1 = testFileUrl("mapCoordinates.qml").toString() + ":10:5: QML Item: mapToItem() given argument \"1122\" which is neither null nor an Item";
-    QString warning2 = testFileUrl("mapCoordinates.qml").toString() + ":10:5: QML Item: mapFromItem() given argument \"1122\" which is neither null nor an Item";
+    QRegularExpression warning1 = QRegularExpression(".*Could not convert argument 0 at.*");
+    QRegularExpression warning2 = QRegularExpression(".*checkMapA.*Invalid@.*");
 
-    QTest::ignoreMessage(QtWarningMsg, qPrintable(warning1));
+    QTest::ignoreMessage(QtWarningMsg, warning1);
+    QTest::ignoreMessage(QtWarningMsg, warning2);
     QVERIFY(QMetaObject::invokeMethod(root, "checkMapAToInvalid",
             Q_RETURN_ARG(QVariant, result), Q_ARG(QVariant, x), Q_ARG(QVariant, y)));
     QVERIFY(result.toBool());
 
-    QTest::ignoreMessage(QtWarningMsg, qPrintable(warning2));
+    QTest::ignoreMessage(QtWarningMsg, warning1);
+    QTest::ignoreMessage(QtWarningMsg, warning2);
     QVERIFY(QMetaObject::invokeMethod(root, "checkMapAFromInvalid",
             Q_RETURN_ARG(QVariant, result), Q_ARG(QVariant, x), Q_ARG(QVariant, y)));
     QVERIFY(result.toBool());
@@ -2726,7 +2731,7 @@ void tst_QQuickItem::mapCoordinatesRect()
     QFETCH(int, width);
     QFETCH(int, height);
 
-    QQuickView *window = new QQuickView(nullptr);
+    std::unique_ptr<QQuickView> window = std::make_unique<QQuickView>();
     window->setBaseSize(QSize(300, 300));
     window->setSource(testFileUrl("mapCoordinatesRect.qml"));
     window->show();
@@ -2765,20 +2770,20 @@ void tst_QQuickItem::mapCoordinatesRect()
             Q_RETURN_ARG(QVariant, result), Q_ARG(QVariant, x), Q_ARG(QVariant, y), Q_ARG(QVariant, width), Q_ARG(QVariant, height)));
     QCOMPARE(result.value<QRectF>(), qobject_cast<QQuickItem*>(a)->mapRectFromScene(QRectF(x, y, width, height)));
 
-    QString warning1 = testFileUrl("mapCoordinatesRect.qml").toString() + ":10:5: QML Item: mapToItem() given argument \"1122\" which is neither null nor an Item";
-    QString warning2 = testFileUrl("mapCoordinatesRect.qml").toString() + ":10:5: QML Item: mapFromItem() given argument \"1122\" which is neither null nor an Item";
+    QRegularExpression warning1 = QRegularExpression(".*Could not convert argument 0 at.*");
+    QRegularExpression warning2 = QRegularExpression(".*checkMapA.*Invalid@.*");
 
-    QTest::ignoreMessage(QtWarningMsg, qPrintable(warning1));
+    QTest::ignoreMessage(QtWarningMsg, warning1);
+    QTest::ignoreMessage(QtWarningMsg, warning2);
     QVERIFY(QMetaObject::invokeMethod(root, "checkMapAToInvalid",
             Q_RETURN_ARG(QVariant, result), Q_ARG(QVariant, x), Q_ARG(QVariant, y), Q_ARG(QVariant, width), Q_ARG(QVariant, height)));
     QVERIFY(result.toBool());
 
-    QTest::ignoreMessage(QtWarningMsg, qPrintable(warning2));
+    QTest::ignoreMessage(QtWarningMsg, warning1);
+    QTest::ignoreMessage(QtWarningMsg, warning2);
     QVERIFY(QMetaObject::invokeMethod(root, "checkMapAFromInvalid",
             Q_RETURN_ARG(QVariant, result), Q_ARG(QVariant, x), Q_ARG(QVariant, y), Q_ARG(QVariant, width), Q_ARG(QVariant, height)));
     QVERIFY(result.toBool());
-
-    delete window;
 }
 
 void tst_QQuickItem::mapCoordinatesRect_data()
@@ -4001,6 +4006,137 @@ void tst_QQuickItem::qobject_castOnDestruction()
         QVERIFY(!dynamic_cast<QQuickItem *>(object));
         QVERIFY(!object->isQuickItemType());
     });
+}
+
+/*
+    Items that are getting destroyed should not emit property change notifications.
+*/
+void tst_QQuickItem::signalsOnDestruction_data()
+{
+    QTest::addColumn<bool>("childVisible");
+    QTest::addColumn<bool>("grandChildVisible");
+
+    QTest::addRow("Both visible") << true << true;
+    QTest::addRow("Child visible") << true << false;
+    QTest::addRow("Grand child visible") << false << true;
+    QTest::addRow("Both hidden") << false << false;
+}
+
+void tst_QQuickItem::signalsOnDestruction()
+{
+    QFETCH(bool, childVisible);
+    QFETCH(bool, grandChildVisible);
+
+    QQuickWindow window;
+    window.show();
+
+    int expectedChildVisibleCount = 0;
+    int expectedGrandChildVisibleCount = 0;
+
+    // Visual children, but not QObject children.
+    // Note: QQuickItem's visible property defaults to true after creation, as visual
+    // items are always expected to be added to a visual hierarchy. So for the sake
+    // of this test we first add, and then remove the item from a parent. This explicitly
+    // sets the effective visibility to false.
+    std::unique_ptr<QQuickItem> parent(new QQuickItem(window.contentItem()));
+    QVERIFY(parent->isVisible());
+    std::unique_ptr<QQuickItem> child(new QQuickItem);
+    child->setVisible(childVisible);
+    child->setParentItem(parent.get());
+    child->setParentItem(nullptr);
+    QVERIFY(!child->isVisible());
+    std::unique_ptr<QQuickItem> grandChild(new QQuickItem);
+    grandChild->setVisible(grandChildVisible);
+    grandChild->setParentItem(child.get());
+    grandChild->setParentItem(nullptr);
+    QVERIFY(!grandChild->isVisible());
+
+    QSignalSpy childrenSpy(parent.get(), &QQuickItem::childrenChanged);
+    QSignalSpy visibleChildrenSpy(parent.get(), &QQuickItem::visibleChildrenChanged);
+    QSignalSpy childParentSpy(child.get(), &QQuickItem::parentChanged);
+    QSignalSpy childVisibleSpy(child.get(), &QQuickItem::visibleChanged);
+    QSignalSpy childChildrenSpy(child.get(), &QQuickItem::childrenChanged);
+    QSignalSpy childVisibleChildrenSpy(child.get(), &QQuickItem::visibleChildrenChanged);
+    QSignalSpy grandChildParentSpy(grandChild.get(), &QQuickItem::parentChanged);
+    QSignalSpy grandChildVisibleSpy(grandChild.get(), &QQuickItem::visibleChanged);
+
+    child->setParentItem(parent.get());
+    QCOMPARE(childrenSpy.count(), 1);
+    if (childVisible)
+        ++expectedChildVisibleCount;
+    QCOMPARE(visibleChildrenSpy.count(), expectedChildVisibleCount);
+    QCOMPARE(childParentSpy.count(), 1);
+    QCOMPARE(childVisibleSpy.count(), expectedChildVisibleCount);
+    QCOMPARE(childChildrenSpy.count(), 0);
+    QCOMPARE(childVisibleChildrenSpy.count(), 0);
+
+    grandChild->setParentItem(child.get());
+    QCOMPARE(childrenSpy.count(), 1);
+    QCOMPARE(visibleChildrenSpy.count(), expectedChildVisibleCount);
+    QCOMPARE(childParentSpy.count(), 1);
+    QCOMPARE(childVisibleSpy.count(), expectedChildVisibleCount);
+    QCOMPARE(childChildrenSpy.count(), 1);
+    if (grandChildVisible && childVisible)
+        ++expectedGrandChildVisibleCount;
+    QCOMPARE(childVisibleChildrenSpy.count(), expectedGrandChildVisibleCount);
+    QCOMPARE(grandChildParentSpy.count(), 1);
+    QCOMPARE(grandChildVisibleSpy.count(), expectedGrandChildVisibleCount);
+
+    parent.reset();
+
+    QVERIFY(!child->parentItem());
+    QVERIFY(grandChild->parentItem());
+    QCOMPARE(childrenSpy.count(), 1);
+    QCOMPARE(visibleChildrenSpy.count(), expectedChildVisibleCount);
+    QCOMPARE(childParentSpy.count(), 2);
+    QCOMPARE(childChildrenSpy.count(), 1);
+    if (childVisible)
+        ++expectedChildVisibleCount;
+    QCOMPARE(childVisibleSpy.count(), expectedChildVisibleCount);
+    if (childVisible && grandChildVisible)
+        ++expectedGrandChildVisibleCount;
+    QCOMPARE(childVisibleChildrenSpy.count(), expectedGrandChildVisibleCount);
+    QCOMPARE(grandChildParentSpy.count(), 1);
+    QCOMPARE(grandChildVisibleSpy.count(), expectedGrandChildVisibleCount);
+}
+
+void tst_QQuickItem::visibleChanged()
+{
+    QQuickView window;
+    window.setSource(testFileUrl("visiblechanged.qml"));
+    window.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+    QQuickItem *root = qobject_cast<QQuickItem*>(window.rootObject());
+    QVERIFY(root);
+
+    QPointer<QQuickItem> parentItem = root->findChild<QQuickItem *>("parentItem");
+    QPointer<QQuickItem> childItem = root->findChild<QQuickItem *>("childItem");
+    QPointer<QQuickItem> loader = root->findChild<QQuickItem *>("loader");
+    QPointer<QQuickItem> loaderChild = root->findChild<QQuickItem *>("loaderChild");
+    QVERIFY(parentItem);
+    QVERIFY(childItem);
+    QVERIFY(loader);
+    QVERIFY(loaderChild);
+
+    QSignalSpy parentItemSpy(parentItem.data(), &QQuickItem::visibleChanged);
+    QSignalSpy childItemSpy(childItem.data(), &QQuickItem::visibleChanged);
+    QSignalSpy loaderChildSpy(loaderChild.data(), &QQuickItem::visibleChanged);
+
+    loader->setProperty("active", false);
+    QCOMPARE(parentItemSpy.count(), 0);
+    QCOMPARE(childItemSpy.count(), 0);
+    QVERIFY(!loaderChild->parentItem());
+    QCOMPARE(loaderChildSpy.count(), 1);
+    QCOMPARE(loaderChild->isVisible(), false);
+
+    delete parentItem.data();
+    QVERIFY(!parentItem);
+    QVERIFY(childItem);
+    QVERIFY(!childItem->parentItem());
+
+    QCOMPARE(parentItemSpy.count(), 0);
+    QCOMPARE(childItemSpy.count(), 1);
 }
 
 QTEST_MAIN(tst_QQuickItem)

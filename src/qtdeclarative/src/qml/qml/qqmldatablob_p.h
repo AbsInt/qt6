@@ -38,6 +38,8 @@ class QQmlTypeLoader;
 class Q_QML_PRIVATE_EXPORT QQmlDataBlob : public QQmlRefCount
 {
 public:
+    using Ptr = QQmlRefPointer<QQmlDataBlob>;
+
     enum Status {
         Null,                    // Prior to QQmlTypeLoader::load()
         Loading,                 // Prior to data being received and dataReceived() being called
@@ -179,13 +181,14 @@ private:
             }
         }
 
-        inline quint8 progress() const
+        inline qreal progress() const
         {
-            return quint8((_p.loadRelaxed() & ProgressMask) >> ProgressShift);
+            return quint8((_p.loadRelaxed() & ProgressMask) >> ProgressShift) / float(0xFF);
         }
 
-        inline void setProgress(quint8 v)
+        inline void setProgress(qreal progress)
         {
+            quint8 v = 0xFF * progress;
             while (true) {
                 int d = _p.loadRelaxed();
                 int nd = (d & ~ProgressMask) | ((v << ProgressShift) & ProgressMask);

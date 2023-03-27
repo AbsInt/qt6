@@ -29,6 +29,10 @@ struct QmltcCompilerInfo
 
 class QmltcCompiler
 {
+    using InlineComponentOrDocumentRootName = QQmlJSScope::InlineComponentOrDocumentRootName;
+    using InlineComponentNameType = QQmlJSScope::InlineComponentNameType;
+    using RootDocumentNameType = QQmlJSScope::RootDocumentNameType;
+
 public:
     QmltcCompiler(const QString &url, QmltcTypeResolver *resolver, QmltcVisitor *visitor,
                   QQmlJSLogger *logger);
@@ -72,6 +76,7 @@ private:
                          const QQmlJSScope::ConstPtr &owner);
     void compileAlias(QmltcType &current, const QQmlJSMetaProperty &alias,
                       const QQmlJSScope::ConstPtr &owner);
+    void compileExtraListMethods(QmltcType &current, const QQmlJSMetaProperty &p);
 
     /*!
         \internal
@@ -91,8 +96,42 @@ private:
         QString propertyName = QString();
         bool isValueType = false;
     };
-    void compileBinding(QmltcType &current, const QQmlJSMetaPropertyBinding &binding,
+
+    QStringList unprocessedListBindings;
+    QQmlJSMetaProperty unprocessedListProperty;
+
+    void processLastListBindings(QmltcType &current, const QQmlJSScope::ConstPtr &type,
+                                 const BindingAccessorData &accessor);
+
+    void compileBinding(QmltcType &current, QList<QQmlJSMetaPropertyBinding>::iterator bindingStart,
+                        QList<QQmlJSMetaPropertyBinding>::iterator bindingEnd,
                         const QQmlJSScope::ConstPtr &type, const BindingAccessorData &accessor);
+
+    void compileBindingByType(QmltcType &current, const QQmlJSMetaPropertyBinding &binding,
+                              const QQmlJSScope::ConstPtr &type,
+                              const BindingAccessorData &accessor);
+
+    void compileObjectBinding(QmltcType &current, const QQmlJSMetaPropertyBinding &binding,
+                              const QQmlJSScope::ConstPtr &type,
+                              const BindingAccessorData &accessor);
+
+    void compileValueSourceOrInterceptorBinding(QmltcType &current,
+                                                const QQmlJSMetaPropertyBinding &binding,
+                                                const QQmlJSScope::ConstPtr &type,
+                                                const BindingAccessorData &accessor);
+
+    void compileAttachedPropertyBinding(QmltcType &current,
+                                        const QQmlJSMetaPropertyBinding &binding,
+                                        const QQmlJSScope::ConstPtr &type,
+                                        const BindingAccessorData &accessor);
+
+    void compileGroupPropertyBinding(QmltcType &current, const QQmlJSMetaPropertyBinding &binding,
+                                     const QQmlJSScope::ConstPtr &type,
+                                     const BindingAccessorData &accessor);
+
+    void compileTranslationBinding(QmltcType &current, const QQmlJSMetaPropertyBinding &binding,
+                                   const QQmlJSScope::ConstPtr &type,
+                                   const BindingAccessorData &accessor);
 
     // special case (for simplicity)
     void compileScriptBinding(QmltcType &current, const QQmlJSMetaPropertyBinding &binding,
@@ -146,17 +185,17 @@ private:
 
     bool hasErrors() const { return m_logger->hasErrors(); }
     void recordError(const QQmlJS::SourceLocation &location, const QString &message,
-                     QQmlJSLoggerCategory category = Log_Compiler)
+                     LoggerWarningId id = qmlCompiler)
     {
         // pretty much any compiler error is a critical error (we cannot
         // generate code - compilation fails)
-        m_logger->log(message, category, location);
+        m_logger->log(message, id, location);
     }
     void recordError(const QV4::CompiledData::Location &location, const QString &message,
-                     QQmlJSLoggerCategory category = Log_Compiler)
+                     LoggerWarningId id = qmlCompiler)
     {
         recordError(QQmlJS::SourceLocation { 0, 0, location.line(), location.column() }, message,
-                    category);
+                    id);
     }
 };
 

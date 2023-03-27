@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Generated from qmljs.pro.
 
 #####################################################################
@@ -32,7 +35,7 @@ qt_internal_add_app(qmljs
         ../../src/3rdparty/masm/stubs/runtime
         ../../src/3rdparty/masm/stubs/wtf
         ../../src/3rdparty/masm/wtf
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::CorePrivate
         Qt::QmlPrivate
 )

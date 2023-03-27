@@ -63,6 +63,7 @@ void Profiler::reportData()
     for (const FunctionCall &call : std::as_const(m_data)) {
         properties.append(call.properties());
         Function *function = call.function();
+        Q_ASSERT(function);
         SentMarker &marker = m_sentLocations[reinterpret_cast<quintptr>(function)];
         if (!marker.isValid()) {
             FunctionLocation &location = locations[properties.constLast().id];
@@ -87,10 +88,10 @@ void Profiler::startProfiling(quint64 features)
                                                (qint64)m_engine->memoryManager->getLargeItemsMem(),
                                                HeapPage};
             m_memory_data.append(heap);
-            MemoryAllocationProperties small = {timestamp,
+            MemoryAllocationProperties smallP = {timestamp,
                                                 (qint64)m_engine->memoryManager->getUsedMem(),
                                                 SmallItem};
-            m_memory_data.append(small);
+            m_memory_data.append(smallP);
             MemoryAllocationProperties large = {timestamp,
                                                 (qint64)m_engine->memoryManager->getLargeItemsMem(),
                                                 LargeItem};

@@ -1,7 +1,8 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 cmake_minimum_required(VERSION 3.16)
 project(externaldraganddrop LANGUAGES CXX)
-
-set(CMAKE_AUTOMOC ON)
 
 if(NOT DEFINED INSTALL_EXAMPLESDIR)
     set(INSTALL_EXAMPLESDIR "examples")
@@ -11,24 +12,22 @@ set(INSTALL_EXAMPLEDIR "${INSTALL_EXAMPLESDIR}/quick/externaldraganddrop")
 
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Qml Quick)
 
-qt_add_executable(externaldraganddropexample
-    main.cpp
-)
+qt_standard_project_setup(REQUIRES 6.5)
 
-set_target_properties(externaldraganddropexample PROPERTIES
-    WIN32_EXECUTABLE TRUE
-    MACOSX_BUNDLE TRUE
+qt_add_executable(externaldraganddropexample
+    WIN32
+    MACOSX_BUNDLE
+    main.cpp
 )
 
 qt_add_qml_module(externaldraganddropexample
     URI externaldraganddrop
-    VERSION 1.0
     QML_FILES
         "DragAndDropTextItem.qml"
         "externaldraganddrop.qml"
 )
 
-target_link_libraries(externaldraganddropexample PUBLIC
+target_link_libraries(externaldraganddropexample PRIVATE
     Qt::Core
     Qt::Gui
     Qt::Qml

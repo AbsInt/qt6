@@ -71,8 +71,12 @@ public:
     typedef QVariant (*CreateValueTypeFunc)(const QJSValue &);
     CreateValueTypeFunc createValueTypeFunction() const;
 
+    bool canConstructValueType() const;
+    bool canPopulateValueType() const;
+
     QObject *create() const;
     QObject *create(void **, size_t) const;
+    QObject *createWithQQmlData() const;
 
     typedef void (*CreateFunc)(void *, void *);
     CreateFunc createFunction() const;

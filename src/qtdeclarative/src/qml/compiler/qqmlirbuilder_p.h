@@ -167,6 +167,9 @@ struct PoolList
         bool operator!=(const Iterator &rhs) const {
             return ptr != rhs.ptr;
         }
+
+        operator T *() { return ptr; }
+        operator const T *() const { return ptr; }
     };
 
     Iterator begin() { return Iterator(first); }
@@ -200,13 +203,36 @@ struct Parameter : public QV4::CompiledData::Parameter
 {
     Parameter *next;
 
-    bool init(QV4::Compiler::JSUnitGenerator *stringGenerator, const QString &parameterName, const QString &typeName);
-    static bool init(QV4::CompiledData::Parameter *param, const QV4::Compiler::JSUnitGenerator *stringGenerator,
-                     int parameterNameIndex, int typeNameIndex);
-    static bool initType(QV4::CompiledData::ParameterType *paramType,
-                         const QV4::Compiler::JSUnitGenerator *stringGenerator, int typeNameIndex);
+    template<typename IdGenerator>
+    static bool initType(
+            QV4::CompiledData::ParameterType *type, const IdGenerator &idGenerator,
+            const QQmlJS::AST::Type *annotation)
+    {
+        using Flag = QV4::CompiledData::ParameterType::Flag;
+
+        if (!annotation)
+            return initType(type, QString(), idGenerator(QString()), Flag::NoFlag);
+
+        const QString typeId = annotation->typeId->toString();
+        const QString typeArgument =
+                annotation->typeArgument ? annotation->typeArgument->toString() : QString();
+
+        if (typeArgument.isEmpty())
+            return initType(type, typeId, idGenerator(typeId), Flag::NoFlag);
+
+        if (typeId == QLatin1String("list"))
+            return initType(type, typeArgument, idGenerator(typeArgument), Flag::List);
+
+        const QString annotationString = annotation->toString();
+        return initType(type, annotationString, idGenerator(annotationString), Flag::NoFlag);
+    }
 
     static QV4::CompiledData::BuiltinType stringToBuiltinType(const QString &typeName);
+
+private:
+    static bool initType(
+            QV4::CompiledData::ParameterType *paramType, const QString &typeName,
+            int typeNameIndex, QV4::CompiledData::ParameterType::Flag listFlag);
 };
 
 struct Signal
@@ -381,7 +407,10 @@ struct Q_QML_COMPILER_PRIVATE_EXPORT Pragma
         Singleton,
         Strict,
         ListPropertyAssignBehavior,
-        ComponentBehavior
+        ComponentBehavior,
+        FunctionSignatureBehavior,
+        NativeMethodBehavior,
+        ValueTypeBehavior,
     };
 
     enum ListPropertyAssignBehaviorValue
@@ -397,11 +426,32 @@ struct Q_QML_COMPILER_PRIVATE_EXPORT Pragma
         Bound
     };
 
+    enum FunctionSignatureBehaviorValue
+    {
+        Ignored,
+        Enforced
+    };
+
+    enum NativeMethodBehaviorValue
+    {
+        AcceptThisObject,
+        RejectThisObject
+    };
+
+    enum ValueTypeBehaviorValue
+    {
+        Reference,
+        Copy
+    };
+
     PragmaType type;
 
     union {
         ListPropertyAssignBehaviorValue listPropertyAssignBehavior;
         ComponentBehaviorValue componentBehavior;
+        FunctionSignatureBehaviorValue functionSignatureBehavior;
+        NativeMethodBehaviorValue nativeMethodBehavior;
+        ValueTypeBehaviorValue valueTypeBehavior;
     };
 
     QV4::CompiledData::Location location;
@@ -577,14 +627,14 @@ struct Q_QML_COMPILER_PRIVATE_EXPORT JSCodeGen : public QV4::Compiler::Codegen
 {
     JSCodeGen(Document *document, const QSet<QString> &globalNames,
               QV4::Compiler::CodegenWarningInterface *iface =
-                      QV4::Compiler::defaultCodegenWarningInterface());
+                      QV4::Compiler::defaultCodegenWarningInterface(),
+              bool storeSourceLocations = false);
 
     // Returns mapping from input functions to index in IR::Module::functions / compiledData->runtimeFunctions
     QVector<int>
-    generateJSCodeForFunctionsAndBindings(const QList<CompiledFunctionOrExpression> &functions,
-                                          bool storeSourceLocation = false);
+    generateJSCodeForFunctionsAndBindings(const QList<CompiledFunctionOrExpression> &functions);
 
-    bool generateRuntimeFunctions(QmlIR::Object *object, bool storeSourceLocation = true);
+    bool generateRuntimeFunctions(QmlIR::Object *object);
 
 private:
     Document *document;
@@ -603,10 +653,15 @@ private:
     Result will be stored in a TranslationData's commentIndex
     \a finalizeTranslationData: Takes the type of the binding and the previously set up TranslationData
  */
-template<typename RegisterString1, typename RegisterString2, typename FinalizeTranslationData>
+template<
+        typename RegisterMainString,
+        typename RegisterCommentString,
+        typename RegisterContextString,
+        typename FinalizeTranslationData>
 void tryGeneratingTranslationBindingBase(QStringView base, QQmlJS::AST::ArgumentList *args,
-                                         RegisterString1 registerMainString,
-                                         RegisterString2 registerCommentString,
+                                         RegisterMainString registerMainString,
+                                         RegisterCommentString registerCommentString,
+                                         RegisterContextString registerContextString,
                                          FinalizeTranslationData finalizeTranslationData
                                          )
 {
@@ -614,7 +669,7 @@ void tryGeneratingTranslationBindingBase(QStringView base, QQmlJS::AST::Argument
         QV4::CompiledData::TranslationData translationData;
         translationData.number = -1;
         translationData.commentIndex = 0; // empty string
-        translationData.padding = 0;
+        translationData.contextIndex = 0;
 
         if (!args || !args->expression)
             return; // no arguments, stop
@@ -655,7 +710,7 @@ void tryGeneratingTranslationBindingBase(QStringView base, QQmlJS::AST::Argument
         QV4::CompiledData::TranslationData translationData;
         translationData.number = -1;
         translationData.commentIndex = 0; // empty string, but unused
-        translationData.padding = 0;
+        translationData.contextIndex = 0;
 
         if (!args || !args->expression)
             return; // no arguments, stop
@@ -723,6 +778,57 @@ void tryGeneratingTranslationBindingBase(QStringView base, QQmlJS::AST::Argument
         QV4::CompiledData::TranslationData fakeTranslationData;
         fakeTranslationData.number = registerMainString(str);
         finalizeTranslationData(QV4::CompiledData::Binding::Type_String, fakeTranslationData);
+    } else if (base == QLatin1String("qsTranslate")) {
+        QV4::CompiledData::TranslationData translationData;
+        translationData.number = -1;
+        translationData.commentIndex = 0; // empty string
+
+        if (!args || !args->next)
+            return; // less than 2 arguments, stop
+
+        QStringView translation;
+        if (QQmlJS::AST::StringLiteral *arg1
+                = QQmlJS::AST::cast<QQmlJS::AST::StringLiteral *>(args->expression)) {
+            translation = arg1->value;
+        } else {
+            return; // first argument is not a string, stop
+        }
+
+        translationData.contextIndex = registerContextString(translation);
+
+        args = args->next;
+        Q_ASSERT(args);
+
+        QQmlJS::AST::StringLiteral *arg2
+                = QQmlJS::AST::cast<QQmlJS::AST::StringLiteral *>(args->expression);
+        if (!arg2)
+            return; // second argument is not a string, stop
+        translationData.stringIndex = registerMainString(arg2->value);
+
+        args = args->next;
+        if (args) {
+            QQmlJS::AST::StringLiteral *arg3
+                    = QQmlJS::AST::cast<QQmlJS::AST::StringLiteral *>(args->expression);
+            if (!arg3)
+                return; // third argument is not a string, stop
+            translationData.commentIndex = registerCommentString(arg3->value);
+
+            args = args->next;
+            if (args) {
+                if (QQmlJS::AST::NumericLiteral *arg4
+                        = QQmlJS::AST::cast<QQmlJS::AST::NumericLiteral *>(args->expression)) {
+                    translationData.number = int(arg4->value);
+                    args = args->next;
+                } else {
+                    return; // fourth argument is not a translation number, stop
+                }
+            }
+        }
+
+        if (args)
+            return; // too many arguments, stop
+
+        finalizeTranslationData(QV4::CompiledData::Binding::Type_Translation, translationData);
     }
 }
 

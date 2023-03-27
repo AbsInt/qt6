@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 cmake_minimum_required(VERSION 3.16)
 project(quick-accessibility LANGUAGES CXX)
 
@@ -11,16 +14,15 @@ set(INSTALL_EXAMPLEDIR "${INSTALL_EXAMPLESDIR}/quick/quick-accessibility")
 
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Qml Quick)
 
+qt_standard_project_setup(REQUIRES 6.5)
+
 qt_add_executable(quick-accessibility
+    WIN32
+    MACOSX_BUNDLE
     main.cpp
 )
 
-set_target_properties(quick-accessibility PROPERTIES
-    WIN32_EXECUTABLE TRUE
-    MACOSX_BUNDLE TRUE
-)
-
-target_link_libraries(quick-accessibility PUBLIC
+target_link_libraries(quick-accessibility PRIVATE
     Qt::Core
     Qt::Gui
     Qt::Qml
@@ -29,7 +31,6 @@ target_link_libraries(quick-accessibility PUBLIC
 
 qt_add_qml_module(quick-accessibility
     URI accessibility
-    VERSION 1.0
     QML_FILES
         "accessibility.qml"
         "Button.qml"

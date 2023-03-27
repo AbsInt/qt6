@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 function(qt6_generate_wayland_protocol_client_sources target)
     cmake_parse_arguments(arg "NO_INCLUDE_CORE_ONLY" "__QT_INTERNAL_WAYLAND_INCLUDE_DIR" "FILES" ${ARGN})
     if(DEFINED arg_UNPARSED_ARGUMENTS)
@@ -35,11 +38,13 @@ function(qt6_generate_wayland_protocol_client_sources target)
             OUTPUT "${waylandscanner_header_output}"
             #TODO: Maybe put the files in ${CMAKE_CURRENT_BINARY_DIR/wayland_generated instead?
             COMMAND Wayland::Scanner --strict ${waylandscanner_extra_args} client-header < "${protocol_file}" > "${waylandscanner_header_output}"
+            DEPENDS ${protocol_file} Wayland::Scanner
         )
 
         add_custom_command(
             OUTPUT "${waylandscanner_code_output}"
             COMMAND Wayland::Scanner --strict ${waylandscanner_extra_args} public-code < "${protocol_file}" > "${waylandscanner_code_output}"
+            DEPENDS ${protocol_file} Wayland::Scanner
         )
 
         set(wayland_include_dir "")
@@ -81,12 +86,14 @@ function(qt6_generate_wayland_protocol_client_sources target)
             DEPENDS ${protocol_file} Qt6::qtwaylandscanner
         )
 
-        target_sources(${target} PRIVATE
-            "${waylandscanner_header_output}"
+        set(sources "${waylandscanner_header_output}"
             "${waylandscanner_code_output}"
             "${qtwaylandscanner_header_output}"
-            "${qtwaylandscanner_code_output}"
-        )
+            "${qtwaylandscanner_code_output}")
+
+        target_sources(${target} PRIVATE ${sources})
+
+        set_source_files_properties(${sources} PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
     endforeach()
     target_include_directories(${target} PRIVATE ${target_binary_dir})
 endfunction()

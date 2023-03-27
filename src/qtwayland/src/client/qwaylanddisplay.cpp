@@ -50,6 +50,8 @@
 #include <QtWaylandClient/private/qwayland-text-input-unstable-v4-wip.h>
 #include <QtWaylandClient/private/qwayland-wp-primary-selection-unstable-v1.h>
 #include <QtWaylandClient/private/qwayland-qt-text-input-method-unstable-v1.h>
+#include <QtWaylandClient/private/qwayland-fractional-scale-v1.h>
+#include <QtWaylandClient/private/qwayland-viewporter.h>
 
 #include <QtCore/private/qcore_unix_p.h>
 
@@ -294,6 +296,17 @@ struct ::wl_region *QWaylandDisplay::createRegion(const QRegion &qregion)
     return mSubCompositor->get_subsurface(window->wlSurface(), parent->wlSurface());
 }
 
+::wp_viewport *QWaylandDisplay::createViewport(QWaylandWindow *window)
+{
+    if (!mViewporter) {
+        qCWarning(lcQpaWayland) << "Can't create wp_viewport, not supported by the compositor.";
+        return nullptr;
+    }
+
+    Q_ASSERT(window->wlSurface());
+    return mViewporter->get_viewport(window->wlSurface());
+}
+
 QWaylandShellIntegration *QWaylandDisplay::shellIntegration() const
 {
     return mWaylandIntegration->shellIntegration();
@@ -345,9 +358,9 @@ QWaylandDisplay::~QWaylandDisplay(void)
     if (mSyncCallback)
         wl_callback_destroy(mSyncCallback);
 
-    qDeleteAll(qExchange(mInputDevices, {}));
+    qDeleteAll(std::exchange(mInputDevices, {}));
 
-    for (QWaylandScreen *screen : qExchange(mScreens, {})) {
+    for (QWaylandScreen *screen : std::exchange(mScreens, {})) {
         QWindowSystemInterface::handleScreenRemoved(screen);
     }
     qDeleteAll(mWaitingScreens);
@@ -509,6 +522,8 @@ void QWaylandDisplay::registry_global(uint32_t id, const QString &interface, uin
 #if QT_CONFIG(wayland_client_primary_selection)
     } else if (interface == QLatin1String(QWaylandPrimarySelectionDeviceManagerV1::interface()->name)) {
         mPrimarySelectionManager.reset(new QWaylandPrimarySelectionDeviceManagerV1(this, id, 1));
+        for (QWaylandInputDevice *inputDevice : std::as_const(mInputDevices))
+            inputDevice->setPrimarySelectionDevice(mPrimarySelectionManager->createDevice(inputDevice));
 #endif
     } else if (interface == QLatin1String(QtWayland::qt_text_input_method_manager_v1::interface()->name)
             && (mTextInputManagerList.contains(interface) && mTextInputManagerList.indexOf(interface) < mTextInputManagerIndex)) {
@@ -597,7 +612,10 @@ void QWaylandDisplay::registry_global(uint32_t id, const QString &interface, uin
         mXdgOutputManager.reset(new QWaylandXdgOutputManagerV1(this, id, version));
         for (auto *screen : std::as_const(mWaitingScreens))
             screen->initXdgOutput(xdgOutputManager());
-        forceRoundTrip();
+    } else if (interface == QLatin1String(QtWayland::wp_fractional_scale_manager_v1::interface()->name)) {
+        mFractionalScaleManager.reset(new QtWayland::wp_fractional_scale_manager_v1(registry, id, 1));
+    } else if (interface == QLatin1String("wp_viewporter")) {
+        mViewporter.reset(new QtWayland::wp_viewporter(registry, id, qMin(1u, version)));
     }
 
     mGlobals.append(RegistryGlobal(id, interface, version, registry));
@@ -658,6 +676,13 @@ void QWaylandDisplay::registry_global_remove(uint32_t id)
                     inputDevice->setTextInputMethod(nullptr);
                 mWaylandIntegration->reconfigureInputContext();
             }
+#if QT_CONFIG(wayland_client_primary_selection)
+            if (global.interface == QLatin1String(QtWayland::zwp_primary_selection_device_manager_v1::interface()->name)) {
+                mPrimarySelectionManager.reset();
+                for (QWaylandInputDevice *inputDevice : std::as_const(mInputDevices))
+                    inputDevice->setPrimarySelectionDevice(nullptr);
+            }
+#endif
             emit globalRemoved(mGlobals.takeAt(i));
             break;
         }

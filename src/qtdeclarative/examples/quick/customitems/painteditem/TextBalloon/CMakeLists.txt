@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     message(FATAL_ERROR "TextBalloon should be built as part of the 'painteditem' project, and not in isolation.")
 endif()
@@ -5,7 +8,6 @@ endif()
 set(INSTALL_EXAMPLEDIR "${INSTALL_EXAMPLESDIR}/quick/customitems/painteditem/TextBalloon")
 
 qt_add_qml_module(qmltextballoon
-    VERSION 1.0
     URI "TextBalloon"
     PLUGIN_TARGET qmltextballoon
     SOURCES

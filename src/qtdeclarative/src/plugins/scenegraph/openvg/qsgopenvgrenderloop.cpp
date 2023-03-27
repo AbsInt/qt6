@@ -155,7 +155,7 @@ void QSGOpenVGRenderLoop::renderWindow(QQuickWindow *window)
     data.updatePending = false;
 
     if (!data.grabOnly) {
-        cd->flushFrameSynchronousEvents();
+        cd->deliveryAgentPrivate()->flushFrameSynchronousEvents(window);
         // Event delivery/processing triggered the window to be deleted or stop rendering.
         if (!m_windows.contains(window))
             return;
@@ -196,7 +196,7 @@ void QSGOpenVGRenderLoop::renderWindow(QQuickWindow *window)
     vgTranslate(0.0f, window->size().height());
     vgScale(1.0, -1.0);
 
-    cd->renderSceneGraph(window->size());
+    cd->renderSceneGraph();
 
     if (profileFrames)
         renderTime = renderTimer.nsecsElapsed();

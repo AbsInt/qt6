@@ -62,6 +62,7 @@ struct QmltcEnum
 
 struct QmltcMethodBase
 {
+    QStringList comments; // C++ comments
     QString name; // C++ function name
     QList<QmltcVariable> parameterList; // C++ function parameter list
     QStringList body; // C++ function code
@@ -127,6 +128,9 @@ struct QmltcType
 
     // TODO: only needed for binding callables - should not be needed, generally
     bool ignoreInit = false; // specifies whether init and externalCtor should be ignored
+
+    // needed for singletons
+    std::optional<QmltcMethod> staticCreate{};
 };
 
 // Represents whole QML program, compiled to C++

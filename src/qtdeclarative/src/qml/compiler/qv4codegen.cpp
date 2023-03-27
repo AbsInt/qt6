@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qv4codegen_p.h"
-#include "qv4util_p.h"
 
 #include <QtCore/QCoreApplication>
 #include <QtCore/QStringList>
@@ -70,16 +69,39 @@ static inline void setJumpOutLocation(QV4::Moth::BytecodeGenerator *bytecodeGene
     }
 }
 
+void Codegen::generateThrowException(const QString &type, const QString &text)
+{
+    RegisterScope scope(this);
+    Instruction::Construct construct;
+    if (text.isEmpty()) {
+        construct.argc = 0;
+        construct.argv = 0;
+    } else {
+        construct.argc = 1;
+        Instruction::LoadRuntimeString load;
+        load.stringId = registerString(text);
+        bytecodeGenerator->addInstruction(load);
+        construct.argv = Reference::fromAccumulator(this).storeOnStack().stackSlot();
+    }
+    Reference r = referenceForName(type, false);
+    r = r.storeOnStack();
+    construct.func = r.stackSlot();
+    bytecodeGenerator->addInstruction(construct);
+    Instruction::ThrowException throwException;
+    bytecodeGenerator->addInstruction(throwException);
+}
+
 Codegen::Codegen(QV4::Compiler::JSUnitGenerator *jsUnitGenerator, bool strict,
-                 CodegenWarningInterface *interface)
+                 CodegenWarningInterface *iface, bool storeSourceLocations)
     : _module(nullptr),
       _returnAddress(-1),
       _context(nullptr),
       _labelledStatement(nullptr),
       jsUnitGenerator(jsUnitGenerator),
       _strictMode(strict),
+      storeSourceLocations(storeSourceLocations),
       _fileNameIsUrl(false),
-      _interface(interface)
+      _interface(iface)
 {
     jsUnitGenerator->codeGeneratorName = QStringLiteral("moth");
     pushExpr();
@@ -373,6 +395,7 @@ void Codegen::statement(Statement *ast)
 {
     RegisterScope scope(this);
 
+    bytecodeGenerator->incrementStatement();
     bytecodeGenerator->setLocation(ast->firstSourceLocation());
 
     VolatileMemoryLocations vLocs = scanVolatileMemoryLocations(ast);
@@ -388,6 +411,7 @@ void Codegen::statement(ExpressionNode *ast)
     } else {
         RegisterScope scope(this);
 
+        bytecodeGenerator->incrementStatement();
         pushExpr(Result(nx));
         VolatileMemoryLocations vLocs = scanVolatileMemoryLocations(ast);
         qSwap(_volatileMemoryLocations, vLocs);
@@ -757,86 +781,72 @@ void Codegen::destructurePattern(Pattern *p, const Reference &rhs)
 
 bool Codegen::visit(ArgumentList *)
 {
-    Q_UNREACHABLE();
-    return false;
+    Q_UNREACHABLE_RETURN(false);
 }
 
 bool Codegen::visit(CaseBlock *)
 {
-    Q_UNREACHABLE();
-    return false;
+    Q_UNREACHABLE_RETURN(false);
 }
 
 bool Codegen::visit(CaseClause *)
 {
-    Q_UNREACHABLE();
-    return false;
+    Q_UNREACHABLE_RETURN(false);
 }
 
 bool Codegen::visit(CaseClauses *)
 {
-    Q_UNREACHABLE();
-    return false;
+    Q_UNREACHABLE_RETURN(false);
 }
 
 bool Codegen::visit(Catch *)
 {
-    Q_UNREACHABLE();
-    return false;
+    Q_UNREACHABLE_RETURN(false);
 }
 
 bool Codegen::visit(DefaultClause *)
 {
-    Q_UNREACHABLE();
-    return false;
+    Q_UNREACHABLE_RETURN(false);
 }
 
 bool Codegen::visit(Elision *)
 {
-    Q_UNREACHABLE();
-    return false;
+    Q_UNREACHABLE_RETURN(false);
 }
 
 bool Codegen::visit(Finally *)
 {
-    Q_UNREACHABLE();
-    return false;
+    Q_UNREACHABLE_RETURN(false);
 }
 
 bool Codegen::visit(FormalParameterList *)
 {
-    Q_UNREACHABLE();
-    return false;
+    Q_UNREACHABLE_RETURN(false);
 }
 
 bool Codegen::visit(Program *)
 {
-    Q_UNREACHABLE();
-    return false;
+    Q_UNREACHABLE_RETURN(false);
 }
 
 bool Codegen::visit(PatternElement *)
 {
-    Q_UNREACHABLE();
-    return false;
+    Q_UNREACHABLE_RETURN(false);
 }
 
 bool Codegen::visit(PatternElementList *)
 {
-    Q_UNREACHABLE();
-    return false;
+    Q_UNREACHABLE_RETURN(false);
 }
 
 bool Codegen::visit(PatternProperty *)
 {
-    Q_UNREACHABLE();
-    return false;
+    Q_UNREACHABLE_RETURN(false);
 }
 
 bool Codegen::visit(PatternPropertyList *)
 {
-    Q_UNREACHABLE();
-    return false;
+    Q_UNREACHABLE_RETURN(false);
 }
 
 bool Codegen::visit(ExportDeclaration *ast)
@@ -877,68 +887,57 @@ bool Codegen::visit(TypeAnnotation *ast)
 
 bool Codegen::visit(StatementList *)
 {
-    Q_UNREACHABLE();
-    return false;
+    Q_UNREACHABLE_RETURN(false);
 }
 
 bool Codegen::visit(UiArrayMemberList *)
 {
-    Q_UNREACHABLE();
-    return false;
+    Q_UNREACHABLE_RETURN(false);
 }
 
 bool Codegen::visit(UiImport *)
 {
-    Q_UNREACHABLE();
-    return false;
+    Q_UNREACHABLE_RETURN(false);
 }
 
 bool Codegen::visit(UiHeaderItemList *)
 {
-    Q_UNREACHABLE();
-    return false;
+    Q_UNREACHABLE_RETURN(false);
 }
 
 bool Codegen::visit(UiPragma *)
 {
-    Q_UNREACHABLE();
-    return false;
+    Q_UNREACHABLE_RETURN(false);
 }
 
 bool Codegen::visit(UiObjectInitializer *)
 {
-    Q_UNREACHABLE();
-    return false;
+    Q_UNREACHABLE_RETURN(false);
 }
 
 bool Codegen::visit(UiObjectMemberList *)
 {
-    Q_UNREACHABLE();
-    return false;
+    Q_UNREACHABLE_RETURN(false);
 }
 
 bool Codegen::visit(UiParameterList *)
 {
-    Q_UNREACHABLE();
-    return false;
+    Q_UNREACHABLE_RETURN(false);
 }
 
 bool Codegen::visit(UiProgram *)
 {
-    Q_UNREACHABLE();
-    return false;
+    Q_UNREACHABLE_RETURN(false);
 }
 
 bool Codegen::visit(UiQualifiedId *)
 {
-    Q_UNREACHABLE();
-    return false;
+    Q_UNREACHABLE_RETURN(false);
 }
 
 bool Codegen::visit(VariableDeclarationList *)
 {
-    Q_UNREACHABLE();
-    return false;
+    Q_UNREACHABLE_RETURN(false);
 }
 
 bool Codegen::visit(ClassExpression *ast)
@@ -1931,6 +1930,17 @@ Codegen::Reference Codegen::jumpBinop(QSOperator::Op oper, Reference &left, Refe
     return Reference();
 }
 
+Codegen::Reference Codegen::loadSubscriptForCall(const Codegen::Reference &base)
+{
+    // Retrieve the function to be called before generating the arguments.
+    // Generating the arguments might change the array.
+    base.elementSubscript.loadInAccumulator();
+    Codegen::Instruction::LoadElement load;
+    load.base = base.elementBase;
+    bytecodeGenerator->addInstruction(load);
+    return Reference::fromAccumulator(this);
+}
+
 bool Codegen::visit(CallExpression *ast)
 {
     if (hasError())
@@ -1947,8 +1957,11 @@ bool Codegen::visit(CallExpression *ast)
         return false;
     switch (base.type) {
     case Reference::Member:
-    case Reference::Subscript:
         base = base.asLValue();
+        break;
+    case Reference::Subscript:
+        base.element = loadSubscriptForCall(base).storeOnStack().stackSlot();
+        base.subscriptLoadedForCall = true;
         break;
     case Reference::Name:
         break;
@@ -1971,14 +1984,12 @@ bool Codegen::visit(CallExpression *ast)
 
         auto jumpLabel = ast->isOptional ? m_optionalChainLabels.take(ast) : *base.optionalChainJumpLabel.get();
 
-        auto acc = Reference::fromAccumulator(this).storeOnStack();
         base.loadInAccumulator();
         bytecodeGenerator->addInstruction(Instruction::CmpEqNull());
         auto jumpFalse = bytecodeGenerator->jumpFalse();
         bytecodeGenerator->addInstruction(Instruction::LoadUndefined());
         bytecodeGenerator->jump().link(jumpLabel);
         jumpFalse.link();
-        acc.loadInAccumulator();
     }
 
     auto calldata = pushArgs(ast->arguments);
@@ -1992,21 +2003,29 @@ bool Codegen::visit(CallExpression *ast)
             baseObject.storeOnStack(thisObject);
             baseObject = Reference::fromStackSlot(this, thisObject);
         }
-        if (!base.isStackSlot()) {
-            base.storeOnStack(functionObject);
-            base = Reference::fromStackSlot(this, functionObject);
-        }
+
+        const int func = [&]() {
+            if (base.type == Reference::Subscript)
+                return base.element;
+
+            if (!base.isStackSlot()) {
+                base.storeOnStack(functionObject);
+                base = Reference::fromStackSlot(this, functionObject);
+            }
+
+            return base.stackSlot();
+        }();
 
         if (calldata.hasSpread) {
             Instruction::CallWithSpread call;
-            call.func = base.stackSlot();
+            call.func = func;
             call.thisObject = baseObject.stackSlot();
             call.argc = calldata.argc;
             call.argv = calldata.argv;
             bytecodeGenerator->addInstruction(call);
         } else {
             Instruction::TailCall call;
-            call.func = base.stackSlot();
+            call.func = func;
             call.thisObject = baseObject.stackSlot();
             call.argc = calldata.argc;
             call.argv = calldata.argv;
@@ -2045,7 +2064,8 @@ void Codegen::handleCall(Reference &base, Arguments calldata, int slotForFunctio
         if (!disable_lookups && useFastLookups) {
             Instruction::CallPropertyLookup call;
             call.base = base.propertyBase.stackSlot();
-            call.lookupIndex = registerGetterLookup(base.propertyNameIndex);
+            call.lookupIndex = registerGetterLookup(
+                        base.propertyNameIndex, JSUnitGenerator::LookupForCall);
             call.argc = calldata.argc;
             call.argv = calldata.argv;
             bytecodeGenerator->addInstruction(call);
@@ -2058,9 +2078,9 @@ void Codegen::handleCall(Reference &base, Arguments calldata, int slotForFunctio
             bytecodeGenerator->addInstruction(call);
         }
     } else if (base.type == Reference::Subscript) {
-        Instruction::CallElement call;
-        call.base = base.elementBase;
-        call.index = base.elementSubscript.stackSlot();
+        Instruction::CallWithReceiver call;
+        call.thisObject = base.elementBase.stackSlot();
+        call.name = base.element;
         call.argc = calldata.argc;
         call.argv = calldata.argv;
         bytecodeGenerator->addInstruction(call);
@@ -2073,13 +2093,15 @@ void Codegen::handleCall(Reference &base, Arguments calldata, int slotForFunctio
         } else if (!disable_lookups && useFastLookups && base.global) {
             if (base.qmlGlobal) {
                 Instruction::CallQmlContextPropertyLookup call;
-                call.index = registerQmlContextPropertyGetterLookup(base.nameAsIndex());
+                call.index = registerQmlContextPropertyGetterLookup(
+                            base.nameAsIndex(), JSUnitGenerator::LookupForCall);
                 call.argc = calldata.argc;
                 call.argv = calldata.argv;
                 bytecodeGenerator->addInstruction(call);
             } else {
                 Instruction::CallGlobalLookup call;
-                call.index = registerGlobalGetterLookup(base.nameAsIndex());
+                call.index = registerGlobalGetterLookup(
+                            base.nameAsIndex(), JSUnitGenerator::LookupForCall);
                 call.argc = calldata.argc;
                 call.argv = calldata.argv;
                 bytecodeGenerator->addInstruction(call);
@@ -2150,8 +2172,10 @@ Codegen::Arguments Codegen::pushArgs(ArgumentList *args)
             break;
         if (!argc && !it->next && !hasSpread) {
             // avoid copy for functions taking a single argument
-            if (e.isStackSlot())
+            if (e.isStackSlot()) {
+                e.tdzCheck();
                 return { 1, e.stackSlot(), hasSpread };
+            }
         }
         (void) e.storeOnStack(calldata + argc);
         ++argc;
@@ -2502,8 +2526,11 @@ bool Codegen::handleTaggedTemplate(Reference base, TaggedTemplate *ast)
     int functionObject = -1, thisObject = -1;
     switch (base.type) {
     case Reference::Member:
-    case Reference::Subscript:
         base = base.asLValue();
+        break;
+    case Reference::Subscript:
+        base.element = loadSubscriptForCall(base).storeOnStack().stackSlot();
+        base.subscriptLoadedForCall = true;
         break;
     case Reference::Name:
         break;
@@ -2567,6 +2594,7 @@ bool Codegen::visit(FunctionExpression *ast)
 Codegen::Reference Codegen::referenceForName(const QString &name, bool isLhs, const SourceLocation &accessLocation)
 {
     Context::ResolvedName resolved = _context->resolveName(name, accessLocation);
+    bool throwsReferenceError = false;
 
     if (resolved.type == Context::ResolvedName::Local || resolved.type == Context::ResolvedName::Stack
         || resolved.type == Context::ResolvedName::Import) {
@@ -2579,6 +2607,8 @@ Codegen::Reference Codegen::referenceForName(const QString &name, bool isLhs, co
             Q_ASSERT(_interface);
             _interface->reportVarUsedBeforeDeclaration(
                     name, url().toLocalFile(), resolved.declarationLocation, accessLocation);
+            if (resolved.type == Context::ResolvedName::Stack && resolved.requiresTDZCheck)
+                throwsReferenceError = true;
         }
 
         if (resolved.isInjected && accessLocation.isValid()) {
@@ -2607,6 +2637,7 @@ Codegen::Reference Codegen::referenceForName(const QString &name, bool isLhs, co
         r.requiresTDZCheck = resolved.requiresTDZCheck;
         r.name = name; // used to show correct name at run-time when TDZ check fails.
         r.sourceLocation = accessLocation;
+        r.throwsReferenceError = throwsReferenceError;
         return r;
     }
 
@@ -3246,7 +3277,7 @@ static bool endsWithReturn(Module *module, Node *node)
 }
 
 int Codegen::defineFunction(const QString &name, AST::Node *ast, AST::FormalParameterList *formals,
-                            AST::StatementList *body, bool storeSourceLocation)
+                            AST::StatementList *body)
 {
     enterContext(ast);
 
@@ -3256,7 +3287,7 @@ int Codegen::defineFunction(const QString &name, AST::Node *ast, AST::FormalPara
 
     _context->name = name.isEmpty() ? currentExpr().result().name : name;
     _module->functions.append(_context);
-    _context->functionIndex = _module->functions.count() - 1;
+    _context->functionIndex = _module->functions.size() - 1;
 
     Context *savedFunctionContext = _functionContext;
     _functionContext = _context;
@@ -3265,7 +3296,7 @@ int Codegen::defineFunction(const QString &name, AST::Node *ast, AST::FormalPara
 
     if (_context->contextType == ContextType::Global || _context->contextType == ContextType::ScriptImportedByQML) {
         _module->blocks.append(_context);
-        _context->blockIndex = _module->blocks.count() - 1;
+        _context->blockIndex = _module->blocks.size() - 1;
     }
     if (_module->debugMode) // allow the debugger to see overwritten arguments
         _context->argumentsCanEscape = true;
@@ -3276,9 +3307,10 @@ int Codegen::defineFunction(const QString &name, AST::Node *ast, AST::FormalPara
     // at all, because if the onSignal is a signal handler, the user is actually making it explicit
     // that the binding is a function, so we should execute that. However, we don't know that during
     // AOT compilation, so mark the surrounding function as only-returning-a-closure.
-    _context->returnsClosure = body && body->statement && cast<ExpressionStatement *>(body->statement) && cast<FunctionExpression *>(cast<ExpressionStatement *>(body->statement)->expression);
+    _context->returnsClosure = body && cast<ExpressionStatement *>(body->statement)
+            && cast<FunctionExpression *>(cast<ExpressionStatement *>(body->statement)->expression);
 
-    BytecodeGenerator bytecode(_context->line, _module->debugMode, storeSourceLocation);
+    BytecodeGenerator bytecode(_context->line, _module->debugMode, storeSourceLocations);
     BytecodeGenerator *savedBytecodeGenerator;
     savedBytecodeGenerator = bytecodeGenerator;
     bytecodeGenerator = &bytecode;
@@ -3305,7 +3337,7 @@ int Codegen::defineFunction(const QString &name, AST::Node *ast, AST::FormalPara
     // register the lexical scope for global code
     if (!_context->parent && _context->requiresExecutionContext) {
         _module->blocks.append(_context);
-        _context->blockIndex = _module->blocks.count() - 1;
+        _context->blockIndex = _module->blocks.size() - 1;
     }
 
     TailCallBlocker maybeBlockTailCalls(this, _context->canHaveTailCalls());
@@ -3380,7 +3412,7 @@ int Codegen::defineFunction(const QString &name, AST::Node *ast, AST::FormalPara
             qDebug() << "=== Bytecode for" << _context->name << "strict mode" << _context->isStrict
                      << "register count" << _context->registerCountInFunction << "implicit return" << requiresReturnValue;
             QV4::Moth::dumpBytecode(_context->code, _context->locals.size(), _context->arguments.size(),
-                                    _context->line, _context->lineNumberMapping);
+                                    _context->line, _context->lineAndStatementNumberMapping);
             qDebug();
         }
     }
@@ -4300,7 +4332,9 @@ bool Codegen::Reference::operator==(const Codegen::Reference &other) const
     case Member:
         return propertyBase == other.propertyBase && propertyNameIndex == other.propertyNameIndex;
     case Subscript:
-        return elementBase == other.elementBase && elementSubscript == other.elementSubscript;
+        return elementBase == other.elementBase && other.subscriptLoadedForCall
+                ? (subscriptLoadedForCall && element == other.element)
+                : (!subscriptLoadedForCall && elementSubscript == other.elementSubscript);
     case Import:
         return index == other.index;
     case Const:
@@ -4417,6 +4451,28 @@ Codegen::Reference Codegen::Reference::doStoreOnStack(int slotIndex) const
     return slot;
 }
 
+void Codegen::Reference::tdzCheck(bool requiresCheck, bool throwsReferenceError) const {
+    if (throwsReferenceError) {
+        codegen->generateThrowException(QStringLiteral("ReferenceError"),
+                                        name + QStringLiteral(" is not defined"));
+        return;
+    }
+    if (!requiresCheck)
+        return;
+    Instruction::DeadTemporalZoneCheck check;
+    check.name = codegen->registerString(name);
+    codegen->bytecodeGenerator->addInstruction(check);
+}
+
+void Codegen::Reference::tdzCheckStackSlot(Moth::StackSlot slot, bool requiresCheck, bool throwsReferenceError) const {
+    if (!requiresCheck)
+        return;
+    Instruction::LoadReg load;
+    load.reg = slot;
+    codegen->bytecodeGenerator->addInstruction(load);
+    tdzCheck(true, throwsReferenceError);
+}
+
 Codegen::Reference Codegen::Reference::storeRetainAccumulator() const
 {
     if (storeWipesAccumulator()) {
@@ -4453,24 +4509,21 @@ bool Codegen::Reference::storeWipesAccumulator() const
 
 void Codegen::Reference::storeAccumulator() const
 {
-    if (isReferenceToConst) {
-        // throw a type error
-        RegisterScope scope(codegen);
-        Reference r = codegen->referenceForName(QStringLiteral("TypeError"), false);
-        r = r.storeOnStack();
-        Instruction::Construct construct;
-        construct.func = r.stackSlot();
-        construct.argc = 0;
-        construct.argv = 0;
-        codegen->bytecodeGenerator->addInstruction(construct);
-        Instruction::ThrowException throwException;
-        codegen->bytecodeGenerator->addInstruction(throwException);
+    if (throwsReferenceError) {
+        codegen->generateThrowException(QStringLiteral("ReferenceError"),
+                                        name + QStringLiteral(" is not defined"));
         return;
     }
+
+    if (isReferenceToConst) {
+        // throw a type error
+        codegen->generateThrowException(QStringLiteral("TypeError"));
+        return;
+    }
+
     switch (type) {
     case Super:
-        Q_UNREACHABLE();
-        return;
+        Q_UNREACHABLE_RETURN();
     case SuperProperty:
         Instruction::StoreSuperProperty store;
         store.property = property.stackSlot();
@@ -4538,30 +4591,13 @@ void Codegen::Reference::storeAccumulator() const
 
 void Codegen::Reference::loadInAccumulator() const
 {
-    auto tdzCheck = [this](bool requiresCheck){
-        if (!requiresCheck)
-            return;
-        Instruction::DeadTemporalZoneCheck check;
-        check.name = codegen->registerString(name);
-        codegen->bytecodeGenerator->addInstruction(check);
-    };
-    auto tdzCheckStackSlot = [this, tdzCheck](Moth::StackSlot slot, bool requiresCheck){
-        if (!requiresCheck)
-            return;
-        Instruction::LoadReg load;
-        load.reg = slot;
-        codegen->bytecodeGenerator->addInstruction(load);
-        tdzCheck(true);
-    };
-
     switch (type) {
     case Accumulator:
         return;
     case Super:
-        Q_UNREACHABLE();
-        return;
+        Q_UNREACHABLE_RETURN();
     case SuperProperty:
-        tdzCheckStackSlot(property, subscriptRequiresTDZCheck);
+        tdzCheckStackSlot(property, subscriptRequiresTDZCheck, false);
         Instruction::LoadSuperProperty load;
         load.property = property.stackSlot();
         codegen->bytecodeGenerator->addInstruction(load);
@@ -4608,7 +4644,7 @@ QT_WARNING_POP
         Instruction::LoadReg load;
         load.reg = stackSlot();
         codegen->bytecodeGenerator->addInstruction(load);
-        tdzCheck(requiresTDZCheck);
+        tdzCheck(requiresTDZCheck, throwsReferenceError);
     } return;
     case ScopedLocal: {
         if (!scope) {
@@ -4621,7 +4657,7 @@ QT_WARNING_POP
             load.scope = scope;
             codegen->bytecodeGenerator->addInstruction(load);
         }
-        tdzCheck(requiresTDZCheck);
+        tdzCheck(requiresTDZCheck, throwsReferenceError);
         return;
     }
     case Name:
@@ -4646,11 +4682,13 @@ QT_WARNING_POP
         if (!disable_lookups && global) {
             if (qmlGlobal) {
                 Instruction::LoadQmlContextPropertyLookup load;
-                load.index = codegen->registerQmlContextPropertyGetterLookup(nameAsIndex());
+                load.index = codegen->registerQmlContextPropertyGetterLookup(
+                            nameAsIndex(), JSUnitGenerator::LookupForStorage);
                 codegen->bytecodeGenerator->addInstruction(load);
             } else {
                 Instruction::LoadGlobalLookup load;
-                load.index = codegen->registerGlobalGetterLookup(nameAsIndex());
+                load.index = codegen->registerGlobalGetterLookup(
+                            nameAsIndex(), JSUnitGenerator::LookupForStorage);
                 codegen->bytecodeGenerator->addInstruction(load);
             }
         } else {
@@ -4661,18 +4699,22 @@ QT_WARNING_POP
         return;
     case Member:
         propertyBase.loadInAccumulator();
-        tdzCheck(requiresTDZCheck);
+        tdzCheck(requiresTDZCheck, throwsReferenceError);
 
         if (sourceLocation.isValid())
             codegen->bytecodeGenerator->setLocation(sourceLocation);
 
         if (!disable_lookups && codegen->useFastLookups) {
-            if (optionalChainJumpLabel->isValid()) { // If we got a valid jump label, this means it's an optional lookup
-                auto jump = codegen->bytecodeGenerator->jumpOptionalLookup(codegen->registerGetterLookup(propertyNameIndex));
+            if (optionalChainJumpLabel->isValid()) {
+                // If we got a valid jump label, this means it's an optional lookup
+                auto jump = codegen->bytecodeGenerator->jumpOptionalLookup(
+                            codegen->registerGetterLookup(
+                                propertyNameIndex, JSUnitGenerator::LookupForStorage));
                 jump.link(*optionalChainJumpLabel.get());
             } else {
                 Instruction::GetLookup load;
-                load.index = codegen->registerGetterLookup(propertyNameIndex);
+                load.index = codegen->registerGetterLookup(
+                            propertyNameIndex, JSUnitGenerator::LookupForStorage);
                 codegen->bytecodeGenerator->addInstruction(load);
             }
         } else {
@@ -4693,12 +4735,12 @@ QT_WARNING_POP
         Instruction::LoadImport load;
         load.index = index;
         codegen->bytecodeGenerator->addInstruction(load);
-        tdzCheck(requiresTDZCheck);
+        tdzCheck(requiresTDZCheck, throwsReferenceError);
     } return;
     case Subscript: {
-        tdzCheckStackSlot(elementBase, requiresTDZCheck);
+        tdzCheckStackSlot(elementBase, requiresTDZCheck, throwsReferenceError);
         elementSubscript.loadInAccumulator();
-        tdzCheck(subscriptRequiresTDZCheck);
+        tdzCheck(subscriptRequiresTDZCheck, false);
         Instruction::LoadElement load;
         load.base = elementBase;
         codegen->bytecodeGenerator->addInstruction(load);

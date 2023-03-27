@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "mockcompositor.h"
-#include <QtOpenGL/QOpenGLWindow>
 #include <QtGui/QRasterWindow>
 #include <QtGui/QEventPoint>
 
@@ -18,7 +17,7 @@ public:
             removeAll<Seat>();
 
             uint capabilities = MockCompositor::Seat::capability_pointer | MockCompositor::Seat::capability_touch;
-            int version = 7;
+            int version = 8;
             add<Seat>(capabilities, version);
         });
     }
@@ -40,8 +39,7 @@ private slots:
     void fingerScroll();
     void fingerScrollSlow();
     void continuousScroll();
-    void wheelDiscreteScroll_data();
-    void wheelDiscreteScroll();
+    void highResolutionScroll();
 
     // Touch tests
     void createsTouch();
@@ -50,18 +48,19 @@ private slots:
     void multiTouch();
     void multiTouchUpAndMotionFrame();
     void tapAndMoveInSameFrame();
+    void cancelTouch();
 };
 
 void tst_seat::bindsToSeat()
 {
     QCOMPOSITOR_COMPARE(get<Seat>()->resourceMap().size(), 1);
-    QCOMPOSITOR_COMPARE(get<Seat>()->resourceMap().first()->version(), 7);
+    QCOMPOSITOR_COMPARE(get<Seat>()->resourceMap().first()->version(), 8);
 }
 
 void tst_seat::createsPointer()
 {
     QCOMPOSITOR_TRY_COMPARE(pointer()->resourceMap().size(), 1);
-    QCOMPOSITOR_TRY_COMPARE(pointer()->resourceMap().first()->version(), 7);
+    QCOMPOSITOR_TRY_COMPARE(pointer()->resourceMap().first()->version(), 8);
 }
 
 void tst_seat::setsCursorOnEnter()
@@ -93,7 +92,7 @@ void tst_seat::usesEnterSerial()
     });
     QCOMPOSITOR_TRY_VERIFY(pointer()->cursorSurface());
 
-    QTRY_COMPARE(setCursorSpy.count(), 1);
+    QTRY_COMPARE(setCursorSpy.size(), 1);
     QCOMPARE(setCursorSpy.takeFirst().at(0).toUInt(), enterSerial);
 }
 
@@ -319,28 +318,19 @@ void tst_seat::fingerScrollSlow()
     QCOMPARE(accumulated.y(), -1);
 }
 
-void tst_seat::wheelDiscreteScroll_data()
-{
-    QTest::addColumn<uint>("source");
-    QTest::newRow("wheel") << uint(Pointer::axis_source_wheel);
-    QTest::newRow("wheel tilt") << uint(Pointer::axis_source_wheel_tilt);
-}
-
-void tst_seat::wheelDiscreteScroll()
+void tst_seat::highResolutionScroll()
 {
     WheelWindow window;
     QCOMPOSITOR_TRY_VERIFY(xdgSurface() && xdgSurface()->m_committedConfigureSerial);
-
-    QFETCH(uint, source);
 
     exec([=] {
         auto *p = pointer();
         auto *c = client();
         p->sendEnter(xdgToplevel()->surface(), {32, 32});
         p->sendFrame(c);
-        p->sendAxisSource(c, Pointer::axis_source(source));
-        p->sendAxisDiscrete(c, Pointer::axis_vertical_scroll, 1); // 1 click downwards
-        p->sendAxis(c, Pointer::axis_vertical_scroll, 1.0);
+        p->sendAxisSource(c, Pointer::axis_source_wheel);
+        p->sendAxisValue120(c, Pointer::axis_vertical_scroll, 30); // quarter of a click
+        p->sendAxis(c, Pointer::axis_vertical_scroll, 3.75);
         p->sendFrame(c);
     });
 
@@ -349,10 +339,26 @@ void tst_seat::wheelDiscreteScroll()
         auto e = window.m_events.takeFirst();
         QCOMPARE(e.phase, Qt::NoScrollPhase);
         QVERIFY(qAbs(e.angleDelta.x()) <= qAbs(e.angleDelta.y())); // Vertical scroll
-        // According to the docs the angle delta is in eights of a degree and most mice have
-        // 1 click = 15 degrees. The angle delta should therefore be:
-        // 15 degrees / (1/8 eights per degrees) = 120 eights of degrees.
-        QCOMPARE(e.angleDelta, QPoint(0, -120));
+        QCOMPARE(e.angleDelta, QPoint(0, -30));
+        // Click scrolls are not continuous and should not have a pixel delta
+        QCOMPARE(e.pixelDelta, QPoint(0, 0));
+    }
+
+    exec([=] {
+        auto *p = pointer();
+        auto *c = client();
+        p->sendAxisSource(c, Pointer::axis_source_wheel);
+        p->sendAxisValue120(c, Pointer::axis_vertical_scroll, 90); // complete the click
+        p->sendAxis(c, Pointer::axis_vertical_scroll, 11.25);
+        p->sendFrame(c);
+    });
+
+    QTRY_VERIFY(!window.m_events.empty());
+    {
+        auto e = window.m_events.takeFirst();
+        QCOMPARE(e.phase, Qt::NoScrollPhase);
+        QVERIFY(qAbs(e.angleDelta.x()) <= qAbs(e.angleDelta.y())); // Vertical scroll
+        QCOMPARE(e.angleDelta, QPoint(0, -90));
         // Click scrolls are not continuous and should not have a pixel delta
         QCOMPARE(e.pixelDelta, QPoint(0, 0));
     }
@@ -387,7 +393,7 @@ void tst_seat::continuousScroll()
 void tst_seat::createsTouch()
 {
     QCOMPOSITOR_TRY_COMPARE(touch()->resourceMap().size(), 1);
-    QCOMPOSITOR_TRY_COMPARE(touch()->resourceMap().first()->version(), 7);
+    QCOMPOSITOR_TRY_COMPARE(touch()->resourceMap().first()->version(), 8);
 }
 
 class TouchWindow : public QRasterWindow {
@@ -437,14 +443,14 @@ void tst_seat::singleTap()
         auto e = window.m_events.takeFirst();
         QCOMPARE(e.type, QEvent::TouchBegin);
         QCOMPARE(e.touchPointStates, QEventPoint::State::Pressed);
-        QCOMPARE(e.touchPoints.length(), 1);
+        QCOMPARE(e.touchPoints.size(), 1);
         QCOMPARE(e.touchPoints.first().position(), QPointF(32-window.frameMargins().left(), 32-window.frameMargins().top()));
     }
     {
         auto e = window.m_events.takeFirst();
         QCOMPARE(e.type, QEvent::TouchEnd);
         QCOMPARE(e.touchPointStates, QEventPoint::State::Released);
-        QCOMPARE(e.touchPoints.length(), 1);
+        QCOMPARE(e.touchPoints.size(), 1);
         QCOMPARE(e.touchPoints.first().position(), QPointF(32-window.frameMargins().left(), 32-window.frameMargins().top()));
     }
 }
@@ -468,14 +474,14 @@ void tst_seat::singleTapFloat()
         auto e = window.m_events.takeFirst();
         QCOMPARE(e.type, QEvent::TouchBegin);
         QCOMPARE(e.touchPointStates, QEventPoint::State::Pressed);
-        QCOMPARE(e.touchPoints.length(), 1);
+        QCOMPARE(e.touchPoints.size(), 1);
         QCOMPARE(e.touchPoints.first().position(), QPointF(32.75-window.frameMargins().left(), 32.25-window.frameMargins().top()));
     }
     {
         auto e = window.m_events.takeFirst();
         QCOMPARE(e.type, QEvent::TouchEnd);
         QCOMPARE(e.touchPointStates, QEventPoint::State::Released);
-        QCOMPARE(e.touchPoints.length(), 1);
+        QCOMPARE(e.touchPoints.size(), 1);
         QCOMPARE(e.touchPoints.first().position(), QPointF(32.75-window.frameMargins().left(), 32.25-window.frameMargins().top()));
     }
 }
@@ -511,7 +517,7 @@ void tst_seat::multiTouch()
         auto e = window.m_events.takeFirst();
         QCOMPARE(e.type, QEvent::TouchBegin);
         QCOMPARE(e.touchPointStates, QEventPoint::State::Pressed);
-        QCOMPARE(e.touchPoints.length(), 2);
+        QCOMPARE(e.touchPoints.size(), 2);
 
         QCOMPARE(e.touchPoints[0].state(), QEventPoint::State::Pressed);
         QCOMPARE(e.touchPoints[0].position(), QPointF(32-window.frameMargins().left(), 32-window.frameMargins().top()));
@@ -522,7 +528,7 @@ void tst_seat::multiTouch()
     {
         auto e = window.m_events.takeFirst();
         QCOMPARE(e.type, QEvent::TouchUpdate);
-        QCOMPARE(e.touchPoints.length(), 2);
+        QCOMPARE(e.touchPoints.size(), 2);
 
         QCOMPARE(e.touchPoints[0].state(), QEventPoint::State::Updated);
         QCOMPARE(e.touchPoints[0].position(), QPointF(33-window.frameMargins().left(), 32-window.frameMargins().top()));
@@ -534,7 +540,7 @@ void tst_seat::multiTouch()
         auto e = window.m_events.takeFirst();
         QCOMPARE(e.type, QEvent::TouchUpdate);
         QCOMPARE(e.touchPointStates, QEventPoint::State::Released | QEventPoint::State::Stationary);
-        QCOMPARE(e.touchPoints.length(), 2);
+        QCOMPARE(e.touchPoints.size(), 2);
 
         QCOMPARE(e.touchPoints[0].state(), QEventPoint::State::Released);
         QCOMPARE(e.touchPoints[0].position(), QPointF(33-window.frameMargins().left(), 32-window.frameMargins().top()));
@@ -546,7 +552,7 @@ void tst_seat::multiTouch()
         auto e = window.m_events.takeFirst();
         QCOMPARE(e.type, QEvent::TouchEnd);
         QCOMPARE(e.touchPointStates, QEventPoint::State::Released);
-        QCOMPARE(e.touchPoints.length(), 1);
+        QCOMPARE(e.touchPoints.size(), 1);
         QCOMPARE(e.touchPoints[0].state(), QEventPoint::State::Released);
         QCOMPARE(e.touchPoints[0].position(), QPointF(49-window.frameMargins().left(), 48-window.frameMargins().top()));
     }
@@ -588,14 +594,14 @@ void tst_seat::multiTouchUpAndMotionFrame()
     {
         auto e = window.m_events.takeFirst();
         QCOMPARE(e.type, QEvent::TouchUpdate);
-        QCOMPARE(e.touchPoints.length(), 2);
+        QCOMPARE(e.touchPoints.size(), 2);
         QCOMPARE(e.touchPoints[0].state(), QEventPoint::State::Released);
         QCOMPARE(e.touchPoints[1].state(), QEventPoint::State::Updated);
     }
     {
         auto e = window.m_events.takeFirst();
         QCOMPARE(e.type, QEvent::TouchEnd);
-        QCOMPARE(e.touchPoints.length(), 1);
+        QCOMPARE(e.touchPoints.size(), 1);
         QCOMPARE(e.touchPoints[0].state(), QEventPoint::State::Released);
     }
     QVERIFY(window.m_events.empty());
@@ -631,6 +637,35 @@ void tst_seat::tapAndMoveInSameFrame()
     // Make sure we eventually release
     QTRY_VERIFY(!window.m_events.empty());
     QTRY_COMPARE(window.m_events.last().touchPoints.first().state(), QEventPoint::State::Released);
+}
+
+void tst_seat::cancelTouch()
+{
+    TouchWindow window;
+    QCOMPOSITOR_TRY_VERIFY(xdgSurface() && xdgSurface()->m_committedConfigureSerial);
+
+    exec([=] {
+        auto *t = touch();
+        auto *c = client();
+        t->sendDown(xdgToplevel()->surface(), {32, 32}, 1);
+        t->sendFrame(c);
+        t->sendCancel(c);
+        t->sendFrame(c);
+    });
+
+    QTRY_VERIFY(!window.m_events.empty());
+    {
+        auto e = window.m_events.takeFirst();
+        QCOMPARE(e.type, QEvent::TouchBegin);
+        QCOMPARE(e.touchPointStates, QEventPoint::State::Pressed);
+        QCOMPARE(e.touchPoints.size(), 1);
+        QCOMPARE(e.touchPoints.first().position(), QPointF(32-window.frameMargins().left(), 32-window.frameMargins().top()));
+    }
+    {
+        auto e = window.m_events.takeFirst();
+        QCOMPARE(e.type, QEvent::TouchCancel);
+        QCOMPARE(e.touchPoints.size(), 0);
+    }
 }
 
 QCOMPOSITOR_TEST_MAIN(tst_seat)

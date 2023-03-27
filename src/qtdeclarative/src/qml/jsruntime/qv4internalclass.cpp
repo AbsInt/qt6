@@ -6,7 +6,6 @@
 #include <qv4engine_p.h>
 #include <qv4identifierhash_p.h>
 #include "qv4object_p.h"
-#include "qv4identifiertable_p.h"
 #include "qv4value_p.h"
 #include "qv4mm_p.h"
 #include <private/qprimefornumbits_p.h>
@@ -40,34 +39,6 @@ void PropertyHash::addEntry(const PropertyHash::Entry &entry, int classSize)
     }
     d->entries[idx] = entry;
     ++d->size;
-}
-
-int PropertyHash::removeIdentifier(PropertyKey identifier, int classSize)
-{
-    int val = -1;
-    PropertyHashData *dd = new PropertyHashData(d->numBits);
-    for (int i = 0; i < d->alloc; ++i) {
-        const Entry &e = d->entries[i];
-        if (!e.identifier.isValid() || e.index >= static_cast<unsigned>(classSize))
-            continue;
-        if (e.identifier == identifier) {
-            val = e.index;
-            continue;
-        }
-        uint idx = e.identifier.id() % dd->alloc;
-        while (dd->entries[idx].identifier.isValid()) {
-            ++idx;
-            idx %= dd->alloc;
-        }
-        dd->entries[idx] = e;
-    }
-    dd->size = classSize;
-    if (!--d->refCount)
-        delete d;
-    d = dd;
-
-    Q_ASSERT(val != -1);
-    return val;
 }
 
 void PropertyHash::detach(bool grow, int classSize)
@@ -169,11 +140,20 @@ SharedInternalClassDataPrivate<PropertyAttributes>::SharedInternalClassDataPriva
       m_engine(other.m_engine)
 {
     Q_ASSERT(m_size <= m_alloc);
+    Q_ASSERT(m_alloc > 0);
+
     m_engine->memoryManager->changeUnmanagedHeapSizeUsage(m_alloc * sizeof(PropertyAttributes));
-    data = new PropertyAttributes[m_alloc];
-    if (other.data)
-        memcpy(data, other.data, (m_size - 1) * sizeof(PropertyAttributes));
-    data[pos] = value;
+    const PropertyAttributes *source = other.m_alloc > NumAttributesInPointer
+            ? other.m_data
+            : other.m_inlineData;
+    PropertyAttributes *target;
+    if (m_alloc > NumAttributesInPointer)
+        m_data = target = new PropertyAttributes[m_alloc];
+    else
+        target = m_inlineData;
+
+    memcpy(target, source, (m_size - 1) * sizeof(PropertyAttributes));
+    target[pos] = value;
 }
 
 SharedInternalClassDataPrivate<PropertyAttributes>::SharedInternalClassDataPrivate(
@@ -183,12 +163,14 @@ SharedInternalClassDataPrivate<PropertyAttributes>::SharedInternalClassDataPriva
       m_size(other.m_size),
       m_engine(other.m_engine)
 {
-    if (m_alloc) {
-        m_engine->memoryManager->changeUnmanagedHeapSizeUsage(m_alloc * sizeof(PropertyAttributes));
-        data = new PropertyAttributes[m_alloc];
-        memcpy(data, other.data, m_size*sizeof(PropertyAttributes));
+    m_engine->memoryManager->changeUnmanagedHeapSizeUsage(m_alloc * sizeof(PropertyAttributes));
+    if (m_alloc > NumAttributesInPointer) {
+        m_data = new PropertyAttributes[m_alloc];
+        memcpy(m_data, other.m_data, m_size*sizeof(PropertyAttributes));
+    } else if (m_alloc > 0) {
+        memcpy(m_inlineData, other.m_inlineData, m_alloc * sizeof(PropertyAttributes));
     } else {
-        data = nullptr;
+        m_data = nullptr;
     }
 }
 
@@ -196,13 +178,14 @@ SharedInternalClassDataPrivate<PropertyAttributes>::~SharedInternalClassDataPriv
 {
     m_engine->memoryManager->changeUnmanagedHeapSizeUsage(
             -qptrdiff(m_alloc * sizeof(PropertyAttributes)));
-    delete [] data;
+    if (m_alloc > NumAttributesInPointer)
+        delete [] m_data;
 }
 
 void SharedInternalClassDataPrivate<PropertyAttributes>::grow() {
     uint alloc;
     if (!m_alloc) {
-        alloc = 8;
+        alloc = NumAttributesInPointer;
         m_engine->memoryManager->changeUnmanagedHeapSizeUsage(alloc * sizeof(PropertyAttributes));
     } else {
         // yes, signed. We don't want to deal with stuff > 2G
@@ -216,12 +199,16 @@ void SharedInternalClassDataPrivate<PropertyAttributes>::grow() {
                 (alloc - m_alloc) * sizeof(PropertyAttributes));
     }
 
-    auto *n = new PropertyAttributes[alloc];
-    if (data) {
-        memcpy(n, data, m_alloc*sizeof(PropertyAttributes));
-        delete [] data;
+    if (alloc > NumAttributesInPointer) {
+        auto *n = new PropertyAttributes[alloc];
+        if (m_alloc > NumAttributesInPointer) {
+            memcpy(n, m_data, m_alloc * sizeof(PropertyAttributes));
+            delete [] m_data;
+        } else if (m_alloc > 0) {
+            memcpy(n, m_inlineData, m_alloc * sizeof(PropertyAttributes));
+        }
+        m_data = n;
     }
-    data = n;
     m_alloc = alloc;
 }
 
@@ -407,6 +394,9 @@ static Heap::InternalClass *cleanInternalClass(Heap::InternalClass *orig)
         case InternalClassTransition::Frozen:
             child = child->d()->frozen();
             continue;
+        case InternalClassTransition::Locked:
+            child = child->d()->locked();
+            continue;
         default:
             Q_ASSERT(it->flags != 0);
             Q_ASSERT(it->flags < InternalClassTransition::StructureChange);
@@ -521,6 +511,24 @@ Heap::InternalClass *InternalClass::nonExtensible()
 
     Heap::InternalClass *newClass = engine->newClass(this);
     newClass->flags |= NotExtensible;
+
+    t.lookup = newClass;
+    Q_ASSERT(t.lookup);
+    return newClass;
+}
+
+InternalClass *InternalClass::locked()
+{
+    if (isLocked())
+        return this;
+
+    Transition temp = { { PropertyKey::invalid() }, nullptr, Transition::Locked};
+    Transition &t = lookupOrInsertTransition(temp);
+    if (t.lookup)
+        return t.lookup;
+
+    Heap::InternalClass *newClass = engine->newClass(this);
+    newClass->flags |= Locked;
 
     t.lookup = newClass;
     Q_ASSERT(t.lookup);

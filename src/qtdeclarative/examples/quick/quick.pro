@@ -26,7 +26,9 @@ SUBDIRS =   quick-accessibility \
             window \
             particles \
             delegatechooser \
-            shapes
+            shapes \
+            itemvariablerefreshrate \
+            multieffect
 
 #OpenGL Support Required
 qtConfig(opengl(es1|es2)?) {

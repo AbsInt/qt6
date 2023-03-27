@@ -20,6 +20,7 @@ namespace TestQDoc {
     \qtcmakepackage QDocTest
     \title QDoc Test C++ Classes
     \brief A test module page.
+    \since 2.0
 
     \testnoautolist
 
@@ -27,7 +28,8 @@ namespace TestQDoc {
     \include testcpp.cpp {args} {/} {*} {Look, Ma! {I'm made of arguments!}}
 
 \if defined(test_nestedmacro)
-    \versionnote {module} {\ver}
+    \versionnote {module} {\ver 5.15.0}
+    \ver 1.0.0
 \endif
 
     \section1 Linking to function-like things
@@ -67,6 +69,7 @@ namespace TestQDoc {
     \since 1.1
 \endif
     \ingroup testgroup
+    \ingroup cpptypes
 */
 
 /*!
@@ -166,6 +169,59 @@ void Test::someFunctionDefaultArg(int i, bool b = false)
     \fn [op-dec] Test::operator--()
     \deprecated
 */
+
+/*!
+    This method has en dashes in its documentation -- as you'll find
+    represented by \c{--} in the sources -- here and there. The important bit
+    to note is that when passed e.g. to the \\c command, the two hyphens are
+    processed as input to the command and not replaced by an en dash. This also
+    applies to code blocks, where otherwise, the decrement operator would get
+    completely borked:
+
+    \code
+    for (int i = 42; i > 0; --i)
+        // Do something cool during countdown.
+    \endcode
+
+    ...as it would be silly if this would output --i instead of \c {--i}.
+
+    -----------------------------------------------------------------------
+
+    It still allows people to add a bunch of dashes, though, without replacing
+    them all with a series of en dashes. Of course, they might want to use the
+    \\hr command instead, like this:
+    \hr
+
+    -- You can also start a new paragraph with an en dash, if you want to.
+
+    //! Self-referencing \sa-command for tests.
+    \sa methodWithEnDashInItsDocs
+*/
+void Test::methodWithEnDashInItsDocs()
+{
+    // Nothing to see here.
+}
+
+/*!
+    This method has em dashes in its documentation---as you'll find
+    represented by \c{---} in the sources---here and there. The important bit
+    to note is that when passed e.g. to the \\c command, the three hyphens are
+    processed as input to the command and not replaced by an em dash.
+
+    -----------------------------------------------------------------------
+
+    People can still add a bunch of dashes, though, without QDoc replacing
+    them all with a series of em dashes.
+
+    ---You can also start a new paragraph with an em dash, if you want to.
+
+    \sa methodWithEnDashInItsDocs
+
+*/
+void Test::methodWithEmDashInItsDocs()
+{
+    // Woah! Look at that!
+}
 
 // Documented below with an \fn command. Unnecessary but we support it, and it's used.
 int Test::someFunction(int, int v)
@@ -327,6 +383,7 @@ int TestDerived::id()
     \namespace CrossModuleRef
     \inmodule TestCPP
     \brief Namespace that has documented functions in multiple modules.
+    \since 3.0
 */
 namespace CrossModuleRef {
 

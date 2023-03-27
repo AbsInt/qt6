@@ -1,4 +1,5 @@
-# Generated from lrelease.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## lrelease Tool:
@@ -7,7 +8,7 @@
 qt_get_tool_target_name(target_name lrelease)
 qt_internal_add_tool(${target_name}
     TARGET_DESCRIPTION "Qt Translation File Compiler"
-    TOOLS_TARGET Linguist # special case
+    TOOLS_TARGET Linguist
     SOURCES
         ../shared/numerus.cpp
         ../shared/po.cpp
@@ -26,7 +27,7 @@ qt_internal_add_tool(${target_name}
         QT_NO_CAST_TO_ASCII
     INCLUDE_DIRECTORIES
         ../shared
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::CorePrivate
     # special case begin
     EXTRA_CMAKE_FILES
@@ -36,10 +37,3 @@ qt_internal_add_tool(${target_name}
     # special case end
 )
 qt_internal_return_unless_building_tools()
-
-#### Keys ignored in scope 1:.:.:lrelease.pro:<TRUE>:
-# QMAKE_TARGET_DESCRIPTION = "Qt Translation File Compiler"
-# QT_TOOL_ENV = "qmake"
-# _OPTION = "host_build"
-# qmake.name = "QMAKE"
-# qmake.value = "$$shell_path($$QMAKE_QMAKE)"

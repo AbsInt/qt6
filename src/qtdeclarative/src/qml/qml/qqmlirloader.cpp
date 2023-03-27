@@ -43,16 +43,45 @@ void QQmlIRLoader::load()
         createPragma(type)->componentBehavior = value;
     };
 
+    const auto createFunctionSignaturePragma = [&](
+            Pragma::PragmaType type,
+            Pragma::FunctionSignatureBehaviorValue value) {
+        createPragma(type)->functionSignatureBehavior = value;
+    };
+
+    const auto createNativeMethodPragma = [&](
+            Pragma::PragmaType type,
+            Pragma::NativeMethodBehaviorValue value) {
+        createPragma(type)->nativeMethodBehavior = value;
+    };
+
+    const auto createValueTypePragma = [&](
+            Pragma::PragmaType type,
+            Pragma::ValueTypeBehaviorValue value) {
+        createPragma(type)->valueTypeBehavior = value;
+    };
+
     if (unit->flags & QV4::CompiledData::Unit::IsSingleton)
         createPragma(Pragma::Singleton);
     if (unit->flags & QV4::CompiledData::Unit::IsStrict)
         createPragma(Pragma::Strict);
+
     if (unit->flags & QV4::CompiledData::Unit::ListPropertyAssignReplace)
         createListPragma(Pragma::ListPropertyAssignBehavior, Pragma::Replace);
     else if (unit->flags & QV4::CompiledData::Unit::ListPropertyAssignReplaceIfNotDefault)
         createListPragma(Pragma::ListPropertyAssignBehavior, Pragma::ReplaceIfNotDefault);
+
     if (unit->flags & QV4::CompiledData::Unit::ComponentsBound)
         createComponentPragma(Pragma::ComponentBehavior, Pragma::Bound);
+
+    if (unit->flags & QV4::CompiledData::Unit::FunctionSignaturesEnforced)
+        createFunctionSignaturePragma(Pragma::FunctionSignatureBehavior, Pragma::Enforced);
+
+    if (unit->flags & QV4::CompiledData::Unit::NativeMethodsAcceptThisObject)
+        createNativeMethodPragma(Pragma::NativeMethodBehavior, Pragma::AcceptThisObject);
+
+    if (unit->flags & QV4::CompiledData::Unit::ValueTypesCopied)
+        createValueTypePragma(Pragma::ValueTypeBehavior, Pragma::Copy);
 
     for (uint i = 0; i < qmlUnit->nObjects; ++i) {
         const QV4::CompiledData::Object *serializedObject = qmlUnit->objectAt(i);

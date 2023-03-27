@@ -1,3 +1,5 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 # For now, don't built auto tests when QT_BUILD_MINIMAL_STATIC_TEST
 # is specified and the build is targeting iOS. QT_BUILD_MINIMAL_STATIC_TEST is used in our CI.
@@ -9,9 +11,9 @@ endif()
 
 if(TARGET Qt::Widgets)
     add_subdirectory(qsvgdevice)
-    if(TARGET Qt::Xml) # special case
-        add_subdirectory(qsvggenerator) # special case
-    endif() # special case
+    if(TARGET Qt::Xml)
+        add_subdirectory(qsvggenerator)
+    endif()
     add_subdirectory(qsvgplugin)
     add_subdirectory(qicon_svg)
     # add_subdirectory(cmake) # special case remove

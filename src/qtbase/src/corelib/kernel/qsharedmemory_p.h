@@ -19,8 +19,8 @@
 
 #include <QtCore/qstring.h>
 
-#ifdef QT_NO_SHAREDMEMORY
-#    ifndef QT_NO_SYSTEMSEMAPHORE
+#if !QT_CONFIG(sharedmemory)
+#    if QT_CONFIG(systemsemaphore)
 
 QT_BEGIN_NAMESPACE
 
@@ -37,10 +37,7 @@ QT_END_NAMESPACE
 #else
 
 #include "qsystemsemaphore.h"
-
-#ifndef QT_NO_QOBJECT
-# include "private/qobject_p.h"
-#endif
+#include "private/qobject_p.h"
 
 #if !defined(Q_OS_WIN) && !defined(Q_OS_ANDROID) && !defined(Q_OS_INTEGRITY) && !defined(Q_OS_RTEMS)
 #  include <sys/sem.h>
@@ -48,7 +45,7 @@ QT_END_NAMESPACE
 
 QT_BEGIN_NAMESPACE
 
-#ifndef QT_NO_SYSTEMSEMAPHORE
+#if QT_CONFIG(systemsemaphore)
 /*!
   Helper class
   */
@@ -78,29 +75,22 @@ public:
 private:
     QSharedMemory *q_sm;
 };
-#endif // QT_NO_SYSTEMSEMAPHORE
+#endif // QT_CONFIG(systemsemaphore)
 
-class Q_AUTOTEST_EXPORT QSharedMemoryPrivate
-#ifndef QT_NO_QOBJECT
-        : public QObjectPrivate
-#endif
+class Q_AUTOTEST_EXPORT QSharedMemoryPrivate : public QObjectPrivate
 {
-#ifndef QT_NO_QOBJECT
     Q_DECLARE_PUBLIC(QSharedMemory)
-#endif
 
 public:
-    QSharedMemoryPrivate();
-
-    void *memory;
-    qsizetype size;
+    void *memory = nullptr;
+    qsizetype size = 0;
     QString key;
     QString nativeKey;
-    QSharedMemory::SharedMemoryError error;
+    QSharedMemory::SharedMemoryError error = QSharedMemory::NoError;
     QString errorString;
-#ifndef QT_NO_SYSTEMSEMAPHORE
-    QSystemSemaphore systemSemaphore;
-    bool lockedByMe;
+#if QT_CONFIG(systemsemaphore)
+    QSystemSemaphore systemSemaphore{QString()};
+    bool lockedByMe = false;
 #endif
 
     static int createUnixKeyFile(const QString &fileName);
@@ -121,7 +111,7 @@ public:
 
     void setErrorString(QLatin1StringView function);
 
-#ifndef QT_NO_SYSTEMSEMAPHORE
+#if QT_CONFIG(systemsemaphore)
     bool tryLocker(QSharedMemoryLocker *locker, const QString &function) {
         if (!locker->lock()) {
             errorString = QSharedMemory::tr("%1: unable to lock").arg(function);
@@ -130,21 +120,21 @@ public:
         }
         return true;
     }
-#endif // QT_NO_SYSTEMSEMAPHORE
+#endif // QT_CONFIG(systemsemaphore)
 
 private:
 #ifdef Q_OS_WIN
-    Qt::HANDLE hand;
+    Qt::HANDLE hand = nullptr;
 #elif defined(QT_POSIX_IPC)
-    int hand;
+    int hand = -1;
 #else
-    key_t unix_key;
+    key_t unix_key = 0;
 #endif
 };
 
 QT_END_NAMESPACE
 
-#endif // QT_NO_SHAREDMEMORY
+#endif // QT_CONFIG(sharedmemory)
 
 #endif // QSHAREDMEMORY_P_H
 

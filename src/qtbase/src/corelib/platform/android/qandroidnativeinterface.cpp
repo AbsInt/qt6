@@ -10,8 +10,10 @@
 #include <QtCore/qfuture.h>
 #include <QtCore/qfuturewatcher.h>
 #include <QtCore/qpromise.h>
+#include <QtCore/qtimer.h>
 #include <QtCore/qthreadpool.h>
 #include <deque>
+#include <memory>
 #endif
 
 QT_BEGIN_NAMESPACE
@@ -21,12 +23,12 @@ static const char qtNativeClassName[] = "org/qtproject/qt/android/QtNative";
 
 struct PendingRunnable {
     std::function<QVariant()> function;
-    QSharedPointer<QPromise<QVariant>> promise;
+    std::shared_ptr<QPromise<QVariant>> promise;
 };
 
 using PendingRunnables = std::deque<PendingRunnable>;
 Q_GLOBAL_STATIC(PendingRunnables, g_pendingRunnables);
-static QBasicMutex g_pendingRunnablesMutex;
+Q_CONSTINIT static QBasicMutex g_pendingRunnablesMutex;
 #endif
 
 /*!
@@ -161,7 +163,7 @@ QFuture<QVariant> QNativeInterface::QAndroidApplication::runOnAndroidMainThread(
                                                     const std::function<QVariant()> &runnable,
                                                     const QDeadlineTimer timeout)
 {
-    QSharedPointer<QPromise<QVariant>> promise(new QPromise<QVariant>());
+    auto promise = std::make_shared<QPromise<QVariant>>();
     QFuture<QVariant> future = promise->future();
     promise->start();
 

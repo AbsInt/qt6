@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Generated from colorresolving.pro.
 
 #####################################################################
@@ -15,7 +18,7 @@ qt_internal_add_test(tst_colorresolving
     QMLTEST
     SOURCES
         tst_colorresolving.cpp
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Gui
     TESTDATA ${test_data}
 )

@@ -84,6 +84,34 @@ QmltcCodeGenerator::wrap_extensionType(const QQmlJSScope::ConstPtr &type,
     return { prologue, value, epilogue };
 }
 
+void QmltcCodeGenerator::generate_assignToListProperty(
+        QStringList *block, const QQmlJSScope::ConstPtr &type, const QQmlJSMetaProperty &p,
+        const QStringList &values, const QString &accessor, QString &qmlListVarName)
+{
+    Q_UNUSED(type); // might be needed
+    const bool populateLocalListProperty = qmlListVarName.isEmpty();
+
+    if (populateLocalListProperty) {
+        auto [extensionPrologue, extensionAccessor, extensionEpilogue] =
+                QmltcCodeGenerator::wrap_extensionType(
+                        type, p, QmltcCodeGenerator::wrap_privateClass(accessor, p));
+
+        qmlListVarName = u"listprop_%1"_s.arg(p.propertyName());
+        QQmlJSScope::ConstPtr valueType = p.type()->valueType();
+        *block << u"QQmlListProperty<%1> %2;"_s.arg(valueType->internalName(), qmlListVarName);
+        *block << extensionPrologue;
+        *block << u"%1 = %2->%3();"_s.arg(qmlListVarName, extensionAccessor, p.read());
+        *block << extensionEpilogue;
+    }
+    for (const QString &value : values) {
+        auto [prologue, wrappedValue, epilogue] =
+                QmltcCodeGenerator::wrap_mismatchingTypeConversion(p, value);
+        *block << prologue;
+        *block << u"%1.append(std::addressof(%1), %2);"_s.arg(qmlListVarName, wrappedValue);
+        *block << epilogue;
+    }
+}
+
 void QmltcCodeGenerator::generate_assignToProperty(QStringList *block,
                                                    const QQmlJSScope::ConstPtr &type,
                                                    const QQmlJSMetaProperty &p,
@@ -104,7 +132,9 @@ void QmltcCodeGenerator::generate_assignToProperty(QStringList *block,
         *block += prologue;
         *block << u"%1->m_%2 = %3;"_s.arg(accessor, propertyName, wrappedValue);
         *block += epilogue;
-    } else if (QString propertySetter = p.write(); !propertySetter.isEmpty()) {
+    } else if (QString propertySetter = p.write(); !propertySetter.isEmpty()
+               && !QQmlJSUtils::bindablePropertyHasDefaultAccessor(
+                       p, QQmlJSUtils::PropertyAccessor_Write)) {
         // there's a WRITE function
         auto [prologue, wrappedValue, epilogue] =
                 QmltcCodeGenerator::wrap_mismatchingTypeConversion(p, value);
@@ -139,6 +169,8 @@ void QmltcCodeGenerator::generate_setIdValue(QStringList *block, const QString &
                                              const QString &idString)
 {
     Q_ASSERT(index >= 0);
+    *block << u"Q_ASSERT(%1 < %2->numIdValues()); // make sure Id is in bounds"_s.arg(index).arg(
+            context);
     *block << u"%1->setIdValue(%2 /* id: %3 */, %4);"_s.arg(context, QString::number(index),
                                                              idString, accessor);
 }
@@ -182,8 +214,9 @@ void QmltcCodeGenerator::generate_callExecuteRuntimeFunction(
 
 void QmltcCodeGenerator::generate_createBindingOnProperty(
         QStringList *block, const QString &unitVarName, const QString &scope,
-        qsizetype functionIndex, const QString &target, int propertyIndex,
-        const QQmlJSMetaProperty &p, int valueTypeIndex, const QString &subTarget)
+        qsizetype functionIndex, const QString &target, const QQmlJSScope::ConstPtr &targetType,
+        int propertyIndex, const QQmlJSMetaProperty &p, int valueTypeIndex,
+        const QString &subTarget)
 {
     const QString propName = QQmlJSUtils::toLiteral(p.propertyName());
     if (QString bindable = p.bindable(); !bindable.isEmpty()) {
@@ -194,10 +227,19 @@ void QmltcCodeGenerator::generate_createBindingOnProperty(
                 + target + u", " + QString::number(propertyIndex) + u", "
                 + QString::number(valueTypeIndex) + u", " + propName + u")";
         const QString accessor = (valueTypeIndex == -1) ? target : subTarget;
-        *block << QmltcCodeGenerator::wrap_privateClass(accessor, p) + u"->" + bindable
-                        + u"().setBinding(" + createBindingForBindable + u");";
+
+        QStringList prologue;
+        QString value = QmltcCodeGenerator::wrap_privateClass(accessor, p);
+        QStringList epilogue;
+        if (targetType) {
+            auto [pro, v, epi] = QmltcCodeGenerator::wrap_extensionType(targetType, p, value);
+            std::tie(prologue, value, epilogue) = std::make_tuple(pro, v, epi);
+        }
+
+        *block += prologue;
+        *block << value + u"->" + bindable + u"().setBinding(" + createBindingForBindable + u");";
+        *block += epilogue;
     } else {
-        // TODO: test that bindings on private properties also work
         QString createBindingForNonBindable =
                 u"QT_PREPEND_NAMESPACE(QQmlCppBinding)::createBindingForNonBindable(" + unitVarName
                 + u", " + scope + u", " + QString::number(functionIndex) + u", " + target + u", "
@@ -205,6 +247,46 @@ void QmltcCodeGenerator::generate_createBindingOnProperty(
                 + propName + u")";
         // Note: in this version, the binding is set implicitly
         *block << createBindingForNonBindable + u";";
+    }
+}
+
+void QmltcCodeGenerator::generate_createTranslationBindingOnProperty(
+        QStringList *block, const TranslationBindingInfo &info)
+{
+    const QString propName = QQmlJSUtils::toLiteral(info.property.propertyName());
+    const QString qqmlTranslation = info.data.serializeForQmltc();
+
+    if (QString bindable = info.property.bindable(); !bindable.isEmpty()) {
+        // TODO: test that private properties are bindable
+        QString createTranslationCode = uR"(QT_PREPEND_NAMESPACE(QQmlCppBinding)
+        ::createTranslationBindingForBindable(%1, %2, %3, %4, %5))"_s
+                                                .arg(info.unitVarName, info.target)
+                                                .arg(info.propertyIndex)
+                                                .arg(qqmlTranslation, propName);
+
+        *block << QmltcCodeGenerator::wrap_privateClass(info.target, info.property) + u"->"
+                        + bindable + u"().setBinding(" + createTranslationCode + u");";
+    } else {
+        QString locationString =
+                u"QQmlSourceLocation(%1->fileName(), %2, %3)"_s.arg(info.unitVarName)
+                        .arg(info.line)
+                        .arg(info.column);
+        QString createTranslationCode = uR"(QT_PREPEND_NAMESPACE(QQmlCppBinding)
+    ::createTranslationBindingForNonBindable(
+        %1, //unit
+        %2, //location
+        %3, //translationData
+        %4, //thisObject
+        %5, //bindingTarget
+        %6, //metaPropertyIndex
+        %7, //propertyName
+        %8) //valueTypePropertyIndex
+    )"_s.arg(info.unitVarName, locationString, qqmlTranslation, info.scope, info.target)
+                                                .arg(info.propertyIndex)
+                                                .arg(propName)
+                                                .arg(info.valueTypeIndex);
+        // Note: in this version, the binding is set implicitly
+        *block << createTranslationCode + u";";
     }
 }
 

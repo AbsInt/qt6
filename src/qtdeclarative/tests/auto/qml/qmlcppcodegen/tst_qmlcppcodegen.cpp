@@ -6,10 +6,12 @@
 #include <data/objectwithmethod.h>
 
 #include <QtQml/private/qqmlengine_p.h>
+#include <QtQml/private/qqmlpropertycachecreator_p.h>
 
 #include <QtTest>
 #include <QtQml>
 #include <QtGui/qcolor.h>
+#include <QtGui/qpa/qplatformdialoghelper.h>
 
 #if QT_CONFIG(process)
 #include <QtCore/qprocess.h>
@@ -23,6 +25,8 @@ class tst_QmlCppCodegen : public QObject
 {
     Q_OBJECT
 private slots:
+    void initTestCase();
+
     void simpleBinding();
     void cppValueTypeList();
     void anchorsFill();
@@ -39,7 +43,6 @@ private slots:
     void excessiveParameters();
     void jsImport();
     void jsmoduleImport();
-    void runInterpreted();
     void methods();
     void math();
     void unknownParameter();
@@ -124,31 +127,60 @@ private slots:
     void objectToString();
     void throwObjectName();
     void javaScriptArgument();
+    void translation();
+    void stringArg();
     void conversionDecrement();
     void unstoredUndefined();
     void registerPropagation();
     void argumentConversion();
     void badSequence();
     void enumLookup();
+    void trivialSignalHandler();
     void stringToByteArray();
     void listPropertyAsModel();
     void notNotString();
+    void mathOperations();
     void inaccessibleProperty();
     void typePropagationLoop();
-    void nullComparison();
+    void signatureIgnored();
+    void listAsArgument();
+    void letAndConst();
     void signalIndexMismatch();
     void callWithSpread();
-    void enumConversion();
+    void nullComparison();
+    void consoleObject();
+    void multiForeign();
+    void namespaceWithEnum();
     void enumProblems();
+    void enumConversion();
+    void ambiguousSignals();
+    void fileImportsContainCxxTypes();
+    void lengthAccessArraySequenceCompat();
     void storeElementSideEffects();
+    void numbersInJsPrimitive();
+    void equalityVarAndNonStorable();
+    void equalityQObjects();
+    void valueTypeBehavior();
+    void invisibleSingleton();
+    void dialogButtonBox();
+    void equalityQUrl();
     void undefinedToDouble();
+    void variantMapLookup();
     void enumFromBadSingleton();
+    void ambiguousAs();
 };
+
+void tst_QmlCppCodegen::initTestCase()
+{
+#ifdef QT_TEST_FORCE_INTERPRETER
+    qputenv("QV4_FORCE_INTERPRETER", "1");
+#endif
+}
 
 void tst_QmlCppCodegen::simpleBinding()
 {
     QQmlEngine engine;
-    QQmlComponent component(&engine, QUrl(u"qrc:/TestTypes/Test.qml"_s));
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/Test.qml"_s));
     QScopedPointer<QObject> object(component.create());
     QVERIFY2(!object.isNull(), component.errorString().toUtf8().constData());
     QCOMPARE(object->property("foo").toInt(), int(3));
@@ -169,7 +201,7 @@ void tst_QmlCppCodegen::simpleBinding()
 void tst_QmlCppCodegen::cppValueTypeList()
 {
     QQmlEngine engine;
-    QQmlComponent component(&engine, QUrl(u"qrc:/TestTypes/Test.qml"_s));
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/Test.qml"_s));
     QScopedPointer<QObject> object(component.create());
     QVERIFY2(!object.isNull(), component.errorString().toUtf8().constData());
     QCOMPARE(object->property("a").toInt(), 16);
@@ -184,12 +216,12 @@ void tst_QmlCppCodegen::cppValueTypeList()
 void tst_QmlCppCodegen::anchorsFill()
 {
     QQmlEngine engine;
-    QQmlComponent component(&engine, QUrl(u"qrc:/TestTypes/anchorsFill.qml"_s));
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/anchorsFill.qml"_s));
     QScopedPointer<QObject> object(component.create());
     QVERIFY2(!object.isNull(), component.errorString().toUtf8().constData());
 
     QCOMPARE(object->property("width").toInt(), 234);
-    QCOMPARE(object->children().length(), 2);
+    QCOMPARE(object->children().size(), 2);
 
     QObject *child = object->children().front();
     QVERIFY(child);
@@ -206,7 +238,7 @@ void tst_QmlCppCodegen::anchorsFill()
 void tst_QmlCppCodegen::signalHandler()
 {
     QQmlEngine engine;
-    QQmlComponent component(&engine, QUrl(u"qrc:/TestTypes/signal.qml"_s));
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/signal.qml"_s));
     QVERIFY2(!component.isError(), component.errorString().toUtf8());
     QScopedPointer<QObject> object(component.create());
     QVERIFY(!object.isNull());
@@ -220,7 +252,7 @@ void tst_QmlCppCodegen::signalHandler()
 void tst_QmlCppCodegen::idAccess()
 {
     QQmlEngine engine;
-    QQmlComponent component(&engine, QUrl(u"qrc:/TestTypes/idAccess.qml"_s));
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/idAccess.qml"_s));
     QVERIFY2(!component.isError(), component.errorString().toUtf8());
     QScopedPointer<QObject> object(component.create());
     QVERIFY(!object.isNull());
@@ -244,7 +276,7 @@ void tst_QmlCppCodegen::idAccess()
 static QByteArray arg1()
 {
     const QStringList args = QCoreApplication::instance()->arguments();
-    return args.length() > 1 ? args[1].toUtf8() : QByteArray("undefined");
+    return args.size() > 1 ? args[1].toUtf8() : QByteArray("undefined");
 }
 
 void tst_QmlCppCodegen::globals()
@@ -252,7 +284,7 @@ void tst_QmlCppCodegen::globals()
     QQmlEngine engine;
     int exitCode = -1;
     QObject::connect(&engine, &QQmlEngine::exit, [&](int code) { exitCode = code; });
-    QQmlComponent component(&engine, QUrl(u"qrc:/TestTypes/globals.qml"_s));
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/globals.qml"_s));
     QVERIFY2(!component.isError(), component.errorString().toUtf8());
 
     const QByteArray message = QByteArray("Start 2 ") + arg1();
@@ -287,7 +319,7 @@ void tst_QmlCppCodegen::multiLookup()
 {
     // Multiple lookups of singletons (Qt in this case) don't clash with one another.
     QQmlEngine engine;
-    QQmlComponent component(&engine, QUrl(u"qrc:/TestTypes/immediateQuit.qml"_s));
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/immediateQuit.qml"_s));
     QVERIFY2(!component.isError(), component.errorString().toUtf8());
 
     const QByteArray message = QByteArray("End: ") + arg1();
@@ -296,17 +328,17 @@ void tst_QmlCppCodegen::multiLookup()
     QSignalSpy quitSpy(&engine, &QQmlEngine::quit);
     QScopedPointer<QObject> object(component.create());
     QVERIFY(!object.isNull());
-    QCOMPARE(quitSpy.count(), 1);
+    QCOMPARE(quitSpy.size(), 1);
 }
 
 void tst_QmlCppCodegen::enums()
 {
     QQmlEngine engine;
     {
-        QQmlComponent component(&engine, QUrl(u"qrc:/TestTypes/Enums.qml"_s));
+        QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/Enums.qml"_s));
         QVERIFY2(!component.isError(), component.errorString().toUtf8());
 
-        QTest::ignoreMessage(QtWarningMsg, "qrc:/TestTypes/Enums.qml:4:1: "
+        QTest::ignoreMessage(QtWarningMsg, "qrc:/qt/qml/TestTypes/Enums.qml:4:1: "
                                            "QML Enums: Layout must be attached to Item elements");
         QScopedPointer<QObject> object(component.create());
 
@@ -323,7 +355,7 @@ void tst_QmlCppCodegen::enums()
         const auto func = qmlAttachedPropertiesFunction(
                     object.data(), QMetaType::fromName("QQuickLayout*").metaObject());
 
-        QTest::ignoreMessage(QtWarningMsg, "qrc:/TestTypes/enumsInOtherObject.qml:4:25: "
+        QTest::ignoreMessage(QtWarningMsg, "qrc:/qt/qml/TestTypes/enumsInOtherObject.qml:4:25: "
                                            "QML Enums: Layout must be attached to Item elements");
         QObject *attached = qmlAttachedPropertiesObject(object.data(), func);
 
@@ -332,7 +364,7 @@ void tst_QmlCppCodegen::enums()
         QCOMPARE(qvariant_cast<Qt::Alignment>(prop), Qt::AlignCenter);
     }
     {
-        QQmlComponent component(&engine, QUrl(u"qrc:/TestTypes/enumsInOtherObject.qml"_s));
+        QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/enumsInOtherObject.qml"_s));
         QVERIFY2(!component.isError(), component.errorString().toUtf8());
         QScopedPointer<QObject> object(component.create());
         QVERIFY(!object.isNull());
@@ -344,7 +376,7 @@ void tst_QmlCppCodegen::enums()
 void tst_QmlCppCodegen::funcWithParams()
 {
     QQmlEngine engine;
-    QQmlComponent component(&engine, QUrl(u"qrc:/TestTypes/funcWithParams.qml"_s));
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/funcWithParams.qml"_s));
     QVERIFY2(!component.isError(), component.errorString().toUtf8());
     QScopedPointer<QObject> object(component.create());
     QVERIFY(!object.isNull());
@@ -354,7 +386,7 @@ void tst_QmlCppCodegen::funcWithParams()
 void tst_QmlCppCodegen::intOverflow()
 {
     QQmlEngine engine;
-    QQmlComponent component(&engine, QUrl(u"qrc:/TestTypes/intOverflow.qml"_s));
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/intOverflow.qml"_s));
     QVERIFY2(!component.isError(), component.errorString().toUtf8());
     QScopedPointer<QObject> object(component.create());
     QVERIFY(!object.isNull());
@@ -365,7 +397,7 @@ void tst_QmlCppCodegen::intOverflow()
 void tst_QmlCppCodegen::stringLength()
 {
     QQmlEngine engine;
-    QQmlComponent component(&engine, QUrl(u"qrc:/TestTypes/stringLength.qml"_s));
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/stringLength.qml"_s));
     QVERIFY2(!component.isError(), component.errorString().toUtf8());
     QScopedPointer<QObject> object(component.create());
     QVERIFY(!object.isNull());
@@ -375,7 +407,7 @@ void tst_QmlCppCodegen::stringLength()
 void tst_QmlCppCodegen::scopeVsObject()
 {
     QQmlEngine engine;
-    QQmlComponent component(&engine, QUrl(u"qrc:/TestTypes/scopeVsObject.qml"_s));
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/scopeVsObject.qml"_s));
     QVERIFY2(!component.isError(), component.errorString().toUtf8());
     QScopedPointer<QObject> object(component.create());
     QVERIFY(!object.isNull());
@@ -385,29 +417,29 @@ void tst_QmlCppCodegen::scopeVsObject()
 void tst_QmlCppCodegen::compositeTypeMethod()
 {
     QQmlEngine engine;
-    QQmlComponent component(&engine, QUrl(u"qrc:/TestTypes/compositeTypeMethod.qml"_s));
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/compositeTypeMethod.qml"_s));
     QVERIFY2(!component.isError(), component.errorString().toUtf8());
     QScopedPointer<QObject> object(component.create());
     QVERIFY(!object.isNull());
     QSignalSpy spy(object.data(), SIGNAL(foo()));
-    QTRY_VERIFY(spy.count() > 0);
+    QTRY_VERIFY(spy.size() > 0);
 }
 
 void tst_QmlCppCodegen::excessiveParameters()
 {
     QQmlEngine engine;
-    QQmlComponent component(&engine, QUrl(u"qrc:/TestTypes/excessiveParameters.qml"_s));
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/excessiveParameters.qml"_s));
     QVERIFY2(!component.isError(), component.errorString().toUtf8());
     QScopedPointer<QObject> object(component.create());
     QVERIFY(!object.isNull());
     QSignalSpy spy(object.data(), SIGNAL(foo()));
-    QTRY_VERIFY(spy.count() > 0);
+    QTRY_VERIFY(spy.size() > 0);
 }
 
 void tst_QmlCppCodegen::jsImport()
 {
     QQmlEngine engine;
-    QQmlComponent component(&engine, QUrl(u"qrc:/TestTypes/jsimport.qml"_s));
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/jsimport.qml"_s));
     QVERIFY2(!component.isError(), component.errorString().toUtf8());
     QScopedPointer<QObject> object(component.create());
     QVERIFY(!object.isNull());
@@ -417,7 +449,7 @@ void tst_QmlCppCodegen::jsImport()
 void tst_QmlCppCodegen::jsmoduleImport()
 {
     QQmlEngine engine;
-    QQmlComponent component(&engine, QUrl(u"qrc:/TestTypes/jsmoduleimport.qml"_s));
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/jsmoduleimport.qml"_s));
     QVERIFY2(!component.isError(), component.errorString().toUtf8());
     QScopedPointer<QObject> object(component.create());
     QVERIFY(!object.isNull());
@@ -433,7 +465,7 @@ void tst_QmlCppCodegen::jsmoduleImport()
 void tst_QmlCppCodegen::methods()
 {
     QQmlEngine engine;
-    QQmlComponent component(&engine, QUrl(u"qrc:/TestTypes/methods.qml"_s));
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/methods.qml"_s));
     QVERIFY(component.isReady());
 
     QTest::ignoreMessage(QtDebugMsg, "The Bar");
@@ -492,7 +524,7 @@ void tst_QmlCppCodegen::methods()
 void tst_QmlCppCodegen::math()
 {
     QQmlEngine engine;
-    QQmlComponent component(&engine, QUrl(u"qrc:/TestTypes/math.qml"_s));
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/math.qml"_s));
     QVERIFY2(!component.isError(), component.errorString().toUtf8());
     QScopedPointer<QObject> object(component.create());
     QVERIFY(!object.isNull());
@@ -503,7 +535,7 @@ void tst_QmlCppCodegen::math()
 void tst_QmlCppCodegen::unknownParameter()
 {
     QQmlEngine engine;
-    QQmlComponent component(&engine, QUrl(u"qrc:/TestTypes/unknownParameter.qml"_s));
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/unknownParameter.qml"_s));
     QVERIFY2(!component.isError(), component.errorString().toUtf8());
     QScopedPointer<QObject> object(component.create());
     QVERIFY(!object.isNull());
@@ -513,7 +545,7 @@ void tst_QmlCppCodegen::unknownParameter()
 void tst_QmlCppCodegen::array()
 {
     QQmlEngine engine;
-    QQmlComponent component(&engine, QUrl(u"qrc:/TestTypes/array.qml"_s));
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/array.qml"_s));
     QVERIFY2(!component.isError(), component.errorString().toUtf8());
     QScopedPointer<QObject> object(component.create());
     QVERIFY(!object.isNull());
@@ -532,7 +564,7 @@ void tst_QmlCppCodegen::array()
 void tst_QmlCppCodegen::equalsUndefined()
 {
     QQmlEngine engine;
-    QQmlComponent component(&engine, QUrl(u"qrc:/TestTypes/equalsUndefined.qml"_s));
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/equalsUndefined.qml"_s));
     QVERIFY2(!component.isError(), component.errorString().toUtf8());
     QScopedPointer<QObject> object(component.create());
     QVERIFY(!object.isNull());
@@ -544,10 +576,10 @@ void tst_QmlCppCodegen::equalsUndefined()
 void tst_QmlCppCodegen::conversions()
 {
     QQmlEngine engine;
-    QQmlComponent component(&engine, QUrl(u"qrc:/TestTypes/conversions.qml"_s));
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/conversions.qml"_s));
     QVERIFY2(!component.isError(), component.errorString().toUtf8());
 
-    QTest::ignoreMessage(QtWarningMsg, "qrc:/TestTypes/conversions.qml:42: TypeError: Type error");
+    QTest::ignoreMessage(QtWarningMsg, "qrc:/qt/qml/TestTypes/conversions.qml:42: TypeError: Type error");
 
     QScopedPointer<QObject> object(component.create());
     QVERIFY(!object.isNull());
@@ -621,7 +653,7 @@ void tst_QmlCppCodegen::conversions()
     QCOMPARE(object->property("doneStuff").toInt(), 19);
 
     QVariantList modulos = object->property("modulos").toList();
-    QCOMPARE(modulos.length(), 7);
+    QCOMPARE(modulos.size(), 7);
 
     QCOMPARE(modulos[0].userType(), QMetaType::Double);
     QCOMPARE(modulos[0].toDouble(), 0.0);
@@ -645,7 +677,7 @@ void tst_QmlCppCodegen::conversions()
     QVERIFY(qIsNaN(modulos[6].toDouble()));
 
     QVariantList unaryOps = object->property("unaryOps").toList();
-    QCOMPARE(unaryOps.length(), 6);
+    QCOMPARE(unaryOps.size(), 6);
 
     QCOMPARE(unaryOps[0].userType(), QMetaType::Double);
     QCOMPARE(unaryOps[0].toDouble(), 1221);
@@ -697,7 +729,7 @@ void tst_QmlCppCodegen::interestingFiles()
     QFETCH(bool, isValid);
 
     QQmlEngine engine;
-    QQmlComponent component(&engine, QUrl(u"qrc:/TestTypes/%1"_s.arg(file)));
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/%1"_s.arg(file)));
     if (isValid) {
         QVERIFY2(component.isReady(), qPrintable(component.errorString()));
         QScopedPointer<QObject> object(component.create());
@@ -710,7 +742,7 @@ void tst_QmlCppCodegen::interestingFiles()
 void tst_QmlCppCodegen::extendedTypes()
 {
     QQmlEngine engine;
-    QQmlComponent component(&engine, QUrl(u"qrc:/TestTypes/extendedTypes.qml"_s));
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/extendedTypes.qml"_s));
     QVERIFY2(!component.isError(), component.errorString().toUtf8());
 
     QTest::ignoreMessage(QtDebugMsg, "6 QSizeF(10, 20) 30");
@@ -728,7 +760,7 @@ void tst_QmlCppCodegen::extendedTypes()
 void tst_QmlCppCodegen::construct()
 {
     QQmlEngine engine;
-    QQmlComponent component(&engine, QUrl(u"qrc:/TestTypes/construct.qml"_s));
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/construct.qml"_s));
     QVERIFY2(!component.isError(), component.errorString().toUtf8());
     QScopedPointer<QObject> object(component.create());
     QVERIFY(!object.isNull());
@@ -738,7 +770,7 @@ void tst_QmlCppCodegen::construct()
     QCOMPARE(v.toString(), u"Error: bar"_s);
 
     QCOMPARE(object->property("aaa").toInt(), 12);
-    QTest::ignoreMessage(QtWarningMsg, "qrc:/TestTypes/construct.qml:9: Error: ouch");
+    QTest::ignoreMessage(QtWarningMsg, "qrc:/qt/qml/TestTypes/construct.qml:9: Error: ouch");
     object->metaObject()->invokeMethod(object.data(), "ouch");
     QCOMPARE(object->property("aaa").toInt(), 13);
 }
@@ -754,7 +786,7 @@ void tst_QmlCppCodegen::contextParam()
     m.insert(u"foo"_s, 10);
     engine.rootContext()->setContextProperty(u"contextParam"_s, m);
 
-    QQmlComponent component(&engine, QUrl(u"qrc:/TestTypes/contextParam.qml"_s));
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/contextParam.qml"_s));
     QVERIFY2(!component.isError(), component.errorString().toUtf8());
     QScopedPointer<QObject> object(component.create());
     QVERIFY(!object.isNull());
@@ -765,7 +797,7 @@ void tst_QmlCppCodegen::contextParam()
 void tst_QmlCppCodegen::attachedType()
 {
     QQmlEngine engine;
-    QQmlComponent component(&engine, QUrl(u"qrc:/TestTypes/text.qml"_s));
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/text.qml"_s));
     QVERIFY2(!component.isError(), component.errorString().toUtf8());
     QScopedPointer<QObject> object(component.create());
     QVERIFY(!object.isNull());
@@ -782,7 +814,7 @@ void tst_QmlCppCodegen::attachedType()
 void tst_QmlCppCodegen::componentReturnType()
 {
     QQmlEngine engine;
-    QQmlComponent component(&engine, QUrl(u"qrc:/TestTypes/componentReturnType.qml"_s));
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/componentReturnType.qml"_s));
     QVERIFY2(!component.isError(), component.errorString().toUtf8());
     QScopedPointer<QObject> object(component.create());
 
@@ -793,7 +825,7 @@ void tst_QmlCppCodegen::componentReturnType()
 void tst_QmlCppCodegen::onAssignment()
 {
     QQmlEngine engine;
-    QQmlComponent component(&engine, QUrl(u"qrc:/TestTypes/pressAndHoldButton.qml"_s));
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/pressAndHoldButton.qml"_s));
     QVERIFY2(!component.isError(), component.errorString().toUtf8());
     QScopedPointer<QObject> object(component.create());
 
@@ -810,15 +842,15 @@ void tst_QmlCppCodegen::onAssignment()
 }
 
 namespace QmlCacheGeneratedCode {
-namespace _0x5f_TestTypes_failures_qml {
-extern const QQmlPrivate::AOTCompiledFunction aotBuiltFunctions[];
+namespace _qt_qml_TestTypes_failures_qml {
+extern const QQmlPrivate::TypedFunction aotBuiltFunctions[];
 }
 }
 
 void tst_QmlCppCodegen::failures()
 {
     const auto &aotFailure
-            = QmlCacheGeneratedCode::_0x5f_TestTypes_failures_qml::aotBuiltFunctions[0];
+            = QmlCacheGeneratedCode::_qt_qml_TestTypes_failures_qml::aotBuiltFunctions[0];
     QVERIFY(aotFailure.argumentTypes.isEmpty());
     QVERIFY(!aotFailure.functionPtr);
     QCOMPARE(aotFailure.extraData, 0);
@@ -827,7 +859,7 @@ void tst_QmlCppCodegen::failures()
 void tst_QmlCppCodegen::enumScope()
 {
     QQmlEngine engine;
-    QQmlComponent component(&engine, QUrl(u"qrc:/TestTypes/enumScope.qml"_s));
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/enumScope.qml"_s));
     QVERIFY2(!component.isError(), component.errorString().toUtf8());
     QScopedPointer<QObject> object(component.create());
     QCOMPARE(object->property("flow").toInt(), 1);
@@ -836,7 +868,7 @@ void tst_QmlCppCodegen::enumScope()
 void tst_QmlCppCodegen::unusedAttached()
 {
     QQmlEngine engine;
-    QQmlComponent component(&engine, QUrl(u"qrc:/TestTypes/unusedAttached.qml"_s));
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/unusedAttached.qml"_s));
     QVERIFY2(!component.isError(), component.errorString().toUtf8());
     QScopedPointer<QObject> object(component.create());
 
@@ -854,7 +886,7 @@ void tst_QmlCppCodegen::unusedAttached()
 void tst_QmlCppCodegen::attachedBaseEnum()
 {
     QQmlEngine engine;
-    QQmlComponent component(&engine, QUrl(u"qrc:/TestTypes/attachedBaseEnum.qml"_s));
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/attachedBaseEnum.qml"_s));
     QVERIFY2(!component.isError(), component.errorString().toUtf8());
     QScopedPointer<QObject> object(component.create());
 
@@ -870,17 +902,17 @@ void tst_QmlCppCodegen::attachedBaseEnum()
 void tst_QmlCppCodegen::nullAccess()
 {
     QQmlEngine engine;
-    QQmlComponent component(&engine, QUrl(u"qrc:/TestTypes/nullAccess.qml"_s));
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/nullAccess.qml"_s));
     QVERIFY2(!component.isError(), component.errorString().toUtf8());
 
     QTest::ignoreMessage(QtWarningMsg,
-                         "qrc:/TestTypes/nullAccess.qml:4:5: TypeError: "
+                         "qrc:/qt/qml/TestTypes/nullAccess.qml:4:5: TypeError: "
                          "Cannot read property 'width' of null");
     QTest::ignoreMessage(QtWarningMsg,
-                         "qrc:/TestTypes/nullAccess.qml:5:5: TypeError: "
+                         "qrc:/qt/qml/TestTypes/nullAccess.qml:5:5: TypeError: "
                          "Cannot read property 'height' of null");
     QTest::ignoreMessage(QtWarningMsg,
-                         "qrc:/TestTypes/nullAccess.qml:6: TypeError: Value is null and "
+                         "qrc:/qt/qml/TestTypes/nullAccess.qml:6: TypeError: Value is null and "
                          "could not be converted to an object");
     QScopedPointer<QObject> object(component.create());
 
@@ -891,7 +923,7 @@ void tst_QmlCppCodegen::nullAccess()
 void tst_QmlCppCodegen::interceptor()
 {
     QQmlEngine engine;
-    QQmlComponent component(&engine, QUrl(u"qrc:/TestTypes/interceptor.qml"_s));
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/interceptor.qml"_s));
     QVERIFY2(!component.isError(), component.errorString().toUtf8());
     QScopedPointer<QObject> object(component.create());
     QVERIFY(!object.isNull());
@@ -912,7 +944,7 @@ void tst_QmlCppCodegen::interceptor()
 void tst_QmlCppCodegen::nonNotifyable()
 {
     QQmlEngine engine;
-    QQmlComponent component(&engine, QUrl(u"qrc:/TestTypes/nonNotifyable.qml"_s));
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/nonNotifyable.qml"_s));
     QVERIFY2(!component.isError(), component.errorString().toUtf8());
     QScopedPointer<QObject> object(component.create());
     QVERIFY(!object.isNull());
@@ -926,19 +958,19 @@ void tst_QmlCppCodegen::nonNotifyable()
 void tst_QmlCppCodegen::importsFromImportPath()
 {
     QQmlEngine engine;
-    QQmlComponent component(&engine, QUrl(u"qrc:/TestTypes/importsFromImportPath.qml"_s));
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/importsFromImportPath.qml"_s));
 
     // We might propagate the import path, eventually, but for now instantiating is not important.
     // If the compiler accepts the file, it's probably fine.
     QVERIFY(component.isError());
     QCOMPARE(component.errorString(),
-             u"qrc:/TestTypes/importsFromImportPath.qml:1 module \"Module\" is not installed\n"_s);
+             u"qrc:/qt/qml/TestTypes/importsFromImportPath.qml:1 module \"Module\" is not installed\n"_s);
 }
 
 void tst_QmlCppCodegen::aliasLookup()
 {
     QQmlEngine engine;
-    QQmlComponent component(&engine, QUrl(u"qrc:/TestTypes/aliasLookup.qml"_s));
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/aliasLookup.qml"_s));
     QVERIFY2(!component.isError(), component.errorString().toUtf8());
     QScopedPointer<QObject> object(component.create());
     QVERIFY(!object.isNull());
@@ -951,7 +983,7 @@ void tst_QmlCppCodegen::aliasLookup()
 void tst_QmlCppCodegen::outOfBoundsArray()
 {
     QQmlEngine engine;
-    QQmlComponent component(&engine, QUrl(u"qrc:/TestTypes/outOfBounds.qml"_s));
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/outOfBounds.qml"_s));
     QVERIFY2(!component.isError(), component.errorString().toUtf8());
 
     QTest::ignoreMessage(QtDebugMsg, "oob undefined");
@@ -967,8 +999,8 @@ void tst_QmlCppCodegen::outOfBoundsArray()
 void tst_QmlCppCodegen::compositeSingleton()
 {
     QQmlEngine engine;
-    engine.addImportPath(u":/TestTypes/imports/"_s);
-    QQmlComponent component(&engine, QUrl(u"qrc:/TestTypes/compositesingleton.qml"_s));
+    engine.addImportPath(u":/qt/qml/TestTypes/imports/"_s);
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/compositesingleton.qml"_s));
     QVERIFY2(!component.isError(), component.errorString().toUtf8());
     QScopedPointer<QObject> o(component.create());
     QCOMPARE(o->property("x").toDouble(), 4.5);
@@ -979,7 +1011,7 @@ void tst_QmlCppCodegen::compositeSingleton()
 void tst_QmlCppCodegen::lotsOfRegisters()
 {
     QQmlEngine engine;
-    QQmlComponent component(&engine, QUrl(u"qrc:/TestTypes/page.qml"_s));
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/page.qml"_s));
     QVERIFY2(!component.isError(), component.errorString().toUtf8());
     QScopedPointer<QObject> object(component.create());
     QVERIFY(!object.isNull());
@@ -1007,7 +1039,7 @@ void tst_QmlCppCodegen::lotsOfRegisters()
     };
 
     for (int i = 0; i < 100; ++i) {
-        QVERIFY(object->setProperty(props[i % props.length()], (i * 17) % 512));
+        QVERIFY(object->setProperty(props[i % props.size()], (i * 17) % 512));
         compare();
     }
 }
@@ -1015,7 +1047,7 @@ void tst_QmlCppCodegen::lotsOfRegisters()
 void tst_QmlCppCodegen::inPlaceDecrement()
 {
     QQmlEngine engine;
-    QQmlComponent component(&engine, QUrl(u"qrc:/TestTypes/dialog.qml"_s));
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/dialog.qml"_s));
     QVERIFY2(component.isReady(), qPrintable(component.errorString()));
     QScopedPointer<QObject> object(component.create());
     QVERIFY(!object.isNull());
@@ -1041,7 +1073,7 @@ void tst_QmlCppCodegen::inPlaceDecrement()
 void tst_QmlCppCodegen::shifts()
 {
     QQmlEngine engine;
-    QQmlComponent component(&engine, QUrl(u"qrc:/TestTypes/shifts.qml"_s));
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/shifts.qml"_s));
     QVERIFY2(component.isReady(), qPrintable(component.errorString()));
     QScopedPointer<QObject> object(component.create());
     QVERIFY(!object.isNull());
@@ -1056,7 +1088,7 @@ void tst_QmlCppCodegen::shifts()
 void tst_QmlCppCodegen::valueTypeProperty()
 {
     QQmlEngine engine;
-    QQmlComponent component(&engine, QUrl(u"qrc:/TestTypes/valueTypeProperty.qml"_s));
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/valueTypeProperty.qml"_s));
     QVERIFY2(component.isReady(), component.errorString().toUtf8());
     QScopedPointer<QObject> object(component.create());
 
@@ -1070,7 +1102,7 @@ void tst_QmlCppCodegen::valueTypeProperty()
 void tst_QmlCppCodegen::propertyOfParent()
 {
     QQmlEngine engine;
-    QQmlComponent component(&engine, QUrl(u"qrc:/TestTypes/RootWithoutId.qml"_s));
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/RootWithoutId.qml"_s));
     QVERIFY2(component.isReady(), component.errorString().toUtf8());
     QScopedPointer<QObject> object(component.create());
 
@@ -1099,7 +1131,7 @@ void tst_QmlCppCodegen::propertyOfParent()
 void tst_QmlCppCodegen::accessModelMethodFromOutSide()
 {
     QQmlEngine engine;
-    QQmlComponent component(&engine, QUrl(u"qrc:/TestTypes/AccessModelMethodsFromOutside.qml"_s));
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/AccessModelMethodsFromOutside.qml"_s));
     QVERIFY2(component.isReady(), component.errorString().toUtf8());
 
     QTest::ignoreMessage(QtDebugMsg, "3");
@@ -1112,26 +1144,52 @@ void tst_QmlCppCodegen::accessModelMethodFromOutSide()
     QCOMPARE(object->property("name2").toString(), u"Banana"_s);
 }
 
+// QML-generated types have no C++ names, but we want to call a method that
+// expects a pointer to a QML-generated type as argument.
+//
+// We force the QML engine to assign a specific name to our type and declare
+// an incomplete dummy class of the same name here. The dummy class does not
+// have a proper metatype by itself. Therefore, when we want to pass a (null)
+// pointer of it to invokeMethod(), usually invokeMethod() would complain that
+// the metatype of the argument we pass does not match the metatype of the
+// argument the method expects. In order to work around it, we specialize
+// qMetaTypeInterfaceForType() and produce a "correct" metatype this way.
+class Dummy_QMLTYPE_0;
+
+// We set this to the actual value retrieved from an actual instance of the QML
+// type before retrieving the metatype interface for the first time.
+static const QtPrivate::QMetaTypeInterface *dummyMetaTypeInterface = nullptr;
+template<>
+const QtPrivate::QMetaTypeInterface *QtPrivate::qMetaTypeInterfaceForType<Dummy_QMLTYPE_0 *>() {
+    return dummyMetaTypeInterface;
+}
+
 void tst_QmlCppCodegen::functionArguments()
 {
     QQmlEngine engine;
-    QQmlComponent component(&engine, QUrl(u"qrc:/TestTypes/Dummy.qml"_s));
+
+    // Ensure that Dummy gets counter value 0. Don't do that at home
+    QScopedValueRollback<QAtomicInt> rb(QQmlPropertyCacheCreatorBase::classIndexCounter, 0);
+
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/Dummy.qml"_s));
     QVERIFY2(component.isReady(), component.errorString().toUtf8());
     QScopedPointer<QObject> object(component.create());
 
     const QMetaObject *metaObject = object->metaObject();
+    dummyMetaTypeInterface = metaObject->metaType().iface();
+    const QByteArray className = QByteArray(metaObject->className());
+    QCOMPARE(className, "Dummy_QMLTYPE_0");
 
     int result;
     int a = 1;
     bool b = false;
-    QObject *c = nullptr;
+    Dummy_QMLTYPE_0 *c = nullptr;
     double d = -1.2;
     int e = 3;
 
-    const QByteArray className = QByteArray(metaObject->className()) + '*';
     metaObject->invokeMethod(
                 object.data(), "someFunction", Q_RETURN_ARG(int, result),
-                Q_ARG(int, a), Q_ARG(bool, b), QGenericArgument(className, &c),
+                Q_ARG(int, a), Q_ARG(bool, b), Q_ARG(Dummy_QMLTYPE_0 *, c),
                 Q_ARG(double, d), Q_ARG(int, e));
     QCOMPARE(result, 42);
 
@@ -1147,7 +1205,7 @@ void tst_QmlCppCodegen::functionArguments()
 void tst_QmlCppCodegen::bindingExpression()
 {
     QQmlEngine engine;
-    QQmlComponent component(&engine, QUrl(u"qrc:/TestTypes/BindingExpression.qml"_s));
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/BindingExpression.qml"_s));
     QVERIFY2(component.isReady(), component.errorString().toUtf8());
     QScopedPointer<QObject> object(component.create());
 
@@ -1189,7 +1247,7 @@ void tst_QmlCppCodegen::bindingExpression()
 void tst_QmlCppCodegen::voidFunction()
 {
     QQmlEngine engine;
-    QQmlComponent component(&engine, QUrl(u"qrc:/TestTypes/voidfunction.qml"_s));
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/voidfunction.qml"_s));
     QVERIFY2(component.isReady(), component.errorString().toUtf8());
     QScopedPointer<QObject> object(component.create());
     QVERIFY(!object.isNull());
@@ -1201,7 +1259,7 @@ void tst_QmlCppCodegen::voidFunction()
 void tst_QmlCppCodegen::overriddenProperty()
 {
     QQmlEngine engine;
-    QQmlComponent component(&engine, QUrl(u"qrc:/TestTypes/childobject.qml"_s));
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/childobject.qml"_s));
     QVERIFY2(component.isReady(), component.errorString().toUtf8());
     QScopedPointer<QObject> object(component.create());
     QVERIFY(!object.isNull());
@@ -1241,7 +1299,7 @@ void tst_QmlCppCodegen::overriddenProperty()
 void tst_QmlCppCodegen::listLength()
 {
     QQmlEngine engine;
-    QQmlComponent component(&engine, QUrl(u"qrc:/TestTypes/listlength.qml"_s));
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/listlength.qml"_s));
     QVERIFY2(component.isReady(), component.errorString().toUtf8());
     QScopedPointer<QObject> object(component.create());
     QVERIFY(!object.isNull());
@@ -1251,7 +1309,7 @@ void tst_QmlCppCodegen::listLength()
 void tst_QmlCppCodegen::parentProperty()
 {
     QQmlEngine engine;
-    QQmlComponent component(&engine, QUrl(u"qrc:/TestTypes/parentProp.qml"_s));
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/parentProp.qml"_s));
     QVERIFY2(component.isReady(), component.errorString().toUtf8());
     QScopedPointer<QObject> object(component.create());
     QVERIFY(!object.isNull());
@@ -1281,7 +1339,7 @@ void tst_QmlCppCodegen::parentProperty()
     QCOMPARE(object->property("i").toInt(), 886);
 
     {
-        QQmlComponent component(&engine, QUrl(u"qrc:/TestTypes/specificParent.qml"_s));
+        QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/specificParent.qml"_s));
 
         QVERIFY2(component.isReady(), qPrintable(component.errorString()));
         QScopedPointer<QObject> rootObject(component.create());
@@ -1294,7 +1352,7 @@ void tst_QmlCppCodegen::parentProperty()
 void tst_QmlCppCodegen::registerElimination()
 {
     QQmlEngine engine;
-    QQmlComponent component(&engine, QUrl(u"qrc:/TestTypes/registerelimination.qml"_s));
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/registerelimination.qml"_s));
     QVERIFY2(component.isReady(), component.errorString().toUtf8());
     QScopedPointer<QObject> object(component.create());
     QVERIFY(!object.isNull());
@@ -1312,7 +1370,7 @@ void tst_QmlCppCodegen::registerElimination()
 void tst_QmlCppCodegen::asCast()
 {
     QQmlEngine engine;
-    QQmlComponent component(&engine, QUrl(u"qrc:/TestTypes/asCast.qml"_s));
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/asCast.qml"_s));
     QVERIFY2(component.isReady(), component.errorString().toUtf8());
     QScopedPointer<QObject> root(component.create());
     QVERIFY(!root.isNull());
@@ -1347,10 +1405,10 @@ void tst_QmlCppCodegen::asCast()
 void tst_QmlCppCodegen::noQQmlData()
 {
     QQmlEngine engine;
-    QQmlComponent component(&engine, QUrl(u"qrc:/TestTypes/noQQmlData.qml"_s));
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/noQQmlData.qml"_s));
     QVERIFY2(component.isReady(), component.errorString().toUtf8());
 
-    QTest::ignoreMessage(QtWarningMsg, "qrc:/TestTypes/noQQmlData.qml:7: TypeError: "
+    QTest::ignoreMessage(QtWarningMsg, "qrc:/qt/qml/TestTypes/noQQmlData.qml:7: TypeError: "
                                        "Cannot read property 'name' of null");
     QScopedPointer<QObject> root(component.create());
     QVERIFY(!root.isNull());
@@ -1367,7 +1425,7 @@ void tst_QmlCppCodegen::noQQmlData()
     host1->setName(u"Marge"_s);
     QCOMPARE(party->property("n").toString(), u"Marge in da house!"_s);
 
-    QTest::ignoreMessage(QtWarningMsg, "qrc:/TestTypes/noQQmlData.qml:7: TypeError: "
+    QTest::ignoreMessage(QtWarningMsg, "qrc:/qt/qml/TestTypes/noQQmlData.qml:7: TypeError: "
                                        "Cannot read property 'name' of null");
 
     // Doesn't crash
@@ -1394,12 +1452,8 @@ void tst_QmlCppCodegen::noQQmlData()
 
 void tst_QmlCppCodegen::scopeObjectDestruction()
 {
-#ifdef Q_OS_ANDROID
-    QSKIP("crashes on Android, see QTBUG-103044.");
-#endif
-
     QQmlEngine engine;
-    QQmlComponent component(&engine, QUrl(u"qrc:/TestTypes/fileDialog.qml"_s));
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/fileDialog.qml"_s));
 
     QVERIFY2(component.isReady(), qPrintable(component.errorString()));
     QScopedPointer<QObject> rootObject(component.create());
@@ -1446,21 +1500,21 @@ static void checkColorProperties(QQmlComponent *component)
 void tst_QmlCppCodegen::colorAsVariant()
 {
     QQmlEngine engine;
-    QQmlComponent component(&engine, QUrl(u"qrc:/TestTypes/colorAsVariant.qml"_s));
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/colorAsVariant.qml"_s));
     checkColorProperties(&component);
 }
 
 void tst_QmlCppCodegen::bindToValueType()
 {
     QQmlEngine engine;
-    QQmlComponent component(&engine, QUrl(u"qrc:/TestTypes/bindToValueType.qml"_s));
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/bindToValueType.qml"_s));
     checkColorProperties(&component);
 }
 
 void tst_QmlCppCodegen::undefinedResets()
 {
     QQmlEngine engine;
-    QQmlComponent component(&engine, QUrl(u"qrc:/TestTypes/undefinedResets.qml"_s));
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/undefinedResets.qml"_s));
 
     QVERIFY2(component.isReady(), qPrintable(component.errorString()));
     QScopedPointer<QObject> rootObject(component.create());
@@ -1482,6 +1536,7 @@ void tst_QmlCppCodegen::undefinedResets()
 
     person->setName(u"no one"_s);
     QCOMPARE(person->name(), u"no one"_s);
+
     person->setObjectName(u"the one"_s);
     QCOMPARE(person->name(), u"Bart"_s);
 }
@@ -1489,7 +1544,7 @@ void tst_QmlCppCodegen::undefinedResets()
 void tst_QmlCppCodegen::innerObjectNonShadowable()
 {
     QQmlEngine engine;
-    QQmlComponent component(&engine, QUrl(u"qrc:/TestTypes/ownProperty.qml"_s));
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/ownProperty.qml"_s));
 
     QVERIFY2(component.isReady(), qPrintable(component.errorString()));
     QScopedPointer<QObject> rootObject(component.create());
@@ -1501,7 +1556,7 @@ void tst_QmlCppCodegen::innerObjectNonShadowable()
 void tst_QmlCppCodegen::ownPropertiesNonShadowable()
 {
     QQmlEngine engine;
-    QQmlComponent component(&engine, QUrl(u"qrc:/TestTypes/overriddenMember.qml"_s));
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/overriddenMember.qml"_s));
 
     QVERIFY2(component.isReady(), qPrintable(component.errorString()));
     QScopedPointer<QObject> rootObject(component.create());
@@ -1515,7 +1570,7 @@ void tst_QmlCppCodegen::ownPropertiesNonShadowable()
 void tst_QmlCppCodegen::modulePrefix()
 {
     QQmlEngine engine;
-    QQmlComponent component(&engine, QUrl(u"qrc:/TestTypes/modulePrefix.qml"_s));
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/modulePrefix.qml"_s));
 
     QVERIFY2(component.isReady(), qPrintable(component.errorString()));
     QScopedPointer<QObject> rootObject(component.create());
@@ -1529,7 +1584,7 @@ void tst_QmlCppCodegen::modulePrefix()
 void tst_QmlCppCodegen::colorString()
 {
     QQmlEngine engine;
-    QQmlComponent component(&engine, QUrl(u"qrc:/TestTypes/colorString.qml"_s));
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/colorString.qml"_s));
 
     QVERIFY2(component.isReady(), qPrintable(component.errorString()));
     QScopedPointer<QObject> rootObject(component.create());
@@ -1543,7 +1598,7 @@ void tst_QmlCppCodegen::colorString()
 void tst_QmlCppCodegen::urlString()
 {
     QQmlEngine engine;
-    QQmlComponent component(&engine, QUrl(u"qrc:/TestTypes/urlString.qml"_s));
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/urlString.qml"_s));
 
     QVERIFY2(component.isReady(), qPrintable(component.errorString()));
     QScopedPointer<QObject> rootObject(component.create());
@@ -1558,7 +1613,7 @@ void tst_QmlCppCodegen::urlString()
 void tst_QmlCppCodegen::callContextPropertyLookupResult()
 {
     QQmlEngine engine;
-    QQmlComponent c(&engine, QUrl(u"qrc:/TestTypes/callContextPropertyLookupResult.qml"_s));
+    QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/callContextPropertyLookupResult.qml"_s));
     QVERIFY2(c.isReady(), qPrintable(c.errorString()));
     QScopedPointer<QObject> o(c.create());
     QVERIFY(o);
@@ -1569,9 +1624,9 @@ void tst_QmlCppCodegen::callContextPropertyLookupResult()
 void tst_QmlCppCodegen::deadShoeSize()
 {
     QQmlEngine engine;
-    QQmlComponent c(&engine, QUrl(u"qrc:/TestTypes/deadShoeSize.qml"_s));
+    QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/deadShoeSize.qml"_s));
     QVERIFY2(c.isReady(), qPrintable(c.errorString()));
-    QTest::ignoreMessage(QtWarningMsg, "qrc:/TestTypes/deadShoeSize.qml:5: Error: ouch");
+    QTest::ignoreMessage(QtWarningMsg, "qrc:/qt/qml/TestTypes/deadShoeSize.qml:5: Error: ouch");
     QScopedPointer<QObject> o(c.create());
     QVERIFY(o);
     QCOMPARE(o->property("shoeSize").toInt(), 0);
@@ -1580,7 +1635,7 @@ void tst_QmlCppCodegen::deadShoeSize()
 void tst_QmlCppCodegen::listIndices()
 {
     QQmlEngine engine;
-    QQmlComponent c(&engine, QUrl(u"qrc:/TestTypes/listIndices.qml"_s));
+    QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/listIndices.qml"_s));
     QVERIFY2(c.isReady(), qPrintable(c.errorString()));
     QScopedPointer<QObject> o(c.create());
     QVERIFY(o);
@@ -1596,36 +1651,40 @@ void tst_QmlCppCodegen::listIndices()
     QCOMPARE(qvariant_cast<QObject *>(o->property("nan")), nullptr);
 }
 
+static const double numbers[] = {
+    qQNaN(), -qInf(),
+    std::numeric_limits<double>::min(),
+    std::numeric_limits<float>::min(),
+    std::numeric_limits<qint32>::min(),
+    -1000.2, -100, -2, -1.333, -1, -0.84, -0.5,
+
+    // -0 and 0 are not different on the QML side. Therefore, don't keep them adjacent.
+    // Otherwise the bindings won't get re-evaluated.
+    std::copysign(0.0, -1), 1, 0.0,
+
+    0.5, 0.77, 1.4545, 2, 199, 2002.13,
+    std::numeric_limits<qint32>::max(),
+    std::numeric_limits<quint32>::max(),
+    std::numeric_limits<float>::max(),
+    std::numeric_limits<double>::max(),
+    qInf()
+};
+
 void tst_QmlCppCodegen::jsMathObject()
 {
     QQmlEngine engine;
-    QQmlComponent c(&engine, QUrl(u"qrc:/TestTypes/jsMathObject.qml"_s));
+    QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/jsMathObject.qml"_s));
     QVERIFY2(c.isReady(), qPrintable(c.errorString()));
     QScopedPointer<QObject> o(c.create());
     QVERIFY(o);
-
-    const double inputs[] = {
-        qQNaN(), -qInf(),
-        std::numeric_limits<double>::min(),
-        std::numeric_limits<float>::min(),
-        std::numeric_limits<qint32>::min(),
-        -1000.2, -100, -2, -1.333, -1, -0.84, -0.5,
-        std::copysign(0.0, -1), 0.0,
-        0.5, 0.77, 1, 1.4545, 2, 199, 2002.13,
-        std::numeric_limits<qint32>::max(),
-        std::numeric_limits<quint32>::max(),
-        std::numeric_limits<float>::max(),
-        std::numeric_limits<double>::max(),
-        qInf()
-    };
 
     QJSManagedValue math(engine.globalObject().property(QStringLiteral("Math")), &engine);
 
     const QMetaObject *metaObject = o->metaObject();
 
     QString name;
-    for (double a : inputs) {
-        for (double b : inputs) {
+    for (double a : numbers) {
+        for (double b : numbers) {
             o->setProperty("a", a);
             o->setProperty("b", b);
             for (int i = 0, end = metaObject->propertyCount(); i != end; ++i) {
@@ -1656,7 +1715,7 @@ void tst_QmlCppCodegen::intEnumCompare()
 {
     QQmlEngine engine;
     {
-        QQmlComponent c(&engine, QUrl(u"qrc:/TestTypes/intEnumCompare.qml"_s));
+        QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/intEnumCompare.qml"_s));
         QVERIFY2(c.isReady(), qPrintable(c.errorString()));
         QScopedPointer<QObject> o(c.create());
         QVERIFY(o);
@@ -1668,7 +1727,7 @@ void tst_QmlCppCodegen::intEnumCompare()
 
     {
         // We cannot use Qt.red in QML because it's lower case.
-        QQmlComponent c(&engine, QUrl(u"qrc:/TestTypes/enumInvalid.qml"_s));
+        QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/enumInvalid.qml"_s));
         QVERIFY2(c.isReady(), qPrintable(c.errorString()));
         QScopedPointer<QObject> o(c.create());
         QVERIFY(o);
@@ -1680,7 +1739,7 @@ void tst_QmlCppCodegen::intEnumCompare()
 void tst_QmlCppCodegen::attachedSelf()
 {
     QQmlEngine engine;
-    QQmlComponent c(&engine, QUrl(u"qrc:/TestTypes/SelectionRectangle.qml"_s));
+    QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/SelectionRectangle.qml"_s));
     QVERIFY2(c.isReady(), qPrintable(c.errorString()));
     QScopedPointer<QObject> o(c.create());
     QVERIFY(o);
@@ -1693,7 +1752,7 @@ void tst_QmlCppCodegen::attachedSelf()
 void tst_QmlCppCodegen::functionReturningVoid()
 {
     QQmlEngine engine;
-    QQmlComponent c(&engine, QUrl(u"qrc:/TestTypes/functionReturningVoid.qml"_s));
+    QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/functionReturningVoid.qml"_s));
     QVERIFY2(c.isReady(), qPrintable(c.errorString()));
     QScopedPointer<QObject> o(c.create());
     QVERIFY(o);
@@ -1710,7 +1769,7 @@ void tst_QmlCppCodegen::functionCallOnNamespaced()
 {
     QQmlEngine engine;
     {
-        QQmlComponent c(&engine, QUrl(u"qrc:/TestTypes/themergood.qml"_s));
+        QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/themergood.qml"_s));
         QVERIFY2(c.isReady(), qPrintable(c.errorString()));
         QScopedPointer<QObject> o(c.create());
         QVERIFY(o);
@@ -1718,7 +1777,7 @@ void tst_QmlCppCodegen::functionCallOnNamespaced()
     }
 
     {
-        QQmlComponent c(&engine, QUrl(u"qrc:/TestTypes/themerbad.qml"_s));
+        QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/themerbad.qml"_s));
         QVERIFY2(c.isReady(), qPrintable(c.errorString()));
         QScopedPointer<QObject> o(c.create());
         QVERIFY(o);
@@ -1729,7 +1788,7 @@ void tst_QmlCppCodegen::functionCallOnNamespaced()
 void tst_QmlCppCodegen::flushBeforeCapture()
 {
     QQmlEngine engine;
-    QQmlComponent c(&engine, QUrl(u"qrc:/TestTypes/noBindingLoop.qml"_s));
+    QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/noBindingLoop.qml"_s));
     QVERIFY2(c.isReady(), qPrintable(c.errorString()));
     QScopedPointer<QObject> o(c.create());
     QVERIFY(o);
@@ -1742,20 +1801,20 @@ void tst_QmlCppCodegen::flushBeforeCapture()
 void tst_QmlCppCodegen::unknownAttached()
 {
     QQmlEngine engine;
-    QQmlComponent c(&engine, QUrl(u"qrc:/TestTypes/unknownAttached.qml"_s));
+    QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/unknownAttached.qml"_s));
     QVERIFY(c.isError());
 }
 
 void tst_QmlCppCodegen::variantlist()
 {
     QQmlEngine engine;
-    QQmlComponent c(&engine, QUrl(u"qrc:/TestTypes/variantlist.qml"_s));
+    QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/variantlist.qml"_s));
     QVERIFY2(c.isReady(), qPrintable(c.errorString()));
     QScopedPointer<QObject> o(c.create());
     QVERIFY(o);
 
     const QVariantList things = qvariant_cast<QVariantList>(o->property("things"));
-    QCOMPARE(things.length(), 2);
+    QCOMPARE(things.size(), 2);
     QCOMPARE(things[0].toString(), u"thing"_s);
     QCOMPARE(things[1].toInt(), 30);
 }
@@ -1763,7 +1822,7 @@ void tst_QmlCppCodegen::variantlist()
 void tst_QmlCppCodegen::popContextAfterRet()
 {
     QQmlEngine engine;
-    QQmlComponent c(&engine, QUrl(u"qrc:/TestTypes/popContextAfterRet.qml"_s));
+    QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/popContextAfterRet.qml"_s));
     QVERIFY2(c.isReady(), qPrintable(c.errorString()));
     QScopedPointer<QObject> o(c.create());
     QVERIFY(o);
@@ -1780,7 +1839,7 @@ void tst_QmlCppCodegen::popContextAfterRet()
 void tst_QmlCppCodegen::revisions()
 {
     QQmlEngine engine;
-    QQmlComponent c(&engine, QUrl(u"qrc:/TestTypes/revisions.qml"_s));
+    QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/revisions.qml"_s));
     QVERIFY2(c.isReady(), qPrintable(c.errorString()));
     QScopedPointer<QObject> o(c.create());
     QVERIFY(o);
@@ -1792,7 +1851,7 @@ void tst_QmlCppCodegen::revisions()
 void tst_QmlCppCodegen::invisibleBase()
 {
     QQmlEngine engine;
-    QQmlComponent c(&engine, QUrl(u"qrc:/TestTypes/invisibleBase.qml"_s));
+    QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/invisibleBase.qml"_s));
     QVERIFY2(c.isReady(), qPrintable(c.errorString()));
     QScopedPointer<QObject> o(c.create());
     QVERIFY(o);
@@ -1802,7 +1861,7 @@ void tst_QmlCppCodegen::invisibleBase()
 void tst_QmlCppCodegen::notEqualsInt()
 {
     QQmlEngine engine;
-    QQmlComponent c(&engine, QUrl(u"qrc:/TestTypes/notEqualsInt.qml"_s));
+    QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/notEqualsInt.qml"_s));
     QVERIFY2(c.isReady(), qPrintable(c.errorString()));
     QScopedPointer<QObject> o(c.create());
     QVERIFY(o);
@@ -1816,7 +1875,7 @@ void tst_QmlCppCodegen::notEqualsInt()
 void tst_QmlCppCodegen::infinities()
 {
     QQmlEngine engine;
-    QQmlComponent c(&engine, QUrl(u"qrc:/TestTypes/infinities.qml"_s));
+    QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/infinities.qml"_s));
     QVERIFY2(c.isReady(), qPrintable(c.errorString()));
     QScopedPointer<QObject> o(c.create());
     QVERIFY(o);
@@ -1838,7 +1897,7 @@ void tst_QmlCppCodegen::infinities()
 void tst_QmlCppCodegen::blockComments()
 {
     QQmlEngine engine;
-    QQmlComponent c(&engine, QUrl(u"qrc:/TestTypes/blockComments.qml"_s));
+    QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/blockComments.qml"_s));
     QVERIFY2(c.isReady(), qPrintable(c.errorString()));
     QScopedPointer<QObject> o(c.create());
     QVERIFY(o);
@@ -1848,7 +1907,7 @@ void tst_QmlCppCodegen::blockComments()
 void tst_QmlCppCodegen::functionLookup()
 {
     QQmlEngine engine;
-    QQmlComponent c(&engine, QUrl(u"qrc:/TestTypes/functionLookup.qml"_s));
+    QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/functionLookup.qml"_s));
     QVERIFY2(c.isReady(), qPrintable(c.errorString()));
     QScopedPointer<QObject> o(c.create());
     QVERIFY(o);
@@ -1864,7 +1923,7 @@ void tst_QmlCppCodegen::functionLookup()
 void tst_QmlCppCodegen::objectInVar()
 {
     QQmlEngine engine;
-    QQmlComponent c(&engine, QUrl(u"qrc:/TestTypes/objectInVar.qml"_s));
+    QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/objectInVar.qml"_s));
     QVERIFY2(c.isReady(), qPrintable(c.errorString()));
     QScopedPointer<QObject> o(c.create());
     QVERIFY(o);
@@ -1882,7 +1941,7 @@ void tst_QmlCppCodegen::objectInVar()
 void tst_QmlCppCodegen::functionTakingVar()
 {
     QQmlEngine engine;
-    const QUrl document(u"qrc:/TestTypes/functionTakingVar.qml"_s);
+    const QUrl document(u"qrc:/qt/qml/TestTypes/functionTakingVar.qml"_s);
     QQmlComponent c(&engine, document);
     QVERIFY2(c.isReady(), qPrintable(c.errorString()));
     QScopedPointer<QObject> o(c.create());
@@ -1902,7 +1961,7 @@ void tst_QmlCppCodegen::functionTakingVar()
 void tst_QmlCppCodegen::testIsnan()
 {
     QQmlEngine engine;
-    const QUrl document(u"qrc:/TestTypes/isnan.qml"_s);
+    const QUrl document(u"qrc:/qt/qml/TestTypes/isnan.qml"_s);
     QQmlComponent c(&engine, document);
     QVERIFY2(c.isReady(), qPrintable(c.errorString()));
     QScopedPointer<QObject> o(c.create());
@@ -1923,7 +1982,7 @@ void tst_QmlCppCodegen::testIsnan()
 void tst_QmlCppCodegen::fallbackLookups()
 {
     QQmlEngine engine;
-    const QUrl document(u"qrc:/TestTypes/fallbacklookups.qml"_s);
+    const QUrl document(u"qrc:/qt/qml/TestTypes/fallbacklookups.qml"_s);
     QQmlComponent c(&engine, document);
     QVERIFY2(c.isReady(), qPrintable(c.errorString()));
     QScopedPointer<QObject> o(c.create());
@@ -1956,7 +2015,7 @@ void tst_QmlCppCodegen::fallbackLookups()
 void tst_QmlCppCodegen::typedArray()
 {
     QQmlEngine engine;
-    const QUrl document(u"qrc:/TestTypes/typedArray.qml"_s);
+    const QUrl document(u"qrc:/qt/qml/TestTypes/typedArray.qml"_s);
     QQmlComponent c(&engine, document);
     QVERIFY2(c.isReady(), qPrintable(c.errorString()));
     QScopedPointer<QObject> o(c.create());
@@ -2019,7 +2078,7 @@ void tst_QmlCppCodegen::prefixedType()
     // import TestTypes. That is because the TestTypes module is in a subdirectory "data".
     engine.addImportPath(u":/"_s);
 
-    const QUrl document(u"qrc:/TestTypes/prefixedMetaType.qml"_s);
+    const QUrl document(u"qrc:/qt/qml/TestTypes/prefixedMetaType.qml"_s);
     QQmlComponent c(&engine, document);
     QVERIFY2(c.isReady(), qPrintable(c.errorString()));
     QScopedPointer<QObject> o(c.create());
@@ -2050,13 +2109,13 @@ void tst_QmlCppCodegen::evadingAmbiguity()
     // import TestTypes. That is because the TestTypes module is in a subdirectory "data".
     engine.addImportPath(u":/"_s);
 
-    QQmlComponent c1(&engine, QUrl(u"qrc:/TestTypes/ambiguous1/Ambiguous.qml"_s));
+    QQmlComponent c1(&engine, QUrl(u"qrc:/qt/qml/TestTypes/ambiguous1/Ambiguous.qml"_s));
     QVERIFY2(c1.isReady(), qPrintable(c1.errorString()));
     QScopedPointer<QObject> o1(c1.create());
     QCOMPARE(o1->objectName(), QStringLiteral("Ambiguous"));
     QCOMPARE(o1->property("i").toString(), QStringLiteral("Ambiguous1"));
 
-    QQmlComponent c2(&engine, QUrl(u"qrc:/TestTypes/ambiguous2/Ambiguous.qml"_s));
+    QQmlComponent c2(&engine, QUrl(u"qrc:/qt/qml/TestTypes/ambiguous2/Ambiguous.qml"_s));
     QVERIFY2(c2.isReady(), qPrintable(c2.errorString()));
     QScopedPointer<QObject> o2(c2.create());
     QCOMPARE(o2->objectName(), QStringLiteral("Ambiguous"));
@@ -2066,7 +2125,7 @@ void tst_QmlCppCodegen::evadingAmbiguity()
 void tst_QmlCppCodegen::fromBoolValue()
 {
     QQmlEngine engine;
-    QQmlComponent c(&engine, QUrl(u"qrc:/TestTypes/fromBoolValue.qml"_s));
+    QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/fromBoolValue.qml"_s));
     QVERIFY2(c.isReady(), qPrintable(c.errorString()));
     QScopedPointer<QObject> o(c.create());
     QCOMPARE(o->property("a").toBool(), true);
@@ -2089,7 +2148,7 @@ void tst_QmlCppCodegen::fromBoolValue()
 void tst_QmlCppCodegen::invisibleTypes()
 {
     QQmlEngine engine;
-    QQmlComponent c(&engine, QUrl(u"qrc:/TestTypes/invisibleTypes.qml"_s));
+    QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/invisibleTypes.qml"_s));
     QVERIFY2(c.isReady(), qPrintable(c.errorString()));
     QScopedPointer<QObject> o(c.create());
 
@@ -2140,7 +2199,7 @@ void tst_QmlCppCodegen::invalidPropertyType()
     qmlRegisterType<MyCppType>("App", 1, 0, "MyCppType");
 
     QQmlEngine engine;
-    QQmlComponent okComponent(&engine, QUrl(u"qrc:/TestTypes/OkType.qml"_s));
+    QQmlComponent okComponent(&engine, QUrl(u"qrc:/qt/qml/TestTypes/OkType.qml"_s));
     QVERIFY2(okComponent.isReady(), qPrintable(okComponent.errorString()));
     QScopedPointer<QObject> picker(okComponent.create());
     QVERIFY2(!picker.isNull(), qPrintable(okComponent.errorString()));
@@ -2150,7 +2209,7 @@ void tst_QmlCppCodegen::invalidPropertyType()
     QVERIFY(myCppType);
     QVERIFY(!myCppType->useListDelegate());
 
-    QQmlComponent c(&engine, QUrl(u"qrc:/TestTypes/BadType.qml"_s));
+    QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/BadType.qml"_s));
     QVERIFY2(c.isReady(), qPrintable(c.errorString()));
     QScopedPointer<QObject> o(c.createWithInitialProperties(
             QVariantMap {{u"picker"_s, QVariant::fromValue(picker.data())}}));
@@ -2164,7 +2223,7 @@ void tst_QmlCppCodegen::invalidPropertyType()
 void tst_QmlCppCodegen::valueTypeLists()
 {
     QQmlEngine engine;
-    QQmlComponent c(&engine, QUrl(u"qrc:/TestTypes/valueTypeLists.qml"_s));
+    QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/valueTypeLists.qml"_s));
     QVERIFY2(c.isReady(), qPrintable(c.errorString()));
     QScopedPointer<QObject> o(c.create());
 
@@ -2188,7 +2247,7 @@ void tst_QmlCppCodegen::valueTypeLists()
 void tst_QmlCppCodegen::boundComponents()
 {
     QQmlEngine engine;
-    QQmlComponent c(&engine, QUrl(u"qrc:/TestTypes/boundComponents.qml"_s));
+    QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/boundComponents.qml"_s));
     QVERIFY2(c.isReady(), qPrintable(c.errorString()));
     QScopedPointer<QObject> o(c.create());
 
@@ -2212,7 +2271,7 @@ void tst_QmlCppCodegen::invisibleListElementType()
 {
     qmlRegisterType<InvisibleListElementType>("Invisible", 1, 0, "InvisibleListElement");
     QQmlEngine engine;
-    QQmlComponent c(&engine, QUrl(u"qrc:/TestTypes/invisibleListElementType.qml"_s));
+    QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/invisibleListElementType.qml"_s));
     QVERIFY2(c.isReady(), qPrintable(c.errorString()));
     QScopedPointer<QObject> o(c.create());
     QVERIFY(!o.isNull());
@@ -2231,7 +2290,7 @@ void tst_QmlCppCodegen::typePropertyClash()
 {
     QQmlEngine engine;
     engine.rootContext()->setContextProperty(u"size"_s, 5);
-    QQmlComponent c(&engine, QUrl(u"qrc:/TestTypes/typePropertyClash.qml"_s));
+    QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/typePropertyClash.qml"_s));
     QVERIFY2(c.isReady(), qPrintable(c.errorString()));
     QScopedPointer<QObject> o(c.create());
     QVERIFY(!o.isNull());
@@ -2241,10 +2300,10 @@ void tst_QmlCppCodegen::typePropertyClash()
 void tst_QmlCppCodegen::objectToString()
 {
     QQmlEngine engine;
-    QQmlComponent c(&engine, QUrl(u"qrc:/TestTypes/toString.qml"_s));
+    QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/toString.qml"_s));
     QVERIFY2(c.isReady(), qPrintable(c.errorString()));
 
-    QTest::ignoreMessage(QtWarningMsg, "qrc:/TestTypes/toString.qml:6: no");
+    QTest::ignoreMessage(QtWarningMsg, "qrc:/qt/qml/TestTypes/toString.qml:6: no");
     QScopedPointer<QObject> o(c.create());
     QVERIFY(!o.isNull());
 
@@ -2255,10 +2314,10 @@ void tst_QmlCppCodegen::objectToString()
 void tst_QmlCppCodegen::throwObjectName()
 {
     QQmlEngine engine;
-    QQmlComponent c(&engine, QUrl(u"qrc:/TestTypes/throwObjectName.qml"_s));
+    QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/throwObjectName.qml"_s));
     QVERIFY2(c.isReady(), qPrintable(c.errorString()));
 
-    QTest::ignoreMessage(QtWarningMsg, "qrc:/TestTypes/throwObjectName.qml:5:5: ouch");
+    QTest::ignoreMessage(QtWarningMsg, "qrc:/qt/qml/TestTypes/throwObjectName.qml:5:5: ouch");
     QScopedPointer<QObject> o(c.create());
     QVERIFY(!o.isNull());
     QVERIFY(o->objectName().isEmpty());
@@ -2267,7 +2326,7 @@ void tst_QmlCppCodegen::throwObjectName()
 void tst_QmlCppCodegen::javaScriptArgument()
 {
     QQmlEngine engine;
-    QQmlComponent c(&engine, QUrl(u"qrc:/TestTypes/javaScriptArgument.qml"_s));
+    QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/javaScriptArgument.qml"_s));
     QVERIFY2(c.isReady(), qPrintable(c.errorString()));
 
     QScopedPointer<QObject> o(c.create());
@@ -2295,10 +2354,52 @@ void tst_QmlCppCodegen::javaScriptArgument()
     QCOMPARE(result, u"12 ");
 }
 
+void tst_QmlCppCodegen::translation()
+{
+    QQmlEngine engine;
+    QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/translation.qml"_s));
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+    QScopedPointer<QObject> o(c.create());
+
+    QCOMPARE(o->property("translate2"), u"s"_s);
+    QCOMPARE(o->property("translate3"), u"s"_s);
+    QCOMPARE(o->property("translate4"), u"s"_s);
+
+    QCOMPARE(o->property("translateNoop2"), u"s"_s);
+    QCOMPARE(o->property("translateNoop3"), u"s"_s);
+
+    QCOMPARE(o->property("tr1"), u"s"_s);
+    QCOMPARE(o->property("tr2"), u"s"_s);
+    QCOMPARE(o->property("tr3"), u"s"_s);
+
+    QCOMPARE(o->property("trNoop1"), u"s"_s);
+    QCOMPARE(o->property("trNoop2"), u"s"_s);
+
+    QCOMPARE(o->property("trId1"), u"s"_s);
+    QCOMPARE(o->property("trId2"), u"s"_s);
+
+    QCOMPARE(o->property("trIdNoop1"), u"s"_s);
+}
+
+void tst_QmlCppCodegen::stringArg()
+{
+    QQmlEngine engine;
+    QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/stringArg.qml"_s));
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+    QScopedPointer<QObject> o(c.create());
+
+    QCOMPARE(o->property("stringArg"), u"a foozly thing"_s);
+    QCOMPARE(o->property("falseArg"), u"a 0 thing"_s);
+    QCOMPARE(o->property("trueArg"), u"a 1 thing"_s);
+    QCOMPARE(o->property("zeroArg"), u"a 0 thing"_s);
+    QCOMPARE(o->property("intArg"), u"a 11 thing"_s);
+    QCOMPARE(o->property("realArg"), u"a 12.25 thing"_s);
+}
+
 void tst_QmlCppCodegen::conversionDecrement()
 {
     QQmlEngine engine;
-    QQmlComponent c(&engine, QUrl(u"qrc:/TestTypes/conversionDecrement.qml"_s));
+    QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/conversionDecrement.qml"_s));
 
     QVERIFY2(c.isReady(), qPrintable(c.errorString()));
 
@@ -2319,7 +2420,7 @@ void tst_QmlCppCodegen::conversionDecrement()
 void tst_QmlCppCodegen::unstoredUndefined()
 {
     QQmlEngine engine;
-    QQmlComponent c(&engine, QUrl(u"qrc:/TestTypes/unstoredUndefined.qml"_s));
+    QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/unstoredUndefined.qml"_s));
     QVERIFY2(c.isReady(), qPrintable(c.errorString()));
     QScopedPointer<QObject> o(c.create());
     QCOMPARE(o->objectName(), u"NaN"_s);
@@ -2328,7 +2429,7 @@ void tst_QmlCppCodegen::unstoredUndefined()
 void tst_QmlCppCodegen::registerPropagation()
 {
     QQmlEngine engine;
-    QQmlComponent c(&engine, QUrl(u"qrc:/TestTypes/registerPropagation.qml"_s));
+    QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/registerPropagation.qml"_s));
     QVERIFY2(c.isReady(), qPrintable(c.errorString()));
     QScopedPointer<QObject> o(c.create());
 
@@ -2348,7 +2449,7 @@ void tst_QmlCppCodegen::registerPropagation()
 void tst_QmlCppCodegen::argumentConversion()
 {
     QQmlEngine engine;
-    QQmlComponent c(&engine, QUrl(u"qrc:/TestTypes/argumentConversion.qml"_s));
+    QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/argumentConversion.qml"_s));
     QVERIFY2(c.isReady(), qPrintable(c.errorString()));
     QScopedPointer<QObject> o(c.create());
 
@@ -2370,41 +2471,83 @@ void tst_QmlCppCodegen::argumentConversion()
 void tst_QmlCppCodegen::badSequence()
 {
     QQmlEngine engine;
-    QQmlComponent c(&engine, QUrl(u"qrc:/TestTypes/badSequence.qml"_s));
+    QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/badSequence.qml"_s));
     QVERIFY2(c.isReady(), qPrintable(c.errorString()));
     QScopedPointer<QObject> o(c.create());
 
     Person *self = qobject_cast<Person *>(o.data());
-    QVERIFY(self); QVERIFY(self->barzles().isEmpty());
+    QVERIFY(self);
+    QVERIFY(self->barzles().isEmpty());
+    QVERIFY(self->cousins().isEmpty());
 
     Person *other = o->property("other").value<Person *>();
     QVERIFY(other);
 
     QVERIFY(other->barzles().isEmpty());
+    QVERIFY(other->cousins().isEmpty());
 
     Barzle f1;
     Barzle f2;
     const QList<Barzle *> barzles { &f1, &f2 };
+    const QList<Person *> cousins { self, other };
 
     other->setBarzles(barzles);
     QCOMPARE(self->barzles(), barzles);
     QCOMPARE(self->property("l").toInt(), 2);
+
+    other->setCousins(cousins);
+    QCOMPARE(self->cousins(), cousins);
+    QCOMPARE(self->property("m").toInt(), 2);
+
+    QQmlListProperty<Person> others
+            = self->property("others").value<QQmlListProperty<Person>>();
+    QCOMPARE(others.count(&others), 2);
+    QCOMPARE(others.at(&others, 0), cousins[0]);
+    QCOMPARE(others.at(&others, 1), cousins[1]);
+
+    QQmlListProperty<Person> momsCousins
+            = self->property("momsCousins").value<QQmlListProperty<Person>>();
+    QCOMPARE(momsCousins.count(&momsCousins), 2);
+    QCOMPARE(momsCousins.at(&momsCousins, 0), cousins[0]);
+    QCOMPARE(momsCousins.at(&momsCousins, 1), cousins[1]);
+
+    QQmlListProperty<Person> dadsCousins
+            = self->property("dadsCousins").value<QQmlListProperty<Person>>();
+    QCOMPARE(dadsCousins.count(&dadsCousins), 1);
+    QCOMPARE(dadsCousins.at(&dadsCousins, 0), other);
 }
 
 void tst_QmlCppCodegen::enumLookup()
 {
     QQmlEngine engine;
-    QQmlComponent c(&engine, QUrl(u"qrc:/TestTypes/enumLookup.qml"_s));
+    QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/enumLookup.qml"_s));
     QVERIFY2(c.isReady(), qPrintable(c.errorString()));
     QScopedPointer<QObject> o(c.create());
 
     QCOMPARE(o->property("ready").toBool(), true);
 }
 
+void tst_QmlCppCodegen::trivialSignalHandler()
+{
+    QQmlEngine engine;
+    QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/trivialSignalHandler.qml"_s));
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+    QScopedPointer<QObject> o(c.create());
+
+    QCOMPARE(o->property("a").toString(), u"no"_s);
+    QCOMPARE(o->property("b").toInt(), -1);
+    QCOMPARE(o->property("b").toDouble(), -1.0);
+
+    o->setObjectName(u"yes"_s);
+    QCOMPARE(o->property("a").toString(), u"yes"_s);
+    QCOMPARE(o->property("b").toInt(), 5);
+    QCOMPARE(o->property("c").toDouble(), 2.5);
+}
+
 void tst_QmlCppCodegen::stringToByteArray()
 {
     QQmlEngine engine;
-    QQmlComponent c(&engine, QUrl(u"qrc:/TestTypes/stringToByteArray.qml"_s));
+    QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/stringToByteArray.qml"_s));
     QVERIFY2(c.isReady(), qPrintable(c.errorString()));
     QScopedPointer<QObject> o(c.create());
 
@@ -2418,7 +2561,7 @@ void tst_QmlCppCodegen::stringToByteArray()
 void tst_QmlCppCodegen::listPropertyAsModel()
 {
     QQmlEngine engine;
-    QQmlComponent c(&engine, QUrl(u"qrc:/TestTypes/listPropertyAsModel.qml"_s));
+    QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/listPropertyAsModel.qml"_s));
     QVERIFY2(c.isReady(), qPrintable(c.errorString()));
     QScopedPointer<QObject> o(c.create());
 
@@ -2429,7 +2572,7 @@ void tst_QmlCppCodegen::listPropertyAsModel()
 void tst_QmlCppCodegen::notNotString()
 {
     QQmlEngine engine;
-    QQmlComponent c(&engine, QUrl(u"qrc:/TestTypes/notNotString.qml"_s));
+    QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/notNotString.qml"_s));
     QVERIFY2(c.isReady(), qPrintable(c.errorString()));
     QScopedPointer<QObject> o(c.create());
 
@@ -2438,34 +2581,205 @@ void tst_QmlCppCodegen::notNotString()
     QCOMPARE(o->property("notNotString").value<bool>(), true);
 }
 
-void tst_QmlCppCodegen::runInterpreted()
+template<typename T>
+QString toOperand(double arg);
+
+template<>
+QString toOperand<double>(double arg)
 {
-#ifdef Q_OS_ANDROID
-    QSKIP("Can't start QProcess to run a custom user binary on Android");
-#endif
+    if (qIsNull(arg))
+        return std::signbit(arg) ? QStringLiteral("(-0)") : QStringLiteral("(0)");
 
-    if (qEnvironmentVariableIsSet("QV4_FORCE_INTERPRETER"))
-        QSKIP("Already running in interpreted mode");
+    return u'(' + QJSPrimitiveValue(arg).toString() + u')';
+}
 
-#if QT_CONFIG(process)
-    QProcess process;
-    process.setProgram(QCoreApplication::applicationFilePath());
-    process.setEnvironment(QProcess::systemEnvironment()
-                           + QStringList(u"QV4_FORCE_INTERPRETER=1"_s));
-    process.start();
-    QVERIFY(process.waitForFinished());
-    QCOMPARE(process.exitStatus(), QProcess::NormalExit);
-    QCOMPARE(process.exitCode(), 0);
-#else
-    QSKIP("Test needs QProcess");
-#endif
+template<>
+QString toOperand<int>(double arg)
+{
+    const int iArg = QJSPrimitiveValue(arg).toInteger();
+    return u'(' + QJSPrimitiveValue(iArg).toString() + u')';
+}
+
+template<>
+QString toOperand<bool>(double arg)
+{
+    const bool bArg = QJSPrimitiveValue(arg).toBoolean();
+    return u'(' + QJSPrimitiveValue(bArg).toString() + u')';
+}
+
+template<typename T1, typename T2>
+double jsEval(double arg1, double arg2, const QString &op, QJSEngine *engine)
+{
+    auto evalBinary = [&](const QString &jsOp) {
+        return engine->evaluate(toOperand<T1>(arg1) + jsOp + toOperand<T2>(arg2)).toNumber();
+    };
+
+    auto evalBinaryConst = [&](const QString &jsOp) {
+        return engine->evaluate(toOperand<T1>(arg1) + jsOp + u'9').toNumber();
+    };
+
+    auto evalUnary = [&](const QString &jsOp) {
+        return engine->evaluate(jsOp + toOperand<T1>(arg1)).toNumber();
+    };
+
+    auto evalInPlace = [&](const QString &jsOp) {
+        return engine->evaluate(
+                    u"(function() {var a = "_s + toOperand<T1>(arg1)+ u"; return "_s
+                    + jsOp + u"a;})()"_s).toNumber();
+    };
+
+    if (op == u"unot")
+        return evalUnary(u"!"_s);
+    if (op == u"uplus")
+        return evalUnary(u"+"_s);
+    if (op == u"uminus")
+        return evalUnary(u"-"_s);
+    if (op == u"ucompl")
+        return evalUnary(u"~"_s);
+
+    if (op == u"increment")
+        return evalInPlace(u"++"_s);
+    if (op == u"decrement")
+        return evalInPlace(u"--"_s);
+
+    if (op == u"add")
+        return evalBinary(u"+"_s);
+    if (op == u"sub")
+        return evalBinary(u"-"_s);
+    if (op == u"mul")
+        return evalBinary(u"*"_s);
+    if (op == u"div")
+        return evalBinary(u"/"_s);
+    if (op == u"exp")
+        return evalBinary(u"**"_s);
+    if (op == u"mod")
+        return evalBinary(u"%"_s);
+
+    if (op == u"bitAnd")
+        return evalBinary(u"&"_s);
+    if (op == u"bitOr")
+        return evalBinary(u"|"_s);
+    if (op == u"bitXor")
+        return evalBinary(u"^"_s);
+
+    if (op == u"bitAndConst")
+        return evalBinaryConst(u"&"_s);
+    if (op == u"bitOrConst")
+        return evalBinaryConst(u"|"_s);
+    if (op == u"bitXorConst")
+        return evalBinaryConst(u"^"_s);
+
+    if (op == u"ushr")
+        return evalBinary(u">>>"_s);
+    if (op == u"shr")
+        return evalBinary(u">>"_s);
+    if (op == u"shl")
+        return evalBinary(u"<<"_s);
+
+    if (op == u"ushrConst")
+        return evalBinaryConst(u">>>"_s);
+    if (op == u"shrConst")
+        return evalBinaryConst(u">>"_s);
+    if (op == u"shlConst")
+        return evalBinaryConst(u"<<"_s);
+
+    qDebug() << op;
+    Q_UNREACHABLE_RETURN(0);
+}
+
+void tst_QmlCppCodegen::mathOperations()
+{
+    QQmlEngine engine;
+    QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/mathOperations.qml"_s));
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+    QScopedPointer<QObject> o(c.create());
+
+    const QMetaObject *metaObject = o->metaObject();
+
+    char t1;
+    char t2;
+    QString name;
+    const auto guard = qScopeGuard([&]() {
+        if (QTest::currentTestFailed()) {
+            qDebug() << t1 << t2 << name << "failed on:";
+            qDebug() << "doubles" << o->property("a").toDouble() << o->property("b").toDouble();
+            qDebug() << "integers" << o->property("ia").toInt() << o->property("ib").toInt();
+            qDebug() << "booleans" << o->property("ba").toBool() << o->property("bb").toBool();
+        }
+    });
+
+    for (double a : numbers) {
+        for (double b : numbers) {
+            o->setProperty("a", a);
+            o->setProperty("b", b);
+            for (int i = 0, end = metaObject->propertyCount(); i != end; ++i) {
+                const QMetaProperty prop = metaObject->property(i);
+                const QByteArray propName = prop.name();
+
+                if (propName.size() < 3 || propName == "objectName")
+                    continue;
+
+                t1 = propName[0];
+                t2 = propName[1];
+                name = QString::fromUtf8(propName.mid(2));
+
+                double expected;
+
+                switch (t2) {
+                case 'd':
+                case '_':
+                    switch (t1) {
+                    case 'd':
+                        expected = jsEval<double, double>(a, b, name, &engine);
+                        break;
+                    case 'i':
+                        expected = jsEval<int, double>(a, b, name, &engine);
+                        break;
+                    case 'b':
+                        expected = jsEval<bool, double>(a, b, name, &engine);
+                        break;
+                    }
+                    break;
+                case 'i':
+                    switch (t1) {
+                    case 'd':
+                        expected = jsEval<double, int>(a, b, name, &engine);
+                        break;
+                    case 'i':
+                        expected = jsEval<int, int>(a, b, name, &engine);
+                        break;
+                    case 'b':
+                        expected = jsEval<bool, int>(a, b, name, &engine);
+                        break;
+                    }
+                    break;
+                case 'b':
+                    switch (t1) {
+                    case 'd':
+                        expected = jsEval<double, bool>(a, b, name, &engine);
+                        break;
+                    case 'i':
+                        expected = jsEval<int, bool>(a, b, name, &engine);
+                        break;
+                    case 'b':
+                        expected = jsEval<bool, bool>(a, b, name, &engine);
+                        break;
+                    }
+                    break;
+                }
+
+                const double result = prop.read(o.data()).toDouble();
+                QCOMPARE(result, expected);
+            }
+        }
+    }
 }
 
 void tst_QmlCppCodegen::inaccessibleProperty()
 {
     QQmlEngine engine;
 
-    QQmlComponent c(&engine, QUrl(u"qrc:/TestTypes/versionmismatch.qml"_s));
+    QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/versionmismatch.qml"_s));
     QVERIFY2(c.isReady(), qPrintable(c.errorString()));
     QScopedPointer<QObject> o(c.create());
 
@@ -2476,33 +2790,63 @@ void tst_QmlCppCodegen::typePropagationLoop()
 {
     QQmlEngine engine;
 
-    QQmlComponent c(&engine, QUrl(u"qrc:/TestTypes/typePropagationLoop.qml"_s));
+    QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/typePropagationLoop.qml"_s));
     QVERIFY2(c.isReady(), qPrintable(c.errorString()));
     QScopedPointer<QObject> o(c.create());
 
     QCOMPARE(o->property("j").toInt(), 3);
 }
 
-void tst_QmlCppCodegen::nullComparison()
+void tst_QmlCppCodegen::signatureIgnored()
 {
     QQmlEngine engine;
 
-    QQmlComponent c(&engine, QUrl(u"qrc:/TestTypes/nullComparison.qml"_s));
+    QQmlComponent c1(&engine, QUrl(u"qrc:/qt/qml/TestTypes/signatureIgnored.qml"_s));
+    QVERIFY2(c1.isReady(), qPrintable(c1.errorString()));
+
+    QScopedPointer<QObject> ignored(c1.create());
+    QCOMPARE(ignored->property("l").toInt(), 5);
+    QCOMPARE(ignored->property("m").toInt(), 77);
+    QCOMPARE(ignored->property("n").toInt(), 67);
+}
+
+void tst_QmlCppCodegen::listAsArgument()
+{
+    QQmlEngine engine;
+
+    QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/listAsArgument.qml"_s));
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+
+    QScopedPointer<QObject> o(c.create());
+    QCOMPARE(o->property("i").toInt(), 4);
+    QCOMPARE(o->property("j").toInt(), 2);
+    QCOMPARE(o->property("i1").toInt(), 2);
+    QCOMPARE(o->property("i2").toInt(), 4);
+    QCOMPARE(o->property("d").value<QObject *>()->objectName(), u"this one"_s);
+
+    int singleInt = 0;
+    QList<int> moreInts;
+    QMetaObject::invokeMethod(o.data(), "returnInts1", Q_RETURN_ARG(QList<int>, moreInts));
+    QCOMPARE(moreInts, QList<int>({5, 4, 3, 2, 1}));
+    QMetaObject::invokeMethod(o.data(), "selectSecondInt", Q_RETURN_ARG(int, singleInt), Q_ARG(QList<int>, moreInts));
+    QCOMPARE(singleInt, 4);
+}
+
+void tst_QmlCppCodegen::letAndConst()
+{
+    QQmlEngine engine;
+    QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/letAndConst.qml"_s));
     QVERIFY2(c.isReady(), qPrintable(c.errorString()));
     QScopedPointer<QObject> o(c.create());
     QVERIFY(!o.isNull());
-
-    QCOMPARE(o->property("v").toInt(), 1);
-    QCOMPARE(o->property("w").toInt(), 3);
-    QCOMPARE(o->property("x").toInt(), 1);
-    QCOMPARE(o->property("y").toInt(), 5);
+    QCOMPARE(o->objectName(), u"ab"_s);
 }
 
 void tst_QmlCppCodegen::signalIndexMismatch()
 {
     QQmlEngine engine;
 
-    QQmlComponent c1(&engine, QUrl(u"qrc:/TestTypes/signalIndexMismatch.qml"_s));
+    QQmlComponent c1(&engine, QUrl(u"qrc:/qt/qml/TestTypes/signalIndexMismatch.qml"_s));
     QVERIFY2(c1.isReady(), qPrintable(c1.errorString()));
 
     QScopedPointer<QObject> item(c1.create());
@@ -2516,30 +2860,90 @@ void tst_QmlCppCodegen::signalIndexMismatch()
 void tst_QmlCppCodegen::callWithSpread()
 {
     QQmlEngine engine;
-    QQmlComponent c(&engine, QUrl(u"qrc:/TestTypes/callWithSpread.qml"_s));
+    QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/callWithSpread.qml"_s));
     QVERIFY2(c.isReady(), qPrintable(c.errorString()));
     QTest::ignoreMessage(QtCriticalMsg, "That is great!");
     QScopedPointer<QObject> o(c.create());
     QVERIFY(!o.isNull());
-};
+}
 
-void tst_QmlCppCodegen::enumConversion()
+void tst_QmlCppCodegen::nullComparison()
 {
     QQmlEngine engine;
 
-    QQmlComponent c(&engine, QUrl(u"qrc:/TestTypes/enumConversion.qml"_s));
+    QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/nullComparison.qml"_s));
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+    QScopedPointer<QObject> o(c.create());
+    QVERIFY(!o.isNull());
+
+    QCOMPARE(o->property("v").toInt(), 1);
+    QCOMPARE(o->property("w").toInt(), 3);
+    QCOMPARE(o->property("x").toInt(), 1);
+    QCOMPARE(o->property("y").toInt(), 5);
+}
+
+void tst_QmlCppCodegen::consoleObject()
+{
+    QQmlEngine engine;
+    QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/consoleObject.qml"_s));
     QVERIFY2(c.isReady(), qPrintable(c.errorString()));
 
+    QTest::ignoreMessage(QtDebugMsg, "b 4.55");
+    QTest::ignoreMessage(QtDebugMsg, "b 4.55");
+    QTest::ignoreMessage(QtInfoMsg, "b 4.55");
+    QTest::ignoreMessage(QtWarningMsg, "b 4.55");
+    QTest::ignoreMessage(QtCriticalMsg, "b 4.55");
+
+    // Unfortunately we cannot check the logging category with QTest::ignoreMessage
+    QTest::ignoreMessage(QtDebugMsg, "b 4.55");
+    QTest::ignoreMessage(QtDebugMsg, "b 4.55");
+    QTest::ignoreMessage(QtInfoMsg, "b 4.55");
+    QTest::ignoreMessage(QtWarningMsg, "b 4.55");
+    QTest::ignoreMessage(QtCriticalMsg, "b 4.55");
+
+    const QRegularExpression re(u"QQmlComponentAttached\\(0x[0-9a-f]+\\) b 4\\.55"_s);
+    QTest::ignoreMessage(QtDebugMsg, re);
+    QTest::ignoreMessage(QtDebugMsg, re);
+    QTest::ignoreMessage(QtInfoMsg, re);
+    QTest::ignoreMessage(QtWarningMsg, re);
+    QTest::ignoreMessage(QtCriticalMsg, re);
+
+    QTest::ignoreMessage(QtDebugMsg, "a undefined b false null 7");
+    QTest::ignoreMessage(QtDebugMsg, "");
+    QTest::ignoreMessage(QtDebugMsg, "4");
+    QTest::ignoreMessage(QtDebugMsg, "");
+
+    const QRegularExpression re2(u"QQmlComponentAttached\\(0x[0-9a-f]+\\)"_s);
+    QTest::ignoreMessage(QtDebugMsg, re2);
+
     QScopedPointer<QObject> o(c.create());
-    QVERIFY(o);
-    QCOMPARE(o->property("test").toInt(), 0x04);
-    QCOMPARE(o->property("test_1").toBool(), true);
-};
+    QVERIFY(!o.isNull());
+}
+
+void tst_QmlCppCodegen::multiForeign()
+{
+    QQmlEngine engine;
+    QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/multiforeign.qml"_s));
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+    QScopedPointer<QObject> o(c.create());
+    QVERIFY(!o.isNull());
+    QCOMPARE(o->objectName(), u"not here and not there"_s);
+}
+
+void tst_QmlCppCodegen::namespaceWithEnum()
+{
+    QQmlEngine engine;
+    QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/namespaceWithEnum.qml"_s));
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+    QScopedPointer<QObject> o(c.create());
+    QVERIFY(!o.isNull());
+    QCOMPARE(o->property("i").toInt(), 2);
+}
 
 void tst_QmlCppCodegen::enumProblems()
 {
     QQmlEngine engine;
-    QQmlComponent c(&engine, QUrl(u"qrc:/TestTypes/enumProblems.qml"_s));
+    QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/enumProblems.qml"_s));
     QVERIFY2(c.isReady(), qPrintable(c.errorString()));
     QScopedPointer<QObject> outer(c.create());
     QVERIFY(!outer.isNull());
@@ -2555,11 +2959,24 @@ void tst_QmlCppCodegen::enumProblems()
     QCOMPARE(fighter->type(), Foo::Fighter);
 }
 
+void tst_QmlCppCodegen::enumConversion()
+{
+    QQmlEngine engine;
+
+    QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/enumConversion.qml"_s));
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+
+    QScopedPointer<QObject> o(c.create());
+    QVERIFY(o);
+    QCOMPARE(o->property("test").toInt(), 0x04);
+    QCOMPARE(o->property("test_1").toBool(), true);
+}
+
 void tst_QmlCppCodegen::storeElementSideEffects()
 {
     QQmlEngine engine;
 
-    QQmlComponent c(&engine, QUrl(u"qrc:/TestTypes/storeElementSideEffects.qml"_s));
+    QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/storeElementSideEffects.qml"_s));
     QVERIFY2(c.isReady(), qPrintable(c.errorString()));
 
     QScopedPointer<QObject> o(c.create());
@@ -2570,10 +2987,227 @@ void tst_QmlCppCodegen::storeElementSideEffects()
     QCOMPARE(prop.property(0).toInt(), 10);
 };
 
+void tst_QmlCppCodegen::ambiguousSignals()
+{
+    QQmlEngine engine;
+    QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/ambiguousSignals.qml"_s));
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+    QScopedPointer<QObject> o(c.create());
+    QVERIFY(!o.isNull());
+    QCOMPARE(o->objectName(), u"tomorrow"_s);
+    Person *p = qobject_cast<Person *>(o.data());
+    QVERIFY(p);
+    emit p->ambiguous(12);
+    QCOMPARE(o->objectName(), u"12foo"_s);
+    emit p->ambiguous();
+    QCOMPARE(o->objectName(), u"9foo"_s);
+}
+
+void tst_QmlCppCodegen::fileImportsContainCxxTypes()
+{
+    QQmlEngine engine;
+    QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/usingCxxTypesFromFileImports.qml"_s));
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+    QScopedPointer<QObject> o(c.create());
+    QVERIFY(!o.isNull());
+    QCOMPARE(o->objectName(), u"horst guenther"_s);
+}
+
+void tst_QmlCppCodegen::lengthAccessArraySequenceCompat()
+{
+    QQmlEngine engine;
+    QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/ArraySequenceLengthInterop.qml"_s));
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+    QScopedPointer<QObject> o(c.create());
+    QVERIFY(!o.isNull());
+    QCOMPARE(o->property("length").toInt(), 100);
+}
+
+static QList<QString> convertToStrings(const QList<int> &ints)
+{
+    QList<QString> strings;
+    for (int i : ints)
+        strings.append(QString::number(i));
+    return strings;
+}
+
+void tst_QmlCppCodegen::numbersInJsPrimitive()
+{
+    QQmlEngine engine;
+    QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/numbersInJsPrimitive.qml"_s));
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+    QScopedPointer<QObject> o(c.create());
+    QVERIFY(!o.isNull());
+
+    const QList<int> zeroes  = {0, 0, 0, 0};
+    const QList<int> written = {39, 40, 41, 42};
+    const QList<int> stored  = {1334, 1335, 1336, 1337};
+    QStringList asStrings(4);
+
+    for (int i = 0; i < 4; ++i) {
+        QMetaObject::invokeMethod(
+                    o.data(), "readValueAsString",
+                    Q_RETURN_ARG(QString, asStrings[i]), Q_ARG(int, i));
+    }
+    QCOMPARE(asStrings, convertToStrings(zeroes));
+
+    QMetaObject::invokeMethod(o.data(), "writeValues");
+    for (int i = 0; i < 4; ++i) {
+        QMetaObject::invokeMethod(
+                    o.data(), "readValueAsString",
+                    Q_RETURN_ARG(QString, asStrings[i]), Q_ARG(int, i));
+    }
+    QCOMPARE(asStrings, convertToStrings(written));
+
+    QMetaObject::invokeMethod(o.data(), "storeValues");
+    for (int i = 0; i < 4; ++i) {
+        QMetaObject::invokeMethod(
+                    o.data(), "readValueAsString",
+                    Q_RETURN_ARG(QString, asStrings[i]), Q_ARG(int, i));
+    }
+    QCOMPARE(asStrings, convertToStrings(stored));
+}
+
+void tst_QmlCppCodegen::equalityVarAndNonStorable()
+{
+    QQmlEngine engine;
+
+    QQmlComponent c1(&engine, QUrl(u"qrc:/qt/qml/TestTypes/equalityVarAndNonStorable.qml"_s));
+    QVERIFY2(c1.isReady(), qPrintable(c1.errorString()));
+
+    QScopedPointer<QObject> object(c1.create());
+    QVERIFY(!object.isNull() && !c1.isError());
+    QVERIFY(!object->property("aIsNull").toBool());
+    QVERIFY(object->property("aIsNotNull").toBool());
+    QVERIFY(object->property("aIsNotUndefined").toBool());
+    QVERIFY(object->property("objectIsNotNull").toBool());
+    QVERIFY(!object->property("typedArrayIsNull").toBool());
+    QVERIFY(object->property("isUndefined").toBool());
+    QVERIFY(!object->property("derivedIsNull").toBool());
+
+    QVERIFY(object->property("primitiveIsNull").toBool());
+    QVERIFY(object->property("primitiveIsDefined").toBool());
+    QVERIFY(object->property("primitiveIsUndefined").toBool());
+
+    QVERIFY(object->property("jsValueIsNull").toBool());
+    QVERIFY(object->property("jsValueIsDefined").toBool());
+    QVERIFY(object->property("jsValueIsUndefined").toBool());
+
+    QVERIFY(object->property("nullVarIsUndefined").toBool());
+    QVERIFY(object->property("nullIsUndefined").toBool());
+    QVERIFY(object->property("nullVarIsNull").toBool());
+    QVERIFY(object->property("nullIsNotUndefined").toBool());
+};
+
+void tst_QmlCppCodegen::equalityQObjects()
+{
+    QQmlEngine engine;
+    QQmlComponent c1(&engine, QUrl(u"qrc:/qt/qml/TestTypes/equalityQObjects.qml"_s));
+    QVERIFY2(c1.isReady(), qPrintable(c1.errorString()));
+    QScopedPointer<QObject> object(c1.create());
+    QVERIFY(!object.isNull() && !c1.isError());
+
+    QVERIFY(object->property("derivedIsNotNull").toBool());
+    QVERIFY(object->property("nullObjectIsNull").toBool());
+    QVERIFY(object->property("nonNullObjectIsNotNull").toBool());
+    QVERIFY(object->property("compareSameObjects").toBool());
+    QVERIFY(object->property("compareDifferentObjects").toBool());
+    QVERIFY(object->property("compareObjectWithNullObject").toBool());
+
+    QVERIFY(object->property("nonStrict_derivedIsNotNull").toBool());
+    QVERIFY(object->property("nonStrict_nullObjectIsNull").toBool());
+    QVERIFY(object->property("nonStrict_nonNullObjectIsNotNull").toBool());
+    QVERIFY(object->property("nonStrict_compareSameObjects").toBool());
+    QVERIFY(object->property("nonStrict_compareDifferentObjects").toBool());
+    QVERIFY(object->property("nonStrict_compareObjectWithNullObject").toBool());
+}
+
+static QRegularExpression bindingLoopMessage(const QUrl &url, char var)
+{
+    // The actual string depends on how many times QObject* was registered with what parameters.
+    return QRegularExpression(
+                "%1:4:1: QML [^:]+: Binding loop detected for property \"%2\""_L1
+                .arg(url.toString()).arg(QLatin1Char(var)));
+}
+
+void tst_QmlCppCodegen::valueTypeBehavior()
+{
+    QQmlEngine engine;
+
+    const QUrl copy(u"qrc:/qt/qml/TestTypes/valueTypeCopy.qml"_s);
+
+    QQmlComponent c1(&engine, copy);
+    QVERIFY2(c1.isReady(), qPrintable(c1.errorString()));
+    QTest::ignoreMessage(QtWarningMsg, bindingLoopMessage(copy, 'e'));
+    QTest::ignoreMessage(QtWarningMsg, bindingLoopMessage(copy, 'f'));
+    QScopedPointer<QObject> o1(c1.create());
+    QVERIFY(!o1.isNull());
+    QCOMPARE(o1->property("e").toDouble(), 45.0);
+    QCOMPARE(o1->property("f").toDouble(), 1.0);
+
+    const QUrl reference(u"qrc:/qt/qml/TestTypes/valueTypeReference.qml"_s);
+    QQmlComponent c2(&engine, reference);
+    QVERIFY2(c2.isReady(), qPrintable(c2.errorString()));
+    QTest::ignoreMessage(QtWarningMsg, bindingLoopMessage(reference, 'e'));
+    QTest::ignoreMessage(QtWarningMsg, bindingLoopMessage(reference, 'f'));
+    QScopedPointer<QObject> o2(c2.create());
+    QVERIFY(!o2.isNull());
+    QVERIFY(qIsNaN(o2->property("e").toDouble()));
+    QCOMPARE(o2->property("f").toDouble(), 5.0);
+}
+
+void tst_QmlCppCodegen::invisibleSingleton()
+{
+    QQmlEngine engine;
+    const QUrl copy(u"qrc:/qt/qml/TestTypes/hidden/Main.qml"_s);
+    QQmlComponent c(&engine, copy);
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+
+    QTest::ignoreMessage(
+                QtWarningMsg,
+                "qrc:/qt/qml/TestTypes/hidden/Main.qml:4:5: "
+                "Unable to assign [undefined] to QColor");
+    QScopedPointer<QObject> o(c.create());
+    QVERIFY(!o.isNull());
+    QCOMPARE(o->property("c"), QVariant(QMetaType::fromName("QColor")));
+}
+
+void tst_QmlCppCodegen::dialogButtonBox()
+{
+    QQmlEngine engine;
+    const QUrl copy(u"qrc:/qt/qml/TestTypes/dialogButtonBox.qml"_s);
+    QQmlComponent c(&engine, copy);
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+    QScopedPointer<QObject> o(c.create());
+    QVERIFY(!o.isNull());
+    QObject *footer = o->property("footer").value<QObject *>();
+    QVERIFY(footer);
+
+    QCOMPARE(footer->property("standardButtons").value<QPlatformDialogHelper::StandardButton>(),
+             QPlatformDialogHelper::Ok | QPlatformDialogHelper::Cancel);
+}
+
+void tst_QmlCppCodegen::equalityQUrl()
+{
+    QQmlEngine engine;
+
+    QQmlComponent c1(&engine, QUrl(u"qrc:/qt/qml/TestTypes/equalityQUrl.qml"_s));
+    QVERIFY2(c1.isReady(), qPrintable(c1.errorString()));
+
+    QScopedPointer<QObject> object(c1.create());
+    QVERIFY(!object.isNull() && !c1.isError());
+    QVERIFY(object->property("emptyUrlStrict").toBool());
+    QVERIFY(object->property("emptyUrlWeak").toBool());
+    QVERIFY(object->property("sourceUrlStrict").toBool());
+    QVERIFY(object->property("sourceUrlWeak").toBool());
+    QVERIFY(object->property("sourceIsNotEmptyStrict").toBool());
+    QVERIFY(object->property("sourceIsNotEmptyWeak").toBool());
+}
+
 void tst_QmlCppCodegen::undefinedToDouble()
 {
     QQmlEngine engine;
-    QQmlComponent c(&engine, QUrl(u"qrc:/TestTypes/undefinedToDouble.qml"_s));
+    QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/undefinedToDouble.qml"_s));
     QVERIFY2(c.isReady(), qPrintable(c.errorString()));
     QScopedPointer<QObject> o(c.create());
     QVERIFY(!o.isNull());
@@ -2582,10 +3216,20 @@ void tst_QmlCppCodegen::undefinedToDouble()
     QVERIFY(std::isnan(d.toDouble()));
 }
 
+void tst_QmlCppCodegen::variantMapLookup()
+{
+    QQmlEngine engine;
+    QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/variantMapLookup.qml"_s));
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+    QScopedPointer<QObject> o(c.create());
+    QVERIFY(!o.isNull());
+    QCOMPARE(o->property("i"), 42);
+}
+
 void tst_QmlCppCodegen::enumFromBadSingleton()
 {
     QQmlEngine e;
-    const QUrl url(u"qrc:/TestTypes/enumFromBadSingleton.qml"_s);
+    const QUrl url(u"qrc:/qt/qml/TestTypes/enumFromBadSingleton.qml"_s);
     QQmlComponent c(&e, url);
     QVERIFY2(c.isReady(), qPrintable(c.errorString()));
 
@@ -2604,6 +3248,20 @@ void tst_QmlCppCodegen::enumFromBadSingleton()
     QScopedPointer<QObject> o(c.create());
     QVERIFY(o);
     QVERIFY(o->objectName().isEmpty());
+}
+
+void tst_QmlCppCodegen::ambiguousAs()
+{
+    QQmlEngine e;
+    const QUrl url(u"qrc:/qt/qml/TestTypes/ambiguousAs.qml"_s);
+    QQmlComponent c(&e, url);
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+
+    QScopedPointer<QObject> o(c.create());
+    QVERIFY(!o.isNull());
+    QCOMPARE(o->property("other").value<QObject *>(), o.data());
+    o->setProperty("useSelf", QVariant::fromValue(false));
+    QCOMPARE(o->property("other").value<QObject *>(), nullptr);
 }
 
 QTEST_MAIN(tst_QmlCppCodegen)

@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Generated from subsurface.pro.
 
 #####################################################################
@@ -9,7 +12,7 @@ qt_internal_add_manual_test(subsurface
     SOURCES
         main.cpp
         shmwindow.cpp shmwindow.h
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::CorePrivate
         Qt::Gui
         Qt::GuiPrivate

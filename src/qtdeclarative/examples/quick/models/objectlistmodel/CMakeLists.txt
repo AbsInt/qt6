@@ -1,7 +1,8 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 cmake_minimum_required(VERSION 3.16)
 project(objectlistmodel LANGUAGES CXX)
-
-set(CMAKE_AUTOMOC ON)
 
 if(NOT DEFINED INSTALL_EXAMPLESDIR)
     set(INSTALL_EXAMPLESDIR "examples")
@@ -11,12 +12,14 @@ set(INSTALL_EXAMPLEDIR "${INSTALL_EXAMPLESDIR}/quick/models/objectlistmodel")
 
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Qml Quick)
 
+qt_standard_project_setup(REQUIRES 6.5)
+
 qt_add_executable(objectlistmodelexample WIN32 MACOSX_BUNDLE
-    dataobject.cpp
+    dataobject.cpp dataobject.h
     main.cpp
 )
 
-target_link_libraries(objectlistmodelexample PUBLIC
+target_link_libraries(objectlistmodelexample PRIVATE
     Qt::Core
     Qt::Gui
     Qt::Qml
@@ -26,7 +29,6 @@ target_link_libraries(objectlistmodelexample PUBLIC
 # Resources:
 qt_add_qml_module(objectlistmodelexample
     URI objectlistmodel
-    VERSION 1.0
     QML_FILES
         "view.qml"
 )

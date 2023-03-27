@@ -14,13 +14,12 @@
 
 QT_BEGIN_NAMESPACE
 
-using namespace qdesigner_internal;
+namespace qdesigner_internal {
 
 ListWidgetEditor::ListWidgetEditor(QDesignerFormWindowInterface *form,
                                    QWidget *parent)
     : QDialog(parent)
 {
-    setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
     QDialogButtonBox *buttonBox = new QDialogButtonBox;
     buttonBox->setStandardButtons(QDialogButtonBox::Cancel|QDialogButtonBox::Ok);
     connect(buttonBox, &QDialogButtonBox::accepted, this, &QDialog::accept);
@@ -96,5 +95,7 @@ ListContents ListWidgetEditor::contents() const
     retVal.createFromListWidget(m_itemsEditor->listWidget(), true);
     return retVal;
 }
+
+} // namespace qdesigner_internal
 
 QT_END_NAMESPACE

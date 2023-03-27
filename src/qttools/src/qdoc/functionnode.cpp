@@ -60,6 +60,8 @@ FunctionNode::FunctionNode(Aggregate *parent, const QString &name)
       m_isRef(false),
       m_isRefRef(false),
       m_isInvokable(false),
+      m_explicit{false},
+      m_constexpr{false},
       m_metaness(Plain),
       m_virtualness(NonVirtual),
       m_overloadNumber(0),
@@ -91,6 +93,8 @@ FunctionNode::FunctionNode(Metaness kind, Aggregate *parent, const QString &name
       m_isRef(false),
       m_isRefRef(false),
       m_isInvokable(false),
+      m_explicit{false},
+      m_constexpr{false},
       m_metaness(kind),
       m_virtualness(NonVirtual),
       m_overloadNumber(0),
@@ -436,15 +440,6 @@ QString FunctionNode::signature(bool values, bool noReturnType, bool templatePar
         elements << name();
     }
     return elements.join(QLatin1Char(' '));
-}
-
-/*!
-  Print some information used for debugging qdoc. Only used when debugging.
- */
-void FunctionNode::debug() const
-{
-    qDebug("QML METHOD %s m_returnType %s m_parentPath %s", qPrintable(name()),
-           qPrintable(m_returnType), qPrintable(m_parentPath.join(' ')));
 }
 
 /*!

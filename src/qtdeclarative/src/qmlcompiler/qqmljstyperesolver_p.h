@@ -32,6 +32,7 @@ class Q_QMLCOMPILER_PRIVATE_EXPORT QQmlJSTypeResolver
 public:
     enum ParentMode { UseDocumentParent, UseParentProperty };
     enum CloneMode { CloneTypes, DoNotCloneTypes };
+    enum ListMode { UseListProperty, UseQObjectList };
 
     QQmlJSTypeResolver(QQmlJSImporter *importer);
 
@@ -45,6 +46,7 @@ public:
     QQmlJSScope::ConstPtr realType() const { return m_realType; }
     QQmlJSScope::ConstPtr floatType() const { return m_floatType; }
     QQmlJSScope::ConstPtr intType() const { return m_intType; }
+    QQmlJSScope::ConstPtr uintType() const { return m_uintType; }
     QQmlJSScope::ConstPtr boolType() const { return m_boolType; }
     QQmlJSScope::ConstPtr stringType() const { return m_stringType; }
     QQmlJSScope::ConstPtr stringListType() const { return m_stringListType; }
@@ -52,6 +54,7 @@ public:
     QQmlJSScope::ConstPtr urlType() const { return m_urlType; }
     QQmlJSScope::ConstPtr dateTimeType() const { return m_dateTimeType; }
     QQmlJSScope::ConstPtr variantListType() const { return m_variantListType; }
+    QQmlJSScope::ConstPtr variantMapType() const { return m_variantMapType; }
     QQmlJSScope::ConstPtr varType() const { return m_varType; }
     QQmlJSScope::ConstPtr jsValueType() const { return m_jsValueType; }
     QQmlJSScope::ConstPtr jsPrimitiveType() const { return m_jsPrimitiveType; }
@@ -59,29 +62,32 @@ public:
     QQmlJSScope::ConstPtr metaObjectType() const { return m_metaObjectType; }
     QQmlJSScope::ConstPtr functionType() const { return m_functionType; }
     QQmlJSScope::ConstPtr jsGlobalObject() const { return m_jsGlobalObject; }
+    QQmlJSScope::ConstPtr qObjectListType() const { return m_qObjectListType; }
 
     QQmlJSScope::ConstPtr scopeForLocation(const QV4::CompiledData::Location &location) const;
     QQmlJSScope::ConstPtr scopeForId(
             const QString &id, const QQmlJSScope::ConstPtr &referrer) const;
+    QString idForScope(
+            const QQmlJSScope::ConstPtr &scope, const QQmlJSScope::ConstPtr &referrer) const;
 
     bool isPrefix(const QString &name) const
     {
-        return m_imports.contains(name) && !m_imports[name].scope;
+        return m_imports.hasType(name) && !m_imports.type(name).scope;
     }
 
-    enum ListMode { UseListReference, UseQObjectList };
-    QQmlJSScope::ConstPtr listType(const QQmlJSScope::ConstPtr &elementType, ListMode mode) const;
-    QQmlJSScope::ConstPtr typeForName(const QString &name) const { return m_imports[name].scope; }
+    QQmlJSScope::ConstPtr typeForName(const QString &name) const
+    {
+        return m_imports.type(name).scope;
+    }
     QQmlJSScope::ConstPtr typeFromAST(QQmlJS::AST::Type *type) const;
     QQmlJSScope::ConstPtr typeForConst(QV4::ReturnedValue rv) const;
     QQmlJSRegisterContent typeForBinaryOperation(QSOperator::Op oper,
                                                  const QQmlJSRegisterContent &left,
                                                  const QQmlJSRegisterContent &right) const;
 
-    enum class UnaryOperator { Plus, Minus, Increment, Decrement };
-
+    enum class UnaryOperator { Not, Plus, Minus, Increment, Decrement, Complement };
     QQmlJSRegisterContent typeForArithmeticUnaryOperation(
-            UnaryOperator oper, const QQmlJSRegisterContent &operand) const;
+            UnaryOperator op, const QQmlJSRegisterContent &operand) const;
 
     bool isPrimitive(const QQmlJSRegisterContent &type) const;
     bool isNumeric(const QQmlJSRegisterContent &type) const;
@@ -97,12 +103,14 @@ public:
     genericType(const QQmlJSScope::ConstPtr &type,
                 ComponentIsGeneric allowComponent = ComponentIsGeneric::No) const;
 
+    QQmlJSRegisterContent builtinType(const QQmlJSScope::ConstPtr &type) const;
     QQmlJSRegisterContent globalType(const QQmlJSScope::ConstPtr &type) const;
     QQmlJSRegisterContent scopedType(const QQmlJSScope::ConstPtr &scope, const QString &name) const;
     QQmlJSRegisterContent memberType(const QQmlJSRegisterContent &type, const QString &name) const;
     QQmlJSRegisterContent valueType(const QQmlJSRegisterContent &list) const;
-    QQmlJSRegisterContent returnType(const QQmlJSScope::ConstPtr &type,
-                                     QQmlJSRegisterContent::ContentVariant variant) const;
+    QQmlJSRegisterContent returnType(
+            const QQmlJSScope::ConstPtr &type, QQmlJSRegisterContent::ContentVariant variant,
+            const QQmlJSScope::ConstPtr &scope) const;
 
     bool registerIsStoredIn(const QQmlJSRegisterContent &reg,
                             const QQmlJSScope::ConstPtr &type) const;
@@ -136,6 +144,9 @@ public:
     QQmlJSScope::ConstPtr comparableType(const QQmlJSScope::ConstPtr &type) const;
 
     const QQmlJSScopesById &objectsById() const { return m_objectsById; }
+    bool canCallJSFunctions() const { return m_objectsById.signaturesAreEnforced(); }
+    bool canUseValueTypes() const { return m_objectsById.valueTypesAreCopied(); }
+
     const QHash<QQmlJS::SourceLocation, QQmlJSMetaSignalHandler> &signalHandlers() const
     {
         return m_signalHandlers;
@@ -163,7 +174,6 @@ protected:
     bool canPrimitivelyConvertFromTo(
             const QQmlJSScope::ConstPtr &from, const QQmlJSScope::ConstPtr &to) const;
     QQmlJSRegisterContent lengthProperty(bool isWritable, const QQmlJSScope::ConstPtr &scope) const;
-    void trackListPropertyType(const QQmlJSScope::ConstPtr &trackedListElementType) const;
     QQmlJSRegisterContent transformed(
             const QQmlJSRegisterContent &origin,
             QQmlJSScope::ConstPtr (QQmlJSTypeResolver::*op)(const QQmlJSScope::ConstPtr &) const) const;
@@ -178,9 +188,11 @@ protected:
     QQmlJSScope::ConstPtr m_emptyType;
     QQmlJSScope::ConstPtr m_nullType;
     QQmlJSScope::ConstPtr m_numberPrototype;
+    QQmlJSScope::ConstPtr m_arrayType;
     QQmlJSScope::ConstPtr m_realType;
     QQmlJSScope::ConstPtr m_floatType;
     QQmlJSScope::ConstPtr m_intType;
+    QQmlJSScope::ConstPtr m_uintType;
     QQmlJSScope::ConstPtr m_boolType;
     QQmlJSScope::ConstPtr m_stringType;
     QQmlJSScope::ConstPtr m_stringListType;
@@ -188,10 +200,12 @@ protected:
     QQmlJSScope::ConstPtr m_urlType;
     QQmlJSScope::ConstPtr m_dateTimeType;
     QQmlJSScope::ConstPtr m_variantListType;
+    QQmlJSScope::ConstPtr m_variantMapType;
     QQmlJSScope::ConstPtr m_varType;
     QQmlJSScope::ConstPtr m_jsValueType;
     QQmlJSScope::ConstPtr m_jsPrimitiveType;
     QQmlJSScope::ConstPtr m_listPropertyType;
+    QQmlJSScope::ConstPtr m_qObjectListType;
     QQmlJSScope::ConstPtr m_metaObjectType;
     QQmlJSScope::ConstPtr m_functionType;
     QQmlJSScope::ConstPtr m_jsGlobalObject;
@@ -218,13 +232,7 @@ protected:
         QQmlJSScope::Ptr clone;
     };
 
-    struct TypeTracker
-    {
-        QHash<QQmlJSScope::ConstPtr, QQmlJSScope::Ptr> listTypes;
-        QHash<QQmlJSScope::ConstPtr, TrackedType> trackedTypes;
-    };
-
-    std::unique_ptr<TypeTracker> m_typeTracker;
+    std::unique_ptr<QHash<QQmlJSScope::ConstPtr, TrackedType>> m_trackedTypes;
 };
 
 QT_END_NAMESPACE

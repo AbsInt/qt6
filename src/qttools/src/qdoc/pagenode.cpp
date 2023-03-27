@@ -70,16 +70,6 @@ bool PageNode::setTitle(const QString &title)
   or \c {\\namespace}, for example.
  */
 
-/*! \fn PageNode::PageNode(Aggregate *parent, const QString &name, PageType ptype)
-  This constructor is called when the argument to the \c {\\page} command
-  contains a space, which means the second word of the argument is the page type.
-  It creates a PageNode that has node type Node::Page, with the specified
-  \a parent and \name, and the \a ptype is that second word of the argument to
-  the \c {\\page} command.
-
-  \sa Node::PageType
- */
-
 /*! \fn PageNode::~PageNode()
   The destructor is virtual, and it does nothing.
  */
@@ -126,14 +116,6 @@ bool PageNode::setTitle(const QString &title)
 
 /*! \fn void PageNode::appendGroupName(const QString &t)
   Appends \a t to the list of group names.
- */
-
-/*! \fn void PageNode::setOutputFileName(const QString &f)
-  Sets this PageNode's output file name to \a f.
- */
-
-/*! \fn QString PageNode::outputFileName() const
-  Returns this PageNode's output file name.
  */
 
 QT_END_NAMESPACE

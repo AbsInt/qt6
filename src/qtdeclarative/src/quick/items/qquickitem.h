@@ -114,7 +114,9 @@ class Q_QUICK_EXPORT QQuickItem : public QObject, public QQmlParserStatus
     Q_PROPERTY(qreal implicitHeight READ implicitHeight WRITE setImplicitHeight NOTIFY implicitHeightChanged)
     Q_PROPERTY(QObject *containmentMask READ containmentMask WRITE setContainmentMask NOTIFY containmentMaskChanged REVISION(2, 11))
 
+#if QT_CONFIG(quick_shadereffect)
     Q_PRIVATE_PROPERTY(QQuickItem::d_func(), QQuickItemLayer *layer READ layer DESIGNABLE false CONSTANT FINAL)
+#endif
 
     Q_CLASSINFO("DefaultProperty", "data")
     Q_CLASSINFO("ParentProperty", "parent")
@@ -151,6 +153,7 @@ public:
         ItemDevicePixelRatioHasChanged, // value.realValue
         ItemEnabledHasChanged      // value.boolValue
     };
+    Q_ENUM(ItemChange)
 
     union ItemChangeData {
         ItemChangeData(QQuickItem *v) : item(v) {}
@@ -304,23 +307,51 @@ public:
     void setContainmentMask(QObject *mask);
 
     QTransform itemTransform(QQuickItem *, bool *) const;
-    QPointF mapToItem(const QQuickItem *item, const QPointF &point) const;
     QPointF mapToScene(const QPointF &point) const;
-    QPointF mapToGlobal(const QPointF &point) const;
     QRectF mapRectToItem(const QQuickItem *item, const QRectF &rect) const;
     QRectF mapRectToScene(const QRectF &rect) const;
-    QPointF mapFromItem(const QQuickItem *item, const QPointF &point) const;
     QPointF mapFromScene(const QPointF &point) const;
-    QPointF mapFromGlobal(const QPointF &point) const;
     QRectF mapRectFromItem(const QQuickItem *item, const QRectF &rect) const;
     QRectF mapRectFromScene(const QRectF &rect) const;
 
     void polish();
 
-    Q_INVOKABLE void mapFromItem(QQmlV4Function*) const;
-    Q_INVOKABLE void mapToItem(QQmlV4Function*) const;
-    Q_REVISION(2, 7) Q_INVOKABLE void mapFromGlobal(QQmlV4Function*) const;
-    Q_REVISION(2, 7) Q_INVOKABLE void mapToGlobal(QQmlV4Function*) const;
+#if QT_DEPRECATED_SINCE(6, 5)
+    QT_DEPRECATED_VERSION_X_6_5("Use typed overload or mapRectFromItem")
+    void mapFromItem(QQmlV4Function*) const;
+#endif
+    Q_INVOKABLE QPointF mapFromItem(const QQuickItem *item, const QPointF &point) const;
+    // overloads mainly exist for QML
+    Q_INVOKABLE QPointF mapFromItem(const QQuickItem *item, qreal x, qreal y);
+    Q_INVOKABLE QRectF mapFromItem(const QQuickItem *item, const QRectF &rect) const;
+    Q_INVOKABLE QRectF mapFromItem(const QQuickItem *item, qreal x, qreal y, qreal width, qreal height) const;
+
+#if QT_DEPRECATED_SINCE(6, 5)
+    QT_DEPRECATED_VERSION_X_6_5("Use typed overload or mapRectToItem")
+    void mapToItem(QQmlV4Function*) const;
+#endif
+    Q_INVOKABLE QPointF mapToItem(const QQuickItem *item, const QPointF &point) const;
+    // overloads mainly exist for QML
+    Q_INVOKABLE QPointF mapToItem(const QQuickItem *item, qreal x, qreal y);
+    Q_INVOKABLE QRectF mapToItem(const QQuickItem *item, const QRectF &rect) const;
+    Q_INVOKABLE QRectF mapToItem(const QQuickItem *item, qreal x, qreal y, qreal width, qreal height) const;
+
+#if QT_DEPRECATED_SINCE(6, 5)
+    QT_DEPRECATED_VERSION_X_6_5("Use the typed overload")
+    Q_REVISION(2, 7) void mapFromGlobal(QQmlV4Function*) const;
+#endif
+    Q_REVISION(2, 7) Q_INVOKABLE QPointF mapFromGlobal(qreal x, qreal y) const;
+    // overload mainly exists for QML
+    Q_REVISION(2, 7) Q_INVOKABLE QPointF mapFromGlobal(const QPointF &point) const;
+
+#if QT_DEPRECATED_SINCE(6, 5)
+    QT_DEPRECATED_VERSION_X_6_5("Use the typed overload")
+    Q_REVISION(2, 7) void mapToGlobal(QQmlV4Function*) const;
+#endif
+    Q_REVISION(2, 7) Q_INVOKABLE  QPointF mapToGlobal(qreal x, qreal y) const;
+    // overload only exist for QML
+    Q_REVISION(2, 7) Q_INVOKABLE  QPointF mapToGlobal(const QPointF &point) const;
+
     Q_INVOKABLE void forceActiveFocus();
     Q_INVOKABLE void forceActiveFocus(Qt::FocusReason reason);
     Q_REVISION(2, 1) Q_INVOKABLE QQuickItem *nextItemInFocusChain(bool forward = true);

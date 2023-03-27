@@ -3,6 +3,8 @@
 
 /*!
     \example containerextension
+    \meta category {Desktop}
+    \meta tags {widgets,designer}
     \ingroup examples-designer
     \title Container Extension Example
 
@@ -12,7 +14,7 @@
     plugin for \QD using the
     QDesignerContainerExtension class.
 
-    \image containerextension-example.png
+    \image containerextension-example.webp
 
     To provide a custom widget that can be used with \QD, we need to
     supply a self-contained implementation. In this example we use a

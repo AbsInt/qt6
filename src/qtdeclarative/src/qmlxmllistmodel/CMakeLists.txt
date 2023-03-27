@@ -1,10 +1,13 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 qt_internal_add_qml_module(QmlXmlListModel
     URI "QtQml.XmlListModel"
     VERSION "${PROJECT_VERSION}"
     PLUGIN_TARGET qmlxmllistmodelplugin
     CLASS_NAME QtQmlXmlListModelPlugin
     DEPENDENCIES
-        QtQml
+        QtQml/auto
     SOURCES
         qqmlxmllistmodel_p.h qqmlxmllistmodel.cpp
         qtqmlxmllistmodelglobal_p.h
@@ -12,6 +15,7 @@ qt_internal_add_qml_module(QmlXmlListModel
         QT_BUILD_QMLXMLLISTMODEL_LIB
     LIBRARIES
         Qt::CorePrivate
+        Qt::QmlModelsPrivate
     PUBLIC_LIBRARIES
         Qt::Core
         Qt::Qml

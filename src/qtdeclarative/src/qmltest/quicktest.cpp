@@ -92,6 +92,9 @@ bool QQuickTest::qIsPolishScheduled(const QQuickItem *item)
             QVERIFY(QQuickTest::qWaitForPolish(window));
     \endcode
 
+    The QML equivalent of this function is
+    \l [QML]{TestCase::}{isPolishScheduled()}.
+
     \sa QQuickItem::polish(), QQuickItem::updatePolish(),
         QQuickTest::qWaitForPolish()
 */
@@ -150,6 +153,9 @@ bool QQuickTest::qWaitForPolish(const QQuickItem *item, int timeout)
 
     Returns \c true if \c qIsPolishScheduled(item) returns false for all items
     within \a timeout milliseconds, otherwise returns \c false.
+
+    The QML equivalent of this function is
+    \l [QML]{TestCase::}{waitForPolish()}.
 
     \sa QQuickItem::polish(), QQuickItem::updatePolish(),
         QQuickTest::qIsPolishScheduled()
@@ -217,7 +223,7 @@ static void handleCompileErrors(
     results.stopLogging();
 }
 
-bool qWaitForSignal(QObject *obj, const char* signal, int timeout = 5000)
+bool qWaitForSignal(QObject *obj, const char* signal, int timeout)
 {
     QSignalSpy spy(obj, signal);
     QElapsedTimer timer;
@@ -235,7 +241,8 @@ bool qWaitForSignal(QObject *obj, const char* signal, int timeout = 5000)
     return spy.size();
 }
 
-void maybeInvokeSetupMethod(QObject *setupObject, const char *member, QGenericArgument val0 = QGenericArgument(nullptr))
+template <typename... Args>
+void maybeInvokeSetupMethod(QObject *setupObject, const char *member, Args &&... args)
 {
     // It's OK if it doesn't exist: since we have more than one callback that
     // can be called, it makes sense if the user only implements one of them.
@@ -246,7 +253,7 @@ void maybeInvokeSetupMethod(QObject *setupObject, const char *member, QGenericAr
     const int methodIndex = setupMetaObject->indexOfMethod(member);
     if (methodIndex != -1) {
         const QMetaMethod method = setupMetaObject->method(methodIndex);
-        method.invoke(setupObject, val0);
+        method.invoke(setupObject, std::forward<Args>(args)...);
     }
 }
 

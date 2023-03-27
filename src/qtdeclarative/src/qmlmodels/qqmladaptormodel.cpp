@@ -22,7 +22,7 @@ public:
     QV4::PersistentValue listItemProto;
 };
 
-V4_DEFINE_EXTENSION(QQmlAdaptorModelEngineData, engineData)
+V4_DEFINE_EXTENSION(QQmlAdaptorModelEngineData, qamEngineData)
 
 static QV4::ReturnedValue get_index(const QV4::FunctionObject *f, const QV4::Value *thisObject, const QV4::Value *, int)
 {
@@ -333,10 +333,11 @@ QV4::ReturnedValue QQmlDMCachedModelData::set_property(const QV4::FunctionObject
         QQmlDMCachedModelData *modelData = static_cast<QQmlDMCachedModelData *>(o->d()->item);
         if (!modelData->cachedData.isEmpty()) {
             if (modelData->cachedData.size() > 1) {
-                modelData->cachedData[propertyId] = scope.engine->toVariant(argv[0], QMetaType {});
+                modelData->cachedData[propertyId]
+                        = QV4::ExecutionEngine::toVariant(argv[0], QMetaType {});
                 QMetaObject::activate(o->d()->item, o->d()->item->metaObject(), propertyId, nullptr);
             } else if (modelData->cachedData.size() == 1) {
-                modelData->cachedData[0] = scope.engine->toVariant(argv[0], QMetaType {});
+                modelData->cachedData[0] = QV4::ExecutionEngine::toVariant(argv[0], QMetaType {});
                 QMetaObject::activate(o->d()->item, o->d()->item->metaObject(), 0, nullptr);
                 QMetaObject::activate(o->d()->item, o->d()->item->metaObject(), 1, nullptr);
             }
@@ -388,7 +389,7 @@ public:
     QV4::ReturnedValue get() override
     {
         if (type->prototype.isUndefined()) {
-            QQmlAdaptorModelEngineData * const data = engineData(v4);
+            QQmlAdaptorModelEngineData * const data = qamEngineData(v4);
             type->initializeConstructor(data);
         }
         QV4::Scope scope(v4);
@@ -568,13 +569,14 @@ public:
         if (!argc)
             return v4->throwTypeError();
 
-        static_cast<QQmlDMListAccessorData *>(o->d()->item)->setModelData(v4->toVariant(argv[0], QMetaType {}));
+        static_cast<QQmlDMListAccessorData *>(o->d()->item)->setModelData(
+                    QV4::ExecutionEngine::toVariant(argv[0], QMetaType {}));
         return QV4::Encode::undefined();
     }
 
     QV4::ReturnedValue get() override
     {
-        QQmlAdaptorModelEngineData *data = engineData(v4);
+        QQmlAdaptorModelEngineData *data = qamEngineData(v4);
         QV4::Scope scope(v4);
         QV4::ScopedObject o(scope, v4->memoryManager->allocate<QQmlDelegateModelItemObject>(this));
         QV4::ScopedObject p(scope, data->listItemProto.value());

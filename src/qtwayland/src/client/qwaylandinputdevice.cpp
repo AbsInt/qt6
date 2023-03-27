@@ -36,6 +36,7 @@
 #include <QtGui/private/qguiapplication_p.h>
 #include <qpa/qplatformwindow.h>
 #include <qpa/qplatforminputcontext.h>
+#include <qpa/qplatformtheme.h>
 #include <QDebug>
 
 #include <unistd.h>
@@ -229,19 +230,6 @@ private:
     QPoint m_hotspot;
 };
 
-QString QWaylandInputDevice::Pointer::cursorThemeName() const
-{
-    static QString themeName = qEnvironmentVariable("XCURSOR_THEME", QStringLiteral("default"));
-    return themeName;
-}
-
-int QWaylandInputDevice::Pointer::cursorSize() const
-{
-    constexpr int defaultCursorSize = 24;
-    static const int xCursorSize = qEnvironmentVariableIntValue("XCURSOR_SIZE");
-    return xCursorSize > 0 ? xCursorSize : defaultCursorSize;
-}
-
 int QWaylandInputDevice::Pointer::idealCursorScale() const
 {
     if (seat()->mQDisplay->compositor()->version() < 3) {
@@ -258,17 +246,30 @@ int QWaylandInputDevice::Pointer::idealCursorScale() const
 
 void QWaylandInputDevice::Pointer::updateCursorTheme()
 {
+    QString cursorThemeName;
+    QSize cursorSize;
+
+    if (const QPlatformTheme *platformTheme = QGuiApplicationPrivate::platformTheme()) {
+        cursorThemeName = platformTheme->themeHint(QPlatformTheme::MouseCursorTheme).toString();
+        cursorSize = platformTheme->themeHint(QPlatformTheme::MouseCursorSize).toSize();
+    }
+
+    if (cursorThemeName.isEmpty())
+        cursorThemeName = QStringLiteral("default");
+    if (cursorSize.isEmpty())
+        cursorSize = QSize(24, 24);
+
     int scale = idealCursorScale();
-    int pixelSize = cursorSize() * scale;
+    int pixelSize = cursorSize.width() * scale;
     auto *display = seat()->mQDisplay;
-    mCursor.theme = display->loadCursorTheme(cursorThemeName(), pixelSize);
+    mCursor.theme = display->loadCursorTheme(cursorThemeName, pixelSize);
 
     if (!mCursor.theme)
         return; // A warning has already been printed in loadCursorTheme
 
     if (auto *arrow = mCursor.theme->cursor(Qt::ArrowCursor)) {
         int arrowPixelSize = qMax(arrow->images[0]->width, arrow->images[0]->height); // Not all cursor themes are square
-        while (scale > 1 && arrowPixelSize / scale < cursorSize())
+        while (scale > 1 && arrowPixelSize / scale < cursorSize.width())
             --scale;
     } else {
         qCWarning(lcQpaWayland) << "Cursor theme does not support the arrow cursor";
@@ -284,8 +285,7 @@ void QWaylandInputDevice::Pointer::updateCursor()
     auto shape = seat()->mCursor.shape;
 
     if (shape == Qt::BlankCursor) {
-        if (mCursor.surface)
-            mCursor.surface->hide();
+        getOrCreateCursorSurface()->hide();
         return;
     }
 
@@ -375,7 +375,7 @@ QWaylandInputDevice::Touch::~Touch()
 }
 
 QWaylandInputDevice::QWaylandInputDevice(QWaylandDisplay *display, int version, uint32_t id)
-    : QtWayland::wl_seat(display->wl_registry(), id, qMin(version, 7))
+    : QtWayland::wl_seat(display->wl_registry(), id, qMin(version, 8))
     , mQDisplay(display)
     , mDisplay(display->wl_display())
 {
@@ -864,7 +864,7 @@ void QWaylandInputDevice::Pointer::releaseButtons()
     mButtons = Qt::NoButton;
 
     if (auto *window = focusWindow()) {
-        MotionEvent e(focusWindow(), mParent->mTime, mSurfacePos, mGlobalPos, mButtons, mParent->modifiers());
+        ReleaseEvent e(focusWindow(), mParent->mTime, mSurfacePos, mGlobalPos, mButtons, Qt::NoButton, mParent->modifiers());
         window->handleMouse(mParent, e);
     }
 }
@@ -982,18 +982,40 @@ void QWaylandInputDevice::Pointer::pointer_axis_discrete(uint32_t axis, int32_t 
     if (!focusWindow())
         return;
 
+    const int32_t delta120 = value * 15 * 8;
+
     switch (axis) {
     case axis_vertical_scroll:
         qCDebug(lcQpaWaylandInput) << "wl_pointer.axis_discrete vertical:" << value;
-        mFrameData.discreteDelta.ry() += value;
+        mFrameData.delta120.ry() += delta120;
         break;
     case axis_horizontal_scroll:
         qCDebug(lcQpaWaylandInput) << "wl_pointer.axis_discrete horizontal:" << value;
-        mFrameData.discreteDelta.rx() += value;
+        mFrameData.delta120.rx() += delta120;
         break;
     default:
         //TODO: is this really needed?
         qCWarning(lcQpaWaylandInput) << "wl_pointer.axis_discrete: Unknown axis:" << axis;
+        return;
+    }
+}
+
+void QWaylandInputDevice::Pointer::pointer_axis_value120(uint32_t axis, int32_t value)
+{
+    if (!focusWindow())
+        return;
+
+    switch (axis) {
+    case axis_vertical_scroll:
+        qCDebug(lcQpaWaylandInput) << "wl_pointer.axis_value120 vertical:" << value;
+        mFrameData.delta120.ry() += value;
+        break;
+    case axis_horizontal_scroll:
+        qCDebug(lcQpaWaylandInput) << "wl_pointer.axis_value120 horizontal:" << value;
+        mFrameData.delta120.rx() += value;
+        break;
+    default:
+        qCWarning(lcQpaWaylandInput) << "wl_pointer.axis_value120: Unknown axis:" << axis;
         return;
     }
 }
@@ -1016,7 +1038,7 @@ void QWaylandInputDevice::Pointer::setFrameEvent(QWaylandPointerEvent *event)
 
 void QWaylandInputDevice::Pointer::FrameData::resetScrollData()
 {
-    discreteDelta = QPoint();
+    delta120 = QPoint();
     delta = QPointF();
     axisSource = axis_source_wheel;
 }
@@ -1060,15 +1082,16 @@ QPoint QWaylandInputDevice::Pointer::FrameData::pixelDeltaAndError(QPointF *accu
 
 QPoint QWaylandInputDevice::Pointer::FrameData::angleDelta() const
 {
-    if (discreteDelta.isNull()) {
+    if (delta120.isNull()) {
         // If we didn't get any discrete events, then we need to fall back to
         // the continuous information.
         return (delta * -12).toPoint(); //TODO: why multiply by 12?
     }
 
     // The angle delta is in eights of degrees, and our docs says most mice have
-    // 1 click = 15 degrees. It's also in the opposite direction of surface space.
-    return -discreteDelta * 15 * 8;
+    // 1 click = 15 degrees, i.e. 120 is one click. It's also in the opposite
+    // direction of surface space.
+    return -delta120;
 }
 
 Qt::MouseEventSource QWaylandInputDevice::Pointer::FrameData::wheelEventSource() const
@@ -1412,6 +1435,7 @@ void QWaylandInputDevice::Touch::touch_cancel()
     if (touchExt)
         touchExt->touchCanceled();
 
+    mFocus = nullptr;
     QWindowSystemInterface::handleTouchCancelEvent(nullptr, mParent->mTouchDevice);
 }
 

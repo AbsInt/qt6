@@ -1,4 +1,5 @@
-# Generated from src.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 if(TARGET Qt::Gui)
     add_subdirectory(svg)

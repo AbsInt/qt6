@@ -10,110 +10,69 @@ QT_BEGIN_NAMESPACE
 
 class Aggregate;
 
-typedef QMultiMap<QString, Node *> MemberMap; // the string is the member signature
-typedef std::pair<const QmlTypeNode *, MemberMap> ClassMap; // the node is the QML type
-typedef QList<ClassMap *> ClassMapList;
-
-typedef std::pair<QStringList, NodeVector> KeysAndNodes;
-typedef std::pair<const QmlTypeNode *, KeysAndNodes> ClassKeysNodes;
-typedef QList<ClassKeysNodes *> ClassKeysNodesList;
+typedef std::pair<const QmlTypeNode *, NodeVector> ClassNodes;
+typedef QList<ClassNodes> ClassNodesList;
 
 class Section
 {
 public:
     enum Style { Summary, Details, AllMembers, Accessors };
-    enum Status { Obsolete, Active };
 
 public:
-    Section() : m_style(Details), m_status(Active), m_aggregate(nullptr) { }
-    Section(Style style, Status status) : m_style(style), m_status(status), m_aggregate(nullptr) {};
+    Section(
+        QString title, QString singular, QString plural,
+        QString divclass, Style style
+    ) : m_title{title}, m_singular{singular}, m_plural{plural},
+        m_divClass{divclass}, m_style{style}
+    {}
+
     ~Section();
 
-    void init(const QString &title) { m_title = title; }
-    void init(const QString &singular, const QString &plural)
-    {
-        m_singular = singular;
-        m_plural = plural;
-    }
-    void init(const QString &title, const QString &singular, const QString &plural)
-    {
-        m_title = title;
-        m_divClass.clear();
-        m_singular = singular;
-        m_plural = plural;
-    }
-    void init(const QString &title, const QString &divClass, const QString &singular,
-              const QString &plural)
-    {
-        m_title = title;
-        m_divClass = divClass;
-        m_singular = singular;
-        m_plural = plural;
-    }
-
     void insert(Node *node);
-    void insert(const QString &key, Node *node) { m_memberMap.insert(key, node); }
     bool insertReimplementedMember(Node *node);
 
-    ClassMap *newClassMap(const Aggregate *aggregate);
-    void add(ClassMap *classMap, Node *n);
     void appendMember(Node *node) { m_members.append(node); }
 
     void clear();
     void reduce();
     [[nodiscard]] bool isEmpty() const
     {
-        return (m_memberMap.isEmpty() && m_inheritedMembers.isEmpty()
-                && m_reimplementedMemberMap.isEmpty() && m_classMapList.isEmpty());
+        return (m_members.isEmpty() && m_inheritedMembers.isEmpty()
+                && m_reimplementedMemberMap.isEmpty() && m_classNodesList.isEmpty());
     }
 
     [[nodiscard]] Style style() const { return m_style; }
-    [[nodiscard]] Status status() const { return m_status; }
     [[nodiscard]] const QString &title() const { return m_title; }
     [[nodiscard]] const QString &divClass() const { return m_divClass; }
     [[nodiscard]] const QString &singular() const { return m_singular; }
     [[nodiscard]] const QString &plural() const { return m_plural; }
-    [[nodiscard]] const QStringList &keys() const { return m_keys; }
-    [[nodiscard]] const QStringList &keys(Status t) const
-    {
-        return (t == Obsolete ? m_obsoleteKeys : m_keys);
-    }
     [[nodiscard]] const NodeVector &members() const { return m_members; }
     [[nodiscard]] const NodeVector &reimplementedMembers() const { return m_reimplementedMembers; }
     [[nodiscard]] const QList<std::pair<Aggregate *, int>> &inheritedMembers() const
     {
         return m_inheritedMembers;
     }
-    ClassKeysNodesList &classKeysNodesList() { return m_classKeysNodesList; }
+    ClassNodesList &classNodesList() { return m_classNodesList; }
     [[nodiscard]] const NodeVector &obsoleteMembers() const { return m_obsoleteMembers; }
     void appendMembers(const NodeVector &nv) { m_members.append(nv); }
     [[nodiscard]] const Aggregate *aggregate() const { return m_aggregate; }
     void setAggregate(Aggregate *t) { m_aggregate = t; }
 
 private:
-    QString sortName(const Node *node, const QString *name = nullptr);
-
-private:
-    Style m_style {};
-    Status m_status {};
     QString m_title {};
-    QString m_divClass {};
     QString m_singular {};
     QString m_plural {};
+    QString m_divClass {};
+    Style m_style {};
 
     Aggregate *m_aggregate { nullptr };
-    QStringList m_keys {};
-    QStringList m_obsoleteKeys {};
     NodeVector m_members {};
     NodeVector m_obsoleteMembers {};
     NodeVector m_reimplementedMembers {};
     QList<std::pair<Aggregate *, int>> m_inheritedMembers {};
-    ClassKeysNodesList m_classKeysNodesList {};
+    ClassNodesList m_classNodesList {};
 
-    QMultiMap<QString, Node *> m_memberMap {};
-    QMultiMap<QString, Node *> m_obsoleteMemberMap {};
     QMultiMap<QString, Node *> m_reimplementedMemberMap {};
-    ClassMapList m_classMapList {};
 };
 
 typedef QList<Section> SectionVector;
@@ -158,7 +117,6 @@ public:
         StdMacros = 6,
         QmlAttachedMethods = 6,
         ProtectedTypes = 7,
-        SinceTypedefs = 7,
         SinceTypeAliases = 7,
         ProtectedFunctions = 8,
         SinceProperties = 8,
@@ -183,7 +141,6 @@ public:
     explicit Sections(const NodeMultiMap &nsmap);
     ~Sections();
 
-    void initSections();
     void clear(SectionVector &v);
     void reduce(SectionVector &v);
     void buildStdRefPageSections();

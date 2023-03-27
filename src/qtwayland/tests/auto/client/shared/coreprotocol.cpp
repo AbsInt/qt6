@@ -109,7 +109,7 @@ void Surface::surface_commit(Resource *resource)
             }
         }
 
-        for (wl_resource *frameCallback : qExchange(m_frameCallbackList, {})) {
+        for (wl_resource *frameCallback : std::exchange(m_frameCallbackList, {})) {
             auto time = m_wlCompositor->m_compositor->currentTimeMilliseconds();
             wl_callback_send_done(frameCallback, time);
             wl_resource_destroy(frameCallback);
@@ -423,6 +423,13 @@ void Pointer::sendFrame(wl_client *client)
         send_frame(r->handle);
 }
 
+void Pointer::sendAxisValue120(wl_client *client, QtWaylandServer::wl_pointer::axis axis, int value120)
+{
+    const auto pointerResources = resourceMap().values(client);
+    for (auto *r : pointerResources)
+        send_axis_value120(r->handle, axis, value120);
+}
+
 void Pointer::pointer_set_cursor(Resource *resource, uint32_t serial, wl_resource *surface, int32_t hotspot_x, int32_t hotspot_y)
 {
     Q_UNUSED(resource);
@@ -491,6 +498,13 @@ void Touch::sendFrame(wl_client *client)
     const auto touchResources = resourceMap().values(client);
     for (auto *r : touchResources)
         send_frame(r->handle);
+}
+
+void Touch::sendCancel(wl_client *client)
+{
+    const auto touchResources = resourceMap().values(client);
+    for (auto *r : touchResources)
+        send_cancel(r->handle);
 }
 
 uint Keyboard::sendEnter(Surface *surface)

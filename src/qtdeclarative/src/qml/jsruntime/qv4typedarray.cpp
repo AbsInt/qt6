@@ -4,8 +4,6 @@
 #include "qv4typedarray_p.h"
 #include "qv4arrayiterator_p.h"
 #include "qv4arraybuffer_p.h"
-#include "qv4string_p.h"
-#include "qv4jscall_p.h"
 #include "qv4symbol_p.h"
 #include "qv4runtime_p.h"
 #include <QtCore/qatomic.h>
@@ -260,17 +258,20 @@ ReturnedValue TypedArrayCtor::virtualCallAsConstructor(const FunctionObject *f, 
 
     if (!argc || !argv[0].isObject()) {
         // ECMA 6 22.2.1.1
-        qint64 l = argc ? argv[0].toIndex() : 0;
+        const double l = argc ? argv[0].toInteger() : 0;
         if (scope.hasException())
             return Encode::undefined();
-        // ### lift UINT_MAX restriction
-        if (l < 0 || l > UINT_MAX)
+        if (l < 0 || l > std::numeric_limits<int>::max())
             return scope.engine->throwRangeError(QLatin1String("Index out of range."));
-        uint len = (uint)l;
-        if (l != len)
-            scope.engine->throwRangeError(QStringLiteral("Non integer length for typed array."));
-        uint byteLength = len * operations[that->d()->type].bytesPerElement;
-        Scoped<ArrayBuffer> buffer(scope, scope.engine->newArrayBuffer(byteLength));
+
+        const double byteLength = l * operations[that->d()->type].bytesPerElement;
+
+        // TODO: This is an artificial restriction due to the fact that we store the byteLength in
+        //       uint below. We should allow up to INT_MAX elements of any size.
+        if (byteLength > std::numeric_limits<uint>::max())
+            return scope.engine->throwRangeError(QLatin1String("Index out of range."));
+
+        Scoped<ArrayBuffer> buffer(scope, scope.engine->newArrayBuffer(size_t(byteLength)));
         if (scope.hasException())
             return Encode::undefined();
 
@@ -637,51 +638,50 @@ ReturnedValue IntrinsicTypedArrayPrototype::method_get_length(const FunctionObje
 ReturnedValue IntrinsicTypedArrayPrototype::method_copyWithin(const FunctionObject *f, const Value *thisObject, const Value *argv, int argc)
 {
     Scope scope(f);
-    Scoped<TypedArray> O(scope, thisObject);
-    if (!O || O->hasDetachedArrayData())
+    Scoped<TypedArray> instance(scope, thisObject);
+    if (!instance || instance->hasDetachedArrayData())
         return scope.engine->throwTypeError();
 
     if (!argc)
-        return O->asReturnedValue();
+        return instance->asReturnedValue();
 
-    qint64 len = static_cast<uint>(O->length());
+    const double len = instance->length();
+    Q_ASSERT(std::isfinite(len));
 
-    qint64 to = static_cast<qint64>(argv[0].toInteger());
-    if (to < 0)
-        to = qMax(len + to, 0ll);
-    else
-        to = qMin(to, len);
+    const double target = argv[0].toInteger();
 
-    qint64 from = (argc > 1) ? static_cast<qint64>(argv[1].toInteger()) : 0ll;
-    if (from < 0)
-        from = qMax(len + from, 0ll);
-    else
-        from = qMin(from, len);
+    const double start = (argc > 1)
+            ? argv[1].toInteger()
+            : 0;
 
-    double fend = argv[2].toInteger();
-    if (fend > len)
-        fend = len;
-    qint64 end = (argc > 2 && !argv[2].isUndefined()) ? static_cast<qint64>(fend) : len;
-    if (end < 0)
-        end = qMax(len + end, 0ll);
-    else
-        end = qMin(end, len);
+    const double end = (argc > 2 && !argv[2].isUndefined())
+            ? argv[2].toInteger()
+            : len;
 
-    qint64 count = qMin(end - from, len - to);
+    const double fin = end < 0
+            ? std::max(len + end, 0.0)
+            : std::min(end, len);
+
+    const qsizetype from = start < 0
+            ? std::max(len + start, 0.0)
+            : std::min(start, len);
+
+    const qsizetype to = target < 0
+            ? std::max(len + target, 0.0)
+            : std::min(target, len);
+
+    const qsizetype count = std::min(fin - from, len - to);
 
     if (count <= 0)
-        return O->asReturnedValue();
-
-    if (O->hasDetachedArrayData())
-        return scope.engine->throwTypeError();
+        return instance->asReturnedValue();
 
     if (from != to) {
-        int elementSize = O->bytesPerElement();
-        char *data = O->arrayData() + O->byteOffset();
-        memmove(data + to*elementSize, data + from*elementSize, count*elementSize);
+        int elementSize = instance->bytesPerElement();
+        char *data = instance->arrayData() + instance->byteOffset();
+        memmove(data + to * elementSize, data + from * elementSize, count * elementSize);
     }
 
-    return O->asReturnedValue();
+    return instance->asReturnedValue();
 }
 
 ReturnedValue IntrinsicTypedArrayPrototype::method_entries(const FunctionObject *b, const Value *thisObject, const Value *, int)
@@ -1552,6 +1552,9 @@ ReturnedValue IntrinsicTypedArrayPrototype::method_toLocaleString(const Function
     ScopedValue v(scope);
     ScopedString s(scope);
 
+    ScopedPropertyKey tolocaleString(scope, scope.engine->id_toLocaleString()->toPropertyKey());
+    Q_ASSERT(!scope.engine->hasException);
+
     for (uint k = 0; k < len; ++k) {
         if (instance->hasDetachedArrayData())
             return scope.engine->throwTypeError();
@@ -1559,7 +1562,19 @@ ReturnedValue IntrinsicTypedArrayPrototype::method_toLocaleString(const Function
             R += separator;
 
         v = instance->get(k);
-        v = Runtime::CallElement::call(scope.engine, v, *scope.engine->id_toLocaleString(), nullptr, 0);
+        Q_ASSERT(!v->isNullOrUndefined()); // typed array cannot hold null or undefined
+
+        ScopedObject valueAsObject(scope, v->toObject(scope.engine));
+        Q_ASSERT(valueAsObject); // only null or undefined cannot be converted to object
+
+        ScopedFunctionObject function(scope, valueAsObject->get(tolocaleString));
+        if (!function)
+            return scope.engine->throwTypeError();
+
+        v = function->call(valueAsObject, nullptr, 0);
+        if (scope.hasException())
+            return Encode::undefined();
+
         s = v->toString(scope.engine);
         if (scope.hasException())
             return Encode::undefined();

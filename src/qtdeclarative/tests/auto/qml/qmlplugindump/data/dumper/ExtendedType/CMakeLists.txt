@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Generated from extendedtype.pro.
 
 #####################################################################
@@ -10,7 +13,7 @@ qt_internal_add_cmake_library(ExtendedType
     SOURCES
         plugin.cpp plugin.h
         types.h
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Core
         Qt::Gui
         Qt::Qml

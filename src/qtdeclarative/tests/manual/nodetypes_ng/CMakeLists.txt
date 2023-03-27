@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Generated from nodetypes_ng.pro.
 
 #####################################################################
@@ -8,7 +11,7 @@ qt_internal_add_manual_test(nodetypes_ng
     GUI
     SOURCES
         nodetypes_ng.cpp
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Gui
         Qt::Qml
         Qt::Quick

@@ -145,11 +145,17 @@ static QQmlTypePrivate *createQQmlType(QQmlMetaTypeData *data, const QString &el
     d->extraData.cd->parserStatusCast = type.parserStatusCast;
     d->extraData.cd->propertyValueSourceCast = type.valueSourceCast;
     d->extraData.cd->propertyValueInterceptorCast = type.valueInterceptorCast;
-    d->extraData.cd->finalizerCast = (type.structVersion > 0) ? type.finalizerCast : -1;
+    d->extraData.cd->finalizerCast = type.has(QQmlPrivate::RegisterType::FinalizerCast)
+            ? type.finalizerCast
+            : -1;
     d->extraData.cd->extFunc = type.extensionObjectCreate;
     d->extraData.cd->customParser = reinterpret_cast<QQmlCustomParser *>(type.customParser);
     d->extraData.cd->registerEnumClassesUnscoped = true;
     d->extraData.cd->registerEnumsFromRelatedTypes = true;
+    d->extraData.cd->constructValueType = type.has(QQmlPrivate::RegisterType::CreationMethod)
+            && type.creationMethod != QQmlPrivate::ValueTypeCreationMethod::None;
+    d->extraData.cd->populateValueType = type.has(QQmlPrivate::RegisterType::CreationMethod)
+            && type.creationMethod == QQmlPrivate::ValueTypeCreationMethod::Structured;
 
     if (type.extensionMetaObject)
         d->extraData.cd->extMetaObject = type.extensionMetaObject;
@@ -460,7 +466,7 @@ static void addTypeToData(QQmlTypePrivate *type, QQmlMetaTypeData *data)
 
 QQmlType QQmlMetaType::registerType(const QQmlPrivate::RegisterType &type)
 {
-    if (type.structVersion > 1)
+    if (type.structVersion > int(QQmlPrivate::RegisterType::CurrentVersion))
         qFatal("qmlRegisterType(): Cannot mix incompatible QML versions.");
 
     QQmlMetaTypeDataPtr data;
@@ -672,13 +678,20 @@ QList<QQmlDirParser::Import> QQmlMetaType::moduleImports(
         const QString &uri, QTypeRevision version)
 {
     QQmlMetaTypeDataPtr data;
+    QList<QQmlDirParser::Import> result;
 
     const auto unrevisioned = data->moduleImports.equal_range(
                 QQmlMetaTypeData::VersionedUri(uri, QTypeRevision()));
+    for (auto it = unrevisioned.second; it != unrevisioned.first;)
+        result.append(*(--it));
 
-    QList<QQmlDirParser::Import> result(unrevisioned.first, unrevisioned.second);
-    if (version.hasMajorVersion())
-        return result + data->moduleImports.values(QQmlMetaTypeData::VersionedUri(uri, version));
+    if (version.hasMajorVersion()) {
+        const auto revisioned = data->moduleImports.equal_range(
+                    QQmlMetaTypeData::VersionedUri(uri, version));
+        for (auto it = revisioned.second; it != revisioned.first;)
+            result.append(*(--it));
+        return result;
+    }
 
     // Use latest module available with that URI.
     const auto begin = data->moduleImports.begin();
@@ -1039,14 +1052,16 @@ QMetaType QQmlMetaType::listValueType(QMetaType metaType)
 {
     if (isList(metaType)) {
         const auto iface = metaType.iface();
-        if (iface->metaObjectFn == &dynamicQmlListMarker)
+        if (iface && iface->metaObjectFn == &dynamicQmlListMarker)
             return QMetaType(static_cast<const QQmlListMetaTypeInterface *>(iface)->valueType);
     } else if (metaType.flags() & QMetaType::PointerToQObject) {
         return QMetaType();
     }
 
     QQmlMetaTypeDataPtr data;
+    Q_ASSERT(data);
     QQmlTypePrivate *type = data->idToType.value(metaType.id());
+
     if (type && type->listId == metaType)
         return type->typeId;
     else
@@ -1155,8 +1170,12 @@ QQmlType QQmlMetaType::qmlType(const QString &qualifiedName, QTypeRevision versi
 }
 
 /*!
-    Returns the type (if any) of \a name in \a module and version specified
-    by \a version_major and \a version_minor.
+    \internal
+    Returns the type (if any) of \a name in \a module and the specified \a version.
+
+    If \a version has no major version, accept any version.
+    If \a version has no minor version, accept any minor version.
+    If \a module is empty, search in all modules and accept any version.
 */
 QQmlType QQmlMetaType::qmlType(const QHashedStringRef &name, const QHashedStringRef &module,
                                QTypeRevision version)
@@ -1702,23 +1721,8 @@ const QMetaObject *QQmlMetaType::metaObjectForValueType(QMetaType metaType)
     // call QObject pointers value types. Explicitly registered types also override
     // the implicit use of gadgets.
     if (!(metaType.flags() & QMetaType::PointerToQObject)) {
-        const QQmlType qmlType = QQmlMetaType::qmlType(metaType);
-
-        // Prefer the extension meta object, if any.
-        // Extensions allow registration of non-gadget value types.
-        if (const QMetaObject *extensionMetaObject = qmlType.extensionMetaObject()) {
-            // This may be a namespace even if the original metaType isn't.
-            // You can do such things with QML_FOREIGN declarations.
-            if (extensionMetaObject->metaType().flags() & QMetaType::IsGadget)
-                return extensionMetaObject;
-        }
-
-        if (const QMetaObject *qmlTypeMetaObject = qmlType.metaObject()) {
-            // This may be a namespace even if the original metaType isn't.
-            // You can do such things with QML_FOREIGN declarations.
-            if (qmlTypeMetaObject->metaType().flags() & QMetaType::IsGadget)
-                return qmlTypeMetaObject;
-        }
+        if (const QMetaObject *mo = metaObjectForValueType(QQmlMetaType::qmlType(metaType)))
+            return mo;
     }
 
     // If it _is_ a gadget, we can just use it.

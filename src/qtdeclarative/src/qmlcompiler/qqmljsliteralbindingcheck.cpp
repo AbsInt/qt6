@@ -58,7 +58,7 @@ void QQmlJSLiteralBindingCheck::run(QQmlJSImportVisitor *visitor, QQmlJSTypeReso
             // we are in fact allowed to set it, even if it's not writable.
             if (!property.isWritable() && !scope->hasOwnProperty(propertyName)) {
                 logger->log(u"Cannot assign to read-only property %1"_s.arg(propertyName),
-                            Log_Type, binding.sourceLocation());
+                            qmlReadOnlyProperty, binding.sourceLocation());
                 continue;
             }
 
@@ -67,7 +67,7 @@ void QQmlJSLiteralBindingCheck::run(QQmlJSImportVisitor *visitor, QQmlJSTypeReso
                 logger->log(u"Cannot assign literal of type %1 to %2"_s.arg(
                                     QQmlJSScope::prettyName(binding.literalTypeName()),
                                     QQmlJSScope::prettyName(property.typeName())),
-                            Log_Type, binding.sourceLocation());
+                            qmlIncompatibleType, binding.sourceLocation());
                 continue;
             }
         }

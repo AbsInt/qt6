@@ -1,9 +1,10 @@
 // Copyright (C) 2017 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
+#include "qv4codegen_p.h"
 #include "qv4compilercontext_p.h"
-#include "qv4compilercontrolflow_p.h"
 #include "qv4bytecodegenerator_p.h"
+#include <QtQml/private/qv4calldata_p.h>
 
 QT_USE_NAMESPACE
 using namespace QV4;
@@ -110,7 +111,7 @@ Context::ResolvedName Context::resolveName(const QString &name, const QQmlJS::So
             result.scope = scope;
             result.index = m.index;
             result.isConst = (m.scope == VariableScope::Const);
-            result.requiresTDZCheck = m.requiresTDZCheck(accessLocation, c != this);
+            result.requiresTDZCheck = m.requiresTDZCheck(accessLocation, c != this) || c->isCaseBlock();
             if (c->isStrict && (name == QLatin1String("arguments") || name == QLatin1String("eval")))
                 result.isArgOrEval = true;
             result.declarationLocation = m.declarationLocation;

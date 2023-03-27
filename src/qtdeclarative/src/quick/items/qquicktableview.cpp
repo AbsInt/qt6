@@ -40,6 +40,10 @@
     in a TableView. To create models with multiple columns, either use
     \l TableModel or a C++ model that inherits QAbstractItemModel.
 
+    A TableView does not include headers by default. You can add headers
+    using the \l HorizontalHeaderView and \l VerticalHeaderView from
+    Qt Quick Controls.
+
     \section1 Example Usage
 
     \section2 C++ Models
@@ -98,26 +102,37 @@
     \section1 Row heights and column widths
 
     When a new column is flicked into view, TableView will determine its width
-    by calling the \l columnWidthProvider function. TableView does not store
-    row height or column width, as it's designed to support large models
-    containing any number of rows and columns. Instead, it will ask the
-    application whenever it needs to know.
+    by calling the \l columnWidthProvider. If set, this function will alone decide
+    the width of the column. Otherwise, it will check if an explicit width has
+    been set with \l setColumnWidth(). If not, \l implicitColumnWidth() will be used.
+    The implicit width of a column is the same as the largest
+    \l {implicit width}{QQuickItem::implicitWidth()} found among the currently loaded
+    delegate items in that column. Trying to set an explicit \c width directly on
+    a delegate has no effect, and will be ignored and overwritten. The same logic also
+    applies to row heights.
 
-    TableView uses the largest \c implicitWidth among the items as the column
-    width, unless the \l columnWidthProvider property is explicitly set. Once
-    the column width is found, all other items in the same column are resized
-    to this width, even if new items that are flicked in later have larger
-    \c implicitWidth. Setting an explicit \c width on an item is ignored and
-    overwritten.
+    An implementation of a columnWidthProvider that is equivalent to the default
+    logic would be:
 
-    \note The calculated width of a column is discarded when it is flicked out
-    of the viewport, and is recalculated if the column is flicked back in. The
-    calculation is always based on the items that are visible when the column
-    is flicked in. This means that column width can be different each time,
-    depending on which row you're at when the column enters. You should
-    therefore have the same \c implicitWidth for all items in a column, or set
-    \l columnWidthProvider. The same logic applies for the row height
-    calculation.
+    \code
+    columnWidthProvider: function(column) {
+        let w = explicitColumnWidth(column)
+        if (w >= 0)
+            return w;
+        return implicitColumnWidth(column)
+    }
+    \endcode
+
+    Once the column width is resolved, all other items in the same column are resized
+    to this width, including any items that are flicked into the view at a later point.
+
+    \note The resolved width of a column is discarded when the whole column is flicked out
+    of the view, and is recalculated again if it's flicked back in. This means that if the
+    width depends on the \l implicitColumnWidth(), the calculation can be different each time,
+    depending on which row you're at when the column enters (since \l implicitColumnWidth()
+    only considers the delegate items that are currently \l {loaded}{isColumnLoaded()}).
+    To avoid this, you should use a \l columnWidthProvider, or ensure that all the delegate
+    items in the same column have the same \c implicitWidth.
 
     If you change the values that a \l rowHeightProvider or a
     \l columnWidthProvider return for rows and columns inside the viewport, you
@@ -140,6 +155,41 @@
 
     \snippet qml/tableview/tableviewwithprovider.qml 0
 
+    \section1 Editing cells
+
+    You can let the user edit table cells by providing an edit delegate. The
+    edit delegate will be instantiated according to the \l editTriggers, which
+    by default is when the user double taps on a cell, or presses e.g
+    \l Qt.Key_Enter or \l Qt.Key_Return. The edit delegate is set using
+    \l {TableView::editDelegate}, which is an attached property that you set
+    on the \l delegate. The following snippet shows how to do that:
+
+    \snippet qml/tableview/editdelegate.qml 0
+
+    If the user presses Qt.Key_Enter or Qt.Key_Return while the edit delegate
+    is active, TableView will emit the \l TableView::commit signal to the edit
+    delegate, so that it can write back the changed data to the model.
+
+    \note In order for a cell to be editable, the model needs to override
+    \l QAbstractItemModel::flags(), and return \c Qt::ItemIsEditable.
+    This flag is not enabled in QAbstractItemModel by default.
+    The override could for example look like this:
+
+    \code
+    Qt::ItemFlags QAbstractItemModelSubClass::flags(const QModelIndex &index) const override
+    {
+        Q_UNUSED(index)
+        return Qt::ItemIsSelectable | Qt::ItemIsEnabled | Qt::ItemIsEditable;
+    }
+    \endcode
+
+    If the \l {TableView::delegate}{TableView delegate} has a property
+    \c {required property bool editing} defined, it will be set to \c true
+    for the delegate being edited. See the documentation for
+    \l editDelegate for an example on how to use it.
+
+    \sa TableView::editDelegate, TableView::commit, editTriggers, edit(), closeEditor()
+
     \section1 Overlays and underlays
 
     All new items that are instantiated from the delegate are parented to the
@@ -152,6 +202,19 @@
     moves together with the table as you flick:
 
     \snippet qml/tableview/tableviewwithheader.qml 0
+
+    Here is another example that shows how to create an overlay item that
+    stays on top of a particular cell. This requires a bit more code, since
+    the location of a cell will \l {layoutChanged}{change} if the user, for
+    example, is resizing a column in front of it.
+
+    \snippet qml/tableview/overlay.qml 0
+
+    You could also parent the overlay directly to the cell instead of the
+    \l contentItem. But doing so will be fragile since the cell is unloaded
+    or reused whenever it's flicked out of the viewport.
+
+    \sa layoutChanged()
 
     \section1 Selecting items
 
@@ -198,9 +261,19 @@
 
     In order to support keyboard navigation, you need to assign an \l ItemSelectionModel
     to the \l selectionModel property. TableView will then use this model to manipulate
-    the model's \l {ItemSelectionModel::currentIndex}{currentIndex}. You can
-    disable keyboard navigation fully (in case you want to implement your own key
-    handlers) by setting \l keyNavigationEnabled to \c false.
+    the model's \l {ItemSelectionModel::currentIndex}{currentIndex}.
+
+    It's the responsibility of the delegate to render itself as
+    \l {QQuickItemSelectionModel::currentIndex()}{current.} You can do this by adding a
+    property \c {required property bool current} to it, and let the appearance
+    depend on its state. The \c current property's value is set by the TableView.
+    You can also disable keyboard navigation fully (in case you want to implement your
+    own key handlers) by setting \l keyNavigationEnabled to \c false.
+
+    The following example demonstrates how you can use keyboard navigation together
+    with \c current and \c selected properties:
+
+    \snippet qml/tableview/keyboard-navigation.qml 0
 
     \section1 Copy and paste
 
@@ -379,11 +452,32 @@
     \l {Item::}{implicitHeight}. The TableView lays out the items based on that
     information. Explicit width or height settings are ignored and overwritten.
 
+    Inside the delegate, you can optionally add one or more of the following
+    properties. TableView modifies the values of these properties to inform the
+    delegate which state it's in. This can be used by the delegate to render
+    itself differently according on its own state.
+
+    \list
+    \li required property bool current - \c true if the delegate is \l {Keyboard navigation}{current.}
+    \li required property bool selected - \c true if the delegate is \l {Selecting items}{selected.}
+    \li required property bool editing - \c true if the delegate is being \l {Editing cells}{edited.}
+    \endlist
+
+    The following example shows how to use these properties:
+    \code
+    delegate: Rectangle {
+        required property bool current
+        required property bool selected
+        border.width: current ? 1 : 0
+        color: selected ? palette.highlight : palette.base
+    }
+    \endcode
+
     \note Delegates are instantiated as needed and may be destroyed at any time.
     They are also reused if the \l reuseItems property is set to \c true. You
     should therefore avoid storing state information in the delegates.
 
-    \sa {Row heights and column widths}, {Reusing items}
+    \sa {Row heights and column widths}, {Reusing items}, {Required Properties}
 */
 
 /*!
@@ -507,7 +601,7 @@
     \readonly
 
     This read-only property holds the column in the view that contains the
-    item that is current. If no item is current, it will be \c -1.
+    item that is \l {Keyboard navigation}{current.} If no item is current, it will be \c -1.
 
     \note In order for TableView to report what the current column is, you
     need to assign an \l ItemSelectionModel to \l selectionModel.
@@ -520,7 +614,7 @@
     \readonly
 
     This read-only property holds the row in the view that contains the item
-    that is current. If no item is current, it will be \c -1.
+    that is \l {Keyboard navigation}{current.} If no item is current, it will be \c -1.
 
     \note In order for TableView to report what the current row is, you
     need to assign an \l ItemSelectionModel to \l selectionModel.
@@ -606,6 +700,79 @@
 */
 
 /*!
+    \qmlproperty bool QtQuick::TableView::resizableColumns
+    \since 6.5
+
+    This property holds whether the user is allowed to resize columns
+    by dragging between the cells. The default value is \c false.
+*/
+
+/*!
+    \qmlproperty bool QtQuick::TableView::resizableRows
+    \since 6.5
+
+    This property holds whether the user is allowed to resize rows
+    by dragging between the cells. The default value is \c false.
+*/
+
+/*!
+    \qmlproperty enumeration QtQuick::TableView::editTriggers
+    \since 6.5
+
+    This property holds the different ways the user can start to edit a cell.
+    It can be a combination of the following values:
+
+    \default TableView.DoubleTapped | TableView.EditKeyPressed.
+    \value TableView.NoEditTriggers - the user cannot trigger editing of cells.
+        When this value is set, TableView will neither \e {open or close}
+        the edit delegate as a response to any user interaction.
+        But the application can call \l edit() and \l closeEditor() manually.
+    \value TableView.SingleTapped - the user can edit a cell by single tapping it.
+    \value TableView.DoubleTapped - the user can edit a cell by double tapping it.
+    \value TableView.SelectedTapped - the user can edit a
+        \l {QItemSelectionModel::selectedIndexes()}{selected cell} by tapping it.
+    \value TableView.EditKeyPressed - the user can edit the
+        \l {QItemSelectionModel::currentIndex()}{current cell} by pressing one
+        of the edit keys. The edit keys are decided by the OS, but are normally
+        \c Qt.Key_Enter and \c Qt.Key_Return.
+    \value TableView.AnyKeyPressed - the user can edit the
+        \l {TableView::current}{current cell} by pressing any key, other
+        than the cell navigation keys. The pressed key is also sent to the
+        focus object inside the \l {TableView::editDelegate}{edit delegate}.
+
+    For \c TableView.SelectedTapped, \c TableView.EditKeyPressed, and
+    \c TableView.AnyKeyPressed to have any effect, TableView needs to have a
+    \l {selectionModel}{selection model} assigned, since they depend on a
+    \l {QItemSelectionModel::currentIndex()}{current index} being set. To be
+    able to receive any key events at all, TableView will also need to have
+    \l QQuickItem::activeFocus.
+
+    When editing a cell, the user can press \c Qt.Key_Tab or \c Qt.Key_Backtab
+    to \l {TableView::commit}{commit} the data, and move editing to the next
+    cell. This behavior can be disabled by setting
+    \l QQuickItem::activeFocusOnTab on TableView to \c false.
+
+    \note In order for a cell to be editable, the \l delegate needs an
+    \l {TableView::editDelegate}{edit delegate} attached, and the model
+    needs to return \c Qt::ItemIsEditable from \l QAbstractItemModel::flags()
+    (exemplified underneath).
+    If you still cannot edit a cell after activating one of the specified
+    triggers, you can, as a help, try to call \l edit() explicitly (e.g
+    from a Button/TapHandler). Doing so will print out a warning explaining
+    why the cell cannot be edited.
+
+    \code
+    Qt::ItemFlags QAbstractItemModelSubClass::flags(const QModelIndex &index) const override
+    {
+        Q_UNUSED(index)
+        return Qt::ItemIsSelectable | Qt::ItemIsEnabled | Qt::ItemIsEditable;
+    }
+    \endcode
+
+    \sa TableView::editDelegate, TableView::commit, {Editing cells}
+*/
+
+/*!
     \qmlmethod QtQuick::TableView::positionViewAtCell(point cell, PositionMode mode, point offset, rect subRect)
 
     Positions \l {Flickable::}{contentX} and \l {Flickable::}{contentY} such
@@ -665,6 +832,20 @@
 */
 
 /*!
+    \qmlmethod QtQuick::TableView::positionViewAtIndex(QModelIndex index, PositionMode mode, point offset, rect subRect)
+    \since 6.5
+
+    Positions the view such that \a index is at the position specified
+    by \a mode, \a offset and \a subRect.
+
+    Convenience method for calling
+    \code
+    positionViewAtRow(rowAtIndex(index), mode & Qt.AlignVertical_Mask, offset.y, subRect)
+    positionViewAtColumn(columnAtIndex(index), mode & Qt.AlignVertical_Mask, offset.x, subRect)
+    \endcode
+*/
+
+/*!
     \qmlmethod bool QtQuick::TableView::isColumnLoaded(int column)
     \since 6.2
 
@@ -696,14 +877,9 @@
 
 /*!
     \qmlmethod QtQuick::TableView::positionViewAtCell(int column, int row, PositionMode mode, point offset, rect subRect)
+    \deprecated
 
-    Positions \l {Flickable::}{contentX} and \l {Flickable::}{contentY} such
-    that \a row and \a column is at the position specified by \a mode, \a offset and \a subRect.
-
-    Convenience for calling
-    \code
-    positionViewAtCell(Qt.point(column, row), mode, offset, subRect)
-    \endcode
+    Use \l {positionViewAtIndex()}{positionViewAtIndex(index(row, column), ...)} instead.
 */
 
 /*!
@@ -743,8 +919,27 @@
 
 /*!
     \qmlmethod Item QtQuick::TableView::itemAtCell(int column, int row)
+    \deprecated
 
-    Convenience for calling \c{itemAtCell(Qt.point(column, row))}.
+    Use \l {itemAtIndex()}{itemAtIndex(index(row, column))} instead.
+*/
+
+/*!
+    \qmlmethod Item QtQuick::TableView::itemAtIndex(QModelIndex index)
+    \since 6.5
+
+    Returns the instantiated delegate item for the cell that represents
+    \a index. If the item is not \l {isRowLoaded()}{loaded}, the value
+    will be \c null.
+
+    \note only the items that are visible in the view are normally loaded.
+    As soon as a cell is flicked out of the view, the item inside will
+    either be unloaded or placed in the recycle pool. As such, the return
+    value should never be stored.
+
+    \note If the \l model is not a QAbstractItemModel, you can also use
+    \l {itemAtCell()}{itemAtCell(Qt.point(column, row))}. But be aware
+    that \c {point.x} maps to columns and \c {point.y} maps to rows.
 */
 
 /*!
@@ -793,15 +988,6 @@
     Returns the width of the given \a column. If the column is not
     loaded (and therefore not visible), the return value will be \c -1.
 
-    \note It's the applications responsibility to store what the
-    column widths are, by using a \l columnWidthProvider. Hence,
-    there is no setter function. This getter function is mostly
-    useful if the TableView doesn't have a columnWidthProvider set, since
-    otherwise you can call that function instead (which will work, even
-    for columns that are not currently visible).
-    If no columnWidthProvider is set, the width of a column will be
-    equal to its \l implicitColumnWidth().
-
     \sa columnWidthProvider, implicitColumnWidth(), isColumnLoaded(), {Row heights and column widths}
 */
 
@@ -811,15 +997,6 @@
 
     Returns the height of the given \a row. If the row is not
     loaded (and therefore not visible), the return value will be \c -1.
-
-    \note It's the applications responsibility to store what the
-    row heights are, by using a \l rowHeightProvider. Hence,
-    there is no setter function. This getter function is mostly
-    useful if the TableView doesn't have a rowHeightProvider set, since
-    otherwise you can call that function instead (which will work, even
-    for rows that are not currently visible).
-    If no rowHeightProvider is set, the height of a row will be
-    equal to its \l implicitRowHeight().
 
     \sa rowHeightProvider, implicitRowHeight(), isRowLoaded(), {Row heights and column widths}
 */
@@ -857,7 +1034,151 @@
 */
 
 /*!
-    \qmlmethod QModelIndex QtQuick::TableView::modelIndex(int column, int row)
+    \qmlmethod QtQuick::TableView::setColumnWidth(int column, real size)
+
+    Sets the explicit column width of column \a column to \a size.
+
+    If you want to read back the values you set with this function, you
+    should use \l explicitColumnWidth(). \l columnWidth() will return
+    the actual size of the column, which can be different if a
+    \l columnWidthProvider is set.
+
+    When TableView needs to resolve the width of \a column, it will first try
+    to call the \l columnWidthProvider. Only if a provider is not set, will
+    the widths set with this function be used by default. You can, however, call
+    \l explicitColumnWidth() from within the provider, and if needed, moderate
+    the values to e.g always be within a certain interval.
+    The following snippet shows an example on how to do that:
+
+    \code
+    columnWidthProvider: function(column) {
+        let w = explicitColumnWidth(column)
+        if (w >= 0)
+            return Math.max(100, w);
+        return implicitColumnWidth(column)
+    }
+    \endcode
+
+    If \a size is equal to \c 0, the column will be hidden. If \a size is
+    equal to \c -1, the column will be reset back to use \l implicitColumnWidth().
+    You are allowed to specify column sizes for columns that are outside the
+    size of the model.
+
+    \note The sizes you set will not be cleared if you change the \l model.
+    To clear the sizes, you need to call \l clearColumnWidths() explicitly.
+
+    \include tableview.qdocinc explicit-column-size-and-syncview
+
+    \note For models with \e lots of columns, using \l setColumnWidth() to set the widths for
+    all the columns at start-up, can be suboptimal. This will consume start-up time and
+    memory (for storing all the widths). A more scalable approach is to use a
+    \l columnWidthProvider instead, or rely on the implicit width of the delegate.
+    A \c columnWidthProvider will only be called on an as-needed basis, and will not
+    be affected by the size of the model.
+
+    \sa explicitColumnWidth(), setRowHeight(), clearColumnWidths(), {Row heights and column widths}
+*/
+
+/*!
+    \qmlmethod QtQuick::TableView::clearColumnWidths()
+
+    Clears all the column widths set with \l setColumnWidth().
+
+    \include tableview.qdocinc explicit-column-size-and-syncview
+
+    \sa setColumnWidth(), clearRowHeights(), {Row heights and column widths}
+*/
+
+/*!
+    \qmlmethod qreal QtQuick::TableView::explicitColumnWidth(int column)
+
+    Returns the width of the \a column set with \l setColumnWidth(). This width might
+    differ from the actual width of the column, if a \l columnWidthProvider
+    is in use. To get the actual width of a column, use \l columnWidth().
+
+    A return value equal to \c 0 means that the column has been told to hide.
+    A return value equal to \c -1 means that no explicit width has been set
+    for the column.
+
+    \include tableview.qdocinc explicit-column-size-and-syncview
+
+    \sa setColumnWidth(), columnWidth(), {Row heights and column widths}
+*/
+
+/*!
+    \qmlmethod QtQuick::TableView::setRowHeight(int row, real size)
+
+    Sets the explicit row height of row \a row to \a size.
+
+    If you want to read back the values you set with this function, you
+    should use \l explicitRowHeight(). \l rowHeight() will return
+    the actual height of the row, which can be different if a
+    \l rowHeightProvider is set.
+
+    When TableView needs to resolve the height of \a row, it will first try
+    to call the \l rowHeightProvider. Only if a provider is not set, will
+    the heights set with this function be used by default. You can, however, call
+    \l explicitRowHeight() from within the provider, and if needed, moderate
+    the values to e.g always be within a certain interval.
+    The following snippet shows an example on how to do that:
+
+    \code
+    rowHeightProvider: function(row) {
+        let h = explicitRowHeight(row)
+        if (h >= 0)
+            return Math.max(100, h);
+        return implicitRowHeight(row)
+    }
+    \endcode
+
+    If \a size is equal to \c 0, the row will be hidden. If \a size is
+    equal to \c -1, the row will be reset back to use \l implicitRowHeight().
+    You are allowed to specify row sizes for rows that are outside the
+    size of the model.
+
+    \note The sizes you set will not be cleared if you change the \l model.
+    To clear the sizes, you need to call \l clearRowHeights() explicitly.
+
+    \include tableview.qdocinc explicit-row-size-and-syncview
+
+    \note For models with \e lots of rows, using \l setRowHeight() to set the heights for
+    all the rows at start-up, can be suboptimal. This will consume start-up time and
+    memory (for storing all the heights). A more scalable approach is to use a
+    \l rowHeightProvider instead, or rely on the implicit height of the delegate.
+    A \c rowHeightProvider will only be called on an as-needed basis, and will not
+    be affected by the size of the model.
+
+    \sa explicitRowHeight(), setColumnWidth(), {Row heights and column widths}
+*/
+
+/*!
+    \qmlmethod QtQuick::TableView::clearRowHeights()
+
+    Clears all the row heights set with \l setRowHeight().
+
+    \include tableview.qdocinc explicit-row-size-and-syncview
+
+    \sa setRowHeight(), clearColumnWidths(), {Row heights and column widths}
+*/
+
+/*!
+    \qmlmethod qreal QtQuick::TableView::explicitRowHeight(int row)
+
+    Returns the height of the \a row set with \l setRowHeight(). This height might
+    differ from the actual height of the column, if a \l rowHeightProvider
+    is in use. To get the actual height of a row, use \l rowHeight().
+
+    A return value equal to \c 0 means that the row has been told to hide.
+    A return value equal to \c -1 means that no explicit height has been set
+    for the row.
+
+    \include tableview.qdocinc explicit-row-size-and-syncview
+
+    \sa setRowHeight(), rowHeight(), {Row heights and column widths}
+*/
+
+/*!
+    \qmlmethod QModelIndex QtQuick::TableView::modelIndex(int row, int column)
     \since 6.4
     \deprecated
 
@@ -937,6 +1258,50 @@
 */
 
 /*!
+    \qmlmethod QtQuick::TableView::edit(QModelIndex modelIndex)
+    \since 6.5
+
+    This function starts an editing session for the cell that represents
+    \a modelIndex. If the user is already editing another cell, that session ends.
+
+    Normally you can specify the different ways of starting an edit session by
+    using \l editTriggers instead. If that isn't sufficient, you can use this
+    function. To take full control over cell editing and keep TableView from
+    interfering, set editTriggers to \c TableView.NoEditTriggers.
+
+    \note The \l {ItemSelectionModel::currentIndex}{current index} in the
+    \l {selectionModel}{selection model} will also change to \a modelIndex.
+
+    \sa closeEditor(), editTriggers, TableView::editDelegate, {Editing cells}
+*/
+
+/*!
+    \qmlmethod QtQuick::TableView::closeEditor()
+    \since 6.5
+
+    If the user is editing a cell, calling this function will
+    stop the editing, and destroy the edit delegate instance.
+
+    \sa edit(), TableView::editDelegate, {Editing cells}
+*/
+
+/*!
+    \qmlsignal QtQuick::TableView::layoutChanged()
+    \since 6.5
+
+    This signal is emitted whenever the layout of the
+    \l {isColumnLoaded()}{loaded} rows and columns has potentially
+    changed. This will especially be the case when \l forceLayout()
+    is called, but also when e.g resizing a row or a column, or
+    when a row or column have entered or left the viewport.
+
+    This signal can be used to for example update the geometry
+    of overlays.
+
+    \sa forceLayout(), {Overlays and underlays}
+*/
+
+/*!
     \qmlattachedproperty TableView QtQuick::TableView::view
 
     This attached property holds the view that manages the delegate instance.
@@ -974,6 +1339,76 @@
     \sa {Reusing items}, reuseItems, pooled
 */
 
+/*!
+    \qmlattachedsignal QtQuick::TableView::commit
+    This signal is emitted by the \l {TableView::editDelegate}{edit delegate}
+
+    This attached signal is emitted when the \l {TableView::editDelegate}{edit delegate}
+    is active, and the user presses \l Qt.Key_Enter or \l Qt.Key_Return. It will also
+    be emitted if TableView has \l QQuickItem::activeFocusOnTab set, and the user
+    presses Qt.Key_Tab or Qt.Key_Backtab.
+
+    This signal will \e not be emitted if editing ends because of reasons other
+    than the ones mentioned. This includes e.g if the user presses
+    Qt.Key_Escape, taps outside the delegate, the row or column being
+    edited is deleted, or if the application calls \l closeEditor().
+
+    Upon receiving the signal, the edit delegate should write any modified data
+    back to the model.
+
+    \note This property should be attached to the
+    \l {TableView::editDelegate}{edit delegate}, and not to the \l delegate.
+
+    \sa TableView::editDelegate, editTriggers, {Editing cells}
+*/
+
+/*!
+    \qmlattachedproperty Component QtQuick::TableView::editDelegate
+
+    This attached property holds the edit delegate. It's instantiated
+    when editing begins, and parented to the delegate it edits. It
+    supports the same required properties as the
+    \l {TableView::delegate}{TableView delegate}, including \c index, \c row and \c column.
+    Properties of the model, like \c display and \c edit, are also available
+    (depending on the \l {QAbstractItemModel::roleNames()}{role names} exposed
+    by the model).
+
+    Editing starts when the actions specified by \l editTriggers are met, and
+    the current cell is editable.
+
+    \note In order for a cell to be editable, the model needs to override
+    \l QAbstractItemModel::flags(), and return \c Qt::ItemIsEditable.
+
+    You can also open and close the edit delegate manually by calling \l edit()
+    and \l closeEditor(), respectively. The \c Qt::ItemIsEditable flag will
+    then be ignored.
+
+    Editing ends when the user presses \c Qt.Key_Enter or \c Qt.Key_Return
+    (and also \c Qt.Key_Tab or \c Qt.Key_Backtab, if TableView has
+    \l QQuickItem::activeFocusOnTab set). In that case, the \l TableView::commit
+    signal will be emitted, so that the edit delegate can respond by writing any
+    modified data back to the model. If editing ends because of other reasons
+    (e.g if the user presses Qt.Key_Escape), the signal will not be emitted.
+    In any case will \l {Component::destruction}{destruction()} be emitted in the end.
+
+    While the edit delegate is showing, the cell underneath will still be visible, and
+    therefore shine through if the edit delegate is translucent, or otherwise doesn't
+    cover the whole cell. If this is not wanted, you can either let the root item
+    of the edit delegate be a solid \l Rectangle, or hide some of the items
+    inside the \l {TableView::delegate}{TableView delegate.}. The latter can be done
+    by defining a property \c {required property bool editing} inside it, that you
+    bind to the \l visible property of some of the child items.
+    The following snippet shows how to do that:
+
+    \snippet qml/tableview/editdelegate.qml 1
+
+    When the edit delegate is instantiated, TableView will call \l QQuickItem::forceActiveFocus()
+    on it. If you want active focus to be set on a child of the edit delegate instead, let
+    the edit delegate be a \l FocusScope.
+
+    \sa editTriggers, TableView::commit, edit(), closeEditor(), {Editing cells}
+*/
+
 QT_BEGIN_NAMESPACE
 
 Q_LOGGING_CATEGORY(lcTableViewDelegateLifecycle, "qt.quick.tableview.lifecycle")
@@ -986,6 +1421,7 @@ static const Qt::Edge allTableEdges[] = { Qt::LeftEdge, Qt::RightEdge, Qt::TopEd
 static const char* kRequiredProperties = "_qt_tableview_requiredpropertymask";
 static const char* kRequiredProperty_selected = "selected";
 static const char* kRequiredProperty_current = "current";
+static const char* kRequiredProperty_editing = "editing";
 
 QQuickTableViewPrivate::EdgeRange::EdgeRange()
     : startIndex(kEdgeIndexNotSet)
@@ -1017,14 +1453,20 @@ bool QQuickTableViewPrivate::EdgeRange::containsIndex(Qt::Edge edge, int index)
 QQuickTableViewPrivate::QQuickTableViewPrivate()
     : QQuickFlickablePrivate()
 {
-    QObject::connect(&columnWidths, &QQuickTableSectionSizeProvider::sizeChanged,
-                            [this] { this->forceLayout();});
-    QObject::connect(&rowHeights, &QQuickTableSectionSizeProvider::sizeChanged,
-                            [this] { this->forceLayout();});
 }
 
 QQuickTableViewPrivate::~QQuickTableViewPrivate()
 {
+    if (editItem) {
+        QQuickItem *cellItem = editItem->parentItem();
+        Q_ASSERT(cellItem);
+        editModel->dispose(editItem);
+        tableModel->release(cellItem, QQmlInstanceModel::NotReusable);
+    }
+
+    if (editModel)
+        delete editModel;
+
     for (auto *fxTableItem : loadedItems) {
         if (auto item = fxTableItem->item) {
             if (fxTableItem->ownItem)
@@ -1046,7 +1488,7 @@ QString QQuickTableViewPrivate::tableLayoutToString() const
     return QString(QLatin1String("table cells: (%1,%2) -> (%3,%4), item count: %5, table rect: %6,%7 x %8,%9"))
             .arg(leftColumn()).arg(topRow())
             .arg(rightColumn()).arg(bottomRow())
-            .arg(loadedItems.count())
+            .arg(loadedItems.size())
             .arg(loadedTableOuterRect.x())
             .arg(loadedTableOuterRect.y())
             .arg(loadedTableOuterRect.width())
@@ -1061,7 +1503,7 @@ void QQuickTableViewPrivate::dumpTable() const
         { return lhs->index < rhs->index; });
 
     qWarning() << QStringLiteral("******* TABLE DUMP *******");
-    for (int i = 0; i < listCopy.count(); ++i)
+    for (int i = 0; i < listCopy.size(); ++i)
         qWarning() << static_cast<FxTableItem *>(listCopy.at(i))->cell;
     qWarning() << tableLayoutToString();
 
@@ -1074,7 +1516,10 @@ void QQuickTableViewPrivate::dumpTable() const
 void QQuickTableViewPrivate::setRequiredProperty(const char *property,
     const QVariant &value, int serializedModelIndex, QObject *object, bool init)
 {
-    if (!qobject_cast<QQmlTableInstanceModel *>(model)) {
+    Q_Q(QQuickTableView);
+
+    QQmlTableInstanceModel *tableInstanceModel = qobject_cast<QQmlTableInstanceModel *>(model);
+    if (!tableInstanceModel) {
         // TableView only supports using required properties when backed by
         // a QQmlTableInstanceModel. This is almost always the case, except
         // if you assign it an ObjectModel or a DelegateModel (which are really
@@ -1087,27 +1532,73 @@ void QQuickTableViewPrivate::setRequiredProperty(const char *property,
     const QString propertyName = QString::fromUtf8(property);
 
     if (init) {
-        const bool wasRequired = model->setRequiredProperty(serializedModelIndex, propertyName, value);
+        bool wasRequired = false;
+        if (object == editItem) {
+            // Special case: the item that we should write to belongs to the edit
+            // model rather than 'model' (which is used for normal delegate items).
+            wasRequired = editModel->setRequiredProperty(serializedModelIndex, propertyName, value);
+        } else {
+            wasRequired = tableInstanceModel->setRequiredProperty(serializedModelIndex, propertyName, value);
+        }
         if (wasRequired) {
             QStringList propertyList = object->property(kRequiredProperties).toStringList();
             object->setProperty(kRequiredProperties, propertyList << propertyName);
         }
     } else {
-        const QStringList propertyList = object->property(kRequiredProperties).toStringList();
-        if (!propertyList.contains(propertyName)) {
-            // We only write to properties that are required
-            return;
+        {
+            const QStringList propertyList = object->property(kRequiredProperties).toStringList();
+            if (propertyList.contains(propertyName)) {
+                const auto metaObject = object->metaObject();
+                const int propertyIndex = metaObject->indexOfProperty(property);
+                const auto metaProperty = metaObject->property(propertyIndex);
+                metaProperty.write(object, value);
+            }
         }
-        const auto metaObject = object->metaObject();
-        const int propertyIndex = metaObject->indexOfProperty(property);
-        const auto metaProperty = metaObject->property(propertyIndex);
-        metaProperty.write(object, value);
+
+        if (editItem) {
+            // Whenever we're told to update a required property for a table item that has the
+            // same model index as the edit item, we also mirror that update to the edit item.
+            // As such, this function is never called for the edit item directly (except the
+            // first time when it needs to be initialized).
+            Q_TABLEVIEW_ASSERT(object != editItem, "");
+            const QModelIndex modelIndex = q->modelIndex(cellAtModelIndex(serializedModelIndex));
+            if (modelIndex == editIndex) {
+                const QStringList propertyList = editItem->property(kRequiredProperties).toStringList();
+                if (propertyList.contains(propertyName)) {
+                    const auto metaObject = editItem->metaObject();
+                    const int propertyIndex = metaObject->indexOfProperty(property);
+                    const auto metaProperty = metaObject->property(propertyIndex);
+                    metaProperty.write(editItem, value);
+                }
+            }
+        }
+
     }
 }
 
 QQuickItem *QQuickTableViewPrivate::selectionPointerHandlerTarget() const
 {
     return const_cast<QQuickTableView *>(q_func())->contentItem();
+}
+
+bool QQuickTableViewPrivate::startSelection(const QPointF &pos)
+{
+    Q_Q(QQuickTableView);
+    Q_UNUSED(pos);
+
+    if (selectionBehavior == QQuickTableView::SelectionDisabled) {
+        qmlWarning(q) << "Cannot start selection: TableView.selectionBehavior == TableView.SelectionDisabled";
+        return false;
+    }
+
+    // Only allow a selection if it doesn't conflict with resizing
+    if (resizeHandler->state() != QQuickTableViewResizeHandler::Listening)
+        return false;
+
+    selectionStartCell = QPoint(-1, -1);
+    selectionEndCell = QPoint(-1, -1);
+    q->closeEditor();
+    return true;
 }
 
 void QQuickTableViewPrivate::setSelectionStartPos(const QPointF &pos)
@@ -1130,7 +1621,6 @@ void QQuickTableViewPrivate::setSelectionStartPos(const QPointF &pos)
         return;
 
     setCurrentIndex(clampedCell);
-    selectionStartCellRect = loadedTableItem(clampedCell)->geometry();
 
     switch (selectionBehavior) {
     case QQuickTableView::SelectCells:
@@ -1173,7 +1663,6 @@ void QQuickTableViewPrivate::setSelectionEndPos(const QPointF &pos)
         return;
 
     setCurrentIndex(clampedCell);
-    selectionEndCellRect = loadedTableItem(clampedCell)->geometry();;
 
     switch (selectionBehavior) {
     case QQuickTableView::SelectCells:
@@ -1256,8 +1745,6 @@ void QQuickTableViewPrivate::clearSelection()
 {
     selectionStartCell = QPoint(-1, -1);
     selectionEndCell = QPoint(-1, -1);
-    selectionStartCellRect = QRectF();
-    selectionEndCellRect = QRectF();
 
     if (selectionModel)
         selectionModel->clearSelection();
@@ -1269,50 +1756,60 @@ void QQuickTableViewPrivate::normalizeSelection()
     // and above the end cell. This is typically done after a selection drag has
     // finished so that the start and end positions up in sync with the handles.
     // This will not cause any changes to the selection itself.
-    const bool flippedX = selectionEndCell.x() < selectionStartCell.x();
-    const bool flippedY = selectionEndCell.y() < selectionStartCell.y();
-
-    if (flippedX) {
+    if (selectionEndCell.x() < selectionStartCell.x())
         std::swap(selectionStartCell.rx(), selectionEndCell.rx());
-        QPointF startPos = selectionStartCellRect.topLeft();
-        QPointF endPos = selectionEndCellRect.topLeft();
-        selectionStartCellRect.moveLeft(endPos.x());
-        selectionEndCellRect.moveLeft(startPos.x());
-    }
-
-    if (flippedY) {
+    if (selectionEndCell.y() < selectionStartCell.y())
         std::swap(selectionStartCell.ry(), selectionEndCell.ry());
-        QPointF startPos = selectionStartCellRect.topLeft();
-        QPointF endPos = selectionEndCellRect.topLeft();
-        selectionStartCellRect.moveTop(endPos.y());
-        selectionEndCellRect.moveTop(startPos.y());
-    }
 }
 
 QRectF QQuickTableViewPrivate::selectionRectangle() const
 {
-    // Normalize the rectangle before we return it. But in order to do
-    // that correctly, QRectF::normalize() will not be enough, we need to
-    // take cell size into account as well.
-    QRectF rect;
+    Q_Q(const QQuickTableView);
 
-    if (selectionStartCell.x() < selectionEndCell.x()) {
-        rect.setX(selectionStartCellRect.x());
-        rect.setWidth(selectionEndCellRect.x() + selectionEndCellRect.width() - selectionStartCellRect.x());
-    } else {
-        rect.setX(selectionEndCellRect.x());
-        rect.setWidth(selectionStartCellRect.x() + selectionStartCellRect.width() - selectionEndCellRect.x());
-    }
+    QPoint topLeftCell = selectionStartCell;
+    QPoint bottomRightCell = selectionEndCell;
+    if (bottomRightCell.x() < topLeftCell.x())
+        std::swap(topLeftCell.rx(), bottomRightCell.rx());
+    if (selectionEndCell.y() < topLeftCell.y())
+        std::swap(topLeftCell.ry(), bottomRightCell.ry());
 
-    if (selectionStartCell.y() < selectionEndCell.y()) {
-        rect.setY(selectionStartCellRect.y());
-        rect.setHeight(selectionEndCellRect.y() + selectionEndCellRect.height() - selectionStartCellRect.y());
-    } else {
-        rect.setY(selectionEndCellRect.y());
-        rect.setHeight(selectionStartCellRect.y() + selectionStartCellRect.height() - selectionEndCellRect.y());
-    }
+    const QPoint leftCell(topLeftCell.x(), topRow());
+    const QPoint topCell(leftColumn(), topLeftCell.y());
+    const QPoint rightCell(bottomRightCell.x(), topRow());
+    const QPoint bottomCell(leftColumn(), bottomRightCell.y());
 
-    return rect;
+    // If the corner cells of the selection are loaded, we can position the
+    // selection rectangle at its exact location. Otherwise we extend it out
+    // to the edges of the content item. This is not ideal, but the best we
+    // can do while the location of the corner cells are unknown.
+    // This will at least move the selection handles (and other overlay) out
+    // of the viewport until the affected cells are eventually loaded.
+    int left = 0;
+    int top = 0;
+    int right = 0;
+    int bottom = 0;
+
+    if (loadedItems.contains(modelIndexAtCell(leftCell)))
+        left = loadedTableItem(leftCell)->geometry().left();
+    else if (leftCell.x() > rightColumn())
+        left = q->contentWidth();
+
+    if (loadedItems.contains(modelIndexAtCell(topCell)))
+        top = loadedTableItem(topCell)->geometry().top();
+    else if (topCell.y() > bottomRow())
+        top = q->contentHeight();
+
+    if (loadedItems.contains(modelIndexAtCell(rightCell)))
+        right = loadedTableItem(rightCell)->geometry().right();
+    else if (rightCell.x() > rightColumn())
+        right = q->contentWidth();
+
+    if (loadedItems.contains(modelIndexAtCell(bottomCell)))
+        bottom = loadedTableItem(bottomCell)->geometry().bottom();
+    else if (bottomCell.y() > bottomRow())
+        bottom = q->contentHeight();
+
+    return QRectF(left, top, right - left, bottom - top);
 }
 
 QRect QQuickTableViewPrivate::selection() const
@@ -1914,7 +2411,7 @@ QQuickTableViewPrivate::RebuildOptions QQuickTableViewPrivate::checkForVisibilit
     return rebuildOptions;
 }
 
-void QQuickTableViewPrivate::forceLayout()
+void QQuickTableViewPrivate::forceLayout(bool immediate)
 {
     clearEdgeSizeCache();
     RebuildOptions rebuildOptions = RebuildOption::None;
@@ -1938,18 +2435,18 @@ void QQuickTableViewPrivate::forceLayout()
 
     scheduleRebuildTable(rebuildOptions);
 
-    auto rootView = rootSyncView();
-    const bool updated = rootView->d_func()->updateTableRecursive();
-    if (!updated) {
-        qWarning() << "TableView::forceLayout(): Cannot do an immediate re-layout during an ongoing layout!";
-        rootView->polish();
+    if (immediate) {
+        auto rootView = rootSyncView();
+        const bool updated = rootView->d_func()->updateTableRecursive();
+        if (!updated) {
+            qWarning() << "TableView::forceLayout(): Cannot do an immediate re-layout during an ongoing layout!";
+            rootView->polish();
+        }
     }
 }
 
 void QQuickTableViewPrivate::syncLoadedTableFromLoadRequest()
 {
-    Q_Q(QQuickTableView);
-
     if (loadRequest.edge() == Qt::Edge(0)) {
         // No edge means we're loading the top-left item
         loadedColumns.insert(loadRequest.column());
@@ -1959,24 +2456,12 @@ void QQuickTableViewPrivate::syncLoadedTableFromLoadRequest()
 
     switch (loadRequest.edge()) {
     case Qt::LeftEdge:
-        loadedColumns.insert(loadRequest.column());
-        if (rebuildState == RebuildState::Done)
-            emit q->leftColumnChanged();
-        break;
     case Qt::RightEdge:
         loadedColumns.insert(loadRequest.column());
-        if (rebuildState == RebuildState::Done)
-            emit q->rightColumnChanged();
         break;
     case Qt::TopEdge:
-        loadedRows.insert(loadRequest.row());
-        if (rebuildState == RebuildState::Done)
-            emit q->topRowChanged();
-        break;
     case Qt::BottomEdge:
         loadedRows.insert(loadRequest.row());
-        if (rebuildState == RebuildState::Done)
-            emit q->bottomRowChanged();
         break;
     }
 }
@@ -2357,6 +2842,8 @@ qreal QQuickTableViewPrivate::getColumnWidth(int column) const
     // is hidden, and -1 if the width is not set (which means that the width should
     // instead be calculated from the implicit size of the delegate items. This function
     // can be overridden by e.g HeaderView to provide the column widths by other means.
+    Q_Q(const QQuickTableView);
+
     const int noExplicitColumnWidth = -1;
 
     if (cachedColumnWidth.startIndex == column)
@@ -2365,12 +2852,15 @@ qreal QQuickTableViewPrivate::getColumnWidth(int column) const
     if (syncHorizontally)
         return syncView->d_func()->getColumnWidth(column);
 
-    auto cw = columnWidths.size(column);
-    if (cw >= 0)
-        return cw;
-
-    if (columnWidthProvider.isUndefined())
+    if (columnWidthProvider.isUndefined()) {
+        // We only respect explicit column widths when no columnWidthProvider
+        // is set. Otherwise it's the responsibility of the provider to e.g
+        // call explicitColumnWidth() (and implicitColumnWidth()), if needed.
+        qreal explicitColumnWidth = q->explicitColumnWidth(column);
+        if (explicitColumnWidth >= 0)
+            return explicitColumnWidth;
         return noExplicitColumnWidth;
+    }
 
     qreal columnWidth = noExplicitColumnWidth;
 
@@ -2398,6 +2888,8 @@ qreal QQuickTableViewPrivate::getRowHeight(int row) const
     // is hidden, and -1 if the height is not set (which means that the height should
     // instead be calculated from the implicit size of the delegate items. This function
     // can be overridden by e.g HeaderView to provide the row heights by other means.
+    Q_Q(const QQuickTableView);
+
     const int noExplicitRowHeight = -1;
 
     if (cachedRowHeight.startIndex == row)
@@ -2406,12 +2898,15 @@ qreal QQuickTableViewPrivate::getRowHeight(int row) const
     if (syncVertically)
         return syncView->d_func()->getRowHeight(row);
 
-    auto rh = rowHeights.size(row);
-    if (rh >= 0)
-        return rh;
-
-    if (rowHeightProvider.isUndefined())
+    if (rowHeightProvider.isUndefined()) {
+        // We only resepect explicit row heights when no rowHeightProvider
+        // is set. Otherwise it's the responsibility of the provider to e.g
+        // call explicitRowHeight() (and implicitRowHeight()), if needed.
+        qreal explicitRowHeight = q->explicitRowHeight(row);
+        if (explicitRowHeight >= 0)
+            return explicitRowHeight;
         return noExplicitRowHeight;
+    }
 
     qreal rowHeight = noExplicitRowHeight;
 
@@ -2536,6 +3031,12 @@ bool QQuickTableViewPrivate::isRowHidden(int row) const
 void QQuickTableViewPrivate::relayoutTableItems()
 {
     qCDebug(lcTableViewDelegateLifecycle);
+
+    if (viewportRect.isEmpty()) {
+        // This can happen if TableView was resized down to have a zero size
+        qCDebug(lcTableViewDelegateLifecycle()) << "Skipping relayout, viewport has zero size";
+        return;
+    }
 
     qreal nextColumnX = loadedTableOuterRect.x();
     qreal nextRowY = loadedTableOuterRect.y();
@@ -2696,6 +3197,7 @@ void QQuickTableViewPrivate::layoutTableEdgeFromLoadRequest()
 
 void QQuickTableViewPrivate::processLoadRequest()
 {
+    Q_Q(QQuickTableView);
     Q_TABLEVIEW_ASSERT(loadRequest.isActive(), "");
 
     while (loadRequest.hasCurrentCell()) {
@@ -2723,6 +3225,26 @@ void QQuickTableViewPrivate::processLoadRequest()
         // instead as an incremental build after e.g a flick.
         updateExtents();
         drainReusePoolAfterLoadRequest();
+
+        switch (loadRequest.edge()) {
+        case Qt::LeftEdge:
+            emit q->leftColumnChanged();
+            break;
+        case Qt::RightEdge:
+            emit q->rightColumnChanged();
+            break;
+        case Qt::TopEdge:
+            emit q->topRowChanged();
+            break;
+        case Qt::BottomEdge:
+            emit q->bottomRowChanged();
+            break;
+        }
+
+        if (editIndex.isValid())
+            updateEditItem();
+
+        emit q->layoutChanged();
     }
 
     loadRequest.markAsDone();
@@ -2826,7 +3348,11 @@ void QQuickTableViewPrivate::processRebuildTable()
         if (edgesBeforeRebuild.bottom() != q->bottomRow())
             emit q->bottomRowChanged();
 
+        if (editIndex.isValid())
+            updateEditItem();
         updateCurrentRowAndColumn();
+
+        emit q->layoutChanged();
 
         qCDebug(lcTableViewDelegateLifecycle()) << "current table:" << tableLayoutToString();
         qCDebug(lcTableViewDelegateLifecycle()) << "rebuild completed!";
@@ -3042,6 +3568,11 @@ void QQuickTableViewPrivate::loadInitialTable()
         return;
     }
 
+    if (viewportRect.isEmpty()) {
+        qCDebug(lcTableViewDelegateLifecycle()) << "viewport has zero size, leaving table empty";
+        return;
+    }
+
     // Load top-left item. After loaded, loadItemsInsideRect() will take
     // care of filling out the rest of the table.
     loadRequest.begin(topLeft, topLeftPos, QQmlIncubator::AsynchronousIfNested);
@@ -3185,6 +3716,9 @@ void QQuickTableViewPrivate::unloadEdge(Qt::Edge edge)
             emit q->bottomRowChanged();
         break; }
     }
+
+    if (rebuildState == RebuildState::Done)
+        emit q->layoutChanged();
 
     qCDebug(lcTableViewDelegateLifecycle) << tableLayoutToString();
 }
@@ -3386,6 +3920,7 @@ bool QQuickTableViewPrivate::updateTable()
         return !loadRequest.isActive();
 
     loadAndUnloadVisibleEdges();
+    updateEditItem();
 
     return !loadRequest.isActive();
 }
@@ -3467,9 +4002,9 @@ void QQuickTableViewPrivate::selectionChangedInSelectionModel(const QItemSelecti
 
     const auto &selectedIndexes = selected.indexes();
     const auto &deselectedIndexes = deselected.indexes();
-    for (int i = 0; i < selectedIndexes.count(); ++i)
+    for (int i = 0; i < selectedIndexes.size(); ++i)
         setSelectedOnDelegateItem(selectedIndexes.at(i), true);
-    for (int i = 0; i < deselectedIndexes.count(); ++i)
+    for (int i = 0; i < deselectedIndexes.size(); ++i)
         setSelectedOnDelegateItem(deselectedIndexes.at(i), false);
 }
 
@@ -3501,8 +4036,10 @@ void QQuickTableViewPrivate::updateSelectedOnAllDelegateItems()
         const bool selected = selectedInSelectionModel(cell);
         const bool current = currentInSelectionModel(cell);
         QQuickItem *item = loadedTableItem(cell)->item;
+        const bool editing = editIndex == q_func()->modelIndex(cell);
         setRequiredProperty(kRequiredProperty_selected, QVariant::fromValue(selected), cellIndex, item, false);
         setRequiredProperty(kRequiredProperty_current, QVariant::fromValue(current), cellIndex, item, false);
+        setRequiredProperty(kRequiredProperty_editing, QVariant::fromValue(editing), cellIndex, item, false);
     }
 }
 
@@ -3568,7 +4105,9 @@ void QQuickTableViewPrivate::initItemCallback(int modelIndex, QObject *object)
 {
     Q_Q(QQuickTableView);
 
-    auto item = static_cast<QQuickItem*>(object);
+    auto item = qobject_cast<QQuickItem*>(object);
+    if (!item)
+        return;
 
     item->setParentItem(q->contentItem());
     item->setZ(1);
@@ -3578,6 +4117,7 @@ void QQuickTableViewPrivate::initItemCallback(int modelIndex, QObject *object)
     const bool selected = selectedInSelectionModel(cell);
     setRequiredProperty(kRequiredProperty_current, QVariant::fromValue(current), modelIndex, object, true);
     setRequiredProperty(kRequiredProperty_selected, QVariant::fromValue(selected), modelIndex, object, true);
+    setRequiredProperty(kRequiredProperty_editing, QVariant::fromValue(false), modelIndex, item, true);
 
     if (auto attached = getAttachedObject(object))
         attached->setView(q);
@@ -3598,6 +4138,10 @@ void QQuickTableViewPrivate::itemReusedCallback(int modelIndex, QObject *object)
     const bool selected = selectedInSelectionModel(cell);
     setRequiredProperty(kRequiredProperty_current, QVariant::fromValue(current), modelIndex, object, false);
     setRequiredProperty(kRequiredProperty_selected, QVariant::fromValue(selected), modelIndex, object, false);
+    // Note: the edit item will never be reused, so no reason to set kRequiredProperty_editing
+
+    if (auto item = qobject_cast<QQuickItem*>(object))
+        QQuickItemPrivate::get(item)->setCulled(false);
 
     if (auto attached = getAttachedObject(object))
         emit attached->reused();
@@ -3892,8 +4436,14 @@ void QQuickTableViewPrivate::rowsInsertedCallback(const QModelIndex &parent, int
 
 void QQuickTableViewPrivate::rowsRemovedCallback(const QModelIndex &parent, int, int)
 {
+    Q_Q(QQuickTableView);
+
     if (parent != QModelIndex())
         return;
+
+    // If editIndex was a part of the removed rows, it will now be invalid.
+    if (!editIndex.isValid() && editItem)
+        q->closeEditor();
 
     scheduleRebuildTable(RebuildOption::ViewportOnly | RebuildOption::CalculateNewContentHeight);
 }
@@ -3913,8 +4463,14 @@ void QQuickTableViewPrivate::columnsInsertedCallback(const QModelIndex &parent, 
 
 void QQuickTableViewPrivate::columnsRemovedCallback(const QModelIndex &parent, int, int)
 {
+    Q_Q(QQuickTableView);
+
     if (parent != QModelIndex())
         return;
+
+    // If editIndex was a part of the removed columns, it will now be invalid.
+    if (!editIndex.isValid() && editItem)
+        q->closeEditor();
 
     scheduleRebuildTable(RebuildOption::ViewportOnly | RebuildOption::CalculateNewContentWidth);
 }
@@ -3937,6 +4493,8 @@ void QQuickTableViewPrivate::fetchMoreData()
 
 void QQuickTableViewPrivate::modelResetCallback()
 {
+    Q_Q(QQuickTableView);
+    q->closeEditor();
     scheduleRebuildTable(RebuildOption::All);
 }
 
@@ -4145,6 +4703,7 @@ void QQuickTableViewPrivate::init()
     Q_Q(QQuickTableView);
 
     q->setFlag(QQuickItem::ItemIsFocusScope);
+    q->setActiveFocusOnTab(true);
 
     positionXAnimation.setTargetObject(q);
     positionXAnimation.setProperty(QStringLiteral("contentX"));
@@ -4156,27 +4715,132 @@ void QQuickTableViewPrivate::init()
 
     auto tapHandler = new QQuickTapHandler(q->contentItem());
 
+    hoverHandler = new QQuickTableViewHoverHandler(q);
+    resizeHandler = new QQuickTableViewResizeHandler(q);
+    hoverHandler->setEnabled(resizableRows || resizableColumns);
+    resizeHandler->setEnabled(resizableRows || resizableColumns);
+
+    // To allow for a more snappy UX, we try to change the current index already upon
+    // receiving a pointer press. But we should only do that if the view is not interactive
+    // (so that it doesn't interfere with flicking), and if the resizeHandler is not
+    // being hovered/dragged. For those cases, we fall back to setting the current index
+    // on tap instead. A double tap on a resize area should also revert the section size
+    // back to its implicit size.
     QObject::connect(tapHandler, &QQuickTapHandler::pressedChanged, [this, q, tapHandler] {
-        if (!pointerNavigationEnabled || !tapHandler->isPressed())
+        if (!tapHandler->isPressed())
             return;
+
         positionXAnimation.stop();
         positionYAnimation.stop();
-        if (keyNavigationEnabled)
-            q->forceActiveFocus(Qt::MouseFocusReason);
-        if (q->isInteractive())
-            return;
-        clearSelection();
-        setCurrentIndexFromTap(tapHandler->point().pressPosition());
+
+        if (!q->isInteractive())
+            handleTap(tapHandler->point());
     });
 
-    QObject::connect(tapHandler, &QQuickTapHandler::tapped, [this, q, tapHandler] {
-        if (!pointerNavigationEnabled)
-            return;
-        if (!q->isInteractive())
-            return;
-        clearSelection();
-        setCurrentIndexFromTap(tapHandler->point().pressPosition());
+    QObject::connect(tapHandler, &QQuickTapHandler::singleTapped, [this, q, tapHandler] {
+        if (q->isInteractive())
+            handleTap(tapHandler->point());
     });
+
+    QObject::connect(tapHandler, &QQuickTapHandler::doubleTapped, [this, q, tapHandler] {
+        const bool resizeRow = resizableRows && hoverHandler->m_row != -1;
+        const bool resizeColumn = resizableColumns && hoverHandler->m_column != -1;
+
+        if (resizeRow || resizeColumn) {
+            if (resizeRow)
+                q->setRowHeight(hoverHandler->m_row, -1);
+            if (resizeColumn)
+                q->setColumnWidth(hoverHandler->m_column, -1);
+        } else if (editTriggers & QQuickTableView::DoubleTapped) {
+            const QPointF pos = tapHandler->point().pressPosition();
+            const QPoint cell = q->cellAtPosition(pos);
+            const QModelIndex index = q->modelIndex(cell);
+            if (canEdit(index, false))
+                q->edit(index);
+        }
+    });
+}
+
+void QQuickTableViewPrivate::handleTap(const QQuickHandlerPoint &point)
+{
+    Q_Q(QQuickTableView);
+
+    if (keyNavigationEnabled)
+        q->forceActiveFocus(Qt::MouseFocusReason);
+
+    if (point.modifiers() != Qt::NoModifier)
+        return;
+    if (resizableRows && hoverHandler->m_row != -1)
+        return;
+    if (resizableColumns && hoverHandler->m_column != -1)
+        return;
+    if (resizeHandler->state() != QQuickTableViewResizeHandler::Listening)
+        return;
+
+    const QModelIndex tappedIndex = q->modelIndex(q->cellAtPosition(point.position()));
+    bool tappedCellIsSelected = false;
+
+    if (selectionModel)
+        tappedCellIsSelected = selectionModel->isSelected(tappedIndex);
+
+    if (canEdit(tappedIndex, false)) {
+        if (editTriggers & QQuickTableView::SingleTapped) {
+            if (selectionBehavior != QQuickTableView::SelectionDisabled)
+                clearSelection();
+            q->edit(tappedIndex);
+            return;
+        } else if (editTriggers & QQuickTableView::SelectedTapped && tappedCellIsSelected) {
+            q->edit(tappedIndex);
+            return;
+        }
+    }
+
+    // Since the tap didn't result in selecting or editing cells, we clear
+    // the current selection and move the current index instead.
+    if (pointerNavigationEnabled) {
+        q->closeEditor();
+        if (selectionBehavior != QQuickTableView::SelectionDisabled)
+            clearSelection();
+        setCurrentIndexFromTap(point.position());
+    }
+}
+
+bool QQuickTableViewPrivate::canEdit(const QModelIndex tappedIndex, bool warn)
+{
+    // Check that a call to edit(tappedIndex) would not
+    // result in warnings being printed.
+    Q_Q(QQuickTableView);
+
+    if (!tappedIndex.isValid()) {
+        if (warn)
+            qmlWarning(q) << "cannot edit: index is not valid!";
+        return false;
+    }
+
+    if (auto const qaim = model->abstractItemModel()) {
+        if (!(qaim->flags(tappedIndex) & Qt::ItemIsEditable)) {
+            if (warn)
+                qmlWarning(q) << "cannot edit: QAbstractItemModel::flags(index) doesn't contain Qt::ItemIsEditable";
+            return false;
+        }
+    }
+
+    const QPoint cell = q->cellAtIndex(tappedIndex);
+    const QQuickItem *cellItem = q->itemAtCell(cell);
+    if (!cellItem) {
+        if (warn)
+            qmlWarning(q) << "cannot edit: the cell to edit is not inside the viewport!";
+        return false;
+    }
+
+    auto attached = getAttachedObject(cellItem);
+    if (!attached || !attached->editDelegate()) {
+        if (warn)
+            qmlWarning(q) << "cannot edit: no TableView.editDelegate set!";
+        return false;
+    }
+
+    return true;
 }
 
 void QQuickTableViewPrivate::syncViewportPosRecursive()
@@ -4225,6 +4889,331 @@ void QQuickTableViewPrivate::setCurrentIndex(const QPoint &cell)
 
     const auto index = q_func()->modelIndex(cell);
     selectionModel->setCurrentIndex(index, QItemSelectionModel::NoUpdate);
+}
+
+bool QQuickTableViewPrivate::setCurrentIndexFromKeyEvent(QKeyEvent *e)
+{
+    Q_Q(QQuickTableView);
+
+    if (!selectionModel || !selectionModel->model())
+        return false;
+
+    const QModelIndex currentIndex = selectionModel->currentIndex();
+    const QPoint currentCell = q->cellAtIndex(currentIndex);
+    const bool select = (e->modifiers() & Qt::ShiftModifier) && (e->key() != Qt::Key_Backtab);
+
+    if (!q->activeFocusOnTab()) {
+        switch (e->key()) {
+        case Qt::Key_Tab:
+        case Qt::Key_Backtab:
+            return false;
+        }
+    }
+
+    if (!cellIsValid(currentCell)) {
+        switch (e->key()) {
+        case Qt::Key_Up:
+        case Qt::Key_Down:
+        case Qt::Key_Left:
+        case Qt::Key_Right:
+        case Qt::Key_PageUp:
+        case Qt::Key_PageDown:
+        case Qt::Key_Home:
+        case Qt::Key_End:
+        case Qt::Key_Tab:
+        case Qt::Key_Backtab:
+            // Special case: the current index doesn't map to a cell in the view (perhaps
+            // because it isn't set yet). In that case, we set it to be the top-left cell.
+            const QModelIndex topLeftIndex = q->index(topRow(), leftColumn());
+            selectionModel->setCurrentIndex(topLeftIndex, QItemSelectionModel::NoUpdate);
+            return true;
+        }
+        return false;
+    }
+
+    auto beginMoveCurrentIndex = [=](){
+        if (!select) {
+            clearSelection();
+        } else if (selectionRectangle().isEmpty()) {
+            const int serializedStartIndex = modelIndexToCellIndex(selectionModel->currentIndex());
+            if (loadedItems.contains(serializedStartIndex)) {
+                const QRectF startGeometry = loadedItems.value(serializedStartIndex)->geometry();
+                setSelectionStartPos(startGeometry.center());
+            }
+        }
+    };
+
+    auto endMoveCurrentIndex = [=](const QPoint &cell){
+        if (select) {
+            if (polishScheduled)
+                forceLayout(true);
+            const int serializedEndIndex = modelIndexAtCell(cell);
+            if (loadedItems.contains(serializedEndIndex)) {
+                const QRectF endGeometry = loadedItems.value(serializedEndIndex)->geometry();
+                setSelectionEndPos(endGeometry.center());
+            }
+        }
+        selectionModel->setCurrentIndex(q->modelIndex(cell), QItemSelectionModel::NoUpdate);
+    };
+
+    switch (e->key()) {
+    case Qt::Key_Up: {
+        beginMoveCurrentIndex();
+        const int nextRow = nextVisibleEdgeIndex(Qt::TopEdge, currentCell.y() - 1);
+        if (nextRow == kEdgeIndexAtEnd)
+            break;
+        const qreal marginY = atTableEnd(Qt::TopEdge, nextRow - 1) ? -q->topMargin() : 0;
+        q->positionViewAtRow(nextRow, QQuickTableView::Contain, marginY);
+        endMoveCurrentIndex({currentCell.x(), nextRow});
+        break; }
+    case Qt::Key_Down: {
+        beginMoveCurrentIndex();
+        const int nextRow = nextVisibleEdgeIndex(Qt::BottomEdge, currentCell.y() + 1);
+        if (nextRow == kEdgeIndexAtEnd)
+            break;
+        const qreal marginY = atTableEnd(Qt::BottomEdge, nextRow + 1) ? q->bottomMargin() : 0;
+        q->positionViewAtRow(nextRow, QQuickTableView::Contain, marginY);
+        endMoveCurrentIndex({currentCell.x(), nextRow});
+        break; }
+    case Qt::Key_Left: {
+        beginMoveCurrentIndex();
+        const int nextColumn = nextVisibleEdgeIndex(Qt::LeftEdge, currentCell.x() - 1);
+        if (nextColumn == kEdgeIndexAtEnd)
+            break;
+        const qreal marginX = atTableEnd(Qt::LeftEdge, nextColumn - 1) ? -q->leftMargin() : 0;
+        q->positionViewAtColumn(nextColumn, QQuickTableView::Contain, marginX);
+        endMoveCurrentIndex({nextColumn, currentCell.y()});
+        break; }
+    case Qt::Key_Right: {
+        beginMoveCurrentIndex();
+        const int nextColumn = nextVisibleEdgeIndex(Qt::RightEdge, currentCell.x() + 1);
+        if (nextColumn == kEdgeIndexAtEnd)
+            break;
+        const qreal marginX = atTableEnd(Qt::RightEdge, nextColumn + 1) ? q->rightMargin() : 0;
+        q->positionViewAtColumn(nextColumn, QQuickTableView::Contain, marginX);
+        endMoveCurrentIndex({nextColumn, currentCell.y()});
+        break; }
+    case Qt::Key_PageDown: {
+        int newBottomRow = -1;
+        beginMoveCurrentIndex();
+        if (currentCell.y() < bottomRow()) {
+            // The first PageDown should just move currentIndex to the bottom
+            newBottomRow = bottomRow();
+            q->positionViewAtRow(newBottomRow, QQuickTableView::AlignBottom, 0);
+        } else {
+            q->positionViewAtRow(bottomRow(), QQuickTableView::AlignTop, 0);
+            positionYAnimation.complete();
+            newBottomRow = topRow() != bottomRow() ? bottomRow() : bottomRow() + 1;
+            const qreal marginY = atTableEnd(Qt::BottomEdge, newBottomRow + 1) ? q->bottomMargin() : 0;
+            q->positionViewAtRow(newBottomRow, QQuickTableView::AlignTop | QQuickTableView::AlignBottom, marginY);
+            positionYAnimation.complete();
+        }
+        endMoveCurrentIndex(QPoint(currentCell.x(), newBottomRow));
+        break; }
+    case Qt::Key_PageUp: {
+        int newTopRow = -1;
+        beginMoveCurrentIndex();
+        if (currentCell.y() > topRow()) {
+            // The first PageUp should just move currentIndex to the top
+            newTopRow = topRow();
+            q->positionViewAtRow(newTopRow, QQuickTableView::AlignTop, 0);
+        } else {
+            q->positionViewAtRow(topRow(), QQuickTableView::AlignBottom, 0);
+            positionYAnimation.complete();
+            newTopRow = topRow() != bottomRow() ? topRow() : topRow() - 1;
+            const qreal marginY = atTableEnd(Qt::TopEdge, newTopRow - 1) ? -q->topMargin() : 0;
+            q->positionViewAtRow(newTopRow, QQuickTableView::AlignTop, marginY);
+            positionYAnimation.complete();
+        }
+        endMoveCurrentIndex(QPoint(currentCell.x(), newTopRow));
+        break; }
+    case Qt::Key_Home: {
+        beginMoveCurrentIndex();
+        const int firstColumn = nextVisibleEdgeIndex(Qt::RightEdge, 0);
+        q->positionViewAtColumn(firstColumn, QQuickTableView::AlignLeft, -q->leftMargin());
+        endMoveCurrentIndex(QPoint(firstColumn, currentCell.y()));
+        break; }
+    case Qt::Key_End: {
+        beginMoveCurrentIndex();
+        const int lastColumn = nextVisibleEdgeIndex(Qt::LeftEdge, tableSize.width() - 1);
+        q->positionViewAtColumn(lastColumn, QQuickTableView::AlignRight, q->rightMargin());
+        endMoveCurrentIndex(QPoint(lastColumn, currentCell.y()));
+        break; }
+    case Qt::Key_Tab: {
+        beginMoveCurrentIndex();
+        int nextRow = currentCell.y();
+        int nextColumn = nextVisibleEdgeIndex(Qt::RightEdge, currentCell.x() + 1);
+        if (nextColumn == kEdgeIndexAtEnd) {
+            nextRow = nextVisibleEdgeIndex(Qt::BottomEdge, currentCell.y() + 1);
+            if (nextRow == kEdgeIndexAtEnd)
+                nextRow = nextVisibleEdgeIndex(Qt::BottomEdge, 0);
+            nextColumn = nextVisibleEdgeIndex(Qt::RightEdge, 0);
+            const qreal marginY = atTableEnd(Qt::BottomEdge, nextRow + 1) ? q->bottomMargin() : 0;
+            q->positionViewAtRow(nextRow, QQuickTableView::Contain, marginY);
+        }
+
+        qreal marginX = 0;
+        if (atTableEnd(Qt::RightEdge, nextColumn + 1))
+            marginX = q->leftMargin();
+        else if (atTableEnd(Qt::LeftEdge, nextColumn - 1))
+            marginX = -q->leftMargin();
+
+        q->positionViewAtColumn(nextColumn, QQuickTableView::Contain, marginX);
+        endMoveCurrentIndex({nextColumn, nextRow});
+        break; }
+    case Qt::Key_Backtab: {
+        beginMoveCurrentIndex();
+        int nextRow = currentCell.y();
+        int nextColumn = nextVisibleEdgeIndex(Qt::LeftEdge, currentCell.x() - 1);
+        if (nextColumn == kEdgeIndexAtEnd) {
+            nextRow = nextVisibleEdgeIndex(Qt::TopEdge, currentCell.y() - 1);
+            if (nextRow == kEdgeIndexAtEnd)
+                nextRow = nextVisibleEdgeIndex(Qt::TopEdge, tableSize.height() - 1);
+            nextColumn = nextVisibleEdgeIndex(Qt::LeftEdge, tableSize.width() - 1);
+            const qreal marginY = atTableEnd(Qt::TopEdge, nextRow - 1) ? -q->topMargin() : 0;
+            q->positionViewAtRow(nextRow, QQuickTableView::Contain, marginY);
+        }
+
+        qreal marginX = 0;
+        if (atTableEnd(Qt::RightEdge, nextColumn + 1))
+            marginX = q->leftMargin();
+        else if (atTableEnd(Qt::LeftEdge, nextColumn - 1))
+            marginX = -q->leftMargin();
+
+        q->positionViewAtColumn(nextColumn, QQuickTableView::Contain, marginX);
+        endMoveCurrentIndex({nextColumn, nextRow});
+        break; }
+    default:
+        return false;
+    }
+
+    return true;
+}
+
+bool QQuickTableViewPrivate::editFromKeyEvent(QKeyEvent *e)
+{
+    Q_Q(QQuickTableView);
+
+    if (editTriggers == QQuickTableView::NoEditTriggers)
+        return false;
+    if (!selectionModel || !selectionModel->model())
+        return false;
+
+    const QModelIndex index = selectionModel->currentIndex();
+    const QPoint cell = q->cellAtIndex(index);
+    const QQuickItem *cellItem = q->itemAtCell(cell);
+    if (!cellItem)
+        return false;
+
+    auto attached = getAttachedObject(cellItem);
+    if (!attached || !attached->editDelegate())
+        return false;
+
+    bool anyKeyPressed = false;
+    bool editKeyPressed = false;
+
+    switch (e->key()) {
+    case Qt::Key_Return:
+    case Qt::Key_Enter:
+#ifndef Q_OS_MACOS
+    case Qt::Key_F2:
+#endif
+        anyKeyPressed = true;
+        editKeyPressed = true;
+        break;
+    case Qt::Key_Shift:
+    case Qt::Key_Alt:
+    case Qt::Key_Control:
+    case Qt::Key_Meta:
+    case Qt::Key_Tab:
+    case Qt::Key_Backtab:
+        break;
+    default:
+        anyKeyPressed = true;
+    }
+
+    const bool anyKeyAccepted = anyKeyPressed && (editTriggers & QQuickTableView::AnyKeyPressed);
+    const bool editKeyAccepted = editKeyPressed && (editTriggers & QQuickTableView::EditKeyPressed);
+
+    if (!(editKeyAccepted || anyKeyAccepted))
+        return false;
+
+    if (!canEdit(index, false)) {
+        // If canEdit() returns false at this point (e.g because currentIndex is not
+        // editable), we still want to eat the key event, to keep a consistent behavior
+        // when some cells are editable, but others not.
+        return true;
+    }
+
+    q->edit(index);
+
+    if (editIndex.isValid() && anyKeyAccepted && !editKeyPressed) {
+        // Replay the key event to the focus object (which should at this point
+        // be the edit item, or an item inside the edit item).
+        QGuiApplication::sendEvent(QGuiApplication::focusObject(), e);
+    }
+
+    return true;
+}
+
+#if QT_CONFIG(cursor)
+void QQuickTableViewPrivate::updateCursor()
+{
+    int row = resizableRows ? hoverHandler->m_row : -1;
+    int column = resizableColumns ? hoverHandler->m_column : -1;
+
+    const auto resizeState = resizeHandler->state();
+    if (resizeState == QQuickTableViewResizeHandler::DraggingStarted
+            || resizeState == QQuickTableViewResizeHandler::Dragging) {
+        // Don't change the cursor while resizing, even if
+        // the pointer is not actually hovering the grid.
+        row = resizeHandler->m_row;
+        column = resizeHandler->m_column;
+    }
+
+    if (row != -1 || column != -1) {
+        Qt::CursorShape shape;
+        if (row != -1 && column != -1)
+            shape = Qt::SizeFDiagCursor;
+        else if (row != -1)
+            shape = Qt::SplitVCursor;
+        else
+            shape = Qt::SplitHCursor;
+
+        if (m_cursorSet)
+            qApp->changeOverrideCursor(shape);
+        else
+            qApp->setOverrideCursor(shape);
+
+        m_cursorSet = true;
+    } else if (m_cursorSet) {
+        qApp->restoreOverrideCursor();
+        m_cursorSet = false;
+    }
+}
+#endif
+
+void QQuickTableViewPrivate::updateEditItem()
+{
+    Q_Q(QQuickTableView);
+
+    if (!editItem)
+        return;
+
+    const QPoint cell = q->cellAtIndex(editIndex);
+    auto cellItem = q->itemAtCell(cell);
+    if (!cellItem) {
+        // The delegate item that is being edited has left the viewport. But since we
+        // added an extra reference to it when editing began, the delegate item has
+        // not been unloaded! It's therefore still on the content item (outside the
+        // viewport), but its position will no longer be updated until the row and column
+        // it's a part of enters the viewport again. To avoid glitches related to the
+        // item showing up on wrong places (e.g after resizing a column in front of it),
+        // we move it far out of the viewport. This way it will be "hidden", but continue
+        // to have edit focus. When the row and column that it's a part of are eventually
+        // flicked back in again, a relayout will move it back to the correct place.
+        editItem->parentItem()->setX(-editItem->width() - 10000);
+    }
 }
 
 QQuickTableView::QQuickTableView(QQuickItem *parent)
@@ -4372,6 +5361,8 @@ QVariant QQuickTableView::model() const
 void QQuickTableView::setModel(const QVariant &newModel)
 {
     Q_D(QQuickTableView);
+
+    closeEditor();
     d->setModelImpl(newModel);
 
     if (d->selectionModel)
@@ -4393,6 +5384,22 @@ void QQuickTableView::setDelegate(QQmlComponent *newDelegate)
     d->scheduleRebuildTable(QQuickTableViewPrivate::RebuildOption::All);
 
     emit delegateChanged();
+}
+
+QQuickTableView::EditTriggers QQuickTableView::editTriggers() const
+{
+    return d_func()->editTriggers;
+}
+
+void QQuickTableView::setEditTriggers(QQuickTableView::EditTriggers editTriggers)
+{
+    Q_D(QQuickTableView);
+    if (editTriggers == d->editTriggers)
+        return;
+
+    d->editTriggers = editTriggers;
+
+    emit editTriggersChanged();
 }
 
 bool QQuickTableView::reuseItems() const
@@ -4758,9 +5765,35 @@ void QQuickTableView::positionViewAtColumn(int column, PositionMode mode, qreal 
 
 void QQuickTableView::positionViewAtCell(const QPoint &cell, PositionMode mode, const QPointF &offset, const QRectF &subRect)
 {
-    positionViewAtCell(cell.x(), cell.y(), mode, offset, subRect);
+    PositionMode horizontalMode = mode & ~(AlignTop | AlignBottom | AlignVCenter);
+    PositionMode verticalMode = mode & ~(AlignLeft | AlignRight | AlignHCenter);
+    if (!horizontalMode && !verticalMode) {
+        qmlWarning(this) << "Unsupported mode:" << int(mode);
+        return;
+    }
+
+    if (horizontalMode)
+        positionViewAtColumn(cell.x(), horizontalMode, offset.x(), subRect);
+    if (verticalMode)
+        positionViewAtRow(cell.y(), verticalMode, offset.y(), subRect);
 }
 
+void QQuickTableView::positionViewAtIndex(const QModelIndex &index, PositionMode mode, const QPointF &offset, const QRectF &subRect)
+{
+    PositionMode horizontalMode = mode & ~(AlignTop | AlignBottom | AlignVCenter);
+    PositionMode verticalMode = mode & ~(AlignLeft | AlignRight | AlignHCenter);
+    if (!horizontalMode && !verticalMode) {
+        qmlWarning(this) << "Unsupported mode:" << int(mode);
+        return;
+    }
+
+    if (horizontalMode)
+        positionViewAtColumn(columnAtIndex(index), horizontalMode, offset.x(), subRect);
+    if (verticalMode)
+        positionViewAtRow(rowAtIndex(index), verticalMode, offset.y(), subRect);
+}
+
+#if QT_DEPRECATED_SINCE(6, 5)
 void QQuickTableView::positionViewAtCell(int column, int row, PositionMode mode, const QPointF &offset, const QRectF &subRect)
 {
     PositionMode horizontalMode = mode & ~(AlignTop | AlignBottom | AlignVCenter);
@@ -4775,6 +5808,7 @@ void QQuickTableView::positionViewAtCell(int column, int row, PositionMode mode,
     if (verticalMode)
         positionViewAtRow(row, verticalMode, offset.y(), subRect);
 }
+#endif
 
 QQuickItem *QQuickTableView::itemAtCell(const QPoint &cell) const
 {
@@ -4785,9 +5819,20 @@ QQuickItem *QQuickTableView::itemAtCell(const QPoint &cell) const
     return d->loadedItems.value(modelIndex)->item;
 }
 
+#if QT_DEPRECATED_SINCE(6, 5)
 QQuickItem *QQuickTableView::itemAtCell(int column, int row) const
 {
     return itemAtCell(QPoint(column, row));
+}
+#endif
+
+QQuickItem *QQuickTableView::itemAtIndex(const QModelIndex &index) const
+{
+    Q_D(const QQuickTableView);
+    const int serializedIndex = d->modelIndexToCellIndex(index);
+    if (!d->loadedItems.contains(serializedIndex))
+        return nullptr;
+    return d->loadedItems.value(serializedIndex)->item;
 }
 
 #if QT_DEPRECATED_SINCE(6, 4)
@@ -4926,6 +5971,122 @@ qreal QQuickTableView::implicitRowHeight(int row) const
     return d->sizeHintForRow(row);
 }
 
+void QQuickTableView::setColumnWidth(int column, qreal size)
+{
+    Q_D(QQuickTableView);
+    if (column < 0) {
+        qmlWarning(this) << "column must be greather than, or equal to, zero";
+        return;
+    }
+
+    if (d->syncHorizontally) {
+        d->syncView->setColumnWidth(column, size);
+        return;
+    }
+
+    if (qFuzzyCompare(explicitColumnWidth(column), size))
+        return;
+
+    if (size < 0)
+        d->explicitColumnWidths.remove(column);
+    else
+        d->explicitColumnWidths.insert(column, size);
+
+    if (d->loadedItems.isEmpty())
+        return;
+
+    const bool allColumnsLoaded = d->atTableEnd(Qt::LeftEdge) && d->atTableEnd(Qt::RightEdge);
+    if (column >= leftColumn() || column <= rightColumn() || allColumnsLoaded)
+        d->forceLayout(false);
+}
+
+void QQuickTableView::clearColumnWidths()
+{
+    Q_D(QQuickTableView);
+
+    if (d->syncHorizontally) {
+        d->syncView->clearColumnWidths();
+        return;
+    }
+
+    if (d->explicitColumnWidths.isEmpty())
+        return;
+
+    d->explicitColumnWidths.clear();
+    d->forceLayout(false);
+}
+
+qreal QQuickTableView::explicitColumnWidth(int column) const
+{
+    Q_D(const QQuickTableView);
+
+    if (d->syncHorizontally)
+        return d->syncView->explicitColumnWidth(column);
+
+    const auto it = d->explicitColumnWidths.constFind(column);
+    if (it != d->explicitColumnWidths.constEnd())
+        return *it;
+    return -1;
+}
+
+void QQuickTableView::setRowHeight(int row, qreal size)
+{
+    Q_D(QQuickTableView);
+    if (row < 0) {
+        qmlWarning(this) << "row must be greather than, or equal to, zero";
+        return;
+    }
+
+    if (d->syncVertically) {
+        d->syncView->setRowHeight(row, size);
+        return;
+    }
+
+    if (qFuzzyCompare(explicitRowHeight(row), size))
+        return;
+
+    if (size < 0)
+        d->explicitRowHeights.remove(row);
+    else
+        d->explicitRowHeights.insert(row, size);
+
+    if (d->loadedItems.isEmpty())
+        return;
+
+    const bool allRowsLoaded = d->atTableEnd(Qt::TopEdge) && d->atTableEnd(Qt::BottomEdge);
+    if (row >= topRow() || row <= bottomRow() || allRowsLoaded)
+        d->forceLayout(false);
+}
+
+void QQuickTableView::clearRowHeights()
+{
+    Q_D(QQuickTableView);
+
+    if (d->syncVertically) {
+        d->syncView->clearRowHeights();
+        return;
+    }
+
+    if (d->explicitRowHeights.isEmpty())
+        return;
+
+    d->explicitRowHeights.clear();
+    d->forceLayout(false);
+}
+
+qreal QQuickTableView::explicitRowHeight(int row) const
+{
+    Q_D(const QQuickTableView);
+
+    if (d->syncVertically)
+        return d->syncView->explicitRowHeight(row);
+
+    const auto it = d->explicitRowHeights.constFind(row);
+    if (it != d->explicitRowHeights.constEnd())
+        return *it;
+    return -1;
+}
+
 QModelIndex QQuickTableView::modelIndex(const QPoint &cell) const
 {
     Q_D(const QQuickTableView);
@@ -4982,7 +6143,122 @@ int QQuickTableView::columnAtIndex(const QModelIndex &index) const
 
 void QQuickTableView::forceLayout()
 {
-    d_func()->forceLayout();
+    d_func()->forceLayout(true);
+}
+
+void QQuickTableView::edit(const QModelIndex &index)
+{
+    Q_D(QQuickTableView);
+
+    if (!d->canEdit(index, true))
+        return;
+
+    if (d->editIndex == index)
+        return;
+
+    if (!d->tableModel)
+        return;
+
+    if (!d->editModel) {
+        d->editModel = new QQmlTableInstanceModel(qmlContext(this));
+        d->editModel->useImportVersion(d->resolveImportVersion());
+        QObject::connect(d->editModel, &QQmlInstanceModel::initItem,
+                         [this, d] (int serializedModelIndex, QObject *object) {
+            // initItemCallback will call setRequiredProperty for each required property in the
+            // delegate, both for this class, but also also for any subclasses. setRequiredProperty
+            // is currently dependent of the QQmlTableInstanceModel that was used to create the object
+            // in order to initialize required properties, so we need to set the editItem variable
+            // early on, so that we can use it in setRequiredProperty.
+            d->editIndex = modelIndex(d->cellAtModelIndex(serializedModelIndex));
+            d->editItem = qmlobject_cast<QQuickItem*>(object);
+            if (!d->editItem)
+                return;
+            // Initialize required properties
+            d->initItemCallback(serializedModelIndex, object);
+            const auto cellItem = itemAtCell(cellAtIndex(d->editIndex));
+            Q_ASSERT(cellItem);
+            d->editItem->setParentItem(cellItem);
+            // Move the cell item to the top of the other items, to ensure
+            // that e.g a focus frame ends up on top of all the cells
+            cellItem->setZ(2);
+        });
+    }
+
+    if (d->selectionModel)
+        d->selectionModel->setCurrentIndex(index, QItemSelectionModel::NoUpdate);
+
+    if (d->editIndex.isValid())
+        closeEditor();
+
+    const auto cellItem = itemAtCell(cellAtIndex(index));
+    Q_ASSERT(cellItem);
+    const auto attached = d->getAttachedObject(cellItem);
+    Q_ASSERT(attached);
+
+    d->editModel->setModel(d->tableModel->model());
+    d->editModel->setDelegate(attached->editDelegate());
+
+    const int cellIndex = d->modelIndexToCellIndex(index);
+    QObject* object = d->editModel->object(cellIndex, QQmlIncubator::Synchronous);
+    if (!object) {
+        d->editIndex = QModelIndex();
+        d->editItem = nullptr;
+        qmlWarning(this) << "cannot edit: TableView.editDelegate could not be instantiated!";
+        return;
+    }
+
+    // Note: at this point, editIndex and editItem has been set from initItem!
+
+    if (!d->editItem) {
+        qmlWarning(this) << "cannot edit: TableView.editDelegate is not an Item!";
+        d->editItem = nullptr;
+        d->editIndex = QModelIndex();
+        d->editModel->release(object, QQmlInstanceModel::NotReusable);
+        return;
+    }
+
+    // Reference the cell item once more, so that it doesn't
+    // get reused or deleted if it leaves the viewport.
+    d->model->object(cellIndex, QQmlIncubator::Synchronous);
+
+    // Inform the delegate, and the edit delegate, that they're being edited
+    d->setRequiredProperty(kRequiredProperty_editing, QVariant::fromValue(true), cellIndex, cellItem, false);
+
+    // Transfer focus to the edit item
+    d->editItem->forceActiveFocus(Qt::MouseFocusReason);
+
+    // Install an event filter on the focus object to handle Enter and Tab.
+    // Note that the focusObject doesn't need to be the editItem itself, in
+    // case the editItem is a FocusScope.
+    if (QObject *focusObject = d->editItem->window()->focusObject()) {
+        QQuickItem *focusItem = qobject_cast<QQuickItem *>(focusObject);
+        if (focusItem == d->editItem || d->editItem->isAncestorOf(focusItem))
+            focusItem->installEventFilter(this);
+    }
+}
+
+void QQuickTableView::closeEditor()
+{
+    Q_D(QQuickTableView);
+
+    if (!d->editItem)
+        return;
+
+    QQuickItem *cellItem = d->editItem->parentItem();
+    d->editModel->release(d->editItem, QQmlInstanceModel::NotReusable);
+    d->editItem = nullptr;
+
+    cellItem->setZ(1);
+    const int cellIndex = d->modelIndexToCellIndex(d->editIndex);
+    d->setRequiredProperty(kRequiredProperty_editing, QVariant::fromValue(false), cellIndex, cellItem, false);
+    // Remove the extra reference we sat on the cell item from edit()
+    d->model->release(cellItem, QQmlInstanceModel::NotReusable);
+
+    if (d->editIndex.isValid()) {
+        // Note: we can have an invalid editIndex, even when we
+        // have an editItem, if the model has changed (e.g been reset)!
+        d->editIndex = QModelIndex();
+    }
 }
 
 QQuickTableViewAttached *QQuickTableView::qmlAttachedProperties(QObject *obj)
@@ -5001,10 +6277,7 @@ void QQuickTableView::geometryChange(const QRectF &newGeometry, const QRectF &ol
         d->tableModel->drainReusableItemsPool(0);
     }
 
-    d->scheduleRebuildTable(
-                QQuickTableViewPrivate::RebuildOption::LayoutOnly |
-                QQuickTableViewPrivate::RebuildOption::CalculateNewContentWidth |
-                QQuickTableViewPrivate::RebuildOption::CalculateNewContentHeight);
+    d->forceLayout(false);
 }
 
 void QQuickTableView::viewportMoved(Qt::Orientations orientation)
@@ -5052,7 +6325,7 @@ void QQuickTableView::keyPressEvent(QKeyEvent *e)
 {
     Q_D(QQuickTableView);
 
-    if (!d->keyNavigationEnabled || !d->selectionModel || !d->selectionModel->model()) {
+    if (!d->keyNavigationEnabled) {
         QQuickFlickable::keyPressEvent(e);
         return;
     }
@@ -5060,136 +6333,56 @@ void QQuickTableView::keyPressEvent(QKeyEvent *e)
     if (d->tableSize.isEmpty())
         return;
 
-    const bool select = e->modifiers() & Qt::ShiftModifier;
-    const QModelIndex currentIndex = d->selectionModel->currentIndex();
-    const QPoint currentCell = cellAtIndex(currentIndex);
-
-    if (!d->cellIsValid(currentCell)) {
-        switch (e->key()) {
-        case Qt::Key_Up:
-        case Qt::Key_Down:
-        case Qt::Key_Left:
-        case Qt::Key_Right:
-            // Special case: the current index doesn't map to a cell in the view (perhaps
-            // because it isn't set yet). In that case, we set it to be the top-left cell.
-            const QModelIndex topLeftIndex = index(topRow(), leftColumn());
-            d->selectionModel->setCurrentIndex(topLeftIndex, QItemSelectionModel::NoUpdate);
-        }
+    if (d->editIndex.isValid()) {
+        // While editing, we limit the keys that we
+        // handle to not interfere with editing.
         return;
     }
 
-    auto beginMoveCurrentIndex = [=](){
-        if (!select) {
-            d->clearSelection();
-        } else if (d->selectionRectangle().isEmpty()) {
-            const int serializedStartIndex = d->modelIndexToCellIndex(d->selectionModel->currentIndex());
-            if (d->loadedItems.contains(serializedStartIndex)) {
-                const QRectF startGeometry = d->loadedItems.value(serializedStartIndex)->geometry();
-                d->setSelectionStartPos(startGeometry.center());
-            }
-        }
-    };
+    if (d->setCurrentIndexFromKeyEvent(e))
+        return;
 
-    auto endMoveCurrentIndex = [=](const QPoint &cell){
-        if (select) {
-            if (d->polishScheduled)
-                d->q_func()->forceLayout();
-            const int serializedEndIndex = d->modelIndexAtCell(cell);
-            if (d->loadedItems.contains(serializedEndIndex)) {
-                const QRectF endGeometry = d->loadedItems.value(serializedEndIndex)->geometry();
-                d->setSelectionEndPos(endGeometry.center());
-            }
-        }
-        d->selectionModel->setCurrentIndex(d->q_func()->modelIndex(cell), QItemSelectionModel::NoUpdate);
-    };
+    if (d->editFromKeyEvent(e))
+        return;
 
-    switch (e->key()) {
-    case Qt::Key_Up: {
-        beginMoveCurrentIndex();
-        const int nextRow = d->nextVisibleEdgeIndex(Qt::TopEdge, currentCell.y() - 1);
-        if (nextRow == kEdgeIndexAtEnd)
+    QQuickFlickable::keyPressEvent(e);
+}
+
+bool QQuickTableView::eventFilter(QObject *obj, QEvent *event)
+{
+    Q_D(QQuickTableView);
+
+    if (event->type() == QEvent::KeyPress) {
+        Q_ASSERT(d->editItem);
+        QKeyEvent *keyEvent = static_cast<QKeyEvent *>(event);
+        switch (keyEvent->key()) {
+        case Qt::Key_Enter:
+        case Qt::Key_Return:
+            if (auto attached = d->getAttachedObject(d->editItem))
+                emit attached->commit();
+            closeEditor();
+            return true;
+        case Qt::Key_Tab:
+        case Qt::Key_Backtab:
+            if (activeFocusOnTab()) {
+                if (auto attached = d->getAttachedObject(d->editItem))
+                    emit attached->commit();
+                closeEditor();
+                if (d->setCurrentIndexFromKeyEvent(keyEvent)) {
+                    const QModelIndex currentIndex = d->selectionModel->currentIndex();
+                    if (d->canEdit(currentIndex, false))
+                        edit(currentIndex);
+                }
+                return true;
+            }
             break;
-        const qreal marginY = d->atTableEnd(Qt::TopEdge, nextRow - 1) ? -topMargin() : 0;
-        positionViewAtRow(nextRow, Contain, marginY);
-        endMoveCurrentIndex({currentCell.x(), nextRow});
-        break; }
-    case Qt::Key_Down: {
-        beginMoveCurrentIndex();
-        const int nextRow = d->nextVisibleEdgeIndex(Qt::BottomEdge, currentCell.y() + 1);
-        if (nextRow == kEdgeIndexAtEnd)
-            break;
-        const qreal marginY = d->atTableEnd(Qt::BottomEdge, nextRow + 1) ? bottomMargin() : 0;
-        positionViewAtRow(nextRow, Contain, marginY);
-        endMoveCurrentIndex({currentCell.x(), nextRow});
-        break; }
-    case Qt::Key_Left: {
-        beginMoveCurrentIndex();
-        const int nextColumn = d->nextVisibleEdgeIndex(Qt::LeftEdge, currentCell.x() - 1);
-        if (nextColumn == kEdgeIndexAtEnd)
-            break;
-        const qreal marginX = d->atTableEnd(Qt::LeftEdge, nextColumn - 1) ? -leftMargin() : 0;
-        positionViewAtColumn(nextColumn, Contain, marginX);
-        endMoveCurrentIndex({nextColumn, currentCell.y()});
-        break; }
-    case Qt::Key_Right: {
-        beginMoveCurrentIndex();
-        const int nextColumn = d->nextVisibleEdgeIndex(Qt::RightEdge, currentCell.x() + 1);
-        if (nextColumn == kEdgeIndexAtEnd)
-            break;
-        const qreal marginX = d->atTableEnd(Qt::RightEdge, nextColumn + 1) ? rightMargin() : 0;
-        positionViewAtColumn(nextColumn, Contain, marginX);
-        endMoveCurrentIndex({nextColumn, currentCell.y()});
-        break; }
-    case Qt::Key_PageDown: {
-        int newBottomRow = -1;
-        beginMoveCurrentIndex();
-        if (currentCell.y() < bottomRow()) {
-            // The first PageDown should just move currentIndex to the bottom
-            newBottomRow = bottomRow();
-            d->positionViewAtRow(newBottomRow, Qt::AlignBottom, 0);
-        } else {
-            d->positionViewAtRow(bottomRow(), Qt::AlignTop, 0);
-            d->positionYAnimation.complete();
-            newBottomRow = topRow() != bottomRow() ? bottomRow() : bottomRow() + 1;
-            const qreal marginY = d->atTableEnd(Qt::BottomEdge, newBottomRow + 1) ? bottomMargin() : 0;
-            positionViewAtRow(newBottomRow, AlignTop | AlignBottom, marginY);
-            d->positionYAnimation.complete();
+        case Qt::Key_Escape:
+            closeEditor();
+            return true;
         }
-        endMoveCurrentIndex(QPoint(currentCell.x(), newBottomRow));
-        break; }
-    case Qt::Key_PageUp: {
-        int newTopRow = -1;
-        beginMoveCurrentIndex();
-        if (currentCell.y() > topRow()) {
-            // The first PageUp should just move currentIndex to the top
-            newTopRow = topRow();
-            d->positionViewAtRow(newTopRow, Qt::AlignTop, 0);
-        } else {
-            d->positionViewAtRow(topRow(), Qt::AlignBottom, 0);
-            d->positionYAnimation.complete();
-            newTopRow = topRow() != bottomRow() ? topRow() : topRow() - 1;
-            const qreal marginY = d->atTableEnd(Qt::TopEdge, newTopRow - 1) ? -topMargin() : 0;
-            d->positionViewAtRow(newTopRow, Qt::AlignTop, marginY);
-            d->positionYAnimation.complete();
-        }
-        endMoveCurrentIndex(QPoint(currentCell.x(), newTopRow));
-        break; }
-    case Qt::Key_Home: {
-        beginMoveCurrentIndex();
-        const int firstColumn = d->nextVisibleEdgeIndex(Qt::RightEdge, 0);
-        d->positionViewAtColumn(firstColumn, Qt::AlignLeft, -leftMargin());
-        endMoveCurrentIndex(QPoint(firstColumn, currentCell.y()));
-        break; }
-    case Qt::Key_End: {
-        beginMoveCurrentIndex();
-        const int lastColumn = d->nextVisibleEdgeIndex(Qt::LeftEdge, columns() - 1);
-        d->positionViewAtColumn(lastColumn, Qt::AlignRight, rightMargin());
-        endMoveCurrentIndex(QPoint(lastColumn, currentCell.y()));
-        break; }
-    default:
-        QQuickFlickable::keyPressEvent(e);
-        break;
     }
+
+    return QQuickFlickable::eventFilter(obj, event);
 }
 
 bool QQuickTableView::alternatingRows() const
@@ -5222,70 +6415,229 @@ void QQuickTableView::setSelectionBehavior(SelectionBehavior selectionBehavior)
     emit selectionBehaviorChanged();
 }
 
-class QObjectPrivate;
-class QQuickTableSectionSizeProviderPrivate : public QObjectPrivate {
-public:
-    QQuickTableSectionSizeProviderPrivate();
-    ~QQuickTableSectionSizeProviderPrivate();
-    QHash<int, qreal> hash;
-};
-
-QQuickTableSectionSizeProvider::QQuickTableSectionSizeProvider(QObject *parent)
-    : QObject (*(new QQuickTableSectionSizeProviderPrivate), parent)
+bool QQuickTableView::resizableColumns() const
 {
+    return d_func()->resizableColumns;
 }
 
-void QQuickTableSectionSizeProvider::setSize(int section, qreal size)
+void QQuickTableView::setResizableColumns(bool enabled)
 {
-    Q_D(QQuickTableSectionSizeProvider);
-    if (section < 0 || size < 0) {
-        qmlWarning(this) << "setSize: section or size less than zero";
+    Q_D(QQuickTableView);
+    if (d->resizableColumns == enabled)
+        return;
+
+    d->resizableColumns = enabled;
+    d->resizeHandler->setEnabled(d->resizableRows || d->resizableColumns);
+    d->hoverHandler->setEnabled(d->resizableRows || d->resizableColumns);
+
+    emit resizableColumnsChanged();
+}
+
+bool QQuickTableView::resizableRows() const
+{
+    return d_func()->resizableRows;
+}
+
+void QQuickTableView::setResizableRows(bool enabled)
+{
+    Q_D(QQuickTableView);
+    if (d->resizableRows == enabled)
+        return;
+
+    d->resizableRows = enabled;
+    d->resizeHandler->setEnabled(d->resizableRows || d->resizableColumns);
+    d->hoverHandler->setEnabled(d->resizableRows || d->resizableColumns);
+
+    emit resizableRowsChanged();
+}
+
+// ----------------------------------------------
+
+QQuickTableViewHoverHandler::QQuickTableViewHoverHandler(QQuickTableView *view)
+    : QQuickHoverHandler(view->contentItem())
+{
+    setMargin(5);
+
+    connect(this, &QQuickHoverHandler::hoveredChanged, [this] {
+        if (!isHoveringGrid())
+            return;
+        m_row = -1;
+        m_column = -1;
+#if QT_CONFIG(cursor)
+        auto tableView = static_cast<QQuickTableView *>(parentItem()->parent());
+        auto tableViewPrivate = QQuickTableViewPrivate::get(tableView);
+        tableViewPrivate->updateCursor();
+#endif
+    });
+}
+
+void QQuickTableViewHoverHandler::handleEventPoint(QPointerEvent *event, QEventPoint &point)
+{
+    QQuickHoverHandler::handleEventPoint(event, point);
+
+    auto tableView = static_cast<QQuickTableView *>(parentItem()->parent());
+#if QT_CONFIG(cursor)
+    auto tableViewPrivate = QQuickTableViewPrivate::get(tableView);
+#endif
+
+    const QPoint cell = tableView->cellAtPosition(point.position(), true);
+    const auto item = tableView->itemAtCell(cell);
+    if (!item) {
+        m_row = -1;
+        m_column = -1;
+#if QT_CONFIG(cursor)
+        tableViewPrivate->updateCursor();
+#endif
         return;
     }
-    if (qFuzzyCompare(QQuickTableSectionSizeProvider::size(section), size))
-        return;
-    d->hash.insert(section, size);
-    emit sizeChanged();
+
+    const QPointF itemPos = item->mapFromItem(tableView->contentItem(), point.position());
+    const bool hoveringRow = (itemPos.y() < margin() || itemPos.y() > item->height() - margin());
+    const bool hoveringColumn = (itemPos.x() < margin() || itemPos.x() > item->width() - margin());
+    m_row = hoveringRow ? itemPos.y() < margin() ? cell.y() - 1 : cell.y() : -1;
+    m_column = hoveringColumn ? itemPos.x() < margin() ? cell.x() - 1 : cell.x() : -1;
+#if QT_CONFIG(cursor)
+    tableViewPrivate->updateCursor();
+#endif
 }
 
-// return -1.0 if no valid explicit size retrieved
-qreal QQuickTableSectionSizeProvider::size(int section) const
+// ----------------------------------------------
+
+QQuickTableViewResizeHandler::QQuickTableViewResizeHandler(QQuickTableView *view)
+    : QQuickSinglePointHandler(view->contentItem())
 {
-    Q_D(const QQuickTableSectionSizeProvider);
-    auto it = d->hash.find(section);
-    if (it != d->hash.end())
-        return *it;
-    return -1.0;
+    setMargin(5);
+    // Set a grab permission that stops the flickable, as well as
+    // any drag handler inside the delegate, from stealing the drag.
+    setGrabPermissions(QQuickPointerHandler::CanTakeOverFromAnything);
 }
 
-// return true if section is valid
-bool QQuickTableSectionSizeProvider::resetSize(int section)
+void QQuickTableViewResizeHandler::onGrabChanged(QQuickPointerHandler *grabber
+                                     , QPointingDevice::GrabTransition transition
+                                     , QPointerEvent *ev
+                                     , QEventPoint &point)
 {
-    Q_D(QQuickTableSectionSizeProvider);
-    if (d->hash.empty())
-        return false;
+    QQuickSinglePointHandler::onGrabChanged(grabber, transition, ev, point);
 
-    auto ret = d->hash.remove(section);
-    if (ret)
-        emit sizeChanged();
-    return ret;
+    switch (transition) {
+    case QPointingDevice::GrabPassive:
+    case QPointingDevice::GrabExclusive:
+        break;
+    case QPointingDevice::UngrabPassive:
+    case QPointingDevice::UngrabExclusive:
+    case QPointingDevice::CancelGrabPassive:
+    case QPointingDevice::CancelGrabExclusive:
+    case QPointingDevice::OverrideGrabPassive:
+        if (m_state == DraggingStarted || m_state == Dragging) {
+            m_state = DraggingFinished;
+            updateDrag(ev, point);
+        }
+        break;
+    }
 }
 
-void QQuickTableSectionSizeProvider::resetAll()
+bool QQuickTableViewResizeHandler::wantsEventPoint(const QPointerEvent *event, const QEventPoint &point)
 {
-    Q_D(QQuickTableSectionSizeProvider);
-    d->hash.clear();
-    emit sizeChanged();
+    Q_UNUSED(event);
+    Q_UNUSED(point);
+    // When the user is flicking, we disable resizing, so that
+    // he doesn't start to resize by accident.
+    auto tableView = static_cast<QQuickTableView *>(parentItem()->parent());
+    return !tableView->isMoving();
 }
 
-QQuickTableSectionSizeProviderPrivate::QQuickTableSectionSizeProviderPrivate()
-    : QObjectPrivate()
+void QQuickTableViewResizeHandler::handleEventPoint(QPointerEvent *event, QEventPoint &point)
 {
+    // Resolve which state we're in first...
+    updateState(point);
+    // ...and act on it next
+    updateDrag(event, point);
 }
 
-QQuickTableSectionSizeProviderPrivate::~QQuickTableSectionSizeProviderPrivate()
+void QQuickTableViewResizeHandler::updateState(QEventPoint &point)
 {
+    auto tableView = static_cast<QQuickTableView *>(parentItem()->parent());
+    auto tableViewPrivate = QQuickTableViewPrivate::get(tableView);
 
+    if (m_state == DraggingFinished)
+        m_state = Listening;
+
+    if (point.state() == QEventPoint::Pressed) {
+        m_row = tableViewPrivate->resizableRows ? tableViewPrivate->hoverHandler->m_row : -1;
+        m_column = tableViewPrivate->resizableColumns ? tableViewPrivate->hoverHandler->m_column : -1;
+        if (m_row != -1 || m_column != -1)
+            m_state = Tracking;
+    } else if (point.state() == QEventPoint::Released) {
+        if (m_state == DraggingStarted || m_state == Dragging)
+            m_state = DraggingFinished;
+        else
+            m_state = Listening;
+    } else if (point.state() == QEventPoint::Updated) {
+        switch (m_state) {
+        case Listening:
+            break;
+        case Tracking: {
+            const qreal distX = m_column != -1 ? point.position().x() - point.pressPosition().x() : 0;
+            const qreal distY = m_row != -1 ? point.position().y() - point.pressPosition().y() : 0;
+            const qreal dragDist = qSqrt(distX * distX + distY * distY);
+            if (dragDist > qApp->styleHints()->startDragDistance())
+                m_state = DraggingStarted;
+            break;}
+        case DraggingStarted:
+            m_state = Dragging;
+            break;
+        case Dragging:
+            break;
+        case DraggingFinished:
+            // Handled at the top of the function
+            Q_UNREACHABLE();
+            break;
+        }
+    }
+}
+
+void QQuickTableViewResizeHandler::updateDrag(QPointerEvent *event, QEventPoint &point)
+{
+    auto tableView = static_cast<QQuickTableView *>(parentItem()->parent());
+#if QT_CONFIG(cursor)
+    auto tableViewPrivate = QQuickTableViewPrivate::get(tableView);
+#endif
+
+    switch (m_state) {
+    case Listening:
+        break;
+    case Tracking:
+        setPassiveGrab(event, point, true);
+        // Disable flicking while dragging. TableView uses filtering instead of
+        // pointer handlers to do flicking, so setting an exclusive grab (together
+        // with grab permissions) doens't work ATM.
+        tableView->setFiltersChildMouseEvents(false);
+        break;
+    case DraggingStarted:
+        setExclusiveGrab(event, point, true);
+        m_columnStartX = point.position().x();
+        m_columnStartWidth = tableView->columnWidth(m_column);
+        m_rowStartY = point.position().y();
+        m_rowStartHeight = tableView->rowHeight(m_row);
+#if QT_CONFIG(cursor)
+        tableViewPrivate->updateCursor();
+#endif
+        // fallthrough
+    case Dragging: {
+        const qreal distX = point.position().x() - m_columnStartX;
+        const qreal distY = point.position().y() - m_rowStartY;
+        if (m_column != -1)
+            tableView->setColumnWidth(m_column, qMax(0.001, m_columnStartWidth + distX));
+        if (m_row != -1)
+            tableView->setRowHeight(m_row, qMax(0.001, m_rowStartHeight + distY));
+        break; }
+    case DraggingFinished: {
+        tableView->setFiltersChildMouseEvents(true);
+#if QT_CONFIG(cursor)
+        tableViewPrivate->updateCursor();
+#endif
+        break; }
+    }
 }
 
 QT_END_NAMESPACE

@@ -11,6 +11,8 @@
 #include <QtCore/qwaitcondition.h>
 #include <QtCore/qcoreapplication.h>
 
+#include <QtCore/private/qthread_p.h>
+
 QT_BEGIN_NAMESPACE
 
 class QQmlThreadPrivate : public QThread
@@ -19,19 +21,16 @@ public:
     QQmlThreadPrivate(QQmlThread *);
     QQmlThread *q;
 
-    void run() override;
-
     inline QMutex &mutex() { return _mutex; }
     inline void lock() { _mutex.lock(); }
     inline void unlock() { _mutex.unlock(); }
     inline void wait() { _wait.wait(&_mutex); }
     inline void wakeOne() { _wait.wakeOne(); }
-    inline void wakeAll() { _wait.wakeAll(); }
 
-    quint32 m_threadProcessing:1; // Set when the thread is processing messages
-    quint32 m_mainProcessing:1; // Set when the main thread is processing messages
-    quint32 m_shutdown:1; // Set by main thread to request a shutdown
-    quint32 m_mainThreadWaiting:1; // Set by main thread if it is waiting for the message queue to empty
+    bool m_threadProcessing; // Set when the thread is processing messages
+    bool m_mainProcessing; // Set when the main thread is processing messages
+    bool m_shutdown; // Set by main thread to request a shutdown
+    bool m_mainThreadWaiting; // Set by main thread if it is waiting for the message queue to empty
 
     typedef QFieldList<QQmlThread::Message, &QQmlThread::Message::next> MessageList;
     MessageList threadList;
@@ -107,19 +106,6 @@ bool QQmlThreadPrivate::event(QEvent *e)
     return QThread::event(e);
 }
 
-void QQmlThreadPrivate::run()
-{
-    lock();
-
-    wakeOne();
-
-    unlock();
-
-    q->startupThread();
-    exec();
-    q->shutdownThread();
-}
-
 void QQmlThreadPrivate::mainEvent()
 {
     lock();
@@ -192,12 +178,13 @@ QQmlThread::~QQmlThread()
     delete d;
 }
 
+/*!
+    \internal
+    Starts the actual worker thread.
+ */
 void QQmlThread::startup()
 {
-    d->lock();
     d->start();
-    d->wait();
-    d->unlock();
     d->moveToThread(d);
 }
 
@@ -253,11 +240,6 @@ void QQmlThread::wakeOne()
     d->wakeOne();
 }
 
-void QQmlThread::wakeAll()
-{
-    d->wakeAll();
-}
-
 void QQmlThread::wait()
 {
     d->wait();
@@ -265,22 +247,12 @@ void QQmlThread::wait()
 
 bool QQmlThread::isThisThread() const
 {
-    return QThread::currentThread() == d;
+    return QThread::currentThreadId() == static_cast<QThreadPrivate *>(QObjectPrivate::get(d))->threadData.loadRelaxed()->threadId.loadRelaxed();
 }
 
 QThread *QQmlThread::thread() const
 {
     return const_cast<QThread *>(static_cast<const QThread *>(d));
-}
-
-// Called when the thread starts.  Do startup stuff in here.
-void QQmlThread::startupThread()
-{
-}
-
-// Called when the thread shuts down.  Do cleanup in here.
-void QQmlThread::shutdownThread()
-{
 }
 
 void QQmlThread::internalCallMethodInThread(Message *message)
@@ -320,6 +292,13 @@ void QQmlThread::internalCallMethodInThread(Message *message)
     d->unlock();
 }
 
+/*!
+    \internal
+    \note This method needs to run in the worker/QQmlThread
+
+    This runs \a message in the main thread, and blocks the
+    worker thread until the call has completed
+ */
 void QQmlThread::internalCallMethodInMain(Message *message)
 {
 #if !QT_CONFIG(thread)
@@ -383,12 +362,22 @@ void QQmlThread::internalPostMethodToMain(Message *message)
     d->unlock();
 }
 
+/*!
+    \internal
+    \note This method must be called in the main thread
+    \warning This method requires that the lock is held!
+
+    A call to this method will either:
+    - run a message requested to run synchronously on the main thread if there is one
+      (and return afterrwards),
+    - wait for the worker thread to notify it if the worker thread has pending work,
+    - or simply return if neither of the conditions above hold
+ */
 void QQmlThread::waitForNextMessage()
 {
 #if QT_CONFIG(thread)
     Q_ASSERT(!isThisThread());
 #endif
-    d->lock();
     Q_ASSERT(d->m_mainThreadWaiting == false);
 
     d->m_mainThreadWaiting = true;
@@ -408,7 +397,6 @@ void QQmlThread::waitForNextMessage()
     }
 
     d->m_mainThreadWaiting = false;
-    d->unlock();
 }
 
 

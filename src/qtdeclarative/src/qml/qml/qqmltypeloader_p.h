@@ -65,6 +65,7 @@ public:
             QV4::CompiledData::Location location;
 
             QQmlImports::ImportFlags flags;
+            quint8 precedence = 0;
             int priority = 0;
 
             QTypeRevision version;
@@ -75,18 +76,20 @@ public:
         };
         using PendingImportPtr = std::shared_ptr<PendingImport>;
 
+        void importQmldirScripts(const PendingImportPtr &import, const QQmlTypeLoaderQmldirContent &qmldir, const QUrl &qmldirUrl);
+
     protected:
         bool addImport(const QV4::CompiledData::Import *import, QQmlImports::ImportFlags,
                        QList<QQmlError> *errors);
         bool addImport(PendingImportPtr import, QList<QQmlError> *errors);
 
         bool fetchQmldir(const QUrl &url, PendingImportPtr import, int priority, QList<QQmlError> *errors);
-        bool updateQmldir(const QQmlRefPointer<QQmlQmldirData> &data, PendingImportPtr import, QList<QQmlError> *errors);
+        bool updateQmldir(const QQmlRefPointer<QQmlQmldirData> &data, const PendingImportPtr &import, QList<QQmlError> *errors);
 
     private:
-        bool addScriptImport(PendingImportPtr import);
-        bool addFileImport(PendingImportPtr import, QList<QQmlError> *errors);
-        bool addLibraryImport(PendingImportPtr import, QList<QQmlError> *errors);
+        bool addScriptImport(const PendingImportPtr &import);
+        bool addFileImport(const PendingImportPtr &import, QList<QQmlError> *errors);
+        bool addLibraryImport(const PendingImportPtr &import, QList<QQmlError> *errors);
 
         virtual bool qmldirDataAvailable(const QQmlRefPointer<QQmlQmldirData> &, QList<QQmlError> *);
 
@@ -95,13 +98,14 @@ public:
         void dependencyComplete(QQmlDataBlob *) override;
 
         bool loadImportDependencies(
-                PendingImportPtr currentImport, const QString &qmldirUri,
+                const PendingImportPtr &currentImport, const QString &qmldirUri,
                 QQmlImports::ImportFlags flags, QList<QQmlError> *errors);
 
     protected:
         bool loadDependentImports(
                 const QList<QQmlDirParser::Import> &imports, const QString &qualifier,
-                QTypeRevision version, QQmlImports::ImportFlags flags, QList<QQmlError> *errors);
+                QTypeRevision version, quint16 precedence, QQmlImports::ImportFlags flags,
+                QList<QQmlError> *errors);
         virtual QString stringAt(int) const { return QString(); }
 
         bool isDebugging() const;
@@ -171,36 +175,20 @@ private:
 
     void shutdownThread();
 
-    void loadThread(QQmlDataBlob *);
-    void loadWithStaticDataThread(QQmlDataBlob *, const QByteArray &);
-    void loadWithCachedUnitThread(QQmlDataBlob *blob, const QQmlPrivate::CachedQmlUnit *unit);
+    void loadThread(const QQmlDataBlob::Ptr &);
+    void loadWithStaticDataThread(const QQmlDataBlob::Ptr &, const QByteArray &);
+    void loadWithCachedUnitThread(const QQmlDataBlob::Ptr &blob, const QQmlPrivate::CachedQmlUnit *unit);
 #if QT_CONFIG(qml_network)
     void networkReplyFinished(QNetworkReply *);
     void networkReplyProgress(QNetworkReply *, qint64, qint64);
 
-    typedef QHash<QNetworkReply *, QQmlDataBlob *> NetworkReplies;
+    typedef QHash<QNetworkReply *, QQmlDataBlob::Ptr> NetworkReplies;
 #endif
 
-    void setData(QQmlDataBlob *, const QByteArray &);
-    void setData(QQmlDataBlob *, const QString &fileName);
-    void setData(QQmlDataBlob *, const QQmlDataBlob::SourceCodeData &);
-    void setCachedUnit(QQmlDataBlob *blob, const QQmlPrivate::CachedQmlUnit *unit);
-
-    template<typename T>
-    struct TypedCallback
-    {
-        TypedCallback(T *object, void (T::*func)(QQmlTypeData *)) : o(object), mf(func) {}
-
-        static void redirect(void *arg, QQmlTypeData *type)
-        {
-            TypedCallback<T> *self = reinterpret_cast<TypedCallback<T> *>(arg);
-            ((self->o)->*(self->mf))(type);
-        }
-
-    private:
-        T *o;
-        void (T::*mf)(QQmlTypeData *);
-    };
+    void setData(const QQmlDataBlob::Ptr &, const QByteArray &);
+    void setData(const QQmlDataBlob::Ptr &, const QString &fileName);
+    void setData(const QQmlDataBlob::Ptr &, const QQmlDataBlob::SourceCodeData &);
+    void setCachedUnit(const QQmlDataBlob::Ptr &blob, const QQmlPrivate::CachedQmlUnit *unit);
 
     typedef QHash<QUrl, QQmlTypeData *> TypeCache;
     typedef QHash<QUrl, QQmlScriptBlob *> ScriptCache;

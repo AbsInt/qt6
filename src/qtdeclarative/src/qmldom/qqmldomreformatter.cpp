@@ -849,12 +849,15 @@ protected:
                 out(ast->identifierToken);
         }
         out(ast->lparenToken);
-        if (ast->isArrowFunction && ast->formals && ast->formals->next)
+        const bool needParentheses = ast->formals &&
+                (ast->formals->next ||
+                 (ast->formals->element && ast->formals->element->bindingTarget));
+        if (ast->isArrowFunction && needParentheses)
             out("(");
         int baseIndent = lw.increaseIndent(1);
         accept(ast->formals);
         lw.decreaseIndent(1, baseIndent);
-        if (ast->isArrowFunction && ast->formals && ast->formals->next)
+        if (ast->isArrowFunction && needParentheses)
             out(")");
         out(ast->rparenToken);
         if (ast->isArrowFunction && !ast->formals)
@@ -945,7 +948,11 @@ protected:
     bool visit(FormalParameterList *ast) override
     {
         for (FormalParameterList *it = ast; it; it = it->next) {
-            out(it->element->bindingIdentifier.toString()); // TODO
+            // compare FormalParameterList::finish
+            if (auto id = it->element->bindingIdentifier.toString(); !id.startsWith(u"arg#"))
+                out(id);
+            if (it->element->bindingTarget)
+                accept(it->element->bindingTarget);
             if (it->next)
                 out(", ");
         }
@@ -954,7 +961,11 @@ protected:
 
     // to check
     bool visit(TypeExpression *) override { return true; }
-    bool visit(SuperLiteral *) override { return true; }
+    bool visit(SuperLiteral *) override
+    {
+        out("super");
+        return true;
+    }
     bool visit(PatternProperty *) override { return true; }
     bool visit(ComputedPropertyName *) override
     {
@@ -977,7 +988,61 @@ protected:
     }
     bool visit(YieldExpression *) override { return true; }
     bool visit(ClassExpression *) override { return true; }
-    bool visit(ClassDeclaration *) override { return true; }
+
+    // Return false because we want to omit default function calls in accept0 implementation.
+    bool visit(ClassDeclaration *ast) override
+    {
+        preVisit(ast);
+        out(ast->classToken);
+        out(" ");
+        out(ast->name);
+        if (ast->heritage) {
+            out(" extends ");
+            accept(ast->heritage);
+        }
+        out(" {");
+        int baseIndent = lw.increaseIndent();
+        for (ClassElementList *it = ast->elements; it; it = it->next) {
+            PatternProperty *property = it->property;
+            lw.newline();
+            preVisit(property);
+            if (it->isStatic)
+                out("static ");
+            if (property->type == PatternProperty::Getter)
+                out("get ");
+            else if (property->type == PatternProperty::Setter)
+                out("set ");
+            FunctionExpression *f = AST::cast<FunctionExpression *>(property->initializer);
+            const bool scoped = f->lbraceToken.length != 0;
+            out(f->functionToken);
+            out(f->lparenToken);
+            accept(f->formals);
+            out(f->rparenToken);
+            out(f->lbraceToken);
+            if (scoped)
+                ++expressionDepth;
+            if (f->body) {
+                if (f->body->next || scoped) {
+                    lnAcceptIndented(f->body);
+                    lw.newline();
+                } else {
+                    baseIndent = lw.increaseIndent(1);
+                    accept(f->body);
+                    lw.decreaseIndent(1, baseIndent);
+                }
+            }
+            if (scoped)
+                --expressionDepth;
+            out(f->rbraceToken);
+            lw.newline();
+            postVisit(property);
+        }
+        lw.decreaseIndent(1, baseIndent);
+        out("}");
+        postVisit(ast);
+        return false;
+    }
+
     bool visit(ClassElementList *) override { return true; }
     bool visit(Program *) override { return true; }
     bool visit(NameSpaceImport *) override { return true; }
@@ -994,7 +1059,11 @@ protected:
     bool visit(ESModule *) override { return true; }
     bool visit(DebuggerStatement *) override { return true; }
     bool visit(Type *) override { return true; }
+#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
+    bool visit(TypeArgument *) override { return true; }
+#else
     bool visit(TypeArgumentList *) override { return true; }
+#endif
     bool visit(TypeAnnotation *) override { return true; }
 
     // overridden to use BasicVisitor (and ensure warnings about new added AST)
@@ -1111,7 +1180,11 @@ protected:
     void endVisit(ESModule *) override { }
     void endVisit(DebuggerStatement *) override { }
     void endVisit(Type *) override { }
+#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
+    void endVisit(TypeArgument *) override { }
+#else
     void endVisit(TypeArgumentList *) override { }
+#endif
     void endVisit(TypeAnnotation *) override { }
 
     void throwRecursionDepthError() override

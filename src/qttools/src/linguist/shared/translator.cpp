@@ -324,34 +324,34 @@ bool Translator::save(const QString &filename, ConversionData &cd, const QString
     return false;
 }
 
-QString Translator::makeLanguageCode(QLocale::Language language, QLocale::Country country)
+QString Translator::makeLanguageCode(QLocale::Language language, QLocale::Territory territory)
 {
     QString result = QLocale::languageToCode(language);
-    if (language != QLocale::C && country != QLocale::AnyCountry) {
+    if (language != QLocale::C && territory != QLocale::AnyTerritory) {
         result.append(QLatin1Char('_'));
-        result.append(QLocale::countryToCode(country));
+        result.append(QLocale::territoryToCode(territory));
     }
     return result;
 }
 
-void Translator::languageAndCountry(QStringView languageCode, QLocale::Language *langPtr,
-                                    QLocale::Country *countryPtr)
+void Translator::languageAndTerritory(QStringView languageCode, QLocale::Language *langPtr,
+                                    QLocale::Territory *territoryPtr)
 {
     QLocale::Language language = QLocale::AnyLanguage;
-    QLocale::Country country = QLocale::AnyCountry;
+    QLocale::Territory territory = QLocale::AnyTerritory;
     const auto underScore = languageCode.indexOf(u'_'); // "de_DE"
     if (underScore != -1) {
         language = QLocale::codeToLanguage(languageCode.left(underScore));
-        country = QLocale::codeToCountry(languageCode.mid(underScore + 1));
+        territory = QLocale::codeToTerritory(languageCode.mid(underScore + 1));
     } else {
         language = QLocale::codeToLanguage(languageCode);
-        country = QLocale(language).country();
+        territory = QLocale(language).territory();
     }
 
     if (langPtr)
         *langPtr = language;
-    if (countryPtr)
-        *countryPtr = country;
+    if (territoryPtr)
+        *territoryPtr = territory;
 }
 
 int Translator::find(const TranslatorMessage &msg) const
@@ -620,6 +620,9 @@ void Translator::reportDuplicates(const Duplicates &dupes,
                           << "\n* Source: " << qPrintable(msg.sourceText()) << std::endl;
                 if (!msg.comment().isEmpty())
                     std::cerr << "* Comment: " << qPrintable(msg.comment()) << std::endl;
+                const int tsLine = msg.tsLineNumber();
+                if (tsLine >= 0)
+                    std::cerr << "* Line in .ts File: " << msg.tsLineNumber() << std::endl;
             }
             std::cerr << std::endl;
         }
@@ -668,8 +671,8 @@ void Translator::normalizeTranslations(ConversionData &cd)
 {
     bool truncated = false;
     QLocale::Language l;
-    QLocale::Country c;
-    languageAndCountry(languageCode(), &l, &c);
+    QLocale::Territory c;
+    languageAndTerritory(languageCode(), &l, &c);
     int numPlurals = 1;
     if (l != QLocale::C) {
         QStringList forms;

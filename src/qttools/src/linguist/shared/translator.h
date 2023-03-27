@@ -5,6 +5,7 @@
 #define METATRANSLATOR_H
 
 #include "translatormessage.h"
+#include "fmt.h"
 
 #include <QCoreApplication>
 #include <QDir>
@@ -16,10 +17,6 @@
 
 
 QT_BEGIN_NAMESPACE
-
-class FMT {
-    Q_DECLARE_TR_FUNCTIONS(Linguist)
-};
 
 class QIODevice;
 
@@ -128,9 +125,9 @@ public:
     void setLocationsType(LocationsType lt) { m_locationsType = lt; }
     LocationsType locationsType() const { return m_locationsType; }
 
-    static QString makeLanguageCode(QLocale::Language language, QLocale::Country country);
-    static void languageAndCountry(QStringView languageCode,
-        QLocale::Language *langPtr, QLocale::Country *countryPtr);
+    static QString makeLanguageCode(QLocale::Language language, QLocale::Territory territory);
+    static void languageAndTerritory(QStringView languageCode, QLocale::Language *langPtr,
+                                     QLocale::Territory *territoryPtr);
     void setLanguageCode(const QString &languageCode) { m_language = languageCode; }
     void setSourceLanguageCode(const QString &languageCode) { m_sourceLanguage = languageCode; }
     static QString guessLanguageCodeFromFileName(const QString &fileName);
@@ -192,9 +189,9 @@ private:
     LocationsType m_locationsType;
 
     // A string beginning with a 2 or 3 letter language code (ISO 639-1
-    // or ISO-639-2), followed by the optional country variant to distinguish
-    //  between country-specific variations of the language. The language code
-    // and country code are always separated by '_'
+    // or ISO-639-2), followed by the optional territory variant to distinguish
+    // between territory-specific variations of the language. The language code
+    // and territory code are always separated by '_'
     // Note that the language part can also be a 3-letter ISO 639-2 code.
     // Legal examples:
     // 'pt'         portuguese, assumes portuguese from portugal
@@ -211,8 +208,8 @@ private:
     mutable QHash<TMMKey, int> m_msgIdx;
 };
 
-bool getNumerusInfo(QLocale::Language language, QLocale::Country country,
-                    QByteArray *rules, QStringList *forms, const char **gettextRules);
+bool getNumerusInfo(QLocale::Language language, QLocale::Territory territory, QByteArray *rules,
+                    QStringList *forms, const char **gettextRules);
 
 QString getNumerusInfoString();
 

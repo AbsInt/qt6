@@ -114,7 +114,7 @@ namespace QQmlPrivate
 #endif
     };
 
-    enum class ConstructionMode
+    enum class SingletonConstructionMode
     {
         None,
         Constructor,
@@ -139,33 +139,45 @@ namespace QQmlPrivate
     };
 
     template<typename T, typename WrapperT>
-    constexpr ConstructionMode constructionMode()
+    constexpr SingletonConstructionMode singletonConstructionMode()
     {
         if constexpr (!std::is_base_of<QObject, T>::value)
-            return ConstructionMode::None;
+            return SingletonConstructionMode::None;
         if constexpr (!std::is_same_v<T, WrapperT> && HasSingletonFactory<T, WrapperT>::value)
-            return ConstructionMode::FactoryWrapper;
+            return SingletonConstructionMode::FactoryWrapper;
         if constexpr (std::is_default_constructible<T>::value)
-            return ConstructionMode::Constructor;
+            return SingletonConstructionMode::Constructor;
         if constexpr (HasSingletonFactory<T>::value)
-            return ConstructionMode::Factory;
+            return SingletonConstructionMode::Factory;
 
-        return ConstructionMode::None;
+        return SingletonConstructionMode::None;
     }
+
+    template<typename>
+    struct QmlMarkerFunction;
+
+    template<typename Ret, typename Class>
+    struct QmlMarkerFunction<Ret (Class::*)()>
+    {
+        using ClassType = Class;
+    };
+
+    template<typename T, typename Marker>
+    using QmlTypeHasMarker = std::is_same<T, typename QmlMarkerFunction<Marker>::ClassType>;
 
     template<typename T>
     void createInto(void *memory, void *) { new (memory) QQmlElement<T>; }
 
-    template<typename T, typename WrapperT, ConstructionMode Mode>
+    template<typename T, typename WrapperT, SingletonConstructionMode Mode>
     QObject *createSingletonInstance(QQmlEngine *q, QJSEngine *j)
     {
         Q_UNUSED(q);
         Q_UNUSED(j);
-        if constexpr (Mode == ConstructionMode::Constructor)
+        if constexpr (Mode == SingletonConstructionMode::Constructor)
             return new T;
-        else if constexpr (Mode == ConstructionMode::Factory)
+        else if constexpr (Mode == SingletonConstructionMode::Factory)
             return T::create(q, j);
-        else if constexpr (Mode == ConstructionMode::FactoryWrapper)
+        else if constexpr (Mode == SingletonConstructionMode::FactoryWrapper)
             return WrapperT::create(q, j);
         else
             return nullptr;
@@ -179,39 +191,43 @@ namespace QQmlPrivate
     using CreateParentFunction = QObject *(*)(QObject *);
     using CreateValueTypeFunction = QVariant (*)(const QJSValue &);
 
-    template<typename T, typename WrapperT = T, ConstructionMode Mode = constructionMode<T, WrapperT>()>
+    template<typename T, typename WrapperT = T,
+             SingletonConstructionMode Mode = singletonConstructionMode<T, WrapperT>()>
     struct Constructors;
 
     template<typename T, typename WrapperT>
-    struct Constructors<T, WrapperT, ConstructionMode::Constructor>
+    struct Constructors<T, WrapperT, SingletonConstructionMode::Constructor>
     {
         static constexpr CreateIntoFunction createInto
                 = QQmlPrivate::createInto<T>;
         static constexpr CreateSingletonFunction createSingletonInstance
-                = QQmlPrivate::createSingletonInstance<T, WrapperT, ConstructionMode::Constructor>;
+                = QQmlPrivate::createSingletonInstance<
+                    T, WrapperT, SingletonConstructionMode::Constructor>;
     };
 
     template<typename T, typename WrapperT>
-    struct Constructors<T, WrapperT, ConstructionMode::None>
+    struct Constructors<T, WrapperT, SingletonConstructionMode::None>
     {
         static constexpr CreateIntoFunction createInto = nullptr;
         static constexpr CreateSingletonFunction createSingletonInstance = nullptr;
     };
 
     template<typename T, typename WrapperT>
-    struct Constructors<T, WrapperT, ConstructionMode::Factory>
+    struct Constructors<T, WrapperT, SingletonConstructionMode::Factory>
     {
         static constexpr CreateIntoFunction createInto = nullptr;
         static constexpr CreateSingletonFunction createSingletonInstance
-                = QQmlPrivate::createSingletonInstance<T, WrapperT, ConstructionMode::Factory>;
+                = QQmlPrivate::createSingletonInstance<
+                    T, WrapperT, SingletonConstructionMode::Factory>;
     };
 
     template<typename T, typename WrapperT>
-    struct Constructors<T, WrapperT, ConstructionMode::FactoryWrapper>
+    struct Constructors<T, WrapperT, SingletonConstructionMode::FactoryWrapper>
     {
         static constexpr CreateIntoFunction createInto = nullptr;
         static constexpr CreateSingletonFunction createSingletonInstance
-                = QQmlPrivate::createSingletonInstance<T, WrapperT, ConstructionMode::FactoryWrapper>;
+                = QQmlPrivate::createSingletonInstance<
+                    T, WrapperT, SingletonConstructionMode::FactoryWrapper>;
     };
 
     template<typename T,
@@ -353,7 +369,9 @@ namespace QQmlPrivate
             static Func attachedPropertiesFunc() { return nullptr; };
         };
 
-        using Type = typename OverridableAttachedType<T, typename T::QmlAttachedType>::Type;
+        using Type = typename std::conditional<
+                QmlTypeHasMarker<T, decltype(&T::qt_qmlMarker_attached)>::value,
+                typename OverridableAttachedType<T, typename T::QmlAttachedType>::Type, void>::type;
         using Func = typename Properties<T, Type>::Func;
 
         static const QMetaObject *staticMetaObject()
@@ -413,7 +431,18 @@ namespace QQmlPrivate
     enum AutoParentResult { Parented, IncompatibleObject, IncompatibleParent };
     typedef AutoParentResult (*AutoParentFunction)(QObject *object, QObject *parent);
 
+    enum class ValueTypeCreationMethod { None, Construct, Structured };
+
     struct RegisterType {
+        enum StructVersion: int {
+            Base = 0,
+            FinalizerCast = 1,
+            CreationMethod = 2,
+            CurrentVersion = CreationMethod,
+        };
+
+        bool has(StructVersion v) const { return structVersion >= int(v); }
+
         int structVersion;
 
         QMetaType typeId;
@@ -424,6 +453,7 @@ namespace QQmlPrivate
         void *userdata;
         QString noCreationReason;
 
+        // ### Qt7: Get rid of this. It can be covered by creationMethod below.
         QVariant (*createValueType)(const QJSValue &);
 
         const char *uri;
@@ -445,6 +475,8 @@ namespace QQmlPrivate
 
         QTypeRevision revision;
         int finalizerCast;
+
+        ValueTypeCreationMethod creationMethod;
         // If this is extended ensure "version" is bumped!!!
     };
 
@@ -600,9 +632,19 @@ namespace QQmlPrivate
         // Run QQmlPropertyCapture::captureProperty() without retrieving the value.
         bool captureLookup(uint index, QObject *object) const;
         bool captureQmlContextPropertyLookup(uint index) const;
+        void captureTranslation() const;
+        QString translationContext() const;
         QMetaType lookupResultMetaType(uint index) const;
         void storeNameSloppy(uint nameIndex, void *value, QMetaType type) const;
         QJSValue javaScriptGlobalProperty(uint nameIndex) const;
+
+        const QLoggingCategory *resolveLoggingCategory(QObject *wrapper, bool *ok) const;
+
+        void writeToConsole(
+                QtMsgType type, const QString &message,
+                const QLoggingCategory *loggingCategory) const;
+
+        QString objectToString(QObject *object) const;
 
         // All of these lookup functions should be used as follows:
         //
@@ -669,16 +711,21 @@ namespace QQmlPrivate
         void initSetValueLookup(uint index, const QMetaObject *metaObject, QMetaType type) const;
     };
 
-    struct AOTCompiledFunction {
+    struct TypedFunction {
         qintptr extraData;
         QMetaType returnType;
         QList<QMetaType> argumentTypes;
         void (*functionPtr)(const AOTCompiledContext *context, void *resultPtr, void **arguments);
     };
 
+#if QT_DEPRECATED_SINCE(6, 5)
+    QT_DEPRECATED_VERSION_X(6, 5, "Use TypedFunction instead")
+    typedef TypedFunction AOTCompiledFunction;
+#endif
+
     struct CachedQmlUnit {
         const QV4::CompiledData::Unit *qmlData;
-        const AOTCompiledFunction *aotCompiledFunctions;
+        const TypedFunction *aotCompiledFunctions;
         void *unused2;
     };
 
@@ -753,26 +800,18 @@ namespace QQmlPrivate
         const int index = indexOfOwnClassInfo(metaObject, key);
         return (index == -1) ? defaultValue
                              : QTypeRevision::fromEncodedVersion(
-                                   QByteArray(metaObject->classInfo(index).value()).toInt());
+                                   QLatin1StringView(metaObject->classInfo(index).value()).toInt());
     }
 
-    inline QList<QTypeRevision> revisionClassInfos(const QMetaObject *metaObject, const char *key)
-    {
-        QList<QTypeRevision> revisions;
-        for (int index = indexOfOwnClassInfo(metaObject, key); index != -1;
-             index = indexOfOwnClassInfo(metaObject, key, index - 1)) {
-            revisions.push_back(QTypeRevision::fromEncodedVersion(
-                          QByteArray(metaObject->classInfo(index).value()).toInt()));
-        }
-        return revisions;
-    }
+    Q_QML_EXPORT QList<QTypeRevision> revisionClassInfos(const QMetaObject *metaObject, const char *key);
 
     inline bool boolClassInfo(const QMetaObject *metaObject, const char *key,
                               bool defaultValue = false)
     {
         const int index = indexOfOwnClassInfo(metaObject, key);
-        return (index == -1) ? defaultValue
-                             : (QByteArray(metaObject->classInfo(index).value()) == "true");
+        if (index == -1)
+            return defaultValue;
+        return qstrcmp(metaObject->classInfo(index).value(), "true") == 0;
     }
 
     inline const char *classElementName(const QMetaObject *metaObject)
@@ -797,18 +836,6 @@ namespace QQmlPrivate
 
         return elementName;
     }
-
-    template<typename>
-    struct QmlMarkerFunction;
-
-    template<typename Ret, typename Class>
-    struct QmlMarkerFunction<Ret (Class::*)()>
-    {
-        using ClassType = Class;
-    };
-
-    template<typename T, typename Marker>
-    using QmlTypeHasMarker = std::is_same<T, typename QmlMarkerFunction<Marker>::ClassType>;
 
     template<class T, class = std::void_t<>>
     struct QmlExtended
@@ -851,8 +878,39 @@ namespace QQmlPrivate
     template<class T>
     struct QmlResolved<T, std::void_t<typename T::QmlForeignType>>
     {
-        using Type = typename T::QmlForeignType;
+        using Type = typename std::conditional<
+                QmlTypeHasMarker<T, decltype(&T::qt_qmlMarker_foreign)>::value,
+                typename T::QmlForeignType, T>::type;
     };
+
+    template<class T, class = std::void_t<>>
+    struct QmlUncreatable
+    {
+        static constexpr bool Value = false;
+    };
+
+    template<class T>
+    struct QmlUncreatable<T, std::void_t<typename T::QmlIsUncreatable>>
+    {
+        static constexpr bool Value =
+                QmlTypeHasMarker<T, decltype(&T::qt_qmlMarker_uncreatable)>::value
+                && bool(T::QmlIsUncreatable::yes);
+    };
+
+    template<class T, class = std::void_t<>>
+    struct QmlAnonymous
+    {
+        static constexpr bool Value = false;
+    };
+
+    template<class T>
+    struct QmlAnonymous<T, std::void_t<typename T::QmlIsAnonymous>>
+    {
+        static constexpr bool Value =
+                QmlTypeHasMarker<T, decltype(&T::qt_qmlMarker_anonymous)>::value
+                && bool(T::QmlIsAnonymous::yes);
+    };
+
 
     template<class T, class = std::void_t<>>
     struct QmlSingleton
@@ -863,7 +921,9 @@ namespace QQmlPrivate
     template<class T>
     struct QmlSingleton<T, std::void_t<typename T::QmlIsSingleton>>
     {
-        static constexpr bool Value = bool(T::QmlIsSingleton::yes);
+        static constexpr bool Value =
+                QmlTypeHasMarker<T, decltype(&T::qt_qmlMarker_singleton)>::value
+                && bool(T::QmlIsSingleton::yes);
     };
 
     template<class T, class = std::void_t<>>
@@ -909,8 +969,12 @@ namespace QQmlPrivate
     {
         static constexpr bool hasAcceptableCtors()
         {
-            return std::is_base_of_v<QObject, T>
-                    || (std::is_default_constructible_v<T> && std::is_copy_constructible_v<T>);
+            if constexpr (!std::is_default_constructible_v<T>)
+                return false;
+            else if constexpr (std::is_base_of_v<QObject, T>)
+                return true;
+            else
+                return std::is_copy_constructible_v<T>;
         }
 
         static QMetaType self()
@@ -972,22 +1036,6 @@ namespace QQmlPrivate
                                      QVector<int> *qmlTypeIds, const QMetaObject *extension,
                                      bool forceAnonymous = false)
     {
-#if QT_DEPRECATED_SINCE(6, 4)
-        // ### Qt7: Remove the warnings, and leave only the static asserts below.
-        if (!QmlMetaType<T>::hasAcceptableCtors()) {
-            qWarning() << QMetaType::fromType<T>().name()
-                       << "is neither a QObject, nor default- and copy-constructible."
-                       << "You should not use it as a QML type.";
-        }
-        if (!std::is_base_of_v<QObject, T> && QQmlTypeInfo<T>::hasAttachedProperties) {
-            qWarning() << QMetaType::fromType<T>().name()
-                       << "is not a QObject, but has attached properties. This won't work.";
-        }
-#else
-        static_assert(QmlMetaType<T>::hasAcceptableCtors());
-        static_assert(std::is_base_of_v<QObject, T> || !QQmlTypeInfo<T>::hasAttachedProperties);
-#endif
-
         RegisterTypeAndRevisions type = {
             3,
             QmlMetaType<T>::self(),
@@ -1075,6 +1123,14 @@ namespace QQmlPrivate
     }
 
     Q_QML_EXPORT QObject *qmlExtendedObject(QObject *, int);
+
+    enum QmlRegistrationWarning {
+        UnconstructibleType,
+        UnconstructibleSingleton,
+        NonQObjectWithAtached,
+    };
+
+    Q_QML_EXPORT void qmlRegistrationWarning(QmlRegistrationWarning warning, QMetaType type);
 
 } // namespace QQmlPrivate
 

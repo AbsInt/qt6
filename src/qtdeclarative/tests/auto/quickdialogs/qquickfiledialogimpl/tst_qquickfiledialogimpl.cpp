@@ -66,6 +66,7 @@ private slots:
     void chooseFileAndThenFolderViaTextEdit();
     void cancelDialogWhileTextEditHasFocus();
     void closingDialogCancels();
+    void goUp_data();
     void goUp();
     void goUpWhileTextEditHasFocus();
     void goIntoLargeFolder();
@@ -315,8 +316,8 @@ void tst_QQuickFileDialogImpl::chooseFileViaStandardButtons()
     COMPARE_URL(delegate->file(), QUrl::fromLocalFile(tempFile2->fileName()));
     QVERIFY(clickButton(delegate));
     VERIFY_FILE_SELECTED_AND_FOCUSED(QUrl::fromLocalFile(tempDir.path()), QUrl::fromLocalFile(tempFile2->fileName()), 2);
-    QCOMPARE(dialogSelectedFileChangedSpy.count(), 1);
-    QCOMPARE(dialogCurrentFileChangedSpy.count(), 1);
+    QCOMPARE(dialogSelectedFileChangedSpy.size(), 1);
+    QCOMPARE(dialogCurrentFileChangedSpy.size(), 1);
 
     // Click the "Open" button.
     QVERIFY(dialogHelper.quickDialog->footer());
@@ -328,8 +329,8 @@ void tst_QQuickFileDialogImpl::chooseFileViaStandardButtons()
     COMPARE_URL(dialogHelper.dialog->selectedFile(), QUrl::fromLocalFile(tempFile2->fileName()));
     COMPARE_URLS(dialogHelper.dialog->selectedFiles(), { QUrl::fromLocalFile(tempFile2->fileName()) });
     COMPARE_URL(dialogHelper.quickDialog->selectedFile(), QUrl::fromLocalFile(tempFile2->fileName()));
-    QCOMPARE(dialogSelectedFileChangedSpy.count(), 1);
-    QCOMPARE(dialogCurrentFileChangedSpy.count(), 1);
+    QCOMPARE(dialogSelectedFileChangedSpy.size(), 1);
+    QCOMPARE(dialogCurrentFileChangedSpy.size(), 1);
     QTRY_VERIFY(!dialogHelper.quickDialog->isVisible());
     QVERIFY(!dialogHelper.dialog->isVisible());
 }
@@ -492,7 +493,7 @@ void tst_QQuickFileDialogImpl::changeFolderViaDoubleClick()
 {
     QFETCH(bool, showDirsFirst);
 
-    qputenv("QT_QUICK_DIALOGS_SHOW_DIRS_FIRST", showDirsFirst ? "true" : "false");
+    qputenv("QT_QUICK_DIALOGS_SHOW_DIRS_FIRST", showDirsFirst ? "1" : "0");
 
     // Open the dialog.
     FileDialogTestHelper dialogHelper(this, "fileDialog.qml");
@@ -696,8 +697,20 @@ void tst_QQuickFileDialogImpl::closingDialogCancels()
     QCOMPARE(rejected.size(), 1);
 }
 
+void tst_QQuickFileDialogImpl::goUp_data()
+{
+    QTest::addColumn<bool>("showDirsFirst");
+
+    QTest::newRow("showDirsFirst=true") << true;
+    QTest::newRow("showDirsFirst=false") << false;
+}
+
 void tst_QQuickFileDialogImpl::goUp()
 {
+    QFETCH(bool, showDirsFirst);
+
+    qputenv("QT_QUICK_DIALOGS_SHOW_DIRS_FIRST", showDirsFirst ? "1" : "0");
+
     // Open the dialog. Start off in "sub-dir".
     FileDialogTestHelper dialogHelper(this, "bindCurrentFolder.qml", {},
         {{ "initialFolder", QUrl::fromLocalFile(tempSubDir.path()) }});
@@ -714,7 +727,8 @@ void tst_QQuickFileDialogImpl::goUp()
         QVERIFY(QQuickTest::qWaitForPolish(barListView));
     QVERIFY(clickButton(breadcrumbBar->upButton()));
     // The previous directory that we were in should now be selected (matches e.g. Windows and Ubuntu).
-    VERIFY_FILE_SELECTED_AND_FOCUSED(QUrl::fromLocalFile(tempDir.path()), QUrl::fromLocalFile(tempSubDir.path()), 0);
+    int expectedCurrentIndex = showDirsFirst ? 0 : 2;
+    VERIFY_FILE_SELECTED_AND_FOCUSED(QUrl::fromLocalFile(tempDir.path()), QUrl::fromLocalFile(tempSubDir.path()), expectedCurrentIndex);
 
     // Go up a directory via the keyboard shortcut.
     QDir tempParentDir(tempDir.path());
@@ -724,7 +738,7 @@ void tst_QQuickFileDialogImpl::goUp()
     QTest::keySequence(dialogHelper.window(), goUpKeySequence);
     // Ubuntu on QEMU arm shows no files in /tmp even if there are.
     if (!filesInTempParentDir.isEmpty()) {
-        const int expectedCurrentIndex = filesInTempParentDir.indexOf(QFileInfo(tempDir.path()));
+        expectedCurrentIndex = filesInTempParentDir.indexOf(QFileInfo(tempDir.path()));
         QVERIFY(expectedCurrentIndex != -1);
         VERIFY_FILE_SELECTED_AND_FOCUSED(QUrl::fromLocalFile(tempParentDir.path()), QUrl::fromLocalFile(tempDir.path()), expectedCurrentIndex);
     }
@@ -897,7 +911,7 @@ void tst_QQuickFileDialogImpl::changeNameFilters()
     const QStringList nameFilters = { "Text files (*.txt)", "HTML files (*.html)" };
     dialogHelper.dialog->setNameFilters(nameFilters);
     QCOMPARE(dialogHelper.dialog->nameFilters(), nameFilters);
-    QCOMPARE(nameFiltersChangedSpy.count(), 1);
+    QCOMPARE(nameFiltersChangedSpy.size(), 1);
     QCOMPARE(dialogHelper.dialog->selectedNameFilter()->name(), "Text files");
     QCOMPARE(dialogHelper.dialog->selectedNameFilter()->index(), 0);
     QCOMPARE(dialogHelper.dialog->selectedNameFilter()->extensions(), { "txt" });

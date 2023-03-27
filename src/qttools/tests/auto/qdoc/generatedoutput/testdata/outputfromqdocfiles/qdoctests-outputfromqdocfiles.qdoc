@@ -51,6 +51,10 @@
 
     This section title is overridden by another target which takes
     precedence.
+
+    \section1 Linking to \l {Further information}{something} in a section title
+
+    This is allowed but a questionable practice.
 */
 
 /*!
@@ -112,10 +116,6 @@
 
     \dots
 
-    \js
-        // If I knew JavaScript, this is where I would write it.
-    \endjs
-
     \qmltext
         And if I knew qmltext, I guess this is where that would go.
     \endqmltext
@@ -149,6 +149,54 @@
 
     \hr
 
+    \section1 Images
+
+    An image without any text:
+
+    \image leonardo-da-vinci.png
+
+    An image with just an alternative text:
+
+    \image leonardo-da-vinci.png Image alt
+
+    An image with alternative text and 1-atom caption:
+
+    \image leonardo-da-vinci.png Image alt
+    \caption Image caption
+
+    An image with alternative text and 2-atom caption:
+
+    \image leonardo-da-vinci.png Image alt
+    \caption Image caption with \b {bold} text
+
+    A bordered image:
+
+    \borderedimage leonardo-da-vinci.png
+
+    //! A bordered image with alternative text:
+    //!
+    //! \borderedimage leonardo-da-vinci.png Screenshot of the Drill Down Example
+    //! It looks like this macro is not written to handle alternative text (no \2)
+
+    A bordered image with a caption:
+
+    \borderedimage leonardo-da-vinci.png
+    \caption Screenshot of the System Tray Icon
+
+    An inline image:
+
+    The is a paragraph containing an \inlineimage 01.png inline image to test
+    if qdoc handles them properly, without considering rest of the line as
+    alt text for the image.
+
+    An inline image with alt text:
+
+    Here is another example of \inlineimage 01.png {No. 1} inline image with
+    alternative text, which should be added as an attribute to the inline
+    image.
+
+    \section1 Commands not yet tested
+
     \warning The following commands have yet to be tested:
     footnote
     link
@@ -157,7 +205,6 @@
     header
     index
     topicref // or just don’t care, remove it
-    image
     inlineimage
     printline
     printto

@@ -411,7 +411,9 @@ bool HelpGeneratorPrivate::insertFiles(const QStringList &files, const QString &
     if (filterSetId < 0)
         return false;
     ++filterSetId;
-    for (int attId : std::as_const(filterAtts)) {
+    QList<int> attValues = filterAtts.values();
+    std::sort(attValues.begin(), attValues.end());
+    for (int attId : std::as_const(attValues)) {
         m_query->prepare(QLatin1String("INSERT INTO FileAttributeSetTable "
             "VALUES(?, ?)"));
         m_query->bindValue(0, filterSetId);

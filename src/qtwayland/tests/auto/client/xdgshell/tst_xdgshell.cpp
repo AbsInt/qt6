@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "mockcompositor.h"
-#include <QtOpenGL/QOpenGLWindow>
 #include <QtGui/QRasterWindow>
 #include <QtGui/qpa/qplatformnativeinterface.h>
 #include <QtWaylandClient/private/wayland-wayland-client-protocol.h>
@@ -14,11 +13,13 @@ class tst_xdgshell : public QObject, private DefaultCompositor
 {
     Q_OBJECT
 private slots:
+    void init();
     void cleanup() { QTRY_VERIFY2(isClean(), qPrintable(dirtyMessage())); }
     void showMinimized();
     void basicConfigure();
     void configureSize();
     void configureStates();
+    void configureBounds();
     void popup();
     void tooltipOnPopup();
     void tooltipAndSiblingPopup();
@@ -30,6 +31,11 @@ private slots:
     void foreignSurface();
     void nativeResources();
 };
+
+void tst_xdgshell::init()
+{
+    setenv("QT_WAYLAND_DISABLE_WINDOWDECORATION", "1", 1);
+}
 
 void tst_xdgshell::showMinimized()
 {
@@ -170,6 +176,30 @@ void tst_xdgshell::configureStates()
     QVERIFY(qunsetenv("QT_WAYLAND_FRAME_CALLBACK_TIMEOUT"));
 }
 
+void tst_xdgshell::configureBounds()
+{
+    QRasterWindow window;
+    window.resize(1280, 1024);
+    window.show();
+    QCOMPOSITOR_TRY_VERIFY(xdgToplevel());
+
+    // Take xdg_toplevel.configure_bounds into account only if the configure event has 0x0 size.
+    const uint serial1 = exec([=] {
+        xdgToplevel()->sendConfigureBounds(QSize(800, 600));
+        return xdgToplevel()->sendCompleteConfigure(QSize(0, 0), { XdgToplevel::state_activated });
+    });
+    QCOMPOSITOR_TRY_COMPARE(xdgSurface()->m_committedConfigureSerial, serial1);
+    QCOMPARE(window.frameGeometry().size(), QSize(800, 600));
+
+    // Window size in xdg_toplevel configure events takes precedence over the configure bounds.
+    const uint serial2 = exec([=] {
+        xdgToplevel()->sendConfigureBounds(QSize(800, 600));
+        return xdgToplevel()->sendCompleteConfigure(QSize(1600, 900), { XdgToplevel::state_activated });
+    });
+    QCOMPOSITOR_TRY_COMPARE(xdgSurface()->m_committedConfigureSerial, serial2);
+    QCOMPARE(window.frameGeometry().size(), QSize(1600, 900));
+}
+
 void tst_xdgshell::popup()
 {
     class Window : public QRasterWindow {
@@ -215,8 +245,8 @@ void tst_xdgshell::popup()
     QRasterWindow *popup = window.m_popup.get();
     QVERIFY(!popup->isExposed()); // wait for configure
 
-    //TODO: Verify it works with a different configure window geometry
-    exec([=] { xdgPopup()->sendConfigure(QRect(100, 100, 100, 100)); });
+    QRect rect1 = QRect(100, 100, 100, 100);
+    exec([=] { xdgPopup()->sendConfigure(rect1); });
 
     // Nothing should happen before the *xdg_surface* configure
     QTRY_VERIFY(!popup->isExposed()); // Popup shouldn't be exposed before the first configure event
@@ -232,6 +262,18 @@ void tst_xdgshell::popup()
     // The client is now going to ack the configure
     QTRY_COMPARE(popupConfigureSpy.size(), 1);
     QCOMPARE(popupConfigureSpy.takeFirst().at(0).toUInt(), configureSerial);
+    QCOMPARE(popup->geometry(), rect1);
+
+    QRect rect2 = QRect(50, 50, 150, 150);
+    exec([=] { xdgPopup()->sendConfigure(rect2); });
+
+    const uint configureSerial2 = exec([=] {
+        return xdgPopup()->m_xdgSurface->sendConfigure();
+    });
+
+    QTRY_COMPARE(popupConfigureSpy.size(), 1);
+    QCOMPARE(popupConfigureSpy.takeFirst().at(0).toUInt(), configureSerial2);
+    QCOMPARE(popup->geometry(), rect2);
 
     // And attach a buffer
     exec([&] {

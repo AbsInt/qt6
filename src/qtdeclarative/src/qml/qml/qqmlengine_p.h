@@ -161,10 +161,8 @@ public:
 
     // Unfortunate workaround to avoid a circular dependency between
     // qqmlengine_p.h and qqmlincubator_p.h
-    struct Incubator : public QSharedData {
+    struct Incubator {
         QIntrusiveListNode next;
-        // Unfortunate workaround for MSVC
-        QIntrusiveListNode nextWaitingFor;
     };
     QIntrusiveList<Incubator, &Incubator::next> incubatorList;
     unsigned int incubatorCount = 0;
@@ -214,7 +212,7 @@ public:
             return *it;
 
         if (QQmlValueType *valueType = QQmlMetaType::valueType(type)) {
-            QQmlGadgetPtrWrapper *instance = new QQmlGadgetPtrWrapper(valueType, q_func());
+            QQmlGadgetPtrWrapper *instance = new QQmlGadgetPtrWrapper(valueType);
             cachedValueTypeInstances.insert(typeIndex, instance);
             return instance;
         }
@@ -379,6 +377,27 @@ template<typename T>
 T QQmlEnginePrivate::singletonInstance(const QQmlType &type) {
     return qobject_cast<T>(singletonInstance<QJSValue>(type).toQObject());
 }
+
+struct LoadHelper final : QQmlTypeLoader::Blob
+{
+    LoadHelper(QQmlTypeLoader *loader, QAnyStringView uri);
+
+    struct ResolveTypeResult
+    {
+        enum Status { NoSuchModule, ModuleFound } status;
+        QQmlType type;
+    };
+
+    ResolveTypeResult resolveType(QAnyStringView typeName);
+
+protected:
+    void dataReceived(const SourceCodeData &) final { Q_UNREACHABLE(); }
+    void initializeFromCachedUnit(const QQmlPrivate::CachedQmlUnit *) final { Q_UNREACHABLE(); }
+
+private:
+    bool couldFindModule() const;
+    QString m_uri;
+};
 
 
 QT_END_NAMESPACE

@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 #####################################################################
 ## tst_reformatter:
 #####################################################################
@@ -12,8 +15,8 @@ qt_internal_add_test(tst_reformatter
         tst_reformatter.cpp tst_reformatter.h
     DEFINES
         QT_DEPRECATED_WARNINGS
-        QT_QMLTEST_DATADIR=\\\"${CMAKE_CURRENT_SOURCE_DIR}/../domdata\\\"
-    PUBLIC_LIBRARIES
+        QT_QMLTEST_DATADIR="${CMAKE_CURRENT_SOURCE_DIR}/../domdata"
+    LIBRARIES
         Qt::Core
         Qt::QmlDomPrivate
         Qt::Test
@@ -22,5 +25,5 @@ qt_internal_add_test(tst_reformatter
 
 qt_internal_extend_target(tst_reformatter CONDITION ANDROID OR IOS
     DEFINES
-        QT_REFORMATTERTEST_DATADIR=\\\":/domdata\\\"
+        QT_REFORMATTERTEST_DATADIR=":/domdata"
 )

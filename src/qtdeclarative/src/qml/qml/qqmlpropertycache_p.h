@@ -232,7 +232,7 @@ private:
     friend class QQmlCompiler;
     template <typename T> friend class QQmlPropertyCacheCreator;
     template <typename T> friend class QQmlPropertyCacheAliasCreator;
-    friend class QQmlComponentAndAliasResolver;
+    template <typename T> friend class QQmlComponentAndAliasResolver;
     friend class QQmlMetaObject;
 
     QQmlPropertyCache(const QQmlMetaObjectPointer &metaObject) : _metaObject(metaObject) {}
@@ -263,10 +263,9 @@ private:
     }
 
     template<typename K>
-    void setNamedProperty(const K &key, int index, QQmlPropertyData *data, bool isOverride)
+    void setNamedProperty(const K &key, int index, QQmlPropertyData *data)
     {
         stringCache.insert(key, qMakePair(index, data));
-        _hasPropertyOverrides |= isOverride;
     }
 
 private:
@@ -311,7 +310,6 @@ private:
     int methodIndexCacheStart = 0;
     int signalHandlerIndexCacheStart = 0;
     int _jsFactoryMethodIndex = -1;
-    bool _hasPropertyOverrides = false;
 };
 
 // Returns this property cache's metaObject.  May be null if it hasn't been created yet.
@@ -434,7 +432,7 @@ bool QQmlPropertyCache::isAllowedInRevision(const QQmlPropertyData *data) const
 
 int QQmlPropertyCache::propertyCount() const
 {
-    return propertyIndexCacheStart + propertyIndexCache.size();
+    return propertyIndexCacheStart + int(propertyIndexCache.size());
 }
 
 int QQmlPropertyCache::propertyOffset() const
@@ -444,7 +442,7 @@ int QQmlPropertyCache::propertyOffset() const
 
 int QQmlPropertyCache::methodCount() const
 {
-    return methodIndexCacheStart + methodIndexCache.size();
+    return methodIndexCacheStart + int(methodIndexCache.size());
 }
 
 int QQmlPropertyCache::methodOffset() const
@@ -454,7 +452,7 @@ int QQmlPropertyCache::methodOffset() const
 
 int QQmlPropertyCache::signalCount() const
 {
-    return signalHandlerIndexCacheStart + signalHandlerIndexCache.size();
+    return signalHandlerIndexCacheStart + int(signalHandlerIndexCache.size());
 }
 
 int QQmlPropertyCache::signalOffset() const
@@ -464,7 +462,7 @@ int QQmlPropertyCache::signalOffset() const
 
 int QQmlPropertyCache::qmlEnumCount() const
 {
-    return enumCache.size();
+    return int(enumCache.size());
 }
 
 bool QQmlPropertyCache::callJSFactoryMethod(QObject *object, void **args) const

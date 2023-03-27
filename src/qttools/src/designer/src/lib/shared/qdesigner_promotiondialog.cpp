@@ -188,7 +188,6 @@ namespace qdesigner_internal {
         m_buttonBox = createButtonBox();
         setModal(true);
         setWindowTitle(tr("Promoted Widgets"));
-        setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
 
         QVBoxLayout *vboxLayout = new QVBoxLayout(this);
 
@@ -281,10 +280,8 @@ namespace qdesigner_internal {
         if (rc.isEmpty()) {
             // Convert the item list into a string list.
             const WidgetDataBaseItemList dbItems =  promotion->promotionBaseClasses();
-            const WidgetDataBaseItemList::const_iterator cend =  dbItems.constEnd();
-            for (WidgetDataBaseItemList::const_iterator it = dbItems.constBegin() ; it != cend; ++it) {
-                rc.push_back( (*it)->name());
-            }
+            for (auto *item : dbItems)
+                rc.append(item->name());
         }
         return rc;
     }

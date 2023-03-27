@@ -280,8 +280,6 @@ public:
     ~Pointer() override;
     QWaylandWindow *focusWindow() const;
 #if QT_CONFIG(cursor)
-    QString cursorThemeName() const;
-    int cursorSize() const; // in surface coordinates
     int idealCursorScale() const;
     void updateCursorTheme();
     void updateCursor();
@@ -308,6 +306,7 @@ protected:
     void pointer_axis_stop(uint32_t time, uint32_t axis) override;
     void pointer_axis_discrete(uint32_t axis, int32_t value) override;
     void pointer_frame() override;
+    void pointer_axis_value120(uint32_t axis, int32_t value120) override;
 
 private slots:
     void handleFocusDestroyed() { invalidateFocus(); }
@@ -343,7 +342,7 @@ public:
         QWaylandPointerEvent *event = nullptr;
 
         QPointF delta;
-        QPoint discreteDelta;
+        QPoint delta120;
         axis_source axisSource = axis_source_wheel;
 
         void resetScrollData();

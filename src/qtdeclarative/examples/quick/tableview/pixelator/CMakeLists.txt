@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 cmake_minimum_required(VERSION 3.16)
 project(qml_pixelator LANGUAGES CXX)
 
@@ -11,17 +14,16 @@ set(INSTALL_EXAMPLEDIR "${INSTALL_EXAMPLESDIR}/quick/tableview/pixelator")
 
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Qml Quick)
 
+qt_standard_project_setup(REQUIRES 6.5)
+
 qt_add_executable(qml_pixelator
+    WIN32
+    MACOSX_BUNDLE
     imagemodel.cpp imagemodel.h
     main.cpp
 )
 
-set_target_properties(qml_pixelator PROPERTIES
-    WIN32_EXECUTABLE TRUE
-    MACOSX_BUNDLE TRUE
-)
-
-target_link_libraries(qml_pixelator PUBLIC
+target_link_libraries(qml_pixelator PRIVATE
     Qt::Core
     Qt::Gui
     Qt::Qml
@@ -30,7 +32,6 @@ target_link_libraries(qml_pixelator PUBLIC
 
 qt_add_qml_module(qml_pixelator
     URI ImageModel
-    VERSION 1.0
     QML_FILES main.qml
     RESOURCES qt.png
     NO_RESOURCE_TARGET_PATH

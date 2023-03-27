@@ -1,4 +1,5 @@
-# Generated from qicon_svg.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## tst_qicon_svg Test:
@@ -11,10 +12,10 @@ file(GLOB_RECURSE test_data_glob
 list(APPEND test_data ${test_data_glob})
 
 qt_internal_add_test(tst_qicon_svg
-    LOWDPI # special case
+    LOWDPI
     SOURCES
         tst_qicon_svg.cpp
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Gui
         Qt::GuiPrivate
         Qt::Svg

@@ -64,10 +64,13 @@ class QMLDOM_EXPORT ExternalItemPairBase: public OwningItem { // all access shou
 public:
     constexpr static DomType kindValue = DomType::ExternalItemPair;
     DomType kind() const final override { return kindValue; }
-    ExternalItemPairBase(QDateTime validExposedAt = QDateTime::fromMSecsSinceEpoch(0),
-                         QDateTime currentExposedAt = QDateTime::fromMSecsSinceEpoch(0),
-                         int derivedFrom=0, QDateTime lastDataUpdateAt = QDateTime::fromMSecsSinceEpoch(0)):
-        OwningItem(derivedFrom, lastDataUpdateAt), validExposedAt(validExposedAt), currentExposedAt(currentExposedAt)
+    ExternalItemPairBase(QDateTime validExposedAt = QDateTime::fromMSecsSinceEpoch(0, UTC),
+                         QDateTime currentExposedAt = QDateTime::fromMSecsSinceEpoch(0, UTC),
+                         int derivedFrom = 0,
+                         QDateTime lastDataUpdateAt = QDateTime::fromMSecsSinceEpoch(0, UTC))
+        : OwningItem(derivedFrom, lastDataUpdateAt),
+          validExposedAt(validExposedAt),
+          currentExposedAt(currentExposedAt)
     {}
     ExternalItemPairBase(const ExternalItemPairBase &o):
         OwningItem(o), validExposedAt(o.validExposedAt), currentExposedAt(o.currentExposedAt)
@@ -118,18 +121,20 @@ class QMLDOM_EXPORT ExternalItemPair final : public ExternalItemPairBase
 protected:
     std::shared_ptr<OwningItem> doCopy(DomItem &) const override
     {
-        return std::shared_ptr<OwningItem>(new ExternalItemPair(*this));
+        return std::make_shared<ExternalItemPair>(*this);
     }
 
 public:
     constexpr static DomType kindValue = DomType::ExternalItemPair;
     friend class DomUniverse;
     ExternalItemPair(std::shared_ptr<T> valid = {}, std::shared_ptr<T> current = {},
-                     QDateTime validExposedAt = QDateTime::fromMSecsSinceEpoch(0),
-                     QDateTime currentExposedAt = QDateTime::fromMSecsSinceEpoch(0),
-                     int derivedFrom = 0, QDateTime lastDataUpdateAt = QDateTime::fromMSecsSinceEpoch(0)):
-        ExternalItemPairBase(validExposedAt, currentExposedAt, derivedFrom, lastDataUpdateAt),
-        valid(valid), current(current)
+                     QDateTime validExposedAt = QDateTime::fromMSecsSinceEpoch(0, UTC),
+                     QDateTime currentExposedAt = QDateTime::fromMSecsSinceEpoch(0, UTC),
+                     int derivedFrom = 0,
+                     QDateTime lastDataUpdateAt = QDateTime::fromMSecsSinceEpoch(0, UTC))
+        : ExternalItemPairBase(validExposedAt, currentExposedAt, derivedFrom, lastDataUpdateAt),
+          valid(valid),
+          current(current)
     {}
     ExternalItemPair(const ExternalItemPair &o):
         ExternalItemPairBase(o), valid(o.valid), current(o.current)
@@ -238,9 +243,9 @@ public:
     {
         if (auto current = globalScopeWithName(name))
             return current;
-        std::shared_ptr<GlobalScope> newScope(new GlobalScope(name));
-        std::shared_ptr<ExternalItemPair<GlobalScope>> newValue(
-                new ExternalItemPair<GlobalScope>(newScope, newScope));
+        auto newScope = std::make_shared<GlobalScope>(name);
+        auto newValue = std::make_shared<ExternalItemPair<GlobalScope>>(
+                newScope, newScope);
         QMutexLocker l(mutex());
         if (auto current = m_globalScopeWithName.value(name))
             return current;
@@ -364,9 +369,9 @@ public:
     constexpr static DomType kindValue = DomType::ExternalItemInfo;
     DomType kind() const final override { return kindValue; }
     ExternalItemInfoBase(Path canonicalPath,
-                         QDateTime currentExposedAt = QDateTime::fromMSecsSinceEpoch(0),
+                         QDateTime currentExposedAt = QDateTime::fromMSecsSinceEpoch(0, UTC),
                          int derivedFrom = 0,
-                         QDateTime lastDataUpdateAt = QDateTime::fromMSecsSinceEpoch(0))
+                         QDateTime lastDataUpdateAt = QDateTime::fromMSecsSinceEpoch(0, UTC))
         : OwningItem(derivedFrom, lastDataUpdateAt),
           m_canonicalPath(canonicalPath),
           m_currentExposedAt(currentExposedAt)
@@ -443,15 +448,15 @@ class ExternalItemInfo final : public ExternalItemInfoBase
 protected:
     std::shared_ptr<OwningItem> doCopy(DomItem &) const override
     {
-        return std::shared_ptr<ExternalItemInfo>(new ExternalItemInfo(*this));
+        return std::make_shared<ExternalItemInfo>(*this);
     }
 
 public:
     constexpr static DomType kindValue = DomType::ExternalItemInfo;
     ExternalItemInfo(std::shared_ptr<T> current = std::shared_ptr<T>(),
-                     QDateTime currentExposedAt = QDateTime::fromMSecsSinceEpoch(0),
+                     QDateTime currentExposedAt = QDateTime::fromMSecsSinceEpoch(0, UTC),
                      int derivedFrom = 0,
-                     QDateTime lastDataUpdateAt = QDateTime::fromMSecsSinceEpoch(0))
+                     QDateTime lastDataUpdateAt = QDateTime::fromMSecsSinceEpoch(0, UTC))
         : ExternalItemInfoBase(current->canonicalPath().dropTail(), currentExposedAt, derivedFrom,
                                lastDataUpdateAt),
           current(current)
@@ -509,7 +514,8 @@ public:
     };
 
     LoadInfo(Path elPath = Path(), Status status = Status::NotStarted, int nLoaded = 0,
-             int derivedFrom = 0, QDateTime lastDataUpdateAt = QDateTime::fromMSecsSinceEpoch(0))
+             int derivedFrom = 0,
+             QDateTime lastDataUpdateAt = QDateTime::fromMSecsSinceEpoch(0, UTC))
         : OwningItem(derivedFrom, lastDataUpdateAt),
           m_elementCanonicalPath(elPath),
           m_status(status),

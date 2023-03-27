@@ -18,7 +18,7 @@
 #include <algorithm>
 #include <initializer_list>
 #include <iterator>
-#include <memory>
+#include <QtCore/q20memory.h>
 #include <new>
 
 #include <string.h>
@@ -52,7 +52,8 @@ protected:
     qsizetype s;      // size
     void *ptr;     // data
 
-    Q_ALWAYS_INLINE constexpr void verify(qsizetype pos = 0, qsizetype n = 1) const
+    Q_ALWAYS_INLINE constexpr void verify([[maybe_unused]] qsizetype pos = 0,
+                                          [[maybe_unused]] qsizetype n = 1) const
     {
         Q_ASSERT(pos >= 0);
         Q_ASSERT(pos <= size());
@@ -194,7 +195,7 @@ protected:
     {
         if (size() == capacity()) // ie. size() != 0
             growBy(prealloc, array, 1);
-        reference r = *new (end()) T(std::forward<Args>(args)...);
+        reference r = *q20::construct_at(end(), std::forward<Args>(args)...);
         ++s;
         return r;
     }
@@ -224,7 +225,7 @@ protected:
         }
         reallocate_impl(prealloc, array, sz, qMax(sz, capacity()));
         while (size() < sz) {
-            new (data() + size()) T(v);
+            q20::construct_at(data() + size(), v);
             ++s;
         }
     }
@@ -234,7 +235,7 @@ protected:
         if constexpr (QTypeInfo<T>::isComplex) {
             // call default constructor for new objects (which can throw)
             while (size() < sz) {
-                new (data() + size()) T;
+                q20::construct_at(data() + size());
                 ++s;
             }
         } else {
@@ -259,6 +260,7 @@ class QVarLengthArray
     friend class QVarLengthArray;
     using Base = QVLABase<T>;
     using Storage = QVLAStorage<sizeof(T), alignof(T), Prealloc>;
+    static_assert(Prealloc > 0, "QVarLengthArray Prealloc must be greater than 0.");
     static_assert(std::is_nothrow_destructible_v<T>, "Types with throwing destructors are not supported in Qt containers.");
     using Base::verify;
 
@@ -653,23 +655,22 @@ QVarLengthArray(InputIterator, InputIterator) -> QVarLengthArray<ValueType>;
 
 template <class T, qsizetype Prealloc>
 Q_INLINE_TEMPLATE QVarLengthArray<T, Prealloc>::QVarLengthArray(qsizetype asize)
+    : QVarLengthArray()
 {
+    Q_ASSERT_X(asize >= 0, "QVarLengthArray::QVarLengthArray(qsizetype)",
+               "Size must be greater than or equal to 0.");
+
+    // historically, this ctor worked for non-copyable/non-movable T, so keep it working, why not?
+    // resize(asize) // this requires a movable or copyable T, can't use, need to do it by hand
+
+    if (asize > Prealloc) {
+        this->ptr = malloc(asize * sizeof(T));
+        Q_CHECK_PTR(this->ptr);
+        this->a = asize;
+    }
+    if constexpr (QTypeInfo<T>::isComplex)
+        std::uninitialized_default_construct_n(data(), asize);
     this->s = asize;
-    static_assert(Prealloc > 0, "QVarLengthArray Prealloc must be greater than 0.");
-    Q_ASSERT_X(size() >= 0, "QVarLengthArray::QVarLengthArray()", "Size must be greater than or equal to 0.");
-    if (size() > Prealloc) {
-        this->ptr = malloc(size() * sizeof(T));
-        Q_CHECK_PTR(data());
-        this->a = size();
-    } else {
-        this->ptr = this->array;
-        this->a = Prealloc;
-    }
-    if constexpr (QTypeInfo<T>::isComplex) {
-        T *i = end();
-        while (i != begin())
-            new (--i) T;
-    }
 }
 
 template <class T>

@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Generated from errormessage.pro.
 
 #####################################################################
@@ -9,6 +12,6 @@ qt_internal_add_test(tst_qmldomerrormessage
         tst_qmldomerrormessage.cpp tst_qmldomerrormessage.h
     DEFINES
         QT_DEPRECATED_WARNINGS
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::QmlDomPrivate
 )

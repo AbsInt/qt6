@@ -101,23 +101,23 @@ void QSGRhiLayer::setItem(QSGNode *item)
     markDirtyTexture();
 }
 
-void QSGRhiLayer::setRect(const QRectF &rect)
+void QSGRhiLayer::setRect(const QRectF &logicalRect)
 {
-    if (rect == m_rect)
+    if (logicalRect == m_logicalRect)
         return;
 
-    m_rect = rect;
+    m_logicalRect = logicalRect;
     markDirtyTexture();
 }
 
-void QSGRhiLayer::setSize(const QSize &size)
+void QSGRhiLayer::setSize(const QSize &pixelSize)
 {
-    if (size == m_size)
+    if (pixelSize == m_pixelSize)
         return;
 
-    m_size = size;
+    m_pixelSize = pixelSize;
 
-    if (m_live && m_size.isNull())
+    if (m_live && m_pixelSize.isNull())
         releaseResources();
 
     markDirtyTexture();
@@ -155,7 +155,7 @@ void QSGRhiLayer::setLive(bool live)
 
     m_live = live;
 
-    if (m_live && (!m_item || m_size.isNull()))
+    if (m_live && (!m_item || m_pixelSize.isNull()))
         releaseResources();
 
     markDirtyTexture();
@@ -216,7 +216,7 @@ void QSGRhiLayer::releaseResources()
 
 void QSGRhiLayer::grab()
 {
-    if (!m_item || m_size.isEmpty()) {
+    if (!m_item || m_pixelSize.isEmpty()) {
         releaseResources();
         m_dirtyTexture = false;
         return;
@@ -227,7 +227,7 @@ void QSGRhiLayer::grab()
     if (effectiveSamples <= 1)
         effectiveSamples = m_context->msaaSampleCount();
 
-    const bool needsNewRt = !m_rt || m_rt->pixelSize() != m_size || (m_recursive && !m_secondaryTexture) || (m_texture && m_texture->format() != m_format);
+    const bool needsNewRt = !m_rt || m_rt->pixelSize() != m_pixelSize || (m_recursive && !m_secondaryTexture) || (m_texture && m_texture->format() != m_format);
     const bool mipmapSettingChanged = m_texture && m_texture->flags().testFlag(QRhiTexture::MipMapped) != m_mipmap;
     const bool msaaSettingChanged = (effectiveSamples > 1 && !m_msaaColorBuffer) || (effectiveSamples <= 1 && m_msaaColorBuffer);
 
@@ -255,21 +255,21 @@ void QSGRhiLayer::grab()
 
         if (m_multisampling) {
             releaseResources();
-            m_msaaColorBuffer = m_rhi->newRenderBuffer(QRhiRenderBuffer::Color, m_size, effectiveSamples);
+            m_msaaColorBuffer = m_rhi->newRenderBuffer(QRhiRenderBuffer::Color, m_pixelSize, effectiveSamples);
             if (!m_msaaColorBuffer->create()) {
                 qWarning("Failed to build multisample color buffer for layer of size %dx%d, sample count %d",
-                         m_size.width(), m_size.height(), effectiveSamples);
+                         m_pixelSize.width(), m_pixelSize.height(), effectiveSamples);
                 releaseResources();
                 return;
             }
-            m_texture = m_rhi->newTexture(m_format, m_size, 1, textureFlags);
+            m_texture = m_rhi->newTexture(m_format, m_pixelSize, 1, textureFlags);
             if (!m_texture->create()) {
-                qWarning("Failed to build texture for layer of size %dx%d", m_size.width(), m_size.height());
+                qWarning("Failed to build texture for layer of size %dx%d", m_pixelSize.width(), m_pixelSize.height());
                 releaseResources();
                 return;
             }
             if (depthBufferEnabled) {
-                m_ds = m_rhi->newRenderBuffer(QRhiRenderBuffer::DepthStencil, m_size, effectiveSamples);
+                m_ds = m_rhi->newRenderBuffer(QRhiRenderBuffer::DepthStencil, m_pixelSize, effectiveSamples);
                 if (!m_ds->create()) {
                     qWarning("Failed to build depth-stencil buffer for layer");
                     releaseResources();
@@ -297,14 +297,14 @@ void QSGRhiLayer::grab()
             }
         } else {
             releaseResources();
-            m_texture = m_rhi->newTexture(m_format, m_size, 1, textureFlags);
+            m_texture = m_rhi->newTexture(m_format, m_pixelSize, 1, textureFlags);
             if (!m_texture->create()) {
-                qWarning("Failed to build texture for layer of size %dx%d", m_size.width(), m_size.height());
+                qWarning("Failed to build texture for layer of size %dx%d", m_pixelSize.width(), m_pixelSize.height());
                 releaseResources();
                 return;
             }
             if (depthBufferEnabled) {
-                m_ds = m_rhi->newRenderBuffer(QRhiRenderBuffer::DepthStencil, m_size);
+                m_ds = m_rhi->newRenderBuffer(QRhiRenderBuffer::DepthStencil, m_pixelSize);
                 if (!m_ds->create()) {
                     qWarning("Failed to build depth-stencil buffer for layer");
                     releaseResources();
@@ -315,9 +315,9 @@ void QSGRhiLayer::grab()
             if (m_recursive) {
                 // Here rt is associated with m_secondaryTexture instead of m_texture.
                 // We will issue a copy to m_texture afterwards.
-                m_secondaryTexture = m_rhi->newTexture(m_format, m_size, 1, textureFlags);
+                m_secondaryTexture = m_rhi->newTexture(m_format, m_pixelSize, 1, textureFlags);
                 if (!m_secondaryTexture->create()) {
-                    qWarning("Failed to build texture for layer of size %dx%d", m_size.width(), m_size.height());
+                    qWarning("Failed to build texture for layer of size %dx%d", m_pixelSize.width(), m_pixelSize.height());
                     releaseResources();
                     return;
                 }
@@ -365,28 +365,26 @@ void QSGRhiLayer::grab()
     m_dirtyTexture = false;
 
     m_renderer->setDevicePixelRatio(m_dpr);
-    m_renderer->setDeviceRect(m_size);
-    m_renderer->setViewportRect(m_size);
-    QRectF mirrored;
+    m_renderer->setDeviceRect(m_pixelSize);
+    m_renderer->setViewportRect(m_pixelSize);
+    QRectF mirrored; // in logical coordinates (no dpr) since this gets passed to setProjectionMatrixToRect()
     if (m_rhi->isYUpInFramebuffer()) {
-        mirrored = QRectF(m_mirrorHorizontal ? m_rect.right() : m_rect.left(),
-                          m_mirrorVertical ? m_rect.bottom() : m_rect.top(),
-                          m_mirrorHorizontal ? -m_rect.width() : m_rect.width(),
-                          m_mirrorVertical ? -m_rect.height() : m_rect.height());
+        mirrored = QRectF(m_mirrorHorizontal ? m_logicalRect.right() : m_logicalRect.left(),
+                          m_mirrorVertical ? m_logicalRect.bottom() : m_logicalRect.top(),
+                          m_mirrorHorizontal ? -m_logicalRect.width() : m_logicalRect.width(),
+                          m_mirrorVertical ? -m_logicalRect.height() : m_logicalRect.height());
     } else {
-        mirrored = QRectF(m_mirrorHorizontal ? m_rect.right() : m_rect.left(),
-                          m_mirrorVertical ? m_rect.top() : m_rect.bottom(),
-                          m_mirrorHorizontal ? -m_rect.width() : m_rect.width(),
-                          m_mirrorVertical ? m_rect.height() : -m_rect.height());
+        mirrored = QRectF(m_mirrorHorizontal ? m_logicalRect.right() : m_logicalRect.left(),
+                          m_mirrorVertical ? m_logicalRect.top() : m_logicalRect.bottom(),
+                          m_mirrorHorizontal ? -m_logicalRect.width() : m_logicalRect.width(),
+                          m_mirrorVertical ? m_logicalRect.height() : -m_logicalRect.height());
     }
     QSGAbstractRenderer::MatrixTransformFlags matrixFlags;
     if (!m_rhi->isYUpInNDC())
         matrixFlags |= QSGAbstractRenderer::MatrixTransformFlipY;
     m_renderer->setProjectionMatrixToRect(mirrored, matrixFlags);
     m_renderer->setClearColor(Qt::transparent);
-    m_renderer->setRenderTarget(m_rt);
-    m_renderer->setCommandBuffer(m_context->currentFrameCommandBuffer());
-    m_renderer->setRenderPassDescriptor(m_rtRp);
+    m_renderer->setRenderTarget({ m_rt, m_rtRp, m_context->currentFrameCommandBuffer() });
 
     QRhiResourceUpdateBatch *resourceUpdates = nullptr;
 
@@ -445,10 +443,13 @@ QImage QSGRhiLayer::toImage() const
         return QImage();
     }
 
-    // There is no room for negotiation here, the texture is RGBA8, and the
-    // readback happens with GL_RGBA on GL, so RGBA8888 is the only option.
+    // There is little room for negotiation here, the texture is one of the formats from setFormat.
     // Also, Quick is always premultiplied alpha.
-    const QImage::Format imageFormat = QImage::Format_RGBA8888_Premultiplied;
+    QImage::Format imageFormat = QImage::Format_RGBA8888_Premultiplied;
+    if (m_format == QRhiTexture::RGBA16F)
+        imageFormat = QImage::Format_RGBA16FPx4_Premultiplied;
+    else if (m_format == QRhiTexture::RGBA32F)
+        imageFormat = QImage::Format_RGBA32FPx4_Premultiplied;
 
     const uchar *p = reinterpret_cast<const uchar *>(result.data.constData());
     return QImage(p, result.pixelSize.width(), result.pixelSize.height(), imageFormat).mirrored();

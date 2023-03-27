@@ -5,15 +5,10 @@
 #include "qv4runtime_p.h"
 #include "qv4engine_p.h"
 #include "qv4object_p.h"
-#include "qv4objectproto_p.h"
 #include "qv4globalobject_p.h"
-#include "qv4stringobject_p.h"
 #include "qv4argumentsobject_p.h"
-#include "qv4objectiterator_p.h"
-#include "qv4dateobject_p.h"
 #include "qv4lookup_p.h"
 #include "qv4function_p.h"
-#include "qv4numberobject_p.h"
 #include "qv4regexp_p.h"
 #include "qv4regexpobject_p.h"
 #include "private/qlocale_tools_p.h"
@@ -28,6 +23,7 @@
 #include "qv4qobjectwrapper_p.h"
 #include "qv4symbol_p.h"
 #include "qv4generatorobject_p.h"
+#include <QtQml/private/qv4math_p.h>
 
 #include <QtCore/QDebug>
 #include <cassert>
@@ -1043,7 +1039,7 @@ static Object *getSuperBase(Scope &scope)
             if (CallContext *c = ctx->asCallContext()) {
                 f = c->d()->function;
                 QV4::Function *fn = f->function();
-                if (fn && !fn->isArrowFunction() && !fn->isEval)
+                if (fn && !fn->isArrowFunction() && fn->kind != Function::Eval)
                     break;
             }
             ctx = ctx->d()->outer;
@@ -1489,24 +1485,6 @@ ReturnedValue Runtime::CallPropertyLookup::call(ExecutionEngine *engine, const V
         return engine->throwTypeError();
 
     return checkedResult(engine, static_cast<FunctionObject &>(f).call(&base, argv, argc));
-}
-
-ReturnedValue Runtime::CallElement::call(ExecutionEngine *engine, const Value &baseRef, const Value &index, Value *argv, int argc)
-{
-    const Value *base = &baseRef;
-    Scope scope(engine);
-    ScopedValue thisObject(scope, base->toObject(engine));
-    base = thisObject;
-
-    ScopedPropertyKey str(scope, index.toPropertyKey(engine));
-    if (engine->hasException)
-        return Encode::undefined();
-
-    ScopedFunctionObject f(scope, static_cast<const Object *>(base)->get(str));
-    if (!f)
-        return engine->throwTypeError();
-
-    return checkedResult(engine, f->call(base, argv, argc));
 }
 
 ReturnedValue Runtime::CallValue::call(ExecutionEngine *engine, const Value &func, Value *argv, int argc)
@@ -2118,9 +2096,7 @@ ReturnedValue Runtime::Exp::call(const Value &base, const Value &exp)
 {
     double b = base.toNumber();
     double e = exp.toNumber();
-    if (qt_is_inf(e) && (b == 1 || b == -1))
-        return Encode(qt_qnan());
-    return Encode(pow(b,e));
+    return Encode(QQmlPrivate::jsExponentiate(b, e));
 }
 
 ReturnedValue Runtime::BitAnd::call(const Value &left, const Value &right)
@@ -2242,35 +2218,23 @@ Bool Runtime::CompareEqual::call(const Value &left, const Value &right)
     Value *lhsGuard = nullptr;
     Value *rhsGuard = nullptr;
 
-  redo:
+ redo:
     if (lhs.asReturnedValue() == rhs.asReturnedValue())
         return !lhs.isNaN();
 
-    int lt = lhs.quickType();
-    int rt = rhs.quickType();
-    if (rt < lt) {
-        qSwap(lhs, rhs);
-        qSwap(lt, rt);
-    }
+    quint32 lt = lhs.quickType();
+    quint32 rt = rhs.quickType();
 
-    switch (lt) {
-    case QV4::Value::QT_ManagedOrUndefined:
+    // LHS: Check if managed
+    if ((lt & (Value::ManagedMask >> Value::Tag_Shift)) == 0) {
         if (lhs.isUndefined())
             return rhs.isNullOrUndefined();
-        Q_FALLTHROUGH();
-    case QV4::Value::QT_ManagedOrUndefined1:
-    case QV4::Value::QT_ManagedOrUndefined2:
-    case QV4::Value::QT_ManagedOrUndefined3:
-        // LHS: Managed
-        switch (rt) {
-        case QV4::Value::QT_ManagedOrUndefined:
+
+        // RHS: Check if managed
+        if ((rt & (Value::ManagedMask >> Value::Tag_Shift)) == 0) {
             if (rhs.isUndefined())
                 return false;
-            Q_FALLTHROUGH();
-        case QV4::Value::QT_ManagedOrUndefined1:
-        case QV4::Value::QT_ManagedOrUndefined2:
-        case QV4::Value::QT_ManagedOrUndefined3: {
-            // RHS: Managed
+
             Heap::Base *l = lhs.m();
             Heap::Base *r = rhs.m();
             Q_ASSERT(l);
@@ -2280,15 +2244,18 @@ Bool Runtime::CompareEqual::call(const Value &left, const Value &right)
             if (l->internalClass->vtable->isStringOrSymbol) {
                 scope.set(&rhsGuard, RuntimeHelpers::objectDefaultValue(&static_cast<QV4::Object &>(rhs), PREFERREDTYPE_HINT), r->internalClass->engine);
                 rhs = rhsGuard->asReturnedValue();
-                break;
+                goto redo;
             } else {
                 Q_ASSERT(r->internalClass->vtable->isStringOrSymbol);
                 scope.set(&lhsGuard, RuntimeHelpers::objectDefaultValue(&static_cast<QV4::Object &>(lhs), PREFERREDTYPE_HINT), l->internalClass->engine);
                 lhs = lhsGuard->asReturnedValue();
-                break;
+                goto redo;
             }
             return false;
         }
+
+lhs_managed_and_rhs_not:
+        switch (rt) {
         case QV4::Value::QT_Empty:
             Q_UNREACHABLE();
         case QV4::Value::QT_Null:
@@ -2306,6 +2273,15 @@ Bool Runtime::CompareEqual::call(const Value &left, const Value &right)
             }
         }
         goto redo;
+    } else if ((rt & (Value::ManagedMask >> Value::Tag_Shift)) == 0) {
+        if (rhs.isUndefined())
+            return lhs.isNull(); // Can't be undefined
+        qSwap(lhs, rhs);
+        qSwap(lt, rt);
+        goto lhs_managed_and_rhs_not;
+    }
+
+    switch (lt) {
     case QV4::Value::QT_Empty:
         Q_UNREACHABLE();
     case QV4::Value::QT_Null:
@@ -2313,13 +2289,10 @@ Bool Runtime::CompareEqual::call(const Value &left, const Value &right)
     case QV4::Value::QT_Bool:
     case QV4::Value::QT_Int:
         switch (rt) {
-        case QV4::Value::QT_ManagedOrUndefined:
-        case QV4::Value::QT_ManagedOrUndefined1:
-        case QV4::Value::QT_ManagedOrUndefined2:
-        case QV4::Value::QT_ManagedOrUndefined3:
         case QV4::Value::QT_Empty:
-        case QV4::Value::QT_Null:
             Q_UNREACHABLE();
+        case QV4::Value::QT_Null:
+            return false;
         case QV4::Value::QT_Bool:
         case QV4::Value::QT_Int:
             return lhs.int_32() == rhs.int_32();
@@ -2327,8 +2300,17 @@ Bool Runtime::CompareEqual::call(const Value &left, const Value &right)
             return lhs.int_32() == rhs.doubleValue();
         }
     default: // double
-        Q_ASSERT(rhs.isDouble());
-        return lhs.doubleValue() == rhs.doubleValue();
+        switch (rt) {
+        case QV4::Value::QT_Empty:
+            Q_UNREACHABLE();
+        case QV4::Value::QT_Null:
+            return false;
+        case QV4::Value::QT_Bool:
+        case QV4::Value::QT_Int:
+            return lhs.doubleValue() == rhs.int_32();
+        default: // double
+            return lhs.doubleValue() == rhs.doubleValue();
+        }
     }
 }
 
@@ -2400,7 +2382,6 @@ QHash<const void *, const char *> Runtime::symbolTable()
             {symbol<CallName>(), "CallName" },
             {symbol<CallProperty>(), "CallProperty" },
             {symbol<CallPropertyLookup>(), "CallPropertyLookup" },
-            {symbol<CallElement>(), "CallElement" },
             {symbol<CallValue>(), "CallValue" },
             {symbol<CallWithReceiver>(), "CallWithReceiver" },
             {symbol<CallPossiblyDirectEval>(), "CallPossiblyDirectEval" },

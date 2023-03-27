@@ -3,7 +3,6 @@
 
 #include "qv4arrayiterator_p.h"
 #include "qv4urlobject_p.h"
-#include "qv4stringobject_p.h"
 
 #include <QtCore/QUrl>
 
@@ -125,14 +124,14 @@ void UrlObject::setUrl(const QUrl &url)
 {
     d()->hash.set(engine(), engine()->newString(url.fragment()));
     d()->hostname.set(engine(), engine()->newString(url.host()));
-    d()->href.set(engine(), engine()->newString(url.toString()));
+    d()->href.set(engine(), engine()->newString(url.toString(QUrl::ComponentFormattingOptions(QUrl::ComponentFormattingOption::FullyEncoded))));
     d()->password.set(engine(), engine()->newString(url.password()));
     d()->pathname.set(engine(), engine()->newString(url.path()));
     d()->port.set(engine(),
                   engine()->newString(url.port() == -1 ? QLatin1String("")
                                                        : QString::number(url.port())));
     d()->protocol.set(engine(), engine()->newString(url.scheme() + QLatin1Char(':')));
-    d()->search.set(engine(), engine()->newString(url.query()));
+    d()->search.set(engine(), engine()->newString(url.query(QUrl::ComponentFormattingOptions(QUrl::ComponentFormattingOption::FullyEncoded))));
     d()->username.set(engine(), engine()->newString(url.userName()));
 
     updateOrigin();
@@ -241,6 +240,15 @@ bool UrlObject::setUsername(QString username)
     d()->href.set(engine(), engine()->newString(url.toString()));
 
     return true;
+}
+
+QString UrlObject::search() const
+{
+    auto url = QUrl(href());
+    if (auto url = QUrl(href()); !url.hasQuery() || url.query().isEmpty())
+        return QLatin1String("");
+
+    return QLatin1Char('?') + url.query(QUrl::ComponentFormattingOptions(QUrl::ComponentFormattingOption::FullyEncoded));
 }
 
 QUrl UrlObject::toQUrl() const
@@ -671,6 +679,7 @@ ReturnedValue UrlPrototype::method_getSearchParams(const FunctionObject *b, cons
 
     Scoped<UrlSearchParamsObject> usp(scope, v4->newUrlSearchParamsObject());
 
+    usp->setUrlObject(thisObject->as<UrlObject>());
     usp->initializeParams(r->search());
 
     return usp->asReturnedValue();
@@ -961,6 +970,11 @@ void UrlSearchParamsObject::setParams(QList<QStringList> params)
     d()->values.set(engine(), values);
 }
 
+void UrlSearchParamsObject::setUrlObject(const UrlObject *url)
+{
+    d()->url.set(engine(), url->d());
+}
+
 void UrlSearchParamsObject::append(Heap::String *name, Heap::String *value)
 {
     Scope scope(engine());
@@ -1007,6 +1021,25 @@ QList<QStringList> UrlSearchParamsObject::params() const
     }
 
     return result;
+}
+
+Heap::UrlObject *UrlSearchParamsObject::urlObject() const
+{
+    return d()->url.get();
+}
+
+QString UrlSearchParamsObject::searchString() const
+{
+    QString search = QLatin1String("");
+    auto params = this->params();
+    auto len = params.size();
+    for (int i = 0; i < len; ++i) {
+        const QStringList &param = params[i];
+        search += param[0] + QLatin1Char('=') + param[1];
+        if (i != len - 1)
+            search += QLatin1Char('&');
+    }
+    return search;
 }
 
 int UrlSearchParamsObject::length() const
@@ -1335,6 +1368,10 @@ ReturnedValue UrlSearchParamsPrototype::method_set(const FunctionObject *b, cons
         params << QStringList { name, value };
 
     o->setParams(params);
+
+    Scoped<UrlObject> scopedUrlObject(scope, o->d()->url.get());
+    if (scopedUrlObject)
+        scopedUrlObject->setSearch(o->searchString());
 
     return Encode::undefined();
 }

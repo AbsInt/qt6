@@ -14,7 +14,6 @@ namespace QtWaylandClient {
 
 class QWaylandWindow;
 class QWaylandInputDevice;
-class QWindow;
 class QWaylandExtendedSurface;
 
 class Q_WAYLANDCLIENT_EXPORT QWaylandIviSurface : public QtWayland::ivi_surface
@@ -27,6 +26,8 @@ public:
     ~QWaylandIviSurface() override;
 
     void applyConfigure() override;
+
+    std::any surfaceRole() const override { return ivi_surface::object(); };
 
 private:
     void createExtendedSurface(QWaylandWindow *window);

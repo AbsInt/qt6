@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Generated from wlshell.pro.
 
 #####################################################################
@@ -20,6 +23,8 @@ qt_internal_add_qml_module(WaylandCompositorWLShell
         Qt::Gui
         Qt::WaylandCompositor
 )
+
+qt_internal_add_autogen_sync_header_dependencies(WaylandCompositorWLShell WaylandCompositor)
 
 #### Keys ignored in scope 1:.:.:wlshell.pro:<TRUE>:
 # CXX_MODULE = "qml"

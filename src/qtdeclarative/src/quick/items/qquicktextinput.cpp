@@ -996,6 +996,7 @@ void QQuickTextInput::setAutoScroll(bool b)
     emit autoScrollChanged(d->autoScroll);
 }
 
+#if QT_CONFIG(validator)
 /*!
     \qmlproperty Validator QtQuick::TextInput::validator
 
@@ -1022,19 +1023,12 @@ void QQuickTextInput::setAutoScroll(bool b)
 
 QValidator* QQuickTextInput::validator() const
 {
-#if !QT_CONFIG(validator)
-    return nullptr;
-#else
     Q_D(const QQuickTextInput);
     return d->m_validator;
-#endif // validator
 }
 
 void QQuickTextInput::setValidator(QValidator* v)
 {
-#if !QT_CONFIG(validator)
-    Q_UNUSED(v);
-#else
     Q_D(QQuickTextInput);
     if (d->m_validator == v)
         return;
@@ -1057,10 +1051,8 @@ void QQuickTextInput::setValidator(QValidator* v)
         d->checkIsValid();
 
     emit validatorChanged();
-#endif // validator
 }
 
-#if QT_CONFIG(validator)
 void QQuickTextInput::q_validatorChanged()
 {
     Q_D(QQuickTextInput);
@@ -1972,6 +1964,29 @@ QSGNode *QQuickTextInput::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData 
 #if QT_CONFIG(im)
 QVariant QQuickTextInput::inputMethodQuery(Qt::InputMethodQuery property) const
 {
+#ifdef Q_OS_ANDROID
+    // QTBUG-61652
+    if (property == Qt::ImEnterKeyType) {
+        Q_D(const QQuickItem);
+        // Do not change if type was set manually
+        if (!d->extra.isAllocated()
+          || d->extra->enterKeyAttached == nullptr
+          || d->extra->enterKeyAttached->type() == Qt::EnterKeyDefault) {
+
+            QQuickItem *next = const_cast<QQuickTextInput*>(this)->nextItemInFocusChain();
+            while (next && next != this && !next->activeFocusOnTab())
+                next = next->nextItemInFocusChain();
+            if (next) {
+                const auto nextYPos = next->mapToGlobal(QPoint(0, 0)).y();
+                const auto currentYPos = this->mapToGlobal(QPoint(0, 0)).y();
+                if (currentYPos < nextYPos)
+                    // Set EnterKey to KeyNext type only if the next item
+                    // in the focus chain is below current QQuickTextInput
+                    return Qt::EnterKeyNext;
+            }
+        }
+    }
+#endif
     return inputMethodQuery(property, QVariant());
 }
 

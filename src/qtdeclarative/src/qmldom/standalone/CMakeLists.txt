@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 cmake_minimum_required(VERSION 3.16)
 
 include(../../../.cmake.conf)
@@ -41,6 +44,7 @@ add_library(qmldomlib
         ../qqmldomastcreator.cpp ../qqmldomastcreator_p.h
         ../qqmldomastdumper.cpp ../qqmldomastdumper_p.h
         ../qqmldomattachedinfo.cpp ../qqmldomattachedinfo_p.h
+        ../qqmldomcodeformatter.cpp ../qqmldomcodeformatter_p.h
         ../qqmldomcomments.cpp ../qqmldomcomments_p.h
         ../qqmldomcompare.cpp ../qqmldomcompare_p.h
         ../qqmldomconstants_p.h
@@ -57,6 +61,7 @@ add_library(qmldomlib
         ../qqmldomoutwriter.cpp ../qqmldomoutwriter_p.h
         ../qqmldompath.cpp ../qqmldompath_p.h
         ../qqmldomreformatter.cpp ../qqmldomreformatter_p.h
+        ../qqmldomscanner.cpp ../qqmldomscanner_p.h
         ../qqmldomstringdumper.cpp ../qqmldomstringdumper_p.h
         ../qqmldomtop.cpp ../qqmldomtop_p.h
         ../qqmldomtypesreader.cpp ../qqmldomtypesreader_p.h

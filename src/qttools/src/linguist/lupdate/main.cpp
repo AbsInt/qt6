@@ -386,8 +386,8 @@ static void updateTsFiles(const Translator &fetchedTor, const QStringList &tsFil
             // (when the language is not recognized, plural translations are lost)
             if (tor.translationsExist()) {
                 QLocale::Language l;
-                QLocale::Country c;
-                tor.languageAndCountry(tor.languageCode(), &l, &c);
+                QLocale::Territory c;
+                tor.languageAndTerritory(tor.languageCode(), &l, &c);
                 QStringList forms;
                 if (!getNumerusInfo(l, c, 0, &forms, 0)) {
                     printErr(QStringLiteral("File %1 won't be updated: it contains translation but the"
@@ -479,6 +479,31 @@ static QStringList getResources(const QString &resourceFile)
                  .arg(resourceFile, QString::number(rqr.line), rqr.errorString));
     }
     return rqr.files;
+}
+
+// Remove .qrc files from the project and return them as absolute paths.
+static QStringList extractQrcFiles(Project &project)
+{
+    auto it = project.sources.begin();
+    QStringList qrcFiles;
+    while (it != project.sources.end()) {
+        QFileInfo fi(*it);
+        QString fn = QDir::cleanPath(fi.absoluteFilePath());
+        if (fn.endsWith(QLatin1String(".qrc"), Qt::CaseInsensitive)) {
+            qrcFiles += fn;
+            it = project.sources.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    return qrcFiles;
+}
+
+// Replace all .qrc files in the project with their content.
+static void expandQrcFiles(Project &project)
+{
+    for (const QString &qrcFile : extractQrcFiles(project))
+        project.sources << getResources(qrcFile);
 }
 
 static bool processTs(Translator &fetchedTor, const QString &file, ConversionData &cd)
@@ -704,7 +729,6 @@ int main(int argc, char **argv)
     UpdateOptions options =
         Verbose | // verbose is on by default starting with Qt 4.2
         HeuristicSameText | HeuristicSimilarText | HeuristicNumber;
-    int proDebug = 0;
     int numFiles = 0;
     bool metTsFlag = false;
     bool metXTsFlag = false;
@@ -734,7 +758,6 @@ int main(int argc, char **argv)
             options &= ~Verbose;
             continue;
         } else if (arg == QLatin1String("-pro-debug")) {
-            proDebug++;
             continue;
         } else if (arg == QLatin1String("-project")) {
             ++i;
@@ -1022,6 +1045,14 @@ int main(int argc, char **argv)
         printErr(u"lupdate warning: -target-language usually only"
                   " makes sense with exactly one TS file.\n"_s);
 
+    if (proFiles.isEmpty() && resourceFiles.isEmpty() && sourceFiles.size() == 1
+        && QFileInfo(sourceFiles.first()).fileName() == u"CMakeLists.txt"_s) {
+        printErr(u"lupdate error: Passing a CMakeLists.txt as project file is not supported.\n"_s
+                 u"Please use the 'qt_add_lupdate' CMake command and build the "_s
+                 u"'update_translations' target.\n"_s);
+        return 1;
+    }
+
     QString errorString;
     if (!proFiles.isEmpty()) {
         runInternalQtTool(u"lupdate-pro"_s, app.arguments().mid(1));
@@ -1041,6 +1072,8 @@ int main(int argc, char **argv)
                      .arg(projectDescriptionFile));
             return 1;
         }
+        for (Project &project : projectDescription)
+            expandQrcFiles(project);
     }
 
     bool fail = false;

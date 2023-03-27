@@ -278,7 +278,7 @@ int QWaylandInputMethodEventBuilder::indexFromWayland(const QString &text, int l
 
     if (length < 0) {
         const QByteArray &utf8 = QStringView{text}.left(base).toUtf8();
-        return QString::fromUtf8(utf8.left(qMax(utf8.length() + length, 0))).size();
+        return QString::fromUtf8(utf8.left(qMax(utf8.size() + length, 0))).size();
     } else {
         const QByteArray &utf8 = QStringView{text}.mid(base).toUtf8();
         return QString::fromUtf8(utf8.left(length)).size() + base;

@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Generated from qjsvalueiterator.pro.
 
 #####################################################################
@@ -7,7 +10,7 @@
 qt_internal_add_benchmark(tst_bench_qjsvalueiterator
     SOURCES
         tst_qjsvalueiterator.cpp
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Qml
         Qt::Test
 )

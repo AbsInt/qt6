@@ -9,7 +9,6 @@
 #include "doc.h"
 #include "docbookgenerator.h"
 #include "htmlgenerator.h"
-#include "jscodemarker.h"
 #include "location.h"
 #include "puredocparser.h"
 #include "qdocdatabase.h"
@@ -21,8 +20,8 @@
 #include "tree.h"
 #include "webxmlgenerator.h"
 
-#include "filesystem/fileresolver.hpp"
-#include "boundaries/filesystem/directorypath.hpp"
+#include "filesystem/fileresolver.h"
+#include "boundaries/filesystem/directorypath.h"
 
 #include <QtCore/qdatetime.h>
 #include <QtCore/qdebug.h>
@@ -37,6 +36,8 @@
 #include <cstdlib>
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::StringLiterals;
 
 bool creationTimeBefore(const QFileInfo &fi1, const QFileInfo &fi2)
 {
@@ -131,11 +132,13 @@ static void loadIndexFiles(const QSet<QString> &formats)
                     }
                 }
                 // Remove self-dependencies and possible duplicates
-                config.dependModules().removeAll(config.getString(CONFIG_PROJECT).toLower());
+                QString project{config.getString(CONFIG_PROJECT)};
+                config.dependModules().removeAll(project.toLower());
                 config.dependModules().removeDuplicates();
-                qCCritical(lcQdoc) << "qdocconf file has depends = *; loading all "
-                               << config.dependModules().count()
-                               << " index files found";
+                qCCritical(lcQdoc) << "Configuration file for"
+                               << project << "has depends = *; loading all"
+                               << config.dependModules().size()
+                               << "index files found";
             }
             for (const auto &module : config.dependModules()) {
                 QList<QFileInfo> foundIndices;
@@ -205,10 +208,14 @@ static void loadIndexFiles(const QSet<QString> &formats)
     Prints to stderr the name of the project that QDoc is running for,
     in which mode and which phase.
 
-    If QDoc is running in debug mode, also logs the command line arguments.
+    If QDoc is not running in debug mode or --log-progress command line
+    option is not set, do nothing.
  */
 void logStartEndMessage(const QLatin1String &startStop, const Config &config)
 {
+    if (!config.getBool(CONFIG_LOGPROGRESS))
+        return;
+
     const QString runName = " qdoc for "
             + config.getString(CONFIG_PROJECT)
             + QLatin1String(" in ")
@@ -324,7 +331,7 @@ static void processQdocconfFile(const QString &fileName)
         auto maybe_validated_path{DirectoryPath::refine(path)};
         if (!maybe_validated_path)
             // TODO: [uncentralized-admonition]
-            qCDebug(lcQdoc).noquote() << u"%1 is not a valid path, it will be ignored when resolving a file"_qs.arg(path);
+            qCDebug(lcQdoc).noquote() << u"%1 is not a valid path, it will be ignored when resolving a file"_s.arg(path);
         else validated_search_directories.push_back(*maybe_validated_path);
     }
 
@@ -521,11 +528,9 @@ static void processQdocconfFile(const QString &fileName)
         */
 
         qCDebug(lcQdoc, "Parsing header files");
-        int parsed = 0;
         for (auto it = headers.constBegin(); it != headers.constEnd(); ++it) {
             CodeParser *codeParser = CodeParser::parserForHeaderFile(it.key());
             if (codeParser) {
-                ++parsed;
                 qCDebug(lcQdoc, "Parsing %s", qPrintable(it.key()));
                 codeParser->parseHeaderFile(config.location(), it.key());
             }
@@ -537,18 +542,18 @@ static void processQdocconfFile(const QString &fileName)
           Parse each source text file in the set using the appropriate parser and
           add it to the big tree.
         */
-        parsed = 0;
-        qCInfo(lcQdoc) << "Parse source files for" << project;
+        if (config.getBool(CONFIG_LOGPROGRESS))
+            qCInfo(lcQdoc) << "Parse source files for" << project;
         for (auto it = sources.cbegin(), end = sources.cend(); it != end; ++it) {
             const auto &key = it.key();
             auto *codeParser = CodeParser::parserForSourceFile(key);
             if (codeParser) {
-                ++parsed;
                 qCDebug(lcQdoc, "Parsing %s", qPrintable(key));
                 codeParser->parseSourceFile(config.location(), key);
             }
         }
-        qCInfo(lcQdoc) << "Source files parsed for" << project;
+        if (config.getBool(CONFIG_LOGPROGRESS))
+            qCInfo(lcQdoc) << "Source files parsed for" << project;
     }
     /*
       Now the primary tree has been built from all the header and
@@ -568,11 +573,13 @@ static void processQdocconfFile(const QString &fileName)
     qCDebug(lcQdoc, "Generating docs");
     for (const auto &format : outputFormats) {
         auto *generator = Generator::generatorForFormat(format);
-        if (generator == nullptr)
+        if (generator) {
+            generator->initializeFormat();
+            generator->generateDocs();
+        } else {
             outputFormatsLocation.fatal(
                     QCoreApplication::translate("QDoc", "Unknown output format '%1'").arg(format));
-        generator->initializeFormat();
-        generator->generateDocs();
+        }
     }
 
     qCDebug(lcQdoc, "Terminating qdoc classes");
@@ -600,7 +607,8 @@ int main(int argc, char **argv)
 
     // Initialize Qt:
 #ifndef QT_BOOTSTRAPPED
-    qSetGlobalQHashSeed(0); // set the hash seed to 0 if it wasn't set yet
+    // use deterministic hash seed
+    QHashSeed::setDeterministicGlobalSeed();
 #endif
     QCoreApplication app(argc, argv);
     app.setApplicationVersion(QLatin1String(QT_VERSION_STR));
@@ -617,7 +625,7 @@ int main(int argc, char **argv)
 
     /*
       Create code markers for plain text, C++,
-      javascript, and QML.
+      and QML.
 
       The plain CodeMarker must be instantiated first because it is used as
       fallback when the other markers cannot be used.
@@ -627,7 +635,6 @@ int main(int argc, char **argv)
      */
     CodeMarker fallbackMarker;
     CppCodeMarker cppMarker;
-    JsCodeMarker jsMarker;
     QmlCodeMarker qmlMarker;
 
     Config::instance().init(QCoreApplication::translate("QDoc", "qdoc"), app.arguments());
@@ -671,14 +678,6 @@ int main(int argc, char **argv)
     translators.clear();
 #endif
     QmlTypeNode::terminate();
-
-#ifdef DEBUG_SHUTDOWN_CRASH
-    qDebug() << "main(): Delete qdoc database";
-#endif
     QDocDatabase::destroyQdocDB();
-#ifdef DEBUG_SHUTDOWN_CRASH
-    qDebug() << "main(): qdoc database deleted";
-#endif
-
     return Location::exitCode();
 }

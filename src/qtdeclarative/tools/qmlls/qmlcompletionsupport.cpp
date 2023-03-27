@@ -5,6 +5,7 @@
 #include "qqmllanguageserver.h"
 #include <QtLanguageServer/private/qlanguageserverspectypes_p.h>
 #include <QtCore/qthreadpool.h>
+#include <QtCore/private/qduplicatetracker_p.h>
 #include <QtCore/QRegularExpression>
 #include <QtQmlDom/private/qqmldomexternalitems_p.h>
 #include <QtQmlDom/private/qqmldomtop_p.h>
@@ -168,8 +169,13 @@ static QList<ItemLocation> findLastItemsContaining(DomItem file, int line, int c
         qCWarning(complLog) << "no code";
     QList<ItemLocation> toDo;
     qsizetype targetPos = posAfterLineChar(code, line, character);
+    Q_ASSERT(targetPos >= 0);
     auto containsTarget = [targetPos](QQmlJS::SourceLocation l) {
-        return l.begin() <= targetPos && targetPos < l.end();
+        if constexpr (sizeof(qsizetype) <= sizeof(quint32)) {
+            return l.begin() <= quint32(targetPos) && quint32(targetPos) < l.end();
+        } else {
+            return l.begin() <= targetPos && targetPos < l.end();
+        }
     };
     if (containsTarget(t->info().fullRegion)) {
         ItemLocation loc;
@@ -329,20 +335,26 @@ static QList<CompletionItem> importCompletions(DomItem &file, const CompletionCo
         switch (importCompletionType) {
         case ImportCompletionType::None:
             break;
-        case ImportCompletionType::Module:
+        case ImportCompletionType::Module: {
+            QDuplicateTracker<QString> modulesSeen;
             for (const QString &uri : envPtr->moduleIndexUris(env)) {
                 QStringView base = ctx.base(); // if we allow spaces we should get rid of them
                 if (uri.startsWith(base)) {
                     QStringList rest = uri.mid(base.size()).split(u'.');
                     if (rest.isEmpty())
                         continue;
-                    CompletionItem comp;
-                    comp.label = rest.first().toUtf8();
-                    comp.kind = int(CompletionItemKind::Module);
-                    res.append(comp);
+
+                    const QString label = rest.first();
+                    if (!modulesSeen.hasSeen(label)) {
+                        CompletionItem comp;
+                        comp.label = label.toUtf8();
+                        comp.kind = int(CompletionItemKind::Module);
+                        res.append(comp);
+                    }
                 }
             }
             break;
+        }
         case ImportCompletionType::Version:
             if (ctx.base().isEmpty()) {
                 for (int majorV :
@@ -416,6 +428,7 @@ static QList<CompletionItem> bindingsCompletions(DomItem &containingObject)
                         qCDebug(complLog) << "adding property" << *it2;
                         CompletionItem comp;
                         comp.label = it2->toUtf8();
+                        comp.insertText = (*it2 + u": "_s).toUtf8();
                         comp.kind = int(CompletionItemKind::Property);
                         res.append(comp);
                     }
@@ -464,29 +477,46 @@ static QList<CompletionItem> reachableSymbols(DomItem &context, const Completion
                 while (it != methods.cend()) {
                     localSymbols.remove(it.key());
                     if (completeMethodCalls == FunctionCompletion::Declaration) {
-                        CompletionItem comp;
-                        QString label = it.key() + u"(";
-                        QString doc = it.key() + u"(";
-                        bool first = true;
+                        QStringList parameters;
                         for (const MethodParameter &pInfo : std::as_const(it->parameters)) {
-                            if (first)
-                                first = false;
-                            else {
-                                label += u",";
-                                doc += u",";
-                            }
-                            label += pInfo.name;
+                            QStringList param;
                             if (!pInfo.typeName.isEmpty())
-                                doc += pInfo.typeName + u" ";
-                            doc += pInfo.name;
+                                param << pInfo.typeName;
+                            if (!pInfo.name.isEmpty())
+                                param << pInfo.name;
                             if (pInfo.defaultValue) {
-                                doc += u"=";
-                                doc += pInfo.defaultValue->code();
+                                param << u"= " + pInfo.defaultValue->code();
+                            }
+                            parameters.append(param.join(' '));
+                        }
+
+                        QString commentsStr;
+
+                        if (!it->comments.regionComments.isEmpty()) {
+                            for (const Comment &c : it->comments.regionComments[0].preComments) {
+                                commentsStr += c.rawComment().toString().trimmed() + '\n';
                             }
                         }
-                        comp.detail = label.toUtf8();
+
+                        CompletionItem comp;
+                        comp.documentation =
+                                u"%1%2(%3)"_s.arg(commentsStr, it.key(), parameters.join(u", "))
+                                        .toUtf8();
                         comp.label = (it.key() + u"()").toUtf8();
-                        comp.documentation = doc.toUtf8();
+                        comp.kind = int(CompletionItemKind::Function);
+
+                        if (it->typeName.isEmpty())
+                            comp.detail = "returns void";
+                        else
+                            comp.detail = (u"returns "_s + it->typeName).toUtf8();
+
+                        // Only append full bracket if there are no parameters
+                        if (it->parameters.isEmpty())
+                            comp.insertText = comp.label;
+                        else
+                            // add snippet support?
+                            comp.insertText = (it.key() + u"(").toUtf8();
+
                         res.append(comp);
                     }
                     ++it;

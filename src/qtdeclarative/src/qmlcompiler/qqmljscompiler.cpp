@@ -124,7 +124,7 @@ static bool checkArgumentsObjectUseInSignalHandlers(const QmlIR::Document &doc,
                 continue;
             const QString propName =  doc.stringAt(binding->propertyNameIndex);
             if (!propName.startsWith(QLatin1String("on"))
-                || propName.length() < 3
+                || propName.size() < 3
                 || !propName.at(2).isUpper())
                 continue;
             auto compiledFunction = doc.jsModule.functions.value(object->runtimeFunctionIndices.at(binding->value.compiledScriptIndex));
@@ -221,7 +221,7 @@ bool qCompileQmlFile(QmlIR::Document &irDocument, const QString &inputFileName,
     QQmlJSAotFunctionMap aotFunctionsByIndex;
 
     {
-        QmlIR::JSCodeGen v4CodeGen(&irDocument, *illegalNames(), interface);
+        QmlIR::JSCodeGen v4CodeGen(&irDocument, *illegalNames(), interface, storeSourceLocation);
 
         if (aotCompiler)
             aotCompiler->setDocument(&v4CodeGen, &irDocument);
@@ -231,7 +231,7 @@ bool qCompileQmlFile(QmlIR::Document &irDocument, const QString &inputFileName,
             if (object->functionsAndExpressions->count == 0 && object->bindingCount() == 0)
                 continue;
 
-            if (!v4CodeGen.generateRuntimeFunctions(object, storeSourceLocation)) {
+            if (!v4CodeGen.generateRuntimeFunctions(object)) {
                 Q_ASSERT(v4CodeGen.hasError());
                 error->appendDiagnostic(inputFileName, v4CodeGen.error());
                 return false;
@@ -265,11 +265,11 @@ bool qCompileQmlFile(QmlIR::Document &irDocument, const QString &inputFileName,
 
             // AOT-compile bindings and functions in the same order as above so that the runtime
             // class indices match
+            auto contextMap = v4CodeGen.module()->contextMap;
             std::sort(bindingsAndFunctions.begin(), bindingsAndFunctions.end());
             std::for_each(bindingsAndFunctions.begin(), bindingsAndFunctions.end(),
                           [&](const BindingOrFunction &bindingOrFunction) {
                 std::variant<QQmlJSAotFunction, QQmlJS::DiagnosticMessage> result;
-                auto *module = v4CodeGen.module();
                 if (const auto *binding = bindingOrFunction.binding()) {
                     switch (binding->type()) {
                     case QmlIR::Binding::Type_AttachedProperty:
@@ -289,27 +289,53 @@ bool qCompileQmlFile(QmlIR::Document &irDocument, const QString &inputFileName,
                         break;
                     }
 
-                    Q_ASSERT(quint32(functionsToCompile.length()) > binding->value.compiledScriptIndex);
-                    auto *node = functionsToCompile[binding->value.compiledScriptIndex].parentNode;
-                    Q_ASSERT(node);
-                    Q_ASSERT(module->contextMap.contains(node));
-                    QV4::Compiler::Context *context = module->contextMap[node];
+                    Q_ASSERT(quint32(functionsToCompile.size()) > binding->value.compiledScriptIndex);
+                    const auto &functionToCompile
+                            = functionsToCompile[binding->value.compiledScriptIndex];
+                    auto *parentNode = functionToCompile.parentNode;
+                    Q_ASSERT(parentNode);
+                    Q_ASSERT(contextMap.contains(parentNode));
+                    QV4::Compiler::Context *context = contextMap.take(parentNode);
                     Q_ASSERT(context);
+
+                    auto *node = functionToCompile.node;
+                    Q_ASSERT(node);
+
+                    if (context->returnsClosure) {
+                        QQmlJS::AST::Node *inner
+                                = QQmlJS::AST::cast<QQmlJS::AST::ExpressionStatement *>(
+                                    node)->expression;
+                        Q_ASSERT(inner);
+                        QV4::Compiler::Context *innerContext = contextMap.take(inner);
+                        Q_ASSERT(innerContext);
+                        qCDebug(lcAotCompiler) << "Compiling signal handler for"
+                                               << irDocument.stringAt(binding->propertyNameIndex);
+                        std::variant<QQmlJSAotFunction, QQmlJS::DiagnosticMessage> innerResult
+                                = aotCompiler->compileBinding(innerContext, *binding, inner);
+
+                        if (auto *error = std::get_if<QQmlJS::DiagnosticMessage>(&innerResult)) {
+                            qCDebug(lcAotCompiler) << "Compilation failed:"
+                                                   << diagnosticErrorMessage(inputFileName, *error);
+                        } else if (auto *func = std::get_if<QQmlJSAotFunction>(&innerResult)) {
+                            qCDebug(lcAotCompiler) << "Generated code:" << func->code;
+                            aotFunctionsByIndex[innerContext->functionIndex] = *func;
+                        }
+                    }
 
                     qCDebug(lcAotCompiler) << "Compiling binding for property"
                                            << irDocument.stringAt(binding->propertyNameIndex);
-                    result = aotCompiler->compileBinding(context, *binding);
+                    result = aotCompiler->compileBinding(context, *binding, node);
                 } else if (const auto *function = bindingOrFunction.function()) {
-                    Q_ASSERT(quint32(functionsToCompile.length()) > function->index);
+                    Q_ASSERT(quint32(functionsToCompile.size()) > function->index);
                     auto *node = functionsToCompile[function->index].node;
                     Q_ASSERT(node);
-                    Q_ASSERT(module->contextMap.contains(node));
-                    QV4::Compiler::Context *context = module->contextMap[node];
+                    Q_ASSERT(contextMap.contains(node));
+                    QV4::Compiler::Context *context = contextMap.take(node);
                     Q_ASSERT(context);
 
-                    qCDebug(lcAotCompiler) << "Compiling function"
-                                           << irDocument.stringAt(function->nameIndex);
-                    result = aotCompiler->compileFunction(context, *function);
+                    const QString functionName = irDocument.stringAt(function->nameIndex);
+                    qCDebug(lcAotCompiler) << "Compiling function" << functionName;
+                    result = aotCompiler->compileFunction(context, functionName, node);
                 } else {
                     Q_UNREACHABLE();
                 }
@@ -550,12 +576,12 @@ bool qSaveQmlJSUnitAsCpp(const QString &inputFileName, const QString &outputFile
     writeStr(aotFunctions[FileScopeCodeIndex].code.toUtf8().constData());
     if (aotFunctions.size() <= 1) {
         // FileScopeCodeIndex is always there, but it may be the only one.
-        writeStr("extern const QQmlPrivate::AOTCompiledFunction aotBuiltFunctions[];\n"
-                 "extern const QQmlPrivate::AOTCompiledFunction aotBuiltFunctions[] = { { 0, QMetaType::fromType<void>(), {}, nullptr } };");
+        writeStr("extern const QQmlPrivate::TypedFunction aotBuiltFunctions[];\n"
+                 "extern const QQmlPrivate::TypedFunction aotBuiltFunctions[] = { { 0, QMetaType::fromType<void>(), {}, nullptr } };");
     } else {
         writeStr(wrapCallCode);
-        writeStr("extern const QQmlPrivate::AOTCompiledFunction aotBuiltFunctions[];\n"
-                 "extern const QQmlPrivate::AOTCompiledFunction aotBuiltFunctions[] = {\n");
+        writeStr("extern const QQmlPrivate::TypedFunction aotBuiltFunctions[];\n"
+                 "extern const QQmlPrivate::TypedFunction aotBuiltFunctions[] = {\n");
 
         QString footer = QStringLiteral("});}\n");
 
@@ -651,7 +677,7 @@ QQmlJS::DiagnosticMessage QQmlJSAotCompiler::diagnose(
 {
     if (isStrict(m_document)
             && (type == QtWarningMsg || type == QtCriticalMsg || type == QtFatalMsg)
-            && m_logger->isCategoryFatal(Log_Compiler)) {
+            && m_logger->isCategoryFatal(qmlCompiler)) {
         qFatal("%s:%d: (strict mode) %s",
                qPrintable(QFileInfo(m_resourcePath).fileName()),
                location.startLine, qPrintable(message));
@@ -659,7 +685,7 @@ QQmlJS::DiagnosticMessage QQmlJSAotCompiler::diagnose(
 
     // TODO: this is a special place that explicitly sets the severity through
     // logger's private function
-    m_logger->log(message, Log_Compiler, location, type);
+    m_logger->log(message, qmlCompiler, location, type);
 
     return QQmlJS::DiagnosticMessage {
         message,
@@ -669,12 +695,15 @@ QQmlJS::DiagnosticMessage QQmlJSAotCompiler::diagnose(
 }
 
 std::variant<QQmlJSAotFunction, QQmlJS::DiagnosticMessage> QQmlJSAotCompiler::compileBinding(
-        const QV4::Compiler::Context *context, const QmlIR::Binding &irBinding)
+        const QV4::Compiler::Context *context, const QmlIR::Binding &irBinding,
+        QQmlJS::AST::Node *astNode)
 {
-    QQmlJSFunctionInitializer initializer(&m_typeResolver, m_currentObject, m_currentScope);
+    QQmlJSFunctionInitializer initializer(
+                &m_typeResolver, m_currentObject->location, m_currentScope->location);
     QQmlJS::DiagnosticMessage error;
     const QString name = m_document->stringAt(irBinding.propertyNameIndex);
-    QQmlJSCompilePass::Function function = initializer.run(context, name, irBinding, &error);
+    QQmlJSCompilePass::Function function = initializer.run(
+                context, name, astNode, irBinding, &error);
     const QQmlJSAotFunction aotFunction = doCompile(context, &function, &error);
 
     if (error.isValid()) {
@@ -693,12 +722,12 @@ std::variant<QQmlJSAotFunction, QQmlJS::DiagnosticMessage> QQmlJSAotCompiler::co
 }
 
 std::variant<QQmlJSAotFunction, QQmlJS::DiagnosticMessage> QQmlJSAotCompiler::compileFunction(
-        const QV4::Compiler::Context *context, const QmlIR::Function &irFunction)
+        const QV4::Compiler::Context *context, const QString &name, QQmlJS::AST::Node *astNode)
 {
-    QQmlJSFunctionInitializer initializer(&m_typeResolver, m_currentObject, m_currentScope);
+    QQmlJSFunctionInitializer initializer(
+                &m_typeResolver, m_currentObject->location, m_currentScope->location);
     QQmlJS::DiagnosticMessage error;
-    const QString name = m_document->stringAt(irFunction.nameIndex);
-    QQmlJSCompilePass::Function function = initializer.run(context, name, irFunction, &error);
+    QQmlJSCompilePass::Function function = initializer.run(context, name, astNode, &error);
     const QQmlJSAotFunction aotFunction = doCompile(context, &function, &error);
 
     if (error.isValid())
@@ -719,6 +748,7 @@ QQmlJSAotFunction QQmlJSAotCompiler::globalCode() const
         u"QtQml/qqmlcomponent.h"_s,
         u"QtQml/qqmlcontext.h"_s,
         u"QtQml/qqmlengine.h"_s,
+        u"QtQml/qqmllist.h"_s,
 
         u"QtCore/qdatetime.h"_s,
         u"QtCore/qobject.h"_s,

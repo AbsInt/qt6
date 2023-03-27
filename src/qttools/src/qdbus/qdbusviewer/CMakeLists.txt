@@ -1,4 +1,5 @@
-# Generated from qdbusviewer.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## qdbusviewer App:
@@ -13,7 +14,7 @@ qt_internal_add_app(qdbusviewer
         qdbusmodel.cpp qdbusmodel.h
         qdbusviewer.cpp qdbusviewer.h
         servicesproxymodel.cpp servicesproxymodel.h
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::DBusPrivate
         Qt::Gui
         Qt::Widgets
@@ -49,11 +50,9 @@ if(APPLE)
     target_sources(qdbusviewer PRIVATE
         images/qdbusviewer.icns
     )
-    # special case end
     # Set values to be replaced in the custom Info_mac.plist.
     set(ICON "qdbusviewer.icns")
     set(EXECUTABLE "qdbusviewer")
-    # special case end
 endif()
 
 if(WIN32)

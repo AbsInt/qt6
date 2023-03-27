@@ -93,7 +93,7 @@ void MainWindow::setupMenuBar()
     menu->addAction(tr("Switch layout direction"),this, &MainWindow::switchLayoutDirection);
 
     menu->addSeparator();
-    menu->addAction(tr("&Quit"), this, &QWidget::close);
+    menu->addAction(tr("&Quit"), qApp, &QCoreApplication::quit);
 
     mainWindowMenu = menuBar()->addMenu(tr("Main window"));
 
@@ -429,7 +429,7 @@ void MainWindow::createDockWidget()
 
 void MainWindow::destroyDockWidget(QAction *action)
 {
-    int index = destroyDockWidgetMenu->actions().indexOf(action);
+    auto index = destroyDockWidgetMenu->actions().indexOf(action);
     delete extraDockWidgets.takeAt(index);
     destroyDockWidgetMenu->removeAction(action);
     action->deleteLater();

@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 include(Qt6QmlBuildInternals.cmake)
 
 #####################################################################
@@ -29,13 +32,12 @@ if(ANDROID)
 endif()
 
 qt_internal_add_qml_module(Qml
-    URI "QtQml"
+    URI "QtQml.Base"
     VERSION "${PROJECT_VERSION}"
     DESIGNER_SUPPORTED
     __QT_INTERNAL_SYSTEM_MODULE
     PLUGIN_TARGET qmlplugin
     CLASS_NAME QtQmlPlugin
-    IMPORTS ${module_dynamic_qml_imports}
     PLUGIN_TYPES qmltooling
     SOURCES
         ../3rdparty/masm/assembler/ARM64Assembler.h
@@ -125,6 +127,8 @@ qt_internal_add_qml_module(Qml
         common/qv4compileddata_p.h
         common/qv4staticvalue_p.h
         common/qv4stringtoarrayindex_p.h
+        common/qqmltranslation.cpp common/qqmltranslation_p.h
+        compat/removed_api.cpp
         compiler/qqmlirbuilder.cpp compiler/qqmlirbuilder_p.h
         compiler/qv4bytecodegenerator.cpp compiler/qv4bytecodegenerator_p.h
         compiler/qv4bytecodehandler.cpp compiler/qv4bytecodehandler_p.h
@@ -225,9 +229,11 @@ qt_internal_add_qml_module(Qml
         jsruntime/qv4vme_moth.cpp jsruntime/qv4vme_moth_p.h
         jsruntime/qv4sequenceobject.cpp jsruntime/qv4sequenceobject_p.h
         jsruntime/qv4vtable_p.h
+        jsruntime/qv4referenceobject.cpp jsruntime/qv4referenceobject_p.h
         memory/qv4heap_p.h
         memory/qv4mm.cpp memory/qv4mm_p.h
         memory/qv4mmdefs_p.h
+        memory/qv4stacklimits.cpp memory/qv4stacklimits_p.h
         memory/qv4writebarrier_p.h
         parser/qqmljsast.cpp parser/qqmljsast_p.h
         parser/qqmljsastfwd_p.h
@@ -261,6 +267,7 @@ qt_internal_add_qml_module(Qml
         qml/qqmlboundsignal.cpp qml/qqmlboundsignal_p.h
         qml/qqmlbuiltinfunctions.cpp qml/qqmlbuiltinfunctions_p.h
         qml/qqmlcomponent.cpp qml/qqmlcomponent.h qml/qqmlcomponent_p.h
+        qml/qqmlcomponentandaliasresolver_p.h
         qml/qqmlcomponentattached_p.h
         qml/qqmlcontext.cpp qml/qqmlcontext.h qml/qqmlcontext_p.h
         qml/qqmlcontextdata.cpp qml/qqmlcontextdata_p.h
@@ -289,6 +296,7 @@ qt_internal_add_qml_module(Qml
         qml/qqmllist.cpp qml/qqmllist.h qml/qqmllist_p.h
         qml/qqmllistwrapper.cpp qml/qqmllistwrapper_p.h
         qml/qqmlloggingcategory.cpp qml/qqmlloggingcategory_p.h
+        qml/qqmlmetamoduleregistration.cpp
         qml/qqmlmetaobject.cpp qml/qqmlmetaobject_p.h
         qml/qqmlmetatype.cpp qml/qqmlmetatype_p.h
         qml/qqmlmetatypedata.cpp qml/qqmlmetatypedata_p.h
@@ -333,7 +341,6 @@ qt_internal_add_qml_module(Qml
         qml/qqmltypemodule.cpp qml/qqmltypemodule_p.h
         qml/qqmltypemoduleversion.cpp qml/qqmltypemoduleversion_p.h
         qml/qqmltypenamecache.cpp qml/qqmltypenamecache_p.h
-        qml/qqmltypenotavailable.cpp qml/qqmltypenotavailable_p.h
         qml/qqmltypewrapper.cpp qml/qqmltypewrapper_p.h
         qml/qqmlvaluetype.cpp qml/qqmlvaluetype_p.h
         qml/qqmlvaluetypeproxybinding.cpp qml/qqmlvaluetypeproxybinding_p.h
@@ -354,6 +361,7 @@ qt_internal_add_qml_module(Qml
         qmltc/supportlibrary/qqmlcppbinding.cpp
         qmltc/supportlibrary/qqmlcpponassignment_p.h
         qmltc/supportlibrary/qqmlcpponassignment.cpp
+        qmltc/supportlibrary/qqmlcpptypehelpers_p.h
     DEFINES
         BUILDING_QT__
         ENABLE_ASSEMBLER_WX_EXCLUSIVE=1
@@ -412,6 +420,43 @@ qt_internal_add_qml_module(Qml
         ${extra_cmake_includes}
     GENERATE_CPP_EXPORTS
     GENERATE_PRIVATE_CPP_EXPORTS
+    POLICIES
+        QTP0001
+)
+
+qt_update_ignore_pch_source(Qml "compat/removed_api.cpp")
+
+set_source_files_properties(compat/removed_api.cpp
+                            jsruntime/qv4mathobject.cpp # math.h issues on Windows
+                            PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
+
+qt_internal_add_qml_module(QmlMeta
+    URI "QtQml"
+    VERSION "${PROJECT_VERSION}"
+    DESIGNER_SUPPORTED
+    CLASS_NAME QtQmlMetaPlugin
+    PLUGIN_TARGET QmlMeta
+
+    # Prevent type registration
+    NO_GENERATE_QMLTYPES
+
+    PAST_MAJOR_VERSIONS 2
+    IMPORTS
+        QtQml.Base/auto
+        ${module_dynamic_qml_imports}
+)
+
+# Add the QtQml qmldir to libQtQml, too.
+# Since we also provide the (bare bones) type  registration in libQtQml,
+# this makes the complete module reside in libQtQml. There is no need to
+# load the QmlMeta plugin, then.
+# Se still provide the plugin so that static linking works.
+get_target_property(qtqml_out_dir QmlMeta QT_QML_MODULE_OUTPUT_DIRECTORY)
+qt_internal_add_resource(Qml "qmlMetaQmldir"
+    PREFIX
+        "/qt-project.org/imports/QtQml"
+    FILES
+        ${qtqml_out_dir}/qmldir
 )
 
 # Linking to the static qml plugin should also automatically link to the worker script
@@ -462,6 +507,11 @@ qt_internal_extend_target(Qml CONDITION WIN32
         NOMINMAX
     PUBLIC_LIBRARIES
         shell32
+)
+
+qt_internal_extend_target(Qml CONDITION LINUX AND QT_FEATURE_dlopen
+    LIBRARIES
+        dl
 )
 
 #### Keys ignored in scope 7:.:.:qml.pro:solaris-cc_x_:
@@ -533,14 +583,10 @@ qt_internal_extend_target(Qml CONDITION QT_FEATURE_qml_debug
         debugger/qqmldebugservice.cpp debugger/qqmldebugservice_p.h
         debugger/qqmldebugservicefactory.cpp debugger/qqmldebugservicefactory_p.h
         debugger/qqmldebugserviceinterfaces.cpp
+        debugger/qqmldebugtranslationprotocol_p.h
         debugger/qqmlprofiler.cpp
         debugger/qqmlprofilerdefinitions_p.h
         jsruntime/qv4profiling.cpp
-)
-
-qt_internal_extend_target(Qml CONDITION QT_FEATURE_qml_debug AND QT_FEATURE_translation
-    SOURCES
-        debugger/qqmldebugtranslationprotocol_p.h
 )
 
 qt_internal_extend_target(Qml CONDITION UNIX
@@ -691,3 +737,14 @@ if(QT_FEATURE_private_tests AND CMAKE_VERSION VERSION_GREATER_EQUAL "3.19" AND Q
     qt_autogen_tools(qt_target_qml_sources_example ENABLE_AUTOGEN_TOOLS moc)
     qt_autogen_tools(qt_target_qml_sources_exampleplugin ENABLE_AUTOGEN_TOOLS moc)
 endif()
+
+# The Qml_sync_headers target doesn't exist when this CMakeLists is executed. So the qmlplugin
+# plugin target misses the dependency on Qml_sync_headers target. This leads to the
+# "unknown IID" issue when moc processes plugin sources, because of missing header aliases.
+# Qml_sync_headers target is created later by the finalizer in the directory scope so we add this
+# dependency manually instead of relying on qt_internal_add_qml_module logic. Same is applicable
+# for QmlMeta target.
+set_property(TARGET qmlplugin APPEND PROPERTY AUTOGEN_TARGET_DEPENDS
+    Qml_sync_headers)
+set_property(TARGET QmlMeta APPEND PROPERTY AUTOGEN_TARGET_DEPENDS
+    Qml_sync_headers)

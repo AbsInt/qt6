@@ -38,6 +38,8 @@ private Q_SLOTS:
     void normalizeExample_data();
 #endif
 
+    void testBackupFileLimit();
+
 private:
     QString readTestFile(const QString &path);
     QString runQmlformat(const QString &fileToFormat, QStringList args, bool shouldSucceed = true,
@@ -137,7 +139,7 @@ void TestQmlformat::initTestCase()
     // Optional chains are not permitted on the left-hand-side in assignments
     m_invalidFiles << "tests/auto/qml/qqmllanguage/data/optionalChaining.LHS.qml";
     // object literal with = assignements
-    m_invalidFiles << "tests/auto/quickcontrols2/controls/data/tst_scrollbar.qml";
+    m_invalidFiles << "tests/auto/quickcontrols/controls/data/tst_scrollbar.qml";
 
     // These files rely on exact formatting
     m_invalidFiles << "tests/auto/qml/qqmlecmascript/data/incrDecrSemicolon1.qml";
@@ -276,9 +278,35 @@ void TestQmlformat::testFormat_data()
     QTest::newRow("forWithLet")
             << "forWithLet.qml"
             << "forWithLet.formatted.qml" << QStringList {} << RunOption::OnCopy;
+
+    QTest::newRow("objects spacing (no changes)")
+            << "objectsSpacing.qml"
+            << "objectsSpacing.formatted.qml" << QStringList { "--objects-spacing" } << RunOption::OnCopy;
+
+    QTest::newRow("normalize + objects spacing")
+            << "normalizedObjectsSpacing.qml"
+            << "normalizedObjectsSpacing.formatted.qml" << QStringList { "-n", "--objects-spacing" } << RunOption::OnCopy;
+
+    QTest::newRow("ids new lines")
+            << "checkIdsNewline.qml"
+            << "checkIdsNewline.formatted.qml" << QStringList { "-n" } << RunOption::OnCopy;
+
+    QTest::newRow("functions spacing (no changes)")
+            << "functionsSpacing.qml"
+            << "functionsSpacing.formatted.qml" << QStringList { "--functions-spacing" } << RunOption::OnCopy;
+
+    QTest::newRow("normalize + functions spacing")
+            << "normalizedFunctionsSpacing.qml"
+            << "normalizedFunctionsSpacing.formatted.qml" << QStringList { "-n", "--functions-spacing" } << RunOption::OnCopy;
     QTest::newRow("dontRemoveComments")
             << "dontRemoveComments.qml"
             << "dontRemoveComments.formatted.qml" << QStringList {} << RunOption::OnCopy;
+    QTest::newRow("ecmaScriptClassInQml")
+            << "ecmaScriptClassInQml.qml"
+            << "ecmaScriptClassInQml.formatted.qml" << QStringList{} << RunOption::OnCopy;
+    QTest::newRow("arrowFunctionWithBinding")
+            << "arrowFunctionWithBinding.qml"
+            << "arrowFunctionWithBinding.formatted.qml" << QStringList{} << RunOption::OnCopy;
 }
 
 void TestQmlformat::testFormat()
@@ -368,6 +396,29 @@ void TestQmlformat::normalizeExample()
         QVERIFY(wasSuccessful && !output.isEmpty());
 }
 #endif
+
+void TestQmlformat::testBackupFileLimit()
+{
+    // Create a temporary directory
+    QTemporaryDir tempDir;
+
+    // Unformatted file to format
+    const QString fileToFormat{ testFile("Annotations.qml") };
+
+    {
+        const QString tempFile = tempDir.path() + QDir::separator() + "test_0.qml";
+        const QString backupFile = tempFile + QStringLiteral("~");
+        QFile::copy(fileToFormat, tempFile);
+
+        QProcess process;
+        process.start(m_qmlformatPath, QStringList{ "--verbose", "--inplace", tempFile });
+        QVERIFY(process.waitForFinished());
+        QCOMPARE(process.exitStatus(), QProcess::NormalExit);
+        QCOMPARE(process.exitCode(), 0);
+        QVERIFY(QFileInfo::exists(tempFile));
+        QVERIFY(!QFileInfo::exists(backupFile));
+    };
+}
 
 QString TestQmlformat::runQmlformat(const QString &fileToFormat, QStringList args,
                                     bool shouldSucceed, RunOption rOptions)

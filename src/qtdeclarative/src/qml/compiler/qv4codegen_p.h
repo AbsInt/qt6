@@ -66,7 +66,8 @@ protected:
     using Instruction = QV4::Moth::Instruction;
 public:
     Codegen(QV4::Compiler::JSUnitGenerator *jsUnitGenerator, bool strict,
-            CodegenWarningInterface *iface = defaultCodegenWarningInterface());
+            CodegenWarningInterface *iface = defaultCodegenWarningInterface(),
+            bool storeSourceLocations = false);
 
     void generateFromProgram(const QString &fileName,
                              const QString &finalUrl,
@@ -187,7 +188,9 @@ public:
             stackSlotIsLocalOrArgument(false),
             isVolatile(false),
             global(false),
-            qmlGlobal(false)
+            qmlGlobal(false),
+            throwsReferenceError(false),
+            subscriptLoadedForCall(false)
         {}
 
         Reference(const Reference &) = default;
@@ -232,14 +235,6 @@ public:
                 tempIndex = cg->bytecodeGenerator->newRegister();
             r.theStackSlot = Moth::StackSlot::createRegister(tempIndex);
             r.stackSlotIsLocalOrArgument = isLocal;
-            return r;
-        }
-        static Reference fromArgument(Codegen *cg, int index, bool isVolatile) {
-            Reference r(cg, StackSlot);
-            r.theStackSlot = Moth::StackSlot::createRegister(
-                    index + sizeof(CallData) / sizeof(StaticValue) - 1);
-            r.stackSlotIsLocalOrArgument = true;
-            r.isVolatile = isVolatile;
             return r;
         }
         static Reference fromScopedLocal(Codegen *cg, int index, int scope) {
@@ -336,6 +331,14 @@ public:
             return theStackSlot;
         }
 
+        void tdzCheck() const
+        {
+            if (isAccumulator())
+                tdzCheck(requiresTDZCheck, throwsReferenceError);
+            else if (isStackSlot())
+                tdzCheckStackSlot(stackSlot(), requiresTDZCheck, throwsReferenceError);
+        }
+
         union {
             Moth::StackSlot theStackSlot;
             QV4::ReturnedValue constant;
@@ -349,7 +352,10 @@ public:
             };
             struct {
                 Moth::StackSlot elementBase;
-                RValue elementSubscript;
+                union {
+                    RValue elementSubscript;
+                    Moth::StackSlot element;
+                };
             };
             Moth::StackSlot property; // super property
         };
@@ -365,6 +371,8 @@ public:
         quint32 isVolatile:1;
         quint32 global:1;
         quint32 qmlGlobal:1;
+        quint32 throwsReferenceError:1;
+        quint32 subscriptLoadedForCall:1;
         QQmlJS::SourceLocation sourceLocation = QQmlJS::SourceLocation();
         QSharedPointer<Moth::BytecodeGenerator::Label> optionalChainJumpLabel;
         QSharedPointer<Moth::BytecodeGenerator::Label> optionalChainTargetLabel;
@@ -372,6 +380,9 @@ public:
     private:
         void storeAccumulator() const;
         Reference doStoreOnStack(int tempIndex) const;
+        void tdzCheck(bool requiresCheck, bool throwsReferenceError) const;
+        void tdzCheckStackSlot(
+                Moth::StackSlot slot, bool requiresCheck, bool throwsReferenceError) const;
     };
 
     struct RegisterScope {
@@ -505,16 +516,31 @@ public:
     int registerString(const QString &name) {
         return jsUnitGenerator->registerString(name);
     }
-    int registerConstant(QV4::ReturnedValue v) { return jsUnitGenerator->registerConstant(v); }
-    int registerGetterLookup(int nameIndex) { return jsUnitGenerator->registerGetterLookup(nameIndex); }
-    int registerSetterLookup(int nameIndex) { return jsUnitGenerator->registerSetterLookup(nameIndex); }
-    int registerGlobalGetterLookup(int nameIndex) { return jsUnitGenerator->registerGlobalGetterLookup(nameIndex); }
-    int registerQmlContextPropertyGetterLookup(int nameIndex) { return jsUnitGenerator->registerQmlContextPropertyGetterLookup(nameIndex); }
+    int registerConstant(QV4::ReturnedValue v)
+    {
+        return jsUnitGenerator->registerConstant(v);
+    }
+    int registerGetterLookup(int nameIndex, JSUnitGenerator::LookupMode mode)
+    {
+        return jsUnitGenerator->registerGetterLookup(nameIndex, mode);
+    }
+    int registerSetterLookup(int nameIndex)
+    {
+        return jsUnitGenerator->registerSetterLookup(nameIndex);
+    }
+    int registerGlobalGetterLookup(int nameIndex, JSUnitGenerator::LookupMode mode)
+    {
+        return jsUnitGenerator->registerGlobalGetterLookup(nameIndex, mode);
+    }
+    int registerQmlContextPropertyGetterLookup(int nameIndex, JSUnitGenerator::LookupMode mode)
+    {
+        return jsUnitGenerator->registerQmlContextPropertyGetterLookup(nameIndex, mode);
+    }
 
     // Returns index in _module->functions
     virtual int defineFunction(const QString &name, QQmlJS::AST::Node *ast,
                                QQmlJS::AST::FormalParameterList *formals,
-                               QQmlJS::AST::StatementList *body, bool storeSourceLocation = false);
+                               QQmlJS::AST::StatementList *body);
 
 protected:
     void statement(QQmlJS::AST::Statement *ast);
@@ -772,6 +798,7 @@ protected:
     bool inFormalParameterList = false;
     bool functionEndsWithReturn = false;
     bool _tailCallsAreAllowed = true;
+    bool storeSourceLocations = false;
     QSet<QString> m_globalNames;
     QSet<QQmlJS::AST::Node*> m_seenOptionalChainNodes;
     QHash<QQmlJS::AST::Node*, Moth::BytecodeGenerator::Label> m_optionalChainLabels;
@@ -813,6 +840,8 @@ private:
     void throwError(ErrorType errorType, const QQmlJS::SourceLocation &loc,
                     const QString &detail);
     std::optional<Moth::BytecodeGenerator::Label> traverseOptionalChain(QQmlJS::AST::Node *node);
+    Reference loadSubscriptForCall(const Reference &base);
+    void generateThrowException(const QString &type, const QString &text = QString());
 };
 
 }

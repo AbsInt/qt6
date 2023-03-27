@@ -44,7 +44,7 @@ sudo zypper -nq install bison flex gperf \
         zlib-devel \
         systemd-devel \
         glib2-devel \
-        libopenssl-devel \
+        libopenssl-3-devel \
         freetype2-devel \
         fontconfig-devel \
         sqlite3-devel \
@@ -75,6 +75,9 @@ sudo zypper -nq install alsa-devel dbus-1-devel libxkbfile-devel \
 # qtwebkit
 sudo zypper -nq install libxml2-devel libxslt-devel
 
+# yasm (for ffmpeg in multimedia)
+sudo zypper -nq install yasm
+
 # GStreamer (qtwebkit and qtmultimedia), pulseaudio (qtmultimedia)
 sudo zypper -nq install gstreamer-devel gstreamer-plugins-base-devel libpulse-devel
 
@@ -90,8 +93,11 @@ sudo zypper -nq install make
 # Tools to build Git
 sudo zypper -nq install autoconf libcurl-devel libexpat-devel
 
+# OpenSSL 3
+sudo zypper -nq install openssl-3
+
 gccVersion="$(gcc --version |grep gcc |cut -b 17-23)"
 echo "GCC = $gccVersion" >> versions.txt
 
-OpenSSLVersion="$(openssl version |cut -b 9-14)"
+OpenSSLVersion="$(openssl-3 version |cut -b 9-14)"
 echo "OpenSSL = $OpenSSLVersion" >> ~/versions.txt

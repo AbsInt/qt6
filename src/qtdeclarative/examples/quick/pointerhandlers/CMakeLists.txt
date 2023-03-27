@@ -1,7 +1,8 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 cmake_minimum_required(VERSION 3.16)
 project(pointerhandlers LANGUAGES CXX)
-
-set(CMAKE_AUTOMOC ON)
 
 if(NOT DEFINED INSTALL_EXAMPLESDIR)
     set(INSTALL_EXAMPLESDIR "examples")
@@ -11,11 +12,13 @@ set(INSTALL_EXAMPLEDIR "${INSTALL_EXAMPLESDIR}/quick/pointerhandlers")
 
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Qml Quick Svg)
 
+qt_standard_project_setup(REQUIRES 6.5)
+
 add_subdirectory("../shared" "shared")
 
 qt_add_executable(pointerhandlersexample WIN32 MACOSX_BUNDLE main.cpp)
 
-target_link_libraries(pointerhandlersexample PUBLIC
+target_link_libraries(pointerhandlersexample PRIVATE
     Qt::Core
     Qt::Gui
     Qt::Qml
@@ -27,7 +30,6 @@ add_dependencies(pointerhandlersexample pointerhandlers_shared)
 
 qt_add_qml_module(pointerhandlersexample
     URI pointerhandlers
-    VERSION 1.0
     QML_FILES
         "components/Button.qml"
         "components/CheckBox.qml"
