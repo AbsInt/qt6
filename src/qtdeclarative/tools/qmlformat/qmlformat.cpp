@@ -33,6 +33,8 @@ struct Options
     bool normalize = false;
     bool ignoreSettings = false;
     bool writeDefaultSettings = false;
+    bool objectsSpacing = false;
+    bool functionsSpacing = false;
 
     int indentWidth = 4;
     bool indentWidthSet = false;
@@ -118,12 +120,16 @@ bool parseFile(const QString &filename, const Options &options)
     if (options.force || qmlFilePtr->code().size() > 32000)
         checks = WriteOutCheck::None;
 
+    lwOptions.objectsSpacing = options.objectsSpacing;
+    lwOptions.functionsSpacing = options.functionsSpacing;
+
     MutableDomItem res;
     if (options.inplace) {
         if (options.verbose)
             qWarning().noquote() << "Writing to file" << filename;
         FileWriter fw;
-        res = qmlFile.writeOut(filename, 2, lwOptions, &fw, checks);
+        const unsigned numberOfBackupFiles = 0;
+        res = qmlFile.writeOut(filename, numberOfBackupFiles, lwOptions, &fw, checks);
     } else {
         QFile out;
         out.open(stdout, QIODevice::WriteOnly);
@@ -184,6 +190,10 @@ Options buildCommandLineOptions(const QCoreApplication &app)
             QStringLiteral("Override the new line format to use (native macos unix windows)."),
             "newline", "native"));
 
+    parser.addOption(QCommandLineOption(QStringList() << "objects-spacing", QStringLiteral("Ensure spaces between objects (only works with normalize option).")));
+
+    parser.addOption(QCommandLineOption(QStringList() << "functions-spacing", QStringLiteral("Ensure spaces between functions (only works with normalize option).")));
+
     parser.addPositionalArgument("filenames", "files to be processed by qmlformat");
 
     parser.process(app);
@@ -227,6 +237,8 @@ Options buildCommandLineOptions(const QCoreApplication &app)
     options.tabs = parser.isSet("tabs");
     options.normalize = parser.isSet("normalize");
     options.ignoreSettings = parser.isSet("ignore-settings");
+    options.objectsSpacing = parser.isSet("objects-spacing");
+    options.functionsSpacing = parser.isSet("functions-spacing");
     options.valid = true;
 
     options.indentWidth = indentWidth;
@@ -260,6 +272,12 @@ int main(int argc, char *argv[])
     const QString &newlineSetting = QStringLiteral("NewlineType");
     settings.addOption(newlineSetting, QStringLiteral("native"));
 
+    const QString &objectsSpacingSetting = QStringLiteral("ObjectsSpacing");
+    settings.addOption(objectsSpacingSetting);
+
+    const QString &functionsSpacingSetting = QStringLiteral("FunctionsSpacing");
+    settings.addOption(functionsSpacingSetting);
+
     const auto options = buildCommandLineOptions(app);
     if (!options.valid) {
         for (const auto &error : options.errors) {
@@ -291,6 +309,12 @@ int main(int argc, char *argv[])
 
         if (settings.isSet(newlineSetting))
             perFileOptions.newline = settings.value(newlineSetting).toString();
+
+        if (settings.isSet(objectsSpacingSetting))
+            perFileOptions.objectsSpacing = settings.value(objectsSpacingSetting).toBool();
+
+        if (settings.isSet(functionsSpacingSetting))
+            perFileOptions.functionsSpacing = settings.value(functionsSpacingSetting).toBool();
 
         return perFileOptions;
     };

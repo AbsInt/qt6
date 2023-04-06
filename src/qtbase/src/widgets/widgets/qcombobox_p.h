@@ -49,7 +49,11 @@ class QComboBoxListView : public QListView
 {
     Q_OBJECT
 public:
-    QComboBoxListView(QComboBox *cmb = nullptr) : combo(cmb) {}
+    QComboBoxListView(QComboBox *cmb = nullptr) : combo(cmb)
+    {
+        if (cmb)
+            setScreen(cmb->screen());
+    }
 
 protected:
     void resizeEvent(QResizeEvent *event) override
@@ -352,6 +356,7 @@ public:
     void updateViewContainerPaletteAndOpacity();
     void updateFocusPolicy();
     void showPopupFromMouseEvent(QMouseEvent *e);
+    void doHidePopup();
 
 #ifdef Q_OS_MAC
     void cleanupNativePopup();

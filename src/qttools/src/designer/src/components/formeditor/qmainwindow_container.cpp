@@ -15,7 +15,7 @@
 
 QT_BEGIN_NAMESPACE
 
-using namespace qdesigner_internal;
+namespace qdesigner_internal {
 
 QMainWindowContainer::QMainWindowContainer(QMainWindow *widget, QObject *parent)
     : QObject(parent),
@@ -30,15 +30,14 @@ int QMainWindowContainer::count() const
 
 QWidget *QMainWindowContainer::widget(int index) const
 {
-    if (index == -1)
-        return nullptr;
-
-    return m_widgets.at(index);
+    return m_widgets.value(index, nullptr);
 }
 
 int QMainWindowContainer::currentIndex() const
 {
-    return m_mainWindow->centralWidget() ? 0 : -1;
+    // QTBUG-111603, handle plugins with unmanaged central widgets
+    auto *cw = m_mainWindow->centralWidget();
+    return cw != nullptr && m_widgets.contains(cw) ? 0 : -1;
 }
 
 void QMainWindowContainer::setCurrentIndex(int index)
@@ -176,5 +175,7 @@ void QMainWindowContainer::remove(int index)
     }
     m_widgets.removeAt(index);
 }
+
+} // namespace qdesigner_internal
 
 QT_END_NAMESPACE

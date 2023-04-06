@@ -67,8 +67,6 @@ QT_BEGIN_NAMESPACE
   \value ImageText
   \value ImportantNote
   \value InlineImage
-  \value JavaScript
-  \value EndJavaScript
   \value Keyword
   \value LineBreak
   \value Link
@@ -153,8 +151,6 @@ static const struct
              { "ImportantLeft", Atom::ImportantLeft },
              { "ImportantRight", Atom::ImportantRight },
              { "InlineImage", Atom::InlineImage },
-             { "JavaScript", Atom::JavaScript },
-             { "EndJavaScript", Atom::EndJavaScript },
              { "Keyword", Atom::Keyword },
              { "LegaleseLeft", Atom::LegaleseLeft },
              { "LegaleseRight", Atom::LegaleseRight },
@@ -358,7 +354,6 @@ LinkAtom::LinkAtom(const QString &p1, const QString &p2)
     : Atom(Atom::Link, p1),
       m_resolved(false),
       m_genus(Node::DontCare),
-      m_goal(Node::NoType),
       m_domain(nullptr),
       m_squareBracketParams(p2)
 {
@@ -382,11 +377,7 @@ void LinkAtom::resolveSquareBracketParams()
                 continue;
             }
         }
-        if (m_goal == Node::NoType) {
-            m_goal = Node::goal(param);
-            if (m_goal != Node::NoType)
-                continue;
-        }
+
         if (param == "qml") {
             m_genus = Node::QML;
             continue;
@@ -416,7 +407,6 @@ LinkAtom::LinkAtom(const LinkAtom &t)
     : Atom(Link, t.string()),
       m_resolved(t.m_resolved),
       m_genus(t.m_genus),
-      m_goal(t.m_goal),
       m_domain(t.m_domain),
       m_error(t.m_error),
       m_squareBracketParams(t.m_squareBracketParams)
@@ -433,7 +423,6 @@ LinkAtom::LinkAtom(Atom *previous, const LinkAtom &t)
     : Atom(previous, Link, t.string()),
       m_resolved(t.m_resolved),
       m_genus(t.m_genus),
-      m_goal(t.m_goal),
       m_domain(t.m_domain),
       m_error(t.m_error),
       m_squareBracketParams(t.m_squareBracketParams)

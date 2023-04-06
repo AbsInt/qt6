@@ -154,9 +154,22 @@ public:
     std::unique_ptr<CompilationUnitMapper> backingFile;
 
     // --- interface for QQmlPropertyCacheCreator
-    using CompiledObject = CompiledData::Object;
-    using CompiledFunction = CompiledData::Function;
+    using CompiledObject = const CompiledData::Object;
+    using CompiledFunction = const CompiledData::Function;
+    using CompiledBinding = const CompiledData::Binding;
     enum class ListPropertyAssignBehavior { Append, Replace, ReplaceIfNotDefault };
+
+    // Empty dummy. We don't need to do this when loading from cache.
+    class IdToObjectMap
+    {
+    public:
+        void insert(int, int) {}
+        void clear() {}
+
+        // We have already checked uniqueness of IDs when creating the CU
+        bool contains(int) { return false; }
+    };
+
     ListPropertyAssignBehavior listPropertyAssignBehavior() const
     {
         if (data->flags & CompiledData::Unit::ListPropertyAssignReplace)
@@ -164,6 +177,21 @@ public:
         if (data->flags & CompiledData::Unit::ListPropertyAssignReplaceIfNotDefault)
             return ListPropertyAssignBehavior::ReplaceIfNotDefault;
         return ListPropertyAssignBehavior::Append;
+    }
+
+    bool enforcesFunctionSignature() const
+    {
+        return data->flags & CompiledData::Unit::FunctionSignaturesEnforced;
+    }
+
+    bool nativeMethodsAcceptThisObjects() const
+    {
+        return data->flags & CompiledData::Unit::NativeMethodsAcceptThisObject;
+    }
+
+    bool valueTypesAreCopied() const
+    {
+        return data->flags & CompiledData::Unit::ValueTypesCopied;
     }
 
     int objectCount() const { return qmlData->nObjects; }
@@ -251,6 +279,14 @@ public:
     bool saveToDisk(const QUrl &unitUrl, QString *errorString);
 
     QString bindingValueAsString(const CompiledData::Binding *binding) const;
+
+    struct TranslationDataIndex
+    {
+        uint index;
+        bool byId;
+    };
+
+    QString translateFrom(TranslationDataIndex index) const;
 
     static bool verifyHeader(const CompiledData::Unit *unit, QDateTime expectedSourceTimeStamp,
                              QString *errorString);

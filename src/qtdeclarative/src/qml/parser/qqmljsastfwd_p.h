@@ -4,7 +4,6 @@
 #ifndef QQMLJSAST_FWD_P_H
 #define QQMLJSAST_FWD_P_H
 
-#include "qqmljsglobal_p.h"
 #include <private/qqmljssourcelocation_p.h>
 
 #include <QtCore/qglobal.h>
@@ -123,7 +122,7 @@ class NestedExpression;
 class ClassExpression;
 class ClassDeclaration;
 class ClassElementList;
-class TypeArgumentList;
+class TypeArgument;
 class Type;
 class TypeAnnotation;
 

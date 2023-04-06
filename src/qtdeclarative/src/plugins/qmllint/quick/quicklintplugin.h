@@ -13,6 +13,12 @@
 
 QT_BEGIN_NAMESPACE
 
+struct TypeDescription
+{
+    QString module;
+    QString name;
+};
+
 class QmlLintQuickPlugin : public QObject, public QQmlSA::LintPlugin
 {
     Q_OBJECT
@@ -46,12 +52,6 @@ private:
 class AttachedPropertyTypeValidatorPass : public QQmlSA::PropertyPass
 {
 public:
-    struct TypeDescription
-    {
-        QString module;
-        QString name;
-    };
-
     AttachedPropertyTypeValidatorPass(QQmlSA::PassManager *manager);
 
     QString addWarning(TypeDescription attachType, QList<TypeDescription> allowedTypes,
@@ -123,6 +123,60 @@ public:
 
 private:
     QQmlSA::Element m_swipeDelegate;
+};
+
+class VarBindingTypeValidatorPass : public QQmlSA::PropertyPass
+{
+public:
+    VarBindingTypeValidatorPass(QQmlSA::PassManager *manager,
+                                const QMultiHash<QString, TypeDescription> &expectedPropertyTypes);
+
+    void onBinding(const QQmlSA::Element &element, const QString &propertyName,
+                   const QQmlJSMetaPropertyBinding &binding, const QQmlSA::Element &bindingScope,
+                   const QQmlSA::Element &value) override;
+
+private:
+    QMultiHash<QString, QQmlSA::Element> m_expectedPropertyTypes;
+};
+
+class PropertyChangesValidatorPass : public QQmlSA::ElementPass
+{
+public:
+    PropertyChangesValidatorPass(QQmlSA::PassManager *manager);
+
+    bool shouldRun(const QQmlSA::Element &element) override;
+    void run(const QQmlSA::Element &element) override;
+
+private:
+    QQmlSA::Element m_propertyChanges;
+};
+
+class AttachedPropertyReuse : public QQmlSA::PropertyPass
+{
+public:
+    enum Mode {
+        CheckAll,
+        RestrictToControls
+    };
+
+    AttachedPropertyReuse(QQmlSA::PassManager *manager, LoggerWarningId category)
+        : QQmlSA::PropertyPass(manager)
+        , category(category)
+    {}
+
+    void onRead(const QQmlSA::Element &element, const QString &propertyName,
+                const QQmlSA::Element &readScope, QQmlJS::SourceLocation location) override;
+    void onWrite(const QQmlSA::Element &element, const QString &propertyName,
+                 const QQmlSA::Element &value, const QQmlSA::Element &writeScope,
+                 QQmlJS::SourceLocation location) override;
+private:
+    struct ElementAndLocation {
+        QQmlSA::Element element;
+        QQmlJS::SourceLocation location;
+    };
+
+    QMultiHash<QQmlSA::Element, ElementAndLocation> usedAttachedTypes;
+    LoggerWarningId category;
 };
 
 QT_END_NAMESPACE

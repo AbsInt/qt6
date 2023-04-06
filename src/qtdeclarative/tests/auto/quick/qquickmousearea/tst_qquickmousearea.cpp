@@ -110,6 +110,8 @@ private slots:
     void subtreeHoverEnabled();
     void hoverWhenDisabled();
     void disableAfterPress();
+    void disableParentOnPress_data();
+    void disableParentOnPress();
     void onWheel();
     void transformedMouseArea_data();
     void transformedMouseArea();
@@ -143,6 +145,7 @@ private slots:
 #if QT_CONFIG(tabletevent)
     void tabletStylusTap();
 #endif
+    void syntheticRightClick();
 
 private:
     int startDragDistance() const {
@@ -150,7 +153,7 @@ private:
     }
     void acceptedButton_data();
     void rejectedButton_data();
-    QPointingDevice *device = QTest::createTouchDevice();
+    QPointingDevice *device = QTest::createTouchDevice(); // TODO const after fixing QTBUG-107864
 };
 
 Q_DECLARE_METATYPE(Qt::MouseButton)
@@ -1534,6 +1537,53 @@ void tst_QQuickMouseArea::disableAfterPress()
     QCOMPARE(mouseReleaseSpy.size(), 0);
 }
 
+void tst_QQuickMouseArea::disableParentOnPress_data()
+{
+    QTest::addColumn<const QPointingDevice *>("device");
+
+    QTest::newRow("core pointer") << QPointingDevice::primaryPointingDevice();
+    QTest::newRow("touch") << static_cast<const QPointingDevice *>(device); // TODO QTBUG-107864
+}
+
+void tst_QQuickMouseArea::disableParentOnPress() // QTBUG-39806 and QTBUG-103788
+{
+    QFETCH(const QPointingDevice *, device);
+
+    QQuickView window;
+    QVERIFY(QQuickTest::showView(window, testFileUrl("disableParentOnPress.qml")));
+    QQuickItem *root = window.rootObject();
+    QVERIFY(root);
+    QQuickMouseArea *mouseArea = root->findChild<QQuickMouseArea*>();
+    QVERIFY(mouseArea);
+
+    QSignalSpy pressedChangedSpy(mouseArea, &QQuickMouseArea::pressedChanged);
+    QSignalSpy canceledSpy(mouseArea, &QQuickMouseArea::canceled);
+    QSignalSpy enabledSpy(mouseArea, &QQuickMouseArea::enabledChanged);
+    QSignalSpy parentEnabledSpy(root, &QQuickItem::enabledChanged);
+    const QPoint p(100, 100);
+
+    QQuickTest::pointerPress(device, &window, 0, p);
+    QTRY_COMPARE(parentEnabledSpy.size(), 1);
+    QCOMPARE(root->isEnabled(), false);
+    QCOMPARE(mouseArea->isEnabled(), true); // enabled is independent, unfortunately (inverse of QTBUG-38364)
+    QCOMPARE(QQuickItemPrivate::get(mouseArea)->effectiveEnable, false);
+    // bug fix: it knows it got effectively disabled, so now it's no longer pressed
+    QCOMPARE(mouseArea->pressed(), false);
+    QCOMPARE(canceledSpy.size(), 1); // ...because the press was canceled
+    QCOMPARE(pressedChangedSpy.size(), 2); // kerchunk
+    QQuickTest::pointerRelease(device, &window, 0, p);
+
+    // now re-enable it and try again
+    root->setEnabled(true);
+    QQuickTest::pointerPress(device, &window, 0, p);
+    QTRY_COMPARE(root->isEnabled(), false);
+    QCOMPARE(QQuickItemPrivate::get(mouseArea)->effectiveEnable, false);
+    QCOMPARE(mouseArea->pressed(), false);
+    QCOMPARE(canceledSpy.size(), 2);
+    QCOMPARE(pressedChangedSpy.size(), 4);
+    QQuickTest::pointerRelease(device, &window, 0, p);
+}
+
 void tst_QQuickMouseArea::onWheel()
 {
     QQuickView window;
@@ -1859,7 +1909,12 @@ void tst_QQuickMouseArea::nestedStopAtBounds()
     QTest::mouseMove(&window, position);
     axis += invert ? threshold : -threshold;
     QTest::mouseMove(&window, position);
-    QTRY_COMPARE(outer->drag()->active(), true);
+
+    // outer drag will not receive mouse event, when the focus has been stolen.
+    // => try to regain and time out if it fails.
+    while (!QTest::qWaitFor([&outer]() { return outer->drag()->active(); }))
+        window.raise();
+
     QCOMPARE(inner->drag()->active(), false);
     QTest::mouseRelease(&window, Qt::LeftButton, Qt::NoModifier, position);
 
@@ -2540,6 +2595,34 @@ void tst_QQuickMouseArea::tabletStylusTap()
     QCOMPARE(pressSpy.size(), 1);
 }
 #endif
+
+void tst_QQuickMouseArea::syntheticRightClick()
+{
+    QQuickView window;
+    QVERIFY(QQuickTest::showView(window, testFileUrl("simple.qml")));
+    QQuickMouseArea *mouseArea = window.rootObject()->findChild<QQuickMouseArea *>();
+    QVERIFY(mouseArea);
+    mouseArea->setAcceptedButtons(Qt::RightButton);
+
+    QSignalSpy clickSpy(mouseArea, &QQuickMouseArea::clicked);
+    const QPointF p(20, 20);
+    quint64 timestamp = 10;
+
+    // The right-click is probably synthesized from a touch long-press IRL, but it doesn't matter for the DA's logic.
+    // We could set QT_QUICK_ALLOW_SYNTHETIC_RIGHT_CLICK=0 to opt out, but otherwise it's allowed.
+    QMouseEvent press(QEvent::MouseButtonPress, p, mouseArea->mapToScene(p), mouseArea->mapToGlobal(p),
+                      Qt::RightButton, Qt::RightButton, Qt::NoModifier, Qt::MouseEventSynthesizedBySystem);
+    press.setTimestamp(timestamp++);
+    QGuiApplication::sendEvent(&window, &press);
+    QCOMPARE(mouseArea->pressedButtons(), Qt::RightButton);
+
+    QMouseEvent release(QEvent::MouseButtonRelease, p, mouseArea->mapToScene(p), mouseArea->mapToGlobal(p),
+                        Qt::RightButton, Qt::RightButton, Qt::NoModifier, Qt::MouseEventSynthesizedBySystem);
+    release.setTimestamp(timestamp);
+    QGuiApplication::sendEvent(&window, &release);
+    QCOMPARE(mouseArea->pressedButtons(), Qt::NoButton);
+    QCOMPARE(clickSpy.size(), 1);
+}
 
 QTEST_MAIN(tst_QQuickMouseArea)
 

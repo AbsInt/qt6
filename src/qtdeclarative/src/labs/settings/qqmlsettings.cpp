@@ -18,6 +18,7 @@ QT_BEGIN_NAMESPACE
     \qmlmodule Qt.labs.settings 1.0
     \title Qt Labs Settings QML Types
     \ingroup qmlmodules
+    \deprecated [6.5] Use \l [QML] {QtCore::}{Settings} from Qt QML Core instead.
     \brief Provides persistent platform-independent application settings.
 
     To use this module, import the module with the following line:
@@ -32,6 +33,7 @@ QT_BEGIN_NAMESPACE
 //!    \instantiates QQmlSettings
     \inqmlmodule Qt.labs.settings
     \ingroup settings
+    \deprecated [6.5] Use \l [QML] {QtCore::}{Settings} from Qt QML Core instead.
     \brief Provides persistent platform-independent application settings.
 
     The Settings type provides persistent platform-independent application settings.
@@ -196,7 +198,7 @@ QT_BEGIN_NAMESPACE
     standard, INI text files are used. See \l QSettings documentation for
     more details.
 
-    \sa QSettings
+    \sa {QtCore::}{Settings}, QSettings
 */
 
 Q_LOGGING_CATEGORY(lcSettings, "qt.labs.settings")
@@ -481,6 +483,9 @@ void QQmlSettings::componentComplete()
 {
     Q_D(QQmlSettings);
     d->init();
+    qmlWarning(this) << "The Settings type from Qt.labs.settings is deprecated"
+                        " and will be removed in a future release. Please use "
+                        "the one from QtCore instead.";
 }
 
 void QQmlSettings::timerEvent(QTimerEvent *event)

@@ -4,13 +4,7 @@
 
 #include "qqmlvmemetaobject_p.h"
 
-
-#include "qqml.h"
 #include <private/qqmlrefcount_p.h>
-#include "qqmlexpression.h"
-#include "qqmlexpression_p.h"
-#include "qqmlcontext_p.h"
-#include "qqmlbinding_p.h"
 #include "qqmlpropertyvalueinterceptor_p.h"
 #include <qqmlinfo.h>
 
@@ -25,6 +19,7 @@
 #include <private/qv4sequenceobject_p.h>
 #include <private/qqmlpropertycachecreator_p.h>
 #include <private/qqmlpropertycachemethodarguments_p.h>
+#include <private/qqmlvaluetypewrapper_p.h>
 
 #include <climits> // for CHAR_BIT
 
@@ -280,63 +275,72 @@ bool QQmlInterceptorMetaObject::doIntercept(QMetaObject::Call c, int id, void **
 
         if (metaType.isValid()) {
             if (valueIndex != -1 && c == QMetaObject::WriteProperty) {
-                // TODO: handle intercepting bindable properties for value types?
-                QQmlGadgetPtrWrapper *valueType = QQmlGadgetPtrWrapper::instance(
-                            data->context->engine(), metaType);
-                Q_ASSERT(valueType);
 
-                //
-                // Consider the following case:
-                //  color c = { 0.1, 0.2, 0.3 }
-                //  interceptor exists on c.r
-                //  write { 0.2, 0.4, 0.6 }
-                //
-                // The interceptor may choose not to update the r component at this
-                // point (for example, a behavior that creates an animation). But we
-                // need to ensure that the g and b components are updated correctly.
-                //
-                // So we need to perform a full write where the value type is:
-                //    r = old value, g = new value, b = new value
-                //
-                // And then call the interceptor which may or may not write the
-                // new value to the r component.
-                //
-                // This will ensure that the other components don't contain stale data
-                // and any relevant signals are emitted.
-                //
-                // To achieve this:
-                //   (1) Store the new value type as a whole (needed due to
-                //       aliasing between a[0] and static storage in value type).
-                //   (2) Read the entire existing value type from object -> valueType temp.
-                //   (3) Read the previous value of the component being changed
-                //       from the valueType temp.
-                //   (4) Write the entire new value type into the temp.
-                //   (5) Overwrite the component being changed with the old value.
-                //   (6) Perform a full write to the value type (which may emit signals etc).
-                //   (7) Issue the interceptor call with the new component value.
-                //
+                // If we didn't intend to change the property this interceptor cares about,
+                // then don't bother intercepting it. There may be an animation running on
+                // the property. We shouldn't disturb it.
+                const int changedProperty
+                        = (*static_cast<int *>(a[3]) & QQmlPropertyData::HasInternalIndex)
+                            ? *static_cast<int *>(a[4])
+                            : QV4::ReferenceObject::AllProperties;
+                if (changedProperty == QV4::ReferenceObject::AllProperties
+                        || changedProperty == valueIndex) {
+                    // TODO: handle intercepting bindable properties for value types?
+                    QQmlGadgetPtrWrapper *valueType = QQmlGadgetPtrWrapper::instance(
+                                data->context->engine(), metaType);
+                    Q_ASSERT(valueType);
 
-                QMetaProperty valueProp = valueType->property(valueIndex);
-                QVariant newValue(metaType, a[0]);
+                    //
+                    // Consider the following case:
+                    //  color c = { 0.1, 0.2, 0.3 }
+                    //  interceptor exists on c.r
+                    //  write { 0.2, 0.4, 0.6 }
+                    //
+                    // The interceptor may choose not to update the r component at this
+                    // point (for example, a behavior that creates an animation). But we
+                    // need to ensure that the g and b components are updated correctly.
+                    //
+                    // So we need to perform a full write where the value type is:
+                    //    r = old value, g = new value, b = new value
+                    //
+                    // And then call the interceptor which may or may not write the
+                    // new value to the r component.
+                    //
+                    // This will ensure that the other components don't contain stale data
+                    // and any relevant signals are emitted.
+                    //
+                    // To achieve this:
+                    //   (1) Store the new value type as a whole (needed due to
+                    //       aliasing between a[0] and static storage in value type).
+                    //   (2) Read the entire existing value type from object -> valueType temp.
+                    //   (3) Read the previous value of the component being changed
+                    //       from the valueType temp.
+                    //   (4) Write the entire new value type into the temp.
+                    //   (5) Overwrite the component being changed with the old value.
+                    //   (6) Perform a full write to the value type (which may emit signals etc).
+                    //   (7) Issue the interceptor call with the new component value.
+                    //
 
-                valueType->read(object, id);
-                QVariant prevComponentValue = valueType->readOnGadget(valueProp);
+                    QMetaProperty valueProp = valueType->property(valueIndex);
+                    QVariant newValue(metaType, a[0]);
 
-                valueType->setValue(newValue);
-                QVariant newComponentValue = valueType->readOnGadget(valueProp);
+                    valueType->read(object, id);
+                    QVariant prevComponentValue = valueType->readOnGadget(valueProp);
 
-                // Don't apply the interceptor if the intercepted value has not changed
-                bool updated = false;
-                if (newComponentValue != prevComponentValue) {
+                    valueType->setValue(newValue);
+                    QVariant newComponentValue = valueType->readOnGadget(valueProp);
+
+                    // If the intercepted value seemingly has not changed, we still need to
+                    // invoke the interceptor. There may be a pending animation that will
+                    // change the value soon. Such an animation needs to be canceled if the
+                    // current value is explicitly set.
+                    // So, we cannot return here if prevComponentValue == newComponentValue.
                     valueType->writeOnGadget(valueProp, prevComponentValue);
                     valueType->write(object, id, QQmlPropertyData::DontRemoveBinding | QQmlPropertyData::BypassInterceptor);
 
                     vi->write(newComponentValue);
-                    updated = true;
-                }
-
-                if (updated)
                     return true;
+                }
             } else if (c == QMetaObject::WriteProperty) {
                 vi->write(QVariant(metaType, a[0]));
                 return true;
@@ -351,16 +355,26 @@ bool QQmlInterceptorMetaObject::doIntercept(QMetaObject::Call c, int id, void **
     return false;
 }
 
+static QMetaObject *stringCastMetaObject(QObject *o, const QMetaObject *top)
+{
+    for (const QMetaObject *mo = top; mo; mo = mo->superClass()) {
+        if (o->qt_metacast(mo->className()) != nullptr)
+            return const_cast<QMetaObject *>(mo);
+    }
+    return nullptr;
+}
 
 QMetaObject *QQmlInterceptorMetaObject::toDynamicMetaObject(QObject *o)
 {
-    Q_UNUSED(o);
     if (!metaObject)
         metaObject = cache->createMetaObject();
 
+    if (Q_UNLIKELY(metaObject.tag() == MetaObjectInvalid))
+        return stringCastMetaObject(o, metaObject->superClass());
+
     // ### Qt7: The const_cast is only due to toDynamicMetaObject having the wrong return type.
     //          It should be const QMetaObject *. Fix this.
-    return const_cast<QMetaObject *>(metaObject);
+    return const_cast<QMetaObject *>(metaObject.data());
 }
 
 QQmlVMEMetaObject::QQmlVMEMetaObject(QV4::ExecutionEngine *engine,
@@ -620,8 +634,8 @@ QVector<QQmlGuard<QObject>> *QQmlVMEMetaObject::readPropertyAsList(int id) const
     QV4::Scope scope(engine);
     QV4::Scoped<QV4::VariantObject> v(scope, *(md->data() + id));
     if (!v || v->d()->data().metaType() != QMetaType::fromType<QVector<QQmlGuard<QObject>>>()) {
-        QVariant variant(QVariant::fromValue(QVector<QQmlGuard<QObject>>()));
-        v = engine->newVariantObject(variant);
+        const QVector<QQmlGuard<QObject>> guards;
+        v = engine->newVariantObject(QMetaType::fromType<QVector<QQmlGuard<QObject>>>(), &guards);
         md->set(engine, id, v);
     }
     return static_cast<QVector<QQmlGuard<QObject>> *>(v->d()->data().data());
@@ -821,10 +835,10 @@ int QQmlVMEMetaObject::metaCall(QObject *o, QMetaObject::Call c, int _id, void *
                                     needActivate = true;
                                 }
                             } else {
-                                bool success = false;
-                                md->set(engine, id, QV4::SequencePrototype::fromData(
-                                            engine, propType, a[0], &success));
-                                if (!success) {
+                                QV4::ScopedValue sequence(scope, QV4::SequencePrototype::fromData(
+                                                              engine, propType, a[0]));
+                                md->set(engine, id, sequence);
+                                if (sequence->isUndefined()) {
                                     qmlWarning(object)
                                             << "Could not create a QML sequence object for "
                                             << propType.name();
@@ -915,7 +929,7 @@ int QQmlVMEMetaObject::metaCall(QObject *o, QMetaObject::Call c, int _id, void *
                                     } else {
                                         needActivate = true;
                                         md->set(engine, id, engine->newVariantObject(
-                                                    QVariant(propType, a[0])));
+                                                    propType, a[0]));
                                     }
                                 }
                             } else {
@@ -988,7 +1002,8 @@ int QQmlVMEMetaObject::metaCall(QObject *o, QMetaObject::Call c, int _id, void *
                         int rv = QMetaObject::metacall(valueType, c, valueTypePropertyIndex, a);
 
                         if (c == QMetaObject::WriteProperty)
-                            valueType->write(target, coreIndex, {});
+                            valueType->write(target, coreIndex, QQmlPropertyData::HasInternalIndex,
+                                             valueTypePropertyIndex);
 
                         return rv;
                     } else {
@@ -1116,7 +1131,7 @@ QVariant QQmlVMEMetaObject::readPropertyAsVariant(int id) const
         const QV4::VariantObject *v = (md->data() + id)->as<QV4::VariantObject>();
         if (v)
             return v->d()->data();
-        return engine->toVariant(*(md->data() + id), QMetaType {});
+        return QV4::ExecutionEngine::toVariant(*(md->data() + id), QMetaType {});
     }
     return QVariant();
 }
@@ -1142,6 +1157,7 @@ void QQmlVMEMetaObject::writeVarProperty(int id, const QV4::Value &value)
     // automatically released by the engine until no other references to it exist.
     if (QV4::VariantObject *v = const_cast<QV4::VariantObject*>(value.as<QV4::VariantObject>())) {
         v->addVmePropertyReference();
+        md->set(engine, id, value);
     } else if (QV4::QObjectWrapper *wrapper = const_cast<QV4::QObjectWrapper*>(value.as<QV4::QObjectWrapper>())) {
         // We need to track this QObject to signal its deletion
         valueObject = wrapper->object();
@@ -1151,13 +1167,33 @@ void QQmlVMEMetaObject::writeVarProperty(int id, const QV4::Value &value)
             guard = new QQmlVMEVariantQObjectPtr();
             varObjectGuards.append(guard);
         }
+        md->set(engine, id, value);
+    } else if (const QV4::Sequence *sequence = value.as<QV4::Sequence>()) {
+        QV4::Heap::Sequence *p = sequence->d();
+        if (p->enforcesLocation()) {
+            // If the sequence enforces its location, we don't want it to be updated anymore after
+            // being written to a property.
+            md->set(engine, id, QV4::ReferenceObject::detached(p));
+        } else {
+            // Otherwise, make sure the reference carries some value so that we can still call
+            // toVariant() on it (see note in QV4::SequencePrototype::toVariant).
+            if (!p->hasData())
+                QV4::ReferenceObject::readReference(p);
+            md->set(engine, id, p);
+        }
+    } else if (const QV4::QQmlValueTypeWrapper *wrapper = value.as<QV4::QQmlValueTypeWrapper>()) {
+        // If the value type enforces its location, we don't want it to be updated anymore after
+        // being written to a property.
+        QV4::Heap::QQmlValueTypeWrapper *p = wrapper->d();
+        md->set(engine, id, p->enforcesLocation() ? QV4::ReferenceObject::detached(p) : p);
+    } else {
+        md->set(engine, id, value);
     }
 
     if (guard)
         guard->setGuardedValue(valueObject, this, id);
 
-    // Write the value and emit change signal as appropriate.
-    md->set(engine, id, value);
+    // Emit change signal as appropriate.
     activate(object, methodOffset() + id, nullptr);
 }
 
@@ -1202,7 +1238,7 @@ void QQmlVMEMetaObject::writeProperty(int id, const QVariant &value)
                                  v->d()->data() != value);
                 if (v)
                     v->removeVmePropertyReference();
-                md->set(engine, id, engine->newVariantObject(value));
+                md->set(engine, id, engine->newVariantObject(value.metaType(), value.constData()));
                 v = static_cast<const QV4::VariantObject *>(md->data() + id);
                 v->addVmePropertyReference();
             }

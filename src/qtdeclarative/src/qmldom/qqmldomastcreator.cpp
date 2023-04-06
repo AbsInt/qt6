@@ -46,7 +46,7 @@ V *valueFromMultimap(QMultiMap<K, V> &mmap, const K &key, index_type idx)
     return &(*it);
 }
 
-static ErrorGroups myParseErrors()
+static ErrorGroups astParseErrors()
 {
     static ErrorGroups errs = { { NewErrorGroup("Dom"), NewErrorGroup("QmlFile"),
                                   NewErrorGroup("Parsing") } };
@@ -71,6 +71,11 @@ static QString typeToString(AST::Type *t)
 {
     Q_ASSERT(t);
     QString res = toString(t->typeId);
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
+    if (UiQualifiedId *arg = t->typeArgument)
+        res += u'<' + toString(arg) + u'>';
+#else
     if (!t->typeArguments)
         return res;
     res += u"<";
@@ -84,6 +89,8 @@ static QString typeToString(AST::Type *t)
         res += typeToString(tt->typeId);
     }
     res += u">";
+#endif
+
     return res;
 }
 
@@ -369,7 +376,11 @@ public:
             while (args) {
                 MethodParameter param;
                 param.name = args->name.toString();
+#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
+                param.typeName = args->type ? args->type->toString() : QString();
+#else
                 param.typeName = toString(args->type);
+#endif
                 index_type idx = index_type(mInfo.parameters.size());
                 mInfo.parameters.append(param);
                 auto argLocs = FileLocations::ensure(nodeStack.last().fileLocations,
@@ -409,7 +420,7 @@ public:
 #endif
             if (p.name == u"id")
                 qmlFile.addError(
-                        myParseErrors()
+                        astParseErrors()
                                 .warning(tr("id is a special attribute, that should not be "
                                             "used as property name"))
                                 .withPath(currentNodeEl().path));
@@ -433,10 +444,10 @@ public:
                 SourceLocation loc = combineLocations(el->statement);
                 QStringView code = qmlFilePtr->code();
 
-                std::shared_ptr<ScriptExpression> script(new ScriptExpression(
+                auto script = std::make_shared<ScriptExpression>(
                         code.mid(loc.offset, loc.length), qmlFilePtr->engine(), el->statement,
                         qmlFilePtr->astComments(),
-                        ScriptExpression::ExpressionType::BindingExpression, loc));
+                        ScriptExpression::ExpressionType::BindingExpression, loc);
                 Binding *bPtr;
                 Path bPathFromOwner = current<QmlObject>().addBinding(
                         Binding(p.name, script, bType), AddOption::KeepExisting, &bPtr);
@@ -518,10 +529,10 @@ public:
                 QStringView preCode =
                         code.mid(methodLoc.begin(), bodyLoc.begin() - methodLoc.begin());
                 QStringView postCode = code.mid(bodyLoc.end(), methodLoc.end() - bodyLoc.end());
-                m.body = std::shared_ptr<ScriptExpression>(new ScriptExpression(
+                m.body = std::make_shared<ScriptExpression>(
                         code.mid(bodyLoc.offset, bodyLoc.length), qmlFilePtr->engine(), fDef->body,
                         qmlFilePtr->astComments(), ScriptExpression::ExpressionType::FunctionBody,
-                        bodyLoc, 0, preCode, postCode));
+                        bodyLoc, 0, preCode, postCode);
             }
             MethodInfo *mPtr;
             Path mPathFromOwner = current<QmlObject>().addMethod(m, AddOption::KeepExisting, &mPtr);
@@ -548,11 +559,10 @@ public:
                 }
                 if (args->element->initializer) {
                     SourceLocation loc = combineLocations(args->element->initializer);
-                    std::shared_ptr<ScriptExpression> script =
-                            std::shared_ptr<ScriptExpression>(new ScriptExpression(
+                    auto script = std::make_shared<ScriptExpression>(
                                     code.mid(loc.offset, loc.length), qmlFilePtr->engine(),
                                     args->element->initializer, qmlFilePtr->astComments(),
-                                    ScriptExpression::ExpressionType::ArgInitializer, loc));
+                                    ScriptExpression::ExpressionType::ArgInitializer, loc);
                     param.defaultValue = script;
                 }
                 index_type idx = index_type(mInfo.parameters.size());
@@ -673,7 +683,7 @@ public:
         Path bPathFromOwner = current<QmlObject>().addBinding(
                 Binding(toString(el->qualifiedId), value, bType), AddOption::KeepExisting, &bPtr);
         if (bPtr->name() == u"id")
-            qmlFile.addError(myParseErrors()
+            qmlFile.addError(astParseErrors()
                                      .warning(tr("id attributes should only be a lower case letter "
                                                  "followed by letters, numbers or underscore, "
                                                  "assuming they refer to an id property"))
@@ -707,10 +717,10 @@ public:
     {
         QStringView code = qmlFilePtr->code();
         SourceLocation loc = combineLocations(el->statement);
-        std::shared_ptr<ScriptExpression> script(
-                new ScriptExpression(code.mid(loc.offset, loc.length), qmlFilePtr->engine(),
+        auto script = std::make_shared<ScriptExpression>(
+                                     code.mid(loc.offset, loc.length), qmlFilePtr->engine(),
                                      el->statement, qmlFilePtr->astComments(),
-                                     ScriptExpression::ExpressionType::BindingExpression, loc));
+                                     ScriptExpression::ExpressionType::BindingExpression, loc);
         Binding bindingV(toString(el->qualifiedId), script, BindingType::Normal);
         Binding *bindingPtr = nullptr;
         Id *idPtr = nullptr;
@@ -735,10 +745,14 @@ public:
                 pathFromOwner = comp.addId(idVal, AddOption::KeepExisting, &idPtr);
                 QRegularExpression idRe(QRegularExpression::anchoredPattern(
                         QStringLiteral(uR"([[:lower:]][[:lower:][:upper:]0-9_]*)")));
+#if QT_VERSION < QT_VERSION_CHECK(6, 4, 0)
                 auto m = idRe.match(iExp->name);
+#else
+                auto m = idRe.matchView(iExp->name);
+#endif
                 if (!m.hasMatch()) {
                     qmlFile.addError(
-                            myParseErrors()
+                            astParseErrors()
                                     .warning(
                                             tr("id attributes should only be a lower case letter "
                                                "followed by letters, numbers or underscore, not %1")
@@ -750,7 +764,7 @@ public:
                                                                 &bindingPtr);
                 Q_ASSERT_X(bindingPtr, className, "binding could not be retrieved");
                 qmlFile.addError(
-                        myParseErrors()
+                        astParseErrors()
                                 .warning(tr("id attributes should only be a lower case letter "
                                             "followed by letters, numbers or underscore, not %1 "
                                             "%2, assuming they refer to a property")
@@ -804,7 +818,7 @@ public:
                 current<QmlObject>().addBinding(bindingV, AddOption::KeepExisting, &bindingPtr);
         if (bindingV.name() == u"id")
             qmlFile.addError(
-                    myParseErrors()
+                    astParseErrors()
                             .error(tr("id attributes should have only simple strings as values"))
                             .withPath(bindingPathFromOwner));
         pushEl(bindingPathFromOwner, *bindingPtr, el);
@@ -831,7 +845,13 @@ public:
     bool visit(AST::UiParameterList *el) override
     { // currently not used...
         MethodParameter p {
-            el->name.toString(), toString(el->type), false, false, false, {}, {}, {}
+            el->name.toString(),
+#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
+            el->type ? el->type->toString() : QString(),
+#else
+            toString(el->type),
+#endif
+            false, false, false, {}, {}, {}
         };
         return true;
     }
@@ -981,7 +1001,7 @@ public:
 
     void throwRecursionDepthError() override
     {
-        qmlFile.addError(myParseErrors().error(
+        qmlFile.addError(astParseErrors().error(
                 tr("Maximum statement or expression depth exceeded in QmlDomAstCreator")));
     }
 };

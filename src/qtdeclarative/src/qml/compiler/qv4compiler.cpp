@@ -15,12 +15,17 @@
 #include <QtEndian>
 
 // Efficient implementation that takes advantage of powers of two.
+
+QT_BEGIN_NAMESPACE
+namespace QtPrivate { // Disambiguate from WTF::roundUpToMultipleOf
 static inline size_t roundUpToMultipleOf(size_t divisor, size_t x)
 {
     Q_ASSERT(divisor && !(divisor & (divisor - 1)));
     const size_t remainderMask = divisor - 1;
     return (x + remainderMask) & ~remainderMask;
 }
+}
+QT_END_NAMESPACE
 
 QV4::Compiler::StringTableGenerator::StringTableGenerator()
 {
@@ -66,7 +71,8 @@ void QV4::Compiler::StringTableGenerator::serialize(CompiledData::Unit *unit)
 {
     char *dataStart = reinterpret_cast<char *>(unit);
     quint32_le *stringTable = reinterpret_cast<quint32_le *>(dataStart + unit->offsetToStringTable);
-    char *stringData = reinterpret_cast<char *>(stringTable) + roundUpToMultipleOf(8, unit->stringTableSize * sizeof(uint));
+    char *stringData = reinterpret_cast<char *>(stringTable)
+                       + QtPrivate::roundUpToMultipleOf(8, unit->stringTableSize * sizeof(uint));
     for (int i = backingUnitTableSize ; i < strings.size(); ++i) {
         const int index = i - backingUnitTableSize;
         stringTable[index] = stringData - dataStart;
@@ -111,14 +117,22 @@ QV4::Compiler::JSUnitGenerator::JSUnitGenerator(QV4::Compiler::Module *module)
     registerString(QString());
 }
 
-int QV4::Compiler::JSUnitGenerator::registerGetterLookup(const QString &name)
+int QV4::Compiler::JSUnitGenerator::registerGetterLookup(const QString &name, LookupMode mode)
 {
-    return registerGetterLookup(registerString(name));
+    return registerGetterLookup(registerString(name), mode);
 }
 
-int QV4::Compiler::JSUnitGenerator::registerGetterLookup(int nameIndex)
+static QV4::CompiledData::Lookup::Mode lookupMode(QV4::Compiler::JSUnitGenerator::LookupMode mode)
 {
-    lookups << CompiledData::Lookup(CompiledData::Lookup::Type_Getter, nameIndex);
+    return mode == QV4::Compiler::JSUnitGenerator::LookupForCall
+            ? QV4::CompiledData::Lookup::Mode_ForCall
+            : QV4::CompiledData::Lookup::Mode_ForStorage;
+}
+
+int QV4::Compiler::JSUnitGenerator::registerGetterLookup(int nameIndex, LookupMode mode)
+{
+    lookups << CompiledData::Lookup(
+                   CompiledData::Lookup::Type_Getter, lookupMode(mode), nameIndex);
     return lookups.size() - 1;
 }
 
@@ -129,19 +143,25 @@ int QV4::Compiler::JSUnitGenerator::registerSetterLookup(const QString &name)
 
 int QV4::Compiler::JSUnitGenerator::registerSetterLookup(int nameIndex)
 {
-    lookups << CompiledData::Lookup(CompiledData::Lookup::Type_Setter, nameIndex);
+    lookups << CompiledData::Lookup(
+                   CompiledData::Lookup::Type_Setter,
+                   CompiledData::Lookup::Mode_ForStorage, nameIndex);
     return lookups.size() - 1;
 }
 
-int QV4::Compiler::JSUnitGenerator::registerGlobalGetterLookup(int nameIndex)
+int QV4::Compiler::JSUnitGenerator::registerGlobalGetterLookup(int nameIndex, LookupMode mode)
 {
-    lookups << CompiledData::Lookup(CompiledData::Lookup::Type_GlobalGetter, nameIndex);
+    lookups << CompiledData::Lookup(
+                   CompiledData::Lookup::Type_GlobalGetter, lookupMode(mode), nameIndex);
     return lookups.size() - 1;
 }
 
-int QV4::Compiler::JSUnitGenerator::registerQmlContextPropertyGetterLookup(int nameIndex)
+int QV4::Compiler::JSUnitGenerator::registerQmlContextPropertyGetterLookup(
+        int nameIndex, LookupMode mode)
 {
-    lookups << CompiledData::Lookup(CompiledData::Lookup::Type_QmlContextPropertyGetter, nameIndex);
+    lookups << CompiledData::Lookup(
+                   CompiledData::Lookup::Type_QmlContextPropertyGetter, lookupMode(mode),
+                   nameIndex);
     return lookups.size() - 1;
 }
 
@@ -207,14 +227,28 @@ int QV4::Compiler::JSUnitGenerator::registerTranslation(const QV4::CompiledData:
 
 QV4::CompiledData::Unit *QV4::Compiler::JSUnitGenerator::generateUnit(GeneratorOption option)
 {
+    const auto registerTypeStrings = [this](QQmlJS::AST::Type *type) {
+        if (!type)
+            return;
+
+        if (type->typeArgument) {
+            registerString(type->typeArgument->toString());
+            registerString(type->typeId->toString());
+        }
+        registerString(type->toString());
+    };
+
     registerString(module->fileName);
     registerString(module->finalUrl);
     for (Context *f : std::as_const(module->functions)) {
         registerString(f->name);
-        registerString(f->returnType);
+        registerTypeStrings(f->returnType);
         for (int i = 0; i < f->arguments.size(); ++i) {
             registerString(f->arguments.at(i).id);
-            registerString(f->arguments.at(i).typeName());
+            if (const QQmlJS::AST::TypeAnnotation *annotation
+                    = f->arguments.at(i).typeAnnotation.data()) {
+                registerTypeStrings(annotation->type);
+            }
         }
         for (int i = 0; i < f->locals.size(); ++i)
             registerString(f->locals.at(i));
@@ -370,7 +404,7 @@ void QV4::Compiler::JSUnitGenerator::writeFunction(char *f, QV4::Compiler::Conte
 {
     QV4::CompiledData::Function *function = (QV4::CompiledData::Function *)f;
 
-    quint32 currentOffset = static_cast<quint32>(roundUpToMultipleOf(8, sizeof(*function)));
+    quint32 currentOffset = static_cast<quint32>(QtPrivate::roundUpToMultipleOf(8, sizeof(*function)));
 
     function->nameIndex = getStringId(irFunction->name);
     function->flags = 0;
@@ -400,7 +434,9 @@ void QV4::Compiler::JSUnitGenerator::writeFunction(char *f, QV4::Compiler::Conte
     function->formalsOffset = currentOffset;
     currentOffset += function->nFormals * sizeof(CompiledData::Parameter);
 
-    QmlIR::Parameter::initType(&function->returnType, this, getStringId(irFunction->returnType));
+    const auto idGenerator = [this](const QString &str) { return getStringId(str); };
+
+    QmlIR::Parameter::initType(&function->returnType, idGenerator, irFunction->returnType);
 
     function->sizeOfLocalTemporalDeadZone = irFunction->sizeOfLocalTemporalDeadZone;
     function->sizeOfRegisterTemporalDeadZone = irFunction->sizeOfRegisterTemporalDeadZone;
@@ -410,9 +446,11 @@ void QV4::Compiler::JSUnitGenerator::writeFunction(char *f, QV4::Compiler::Conte
     function->localsOffset = currentOffset;
     currentOffset += function->nLocals * sizeof(quint32);
 
-    function->nLineNumbers = irFunction->lineNumberMapping.size();
-    Q_ASSERT(function->lineNumberOffset() == currentOffset);
-    currentOffset += function->nLineNumbers * sizeof(CompiledData::CodeOffsetToLine);
+    function->nLineAndStatementNumbers
+            = irFunction->lineAndStatementNumberMapping.size();
+    Q_ASSERT(function->lineAndStatementNumberOffset() == currentOffset);
+    currentOffset += function->nLineAndStatementNumbers
+            * sizeof(CompiledData::CodeOffsetToLineAndStatement);
 
     function->nRegisters = irFunction->registerCountInFunction;
 
@@ -430,8 +468,10 @@ void QV4::Compiler::JSUnitGenerator::writeFunction(char *f, QV4::Compiler::Conte
     // write formals
     CompiledData::Parameter *formals = (CompiledData::Parameter *)(f + function->formalsOffset);
     for (int i = 0; i < irFunction->arguments.size(); ++i) {
-        QmlIR::Parameter::init(&formals[i], this, getStringId(irFunction->arguments.at(i).id),
-                               getStringId(irFunction->arguments.at(i).typeName()));
+        auto *formal = &formals[i];
+        formal->nameIndex = getStringId(irFunction->arguments.at(i).id);
+        if (QQmlJS::AST::TypeAnnotation *annotation = irFunction->arguments.at(i).typeAnnotation.data())
+            QmlIR::Parameter::initType(&formal->type, idGenerator, annotation->type);
     }
 
     // write locals
@@ -439,8 +479,11 @@ void QV4::Compiler::JSUnitGenerator::writeFunction(char *f, QV4::Compiler::Conte
     for (int i = 0; i < irFunction->locals.size(); ++i)
         locals[i] = getStringId(irFunction->locals.at(i));
 
-    // write line numbers
-    memcpy(f + function->lineNumberOffset(), irFunction->lineNumberMapping.constData(), irFunction->lineNumberMapping.size()*sizeof(CompiledData::CodeOffsetToLine));
+    // write line and statement numbers
+    memcpy(f + function->lineAndStatementNumberOffset(),
+           irFunction->lineAndStatementNumberMapping.constData(),
+           irFunction->lineAndStatementNumberMapping.size()
+                * sizeof(CompiledData::CodeOffsetToLineAndStatement));
 
     quint32_le *labels = (quint32_le *)(f + function->labelInfosOffset());
     for (unsigned u : irFunction->labelInfo) {
@@ -536,7 +579,7 @@ void QV4::Compiler::JSUnitGenerator::writeBlock(char *b, QV4::Compiler::Context 
 {
     QV4::CompiledData::Block *block = reinterpret_cast<QV4::CompiledData::Block *>(b);
 
-    quint32 currentOffset = static_cast<quint32>(roundUpToMultipleOf(8, sizeof(*block)));
+    quint32 currentOffset = static_cast<quint32>(QtPrivate::roundUpToMultipleOf(8, sizeof(*block)));
 
     block->sizeOfLocalTemporalDeadZone = irBlock->sizeOfLocalTemporalDeadZone;
     block->nLocals = irBlock->locals.size();
@@ -599,7 +642,7 @@ QV4::CompiledData::Unit QV4::Compiler::JSUnitGenerator::generateHeader(QV4::Comp
     unit.constantTableSize = constants.size();
 
     // Ensure we load constants from well-aligned addresses into for example SSE registers.
-    nextOffset = static_cast<quint32>(roundUpToMultipleOf(16, nextOffset));
+    nextOffset = static_cast<quint32>(QtPrivate::roundUpToMultipleOf(16, nextOffset));
     unit.offsetToConstantTable = nextOffset;
     nextOffset += unit.constantTableSize * sizeof(ReturnedValue);
 
@@ -610,19 +653,19 @@ QV4::CompiledData::Unit QV4::Compiler::JSUnitGenerator::generateHeader(QV4::Comp
     *jsClassDataOffset = nextOffset;
     nextOffset += jsClassData.size();
 
-    nextOffset = static_cast<quint32>(roundUpToMultipleOf(8, nextOffset));
+    nextOffset = static_cast<quint32>(QtPrivate::roundUpToMultipleOf(8, nextOffset));
 
     unit.translationTableSize = translations.size();
     unit.offsetToTranslationTable = nextOffset;
     nextOffset += unit.translationTableSize * sizeof(CompiledData::TranslationData);
 
-    nextOffset = static_cast<quint32>(roundUpToMultipleOf(8, nextOffset));
+    nextOffset = static_cast<quint32>(QtPrivate::roundUpToMultipleOf(8, nextOffset));
 
     const auto reserveExportTable = [&nextOffset](int count, quint32_le *tableSizePtr, quint32_le *offsetPtr) {
         *tableSizePtr = count;
         *offsetPtr = nextOffset;
         nextOffset += count * sizeof(CompiledData::ExportEntry);
-        nextOffset = static_cast<quint32>(roundUpToMultipleOf(8, nextOffset));
+        nextOffset = static_cast<quint32>(QtPrivate::roundUpToMultipleOf(8, nextOffset));
     };
 
     reserveExportTable(module->localExportEntries.size(), &unit.localExportEntryTableSize, &unit.offsetToLocalExportEntryTable);
@@ -632,20 +675,21 @@ QV4::CompiledData::Unit QV4::Compiler::JSUnitGenerator::generateHeader(QV4::Comp
     unit.importEntryTableSize = module->importEntries.size();
     unit.offsetToImportEntryTable = nextOffset;
     nextOffset += unit.importEntryTableSize * sizeof(CompiledData::ImportEntry);
-    nextOffset = static_cast<quint32>(roundUpToMultipleOf(8, nextOffset));
+    nextOffset = static_cast<quint32>(QtPrivate::roundUpToMultipleOf(8, nextOffset));
 
     unit.moduleRequestTableSize = module->moduleRequests.size();
     unit.offsetToModuleRequestTable = nextOffset;
     nextOffset += unit.moduleRequestTableSize * sizeof(uint);
-    nextOffset = static_cast<quint32>(roundUpToMultipleOf(8, nextOffset));
+    nextOffset = static_cast<quint32>(QtPrivate::roundUpToMultipleOf(8, nextOffset));
 
     quint32 functionSize = 0;
     for (int i = 0; i < module->functions.size(); ++i) {
         Context *f = module->functions.at(i);
         blockAndFunctionOffsets[i] = nextOffset;
 
-        quint32 size = QV4::CompiledData::Function::calculateSize(f->arguments.size(), f->locals.size(), f->lineNumberMapping.size(), f->nestedContexts.size(),
-                                                                  int(f->labelInfo.size()), f->code.size());
+        quint32 size = QV4::CompiledData::Function::calculateSize(
+                    f->arguments.size(), f->locals.size(), f->lineAndStatementNumberMapping.size(),
+                    f->nestedContexts.size(), int(f->labelInfo.size()), f->code.size());
         functionSize += size - f->code.size();
         nextOffset += size;
     }
@@ -677,7 +721,7 @@ QV4::CompiledData::Unit QV4::Compiler::JSUnitGenerator::generateHeader(QV4::Comp
 
     if (option == GenerateWithStringTable) {
         unit.stringTableSize = stringTable.stringCount();
-        nextOffset = static_cast<quint32>(roundUpToMultipleOf(8, nextOffset));
+        nextOffset = static_cast<quint32>(QtPrivate::roundUpToMultipleOf(8, nextOffset));
         unit.offsetToStringTable = nextOffset;
         nextOffset += stringTable.sizeOfTableAndData();
     } else {

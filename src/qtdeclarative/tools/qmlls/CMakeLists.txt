@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 #####################################################################
 ## qmlls Tool:
 #####################################################################
@@ -22,7 +25,7 @@ qt_internal_add_app(qmlls
         ../shared/qqmltoolingsettings.cpp
     DEFINES
         QT_USE_QSTRINGBUILDER
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::QmlPrivate
         Qt::CorePrivate
         Qt::QmlDomPrivate

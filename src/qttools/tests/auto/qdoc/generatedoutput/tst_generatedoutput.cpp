@@ -204,6 +204,7 @@ void tst_generatedOutput::htmlFromQDocFile()
     testAndCompare("testdata/configs/test.qdocconf",
                    "qdoctests-qdocfileoutput.html "
                    "qdoctests-qdocfileoutput-linking.html "
+                   "qdoctests-qdocmanuallikefileoutput.html "
                    "qdoctests-qdocfileoutput-exhaustive.html "
                    "toc.html");
 }
@@ -260,6 +261,7 @@ void tst_generatedOutput::webXmlFromQDocFile()
 {
     testAndCompare("testdata/configs/webxml_test.qdocconf",
                    "html/qdoctests-qdocfileoutput.webxml "
+                   "html/qdoctests-qdocmanuallikefileoutput.webxml "
                    "html/qdoctests-qdocfileoutput-linking.webxml "
                    "html/qdoctests-qdocfileoutput-exhaustive.webxml");
 }
@@ -293,6 +295,7 @@ void tst_generatedOutput::docBookFromQDocFile()
 {
     testAndCompare("testdata/configs/docbook_test.qdocconf",
                    "docbook/qdoctests-qdocfileoutput.xml "
+                   "docbook/qdoctests-qdocmanuallikefileoutput.xml "
                    "docbook/qdoctests-qdocfileoutput-linking.xml "
                    "docbook/qdoctests-qdocfileoutput-exhaustive.xml");
 }
@@ -349,7 +352,7 @@ void tst_generatedOutput::examplesManifestXmlAndQhp()
 {
     testAndCompare("testdata/configs/examples-qhp.qdocconf",
                    "examples-manifest.xml "
-                   "demos-manifest.xml "
+                   "test-demos-demo-example.html "
                    "test.qhp");
 }
 
@@ -479,7 +482,8 @@ void tst_generatedOutput::noAutoList()
 void tst_generatedOutput::nestedMacro()
 {
     testAndCompare("testdata/configs/nestedmacro.qdocconf",
-                   "nestedmacro/testcpp-module.html");
+                   "nestedmacro/testcpp-module.html "
+                   "docbook-nestedmacro/testcpp-module.xml");
 }
 
 void tst_generatedOutput::headerFile()

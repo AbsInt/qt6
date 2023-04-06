@@ -29,13 +29,13 @@
 #include <QtCore/QProcess>
 #include <QtCore/private/qobject_p.h>
 #include <QtCore/private/qmetaobject_p.h>
+#include <QtQmlTypeRegistrar/private/qqmljsstreamwriter_p.h>
 
 #include <QRegularExpression>
 #include <iostream>
 #include <algorithm>
 
 #include "qmltypereader.h"
-#include "qqmljsstreamwriter_p.h"
 
 #ifdef QT_SIMULATOR
 #include <QtGui/private/qsimulatorconnection_p.h>
@@ -236,7 +236,8 @@ QSet<const QMetaObject *> collectReachableMetaObjects(QQmlEngine *engine,
         if (ty.isSingleton())
             singletons.insert(ty.baseMetaObject());
         if (!ty.isComposite()) {
-            qmlTypesByCppName[ty.baseMetaObject()->className()].insert(ty);
+            if (const QMetaObject *mo = ty.baseMetaObject())
+                qmlTypesByCppName[mo->className()].insert(ty);
             collectReachableMetaObjects(QQmlEnginePrivate::get(engine), ty, &metas, info);
         } else {
             compositeTypes[ty.elementName()].append(ty);
@@ -1157,7 +1158,10 @@ int main(int argc, char *argv[])
         QDir cur = QDir::current();
         cur.cd(pluginImportPath);
         pluginImportPath = cur.canonicalPath();
-        QDir::setCurrent(pluginImportPath);
+        if (!QDir::setCurrent(pluginImportPath)) {
+            std::cerr << "Cannot set current directory to import path "
+                      << qPrintable(pluginImportPath) << std::endl;
+        }
         engine.addImportPath(pluginImportPath);
     }
 

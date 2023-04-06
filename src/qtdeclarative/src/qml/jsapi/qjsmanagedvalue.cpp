@@ -631,11 +631,10 @@ QVariant QJSManagedValue::toVariant() const
         return QVariant(d->doubleValue());
     if (d->isString())
         return QVariant(d->toQString());
-    if (QV4::Managed *m = d->as<QV4::Managed>())
-        return m->engine()->toVariant(*d, QMetaType{}, true);
+    if (d->as<QV4::Managed>())
+        return QV4::ExecutionEngine::toVariant(*d, QMetaType{}, true);
 
-    Q_UNREACHABLE();
-    return QVariant();
+    Q_UNREACHABLE_RETURN(QVariant());
 }
 
 /*!

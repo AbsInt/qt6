@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 #include "qv4lookup_p.h"
 #include "qv4functionobject_p.h"
-#include "qv4jscall_p.h"
-#include "qv4string_p.h"
 #include <private/qv4identifiertable_p.h>
+#include <QtQml/private/qv4runtime_p.h>
+#include <QtQml/private/qv4qobjectwrapper_p.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -38,6 +38,9 @@ ReturnedValue Lookup::resolveGetter(ExecutionEngine *engine, const Object *objec
 
 ReturnedValue Lookup::resolvePrimitiveGetter(ExecutionEngine *engine, const Value &object)
 {
+    // Otherwise we cannot trust the protoIds
+    Q_ASSERT(engine->isInitialized);
+
     primitiveLookup.type = object.type();
     switch (primitiveLookup.type) {
     case Value::Undefined_Type:
@@ -83,6 +86,9 @@ ReturnedValue Lookup::resolvePrimitiveGetter(ExecutionEngine *engine, const Valu
 
 ReturnedValue Lookup::resolveGlobalGetter(ExecutionEngine *engine)
 {
+    // Otherwise we cannot trust the protoIds
+    Q_ASSERT(engine->isInitialized);
+
     Object *o = engine->globalObject;
     PropertyKey name = engine->identifierTable->asPropertyKey(engine->currentStackFrame->v4Function->compilationUnit->runtimeStrings[nameIndex]);
     protoLookup.protoId = o->internalClass()->protoId;
@@ -142,6 +148,7 @@ ReturnedValue Lookup::getterTwoClasses(Lookup *l, ExecutionEngine *engine, const
         Lookup second;
         memset(&second, 0, sizeof(Lookup));
         second.nameIndex = l->nameIndex;
+        second.forCall = l->forCall;
         second.getter = getterGeneric;
         const ReturnedValue result = second.resolveGetter(engine, o);
 
@@ -220,6 +227,9 @@ ReturnedValue Lookup::getter0Inline(Lookup *l, ExecutionEngine *engine, const Va
 
 ReturnedValue Lookup::getterProto(Lookup *l, ExecutionEngine *engine, const Value &object)
 {
+    // Otherwise we cannot trust the protoIds
+    Q_ASSERT(engine->isInitialized);
+
     // we can safely cast to a QV4::Object here. If object is actually a string,
     // the internal class won't match
     Heap::Object *o = static_cast<Heap::Object *>(object.heapObject());
@@ -277,6 +287,9 @@ ReturnedValue Lookup::getter0MemberDatagetter0MemberData(Lookup *l, ExecutionEng
 
 ReturnedValue Lookup::getterProtoTwoClasses(Lookup *l, ExecutionEngine *engine, const Value &object)
 {
+    // Otherwise we cannot trust the protoIds
+    Q_ASSERT(engine->isInitialized);
+
     // we can safely cast to a QV4::Object here. If object is actually a string,
     // the internal class won't match
     Heap::Object *o = static_cast<Heap::Object *>(object.heapObject());
@@ -312,6 +325,9 @@ ReturnedValue Lookup::getterAccessor(Lookup *l, ExecutionEngine *engine, const V
 
 ReturnedValue Lookup::getterProtoAccessor(Lookup *l, ExecutionEngine *engine, const Value &object)
 {
+    // Otherwise we cannot trust the protoIds
+    Q_ASSERT(engine->isInitialized);
+
     // we can safely cast to a QV4::Object here. If object is actually a string,
     // the internal class won't match
     Heap::Object *o = static_cast<Heap::Object *>(object.heapObject());
@@ -328,6 +344,9 @@ ReturnedValue Lookup::getterProtoAccessor(Lookup *l, ExecutionEngine *engine, co
 
 ReturnedValue Lookup::getterProtoAccessorTwoClasses(Lookup *l, ExecutionEngine *engine, const Value &object)
 {
+    // Otherwise we cannot trust the protoIds
+    Q_ASSERT(engine->isInitialized);
+
     // we can safely cast to a QV4::Object here. If object is actually a string,
     // the internal class won't match
     Heap::Object *o = static_cast<Heap::Object *>(object.heapObject());
@@ -375,12 +394,34 @@ ReturnedValue Lookup::getterQObject(Lookup *lookup, ExecutionEngine *engine, con
         return Lookup::getterGeneric(lookup, engine, object);
     };
 
-    return QObjectWrapper::lookupGetterImpl(
-                lookup, engine, object, /*useOriginalProperty*/ false, revertLookup);
+    const QObjectWrapper::Flags flags = lookup->forCall
+            ? QObjectWrapper::AllowOverride
+            : (QObjectWrapper::AllowOverride | QObjectWrapper::AttachMethods);
+
+    return QObjectWrapper::lookupPropertyGetterImpl(lookup, engine, object, flags, revertLookup);
+}
+
+ReturnedValue Lookup::getterQObjectMethod(Lookup *lookup, ExecutionEngine *engine, const Value &object)
+{
+    const auto revertLookup = [lookup, engine, &object]() {
+        lookup->qobjectMethodLookup.propertyCache->release();
+        lookup->qobjectMethodLookup.propertyCache = nullptr;
+        lookup->getter = Lookup::getterGeneric;
+        return Lookup::getterGeneric(lookup, engine, object);
+    };
+
+    const QObjectWrapper::Flags flags = lookup->forCall
+            ? QObjectWrapper::AllowOverride
+            : (QObjectWrapper::AllowOverride | QObjectWrapper::AttachMethods);
+
+    return QObjectWrapper::lookupMethodGetterImpl(lookup, engine, object, flags, revertLookup);
 }
 
 ReturnedValue Lookup::primitiveGetterProto(Lookup *l, ExecutionEngine *engine, const Value &object)
 {
+    // Otherwise we cannot trust the protoIds
+    Q_ASSERT(engine->isInitialized);
+
     if (object.type() == l->primitiveLookup.type && !object.isObject()) {
         Heap::Object *o = l->primitiveLookup.proto;
         if (l->primitiveLookup.protoId == o->internalClass->protoId)
@@ -392,6 +433,9 @@ ReturnedValue Lookup::primitiveGetterProto(Lookup *l, ExecutionEngine *engine, c
 
 ReturnedValue Lookup::primitiveGetterAccessor(Lookup *l, ExecutionEngine *engine, const Value &object)
 {
+    // Otherwise we cannot trust the protoIds
+    Q_ASSERT(engine->isInitialized);
+
     if (object.type() == l->primitiveLookup.type && !object.isObject()) {
         Heap::Object *o = l->primitiveLookup.proto;
         if (l->primitiveLookup.protoId == o->internalClass->protoId) {
@@ -423,6 +467,9 @@ ReturnedValue Lookup::globalGetterGeneric(Lookup *l, ExecutionEngine *engine)
 
 ReturnedValue Lookup::globalGetterProto(Lookup *l, ExecutionEngine *engine)
 {
+    // Otherwise we cannot trust the protoIds
+    Q_ASSERT(engine->isInitialized);
+
     Heap::Object *o = engine->globalObject->d();
     if (l->protoLookup.protoId == o->internalClass->protoId)
         return l->protoLookup.data->asReturnedValue();
@@ -432,6 +479,9 @@ ReturnedValue Lookup::globalGetterProto(Lookup *l, ExecutionEngine *engine)
 
 ReturnedValue Lookup::globalGetterProtoAccessor(Lookup *l, ExecutionEngine *engine)
 {
+    // Otherwise we cannot trust the protoIds
+    Q_ASSERT(engine->isInitialized);
+
     Heap::Object *o = engine->globalObject->d();
     if (l->protoLookup.protoId == o->internalClass->protoId) {
         const Value *getter = l->protoLookup.data;
@@ -551,6 +601,9 @@ bool Lookup::setter0setter0(Lookup *l, ExecutionEngine *engine, Value &object, c
 
 bool Lookup::setterInsert(Lookup *l, ExecutionEngine *engine, Value &object, const Value &value)
 {
+    // Otherwise we cannot trust the protoIds
+    Q_ASSERT(engine->isInitialized);
+
     Object *o = static_cast<Object *>(object.managed());
     if (o && o->internalClass()->protoId == l->insertionLookup.protoId) {
         o->setInternalClass(l->insertionLookup.newClass);

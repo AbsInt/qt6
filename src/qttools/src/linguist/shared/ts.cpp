@@ -12,9 +12,7 @@
 
 #include <algorithm>
 
-#define STRINGIFY_INTERNAL(x) #x
-#define STRINGIFY(x) STRINGIFY_INTERNAL(x)
-#define STRING(s) static QString str##s(QLatin1String(STRINGIFY(s)))
+using namespace Qt::StringLiterals;
 
 QT_BEGIN_NAMESPACE
 
@@ -104,8 +102,8 @@ static QString byteValue(QString value)
 
 QString TSReader::readContents()
 {
-    STRING(byte);
-    STRING(value);
+    static const QString strbyte = u"byte"_s;
+    static const QString strvalue = u"value"_s;
 
     QString result;
     while (!atEnd()) {
@@ -133,9 +131,9 @@ QString TSReader::readContents()
 
 QString TSReader::readTransContents()
 {
-    STRING(lengthvariant);
-    STRING(variants);
-    STRING(yes);
+    static const QString strlengthvariant = u"lengthvariant"_s;
+    static const QString strvariants = u"variants"_s;
+    static const QString stryes = u"yes"_s;
 
     if (attributes().value(strvariants) == stryes) {
         QString result;
@@ -162,35 +160,35 @@ QString TSReader::readTransContents()
 
 bool TSReader::read(Translator &translator)
 {
-    STRING(catalog);
-    STRING(comment);
-    STRING(context);
-    STRING(dependencies);
-    STRING(dependency);
-    STRING(extracomment);
-    STRING(filename);
-    STRING(id);
-    STRING(language);
-    STRING(line);
-    STRING(location);
-    STRING(message);
-    STRING(name);
-    STRING(numerus);
-    STRING(numerusform);
-    STRING(obsolete);
-    STRING(oldcomment);
-    STRING(oldsource);
-    STRING(source);
-    STRING(sourcelanguage);
-    STRING(translation);
-    STRING(translatorcomment);
-    STRING(TS);
-    STRING(type);
-    STRING(unfinished);
-    STRING(userdata);
-    STRING(vanished);
-    //STRING(version);
-    STRING(yes);
+    static const QString strcatalog = u"catalog"_s;
+    static const QString strcomment = u"comment"_s;
+    static const QString strcontext = u"context"_s;
+    static const QString strdependencies = u"dependencies"_s;
+    static const QString strdependency = u"dependency"_s;
+    static const QString strextracomment = u"extracomment"_s;
+    static const QString strfilename = u"filename"_s;
+    static const QString strid = u"id"_s;
+    static const QString strlanguage = u"language"_s;
+    static const QString strline = u"line"_s;
+    static const QString strlocation = u"location"_s;
+    static const QString strmessage = u"message"_s;
+    static const QString strname = u"name"_s;
+    static const QString strnumerus = u"numerus"_s;
+    static const QString strnumerusform = u"numerusform"_s;
+    static const QString strobsolete = u"obsolete"_s;
+    static const QString stroldcomment = u"oldcomment"_s;
+    static const QString stroldsource = u"oldsource"_s;
+    static const QString strsource = u"source"_s;
+    static const QString strsourcelanguage = u"sourcelanguage"_s;
+    static const QString strtranslation = u"translation"_s;
+    static const QString strtranslatorcomment = u"translatorcomment"_s;
+    static const QString strTS = u"TS"_s;
+    static const QString strtype = u"type"_s;
+    static const QString strunfinished = u"unfinished"_s;
+    static const QString struserdata = u"userdata"_s;
+    static const QString strvanished = u"vanished"_s;
+    //static const QString strversion = u"version"_s;
+    static const QString stryes = u"yes"_s;
 
     static const QString strextrans(QLatin1String("extra-"));
 
@@ -280,6 +278,7 @@ bool TSReader::read(Translator &translator)
                             msg.setContext(context);
                             msg.setType(TranslatorMessage::Finished);
                             msg.setPlural(attributes().value(strnumerus) == stryes);
+                            msg.setTsLineNumber(lineNumber());
                             while (!atEnd()) {
                                 readNext();
                                 if (isEndElement()) {
@@ -405,13 +404,13 @@ bool TSReader::read(Translator &translator)
     return true;
 }
 
-static QString numericEntity(int ch)
+static QString tsNumericEntity(int ch)
 {
     return QString(ch <= 0x20 ? QLatin1String("<byte value=\"x%1\"/>")
         : QLatin1String("&#x%1;")) .arg(ch, 0, 16);
 }
 
-static QString protect(const QString &str)
+static QString tsProtect(const QString &str)
 {
     QString result;
     result.reserve(str.size() * 12 / 10);
@@ -436,7 +435,7 @@ static QString protect(const QString &str)
             break;
         default:
             if ((c < 0x20 || (ch > QChar(0x7f) && ch.isSpace())) && c != '\n' && c != '\t')
-                result += numericEntity(c);
+                result += tsNumericEntity(c);
             else // this also covers surrogates
                 result += QChar(c);
         }
@@ -451,7 +450,7 @@ static void writeExtras(QTextStream &t, const char *indent,
     for (auto it = extras.cbegin(), end = extras.cend(); it != end; ++it) {
         if (!drops.match(it.key()).hasMatch()) {
             outs << (QStringLiteral("<extra-") + it.key() + QLatin1Char('>')
-                     + protect(it.value())
+                     + tsProtect(it.value())
                      + QStringLiteral("</extra-") + it.key() + QLatin1Char('>'));
         }
     }
@@ -468,7 +467,7 @@ static void writeVariants(QTextStream &t, const char *indent, const QString &inp
         int start = 0;
         forever {
             t << "\n    " << indent << "<lengthvariant>"
-              << protect(input.mid(start, offset - start))
+              << tsProtect(input.mid(start, offset - start))
               << "</lengthvariant>";
             if (offset == input.size())
                 break;
@@ -479,7 +478,7 @@ static void writeVariants(QTextStream &t, const char *indent, const QString &inp
         }
         t << "\n" << indent;
     } else {
-        t << ">" << protect(input);
+        t << ">" << tsProtect(input);
     }
 }
 
@@ -535,7 +534,7 @@ bool saveTS(const Translator &translator, QIODevice &dev, ConversionData &cd)
     for (const QString &context : std::as_const(contextOrder)) {
         t << "<context>\n"
              "    <name>"
-          << protect(context)
+          << tsProtect(context)
           << "</name>\n";
         for (const TranslatorMessage &msg : std::as_const(messageOrder[context])) {
             //msg.dump();
@@ -585,27 +584,27 @@ bool saveTS(const Translator &translator, QIODevice &dev, ConversionData &cd)
                 }
 
                 t << "        <source>"
-                  << protect(msg.sourceText())
+                  << tsProtect(msg.sourceText())
                   << "</source>\n";
 
                 if (!msg.oldSourceText().isEmpty())
-                    t << "        <oldsource>" << protect(msg.oldSourceText()) << "</oldsource>\n";
+                    t << "        <oldsource>" << tsProtect(msg.oldSourceText()) << "</oldsource>\n";
 
                 if (!msg.comment().isEmpty()) {
                     t << "        <comment>"
-                      << protect(msg.comment())
+                      << tsProtect(msg.comment())
                       << "</comment>\n";
                 }
 
                     if (!msg.oldComment().isEmpty())
-                        t << "        <oldcomment>" << protect(msg.oldComment()) << "</oldcomment>\n";
+                        t << "        <oldcomment>" << tsProtect(msg.oldComment()) << "</oldcomment>\n";
 
                     if (!msg.extraComment().isEmpty())
-                        t << "        <extracomment>" << protect(msg.extraComment())
+                        t << "        <extracomment>" << tsProtect(msg.extraComment())
                           << "</extracomment>\n";
 
                     if (!msg.translatorComment().isEmpty())
-                        t << "        <translatorcomment>" << protect(msg.translatorComment())
+                        t << "        <translatorcomment>" << tsProtect(msg.translatorComment())
                           << "</translatorcomment>\n";
 
                 t << "        <translation";

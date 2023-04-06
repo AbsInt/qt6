@@ -48,6 +48,8 @@
 
 #include <QtTest/private/qtesthelpers_p.h>
 
+#include <QtWidgets/private/qapplication_p.h>
+
 using namespace QTestPrivate;
 
 class tst_QComboBox : public QObject
@@ -452,11 +454,19 @@ void tst_QComboBox::setEditable()
 
 void tst_QComboBox::setPalette()
 {
-#ifdef Q_OS_MAC
-    if (QApplication::style()->inherits("QMacStyle")) {
-        QSKIP("This test doesn't make sense for pixmap-based styles");
-    }
-#endif
+    // If (a) Palettes are pixmap based and/or (b) contain color groups/roles which the
+    // resolve mask prevents from being copied, the direct comparison of the inherited
+    // palette and the parent palette will fail.
+    // To prevent that, set a simple gray system palette for QComboBox and QLineEdit
+    const QPalette comboBoxPalette = qApp->palette("QComboBox");
+    const QPalette lineEditPalette = qApp->palette("QLineEdit");
+    auto guard = qScopeGuard([&]{
+        qApp->setPalette(comboBoxPalette, "QComboBox");
+        qApp->setPalette(lineEditPalette, "QLineEdit");
+    });
+    qApp->setPalette(QPalette(Qt::gray), "QComboBox");
+    qApp->setPalette(QPalette(Qt::gray), "QLineEdit");
+
     TestWidget topLevel;
     topLevel.show();
     QVERIFY(QTest::qWaitForWindowExposed(&topLevel));
@@ -464,16 +474,15 @@ void tst_QComboBox::setPalette()
     QPalette pal = testWidget->palette();
     pal.setColor(QPalette::Base, Qt::red);
     testWidget->setPalette(pal);
-    testWidget->setEditable(!testWidget->isEditable());
+    testWidget->setEditable(true);
 
     pal.setColor(QPalette::Base, Qt::blue);
     testWidget->setPalette(pal);
 
-    const QObjectList comboChildren = testWidget->children();
-    for (int i = 0; i < comboChildren.size(); ++i) {
-        QObject *o = comboChildren.at(i);
-        if (o->isWidgetType()) {
-            QCOMPARE(((QWidget*)o)->palette(), pal);
+    const QObjectList &comboChildren = testWidget->children();
+    for (auto *child : comboChildren) {
+        if (auto *widget = qobject_cast<QWidget *>(child)) {
+            QCOMPARE(widget->palette(), pal);
         }
     }
 
@@ -836,7 +845,7 @@ void tst_QComboBox::autoCompletionCaseSensitivity()
     TestWidget topLevel;
     topLevel.show();
     QComboBox *testWidget = topLevel.comboBox();
-    qApp->setActiveWindow(&topLevel);
+    QApplicationPrivate::setActiveWindow(&topLevel);
     testWidget->setFocus();
     QVERIFY(QTest::qWaitForWindowActive(&topLevel));
     QCOMPARE(qApp->focusWidget(), (QWidget *)testWidget);
@@ -1009,7 +1018,7 @@ void tst_QComboBox::currentIndex_data()
         expectedCurrentIndex = -1;
         expectedCurrentText = "";
         expectedSignalCount = 2;
-        QTest::newRow("check that isetting the index to -1 works")
+        QTest::newRow("check that setting the index to -1 works")
             << initialItems << setCurrentIndex << removeIndex
             << insertIndex << insertText << expectedCurrentIndex << expectedCurrentText
             << expectedSignalCount;
@@ -1152,66 +1161,71 @@ void tst_QComboBox::currentIndex()
     TestWidget topLevel;
     topLevel.show();
     QVERIFY(QTest::qWaitForWindowExposed(&topLevel));
-    QComboBox *testWidget = topLevel.comboBox();
+    QComboBox *comboBox = topLevel.comboBox();
     // test both editable/non-editable combobox
     for (int edit = 0; edit < 2; ++edit) {
-        testWidget->clear();
-        testWidget->setEditable(edit ? true : false);
+        comboBox->clear();
+        comboBox->setEditable(edit ? true : false);
         if (edit)
-            QVERIFY(testWidget->lineEdit());
+            QVERIFY(comboBox->lineEdit());
 
         // verify it is empty, has no current index and no current text
-        QCOMPARE(testWidget->count(), 0);
-        QCOMPARE(testWidget->currentIndex(), -1);
-        QVERIFY(testWidget->currentText().isEmpty());
+        QCOMPARE(comboBox->count(), 0);
+        QCOMPARE(comboBox->currentIndex(), -1);
+        QVERIFY(comboBox->currentText().isEmpty());
 
         // spy on currentIndexChanged
-        QSignalSpy indexChangedInt(testWidget, SIGNAL(currentIndexChanged(int)));
+        QSignalSpy indexChangedSpy(comboBox, &QComboBox::currentIndexChanged);
 
         // stuff items into it
-        foreach(QString text, initialItems) {
-            testWidget->addItem(text);
-        }
-        QCOMPARE(testWidget->count(), initialItems.size());
+        for (const QString &text : initialItems)
+            comboBox->addItem(text);
+
+        QCOMPARE(comboBox->count(), initialItems.size());
 
         // set current index, remove and/or insert
         if (setCurrentIndex >= -1) {
-            testWidget->setCurrentIndex(setCurrentIndex);
-            QCOMPARE(testWidget->currentIndex(), setCurrentIndex);
+            comboBox->setCurrentIndex(setCurrentIndex);
+            QCOMPARE(comboBox->currentIndex(), setCurrentIndex);
         }
 
         if (removeIndex >= 0)
-            testWidget->removeItem(removeIndex);
+            comboBox->removeItem(removeIndex);
         if (insertIndex >= 0)
-            testWidget->insertItem(insertIndex, insertText);
+            comboBox->insertItem(insertIndex, insertText);
 
         // compare with expected index and text
-        QCOMPARE(testWidget->currentIndex(), expectedCurrentIndex);
-        QCOMPARE(testWidget->currentText(), expectedCurrentText);
+        QCOMPARE(comboBox->currentIndex(), expectedCurrentIndex);
+        QCOMPARE(comboBox->currentText(), expectedCurrentText);
 
         // check that signal count is correct
-        QCOMPARE(indexChangedInt.size(), expectedSignalCount);
+        QCOMPARE(indexChangedSpy.size(), expectedSignalCount);
 
         // compare with last sent signal values
-        if (indexChangedInt.size())
-            QCOMPARE(indexChangedInt.at(indexChangedInt.size() - 1).at(0).toInt(),
-                    testWidget->currentIndex());
+        if (indexChangedSpy.size())
+            QCOMPARE(indexChangedSpy.at(indexChangedSpy.size() - 1).at(0).toInt(),
+                    comboBox->currentIndex());
+
+        // Test a no-op index change
+        const int index = comboBox->currentIndex();
+        comboBox->setCurrentIndex(index);
+        QCOMPARE(indexChangedSpy.size(), expectedSignalCount);
 
         if (edit) {
-            testWidget->setCurrentIndex(-1);
-            testWidget->setInsertPolicy(QComboBox::InsertAtBottom);
-            QTest::keyPress(testWidget, 'a');
-            QTest::keyPress(testWidget, 'b');
-            QCOMPARE(testWidget->currentText(), QString("ab"));
-            QCOMPARE(testWidget->currentIndex(), -1);
-            int numItems = testWidget->count();
-            QTest::keyPress(testWidget, Qt::Key_Return);
-            QCOMPARE(testWidget->count(), numItems + 1);
-            QCOMPARE(testWidget->currentIndex(), numItems);
-            testWidget->setCurrentIndex(-1);
-            QTest::keyPress(testWidget, 'a');
-            QTest::keyPress(testWidget, 'b');
-            QCOMPARE(testWidget->currentIndex(), -1);
+            comboBox->setCurrentIndex(-1);
+            comboBox->setInsertPolicy(QComboBox::InsertAtBottom);
+            QTest::keyPress(comboBox, 'a');
+            QTest::keyPress(comboBox, 'b');
+            QCOMPARE(comboBox->currentText(), QString("ab"));
+            QCOMPARE(comboBox->currentIndex(), -1);
+            int numItems = comboBox->count();
+            QTest::keyPress(comboBox, Qt::Key_Return);
+            QCOMPARE(comboBox->count(), numItems + 1);
+            QCOMPARE(comboBox->currentIndex(), numItems);
+            comboBox->setCurrentIndex(-1);
+            QTest::keyPress(comboBox, 'a');
+            QTest::keyPress(comboBox, 'b');
+            QCOMPARE(comboBox->currentIndex(), -1);
         }
     }
 }
@@ -2009,7 +2023,7 @@ void tst_QComboBox::flaggedItems()
     comboBox.setView(&listWidget);
     comboBox.move(200, 200);
     comboBox.show();
-    QApplication::setActiveWindow(&comboBox);
+    QApplicationPrivate::setActiveWindow(&comboBox);
     comboBox.activateWindow();
     comboBox.setFocus();
     QVERIFY(QTest::qWaitForWindowActive(&comboBox));
@@ -2438,7 +2452,7 @@ void tst_QComboBox::task247863_keyBoardSelection()
   combo.addItem( QLatin1String("111"));
   combo.addItem( QLatin1String("222"));
   combo.show();
-  QApplication::setActiveWindow(&combo);
+  QApplicationPrivate::setActiveWindow(&combo);
   QTRY_COMPARE(QApplication::activeWindow(), static_cast<QWidget *>(&combo));
 
   QSignalSpy spy(&combo, &QComboBox::activated);
@@ -2464,7 +2478,7 @@ void tst_QComboBox::task220195_keyBoardSelection2()
     combo.addItem( QLatin1String("foo2"));
     combo.addItem( QLatin1String("foo3"));
     combo.show();
-    QApplication::setActiveWindow(&combo);
+    QApplicationPrivate::setActiveWindow(&combo);
     QVERIFY(QTest::qWaitForWindowActive(&combo));
 
     combo.setCurrentIndex(-1);
@@ -2750,7 +2764,7 @@ void tst_QComboBox::keyBoardNavigationWithMouse()
 
     combo.move(200, 200);
     combo.showNormal();
-    QApplication::setActiveWindow(&combo);
+    QApplicationPrivate::setActiveWindow(&combo);
     QVERIFY(QTest::qWaitForWindowActive(&combo));
 
     QCOMPARE(combo.currentText(), QLatin1String("0"));
@@ -2806,7 +2820,7 @@ void tst_QComboBox::task_QTBUG_1071_changingFocusEmitsActivated()
     layout.addWidget(&edit);
 
     w.show();
-    QApplication::setActiveWindow(&w);
+    QApplicationPrivate::setActiveWindow(&w);
     QVERIFY(QTest::qWaitForWindowActive(&w));
     cb.clearEditText();
     cb.setFocus();
@@ -3426,7 +3440,7 @@ void tst_QComboBox::task_QTBUG_52027_mapCompleterIndex()
     QCOMPARE(spy.size(), 0);
     cbox.move(200, 200);
     cbox.show();
-    QApplication::setActiveWindow(&cbox);
+    QApplicationPrivate::setActiveWindow(&cbox);
     QVERIFY(QTest::qWaitForWindowActive(&cbox));
 
     QTest::keyClicks(&cbox, "foobar2");
@@ -3452,7 +3466,7 @@ void tst_QComboBox::task_QTBUG_52027_mapCompleterIndex()
         cbox.activateWindow();
     }
 
-    QApplication::setActiveWindow(&cbox);
+    QApplicationPrivate::setActiveWindow(&cbox);
     QVERIFY(QTest::qWaitForWindowActive(&cbox));
 
     QTest::keyClicks(&cbox, "foobar1");
@@ -3520,7 +3534,7 @@ void tst_QComboBox::checkEmbeddedLineEditWhenStyleSheetIsSet()
     layout->addWidget(comboBox);
     topLevel.show();
     comboBox->setEditable(true);
-    QApplication::setActiveWindow(&topLevel);
+    QApplicationPrivate::setActiveWindow(&topLevel);
     QVERIFY(QTest::qWaitForWindowActive(&topLevel));
 
     QImage grab = comboBox->grab().toImage();

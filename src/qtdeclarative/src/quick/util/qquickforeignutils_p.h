@@ -7,6 +7,7 @@
 #include <QtQuick/private/qtquickglobal_p.h>
 
 #include <QtGui/qstylehints.h>
+#include <QtGui/qeventpoint.h>
 #if QT_CONFIG(im)
 #include <QtGui/qinputmethod.h>
 #endif
@@ -38,6 +39,13 @@ struct QStyleHintsForeign
     QML_FOREIGN(QStyleHints)
     QML_ANONYMOUS
     QML_ADDED_IN_VERSION(6, 4)
+};
+
+struct QImageForeign
+{
+    Q_GADGET
+    QML_FOREIGN(QImage)
+    QML_ANONYMOUS
 };
 
 #if QT_CONFIG(validator)
@@ -82,6 +90,14 @@ namespace QKeySequenceForeign
     QML_ADDED_IN_VERSION(2, 2)
 };
 #endif // QT_CONFIG(shortcut)
+
+struct QEventPointForeign
+{
+    Q_GADGET
+    QML_FOREIGN(QEventPoint)
+    QML_VALUE_TYPE(eventPoint)
+    QML_ADDED_IN_VERSION(6, 5)
+};
 
 QT_END_NAMESPACE
 

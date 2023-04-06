@@ -1,7 +1,8 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 cmake_minimum_required(VERSION 3.16)
 project(imageelements LANGUAGES CXX)
-
-set(CMAKE_AUTOMOC ON)
 
 if(NOT DEFINED INSTALL_EXAMPLESDIR)
     set(INSTALL_EXAMPLESDIR "examples")
@@ -11,6 +12,8 @@ set(INSTALL_EXAMPLEDIR "${INSTALL_EXAMPLESDIR}/quick/imageelements")
 
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Qml Quick)
 
+qt_standard_project_setup(REQUIRES 6.5)
+
 add_subdirectory("../shared" "shared")
 
 qt_add_executable(imageelementsexample
@@ -19,7 +22,7 @@ qt_add_executable(imageelementsexample
     main.cpp
 )
 
-target_link_libraries(imageelementsexample PUBLIC
+target_link_libraries(imageelementsexample PRIVATE
     Qt::Core
     Qt::Gui
     Qt::Qml
@@ -28,7 +31,6 @@ target_link_libraries(imageelementsexample PUBLIC
 
 qt_add_qml_module(imageelementsexample
     URI imageelements
-    VERSION 1.0
     QML_FILES
         "animatedimage.qml"
         "animatedsprite.qml"

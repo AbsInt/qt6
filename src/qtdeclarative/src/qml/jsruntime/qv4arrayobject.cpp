@@ -3,17 +3,12 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qv4arrayobject_p.h"
-#include "qv4objectiterator_p.h"
 #include "qv4arrayiterator_p.h"
-#include "qv4sparsearray_p.h"
 #include "qv4objectproto_p.h"
-#include "qv4jscall_p.h"
 #include "qv4argumentsobject_p.h"
 #include "qv4runtime_p.h"
-#include "qv4string_p.h"
 #include "qv4symbol_p.h"
 #include <QtCore/qscopedvaluerollback.h>
-#include "qv4proxy_p.h"
 
 using namespace QV4;
 
@@ -347,6 +342,9 @@ ReturnedValue ArrayPrototype::method_toLocaleString(const FunctionObject *b, con
     ScopedValue v(scope);
     ScopedString s(scope);
 
+    ScopedPropertyKey tolocaleString(scope, scope.engine->id_toLocaleString()->toPropertyKey());
+    Q_ASSERT(!scope.engine->hasException);
+
     for (uint k = 0; k < len; ++k) {
         if (k)
             R += separator;
@@ -354,7 +352,18 @@ ReturnedValue ArrayPrototype::method_toLocaleString(const FunctionObject *b, con
         v = instance->get(k);
         if (v->isNullOrUndefined())
             continue;
-        v = Runtime::CallElement::call(scope.engine, v, *scope.engine->id_toLocaleString(), nullptr, 0);
+
+        ScopedObject valueAsObject(scope, v->toObject(scope.engine));
+        Q_ASSERT(valueAsObject); // null and undefined handled above
+
+        ScopedFunctionObject function(scope, valueAsObject->get(tolocaleString));
+        if (!function)
+            return scope.engine->throwTypeError();
+
+        v = function->call(valueAsObject, nullptr, 0);
+        if (scope.hasException())
+            return Encode::undefined();
+
         s = v->toString(scope.engine);
         if (scope.hasException())
             return Encode::undefined();
@@ -398,7 +407,7 @@ ReturnedValue ArrayPrototype::method_concat(const FunctionObject *b, const Value
                         return scope.engine->throwTypeError();
                 }
             }
-        } else if (eltAsObj && eltAsObj->isListType()) {
+        } else if (eltAsObj && eltAsObj->isArrayLike()) {
             const uint startIndex = result->getLength();
             for (int i = 0, len = eltAsObj->getLength(); i < len; ++i) {
                 entry = eltAsObj->get(i);

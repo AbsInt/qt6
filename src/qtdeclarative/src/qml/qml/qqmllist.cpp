@@ -3,8 +3,7 @@
 
 #include "qqmllist.h"
 #include "qqmllist_p.h"
-#include "qqmlengine_p.h"
-#include "qqmlproperty_p.h"
+#include <QtQml/private/qqmlproperty_p.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -448,7 +447,7 @@ Q_PROPERTY(QQmlListProperty<Fruit> fruit READ fruit)
 QML list properties are type-safe - in this case \c {Fruit} is a QObject type that
 \c {Apple}, \c {Orange} and \c {Banana} all derive from.
 
-\sa {Extending QML - Object and List Property Types Example}
+\sa {Chapter 5: Using List Property Types}
 */
 
 /*!

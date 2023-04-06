@@ -29,8 +29,9 @@ public:
     ~QWaylandVulkanWindow() override;
 
     WindowType windowType() const override;
+    void invalidateSurface() override;
 
-    VkSurfaceKHR *surface();
+    VkSurfaceKHR *vkSurface();
 
 private:
     VkSurfaceKHR m_surface = VK_NULL_HANDLE;

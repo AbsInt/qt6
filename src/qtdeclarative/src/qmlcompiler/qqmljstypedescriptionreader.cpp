@@ -8,11 +8,13 @@
 #include <QtQml/private/qqmljsengine_p.h>
 
 #include <QtCore/qdir.h>
+#include <QtCore/qstring.h>
 
 QT_BEGIN_NAMESPACE
 
 using namespace QQmlJS;
 using namespace QQmlJS::AST;
+using namespace Qt::StringLiterals;
 
 QString toString(const UiQualifiedId *qualifiedId, QChar delimiter = QLatin1Char('.'))
 {
@@ -29,8 +31,7 @@ QString toString(const UiQualifiedId *qualifiedId, QChar delimiter = QLatin1Char
 }
 
 bool QQmlJSTypeDescriptionReader::operator()(
-        QHash<QString, QQmlJSExportedScope> *objects,
-        QStringList *dependencies)
+        QList<QQmlJSExportedScope> *objects, QStringList *dependencies)
 {
     Engine engine;
 
@@ -210,7 +211,7 @@ void QQmlJSTypeDescriptionReader::readComponent(UiObjectDefinition *ast)
             } else if (name == QLatin1String("isSingleton")) {
                 scope->setIsSingleton(readBoolBinding(script));
             } else if (name == QLatin1String("isCreatable")) {
-                scope->setIsCreatable(readBoolBinding(script));
+                scope->setCreatableFlag(readBoolBinding(script));
             } else if (name == QLatin1String("isComposite")) {
                 scope->setIsComposite(readBoolBinding(script));
             } else if (name == QLatin1String("hasCustomParser")) {
@@ -258,7 +259,7 @@ void QQmlJSTypeDescriptionReader::readComponent(UiObjectDefinition *ast)
 
     if (metaObjectRevisions)
         checkMetaObjectRevisions(metaObjectRevisions, &exports);
-    m_objects->insert(scope->internalName(), {scope, exports});
+    m_objects->append({scope, exports});
 }
 
 void QQmlJSTypeDescriptionReader::readSignalOrMethod(UiObjectDefinition *ast, bool isMethod,
@@ -291,6 +292,8 @@ void QQmlJSTypeDescriptionReader::readSignalOrMethod(UiObjectDefinition *ast, bo
                 metaMethod.setReturnTypeName(readStringBinding(script));
             } else if (name == QLatin1String("revision")) {
                 metaMethod.setRevision(readIntBinding(script));
+            } else if (name == QLatin1String("isCloned")) {
+                metaMethod.setIsCloned(true);
             } else if (name == QLatin1String("isConstructor")) {
                 metaMethod.setIsConstructor(true);
             } else if (name == QLatin1String("isJavaScriptFunction")) {
@@ -304,7 +307,7 @@ void QQmlJSTypeDescriptionReader::readSignalOrMethod(UiObjectDefinition *ast, bo
             } else {
                 addWarning(script->firstSourceLocation(),
                            tr("Expected only name, type, revision, isPointer, isList, "
-                              "isConstructor, and "
+                              "isCloned, isConstructor, and "
                               "isJavaScriptFunction in script bindings."));
             }
         } else {
@@ -351,6 +354,8 @@ void QQmlJSTypeDescriptionReader::readProperty(UiObjectDefinition *ast, const QQ
             property.setIsList(readBoolBinding(script));
         } else if (id == QLatin1String("isFinal")) {
             property.setIsFinal(readBoolBinding(script));
+        } else if (id == QLatin1String("isConstant")) {
+            property.setIsConstant(readBoolBinding(script));
         } else if (id == QLatin1String("revision")) {
             property.setRevision(readIntBinding(script));
         } else if (id == QLatin1String("bindable")) {
@@ -359,6 +364,8 @@ void QQmlJSTypeDescriptionReader::readProperty(UiObjectDefinition *ast, const QQ
             property.setRead(readStringBinding(script));
         } else if (id == QLatin1String("write")) {
             property.setWrite(readStringBinding(script));
+        } else if (id == QLatin1String("reset")) {
+            property.setReset(readStringBinding(script));
         } else if (id == QLatin1String("notify")) {
             property.setNotify(readStringBinding(script));
         } else if (id == QLatin1String("index")) {
@@ -368,8 +375,8 @@ void QQmlJSTypeDescriptionReader::readProperty(UiObjectDefinition *ast, const QQ
         } else {
             addWarning(script->firstSourceLocation(),
                        tr("Expected only type, name, revision, isPointer, isReadonly, isRequired, "
-                          "isFinal, bindable, read, write, notify, index and isList script "
-                          "bindings."));
+                          "isFinal, isList, bindable, read, write, reset, notify, index, and "
+                          "privateClass and script bindings."));
         }
     }
 
@@ -405,6 +412,8 @@ void QQmlJSTypeDescriptionReader::readEnum(UiObjectDefinition *ast, const QQmlJS
             metaEnum.setIsFlag(readBoolBinding(script));
         } else if (name == QLatin1String("values")) {
             readEnumValues(script, &metaEnum);
+        } else if (name == QLatin1String("scoped")) {
+            metaEnum.setScoped(readBoolBinding(script));
         } else {
             addWarning(script->firstSourceLocation(),
                        tr("Expected only name and values script bindings."));
@@ -418,6 +427,8 @@ void QQmlJSTypeDescriptionReader::readParameter(UiObjectDefinition *ast, QQmlJSM
 {
     QString name;
     QString type;
+    bool isConstant = false;
+    bool isPointer = false;
 
     for (UiObjectMemberList *it = ast->initializer->members; it; it = it->next) {
         UiObjectMember *member = it->member;
@@ -433,7 +444,9 @@ void QQmlJSTypeDescriptionReader::readParameter(UiObjectDefinition *ast, QQmlJSM
         } else if (id == QLatin1String("type")) {
             type = readStringBinding(script);
         } else if (id == QLatin1String("isPointer")) {
-            // ### unhandled
+            isPointer = readBoolBinding(script);
+        } else if (id == QLatin1String("isConstant")) {
+            isConstant = readBoolBinding(script);
         } else if (id == QLatin1String("isReadonly")) {
             // ### unhandled
         } else if (id == QLatin1String("isList")) {
@@ -444,7 +457,10 @@ void QQmlJSTypeDescriptionReader::readParameter(UiObjectDefinition *ast, QQmlJSM
         }
     }
 
-    metaMethod->addParameter(name, type);
+    QQmlJSMetaParameter p(name, type);
+    p.setTypeQualifier(isConstant ? QQmlJSMetaParameter::Const : QQmlJSMetaParameter::NonConst);
+    p.setIsPointer(isPointer);
+    metaMethod->addParameter(std::move(p));
 }
 
 QString QQmlJSTypeDescriptionReader::readStringBinding(UiScriptBinding *ast)

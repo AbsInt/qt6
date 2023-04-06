@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 cmake_minimum_required(VERSION 3.16)
 project(dialcontrol LANGUAGES CXX)
 
@@ -10,6 +13,8 @@ endif()
 set(INSTALL_EXAMPLEDIR "${INSTALL_EXAMPLESDIR}/quick/customitems/dialcontrol")
 
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Qml Quick)
+
+qt_standard_project_setup(REQUIRES 6.5)
 
 qt_add_executable(dialcontrolexample
     main.cpp
@@ -29,7 +34,6 @@ target_link_libraries(dialcontrolexample PUBLIC
 
 qt_add_qml_module(dialcontrolexample
     URI dialcontrol
-    VERSION 1.0
     QML_FILES
         "Dial.qml"
         "QuitButton.qml"

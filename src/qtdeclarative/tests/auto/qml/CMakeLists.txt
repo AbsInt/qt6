@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Generated from qml.pro.
 
 
@@ -7,11 +10,16 @@ qt_exclude_tool_directories_from_default_target(
 
 add_subdirectory(registrationmacros)
 add_subdirectory(parserstress)
+add_subdirectory(linebylinelex)
 add_subdirectory(qjsprimitivevalue)
 add_subdirectory(qjsvalueiterator)
 add_subdirectory(qjsonbinding)
 add_subdirectory(qqmlfile)
-add_subdirectory(qqmlfileselector)
+
+if(NOT INTEGRITY)
+    # The INTEGRITY linker tends to crash on tst_qqmlfileselector
+    add_subdirectory(qqmlfileselector)
+endif()
 
 # Limit set of tests to run for static Qt builds.
 if(QT_BUILD_MINIMAL_STATIC_TESTS)
@@ -47,7 +55,7 @@ endif()
 add_subdirectory(qqmlmetatype)
 if(TARGET Qt::Quick)
     add_subdirectory(qmltc_manual)
-    # QML Type Compiler tests cannot be run on webOS due to missing support for multiple
+    # QML type compiler tests cannot be run on webOS due to missing support for multiple
     # consecutive window creation from a single QtWayland client
     if(NOT WEBOS)
         add_subdirectory(qmltc)
@@ -78,6 +86,7 @@ if(QT_FEATURE_process AND NOT CMAKE_CROSSCOMPILING)
     add_subdirectory(qmllint)
     add_subdirectory(qmltc_qprocess)
     add_subdirectory(qmlplugindump)
+    add_subdirectory(qml)
 endif()
 if(QT_FEATURE_library)
     add_subdirectory(qqmlextensionplugin)
@@ -133,6 +142,7 @@ if(QT_FEATURE_private_tests)
     add_subdirectory(qv4mm)
     add_subdirectory(qv4identifiertable)
     add_subdirectory(qv4regexp)
+    add_subdirectory(qv4urlobject)
     if(QT_FEATURE_process AND NOT QNX)
         add_subdirectory(ecmascripttests)
     endif()

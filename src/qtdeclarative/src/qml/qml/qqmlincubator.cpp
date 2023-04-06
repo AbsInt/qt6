@@ -5,7 +5,6 @@
 #include "qqmlcomponent.h"
 #include "qqmlincubator_p.h"
 
-#include "qqmlexpression_p.h"
 #include "qqmlobjectcreator_p.h"
 #include <private/qqmlcomponent_p.h>
 
@@ -104,6 +103,9 @@ QQmlIncubatorPrivate::~QQmlIncubatorPrivate()
 
 void QQmlIncubatorPrivate::clear()
 {
+    // reset the tagged pointer
+    if (requiredPropertiesFromComponent)
+        requiredPropertiesFromComponent = decltype(requiredPropertiesFromComponent){};
     compilationUnit.reset();
     if (next.isInList()) {
         next.remove();
@@ -227,7 +229,7 @@ void QQmlIncubatorPrivate::forceCompletion(QQmlInstantiationInterrupt &i)
 {
     while (QQmlIncubator::Loading == status) {
         while (QQmlIncubator::Loading == status && !waitingFor.isEmpty())
-            static_cast<QQmlIncubatorPrivate *>(waitingFor.first())->forceCompletion(i);
+            waitingFor.first()->forceCompletion(i);
         if (QQmlIncubator::Loading == status)
             incubate(i);
     }
@@ -279,7 +281,7 @@ void QQmlIncubatorPrivate::incubate(QQmlInstantiationInterrupt &i)
         if (!tresult)
             errors = creator->errors;
         else {
-           RequiredProperties& requiredProperties = creator->requiredProperties();
+           RequiredProperties* requiredProperties = creator->requiredProperties();
            for (auto it = initialProperties.cbegin(); it != initialProperties.cend(); ++it) {
                auto component = tresult;
                auto name = it.key();
@@ -311,9 +313,9 @@ void QQmlIncubatorPrivate::incubate(QQmlInstantiationInterrupt &i)
             ddata->rootObjectInCreation = false;
             if (q) {
                 q->setInitialState(result);
-                if (creator && !creator->requiredProperties().empty()) {
-                    const auto& unsetRequiredProperties = creator->requiredProperties();
-                    for (const auto& unsetRequiredProperty: unsetRequiredProperties)
+                if (creator && !creator->requiredProperties()->empty()) {
+                    const RequiredProperties *unsetRequiredProperties = creator->requiredProperties();
+                    for (const auto& unsetRequiredProperty: *unsetRequiredProperties)
                         errors << QQmlComponentPrivate::unsetRequiredPropertyToQQmlError(unsetRequiredProperty);
                 }
             }
@@ -372,6 +374,37 @@ finishIncubate:
     } else if (!creator.isNull()) {
         vmeGuard.guard(creator.data());
     }
+}
+
+/*!
+    \internal
+    This is used to mimic the behavior of incubate when the
+    Component we want to incubate refers to a creatable
+    QQmlType (i.e., it is the result of loadFromModule).
+ */
+void QQmlIncubatorPrivate::incubateCppBasedComponent(QQmlComponent *component, QQmlContext *context)
+{
+    auto compPriv = QQmlComponentPrivate::get(component);
+    Q_ASSERT(compPriv->loadedType.isCreatable());
+    std::unique_ptr<QObject> object(component->beginCreate(context));
+    component->setInitialProperties(object.get(), initialProperties);
+    if (auto props = compPriv->state.requiredProperties()) {
+        requiredPropertiesFromComponent = props;
+        requiredPropertiesFromComponent.setTag(HadTopLevelRequired::Yes);
+    }
+    q->setInitialState(object.get());
+    if (requiredPropertiesFromComponent && !requiredPropertiesFromComponent->isEmpty()) {
+        for (const RequiredPropertyInfo &unsetRequiredProperty :
+             std::as_const(*requiredPropertiesFromComponent)) {
+            errors << QQmlComponentPrivate::unsetRequiredPropertyToQQmlError(unsetRequiredProperty);
+        }
+    } else {
+        compPriv->completeCreate();
+        result = object.release();
+        progress = QQmlIncubatorPrivate::Completed;
+    }
+    changeStatus(calculateStatus());
+
 }
 
 /*!
@@ -663,21 +696,28 @@ QObject *QQmlIncubator::object() const
 }
 
 /*!
-Return a list of properties which are required but haven't been set yet.
+Return a pointer to a list of properties which are required but haven't
+been set yet.
 This list can be modified, so that subclasses which implement special logic
 setInitialProperties can mark properties set there as no longer required.
 
 \sa QQmlIncubator::setInitialProperties
 \since 5.15
 */
-RequiredProperties &QQmlIncubatorPrivate::requiredProperties()
+RequiredProperties *QQmlIncubatorPrivate::requiredProperties()
 {
-    return creator->requiredProperties();
+    if (creator)
+        return creator->requiredProperties();
+    else
+        return requiredPropertiesFromComponent.data();
 }
 
 bool QQmlIncubatorPrivate::hadTopLevelRequiredProperties() const
 {
-    return creator->componentHadTopLevelRequiredProperties();
+    if (creator)
+        return creator->componentHadTopLevelRequiredProperties();
+    else
+        return requiredPropertiesFromComponent.tag() == HadTopLevelRequired::Yes;
 }
 
 /*!

@@ -584,7 +584,7 @@ void QQuickWindowPrivate::emitAfterRenderPassRecording(void *ud)
     emit w->afterRenderPassRecording();
 }
 
-void QQuickWindowPrivate::renderSceneGraph(const QSize &size, const QSize &surfaceSize)
+void QQuickWindowPrivate::renderSceneGraph()
 {
     Q_Q(QQuickWindow);
     if (!renderer)
@@ -618,11 +618,9 @@ void QQuickWindowPrivate::renderSceneGraph(const QSize &size, const QSize &surfa
             rp = rpDescForSwapchain;
             cb = swapchain->currentFrameCommandBuffer();
         }
-        sgRenderTarget.rt = rt;
-        sgRenderTarget.rpDesc = rp;
-        sgRenderTarget.cb = cb;
+        sgRenderTarget = QSGRenderTarget(rt, rp, cb);
     } else {
-        sgRenderTarget.paintDevice = redirect.rt.paintDevice;
+        sgRenderTarget = QSGRenderTarget(redirect.rt.paintDevice);
     }
 
     context->beginNextFrame(renderer,
@@ -648,16 +646,15 @@ void QQuickWindowPrivate::renderSceneGraph(const QSize &size, const QSize &surfa
         pixelSize = redirect.rt.renderTarget->pixelSize();
     else if (redirect.rt.paintDevice)
         pixelSize = QSize(redirect.rt.paintDevice->width(), redirect.rt.paintDevice->height());
-    else if (surfaceSize.isEmpty())
-        pixelSize = size * devicePixelRatio;
-    else
-        pixelSize = surfaceSize;
-    QSize logicalSize = pixelSize / devicePixelRatio;
+    else if (rhi)
+        pixelSize = swapchain->currentPixelSize();
+    else // software or other backend
+        pixelSize = q->size() * devicePixelRatio;
 
     renderer->setDevicePixelRatio(devicePixelRatio);
     renderer->setDeviceRect(QRect(QPoint(0, 0), pixelSize));
     renderer->setViewportRect(QRect(QPoint(0, 0), pixelSize));
-    renderer->setProjectionMatrixToRect(QRectF(QPointF(0, 0), logicalSize), matrixFlags);
+    renderer->setProjectionMatrixToRect(QRectF(QPointF(0, 0), pixelSize / devicePixelRatio), matrixFlags);
 
     context->renderNextFrame(renderer);
 
@@ -691,6 +688,7 @@ QQuickWindowPrivate::QQuickWindowPrivate()
     , hasActiveSwapchain(false)
     , hasRenderableSwapchain(false)
     , swapchainJustBecameRenderable(false)
+    , updatesEnabled(true)
 {
 }
 
@@ -1152,18 +1150,24 @@ void qtquick_shadereffect_purge_gui_thread_shader_cache();
     This function tries to release redundant resources currently held by the QML scene.
 
     Calling this function requests the scene graph to release cached graphics
-    resources, such as graphics pipeline objects or shader programs.
-
-    \note The releasing of cached graphics resources is not dependent on the
-    hint from setPersistentGraphics().
+    resources, such as graphics pipeline objects, shader programs, or image
+    data.
 
     Additionally, depending on the render loop in use, this function may also
-    result in the scene graph and all rendering resources to be released. If
-    this happens, the sceneGraphInvalidated() signal will be emitted, allowing
-    users to clean up their own graphics resources. The
-    setPersistentGraphics() and setPersistentSceneGraph() functions can be
-    used to prevent this from happening, if handling the cleanup is not feasible
-    in the application, at the cost of higher memory usage.
+    result in the scene graph and all window-related rendering resources to be
+    released. If this happens, the sceneGraphInvalidated() signal will be
+    emitted, allowing users to clean up their own graphics resources. The
+    setPersistentGraphics() and setPersistentSceneGraph() functions can be used
+    to prevent this from happening, if handling the cleanup is not feasible in
+    the application, at the cost of higher memory usage.
+
+    \note The releasing of cached graphics resources, such as graphics
+    pipelines or shader programs is not dependent on the persistency hints. The
+    releasing of those will happen regardless of the values of the persistent
+    graphics and scenegraph hints.
+
+    \note This function is not related to the QQuickItem::releaseResources()
+    virtual function.
 
     \sa sceneGraphInvalidated(), setPersistentGraphics(), setPersistentSceneGraph()
  */
@@ -1653,14 +1657,6 @@ void QQuickWindow::mouseReleaseEvent(QMouseEvent *event)
     da->handleMouseEvent(event);
 }
 
-void QQuickWindowPrivate::flushFrameSynchronousEvents()
-{
-    Q_Q(QQuickWindow);
-    auto da = deliveryAgentPrivate();
-    Q_ASSERT(da);
-    da->flushFrameSynchronousEvents(q);
-}
-
 #if QT_CONFIG(cursor)
 void QQuickWindowPrivate::updateCursor(const QPointF &scenePos, QQuickItem *rootItem)
 {
@@ -2057,18 +2053,23 @@ void QQuickWindowPrivate::updateDirtyNode(QQuickItem *item)
         QSGNode *desiredNode = nullptr;
 
         while (currentNode && (desiredNode = fetchNextNode(itemPriv, ii, fetchedPaintNode))) {
-            // uh oh... reality and our utopic paradise are diverging!
-            // we need to reconcile this...
             if (currentNode != desiredNode) {
-                // for now, we're just removing the node from the children -
-                // and replacing it with the new node.
-                if (desiredNode->parent())
-                    desiredNode->parent()->removeChildNode(desiredNode);
-                groupNode->insertChildNodeAfter(desiredNode, currentNode);
-                groupNode->removeChildNode(currentNode);
+                // uh oh... reality and our utopic paradise are diverging!
+                // we need to reconcile this...
+                if (currentNode->nextSibling() == desiredNode) {
+                    // nice and simple: a node was removed, and the next in line is correct.
+                    groupNode->removeChildNode(currentNode);
+                } else {
+                    // a node needs to be added..
+                    // remove it from any pre-existing parent, and push it before currentNode,
+                    // so it's in the correct place...
+                    if (desiredNode->parent()) {
+                        desiredNode->parent()->removeChildNode(desiredNode);
+                    }
+                    groupNode->insertChildNodeBefore(desiredNode, currentNode);
+                }
 
-                // since we just replaced currentNode, we also need to reset
-                // the pointer.
+                // continue iteration at the correct point, now desiredNode is in place...
                 currentNode = desiredNode;
             }
 
@@ -2339,7 +2340,7 @@ bool QQuickWindow::isSceneGraphInitialized() const
 /*!
     \qmltype CloseEvent
     \instantiates QQuickCloseEvent
-    \inqmlmodule QtQuick.Window
+    \inqmlmodule QtQuick
     \ingroup qtquick-visual
     \brief Notification that a \l Window is about to be closed.
     \since 5.1
@@ -2347,8 +2348,6 @@ bool QQuickWindow::isSceneGraphInitialized() const
     Notification that a window is about to be closed by the windowing system
     (e.g. the user clicked the title bar close button). The CloseEvent contains
     an accepted property which can be set to false to abort closing the window.
-
-    \sa QQuickWindow::closing()
 */
 
 /*!
@@ -2359,6 +2358,7 @@ bool QQuickWindow::isSceneGraphInitialized() const
 */
 
 /*!
+    \internal
     \fn void QQuickWindow::closing(QQuickCloseEvent *close)
     \since 5.1
 
@@ -3120,6 +3120,51 @@ void QQuickWindow::setDefaultAlphaBuffer(bool useAlpha)
  */
 
 /*!
+    \variable QQuickWindow::GraphicsStateInfo::currentFrameSlot
+    \since 5.14
+    \brief the current frame slot index while recording a frame.
+
+    When the scenegraph renders with lower level 3D APIs such as Vulkan or
+    Metal, it is the Qt's responsibility to ensure blocking whenever starting a
+    new frame and finding the CPU is already a certain number of frames ahead
+    of the GPU (because the command buffer submitted in frame no. \c{current} -
+    \c{FramesInFlight} has not yet completed). With other graphics APIs, such
+    as OpenGL or Direct 3D 11 this level of control is not exposed to the API
+    client but rather handled by the implementation of the graphics API.
+
+    By extension, this also means that the appropriate double (or triple)
+    buffering of resources, such as buffers, is up to the graphics API client
+    to manage. Most commonly, a uniform buffer where the data changes between
+    frames cannot simply change its contents when submitting a frame, given
+    that the frame may still be active ("in flight") when starting to record
+    the next frame. To avoid stalling the pipeline, one way is to have multiple
+    buffers (and memory allocations) under the hood, thus realizing at least a
+    double buffered scheme for such resources.
+
+    Applications that integrate rendering done directly with a graphics API
+    such as Vulkan may want to perform a similar double or triple buffering of
+    their own graphics resources, in a way that is compatible with the Qt
+    rendering engine's frame submission process. That then involves knowing the
+    values for the maximum number of in-flight frames (which is typically 2 or
+    3) and the current frame slot index, which is a number running 0, 1, ..,
+    FramesInFlight-1, and then wrapping around. The former is exposed in the
+    \l{QQuickWindow::GraphicsStateInfo::framesInFlight}{framesInFlight}
+    variable. The latter, current index, is this value.
+
+    For an example of using these values in practice, refer to the {Scene Graph
+    - Vulkan Under QML} and {Scene Graph - Vulkan Texture Import} examples.
+ */
+
+/*!
+    \variable QQuickWindow::GraphicsStateInfo::framesInFlight
+    \since 5.14
+    \brief the maximum number of frames kept in flight.
+
+    See \l{QQuickWindow::GraphicsStateInfo::currentFrameSlot}{currentFrameSlot}
+    for a detailed description.
+ */
+
+/*!
     \return a reference to a GraphicsStateInfo struct describing some of the
     RHI's internal state, in particular, the double or tripple buffering status
     of the backend (such as, the Vulkan or Metal integrations). This is
@@ -3448,7 +3493,7 @@ void QQuickWindow::endExternalCommands()
 
     However if you set this property, then Qt Quick will no longer wait until
     the \c transientParent window is shown before showing this window. If you
-    want to to be able to show a transient window independently of the "parent"
+    want to be able to show a transient window independently of the "parent"
     Item or Window within which it was declared, you can remove that
     relationship by setting \c transientParent to \c null:
 

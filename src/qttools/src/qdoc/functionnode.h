@@ -75,6 +75,12 @@ public:
     }
     [[nodiscard]] bool isDeprecated() const override;
 
+    void markExplicit() { m_explicit = true; }
+    bool isExplicit() const { return m_explicit; }
+
+    void markConstexpr() { m_constexpr = true; }
+    bool isConstexpr() const { return m_constexpr; }
+
     [[nodiscard]] bool isCppFunction() const { return m_metaness == Plain; } // Is this correct?
     [[nodiscard]] bool isSignal() const { return (m_metaness == Signal); }
     [[nodiscard]] bool isSlot() const { return (m_metaness == Slot); }
@@ -106,14 +112,12 @@ public:
                                     bool templateParams = false) const override;
 
     [[nodiscard]] const QString &overridesThis() const { return m_overridesThis; }
-    [[nodiscard]] const NodeList &associatedProperties() const { return m_associatedProperties; }
+    [[nodiscard]] const QList<PropertyNode *> &associatedProperties() const { return m_associatedProperties; }
     [[nodiscard]] bool hasAssociatedProperties() const { return !m_associatedProperties.isEmpty(); }
     [[nodiscard]] bool hasOneAssociatedProperty() const
     {
         return (m_associatedProperties.size() == 1);
     }
-    [[nodiscard]] Node *firstAssociatedProperty() const { return m_associatedProperties[0]; }
-
     [[nodiscard]] QString element() const override { return parent()->name(); }
     [[nodiscard]] bool isAttached() const override { return m_attached; }
     [[nodiscard]] bool isQtQuickNode() const override { return parent()->isQtQuickNode(); }
@@ -130,8 +134,6 @@ public:
     {
         return parent()->logicalModuleIdentifier();
     }
-
-    void debug() const;
 
     void setFinal(bool b) { m_isFinal = b; }
     [[nodiscard]] bool isFinal() const { return m_isFinal; }
@@ -180,6 +182,9 @@ private:
     bool m_isRef : 1;
     bool m_isRefRef : 1;
     bool m_isInvokable : 1;
+    bool m_explicit;
+    bool m_constexpr;
+
     Metaness m_metaness {};
     Virtualness m_virtualness {};
     signed short m_overloadNumber {};
@@ -188,7 +193,7 @@ private:
     QStringList m_parentPath {};
     QString m_overridesThis {};
     QString m_tag {};
-    NodeList m_associatedProperties {};
+    QList<PropertyNode *> m_associatedProperties {};
     Parameters m_parameters {};
 };
 

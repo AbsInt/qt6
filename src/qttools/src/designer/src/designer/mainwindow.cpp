@@ -154,10 +154,8 @@ bool DockedMdiArea::event(QEvent *event)
     case QEvent::Drop: {
         QDropEvent *e = static_cast<QDropEvent*>(event);
         const QStringList files = uiFiles(e->mimeData());
-        const QStringList::const_iterator cend = files.constEnd();
-        for (QStringList::const_iterator it = files.constBegin(); it != cend; ++it) {
-            emit fileDropped(*it);
-        }
+        for (const auto &f : files)
+            emit fileDropped(f);
         e->acceptProposedAction();
         return true;
     }
@@ -248,7 +246,6 @@ void ToolBarManager::updateToolBarMenu()
 void ToolBarManager::configureToolBars()
 {
     QtToolBarDialog dlg(m_parent);
-    dlg.setWindowFlags(dlg.windowFlags() & ~Qt::WindowContextHelpButtonHint);
     dlg.setToolBarManager(m_manager);
     dlg.exec();
     updateToolBarMenu();
@@ -314,13 +311,10 @@ QMdiSubWindow *DockedMainWindow::createMdiSubWindow(QWidget *fw, Qt::WindowFlags
     // designer menu actions
     if (designerCloseActionShortCut == QKeySequence(QKeySequence::Close)) {
         const ActionList systemMenuActions = rc->systemMenu()->actions();
-        if (!systemMenuActions.isEmpty()) {
-            const ActionList::const_iterator cend = systemMenuActions.constEnd();
-            for (ActionList::const_iterator it = systemMenuActions.constBegin(); it != cend; ++it) {
-                if ( (*it)->shortcut() == designerCloseActionShortCut) {
-                    (*it)->setShortcutContext(Qt::WidgetShortcut);
-                    break;
-                }
+        for (auto *a : systemMenuActions) {
+            if (a->shortcut() == designerCloseActionShortCut) {
+                a->setShortcutContext(Qt::WidgetShortcut);
+                break;
             }
         }
     }

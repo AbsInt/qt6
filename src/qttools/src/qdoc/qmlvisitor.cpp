@@ -11,6 +11,7 @@
 #include "qdocdatabase.h"
 #include "qmlpropertynode.h"
 #include "tokenizer.h"
+#include "utilities.h"
 
 #include <QtCore/qdebug.h>
 #include <QtCore/qfileinfo.h>
@@ -148,7 +149,7 @@ bool QmlDocVisitor::applyDocumentation(QQmlJS::SourceLocation location, Node *no
                             nodes.append(n);
                         }
                     } else
-                        qDebug() << "  FAILED TO PARSE QML PROPERTY:" << topic << args;
+                        qCDebug(lcQdoc) << "Failed to parse QML property:" << topic << args;
                 } else if (topic.endsWith(QLatin1String("method")) || topic == COMMAND_QMLSIGNAL) {
                     if (node->isFunction()) {
                         auto *fn = static_cast<FunctionNode *>(node);
@@ -546,17 +547,7 @@ bool QmlDocVisitor::visit(QQmlJS::AST::UiArrayBinding *)
 
 void QmlDocVisitor::endVisit(QQmlJS::AST::UiArrayBinding *) {}
 
-template<typename T>
-QString qualifiedIdToString(T node);
-
-template<>
-QString qualifiedIdToString(QStringView node)
-{
-    return node.toString();
-}
-
-template<>
-QString qualifiedIdToString(QQmlJS::AST::UiQualifiedId *node)
+static QString qualifiedIdToString(QQmlJS::AST::UiQualifiedId *node)
 {
     QString s;
 
@@ -590,7 +581,7 @@ bool QmlDocVisitor::visit(QQmlJS::AST::UiPublicMember *member)
                 auto *newSignal = new FunctionNode(metaness, m_current, name);
                 Parameters &parameters = newSignal->parameters();
                 for (QQmlJS::AST::UiParameterList *it = member->parameters; it; it = it->next) {
-                    const QString type = qualifiedIdToString(it->type);
+                    const QString type = it->type ? it->type->toString() : QString();
                     if (!type.isEmpty() && !it->name.isEmpty())
                         parameters.append(type, it->name.toString());
                 }

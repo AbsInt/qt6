@@ -5,13 +5,26 @@
 #include <QProcess>
 #include <QLibraryInfo>
 #include <qjstest/test262runner.h>
+#include <QtQuickTestUtils/private/qmlutils_p.h>
 
-class tst_EcmaScriptTests : public QObject
+class tst_EcmaScriptTests : public QQmlDataTest
 {
     Q_OBJECT
+public:
+    tst_EcmaScriptTests()
+        : QQmlDataTest(QT_QMLTEST_DATADIR, FailOnWarningsPolicy::DoNotFailOnWarnings, "test262")
+    {
+        if (!qEnvironmentVariableIsEmpty("QTEST_FUNCTION_TIMEOUT"))
+            return;
+#ifdef Q_OS_ANDROID
+    qputenv("QTEST_FUNCTION_TIMEOUT", "1800000"); // 30 minutes for android
+#else
+    qputenv("QTEST_FUNCTION_TIMEOUT", "900000");  // 15 minutes for everything else
+#endif
+    }
 
 private slots:
-    void initTestCase();
+    void initTestCase() final;
     void cleanupTestCase();
     void runInterpreted();
     void runJitted();
@@ -45,6 +58,7 @@ void tst_EcmaScriptTests::filterCategories(QLoggingCategory *category)
 
 void tst_EcmaScriptTests::initTestCase()
 {
+    QQmlDataTest::initTestCase();
     /* Suppress lcQmlCompiler's "qt.qml.compiler" warnings; we aren't in a
        position to fix test262's many warnings and they flood messages so we
        didn't get to see actual failures unless we passed -maxwarnings with a
@@ -60,30 +74,24 @@ void tst_EcmaScriptTests::cleanupTestCase()
 
 void tst_EcmaScriptTests::runInterpreted()
 {
-#if defined(Q_PROCESSOR_X86_64)
-    QDir::setCurrent(QLatin1String(SRCDIR));
-    Test262Runner runner(QString(), "test262");
+    Test262Runner runner(QString(), dataDirectory(), directory() + QStringLiteral("/TestExpectations"));
     runner.setFlags(Test262Runner::ForceBytecode
                     | Test262Runner::WithTestExpectations
                     | Test262Runner::Parallel
                     | Test262Runner::Verbose);
     bool result = runner.run();
     QVERIFY(result);
-#endif
 }
 
 void tst_EcmaScriptTests::runJitted()
 {
-#if defined(Q_PROCESSOR_X86_64)
-    QDir::setCurrent(QLatin1String(SRCDIR));
-    Test262Runner runner(QString(), "test262");
+    Test262Runner runner(QString(), dataDirectory(), directory() + QStringLiteral("/TestExpectations"));
     runner.setFlags(Test262Runner::ForceJIT
                     | Test262Runner::WithTestExpectations
                     | Test262Runner::Parallel
                     | Test262Runner::Verbose);
     bool result = runner.run();
     QVERIFY(result);
-#endif
 }
 
 QTEST_GUILESS_MAIN(tst_EcmaScriptTests)

@@ -45,6 +45,14 @@ public:
     using ConstPtr = QDeferredSharedPointer<const QQmlJSScope>;
     using WeakConstPtr = QDeferredWeakPointer<const QQmlJSScope>;
 
+    using InlineComponentNameType = QString;
+    using RootDocumentNameType = std::monostate; // an empty type that has std::hash
+    /*!
+     *  A Hashable type to differentiate document roots from different inline components.
+     */
+    using InlineComponentOrDocumentRootName =
+            std::variant<InlineComponentNameType, RootDocumentNameType>;
+
     enum ScopeType
     {
         JSFunctionScope,
@@ -73,6 +81,7 @@ public:
         WrappedInImplicitComponent = 0x80,
         HasBaseTypeError = 0x100,
         HasExtensionNamespace = 0x200,
+        IsListProperty = 0x400,
     };
     Q_DECLARE_FLAGS(Flags, Flag)
     Q_FLAGS(Flags);
@@ -196,7 +205,72 @@ public:
         QTypeRevision revision;
     };
 
-    using ContextualTypes = QHash<QString, ImportedScope<ConstPtr>>;
+    /*! \internal
+     *  Maps type names to types and the compile context of the types. The context can be
+     *  INTERNAl (for c++ and synthetic jsrootgen types) or QML (for qml types).
+     */
+    struct ContextualTypes
+    {
+        enum CompileContext { INTERNAL, QML };
+
+        ContextualTypes(
+                CompileContext context,
+                const QHash<QString, ImportedScope<ConstPtr>> types,
+                const QQmlJSScope::ConstPtr &intType,
+                const QQmlJSScope::ConstPtr &arrayType)
+            : m_types(types)
+            , m_context(context)
+            , m_intType(intType)
+            , m_arrayType(arrayType)
+        {}
+
+        CompileContext context() const { return m_context; }
+        ConstPtr intType() const { return m_intType; }
+        ConstPtr arrayType() const { return m_arrayType; }
+
+        bool hasType(const QString &name) const { return m_types.contains(name); }
+        ImportedScope<ConstPtr> type(const QString &name) const { return m_types[name]; }
+        void setType(const QString &name, const ImportedScope<ConstPtr> &type)
+        {
+            m_types.insert(name, type);
+        }
+        void clearType(const QString &name)
+        {
+            m_types[name].scope = QQmlJSScope::ConstPtr();
+        }
+
+        bool isNullType(const QString &name) const
+        {
+            const auto it = m_types.constFind(name);
+            return it != m_types.constEnd() && it->scope.isNull();
+        }
+
+        void addTypes(ContextualTypes &&types)
+        {
+            Q_ASSERT(types.m_context == m_context);
+            m_types.insert(std::move(types.m_types));
+        }
+
+        void addTypes(const ContextualTypes &types)
+        {
+            Q_ASSERT(types.m_context == m_context);
+            m_types.insert(types.m_types);
+        }
+
+        const QHash<QString, ImportedScope<ConstPtr>> &types() const { return m_types; }
+
+        void clearTypes() { m_types.clear(); }
+
+    private:
+        QHash<QString, ImportedScope<ConstPtr>> m_types;
+        CompileContext m_context;
+
+        // For resolving enums
+        QQmlJSScope::ConstPtr m_intType;
+
+        // For resolving sequence types
+        QQmlJSScope::ConstPtr m_arrayType;
+    };
 
     struct JavaScriptIdentifier
     {
@@ -229,7 +303,12 @@ public:
 
     QQmlJSScope::ConstPtr parentScope() const
     {
+QT_WARNING_PUSH
+#if defined(Q_CC_GNU_ONLY) && Q_CC_GNU < 1400 && Q_CC_GNU >= 1200
+    QT_WARNING_DISABLE_GCC("-Wuse-after-free")
+#endif
         return QQmlJSScope::WeakConstPtr(m_parentScope).toStrongRef();
+QT_WARNING_POP
     }
 
     static void reparent(const QQmlJSScope::Ptr &parentScope, const QQmlJSScope::Ptr &childScope);
@@ -437,6 +516,8 @@ public:
     QString valueTypeName() const { return m_valueTypeName; }
     void setValueTypeName(const QString &name) { m_valueTypeName = name; }
     QQmlJSScope::ConstPtr valueType() const { return m_valueType; }
+    QQmlJSScope::ConstPtr listType() const { return m_listType; }
+    QQmlJSScope::Ptr listType() { return m_listType; }
 
     void addOwnRuntimeFunctionIndex(QQmlJSMetaMethod::AbsoluteFunctionIndex index)
     {
@@ -452,7 +533,13 @@ public:
     }
 
     bool isSingleton() const { return m_flags & Singleton; }
-    bool isCreatable() const { return m_flags & Creatable; }
+    bool isCreatable() const;
+    bool hasCreatableFlag() const { return m_flags & Creatable; }
+    /*!
+     * \internal
+     *
+     * Returns true for objects defined from Qml, and false for objects declared from C++.
+     */
     bool isComposite() const { return m_flags & Composite; }
     bool isScript() const { return m_flags & Script; }
     bool hasCustomParser() const { return m_flags & CustomParser; }
@@ -461,7 +548,7 @@ public:
     bool isWrappedInImplicitComponent() const { return m_flags & WrappedInImplicitComponent; }
     bool extensionIsNamespace() const { return m_flags & HasExtensionNamespace; }
     void setIsSingleton(bool v) { m_flags.setFlag(Singleton, v); }
-    void setIsCreatable(bool v) { m_flags.setFlag(Creatable, v); }
+    void setCreatableFlag(bool v) { m_flags.setFlag(Creatable, v); }
     void setIsComposite(bool v) { m_flags.setFlag(Composite, v); }
     void setIsScript(bool v) { m_flags.setFlag(Script, v); }
     void setHasCustomParser(bool v)
@@ -473,9 +560,13 @@ public:
     void setIsWrappedInImplicitComponent(bool v) { m_flags.setFlag(WrappedInImplicitComponent, v); }
     void setExtensionIsNamespace(bool v) { m_flags.setFlag(HasExtensionNamespace, v); }
 
+    bool isListProperty() const { return m_flags.testFlag(IsListProperty); }
+    void setIsListProperty(bool v) { m_flags.setFlag(IsListProperty, v); }
+
     void setAccessSemantics(AccessSemantics semantics) { m_semantics = semantics; }
     AccessSemantics accessSemantics() const { return m_semantics; }
     bool isReferenceType() const { return m_semantics == QQmlJSScope::AccessSemantics::Reference; }
+    bool isValueType() const { return m_semantics == QQmlJSScope::AccessSemantics::Value; }
 
     bool isIdInCurrentQmlScopes(const QString &id) const;
     bool isIdInCurrentJSScopes(const QString &id) const;
@@ -485,6 +576,14 @@ public:
 
     ConstPtrWrapperIterator childScopesBegin() const { return m_childScopes.constBegin(); }
     ConstPtrWrapperIterator childScopesEnd() const { return m_childScopes.constEnd(); }
+
+    void setInlineComponentName(const QString &inlineComponentName)
+    {
+        Q_ASSERT(isInlineComponent());
+        m_inlineComponentName = inlineComponentName;
+    }
+    std::optional<QString> inlineComponentName() const;
+    InlineComponentOrDocumentRootName enclosingInlineComponentName() const;
 
     QVector<QQmlJSScope::Ptr> childScopes()
     {
@@ -508,6 +607,8 @@ public:
             QSet<QString> *usedTypes = nullptr);
     static void resolveEnums(
             const QQmlJSScope::Ptr &self, const QQmlJSScope::ConstPtr &intType);
+    static void resolveList(
+            const QQmlJSScope::Ptr &self, const QQmlJSScope::ConstPtr &arrayType);
     static void resolveGeneralizedGroup(
             const QQmlJSScope::Ptr &self, const QQmlJSScope::ConstPtr &baseType,
             const QQmlJSScope::ContextualTypes &contextualTypes,
@@ -598,14 +699,22 @@ public:
         quint32 sourceLocationOffset = 0; // binding's source location offset
     };
 
+    /*! \internal
+     *  Finds a type in contextualTypes with given name.
+     *  If a type is found, then its name is inserted into usedTypes (when provided).
+     *  If contextualTypes has mode INTERNAl, then namespace resolution for enums is
+     *  done (eg for Qt::Alignment).
+     *  If contextualTypes has mode QML, then inline component resolution is done
+     *  ("qmlFileName.IC" is correctly resolved from qmlFileName).
+     */
+    static ImportedScope<QQmlJSScope::ConstPtr> findType(const QString &name,
+                                                         const ContextualTypes &contextualTypes,
+                                                         QSet<QString> *usedTypes = nullptr);
+
 private:
     QQmlJSScope() = default;
     QQmlJSScope(const QQmlJSScope &) = default;
     QQmlJSScope &operator=(const QQmlJSScope &) = default;
-
-    static ImportedScope<QQmlJSScope::ConstPtr> findType(
-            const QString &name, const ContextualTypes &contextualTypes,
-            QSet<QString> *usedTypes = nullptr);
     static QTypeRevision resolveType(
             const QQmlJSScope::Ptr &self, const ContextualTypes &contextualTypes,
             QSet<QString> *usedTypes);
@@ -650,27 +759,41 @@ private:
 
     QString m_defaultPropertyName;
     QString m_parentPropertyName;
+    /*! \internal
+     *  The attached type name.
+     *  This is an internal name, from a c++ type or a synthetic jsrootgen.
+     */
     QString m_attachedTypeName;
     QStringList m_requiredPropertyNames;
     QQmlJSScope::WeakConstPtr m_attachedType;
 
+    /*! \internal
+     *  The Value type name.
+     *  This is an internal name, from a c++ type or a synthetic jsrootgen.
+     */
     QString m_valueTypeName;
     QQmlJSScope::WeakConstPtr m_valueType;
+    QQmlJSScope::Ptr m_listType;
 
-    // extension is provided as either a type (QML_{NAMESPACE_}EXTENDED) or as a
-    // namespace (QML_EXTENDED_NAMESPACE). in case of namespace, we have a more
-    // limited lookup capabilities. HasExtensionNamespace serves as a boolean to
-    // differentiate the two cases
+    /*!
+       The extension is provided as either a type (QML_{NAMESPACE_}EXTENDED) or as a
+       namespace (QML_EXTENDED_NAMESPACE).
+       The bool HasExtensionNamespace helps differentiating both cases, as namespaces
+       have a more limited lookup capaility.
+       This is an internal name, from a c++ type or a synthetic jsrootgen.
+    */
     QString m_extensionTypeName;
     QQmlJSScope::WeakConstPtr m_extensionType;
 
-    Flags m_flags;
+    Flags m_flags = Creatable; // all types are marked as creatable by default.
     AccessSemantics m_semantics = AccessSemantics::Reference;
 
     QQmlJS::SourceLocation m_sourceLocation;
 
     QString m_qualifiedName;
     QString m_moduleName;
+
+    std::optional<QString> m_inlineComponentName;
 };
 Q_DECLARE_TYPEINFO(QQmlJSScope::QmlIRCompatibilityBindingData, Q_RELOCATABLE_TYPE);
 
@@ -720,11 +843,6 @@ private:
 
 using QQmlJSExportedScope = QQmlJSScope::ExportedScope<QQmlJSScope::Ptr>;
 using QQmlJSImportedScope = QQmlJSScope::ImportedScope<QQmlJSScope::ConstPtr>;
-
-struct QQmlJSTypeInfo
-{
-    QMultiHash<QQmlJSScope::ConstPtr, QQmlJSScope::ConstPtr> usedAttachedTypes;
-};
 
 QT_END_NAMESPACE
 

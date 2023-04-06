@@ -12,6 +12,7 @@
 
 #include <iostream>
 
+using namespace Qt::StringLiterals;
 using namespace QLspSpecification;
 
 class DiagnosticsHandler
@@ -97,7 +98,7 @@ tst_Qmlls::tst_Qmlls()
             [this]() { qWarning() << "LSPerr" << m_server.readAllStandardError(); });
 
     m_qmllsPath =
-            QLibraryInfo::path(QLibraryInfo::LibraryExecutablesPath) + QLatin1String("/qmlls");
+            QLibraryInfo::path(QLibraryInfo::BinariesPath) + QLatin1String("/qmlls");
 #ifdef Q_OS_WIN
     m_qmllsPath += QLatin1String(".exe");
 #endif
@@ -127,8 +128,8 @@ void tst_Qmlls::initTestCase()
     tDoc.publishDiagnostics = pDiag;
     pDiag.versionSupport = true;
     clientInfo.capabilities.textDocument = tDoc;
-    QJsonObject workspace({ { u"didChangeWatchedFiles"_qs,
-                              QJsonObject({ { u"dynamicRegistration"_qs, true } }) } });
+    QJsonObject workspace({ { u"didChangeWatchedFiles"_s,
+                              QJsonObject({ { u"dynamicRegistration"_s, true } }) } });
     clientInfo.capabilities.workspace = workspace;
     bool didInit = false;
     m_protocol.registerRegistrationRequestHandler([this](const QByteArray &,

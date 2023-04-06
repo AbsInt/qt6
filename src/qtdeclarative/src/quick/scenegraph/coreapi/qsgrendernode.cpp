@@ -49,17 +49,15 @@ QSGRenderNodePrivate::QSGRenderNodePrivate()
     mask where each bit represents graphics states changed by the \l render()
     function:
 
-    \list
-    \li DepthState - depth write mask, depth test enabled, depth comparison function
-    \li StencilState - stencil write masks, stencil test enabled, stencil operations,
-                      stencil comparison functions
-    \li ScissorState - scissor enabled, scissor test enabled
-    \li ColorState - clear color, color write mask
-    \li BlendState - blend enabled, blend function
-    \li CullState - front face, cull face enabled
-    \li ViewportState - viewport
-    \li RenderTargetState - render target
-    \endlist
+    \value DepthState   depth write mask, depth test enabled, depth comparison function
+    \value StencilState stencil write masks, stencil test enabled, stencil operations,
+                        stencil comparison functions
+    \value ScissorState scissor enabled, scissor test enabled
+    \value ColorState   clear color, color write mask
+    \value BlendState   blend enabled, blend function
+    \value CullState    front face, cull face enabled
+    \value ViewportState viewport
+    \value RenderTargetState render target
 
     With APIs other than OpenGL, the only relevant values are the ones that
     correspond to dynamic state changes recorded on the command list/buffer.
@@ -321,6 +319,27 @@ QSGRenderNode::RenderingFlags QSGRenderNode::flags() const
 QRectF QSGRenderNode::rect() const
 {
     return QRectF();
+}
+
+/*!
+    \return pointer to the current projection matrix.
+
+    In render() this is the same matrix that is returned from
+    RenderState::projectionMatrix(). This getter exists so that prepare() also
+    has a way to query the projection matrix.
+
+    When working with a modern graphics API, or Qt's own graphics abstraction
+    layer, it is more than likely that one will want to load
+    \c{*projectionMatrix() * *matrix()} into a uniform buffer. That is however
+    something that needs to be done in prepare(), so outside the recording of a
+    render pass. That is why both matrices are queriable directly from the
+    QSGRenderNode, both in prepare() and render().
+
+    \since 6.5
+ */
+const QMatrix4x4 *QSGRenderNode::projectionMatrix() const
+{
+    return &d->m_projectionMatrix;
 }
 
 /*!

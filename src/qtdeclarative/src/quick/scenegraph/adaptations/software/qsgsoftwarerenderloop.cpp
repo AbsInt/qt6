@@ -95,7 +95,7 @@ void QSGSoftwareRenderLoop::renderWindow(QQuickWindow *window, bool isNewExpose)
     data.updatePending = false;
 
     if (!data.grabOnly) {
-        cd->flushFrameSynchronousEvents();
+        cd->deliveryAgentPrivate()->flushFrameSynchronousEvents(window);
         // Event delivery/processing triggered the window to be deleted or stop rendering.
         if (!m_windows.contains(window))
             return;
@@ -139,7 +139,7 @@ void QSGSoftwareRenderLoop::renderWindow(QQuickWindow *window, bool isNewExpose)
     if (softwareRenderer)
         softwareRenderer->setBackingStore(m_backingStores[window]);
 
-    cd->renderSceneGraph(window->size());
+    cd->renderSceneGraph();
 
     if (profileFrames)
         renderTime = renderTimer.nsecsElapsed();

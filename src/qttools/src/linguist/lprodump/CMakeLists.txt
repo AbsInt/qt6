@@ -1,4 +1,5 @@
-# Generated from lprodump.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## lprodump Tool:
@@ -7,7 +8,7 @@
 qt_get_tool_target_name(target_name lprodump)
 qt_internal_add_tool(${target_name}
     TARGET_DESCRIPTION "Qt Linguist QMake Project Dump Tool"
-    TOOLS_TARGET Linguist # special case
+    TOOLS_TARGET Linguist
     INSTALL_DIR "${INSTALL_LIBEXECDIR}"
     SOURCES
         ../shared/ioutils.cpp ../shared/ioutils.h
@@ -31,7 +32,12 @@ qt_internal_add_tool(${target_name}
         QT_NO_CAST_TO_ASCII
     INCLUDE_DIRECTORIES
         ../shared
+    LIBRARIES
+        Qt::CorePrivate
 )
+
+set_source_files_properties(../shared/qmakeparser.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
+
 qt_internal_return_unless_building_tools()
 
 # Resources:
@@ -48,10 +54,10 @@ qt_internal_add_resource(${target_name} "proparser"
         ${proparser_resource_files}
 )
 
-
-#### Keys ignored in scope 1:.:.:lprodump.pro:<TRUE>:
-# QMAKE_TARGET_DESCRIPTION = "Qt Linguist QMake Project Dump Tool"
-# QT_TOOL_ENV = "qmake"
-# _OPTION = "host_build"
-# qmake.name = "QMAKE"
-# qmake.value = "$$shell_path($$QMAKE_QMAKE)"
+qt_internal_extend_target(${target_name} CONDITION WIN32
+    SOURCES
+        ../shared/registry.cpp
+        ../shared/registry_p.h
+    DEFINES
+        _SCL_SECURE_NO_WARNINGS
+)

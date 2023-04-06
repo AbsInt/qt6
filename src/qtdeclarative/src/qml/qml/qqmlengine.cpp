@@ -3,25 +3,16 @@
 
 #include "qqmlengine_p.h"
 #include "qqmlengine.h"
-#include "qqmlcomponentattached_p.h"
 
 #include "qqmlcontext_p.h"
 #include "qqml.h"
 #include "qqmlcontext.h"
-#include "qqmlexpression.h"
-#include "qqmlcomponent.h"
-#include "qqmlvme_p.h"
-#include "qqmlstringconverters_p.h"
 #include "qqmlscriptstring.h"
 #include "qqmlglobal_p.h"
-#include "qqmlcomponent_p.h"
-#include "qqmlextensioninterface.h"
-#include "qqmllist_p.h"
-#include "qqmltypenamecache_p.h"
 #include "qqmlnotifier_p.h"
 #include "qqmlincubator.h"
 #include "qqmlabstracturlinterceptor.h"
-#include "qqmlsourcecoordinate_p.h"
+
 #include <private/qqmldirparser_p.h>
 #include <private/qqmlboundsignal_p.h>
 #include <private/qqmljsdiagnosticmessage_p.h>
@@ -37,6 +28,9 @@
 #include <QtCore/qthread.h>
 #include <private/qthread_p.h>
 #include <private/qqmlscriptdata_p.h>
+#include <QtQml/private/qqmlcomponentattached_p.h>
+#include <QtQml/private/qqmlsourcecoordinate_p.h>
+#include <QtQml/private/qqmlcomponent_p.h>
 
 #if QT_CONFIG(qml_network)
 #include "qqmlnetworkaccessmanagerfactory.h"
@@ -214,11 +208,13 @@ QQmlEnginePrivate::~QQmlEnginePrivate()
 #if QT_CONFIG(qml_debug)
     delete profiler;
 #endif
+    qDeleteAll(cachedValueTypeInstances);
 }
 
 void QQmlPrivate::qdeclarativeelement_destructor(QObject *o)
 {
-    if (QQmlData *d = QQmlData::get(o)) {
+    QObjectPrivate *p = QObjectPrivate::get(o);
+    if (QQmlData *d = QQmlData::get(p)) {
         if (d->ownContext) {
             for (QQmlRefPointer<QQmlContextData> lc = d->ownContext->linkedContext(); lc;
                  lc = lc->linkedContext()) {
@@ -235,6 +231,23 @@ void QQmlPrivate::qdeclarativeelement_destructor(QObject *o)
 
         if (d->outerContext && d->outerContext->contextObject() == o)
             d->outerContext->setContextObject(nullptr);
+
+        if (d->hasVMEMetaObject || d->hasInterceptorMetaObject) {
+            // This is somewhat dangerous because another thread might concurrently
+            // try to resolve the dynamic metaobject. In practice this will then
+            // lead to either the code path that still returns the interceptor
+            // metaobject or the code path that returns the string casted one. Both
+            // is fine if you cannot actually touch the object itself. Since the
+            // other thread is obviously not synchronized to this one, it can't.
+            //
+            // In particular we do this when delivering the frameSwapped() signal
+            // in QQuickWindow. The handler for frameSwapped() is written in a way
+            // that is thread safe as long as QQuickWindow's dtor hasn't finished.
+            // QQuickWindow's dtor does synchronize with the render thread, but it
+            // runs _after_ qdeclarativeelement_destructor.
+            static_cast<QQmlInterceptorMetaObject *>(p->metaObject)->invalidate();
+            d->hasVMEMetaObject = d->hasInterceptorMetaObject = false;
+        }
 
         // Mark this object as in the process of deletion to
         // prevent it resolving in bindings
@@ -312,12 +325,12 @@ void QQmlData::signalEmitted(QAbstractDeclarativeData *, QObject *object, int in
 
         auto ev = std::make_unique<QMetaCallEvent>(m.methodIndex(), 0, nullptr,
                                                    object, index,
-                                                   parameterTypes.count() + 1);
+                                                   parameterTypes.size() + 1);
 
         void **args = ev->args();
         QMetaType *types = ev->types();
 
-        for (int ii = 0; ii < parameterTypes.count(); ++ii) {
+        for (int ii = 0; ii < parameterTypes.size(); ++ii) {
             const QByteArray &typeName = parameterTypes.at(ii);
             if (typeName.endsWith('*'))
                 types[ii + 1] = QMetaType(QMetaType::VoidStar);
@@ -986,6 +999,48 @@ QJSValue QQmlEngine::singletonInstance<QJSValue>(int qmlTypeId)
     return d->singletonInstance<QJSValue>(type);
 }
 
+
+/*!
+  \fn template<typename T> T QQmlEngine::singletonInstance(QAnyStringView uri, QAnyStringView typeName)
+
+  \overload
+  Returns the instance of a singleton type named \a typeName from the module specified by \a uri.
+
+  This method can be used as an alternative to calling qmlTypeId followed by the id based overload of
+  singletonInstance. This is convenient when one only needs to do a one time setup of a
+  singleton; if repeated access to the singleton is required, caching its typeId will allow
+  faster subsequent access via the
+  \l {QQmlEngine::singletonInstance(int qmlTypeId)}{type-id based overload}.
+
+  The template argument \e T may be either QJSValue or a pointer to a QObject-derived
+  type and depends on how the singleton was registered. If no instance of \e T has been
+  created yet, it is created now. If \a typeName does not represent a valid singleton
+  type, either a default constructed QJSValue or a \c nullptr is returned.
+
+  \snippet code/src_qml_qqmlengine.cpp 5
+
+  \sa QML_SINGLETON, qmlRegisterSingletonType(), qmlTypeId()
+  \since 6.5
+*/
+template<>
+QJSValue QQmlEngine::singletonInstance<QJSValue>(QAnyStringView uri, QAnyStringView typeName)
+{
+    Q_D(QQmlEngine);
+
+    auto loadHelper = QQml::makeRefPointer<LoadHelper>(&d->typeLoader, uri);
+
+    auto [moduleStatus, type] = loadHelper->resolveType(typeName);
+
+    if (moduleStatus == LoadHelper::ResolveTypeResult::NoSuchModule)
+        return {};
+    if (!type.isValid())
+        return {};
+    if (!type.isSingleton())
+        return {};
+
+    return d->singletonInstance<QJSValue>(type);
+}
+
 /*!
   Refreshes all binding expressions that use strings marked for translation.
 
@@ -1002,13 +1057,14 @@ void QQmlEngine::retranslate()
 }
 
 /*!
-  Returns the QQmlContext for the \a object, or 0 if no
+  Returns the QQmlContext for the \a object, or nullptr if no
   context has been set.
 
-  When the QQmlEngine instantiates a QObject, the context is
-  set automatically.
+  When the QQmlEngine instantiates a QObject, an internal context is assigned
+  to it automatically. Such internal contexts are read-only. You cannot set
+  context properties on them.
 
-  \sa qmlContext(), qmlEngine()
+  \sa qmlContext(), qmlEngine(), QQmlContext::setContextProperty()
   */
 QQmlContext *QQmlEngine::contextForObject(const QObject *object)
 {
@@ -1391,7 +1447,7 @@ static void dumpwarning(const QQmlError &error)
 
 static void dumpwarning(const QList<QQmlError> &errors)
 {
-    for (int ii = 0; ii < errors.count(); ++ii)
+    for (int ii = 0; ii < errors.size(); ++ii)
         dumpwarning(errors.at(ii));
 }
 
@@ -1489,7 +1545,7 @@ void QQmlEnginePrivate::cleanupScarceResources()
 
   The newly added \a path will be first in the importPathList().
 
-  \sa setImportPathList(), {QML Modules}
+  \sa setImportPathList(), {QML Modules}, {QML Import Path}
 */
 void QQmlEngine::addImportPath(const QString& path)
 {
@@ -1507,9 +1563,8 @@ void QQmlEngine::addImportPath(const QString& path)
   provided by that module. A \c qmldir file is required for defining the
   type version mapping and possibly QML extensions plugins.
 
-  By default, the list contains the directory of the application executable,
-  paths specified in the \c QML_IMPORT_PATH environment variable,
-  and the builtin \c QmlImportsPath from QLibraryInfo.
+  By default, this list contains the paths mentioned in
+  \l {QML Import Path}.
 
   \sa addImportPath(), setImportPathList()
 */
@@ -1523,9 +1578,11 @@ QStringList QQmlEngine::importPathList() const
   Sets \a paths as the list of directories where the engine searches for
   installed modules in a URL-based directory structure.
 
-  By default, the list contains the directory of the application executable,
-  paths specified in the \c QML_IMPORT_PATH environment variable,
-  and the builtin \c QmlImportsPath from QLibraryInfo.
+  By default, this list contains the paths mentioned in
+  \l {QML Import Path}.
+
+  \warning Calling setImportPathList does not preserve the default
+  import paths.
 
   \sa importPathList(), addImportPath()
   */
@@ -1629,10 +1686,20 @@ bool QQmlEngine::importPlugin(const QString &filePath, const QString &uri, QList
 
   \sa {Qt Quick Local Storage QML Types}
 */
+
+/*!
+  \fn void QQmlEngine::offlineStoragePathChanged()
+  This signal is emitted when \l offlineStoragePath changes.
+  \since 6.5
+*/
+
 void QQmlEngine::setOfflineStoragePath(const QString& dir)
 {
     Q_D(QQmlEngine);
+    if (dir == d->offlineStoragePath)
+        return;
     d->offlineStoragePath = dir;
+    Q_EMIT offlineStoragePathChanged();
 }
 
 QString QQmlEngine::offlineStoragePath() const
@@ -1642,10 +1709,12 @@ QString QQmlEngine::offlineStoragePath() const
     if (d->offlineStoragePath.isEmpty()) {
         QString dataLocation = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
         QQmlEnginePrivate *e = const_cast<QQmlEnginePrivate *>(d);
-        if (!dataLocation.isEmpty())
+        if (!dataLocation.isEmpty()) {
             e->offlineStoragePath = dataLocation.replace(QLatin1Char('/'), QDir::separator())
                                   + QDir::separator() + QLatin1String("QML")
                                   + QDir::separator() + QLatin1String("OfflineStorage");
+            Q_EMIT e->q_func()->offlineStoragePathChanged();
+        }
     }
 
     return d->offlineStoragePath;
@@ -1765,7 +1834,7 @@ void QQmlEnginePrivate::executeRuntimeFunction(const QV4::ExecutableCompilationU
                                                int argc, void **args, QMetaType *types)
 {
     Q_ASSERT(unit);
-    Q_ASSERT((functionIndex >= 0) && (functionIndex < unit->runtimeFunctions.length()));
+    Q_ASSERT((functionIndex >= 0) && (functionIndex < unit->runtimeFunctions.size()));
     Q_ASSERT(thisObject);
 
     QQmlData *ddata = QQmlData::get(thisObject);
@@ -1832,15 +1901,15 @@ QQmlEnginePrivate::createInternalContext(const QQmlRefPointer<QV4::ExecutableCom
     context->setImports(unit->typeNameCache);
     context->initFromTypeCompilationUnit(unit, subComponentIndex);
 
-    if (isComponentRoot && unit->dependentScripts.count()) {
+    if (isComponentRoot && unit->dependentScripts.size()) {
         QV4::ExecutionEngine *v4 = v4engine();
         Q_ASSERT(v4);
         QV4::Scope scope(v4);
 
-        QV4::ScopedObject scripts(scope, v4->newArrayObject(unit->dependentScripts.count()));
+        QV4::ScopedObject scripts(scope, v4->newArrayObject(unit->dependentScripts.size()));
         context->setImportedScripts(QV4::PersistentValue(v4, scripts.asReturnedValue()));
         QV4::ScopedValue v(scope);
-        for (int i = 0; i < unit->dependentScripts.count(); ++i) {
+        for (int i = 0; i < unit->dependentScripts.size(); ++i) {
             QQmlRefPointer<QQmlScriptData> s = unit->dependentScripts.at(i);
             scripts->put(i, (v = s->scriptValueForContext(context)));
         }
@@ -1958,8 +2027,53 @@ bool QQml_isFileCaseCorrect(const QString &fileName, int lengthIn /* = -1 */)
 
 void hasJsOwnershipIndicator(QQmlGuardImpl *) {};
 
+LoadHelper::LoadHelper(QQmlTypeLoader *loader, QAnyStringView uri)
+    : QQmlTypeLoader::Blob({}, QQmlDataBlob::QmlFile, loader)
+    , m_uri(uri.toString())
+
+{
+    auto import = std::make_shared<PendingImport>();
+    import->uri = uri.toString();
+    QList<QQmlError> errorList;
+    if (!Blob::addImport(import, &errorList))
+        m_uri = QString(); // reset m_uri to remember the failure
+}
+
+LoadHelper::ResolveTypeResult LoadHelper::resolveType(QAnyStringView typeName)
+{
+    QQmlType type;
+    if (!couldFindModule())
+        return {ResolveTypeResult::NoSuchModule, type};
+    QQmlTypeModule *module = QQmlMetaType::typeModule(m_uri, QTypeRevision{});
+    if (module) {
+        type = module->type(typeName.toString(), {});
+        if (type.isValid())
+            return {ResolveTypeResult::ModuleFound, type};
+    }
+    // The module exists (see check above), but there is no QQmlTypeModule
+    // ==> pure QML module, attempt resolveType
+    QTypeRevision versionReturn;
+    QList<QQmlError> errors;
+    QQmlImportNamespace *ns_return = nullptr;
+    m_importCache->resolveType(typeName.toString(), &type, &versionReturn,
+                               &ns_return,
+                               &errors);
+    return {ResolveTypeResult::ModuleFound, type};
+}
+
+bool LoadHelper::couldFindModule() const
+{
+    if (m_uri.isEmpty())
+        return false;
+    for (const auto &import: std::as_const(m_unresolvedImports))
+        if (import->priority == 0) // compare QQmlTypeData::allDependenciesDone
+            return false;
+    return true;
+}
+
 QT_END_NAMESPACE
 
 #include "moc_qqmlengine_p.cpp"
 
 #include "moc_qqmlengine.cpp"
+

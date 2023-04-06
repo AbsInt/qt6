@@ -152,12 +152,12 @@ void QmlLintSuggestions::diagnose(const QByteArray &url)
         fileContents = doc.field(Fields::code).value().toString();
         QStringList qmltypesFiles;
         QStringList resourceFiles;
-        QMap<QString, QQmlJSLogger::Option> options;
+        QList<QQmlJSLogger::Category> categories;
 
         QQmlJSLinter linter(imports);
 
         linter.lintFile(filename, &fileContents, silent, nullptr, imports, qmltypesFiles,
-                        resourceFiles, options);
+                        resourceFiles, categories);
         auto addLength = [&fileContents](Position &position, int startOffset, int length) {
             int i = startOffset;
             int iEnd = i + length;
@@ -196,28 +196,26 @@ void QmlLintSuggestions::diagnose(const QByteArray &url)
                 // We need to interject the information about where the fix suggestions end
                 // here since we don't have access to the textDocument to calculate it later.
                 QJsonArray fixedSuggestions;
-                for (const FixSuggestion::Fix &fix : suggestion->fixes) {
-                    QQmlJS::SourceLocation cut = fix.cutLocation;
+                const QQmlJS::SourceLocation cut = suggestion->location();
 
-                    int line = cut.isValid() ? cut.startLine - 1 : 0;
-                    int column = cut.isValid() ? cut.startColumn - 1 : 0;
+                const int line = cut.isValid() ? cut.startLine - 1 : 0;
+                const int column = cut.isValid() ? cut.startColumn - 1 : 0;
 
-                    QJsonObject object;
-                    object[u"lspBeginLine"] = line;
-                    object[u"lspBeginCharacter"] = column;
+                QJsonObject object;
+                object.insert("lspBeginLine"_L1, line);
+                object.insert("lspBeginCharacter"_L1, column);
 
-                    Position end = { line, column };
+                Position end = { line, column };
 
-                    addLength(end, srcLoc.isValid() ? cut.offset : 0,
-                              srcLoc.isValid() ? cut.length : 0);
-                    object[u"lspEndLine"] = end.line;
-                    object[u"lspEndCharacter"] = end.character;
+                addLength(end, srcLoc.isValid() ? cut.offset : 0,
+                          srcLoc.isValid() ? cut.length : 0);
+                object.insert("lspEndLine"_L1, end.line);
+                object.insert("lspEndCharacter"_L1, end.character);
 
-                    object[u"message"] = fix.message;
-                    object[u"replacement"] = fix.replacementString;
+                object.insert("message"_L1, suggestion->fixDescription());
+                object.insert("replacement"_L1, suggestion->replacement());
 
-                    fixedSuggestions << object;
-                }
+                fixedSuggestions << object;
                 QJsonObject data;
                 data[u"suggestions"] = fixedSuggestions;
 
@@ -248,10 +246,28 @@ void QmlLintSuggestions::diagnose(const QByteArray &url)
                 true);
 
         if (const QQmlJSLogger *logger = linter.logger()) {
+            qsizetype nDiagnostics = diagnostics.size();
             for (const auto &messages : { logger->infos(), logger->warnings(), logger->errors() }) {
                 for (const Message &message : messages) {
                     diagnostics.append(messageToDiagnostic(message));
                 }
+            }
+            if (diagnostics.size() != nDiagnostics && imports.size() == 1) {
+                Diagnostic diagnostic;
+                diagnostic.severity = DiagnosticSeverity::Warning;
+                Range &range = diagnostic.range;
+                Position &position = range.start;
+                position.line = 0;
+                position.character = 0;
+                Position &positionEnd = range.end;
+                positionEnd.line = 1;
+                diagnostic.message =
+                        "qmlls could not find a build directory, without a build directory "
+                        "containing a current build there could be spurious warnings, you might "
+                        "want to pass the --build-dir <buildDir> option to qmlls, or set the "
+                        "environment variable QMLLS_BUILD_DIRS.";
+                diagnostic.source = QByteArray("qmllint");
+                diagnostics.append(diagnostic);
             }
         }
     }

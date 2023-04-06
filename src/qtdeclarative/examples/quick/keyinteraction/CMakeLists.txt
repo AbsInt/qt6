@@ -1,7 +1,8 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 cmake_minimum_required(VERSION 3.16)
 project(keyinteraction LANGUAGES CXX)
-
-set(CMAKE_AUTOMOC ON)
 
 if(NOT DEFINED INSTALL_EXAMPLESDIR)
     set(INSTALL_EXAMPLESDIR "examples")
@@ -10,6 +11,8 @@ endif()
 set(INSTALL_EXAMPLEDIR "${INSTALL_EXAMPLESDIR}/quick/keyinteraction")
 
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Qml Quick)
+
+qt_standard_project_setup(REQUIRES 6.5)
 
 qt_add_executable(keyinteractionexample WIN32 MACOSX_BUNDLE
     main.cpp
@@ -25,7 +28,6 @@ target_link_libraries(keyinteractionexample PRIVATE
 # Resources:
 qt_add_qml_module(keyinteractionexample
     URI keyinteraction
-    VERSION 1.0
     QML_FILES
         "ContextMenu.qml"
         "GridMenu.qml"

@@ -12,6 +12,7 @@
 #include "qwaylandwindowmanagerintegration_p.h"
 #include "qwaylandscreen_p.h"
 #include "qwaylandinputdevice_p.h"
+#include <QtCore/private/qnativeinterface_p.h>
 #include <QtGui/private/qguiapplication_p.h>
 #include <QtGui/QScreen>
 #include <QtWaylandClient/private/qwaylandclientbufferintegration_p.h>
@@ -68,6 +69,60 @@ void *QWaylandNativeInterface::nativeResourceForIntegration(const QByteArray &re
     return nullptr;
 }
 
+wl_display *QtWaylandClient::QWaylandNativeInterface::display() const
+{
+    return m_integration->display()->wl_display();
+}
+
+wl_compositor *QtWaylandClient::QWaylandNativeInterface::compositor() const
+{
+    return const_cast<wl_compositor *>(m_integration->display()->wl_compositor());
+}
+
+wl_seat *QtWaylandClient::QWaylandNativeInterface::seat() const
+{
+    if (auto inputDevice = m_integration->display()->defaultInputDevice()) {
+        return inputDevice->wl_seat();
+    }
+    return nullptr;
+}
+
+wl_keyboard *QtWaylandClient::QWaylandNativeInterface::keyboard() const
+{
+    if (auto inputDevice = m_integration->display()->defaultInputDevice())
+        if (auto keyboard = inputDevice->keyboard())
+            return keyboard->wl_keyboard();
+    return nullptr;
+}
+
+wl_pointer *QtWaylandClient::QWaylandNativeInterface::pointer() const
+{
+    if (auto inputDevice = m_integration->display()->defaultInputDevice())
+        if (auto pointer = inputDevice->pointer())
+            return pointer->wl_pointer();
+    return nullptr;
+}
+
+wl_touch *QtWaylandClient::QWaylandNativeInterface::touch() const
+{
+    if (auto inputDevice = m_integration->display()->defaultInputDevice())
+        if (auto touch = inputDevice->touch())
+            return touch->wl_touch();
+    return nullptr;
+}
+
+uint QtWaylandClient::QWaylandNativeInterface::lastInputSerial() const
+{
+    return m_integration->display()->lastInputSerial();
+}
+
+wl_seat *QtWaylandClient::QWaylandNativeInterface::lastInputSeat() const
+{
+    if (auto inputDevice = m_integration->display()->lastInputDevice())
+        return inputDevice->wl_seat();
+    return nullptr;
+}
+
 void *QWaylandNativeInterface::nativeResourceForWindow(const QByteArray &resourceString, QWindow *window)
 {
     QByteArray lowerCaseResource = resourceString.toLower();
@@ -88,13 +143,14 @@ void *QWaylandNativeInterface::nativeResourceForWindow(const QByteArray &resourc
     if (lowerCaseResource == "vksurface") {
         if (window->surfaceType() == QSurface::VulkanSurface && window->handle()) {
             // return a pointer to the VkSurfaceKHR value, not the value itself
-            return static_cast<QWaylandVulkanWindow *>(window->handle())->surface();
+            return static_cast<QWaylandVulkanWindow *>(window->handle())->vkSurface();
         }
     }
 #endif
 
-    if (auto shellIntegration = m_integration->shellIntegration())
-        return shellIntegration->nativeResourceForWindow(resourceString, window);
+    QWaylandWindow *platformWindow = static_cast<QWaylandWindow *>(window->handle());
+    if (platformWindow && platformWindow->shellIntegration())
+        return platformWindow->shellIntegration()->nativeResourceForWindow(resourceString, window);
 
     return nullptr;
 }
@@ -103,7 +159,7 @@ void *QWaylandNativeInterface::nativeResourceForScreen(const QByteArray &resourc
 {
     QByteArray lowerCaseResource = resourceString.toLower();
 
-    if (lowerCaseResource == "output")
+    if (lowerCaseResource == "output" && !screen->handle()->isPlaceholder())
         return ((QWaylandScreen *) screen->handle())->output();
 
     return nullptr;

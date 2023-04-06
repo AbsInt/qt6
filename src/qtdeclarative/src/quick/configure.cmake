@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 
 
 #### Inputs
@@ -69,7 +72,7 @@ qt_feature("quick-treeview" PRIVATE
     SECTION "Qt Quick"
     LABEL "TreeView item"
     PURPOSE "Provides the TreeView item."
-    CONDITION QT_FEATURE_qml_table_model
+    CONDITION QT_FEATURE_quick_tableview
 )
 qt_feature("quick-particles" PRIVATE
     SECTION "Qt Quick"
@@ -100,7 +103,7 @@ qt_feature("quick-repeater" PRIVATE
     PURPOSE "Provides the Repeater item."
     CONDITION QT_FEATURE_qml_delegate_model
 )
-qt_feature("quick-shadereffect" PRIVATE
+qt_feature("quick-shadereffect" PUBLIC
     SECTION "Qt Quick"
     LABEL "ShaderEffect item"
     PURPOSE "Provides Shader effects."

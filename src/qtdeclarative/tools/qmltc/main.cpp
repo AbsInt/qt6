@@ -31,17 +31,12 @@ using namespace Qt::StringLiterals;
 
 void setupLogger(QQmlJSLogger &logger) // prepare logger to work with compiler
 {
-    const QSet<QQmlJSLoggerCategory> exceptions {
-        Log_ControlsSanity, // this category is just weird
-        Log_UnusedImport, // not critical
-    };
-
-    for (int i = 0; i <= static_cast<int>(QQmlJSLoggerCategory_Last); ++i) {
-        const auto c = static_cast<QQmlJSLoggerCategory>(i);
-        if (exceptions.contains(c))
+    for (const QQmlJSLogger::Category &category : logger.categories()) {
+        if (category == qmlControlsSanity // this category is just weird
+            || category == qmlUnusedImports)
             continue;
-        logger.setCategoryLevel(c, QtCriticalMsg);
-        logger.setCategoryIgnored(c, false);
+        logger.setCategoryLevel(category.id(), QtCriticalMsg);
+        logger.setCategoryIgnored(category.id(), false);
     }
 }
 
@@ -49,7 +44,7 @@ int main(int argc, char **argv)
 {
     // Produce reliably the same output for the same input by disabling QHash's
     // random seeding.
-    qSetGlobalQHashSeed(0);
+    QHashSeed::setDeterministicGlobalSeed();
     QCoreApplication app(argc, argv);
     QCoreApplication::setApplicationName(u"qmltc"_s);
     QCoreApplication::setApplicationVersion(QStringLiteral(QT_VERSION_STR));
@@ -94,6 +89,12 @@ int main(int argc, char **argv)
         QCoreApplication::translate("main", "resource file name")
     };
     parser.addOption(resourceOption);
+    QCommandLineOption metaResourceOption {
+        u"meta-resource"_s,
+        QCoreApplication::translate("main", "Qt meta information file (in .qrc format)"),
+        QCoreApplication::translate("main", "meta file name")
+    };
+    parser.addOption(metaResourceOption);
     QCommandLineOption namespaceOption {
         u"namespace"_s, QCoreApplication::translate("main", "Namespace of the generated C++ code"),
         QCoreApplication::translate("main", "namespace")
@@ -140,9 +141,19 @@ int main(int argc, char **argv)
     if (implicitImportDirectory.isEmpty())
         return EXIT_FAILURE;
 
-    QStringList importPaths = parser.values(importPathOption);
+    QStringList importPaths;
+
+    if (parser.isSet(resourceOption)) {
+        importPaths.append(QLatin1String(":/qt-project.org/imports"));
+        importPaths.append(QLatin1String(":/qt/qml"));
+    };
+
+    if (parser.isSet(importPathOption))
+        importPaths.append(parser.values(importPathOption));
+
     if (!parser.isSet(bareOption))
         importPaths.append(QLibraryInfo::path(QLibraryInfo::QmlImportsPath));
+
     QStringList qmldirFiles = parser.values(qmldirOption);
 
     QString outputCppFile;
@@ -184,6 +195,8 @@ int main(int argc, char **argv)
 
     const QStringList resourceFiles = parser.values(resourceOption);
     QQmlJSResourceFileMapper mapper(resourceFiles);
+    const QStringList metaResourceFiles = parser.values(metaResourceOption);
+    QQmlJSResourceFileMapper metaDataMapper(metaResourceFiles);
 
     const auto firstQml = [](const QStringList &paths) {
         auto it = std::find_if(paths.cbegin(), paths.cend(),
@@ -223,6 +236,7 @@ int main(int argc, char **argv)
     }
 
     QQmlJSImporter importer { importPaths, &mapper };
+    importer.setMetaDataMapper(&metaDataMapper);
     auto createQmltcVisitor = [](const QQmlJSScope::Ptr &root, QQmlJSImporter *importer,
                                  QQmlJSLogger *logger, const QString &implicitImportDirectory,
                                  const QStringList &qmldirFiles) -> QQmlJSImportVisitor * {
@@ -246,9 +260,9 @@ int main(int argc, char **argv)
 
     QList<QQmlJS::DiagnosticMessage> warnings = importer.takeGlobalWarnings();
     if (!warnings.isEmpty()) {
-        logger.log(QStringLiteral("Type warnings occurred while compiling file:"), Log_Import,
+        logger.log(QStringLiteral("Type warnings occurred while compiling file:"), qmlImport,
                    QQmlJS::SourceLocation());
-        logger.processMessages(warnings, Log_Import);
+        logger.processMessages(warnings, qmlImport);
         // Log_Import is critical for the compiler
         return EXIT_FAILURE;
     }

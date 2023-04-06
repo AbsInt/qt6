@@ -37,7 +37,7 @@ class tst_qqmljsscope : public QQmlDataTest
         QFile f(fi.absoluteFilePath());
         f.open(QIODevice::ReadOnly);
         QByteArray data(fi.size(), Qt::Uninitialized);
-        f.read(data.data(), data.length());
+        f.read(data.data(), data.size());
         return QString::fromUtf8(data);
     }
 
@@ -175,7 +175,7 @@ void tst_qqmljsscope::orderedBindings()
 
 void tst_qqmljsscope::signalCreationDifferences()
 {
-    QQmlJSScope::ConstPtr root = run(u"signalCreationDifferences.qml"_s);
+    QQmlJSScope::ConstPtr root = run(u"signalCreationDifferences.qml"_s, true);
     QVERIFY(root);
 
     QVERIFY(root->hasOwnProperty(u"myProperty"_s));
@@ -203,7 +203,9 @@ void tst_qqmljsscope::allTypesAvailable()
         };
 
         QQmlJSImporter importer { importPaths, /* resource file mapper */ nullptr };
-        const auto types = importer.importModule(u"QtQml"_s);
+        const auto imported = importer.importModule(u"QtQml"_s);
+        QCOMPARE(imported.context(), QQmlJSScope::ContextualTypes::QML);
+        const auto types = imported.types();
         QVERIFY(types.contains(u"$internal$.QObject"_s));
         QVERIFY(types.contains(u"QtObject"_s));
         QCOMPARE(types[u"$internal$.QObject"_s].scope, types[u"QtObject"_s].scope);
@@ -240,7 +242,7 @@ void tst_qqmljsscope::componentWrappedObjects()
     QVERIFY(root);
 
     auto children = root->childScopes();
-    QCOMPARE(children.size(), 4);
+    QCOMPARE(children.size(), 6);
 
     const auto isGoodType = [](const QQmlJSScope::ConstPtr &type, const QString &propertyName,
                                bool isWrapped) {
@@ -252,6 +254,13 @@ void tst_qqmljsscope::componentWrappedObjects()
     QVERIFY(isGoodType(children[1], u"nonWrapped2"_s, false));
     QVERIFY(isGoodType(children[2], u"nonWrapped3"_s, false));
     QVERIFY(isGoodType(children[3], u"wrapped"_s, true));
+    QCOMPARE(children[4]->childScopes().size(), 3);
+    QVERIFY(isGoodType(children[4]->childScopes()[0], u"wrapped"_s, true));
+
+    QCOMPARE(children[4]->childScopes()[1]->childScopes().size(), 1);
+    QVERIFY(isGoodType(children[4]->childScopes()[1]->childScopes()[0], u"wrapped2"_s, true));
+    QCOMPARE(children[4]->childScopes()[2]->childScopes().size(), 1);
+    QVERIFY(isGoodType(children[4]->childScopes()[2]->childScopes()[0], u"wrapped3"_s, false));
 }
 
 void tst_qqmljsscope::labsQmlModelsSanity()
@@ -668,60 +677,25 @@ void tst_qqmljsscope::emptyBlockBinding()
 void tst_qqmljsscope::qualifiedName()
 {
     QQmlJSScope::ConstPtr root = run(u"qualifiedName.qml"_s);
+    QVERIFY(root);
 
-    auto qualifiedNameOf = [](const QQmlJSScope::ConstPtr &ptr) {
-        return ptr->baseType()->qualifiedName();
+    auto qualifiedNameOf = [](const QQmlJSScope::ConstPtr &ptr) -> QString {
+        if (ptr->baseType())
+            return ptr->baseType()->qualifiedName();
+        else
+            return u""_s;
     };
 
-    QQmlJSScope::ConstPtr item = root;
+    QCOMPARE(root->childScopes().size(), 4);
+    QQmlJSScope::ConstPtr b = root->childScopes()[0];
+    QQmlJSScope::ConstPtr d = root->childScopes()[1];
+    QQmlJSScope::ConstPtr qualifiedA = root->childScopes()[2];
+    QQmlJSScope::ConstPtr qualifiedB = root->childScopes()[3];
 
-    // normal case
-    QCOMPARE(qualifiedNameOf(item), "QtQuick/Item 2.0-6.3");
-
-    QCOMPARE(item->childScopes().size(), 4);
-    QQmlJSScope::ConstPtr textInItem = item->childScopes()[0];
-    QQmlJSScope::ConstPtr nonQualifiedComponentInItem = item->childScopes()[1];
-    QQmlJSScope::ConstPtr qualifiedComponentInItem = item->childScopes()[2];
-    QQmlJSScope::ConstPtr componentInItem = item->childScopes()[3];
-
-    // qualified case
-    QCOMPARE(qualifiedNameOf(nonQualifiedComponentInItem), "QtQuick/TextEdit 2.0-6.3");
-
-    // qualified case
-    QCOMPARE(qualifiedNameOf(qualifiedComponentInItem), "QtQuick/TextEdit 2.0-6.3");
-
-    // normal case
-    QCOMPARE(qualifiedNameOf(textInItem), "QtQuick/Text 2.0-6.3");
-    // qualified import of builtin variable
-    QCOMPARE(qualifiedNameOf(componentInItem), "QML/Component 1.0");
-    QCOMPARE(componentInItem->baseType()->moduleName(), "QML");
-
-    QCOMPARE(componentInItem->childScopes().size(), 1);
-
-    QQmlJSScope::ConstPtr itemInComponent = componentInItem->childScopes()[0];
-
-    QCOMPARE(qualifiedNameOf(itemInComponent), "QtQuick/Item 2.0-6.3");
-
-    QCOMPARE(itemInComponent->childScopes().size(), 5);
-    QQmlJSScope::ConstPtr qualifiedImportTextInItemInComponent = itemInComponent->childScopes()[0];
-    QQmlJSScope::ConstPtr textInItemInComponent = itemInComponent->childScopes()[1];
-    QQmlJSScope::ConstPtr qualifiedImportTextInputInItemInComponent =
-            itemInComponent->childScopes()[2];
-    QQmlJSScope::ConstPtr indirectImportTimerInItemInComponent = itemInComponent->childScopes()[3];
-    QQmlJSScope::ConstPtr qualifiedImportTimerInItemInComponent = itemInComponent->childScopes()[4];
-
-    QCOMPARE(qualifiedNameOf(qualifiedImportTextInItemInComponent), "QtQuick/Text 2.0-6.3");
-    QCOMPARE(qualifiedNameOf(textInItemInComponent), "QtQuick/Text 2.0-6.3");
-    QCOMPARE(textInItemInComponent->baseType()->moduleName(), "QtQuick");
-    QCOMPARE(qualifiedImportTextInItemInComponent->baseType()->moduleName(), "QtQuick");
-
-    QCOMPARE(qualifiedNameOf(qualifiedImportTextInputInItemInComponent),
-             "QtQuick/TextInput 2.0-6.3");
-
-    QCOMPARE(qualifiedNameOf(indirectImportTimerInItemInComponent), "QtQml/Timer 2.0-6.0");
-    QCOMPARE(qualifiedNameOf(qualifiedImportTimerInItemInComponent), "QtQml/Timer 2.0-6.0");
-    QCOMPARE(indirectImportTimerInItemInComponent->baseType()->moduleName(), "QtQml");
-    QCOMPARE(qualifiedImportTimerInItemInComponent->baseType()->moduleName(), "QtQml");
+    QCOMPARE(qualifiedNameOf(b), "QualifiedNamesTests/B 5.0-6.0");
+    QCOMPARE(qualifiedNameOf(d), "QualifiedNamesTests/D 6.0");
+    QCOMPARE(qualifiedNameOf(qualifiedA), "QualifiedNamesTests/A 5.0");
+    QCOMPARE(qualifiedNameOf(qualifiedB), "QualifiedNamesTests/B 5.0-6.0");
 }
 
 void tst_qqmljsscope::resolvedNonUniqueScopes()

@@ -36,8 +36,6 @@ static inline QString namingModeKey() { return QStringLiteral("naming"); }
 static inline QString underScoreNamingMode() { return QStringLiteral("underscore"); }
 static inline QString camelCaseNamingMode() { return QStringLiteral("camelcase"); }
 
-using namespace qdesigner_internal;
-
 static bool checkTemplatePath(const QString &path, bool create)
 {
     QDir current(QDir::current());
@@ -299,9 +297,8 @@ QDesignerSharedSettings::DeviceProfileList QDesignerSharedSettings::deviceProfil
     // De-serialize
     QString errorMessage;
     DeviceProfile dp;
-    const QStringList::const_iterator scend = xmls.constEnd();
-    for (QStringList::const_iterator it = xmls.constBegin(); it != scend; ++it) {
-        if (dp.fromXml(*it, &errorMessage)) {
+    for (const auto &xml : xmls) {
+        if (dp.fromXml(xml, &errorMessage)) {
             rc.push_back(dp);
         } else {
             designerWarning(msgWarnDeviceProfileXml(errorMessage));
@@ -310,12 +307,11 @@ QDesignerSharedSettings::DeviceProfileList QDesignerSharedSettings::deviceProfil
     return rc;
 }
 
-void QDesignerSharedSettings::setDeviceProfiles(const DeviceProfileList &dp)
+void QDesignerSharedSettings::setDeviceProfiles(const DeviceProfileList &dpl)
 {
     QStringList l;
-    const DeviceProfileList::const_iterator dcend = dp.constEnd();
-    for (DeviceProfileList::const_iterator it = dp.constBegin(); it != dcend; ++it)
-        l.push_back(it->toXml());
+    for (const auto &dp : dpl)
+        l.push_back(dp.toXml());
     m_settings->setValue(QLatin1String(deviceProfilesKey), l);
 }
 }

@@ -154,11 +154,41 @@ Module {
     }
 
     Component {
+        file: "qqmllist.h"
+        name: "QQmlListProperty<QObject>"
+        accessSemantics: "sequence"
+        valueType: "QObject"
+    }
+
+    Component {
+        file: "qobject.h"
+        name: "QObjectList"
+        accessSemantics: "sequence"
+        valueType: "QObject"
+    }
+
+    Component {
         name: "int"
         extension: "Number"
         exports: ["QML/int 1.0"]
         exportMetaObjectRevisions: [256]
         accessSemantics: "value"
+    }
+
+    Component {
+        name: "uint"
+        extension: "Number"
+        accessSemantics: "value"
+    }
+
+    Component {
+       name: "qlonglong"
+       accessSemantics: "value"
+    }
+
+    Component {
+      name: "qulonglong"
+      accessSemantics: "value"
     }
 
     Component {
@@ -172,6 +202,11 @@ Module {
         extension: "Number"
         exports: ["QML/real 1.0", "QML/double 1.0"]
         exportMetaObjectRevisions: [256]
+        accessSemantics: "value"
+    }
+
+    Component {
+        name: "QChar"
         accessSemantics: "value"
     }
 
@@ -202,6 +237,16 @@ Module {
         extension: "Date"
         exports: ["QML/date 1.0"]
         exportMetaObjectRevisions: [256]
+        accessSemantics: "value"
+    }
+
+    Component {
+        name: "QDate"
+        accessSemantics: "value"
+    }
+
+    Component {
+        name: "QTime"
         accessSemantics: "value"
     }
 

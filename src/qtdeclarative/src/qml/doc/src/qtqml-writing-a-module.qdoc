@@ -6,19 +6,19 @@
 \title Writing QML Modules
 \brief How to write a custom QML module.
 
-You can declare a QML module using the \l{qt_add_qml_module}
+You should declare a QML module using the \l{qt_add_qml_module}
 {CMake QML Module API} to:
 
 \list
 \li Generate \l {Module Definition qmldir Files}{qmldir} and
     \l {Type Description Files}{*.qmltypes files}.
 \li Register C++ types annotated with \l QML_ELEMENT.
-\li Invoke \l {Ahead-of-Time-Compilation}{qmlcachegen}.
-\li Provide modules both in the physical and in \l{The Qt Resource System}
-    {resource file system}.
-\li Use the pre-compiled versions of QML files.
-\li Bundle the module's files in the resource file system.
 \li Combine QML files and C++-based types in the same module.
+\li Invoke \l {Ahead-of-Time-Compilation}{qmlcachegen} on all
+    QML files.
+\li Use the pre-compiled versions of QML files inside the module.
+\li Provide the module both in the physical and in the
+    \l{The Qt Resource System}{resource file system}.
 \li Create a backing library and an optional plugin. Link the backing library
     into the application to avoid loading the plugin at run time.
 \endlist
@@ -128,8 +128,8 @@ information for OneMoreThing.qml. This means that OneMoreThing.qml is available
 in all major versions, from minor version 0.
 
 With this setup, the generated registration code will register the module
-\c versionsqmlRegisterModule() for each of the major versions. This way, all
-versions can be imported.
+\c versions using \l qmlRegisterModule() for each of the major versions. This
+way, all versions can be imported.
 
 
 \section1 Custom Directory Layouts
@@ -143,7 +143,7 @@ In more complex projects, this convention can be too limiting. You might for
 instance want to group all QML modules in one place to avoid polluting the
 project's root directory. Or you want to reuse a single module in multiple
 applications. For those cases, \c QT_QML_OUTPUT_DIRECTORY in combination with
-\c RESOURCE_PREFIX  and \l IMPORT_PATH can be used.
+\c RESOURCE_PREFIX and \l IMPORT_PATH can be used.
 
 To collect QML modules into a specific output directory, for example a
 subdirectory "qml" in the build directory \l QT_QML_OUTPUT_DIRECTORY, set the
@@ -204,38 +204,43 @@ qt_add_qml_module(
 \section1 Eliminating Run Time File System Access
 
 If all QML modules are always loaded from the resource
-file system, you can deploy the application as a single binary. Let's first
-consider the simple case:
+file system, you can deploy the application as a single binary.
+
+If \l{QTP0001} policy is set to \c NEW, the \c RESOURCE_PREFIX argument
+for \c{qt_add_qml_module()} defaults to \c{/qt/qml/}, therefore your
+modules are placed in \c{:/qt/qml/} in the resource file system.
+This is part of the default \l{QML Import Path}, but not used by Qt
+itself. For modules to be used within your application, this is the right place.
+
+If you have instead specified a custom \c RESOURCE_PREFIX, you have to add the
+custom resource prefix to the \l{QML Import Path}. You can also add multiple
+resource prefixes:
 
 \badcode
 QQmlEngine qmlEngine;
-qmlEngine.addImportPath(QStringLiteral(":/"));
+qmlEngine.addImportPath(QStringLiteral(":/my/resource/prefix"));
+qmlEngine.addImportPath(QStringLiteral(":/other/resource/prefix"));
 // Use qmlEngine to load the main.qml file.
 \endcode
 
-\note ":/" is used for simplicity here. See \l {Custom Directory Layouts}
-for more complex cases.
+This might be necessary when using third party libraries to avoid module name
+conflicts. Using a custom resource prefix is discouraged in all other cases.
 
-If all the modules are linked into the application and if you're following
-the default resource directory structure, do not add any further import paths as
-those might override the one you added.
+The path \c :/qt-project.org/imports/ is also part of the default \l{QML Import
+Path}. For modules that are heavily re-used across different projects or Qt
+versions, \c :/qt-project.org/imports/ is acceptable as resource prefix. Qt's
+own QML modules are placed there, though. You have to be careful not to
+overwrite them.
 
-If you have specified a custom \c RESOURCE_PREFIX, you have to add the custom
-resource prefix to the import path instead. You can also add multiple resource
-prefixes.
-
-The path \c :/qt-project.org/imports/ is part of the default QML import path. If
-you use it, you don't have to specially add it. Qt's own QML modules are placed
-there, though. You have to be careful not to overwrite them. For modules that are
-heavily re-used across different projects \c :/qt-project.org/imports/ is
-acceptable. By using it you can avoid forcing all the users to add custom
-import paths.
+Do not add any unnecessary import paths. The QML engine might find your modules
+in the wrong place then. This can trigger problems which can only be reproduced
+in specific environments.
 
 \section1 Integrating custom QML plugins
 
 If you bundle an \l {QQuickImageProvider}{image provider} in the QML module, you
 need to implement the \l {QQmlEngineExtensionPlugin::initializeEngine()}
-method. This, in turn, makes it necessary to write the own plugin. To support
+method. This, in turn, makes it necessary to write your own plugin. To support
 this use case, \l NO_GENERATE_PLUGIN_SOURCE can be used.
 
 Let's consider a module that provides its own plugin source:

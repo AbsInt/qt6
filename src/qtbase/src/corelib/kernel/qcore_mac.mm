@@ -30,16 +30,22 @@
 #include "qvarlengtharray.h"
 #include "private/qlocking_p.h"
 
+#if !defined(QT_BOOTSTRAPPED)
+#include <thread>
+#endif
+
 #if !defined(QT_APPLE_NO_PRIVATE_APIS)
 extern "C" {
 typedef uint32_t csr_config_t;
 extern int csr_get_active_config(csr_config_t *) __attribute__((weak_import));
 
+#ifdef QT_BUILD_INTERNAL
 int responsibility_spawnattrs_setdisclaim(posix_spawnattr_t attrs, int disclaim)
 __attribute__((availability(macos,introduced=10.14),weak_import));
 pid_t responsibility_get_pid_responsible_for_pid(pid_t) __attribute__((weak_import));
 char *** _NSGetArgv();
 extern char **environ;
+#endif
 }
 #endif
 
@@ -255,9 +261,9 @@ QMacAutoReleasePool::QMacAutoReleasePool()
 
 #ifdef QT_DEBUG
     void *poolFrame = nullptr;
-    void *frame;
-    if (backtrace_from_fp(__builtin_frame_address(0), &frame, 1))
-        poolFrame = frame;
+    void *frames[2];
+    if (backtrace_from_fp(__builtin_frame_address(0), frames, 2))
+        poolFrame = frames[1];
 
     if (poolFrame) {
         Dl_info info;
@@ -384,6 +390,7 @@ std::optional<uint32_t> qt_mac_sipConfiguration()
         return; \
     }
 
+#ifdef QT_BUILD_INTERNAL
 void qt_mac_ensureResponsible()
 {
 #if !defined(QT_APPLE_NO_PRIVATE_APIS)
@@ -421,6 +428,7 @@ void qt_mac_ensureResponsible()
     posix_spawnattr_destroy(&attr);
 #endif
 }
+#endif // QT_BUILD_INTERNAL
 
 #endif
 
@@ -452,34 +460,62 @@ AppleApplication *qt_apple_sharedApplication()
 }
 #endif
 
+#if !defined(QT_BOOTSTRAPPED)
+
+#if defined(Q_OS_MACOS)
+namespace {
+struct SandboxChecker
+{
+    SandboxChecker() : m_thread([this]{
+            m_isSandboxed = []{
+                QCFType<SecStaticCodeRef> staticCode = nullptr;
+                NSURL *executableUrl = NSBundle.mainBundle.executableURL;
+                if (SecStaticCodeCreateWithPath((__bridge CFURLRef)executableUrl,
+                    kSecCSDefaultFlags, &staticCode) != errSecSuccess)
+                    return false;
+
+                QCFType<SecRequirementRef> sandboxRequirement;
+                if (SecRequirementCreateWithString(CFSTR("entitlement[\"com.apple.security.app-sandbox\"] exists"),
+                    kSecCSDefaultFlags, &sandboxRequirement) != errSecSuccess)
+                    return false;
+
+                if (SecStaticCodeCheckValidityWithErrors(staticCode,
+                    kSecCSBasicValidateOnly, sandboxRequirement, nullptr) != errSecSuccess)
+                    return false;
+
+                return true;
+            }();
+        })
+    {}
+    ~SandboxChecker() {
+        std::scoped_lock lock(m_mutex);
+        if (m_thread.joinable())
+            m_thread.detach();
+    }
+    bool isSandboxed() const {
+        std::scoped_lock lock(m_mutex);
+        if (m_thread.joinable())
+            m_thread.join();
+        return m_isSandboxed;
+    }
+private:
+    bool m_isSandboxed;
+    mutable std::thread m_thread;
+    mutable std::mutex m_mutex;
+};
+} // namespace
+static SandboxChecker sandboxChecker;
+#endif // Q_OS_MACOS
+
 bool qt_apple_isSandboxed()
 {
 #if defined(Q_OS_MACOS)
-    static bool isSandboxed = []() {
-        QCFType<SecStaticCodeRef> staticCode = nullptr;
-        NSURL *executableUrl = NSBundle.mainBundle.executableURL;
-        if (SecStaticCodeCreateWithPath((__bridge CFURLRef)executableUrl,
-            kSecCSDefaultFlags, &staticCode) != errSecSuccess)
-            return false;
-
-        QCFType<SecRequirementRef> sandboxRequirement;
-        if (SecRequirementCreateWithString(CFSTR("entitlement[\"com.apple.security.app-sandbox\"] exists"),
-            kSecCSDefaultFlags, &sandboxRequirement) != errSecSuccess)
-            return false;
-
-        if (SecStaticCodeCheckValidityWithErrors(staticCode,
-            kSecCSBasicValidateOnly, sandboxRequirement, nullptr) != errSecSuccess)
-            return false;
-
-        return true;
-    }();
-    return isSandboxed;
+    return sandboxChecker.isSandboxed();
 #else
     return true; // All other Apple platforms
 #endif
 }
 
-#if !defined(QT_BOOTSTRAPPED)
 QT_END_NAMESPACE
 @implementation NSObject (QtSandboxHelpers)
 - (id)qt_valueForPrivateKey:(NSString *)key
@@ -491,7 +527,7 @@ QT_END_NAMESPACE
 }
 @end
 QT_BEGIN_NAMESPACE
-#endif
+#endif // !QT_BOOTSTRAPPED
 
 #ifdef Q_OS_MACOS
 /*

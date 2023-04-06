@@ -39,15 +39,15 @@ class QQmlJSLinterCodegen : public QQmlJSAotCompiler
 {
 public:
     QQmlJSLinterCodegen(QQmlJSImporter *importer, const QString &fileName,
-                        const QStringList &qmldirFiles, QQmlJSLogger *logger,
-                        QQmlJSTypeInfo *typeInfo);
+                        const QStringList &qmldirFiles, QQmlJSLogger *logger);
 
     void setDocument(const QmlIR::JSCodeGen *codegen, const QmlIR::Document *document) override;
     std::variant<QQmlJSAotFunction, QQmlJS::DiagnosticMessage>
-    compileBinding(const QV4::Compiler::Context *context, const QmlIR::Binding &irBinding) override;
+    compileBinding(const QV4::Compiler::Context *context, const QmlIR::Binding &irBinding,
+                   QQmlJS::AST::Node *astNode) override;
     std::variant<QQmlJSAotFunction, QQmlJS::DiagnosticMessage>
-    compileFunction(const QV4::Compiler::Context *context,
-                    const QmlIR::Function &irFunction) override;
+    compileFunction(const QV4::Compiler::Context *context, const QString &name,
+                    QQmlJS::AST::Node *astNode) override;
 
     void setTypeResolver(QQmlJSTypeResolver typeResolver)
     {
@@ -61,7 +61,6 @@ public:
     QQmlSA::PassManager *passManager() { return m_passManager; }
 
 private:
-    QQmlJSTypeInfo *m_typeInfo;
     QQmlSA::PassManager *m_passManager = nullptr;
 
     bool analyzeFunction(const QV4::Compiler::Context *context,

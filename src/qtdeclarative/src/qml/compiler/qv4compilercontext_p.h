@@ -174,7 +174,7 @@ struct Context {
     QSet<QString> usedVariables;
     QQmlJS::AST::FormalParameterList *formals = nullptr;
     QQmlJS::AST::BoundNames arguments;
-    QString returnType;
+    QQmlJS::AST::Type *returnType = nullptr;
     QStringList locals;
     QStringList moduleRequests;
     QVector<ImportEntry> importEntries;
@@ -184,7 +184,7 @@ struct Context {
 
     ControlFlow *controlFlow = nullptr;
     QByteArray code;
-    QVector<CompiledData::CodeOffsetToLine> lineNumberMapping;
+    QVector<CompiledData::CodeOffsetToLineAndStatement> lineAndStatementNumberMapping;
     std::unique_ptr<SourceLocationTable> sourceLocationTable;
     std::vector<unsigned> labelInfo;
 
@@ -359,6 +359,11 @@ struct Context {
         if (contextType == ContextType::Block && parent)
             return parent->canHaveTailCalls();
         return false;
+    }
+
+    bool isCaseBlock() const
+    {
+        return contextType == ContextType::Block && name == u"%CaseBlock";
     }
 };
 

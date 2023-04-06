@@ -22,7 +22,7 @@
 
         "Description": "litehtml is the lightweight HTML rendering engine with CSS2/CSS3 support.",
         "Homepage": "https://github.com/litehtml/litehtml",
-        "Version": "v0.5-64-gdb7f59d",
+        "Version": "v0.6",
         "LicenseId": "BSD-3-Clause",
         "License": "BSD 3-Clause \"New\" or \"Revised\" License",
         "LicenseFile": "litehtml/LICENSE",

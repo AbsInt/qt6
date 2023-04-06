@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 file(GLOB_RECURSE test_data_glob
     RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/data/*)
@@ -13,7 +16,7 @@ qt_internal_add_test(tst_baseline_controls
         tst_baseline_controls.cpp
     INCLUDE_DIRECTORIES
         ../../../../qtbase/tests/baseline/shared
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Gui
         Qt::Network
         Qt::QuickControls2

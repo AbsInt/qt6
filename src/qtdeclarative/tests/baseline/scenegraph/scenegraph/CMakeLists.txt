@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 #####################################################################
 ## tst_baseline_scenegraph Test:
 #####################################################################
@@ -16,7 +19,7 @@ qt_internal_add_test(tst_baseline_scenegraph
         tst_baseline_scenegraph.cpp
     INCLUDE_DIRECTORIES
         ../../../../../qtbase/tests/baseline/shared
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Gui
         Qt::Network
     TESTDATA ${test_data}

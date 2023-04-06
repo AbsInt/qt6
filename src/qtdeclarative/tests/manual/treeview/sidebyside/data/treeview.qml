@@ -80,6 +80,8 @@ ApplicationWindow {
             anchors.topMargin: 100
             clip: true
 
+            selectionModel: ItemSelectionModel {}
+
             model: useFileSystemModel.checked ? fileSystemModel : testModel
             delegate: useCustomDelegate.checked ? customDelegate : treeViewDelegate
         }
@@ -131,10 +133,6 @@ ApplicationWindow {
             required property bool expanded
             required property int hasChildren
             required property int depth
-
-            TapHandler {
-                onTapped: treeView.toggleExpanded(row)
-            }
 
             Text {
                 id: indicator

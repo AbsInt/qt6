@@ -51,6 +51,8 @@ private slots:
     void isCurrentItem_NoRegressionWithDelegateModelGroups();
 
     void pullbackSparseList();
+    void highlightWithBound();
+    void sectionIsCompatibleWithBoundComponents();
 
 private:
     void flickWithTouch(QQuickWindow *window, const QPoint &from, const QPoint &to);
@@ -477,8 +479,7 @@ void tst_QQuickListView2::flickDuringFlicking() // QTBUG-103832
 
     flickWithTouch(&window, {100, 400}, {100, 100});
     // let it flick some distance
-    QTRY_VERIFY2(listView->contentY() > 1000, qPrintable(QString::fromLatin1(
-        "Expected ListView's contentY to be greater than 1000, but it's %1").arg(listView->contentY())));
+    QTRY_COMPARE_GT(listView->contentY(), 500);
     QVERIFY(listView->isFlicking()); // we want to test the case when it's moving and then we flick again
     const qreal posBeforeSecondFlick = listView->contentY();
 
@@ -658,7 +659,7 @@ void tst_QQuickListView2::wheelSnap()
 
     if (highlightRangeMode == QQuickItemView::StrictlyEnforceRange) {
         QCOMPARE(listview->currentIndex(), listview->count() - 1);
-        QCOMPARE(currentIndexSpy.size(), listview->count() - 1);
+        QCOMPARE(currentIndexSpy.count(), listview->count() - 1);
     }
 
     // flick to start
@@ -679,7 +680,7 @@ void tst_QQuickListView2::wheelSnap()
 
     if (highlightRangeMode == QQuickItemView::StrictlyEnforceRange) {
         QCOMPARE(listview->currentIndex(), 0);
-        QCOMPARE(currentIndexSpy.size(), (listview->count() - 1) * 2);
+        QCOMPARE(currentIndexSpy.count(), (listview->count() - 1) * 2);
     }
 }
 
@@ -930,6 +931,33 @@ void tst_QQuickListView2::pullbackSparseList() // QTBUG_104679
     window->resize(640, 480);
     window->show();
     QVERIFY(QTest::qWaitForWindowExposed(window.data()));
+}
+
+void tst_QQuickListView2::highlightWithBound()
+{
+    QQmlEngine engine;
+    QQmlComponent c(&engine, testFileUrl("highlightWithBound.qml"));
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+    QScopedPointer<QObject> o(c.create());
+    QVERIFY(!o.isNull());
+    QQuickListView *listView = qobject_cast<QQuickListView *>(o.data());
+    QVERIFY(listView);
+    QQuickItem *highlight = listView->highlightItem();
+    QVERIFY(highlight);
+    QCOMPARE(highlight->objectName(), QStringLiteral("highlight"));
+}
+
+void tst_QQuickListView2::sectionIsCompatibleWithBoundComponents()
+{
+    QTest::failOnWarning(".?");
+    QQmlEngine engine;
+    QQmlComponent c(&engine, testFileUrl("sectionBoundComponent.qml"));
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+    QScopedPointer<QObject> o(c.create());
+    QVERIFY(!o.isNull());
+    QQuickListView *listView = qobject_cast<QQuickListView *>(o.data());
+    QVERIFY(listView);
+    QTRY_COMPARE(listView->currentSection(), "42");
 }
 
 QTEST_MAIN(tst_QQuickListView2)

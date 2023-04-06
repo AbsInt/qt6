@@ -4,8 +4,6 @@
 #include "qqmlinfo.h"
 
 #include "qqmldata_p.h"
-#include "qqmlcontext.h"
-#include "qqmlcontext_p.h"
 #include "qqmlmetatype_p.h"
 #include "qqmlengine_p.h"
 #include "qqmlsourcecoordinate_p.h"
@@ -15,8 +13,21 @@
 QT_BEGIN_NAMESPACE
 
 /*!
+    \class QQmlInfo
+    \inmodule QtQml
+    \brief The QQmlInfo class allows logging of QML-related messages.
+
+    QQmlInfo is an opaque handle for QML-related diagnostic messages. You can
+    use the \c{<<} operator to add content to the message. When the QQmlInfo
+    object is destroyed, it prints the resulting message along with information
+    on the context.
+
+    \sa qmlDebug, qmlInfo, qmlWarning
+*/
+
+/*!
     \fn QQmlInfo qmlDebug(const QObject *object)
-    \relates QQmlEngine
+    \relates QQmlInfo
     \since 5.9
 
     Prints debug messages that include the file and line number for the
@@ -50,7 +61,7 @@ QT_BEGIN_NAMESPACE
 
 /*!
     \fn QQmlInfo qmlInfo(const QObject *object)
-    \relates QQmlEngine
+    \relates QQmlInfo
 
     Prints informational messages that include the file and line number for the
     specified QML \a object.
@@ -78,7 +89,7 @@ QT_BEGIN_NAMESPACE
 
 /*!
     \fn QQmlInfo qmlWarning(const QObject *object)
-    \relates QQmlEngine
+    \relates QQmlInfo
     \since 5.9
 
     Prints warning messages that include the file and line number for the

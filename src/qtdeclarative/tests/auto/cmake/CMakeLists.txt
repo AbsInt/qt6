@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # This is an automatic test for the CMake configuration files.
 # To run it manually,
 # 1) mkdir build   # Create a build directory
@@ -37,6 +40,45 @@ endforeach()
 
 include("${_Qt6CTestMacros}")
 
+if(TARGET Qt::Quick)
+    set(deploy_args
+        test_qml_app_deployment
+        BINARY "${CMAKE_CTEST_COMMAND}"
+        BINARY_ARGS "-V"
+        # Need to explicitly specify a writable install prefix.
+        BUILD_OPTIONS
+            -DCMAKE_INSTALL_PREFIX=${CMAKE_CURRENT_BINARY_DIR}/test_qml_app_deployment_installed
+        NO_RUN_ENVIRONMENT_PLUGIN_PATH
+    )
+
+    # For now, the test should only pass on
+    # - Windows shared / static builds
+    # - macOS shared / static builds
+    #-  Linux desktop shared / static builds
+    # - iOS static builds
+    # It should fail on other platforms, because there is no support for runtime dependency
+    # deployment on those platforms.
+    # In the static builds case, the runtime dependencies are just skipped, but the test should
+    # still pass.
+    if(WIN32 OR APPLE
+             OR (UNIX AND NOT APPLE AND NOT ANDROID AND NOT CMAKE_CROSSCOMPILING))
+        _qt_internal_test_expect_pass(${deploy_args})
+    else()
+        _qt_internal_test_expect_fail(${deploy_args})
+    endif()
+endif()
+
+# We only support a limited subset of cmake tests when targeting iOS:
+# - Only those that use qt_add_executable (but not add_executable), and
+# - don't try to run the built binaries via BINARY_ARGS option, and
+# - don't use internal API like qt_internal_add_*
+#
+# We can't run binaries in the simulator or on-device, but we at least
+# want build coverage (app linking succeeds).
+if(IOS)
+    return()
+endif()
+
 set(module_includes "")
 
 if(TARGET Qt::Qml)
@@ -74,6 +116,12 @@ endif()
 if(TARGET Qt::Quick)
     if(NOT CMAKE_CROSSCOMPILING)
         _qt_internal_test_expect_pass(qtquickcompiler BINARY qqc_test)
+        if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.21")
+            _qt_internal_test_expect_pass(test_common_import_path
+                TESTNAME cmake_test_common_import_path
+                BINARY cmake_test
+            )
+        endif()
     endif()
     if(NOT QT6_IS_SHARED_LIBS_BUILD)
         _qt_internal_test_expect_pass(test_import_static_shapes_plugin_resources
@@ -86,26 +134,6 @@ if(TARGET Qt::Quick)
                 BINARY qis_test
             )
         endif()
-    endif()
-
-    set(deploy_args
-        test_qml_app_deployment
-        BINARY "${CMAKE_CTEST_COMMAND}"
-        BINARY_ARGS "-V"
-        # Need to explicitly specify a writable install prefix.
-        BUILD_OPTIONS
-            -DCMAKE_INSTALL_PREFIX=${CMAKE_CURRENT_BINARY_DIR}/test_qml_app_deployment_installed
-    )
-
-    # For now, the test should only pass on Windows and macOS shared and static builds and fail on
-    # other platforms, because there is no support for runtime dependency deployment
-    # on those platforms.
-    # With static builds the runtime dependencies are just skipped, but the test should
-    # still pass.
-    if((WIN32 OR (APPLE AND NOT IOS)))
-        _qt_internal_test_expect_pass(${deploy_args})
-    else()
-        _qt_internal_test_expect_fail(${deploy_args})
     endif()
 endif()
 

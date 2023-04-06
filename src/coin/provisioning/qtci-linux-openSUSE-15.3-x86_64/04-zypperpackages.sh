@@ -29,7 +29,7 @@ sudo zypper -nq install libXi-devel
 
 # system provided XCB libraries
 sudo zypper -nq install xcb-util-devel xcb-util-image-devel xcb-util-keysyms-devel \
-         xcb-util-wm-devel xcb-util-renderutil-devel
+         xcb-util-wm-devel xcb-util-renderutil-devel xcb-util-cursor-devel
 
 # ICU
 sudo zypper -nq install libicu-devel
@@ -42,6 +42,9 @@ sudo zypper -nq install alsa-devel dbus-1-devel libxkbfile-devel \
 
 # qtwebkit
 sudo zypper -nq install libxml2-devel libxslt-devel
+
+# yasm (for ffmpeg in multimedia)
+sudo zypper -nq install yasm
 
 # GStreamer (qtwebkit and qtmultimedia), pulseaudio (qtmultimedia)
 sudo zypper -nq install gstreamer-devel gstreamer-plugins-base-devel libpulse-devel

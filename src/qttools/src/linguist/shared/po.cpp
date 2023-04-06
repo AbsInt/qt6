@@ -729,8 +729,8 @@ bool savePO(const Translator &translator, QIODevice &dev, ConversionData &)
     addPoHeader(headers, hdrOrder, "Content-Transfer-Encoding", QLatin1String("8bit"));
     if (!translator.languageCode().isEmpty()) {
         QLocale::Language l;
-        QLocale::Country c;
-        Translator::languageAndCountry(translator.languageCode(), &l, &c);
+        QLocale::Territory c;
+        Translator::languageAndTerritory(translator.languageCode(), &l, &c);
         const char *gettextRules;
         if (getNumerusInfo(l, c, 0, 0, &gettextRules))
             addPoHeader(headers, hdrOrder, "Plural-Forms", QLatin1String(gettextRules));

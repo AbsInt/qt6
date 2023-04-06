@@ -37,6 +37,7 @@ void QSGRhiShaderLinker::reset(const QShader &vs, const QShader &fs)
 void QSGRhiShaderLinker::feedConstants(const QSGShaderEffectNode::ShaderData &shader, const QSet<int> *dirtyIndices)
 {
     Q_ASSERT(shader.shaderInfo.variables.size() == shader.varData.size());
+    static bool shaderEffectDebug = qEnvironmentVariableIntValue("QSG_RHI_SHADEREFFECT_DEBUG");
     if (!dirtyIndices) {
         m_constantBufferSize = qMax(m_constantBufferSize, shader.shaderInfo.constantDataSize);
         for (int i = 0; i < shader.shaderInfo.variables.size(); ++i) {
@@ -48,7 +49,7 @@ void QSGRhiShaderLinker::feedConstants(const QSGShaderEffectNode::ShaderData &sh
                 c.specialType = vd.specialType;
                 if (c.specialType != QSGShaderEffectNode::VariableData::SubRect) {
                     c.value = vd.value;
-                    if (QSGRhiSupport::instance()->isShaderEffectDebuggingRequested()) {
+                    if (shaderEffectDebug) {
                         if (c.specialType == QSGShaderEffectNode::VariableData::None) {
                             qDebug() << "cbuf prepare" << shader.shaderInfo.name << var.name
                                      << "offset" << var.offset << "value" << c.value;
@@ -69,7 +70,7 @@ void QSGRhiShaderLinker::feedConstants(const QSGShaderEffectNode::ShaderData &sh
             const int offset = shader.shaderInfo.variables.at(idx).offset;
             const QVariant value = shader.varData.at(idx).value;
             m_constants[offset].value = value;
-            if (QSGRhiSupport::instance()->isShaderEffectDebuggingRequested()) {
+            if (shaderEffectDebug) {
                 qDebug() << "cbuf update" << shader.shaderInfo.name
                          << "offset" << offset << "value" << value;
             }
@@ -155,9 +156,18 @@ QDebug operator<<(QDebug debug, const QSGRhiShaderLinker::Constant &c)
 
 struct QSGRhiShaderMaterialTypeCache
 {
-    QSGMaterialType *get(const QShader &vs, const QShader &fs);
-    void reset() { qDeleteAll(m_types); m_types.clear(); }
-
+    QSGMaterialType *ref(const QShader &vs, const QShader &fs);
+    void unref(const QShader &vs, const QShader &fs);
+    void reset() {
+        for (auto it = m_types.begin(), end = m_types.end(); it != end; ++it)
+            delete it->type;
+        m_types.clear();
+        clearGraveyard();
+    }
+    void clearGraveyard() {
+        qDeleteAll(m_graveyard);
+        m_graveyard.clear();
+    }
     struct Key {
         QShader vs;
         QShader fs;
@@ -173,7 +183,12 @@ struct QSGRhiShaderMaterialTypeCache
             return vs == other.vs && fs == other.fs;
         }
     };
-    QHash<Key, QSGMaterialType *> m_types;
+    struct MaterialType {
+        int ref;
+        QSGMaterialType *type;
+    };
+    QHash<Key, MaterialType> m_types;
+    QVector<QSGMaterialType *> m_graveyard;
 };
 
 size_t qHash(const QSGRhiShaderMaterialTypeCache::Key &key, size_t seed = 0)
@@ -181,19 +196,49 @@ size_t qHash(const QSGRhiShaderMaterialTypeCache::Key &key, size_t seed = 0)
     return seed ^ key.hash;
 }
 
-QSGMaterialType *QSGRhiShaderMaterialTypeCache::get(const QShader &vs, const QShader &fs)
+static QMutex shaderMaterialTypeCacheMutex;
+
+QSGMaterialType *QSGRhiShaderMaterialTypeCache::ref(const QShader &vs, const QShader &fs)
 {
+    QMutexLocker lock(&shaderMaterialTypeCacheMutex);
     const Key k(vs, fs);
-    if (m_types.contains(k))
-        return m_types.value(k);
+    auto it = m_types.find(k);
+    if (it != m_types.end()) {
+        it->ref += 1;
+        return it->type;
+    }
 
     QSGMaterialType *t = new QSGMaterialType;
-    m_types.insert(k, t);
+    m_types.insert(k, { 1, t });
     return t;
 }
 
+void QSGRhiShaderMaterialTypeCache::unref(const QShader &vs, const QShader &fs)
+{
+    QMutexLocker lock(&shaderMaterialTypeCacheMutex);
+    const Key k(vs, fs);
+    auto it = m_types.find(k);
+    if (it != m_types.end()) {
+        if (!--it->ref) {
+            m_graveyard.append(it->type);
+            m_types.erase(it);
+        }
+    }
+}
+
 static QHash<void *, QSGRhiShaderMaterialTypeCache> shaderMaterialTypeCache;
-static QMutex shaderMaterialTypeCacheMutex;
+
+void QSGRhiShaderEffectNode::resetMaterialTypeCache(void *materialTypeCacheKey)
+{
+    QMutexLocker lock(&shaderMaterialTypeCacheMutex);
+    shaderMaterialTypeCache[materialTypeCacheKey].reset();
+}
+
+void QSGRhiShaderEffectNode::garbageCollectMaterialTypeCache(void *materialTypeCacheKey)
+{
+    QMutexLocker lock(&shaderMaterialTypeCacheMutex);
+    shaderMaterialTypeCache[materialTypeCacheKey].clearGraveyard();
+}
 
 class QSGRhiShaderEffectMaterialShader : public QSGMaterialShader
 {
@@ -449,6 +494,9 @@ QSGRhiShaderEffectMaterial::QSGRhiShaderEffectMaterial(QSGRhiShaderEffectNode *n
 
 QSGRhiShaderEffectMaterial::~QSGRhiShaderEffectMaterial()
 {
+    if (m_materialType && m_materialTypeCacheKey)
+        shaderMaterialTypeCache[m_materialTypeCacheKey].unref(m_vertexShader, m_fragmentShader);
+
     delete m_dummyTexture;
 }
 
@@ -631,6 +679,11 @@ void QSGRhiShaderEffectNode::syncMaterial(SyncData *syncData)
     }
 
     if (syncData->dirty & QSGShaderEffectNode::DirtyShaders) {
+        if (m_material.m_materialType) {
+            shaderMaterialTypeCache[m_material.m_materialTypeCacheKey].unref(m_material.m_vertexShader,
+                                                                             m_material.m_fragmentShader);
+        }
+
         m_material.m_hasCustomVertexShader = syncData->vertex.shader->hasShaderCode;
         if (m_material.m_hasCustomVertexShader) {
             m_material.m_vertexShader = syncData->vertex.shader->shaderInfo.rhiShader;
@@ -649,11 +702,9 @@ void QSGRhiShaderEffectNode::syncMaterial(SyncData *syncData)
             m_material.m_fragmentShader = defaultFragmentShader;
         }
 
-        {
-            QMutexLocker lock(&shaderMaterialTypeCacheMutex);
-            m_material.m_materialType = shaderMaterialTypeCache[syncData->materialTypeCacheKey].get(m_material.m_vertexShader,
-                                                                                                    m_material.m_fragmentShader);
-        }
+        m_material.m_materialType = shaderMaterialTypeCache[syncData->materialTypeCacheKey].ref(m_material.m_vertexShader,
+                                                                                                m_material.m_fragmentShader);
+        m_material.m_materialTypeCacheKey = syncData->materialTypeCacheKey;
 
         m_material.m_linker.reset(m_material.m_vertexShader, m_material.m_fragmentShader);
 
@@ -770,12 +821,6 @@ void QSGRhiShaderEffectNode::preprocess()
                 texture->updateTexture();
         }
     }
-}
-
-void QSGRhiShaderEffectNode::cleanupMaterialTypeCache(void *materialTypeCacheKey)
-{
-    QMutexLocker lock(&shaderMaterialTypeCacheMutex);
-    shaderMaterialTypeCache[materialTypeCacheKey].reset();
 }
 
 bool QSGRhiGuiThreadShaderEffectManager::hasSeparateSamplerAndTextureObjects() const

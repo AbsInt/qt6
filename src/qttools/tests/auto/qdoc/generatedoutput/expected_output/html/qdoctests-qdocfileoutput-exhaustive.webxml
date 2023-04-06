@@ -6,6 +6,8 @@
             <contents name="this-is-a-section2" title="This is a section2" level="2"/>
             <contents name="this-is-a-section3" title="This is a section3" level="3"/>
             <contents name="this-is-a-section4" title="This is a section4" level="4"/>
+            <contents name="images" title="Images" level="1"/>
+            <contents name="commands-not-yet-tested" title="Commands not yet tested" level="1"/>
             <description>
                 <brief>This page is a dumping ground for QDoc commands under test.</brief>
                 <section id="this-is-a-section1">
@@ -28,7 +30,9 @@
     <para>
         <bold>All your text belong to bold</bold> ...And this is an examble of only <bold>bold</bold> being, well, bold.</para>
     <dots indent="4">...</dots>
-    <para>And if I knew qmltext, I guess this is where that would go. </para>This a caption<legalese>
+    <para>And if I knew qmltext, I guess this is where that would go. </para>
+    <para>This a caption</para>
+    <legalese>
         <para>Lorem legal ipsum</para>
     </legalese>
     <quote>
@@ -53,6 +57,31 @@
         <bold>Important:</bold> This is really important.</para>
     <para>
         <bold>Note:</bold> The code above doesn't compile</para>
-    <para>
-        <bold>Warning:</bold> The following commands have yet to be tested: footnote link sincelist header index topicref // or just don’t care, remove it image inlineimage printline printto printuntil // what’s the difference between printto and printuntil??? quotefile quotefromfile skipline skipto skipuntil span snippet codeline overload sub sup tableofcontents tt uicontrol endmapref endomit underline unicode</para>
+    <section id="images">
+        <heading level="1">Images</heading>
+        <para>An image without any text:</para>
+        <image href="images/leonardo-da-vinci.png"/>
+        <para>An image with just an alternative text:</para>
+        <image href="images/leonardo-da-vinci.png"/>
+        <para>An image with alternative text and 1-atom caption:</para>
+        <image href="images/leonardo-da-vinci.png"/>
+        <para>Image caption</para>
+        <para>An image with alternative text and 2-atom caption:</para>
+        <image href="images/leonardo-da-vinci.png"/>
+        <para>Image caption with <bold>bold</bold> text</para>
+        <para>A bordered image:</para>
+        <image href="images/leonardo-da-vinci.png"/>
+        <para>A bordered image with a caption:</para>
+        <image href="images/leonardo-da-vinci.png"/>
+        <para>Screenshot of the System Tray Icon</para>
+        <para>An inline image:</para>
+        <para>The is a paragraph containing an <inlineimage href="images/01.png"/> inline image to test if qdoc handles them properly, without considering rest of the line as alt text for the image.</para>
+        <para>An inline image with alt text:</para>
+        <para>Here is another example of <inlineimage href="images/01.png"/> inline image with alternative text, which should be added as an attribute to the inline image.</para>
+    </section>
+    <section id="commands-not-yet-tested">
+        <heading level="1">Commands not yet tested</heading>
+        <para>
+            <bold>Warning:</bold> The following commands have yet to be tested: footnote link sincelist header index topicref // or just don’t care, remove it inlineimage printline printto printuntil // what’s the difference between printto and printuntil??? quotefile quotefromfile skipline skipto skipuntil span snippet codeline overload sub sup tableofcontents tt uicontrol endmapref endomit underline unicode</para>
+    </section>
 </WebXML>

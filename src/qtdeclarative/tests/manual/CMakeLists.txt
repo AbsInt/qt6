@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 add_subdirectory(highdpi)
 # add_subdirectory(httpserver) # TODO: C++ API changed, does this test still make sense?
 add_subdirectory(listview)
@@ -11,6 +14,9 @@ add_subdirectory(tableview)
 add_subdirectory(text)
 add_subdirectory(touch)
 # add_subdirectory(v4) # TODO: port if needed
-add_subdirectory(quickcontrols2)
+add_subdirectory(quickcontrols)
 add_subdirectory(quickdialogs)
 add_subdirectory(frameanimation)
+if(QT_FEATURE_qml_network AND TARGET Qt::Quick)
+    qt_internal_add_example(networkaccessmanagerfactory)
+endif()

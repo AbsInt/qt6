@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "qdesigner_membersheet_p.h"
+#include "qdesigner_propertysheet_p.h"
 
 #include <QtDesigner/abstractformeditor.h>
 #include <abstractintrospection_p.h>
@@ -9,29 +10,12 @@
 #include <QtWidgets/qwidget.h>
 QT_BEGIN_NAMESPACE
 
-static QList<QByteArray> stringListToByteArray(const QStringList &l)
+static QByteArrayList stringListToByteArray(const QStringList &l)
 {
-    if (l.isEmpty())
-        return QList<QByteArray>();
-    QList<QByteArray> rc;
-    const QStringList::const_iterator cend = l.constEnd();
-    for (QStringList::const_iterator it = l.constBegin(); it != cend; ++it)
-        rc += it->toUtf8();
+    QByteArrayList rc;
+    for (const auto &s : l)
+        rc += s.toUtf8();
     return rc;
-}
-
-// Find the form editor in the hierarchy.
-// We know that the parent of the sheet is the extension manager
-// whose parent is the core.
-
-static QDesignerFormEditorInterface *formEditorForObject(QObject *o) {
-    do {
-        if (QDesignerFormEditorInterface* core = qobject_cast<QDesignerFormEditorInterface*>(o))
-            return core;
-        o = o->parent();
-    } while(o);
-    Q_ASSERT(o);
-    return nullptr;
 }
 
 // ------------ QDesignerMemberSheetPrivate
@@ -56,7 +40,7 @@ public:
 };
 
 QDesignerMemberSheetPrivate::QDesignerMemberSheetPrivate(QObject *object, QObject *sheetParent) :
-    m_core(formEditorForObject(sheetParent)),
+    m_core(QDesignerPropertySheet::formEditorForObject(sheetParent)),
     m_meta(m_core->introspection()->metaObject(object))
 {
 }

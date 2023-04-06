@@ -43,6 +43,10 @@
 #include <private/qlocking_p.h>
 #include <private/qhooks_p.h>
 
+#if QT_CONFIG(permissions)
+#include <private/qpermissions_p.h>
+#endif
+
 #ifndef QT_NO_QOBJECT
 #if defined(Q_OS_UNIX)
 # if defined(Q_OS_DARWIN)
@@ -104,6 +108,19 @@
 QT_BEGIN_NAMESPACE
 
 using namespace Qt::StringLiterals;
+
+Q_TRACE_PREFIX(qtcore,
+   "#include <qcoreevent.h>"
+);
+Q_TRACE_METADATA(qtcore, "ENUM { AUTO, RANGE User ... MaxUser } QEvent::Type;");
+Q_TRACE_POINT(qtcore, QCoreApplication_postEvent_entry, QObject *receiver, QEvent *event, QEvent::Type type);
+Q_TRACE_POINT(qtcore, QCoreApplication_postEvent_exit);
+Q_TRACE_POINT(qtcore, QCoreApplication_postEvent_event_compressed, QObject *receiver, QEvent *event);
+Q_TRACE_POINT(qtcore, QCoreApplication_postEvent_event_posted, QObject *receiver, QEvent *event, QEvent::Type type);
+Q_TRACE_POINT(qtcore, QCoreApplication_sendEvent, QObject *receiver, QEvent *event, QEvent::Type type);
+Q_TRACE_POINT(qtcore, QCoreApplication_sendSpontaneousEvent, QObject *receiver, QEvent *event, QEvent::Type type);
+Q_TRACE_POINT(qtcore, QCoreApplication_notify_entry, QObject *receiver, QEvent *event, QEvent::Type type);
+Q_TRACE_POINT(qtcore, QCoreApplication_notify_exit, bool consumed, bool filtered);
 
 #if defined(Q_OS_WIN) || defined(Q_OS_MAC)
 extern QString qAppFileName();
@@ -448,6 +465,8 @@ QCoreApplicationPrivate::~QCoreApplicationPrivate()
 #endif
 #if defined(Q_OS_WIN)
     delete [] origArgv;
+    if (consoleAllocated)
+        FreeConsole();
 #endif
     QCoreApplicationPrivate::clearApplicationFilePath();
 }
@@ -544,6 +563,37 @@ QString qAppName()
     if (!QCoreApplicationPrivate::checkInstance("qAppName"))
         return QString();
     return QCoreApplication::instance()->d_func()->appName();
+}
+
+void QCoreApplicationPrivate::initConsole()
+{
+#ifdef Q_OS_WINDOWS
+    const QString env = qEnvironmentVariable("QT_WIN_DEBUG_CONSOLE");
+    if (env.isEmpty())
+        return;
+    if (env.compare(u"new"_s, Qt::CaseInsensitive) == 0) {
+        if (AllocConsole() == FALSE)
+            return;
+        consoleAllocated = true;
+    } else if (env.compare(u"attach"_s, Qt::CaseInsensitive) == 0) {
+        if (AttachConsole(ATTACH_PARENT_PROCESS) == FALSE)
+            return;
+    } else {
+        // Unknown input, don't make any decision for the user.
+        return;
+    }
+    // The std{in,out,err} handles are read-only, so we need to pass in dummies.
+    FILE *in = nullptr;
+    FILE *out = nullptr;
+    FILE *err = nullptr;
+    freopen_s(&in, "CONIN$", "r", stdin);
+    freopen_s(&out, "CONOUT$", "w", stdout);
+    freopen_s(&err, "CONOUT$", "w", stderr);
+    // However, things wouldn't work if the runtime did not preserve the pointers.
+    Q_ASSERT(in == stdin);
+    Q_ASSERT(out == stdout);
+    Q_ASSERT(err == stderr);
+#endif
 }
 
 void QCoreApplicationPrivate::initLocale()
@@ -761,7 +811,7 @@ QCoreApplication::QCoreApplication(int &argc, char **argv
   \value ApplicationFlags QT_VERSION
 */
 
-void QCoreApplicationPrivate::init()
+void Q_TRACE_INSTRUMENT(qtcore) QCoreApplicationPrivate::init()
 {
     Q_TRACE_SCOPE(QCoreApplicationPrivate_init);
 
@@ -770,6 +820,8 @@ void QCoreApplicationPrivate::init()
 #endif
 
     Q_Q(QCoreApplication);
+
+    initConsole();
 
     initLocale();
 
@@ -1400,9 +1452,6 @@ void QCoreApplicationPrivate::execCleanup()
 {
     threadData.loadRelaxed()->quitNow = false;
     in_exec = false;
-    if (!aboutToQuitEmitted)
-        emit q_func()->aboutToQuit(QCoreApplication::QPrivateSignal());
-    aboutToQuitEmitted = true;
     QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
 }
 
@@ -1441,7 +1490,12 @@ void QCoreApplication::exit(int returnCode)
 {
     if (!self)
         return;
-    QThreadData *data = self->d_func()->threadData.loadRelaxed();
+    QCoreApplicationPrivate *d = self->d_func();
+    if (!d->aboutToQuitEmitted) {
+        emit self->aboutToQuit(QCoreApplication::QPrivateSignal());
+        d->aboutToQuitEmitted = true;
+    }
+    QThreadData *data = d->threadData.loadRelaxed();
     data->quitNow = true;
     for (qsizetype i = 0; i < data->eventLoops.size(); ++i) {
         QEventLoop *eventLoop = data->eventLoops.at(i);
@@ -2108,7 +2162,8 @@ void QCoreApplicationPrivate::quit()
 
     \note QCoreApplication does \e not take ownership of \a translationFile.
 
-    \sa removeTranslator(), translate(), QTranslator::load(), {Dynamic Translation}
+    \sa removeTranslator(), translate(), QTranslator::load(),
+        {Writing Source Code for Translation#Prepare for Dynamic Language Changes}{Prepare for Dynamic Language Changes}
 */
 
 bool QCoreApplication::installTranslator(QTranslator *translationFile)
@@ -2693,6 +2748,180 @@ QString QCoreApplication::applicationVersion()
 {
     return coreappdata() ? coreappdata()->applicationVersion : QString();
 }
+
+#if QT_CONFIG(permissions) || defined(Q_QDOC)
+
+/*!
+    Checks the status of the given \a permission
+
+    If the result is Qt::PermissionStatus::Undetermined then permission should be
+    requested via requestPermission() to determine the user's intent.
+
+    \since 6.5
+    \sa requestPermission(), {Application Permissions}
+*/
+Qt::PermissionStatus QCoreApplication::checkPermission(const QPermission &permission)
+{
+    return QPermissions::Private::checkPermission(permission);
+}
+
+/*!
+    \fn template<typename Functor> void QCoreApplication::requestPermission(
+        const QPermission &permission, Functor functor)
+
+    Requests the given \a permission.
+
+    \include permissions.qdocinc requestPermission-functor
+
+    The \a functor can be a free-standing or static member function:
+
+    \code
+    qApp->requestPermission(QCameraPermission{}, &permissionUpdated);
+    \endcode
+
+    or a lambda:
+
+    \code
+    qApp->requestPermission(QCameraPermission{}, [](const QPermission &permission) {
+    });
+    \endcode
+
+    \include permissions.qdocinc requestPermission-postamble
+
+    \since 6.5
+    \sa checkPermission(), {Application Permissions}
+*/
+
+/*!
+    \fn template<typename Functor> void QCoreApplication::requestPermission(
+        const QPermission &permission, const QObject *context,
+        Functor functor)
+
+    Requests the given \a permission, in the context of \a context.
+
+    \include permissions.qdocinc requestPermission-functor
+
+    The \a functor can be a free-standing or static member function:
+
+    \code
+    qApp->requestPermission(QCameraPermission{}, context, &permissionUpdated);
+    \endcode
+
+    a lambda:
+
+    \code
+    qApp->requestPermission(QCameraPermission{}, context, [](const QPermission &permission) {
+    });
+    \endcode
+
+    or a slot in the \a context object:
+
+    \code
+    qApp->requestPermission(QCameraPermission{}, this, &CamerWidget::permissionUpdated);
+    \endcode
+
+    The \a functor will be called in the thread of the \a context object. If
+    \a context is destroyed before the request completes, the \a functor will
+    not be called.
+
+    \include permissions.qdocinc requestPermission-postamble
+
+    \since 6.5
+    \overload
+    \sa checkPermission(), {Application Permissions}
+*/
+
+/*!
+    \internal
+
+    Called by the various requestPermission overloads to perform the request.
+
+    Calls the functor encapsulated in the \a slotObj in the given \a context
+    (which may be \c nullptr).
+*/
+void QCoreApplication::requestPermission(const QPermission &requestedPermission,
+    QtPrivate::QSlotObjectBase *slotObj, const QObject *context)
+{
+    if (QThread::currentThread() != QCoreApplicationPrivate::mainThread()) {
+        qWarning(lcPermissions, "Permissions can only be requested from the GUI (main) thread");
+        return;
+    }
+
+    Q_ASSERT(slotObj);
+
+    // If we have a context object, then we dispatch the permission response
+    // asynchronously through a received object that lives in the same thread
+    // as the context object. Otherwise we call the functor synchronously when
+    // we get a response (which might still be asynchronous for the caller).
+    class PermissionReceiver : public QObject
+    {
+    public:
+        PermissionReceiver(QtPrivate::QSlotObjectBase *slotObject, const QObject *context)
+            : slotObject(slotObject), context(context)
+        {}
+    protected:
+        bool event(QEvent *event) override {
+            if (event->type() == QEvent::MetaCall) {
+                auto metaCallEvent = static_cast<QMetaCallEvent *>(event);
+                if (metaCallEvent->id() == ushort(-1)) {
+                    Q_ASSERT(slotObject);
+                    // only execute if context object is still alive
+                    if (context)
+                        slotObject->call(const_cast<QObject*>(context.data()), metaCallEvent->args());
+                    slotObject->destroyIfLastRef();
+                    deleteLater();
+
+                    return true;
+                }
+            }
+            return QObject::event(event);
+        }
+    private:
+        QtPrivate::QSlotObjectBase *slotObject;
+        QPointer<const QObject> context;
+    };
+    PermissionReceiver *receiver = nullptr;
+    if (context) {
+        receiver = new PermissionReceiver(slotObj, context);
+        receiver->moveToThread(context->thread());
+    }
+
+    QPermissions::Private::requestPermission(requestedPermission, [=](Qt::PermissionStatus status) {
+        Q_ASSERT_X(status != Qt::PermissionStatus::Undetermined, "QPermission",
+            "QCoreApplication::requestPermission() should never return Undetermined");
+        if (status == Qt::PermissionStatus::Undetermined)
+            status = Qt::PermissionStatus::Denied;
+
+        if (QCoreApplication::self) {
+            QPermission permission = requestedPermission;
+            permission.m_status = status;
+
+            if (receiver) {
+                const int nargs = 2;
+                auto metaCallEvent = new QMetaCallEvent(slotObj, qApp, ushort(-1), nargs);
+                Q_CHECK_PTR(metaCallEvent);
+                void **args = metaCallEvent->args();
+                QMetaType *types = metaCallEvent->types();
+                const auto voidType = QMetaType::fromType<void>();
+                const auto permissionType = QMetaType::fromType<QPermission>();
+                types[0] = voidType;
+                types[1] = permissionType;
+                args[0] = nullptr;
+                args[1] = permissionType.create(&permission);
+                Q_CHECK_PTR(args[1]);
+                qApp->postEvent(receiver, metaCallEvent);
+            } else {
+                void *argv[] = { nullptr, &permission };
+                slotObj->call(const_cast<QObject*>(context), argv);
+            }
+        }
+
+        if (!receiver)
+            slotObj->destroyIfLastRef();
+    });
+}
+
+#endif // QT_CONFIG(permissions)
 
 #if QT_CONFIG(library)
 

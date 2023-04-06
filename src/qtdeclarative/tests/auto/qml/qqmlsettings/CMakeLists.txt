@@ -1,7 +1,10 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Generated from qqmlsettings.pro.
 
 #####################################################################
-## tst_qqmlsettings Test:
+## tst_qqmlsettings_labs Test:
 #####################################################################
 
 # Collect test data
@@ -10,10 +13,10 @@ file(GLOB_RECURSE test_data_glob
     data/*)
 list(APPEND test_data ${test_data_glob})
 
-qt_internal_add_test(tst_qqmlsettings
+qt_internal_add_test(tst_qqmlsettings_labs
     SOURCES
         tst_qqmlsettings.cpp
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Gui
         Qt::Qml
         Qt::QuickTestUtilsPrivate
@@ -23,12 +26,12 @@ qt_internal_add_test(tst_qqmlsettings
 ## Scopes:
 #####################################################################
 
-qt_internal_extend_target(tst_qqmlsettings CONDITION ANDROID OR IOS
+qt_internal_extend_target(tst_qqmlsettings_labs CONDITION ANDROID OR IOS
     DEFINES
-        QT_QMLTEST_DATADIR=\\\":/data\\\"
+        QT_QMLTEST_DATADIR=":/data"
 )
 
-qt_internal_extend_target(tst_qqmlsettings CONDITION NOT ANDROID AND NOT IOS
+qt_internal_extend_target(tst_qqmlsettings_labs CONDITION NOT ANDROID AND NOT IOS
     DEFINES
-        QT_QMLTEST_DATADIR=\\\"${CMAKE_CURRENT_SOURCE_DIR}/data\\\"
+        QT_QMLTEST_DATADIR="${CMAKE_CURRENT_SOURCE_DIR}/data"
 )

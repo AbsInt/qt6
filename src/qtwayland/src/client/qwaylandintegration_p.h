@@ -41,7 +41,9 @@ public:
     QWaylandIntegration();
     ~QWaylandIntegration() override;
 
-    bool hasFailed() { return mFailed; }
+    static QWaylandIntegration *instance() { return sInstance; }
+
+    bool init();
 
     bool hasCapability(QPlatformIntegration::Capability cap) const override;
     QPlatformWindow *createPlatformWindow(QWindow *window) const override;
@@ -131,11 +133,12 @@ private:
 #if QT_CONFIG(accessibility)
     mutable QScopedPointer<QPlatformAccessibility> mAccessibility;
 #endif
-    bool mFailed = false;
     QMutex mClientBufferInitLock;
     bool mClientBufferIntegrationInitialized = false;
     bool mServerBufferIntegrationInitialized = false;
     bool mShellIntegrationInitialized = false;
+
+    static QWaylandIntegration *sInstance;
 
     friend class QWaylandDisplay;
 };

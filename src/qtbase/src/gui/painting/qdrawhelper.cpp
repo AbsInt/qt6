@@ -51,8 +51,7 @@ constexpr int half_point = 1 << 15;
 template <QPixelLayout::BPP bpp> static
 inline uint QT_FASTCALL fetch1Pixel(const uchar *, int)
 {
-    Q_UNREACHABLE();
-    return 0;
+    Q_UNREACHABLE_RETURN(0);
 }
 
 template <>
@@ -3602,7 +3601,7 @@ static TextureBlendType getBlendType(const QSpanData *data)
     return ft;
 }
 
-static inline Operator getOperator(const QSpanData *data, const QSpan *spans, int spanCount)
+static inline Operator getOperator(const QSpanData *data, const QT_FT_Span *spans, int spanCount)
 {
     Operator op;
     bool solidSource = false;
@@ -3684,7 +3683,7 @@ static inline Operator getOperator(const QSpanData *data, const QSpan *spans, in
 #endif
     if (op.mode == QPainter::CompositionMode_Source &&
             (data->type != QSpanData::Texture || data->texture.const_alpha == 256)) {
-        const QSpan *lastSpan = spans + spanCount;
+        const QT_FT_Span *lastSpan = spans + spanCount;
         bool alphaSpans = false;
         while (spans < lastSpan) {
             if (spans->coverage != 255) {
@@ -3798,7 +3797,7 @@ static void spanfill_from_first(QRasterBuffer *rasterBuffer, QPixelLayout::BPP b
 #define QT_THREAD_PARALLEL_FILLS(function) function(0, count)
 #endif
 
-static void blend_color_generic(int count, const QSpan *spans, void *userData)
+static void blend_color_generic(int count, const QT_FT_Span *spans, void *userData)
 {
     QSpanData *data = reinterpret_cast<QSpanData *>(userData);
     const Operator op = getOperator(data, nullptr, 0);
@@ -3832,7 +3831,7 @@ static void blend_color_generic(int count, const QSpan *spans, void *userData)
     QT_THREAD_PARALLEL_FILLS(function);
 }
 
-static void blend_color_argb(int count, const QSpan *spans, void *userData)
+static void blend_color_argb(int count, const QT_FT_Span *spans, void *userData)
 {
     QSpanData *data = reinterpret_cast<QSpanData *>(userData);
 
@@ -3869,7 +3868,7 @@ static void blend_color_argb(int count, const QSpan *spans, void *userData)
     QT_THREAD_PARALLEL_FILLS(function);
 }
 
-static void blend_color_generic_rgb64(int count, const QSpan *spans, void *userData)
+static void blend_color_generic_rgb64(int count, const QT_FT_Span *spans, void *userData)
 {
 #if QT_CONFIG(raster_64bit)
     QSpanData *data = reinterpret_cast<QSpanData *>(userData);
@@ -3913,7 +3912,7 @@ static void blend_color_generic_rgb64(int count, const QSpan *spans, void *userD
 #endif
 }
 
-static void blend_color_generic_fp(int count, const QSpan *spans, void *userData)
+static void blend_color_generic_fp(int count, const QT_FT_Span *spans, void *userData)
 {
 #if QT_CONFIG(raster_fp)
     QSpanData *data = reinterpret_cast<QSpanData *>(userData);
@@ -3960,7 +3959,7 @@ static void blend_color_generic_fp(int count, const QSpan *spans, void *userData
 }
 
 template <typename T>
-void handleSpans(int count, const QSpan *spans, const QSpanData *data, const Operator &op)
+void handleSpans(int count, const QT_FT_Span *spans, const QSpanData *data, const Operator &op)
 {
     const int const_alpha = (data->type == QSpanData::Texture) ? data->texture.const_alpha : 256;
     const bool solidSource = op.mode == QPainter::CompositionMode_Source && const_alpha == 256;
@@ -4132,7 +4131,7 @@ public:
 };
 #endif
 
-static void blend_src_generic(int count, const QSpan *spans, void *userData)
+static void blend_src_generic(int count, const QT_FT_Span *spans, void *userData)
 {
     QSpanData *data = reinterpret_cast<QSpanData *>(userData);
     const Operator op = getOperator(data, nullptr, 0);
@@ -4140,7 +4139,7 @@ static void blend_src_generic(int count, const QSpan *spans, void *userData)
 }
 
 #if QT_CONFIG(raster_64bit)
-static void blend_src_generic_rgb64(int count, const QSpan *spans, void *userData)
+static void blend_src_generic_rgb64(int count, const QT_FT_Span *spans, void *userData)
 {
     QSpanData *data = reinterpret_cast<QSpanData *>(userData);
     const Operator op = getOperator(data, nullptr, 0);
@@ -4154,7 +4153,7 @@ static void blend_src_generic_rgb64(int count, const QSpan *spans, void *userDat
 #endif
 
 #if QT_CONFIG(raster_fp)
-static void blend_src_generic_fp(int count, const QSpan *spans, void *userData)
+static void blend_src_generic_fp(int count, const QT_FT_Span *spans, void *userData)
 {
     QSpanData *data = reinterpret_cast<QSpanData *>(userData);
     const Operator op = getOperator(data, spans, count);
@@ -4167,7 +4166,7 @@ static void blend_src_generic_fp(int count, const QSpan *spans, void *userData)
 }
 #endif
 
-static void blend_untransformed_generic(int count, const QSpan *spans, void *userData)
+static void blend_untransformed_generic(int count, const QT_FT_Span *spans, void *userData)
 {
     QSpanData *data = reinterpret_cast<QSpanData *>(userData);
 
@@ -4221,7 +4220,7 @@ static void blend_untransformed_generic(int count, const QSpan *spans, void *use
 }
 
 #if QT_CONFIG(raster_64bit)
-static void blend_untransformed_generic_rgb64(int count, const QSpan *spans, void *userData)
+static void blend_untransformed_generic_rgb64(int count, const QT_FT_Span *spans, void *userData)
 {
     QSpanData *data = reinterpret_cast<QSpanData *>(userData);
 
@@ -4280,7 +4279,7 @@ static void blend_untransformed_generic_rgb64(int count, const QSpan *spans, voi
 #endif
 
 #if QT_CONFIG(raster_fp)
-static void blend_untransformed_generic_fp(int count, const QSpan *spans, void *userData)
+static void blend_untransformed_generic_fp(int count, const QT_FT_Span *spans, void *userData)
 {
     QSpanData *data = reinterpret_cast<QSpanData *>(userData);
 
@@ -4337,7 +4336,7 @@ static void blend_untransformed_generic_fp(int count, const QSpan *spans, void *
 }
 #endif
 
-static void blend_untransformed_argb(int count, const QSpan *spans, void *userData)
+static void blend_untransformed_argb(int count, const QT_FT_Span *spans, void *userData)
 {
     QSpanData *data = reinterpret_cast<QSpanData *>(userData);
     if (data->texture.format != QImage::Format_ARGB32_Premultiplied
@@ -4434,7 +4433,7 @@ static inline void blend_sourceOver_rgb16_rgb16(quint16 *Q_DECL_RESTRICT dest,
     }
 }
 
-static void blend_untransformed_rgb565(int count, const QSpan *spans, void *userData)
+static void blend_untransformed_rgb565(int count, const QT_FT_Span *spans, void *userData)
 {
     QSpanData *data = reinterpret_cast<QSpanData*>(userData);
     QPainter::CompositionMode mode = data->rasterBuffer->compositionMode;
@@ -4491,7 +4490,7 @@ static void blend_untransformed_rgb565(int count, const QSpan *spans, void *user
     QT_THREAD_PARALLEL_FILLS(function);
 }
 
-static void blend_tiled_generic(int count, const QSpan *spans, void *userData)
+static void blend_tiled_generic(int count, const QT_FT_Span *spans, void *userData)
 {
     QSpanData *data = reinterpret_cast<QSpanData *>(userData);
 
@@ -4544,7 +4543,7 @@ static void blend_tiled_generic(int count, const QSpan *spans, void *userData)
 }
 
 #if QT_CONFIG(raster_64bit)
-static void blend_tiled_generic_rgb64(int count, const QSpan *spans, void *userData)
+static void blend_tiled_generic_rgb64(int count, const QT_FT_Span *spans, void *userData)
 {
     QSpanData *data = reinterpret_cast<QSpanData *>(userData);
 
@@ -4652,7 +4651,7 @@ static void blend_tiled_generic_rgb64(int count, const QSpan *spans, void *userD
 #endif
 
 #if QT_CONFIG(raster_fp)
-static void blend_tiled_generic_fp(int count, const QSpan *spans, void *userData)
+static void blend_tiled_generic_fp(int count, const QT_FT_Span *spans, void *userData)
 {
     QSpanData *data = reinterpret_cast<QSpanData *>(userData);
 
@@ -4710,7 +4709,7 @@ static void blend_tiled_generic_fp(int count, const QSpan *spans, void *userData
 }
 #endif
 
-static void blend_tiled_argb(int count, const QSpan *spans, void *userData)
+static void blend_tiled_argb(int count, const QT_FT_Span *spans, void *userData)
 {
     QSpanData *data = reinterpret_cast<QSpanData *>(userData);
     if (data->texture.format != QImage::Format_ARGB32_Premultiplied
@@ -4763,7 +4762,7 @@ static void blend_tiled_argb(int count, const QSpan *spans, void *userData)
     QT_THREAD_PARALLEL_FILLS(function);
 }
 
-static void blend_tiled_rgb565(int count, const QSpan *spans, void *userData)
+static void blend_tiled_rgb565(int count, const QT_FT_Span *spans, void *userData)
 {
     QSpanData *data = reinterpret_cast<QSpanData*>(userData);
     QPainter::CompositionMode mode = data->rasterBuffer->compositionMode;
@@ -4911,15 +4910,14 @@ static const ProcessSpans processTextureSpansGenericFP[NBlendTypes] = {
     blend_src_generic_fp                // TransformedBilinearTiled
 };
 #endif
-void qBlendTexture(int count, const QSpan *spans, void *userData)
+void qBlendTexture(int count, const QT_FT_Span *spans, void *userData)
 {
     QSpanData *data = reinterpret_cast<QSpanData *>(userData);
     TextureBlendType blendType = getBlendType(data);
     ProcessSpans proc;
     switch (data->rasterBuffer->format) {
     case QImage::Format_Invalid:
-        Q_UNREACHABLE();
-        return;
+        Q_UNREACHABLE_RETURN();
     case QImage::Format_ARGB32_Premultiplied:
         proc = processTextureSpansARGB32PM[blendType];
         break;
@@ -4967,7 +4965,7 @@ void qBlendTexture(int count, const QSpan *spans, void *userData)
     proc(count, spans, userData);
 }
 
-static void blend_vertical_gradient_argb(int count, const QSpan *spans, void *userData)
+static void blend_vertical_gradient_argb(int count, const QT_FT_Span *spans, void *userData)
 {
     QSpanData *data = reinterpret_cast<QSpanData *>(userData);
 
@@ -5008,7 +5006,7 @@ static void blend_vertical_gradient_argb(int count, const QSpan *spans, void *us
 }
 
 template<ProcessSpans blend_color>
-static void blend_vertical_gradient(int count, const QSpan *spans, void *userData)
+static void blend_vertical_gradient(int count, const QT_FT_Span *spans, void *userData)
 {
     QSpanData *data = reinterpret_cast<QSpanData *>(userData);
 
@@ -5034,7 +5032,7 @@ static void blend_vertical_gradient(int count, const QSpan *spans, void *userDat
     }
 }
 
-void qBlendGradient(int count, const QSpan *spans, void *userData)
+void qBlendGradient(int count, const QT_FT_Span *spans, void *userData)
 {
     QSpanData *data = reinterpret_cast<QSpanData *>(userData);
     bool isVerticalGradient =
@@ -5316,7 +5314,7 @@ static void qt_alphamapblit_generic(QRasterBuffer *rasterBuffer,
             const QClipData::ClipLine &line = clip->m_clipLines[yp];
 
             for (int i=0; i<line.count; ++i) {
-                const QSpan &clip = line.spans[i];
+                const QT_FT_Span &clip = line.spans[i];
 
                 int start = qMax<int>(x, clip.x);
                 int end = qMin<int>(x + mapWidth, clip.x + clip.len);
@@ -5390,7 +5388,7 @@ static void qt_alphamapblit_generic(QRasterBuffer *rasterBuffer,
             const QClipData::ClipLine &line = clip->m_clipLines[yp];
 
             for (int i=0; i<line.count; ++i) {
-                const QSpan &clip = line.spans[i];
+                const QT_FT_Span &clip = line.spans[i];
 
                 int start = qMax<int>(x, clip.x);
                 int end = qMin<int>(x + mapWidth, clip.x + clip.len);
@@ -5458,7 +5456,7 @@ void qt_alphamapblit_quint16(QRasterBuffer *rasterBuffer,
             quint16 *dest = reinterpret_cast<quint16*>(rasterBuffer->scanLine(yp));
 
             for (int i=0; i<line.count; ++i) {
-                const QSpan &clip = line.spans[i];
+                const QT_FT_Span &clip = line.spans[i];
 
                 int start = qMax<int>(x, clip.x);
                 int end = qMin<int>(x + mapWidth, clip.x + clip.len);
@@ -5515,7 +5513,7 @@ static void qt_alphamapblit_argb32(QRasterBuffer *rasterBuffer,
             quint32 *dest = reinterpret_cast<quint32 *>(rasterBuffer->scanLine(yp));
 
             for (int i=0; i<line.count; ++i) {
-                const QSpan &clip = line.spans[i];
+                const QT_FT_Span &clip = line.spans[i];
 
                 int start = qMax<int>(x, clip.x);
                 int end = qMin<int>(x + mapWidth, clip.x + clip.len);
@@ -5695,7 +5693,7 @@ static void qt_alphargbblit_generic(QRasterBuffer *rasterBuffer,
             const QClipData::ClipLine &line = clip->m_clipLines[yp];
 
             for (int i=0; i<line.count; ++i) {
-                const QSpan &clip = line.spans[i];
+                const QT_FT_Span &clip = line.spans[i];
 
                 int start = qMax<int>(x, clip.x);
                 int end = qMin<int>(x + mapWidth, clip.x + clip.len);
@@ -5768,7 +5766,7 @@ static void qt_alphargbblit_generic(QRasterBuffer *rasterBuffer,
             const QClipData::ClipLine &line = clip->m_clipLines[yp];
 
             for (int i=0; i<line.count; ++i) {
-                const QSpan &clip = line.spans[i];
+                const QT_FT_Span &clip = line.spans[i];
 
                 int start = qMax<int>(x, clip.x);
                 int end = qMin<int>(x + mapWidth, clip.x + clip.len);
@@ -5834,7 +5832,7 @@ static void qt_alphargbblit_argb32(QRasterBuffer *rasterBuffer,
             quint32 *dst = reinterpret_cast<quint32 *>(rasterBuffer->scanLine(yp));
 
             for (int i=0; i<line.count; ++i) {
-                const QSpan &clip = line.spans[i];
+                const QT_FT_Span &clip = line.spans[i];
 
                 int start = qMax<int>(x, clip.x);
                 int end = qMin<int>(x + mapWidth, clip.x + clip.len);
@@ -6233,7 +6231,7 @@ DrawHelper qDrawHelper[QImage::NImageFormats] =
     },
 };
 
-#if !defined(__SSE2__)
+#if !defined(Q_PROCESSOR_X86)
 void qt_memfill64(quint64 *dest, quint64 color, qsizetype count)
 {
     qt_memfill_template<quint64>(dest, color, count);
@@ -6300,15 +6298,14 @@ void qt_memfill16(quint16 *dest, quint16 value, qsizetype count)
     qt_memfill32(reinterpret_cast<quint32*>(dest), value32, count / 2);
 }
 
-#if !defined(__SSE2__) && !defined(__ARM_NEON__) && !defined(__MIPS_DSP__)
+#if defined(Q_PROCESSOR_X86)
+void (*qt_memfill32)(quint32 *dest, quint32 value, qsizetype count) = nullptr;
+void (*qt_memfill64)(quint64 *dest, quint64 value, qsizetype count) = nullptr;
+#elif !defined(__ARM_NEON__) && !defined(__MIPS_DSP__)
 void qt_memfill32(quint32 *dest, quint32 color, qsizetype count)
 {
     qt_memfill_template<quint32>(dest, color, count);
 }
-#endif
-#ifdef __SSE2__
-decltype(qt_memfill32_sse2) *qt_memfill32 = nullptr;
-decltype(qt_memfill64_sse2) *qt_memfill64 = nullptr;
 #endif
 
 #ifdef QT_COMPILER_SUPPORTS_SSE4_1
@@ -6322,7 +6319,10 @@ static void qInitDrawhelperFunctions()
     // Set up basic blend function tables.
     qInitBlendFunctions();
 
-#ifdef __SSE2__
+#if defined(Q_PROCESSOR_X86) && !defined(__SSE2__)
+    qt_memfill32 = qt_memfill_template<quint32>;
+    qt_memfill64 = qt_memfill_template<quint64>;
+#elif defined(__SSE2__)
 #  ifndef __AVX2__
     qt_memfill32 = qt_memfill32_sse2;
     qt_memfill64 = qt_memfill64_sse2;

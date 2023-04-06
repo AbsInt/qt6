@@ -52,7 +52,7 @@ public:
                         .arg(name)
                         .arg(declarationLocation.startLine)
                         .arg(declarationLocation.startColumn),
-                Log_Type, accessLocation);
+                qmlVarUsedBeforeDeclaration, accessLocation);
     }
 
 private:
@@ -74,18 +74,19 @@ QQmlJSLinter::QQmlJSLinter(const QStringList &importPaths, const QStringList &pl
 }
 
 QQmlJSLinter::Plugin::Plugin(QQmlJSLinter::Plugin &&plugin) noexcept
+    : m_name(std::move(plugin.m_name))
+    , m_description(std::move(plugin.m_description))
+    , m_version(std::move(plugin.m_version))
+    , m_author(std::move(plugin.m_author))
+    , m_categories(std::move(plugin.m_categories))
+    , m_instance(std::move(plugin.m_instance))
+    , m_loader(std::move(plugin.m_loader))
+    , m_isBuiltin(std::move(plugin.m_isBuiltin))
+    , m_isInternal(std::move(plugin.m_isInternal))
+    , m_isValid(std::move(plugin.m_isValid))
 {
-    m_name = plugin.m_name;
-    m_author = plugin.m_author;
-    m_description = plugin.m_description;
-    m_version = plugin.m_version;
-    m_instance = plugin.m_instance;
-    m_loader = plugin.m_loader;
-    m_isValid = plugin.m_isValid;
-    m_isBuiltin = plugin.m_isBuiltin;
-
     // Mark the old Plugin as invalid and make sure it doesn't delete the loader
-    plugin.m_loader = nullptr;
+    Q_ASSERT(!plugin.m_loader);
     plugin.m_instance = nullptr;
     plugin.m_isValid = false;
 }
@@ -93,7 +94,7 @@ QQmlJSLinter::Plugin::Plugin(QQmlJSLinter::Plugin &&plugin) noexcept
 #if QT_CONFIG(library)
 QQmlJSLinter::Plugin::Plugin(QString path)
 {
-    m_loader = new QPluginLoader(path);
+    m_loader = std::make_unique<QPluginLoader>(path);
     if (!parseMetaData(m_loader->metaData(), path))
         return;
 
@@ -140,7 +141,8 @@ bool QQmlJSLinter::Plugin::parseMetaData(const QJsonObject &metaData, QString pl
 
     QJsonObject pluginMetaData = metaData[u"MetaData"].toObject();
 
-    for (const QString &requiredKey : { u"name"_s, u"version"_s, u"author"_s }) {
+    for (const QString &requiredKey :
+         { u"name"_s, u"version"_s, u"author"_s, u"loggingCategories"_s }) {
         if (!pluginMetaData.contains(requiredKey)) {
             qWarning() << pluginName << "is missing the required " << requiredKey
                        << "metadata, skipping";
@@ -152,6 +154,44 @@ bool QQmlJSLinter::Plugin::parseMetaData(const QJsonObject &metaData, QString pl
     m_author = pluginMetaData[u"author"].toString();
     m_version = pluginMetaData[u"version"].toString();
     m_description = pluginMetaData[u"description"].toString(u"-/-"_s);
+    m_isInternal = pluginMetaData[u"isInternal"].toBool(false);
+
+    if (!pluginMetaData[u"loggingCategories"].isArray()) {
+        qWarning() << pluginName << "has loggingCategories which are not an array, skipping";
+        return false;
+    }
+
+    QJsonArray categories = pluginMetaData[u"loggingCategories"].toArray();
+
+    for (const QJsonValue value : categories) {
+        if (!value.isObject()) {
+            qWarning() << pluginName << "has invalid loggingCategories entries, skipping";
+            return false;
+        }
+
+        const QJsonObject object = value.toObject();
+
+        for (const QString &requiredKey : { u"name"_s, u"description"_s }) {
+            if (!object.contains(requiredKey)) {
+                qWarning() << pluginName << " logging category is missing the required "
+                           << requiredKey << "metadata, skipping";
+                return false;
+            }
+        }
+
+        const auto it = object.find("enabled"_L1);
+        const bool ignored = (it != object.end() && !it->toBool());
+
+        const QString categoryId =
+                (m_isInternal ? u""_s : u"Plugin."_s) + m_name + u'.' + object[u"name"].toString();
+        m_categories << QQmlJSLogger::Category {
+                categoryId,
+                categoryId,
+                object["description"_L1].toString(),
+                QtWarningMsg,
+                ignored
+        };
+    }
 
     return true;
 }
@@ -211,12 +251,13 @@ std::vector<QQmlJSLinter::Plugin> QQmlJSLinter::loadPlugins(QStringList paths)
 void QQmlJSLinter::parseComments(QQmlJSLogger *logger,
                                  const QList<QQmlJS::SourceLocation> &comments)
 {
-    QHash<int, QSet<QQmlJSLoggerCategory>> disablesPerLine;
-    QHash<int, QSet<QQmlJSLoggerCategory>> enablesPerLine;
-    QHash<int, QSet<QQmlJSLoggerCategory>> oneLineDisablesPerLine;
+    QHash<int, QSet<QString>> disablesPerLine;
+    QHash<int, QSet<QString>> enablesPerLine;
+    QHash<int, QSet<QString>> oneLineDisablesPerLine;
 
     const QString code = logger->code();
     const QStringList lines = code.split(u'\n');
+    const auto loggerCategories = logger->categories();
 
     for (const auto &loc : comments) {
         const QString comment = code.mid(loc.offset, loc.length);
@@ -227,27 +268,29 @@ void QQmlJSLinter::parseComments(QQmlJSLogger *logger,
         if (words.size() < 2)
             continue;
 
-        const QString command = words.at(1);
-
-        QSet<QQmlJSLoggerCategory> categories;
+        QSet<QString> categories;
         for (qsizetype i = 2; i < words.size(); i++) {
             const QString category = words.at(i);
-            const auto option = logger->options().constFind(category);
-            if (option != logger->options().constEnd())
-                categories << option->m_category;
+            const auto categoryExists = std::any_of(
+                    loggerCategories.cbegin(), loggerCategories.cend(),
+                    [&](const QQmlJSLogger::Category &cat) { return cat.id().name() == category; });
+
+            if (categoryExists)
+                categories << category;
             else
                 logger->log(u"qmllint directive on unknown category \"%1\""_s.arg(category),
-                            Log_Syntax, loc);
+                            qmlInvalidLintDirective, loc);
         }
 
         if (categories.isEmpty()) {
-            for (const auto &option : logger->options())
-                categories << option.m_category;
+            for (const auto &option : logger->categories())
+                categories << option.id().name().toString();
         }
 
+        const QString command = words.at(1);
         if (command == u"disable"_s) {
             if (const qsizetype lineIndex = loc.startLine - 1; lineIndex < lines.size()) {
-                const QString line = lines[loc.startLine - 1];
+                const QString line = lines[lineIndex];
                 const QString preComment = line.left(line.indexOf(comment) - 2);
 
                 bool lineHasContent = false;
@@ -266,16 +309,16 @@ void QQmlJSLinter::parseComments(QQmlJSLogger *logger,
         } else if (command == u"enable"_s) {
             enablesPerLine[loc.startLine + 1] |= categories;
         } else {
-            logger->log(u"Invalid qmllint directive \"%1\" provided"_s.arg(command), Log_Syntax,
-                        loc);
+            logger->log(u"Invalid qmllint directive \"%1\" provided"_s.arg(command),
+                        qmlInvalidLintDirective, loc);
         }
     }
 
     if (disablesPerLine.isEmpty() && oneLineDisablesPerLine.isEmpty())
         return;
 
-    QSet<QQmlJSLoggerCategory> currentlyDisabled;
-    for (qsizetype i = 1; i <= lines.length(); i++) {
+    QSet<QString> currentlyDisabled;
+    for (qsizetype i = 1; i <= lines.size(); i++) {
         currentlyDisabled.unite(disablesPerLine[i]).subtract(enablesPerLine[i]);
 
         currentlyDisabled.unite(oneLineDisablesPerLine[i]);
@@ -287,12 +330,99 @@ void QQmlJSLinter::parseComments(QQmlJSLogger *logger,
     }
 }
 
+static void addJsonWarning(QJsonArray &warnings, const QQmlJS::DiagnosticMessage &message,
+                           QAnyStringView id, const std::optional<QQmlJSFixSuggestion> &suggestion = {})
+{
+    QJsonObject jsonMessage;
+
+    QString type;
+    switch (message.type) {
+    case QtDebugMsg:
+        type = u"debug"_s;
+        break;
+    case QtWarningMsg:
+        type = u"warning"_s;
+        break;
+    case QtCriticalMsg:
+        type = u"critical"_s;
+        break;
+    case QtFatalMsg:
+        type = u"fatal"_s;
+        break;
+    case QtInfoMsg:
+        type = u"info"_s;
+        break;
+    default:
+        type = u"unknown"_s;
+        break;
+    }
+
+    jsonMessage[u"type"_s] = type;
+    jsonMessage[u"id"_s] = id.toString();
+
+    if (message.loc.isValid()) {
+        jsonMessage[u"line"_s] = static_cast<int>(message.loc.startLine);
+        jsonMessage[u"column"_s] = static_cast<int>(message.loc.startColumn);
+        jsonMessage[u"charOffset"_s] = static_cast<int>(message.loc.offset);
+        jsonMessage[u"length"_s] = static_cast<int>(message.loc.length);
+    }
+
+    jsonMessage[u"message"_s] = message.message;
+
+    QJsonArray suggestions;
+    const auto convertLocation = [](const QQmlJS::SourceLocation &source, QJsonObject *target) {
+        target->insert("line"_L1, int(source.startLine));
+        target->insert("column"_L1, int(source.startColumn));
+        target->insert("charOffset"_L1, int(source.offset));
+        target->insert("length"_L1, int(source.length));
+    };
+    if (suggestion.has_value()) {
+        QJsonObject jsonFix {
+            { "message"_L1, suggestion->fixDescription() },
+            { "replacement"_L1, suggestion->replacement() },
+            { "isHint"_L1, !suggestion->isAutoApplicable() },
+        };
+        convertLocation(suggestion->location(), &jsonFix);
+        const QString filename = suggestion->filename();
+        if (!filename.isEmpty())
+            jsonFix.insert("fileName"_L1, filename);
+        suggestions << jsonFix;
+
+        const QString hint = suggestion->hint();
+        if (!hint.isEmpty()) {
+            // We need to keep compatibility with the JSON format.
+            // Therefore the overly verbose encoding of the hint.
+            QJsonObject jsonHint {
+                { "message"_L1,  hint },
+                { "replacement"_L1, QString() },
+                { "isHint"_L1, true }
+            };
+            convertLocation(QQmlJS::SourceLocation(), &jsonHint);
+            suggestions << jsonHint;
+        }
+    }
+    jsonMessage[u"suggestions"] = suggestions;
+
+    warnings << jsonMessage;
+
+}
+
+void QQmlJSLinter::processMessages(QJsonArray &warnings)
+{
+    for (const auto &error : m_logger->errors())
+        addJsonWarning(warnings, error, error.id, error.fixSuggestion);
+    for (const auto &warning : m_logger->warnings())
+        addJsonWarning(warnings, warning, warning.id, warning.fixSuggestion);
+    for (const auto &info : m_logger->infos())
+        addJsonWarning(warnings, info, info.id, info.fixSuggestion);
+}
+
 QQmlJSLinter::LintResult QQmlJSLinter::lintFile(const QString &filename,
                                                 const QString *fileContents, const bool silent,
                                                 QJsonArray *json, const QStringList &qmlImportPaths,
                                                 const QStringList &qmldirFiles,
                                                 const QStringList &resourceFiles,
-                                                const QMap<QString, QQmlJSLogger::Option> &options)
+                                                const QList<QQmlJSLogger::Category> &categories)
 {
     // Make sure that we don't expose an old logger if we return before a new one is created.
     m_logger.reset();
@@ -313,64 +443,6 @@ QQmlJSLinter::LintResult QQmlJSLinter::lintFile(const QString &filename,
         json->append(result);
     });
 
-    auto addJsonWarning = [&](const QQmlJS::DiagnosticMessage &message,
-                              const std::optional<FixSuggestion> &suggestion = {}) {
-        QJsonObject jsonMessage;
-
-        QString type;
-        switch (message.type) {
-        case QtDebugMsg:
-            type = u"debug"_s;
-            break;
-        case QtWarningMsg:
-            type = u"warning"_s;
-            break;
-        case QtCriticalMsg:
-            type = u"critical"_s;
-            break;
-        case QtFatalMsg:
-            type = u"fatal"_s;
-            break;
-        case QtInfoMsg:
-            type = u"info"_s;
-            break;
-        default:
-            type = u"unknown"_s;
-            break;
-        }
-
-        jsonMessage[u"type"_s] = type;
-
-        if (message.loc.isValid()) {
-            jsonMessage[u"line"_s] = static_cast<int>(message.loc.startLine);
-            jsonMessage[u"column"_s] = static_cast<int>(message.loc.startColumn);
-            jsonMessage[u"charOffset"_s] = static_cast<int>(message.loc.offset);
-            jsonMessage[u"length"_s] = static_cast<int>(message.loc.length);
-        }
-
-        jsonMessage[u"message"_s] = message.message;
-
-        QJsonArray suggestions;
-        if (suggestion.has_value()) {
-            for (const auto &fix : suggestion->fixes) {
-                QJsonObject jsonFix;
-                jsonFix[u"message"] = fix.message;
-                jsonFix[u"line"_s] = static_cast<int>(fix.cutLocation.startLine);
-                jsonFix[u"column"_s] = static_cast<int>(fix.cutLocation.startColumn);
-                jsonFix[u"charOffset"_s] = static_cast<int>(fix.cutLocation.offset);
-                jsonFix[u"length"_s] = static_cast<int>(fix.cutLocation.length);
-                jsonFix[u"replacement"_s] = fix.replacementString;
-                jsonFix[u"isHint"] = fix.isHint;
-                if (!fix.fileName.isEmpty())
-                    jsonFix[u"fileName"] = fix.fileName;
-                suggestions << jsonFix;
-            }
-        }
-        jsonMessage[u"suggestions"] = suggestions;
-
-        warnings << jsonMessage;
-    };
-
     QString code;
 
     if (fileContents == nullptr) {
@@ -378,9 +450,11 @@ QQmlJSLinter::LintResult QQmlJSLinter::lintFile(const QString &filename,
         if (!file.open(QFile::ReadOnly)) {
             if (json) {
                 addJsonWarning(
+                        warnings,
                         QQmlJS::DiagnosticMessage { QStringLiteral("Failed to open file %1: %2")
                                                             .arg(filename, file.errorString()),
-                                                    QtCriticalMsg, QQmlJS::SourceLocation() });
+                                                    QtCriticalMsg, QQmlJS::SourceLocation() },
+                        qmlImport.name());
                 success = false;
             } else if (!silent) {
                 qWarning() << "Failed to open file" << filename << file.error();
@@ -414,7 +488,7 @@ QQmlJSLinter::LintResult QQmlJSLinter::lintFile(const QString &filename,
         const auto diagnosticMessages = parser.diagnosticMessages();
         for (const QQmlJS::DiagnosticMessage &m : diagnosticMessages) {
             if (json) {
-                addJsonWarning(m);
+                addJsonWarning(warnings, m, qmlSyntax.name());
             } else if (!silent) {
                 qWarning().noquote() << QString::fromLatin1("%1:%2:%3: %4")
                                                 .arg(filename)
@@ -427,17 +501,6 @@ QQmlJSLinter::LintResult QQmlJSLinter::lintFile(const QString &filename,
     }
 
     if (success && !isJavaScript) {
-        const auto processMessages = [&]() {
-            if (json) {
-                for (const auto &error : m_logger->errors())
-                    addJsonWarning(error, error.fixSuggestion);
-                for (const auto &warning : m_logger->warnings())
-                    addJsonWarning(warning, warning.fixSuggestion);
-                for (const auto &info : m_logger->infos())
-                    addJsonWarning(info, info.fixSuggestion);
-            }
-        };
-
         const auto check = [&](QQmlJSResourceFileMapper *mapper) {
             if (m_importer.importPaths() != qmlImportPaths)
                 m_importer.setImportPaths(qmlImportPaths);
@@ -454,15 +517,22 @@ QQmlJSLinter::LintResult QQmlJSLinter::lintFile(const QString &filename,
                                             m_logger->fileName(), m_importer.resourceFileMapper()),
                                     qmldirFiles };
 
-            parseComments(m_logger.get(), engine.comments());
+            if (m_enablePlugins) {
+                for (const Plugin &plugin : m_plugins) {
+                    for (const QQmlJSLogger::Category &category : plugin.categories())
+                        m_logger->registerCategory(category);
+                }
+            }
 
-            for (auto it = options.cbegin(); it != options.cend(); ++it) {
-                if (!it.value().m_changed)
+            for (auto it = categories.cbegin(); it != categories.cend(); ++it) {
+                if (!it->changed)
                     continue;
 
-                m_logger->setCategoryIgnored(it.value().m_category, it.value().m_ignored);
-                m_logger->setCategoryLevel(it.value().m_category, it.value().m_level);
+                m_logger->setCategoryIgnored(it->id(), it->ignored);
+                m_logger->setCategoryLevel(it->id(), it->level);
             }
+
+            parseComments(m_logger.get(), engine.comments());
 
             QQmlJSTypeResolver typeResolver(&m_importer);
 
@@ -502,11 +572,10 @@ QQmlJSLinter::LintResult QQmlJSLinter::lintFile(const QString &filename,
             success = !m_logger->hasWarnings() && !m_logger->hasErrors();
 
             if (m_logger->hasErrors()) {
-                processMessages();
+                if (json)
+                    processMessages(warnings);
                 return;
             }
-
-            QQmlJSTypeInfo typeInfo;
 
             const QStringList resourcePaths = mapper
                     ? mapper->resourcePaths(QQmlJSResourceFileMapper::localFileFilter(filename))
@@ -514,8 +583,7 @@ QQmlJSLinter::LintResult QQmlJSLinter::lintFile(const QString &filename,
             const QString resolvedPath =
                     (resourcePaths.size() == 1) ? u':' + resourcePaths.first() : filename;
 
-            QQmlJSLinterCodegen codegen { &m_importer, resolvedPath, qmldirFiles, m_logger.get(),
-                                          &typeInfo };
+            QQmlJSLinterCodegen codegen { &m_importer, resolvedPath, qmldirFiles, m_logger.get() };
             codegen.setTypeResolver(std::move(typeResolver));
             if (passMan)
                 codegen.setPassManager(passMan.get());
@@ -531,17 +599,18 @@ QQmlJSLinter::LintResult QQmlJSLinter::lintFile(const QString &filename,
             qCompileQmlFile(filename, saveFunction, &codegen, &error, true, &interface,
                             fileContents);
 
-            QList<QQmlJS::DiagnosticMessage> warnings = m_importer.takeGlobalWarnings();
+            QList<QQmlJS::DiagnosticMessage> globalWarnings = m_importer.takeGlobalWarnings();
 
-            if (!warnings.isEmpty()) {
+            if (!globalWarnings.isEmpty()) {
                 m_logger->log(QStringLiteral("Type warnings occurred while evaluating file:"),
-                              Log_Import, QQmlJS::SourceLocation());
-                m_logger->processMessages(warnings, Log_Import);
+                              qmlImport, QQmlJS::SourceLocation());
+                m_logger->processMessages(globalWarnings, qmlImport);
             }
 
             success &= !m_logger->hasWarnings() && !m_logger->hasErrors();
 
-            processMessages();
+            if (json)
+                processMessages(warnings);
         };
 
         if (resourceFiles.isEmpty()) {
@@ -551,6 +620,168 @@ QQmlJSLinter::LintResult QQmlJSLinter::lintFile(const QString &filename,
             check(&mapper);
         }
     }
+
+    return success ? LintSuccess : HasWarnings;
+}
+
+QQmlJSLinter::LintResult QQmlJSLinter::lintModule(
+        const QString &module, const bool silent, QJsonArray *json,
+        const QStringList &qmlImportPaths, const QStringList &resourceFiles)
+{
+    // Make sure that we don't expose an old logger if we return before a new one is created.
+    m_logger.reset();
+
+    // We can't lint properly if a module has already been pre-cached
+    m_importer.clearCache();
+
+    if (m_importer.importPaths() != qmlImportPaths)
+        m_importer.setImportPaths(qmlImportPaths);
+
+    QQmlJSResourceFileMapper mapper(resourceFiles);
+    if (!resourceFiles.isEmpty())
+        m_importer.setResourceFileMapper(&mapper);
+    else
+        m_importer.setResourceFileMapper(nullptr);
+
+    QJsonArray warnings;
+    QJsonObject result;
+
+    bool success = true;
+
+    QScopeGuard jsonOutput([&] {
+        if (!json)
+            return;
+
+        result[u"module"_s] = module;
+
+        result[u"warnings"] = warnings;
+        result[u"success"] = success;
+
+        json->append(result);
+    });
+
+    m_logger.reset(new QQmlJSLogger);
+    m_logger->setFileName(module);
+    m_logger->setCode(u""_s);
+    m_logger->setSilent(silent || json);
+
+    const QQmlJSImporter::ImportedTypes types = m_importer.importModule(module);
+
+    QList<QQmlJS::DiagnosticMessage> importWarnings =
+            m_importer.takeGlobalWarnings() + m_importer.takeWarnings();
+
+    if (!importWarnings.isEmpty()) {
+        m_logger->log(QStringLiteral("Warnings occurred while importing module:"), qmlImport,
+                      QQmlJS::SourceLocation());
+        m_logger->processMessages(importWarnings, qmlImport);
+    }
+
+    QMap<QString, QSet<QString>> missingTypes;
+    QMap<QString, QSet<QString>> partiallyResolvedTypes;
+
+    const QString modulePrefix = u"$module$."_s;
+    const QString internalPrefix = u"$internal$."_s;
+
+    for (auto &&[typeName, importedScope] : types.types().asKeyValueRange()) {
+        QString name = typeName;
+        const QQmlJSScope::ConstPtr scope = importedScope.scope;
+
+        if (name.startsWith(modulePrefix))
+            continue;
+
+        if (name.startsWith(internalPrefix)) {
+            name = name.mid(internalPrefix.size());
+        }
+
+        if (scope.isNull()) {
+            if (!missingTypes.contains(name))
+                missingTypes[name] = {};
+            continue;
+        }
+
+        if (!scope->isFullyResolved()) {
+            if (!partiallyResolvedTypes.contains(name))
+                partiallyResolvedTypes[name] = {};
+        }
+        for (const auto &property : scope->ownProperties()) {
+            if (property.typeName().isEmpty()) {
+                // If the type name is empty, then it's an intentional vaguery i.e. for some
+                // builtins
+                continue;
+            }
+            if (property.type().isNull()) {
+                missingTypes[property.typeName()]
+                        << scope->internalName() + u'.' + property.propertyName();
+                continue;
+            }
+            if (!property.type()->isFullyResolved()) {
+                partiallyResolvedTypes[property.typeName()]
+                        << scope->internalName() + u'.' + property.propertyName();
+            }
+        }
+        if (scope->attachedType() && !scope->attachedType()->isFullyResolved()) {
+            m_logger->log(u"Attached type of \"%1\" not fully resolved"_s.arg(name),
+                          qmlUnresolvedType, scope->sourceLocation());
+        }
+
+        for (const auto &method : scope->ownMethods()) {
+            if (method.returnTypeName().isEmpty())
+                continue;
+            if (method.returnType().isNull()) {
+                missingTypes[method.returnTypeName()] << u"return type of "_s
+                                + scope->internalName() + u'.' + method.methodName() + u"()"_s;
+            } else if (!method.returnType()->isFullyResolved()) {
+                partiallyResolvedTypes[method.returnTypeName()] << u"return type of "_s
+                                + scope->internalName() + u'.' + method.methodName() + u"()"_s;
+            }
+
+            const auto parameters = method.parameters();
+            for (qsizetype i = 0; i < parameters.size(); i++) {
+                auto &parameter = parameters[i];
+                const QString typeName = parameter.typeName();
+                const QSharedPointer<const QQmlJSScope> type = parameter.type();
+                if (typeName.isEmpty())
+                    continue;
+                if (type.isNull()) {
+                    missingTypes[typeName] << u"parameter %1 of "_s.arg(i + 1)
+                                    + scope->internalName() + u'.' + method.methodName() + u"()"_s;
+                    continue;
+                }
+                if (!type->isFullyResolved()) {
+                    partiallyResolvedTypes[typeName] << u"parameter %1 of "_s.arg(i + 1)
+                                    + scope->internalName() + u'.' + method.methodName() + u"()"_s;
+                    continue;
+                }
+            }
+        }
+    }
+
+    for (auto &&[name, uses] :  missingTypes.asKeyValueRange()) {
+        QString message = u"Type \"%1\" not found"_s.arg(name);
+
+        if (!uses.isEmpty()) {
+            const QStringList usesList = QStringList(uses.begin(), uses.end());
+            message += u". Used in %1"_s.arg(usesList.join(u", "_s));
+        }
+
+        m_logger->log(message, qmlUnresolvedType, QQmlJS::SourceLocation());
+    }
+
+    for (auto &&[name, uses] : partiallyResolvedTypes.asKeyValueRange()) {
+        QString message = u"Type \"%1\" is not fully resolved"_s.arg(name);
+
+        if (!uses.isEmpty()) {
+            const QStringList usesList = QStringList(uses.begin(), uses.end());
+            message += u". Used in %1"_s.arg(usesList.join(u", "_s));
+        }
+
+        m_logger->log(message, qmlUnresolvedType, QQmlJS::SourceLocation());
+    }
+
+    if (json)
+        processMessages(warnings);
+
+    success &= !m_logger->hasWarnings() && !m_logger->hasErrors();
 
     return success ? LintSuccess : HasWarnings;
 }
@@ -568,7 +799,7 @@ QQmlJSLinter::FixResult QQmlJSLinter::applyFixes(QString *fixedCode, bool silent
 
     QString code = m_fileContents;
 
-    QList<FixSuggestion::Fix> fixesToApply;
+    QList<QQmlJSFixSuggestion> fixesToApply;
 
     QFileInfo info(m_logger->fileName());
     const QString currentFileAbsolutePath = info.absoluteFilePath();
@@ -582,34 +813,30 @@ QQmlJSLinter::FixResult QQmlJSLinter::applyFixes(QString *fixedCode, bool silent
 
     for (const auto &messages : { m_logger->infos(), m_logger->warnings(), m_logger->errors() })
         for (const Message &msg : messages) {
-            if (!msg.fixSuggestion.has_value())
+            if (!msg.fixSuggestion.has_value() || !msg.fixSuggestion->isAutoApplicable())
                 continue;
 
-            for (const auto &fix : msg.fixSuggestion->fixes) {
-                if (fix.isHint)
-                    continue;
-
-                // Ignore fix suggestions for other files
-                if (!fix.fileName.isEmpty()
-                    && QFileInfo(fix.fileName).absoluteFilePath() != currentFileAbsolutePath) {
-                    continue;
-                }
-
-                fixesToApply << fix;
+            // Ignore fix suggestions for other files
+            const QString filename = msg.fixSuggestion->filename();
+            if (!filename.isEmpty()
+                    && QFileInfo(filename).absoluteFilePath() != currentFileAbsolutePath) {
+                continue;
             }
+
+            fixesToApply << msg.fixSuggestion.value();
         }
 
     if (fixesToApply.isEmpty())
         return NothingToFix;
 
     std::sort(fixesToApply.begin(), fixesToApply.end(),
-              [](FixSuggestion::Fix &a, FixSuggestion::Fix &b) {
-                  return a.cutLocation.offset < b.cutLocation.offset;
+              [](const QQmlJSFixSuggestion &a, const QQmlJSFixSuggestion &b) {
+                  return a.location().offset < b.location().offset;
               });
 
     for (auto it = fixesToApply.begin(); it + 1 != fixesToApply.end(); it++) {
-        QQmlJS::SourceLocation srcLocA = it->cutLocation;
-        QQmlJS::SourceLocation srcLocB = (it + 1)->cutLocation;
+        const QQmlJS::SourceLocation srcLocA = it->location();
+        const QQmlJS::SourceLocation srcLocB = (it + 1)->location();
         if (srcLocA.offset + srcLocA.length > srcLocB.offset) {
             if (!silent)
                 qWarning() << "Fixes for two warnings are overlapping, aborting. Please file a bug "
@@ -621,12 +848,14 @@ QQmlJSLinter::FixResult QQmlJSLinter::applyFixes(QString *fixedCode, bool silent
     int offsetChange = 0;
 
     for (const auto &fix : fixesToApply) {
-        qsizetype cutLocation = fix.cutLocation.offset + offsetChange;
-        QString before = code.left(cutLocation);
-        QString after = code.mid(cutLocation + fix.cutLocation.length);
+        const QQmlJS::SourceLocation fixLocation = fix.location();
+        qsizetype cutLocation = fixLocation.offset + offsetChange;
+        const QString before = code.left(cutLocation);
+        const QString after = code.mid(cutLocation + fixLocation.length);
 
-        code = before + fix.replacementString + after;
-        offsetChange += fix.replacementString.length() - fix.cutLocation.length;
+        const QString replacement = fix.replacement();
+        code = before + replacement + after;
+        offsetChange += replacement.size() - fixLocation.length;
     }
 
     QQmlJS::Engine engine;

@@ -14,7 +14,6 @@ namespace QtWaylandClient {
 
 class QWaylandWindow;
 class QWaylandInputDevice;
-class QWindow;
 
 class Q_WAYLANDCLIENT_EXPORT QWaylandQtSurface : public QWaylandShellSurface
         , public QtWayland::zqt_shell_surface_v1
@@ -41,6 +40,8 @@ public:
 
     void raise() override;
     void lower() override;
+
+    std::any surfaceRole() const override { return object(); };
 
 private:
     void resetConfiguration();

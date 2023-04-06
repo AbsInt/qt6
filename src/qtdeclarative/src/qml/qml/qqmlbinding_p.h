@@ -15,12 +15,8 @@
 // We mean it.
 //
 
-#include "qqml.h"
-#include "qqmlpropertyvaluesource.h"
-#include "qqmlexpression.h"
 #include "qqmlproperty.h"
 #include "qqmlscriptstring.h"
-#include "qqmlproperty_p.h"
 
 #include <QtCore/QObject>
 #include <QtCore/QMetaProperty>
@@ -28,6 +24,7 @@
 #include <private/qqmlabstractbinding_p.h>
 #include <private/qqmljavascriptexpression_p.h>
 #include <private/qv4functionobject_p.h>
+#include <private/qqmltranslation_p.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -58,6 +55,12 @@ public:
             const QQmlRefPointer<QV4::ExecutableCompilationUnit> &unit,
             const QV4::CompiledData::Binding *binding, QObject *obj,
             const QQmlRefPointer<QQmlContextData> &ctxt);
+
+    static QQmlBinding *
+    createTranslationBinding(const QQmlRefPointer<QV4::ExecutableCompilationUnit> &unit,
+                             const QQmlRefPointer<QQmlContextData> &ctxt,
+                             const QString &propertyName, const QQmlTranslation &translationData,
+                             const QQmlSourceLocation &location, QObject *obj);
 
     Kind kind() const final { return QQmlAbstractBinding::QmlBinding; }
 
@@ -103,7 +106,10 @@ public:
 
 protected:
     virtual void doUpdate(const DeleteWatcher &watcher,
-                          QQmlPropertyData::WriteFlags flags, QV4::Scope &scope) = 0;
+                  QQmlPropertyData::WriteFlags flags, QV4::Scope &scope);
+
+    virtual bool write(const QV4::Value &result, bool isUndefined, QQmlPropertyData::WriteFlags flags) = 0;
+    virtual bool write(void *result, QMetaType type, bool isUndefined, QQmlPropertyData::WriteFlags flags) = 0;
 
     int getPropertyType() const;
 

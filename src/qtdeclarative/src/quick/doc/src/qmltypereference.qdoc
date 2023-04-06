@@ -17,11 +17,11 @@ import QtQuick
 \endqml
 
 Visit the \l {Qt Quick} module documentation for more
-information about the concepts which are central to \c QtQuick.
+information about the concepts that are central to \c QtQuick.
 
 \section1 Submodules
 
-    Qt Quick includes several submodules which contain additional types.
+    Qt Quick includes several submodules that contain additional types:
 
     \list
     \li \l{Qt Quick Local Storage QML Types}{Local Storage} - a submodule
@@ -33,6 +33,8 @@ information about the concepts which are central to \c QtQuick.
     \li \l{Qt Quick Layouts QML Types}{Layouts} - contains types that are used
     to arrange items in the user interface
     \li \l{Qt Quick Test QML Types}{Tests} - types for testing QML applications.
+    \li \l{Qt Quick Effects QML Types}{Effects} - provides types for applying
+    one or more simple graphical effects to Qt Quick items.
     \endlist
 
 \target value-types
@@ -123,6 +125,9 @@ available when you import \c QtQuick.
 
     The \c font type refers to a font value with the properties of QFont.
 
+    Properties of type \c font default to the application's default
+    \l {Application::font} {font}.
+
     The most commonly used properties are:
 
     \list
@@ -165,68 +170,32 @@ available when you import \c QtQuick.
     Font weighting is classified on a scale from 0 to 99, where a weight of 0 is ultralight,
     and 99 is extremely black. The following values are supported:
 
-    \table
-    \row
-        \li \c Font.Thin
-        \li 0
-    \row
-        \li \c Font.ExtraLight
-        \li 12
-    \row
-        \li \c Font.Light
-        \li 25
-    \row
-        \li \c Font.Normal
-        \li 50
-    \row
-        \li \c Font.Medium
-        \li 57
-    \row
-        \li \c Font.DemiBold
-        \li 63
-    \row
-        \li \c Font.Bold
-        \li 75
-    \row
-        \li \c Font.ExtraBold
-        \li 81
-    \row
-        \li \c Font.Black
-        \li 87
-    \endtable
+    \value Font.Thin        0
+    \value Font.ExtraLight  12
+    \value Font.Light       25
+    \value Font.Normal      50
+    \value Font.Medium      57
+    \value Font.DemiBold    63
+    \value Font.Bold        75
+    \value Font.ExtraBold   81
+    \value Font.Black       87
 
     Capitalization supports the following values:
 
-    \table
-    \row
-        \li \c Font.MixedCase
-        \li No capitalization change is applied.
-    \row
-        \li \c Font.AllUppercase
-        \li Alters the text to be rendered in all uppercase type.
-    \row
-        \li \c Font.AllLowercase
-        \li Alters the text to be rendered in all lowercase type.
-    \row
-        \li \c Font.SmallCaps
-        \li Alters the text to be rendered in small-caps type.
-    \row
-        \li \c Font.Capitalize
-        \li Alters the text to be rendered with the first character of each word as an uppercase character.
-    \endtable
+    \value Font.MixedCase       No capitalization change is applied.
+    \value Font.AllUppercase    Alters the text to be rendered in all uppercase type.
+    \value Font.AllLowercase    Alters the text to be rendered in all lowercase type.
+    \value Font.SmallCaps       Alters the text to be rendered in small-caps type.
+    \value Font.Capitalize      Alters the text to be rendered with the first character of each word as an uppercase character.
 
     Setting the hinting preference only has an effect when using the "NativeRendering" render type.
     The property supports the following values:
 
-    \list
-    \value Font.PreferDefaultHinting - Use the default hinting level for the target platform.
-    \value Font.PreferNoHinting - If possible, render text without hinting the outlines
-           of the glyphs.
-    \value Font.PreferVerticalHinting - If possible, render text with no horizontal hinting,
-           but align glyphs to the pixel grid in the vertical direction.
-    \value Font.PreferFullHinting - If possible, render text with hinting in both horizontal and
-           vertical directions.
-    \endlist
+    \value Font.PreferDefaultHinting    Use the default hinting level for the target platform.
+    \value Font.PreferNoHinting         If possible, render text without hinting the outlines of the glyphs.
+    \value Font.PreferVerticalHinting   If possible, render text with no horizontal hinting,
+                                        but align glyphs to the pixel grid in the vertical direction.
+    \value Font.PreferFullHinting       If possible, render text with hinting in both horizontal and vertical directions.
 
     \sa {QML Value Types}
 */
@@ -238,8 +207,12 @@ available when you import \c QtQuick.
     \brief A vector2d type has x and y attributes.
 
     A \c vector2d type has \c x and \c y attributes, otherwise
-    it is similar to the \c vector3d type.  Please see the
-    documentation about the \c vector3d type for more information.
+    it is similar to the \c vector3d type.
+
+    Properties of type \c vector2d have a zero vector as their default value.
+    This has both \c x and \c y set to \c 0.
+
+    See the documentation about the \c vector3d type for more information.
 
     To create a \c vector2d value, specify it as a "x,y" string,
     or define the components individually, or compose it with
@@ -365,6 +338,9 @@ console.log(c + " " + d); // false true
     \brief a value with x, y, and z attributes.
 
     The \c vector3d type refers to a value with \c x, \c y, and \c z attributes.
+
+    Properties of type \c vector3d have a zero vector by default. This has
+    \c x, \c y and \c z set to \c 0.
 
     To create a \c vector3d value, specify it as a "x,y,z" string:
 
@@ -537,8 +513,12 @@ console.log(c + " " + d); // false true
     \brief A vector4d type has x, y, z and w attributes.
 
     A \c vector4d type has \c x, \c y, \c z and \c w attributes,
-    otherwise it is similar to the \c vector3d type.  Please see the
-    documentation about the \c vector3d type for more information.
+    otherwise it is similar to the \c vector3d type.
+
+    Properties of type \c vector4d have a zero vector by default. This has
+    \c x, \c y ,\c z and \c w set to \c 0.
+
+    See the documentation about the \c vector3d type for more information.
 
     To create a \c vector4d value, specify it as a "x,y,z,w" string,
     or define the components individually, or compose it with
@@ -826,6 +806,9 @@ console.log(c + " " + d); // false true
             \endcode
     \endtable
 
+    Properties of type \c quaternion have \c {Qt.quaternion(1, 0, 0, 0)} as their
+    default value.
+
     This value type is provided by the QtQuick import.
 
     \sa {QML Value Types}
@@ -838,10 +821,13 @@ console.log(c + " " + d); // false true
     \brief A matrix4x4 type is a 4-row and 4-column matrix.
 
     A \c matrix4x4 type has sixteen values, each accessible via the properties
-    \c m11 through \c m44 in QML (in row/column order).  Values of this type
-    can be composed with the Qt.matrix4x4() function.  Each attribute in a
-    matrix4x4 is stored as a real (single-precision on ARM, double-precision
-    on x86).
+    \c m11 through \c m44 in QML (in row/column order). Values of this type can
+    be composed with the Qt.matrix4x4() function. Each attribute in a matrix4x4
+    is stored as a real (single-precision on ARM, double-precision on x86).
+
+    A property of type \c matrix4x4 defaults to the identity matrix, whose
+    diagonal entries \c m11, \c m22, \c m33 and \c m44 are all \c 1, with all
+    other components \c 0.
 
     The matrix4x4 type has the following idempotent functions which can be
     invoked in QML:
@@ -1054,6 +1040,29 @@ var a = Qt.matrix4x4(1,0,0,0,0,2,0,0,0,0,3,0,100,200,300,1);
 var b = a.transposed();
 console.log(b.toString());
 // QMatrix4x4(1, 0, 0, 100, 0, 2, 0, 200, 0, 0, 3, 300, 0, 0, 0, 1)
+            \endcode
+
+        \row
+        \li rect mapRect(rect)
+        \li Maps the provided rectangle into the coordinate system defined by this matrix.
+            If rotation or shearing has been specified, this function returns the bounding rectangle.
+            This function was introduced in Qt 6.5.
+        \li \code
+var a = Qt.matrix4x4(2,0,0,0,0,2,0,0,0,0,1,0,0,0,0,1);
+var b = a.mapRect(Qt.rect(10, 20, 30, 40));
+console.log(b.toString());
+// Qt.rect(20, 40, 60, 80)
+            \endcode
+
+        \row
+        \li point map(point)
+        \li Maps the provided point into the coordinate system defined by this matrix.
+            This function was introduced in Qt 6.5.
+        \li \code
+var a = Qt.matrix4x4(2,0,0,0,0,2,0,0,0,0,1,0,0,0,0,1);
+var b = a.map(10, 20);
+console.log(b.toString());
+// Qt.point(20, 40)
             \endcode
 
         \row

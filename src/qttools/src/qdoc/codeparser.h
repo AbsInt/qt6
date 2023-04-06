@@ -78,6 +78,7 @@ private:
 #define COMMAND_INTERNAL Doc::alias(QLatin1String("internal"))
 #define COMMAND_MACRO Doc::alias(QLatin1String("macro"))
 #define COMMAND_MODULE Doc::alias(QLatin1String("module"))
+#define COMMAND_MODULESTATE Doc::alias(QLatin1String("modulestate"))
 #define COMMAND_NAMESPACE Doc::alias(QLatin1String("namespace"))
 #define COMMAND_NEXTPAGE Doc::alias(QLatin1String("nextpage"))
 #define COMMAND_NOAUTOLIST Doc::alias(QLatin1String("noautolist"))
@@ -122,6 +123,7 @@ private:
 #define COMMAND_VERSION Doc::alias(QLatin1String("version"))
 #define COMMAND_UNION Doc::alias(QLatin1String("union"))
 #define COMMAND_WRAPPER Doc::alias(QLatin1String("wrapper"))
+#define COMMAND_ATTRIBUTION Doc::alias(QLatin1String("attribution"))
 
 // deprecated alias of qmlvaluetype
 #define COMMAND_QMLBASICTYPE Doc::alias(QLatin1String("qmlbasictype"))

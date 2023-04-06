@@ -168,9 +168,13 @@ public:
     int operator%(int) { ADD("TestClass1::operator%"); return 0; }
     int x;
     int &operator++() { ADD("TestClass1::operator++"); return x; }
-    int operator++(int) { ADD("TestClass1::operator++"); return 0; }
     int &operator--() { ADD("TestClass1::operator--"); return x; }
-    int operator--(int) { ADD("TestClass1::operator--"); return 0; }
+
+    // slightly different to avoid duplicate test rows
+#define ADD2(x)     QTest::newRow(x ".postfix") << Q_FUNC_INFO << x;
+    int operator++(int) { ADD2("TestClass1::operator++"); return 0; }
+    int operator--(int) { ADD2("TestClass1::operator--"); return 0; }
+#undef ADD2
 
     int nested_struct()
     {
@@ -532,7 +536,7 @@ void tst_qmessagehandler::cleanupFuncinfo_data()
     QTest::newRow("msvc_28")
         << "class std::map<long,void const *,struct std::less<long>,class std::allocator<struct std::pair<long const ,void const *> > > *__thiscall TestClass2<class std::map<long,void const *,struct std::less<long>,class std::allocator<struct std::pair<long const ,void const *> > > >::func_template1<class TestClass2<class std::map<long,void const *,struct std::less<long>,class std::allocator<struct std::pair<long const ,void const *> > > >>(void)"
         << "TestClass2::func_template1";
-    QTest::newRow("gcc_21")
+    QTest::newRow("gcc_28")
         << "T* TestClass2<T>::func_template1() [with S = TestClass2<std::map<long int, const void*, std::less<long int>, std::allocator<std::pair<const long int, const void*> > > >, T = std::map<long int, const void*, std::less<long int>, std::allocator<std::pair<const long int, const void*> > >]"
         << "TestClass2::func_template1";
 
@@ -781,28 +785,39 @@ void tst_qmessagehandler::qMessagePattern_data()
 
 #define BACKTRACE_HELPER_NAME "qlogging_helper"
 
-#ifdef __GLIBC__
 #ifdef QT_NAMESPACE
 #define QT_NAMESPACE_STR QT_STRINGIFY(QT_NAMESPACE::)
 #else
 #define QT_NAMESPACE_STR ""
 #endif
 
-#if QT_CONFIG(static)
-    QSKIP("These test cases don't work with static Qt builds");
-#else
-#ifndef QT_NO_DEBUG
-    QTest::newRow("backtrace") << "[%{backtrace}] %{message}" << true << (QList<QByteArray>()
-            // MyClass::qt_static_metacall is explicitly marked as hidden in the Q_OBJECT macro
-            << "[MyClass::myFunction|MyClass::mySlot1|?" BACKTRACE_HELPER_NAME "?|" QT_NAMESPACE_STR "QMetaMethod::invoke|" QT_NAMESPACE_STR "QMetaObject::invokeMethod] from_a_function 34");
-#endif
+#ifdef __GLIBC__
+#  if QT_CONFIG(static)
+    // These test cases don't work with static Qt builds
+#  elif defined(QT_ASAN_ENABLED)
+    // These tests produce far more call frames under ASan
+#  else
+#    ifndef QT_NO_DEBUG
+    QList<QByteArray> expectedBacktrace = {
+        // MyClass::qt_static_metacall is explicitly marked as hidden in the
+        // Q_OBJECT macro hence the ?helper? frame
+        "[MyClass::myFunction|MyClass::mySlot1|?" BACKTRACE_HELPER_NAME "?|",
+
+        // QMetaObject::invokeMethodImpl calls internal function
+        // (QMetaMethodPrivate::invokeImpl, at the tims of this writing), which
+        // will usually show only as ?libQt6Core.so? or equivalent, so we skip
+
+        // end of backtrace, actual message
+        "|" QT_NAMESPACE_STR "QMetaObject::invokeMethodImpl] from_a_function 34"
+    };
+    QTest::newRow("backtrace") << "[%{backtrace}] %{message}" << true << expectedBacktrace;
+#    endif
 
     QTest::newRow("backtrace depth,separator") << "[%{backtrace depth=2 separator=\"\n\"}] %{message}" << true << (QList<QByteArray>()
             << "[MyClass::myFunction\nMyClass::mySlot1] from_a_function 34"
             << "[T::T\n");
-#endif // #if !QT_CONFIG(process)
+#  endif // #if !QT_CONFIG(static)
 #endif // #ifdef __GLIBC__
-
 }
 
 

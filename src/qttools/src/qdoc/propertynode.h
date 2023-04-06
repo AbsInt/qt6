@@ -17,9 +17,9 @@ class Aggregate;
 class PropertyNode : public Node
 {
 public:
-    enum PropertyType { Standard, Bindable };
-    enum FunctionRole { Getter, Setter, Resetter, Notifier };
-    enum { NumFunctionRoles = Notifier + 1 };
+    enum class PropertyType { StandardProperty, BindableProperty };
+    enum class FunctionRole { Getter, Setter, Resetter, Notifier, Bindable, NumFunctionRoles };
+    static QString roleName(FunctionRole role);
 
     PropertyNode(Aggregate *parent, const QString &name);
 
@@ -27,8 +27,6 @@ public:
     void addFunction(FunctionNode *function, FunctionRole role);
     void addSignal(FunctionNode *function, FunctionRole role);
     void setStored(bool stored) { m_stored = toFlagValue(stored); }
-    void setDesignable(bool designable) { m_designable = toFlagValue(designable); }
-    void setScriptable(bool scriptable) { m_scriptable = toFlagValue(scriptable); }
     void setWritable(bool writable) { m_writable = toFlagValue(writable); }
     void setOverriddenFrom(const PropertyNode *baseProperty);
     void setConstant() { m_const = true; }
@@ -42,10 +40,10 @@ public:
     {
         return m_functions[(int)role];
     }
-    [[nodiscard]] const NodeList &getters() const { return functions(Getter); }
-    [[nodiscard]] const NodeList &setters() const { return functions(Setter); }
-    [[nodiscard]] const NodeList &resetters() const { return functions(Resetter); }
-    [[nodiscard]] const NodeList &notifiers() const { return functions(Notifier); }
+    [[nodiscard]] const NodeList &getters() const { return functions(FunctionRole::Getter); }
+    [[nodiscard]] const NodeList &setters() const { return functions(FunctionRole::Setter); }
+    [[nodiscard]] const NodeList &resetters() const { return functions(FunctionRole::Resetter); }
+    [[nodiscard]] const NodeList &notifiers() const { return functions(FunctionRole::Notifier); }
     [[nodiscard]] bool hasAccessFunction(const QString &name) const;
     FunctionRole role(const FunctionNode *functionNode) const;
     [[nodiscard]] bool isStored() const { return fromFlagValue(m_stored, storedDefault()); }
@@ -56,16 +54,13 @@ public:
     [[nodiscard]] const PropertyNode *overriddenFrom() const { return m_overrides; }
 
     [[nodiscard]] bool storedDefault() const { return true; }
-    [[nodiscard]] bool designableDefault() const { return !setters().isEmpty(); }
     [[nodiscard]] bool writableDefault() const { return !setters().isEmpty(); }
 
 private:
     QString m_type {};
-    PropertyType m_propertyType { Standard };
-    NodeList m_functions[NumFunctionRoles] {};
+    PropertyType m_propertyType { PropertyType::StandardProperty };
+    NodeList m_functions[(qsizetype)FunctionRole::NumFunctionRoles] {};
     FlagValue m_stored { FlagValueDefault };
-    FlagValue m_designable { FlagValueDefault };
-    FlagValue m_scriptable { FlagValueDefault };
     FlagValue m_writable { FlagValueDefault };
     FlagValue m_user { FlagValueDefault };
     bool m_const { false };
@@ -88,7 +83,7 @@ inline void PropertyNode::addSignal(FunctionNode *function, FunctionRole role)
 inline NodeList PropertyNode::functions() const
 {
     NodeList list;
-    for (int i = 0; i < NumFunctionRoles; ++i)
+    for (qsizetype i{0}; i < (qsizetype)FunctionRole::NumFunctionRoles; ++i)
         list += m_functions[i];
     return list;
 }

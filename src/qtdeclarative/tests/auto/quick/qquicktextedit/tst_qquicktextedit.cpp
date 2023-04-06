@@ -2184,8 +2184,6 @@ void tst_qquicktextedit::mouseSelection()
         QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, p1, moreThanDoubleClickInterval);
     else if (clicks == 3)
         QTest::mouseDClick(&window, Qt::LeftButton, Qt::NoModifier, p1, moreThanDoubleClickInterval);
-    // cancel the 500ms delta QTestLib adds in order to properly synthesize a triple click within the required interval
-    QTest::lastMouseTimestamp -= QTest::mouseDoubleClickInterval;
     QTest::mousePress(&window, Qt::LeftButton, Qt::NoModifier, p1);
     QTest::mouseMove(&window, p2);
     QTest::mouseRelease(&window, Qt::LeftButton, Qt::NoModifier, p2);
@@ -2193,13 +2191,10 @@ void tst_qquicktextedit::mouseSelection()
 
     // Clicking and shift to clicking between the same points should select the same text.
     textEditObject->setCursorPosition(0);
-    if (clicks > 1) {
-        QTest::mouseDClick(&window, Qt::LeftButton, Qt::NoModifier, p1);
-        // cancel the 500ms delta QTestLib adds in order to properly synthesize a triple click within the required interval
-        QTest::lastMouseTimestamp -= QTest::mouseDoubleClickInterval;
-    }
+    if (clicks > 1)
+        QTest::mouseDClick(&window, Qt::LeftButton, Qt::NoModifier, p1, 10);
     if (clicks != 2)
-        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, p1);
+        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, p1, 10);
     QTest::mouseClick(&window, Qt::LeftButton, Qt::ShiftModifier, p2);
     QTRY_COMPARE(textEditObject->selectedText(), selectedText);
 }
@@ -3769,11 +3764,15 @@ void tst_qquicktextedit::largeTextObservesViewport_data()
     // QQuickTextEdit doesn't populate lines of text beyond the bottom of the window
     // cursor position 1000 is on line 121
     QTest::newRow("default plain text") << text << QQuickTextEdit::PlainText << false << 1000 << 0
-                                        << 5 << 114 << 155 << 1200 << 2200;
+                                        << 1 << 118 << 142 << 2400 << 3000;
     // make the rectangle into a viewport item, and move the text upwards:
     // QQuickTextEdit doesn't populate lines of text beyond the bottom of the viewport rectangle
     QTest::newRow("clipped plain text") << text << QQuickTextEdit::PlainText << true << 1000 << 0
-                                        << 5 << 123 << 147 << 1200 << 2100;
+                                        << 1 << 123 << 137 << 2550 << 3000;
+
+    // scroll backwards
+    QTest::newRow("scroll backwards in plain text") << text << QQuickTextEdit::PlainText << true << 1000 << 600
+                                                    << 1 << 93 << 108 << 1475 << 2300;
 
     {
         QStringList lines;
@@ -3797,20 +3796,20 @@ void tst_qquicktextedit::largeTextObservesViewport_data()
     // by default, the root item acts as the viewport:
     // QQuickTextEdit doesn't populate blocks beyond the bottom of the window
     QTest::newRow("default styled text") << text << QQuickTextEdit::RichText << false << 1000 << 0
-                                         << 120 << 7 << 143 << 2700 << 3700;
+                                         << 1 << 124 << 139 << 3900 << 4500;
     // make the rectangle into a viewport item, and move the text upwards:
     // QQuickTextEdit doesn't populate blocks that don't intersect the viewport rectangle
     QTest::newRow("clipped styled text") << text << QQuickTextEdit::RichText << true << 1000 << 0
-                                         << 3 << 127 << 139 << 2800 << 3600;
+                                         << 1 << 127 << 136 << 4000 << 4360;
     // get the "chapter 2" heading into the viewport
     QTest::newRow("heading visible") << text << QQuickTextEdit::RichText << true << 800 << 0
-                                     << 3 << 105 << 116 << 2300 << 3000;
+                                     << 1 << 105 << 113 << 3300 << 3600;
     // get the "chapter 2" heading into the viewport, and then scroll backwards
     QTest::newRow("scroll backwards") << text << QQuickTextEdit::RichText << true << 800 << 20
-                                     << 3 << 104 << 116 << 2200 << 3000;
+                                     << 1 << 104 << 113 << 3200 << 3600;
     // get the "chapter 2" heading into the viewport, and then scroll forwards
     QTest::newRow("scroll forwards") << text << QQuickTextEdit::RichText << true << 800 << -50
-                                     << 3 << 107 << 119 << 2300 << 3100;
+                                     << 1 << 106 << 115 << 3300 << 3670;
 }
 
 void tst_qquicktextedit::largeTextObservesViewport()
@@ -3859,18 +3858,24 @@ void tst_qquicktextedit::largeTextObservesViewport()
     Q_ASSERT(textItem->text().size() > QQuickTextEditPrivate::largeTextSizeThreshold);
     QVERIFY(textItem->flags().testFlag(QQuickItem::ItemObservesViewport)); // large text sets this flag automatically
     QCOMPARE(textItem->viewportItem(), parentIsViewport ? viewportItem : viewportItem->parentItem());
-    QTRY_VERIFY(textPriv->firstBlockInViewport > 0); // wait for rendering
+    QTRY_COMPARE_GT(textPriv->firstBlockInViewport, 0); // wait for rendering
     qCDebug(lcTests) << "first block rendered" << textPriv->firstBlockInViewport
                      << "expected" << expectedBlocksAboveViewport
                      << "first block past viewport" << textPriv->firstBlockPastViewport
                      << "expected" << expectedBlocksPastViewport
                      << "region" << textPriv->renderedRegion << "bottom" << textPriv->renderedRegion.bottom()
                      << "expected range" << expectedRenderedRegionMin << expectedRenderedRegionMax;
-    if (scrollDelta >= 0) // unfortunately firstBlockInViewport isn't always reliable after scrolling
-        QTRY_VERIFY(qAbs(textPriv->firstBlockInViewport - expectedBlocksAboveViewport) < expectedBlockTolerance);
-    QVERIFY(qAbs(textPriv->firstBlockPastViewport - expectedBlocksPastViewport) < expectedBlockTolerance);
-    QVERIFY(textPriv->renderedRegion.top() > expectedRenderedRegionMin);
-    QVERIFY(textPriv->renderedRegion.bottom() < expectedRenderedRegionMax);
+    if (scrollDelta >= 0) { // unfortunately firstBlockInViewport isn't always reliable after scrolling
+        QTRY_IMPL((qAbs(textPriv->firstBlockInViewport - expectedBlocksAboveViewport) <= expectedBlockTolerance), 5000);
+    }
+    QVERIFY2((qAbs(textPriv->firstBlockInViewport - expectedBlocksAboveViewport) <= expectedBlockTolerance),
+             qPrintable(QString::fromLatin1("Expected first block in viewport %1 to be near %2 (tolerance: %3)")
+                        .arg(textPriv->firstBlockInViewport).arg(expectedBlocksAboveViewport).arg(expectedBlockTolerance)));
+    QVERIFY2((qAbs(textPriv->firstBlockPastViewport - expectedBlocksPastViewport) <= expectedBlockTolerance),
+             qPrintable(QString::fromLatin1("Expected first block past viewport %1 to be near %2 (tolerance: %3)")
+                        .arg(textPriv->firstBlockPastViewport).arg(expectedBlocksPastViewport).arg(expectedBlockTolerance)));
+    QCOMPARE_GT(textPriv->renderedRegion.top(), expectedRenderedRegionMin);
+    QCOMPARE_LT(textPriv->renderedRegion.bottom(), expectedRenderedRegionMax);
     QVERIFY(textPriv->cursorItem);
     qCDebug(lcTests) << "cursor rect" << textItem->cursorRectangle() << "visible?" << textPriv->cursorItem->isVisible();
     QCOMPARE(textPriv->cursorItem->isVisible(), textPriv->renderedRegion.intersects(textItem->cursorRectangle()));

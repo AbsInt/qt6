@@ -49,6 +49,8 @@
 QT_BEGIN_NAMESPACE
 
 Q_LOGGING_CATEGORY(lcRootProperties, "qt.qml.rootObjectProperties");
+Q_LOGGING_CATEGORY(lcQml, "qml");
+Q_LOGGING_CATEGORY(lcJs, "js");
 
 using namespace QV4;
 
@@ -267,13 +269,22 @@ the same object as is returned from the Qt.include() call.
 QtObject::QtObject(ExecutionEngine *engine)
     : m_engine(engine)
 {
-    QV4::Scope scope(engine);
-    QV4::ScopedString callLaterName(scope, engine->newIdentifier(QStringLiteral("callLater")));
+}
 
-    QV4::ScopedFunctionObject function(scope, QV4::FunctionObject::createBuiltinFunction(
-                engine, callLaterName, QQmlDelayedCallQueue::addUniquelyAndExecuteLater, 1));
+QtObject::Contexts QtObject::getContexts() const
+{
+    QQmlEngine *engine = qmlEngine();
+    if (!engine)
+        return {};
 
-    m_callLater = QJSValuePrivate::fromReturnedValue(function.asReturnedValue());
+    QQmlRefPointer<QQmlContextData> context = v4Engine()->callingQmlContext();
+    if (!context)
+        context = QQmlContextData::get(QQmlEnginePrivate::get(engine)->rootContext);
+
+    Q_ASSERT(context);
+    QQmlRefPointer<QQmlContextData> effectiveContext
+            = context->isPragmaLibraryContext() ? nullptr : context;
+    return {context, effectiveContext};
 }
 
 QtObject *QtObject::create(QQmlEngine *, QJSEngine *jsEngine)
@@ -464,11 +475,9 @@ QVariant QtObject::font(const QJSValue &fontSpecifier) const
     }
 
     {
-        QVariant v;
-        if (QQml_valueTypeProvider()->createValueType(
-                    QMetaType(QMetaType::QFont), fontSpecifier, v)) {
+        QVariant v((QMetaType(QMetaType::QFont)));
+        if (QQmlValueTypeProvider::constructFromJSValue(fontSpecifier, v.metaType(), v.data()))
             return v;
-        }
     }
 
     v4Engine()->throwError(QStringLiteral("Qt.font(): Invalid argument: "
@@ -496,14 +505,14 @@ void addParameters(QJSEngine *e, QJSValue &result, int i, T parameter, Others...
 }
 
 template<typename ...T>
-static QVariant createValueType(QJSEngine *e, QMetaType type, T... parameters)
+static QVariant constructFromJSValue(QJSEngine *e, QMetaType type, T... parameters)
 {
     if (!e)
         return QVariant();
     QJSValue params = e->newArray(sizeof...(parameters));
     addParameters(e, params, 0, parameters...);
-    QVariant variant;
-    QQml_valueTypeProvider()->createValueType(type, params, variant);
+    QVariant variant(type);
+    QQmlValueTypeProvider::constructFromJSValue(params, type, variant.data());
     return variant;
 }
 
@@ -514,7 +523,7 @@ static QVariant createValueType(QJSEngine *e, QMetaType type, T... parameters)
 */
 QVariant QtObject::vector2d(double x, double y) const
 {
-    return createValueType(jsEngine(), QMetaType(QMetaType::QVector2D), x, y);
+    return constructFromJSValue(jsEngine(), QMetaType(QMetaType::QVector2D), x, y);
 }
 
 /*!
@@ -524,7 +533,7 @@ QVariant QtObject::vector2d(double x, double y) const
 */
 QVariant QtObject::vector3d(double x, double y, double z) const
 {
-    return createValueType(jsEngine(), QMetaType(QMetaType::QVector3D), x, y, z);
+    return constructFromJSValue(jsEngine(), QMetaType(QMetaType::QVector3D), x, y, z);
 }
 
 /*!
@@ -534,7 +543,7 @@ QVariant QtObject::vector3d(double x, double y, double z) const
 */
 QVariant QtObject::vector4d(double x, double y, double z, double w) const
 {
-    return createValueType(jsEngine(), QMetaType(QMetaType::QVector4D), x, y, z, w);
+    return constructFromJSValue(jsEngine(), QMetaType(QMetaType::QVector4D), x, y, z, w);
 }
 
 /*!
@@ -544,7 +553,48 @@ QVariant QtObject::vector4d(double x, double y, double z, double w) const
 */
 QVariant QtObject::quaternion(double scalar, double x, double y, double z) const
 {
-    return createValueType(jsEngine(), QMetaType(QMetaType::QQuaternion), scalar, x, y, z);
+    return constructFromJSValue(jsEngine(), QMetaType(QMetaType::QQuaternion), scalar, x, y, z);
+}
+
+/*!
+    \qmlmethod matrix4x4 Qt::matrix4x4()
+
+    Returns an identity matrix4x4.
+ */
+QVariant QtObject::matrix4x4() const
+{
+    QVariant variant((QMetaType(QMetaType::QMatrix4x4)));
+    QQmlValueTypeProvider::constructFromJSValue(
+                QJSValue(), variant.metaType(), variant.data());
+    return variant;
+}
+
+/*!
+    \qmlmethod matrix4x4 Qt::matrix4x4(var values)
+
+    Returns a matrix4x4 with the specified \a values. \a values is expected to
+    be a JavaScript array with 16 entries.
+
+    The array indices correspond to positions in the matrix as follows:
+
+    \table
+    \row \li 0  \li 1  \li 2  \li 3
+    \row \li 4  \li 5  \li 6  \li 7
+    \row \li 8  \li 9  \li 10 \li 11
+    \row \li 12 \li 13 \li 14 \li 15
+    \endtable
+*/
+QVariant QtObject::matrix4x4(const QJSValue &value) const
+{
+    if (value.isObject()) {
+        QVariant v((QMetaType(QMetaType::QMatrix4x4)));
+        if (QQmlValueTypeProvider::constructFromJSValue(value, v.metaType(), v.data()))
+            return v;
+    }
+
+    v4Engine()->throwError(QStringLiteral("Qt.matrix4x4(): Invalid argument: "
+                                          "not a valid matrix4x4 values array"));
+    return QVariant();
 }
 
 /*!
@@ -560,41 +610,13 @@ QVariant QtObject::quaternion(double scalar, double x, double y, double z) const
     \row \li \a m31 \li \a m32 \li \a m33 \li \a m34
     \row \li \a m41 \li \a m42 \li \a m43 \li \a m44
     \endtable
-
-    Alternatively, the function may be called with a single argument
-    where that argument is a JavaScript array which contains the sixteen
-    matrix values.
-
-    Finally, the function may be called with no arguments and the resulting
-    matrix will be the identity matrix.
 */
-QVariant QtObject::matrix4x4() const
-{
-    QVariant variant;
-    QQml_valueTypeProvider()->createValueType(
-                QMetaType(QMetaType::QMatrix4x4), QJSValue(), variant);
-    return variant;
-}
-
-QVariant QtObject::matrix4x4(const QJSValue &value) const
-{
-    if (value.isObject()) {
-        QVariant v;
-        if (QQml_valueTypeProvider()->createValueType(QMetaType(QMetaType::QMatrix4x4), value, v))
-            return v;
-    }
-
-    v4Engine()->throwError(QStringLiteral("Qt.matrix4x4(): Invalid argument: "
-                                          "not a valid matrix4x4 values array"));
-    return QVariant();
-}
-
 QVariant QtObject::matrix4x4(double m11, double m12, double m13, double m14,
                              double m21, double m22, double m23, double m24,
                              double m31, double m32, double m33, double m34,
                              double m41, double m42, double m43, double m44) const
 {
-    return createValueType(jsEngine(), QMetaType(QMetaType::QMatrix4x4),
+    return constructFromJSValue(jsEngine(), QMetaType(QMetaType::QMatrix4x4),
                            m11, m12, m13, m14, m21, m22, m23, m24,
                            m31, m32, m33, m34, m41, m42, m43, m44);
 }
@@ -1158,7 +1180,7 @@ QObject *QtObject::createQmlObject(const QString &qml, QObject *parent, const QU
             QV4::ScopedObject qmlerror(scope);
             QV4::ScopedString s(scope);
             QV4::ScopedValue v(scope);
-            for (int ii = 0; ii < errors.count(); ++ii) {
+            for (int ii = 0; ii < errors.size(); ++ii) {
                 const QQmlError &error = errors.at(ii);
                 errorstr += QLatin1String("\n    ") + error.toString();
                 qmlerror = v4->newObject();
@@ -1234,7 +1256,7 @@ QObject *QtObject::createQmlObject(const QString &qml, QObject *parent, const QU
         obj->setParent(parent);
 
         QList<QQmlPrivate::AutoParentFunction> functions = QQmlMetaType::parentFunctions();
-        for (int ii = 0; ii < functions.count(); ++ii) {
+        for (int ii = 0; ii < functions.size(); ++ii) {
             if (QQmlPrivate::Parented == functions.at(ii)(obj, parent))
                 break;
         }
@@ -1295,6 +1317,32 @@ See \l {Dynamic QML Object Creation from JavaScript} for more information on usi
 To create a QML object from an arbitrary string of QML (instead of a file),
 use \l{QtQml::Qt::createQmlObject()}{Qt.createQmlObject()}.
 */
+
+/*!
+\qmlmethod Component Qt::createComponent(string moduleUri, string typeName, enumeration mode, QtObject parent)
+\overload
+Returns a \l Component object created for the type specified by \a moduleUri and \a typeName.
+\qml
+import QtQuick
+QtObject {
+    id: root
+    property Component myComponent: Qt.createComponent(Rectangle, root)
+}
+\endqml
+This overload mostly behaves as the \c url based version, but can be used
+to instantiate types which do not have an URL (e.g. C++ types registered
+via \l {QML_ELEMENT}).
+\note In some cases, passing \c Component.Asynchronous won't have any
+effect:
+\list
+\li The type is implemented in C++
+\li The type is an inline component.
+\endlist
+If the optional \a parent parameter is given, it should refer to the object
+that will become the parent for the created \l Component object. If no mode
+was passed, this can be the second argument.
+*/
+
 QQmlComponent *QtObject::createComponent(const QUrl &url, QObject *parent) const
 {
     return createComponent(url, QQmlComponent::PreferSynchronous, parent);
@@ -1315,15 +1363,46 @@ QQmlComponent *QtObject::createComponent(const QUrl &url, QQmlComponent::Compila
     if (!engine)
         return nullptr;
 
-    QQmlRefPointer<QQmlContextData> context = v4Engine()->callingQmlContext();
+    auto [context, effectiveContext] = getContexts();
     if (!context)
-        context = QQmlContextData::get(QQmlEnginePrivate::get(engine)->rootContext);
-
-    Q_ASSERT(context);
-    QQmlRefPointer<QQmlContextData> effectiveContext
-            = context->isPragmaLibraryContext() ? nullptr : context;
+        return nullptr;
 
     QQmlComponent *c = new QQmlComponent(engine, context->resolvedUrl(url), mode, parent);
+    QQmlComponentPrivate::get(c)->creationContext = effectiveContext;
+    QQmlData::get(c, true)->explicitIndestructibleSet = false;
+    QQmlData::get(c)->indestructible = false;
+    return c;
+}
+
+QQmlComponent *QtObject::createComponent(const QString &moduleUri, const QString &typeName,
+                                         QObject *parent) const
+{
+    return createComponent(moduleUri, typeName, QQmlComponent::PreferSynchronous, parent);
+}
+
+QQmlComponent *QtObject::createComponent(const QString &moduleUri, const QString &typeName, QQmlComponent::CompilationMode mode, QObject *parent) const
+{
+    if (mode != QQmlComponent::Asynchronous && mode != QQmlComponent::PreferSynchronous) {
+        v4Engine()->throwError(QStringLiteral("Invalid compilation mode %1").arg(mode));
+        return nullptr;
+    }
+
+    QQmlEngine *engine = qmlEngine();
+    if (!engine)
+        return nullptr;
+
+    if (moduleUri.isEmpty() || typeName.isEmpty())
+        return nullptr;
+
+    auto [context, effectiveContext] = getContexts();
+    if (!context)
+        return nullptr;
+
+    QQmlComponent *c = new QQmlComponent(engine, moduleUri, typeName, mode, parent);
+    if (c->isError() && !parent && moduleUri.endsWith(u".qml")) {
+        v4Engine()->throwTypeError(
+                    QStringLiteral("Invalid arguments; did you swap mode and parent"));
+    }
     QQmlComponentPrivate::get(c)->creationContext = effectiveContext;
     QQmlData::get(c, true)->explicitIndestructibleSet = false;
     QQmlData::get(c)->indestructible = false;
@@ -1459,6 +1538,11 @@ QJSValue QtObject::binding(const QJSValue &function) const
                 Encode(e->memoryManager->allocate<QQmlBindingFunction>(f)));
 }
 
+void QtObject::callLater(QQmlV4Function *args)
+{
+    m_engine->delayedCallQueue()->addUniquelyAndExecuteLater(m_engine, args);
+}
+
 
 QQmlPlatform *QtObject::platform()
 {
@@ -1484,11 +1568,6 @@ QObject *QtObject::inputMethod() const
 QObject *QtObject::styleHints() const
 {
     return QQml_guiProvider()->styleHints();
-}
-
-QJSValue QtObject::callLater() const
-{
-    return m_callLater;
 }
 
 void QV4::Heap::ConsoleObject::init()
@@ -1526,7 +1605,7 @@ static QString jsStack(QV4::ExecutionEngine *engine) {
 
     QVector<QV4::StackFrame> stackTrace = engine->stackTrace(10);
 
-    for (int i = 0; i < stackTrace.count(); i++) {
+    for (int i = 0; i < stackTrace.size(); i++) {
         const QV4::StackFrame &frame = stackTrace.at(i);
 
         QString stackFrame;
@@ -1575,7 +1654,7 @@ static QString serializeArray(Object *array, ExecutionEngine *v4, QSet<QV4::Heap
 static ReturnedValue writeToConsole(const FunctionObject *b, const Value *argv, int argc,
                                     ConsoleLogTypes logType, bool printStack = false)
 {
-    QLoggingCategory *loggingCategory = nullptr;
+    const QLoggingCategory *loggingCategory = nullptr;
     QString result;
     QV4::Scope scope(b);
     QV4::ExecutionEngine *v4 = scope.engine;
@@ -1608,11 +1687,8 @@ static ReturnedValue writeToConsole(const FunctionObject *b, const Value *argv, 
     if (printStack)
         result += QLatin1Char('\n') + jsStack(v4);
 
-    static QLoggingCategory qmlLoggingCategory("qml");
-    static QLoggingCategory jsLoggingCategory("js");
-
     if (!loggingCategory)
-        loggingCategory = v4->qmlEngine() ? &qmlLoggingCategory : &jsLoggingCategory;
+        loggingCategory = v4->qmlEngine() ? &lcQml() : &lcJs();
     QV4::CppStackFrame *frame = v4->currentStackFrame;
     const QByteArray baSource = frame ? frame->source().toUtf8() : QByteArray();
     const QByteArray baFunction = frame ? frame->function().toUtf8() : QByteArray();
@@ -1869,7 +1945,7 @@ void QV4::GlobalExtensions::init(Object *globalObject, QJSEngine::Extensions ext
     Example:
     \snippet qml/qsTranslate.qml 0
 
-    \sa {Internationalization and Localization with Qt Quick}
+    \sa {Internationalization with Qt}
 */
 ReturnedValue GlobalExtensions::method_qsTranslate(const FunctionObject *b, const Value *, const Value *argv, int argc)
 {
@@ -1930,7 +2006,7 @@ ReturnedValue GlobalExtensions::method_qsTranslate(const FunctionObject *b, cons
     Example:
     \snippet qml/qtTranslateNoOp.qml 0
 
-    \sa {Internationalization and Localization with Qt Quick}
+    \sa {Internationalization with Qt}
 */
 ReturnedValue GlobalExtensions::method_qsTranslateNoOp(const FunctionObject *b, const Value *, const Value *argv, int argc)
 {
@@ -1939,6 +2015,42 @@ ReturnedValue GlobalExtensions::method_qsTranslateNoOp(const FunctionObject *b, 
         return QV4::Encode::undefined();
     else
         return argv[1].asReturnedValue();
+}
+
+QString GlobalExtensions::currentTranslationContext(ExecutionEngine *engine)
+{
+    QString context;
+    CppStackFrame *frame = engine->currentStackFrame;
+
+    // The first non-empty source URL in the call stack determines the translation context.
+    while (frame && context.isEmpty()) {
+        if (CompiledData::CompilationUnitBase *baseUnit = frame->v4Function->compilationUnit) {
+            const auto *unit = static_cast<const CompiledData::CompilationUnit *>(baseUnit);
+            QString fileName = unit->fileName();
+            QUrl url(unit->fileName());
+            if (url.isValid() && url.isRelative()) {
+                context = url.fileName();
+            } else {
+                context = QQmlFile::urlToLocalFileOrQrc(fileName);
+                if (context.isEmpty() && fileName.startsWith(QLatin1String(":/")))
+                    context = fileName;
+            }
+            context = QFileInfo(context).completeBaseName();
+        }
+        frame = frame->parentFrame();
+    }
+
+    if (context.isEmpty()) {
+        if (QQmlRefPointer<QQmlContextData> ctxt = engine->callingQmlContext()) {
+            QString path = ctxt->urlString();
+            int lastSlash = path.lastIndexOf(QLatin1Char('/'));
+            int lastDot = path.lastIndexOf(QLatin1Char('.'));
+            int length = lastDot - (lastSlash + 1);
+            context = (lastSlash > -1) ? path.mid(lastSlash + 1, (length > -1) ? length : -1) : QString();
+        }
+    }
+
+    return context;
 }
 
 /*!
@@ -1956,7 +2068,7 @@ ReturnedValue GlobalExtensions::method_qsTranslateNoOp(const FunctionObject *b, 
     Example:
     \snippet qml/qsTr.qml 0
 
-    \sa {Internationalization and Localization with Qt Quick}
+    \sa {Internationalization with Qt}
 */
 ReturnedValue GlobalExtensions::method_qsTr(const FunctionObject *b, const Value *, const Value *argv, int argc)
 {
@@ -1970,43 +2082,10 @@ ReturnedValue GlobalExtensions::method_qsTr(const FunctionObject *b, const Value
     if ((argc > 2) && !argv[2].isNumber())
         THROW_GENERIC_ERROR("qsTr(): third argument (n) must be a number");
 
-    QString context;
-    CppStackFrame *frame = scope.engine->currentStackFrame;
-    // The first non-empty source URL in the call stack determines the translation context.
-    while (frame && context.isEmpty()) {
-        if (CompiledData::CompilationUnitBase *baseUnit = frame->v4Function->compilationUnit) {
-            const auto *unit = static_cast<const CompiledData::CompilationUnit *>(baseUnit);
-            QString fileName = unit->fileName();
-            QUrl url(unit->fileName());
-            if (url.isValid() && url.isRelative()) {
-                context = url.fileName();
-            } else {
-                context = QQmlFile::urlToLocalFileOrQrc(fileName);
-                if (context.isEmpty() && fileName.startsWith(QLatin1String(":/")))
-                    context = fileName;
-            }
-            context = QFileInfo(context).baseName();
-        }
-        frame = frame->parentFrame();
-    }
-
-    if (context.isEmpty()) {
-        if (QQmlRefPointer<QQmlContextData> ctxt = scope.engine->callingQmlContext()) {
-            QString path = ctxt->urlString();
-            int lastSlash = path.lastIndexOf(QLatin1Char('/'));
-            int lastDot = path.lastIndexOf(QLatin1Char('.'));
-            int length = lastDot - (lastSlash + 1);
-            context = (lastSlash > -1) ? path.mid(lastSlash + 1, (length > -1) ? length : -1) : QString();
-        }
-    }
-
-    QString text = argv[0].toQStringNoThrow();
-    QString comment;
-    if (argc > 1)
-        comment = argv[1].toQStringNoThrow();
-    int n = -1;
-    if (argc > 2)
-        n = argv[2].toInt32();
+    const QString context = currentTranslationContext(scope.engine);
+    const QString text = argv[0].toQStringNoThrow();
+    const QString comment = argc > 1 ? argv[1].toQStringNoThrow() : QString();
+    const int n = argc > 2 ? argv[2].toInt32() : -1;
 
     if (QQmlEnginePrivate *ep = (scope.engine->qmlEngine() ? QQmlEnginePrivate::get(scope.engine->qmlEngine()) : nullptr))
         if (ep->propertyCapture)
@@ -2038,7 +2117,7 @@ ReturnedValue GlobalExtensions::method_qsTr(const FunctionObject *b, const Value
     Example:
     \snippet qml/qtTrNoOp.qml 0
 
-    \sa {Internationalization and Localization with Qt Quick}
+    \sa {Internationalization with Qt}
 */
 ReturnedValue GlobalExtensions::method_qsTrNoOp(const FunctionObject *, const Value *, const Value *argv, int argc)
 {
@@ -2076,7 +2155,7 @@ ReturnedValue GlobalExtensions::method_qsTrNoOp(const FunctionObject *, const Va
     Creating binary translation (QM) files suitable for use with this function requires passing
     the \c -idbased option to the \c lrelease tool.
 
-    \sa QT_TRID_NOOP(), {Internationalization and Localization with Qt Quick}
+    \sa QT_TRID_NOOP(), {Internationalization with Qt}
 */
 ReturnedValue GlobalExtensions::method_qsTrId(const FunctionObject *b, const Value *, const Value *argv, int argc)
 {
@@ -2113,7 +2192,7 @@ ReturnedValue GlobalExtensions::method_qsTrId(const FunctionObject *b, const Val
     Example:
     \snippet qml/qtTrIdNoOp.qml 0
 
-    \sa qsTrId(), {Internationalization and Localization with Qt Quick}
+    \sa qsTrId(), {Internationalization with Qt}
 */
 ReturnedValue GlobalExtensions::method_qsTrIdNoOp(const FunctionObject *, const Value *, const Value *argv, int argc)
 {
@@ -2173,11 +2252,6 @@ be passed on to the function invoked. Note that if redundant calls
 are eliminated, then only the last set of arguments will be passed to the
 function.
 */
-ReturnedValue QtObject::method_callLater(const FunctionObject *b, const Value *thisObject,
-                                         const Value *argv, int argc)
-{
-    return b->engine()->delayedCallQueue()->addUniquelyAndExecuteLater(b, thisObject, argv, argc);
-}
 
 QT_END_NAMESPACE
 

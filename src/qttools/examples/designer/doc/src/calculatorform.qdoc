@@ -3,8 +3,10 @@
 
 /*!
     \example calculatorform
+    \meta category {Desktop}
+    \meta tags {widgets,designer}
     \ingroup examples-designer
-    \title Calculator Form Example
+    \title Calculator Form
 
     \brief Using a form created with \QD in an application.
 
@@ -12,7 +14,7 @@
     \QD in an application by using the user interface information from
     a QWidget subclass.
 
-    \image calculatorform-example.png Screenshot of the Calculator Form example
+    \image calculatorform-example.webp Screenshot of the Calculator Form example
 
     The example presents two spin boxes that are used to input integer values
     and a label that shows their sum. Whenever either of the spin boxes are

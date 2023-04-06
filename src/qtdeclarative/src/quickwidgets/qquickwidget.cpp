@@ -42,8 +42,10 @@
 
 #include "private/qwidget_p.h"
 
+#if QT_CONFIG(graphicsview)
 #include <QtWidgets/qgraphicsscene.h>
 #include <QtWidgets/qgraphicsview.h>
+#endif
 
 QT_BEGIN_NAMESPACE
 
@@ -1267,19 +1269,28 @@ QPlatformBackingStoreRhiConfig QQuickWidgetPrivate::rhiConfig() const
         return {};
 
     QPlatformBackingStoreRhiConfig config(graphicsApiToBackingStoreRhiApi(QQuickWindow::graphicsApi()));
-    config.setDebugLayer(QSGRhiSupport::instance()->isDebugLayerRequested());
+
+    QQuickWindowPrivate *wd = QQuickWindowPrivate::get(offscreenWindow);
+    // This is only here to support some of the env.vars. (such as
+    // QSG_RHI_DEBUG_LAYER). There is currently no way to set a
+    // QQuickGraphicsConfiguration for a QQuickWidget, which means things like
+    // the pipeline cache are just not available. That is something to support
+    // on the widget/backingstore level since that's where the QRhi is
+    // controlled in this case.
+    const bool debugLayerRequested = wd->graphicsConfig.isDebugLayerEnabled();
+    config.setDebugLayer(debugLayerRequested);
     return config;
 }
 
-QRhiTexture *QQuickWidgetPrivate::texture() const
+QWidgetPrivate::TextureData QQuickWidgetPrivate::texture() const
 {
     Q_Q(const QQuickWidget);
     if (!q->isWindow() && q->internalWinId()) {
         qWarning() << "QQuickWidget cannot be used as a native child widget."
                    << "Consider setting Qt::AA_DontCreateNativeWidgetSiblings";
-        return 0;
+        return {};
     }
-    return outputTexture;
+    return { outputTexture, nullptr };
 }
 
 QPlatformTextureList::Flags QQuickWidgetPrivate::textureListFlags()

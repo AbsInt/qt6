@@ -567,6 +567,35 @@ QRectF QWindowPrivate::closestAcceptableGeometry(const QRectF &rect) const
     return QRectF();
 }
 
+void QWindowPrivate::setMinOrMaxSize(QSize *oldSizeMember, const QSize &size,
+                                     qxp::function_ref<void()> funcWidthChanged,
+                                     qxp::function_ref<void()> funcHeightChanged)
+{
+    Q_Q(QWindow);
+    Q_ASSERT(oldSizeMember);
+    const QSize adjustedSize =
+            size.expandedTo(QSize(0, 0)).boundedTo(QSize(QWINDOWSIZE_MAX, QWINDOWSIZE_MAX));
+    if (*oldSizeMember == adjustedSize)
+        return;
+    const bool widthChanged = adjustedSize.width() != oldSizeMember->width();
+    const bool heightChanged = adjustedSize.height() != oldSizeMember->height();
+    *oldSizeMember = adjustedSize;
+
+    if (platformWindow && q->isTopLevel())
+        platformWindow->propagateSizeHints();
+
+    if (widthChanged)
+        funcWidthChanged();
+    if (heightChanged)
+        funcHeightChanged();
+
+    // resize window if current size is outside of min and max limits
+    if (minimumSize.width() <= maximumSize.width()
+        || minimumSize.height() <= maximumSize.height()) {
+        q->resize(q->geometry().size().expandedTo(minimumSize).boundedTo(maximumSize));
+    }
+}
+
 /*!
     Sets the \a surfaceType of the window.
 
@@ -1220,6 +1249,8 @@ bool QWindow::isExposed() const
     Typically active windows should appear active from a style perspective.
 
     To get the window that currently has focus, use QGuiApplication::focusWindow().
+
+    \sa requestActivate()
 */
 bool QWindow::isActive() const
 {
@@ -1355,8 +1386,13 @@ void QWindow::setWindowStates(Qt::WindowStates state)
 
     if (d->platformWindow)
         d->platformWindow->setWindowState(state);
+
+    auto originalEffectiveState = QWindowPrivate::effectiveState(d->windowState);
     d->windowState = state;
-    emit windowStateChanged(QWindowPrivate::effectiveState(d->windowState));
+    auto newEffectiveState = QWindowPrivate::effectiveState(d->windowState);
+    if (newEffectiveState != originalEffectiveState)
+        emit windowStateChanged(newEffectiveState);
+
     d->updateVisibility();
 }
 
@@ -1531,17 +1567,9 @@ QSize QWindow::sizeIncrement() const
 void QWindow::setMinimumSize(const QSize &size)
 {
     Q_D(QWindow);
-    QSize adjustedSize = QSize(qBound(0, size.width(), QWINDOWSIZE_MAX), qBound(0, size.height(), QWINDOWSIZE_MAX));
-    if (d->minimumSize == adjustedSize)
-        return;
-    QSize oldSize = d->minimumSize;
-    d->minimumSize = adjustedSize;
-    if (d->platformWindow && isTopLevel())
-        d->platformWindow->propagateSizeHints();
-    if (d->minimumSize.width() != oldSize.width())
-        emit minimumWidthChanged(d->minimumSize.width());
-    if (d->minimumSize.height() != oldSize.height())
-        emit minimumHeightChanged(d->minimumSize.height());
+    d->setMinOrMaxSize(
+            &d->minimumSize, size, [this, d]() { emit minimumWidthChanged(d->minimumSize.width()); },
+            [this, d]() { emit minimumHeightChanged(d->minimumSize.height()); });
 }
 
 /*!
@@ -1618,17 +1646,9 @@ void QWindow::setMinimumHeight(int h)
 void QWindow::setMaximumSize(const QSize &size)
 {
     Q_D(QWindow);
-    QSize adjustedSize = QSize(qBound(0, size.width(), QWINDOWSIZE_MAX), qBound(0, size.height(), QWINDOWSIZE_MAX));
-    if (d->maximumSize == adjustedSize)
-        return;
-    QSize oldSize = d->maximumSize;
-    d->maximumSize = adjustedSize;
-    if (d->platformWindow && isTopLevel())
-        d->platformWindow->propagateSizeHints();
-    if (d->maximumSize.width() != oldSize.width())
-        emit maximumWidthChanged(d->maximumSize.width());
-    if (d->maximumSize.height() != oldSize.height())
-        emit maximumHeightChanged(d->maximumSize.height());
+    d->setMinOrMaxSize(
+            &d->maximumSize, size, [this, d]() { emit maximumWidthChanged(d->maximumSize.width()); },
+            [this, d]() { emit maximumHeightChanged(d->maximumSize.height()); });
 }
 
 /*!
@@ -1855,6 +1875,10 @@ void QWindow::setFramePosition(const QPoint &point)
     For interactively moving windows, see startSystemMove(). For interactively
     resizing windows, see startSystemResize().
 
+    \note Not all windowing systems support setting or querying top level window positions.
+    On such a system, programmatically moving windows may not have any effect, and artificial
+    values may be returned for the current positions, such as \c QPoint(0, 0).
+
     \sa position(), startSystemMove()
 */
 void QWindow::setPosition(const QPoint &pt)
@@ -1877,6 +1901,10 @@ void QWindow::setPosition(int posx, int posy)
 /*!
     \fn QPoint QWindow::position() const
     \brief Returns the position of the window on the desktop excluding any window frame
+
+    \note Not all windowing systems support setting or querying top level window positions.
+    On such a system, programmatically moving windows may not have any effect, and artificial
+    values may be returned for the current positions, such as \c QPoint(0, 0).
 
     \sa setPosition()
 */
@@ -2488,13 +2516,6 @@ bool QWindow::event(QEvent *ev)
         setIcon(icon());
         break;
 
-    case QEvent::WindowStateChange: {
-        Q_D(QWindow);
-        emit windowStateChanged(QWindowPrivate::effectiveState(d->windowState));
-        d->updateVisibility();
-        break;
-    }
-
 #if QT_CONFIG(tabletevent)
     case QEvent::TabletPress:
     case QEvent::TabletMove:
@@ -3016,6 +3037,10 @@ void *QWindow::resolveInterface(const char *name, int revision) const
     QT_NATIVE_INTERFACE_RETURN_IF(QCocoaWindow, platformWindow);
 #endif
 
+#if defined(Q_OS_UNIX)
+    QT_NATIVE_INTERFACE_RETURN_IF(QWaylandWindow, platformWindow);
+#endif
+
     return nullptr;
 }
 
@@ -3058,7 +3083,7 @@ QDebug operator<<(QDebug debug, const QWindow *window)
 }
 #endif // !QT_NO_DEBUG_STREAM
 
-#if QT_CONFIG(vulkan) || defined(Q_CLANG_QDOC)
+#if QT_CONFIG(vulkan) || defined(Q_QDOC)
 
 /*!
     Associates this window with the specified Vulkan \a instance.

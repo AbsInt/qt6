@@ -37,7 +37,7 @@ QT_BEGIN_NAMESPACE
 
 static const char *styleSheetProperty = "styleSheet";
 static const char *StyleSheetDialogC = "StyleSheetDialog";
-static const char *Geometry = "Geometry";
+static const char *seGeometry = "Geometry";
 
 namespace qdesigner_internal {
 
@@ -79,7 +79,6 @@ StyleSheetEditorDialog::StyleSheetEditorDialog(QDesignerFormEditorInterface *cor
     m_addFontAction(new QAction(tr("Add Font..."), this))
 {
     setWindowTitle(tr("Edit Style Sheet"));
-    setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
 
     connect(m_buttonBox, &QDialogButtonBox::accepted, this, &QDialog::accept);
     connect(m_buttonBox, &QDialogButtonBox::rejected, this, &QDialog::reject);
@@ -171,8 +170,8 @@ StyleSheetEditorDialog::StyleSheetEditorDialog(QDesignerFormEditorInterface *cor
     QDesignerSettingsInterface *settings = core->settingsManager();
     settings->beginGroup(QLatin1String(StyleSheetDialogC));
 
-    if (settings->contains(QLatin1String(Geometry)))
-        restoreGeometry(settings->value(QLatin1String(Geometry)).toByteArray());
+    if (settings->contains(QLatin1String(seGeometry)))
+        restoreGeometry(settings->value(QLatin1String(seGeometry)).toByteArray());
 
     settings->endGroup();
 }
@@ -182,7 +181,7 @@ StyleSheetEditorDialog::~StyleSheetEditorDialog()
     QDesignerSettingsInterface *settings = m_core->settingsManager();
     settings->beginGroup(QLatin1String(StyleSheetDialogC));
 
-    settings->setValue(QLatin1String(Geometry), saveGeometry());
+    settings->setValue(QLatin1String(seGeometry), saveGeometry());
     settings->endGroup();
 }
 

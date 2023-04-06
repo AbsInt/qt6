@@ -60,7 +60,7 @@ QT_BEGIN_NAMESPACE
 
   Management of the graphics devices, contexts, image and texture objects is up
   to the application. The device or context that will be used by Qt Quick must
-  be created before calling initialize(). The creation of the the texture object
+  be created before calling initialize(). The creation of the texture object
   can be deferred, see below. Qt 5.4 introduces the ability for QOpenGLContext
   to adopt existing native contexts. Together with QQuickRenderControl this
   makes it possible to create a QOpenGLContext that shares with an external
@@ -165,8 +165,12 @@ QQuickRenderControl::~QQuickRenderControl()
 
     invalidate();
 
-    if (d->window)
-        QQuickWindowPrivate::get(d->window)->renderControl = nullptr;
+    QQuickGraphicsConfiguration config;
+    if (d->window) {
+        QQuickWindowPrivate *wd = QQuickWindowPrivate::get(d->window);
+        wd->renderControl = nullptr;
+        config = wd->graphicsConfig;
+    }
 
     // It is likely that the cleanup in windowDestroyed() is not called since
     // the standard pattern is to destroy the rendercontrol before the QQuickWindow.
@@ -180,7 +184,7 @@ QQuickRenderControl::~QQuickRenderControl()
     // using the rendercontrol without ever calling initialize() - it is then
     // important to completely skip calling any QSGRhiSupport functions.
     if (d->rhi)
-        d->resetRhi();
+        d->resetRhi(config);
 }
 
 void QQuickRenderControlPrivate::windowDestroyed()
@@ -192,9 +196,11 @@ void QQuickRenderControlPrivate::windowDestroyed()
         rc->invalidate();
 
         QQuickWindowPrivate::get(window)->animationController.reset();
+
 #if QT_CONFIG(quick_shadereffect)
-        QSGRhiShaderEffectNode::cleanupMaterialTypeCache(window);
+        QSGRhiShaderEffectNode::resetMaterialTypeCache(window);
 #endif
+
         window = nullptr;
     }
 }
@@ -321,7 +327,7 @@ void QQuickRenderControl::polishItems()
         return;
 
     QQuickWindowPrivate *cd = QQuickWindowPrivate::get(d->window);
-    cd->flushFrameSynchronousEvents();
+    cd->deliveryAgentPrivate()->flushFrameSynchronousEvents(d->window);
     if (!d->window)
         return;
     cd->polishItems();
@@ -425,7 +431,7 @@ void QQuickRenderControl::render()
         cd->setCustomCommandBuffer(d->cb);
     }
 
-    cd->renderSceneGraph(d->window->size());
+    cd->renderSceneGraph();
 }
 
 /*!
@@ -568,7 +574,7 @@ QQuickWindow *QQuickRenderControl::window() const
     to the user of QQuickRenderControl to specify these points.
 
     A typical update step, including initialization of rendering into an
-    existing texture, could like like the following. The example snippet
+    existing texture, could look like the following. The example snippet
     assumes Direct3D 11 but the same concepts apply other graphics APIs as
     well.
 
@@ -685,10 +691,10 @@ bool QQuickRenderControlPrivate::initRhi()
     return true;
 }
 
-void QQuickRenderControlPrivate::resetRhi()
+void QQuickRenderControlPrivate::resetRhi(const QQuickGraphicsConfiguration &config)
 {
     if (ownRhi)
-        QSGRhiSupport::instance()->destroyRhi(rhi);
+        QSGRhiSupport::instance()->destroyRhi(rhi, config);
 
     rhi = nullptr;
 

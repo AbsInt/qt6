@@ -44,7 +44,7 @@ static QString msgTagMismatch(const QString &got, const QString &expected)
     return QCoreApplication::translate("QtResourceEditorDialog", "The file does not appear to be a resource file; element '%1' was found where '%2' was expected.").arg(got, expected);
 }
 
-namespace {
+namespace qdesigner_internal {
 
 // below 3 data classes should be derived from QSharedData and made implicit shared class
 struct QtResourceFileData {
@@ -72,7 +72,14 @@ struct QtQrcFileData {
     { return qrcPath == other.qrcPath && resourceList == other.resourceList; }
 };
 
-bool loadResourceFileData(const QDomElement &fileElem, QtResourceFileData *fileData, QString *errorMessage)
+} // namespace qdesigner_internal
+
+using QtResourcePrefixData = qdesigner_internal::QtResourcePrefixData;
+using QtResourceFileData = qdesigner_internal::QtResourceFileData;
+using QtQrcFileData = qdesigner_internal::QtQrcFileData;
+
+static bool loadResourceFileData(const QDomElement &fileElem, QtResourceFileData *fileData,
+                                 QString *errorMessage)
 {
     if (!fileData)
         return false;
@@ -142,7 +149,7 @@ static bool loadQrcFileData(const QDomDocument &doc, const QString &path, QtQrcF
     return true;
 }
 
-QDomElement saveResourceFileData(QDomDocument &doc, const QtResourceFileData &fileData)
+static QDomElement saveResourceFileData(QDomDocument &doc, const QtResourceFileData &fileData)
 {
     QDomElement fileElem = doc.createElement(QLatin1String(rccFileTag));
     if (!fileData.alias.isEmpty())
@@ -154,7 +161,7 @@ QDomElement saveResourceFileData(QDomDocument &doc, const QtResourceFileData &fi
     return fileElem;
 }
 
-QDomElement saveResourcePrefixData(QDomDocument &doc, const QtResourcePrefixData &prefixData)
+static QDomElement saveResourcePrefixData(QDomDocument &doc, const QtResourcePrefixData &prefixData)
 {
     QDomElement prefixElem = doc.createElement(QLatin1String(rccTag));
     if (!prefixData.prefix.isEmpty())
@@ -170,7 +177,7 @@ QDomElement saveResourcePrefixData(QDomDocument &doc, const QtResourcePrefixData
     return prefixElem;
 }
 
-QDomDocument saveQrcFileData(const QtQrcFileData &qrcFileData)
+static QDomDocument saveQrcFileData(const QtQrcFileData &qrcFileData)
 {
     QDomDocument doc;
     QDomElement docElem = doc.createElement(QLatin1String(rccRootTag));
@@ -183,6 +190,9 @@ QDomDocument saveQrcFileData(const QtQrcFileData &qrcFileData)
 
     return doc;
 }
+
+namespace qdesigner_internal {
+
 // --------------- QtResourceFile
 class QtResourceFile {
 public:
@@ -759,9 +769,12 @@ void QtQrcManager::removeResourceFile(QtResourceFile *resourceFile)
     delete resourceFile;
 }
 
+} // namespace qdesigner_internal
 
-
-}
+using QtResourceFile = qdesigner_internal::QtResourceFile;
+using QtResourcePrefix = qdesigner_internal::QtResourcePrefix;
+using QtQrcFile = qdesigner_internal::QtQrcFile;
+using QtQrcManager = qdesigner_internal::QtQrcManager;
 
 // ----------------- QtResourceEditorDialogPrivate
 class QtResourceEditorDialogPrivate
@@ -1802,16 +1815,15 @@ bool QtResourceEditorDialogPrivate::loadQrcFile(const QString &path, QtQrcFileDa
     file.close();
 
     QDomDocument doc;
-    int errLine, errCol;
-    if (!doc.setContent(dataArray, errorMessage, &errLine, &errCol))  {
+    if (QDomDocument::ParseResult result = doc.setContent(dataArray)) {
+        return loadQrcFileData(doc, path, qrcFileData, errorMessage);
+    } else {
         *errorMessage =
             QCoreApplication::translate("QtResourceEditorDialog",
                                         "A parse error occurred at line %1, column %2 of %3:\n%4")
-                                       .arg(errLine).arg(errCol).arg(path, *errorMessage);
+                .arg(result.errorLine).arg(result.errorColumn).arg(path, result.errorMessage);
         return false;
     }
-
-    return loadQrcFileData(doc, path, qrcFileData, errorMessage);
 }
 
 bool QtResourceEditorDialogPrivate::saveQrcFile(const QtQrcFileData &qrcFileData)
@@ -1856,33 +1868,34 @@ QtResourceEditorDialog::QtResourceEditorDialog(QDesignerFormEditorInterface *cor
     d_ptr->m_dlgGui = dlgGui;
     d_ptr->m_core = core;
 
-    setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
     setWindowTitle(tr("Edit Resources"));
 
-    connect(d_ptr->m_qrcManager, SIGNAL(qrcFileInserted(QtQrcFile*)),
-                this, SLOT(slotQrcFileInserted(QtQrcFile*)));
-    connect(d_ptr->m_qrcManager, SIGNAL(qrcFileMoved(QtQrcFile*,QtQrcFile*)),
-                this, SLOT(slotQrcFileMoved(QtQrcFile*)));
-    connect(d_ptr->m_qrcManager, SIGNAL(qrcFileRemoved(QtQrcFile*)),
-                this, SLOT(slotQrcFileRemoved(QtQrcFile*)));
-    connect(d_ptr->m_qrcManager, SIGNAL(resourcePrefixInserted(QtResourcePrefix*)),
-                this, SLOT(slotResourcePrefixInserted(QtResourcePrefix*)));
-    connect(d_ptr->m_qrcManager, SIGNAL(resourcePrefixMoved(QtResourcePrefix*,QtResourcePrefix*)),
-                this, SLOT(slotResourcePrefixMoved(QtResourcePrefix*)));
-    connect(d_ptr->m_qrcManager, SIGNAL(resourcePrefixChanged(QtResourcePrefix*,QString)),
-                this, SLOT(slotResourcePrefixChanged(QtResourcePrefix*)));
-    connect(d_ptr->m_qrcManager, SIGNAL(resourceLanguageChanged(QtResourcePrefix*,QString)),
-                this, SLOT(slotResourceLanguageChanged(QtResourcePrefix*)));
-    connect(d_ptr->m_qrcManager, SIGNAL(resourcePrefixRemoved(QtResourcePrefix*)),
-                this, SLOT(slotResourcePrefixRemoved(QtResourcePrefix*)));
-    connect(d_ptr->m_qrcManager, SIGNAL(resourceFileInserted(QtResourceFile*)),
-                this, SLOT(slotResourceFileInserted(QtResourceFile*)));
-    connect(d_ptr->m_qrcManager, SIGNAL(resourceFileMoved(QtResourceFile*,QtResourceFile*)),
-                this, SLOT(slotResourceFileMoved(QtResourceFile*)));
-    connect(d_ptr->m_qrcManager, SIGNAL(resourceAliasChanged(QtResourceFile*,QString)),
-                this, SLOT(slotResourceAliasChanged(QtResourceFile*)));
-    connect(d_ptr->m_qrcManager, SIGNAL(resourceFileRemoved(QtResourceFile*)),
-                this, SLOT(slotResourceFileRemoved(QtResourceFile*)));
+    connect(d_ptr->m_qrcManager, &QtQrcManager::qrcFileInserted,
+            this, [this](QtQrcFile *file) { d_ptr->slotQrcFileInserted(file); });
+    connect(d_ptr->m_qrcManager, &QtQrcManager::qrcFileMoved,
+            this, [this](QtQrcFile *file) { d_ptr->slotQrcFileMoved(file); });
+    connect(d_ptr->m_qrcManager, &QtQrcManager::qrcFileRemoved,
+            this, [this](QtQrcFile *file) { d_ptr->slotQrcFileRemoved(file); });
+
+    connect(d_ptr->m_qrcManager, &QtQrcManager::resourcePrefixInserted,
+            this, [this](QtResourcePrefix *prefix) { d_ptr->slotResourcePrefixInserted(prefix); });
+    connect(d_ptr->m_qrcManager, &QtQrcManager::resourcePrefixMoved,
+            this, [this](QtResourcePrefix *prefix) { d_ptr->slotResourcePrefixMoved(prefix); });
+    connect(d_ptr->m_qrcManager, &QtQrcManager::resourcePrefixChanged,
+            this, [this](QtResourcePrefix *prefix) { d_ptr->slotResourcePrefixChanged(prefix); });
+    connect(d_ptr->m_qrcManager, &QtQrcManager::resourceLanguageChanged,
+            this, [this](QtResourcePrefix *prefix) { d_ptr->slotResourceLanguageChanged(prefix); });
+    connect(d_ptr->m_qrcManager, &QtQrcManager::resourcePrefixRemoved,
+            this, [this](QtResourcePrefix *prefix) { d_ptr->slotResourcePrefixRemoved(prefix); });
+
+    connect(d_ptr->m_qrcManager, &QtQrcManager::resourceFileInserted,
+            this, [this](QtResourceFile *file) { d_ptr->slotResourceFileInserted(file); });
+    connect(d_ptr->m_qrcManager, &QtQrcManager::resourceFileMoved,
+            this, [this](QtResourceFile *file) { d_ptr->slotResourceFileMoved(file); });
+    connect(d_ptr->m_qrcManager, &QtQrcManager::resourceAliasChanged,
+            this, [this](QtResourceFile *file) { d_ptr->slotResourceAliasChanged(file); });
+    connect(d_ptr->m_qrcManager, &QtQrcManager::resourceFileRemoved,
+            this, [this](QtResourceFile *file) { d_ptr->slotResourceFileRemoved(file); });
 
     QIcon upIcon = qdesigner_internal::createIconSet(QString::fromUtf8("up.png"));
     QIcon downIcon = qdesigner_internal::createIconSet(QString::fromUtf8("down.png"));
@@ -1919,27 +1932,41 @@ QtResourceEditorDialog::QtResourceEditorDialog(QDesignerFormEditorInterface *cor
     d_ptr->m_ui.addResourceButton->setDefaultAction(d_ptr->m_addResourceFileAction);
     d_ptr->m_ui.removeResourceButton->setDefaultAction(d_ptr->m_removeAction);
 
-    connect(d_ptr->m_newQrcFileAction, SIGNAL(triggered()), this, SLOT(slotNewQrcFile()));
-    connect(d_ptr->m_importQrcFileAction, SIGNAL(triggered()), this, SLOT(slotImportQrcFile()));
-    connect(d_ptr->m_removeQrcFileAction, SIGNAL(triggered()), this, SLOT(slotRemoveQrcFile()));
-    connect(d_ptr->m_moveUpQrcFileAction, SIGNAL(triggered()), this, SLOT(slotMoveUpQrcFile()));
-    connect(d_ptr->m_moveDownQrcFileAction, SIGNAL(triggered()), this, SLOT(slotMoveDownQrcFile()));
+    connect(d_ptr->m_newQrcFileAction, &QAction::triggered,
+            this, [this] { d_ptr->slotNewQrcFile(); });
+    connect(d_ptr->m_importQrcFileAction, &QAction::triggered,
+            this, [this] { d_ptr->slotImportQrcFile(); });
+    connect(d_ptr->m_removeQrcFileAction, &QAction::triggered,
+            this, [this] { d_ptr->slotRemoveQrcFile(); });
+    connect(d_ptr->m_moveUpQrcFileAction, &QAction::triggered,
+            this, [this] { d_ptr->slotMoveUpQrcFile(); });
+    connect(d_ptr->m_moveDownQrcFileAction, &QAction::triggered,
+            this, [this] { d_ptr->slotMoveDownQrcFile(); });
 
-    connect(d_ptr->m_newPrefixAction, SIGNAL(triggered()), this, SLOT(slotNewPrefix()));
-    connect(d_ptr->m_addResourceFileAction, SIGNAL(triggered()), this, SLOT(slotAddFiles()));
-    connect(d_ptr->m_changePrefixAction, SIGNAL(triggered()), this, SLOT(slotChangePrefix()));
-    connect(d_ptr->m_changeLanguageAction, SIGNAL(triggered()), this, SLOT(slotChangeLanguage()));
-    connect(d_ptr->m_changeAliasAction, SIGNAL(triggered()), this, SLOT(slotChangeAlias()));
-    connect(d_ptr->m_clonePrefixAction, SIGNAL(triggered()), this, SLOT(slotClonePrefix()));
-    connect(d_ptr->m_removeAction, SIGNAL(triggered()), this, SLOT(slotRemove()));
-    connect(d_ptr->m_moveUpAction, SIGNAL(triggered()), this, SLOT(slotMoveUp()));
-    connect(d_ptr->m_moveDownAction, SIGNAL(triggered()), this, SLOT(slotMoveDown()));
+    connect(d_ptr->m_newPrefixAction, &QAction::triggered,
+            this, [this] { d_ptr->slotNewPrefix(); });
+    connect(d_ptr->m_addResourceFileAction, &QAction::triggered,
+            this, [this] { d_ptr->slotAddFiles(); });
+    connect(d_ptr->m_changePrefixAction, &QAction::triggered,
+            this, [this] { d_ptr->slotChangePrefix(); });
+    connect(d_ptr->m_changeLanguageAction, &QAction::triggered,
+            this, [this] { d_ptr->slotChangeLanguage(); });
+    connect(d_ptr->m_changeAliasAction, &QAction::triggered,
+            this, [this] { d_ptr->slotChangeAlias(); });
+    connect(d_ptr->m_clonePrefixAction, &QAction::triggered,
+            this, [this] { d_ptr->slotClonePrefix(); });
+    connect(d_ptr->m_removeAction, &QAction::triggered,
+            this, [this] { d_ptr->slotRemove(); });
+    connect(d_ptr->m_moveUpAction, &QAction::triggered,
+            this, [this] { d_ptr->slotMoveUp(); });
+    connect(d_ptr->m_moveDownAction, &QAction::triggered,
+            this, [this] { d_ptr->slotMoveDown(); });
 
     d_ptr->m_ui.qrcFileList->setContextMenuPolicy(Qt::CustomContextMenu);
-    connect(d_ptr->m_ui.qrcFileList, SIGNAL(customContextMenuRequested(QPoint)),
-                this, SLOT(slotListWidgetContextMenuRequested(QPoint)));
-    connect(d_ptr->m_ui.qrcFileList, SIGNAL(currentItemChanged(QListWidgetItem*,QListWidgetItem*)),
-                    this, SLOT(slotCurrentQrcFileChanged(QListWidgetItem*)));
+    connect(d_ptr->m_ui.qrcFileList, &QListWidget::customContextMenuRequested,
+            this, [this](const QPoint &point) { d_ptr->slotListWidgetContextMenuRequested(point); });
+    connect(d_ptr->m_ui.qrcFileList, &QListWidget::currentItemChanged,
+            this, [this](QListWidgetItem *item) { d_ptr->slotCurrentQrcFileChanged(item); });
 
     d_ptr->m_treeModel = new QStandardItemModel(this);
     d_ptr->m_treeModel->setColumnCount(2);
@@ -1952,12 +1979,12 @@ QtResourceEditorDialog::QtResourceEditorDialog(QDesignerFormEditorInterface *cor
             d_ptr->m_ui.resourceTreeView, &QTreeView::resizeColumnToContents);
     d_ptr->m_ui.resourceTreeView->setTextElideMode(Qt::ElideLeft);
 
-    connect(d_ptr->m_ui.resourceTreeView, SIGNAL(customContextMenuRequested(QPoint)),
-                this, SLOT(slotTreeViewContextMenuRequested(QPoint)));
-    connect(d_ptr->m_treeModel, SIGNAL(itemChanged(QStandardItem*)),
-                this, SLOT(slotTreeViewItemChanged(QStandardItem*)));
-    connect(d_ptr->m_treeSelection, SIGNAL(currentChanged(QModelIndex,QModelIndex)),
-                    this, SLOT(slotCurrentTreeViewItemChanged(QModelIndex)));
+    connect(d_ptr->m_ui.resourceTreeView, &QTreeView::customContextMenuRequested,
+            this, [this](const QPoint &point) { d_ptr->slotTreeViewContextMenuRequested(point); });
+    connect(d_ptr->m_treeModel, &QStandardItemModel::itemChanged,
+            this, [this](QStandardItem *item) { d_ptr->slotTreeViewItemChanged(item); });
+    connect(d_ptr->m_treeSelection, &QItemSelectionModel::currentChanged,
+            this, [this](const QModelIndex &index) { d_ptr->slotCurrentTreeViewItemChanged(index); });
 
     d_ptr->m_ui.resourceTreeView->setColumnWidth(0, 200);
 
@@ -1985,6 +2012,8 @@ QtResourceEditorDialog::~QtResourceEditorDialog()
     settings->setValue(QLatin1String(SplitterPosition), d_ptr->m_ui.splitter->saveState());
     settings->setValue(QLatin1String(Geometry), saveGeometry());
     settings->endGroup();
+
+    disconnect(d_ptr->m_qrcManager, nullptr, this, nullptr);
 }
 
 QtResourceModel *QtResourceEditorDialog::model() const

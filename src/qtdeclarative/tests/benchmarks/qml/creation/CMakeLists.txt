@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Generated from creation.pro.
 
 #####################################################################
@@ -8,8 +11,8 @@ qt_internal_add_benchmark(tst_creation
     SOURCES
         tst_creation.cpp
     DEFINES
-        SRCDIR=\\\"${CMAKE_CURRENT_SOURCE_DIR}\\\"
-    PUBLIC_LIBRARIES
+        SRCDIR="${CMAKE_CURRENT_SOURCE_DIR}"
+    LIBRARIES
         Qt::CorePrivate
         Qt::Gui
         Qt::GuiPrivate

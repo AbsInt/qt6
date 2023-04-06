@@ -16,6 +16,11 @@
 
 #include <QOperatingSystemVersion>
 #include <QLockFile>
+#include <QSaveFile>
+#include <QStandardPaths>
+#include <QDir>
+#include <QFileInfo>
+#include <QSysInfo>
 #include <QOffscreenSurface>
 
 #ifdef Q_OS_WIN
@@ -27,11 +32,6 @@
 QT_BEGIN_NAMESPACE
 
 QSGRhiSupport::QSGRhiSupport()
-    : m_settingsApplied(false),
-      m_debugLayer(false),
-      m_profile(false),
-      m_shaderEffectDebug(false),
-      m_preferSoftwareRenderer(false)
 {
 }
 
@@ -112,21 +112,6 @@ void QSGRhiSupport::applySettings()
     // f.ex.), and all that is based on what we report from here. So further
     // adjustments are not possible (or, at minimum, not safe and portable).
 
-    // validation layers (Vulkan) or debug layer (D3D)
-    m_debugLayer = uint(qEnvironmentVariableIntValue("QSG_RHI_DEBUG_LAYER"));
-
-    // EnableProfiling + DebugMarkers
-    m_profile = uint(qEnvironmentVariableIntValue("QSG_RHI_PROFILE"));
-
-    // EnablePipelineCacheDataSave
-    m_pipelineCacheSave = qEnvironmentVariable("QSG_RHI_PIPELINE_CACHE_SAVE");
-
-    m_pipelineCacheLoad = qEnvironmentVariable("QSG_RHI_PIPELINE_CACHE_LOAD");
-
-    m_shaderEffectDebug = uint(qEnvironmentVariableIntValue("QSG_RHI_SHADEREFFECT_DEBUG"));
-
-    m_preferSoftwareRenderer = uint(qEnvironmentVariableIntValue("QSG_RHI_PREFER_SOFTWARE_RENDERER"));
-
     m_killDeviceFrameCount = qEnvironmentVariableIntValue("QSG_RHI_SIMULATE_DEVICE_LOSS");
     if (m_killDeviceFrameCount > 0 && m_rhiBackend == QRhi::D3D11)
         qDebug("Graphics device will be reset every %d frames", m_killDeviceFrameCount);
@@ -141,16 +126,6 @@ void QSGRhiSupport::applySettings()
         else
             qWarning("Unknown HDR mode '%s'", hdrRequest.constData());
     }
-
-    const QString backendName = rhiBackendName();
-    qCDebug(QSG_LOG_INFO,
-            "Using QRhi with backend %s\n"
-            "  Graphics API debug/validation layers: %d\n"
-            "  QRhi profiling and debug markers: %d\n"
-            "  Shader/pipeline cache collection: %d",
-            qPrintable(backendName), m_debugLayer, m_profile, !m_pipelineCacheSave.isEmpty());
-    if (m_preferSoftwareRenderer)
-        qCDebug(QSG_LOG_INFO, "Prioritizing software renderers");
 }
 
 void QSGRhiSupport::adjustToPlatformQuirks()
@@ -673,20 +648,7 @@ QSGRhiSupport *QSGRhiSupport::instance()
 
 QString QSGRhiSupport::rhiBackendName() const
 {
-    switch (m_rhiBackend) {
-    case QRhi::Null:
-        return QLatin1String("Null");
-    case QRhi::Vulkan:
-        return QLatin1String("Vulkan");
-    case QRhi::OpenGLES2:
-        return QLatin1String("OpenGL");
-    case QRhi::D3D11:
-        return QLatin1String("D3D11");
-    case QRhi::Metal:
-        return QLatin1String("Metal");
-    default:
-        return QLatin1String("Unknown");
-    }
+    return QString::fromUtf8(QRhi::backendName(m_rhiBackend));
 }
 
 QSGRendererInterface::GraphicsApi QSGRhiSupport::graphicsApi() const
@@ -944,34 +906,175 @@ void QSGRhiSupport::prepareWindowForRhi(QQuickWindow *window)
 #endif
 }
 
+static inline bool ensureWritableDir(const QString &name)
+{
+    QDir::root().mkpath(name);
+    return QFileInfo(name).isWritable();
+}
+
+static QString automaticPipelineCacheDir()
+{
+    static bool checked = false;
+    static QString currentCacheDir;
+    static bool cacheWritable = false;
+
+    if (checked)
+        return cacheWritable ? currentCacheDir : QString();
+
+    checked = true;
+
+    // Intentionally not using the global cache path (GenericCacheLocation) -
+    // we do not want forever growing pipeline cache files that contain
+    // everything from all Qt apps ever run (that would affect load times
+    // eventually, resource use, etc.). Stick to being application-specific.
+
+    const QString cachePath = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
+    const QString subPath = QLatin1String("/qtpipelinecache-") + QSysInfo::buildAbi() + QLatin1Char('/');
+
+    if (!cachePath.isEmpty()) {
+        currentCacheDir = cachePath + subPath;
+        cacheWritable = ensureWritableDir(currentCacheDir);
+    }
+
+    return cacheWritable ? currentCacheDir : QString();
+}
+
+static inline QString automaticPipelineCacheFileName(QRhi *rhi)
+{
+    const QString cacheDir = automaticPipelineCacheDir();
+    if (!cacheDir.isEmpty())
+        return cacheDir + QLatin1String("qqpc_") + QString::fromLatin1(rhi->backendName()).toLower();
+
+    return QString();
+}
+
+static inline bool isAutomaticPipelineCacheLoadSkippedForWindow(Qt::WindowFlags wflags)
+{
+    return wflags.testFlag(Qt::ToolTip) || wflags.testFlag(Qt::SplashScreen);
+}
+
+static inline bool isAutomaticPipelineCacheSaveSkippedForWindow(Qt::WindowFlags wflags)
+{
+    // this catches Tool, ToolTip, SplashScreen as well
+    return wflags.testFlag(Qt::Dialog) || wflags.testFlag(Qt::Popup);
+}
+
 static inline QString pipelineCacheLockFileName(const QString &name)
 {
     return name + QLatin1String(".lck");
 }
 
-void QSGRhiSupport::preparePipelineCache(QRhi *rhi)
+void QSGRhiSupport::preparePipelineCache(QRhi *rhi, QQuickWindow *window)
 {
-    if (m_pipelineCacheLoad.isEmpty())
+    QQuickWindowPrivate *wd = QQuickWindowPrivate::get(window);
+
+    // the explicitly set filename always takes priority as per docs
+    QString pipelineCacheLoad = wd->graphicsConfig.pipelineCacheLoadFile();
+    bool isAutomatic = false;
+    if (pipelineCacheLoad.isEmpty() && wd->graphicsConfig.isAutomaticPipelineCacheEnabled()) {
+        if (!isAutomaticPipelineCacheLoadSkippedForWindow(window->flags())) {
+            pipelineCacheLoad = automaticPipelineCacheFileName(rhi);
+            isAutomatic = true;
+        }
+    }
+
+    if (pipelineCacheLoad.isEmpty())
         return;
 
-    QLockFile lock(pipelineCacheLockFileName(m_pipelineCacheLoad));
+    QLockFile lock(pipelineCacheLockFileName(pipelineCacheLoad));
     if (!lock.lock()) {
         qWarning("Could not create pipeline cache lock file '%s'",
                  qPrintable(lock.fileName()));
         return;
     }
 
-    QFile f(m_pipelineCacheLoad);
+    QFile f(pipelineCacheLoad);
     if (!f.open(QIODevice::ReadOnly)) {
-        qWarning("Could not open pipeline cache source file '%s'",
-                 qPrintable(m_pipelineCacheLoad));
+        if (!isAutomatic) {
+            qWarning("Could not open pipeline cache source file '%s'",
+                     qPrintable(pipelineCacheLoad));
+        }
         return;
     }
 
-    qCDebug(QSG_LOG_INFO, "Attempting to seed pipeline cache from '%s'",
-            qPrintable(m_pipelineCacheLoad));
+    const QByteArray buf = f.readAll();
+    if (!buf.isEmpty()) {
+        qCDebug(QSG_LOG_INFO, "Attempting to seed pipeline cache for QRhi %p from '%s'",
+                rhi, qPrintable(pipelineCacheLoad));
+        rhi->setPipelineCacheData(buf);
+    }
+}
 
-    rhi->setPipelineCacheData(f.readAll());
+void QSGRhiSupport::finalizePipelineCache(QRhi *rhi, const QQuickGraphicsConfiguration &config)
+{
+    // output the rhi statistics about pipelines, as promised by the documentation
+    qCDebug(QSG_LOG_INFO, "Total time spent on pipeline creation during the lifetime of the QRhi %p was %lld ms",
+            rhi, rhi->statistics().totalPipelineCreationTime);
+
+    // the explicitly set filename always takes priority as per docs
+    QString pipelineCacheSave = config.pipelineCacheSaveFile();
+    bool isAutomatic = false;
+    if (pipelineCacheSave.isEmpty() && config.isAutomaticPipelineCacheEnabled()) {
+        pipelineCacheSave = automaticPipelineCacheFileName(rhi);
+        isAutomatic = true;
+    }
+
+    if (pipelineCacheSave.isEmpty())
+        return;
+
+    const QByteArray buf = rhi->pipelineCacheData();
+
+    // If empty, do nothing. This is exactly what will happen if the rhi was
+    // created without QRhi::EnablePipelineCacheDataSave set.
+    if (buf.isEmpty()) {
+        if (isAutomatic) {
+            // Attempt to remove the file. If it does not exist or this fails,
+            // that's fine. The goal is just to prevent warnings from
+            // setPipelineCacheData in future runs, e.g. if the Qt or driver
+            // version does not match _and_ we do not generate any data at run
+            // time, then not writing the file out also means the warning would
+            // appear again and again on every run. Prevent that.
+            QDir().remove(pipelineCacheSave);
+        }
+        return;
+    }
+
+    QLockFile lock(pipelineCacheLockFileName(pipelineCacheSave));
+    if (!lock.lock()) {
+        qWarning("Could not create pipeline cache lock file '%s'",
+                 qPrintable(lock.fileName()));
+        return;
+    }
+
+#if QT_CONFIG(temporaryfile)
+    QSaveFile f(pipelineCacheSave);
+#else
+    QFile f(pipelineCacheSave);
+#endif
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        if (!isAutomatic) {
+            const QString msg = f.errorString();
+            qWarning("Could not open pipeline cache output file '%s': %s",
+                     qPrintable(pipelineCacheSave), qPrintable(msg));
+        }
+        return;
+    }
+
+    qCDebug(QSG_LOG_INFO, "Writing pipeline cache contents (%d bytes) for QRhi %p to '%s'",
+            int(buf.size()), rhi, qPrintable(pipelineCacheSave));
+
+    if (f.write(buf) != buf.size()
+#if QT_CONFIG(temporaryfile)
+            || !f.commit()
+#endif
+            )
+    {
+        if (!isAutomatic) {
+            const QString msg = f.errorString();
+            qWarning("Could not write pipeline cache: %s", qPrintable(msg));
+        }
+        return;
+    }
 }
 
 // must be called on the render thread
@@ -983,17 +1086,33 @@ QSGRhiSupport::RhiCreateResult QSGRhiSupport::createRhi(QQuickWindow *window, QS
     if (customDevD->type == QQuickGraphicsDevicePrivate::Type::Rhi) {
         rhi = customDevD->u.rhi;
         if (rhi) {
-            preparePipelineCache(rhi);
+            preparePipelineCache(rhi, window);
             return { rhi, false };
         }
     }
 
+    const bool debugLayer = wd->graphicsConfig.isDebugLayerEnabled();
+    const bool debugMarkers = wd->graphicsConfig.isDebugMarkersEnabled();
+    const bool preferSoftware = wd->graphicsConfig.prefersSoftwareDevice();
+    const bool pipelineCacheSave = !wd->graphicsConfig.pipelineCacheSaveFile().isEmpty()
+            || (wd->graphicsConfig.isAutomaticPipelineCacheEnabled()
+                && !isAutomaticPipelineCacheSaveSkippedForWindow(window->flags()));
+
+    const QString backendName = rhiBackendName();
+    qCDebug(QSG_LOG_INFO,
+            "Creating QRhi with backend %s for window %p (wflags 0x%X)\n"
+            "  Graphics API debug/validation layers: %d\n"
+            "  Debug markers: %d\n"
+            "  Prefer software device: %d\n"
+            "  Shader/pipeline cache collection: %d",
+            qPrintable(backendName), window, int(window->flags()), debugLayer, debugMarkers, preferSoftware, pipelineCacheSave);
+
     QRhi::Flags flags;
-    if (isProfilingRequested())
-        flags |= QRhi::EnableProfiling | QRhi::EnableDebugMarkers;
-    if (isSoftwareRendererRequested())
+    if (debugMarkers)
+        flags |= QRhi::EnableDebugMarkers;
+    if (preferSoftware)
         flags |= QRhi::PreferSoftwareRenderer;
-    if (!m_pipelineCacheSave.isEmpty())
+    if (pipelineCacheSave)
         flags |= QRhi::EnablePipelineCacheDataSave;
 
     const QRhi::Implementation backend = rhiBackend();
@@ -1024,7 +1143,7 @@ QSGRhiSupport::RhiCreateResult QSGRhiSupport::createRhi(QQuickWindow *window, QS
 #endif
 #if QT_CONFIG(vulkan)
     if (backend == QRhi::Vulkan) {
-        if (isDebugLayerRequested())
+        if (debugLayer)
             QVulkanDefaultInstance::setFlag(QVulkanDefaultInstance::EnableValidation, true);
         QRhiVulkanInitParams rhiParams;
         prepareWindowForRhi(window); // sets a vulkanInstance if not yet present
@@ -1059,7 +1178,7 @@ QSGRhiSupport::RhiCreateResult QSGRhiSupport::createRhi(QQuickWindow *window, QS
 #ifdef Q_OS_WIN
     if (backend == QRhi::D3D11) {
         QRhiD3D11InitParams rhiParams;
-        rhiParams.enableDebugLayer = isDebugLayerRequested();
+        rhiParams.enableDebugLayer = debugLayer;
         if (m_killDeviceFrameCount > 0) {
             rhiParams.framesUntilKillingDeviceViaTdr = m_killDeviceFrameCount;
             rhiParams.repeatDeviceKill = true;
@@ -1106,38 +1225,23 @@ QSGRhiSupport::RhiCreateResult QSGRhiSupport::createRhi(QQuickWindow *window, QS
     }
 #endif
 
-    if (rhi)
-        preparePipelineCache(rhi);
-    else
+    if (rhi) {
+        qCDebug(QSG_LOG_INFO, "Created QRhi %p for window %p", rhi, window);
+        preparePipelineCache(rhi, window);
+    } else {
         qWarning("Failed to create RHI (backend %d)", backend);
+    }
 
     return { rhi, true };
 }
 
-void QSGRhiSupport::destroyRhi(QRhi *rhi)
+void QSGRhiSupport::destroyRhi(QRhi *rhi, const QQuickGraphicsConfiguration &config)
 {
     if (!rhi)
         return;
 
-    if (!rhi->isDeviceLost()) {
-        if (!m_pipelineCacheSave.isEmpty()) {
-            QLockFile lock(pipelineCacheLockFileName(m_pipelineCacheSave));
-            if (lock.lock()) {
-                QFile f(m_pipelineCacheSave);
-                if (f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-                    qCDebug(QSG_LOG_INFO, "Writing pipeline cache contents to '%s'",
-                            qPrintable(m_pipelineCacheSave));
-                    f.write(rhi->pipelineCacheData());
-                } else {
-                    qWarning("Could not open pipeline cache output file '%s'",
-                             qPrintable(m_pipelineCacheSave));
-                }
-            } else {
-                qWarning("Could not create pipeline cache lock file '%s'",
-                         qPrintable(lock.fileName()));
-            }
-        }
-    }
+    if (!rhi->isDeviceLost())
+        finalizePipelineCache(rhi, config);
 
     delete rhi;
 }
@@ -1241,7 +1345,7 @@ QImage QSGRhiSupport::grabOffscreen(QQuickWindow *window)
     wd->setCustomCommandBuffer(cb);
     wd->polishItems();
     wd->syncSceneGraph();
-    wd->renderSceneGraph(window->size());
+    wd->renderSceneGraph();
     wd->setCustomCommandBuffer(nullptr);
 
     QImage image = grabAndBlockInCurrentFrame(rhi, cb, texture.data());
@@ -1338,7 +1442,7 @@ QImage QSGRhiSupport::grabOffscreenForProtectedContent(QQuickWindow *window)
     wd->setCustomCommandBuffer(cb);
     wd->polishItems();
     wd->syncSceneGraph();
-    wd->renderSceneGraph(window->size());
+    wd->renderSceneGraph();
     wd->setCustomCommandBuffer(nullptr);
 
     QImage image = grabAndBlockInCurrentFrame(rhi, cb, texture.data());

@@ -38,6 +38,9 @@ private slots:
     void invokableFunctions();
     void userType();
     void changedSignal();
+    void structured();
+    void recursive();
+    void date();
 };
 
 void tst_qqmlvaluetypeproviders::initTestCase()
@@ -52,11 +55,10 @@ void tst_qqmlvaluetypeproviders::qtqmlValueTypes()
     QQmlComponent component(&e, testFileUrl("qtqmlValueTypes.qml"));
     QVERIFY2(!component.isError(), qPrintable(component.errorString()));
     QVERIFY(component.errors().isEmpty());
-    QObject *object = component.create();
+    QScopedPointer<QObject> object(component.create());
     QVERIFY(object != nullptr);
     QVERIFY(object->property("qtqmlTypeSuccess").toBool());
     QVERIFY(object->property("qtquickTypeSuccess").toBool());
-    delete object;
 }
 
 void tst_qqmlvaluetypeproviders::qtquickValueTypes()
@@ -65,11 +67,10 @@ void tst_qqmlvaluetypeproviders::qtquickValueTypes()
     QQmlComponent component(&e, testFileUrl("qtquickValueTypes.qml"));
     QVERIFY(!component.isError());
     QVERIFY(component.errors().isEmpty());
-    QObject *object = component.create();
+    QScopedPointer<QObject> object(component.create());
     QVERIFY(object != nullptr);
     QVERIFY(object->property("qtqmlTypeSuccess").toBool());
     QVERIFY(object->property("qtquickTypeSuccess").toBool());
-    delete object;
 }
 
 void tst_qqmlvaluetypeproviders::comparisonSemantics()
@@ -78,10 +79,9 @@ void tst_qqmlvaluetypeproviders::comparisonSemantics()
     QQmlComponent component(&e, testFileUrl("comparisonSemantics.qml"));
     QVERIFY(!component.isError());
     QVERIFY(component.errors().isEmpty());
-    QObject *object = component.create();
+    QScopedPointer<QObject> object(component.create());
     QVERIFY(object != nullptr);
     QVERIFY(object->property("comparisonSuccess").toBool());
-    delete object;
 }
 
 void tst_qqmlvaluetypeproviders::cppIntegration()
@@ -90,7 +90,7 @@ void tst_qqmlvaluetypeproviders::cppIntegration()
     QQmlComponent component(&e, testFileUrl("cppIntegration.qml"));
     QVERIFY(!component.isError());
     QVERIFY(component.errors().isEmpty());
-    QObject *object = component.create();
+    QScopedPointer<QObject> object(component.create());
     QVERIFY(object != nullptr);
 
     // ensure accessing / comparing / assigning cpp-defined props
@@ -120,8 +120,6 @@ void tst_qqmlvaluetypeproviders::cppIntegration()
     QCOMPARE(object->property("m").value<QMatrix4x4>(), object->property("matrix").value<QMatrix4x4>());
     QCOMPARE(object->property("c").value<QColor>(), object->property("color").value<QColor>());
     QCOMPARE(object->property("f").value<QFont>(), object->property("font").value<QFont>());
-
-    delete object;
 }
 
 void tst_qqmlvaluetypeproviders::jsObjectConversion()
@@ -130,10 +128,9 @@ void tst_qqmlvaluetypeproviders::jsObjectConversion()
     QQmlComponent component(&e, testFileUrl("jsObjectConversion.qml"));
     QVERIFY(!component.isError());
     QVERIFY(component.errors().isEmpty());
-    QObject *object = component.create();
+    QScopedPointer<QObject> object(component.create());
     QVERIFY(object != nullptr);
     QVERIFY(object->property("qtquickTypeSuccess").toBool());
-    delete object;
 }
 
 void tst_qqmlvaluetypeproviders::invokableFunctions()
@@ -142,11 +139,10 @@ void tst_qqmlvaluetypeproviders::invokableFunctions()
     QQmlComponent component(&e, testFileUrl("invokableFunctions.qml"));
     QVERIFY(!component.isError());
     QVERIFY(component.errors().isEmpty());
-    QObject *object = component.create();
+    QScopedPointer<QObject> object(component.create());
     QVERIFY(object != nullptr);
     QVERIFY(object->property("complete").toBool());
     QVERIFY(object->property("success").toBool());
-    delete object;
 }
 
 namespace {
@@ -243,6 +239,151 @@ void tst_qqmlvaluetypeproviders::changedSignal()
     QVERIFY(object != nullptr);
     QVERIFY(object->property("complete").toBool());
     QVERIFY(object->property("success").toBool());
+}
+
+void tst_qqmlvaluetypeproviders::structured()
+{
+    QQmlEngine e;
+    const QUrl url = testFileUrl("structuredValueTypes.qml");
+    QQmlComponent component(&e, url);
+    QVERIFY2(!component.isError(), qPrintable(component.errorString()));
+
+    const char *warnings[] = {
+        "Could not find any constructor for value type ConstructibleValueType to call"
+            " with value [object Object]",
+        "Could not find any constructor for value type ConstructibleValueType to call"
+            " with value QVariant(QJSValue, )",
+        "Could not find any constructor for value type ConstructibleValueType to call"
+            " with value [object Object]",
+        "Could not find any constructor for value type ConstructibleValueType to call"
+            " with value QVariant(QVariantMap, QMap())",
+        "Could not convert array value at position 5 from QVariantMap to ConstructibleValueType",
+        "Could not find any constructor for value type ConstructibleValueType to call"
+            " with value [object Object]",
+        "Could not find any constructor for value type ConstructibleValueType to call"
+            " with value QVariant(QJSValue, )"
+    };
+
+    for (const auto warning : warnings)
+        QTest::ignoreMessage(QtWarningMsg, warning);
+
+    QTest::ignoreMessage(QtWarningMsg, qPrintable(
+                             url.toString()  + QStringLiteral(":44: Error: Cannot assign QJSValue "
+                                                              "to ConstructibleValueType")));
+
+    QTest::ignoreMessage(QtWarningMsg, qPrintable(
+                             url.toString()  + QStringLiteral(":14:5: Unable to assign QJSValue "
+                                                              "to ConstructibleValueType")));
+
+    QScopedPointer<QObject> o(component.create());
+    QVERIFY2(!o.isNull(), qPrintable(component.errorString()));
+
+    QCOMPARE(o->property("p").value<QPointF>(), QPointF(7, 77));
+    QCOMPARE(o->property("s").value<QSizeF>(), QSizeF(7, 77));
+    QCOMPARE(o->property("r").value<QRectF>(), QRectF(5, 55, 7, 77));
+
+    QCOMPARE(o->property("p2").value<QPointF>(), QPointF(4, 5));
+    QCOMPARE(o->property("s2").value<QSizeF>(), QSizeF(7, 8));
+    QCOMPARE(o->property("r2").value<QRectF>(), QRectF(9, 10, 11, 12));
+
+    QCOMPARE(o->property("c1").value<ConstructibleValueType>(), ConstructibleValueType(5));
+    QCOMPARE(o->property("c2").value<ConstructibleValueType>(), ConstructibleValueType(0));
+    QCOMPARE(o->property("c3").value<ConstructibleValueType>(), ConstructibleValueType(99));
+    QCOMPARE(o->property("c4").value<ConstructibleValueType>(), ConstructibleValueType(0));
+
+    const QList<QPointF> actual = o->property("ps").value<QList<QPointF>>();
+    const QList<QPointF> expected = {
+        QPointF(1, 2), QPointF(3, 4), QPointF(55, std::numeric_limits<double>::quiet_NaN())
+    };
+    QCOMPARE(actual.size(), expected.size());
+    QCOMPARE(actual[0], expected[0]);
+    QCOMPARE(actual[1], expected[1]);
+    QCOMPARE(actual[2].x(), expected[2].x());
+    QVERIFY(std::isnan(actual[2].y()));
+
+    QCOMPARE(o->property("ss").value<QList<QSizeF>>(),
+             QList<QSizeF>({QSizeF(5, 6), QSizeF(7, 8), QSizeF(-1, 99)}));
+    QCOMPARE(o->property("cs").value<QList<ConstructibleValueType>>(),
+             QList<ConstructibleValueType>({1, 2, 3, 4, 5, 0}));
+
+    StructuredValueType b1;
+    b1.setI(10);
+    b1.setC(14);
+    b1.setP(QPointF(1, 44));
+    QCOMPARE(o->property("b1").value<StructuredValueType>(), b1);
+
+    StructuredValueType b2;
+    b2.setI(11);
+    b2.setC(15);
+    b2.setP(QPointF(4, 0));
+    QCOMPARE(o->property("b2").value<StructuredValueType>(), b2);
+
+
+    QList<StructuredValueType> bb(3);
+    bb[0].setI(21);
+    bb[1].setC(22);
+    bb[2].setP(QPointF(199, 222));
+    QCOMPARE(o->property("bb").value<QList<StructuredValueType>>(), bb);
+
+    MyTypeObject *t = qobject_cast<MyTypeObject *>(o.data());
+    QVERIFY(t);
+
+    QCOMPARE(t->constructible(), ConstructibleValueType(47));
+
+    StructuredValueType structured;
+    structured.setI(11);
+    structured.setC(12);
+    structured.setP(QPointF(7, 8));
+    QCOMPARE(t->structured(), structured);
+
+    QCOMPARE(o->property("cr1").value<ConstructibleFromQReal>(),
+             ConstructibleFromQReal(11.25));
+    QCOMPARE(o->property("cr2").value<ConstructibleFromQReal>(),
+             ConstructibleFromQReal(std::numeric_limits<qreal>::infinity()));
+    QCOMPARE(o->property("cr3").value<ConstructibleFromQReal>(),
+             ConstructibleFromQReal(-std::numeric_limits<qreal>::infinity()));
+    QCOMPARE(o->property("cr4").value<ConstructibleFromQReal>(),
+             ConstructibleFromQReal(std::numeric_limits<qreal>::quiet_NaN()));
+    QCOMPARE(o->property("cr5").value<ConstructibleFromQReal>(),
+             ConstructibleFromQReal(0));
+    QCOMPARE(o->property("cr6").value<ConstructibleFromQReal>(),
+             ConstructibleFromQReal(-112.5));
+    QCOMPARE(o->property("cr7").value<ConstructibleFromQReal>(),
+             ConstructibleFromQReal(50));
+}
+
+void tst_qqmlvaluetypeproviders::recursive()
+{
+    QQmlEngine e;
+    const QUrl url = testFileUrl("recursiveWriteBack.qml");
+    QQmlComponent component(&e, url);
+    QVERIFY2(!component.isError(), qPrintable(component.errorString()));
+
+    QScopedPointer<QObject> o(component.create());
+    QVERIFY(!o.isNull());
+
+    const QList<StructuredValueType> l = o->property("l").value<QList<StructuredValueType>>();
+    QCOMPARE(l.size(), 3);
+    QCOMPARE(l[2].i(), 4);
+    QCOMPARE(l[1].p().x(), 88);
+    QCOMPARE(l[0].sizes()[1].width(), 19);
+
+    MyTypeObject *m = qobject_cast<MyTypeObject *>(o.data());
+    QCOMPARE(m->structured().p().x(), 76);
+}
+
+void tst_qqmlvaluetypeproviders::date()
+{
+    QQmlEngine e;
+    QQmlComponent component(&e, testFileUrl("dateWriteBack.qml"));
+    QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+    QScopedPointer<QObject> o(component.create());
+    QVERIFY(!o.isNull());
+
+    QCOMPARE(o->property("aDateTime").value<QDateTime>().date().day(), 14);
+    QCOMPARE(o->property("aDate").value<QDate>().month(), 9);
+    QCOMPARE(o->property("aTime").value<QTime>().hour(), 5);
+    QCOMPARE(o->property("aVariant").value<QDateTime>().time().minute(), 44);
 }
 
 QTEST_MAIN(tst_qqmlvaluetypeproviders)

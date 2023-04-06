@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Generated from compositor.pro.
 
 #####################################################################
@@ -70,6 +73,8 @@ qt_internal_add_module(WaylandCompositor
         Qt::CorePrivate
         Qt::GuiPrivate
         Qt::WaylandGlobalPrivate
+    PRIVATE_HEADER_FILTERS
+        "^qwayland-.*\.h|^wayland-.*-protocol\.h"
 )
 
 set(compositor_no_pch_sources

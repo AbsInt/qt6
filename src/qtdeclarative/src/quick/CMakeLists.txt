@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 #####################################################################
 ## Quick Module:
 #####################################################################
@@ -299,12 +302,6 @@ qt_internal_add_shaders(Quick "scenegraph_shaders"
         "scenegraph/shaders_ng/visualization.vert"
 )
 
-if(ANDROID)
-    set_property(TARGET Quick APPEND PROPERTY QT_ANDROID_BUNDLED_FILES
-        qml
-    )
-endif()
-
 qt_internal_extend_target(Quick CONDITION QT_FEATURE_qml_network
     LIBRARIES
         Qt::Network
@@ -420,7 +417,7 @@ qt_internal_extend_target(Quick CONDITION QT_FEATURE_quick_sprite
 
 qt_internal_extend_target(Quick CONDITION QT_FEATURE_quick_draganddrop
     SOURCES
-        items/qquickdrag.cpp items/qquickdrag_p.h
+        items/qquickdrag.cpp items/qquickdrag_p.h items/qquickdrag_p_p.h
         items/qquickdroparea.cpp items/qquickdroparea_p.h
 )
 
@@ -491,7 +488,7 @@ qt_internal_extend_target(Quick CONDITION QT_FEATURE_quick_repeater
 
 qt_internal_extend_target(Quick CONDITION QT_FEATURE_quick_shadereffect
     SOURCES
-        items/qquickshadereffect.cpp items/qquickshadereffect_p.h
+        items/qquickshadereffect.cpp items/qquickshadereffect_p.h items/qquickshadereffect_p_p.h
         items/qquickshadereffectmesh.cpp items/qquickshadereffectmesh_p.h
         items/qquickshadereffectsource.cpp items/qquickshadereffectsource_p.h
 )

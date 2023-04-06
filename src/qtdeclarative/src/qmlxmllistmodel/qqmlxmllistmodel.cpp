@@ -3,9 +3,21 @@
 
 #include "qqmlxmllistmodel_p.h"
 
-#include <QQmlFile>
-#include <QFile>
-#include <QCoreApplication>
+#include <QtQml/qqmlcontext.h>
+#include <QtQml/qqmlengine.h>
+#include <QtQml/qqmlinfo.h>
+#include <QtQml/qqmlfile.h>
+
+#include <QtCore/qcoreapplication.h>
+#include <QtCore/qfile.h>
+#include <QtCore/qfuturewatcher.h>
+#include <QtCore/qtimer.h>
+#include <QtCore/qxmlstream.h>
+
+#if QT_CONFIG(qml_network)
+#include <QtNetwork/qnetworkreply.h>
+#include <QtNetwork/qnetworkrequest.h>
+#endif
 
 Q_DECLARE_METATYPE(QQmlXmlListModelQueryResult)
 
@@ -547,14 +559,12 @@ int QQmlXmlListModel::nextQueryId()
     \qmlproperty enumeration QtQml.XmlListModel::XmlListModel::status
     Specifies the model loading status, which can be one of the following:
 
-    \list
-    \li XmlListModel.Null - No XML data has been set for this model.
-    \li XmlListModel.Ready - The XML data has been loaded into the model.
-    \li XmlListModel.Loading - The model is in the process of reading and
-        loading XML data.
-    \li XmlListModel.Error - An error occurred while the model was loading. See
-        \l errorString() for details about the error.
-    \endlist
+    \value XmlListModel.Null    No XML data has been set for this model.
+    \value XmlListModel.Ready   The XML data has been loaded into the model.
+    \value XmlListModel.Loading The model is in the process of reading and
+                                loading XML data.
+    \value XmlListModel.Error   An error occurred while the model was loading. See
+                                \l errorString() for details about the error.
 
     \sa progress
 */

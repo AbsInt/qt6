@@ -7,10 +7,10 @@
 #include "qdesigner.h"
 #include "qdesigner_workbench.h"
 #include "qdesigner_formwindow.h"
+#include "mainwindow.h"
 #include "newform.h"
 #include "versiondialog.h"
 #include "saveformastemplate.h"
-#include "qdesigner_toolwindow.h"
 #include "preferencesdialog.h"
 #include "appfontdialog.h"
 
@@ -76,9 +76,10 @@
 #include <QtCore/qscopedpointer.h>
 #include <QtXml/qdom.h>
 
+#include <algorithm>
+
 QT_BEGIN_NAMESPACE
 
-using namespace qdesigner_internal;
 using namespace Qt::StringLiterals;
 
 const char *QDesignerActions::defaultToolbarPropertyName = "__qt_defaultToolBarAction";
@@ -309,7 +310,7 @@ QDesignerActions::QDesignerActions(QDesignerWorkbench *workbench)
     m_editWidgetsAction->setProperty(QDesignerActions::defaultToolbarPropertyName, true);
     m_toolActions->addAction(m_editWidgetsAction);
 
-    connect(formWindowManager, &QDesignerFormWindowManager::activeFormWindowChanged,
+    connect(formWindowManager, &qdesigner_internal::QDesignerFormWindowManager::activeFormWindowChanged,
                 this, &QDesignerActions::activeFormWindowChanged);
 
     const QObjectList builtinPlugins = QPluginLoader::staticInstances()
@@ -474,7 +475,7 @@ QString QDesignerActions::uiExtension() const
 
 QAction *QDesignerActions::createRecentFilesMenu()
 {
-    QMenu *menu = new QMenu;
+    m_recentMenu.reset(new QMenu);
     QAction *act;
     // Need to insert this into the QAction.
     for (int i = 0; i < MaxRecentFiles; ++i) {
@@ -482,20 +483,20 @@ QAction *QDesignerActions::createRecentFilesMenu()
         act->setVisible(false);
         connect(act, &QAction::triggered, this, &QDesignerActions::openRecentForm);
         m_recentFilesActions->addAction(act);
-        menu->addAction(act);
+        m_recentMenu->addAction(act);
     }
     updateRecentFileActions();
-    menu->addSeparator();
+    m_recentMenu->addSeparator();
     act = new QAction(QIcon::fromTheme(QStringLiteral("edit-clear")),
                       tr("Clear &Menu"), this);
     act->setObjectName(QStringLiteral("__qt_action_clear_menu_"));
     connect(act, &QAction::triggered, this, &QDesignerActions::clearRecentFiles);
     m_recentFilesActions->addAction(act);
-    menu->addAction(act);
+    m_recentMenu->addAction(act);
 
     act = new QAction(QIcon::fromTheme(QStringLiteral("document-open-recent")),
                       tr("&Recent Forms"), this);
-    act->setMenu(menu);
+    act->setMenu(m_recentMenu.get());
     return act;
 }
 
@@ -889,32 +890,26 @@ void QDesignerActions::formWindowSettingsChanged(QDesignerFormWindowInterface *f
 void QDesignerActions::updateRecentFileActions()
 {
     QStringList files = m_settings.recentFilesList();
-    const int originalSize = files.size();
-    int numRecentFiles = qMin(files.size(), int(MaxRecentFiles));
-    const auto recentFilesActs = m_recentFilesActions->actions();
-
-    for (int i = 0; i < numRecentFiles; ++i) {
-        const QFileInfo fi(files[i]);
-        // If the file doesn't exist anymore, just remove it from the list so
-        // people don't get confused.
-        if (!fi.exists()) {
-            files.removeAt(i);
-            --i;
-            numRecentFiles = qMin(files.size(), int(MaxRecentFiles));
-            continue;
-        }
-        const QString text = fi.fileName();
-        recentFilesActs[i]->setText(text);
-        recentFilesActs[i]->setIconText(files[i]);
-        recentFilesActs[i]->setVisible(true);
+    auto existingEnd = std::remove_if(files.begin(), files.end(),
+                                      [] (const QString &f) { return !QFileInfo::exists(f); });
+    if (existingEnd != files.end()) {
+        files.erase(existingEnd, files.end());
+        m_settings.setRecentFilesList(files);
     }
 
-    for (int j = numRecentFiles; j < MaxRecentFiles; ++j)
-        recentFilesActs[j]->setVisible(false);
-
-    // If there's been a change, right it back
-    if (originalSize != files.size())
-        m_settings.setRecentFilesList(files);
+    const auto recentFilesActs = m_recentFilesActions->actions();
+    qsizetype i = 0;
+    for (QAction *action : recentFilesActs) {
+        if (i < files.size()) {
+            const QString &file = files.at(i);
+            action->setText(QFileInfo(file).fileName());
+            action->setIconText(file);
+            action->setVisible(true);
+        } else {
+            action->setVisible(false);
+        }
+        ++i;
+    }
 }
 
 void QDesignerActions::openRecentForm()
@@ -1164,7 +1159,7 @@ bool QDesignerActions::ensureBackupDirectories() {
 
     if (m_backupPath.isEmpty()) {
         // create names
-        m_backupPath = dataDirectory() + u"/backup"_s;
+        m_backupPath = qdesigner_internal::dataDirectory() + u"/backup"_s;
         m_backupTmpPath = m_backupPath + u"/tmp"_s;
     }
 
@@ -1223,7 +1218,7 @@ QPixmap QDesignerActions::createPreviewPixmap(QDesignerFormWindowInterface *fw)
 qdesigner_internal::PreviewConfiguration QDesignerActions::previewConfiguration()
 {
     qdesigner_internal::PreviewConfiguration pc;
-    QDesignerSharedSettings settings(core());
+    qdesigner_internal::QDesignerSharedSettings settings(core());
     if (settings.isCustomPreviewConfigurationEnabled())
         pc = settings.customPreviewConfiguration();
     return pc;

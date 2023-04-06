@@ -1,4 +1,5 @@
-# Generated from qsvgplugin.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## tst_qsvgplugin Test:
@@ -8,7 +9,7 @@
 qt_internal_add_test(tst_qsvgplugin
     SOURCES
         tst_qsvgplugin.cpp
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Gui
         Qt::GuiPrivate
         Qt::Svg
@@ -44,4 +45,3 @@ qt_internal_add_resource(tst_qsvgplugin "resources"
     FILES
         ${resources_resource_files}
 )
-

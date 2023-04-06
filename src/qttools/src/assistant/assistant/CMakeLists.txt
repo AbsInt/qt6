@@ -1,4 +1,5 @@
-# Generated from assistant.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## assistant App:
@@ -42,13 +43,13 @@ qt_internal_add_app(assistant
         xbelsupport.cpp xbelsupport.h
     INCLUDE_DIRECTORIES
         ../../shared/fontpanel
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Gui
         Qt::Help
         Qt::Network
         Qt::Sql
         Qt::Widgets
-        Qt::PrintSupport # special case
+        Qt::PrintSupport
         qlitehtml
     ENABLE_AUTOGEN_TOOLS
         uic
@@ -61,7 +62,6 @@ set(assistant_images_resource_files
     "images/bookmark.png"
     "images/closebutton.png"
     "images/darkclosebutton.png"
-    "images/mac/addtab.png"
     "images/mac/book.png"
     "images/mac/closetab.png"
     "images/mac/editcopy.png"
@@ -74,7 +74,6 @@ set(assistant_images_resource_files
     "images/mac/synctoc.png"
     "images/mac/zoomin.png"
     "images/mac/zoomout.png"
-    "images/win/addtab.png"
     "images/win/book.png"
     "images/win/closetab.png"
     "images/win/editcopy.png"
@@ -101,17 +100,8 @@ set_target_properties(assistant PROPERTIES
     QT_TARGET_DESCRIPTION "Qt Assistant"
 )
 
-#### Keys ignored in scope 1:.:.:assistant.pro:<TRUE>:
-# PROJECTNAME = "Assistant"
-
 ## Scopes:
 #####################################################################
-
-#### Keys ignored in scope 2:.:.:assistant.pro:TARGET Qt::WebKitWidgets AND NOT QT_CONFIG___contains___static:
-# BROWSER = "qtwebkit"
-
-#### Keys ignored in scope 3:.:.:assistant.pro:else:
-# BROWSER = "qtextbrowser"
 
 qt_internal_extend_target(assistant CONDITION TARGET Qt::PrintSupport
     PUBLIC_LIBRARIES
@@ -177,11 +167,9 @@ if(APPLE)
     target_sources(assistant PRIVATE
         assistant.icns
     )
-    # special case end
     # Set values to be replaced in the custom Info_mac.plist.
     set(ICON "assistant.icns")
     set(EXECUTABLE "Assistant")
-    # special case end
 endif()
 qt_internal_add_docs(assistant
     doc/qtassistant.qdocconf

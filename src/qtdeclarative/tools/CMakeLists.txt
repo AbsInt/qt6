@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Generated from tools.pro.
 
 if(QT_FEATURE_qml_devtools)
@@ -5,6 +8,7 @@ if(QT_FEATURE_qml_devtools)
     if(QT_FEATURE_commandlineparser)
         add_subdirectory(qmllint)
         add_subdirectory(qmltc)
+        add_subdirectory(qmltyperegistrar)
     endif()
     add_subdirectory(qmlimportscanner)
     add_subdirectory(qmlformat)

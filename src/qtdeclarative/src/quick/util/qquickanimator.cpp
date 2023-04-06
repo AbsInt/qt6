@@ -247,7 +247,8 @@ QAbstractAnimationJob *QQuickAnimator::transition(QQuickStateActions &actions,
     Q_D(QQuickAnimator);
 
     if (d->defaultProperty.isValid() && propertyName() != d->defaultProperty.name()) {
-        qDebug() << Q_FUNC_INFO << "property name conflict...";
+        qmlWarning(this) << "property name conflict: \""
+            << propertyName() << "\" != \"" << d->defaultProperty.name() << "\"";
         return nullptr;
     }
 
@@ -448,14 +449,16 @@ QQuickAnimatorJob *QQuickRotationAnimator::createJob() const {
 
     Possible values are:
 
-    \list
-    \li RotationAnimator.Numerical (default) - Rotate by linearly interpolating between the two numbers.
-           A rotation from 10 to 350 will rotate 340 degrees clockwise.
-    \li RotationAnimator.Clockwise - Rotate clockwise between the two values
-    \li RotationAnimator.Counterclockwise - Rotate counterclockwise between the two values
-    \li RotationAnimator.Shortest - Rotate in the direction that produces the shortest animation path.
-           A rotation from 10 to 350 will rotate 20 degrees counterclockwise.
-    \endlist
+    \value RotationAnimator.Numerical
+        (default) Rotate by linearly interpolating between the two numbers.
+        A rotation from 10 to 350 will rotate 340 degrees clockwise.
+    \value RotationAnimator.Clockwise
+        Rotate clockwise between the two values
+    \value RotationAnimator.Counterclockwise
+        Rotate counterclockwise between the two values
+    \value RotationAnimator.Shortest
+        Rotate in the direction that produces the shortest animation path.
+        A rotation from 10 to 350 will rotate 20 degrees counterclockwise.
 */
 void QQuickRotationAnimator::setDirection(RotationDirection dir)
 {
@@ -472,6 +475,7 @@ QQuickRotationAnimator::RotationDirection QQuickRotationAnimator::direction() co
     return d->direction;
 }
 
+#if QT_CONFIG(quick_shadereffect)
 /*!
     \qmltype UniformAnimator
     \instantiates QQuickUniformAnimator
@@ -549,6 +553,7 @@ QQuickAnimatorJob *QQuickUniformAnimator::createJob() const
     job->setUniform(u.toLatin1());
     return job;
 }
+#endif
 
 QT_END_NAMESPACE
 

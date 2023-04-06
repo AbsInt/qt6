@@ -49,6 +49,7 @@ static QString getFunctionCategory(const QmltcMethod &method)
         category += u" Q_SLOTS"_s;
         break;
     case QQmlJSMetaMethod::Method:
+    case QQmlJSMetaMethod::StaticMethod:
         break;
     }
     return category;
@@ -136,6 +137,7 @@ void QmltcCodeWriter::writeGlobalHeader(QmltcOutputWrapper &code, const QString 
     code.rawAppendToCpp(u"// qmltc support library:");
     code.rawAppendToCpp(u"#include <private/qqmlcppbinding_p.h>"); // QmltcSupportLib
     code.rawAppendToCpp(u"#include <private/qqmlcpponassignment_p.h>"); // QmltcSupportLib
+    code.rawAppendToHeader(u"#include <private/qqmlcpptypehelpers_p.h> "); // QmltcSupportLib
 
     code.rawAppendToCpp(u"#include <private/qqmlobjectcreator_p.h>"); // createComponent()
     code.rawAppendToCpp(u"#include <private/qqmlcomponent_p.h>"); // QQmlComponentPrivate::get()
@@ -287,6 +289,8 @@ void QmltcCodeWriter::write(QmltcOutputWrapper &code, const QmltcType &type)
             // TODO: ignoreInit must be eliminated
 
             QmltcCodeWriter::write(code, type.externalCtor);
+            if (type.staticCreate)
+                QmltcCodeWriter::write(code, *type.staticCreate);
         }
 
         // dtor
@@ -384,12 +388,21 @@ void QmltcCodeWriter::write(QmltcOutputWrapper &code, const QmltcMethod &method)
 {
     const auto [hSignature, cppSignature] = functionSignatures(method);
     // Note: augment return type with preambles in declaration
-    code.rawAppendToHeader(functionReturnType(method) + u" " + hSignature + u";");
+    code.rawAppendToHeader((method.type == QQmlJSMetaMethod::StaticMethod
+                                    ? u"static " + functionReturnType(method)
+                                    : functionReturnType(method))
+                           + u" " + hSignature + u";");
 
     // do not generate method implementation if it is a signal
     const auto methodType = method.type;
     if (methodType != QQmlJSMetaMethod::Signal) {
-        code.rawAppendToCpp(u""); // blank line
+        code.rawAppendToCpp(u""_s); // blank line
+        if (method.comments.size() > 0) {
+            code.rawAppendToCpp(u"/*! \\internal"_s);
+            for (const auto &comment : method.comments)
+                code.rawAppendToCpp(comment, 1);
+            code.rawAppendToCpp(u"*/"_s);
+        }
         code.rawAppendToCpp(method.returnType);
         code.rawAppendSignatureToCpp(cppSignature);
         code.rawAppendToCpp(u"{");

@@ -1,4 +1,5 @@
-# Generated from svg.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## QSvgPlugin Plugin:
@@ -15,6 +16,3 @@ qt_internal_add_plugin(QSvgPlugin
         Qt::Gui
         Qt::Svg
 )
-
-#### Keys ignored in scope 1:.:.:svg.pro:<TRUE>:
-# PLUGIN_EXTENDS = "svg"

@@ -247,10 +247,8 @@ QSizeF QQuickGridLayoutBase::sizeHint(Qt::SizeHint whichSizeHint) const
 
     Possible values:
 
-    \list
-    \li Qt.LeftToRight (default) - Items are laid out from left to right.
-    \li Qt.RightToLeft - Items are laid out from right to left.
-    \endlist
+    \value Qt.LeftToRight   (default) Items are laid out from left to right.
+    \value Qt.RightToLeft   Items are laid out from right to left.
 
     \sa RowLayout::layoutDirection, ColumnLayout::layoutDirection
 */
@@ -282,6 +280,12 @@ void QQuickGridLayoutBase::setAlignment(QQuickItem *item, Qt::Alignment alignmen
     Q_D(QQuickGridLayoutBase);
     d->engine.setAlignment(item, alignment);
     maybeSubscribeToBaseLineOffsetChanges(item);
+}
+
+void QQuickGridLayoutBase::setStretchFactor(QQuickItem *item, int stretchFactor, Qt::Orientation orient)
+{
+    Q_D(QQuickGridLayoutBase);
+    d->engine.setStretchFactor(item, stretchFactor, orient);
 }
 
 QQuickGridLayoutBase::~QQuickGridLayoutBase()
@@ -589,12 +593,10 @@ void QQuickGridLayout::setRows(int rows)
 
     Possible values are:
 
-    \list
-    \li GridLayout.LeftToRight (default) - Items are positioned next to
-       each other, then wrapped to the next line.
-    \li GridLayout.TopToBottom - Items are positioned next to each
-       other from top to bottom, then wrapped to the next column.
-    \endlist
+    \value GridLayout.LeftToRight
+        (default) Items are positioned next to each other, then wrapped to the next line.
+    \value GridLayout.TopToBottom
+        Items are positioned next to each other from top to bottom, then wrapped to the next column.
 
     \sa rows
     \sa columns
@@ -642,6 +644,8 @@ void QQuickGridLayout::insertLayoutItems()
         QQuickLayoutAttached *info = attachedLayoutObject(child, false);
 
         Qt::Alignment alignment;
+        int hStretch = -1;
+        int vStretch = -1;
         int row = -1;
         int column = -1;
         int span[2] = {1,1};
@@ -681,6 +685,12 @@ void QQuickGridLayout::insertLayoutItems()
                 return;
             }
             alignment = info->alignment();
+            hStretch = info->horizontalStretchFactor();
+            if (hStretch >= 0 && !info->fillWidth())
+                qmlWarning(child) << "horizontalStretchFactor requires fillWidth to also be set to true";
+            vStretch = info->verticalStretchFactor();
+            if (vStretch >= 0 && !info->fillHeight())
+                qmlWarning(child) << "verticalStretchFactor requires fillHeight to also be set to true";
         }
 
         Q_ASSERT(columnSpan >= 1);
@@ -732,6 +742,10 @@ void QQuickGridLayout::insertLayoutItems()
         column = nextColumn;
         row = nextRow;
         QQuickGridLayoutItem *layoutItem = new QQuickGridLayoutItem(child, row, column, rowSpan, columnSpan, alignment);
+        if (hStretch >= 0)
+            layoutItem->setStretchFactor(hStretch, Qt::Horizontal);
+        if (vStretch >= 0)
+            layoutItem->setStretchFactor(vStretch, Qt::Vertical);
         d->engine.insertItem(layoutItem, -1);
     }
 }
@@ -757,10 +771,8 @@ QQuickLinearLayout::QQuickLinearLayout(Qt::Orientation orientation,
 
     Possible values:
 
-    \list
-    \li Qt.LeftToRight (default) - Items are laid out from left to right.
-    \li Qt.RightToLeft - Items are laid out from right to left
-    \endlist
+    \value Qt.LeftToRight   (default) Items are laid out from left to right.
+    \value Qt.RightToLeft   Items are laid out from right to left
 
     \sa GridLayout::layoutDirection, ColumnLayout::layoutDirection
 */
@@ -774,10 +786,8 @@ QQuickLinearLayout::QQuickLinearLayout(Qt::Orientation orientation,
 
     Possible values:
 
-    \list
-    \li Qt.LeftToRight (default) - Items are laid out from left to right.
-    \li Qt.RightToLeft - Items are laid out from right to left
-    \endlist
+    \value Qt.LeftToRight   (default) Items are laid out from left to right.
+    \value Qt.RightToLeft   Items are laid out from right to left
 
     \sa GridLayout::layoutDirection, RowLayout::layoutDirection
 */
@@ -827,8 +837,17 @@ void QQuickLinearLayout::insertLayoutItems()
         QQuickLayoutAttached *info = attachedLayoutObject(child, false);
 
         Qt::Alignment alignment;
-        if (info)
+        int hStretch = -1;
+        int vStretch = -1;
+        bool fillWidth = false;
+        bool fillHeight = false;
+        if (info) {
             alignment = info->alignment();
+            hStretch = info->horizontalStretchFactor();
+            vStretch = info->verticalStretchFactor();
+            fillWidth = info->fillWidth();
+            fillHeight = info->fillHeight();
+        }
 
         const int index = d->engine.rowCount(d->orientation);
         d->engine.insertRow(index, d->orientation);
@@ -838,6 +857,17 @@ void QQuickLinearLayout::insertLayoutItems()
         if (d->orientation == Qt::Vertical)
             qSwap(gridRow, gridColumn);
         QQuickGridLayoutItem *layoutItem = new QQuickGridLayoutItem(child, gridRow, gridColumn, 1, 1, alignment);
+
+        if (hStretch >= 0) {
+            if (!fillWidth)
+                qmlWarning(child) << "horizontalStretchFactor requires fillWidth to also be set to true";
+            layoutItem->setStretchFactor(hStretch, Qt::Horizontal);
+        }
+        if (vStretch >= 0) {
+            if (!fillHeight)
+                qmlWarning(child) << "verticalStretchFactor requires fillHeight to also be set to true";
+            layoutItem->setStretchFactor(vStretch, Qt::Vertical);
+        }
         d->engine.insertItem(layoutItem, index);
     }
 }

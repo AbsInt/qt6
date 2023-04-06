@@ -93,6 +93,11 @@ qt_add_qml_module(my_module
 
 All QML files listed under \c {QML_FILES} will automatically get compiled \l {Ahead-of-Time Compilation}{ahead of time}.
 
+You should keep the QML files in the same directory as the CMakeLists.txt with
+the qt_add_qml_module. Otherwise their \l{The Implicit Import}{implicit imports}
+will be different from the \l{QML Modules} they belong to. This is a frequent
+source of mistakes.
+
 \section2 Related Information
 \list
  \li \l{The Qt Resource System}
@@ -249,7 +254,7 @@ property MyMenu optionsMenu
 \section1 Performance
 
 For information on performance in QML and Qt Quick,
-see \l {Performance Considerations And Suggestions}.
+see \l {QML Performance Considerations And Suggestions}.
 
 \section1 Prefer Declarative Bindings Over Imperative Assignments
 
@@ -329,7 +334,7 @@ developers to follow these tips:
 With this in place, your application's UI should scale depending
 on the display resolution on offer.
 
-\image qtquickcontrols2-gallery-welcome.png
+\image qtquickcontrols-gallery-welcome.png
 
 \section2 Related Information
 

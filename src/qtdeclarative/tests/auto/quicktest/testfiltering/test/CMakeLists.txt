@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Generated from test.pro.
 
 #####################################################################
@@ -9,6 +12,6 @@ qt_internal_add_test(tst_testfiltering
     WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/../" # special case
     SOURCES
         ../tst_testfiltering.cpp
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Gui
 )

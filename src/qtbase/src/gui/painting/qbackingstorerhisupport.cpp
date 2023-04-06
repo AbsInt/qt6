@@ -83,6 +83,12 @@ bool QBackingStoreRhiSupport::create()
         QRhiD3D11InitParams params;
         params.enableDebugLayer = m_config.isDebugLayerEnabled();
         rhi = QRhi::create(QRhi::D3D11, &params, flags);
+        if (!rhi && !flags.testFlag(QRhi::PreferSoftwareRenderer)) {
+            qCDebug(lcQpaBackingStore, "Failed to create a D3D device with default settings; "
+                                       "attempting to get a software rasterizer backed device instead");
+            flags |= QRhi::PreferSoftwareRenderer;
+            rhi = QRhi::create(QRhi::D3D11, &params, flags);
+        }
     }
 #endif
 
@@ -231,25 +237,6 @@ QRhi::Implementation QBackingStoreRhiSupport::apiToRhiBackend(QPlatformBackingSt
     return QRhi::Null;
 }
 
-const char *QBackingStoreRhiSupport::apiName(QPlatformBackingStoreRhiConfig::Api api)
-{
-    switch (api) {
-    case QPlatformBackingStoreRhiConfig::OpenGL:
-        return "OpenGL";
-    case QPlatformBackingStoreRhiConfig::Metal:
-        return "Metal";
-    case QPlatformBackingStoreRhiConfig::Vulkan:
-        return "Vulkan";
-    case QPlatformBackingStoreRhiConfig::D3D11:
-        return "D3D11";
-    case QPlatformBackingStoreRhiConfig::Null:
-        return "Null";
-    default:
-        break;
-    }
-    return "Unknown";
-}
-
 bool QBackingStoreRhiSupport::checkForceRhi(QPlatformBackingStoreRhiConfig *outConfig, QSurface::SurfaceType *outType)
 {
     static QPlatformBackingStoreRhiConfig config;
@@ -303,7 +290,7 @@ bool QBackingStoreRhiSupport::checkForceRhi(QPlatformBackingStoreRhiConfig *outC
         }
 
         qCDebug(lcQpaBackingStore) << "Check for forced use of QRhi resulted in enable"
-                                   << config.isEnabled() << "with api" << apiName(config.api());
+                                   << config.isEnabled() << "with api" << QRhi::backendName(apiToRhiBackend(config.api()));
     }
 
     if (config.isEnabled()) {

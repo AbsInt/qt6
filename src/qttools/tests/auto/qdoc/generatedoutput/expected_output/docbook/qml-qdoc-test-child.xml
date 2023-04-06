@@ -6,6 +6,7 @@
 <db:titleabbrev>A test project for QDoc build artifacts</db:titleabbrev>
 <db:abstract>
 <db:para>A Child inheriting its parent.</db:para>
+<db:para>This type was introduced in Qt 1.1.</db:para>
 </db:abstract>
 </db:info>
 <db:variablelist>
@@ -13,6 +14,12 @@
 <db:term>Import Statement</db:term>
 <db:listitem>
 <db:para>import QDoc.Test 1.1</db:para>
+</db:listitem>
+</db:varlistentry>
+<db:varlistentry>
+<db:term>Since:</db:term>
+<db:listitem>
+<db:para>Qt 1.1</db:para>
 </db:listitem>
 </db:varlistentry>
 <db:varlistentry>
@@ -56,13 +63,13 @@
 </db:section>
 <db:section xml:id="method-documentation">
 <db:title>Method Documentation</db:title>
-<db:section xml:id="name-method-1">
-<db:title>void name()</db:title>
-<db:para>Name all children with random names.</db:para>
-</db:section>
 <db:section xml:id="name-method">
 <db:title>void name(Child <db:emphasis>child</db:emphasis>, <db:emphasis>name</db:emphasis>)</db:title>
 <db:para>Name a <db:code role="parameter">child</db:code> of this child using <db:code role="parameter">name</db:code>.</db:para>
+</db:section>
+<db:section xml:id="name-method-1">
+<db:title>void name()</db:title>
+<db:para>Name all children with random names.</db:para>
 </db:section>
 <db:section xml:id="rear-method">
 <db:title>void rear(Child <db:emphasis>child</db:emphasis>, var <db:emphasis>method</db:emphasis> = Strict)</db:title>

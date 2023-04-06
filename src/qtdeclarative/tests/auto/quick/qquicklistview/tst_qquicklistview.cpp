@@ -8013,7 +8013,7 @@ void tst_QQuickListView::flickBothDirections()
             listview->setContentHeight(contentHeight);
     }
 
-    flick(window, QPoint(100, 100), QPoint(25, 25), 50);
+    flick(window, QPoint(140, 140), QPoint(25, 25), 50);
     QVERIFY(listview->isMoving());
     QTRY_VERIFY(!listview->isMoving());
     QCOMPARE(listview->contentX(), targetPos.x());
@@ -8845,7 +8845,7 @@ void tst_QQuickListView::QTBUG_38209()
     listview->flick(0, 1000);
 
     // ensure we move more than just a couple pixels
-    QTRY_VERIFY(contentY - listview->contentY() > qreal(100.0));
+    QTRY_COMPARE_GE(contentY - listview->contentY(), 100);
 }
 
 void tst_QQuickListView::programmaticFlickAtBounds()

@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Generate an lupdate project file in JSON format.
 #
 # This file is to be used in CMake script mode with the following variables set:

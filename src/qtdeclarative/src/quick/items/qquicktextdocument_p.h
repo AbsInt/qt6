@@ -37,10 +37,6 @@ public:
     QQuickTextDocumentWithImageResources(QQuickItem *parent);
     virtual ~QQuickTextDocumentWithImageResources();
 
-    void setText(const QString &);
-#if QT_CONFIG(textmarkdownreader)
-    void setMarkdownText(const QString &);
-#endif
     int resourcesLoading() const { return outstanding; }
 
     QSizeF intrinsicSize(QTextDocument *doc, int posInDocument, const QTextFormat &format) override;
@@ -60,7 +56,6 @@ protected:
     QQuickPixmap *loadPixmap(QQmlContext *context, const QUrl &name);
 
 private Q_SLOTS:
-    void reset();
     void requestFinished();
 
 private:
@@ -69,6 +64,17 @@ private:
     int outstanding;
     static QSet<QUrl> errors;
 };
+
+namespace QtPrivate {
+class ProtectedLayoutAccessor: public QAbstractTextDocumentLayout
+{
+public:
+    inline QTextCharFormat formatAccessor(int pos)
+    {
+        return format(pos);
+    }
+};
+} // namespace QtPrivate
 
 QT_END_NAMESPACE
 

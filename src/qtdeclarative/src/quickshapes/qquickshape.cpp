@@ -15,7 +15,7 @@
 static void initResources()
 {
 #if defined(QT_STATIC)
-    Q_INIT_RESOURCE(qtquickshapes);
+    Q_INIT_RESOURCE(qtquickshapes_shaders);
 #endif
 }
 
@@ -360,10 +360,8 @@ void QQuickShapePath::setCapStyle(CapStyle style)
     This property defines the style of stroking. The default value is
     ShapePath.SolidLine.
 
-    \list
-    \li ShapePath.SolidLine - A plain line.
-    \li ShapePath.DashLine - Dashes separated by a few pixels.
-    \endlist
+    \value ShapePath.SolidLine  A plain line.
+    \value ShapePath.DashLine   Dashes separated by a few pixels.
  */
 
 QQuickShapePath::StrokeStyle QQuickShapePath::strokeStyle() const
@@ -500,8 +498,7 @@ void QQuickShapePath::resetFillGradient()
     \brief Renders a path.
     \since 5.10
 
-    Renders a path either by generating geometry via QPainterPath and manual
-    triangulation or by using a GPU vendor extension.
+    Renders a path by triangulating geometry from a QPainterPath.
 
     This approach is different from rendering shapes via QQuickPaintedItem or
     the 2D Canvas because the path never gets rasterized in software.
@@ -557,10 +554,9 @@ void QQuickShapePath::resetFillGradient()
 
     \list
 
-    \li When running with the OpenGL backend of Qt Quick, only the generic,
-    triangulation-based approach is available. When OpenGL is not used directly
-    by the scene graph, for example because it is using the graphics abstraction layer
-    (QRhi), only the generic shape renderer is available.
+    \li When Qt Quick is running with the default, hardware-accelerated backend (RHI),
+    the generic shape renderer will be used. This converts the shapes into triangles
+    which are passed to the renderer.
 
     \li The \c software backend is fully supported. The path is rendered via
     QPainter::strokePath() and QPainter::fillPath() in this case.
@@ -1005,6 +1001,7 @@ void QQuickShapePrivate::sync()
     const int count = sp.size();
     bool countChanged = false;
     renderer->beginSync(count, &countChanged);
+    renderer->setTriangulationScale(triangulationScale);
 
     for (int i = 0; i < count; ++i) {
         QQuickShapePath *p = sp[i];

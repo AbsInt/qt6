@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 qt_internal_add_example(quick-accessibility)
 qt_internal_add_example(animation)
 qt_internal_add_example(draganddrop)
@@ -26,6 +29,8 @@ qt_internal_add_example(window)
 add_subdirectory(particles)
 qt_internal_add_example(delegatechooser)
 qt_internal_add_example(shapes)
+qt_internal_add_example(itemvariablerefreshrate)
+add_subdirectory(multieffect)
 if(QT_FEATURE_opengl OR QT_FEATURE_opengles2 OR QT_FEATURE_opengles3)
     add_subdirectory(rendercontrol)
 endif()
@@ -58,6 +63,8 @@ set(reused_dir_targets
     itemparticle_shared
     system_shared
     draganddrop_shared
+    testbed_shared
+    itemswitcher_shared
 )
 
 foreach(target IN LISTS reused_dir_targets)

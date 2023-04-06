@@ -6,6 +6,6 @@ QtObject {
         id: cc
         QtObject {}
     }
-
+        
     property bool ready: cc.status == Component.Ready
 }

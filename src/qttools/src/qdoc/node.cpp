@@ -24,9 +24,6 @@
 
 QT_BEGIN_NAMESPACE
 
-QStringMap Node::operators;
-QMap<QString, Node::NodeType> Node::goals;
-
 /*!
   \class Node
   \brief The Node class is the base class for all the nodes in QDoc's parse tree.
@@ -49,47 +46,6 @@ QMap<QString, Node::NodeType> Node::goals;
 
   \sa Aggregate, ClassNode, PropertyNode
  */
-
-/*!
-  Initialize the map of search goals. This is called once
-  by QDocDatabase::initializeDB(). The map key is a string
-  representing a value in the enum Node::NodeType. The map value
-  is the enum value.
-
-  There should be an entry in the map for each value in the
-  NodeType enum.
- */
-void Node::initialize()
-{
-    goals.insert("namespace", Node::Namespace);
-    goals.insert("class", Node::Class);
-    goals.insert("struct", Node::Struct);
-    goals.insert("union", Node::Union);
-    goals.insert("header", Node::HeaderFile);
-    goals.insert("headerfile", Node::HeaderFile);
-    goals.insert("page", Node::Page);
-    goals.insert("enum", Node::Enum);
-    goals.insert("example", Node::Example);
-    goals.insert("externalpage", Node::ExternalPage);
-    goals.insert("typedef", Node::Typedef);
-    goals.insert("typealias", Node::TypeAlias);
-    goals.insert("function", Node::Function);
-    goals.insert("proxy", Node::Proxy);
-    goals.insert("property", Node::Property);
-    goals.insert("variable", Node::Variable);
-    goals.insert("group", Node::Group);
-    goals.insert("module", Node::Module);
-    goals.insert("qmltype", Node::QmlType);
-    goals.insert("qmlmodule", Node::QmlModule);
-    goals.insert("qmlproperty", Node::QmlProperty);
-    goals.insert("qmlsignal", Node::Function);
-    goals.insert("qmlsignalhandler", Node::Function);
-    goals.insert("qmlmethod", Node::Function);
-    goals.insert("qmlvaluetype", Node::QmlValueType);
-    goals.insert("qmlbasictype", Node::QmlValueType); // deprecated!
-    goals.insert("sharedcomment", Node::SharedComment);
-    goals.insert("collection", Node::Collection);
-}
 
 /*!
   Returns \c true if the node \a n1 is less than node \a n2. The
@@ -233,24 +189,6 @@ bool Node::nodeNameLessThan(const Node *n1, const Node *n2)
   \value PreviousLink
   \value ContentsLink
  */
-
-/*!
-  \enum Node::PageType
-
-  An unsigned char value that indicates what kind of documentation page
-  the Node represents. I think it is not very useful anymore.
-
-  \value NoPageType
-  \value AttributionPage
-  \value ApiPage
-  \value ArticlePage
-  \value ExamplePage
-  \value HowToPage
-  \value OverviewPage
-  \value TutorialPage
-  \value FAQPage
-  \omitvalue OnBeyondZebra
-*/
 
 /*!
   \enum Node::FlagValue
@@ -558,17 +496,6 @@ QString Node::fullName(const Node *relative) const
 }
 
 /*!
-  Try to match this node's type with one of the \a types.
-  If a match is found, return true. If no match is found,
-  return false.
- */
-bool Node::match(const QList<int> &types) const
-{
-    return std::any_of(types.cbegin(), types.cend(),
-                       [this](const int type) { return nodeType() == type; });
-}
-
-/*!
   Sets this Node's Doc to \a doc. If \a replace is false and
   this Node already has a Doc, and if this doc is not marked
   with the \\reimp command, a warning is reported that the
@@ -624,91 +551,10 @@ Node::Node(NodeType type, Aggregate *parent, QString name)
 {
     if (m_parent)
         m_parent->addChild(this);
-    m_outSubDir = Generator::outputSubdir();
-    if (operators.isEmpty()) {
-        operators.insert("++", "inc");
-        operators.insert("--", "dec");
-        operators.insert("==", "eq");
-        operators.insert("!=", "ne");
-        operators.insert("<<", "lt-lt");
-        operators.insert(">>", "gt-gt");
-        operators.insert("+=", "plus-assign");
-        operators.insert("-=", "minus-assign");
-        operators.insert("*=", "mult-assign");
-        operators.insert("/=", "div-assign");
-        operators.insert("%=", "mod-assign");
-        operators.insert("&=", "bitwise-and-assign");
-        operators.insert("|=", "bitwise-or-assign");
-        operators.insert("^=", "bitwise-xor-assign");
-        operators.insert("<<=", "bitwise-left-shift-assign");
-        operators.insert(">>=", "bitwise-right-shift-assign");
-        operators.insert("||", "logical-or");
-        operators.insert("&&", "logical-and");
-        operators.insert("()", "call");
-        operators.insert("[]", "subscript");
-        operators.insert("->", "pointer");
-        operators.insert("->*", "pointer-star");
-        operators.insert("+", "plus");
-        operators.insert("-", "minus");
-        operators.insert("*", "mult");
-        operators.insert("/", "div");
-        operators.insert("%", "mod");
-        operators.insert("|", "bitwise-or");
-        operators.insert("&", "bitwise-and");
-        operators.insert("^", "bitwise-xor");
-        operators.insert("!", "not");
-        operators.insert("~", "bitwise-not");
-        operators.insert("<=", "lt-eq");
-        operators.insert(">=", "gt-eq");
-        operators.insert("<", "lt");
-        operators.insert(">", "gt");
-        operators.insert("=", "assign");
-        operators.insert(",", "comma");
-        operators.insert("delete[]", "delete-array");
-        operators.insert("delete", "delete");
-        operators.insert("new[]", "new-array");
-        operators.insert("new", "new");
-    }
-    setPageType(getPageType(type));
-    setGenus(getGenus(type));
-}
 
-/*!
-  Determines the appropriate PageType value for the NodeType
-  value \a t and returns that PageType value.
- */
-Node::PageType Node::getPageType(Node::NodeType t)
-{
-    switch (t) {
-    case Node::Namespace:
-    case Node::Class:
-    case Node::Struct:
-    case Node::Union:
-    case Node::HeaderFile:
-    case Node::Enum:
-    case Node::Function:
-    case Node::Typedef:
-    case Node::Property:
-    case Node::Variable:
-    case Node::QmlType:
-    case Node::QmlProperty:
-    case Node::QmlValueType:
-    case Node::SharedComment:
-        return Node::ApiPage;
-    case Node::Example:
-        return Node::ExamplePage;
-    case Node::Page:
-    case Node::ExternalPage:
-        return Node::NoPageType;
-    case Node::Group:
-    case Node::Module:
-    case Node::QmlModule:
-    case Node::Collection:
-        return Node::OverviewPage;
-    case Node::Proxy:
-    default:
-        return Node::NoPageType;
-    }
+    m_outSubDir = Generator::outputSubdir();
+
+    setGenus(getGenus(type));
 }
 
 /*!
@@ -843,27 +689,6 @@ QString Node::nodeTypeString(NodeType t)
         break;
     }
     return QString();
-}
-
-/*!
-  Set the page type according to the string \a t.
- */
-void Node::setPageType(const QString &t)
-{
-    if ((t == "API") || (t == "api"))
-        m_pageType = ApiPage;
-    else if (t == "howto")
-        m_pageType = HowToPage;
-    else if (t == "overview")
-        m_pageType = OverviewPage;
-    else if (t == "tutorial")
-        m_pageType = TutorialPage;
-    else if (t == "faq")
-        m_pageType = FAQPage;
-    else if (t == "article")
-        m_pageType = ArticlePage;
-    else if (t == "example")
-        m_pageType = ExamplePage;
 }
 
 /*! Converts the boolean value \a b to an enum representation
@@ -1189,18 +1014,6 @@ void Node::setDeprecatedSince(const QString &sinceVersion)
   Sets this node's Genus to \a t.
 */
 
-/*! \fn PageType Node::pageType() const
-  Returns this node's page type.
-
-  \sa PageType
-*/
-
-/*! \fn void Node::setPageType(PageType t)
-  Sets this node's page type to \a t.
-
-  \sa PageType
-*/
-
 /*! \fn  QString Node::signature(bool values, bool noReturnType, bool templateParams) const
 
   If this node is a FunctionNode, this function returns the function's
@@ -1272,11 +1085,6 @@ void Node::setDeprecatedSince(const QString &sinceVersion)
   of something. This function is called when the \c relates command is seen.
  */
 
-/*! \fn void Node::setOutputFileName(const QString &f)
-  In a PageNode, this function sets the node's output file name to \a f.
-  In a non-PageNode, this function does nothing.
- */
-
 /*! \fn void Node::addMember(Node *node)
   In a CollectionNode, this function adds \a node to the collection
   node's members list. It does nothing if this node is not a CollectionNode.
@@ -1300,16 +1108,6 @@ void Node::setDeprecatedSince(const QString &sinceVersion)
 /*! \fn void Node::setWrapper()
   If this node is a ClassNode or a QmlTypeNode, the node's wrapper flag
   data member is set to \c true.
- */
-
-/*! \fn void Node::getMemberNamespaces(NodeMap& out)
-  If this is a CollectionNode, \a out is loaded with all the collection
-  members that are namespaces.
- */
-
-/*! \fn void getMemberClasses(NodeMap& out) const { }
-  If this is a CollectionNode, \a out is loaded with all the collection
-  members that are classes.
  */
 
 /*! \fn void Node::setDataType(const QString &dataType)
@@ -1336,11 +1134,6 @@ void Node::setDeprecatedSince(const QString &sinceVersion)
   If this node is a QmlPropertyNode or a FunctionNode, this function
   returns the name of the parent node. Otherwise it returns an empty
   string.
- */
-
-/*! \fn void Node::setNoAutoList(bool b)
-  If this node is a PageNode, the node's \c {no autolist} flag is set to \a b.
-  Otherwise the function does nothing.
  */
 
 /*! \fn bool Node::docMustBeGenerated() const
@@ -1415,11 +1208,6 @@ void Node::setDeprecatedSince(const QString &sinceVersion)
 /*! \fn QString Node::nameForLists() const
   If this node is a PageNode or a HeaderNode, title() is returned.
   Otherwise name() is returned.
- */
-
-/*! \fn QString Node::outputFileName() const
-  If this node is a PageNode, the name of the output file that will be
-  generated for the node is returned. Otherwise an empty string is returned.
  */
 
 /*! \fn QString Node::obsoleteLink() const

@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Generated from qqmlmetaproperty.pro.
 
 #####################################################################
@@ -8,8 +11,8 @@ qt_internal_add_benchmark(tst_qqmlmetaproperty
     SOURCES
         tst_qqmlmetaproperty.cpp
     DEFINES
-        SRCDIR=\\\"${CMAKE_CURRENT_SOURCE_DIR}\\\"
-    PUBLIC_LIBRARIES
+        SRCDIR="${CMAKE_CURRENT_SOURCE_DIR}"
+    LIBRARIES
         Qt::Gui
         Qt::Qml
         Qt::Test

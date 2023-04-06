@@ -29,13 +29,16 @@ class QQmlJSLogger;
 class Q_QMLCOMPILER_PRIVATE_EXPORT QQmlJSImporter
 {
 public:
-    using ImportedTypes = QHash<QString, QQmlJSImportedScope>;
+    using ImportedTypes = QQmlJSScope::ContextualTypes;
 
     QQmlJSImporter(const QStringList &importPaths, QQmlJSResourceFileMapper *mapper,
                    bool useOptionalImports = false);
 
-    QQmlJSResourceFileMapper *resourceFileMapper() { return m_mapper; }
+    QQmlJSResourceFileMapper *resourceFileMapper() const { return m_mapper; }
     void setResourceFileMapper(QQmlJSResourceFileMapper *mapper) { m_mapper = mapper; }
+
+    QQmlJSResourceFileMapper *metaDataMapper() const { return m_metaDataMapper; }
+    void setMetaDataMapper(QQmlJSResourceFileMapper *mapper) { m_metaDataMapper = mapper; }
 
     ImportedTypes importBuiltins();
     void importQmldirs(const QStringList &qmltypesFiles);
@@ -69,6 +72,8 @@ public:
     QStringList importPaths() const { return m_importPaths; }
     void setImportPaths(const QStringList &importPaths);
 
+    void clearCache();
+
     QQmlJSScope::ConstPtr jsGlobalObject() const;
 
     std::unique_ptr<QQmlJSImportVisitor>
@@ -87,7 +92,10 @@ private:
     {
         AvailableTypes(ImportedTypes builtins)
             : cppNames(std::move(builtins))
-        {}
+            , qmlNames(QQmlJSScope::ContextualTypes::QML, {},
+                       cppNames.intType(), cppNames.arrayType())
+        {
+        }
 
         // C++ names used in qmltypes files for non-composite types
         ImportedTypes cppNames;
@@ -107,7 +115,7 @@ private:
         bool isStaticModule = false;
         bool isSystemModule = false;
 
-        QHash<QString, QQmlJSExportedScope> objects;
+        QList<QQmlJSExportedScope> objects;
         QHash<QString, QQmlJSExportedScope> scripts;
         QList<QQmlDirParser::Import> imports;
         QList<QQmlDirParser::Import> dependencies;
@@ -122,7 +130,7 @@ private:
     void importDependencies(const QQmlJSImporter::Import &import, AvailableTypes *types,
                             const QString &prefix = QString(),
                             QTypeRevision version = QTypeRevision(), bool isDependency = false);
-    void readQmltypes(const QString &filename, QHash<QString, QQmlJSExportedScope> *objects,
+    void readQmltypes(const QString &filename, QList<QQmlJSExportedScope> *objects,
                       QList<QQmlDirParser::Import> *dependencies);
     Import readQmldir(const QString &dirname);
     Import readDirectory(const QString &directory);
@@ -139,8 +147,10 @@ private:
     QHash<QString, QQmlJSScope::Ptr> m_importedFiles;
     QList<QQmlJS::DiagnosticMessage> m_globalWarnings;
     QList<QQmlJS::DiagnosticMessage> m_warnings;
-    AvailableTypes m_builtins;
+    std::optional<AvailableTypes> m_builtins;
+
     QQmlJSResourceFileMapper *m_mapper = nullptr;
+    QQmlJSResourceFileMapper *m_metaDataMapper = nullptr;
     bool m_useOptionalImports;
 
     ImportVisitorCreator m_createImportVisitor = nullptr;

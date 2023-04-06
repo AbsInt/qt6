@@ -62,7 +62,7 @@ void RhiVisualizer::prepareVisualize()
                     QLatin1String(":/qt-project.org/scenegraph/shaders_ng/visualization.frag.qsb"));
     }
 
-    m_fade.prepare(this, m_renderer->m_rhi, m_renderer->m_resourceUpdates, m_renderer->renderPassDescriptor());
+    m_fade.prepare(this, m_renderer->m_rhi, m_renderer->m_resourceUpdates, m_renderer->renderTarget().rpDesc);
 
     const bool forceUintIndex = m_renderer->m_uint32IndexForRhi;
 
@@ -99,7 +99,7 @@ void RhiVisualizer::visualize()
     if (m_visualizeMode == VisualizeNothing)
         return;
 
-    QRhiCommandBuffer *cb = m_renderer->commandBuffer();
+    QRhiCommandBuffer *cb = m_renderer->renderTarget().cb;
     m_fade.render(cb);
 
     switch (m_visualizeMode) {
@@ -127,7 +127,7 @@ void RhiVisualizer::recordDrawCalls(const QVector<DrawCall> &drawCalls,
                                     bool blendOneOne)
 {
     for (const DrawCall &dc : drawCalls) {
-        QRhiGraphicsPipeline *ps = m_pipelines.pipeline(this, m_renderer->m_rhi, srb, m_renderer->renderPassDescriptor(),
+        QRhiGraphicsPipeline *ps = m_pipelines.pipeline(this, m_renderer->m_rhi, srb, m_renderer->renderTarget().rpDesc,
                                                         dc.vertex.topology, dc.vertex.format, dc.vertex.stride,
                                                         blendOneOne);
         if (!ps)
@@ -252,7 +252,7 @@ static inline uint aligned(uint v, uint byteAlign)
     return (v + byteAlign - 1) & ~(byteAlign - 1);
 }
 
-static bool ensureBuffer(QRhi *rhi, QRhiBuffer **buf, QRhiBuffer::UsageFlags usage, int newSize)
+static bool ensureBuffer(QRhi *rhi, QRhiBuffer **buf, QRhiBuffer::UsageFlags usage, quint32 newSize)
 {
     if (!*buf) {
         *buf = rhi->newBuffer(QRhiBuffer::Dynamic, usage, newSize);
@@ -327,7 +327,7 @@ void RhiVisualizer::ChangeVis::gather(Node *n)
     if (n->type() == QSGNode::GeometryNodeType && n->element()->batch && visualizer->m_visualizeChangeSet.contains(n)) {
         const uint dirty = visualizer->m_visualizeChangeSet.value(n);
         const bool tinted = (dirty & QSGNODE_DIRTY_PARENT) != 0;
-        const QColor color = QColor::fromHsvF((rand() & 1023) / 1023.0f, 0.3f, 1.0f).toRgb();
+        const QColor color = QColor::fromHsvF((visualizer->m_randomGenerator.generate() & 1023) / 1023.0f, 0.3f, 1.0f).toRgb();
         const float alpha = 0.5f;
 
         QMatrix4x4 matrix = visualizer->m_renderer->m_current_projection_matrix;
@@ -454,7 +454,7 @@ void RhiVisualizer::BatchVis::gather(Batch *b)
     QMatrix4x4 rotation;
     memcpy(dc.uniforms.data + 64, rotation.constData(), 64);
 
-    const QColor color = QColor::fromHsvF((rand() & 1023) / 1023.0, 1.0, 1.0).toRgb();
+    const QColor color = QColor::fromHsvF((visualizer->m_randomGenerator.generate() & 1023) / 1023.0, 1.0, 1.0).toRgb();
 
     float c[4] = {
         float(color.redF()),
@@ -528,7 +528,6 @@ void RhiVisualizer::BatchVis::prepare(const QDataBuffer<Batch *> &opaqueBatches,
 
     drawCalls.clear();
 
-    srand(0); // To force random colors to be roughly the same every time..
     for (int i = 0; i < opaqueBatches.size(); ++i)
         gather(opaqueBatches.at(i));
     for (int i = 0; i < alphaBatches.size(); ++i)
@@ -801,7 +800,7 @@ void RhiVisualizer::OverdrawVis::prepare(Node *n, RhiVisualizer *visualizer,
         inputLayout.setAttributes({ { 0, 0, QRhiVertexInputAttribute::Float3, 0 } });
         box.ps->setVertexInputLayout(inputLayout);
         box.ps->setShaderResourceBindings(box.srb);
-        box.ps->setRenderPassDescriptor(visualizer->m_renderer->renderPassDescriptor());
+        box.ps->setRenderPassDescriptor(visualizer->m_renderer->renderTarget().rpDesc);
         if (!box.ps->create())
             return;
     }

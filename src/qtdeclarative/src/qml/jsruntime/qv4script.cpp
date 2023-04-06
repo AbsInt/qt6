@@ -3,13 +3,10 @@
 
 #include "qv4script_p.h"
 #include <private/qv4mm_p.h>
-#include "qv4functionobject_p.h"
 #include "qv4function_p.h"
 #include "qv4context_p.h"
 #include "qv4debugging_p.h"
-#include "qv4profiling_p.h"
 #include "qv4scopedvalue_p.h"
-#include "qv4jscall_p.h"
 
 #include <private/qqmljsengine_p.h>
 #include <private/qqmljslexer_p.h>
@@ -48,14 +45,12 @@ void Script::parse()
     if (parsed)
         return;
 
-    using namespace QV4::Compiler;
-
     parsed = true;
 
     ExecutionEngine *v4 = context->engine();
     Scope valueScope(v4);
 
-    Module module(v4->debugger() != nullptr);
+    QV4::Compiler::Module module(v4->debugger() != nullptr);
 
     if (sourceCode.startsWith(QLatin1String("function("))) {
         static const int snippetLength = 70;

@@ -3,7 +3,6 @@
 
 #include "qv4managed_p.h"
 #include <private/qv4mm_p.h>
-#include "qv4errorobject_p.h"
 
 using namespace QV4;
 
@@ -103,6 +102,9 @@ QString Managed::className() const
 
     case Type_V4Sequence:
         s = "V4Sequence";
+        break;
+    case Type_QmlListProperty:
+        s = "QML List";
         break;
     }
     return QString::fromLatin1(s);

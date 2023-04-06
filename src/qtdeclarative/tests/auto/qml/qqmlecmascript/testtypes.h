@@ -21,6 +21,7 @@
 #include <QtCore/qjsonobject.h>
 #include <QtCore/qjsonvalue.h>
 #include <QtCore/qproperty.h>
+#include <QtCore/qtimezone.h>
 #include <QtQml/qjsvalue.h>
 #include <QtQml/qqmlscriptstring.h>
 #include <QtQml/qqmlcomponent.h>
@@ -924,7 +925,7 @@ public:
         QV4::Scope scope(v->v4engine());
         for (int i = 0, end = v->length(); i != end; ++i) {
             QV4::ScopedValue v4Value(scope, (*v)[i]);
-            m_actuals.append(v->v4engine()->toVariant(v4Value, QMetaType()));
+            m_actuals.append(QV4::ExecutionEngine::toVariant(v4Value, QMetaType()));
         }
     }
     Q_INVOKABLE void method_overload2(const QVariantList &list)
@@ -938,6 +939,8 @@ public:
     Q_INVOKABLE void method_overload2(QString a) { invoke(36); m_actuals << a; }
     Q_INVOKABLE void method_overload2() { invoke(37); }
 
+    Q_INVOKABLE void method_overload3(char c, QUrl a, QDateTime b) { invoke(38); m_actuals << c << a << b; }
+    Q_INVOKABLE void method_overload3(char c, QJsonValue a, QTime b) { invoke(39); m_actuals << c << a << b; }
     Q_PROPERTY(QFont someFont READ someFont WRITE setSomeFont NOTIFY someFontChanged);
     QFont someFont() { return m_someFont; }
     void setSomeFont(const QFont &f)
@@ -1643,7 +1646,7 @@ public:
         case Qt::LocalTime:
             {
             QDateTime utc(m_datetime.toUTC());
-            utc.setTimeSpec(Qt::LocalTime);
+            utc.setTimeZone(QTimeZone::LocalTime);
             m_offset = m_datetime.secsTo(utc) / 60;
             m_timespec = "LocalTime";
             }

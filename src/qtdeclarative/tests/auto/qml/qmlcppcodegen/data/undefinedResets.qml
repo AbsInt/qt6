@@ -1,3 +1,4 @@
+pragma Strict
 import TestTypes
 
 Person {

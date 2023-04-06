@@ -1,4 +1,5 @@
-# Generated from svgiconengine.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## QSvgIconPlugin Plugin:
@@ -17,7 +18,3 @@ qt_internal_add_plugin(QSvgIconPlugin
         Qt::GuiPrivate
         Qt::Svg
 )
-
-#### Keys ignored in scope 1:.:.:svgiconengine.pro:<TRUE>:
-# OTHER_FILES = "qsvgiconengine.json" "qsvgiconengine-nocompress.json"
-# PLUGIN_EXTENDS = "svg"

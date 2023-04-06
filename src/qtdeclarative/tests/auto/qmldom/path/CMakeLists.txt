@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Generated from path.pro.
 
 #####################################################################
@@ -9,6 +12,6 @@ qt_internal_add_test(tst_qmldompath
         tst_qmldompath.cpp tst_qmldompath.h
     DEFINES
         QT_DEPRECATED_WARNINGS
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::QmlDomPrivate
 )

@@ -1,5 +1,5 @@
 include($QT_INSTALL_DOCS/global/qt-module-defaults.qdocconf)
-include($QT_INSTALL_DOCS/config/exampleurl-qtquickcontrols2.qdocconf)
+include($QT_INSTALL_DOCS/config/exampleurl-qtquickcontrols.qdocconf)
 
 project                 = QtLabsPlatform
 description             = Qt Labs Platform Reference Documentation
@@ -23,6 +23,8 @@ depends = qtcore qtgui qtdoc qtqml qtqmlcore qtqmlmodels qtquick qtquickcontrols
 
 # This module has no documented C++ types, clear the module header
 moduleheader =
+
+exampledirs += snippets
 
 {headerdirs,sourcedirs} += ..
 

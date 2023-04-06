@@ -103,7 +103,7 @@ public:
     QV4::PersistentValue changeProto;
 };
 
-V4_DEFINE_EXTENSION(QQmlDelegateModelEngineData, engineData)
+V4_DEFINE_EXTENSION(QQmlDelegateModelEngineData, qdmEngineData)
 
 
 void QQmlDelegateModelPartsMetaObject::propertyCreated(int, QMetaPropertyBuilder &prop)
@@ -931,9 +931,9 @@ void QQDMIncubationTask::initializeRequiredProperties(QQmlDelegateModelItem *mod
             proxyContext->setContextObject(nullptr);
         }
 
-        if (incubatorPriv->requiredProperties().empty())
+        if (incubatorPriv->requiredProperties()->empty())
             return;
-        RequiredProperties &requiredProperties = incubatorPriv->requiredProperties();
+        RequiredProperties *requiredProperties = incubatorPriv->requiredProperties();
 
         auto qmlMetaObject = modelItemToIncubate->metaObject();
         // if a required property was not in the model, it might still be a static property of the
@@ -1833,10 +1833,15 @@ void QQmlDelegateModelPrivate::emitChanges()
     for (int i = 1; i < m_groupCount; ++i)
         QQmlDelegateModelGroupPrivate::get(m_groups[i])->emitModelUpdated(reset);
 
-    auto cacheCopy = m_cache; // deliberate; emitChanges may alter m_cache
-    for (QQmlDelegateModelItem *cacheItem : std::as_const(cacheCopy)) {
-        if (cacheItem->attached)
-            cacheItem->attached->emitChanges();
+    // emitChanges may alter m_cache and delete items
+    QVarLengthArray<QPointer<QQmlDelegateModelAttached>> attachedObjects;
+    attachedObjects.reserve(m_cache.length());
+    for (const QQmlDelegateModelItem *cacheItem : std::as_const(m_cache))
+        attachedObjects.append(cacheItem->attached);
+
+    for (const QPointer<QQmlDelegateModelAttached> &attached : std::as_const(attachedObjects)) {
+        if (attached && attached->m_cacheItem)
+            attached->emitChanges();
     }
 }
 
@@ -2042,7 +2047,9 @@ bool QQmlDelegateModelPrivate::insert(Compositor::insert_iterator &before, const
         propertyName = it.nextPropertyNameAsString(v);
         if (propertyName->isNull())
             break;
-        cacheItem->setValue(propertyName->toQStringNoThrow(), scope.engine->toVariant(v, QMetaType {}));
+        cacheItem->setValue(
+                    propertyName->toQStringNoThrow(),
+                    QV4::ExecutionEngine::toVariant(v, QMetaType {}));
     }
 
     cacheItem->groups = groups | Compositor::UnresolvedFlag | Compositor::CacheFlag;
@@ -2718,20 +2725,24 @@ void QQmlDelegateModelAttached::emitChanges()
     m_previousGroups = m_cacheItem->groups;
 
     int indexChanges = 0;
-    for (int i = 1; i < m_cacheItem->metaType->groupCount; ++i) {
+    const int groupCount = m_cacheItem->metaType->groupCount;
+    for (int i = 1; i < groupCount; ++i) {
         if (m_previousIndex[i] != m_currentIndex[i]) {
             m_previousIndex[i] = m_currentIndex[i];
             indexChanges |= (1 << i);
         }
     }
 
+    // Don't access m_cacheItem anymore once we've started sending signals.
+    // We don't own it and someone might delete it.
+
     int notifierId = 0;
     const QMetaObject *meta = metaObject();
-    for (int i = 1; i < m_cacheItem->metaType->groupCount; ++i, ++notifierId) {
+    for (int i = 1; i < groupCount; ++i, ++notifierId) {
         if (groupChanges & (1 << i))
             QMetaObject::activate(this, meta, notifierId, nullptr);
     }
-    for (int i = 1; i < m_cacheItem->metaType->groupCount; ++i, ++notifierId) {
+    for (int i = 1; i < groupCount; ++i, ++notifierId) {
         if (indexChanges & (1 << i))
             QMetaObject::activate(this, meta, notifierId, nullptr);
     }
@@ -2760,9 +2771,9 @@ void QQmlDelegateModelGroupPrivate::emitChanges(QV4::ExecutionEngine *v4)
     Q_Q(QQmlDelegateModelGroup);
     if (isChangedConnected() && !changeSet.isEmpty()) {
         emit q->changed(QJSValuePrivate::fromReturnedValue(
-                            engineData(v4)->array(v4, changeSet.removes())),
+                            qdmEngineData(v4)->array(v4, changeSet.removes())),
                         QJSValuePrivate::fromReturnedValue(
-                            engineData(v4)->array(v4, changeSet.inserts())));
+                            qdmEngineData(v4)->array(v4, changeSet.inserts())));
     }
     if (changeSet.difference() != 0)
         emit q->countChanged();
@@ -3924,7 +3935,7 @@ public:
 
             const QQmlChangeSet::Change &change = array->at(index);
 
-            QV4::ScopedObject changeProto(scope, engineData(v4)->changeProto.value());
+            QV4::ScopedObject changeProto(scope, qdmEngineData(v4)->changeProto.value());
             QV4::Scoped<QQmlDelegateModelGroupChange> object(scope, QQmlDelegateModelGroupChange::create(v4));
             object->setPrototypeOf(changeProto);
             object->d()->change = change;

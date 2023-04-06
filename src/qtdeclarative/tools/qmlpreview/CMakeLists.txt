@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Generated from qmlpreview.pro.
 
 #####################################################################
@@ -10,7 +13,7 @@ qt_internal_add_app(qmlpreview
         main.cpp
         qmlpreviewapplication.cpp qmlpreviewapplication.h
         qmlpreviewfilesystemwatcher.cpp qmlpreviewfilesystemwatcher.h
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Network
         Qt::QmlDebugPrivate
 )

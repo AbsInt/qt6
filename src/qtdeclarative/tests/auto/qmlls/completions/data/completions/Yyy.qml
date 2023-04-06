@@ -14,7 +14,15 @@ Zzz {
 
     function lala() {}
     property Rectangle foo: Rectangle{ height: 200 }
+    function longfunction(a, b, c = "c", d = "d"): string {
+        return "hehe: " + c + d
+    }
 
+    // documentedFunction: is documented
+    // returns 'Good'
+    function documentedFunction(arg1, arg2 = "Qt"): string {
+        return "Good"
+    }
     QQ.Rectangle {
         color:"red"
     }

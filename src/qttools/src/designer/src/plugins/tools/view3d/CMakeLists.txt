@@ -1,4 +1,5 @@
-# Generated from view3d.pro.
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
 
 #####################################################################
 ## QView3DPlugin Plugin:

@@ -3,6 +3,7 @@
 
 #include <private/qqmlglobal_p.h>
 #include <QtQml/private/qqmlmetatype_p.h>
+#include <QtQml/private/qjsvalue_p.h>
 
 #include <QtQml/qqmlengine.h>
 #include <QtCore/qvariant.h>
@@ -12,21 +13,100 @@
 
 QT_BEGIN_NAMESPACE
 
-bool QQmlValueTypeProvider::initValueType(QMetaType metaType, QVariant &dst)
+// Pre-filter the metatype before poking QQmlMetaType::qmlType() and locking its mutex.
+static bool isConstructibleMetaType(const QMetaType metaType)
 {
-    if (!metaType.isValid())
+    switch (metaType.id()) {
+        // The builtins are not constructible this way.
+        case QMetaType::Void:
+        case QMetaType::Nullptr:
+        case QMetaType::QVariant:
+        case QMetaType::Int:
+        case QMetaType::UInt:
+        case QMetaType::LongLong:
+        case QMetaType::ULongLong:
+        case QMetaType::Float:
+        case QMetaType::Double:
+        case QMetaType::Long:
+        case QMetaType::ULong:
+        case QMetaType::Short:
+        case QMetaType::UShort:
+        case QMetaType::Char:
+        case QMetaType::SChar:
+        case QMetaType::UChar:
+        case QMetaType::QChar:
+        case QMetaType::QString:
+        case QMetaType::Bool:
+        case QMetaType::QDateTime:
+        case QMetaType::QDate:
+        case QMetaType::QTime:
+        case QMetaType::QUrl:
+        case QMetaType::QRegularExpression:
+        case QMetaType::QByteArray:
+        case QMetaType::QLocale:
         return false;
-    dst = QVariant(metaType);
+    default:
+        break;
+    }
+
+    // QJSValue is also builtin
+    if (metaType == QMetaType::fromType<QJSValue>())
+        return false;
+
+    // We also don't want to construct pointers of any kind, or lists, or enums.
+    if (metaType.flags() &
+            (QMetaType::PointerToQObject
+             | QMetaType::IsEnumeration
+             | QMetaType::SharedPointerToQObject
+             | QMetaType::WeakPointerToQObject
+             | QMetaType::TrackingPointerToQObject
+             | QMetaType::IsUnsignedEnumeration
+             | QMetaType::PointerToGadget
+             | QMetaType::IsPointer
+             | QMetaType::IsQmlList)) {
+        return false;
+    }
+
     return true;
 }
 
-bool QQmlValueTypeProvider::createValueType(QMetaType metaType, const QJSValue &s, QVariant &data)
+static void callConstructor(
+        const QMetaObject *mo, int i, void *parameter, QMetaType metaType, void *data)
 {
-    const QQmlType qmlType = QQmlMetaType::qmlType(metaType);
-    if (auto valueTypeFunction = qmlType.createValueTypeFunction()) {
-        QVariant result = valueTypeFunction(s);
-        if (result.metaType() == metaType) {
-            data = std::move(result);
+    // Unfortunately CreateInstance unconditionally creates the instance on the heap.
+    void *gadget = nullptr;
+    void *p[] = { &gadget, parameter };
+    mo->static_metacall(QMetaObject::CreateInstance, i, p);
+    Q_ASSERT(gadget);
+    metaType.destruct(data);
+    metaType.construct(data, gadget);
+    metaType.destroy(gadget);
+}
+
+static bool fromMatchingType(
+        const QMetaObject *mo, const QV4::Value &s, const QMetaType metaType, void *data)
+{
+    for (int i = 0, end = mo->constructorCount(); i < end; ++i) {
+        const QMetaMethod ctor = mo->constructor(i);
+        if (ctor.parameterCount() != 1)
+            continue;
+
+        const QMetaType parameterType = ctor.parameterMetaType(0);
+        QVariant parameter = QV4::ExecutionEngine::toVariant(s, parameterType);
+        if (parameter.metaType() == parameterType) {
+            callConstructor(mo, i, parameter.data(), metaType, data);
+            return true;
+        }
+
+        QVariant converted(parameterType);
+        if (QQmlValueTypeProvider::createValueType(s, parameterType, converted.data())) {
+            callConstructor(mo, i, converted.data(), metaType, data);
+            return true;
+        }
+
+        if (QMetaType::convert(parameter.metaType(), parameter.constData(),
+                               parameterType, converted.data())) {
+            callConstructor(mo, i, converted.data(), metaType, data);
             return true;
         }
     }
@@ -34,42 +114,233 @@ bool QQmlValueTypeProvider::createValueType(QMetaType metaType, const QJSValue &
     return false;
 }
 
-bool QQmlValueTypeProvider::equalValueType(QMetaType metaType, const void *lhs, const QVariant &rhs)
+static bool fromMatchingType(
+        const QMetaObject *mo, QVariant s, const QMetaType metaType, void *data)
 {
-    Q_ASSERT(lhs);
-    return metaType.equals(lhs, rhs.constData());
-}
-
-bool QQmlValueTypeProvider::readValueType(QMetaType metaType, const QVariant  &src, void *dst)
-{
-    Q_ASSERT(dst);
-    if (!metaType.isValid()
-            || (src.metaType() == metaType && metaType.equals(src.constData(), dst))) {
-        return false;
+    const QMetaType sourceMetaType = s.metaType();
+    if (sourceMetaType == QMetaType::fromType<QJSValue>()) {
+        QJSValue val = s.value<QJSValue>();
+        return fromMatchingType(
+                    mo, QV4::Value(QJSValuePrivate::asReturnedValue(&val)), metaType, data);
     }
 
-    metaType.destruct(dst);
-    metaType.construct(dst, src.metaType() == metaType ? src.constData() : nullptr);
+    for (int i = 0, end = mo->constructorCount(); i < end; ++i) {
+        const QMetaMethod ctor = mo->constructor(i);
+        if (ctor.parameterCount() != 1)
+            continue;
+
+        const QMetaType parameterType = ctor.parameterMetaType(0);
+        if (sourceMetaType == parameterType) {
+            callConstructor(mo, i, s.data(), metaType, data);
+            return true;
+        }
+
+        QVariant parameter(parameterType);
+        if (QQmlValueTypeProvider::createValueType(s, parameterType, parameter.data())) {
+            callConstructor(mo, i, parameter.data(), metaType, data);
+            return true;
+        }
+
+        // At this point, s should be a builtin type. For builtin types
+        // the QMetaType converters are good enough.
+        if (QMetaType::convert(sourceMetaType, s.constData(), parameterType, parameter.data())) {
+            callConstructor(mo, i, parameter.data(), metaType, data);
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static bool fromString(
+        const QMetaObject *mo, QString s, const QMetaType metaType, void *data)
+{
+    for (int i = 0, end = mo->constructorCount(); i < end; ++i) {
+        const QMetaMethod ctor = mo->constructor(i);
+        if (ctor.parameterCount() != 1)
+            continue;
+
+        if (ctor.parameterMetaType(0) == QMetaType::fromType<QString>()) {
+            callConstructor(mo, i, &s, metaType, data);
+            return true;
+        }
+    }
+
+
+    return false;
+}
+
+static bool byProperties(
+        const QMetaObject *mo, const QV4::Value &s, void *data)
+{
+    if (!s.isObject())
+        return false;
+
+    if (!mo)
+        return false;
+
+    const QV4::Object *o = static_cast<const QV4::Object *>(&s);
+    QV4::Scope scope(o->engine());
+    QV4::ScopedObject object(scope, o);
+
+    for (int i = 0; i < mo->propertyCount(); ++i) {
+        const QMetaProperty metaProperty = mo->property(i);
+        const QString propertyName = QString::fromUtf8(metaProperty.name());
+
+        QV4::ScopedString v4PropName(scope, scope.engine->newString(propertyName));
+        QV4::ScopedValue v4PropValue(scope, object->get(v4PropName));
+
+        // We assume that data is freshly constructed.
+        // There is no point in reset()'ing properties of a freshly created object.
+        if (v4PropValue->isUndefined())
+            continue;
+
+        const QMetaType propertyType = metaProperty.metaType();
+        QVariant property = QV4::ExecutionEngine::toVariant(v4PropValue, propertyType);
+        if (property.metaType() == propertyType) {
+            metaProperty.writeOnGadget(data, property);
+            continue;
+        }
+
+        QVariant converted(propertyType);
+        if (QQmlValueTypeProvider::createValueType(v4PropValue, propertyType, converted.data())) {
+            metaProperty.writeOnGadget(data, converted);
+            continue;
+        }
+
+        if (QMetaType::convert(property.metaType(), property.constData(),
+                               propertyType, converted.data())) {
+            metaProperty.writeOnGadget(data, converted);
+            continue;
+        }
+
+        qWarning().noquote()
+                << QLatin1String("Could not convert %1 to %2 for property %3")
+                   .arg(v4PropValue->toQStringNoThrow(), QString::fromUtf8(propertyType.name()),
+                        propertyName);
+    }
     return true;
 }
 
-bool QQmlValueTypeProvider::writeValueType(QMetaType metaType, const void *src, QVariant &dst)
+static bool byProperties(
+        const QMetaObject *mo, const QVariant &s, void *data)
 {
-    Q_ASSERT(src);
-    if (!metaType.isValid()
-            || (dst.metaType() == metaType && metaType.equals(src, dst.constData()))) {
+    if (!mo)
         return false;
+
+    if (s.metaType() == QMetaType::fromType<QJSValue>()) {
+        QJSValue val = s.value<QJSValue>();
+        return byProperties(mo, QV4::Value(QJSValuePrivate::asReturnedValue(&val)), data);
     }
 
-    dst = QVariant(metaType, src);
-    return true;
+    return false;
 }
 
-Q_GLOBAL_STATIC(QQmlValueTypeProvider, valueTypeProvider)
-
-Q_AUTOTEST_EXPORT QQmlValueTypeProvider *QQml_valueTypeProvider()
+static bool fromJSValue(
+        const QQmlType &type, const QJSValue &s, QMetaType metaType, void *data)
 {
-    return valueTypeProvider();
+    if (const auto valueTypeFunction = type.createValueTypeFunction()) {
+        QVariant result = valueTypeFunction(s);
+        if (result.metaType() == metaType) {
+            metaType.destruct(data);
+            metaType.construct(data, result.constData());
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool QQmlValueTypeProvider::constructFromJSValue(
+        const QJSValue &s, QMetaType metaType, void *data)
+{
+    return isConstructibleMetaType(metaType)
+            && fromJSValue(QQmlMetaType::qmlType(metaType), s, metaType, data);
+}
+
+bool QQmlValueTypeProvider::createValueType(
+        const QString &s, QMetaType metaType, void *data)
+{
+    if (!isConstructibleMetaType(metaType))
+        return false;
+    const QQmlType type = QQmlMetaType::qmlType(metaType);
+    const QMetaObject *mo = QQmlMetaType::metaObjectForValueType(type);
+    if (mo && type.canConstructValueType()) {
+        if (fromString(mo, s, metaType, data))
+            return true;
+    }
+
+    return fromJSValue(type, s, metaType, data);
+}
+
+bool QQmlValueTypeProvider::createValueType(
+        const QJSValue &s, QMetaType metaType, void *data)
+{
+    if (!isConstructibleMetaType(metaType))
+        return false;
+    const QQmlType type = QQmlMetaType::qmlType(metaType);
+    if (const QMetaObject *mo = QQmlMetaType::metaObjectForValueType(type)) {
+        if (type.canPopulateValueType()
+                && byProperties(mo, QV4::Value(QJSValuePrivate::asReturnedValue(&s)), data)) {
+                return true;
+        }
+
+        if (type.canConstructValueType()
+                && fromMatchingType(mo, QV4::Value(QJSValuePrivate::asReturnedValue(&s)),
+                                    metaType, data)) {
+                return true;
+        }
+    }
+
+    return fromJSValue(type, s, metaType, data);
+}
+
+bool QQmlValueTypeProvider::createValueType(
+        const QV4::Value &s, QMetaType metaType, void *data)
+{
+    if (!isConstructibleMetaType(metaType))
+        return false;
+    const QQmlType type = QQmlMetaType::qmlType(metaType);
+    if (const QMetaObject *mo = QQmlMetaType::metaObjectForValueType(type)) {
+        if (type.canPopulateValueType() && byProperties(mo, s, data))
+            return true;
+        if (type.canConstructValueType()) {
+            if (fromMatchingType(mo, s, metaType, data))
+                return true;
+            qWarning().noquote()
+                    << "Could not find any constructor for value type"
+                    << mo->className() << "to call with value" << s.toQStringNoThrow();
+        }
+    }
+
+    return fromJSValue(
+                type, QJSValuePrivate::fromReturnedValue(s.asReturnedValue()), metaType, data);
+
+}
+
+/*!
+ * \internal
+ * This should only be called with either builtin types or wrapped QJSValues as source.
+ */
+bool QQmlValueTypeProvider::createValueType(
+        const QVariant &s, QMetaType metaType, void *data)
+{
+    if (!isConstructibleMetaType(metaType))
+        return false;
+    const QQmlType type = QQmlMetaType::qmlType(metaType);
+    if (const QMetaObject *mo = QQmlMetaType::metaObjectForValueType(type)) {
+        if (type.canPopulateValueType() && byProperties(mo, s, data))
+            return true;
+        if (type.canConstructValueType()) {
+            if (fromMatchingType(mo, s, metaType, data))
+                return true;
+            qWarning().noquote()
+                    << "Could not find any constructor for value type"
+                    << mo->className() << "to call with value" << s;
+        }
+    }
+
+    return false;
 }
 
 QQmlColorProvider::~QQmlColorProvider() {}

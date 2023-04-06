@@ -46,6 +46,9 @@ private:
 tst_qqmlbinding::tst_qqmlbinding()
     : QQmlDataTest(QT_QMLTEST_DATADIR)
 {
+#ifdef QML_DISABLE_INTERNAL_DEFERRED_PROPERTIES
+    qputenv("QML_DISABLE_INTERNAL_DEFERRED_PROPERTIES", "1");
+#endif
 }
 
 void tst_qqmlbinding::binding()
@@ -148,8 +151,11 @@ void tst_qqmlbinding::restoreBindingValue()
 {
     QQmlEngine engine;
     QQmlComponent c(&engine, testFileUrl("restoreBinding2.qml"));
-    QScopedPointer<QQuickRectangle> rect(qobject_cast<QQuickRectangle*>(c.create()));
-    QVERIFY(!rect.isNull());
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+    QScopedPointer<QObject> o(c.create());
+    QVERIFY(!o.isNull());
+    QQuickRectangle *rect = qobject_cast<QQuickRectangle*>(o.data());
+    QVERIFY(rect);
 
     auto myItem = qobject_cast<QQuickRectangle*>(rect->findChild<QQuickRectangle*>("myItem"));
     QVERIFY(myItem != nullptr);
@@ -172,8 +178,11 @@ void tst_qqmlbinding::restoreBindingVarValue()
 {
     QQmlEngine engine;
     QQmlComponent c(&engine, testFileUrl("restoreBinding3.qml"));
-    QScopedPointer<QQuickRectangle> rect(qobject_cast<QQuickRectangle*>(c.create()));
-    QVERIFY(!rect.isNull());
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+    QScopedPointer<QObject> o(c.create());
+    QVERIFY(!o.isNull());
+    QQuickRectangle *rect = qobject_cast<QQuickRectangle*>(o.data());
+    QVERIFY(rect);
 
     auto myItem = qobject_cast<QQuickRectangle*>(rect->findChild<QQuickRectangle*>("myItem"));
     QVERIFY(myItem != nullptr);
@@ -196,8 +205,11 @@ void tst_qqmlbinding::restoreBindingJSValue()
 {
     QQmlEngine engine;
     QQmlComponent c(&engine, testFileUrl("restoreBinding4.qml"));
-    QScopedPointer<QQuickRectangle> rect(qobject_cast<QQuickRectangle*>(c.create()));
-    QVERIFY(!rect.isNull());
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+    QScopedPointer<QObject> o(c.create());
+    QVERIFY(!o.isNull());
+    QQuickRectangle *rect = qobject_cast<QQuickRectangle*>(o.data());
+    QVERIFY(rect);
 
     auto myItem = qobject_cast<QQuickRectangle*>(rect->findChild<QQuickRectangle*>("myItem"));
     QVERIFY(myItem != nullptr);

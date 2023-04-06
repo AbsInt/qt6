@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Generated from moduleWithQmlSingleton.pro.
 
 #####################################################################
@@ -9,7 +12,7 @@ qt_internal_add_cmake_library(moduleWithQmlSingleton
     OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/../imports/org/qtproject/ModuleWithQmlSingleton"
     SOURCES
         plugin.cpp
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Core
         Qt::CorePrivate
         Qt::GuiPrivate

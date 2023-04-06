@@ -17,6 +17,7 @@ Configurations:
         Environment variables: [
             'CMAKE_ARGS=-DCMAKE_OSX_ARCHITECTURES="x86_64;arm64" -DODBC_ROOT=/usr/local/opt/libiodbc -DPostgreSQL_ROOT={{.Env.POSTGRESQLBINPATH}}/.. -DOPENSSL_ROOT_DIR={{.Env.OPENSSL_DIR}}',
             'NON_QTBASE_CMAKE_ARGS=-DFEATURE_gds=OFF -DFFMPEG_DIR={{.Env.FFMPEG_DIR}}',
+            'Protobuf_ROOT=/usr/local/lib/cmake/protobuf',
             'CONAN_PROFILE=coin/conan/profiles/ci-macos-universal-clang'
         ]
 
@@ -28,23 +29,13 @@ Configurations:
         Features: ['DoNotRunTests', 'WarningsAreErrors', 'UseConfigure']
         Configure arguments: '-nomake examples -release -force-debug-info -separate-debug-info -headersclean -framework'
         Environment variables: [
-            'CMAKE_ARGS=-DCMAKE_OSX_ARCHITECTURES="x86_64;arm64"'
+            'CMAKE_ARGS=-DCMAKE_OSX_ARCHITECTURES="x86_64;arm64"',
+            'Protobuf_ROOT=/usr/local/lib/cmake/protobuf',
+            'NON_QTBASE_CMAKE_ARGS=-DFFMPEG_DIR={{.Env.FFMPEG_DIR}}',
         ]
 
     # Test on all supported macOS versions (deployment targets)
 
-    -
-        Id: 'macos-10.14-x86_64-tests'
-        Template: 'qtci-macos-10.14-x86_64'
-        Compiler: 'Clang'
-        Features: ['Sccache', 'TestOnly', 'Packaging']
-        Platform dependency: 'macos-universal-on-x86_64'
-    -
-        Id: 'macos-10.15-x86_64-tests'
-        Template: 'qtci-macos-10.15-x86_64-102'
-        Compiler: 'Clang'
-        Features: ['Sccache', 'TestOnly', 'Packaging']
-        Platform dependency: 'macos-universal-on-x86_64'
     -
         Id: 'macos-11-x86_64-tests'
         Template: 'qtci-macos-11-x86_64-105'
@@ -102,7 +93,8 @@ Configurations:
         Configure arguments: '-developer-build -release -force-debug-info -no-pch -no-framework -qtnamespace TestNamespace -make examples'
         Environment variables: [
             'CMAKE_ARGS=-DOPENSSL_ROOT_DIR={{.Env.OPENSSL_DIR}}',
-            'NON_QTBASE_CMAKE_ARGS=-DFFMPEG_DIR={{.Env.FFMPEG_DIR}}'
+            'NON_QTBASE_CMAKE_ARGS=-DFFMPEG_DIR={{.Env.FFMPEG_DIR}}',
+            'Protobuf_ROOT=/usr/local/lib/cmake/protobuf',
         ]
     -
         Id: 'macos-12-arm64-developer-build'
@@ -110,23 +102,15 @@ Configurations:
         Compiler: 'Clang'
         Features: ['DoNotRunTests', 'WarningsAreErrors', 'UseConfigure']
         Configure arguments: '-developer-build -nomake examples -release -force-debug-info -separate-debug-info -framework'
+        Environment variables: [
+            'Protobuf_ROOT=/usr/local/lib/cmake/protobuf',
+            'NON_QTBASE_CMAKE_ARGS=-DFFMPEG_DIR={{.Env.FFMPEG_DIR}}',
+        ]
         # Note: We do not include OpenSSL or PostgreSQL in this build,
         # as the M1 CI machines are not provisioned for that yet.
 
     # Test on all supported macOS versions (deployment targets)
 
-    -
-        Id: 'macos-10.14-x86_64-developer-build-tests'
-        Template: 'qtci-macos-10.14-x86_64'
-        Compiler: 'Clang'
-        Features: ['Sccache', 'TestOnly']
-        Platform dependency: 'macos-12-x86_64-developer-build'
-    -
-        Id: 'macos-10.15-x86_64-developer-build-tests'
-        Template: 'qtci-macos-10.15-x86_64-102'
-        Compiler: 'Clang'
-        Features: ['Sccache', 'TestOnly']
-        Platform dependency: 'macos-12-x86_64-developer-build'
     -
         Id: 'macos-11-x86_64-developer-build-tests'
         Template: 'qtci-macos-11-x86_64-105'

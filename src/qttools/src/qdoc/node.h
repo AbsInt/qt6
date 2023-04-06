@@ -79,10 +79,9 @@ public:
     enum Genus : unsigned char {
         DontCare = 0x0,
         CPP = 0x1,
-        JS = 0x2,
         QML = 0x4,
         DOC = 0x8,
-        API = CPP | JS | QML
+        API = CPP | QML
         };
 
     enum Status : unsigned char {
@@ -102,18 +101,6 @@ public:
 
     enum LinkType : unsigned char { StartLink, NextLink, PreviousLink, ContentsLink };
 
-    enum PageType : unsigned char {
-        NoPageType,
-        AttributionPage,
-        ApiPage,
-        ArticlePage,
-        ExamplePage,
-        HowToPage,
-        OverviewPage,
-        TutorialPage,
-        FAQPage
-    };
-
     enum FlagValue { FlagValueDefault = -1, FlagValueFalse = 0, FlagValueTrue = 1 };
 
     virtual ~Node() = default;
@@ -127,11 +114,6 @@ public:
     [[nodiscard]] Genus genus() const { return m_genus; }
     void setGenus(Genus t) { m_genus = t; }
     static Genus getGenus(NodeType t);
-
-    [[nodiscard]] PageType pageType() const { return m_pageType; }
-    void setPageType(PageType t) { m_pageType = t; }
-    void setPageType(const QString &t);
-    static PageType getPageType(NodeType t);
 
     [[nodiscard]] bool isActive() const { return m_status == Active; }
     [[nodiscard]] bool isClass() const { return m_nodeType == Class; }
@@ -225,19 +207,15 @@ public:
     void setIndexNodeFlag(bool isIndexNode = true) { m_indexNodeFlag = isIndexNode; }
     void setHadDoc() { m_hadDoc = true; }
     virtual void setRelatedNonmember(bool b) { m_relatedNonmember = b; }
-    virtual void setOutputFileName(const QString &) {}
     virtual void addMember(Node *) {}
     [[nodiscard]] virtual bool hasNamespaces() const { return false; }
     [[nodiscard]] virtual bool hasClasses() const { return false; }
     virtual void setAbstract(bool) {}
     virtual void setWrapper() {}
-    virtual void getMemberNamespaces(NodeMap &) {}
-    virtual void getMemberClasses(NodeMap &) const {}
     virtual void setDataType(const QString &) {}
     [[nodiscard]] virtual bool wasSeen() const { return false; }
     virtual void appendGroupName(const QString &) {}
     [[nodiscard]] virtual QString element() const { return QString(); }
-    virtual void setNoAutoList(bool) {}
     [[nodiscard]] virtual bool docMustBeGenerated() const { return false; }
 
     [[nodiscard]] virtual QString title() const { return name(); }
@@ -254,13 +232,11 @@ public:
     virtual void markDefault() {}
     virtual void markReadOnly(bool) {}
 
-    [[nodiscard]] bool match(const QList<int> &types) const;
     [[nodiscard]] Aggregate *parent() const { return m_parent; }
     [[nodiscard]] const QString &name() const { return m_name; }
     [[nodiscard]] QString physicalModuleName() const { return m_physicalModuleName; }
     [[nodiscard]] QString url() const { return m_url; }
     [[nodiscard]] virtual QString nameForLists() const { return m_name; }
-    [[nodiscard]] virtual QString outputFileName() const { return QString(); }
     [[nodiscard]] virtual QString obsoleteLink() const { return QString(); }
     virtual void setObsoleteLink(const QString &) {}
     virtual void setQtVariable(const QString &) {}
@@ -274,8 +250,6 @@ public:
 
     [[nodiscard]] const QMap<LinkType, std::pair<QString, QString>> &links() const { return m_linkMap; }
     void setLink(LinkType linkType, const QString &link, const QString &desc);
-    [[nodiscard]] const Node *navigationParent() const { return m_navParent; }
-    void setNavigationParent(const Node *parent) { m_navParent = parent; }
 
     [[nodiscard]] Access access() const { return m_access; }
     [[nodiscard]] const Location &declLocation() const { return m_declLocation; }
@@ -309,6 +283,7 @@ public:
     [[nodiscard]] virtual QString logicalModuleName() const { return QString(); }
     [[nodiscard]] virtual QString logicalModuleVersion() const { return QString(); }
     [[nodiscard]] virtual QString logicalModuleIdentifier() const { return QString(); }
+
     virtual void setLogicalModuleInfo(const QString &) {}
     virtual void setLogicalModuleInfo(const QStringList &) {}
     [[nodiscard]] virtual CollectionNode *logicalModule() const { return nullptr; }
@@ -327,8 +302,6 @@ public:
     static FlagValue toFlagValue(bool b);
     static bool fromFlagValue(FlagValue fv, bool defaultValue);
     static QString nodeTypeString(NodeType t);
-    static void initialize();
-    static NodeType goal(const QString &t) { return goals.value(t); }
     static bool nodeNameLessThan(const Node *first, const Node *second);
 
 protected:
@@ -339,7 +312,6 @@ private:
     Genus m_genus {};
     Access m_access { Access::Public };
     ThreadSafeness m_safeness { UnspecifiedSafeness };
-    PageType m_pageType { NoPageType };
     Status m_status { Active };
     bool m_indexNodeFlag : 1;
     bool m_relatedNonmember : 1;
@@ -359,10 +331,7 @@ private:
     QString m_templateDecl {};
     QString m_reconstitutedBrief {};
     QString m_outSubDir {};
-    static QStringMap operators;
-    static QMap<QString, Node::NodeType> goals;
     QString m_deprecatedSince {};
-    const Node *m_navParent { nullptr };
 };
 
 QT_END_NAMESPACE

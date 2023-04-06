@@ -4,6 +4,10 @@
 #include "qqmljsmetatypes_p.h"
 #include "qqmljstyperesolver_p.h"
 
+#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
+#    include "QtQml/private/qqmltranslation_p.h"
+#endif
+
 QT_BEGIN_NAMESPACE
 
 /*!
@@ -60,6 +64,30 @@ QString QQmlJSMetaPropertyBinding::regExpValue() const
     return {};
 }
 
+#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
+/*!
+ *  Extracts the information about translations from a binding.
+ *  An additional context string is needed for text based translation (e.g. with qsTr())
+ *  and can be obtained from the name of the qml file.
+ *
+ *  \sa QQmlTranslation
+ */
+QQmlTranslation QQmlJSMetaPropertyBinding::translationDataValue(QString qmlFileNameForContext) const
+{
+    QQmlTranslation::Data data;
+    if (auto translation = std::get_if<Content::TranslationById>(&m_bindingContent)) {
+        data = QQmlTranslation::QsTrIdData(translation->id, translation->number);
+    } else if (auto translation = std::get_if<Content::TranslationString>(&m_bindingContent)) {
+        const QString context = translation->context.isEmpty()
+                ? QQmlTranslation::contextFromQmlFilename(qmlFileNameForContext)
+                : translation->context;
+        data = QQmlTranslation::QsTrData(context, translation->text, translation->comment,
+                                         translation->number);
+    }
+    return QQmlTranslation(data);
+}
+#endif
+
 /*!
     \internal
     Uses \a resolver to return the correct type for the stored literal
@@ -81,11 +109,16 @@ QSharedPointer<const QQmlJSScope> QQmlJSMetaPropertyBinding::literalType(const Q
         return resolver->typeForName(QLatin1String("regexp"));
     case QQmlJSMetaPropertyBinding::Null:
         return resolver->nullType();
-    default:
+    case QQmlJSMetaPropertyBinding::Invalid:
+    case QQmlJSMetaPropertyBinding::Script:
+    case QQmlJSMetaPropertyBinding::Object:
+    case QQmlJSMetaPropertyBinding::Interceptor:
+    case QQmlJSMetaPropertyBinding::ValueSource:
+    case QQmlJSMetaPropertyBinding::AttachedProperty:
+    case QQmlJSMetaPropertyBinding::GroupProperty:
         return {};
     }
-    Q_UNREACHABLE();
-    return {}; // needed on some compilers which do not see that every case in the switch returns
+    Q_UNREACHABLE_RETURN({});
 }
 
 QT_END_NAMESPACE

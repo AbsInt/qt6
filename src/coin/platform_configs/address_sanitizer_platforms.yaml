@@ -1,0 +1,14 @@
+Version: 2
+Configurations:
+-
+    Id: 'opensuse-15.4-host-asan'
+    Template: 'qtci-linux-openSUSE-15.4-x86_64-50'
+    Compiler: 'GCC'
+    Features: ['Sccache', 'WarningsAreErrors', 'UseConfigure', 'UseAddressSanitizer']
+    Configure arguments: '-nomake examples -developer-build'
+    Environment variables: [
+        'PATH={{.Env.CMAKE_MIN_SUPPORTED_BIN_PATH}}:{{.Env.PATH}}',
+        'CONAN_PROFILE=coin/conan/profiles/ci-linux-x86_64-gcc-debug-developer',
+        'CMAKE_ARGS=-DOPENSSL_ROOT_DIR={{.Env.OPENSSL_HOME}}',
+        'NON_QTBASE_CMAKE_ARGS=-DFFMPEG_DIR={{.Env.FFMPEG_DIR}}'
+    ]

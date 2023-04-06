@@ -24,9 +24,12 @@
 using namespace QQuickViewTestUtils;
 using namespace QQuickVisualTestUtils;
 
+using namespace Qt::StringLiterals;
+
 #define LOAD_TREEVIEW(fileName) \
     view->setSource(testFileUrl(fileName)); \
     view->show(); \
+    view->requestActivate(); \
     QVERIFY(QTest::qWaitForWindowActive(view)); \
     auto treeView = view->rootObject()->property("treeView").value<QQuickTreeView *>(); \
     QVERIFY(treeView); \
@@ -74,6 +77,7 @@ private slots:
     void updatedModifiedModel();
     void insertRows();
     void toggleExpandedUsingArrowKeys();
+    void expandAndCollapsUsingDoubleClick();
     void selectionBehaviorCells_data();
     void selectionBehaviorCells();
     void selectionBehaviorRows();
@@ -780,6 +784,37 @@ void tst_qquicktreeview::toggleExpandedUsingArrowKeys()
     QCOMPARE(treeView->selectionModel()->currentIndex(), treeView->index(row0, 0));
 }
 
+void tst_qquicktreeview::expandAndCollapsUsingDoubleClick()
+{
+    LOAD_TREEVIEW("normaltreeview.qml");
+    // Check that the view only has one row loaded so far (the root of the tree)
+    QCOMPARE(treeViewPrivate->loadedRows.count(), 1);
+
+    // Expand the root by double clicking on the row
+    const auto item = treeView->itemAtIndex(treeView->index(0, 0));
+    QVERIFY(item);
+    const QPoint localPos = QPoint(item->width() / 2, item->height() / 2);
+    const QPoint pos = item->window()->contentItem()->mapFromItem(item, localPos).toPoint();
+    QTest::mouseDClick(item->window(), Qt::LeftButton, Qt::NoModifier, pos);
+
+    // We now expect 5 rows, the root pluss it's 4 children. Since
+    // mouseDClick calls processEvents(), it becomes random at this
+    // point if the view has been polished or not. So use QTRY_COMPARE.
+    QTRY_COMPARE(treeViewPrivate->loadedRows.count(), 5);
+
+    // Collapse the root again
+    QTest::mouseDClick(item->window(), Qt::LeftButton, Qt::NoModifier, pos);
+    QTRY_COMPARE(treeViewPrivate->loadedRows.count(), 1);
+
+    // If edit triggers has DoubleTapped set, we should
+    // start to edit instead of expanding.
+    treeView->setEditTriggers(QQuickTableView::DoubleTapped);
+    QTest::mouseDClick(item->window(), Qt::LeftButton, Qt::NoModifier, pos);
+    if (QQuickTest::qIsPolishScheduled(treeView))
+        QVERIFY(QQuickTest::qWaitForPolish(treeView));
+    QTRY_COMPARE(treeViewPrivate->loadedRows.count(), 1);
+}
+
 void tst_qquicktreeview::selectionBehaviorCells_data()
 {
     QTest::addColumn<QPoint>("startCell");
@@ -1111,7 +1146,7 @@ void tst_qquicktreeview::sortTreeModelDynamic()
 
     // Now change the text in one of the items. This will trigger
     // a sort for only one of the parents in the model.
-    proxyModel.setData(treeView->index(row, 0), u"xxx"_qs, Qt::DisplayRole);
+    proxyModel.setData(treeView->index(row, 0), u"xxx"_s, Qt::DisplayRole);
 
     for (int row = 0; row < treeView->rows(); ++row) {
         const auto index = treeView->index(row, 0);

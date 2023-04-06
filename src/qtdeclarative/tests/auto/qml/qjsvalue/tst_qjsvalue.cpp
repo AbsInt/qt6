@@ -7,6 +7,7 @@
 #include <private/qjsvalue_p.h>
 
 #include <QtWidgets/QPushButton>
+#include <QtCore/qdatetime.h>
 #include <QtCore/qthread.h>
 #include <QtQml/qqmlengine.h>
 #include <QtQml/qqmlcomponent.h>
@@ -281,11 +282,11 @@ void tst_QJSValue::toString()
 
     QJSValue undefined = eng.toScriptValue(QVariant());
     QCOMPARE(undefined.toString(), QString("undefined"));
-    QCOMPARE(qjsvalue_cast<QString>(undefined), QString());
+    QCOMPARE(qjsvalue_cast<QString>(undefined), QString("undefined"));
 
     QJSValue null = eng.evaluate("null");
     QCOMPARE(null.toString(), QString("null"));
-    QCOMPARE(qjsvalue_cast<QString>(null), QString());
+    QCOMPARE(qjsvalue_cast<QString>(null), QString("null"));
 
     {
         QJSValue falskt = eng.toScriptValue(false);
@@ -1239,7 +1240,7 @@ void tst_QJSValue::toDateTime()
     QDateTime dt = eng.evaluate("new Date(0)").toDateTime();
     QVERIFY(dt.isValid());
     QCOMPARE(dt.timeSpec(), Qt::LocalTime);
-    QCOMPARE(dt.toUTC(), QDate(1970, 1, 1).startOfDay(Qt::UTC));
+    QCOMPARE(dt.toUTC(), QDate(1970, 1, 1).startOfDay(QTimeZone::UTC));
 
     QVERIFY(!eng.evaluate("[]").toDateTime().isValid());
     QVERIFY(!eng.evaluate("{}").toDateTime().isValid());
@@ -2781,7 +2782,6 @@ void tst_QJSValue::jsvalueArrayToSequenceType()
     QCOMPARE(instanceCount, 0);
 }
 
-struct QJSValuePrivateAccess : public QJSValuePrivate { using QJSValuePrivate::setRawValue; };
 void tst_QJSValue::deleteFromDifferentThread()
 {
 #if !QT_CONFIG(thread)
@@ -2792,7 +2792,7 @@ void tst_QJSValue::deleteFromDifferentThread()
     QV4::PersistentValueStorage storage(engine->handle());
     QCOMPARE(storage.firstPage, nullptr);
     QJSValue jsval;
-    QJSValuePrivateAccess::setRawValue(&jsval, storage.allocate());
+    QJSValuePrivate::adoptPersistentValue(&jsval, storage.allocate());
     QVERIFY(storage.firstPage != nullptr);
 
     QMutex mutex;

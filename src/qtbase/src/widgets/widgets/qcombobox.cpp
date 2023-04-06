@@ -226,15 +226,6 @@ void QComboBoxPrivate::_q_completerActivated(const QModelIndex &index)
         }
     }
 #endif
-
-#  ifdef QT_KEYPAD_NAVIGATION
-    if ( QApplicationPrivate::keypadNavigationEnabled()
-         && q->isEditable()
-         && q->completer()
-         && q->completer()->completionMode() == QCompleter::UnfilteredPopupCompletion ) {
-        q->setEditFocus(false);
-    }
-#  endif // QT_KEYPAD_NAVIGATION
 }
 #endif // QT_CONFIG(completer)
 
@@ -1128,6 +1119,12 @@ void QComboBoxPrivate::_q_rowsRemoved(const QModelIndex &parent, int /*start*/, 
         sizeHint = QSize();
         adjustComboBoxSize();
         q->updateGeometry();
+    }
+
+    // model has removed the last row
+    if (model->rowCount(root) == 0) {
+        setCurrentIndex(QModelIndex());
+        return;
     }
 
     // model has changed the currentIndex
@@ -2136,10 +2133,15 @@ void QComboBoxPrivate::setCurrentIndex(const QModelIndex &mi)
         }
         updateLineEditGeometry();
     }
-    // If the model was reset to an empty, currentIndex will be invalidated
+    // If the model was reset to an empty one, currentIndex will be invalidated
     // (because it's a QPersistentModelIndex), but the index change will never
-    // be advertised. So we need an explicit check for such condition.
+    // be advertised. So an explicit check for this condition is needed.
+    // The variable used for that check has to be reset when a previously valid
+    // index becomes invalid.
     const bool modelResetToEmpty = !normalized.isValid() && indexBeforeChange != -1;
+    if (modelResetToEmpty)
+        indexBeforeChange = -1;
+
     if (indexChanged || modelResetToEmpty) {
         q->update();
         _q_emitCurrentIndexChanged(currentIndex);
@@ -2499,10 +2501,12 @@ bool QComboBoxPrivate::showNativePopup()
         QVariant textVariant = model->data(rowIndex, Qt::EditRole);
         item->setText(textVariant.toString());
         QVariant iconVariant = model->data(rowIndex, Qt::DecorationRole);
+        const Qt::ItemFlags itemFlags = model->flags(rowIndex);
         if (iconVariant.canConvert<QIcon>())
             item->setIcon(iconVariant.value<QIcon>());
         item->setCheckable(true);
         item->setChecked(i == currentIndex);
+        item->setEnabled(itemFlags & Qt::ItemIsEnabled);
         if (!currentItem || i == currentIndex)
             currentItem = item;
 
@@ -2567,17 +2571,6 @@ void QComboBox::showPopup()
         && d->showNativePopup())
         return;
 #endif // Q_OS_MAC
-
-#ifdef QT_KEYPAD_NAVIGATION
-#if QT_CONFIG(completer)
-    if (QApplicationPrivate::keypadNavigationEnabled() && d->completer) {
-        // editable combo box is line edit plus completer
-        setEditFocus(true);
-        d->completer->complete(); // show popup
-        return;
-    }
-#endif
-#endif
 
     // set current item and select it
     QItemSelectionModel::SelectionFlags selectionMode = QItemSelectionModel::ClearAndSelect;
@@ -2783,10 +2776,6 @@ void QComboBox::showPopup()
 #endif
 
     container->update();
-#ifdef QT_KEYPAD_NAVIGATION
-    if (QApplicationPrivate::keypadNavigationEnabled())
-        view()->setEditFocus(true);
-#endif
     if (startTimer) {
         container->popupTimer.start();
         container->maybeIgnoreMouseButtonRelease = true;
@@ -2813,41 +2802,49 @@ void QComboBox::hidePopup()
     auto resetHidingPopup = qScopeGuard([d]{
         d->hidingPopup = false;
     });
-    if (d->container && d->container->isVisible()) {
+
+    if (!d->container || !d->container->isVisible())
+        return;
+
 #if QT_CONFIG(effects)
-        QSignalBlocker modelBlocker(d->model);
-        QSignalBlocker viewBlocker(d->container->itemView());
-        QSignalBlocker containerBlocker(d->container);
-        // Flash selected/triggered item (if any).
-        if (style()->styleHint(QStyle::SH_Menu_FlashTriggeredItem)) {
-            QItemSelectionModel *selectionModel = view() ? view()->selectionModel() : nullptr;
-            if (selectionModel && selectionModel->hasSelection()) {
-                QEventLoop eventLoop;
-                const QItemSelection selection = selectionModel->selection();
+    // Flash selected/triggered item (if any).
+    if (style()->styleHint(QStyle::SH_Menu_FlashTriggeredItem)) {
+        QItemSelectionModel *selectionModel = d->container->itemView()
+                                            ? d->container->itemView()->selectionModel() : nullptr;
+        if (selectionModel && selectionModel->hasSelection()) {
+            const QItemSelection selection = selectionModel->selection();
+
+            QTimer::singleShot(0, d->container, [d, selection, selectionModel]{
+                QSignalBlocker modelBlocker(d->model);
+                QSignalBlocker viewBlocker(d->container->itemView());
+                QSignalBlocker containerBlocker(d->container);
 
                 // Deselect item and wait 60 ms.
                 selectionModel->select(selection, QItemSelectionModel::Toggle);
-                QTimer::singleShot(60, &eventLoop, SLOT(quit()));
-                eventLoop.exec();
-
-                // Select item and wait 20 ms.
-                selectionModel->select(selection, QItemSelectionModel::Toggle);
-                QTimer::singleShot(20, &eventLoop, SLOT(quit()));
-                eventLoop.exec();
-            }
+                QTimer::singleShot(60, d->container, [d, selection, selectionModel]{
+                    QSignalBlocker modelBlocker(d->model);
+                    QSignalBlocker viewBlocker(d->container->itemView());
+                    QSignalBlocker containerBlocker(d->container);
+                    selectionModel->select(selection, QItemSelectionModel::Toggle);
+                    QTimer::singleShot(20, d->container, [d] {
+                        d->doHidePopup();
+                    });
+                });
+            });
         }
-
-        containerBlocker.unblock();
-        viewBlocker.unblock();
-        modelBlocker.unblock();
+    } else
 #endif // QT_CONFIG(effects)
-        d->container->hide();
+    {
+        d->doHidePopup();
     }
-#ifdef QT_KEYPAD_NAVIGATION
-    if (QApplicationPrivate::keypadNavigationEnabled() && isEditable() && hasFocus())
-        setEditFocus(true);
-#endif
-    d->_q_resetButton();
+}
+
+void QComboBoxPrivate::doHidePopup()
+{
+    if (container && container->isVisible())
+        container->hide();
+
+    _q_resetButton();
 }
 
 /*!
@@ -3053,9 +3050,7 @@ bool QComboBox::event(QEvent *event)
         break;
 #ifdef QT_KEYPAD_NAVIGATION
     case QEvent::EnterEditFocus:
-        if (!d->lineEdit)
-            setEditFocus(false); // We never want edit focus if we are not editable
-        else
+        if (d->lineEdit)
             d->lineEdit->event(event);  //so cursor starts
         break;
     case QEvent::LeaveEditFocus:
@@ -3234,10 +3229,12 @@ void QComboBox::keyPressEvent(QKeyEvent *e)
         break;
 #endif
     default:
+#if QT_CONFIG(shortcut)
         if (d->container && d->container->isVisible() && e->matches(QKeySequence::Cancel)) {
             hidePopup();
             e->accept();
         }
+#endif
 
         if (!d->lineEdit) {
             if (!e->text().isEmpty())

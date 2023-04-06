@@ -47,9 +47,9 @@
 
 # NDK
 $ndkVersionLatest = "r25b"
-$ndkVersionDefault = "r23b"
+$ndkVersionDefault = $ndkVersionLatest
 $ndkChecksumLatest = "b2e9b5ab2e1434a65ffd85780891878cf5c6fd92"
-$ndkChecksumDefault = "6e3fb50022c611a2b13d02f5de5c21cc7206a298"
+$ndkChecksumDefault = $ndkChecksumLatest
 $ndkCachedUrlLatest = "\\ci-files01-hki.intra.qt.io\provisioning\android\android-ndk-$ndkVersionLatest-windows.zip"
 $ndkOfficialUrlLatest = "https://dl.google.com/android/repository/android-ndk-$ndkVersionLatest-windows.zip"
 $ndkCachedUrlDefault = "\\ci-files01-hki.intra.qt.io\provisioning\android\android-ndk-$ndkVersionDefault-windows.zip"
@@ -62,8 +62,8 @@ $ndkZip = "c:\Windows\Temp\android_ndk.zip"
 $toolsVersion = "2.1"
 $toolsFile = "commandlinetools-win-6609375_latest.zip"
 $sdkApi = "ANDROID_API_VERSION"
-$sdkApiLevel = "android-31"
-$sdkBuildToolsVersion = "31.0.0"
+$sdkApiLevel = "android-33"
+$sdkBuildToolsVersion = "33.0.1"
 $toolsCachedUrl= "\\ci-files01-hki.intra.qt.io\provisioning\android\$toolsFile"
 $toolsOfficialUrl = "https://dl.google.com/android/repository/$toolsFile"
 $toolsChecksum = "e2e19c2ff584efa87ef0cfdd1987f92881323208"

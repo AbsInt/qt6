@@ -126,9 +126,8 @@ void QDesignerWorkbench::Position::applyTo(QDockWidget *dockWidget) const
 
 static inline void addActionsToMenu(QMenu *m, const ActionList &al)
 {
-    const ActionList::const_iterator cend = al.constEnd();
-    for (ActionList::const_iterator it = al.constBegin(); it != cend; ++it)
-        m->addAction(*it);
+    for (auto *a : al)
+        m->addAction(a);
 }
 
 static inline QMenu *addMenu(QMenuBar *mb, const QString &title, const ActionList &al)
@@ -233,6 +232,9 @@ QDesignerWorkbench::~QDesignerWorkbench()
         delete widgetBoxToolWindow();
         break;
     }
+    delete m_globalMenuBar;
+    m_windowMenu = nullptr;
+    delete m_dockedMainWindow;
 }
 
 void QDesignerWorkbench::saveGeometriesForModeChange()
@@ -371,7 +373,6 @@ void QDesignerWorkbench::switchToNeutralMode()
     qDesigner->setMainWindow(nullptr);
 
     delete m_dockedMainWindow;
-    m_dockedMainWindow = nullptr;
 }
 
 void QDesignerWorkbench::switchToDockedMode()
@@ -589,7 +590,8 @@ void QDesignerWorkbench::removeFormWindow(QDesignerFormWindow *formWindow)
 
     if (QAction *action = formWindow->action()) {
         m_windowActions->removeAction(action);
-        m_windowMenu->removeAction(action);
+        if (m_windowMenu)
+            m_windowMenu->removeAction(action);
     }
 
     if (m_formWindows.isEmpty()) {

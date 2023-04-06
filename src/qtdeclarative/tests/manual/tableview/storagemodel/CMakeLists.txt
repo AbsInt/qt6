@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Generated from storagemodel.pro.
 
 if (NOT QT_BUILD_STANDALONE_TESTS AND NOT QT_BUILDING_QT)
@@ -15,7 +18,7 @@ qt_internal_add_manual_test(tableview_storage
     SOURCES
         main.cpp
         storagemodel.cpp storagemodel.h
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Gui
         Qt::Qml
         Qt::Quick

@@ -6,7 +6,7 @@
 
 #include "text.h"
 #include "utilities.h"
-#include "filesystem/fileresolver.hpp"
+#include "filesystem/fileresolver.h"
 
 #include <QtCore/qlist.h>
 #include <QtCore/qmap.h>
@@ -73,8 +73,6 @@ public:
 
 protected:
     static QFile *openSubPageFile(const Node *node, const QString &fileName);
-    void beginFilePage(const Node *node, const QString &fileName);
-    void endFilePage() { endSubPage(); } // for symmetry
     void beginSubPage(const Node *node, const QString &fileName);
     void endSubPage();
     [[nodiscard]] virtual QString fileExtension() const = 0;
@@ -140,7 +138,7 @@ protected:
     QTextStream &out();
     QString outFileName();
     bool parseArg(const QString &src, const QString &tag, int *pos, int n, QStringView *contents,
-                  QStringView *par1 = nullptr, bool debug = false);
+                  QStringView *par1 = nullptr);
     void unknownAtom(const Atom *atom);
     int appendSortedQmlNames(Text &text, const Node *base, const NodeList &subs);
 
@@ -162,8 +160,8 @@ protected:
 
     void addImageToCopy(const ExampleNode *en, const ResolvedFile& resolved_file);
     // TODO: This seems to be used as the predicate in std::sort calls.
-    // Remove it as it is unneded.
-    // Indeed, it could be replaced by std::less and, furthemore,
+    // Remove it as it is unneeded.
+    // Indeed, it could be replaced by std::less and, furthermore,
     // std::sort already defaults to operator< when no predicate is
     // provided.
     static bool comparePaths(const QString &a, const QString &b) { return (a < b); }

@@ -50,12 +50,13 @@ struct UrlCtor : FunctionObject
     void init(QV4::ExecutionContext *scope);
 };
 
-// clang-format on
+// clang-format off
 #define UrlSearchParamsObjectMembers(class, Member)                                                \
     Member(class, Pointer, ArrayObject *, params) \
     Member(class, Pointer, ArrayObject *, keys) \
-    Member(class, Pointer, ArrayObject *, values)
-// clang-format off
+    Member(class, Pointer, ArrayObject *, values) \
+    Member(class, Pointer, UrlObject *, url)
+// clang-format on
 
 DECLARE_HEAP_OBJECT(UrlSearchParamsObject, Object)
 {
@@ -101,7 +102,7 @@ struct UrlObject : Object
     QString protocol() const { return toQString(d()->protocol); }
     bool setProtocol(QString protocol);
 
-    QString search() const { return QLatin1String("?") + toQString(d()->search); }
+    Q_QML_AUTOTEST_EXPORT QString search() const;
     bool setSearch(QString search);
 
     QString username() const { return toQString(d()->username); }
@@ -212,6 +213,10 @@ struct UrlSearchParamsObject : Object
 
     QList<QStringList> params() const;
     void setParams(QList<QStringList> params);
+    Heap::UrlObject *urlObject() const;
+    void setUrlObject(const UrlObject *url);
+
+    QString searchString() const;
 
     QString nameAt(int index) const;
     Heap::String * nameAtRaw(int index) const;

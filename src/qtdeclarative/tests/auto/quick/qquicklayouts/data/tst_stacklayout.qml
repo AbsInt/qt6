@@ -420,7 +420,7 @@ Item {
             compare(stack.implicitHeight, 0)
 
             var rect0 = layoutItem_Component.createObject(stack)
-            verify(waitForItemPolished(stack))
+            waitForPolish(stack)
             compare(stack.implicitWidth, 20)
             compare(stack.implicitHeight, 20)
             compare(rect0.visible, false)
@@ -428,7 +428,7 @@ Item {
             var rect1 = layoutItem_Component.createObject(stack)
             rect1.Layout.preferredWidth = 30
             rect1.Layout.preferredHeight = 10
-            verify(waitForItemPolished(stack))
+            waitForPolish(stack)
             compare(stack.implicitWidth, 30)
             compare(stack.implicitHeight, 20)
             compare(rect0.visible, false)
@@ -440,7 +440,7 @@ Item {
             rect2.Layout.preferredWidth = 80
             rect2.Layout.preferredHeight = 30
             rect2.Layout.fillWidth = true
-            verify(waitForItemPolished(stack))
+            waitForPolish(stack)
             compare(stack.implicitWidth, 80)
             compare(stack.implicitHeight, 30)
             compare(rect0.visible, false)
@@ -450,19 +450,19 @@ Item {
 
             rect2.destroy()
             wait(0)
-            verify(waitForItemPolished(stack))
+            waitForPolish(stack)
             compare(stack.implicitWidth, 30)
             compare(stack.implicitHeight, 20)
 
             rect0.destroy()
             wait(0)
-            verify(waitForItemPolished(stack))
+            waitForPolish(stack)
             compare(stack.implicitWidth, 30)
             compare(stack.implicitHeight, 10)
 
             rect1.destroy()
             wait(0)
-            verify(waitForItemPolished(stack))
+            waitForPolish(stack)
             compare(stack.implicitWidth, 0)
             compare(stack.implicitHeight, 0)
 
@@ -527,7 +527,7 @@ Item {
             child.Layout.preferredWidth = data.childHints[1]
             child.Layout.maximumWidth = data.childHints[2]
 
-            verify(waitForItemPolished(layout))
+            waitForPolish(layout)
             var effectiveSizeHintResult = [layout.Layout.minimumWidth, layout.implicitWidth, layout.Layout.maximumWidth]
             compare(effectiveSizeHintResult, data.expected)
             layout.destroy()
@@ -556,7 +556,7 @@ Item {
             var r = stack.children[0]
             r.Layout.preferredWidth = 20
             r.Layout.preferredHeight = 30
-            verify(waitForItemPolished(stack))
+            waitForPolish(stack)
             compare(stack.count, 1)
             compare(stack.implicitWidth, 20)
             compare(stack.implicitHeight, 30)

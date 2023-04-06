@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Generated from seatv4.pro.
 
 #####################################################################
@@ -7,7 +10,7 @@
 qt_internal_add_test(tst_seatv4
     SOURCES
         tst_seatv4.cpp
-    PUBLIC_LIBRARIES
+    LIBRARIES
         SharedClientTest
 )
 
@@ -15,7 +18,7 @@ qt_internal_add_test(tst_seatv4
 #####################################################################
 
 qt_internal_extend_target(tst_seatv4 CONDITION QT_FEATURE_cursor
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::GuiPrivate
         Wayland::Cursor
 )

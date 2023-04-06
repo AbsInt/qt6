@@ -26,6 +26,11 @@ QT_BEGIN_NAMESPACE
 bool QmlCodeMarker::recognizeCode(const QString &code)
 {
 #ifndef QT_NO_DECLARATIVE
+    // Naive pre-check; starts with an import statement or 'CamelCase {'
+    static const QRegularExpression regExp(QStringLiteral("^\\s*(import |([A-Z][a-z0-9]*)+\\s?{)"));
+    if (!regExp.match(code).hasMatch())
+        return false;
+
     QQmlJS::Engine engine;
     QQmlJS::Lexer lexer(&engine);
     QQmlJS::Parser parser(&engine);
@@ -86,15 +91,9 @@ QString QmlCodeMarker::markedUpName(const Node *node)
     return name;
 }
 
-QString QmlCodeMarker::markedUpIncludes(const QStringList &includes)
+QString QmlCodeMarker::markedUpInclude(const QString &include)
 {
-    QString code;
-
-    for (const auto &include : includes)
-        code += "import " + include + QLatin1Char('\n');
-
-    Location location;
-    return addMarkUp(code, nullptr, location);
+    return addMarkUp("import " + include, nullptr, Location{});
 }
 
 QString QmlCodeMarker::addMarkUp(const QString &code, const Node * /* relative */,
@@ -144,13 +143,7 @@ QString QmlCodeMarker::addMarkUp(const QString &code, const Node * /* relative *
   Copied and pasted from
   src/declarative/qml/qqmlscriptparser.cpp.
 */
-static void replaceWithSpace(QString &str, int idx, int n)
-{
-    QChar *data = str.data() + idx;
-    const QChar space(QLatin1Char(' '));
-    for (int ii = 0; ii < n; ++ii)
-        *data++ = space;
-}
+void replaceWithSpace(QString &str, int idx, int n); // qmlcodeparser.cpp
 
 /*
   Copied and pasted from

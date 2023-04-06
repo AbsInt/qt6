@@ -19,7 +19,7 @@
 
 QT_BEGIN_NAMESPACE
 
-DEFINE_BOOL_CONFIG_OPTION(qmlVisualTouchDebugging, QML_VISUAL_TOUCH_DEBUGGING)
+DEFINE_BOOL_CONFIG_OPTION(qmlMaVisualTouchDebugging, QML_VISUAL_TOUCH_DEBUGGING)
 
 Q_DECLARE_LOGGING_CATEGORY(lcHoverTrace)
 
@@ -53,7 +53,7 @@ void QQuickMouseAreaPrivate::init()
     q->setAcceptedMouseButtons(Qt::LeftButton);
     q->setAcceptTouchEvents(false); // rely on mouse events synthesized from touch
     q->setFiltersChildMouseEvents(true);
-    if (qmlVisualTouchDebugging()) {
+    if (qmlMaVisualTouchDebugging()) {
         q->setFlag(QQuickItem::ItemHasContents);
     }
 }
@@ -1038,6 +1038,12 @@ void QQuickMouseArea::itemChange(ItemChange change, const ItemChangeData &value)
 {
     Q_D(QQuickMouseArea);
     switch (change) {
+    case ItemEnabledHasChanged:
+        // If MouseArea becomes effectively disabled by disabling a parent
+        // (for example, onPressed: parent.enabled = false), cancel the pressed state.
+        if (d->pressed && !d->effectiveEnable)
+            ungrabMouse();
+        break;
     case ItemVisibleHasChanged:
         if (d->effectiveEnable && d->enabled && hoverEnabled()
             && d->hovered != (isVisible() && isUnderMouse())) {
@@ -1078,7 +1084,7 @@ void QQuickMouseArea::itemChange(ItemChange change, const ItemChangeData &value)
             }
         }
         if (d->pressed && (!isVisible())) {
-            // This happens when the mouse area sets itself disabled or hidden
+            // This happens when the mouse area hides itself
             // inside the press handler. In that case we should not keep the internal
             // state as pressed, since we never became the mouse grabber.
             ungrabMouse();
@@ -1436,7 +1442,7 @@ QSGNode *QQuickMouseArea::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData 
     Q_UNUSED(data);
     Q_D(QQuickMouseArea);
 
-    if (!qmlVisualTouchDebugging())
+    if (!qmlMaVisualTouchDebugging())
         return nullptr;
 
     QSGInternalRectangleNode *rectangle = static_cast<QSGInternalRectangleNode *>(oldNode);

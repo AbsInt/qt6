@@ -20,6 +20,8 @@
 
 DEFINE_BOOL_CONFIG_OPTION(dumpErrors, QML_DUMP_ERRORS);
 
+Q_DECLARE_LOGGING_CATEGORY(lcCycle)
+
 QT_BEGIN_NAMESPACE
 
 /*!
@@ -37,16 +39,14 @@ The QQmlTypeLoader invokes callbacks on the QQmlDataBlob as data becomes availab
 
 This enum describes the status of the data blob.
 
-\list
-\li Null The blob has not yet been loaded by a QQmlTypeLoader
-\li Loading The blob is loading network data.  The QQmlDataBlob::setData() callback has not yet been
-    invoked or has not yet returned.
-\li WaitingForDependencies The blob is waiting for dependencies to be done before continuing.
-    This status only occurs after the QQmlDataBlob::setData() callback has been made, and when the
-    blob has outstanding dependencies.
-\li Complete The blob's data has been loaded and all dependencies are done.
-\li Error An error has been set on this blob.
-\endlist
+\value Null             The blob has not yet been loaded by a QQmlTypeLoader
+\value Loading          The blob is loading network data.  The QQmlDataBlob::setData() callback has
+                        not yet been invoked or has not yet returned.
+\value WaitingForDependencies The blob is waiting for dependencies to be done before continuing.
+                        This status only occurs after the QQmlDataBlob::setData() callback has been made,
+                        and when the blob has outstanding dependencies.
+\value Complete         The blob's data has been loaded and all dependencies are done.
+\value Error            An error has been set on this blob.
 */
 
 /*!
@@ -54,11 +54,9 @@ This enum describes the status of the data blob.
 
 This enum describes the type of the data blob.
 
-\list
-\li QmlFile This is a QQmlTypeData
-\li JavaScriptFile This is a QQmlScriptData
-\li QmldirFile This is a QQmlQmldirData
-\endlist
+\value QmlFile          This is a QQmlTypeData
+\value JavaScriptFile   This is a QQmlScriptData
+\value QmldirFile       This is a QQmlQmldirData
 */
 
 /*!
@@ -324,7 +322,8 @@ void QQmlDataBlob::addDependency(QQmlDataBlob *blob)
 
     // Check circular dependency
     if (m_waitingOnMe.indexOf(blob) >= 0) {
-        qWarning() << "Cyclic dependency detected between" << this->url().toString() << "and" << blob->url().toString();
+        qCWarning(lcCycle) << "Cyclic dependency detected between" << this->url().toString()
+                           << "and" << blob->url().toString();
         m_data.setStatus(Error);
     }
 }

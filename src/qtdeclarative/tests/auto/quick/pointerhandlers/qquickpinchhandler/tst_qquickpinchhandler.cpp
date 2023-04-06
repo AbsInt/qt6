@@ -34,6 +34,8 @@ private slots:
     void scaleThreeFingers();
     void scaleNativeGesture_data();
     void scaleNativeGesture();
+    void cumulativeNativeGestures_data();
+    void cumulativeNativeGestures();
     void pan();
     void dragAxesEnabled_data();
     void dragAxesEnabled();
@@ -79,96 +81,125 @@ void tst_QQuickPinchHandler::pinchProperties()
     pinchHandler->setTarget(rootItem);
     QCOMPARE(targetSpy.size(),1);
 
-    // axis
-    /*
-    QCOMPARE(pinchHandler->axis(), QQuickPinch::XAndYAxis);
-    QSignalSpy axisSpy(pinchHandler, SIGNAL(dragAxisChanged()));
-    pinchHandler->setAxis(QQuickPinch::XAxis);
-    QCOMPARE(pinchHandler->axis(), QQuickPinch::XAxis);
-    QCOMPARE(axisSpy.count(),1);
-    pinchHandler->setAxis(QQuickPinch::XAxis);
-    QCOMPARE(axisSpy.count(),1);
+    // drag axes
+    QCOMPARE(pinchHandler->xAxis()->enabled(), true);
+    QCOMPARE(pinchHandler->yAxis()->enabled(), true);
+    QSignalSpy xEnabledSpy(pinchHandler->xAxis(), &QQuickDragAxis::enabledChanged);
+    QSignalSpy yEnabledSpy(pinchHandler->yAxis(), &QQuickDragAxis::enabledChanged);
+    QSignalSpy scaleEnabledSpy(pinchHandler->scaleAxis(), &QQuickDragAxis::enabledChanged);
+    QSignalSpy rotationEnabledSpy(pinchHandler->rotationAxis(), &QQuickDragAxis::enabledChanged);
+    pinchHandler->xAxis()->setEnabled(false);
+    QCOMPARE(xEnabledSpy.count(), 1);
+    pinchHandler->yAxis()->setEnabled(false);
+    QCOMPARE(yEnabledSpy.count(), 1);
+    pinchHandler->scaleAxis()->setEnabled(false);
+    QCOMPARE(scaleEnabledSpy.count(), 1);
+    pinchHandler->rotationAxis()->setEnabled(false);
+    QCOMPARE(rotationEnabledSpy.count(), 1);
 
     // minimum and maximum drag properties
-    QSignalSpy xminSpy(pinchHandler, SIGNAL(minimumXChanged()));
-    QSignalSpy xmaxSpy(pinchHandler, SIGNAL(maximumXChanged()));
-    QSignalSpy yminSpy(pinchHandler, SIGNAL(minimumYChanged()));
-    QSignalSpy ymaxSpy(pinchHandler, SIGNAL(maximumYChanged()));
+    QSignalSpy xminSpy(pinchHandler->xAxis(), &QQuickDragAxis::minimumChanged);
+    QSignalSpy xmaxSpy(pinchHandler->xAxis(), &QQuickDragAxis::maximumChanged);
+    QSignalSpy yminSpy(pinchHandler->yAxis(), &QQuickDragAxis::minimumChanged);
+    QSignalSpy ymaxSpy(pinchHandler->yAxis(), &QQuickDragAxis::maximumChanged);
 
-    QCOMPARE(pinchHandler->xmin(), 0.0);
-    QCOMPARE(pinchHandler->xmax(), rootItem->width()-blackRect->width());
-    QCOMPARE(pinchHandler->ymin(), 0.0);
-    QCOMPARE(pinchHandler->ymax(), rootItem->height()-blackRect->height());
+    QCOMPARE(pinchHandler->xAxis()->minimum(), std::numeric_limits<qreal>::lowest());
+    QCOMPARE(pinchHandler->xAxis()->maximum(), 140);
+    QCOMPARE(pinchHandler->yAxis()->minimum(), std::numeric_limits<qreal>::lowest());
+    QCOMPARE(pinchHandler->yAxis()->maximum(), 170);
 
-    pinchHandler->setXmin(10);
-    pinchHandler->setXmax(10);
-    pinchHandler->setYmin(10);
-    pinchHandler->setYmax(10);
+    pinchHandler->xAxis()->setMinimum(10);
+    pinchHandler->xAxis()->setMaximum(10);
+    pinchHandler->yAxis()->setMinimum(10);
+    pinchHandler->yAxis()->setMaximum(10);
 
-    QCOMPARE(pinchHandler->xmin(), 10.0);
-    QCOMPARE(pinchHandler->xmax(), 10.0);
-    QCOMPARE(pinchHandler->ymin(), 10.0);
-    QCOMPARE(pinchHandler->ymax(), 10.0);
-
-    QCOMPARE(xminSpy.count(),1);
-    QCOMPARE(xmaxSpy.count(),1);
-    QCOMPARE(yminSpy.count(),1);
-    QCOMPARE(ymaxSpy.count(),1);
-
-    pinchHandler->setXmin(10);
-    pinchHandler->setXmax(10);
-    pinchHandler->setYmin(10);
-    pinchHandler->setYmax(10);
+    QCOMPARE(pinchHandler->xAxis()->minimum(), 10);
+    QCOMPARE(pinchHandler->xAxis()->maximum(), 10);
+    QCOMPARE(pinchHandler->yAxis()->minimum(), 10);
+    QCOMPARE(pinchHandler->yAxis()->maximum(), 10);
 
     QCOMPARE(xminSpy.count(),1);
     QCOMPARE(xmaxSpy.count(),1);
     QCOMPARE(yminSpy.count(),1);
     QCOMPARE(ymaxSpy.count(),1);
-    */
+
+    pinchHandler->xAxis()->setMinimum(10);
+    pinchHandler->xAxis()->setMaximum(10);
+    pinchHandler->yAxis()->setMinimum(10);
+    pinchHandler->yAxis()->setMaximum(10);
+
+    QCOMPARE(xminSpy.count(),1);
+    QCOMPARE(xmaxSpy.count(),1);
+    QCOMPARE(yminSpy.count(),1);
+    QCOMPARE(ymaxSpy.count(),1);
 
     // minimum and maximum scale properties
-    QSignalSpy scaleMinSpy(pinchHandler, SIGNAL(minimumScaleChanged()));
-    QSignalSpy scaleMaxSpy(pinchHandler, SIGNAL(maximumScaleChanged()));
+    QSignalSpy scaleAxisMinSpy(pinchHandler->scaleAxis(), &QQuickDragAxis::minimumChanged);
+    QSignalSpy scaleAxisMaxSpy(pinchHandler->scaleAxis(), &QQuickDragAxis::maximumChanged);
 
+    QCOMPARE(pinchHandler->scaleAxis()->minimum(), 0.5);
+    QCOMPARE(pinchHandler->scaleAxis()->maximum(), 4);
+
+#if QT_DEPRECATED_SINCE(6, 5)
+QT_WARNING_PUSH QT_WARNING_DISABLE_DEPRECATED
     QCOMPARE(pinchHandler->minimumScale(), 0.5);
-    QCOMPARE(pinchHandler->maximumScale(), 4.0);
+    QCOMPARE(pinchHandler->maximumScale(), 4);
+QT_WARNING_POP
+#endif
 
-    pinchHandler->setMinimumScale(0.25);
-    pinchHandler->setMaximumScale(1.5);
+    pinchHandler->scaleAxis()->setMinimum(0.25);
+    pinchHandler->scaleAxis()->setMaximum(1.5);
 
+    QCOMPARE(pinchHandler->scaleAxis()->minimum(), 0.25);
+    QCOMPARE(pinchHandler->scaleAxis()->maximum(), 1.5);
+
+#if QT_DEPRECATED_SINCE(6, 5)
+QT_WARNING_PUSH QT_WARNING_DISABLE_DEPRECATED
     QCOMPARE(pinchHandler->minimumScale(), 0.25);
     QCOMPARE(pinchHandler->maximumScale(), 1.5);
+QT_WARNING_POP
+#endif
 
-    QCOMPARE(scaleMinSpy.size(),1);
-    QCOMPARE(scaleMaxSpy.size(),1);
+    QCOMPARE(scaleAxisMinSpy.size(),1);
+    QCOMPARE(scaleAxisMaxSpy.size(),1);
 
-    pinchHandler->setMinimumScale(0.25);
-    pinchHandler->setMaximumScale(1.5);
+    pinchHandler->scaleAxis()->setMinimum(0.25);
+    pinchHandler->scaleAxis()->setMaximum(1.5);
 
-    QCOMPARE(scaleMinSpy.size(),1);
-    QCOMPARE(scaleMaxSpy.size(),1);
+    QCOMPARE(scaleAxisMinSpy.size(),1);
+    QCOMPARE(scaleAxisMaxSpy.size(),1);
 
     // minimum and maximum rotation properties
-    QSignalSpy rotMinSpy(pinchHandler, SIGNAL(minimumRotationChanged()));
-    QSignalSpy rotMaxSpy(pinchHandler, SIGNAL(maximumRotationChanged()));
+    QSignalSpy rotAxisMinSpy(pinchHandler->rotationAxis(), &QQuickDragAxis::minimumChanged);
+    QSignalSpy rotAxisMaxSpy(pinchHandler->rotationAxis(), &QQuickDragAxis::maximumChanged);
 
-    QCOMPARE(pinchHandler->minimumRotation(), 0.0);
-    QCOMPARE(pinchHandler->maximumRotation(), 90.0);
+#if QT_DEPRECATED_SINCE(6, 5)
+QT_WARNING_PUSH QT_WARNING_DISABLE_DEPRECATED
+    QCOMPARE(pinchHandler->minimumRotation(), 0);
+    QCOMPARE(pinchHandler->maximumRotation(), 90);
+QT_WARNING_POP
+#endif
+    QCOMPARE(pinchHandler->rotationAxis()->minimum(), 0);
+    QCOMPARE(pinchHandler->rotationAxis()->maximum(), 90);
 
-    pinchHandler->setMinimumRotation(-90.0);
-    pinchHandler->setMaximumRotation(45.0);
+    pinchHandler->rotationAxis()->setMinimum(-90);
+    pinchHandler->rotationAxis()->setMaximum(45);
 
-    QCOMPARE(pinchHandler->minimumRotation(), -90.0);
-    QCOMPARE(pinchHandler->maximumRotation(), 45.0);
+#if QT_DEPRECATED_SINCE(6, 5)
+QT_WARNING_PUSH QT_WARNING_DISABLE_DEPRECATED
+    QCOMPARE(pinchHandler->minimumRotation(), -90);
+    QCOMPARE(pinchHandler->maximumRotation(), 45);
+QT_WARNING_POP
+#endif
 
-    QCOMPARE(rotMinSpy.size(),1);
-    QCOMPARE(rotMaxSpy.size(),1);
+    QCOMPARE(rotAxisMinSpy.size(),1);
+    QCOMPARE(rotAxisMaxSpy.size(),1);
 
-    pinchHandler->setMinimumRotation(-90.0);
-    pinchHandler->setMaximumRotation(45.0);
+    pinchHandler->rotationAxis()->setMinimum(-90);
+    pinchHandler->rotationAxis()->setMaximum(45);
 
-    QCOMPARE(rotMinSpy.size(),1);
-    QCOMPARE(rotMaxSpy.size(),1);
+    QCOMPARE(rotAxisMinSpy.size(),1);
+    QCOMPARE(rotAxisMaxSpy.size(),1);
 }
 
 QEventPoint makeTouchPoint(int id, QPoint p, QQuickView *v, QQuickItem *i)
@@ -202,6 +233,8 @@ void tst_QQuickPinchHandler::scale()
     QQuickItem *blackRect = (hasTarget ? pinchHandler->target() : pinchHandler->parentItem());
     QVERIFY(blackRect != nullptr);
     QSignalSpy grabChangedSpy(pinchHandler, SIGNAL(grabChanged(QPointingDevice::GrabTransition, QEventPoint)));
+    QSignalSpy scaleChangedSpy(pinchHandler, &QQuickPinchHandler::scaleChanged);
+    if (lcPointerTests().isDebugEnabled()) QTest::qWait(500);
 
     QPoint p0(80, 80);
     QPoint p1(100, 100);
@@ -215,6 +248,7 @@ void tst_QQuickPinchHandler::scale()
     // it is outside its bounds.
     pinchSequence.stationary(0).press(1, p1, &window).commit();
     QQuickTouchUtils::flush(&window);
+    if (lcPointerTests().isDebugEnabled()) QTest::qWait(500);
     QCOMPARE(grabChangedSpy.size(), 1); // passive grab
 
     QPoint pd(10, 10);
@@ -224,6 +258,7 @@ void tst_QQuickPinchHandler::scale()
         pinchSequence.stationary(0).move(1, p1, &window).commit();
         QQuickTouchUtils::flush(&window);
     }
+    if (lcPointerTests().isDebugEnabled()) QTest::qWait(500);
     QCOMPARE(pinchHandler->active(), true);
     // grabs occur when the handler becomes active; at that time, QQuickHandlerPoint.sceneGrabPosition should be correct
     QVERIFY(pinchHandler->firstPoint().sceneGrabPosition() != QPointF());
@@ -237,26 +272,38 @@ void tst_QQuickPinchHandler::scale()
 
     // move the same point even further and observe the change in scale
     for (int i = 0; i < 2; ++i) {
+        qreal lastScale = pinchHandler->activeScale();
         p1 += pd;
         pinchSequence.stationary(0).move(1, p1, &window).commit();
         QQuickTouchUtils::flush(&window);
         if (lcPointerTests().isDebugEnabled()) QTest::qWait(500);
         line.setP2(p1);
         qreal expectedScale = line.length() / startLength;
+        qCDebug(lcPointerTests) << "pinchScale" << root->property("pinchScale").toReal()
+                                << "expected" << expectedScale << "; target scale" << blackRect->scale()
+                                << "increments" << scaleChangedSpy.size()
+                                << "multiplier" << scaleChangedSpy.last().first().toReal();
         QVERIFY(qFloatDistance(root->property("pinchScale").toReal(), expectedScale) < 10);
         QVERIFY(qFloatDistance(blackRect->scale(), expectedScale) < 10);
-        QCOMPARE(pinchHandler->scale(), root->property("pinchScale").toReal());
-        QCOMPARE(pinchHandler->scale(), pinchHandler->activeScale()); // in sync for the first gesture
+        QCOMPARE(pinchHandler->persistentScale(), root->property("pinchScale").toReal());
+        QCOMPARE(pinchHandler->persistentScale(), pinchHandler->activeScale()); // in sync for the first gesture
+        QCOMPARE(pinchHandler->scaleAxis()->persistentValue(), pinchHandler->activeScale());
+        QCOMPARE(pinchHandler->scaleAxis()->activeValue(), pinchHandler->activeScale());
+        const qreal expectedIncrement = pinchHandler->activeScale() / lastScale;
+        QCOMPARE(scaleChangedSpy.size(), i + 1);
+        QCOMPARE(scaleChangedSpy.last().first().toReal(), expectedIncrement);
         QPointF expectedCentroid = p0 + (p1 - p0) / 2;
         QCOMPARE(pinchHandler->centroid().scenePosition(), expectedCentroid);
     }
 
-    qreal lastScale = pinchHandler->scale();
+    qreal lastScale = pinchHandler->persistentScale();
     pinchSequence.release(0, p0, &window).release(1, p1, &window).commit();
     QQuickTouchUtils::flush(&window);
     if (lcPointerTests().isDebugEnabled()) QTest::qWait(500);
     // scale property is persistent after release
-    QCOMPARE(pinchHandler->scale(), lastScale);
+    QCOMPARE(pinchHandler->persistentScale(), lastScale);
+    QCOMPARE(pinchHandler->scaleAxis()->persistentValue(), lastScale);
+    QCOMPARE(pinchHandler->scaleAxis()->activeValue(), 1);
 
     // pinch a second time: scale picks up where we left off
     p0 = QPoint(80, 80);
@@ -270,28 +317,44 @@ void tst_QQuickPinchHandler::scale()
     }
     if (lcPointerTests().isDebugEnabled()) QTest::qWait(500);
     QCOMPARE(pinchHandler->active(), true);
-    QCOMPARE(pinchHandler->scale(), lastScale); // just activated, not scaling further yet
+    QCOMPARE(pinchHandler->persistentScale(), lastScale); // just activated, not scaling further yet
+    QCOMPARE(pinchHandler->scaleAxis()->persistentValue(), lastScale);
+    QCOMPARE(pinchHandler->scaleAxis()->activeValue(), 1);
     for (int i = 0; i < 2; ++i) {
-        lastScale = pinchHandler->scale();
+        lastScale = pinchHandler->persistentScale();
         p1 += pd;
         pinchSequence.stationary(0).move(1, p1, &window).commit();
         QQuickTouchUtils::flush(&window);
         if (lcPointerTests().isDebugEnabled()) QTest::qWait(500);
-        QCOMPARE_GT(pinchHandler->scale(), lastScale);
+        QCOMPARE_GT(pinchHandler->persistentScale(), lastScale);
         line.setP2(p1);
         qreal expectedActiveScale = line.length() / startLength;
+        qCDebug(lcPointerTests) << i << "activeScale" << pinchHandler->activeScale()
+                                << "expected" << expectedActiveScale << "; scale" << pinchHandler->persistentScale()
+                                << "increments" << scaleChangedSpy.size()
+                                << "multiplier" << scaleChangedSpy.last().first().toReal();
         QVERIFY(qFloatDistance(pinchHandler->activeScale(), expectedActiveScale) < 10);
-        QCOMPARE(pinchHandler->scale(), root->property("pinchScale").toReal());
-        QCOMPARE_NE(pinchHandler->scale(), pinchHandler->activeScale()); // not in sync anymore
+        QCOMPARE(pinchHandler->persistentScale(), root->property("pinchScale").toReal());
+        QCOMPARE(pinchHandler->scaleAxis()->persistentValue(), root->property("pinchScale").toReal());
+        QCOMPARE_NE(pinchHandler->persistentScale(), pinchHandler->activeScale()); // not in sync anymore
+        QCOMPARE(pinchHandler->scaleAxis()->activeValue(), pinchHandler->activeScale());
+        const qreal expectedIncrement = pinchHandler->persistentScale() / lastScale;
+        QCOMPARE(scaleChangedSpy.size(), i + 3);
+        QCOMPARE(scaleChangedSpy.last().first().toReal(), expectedIncrement);
     }
 
     // scale beyond maximumScale
+    lastScale = pinchHandler->activeScale();
     p1 = QPoint(310, 310);
     pinchSequence.stationary(0).move(1, p1, &window).commit();
     QQuickTouchUtils::flush(&window);
     if (lcPointerTests().isDebugEnabled()) QTest::qWait(500);
     QCOMPARE(blackRect->scale(), qreal(4));
-    QCOMPARE(pinchHandler->scale(), qreal(4)); // limited by maximumScale
+    QCOMPARE(pinchHandler->persistentScale(), qreal(4)); // limited by maximumScale
+    QCOMPARE(pinchHandler->scaleAxis()->persistentValue(), 4);
+    const qreal expectedIncrement = pinchHandler->activeScale() / lastScale;
+    QCOMPARE(scaleChangedSpy.size(), 5);
+    QCOMPARE(scaleChangedSpy.last().first().toReal(), expectedIncrement);
     pinchSequence.release(0, p0, &window).release(1, p1, &window).commit();
     QQuickTouchUtils::flush(&window);
     QCOMPARE(pinchHandler->active(), false);
@@ -344,9 +407,17 @@ void tst_QQuickPinchHandler::scaleThreeFingers()
 
         QCOMPARE(pinchHandler->active(), true);
         // scale we got was 1.1729088738267854364, but keep some slack
-        QVERIFY(withinBounds(1.163, root->property("scale").toReal(), 1.183));
+        qCDebug(lcPointerTests) << "pinch scale" << pinchHandler->persistentScale() << "expected 1.173";
+        QVERIFY(withinBounds(1.163, pinchHandler->persistentScale(), 1.183));
         // should not rotate
-        QCOMPARE(root->property("rotation").toReal(), 0.);
+        QCOMPARE(root->rotation(), 0);
+        // rotation should be 0, but could be something tiny
+        qCDebug(lcPointerTests) << "pinch scale expected zero:" << pinchHandler->activeRotation()
+                                << pinchHandler->rotationAxis()->activeValue()
+                                << pinchHandler->rotationAxis()->persistentValue();
+        QCOMPARE_LE(qAbs(pinchHandler->activeRotation()), 0.001);
+        QCOMPARE(pinchHandler->rotationAxis()->activeValue(), pinchHandler->activeRotation());
+        QCOMPARE(pinchHandler->rotationAxis()->persistentValue(), 0);
 
         for (int i = 0; i < 5;++i) {
             p0 += QPoint(-4, -4);
@@ -356,10 +427,10 @@ void tst_QQuickPinchHandler::scaleThreeFingers()
             QQuickTouchUtils::flush(window);
         }
         // scale we got was 1.4613, but keep some slack
-        QVERIFY(withinBounds(1.361, root->property("scale").toReal(), 1.561));
+        QVERIFY(withinBounds(1.361, pinchHandler->persistentScale(), 1.561));
 
         // since points were moved symetrically around the y axis, centroid should remain at x:150
-        QCOMPARE(root->property("centroid").value<QQuickHandlerPoint>().scenePosition().x(), 150); // blackrect is at 50,50
+        QCOMPARE(pinchHandler->centroid().scenePosition().x(), 150); // blackrect is at 50,50
 
         // scale beyond bound, we should reach the maximumScale
         p0 += QPoint(-40, -40);
@@ -368,7 +439,9 @@ void tst_QQuickPinchHandler::scaleThreeFingers()
         pinchSequence.move(0, p0,window).move(1, p1,window).move(2, p2,window).commit();
         QQuickTouchUtils::flush(window);
 
-        QCOMPARE(root->property("scale").toReal(), 2.);
+        QCOMPARE(pinchHandler->persistentScale(), 2);
+        QCOMPARE(pinchHandler->scaleAxis()->persistentValue(), 2);
+        QCOMPARE(pinchHandler->scaleAxis()->activeValue(), 2);
         pinchSequence.release(0, p0, window).release(1, p1, window).release(2, p2, window).commit();
         QQuickTouchUtils::flush(window);
     }
@@ -422,29 +495,38 @@ void tst_QQuickPinchHandler::scaleNativeGesture()
     if (lcPointerTests().isDebugEnabled()) QTest::qWait(500);
     QWindowSystemInterface::handleGestureEventWithRealValue(window, ts++, touchpad.get(),
                                                             Qt::ZoomNativeGesture, scale - 1, pinchPos, pinchPos);
+    if (lcPointerTests().isDebugEnabled()) QTest::qWait(500);
     QTRY_COMPARE(target->scale(), expectedScale);
     QCOMPARE(pinchHandler->active(), true);
+    qCDebug(lcPointerTests) << "centroid: local" << pinchHandler->centroid().position()
+                            << "scene" << pinchHandler->centroid().scenePosition();
     QCOMPARE(pinchHandler->centroid().position().toPoint(), pinchLocalPos.toPoint());
     QCOMPARE(pinchHandler->centroid().scenePosition().toPoint(), pinchPos.toPoint());
     QVERIFY(qAbs(target->position().x() - expectedPos.x()) < 0.001);
     QVERIFY(qAbs(target->position().y() - expectedPos.y()) < 0.001);
-    QCOMPARE(pinchHandler->scale(), expectedScale);
-    QCOMPARE(pinchHandler->activeScale(), expectedScale);
-    QCOMPARE(pinchHandler->translation(), QVector2D());
-    QCOMPARE(pinchHandler->rotation(), 0);
+    QCOMPARE(pinchHandler->persistentScale(), expectedScale);
+    QCOMPARE(pinchHandler->activeScale(), scale);
+    QCOMPARE(pinchHandler->scaleAxis()->activeValue(), scale);
+    QCOMPARE(pinchHandler->activeTranslation(), QPointF());
+    QCOMPARE(pinchHandler->activeRotation(), 0);
+    QCOMPARE(pinchHandler->rotationAxis()->persistentValue(), 0);
+    QCOMPARE(pinchHandler->rotationAxis()->activeValue(), 0);
     QWindowSystemInterface::handleGestureEvent(window, ts++, touchpad.get(),
                                                Qt::EndNativeGesture, pinchPos, pinchPos);
     QTRY_COMPARE(pinchHandler->active(), false);
     QCOMPARE(target->scale(), expectedScale);
-    QCOMPARE(pinchHandler->scale(), expectedScale);
+    QCOMPARE(pinchHandler->persistentScale(), expectedScale);
     QCOMPARE(pinchHandler->activeScale(), 1);
-    QCOMPARE(pinchHandler->translation(), QVector2D());
-    QCOMPARE(pinchHandler->rotation(), 0);
+    QCOMPARE(pinchHandler->scaleAxis()->activeValue(), 1);
+    QCOMPARE(pinchHandler->activeTranslation(), QPointF());
+    QCOMPARE(pinchHandler->activeRotation(), 0);
+    QCOMPARE(pinchHandler->rotationAxis()->persistentValue(), 0);
+    QCOMPARE(pinchHandler->rotationAxis()->activeValue(), 0);
 
     // second pinch at a different position: scale it back to original size again
     // but remove the limits first, so that we can scale arbitrarily
-    pinchHandler->setMaximumScale(qInf());
-    pinchHandler->setMinimumScale(-qInf());
+    pinchHandler->scaleAxis()->setMaximum(qInf());
+    pinchHandler->scaleAxis()->setMinimum(-qInf());
     const qreal reverseScale = (1 / expectedScale);
     pinchPos = QPointF(110, 110);
     pinchLocalPos = target->mapFromScene(pinchPos);
@@ -454,16 +536,117 @@ void tst_QQuickPinchHandler::scaleNativeGesture()
                                                             Qt::ZoomNativeGesture, reverseScale - 1, pinchPos, pinchPos);
     QTRY_COMPARE(target->scale(), 1);
     QCOMPARE(pinchHandler->active(), true);
+    qCDebug(lcPointerTests) << "centroid: local" << pinchHandler->centroid().position()
+                            << "scene" << pinchHandler->centroid().scenePosition();
     QCOMPARE(pinchHandler->centroid().position().toPoint(), pinchLocalPos.toPoint());
     QCOMPARE(pinchHandler->centroid().scenePosition().toPoint(), pinchPos.toPoint());
-    QCOMPARE(pinchHandler->scale(), 1);
+    QCOMPARE(pinchHandler->persistentScale(), 1);
     QCOMPARE(pinchHandler->activeScale(), reverseScale);
+    QCOMPARE(pinchHandler->scaleAxis()->activeValue(), reverseScale);
     QWindowSystemInterface::handleGestureEvent(window, ts++, touchpad.get(),
                                                Qt::EndNativeGesture, pinchPos, pinchPos);
     QTRY_COMPARE(pinchHandler->active(), false);
     QCOMPARE(target->scale(), 1);
-    QCOMPARE(pinchHandler->scale(), 1);
+    QCOMPARE(pinchHandler->persistentScale(), 1);
     QCOMPARE(pinchHandler->activeScale(), 1);
+    QCOMPARE(pinchHandler->scaleAxis()->activeValue(), 1);
+}
+
+void tst_QQuickPinchHandler::cumulativeNativeGestures_data()
+{
+    QTest::addColumn<const QPointingDevice*>("device");
+    QTest::addColumn<Qt::NativeGestureType>("gesture");
+    QTest::addColumn<qreal>("value");
+
+    const auto *touchpadDevice = touchpad.get();
+    const auto *mouse = QPointingDevice::primaryPointingDevice();
+
+    QTest::newRow("touchpad: rotate") << touchpadDevice << Qt::RotateNativeGesture << 5.0;
+    QTest::newRow("touchpad: scale") << touchpadDevice << Qt::ZoomNativeGesture << 0.1;
+
+    if (mouse->type() == QInputDevice::DeviceType::Mouse) {
+        QTest::newRow("mouse: rotate") << mouse << Qt::RotateNativeGesture << 5.0;
+        QTest::newRow("mouse: scale") << mouse << Qt::ZoomNativeGesture << 0.1;
+    } else {
+        qCWarning(lcPointerTests) << "skipping mouse tests: primary device is not a mouse" << mouse;
+    }
+}
+
+void tst_QQuickPinchHandler::cumulativeNativeGestures()
+{
+    QFETCH(const QPointingDevice*, device);
+    QFETCH(Qt::NativeGestureType, gesture);
+    QFETCH(qreal, value);
+
+    QQuickView window;
+    QVERIFY(QQuickTest::showView(window, testFileUrl("pinchproperties.qml")));
+    QVERIFY(window.rootObject() != nullptr);
+    qApp->processEvents();
+
+    QQuickItem *root = qobject_cast<QQuickItem*>(window.rootObject());
+    QVERIFY(root != nullptr);
+    QQuickPinchHandler *pinchHandler = root->findChild<QQuickPinchHandler*>("pinchHandler");
+    QVERIFY(pinchHandler != nullptr);
+    QQuickItem *target = root->findChild<QQuickItem*>("blackrect");
+    QVERIFY(target != nullptr);
+
+    ulong ts = 1;
+    qreal expectedScale = 1;
+    qreal expectedRotation = 0;
+    QPointF pinchPos(75, 75);
+    QWindowSystemInterface::handleGestureEvent(&window, ts++, device,
+                                               Qt::BeginNativeGesture, pinchPos, pinchPos);
+    for (int i = 1; i <= 4; ++i) {
+        if (lcPointerTests().isDebugEnabled()) QTest::qWait(500);
+        QWindowSystemInterface::handleGestureEventWithRealValue(&window, ts++, device,
+                                                                gesture, value, pinchPos, pinchPos);
+        qApp->processEvents();
+        switch (gesture) {
+        case Qt::ZoomNativeGesture:
+            expectedScale = qBound(qreal(0.5), qPow(1 + value, i), qreal(4));
+            break;
+        case Qt::RotateNativeGesture:
+            expectedRotation = qBound(qreal(0), value * i, qreal(90));
+            break;
+        default:
+            break; // PinchHandler doesn't react to the others
+        }
+
+        qCDebug(lcPointerTests) << gesture << "with value" << value
+                                << ": scale" << target->scale() << "expected" << expectedScale
+                                << ": rotation" << target->rotation() << "expected" << expectedRotation;
+        QCOMPARE(target->scale(), expectedScale);
+        QCOMPARE(target->rotation(), expectedRotation);
+        QCOMPARE(pinchHandler->persistentScale(), expectedScale);
+        QCOMPARE(pinchHandler->activeScale(), expectedScale);
+        QCOMPARE(pinchHandler->scaleAxis()->persistentValue(), expectedScale);
+        QCOMPARE(pinchHandler->scaleAxis()->activeValue(), expectedScale);
+        QCOMPARE(pinchHandler->persistentRotation(), expectedRotation);
+        QCOMPARE(pinchHandler->activeRotation(), expectedRotation);
+        QCOMPARE(pinchHandler->rotationAxis()->persistentValue(), expectedRotation);
+        QCOMPARE(pinchHandler->rotationAxis()->activeValue(), expectedRotation);
+        QCOMPARE(pinchHandler->activeTranslation(), QPointF());
+    }
+    QCOMPARE(pinchHandler->active(), true);
+    qCDebug(lcPointerTests) << "centroid: local" << pinchHandler->centroid().position()
+                            << "scene" << pinchHandler->centroid().scenePosition();
+    QCOMPARE(pinchHandler->persistentScale(), expectedScale);
+    QCOMPARE(pinchHandler->activeScale(), expectedScale);
+    QCOMPARE(pinchHandler->scaleAxis()->activeValue(), expectedScale);
+    QWindowSystemInterface::handleGestureEvent(&window, ts++, device,
+                                               Qt::EndNativeGesture, pinchPos, pinchPos);
+    QTRY_COMPARE(pinchHandler->active(), false);
+    QCOMPARE(target->scale(), expectedScale);
+    QCOMPARE(target->rotation(), expectedRotation);
+    QCOMPARE(pinchHandler->persistentScale(), expectedScale);
+    QCOMPARE(pinchHandler->activeScale(), 1);
+    QCOMPARE(pinchHandler->scaleAxis()->persistentValue(), expectedScale);
+    QCOMPARE(pinchHandler->scaleAxis()->activeValue(), 1);
+    QCOMPARE(pinchHandler->persistentRotation(), expectedRotation);
+    QCOMPARE(pinchHandler->activeRotation(), 0);
+    QCOMPARE(pinchHandler->rotationAxis()->persistentValue(), expectedRotation);
+    QCOMPARE(pinchHandler->rotationAxis()->activeValue(), 0);
+    QCOMPARE(pinchHandler->activeTranslation(), QPointF());
 }
 
 void tst_QQuickPinchHandler::pan()
@@ -478,6 +661,7 @@ void tst_QQuickPinchHandler::pan()
 
     QQuickPinchHandler *pinchHandler = window->rootObject()->findChild<QQuickPinchHandler*>("pinchHandler");
     QVERIFY(pinchHandler != nullptr);
+    QSignalSpy translationChangedSpy(pinchHandler, &QQuickPinchHandler::translationChanged);
 
     QQuickItem *root = qobject_cast<QQuickItem*>(window->rootObject());
     QVERIFY(root != nullptr);
@@ -526,6 +710,8 @@ void tst_QQuickPinchHandler::pan()
         // blackrect starts at 50,50
         QCOMPARE(blackRect->x(), 50.0);
         QCOMPARE(blackRect->y(), 50.0);
+        QCOMPARE(translationChangedSpy.size(), 1);
+        QCOMPARE(translationChangedSpy.first().first().value<QVector2D>(), QVector2D(0, 0));
 
         p0 += QPoint(10, 0);
         p1 += QPoint(10, 0);
@@ -534,6 +720,8 @@ void tst_QQuickPinchHandler::pan()
         QCOMPARE(pinchHandler->centroid().scenePosition(), QPointF(90 + dragThreshold + 11, 90));
         QCOMPARE(blackRect->x(), 60.0);
         QCOMPARE(blackRect->y(), 50.0);
+        QCOMPARE(translationChangedSpy.size(), 2);
+        QCOMPARE(translationChangedSpy.last().first().value<QVector2D>(), QVector2D(10, 0));
 
         p0 += QPoint(0, 10);
         p1 += QPoint(0, 10);
@@ -542,6 +730,8 @@ void tst_QQuickPinchHandler::pan()
         QCOMPARE(pinchHandler->centroid().scenePosition(), QPointF(90 + dragThreshold + 11, 90 + 10));
         QCOMPARE(blackRect->x(), 60.0);
         QCOMPARE(blackRect->y(), 60.0);
+        QCOMPARE(translationChangedSpy.size(), 3);
+        QCOMPARE(translationChangedSpy.last().first().value<QVector2D>(), QVector2D(0, 10));
 
         p0 += QPoint(10, 10);
         p1 += QPoint(10, 10);
@@ -551,6 +741,8 @@ void tst_QQuickPinchHandler::pan()
         QCOMPARE(pinchHandler->centroid().scenePosition(), QPointF(90 + dragThreshold + 21, 90 + 20));
         QCOMPARE(blackRect->x(), 70.0);
         QCOMPARE(blackRect->y(), 70.0);
+        QCOMPARE(translationChangedSpy.size(), 4);
+        QCOMPARE(translationChangedSpy.last().first().value<QVector2D>(), QVector2D(10, 10));
     }
 
     // pan x beyond bound
@@ -561,6 +753,8 @@ void tst_QQuickPinchHandler::pan()
 
     QCOMPARE(blackRect->x(), 140.0);
     QCOMPARE(blackRect->y(), 170.0);
+    QCOMPARE(translationChangedSpy.size(), 5);
+    QCOMPARE(translationChangedSpy.last().first().value<QVector2D>(), QVector2D(100, 100));
 
     QTest::touchEvent(window, touchscreen.get()).release(0, p0, window).release(1, p1, window);
     QQuickTouchUtils::flush(window);

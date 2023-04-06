@@ -35,6 +35,8 @@
 
 QT_BEGIN_NAMESPACE
 
+using namespace Qt::StringLiterals;
+
 Generator *Generator::s_currentGenerator;
 QMap<QString, QMap<QString, QString>> Generator::s_fmtLeftMaps;
 QMap<QString, QMap<QString, QString>> Generator::s_fmtRightMaps;
@@ -183,7 +185,7 @@ int Generator::appendSortedQmlNames(Text &text, const Node *base, const NodeList
   this method deals with errors when opening the file:
   the returned QFile is always valid and can be written to.
 
-  \sa beginFilePage()
+  \sa beginSubPage()
  */
 QFile *Generator::openSubPageFile(const Node *node, const QString &fileName)
 {
@@ -213,33 +215,13 @@ QFile *Generator::openSubPageFile(const Node *node, const QString &fileName)
 /*!
   Creates the file named \a fileName in the output directory.
   Attaches a QTextStream to the created file, which is written
-  to all over the place using out(). This function does not
-  store the \a fileName in the \a node as the output file name.
-
-  \sa beginSubPage()
+  to all over the place using out().
  */
-void Generator::beginFilePage(const Node *node, const QString &fileName)
+void Generator::beginSubPage(const Node *node, const QString &fileName)
 {
     QFile *outFile = openSubPageFile(node, fileName);
     auto *out = new QTextStream(outFile);
     outStreamStack.push(out);
-}
-
-/*!
- Creates the file named \a fileName in the output directory.
- Attaches a QTextStream to the created file, which is written
- to all over the place using out(). This function calls another
- function, \c beginFilePage(), which is really just most of what
- this function used to contain. We needed a different version
- that doesn't store the \a fileName in the \a node as the output
- file name.
-
- \sa beginFilePage()
-*/
-void Generator::beginSubPage(const Node *node, const QString &fileName)
-{
-    beginFilePage(node, fileName);
-    const_cast<Node *>(node)->setOutputFileName(fileName);
 }
 
 /*!
@@ -554,7 +536,7 @@ QString Generator::fullDocumentLocation(const Node *node, bool useSubdir)
             if (fn->isDtor())
                 anchorRef = "#dtor." + fn->name().mid(1);
             else if (fn->hasOneAssociatedProperty() && fn->doc().isEmpty())
-                return fullDocumentLocation(fn->firstAssociatedProperty());
+                return fullDocumentLocation(fn->associatedProperties()[0]);
             else if (fn->overloadNumber() > 0)
                 anchorRef = QLatin1Char('#') + cleanRef(fn->name()) + QLatin1Char('-')
                         + QString::number(fn->overloadNumber());
@@ -751,7 +733,7 @@ void Generator::generateBody(const Node *node, CodeMarker *marker)
         if (fn && !fn->overridesThis().isEmpty())
             generateReimplementsClause(fn, marker);
         else if (node->isProperty()) {
-            if (static_cast<const PropertyNode *>(node)->propertyType() != PropertyNode::Standard)
+            if (static_cast<const PropertyNode *>(node)->propertyType() != PropertyNode::PropertyType::StandardProperty)
                 generateAddendum(node, BindableProperty, marker);
         }
 
@@ -983,12 +965,12 @@ void Generator::generateFileList(const ExampleNode *en, CodeMarker *marker, bool
             QString details = std::transform_reduce(
                 file_resolver.get_search_directories().cbegin(),
                 file_resolver.get_search_directories().cend(),
-                u"Searched directories:"_qs,
+                u"Searched directories:"_s,
                 std::plus(),
                 [](const DirectoryPath &directory_path) -> QString { return u' ' + directory_path.value(); }
             );
 
-            en->location().warning(u"(Generator)Cannot find file to quote from: %1"_qs.arg(path), details);
+            en->location().warning(u"(Generator)Cannot find file to quote from: %1"_s.arg(path), details);
 
             continue;
         }
@@ -1093,9 +1075,16 @@ void Generator::generateDocumentation(Node *node)
     if (node->isAggregate()) {
         auto *aggregate = static_cast<Aggregate *>(node);
         const NodeList &children = aggregate->childNodes();
-        for (auto *node : children) {
-            if (node->isPageNode() && !node->isPrivate())
-                generateDocumentation(node);
+        for (auto *child : children) {
+            if (child->isPageNode() && !child->isPrivate()) {
+                generateDocumentation(child);
+            } else if (!node->parent() && child->isInAPI() && !child->isRelatedNonmember()) {
+                // Warn if there are documented non-page-generating nodes in the root namespace
+                child->location().warning(u"No documentation generated for %1 '%2' in global scope."_s
+                    .arg(typeString(child), child->name()),
+                            u"Maybe you forgot to use the '\\relates' command?"_s);
+                child->setStatus(Node::DontDocument);
+            }
         }
     }
 }
@@ -1131,36 +1120,35 @@ bool Generator::generateQmlText(const Text &text, const Node *relative, CodeMark
 
 void Generator::generateReimplementsClause(const FunctionNode *fn, CodeMarker *marker)
 {
-    if (!fn->overridesThis().isEmpty()) {
-        if (fn->parent()->isClassNode()) {
-            auto *cn = static_cast<ClassNode *>(fn->parent());
-            const FunctionNode *overrides = cn->findOverriddenFunction(fn);
-            if (overrides && !overrides->isPrivate() && !overrides->parent()->isPrivate()) {
-                if (overrides->hasDoc()) {
-                    Text text;
-                    text << Atom::ParaLeft << "Reimplements: ";
-                    QString fullName =
-                            overrides->parent()->name() + "::" + overrides->signature(false, true);
-                    appendFullName(text, overrides->parent(), fullName, overrides);
-                    text << "." << Atom::ParaRight;
-                    generateText(text, fn, marker);
-                } else {
-                    fn->doc().location().warning(
-                            QStringLiteral("Illegal \\reimp; no documented virtual function for %1")
-                                    .arg(overrides->plainSignature()));
-                }
-                return;
-            }
-            const PropertyNode *sameName = cn->findOverriddenProperty(fn);
-            if (sameName && sameName->hasDoc()) {
-                Text text;
-                text << Atom::ParaLeft << "Reimplements an access function for property: ";
-                QString fullName = sameName->parent()->name() + "::" + sameName->name();
-                appendFullName(text, sameName->parent(), fullName, sameName);
-                text << "." << Atom::ParaRight;
-                generateText(text, fn, marker);
-            }
+    if (fn->overridesThis().isEmpty() || !fn->parent()->isClassNode())
+        return;
+
+    auto *cn = static_cast<ClassNode *>(fn->parent());
+    const FunctionNode *overrides = cn->findOverriddenFunction(fn);
+    if (overrides && !overrides->isPrivate() && !overrides->parent()->isPrivate()) {
+        if (overrides->hasDoc()) {
+            Text text;
+            text << Atom::ParaLeft << "Reimplements: ";
+            QString fullName =
+                    overrides->parent()->name() + "::" + overrides->signature(false, true);
+            appendFullName(text, overrides->parent(), fullName, overrides);
+            text << "." << Atom::ParaRight;
+            generateText(text, fn, marker);
+        } else {
+            fn->doc().location().warning(
+                    QStringLiteral("Illegal \\reimp; no documented virtual function for %1")
+                            .arg(overrides->plainSignature()));
         }
+        return;
+    }
+    const PropertyNode *sameName = cn->findOverriddenProperty(fn);
+    if (sameName && sameName->hasDoc()) {
+        Text text;
+        text << Atom::ParaLeft << "Reimplements an access function for property: ";
+        QString fullName = sameName->parent()->name() + "::" + sameName->name();
+        appendFullName(text, sameName->parent(), fullName, sameName);
+        text << "." << Atom::ParaRight;
+        generateText(text, fn, marker);
     }
 }
 
@@ -1194,7 +1182,16 @@ void Generator::generateStatus(const Node *node, CodeMarker *marker)
 
     switch (node->status()) {
     case Node::Active:
-        // Do nothing.
+        // Output the module 'state' description if set.
+        if (node->isModule() || node->isQmlModule()) {
+            const QString &state = static_cast<const CollectionNode*>(node)->state();
+            if (!state.isEmpty()) {
+                text << Atom::ParaLeft << "This " << typeString(node) << " is in "
+                     << Atom(Atom::FormattingLeft, ATOM_FORMATTING_ITALIC) << state
+                     << Atom(Atom::FormattingRight, ATOM_FORMATTING_ITALIC) << " state."
+                     << Atom::ParaRight;
+            }
+        }
         break;
     case Node::Preliminary:
         text << Atom::ParaLeft << Atom(Atom::FormattingLeft, ATOM_FORMATTING_BOLD) << "This "
@@ -1209,7 +1206,6 @@ void Generator::generateStatus(const Node *node, CodeMarker *marker)
         if (const QString &version = node->deprecatedSince(); !version.isEmpty())
             text << " since " << version;
         text << ". We strongly advise against using it in new code.";
-        text << Atom::ParaRight;
         if (node->isAggregate())
             text << Atom(Atom::FormattingRight, ATOM_FORMATTING_BOLD);
         text << Atom::ParaRight;
@@ -1264,7 +1260,7 @@ void Generator::generateAddendum(const Node *node, Addendum type, CodeMarker *ma
         if (!node->isFunction())
             return;
         const auto *fn = static_cast<const FunctionNode *>(node);
-        NodeList nodes = fn->associatedProperties();
+        auto nodes = fn->associatedProperties();
         if (nodes.isEmpty())
             return;
         std::sort(nodes.begin(), nodes.end(), Node::nodeNameLessThan);
@@ -1272,16 +1268,16 @@ void Generator::generateAddendum(const Node *node, Addendum type, CodeMarker *ma
             QString msg;
             const auto *pn = static_cast<const PropertyNode *>(n);
             switch (pn->role(fn)) {
-            case PropertyNode::Getter:
+            case PropertyNode::FunctionRole::Getter:
                 msg = QStringLiteral("Getter function");
                 break;
-            case PropertyNode::Setter:
+            case PropertyNode::FunctionRole::Setter:
                 msg = QStringLiteral("Setter function");
                 break;
-            case PropertyNode::Resetter:
+            case PropertyNode::FunctionRole::Resetter:
                 msg = QStringLiteral("Resetter function");
                 break;
-            case PropertyNode::Notifier:
+            case PropertyNode::FunctionRole::Notifier:
                 msg = QStringLiteral("Notifier signal");
                 break;
             default:
@@ -1801,16 +1797,11 @@ QString Generator::outputSuffix(const Node *node)
 }
 
 bool Generator::parseArg(const QString &src, const QString &tag, int *pos, int n,
-                         QStringView *contents, QStringView *par1, bool debug)
+                         QStringView *contents, QStringView *par1)
 {
 #define SKIP_CHAR(c)                                                                               \
-    if (debug)                                                                                     \
-        qDebug() << "looking for " << c << " at " << QString(src.data() + i, n - i);               \
-    if (i >= n || src[i] != c) {                                                                   \
-        if (debug)                                                                                 \
-            qDebug() << " char '" << c << "' not found";                                           \
+    if (i >= n || src[i] != c)                                                                     \
         return false;                                                                              \
-    }                                                                                              \
     ++i;
 
 #define SKIP_SPACE                                                                                 \
@@ -1828,9 +1819,6 @@ bool Generator::parseArg(const QString &src, const QString &tag, int *pos, int n
         return false;
     }
 
-    if (debug)
-        qDebug() << "haystack:" << src << "needle:" << tag << "i:" << i;
-
     // skip tag
     i += tag.size();
 
@@ -1842,8 +1830,6 @@ bool Generator::parseArg(const QString &src, const QString &tag, int *pos, int n
         while (i < n && src[i].isLetter())
             ++i;
         if (src[i] == '=') {
-            if (debug)
-                qDebug() << "read parameter" << QString(src.data() + j, i - j);
             SKIP_CHAR('=');
             SKIP_CHAR('"');
             // skip parameter name
@@ -1853,9 +1839,6 @@ bool Generator::parseArg(const QString &src, const QString &tag, int *pos, int n
             *par1 = QStringView(src).mid(j, i - j);
             SKIP_CHAR('"');
             SKIP_SPACE;
-        } else {
-            if (debug)
-                qDebug() << "no optional parameter found";
         }
     }
     SKIP_SPACE;
@@ -1884,10 +1867,9 @@ bool Generator::parseArg(const QString &src, const QString &tag, int *pos, int n
     i += tag.size() + 4;
 
     *pos = i;
-    if (debug)
-        qDebug() << " tag " << tag << " found: pos now: " << i;
     return true;
 #undef SKIP_CHAR
+#undef SKIP_SPACE
 }
 
 QString Generator::plainCode(const QString &markedCode)

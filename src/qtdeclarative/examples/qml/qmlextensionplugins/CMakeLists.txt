@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 cmake_minimum_required(VERSION 3.16)
 project(qmlqtimeexample LANGUAGES CXX)
 
@@ -10,6 +13,8 @@ endif()
 set(INSTALL_EXAMPLEDIR "${INSTALL_EXAMPLESDIR}/qml/qmlextensionplugins/imports/TimeExample")
 
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Qml)
+
+qt_standard_project_setup(REQUIRES 6.5)
 
 #![0]
 set(qml_files
@@ -32,7 +37,6 @@ endforeach()
 #![1]
 qt_add_qml_module(qmlqtimeexample
     OUTPUT_DIRECTORY imports/TimeExample
-    VERSION 1.0
     URI "TimeExample"
     SOURCES timemodel.cpp timemodel.h
     QML_FILES ${qml_files}

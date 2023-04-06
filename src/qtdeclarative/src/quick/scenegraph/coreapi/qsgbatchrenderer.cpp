@@ -84,7 +84,11 @@ const uint DYNAMIC_VERTEX_INDEX_BUFFER_THRESHOLD = 4;
 const int VERTEX_BUFFER_BINDING = 0;
 const int ZORDER_BUFFER_BINDING = VERTEX_BUFFER_BINDING + 1;
 
-static inline uint aligned(uint v, uint byteAlign)
+const float VIEWPORT_MIN_DEPTH = 0.0f;
+const float VIEWPORT_MAX_DEPTH = 1.0f;
+
+template <class Int>
+inline Int aligned(Int v, Int byteAlign)
 {
     return (v + byteAlign - 1) & ~(byteAlign - 1);
 }
@@ -114,8 +118,7 @@ QRhiVertexInputAttribute::Format qsg_vertexInputFormat(const QSGGeometry::Attrib
         break;
     }
     qWarning("Unsupported attribute type 0x%x with %d components", a.type, a.tupleSize);
-    Q_UNREACHABLE();
-    return QRhiVertexInputAttribute::Float;
+    Q_UNREACHABLE_RETURN(QRhiVertexInputAttribute::Float);
 }
 
 static QRhiVertexInputLayout calculateVertexInputLayout(const QSGMaterialShader *s, const QSGGeometry *geometry, bool batchable)
@@ -130,7 +133,7 @@ static QRhiVertexInputLayout calculateVertexInputLayout(const QSGMaterialShader 
     const int attrCount = geometry->attributeCount();
     QVarLengthArray<QRhiVertexInputAttribute, 8> inputAttributes;
     inputAttributes.reserve(attrCount + 1);
-    int offset = 0;
+    quint32 offset = 0;
     for (int i = 0; i < attrCount; ++i) {
         const QSGGeometry::Attribute &a = geometry->attributes()[i];
         if (!sd->vertexShader->vertexInputLocations.contains(a.position)) {
@@ -168,8 +171,7 @@ QRhiCommandBuffer::IndexFormat qsg_indexFormat(const QSGGeometry *geometry)
         return QRhiCommandBuffer::IndexUInt32;
         break;
     default:
-        Q_UNREACHABLE();
-        return QRhiCommandBuffer::IndexUInt16;
+        Q_UNREACHABLE_RETURN(QRhiCommandBuffer::IndexUInt16);
     }
 }
 
@@ -213,10 +215,10 @@ ShaderManager::Shader *ShaderManager::prepareMaterial(QSGMaterial *material,
     shader = new Shader;
     QSGMaterialShader *s = static_cast<QSGMaterialShader *>(material->createShader(renderMode));
     context->initializeRhiShader(s, QShader::BatchableVertexShader);
-    shader->programRhi.program = s;
-    shader->programRhi.inputLayout = calculateVertexInputLayout(s, geometry, true);
+    shader->materialShader = s;
+    shader->inputLayout = calculateVertexInputLayout(s, geometry, true);
     QSGMaterialShaderPrivate *sD = QSGMaterialShaderPrivate::get(s);
-    shader->programRhi.shaderStages = {
+    shader->stages = {
         { QRhiGraphicsShaderStage::Vertex, sD->shader(QShader::VertexStage), QShader::BatchableVertexShader },
         { QRhiGraphicsShaderStage::Fragment, sD->shader(QShader::FragmentStage) }
     };
@@ -241,10 +243,10 @@ ShaderManager::Shader *ShaderManager::prepareMaterialNoRewrite(QSGMaterial *mate
     shader = new Shader;
     QSGMaterialShader *s = static_cast<QSGMaterialShader *>(material->createShader(renderMode));
     context->initializeRhiShader(s, QShader::StandardShader);
-    shader->programRhi.program = s;
-    shader->programRhi.inputLayout = calculateVertexInputLayout(s, geometry, false);
+    shader->materialShader = s;
+    shader->inputLayout = calculateVertexInputLayout(s, geometry, false);
     QSGMaterialShaderPrivate *sD = QSGMaterialShaderPrivate::get(s);
-    shader->programRhi.shaderStages = {
+    shader->stages = {
         { QRhiGraphicsShaderStage::Vertex, sD->shader(QShader::VertexStage) },
         { QRhiGraphicsShaderStage::Fragment, sD->shader(QShader::FragmentStage) }
     };
@@ -273,14 +275,14 @@ void ShaderManager::invalidated()
 void ShaderManager::clearCachedRendererData()
 {
     for (ShaderManager::Shader *sms : std::as_const(stockShaders)) {
-        QSGMaterialShader *s = sms->programRhi.program;
+        QSGMaterialShader *s = sms->materialShader;
         if (s) {
             QSGMaterialShaderPrivate *sd = QSGMaterialShaderPrivate::get(s);
             sd->clearCachedRendererData();
         }
     }
     for (ShaderManager::Shader *sms : std::as_const(rewrittenShaders)) {
-        QSGMaterialShader *s = sms->programRhi.program;
+        QSGMaterialShader *s = sms->materialShader;
         if (s) {
             QSGMaterialShaderPrivate *sd = QSGMaterialShaderPrivate::get(s);
             sd->clearCachedRendererData();
@@ -971,13 +973,13 @@ void Renderer::invalidateAndRecycleBatch(Batch *b)
     m_batchPool.add(b);
 }
 
-void Renderer::map(Buffer *buffer, int byteSize, bool isIndexBuf)
+void Renderer::map(Buffer *buffer, quint32 byteSize, bool isIndexBuf)
 {
     if (m_visualizer->mode() == Visualizer::VisualizeNothing) {
         // Common case, use a shared memory pool for uploading vertex data to avoid
         // excessive reevaluation
         QDataBuffer<char> &pool = isIndexBuf ? m_indexUploadPool : m_vertexUploadPool;
-        if (byteSize > pool.size())
+        if (byteSize > quint32(pool.size()))
             pool.resize(byteSize);
         buffer->data = pool.data();
     } else if (buffer->size != byteSize) {
@@ -998,7 +1000,7 @@ void Renderer::unmap(Buffer *buffer, bool isIndexBuf)
                                        isIndexBuf ? QRhiBuffer::IndexBuffer : QRhiBuffer::VertexBuffer,
                                        buffer->size);
         if (!buffer->buf->create()) {
-            qWarning("Failed to build vertex/index buffer of size %d", buffer->size);
+            qWarning("Failed to build vertex/index buffer of size %u", buffer->size);
             delete buffer->buf;
             buffer->buf = nullptr;
         }
@@ -1017,7 +1019,7 @@ void Renderer::unmap(Buffer *buffer, bool isIndexBuf)
         }
         if (needsRebuild) {
             if (!buffer->buf->create()) {
-                qWarning("Failed to (re)build vertex/index buffer of size %d", buffer->size);
+                qWarning("Failed to (re)build vertex/index buffer of size %u", buffer->size);
                 delete buffer->buf;
                 buffer->buf = nullptr;
             }
@@ -1834,6 +1836,12 @@ static inline int qsg_fixIndexCount(int iCount, int drawMode)
     }
 }
 
+static inline float calculateElementZOrder(const Element *e, qreal zRange)
+{
+    // Clamp the zOrder to within the min and max depth of the viewport.
+    return std::clamp(1.0f - float(e->order * zRange), VIEWPORT_MIN_DEPTH, VIEWPORT_MAX_DEPTH);
+}
+
 /* These parameters warrant some explanation...
  *
  * vaOffset: The byte offset into the vertex data to the location of the
@@ -1878,7 +1886,7 @@ void Renderer::uploadMergedElement(Element *e, int vaOffset, char **vertexData, 
 
     if (useDepthBuffer()) {
         float *vzorder = (float *) *zData;
-        float zorder = 1.0f - e->order * m_zRange;
+        float zorder = calculateElementZOrder(e, m_zRange);
         for (int i=0; i<vCount; ++i)
             vzorder[i] = zorder;
         *zData += vCount * sizeof(float);
@@ -2239,7 +2247,7 @@ QRhiGraphicsPipeline *Renderer::buildStencilPipeline(const Batch *batch, bool fi
                           QRhiGraphicsShaderStage(QRhiGraphicsShaderStage::Fragment, m_stencilClipCommon.fs) });
     ps->setVertexInputLayout(m_stencilClipCommon.inputLayout);
     ps->setShaderResourceBindings(batch->stencilClipState.srb); // use something, it just needs to be layout-compatible
-    ps->setRenderPassDescriptor(renderPassDescriptor());
+    ps->setRenderPassDescriptor(renderTarget().rpDesc);
 
     if (!ps->create()) {
         qWarning("Failed to build stencil clip pipeline");
@@ -2277,10 +2285,10 @@ void Renderer::updateClipState(const QSGClipNode *clipList, Batch *batch)
     const QSGClipNode *clip = clipList;
 
     batch->stencilClipState.drawCalls.reset();
-    int totalVSize = 0;
-    int totalISize = 0;
-    int totalUSize = 0;
-    const int StencilClipUbufSize = 64;
+    quint32 totalVSize = 0;
+    quint32 totalISize = 0;
+    quint32 totalUSize = 0;
+    const quint32 StencilClipUbufSize = 64;
 
     while (clip) {
         QMatrix4x4 m = m_current_projection_matrix_native_ndc;
@@ -2335,11 +2343,11 @@ void Renderer::updateClipState(const QSGClipNode *clipList, Batch *batch)
 
             const int vertexByteSize = g->sizeOfVertex() * g->vertexCount();
             // the 4 byte alignment may not actually be needed here
-            totalVSize = aligned(totalVSize, 4) + vertexByteSize;
+            totalVSize = aligned(totalVSize, 4u) + vertexByteSize;
             if (g->indexCount()) {
                 const int indexByteSize = g->sizeOfIndex() * g->indexCount();
                 // so no need to worry about NonFourAlignedEffectiveIndexBufferOffset
-                totalISize = aligned(totalISize, 4) + indexByteSize;
+                totalISize = aligned(totalISize, 4u) + indexByteSize;
             }
             // ubuf start offsets must be aligned (typically to 256 bytes)
             totalUSize = aligned(totalUSize, m_ubufAlignment) + StencilClipUbufSize;
@@ -2417,9 +2425,9 @@ void Renderer::updateClipState(const QSGClipNode *clipList, Batch *batch)
             }
         }
 
-        int vOffset = 0;
-        int iOffset = 0;
-        int uOffset = 0;
+        quint32 vOffset = 0;
+        quint32 iOffset = 0;
+        quint32 uOffset = 0;
         for (const QSGClipNode *clip : stencilClipNodes) {
             const QSGGeometry *g = clip->geometry();
             const QSGGeometry::Attribute *a = g->attributes();
@@ -2440,13 +2448,13 @@ void Renderer::updateClipState(const QSGClipNode *clipList, Batch *batch)
             }
 #endif
 
-            drawCall.vbufOffset = aligned(vOffset, 4);
+            drawCall.vbufOffset = aligned(vOffset, 4u);
             const int vertexByteSize = g->sizeOfVertex() * g->vertexCount();
             vOffset = drawCall.vbufOffset + vertexByteSize;
 
             int indexByteSize = 0;
             if (g->indexCount()) {
-                drawCall.ibufOffset = aligned(iOffset, 4);
+                drawCall.ibufOffset = aligned(iOffset, 4u);
                 indexByteSize = g->sizeOfIndex() * g->indexCount();
                 iOffset = drawCall.ibufOffset + indexByteSize;
             }
@@ -2509,7 +2517,7 @@ void Renderer::enqueueStencilDraw(const Batch *batch)
     if (!batch->stencilClipState.updateStencilBuffer)
         return;
 
-    QRhiCommandBuffer *cb = commandBuffer();
+    QRhiCommandBuffer *cb = renderTarget().cb;
     const int count = batch->stencilClipState.drawCalls.size();
     for (int i = 0; i < count; ++i) {
         const StencilClipState::StencilDrawCall &drawCall(batch->stencilClipState.drawCalls.at(i));
@@ -2591,7 +2599,7 @@ bool Renderer::ensurePipelineState(Element *e, const ShaderManager::Shader *sms,
     // for comparison we only rely on the serialized blob in order decide if the
     // render target is compatible with the pipeline.
 
-    const GraphicsPipelineStateKey k = GraphicsPipelineStateKey::create(m_gstate, sms, renderPassDescriptor(), e->srb);
+    const GraphicsPipelineStateKey k = GraphicsPipelineStateKey::create(m_gstate, sms, renderTarget().rpDesc, e->srb);
 
     // Note: dynamic state (viewport rect, scissor rect, stencil ref, blend
     // constant) is never a part of GraphicsState/QRhiGraphicsPipeline.
@@ -2608,14 +2616,17 @@ bool Renderer::ensurePipelineState(Element *e, const ShaderManager::Shader *sms,
 
     // Build a new one. This is potentially expensive.
     QRhiGraphicsPipeline *ps = m_rhi->newGraphicsPipeline();
-    ps->setShaderStages(sms->programRhi.shaderStages.cbegin(), sms->programRhi.shaderStages.cend());
-    ps->setVertexInputLayout(sms->programRhi.inputLayout);
+    ps->setShaderStages(sms->stages.cbegin(), sms->stages.cend());
+    ps->setVertexInputLayout(sms->inputLayout);
     ps->setShaderResourceBindings(e->srb);
-    ps->setRenderPassDescriptor(renderPassDescriptor());
+    ps->setRenderPassDescriptor(renderTarget().rpDesc);
 
     QRhiGraphicsPipeline::Flags flags;
-    if (needsBlendConstant(m_gstate.srcColor) || needsBlendConstant(m_gstate.dstColor))
+    if (needsBlendConstant(m_gstate.srcColor) || needsBlendConstant(m_gstate.dstColor)
+            || needsBlendConstant(m_gstate.srcAlpha) || needsBlendConstant(m_gstate.dstAlpha))
+    {
         flags |= QRhiGraphicsPipeline::UsesBlendConstants;
+    }
     if (m_gstate.usesScissor)
         flags |= QRhiGraphicsPipeline::UsesScissor;
     if (m_gstate.stencilTest)
@@ -2629,8 +2640,10 @@ bool Renderer::ensurePipelineState(Element *e, const ShaderManager::Shader *sms,
     QRhiGraphicsPipeline::TargetBlend blend;
     blend.colorWrite = m_gstate.colorWrite;
     blend.enable = m_gstate.blending;
-    blend.srcColor = blend.srcAlpha = m_gstate.srcColor;
-    blend.dstColor = blend.dstAlpha = m_gstate.dstColor;
+    blend.srcColor = m_gstate.srcColor;
+    blend.dstColor = m_gstate.dstColor;
+    blend.srcAlpha = m_gstate.srcAlpha;
+    blend.dstAlpha = m_gstate.dstAlpha;
     ps->setTargetBlends({ blend });
 
     ps->setDepthTest(m_gstate.depthTest);
@@ -2768,6 +2781,17 @@ static void rendererToMaterialGraphicsState(QSGMaterialShader::GraphicsPipelineS
     dst->srcColor = QSGMaterialShader::GraphicsPipelineState::BlendFactor(src->srcColor);
     dst->dstColor = QSGMaterialShader::GraphicsPipelineState::BlendFactor(src->dstColor);
 
+    // For compatibility with any existing code, separateBlendFactors defaults
+    // to _false_ which means that materials that do not touch srcAlpha and
+    // dstAlpha will continue to use srcColor and dstColor as the alpha
+    // blending factors. New code that needs different values for color/alpha,
+    // can explicitly set separateBlendFactors to true and then set srcAlpha
+    // and dstAlpha as well.
+    dst->separateBlendFactors = false;
+
+    dst->srcAlpha = QSGMaterialShader::GraphicsPipelineState::BlendFactor(src->srcAlpha);
+    dst->dstAlpha = QSGMaterialShader::GraphicsPipelineState::BlendFactor(src->dstAlpha);
+
     dst->colorWrite = QSGMaterialShader::GraphicsPipelineState::ColorMask(int(src->colorWrite));
 
     dst->cullMode = QSGMaterialShader::GraphicsPipelineState::CullMode(src->cullMode);
@@ -2780,6 +2804,13 @@ static void materialToRendererGraphicsState(GraphicsState *dst,
     dst->blending = src->blendEnable;
     dst->srcColor = QRhiGraphicsPipeline::BlendFactor(src->srcColor);
     dst->dstColor = QRhiGraphicsPipeline::BlendFactor(src->dstColor);
+    if (src->separateBlendFactors) {
+        dst->srcAlpha = QRhiGraphicsPipeline::BlendFactor(src->srcAlpha);
+        dst->dstAlpha = QRhiGraphicsPipeline::BlendFactor(src->dstAlpha);
+    } else {
+        dst->srcAlpha = dst->srcColor;
+        dst->dstAlpha = dst->dstColor;
+    }
     dst->colorWrite = QRhiGraphicsPipeline::ColorMask(int(src->colorWrite));
     dst->cullMode = QRhiGraphicsPipeline::CullMode(src->cullMode);
     dst->polygonMode = QRhiGraphicsPipeline::PolygonMode(src->polygonMode);
@@ -2795,7 +2826,7 @@ void Renderer::updateMaterialDynamicData(ShaderManager::Shader *sms,
 {
     m_current_resource_update_batch = m_resourceUpdates;
 
-    QSGMaterialShader *shader = sms->programRhi.program;
+    QSGMaterialShader *shader = sms->materialShader;
     QSGMaterialShaderPrivate *pd = QSGMaterialShaderPrivate::get(shader);
     QVarLengthArray<QRhiShaderResourceBinding, 8> bindings;
 
@@ -2988,7 +3019,7 @@ void Renderer::updateMaterialStaticData(ShaderManager::Shader *sms,
                                         Batch *batch,
                                         bool *gstateChanged)
 {
-    QSGMaterialShader *shader = sms->programRhi.program;
+    QSGMaterialShader *shader = sms->materialShader;
     *gstateChanged = false;
     if (shader->flags().testFlag(QSGMaterialShader::UpdatesGraphicsPipelineState)) {
         // generate the public mini-state from m_gstate, invoke the material,
@@ -3000,8 +3031,11 @@ void Renderer::updateMaterialStaticData(ShaderManager::Shader *sms,
         if (changed) {
             m_gstateStack.push(m_gstate);
             materialToRendererGraphicsState(&m_gstate, &shaderPs);
-            if (needsBlendConstant(m_gstate.srcColor) || needsBlendConstant(m_gstate.dstColor))
+            if (needsBlendConstant(m_gstate.srcColor) || needsBlendConstant(m_gstate.dstColor)
+                    || needsBlendConstant(m_gstate.srcAlpha) || needsBlendConstant(m_gstate.dstAlpha))
+            {
                 batch->blendConstant = shaderPs.blendConstant;
+            }
             *gstateChanged = true;
         }
     }
@@ -3058,9 +3092,9 @@ bool Renderer::prepareRenderMergedBatch(Batch *batch, PreparedRenderBatch *rende
     if (!sms)
         return false;
 
-    Q_ASSERT(sms->programRhi.program);
+    Q_ASSERT(sms->materialShader);
     if (m_currentShader != sms)
-        setActiveRhiShader(sms->programRhi.program, sms);
+        setActiveRhiShader(sms->materialShader, sms);
 
     m_current_opacity = gn->inheritedOpacity();
     if (!qFuzzyCompare(sms->lastOpacity, float(m_current_opacity))) {
@@ -3068,8 +3102,8 @@ bool Renderer::prepareRenderMergedBatch(Batch *batch, PreparedRenderBatch *rende
         sms->lastOpacity = m_current_opacity;
     }
 
-    QSGMaterialShaderPrivate *pd = QSGMaterialShaderPrivate::get(sms->programRhi.program);
-    const int ubufSize = pd->masterUniformData.size();
+    QSGMaterialShaderPrivate *pd = QSGMaterialShaderPrivate::get(sms->materialShader);
+    const quint32 ubufSize = quint32(pd->masterUniformData.size());
     if (pd->ubufBinding >= 0) {
         bool ubufRebuild = false;
         if (!batch->ubuf) {
@@ -3084,7 +3118,7 @@ bool Renderer::prepareRenderMergedBatch(Batch *batch, PreparedRenderBatch *rende
         if (ubufRebuild) {
             batch->ubufDataValid = false;
             if (!batch->ubuf->create()) {
-                qWarning("Failed to build uniform buffer of size %d bytes", ubufSize);
+                qWarning("Failed to build uniform buffer of size %u bytes", ubufSize);
                 delete batch->ubuf;
                 batch->ubuf = nullptr;
                 return false;
@@ -3179,7 +3213,7 @@ void Renderer::renderMergedBatch(PreparedRenderBatch *renderBatch, bool depthPos
     if (batch->clipState.type & ClipState::StencilClip)
         enqueueStencilDraw(batch);
 
-    QRhiCommandBuffer *cb = commandBuffer();
+    QRhiCommandBuffer *cb = renderTarget().cb;
     setGraphicsPipeline(cb, batch, e, depthPostPass);
 
     for (int i = 0, ie = batch->drawSets.size(); i != ie; ++i) {
@@ -3236,9 +3270,9 @@ bool Renderer::prepareRenderUnmergedBatch(Batch *batch, PreparedRenderBatch *ren
     if (!sms)
         return false;
 
-    Q_ASSERT(sms->programRhi.program);
+    Q_ASSERT(sms->materialShader);
     if (m_currentShader != sms)
-        setActiveRhiShader(sms->programRhi.program, sms);
+        setActiveRhiShader(sms->materialShader, sms);
 
     m_current_opacity = gn->inheritedOpacity();
     if (sms->lastOpacity != m_current_opacity) {
@@ -3248,10 +3282,10 @@ bool Renderer::prepareRenderUnmergedBatch(Batch *batch, PreparedRenderBatch *ren
 
     QMatrix4x4 rootMatrix = batch->root ? qsg_matrixForRoot(batch->root) : QMatrix4x4();
 
-    QSGMaterialShaderPrivate *pd = QSGMaterialShaderPrivate::get(sms->programRhi.program);
-    const int ubufSize = pd->masterUniformData.size();
+    QSGMaterialShaderPrivate *pd = QSGMaterialShaderPrivate::get(sms->materialShader);
+    const quint32 ubufSize = quint32(pd->masterUniformData.size());
     if (pd->ubufBinding >= 0) {
-        int totalUBufSize = 0;
+        quint32 totalUBufSize = 0;
         while (e) {
             totalUBufSize += aligned(ubufSize, m_ubufAlignment);
             e = e->nextInBatch;
@@ -3269,7 +3303,7 @@ bool Renderer::prepareRenderUnmergedBatch(Batch *batch, PreparedRenderBatch *ren
         if (ubufRebuild) {
             batch->ubufDataValid = false;
             if (!batch->ubuf->create()) {
-                qWarning("Failed to build uniform buffer of size %d bytes", totalUBufSize);
+                qWarning("Failed to build uniform buffer of size %u bytes", totalUBufSize);
                 delete batch->ubuf;
                 batch->ubuf = nullptr;
                 return false;
@@ -3296,7 +3330,7 @@ bool Renderer::prepareRenderUnmergedBatch(Batch *batch, PreparedRenderBatch *ren
         m_current_projection_matrix_native_ndc = projectionMatrixWithNativeNDC();
         if (useDepthBuffer()) {
             m_current_projection_matrix(2, 2) = m_zRange;
-            m_current_projection_matrix(2, 3) = 1.0f - e->order * m_zRange;
+            m_current_projection_matrix(2, 3) = calculateElementZOrder(e, m_zRange);
         }
 
         QSGMaterialShader::RenderState renderState = state(QSGMaterialShader::RenderState::DirtyStates(int(dirty)));
@@ -3374,9 +3408,9 @@ void Renderer::renderUnmergedBatch(PreparedRenderBatch *renderBatch, bool depthP
     if (batch->clipState.type & ClipState::StencilClip)
         enqueueStencilDraw(batch);
 
-    int vOffset = 0;
-    int iOffset = 0;
-    QRhiCommandBuffer *cb = commandBuffer();
+    quint32 vOffset = 0;
+    quint32 iOffset = 0;
+    QRhiCommandBuffer *cb = renderTarget().cb;
 
     while (e) {
         QSGGeometry *g = e->node->geometry();
@@ -3630,8 +3664,8 @@ void Renderer::prepareRenderPass(RenderPassContext *ctx)
 
     if (Q_UNLIKELY(debug_render())) ctx->timeSorting = ctx->timer.restart();
 
-    int largestVBO = 0;
-    int largestIBO = 0;
+    quint32 largestVBO = 0;
+    quint32 largestIBO = 0;
 
     if (Q_UNLIKELY(debug_upload())) qDebug("Uploading Opaque Batches:");
     for (int i=0; i<m_opaqueBatches.size(); ++i) {
@@ -3651,10 +3685,8 @@ void Renderer::prepareRenderPass(RenderPassContext *ctx)
     }
     if (Q_UNLIKELY(debug_render())) ctx->timeUploadAlpha = ctx->timer.restart();
 
-    if (largestVBO * 2 < m_vertexUploadPool.size())
-        m_vertexUploadPool.resize(largestVBO * 2);
-    if (largestIBO * 2 < m_indexUploadPool.size())
-        m_indexUploadPool.resize(largestIBO * 2);
+    m_vertexUploadPool.resize(largestVBO);
+    m_indexUploadPool.resize(largestIBO);
 
     if (Q_UNLIKELY(debug_render())) {
         qDebug().nospace() << "Rendering:" << Qt::endl
@@ -3673,7 +3705,9 @@ void Renderer::prepareRenderPass(RenderPassContext *ctx)
     bool renderOpaque = !debug_noopaque();
     bool renderAlpha = !debug_noalpha();
 
-    m_pstate.viewport = QRhiViewport(viewport.x(), deviceRect().bottom() - viewport.bottom(), viewport.width(), viewport.height());
+    m_pstate.viewport =
+            QRhiViewport(viewport.x(), deviceRect().bottom() - viewport.bottom(), viewport.width(),
+                         viewport.height(), VIEWPORT_MIN_DEPTH, VIEWPORT_MAX_DEPTH);
     m_pstate.clearColor = clearColor();
     m_pstate.dsClear = QRhiDepthStencilClearValue(1.0f, 0);
     m_pstate.viewportSet = false;
@@ -3752,20 +3786,21 @@ void Renderer::prepareRenderPass(RenderPassContext *ctx)
     if (m_visualizer->mode() != Visualizer::VisualizeNothing)
         m_visualizer->prepareVisualize();
 
-    commandBuffer()->resourceUpdate(m_resourceUpdates);
+    renderTarget().cb->resourceUpdate(m_resourceUpdates);
     m_resourceUpdates = nullptr;
 }
 
 void Renderer::beginRenderPass(RenderPassContext *)
 {
-    commandBuffer()->beginPass(renderTarget().rt, m_pstate.clearColor, m_pstate.dsClear, nullptr,
-                               // we cannot tell if the application will have
-                               // native rendering thrown in to this pass
-                               // (QQuickWindow::beginExternalCommands()), so
-                               // we have no choice but to set the flag always
-                               // (thus triggering using secondary command
-                               // buffers with Vulkan)
-                               QRhiCommandBuffer::ExternalContent);
+    const QSGRenderTarget &rt(renderTarget());
+    rt.cb->beginPass(rt.rt, m_pstate.clearColor, m_pstate.dsClear, nullptr,
+                     // we cannot tell if the application will have
+                     // native rendering thrown in to this pass
+                     // (QQuickWindow::beginExternalCommands()), so
+                     // we have no choice but to set the flag always
+                     // (thus triggering using secondary command
+                     // buffers with Vulkan)
+                     QRhiCommandBuffer::ExternalContent);
 
     if (m_renderPassRecordingCallbacks.start)
         m_renderPassRecordingCallbacks.start(m_renderPassRecordingCallbacks.userData);
@@ -3786,7 +3821,7 @@ void Renderer::recordRenderPass(RenderPassContext *ctx)
 
     ctx->valid = false;
 
-    QRhiCommandBuffer *cb = commandBuffer();
+    QRhiCommandBuffer *cb = renderTarget().cb;
     cb->debugMarkBegin(QByteArrayLiteral("Qt Quick scene render"));
 
     for (int i = 0, ie = ctx->opaqueRenderBatches.size(); i != ie; ++i) {
@@ -3841,7 +3876,7 @@ void Renderer::endRenderPass(RenderPassContext *)
     if (m_visualizer->mode() != Visualizer::VisualizeNothing)
         m_visualizer->visualize();
 
-    commandBuffer()->endPass();
+    renderTarget().cb->endPass();
 }
 
 struct RenderNodeState : public QSGRenderNode::RenderState
@@ -3912,6 +3947,12 @@ bool Renderer::prepareRhiRenderNode(Batch *batch, PreparedRenderBatch *renderBat
 
     rd->m_rt = renderTarget();
 
+    rd->m_projectionMatrix = projectionMatrix();
+    if (useDepthBuffer()) {
+        rd->m_projectionMatrix(2, 2) = m_zRange;
+        rd->m_projectionMatrix(2, 3) = calculateElementZOrder(e, m_zRange);
+    }
+
     e->renderNode->prepare();
 
     renderBatch->batch = batch;
@@ -3928,14 +3969,8 @@ void Renderer::renderRhiRenderNode(const Batch *batch)
     RenderNodeElement *e = static_cast<RenderNodeElement *>(batch->first);
     QSGRenderNodePrivate *rd = QSGRenderNodePrivate::get(e->renderNode);
 
-    QMatrix4x4 pm = projectionMatrix();
-    if (useDepthBuffer()) {
-        pm(2, 2) = m_zRange;
-        pm(2, 3) = 1.0f - e->order * m_zRange;
-    }
-
     RenderNodeState state;
-    state.m_projectionMatrix = &pm;
+    state.m_projectionMatrix = &rd->m_projectionMatrix;
     const std::array<int, 4> scissor = batch->clipState.scissor.scissor();
     state.m_scissorRect = QRect(scissor[0], scissor[1], scissor[2], scissor[3]);
     state.m_stencilValue = batch->clipState.stencilRef;
@@ -3944,7 +3979,7 @@ void Renderer::renderRhiRenderNode(const Batch *batch)
 
     const QSGRenderNode::StateFlags changes = e->renderNode->changedStates();
 
-    QRhiCommandBuffer *cb = commandBuffer();
+    QRhiCommandBuffer *cb = renderTarget().cb;
     const bool needsExternal = !e->renderNode->flags().testFlag(QSGRenderNode::NoExternalRendering);
     if (needsExternal)
         cb->beginExternal();
@@ -3997,6 +4032,8 @@ bool operator==(const GraphicsState &a, const GraphicsState &b) noexcept
             && a.blending == b.blending
             && a.srcColor == b.srcColor
             && a.dstColor == b.dstColor
+            && a.srcAlpha == b.srcAlpha
+            && a.dstAlpha == b.dstAlpha
             && a.colorWrite == b.colorWrite
             && a.cullMode == b.cullMode
             && a.usesScissor == b.usesScissor
@@ -4030,7 +4067,7 @@ size_t qHash(const GraphicsState &s, size_t seed) noexcept
 bool operator==(const GraphicsPipelineStateKey &a, const GraphicsPipelineStateKey &b) noexcept
 {
     return a.state == b.state
-            && a.sms->programRhi.program == b.sms->programRhi.program
+            && a.sms->materialShader == b.sms->materialShader
             && a.renderTargetDescription == b.renderTargetDescription
             && a.srbLayoutDescription == b.srbLayoutDescription;
 }
@@ -4043,7 +4080,7 @@ bool operator!=(const GraphicsPipelineStateKey &a, const GraphicsPipelineStateKe
 size_t qHash(const GraphicsPipelineStateKey &k, size_t seed) noexcept
 {
     return qHash(k.state, seed)
-        ^ qHash(k.sms->programRhi.program)
+        ^ qHash(k.sms->materialShader)
         ^ k.extra.renderTargetDescriptionHash
         ^ k.extra.srbLayoutDescriptionHash;
 }

@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Generated from script.pro.
 
 #####################################################################
@@ -8,9 +11,8 @@ qt_internal_add_benchmark(tst_script
     SOURCES
         tst_script.cpp
     DEFINES
-        QT_DISABLE_DEPRECATED_BEFORE=0
-        SRCDIR=\\\"${CMAKE_CURRENT_SOURCE_DIR}\\\"
-    PUBLIC_LIBRARIES
+        SRCDIR="${CMAKE_CURRENT_SOURCE_DIR}"
+    LIBRARIES
         Qt::CorePrivate
         Qt::Gui
         Qt::GuiPrivate

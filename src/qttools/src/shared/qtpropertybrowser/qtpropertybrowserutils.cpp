@@ -13,8 +13,17 @@
 
 QT_BEGIN_NAMESPACE
 
+// Make sure icons are removed as soon as QApplication is destroyed, otherwise,
+// handles are leaked on X11.
+static void clearCursorDatabase()
+{
+    QtCursorDatabase::instance()->clear();
+}
+
 QtCursorDatabase::QtCursorDatabase()
 {
+    qAddPostRoutine(clearCursorDatabase);
+
     appendCursor(Qt::ArrowCursor, QCoreApplication::translate("QtCursorDatabase", "Arrow"),
                  QIcon(QLatin1String(":/qt-project.org/qtpropertybrowser/images/cursor-arrow.png")));
     appendCursor(Qt::UpArrowCursor, QCoreApplication::translate("QtCursorDatabase", "Up Arrow"),
@@ -117,6 +126,13 @@ QCursor QtCursorDatabase::valueToCursor(int value) const
 }
 #endif
 
+Q_GLOBAL_STATIC(QtCursorDatabase, cursorDatabase)
+
+QtCursorDatabase *QtCursorDatabase::instance()
+{
+    return cursorDatabase();
+}
+
 QPixmap QtPropertyBrowserUtils::brushValuePixmap(const QBrush &b)
 {
     QImage img(16, 16, QImage::Format_ARGB32_Premultiplied);
@@ -212,7 +228,7 @@ QtBoolEdit::QtBoolEdit(QWidget *parent) :
         lt->setContentsMargins(0, 0, 4, 0);
     lt->addWidget(m_checkBox);
     setLayout(lt);
-    connect(m_checkBox, SIGNAL(toggled(bool)), this, SIGNAL(toggled(bool)));
+    connect(m_checkBox, &QAbstractButton::toggled, this, &QtBoolEdit::toggled);
     setFocusProxy(m_checkBox);
     m_checkBox->setText(tr("True"));
 }

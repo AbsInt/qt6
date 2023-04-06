@@ -2,14 +2,17 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
 
 /*!
- * \title Qt Wayland Compositor Examples - QtShell Compositor
+ * \title QtShell Compositor
  * \example qtshell
+ * \meta category {Embedded}
  * \brief QtShell Compositor shows how to use the QtShell shell extension.
  * \ingroup qtwaylandcompositor-examples
  *
  * QtShell Compositor is a desktop-style Wayland compositor example implementing a
  * complete Qt Wayland Compositor which uses the specialized
  * \l{Shell Extensions - Qt Wayland Compositor}{shell extension protocol} called \l{QtShell}.
+ *
+ * \image qtshell.jpg
  *
  * The compositor is implemented with Qt Quick and QML.
  *

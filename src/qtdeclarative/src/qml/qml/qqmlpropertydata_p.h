@@ -28,7 +28,8 @@ public:
     enum WriteFlag {
         BypassInterceptor = 0x01,
         DontRemoveBinding = 0x02,
-        RemoveBindingOnAliasWrite = 0x04
+        RemoveBindingOnAliasWrite = 0x04,
+        HasInternalIndex = 0x8,
     };
     Q_DECLARE_FLAGS(WriteFlags, WriteFlag)
 
@@ -341,6 +342,15 @@ public:
         return true;
     }
 
+    bool resetProperty(QObject *target, WriteFlags flags) const
+    {
+        if (flags.testFlag(BypassInterceptor) && hasStaticMetaCallFunction())
+            staticMetaCallFunction()(target, QMetaObject::ResetProperty, relativePropertyIndex(), nullptr);
+        else
+            doMetacall<QMetaObject::ResetProperty>(target, coreIndex(), nullptr);
+        return true;
+    }
+
     static Flags defaultSignalFlags()
     {
         Flags f;
@@ -360,8 +370,6 @@ public:
 
 private:
     friend class QQmlPropertyCache;
-    void lazyLoad(const QMetaProperty &);
-    void lazyLoad(const QMetaMethod &);
 
     Flags m_flags;
     qint16 m_coreIndex = -1;

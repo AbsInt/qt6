@@ -262,8 +262,8 @@ void Aggregate::normalizeOverloads()
                     internalFn = next;
                 } else {
                     next->setOverloadNumber(++count);
+                    fn = fn->nextOverload();
                 }
-                fn = fn->nextOverload();
             } else {
                 fn->setNextOverload(internalFn);
                 break;
@@ -314,22 +314,6 @@ const EnumNode *Aggregate::findEnumNodeForValue(const QString &enumValue) const
             return en;
     }
     return nullptr;
-}
-
-/*!
-  Appends \a includeFile file to the list of include files.
- */
-void Aggregate::addIncludeFile(const QString &includeFile)
-{
-    m_includeFiles.append(includeFile);
-}
-
-/*!
-  Sets the list of include files to \a includeFiles.
- */
-void Aggregate::setIncludeFiles(const QStringList &includeFiles)
-{
-    m_includeFiles = includeFiles;
 }
 
 /*!
@@ -737,7 +721,7 @@ void Aggregate::findAllAttributions(NodeMultiMap &attributions)
 {
     for (auto *node : std::as_const(m_children)) {
         if (!node->isPrivate()) {
-            if (node->pageType() == Node::AttributionPage)
+            if (node->isPageNode() && static_cast<PageNode*>(node)->isAttribution())
                 attributions.insert(node->tree()->indexTitle(), node);
             else if (node->isAggregate())
                 static_cast<Aggregate *>(node)->findAllAttributions(attributions);
@@ -864,11 +848,6 @@ QString Aggregate::typeWord(bool cap) const
 
 /*! \fn NodeList::ConstIterator Aggregate::constEnd() const
   Returns a const iterator pointing at the end of the child list.
- */
-
-/*! \fn const QStringList &Aggregate::includeFiles() const
-  This function returns a const reference to a list of strings, but
-  I no longer know what they are.
  */
 
 /*! \fn QmlTypeNode *Aggregate::qmlBaseNode() const

@@ -124,8 +124,8 @@ public:
     void undo() override;
 
 protected:
-    using PropertyHelperPtr = QSharedPointer<PropertyHelper>;
-    using PropertyHelperList = QList<PropertyHelperPtr>;
+    using PropertyHelperPtr = std::unique_ptr<PropertyHelper>;
+    using PropertyHelperList = std::vector<PropertyHelperPtr>;
 
     // add an object
     bool add(QObject *object, const QString &propertyName);
@@ -170,8 +170,9 @@ protected:
     const PropertyDescription &propertyDescription() const { return  m_propertyDescription; }
 
 protected:
-    virtual PropertyHelper *createPropertyHelper(QObject *o, SpecialProperty sp,
-                                                 QDesignerPropertySheetExtension *sheet, int sheetIndex) const;
+    virtual std::unique_ptr<PropertyHelper>
+    createPropertyHelper(QObject *o, SpecialProperty sp,
+                         QDesignerPropertySheetExtension *sheet, int sheetIndex) const;
 
 private:
     PropertyDescription m_propertyDescription;
@@ -236,14 +237,14 @@ class QDESIGNER_SHARED_EXPORT AddDynamicPropertyCommand: public QDesignerFormWin
 public:
     explicit AddDynamicPropertyCommand(QDesignerFormWindowInterface *formWindow);
 
-    bool init(const QList<QObject *> &selection, QObject *current, const QString &propertyName, const QVariant &value);
+    bool init(const QObjectList &selection, QObject *current, const QString &propertyName, const QVariant &value);
 
     void redo() override;
     void undo() override;
 private:
     void setDescription();
     QString m_propertyName;
-    QList<QObject *> m_selection;
+    QObjectList m_selection;
     QVariant m_value;
 };
 
@@ -253,7 +254,7 @@ class QDESIGNER_SHARED_EXPORT RemoveDynamicPropertyCommand: public QDesignerForm
 public:
     explicit RemoveDynamicPropertyCommand(QDesignerFormWindowInterface *formWindow);
 
-    bool init(const QList<QObject *> &selection, QObject *current, const QString &propertyName);
+    bool init(const QObjectList &selection, QObject *current, const QString &propertyName);
 
     void redo() override;
     void undo() override;

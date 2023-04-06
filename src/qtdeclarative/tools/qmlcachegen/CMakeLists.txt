@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Generated from qmlcachegen.pro.
 
 #####################################################################
@@ -14,7 +17,7 @@ qt_internal_add_tool(${target_name}
     DEFINES
         QT_NO_CAST_FROM_ASCII
         QT_NO_CAST_TO_ASCII
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::QmlCompilerPrivate
 )
 qt_internal_return_unless_building_tools()

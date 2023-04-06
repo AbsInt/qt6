@@ -188,7 +188,10 @@ public:
     static void showModalWindow(QWindow *window);
     static void hideModalWindow(QWindow *window);
     static void updateBlockedStatus(QWindow *window);
-    virtual bool isWindowBlocked(QWindow *window, QWindow **blockingWindow = nullptr) const;
+
+    virtual Qt::WindowModality defaultModality() const;
+    virtual bool windowNeverBlocked(QWindow *window) const;
+    bool isWindowBlocked(QWindow *window, QWindow **blockingWindow = nullptr) const;
     virtual bool popupActive() { return false; }
     virtual bool closeAllPopups() { return false; }
 
@@ -332,6 +335,8 @@ private:
 
     friend class QDragManager;
 
+    static Qt::ColorScheme colorScheme();
+
     static QGuiApplicationPrivate *self;
     static int m_fakeMouseSourcePointId;
 #ifdef Q_OS_WIN
@@ -350,11 +355,12 @@ private:
 
 // ----------------- QNativeInterface -----------------
 
+class QWindowsMimeConverter;
+
 namespace QNativeInterface::Private {
 
-#if defined(Q_OS_WIN) || defined(Q_CLANG_QDOC)
+#if defined(Q_OS_WIN) || defined(Q_QDOC)
 
-class QWindowsMime;
 
 struct Q_GUI_EXPORT QWindowsApplication
 {
@@ -386,6 +392,8 @@ struct Q_GUI_EXPORT QWindowsApplication
     virtual WindowActivationBehavior windowActivationBehavior() const = 0;
     virtual void setWindowActivationBehavior(WindowActivationBehavior behavior) = 0;
 
+    virtual void setHasBorderInFullScreenDefault(bool border) = 0;
+
     virtual bool isTabletMode() const = 0;
 
     virtual bool isWinTabEnabled() const = 0;
@@ -396,8 +404,8 @@ struct Q_GUI_EXPORT QWindowsApplication
     virtual DarkModeHandling darkModeHandling() const = 0;
     virtual void setDarkModeHandling(DarkModeHandling handling) = 0;
 
-    virtual void registerMime(QWindowsMime *mime) = 0;
-    virtual void unregisterMime(QWindowsMime *mime) = 0;
+    virtual void registerMime(QWindowsMimeConverter *mime) = 0;
+    virtual void unregisterMime(QWindowsMimeConverter *mime) = 0;
 
     virtual int registerMimeType(const QString &mime) = 0;
 
@@ -410,6 +418,8 @@ struct Q_GUI_EXPORT QWindowsApplication
 
     virtual QVariant gpu() const = 0; // internal, used by qtdiag
     virtual QVariant gpuList() const = 0;
+
+    virtual void lightSystemPalette(QPalette &pal) const = 0;
 };
 #endif // Q_OS_WIN
 

@@ -17,6 +17,7 @@
 #include <qtqmlcompilerexports.h>
 
 #include <private/qqmljsscope_p.h>
+#include <private/qqmljslogger_p.h>
 #include <QtCore/qset.h>
 
 #include <map>
@@ -34,6 +35,7 @@ namespace QQmlSA {
 
 // ### FIXME: Replace with a proper PIMPL'd type
 using Element = QQmlJSScope::ConstPtr;
+using FixSuggestion = QQmlJSFixSuggestion;
 
 class GenericPassPrivate;
 class PassManager;
@@ -45,9 +47,20 @@ public:
     GenericPass(PassManager *manager);
     virtual ~GenericPass();
 
-    void emitWarning(QAnyStringView message,
+    void emitWarning(QAnyStringView diagnostic, LoggerWarningId id,
                      QQmlJS::SourceLocation srcLocation = QQmlJS::SourceLocation());
+    void emitWarning(QAnyStringView diagnostic, LoggerWarningId id,
+                     QQmlJS::SourceLocation srcLocation, const FixSuggestion &fix);
+
+    Element resolveTypeInFileScope(QAnyStringView typeName);
     Element resolveType(QAnyStringView moduleName, QAnyStringView typeName); // #### TODO: revisions
+    Element resolveLiteralType(const QQmlJSMetaPropertyBinding &binding);
+
+    Element resolveIdToElement(QAnyStringView id, const Element &context);
+    QString resolveElementToId(const Element &element, const Element &context);
+
+    QString sourceCode(QQmlJS::SourceLocation location);
+
 private:
     std::unique_ptr<GenericPassPrivate> d; // PIMPL might be overkill
 };
@@ -107,6 +120,9 @@ public:
     void analyze(const Element &root);
 
     bool hasImportedModule(QAnyStringView name) const;
+
+    bool isCategoryEnabled(LoggerWarningId category) const;
+    void setCategoryEnabled(LoggerWarningId category, bool enabled = true);
 
 private:
     friend struct ::QQmlJSTypePropagator;

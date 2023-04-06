@@ -21,7 +21,7 @@ namespace QtPrivate {
         static_assert((alignment & (alignment - 1)) == 0,
             "Alignment of template parameter must be power of two");
 
-        static constexpr quint8 tagBits = QtPrivate::qConstexprCountTrailingZeroBits(alignment);
+        static constexpr quint8 tagBits = quint8{QtPrivate::qConstexprCountTrailingZeroBits(alignment)};
         static_assert(tagBits > 0,
             "Alignment of template parameter does not allow any tags");
 
@@ -104,8 +104,10 @@ public:
 
     void setTag(Tag tag)
     {
-        Q_ASSERT_X((static_cast<typename QtPrivate::TagInfo<T>::TagType>(tag) & pointerMask()) == 0,
-            "QTaggedPointer<T, Tag>::setTag", "Tag is larger than allowed by number of available tag bits");
+        Q_ASSERT_X(
+                (static_cast<quintptr>(tag) & pointerMask()) == 0,
+                "QTaggedPointer<T, Tag>::setTag",
+                "Tag is larger than allowed by number of available tag bits");
 
         d = (d & pointerMask()) | static_cast<quintptr>(tag);
     }

@@ -8,7 +8,9 @@
 #include <QtWaylandCompositor/QWaylandResource>
 #include <QtWaylandCompositor/QWaylandShell>
 #include <QtWaylandCompositor/QWaylandShellSurface>
+#if QT_CONFIG(wayland_compositor_quick)
 #include <QtWaylandCompositor/qwaylandquickchildren.h>
+#endif
 
 #include <QtCore/QRect>
 
@@ -61,7 +63,9 @@ class Q_WAYLANDCOMPOSITOR_EXPORT QWaylandXdgSurface : public QWaylandShellSurfac
 {
     Q_OBJECT
     Q_DECLARE_PRIVATE(QWaylandXdgSurface)
+#if QT_CONFIG(wayland_compositor_quick)
     Q_WAYLAND_COMPOSITOR_DECLARE_QUICK_CHILDREN(QWaylandXdgSurface)
+#endif
     Q_PROPERTY(QWaylandXdgShell *shell READ shell NOTIFY shellChanged)
     Q_PROPERTY(QWaylandSurface *surface READ surface NOTIFY surfaceChanged)
     Q_PROPERTY(QWaylandXdgToplevel *toplevel READ toplevel NOTIFY toplevelCreated)
@@ -122,7 +126,7 @@ class Q_WAYLANDCOMPOSITOR_EXPORT QWaylandXdgToplevel : public QObject
     Q_PROPERTY(bool resizing READ resizing NOTIFY resizingChanged)
     Q_PROPERTY(bool activated READ activated NOTIFY activatedChanged)
 // QDoc fails to parse the property type that includes the keyword 'enum'
-#ifndef Q_CLANG_QDOC
+#ifndef Q_QDOC
     Q_PROPERTY(enum DecorationMode decorationMode READ decorationMode NOTIFY decorationModeChanged)
 #else
     Q_PROPERTY(DecorationMode decorationMode READ decorationMode NOTIFY decorationModeChanged)

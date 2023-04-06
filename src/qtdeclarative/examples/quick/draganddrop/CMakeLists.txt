@@ -1,7 +1,8 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 cmake_minimum_required(VERSION 3.16)
 project(draganddrop LANGUAGES CXX)
-
-set(CMAKE_AUTOMOC ON)
 
 if(NOT DEFINED INSTALL_EXAMPLESDIR)
     set(INSTALL_EXAMPLESDIR "examples")
@@ -10,6 +11,8 @@ endif()
 set(INSTALL_EXAMPLEDIR "${INSTALL_EXAMPLESDIR}/quick/draganddrop")
 
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Qml Quick)
+
+qt_standard_project_setup(REQUIRES 6.5)
 
 add_subdirectory("../shared" "shared")
 
@@ -21,7 +24,6 @@ qt_add_executable(draganddropexample
 
 qt_add_qml_module(draganddropexample
     URI draganddrop
-    VERSION 1.0
     QML_FILES
         "draganddrop.qml"
         "tiles/DragTile.qml"
@@ -31,7 +33,7 @@ qt_add_qml_module(draganddropexample
         "views/gridview.qml"
 )
 
-target_link_libraries(draganddropexample PUBLIC
+target_link_libraries(draganddropexample PRIVATE
     Qt::Core
     Qt::Gui
     Qt::Qml

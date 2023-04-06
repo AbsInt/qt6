@@ -16,8 +16,6 @@
 // We mean it.
 //
 
-#include "qqml.h"
-
 #include <QtCore/QMetaObject>
 #include <QtCore/QBitArray>
 #include <QtCore/QPair>
@@ -80,6 +78,8 @@ public:
         return false;
     }
 
+    void invalidate() { metaObject.setTag(MetaObjectInvalid); }
+
     QObject *object = nullptr;
     QQmlPropertyCache::ConstPtr cache;
 
@@ -105,7 +105,9 @@ protected:
     }
 
     QBiPointer<QDynamicMetaObjectData, const QMetaObject> parent;
-    const QMetaObject *metaObject = nullptr;
+
+    enum MetaObjectValidity { MetaObjectValid, MetaObjectInvalid };
+    QTaggedPointer<const QMetaObject, MetaObjectValidity> metaObject;
 
 private:
     bool doIntercept(QMetaObject::Call c, int id, void **a);
@@ -189,8 +191,9 @@ public:
         QV4::MemberData *md = propertyAndMethodStorageAsMemberData();
         if (md) {
             QV4::Scope scope(engine);
-            QV4::Scoped<QV4::MemberData>(scope, md)->set(engine, id, engine->newVariantObject(
-                                                             QVariant::fromValue(v)));
+            QV4::Scoped<QV4::MemberData>(scope, md)->set(
+                        engine, id, engine->newVariantObject(
+                            QMetaType::fromType<VariantCompatible>(), &v));
         }
     }
 

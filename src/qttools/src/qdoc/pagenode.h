@@ -19,10 +19,6 @@ class PageNode : public Node
 public:
     PageNode(Aggregate *parent, const QString &name) : Node(Page, parent, name) {}
     PageNode(NodeType type, Aggregate *parent, const QString &name) : Node(type, parent, name) {}
-    PageNode(Aggregate *parent, const QString &name, PageType ptype) : Node(Page, parent, name)
-    {
-        setPageType(ptype);
-    }
 
     [[nodiscard]] bool isPageNode() const override { return true; }
     [[nodiscard]] bool isTextPageNode() const override
@@ -45,12 +41,15 @@ public:
     virtual void setImageFileName(const QString &) {}
 
     [[nodiscard]] bool noAutoList() const { return m_noAutoList; }
-    void setNoAutoList(bool b) override { m_noAutoList = b; }
+    void setNoAutoList(bool b) { m_noAutoList = b; }
     [[nodiscard]] const QStringList &groupNames() const { return m_groupNames; }
     void appendGroupName(const QString &t) override { m_groupNames.append(t); }
 
-    void setOutputFileName(const QString &f) override { m_outputFileName = f; }
-    [[nodiscard]] QString outputFileName() const override { return m_outputFileName; }
+    [[nodiscard]] const PageNode *navigationParent() const { return m_navParent; }
+    void setNavigationParent(const PageNode *parent) { m_navParent = parent; }
+
+    void markAttribution() { is_attribution = true; }
+    [[nodiscard]] bool isAttribution() const { return is_attribution; }
 
 protected:
     friend class Node;
@@ -59,8 +58,25 @@ protected:
     bool m_noAutoList { false };
     QString m_title {};
     QString m_subtitle {};
-    QString m_outputFileName {};
     QStringList m_groupNames {};
+
+    // Marks the PageNode as being or not being an attribution.
+    // A PageNode that is an attribution represents a page that serves
+    // to present the third party software that a project uses,
+    // together with its license, link to the website of the project
+    // and so on.
+    // PageNode that are attribution are expected to be generate only
+    // for the Qt project by the QAttributionScanner, as part of the
+    // built of Qt's documentation.
+    //
+    // PageNodes that are attribution are marked primarily so that
+    // QDoc is able to generate a specialized list of attributions for
+    // a specific module through the use of the "\generatedlist"
+    // command, and behave like any other PageNode otherwise.
+    bool is_attribution{ false };
+
+private:
+    const PageNode *m_navParent { nullptr };
 };
 
 QT_END_NAMESPACE

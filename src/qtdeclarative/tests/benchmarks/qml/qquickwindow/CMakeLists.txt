@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Generated from qquickwindow.pro.
 
 #####################################################################
@@ -7,9 +10,7 @@
 qt_internal_add_benchmark(tst_qquickwindow_bench # special case
     SOURCES
         tst_qquickwindow.cpp
-    DEFINES
-        QT_DISABLE_DEPRECATED_BEFORE=0
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::CorePrivate
         Qt::Gui
         Qt::GuiPrivate

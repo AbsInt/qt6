@@ -498,8 +498,8 @@ bool loadQM(Translator &translator, QIODevice &dev, ConversionData &cd)
 
     QString strProN = QLatin1String("%n");
     QLocale::Language l;
-    QLocale::Country c;
-    Translator::languageAndCountry(translator.languageCode(), &l, &c);
+    QLocale::Territory c;
+    Translator::languageAndTerritory(translator.languageCode(), &l, &c);
     QStringList numerusForms;
     bool guessPlurals = true;
     if (getNumerusInfo(l, c, 0, &numerusForms, 0))
@@ -620,8 +620,8 @@ bool saveQM(const Translator &translator, QIODevice &dev, ConversionData &cd)
 {
     Releaser releaser(translator.languageCode());
     QLocale::Language l;
-    QLocale::Country c;
-    Translator::languageAndCountry(translator.languageCode(), &l, &c);
+    QLocale::Territory c;
+    Translator::languageAndTerritory(translator.languageCode(), &l, &c);
     QByteArray rules;
     if (getNumerusInfo(l, c, &rules, 0, 0))
         releaser.setNumerusRules(rules);

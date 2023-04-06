@@ -38,7 +38,6 @@ class Q_QML_EXPORT QtObject : public QObject
     Q_PROPERTY(QQmlPlatform *platform READ platform CONSTANT)
     Q_PROPERTY(QObject *inputMethod READ inputMethod CONSTANT)
     Q_PROPERTY(QObject *styleHints READ styleHints CONSTANT)
-    Q_PROPERTY(QJSValue callLater READ callLater CONSTANT)
 
 #if QT_CONFIG(translation)
     Q_PROPERTY(QString uiLanguage READ uiLanguage WRITE setUiLanguage BINDABLE uiLanguageBindable)
@@ -132,12 +131,14 @@ public:
             const QUrl &url, QQmlComponent::CompilationMode mode = QQmlComponent::PreferSynchronous,
             QObject *parent = nullptr) const;
 
-    Q_INVOKABLE QJSValue binding(const QJSValue &function) const;
+    Q_INVOKABLE QQmlComponent *createComponent(const QString &moduleUri,
+                                               const QString &typeName, QObject *parent) const;
+    Q_INVOKABLE QQmlComponent *createComponent(const QString &moduleUri, const QString &typeName,
+            QQmlComponent::CompilationMode mode = QQmlComponent::PreferSynchronous,
+            QObject *parent = nullptr) const;
 
-    // We can't make this invokable as it uses actual varargs
-    static QV4::ReturnedValue method_callLater(
-            const QV4::FunctionObject *b, const QV4::Value *thisObject,
-            const QV4::Value *argv, int argc);
+    Q_INVOKABLE QJSValue binding(const QJSValue &function) const;
+    Q_INVOKABLE void callLater(QQmlV4Function *args);
 
 #if QT_CONFIG(translation)
     QString uiLanguage() const;
@@ -151,7 +152,6 @@ public:
 
     QObject *inputMethod() const;
     QObject *styleHints() const;
-    QJSValue callLater() const;
 
 private:
     friend struct QV4::ExecutionEngine;
@@ -162,11 +162,16 @@ private:
     QJSEngine *jsEngine() const { return m_engine->jsEngine(); }
     QV4::ExecutionEngine *v4Engine() const { return m_engine; }
 
+    struct Contexts {
+        QQmlRefPointer<QQmlContextData> context;
+        QQmlRefPointer<QQmlContextData> effectiveContext;
+    };
+    Contexts getContexts() const;
+
     QQmlPlatform *m_platform = nullptr;
     QQmlApplication *m_application = nullptr;
 
     QV4::ExecutionEngine *m_engine = nullptr;
-    QJSValue m_callLater;
 };
 
 namespace QV4 {
@@ -209,6 +214,7 @@ struct Q_QML_PRIVATE_EXPORT GlobalExtensions {
     static void init(Object *globalObject, QJSEngine::Extensions extensions);
 
 #if QT_CONFIG(translation)
+    static QString currentTranslationContext(ExecutionEngine *engine);
     static ReturnedValue method_qsTranslate(const FunctionObject *b, const Value *thisObject, const Value *argv, int argc);
     static ReturnedValue method_qsTranslateNoOp(const FunctionObject *b, const Value *thisObject, const Value *argv, int argc);
     static ReturnedValue method_qsTr(const FunctionObject *b, const Value *thisObject, const Value *argv, int argc);

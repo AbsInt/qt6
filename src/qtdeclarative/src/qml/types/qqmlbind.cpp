@@ -625,14 +625,13 @@ void QQmlBind::setDelayed(bool delayed)
     be restored when the binding is disabled.
 
     The possible values are:
-    \list
-    \li Binding.RestoreNone The original value is not restored at all
-    \li Binding.RestoreBinding The original value is restored if it was another
-        binding. In that case the old binding is in effect again.
-    \li Binding.RestoreValue The original value is restored if it was a plain
-        value rather than a binding.
-    \li Binding.RestoreBindingOrValue The original value is always restored.
-    \endlist
+
+    \value Binding.RestoreNone      The original value is not restored at all
+    \value Binding.RestoreBinding   The original value is restored if it was another binding.
+                                    In that case the old binding is in effect again.
+    \value Binding.RestoreValue     The original value is restored if it was a plain
+                                    value rather than a binding.
+    \value Binding.RestoreBindingOrValue The original value is always restored.
 
     The default value is \c Binding.RestoreBindingOrValue.
 
@@ -760,14 +759,14 @@ void QQmlBindPrivate::decodeBinding(
         QQmlProperty property = QQmlPropertyPrivate::create(
                     q, propertyName, contextData, QQmlPropertyPrivate::InitFlag::AllowSignal);
         if (property.isValid()) {
-            if (!immediateState->creator) {
-                immediateState->completePending = true;
-                immediateState->creator = std::make_unique<QQmlObjectCreator>(
+            if (!immediateState->hasCreator()) {
+                immediateState->setCompletePending(true);
+                immediateState->initCreator(
                             deferredData->context->parent(), deferredData->compilationUnit,
                             contextData);
-                immediateState->creator->beginPopulateDeferred(deferredData->context);
+                immediateState->creator()->beginPopulateDeferred(deferredData->context);
             }
-            immediateState->creator->populateDeferredBinding(
+            immediateState->creator()->populateDeferredBinding(
                         property, deferredData->deferredIdx, binding);
         } else {
             qmlWarning(q).nospace() << "Unknown name " << propertyName
@@ -883,10 +882,10 @@ void QQmlBindPrivate::buildBindEntries(QQmlBind *q, QQmlComponentPrivate::Deferr
                     decodeBinding(q, QString(), deferredData, *it, &constructionState);
 
 
-                if (constructionState.creator.get()) {
+                if (constructionState.hasCreator()) {
                     ++ep->inProgressCreations;
-                    constructionState.creator->finalizePopulateDeferred();
-                    constructionState.errors << constructionState.creator->errors;
+                    constructionState.creator()->finalizePopulateDeferred();
+                    constructionState.appendCreatorErrors();
                     deferredState->push_back(std::move(constructionState));
                 }
             } else {

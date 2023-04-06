@@ -416,9 +416,10 @@ bool ScanFunctions::visit(TemplateLiteral *ast)
 
 bool ScanFunctions::visit(SuperLiteral *)
 {
+    Q_ASSERT(_context);
     Context *c = _context;
     bool needContext = false;
-    while (c && (c->contextType == ContextType::Block || c->isArrowFunction)) {
+    while (c->contextType == ContextType::Block || c->isArrowFunction) {
         needContext |= c->isArrowFunction;
         c = c->parent;
     }
@@ -675,7 +676,7 @@ bool ScanFunctions::enterFunction(
             _context->isGenerator = true;
 
         if (expr->typeAnnotation)
-            _context->returnType = expr->typeAnnotation->type->toString();
+            _context->returnType = expr->typeAnnotation->type;
     }
 
 

@@ -48,7 +48,7 @@ static inline int compare(const qdesigner_internal::PreviewConfiguration &pc1, c
     return pc1.deviceSkin().compare(pc2.deviceSkin());
 }
 
-namespace {
+namespace qdesigner_internal {
     // ------ PreviewData (data associated with a preview window)
     struct PreviewData {
         PreviewData(const QPointer<QWidget> &widget, const  QDesignerFormWindowInterface *formWindow, const qdesigner_internal::PreviewConfiguration &pc);
@@ -65,9 +65,6 @@ namespace {
         m_configuration(pc)
     {
     }
-}
-
-namespace qdesigner_internal {
 
 /* In designer, we have the situation that laid-out maincontainers have
  * a geometry set (which might differ from their sizeHint()). The QGraphicsItem
@@ -489,7 +486,7 @@ void PreviewConfiguration::fromSettings(const QString &prefix, const QDesignerSe
     clear();
     QString key = prefix;
     key += QLatin1Char('/');
-    const int prefixSize = key.size();
+    const auto prefixSize = key.size();
 
     PreviewConfigurationData &d = *m_d;
 
@@ -771,15 +768,13 @@ QWidget *PreviewManager::showPreview(const QDesignerFormWindowInterface *fw,
 
 QWidget *PreviewManager::raise(const QDesignerFormWindowInterface *fw, const PreviewConfiguration &pc)
 {
-    using PreviewDataList = PreviewManagerPrivate::PreviewDataList;
     if (d->m_previews.isEmpty())
         return nullptr;
 
     // find matching window
-    const PreviewDataList::const_iterator cend =  d->m_previews.constEnd();
-    for (PreviewDataList::const_iterator it = d->m_previews.constBegin(); it !=  cend ;++it) {
-        QWidget * w = it->m_widget;
-        if (w && it->m_formWindow == fw && it->m_configuration == pc) {
+    for (const auto &pd : std::as_const(d->m_previews)) {
+        QWidget *w = pd.m_widget;
+        if (w && pd.m_formWindow == fw && pd.m_configuration == pc) {
             w->raise();
             w->activateWindow();
             return w;
@@ -793,9 +788,9 @@ void PreviewManager::closeAllPreviews()
     if (!d->m_previews.isEmpty()) {
         d->m_updateBlocked = true;
         d->m_activePreview = nullptr;
-        for (auto it = d->m_previews.constBegin(), cend = d->m_previews.constEnd(); it != cend ;++it) {
-            if (it->m_widget)
-                it->m_widget->close();
+        for (const auto &pd : std::as_const(d->m_previews)) {
+            if (pd.m_widget)
+                pd.m_widget->close();
         }
         d->m_previews.clear();
         d->m_updateBlocked = false;

@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Generated from src.pro.
 # special case begin
 qt_find_package(WaylandScanner PROVIDED_TARGETS Wayland::Scanner)

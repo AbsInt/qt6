@@ -12,6 +12,8 @@
 #include <QtCore/qproperty.h>
 #include <QtCore/qtimeline.h>
 #include <QtCore/qrect.h>
+#include <QtQmlTypeRegistrar/private/qqmltyperegistrar_p.h>
+#include <QtCore/qtemporaryfile.h>
 
 #ifdef QT_QUICK_LIB
 #    include <QtQuick/qquickitem.h>
@@ -466,6 +468,57 @@ public:
     RemovedInEarlyVersion(QObject *parent = nullptr) : AddedInLateVersion(parent) {}
 };
 
+class HasResettableProperty : public QObject
+{
+    Q_OBJECT
+    QML_ELEMENT
+    Q_PROPERTY(int foo READ foo WRITE setFoo RESET resetFoo NOTIFY fooChanged)
+public:
+    HasResettableProperty(QObject *parent = nullptr) : QObject(parent) {}
+
+    int foo() const { return m_foo; }
+    void setFoo(int newFoo)
+    {
+        if (m_foo == newFoo)
+            return;
+        m_foo = newFoo;
+        emit fooChanged();
+    }
+    void resetFoo() { setFoo(12); }
+
+signals:
+    void fooChanged();
+
+private:
+    int m_foo = 12;
+};
+
+class ClonedSignal : public QObject
+{
+    Q_OBJECT
+    QML_ELEMENT
+signals:
+    void clonedSignal(int i = 7);
+};
+
+class AnonymousAndUncreatable : public QObject
+{
+     Q_OBJECT
+     QML_ANONYMOUS
+     QML_UNCREATABLE("Pointless uncreatable message")
+};
+
+class Invisible : public QObject
+{
+};
+
+struct InvisibleForeign
+{
+    Q_GADGET
+    QML_FOREIGN(Invisible)
+    QML_NAMED_ELEMENT(Invisible)
+};
+
 class tst_qmltyperegistrar : public QObject
 {
     Q_OBJECT
@@ -500,6 +553,8 @@ private slots:
     void immediateNames();
     void derivedFromForeignPrivate();
     void methodReturnType();
+    void hasIsConstantInParameters();
+    void uncreatable();
 
 #ifdef QT_QUICK_LIB
     void foreignRevisionedProperty();
@@ -508,6 +563,12 @@ private slots:
     void addRemoveVersion_data();
     void addRemoveVersion();
     void typeInModuleMajorVersionZero();
+    void resettableProperty();
+    void duplicateExportWarnings();
+    void clonedSignal();
+    void baseVersionInQmltypes();
+    void anonymousAndUncreatable();
+    void omitInvisible();
 
 private:
     QByteArray qmltypesData;

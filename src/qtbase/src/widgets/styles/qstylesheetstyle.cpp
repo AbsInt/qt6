@@ -437,14 +437,15 @@ struct QStyleSheetBoxData : public QSharedData
 struct QStyleSheetPaletteData : public QSharedData
 {
     QStyleSheetPaletteData(const QBrush &fg, const QBrush &sfg, const QBrush &sbg,
-                           const QBrush &abg)
+                           const QBrush &abg, const QBrush &pfg)
         : foreground(fg), selectionForeground(sfg), selectionBackground(sbg),
-          alternateBackground(abg) { }
+          alternateBackground(abg), placeholderForeground(pfg) { }
 
     QBrush foreground;
     QBrush selectionForeground;
     QBrush selectionBackground;
     QBrush alternateBackground;
+    QBrush placeholderForeground;
 };
 
 struct QStyleSheetGeometryData : public QSharedData
@@ -956,10 +957,10 @@ QRenderRule::QRenderRule(const QList<Declaration> &declarations, const QObject *
         bg = new QStyleSheetBackgroundData(brush, pixmap, repeat, alignment, origin, attachment, clip);
     }
 
-    QBrush sfg, fg;
+    QBrush sfg, fg, pfg;
     QBrush sbg, abg;
-    if (v.extractPalette(&fg, &sfg, &sbg, &abg))
-        pal = new QStyleSheetPaletteData(fg, sfg, sbg, abg);
+    if (v.extractPalette(&fg, &sfg, &sbg, &abg, &pfg))
+        pal = new QStyleSheetPaletteData(fg, sfg, sbg, abg, pfg);
 
     QIcon imgIcon;
     alignment = Qt::AlignCenter;
@@ -1486,6 +1487,8 @@ void QRenderRule::configurePalette(QPalette *p, QPalette::ColorGroup cg, const Q
         p->setBrush(cg, QPalette::HighlightedText, pal->selectionForeground);
     if (pal->alternateBackground.style() != Qt::NoBrush)
         p->setBrush(cg, QPalette::AlternateBase, pal->alternateBackground);
+    if (pal->placeholderForeground.style() != Qt::NoBrush)
+        p->setBrush(cg, QPalette::PlaceholderText, pal->placeholderForeground);
 }
 
 bool QRenderRule::hasModification() const
@@ -1600,8 +1603,8 @@ public:
             return nodeName == "QToolTip"_L1;
 #endif
         do {
-            const ushort *uc = (const ushort *)nodeName.constData();
-            const ushort *e = uc + nodeName.size();
+            const auto *uc = reinterpret_cast<const char16_t *>(nodeName.constData());
+            const auto *e = uc + nodeName.size();
             const uchar *c = (const uchar *)metaObject->className();
             while (*c && uc != e && (*uc == *c || (*c == ':' && *uc == '-'))) {
                 ++uc;
@@ -2167,7 +2170,7 @@ bool QStyleSheetStyle::hasStyleRule(const QObject *obj, int part) const
         return result;
     }
 
-    QString pseudoElement = QLatin1StringView(knownPseudoElements[part].name);
+    auto pseudoElement = QLatin1StringView(knownPseudoElements[part].name);
     for (int i = 0; i < rules.size(); i++) {
         const Selector& selector = rules.at(i).selectors.at(0);
         if (pseudoElement.compare(selector.pseudoElement(), Qt::CaseInsensitive) == 0) {
@@ -2568,8 +2571,9 @@ static quint64 extendedPseudoClass(const QWidget *w)
     } else
     if (const QPlainTextEdit *edit = qobject_cast<const QPlainTextEdit *>(w)) {
         pc |= (edit->isReadOnly() ? PseudoClass_ReadOnly : PseudoClass_Editable);
-    }
+    } else
 #endif
+    {}
     return pc;
 }
 
@@ -4097,7 +4101,12 @@ void QStyleSheetStyle::drawControl(ControlElement ce, const QStyleOption *opt, Q
 
     case CE_HeaderLabel:
         if (const QStyleOptionHeader *header = qstyleoption_cast<const QStyleOptionHeader *>(opt)) {
-            QStyleOptionHeader hdr(*header);
+          QStyleOptionHeaderV2 hdr;
+          QStyleOptionHeader &v1Copy = hdr;
+          if (auto v2 = qstyleoption_cast<const QStyleOptionHeaderV2 *>(opt))
+              hdr = *v2;
+          else
+              v1Copy = *header;
             QRenderRule subRule = renderRule(w, opt, PseudoElement_HeaderViewSection);
             if (hasStyleRule(w, PseudoElement_HeaderViewUpArrow)
              || hasStyleRule(w, PseudoElement_HeaderViewDownArrow)) {

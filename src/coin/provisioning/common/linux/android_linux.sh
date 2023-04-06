@@ -62,13 +62,13 @@ basePath="http://ci-files01-hki.intra.qt.io/input/android"
 toolsVersion="2.1"
 toolsFile="commandlinetools-linux-6609375_latest.zip"
 ndkVersionLatest="r25b"
-ndkVersionDefault="r23b"
-sdkBuildToolsVersion="31.0.0"
-sdkApiLevel="android-31"
+ndkVersionDefault=$ndkVersionLatest
+sdkBuildToolsVersion="33.0.1"
+sdkApiLevel="android-33"
 
 toolsSha1="9172381ff070ee2a416723c1989770cf4b0d1076"
 ndkSha1Latest="e27dcb9c8bcaa77b78ff68c3f23abcf6867959eb"
-ndkSha1Default="f47ec4c4badd11e9f593a8450180884a927c330d"
+ndkSha1Default=$ndkSha1Latest
 # Android automotive
 sdkApiLevelAutomovie="android-30"
 androidAutomotive11Url="$basePath/${sdkApiLevelAutomovie}_automotive.tar.gz"
@@ -155,8 +155,8 @@ echo "Android NDK = $ndkVersion" >> ~/versions.txt
 cd "$sdkTargetFolder/cmdline-tools/tools/bin"
 ./sdkmanager --install "emulator" --sdk_root=$sdkTargetFolder \
     | eval $sdkmanager_no_progress_bar_cmd
-echo "y" | ./sdkmanager --install "system-images;android-23;google_apis;x86"  \
-    | eval $sdkmanager_no_progress_bar_cmd
+echo "y" | ./sdkmanager --install "system-images;android-23;google_apis;x86" \
+    "system-images;android-31;google_apis;x86_64" | eval $sdkmanager_no_progress_bar_cmd
 
 
 echo "Checking the contents of Android SDK again..."
@@ -164,6 +164,9 @@ ls -l "$sdkTargetFolder"
 
 echo "no" | ./avdmanager create avd -n emulator_x86_api_23 -c 2048M -f \
     -k "system-images;android-23;google_apis;x86"
+
+echo "no" | ./avdmanager create avd -n emulator_x86_64_api_31 -c 2048M -f \
+    -k "system-images;android-31;google_apis;x86_64"
 
 echo "Install $sdkApiLevelAutomovie $androidAutomotive"
 DownloadURL "$androidAutomotive11Url" "$androidAutomotive11Url" "$android11Sha" \

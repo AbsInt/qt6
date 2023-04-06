@@ -108,7 +108,6 @@ protected:
     void generate_CallWithReceiver(int name, int thisObject, int argc, int argv) override;
     void generate_CallProperty(int name, int base, int argc, int argv) override;
     void generate_CallPropertyLookup(int lookupIndex, int base, int argc, int argv) override;
-    void generate_CallElement(int base, int index, int argc, int argv) override;
     void generate_CallName(int name, int argc, int argv) override;
     void generate_CallPossiblyDirectEval(int argc, int argv) override;
     void generate_CallGlobalLookup(int index, int argc, int argv) override;
@@ -251,23 +250,39 @@ private:
     void generateEqualityOperation(int lhs, const QString &function, bool invert);
     void generateCompareOperation(int lhs, const QString &cppOperator);
     void generateArithmeticOperation(int lhs, const QString &cppOperator);
+    void generateShiftOperation(int lhs, const QString &cppOperator);
+    void generateArithmeticOperation(
+            const QString &lhs, const QString &rhs, const QString &cppOperator);
+    void generateArithmeticConstOperation(int lhsConst, const QString &cppOperator);
     void generateJumpCodeWithTypeConversions(int relativeOffset);
     void generateUnaryOperation(const QString &cppOperator);
     void generateInPlaceOperation(const QString &cppOperator);
     void generateMoveOutVar(const QString &outVar);
     void generateTypeLookup(int index);
     void generateOutputVariantConversion(const QQmlJSScope::ConstPtr &containedType);
+    void generateVariantEqualityComparison(const QQmlJSRegisterContent &nonStorable,
+                                           const QString &registerName, bool invert);
     void rejectIfNonQObjectOut(const QString &error);
 
     QString eqIntExpression(int lhsConst);
     QString argumentsList(int argc, int argv, QString *outVar);
     QString castTargetName(const QQmlJSScope::ConstPtr &type) const;
 
+    bool inlineStringMethod(const QString &name, int base, int argc, int argv);
+    bool inlineTranslateMethod(const QString &name, int argc, int argv);
     bool inlineMathMethod(const QString &name, int argc, int argv);
+    bool inlineConsoleMethod(const QString &name, int argc, int argv);
+
     QQmlJSScope::ConstPtr mathObject() const
     {
         using namespace Qt::StringLiterals;
         return m_typeResolver->jsGlobalObject()->property(u"Math"_s).type();
+    }
+
+    QQmlJSScope::ConstPtr consoleObject() const
+    {
+        using namespace Qt::StringLiterals;
+        return m_typeResolver->jsGlobalObject()->property(u"console"_s).type();
     }
 
     // map from instruction offset to sequential label number

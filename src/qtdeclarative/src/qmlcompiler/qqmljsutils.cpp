@@ -7,6 +7,8 @@
 
 #include <algorithm>
 
+QT_BEGIN_NAMESPACE
+
 using namespace Qt::StringLiterals;
 
 /*! \internal
@@ -95,7 +97,7 @@ QQmlJSUtils::ResolvedAlias QQmlJSUtils::resolveAlias(const QQmlJSScopesById &idS
             property, owner, visitor);
 }
 
-std::optional<FixSuggestion> QQmlJSUtils::didYouMean(const QString &userInput,
+std::optional<QQmlJSFixSuggestion> QQmlJSUtils::didYouMean(const QString &userInput,
                                                      QStringList candidates,
                                                      QQmlJS::SourceLocation location)
 {
@@ -142,11 +144,120 @@ std::optional<FixSuggestion> QQmlJSUtils::didYouMean(const QString &userInput,
     }
 
     if (shortestDistance
-        < std::min(std::max(userInput.size() / 2, qsizetype(3)), userInput.size())) {
-        return FixSuggestion { { FixSuggestion::Fix {
-                u"Did you mean \"%1\"?"_s.arg(shortestDistanceWord), location,
-                shortestDistanceWord } } };
+            < std::min(std::max(userInput.size() / 2, qsizetype(3)), userInput.size())) {
+        return QQmlJSFixSuggestion {
+            u"Did you mean \"%1\"?"_s.arg(shortestDistanceWord),
+            location,
+            shortestDistanceWord
+        };
     } else {
         return {};
     }
 }
+
+/*! \internal
+
+    Returns a corresponding source directory path for \a buildDirectoryPath
+    Returns empty string on error
+*/
+std::variant<QString, QQmlJS::DiagnosticMessage>
+QQmlJSUtils::sourceDirectoryPath(const QQmlJSImporter *importer, const QString &buildDirectoryPath)
+{
+    const auto makeError = [](const QString &msg) {
+        return QQmlJS::DiagnosticMessage { msg, QtWarningMsg, QQmlJS::SourceLocation() };
+    };
+
+    if (!importer->metaDataMapper())
+        return makeError(u"QQmlJSImporter::metaDataMapper() is nullptr"_s);
+
+    // for now, meta data contains just a single entry
+    QQmlJSResourceFileMapper::Filter matchAll { QString(), QStringList(),
+                                                QQmlJSResourceFileMapper::Directory
+                                                        | QQmlJSResourceFileMapper::Recurse };
+    QQmlJSResourceFileMapper::Entry entry = importer->metaDataMapper()->entry(matchAll);
+    if (!entry.isValid())
+        return makeError(u"Failed to find meta data entry in QQmlJSImporter::metaDataMapper()"_s);
+    if (!buildDirectoryPath.startsWith(entry.filePath)) // assume source directory path already
+        return makeError(u"The module output directory does not match the build directory path"_s);
+
+    QString qrcPath = buildDirectoryPath;
+    qrcPath.remove(0, entry.filePath.size());
+    qrcPath.prepend(entry.resourcePath);
+    qrcPath.remove(0, 1); // remove extra "/"
+
+    const QStringList sourceDirPaths = importer->resourceFileMapper()->filePaths(
+            QQmlJSResourceFileMapper::resourceFileFilter(qrcPath));
+    if (sourceDirPaths.size() != 1) {
+        const QString matchedPaths =
+                sourceDirPaths.isEmpty() ? u"<none>"_s : sourceDirPaths.join(u", ");
+        return makeError(
+                QStringLiteral("QRC path %1 (deduced from %2) has unexpected number of mappings "
+                               "(%3). File paths that matched:\n%4")
+                        .arg(qrcPath, buildDirectoryPath, QString::number(sourceDirPaths.size()),
+                             matchedPaths));
+    }
+    return sourceDirPaths[0];
+}
+
+/*! \internal
+
+    Utility method that checks if one of the registers is var, and the other can be
+    efficiently compared to it
+*/
+bool canStrictlyCompareWithVar(const QQmlJSTypeResolver *typeResolver,
+                               const QQmlJSRegisterContent &lhsContent,
+                               const QQmlJSRegisterContent &rhsContent)
+{
+    Q_ASSERT(typeResolver);
+    const auto varType = typeResolver->varType();
+    const auto nullType = typeResolver->nullType();
+    const auto voidType = typeResolver->voidType();
+
+    // Use containedType() because nullptr is not a stored type.
+    const auto lhsType = typeResolver->containedType(lhsContent);
+    const auto rhsType = typeResolver->containedType(rhsContent);
+
+    return (typeResolver->equals(lhsType, varType)
+            && (typeResolver->equals(rhsType, nullType) || typeResolver->equals(rhsType, voidType)))
+            || (typeResolver->equals(rhsType, varType)
+                && (typeResolver->equals(lhsType, nullType)
+                    || typeResolver->equals(lhsType, voidType)));
+}
+
+/*! \internal
+
+    Utility method that checks if one of the registers is qobject, and the other can be
+    efficiently compared to it
+*/
+bool canCompareWithQObject(const QQmlJSTypeResolver *typeResolver,
+                           const QQmlJSRegisterContent &lhsContent,
+                           const QQmlJSRegisterContent &rhsContent)
+{
+    Q_ASSERT(typeResolver);
+    const auto lhsType = typeResolver->containedType(lhsContent);
+    const auto rhsType = typeResolver->containedType(rhsContent);
+    return (lhsType->isReferenceType()
+            && (rhsType->isReferenceType()
+                || typeResolver->equals(rhsType, typeResolver->nullType())))
+            || (rhsType->isReferenceType()
+                && (lhsType->isReferenceType()
+                    || typeResolver->equals(lhsType, typeResolver->nullType())));
+}
+
+/*! \internal
+
+    Utility method that checks if both sides are QUrl type. In future, that might be extended to
+    support comparison with other types i.e QUrl vs string
+*/
+bool canCompareWithQUrl(const QQmlJSTypeResolver *typeResolver,
+                        const QQmlJSRegisterContent &lhsContent,
+                        const QQmlJSRegisterContent &rhsContent)
+{
+    Q_ASSERT(typeResolver);
+    const auto lhsType = typeResolver->containedType(lhsContent);
+    const auto rhsType = typeResolver->containedType(rhsContent);
+    return typeResolver->equals(lhsType, typeResolver->urlType())
+            && typeResolver->equals(rhsType, typeResolver->urlType());
+}
+
+QT_END_NAMESPACE

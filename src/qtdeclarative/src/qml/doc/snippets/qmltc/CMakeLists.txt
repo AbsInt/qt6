@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 set(application_name tst_qmltc_examples)
 #[[
 #! [qmltc-app-name]
@@ -39,10 +42,11 @@ target_compile_definitions(${application_name} PRIVATE
     QMLTC_TESTS_BINARY_DIR="${CMAKE_CURRENT_BINARY_DIR}"
 )
 
+qt_policy(SET QTP0001 NEW)
+
 #! [qmltc-add-qml-module]
 # Make the application into a proper QML module:
 qt6_add_qml_module(${application_name}
-    VERSION 1.0
     URI QmltcExample
     QML_FILES ${application_qml_files}
 

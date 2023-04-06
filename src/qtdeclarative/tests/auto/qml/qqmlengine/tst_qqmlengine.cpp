@@ -16,11 +16,16 @@
 #include <QQmlExpression>
 #include <QQmlIncubationController>
 #include <QTemporaryDir>
+ #include <QQmlEngineExtensionPlugin>
 #include <private/qqmlengine_p.h>
 #include <private/qqmltypedata_p.h>
 #include <private/qqmlcomponentattached_p.h>
 #include <QQmlAbstractUrlInterceptor>
 #include <QtQuickTestUtils/private/qmlutils_p.h>
+
+#include "declarativelyregistered.h"
+
+Q_IMPORT_QML_PLUGIN(OnlyDeclarativePlugin)
 
 class tst_qqmlengine : public QQmlDataTest
 {
@@ -70,6 +75,9 @@ private slots:
     void stringToColor();
     void qobjectToString();
     void qtNamespaceInQtObject();
+    void nativeModuleImport();
+    void lockedRootObject();
+    void crossReferencingSingletonsDeletion();
 
 public slots:
     QObject *createAQObjectForOwnershipTest ()
@@ -313,7 +321,9 @@ void tst_qqmlengine::offlineStoragePath()
 
     QCOMPARE(QDir::fromNativeSeparators(engine.offlineStoragePath()), dir.path());
 
+    QSignalSpy offlineStoragePathSpy(&engine, &QQmlEngine::offlineStoragePathChanged);
     engine.setOfflineStoragePath(QDir::homePath());
+    QCOMPARE(offlineStoragePathSpy.size(), 1);
     QCOMPARE(engine.offlineStoragePath(), QDir::homePath());
 }
 
@@ -542,10 +552,14 @@ void tst_qqmlengine::clearSingletons()
     const int cppInstance = qmlRegisterSingletonInstance(
                 "ClearSingletons", 1, 0, "CppInstance", &objectCaller1);
 
+#if QT_DEPRECATED_SINCE(6, 3)
+QT_WARNING_PUSH QT_WARNING_DISABLE_DEPRECATED
     QQmlPrivate::SingletonFunctor deprecatedSingletonFunctor;
     deprecatedSingletonFunctor.m_object = &objectCaller2;
     const int deprecatedCppInstance = qmlRegisterSingletonType<ObjectCaller>(
                 "ClearSingletons", 1, 0, "DeprecatedCppInstance", deprecatedSingletonFunctor);
+QT_WARNING_POP
+#endif // QT_DEPRECATED_SINCE(6, 3)
 
     const int cppFactory = qmlRegisterSingletonType<CppSingleton>(
                 "ClearSingletons", 1, 0, "CppFactory", &CppSingleton::create);
@@ -559,7 +573,9 @@ void tst_qqmlengine::clearSingletons()
     QQmlEngine engine;
 
     QCOMPARE(engine.singletonInstance<ObjectCaller *>(cppInstance), &objectCaller1);
+#if QT_DEPRECATED_SINCE(6, 3)
     QCOMPARE(engine.singletonInstance<ObjectCaller *>(deprecatedCppInstance), &objectCaller2);
+#endif
     const CppSingleton *oldCppSingleton = engine.singletonInstance<CppSingleton *>(cppFactory);
     QVERIFY(oldCppSingleton != nullptr);
     const uint oldCppSingletonId = oldCppSingleton->id;
@@ -577,7 +593,9 @@ void tst_qqmlengine::clearSingletons()
               "import QtQml\n"
               "QtObject {\n"
               "    property QtObject a: CppInstance\n"
+#if QT_DEPRECATED_SINCE(6, 3)
               "    property QtObject f: DeprecatedCppInstance\n"
+#endif
               "    property QtObject b: CppFactory\n"
               "    property int c: JsValue\n"
               "    property QtObject d: JsObject\n"
@@ -586,7 +604,9 @@ void tst_qqmlengine::clearSingletons()
     QVERIFY2(c.isReady(), qPrintable(c.errorString()));
     QScopedPointer<QObject> singletonUser(c.create());
     QCOMPARE(qvariant_cast<QObject *>(singletonUser->property("a")), &objectCaller1);
+#if QT_DEPRECATED_SINCE(6, 3)
     QCOMPARE(qvariant_cast<QObject *>(singletonUser->property("f")), &objectCaller2);
+#endif
     QCOMPARE(qvariant_cast<QObject *>(singletonUser->property("b")), oldCppSingleton);
     QCOMPARE(singletonUser->property("c").toUInt(), 13u);
     QCOMPARE(qvariant_cast<QObject *>(singletonUser->property("d")), oldJsSingleton);
@@ -597,6 +617,7 @@ void tst_qqmlengine::clearSingletons()
 
     QCOMPARE(engine.singletonInstance<ObjectCaller *>(cppInstance), &objectCaller1);
 
+#if QT_DEPRECATED_SINCE(6, 3)
     // Singleton instances created with previous versions of qmlRegisterSingletonInstance()
     // are lost and cannot be accessed anymore. We can only call their synthesized factory
     // functions once. This is not a big problem as you have to recompile in order to use
@@ -610,6 +631,7 @@ void tst_qqmlengine::clearSingletons()
                 "<Unknown File>: qmlRegisterSingletonType(): \"DeprecatedCppInstance\" is not "
                 "available because the callback function returns a null pointer.");
     QCOMPARE(engine.singletonInstance<ObjectCaller *>(deprecatedCppInstance), nullptr);
+#endif
 
     QCOMPARE(CppSingleton::instantiations, oldCppSingletonId);
     const CppSingleton *newCppSingleton = engine.singletonInstance<CppSingleton *>(cppFactory);
@@ -626,7 +648,9 @@ void tst_qqmlengine::clearSingletons()
 
     // Holding on to an old singleton instance is OK. We don't delete those.
     QCOMPARE(qvariant_cast<QObject *>(singletonUser->property("a")), &objectCaller1);
+#if QT_DEPRECATED_SINCE(6, 3)
     QCOMPARE(qvariant_cast<QObject *>(singletonUser->property("f")), &objectCaller2);
+#endif
 
     // Deleting the singletons created by factories has cleared their references in QML.
     // We don't renew them as the point of clearing the singletons is not having any
@@ -698,7 +722,7 @@ void tst_qqmlengine::outputWarningsToStandardError()
     QVERIFY(o != nullptr);
     o.reset();
 
-    QCOMPARE(messageHandler.messages().count(), 1);
+    QCOMPARE(messageHandler.messages().size(), 1);
     QCOMPARE(messageHandler.messages().at(0), QLatin1String("<Unknown File>:1:32: Unable to assign [undefined] to int"));
     messageHandler.clear();
 
@@ -760,7 +784,7 @@ void tst_qqmlengine::objectOwnership()
                         c.createWithInitialProperties({{"test", QVariant::fromValue(this)}}));
             QVERIFY(o != nullptr);
         }
-        QTRY_VERIFY(spy.count());
+        QTRY_VERIFY(spy.size());
     }
     {
         QObject *ptr = new QObject();
@@ -777,7 +801,7 @@ void tst_qqmlengine::objectOwnership()
             QQmlProperty testProp(o.data(), "test");
             testProp.write(QVariant::fromValue<QObject*>(nullptr));
         }
-        QTRY_VERIFY(spy.count());
+        QTRY_VERIFY(spy.size());
     }
 }
 
@@ -886,6 +910,7 @@ void tst_qqmlengine::qtqmlModule()
     QQmlEngine e;
     QQmlComponent c(&e, testFile);
     if (expectedError.isEmpty()) {
+        QVERIFY2(c.isReady(), qPrintable(c.errorString()));
         QScopedPointer<QObject> o(c.create());
         QVERIFY(o);
     } else {
@@ -1129,6 +1154,8 @@ void tst_qqmlengine::singletonInstance()
         QObject *instance = value.toQObject();
         QVERIFY(instance);
         QCOMPARE(instance->metaObject()->className(), "CppSingleton");
+
+        QCOMPARE(engine.singletonInstance<CppSingleton *>("Test", "CppSingleton"), instance);
     }
 
     {
@@ -1198,6 +1225,20 @@ void tst_qqmlengine::singletonInstance()
         QTest::ignoreMessage(QtMsgType::QtWarningMsg, "<Unknown File>: Registered object must live in the same thread as the engine it was registered with");
         auto noSinglePtr = engineB.singletonInstance<CppSingleton *>(id);
         QVERIFY(!noSinglePtr);
+    }
+
+    // test the case where we haven't loaded the module yet
+    {
+        auto singleton = engine.singletonInstance<PurelyDeclarativeSingleton *>("OnlyDeclarative", "PurelyDeclarativeSingleton");
+        QVERIFY(singleton);
+        // requesting the singleton twice yields the same result
+        auto again = engine.singletonInstance<PurelyDeclarativeSingleton *>("OnlyDeclarative", "PurelyDeclarativeSingleton");
+        QCOMPARE(again, singleton);
+
+        // different engines -> different singletons
+        QQmlEngine engine2;
+        auto differentEngine = engine2.singletonInstance<PurelyDeclarativeSingleton *>("OnlyDeclarative", "PurelyDeclarativeSingleton");
+        QCOMPARE_NE(differentEngine, singleton);
     }
 
     {
@@ -1536,7 +1577,7 @@ void tst_qqmlengine::stringToColor()
 
     const QMetaType metaType(QMetaType::QColor);
     QVariant color(metaType);
-    QVERIFY(engine.handle()->metaTypeFromJS(
+    QVERIFY(QV4::ExecutionEngine::metaTypeFromJS(
                 engine.handle()->newString(QStringLiteral("#abcdef"))->asReturnedValue(),
                 metaType, color.data()));
     QVERIFY(color.isValid());
@@ -1599,6 +1640,60 @@ void tst_qqmlengine::qtNamespaceInQtObject()
 
     // QObject is also there.
     QVERIFY(qtObject.hasProperty(QStringLiteral("objectName")));
+}
+
+void tst_qqmlengine::nativeModuleImport()
+{
+    QQmlEngine engine;
+
+    QJSValue name("TheName");
+    QJSValue obj = engine.newObject();
+    obj.setProperty("name", name);
+    engine.registerModule("info.mjs", obj);
+
+    QQmlComponent c(&engine, testFileUrl("nativeModuleImport.qml"));
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+
+    QScopedPointer<QObject> o(c.create());
+
+    QCOMPARE(o->property("a").toString(), QStringLiteral("Hello World"));
+    QCOMPARE(o->property("b").toString(), QStringLiteral("TheName"));
+    QCOMPARE(o->property("c").toString(), QStringLiteral("TheName"));
+    QCOMPARE(o->property("d").toString(), QStringLiteral("TheName"));
+    QCOMPARE(o->property("e").toString(), QStringLiteral("TheName"));
+}
+
+void tst_qqmlengine::lockedRootObject()
+{
+    QQmlEngine engine;
+    QQmlComponent c(&engine, testFileUrl("lockedRootObject.qml"));
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+    QTest::ignoreMessage(
+                QtWarningMsg, "You cannot shadow the locked property 'hasOwnProperty' in QML.");
+    QScopedPointer<QObject> o(c.create());
+    QCOMPARE(o->property("myErrorName").toString(), QStringLiteral("MyError1"));
+    QCOMPARE(o->property("errorName").toString(), QStringLiteral("MyError2"));
+    QCOMPARE(o->property("mathMax").toInt(), 4);
+    QCOMPARE(o->property("extendGlobal").toInt(), 32);
+    QCOMPARE(o->property("prototypeTrick").toString(), QStringLiteral("SyntaxError"));
+    QCOMPARE(o->property("shadowMethod1").toString(), QStringLiteral("not a TypeError"));
+    QCOMPARE(o->property("shadowMethod2").toBool(), false);
+    QCOMPARE(o->property("changeObjectProto1").toString(), QStringLiteral("not an Object"));
+    QCOMPARE(o->property("changeObjectProto2").toBool(), false);
+    QCOMPARE(o->property("defineProperty1").toString(), QStringLiteral("not a URIError"));
+    QCOMPARE(o->property("defineProperty2").toBool(), false);
+}
+
+void tst_qqmlengine::crossReferencingSingletonsDeletion()
+{
+    QQmlEngine engine;
+    engine.addImportPath(testFileUrl("crossReferencingSingletonsDeletion").url());
+    QQmlComponent c(&engine, testFileUrl("crossReferencingSingletonsDeletion/Module/Main.qml"));
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+
+    std::unique_ptr<QObject> o{ c.create() };
+    QVERIFY(o);
+    QCOMPARE(o->property("s").toString(), "SingletonA");
 }
 
 QTEST_MAIN(tst_qqmlengine)

@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Generated from qquickshortcut.pro.
 
 #####################################################################
@@ -13,7 +16,7 @@ list(APPEND test_data ${test_data_glob})
 qt_internal_add_test(tst_qquickshortcut
     SOURCES
         tst_qquickshortcut.cpp
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Gui
         Qt::Qml
         Qt::Quick
@@ -25,16 +28,16 @@ qt_internal_add_test(tst_qquickshortcut
 #####################################################################
 
 qt_internal_extend_target(tst_qquickshortcut CONDITION TARGET Qt::Widgets
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::QuickWidgets
 )
 
 qt_internal_extend_target(tst_qquickshortcut CONDITION ANDROID OR IOS
     DEFINES
-        QT_QMLTEST_DATADIR=\\\":/data\\\"
+        QT_QMLTEST_DATADIR=":/data"
 )
 
 qt_internal_extend_target(tst_qquickshortcut CONDITION NOT ANDROID AND NOT IOS
     DEFINES
-        QT_QMLTEST_DATADIR=\\\"${CMAKE_CURRENT_SOURCE_DIR}/data\\\"
+        QT_QMLTEST_DATADIR="${CMAKE_CURRENT_SOURCE_DIR}/data"
 )

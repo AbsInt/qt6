@@ -2,7 +2,7 @@
 
 #############################################################################
 ##
-## Copyright (C) 2020 The Qt Company Ltd.
+## Copyright (C) 2022 The Qt Company Ltd.
 ## Contact: https://www.qt.io/licensing/
 ##
 ## This file is part of the provisioning scripts of the Qt Toolkit.
@@ -58,7 +58,6 @@ sudo zypper -nq install bison flex gperf \
         zlib-devel \
         libudev-devel \
         glib2-devel \
-        libopenssl-devel \
         freetype2-devel \
         fontconfig-devel \
         sqlite3-devel \
@@ -85,6 +84,11 @@ sudo zypper -nq install libXi-devel postgresql14 postgresql14-devel mysql-devel 
 sudo zypper -nq install xcb-util-devel xcb-util-image-devel xcb-util-keysyms-devel \
          xcb-util-wm-devel xcb-util-renderutil-devel
 
+# temporary solution for libxcb-cursor0 xcb-util-cursor-devel
+sudo zypper addrepo --no-gpgcheck https://download.opensuse.org/repositories/home:liangqi_qt:branches:SUSE:SLE-15-SP4:GA/standard/home:liangqi_qt:branches:SUSE:SLE-15-SP4:GA.repo
+sudo zypper refresh
+sudo zypper -nq install --force-resolution libxcb-cursor0 xcb-util-cursor-devel
+
 # qtwebengine
 sudo zypper -nq install alsa-devel dbus-1-devel libxkbfile-devel libdrm-devel \
          libXcomposite-devel libXcursor-devel libXrandr-devel libXtst-devel \
@@ -92,6 +96,9 @@ sudo zypper -nq install alsa-devel dbus-1-devel libxkbfile-devel libdrm-devel \
 
 # qtwebkit
 sudo zypper -nq install libxml2-devel libxslt-devel
+
+# yasm (for ffmpeg in multimedia)
+sudo zypper -nq install yasm
 
 # GStreamer (qtwebkit and qtmultimedia), pulseaudio (qtmultimedia)
 sudo zypper -nq install gstreamer-devel gstreamer-plugins-base-devel libpulse-devel
@@ -121,8 +128,8 @@ sudo zypper -nq install autoconf libcurl-devel libexpat-devel
 # Nodejs - required by QtWebengine
 sudo zypper -nq install nodejs16
 
+# OpenSSL 3
+sudo zypper -nq install openssl-3
+
 gccVersion="$(gcc --version |grep gcc |cut -b 17-23)"
 echo "GCC = $gccVersion" >> versions.txt
-
-OpenSSLVersion="$(openssl version |cut -b 9-14)"
-echo "OpenSSL = $OpenSSLVersion" >> ~/versions.txt

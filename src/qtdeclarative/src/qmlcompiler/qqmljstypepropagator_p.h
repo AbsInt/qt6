@@ -28,7 +28,6 @@ struct Q_QMLCOMPILER_PRIVATE_EXPORT QQmlJSTypePropagator : public QQmlJSCompileP
 {
     QQmlJSTypePropagator(const QV4::Compiler::JSUnitGenerator *unitGenerator,
                          const QQmlJSTypeResolver *typeResolver, QQmlJSLogger *logger,
-                         QQmlJSTypeInfo *typeInfo = nullptr,
                          QQmlSA::PassManager *passManager = nullptr);
 
     InstructionAnnotations run(const Function *m_function, QQmlJS::DiagnosticMessage *error);
@@ -77,7 +76,6 @@ struct Q_QMLCOMPILER_PRIVATE_EXPORT QQmlJSTypePropagator : public QQmlJSCompileP
     void generate_CallWithReceiver(int name, int thisObject, int argc, int argv) override;
     void generate_CallProperty(int name, int base, int argc, int argv) override;
     void generate_CallPropertyLookup(int lookupIndex, int base, int argc, int argv) override;
-    void generate_CallElement(int base, int index, int argc, int argv) override;
     void generate_CallName(int name, int argc, int argv) override;
     void generate_CallPossiblyDirectEval(int argc, int argv) override;
     void generate_CallGlobalLookup(int index, int argc, int argv) override;
@@ -154,10 +152,10 @@ struct Q_QMLCOMPILER_PRIVATE_EXPORT QQmlJSTypePropagator : public QQmlJSCompileP
     void generate_UShr(int lhs) override;
     void generate_Shr(int lhs) override;
     void generate_Shl(int lhs) override;
-    void generate_BitAndConst(int rhs) override;
-    void generate_BitOrConst(int rhs) override;
-    void generate_BitXorConst(int rhs) override;
-    void generate_UShrConst(int rhs) override;
+    void generate_BitAndConst(int rhsConst) override;
+    void generate_BitOrConst(int rhsConst) override;
+    void generate_BitXorConst(int rhsConst) override;
+    void generate_UShrConst(int rhsConst) override;
     void generate_ShrConst(int rhs) override;
     void generate_ShlConst(int rhs) override;
     void generate_Exp(int lhs) override;
@@ -168,6 +166,8 @@ struct Q_QMLCOMPILER_PRIVATE_EXPORT QQmlJSTypePropagator : public QQmlJSCompileP
     void generate_InitializeBlockDeadTemporalZone(int firstReg, int count) override;
     void generate_ThrowOnNullOrUndefined() override;
     void generate_GetTemplateObject(int index) override;
+
+    bool checkForEnumProblems(const QString &propertyName) const;
 
     Verdict startInstruction(QV4::Moth::Instr::Type instr) override;
     void endInstruction(QV4::Moth::Instr::Type instr) override;
@@ -189,7 +189,6 @@ private:
 
     void handleUnqualifiedAccess(const QString &name, bool isMethod) const;
     void checkDeprecated(QQmlJSScope::ConstPtr scope, const QString &name, bool isMethod) const;
-    bool isRestricted(const QString &propertyName) const;
     bool isCallingProperty(QQmlJSScope::ConstPtr scope, const QString &name) const;
 
     enum PropertyResolution {
@@ -202,8 +201,18 @@ private:
     QQmlJS::SourceLocation getCurrentSourceLocation() const;
     QQmlJS::SourceLocation getCurrentBindingSourceLocation() const;
 
+    void checkConversion(const QQmlJSRegisterContent &from, const QQmlJSRegisterContent &to);
+    void generateUnaryArithmeticOperation(QQmlJSTypeResolver::UnaryOperator op);
+
     QQmlJSRegisterContent propagateBinaryOperation(QSOperator::Op op, int lhs);
-    void propagateCall(const QList<QQmlJSMetaMethod> &methods, int argc, int argv);
+    void generateBinaryArithmeticOperation(QSOperator::Op op, int lhs);
+    void generateBinaryConstArithmeticOperation(QSOperator::Op op);
+
+    void propagateCall(
+            const QList<QQmlJSMetaMethod> &methods, int argc, int argv,
+            const QQmlJSScope::ConstPtr &scope);
+    bool propagateTranslationMethod(const QList<QQmlJSMetaMethod> &methods, int argc, int argv);
+    void propagateStringArgCall(int argv);
     void propagatePropertyLookup(const QString &name);
     void propagateScopeLookupCall(const QString &functionName, int argc, int argv);
     void saveRegisterStateForJump(int offset);
@@ -231,8 +240,8 @@ private:
     void recordCompareType(int lhs);
 
     QQmlJSRegisterContent m_returnType;
-    QQmlJSTypeInfo *m_typeInfo = nullptr;
     QQmlSA::PassManager *m_passManager = nullptr;
+    QQmlJSScope::ConstPtr m_attachedContext;
 
     // Not part of the state, as the back jumps are the reason for running multiple passes
     QMultiHash<int, ExpectedRegisterState> m_jumpOriginRegisterStateByTargetInstructionOffset;

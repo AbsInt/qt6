@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Generated from qqmlecmascript.pro.
 
 #####################################################################
@@ -14,7 +17,7 @@ qt_internal_add_test(tst_qqmlecmascript
     SOURCES
         testtypes.cpp testtypes.h
         tst_qqmlecmascript.cpp
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::CorePrivate
         Qt::Gui
         Qt::GuiPrivate
@@ -51,16 +54,16 @@ qt_internal_add_resource(tst_qqmlecmascript "qqmlecmascript"
 #####################################################################
 
 qt_internal_extend_target(tst_qqmlecmascript CONDITION TARGET Qt::Widgets
-    PUBLIC_LIBRARIES
+    LIBRARIES
         Qt::Widgets
 )
 
 qt_internal_extend_target(tst_qqmlecmascript CONDITION ANDROID OR IOS
     DEFINES
-        QT_QMLTEST_DATADIR=\\\":/data\\\"
+        QT_QMLTEST_DATADIR=":/data"
 )
 
 qt_internal_extend_target(tst_qqmlecmascript CONDITION NOT ANDROID AND NOT IOS
     DEFINES
-        QT_QMLTEST_DATADIR=\\\"${CMAKE_CURRENT_SOURCE_DIR}/data\\\"
+        QT_QMLTEST_DATADIR="${CMAKE_CURRENT_SOURCE_DIR}/data"
 )

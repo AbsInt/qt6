@@ -16,6 +16,7 @@
 #include "qcocoamenuloader.h"
 #include <QtGui/private/qcoregraphics_p.h>
 #include <QtCore/qregularexpression.h>
+#include <QtCore/private/qcore_mac_p.h>
 #include <QtGui/private/qapplekeymapper_p.h>
 
 #include <QtCore/QDebug>
@@ -382,7 +383,7 @@ QKeySequence QCocoaMenuItem::mergeAccel()
 void QCocoaMenuItem::syncMerged()
 {
     if (!m_merged) {
-        qWarning("Trying to sync a non-merged item");
+        qCWarning(lcQpaMenus) << "Trying to sync non-merged" << this;
         return;
     }
 

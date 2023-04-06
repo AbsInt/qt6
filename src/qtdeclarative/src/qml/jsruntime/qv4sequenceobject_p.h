@@ -19,15 +19,9 @@
 #include <QtCore/qvariant.h>
 #include <QtQml/qqml.h>
 
-#include "qv4value_p.h"
-#include "qv4object_p.h"
-#include "qv4context_p.h"
-#include "qv4string_p.h"
-
-#if QT_CONFIG(qml_itemmodel)
-#include <QtCore/qabstractitemmodel.h>
-#include <QtCore/qitemselectionmodel.h>
-#endif
+#include <private/qv4referenceobject_p.h>
+#include <private/qv4value_p.h>
+#include <private/qv4object_p.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -42,36 +36,50 @@ struct Q_QML_PRIVATE_EXPORT SequencePrototype : public QV4::Object
     static ReturnedValue method_valueOf(const FunctionObject *, const Value *thisObject, const Value *argv, int argc);
     static ReturnedValue method_sort(const FunctionObject *, const Value *thisObject, const Value *argv, int argc);
 
-    static ReturnedValue newSequence(QV4::ExecutionEngine *engine, QMetaType sequenceType, QObject *object, int propertyIndex, bool readOnly, bool *succeeded);
-    static ReturnedValue fromVariant(QV4::ExecutionEngine *engine, const QVariant &v, bool *succeeded);
-    static ReturnedValue fromData(QV4::ExecutionEngine *engine, QMetaType type, const void *data, bool *succeeded);
+    static ReturnedValue newSequence(
+            QV4::ExecutionEngine *engine, QMetaType sequenceType, const void *data,
+            Heap::Object *object, int propertyIndex, Heap::ReferenceObject::Flags flags);
+    static ReturnedValue fromVariant(QV4::ExecutionEngine *engine, const QVariant &vd);
+    static ReturnedValue fromData(QV4::ExecutionEngine *engine, QMetaType type, const void *data);
 
     static QMetaType metaTypeForSequence(const Sequence *object);
     static QVariant toVariant(const Sequence *object);
-    static QVariant toVariant(const Value &array, QMetaType typeHint, bool *succeeded);
+    static QVariant toVariant(const Value &array, QMetaType typeHint);
     static void *getRawContainerPtr(const Sequence *object, QMetaType typeHint);
 };
 
 namespace Heap {
 
-struct Sequence : Object {
+struct Sequence : ReferenceObject
+{
     void init(const QQmlType &qmlType, const void *container);
-    void init(QObject *object, int propertyIndex, const QQmlType &qmlType, bool readOnly);
+    void init(const QQmlType &qmlType, const void *container,
+              Object *object, int propertyIndex, Heap::ReferenceObject::Flags flags);
+
+    Sequence *detached() const;
     void destroy();
 
-    mutable void *container;
-    const QQmlTypePrivate *typePrivate;
-    QV4QPointer<QObject> object;
-    int propertyIndex;
-    bool isReference : 1;
-    bool isReadOnly : 1;
+    bool hasData() const { return m_container != nullptr; }
+    void *storagePointer();
+    const void *storagePointer() const { return m_container; }
+
+    bool isReadOnly() const { return m_object && !canWriteBack(); }
+
+    bool setVariant(const QVariant &variant);
+    QVariant toVariant() const;
+
+    const QQmlTypePrivate *typePrivate() const { return m_typePrivate; }
+
+private:
+    void *m_container;
+    const QQmlTypePrivate *m_typePrivate;
 };
 
 }
 
-struct Q_QML_PRIVATE_EXPORT Sequence : public QV4::Object
+struct Q_QML_PRIVATE_EXPORT Sequence : public QV4::ReferenceObject
 {
-    V4_OBJECT2(Sequence, QV4::Object)
+    V4_OBJECT2(Sequence, QV4::ReferenceObject)
     Q_MANAGED_TYPE(V4Sequence)
     V4_PROTOTYPE(sequencePrototype)
     V4_NEEDS_DESTROY
@@ -83,6 +91,7 @@ public:
     static bool virtualDeleteProperty(QV4::Managed *that, PropertyKey id);
     static bool virtualIsEqualTo(Managed *that, Managed *other);
     static QV4::OwnPropertyKeyIterator *virtualOwnPropertyKeys(const Object *m, Value *target);
+    static int virtualMetacall(Object *object, QMetaObject::Call call, int index, void **a);
 
     qsizetype size() const;
     QVariant at(qsizetype index) const;
@@ -90,7 +99,6 @@ public:
     void append(qsizetype num, const QVariant &item);
     void replace(qsizetype index, const QVariant &item);
     void removeLast(qsizetype num);
-    QVariant toVariant() const;
 
     QV4::ReturnedValue containerGetIndexed(qsizetype index, bool *hasProperty) const;
     bool containerPutIndexed(qsizetype index, const QV4::Value &value);
@@ -98,8 +106,8 @@ public:
     bool containerIsEqualTo(Managed *other);
     bool sort(const FunctionObject *f, const Value *, const Value *argv, int argc);
     void *getRawContainerPtr() const;
-    void loadReference() const;
-    void storeReference();
+    bool loadReference() const;
+    bool storeReference();
 };
 
 }
@@ -131,12 +139,6 @@ QT_DECLARE_SEQUENTIAL_CONTAINER(QIntStdVectorForeign, std::vector<int>, int);
 QT_DECLARE_SEQUENTIAL_CONTAINER(QBoolStdVectorForeign, std::vector<bool>, bool);
 QT_DECLARE_SEQUENTIAL_CONTAINER(QStringStdVectorForeign, std::vector<QString>, QString);
 QT_DECLARE_SEQUENTIAL_CONTAINER(QUrlStdVectorForeign, std::vector<QUrl>, QUrl);
-
-#if QT_CONFIG(qml_itemmodel)
-QT_DECLARE_SEQUENTIAL_CONTAINER(QModelIndexListForeign, QModelIndexList, QModelIndex);
-QT_DECLARE_SEQUENTIAL_CONTAINER(QModelIndexStdVectorForeign, std::vector<QModelIndex>, QModelIndex);
-QT_DECLARE_SEQUENTIAL_CONTAINER(QItemSelectionForeign, QItemSelection, QItemSelectionRange);
-#endif
 
 #undef QT_DECLARE_SEQUENTIAL_CONTAINER
 

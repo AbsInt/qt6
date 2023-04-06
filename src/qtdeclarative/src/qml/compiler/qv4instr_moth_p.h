@@ -71,7 +71,6 @@ QT_BEGIN_NAMESPACE
 #define INSTR_CallWithReceiver(op) INSTRUCTION(op, CallWithReceiver, 4, name, thisObject, argc, argv)
 #define INSTR_CallProperty(op) INSTRUCTION(op, CallProperty, 4, name, base, argc, argv)
 #define INSTR_CallPropertyLookup(op) INSTRUCTION(op, CallPropertyLookup, 4, lookupIndex, base, argc, argv)
-#define INSTR_CallElement(op) INSTRUCTION(op, CallElement, 4, base, index, argc, argv)
 #define INSTR_CallName(op) INSTRUCTION(op, CallName, 3, name, argc, argv)
 #define INSTR_CallPossiblyDirectEval(op) INSTRUCTION(op, CallPossiblyDirectEval, 2, argc, argv)
 #define INSTR_CallGlobalLookup(op) INSTRUCTION(op, CallGlobalLookup, 3, index, argc, argv)
@@ -254,7 +253,6 @@ QT_BEGIN_NAMESPACE
     F(CallWithReceiver) \
     F(CallProperty) \
     F(CallPropertyLookup) \
-    F(CallElement) \
     F(CallName) \
     F(CallPossiblyDirectEval) \
     F(CallGlobalLookup) \
@@ -474,7 +472,7 @@ QT_BEGIN_NAMESPACE
 namespace QV4 {
 
 namespace CompiledData {
-struct CodeOffsetToLine;
+struct CodeOffsetToLineAndStatement;
 }
 
 namespace Moth {
@@ -500,10 +498,13 @@ inline bool operator!=(const StackSlot &l, const StackSlot &r) { return l.stackS
 // When making changes to the instructions, make sure to bump QV4_DATA_STRUCTURE_VERSION in qv4compileddata_p.h
 
 void dumpBytecode(const char *bytecode, int len, int nLocals, int nFormals, int startLine = 1,
-                  const QVector<CompiledData::CodeOffsetToLine> &lineNumberMapping = QVector<CompiledData::CodeOffsetToLine>());
+                  const QVector<CompiledData::CodeOffsetToLineAndStatement> &lineAndStatementNumberMapping
+                        = QVector<CompiledData::CodeOffsetToLineAndStatement>());
 inline void dumpBytecode(const QByteArray &bytecode, int nLocals, int nFormals, int startLine = 1,
-                         const QVector<CompiledData::CodeOffsetToLine> &lineNumberMapping = QVector<CompiledData::CodeOffsetToLine>()) {
-    dumpBytecode(bytecode.constData(), bytecode.size(), nLocals, nFormals, startLine, lineNumberMapping);
+                         const QVector<CompiledData::CodeOffsetToLineAndStatement> &lineAndStatementNumberMapping
+                            = QVector<CompiledData::CodeOffsetToLineAndStatement>()) {
+    dumpBytecode(bytecode.constData(), bytecode.size(), nLocals, nFormals, startLine,
+                 lineAndStatementNumberMapping);
 }
 
 union Instr

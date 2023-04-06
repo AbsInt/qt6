@@ -7,13 +7,12 @@
 
 QT_BEGIN_NAMESPACE
 
-using namespace qdesigner_internal;
+namespace qdesigner_internal {
 
 StringListEditor::StringListEditor(QWidget *parent)
     : QDialog(parent), m_model(new QStringListModel(this))
 {
     setupUi(this);
-    setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
     listView->setModel(m_model);
 
     connect(listView->selectionModel(),
@@ -168,5 +167,7 @@ void StringListEditor::editString(int index)
 {
     listView->edit(m_model->index(index, 0));
 }
+
+} // namespace qdesigner_internal
 
 QT_END_NAMESPACE

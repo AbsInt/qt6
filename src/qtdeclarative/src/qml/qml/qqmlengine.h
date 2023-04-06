@@ -55,7 +55,7 @@ class QQmlNetworkAccessManagerFactory;
 class QQmlIncubationController;
 class Q_QML_EXPORT QQmlEngine : public QJSEngine
 {
-    Q_PROPERTY(QString offlineStoragePath READ offlineStoragePath WRITE setOfflineStoragePath)
+    Q_PROPERTY(QString offlineStoragePath READ offlineStoragePath WRITE setOfflineStoragePath NOTIFY offlineStoragePathChanged)
     Q_OBJECT
 public:
     explicit QQmlEngine(QObject *p = nullptr);
@@ -126,10 +126,16 @@ public:
     template<typename T>
     T singletonInstance(int qmlTypeId);
 
+    template<typename T>
+    T singletonInstance(QAnyStringView moduleName, QAnyStringView typeName);
+
     void captureProperty(QObject *object, const QMetaProperty &property) const;
 
 public Q_SLOTS:
     void retranslate();
+
+Q_SIGNALS:
+    void offlineStoragePathChanged();
 
 public:
     static QQmlContext *contextForObject(const QObject *);
@@ -155,6 +161,15 @@ Q_QML_EXPORT QJSValue QQmlEngine::singletonInstance<QJSValue>(int qmlTypeId);
 template<typename T>
 T QQmlEngine::singletonInstance(int qmlTypeId) {
     return qobject_cast<T>(singletonInstance<QJSValue>(qmlTypeId).toQObject());
+}
+
+template<>
+Q_QML_EXPORT QJSValue QQmlEngine::singletonInstance<QJSValue>(QAnyStringView uri, QAnyStringView typeName);
+
+template<typename T>
+T QQmlEngine::singletonInstance(QAnyStringView uri, QAnyStringView typeName)
+{
+    return qobject_cast<T>(singletonInstance<QJSValue>(uri, typeName).toQObject());
 }
 
 QT_END_NAMESPACE

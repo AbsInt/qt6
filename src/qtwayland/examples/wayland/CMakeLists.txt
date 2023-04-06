@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 if(QT_FEATURE_wayland_server)
 if(QT_FEATURE_opengl)
     qt_internal_add_example(minimal-cpp)
@@ -15,10 +18,7 @@ if(TARGET Qt::Quick)
     qt_internal_add_example(qtshell)
 endif()
 if(TARGET Qt::Quick AND TARGET Qt::WaylandClient)
-    add_subdirectory(custom-extension)
-    add_subdirectory(custom-shell)
-endif()
-if(QT_FEATURE_opengl AND TARGET Qt::Quick AND TARGET Qt::WaylandClient)
-    add_subdirectory(server-buffer)
+    qt_internal_add_example(custom-extension)
+    qt_internal_add_example(custom-shell)
 endif()
 endif()

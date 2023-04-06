@@ -6,7 +6,7 @@
 
 #include "codemarker.h"
 #include "xmlgenerator.h"
-#include "filesystem/fileresolver.hpp"
+#include "filesystem/fileresolver.h"
 
 #include <QtCore/qhash.h>
 #include <QtCore/qregularexpression.h>
@@ -78,15 +78,14 @@ private:
     bool generateGroupList(CollectionNode *cn);
     void generateList(const Node *relative, CodeMarker *marker, const QString &selector);
     void generateSectionList(const Section &section, const Node *relative, CodeMarker *marker,
-                             Section::Status = Section::Active);
+                             bool useObsoloteMembers = false);
     void generateQmlSummary(const NodeVector &members, const Node *relative, CodeMarker *marker);
     void generateQmlItem(const Node *node, const Node *relative, CodeMarker *marker, bool summary);
     void generateDetailedQmlMember(Node *node, const Aggregate *relative, CodeMarker *marker);
 
     void generateSection(const NodeVector &nv, const Node *relative, CodeMarker *marker);
     void generateSynopsis(const Node *node, const Node *relative, CodeMarker *marker,
-                          Section::Style style, bool alignNames = false,
-                          const QString *prefix = nullptr);
+                          Section::Style style, bool alignNames = false);
     void generateSectionInheritedList(const Section &section, const Node *relative);
     QString highlightedCode(const QString &markedCode, const Node *relative,
                             bool alignNames = false, Node::Genus genus = Node::DontCare);
@@ -103,8 +102,8 @@ private:
     void beginLink(const QString &link, const Node *node, const Node *relative);
     void endLink();
     void generateExtractionMark(const Node *node, ExtractionMarkType markType);
-    void addIncludeFilesToMap(const Aggregate *aggregate, CodeMarker *marker,
-                              QMap<QString, Text> &requisites, Text *text,
+    void addIncludeFileToMap(const Aggregate *aggregate, CodeMarker *marker,
+                              QMap<QString, Text> &requisites, Text& text,
                               const QString &headerText);
     void addSinceToMap(const Aggregate *aggregate, QMap<QString, Text> &requisites, Text *text,
                        const QString &sinceText) const;
@@ -123,6 +122,8 @@ private:
                           CodeMarker *marker);
     inline void openUnorderedList();
     inline void closeUnorderedList();
+
+    QString groupReferenceText(PageNode* node);
 
     static bool s_inUnorderedList;
 

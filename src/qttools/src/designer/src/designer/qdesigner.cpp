@@ -104,7 +104,6 @@ void QDesigner::showErrorMessageBox(const QString &msg)
         const QString title = QCoreApplication::translate("QDesigner", "%1 - warning").arg(QLatin1String(designerApplicationName));
         m_errorMessageDialog->setWindowTitle(title);
         m_errorMessageDialog->setMinimumSize(QSize(600, 250));
-        m_errorMessageDialog->setWindowFlags(m_errorMessageDialog->windowFlags() & ~Qt::WindowContextHelpButtonHint);
     }
     m_errorMessageDialog->showMessage(msg);
     m_lastErrorMessage = msg;
@@ -235,17 +234,14 @@ QDesigner::ParseArgumentsResult QDesigner::parseCommandLineArguments()
 
     m_suppressNewFormShow = m_workbench->readInBackup();
 
-    if (!options.files.isEmpty()) {
-        const QStringList::const_iterator cend = options.files.constEnd();
-        for (QStringList::const_iterator it = options.files.constBegin(); it != cend; ++it) {
-            // Ensure absolute paths for recent file list to be unique
-            QString fileName = *it;
-            const QFileInfo fi(fileName);
-            if (fi.exists() && fi.isRelative())
-                fileName = fi.absoluteFilePath();
-            m_workbench->readInForm(fileName);
-        }
+    for (auto fileName : std::as_const(options.files)) {
+        // Ensure absolute paths for recent file list to be unique
+        const QFileInfo fi(fileName);
+        if (fi.exists() && fi.isRelative())
+            fileName = fi.absoluteFilePath();
+        m_workbench->readInForm(fileName);
     }
+
     if ( m_workbench->formWindowCount())
         m_suppressNewFormShow = true;
 

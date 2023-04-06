@@ -24,6 +24,7 @@
 #include <private/qv4alloca_p.h>
 #include <private/qqmljavascriptexpression_p.h>
 #include <private/qv4qmlcontext_p.h>
+#include <QtQml/private/qv4runtime_p.h>
 #include <iostream>
 
 #if QT_CONFIG(qml_jit)
@@ -346,20 +347,18 @@ static inline const QV4::Value &constant(Function *function, int index)
 static bool compareEqualInt(QV4::Value &accumulator, QV4::Value lhs, int rhs)
 {
   redo:
-    switch (lhs.quickType()) {
-    case QV4::Value::QT_ManagedOrUndefined:
-        if (lhs.isUndefined())
-            return false;
-        Q_FALLTHROUGH();
-    case QV4::Value::QT_ManagedOrUndefined1:
-    case QV4::Value::QT_ManagedOrUndefined2:
-    case QV4::Value::QT_ManagedOrUndefined3:
+    if (lhs.isUndefined())
+        return false;
+    if (lhs.isManagedOrUndefined()) {
         // LHS: Managed
         if (lhs.m()->internalClass->vtable->isString)
             return RuntimeHelpers::stringToNumber(static_cast<String &>(lhs).toQString()) == rhs;
         accumulator = lhs;
         lhs = QV4::Value::fromReturnedValue(RuntimeHelpers::objectDefaultValue(&static_cast<QV4::Object &>(accumulator), PREFERREDTYPE_HINT));
         goto redo;
+    }
+
+    switch (lhs.quickType()) {
     case QV4::Value::QT_Empty:
         Q_UNREACHABLE();
     case QV4::Value::QT_Null:
@@ -403,18 +402,18 @@ void VME::exec(MetaTypesStackFrame *frame, ExecutionEngine *engine)
     ExecutionEngineCallDepthRecorder executionEngineCallDepthRecorder(engine);
 
     Function *function = frame->v4Function;
-    Q_ASSERT(function->aotFunction);
+    Q_ASSERT(function->typedFunction);
     Q_TRACE_SCOPE(QQmlV4_function_call, engine, function->name()->toQString(),
                   function->executableCompilationUnit()->fileName(),
                   function->compiledFunction->location.line(),
                   function->compiledFunction->location.column());
     Profiling::FunctionCallProfiler profiler(engine, function); // start execution profiling
 
-    const qsizetype numFunctionArguments = function->aotFunction->argumentTypes.size();
+    const qsizetype numFunctionArguments = function->typedFunction->argumentTypes.size();
 
     Q_ALLOCA_DECLARE(void *, transformedArguments);
     for (qsizetype i = 0; i < numFunctionArguments; ++i) {
-        const QMetaType argumentType = function->aotFunction->argumentTypes[i];
+        const QMetaType argumentType = function->typedFunction->argumentTypes[i];
         if (frame->argc() > i && argumentType == frame->argTypes()[i])
             continue;
 
@@ -449,7 +448,7 @@ void VME::exec(MetaTypesStackFrame *frame, ExecutionEngine *engine)
         transformedArguments[i] = arg;
     }
 
-    const QMetaType returnType = function->aotFunction->returnType;
+    const QMetaType returnType = function->typedFunction->returnType;
     const QMetaType frameReturn = frame->returnType();
     Q_ALLOCA_DECLARE(void, transformedResult);
     if (frame->returnValue() && returnType != frameReturn) {
@@ -469,7 +468,7 @@ void VME::exec(MetaTypesStackFrame *frame, ExecutionEngine *engine)
     aotContext.engine = engine->jsEngine();
     aotContext.compilationUnit = function->executableCompilationUnit();
 
-    function->aotFunction->functionPtr(
+    function->typedFunction->functionPtr(
                 &aotContext, transformedResult ? transformedResult : frame->returnValue(),
                 transformedArguments ? transformedArguments : frame->argv());
 
@@ -497,7 +496,7 @@ void VME::exec(MetaTypesStackFrame *frame, ExecutionEngine *engine)
             if (arg == nullptr)
                 continue;
             if (i >= frame->argc() || arg != frame->argv()[i])
-                function->aotFunction->argumentTypes[i].destruct(arg);
+                function->typedFunction->argumentTypes[i].destruct(arg);
         }
     }
 }
@@ -534,7 +533,7 @@ ReturnedValue VME::exec(JSTypesStackFrame *frame, ExecutionEngine *engine)
         debugger->enteringFunction();
 
     ReturnedValue result;
-    Q_ASSERT(!function->aotFunction);
+    Q_ASSERT(function->kind != Function::AotCompiled);
     if (function->jittedCode != nullptr && debugger == nullptr) {
         result = function->jittedCode(frame, engine);
     } else {
@@ -860,12 +859,6 @@ QV4::ReturnedValue VME::interpret(JSTypesStackFrame *frame, ExecutionEngine *eng
         acc = static_cast<FunctionObject &>(f).call(stack + base, stack + argv, argc);
         CHECK_EXCEPTION;
     MOTH_END_INSTR(CallPropertyLookup)
-
-    MOTH_BEGIN_INSTR(CallElement)
-        STORE_IP();
-        acc = Runtime::CallElement::call(engine, STACK_VALUE(base), STACK_VALUE(index), stack + argv, argc);
-        CHECK_EXCEPTION;
-    MOTH_END_INSTR(CallElement)
 
     MOTH_BEGIN_INSTR(CallName)
         STORE_IP();
@@ -1372,10 +1365,7 @@ QV4::ReturnedValue VME::interpret(JSTypesStackFrame *frame, ExecutionEngine *eng
         const Value left = STACK_VALUE(lhs);
         double base = left.toNumber();
         double exp = ACC.toNumber();
-        if (qIsInf(exp) && (base == 1 || base == -1))
-            acc = Encode(qQNaN());
-        else
-            acc = Encode(pow(base,exp));
+        acc = Encode(QQmlPrivate::jsExponentiate(base, exp));
     MOTH_END_INSTR(Exp)
 
     MOTH_BEGIN_INSTR(Mul)

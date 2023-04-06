@@ -8,6 +8,7 @@
 #include <QWindow>
 #include <QEvent>
 #include <QFile>
+#include <QFileInfo>
 #include <QStandardPaths>
 #include <QDBusVariant>
 #include <QDBusPendingReply>
@@ -493,7 +494,7 @@ void QIBusPlatformInputContext::filterEventFinished(QDBusPendingCallWatcher *cal
     if (!filtered) {
 #ifndef QT_NO_CONTEXTMENU
         if (type == QEvent::KeyPress && qtcode == Qt::Key_Menu
-            && window != NULL) {
+            && window != nullptr) {
             const QPoint globalPos = window->screen()->handle()->cursor()->pos();
             const QPoint pos = window->mapFromGlobal(globalPos);
             QWindowSystemInterfacePrivate::ContextMenuEvent contextMenuEvent(window, false, pos,
@@ -594,15 +595,15 @@ void QIBusPlatformInputContext::connectToContextSignals()
     }
 }
 
-static inline bool checkRunningUnderFlatpak()
+static inline bool checkNeedPortalSupport()
 {
-    return !QStandardPaths::locate(QStandardPaths::RuntimeLocation, "flatpak-info"_L1).isEmpty();
+    return QFileInfo::exists("/.flatpak-info"_L1) || qEnvironmentVariableIsSet("SNAP");
 }
 
 static bool shouldConnectIbusPortal()
 {
     // honor the same env as ibus-gtk
-    return (checkRunningUnderFlatpak() || !qgetenv("IBUS_USE_PORTAL").isNull());
+    return (checkNeedPortalSupport() || qEnvironmentVariableIsSet("IBUS_USE_PORTAL"));
 }
 
 QIBusPlatformInputContextPrivate::QIBusPlatformInputContextPrivate()

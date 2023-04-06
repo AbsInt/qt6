@@ -1,3 +1,6 @@
+# Copyright (C) 2022 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Generated from qmlplugindump.pro.
 
 #####################################################################
@@ -9,12 +12,10 @@ qt_internal_add_tool(${target_name}
     TARGET_DESCRIPTION "QML Plugin Metadata Dumper"
     TOOLS_TARGET Qml # special case
     SOURCES
-        ../../src/qmlcompiler/qqmljsstreamwriter.cpp ../../src/qmlcompiler/qqmljsstreamwriter_p.h
         main.cpp
         qmltypereader.cpp qmltypereader.h
-    INCLUDE_DIRECTORIES
-        ../../src/qmlcompiler
-    PUBLIC_LIBRARIES
+    LIBRARIES
+        Qt::QmlTypeRegistrarPrivate
         Qt::CorePrivate
         Qt::Gui
         Qt::Qml
