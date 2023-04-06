@@ -1605,11 +1605,7 @@ bool updateLibsXml(Options *options)
         if (localLibs.isEmpty()) {
             QString plugin;
             for (const QtDependency &qtDependency : options->qtDependencies[it.key()]) {
-<<<<<<< HEAD
-                if (qtDependency.relativePath.endsWith("libqtforandroid.so"_L1))
-=======
                 if (qtDependency.relativePath.contains("libplugins_platforms_qtforandroid_"_L1))
->>>>>>> origin/bug/34860
                     plugin = qtDependency.relativePath;
 
                 if (qtDependency.relativePath.contains(
@@ -1622,13 +1618,8 @@ bool updateLibsXml(Options *options)
 
             if (plugin.isEmpty()) {
                 fflush(stdout);
-<<<<<<< HEAD
-                fprintf(stderr, "No platform plugin (libqtforandroid.so) included in "
-                                "the deployment. Make sure the app links to Qt Gui library.\n");
-=======
                 fprintf(stderr, "No platform plugin (libplugins_platforms_qtforandroid.so) included"
                                 " in the deployment. Make sure the app links to Qt Gui library.\n");
->>>>>>> origin/bug/34860
                 fflush(stderr);
                 return false;
             }

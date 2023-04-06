@@ -2128,11 +2128,6 @@ void QODBCDriverPrivate::checkUnicode()
                                   hDbc,
                                   &hStmt);
 
-<<<<<<< HEAD
-    {
-        auto encoded = toSQLTCHAR("select 'test'"_L1);
-        r = SQLExecDirect(hStmt, encoded.data(), SQLINTEGER(encoded.size()));
-=======
     // for databases which do not return something useful in SQLGetInfo and are picky about a
     // 'SELECT' statement without 'FROM' but support VALUE(foo) statement like e.g. DB2 or Oracle
     const auto statements = {
@@ -2145,7 +2140,6 @@ void QODBCDriverPrivate::checkUnicode()
         r = SQLExecDirect(hStmt, encoded.data(), SQLINTEGER(encoded.size()));
         if (r == SQL_SUCCESS)
             break;
->>>>>>> origin/bug/34860
     }
     if (r == SQL_SUCCESS) {
         r = SQLFetch(hStmt);
