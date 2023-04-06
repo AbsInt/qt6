@@ -1241,12 +1241,24 @@ bool readInputFile(Options *options)
                         }
                     }
                 } else {
-                    auto arch = fileArchitecture(*options, path);
-                    if (!arch.isEmpty()) {
-                        options->qtDependencies[arch].append(QtDependency(dependency.toString(), path));
-                    } else if (options->verbose) {
-                        fprintf(stderr, "Skipping \"%s\", unknown architecture\n", qPrintable(path));
-                        fflush(stderr);
+                    auto qtDependency = [options](const QStringView &dependency,
+                                                  const QString &arch) {
+                        const auto installDir = options->architectures[arch].qtInstallDirectory;
+                        const auto absolutePath = "%1/%2"_L1.arg(installDir, dependency.toString());
+                        return QtDependency(dependency.toString(), absolutePath);
+                    };
+
+                    if (dependency.endsWith(QLatin1String(".so"))) {
+                        auto arch = fileArchitecture(*options, path);
+                        if (!arch.isEmpty()) {
+                            options->qtDependencies[arch].append(qtDependency(dependency, arch));
+                        } else if (options->verbose) {
+                            fprintf(stderr, "Skipping \"%s\", unknown architecture\n", qPrintable(path));
+                            fflush(stderr);
+                        }
+                    } else {
+                        for (auto arch : options->architectures.keys())
+                            options->qtDependencies[arch].append(qtDependency(dependency, arch));
                     }
                 }
             }
@@ -1593,7 +1605,7 @@ bool updateLibsXml(Options *options)
         if (localLibs.isEmpty()) {
             QString plugin;
             for (const QtDependency &qtDependency : options->qtDependencies[it.key()]) {
-                if (qtDependency.relativePath.endsWith("libqtforandroid.so"_L1))
+                if (qtDependency.relativePath.contains("libplugins_platforms_qtforandroid_"_L1))
                     plugin = qtDependency.relativePath;
 
                 if (qtDependency.relativePath.contains(
@@ -1601,14 +1613,13 @@ bool updateLibsXml(Options *options)
                     || qtDependency.relativePath.contains(
                             QString::asprintf("libQt%dQuick", QT_VERSION_MAJOR))) {
                     options->usesOpenGL |= true;
-                    break;
                 }
             }
 
             if (plugin.isEmpty()) {
                 fflush(stdout);
-                fprintf(stderr, "No platform plugin (libqtforandroid.so) included in "
-                                "the deployment. Make sure the app links to Qt Gui library.\n");
+                fprintf(stderr, "No platform plugin (libplugins_platforms_qtforandroid.so) included"
+                                " in the deployment. Make sure the app links to Qt Gui library.\n");
                 fflush(stderr);
                 return false;
             }
@@ -2685,22 +2696,36 @@ void checkAndWarnGradleLongPaths(const QString &outputDirectory)
 }
 #endif
 
-bool gradleSetsLegacyPackagingProperty(const QString &path)
+struct GradleFlags {
+    bool setsLegacyPackaging = false;
+    bool usesIntegerCompileSdkVersion = false;
+};
+
+GradleFlags gradleBuildFlags(const QString &path)
 {
+    GradleFlags flags;
+
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly))
-        return false;
+        return flags;
+
+    auto isComment = [](const QByteArray &line) {
+        const auto trimmed = line.trimmed();
+        return trimmed.startsWith("//") || trimmed.startsWith('*') || trimmed.startsWith("/*");
+    };
 
     const auto lines = file.readAll().split('\n');
     for (const auto &line : lines) {
+        if (isComment(line))
+            continue;
         if (line.contains("useLegacyPackaging")) {
-            const auto trimmed = line.trimmed();
-            if (!trimmed.startsWith("//") && !trimmed.startsWith('*') && !trimmed.startsWith("/*"))
-                return true;
+            flags.setsLegacyPackaging = true;
+        } else if (line.contains("compileSdkVersion androidCompileSdkVersion.toInteger()")) {
+            flags.usesIntegerCompileSdkVersion = true;
         }
     }
 
-    return false;
+    return flags;
 }
 
 bool buildAndroidProject(const Options &options)
@@ -2715,7 +2740,8 @@ bool buildAndroidProject(const Options &options)
     GradleProperties gradleProperties = readGradleProperties(gradlePropertiesPath);
 
     const QString gradleBuildFilePath = options.outputDirectory + "build.gradle"_L1;
-    if (!gradleSetsLegacyPackagingProperty(gradleBuildFilePath))
+    GradleFlags gradleFlags = gradleBuildFlags(gradleBuildFilePath);
+    if (!gradleFlags.setsLegacyPackaging)
         gradleProperties["android.bundle.enableUncompressedNativeLibs"] = "false";
 
     gradleProperties["buildDir"] = "build";
@@ -2730,7 +2756,26 @@ bool buildAndroidProject(const Options &options)
         (options.qtInstallDirectory + u'/' + options.qtDataDirectory +
          "/src/android/java"_L1)
             .toUtf8();
-    gradleProperties["androidCompileSdkVersion"] = options.androidPlatform.split(u'-').last().toLocal8Bit();
+
+    QByteArray sdkPlatformVersion;
+    // Provide the integer version only if build.gradle explicitly converts to Integer,
+    // to avoid regression to existing projects that build for sdk platform of form android-xx.
+    if (gradleFlags.usesIntegerCompileSdkVersion) {
+        const QByteArray tmp = options.androidPlatform.split(u'-').last().toLocal8Bit();
+        bool ok;
+        tmp.toInt(&ok);
+        if (ok) {
+            sdkPlatformVersion = tmp;
+        } else {
+            fprintf(stderr, "Warning: Gradle expects SDK platform version to be an integer, "
+                            "but the set version is not convertible to an integer.");
+        }
+    }
+
+    if (sdkPlatformVersion.isEmpty())
+        sdkPlatformVersion = options.androidPlatform.toLocal8Bit();
+
+    gradleProperties["androidCompileSdkVersion"] = sdkPlatformVersion;
     gradleProperties["qtMinSdkVersion"] = options.minSdkVersion;
     gradleProperties["qtTargetSdkVersion"] = options.targetSdkVersion;
     gradleProperties["androidNdkVersion"] = options.ndkVersion.toUtf8();

@@ -64,12 +64,12 @@ function(qt_internal_add_executable name)
             QT_DELAYED_TARGET_COPYRIGHT "${arg_TARGET_COPYRIGHT}"
             )
     else()
-        if("${arg_TARGET_DESCRIPTION}" STREQUAL "")
+        if(NOT arg_TARGET_DESCRIPTION)
             set(arg_TARGET_DESCRIPTION "Qt ${name}")
         endif()
         qt_set_target_info_properties(${name} ${ARGN}
-            TARGET_DESCRIPTION "${arg_TARGET_DESCRIPTION}"
-            TARGET_VERSION "${arg_VERSION}")
+            TARGET_DESCRIPTION ${arg_TARGET_DESCRIPTION}
+            TARGET_VERSION ${arg_VERSION})
     endif()
 
     if (WIN32 AND NOT arg_DELAY_RC)
@@ -116,14 +116,10 @@ function(qt_internal_add_executable name)
         set(arg_NO_UNITY_BUILD "")
     endif()
 
-    if(arg_NO_UNITY_BUILD_SOURCES)
-        set(arg_NO_UNITY_BUILD_SOURCES "NO_UNITY_BUILD_SOURCES ${arg_NO_UNITY_BUILD_SOURCES}")
-    else()
-        set(arg_NO_UNITY_BUILD_SOURCES "")
-    endif()
-
     qt_internal_extend_target("${name}"
+        ${arg_NO_UNITY_BUILD}
         SOURCES ${arg_SOURCES}
+        NO_UNITY_BUILD_SOURCES ${arg_NO_UNITY_BUILD_SOURCES}
         INCLUDE_DIRECTORIES ${private_includes}
         DEFINES ${arg_DEFINES}
         LIBRARIES
@@ -140,8 +136,6 @@ function(qt_internal_add_executable name)
         MOC_OPTIONS ${arg_MOC_OPTIONS}
         ENABLE_AUTOGEN_TOOLS ${arg_ENABLE_AUTOGEN_TOOLS}
         DISABLE_AUTOGEN_TOOLS ${arg_DISABLE_AUTOGEN_TOOLS}
-        ${arg_NO_UNITY_BUILD_SOURCES}
-        ${arg_NO_UNITY_BUILD}
     )
     set_target_properties("${name}" PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${arg_OUTPUT_DIRECTORY}"
@@ -476,6 +470,7 @@ function(qt_internal_add_configure_time_executable target)
             OUTPUT_VARIABLE try_compile_output
         )
 
+        file(WRITE "${timestamp_file}" "")
         if(NOT result)
             message(FATAL_ERROR "Unable to build ${target}: ${try_compile_output}")
         endif()

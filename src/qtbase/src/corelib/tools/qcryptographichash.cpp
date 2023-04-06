@@ -296,13 +296,14 @@ class QCryptographicHashPrivate
 {
 public:
     explicit QCryptographicHashPrivate(QCryptographicHash::Algorithm method) noexcept
-        : method(method)
+        : state(method), method(method)
     {
-        init();
-        reset();
+    }
+    ~QCryptographicHashPrivate()
+    {
+        state.destroy(method);
     }
 
-    void init();
     void reset() noexcept;
     void addData(QByteArrayView bytes) noexcept;
     bool addData(QIODevice *dev);
@@ -327,15 +328,33 @@ public:
     };
     using EVP_MD_CTX_ptr = std::unique_ptr<EVP_MD_CTX, EVP_MD_CTX_deleter>;
     using EVP_MD_ptr = std::unique_ptr<EVP_MD, EVP_MD_deleter>;
-    EVP_MD_ptr algorithm;
-    EVP_MD_CTX_ptr context;
-    bool initializationFailed = false;
+    struct EVP {
+        EVP_MD_ptr algorithm;
+        EVP_MD_CTX_ptr context;
+        bool initializationFailed;
+
+        explicit EVP(QCryptographicHash::Algorithm method);
+        void reset() noexcept;
+        void finalizeUnchecked(HashResult &result) noexcept;
+    };
 #endif
 
-    union {
+    union State {
+        explicit State(QCryptographicHash::Algorithm method);
+        void destroy(QCryptographicHash::Algorithm method);
+#ifdef USING_OPENSSL30
+        ~State() {}
+#endif
+
+        void reset(QCryptographicHash::Algorithm method) noexcept;
+        void addData(QCryptographicHash::Algorithm method, QByteArrayView data) noexcept;
+        void finalizeUnchecked(QCryptographicHash::Algorithm method, HashResult &result) noexcept;
+
         Sha1State sha1Context;
 #ifndef QT_CRYPTOGRAPHICHASH_ONLY_SHA1
-#ifndef USING_OPENSSL30
+#ifdef USING_OPENSSL30
+        EVP evp;
+#else
         MD5Context md5Context;
         md4_context md4Context;
         SHA224Context sha224Context;
@@ -343,21 +362,14 @@ public:
         SHA384Context sha384Context;
         SHA512Context sha512Context;
         SHA3Context sha3Context;
+
+        enum class Sha3Variant { Sha3, Keccak };
+        void sha3Finish(HashResult &result, int bitCount, Sha3Variant sha3Variant);
 #endif
         blake2b_state blake2bContext;
         blake2s_state blake2sContext;
 #endif
-    };
-#ifndef QT_CRYPTOGRAPHICHASH_ONLY_SHA1
-#ifndef USING_OPENSSL30
-    enum class Sha3Variant
-    {
-        Sha3,
-        Keccak
-    };
-    void sha3Finish(int bitCount, Sha3Variant sha3Variant);
-#endif
-#endif
+    } state;
     // protects result in finalize()
     QBasicMutex finalizeMutex;
     HashResult result;
@@ -367,7 +379,8 @@ public:
 
 #ifndef QT_CRYPTOGRAPHICHASH_ONLY_SHA1
 #ifndef USING_OPENSSL30
-void QCryptographicHashPrivate::sha3Finish(int bitCount, Sha3Variant sha3Variant)
+void QCryptographicHashPrivate::State::sha3Finish(HashResult &result, int bitCount,
+                                                  Sha3Variant sha3Variant)
 {
     /*
         FIPS 202 §6.1 defines SHA-3 in terms of calculating the Keccak function
@@ -533,24 +546,38 @@ QCryptographicHash::Algorithm QCryptographicHash::algorithm() const noexcept
 
 #ifdef USING_OPENSSL30
 
-void QCryptographicHashPrivate::init()
+QCryptographicHashPrivate::State::State(QCryptographicHash::Algorithm method)
 {
     if (method == QCryptographicHash::Blake2b_160 ||
         method == QCryptographicHash::Blake2b_256 ||
         method == QCryptographicHash::Blake2b_384) {
         new (&blake2bContext) blake2b_state;
-        return;
+        reset(method);
     } else if (method == QCryptographicHash::Blake2s_128 ||
                method == QCryptographicHash::Blake2s_160 ||
                method == QCryptographicHash::Blake2s_224) {
         new (&blake2sContext) blake2s_state;
-        return;
+        reset(method);
+    } else {
+        new (&evp) EVP(method);
     }
+}
 
-    Q_ASSERT(!context);
+void QCryptographicHashPrivate::State::destroy(QCryptographicHash::Algorithm method)
+{
+    if (method != QCryptographicHash::Blake2b_160 &&
+        method != QCryptographicHash::Blake2b_256 &&
+        method != QCryptographicHash::Blake2b_384 &&
+        method != QCryptographicHash::Blake2s_128 &&
+        method != QCryptographicHash::Blake2s_160 &&
+        method != QCryptographicHash::Blake2s_224) {
+        evp.~EVP();
+    }
+}
 
-    initializationFailed = true;
-
+QCryptographicHashPrivate::EVP::EVP(QCryptographicHash::Algorithm method)
+    : initializationFailed{true}
+{
     if (method == QCryptographicHash::Md4) {
         /*
          * We need to load the legacy provider in order to have the MD4
@@ -583,7 +610,7 @@ void QCryptographicHashPrivate::init()
 
 #else // USING_OPENSSL30
 
-void QCryptographicHashPrivate::init()
+QCryptographicHashPrivate::State::State(QCryptographicHash::Algorithm method)
 {
     switch (method) {
     case QCryptographicHash::Sha1:
@@ -639,27 +666,40 @@ void QCryptographicHashPrivate::init()
     case QCryptographicHash::NumAlgorithms:
         Q_UNREACHABLE();
     }
+    reset(method);
 }
 
+void QCryptographicHashPrivate::State::destroy(QCryptographicHash::Algorithm)
+{
+    static_assert(std::is_trivially_destructible_v<State>); // so nothing to do here
+}
 #endif // !USING_OPENSSL30
-
-#ifdef USING_OPENSSL30
 
 void QCryptographicHashPrivate::reset() noexcept
 {
     result.clear();
+    state.reset(method);
+}
+
+#ifdef USING_OPENSSL30
+
+void QCryptographicHashPrivate::State::reset(QCryptographicHash::Algorithm method) noexcept
+{
     if (method == QCryptographicHash::Blake2b_160 ||
         method == QCryptographicHash::Blake2b_256 ||
         method == QCryptographicHash::Blake2b_384) {
         blake2b_init(&blake2bContext, hashLengthInternal(method));
-        return;
     } else if (method == QCryptographicHash::Blake2s_128 ||
                method == QCryptographicHash::Blake2s_160 ||
                method == QCryptographicHash::Blake2s_224) {
         blake2s_init(&blake2sContext, hashLengthInternal(method));
-        return;
+    } else {
+        evp.reset();
     }
+}
 
+void QCryptographicHashPrivate::EVP::reset() noexcept
+{
     if (!initializationFailed) {
         Q_ASSERT(context);
         Q_ASSERT(algorithm);
@@ -672,9 +712,8 @@ void QCryptographicHashPrivate::reset() noexcept
 
 #else // USING_OPENSSL30
 
-void QCryptographicHashPrivate::reset() noexcept
+void QCryptographicHashPrivate::State::reset(QCryptographicHash::Algorithm method) noexcept
 {
-    result.clear();
     switch (method) {
     case QCryptographicHash::Sha1:
         sha1InitState(&sha1Context);
@@ -759,9 +798,16 @@ void QCryptographicHash::addData(QByteArrayView bytes) noexcept
     d->addData(bytes);
 }
 
+void QCryptographicHashPrivate::addData(QByteArrayView bytes) noexcept
+{
+    state.addData(method, bytes);
+    result.clear();
+}
+
 #ifdef USING_OPENSSL30
 
-void QCryptographicHashPrivate::addData(QByteArrayView bytes) noexcept
+void QCryptographicHashPrivate::State::addData(QCryptographicHash::Algorithm method,
+                                               QByteArrayView bytes) noexcept
 {
     const char *data = bytes.data();
     auto length = bytes.size();
@@ -775,16 +821,16 @@ void QCryptographicHashPrivate::addData(QByteArrayView bytes) noexcept
                 method == QCryptographicHash::Blake2s_160 ||
                 method == QCryptographicHash::Blake2s_224) {
             blake2s_update(&blake2sContext, reinterpret_cast<const uint8_t *>(data), length);
-        } else if (!initializationFailed) {
-            EVP_DigestUpdate(context.get(), (const unsigned char *)data, length);
+        } else if (!evp.initializationFailed) {
+            EVP_DigestUpdate(evp.context.get(), (const unsigned char *)data, length);
         }
     }
-    result.clear();
 }
 
 #else // USING_OPENSSL30
 
-void QCryptographicHashPrivate::addData(QByteArrayView bytes) noexcept
+void QCryptographicHashPrivate::State::addData(QCryptographicHash::Algorithm method,
+                                               QByteArrayView bytes) noexcept
 {
     const char *data = bytes.data();
     auto length = bytes.size();
@@ -853,7 +899,6 @@ void QCryptographicHashPrivate::addData(QByteArrayView bytes) noexcept
             Q_UNREACHABLE();
         }
     }
-    result.clear();
 }
 #endif // !USING_OPENSSL30
 
@@ -933,8 +978,14 @@ void QCryptographicHashPrivate::finalize() noexcept
     Must be called with finalizeMutex held (except from static hash() function,
     where no sharing can take place).
 */
-#ifdef USING_OPENSSL30
 void QCryptographicHashPrivate::finalizeUnchecked() noexcept
+{
+    state.finalizeUnchecked(method, result);
+}
+
+#ifdef USING_OPENSSL30
+void QCryptographicHashPrivate::State::finalizeUnchecked(QCryptographicHash::Algorithm method,
+                                                         HashResult &result) noexcept
 {
     if (method == QCryptographicHash::Blake2b_160 ||
         method == QCryptographicHash::Blake2b_256 ||
@@ -950,7 +1001,14 @@ void QCryptographicHashPrivate::finalizeUnchecked() noexcept
         blake2s_state copy = blake2sContext;
         result.resizeForOverwrite(length);
         blake2s_final(&copy, result.data(), length);
-    } else if (!initializationFailed) {
+    } else {
+        evp.finalizeUnchecked(result);
+    }
+}
+
+void QCryptographicHashPrivate::EVP::finalizeUnchecked(HashResult &result) noexcept
+{
+    if (!initializationFailed) {
         EVP_MD_CTX_ptr copy = EVP_MD_CTX_ptr(EVP_MD_CTX_new());
         EVP_MD_CTX_copy_ex(copy.get(), context.get());
         result.resizeForOverwrite(EVP_MD_get_size(algorithm.get()));
@@ -960,7 +1018,8 @@ void QCryptographicHashPrivate::finalizeUnchecked() noexcept
 
 #else // USING_OPENSSL30
 
-void QCryptographicHashPrivate::finalizeUnchecked() noexcept
+void QCryptographicHashPrivate::State::finalizeUnchecked(QCryptographicHash::Algorithm method,
+                                                         HashResult &result) noexcept
 {
     switch (method) {
     case QCryptographicHash::Sha1: {
@@ -1016,14 +1075,14 @@ void QCryptographicHashPrivate::finalizeUnchecked() noexcept
     case QCryptographicHash::RealSha3_256:
     case QCryptographicHash::RealSha3_384:
     case QCryptographicHash::RealSha3_512: {
-        sha3Finish(8 * hashLengthInternal(method), Sha3Variant::Sha3);
+        sha3Finish(result, 8 * hashLengthInternal(method), Sha3Variant::Sha3);
         break;
     }
     case QCryptographicHash::Keccak_224:
     case QCryptographicHash::Keccak_256:
     case QCryptographicHash::Keccak_384:
     case QCryptographicHash::Keccak_512: {
-        sha3Finish(8 * hashLengthInternal(method), Sha3Variant::Keccak);
+        sha3Finish(result, 8 * hashLengthInternal(method), Sha3Variant::Keccak);
         break;
     }
     case QCryptographicHash::Blake2b_160:

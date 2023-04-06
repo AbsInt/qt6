@@ -117,20 +117,26 @@ void QCocoaWindow::initialize()
     if (!m_view)
         m_view = [[QNSView alloc] initWithCocoaWindow:this];
 
-    // Compute the initial geometry based on the geometry set on the
-    // QWindow. This geometry has already been reflected to the
-    // QPlatformWindow in the constructor, so to ensure that the
-    // resulting setGeometry call does not think the geometry has
-    // already been applied, we reset the QPlatformWindow's view
-    // of the geometry first.
-    auto initialGeometry = QPlatformWindow::initialGeometry(window(),
-        windowGeometry(), defaultWindowWidth, defaultWindowHeight);
-    QPlatformWindow::d_ptr->rect = QRect();
-    setGeometry(initialGeometry);
+    if (!isForeignWindow()) {
+        // Compute the initial geometry based on the geometry set on the
+        // QWindow. This geometry has already been reflected to the
+        // QPlatformWindow in the constructor, so to ensure that the
+        // resulting setGeometry call does not think the geometry has
+        // already been applied, we reset the QPlatformWindow's view
+        // of the geometry first.
+        auto initialGeometry = QPlatformWindow::initialGeometry(window(),
+            windowGeometry(), defaultWindowWidth, defaultWindowHeight);
+        QPlatformWindow::d_ptr->rect = QRect();
+        setGeometry(initialGeometry);
+
+        setMask(QHighDpi::toNativeLocalRegion(window()->mask(), window()));
+
+    } else {
+        // Pick up essential foreign window state
+        QPlatformWindow::setGeometry(QRectF::fromCGRect(m_view.frame).toRect());
+    }
 
     recreateWindowIfNeeded();
-
-    setMask(QHighDpi::toNativeLocalRegion(window()->mask(), window()));
 
     m_initialized = true;
 }
@@ -338,6 +344,9 @@ void QCocoaWindow::setVisible(bool visible)
 
         }
 
+        // Make the NSView visible first, before showing the NSWindow (in case of top level windows)
+        m_view.hidden = NO;
+
         if (isContentView()) {
             QWindowSystemInterface::flushWindowSystemEvents(QEventLoop::ExcludeUserInputEvents);
 
@@ -375,13 +384,6 @@ void QCocoaWindow::setVisible(bool visible)
                 }
             }
         }
-
-        // In some cases, e.g. QDockWidget, the content view is hidden before moving to its own
-        // Cocoa window, and then shown again. Therefore, we test for the view being hidden even
-        // if it's attached to an NSWindow.
-        if ([m_view isHidden])
-            [m_view setHidden:NO];
-
     } else {
         // Window not visible, hide it
         if (isContentView()) {
@@ -410,9 +412,9 @@ void QCocoaWindow::setVisible(bool visible)
                 if (mainWindow && [mainWindow canBecomeKeyWindow])
                     [mainWindow makeKeyWindow];
             }
-        } else {
-            [m_view setHidden:YES];
         }
+
+        m_view.hidden = YES;
 
         if (parentCocoaWindow && window()->type() == Qt::Popup) {
             NSWindow *nativeParentWindow = parentCocoaWindow->nativeWindow();
@@ -1439,6 +1441,14 @@ void QCocoaWindow::recreateWindowIfNeeded()
 {
     QMacAutoReleasePool pool;
 
+    if (isForeignWindow()) {
+        // A foreign window is created as such, and can never move between being
+        // foreign and not, so we don't need to get rid of any existing NSWindows,
+        // nor create new ones, as a foreign window is a single simple NSView.
+        qCDebug(lcQpaWindow) << "Skipping NSWindow management for foreign window" << this;
+        return;
+    }
+
     QPlatformWindow *parentWindow = QPlatformWindow::parent();
 
     const bool isEmbeddedView = isEmbedded();
@@ -1509,20 +1519,9 @@ void QCocoaWindow::recreateWindowIfNeeded()
         }
     }
 
-    if (isEmbeddedView) {
-        // An embedded window doesn't have its own NSWindow.
-    } else if (!parentWindow) {
-        // QPlatformWindow subclasses must sync up with QWindow on creation:
-        propagateSizeHints();
-        setWindowFlags(window()->flags());
-        setWindowTitle(window()->title());
-        setWindowFilePath(window()->filePath()); // Also sets window icon
-        setWindowState(window()->windowState());
-        setOpacity(window()->opacity());
-    } else {
+    if (parentCocoaWindow) {
         // Child windows have no NSWindow, re-parent to superview instead
         [parentCocoaWindow->m_view addSubview:m_view];
-        [m_view setHidden:!window()->isVisible()];
     }
 }
 

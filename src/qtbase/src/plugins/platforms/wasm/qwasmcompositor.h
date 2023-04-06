@@ -12,21 +12,16 @@
 #include <QtGui/qinputdevice.h>
 #include <QtCore/private/qstdweb_p.h>
 
-#include <QPointer>
-#include <QPointingDevice>
-
 #include <emscripten/html5.h>
 #include <emscripten/emscripten.h>
 #include <emscripten/bind.h>
 
 QT_BEGIN_NAMESPACE
 
-struct PointerEvent;
 class QWasmWindow;
 class QWasmScreen;
 class QOpenGLContext;
 class QOpenGLTexture;
-class QWasmEventTranslator;
 
 class QWasmCompositor final : public QObject
 {
@@ -34,8 +29,6 @@ class QWasmCompositor final : public QObject
 public:
     QWasmCompositor(QWasmScreen *screen);
     ~QWasmCompositor() final;
-
-    void initEventHandlers();
 
     void addWindow(QWasmWindow *window);
     void removeWindow(QWasmWindow *window);
@@ -69,11 +62,8 @@ private:
     void deliverUpdateRequests();
     void deliverUpdateRequest(QWasmWindow *window, UpdateRequestDeliveryType updateType);
 
-    static int keyboard_cb(int eventType, const EmscriptenKeyboardEvent *keyEvent, void *userData);
-
     static int touchCallback(int eventType, const EmscriptenTouchEvent *ev, void *userData);
 
-    bool processKeyboard(int eventType, const EmscriptenKeyboardEvent *keyEvent);
     bool processTouch(int eventType, const EmscriptenTouchEvent *touchEvent);
 
     void updateEnabledState();
@@ -85,12 +75,6 @@ private:
     bool m_requestUpdateAllWindows = false;
     int m_requestAnimationFrameId = -1;
     bool m_inDeliverUpdateRequest = false;
-
-    std::unique_ptr<QPointingDevice> m_touchDevice;
-
-    QMap <int, QPointF> m_pressedTouchIds;
-
-    std::unique_ptr<QWasmEventTranslator> m_eventTranslator;
 };
 
 QT_END_NAMESPACE
