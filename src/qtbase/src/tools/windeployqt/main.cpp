@@ -79,10 +79,6 @@ static void assignKnownModuleIds()
 #undef DECLARE_KNOWN_MODULE
 #undef DEFINE_KNOWN_MODULE
 
-enum QtPlugin {
-    QtVirtualKeyboardPlugin = 0x1
-};
-
 static const char webEngineProcessC[] = "QtWebEngineProcess";
 
 static inline QString webProcessBinary(const char *binaryName, Platform p)
@@ -167,7 +163,7 @@ struct Options {
     bool translations = true;
     bool systemD3dCompiler = true;
     bool compilerRunTime = false;
-    unsigned disabledPlugins = 0;
+    QStringList disabledPluginTypes;
     bool softwareRasterizer = true;
     Platform platform = WindowsDesktopMsvc;
     ModuleBitset additionalLibraries;
@@ -383,6 +379,11 @@ static inline int parseArguments(const QStringList &arguments, QCommandLineParse
                                        QStringLiteral("Skip plugin deployment."));
     parser->addOption(noPluginsOption);
 
+    QCommandLineOption skipPluginTypesOption(QStringLiteral("skip-plugin-types"),
+                                         QStringLiteral("A comma-separated list of plugin types that are not deployed (qmltooling,generic)."),
+                                         QStringLiteral("plugin types"));
+    parser->addOption(skipPluginTypesOption);
+
     QCommandLineOption noLibraryOption(QStringLiteral("no-libraries"),
                                        QStringLiteral("Skip library deployment."));
     parser->addOption(noLibraryOption);
@@ -419,10 +420,6 @@ static inline int parseArguments(const QStringList &arguments, QCommandLineParse
     QCommandLineOption compilerRunTimeOption(QStringLiteral("compiler-runtime"),
                                              QStringLiteral("Deploy compiler runtime (Desktop only)."));
     parser->addOption(compilerRunTimeOption);
-
-    QCommandLineOption noVirtualKeyboardOption(QStringLiteral("no-virtualkeyboard"),
-                                               QStringLiteral("Disable deployment of the Virtual Keyboard."));
-    parser->addOption(noVirtualKeyboardOption);
 
     QCommandLineOption noCompilerRunTimeOption(QStringLiteral("no-compiler-runtime"),
                                              QStringLiteral("Do not deploy compiler runtime (Desktop only)."));
@@ -506,8 +503,8 @@ static inline int parseArguments(const QStringList &arguments, QCommandLineParse
         return CommandLineParseError;
     }
 
-    if (parser->isSet(noVirtualKeyboardOption))
-        options->disabledPlugins |= QtVirtualKeyboardPlugin;
+    if (parser->isSet(skipPluginTypesOption))
+        options->disabledPluginTypes = parser->value(skipPluginTypesOption).split(u',');
 
     if (parser->isSet(releaseWithDebugInfoOption))
         std::wcerr << "Warning: " << releaseWithDebugInfoOption.names().first() << " is obsolete.";
@@ -806,7 +803,7 @@ private:
     DllDirectoryFileEntryFunction m_dllFilter;
 };
 
-static quint64 qtModule(QString module, const QString &infix)
+static qint64 qtModule(QString module, const QString &infix)
 {
     // Match needle 'path/Qt6Core<infix><d>.dll' or 'path/libQt6Core<infix>.so.5.0'
     const qsizetype lastSlashPos = module.lastIndexOf(u'/');
@@ -827,19 +824,21 @@ static quint64 qtModule(QString module, const QString &infix)
             return qtModule.id;
         }
     }
-    return 0;
+    std::wcerr << "Warning: module " << qPrintable(module) << " could not be found\n";
+    return -1;
 }
 
 // Return the path if a plugin is to be deployed
 static QString deployPlugin(const QString &plugin, const QDir &subDir,
                             ModuleBitset *usedQtModules, const ModuleBitset &disabledQtModules,
-                            unsigned disabledPlugins,
+                            const QStringList &disabledPluginTypes,
                             const QString &libraryLocation, const QString &infix,
                             Platform platform)
 {
+    const QString subDirName = subDir.dirName();
     // Filter out disabled plugins
-    if ((disabledPlugins & QtVirtualKeyboardPlugin)
-        && plugin.startsWith("qtvirtualkeyboardplugin"_L1)) {
+    if (disabledPluginTypes.contains(subDirName)) {
+        std::wcout << "Skipping plugin " << plugin << " due to skipped plugin type " << subDirName << '\n';
         return {};
     }
 
@@ -847,7 +846,7 @@ static QString deployPlugin(const QString &plugin, const QDir &subDir,
     // Deploy QUiTools plugins as is without further dependency checking.
     // The user needs to ensure all required libraries are present (would
     // otherwise pull QtWebEngine for its plugin).
-    if (subDir.dirName() == u"designer")
+    if (subDirName == u"designer")
         return pluginPath;
 
     QStringList dependentQtLibs;
@@ -855,8 +854,11 @@ static QString deployPlugin(const QString &plugin, const QDir &subDir,
     QString errorMessage;
     if (findDependentQtLibraries(libraryLocation, pluginPath, platform,
                                  &errorMessage, &dependentQtLibs)) {
-        for (int d = 0; d < dependentQtLibs.size(); ++ d)
-            neededModules[qtModule(dependentQtLibs.at(d), infix)] = 1;
+        for (int d = 0; d < dependentQtLibs.size(); ++d) {
+            const qint64 module = qtModule(dependentQtLibs.at(d), infix);
+            if (module >= 0)
+                neededModules[module] = 1;
+        }
     } else {
         std::wcerr << "Warning: Cannot determine dependencies of "
             << QDir::toNativeSeparators(pluginPath) << ": " << errorMessage << '\n';
@@ -885,7 +887,7 @@ static QString deployPlugin(const QString &plugin, const QDir &subDir,
 }
 
 QStringList findQtPlugins(ModuleBitset *usedQtModules, const ModuleBitset &disabledQtModules,
-                          unsigned disabledPlugins,
+                          const QStringList &disabledPluginTypes,
                           const QString &qtPluginsDirName, const QString &libraryLocation,
                           const QString &infix,
                           DebugMatchMode debugMatchModeIn, Platform platform, QString *platformPlugin)
@@ -909,11 +911,7 @@ QStringList findQtPlugins(ModuleBitset *usedQtModules, const ModuleBitset &disab
                 ? MatchDebugOrRelease // QTBUG-44331: Debug detection does not work for webengine, deploy all.
                 : debugMatchModeIn;
             QDir subDir(subDirFi.absoluteFilePath());
-            // Filter out disabled plugins
-            if ((disabledPlugins & QtVirtualKeyboardPlugin) && subDirName == "virtualkeyboard"_L1)
-                continue;
-            if (disabledQtModules.test(QtQmlToolingModuleId) && subDirName == "qmltooling"_L1)
-                continue;
+
             // Filter for platform or any.
             QString filter;
             const bool isPlatformPlugin = subDirName == "platforms"_L1;
@@ -938,7 +936,7 @@ QStringList findQtPlugins(ModuleBitset *usedQtModules, const ModuleBitset &disab
             for (const QString &plugin : plugins) {
                 const QString pluginPath =
                     deployPlugin(plugin, subDir, usedQtModules, disabledQtModules,
-                                 disabledPlugins, libraryLocation, infix, platform);
+                                 disabledPluginTypes, libraryLocation, infix, platform);
                 if (!pluginPath.isEmpty()) {
                     if (isPlatformPlugin)
                         *platformPlugin = subDir.absoluteFilePath(plugin);
@@ -995,7 +993,12 @@ static bool deployTranslations(const QString &sourcePath, const ModuleBitset &us
         if (options.json)
             options.json->addFile(sourcePath +  u'/' + targetFile, absoluteTarget);
         arguments.append(QDir::toNativeSeparators(targetFilePath));
-        const QFileInfoList &langQmFiles = sourceDir.entryInfoList(translationNameFilters(usedQtModules, prefix));
+        const QStringList translationFilters = translationNameFilters(usedQtModules, prefix);
+        if (translationFilters.isEmpty()){
+            std::wcerr << "Warning: translation catalogs are all empty, skipping translation deployment\n";
+            return true;
+        }
+        const QFileInfoList &langQmFiles = sourceDir.entryInfoList(translationFilters);
         for (const QFileInfo &langQmFileFi : langQmFiles) {
             if (options.json) {
                 options.json->addFile(langQmFileFi.absoluteFilePath(),
@@ -1027,18 +1030,18 @@ struct DeployResult
 };
 
 static QString libraryPath(const QString &libraryLocation, const char *name,
-                           const QString &qtLibInfix, Platform platform, bool debug)
+                           const QString &infix, Platform platform, bool debug)
 {
     QString result = libraryLocation + u'/';
     if (platform & WindowsBased) {
         result += QLatin1StringView(name);
-        result += qtLibInfix;
+        result += infix;
         if (debug && platformHasDebugSuffix(platform))
             result += u'd';
     } else if (platform.testFlag(UnixBased)) {
         result += QStringLiteral("lib");
         result += QLatin1StringView(name);
-        result += qtLibInfix;
+        result += infix;
     }
     result += sharedLibrarySuffix(platform);
     return result;
@@ -1159,16 +1162,6 @@ static inline int qtVersion(const QMap<QString, QString> &qtpathsVariables)
     return (majorVersion << 16) | (minorVersion << 8) | patchVersion;
 }
 
-// Determine the Qt lib infix from the library path of "Qt6Core<qtblibinfix>[d].dll".
-static inline QString qtlibInfixFromCoreLibName(const QString &path, bool isDebug, Platform platform)
-{
-    const qsizetype startPos = path.lastIndexOf(u'/') + 8;
-    qsizetype endPos = path.lastIndexOf(u'.');
-    if (isDebug && (platform & WindowsBased))
-        endPos--;
-    return endPos > startPos ? path.mid(startPos, endPos - startPos) : QString();
-}
-
 // Deploy a library along with its .pdb debug info file (MSVC) should it exist.
 static bool updateLibrary(const QString &sourceFileName, const QString &targetDirectory,
                           const Options &options, QString *errorMessage)
@@ -1257,12 +1250,10 @@ static DeployResult deploy(const Options &options, const QMap<QString, QString> 
 
     // Determine application type, check Quick2 is used by looking at the
     // direct dependencies (do not be fooled by QtWebKit depending on it).
-    QString qtLibInfix;
     for (int m = 0; m < dependentQtLibs.size(); ++m) {
-        const quint64 module = qtModule(dependentQtLibs.at(m), infix);
-        result.directlyUsedQtLibraries[module] = 1;
-        if (module == QtCoreModuleId)
-            qtLibInfix = qtlibInfixFromCoreLibName(dependentQtLibs.at(m), detectedDebug, options.platform);
+        const qint64 module = qtModule(dependentQtLibs.at(m), infix);
+        if (module >= 0)
+            result.directlyUsedQtLibraries[module] = 1;
     }
 
     const bool usesQml = result.directlyUsedQtLibraries.test(QtQmlModuleId);
@@ -1373,8 +1364,9 @@ static DeployResult deploy(const Options &options, const QMap<QString, QString> 
     // QtModule enumeration (and thus controlled by flags) and others.
     QStringList deployedQtLibraries;
     for (int i = 0 ; i < dependentQtLibs.size(); ++i)  {
-        if (const quint64 qtm = qtModule(dependentQtLibs.at(i), infix))
-            result.usedQtLibraries[qtm] = 1;
+        const qint64 module = qtModule(dependentQtLibs.at(i), infix);
+        if (module >= 0)
+            result.usedQtLibraries[module] = 1;
         else
             deployedQtLibraries.push_back(dependentQtLibs.at(i)); // Not represented by flag.
     }
@@ -1390,14 +1382,14 @@ static DeployResult deploy(const Options &options, const QMap<QString, QString> 
             // For non-QML applications, disable QML to prevent it from being pulled in by the
             // qtaccessiblequick plugin.
             disabled,
-            options.disabledPlugins, qtpathsVariables.value(QStringLiteral("QT_INSTALL_PLUGINS")),
+            options.disabledPluginTypes, qtpathsVariables.value(QStringLiteral("QT_INSTALL_PLUGINS")),
             libraryLocation, infix, debugMatchMode, options.platform, &platformPlugin);
 
     // Apply options flags and re-add library names.
     QString qtGuiLibrary;
     for (const auto &qtModule : qtModuleEntries) {
         if (result.deployedQtLibraries.test(qtModule.id)) {
-            const QString library = libraryPath(libraryLocation, qtModule.name.toUtf8(), qtLibInfix,
+            const QString library = libraryPath(libraryLocation, qtModule.name.toUtf8(), infix,
                                                 options.platform, result.isDebug);
             deployedQtLibraries.append(library);
             if (qtModule.id == QtGuiModuleId)
@@ -1451,7 +1443,7 @@ static DeployResult deploy(const Options &options, const QMap<QString, QString> 
 
 #if !QT_CONFIG(relocatable)
         if (options.patchQt  && !options.dryRun) {
-            const QString qt6CoreName = QFileInfo(libraryPath(libraryLocation, "Qt6Core", qtLibInfix,
+            const QString qt6CoreName = QFileInfo(libraryPath(libraryLocation, "Qt6Core", infix,
                                                               options.platform, result.isDebug)).fileName();
             if (!patchQtCore(targetPath + u'/' + qt6CoreName, errorMessage)) {
                 std::wcerr << "Warning: " << *errorMessage << '\n';
