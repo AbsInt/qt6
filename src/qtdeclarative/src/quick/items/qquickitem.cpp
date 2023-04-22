@@ -2376,7 +2376,7 @@ bool QQuickItemPrivate::canAcceptTabFocus(QQuickItem *item)
         return true;
 
 #if QT_CONFIG(accessibility)
-    QAccessible::Role role = QQuickItemPrivate::get(item)->accessibleRole();
+    QAccessible::Role role = QQuickItemPrivate::get(item)->effectiveAccessibleRole();
     if (role == QAccessible::EditableText || role == QAccessible::Table || role == QAccessible::List) {
         return true;
     } else if (role == QAccessible::ComboBox || role == QAccessible::SpinBox) {
@@ -6322,7 +6322,11 @@ void QQuickItem::setOpacity(qreal newOpacity)
 
     \note This property's value is only affected by changes to this property or
     the parent's \c visible property. It does not change, for example, if this
-    item moves off-screen, or if the \l opacity changes to 0.
+    item moves off-screen, or if the \l opacity changes to 0. However, for
+    historical reasons, this property is true after the item's construction, even
+    if the item hasn't been added to a scene yet. Changing or reading this
+    property of an item that has not been added to a scene might not produce
+    the expected results.
 
     \note The notification signal for this property gets emitted during destruction
     of the visual parent. C++ signal handlers cannot assume that items in the
@@ -9727,13 +9731,20 @@ QQuickItemPrivate::ExtraData::ExtraData()
 
 
 #if QT_CONFIG(accessibility)
-QAccessible::Role QQuickItemPrivate::accessibleRole() const
+QAccessible::Role QQuickItemPrivate::effectiveAccessibleRole() const
 {
     Q_Q(const QQuickItem);
-    QQuickAccessibleAttached *accessibleAttached = qobject_cast<QQuickAccessibleAttached *>(qmlAttachedPropertiesObject<QQuickAccessibleAttached>(q, false));
-    if (accessibleAttached)
-        return accessibleAttached->role();
+    auto *attached = qmlAttachedPropertiesObject<QQuickAccessibleAttached>(q, false);
+    auto role = QAccessible::NoRole;
+    if (auto *accessibleAttached = qobject_cast<QQuickAccessibleAttached *>(attached))
+        role = accessibleAttached->role();
+    if (role == QAccessible::NoRole)
+        role = accessibleRole();
+    return role;
+}
 
+QAccessible::Role QQuickItemPrivate::accessibleRole() const
+{
     return QAccessible::NoRole;
 }
 #endif

@@ -691,8 +691,6 @@ void QOpenGLWidgetPrivate::reset()
 
     destroyFbos();
 
-    resetRhiDependentResources();
-
     if (initialized)
         q->doneCurrent();
 
@@ -965,6 +963,10 @@ void QOpenGLWidgetPrivate::render()
     f->glViewport(0, 0, q->width() * q->devicePixelRatio(), q->height() * q->devicePixelRatio());
     inPaintGL = true;
 
+#ifdef Q_OS_WASM
+    f->glDepthMask(GL_TRUE);
+#endif
+
     QOpenGLContextPrivate::get(ctx)->defaultFboRedirect = fbos[currentTargetBuffer]->handle();
     q->paintGL();
 
@@ -1016,6 +1018,8 @@ void QOpenGLWidgetPrivate::destroyFbos()
     fbos[QOpenGLWidget::RightBuffer] = nullptr;
     delete resolvedFbos[QOpenGLWidget::RightBuffer];
     resolvedFbos[QOpenGLWidget::RightBuffer] = nullptr;
+
+    resetRhiDependentResources();
 }
 
 QImage QOpenGLWidgetPrivate::grabFramebuffer()

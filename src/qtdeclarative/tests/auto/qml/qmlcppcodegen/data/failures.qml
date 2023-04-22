@@ -62,4 +62,12 @@ QtObject {
         let a;
         return a;
     }
+
+    function getText(myArr: list<string>): string {
+        myArr.shiftss()
+    }
+
+    function readTracks(metadataList : list<badType>): int {
+        return metadataList.length
+    }
 }
