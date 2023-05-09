@@ -658,7 +658,7 @@ bool QQmlJSTypePropagator::checkForEnumProblems(
 
 void QQmlJSTypePropagator::generate_LoadElement(int base)
 {
-    const QQmlJSRegisterContent baseRegister = m_state.registers[base];
+    const QQmlJSRegisterContent baseRegister = m_state.registers[base].content;
 
     if ((baseRegister.storedType()->accessSemantics() != QQmlJSScope::AccessSemantics::Sequence
          && !m_typeResolver->registerIsStoredIn(baseRegister, m_typeResolver->stringType()))
@@ -684,7 +684,7 @@ void QQmlJSTypePropagator::generate_LoadElement(int base)
 
 void QQmlJSTypePropagator::generate_StoreElement(int base, int index)
 {
-    const QQmlJSRegisterContent baseRegister = m_state.registers[base];
+    const QQmlJSRegisterContent baseRegister = m_state.registers[base].content;
     const QQmlJSRegisterContent indexRegister = checkedInputRegister(index);
 
     if (baseRegister.storedType()->accessSemantics() != QQmlJSScope::AccessSemantics::Sequence
@@ -868,7 +868,7 @@ void QQmlJSTypePropagator::generate_GetOptionalLookup(int index, int offset)
 
 void QQmlJSTypePropagator::generate_StoreProperty(int nameIndex, int base)
 {
-    auto callBase = m_state.registers[base];
+    auto callBase = m_state.registers[base].content;
     const QString propertyName = m_jsUnitGenerator->stringForIndex(nameIndex);
 
     QQmlJSRegisterContent property = m_typeResolver->memberType(callBase, propertyName);
@@ -967,7 +967,7 @@ static bool isLoggingMethod(const QString &consoleMethod)
 void QQmlJSTypePropagator::generate_CallProperty(int nameIndex, int base, int argc, int argv)
 {
     Q_ASSERT(m_state.registers.contains(base));
-    const auto callBase = m_state.registers[base];
+    const auto callBase = m_state.registers[base].content;
     const QString propertyName = m_jsUnitGenerator->stringForIndex(nameIndex);
 
     if (m_typeResolver->registerContains(
@@ -1002,7 +1002,7 @@ void QQmlJSTypePropagator::generate_CallProperty(int nameIndex, int base, int ar
 
         if (argc > 0) {
             const QQmlJSScope::ConstPtr firstArg
-                    = m_typeResolver->containedType(m_state.registers[argv]);
+                    = m_typeResolver->containedType(m_state.registers[argv].content);
             if (firstArg->isReferenceType()) {
                 // We cannot know whether this will be a logging category at run time.
                 // Therefore we always pass any object types as special last argument.
@@ -1084,10 +1084,11 @@ QQmlJSMetaMethod QQmlJSTypePropagator::bestMatchForCall(const QList<QQmlJSMetaMe
                                                         int argc, int argv, QStringList *errors)
 {
     QQmlJSMetaMethod javascriptFunction;
+    QQmlJSMetaMethod candidate;
     for (const auto &method : methods) {
 
         // If we encounter a JavaScript function, use this as a fallback if no other method matches
-        if (method.isJavaScriptFunction())
+        if (method.isJavaScriptFunction() && !javascriptFunction.isValid())
             javascriptFunction = method;
 
         if (method.returnType().isNull() && !method.returnTypeName().isEmpty()) {
@@ -1104,33 +1105,42 @@ QQmlJSMetaMethod QQmlJSTypePropagator::bestMatchForCall(const QList<QQmlJSMetaMe
             continue;
         }
 
-        bool matches = true;
+        bool fuzzyMatch = true;
+        bool exactMatch = true;
         for (int i = 0; i < argc; ++i) {
             const auto argumentType = arguments[i].type();
             if (argumentType.isNull()) {
                 errors->append(
                         u"type %1 for argument %2 cannot be resolved"_s.arg(arguments[i].typeName())
                                 .arg(i));
-                matches = false;
+                exactMatch = false;
+                fuzzyMatch = false;
                 break;
             }
 
-            if (canConvertFromTo(m_state.registers[argv + i],
-                                 m_typeResolver->globalType(argumentType))) {
+            const auto content = m_state.registers[argv + i].content;
+            if (m_typeResolver->registerContains(content, argumentType))
                 continue;
-            }
+
+            exactMatch = false;
+            if (canConvertFromTo(content, m_typeResolver->globalType(argumentType)))
+                continue;
 
             errors->append(
                     u"argument %1 contains %2 but is expected to contain the type %3"_s.arg(i).arg(
-                            m_state.registers[argv + i].descriptiveName(),
+                            m_state.registers[argv + i].content.descriptiveName(),
                             arguments[i].typeName()));
-            matches = false;
+            fuzzyMatch = false;
             break;
         }
-        if (matches)
+
+        if (exactMatch)
             return method;
+        else if (fuzzyMatch && !candidate.isValid())
+            candidate = method;
     }
-    return javascriptFunction;
+
+    return candidate.isValid() ? candidate : javascriptFunction;
 }
 
 void QQmlJSTypePropagator::setAccumulator(const QQmlJSRegisterContent &content)
@@ -1170,13 +1180,13 @@ void QQmlJSTypePropagator::mergeRegister(
         if (conversion == it->second.typeConversions.end())
             return false;
 
-        const QQmlJSRegisterContent &lastTry = conversion.value();
+        const VirtualRegister &lastTry = conversion.value();
 
-        Q_ASSERT(lastTry.isValid());
-        Q_ASSERT(lastTry.isConversion());
+        Q_ASSERT(lastTry.content.isValid());
+        Q_ASSERT(lastTry.content.isConversion());
 
-        if (!m_typeResolver->equals(lastTry.conversionResult(), merged.conversionResult())
-                || lastTry.conversionOrigins() != merged.conversionOrigins()) {
+        if (!m_typeResolver->equals(lastTry.content.conversionResult(), merged.conversionResult())
+                || lastTry.content.conversionOrigins() != merged.conversionOrigins()) {
             return false;
         }
 
@@ -1189,14 +1199,15 @@ void QQmlJSTypePropagator::mergeRegister(
     if (!tryPrevStateConversion(index, merged)) {
         merged = m_typeResolver->tracked(merged);
         Q_ASSERT(merged.isValid());
-        m_state.annotations[currentInstructionOffset()].typeConversions[index] = merged;
-        m_state.registers[index] = merged;
+        m_state.annotations[currentInstructionOffset()].typeConversions[index].content = merged;
+        m_state.registers[index].content = merged;
     }
 }
 
 void QQmlJSTypePropagator::addReadRegister(int index, const QQmlJSRegisterContent &convertTo)
 {
-    m_state.addReadRegister(index, m_typeResolver->convert(m_state.registers[index], convertTo));
+    m_state.addReadRegister(
+            index, m_typeResolver->convert(m_state.registers[index].content, convertTo));
 }
 
 void QQmlJSTypePropagator::propagateCall(
@@ -1358,7 +1369,8 @@ void QQmlJSTypePropagator::propagateStringArgCall(int argv)
                        m_typeResolver->stringType()));
     Q_ASSERT(m_state.accumulatorOut().isValid());
 
-    const QQmlJSScope::ConstPtr input = m_typeResolver->containedType(m_state.registers[argv]);
+    const QQmlJSScope::ConstPtr input = m_typeResolver->containedType(
+            m_state.registers[argv].content);
     for (QQmlJSScope::ConstPtr targetType : {
          m_typeResolver->intType(),
          m_typeResolver->uintType(),
@@ -1775,7 +1787,7 @@ void QQmlJSTypePropagator::recordEqualsType(int lhs)
     };
 
     const auto accumulatorIn = m_state.accumulatorIn();
-    const auto lhsRegister = m_state.registers[lhs];
+    const auto lhsRegister = m_state.registers[lhs].content;
 
     // If the types are primitive, we compare directly ...
     if (m_typeResolver->isPrimitive(accumulatorIn) || accumulatorIn.isEnumeration()) {
@@ -1823,8 +1835,8 @@ void QQmlJSTypePropagator::recordCompareType(int lhs)
     // They may be casted to double, though.
     const QQmlJSRegisterContent read
             = (m_typeResolver->isNumeric(m_state.accumulatorIn())
-               && m_typeResolver->isNumeric(m_state.registers[lhs]))
-                    ? m_typeResolver->merge(m_state.accumulatorIn(), m_state.registers[lhs])
+               && m_typeResolver->isNumeric(m_state.registers[lhs].content))
+                    ? m_typeResolver->merge(m_state.accumulatorIn(), m_state.registers[lhs].content)
                     : m_typeResolver->globalType(m_typeResolver->jsPrimitiveType());
     addReadRegister(lhs, read);
     addReadAccumulator(read);
@@ -2181,7 +2193,7 @@ QQmlJSTypePropagator::startInstruction(QV4::Moth::Instr::Type type)
              registerIt != end; ++registerIt) {
             const int registerIndex = registerIt.key();
 
-            auto newType = registerIt.value();
+            auto newType = registerIt.value().content;
             if (!newType.isValid()) {
                 setError(u"When reached from offset %1, %2 is undefined"_s
                                  .arg(stateToMerge.originatingOffset)
@@ -2191,7 +2203,7 @@ QQmlJSTypePropagator::startInstruction(QV4::Moth::Instr::Type type)
 
             auto currentRegister = m_state.registers.find(registerIndex);
             if (currentRegister != m_state.registers.end())
-                mergeRegister(registerIndex, newType, currentRegister.value());
+                mergeRegister(registerIndex, newType, currentRegister.value().content);
             else
                 mergeRegister(registerIndex, newType, newType);
         }
@@ -2208,9 +2220,6 @@ void QQmlJSTypePropagator::endInstruction(QV4::Moth::Instr::Type instr)
     currentInstruction.readRegisters = m_state.takeReadRegisters();
     currentInstruction.hasSideEffects = m_state.hasSideEffects();
     currentInstruction.isRename = m_state.isRename();
-    m_state.setHasSideEffects(false);
-    m_state.setIsRename(false);
-    m_state.setReadRegisters(VirtualRegisters());
 
     switch (instr) {
     // the following instructions are not expected to produce output in the accumulator
@@ -2251,9 +2260,16 @@ void QQmlJSTypePropagator::endInstruction(QV4::Moth::Instr::Type instr)
 
     if (m_state.changedRegisterIndex() != InvalidRegister) {
         Q_ASSERT(m_error->isValid() || m_state.changedRegister().isValid());
-        m_state.registers[m_state.changedRegisterIndex()] = m_state.changedRegister();
+        VirtualRegister &r = m_state.registers[m_state.changedRegisterIndex()];
+        r.content = m_state.changedRegister();
+        r.affectedBySideEffects = m_state.isRename()
+                && m_state.isRegisterAffectedBySideEffects(m_state.renameSourceRegisterIndex());
         m_state.clearChangedRegister();
     }
+
+    m_state.setHasSideEffects(false);
+    m_state.setIsRename(false);
+    m_state.setReadRegisters(VirtualRegisters());
 }
 
 QQmlJSRegisterContent QQmlJSTypePropagator::propagateBinaryOperation(QSOperator::Op op, int lhs)
@@ -2323,7 +2339,7 @@ QQmlJSRegisterContent QQmlJSTypePropagator::checkedInputRegister(int reg)
         setError(u"Type error: could not infer the type of an expression"_s);
         return {};
     }
-    return regIt.value();
+    return regIt.value().content;
 }
 
 bool QQmlJSTypePropagator::canConvertFromTo(const QQmlJSRegisterContent &from,

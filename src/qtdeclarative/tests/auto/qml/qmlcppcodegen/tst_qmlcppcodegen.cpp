@@ -168,6 +168,8 @@ private slots:
     void variantMapLookup();
     void enumFromBadSingleton();
     void ambiguousAs();
+    void topLevelComponent();
+    void variantReturn();
 };
 
 void tst_QmlCppCodegen::initTestCase()
@@ -1263,6 +1265,10 @@ void tst_QmlCppCodegen::overriddenProperty()
     QVERIFY2(component.isReady(), component.errorString().toUtf8());
     QScopedPointer<QObject> object(component.create());
     QVERIFY(!object.isNull());
+
+    QObject *child = object->property("child").value<QObject *>();
+    QVERIFY(child);
+
     QCOMPARE(object->objectName(), u"kraut"_s);
     QCOMPARE(object->property("doneThing").toInt(), 5);
     QCOMPARE(object->property("usingFinal").toInt(), 5);
@@ -1273,6 +1279,13 @@ void tst_QmlCppCodegen::overriddenProperty()
         QCOMPARE(object->objectName(), newName);
     };
     checkAssignment();
+
+    QMetaObject::invokeMethod(child, "doString");
+    QCOMPARE(child->objectName(), u"string"_s);
+    QMetaObject::invokeMethod(child, "doNumber");
+    QCOMPARE(child->objectName(), u"double"_s);
+    QMetaObject::invokeMethod(child, "doArray");
+    QCOMPARE(child->objectName(), u"javaScript"_s);
 
     ObjectWithMethod *benign = new ObjectWithMethod(object.data());
     benign->theThing = 10;
@@ -3134,26 +3147,41 @@ void tst_QmlCppCodegen::valueTypeBehavior()
 {
     QQmlEngine engine;
 
-    const QUrl copy(u"qrc:/qt/qml/TestTypes/valueTypeCopy.qml"_s);
+    {
+        const QUrl url(u"qrc:/qt/qml/TestTypes/valueTypeCopy.qml"_s);
+        QQmlComponent c(&engine, url);
+        QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+        QTest::ignoreMessage(QtWarningMsg, bindingLoopMessage(url, 'e'));
+        QTest::ignoreMessage(QtWarningMsg, bindingLoopMessage(url, 'f'));
+        QScopedPointer<QObject> o(c.create());
+        QVERIFY(!o.isNull());
+        QCOMPARE(o->property("e").toDouble(), 45.0);
+        QCOMPARE(o->property("f").toDouble(), 1.0);
+    }
 
-    QQmlComponent c1(&engine, copy);
-    QVERIFY2(c1.isReady(), qPrintable(c1.errorString()));
-    QTest::ignoreMessage(QtWarningMsg, bindingLoopMessage(copy, 'e'));
-    QTest::ignoreMessage(QtWarningMsg, bindingLoopMessage(copy, 'f'));
-    QScopedPointer<QObject> o1(c1.create());
-    QVERIFY(!o1.isNull());
-    QCOMPARE(o1->property("e").toDouble(), 45.0);
-    QCOMPARE(o1->property("f").toDouble(), 1.0);
+    {
+        const QUrl url(u"qrc:/qt/qml/TestTypes/valueTypeReference.qml"_s);
+        QQmlComponent c(&engine, url);
+        QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+        QTest::ignoreMessage(QtWarningMsg, bindingLoopMessage(url, 'e'));
+        QTest::ignoreMessage(QtWarningMsg, bindingLoopMessage(url, 'f'));
+        QScopedPointer<QObject> o(c.create());
+        QVERIFY(!o.isNull());
+        QVERIFY(qIsNaN(o->property("e").toDouble()));
+        QCOMPARE(o->property("f").toDouble(), 5.0);
+    }
 
-    const QUrl reference(u"qrc:/qt/qml/TestTypes/valueTypeReference.qml"_s);
-    QQmlComponent c2(&engine, reference);
-    QVERIFY2(c2.isReady(), qPrintable(c2.errorString()));
-    QTest::ignoreMessage(QtWarningMsg, bindingLoopMessage(reference, 'e'));
-    QTest::ignoreMessage(QtWarningMsg, bindingLoopMessage(reference, 'f'));
-    QScopedPointer<QObject> o2(c2.create());
-    QVERIFY(!o2.isNull());
-    QVERIFY(qIsNaN(o2->property("e").toDouble()));
-    QCOMPARE(o2->property("f").toDouble(), 5.0);
+    {
+        const QUrl url(u"qrc:/qt/qml/TestTypes/valueTypeDefault.qml"_s);
+        QQmlComponent c(&engine, url);
+        QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+        QTest::ignoreMessage(QtWarningMsg, bindingLoopMessage(url, 'e'));
+        QTest::ignoreMessage(QtWarningMsg, bindingLoopMessage(url, 'f'));
+        QScopedPointer<QObject> o(c.create());
+        QVERIFY(!o.isNull());
+        QVERIFY(qIsNaN(o->property("e").toDouble()));
+        QCOMPARE(o->property("f").toDouble(), 5.0);
+    }
 }
 
 void tst_QmlCppCodegen::invisibleSingleton()
@@ -3262,6 +3290,56 @@ void tst_QmlCppCodegen::ambiguousAs()
     QCOMPARE(o->property("other").value<QObject *>(), o.data());
     o->setProperty("useSelf", QVariant::fromValue(false));
     QCOMPARE(o->property("other").value<QObject *>(), nullptr);
+}
+
+void tst_QmlCppCodegen::topLevelComponent()
+{
+    // TODO: Once we stop accepting top level Component elements, this test can be removed.
+
+    QQmlEngine e;
+
+    const QUrl url(u"qrc:/qt/qml/TestTypes/topLevelComponent.qml"_s);
+    QTest::ignoreMessage(
+            QtWarningMsg,
+            qPrintable(url.toString() + u":4:1: Using a Component as the root of a QML document "
+                                        "is deprecated: types defined in qml documents are "
+                                        "automatically wrapped into Components when needed."_s));
+
+    QQmlComponent c(&e, url);
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+    QScopedPointer<QObject> o(c.create());
+    QVERIFY(!o.isNull());
+
+    QQmlComponent *inner = qobject_cast<QQmlComponent *>(o.data());
+    QVERIFY(inner);
+
+    QScopedPointer<QObject> o2(inner->create());
+    QCOMPARE(o2->objectName(), u"foo"_s);
+}
+
+void tst_QmlCppCodegen::variantReturn()
+{
+    QQmlEngine e;
+    QQmlComponent c(&e, QUrl(u"qrc:/qt/qml/TestTypes/variantReturn.qml"_s));
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+
+    QScopedPointer<QObject> o(c.create());
+    QVERIFY(!o.isNull());
+
+    QObject *a = o->property("a").value<QObject *>();
+    QVERIFY(a);
+    const QVariant x = a->property("x");
+    const QMetaObject *meta = x.metaType().metaObject();
+    QVERIFY(meta);
+    const QMetaProperty property = meta->property(meta->indexOfProperty("timeIndex"));
+    QVERIFY(property.isValid());
+    const QVariant timeIndex = property.readOnGadget(x.data());
+    QCOMPARE(timeIndex.metaType(), QMetaType::fromType<qsizetype>());
+    QCOMPARE(timeIndex.value<qsizetype>(), qsizetype(1));
+
+    QObject *b = o->property("b").value<QObject *>();
+    QVERIFY(b);
+    QCOMPARE(b->property("z").toInt(), 2);
 }
 
 QTEST_MAIN(tst_QmlCppCodegen)

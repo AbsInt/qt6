@@ -1402,7 +1402,6 @@ bool QQmlJSImportVisitor::visit(UiObjectDefinition *definition)
             if (isRoot && base->internalName() == u"QQmlComponent") {
                 m_logger->log(u"Qml top level type cannot be 'Component'."_s, qmlTopLevelComponent,
                               definition->qualifiedTypeNameId->identifierToken, true, true);
-                return false;
             }
             if (base->isSingleton() && m_currentScope->isComposite()) {
                 m_logger->log(u"Singleton Type %1 is not creatable."_s.arg(
@@ -1531,9 +1530,11 @@ bool QQmlJSImportVisitor::visit(UiPublicMember *publicMember)
             if (const auto idExpression = cast<IdentifierExpression *>(node)) {
                 aliasExpr.prepend(idExpression->name.toString());
             } else {
+                // cast to expression might have failed above, so use publicMember->statement
+                // to obtain the source location
                 m_logger->log(QStringLiteral("Invalid alias expression. Only IDs and field "
                                              "member expressions can be aliased."),
-                              qmlSyntax, expression->firstSourceLocation());
+                              qmlSyntax, publicMember->statement->firstSourceLocation());
             }
             };
             tryParseAlias();
@@ -2301,9 +2302,9 @@ bool QQmlJSImportVisitor::visit(QQmlJS::AST::UiPragma *pragma)
         }
     } else if (pragma->name == u"ValueTypeBehavior") {
         if (pragma->value == u"Copy") {
-            m_scopesById.setValueTypesAreCopied(true);
+            // Ignore
         } else if (pragma->value == u"Reference") {
-            m_scopesById.setValueTypesAreCopied(false);
+            // Ignore
         } else {
             m_logger->log(
                     u"Unkonwn argument \"%s\" to pragma ValueTypeBehavior"_s
