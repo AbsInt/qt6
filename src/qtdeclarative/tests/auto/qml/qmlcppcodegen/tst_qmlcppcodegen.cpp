@@ -39,6 +39,7 @@ private slots:
     void intOverflow();
     void stringLength();
     void scopeVsObject();
+    void sequenceToIterable();
     void compositeTypeMethod();
     void excessiveParameters();
     void jsImport();
@@ -117,6 +118,7 @@ private slots:
     void typedArray();
     void prefixedType();
     void evadingAmbiguity();
+    void exceptionFromInner();
     void fromBoolValue();
     void invisibleTypes();
     void invalidPropertyType();
@@ -414,6 +416,16 @@ void tst_QmlCppCodegen::scopeVsObject()
     QScopedPointer<QObject> object(component.create());
     QVERIFY(!object.isNull());
     QCOMPARE(object->property("objectName").toString(), u"foobar"_s);
+}
+
+void tst_QmlCppCodegen::sequenceToIterable()
+{
+    QQmlEngine engine;
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/sequenceToIterable.qml"_s));
+    QVERIFY2(!component.isError(), component.errorString().toUtf8());
+    QScopedPointer<QObject> object(component.create());
+    QVERIFY(!object.isNull());
+    QCOMPARE(object->property("c").toInt(), 11);
 }
 
 void tst_QmlCppCodegen::compositeTypeMethod()
@@ -2133,6 +2145,20 @@ void tst_QmlCppCodegen::evadingAmbiguity()
     QScopedPointer<QObject> o2(c2.create());
     QCOMPARE(o2->objectName(), QStringLiteral("Ambiguous"));
     QCOMPARE(o2->property("i").toString(), QStringLiteral("Ambiguous2"));
+}
+
+void tst_QmlCppCodegen::exceptionFromInner()
+{
+    QQmlEngine engine;
+    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/exceptionFromInner.qml"_s));
+    QVERIFY2(!component.isError(), component.errorString().toUtf8());
+    QScopedPointer<QObject> object(component.create());
+    QVERIFY(!object.isNull());
+    QTest::ignoreMessage(
+        QtWarningMsg,
+        "qrc:/qt/qml/TestTypes/exceptionFromInner.qml:7: TypeError: "
+        "Cannot read property 'objectName' of null");
+    QMetaObject::invokeMethod(object.data(), "disbelieveFail");
 }
 
 void tst_QmlCppCodegen::fromBoolValue()
