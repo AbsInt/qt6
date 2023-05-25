@@ -7,30 +7,28 @@
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QWidget>
-#include <QBuffer>
 #include <QXmlStreamReader>
-#include <QUrl>
-
 
 QT_BEGIN_NAMESPACE
 class QLineEdit;
+class QPushButton;
 class QTreeWidget;
 class QTreeWidgetItem;
-class QPushButton;
+class QUrl;
 QT_END_NAMESPACE
 
 class RSSListing : public QWidget
 {
     Q_OBJECT
 public:
-    RSSListing(QWidget *widget = nullptr);
+    explicit RSSListing(const QString &url = QString(), QWidget *widget = nullptr);
 
 public slots:
     void fetch();
     void finished(QNetworkReply *reply);
     void readyRead();
     void metaDataChanged();
-    void itemActivated(QTreeWidgetItem * item);
+    void itemActivated(QTreeWidgetItem *item);
     void error(QNetworkReply::NetworkError);
 
 private:
@@ -48,8 +46,6 @@ private:
     QLineEdit *lineEdit;
     QTreeWidget *treeWidget;
     QPushButton *fetchButton;
-
 };
 
 #endif
-

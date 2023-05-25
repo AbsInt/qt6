@@ -922,7 +922,7 @@ void QProcessPrivate::setErrorAndEmit(QProcess::ProcessError error, const QStrin
     Q_Q(QProcess);
     Q_ASSERT(error != QProcess::UnknownError);
     setError(error, description);
-    emit q->errorOccurred(processError);
+    emit q->errorOccurred(QProcess::ProcessError(processError));
 }
 
 /*!
@@ -1154,7 +1154,7 @@ void QProcessPrivate::processFinished()
     //emit q->standardOutputClosed();
     //emit q->standardErrorClosed();
 
-    emit q->finished(exitCode, exitStatus);
+    emit q->finished(exitCode, QProcess::ExitStatus(exitStatus));
 
 #if defined QPROCESS_DEBUG
     qDebug("QProcessPrivate::processFinished(): process is dead");
@@ -1239,7 +1239,7 @@ QProcess::~QProcess()
 QProcess::ProcessChannelMode QProcess::processChannelMode() const
 {
     Q_D(const QProcess);
-    return d->processChannelMode;
+    return ProcessChannelMode(d->processChannelMode);
 }
 
 /*!
@@ -1269,7 +1269,7 @@ void QProcess::setProcessChannelMode(ProcessChannelMode mode)
 QProcess::InputChannelMode QProcess::inputChannelMode() const
 {
     Q_D(const QProcess);
-    return d->inputChannelMode;
+    return InputChannelMode(d->inputChannelMode);
 }
 
 /*!
@@ -1558,7 +1558,7 @@ void QProcess::setCreateProcessArgumentsModifier(CreateProcessArgumentModifier m
 std::function<void(void)> QProcess::childProcessModifier() const
 {
     Q_D(const QProcess);
-    return d->childProcessModifier;
+    return d->unixExtras ? d->unixExtras->childProcessModifier : std::function<void(void)>();
 }
 
 /*!
@@ -1567,7 +1567,7 @@ std::function<void(void)> QProcess::childProcessModifier() const
     Sets the \a modifier function for the child process, for Unix systems
     (including \macos; for Windows, see setCreateProcessArgumentsModifier()).
     The function contained by the \a modifier argument will be invoked in the
-    child process after \c{fork()} is completed and QProcess has set up the
+    child process after \c{fork()} or \c{vfork()} is completed and QProcess has set up the
     standard file descriptors for the child process, but before \c{execve()},
     inside start(). The modifier is useful to change certain properties of the
     child process, such as setting up additional file descriptors or closing
@@ -1588,12 +1588,23 @@ std::function<void(void)> QProcess::childProcessModifier() const
     "async-signal-safe" is advised). Most of the Qt API is unsafe inside this
     callback, including qDebug(), and may lead to deadlocks.
 
+    \note On some systems (notably, Linux), QProcess will use \c{vfork()}
+    semantics to start the child process, so this function must obey even
+    stricter constraints. First, because it is still sharing memory with the
+    parent process, it must not write to any non-local variable and must obey
+    proper ordering semantics when reading from them, to avoid data races.
+    Second, even more library functions may misbehave; therefore, this function
+    should only make use of low-level system calls, such as \c{read()},
+    \c{write()}, \c{setsid()}, \c{nice()}, and similar.
+
     \sa childProcessModifier()
 */
 void QProcess::setChildProcessModifier(const std::function<void(void)> &modifier)
 {
     Q_D(QProcess);
-    d->childProcessModifier = modifier;
+    if (!d->unixExtras)
+        d->unixExtras.reset(new QProcessPrivate::UnixExtras);
+    d->unixExtras->childProcessModifier = modifier;
 }
 #endif
 
@@ -1684,7 +1695,7 @@ qint64 QProcess::bytesToWrite() const
 QProcess::ProcessError QProcess::error() const
 {
     Q_D(const QProcess);
-    return d->processError;
+    return ProcessError(d->processError);
 }
 
 /*!
@@ -1695,7 +1706,7 @@ QProcess::ProcessError QProcess::error() const
 QProcess::ProcessState QProcess::state() const
 {
     Q_D(const QProcess);
-    return d->processState;
+    return ProcessState(d->processState);
 }
 
 /*!
@@ -2364,7 +2375,7 @@ int QProcess::exitCode() const
 QProcess::ExitStatus QProcess::exitStatus() const
 {
     Q_D(const QProcess);
-    return d->exitStatus;
+    return ExitStatus(d->exitStatus);
 }
 
 /*!

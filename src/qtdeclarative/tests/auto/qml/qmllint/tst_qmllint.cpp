@@ -82,6 +82,8 @@ private Q_SLOTS:
 
     void additionalImplicitImport();
 
+    void qrcUrlImport();
+
     void attachedPropertyReuse();
 
     void missingBuiltinsNoCrash();
@@ -1687,7 +1689,16 @@ void TestQmllint::additionalImplicitImport()
     const auto guard = qScopeGuard([this]() {m_linter.clearCache(); });
     runTest("additionalImplicitImport.qml", Result::clean(), {}, {},
             { testFile("implicitImportResource.qrc") });
+}
 
+void TestQmllint::qrcUrlImport()
+{
+    const auto guard = qScopeGuard([this]() { m_linter.clearCache(); });
+
+    QJsonArray warnings;
+    callQmllint(testFile("untitled/main.qml"), true, &warnings, {}, {},
+                { testFile("untitled/qrcUrlImport.qrc") });
+    checkResult(warnings, Result::clean());
 }
 
 void TestQmllint::attachedPropertyReuse()
@@ -1998,6 +2009,7 @@ void TestQmllint::quickPlugin()
                       13, 31
                 }
             } });
+    runTest("pluginQuick_propertyChangesInvalidTarget.qml", Result {}); // we don't care about the specific warnings
 }
 #endif
 

@@ -193,7 +193,6 @@ void QDnsLookupRunnable::query(const int requestType, const QByteArray &requestN
     // responseLength in case of error, we still can extract the
     // exact error code from the response.
     HEADER *header = (HEADER*)response;
-    const int answerCount = ntohs(header->ancount);
     switch (header->rcode) {
     case NOERROR:
         break;
@@ -227,18 +226,31 @@ void QDnsLookupRunnable::query(const int requestType, const QByteArray &requestN
         return;
     }
 
-    // Skip the query host, type (2 bytes) and class (2 bytes).
     char host[PACKETSZ], answer[PACKETSZ];
     unsigned char *p = response + sizeof(HEADER);
-    int status = local_dn_expand(response, response + responseLength, p, host, sizeof(host));
-    if (status < 0) {
+    int status;
+
+    if (ntohs(header->qdcount) == 1) {
+        // Skip the query host, type (2 bytes) and class (2 bytes).
+        status = local_dn_expand(response, response + responseLength, p, host, sizeof(host));
+        if (status < 0) {
+            reply->error = QDnsLookup::InvalidReplyError;
+            reply->errorString = tr("Could not expand domain name");
+            return;
+        }
+        if ((p - response) + status + 4 >= responseLength)
+            header->qdcount = 0xffff;   // invalid reply below
+        else
+            p += status + 4;
+    }
+    if (ntohs(header->qdcount) > 1) {
         reply->error = QDnsLookup::InvalidReplyError;
-        reply->errorString = tr("Could not expand domain name");
+        reply->errorString = tr("Invalid reply received");
         return;
     }
-    p += status + 4;
 
     // Extract results.
+    const int answerCount = ntohs(header->ancount);
     int answerIndex = 0;
     while ((p < response + responseLength) && (answerIndex < answerCount)) {
         status = local_dn_expand(response, response + responseLength, p, host, sizeof(host));
@@ -250,13 +262,23 @@ void QDnsLookupRunnable::query(const int requestType, const QByteArray &requestN
         const QString name = QUrl::fromAce(host);
 
         p += status;
+
+        if ((p - response) + 10 > responseLength) {
+            // probably just a truncated reply, return what we have
+            return;
+        }
         const quint16 type = (p[0] << 8) | p[1];
         p += 2; // RR type
+        const qint16 rrclass = (p[0] << 8) | p[1];
         p += 2; // RR class
         const quint32 ttl = (p[0] << 24) | (p[1] << 16) | (p[2] << 8) | p[3];
         p += 4;
         const quint16 size = (p[0] << 8) | p[1];
         p += 2;
+        if ((p - response) + size > responseLength)
+            return;             // truncated
+        if (rrclass != C_IN)
+            continue;
 
         if (type == QDnsLookup::A) {
             if (size != 4) {

@@ -1166,10 +1166,11 @@ QtBrowserItem::~QtBrowserItem()
 
 ////////////////////////////////////
 
-typedef QMap<QtAbstractPropertyBrowser *, QMap<QtAbstractPropertyManager *,
-                            QtAbstractEditorFactoryBase *> > Map1;
-typedef QMap<QtAbstractPropertyManager *, QMap<QtAbstractEditorFactoryBase *,
-                            QList<QtAbstractPropertyBrowser *> > > Map2;
+using Map1 = QMap<QtAbstractPropertyBrowser *,
+                  QMap<QtAbstractPropertyManager *, QtAbstractEditorFactoryBase *>>;
+using Map2 = QMap<QtAbstractPropertyManager *,
+                  QMap<QtAbstractEditorFactoryBase *, QList<QtAbstractPropertyBrowser *>>>;
+
 Q_GLOBAL_STATIC(Map1, m_viewToManagerToFactory)
 Q_GLOBAL_STATIC(Map2, m_managerToFactoryToViews)
 
@@ -1295,9 +1296,9 @@ void QtAbstractPropertyBrowserPrivate::createBrowserIndexes(QtProperty *property
             return;
 
         for (QtBrowserItem *idx : it.value())
-            parentToAfter[idx] = 0;
+            parentToAfter[idx] = nullptr;
     } else {
-        parentToAfter[0] = 0;
+        parentToAfter[nullptr] = nullptr;
     }
 
     const QMap<QtBrowserItem *, QtBrowserItem *>::ConstIterator pcend = parentToAfter.constEnd();
@@ -1308,7 +1309,7 @@ void QtAbstractPropertyBrowserPrivate::createBrowserIndexes(QtProperty *property
 QtBrowserItem *QtAbstractPropertyBrowserPrivate::createBrowserIndex(QtProperty *property,
         QtBrowserItem *parentIndex, QtBrowserItem *afterIndex)
 {
-    QtBrowserItem *newIndex = new QtBrowserItem(q_ptr, property, parentIndex);
+    auto *newIndex = new QtBrowserItem(q_ptr, property, parentIndex);
     if (parentIndex) {
         parentIndex->d_ptr->addChild(newIndex, afterIndex);
     } else {
