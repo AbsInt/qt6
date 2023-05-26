@@ -46,10 +46,9 @@ RSSListing::RSSListing(const QString &url, QWidget *parent)
 
     treeWidget = new QTreeWidget(this);
     connect(treeWidget, &QTreeWidget::itemActivated,
-            this, &RSSListing::itemActivated);
-    QStringList headerLabels;
-    headerLabels << tr("Title") << tr("Link");
-    treeWidget->setHeaderLabels(headerLabels);
+            // Open the link in the browser:
+            this, [](QTreeWidgetItem *item) { QDesktopServices::openUrl(QUrl(item->text(1))); });
+    treeWidget->setHeaderLabels(QStringList { tr("Title"), tr("Link") });
     treeWidget->header()->setSectionResizeMode(QHeaderView::ResizeToContents);
 
     QHBoxLayout *hboxLayout = new QHBoxLayout;
@@ -76,7 +75,6 @@ void RSSListing::get(const QUrl &url)
     currentReply = url.isValid() ? manager.get(QNetworkRequest(url)) : nullptr;
     if (currentReply) {
         connect(currentReply, &QNetworkReply::readyRead, this, &RSSListing::readyRead);
-        connect(currentReply, &QNetworkReply::metaDataChanged, this, &RSSListing::metaDataChanged);
         connect(currentReply, &QNetworkReply::errorOccurred, this, &RSSListing::error);
     }
     xml.setDevice(currentReply); // Equivalent to clear() if currentReply is null.
@@ -103,14 +101,6 @@ void RSSListing::fetch()
     treeWidget->clear();
 
     get(QUrl(lineEdit->text()));
-}
-
-void RSSListing::metaDataChanged()
-{
-    const QUrl redirectionTarget =
-        currentReply->attribute(QNetworkRequest::RedirectionTargetAttribute).toUrl();
-    if (redirectionTarget.isValid())
-        get(redirectionTarget);
 }
 
 /*
@@ -177,14 +167,6 @@ void RSSListing::parseXml()
     }
     if (xml.error() && xml.error() != QXmlStreamReader::PrematureEndOfDocumentError)
         qWarning() << "XML ERROR:" << xml.lineNumber() << ": " << xml.errorString();
-}
-
-/*
-    Open the link in the browser
-*/
-void RSSListing::itemActivated(QTreeWidgetItem *item)
-{
-    QDesktopServices::openUrl(QUrl(item->text(1)));
 }
 
 void RSSListing::error(QNetworkReply::NetworkError)
