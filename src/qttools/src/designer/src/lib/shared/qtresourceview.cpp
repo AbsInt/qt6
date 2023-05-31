@@ -32,6 +32,7 @@
 #include <QtCore/qmimedata.h>
 #include <QtCore/qfileinfo.h>
 #include <QtCore/qdir.h>
+#include <QtCore/qhash.h>
 #include <QtCore/qqueue.h>
 
 #include <QtXml/qdom.h>
@@ -137,13 +138,13 @@ public:
     QTreeWidget *m_treeWidget;
     QListWidget *m_listWidget;
     QSplitter *m_splitter = nullptr;
-    QMap<QString, QStringList>       m_pathToContents; // full path to contents file names (full path to its resource filenames)
-    QMap<QString, QString>           m_pathToParentPath; // full path to full parent path
-    QMap<QString, QStringList>       m_pathToSubPaths; // full path to full sub paths
+    QMap<QString, QStringList> m_pathToContents; // full path to contents file names (full path to its resource filenames)
+    QMap<QString, QString> m_pathToParentPath; // full path to full parent path
+    QMap<QString, QStringList> m_pathToSubPaths; // full path to full sub paths
     QMap<QString, QTreeWidgetItem *> m_pathToItem;
-    QMap<QTreeWidgetItem *, QString> m_itemToPath;
+    QHash<QTreeWidgetItem *, QString> m_itemToPath;
     QMap<QString, QListWidgetItem *> m_resourceToItem;
-    QMap<QListWidgetItem *, QString> m_itemToResource;
+    QHash<QListWidgetItem *, QString> m_itemToResource;
     QAction *m_editResourcesAction = nullptr;
     QAction *m_reloadResourcesAction = nullptr;
     QAction *m_copyResourcePathAction = nullptr;
@@ -422,21 +423,18 @@ void QtResourceViewPrivate::filterOutResources()
         bool searchForNewPathWithContents = true;
 
         if (!currentPath.isEmpty()) { // if the currentPath is empty we will search for a new path too
-            QMap<QString, bool>::ConstIterator it = pathToMatchingContents.constFind(currentPath);
+            const auto it = pathToMatchingContents.constFind(currentPath);
             if (it != pathToMatchingContents.constEnd() && it.value()) // the current item has contents, we don't need to search for another path
                 searchForNewPathWithContents = false;
         }
 
         if (searchForNewPathWithContents) {
             // we find the first path with the matching contents
-            QMap<QString, bool>::ConstIterator itContents = pathToMatchingContents.constBegin();
-            while (itContents != pathToMatchingContents.constEnd()) {
+            for (auto itContents = pathToMatchingContents.cbegin(), cend = pathToMatchingContents.cend(); itContents != cend; ++itContents) {
                 if (itContents.value()) {
                     newCurrentPath = itContents.key(); // the new path will be activated
                     break;
                 }
-
-                itContents++;
             }
         }
 

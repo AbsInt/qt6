@@ -77,9 +77,9 @@ QObject *QExtensionFactory::extension(QObject *object, const QString &iid) const
 {
     if (!object)
         return nullptr;
-    const IdObjectKey key = qMakePair(iid, object);
+    const auto key = qMakePair(iid, object);
 
-    ExtensionMap::iterator it = m_extensions.find(key);
+    auto it = m_extensions.find(key);
     if (it == m_extensions.end()) {
         if (QObject *ext = createExtension(object, iid, const_cast<QExtensionFactory*>(this))) {
             connect(ext, &QObject::destroyed, this, &QExtensionFactory::objectDestroyed);
