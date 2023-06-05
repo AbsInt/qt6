@@ -31,10 +31,10 @@ static const char traceMetadataTemplate[] =
 static const size_t traceMetadataSize = sizeof(traceMetadataTemplate);
 
 template <typename T>
-QByteArray &operator<<(QByteArray &arr, T val)
+static QByteArray &operator<<(QByteArray &arr, T val)
 {
     static_assert(std::is_arithmetic_v<T>);
-    arr.append((char *)&val, sizeof(val));
+    arr.append(reinterpret_cast<char *>(&val), sizeof(val));
     return arr;
 }
 
@@ -49,55 +49,62 @@ QCtfLib *QCtfLibImpl::instance()
 
 void QCtfLibImpl::cleanup()
 {
-    if (s_instance)
-        delete s_instance;
+    delete s_instance;
     s_instance = nullptr;
 }
 
 QCtfLibImpl::QCtfLibImpl()
 {
-    QString location = QString::fromUtf8(qgetenv("QTRACE_LOCATION"));
+    QString location = qEnvironmentVariable("QTRACE_LOCATION");
     if (location.isEmpty()) {
-        qCInfo (lcDebugTrace) << "QTRACE_LOCATION not set";
+        qCInfo(lcDebugTrace) << "QTRACE_LOCATION not set";
         return;
     }
 
     // Check if the location is writable
-    FILE *file = nullptr;
-    file = fopen(qPrintable(location + "/metadata"_L1), "w+b");
-    if (!file) {
-        qCWarning (lcDebugTrace) << "Unable to write to location";
+    if (QT_ACCESS(qPrintable(location), W_OK) != 0) {
+        qCWarning(lcDebugTrace) << "Unable to write to location";
         return;
     }
-    fclose(file);
 
     const QString filename = location + QStringLiteral("/session.json");
-    file = fopen(qPrintable(filename), "rb");
+    FILE *file = fopen(qPrintable(filename), "rb");
     if (!file) {
-        qCWarning (lcDebugTrace) << "unable to open session file: " << filename;
+        qCWarning(lcDebugTrace) << "unable to open session file: "
+                                << filename << ", " << qt_error_string();
         m_location = location;
         m_session.tracepoints.append(QStringLiteral("all"));
         m_session.name = QStringLiteral("default");
     } else {
-        fseek(file, 0, SEEK_END);
-        qsizetype pos = ftell(file);
-        fseek(file, 0, SEEK_SET);
-        QByteArray data(pos, Qt::Uninitialized);
-        qsizetype size = (qsizetype)fread(data.data(), 1, pos, file);
+        QT_STATBUF stat;
+        if (QT_FSTAT(QT_FILENO(file), &stat) != 0) {
+            qCWarning(lcDebugTrace) << "Unable to stat session file, " << qt_error_string();
+            return;
+        }
+        qsizetype filesize = qMin(stat.st_size, std::numeric_limits<qsizetype>::max());
+        QByteArray data(filesize, Qt::Uninitialized);
+        qsizetype size = static_cast<qsizetype>(fread(data.data(), 1, filesize, file));
         fclose(file);
-        if (size != pos)
+        if (size != filesize)
             return;
+
         QJsonDocument json(QJsonDocument::fromJson(data));
-
         QJsonObject obj = json.object();
-        QJsonValue value = *obj.begin();
-        if (value.isNull() || !value.isArray())
-            return;
-        m_session.name = obj.begin().key();
-        const QJsonArray arr = value.toArray();
-        for (auto var : arr)
-            m_session.tracepoints.append(var.toString());
-
+        bool valid = false;
+        if (!obj.isEmpty()) {
+            const auto it = obj.begin();
+            if (it.value().isArray()) {
+                m_session.name = it.key();
+                for (auto var : it.value().toArray())
+                    m_session.tracepoints.append(var.toString());
+                valid = true;
+            }
+        }
+        if (!valid) {
+            qCWarning(lcDebugTrace) << "Session file is not valid";
+            m_session.tracepoints.append(QStringLiteral("all"));
+            m_session.name = QStringLiteral("default");
+        }
         m_location = location + QStringLiteral("/ust");
         std::filesystem::create_directory(qPrintable(m_location), qPrintable(location));
     }
