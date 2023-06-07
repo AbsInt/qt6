@@ -707,6 +707,41 @@ QDateTime DateObject::toQDateTime() const
     return d()->toQDateTime();
 }
 
+QString DateObject::toString() const
+{
+    return ToString(d()->date(), engine()->localTZA);
+}
+
+QString DateObject::dateTimeToString(const QDateTime &dateTime, ExecutionEngine *engine)
+{
+    if (!dateTime.isValid())
+        return QStringLiteral("Invalid Date");
+    return ToString(TimeClip(dateTime.toMSecsSinceEpoch()), engine->localTZA);
+}
+
+QDateTime DateObject::stringToDateTime(const QString &string, ExecutionEngine *engine)
+{
+    return ToDateTime(ParseString(string, engine->localTZA), QTimeZone::LocalTime);
+}
+
+QDate DateObject::dateTimeToDate(const QDateTime &dateTime)
+{
+    // If the Date object was parse()d from a string with no time part
+    // or zone specifier it's really the UTC start of the relevant day,
+    // but it's here represented as a local time, which may fall in the
+    // preceding day. See QTBUG-92466 for the gory details.
+    const auto utc = dateTime.toUTC();
+    if (utc.date() != dateTime.date() && utc.addSecs(-1).date() == dateTime.date())
+        return utc.date();
+
+    // This may, of course, be The Wrong Thing if the date was
+    // constructed as a full local date-time that happens to coincide
+    // with the start of a UTC day; however, that would be an odd value
+    // to give to something that, apparently, someone thinks belongs in
+    // a QDate.
+    return dateTime.date();
+}
+
 DEFINE_OBJECT_VTABLE(DateCtor);
 
 void Heap::DateCtor::init(QV4::ExecutionContext *scope)
