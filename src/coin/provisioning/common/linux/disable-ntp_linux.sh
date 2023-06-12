@@ -43,7 +43,7 @@ set -ex
 
 echo "Disable Network Time Protocol (NTP)"
 
-if uname -a |grep -q "Ubuntu"; then
+if uname -a |grep -q "Ubuntu\|Debian" ; then
     sudo timedatectl set-ntp false
 elif cat /etc/os-release | grep "PRETTY_NAME" | grep -q "Leap 15"; then
     (sudo systemctl stop chronyd && sudo systemctl disable chronyd)

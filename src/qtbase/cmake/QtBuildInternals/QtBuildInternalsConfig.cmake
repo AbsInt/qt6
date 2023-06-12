@@ -434,6 +434,12 @@ macro(qt_build_repo_begin)
         add_custom_target(sync_headers)
     endif()
 
+    # The special target that we use to sync 3rd-party headers before the gn run when building
+    # qtwebengine in top-level builds.
+    if(NOT TARGET thirdparty_sync_headers)
+        add_custom_target(thirdparty_sync_headers)
+    endif()
+
     # Add global qt_plugins, qpa_plugins and qpa_default_plugins convenience custom targets.
     # Internal executables will add a dependency on the qpa_default_plugins target,
     # so that building and running a test ensures it won't fail at runtime due to a missing qpa
@@ -1422,12 +1428,6 @@ function(qt_internal_get_filename_path_mode out_var)
     set(mode REALPATH)
     if(APPLE AND QT_ALLOW_SYMLINK_IN_PATHS)
         set(mode ABSOLUTE)
-        message(WARNING
-            "QT_ALLOW_SYMLINK_IN_PATHS is enabled. "
-            "This is not recommended, and it may lead to unexpected issues. "
-            "E.g., When building QtWebEngine, enabling this option may result in build "
-            "issues in certain platforms. See https://bugreports.qt.io/browse/QTBUG-59769."
-        )
     endif()
     set(${out_var} ${mode} PARENT_SCOPE)
 endfunction()
