@@ -409,8 +409,7 @@ bool Moc::parseFunction(FunctionDef *def, bool inMacro)
     def->isVirtual = false;
     def->isStatic = false;
     //skip modifiers and attributes
-    while (test(INLINE) || (test(STATIC) && (def->isStatic = true) == true) ||
-        (test(VIRTUAL) && (def->isVirtual = true) == true) //mark as virtual
+    while (testForFunctionModifiers(def)
         || skipCxxAttributes() || testFunctionAttribute(def) || testFunctionRevision(def)) {}
     bool templateFunction = (lookup() == TEMPLATE);
     def->type = parseType();
@@ -426,6 +425,10 @@ bool Moc::parseFunction(FunctionDef *def, bool inMacro)
         scopedFunctionName = def->type.isScoped;
         def->type = Type("int");
     } else {
+        // we might have modifiers and attributes after a tag
+        // note that testFunctionAttribute is handled further below,
+        // and revisions and attributes must come first
+        while (testForFunctionModifiers(def)) {}
         Type tempType = parseType();;
         while (!tempType.name.isEmpty() && lookup() != LPAREN) {
             if (testFunctionAttribute(def->type.firstToken, def))
@@ -509,14 +512,20 @@ bool Moc::parseFunction(FunctionDef *def, bool inMacro)
     return true;
 }
 
+bool Moc::testForFunctionModifiers(FunctionDef *def)
+{
+    return test(EXPLICIT) || test(INLINE) ||
+            (test(STATIC) && (def->isStatic = true)) ||
+            (test(VIRTUAL) && (def->isVirtual = true));
+}
+
 // like parseFunction, but never aborts with an error
 bool Moc::parseMaybeFunction(const ClassDef *cdef, FunctionDef *def)
 {
     def->isVirtual = false;
     def->isStatic = false;
     //skip modifiers and attributes
-    while (test(EXPLICIT) || test(INLINE) || (test(STATIC) && (def->isStatic = true) == true) ||
-        (test(VIRTUAL) && (def->isVirtual = true) == true) //mark as virtual
+    while (testForFunctionModifiers(def)
         || skipCxxAttributes() || testFunctionAttribute(def) || testFunctionRevision(def)) {}
     bool tilde = test(TILDE);
     def->type = parseType();
@@ -534,6 +543,10 @@ bool Moc::parseMaybeFunction(const ClassDef *cdef, FunctionDef *def)
             def->type = Type("int");
         }
     } else {
+        // ### TODO: The condition before testForFunctionModifiers shoulnd't be necessary,
+        // but otherwise we end up with misparses
+        if (def->isSlot || def->isSignal || def->isInvokable)
+            while (testForFunctionModifiers(def)) {}
         Type tempType = parseType();;
         while (!tempType.name.isEmpty() && lookup() != LPAREN) {
             if (testFunctionAttribute(def->type.firstToken, def))
@@ -611,7 +624,7 @@ void Moc::parse()
         Token t = next();
         switch (t) {
             case NAMESPACE: {
-                int rewind = index;
+                qsizetype rewind = index;
                 if (test(IDENTIFIER)) {
                     QByteArray nsName = lexem();
                     QByteArrayList nested;
@@ -914,7 +927,7 @@ void Moc::parse()
                 default:
                     FunctionDef funcDef;
                     funcDef.access = access;
-                    int rewind = index--;
+                    qsizetype rewind = index--;
                     if (parseMaybeFunction(&def, &funcDef)) {
                         if (funcDef.isConstructor) {
                             if ((access == FunctionDef::Public) && funcDef.isInvokable) {
@@ -1137,8 +1150,9 @@ void Moc::generate(FILE *out, FILE *jsonOutput)
     fprintf(out, "QT_WARNING_DISABLE_GCC(\"-Wuseless-cast\")\n");
 
     fputs("", out);
-    for (int i = 0; i < classList.size(); ++i) {
-        Generator generator(&classList[i], metaTypes, knownQObjectClasses, knownGadgets, out, requireCompleteTypes);
+    for (ClassDef &def : classList) {
+        Generator generator(&def, metaTypes, knownQObjectClasses, knownGadgets, out,
+                            requireCompleteTypes);
         generator.generateCode();
     }
     fputs("", out);
@@ -1695,7 +1709,7 @@ void Moc::parseSlotInPrivate(ClassDef *def, FunctionDef::Access access)
 
 QByteArray Moc::lexemUntil(Token target)
 {
-    int from = index;
+    qsizetype from = index;
     until(target);
     QByteArray s;
     while (from <= index) {
@@ -1731,7 +1745,7 @@ bool Moc::until(Token target) {
     //when searching commas within the default argument, we should take care of template depth (anglecount)
     // unfortunately, we do not have enough semantic information to know if '<' is the operator< or
     // the beginning of a template type. so we just use heuristics.
-    int possible = -1;
+    qsizetype possible = -1;
 
     while (index < symbols.size()) {
         Token t = symbols.at(index++).token;
@@ -1866,7 +1880,7 @@ void Moc::checkProperties(ClassDef *cdef)
         }
 
         if (p.read.isEmpty() && p.member.isEmpty() && p.bind.isEmpty()) {
-            const int rewind = index;
+            const qsizetype rewind = index;
             if (p.location >= 0)
                 index = p.location;
             QByteArray msg = "Property declaration " + p.name + " has neither an associated QProperty<> member"
@@ -1923,7 +1937,7 @@ void Moc::checkProperties(ClassDef *cdef)
                     cdef->nonClassSignalList << p.notify;
                     p.notifyId = -1 - cdef->nonClassSignalList.size();
                 } else {
-                    p.notifyId = -2 - index;
+                    p.notifyId = int(-2 - index);
                 }
             }
         }

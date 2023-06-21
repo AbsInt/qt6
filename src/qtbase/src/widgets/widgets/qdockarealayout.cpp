@@ -171,6 +171,21 @@ QDockAreaLayoutItem
     return *this;
 }
 
+QDebug QDockAreaLayoutItem::operator<<(QDebug dbg)
+{
+    QDebugStateSaver saver(dbg);
+    dbg.nospace();
+    dbg << "QDockAreaLayoutItem(" << static_cast<void *>(this) << "->";
+    if (widgetItem)
+        dbg << "widgetItem(" << widgetItem->widget() << ")";
+    else if (subinfo)
+        dbg << "subInfo(" << subinfo << ")";
+    else if (placeHolderItem)
+        dbg << "placeHolderItem(" << placeHolderItem << ")";
+    dbg << ")";
+    return dbg;
+}
+
 /******************************************************************************
 ** QDockAreaLayoutInfo
 */
@@ -1088,6 +1103,21 @@ static QRect dockedGeometry(QWidget *widget)
     QRect result = widget->geometry();
     result.adjust(0, -titleHeight, 0, 0);
     return result;
+}
+
+bool QDockAreaLayoutInfo::hasGapItem(const QList<int> &path) const
+{
+    // empty path has no gap item
+    if (path.isEmpty())
+        return false;
+
+    // Index -1 isn't a gap
+    // Index out of range points at a position to be created. That isn't a gap either.
+    const int index = path.constFirst();
+    if (index < 0 || index >= item_list.count())
+        return false;
+
+    return item_list[index].flags & QDockAreaLayoutItem::GapItem;
 }
 
 bool QDockAreaLayoutInfo::insertGap(const QList<int> &path, QLayoutItem *dockWidgetItem)

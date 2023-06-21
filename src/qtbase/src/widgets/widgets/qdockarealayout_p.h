@@ -73,6 +73,7 @@ struct Q_AUTOTEST_EXPORT QDockAreaLayoutItem
     int pos;
     int size;
     uint flags;
+    QDebug operator<<(QDebug dbg);
 };
 
 class Q_AUTOTEST_EXPORT QPlaceHolderItem
@@ -132,6 +133,7 @@ public:
 
     void clear();
     bool isEmpty() const;
+    bool hasGapItem(const QList<int> &path) const;
     bool onlyHasPlaceholders() const;
     bool hasFixedSize() const;
     QList<int> findSeparator(const QPoint &pos) const;
