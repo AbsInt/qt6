@@ -949,6 +949,14 @@ QQuickPopup::QQuickPopup(QQuickPopupPrivate &dd, QObject *parent)
 QQuickPopup::~QQuickPopup()
 {
     Q_D(QQuickPopup);
+    d->inDestructor = true;
+
+    QQuickItem *currentContentItem = d->popupItem->d_func()->contentItem.data();
+    if (currentContentItem) {
+        disconnect(currentContentItem, &QQuickItem::childrenChanged,
+                   this, &QQuickPopup::contentChildrenChanged);
+    }
+
     setParentItem(nullptr);
 
     // If the popup is destroyed before the exit transition finishes,
@@ -1722,7 +1730,8 @@ void QQuickPopup::setParentItem(QQuickItem *parent)
     if (parent) {
         QObjectPrivate::connect(parent, &QQuickItem::windowChanged, d, &QQuickPopupPrivate::setWindow);
         QQuickItemPrivate::get(d->parentItem)->addItemChangeListener(d, QQuickItemPrivate::Destroyed);
-    } else {
+    } else if (!d->inDestructor) {
+        // NOTE: if setParentItem is called from the dtor, this bypasses virtual dispatch and calls QQuickPopup::close() directly
         close();
     }
     d->setWindow(parent ? parent->window() : nullptr);
@@ -1800,7 +1809,17 @@ void QQuickPopup::setContentItem(QQuickItem *item)
     Q_D(QQuickPopup);
     // See comment in setBackground for why we do this.
     QQuickControlPrivate::warnIfCustomizationNotSupported(this, item, QStringLiteral("background"));
+    QQuickItem *oldContentItem = d->complete ? d->popupItem->d_func()->contentItem.data()
+                                             : nullptr;
+    if (oldContentItem)
+        disconnect(oldContentItem, &QQuickItem::childrenChanged, this, &QQuickPopup::contentChildrenChanged);
     d->popupItem->setContentItem(item);
+    if (d->complete) {
+        QQuickItem *newContentItem = d->popupItem->d_func()->contentItem.data();
+        connect(newContentItem, &QQuickItem::childrenChanged, this, &QQuickPopup::contentChildrenChanged);
+        if (oldContentItem != newContentItem)
+            emit contentChildrenChanged();
+    }
 }
 
 /*!
@@ -2553,6 +2572,11 @@ void QQuickPopup::componentComplete()
 
     d->complete = true;
     d->popupItem->componentComplete();
+
+    if (auto currentContentItem = d->popupItem->d_func()->contentItem.data()) {
+        connect(currentContentItem, &QQuickItem::childrenChanged,
+            this, &QQuickPopup::contentChildrenChanged);
+    }
 }
 
 bool QQuickPopup::isComponentComplete() const

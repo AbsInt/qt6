@@ -651,7 +651,7 @@ void QFileDialogPrivate::retranslateStrings()
     if (proxyModel)
         abstractModel = proxyModel;
 #endif
-    int total = qMin(abstractModel->columnCount(QModelIndex()), actions.size() + 1);
+    const int total = qMin(abstractModel->columnCount(QModelIndex()), int(actions.size() + 1));
     for (int i = 1; i < total; ++i) {
         actions.at(i - 1)->setText(QFileDialog::tr("Show ") + abstractModel->headerData(i, Qt::Horizontal, Qt::DisplayRole).toString());
     }
@@ -1240,12 +1240,10 @@ QStringList QFileDialogPrivate::addDefaultSuffixToFiles(const QStringList &files
 QList<QUrl> QFileDialogPrivate::addDefaultSuffixToUrls(const QList<QUrl> &urlsToFix) const
 {
     QList<QUrl> urls;
-    const int numUrlsToFix = urlsToFix.size();
-    urls.reserve(numUrlsToFix);
-    for (int i = 0; i < numUrlsToFix; ++i) {
-        QUrl url = urlsToFix.at(i);
-        // if the filename has no suffix, add the default suffix
-        const QString defaultSuffix = options->defaultSuffix();
+    urls.reserve(urlsToFix.size());
+    // if the filename has no suffix, add the default suffix
+    const QString defaultSuffix = options->defaultSuffix();
+    for (QUrl url : urlsToFix) {
         if (!defaultSuffix.isEmpty()) {
             const QString urlPath = url.path();
             const auto idx = urlPath.lastIndexOf(u'/');
@@ -1353,11 +1351,10 @@ QStringList qt_strip_filters(const QStringList &filters)
 #if QT_CONFIG(regularexpression)
     QStringList strippedFilters;
     static const QRegularExpression r(QString::fromLatin1(QPlatformFileDialogHelper::filterRegExp));
-    const int numFilters = filters.size();
-    strippedFilters.reserve(numFilters);
-    for (int i = 0; i < numFilters; ++i) {
+    strippedFilters.reserve(filters.size());
+    for (const QString &filter : filters) {
         QString filterName;
-        auto match = r.match(filters[i]);
+        auto match = r.match(filter);
         if (match.hasMatch())
             filterName = match.captured(1);
         strippedFilters.append(filterName.simplified());
@@ -1392,11 +1389,10 @@ void QFileDialog::setNameFilters(const QStringList &filters)
 {
     Q_D(QFileDialog);
     QStringList cleanedFilters;
-    const int numFilters = filters.size();
-    cleanedFilters.reserve(numFilters);
-    for (int i = 0; i < numFilters; ++i) {
-        cleanedFilters << filters[i].simplified();
-    }
+    cleanedFilters.reserve(filters.size());
+    for (const QString &filter : filters)
+        cleanedFilters << filter.simplified();
+
     d->options->setNameFilters(cleanedFilters);
 
     if (!d->usingWidgets())
@@ -1774,7 +1770,7 @@ QLineEdit *QFileDialogPrivate::lineEdit() const {
     return (QLineEdit*)qFileDialogUi->fileNameEdit;
 }
 
-int QFileDialogPrivate::maxNameLength(const QString &path)
+long QFileDialogPrivate::maxNameLength(const QString &path)
 {
 #if defined(Q_OS_UNIX)
     return ::pathconf(QFile::encodeName(path).data(), _PC_NAME_MAX);
@@ -2744,7 +2740,7 @@ void QFileDialog::accept()
         }
 
         if (!info.exists()) {
-            int maxNameLength = d->maxNameLength(info.path());
+            const long maxNameLength = d->maxNameLength(info.path());
             if (maxNameLength >= 0 && info.fileName().size() > maxNameLength)
                 return;
         }
@@ -2880,7 +2876,7 @@ bool QFileDialogPrivate::restoreWidgetState(QStringList &history, int splitterPo
     if (proxyModel)
         abstractModel = proxyModel;
 #endif
-    int total = qMin(abstractModel->columnCount(QModelIndex()), actions.size() + 1);
+    const int total = qMin(abstractModel->columnCount(QModelIndex()), int(actions.size() + 1));
     for (int i = 1; i < total; ++i)
         actions.at(i - 1)->setChecked(!headerView->isSectionHidden(i));
 
@@ -3123,7 +3119,8 @@ void QFileDialogPrivate::_q_showHeader(QAction *action)
 {
     Q_Q(QFileDialog);
     QActionGroup *actionGroup = qobject_cast<QActionGroup*>(q->sender());
-    qFileDialogUi->treeView->header()->setSectionHidden(actionGroup->actions().indexOf(action) + 1, !action->isChecked());
+    qFileDialogUi->treeView->header()->setSectionHidden(int(actionGroup->actions().indexOf(action) + 1),
+                                                        !action->isChecked());
 }
 
 #if QT_CONFIG(proxymodel)
@@ -3365,8 +3362,10 @@ void QFileDialogPrivate::navigate(HistoryItem &historyItem)
         | QItemSelectionModel::Rows;
     selectionModel->select(historyItem.selection.constFirst(),
                            flags | QItemSelectionModel::Clear | QItemSelectionModel::Current);
-    for (int i = 1, size = historyItem.selection.size(); i < size; ++i)
-        selectionModel->select(historyItem.selection.at(i), flags);
+    auto it = historyItem.selection.cbegin() + 1;
+    const auto end = historyItem.selection.cend();
+    for (; it != end; ++it)
+        selectionModel->select(*it, flags);
 
     view->scrollTo(historyItem.selection.constFirst());
 }
@@ -3542,9 +3541,9 @@ void QFileDialogPrivate::_q_deleteCurrent()
     if (model->isReadOnly())
         return;
 
-    QModelIndexList list = qFileDialogUi->listView->selectionModel()->selectedRows();
-    for (int i = list.size() - 1; i >= 0; --i) {
-        QPersistentModelIndex index = list.at(i);
+    const QModelIndexList list = qFileDialogUi->listView->selectionModel()->selectedRows();
+    for (auto it = list.crbegin(), end = list.crend(); it != end; ++it) {
+        QPersistentModelIndex index = *it;
         if (index == qFileDialogUi->listView->rootIndex())
             continue;
 
@@ -3683,7 +3682,7 @@ void QFileDialogPrivate::_q_updateOkButton()
                 break;
             }
             if (!idx.isValid()) {
-                int maxLength = maxNameLength(fileDir);
+                const long maxLength = maxNameLength(fileDir);
                 enableButton = maxLength < 0 || fileName.size() <= maxLength;
             }
             break;
@@ -3815,7 +3814,7 @@ void QFileDialogPrivate::_q_useNameFilter(int index)
         QString fileName = lineEdit()->text();
         const QString fileNameExtension = QFileInfo(fileName).suffix();
         if (!fileNameExtension.isEmpty() && !newNameFilterExtension.isEmpty()) {
-            const int fileNameExtensionLength = fileNameExtension.size();
+            const qsizetype fileNameExtensionLength = fileNameExtension.size();
             fileName.replace(fileName.size() - fileNameExtensionLength,
                              fileNameExtensionLength, newNameFilterExtension);
             qFileDialogUi->listView->clearSelection();
