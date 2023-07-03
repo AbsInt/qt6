@@ -1724,9 +1724,9 @@ void HtmlGenerator::generateHeader(const QString &title, const Node *node, CodeM
         out() << "<!-- " << node->doc().location().fileName() << " -->\n";
 
     if (node && !node->doc().briefText().isEmpty()) {
-        out() << "  <meta name=\"description\" content=\"";
-        generateText(node->doc().briefText(), node, marker);
-        out() << "\">\n";
+        out() << "  <meta name=\"description\" content=\""
+              << protectEnc(node->doc().briefText().toString())
+              << "\">\n";
     }
 
     // determine the rest of the <title> element content: "title | titleSuffix version"
@@ -2917,8 +2917,11 @@ bool HtmlGenerator::generateGroupList(CollectionNode *cn)
     m_qdb->mergeCollections(cn);
     if (cn->members().isEmpty())
         return false;
+
+    NodeList members{cn->members()};
+    std::sort(members.begin(), members.end(), Node::nodeNameLessThan);
     out() << "<ul>\n";
-    for (const auto *node : cn->members()) {
+    for (const auto *node : std::as_const(members)) {
         out() << "<li translate=\"no\">";
         generateFullName(node, nullptr);
         out() << "</li>\n";

@@ -796,10 +796,8 @@ void QQuickMouseArea::mouseDoubleClickEvent(QMouseEvent *event)
         if (d->pressed)
             d->doubleClick = d->isDoubleClickConnected() || me.isAccepted();
 
-        // do not call the base implementation if the event is accepted
-        // because it will revert the event back to ignored state
-        if (me.isAccepted())
-            return;
+        // Do not call the base implementation: we don't want to call event->ignore().
+        return;
     }
     QQuickItem::mouseDoubleClickEvent(event);
 }
@@ -907,6 +905,7 @@ void QQuickMouseArea::ungrabMouse()
         emit pressedButtonsChanged();
 
         if (d->hovered && !isUnderMouse()) {
+            qCDebug(lcHoverTrace) << "losing hover: not under the mouse";
             d->hovered = false;
             emit hoveredChanged();
         }
@@ -971,6 +970,7 @@ bool QQuickMouseArea::sendMouseEvent(QMouseEvent *event)
                 emit pressedChanged();
                 emit containsPressChanged();
                 if (d->hovered) {
+                    qCDebug(lcHoverTrace) << "losing hover: button released";
                     d->hovered = false;
                     emit hoveredChanged();
                 }

@@ -9613,7 +9613,7 @@ void QWidget::tabletEvent(QTabletEvent *event)
     implementation if you act upon the key.
 
     \sa keyReleaseEvent(), setFocusPolicy(),
-    focusInEvent(), focusOutEvent(), event(), QKeyEvent, {Tetrix Example}
+    focusInEvent(), focusOutEvent(), event(), QKeyEvent
 */
 
 void QWidget::keyPressEvent(QKeyEvent *event)
@@ -11510,8 +11510,7 @@ void QWidgetPrivate::setWindowOpacity_sys(qreal level)
     its parent because other children of the parent might have been
     modified.
 
-    \sa windowTitle, {Qt Widgets - Application Example},
-    {MDI Example}
+    \sa windowTitle
 */
 bool QWidget::isWindowModified() const
 {

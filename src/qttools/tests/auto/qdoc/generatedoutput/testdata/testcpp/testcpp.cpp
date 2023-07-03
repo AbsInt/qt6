@@ -80,6 +80,7 @@ namespace TestQDoc {
 
 /*!
     \fn Test &Test::operator=(Test &&other)
+    \ingroup testgroup
 
     Move-assigns \a other.
 */
@@ -87,7 +88,7 @@ namespace TestQDoc {
 /*!
     \class TestQDoc::TestDerived
     \inmodule TestCPP
-    \brief A derived class in a namespace.
+    \brief A class in a namespace, derived from \l [CPP] Test.
 */
 
 /*!
