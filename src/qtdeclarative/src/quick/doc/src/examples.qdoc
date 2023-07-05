@@ -99,7 +99,6 @@ Creator.
         \b{QML Types and Controls}
         \list
         \li \l{Qt Quick Controls - Gallery}{Controls Gallery}
-        \li \l{Calendar Example}
         \li \l{tableview/gameoflife}{TableView}
         \li \l{Qt Quick Examples - Text}{Text and Fonts}
         \endlist
@@ -111,7 +110,6 @@ Creator.
         \li \l{Qt Quick Examples - Positioners}{Positioners}
         \li \l{Qt Quick Examples - Views}{Views}
         \li \l{Qt Quick Examples - Window and Screen}{Windows and Screen}
-        \li \l{Qt Quick Examples - Right to Left}{Right-to-Left and Text Layout}
         \endlist
     \enddiv
     \div {class="doc-column"}
