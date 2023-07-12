@@ -24,11 +24,19 @@ static const char PythonMagicComment[] = "TRANSLATOR ";
   most of Python; the only tokens that interest us are defined here.
 */
 
-enum Token { Tok_Eof, Tok_class, Tok_return, Tok_tr,
+enum Token { Tok_Eof, Tok_class, Tok_def, Tok_return, Tok_tr,
              Tok_trUtf8, Tok_translate, Tok_Ident,
              Tok_Comment, Tok_Dot, Tok_String,
              Tok_LeftParen, Tok_RightParen,
              Tok_Comma, Tok_None, Tok_Integer};
+
+enum class StringType
+{
+    NoString,
+    String,
+    FormatString,
+    RawString
+};
 
 /*
   The tokenizer maintains the following global variables. The names
@@ -51,6 +59,7 @@ static QByteArray id;
 QHash<QByteArray, Token> tokens = {
     {"None", Tok_None},
     {"class", Tok_class},
+    {"def", Tok_def},
     {"return", Tok_return},
     {"__tr", Tok_tr}, // Legacy?
     {"__trUtf8", Tok_trUtf8}
@@ -76,8 +85,6 @@ using ContextPair = QPair<QByteArray, int>;
 using ContextStack = QStack<ContextPair>;
 static ContextStack yyContextStack;
 
-static int yyContextPops;
-
 static int getCharFromFile()
 {
     int c;
@@ -95,17 +102,6 @@ static int getCharFromFile()
     } else if (yyCountingIndentation && (c == 32 || c == 9)) {
         yyContinuousSpaceCount++;
     } else {
-        if (yyIndentationSize == 1 && yyContinuousSpaceCount > yyIndentationSize)
-            yyIndentationSize = yyContinuousSpaceCount;
-        if (yyCountingIndentation && yyContextStack.size() > 1) {
-            ContextPair& top = yyContextStack.top();
-            if (top.second == 0 && yyContinuousSpaceCount > 0) {
-                top.second = yyContinuousSpaceCount;
-                yyContinuousSpaceCount = 0;
-            } else if (yyContinuousSpaceCount < top.second) {
-                yyContextPops = (top.second - yyContinuousSpaceCount) / yyIndentationSize;
-            }
-        }
         yyCountingIndentation = false;
     }
     return c;
@@ -131,18 +127,82 @@ static void startTokenizer(const QString &fileName, int (*getCharFunc)(),
     yyParenDepth = 0;
     yyCurLineNo = 1;
 
-    yyIndentationSize = 1;
+    yyIndentationSize = -1;
     yyContinuousSpaceCount = 0;
     yyCountingIndentation = false;
     yyContextStack.clear();
-    yyContextPops = 0;
 }
 
-static Token parseString()
+static bool parseStringEscape(int quoteChar, StringType stringType)
 {
     static const char tab[] = "abfnrtv";
     static const char backTab[] = "\a\b\f\n\r\t\v";
 
+    yyCh = getChar();
+    if (yyCh == EOF)
+        return false;
+
+    if (stringType == StringType::RawString) {
+        if (yyCh != quoteChar) // Only quotes can be escaped in raw strings
+            yyString[yyStringLen++] = '\\';
+        yyString[yyStringLen++] = yyCh;
+        yyCh = getChar();
+        return true;
+    }
+
+    if (yyCh == 'x') {
+        QByteArray hex = "0";
+        yyCh = getChar();
+        if (yyCh == EOF)
+            return false;
+        while (std::isxdigit(yyCh)) {
+            hex += char(yyCh);
+            yyCh = getChar();
+            if (yyCh == EOF)
+                return false;
+        }
+        uint n;
+#ifdef Q_CC_MSVC
+        sscanf_s(hex, "%x", &n);
+#else
+        std::sscanf(hex, "%x", &n);
+#endif
+        if (yyStringLen < sizeof(yyString) - 1)
+            yyString[yyStringLen++] = char(n);
+         return true;
+    }
+
+    if (yyCh >= '0' && yyCh < '8') {
+         QByteArray oct;
+         int n = 0;
+         do {
+            oct += char(yyCh);
+            ++n;
+            yyCh = getChar();
+            if (yyCh == EOF)
+                return false;
+         } while (yyCh >= '0' && yyCh < '8' && n < 3);
+#ifdef Q_CC_MSVC
+         sscanf_s(oct, "%o", &n);
+#else
+         std::sscanf(oct, "%o", &n);
+#endif
+         if (yyStringLen < sizeof(yyString) - 1)
+            yyString[yyStringLen++] = char(n);
+         return true;
+    }
+
+    const char *p = std::strchr(tab, yyCh);
+    if (yyStringLen < sizeof(yyString) - 1) {
+         yyString[yyStringLen++] = p == nullptr
+                                   ? char(yyCh) : backTab[p - tab];
+    }
+    yyCh = getChar();
+    return true;
+}
+
+static Token parseString(StringType stringType = StringType::NoString)
+{
     int quoteChar = yyCh;
     bool tripleQuote = false;
     bool singleQuote = true;
@@ -182,48 +242,8 @@ static Token parseString()
         }
 
         if (yyCh == '\\') {
-            yyCh = getChar();
-
-            if (yyCh == 'x') {
-                QByteArray hex = "0";
-
-                yyCh = getChar();
-                while (std::isxdigit(yyCh)) {
-                    hex += char(yyCh);
-                    yyCh = getChar();
-                }
-                uint n;
-#ifdef Q_CC_MSVC
-                sscanf_s(hex, "%x", &n);
-#else
-                std::sscanf(hex, "%x", &n);
-#endif
-                if (yyStringLen < sizeof(yyString) - 1)
-                    yyString[yyStringLen++] = char(n);
-            } else if (yyCh >= '0' && yyCh < '8') {
-                QByteArray oct;
-                int n = 0;
-
-                do {
-                    oct += char(yyCh);
-                    ++n;
-                    yyCh = getChar();
-                } while (yyCh >= '0' && yyCh < '8' && n < 3);
-#ifdef Q_CC_MSVC
-                sscanf_s(oct, "%o", &n);
-#else
-                std::sscanf(oct, "%o", &n);
-#endif
-                if (yyStringLen < sizeof(yyString) - 1)
-                    yyString[yyStringLen++] = char(n);
-            } else {
-                const char *p = std::strchr(tab, yyCh);
-                if (yyStringLen < sizeof(yyString) - 1) {
-                    yyString[yyStringLen++] = (p == nullptr)
-                            ? char(yyCh) : backTab[p - tab];
-                }
-                yyCh = getChar();
-            }
+            if (!parseStringEscape(quoteChar, stringType))
+                return Tok_Eof;
         } else {
             char *yStart = yyString + yyStringLen;
             char *yp = yStart;
@@ -262,7 +282,7 @@ static QByteArray readLine()
     return result;
 }
 
-static Token getToken()
+static Token getToken(StringType stringType = StringType::NoString)
 {
     yyIdent.clear();
     yyCommentLen = 0;
@@ -300,7 +320,7 @@ static Token getToken()
             break;
         case '"':
         case '\'':
-            return parseString();
+            return parseString(stringType);
         case '(':
             yyParenDepth++;
             yyCh = getChar();
@@ -372,15 +392,34 @@ static bool match(Token t)
     return matches;
 }
 
+static bool matchStringStart()
+{
+    if (yyTok == Tok_String)
+        return true;
+    // Check for f"bla{var}" and raw strings r"bla".
+    if (yyTok == Tok_Ident && yyIdent.size() == 1) {
+        switch (yyIdent.at(0)) {
+        case 'r':
+            yyTok = getToken(StringType::RawString);
+            return yyTok == Tok_String;
+        case 'f':
+            yyTok = getToken(StringType::FormatString);
+            return yyTok == Tok_String;
+        }
+    }
+    return false;
+}
+
 static bool matchString(QByteArray *s)
 {
-    const bool matches = (yyTok == Tok_String);
     s->clear();
-    while (yyTok == Tok_String) {
+    bool ok = false;
+    while (matchStringStart()) {
         *s += yyString;
         yyTok = getToken();
+        ok = true;
     }
-    return matches;
+    return ok;
 }
 
 static bool matchEncoding(bool *utf8)
@@ -566,22 +605,33 @@ static void parse(Translator &tor, ConversionData &cd,
     QByteArray prefix;
     bool utf8 = false;
 
-    yyContextStack.push({initialContext, 0});
-
     yyTok = getToken();
     while (yyTok != Tok_Eof) {
 
-        if (yyContextPops > 0) {
-            for ( int i = 0; i < yyContextPops; i++)
-                yyContextStack.pop();
-            yyContextPops = 0;
-        }
-
         switch (yyTok) {
-            case Tok_class:
+            case Tok_class: {
+                if (yyIndentationSize < 0 && yyContinuousSpaceCount > 0)
+                    yyIndentationSize = yyContinuousSpaceCount; // First indented "class"
+                const int indent = yyIndentationSize > 0
+                                   ? yyContinuousSpaceCount / yyIndentationSize : 0;
+                while (!yyContextStack.isEmpty() && yyContextStack.top().second >= indent)
+                    yyContextStack.pop();
                 yyTok = getToken();
-                yyContextStack.push({yyIdent, 0});
-                yyContinuousSpaceCount = 0;
+                yyContextStack.push({yyIdent, indent});
+                yyTok = getToken();
+            }
+                break;
+            case Tok_def:
+                if (yyIndentationSize < 0 && yyContinuousSpaceCount > 0)
+                    yyIndentationSize = yyContinuousSpaceCount; // First indented "def"
+                if (!yyContextStack.isEmpty()) {
+                    // Pop classes if the function is further outdented than the class on the top
+                    // (end of a nested class).
+                    const int classIndent = yyIndentationSize > 0
+                                            ? yyContinuousSpaceCount / yyIndentationSize - 1 : 0;
+                    while (!yyContextStack.isEmpty() && yyContextStack.top().second > classIndent)
+                        yyContextStack.pop();
+                }
                 yyTok = getToken();
                 break;
             case Tok_tr:
@@ -607,7 +657,8 @@ static void parse(Translator &tor, ConversionData &cd,
                     if (prefix.isEmpty())
                         context = defaultContext;
                     else if (prefix == "self")
-                        context = yyContextStack.top().first;
+                        context = yyContextStack.isEmpty()
+                                  ? initialContext : yyContextStack.top().first;
                     else
                         context = prefix;
 
