@@ -69,14 +69,34 @@ void XbelReader::readXBEL()
 //! [3]
 
 //! [4]
+void XbelReader::readBookmark(QTreeWidgetItem *item)
+{
+    Q_ASSERT(xml.isStartElement() && xml.name() == "bookmark"_L1);
+
+    QTreeWidgetItem *bookmark = createChildItem(item);
+    bookmark->setFlags(bookmark->flags() | Qt::ItemIsEditable);
+    bookmark->setIcon(0, bookmarkIcon);
+    bookmark->setText(0, QObject::tr("Unknown title"));
+    bookmark->setText(1, xml.attributes().value("href"_L1).toString());
+
+    while (xml.readNextStartElement()) {
+        if (xml.name() == "title"_L1)
+            readTitle(bookmark);
+        else
+            xml.skipCurrentElement();
+    }
+}
+//! [4]
+
+//! [5]
 void XbelReader::readTitle(QTreeWidgetItem *item)
 {
     Q_ASSERT(xml.isStartElement() && xml.name() == "title"_L1);
     item->setText(0, xml.readElementText());
 }
-//! [4]
-
 //! [5]
+
+//! [6]
 void XbelReader::readSeparator(QTreeWidgetItem *item)
 {
     Q_ASSERT(xml.isStartElement() && xml.name() == "separator"_L1);
@@ -88,8 +108,9 @@ void XbelReader::readSeparator(QTreeWidgetItem *item)
     separator->setText(0, dots);
     xml.skipCurrentElement();
 }
-//! [5]
+//! [6]
 
+//! [7]
 void XbelReader::readFolder(QTreeWidgetItem *item)
 {
     Q_ASSERT(xml.isStartElement() && xml.name() == "folder"_L1);
@@ -111,28 +132,13 @@ void XbelReader::readFolder(QTreeWidgetItem *item)
             xml.skipCurrentElement();
     }
 }
+//! [7]
 
-void XbelReader::readBookmark(QTreeWidgetItem *item)
-{
-    Q_ASSERT(xml.isStartElement() && xml.name() == "bookmark"_L1);
-
-    QTreeWidgetItem *bookmark = createChildItem(item);
-    bookmark->setFlags(bookmark->flags() | Qt::ItemIsEditable);
-    bookmark->setIcon(0, bookmarkIcon);
-    bookmark->setText(0, QObject::tr("Unknown title"));
-    bookmark->setText(1, xml.attributes().value("href"_L1).toString());
-
-    while (xml.readNextStartElement()) {
-        if (xml.name() == "title"_L1)
-            readTitle(bookmark);
-        else
-            xml.skipCurrentElement();
-    }
-}
-
+//! [8]
 QTreeWidgetItem *XbelReader::createChildItem(QTreeWidgetItem *item)
 {
     QTreeWidgetItem *childItem = item ? new QTreeWidgetItem(item) : new QTreeWidgetItem(treeWidget);
     childItem->setData(0, Qt::UserRole, xml.name().toString());
     return childItem;
 }
+//! [8]

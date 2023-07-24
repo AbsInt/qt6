@@ -98,6 +98,9 @@ private:
 
     void invalidate();
     bool hasFrame() const;
+    bool hasTitleBar() const;
+    bool hasBorder() const;
+    bool hasShadow() const;
     bool hasMaximizeButton() const;
     void applyWindowState();
 
