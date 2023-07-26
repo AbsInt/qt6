@@ -149,6 +149,11 @@ qt_internal_add_module(Designer
         uilib/ui4.cpp uilib/ui4_p.h
         components/qdesigner_components.h
         components/qdesigner_components_global.h
+    NO_UNITY_BUILD_SOURCES
+        shared/qdesigner_command.cpp # redefinition of 'QMetaTypeId<QList<QWidget *>>' (from morphmenu.cpp)
+                                     # and recursiveUpdate (from formwindowbase.cpp)
+        uilib/abstractformbuilder.cpp # using namespace QFormInternal/redefinition of 'QMetaTypeId<QList<QWidget *>>' (from morphmenu.cpp)
+        uilib/ui4.cpp # using namespace QFormInternal
     DEFINES
         QDESIGNER_EXTENSION_LIBRARY
         QDESIGNER_SDK_LIBRARY

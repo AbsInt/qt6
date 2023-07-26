@@ -89,8 +89,8 @@ namespace {
     using DomPropertyList = QList<DomProperty *>;
 }
 
-static const char *currentUiVersion = "4.0";
-static const char *clipboardObjectName = "__qt_fake_top_level";
+static const char currentUiVersion[] = "4.0";
+static const char clipboardObjectName[] = "__qt_fake_top_level";
 
 #define OLD_RESOURCE_FORMAT // Support pre 4.4 format.
 
@@ -170,7 +170,9 @@ QVariant QDesignerResourceBuilder::loadResource(const QDir &workingDirectory, co
         case DomProperty::IconSet: {
             PropertySheetIconValue icon;
             DomResourceIcon *di = property->elementIconSet();
-            icon.setTheme(di->attributeTheme());
+            const bool hasTheme = di->hasAttributeTheme();
+            if (hasTheme)
+                icon.setTheme(di->attributeTheme());
             if (const int flags = iconStateFlags(di)) { // new, post 4.4 format
                 if (flags & NormalOff)
                     setIconPixmap(QIcon::Normal, QIcon::Off, workingDirectory, di->elementNormalOff()->text(), icon, m_lang);
@@ -188,7 +190,7 @@ QVariant QDesignerResourceBuilder::loadResource(const QDir &workingDirectory, co
                     setIconPixmap(QIcon::Selected, QIcon::Off, workingDirectory, di->elementSelectedOff()->text(), icon, m_lang);
                 if (flags & SelectedOn)
                     setIconPixmap(QIcon::Selected, QIcon::On, workingDirectory, di->elementSelectedOn()->text(), icon, m_lang);
-            } else {
+            } else if (!hasTheme) {
 #ifdef OLD_RESOURCE_FORMAT
                 setIconPixmap(QIcon::Normal, QIcon::Off, workingDirectory, di->text(), icon, m_lang);
                 if (di->hasAttributeResource())
@@ -1337,7 +1339,7 @@ DomWidget *QDesignerResource::saveWidget(QToolBar *toolBar, DomWidget *ui_parent
 
         DomProperty *attr = new DomProperty();
         attr->setAttributeName(u"toolBarArea"_s);
-        attr->setElementEnum(QLatin1String(toolBarAreaMetaEnum().valueToKey(area)));
+        attr->setElementEnum(QLatin1StringView(toolBarAreaMetaEnum().valueToKey(area)));
         attributes  << attr;
 
         attr = new DomProperty();
@@ -1495,7 +1497,7 @@ DomWidget *QDesignerResource::saveWidget(QWizardPage *wizardPage, DomWidget *ui_
     DomWidget *ui_widget = QAbstractFormBuilder::createDom(wizardPage, ui_parentWidget, true);
     QDesignerPropertySheetExtension *sheet = qt_extension<QDesignerPropertySheetExtension*>(core()->extensionManager(), wizardPage);
     // Save the page id (string) attribute, append to existing attributes
-    const QString pageIdPropertyName = QLatin1String(QWizardPagePropertySheet::pageIdProperty);
+    const QString pageIdPropertyName = QLatin1StringView(QWizardPagePropertySheet::pageIdProperty);
     const int pageIdIndex = sheet->indexOf(pageIdPropertyName);
     if (pageIdIndex != -1 && sheet->isChanged(pageIdIndex)) {
         DomProperty *property = variantToDomProperty(this, wizardPage->metaObject(), pageIdPropertyName, sheet->property(pageIdIndex));
@@ -1682,7 +1684,7 @@ DomUI *QDesignerResource::copy(const FormBuilderClipboard &selection)
     m_copyWidget = true;
 
     DomWidget *ui_widget = new DomWidget();
-    ui_widget->setAttributeName(QLatin1String(clipboardObjectName));
+    ui_widget->setAttributeName(QLatin1StringView(clipboardObjectName));
     bool hasItems = false;
     // Widgets
     if (!selection.m_widgets.isEmpty()) {
@@ -1721,7 +1723,7 @@ DomUI *QDesignerResource::copy(const FormBuilderClipboard &selection)
     }
     // UI
     DomUI *ui = new DomUI();
-    ui->setAttributeVersion(QLatin1String(currentUiVersion));
+    ui->setAttributeVersion(QLatin1StringView(currentUiVersion));
     ui->setElementWidget(ui_widget);
     ui->setElementResources(saveResources(m_resourceBuilder->usedQrcFiles()));
     if (DomCustomWidgets *cws = saveCustomWidgets())

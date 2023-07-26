@@ -107,6 +107,8 @@ private slots:
     void collectGarbageNestedWrappersTwoEngines();
     void gcWithNestedDataStructure();
     void stacktrace();
+    void unshiftAndSort();
+    void unshiftAndPushAndSort();
     void numberParsing_data();
     void numberParsing();
     void automaticSemicolonInsertion();
@@ -306,6 +308,7 @@ private slots:
 
     void symbolToVariant();
 
+    void garbageCollectedObjectMethodBase();
 public:
     Q_INVOKABLE QJSValue throwingCppMethod1();
     Q_INVOKABLE void throwingCppMethod2();
@@ -2083,6 +2086,81 @@ void tst_QJSEngine::stacktrace()
         QString stackTrace = stack.toString();
         QVERIFY(!stackTrace.contains(QStringLiteral("indirectlyThrow")));
         QVERIFY(stackTrace.contains(QStringLiteral("elide")));
+    }
+}
+
+void tst_QJSEngine::unshiftAndSort()
+{
+    QJSEngine engine;
+    QJSValue func = engine.evaluate(R"""(
+    (function (objectArr, currIdx) {
+        objectArr.unshift({"sortIndex": currIdx});
+        objectArr.sort(function(a, b) {
+            if (a.sortIndex > b.sortIndex)
+                return 1;
+            if (a.sortIndex < b.sortIndex)
+                return -1;
+            return 0;
+        });
+        return objectArr;
+    })
+    )""");
+    QVERIFY(func.isCallable());
+    QJSValue objectArr = engine.newArray();
+
+    for (int i = 0; i < 5; ++i) {
+        objectArr = func.call({objectArr, i});
+        QVERIFY2(!objectArr.isError(), qPrintable(objectArr.toString()));
+        const int length = objectArr.property("length").toInt();
+
+        // It did add one element
+        QCOMPARE(length, i + 1);
+
+        for (int x = 0; x < length; ++x) {
+            // We didn't sort cruft into the array.
+            QVERIFY(!objectArr.property(x).isUndefined());
+
+            // The array is actually sorted.
+            QCOMPARE(objectArr.property(x).property("sortIndex").toInt(), x);
+        }
+    }
+}
+
+void tst_QJSEngine::unshiftAndPushAndSort()
+{
+    QJSEngine engine;
+    QJSValue func = engine.evaluate(R"""(
+    (function (objectArr, currIdx) {
+        objectArr.unshift({"sortIndex": currIdx});
+        objectArr.push({"sortIndex": currIdx + 1});
+        objectArr.sort(function(a, b) {
+            if (a.sortIndex > b.sortIndex)
+                return 1;
+            if (a.sortIndex < b.sortIndex)
+                return -1;
+            return 0;
+        });
+        return objectArr;
+    })
+    )""");
+    QVERIFY(func.isCallable());
+    QJSValue objectArr = engine.newArray();
+
+    for (int i = 0; i < 20; i += 2) {
+        objectArr = func.call({objectArr, i});
+        QVERIFY2(!objectArr.isError(), qPrintable(objectArr.toString()));
+        const int length = objectArr.property("length").toInt();
+
+        // It did add 2 elements
+        QCOMPARE(length, i + 2);
+
+        for (int x = 0; x < length; ++x) {
+            // We didn't sort cruft into the array.
+            QVERIFY(!objectArr.property(x).isUndefined());
+
+            // The array is actually sorted.
+            QCOMPARE(objectArr.property(x).property("sortIndex").toInt(), x);
+        }
     }
 }
 
@@ -6119,6 +6197,97 @@ void tst_QJSEngine::symbolToVariant()
     QVERIFY(retained.value<QJSValue>().strictlyEquals(val));
 
     QCOMPARE(val.toVariant(QJSValue::ConvertJSObjects), QStringLiteral("Symbol(asymbol)"));
+}
+
+class PACHelper : public QObject {
+    Q_OBJECT
+public:
+    Q_INVOKABLE bool shExpMatch(const QString &, const QString &) { return false; }
+    Q_INVOKABLE QString dnsResolve(const QString &) { return QString{}; }
+};
+
+class ProxyAutoConf {
+public:
+    void exposeQObjectMethodsAsGlobal(QJSEngine *engine, QObject *object)
+    {
+        QJSValue helper = engine->newQObject(object);
+        QJSValue g = engine->globalObject();
+        QJSValueIterator it(helper);
+        while (it.hasNext()) {
+            it.next();
+            if (!it.value().isCallable())
+                continue;
+            g.setProperty(it.name(), it.value());
+        }
+    }
+
+    bool parse(const QString & pacBytes)
+    {
+        jsFindProxyForURL = QJSValue();
+        engine = std::make_unique<QJSEngine>();
+        exposeQObjectMethodsAsGlobal(engine.get(), new PACHelper);
+        engine->evaluate(pacBytes);
+        jsFindProxyForURL = engine->globalObject().property(QStringLiteral("FindProxyForURL"));
+        return true;
+    }
+
+    QString findProxyForUrl(const QString &url, const QString &host)
+    {
+        QJSValueList args;
+        args << url << host;
+        engine->collectGarbage();
+        QJSValue callResult = jsFindProxyForURL.call(args);
+        return callResult.toString().trimmed();
+    }
+
+private:
+    std::unique_ptr<QJSEngine> engine;
+    QJSValue jsFindProxyForURL;
+};
+
+QString const pacstring = R"js(
+function FindProxyForURL(host) {
+    list_split_all = Array(
+        "oneoneoneoneo.oneo.oneo.oneoneo.one",
+        "twotwotwotwotw.otwo.twot.wotwotw.otw",
+        "threethreethr.eeth.reet.hreethr.eet",
+        "fourfourfourfo.urfo.urfo.urfourf.our",
+        "fivefivefivef.ivef.ivef.ivefive.fiv",
+        "sixsixsixsixsi.xsix.sixs.ixsixsi.xsi",
+        "sevensevenseve.nsev.ense.venseve.nse",
+        "eight.eighteigh.tei",
+        "*.nin.eninen.ine"
+    )
+    list_myip_direct =
+        "10.254.0.0/255.255.0.0"
+    for (i = 0; i < list_split_all.length; ++i)
+        for (j = 0; j < list_myip_direct.length; ++j)
+            shExpMatch(host, list_split_all)
+        shExpMatch()
+    dnsResolve()}
+)js";
+
+void tst_QJSEngine::garbageCollectedObjectMethodBase()
+{
+    ProxyAutoConf proxyConf;
+    bool pac_read = false;
+
+    const auto processUrl = [&](QString const &url, QString const &host)
+    {
+        if (!pac_read) {
+            proxyConf.parse(pacstring);
+            pac_read = true;
+        }
+        return proxyConf.findProxyForUrl(url, host);
+    };
+
+    const QString url = QStringLiteral("https://servername.domain.test");
+    const QString host = QStringLiteral("servername.domain.test");
+
+    for (size_t i = 0; i < 5; ++i) {
+        auto future = std::async(processUrl, url, host);
+        QCOMPARE(future.get(), QLatin1String("Error: Insufficient arguments"));
+    }
 }
 
 QTEST_MAIN(tst_QJSEngine)

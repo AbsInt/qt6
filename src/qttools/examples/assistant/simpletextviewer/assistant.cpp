@@ -10,7 +10,7 @@
 #include <QMessageBox>
 #include <QStandardPaths>
 
-Assistant::Assistant() = default;
+using namespace Qt::StringLiterals;
 
 //! [0]
 Assistant::~Assistant()
@@ -36,40 +36,40 @@ void Assistant::showDocumentation(const QString &page)
 }
 //! [1]
 
-QString documentationDirectory()
+static QString documentationDirectory()
 {
     QStringList paths;
 #ifdef SRCDIR
-    paths.append(QLatin1String(SRCDIR));
+    paths.append(QLatin1StringView(SRCDIR));
 #endif
     paths.append(QLibraryInfo::path(QLibraryInfo::ExamplesPath));
     paths.append(QCoreApplication::applicationDirPath());
     paths.append(QStandardPaths::standardLocations(QStandardPaths::AppDataLocation));
     for (const auto &dir : std::as_const(paths)) {
-        const QString path = dir + QLatin1String("/documentation");
+        const QString path = dir + "/documentation"_L1;
         if (QFileInfo::exists(path))
             return path;
     }
-    return QString();
+    return {};
 }
 
 //! [2]
 bool Assistant::startAssistant()
 {
     if (m_process.isNull()) {
-        m_process.reset(new QProcess());
+        m_process.reset(new QProcess);
         QObject::connect(m_process.data(), &QProcess::finished,
                          m_process.data(), [this](int exitCode, QProcess::ExitStatus status) {
-                             this->finished(exitCode, status);
-                         });
+            finished(exitCode, status);
+        });
     }
 
     if (m_process->state() != QProcess::Running) {
         QString app = QLibraryInfo::path(QLibraryInfo::BinariesPath);
 #ifndef Q_OS_DARWIN
-        app += QLatin1String("/assistant");
+        app += "/assistant"_L1;
 #else
-        app += QLatin1String("/Assistant.app/Contents/MacOS/Assistant");
+        app += "/Assistant.app/Contents/MacOS/Assistant"_L1;
 #endif
 
         const QString collectionDirectory = documentationDirectory();
@@ -78,15 +78,15 @@ bool Assistant::startAssistant()
             return false;
         }
 
-        QStringList args{QLatin1String("-collectionFile"),
-                         collectionDirectory + QLatin1String("/simpletextviewer.qhc"),
-                         QLatin1String("-enableRemoteControl")};
+        const QStringList args{"-collectionFile"_L1,
+                               collectionDirectory + "/simpletextviewer.qhc"_L1,
+                               "-enableRemoteControl"_L1};
 
         m_process->start(app, args);
 
-        if (!m_process->waitForStarted()) {
+        if (!m_process->waitForStarted(3000)) {
             showError(tr("Unable to launch Qt Assistant (%1): %2")
-                              .arg(QDir::toNativeSeparators(app), m_process->errorString()));
+                      .arg(QDir::toNativeSeparators(app), m_process->errorString()));
             return false;
         }
     }
@@ -96,16 +96,14 @@ bool Assistant::startAssistant()
 
 void Assistant::showError(const QString &message)
 {
-    QMessageBox::critical(QApplication::activeWindow(),
-                          tr("Simple Text Viewer"), message);
+    QMessageBox::critical(QApplication::activeWindow(), tr("Simple Text Viewer"), message);
 }
 
 void Assistant::finished(int exitCode, QProcess::ExitStatus status)
 {
     const QString stdErr = QString::fromLocal8Bit(m_process->readAllStandardError());
-    if (status != QProcess::NormalExit) {
-        showError(tr("Assistant crashed: ").arg(stdErr));
-    } else if (exitCode != 0) {
+    if (status != QProcess::NormalExit)
+        showError(tr("Assistant crashed: %1").arg(stdErr));
+    else if (exitCode != 0)
         showError(tr("Assistant exited with %1: %2").arg(exitCode).arg(stdErr));
-    }
 }

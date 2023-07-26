@@ -224,7 +224,7 @@ QVariant ZoomProxyWidget::itemChange(GraphicsItemChange change, const QVariant &
  * It redirects the events to another handler of ZoomWidget as its
  * base class QScrollArea also implements eventFilter() for its viewport. */
 
-static const char *zoomedEventFilterRedirectorNameC = "__qt_ZoomedEventFilterRedirector";
+static const char zoomedEventFilterRedirectorNameC[] = "__qt_ZoomedEventFilterRedirector";
 
 class ZoomedEventFilterRedirector : public QObject {
     Q_DISABLE_COPY_MOVE(ZoomedEventFilterRedirector)
@@ -241,7 +241,7 @@ ZoomedEventFilterRedirector::ZoomedEventFilterRedirector(ZoomWidget *zw, QObject
     QObject(parent),
     m_zw(zw)
 {
-    setObjectName(QLatin1String(zoomedEventFilterRedirectorNameC));
+    setObjectName(QLatin1StringView(zoomedEventFilterRedirectorNameC));
 }
 
 bool ZoomedEventFilterRedirector::eventFilter(QObject *watched, QEvent *event)
@@ -268,7 +268,7 @@ void ZoomWidget::setWidget(QWidget *w, Qt::WindowFlags wFlags)
         scene().removeItem(m_proxy);
         if (QWidget *w = m_proxy->widget()) {
             // remove the event filter
-            if (QObject *evf =  w->findChild<QObject*>(QLatin1String(zoomedEventFilterRedirectorNameC)))
+            if (QObject *evf =  w->findChild<QObject*>(QLatin1StringView(zoomedEventFilterRedirectorNameC)))
                 w->removeEventFilter(evf);
         }
         m_proxy->deleteLater();

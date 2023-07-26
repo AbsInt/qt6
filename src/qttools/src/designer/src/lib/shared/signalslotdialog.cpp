@@ -32,8 +32,8 @@ using namespace Qt::StringLiterals;
 
 // Regexp to match a function signature, arguments potentially
 // with namespace colons.
-static const char *signatureRegExp = "^[\\w+_]+\\(([\\w+:]\\*?,?)*\\)$";
-static const char *methodNameRegExp = "^[\\w+_]+$";
+static const char signatureRegExp[] = "^[\\w+_]+\\(([\\w+:]\\*?,?)*\\)$";
+static const char methodNameRegExp[] = "^[\\w+_]+$";
 
 static QStandardItem *createEditableItem(const QString &text)
 {
@@ -66,8 +66,8 @@ namespace {
 
     SignatureDelegate::SignatureDelegate(QObject * parent) :
         QItemDelegate(parent),
-        m_signatureRegexp(QLatin1String(signatureRegExp)),
-        m_methodNameRegexp(QLatin1String(methodNameRegExp))
+        m_signatureRegexp(QLatin1StringView(signatureRegExp)),
+        m_methodNameRegexp(QLatin1StringView(methodNameRegExp))
     {
         Q_ASSERT(m_signatureRegexp.isValid());
         Q_ASSERT(m_methodNameRegexp.isValid());
@@ -286,7 +286,7 @@ void SignaturePanel::closeEditor()
 SignalSlotDialog::SignalSlotDialog(QDesignerDialogGuiInterface *dialogGui, QWidget *parent, FocusMode mode) :
     QDialog(parent),
     m_focusMode(mode),
-    m_ui(new Ui::SignalSlotDialogClass),
+    m_ui(new QT_PREPEND_NAMESPACE(Ui)::SignalSlotDialogClass),
     m_dialogGui(dialogGui)
 {
     setModal(true);

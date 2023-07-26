@@ -70,7 +70,7 @@ void QWizardContainer::setCurrentIndex(int index)
     }
 }
 
-static const char *msgWrongType = "** WARNING Attempt to add oject that is not of class WizardPage to a QWizard";
+static const char msgWrongType[] = "** WARNING Attempt to add oject that is not of class WizardPage to a QWizard";
 
 void QWizardContainer::addWidget(QWidget *widget)
 {
@@ -153,7 +153,7 @@ const char *QWizardPagePropertySheet::pageIdProperty = "pageId";
 
 QWizardPagePropertySheet::QWizardPagePropertySheet(QWizardPage *object, QObject *parent) :
     QDesignerPropertySheet(object, parent),
-    m_pageIdIndex(createFakeProperty(QLatin1String(pageIdProperty), QString()))
+    m_pageIdIndex(createFakeProperty(QLatin1StringView(pageIdProperty), QString()))
 {
     setAttribute(m_pageIdIndex, true);
 }
