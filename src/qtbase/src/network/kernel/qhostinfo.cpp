@@ -107,18 +107,8 @@ void QHostInfoResult::postResultsReady(const QHostInfo &info)
     auto result = new QHostInfoResult(this);
     Q_CHECK_PTR(result);
 
-    const int nargs = 2;
-    auto metaCallEvent = new QMetaCallEvent(slotObj, nullptr, signal_index, nargs);
+    auto metaCallEvent = QMetaCallEvent::create(slotObj.get(), nullptr, signal_index, info);
     Q_CHECK_PTR(metaCallEvent);
-    void **args = metaCallEvent->args();
-    QMetaType *types = metaCallEvent->types();
-    auto voidType = QMetaType::fromType<void>();
-    auto hostInfoType = QMetaType::fromType<QHostInfo>();
-    types[0] = voidType;
-    types[1] = hostInfoType;
-    args[0] = nullptr;
-    args[1] = hostInfoType.create(&info);
-    Q_CHECK_PTR(args[1]);
     qApp->postEvent(result, metaCallEvent);
 }
 
@@ -752,6 +742,8 @@ int QHostInfo::lookupHostImpl(const QString &name,
 
     if (!QAbstractEventDispatcher::instance(QThread::currentThread())) {
         qWarning("QHostInfo::lookupHost() called with no event dispatcher");
+        if (slotObj)
+            slotObj->destroyIfLastRef();
         return -1;
     }
 
@@ -812,6 +804,8 @@ int QHostInfo::lookupHostImpl(const QString &name,
             QObject::connect(&runnable->resultEmitter, SIGNAL(resultsReady(QHostInfo)),
                                 receiver, member, Qt::QueuedConnection);
         manager->scheduleLookup(runnable);
+    } else if (slotObj) {
+        slotObj->destroyIfLastRef();
     }
 #endif // Q_OS_WASM
     return id;
