@@ -1642,7 +1642,7 @@ class OptionInfo
 
         for (int i = 0; i < 2; ++i) {
             QMap<QWizard::WizardOption, QSharedPointer<Operation> > operations_;
-            foreach (QWizard::WizardOption option, tags.keys())
+            for (const auto &[option, _] : std::as_const(tags).asKeyValueRange())
                 operations_[option] = SetOption::create(option, i == 1);
             operations << operations_;
         }
@@ -1785,7 +1785,7 @@ public:
 
     ~TestWizard()
     {
-        foreach (int id, pageIds) {
+        for (int id : std::as_const(pageIds)) {
             QWizardPage *page_to_delete = page(id);
             removePage(id);
             delete page_to_delete;
@@ -1794,7 +1794,7 @@ public:
 
     void applyOperations(const QList<QSharedPointer<Operation>> &operations)
     {
-        foreach (const QSharedPointer<Operation> &op, operations) {
+        for (const QSharedPointer<Operation> &op : operations) {
             if (op) {
                 op->apply(this);
                 opsDescr += QLatin1Char('(') + op->describe() + QLatin1String(") ");
@@ -1814,8 +1814,16 @@ public:
 class CombinationsTestData
 {
     TestGroup testGroup;
-    QList<QSharedPointer<Operation>> pageOps;
-    QList<QSharedPointer<Operation>> styleOps;
+    const QSharedPointer<Operation> pageOps[3] = {
+        SetPage::create(0),
+        SetPage::create(1),
+        SetPage::create(2),
+    };
+    const QSharedPointer<Operation> styleOps[3] = {
+        SetStyle::create(QWizard::ClassicStyle),
+        SetStyle::create(QWizard::ModernStyle),
+        SetStyle::create(QWizard::MacStyle),
+    };
     QMap<bool, QList<QSharedPointer<Operation>>> setAllOptions;
 
 public:
@@ -1824,11 +1832,8 @@ public:
         QTest::addColumn<bool>("ref");
         QTest::addColumn<bool>("testEquality");
         QTest::addColumn<QList<QSharedPointer<Operation>>>("operations");
-        pageOps << SetPage::create(0) << SetPage::create(1) << SetPage::create(2);
-        styleOps << SetStyle::create(QWizard::ClassicStyle) << SetStyle::create(QWizard::ModernStyle)
-                 << SetStyle::create(QWizard::MacStyle);
-#define SETPAGE(page) pageOps.at(page)
-#define SETSTYLE(style) styleOps.at(style)
+#define SETPAGE(page) pageOps[page]
+#define SETSTYLE(style) styleOps[style]
 #define OPT(option, on) OptionInfo::instance().operation(option, on)
 #define CLROPT(option) OPT(option, false)
 #define SETOPT(option) OPT(option, true)
@@ -1906,7 +1911,7 @@ public:
             testGroup.createTestRows();
         }
 
-        foreach (const QSharedPointer<Operation> &pageOp, pageOps) {
+        for (const QSharedPointer<Operation> &pageOp : pageOps) {
             testGroup.reset("testAll 4.1");
             testGroup.add() << pageOp;
             testGroup.add() << pageOp << pageOp;
@@ -1929,7 +1934,7 @@ public:
             }
         }
 
-        foreach (const QSharedPointer<Operation> &styleOp, styleOps) {
+        for (const QSharedPointer<Operation> &styleOp : styleOps) {
             testGroup.reset("testAll 5.1");
             testGroup.add() << styleOp;
             testGroup.add() << styleOp << styleOp;
@@ -1952,8 +1957,8 @@ public:
             }
         }
 
-        foreach (const QSharedPointer<Operation> &pageOp, pageOps) {
-            foreach (const QSharedPointer<Operation> &styleOp, styleOps) {
+        for (const QSharedPointer<Operation> &pageOp : pageOps) {
+            for (const QSharedPointer<Operation> &styleOp : styleOps) {
 
                 testGroup.reset("testAll 6.1");
                 testGroup.add() << pageOp;
@@ -2044,7 +2049,7 @@ void tst_QWizard::combinations()
 {
     QFETCH(bool, ref);
     QFETCH(bool, testEquality);
-    QFETCH(QList<QSharedPointer<Operation>>, operations);
+    QFETCH(const QList<QSharedPointer<Operation>>, operations);
 
     TestWizard wizard;
 #if !defined(QT_NO_STYLE_WINDOWSVISTA)
@@ -2113,7 +2118,7 @@ public:
     QList<WizardPage *> shown() const
     {
         QList<WizardPage *> result;
-        foreach (WizardPage *page, pages)
+        for (WizardPage *page : pages)
             if (page->shown())
                 result << page;
         return result;
