@@ -1383,6 +1383,8 @@ void QObjectWrapper::destroyObject(bool lastCall)
                 if (ddata && ddata->ownContext) {
                     Q_ASSERT(ddata->ownContext.data() == ddata->context);
                     ddata->ownContext->emitDestruction();
+                    if (ddata->ownContext->contextObject() == o)
+                        ddata->ownContext->setContextObject(nullptr);
                     ddata->ownContext.reset();
                     ddata->context = nullptr;
                 }
@@ -2407,12 +2409,10 @@ const QMetaObject *Heap::QObjectMethod::metaObject() const
 {
     Scope scope(internalClass->engine);
 
-    if (Scoped<QV4::QObjectWrapper> objectWrapper(scope, wrapper); objectWrapper)
-        return objectWrapper->metaObject();
-    if (Scoped<QV4::QQmlTypeWrapper> typeWrapper(scope, wrapper); typeWrapper)
-        return typeWrapper->metaObject();
     if (Scoped<QV4::QQmlValueTypeWrapper> valueWrapper(scope, wrapper); valueWrapper)
         return valueWrapper->metaObject();
+    if (QObject *self = object())
+        return self->metaObject();
 
     return nullptr;
 }
