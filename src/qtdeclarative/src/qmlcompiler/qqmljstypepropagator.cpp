@@ -577,18 +577,36 @@ void QQmlJSTypePropagator::generate_LoadQmlContextPropertyLookup(int index)
         m_attachedContext = QQmlJSScope::ConstPtr();
 }
 
-void QQmlJSTypePropagator::generate_StoreNameSloppy(int nameIndex)
+/*!
+    \internal
+    As far as type propagation is involved, StoreNameSloppy and
+    StoreNameStrict are completely the same
+    StoreNameStrict is rejecting a few writes (where the variable was not
+    defined before) that would work in a sloppy context in JS, but the
+    compiler would always reject this. And for type propagation, this does
+    not matter at all.
+    \a nameIndex is the index in the string table corresponding to
+    the name which we are storing
+ */
+void QQmlJSTypePropagator::generate_StoreNameCommon(int nameIndex)
 {
     const QString name = m_jsUnitGenerator->stringForIndex(nameIndex);
     const QQmlJSRegisterContent type = m_typeResolver->scopedType(m_function->qmlScope, name);
     const QQmlJSRegisterContent in = m_state.accumulatorIn();
 
     if (!type.isValid()) {
+        handleUnqualifiedAccess(name, false);
         setError(u"Cannot find name "_s + name);
         return;
     }
 
     if (!type.isProperty()) {
+        QString message = type.isMethod() ? u"Cannot assign to method %1"_s
+                                          : u"Cannot assign to non-property %1"_s;
+        // The interpreter treats methods as read-only properties in its error messages
+        // and we lack a better fitting category. We might want to revisit this later.
+        m_logger->log(message.arg(name), qmlReadOnlyProperty,
+                      getCurrentSourceLocation());
         setError(u"Cannot assign to non-property "_s + name);
         return;
     }
@@ -627,11 +645,14 @@ void QQmlJSTypePropagator::generate_StoreNameSloppy(int nameIndex)
     }
 }
 
+void QQmlJSTypePropagator::generate_StoreNameSloppy(int nameIndex)
+{
+    return generate_StoreNameCommon(nameIndex);
+}
+
 void QQmlJSTypePropagator::generate_StoreNameStrict(int name)
 {
-    m_state.setHasSideEffects(true);
-    Q_UNUSED(name)
-    INSTR_PROLOGUE_NOT_IMPLEMENTED();
+    return generate_StoreNameCommon(name);
 }
 
 bool QQmlJSTypePropagator::checkForEnumProblems(

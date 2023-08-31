@@ -2327,7 +2327,9 @@ void QMdiArea::showEvent(QShowEvent *showEvent)
     Q_D(QMdiArea);
     if (!d->pendingRearrangements.isEmpty()) {
         bool skipPlacement = false;
-        foreach (Rearranger *rearranger, d->pendingRearrangements) {
+        // Take a copy because d->rearrange() may modify d->pendingRearrangements
+        const auto pendingRearrange = d->pendingRearrangements;
+        for (Rearranger *rearranger : pendingRearrange) {
             // If this is the case, we don't have to lay out pending child windows
             // since the rearranger will find a placement for them.
             if (rearranger->type() != Rearranger::IconTiler && !skipPlacement)
@@ -2341,7 +2343,12 @@ void QMdiArea::showEvent(QShowEvent *showEvent)
     }
 
     if (!d->pendingPlacements.isEmpty()) {
-        foreach (QMdiSubWindow *window, d->pendingPlacements) {
+        // Nothing obvious in the loop body changes the container (in this code path)
+        // during iteration, this is calling into a non-const method that does change
+        // the container when called from other places. So take a copy anyway for good
+        // measure.
+        const auto copy = d->pendingPlacements;
+        for (QMdiSubWindow *window : copy) {
             if (!window)
                 continue;
             if (!window->testAttribute(Qt::WA_Resized)) {
