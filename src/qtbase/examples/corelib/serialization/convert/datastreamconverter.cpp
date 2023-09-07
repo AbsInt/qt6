@@ -9,7 +9,7 @@
 
 static const char dataStreamOptionHelp[] =
         "byteorder=host|big|little      Byte order to use.\n"
-        "version=<n>                    QDataStream version (default: Qt 5.0).\n"
+        "version=<n>                    QDataStream version (default: Qt 6.0).\n"
         ;
 
 static const char signature[] = "qds";
@@ -56,11 +56,11 @@ static QString dumpVariant(const QVariant &v, const QString &indent = QLatin1Str
         result = QLatin1String("Map {");
         for (const auto &pair : map) {
             result += indented + dumpVariant(pair.first, indented);
-            result.chop(1);         // remove comma
+            result.chop(1); // remove comma
             result += QLatin1String(" => ") + dumpVariant(pair.second, indented);
 
         }
-        result.chop(1);             // remove comma
+        result.chop(1); // remove comma
         result += indent + QLatin1String("},");
     } else if (type == QMetaType::QVariantList) {
         const QVariantList list = v.toList();
@@ -68,7 +68,7 @@ static QString dumpVariant(const QVariant &v, const QString &indent = QLatin1Str
         result = QLatin1String("List [");
         for (const auto &item : list)
             result += indented + dumpVariant(item, indented);
-        result.chop(1);             // remove comma
+        result.chop(1); // remove comma
         result += indent + QLatin1String("],");
     } else {
         QDebug debug(&result);
@@ -115,7 +115,7 @@ void DataStreamDumper::saveFile(QIODevice *f, const QVariant &contents, const QS
 {
     Q_UNUSED(options);
     QString s = dumpVariant(contents);
-    s[s.size() - 1] = QLatin1Char('\n');    // replace the comma with newline
+    s[s.size() - 1] = QLatin1Char('\n'); // replace the comma with newline
 
     QTextStream out(f);
     out << s;
@@ -177,7 +177,7 @@ QVariant DataStreamConverter::loadFile(QIODevice *f, Converter *&outputConverter
 
 void DataStreamConverter::saveFile(QIODevice *f, const QVariant &contents, const QStringList &options)
 {
-    QDataStream::Version version = QDataStream::Qt_5_0;
+    QDataStream::Version version = QDataStream::Qt_6_0;
     auto order = QDataStream::ByteOrder(QSysInfo::ByteOrder);
     for (const QString &option : options) {
         const QStringList pair = option.split('=');
@@ -213,7 +213,7 @@ void DataStreamConverter::saveFile(QIODevice *f, const QVariant &contents, const
         exit(EXIT_FAILURE);
     }
 
-    char c = order == QDataStream::LittleEndian ? 'l'  : 'B';
+    char c = order == QDataStream::LittleEndian ? 'l' : 'B';
     f->write(signature);
     f->write(&c, 1);
 
