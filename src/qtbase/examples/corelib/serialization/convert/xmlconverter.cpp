@@ -15,8 +15,7 @@
 
 using namespace Qt::StringLiterals;
 
-static const char xmlOptionHelp[] =
-        "compact=no|yes              Use compact XML form.\n";
+static const char xmlOptionHelp[] = "compact=no|yes              Use compact XML form.\n";
 
 static XmlConverter xmlConverter;
 
@@ -49,8 +48,7 @@ static QVariantList listFromXml(QXmlStreamReader &xml, Converter::Options option
             break;
         }
 
-        fprintf(stderr, "%lld:%lld: Invalid XML %s '%s'.\n",
-                xml.lineNumber(), xml.columnNumber(),
+        fprintf(stderr, "%lld:%lld: Invalid XML %s '%s'.\n", xml.lineNumber(), xml.columnNumber(),
                 qPrintable(xml.tokenString()), qPrintable(xml.name().toString()));
         exit(EXIT_FAILURE);
     }
@@ -59,7 +57,8 @@ static QVariantList listFromXml(QXmlStreamReader &xml, Converter::Options option
     return list;
 }
 
-static VariantOrderedMap::value_type mapEntryFromXml(QXmlStreamReader &xml, Converter::Options options)
+static VariantOrderedMap::value_type mapEntryFromXml(QXmlStreamReader &xml,
+                                                     Converter::Options options)
 {
     QVariant key, value;
     while (!xml.atEnd() && !(xml.isEndElement() && xml.name() == "entry"_L1)) {
@@ -91,8 +90,7 @@ static VariantOrderedMap::value_type mapEntryFromXml(QXmlStreamReader &xml, Conv
             break;
         }
 
-        fprintf(stderr, "%lld:%lld: Invalid XML %s '%s'.\n",
-                xml.lineNumber(), xml.columnNumber(),
+        fprintf(stderr, "%lld:%lld: Invalid XML %s '%s'.\n", xml.lineNumber(), xml.columnNumber(),
                 qPrintable(xml.tokenString()), qPrintable(xml.name().toString()));
         exit(EXIT_FAILURE);
     }
@@ -136,8 +134,7 @@ static QVariant mapFromXml(QXmlStreamReader &xml, Converter::Options options)
             break;
         }
 
-        fprintf(stderr, "%lld:%lld: Invalid XML %s '%s'.\n",
-                xml.lineNumber(), xml.columnNumber(),
+        fprintf(stderr, "%lld:%lld: Invalid XML %s '%s'.\n", xml.lineNumber(), xml.columnNumber(),
                 qPrintable(xml.tokenString()), qPrintable(xml.name().toString()));
         exit(EXIT_FAILURE);
     }
@@ -171,8 +168,7 @@ static QVariant variantFromXml(QXmlStreamReader &xml, Converter::Options options
         if (xml.isCDATA() || xml.isCharacters() || xml.isEndElement())
             break;
 
-        fprintf(stderr, "%lld:%lld: Invalid XML %s '%s'.\n",
-                xml.lineNumber(), xml.columnNumber(),
+        fprintf(stderr, "%lld:%lld: Invalid XML %s '%s'.\n", xml.lineNumber(), xml.columnNumber(),
                 qPrintable(xml.tokenString()), qPrintable(name.toString()));
         exit(EXIT_FAILURE);
     }
@@ -269,8 +265,7 @@ static QVariant variantFromXml(QXmlStreamReader &xml, Converter::Options options
     } while (xml.isComment() || xml.isWhitespace());
 
     if (!xml.isEndElement()) {
-        fprintf(stderr, "%lld:%lld: Invalid XML %s '%s'.\n",
-                xml.lineNumber(), xml.columnNumber(),
+        fprintf(stderr, "%lld:%lld: Invalid XML %s '%s'.\n", xml.lineNumber(), xml.columnNumber(),
                 qPrintable(xml.tokenString()), qPrintable(name.toString()));
         exit(EXIT_FAILURE);
     }
@@ -289,9 +284,9 @@ static void variantToXml(QXmlStreamWriter &xml, const QVariant &v)
             variantToXml(xml, v);
         xml.writeEndElement();
     } else if (type == QMetaType::QVariantMap || type == qMetaTypeId<VariantOrderedMap>()) {
-        const VariantOrderedMap map = (type == QMetaType::QVariantMap) ?
-                    VariantOrderedMap(v.toMap()) :
-                    qvariant_cast<VariantOrderedMap>(v);
+        const VariantOrderedMap map = (type == QMetaType::QVariantMap)
+                ? VariantOrderedMap(v.toMap())
+                : qvariant_cast<VariantOrderedMap>(v);
 
         xml.writeStartElement("map");
         for (const auto &pair : map) {
@@ -401,27 +396,27 @@ static void variantToXml(QXmlStreamWriter &xml, const QVariant &v)
     }
 }
 
-QString XmlConverter::name()
+QString XmlConverter::name() const
 {
     return "xml"_L1;
 }
 
-Converter::Direction XmlConverter::directions()
+Converter::Directions XmlConverter::directions() const
 {
-    return InOut;
+    return Direction::InOut;
 }
 
-Converter::Options XmlConverter::outputOptions()
+Converter::Options XmlConverter::outputOptions() const
 {
     return SupportsArbitraryMapKeys;
 }
 
-const char *XmlConverter::optionsHelp()
+const char *XmlConverter::optionsHelp() const
 {
     return xmlOptionHelp;
 }
 
-bool XmlConverter::probeFile(QIODevice *f)
+bool XmlConverter::probeFile(QIODevice *f) const
 {
     if (QFile *file = qobject_cast<QFile *>(f)) {
         if (file->fileName().endsWith(".xml"_L1))
@@ -431,7 +426,7 @@ bool XmlConverter::probeFile(QIODevice *f)
     return f->isReadable() && f->peek(5) == "<?xml";
 }
 
-QVariant XmlConverter::loadFile(QIODevice *f, Converter *&outputConverter)
+QVariant XmlConverter::loadFile(QIODevice *f, const Converter *&outputConverter) const
 {
     if (!outputConverter)
         outputConverter = this;
@@ -447,7 +442,8 @@ QVariant XmlConverter::loadFile(QIODevice *f, Converter *&outputConverter)
     return v;
 }
 
-void XmlConverter::saveFile(QIODevice *f, const QVariant &contents, const QStringList &options)
+void XmlConverter::saveFile(QIODevice *f, const QVariant &contents,
+                            const QStringList &options) const
 {
     bool compact = false;
     for (const QString &s : options) {

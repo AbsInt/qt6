@@ -13,12 +13,12 @@
 
 using namespace Qt::StringLiterals;
 
-static QList<Converter *> *availableConverters;
+static QList<const Converter *> *availableConverters;
 
 Converter::Converter()
 {
     if (!availableConverters)
-        availableConverters = new QList<Converter *>;
+        availableConverters = new QList<const Converter *>;
     availableConverters->append(this);
 }
 
@@ -33,12 +33,12 @@ int main(int argc, char *argv[])
 
     QStringList inputFormats;
     QStringList outputFormats;
-    for (Converter *conv : std::as_const(*availableConverters)) {
+    for (const Converter *conv : std::as_const(*availableConverters)) {
         auto direction = conv->directions();
         QString name = conv->name();
-        if (direction & Converter::In)
+        if (direction.testFlag(Converter::Direction::In))
             inputFormats << name;
-        if (direction & Converter::Out)
+        if (direction.testFlag(Converter::Direction::Out))
             outputFormats << name;
     }
     inputFormats.sort();
@@ -86,13 +86,15 @@ int main(int argc, char *argv[])
 
     if (parser.isSet(formatOptionsOption)) {
         QString format = parser.value(formatOptionsOption);
-        for (Converter *conv : std::as_const(*availableConverters)) {
+        for (const Converter *conv : std::as_const(*availableConverters)) {
             if (conv->name() == format) {
                 const char *help = conv->optionsHelp();
-                if (help)
-                    printf("The following options are available for format '%s':\n\n%s", qPrintable(format), help);
-                else
+                if (help) {
+                    printf("The following options are available for format '%s':\n\n%s",
+                           qPrintable(format), help);
+                } else {
                     printf("Format '%s' supports no options.\n", qPrintable(format));
+                }
                 return EXIT_SUCCESS;
             }
         }
@@ -101,10 +103,10 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
-    Converter *inconv = nullptr;
+    const Converter *inconv = nullptr;
     QString format = parser.value(inputFormatOption);
     if (format != "auto"_L1) {
-        for (Converter *conv : std::as_const(*availableConverters)) {
+        for (const Converter *conv : std::as_const(*availableConverters)) {
             if (conv->name() == format) {
                 inconv = conv;
                 break;
@@ -117,10 +119,10 @@ int main(int argc, char *argv[])
         }
     }
 
-    Converter *outconv = nullptr;
+    const Converter *outconv = nullptr;
     format = parser.value(outputFormatOption);
     if (format != "auto"_L1) {
-        for (Converter *conv : std::as_const(*availableConverters)) {
+        for (const Converter *conv : std::as_const(*availableConverters)) {
             if (conv->name() == format) {
                 outconv = conv;
                 break;
@@ -159,8 +161,9 @@ int main(int argc, char *argv[])
 
     if (!inconv) {
         // probe the input to find a file format
-        for (Converter *conv : std::as_const(*availableConverters)) {
-            if (conv->directions() & Converter::In && conv->probeFile(&input)) {
+        for (const Converter *conv : std::as_const(*availableConverters)) {
+            if (conv->directions().testFlag(Converter::Direction::In)
+                && conv->probeFile(&input)) {
                 inconv = conv;
                 break;
             }
@@ -174,8 +177,9 @@ int main(int argc, char *argv[])
 
     if (!outconv) {
         // probe the output to find a file format
-        for (Converter *conv : std::as_const(*availableConverters)) {
-            if (conv->directions() & Converter::Out && conv->probeFile(&output)) {
+        for (const Converter *conv : std::as_const(*availableConverters)) {
+            if (conv->directions().testFlag(Converter::Direction::Out)
+                && conv->probeFile(&output)) {
                 outconv = conv;
                 break;
             }
