@@ -140,7 +140,29 @@ std::filesystem::path normilizedPath(const std::string &path)
 {
     return std::filesystem::path(std::filesystem::weakly_canonical(path).generic_string());
 }
+
+bool createDirectories(const std::string &path, std::string_view errorMsg, bool *exists = nullptr)
+{
+    bool result = true;
+    try {
+        if (!std::filesystem::exists(path)) {
+            if (exists)
+                *exists = false;
+            std::filesystem::create_directories(path);
+        } else {
+            if (exists)
+                *exists = true;
+        }
+    } catch (const std::filesystem::filesystem_error &fserr) {
+        result = false;
+        std::cerr << errorMsg << ": " << path << ".\n"
+                  << fserr.code().message() << "(" << fserr.code().value() << "):" << fserr.what()
+                  << std::endl;
+    }
+    return result;
 }
+
+} // namespace utils
 
 using FileStamp = std::filesystem::file_time_type;
 
@@ -401,6 +423,7 @@ private:
                     if (!parseArgument(argFromFile))
                         return false;
                 }
+                ifs.close();
                 continue;
             }
 
@@ -714,9 +737,12 @@ public:
                                                               bool skipCleanup = false)
     {
         bool result = true;
-        if (!std::filesystem::exists(outputDirectory)) {
-            std::filesystem::create_directories(outputDirectory);
-        } else if (!skipCleanup) {
+        bool outDirExists = false;
+        if (!utils::createDirectories(outputDirectory, "Unable to create staging directory",
+                                      &outDirExists))
+            return false;
+
+        if (outDirExists && !skipCleanup) {
             for (const auto &entry :
                  std::filesystem::recursive_directory_iterator(outputDirectory)) {
                 if (m_producedHeaders.find(entry.path().filename().generic_string())
@@ -820,8 +846,8 @@ public:
         else if (isPrivate)
             outputDir = m_commandLineArgs->privateIncludeDir();
 
-        if (!std::filesystem::exists(outputDir))
-            std::filesystem::create_directories(outputDir);
+        if (!utils::createDirectories(outputDir, "Unable to create output directory"))
+            return false;
 
         bool headerFileExists = std::filesystem::exists(headerFile);
 
@@ -1302,6 +1328,7 @@ public:
                 }
             }
         }
+        input.close();
 
         // Error out if namespace checks are failed.
         if (!(skipChecks & NamespaceChecks)) {
@@ -1538,8 +1565,16 @@ public:
             writeIfDifferent(outputDir + '/' + headerName, buffer.str());
 
             // Add header file to staging installation directory for cross-module deprecation case.
-            if (isCrossModuleDeprecation)
-                writeIfDifferent(outputDir + "/.syncqt_staging/" + headerName, buffer.str());
+            if (isCrossModuleDeprecation) {
+                const std::string stagingDir = outputDir + "/.syncqt_staging/";
+                writeIfDifferent(stagingDir + headerName, buffer.str());
+                if (m_commandLineArgs->isFramework()) {
+                    const std::string frameworkStagingDir = stagingDir + moduleName
+                            + ".framework/Versions/A/Headers/" QT_VERSION_STR "/"
+                            + moduleName.substr(2) + '/';
+                    writeIfDifferent(frameworkStagingDir + headerName, buffer.str());
+                }
+            }
             m_producedHeaders.insert(headerName);
         }
         return result;
@@ -1564,7 +1599,7 @@ public:
         return writeIfDifferent(m_commandLineArgs->versionScriptFile(), buffer.str());
     }
 
-    bool updateOrCopy(const std::filesystem::path &src, const std::filesystem::path &dst);
+    bool updateOrCopy(const std::filesystem::path &src, const std::filesystem::path &dst) noexcept;
     void updateSymbolDescriptor(const std::string &symbol, const std::string &file,
                                 SymbolDescriptor::SourceType type);
 };
@@ -1590,7 +1625,8 @@ SyncScanner::makeHeaderAbsolute(const std::string &filename) const
     return utils::normilizedPath(filename);
 }
 
-bool SyncScanner::updateOrCopy(const std::filesystem::path &src, const std::filesystem::path &dst)
+bool SyncScanner::updateOrCopy(const std::filesystem::path &src,
+                               const std::filesystem::path &dst) noexcept
 {
     if (m_commandLineArgs->showOnly())
         return true;
@@ -1679,8 +1715,9 @@ bool SyncScanner::writeIfDifferent(const std::string &outputFile, const std::str
     std::filesystem::path outputFilePath(outputFile);
 
     std::string outputDirectory = outputFilePath.parent_path().string();
-    if (!std::filesystem::exists(outputDirectory))
-        std::filesystem::create_directories(outputDirectory);
+
+    if (!utils::createDirectories(outputDirectory, "Unable to create output directory"))
+        return false;
 
     auto expectedSize = buffer.size();
 #ifdef _WINDOWS
@@ -1694,6 +1731,10 @@ bool SyncScanner::writeIfDifferent(const std::string &outputFile, const std::str
         memset(rdBuffer, 0, bufferSize);
 
         std::ifstream ifs(outputFile, std::fstream::in);
+        if (!ifs.is_open()) {
+            std::cerr << "Unable to open " << outputFile << " for comparison." << std::endl;
+            return false;
+        }
         std::streamsize currentPos = 0;
 
         std::size_t bytesRead = 0;
