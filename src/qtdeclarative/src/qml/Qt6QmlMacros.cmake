@@ -58,6 +58,8 @@ function(qt6_add_qml_module target)
         INSTALL_DIRECTORY
         INSTALL_LOCATION
         TYPE_COMPILER_NAMESPACE
+        QMLTC_EXPORT_DIRECTIVE
+        QMLTC_EXPORT_FILE_NAME
     )
 
     set(args_multi
@@ -147,11 +149,32 @@ function(qt6_add_qml_module target)
             )
     endif()
 
-    if (DEFINED arg_TYPE_COMPILER_NAMESPACE AND NOT arg_ENABLE_TYPE_COMPILER)
-        message(WARNING
-            "TYPE_COMPILER_NAMESPACE is set, but ENABLE_TYPE_COMPILER is not specified. "
-            "The TYPE_COMPILER_NAMESPACE value will be ignored."
-        )
+    if (NOT arg_ENABLE_TYPE_COMPILER)
+        if (DEFINED arg_TYPE_COMPILER_NAMESPACE)
+            message(WARNING
+                "TYPE_COMPILER_NAMESPACE is set, but ENABLE_TYPE_COMPILER is not specified. "
+                "The TYPE_COMPILER_NAMESPACE value will be ignored."
+            )
+        endif()
+
+        if (DEFINED arg_QMLTC_EXPORT_DIRECTIVE)
+            message(WARNING
+                "QMLTC_EXPORT_DIRECTIVE is set, but ENABLE_TYPE_COMPILER is not specified. "
+                "The QMLTC_EXPORT_DIRECTIVE value will be ignored."
+            )
+        endif()
+        if (DEFINED arg_QMLTC_EXPORT_FILE_NAME)
+            message(WARNING
+                "QMLTC_EXPORT_FILE_NAME is set, but ENABLE_TYPE_COMPILER is not specified. "
+                "The QMLTC_EXPORT_FILE_NAME will be ignored."
+            )
+        endif()
+    else()
+        if ((DEFINED arg_QMLTC_EXPORT_FILE_NAME) AND (NOT (DEFINED arg_QMLTC_EXPORT_DIRECTIVE)))
+            message(FATAL_ERROR
+                "Specifying a value for QMLTC_EXPORT_FILE_NAME also requires one for QMLTC_EXPORT_DIRECTIVE."
+            )
+        endif()
     endif()
 
     set(is_executable FALSE)
@@ -651,10 +674,17 @@ Check https://doc.qt.io/qt-6/qt-cmake-policy-qtp0001.html for policy details."
     endif()
 
     if (arg_ENABLE_TYPE_COMPILER)
+        if (DEFINED arg_TYPE_COMPILER_NAMESPACE AND NOT $<STREQUAL:"${arg_TYPE_COMPILER_NAMESPACE}","">)
+            set(qmltc_namespace ${arg_TYPE_COMPILER_NAMESPACE})
+        else()
+            string(REPLACE "." "::" qmltc_namespace "${arg_URI}")
+        endif()
         _qt_internal_target_enable_qmltc(${target}
             QML_FILES ${arg_QML_FILES}
             IMPORT_PATHS ${arg_IMPORT_PATH}
-            NAMESPACE ${arg_TYPE_COMPILER_NAMESPACE}
+            NAMESPACE ${qmltc_namespace}
+            EXPORT_MACRO_NAME ${arg_QMLTC_EXPORT_DIRECTIVE}
+            EXPORT_FILE_NAME ${arg_QMLTC_EXPORT_FILE_NAME}
         )
     endif()
 
@@ -1246,7 +1276,7 @@ endfunction()
 # Compile Qml files (.qml) to C++ source files with QML type compiler (qmltc).
 function(_qt_internal_target_enable_qmltc target)
     set(args_option "")
-    set(args_single NAMESPACE)
+    set(args_single NAMESPACE EXPORT_MACRO_NAME EXPORT_FILE_NAME)
     set(args_multi QML_FILES IMPORT_PATHS)
 
     cmake_parse_arguments(PARSE_ARGV 1 arg
@@ -1278,6 +1308,10 @@ function(_qt_internal_target_enable_qmltc target)
     set(common_args "")
     if(arg_NAMESPACE)
         list(APPEND common_args --namespace "${arg_NAMESPACE}")
+    endif()
+    if(arg_EXPORT_MACRO_NAME)
+        list(APPEND common_args --export "${arg_EXPORT_MACRO_NAME}")
+        list(APPEND common_args --exportInclude "${arg_EXPORT_FILE_NAME}")
     endif()
 
     get_target_property(output_dir ${target} QT_QML_MODULE_OUTPUT_DIRECTORY)
@@ -2047,6 +2081,7 @@ function(qt6_target_qml_sources target)
                     DEPENDS ${file_absolute}
                     WORKING_DIRECTORY $<TARGET_PROPERTY:${target},SOURCE_DIR>
                     VERBATIM
+                    COMMENT "Copying ${file_src} to ${file_out}"
                 )
                 list(APPEND copied_files ${file_out})
             endif()
@@ -2395,6 +2430,11 @@ function(_qt_internal_qml_type_registration target)
     set(args_option)
     set(args_single NAMESPACE)
     set(args_multi  MANUAL_MOC_JSON_FILES)
+
+    get_target_property(skipped ${target} _qt_is_skipped_test)
+    if(skipped)
+        return()
+    endif()
 
     cmake_parse_arguments(PARSE_ARGV 1 arg
         "${args_option}" "${args_single}" "${args_multi}"

@@ -64,6 +64,7 @@ class QWaylandTextInputInterface;
 class QWaylandTextInputMethod;
 #if QT_CONFIG(cursor)
 class QWaylandCursorTheme;
+class QWaylandCursorShape;
 class CursorSurface;
 #endif
 
@@ -84,6 +85,7 @@ public:
 
     uint32_t capabilities() const { return mCaps; }
 
+    QWaylandDisplay *display() const { return mQDisplay; }
     struct ::wl_seat *wl_seat() { return QtWayland::wl_seat::object(); }
 
 #if QT_CONFIG(cursor)
@@ -322,6 +324,7 @@ public:
     uint32_t mEnterSerial = 0;
 #if QT_CONFIG(cursor)
     struct {
+        QScopedPointer<QWaylandCursorShape> shape;
         QWaylandCursorTheme *theme = nullptr;
         int themeBufferScale = 0;
         QScopedPointer<CursorSurface> surface;

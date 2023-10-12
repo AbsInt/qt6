@@ -1571,9 +1571,9 @@ static QVariant toVariant(
                 QV4::ScopedValue arrayValue(scope);
                 for (qint64 i = 0; i < length; ++i) {
                     arrayValue = a->get(i);
-                    QVariant asVariant(valueMetaType);
-                    if (QQmlValueTypeProvider::createValueType(
-                                arrayValue, valueMetaType, asVariant.data())) {
+                    QVariant asVariant = QQmlValueTypeProvider::createValueType(
+                                arrayValue, valueMetaType);
+                    if (asVariant.isValid()) {
                         retnAsIterable.metaContainer().addValue(retn.data(), asVariant.constData());
                         continue;
                     }
@@ -1671,8 +1671,8 @@ static QVariant toVariant(
 #endif
 
     if (metaType.isValid() && !(metaType.flags() & QMetaType::PointerToQObject)) {
-        QVariant result(metaType);
-        if (QQmlValueTypeProvider::createValueType(value, metaType, result.data()))
+        const QVariant result = QQmlValueTypeProvider::createValueType(value, metaType);
+        if (result.isValid())
             return result;
     }
 
@@ -1865,7 +1865,7 @@ QV4::ReturnedValue ExecutionEngine::fromData(
             }
         }
 
-    } else {
+    } else if (!(metaType.flags() & QMetaType::IsEnumeration)) {
         QV4::Scope scope(this);
         if (metaType == QMetaType::fromType<QQmlListReference>()) {
             typedef QQmlListReferencePrivate QDLRP;
@@ -1951,9 +1951,8 @@ QV4::ReturnedValue ExecutionEngine::fromData(
     //    + QObjectList
     //    + QList<int>
 
-    // Enumeration types can just be treated as integers for now
     if (metaType.flags() & QMetaType::IsEnumeration)
-        return QV4::Encode(*reinterpret_cast<const int *>(ptr));
+        return fromData(metaType.underlyingType(), ptr, container, property, flags);
 
     return QV4::Encode(newVariantObject(metaType, ptr));
 }
@@ -2088,8 +2087,14 @@ ReturnedValue ExecutionEngine::global()
 QQmlRefPointer<ExecutableCompilationUnit> ExecutionEngine::compileModule(const QUrl &url)
 {
     QQmlMetaType::CachedUnitLookupError cacheError = QQmlMetaType::CachedUnitLookupError::NoError;
-    if (const QQmlPrivate::CachedQmlUnit *cachedUnit = diskCacheEnabled()
-            ? QQmlMetaType::findCachedCompilationUnit(url, &cacheError)
+    const DiskCacheOptions options = diskCacheOptions();
+    if (const QQmlPrivate::CachedQmlUnit *cachedUnit = (options & DiskCache::Aot)
+            ? QQmlMetaType::findCachedCompilationUnit(
+                url,
+                (options & DiskCache::AotByteCode)
+                    ? QQmlMetaType::AcceptUntyped
+                    : QQmlMetaType::RequireFullyTyped,
+                &cacheError)
             : nullptr) {
         return ExecutableCompilationUnit::create(
                     QV4::CompiledData::CompilationUnit(
@@ -2194,9 +2199,44 @@ QV4::Value *ExecutionEngine::registerNativeModule(const QUrl &url, const QV4::Va
     return val;
 }
 
-bool ExecutionEngine::diskCacheEnabled() const
+static ExecutionEngine::DiskCacheOptions transFormDiskCache(const char *v)
 {
-    return (!disableDiskCache() && !debugger()) || forceDiskCache();
+    using DiskCache = ExecutionEngine::DiskCache;
+
+    if (v == nullptr)
+        return DiskCache::Enabled;
+
+    ExecutionEngine::DiskCacheOptions result = DiskCache::Disabled;
+    const QList<QByteArray> options = QByteArray(v).split(',');
+    for (const QByteArray &option : options) {
+        if (option == "aot-bytecode")
+            result |= DiskCache::AotByteCode;
+        else if (option == "aot-native")
+            result |= DiskCache::AotNative;
+        else if (option == "aot")
+            result |= DiskCache::Aot;
+        else if (option == "qmlc-read")
+            result |= DiskCache::QmlcRead;
+        else if (option == "qmlc-write")
+            result |= DiskCache::QmlcWrite;
+        else if (option == "qmlc")
+            result |= DiskCache::Qmlc;
+        else
+            qWarning() << "Ignoring unknown option to QML_DISK_CACHE:" << option;
+    }
+
+    return result;
+}
+
+ExecutionEngine::DiskCacheOptions ExecutionEngine::diskCacheOptions() const
+{
+    if (forceDiskCache())
+        return DiskCache::Enabled;
+    if (disableDiskCache() || debugger())
+        return DiskCache::Disabled;
+    static const DiskCacheOptions options = qmlGetConfigOption<
+            DiskCacheOptions, transFormDiskCache>("QML_DISK_CACHE");
+    return options;
 }
 
 void ExecutionEngine::callInContext(QV4::Function *function, QObject *self,
@@ -2659,13 +2699,13 @@ bool ExecutionEngine::metaTypeFromJS(const Value &value, QMetaType metaType, voi
             d->readReference();
 
         if (void *gadgetPtr = d->gadgetPtr()) {
-            if (QQmlValueTypeProvider::createValueType(valueType, gadgetPtr, metaType, data))
+            if (QQmlValueTypeProvider::createValueType(metaType, data, valueType, gadgetPtr))
                 return true;
             if (QMetaType::canConvert(valueType, metaType))
                 return QMetaType::convert(valueType, gadgetPtr, metaType, data);
         } else {
             QVariant empty(valueType);
-            if (QQmlValueTypeProvider::createValueType(valueType, empty.data(), metaType, data))
+            if (QQmlValueTypeProvider::createValueType(metaType, data, valueType, empty.data()))
                 return true;
             if (QMetaType::canConvert(valueType, metaType))
                 return QMetaType::convert(valueType, empty.data(), metaType, data);
@@ -2732,7 +2772,7 @@ bool ExecutionEngine::metaTypeFromJS(const Value &value, QMetaType metaType, voi
                 }
             }
         } else if (QQmlValueTypeProvider::createValueType(
-                       var.metaType(), var.data(), metaType, data)) {
+                       metaType, data, var.metaType(), var.data())) {
             return true;
         }
     } else if (value.isNull() && isPointer) {
@@ -2745,7 +2785,7 @@ bool ExecutionEngine::metaTypeFromJS(const Value &value, QMetaType metaType, voi
         *reinterpret_cast<QJSPrimitiveValue *>(data) = createPrimitive(&value);
         return true;
     } else if (!isPointer) {
-        if (QQmlValueTypeProvider::createValueType(value, metaType, data))
+        if (QQmlValueTypeProvider::createValueType(metaType, data, value))
             return true;
     }
 

@@ -226,6 +226,8 @@ void Output::output_bind_resource(QtWaylandServer::wl_output::Resource *resource
 
     if (m_version >= WL_OUTPUT_DONE_SINCE_VERSION)
         wl_output::send_done(resource->handle);
+
+    Q_EMIT outputBound(resource);
 }
 
 // Seat stuff
@@ -336,7 +338,7 @@ uint Pointer::sendEnter(Surface *surface, const QPointF &position)
 
     uint serial = m_seat->m_compositor->nextSerial();
     m_enterSerials << serial;
-    m_cursorRole = nullptr; // According to the protocol, the pointer image is undefined after enter
+    m_cursorRole.clear(); // According to the protocol, the pointer image is undefined after enter
 
     wl_client *client = surface->resource()->client();
     const auto pointerResources = resourceMap().values(client);
@@ -433,15 +435,19 @@ void Pointer::sendAxisValue120(wl_client *client, QtWaylandServer::wl_pointer::a
 void Pointer::pointer_set_cursor(Resource *resource, uint32_t serial, wl_resource *surface, int32_t hotspot_x, int32_t hotspot_y)
 {
     Q_UNUSED(resource);
-    auto *s = fromResource<Surface>(surface);
-    QVERIFY(s);
 
-    if (s->m_role) {
-        m_cursorRole = CursorRole::fromSurface(s);
-        QVERIFY(m_cursorRole);
+    if (!surface) {
+        m_cursorRole = nullptr;
     } else {
-        m_cursorRole = new CursorRole(s); //TODO: make sure we don't leak CursorRole
-        s->m_role = m_cursorRole;
+        auto *s = fromResource<Surface>(surface);
+        QVERIFY(s);
+        if (s->m_role) {
+            m_cursorRole = CursorRole::fromSurface(s);
+            QVERIFY(m_cursorRole);
+        } else {
+            m_cursorRole = new CursorRole(s); //TODO: make sure we don't leak CursorRole
+            s->m_role = m_cursorRole;
+        }
     }
 
     // Directly checking the last serial would be racy, we may just have sent leaves/enters which

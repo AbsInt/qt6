@@ -8,7 +8,7 @@
 #include <QtQuick/private/qsgcontext_p.h>
 #include <private/qsgadaptationlayer_p.h>
 #include <qsgtextureprovider.h>
-#include <QtGui/private/qrhi_p.h>
+#include <rhi/qrhi.h>
 
 #include <qmath.h>
 
@@ -416,6 +416,10 @@ void QQuickPaintedItem::setContentsScale(qreal scale)
     \brief The item's background fill color.
 
     By default, the fill color is set to Qt::transparent.
+
+    Set the fill color to an invalid color (e.g. QColor()) to disable background
+    filling. This may improve performance, and is safe to do if the paint() function
+    draws to all pixels on each frame.
 */
 QColor QQuickPaintedItem::fillColor() const
 {

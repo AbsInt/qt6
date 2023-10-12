@@ -88,6 +88,8 @@ public:
     QPlatformVulkanInstance *createPlatformVulkanInstance(QVulkanInstance *instance) const override;
 #endif
 
+    void setApplicationBadge(qint64 number) override;
+
     virtual QWaylandInputDevice *createInputDevice(QWaylandDisplay *display, int version, uint32_t id) const;
     virtual QWaylandScreen *createPlatformScreen(QWaylandDisplay *waylandDisplay, int version, uint32_t id) const;
     virtual QWaylandCursor *createPlatformCursor(QWaylandDisplay *display) const;
@@ -105,6 +107,7 @@ protected:
     QScopedPointer<QWaylandDisplay> mDisplay;
 
 protected:
+    void reset();
     virtual QPlatformNativeInterface *createPlatformNativeInterface();
 
     QScopedPointer<QWaylandClientBufferIntegration> mClientBufferIntegration;

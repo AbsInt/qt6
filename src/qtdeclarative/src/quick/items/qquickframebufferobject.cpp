@@ -8,7 +8,7 @@
 #include <private/qquickitem_p.h>
 #include <private/qsgadaptationlayer_p.h>
 #include <qsgtextureprovider.h>
-#include <QtGui/private/qrhi_p.h>
+#include <rhi/qrhi.h>
 
 #include <QSGSimpleTextureNode>
 #include <QSGRendererInterface>
@@ -81,7 +81,7 @@ public:
  * and can be used directly in \l {ShaderEffect}{ShaderEffects} and other
  * classes that consume texture providers.
  *
- * \sa {Scene Graph - Rendering FBOs}, {Scene Graph and Rendering}
+ * \sa {Scene Graph and Rendering}
  */
 
 /*!

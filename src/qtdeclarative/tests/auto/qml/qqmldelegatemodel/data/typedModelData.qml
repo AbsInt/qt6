@@ -13,6 +13,18 @@ DelegateModel {
         }
     }
 
+    // same, useful, object as model and modelData
+    property ListModel listModel: ListModel {
+        ListElement {
+            x: 13
+            y: 14
+        }
+        ListElement {
+            x: 15
+            y: 16
+        }
+    }
+
     // useful but different objects as modelData and model
     // This is how the array accessor works. We can live with it.
     property var array: [
@@ -31,8 +43,9 @@ DelegateModel {
     model: {
         switch (n) {
         case 0: return singularModel
-        case 1: return array
-        case 2: return object
+        case 1: return listModel
+        case 2: return array
+        case 3: return object
         }
         return undefined;
     }
@@ -46,5 +59,6 @@ DelegateModel {
         property point modelSelf: model
         property point modelDataSelf: modelData
         property point modelModelData: model.modelData
+        property point modelAnonymous: model[""]
     }
 }

@@ -33,17 +33,18 @@ set(qml_files
     BadType.qml
     BaseMember.qml
     BindingExpression.qml
+    CxxTypeFromDir.qml
+    CxxTypeFromImplicit.qml
     Cycle1.qml
     Cycle2.qml
     Cycle3.qml
-    CxxTypeFromDir.qml
-    CxxTypeFromImplicit.qml
     Dummy.qml
     Enums.qml
     Foozle.qml
     Loopy.qml
     OkType.qml
     Panel.qml
+    Planner.qml
     ProgressBar/Keyframe.qml
     ProgressBar/KeyframeGroup.qml
     ProgressBar/ProgressBar.ui.qml
@@ -67,25 +68,30 @@ set(qml_files
     attachedBaseEnum.qml
     badSequence.qml
     basicBlocksWithBackJump.qml
+    basicDTZ.qml
     bindToValueType.qml
     blockComments.qml
+    boolCoercions.qml
+    boolPointerMerge.qml
     boundComponents.qml
     callContextPropertyLookupResult.qml
     callWithSpread.qml
     childobject.qml
     colorAsVariant.qml
     colorString.qml
-    consoleObject.qml
     componentReturnType.qml
     compositeTypeMethod.qml
     compositesingleton.qml
+    consoleObject.qml
     construct.qml
     contextParam.qml
     conversionDecrement.qml
     conversions.qml
     conversions2.qml
+    convertToOriginalReadAcumulatorForUnaryOperators.qml
     curlygrouped.qml
     cycleHead.qml
+    dateConversions.qml
     deadShoeSize.qml
     deadStoreLoop.qml
     dialog.qml
@@ -111,9 +117,10 @@ set(qml_files
     failures.qml
     fallbacklookups.qml
     fileDialog.qml
+    flagEnum.qml
     fromBoolValue.qml
-    functionLookup.qml
     funcWithParams.qml
+    functionLookup.qml
     functionReturningVoid.qml
     functionTakingVar.qml
     globals.qml
@@ -124,32 +131,43 @@ set(qml_files
     imports/QmlBench/Globals.qml
     importsFromImportPath.qml
     infinities.qml
-    invisibleBase.qml
-    invisibleTypes.qml
-    invisibleListElementType.qml
+    infinitiesToInt.qml
     intEnumCompare.qml
     intOverflow.qml
+    intToEnum.qml
     interactive.qml
     interceptor.qml
+    invisibleBase.qml
+    invisibleListElementType.qml
+    invisibleTypes.qml
     isnan.qml
     javaScriptArgument.qml
+    jsArrayMethods.qml
+    jsArrayMethodsUntyped.qml
+    jsArrayMethodsWithParams.qml
+    jsArrayMethodsWithParamsUntyped.qml
     jsMathObject.qml
     jsimport.qml
     jsmoduleimport.qml
     layouts.qml
-    library.js
     letAndConst.qml
+    library.js
     listAsArgument.qml
+    listConversion.qml
     listIndices.qml
     listOfInvisible.qml
     listPropertyAsModel.qml
     listlength.qml
     math.qml
+    mathMinMax.qml
     mathOperations.qml
+    mergedObjectRead.qml
+    mergedObjectWrite.qml
     methods.qml
     modulePrefix.qml
     moveRegVoid.qml
     multiforeign.qml
+    multipleCtors.qml
     namespaceWithEnum.qml
     noBindingLoop.qml
     noQQmlData.qml
@@ -161,6 +179,8 @@ set(qml_files
     nullComparison.qml
     numbersInJsPrimitive.qml
     objectInVar.qml
+    objectLookupOnListElement.qml
+    objectWithStringListMethod.qml
     outOfBounds.qml
     overriddenMember.qml
     ownProperty.qml
@@ -169,18 +189,21 @@ set(qml_files
     popContextAfterRet.qml
     prefixedMetaType.qml
     pressAndHoldButton.qml
-    registerelimination.qml
     registerPropagation.qml
+    registerelimination.qml
     revisions.qml
     scopeVsObject.qml
     script.js
     script.mjs
     sequenceToIterable.qml
+    setLookupConversion.qml
+    shadowedMethod.qml
     shared/Slider.qml
     shifts.qml
     signal.qml
     signalHandler.qml
     signalIndexMismatch.qml
+    signalsWithLists.qml
     signatureIgnored.qml
     specificParent.qml
     storeElementSideEffects.qml
@@ -191,6 +214,7 @@ set(qml_files
     text.qml
     themerbad.qml
     themergood.qml
+    thisObject.qml
     throwObjectName.qml
     toString.qml
     topLevelComponent.qml
@@ -207,15 +231,17 @@ set(qml_files
     unusedAttached.qml
     urlString.qml
     usingCxxTypesFromFileImports.qml
+    valueTypeCast.qml
     valueTypeCopy.qml
     valueTypeDefault.qml
     valueTypeLists.qml
     valueTypeProperty.qml
     valueTypeReference.qml
+    variantMapLookup.qml
     variantReturn.qml
     variantlist.qml
-    variantMapLookup.qml
     versionmismatch.qml
+    voidConversion.qml
     voidfunction.qml
     dummy_imports.qml
 )

@@ -45,12 +45,17 @@ qt_feature("assistant" PRIVATE
     CONDITION TARGET Qt::Widgets AND QT_FEATURE_png AND QT_FEATURE_pushbutton AND QT_FEATURE_toolbutton AND (sqlite_plugin_available OR QT_BUILD_SHARED_LIBS)
 )
 qt_feature("clang" PRIVATE
-    LABEL "QDoc"
+    LABEL "libclang found"
     CONDITION TEST_libclang
+)
+qt_feature("qdoc" PRIVATE
+    LABEL "QDoc"
+    PURPOSE "QDoc is Qt's documentation generator for C++ and QML projects."
+    CONDITION TARGET Qt::QmlPrivate AND QT_FEATURE_clang AND QT_FEATURE_clangcpp AND QT_FEATURE_commandlineparser AND QT_FEATURE_thread
 )
 qt_feature("clangcpp" PRIVATE
     LABEL "Clang-based lupdate parser"
-    CONDITION QT_FEATURE_clang AND TEST_libclang
+    CONDITION QT_FEATURE_clang
 )
 qt_feature("designer" PRIVATE
     LABEL "Qt Designer"
@@ -109,6 +114,7 @@ qt_configure_add_summary_entry(ARGS "distancefieldgenerator")
 qt_configure_add_summary_entry(ARGS "linguist")
 qt_configure_add_summary_entry(ARGS "pixeltool")
 qt_configure_add_summary_entry(ARGS "qdbus")
+qt_configure_add_summary_entry(ARGS "qdoc")
 #qt_configure_add_summary_entry(ARGS "qev")
 qt_configure_add_summary_entry(ARGS "qtattributionsscanner")
 qt_configure_add_summary_entry(ARGS "qtdiag")
@@ -116,12 +122,23 @@ qt_configure_add_summary_entry(ARGS "qtplugininfo")
 qt_configure_end_summary_section() # end of "Qt Tools" section
 qt_configure_add_report_entry(
     TYPE WARNING
-    MESSAGE "QDoc will not be compiled, probably because libclang could not be located. This means that you cannot build the Qt documentation.
-Either set CMAKE_PREFIX_PATH or LLVM_INSTALL_DIR to the location of your llvm installation.
-On Linux systems, you may be able to install libclang by installing the libclang-dev or libclang-devel package, depending on your distribution.
+    MESSAGE "QDoc will not be compiled, probably because clang's C and C++ libraries could not be located. This means that you cannot build the Qt documentation.
+You may need to set CMAKE_PREFIX_PATH or LLVM_INSTALL_DIR to the location of your llvm installation.
+Other than clang's libraries, you may need to install another package, such as clang itself, to provide the ClangConfig.cmake file needed to detect your libraries. Once this
+file is in place, the configure script may be able to detect your system-installed libraries without further environment variables.
 On macOS, you can use Homebrew's llvm package.
 You will also need to set the FEATURE_clang CMake variable to ON to re-evaluate this check."
-    CONDITION NOT QT_FEATURE_clang
+    CONDITION NOT QT_FEATURE_clang OR NOT QT_FEATURE_clangcpp
+)
+qt_configure_add_report_entry(
+    TYPE WARNING
+    MESSAGE "QDoc will not be compiled because the QmlPrivate library wasn't found."
+    CONDITION NOT TARGET Qt::QmlPrivate
+)
+qt_configure_add_report_entry(
+    TYPE WARNING
+    MESSAGE "QDoc cannot be compiled without Qt's commandline parser or thread features."
+    CONDITION NOT QT_FEATURE_commandlineparser OR NOT QT_FEATURE_thread
 )
 qt_configure_add_report_entry(
     TYPE WARNING

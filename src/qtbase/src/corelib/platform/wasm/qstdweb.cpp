@@ -17,6 +17,8 @@
 
 QT_BEGIN_NAMESPACE
 
+using namespace Qt::Literals::StringLiterals;
+
 namespace qstdweb {
 
 static void usePotentialyUnusedSymbols()
@@ -420,7 +422,7 @@ private:
                 QByteArray fileContent(file.size(), Qt::Uninitialized);
                 file.stream(fileContent.data(), [this, itemMimeType, fileContent]() {
                     if (!fileContent.isEmpty()) {
-                        if (itemMimeType.startsWith("image/")) {
+                        if (itemMimeType.startsWith("image/"_L1)) {
                             mimeData->setImageData(imageReader(fileContent));
                         } else {
                             mimeData->setData(itemMimeType, fileContent.data());
@@ -432,18 +434,18 @@ private:
                 break;
             }
             case ItemKind::String:
-                if (itemMimeType.contains("STRING", Qt::CaseSensitive)
-                    || itemMimeType.contains("TEXT", Qt::CaseSensitive)) {
+                if (itemMimeType.contains("STRING"_L1, Qt::CaseSensitive)
+                    || itemMimeType.contains("TEXT"_L1, Qt::CaseSensitive)) {
                     break;
                 }
                 QString a;
-                const QString data = QString::fromStdString(webDataTransfer.call<std::string>(
+                const QString data = QString::fromEcmaString(webDataTransfer.call<emscripten::val>(
                         "getData", emscripten::val(itemMimeType.toStdString())));
 
                 if (!data.isEmpty()) {
-                    if (itemMimeType == "text/html")
+                    if (itemMimeType == "text/html"_L1)
                         mimeData->setHtml(data);
-                    else if (itemMimeType.isEmpty() || itemMimeType == "text/plain")
+                    else if (itemMimeType.isEmpty() || itemMimeType == "text/plain"_L1)
                         mimeData->setText(data); // the type can be empty
                     else
                         mimeData->setData(itemMimeType, data.toLocal8Bit());
@@ -623,17 +625,20 @@ void FileReader::readAsArrayBuffer(const Blob &blob) const
 
 void FileReader::onLoad(const std::function<void(emscripten::val)> &onLoad)
 {
-    m_onLoad.reset(new EventCallback(m_fileReader, "load", onLoad));
+    m_onLoad.reset();
+    m_onLoad = std::make_unique<EventCallback>(m_fileReader, "load", onLoad);
 }
 
 void FileReader::onError(const std::function<void(emscripten::val)> &onError)
 {
-    m_onError.reset(new EventCallback(m_fileReader, "error", onError));
+    m_onError.reset();
+    m_onError = std::make_unique<EventCallback>(m_fileReader, "error", onError);
 }
 
 void FileReader::onAbort(const std::function<void(emscripten::val)> &onAbort)
 {
-    m_onAbort.reset(new EventCallback(m_fileReader, "abort", onAbort));
+    m_onAbort.reset();
+    m_onAbort = std::make_unique<EventCallback>(m_fileReader, "abort", onAbort);
 }
 
 emscripten::val FileReader::val()
@@ -765,6 +770,8 @@ EventCallback::EventCallback(emscripten::val element, const std::string &name, c
     ,m_eventName(name)
     ,m_fn(fn)
 {
+    Q_ASSERT_X(m_element[contextPropertyName(m_eventName)].isUndefined(), Q_FUNC_INFO,
+               "Only one event callback of type currently supported with EventCallback");
     m_element.set(contextPropertyName(m_eventName).c_str(), emscripten::val(intptr_t(this)));
     m_element.set((std::string("on") + m_eventName).c_str(), emscripten::val::module_property("qtStdWebEventCallbackActivate"));
 }

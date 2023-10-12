@@ -381,6 +381,13 @@ QString QQuickTextInputPrivate::realText() const
     TextInput { text: "Some text"; font.preferShaping: false }
     \endqml
 */
+
+/*!
+    \qmlproperty object QtQuick::TextInput::font.features
+    \since 6.6
+
+    \include qquicktext.cpp qml-font-features
+*/
 QFont QQuickTextInput::font() const
 {
     Q_D(const QQuickTextInput);

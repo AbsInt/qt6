@@ -32,7 +32,7 @@ namespace MockCompositor {
 class DefaultCompositor : public CoreCompositor
 {
 public:
-    explicit DefaultCompositor(CompositorType t = CompositorType::Default);
+    explicit DefaultCompositor(CompositorType t = CompositorType::Default, int socketFd = -1);
     // Convenience functions
     Output *output(int i = 0) { return getAll<Output>().value(i, nullptr); }
     Surface *surface(int i = 0);
@@ -61,6 +61,7 @@ public:
         bool autoEnter = true;
         bool autoRelease = true;
         bool autoConfigure = false;
+        bool autoFrameCallback = true;
     } m_config;
     void resetConfig() { exec([&] { m_config = Config{}; }); }
 };

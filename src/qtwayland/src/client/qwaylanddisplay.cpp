@@ -52,6 +52,8 @@
 #include <QtWaylandClient/private/qwayland-qt-text-input-method-unstable-v1.h>
 #include <QtWaylandClient/private/qwayland-fractional-scale-v1.h>
 #include <QtWaylandClient/private/qwayland-viewporter.h>
+#include <QtWaylandClient/private/qwayland-cursor-shape-v1.h>
+#include <QtWaylandClient/private/qwayland-qt-toplevel-drag-v1.h>
 
 #include <QtCore/private/qcore_unix_p.h>
 
@@ -64,18 +66,6 @@
 #include <errno.h>
 
 #include <tuple> // for std::tie
-
-static void checkWaylandError(struct wl_display *display)
-{
-    int ecode = wl_display_get_error(display);
-    if ((ecode == EPIPE || ecode == ECONNRESET)) {
-        // special case this to provide a nicer error
-        qWarning("The Wayland connection broke. Did the Wayland compositor die?");
-    } else {
-        qWarning("The Wayland connection experienced a fatal error: %s", strerror(ecode));
-    }
-    _exit(1);
-}
 
 QT_BEGIN_NAMESPACE
 
@@ -114,9 +104,13 @@ public:
          * not only the one issued from event thread's waitForReading(), which means functions
          * called from dispatch_pending() can safely spin an event loop.
          */
+        if (m_quitting)
+            return;
+
         for (;;) {
             if (dispatchQueuePending() < 0) {
-                checkWaylandError(m_wldisplay);
+                Q_EMIT waylandError();
+                m_quitting = true;
                 return;
             }
 
@@ -154,6 +148,7 @@ public:
 
 Q_SIGNALS:
     void needReadAndDispatch();
+    void waylandError();
 
 protected:
     void run() override
@@ -328,11 +323,17 @@ QWaylandDisplay::QWaylandDisplay(QWaylandIntegration *waylandIntegration)
     qRegisterMetaType<uint32_t>("uint32_t");
 
     mDisplay = wl_display_connect(nullptr);
-    if (!mDisplay) {
+    if (mDisplay) {
+        setupConnection();
+    } else {
         qErrnoWarning(errno, "Failed to create wl_display");
-        return;
     }
 
+    mWaylandTryReconnect = qEnvironmentVariableIsSet("QT_WAYLAND_RECONNECT");
+}
+
+void QWaylandDisplay::setupConnection()
+{
     struct ::wl_registry *registry = wl_display_get_registry(mDisplay);
     init(registry);
 
@@ -410,7 +411,115 @@ void QWaylandDisplay::ensureScreen()
     Q_ASSERT(!QGuiApplication::screens().empty());
 }
 
-// Called in main thread, either from queued signal or directly.
+void QWaylandDisplay::reconnect()
+{
+    qCWarning(lcQpaWayland) << "Attempting wayland reconnect";
+    m_eventThread->stop();
+    m_frameEventQueueThread->stop();
+    m_eventThread->wait();
+    m_frameEventQueueThread->wait();
+
+    qDeleteAll(mWaitingScreens);
+    mWaitingScreens.clear();
+
+    while (!mScreens.isEmpty()) {
+        auto screen = mScreens.takeLast();
+        ensureScreen();
+        QWindowSystemInterface::handleScreenRemoved(screen);
+    }
+
+    // mCompositor
+    mShm.reset();
+    mCursorThemes.clear();
+    mCursor.reset();
+    mDndSelectionHandler.reset();
+    mWindowExtension.reset();
+    mSubCompositor.reset();
+    mTouchExtension.reset();
+    mQtKeyExtension.reset();
+    mWindowManagerIntegration.reset();
+    mTabletManager.reset();
+    mPointerGestures.reset();
+#if QT_CONFIG(wayland_client_primary_selection)
+    mPrimarySelectionManager.reset();
+#endif
+    mTextInputMethodManager.reset();
+    mTextInputManagerv1.reset();
+    mTextInputManagerv2.reset();
+    mTextInputManagerv4.reset();
+    mHardwareIntegration.reset();
+    mXdgOutputManager.reset();
+    mViewporter.reset();
+    mFractionalScaleManager.reset();
+    mCursorShapeManager.reset();
+    mXdgToplevelDragManager.reset();
+
+    mWaylandIntegration->reset();
+
+    qDeleteAll(std::exchange(mInputDevices, {}));
+    mLastInputDevice = nullptr;
+
+    for (const RegistryGlobal &global : mGlobals) {
+        emit globalRemoved(global);
+    }
+    mGlobals.clear();
+
+    mLastInputSerial = 0;
+    mLastInputWindow.clear();
+    mLastKeyboardFocus.clear();
+    mActiveWindows.clear();
+
+    const auto windows = QGuiApplication::allWindows();
+    for (auto window : windows) {
+        if (auto waylandWindow = dynamic_cast<QWaylandWindow *>(window->handle()))
+            waylandWindow->closeChildPopups();
+    }
+    // Remove windows that do not need to be recreated and now closed popups
+    QList<QWaylandWindow *> recreateWindows;
+    for (auto window : std::as_const(windows)) {
+        auto waylandWindow = dynamic_cast<QWaylandWindow*>((window)->handle());
+        if (waylandWindow && waylandWindow->wlSurface()) {
+            waylandWindow->reset();
+            recreateWindows.push_back(waylandWindow);
+        }
+    }
+
+    if (mSyncCallback) {
+        wl_callback_destroy(mSyncCallback);
+        mSyncCallback = nullptr;
+    }
+
+    mDisplay = wl_display_connect(nullptr);
+    if (!mDisplay)
+        _exit(1);
+
+    setupConnection();
+    initialize();
+
+    if (m_frameEventQueue)
+        wl_event_queue_destroy(m_frameEventQueue);
+    initEventThread();
+
+    emit reconnected();
+
+    auto needsRecreate = [](QPlatformWindow *window) {
+        return window && !static_cast<QWaylandWindow *>(window)->wlSurface();
+    };
+    auto window = recreateWindows.begin();
+    while (!recreateWindows.isEmpty()) {
+        if (!needsRecreate((*window)->QPlatformWindow::parent()) && !needsRecreate((*window)->transientParent())) {
+            (*window)->reinit();
+            window = recreateWindows.erase(window);
+        } else {
+            ++window;
+        }
+        if (window == recreateWindows.end())
+            window = recreateWindows.begin();
+    }
+
+    mWaylandIntegration->reconfigureInputContext();
+}
+
 void QWaylandDisplay::flushRequests()
 {
     m_eventThread->readAndDispatchEvents();
@@ -425,6 +534,8 @@ void QWaylandDisplay::initEventThread()
             new EventThread(mDisplay, /* default queue */ nullptr, EventThread::EmitToDispatch));
     connect(m_eventThread.get(), &EventThread::needReadAndDispatch, this,
             &QWaylandDisplay::flushRequests, Qt::QueuedConnection);
+    connect(m_eventThread.get(), &EventThread::waylandError, this,
+            &QWaylandDisplay::checkWaylandError, Qt::QueuedConnection);
     m_eventThread->start();
 
     // wl_display_disconnect() free this.
@@ -434,10 +545,31 @@ void QWaylandDisplay::initEventThread()
     m_frameEventQueueThread->start();
 }
 
+void QWaylandDisplay::checkWaylandError()
+{
+    int ecode = wl_display_get_error(mDisplay);
+    if ((ecode == EPIPE || ecode == ECONNRESET)) {
+        qWarning("The Wayland connection broke. Did the Wayland compositor die?");
+        if (mWaylandTryReconnect) {
+            reconnect();
+            return;
+        }
+    } else {
+        qWarning("The Wayland connection experienced a fatal error: %s", strerror(ecode));
+    }
+    _exit(-1);
+}
+
 void QWaylandDisplay::blockingReadEvents()
 {
-    if (wl_display_dispatch(mDisplay) < 0)
-        checkWaylandError(mDisplay);
+    if (wl_display_dispatch(mDisplay) < 0) {
+        int ecode = wl_display_get_error(mDisplay);
+        if ((ecode == EPIPE || ecode == ECONNRESET))
+            qWarning("The Wayland connection broke during blocking read event. Did the Wayland compositor die?");
+        else
+            qWarning("The Wayland connection experienced a fatal error during blocking read event: %s", strerror(ecode));
+        _exit(-1);
+    }
 }
 
 void QWaylandDisplay::checkTextInputProtocol()
@@ -498,7 +630,7 @@ void QWaylandDisplay::registry_global(uint32_t id, const QString &interface, uin
 {
     struct ::wl_registry *registry = object();
 
-    static QByteArrayList interfaceBlacklist = qgetenv("QT_WAYLAND_DISABLED_INTERFACES").split(',');
+    static QStringList interfaceBlacklist = qEnvironmentVariable("QT_WAYLAND_DISABLED_INTERFACES").split(u',');
     if (interfaceBlacklist.contains(interface)) {
         return;
     }
@@ -627,6 +759,11 @@ void QWaylandDisplay::registry_global(uint32_t id, const QString &interface, uin
         mFractionalScaleManager.reset(new QtWayland::wp_fractional_scale_manager_v1(registry, id, 1));
     } else if (interface == QLatin1String("wp_viewporter")) {
         mViewporter.reset(new QtWayland::wp_viewporter(registry, id, qMin(1u, version)));
+    } else if (interface == QLatin1String(QtWayland::wp_cursor_shape_manager_v1::interface()->name)) {
+        mCursorShapeManager.reset(new QtWayland::wp_cursor_shape_manager_v1(registry, id, std::min(1u, version)));
+    } else if (
+            interface == QLatin1String(QtWayland::qt_toplevel_drag_manager_v1::interface()->name)) {
+        mXdgToplevelDragManager.reset(new QtWayland::qt_toplevel_drag_manager_v1(registry, id, 1));
     }
 
     mGlobals.append(RegistryGlobal(id, interface, version, registry));

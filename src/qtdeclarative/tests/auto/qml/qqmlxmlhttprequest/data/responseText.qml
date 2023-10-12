@@ -47,4 +47,3 @@ QtObject {
         sent = (x.responseText == "");
     }
 }
-

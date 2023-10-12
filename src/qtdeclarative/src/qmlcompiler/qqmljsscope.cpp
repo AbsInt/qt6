@@ -5,6 +5,8 @@
 #include "qqmljstypereader_p.h"
 #include "qqmljsimporter_p.h"
 #include "qqmljsutils_p.h"
+#include "qqmlsa.h"
+#include "qqmlsa_p.h"
 
 #include <QtCore/qqueue.h>
 #include <QtCore/qsharedpointer.h>
@@ -33,6 +35,11 @@ QT_BEGIN_NAMESPACE
 
 using namespace Qt::StringLiterals;
 
+QQmlJSScope::QQmlJSScope(const QString &internalName) : QQmlJSScope{}
+{
+    m_internalName = internalName;
+}
+
 void QQmlJSScope::reparent(const QQmlJSScope::Ptr &parentScope, const QQmlJSScope::Ptr &childScope)
 {
     if (const QQmlJSScope::Ptr parent = childScope->m_parentScope.toStrongRef())
@@ -55,14 +62,14 @@ QQmlJSScope::Ptr QQmlJSScope::clone(const ConstPtr &origin)
 
 void QQmlJSScope::insertJSIdentifier(const QString &name, const JavaScriptIdentifier &identifier)
 {
-    Q_ASSERT(m_scopeType != QQmlJSScope::QMLScope);
+    Q_ASSERT(m_scopeType != QQmlSA::ScopeType::QMLScope);
     if (identifier.kind == JavaScriptIdentifier::LexicalScoped
-            || identifier.kind == JavaScriptIdentifier::Injected
-            || m_scopeType == QQmlJSScope::JSFunctionScope) {
+        || identifier.kind == JavaScriptIdentifier::Injected
+        || m_scopeType == QQmlSA::ScopeType::JSFunctionScope) {
         m_jsIdentifiers.insert(name, identifier);
     } else {
         auto targetScope = parentScope();
-        while (targetScope->m_scopeType != QQmlJSScope::JSFunctionScope)
+        while (targetScope->m_scopeType != QQmlSA::ScopeType::JSFunctionScope)
             targetScope = targetScope->parentScope();
         targetScope->m_jsIdentifiers.insert(name, identifier);
     }
@@ -72,7 +79,7 @@ void QQmlJSScope::insertPropertyIdentifier(const QQmlJSMetaProperty &property)
 {
     addOwnProperty(property);
     QQmlJSMetaMethod method(property.propertyName() + u"Changed"_s, u"void"_s);
-    method.setMethodType(QQmlJSMetaMethod::Signal);
+    method.setMethodType(QQmlJSMetaMethodType::Signal);
     method.setIsImplicitQmlPropertyChangeSignal(true);
     addOwnMethod(method);
 }
@@ -133,7 +140,7 @@ QList<QQmlJSMetaMethod> QQmlJSScope::methods(const QString &name) const
     return results;
 }
 
-QList<QQmlJSMetaMethod> QQmlJSScope::methods(const QString &name, QQmlJSMetaMethod::Type type) const
+QList<QQmlJSMetaMethod> QQmlJSScope::methods(const QString &name, QQmlJSMetaMethodType type) const
 {
     QList<QQmlJSMetaMethod> results;
 
@@ -221,6 +228,7 @@ QString QQmlJSScope::prettyName(QAnyStringView name)
 }
 
 /*!
+    \internal
     Returns if assigning \a assignedType to \a property would require an
     implicit component wrapping.
  */
@@ -283,7 +291,7 @@ bool QQmlJSScope::isComponentRootElement() const {
 
 bool QQmlJSScope::isIdInCurrentQmlScopes(const QString &id) const
 {
-    if (m_scopeType == QQmlJSScope::QMLScope)
+    if (m_scopeType == QQmlSA::ScopeType::QMLScope)
         return m_properties.contains(id) || m_methods.contains(id) || m_enumerations.contains(id);
 
     const auto qmlScope = findCurrentQMLScope(parentScope());
@@ -294,11 +302,12 @@ bool QQmlJSScope::isIdInCurrentQmlScopes(const QString &id) const
 
 bool QQmlJSScope::isIdInCurrentJSScopes(const QString &id) const
 {
-    if (m_scopeType != QQmlJSScope::QMLScope && m_jsIdentifiers.contains(id))
+    if (m_scopeType != QQmlSA::ScopeType::QMLScope && m_jsIdentifiers.contains(id))
         return true;
 
     for (auto jsScope = parentScope(); jsScope; jsScope = jsScope->parentScope()) {
-        if (jsScope->m_scopeType != QQmlJSScope::QMLScope && jsScope->m_jsIdentifiers.contains(id))
+        if (jsScope->m_scopeType != QQmlSA::ScopeType::QMLScope
+            && jsScope->m_jsIdentifiers.contains(id))
             return true;
     }
 
@@ -315,13 +324,22 @@ std::optional<QQmlJSScope::JavaScriptIdentifier>
 QQmlJSScope::findJSIdentifier(const QString &id) const
 {
     for (const auto *scope = this; scope; scope = scope->parentScope().data()) {
-        if (scope->m_scopeType == QQmlJSScope::JSFunctionScope
-                || scope->m_scopeType == QQmlJSScope::JSLexicalScope) {
+        if (scope->m_scopeType == QQmlSA::ScopeType::JSFunctionScope
+            || scope->m_scopeType == QQmlSA::ScopeType::JSLexicalScope) {
             auto it = scope->m_jsIdentifiers.find(id);
             if (it != scope->m_jsIdentifiers.end())
                 return *it;
         }
     }
+
+    return std::optional<JavaScriptIdentifier>{};
+}
+
+std::optional<QQmlJSScope::JavaScriptIdentifier> QQmlJSScope::JSIdentifier(const QString &id) const
+{
+    auto it = m_jsIdentifiers.find(id);
+    if (it != m_jsIdentifiers.end())
+        return *it;
 
     return std::optional<JavaScriptIdentifier>{};
 }
@@ -507,14 +525,25 @@ QTypeRevision QQmlJSScope::resolveType(
             auto &parameter = parameters[i];
             if (const QString typeName = parameter.typeName();
                 !parameter.type() && !typeName.isEmpty()) {
-                const auto type = findType(typeName, context, usedTypes);
-                if (type.scope && type.scope->isReferenceType())
+                auto type = findType(typeName, context, usedTypes);
+                if (type.scope && parameter.isList()) {
+                    type.scope = type.scope->listType();
+                    parameter.setIsList(false);
+                    parameter.setIsPointer(false);
+                    parameter.setTypeName(type.scope ? type.scope->internalName() : QString());
+                } else if (type.scope && type.scope->isReferenceType()) {
                     parameter.setIsPointer(true);
+                }
                 parameter.setType({ type.scope });
             }
         }
 
         it->setParameters(parameters);
+    }
+
+    for (auto it = self->m_jsIdentifiers.begin(); it != self->m_jsIdentifiers.end(); ++it) {
+        if (it->typeName)
+            it->scope = findType(it->typeName.value(), context, usedTypes).scope;
     }
 
     return baseType.revision;
@@ -525,7 +554,7 @@ void QQmlJSScope::updateChildScope(
         const QQmlJSScope::ContextualTypes &contextualTypes, QSet<QString> *usedTypes)
 {
     switch (childScope->scopeType()) {
-    case QQmlJSScope::GroupedPropertyScope:
+    case QQmlSA::ScopeType::GroupedPropertyScope:
         QQmlJSUtils::searchBaseAndExtensionTypes(
                 self.data(), [&](const QQmlJSScope *type, QQmlJSScope::ExtensionKind mode) {
                     if (mode == QQmlJSScope::ExtensionNamespace)
@@ -541,7 +570,7 @@ void QQmlJSScope::updateChildScope(
                     return false;
                 });
         break;
-    case QQmlJSScope::AttachedPropertyScope:
+    case QQmlSA::ScopeType::AttachedPropertyScope:
         if (const auto attachedBase = findType(
                     childScope->internalName(), contextualTypes, usedTypes).scope) {
             childScope->m_baseType.scope = attachedBase->attachedType();
@@ -576,7 +605,7 @@ QTypeRevision QQmlJSScope::resolveTypes(
     const auto resolveAll = [](const QQmlJSScope::Ptr &self,
                                const QQmlJSScope::ContextualTypes &contextualTypes,
                                QSet<QString> *usedTypes) {
-        resolveEnums(self, contextualTypes.intType());
+        resolveEnums(self, contextualTypes, usedTypes);
         resolveList(self, contextualTypes.arrayType());
         return resolveType(self, contextualTypes, usedTypes);
     };
@@ -590,6 +619,29 @@ void QQmlJSScope::resolveNonEnumTypes(
     resolveTypesInternal(resolveType, updateChildScope, self, contextualTypes, usedTypes);
 }
 
+static QString flagStorage(const QString &underlyingType)
+{
+    // All numeric types are builtins. Therefore we can exhaustively check the internal names.
+
+    if (underlyingType == u"uint"
+        || underlyingType == u"quint8"
+        || underlyingType == u"ushort"
+        || underlyingType == u"ulonglong") {
+        return u"uint"_s;
+    }
+
+    if (underlyingType == u"int"
+        || underlyingType == u"qint8"
+        || underlyingType == u"short"
+        || underlyingType == u"longlong") {
+        return u"int"_s;
+    }
+
+    // Will fail to resolve and produce an error on usage.
+    // It's harmless if you never use the enum.
+    return QString();
+}
+
 /*!
     \internal
     Resolves all enums of self.
@@ -601,20 +653,28 @@ void QQmlJSScope::resolveNonEnumTypes(
    resolveEnums() will create a QQmlJSMetaEnum copy for the alias in case the 'self'-scope already
    does not have an enum called like the alias.
  */
-void QQmlJSScope::resolveEnums(const QQmlJSScope::Ptr &self, const QQmlJSScope::ConstPtr &intType)
+void QQmlJSScope::resolveEnums(
+        const QQmlJSScope::Ptr &self, const QQmlJSScope::ContextualTypes &contextualTypes,
+        QSet<QString> *usedTypes)
 {
     // temporary hash to avoid messing up m_enumerations while iterators are active on it
     QHash<QString, QQmlJSMetaEnum> toBeAppended;
-    for (auto it = self->m_enumerations.begin(), end = self->m_enumerations.end(); it != end;
-         ++it) {
+    for (auto it = self->m_enumerations.begin(), end = self->m_enumerations.end(); it != end; ++it) {
         if (it->type())
             continue;
-        Q_ASSERT(intType); // We need an "int" type to resolve enums
         QQmlJSScope::Ptr enumScope = QQmlJSScope::create();
         reparent(self, enumScope);
-        enumScope->m_scopeType = EnumScope;
-        enumScope->setBaseTypeName(QStringLiteral("int"));
-        enumScope->m_baseType.scope = intType;
+        enumScope->m_scopeType = QQmlSA::ScopeType::EnumScope;
+
+        QString typeName = it->typeName();
+        if (typeName.isEmpty())
+            typeName = QStringLiteral("int");
+        else if (it->isFlag())
+            typeName = flagStorage(typeName);
+        enumScope->setBaseTypeName(typeName);
+        const auto type = findType(typeName, contextualTypes, usedTypes);
+        enumScope->m_baseType = { type.scope, type.revision };
+
         enumScope->m_semantics = AccessSemantics::Value;
         enumScope->m_internalName = self->internalName() + QStringLiteral("::") + it->name();
         if (QString alias = it->alias(); !alias.isEmpty()
@@ -658,7 +718,7 @@ void QQmlJSScope::resolveList(const QQmlJSScope::Ptr &self, const QQmlJSScope::C
     const QQmlJSImportedScope array = {arrayType, QTypeRevision()};
     QQmlJSScope::ContextualTypes contextualTypes(
                 QQmlJSScope::ContextualTypes::INTERNAL, { { self->internalName(), element }, },
-                QQmlJSScope::ConstPtr(), arrayType);
+                arrayType);
     QQmlJSScope::resolveTypes(listType, contextualTypes);
 
     Q_ASSERT(listType->valueType() == self);
@@ -682,7 +742,7 @@ void QQmlJSScope::resolveGeneralizedGroup(
 QQmlJSScope::ConstPtr QQmlJSScope::findCurrentQMLScope(const QQmlJSScope::ConstPtr &scope)
 {
     auto qmlScope = scope;
-    while (qmlScope && qmlScope->m_scopeType != QQmlJSScope::QMLScope)
+    while (qmlScope && qmlScope->m_scopeType != QQmlSA::ScopeType::QMLScope)
         qmlScope = qmlScope->parentScope();
     return qmlScope;
 }
@@ -1097,7 +1157,7 @@ void QDeferredFactory<QQmlJSScope>::populate(const QSharedPointer<QQmlJSScope> &
     typeReader(scope);
     m_importer->m_globalWarnings.append(typeReader.errors());
     scope->setInternalName(internalName());
-    QQmlJSScope::resolveEnums(scope, m_importer->builtinInternalNames().intType());
+    QQmlJSScope::resolveEnums(scope, m_importer->builtinInternalNames());
     QQmlJSScope::resolveList(scope, m_importer->builtinInternalNames().arrayType());
 
     if (m_isSingleton && !scope->isSingleton()) {
@@ -1209,7 +1269,8 @@ QQmlJSScope::InlineComponentOrDocumentRootName QQmlJSScope::enclosingInlineCompo
 bool QQmlJSScope::isCreatable() const
 {
     auto isCreatableNonRecursive = [](const QQmlJSScope *scope) {
-        return scope->hasCreatableFlag() && !scope->isSingleton() && scope->scopeType() == QMLScope;
+        return scope->hasCreatableFlag() && !scope->isSingleton()
+                && scope->scopeType() == QQmlSA::ScopeType::QMLScope;
     };
 
     for (const QQmlJSScope* scope = this; scope; scope = scope->baseType().get()) {
@@ -1225,4 +1286,26 @@ bool QQmlJSScope::isCreatable() const
     // no uncreatable bases found
     return false;
 }
+
+QQmlSA::Element QQmlJSScope::createQQmlSAElement(const ConstPtr &ptr)
+{
+    QQmlSA::Element element;
+    auto &wrappedPtr = reinterpret_cast<QQmlJSScope::ConstPtr &>(element.m_data);
+    wrappedPtr = ptr;
+    return element;
+}
+
+QQmlSA::Element QQmlJSScope::createQQmlSAElement(ConstPtr &&ptr)
+{
+    QQmlSA::Element element;
+    auto &wrappedPtr = reinterpret_cast<QQmlJSScope::ConstPtr &>(element.m_data);
+    wrappedPtr = std::move(ptr);
+    return element;
+}
+
+const QQmlJSScope::ConstPtr &QQmlJSScope::scope(const QQmlSA::Element &element)
+{
+    return reinterpret_cast<const QQmlJSScope::ConstPtr &>(element.m_data);
+}
+
 QT_END_NAMESPACE

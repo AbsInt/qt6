@@ -55,6 +55,10 @@
     \section1 Linking to \l {Further information}{something} in a section title
 
     This is allowed but a questionable practice.
+
+    \details {\PROD details}
+        \note You're looking at detailed information.
+    \enddetails
 */
 
 /*!
@@ -115,10 +119,6 @@
     ...And this is an examble of only \b bold being, well, bold.
 
     \dots
-
-    \qmltext
-        And if I knew qmltext, I guess this is where that would go.
-    \endqmltext
 
     \caption This a caption
 

@@ -15,23 +15,24 @@
 // We mean it.
 //
 
-#include "qquickitem.h"
-#include "qevent.h"
-#include "qquicksinglepointhandler_p.h"
 #include <QtCore/qbasictimer.h>
 #include <QtCore/qelapsedtimer.h>
+#include <QtGui/qevent.h>
+#include <QtQuick/qquickitem.h>
+
+#include "qquicksinglepointhandler_p.h"
 
 QT_BEGIN_NAMESPACE
 
 class Q_QUICK_PRIVATE_EXPORT QQuickTapHandler : public QQuickSinglePointHandler
 {
     Q_OBJECT
-    Q_PROPERTY(bool pressed READ isPressed NOTIFY pressedChanged)
-    Q_PROPERTY(int tapCount READ tapCount NOTIFY tapCountChanged)
-    Q_PROPERTY(qreal timeHeld READ timeHeld NOTIFY timeHeldChanged)
-    Q_PROPERTY(qreal longPressThreshold READ longPressThreshold WRITE setLongPressThreshold NOTIFY longPressThresholdChanged)
-    Q_PROPERTY(GesturePolicy gesturePolicy READ gesturePolicy WRITE setGesturePolicy NOTIFY gesturePolicyChanged)
-    Q_PROPERTY(QQuickTapHandler::ExclusiveSignals exclusiveSignals READ exclusiveSignals WRITE setExclusiveSignals NOTIFY exclusiveSignalsChanged REVISION(6, 5))
+    Q_PROPERTY(bool pressed READ isPressed NOTIFY pressedChanged FINAL)
+    Q_PROPERTY(int tapCount READ tapCount NOTIFY tapCountChanged FINAL)
+    Q_PROPERTY(qreal timeHeld READ timeHeld NOTIFY timeHeldChanged FINAL)
+    Q_PROPERTY(qreal longPressThreshold READ longPressThreshold WRITE setLongPressThreshold NOTIFY longPressThresholdChanged FINAL)
+    Q_PROPERTY(GesturePolicy gesturePolicy READ gesturePolicy WRITE setGesturePolicy NOTIFY gesturePolicyChanged FINAL)
+    Q_PROPERTY(QQuickTapHandler::ExclusiveSignals exclusiveSignals READ exclusiveSignals WRITE setExclusiveSignals NOTIFY exclusiveSignalsChanged REVISION(6, 5) FINAL)
 
     QML_NAMED_ELEMENT(TapHandler)
     QML_ADDED_IN_VERSION(2, 12)

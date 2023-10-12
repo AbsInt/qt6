@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<db:article xmlns:db="http://docbook.org/ns/docbook" xmlns:xlink="http://www.w3.org/1999/xlink" version="5.2" xml:lang="en">
+<db:article xmlns:db="http://docbook.org/ns/docbook" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:its="http://www.w3.org/2005/11/its" version="5.2" xml:lang="en">
 <db:info>
 <db:title>Testing QDoc output from .qdoc files</db:title>
 <db:productname>OutputFromQDocFiles</db:productname>
@@ -73,5 +73,8 @@
 <db:section xml:id="linking-to-something-in-a-section-title">
 <db:title>Linking to <db:link xlink:href="qdoctests-qdocfileoutput.xml#further-information">something</db:link> in a section title</db:title>
 <db:para>This is allowed but a questionable practice.</db:para>
+<db:note>
+<db:para>You're looking at detailed information.</db:para>
+</db:note>
 </db:section>
 </db:article>

@@ -504,6 +504,22 @@ QWaylandShellIntegration *QWaylandIntegration::createShellIntegration(const QStr
     }
 }
 
+void QWaylandIntegration::reset()
+{
+    mServerBufferIntegration.reset();
+    mServerBufferIntegrationInitialized = false;
+
+    mInputDeviceIntegration.reset();
+
+    mClientBufferIntegration.reset();
+    mClientBufferIntegrationInitialized = false;
+}
+
+void QWaylandIntegration::setApplicationBadge(qint64 number)
+{
+    auto unixServices = mDisplay->windowManagerIntegration();
+    unixServices->setApplicationBadge(number);
+}
 }
 
 QT_END_NAMESPACE

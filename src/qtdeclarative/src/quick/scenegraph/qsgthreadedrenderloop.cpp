@@ -726,7 +726,7 @@ void QSGRenderThread::syncAndRender()
     // Zero size windows do not initialize a swapchain and
     // rendercontext. So no sync or render can be done then.
     const bool canRender = d->renderer && hasValidSwapChain;
-
+    double lastCompletedGpuTime = 0;
     if (canRender) {
         if (!syncRequested) // else this was already done in sync()
             rhi->makeThreadLocalNativeContextCurrent();
@@ -748,6 +748,8 @@ void QSGRenderThread::syncAndRender()
                 qWarning("Failed to end frame");
             if (frameResult == QRhi::FrameOpDeviceLost || frameResult == QRhi::FrameOpSwapChainOutOfDate)
                 QCoreApplication::postEvent(window, new QEvent(QEvent::Type(QQuickWindowPrivate::FullUpdateRequest)));
+        } else {
+            lastCompletedGpuTime = cd->swapchain->currentFrameCommandBuffer()->lastCompletedGpuTime();
         }
         d->fireFrameSwapped();
     } else {
@@ -798,6 +800,12 @@ void QSGRenderThread::syncAndRender()
                 int((syncTime/1000000)),
                 int((renderTime - syncTime) / 1000000),
                 int((threadTimer.nsecsElapsed() - renderTime) / 1000000));
+        if (!qFuzzyIsNull(lastCompletedGpuTime) && cd->graphicsConfig.timestampsEnabled()) {
+            qCDebug(QSG_LOG_TIME_RENDERLOOP, "[window %p][render thread %p] syncAndRender: last retrieved GPU frame time was %.4f ms",
+                    window,
+                    QThread::currentThread(),
+                    lastCompletedGpuTime * 1000.0);
+        }
     }
 
     Q_TRACE(QSG_swap_exit);
@@ -902,7 +910,7 @@ void QSGRenderThread::ensureRhi()
         }
         cd->swapchain->setWindow(window);
         cd->swapchain->setProxyData(scProxyData);
-        QSGRhiSupport::instance()->applySwapChainFormat(cd->swapchain);
+        QSGRhiSupport::instance()->applySwapChainFormat(cd->swapchain, window);
         qCDebug(QSG_LOG_INFO, "MSAA sample count for the swapchain is %d. Alpha channel requested = %s.",
                 rhiSampleCount, alpha ? "yes" : "no");
         cd->swapchain->setSampleCount(rhiSampleCount);
@@ -1312,6 +1320,9 @@ void QSGThreadedRenderLoop::handleExposure(QQuickWindow *window)
  */
 void QSGThreadedRenderLoop::handleObscurity(Window *w)
 {
+    if (!w)
+        return;
+
     qCDebug(QSG_LOG_RENDERLOOP) << "handleObscurity()" << w->window;
     if (w->thread->isRunning()) {
         if (!QQuickWindowPrivate::get(w->window)->updatesEnabled) {

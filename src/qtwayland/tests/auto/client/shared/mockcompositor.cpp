@@ -6,8 +6,8 @@
 
 namespace MockCompositor {
 
-DefaultCompositor::DefaultCompositor(CompositorType t)
-    : CoreCompositor(t)
+DefaultCompositor::DefaultCompositor(CompositorType t, int socketFd)
+    : CoreCompositor(t, socketFd)
 {
     {
         Lock l(this);
@@ -42,6 +42,9 @@ DefaultCompositor::DefaultCompositor(CompositorType t)
                 if (m_config.autoRelease) {
                     // Pretend we made a copy of the buffer and just release it immediately
                     surface->m_committed.buffer->send_release();
+                }
+                if (m_config.autoFrameCallback) {
+                    surface->sendFrameCallbacks();
                 }
                 if (m_config.autoEnter && get<Output>() && surface->m_outputs.empty())
                     surface->sendEnter(get<Output>());

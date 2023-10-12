@@ -319,10 +319,10 @@ QVariant QQuickItemKeyFilter::inputMethodQuery(Qt::InputMethodQuery query) const
 }
 #endif // im
 
-void QQuickItemKeyFilter::shortcutOverride(QKeyEvent *event)
+void QQuickItemKeyFilter::shortcutOverrideEvent(QKeyEvent *event)
 {
     if (m_next)
-        m_next->shortcutOverride(event);
+        m_next->shortcutOverrideEvent(event);
     else
         event->ignore();
 }
@@ -1380,7 +1380,7 @@ QVariant QQuickKeysAttached::inputMethodQuery(Qt::InputMethodQuery query) const
 }
 #endif // im
 
-void QQuickKeysAttached::shortcutOverride(QKeyEvent *event)
+void QQuickKeysAttached::shortcutOverrideEvent(QKeyEvent *event)
 {
     Q_D(QQuickKeysAttached);
     QQuickKeyEvent &keyEvent = d->theKeyEvent;
@@ -3058,7 +3058,7 @@ void QQuickItemPrivate::derefWindow()
 
 
 /*!
-Returns a transform that maps points from window space into item space.
+    Returns a transform that maps points from window space into item space.
 */
 QTransform QQuickItemPrivate::windowToItemTransform() const
 {
@@ -3067,21 +3067,21 @@ QTransform QQuickItemPrivate::windowToItemTransform() const
 }
 
 /*!
-Returns a transform that maps points from item space into window space.
+    Returns a transform that maps points from item space into window space.
 */
 QTransform QQuickItemPrivate::itemToWindowTransform() const
 {
     // item's parent must not be itself, otherwise calling itemToWindowTransform() on it is infinite recursion
     Q_ASSERT(!parentItem || QQuickItemPrivate::get(parentItem) != this);
     QTransform rv = parentItem ? QQuickItemPrivate::get(parentItem)->itemToWindowTransform() : QTransform();
-    itemToParentTransform(rv);
+    itemToParentTransform(&rv);
     return rv;
 }
 
 /*!
-Motifies \a t with this items local transform relative to its parent.
+    Modifies \a t with this item's local transform relative to its parent.
 */
-void QQuickItemPrivate::itemToParentTransform(QTransform &t) const
+void QQuickItemPrivate::itemToParentTransform(QTransform *t) const
 {
     /* Read the current x and y values. As this is an internal method,
        we don't care about it being usable in bindings. Instead, we
@@ -3093,21 +3093,21 @@ void QQuickItemPrivate::itemToParentTransform(QTransform &t) const
     qreal x = this->x.valueBypassingBindings();
     qreal y = this->y.valueBypassingBindings();
     if (x || y)
-        t.translate(x, y);
+        t->translate(x, y);
 
     if (!transforms.isEmpty()) {
-        QMatrix4x4 m(t);
+        QMatrix4x4 m(*t);
         for (int ii = transforms.size() - 1; ii >= 0; --ii)
             transforms.at(ii)->applyTo(&m);
-        t = m.toTransform();
+        *t = m.toTransform();
     }
 
     if (scale() != 1. || rotation() != 0.) {
         QPointF tp = computeTransformOrigin();
-        t.translate(tp.x(), tp.y());
-        t.scale(scale(), scale());
-        t.rotate(rotation());
-        t.translate(-tp.x(), -tp.y());
+        t->translate(tp.x(), tp.y());
+        t->scale(scale(), scale());
+        t->rotate(rotation());
+        t->translate(-tp.x(), -tp.y());
     }
 }
 
@@ -5022,12 +5022,17 @@ void QQuickItemPrivate::dumpItemTree(int indent) const
 {
     Q_Q(const QQuickItem);
 
-    qDebug().nospace().noquote() << QString(indent * 4, QLatin1Char(' ')) <<
+    const auto indentStr = QString(indent * 4, QLatin1Char(' '));
+    qDebug().nospace().noquote() << indentStr <<
 #if QT_VERSION < QT_VERSION_CHECK(7, 0, 0)
                                     const_cast<QQuickItem *>(q);
 #else
                                     q;
 #endif
+    if (extra.isAllocated()) {
+        for (const auto handler : extra->pointerHandlers)
+            qDebug().nospace().noquote() << indentStr << u"  \u26ee " << handler;
+    }
     for (const QQuickItem *ch : childItems) {
         auto itemPriv = QQuickItemPrivate::get(ch);
         itemPriv->dumpItemTree(indent + 1);
@@ -5610,7 +5615,7 @@ void QQuickItemPrivate::deliverInputMethodEvent(QInputMethodEvent *e)
 void QQuickItemPrivate::deliverShortcutOverrideEvent(QKeyEvent *event)
 {
     if (extra.isAllocated() && extra->keyHandler)
-        extra->keyHandler->shortcutOverride(event);
+        extra->keyHandler->shortcutOverrideEvent(event);
     else
         event->ignore();
 }
@@ -8577,7 +8582,7 @@ void QQuickItem::setContainmentMask(QObject *mask)
 
     \input item.qdocinc mapping
 
-    If \a item is 0, this maps \a point to the coordinate system of the
+    If \a item is \nullptr, this maps \a point to the coordinate system of the
     scene.
 
     \sa {Concepts - Visual Coordinates in Qt Quick}
@@ -8635,7 +8640,7 @@ QPointF QQuickItem::mapToGlobal(const QPointF &point) const
 
     \input item.qdocinc mapping
 
-    If \a item is 0, this maps \a rect to the coordinate system of the
+    If \a item is \nullptr, this maps \a rect to the coordinate system of the
     scene.
 
     \sa {Concepts - Visual Coordinates in Qt Quick}
@@ -8671,7 +8676,7 @@ QRectF QQuickItem::mapRectToScene(const QRectF &rect) const
 
     \input item.qdocinc mapping
 
-    If \a item is 0, this maps \a point from the coordinate system of the
+    If \a item is \nullptr, this maps \a point from the coordinate system of the
     scene.
 
     \sa {Concepts - Visual Coordinates in Qt Quick}
@@ -8738,7 +8743,7 @@ QPointF QQuickItem::mapFromGlobal(const QPointF &point) const
 
     \input item.qdocinc mapping
 
-    If \a item is 0, this maps \a rect from the coordinate system of the
+    If \a item is \nullptr, this maps \a rect from the coordinate system of the
     scene.
 
     \sa {Concepts - Visual Coordinates in Qt Quick}

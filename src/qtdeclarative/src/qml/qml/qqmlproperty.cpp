@@ -1248,14 +1248,9 @@ bool QQmlPropertyPrivate::writeEnumProperty(const QMetaProperty &prop, int idx, 
                 v = QVariant(menum.keyToValue(value.toByteArray(), &ok));
             if (!ok)
                 return false;
-        } else if (v.userType() != QMetaType::Int && v.userType() != QMetaType::UInt) {
-            int enumMetaTypeId = QMetaType::fromName(
-                        QByteArray(menum.scope() + QByteArray("::") + menum.name())).id();
-            if ((enumMetaTypeId == QMetaType::UnknownType) || (v.userType() != enumMetaTypeId) || !v.constData())
-                return false;
-            v = QVariant(*reinterpret_cast<const int *>(v.constData()));
         }
-        v.convert(QMetaType(QMetaType::Int));
+        if (!v.convert(prop.metaType())) // ### TODO: underlyingType might be faster?
+            return false;
     }
 
     // the status variable is changed by qt_metacall to indicate what it did
@@ -1403,7 +1398,7 @@ static ConvertAndAssignResult tryConvertAndAssign(
 
     if (variantMetaType == QMetaType::fromType<QJSValue>()) {
         // Handle Qt.binding bindings here to avoid mistaken conversion below
-        const QJSValue &jsValue = *static_cast<const QJSValue *>(value.constData());
+        const QJSValue &jsValue = get<QJSValue>(value);
         const QV4::FunctionObject *f
                 = QJSValuePrivate::asManagedType<QV4::FunctionObject>(&jsValue);
         if (f && f->isBinding()) {
@@ -1458,14 +1453,15 @@ static ConvertAndAssignResult tryConvertAndAssign(
     }
     }
 
-    QVariant converted(propertyMetaType);
-    if (QQmlValueTypeProvider::createValueType(value, propertyMetaType, converted.data())
-            || QMetaType::convert(value.metaType(), value.constData(),
-                                  propertyMetaType, converted.data()))  {
-        return {true, property.writeProperty(object, converted.data(), flags)};
+    QVariant converted = QQmlValueTypeProvider::createValueType(value, propertyMetaType);
+    if (!converted.isValid()) {
+        converted = QVariant(propertyMetaType);
+        if (!QMetaType::convert(value.metaType(), value.constData(),
+                                propertyMetaType, converted.data()))  {
+            return {false, false};
+        }
     }
-
-    return {false, false};
+    return {true, property.writeProperty(object, converted.data(), flags)};
 };
 
 template<typename Op>
@@ -1588,18 +1584,26 @@ bool QQmlPropertyPrivate::write(
             if (valueMetaObject.isNull())
                 return false;
 
-            QQmlListProperty<void> prop;
+            QQmlListProperty<QObject> prop;
             property.readProperty(object, &prop);
 
-            if (!prop.clear)
+            if (!prop.clear || !prop.append)
                 return false;
 
-            prop.clear(&prop);
+            const bool useNonsignalingListOps = prop.clear == &QQmlVMEMetaObject::list_clear
+                    && prop.append == &QQmlVMEMetaObject::list_append;
+
+            auto propClear =
+                    useNonsignalingListOps ? &QQmlVMEMetaObject::list_clear_nosignal : prop.clear;
+            auto propAppend =
+                    useNonsignalingListOps ? &QQmlVMEMetaObject::list_append_nosignal : prop.append;
+
+            propClear(&prop);
 
             const auto doAppend = [&](QObject *o) {
                 if (o && !QQmlMetaObject::canConvert(o, valueMetaObject))
                     o = nullptr;
-                prop.append(&prop, o);
+                propAppend(&prop, o);
             };
 
             if (variantMetaType == QMetaType::fromType<QQmlListReference>()) {
@@ -1617,6 +1621,10 @@ bool QQmlPropertyPrivate::write(
                     doAppend(QQmlMetaType::toQObject(entry));
             } else if (!iterateQObjectContainer(variantMetaType, value.data(), doAppend)) {
                 doAppend(QQmlMetaType::toQObject(value));
+            }
+            if (useNonsignalingListOps) {
+                Q_ASSERT(QQmlVMEMetaObject::get(object));
+                QQmlVMEResolvedList(&prop).activateSignal();
             }
         } else if (variantMetaType == propertyMetaType) {
             QVariant v = value;

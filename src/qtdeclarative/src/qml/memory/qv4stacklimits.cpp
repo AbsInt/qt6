@@ -235,6 +235,7 @@ StackProperties stackPropertiesGeneric(qsizetype stackSize = 0)
     pthread_t thread = pthread_self();
     pthread_attr_t sattr;
 #  if defined(PTHREAD_NP_H) || defined(_PTHREAD_NP_H_) || defined(Q_OS_NETBSD)
+    pthread_attr_init(&sattr);
     pthread_attr_get_np(thread, &sattr);
 #  else
     pthread_getattr_np(thread, &sattr);
@@ -249,9 +250,6 @@ StackProperties stackPropertiesGeneric(qsizetype stackSize = 0)
 
     if (rc)
         qFatal("Cannot find stack base");
-
-    if (!stackBase)
-        qFatal("Invalid stack base");
 
 #  if Q_STACK_GROWTH_DIRECTION < 0
     stackBase = decrementStackPointer(stackBase, regionSize);

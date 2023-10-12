@@ -41,10 +41,11 @@ QQmlJSCompilePass::InstructionAnnotations QQmlJSStorageGeneralizer::run(
             m_typeResolver->generalizeType(specific);
     };
 
-    const auto transformRegisters
-            = [&](VirtualRegisters &registers) {
-        for (auto j = registers.begin(), jEnd = registers.end(); j != jEnd; ++j)
-            transformRegister(j.value().content);
+    const auto transformRegisters = [&](VirtualRegisters &registers) {
+        for (auto j = registers.begin(), jEnd = registers.end(); j != jEnd; ++j) {
+            QQmlJSRegisterContent &content = j.value().content;
+            transformRegister(content);
+        }
     };
 
     for (QQmlJSRegisterContent &argument : function->argumentTypes) {

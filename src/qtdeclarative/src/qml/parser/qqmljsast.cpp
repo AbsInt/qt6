@@ -1329,6 +1329,15 @@ void UiImport::accept0(BaseVisitor *visitor)
     visitor->endVisit(this);
 }
 
+void UiPragmaValueList::accept0(BaseVisitor *visitor)
+{
+    if (visitor->visit(this)) {
+    }
+
+    visitor->endVisit(this);
+}
+
+
 void UiPragma::accept0(BaseVisitor *visitor)
 {
     if (visitor->visit(this)) {

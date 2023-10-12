@@ -363,8 +363,8 @@ void QQmlDelegateModelPrivate::connectToAbstractItemModel()
                       q, QQmlDelegateModel, SLOT(_q_columnsRemoved(QModelIndex,int,int)));
     qmlobject_connect(aim, QAbstractItemModel, SIGNAL(columnsMoved(QModelIndex,int,int,QModelIndex,int)),
                       q, QQmlDelegateModel, SLOT(_q_columnsMoved(QModelIndex,int,int,QModelIndex,int)));
-    qmlobject_connect(aim, QAbstractItemModel, SIGNAL(dataChanged(QModelIndex,QModelIndex,QVector<int>)),
-                      q, QQmlDelegateModel, SLOT(_q_dataChanged(QModelIndex,QModelIndex,QVector<int>)));
+    qmlobject_connect(aim, QAbstractItemModel, SIGNAL(dataChanged(QModelIndex,QModelIndex,QList<int>)),
+                      q, QQmlDelegateModel, SLOT(_q_dataChanged(QModelIndex,QModelIndex,QList<int>)));
     qmlobject_connect(aim, QAbstractItemModel, SIGNAL(rowsMoved(QModelIndex,int,int,QModelIndex,int)),
                       q, QQmlDelegateModel, SLOT(_q_rowsMoved(QModelIndex,int,int,QModelIndex,int)));
 
@@ -393,8 +393,8 @@ void QQmlDelegateModelPrivate::disconnectFromAbstractItemModel()
                         SLOT(_q_columnsRemoved(QModelIndex,int,int)));
     QObject::disconnect(aim, SIGNAL(columnsMoved(QModelIndex,int,int,QModelIndex,int)), q,
                         SLOT(_q_columnsMoved(QModelIndex,int,int,QModelIndex,int)));
-    QObject::disconnect(aim, SIGNAL(dataChanged(QModelIndex,QModelIndex,QVector<int>)),
-                        q, SLOT(_q_dataChanged(QModelIndex,QModelIndex,QVector<int>)));
+    QObject::disconnect(aim, SIGNAL(dataChanged(QModelIndex,QModelIndex,QList<int>)),
+                        q, SLOT(_q_dataChanged(QModelIndex,QModelIndex,QList<int>)));
     QObject::disconnect(aim, SIGNAL(rowsMoved(QModelIndex,int,int,QModelIndex,int)),
                         q, SLOT(_q_rowsMoved(QModelIndex,int,int,QModelIndex,int)));
     QObject::disconnect(aim, &QAbstractItemModel::modelAboutToBeReset, q, &QQmlDelegateModel::_q_modelAboutToBeReset);
@@ -921,7 +921,7 @@ void QQDMIncubationTask::initializeRequiredProperties(QQmlDelegateModelItem *mod
     if (incubatorPriv->hadTopLevelRequiredProperties()) {
         // If we have required properties, we clear the context object
         // so that the model role names are not polluting the context.
-        // Unless the context is bound, in which case we have never set context object.
+        // Unless the context is bound, in which case we have never set the context object.
         if (incubating && !isBound) {
             Q_ASSERT(incubating->contextData);
             incubating->contextData->setContextObject(nullptr);
@@ -930,16 +930,20 @@ void QQDMIncubationTask::initializeRequiredProperties(QQmlDelegateModelItem *mod
             proxyContext->setContextObject(nullptr);
         }
 
+        // Retrieve the metaObject before the potential return so that the accessors have a chance
+        // to perform some finalization in case they produce a dynamic metaobject. Here we know for
+        // sure that we are using required properties.
+        const QMetaObject *qmlMetaObject = modelItemToIncubate->metaObject();
+
         if (incubatorPriv->requiredProperties()->empty())
             return;
         RequiredProperties *requiredProperties = incubatorPriv->requiredProperties();
 
-        auto qmlMetaObject = modelItemToIncubate->metaObject();
         // if a required property was not in the model, it might still be a static property of the
         // QQmlDelegateModelItem or one of its derived classes this is the case for index, row,
         // column, model and more
-        // the most derived subclass of QQmlDelegateModelItem is QQmlDMAbstractModelData at depth 2,
-        // so 4 should be plenty
+        // the most derived subclasses of QQmlDelegateModelItem are QQmlDMAbstractItemModelData and
+        // QQmlDMObjectData at depth 2, so 4 should be plenty
         QVarLengthArray<QPair<const QMetaObject *, QObject *>, 4> mos;
         // we first check the dynamic meta object for properties originating from the model
         // contains abstractitemmodelproperties
@@ -986,6 +990,13 @@ void QQDMIncubationTask::initializeRequiredProperties(QQmlDelegateModelItem *mod
             modelItemToIncubate->contextData->setContextObject(modelItemToIncubate);
         if (proxiedObject)
             proxyContext->setContextObject(proxiedObject);
+
+        // Retrieve the metaObject() once so that the accessors have a chance to perform some
+        // finalization in case they produce a dynamic metaobject. For example, they might be
+        // inclined to create a propertyCache now because there are no required properties and any
+        // revisioned properties should be hidden after all. Here is the first time we know for
+        // sure whether we are using context properties.
+        modelItemToIncubate->metaObject();
     }
 }
 

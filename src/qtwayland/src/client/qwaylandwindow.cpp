@@ -30,6 +30,7 @@
 
 #include <QtCore/QDebug>
 #include <QtCore/QThread>
+#include <QtCore/private/qthread_p.h>
 
 #include <QtWaylandClient/private/qwayland-fractional-scale-v1.h>
 
@@ -104,12 +105,13 @@ void QWaylandWindow::initWindow()
     if (mDisplay->fractionalScaleManager() && qApp->highDpiScaleFactorRoundingPolicy() == Qt::HighDpiScaleFactorRoundingPolicy::PassThrough) {
         mFractionalScale.reset(new QWaylandFractionalScale(mDisplay->fractionalScaleManager()->get_fractional_scale(mSurface->object())));
 
-        mScale = mFractionalScale->preferredScale();
-        connect(mFractionalScale.data(), &QWaylandFractionalScale::preferredScaleChanged, this, [this]() {
-            if (mScale == mFractionalScale->preferredScale()) {
+        connect(mFractionalScale.data(), &QWaylandFractionalScale::preferredScaleChanged, this, [this](qreal preferredScale) {
+            preferredScale = std::max(1.0, preferredScale);
+            if (mScale == preferredScale) {
                 return;
             }
-            mScale = mFractionalScale->preferredScale();
+            mScale = preferredScale;
+            QWindowSystemInterface::handleWindowDevicePixelRatioChanged(window());
             ensureSize();
             if (mViewport)
                 updateViewport();
@@ -134,9 +136,15 @@ void QWaylandWindow::initWindow()
     } else if (shouldCreateShellSurface()) {
         Q_ASSERT(!mShellSurface);
         Q_ASSERT(mShellIntegration);
+        mTransientParent = closestTransientParent();
 
         mShellSurface = mShellIntegration->createShellSurface(this);
         if (mShellSurface) {
+            if (mTransientParent) {
+                if (window()->type() == Qt::ToolTip || window()->type() == Qt::Popup)
+                    mTransientParent->addChildPopup(this);
+            }
+
             // Set initial surface title
             setWindowTitle(window()->title());
 
@@ -200,6 +208,8 @@ void QWaylandWindow::initWindow()
         mShellSurface->requestWindowStates(window()->windowStates());
     handleContentOrientationChange(window()->contentOrientation());
     mFlags = window()->flags();
+
+    mSurface->commit();
 }
 
 void QWaylandWindow::initializeWlSurface()
@@ -265,10 +275,13 @@ void QWaylandWindow::reset()
         emit wlSurfaceDestroyed();
         QWriteLocker lock(&mSurfaceLock);
         invalidateSurface();
+        if (mTransientParent)
+            mTransientParent->removeChildPopup(this);
         delete mShellSurface;
         mShellSurface = nullptr;
         delete mSubSurfaceWindow;
         mSubSurfaceWindow = nullptr;
+        mTransientParent = nullptr;
         mSurface.reset();
         mViewport.reset();
         mFractionalScale.reset();
@@ -284,11 +297,21 @@ void QWaylandWindow::reset()
         mFrameCallbackElapsedTimer.invalidate();
         mWaitingForFrameCallback = false;
     }
+    if (mFrameCallbackCheckIntervalTimerId != -1) {
+        killTimer(mFrameCallbackCheckIntervalTimerId);
+        mFrameCallbackCheckIntervalTimerId = -1;
+    }
+
     mFrameCallbackTimedOut = false;
     mWaitingToApplyConfigure = false;
+    mCanResize = true;
+    mResizeDirty = false;
 
+    mOpaqueArea = QRegion();
     mMask = QRegion();
+
     mQueuedBuffer = nullptr;
+    mQueuedBufferDamage = QRegion();
 
     mDisplay->handleWindowDestroyed(this);
 }
@@ -424,6 +447,32 @@ void QWaylandWindow::setGeometry(const QRect &r)
         setOpaqueArea(QRect(QPoint(0, 0), rect.size()));
 }
 
+void QWaylandWindow::updateInputRegion()
+{
+    if (!mSurface)
+        return;
+
+    const bool transparentInputRegion = mFlags.testFlag(Qt::WindowTransparentForInput);
+
+    QRegion inputRegion;
+    if (!transparentInputRegion)
+        inputRegion = mMask;
+
+    if (mInputRegion == inputRegion && mTransparentInputRegion == transparentInputRegion)
+        return;
+
+    mInputRegion = inputRegion;
+    mTransparentInputRegion = transparentInputRegion;
+
+    if (mInputRegion.isEmpty() && !mTransparentInputRegion) {
+        mSurface->set_input_region(nullptr);
+    } else {
+        struct ::wl_region *region = mDisplay->createRegion(mInputRegion);
+        mSurface->set_input_region(region);
+        wl_region_destroy(region);
+    }
+}
+
 void QWaylandWindow::updateViewport()
 {
     if (!surfaceSize().isEmpty())
@@ -534,21 +583,14 @@ void QWaylandWindow::setMask(const QRegion &mask)
 
     mMask = mask;
 
-    if (mMask.isEmpty()) {
-        mSurface->set_input_region(nullptr);
+    updateInputRegion();
 
-        if (isOpaque())
+    if (isOpaque()) {
+        if (mMask.isEmpty())
             setOpaqueArea(QRect(QPoint(0, 0), geometry().size()));
-    } else {
-        struct ::wl_region *region = mDisplay->createRegion(mMask);
-        mSurface->set_input_region(region);
-        wl_region_destroy(region);
-
-        if (isOpaque())
+        else
             setOpaqueArea(mMask);
     }
-
-    mSurface->commit();
 }
 
 void QWaylandWindow::setAlertState(bool enabled)
@@ -579,10 +621,22 @@ void QWaylandWindow::doApplyConfigure()
     if (!mWaitingToApplyConfigure)
         return;
 
+    Q_ASSERT_X(QThread::currentThreadId() == QThreadData::get2(thread())->threadId.loadRelaxed(),
+               "QWaylandWindow::doApplyConfigure", "not called from main thread");
+
     if (mShellSurface)
         mShellSurface->applyConfigure();
 
     mWaitingToApplyConfigure = false;
+}
+
+void QWaylandWindow::doApplyConfigureFromOtherThread()
+{
+    QMutexLocker lock(&mResizeLock);
+    if (!mCanResize || !mWaitingToApplyConfigure)
+        return;
+    doApplyConfigure();
+    sendExposeEvent(QRect(QPoint(), geometry().size()));
 }
 
 void QWaylandWindow::setCanResize(bool canResize)
@@ -595,8 +649,13 @@ void QWaylandWindow::setCanResize(bool canResize)
             QWindowSystemInterface::handleGeometryChange(window(), geometry());
         }
         if (mWaitingToApplyConfigure) {
-            doApplyConfigure();
-            sendExposeEvent(QRect(QPoint(), geometry().size()));
+            bool inGuiThread = QThread::currentThreadId() == QThreadData::get2(thread())->threadId.loadRelaxed();
+            if (inGuiThread) {
+                doApplyConfigure();
+                sendExposeEvent(QRect(QPoint(), geometry().size()));
+            } else {
+                QMetaObject::invokeMethod(this, &QWaylandWindow::doApplyConfigureFromOtherThread, Qt::QueuedConnection);
+            }
         } else if (mResizeDirty) {
             mResizeDirty = false;
             sendExposeEvent(QRect(QPoint(), geometry().size()));
@@ -637,7 +696,7 @@ void QWaylandWindow::attach(QWaylandBuffer *buffer, int x, int y)
     if (buffer) {
         Q_ASSERT(!buffer->committed());
         handleUpdate();
-        buffer->setBusy();
+        buffer->setBusy(true);
 
         mSurface->attach(buffer->buffer(), x, y);
     } else {
@@ -674,7 +733,11 @@ void QWaylandWindow::safeCommit(QWaylandBuffer *buffer, const QRegion &damage)
     if (isExposed()) {
         commit(buffer, damage);
     } else {
+        if (mQueuedBuffer) {
+            mQueuedBuffer->setBusy(false);
+        }
         mQueuedBuffer = buffer;
+        mQueuedBuffer->setBusy(true);
         mQueuedBufferDamage = damage;
     }
 }
@@ -915,8 +978,6 @@ void QWaylandWindow::handleContentOrientationChange(Qt::ScreenOrientation orient
             Q_UNREACHABLE();
     }
     mSurface->set_buffer_transform(transform);
-    // set_buffer_transform is double buffered, we need to commit.
-    mSurface->commit();
 }
 
 void QWaylandWindow::setOrientationMask(Qt::ScreenOrientations mask)
@@ -938,6 +999,9 @@ void QWaylandWindow::setWindowFlags(Qt::WindowFlags flags)
 
     mFlags = flags;
     createDecoration();
+
+    QReadLocker locker(&mSurfaceLock);
+    updateInputRegion();
 }
 
 bool QWaylandWindow::createDecoration()
@@ -1049,6 +1113,11 @@ static QWaylandWindow *closestShellSurfaceWindow(QWindow *window)
 }
 
 QWaylandWindow *QWaylandWindow::transientParent() const
+{
+    return mTransientParent;
+}
+
+QWaylandWindow *QWaylandWindow::closestTransientParent() const
 {
     // Take the closest window with a shell surface, since the transient parent may be a
     // QWidgetWindow or some other window without a shell surface, which is then not able to
@@ -1307,6 +1376,8 @@ void QWaylandWindow::handleScreensChanged()
     if (newScreen == mLastReportedScreen)
         return;
 
+    if (!newScreen->isPlaceholder() && !newScreen->QPlatformScreen::screen())
+        mDisplay->forceRoundTrip();
     QWindowSystemInterface::handleWindowScreenChanged(window(), newScreen->QPlatformScreen::screen());
 
     mLastReportedScreen = newScreen;
@@ -1325,6 +1396,7 @@ void QWaylandWindow::handleScreensChanged()
 
     if (scale != mScale) {
         mScale = scale;
+        QWindowSystemInterface::handleWindowDevicePixelRatioChanged(window());
         if (mSurface) {
             if (mViewport)
                 updateViewport();
@@ -1457,6 +1529,13 @@ QVariant QWaylandWindow::property(const QString &name, const QVariant &defaultVa
 {
     return m_properties.value(name, defaultValue);
 }
+
+#ifdef QT_PLATFORM_WINDOW_HAS_VIRTUAL_SET_BACKING_STORE
+void QWaylandWindow::setBackingStore(QPlatformBackingStore *store)
+{
+    mBackingStore = dynamic_cast<QWaylandShmBackingStore *>(store);
+}
+#endif
 
 void QWaylandWindow::timerEvent(QTimerEvent *event)
 {
@@ -1615,12 +1694,18 @@ void QWaylandWindow::setXdgActivationToken(const QString &token)
     mShellSurface->setXdgActivationToken(token);
 }
 
-void QWaylandWindow::addChildPopup(QWaylandWindow *surface) {
-    mChildPopups.append(surface);
+void QWaylandWindow::addChildPopup(QWaylandWindow *child)
+{
+    if (mShellSurface)
+        mShellSurface->attachPopup(child->shellSurface());
+    mChildPopups.append(child);
 }
 
-void QWaylandWindow::removeChildPopup(QWaylandWindow *surface) {
-    mChildPopups.removeAll(surface);
+void QWaylandWindow::removeChildPopup(QWaylandWindow *child)
+{
+    if (mShellSurface)
+        mShellSurface->detachPopup(child->shellSurface());
+    mChildPopups.removeAll(child);
 }
 
 void QWaylandWindow::closeChildPopups() {
@@ -1629,6 +1714,16 @@ void QWaylandWindow::closeChildPopups() {
         popup->reset();
     }
 }
+
+void QWaylandWindow::reinit()
+{
+    if (window()->isVisible()) {
+        initWindow();
+        if (hasPendingUpdateRequest())
+            deliverUpdateRequest();
+    }
+}
+
 }
 
 QT_END_NAMESPACE

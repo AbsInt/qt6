@@ -576,12 +576,12 @@ bool qSaveQmlJSUnitAsCpp(const QString &inputFileName, const QString &outputFile
     writeStr(aotFunctions[FileScopeCodeIndex].code.toUtf8().constData());
     if (aotFunctions.size() <= 1) {
         // FileScopeCodeIndex is always there, but it may be the only one.
-        writeStr("extern const QQmlPrivate::TypedFunction aotBuiltFunctions[];\n"
-                 "extern const QQmlPrivate::TypedFunction aotBuiltFunctions[] = { { 0, QMetaType::fromType<void>(), {}, nullptr } };");
+        writeStr("extern const QQmlPrivate::AOTCompiledFunction aotBuiltFunctions[];\n"
+                 "extern const QQmlPrivate::AOTCompiledFunction aotBuiltFunctions[] = { { 0, QMetaType::fromType<void>(), {}, nullptr } };");
     } else {
         writeStr(wrapCallCode);
-        writeStr("extern const QQmlPrivate::TypedFunction aotBuiltFunctions[];\n"
-                 "extern const QQmlPrivate::TypedFunction aotBuiltFunctions[] = {\n");
+        writeStr("extern const QQmlPrivate::AOTCompiledFunction aotBuiltFunctions[];\n"
+                 "extern const QQmlPrivate::AOTCompiledFunction aotBuiltFunctions[] = {\n");
 
         QString footer = QStringLiteral("});}\n");
 
@@ -751,6 +751,7 @@ QQmlJSAotFunction QQmlJSAotCompiler::globalCode() const
         u"QtQml/qqmllist.h"_s,
 
         u"QtCore/qdatetime.h"_s,
+        u"QtCore/qtimezone.h"_s,
         u"QtCore/qobject.h"_s,
         u"QtCore/qstring.h"_s,
         u"QtCore/qstringlist.h"_s,
@@ -778,11 +779,13 @@ QQmlJSAotFunction QQmlJSAotCompiler::doCompile(
     if (error->isValid())
         return compileError();
 
-    QQmlJSBasicBlocks basicBlocks(m_unitGenerator, &m_typeResolver, m_logger);
-    typePropagationResult = basicBlocks.run(function, typePropagationResult);
-
     QQmlJSShadowCheck shadowCheck(m_unitGenerator, &m_typeResolver, m_logger);
     shadowCheck.run(&typePropagationResult, function, error);
+    if (error->isValid())
+        return compileError();
+
+    QQmlJSBasicBlocks basicBlocks(m_unitGenerator, &m_typeResolver, m_logger);
+    typePropagationResult = basicBlocks.run(function, typePropagationResult, error);
     if (error->isValid())
         return compileError();
 

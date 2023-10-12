@@ -15,17 +15,18 @@
 // We mean it.
 //
 #include "qquickdirection_p.h"
+#include <QtQuickParticles/private/qtquickparticlesexports_p.h>
 #include <QtQml/qqml.h>
 
 QT_BEGIN_NAMESPACE
 
-class QQuickAngleDirection : public QQuickDirection
+class Q_QUICKPARTICLES_PRIVATE_EXPORT QQuickAngleDirection : public QQuickDirection
 {
     Q_OBJECT
-    Q_PROPERTY(qreal angle READ angle WRITE setAngle NOTIFY angleChanged)
-    Q_PROPERTY(qreal magnitude READ magnitude WRITE setMagnitude NOTIFY magnitudeChanged)
-    Q_PROPERTY(qreal angleVariation READ angleVariation WRITE setAngleVariation NOTIFY angleVariationChanged)
-    Q_PROPERTY(qreal magnitudeVariation READ magnitudeVariation WRITE setMagnitudeVariation NOTIFY magnitudeVariationChanged)
+    Q_PROPERTY(qreal angle READ angle WRITE setAngle NOTIFY angleChanged FINAL)
+    Q_PROPERTY(qreal magnitude READ magnitude WRITE setMagnitude NOTIFY magnitudeChanged FINAL)
+    Q_PROPERTY(qreal angleVariation READ angleVariation WRITE setAngleVariation NOTIFY angleVariationChanged FINAL)
+    Q_PROPERTY(qreal magnitudeVariation READ magnitudeVariation WRITE setMagnitudeVariation NOTIFY magnitudeVariationChanged FINAL)
     QML_NAMED_ELEMENT(AngleDirection)
     QML_ADDED_IN_VERSION(2, 0)
 public:

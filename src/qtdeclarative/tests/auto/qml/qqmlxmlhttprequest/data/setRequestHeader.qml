@@ -2,7 +2,6 @@ import QtQuick 2.0
 
 QtObject {
     property string url
-
     property bool dataOK: false
 
     Component.onCompleted: {
@@ -23,5 +22,3 @@ QtObject {
         x.send();
     }
 }
-
-

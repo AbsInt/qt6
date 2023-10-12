@@ -437,22 +437,35 @@ public:
 
 #define QMLDOM_USTRING(s) u##s
 #define QMLDOM_FIELD(name) inline constexpr const auto name = QMLDOM_USTRING(#name)
+/*!
+   \internal
+   In an ideal world, the Fields namespace would be an enum, not strings.
+   Use FieldType whenever you expect a static String from the Fields namespace instead of an
+   arbitrary QStringView.
+ */
+using FieldType = QStringView;
 // namespace, so it cam be reopened to add more entries
 namespace Fields{
 QMLDOM_FIELD(access);
 QMLDOM_FIELD(accessSemantics);
 QMLDOM_FIELD(allSources);
+QMLDOM_FIELD(alternative);
 QMLDOM_FIELD(annotations);
+QMLDOM_FIELD(arguments);
 QMLDOM_FIELD(astComments);
 QMLDOM_FIELD(astRelocatableDump);
 QMLDOM_FIELD(attachedType);
 QMLDOM_FIELD(attachedTypeName);
 QMLDOM_FIELD(autoExports);
 QMLDOM_FIELD(base);
+QMLDOM_FIELD(binaryExpression);
 QMLDOM_FIELD(bindable);
+QMLDOM_FIELD(bindingElement);
 QMLDOM_FIELD(bindingType);
 QMLDOM_FIELD(bindings);
+QMLDOM_FIELD(block);
 QMLDOM_FIELD(body);
+QMLDOM_FIELD(callee);
 QMLDOM_FIELD(canonicalFilePath);
 QMLDOM_FIELD(canonicalPath);
 QMLDOM_FIELD(children);
@@ -461,6 +474,8 @@ QMLDOM_FIELD(code);
 QMLDOM_FIELD(commentedElements);
 QMLDOM_FIELD(comments);
 QMLDOM_FIELD(components);
+QMLDOM_FIELD(condition);
+QMLDOM_FIELD(consequence);
 QMLDOM_FIELD(contents);
 QMLDOM_FIELD(contentsDate);
 QMLDOM_FIELD(cppType);
@@ -468,20 +483,24 @@ QMLDOM_FIELD(currentExposedAt);
 QMLDOM_FIELD(currentIsValid);
 QMLDOM_FIELD(currentItem);
 QMLDOM_FIELD(currentRevision);
+QMLDOM_FIELD(declarations);
 QMLDOM_FIELD(defaultPropertyName);
 QMLDOM_FIELD(defaultValue);
 QMLDOM_FIELD(designerSupported);
 QMLDOM_FIELD(elLocation);
+QMLDOM_FIELD(elements);
 QMLDOM_FIELD(elementCanonicalPath);
 QMLDOM_FIELD(enumerations);
 QMLDOM_FIELD(errors);
 QMLDOM_FIELD(exportSource);
 QMLDOM_FIELD(exports);
 QMLDOM_FIELD(expr);
+QMLDOM_FIELD(expression);
 QMLDOM_FIELD(expressionType);
 QMLDOM_FIELD(extensionTypeName);
 QMLDOM_FIELD(fileLocationsTree);
 QMLDOM_FIELD(fileName);
+QMLDOM_FIELD(forStatement);
 QMLDOM_FIELD(fullRegion);
 QMLDOM_FIELD(get);
 QMLDOM_FIELD(globalScopeName);
@@ -489,6 +508,7 @@ QMLDOM_FIELD(globalScopeWithName);
 QMLDOM_FIELD(hasCallback);
 QMLDOM_FIELD(hasCustomParser);
 QMLDOM_FIELD(idStr);
+QMLDOM_FIELD(identifier);
 QMLDOM_FIELD(ids);
 QMLDOM_FIELD(implicit);
 QMLDOM_FIELD(import);
@@ -500,6 +520,7 @@ QMLDOM_FIELD(imports);
 QMLDOM_FIELD(inProgress);
 QMLDOM_FIELD(infoItem);
 QMLDOM_FIELD(inheritVersion);
+QMLDOM_FIELD(initializer);
 QMLDOM_FIELD(interfaceNames);
 QMLDOM_FIELD(isAlias);
 QMLDOM_FIELD(isComposite);
@@ -520,6 +541,7 @@ QMLDOM_FIELD(jsFileWithPath);
 QMLDOM_FIELD(kind);
 QMLDOM_FIELD(lastRevision);
 QMLDOM_FIELD(lastValidRevision);
+QMLDOM_FIELD(left);
 QMLDOM_FIELD(loadInfo);
 QMLDOM_FIELD(loadOptions);
 QMLDOM_FIELD(loadPaths);
@@ -546,6 +568,7 @@ QMLDOM_FIELD(nextScope);
 QMLDOM_FIELD(notify);
 QMLDOM_FIELD(objects);
 QMLDOM_FIELD(onAttachedObject);
+QMLDOM_FIELD(operation);
 QMLDOM_FIELD(options);
 QMLDOM_FIELD(parameters);
 QMLDOM_FIELD(parent);
@@ -560,6 +583,7 @@ QMLDOM_FIELD(pragmas);
 QMLDOM_FIELD(preCode);
 QMLDOM_FIELD(preCommentLocations);
 QMLDOM_FIELD(preComments);
+QMLDOM_FIELD(properties);
 QMLDOM_FIELD(propertyDef);
 QMLDOM_FIELD(propertyDefRef);
 QMLDOM_FIELD(propertyDefs);
@@ -585,8 +609,12 @@ QMLDOM_FIELD(requestedAt);
 QMLDOM_FIELD(requestingUniverse);
 QMLDOM_FIELD(returnType);
 QMLDOM_FIELD(returnTypeName);
+QMLDOM_FIELD(right);
 QMLDOM_FIELD(rootComponent);
+QMLDOM_FIELD(scopeType);
+QMLDOM_FIELD(scriptElement);
 QMLDOM_FIELD(sources);
+QMLDOM_FIELD(statements);
 QMLDOM_FIELD(status);
 QMLDOM_FIELD(stringValue);
 QMLDOM_FIELD(subComponents);
@@ -598,6 +626,7 @@ QMLDOM_FIELD(target);
 QMLDOM_FIELD(targetPropertyName);
 QMLDOM_FIELD(text);
 QMLDOM_FIELD(type);
+QMLDOM_FIELD(typeArgument);
 QMLDOM_FIELD(typeName);
 QMLDOM_FIELD(types);
 QMLDOM_FIELD(universe);
@@ -612,7 +641,7 @@ QMLDOM_FIELD(values);
 QMLDOM_FIELD(version);
 QMLDOM_FIELD(when);
 QMLDOM_FIELD(write);
-}
+} // namespace Fields
 
 class Source;
 size_t qHash(const Path &, size_t);

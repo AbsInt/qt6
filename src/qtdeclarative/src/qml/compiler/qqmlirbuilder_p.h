@@ -227,7 +227,7 @@ struct Parameter : public QV4::CompiledData::Parameter
         return initType(type, annotationString, idGenerator(annotationString), Flag::NoFlag);
     }
 
-    static QV4::CompiledData::BuiltinType stringToBuiltinType(const QString &typeName);
+    static QV4::CompiledData::CommonType stringToBuiltinType(const QString &typeName);
 
 private:
     static bool initType(
@@ -440,9 +440,10 @@ struct Q_QML_COMPILER_PRIVATE_EXPORT Pragma
 
     enum ValueTypeBehaviorValue
     {
-        Reference,
-        Copy
+        Copy        = 0x1,
+        Addressable = 0x2,
     };
+    Q_DECLARE_FLAGS(ValueTypeBehaviorValues, ValueTypeBehaviorValue);
 
     PragmaType type;
 
@@ -451,7 +452,7 @@ struct Q_QML_COMPILER_PRIVATE_EXPORT Pragma
         ComponentBehaviorValue componentBehavior;
         FunctionSignatureBehaviorValue functionSignatureBehavior;
         NativeMethodBehaviorValue nativeMethodBehavior;
-        ValueTypeBehaviorValue valueTypeBehavior;
+        ValueTypeBehaviorValues::Int valueTypeBehavior;
     };
 
     QV4::CompiledData::Location location;

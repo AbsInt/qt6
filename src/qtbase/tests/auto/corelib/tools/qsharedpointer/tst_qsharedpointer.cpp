@@ -1998,7 +1998,7 @@ class StrongThread: public QThread
 protected:
     void run() override
     {
-        usleep(QRandomGenerator::global()->bounded(2000));
+        sleep(std::chrono::microseconds{QRandomGenerator::global()->bounded(2000)});
         ptr->ref();
         ptr.clear();
     }
@@ -2011,7 +2011,7 @@ class WeakThread: public QThread
 protected:
     void run() override
     {
-        usleep(QRandomGenerator::global()->bounded(2000));
+        sleep(std::chrono::microseconds{QRandomGenerator::global()->bounded(2000)});
         QSharedPointer<ThreadData> ptr = weak;
         if (ptr)
             ptr->ref();

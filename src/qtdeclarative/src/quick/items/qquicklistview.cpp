@@ -15,7 +15,6 @@
 
 #include <private/qquicksmoothedanimation_p_p.h>
 #include <private/qqmlcomponent_p.h>
-#include "qplatformdefs.h"
 
 QT_BEGIN_NAMESPACE
 
@@ -108,7 +107,7 @@ public:
     void fixupPosition() override;
     void fixup(AxisData &data, qreal minExtent, qreal maxExtent) override;
     bool flick(QQuickItemViewPrivate::AxisData &data, qreal minExtent, qreal maxExtent, qreal vSize,
-               QQuickTimeLineCallback::Callback fixupCallback, qreal velocity) override;
+               QQuickTimeLineCallback::Callback fixupCallback, QEvent::Type eventType, qreal velocity) override;
 
     QQuickItemViewAttached *getAttachedObject(const QObject *object) const override;
 
@@ -876,6 +875,12 @@ void QQuickListViewPrivate::layoutVisibleItems(int fromModelIndex)
 
         FxListItemSG *firstItem = static_cast<FxListItemSG *>(visibleItems.constFirst());
         bool fixedCurrent = currentItem && firstItem->item == currentItem->item;
+
+        /* Set position of first item in list view when populate transition is configured, as it doesn't set
+           while adding visible item (addVisibleItem()) to the view */
+        if (transitioner && transitioner->canTransition(QQuickItemViewTransitioner::PopulateTransition, true))
+            resetFirstItemPosition(isContentFlowReversed() ? -firstItem->position()-firstItem->size() : firstItem->position());
+
         firstVisibleItemPosition = firstItem->position();
         qreal sum = firstItem->size();
         qreal pos = firstItem->position() + firstItem->size() + spacing;
@@ -1844,13 +1849,13 @@ void QQuickListViewPrivate::fixup(AxisData &data, qreal minExtent, qreal maxExte
 }
 
 bool QQuickListViewPrivate::flick(AxisData &data, qreal minExtent, qreal maxExtent, qreal vSize,
-                                        QQuickTimeLineCallback::Callback fixupCallback, qreal velocity)
+                                        QQuickTimeLineCallback::Callback fixupCallback, QEvent::Type eventType, qreal velocity)
 {
     data.fixingUp = false;
     moveReason = Mouse;
     if ((!haveHighlightRange || highlightRange != QQuickListView::StrictlyEnforceRange) && snapMode == QQuickListView::NoSnap) {
         correctFlick = true;
-        return QQuickItemViewPrivate::flick(data, minExtent, maxExtent, vSize, fixupCallback, velocity);
+        return QQuickItemViewPrivate::flick(data, minExtent, maxExtent, vSize, fixupCallback, eventType, velocity);
     }
     qreal maxDistance = 0;
     const qreal dataValue =
@@ -1906,7 +1911,7 @@ bool QQuickListViewPrivate::flick(AxisData &data, qreal minExtent, qreal maxExte
         }
         if (!hData.flicking && !vData.flicking) {
             // the initial flick - estimate boundary
-            qreal accel = deceleration;
+            qreal accel = eventType == QEvent::Wheel ? wheelDeceleration : deceleration;
             qreal v2 = v * v;
             overshootDist = 0.0;
             // + averageSize/4 to encourage moving at least one item in the flick direction
@@ -3459,12 +3464,12 @@ void QQuickListView::viewportMoved(Qt::Orientations orient)
                 const qreal minY = minYExtent();
                 if ((minY - d->vData.move.value() < height()/2 || d->vData.flickTarget - d->vData.move.value() < height()/2)
                     && minY != d->vData.flickTarget)
-                    d->flickY(-d->vData.smoothVelocity.value());
+                    d->flickY(QEvent::TouchUpdate, -d->vData.smoothVelocity.value());
             } else if (d->vData.velocity < 0) {
                 const qreal maxY = maxYExtent();
                 if ((d->vData.move.value() - maxY < height()/2 || d->vData.move.value() - d->vData.flickTarget < height()/2)
                     && maxY != d->vData.flickTarget)
-                    d->flickY(-d->vData.smoothVelocity.value());
+                    d->flickY(QEvent::TouchUpdate, -d->vData.smoothVelocity.value());
             }
         }
 
@@ -3473,12 +3478,12 @@ void QQuickListView::viewportMoved(Qt::Orientations orient)
                 const qreal minX = minXExtent();
                 if ((minX - d->hData.move.value() < width()/2 || d->hData.flickTarget - d->hData.move.value() < width()/2)
                     && minX != d->hData.flickTarget)
-                    d->flickX(-d->hData.smoothVelocity.value());
+                    d->flickX(QEvent::TouchUpdate, -d->hData.smoothVelocity.value());
             } else if (d->hData.velocity < 0) {
                 const qreal maxX = maxXExtent();
                 if ((d->hData.move.value() - maxX < width()/2 || d->hData.move.value() - d->hData.flickTarget < width()/2)
                     && maxX != d->hData.flickTarget)
-                    d->flickX(-d->hData.smoothVelocity.value());
+                    d->flickX(QEvent::TouchUpdate, -d->hData.smoothVelocity.value());
             }
         }
         d->inFlickCorrection = false;

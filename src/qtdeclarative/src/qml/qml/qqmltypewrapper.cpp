@@ -56,8 +56,25 @@ const QMetaObject *QQmlTypeWrapper::metaObject() const
     if (!type.isValid())
         return nullptr;
 
-    if (type.isSingleton())
-        return type.metaObject();
+    if (type.isSingleton()) {
+        auto metaObjectCandidate = type.metaObject();
+        // if the candidate is the same as te baseMetaObject, we know that
+        // we don't have an extended singleton; in that case the
+        // actual instance might be subclass of type instead of type itself
+        // so we need to query the actual object for it's meta-object
+        if (metaObjectCandidate == type.baseMetaObject()) {
+            QQmlEnginePrivate *qmlEngine = QQmlEnginePrivate::get(engine()->qmlEngine());
+            auto object = qmlEngine->singletonInstance<QObject *>(type);
+            if (object)
+                return object->metaObject();
+        }
+        /* if we instead have an extended singleton, the dynamic proxy
+           meta-object must alreday be set up correctly
+          ### TODO: it isn't, as QQmlTypePrivate::init has no way to
+                    query the object
+        */
+        return metaObjectCandidate;
+    }
 
     return type.attachedPropertiesType(QQmlEnginePrivate::get(engine()->qmlEngine()));
 }
@@ -369,19 +386,11 @@ bool QQmlTypeWrapper::virtualIsEqualTo(Managed *a, Managed *b)
     return false;
 }
 
-ReturnedValue QQmlTypeWrapper::virtualInstanceOf(const Object *typeObject, const Value &var)
+static ReturnedValue instanceOfQObject(const QV4::QQmlTypeWrapper *typeWrapper, const QObjectWrapper *objectWrapper)
 {
-    Q_ASSERT(typeObject->as<QV4::QQmlTypeWrapper>());
-    const QV4::QQmlTypeWrapper *typeWrapper = static_cast<const QV4::QQmlTypeWrapper *>(typeObject);
-
-    // can only compare a QObject* against a QML type
-    const QObjectWrapper *wrapper = var.as<QObjectWrapper>();
-    if (!wrapper)
-        return QV4::Encode(false);
-
-    QV4::ExecutionEngine *engine = typeObject->internalClass()->engine;
+    QV4::ExecutionEngine *engine = typeWrapper->internalClass()->engine;
     // in case the wrapper outlived the QObject*
-    const QObject *wrapperObject = wrapper->object();
+    const QObject *wrapperObject = objectWrapper->object();
     if (!wrapperObject)
         return engine->throwTypeError();
 
@@ -409,6 +418,29 @@ ReturnedValue QQmlTypeWrapper::virtualInstanceOf(const Object *typeObject, const
     const QMetaObject *theirType = wrapperObject->metaObject();
 
     return QV4::Encode(QQmlMetaObject::canConvert(theirType, myQmlType));
+}
+
+ReturnedValue QQmlTypeWrapper::virtualInstanceOf(const Object *typeObject, const Value &var)
+{
+    Q_ASSERT(typeObject->as<QV4::QQmlTypeWrapper>());
+    const QV4::QQmlTypeWrapper *typeWrapper = static_cast<const QV4::QQmlTypeWrapper *>(typeObject);
+
+    if (const QObjectWrapper *objectWrapper = var.as<QObjectWrapper>())
+        return instanceOfQObject(typeWrapper, objectWrapper);
+
+    if (const QMetaObject *valueTypeMetaObject
+            = QQmlMetaType::metaObjectForValueType(typeWrapper->d()->type())) {
+        if (const QQmlValueTypeWrapper *valueWrapper = var.as<QQmlValueTypeWrapper>()) {
+            return QV4::Encode(QQmlMetaObject::canConvert(valueWrapper->metaObject(),
+                                                          valueTypeMetaObject));
+        }
+
+        // We want "foo as valuetype" to return undefined if it doesn't match.
+        return Encode::undefined();
+    }
+
+    // If the target type is an object type  we want null.
+    return Encode(false);
 }
 
 ReturnedValue QQmlTypeWrapper::virtualResolveLookupGetter(const Object *object, ExecutionEngine *engine, Lookup *lookup)

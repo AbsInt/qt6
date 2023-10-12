@@ -19,10 +19,11 @@
 
 QT_BEGIN_NAMESPACE
 
-class QQuickParticleGroup : public QQuickStochasticState, public QQmlParserStatus
+class Q_QUICKPARTICLES_PRIVATE_EXPORT QQuickParticleGroup : public QQuickStochasticState,
+                                                            public QQmlParserStatus
 {
     Q_OBJECT
-    Q_PROPERTY(QQuickParticleSystem* system READ system WRITE setSystem NOTIFY systemChanged)
+    Q_PROPERTY(QQuickParticleSystem* system READ system WRITE setSystem NOTIFY systemChanged FINAL)
 
     //Intercept children requests and assign to the group & system
     Q_PROPERTY(QQmlListProperty<QObject> particleChildren READ particleChildren DESIGNABLE false)//### Hidden property for in-state system definitions - ought not to be used in actual "Sprite" states

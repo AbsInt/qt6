@@ -3,7 +3,7 @@ import QtQml
 
 QtObject {
     function infinite() {
-        var foo = false
+        let foo = false
         if (true) {
             while (true) {}
         } else {
@@ -12,8 +12,8 @@ QtObject {
     }
 
     function t1() {
-        var i = 0
-        var foo = false
+        let i = 0
+        let foo = false
         if (true) {
             for (i = 0; i < 42 ; ++i) {}
         } else {
@@ -22,7 +22,7 @@ QtObject {
     }
 
     function t2() {
-        var foo = false
+        let foo = false
         if (false) {
             while(Math.random() < 0.5) {}
         } else {
@@ -31,7 +31,7 @@ QtObject {
     }
 
     function t3() {
-        var foo = false
+        let foo = false
         if (Math.random() < 0.5) {
             console.log(foo)
         } else {

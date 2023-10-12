@@ -14,22 +14,21 @@
 // We mean it.
 //
 
-#include "qv4global_p.h"
-#include "qv4context_p.h"
-#include "qv4stackframe_p.h"
 #include <private/qintrusivelist_p.h>
-#include "qv4enginebase_p.h"
-#include <private/qqmlrefcount_p.h>
 #include <private/qqmldelayedcallqueue_p.h>
+#include <private/qqmlrefcount_p.h>
+#include <private/qv4compileddata_p.h>
+#include <private/qv4context_p.h>
+#include <private/qv4enginebase_p.h>
+#include <private/qv4executablecompilationunit_p.h>
+#include <private/qv4function_p.h>
+#include <private/qv4global_p.h>
+#include <private/qv4stacklimits_p.h>
+
 #include <QtCore/qelapsedtimer.h>
 #include <QtCore/qmutex.h>
-#include <QtCore/qset.h>
 #include <QtCore/qprocessordetection.h>
-
-#include "qv4function_p.h"
-#include <private/qv4compileddata_p.h>
-#include <private/qv4executablecompilationunit_p.h>
-#include <private/qv4stacklimits_p.h>
+#include <QtCore/qset.h>
 
 namespace WTF {
 class BumpPointerAllocator;
@@ -139,6 +138,20 @@ private:
     friend struct ExecutionContext;
     friend struct Heap::ExecutionContext;
 public:
+    enum class DiskCache {
+        Disabled    = 0,
+        AotByteCode = 1 << 0,
+        AotNative   = 1 << 1,
+        QmlcRead    = 1 << 2,
+        QmlcWrite   = 1 << 3,
+        Aot         = AotByteCode | AotNative,
+        Qmlc        = QmlcRead | QmlcWrite,
+        Enabled     = Aot | Qmlc,
+
+    };
+
+    Q_DECLARE_FLAGS(DiskCacheOptions, DiskCache);
+
     ExecutableAllocator *executableAllocator;
     ExecutableAllocator *regExpAllocator;
 
@@ -522,7 +535,14 @@ public:
     void setProfiler(Profiling::Profiler *profiler);
 #endif // QT_CONFIG(qml_debug)
 
-    ExecutionContext *currentContext() const { return currentStackFrame->context(); }
+    // We don't want to #include <private/qv4stackframe_p.h> here, but we still want
+    // currentContext() to be inline. Therefore we shift the requirement to provide the
+    // complete type of CppStackFrame to the caller by making this a template.
+    template<typename StackFrame = CppStackFrame>
+    ExecutionContext *currentContext() const
+    {
+        return static_cast<const StackFrame *>(currentStackFrame)->context();
+    }
 
     // ensure we always get odd prototype IDs. This helps make marking in QV4::Lookup fast
     quintptr newProtoId() { return (protoIdCount += 2); }
@@ -737,7 +757,7 @@ public:
     Module moduleForUrl(const QUrl &_url, const ExecutableCompilationUnit *referrer = nullptr) const;
     Module loadModule(const QUrl &_url, const ExecutableCompilationUnit *referrer = nullptr);
 
-    bool diskCacheEnabled() const;
+    DiskCacheOptions diskCacheOptions() const;
 
     void callInContext(QV4::Function *function, QObject *self, QV4::ExecutionContext *ctxt,
                        int argc, void **args, QMetaType *types);
@@ -887,6 +907,8 @@ inline bool ExecutionEngine::checkStackLimits()
 
     return false;
 }
+
+Q_DECLARE_OPERATORS_FOR_FLAGS(ExecutionEngine::DiskCacheOptions);
 
 } // namespace QV4
 

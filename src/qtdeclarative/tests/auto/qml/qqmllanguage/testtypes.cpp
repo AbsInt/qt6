@@ -150,6 +150,10 @@ void registerTypes()
     qmlRegisterTypesAndRevisions<DerivedValueType>("ValueTypes", 1);
     qmlRegisterTypesAndRevisions<GetterObject>("Test", 1);
 
+    qmlRegisterNamespaceAndRevisions(&TypedEnums::staticMetaObject, "TypedEnums", 1);
+    qmlRegisterTypesAndRevisions<ObjectWithEnums>("TypedEnums", 1);
+    qmlRegisterTypesAndRevisions<GadgetWithEnums>("TypedEnums", 1);
+
     QMetaType::registerConverter<UnregisteredValueDerivedType, UnregisteredValueBaseType>();
     qmlRegisterTypesAndRevisions<UnregisteredValueTypeHandler>("Test", 1);
 

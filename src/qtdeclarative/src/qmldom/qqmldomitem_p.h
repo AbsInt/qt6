@@ -34,10 +34,9 @@
 #include <QtCore/QDateTime>
 #include <QtCore/QMutex>
 #include <QtCore/QCborValue>
-#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
 #include <QtCore/QTimeZone>
-#endif
 #include <QtQml/private/qqmljssourcelocation_p.h>
+#include <QtQmlCompiler/private/qqmljsscope_p.h>
 
 #include <memory>
 #include <typeinfo>
@@ -62,6 +61,7 @@ constexpr bool domTypeIsValueWrap(DomType k);
 constexpr bool domTypeIsDomElement(DomType);
 constexpr bool domTypeIsOwningItem(DomType);
 constexpr bool domTypeIsUnattachedOwningItem(DomType);
+constexpr bool domTypeIsScriptElement(DomType);
 QMLDOM_EXPORT bool domTypeIsExternalItem(DomType k);
 QMLDOM_EXPORT bool domTypeIsTopItem(DomType k);
 QMLDOM_EXPORT bool domTypeIsContainer(DomType k);
@@ -74,6 +74,7 @@ constexpr bool domTypeCanBeInline(DomType k)
     case DomType::ListP:
     case DomType::ConstantData:
     case DomType::SimpleObjectWrap:
+    case DomType::ScriptElementWrap:
     case DomType::Reference:
         return true;
     default:
@@ -194,9 +195,14 @@ union SubclassStorage {
     ~SubclassStorage() { data()->~T(); }
 };
 
-class QMLDOM_EXPORT DomBase{
+class QMLDOM_EXPORT DomBase
+{
 public:
+    using FilterT = function_ref<bool(DomItem &, const PathEls::PathComponent &, DomItem &)>;
+
     virtual ~DomBase() = default;
+
+    DomBase *domBase() { return static_cast<DomBase *>(this); }
 
     // minimal overload set:
     virtual DomType kind() const = 0;
@@ -212,9 +218,7 @@ public:
 
     virtual DomItem containingObject(
             DomItem &self) const; // the DomItem corresponding to the canonicalSource source
-    virtual void
-    dump(DomItem &, Sink sink, int indent,
-         function_ref<bool(DomItem &, const PathEls::PathComponent &, DomItem &)> filter) const;
+    virtual void dump(DomItem &, Sink sink, int indent, FilterT filter) const;
     virtual quintptr id() const;
     QString typeName() const;
 
@@ -286,6 +290,7 @@ public:
     Path canonicalPath(DomItem &self) const override;
     DomItem containingObject(DomItem &self) const override;
     virtual void updatePathFromOwner(Path newPath);
+
 private:
     Path m_pathFromOwner;
 };
@@ -492,6 +497,7 @@ public:
             return m_value.value<T *>();
         }
     }
+
     template <typename T>
     T *mutableAs()
     {
@@ -503,6 +509,7 @@ public:
             return m_value.value<T *>();
         }
     }
+
     SimpleObjectWrapBase() = delete;
     virtual void copyTo(SimpleObjectWrapBase *) const { Q_ASSERT(false); }
     virtual void moveTo(SimpleObjectWrapBase *) const { Q_ASSERT(false); }
@@ -670,12 +677,148 @@ public:
     Path referredObjectPath;
 };
 
-using ElementT = std::variant<
-        Empty, Map, List, ListP, ConstantData, SimpleObjectWrap, Reference, GlobalComponent *,
-        JsResource *, QmlComponent *, QmltypesComponent *, EnumDecl *, MockObject *, ModuleScope *,
-        AstComments *, AttachedInfo *, DomEnvironment *, DomUniverse *, ExternalItemInfoBase *,
-        ExternalItemPairBase *, GlobalScope *, JsFile *, QmlDirectory *, QmlFile *, QmldirFile *,
-        QmlObject *, QmltypesFile *, LoadInfo *, MockOwner *, ModuleIndex *, ScriptExpression *>;
+template<typename Info>
+class AttachedInfoT;
+class FileLocations;
+
+/*!
+    \internal
+    \brief A common base class for all the script elements.
+
+    This marker class allows to use all the script elements as a ScriptElement*, using virtual
+   dispatch. For now, it does not add any extra functionality, compared to a DomElement, but allows
+   to forbid DomElement* at the places where only script elements are required.
+ */
+// TODO: do we need another marker struct like this one to differentiate expressions from
+// statements? This would allow to avoid mismatchs between script expressions and script statements,
+// using type-safety.
+struct ScriptElement : public DomElement
+{
+    template<typename T>
+    using PointerType = std::shared_ptr<T>;
+
+    using DomElement::DomElement;
+    virtual void createFileLocations(std::shared_ptr<AttachedInfoT<FileLocations>> fileLocationOfOwner) = 0;
+
+    std::optional<QQmlJSScope::Ptr> semanticScope();
+    void setSemanticScope(const QQmlJSScope::Ptr &scope);
+
+private:
+    std::optional<QQmlJSScope::Ptr> m_scope;
+};
+
+/*!
+   \internal
+   \brief Use this to contain any script element.
+ */
+class ScriptElementVariant
+{
+private:
+    template<typename... T>
+    using VariantOfPointer = std::variant<ScriptElement::PointerType<T>...>;
+
+    template<typename T, typename Variant>
+    struct TypeIsInVariant;
+
+    template<typename T, typename... Ts>
+    struct TypeIsInVariant<T, std::variant<Ts...>> : public std::disjunction<std::is_same<T, Ts>...>
+    {
+    };
+
+public:
+    using ScriptElementT =
+            VariantOfPointer<ScriptElements::BlockStatement, ScriptElements::IdentifierExpression,
+                             ScriptElements::ForStatement, ScriptElements::BinaryExpression,
+                             ScriptElements::VariableDeclarationEntry, ScriptElements::Literal,
+                             ScriptElements::IfStatement, ScriptElements::GenericScriptElement,
+                             ScriptElements::VariableDeclaration, ScriptElements::ReturnStatement>;
+
+    template<typename T>
+    static ScriptElementVariant fromElement(T element)
+    {
+        static_assert(TypeIsInVariant<T, ScriptElementT>::value,
+                      "Cannot construct ScriptElementVariant from T, as it is missing from the "
+                      "ScriptElementT.");
+        ScriptElementVariant p;
+        p.m_data = element;
+        return p;
+    }
+
+    /*!
+    \internal
+    \brief Returns a pointer to the virtual base for virtual method calls.
+
+    A helper to call virtual methods without having to call std::visit(...).
+    */
+    ScriptElement::PointerType<ScriptElement> base() const
+    {
+        if (m_data)
+            return std::visit(
+                    [](auto &&e) {
+                        // std::reinterpret_pointer_cast does not exist on qnx it seems...
+                        return std::shared_ptr<ScriptElement>(
+                                e, reinterpret_cast<ScriptElement *>(e.get()));
+                    },
+                    *m_data);
+        return nullptr;
+    }
+
+    operator bool() const { return m_data.has_value(); }
+
+    template<typename F>
+    void visitConst(F &&visitor) const
+    {
+        if (m_data)
+            std::visit(visitor, *m_data);
+    }
+
+    template<typename F>
+    void visit(F &&visitor)
+    {
+        if (m_data)
+            std::visit(visitor, *m_data);
+    }
+    std::optional<ScriptElementT> data() { return m_data; }
+    void setData(ScriptElementT data) { m_data = data; }
+
+private:
+    std::optional<ScriptElementT> m_data;
+};
+
+/*!
+    \internal
+
+    To avoid cluttering the already unwieldy \l ElementT type below with all the types that the
+   different script elements can have, wrap them in an extra class. It will behave like an internal
+   Dom structure (e.g. like a List or a Map) and contain a pointer the the script element.
+ */
+class ScriptElementDomWrapper
+{
+public:
+    ScriptElementDomWrapper(const ScriptElementVariant &element) : m_element(element) { }
+
+    static constexpr DomType kindValue = DomType::ScriptElementWrap;
+
+    DomBase *operator->() { return m_element.base().get(); }
+    const DomBase *operator->() const { return m_element.base().get(); }
+    DomBase &operator*() { return *m_element.base(); }
+    const DomBase &operator*() const { return *m_element.base(); }
+
+    ScriptElementVariant element() { return m_element; }
+
+private:
+    ScriptElementVariant m_element;
+};
+
+// TODO: create more "groups" to simplify this variant? Maybe into Internal, ScriptExpression, ???
+using ElementT =
+        std::variant<Empty, Map, List, ListP, ConstantData, SimpleObjectWrap, Reference,
+                     ScriptElementDomWrapper, GlobalComponent *, JsResource *, QmlComponent *,
+                     QmltypesComponent *, EnumDecl *, MockObject *, ModuleScope *, AstComments *,
+                     AttachedInfo *, DomEnvironment *, DomUniverse *, ExternalItemInfoBase *,
+                     ExternalItemPairBase *, GlobalScope *, JsFile *, QmlDirectory *, QmlFile *,
+                     QmldirFile *, QmlObject *, QmltypesFile *, LoadInfo *, MockOwner *,
+                     ModuleIndex *, ScriptExpression *>;
 
 using TopT = std::variant<std::shared_ptr<DomEnvironment>, std::shared_ptr<DomUniverse>>;
 
@@ -695,6 +838,49 @@ inline bool emptyChildrenVisitor(Path, DomItem &, bool)
 }
 
 class MutableDomItem;
+
+enum DomCreationOption : char {
+    None = 0,
+    WithSemanticAnalysis = 1,
+    WithScriptExpressions = 2,
+};
+
+Q_DECLARE_FLAGS(DomCreationOptions, DomCreationOption);
+
+class FileToLoad
+{
+public:
+    struct InMemoryContents
+    {
+        QString data;
+        QDateTime date = QDateTime::currentDateTimeUtc();
+    };
+
+    FileToLoad(const std::weak_ptr<DomEnvironment> &environment, const QString &canonicalPath,
+               const QString &logicalPath, std::optional<InMemoryContents> content,
+               DomCreationOptions options);
+    FileToLoad() = default;
+
+    static FileToLoad fromMemory(const std::weak_ptr<DomEnvironment> &environment,
+                                 const QString &path, const QString &data,
+                                 DomCreationOptions options = None);
+    static FileToLoad fromFileSystem(const std::weak_ptr<DomEnvironment> &environment,
+                                     const QString &canonicalPath,
+                                     DomCreationOptions options = None);
+
+    std::weak_ptr<DomEnvironment> environment() const { return m_environment; }
+    QString canonicalPath() const { return m_canonicalPath; }
+    QString logicalPath() const { return m_logicalPath; }
+    std::optional<InMemoryContents> content() const { return m_content; }
+    DomCreationOptions options() const { return m_options; }
+
+private:
+    std::weak_ptr<DomEnvironment> m_environment;
+    QString m_canonicalPath;
+    QString m_logicalPath;
+    std::optional<InMemoryContents> m_content;
+    DomCreationOptions m_options;
+};
 
 class QMLDOM_EXPORT DomItem {
     Q_DECLARE_TR_FUNCTIONS(DomItem);
@@ -745,6 +931,10 @@ public:
     DomItem top();
     DomItem environment();
     DomItem universe();
+    DomItem containingFile();
+    DomItem goToFile(const QString &filePath);
+    DomItem goUp(int);
+    DomItem directParent();
 
     DomItem qmlObject(GoTo option = GoTo::Strict,
                       FilterUpOptions options = FilterUpOptions::ReturnOuter);
@@ -753,6 +943,8 @@ public:
     DomItem globalScope();
     DomItem component(GoTo option = GoTo::Strict);
     DomItem scope(FilterUpOptions options = FilterUpOptions::ReturnOuter);
+    std::optional<QQmlJSScope::Ptr> nearestSemanticScope();
+    std::optional<QQmlJSScope::Ptr> semanticScope();
 
     // convenience getters
     DomItem get(ErrorHandler h = nullptr, QList<Path> *visitedRefs = nullptr);
@@ -844,6 +1036,8 @@ public:
                                    VisitPrototypesOptions options = VisitPrototypesOption::Normal,
                                    ErrorHandler h = nullptr, QSet<quintptr> *visited = nullptr,
                                    QList<Path> *visitedRefs = nullptr);
+
+    bool visitUp(function_ref<bool(DomItem &)> visitor);
     bool visitScopeChain(function_ref<bool(DomItem &)> visitor,
                          LookupOptions = LookupOption::Normal, ErrorHandler h = nullptr,
                          QSet<quintptr> *visited = nullptr, QList<Path> *visitedRefs = nullptr);
@@ -977,6 +1171,13 @@ public:
     {
         return DomItem(m_top, m_owner, m_ownerPath, obj);
     }
+
+    DomItem subScriptElementWrapperItem(const ScriptElementVariant &obj)
+    {
+        Q_ASSERT(obj);
+        return DomItem(m_top, m_owner, m_ownerPath, ScriptElementDomWrapper(obj));
+    }
+
     template<typename Owner>
     DomItem subOwnerItem(const PathEls::PathComponent &c, Owner o)
     {
@@ -1005,11 +1206,8 @@ public:
     DomItem(std::shared_ptr<DomUniverse>);
 
     static DomItem fromCode(QString code, DomType fileType = DomType::QmlFile);
-    void loadFile(QString filePath, QString logicalPath,
-                  std::function<void(Path, DomItem &, DomItem &)> callback, LoadOptions loadOptions,
-                  std::optional<DomType> fileType = std::optional<DomType>());
-    void loadFile(QString canonicalFilePath, QString logicalPath, QString code, QDateTime codeDate,
-                  std::function<void(Path, DomItem &, DomItem &)> callback, LoadOptions loadOptions,
+    void loadFile(const FileToLoad &file, std::function<void(Path, DomItem &, DomItem &)> callback,
+                  LoadOptions loadOptions,
                   std::optional<DomType> fileType = std::optional<DomType>());
     void loadModuleDependency(QString uri, Version v,
                               std::function<void(Path, DomItem &, DomItem &)> callback = nullptr,
@@ -1101,10 +1299,12 @@ private:
         return nullptr;
     }
     DomBase *mutableBase();
+
     template<typename Env, typename Owner>
     DomItem(Env, Owner, Path, std::nullptr_t) : DomItem()
     {
     }
+
     template<typename Env, typename Owner, typename T,
              typename = std::enable_if_t<IsInlineDom<std::decay_t<T>>::value>>
     DomItem(Env env, Owner owner, Path ownerPath, T el)
@@ -1262,12 +1462,6 @@ class QMLDOM_EXPORT OwningItem: public DomBase {
 protected:
     virtual std::shared_ptr<OwningItem> doCopy(DomItem &self) const = 0;
 
-    // Temporary alias until QMLDom supports nothing older than 6.5:
-#if QT_VERSION < QT_VERSION_CHECK(6, 5, 0)
-    static constexpr auto UTC = Qt::UTC;
-#else
-    static constexpr auto UTC = QTimeZone::UTC;
-#endif
 public:
     OwningItem(const OwningItem &o);
     OwningItem(int derivedFrom=0);
@@ -1555,6 +1749,8 @@ public:
     {
         return addPostComment(comment, regionName.toString());
     }
+    QQmlJSScope::Ptr semanticScope();
+    void setSemanticScope(const QQmlJSScope::Ptr &scope);
 
     MutableDomItem() = default;
     MutableDomItem(DomItem owner, Path pathFromOwner):
@@ -1794,6 +1990,11 @@ constexpr bool domTypeIsUnattachedOwningItem(DomType k)
     default:
         return false;
     }
+}
+
+constexpr bool domTypeIsScriptElement(DomType k)
+{
+    return DomType::ScriptElementStart <= k && k <= DomType::ScriptElementStop;
 }
 
 template<typename T>

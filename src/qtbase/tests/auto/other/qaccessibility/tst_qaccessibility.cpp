@@ -224,6 +224,7 @@ private slots:
     void accessibleName();
 #if QT_CONFIG(shortcut)
     void labelTest();
+    void relationTest();
     void accelerators();
 #endif
     void bridgeTest();
@@ -1119,7 +1120,10 @@ void tst_QAccessibility::buttonTest()
     interface = QAccessible::queryAccessibleInterface(&toggleButton);
     actionInterface = interface->actionInterface();
     QCOMPARE(interface->role(), QAccessible::CheckBox);
-    QCOMPARE(actionInterface->actionNames(), QStringList() << QAccessibleActionInterface::toggleAction() << QAccessibleActionInterface::setFocusAction());
+    QCOMPARE(actionInterface->actionNames(),
+             QStringList() << QAccessibleActionInterface::toggleAction()
+                           << QAccessibleActionInterface::pressAction()
+                           << QAccessibleActionInterface::setFocusAction());
     QCOMPARE(actionInterface->localizedActionDescription(QAccessibleActionInterface::toggleAction()), QString("Toggles the state"));
     QVERIFY(!toggleButton.isChecked());
     QVERIFY(!interface->state().checked);
@@ -1155,12 +1159,18 @@ void tst_QAccessibility::buttonTest()
     interface = QAccessible::queryAccessibleInterface(&checkBox);
     actionInterface = interface->actionInterface();
     QCOMPARE(interface->role(), QAccessible::CheckBox);
-    QCOMPARE(actionInterface->actionNames(), QStringList() << QAccessibleActionInterface::toggleAction() << QAccessibleActionInterface::setFocusAction());
+    QCOMPARE(actionInterface->actionNames(),
+             QStringList() << QAccessibleActionInterface::toggleAction()
+                           << QAccessibleActionInterface::pressAction()
+                           << QAccessibleActionInterface::setFocusAction());
     QVERIFY(!interface->state().checked);
     actionInterface->doAction(QAccessibleActionInterface::toggleAction());
 
     QTest::qWait(500);
-    QCOMPARE(actionInterface->actionNames(), QStringList() << QAccessibleActionInterface::toggleAction() << QAccessibleActionInterface::setFocusAction());
+    QCOMPARE(actionInterface->actionNames(),
+             QStringList() << QAccessibleActionInterface::toggleAction()
+                           << QAccessibleActionInterface::pressAction()
+                           << QAccessibleActionInterface::setFocusAction());
     QVERIFY(interface->state().checked);
     QVERIFY(checkBox.isChecked());
     QAccessible::State st;
@@ -3701,6 +3711,8 @@ void tst_QAccessibility::comboBoxTest()
     QCOMPARE(iface->text(QAccessible::Name), QLatin1String("one"));
 #endif
     QCOMPARE(iface->text(QAccessible::Value), QLatin1String("one"));
+    QCOMPARE(combo.view()->selectionModel()->currentIndex().row(), 0);
+
     combo.setCurrentIndex(2);
 #ifdef Q_OS_UNIX
     QCOMPARE(iface->text(QAccessible::Name), QLatin1String("three"));
@@ -3711,7 +3723,13 @@ void tst_QAccessibility::comboBoxTest()
     QCOMPARE(listIface->role(), QAccessible::List);
     QCOMPARE(listIface->childCount(), 3);
 
+    QAccessibleSelectionInterface *selectionIface = listIface->selectionInterface();
+    QVERIFY(selectionIface);
+    QCOMPARE(selectionIface->selectedItemCount(), 1);
+    QCOMPARE(listIface->indexOfChild(selectionIface->selectedItem(0)), 2);
+
     QVERIFY(!combo.view()->isVisible());
+    QCOMPARE(combo.view()->selectionModel()->currentIndex().row(), 2);
     QVERIFY(iface->actionInterface());
     QCOMPARE(iface->actionInterface()->actionNames(), QStringList() << QAccessibleActionInterface::showMenuAction() << QAccessibleActionInterface::pressAction());
     iface->actionInterface()->doAction(QAccessibleActionInterface::showMenuAction());
@@ -3741,6 +3759,69 @@ void tst_QAccessibility::comboBoxTest()
     QTestAccessibility::clearEvents();
 }
 
+void tst_QAccessibility::relationTest()
+{
+    auto windowHolder = std::make_unique<QWidget>();
+    auto window = windowHolder.get();
+    QString text = "Hello World";
+    QLabel *label = new QLabel(text, window);
+    setFrameless(label);
+    QSpinBox *spinBox = new QSpinBox(window);
+    label->setBuddy(spinBox);
+    QProgressBar *pb = new QProgressBar(window);
+    pb->setRange(0, 99);
+    connect(spinBox, SIGNAL(valueChanged(int)), pb, SLOT(setValue(int)));
+
+    window->resize(320, 200);
+    window->show();
+
+    QVERIFY(QTest::qWaitForWindowExposed(window));
+#if defined(Q_OS_UNIX)
+    QCoreApplication::processEvents();
+#endif
+    QTest::qWait(100);
+
+    QAccessibleInterface *acc_label = QAccessible::queryAccessibleInterface(label);
+    QVERIFY(acc_label);
+    QAccessibleInterface *acc_spinBox = QAccessible::queryAccessibleInterface(spinBox);
+    QVERIFY(acc_spinBox);
+    QAccessibleInterface *acc_pb = QAccessible::queryAccessibleInterface(pb);
+    QVERIFY(acc_pb);
+
+    typedef QPair<QAccessibleInterface*, QAccessible::Relation> RelationPair;
+    {
+        const QList<RelationPair> rels = acc_label->relations(QAccessible::Labelled);
+        QCOMPARE(rels.size(), 1);
+        const RelationPair relPair = rels.first();
+
+        // spinBox is Labelled by acc_label
+        QCOMPARE(relPair.first->object(), spinBox);
+        QCOMPARE(relPair.second, QAccessible::Labelled);
+    }
+
+    {
+        // Test multiple relations (spinBox have two)
+        const QList<RelationPair> rels = acc_spinBox->relations();
+        QCOMPARE(rels.size(), 2);
+        int visitCount = 0;
+        for (const auto &relPair : rels) {
+            if (relPair.second & QAccessible::Label) {
+                // label is the Label of spinBox
+                QCOMPARE(relPair.first->object(), label);
+                ++visitCount;
+            } else if (relPair.second & QAccessible::Controlled) {
+                // progressbar is Controlled by the spinBox
+                QCOMPARE(relPair.first->object(), pb);
+                ++visitCount;
+            }
+        }
+        QCOMPARE(visitCount, rels.size());
+    }
+
+    windowHolder.reset();
+    QTestAccessibility::clearEvents();
+}
+
 #if QT_CONFIG(shortcut)
 
 void tst_QAccessibility::labelTest()
@@ -3763,6 +3844,8 @@ void tst_QAccessibility::labelTest()
 
     QAccessibleInterface *acc_label = QAccessible::queryAccessibleInterface(label);
     QVERIFY(acc_label);
+    QAccessibleInterface *acc_lineEdit = QAccessible::queryAccessibleInterface(buddy);
+    QVERIFY(acc_lineEdit);
 
     QCOMPARE(acc_label->text(QAccessible::Name), text);
     QCOMPARE(acc_label->state().editable, false);
@@ -3772,13 +3855,23 @@ void tst_QAccessibility::labelTest()
     QCOMPARE(acc_label->state().focusable, false);
     QCOMPARE(acc_label->state().readOnly, true);
 
-    QList<QPair<QAccessibleInterface *, QAccessible::Relation>> rels = acc_label->relations();
-    QCOMPARE(rels.size(), 1);
-    QAccessibleInterface *iface = rels.first().first;
-    QAccessible::Relation rel = rels.first().second;
 
-    QCOMPARE(rel, QAccessible::Labelled);
-    QCOMPARE(iface->role(), QAccessible::EditableText);
+    typedef QPair<QAccessibleInterface*, QAccessible::Relation> RelationPair;
+    {
+        const QList<RelationPair> rels = acc_label->relations(QAccessible::Labelled);
+        QCOMPARE(rels.size(), 1);
+        const RelationPair relPair = rels.first();
+        QCOMPARE(relPair.first->object(), buddy);
+        QCOMPARE(relPair.second, QAccessible::Labelled);
+    }
+
+    {
+        const QList<RelationPair> rels = acc_lineEdit->relations(QAccessible::Label);
+        QCOMPARE(rels.size(), 1);
+        const RelationPair relPair = rels.first();
+        QCOMPARE(relPair.first->object(), label);
+        QCOMPARE(relPair.second, QAccessible::Label);
+    }
 
     windowHolder.reset();
     QTestAccessibility::clearEvents();

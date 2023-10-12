@@ -27,7 +27,7 @@
 #include <QtCore/QBitArray>
 #include <QtCore/QStack>
 
-#include <QtGui/private/qrhi_p.h>
+#include <rhi/qrhi.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -647,7 +647,7 @@ struct ShaderManagerShader
     }
     QSGMaterialShader *materialShader = nullptr;
     QRhiVertexInputLayout inputLayout;
-    QVarLengthArray<QRhiGraphicsShaderStage, 2> stages;
+    QVarLengthArray<QRhiShaderStage, 2> stages;
     float lastOpacity;
 };
 

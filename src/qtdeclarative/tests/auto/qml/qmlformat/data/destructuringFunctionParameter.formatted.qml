@@ -14,11 +14,11 @@ QtObject {
         },
         fun = 42
     } = {
-        "destructuring": 123,
-        "is": {
-            "x": 123
+        destructuring: 123,
+        is: {
+            x: 123
         },
-        "fun": 456
+        fun: 456
     }) {
     }
 }

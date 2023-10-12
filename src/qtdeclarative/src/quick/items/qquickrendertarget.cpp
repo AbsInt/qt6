@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qquickrendertarget_p.h"
-#include <QtGui/private/qrhi_p.h>
+#include <rhi/qrhi.h>
 #include <QtQuick/private/qquickitem_p.h>
 #include <QtQuick/private/qquickwindow_p.h>
 #include <QtQuick/private/qsgrhisupport_p.h>
@@ -350,7 +350,7 @@ QQuickRenderTarget QQuickRenderTarget::fromD3D11Texture(void *texture, uint form
     d->sampleCount = qMax(1, sampleCount);
 
     QRhiTexture::Flags flags;
-    auto rhiFormat = QSGRhiSupport::toRhiTextureFormatFromD3D11(format, &flags);
+    auto rhiFormat = QSGRhiSupport::toRhiTextureFormatFromDXGI(format, &flags);
     d->u.nativeTexture = { quint64(texture), 0, uint(rhiFormat), uint(flags) };
 
     return rt;
@@ -384,6 +384,66 @@ QQuickRenderTarget QQuickRenderTarget::fromD3D11Texture(void *texture, uint form
 QQuickRenderTarget QQuickRenderTarget::fromD3D11Texture(void *texture, const QSize &pixelSize, int sampleCount)
 {
     return fromD3D11Texture(texture, 0 /* DXGI_FORMAT_UNKNOWN */, pixelSize, sampleCount);
+}
+
+/*!
+    \return a new QQuickRenderTarget referencing a D3D12 texture object
+    specified by \a texture.
+
+    \a resourceState must a valid bitmask with bits from D3D12_RESOURCE_STATES,
+    specifying the resource's current state.
+
+    \a format specifies the DXGI_FORMAT of the texture. Only texture formats
+    that are supported by Qt's rendering infrastructure should be used.
+
+    \a pixelSize specifies the size of the image, in pixels. Currently only 2D
+    textures are supported.
+
+    \a sampleCount specific the number of samples. 0 or 1 means no
+    multisampling, while a value like 4 or 8 states that the native object is a
+    multisample texture.
+
+    The texture is used as the first color attachment of the render target used
+    by the Qt Quick scenegraph. A depth-stencil buffer, if applicable, is
+    created and used automatically.
+
+    \note the resulting QQuickRenderTarget does not own any native resources,
+    it merely contains references and the associated metadata of the size and
+    sample count. It is the caller's responsibility to ensure that the native
+    resource exists as long as necessary.
+
+    \since 6.6
+
+    \sa QQuickWindow::setRenderTarget(), QQuickRenderControl
+ */
+QQuickRenderTarget QQuickRenderTarget::fromD3D12Texture(void *texture,
+                                                        int resourceState,
+                                                        uint format,
+                                                        const QSize &pixelSize,
+                                                        int sampleCount)
+{
+    QQuickRenderTarget rt;
+    QQuickRenderTargetPrivate *d = QQuickRenderTargetPrivate::get(&rt);
+
+    if (!texture) {
+        qWarning("QQuickRenderTarget: texture is null");
+        return rt;
+    }
+
+    if (pixelSize.isEmpty()) {
+        qWarning("QQuickRenderTarget: Cannot create with empty size");
+        return rt;
+    }
+
+    d->type = QQuickRenderTargetPrivate::Type::NativeTexture;
+    d->pixelSize = pixelSize;
+    d->sampleCount = qMax(1, sampleCount);
+
+    QRhiTexture::Flags flags;
+    auto rhiFormat = QSGRhiSupport::toRhiTextureFormatFromDXGI(format, &flags);
+    d->u.nativeTexture = { quint64(texture), resourceState, uint(rhiFormat), uint(flags) };
+
+    return rt;
 }
 #endif
 
@@ -532,7 +592,7 @@ QQuickRenderTarget QQuickRenderTarget::fromVulkanImage(VkImage image, VkImageLay
 /*!
     \overload
 
-    \return a new QQuickRenderTarget referencing n Vulkan image object specified
+    \return a new QQuickRenderTarget referencing a Vulkan image object specified
     by \a image. The image is assumed to have a format of
     VK_FORMAT_R8G8B8A8_UNORM.
 
@@ -561,8 +621,21 @@ QQuickRenderTarget QQuickRenderTarget::fromVulkanImage(VkImage image, VkImageLay
 #endif
 
 /*!
-    \internal
- */
+    \return a new QQuickRenderTarget referencing an existing \a renderTarget.
+
+    \a renderTarget will in most cases be a QRhiTextureRenderTarget, which
+    allows directing the Qt Quick scene's rendering into a QRhiTexture.
+
+    \note the resulting QQuickRenderTarget does not own \a renderTarget and any
+    underlying native resources, it merely contains references and the
+    associated metadata of the size and sample count. It is the caller's
+    responsibility to ensure that the referenced resources exists as long as
+    necessary.
+
+    \since 6.6
+
+    \sa QQuickWindow::setRenderTarget(), QQuickRenderControl
+*/
 QQuickRenderTarget QQuickRenderTarget::fromRhiRenderTarget(QRhiRenderTarget *renderTarget)
 {
     QQuickRenderTarget rt;
@@ -638,7 +711,7 @@ bool QQuickRenderTarget::isEqual(const QQuickRenderTarget &other) const noexcept
         break;
     case QQuickRenderTargetPrivate::Type::NativeTexture:
         if (d->u.nativeTexture.object != other.d->u.nativeTexture.object
-                || d->u.nativeTexture.layout != other.d->u.nativeTexture.layout
+                || d->u.nativeTexture.layoutOrState != other.d->u.nativeTexture.layoutOrState
                 || d->u.nativeTexture.rhiFormat != other.d->u.nativeTexture.rhiFormat
                 || d->u.nativeTexture.rhiFlags != other.d->u.nativeTexture.rhiFlags)
             return false;
@@ -708,7 +781,7 @@ bool QQuickRenderTargetPrivate::resolve(QRhi *rhi, QQuickWindowRenderTarget *dst
                                                                                     : QRhiTexture::Format(u.nativeTexture.rhiFormat);
         const auto flags = QRhiTexture::RenderTarget | QRhiTexture::Flags(u.nativeTexture.rhiFlags);
         std::unique_ptr<QRhiTexture> texture(rhi->newTexture(format, pixelSize, sampleCount, flags));
-        if (!texture->createFrom({ u.nativeTexture.object, u.nativeTexture.layout })) {
+        if (!texture->createFrom({ u.nativeTexture.object, u.nativeTexture.layoutOrState })) {
             qWarning("Failed to build wrapper texture for QQuickRenderTarget");
             return false;
         }

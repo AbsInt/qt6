@@ -27,12 +27,15 @@ private slots:
     void webXmlFromCpp();
     void webXmlFromQml();
     void webXmlFromCppBug80259();
-    void illformated_documentation_caused_qtbug112641();
+    void illformated_documentation();
 
-    // DocBook generator
+    // DocBook generator (wiht and without extensions)
     void docBookFromQDocFile();
     void docBookFromCpp();
     void docBookFromQml();
+    void docBookWithExtensionsFromQDocFile();
+    void docBookWithExtensionsFromCpp();
+    void docBookWithExtensionsFromQml();
 
     // Output format independent tests
     void autoNavigation();
@@ -57,6 +60,8 @@ private slots:
     void testTagFile();
     void testGlobalFunctions();
     void proxyPage();
+    void nonAsciiCharacterInput();
+    void lineComments();
 
 private:
     QScopedPointer<QTemporaryDir> m_outputDir;
@@ -133,12 +138,12 @@ void tst_generatedOutput::compareLineByLine(const QStringList &expectedFiles)
 
         QFile expectedFile(expected);
         if (!expectedFile.open(QIODevice::ReadOnly))
-            QFAIL("Cannot open expected data file!");
+            QFAIL(qPrintable(QString("Cannot open expected data file: %1").arg(expected)));
         QTextStream expectedIn(&expectedFile);
 
         QFile actualFile(actual);
         if (!actualFile.open(QIODevice::ReadOnly))
-            QFAIL("Cannot open actual data file!");
+            QFAIL(qPrintable(QString("Cannot open actual data file: %1").arg(actual)));
         QTextStream actualIn(&actualFile);
 
         const QLatin1String delim(": ");
@@ -242,6 +247,7 @@ void tst_generatedOutput::htmlFromQml()
                    "qml-qdoc-test-type-members.html "
                    "qml-qdoc-test-type-obsolete.html "
                    "qml-qdoc-test-type.html "
+                   "qml-qdoc-test-oldtype.html "
                    "qml-test-nover-typenoversion.html "
                    "qml-test-nover-typenoversion-members.html "
                    "qml-uicomponents-progressbar.html "
@@ -293,12 +299,17 @@ void tst_generatedOutput::webXmlFromCppBug80259()
                    "html/index.webxml");
 }
 
-void tst_generatedOutput::illformated_documentation_caused_qtbug112641()
+void tst_generatedOutput::illformated_documentation()
 {
     testAndCompare("testdata/illformatted_documentation/illformatted_documentation.qdocconf",
                    "html/illformatted-examples.webxml "
                    "html/illformatteddocumentation-someexample-example.webxml "
-                   "html/illformatteddocumentation.index");
+                   "html/illformatteddocumentation.index "
+                   "page-with-an-image-at-the-top.html "
+                   "page-with-comment-after-brief.html "
+                   "another-page-with-comments-in-the-brief.html "
+                   "page-with-comment-in-brief.html "
+                   "brief-adventures.html");
 }
 
 void tst_generatedOutput::docBookFromQDocFile()
@@ -332,11 +343,49 @@ void tst_generatedOutput::docBookFromQml()
                    "docbook/qml-qdoc-test-yetanotherchild.xml "
                    "docbook/qml-qdoc-test-doctest.xml "
                    "docbook/qml-qdoc-test-type.xml "
+                   "docbook/qml-qdoc-test-oldtype.xml "
                    "docbook/qml-test-nover-typenoversion.xml "
                    "docbook/qml-uicomponents-progressbar.xml "
                    "docbook/qml-uicomponents-switch.xml "
                    "docbook/qml-uicomponents-tabwidget.xml "
                    "docbook/qml-int.xml");
+}
+
+void tst_generatedOutput::docBookWithExtensionsFromQDocFile()
+{
+    testAndCompare("testdata/configs/docbookext_test.qdocconf",
+                   "docbookext/qdoctests-qdocfileoutput.xml "
+                   "docbookext/qdoctests-qdocmanuallikefileoutput.xml "
+                   "docbookext/qdoctests-qdocfileoutput-linking.xml "
+                   "docbookext/qdoctests-qdocfileoutput-exhaustive.xml");
+}
+
+void tst_generatedOutput::docBookWithExtensionsFromCpp()
+{
+    testAndCompare("testdata/configs/docbookext_testcpp.qdocconf",
+                   "docbookext/testcpp-module.xml "
+                   "docbookext/testqdoc-test.xml "
+                   "docbookext/testqdoc-testderived.xml "
+                   "docbookext/testqdoc.xml");
+}
+
+void tst_generatedOutput::docBookWithExtensionsFromQml()
+{
+    testAndCompare("testdata/configs/docbookext_testqml.qdocconf",
+                   "docbookext/test-componentset-example.xml "
+                   "docbookext/uicomponents-qmlmodule.xml "
+                   "docbookext/qdoc-test-qmlmodule.xml "
+                   "docbookext/test-nover-qmlmodule.xml "
+                   "docbookext/qml-qdoc-test-abstractparent.xml "
+                   "docbookext/qml-qdoc-test-child.xml "
+                   "docbookext/qml-qdoc-test-yetanotherchild.xml "
+                   "docbookext/qml-qdoc-test-doctest.xml "
+                   "docbookext/qml-qdoc-test-type.xml "
+                   "docbookext/qml-test-nover-typenoversion.xml "
+                   "docbookext/qml-uicomponents-progressbar.xml "
+                   "docbookext/qml-uicomponents-switch.xml "
+                   "docbookext/qml-uicomponents-tabwidget.xml "
+                   "docbookext/qml-int.xml");
 }
 
 void tst_generatedOutput::autoNavigation()
@@ -390,6 +439,7 @@ void tst_generatedOutput::scopedEnum()
     testAndCompare("testdata/configs/scopedenum.qdocconf",
                    "scopedenum/testqdoc-test.html "
                    "scopedenum/scoped-enum-linking.html "
+                   "scopedenum/whatsnew.html "
                    "scopedenum-docbook/scoped-enum-linking.xml "
                    "scopedenum-docbook/testqdoc-test.xml");
 }
@@ -541,6 +591,41 @@ void tst_generatedOutput::proxyPage()
     testAndCompare("testdata/proxypage/proxypage.qdocconf",
                    "proxypage/stdpair-proxypage-proxy.html "
                    "proxypage-docbook/stdpair-proxypage-proxy.xml");
+}
+
+void tst_generatedOutput::nonAsciiCharacterInput()
+{
+    testAndCompare(
+            "testdata/non_ascii_character_input/non_ascii_character_input.qdocconf",
+            "html/nonasciicharacterinput.index "
+            "html/mozzarella-7c883eff.webxml "
+            "html/santa-14209312.webxml "
+            "html/seite-mit-ausschlie-lich-gro-buchstaben-im-titel-berschrift-htm-bfa91582.webxml "
+            "html/8b5c72eb.webxml "
+            "html/e85685de.webxml "
+            "seite-mit-ausschlie-lich-gro-buchstaben-im-titel-berschrift-htm-bfa91582.html "
+            "mozzarella-7c883eff.html "
+            "santa-14209312.html "
+            "8b5c72eb.html "
+            "e85685de.html "
+            "adventures-with-non-ascii-characters.html");
+}
+
+void tst_generatedOutput::lineComments()
+{
+    testAndCompare(
+       "testdata/line_comments/line_comments.qdocconf",
+
+   "linecomments/a-page-with-a-line-comment-in-the-see-also-command.html "
+            "linecomments/a-page-with-a-line-comment-in-the-see-also-command.webxml "
+            "linecomments/a-page-with-a-line-comment-in-the-see-also-command.xml "
+            "linecomments/another-page-with-an-image-at-the-top.html "
+            "linecomments/another-page-with-an-image-at-the-top.webxml "
+            "linecomments/another-page-with-an-image-at-the-top.xml "
+            "linecomments/line-comment-adventures.html "
+            "linecomments/line-comment-adventures.webxml "
+            "linecomments/line-comment-adventures.xml"
+    );
 }
 
 int main(int argc, char *argv[])

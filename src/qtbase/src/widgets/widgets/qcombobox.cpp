@@ -12,7 +12,7 @@
 #if QT_CONFIG(tableview)
 #include <qtableview.h>
 #endif
-#include <qitemdelegate.h>
+#include <qabstractitemdelegate.h>
 #include <qmap.h>
 #if QT_CONFIG(menu)
 #include <qmenu.h>
@@ -48,6 +48,7 @@
 #if QT_CONFIG(accessibility)
 #include "qaccessible.h"
 #endif
+#include <array>
 
 QT_BEGIN_NAMESPACE
 
@@ -65,6 +66,7 @@ QComboBoxPrivate::QComboBoxPrivate()
 
 QComboBoxPrivate::~QComboBoxPrivate()
 {
+    disconnectModel();
 #ifdef Q_OS_MAC
     cleanupNativePopup();
 #endif
@@ -200,7 +202,7 @@ bool QComboMenuDelegate::editorEvent(QEvent *event, QAbstractItemModel *model,
 }
 
 #if QT_CONFIG(completer)
-void QComboBoxPrivate::_q_completerActivated(const QModelIndex &index)
+void QComboBoxPrivate::completerActivated(const QModelIndex &index)
 {
     Q_Q(QComboBox);
 #if QT_CONFIG(proxymodel)
@@ -240,7 +242,7 @@ void QComboBoxPrivate::updateArrow(QStyle::StateFlag state)
     q->update(q->rect());
 }
 
-void QComboBoxPrivate::_q_modelReset()
+void QComboBoxPrivate::modelReset()
 {
     Q_Q(QComboBox);
     if (lineEdit) {
@@ -252,7 +254,7 @@ void QComboBoxPrivate::_q_modelReset()
     q->update();
 }
 
-void QComboBoxPrivate::_q_modelDestroyed()
+void QComboBoxPrivate::modelDestroyed()
 {
     model = QAbstractItemModelPrivate::staticEmptyModel();
 }
@@ -490,17 +492,25 @@ QComboBoxPrivateContainer::QComboBoxPrivateContainer(QAbstractItemView *itemView
 
     if (top) {
         layout->insertWidget(0, top);
-        connect(top, SIGNAL(doScroll(int)), this, SLOT(scrollItemView(int)));
+        connect(top, &QComboBoxPrivateScroller::doScroll,
+                this, &QComboBoxPrivateContainer::scrollItemView);
     }
     if (bottom) {
         layout->addWidget(bottom);
-        connect(bottom, SIGNAL(doScroll(int)), this, SLOT(scrollItemView(int)));
+        connect(bottom, &QComboBoxPrivateScroller::doScroll,
+                this, &QComboBoxPrivateContainer::scrollItemView);
     }
 
     // Some styles (Mac) have a margin at the top and bottom of the popup.
     layout->insertSpacing(0, 0);
     layout->addSpacing(0);
     updateStyleSettings();
+}
+
+QComboBoxPrivateContainer::~QComboBoxPrivateContainer()
+{
+    disconnect(view, &QAbstractItemView::destroyed,
+               this, &QComboBoxPrivateContainer::viewDestroyed);
 }
 
 void QComboBoxPrivateContainer::scrollItemView(int action)
@@ -583,13 +593,13 @@ void QComboBoxPrivateContainer::setItemView(QAbstractItemView *itemView)
         view->removeEventFilter(this);
         view->viewport()->removeEventFilter(this);
 #if QT_CONFIG(scrollbar)
-        disconnect(view->verticalScrollBar(), SIGNAL(valueChanged(int)),
-                   this, SLOT(updateScrollers()));
-        disconnect(view->verticalScrollBar(), SIGNAL(rangeChanged(int,int)),
-                   this, SLOT(updateScrollers()));
+        disconnect(view->verticalScrollBar(), &QScrollBar::valueChanged,
+                   this, &QComboBoxPrivateContainer::updateScrollers);
+        disconnect(view->verticalScrollBar(), &QScrollBar::rangeChanged,
+                   this, &QComboBoxPrivateContainer::updateScrollers);
 #endif
-        disconnect(view, SIGNAL(destroyed()),
-                   this, SLOT(viewDestroyed()));
+        disconnect(view, &QAbstractItemView::destroyed,
+                   this, &QComboBoxPrivateContainer::viewDestroyed);
 
         if (isAncestorOf(view))
             delete view;
@@ -620,13 +630,13 @@ void QComboBoxPrivateContainer::setItemView(QAbstractItemView *itemView)
     view->setLineWidth(0);
     view->setEditTriggers(QAbstractItemView::NoEditTriggers);
 #if QT_CONFIG(scrollbar)
-    connect(view->verticalScrollBar(), SIGNAL(valueChanged(int)),
-            this, SLOT(updateScrollers()));
-    connect(view->verticalScrollBar(), SIGNAL(rangeChanged(int,int)),
-            this, SLOT(updateScrollers()));
+    connect(view->verticalScrollBar(), &QScrollBar::valueChanged,
+            this, &QComboBoxPrivateContainer::updateScrollers);
+    connect(view->verticalScrollBar(), &QScrollBar::rangeChanged,
+            this, &QComboBoxPrivateContainer::updateScrollers);
 #endif
-    connect(view, SIGNAL(destroyed()),
-            this, SLOT(viewDestroyed()));
+    connect(view, &QAbstractItemView::destroyed,
+            this, &QComboBoxPrivateContainer::viewDestroyed);
 }
 
 /*!
@@ -715,6 +725,7 @@ bool QComboBoxPrivateContainer::eventFilter(QObject *o, QEvent *e)
 #endif
             if (view->currentIndex().isValid() && view->currentIndex().flags().testFlag(Qt::ItemIsEnabled)) {
                 combo->hidePopup();
+                keyEvent->accept();
                 emit itemSelected(view->currentIndex());
             }
             return true;
@@ -724,6 +735,8 @@ bool QComboBoxPrivateContainer::eventFilter(QObject *o, QEvent *e)
             Q_FALLTHROUGH();
         case Qt::Key_F4:
             combo->hidePopup();
+            keyEvent->accept();
+            emit itemSelected(view->currentIndex());
             return true;
         default:
 #if QT_CONFIG(shortcut)
@@ -904,8 +917,11 @@ QStyleOptionComboBox QComboBoxPrivateContainer::comboStyleOption() const
     \fn void QComboBox::currentTextChanged(const QString &text)
     \since 5.0
 
-    This signal is sent whenever currentText changes. The new value
-    is passed as \a text.
+    This signal is emitted whenever currentText changes.
+    The new value is passed as \a text.
+
+    \note It is not emitted, if currentText remains the same,
+    even if currentIndex changes.
 */
 
 /*!
@@ -1038,22 +1054,23 @@ QComboBoxPrivateContainer* QComboBoxPrivate::viewContainer()
     updateDelegate(true);
     updateLayoutDirection();
     updateViewContainerPaletteAndOpacity();
-    QObject::connect(container, SIGNAL(itemSelected(QModelIndex)),
-                     q, SLOT(_q_itemSelected(QModelIndex)));
-    QObject::connect(container->itemView()->selectionModel(),
-                     SIGNAL(currentChanged(QModelIndex,QModelIndex)),
-                     q, SLOT(_q_emitHighlighted(QModelIndex)));
-    QObject::connect(container, SIGNAL(resetButton()), q, SLOT(_q_resetButton()));
+    QObjectPrivate::connect(container, &QComboBoxPrivateContainer::itemSelected,
+                            this, &QComboBoxPrivate::itemSelected);
+    QObjectPrivate::connect(container->itemView()->selectionModel(),
+                            &QItemSelectionModel::currentChanged,
+                            this, &QComboBoxPrivate::emitHighlighted);
+    QObjectPrivate::connect(container, &QComboBoxPrivateContainer::resetButton,
+                            this, &QComboBoxPrivate::resetButton);
     return container;
 }
 
 
-void QComboBoxPrivate::_q_resetButton()
+void QComboBoxPrivate::resetButton()
 {
     updateArrow(QStyle::State_None);
 }
 
-void QComboBoxPrivate::_q_dataChanged(const QModelIndex &topLeft, const QModelIndex &bottomRight)
+void QComboBoxPrivate::dataChanged(const QModelIndex &topLeft, const QModelIndex &bottomRight)
 {
     Q_Q(QComboBox);
     if (inserting || topLeft.parent() != root)
@@ -1071,7 +1088,7 @@ void QComboBoxPrivate::_q_dataChanged(const QModelIndex &topLeft, const QModelIn
             lineEdit->setText(text);
             updateLineEditGeometry();
         } else {
-            emit q->currentTextChanged(text);
+            updateCurrentText(text);
         }
         q->update();
 #if QT_CONFIG(accessibility)
@@ -1081,7 +1098,7 @@ void QComboBoxPrivate::_q_dataChanged(const QModelIndex &topLeft, const QModelIn
     }
 }
 
-void QComboBoxPrivate::_q_rowsInserted(const QModelIndex &parent, int start, int end)
+void QComboBoxPrivate::rowsInserted(const QModelIndex &parent, int start, int end)
 {
     Q_Q(QComboBox);
     if (inserting || parent != root)
@@ -1100,16 +1117,16 @@ void QComboBoxPrivate::_q_rowsInserted(const QModelIndex &parent, int start, int
         // need to emit changed if model updated index "silently"
     } else if (currentIndex.row() != indexBeforeChange) {
         q->update();
-        _q_emitCurrentIndexChanged(currentIndex);
+        emitCurrentIndexChanged(currentIndex);
     }
 }
 
-void QComboBoxPrivate::_q_updateIndexBeforeChange()
+void QComboBoxPrivate::updateIndexBeforeChange()
 {
     indexBeforeChange = currentIndex.row();
 }
 
-void QComboBoxPrivate::_q_rowsRemoved(const QModelIndex &parent, int /*start*/, int /*end*/)
+void QComboBoxPrivate::rowsRemoved(const QModelIndex &parent, int /*start*/, int /*end*/)
 {
     Q_Q(QComboBox);
     if (parent != root)
@@ -1138,7 +1155,7 @@ void QComboBoxPrivate::_q_rowsRemoved(const QModelIndex &parent, int /*start*/, 
             updateLineEditGeometry();
         }
         q->update();
-        _q_emitCurrentIndexChanged(currentIndex);
+        emitCurrentIndexChanged(currentIndex);
     }
 }
 
@@ -1247,7 +1264,7 @@ Qt::MatchFlags QComboBoxPrivate::matchFlags() const
 }
 
 
-void QComboBoxPrivate::_q_editingFinished()
+void QComboBoxPrivate::editingFinished()
 {
     Q_Q(QComboBox);
     if (!lineEdit)
@@ -1279,13 +1296,13 @@ void QComboBoxPrivate::_q_editingFinished()
 
 }
 
-void QComboBoxPrivate::_q_returnPressed()
+void QComboBoxPrivate::returnPressed()
 {
     Q_Q(QComboBox);
 
     // The insertion code below does not apply when the policy is QComboBox::NoInsert.
     // In case a completer is installed, item activation via the completer is handled
-    // in _q_completerActivated(). Otherwise _q_editingFinished() updates the current
+    // in completerActivated(). Otherwise editingFinished() updates the current
     // index as appropriate.
     if (insertPolicy == QComboBox::NoInsert)
         return;
@@ -1343,7 +1360,7 @@ void QComboBoxPrivate::_q_returnPressed()
     }
 }
 
-void QComboBoxPrivate::_q_itemSelected(const QModelIndex &item)
+void QComboBoxPrivate::itemSelected(const QModelIndex &item)
 {
     Q_Q(QComboBox);
     if (item != currentIndex) {
@@ -1365,7 +1382,7 @@ void QComboBoxPrivate::emitActivated(const QModelIndex &index)
     emit q->textActivated(text);
 }
 
-void QComboBoxPrivate::_q_emitHighlighted(const QModelIndex &index)
+void QComboBoxPrivate::emitHighlighted(const QModelIndex &index)
 {
     Q_Q(QComboBox);
     if (!index.isValid())
@@ -1375,14 +1392,14 @@ void QComboBoxPrivate::_q_emitHighlighted(const QModelIndex &index)
     emit q->textHighlighted(text);
 }
 
-void QComboBoxPrivate::_q_emitCurrentIndexChanged(const QModelIndex &index)
+void QComboBoxPrivate::emitCurrentIndexChanged(const QModelIndex &index)
 {
     Q_Q(QComboBox);
     const QString text = itemText(index);
     emit q->currentIndexChanged(index.row());
     // signal lineEdit.textChanged already connected to signal currentTextChanged, so don't emit double here
     if (!lineEdit)
-        emit q->currentTextChanged(text);
+        updateCurrentText(text);
 #if QT_CONFIG(accessibility)
     QAccessibleValueChangeEvent event(q, text);
     QAccessible::updateAccessibility(&event);
@@ -1408,8 +1425,7 @@ QComboBox::~QComboBox()
     Q_D(QComboBox);
 
     QT_TRY {
-        disconnect(d->model, SIGNAL(destroyed()),
-                this, SLOT(_q_modelDestroyed()));
+        d->disconnectModel();
     } QT_CATCH(...) {
         ; // objects can't throw in destructor
     }
@@ -1798,13 +1814,18 @@ void QComboBox::setLineEdit(QLineEdit *edit)
 #endif
     if (d->lineEdit->parent() != this)
         d->lineEdit->setParent(this);
-    connect(d->lineEdit, SIGNAL(returnPressed()), this, SLOT(_q_returnPressed()));
-    connect(d->lineEdit, SIGNAL(editingFinished()), this, SLOT(_q_editingFinished()));
-    connect(d->lineEdit, SIGNAL(textChanged(QString)), this, SIGNAL(editTextChanged(QString)));
-    connect(d->lineEdit, SIGNAL(textChanged(QString)), this, SIGNAL(currentTextChanged(QString)));
-    connect(d->lineEdit, SIGNAL(cursorPositionChanged(int,int)), this, SLOT(updateMicroFocus()));
-    connect(d->lineEdit, SIGNAL(selectionChanged()), this, SLOT(updateMicroFocus()));
-    connect(d->lineEdit->d_func()->control, SIGNAL(updateMicroFocus()), this, SLOT(updateMicroFocus()));
+    QObjectPrivate::connect(d->lineEdit, &QLineEdit::returnPressed,
+                            d, &QComboBoxPrivate::returnPressed);
+    QObjectPrivate::connect(d->lineEdit, &QLineEdit::editingFinished,
+                            d, &QComboBoxPrivate::editingFinished);
+    connect(d->lineEdit, &QLineEdit::textChanged, this, &QComboBox::editTextChanged);
+    connect(d->lineEdit, &QLineEdit::textChanged, this, &QComboBox::currentTextChanged);
+    QObjectPrivate::connect(d->lineEdit, &QLineEdit::cursorPositionChanged,
+                            d, &QComboBoxPrivate::updateMicroFocus);
+    QObjectPrivate::connect(d->lineEdit, &QLineEdit::selectionChanged,
+                            d, &QComboBoxPrivate::updateMicroFocus);
+    QObjectPrivate::connect(d->lineEdit->d_func()->control, &QWidgetLineControl::updateMicroFocus,
+                            d, &QComboBoxPrivate::updateMicroFocus);
     d->lineEdit->setFrame(false);
     d->lineEdit->setContextMenuPolicy(Qt::NoContextMenu);
     d->updateFocusPolicy();
@@ -1906,7 +1927,8 @@ void QComboBox::setCompleter(QCompleter *c)
     }
     d->lineEdit->setCompleter(c);
     if (c) {
-        connect(c, SIGNAL(activated(QModelIndex)), this, SLOT(_q_completerActivated(QModelIndex)));
+        QObjectPrivate::connect(c, QOverload<const QModelIndex &>::of(&QCompleter::activated),
+                                d, &QComboBoxPrivate::completerActivated);
         c->setWidget(this);
     }
 }
@@ -2000,57 +2022,57 @@ void QComboBox::setModel(QAbstractItemModel *model)
     if (d->lineEdit && d->lineEdit->completer())
         d->lineEdit->completer()->setModel(model);
 #endif
-    if (d->model) {
-        disconnect(d->model, SIGNAL(dataChanged(QModelIndex,QModelIndex)),
-                   this, SLOT(_q_dataChanged(QModelIndex,QModelIndex)));
-        disconnect(d->model, SIGNAL(rowsAboutToBeInserted(QModelIndex,int,int)),
-                   this, SLOT(_q_updateIndexBeforeChange()));
-        disconnect(d->model, SIGNAL(rowsInserted(QModelIndex,int,int)),
-                   this, SLOT(_q_rowsInserted(QModelIndex,int,int)));
-        disconnect(d->model, SIGNAL(rowsAboutToBeRemoved(QModelIndex,int,int)),
-                   this, SLOT(_q_updateIndexBeforeChange()));
-        disconnect(d->model, SIGNAL(rowsRemoved(QModelIndex,int,int)),
-                   this, SLOT(_q_rowsRemoved(QModelIndex,int,int)));
-        disconnect(d->model, SIGNAL(destroyed()),
-                   this, SLOT(_q_modelDestroyed()));
-        disconnect(d->model, SIGNAL(modelAboutToBeReset()),
-                   this, SLOT(_q_updateIndexBeforeChange()));
-        disconnect(d->model, SIGNAL(modelReset()),
-                   this, SLOT(_q_modelReset()));
-        if (d->model->QObject::parent() == this)
-            delete d->model;
+    d->disconnectModel();
+    if (d->model && d->model->QObject::parent() == this) {
+        delete d->model;
+        d->model = nullptr;
     }
 
     d->model = model;
-
-    connect(model, SIGNAL(dataChanged(QModelIndex,QModelIndex)),
-            this, SLOT(_q_dataChanged(QModelIndex,QModelIndex)));
-    connect(model, SIGNAL(rowsAboutToBeInserted(QModelIndex,int,int)),
-            this, SLOT(_q_updateIndexBeforeChange()));
-    connect(model, SIGNAL(rowsInserted(QModelIndex,int,int)),
-            this, SLOT(_q_rowsInserted(QModelIndex,int,int)));
-    connect(model, SIGNAL(rowsAboutToBeRemoved(QModelIndex,int,int)),
-            this, SLOT(_q_updateIndexBeforeChange()));
-    connect(model, SIGNAL(rowsRemoved(QModelIndex,int,int)),
-            this, SLOT(_q_rowsRemoved(QModelIndex,int,int)));
-    connect(model, SIGNAL(destroyed()),
-            this, SLOT(_q_modelDestroyed()));
-    connect(model, SIGNAL(modelAboutToBeReset()),
-            this, SLOT(_q_updateIndexBeforeChange()));
-    connect(model, SIGNAL(modelReset()),
-            this, SLOT(_q_modelReset()));
+    d->connectModel();
 
     if (d->container) {
         d->container->itemView()->setModel(model);
-        connect(d->container->itemView()->selectionModel(),
-                SIGNAL(currentChanged(QModelIndex,QModelIndex)),
-                this, SLOT(_q_emitHighlighted(QModelIndex)), Qt::UniqueConnection);
+        QObjectPrivate::connect(d->container->itemView()->selectionModel(),
+                                &QItemSelectionModel::currentChanged,
+                                d, &QComboBoxPrivate::emitHighlighted, Qt::UniqueConnection);
     }
 
     setRootModelIndex(QModelIndex());
 
     d->trySetValidIndex();
     d->modelChanged();
+}
+
+void QComboBoxPrivate::connectModel()
+{
+    if (!model)
+        return;
+
+    modelConnections = {
+        QObjectPrivate::connect(model, &QAbstractItemModel::dataChanged,
+                                this, &QComboBoxPrivate::dataChanged),
+        QObjectPrivate::connect(model, &QAbstractItemModel::rowsAboutToBeInserted,
+                                this, &QComboBoxPrivate::updateIndexBeforeChange),
+        QObjectPrivate::connect(model, &QAbstractItemModel::rowsInserted,
+                                this, &QComboBoxPrivate::rowsInserted),
+        QObjectPrivate::connect(model, &QAbstractItemModel::rowsAboutToBeRemoved,
+                                this, &QComboBoxPrivate::updateIndexBeforeChange),
+        QObjectPrivate::connect(model, &QAbstractItemModel::rowsRemoved,
+                                this, &QComboBoxPrivate::rowsRemoved),
+        QObjectPrivate::connect(model, &QObject::destroyed,
+                                this, &QComboBoxPrivate::modelDestroyed),
+        QObjectPrivate::connect(model, &QAbstractItemModel::modelAboutToBeReset,
+                                this, &QComboBoxPrivate::updateIndexBeforeChange),
+        QObjectPrivate::connect(model, &QAbstractItemModel::modelReset,
+                                this, &QComboBoxPrivate::modelReset)
+    };
+}
+
+void QComboBoxPrivate::disconnectModel()
+{
+    for (auto &connection : modelConnections)
+        QObject::disconnect(connection);
 }
 
 /*!
@@ -2145,8 +2167,14 @@ void QComboBoxPrivate::setCurrentIndex(const QModelIndex &mi)
         indexBeforeChange = -1;
 
     if (indexChanged || modelResetToEmpty) {
+        QItemSelectionModel::SelectionFlags selectionMode = QItemSelectionModel::ClearAndSelect;
+        if (q->view()->selectionBehavior() == QAbstractItemView::SelectRows)
+            selectionMode.setFlag(QItemSelectionModel::Rows);
+        if (auto *model = q->view()->selectionModel())
+            model->setCurrentIndex(currentIndex, selectionMode);
+
         q->update();
-        _q_emitCurrentIndexChanged(currentIndex);
+        emitCurrentIndexChanged(currentIndex);
     }
 }
 
@@ -2275,7 +2303,7 @@ void QComboBox::insertItem(int index, const QIcon &icon, const QString &text, co
                 if (!values.isEmpty()) d->model->setItemData(item, values);
             }
             d->inserting = false;
-            d->_q_rowsInserted(d->root, index, index);
+            d->rowsInserted(d->root, index, index);
             ++itemCount;
         } else {
             d->inserting = false;
@@ -2323,7 +2351,7 @@ void QComboBox::insertItems(int index, const QStringList &list)
                 d->model->setData(item, list.at(i), Qt::EditRole);
             }
             d->inserting = false;
-            d->_q_rowsInserted(d->root, index, index + insertCount - 1);
+            d->rowsInserted(d->root, index, index + insertCount - 1);
         } else {
             d->inserting = false;
         }
@@ -2578,11 +2606,6 @@ void QComboBox::showPopup()
         return;
 #endif // Q_OS_MAC
 
-    // set current item and select it
-    QItemSelectionModel::SelectionFlags selectionMode = QItemSelectionModel::ClearAndSelect;
-    if (view()->selectionBehavior() == QAbstractItemView::SelectRows)
-        selectionMode.setFlag(QItemSelectionModel::Rows);
-    view()->selectionModel()->setCurrentIndex(d->currentIndex, selectionMode);
     QComboBoxPrivateContainer* container = d->viewContainer();
     QRect listRect(style->subControlRect(QStyle::CC_ComboBox, &opt,
                                          QStyle::SC_ComboBoxListBoxPopup, this));
@@ -2855,7 +2878,16 @@ void QComboBoxPrivate::doHidePopup()
     if (container && container->isVisible())
         container->hide();
 
-    _q_resetButton();
+    resetButton();
+}
+
+void QComboBoxPrivate::updateCurrentText(const QString &text)
+{
+    if (text == currentText)
+        return;
+
+    currentText = text;
+    emit q_func()->currentTextChanged(text);
 }
 
 /*!

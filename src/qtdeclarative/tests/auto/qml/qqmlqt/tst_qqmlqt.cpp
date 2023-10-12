@@ -27,7 +27,7 @@
 #include <QTimeZone>
 
 #include <QtQuickTestUtils/private/qmlutils_p.h>
-#include <private/qglobal_p.h>
+#include <private/qtenvironmentvariables_p.h> // for qTzSet()
 
 class tst_qqmlqt : public QQmlDataTest
 {
@@ -1365,6 +1365,7 @@ class TimeProvider: public QObject
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(TimeProvider)
+    QML_UNCREATABLE("")
     Q_PROPERTY(QTime time READ time WRITE setTime NOTIFY timeChanged)
 
 public:

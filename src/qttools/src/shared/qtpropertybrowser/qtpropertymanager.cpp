@@ -23,11 +23,32 @@
 #include <limits.h>
 #include <float.h>
 
+#include <algorithm>
+#include <utility>
+
 #if defined(Q_CC_MSVC)
 #    pragma warning(disable: 4786) /* MS VS 6: truncating debug info after 255 characters */
 #endif
 
 QT_BEGIN_NAMESPACE
+
+using DisambiguatedTranslation = std::pair<const char *, const char *>;
+
+static const QFont::Weight weightValues[] = {
+    QFont::Thin, QFont::ExtraLight, QFont::Light, QFont::Normal, QFont::Medium, QFont::DemiBold,
+    QFont::Bold, QFont::ExtraBold, QFont::Black
+};
+
+static int indexOfFontWeight(QFont::Weight w)
+{
+    auto it = std::find(std::begin(weightValues), std::end(weightValues), w);
+    return int(it - std::begin(weightValues));
+}
+
+static inline QFont::Weight weightFromIndex(int i)
+{
+    return weightValues[i];
+}
 
 template <class PrivateData, class Value>
 static void setSimpleMinimumData(PrivateData *data, const Value &minVal)
@@ -401,8 +422,6 @@ void QtMetaEnumProvider::initLocale()
     for (QLocale::Language language : languages) {
         auto locales = QLocale::matchingLocales(language, QLocale::AnyScript,
                                                 QLocale::AnyTerritory);
-        if (locales.isEmpty() && language == system.language())
-            locales << system;
 
         if (!locales.isEmpty() && !m_languageToIndex.contains(language)) {
             const auto territories = sortedTerritories(locales);
@@ -5480,6 +5499,7 @@ public:
     QHash<const QtProperty *, QtProperty *> m_propertyToUnderline;
     QHash<const QtProperty *, QtProperty *> m_propertyToStrikeOut;
     QHash<const QtProperty *, QtProperty *> m_propertyToKerning;
+    QHash<const QtProperty *, QtProperty *> m_propertyToWeight;
 
     QHash<const QtProperty *, QtProperty *> m_familyToProperty;
     QHash<const QtProperty *, QtProperty *> m_pointSizeToProperty;
@@ -5488,6 +5508,7 @@ public:
     QHash<const QtProperty *, QtProperty *> m_underlineToProperty;
     QHash<const QtProperty *, QtProperty *> m_strikeOutToProperty;
     QHash<const QtProperty *, QtProperty *> m_kerningToProperty;
+    QHash<const QtProperty *, QtProperty *> m_weightToProperty;
 
     bool m_settingValue;
     QTimer *m_fontDatabaseChangeTimer;
@@ -5517,6 +5538,10 @@ void QtFontPropertyManagerPrivate::slotEnumChanged(QtProperty *property, int val
     if (QtProperty *prop = m_familyToProperty.value(property, nullptr)) {
         QFont f = m_values[prop];
         f.setFamily(m_familyNames.at(value));
+        q_ptr->setValue(prop, f);
+    } else if (auto *prop = m_weightToProperty.value(property, nullptr)) {
+        QFont f = m_values[prop];
+        f.setWeight(weightFromIndex(value));
         q_ptr->setValue(prop, f);
     }
 }
@@ -5571,6 +5596,9 @@ void QtFontPropertyManagerPrivate::slotPropertyDestroyed(QtProperty *property)
     } else if (QtProperty *pointProp = m_kerningToProperty.value(property, nullptr)) {
         m_propertyToKerning[pointProp] = nullptr;
         m_kerningToProperty.remove(property);
+    } else if (QtProperty *weightProp = m_weightToProperty.value(property, nullptr)) {
+        m_propertyToWeight[weightProp] = nullptr;
+        m_weightToProperty.remove(property);
     }
 }
 
@@ -5793,10 +5821,32 @@ void QtFontPropertyManager::setValue(QtProperty *property, const QFont &val)
     d_ptr->m_boolPropertyManager->setValue(d_ptr->m_propertyToUnderline[property], val.underline());
     d_ptr->m_boolPropertyManager->setValue(d_ptr->m_propertyToStrikeOut[property], val.strikeOut());
     d_ptr->m_boolPropertyManager->setValue(d_ptr->m_propertyToKerning[property], val.kerning());
+    d_ptr->m_enumPropertyManager->setValue(d_ptr->m_propertyToWeight[property],
+                                           indexOfFontWeight(val.weight()));
     d_ptr->m_settingValue = settingValue;
 
     emit propertyChanged(property);
     emit valueChanged(property, val);
+}
+
+static QStringList fontWeightNames()
+{
+    static const DisambiguatedTranslation weightsC[] = {
+        QT_TRANSLATE_NOOP3("FontPropertyManager", "Thin", "QFont::Weight combo"),
+        QT_TRANSLATE_NOOP3("FontPropertyManager", "ExtraLight", "QFont::Weight combo"),
+        QT_TRANSLATE_NOOP3("FontPropertyManager", "Light", "QFont::Weight combo"),
+        QT_TRANSLATE_NOOP3("FontPropertyManager", "Normal", "QFont::Weight combo"),
+        QT_TRANSLATE_NOOP3("FontPropertyManager", "Medium", "QFont::Weight combo"),
+        QT_TRANSLATE_NOOP3("FontPropertyManager", "DemiBold", "QFont::Weight combo"),
+        QT_TRANSLATE_NOOP3("FontPropertyManager", "Bold", "QFont::Weight combo"),
+        QT_TRANSLATE_NOOP3("FontPropertyManager", "ExtraBold", "QFont::Weight combo"),
+        QT_TRANSLATE_NOOP3("FontPropertyManager", "Black", "QFont::Weight combo")
+    };
+
+    QStringList result;
+    for (const auto &w : weightsC)
+       result.append(QCoreApplication::translate("FontPropertyManager", w.first, w.second));
+    return result;
 }
 
 /*!
@@ -5829,7 +5879,7 @@ void QtFontPropertyManager::initializeProperty(QtProperty *property)
     property->addSubProperty(pointSizeProp);
 
     QtProperty *boldProp = d_ptr->m_boolPropertyManager->addProperty();
-    boldProp->setPropertyName(tr("Bold"));
+    boldProp->setPropertyName(tr("Bold", "Bold toggle"));
     d_ptr->m_boolPropertyManager->setValue(boldProp, val.bold());
     d_ptr->m_propertyToBold[property] = boldProp;
     d_ptr->m_boldToProperty[boldProp] = property;
@@ -5862,6 +5912,15 @@ void QtFontPropertyManager::initializeProperty(QtProperty *property)
     d_ptr->m_propertyToKerning[property] = kerningProp;
     d_ptr->m_kerningToProperty[kerningProp] = property;
     property->addSubProperty(kerningProp);
+
+    auto *weightProp = d_ptr->m_enumPropertyManager->addProperty();
+    weightProp->setPropertyName(tr("Weight"));
+    static const QStringList weightNames = fontWeightNames();
+    d_ptr->m_enumPropertyManager->setEnumNames(weightProp, weightNames);
+    d_ptr->m_enumPropertyManager->setValue(weightProp, indexOfFontWeight(val.weight()));
+    d_ptr->m_propertyToWeight[property] = weightProp;
+    d_ptr->m_weightToProperty[weightProp] = property;
+    property->addSubProperty(weightProp);
 }
 
 /*!
@@ -5917,6 +5976,11 @@ void QtFontPropertyManager::uninitializeProperty(QtProperty *property)
         delete kerningProp;
     }
     d_ptr->m_propertyToKerning.remove(property);
+
+    if (auto weightProp = d_ptr->m_propertyToWeight[property]) {
+        d_ptr->m_weightToProperty.remove(weightProp);
+        delete weightProp;
+    }
 
     d_ptr->m_values.remove(property);
 }

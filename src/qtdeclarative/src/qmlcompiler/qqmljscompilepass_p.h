@@ -32,6 +32,7 @@ public:
     enum RegisterShortcuts {
         InvalidRegister = -1,
         Accumulator = QV4::CallData::Accumulator,
+        This = QV4::CallData::This,
         FirstArgument = QV4::CallData::OffsetCount
     };
 
@@ -40,12 +41,14 @@ public:
     struct VirtualRegister
     {
         QQmlJSRegisterContent content;
+        bool canMove = false;
         bool affectedBySideEffects = false;
 
     private:
         friend bool operator==(const VirtualRegister &a, const VirtualRegister &b)
         {
-            return a.content == b.content && a.affectedBySideEffects == b.affectedBySideEffects;
+            return a.content == b.content && a.canMove == b.canMove
+                && a.affectedBySideEffects == b.affectedBySideEffects;
         }
     };
 
@@ -120,6 +123,7 @@ public:
             const VirtualRegister &source = registers[registerIndex];
             VirtualRegister &target = m_readRegisters[registerIndex];
             target.content = reg;
+            target.canMove = source.canMove;
             target.affectedBySideEffects = source.affectedBySideEffects;
         }
 
@@ -138,6 +142,12 @@ public:
         {
             Q_ASSERT(m_readRegisters.contains(registerIndex));
             return m_readRegisters[registerIndex].content;
+        }
+
+        bool canMoveReadRegister(int registerIndex) const
+        {
+            auto it = m_readRegisters.find(registerIndex);
+            return it != m_readRegisters.end() && it->second.canMove;
         }
 
         bool isRegisterAffectedBySideEffects(int registerIndex) const

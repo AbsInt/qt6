@@ -52,7 +52,7 @@ Q_LOGGING_CATEGORY(lcDragHandler, "qt.quick.handler.drag")
 
     At this time, drag-and-drop is not yet supported.
 
-    \sa Drag, MouseArea, {Pointer Handlers Example}
+    \sa Drag, MouseArea, {Qt Quick Examples - Pointer Handlers}
 */
 
 QQuickDragHandler::QQuickDragHandler(QQuickItem *parent)
@@ -262,17 +262,6 @@ void QQuickDragHandler::handlePointerEventImpl(QPointerEvent *event)
         enforceAxisConstraints(&pos);
         moveTarget(pos);
     }
-}
-
-void QQuickDragHandler::enforceConstraints()
-{
-    if (!target() || !target()->parentItem())
-        return;
-    QPointF pos = target()->position();
-    QPointF copy(pos);
-    enforceAxisConstraints(&pos);
-    if (pos != copy)
-        target()->setPosition(pos);
 }
 
 void QQuickDragHandler::enforceAxisConstraints(QPointF *localPos)

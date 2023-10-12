@@ -21,10 +21,10 @@
 
 QT_BEGIN_NAMESPACE
 
-class QQuickMaskExtruder : public QQuickParticleExtruder
+class Q_QUICKPARTICLES_PRIVATE_EXPORT QQuickMaskExtruder : public QQuickParticleExtruder
 {
     Q_OBJECT
-    Q_PROPERTY(QUrl source READ source WRITE setSource NOTIFY sourceChanged)
+    Q_PROPERTY(QUrl source READ source WRITE setSource NOTIFY sourceChanged FINAL)
     QML_NAMED_ELEMENT(MaskShape)
     QML_ADDED_IN_VERSION(2, 0)
 public:

@@ -94,10 +94,11 @@ target_link_libraries(mytarget PRIVATE Qt6::QDocTest)</td></tr>
 <!-- @@@ClassicEnum -->
 <!-- $$$ScopedEnum$$$This$$$That$$$All$$$OmittedValue$$$UselessValue$$$VeryLastValue -->
 <h3 class="fn" translate="no" id="ScopedEnum-enum">enum class Test::<span class="name">ScopedEnum</span></h3>
+<p>This enum has a brief to trigger a bug in CMD_BRIEF.</p>
 <div class="table"><table class="valuelist"><tr valign="top" class="odd"><th class="tblConst">Constant</th><th class="tblval">Value</th><th class="tbldscr">Description</th></tr>
 <tr><td class="topAlign"><code translate="no">TestQDoc::Test::ScopedEnum::This</code></td><td class="topAlign tblval"><code translate="no">0x01</code></td><td class="topAlign">Something</td></tr>
 <tr><td class="topAlign"><code translate="no">TestQDoc::Test::ScopedEnum::That</code></td><td class="topAlign tblval"><code translate="no">0x02</code></td><td class="topAlign">Something else</td></tr>
-<tr><td class="topAlign"><code translate="no">TestQDoc::Test::ScopedEnum::All</code></td><td class="topAlign tblval"><code translate="no">This | That</code></td><td class="topAlign">Everything</td></tr>
+<tr><td class="topAlign"><code translate="no">TestQDoc::Test::ScopedEnum::All (since Qt 2.0)</code></td><td class="topAlign tblval"><code translate="no">This | That</code></td><td class="topAlign">Everything</td></tr>
 </table></div>
 <p>A scoped enum.</p>
 <!-- @@@ScopedEnum -->
@@ -114,7 +115,7 @@ target_link_libraries(mytarget PRIVATE Qt6::QDocTest)</td></tr>
 <p>Overloads that share a documentation comment, optionally taking a parameter <i translate="no">b</i>.</p>
 <!-- @@@ -->
 <!-- $$$Test[overload1]$$$Test -->
-<h3 class="fn" translate="no" id="Test"><code translate="no">[default] </code>Test::<span class="name">Test</span>()</h3>
+<h3 class="fn" translate="no" id="Test"><code translate="no">[noexcept default] </code>Test::<span class="name">Test</span>()</h3>
 <p>Default constructor.</p>
 <!-- @@@Test -->
 <!-- $$$funcPtr[overload1]$$$funcPtrboolconstchar* -->
@@ -159,7 +160,7 @@ target_link_libraries(mytarget PRIVATE Qt6::QDocTest)</td></tr>
 <p>Function that must be reimplemented.</p>
 <!-- @@@virtualFun -->
 <!-- $$$operator=[overload1]$$$operator=TestQDoc::Test&& -->
-<h3 class="fn" translate="no" id="operator-eq"><code translate="no">[default] </code><span class="type"><a href="testqdoc-test.html" translate="no">TestQDoc::Test</a></span> &amp;Test::<span class="name">operator=</span>(<span class="type"><a href="testqdoc-test.html" translate="no">TestQDoc::Test</a></span> &amp;&amp;<i>other</i>)</h3>
+<h3 class="fn" translate="no" id="operator-eq"><code translate="no">[noexcept default] </code><span class="type"><a href="testqdoc-test.html" translate="no">TestQDoc::Test</a></span> &amp;Test::<span class="name">operator=</span>(<span class="type"><a href="testqdoc-test.html" translate="no">TestQDoc::Test</a></span> &amp;&amp;<i>other</i>)</h3>
 <p>Move-assigns <i translate="no">other</i>.</p>
 <!-- @@@operator= -->
 </div>

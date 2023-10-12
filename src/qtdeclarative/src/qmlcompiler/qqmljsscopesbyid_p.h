@@ -31,6 +31,9 @@ public:
     void setSignaturesAreEnforced(bool enforced) { m_signaturesAreEnforced = enforced; }
     bool signaturesAreEnforced() const { return m_signaturesAreEnforced; }
 
+    void setValueTypesAreAddressable(bool addressable) { m_valueTypesAreAddressable = addressable; }
+    bool valueTypesAreAddressable() const { return m_valueTypesAreAddressable; }
+
     QString id(const QQmlJSScope::ConstPtr &scope, const QQmlJSScope::ConstPtr &referrer) const
     {
         const QQmlJSScope::ConstPtr referrerRoot = componentRoot(referrer);
@@ -109,6 +112,7 @@ private:
     QMultiHash<QString, QQmlJSScope::ConstPtr> m_scopesById;
     bool m_componentsAreBound = false;
     bool m_signaturesAreEnforced = true;
+    bool m_valueTypesAreAddressable = false;
 };
 
 QT_END_NAMESPACE

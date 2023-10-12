@@ -194,7 +194,7 @@ public:
 
     QQmlPropertyCache::ConstPtr propertyCache;
 
-    QQmlGuardImpl *guards;
+    QQmlGuardImpl *guards = nullptr;
 
     static QQmlData *get(QObjectPrivate *priv, bool create) {
         // If QObjectData::isDeletingChildren is set then access to QObjectPrivate::declarativeData has

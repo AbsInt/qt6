@@ -166,6 +166,7 @@ void QQmlJSTypeDescriptionReader::readDependencies(UiScriptBinding *ast)
 
 void QQmlJSTypeDescriptionReader::readComponent(UiObjectDefinition *ast)
 {
+    m_currentCtorIndex = 0;
     QQmlJSScope::Ptr scope = QQmlJSScope::create();
     QList<QQmlJSScope::Export> exports;
 
@@ -262,15 +263,15 @@ void QQmlJSTypeDescriptionReader::readComponent(UiObjectDefinition *ast)
     m_objects->append({scope, exports});
 }
 
-void QQmlJSTypeDescriptionReader::readSignalOrMethod(UiObjectDefinition *ast, bool isMethod,
-                                               const QQmlJSScope::Ptr &scope)
+void QQmlJSTypeDescriptionReader::readSignalOrMethod(
+        UiObjectDefinition *ast, bool isMethod, const QQmlJSScope::Ptr &scope)
 {
     QQmlJSMetaMethod metaMethod;
     // ### confusion between Method and Slot. Method should be removed.
     if (isMethod)
-        metaMethod.setMethodType(QQmlJSMetaMethod::Slot);
+        metaMethod.setMethodType(QQmlJSMetaMethodType::Slot);
     else
-        metaMethod.setMethodType(QQmlJSMetaMethod::Signal);
+        metaMethod.setMethodType(QQmlJSMetaMethodType::Signal);
 
     for (UiObjectMemberList *it = ast->initializer->members; it; it = it->next) {
         UiObjectMember *member = it->member;
@@ -296,6 +297,13 @@ void QQmlJSTypeDescriptionReader::readSignalOrMethod(UiObjectDefinition *ast, bo
                 metaMethod.setIsCloned(true);
             } else if (name == QLatin1String("isConstructor")) {
                 metaMethod.setIsConstructor(true);
+
+                // The constructors in the moc json output are ordered the same
+                // way as the ones in the metaobject. qmltyperegistrar moves them into
+                // the same list as the other members, but maintains their order.
+                metaMethod.setConstructorIndex(
+                            QQmlJSMetaMethod::RelativeFunctionIndex(m_currentCtorIndex++));
+
             } else if (name == QLatin1String("isJavaScriptFunction")) {
                 metaMethod.setIsJavaScriptFunction(true);
             } else if (name == QLatin1String("isList")) {
@@ -414,9 +422,11 @@ void QQmlJSTypeDescriptionReader::readEnum(UiObjectDefinition *ast, const QQmlJS
             readEnumValues(script, &metaEnum);
         } else if (name == QLatin1String("scoped")) {
             metaEnum.setScoped(readBoolBinding(script));
+        } else if (name == QLatin1String("type")) {
+            metaEnum.setTypeName(readStringBinding(script));
         } else {
             addWarning(script->firstSourceLocation(),
-                       tr("Expected only name and values script bindings."));
+                       tr("Expected only name, alias, isFlag, values, scoped, or type."));
         }
     }
 
@@ -429,6 +439,7 @@ void QQmlJSTypeDescriptionReader::readParameter(UiObjectDefinition *ast, QQmlJSM
     QString type;
     bool isConstant = false;
     bool isPointer = false;
+    bool isList = false;
 
     for (UiObjectMemberList *it = ast->initializer->members; it; it = it->next) {
         UiObjectMember *member = it->member;
@@ -450,16 +461,18 @@ void QQmlJSTypeDescriptionReader::readParameter(UiObjectDefinition *ast, QQmlJSM
         } else if (id == QLatin1String("isReadonly")) {
             // ### unhandled
         } else if (id == QLatin1String("isList")) {
-            // ### unhandled
+            isList = readBoolBinding(script);
         } else {
             addWarning(script->firstSourceLocation(),
-                       tr("Expected only name and type script bindings."));
+                       tr("Expected only name, type, isPointer, isConstant, isReadonly, "
+                          "or IsList script bindings."));
         }
     }
 
     QQmlJSMetaParameter p(name, type);
     p.setTypeQualifier(isConstant ? QQmlJSMetaParameter::Const : QQmlJSMetaParameter::NonConst);
     p.setIsPointer(isPointer);
+    p.setIsList(isList);
     metaMethod->addParameter(std::move(p));
 }
 

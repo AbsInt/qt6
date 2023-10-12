@@ -49,8 +49,6 @@ QtObject {
             }
         }
 
-
         x.send()
     }
 }
-

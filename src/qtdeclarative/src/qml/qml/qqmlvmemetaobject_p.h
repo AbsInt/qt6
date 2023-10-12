@@ -16,27 +16,49 @@
 // We mean it.
 //
 
-#include <QtCore/QMetaObject>
-#include <QtCore/QBitArray>
-#include <QtCore/QPair>
-#include <QtCore/QDate>
-#include <QtCore/qlist.h>
-#include <QtCore/qdebug.h>
-
-#include <private/qobject_p.h>
-
-#include "qqmlguard_p.h"
-
-#include <private/qqmlguardedcontextdata_p.h>
 #include <private/qbipointer_p.h>
-
+#include <private/qqmlguard_p.h>
+#include <private/qqmlguardedcontextdata_p.h>
+#include <private/qqmlpropertyvalueinterceptor_p.h>
 #include <private/qv4object_p.h>
 #include <private/qv4value_p.h>
-#include <private/qqmlpropertyvalueinterceptor_p.h>
+
+#include <QtCore/private/qobject_p.h>
+
+#if QT_CONFIG(regularexpression)
+#include <QtCore/qregularexpression.h>
+#endif
+
+#include <QtCore/qbitarray.h>
+#include <QtCore/qdatetime.h>
+#include <QtCore/qdebug.h>
+#include <QtCore/qlist.h>
+#include <QtCore/qmetaobject.h>
+#include <QtCore/qpair.h>
 
 QT_BEGIN_NAMESPACE
 
 class QQmlVMEMetaObject;
+class QQmlVMEResolvedList
+{
+    Q_DISABLE_COPY_MOVE(QQmlVMEResolvedList)
+
+public:
+    QQmlVMEResolvedList(QQmlListProperty<QObject> *prop);
+    ~QQmlVMEResolvedList();
+
+    QQmlVMEMetaObject *metaObject() const { return m_metaObject; }
+    QVector<QQmlGuard<QObject>> *list() const { return m_list; }
+    quintptr id() const { return m_id; }
+
+    void activateSignal() const;
+
+private:
+    QQmlVMEMetaObject *m_metaObject = nullptr;
+    QVector<QQmlGuard<QObject>> *m_list = nullptr;
+    quintptr m_id = 0;
+};
+
 class QQmlVMEVariantQObjectPtr : public QQmlGuard<QObject>
 {
 public:
@@ -149,6 +171,11 @@ public:
     static QQmlVMEMetaObject *getForMethod(QObject *o, int coreIndex);
     static QQmlVMEMetaObject *getForSignal(QObject *o, int coreIndex);
 
+    static void list_append(QQmlListProperty<QObject> *prop, QObject *o);
+    static void list_clear(QQmlListProperty<QObject> *prop);
+    static void list_append_nosignal(QQmlListProperty<QObject> *prop, QObject *o);
+    static void list_clear_nosignal(QQmlListProperty<QObject> *prop);
+
 protected:
     int metaCall(QObject *o, QMetaObject::Call _c, int _id, void **_a) override;
 
@@ -176,6 +203,11 @@ public:
     QDate readPropertyAsDate(int id) const;
     QTime readPropertyAsTime(int id) const;
     QDateTime readPropertyAsDateTime(int id) const;
+
+#if QT_CONFIG(regularexpression)
+    QRegularExpression readPropertyAsRegularExpression(int id) const;
+#endif
+
     QRectF readPropertyAsRectF(int id) const;
     QObject *readPropertyAsQObject(int id) const;
     QVector<QQmlGuard<QObject> > *readPropertyAsList(int id) const;

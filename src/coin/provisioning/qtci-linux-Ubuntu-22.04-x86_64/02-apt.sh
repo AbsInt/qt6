@@ -1,6 +1,43 @@
 #!/usr/bin/env bash
-# Copyright (C) 2022 The Qt Company Ltd.
-# SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+
+#############################################################################
+##
+## Copyright (C) 2023 The Qt Company Ltd.
+## Contact: https://www.qt.io/licensing/
+##
+## This file is part of the provisioning scripts of the Qt Toolkit.
+##
+## $QT_BEGIN_LICENSE:LGPL$
+## Commercial License Usage
+## Licensees holding valid commercial Qt licenses may use this file in
+## accordance with the commercial license agreement provided with the
+## Software or, alternatively, in accordance with the terms contained in
+## a written agreement between you and The Qt Company. For licensing terms
+## and conditions see https://www.qt.io/terms-conditions. For further
+## information use the contact form at https://www.qt.io/contact-us.
+##
+## GNU Lesser General Public License Usage
+## Alternatively, this file may be used under the terms of the GNU Lesser
+## General Public License version 3 as published by the Free Software
+## Foundation and appearing in the file LICENSE.LGPL3 included in the
+## packaging of this file. Please review the following information to
+## ensure the GNU Lesser General Public License version 3 requirements
+## will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+##
+## GNU General Public License Usage
+## Alternatively, this file may be used under the terms of the GNU
+## General Public License version 2.0 or (at your option) the GNU General
+## Public license version 3 or any later version approved by the KDE Free
+## Qt Foundation. The licenses are as published by the Free Software
+## Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+## included in the packaging of this file. Please review the following
+## information to ensure the GNU General Public License requirements will
+## be met: https://www.gnu.org/licenses/gpl-2.0.html and
+## https://www.gnu.org/licenses/gpl-3.0.html.
+##
+## $QT_END_LICENSE$
+##
+#############################################################################
 
 # Install required packages with APT
 
@@ -57,6 +94,7 @@ installPackages+=(libdbus-1-dev)
 # Needed libraries for WebEngine
 installPackages+=(udev)
 installPackages+=(libudev-dev)
+installPackages+=(libdrm-dev)
 installPackages+=(libegl1-mesa-dev)
 installPackages+=(libfontconfig1-dev)
 installPackages+=(libgbm-dev)
@@ -64,11 +102,12 @@ installPackages+=(liblcms2-dev)
 installPackages+=(libpci-dev)
 installPackages+=(libre2-dev)
 installPackages+=(libsnappy-dev)
+installPackages+=(libva-dev)
 installPackages+=(libvpx-dev)
 installPackages+=(libxkbfile-dev)
 installPackages+=(libxshmfence-dev)
 installPackages+=(libxss-dev)
-installPackages+=(nodejs)
+# installPackages+=(nodejs) too old
 installPackages+=(python3-html5lib)
 
 # Common event loop handling
@@ -175,6 +214,8 @@ installPackages+=(libpoppler-cpp-dev)
 # Needed for QtCore
 installPackages+=(libdouble-conversion-dev)
 installPackages+=(libpcre2-dev)
+# Needed for testlib selftests
+installPackages+=(valgrind)
 # Needed for qtgampepad
 installPackages+=(libsdl2-2.0)
 installPackages+=(libsdl2-dev)
@@ -208,13 +249,16 @@ sudo dpkg --add-architecture i386
 installPackages+=(nfs-kernel-server)
 installPackages+=(net-tools)
 installPackages+=(bridge-utils)
+# For Debian packaging
+installPackages+=(sbuild)
+installPackages+=(ubuntu-dev-tools)
 
 echo "Running update for apt"
 waitLoop
 sudo apt-get update
 echo "Installing packages"
 waitLoop
-sudo DEBIAN_FRONTEND=noninteractive apt-get -q -y install "${installPackages[@]}"
+sudo DEBIAN_FRONTEND=noninteractive apt-get -q -y -o DPkg::Lock::Timeout=300 install "${installPackages[@]}"
 
 source "${BASH_SOURCE%/*}/../common/unix/SetEnvVar.sh"
 # SetEnvVar "PATH" "/usr/lib/nodejs-mozilla/bin:\$PATH"

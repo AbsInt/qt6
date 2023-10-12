@@ -2,22 +2,21 @@ TEMPLATE = subdirs
 SUBDIRS =   quick-accessibility \
             animation \
             draganddrop \
-            externaldraganddrop \
             canvas \
             imageelements \
             keyinteraction \
             layouts \
+            responsivelayouts \
             localstorage \
             models \
             views \
             tableview \
             mousearea \
+            pointerhandlers \
             positioners \
             scenegraph \
             shadereffects \
             text \
-            threading \
-            touchinteraction \
             tutorials \
             customitems \
             imageprovider \

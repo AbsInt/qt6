@@ -212,11 +212,11 @@ public:
       AST::ExportClause *ExportClause;
       AST::ExportDeclaration *ExportDeclaration;
       AST::TypeAnnotation *TypeAnnotation;
-      AST::TypeArgument *TypeArgument;
       AST::Type *Type;
 
       AST::UiProgram *UiProgram;
       AST::UiHeaderItemList *UiHeaderItemList;
+      AST::UiPragmaValueList *UiPragmaValueList;
       AST::UiPragma *UiPragma;
       AST::UiImport *UiImport;
       AST::UiParameterList *UiParameterList;
@@ -717,9 +717,30 @@ UiHeaderItemList: UiHeaderItemList UiImport;
 ./
 
 PragmaId: JsIdentifier;
+PragmaValue: JsIdentifier;
 
 Semicolon: T_AUTOMATIC_SEMICOLON;
 Semicolon: T_SEMICOLON;
+
+UiPragmaValueList: PragmaValue;
+/.
+    case $rule_number: {
+        AST::UiPragmaValueList *list
+            = new (pool) AST::UiPragmaValueList(stringRef(1));
+        list->location = loc(1);
+        sym(1).Node = list;
+    } break;
+./
+
+UiPragmaValueList: UiPragmaValueList T_COMMA PragmaValue;
+/.
+    case $rule_number: {
+        AST::UiPragmaValueList *list
+            = new (pool) AST::UiPragmaValueList(sym(1).UiPragmaValueList, stringRef(3));
+        list->location = loc(3);
+        sym(1).Node = list;
+    } break;
+./
 
 UiPragma: T_PRAGMA PragmaId Semicolon;
 /.
@@ -731,10 +752,11 @@ UiPragma: T_PRAGMA PragmaId Semicolon;
     } break;
 ./
 
-UiPragma: T_PRAGMA PragmaId T_COLON JsIdentifier Semicolon;
+UiPragma: T_PRAGMA PragmaId T_COLON UiPragmaValueList Semicolon;
 /.
     case $rule_number: {
-        AST::UiPragma *pragma = new (pool) AST::UiPragma(stringRef(2), stringRef(4));
+        AST::UiPragma *pragma = new (pool) AST::UiPragma(
+                stringRef(2), sym(4).UiPragmaValueList->finish());
         pragma->pragmaToken = loc(1);
         pragma->semicolonToken = loc(5);
         sym(1).Node = pragma;
@@ -3307,7 +3329,7 @@ BindingElisionElement: ElisionOpt BindingElement;
 BindingProperty: BindingIdentifier InitializerOpt_In;
 /.
     case $rule_number: {
-        AST::IdentifierPropertyName *name = new (pool) AST::IdentifierPropertyName(stringRef(1));
+        AST::StringLiteralPropertyName *name = new (pool) AST::StringLiteralPropertyName(stringRef(1));
         name->propertyNameToken = loc(1);
         // if initializer is an anonymous function expression, we need to assign identifierref as it's name
         if (auto *f = asAnonymousFunctionDefinition(sym(2).Expression))

@@ -12,10 +12,6 @@
 #include <QCryptographicHash>
 #include <cmath>
 
-#ifdef CONST
-#undef CONST
-#endif
-
 QT_USE_NAMESPACE
 
 using namespace Qt::StringLiterals;
@@ -63,7 +59,7 @@ bool Parameter::initType(
         QV4::CompiledData::ParameterType::Flag listFlag)
 {
     auto builtinType = stringToBuiltinType(typeName);
-    if (builtinType == QV4::CompiledData::BuiltinType::InvalidBuiltin) {
+    if (builtinType == QV4::CompiledData::CommonType::Invalid) {
         if (typeName.isEmpty()) {
             paramType->set(listFlag, 0);
             return false;
@@ -72,31 +68,33 @@ bool Parameter::initType(
         paramType->set(listFlag, typeNameIndex);
     } else {
         Q_ASSERT(quint32(builtinType) < (1u << 31));
-        paramType->set(listFlag | QV4::CompiledData::ParameterType::Builtin,
+        paramType->set(listFlag | QV4::CompiledData::ParameterType::Common,
                        static_cast<quint32>(builtinType));
     }
     return true;
 }
 
-QV4::CompiledData::BuiltinType Parameter::stringToBuiltinType(const QString &typeName)
+QV4::CompiledData::CommonType Parameter::stringToBuiltinType(const QString &typeName)
 {
     static const struct TypeNameToType {
         const char *name;
         size_t nameLength;
-        QV4::CompiledData::BuiltinType type;
+        QV4::CompiledData::CommonType type;
     } propTypeNameToTypes[] = {
-        { "int", strlen("int"), QV4::CompiledData::BuiltinType::Int },
-        { "bool", strlen("bool"), QV4::CompiledData::BuiltinType::Bool },
-        { "double", strlen("double"), QV4::CompiledData::BuiltinType::Real },
-        { "real", strlen("real"), QV4::CompiledData::BuiltinType::Real },
-        { "string", strlen("string"), QV4::CompiledData::BuiltinType::String },
-        { "url", strlen("url"), QV4::CompiledData::BuiltinType::Url },
-        { "date", strlen("date"), QV4::CompiledData::BuiltinType::DateTime },
-        { "rect", strlen("rect"), QV4::CompiledData::BuiltinType::Rect },
-        { "point", strlen("point"), QV4::CompiledData::BuiltinType::Point },
-        { "size", strlen("size"), QV4::CompiledData::BuiltinType::Size },
-        { "variant", strlen("variant"), QV4::CompiledData::BuiltinType::Var },
-        { "var", strlen("var"), QV4::CompiledData::BuiltinType::Var }
+        { "void", strlen("void"), QV4::CompiledData::CommonType::Void },
+        { "int", strlen("int"), QV4::CompiledData::CommonType::Int },
+        { "bool", strlen("bool"), QV4::CompiledData::CommonType::Bool },
+        { "double", strlen("double"), QV4::CompiledData::CommonType::Real },
+        { "real", strlen("real"), QV4::CompiledData::CommonType::Real },
+        { "string", strlen("string"), QV4::CompiledData::CommonType::String },
+        { "url", strlen("url"), QV4::CompiledData::CommonType::Url },
+        { "date", strlen("date"), QV4::CompiledData::CommonType::DateTime },
+        { "regexp", strlen("regexp"), QV4::CompiledData::CommonType::RegExp },
+        { "rect", strlen("rect"), QV4::CompiledData::CommonType::Rect },
+        { "point", strlen("point"), QV4::CompiledData::CommonType::Point },
+        { "size", strlen("size"), QV4::CompiledData::CommonType::Size },
+        { "variant", strlen("variant"), QV4::CompiledData::CommonType::Var },
+        { "var", strlen("var"), QV4::CompiledData::CommonType::Var }
     };
     static const int propTypeNameToTypesCount = sizeof(propTypeNameToTypes) /
                                                 sizeof(propTypeNameToTypes[0]);
@@ -107,7 +105,7 @@ QV4::CompiledData::BuiltinType Parameter::stringToBuiltinType(const QString &typ
             return t->type;
         }
     }
-    return QV4::CompiledData::BuiltinType::InvalidBuiltin;
+    return QV4::CompiledData::CommonType::Invalid;
 }
 
 void Object::init(QQmlJS::MemoryPool *pool, int typeNameIndex, int idIndex,
@@ -362,7 +360,7 @@ void ScriptDirectivesCollector::importModule(const QString &uri, const QString &
     QV4::CompiledData::Import *import = engine->pool()->New<QV4::CompiledData::Import>();
     import->type = QV4::CompiledData::Import::ImportLibrary;
     import->uriIndex = jsGenerator->registerString(uri);
-    import->version = IRBuilder::extractVersion(QStringView(version));
+    import->version = IRBuilder::extractVersion(version);
     import->qualifierIndex = jsGenerator->registerString(module);
     import->location.set(lineNumber, column);
     document->imports << import;
@@ -771,10 +769,10 @@ struct PragmaParser
 
         pragma->type = type();
 
-        if (!assign(pragma, node->value)) {
+        if (QQmlJS::AST::UiPragmaValueList *bad = assign(pragma, node->values)) {
             builder->recordError(
                         node->pragmaToken, QCoreApplication::translate(
-                            "QQmlParser", "Unknown %1 '%2' in pragma").arg(name(), node->value));
+                            "QQmlParser", "Unknown %1 '%2' in pragma").arg(name(), bad->value));
             return false;
         }
 
@@ -799,63 +797,107 @@ private:
         Q_UNREACHABLE_RETURN(Pragma::PragmaType(-1));
     }
 
-    static bool assign(Pragma *pragma, QStringView value)
+    template<typename F>
+    static QQmlJS::AST::UiPragmaValueList *iterateValues(
+            QQmlJS::AST::UiPragmaValueList *input, F &&process)
+    {
+        for (QQmlJS::AST::UiPragmaValueList *i = input; i; i = i->next) {
+            if (!process(i->value))
+                return i;
+        }
+        return nullptr;
+    }
+
+    static QQmlJS::AST::UiPragmaValueList *assign(
+            Pragma *pragma, QQmlJS::AST::UiPragmaValueList *values)
     {
         // We could use QMetaEnum here to make the code more compact,
         // but it's probably more expensive.
 
         if constexpr (std::is_same_v<Argument, Pragma::ComponentBehaviorValue>) {
-            if (value == "Unbound"_L1) {
-                pragma->componentBehavior = Pragma::Unbound;
-                return true;
-            }
-            if (value == "Bound"_L1) {
-                pragma->componentBehavior = Pragma::Bound;
-                return true;
-            }
+            return iterateValues(values, [pragma](QStringView value) {
+                if (value == "Unbound"_L1) {
+                    pragma->componentBehavior = Pragma::Unbound;
+                    return true;
+                }
+                if (value == "Bound"_L1) {
+                    pragma->componentBehavior = Pragma::Bound;
+                    return true;
+                }
+                return false;
+            });
         } else if constexpr (std::is_same_v<Argument, Pragma::ListPropertyAssignBehaviorValue>) {
-            if (value == "Append"_L1) {
-                pragma->listPropertyAssignBehavior = Pragma::Append;
-                return true;
-            }
-            if (value == "Replace"_L1) {
-                pragma->listPropertyAssignBehavior = Pragma::Replace;
-                return true;
-            }
-            if (value == "ReplaceIfNotDefault"_L1) {
-                pragma->listPropertyAssignBehavior = Pragma::ReplaceIfNotDefault;
-                return true;
-            }
+            return iterateValues(values, [pragma](QStringView value) {
+                if (value == "Append"_L1) {
+                    pragma->listPropertyAssignBehavior = Pragma::Append;
+                    return true;
+                }
+                if (value == "Replace"_L1) {
+                    pragma->listPropertyAssignBehavior = Pragma::Replace;
+                    return true;
+                }
+                if (value == "ReplaceIfNotDefault"_L1) {
+                    pragma->listPropertyAssignBehavior = Pragma::ReplaceIfNotDefault;
+                    return true;
+                }
+                return false;
+            });
         } else if constexpr (std::is_same_v<Argument, Pragma::FunctionSignatureBehaviorValue>) {
-            if (value == "Ignored"_L1) {
-                pragma->functionSignatureBehavior = Pragma::Ignored;
-                return true;
-            }
-            if (value == "Enforced"_L1) {
-                pragma->functionSignatureBehavior = Pragma::Enforced;
-                return true;
-            }
+            return iterateValues(values, [pragma](QStringView value) {
+                if (value == "Ignored"_L1) {
+                    pragma->functionSignatureBehavior = Pragma::Ignored;
+                    return true;
+                }
+                if (value == "Enforced"_L1) {
+                    pragma->functionSignatureBehavior = Pragma::Enforced;
+                    return true;
+                }
+                return false;
+            });
         } else if constexpr (std::is_same_v<Argument, Pragma::NativeMethodBehaviorValue>) {
-            if (value == "AcceptThisObject"_L1) {
-                pragma->nativeMethodBehavior = Pragma::AcceptThisObject;
-                return true;
-            }
-            if (value == "RejectThisObject"_L1) {
-                pragma->nativeMethodBehavior = Pragma::RejectThisObject;
-                return true;
-            }
+            return iterateValues(values, [pragma](QStringView value) {
+                if (value == "AcceptThisObject"_L1) {
+                    pragma->nativeMethodBehavior = Pragma::AcceptThisObject;
+                    return true;
+                }
+                if (value == "RejectThisObject"_L1) {
+                    pragma->nativeMethodBehavior = Pragma::RejectThisObject;
+                    return true;
+                }
+                return false;
+            });
         } else if constexpr (std::is_same_v<Argument, Pragma::ValueTypeBehaviorValue>) {
-            if (value == "Reference"_L1) {
-                pragma->valueTypeBehavior = Pragma::Reference;
-                return true;
-            }
-            if (value == "Copy"_L1) {
-                pragma->valueTypeBehavior = Pragma::Copy;
-                return true;
-            }
+            pragma->valueTypeBehavior = Pragma::ValueTypeBehaviorValues().toInt();
+            return iterateValues(values, [pragma](QStringView value) {
+                const auto setFlag = [pragma](Pragma::ValueTypeBehaviorValue flag, bool value) {
+                    pragma->valueTypeBehavior
+                            = Pragma::ValueTypeBehaviorValues(pragma->valueTypeBehavior)
+                                .setFlag(flag, value).toInt();
+                };
+
+                if (value == "Reference"_L1) {
+                    setFlag(Pragma::Copy, false);
+                    return true;
+                }
+                if (value == "Copy"_L1) {
+                    setFlag(Pragma::Copy, true);
+                    return true;
+                }
+
+                if (value == "Inaddressable"_L1) {
+                    setFlag(Pragma::Addressable, false);
+                    return true;
+                }
+                if (value == "Addressable"_L1) {
+                    setFlag(Pragma::Addressable, true);
+                    return true;
+                }
+
+                return false;
+            });
         }
 
-        return false;
+        Q_UNREACHABLE_RETURN(nullptr);
     }
 
     static bool isUnique(IRBuilder *builder)
@@ -1045,20 +1087,20 @@ bool IRBuilder::visit(QQmlJS::AST::UiPublicMember *node)
         if (memberType == QLatin1String("alias")) {
             return appendAlias(node);
         } else {
-            const QStringView &name = node->name;
+            QStringView name = node->name;
 
             Property *property = New<Property>();
             property->setIsReadOnly(node->isReadonly());
             property->setIsRequired(node->isRequired());
 
-            const QV4::CompiledData::BuiltinType builtinPropertyType
+            const QV4::CompiledData::CommonType builtinPropertyType
                     = Parameter::stringToBuiltinType(memberType);
-            if (builtinPropertyType != QV4::CompiledData::BuiltinType::InvalidBuiltin)
-                property->setBuiltinType(builtinPropertyType);
+            if (builtinPropertyType != QV4::CompiledData::CommonType::Invalid)
+                property->setCommonType(builtinPropertyType);
             else
-                property->setCustomType(registerString(memberType));
+                property->setTypeNameIndex(registerString(memberType));
 
-            const QStringView &typeModifier = node->typeModifier;
+            QStringView typeModifier = node->typeModifier;
             if (typeModifier == QLatin1String("list")) {
                 property->setIsList(true);
             } else if (!typeModifier.isEmpty()) {
@@ -1613,7 +1655,7 @@ bool IRBuilder::isStatementNodeScript(QQmlJS::AST::Statement *statement)
 
 bool IRBuilder::isRedundantNullInitializerForPropertyDeclaration(Property *property, QQmlJS::AST::Statement *statement)
 {
-    if (property->isBuiltinType() || property->isList())
+    if (property->isCommonType() || property->isList())
         return false;
     QQmlJS::AST::ExpressionStatement *exprStmt = QQmlJS::AST::cast<QQmlJS::AST::ExpressionStatement *>(statement);
     if (!exprStmt)
@@ -1693,13 +1735,13 @@ void QmlUnitGenerator::generate(Document &output, const QV4::CompiledData::Depen
                 }
                 break;
             case Pragma::ValueTypeBehavior:
-                switch (p->valueTypeBehavior) {
-                case Pragma::Copy:
+                if (Pragma::ValueTypeBehaviorValues(p->valueTypeBehavior)
+                        .testFlag(Pragma::Copy)) {
                     createdUnit->flags |= Unit::ValueTypesCopied;
-                    break;
-                case Pragma::Reference:
-                    //this is the default;
-                    break;
+                }
+                if (Pragma::ValueTypeBehaviorValues(p->valueTypeBehavior)
+                        .testFlag(Pragma::Addressable)) {
+                    createdUnit->flags |= Unit::ValueTypesAddressable;
                 }
                 break;
             }

@@ -342,6 +342,15 @@ static bool isStringLiteralPrefix(const QStringView s)
         || s == u"u8"_s;
 }
 
+static bool isRawStringLiteralPrefix(QStringView s)
+{
+    if (s.endsWith(u'R')) {
+        s.chop(1);
+        return s.isEmpty() || isStringLiteralPrefix(s);
+    }
+    return false;
+}
+
 static const QString strQ_OBJECT = u"Q_OBJECT"_s;
 static const QString strclass = u"class"_s;
 static const QString strdecltype = u"decltype"_s;
@@ -647,10 +656,7 @@ CppParser::TokenType CppParser::getToken()
             }
 
             // a C++11 raw string literal?
-            if (yyCh == '"' && (
-                        yyWord == QLatin1String("R") || yyWord == QLatin1String("LR") || yyWord == QLatin1String("u8R") ||
-                        yyWord == QLatin1String("uR") || yyWord == QLatin1String("UR")
-                        )) {
+            if (yyCh == '"' && isRawStringLiteralPrefix(yyWord)) {
                 ptr = reinterpret_cast<ushort *>(const_cast<QChar *>(yyWord.unicode()));
                 //get delimiter
                 QString delimiter;
@@ -2153,8 +2159,14 @@ void CppParser::processComment()
         yyWord.remove(0, 2);
         text = yyWord.trimmed();
         int k = text.indexOf(QLatin1Char(' '));
-        if (k > -1)
-            extra.insert(text.left(k), text.mid(k + 1).trimmed());
+        if (k > -1) {
+            QString commentvalue = text.mid(k + 1).trimmed();
+            if (commentvalue.startsWith(QLatin1Char('"')) && commentvalue.endsWith(QLatin1Char('"'))
+                && commentvalue.size() != 1) {
+                commentvalue = commentvalue.sliced(1, commentvalue.size() - 2);
+            }
+            extra.insert(text.left(k), commentvalue);
+        }
         text.clear();
     } else if (*ptr == QLatin1Char('%') && ptr[1].isSpace()) {
         sourcetext.reserve(sourcetext.size() + yyWord.size() - 2);

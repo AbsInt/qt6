@@ -710,6 +710,15 @@ class QTBUG99415 : QObject {
 
 const QString QTBUG99415::text2() const noexcept { return tr("text2"); }
 
+// QTBUG-110630: Support quoting in extras field to allow whitespace preservation
+class QTBUG110630 : QObject {
+    Q_OBJECT
+    const QString txt() {
+        //~ quoted " string with spaces "
+        tr("translation with extras-quoted field");
+    }
+};
+
 // enum class - C++11
 enum class Bar : unsigned short;
 // QTBUG-36589: Don't treat enum classes as a normal class

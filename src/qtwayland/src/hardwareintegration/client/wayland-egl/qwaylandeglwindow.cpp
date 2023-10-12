@@ -24,6 +24,10 @@ QWaylandEglWindow::QWaylandEglWindow(QWindow *window, QWaylandDisplay *display)
     , m_clientBufferIntegration(static_cast<QWaylandEglClientBufferIntegration *>(mDisplay->clientBufferIntegration()))
     , m_format(window->requestedFormat())
 {
+    connect(display, &QWaylandDisplay::reconnected, this, [this] {
+        m_clientBufferIntegration = static_cast<QWaylandEglClientBufferIntegration *>(
+                mDisplay->clientBufferIntegration());
+    });
 }
 
 QWaylandEglWindow::~QWaylandEglWindow()
@@ -136,6 +140,8 @@ void QWaylandEglWindow::invalidateSurface()
         wl_egl_window_destroy(m_waylandEglWindow);
         m_waylandEglWindow = nullptr;
     }
+    delete m_contentFBO;
+    m_contentFBO = nullptr;
 }
 
 EGLSurface QWaylandEglWindow::eglSurface() const

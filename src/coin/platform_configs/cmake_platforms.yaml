@@ -12,7 +12,7 @@ Configurations:
     Id: 'ubuntu-22.04-documentation'
     Template: 'qtci-linux-Ubuntu-22.04-x86_64-51'
     Compiler: 'GCC'
-    Features: ['Sccache', 'Documentation', 'TestDocs', 'UseConfigure', 'DoNotRunTests']
+    Features: ['Sccache', 'Documentation', 'UseConfigure', 'DoNotRunTests', 'Insignificant']
     Configure arguments: '-make examples -developer-build -c++std c++20 -linker gold -no-warnings-are-errors -qtlibinfix TestInfix -qtnamespace TestNamespace'
     Environment variables: ['NON_QTBASE_CMAKE_ARGS=-DFFMPEG_DIR={{.Env.FFMPEG_DIR}}']
 -
@@ -30,7 +30,7 @@ Configurations:
     Id: 'ubuntu-22.04-documentation-x11-tests'
     Template: 'qtci-linux-Ubuntu-22.04-x86_64-51'
     Compiler: 'GCC'
-    Features: ['Sccache', 'TestOnly']
+    Features: ['Sccache', 'TestDocs', 'TestOnly', 'InsignificantTests']
     Platform dependency: 'ubuntu-22.04-documentation'
 -
     Id: 'ubuntu-22.04-x11-tests'
@@ -52,6 +52,16 @@ Configurations:
 -
     Id: 'sles-15_sp4-static'
     Template: 'qtci-linux-SLES-15_SP4-x86_64-50'
+    Compiler: 'GCC'
+    Features: ['Sccache', 'DisableTests', 'UseConfigure']
+    Configure arguments: '-nomake examples -static -no-sql-mysql'
+    Environment variables: [
+        'CMAKE_ARGS=-DOPENSSL_ROOT_DIR={{.Env.OPENSSL_HOME}}',
+        'NON_QTBASE_CMAKE_ARGS=-DFFMPEG_DIR={{.Env.FFMPEG_DIR}}'
+    ]
+-
+    Id: 'sles-15_sp5-static'
+    Template: 'qtci-linux-SLES-15_SP5-x86_64-50'
     Compiler: 'GCC'
     Features: ['Sccache', 'DisableTests', 'UseConfigure']
     Configure arguments: '-nomake examples -static -no-sql-mysql'
@@ -167,14 +177,24 @@ Configurations:
         'gRPC_ROOT={{.Env.gRPC_ROOT_msvc}}',
     ]
 -
-    Id: 'rhel-8.4'
-    Template: 'qtci-linux-RHEL-8.4-x86_64-50'
+    Id: 'rhel-8.6'
+    Template: 'qtci-linux-RHEL-8.6-x86_64-50'
     Compiler: 'GCC'
     Features: ['Packaging', 'Sccache', 'UseConfigure', 'InstallQt5Dependencies']
     Configure arguments: '-nomake examples -release -force-debug-info -headersclean -separate-debug-info -qt-libjpeg -qt-libpng -qt-pcre -qt-harfbuzz -qt-doubleconversion -no-libudev -bundled-xcb-xinput'
     Environment variables: [
         'CMAKE_ARGS=-DOpenGL_GL_PREFERENCE=LEGACY -DOPENSSL_ROOT_DIR={{.Env.OPENSSL_HOME}}',
         'NON_QTBASE_CMAKE_ARGS=-DFFMPEG_DIR={{.Env.FFMPEG_DIR}} -DFEATURE_native_grpc=OFF'
+    ]
+-
+    Id: 'rhel-8.8'
+    Template: 'qtci-linux-RHEL-8.8-x86_64-50'
+    Compiler: 'GCC'
+    Features: ['Packaging', 'Sccache', 'UseConfigure', 'InstallQt5Dependencies']
+    Configure arguments: '-nomake examples -release -force-debug-info -headersclean -separate-debug-info -qt-libjpeg -qt-libpng -qt-pcre -qt-harfbuzz -qt-doubleconversion -no-libudev -bundled-xcb-xinput'
+    Environment variables: [
+        'CMAKE_ARGS=-DOpenGL_GL_PREFERENCE=LEGACY -DOPENSSL_ROOT_DIR={{.Env.OPENSSL_HOME}}',
+        'NON_QTBASE_CMAKE_ARGS=-DFFMPEG_DIR={{.Env.FFMPEG_DIR}}'
     ]
 -
     Id: 'rhel-9.0'
@@ -198,7 +218,7 @@ Configurations:
 
 -
     Id: 'ios-universal'
-    Template: 'qtci-macos-12-x86_64-105'
+    Template: 'qtci-macos-13-x86_64-103'
     Target os: 'IOS_ANY'
     Target arch: 'arm64'
     Compiler: 'Clang'
@@ -207,7 +227,7 @@ Configurations:
     Features: ['Packaging', 'Sccache', 'DebugAndRelease', 'DisableTests', 'UseConfigure']
     Environment variables: [
         'TARGET_CONFIGURE_ARGS=-debug-and-release -nomake examples -platform macx-ios-clang',
-        'NON_QTBASE_TARGET_CMAKE_ARGS=-DFEATURE_native_grpc=OFF',
+        'NON_QTBASE_TARGET_CMAKE_ARGS=-DFEATURE_native_grpc=OFF -DQT_PROTOBUF_WELL_KNOWN_TYPES_PROTO_DIR=/usr/local/include',
     ]
 -
     Id: 'windows-10_22h2-mingw11'
@@ -278,4 +298,27 @@ Configurations:
         'LLVM_INSTALL_DIR={{.Env.LLVM_INSTALL_DIR_mingw}}',
         'Protobuf_ROOT={{.Env.Protobuf_ROOT_mingw}}',
         'gRPC_ROOT={{.Env.gRPC_ROOT_mingw}}',
+    ]
+-
+    Id: 'focal-arm64-debian-pkg-packaging'
+    Template: 'qtci-linux-Debian-11.6-aarch64-50'
+    Compiler: 'GCC'
+    Features: ['Packaging','DebianPackaging','DisableTests', 'Insignificant']
+    Environment variables: [
+        'DEBIAN_RULES_REF=6.6_dev',
+        'COIN_EXTRA_DEBIAN_PACKAGES={{.Env.HOME}}/debian_packages/',
+        'COIN_SBUILD_CHROOT=focal-arm64-sbuild',
+        'COIN_EXTRA_DEBIAN_REPO=deb http://ports.ubuntu.com/ubuntu-ports/ focal main universe multiverse',
+    ]
+-
+    Id: 'focal-amd64-debian-pkg-packaging'
+    Template: 'qtci-linux-Ubuntu-22.04-x86_64-51'
+    Compiler: 'GCC'
+    Features: ['Packaging','DebianPackaging','DisableTests', 'Insignificant']
+    Environment variables: [
+        'DEBIAN_RULES_REF=6.6_dev',
+        'COIN_EXTRA_DEBIAN_PACKAGES={{.Env.HOME}}/debian_packages/',
+        'COIN_SBUILD_CHROOT=focal-amd64-sbuild',
+        'COIN_EXTRA_DEBIAN_REPO=deb http://archive.ubuntu.com/ubuntu/ focal main universe multiverse',
+
     ]

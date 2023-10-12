@@ -23,8 +23,6 @@
 #include <cmath>
 #include <iostream>
 
-static const bool disable_lookups = false;
-
 #ifdef CONST
 #undef CONST
 #endif
@@ -901,6 +899,11 @@ bool Codegen::visit(UiImport *)
 }
 
 bool Codegen::visit(UiHeaderItemList *)
+{
+    Q_UNREACHABLE_RETURN(false);
+}
+
+bool Codegen::visit(UiPragmaValueList *)
 {
     Q_UNREACHABLE_RETURN(false);
 }
@@ -2061,7 +2064,7 @@ void Codegen::handleCall(Reference &base, Arguments calldata, int slotForFunctio
 
     //### Do we really need all these call instructions? can's we load the callee in a temp?
     if (base.type == Reference::Member) {
-        if (!disable_lookups && useFastLookups) {
+        if (useFastLookups) {
             Instruction::CallPropertyLookup call;
             call.base = base.propertyBase.stackSlot();
             call.lookupIndex = registerGetterLookup(
@@ -2090,7 +2093,7 @@ void Codegen::handleCall(Reference &base, Arguments calldata, int slotForFunctio
             call.argc = calldata.argc;
             call.argv = calldata.argv;
             bytecodeGenerator->addInstruction(call);
-        } else if (!disable_lookups && useFastLookups && base.global) {
+        } else if (useFastLookups && base.global) {
             if (base.qmlGlobal) {
                 Instruction::CallQmlContextPropertyLookup call;
                 call.index = registerQmlContextPropertyGetterLookup(
@@ -4561,7 +4564,7 @@ void Codegen::Reference::storeAccumulator() const
         }
     } return;
     case Member:
-        if (!disable_lookups && codegen->useFastLookups) {
+        if (codegen->useFastLookups) {
             Instruction::SetLookup store;
             store.base = propertyBase.stackSlot();
             store.index = codegen->registerSetterLookup(propertyNameIndex);
@@ -4621,7 +4624,7 @@ QT_WARNING_DISABLE_GCC("-Wmaybe-uninitialized") // the loads below are empty str
             StaticValue p = StaticValue::fromReturnedValue(constant);
             if (p.isNumber()) {
                 double d = p.asDouble();
-                int i = static_cast<int>(d);
+                int i = QJSNumberCoercion::toInteger(d);
                 if (d == i && (d != 0 || !std::signbit(d))) {
                     if (!i) {
                         Instruction::LoadZero load;
@@ -4679,7 +4682,7 @@ QT_WARNING_POP
         if (sourceLocation.isValid())
             codegen->bytecodeGenerator->setLocation(sourceLocation);
 
-        if (!disable_lookups && global) {
+        if (global) {
             if (qmlGlobal) {
                 Instruction::LoadQmlContextPropertyLookup load;
                 load.index = codegen->registerQmlContextPropertyGetterLookup(
@@ -4704,7 +4707,7 @@ QT_WARNING_POP
         if (sourceLocation.isValid())
             codegen->bytecodeGenerator->setLocation(sourceLocation);
 
-        if (!disable_lookups && codegen->useFastLookups) {
+        if (codegen->useFastLookups) {
             if (optionalChainJumpLabel->isValid()) {
                 // If we got a valid jump label, this means it's an optional lookup
                 auto jump = codegen->bytecodeGenerator->jumpOptionalLookup(

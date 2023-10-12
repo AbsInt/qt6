@@ -40,9 +40,9 @@ sudo zypper -nq install libicu-devel
 sudo zypper -nq install alsa-devel dbus-1-devel libxkbfile-devel \
          libXcomposite-devel libXcursor-devel libXrandr-devel libXtst-devel \
          mozilla-nspr-devel mozilla-nss-devel nodejs12 glproto-devel \
-         libxshmfence-devel libXdamage-devel
+         libxshmfence-devel libXdamage-devel libdrm-devel libgbm-devel
 
-# qtmultimedia+ffmpeg
+# qtwebengine, qtmultimedia+ffmpeg
 sudo zypper -nq install libva-devel
 
 # qtwebkit
@@ -68,6 +68,9 @@ sudo zypper -nq install autoconf libcurl-devel libexpat-devel
 
 # OpenSSL 3
 sudo zypper -nq install openssl-3
+
+# Valgrind (Needed for testlib selftests)
+sudo zypper -nq install valgrind-devel
 
 gccVersion="$(gcc --version |grep gcc |cut -b 17-23)"
 echo "GCC = $gccVersion" >> versions.txt

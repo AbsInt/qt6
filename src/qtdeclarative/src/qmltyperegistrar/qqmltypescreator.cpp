@@ -187,6 +187,10 @@ void QmlTypesCreator::writeType(const QJsonObject &property, const QString &key)
 #else
         type = QLatin1String("double");
 #endif
+    } else if (type == QLatin1String("qint16")) {
+        type = QLatin1String("short");
+    } else if (type == QLatin1String("quint16")) {
+        type = QLatin1String("ushort");
     } else if (type == QLatin1String("qint32")) {
         type = QLatin1String("int");
     } else if (type == QLatin1String("quint32")) {
@@ -331,6 +335,7 @@ void QmlTypesCreator::writeEnums(const QJsonArray &enums)
         auto isFlag = obj.find(QLatin1String("isFlag"));
         if (isFlag != obj.end() && isFlag->toBool())
             m_qml.writeBooleanBinding(isFlag.key(), true);
+        writeType(obj, QLatin1String("type"));
         m_qml.writeArrayBinding(QLatin1String("values"), valueList);
         m_qml.writeEndObject();
     }
@@ -348,19 +353,38 @@ static bool isAllowedInMajorVersion(const QJsonValue &member, QTypeRevision maxM
             || memberRevision.majorVersion() <= maxMajorVersion.majorVersion();
 }
 
-static QJsonArray members(const QJsonObject *classDef,
-                          const QString &key, QTypeRevision maxMajorVersion)
+template<typename Postprocess>
+QJsonArray members(
+        const QJsonObject *classDef, const QString &key, QTypeRevision maxMajorVersion,
+        Postprocess &&process)
 {
     QJsonArray classDefMembers;
 
     const QJsonArray candidates = classDef->value(key).toArray();
-    for (const QJsonValue member : candidates) {
+    for (QJsonValue member : candidates) {
         if (isAllowedInMajorVersion(member, maxMajorVersion))
-            classDefMembers.append(member);
+            classDefMembers.append(process(std::move(member)));
     }
 
     return classDefMembers;
 }
+
+static QJsonArray members(
+        const QJsonObject *classDef, const QString &key, QTypeRevision maxMajorVersion)
+{
+    return members(classDef, key, maxMajorVersion, [](QJsonValue &&member) { return member; });
+}
+
+static QJsonArray constructors(
+        const QJsonObject *classDef, const QString &key, QTypeRevision maxMajorVersion)
+{
+    return members(classDef, key, maxMajorVersion, [](QJsonValue &&member) {
+        QJsonObject ctor = member.toObject();
+        ctor[QLatin1String("isConstructor")] = true;
+        return ctor;
+    });
+}
+
 
 void QmlTypesCreator::writeComponents()
 {
@@ -369,6 +393,7 @@ void QmlTypesCreator::writeComponents()
     const QLatin1String propertiesKey("properties");
     const QLatin1String slotsKey("slots");
     const QLatin1String methodsKey("methods");
+    const QLatin1String constructorsKey("constructors");
 
     const QLatin1String signalElement("Signal");
     const QLatin1String componentElement("Component");
@@ -394,6 +419,7 @@ void QmlTypesCreator::writeComponents()
             writeMethods(members(classDef, signalsKey, m_version), signalElement);
             writeMethods(members(classDef, slotsKey, m_version), methodElement);
             writeMethods(members(classDef, methodsKey, m_version), methodElement);
+            writeMethods(constructors(classDef, constructorsKey, m_version), methodElement);
         }
         m_qml.writeEndObject();
 
@@ -419,6 +445,7 @@ void QmlTypesCreator::writeComponents()
             writeMethods(members(&component, signalsKey, m_version), signalElement);
             writeMethods(members(&component, slotsKey, m_version), methodElement);
             writeMethods(members(&component, methodsKey, m_version), methodElement);
+            writeMethods(constructors(&component, constructorsKey, m_version), methodElement);
 
             m_qml.writeEndObject();
         }

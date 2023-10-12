@@ -136,7 +136,18 @@ QWaylandShmBackingStore::QWaylandShmBackingStore(QWindow *window, QWaylandDispla
     : QPlatformBackingStore(window)
     , mDisplay(display)
 {
-
+    QObject::connect(mDisplay, &QWaylandDisplay::reconnected, window, [this]() {
+        auto copy = mBuffers;
+        // clear available buffers so we create new ones
+        // actual deletion is deferred till after resize call so we can copy
+        // contents from the back buffer
+        mBuffers.clear();
+        mFrontBuffer = nullptr;
+        // resize always resets mBackBuffer
+        if (mRequestedSize.isValid() && waylandWindow())
+            resize(mRequestedSize);
+        qDeleteAll(copy);
+    });
 }
 
 QWaylandShmBackingStore::~QWaylandShmBackingStore()
@@ -160,8 +171,6 @@ void QWaylandShmBackingStore::beginPaint(const QRegion &region)
     mPainting = true;
     ensureSize();
 
-    waylandWindow()->setCanResize(false);
-
     if (mBackBuffer->image()->hasAlphaChannel()) {
         QPainter p(paintDevice());
         p.setCompositionMode(QPainter::CompositionMode_Source);
@@ -176,7 +185,6 @@ void QWaylandShmBackingStore::endPaint()
     mPainting = false;
     if (mPendingFlush)
         flush(window(), mPendingRegion, QPoint());
-    waylandWindow()->setCanResize(true);
 }
 
 void QWaylandShmBackingStore::ensureSize()

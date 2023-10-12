@@ -6,6 +6,7 @@
 #include <QtDebug>
 #include <QMetaEnum>
 #include <QScreen>
+#include <QtCore/QFileInfo>
 #include <QtGui/QIcon>
 #include <QtGui/QRegion>
 #include <QtGui/private/qhighdpiscaling_p.h>
@@ -388,6 +389,31 @@ void QXcbWindow::create()
                             XCB_ATOM_STRING, 8, wmClass.size(), wmClass.constData());
     }
 
+    QString desktopFileName = QGuiApplication::desktopFileName();
+    if (QGuiApplication::desktopFileName().isEmpty()) {
+        QFileInfo fi = QFileInfo(QCoreApplication::instance()->applicationFilePath());
+        QStringList domainName =
+                QCoreApplication::instance()->organizationDomain().split(QLatin1Char('.'),
+                                                                         Qt::SkipEmptyParts);
+
+        if (domainName.isEmpty()) {
+            desktopFileName = fi.baseName();
+        } else {
+            for (int i = 0; i < domainName.size(); ++i)
+                desktopFileName.prepend(QLatin1Char('.')).prepend(domainName.at(i));
+            desktopFileName.append(fi.baseName());
+        }
+    }
+    if (!desktopFileName.isEmpty()) {
+        const QByteArray dfName = desktopFileName.toUtf8();
+        xcb_change_property(xcb_connection(), XCB_PROP_MODE_REPLACE,
+                            m_window, atom(QXcbAtom::Atom_KDE_NET_WM_DESKTOP_FILE),
+                            atom(QXcbAtom::AtomUTF8_STRING), 8, dfName.size(), dfName.constData());
+        xcb_change_property(xcb_connection(), XCB_PROP_MODE_REPLACE,
+                            m_window, atom(QXcbAtom::Atom_GTK_APPLICATION_ID),
+                            atom(QXcbAtom::AtomUTF8_STRING), 8, dfName.size(), dfName.constData());
+    }
+
     if (connection()->hasXSync()) {
         m_syncCounter = xcb_generate_id(xcb_connection());
         xcb_sync_create_counter(xcb_connection(), m_syncCounter, m_syncValue);
@@ -470,6 +496,18 @@ void QXcbWindow::create()
 QXcbWindow::~QXcbWindow()
 {
     destroy();
+}
+
+QXcbForeignWindow::QXcbForeignWindow(QWindow *window, WId nativeHandle)
+    : QXcbWindow(window)
+{
+    m_window = nativeHandle;
+
+    // Reflect the foreign window's geometry as our own
+    if (auto geometry = Q_XCB_REPLY(xcb_get_geometry, xcb_connection(), m_window)) {
+        QRect nativeGeometry(geometry->x, geometry->y, geometry->width, geometry->height);
+        QPlatformWindow::setGeometry(nativeGeometry);
+    }
 }
 
 QXcbForeignWindow::~QXcbForeignWindow()

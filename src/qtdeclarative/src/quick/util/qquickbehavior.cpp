@@ -151,7 +151,7 @@ public:
 UntypedProxyProperty::UntypedProxyProperty(QUntypedBindable bindable, QQuickBehaviorPrivate *behavior) :
     m_sourcePropertyData(QUntypedBindablePrivate::getPropertyData(bindable)),
     m_sourceInterface(QUntypedBindablePrivate::getInterface(bindable)),
-    m_storage(QVariant(QUntypedBindablePrivate::getInterface(bindable)->metaType()))
+    m_storage(QVariant(bindable.metaType()))
 {
     behavior->setSource(m_bindingData);
 }
@@ -406,7 +406,7 @@ void QQuickBehavior::write(const QVariant &value)
 
     QList<QQmlProperty> after;
     auto *newInstance = d->animation->transition(actions, after, QQuickAbstractAnimation::Forward);
-    Q_ASSERT(newInstance != d->animationInstance);
+    Q_ASSERT(!newInstance || newInstance != d->animationInstance);
     delete d->animationInstance;
     d->animationInstance = newInstance;
 

@@ -14,6 +14,7 @@ qt_internal_add_module(QmlDomPrivate
     SOURCES
         qqmldom_fwd_p.h
         qqmldom_global.h
+        qqmldom_utils_p.h
         qqmldomastcreator.cpp qqmldomastcreator_p.h
         qqmldomastdumper.cpp qqmldomastdumper_p.h
         qqmldomattachedinfo.cpp qqmldomattachedinfo_p.h
@@ -39,6 +40,7 @@ qt_internal_add_module(QmlDomPrivate
         qqmldomscanner.cpp qqmldomscanner_p.h
         qqmldomtop.cpp qqmldomtop_p.h
         qqmldomtypesreader.cpp qqmldomtypesreader_p.h
+        qqmldomscriptelements_p.h qqmldomscriptelements.cpp
     DEFINES
         QMLDOM_LIBRARY
     PUBLIC_LIBRARIES

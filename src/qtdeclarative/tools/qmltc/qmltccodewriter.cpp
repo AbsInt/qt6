@@ -42,14 +42,14 @@ static QString getFunctionCategory(const QmltcMethod &method)
 {
     QString category = getFunctionCategory(static_cast<const QmltcMethodBase &>(method));
     switch (method.type) {
-    case QQmlJSMetaMethod::Signal:
+    case QQmlJSMetaMethodType::Signal:
         category = u"Q_SIGNALS"_s;
         break;
-    case QQmlJSMetaMethod::Slot:
+    case QQmlJSMetaMethodType::Slot:
         category += u" Q_SLOTS"_s;
         break;
-    case QQmlJSMetaMethod::Method:
-    case QQmlJSMetaMethod::StaticMethod:
+    case QQmlJSMetaMethodType::Method:
+    case QQmlJSMetaMethodType::StaticMethod:
         break;
     }
     return category;
@@ -149,24 +149,28 @@ void QmltcCodeWriter::writeGlobalHeader(QmltcOutputWrapper &code, const QString 
 
     code.rawAppendToCpp(u""); // blank line
     code.rawAppendToCpp(u"QT_USE_NAMESPACE // avoid issues with QT_NAMESPACE");
-    if (!outNamespace.isEmpty()) {
-        code.rawAppendToHeader(u""); // blank line
-        code.rawAppendToHeader(u"namespace %1 {"_s.arg(outNamespace));
-        code.rawAppendToCpp(u""); // blank line
-        code.rawAppendToCpp(u"namespace %1 {"_s.arg(outNamespace));
+
+    code.rawAppendToHeader(u""); // blank line
+
+    const QStringList namespaces = outNamespace.split(u"::"_s);
+
+    for (const QString &currentNamespace : namespaces) {
+        code.rawAppendToHeader(u"namespace %1 {"_s.arg(currentNamespace));
+        code.rawAppendToCpp(u"namespace %1 {"_s.arg(currentNamespace));
     }
 }
 
 void QmltcCodeWriter::writeGlobalFooter(QmltcOutputWrapper &code, const QString &sourcePath,
                                         const QString &outNamespace)
 {
-    if (!outNamespace.isEmpty()) {
-        code.rawAppendToCpp(u"} // namespace %1"_s.arg(outNamespace));
-        code.rawAppendToCpp(u""); // blank line
-        code.rawAppendToHeader(u"} // namespace %1"_s.arg(outNamespace));
-        code.rawAppendToHeader(u""); // blank line
+    const QStringList namespaces = outNamespace.split(u"::"_s);
+
+    for (auto it = namespaces.crbegin(), end = namespaces.crend(); it != end; it++) {
+        code.rawAppendToCpp(u"} // namespace %1"_s.arg(*it));
+        code.rawAppendToHeader(u"} // namespace %1"_s.arg(*it));
     }
 
+    code.rawAppendToHeader(u""); // blank line
     code.rawAppendToHeader(u"#endif // %1_H"_s.arg(urlToMacro(sourcePath)));
     code.rawAppendToHeader(u""); // blank line
 }
@@ -205,7 +209,7 @@ void QmltcCodeWriter::write(QmltcOutputWrapper &code, const QmltcProgram &progra
         code.rawAppendToHeader(u"class " + type.cppType + u";");
     // write all the types and their content
     for (const QmltcType &type : std::as_const(program.compiledTypes))
-        write(code, type);
+        write(code, type, program.exportMacro);
 
     // add typeCount definitions. after all types have been written down (so
     // they are now complete types as per C++). practically, this only concerns
@@ -247,10 +251,14 @@ static void dumpFunctions(QmltcOutputWrapper &code, const QList<QmltcMethod> &fu
     }
 }
 
-void QmltcCodeWriter::write(QmltcOutputWrapper &code, const QmltcType &type)
+void QmltcCodeWriter::write(QmltcOutputWrapper &code, const QmltcType &type,
+                            const QString &exportMacro)
 {
     const auto constructClassString = [&]() {
-        QString str = u"class " + type.cppType;
+        QString str = u"class "_s;
+        if (!exportMacro.isEmpty())
+            str.append(exportMacro).append(u" "_s);
+        str.append(type.cppType);
         QStringList nonEmptyBaseClasses;
         nonEmptyBaseClasses.reserve(type.baseClasses.size());
         std::copy_if(type.baseClasses.cbegin(), type.baseClasses.cend(),
@@ -336,7 +344,7 @@ void QmltcCodeWriter::write(QmltcOutputWrapper &code, const QmltcType &type)
 
         // children
         for (const auto &child : std::as_const(type.children))
-            QmltcCodeWriter::write(code, child);
+            QmltcCodeWriter::write(code, child, exportMacro);
 
         // (non-visible) functions
         dumpFunctions(code, type.functions, std::not_fn(isUserVisibleFunction));
@@ -388,14 +396,14 @@ void QmltcCodeWriter::write(QmltcOutputWrapper &code, const QmltcMethod &method)
 {
     const auto [hSignature, cppSignature] = functionSignatures(method);
     // Note: augment return type with preambles in declaration
-    code.rawAppendToHeader((method.type == QQmlJSMetaMethod::StaticMethod
+    code.rawAppendToHeader((method.type == QQmlJSMetaMethodType::StaticMethod
                                     ? u"static " + functionReturnType(method)
                                     : functionReturnType(method))
                            + u" " + hSignature + u";");
 
     // do not generate method implementation if it is a signal
     const auto methodType = method.type;
-    if (methodType != QQmlJSMetaMethod::Signal) {
+    if (methodType != QQmlJSMetaMethodType::Signal) {
         code.rawAppendToCpp(u""_s); // blank line
         if (method.comments.size() > 0) {
             code.rawAppendToCpp(u"/*! \\internal"_s);

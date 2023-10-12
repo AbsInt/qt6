@@ -425,7 +425,7 @@ void tst_QQuickHeaderView::resizableHandlerBlockingEvents()
     auto mouseArea = window->findChild<QQuickMouseArea *>("mouseArea");
     QVERIFY(mouseArea);
     QTest::mousePress(window, Qt::LeftButton, Qt::NoModifier, mapCenterToWindow(mouseArea));
-    QVERIFY(mouseArea->pressed());
+    QVERIFY(mouseArea->isPressed());
 }
 
 void tst_QQuickHeaderView::headerData()

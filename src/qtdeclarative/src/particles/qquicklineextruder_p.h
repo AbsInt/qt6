@@ -16,11 +16,11 @@
 //
 #include "qquickparticleextruder_p.h"
 
-class QQuickLineExtruder : public QQuickParticleExtruder
+class Q_QUICKPARTICLES_PRIVATE_EXPORT QQuickLineExtruder : public QQuickParticleExtruder
 {
     Q_OBJECT
     //Default is topleft to bottom right. Flipped makes it topright to bottom left
-    Q_PROPERTY(bool mirrored READ mirrored WRITE setMirrored NOTIFY mirroredChanged)
+    Q_PROPERTY(bool mirrored READ mirrored WRITE setMirrored NOTIFY mirroredChanged FINAL)
     QML_NAMED_ELEMENT(LineShape)
     QML_ADDED_IN_VERSION(2, 0)
 

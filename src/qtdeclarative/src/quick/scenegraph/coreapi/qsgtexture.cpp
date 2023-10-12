@@ -9,7 +9,7 @@
 #include <private/qquickitem_p.h> // qquickwindow_p.h cannot be included on its own due to template nonsense
 #include <private/qquickwindow_p.h>
 #include <QtCore/private/qnativeinterface_p.h>
-#include <QtGui/private/qrhi_p.h>
+#include <rhi/qrhi.h>
 
 #if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID) && defined(__GLIBC__)
 #define CAN_BACKTRACE_EXECINFO
@@ -83,6 +83,7 @@ QSGTexturePrivate::QSGTexturePrivate(QSGTexture *t)
 #endif
 #ifdef Q_OS_WIN
     , m_d3d11TextureAccessor(t)
+    , m_d3d12TextureAccessor(t)
 #endif
 #if defined(__OBJC__)
     , m_metalTextureAccessor(t)
@@ -243,8 +244,6 @@ static void qt_debug_remove_texture(QSGTexture* texture)
 
     \note All classes with QSG prefix should be used solely on the scene graph's
     rendering thread. See \l {Scene Graph and Rendering} for more information.
-
-    \sa {Scene Graph - Rendering FBOs}
  */
 
 /*!
@@ -580,8 +579,6 @@ QSGTexture::WrapMode QSGTexture::verticalWrapMode() const
     \warning This function can only be called from the rendering thread.
 
     \since 6.0
-
-    \internal
  */
 QRhiTexture *QSGTexture::rhiTexture() const
 {
@@ -602,8 +599,6 @@ QRhiTexture *QSGTexture::rhiTexture() const
     \warning This function can only be called from the rendering thread.
 
     \since 6.0
-
-    \internal
  */
 void QSGTexture::commitTextureOperations(QRhi *rhi, QRhiResourceUpdateBatch *resourceUpdates)
 {
@@ -839,6 +834,78 @@ void *QSGTexturePlatformD3D11::nativeTexture() const
         return reinterpret_cast<void *>(quintptr(tex->nativeTexture().object));
     return 0;
 }
+
+namespace QNativeInterface {
+/*!
+    \class QNativeInterface::QSGD3D12Texture
+    \inmodule QtQuick
+    \ingroup native-interfaces
+    \ingroup native-interfaces-qsgtexture
+    \inheaderfile QSGTexture
+    \brief Provides access to and enables adopting Direct3D 12 texture objects.
+    \since 6.6
+*/
+
+/*!
+    \fn void *QNativeInterface::QSGD3D12Texture::nativeTexture() const
+    \return the ID3D12Texture object.
+ */
+
+QT_DEFINE_NATIVE_INTERFACE(QSGD3D12Texture);
+
+/*!
+    Creates a new QSGTexture wrapping an existing Direct 3D 12 \a texture object
+    for \a window.
+
+    The native object is wrapped, but not owned, by the resulting QSGTexture.
+    The caller of the function is responsible for deleting the returned
+    QSGTexture, but that will not destroy the underlying native object.
+
+    This function is currently suitable for 2D RGBA textures only.
+
+    \warning This function will return null if the scene graph has not yet been
+    initialized.
+
+    Use \a options to customize the texture attributes. Only the
+    TextureHasAlphaChannel and TextureHasMipmaps are taken into account here.
+
+    \a size specifies the size in pixels.
+
+    \a resourceState must specify the
+    \l{https://learn.microsoft.com/en-us/windows/win32/api/d3d12/ne-d3d12-d3d12_resource_states}{current state}
+    of the texture resource.
+
+    \note This function must be called on the scene graph rendering thread.
+
+    \sa QQuickWindow::sceneGraphInitialized(), QSGTexture,
+    {Scene Graph - Metal Texture Import}, {Scene Graph - Vulkan Texture Import}
+
+    \since 6.6
+ */
+QSGTexture *QSGD3D12Texture::fromNative(void *texture,
+                                        int resourceState,
+                                        QQuickWindow *window,
+                                        const QSize &size,
+                                        QQuickWindow::CreateTextureOptions options)
+{
+    return QQuickWindowPrivate::get(window)->createTextureFromNativeTexture(quint64(texture), resourceState, size, options);
+}
+} // QNativeInterface
+
+int QSGTexturePlatformD3D12::nativeResourceState() const
+{
+    if (auto *tex = m_texture->rhiTexture())
+        return tex->nativeTexture().layout;
+    return 0;
+}
+
+void *QSGTexturePlatformD3D12::nativeTexture() const
+{
+    if (auto *tex = m_texture->rhiTexture())
+        return reinterpret_cast<void *>(quintptr(tex->nativeTexture().object));
+    return 0;
+}
+
 #endif // win
 
 #if defined(__OBJC__) || defined(Q_QDOC)
@@ -983,6 +1050,7 @@ void *QSGTexture::resolveInterface(const char *name, int revision) const
 #endif
 #if defined(Q_OS_WIN)
     QT_NATIVE_INTERFACE_RETURN_IF(QSGD3D11Texture, &dd->m_d3d11TextureAccessor);
+    QT_NATIVE_INTERFACE_RETURN_IF(QSGD3D12Texture, &dd->m_d3d12TextureAccessor);
 #endif
 #if QT_CONFIG(opengl)
     QT_NATIVE_INTERFACE_RETURN_IF(QSGOpenGLTexture, &dd->m_openglTextureAccessor);

@@ -45,7 +45,6 @@ qt_internal_add_qml_module(qtquickcontrols2nativestyleplugin
         items/qquickstyleitem.cpp items/qquickstyleitem.h
         items/qquickstyleitembutton.cpp items/qquickstyleitembutton.h
         items/qquickstyleitemcheckbox.cpp items/qquickstyleitemcheckbox.h
-        items/qquickstyleitemcombobox.cpp items/qquickstyleitemcombobox.h
         items/qquickstyleitemdial.cpp items/qquickstyleitemdial.h
         items/qquickstyleitemframe.cpp items/qquickstyleitemframe.h
         items/qquickstyleitemgroupbox.cpp items/qquickstyleitemgroupbox.h
@@ -86,6 +85,11 @@ qt_internal_extend_target(qtquickcontrols2nativestyleplugin CONDITION QT_FEATURE
         items/qquickstyleitemtreeindicator.cpp items/qquickstyleitemtreeindicator.h
 )
 
+qt_internal_extend_target(qtquickcontrols2nativestyleplugin CONDITION QT_FEATURE_qml_delegate_model
+    SOURCES
+        items/qquickstyleitemcombobox.cpp items/qquickstyleitemcombobox.h
+)
+
 qt_internal_extend_target(qtquickcontrols2nativestyleplugin CONDITION MACOS
     SOURCES
         items/qquickstyleitemscrollviewcorner.cpp items/qquickstyleitemscrollviewcorner.h
@@ -103,6 +107,8 @@ qt_internal_extend_target(qtquickcontrols2nativestyleplugin CONDITION WIN32
         qstyle/windows/qquickwindowsstyle.cpp qstyle/windows/qquickwindowsstyle_p.h
         qstyle/windows/qquickwindowsstyle_p_p.h
         qstyle/windows/qquickwindowsxpstyle.cpp
+        qstyle/windows/qquickwindowsxpstyle_p.h
+        qstyle/windows/qquickwindowsxpstyle_p_p.h
     INCLUDE_DIRECTORIES
         qstyle/windows
     LIBRARIES

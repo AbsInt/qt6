@@ -62,7 +62,6 @@ qt_internal_add_module(XcbQpaPrivate
         XCB::SYNC
         XCB::XCB
         XCB::XFIXES
-        # XCB::XINPUT # special case remove handled below
         XCB::XKB
         XKB::XKB
     NO_UNITY_BUILD # X11 define clashes
@@ -183,5 +182,5 @@ qt_internal_add_plugin(QXcbIntegrationPlugin
 
 add_subdirectory(gl_integrations)
 if(OFF)
-    add_subdirectory(xcb-static) # special case TODO: xcb-static sub folder
+    add_subdirectory(xcb-static)
 endif()

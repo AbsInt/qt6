@@ -26,7 +26,7 @@
 #include <QtCore/private/qobject_p.h>
 
 #include <QtQuick/private/qquickwindow_p.h>
-#include <QtGui/private/qrhi_p.h>
+#include <rhi/qrhi.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -281,6 +281,17 @@ int QQuickRenderControl::samples() const
     \note This function does not need to be, and must not be, called when using
     the \c software adaptation of Qt Quick.
 
+    With the default Qt Quick adaptation this function creates a new \l QRhi
+    object, similarly to what would happen with an on-screen QQuickWindow when
+    QQuickRenderControl was not used. To make this new QRhi object adopt some
+    existing device or context resource (e.g. use an existing QOpenGLContext
+    instead of creating a new one), use QQuickWindow::setGraphicsDevice() as
+    mentioned above. When the application wants to make the Qt Quick rendering
+    use an already existing \l QRhi object, that is possible as well via
+    \l QQuickGraphicsDevice::fromRhi(). When such a QQuickGraphicsDevice,
+    referencing an already existing QRhi, is set, there will be no new,
+    dedicated \l QRhi object created in initialize().
+
     \since 6.0
 
     \sa QQuickRenderTarget, QQuickGraphicsDevice, QQuickGraphicsConfiguration::preferredInstanceExtensions()
@@ -357,7 +368,8 @@ bool QQuickRenderControl::sync()
             return false;
         }
         if (!d->cb) {
-            qWarning("QQuickRenderControl cannot be used with QRhi when no QRhiCommandBuffer is provided");
+            qWarning("QQuickRenderControl cannot be used with QRhi when no QRhiCommandBuffer is provided "
+                     "(perhaps beginFrame() was not called or it was unsuccessful?)");
             return false;
         }
         cd->setCustomCommandBuffer(d->cb);
@@ -575,6 +587,49 @@ QQuickWindow *QQuickRenderControl::window() const
 }
 
 /*!
+    \return the QRhi this QQuickRenderControl is associated with.
+
+    \note The QRhi exists only when initialize() has successfully completed.
+    Before that the return value is null.
+
+    \note This function is not applicable and returns null when using the
+    \c software adaptation of Qt Quick.
+
+    \since 6.6
+
+    \sa commandBuffer(), beginFrame(), endFrame()
+ */
+QRhi *QQuickRenderControl::rhi() const
+{
+    Q_D(const QQuickRenderControl);
+    return d->rhi;
+}
+
+/*!
+    \return the current command buffer.
+
+    Once beginFrame() is called, a QRhiCommandBuffer is set up automatically.
+    That is the command buffer Qt Quick scenegraph uses, but in some cases
+    applications may also want to query it, for example to issue resource
+    updates (for example, a texture readback).
+
+    The command buffer is only valid for use between beginFrame() and
+    endFrame().
+
+    \note This function is not applicable and returns null when using the
+    \c software adaptation of Qt Quick.
+
+    \since 6.6
+
+    \sa rhi(), beginFrame(), endFrame()
+ */
+QRhiCommandBuffer *QQuickRenderControl::commandBuffer() const
+{
+    Q_D(const QQuickRenderControl);
+    return d->cb;
+}
+
+/*!
     Specifies the start of a graphics frame. Calls to sync() or render() must
     be enclosed by calls to beginFrame() and endFrame().
 
@@ -588,7 +643,7 @@ QQuickWindow *QQuickRenderControl::window() const
     assumes Direct3D 11 but the same concepts apply other graphics APIs as
     well.
 
-    \badcode
+    \code
         if (!m_quickInitialized) {
             m_quickWindow->setGraphicsDevice(QQuickGraphicsDevice::fromDeviceAndContext(m_engine->device(), m_engine->context()));
 
@@ -610,6 +665,15 @@ QQuickWindow *QQuickRenderControl::window() const
         m_renderControl->endFrame(); // Qt Quick's rendering commands are submitted to the device context here
     \endcode
 
+    \note This function does not need to be, and must not be, called when using
+    the \c software adaptation of Qt Quick.
+
+    \note Internally beginFrame() and endFrame() invoke
+    \l{QRhi::}{beginOffscreenFrame()} and \l{QRhi::}{endOffscreenFrame()},
+    respectively. This implies that there must not be a frame (neither
+    offscreen, nor swapchain-based) being recorded on the QRhi when
+    this function is called.
+
     \since 6.0
 
     \sa endFrame(), initialize(), sync(), render(), QQuickGraphicsDevice, QQuickRenderTarget
@@ -617,8 +681,18 @@ QQuickWindow *QQuickRenderControl::window() const
 void QQuickRenderControl::beginFrame()
 {
     Q_D(QQuickRenderControl);
-    if (!d->rhi || d->rhi->isRecordingFrame())
+    if (!d->rhi) {
+        qWarning("QQuickRenderControl: No QRhi in beginFrame()");
         return;
+    }
+    if (d->frameStatus == QQuickRenderControlPrivate::RecordingFrame) {
+        qWarning("QQuickRenderControl: beginFrame() must be followed by a call to endFrame() before calling beginFrame() again");
+        return;
+    }
+    if (d->rhi->isRecordingFrame()) {
+        qWarning("QQuickRenderControl: Attempted to beginFrame() while the QRhi is already recording a frame");
+        return;
+    }
 
     emit d->window->beforeFrameBegin();
 
@@ -649,6 +723,9 @@ void QQuickRenderControl::beginFrame()
     scenegraph are submitted to the context or command queue, whichever is
     applicable.
 
+    \note This function does not need to be, and must not be, called when using
+    the \c software adaptation of Qt Quick.
+
     \since 6.0
 
     \sa beginFrame(), initialize(), sync(), render(), QQuickGraphicsDevice, QQuickRenderTarget
@@ -656,8 +733,18 @@ void QQuickRenderControl::beginFrame()
 void QQuickRenderControl::endFrame()
 {
     Q_D(QQuickRenderControl);
-    if (!d->rhi || !d->rhi->isRecordingFrame())
+    if (!d->rhi) {
+        qWarning("QQuickRenderControl: No QRhi in endFrame()");
         return;
+    }
+    if (d->frameStatus != QQuickRenderControlPrivate::RecordingFrame) {
+        qWarning("QQuickRenderControl: endFrame() must only be called after a successful beginFrame()");
+        return;
+    }
+    if (!d->rhi->isRecordingFrame()) {
+        qWarning("QQuickRenderControl: Attempted to endFrame() while the QRhi is not recording a frame");
+        return;
+    }
 
     d->rhi->endOffscreenFrame();
     d->cb = nullptr;

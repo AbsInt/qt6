@@ -65,7 +65,7 @@ class Path;
 class Pragma;
 class PropertyDefinition;
 class PropertyInfo;
-class QmlDomAstCreator;
+class QQmlDomAstCreator;
 class QmlComponent;
 class QmlDirectory;
 class QmldirFile;
@@ -79,6 +79,22 @@ class ScriptExpression;
 class Source;
 class TestDomItem;
 class Version;
+
+namespace ScriptElements {
+class BlockStatement;
+class IdentifierExpression;
+class Literal;
+class ForStatement;
+class IfStatement;
+class BinaryExpression;
+class VariableDeclaration;
+class VariableDeclarationEntry;
+class GenericScriptElement;
+// TODO: add new script classes here, as qqmldomitem_p.h cannot include qqmldomscriptelements_p.h
+// without creating circular dependencies
+class ReturnStatement;
+
+} // end namespace ScriptElements
 
 } // end namespace Dom
 } // end namespace QQmlJS

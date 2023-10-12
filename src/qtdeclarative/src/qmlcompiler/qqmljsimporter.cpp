@@ -148,11 +148,9 @@ QQmlJSImporter::Import QQmlJSImporter::readQmldir(const QString &path)
     Import result;
     auto reader = createQmldirParserForFile(path + SlashQmldir);
     result.name = reader.typeNamespace();
-#if QT_VERSION >= QT_VERSION_CHECK(6, 4, 0)
-    // #if required for standalone DOM build against Qt6.3
+
     result.isStaticModule = reader.isStaticModule();
     result.isSystemModule = reader.isSystemModule();
-#endif
     result.imports.append(reader.imports());
     result.dependencies.append(reader.dependencies());
 
@@ -291,11 +289,9 @@ void QQmlJSImporter::importDependencies(const QQmlJSImporter::Import &import,
             if (!m_useOptionalImports) {
                 continue;
             }
-#if (QT_VERSION >= QT_VERSION_CHECK(6, 4, 0))
-            // #if required for standalone DOM build against Qt6.3
+
             if (!(import.flags & QQmlDirParser::Import::OptionalDefault))
                 continue;
-#endif
         }
 
         importHelper(import.module, types, isDependency ? QString() : prefix,
@@ -482,11 +478,10 @@ void QQmlJSImporter::processImport(const QQmlJSScope::Import &importDescription,
     // only happen when enumerations are involved, thus the strategy is to
     // resolve enumerations (which can potentially create new child scopes)
     // before resolving the type fully
-    const QQmlJSScope::ConstPtr intType = tempTypes.cppNames.type(u"int"_s).scope;
     const QQmlJSScope::ConstPtr arrayType = tempTypes.cppNames.type(u"Array"_s).scope;
     for (auto it = import.objects.begin(); it != import.objects.end(); ++it) {
         if (!it->scope.factory()) {
-            QQmlJSScope::resolveEnums(it->scope, intType);
+            QQmlJSScope::resolveEnums(it->scope, tempTypes.cppNames);
             QQmlJSScope::resolveList(it->scope, arrayType);
         }
     }
@@ -526,7 +521,7 @@ QQmlJSImporter::AvailableTypes QQmlJSImporter::builtinImportHelper()
     if (m_builtins)
         return *m_builtins;
 
-    AvailableTypes builtins(ImportedTypes(ImportedTypes::INTERNAL, {}, {}, {}));
+    AvailableTypes builtins(ImportedTypes(ImportedTypes::INTERNAL, {}, {}));
 
     Import result;
     result.name = QStringLiteral("QML");
@@ -583,12 +578,10 @@ QQmlJSImporter::AvailableTypes QQmlJSImporter::builtinImportHelper()
     Q_ASSERT(intType);
     Q_ASSERT(arrayType);
 
-    m_builtins = AvailableTypes(ImportedTypes(
-                                    ImportedTypes::INTERNAL, builtins.cppNames.types(),
-                                    intType, arrayType));
-    m_builtins->qmlNames =
-            ImportedTypes(ImportedTypes::QML, builtins.qmlNames.types(),
-                          intType, arrayType);
+    m_builtins = AvailableTypes(
+                ImportedTypes(ImportedTypes::INTERNAL, builtins.cppNames.types(), arrayType));
+    m_builtins->qmlNames
+            = ImportedTypes(ImportedTypes::QML, builtins.qmlNames.types(), arrayType);
 
     processImport(builtinImport, result, &(*m_builtins));
 
@@ -707,9 +700,7 @@ bool QQmlJSImporter::importHelper(const QString &module, AvailableTypes *types,
 
     auto cacheTypes = QSharedPointer<QQmlJSImporter::AvailableTypes>(
                 new QQmlJSImporter::AvailableTypes(
-                    ImportedTypes(
-                        ImportedTypes::INTERNAL, {},
-                        types->cppNames.intType(), types->cppNames.arrayType())));
+                    ImportedTypes(ImportedTypes::INTERNAL, {}, types->cppNames.arrayType())));
     m_cachedImportTypes[cacheKey] = cacheTypes;
 
     const QPair<QString, QTypeRevision> importId { module, version };
@@ -826,8 +817,7 @@ QQmlJSImporter::ImportedTypes QQmlJSImporter::importDirectory(
     const AvailableTypes builtins = builtinImportHelper();
     QQmlJSImporter::AvailableTypes types(
                 ImportedTypes(
-                    ImportedTypes::INTERNAL, {},
-                    builtins.cppNames.intType(), builtins.cppNames.arrayType()));
+                    ImportedTypes::INTERNAL, {}, builtins.cppNames.arrayType()));
     importHelper(directory, &types, prefix, QTypeRevision(), false, true);
     return types.qmlNames;
 }

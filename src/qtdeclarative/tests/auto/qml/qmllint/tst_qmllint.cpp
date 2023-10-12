@@ -58,9 +58,6 @@ private Q_SLOTS:
     void compilerWarnings_data();
     void compilerWarnings();
 
-    void controlsSanity_data();
-    void controlsSanity();
-
     void testUnknownCausesFail();
 
     void directoryPassedAsQmlTypesFile();
@@ -120,7 +117,7 @@ private:
                      QStringList importDirs = {}, QStringList qmltypesFiles = {},
                      QStringList resources = {},
                      DefaultImportOption defaultImports = UseDefaultImports,
-                     QList<QQmlJSLogger::Category> *categories = nullptr, bool autoFixable = false,
+                     QList<QQmlJS::LoggerCategory> *categories = nullptr, bool autoFixable = false,
                      LintType type = LintFile);
 
     void searchWarnings(const QJsonArray &warnings, const QString &string,
@@ -142,7 +139,7 @@ private:
     void runTest(const QString &testFile, const Result &result, QStringList importDirs = {},
                  QStringList qmltypesFiles = {}, QStringList resources = {},
                  DefaultImportOption defaultImports = UseDefaultImports,
-                 QList<QQmlJSLogger::Category> *categories = nullptr);
+                 QList<QQmlJS::LoggerCategory> *categories = nullptr);
 
     QString m_qmllintPath;
     QString m_qmljsrootgenPath;
@@ -366,12 +363,12 @@ void TestQmllint::verifyJsRoot()
     QString currentJsRootContent, generatedJsRootContent;
 
     QFile currentJsRoot(currentJsRootPath);
-    QVERIFY(currentJsRoot.open(QFile::ReadOnly));
+    QVERIFY(currentJsRoot.open(QFile::ReadOnly | QIODevice::Text));
     currentJsRootContent = QString::fromUtf8(currentJsRoot.readAll());
     currentJsRoot.close();
 
     QFile generatedJsRoot(dir.path() + QDir::separator() + "jsroot.qmltypes");
-    QVERIFY(generatedJsRoot.open(QFile::ReadOnly));
+    QVERIFY(generatedJsRoot.open(QFile::ReadOnly | QIODevice::Text));
     generatedJsRootContent = QString::fromUtf8(generatedJsRoot.readAll());
     generatedJsRoot.close();
 
@@ -1070,7 +1067,28 @@ expression: \${expr} \${expr} \\\${expr} \\\${expr}`)",
 
     QTest::newRow("StoreNameMethod")
             << QStringLiteral("storeNameMethod.qml")
-            << Result { { Message { QStringLiteral("Cannot assign to method foo") } } };
+            << Result{ { Message{ QStringLiteral("Cannot assign to method foo") } } };
+
+    QTest::newRow("lowerCaseQualifiedImport")
+            << QStringLiteral("lowerCaseQualifiedImport.qml")
+            << Result{ {
+                       Message{ u"Import qualifier 'test' must start with a capital letter."_s },
+                       Message{
+                               u"Namespace 'test' of 'test.Rectangle' must start with an upper case letter."_s },
+               } };
+    QTest::newRow("lowerCaseQualifiedImport2")
+            << QStringLiteral("lowerCaseQualifiedImport2.qml")
+            << Result{ {
+                       Message{ u"Import qualifier 'test' must start with a capital letter."_s },
+                       Message{
+                               u"Namespace 'test' of 'test.Item' must start with an upper case letter."_s },
+                       Message{
+                               u"Namespace 'test' of 'test.Rectangle' must start with an upper case letter."_s },
+                       Message{
+                               u"Namespace 'test' of 'test.color' must start with an upper case letter."_s },
+                       Message{
+                               u"Namespace 'test' of 'test.Grid' must start with an upper case letter."_s },
+               } };
 }
 
 void TestQmllint::dirtyQmlCode()
@@ -1241,12 +1259,15 @@ void TestQmllint::cleanQmlCode_data()
     QTest::newRow("qtquickdialog") << QStringLiteral("qtquickdialog.qml");
     QTest::newRow("callBase") << QStringLiteral("callBase.qml");
     QTest::newRow("propertyWithOn") << QStringLiteral("switcher.qml");
-    QTest::newRow("onlyMajorVersion") << QStringLiteral("onlyMajorVersion.qml");
     QTest::newRow("constructorProperty") << QStringLiteral("constructorProperty.qml");
+    QTest::newRow("onlyMajorVersion") << QStringLiteral("onlyMajorVersion.qml");
     QTest::newRow("attachedImportUse") << QStringLiteral("attachedImportUse.qml");
     QTest::newRow("VariantMapGetPropertyLookup") << QStringLiteral("variantMapLookup.qml");
+    QTest::newRow("StringToDateTime") << QStringLiteral("stringToDateTime.qml");
     QTest::newRow("ScriptInTemplate") << QStringLiteral("scriptInTemplate.qml");
+    QTest::newRow("AddressableValue") << QStringLiteral("addressableValue.qml");
     QTest::newRow("WriteListProperty") << QStringLiteral("writeListProperty.qml");
+    QTest::newRow("dontConfuseMemberPrintWithGlobalPrint") << QStringLiteral("findMemberPrint.qml");
 }
 
 void TestQmllint::cleanQmlCode()
@@ -1316,42 +1337,15 @@ void TestQmllint::compilerWarnings()
 
     auto categories = QQmlJSLogger::defaultCategories();
 
-    auto category = std::find(categories.begin(), categories.end(), qmlCompiler);
+    auto category = std::find_if(categories.begin(), categories.end(), [](const QQmlJS::LoggerCategory& category) {
+        return category.id() == qmlCompiler;
+    });
     Q_ASSERT(category != categories.end());
 
-    if (enableCompilerWarnings)
-        category->setLevel(u"warning"_s);
-
-    runTest(filename, result, {}, {}, {}, UseDefaultImports, &categories);
-}
-
-void TestQmllint::controlsSanity_data()
-{
-    QTest::addColumn<QString>("filename");
-    QTest::addColumn<Result>("result");
-    QTest::newRow("functionDeclarations")
-            << QStringLiteral("functionDeclarations.qml")
-            << Result { { Message { QStringLiteral("Declared function \"add\"") } } };
-    QTest::newRow("signalHandlers")
-            << QStringLiteral("signalHandlers.qml")
-            << Result { { Message { QStringLiteral("Declared signal handler \"onCompleted\"") } } };
-    QTest::newRow("anchors") << QStringLiteral("anchors.qml")
-                             << Result { { Message { QStringLiteral("Using anchors here") } } };
-}
-
-void TestQmllint::controlsSanity()
-{
-    QFETCH(QString, filename);
-    QFETCH(Result, result);
-
-    QJsonArray warnings;
-
-    auto categories = QQmlJSLogger::defaultCategories();
-
-    auto category = std::find(categories.begin(), categories.end(), qmlControlsSanity);
-    Q_ASSERT(category != categories.end());
-
-    category->setLevel(u"warning"_s);
+    if (enableCompilerWarnings) {
+        category->setLevel(QtWarningMsg);
+        category->setIgnored(false);
+    }
 
     runTest(filename, result, {}, {}, {}, UseDefaultImports, &categories);
 }
@@ -1446,7 +1440,7 @@ QString TestQmllint::runQmllint(const QString &fileToLint, bool shouldSucceed,
 void TestQmllint::callQmllint(const QString &fileToLint, bool shouldSucceed, QJsonArray *warnings,
                               QStringList importPaths, QStringList qmldirFiles,
                               QStringList resources, DefaultImportOption defaultImports,
-                              QList<QQmlJSLogger::Category> *categories, bool autoFixable,
+                              QList<QQmlJS::LoggerCategory> *categories, bool autoFixable,
                               LintType type)
 {
     QJsonArray jsonOutput;
@@ -1460,15 +1454,14 @@ void TestQmllint::callQmllint(const QString &fileToLint, bool shouldSucceed, QJs
             ? m_defaultImportPaths + importPaths
             : importPaths;
     if (type == LintFile) {
-        const QList<QQmlJSLogger::Category> resolvedCategories = categories != nullptr
-                ? *categories
-                : QQmlJSLogger::defaultCategories();
+        const QList<QQmlJS::LoggerCategory> resolvedCategories =
+                categories != nullptr ? *categories : QQmlJSLogger::defaultCategories();
         lintResult = m_linter.lintFile(
                     lintedFile, nullptr, true, &jsonOutput, resolvedImportPaths, qmldirFiles,
                     resources, resolvedCategories);
     } else {
-        lintResult = m_linter.lintModule(
-                    fileToLint, true, &jsonOutput, resolvedImportPaths, resources);
+        lintResult =
+                m_linter.lintModule(fileToLint, true, &jsonOutput, resolvedImportPaths, resources);
     }
 
     bool success = lintResult == QQmlJSLinter::LintSuccess;
@@ -1526,7 +1519,7 @@ void TestQmllint::callQmllint(const QString &fileToLint, bool shouldSucceed, QJs
 void TestQmllint::runTest(const QString &testFile, const Result &result, QStringList importDirs,
                           QStringList qmltypesFiles, QStringList resources,
                           DefaultImportOption defaultImports,
-                          QList<QQmlJSLogger::Category> *categories)
+                          QList<QQmlJS::LoggerCategory> *categories)
 {
     QJsonArray warnings;
     callQmllint(testFile, result.flags.testFlag(Result::Flag::ExitsNormally), &warnings, importDirs,
@@ -1716,12 +1709,14 @@ void TestQmllint::qrcUrlImport()
 
 void TestQmllint::attachedPropertyReuse()
 {
-
     auto categories = QQmlJSLogger::defaultCategories();
-    auto category = std::find(categories.begin(), categories.end(), qmlAttachedPropertyReuse);
+    auto category = std::find_if(categories.begin(), categories.end(), [](const QQmlJS::LoggerCategory& category) {
+        return category.id() == qmlAttachedPropertyReuse;
+    });
     Q_ASSERT(category != categories.end());
 
-    category->setLevel(u"warning"_s);
+    category->setLevel(QtWarningMsg);
+    category->setIgnored(false);
     runTest("attachedPropNotReused.qml",
             Result { { Message { QStringLiteral("Using attached type QQuickKeyNavigationAttached "
                                                 "already initialized in a parent "
@@ -1904,6 +1899,9 @@ void TestQmllint::testPlugin()
             Result { { Message { u"QtQuick.Controls and NO QtQuick present"_s } } });
     // Verify that none of the passes do anything when they're not supposed to
     runTest("nothing_pluginTest.qml", Result::clean());
+
+    QVERIFY(runQmllint("settings/plugin/elemenpass_pluginSettingTest.qml", true, QStringList(), false)
+                    .isEmpty());
 }
 
 // TODO: Eventually tests for (real) plugins need to be moved into a separate file

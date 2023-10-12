@@ -63,6 +63,7 @@ static const int MaxTouchPoints = 10;
 QWaylandInputDevice::Keyboard::Keyboard(QWaylandInputDevice *p)
     : mParent(p)
 {
+    init(p->get_keyboard());
     mRepeatTimer.callOnTimeout([&]() {
         if (!focusWindow()) {
             // We destroyed the keyboard focus surface, but the server didn't get the message yet...
@@ -124,7 +125,12 @@ QWaylandWindow *QWaylandInputDevice::Keyboard::focusWindow() const
 QWaylandInputDevice::Pointer::Pointer(QWaylandInputDevice *seat)
     : mParent(seat)
 {
+    init(seat->get_pointer());
 #if QT_CONFIG(cursor)
+    if (auto cursorShapeManager = seat->mQDisplay->cursorShapeManager()) {
+        mCursor.shape.reset(new QWaylandCursorShape(cursorShapeManager->get_pointer(object())));
+    }
+
     mCursor.frameTimer.setSingleShot(true);
     mCursor.frameTimer.callOnTimeout([&]() {
         cursorTimerCallback();
@@ -172,12 +178,10 @@ public:
                 m_pointer, &QWaylandInputDevice::Pointer::updateCursor);
     }
 
-    void hide()
+    void reset()
     {
-        uint serial = m_pointer->mEnterSerial;
-        Q_ASSERT(serial);
-        m_pointer->set_cursor(serial, nullptr, 0, 0);
         m_setSerial = 0;
+        m_hotspot = QPoint();
     }
 
     // Size and hotspot are in surface coordinates
@@ -278,7 +282,9 @@ void QWaylandInputDevice::Pointer::updateCursor()
     auto shape = seat()->mCursor.shape;
 
     if (shape == Qt::BlankCursor) {
-        getOrCreateCursorSurface()->hide();
+        if (mCursor.surface)
+            mCursor.surface->reset();
+        set_cursor(mEnterSerial, nullptr, 0, 0);
         return;
     }
 
@@ -291,6 +297,14 @@ void QWaylandInputDevice::Pointer::updateCursor()
         auto hotspot = seat()->mCursor.hotspot;
         int bufferScale = seat()->mCursor.bitmapScale;
         getOrCreateCursorSurface()->update(buffer->buffer(), hotspot, buffer->size(), bufferScale);
+        return;
+    }
+
+    if (mCursor.shape) {
+        if (mCursor.surface) {
+            mCursor.surface->reset();
+        }
+        mCursor.shape->setShape(mEnterSerial, shape);
         return;
     }
 
@@ -357,6 +371,7 @@ void QWaylandInputDevice::Pointer::cursorFrameCallback()
 QWaylandInputDevice::Touch::Touch(QWaylandInputDevice *p)
     : mParent(p)
 {
+    init(p->get_touch());
 }
 
 QWaylandInputDevice::Touch::~Touch()
@@ -416,14 +431,12 @@ void QWaylandInputDevice::seat_capabilities(uint32_t caps)
 
     if (caps & WL_SEAT_CAPABILITY_KEYBOARD && !mKeyboard) {
         mKeyboard.reset(createKeyboard(this));
-        mKeyboard->init(get_keyboard());
     } else if (!(caps & WL_SEAT_CAPABILITY_KEYBOARD) && mKeyboard) {
         mKeyboard.reset();
     }
 
     if (caps & WL_SEAT_CAPABILITY_POINTER && !mPointer) {
         mPointer.reset(createPointer(this));
-        mPointer->init(get_pointer());
 
         auto *pointerGestures = mQDisplay->pointerGestures();
         if (pointerGestures) {
@@ -446,7 +459,6 @@ void QWaylandInputDevice::seat_capabilities(uint32_t caps)
 
     if (caps & WL_SEAT_CAPABILITY_TOUCH && !mTouch) {
         mTouch.reset(createTouch(this));
-        mTouch->init(get_touch());
 
         if (!mTouchDevice) {
             // TODO number of touchpoints, actual name and ID

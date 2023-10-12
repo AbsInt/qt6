@@ -2,9 +2,8 @@
         var x = new XMLHttpRequest;
         x.open("GET", url);
         x.onreadystatechange = function() {
-            if (x.readyState == XMLHttpRequest.DONE) {
+            if (x.readyState == XMLHttpRequest.DONE)
                 resultCollector.responseText = x.responseText
-            }
         }
         x.send()
 })

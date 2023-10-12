@@ -16,11 +16,15 @@
 #include <QtCore/qtextstream.h>
 #include <QtCore/qxmlstream.h>
 
+#include <utility>
+
 QT_BEGIN_NAMESPACE
 
 using namespace Qt::StringLiterals;
 
 namespace qdesigner_internal {
+
+    using DisambiguatedTranslation = std::pair<const char *, const char *>;
 
     static const char *aliasingC[] = {
         QT_TRANSLATE_NOOP("FontPropertyManager", "PreferDefault"),
@@ -28,11 +32,11 @@ namespace qdesigner_internal {
         QT_TRANSLATE_NOOP("FontPropertyManager", "PreferAntialias")
     };
 
-    static const char *hintingPreferenceC[] = {
-        QT_TRANSLATE_NOOP("FontPropertyManager", "PreferDefaultHinting"),
-        QT_TRANSLATE_NOOP("FontPropertyManager", "PreferNoHinting"),
-        QT_TRANSLATE_NOOP("FontPropertyManager", "PreferVerticalHinting"),
-        QT_TRANSLATE_NOOP("FontPropertyManager", "PreferFullHinting")
+    static const DisambiguatedTranslation hintingPreferenceC[] = {
+        QT_TRANSLATE_NOOP3("FontPropertyManager", "PreferDefaultHinting", "QFont::StyleStrategy combo"),
+        QT_TRANSLATE_NOOP3("FontPropertyManager", "PreferNoHinting", "QFont::StyleStrategy combo"),
+        QT_TRANSLATE_NOOP3("FontPropertyManager", "PreferVerticalHinting", "QFont::StyleStrategy combo"),
+        QT_TRANSLATE_NOOP3("FontPropertyManager", "PreferFullHinting", "QFont::StyleStrategy combo")
     };
 
     FontPropertyManager::FontPropertyManager()
@@ -40,8 +44,8 @@ namespace qdesigner_internal {
         for (const auto *a : aliasingC)
             m_aliasingEnumNames.append(QCoreApplication::translate("FontPropertyManager", a));
 
-        for (const auto *h : hintingPreferenceC)
-            m_hintingPreferenceEnumNames.append(QCoreApplication::translate("FontPropertyManager", h));
+        for (const auto &h : hintingPreferenceC)
+            m_hintingPreferenceEnumNames.append(QCoreApplication::translate("FontPropertyManager", h.first, h.second));
 
         QString errorMessage;
         if (!readFamilyMapping(&m_familyMappings, &errorMessage)) {
@@ -253,15 +257,25 @@ namespace qdesigner_internal {
     unsigned FontPropertyManager::fontFlag(int idx)
     {
         switch (idx) {
-        case 0: return QFont::FamilyResolved | QFont::FamiliesResolved;
-        case 1: return QFont::SizeResolved;
-        case 2: return QFont::WeightResolved;
-        case 3: return QFont::StyleResolved;
-        case 4: return QFont::UnderlineResolved;
-        case 5: return QFont::StrikeOutResolved;
-        case 6: return QFont::KerningResolved;
-        case 7: return QFont::StyleStrategyResolved;
-        case 8: return QFont::HintingPreferenceResolved;
+        case 0:
+            return QFont::FamilyResolved | QFont::FamiliesResolved;
+        case 1:
+            return QFont::SizeResolved;
+        case 2:
+        case 7:
+            return QFont::WeightResolved;
+        case 3:
+            return QFont::StyleResolved;
+        case 4:
+            return QFont::UnderlineResolved;
+        case 5:
+            return QFont::StrikeOutResolved;
+        case 6:
+            return QFont::KerningResolved;
+        case 8:
+            return QFont::StyleStrategyResolved;
+        case 9:
+            return QFont::HintingPreferenceResolved;
         }
         return 0;
     }

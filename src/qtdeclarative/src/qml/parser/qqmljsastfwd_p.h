@@ -122,12 +122,12 @@ class NestedExpression;
 class ClassExpression;
 class ClassDeclaration;
 class ClassElementList;
-class TypeArgument;
 class Type;
 class TypeAnnotation;
 
 // ui elements
 class UiProgram;
+class UiPragmaValueList;
 class UiPragma;
 class UiImport;
 class UiPublicMember;

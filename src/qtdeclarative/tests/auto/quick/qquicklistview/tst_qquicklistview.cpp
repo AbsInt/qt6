@@ -187,6 +187,7 @@ private slots:
 
     void populateTransitions();
     void populateTransitions_data();
+    void repositionFirstItemOnPopulateTransition();
     void sizeTransitions();
     void sizeTransitions_data();
 
@@ -6792,6 +6793,20 @@ void tst_QQuickListView::populateTransitions_data()
     QTest::newRow("empty to start with, no populate") << false << false << false;
 }
 
+// QTBUG-111050
+/* Reposition first visible item in list view on populate transition
+   Note: Occurs only in BottomToTop or RightToLeft layout */
+void tst_QQuickListView::repositionFirstItemOnPopulateTransition()
+{
+    QScopedPointer<QQuickView> window(createView());
+    window->setSource(testFileUrl("repositionListViewOnPopulateTransition.qml"));
+    window->show();
+    QVERIFY(QTest::qWaitForWindowExposed(window.data()));
+
+    QQuickListView *listview = qobject_cast<QQuickListView*>(window->rootObject());
+    QTRY_VERIFY(listview != nullptr);
+    QTRY_COMPARE(listview->contentY(), -100.0);
+}
 
 /*
  * Tests if the first visible item is not repositioned if the same item
@@ -9691,7 +9706,7 @@ void tst_QQuickListView::touchCancel() // QTBUG-74679
     QPoint p1(300, 300);
     QTest::touchEvent(window.data(), touchDevice).press(0, p1, window.data());
     QQuickTouchUtils::flush(window.data());
-    QTRY_VERIFY(mouseArea->pressed());
+    QTRY_VERIFY(mouseArea->isPressed());
     // and because Flickable filtered it, QQuickFlickablePrivate::pressed
     // should be true, but it's not easily tested here
 

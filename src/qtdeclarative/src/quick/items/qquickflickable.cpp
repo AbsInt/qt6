@@ -6,7 +6,6 @@
 #include "qquickflickablebehavior_p.h"
 #include "qquickwindow.h"
 #include "qquickwindow_p.h"
-#include "qquickevents_p_p.h"
 #include "qquickmousearea_p.h"
 #if QT_CONFIG(quick_draganddrop)
 #include "qquickdrag_p.h"
@@ -23,7 +22,7 @@
 #include <QtGui/private/qeventpoint_p.h>
 #include <QtGui/qstylehints.h>
 #include <QtCore/qmath.h>
-#include "qplatformdefs.h"
+#include <qpa/qplatformintegration.h>
 
 #include <math.h>
 #include <cmath>
@@ -36,10 +35,6 @@ Q_LOGGING_CATEGORY(lcFilter, "qt.quick.flickable.filter")
 Q_LOGGING_CATEGORY(lcReplay, "qt.quick.flickable.replay")
 Q_LOGGING_CATEGORY(lcWheel, "qt.quick.flickable.wheel")
 Q_LOGGING_CATEGORY(lcVel, "qt.quick.flickable.velocity")
-
-// FlickThreshold determines how far the "mouse" must have moved
-// before we perform a flick.
-static const int FlickThreshold = 15;
 
 // RetainGrabVelocity is the maxmimum instantaneous velocity that
 // will ensure the Flickable retains the grab on consecutive flicks.
@@ -254,8 +249,9 @@ QQuickFlickablePrivate::QQuickFlickablePrivate()
     , syncDrag(false)
     , lastPosTime(-1)
     , lastPressTime(0)
-    , deceleration(QML_FLICK_DEFAULTDECELERATION)
-    , maxVelocity(QML_FLICK_DEFAULTMAXVELOCITY)
+    , deceleration(QGuiApplicationPrivate::platformIntegration()->styleHint(QPlatformIntegration::FlickDeceleration).toReal())
+    , wheelDeceleration(15000)
+    , maxVelocity(QGuiApplicationPrivate::platformIntegration()->styleHint(QPlatformIntegration::FlickMaximumVelocity).toReal())
     , delayedPressEvent(nullptr), pressDelay(0), fixupDuration(400)
     , flickBoost(1.0), initialWheelFlickDistance(qApp->styleHints()->wheelScrollLines() * 24)
     , fixupMode(Normal), vTime(0), visibleArea(nullptr)
@@ -264,6 +260,9 @@ QQuickFlickablePrivate::QQuickFlickablePrivate()
     , boundsMovement(QQuickFlickable::FollowBoundsBehavior)
     , rebound(nullptr)
 {
+    const int wheelDecelerationEnv = qEnvironmentVariableIntValue("QT_QUICK_FLICKABLE_WHEEL_DECELERATION");
+    if (wheelDecelerationEnv > 0)
+        wheelDeceleration = wheelDecelerationEnv;
 }
 
 void QQuickFlickablePrivate::init()
@@ -344,20 +343,21 @@ void QQuickFlickablePrivate::itemGeometryChanged(QQuickItem *item, QQuickGeometr
     }
 }
 
-bool QQuickFlickablePrivate::flickX(qreal velocity)
+bool QQuickFlickablePrivate::flickX(QEvent::Type eventType, qreal velocity)
 {
     Q_Q(QQuickFlickable);
-    return flick(hData, q->minXExtent(), q->maxXExtent(), q->width(), fixupX_callback, velocity);
+    return flick(hData, q->minXExtent(), q->maxXExtent(), q->width(), fixupX_callback, eventType, velocity);
 }
 
-bool QQuickFlickablePrivate::flickY(qreal velocity)
+bool QQuickFlickablePrivate::flickY(QEvent::Type eventType, qreal velocity)
 {
     Q_Q(QQuickFlickable);
-    return flick(vData, q->minYExtent(), q->maxYExtent(), q->height(), fixupY_callback, velocity);
+    return flick(vData, q->minYExtent(), q->maxYExtent(), q->height(), fixupY_callback, eventType, velocity);
 }
 
 bool QQuickFlickablePrivate::flick(AxisData &data, qreal minExtent, qreal maxExtent, qreal,
-                                         QQuickTimeLineCallback::Callback fixupCallback, qreal velocity)
+                                   QQuickTimeLineCallback::Callback fixupCallback,
+                                   QEvent::Type eventType, qreal velocity)
 {
     Q_Q(QQuickFlickable);
     qreal maxDistance = -1;
@@ -379,8 +379,9 @@ bool QQuickFlickablePrivate::flick(AxisData &data, qreal minExtent, qreal maxExt
                 v = maxVelocity;
         }
 
+        qreal accel = eventType == QEvent::Wheel ? wheelDeceleration : deceleration;
+        qCDebug(lcFlickable) << "choosing deceleration" << accel << "for" << eventType;
         // adjust accel so that we hit a full pixel
-        qreal accel = deceleration;
         qreal v2 = v * v;
         qreal dist = v2 / (accel * 2.0);
         if (v > 0)
@@ -554,7 +555,7 @@ void QQuickFlickablePrivate::updateBeginningEnd()
     // Vertical
     const qreal maxyextent = -q->maxYExtent();
     const qreal minyextent = -q->minYExtent();
-    const qreal ypos = -vData.move.value();
+    const qreal ypos = pixelAligned ? -std::round(vData.move.value()) : -vData.move.value();
     bool atBeginning = fuzzyLessThanOrEqualTo(ypos, std::ceil(minyextent));
     bool atEnd = fuzzyLessThanOrEqualTo(std::floor(maxyextent), ypos);
 
@@ -574,7 +575,7 @@ void QQuickFlickablePrivate::updateBeginningEnd()
     // Horizontal
     const qreal maxxextent = -q->maxXExtent();
     const qreal minxextent = -q->minXExtent();
-    const qreal xpos = -hData.move.value();
+    const qreal xpos = pixelAligned ? -std::round(hData.move.value()) : -hData.move.value();
     atBeginning = fuzzyLessThanOrEqualTo(xpos, std::ceil(minxextent));
     atEnd = fuzzyLessThanOrEqualTo(std::floor(maxxextent), xpos);
 
@@ -1212,9 +1213,9 @@ void QQuickFlickablePrivate::drag(qint64 currentTimestamp, QEvent::Type eventTyp
             } else {
                 qreal vel = velocity.y() / QML_FLICK_OVERSHOOTFRICTION;
                 if (vel > 0. && vel > vData.velocity)
-                    vData.velocity = qMin(velocity.y() / QML_FLICK_OVERSHOOTFRICTION, float(QML_FLICK_DEFAULTMAXVELOCITY));
+                    vData.velocity = qMin(velocity.y() / QML_FLICK_OVERSHOOTFRICTION, maxVelocity);
                 else if (vel < 0. && vel < vData.velocity)
-                    vData.velocity = qMax(velocity.y() / QML_FLICK_OVERSHOOTFRICTION, -float(QML_FLICK_DEFAULTMAXVELOCITY));
+                    vData.velocity = qMax(velocity.y() / QML_FLICK_OVERSHOOTFRICTION, -maxVelocity);
                 if (newY > minY) {
                     // Overshoot beyond the top.  But don't wait for momentum phase to end before returning to bounds.
                     if (momentum && vData.atBeginning) {
@@ -1225,7 +1226,7 @@ void QQuickFlickablePrivate::drag(qint64 currentTimestamp, QEvent::Type eventTyp
                         return;
                     }
                     if (velocitySensitiveOverBounds) {
-                        qreal overshoot = (newY - minY) * vData.velocity / QML_FLICK_DEFAULTMAXVELOCITY / QML_FLICK_OVERSHOOTFRICTION;
+                        qreal overshoot = (newY - minY) * vData.velocity / maxVelocity / QML_FLICK_OVERSHOOTFRICTION;
                         overshoot = QML_FLICK_OVERSHOOT * devicePixelRatio() * EaseOvershoot(overshoot / QML_FLICK_OVERSHOOT / devicePixelRatio());
                         newY = minY + overshoot;
                     } else {
@@ -1241,7 +1242,7 @@ void QQuickFlickablePrivate::drag(qint64 currentTimestamp, QEvent::Type eventTyp
                         return;
                     }
                     if (velocitySensitiveOverBounds) {
-                        qreal overshoot = (newY - maxY) * vData.velocity / QML_FLICK_DEFAULTMAXVELOCITY / QML_FLICK_OVERSHOOTFRICTION;
+                        qreal overshoot = (newY - maxY) * vData.velocity / maxVelocity / QML_FLICK_OVERSHOOTFRICTION;
                         overshoot = QML_FLICK_OVERSHOOT * devicePixelRatio() * EaseOvershoot(overshoot / QML_FLICK_OVERSHOOT / devicePixelRatio());
                         newY = maxY - overshoot;
                     } else {
@@ -1285,9 +1286,9 @@ void QQuickFlickablePrivate::drag(qint64 currentTimestamp, QEvent::Type eventTyp
             } else {
                 qreal vel = velocity.x() / QML_FLICK_OVERSHOOTFRICTION;
                 if (vel > 0. && vel > hData.velocity)
-                    hData.velocity = qMin(velocity.x() / QML_FLICK_OVERSHOOTFRICTION, float(QML_FLICK_DEFAULTMAXVELOCITY));
+                    hData.velocity = qMin(velocity.x() / QML_FLICK_OVERSHOOTFRICTION, maxVelocity);
                 else if (vel < 0. && vel < hData.velocity)
-                    hData.velocity = qMax(velocity.x() / QML_FLICK_OVERSHOOTFRICTION, -float(QML_FLICK_DEFAULTMAXVELOCITY));
+                    hData.velocity = qMax(velocity.x() / QML_FLICK_OVERSHOOTFRICTION, -maxVelocity);
                 if (newX > minX) {
                     // Overshoot beyond the left.  But don't wait for momentum phase to end before returning to bounds.
                     if (momentum && hData.atBeginning) {
@@ -1298,7 +1299,7 @@ void QQuickFlickablePrivate::drag(qint64 currentTimestamp, QEvent::Type eventTyp
                         return;
                     }
                     if (velocitySensitiveOverBounds) {
-                        qreal overshoot = (newX - minX) * hData.velocity / QML_FLICK_DEFAULTMAXVELOCITY / QML_FLICK_OVERSHOOTFRICTION;
+                        qreal overshoot = (newX - minX) * hData.velocity / maxVelocity / QML_FLICK_OVERSHOOTFRICTION;
                         overshoot = QML_FLICK_OVERSHOOT * devicePixelRatio() * EaseOvershoot(overshoot / QML_FLICK_OVERSHOOT / devicePixelRatio());
                         newX = minX + overshoot;
                     } else {
@@ -1314,7 +1315,7 @@ void QQuickFlickablePrivate::drag(qint64 currentTimestamp, QEvent::Type eventTyp
                         return;
                     }
                     if (velocitySensitiveOverBounds) {
-                        qreal overshoot = (newX - maxX) * hData.velocity / QML_FLICK_DEFAULTMAXVELOCITY / QML_FLICK_OVERSHOOTFRICTION;
+                        qreal overshoot = (newX - maxX) * hData.velocity / maxVelocity / QML_FLICK_OVERSHOOTFRICTION;
                         overshoot = QML_FLICK_OVERSHOOT * devicePixelRatio() * EaseOvershoot(overshoot / QML_FLICK_OVERSHOOT / devicePixelRatio());
                         newX = maxX - overshoot;
                     } else {
@@ -1454,23 +1455,24 @@ void QQuickFlickablePrivate::handleReleaseEvent(QPointerEvent *event)
     }
 
     flickBoost = canBoost ? qBound(1.0, flickBoost+0.25, QML_FLICK_MULTIFLICK_MAXBOOST) : 1.0;
+    const int flickThreshold = QGuiApplicationPrivate::platformIntegration()->styleHint(QPlatformIntegration::FlickStartDistance).toInt();
 
     bool flickedVertically = false;
     vVelocity *= flickBoost;
-    bool isVerticalFlickAllowed = q->yflick() && qAbs(vVelocity) > _q_MinimumFlickVelocity && qAbs(pos.y() - pressPos.y()) > FlickThreshold;
+    bool isVerticalFlickAllowed = q->yflick() && qAbs(vVelocity) > _q_MinimumFlickVelocity && qAbs(pos.y() - pressPos.y()) > flickThreshold;
     if (isVerticalFlickAllowed) {
         velocityTimeline.reset(vData.smoothVelocity);
         vData.smoothVelocity.setValue(-vVelocity);
-        flickedVertically = flickY(vVelocity);
+        flickedVertically = flickY(event->type(), vVelocity);
     }
 
     bool flickedHorizontally = false;
     hVelocity *= flickBoost;
-    bool isHorizontalFlickAllowed = q->xflick() && qAbs(hVelocity) > _q_MinimumFlickVelocity && qAbs(pos.x() - pressPos.x()) > FlickThreshold;
+    bool isHorizontalFlickAllowed = q->xflick() && qAbs(hVelocity) > _q_MinimumFlickVelocity && qAbs(pos.x() - pressPos.x()) > flickThreshold;
     if (isHorizontalFlickAllowed) {
         velocityTimeline.reset(hData.smoothVelocity);
         hData.smoothVelocity.setValue(-hVelocity);
-        flickedHorizontally = flickX(hVelocity);
+        flickedHorizontally = flickX(event->type(), hVelocity);
     }
 
     if (!isVerticalFlickAllowed)
@@ -1657,47 +1659,110 @@ void QQuickFlickable::wheelEvent(QWheelEvent *event)
         // no pixel delta (physical mouse wheel, or "dumb" touchpad), so use angleDelta
         int xDelta = event->angleDelta().x();
         int yDelta = event->angleDelta().y();
-        // For a single "clicky" wheel event (angleDelta +/- 120),
-        // we want flick() to end up moving a distance proportional to QStyleHints::wheelScrollLines().
-        // The decel algo from there is
-        // qreal dist = v2 / (accel * 2.0);
-        // i.e. initialWheelFlickDistance = (120 / dt)^2 / (deceleration * 2)
-        // now solve for dt:
-        // dt = 120 / sqrt(deceleration * 2 * initialWheelFlickDistance)
-        if (!isMoving())
-            elapsed = 120 / qSqrt(d->deceleration * 2 * d->initialWheelFlickDistance);
-        if (yflick() && yDelta != 0) {
-            qreal instVelocity = yDelta / elapsed;
-            // if the direction has changed, start over with filtering, to allow instant movement in the opposite direction
-            if ((instVelocity < 0 && d->vData.velocity > 0) || (instVelocity > 0 && d->vData.velocity < 0))
-                d->vData.velocityBuffer.clear();
-            d->vData.addVelocitySample(instVelocity, d->maxVelocity);
-            d->vData.updateVelocity();
-            if ((yDelta > 0 && contentY() > -minYExtent()) || (yDelta < 0 && contentY() < -maxYExtent())) {
-                const bool newFlick = d->flickY(d->vData.velocity);
-                if (newFlick && (d->vData.atBeginning != (yDelta > 0) || d->vData.atEnd != (yDelta < 0))) {
-                    d->flickingStarted(false, true);
-                    d->vMoved = true;
+
+        if (d->wheelDeceleration > _q_MaximumWheelDeceleration) {
+            const qreal wheelScroll = -qApp->styleHints()->wheelScrollLines() * 24;
+            // If wheelDeceleration is very large, i.e. the user or the platform does not want to have any mouse wheel
+            // acceleration behavior, we want to move a distance proportional to QStyleHints::wheelScrollLines()
+            if (yflick() && yDelta != 0) {
+                d->moveReason = QQuickFlickablePrivate::Mouse; // ItemViews will set fixupMode to Immediate in fixup() without this.
+                d->vMoved = true;
+                qreal scrollPixel = (-yDelta / 120.0 * wheelScroll);
+                if (d->boundsBehavior == QQuickFlickable::StopAtBounds) {
+                    const qreal estContentPos = scrollPixel + d->vData.move.value();
+                    if (scrollPixel > 0) { // Forward direction (away from user)
+                        if (d->vData.move.value() >= minYExtent())
+                            d->vMoved = false;
+                        else if (estContentPos > minYExtent())
+                            scrollPixel = minYExtent() - d->vData.move.value();
+                    } else { // Backward direction (towards user)
+                        if (d->vData.move.value() <= maxYExtent())
+                            d->vMoved = false;
+                        else if (estContentPos < maxYExtent())
+                            scrollPixel = maxYExtent() - d->vData.move.value();
+                    }
+                }
+                if (d->vMoved) {
+                    d->resetTimeline(d->vData);
                     movementStarting();
+                    d->timeline.moveBy(d->vData.move, scrollPixel, QEasingCurve(QEasingCurve::OutExpo), 3*d->fixupDuration/4);
+                    d->vData.fixingUp = true;
+                    d->timeline.callback(QQuickTimeLineCallback(&d->vData.move, QQuickFlickablePrivate::fixupY_callback, d));
                 }
                 event->accept();
             }
-        }
-        if (xflick() && xDelta != 0) {
-            qreal instVelocity = xDelta / elapsed;
-            // if the direction has changed, start over with filtering, to allow instant movement in the opposite direction
-            if ((instVelocity < 0 && d->hData.velocity > 0) || (instVelocity > 0 && d->hData.velocity < 0))
-                d->hData.velocityBuffer.clear();
-            d->hData.addVelocitySample(instVelocity, d->maxVelocity);
-            d->hData.updateVelocity();
-            if ((xDelta > 0 && contentX() > -minXExtent()) || (xDelta < 0 && contentX() < -maxXExtent())) {
-                const bool newFlick = d->flickX(d->hData.velocity);
-                if (newFlick && (d->hData.atBeginning != (xDelta > 0) || d->hData.atEnd != (xDelta < 0))) {
-                    d->flickingStarted(true, false);
-                    d->hMoved = true;
+            if (xflick() && xDelta != 0) {
+                d->moveReason = QQuickFlickablePrivate::Mouse; // ItemViews will set fixupMode to Immediate in fixup() without this.
+                d->hMoved = true;
+                qreal scrollPixel = (-xDelta / 120.0 * wheelScroll);
+                if (d->boundsBehavior == QQuickFlickable::StopAtBounds) {
+                    const qreal estContentPos = scrollPixel + d->hData.move.value();
+                    if (scrollPixel > 0) { // Forward direction (away from user)
+                        if (d->hData.move.value() >= minXExtent())
+                            d->hMoved = false;
+                        else if (estContentPos > minXExtent())
+                            scrollPixel = minXExtent() - d->hData.move.value();
+                    } else { // Backward direction (towards user)
+                        if (d->hData.move.value() <= maxXExtent())
+                            d->hMoved = false;
+                        else if (estContentPos < maxXExtent())
+                            scrollPixel = maxXExtent() - d->hData.move.value();
+                    }
+                }
+                if (d->hMoved) {
+                    d->resetTimeline(d->hData);
                     movementStarting();
+                    d->timeline.moveBy(d->hData.move, scrollPixel, QEasingCurve(QEasingCurve::OutExpo), 3*d->fixupDuration/4);
+                    d->hData.fixingUp = true;
+                    d->timeline.callback(QQuickTimeLineCallback(&d->hData.move, QQuickFlickablePrivate::fixupX_callback, d));
                 }
                 event->accept();
+            }
+        } else {
+            // wheelDeceleration is set to some reasonable value: the user or the platform wants to have
+            // the classic Qt Quick mouse wheel acceleration behavior.
+            // For a single "clicky" wheel event (angleDelta +/- 120),
+            // we want flick() to end up moving a distance proportional to QStyleHints::wheelScrollLines().
+            // The decel algo from there is
+            // qreal dist = v2 / (accel * 2.0);
+            // i.e. initialWheelFlickDistance = (120 / dt)^2 / (deceleration * 2)
+            // now solve for dt:
+            // dt = 120 / sqrt(deceleration * 2 * initialWheelFlickDistance)
+            if (!isMoving())
+                elapsed = 120 / qSqrt(d->wheelDeceleration * 2 * d->initialWheelFlickDistance);
+            if (yflick() && yDelta != 0) {
+                qreal instVelocity = yDelta / elapsed;
+                // if the direction has changed, start over with filtering, to allow instant movement in the opposite direction
+                if ((instVelocity < 0 && d->vData.velocity > 0) || (instVelocity > 0 && d->vData.velocity < 0))
+                    d->vData.velocityBuffer.clear();
+                d->vData.addVelocitySample(instVelocity, d->maxVelocity);
+                d->vData.updateVelocity();
+                if ((yDelta > 0 && contentY() > -minYExtent()) || (yDelta < 0 && contentY() < -maxYExtent())) {
+                    const bool newFlick = d->flickY(event->type(), d->vData.velocity);
+                    if (newFlick && (d->vData.atBeginning != (yDelta > 0) || d->vData.atEnd != (yDelta < 0))) {
+                        d->flickingStarted(false, true);
+                        d->vMoved = true;
+                        movementStarting();
+                    }
+                    event->accept();
+                }
+            }
+            if (xflick() && xDelta != 0) {
+                qreal instVelocity = xDelta / elapsed;
+                // if the direction has changed, start over with filtering, to allow instant movement in the opposite direction
+                if ((instVelocity < 0 && d->hData.velocity > 0) || (instVelocity > 0 && d->hData.velocity < 0))
+                    d->hData.velocityBuffer.clear();
+                d->hData.addVelocitySample(instVelocity, d->maxVelocity);
+                d->hData.updateVelocity();
+                if ((xDelta > 0 && contentX() > -minXExtent()) || (xDelta < 0 && contentX() < -maxXExtent())) {
+                    const bool newFlick = d->flickX(event->type(), d->hData.velocity);
+                    if (newFlick && (d->hData.atBeginning != (xDelta > 0) || d->hData.atEnd != (xDelta < 0))) {
+                        d->flickingStarted(true, false);
+                        d->hMoved = true;
+                        movementStarting();
+                    }
+                    event->accept();
+                }
             }
         }
     } else {
@@ -2028,7 +2093,7 @@ void QQuickFlickable::geometryChange(const QRectF &newGeometry, const QRectF &ol
     Flicks the content with \a xVelocity horizontally and \a yVelocity vertically in pixels/sec.
 
     Calling this method will update the corresponding moving and flicking properties and signals,
-    just like a real flick.
+    just like a real touchscreen flick.
 */
 
 void QQuickFlickable::flick(qreal xVelocity, qreal yVelocity)
@@ -2040,8 +2105,8 @@ void QQuickFlickable::flick(qreal xVelocity, qreal yVelocity)
     d->vData.velocity = yVelocity;
     d->hData.vTime = d->vData.vTime = d->timeline.time();
 
-    const bool flickedX = xflick() && !qFuzzyIsNull(xVelocity) && d->flickX(xVelocity);
-    const bool flickedY = yflick() && !qFuzzyIsNull(yVelocity) && d->flickY(yVelocity);
+    const bool flickedX = xflick() && !qFuzzyIsNull(xVelocity) && d->flickX(QEvent::TouchUpdate, xVelocity);
+    const bool flickedY = yflick() && !qFuzzyIsNull(yVelocity) && d->flickY(QEvent::TouchUpdate, yVelocity);
 
     if (flickedX)
         d->hMoved = true;
@@ -2752,21 +2817,10 @@ void QQuickFlickable::setMaximumFlickVelocity(qreal v)
     \qmlproperty real QtQuick::Flickable::flickDeceleration
     This property holds the rate at which a flick will decelerate:
     the higher the number, the faster it slows down when the user stops
-    flicking via touch, touchpad or mouse wheel. For example 0.0001 is nearly
+    flicking via touch. For example 0.0001 is nearly
     "frictionless", and 10000 feels quite "sticky".
 
     The default value is platform dependent. Values of zero or less are not allowed.
-
-    \note For touchpad flicking, some platforms drive Flickable directly by
-    sending QWheelEvents with QWheelEvent::phase() being \c Qt::ScrollMomentum,
-    after the user has released all fingers from the touchpad. In that case,
-    the operating system is controlling the deceleration, and this property has
-    no effect.
-
-    \note For mouse wheel scrolling, and for gesture scrolling on touchpads
-    that do not have a momentum phase, extremely large values of
-    flickDeceleration can make Flickable very resistant to scrolling,
-    especially if \l maximumFlickVelocity is too small.
 */
 qreal QQuickFlickable::flickDeceleration() const
 {

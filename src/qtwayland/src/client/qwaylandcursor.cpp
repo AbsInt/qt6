@@ -1,4 +1,5 @@
 // Copyright (C) 2016 The Qt Company Ltd.
+// Copyright (C) 2023 David Edmundson <davidedmundson@kde.org>
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "qwaylandcursor_p.h"
@@ -206,6 +207,77 @@ wl_cursor *QWaylandCursorTheme::requestCursor(WaylandCursor shape)
     return waylandCursor;
 }
 
+QWaylandCursorShape::QWaylandCursorShape(::wp_cursor_shape_device_v1 *object)
+    : QtWayland::wp_cursor_shape_device_v1(object)
+{}
+
+QWaylandCursorShape::~QWaylandCursorShape()
+{
+    destroy();
+}
+
+static QtWayland::wp_cursor_shape_device_v1::shape qtCursorShapeToWaylandShape(Qt::CursorShape cursorShape)
+{
+    using QtWayland::wp_cursor_shape_device_v1;
+
+    switch (cursorShape) {
+    case Qt::BlankCursor:
+    case Qt::CustomCursor:
+    case Qt::BitmapCursor:
+        // these should have been handled separately before using the shape protocol
+        Q_ASSERT(false);
+        break;
+    case Qt::ArrowCursor:
+        return wp_cursor_shape_device_v1::shape_default;
+    case Qt::SizeVerCursor:
+        return wp_cursor_shape_device_v1::shape_ns_resize;
+    case Qt::UpArrowCursor:
+        return wp_cursor_shape_device_v1::shape_n_resize;
+    case Qt::SizeHorCursor:
+        return wp_cursor_shape_device_v1::shape_ew_resize;
+    case Qt::CrossCursor:
+        return wp_cursor_shape_device_v1::shape_crosshair;
+    case Qt::SizeBDiagCursor:
+        return wp_cursor_shape_device_v1::shape_nesw_resize;
+    case Qt::IBeamCursor:
+        return wp_cursor_shape_device_v1::shape_text;
+    case Qt::SizeFDiagCursor:
+        return wp_cursor_shape_device_v1::shape_nwse_resize;
+    case Qt::WaitCursor:
+        return wp_cursor_shape_device_v1::shape_progress;
+    case Qt::SizeAllCursor:
+        return wp_cursor_shape_device_v1::shape_all_scroll;
+    case Qt::BusyCursor:
+        return wp_cursor_shape_device_v1::shape_wait;
+    case Qt::SplitVCursor:
+        return wp_cursor_shape_device_v1::shape_row_resize;
+    case Qt::ForbiddenCursor:
+        return wp_cursor_shape_device_v1::shape_not_allowed;
+    case Qt::SplitHCursor:
+        return wp_cursor_shape_device_v1::shape_col_resize;
+    case Qt::PointingHandCursor:
+        return wp_cursor_shape_device_v1::shape_pointer;
+    case Qt::OpenHandCursor:
+        return wp_cursor_shape_device_v1::shape_grab;
+    case Qt::WhatsThisCursor:
+        return wp_cursor_shape_device_v1::shape_help;
+    case Qt::ClosedHandCursor:
+        return wp_cursor_shape_device_v1::shape_grabbing;
+    case Qt::DragMoveCursor:
+    case Qt::DragCopyCursor:
+    case Qt::DragLinkCursor:
+        // drags on wayland are different, the compositor knows
+        // the drag type and can do something custom
+        return wp_cursor_shape_device_v1::shape_grab;
+    }
+    return wp_cursor_shape_device_v1::shape_default;
+}
+
+void QWaylandCursorShape::setShape(uint32_t serial, Qt::CursorShape shape)
+{
+    set_shape(serial, qtCursorShapeToWaylandShape(shape));
+}
+
 QWaylandCursor::QWaylandCursor(QWaylandDisplay *display)
     : mDisplay(display)
 {
@@ -214,7 +286,21 @@ QWaylandCursor::QWaylandCursor(QWaylandDisplay *display)
 QSharedPointer<QWaylandBuffer> QWaylandCursor::cursorBitmapBuffer(QWaylandDisplay *display, const QCursor *cursor)
 {
     Q_ASSERT(cursor->shape() == Qt::BitmapCursor);
-    const QImage &img = cursor->pixmap().toImage();
+    QImage img = !cursor->pixmap().isNull() ? cursor->pixmap().toImage() : cursor->bitmap().toImage();
+
+    // convert to supported format if necessary
+    if (!display->shm()->formatSupported(img.format())) {
+        if (cursor->mask().isNull()) {
+            img.convertTo(QImage::Format_RGB32);
+        } else {
+            // preserve mask
+            img.convertTo(QImage::Format_ARGB32);
+            QPixmap pixmap = QPixmap::fromImage(img);
+            pixmap.setMask(cursor->mask());
+            img = pixmap.toImage();
+        }
+    }
+
     QSharedPointer<QWaylandShmBuffer> buffer(new QWaylandShmBuffer(display, img.size(), img.format()));
     memcpy(buffer->image()->bits(), img.bits(), size_t(img.sizeInBytes()));
     return buffer;

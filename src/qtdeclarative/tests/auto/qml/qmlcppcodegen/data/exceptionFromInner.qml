@@ -1,4 +1,4 @@
-
+pragma Strict
 import QtQml
 
 QtObject {

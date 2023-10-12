@@ -1,12 +1,13 @@
 // Copyright (C) 2021 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
-#include "qqmllanguageserver.h"
+
+#include <QtQmlLS/private/qqmllanguageserver_p.h>
 #include <QtCore/qdebug.h>
 #include <QtCore/qfile.h>
 #include <QtCore/qdir.h>
 #include <QtCore/qfileinfo.h>
 #include <QtCore/qcoreapplication.h>
-#include "../shared/qqmltoolingsettings.h"
+#include <QtQmlToolingSettings/private/qqmltoolingsettings_p.h>
 #include <QtCore/qdiriterator.h>
 #include <QtCore/qjsonobject.h>
 #include <QtCore/qjsonarray.h>
@@ -131,7 +132,7 @@ int main(int argv, char *argc[])
     QCoreApplication app(argv, argc);
     QCoreApplication::setApplicationName("qmlls");
     QCoreApplication::setApplicationVersion(QT_VERSION_STR);
-#if QT_CONFIG(commandlineparser)
+
     QCommandLineParser parser;
     QQmlToolingSettings settings(QLatin1String("qmlls"));
     parser.setApplicationDescription(QLatin1String(R"(QML languageserver)"));
@@ -203,7 +204,6 @@ int main(int argv, char *argc[])
         QThread::sleep(waitSeconds);
         qDebug() << "starting";
     }
-#endif
     QMutex writeMutex;
     QQmlLanguageServer qmlServer(
             [&writeMutex](const QByteArray &data) {
@@ -212,8 +212,50 @@ int main(int argv, char *argc[])
                 std::cout.flush();
             },
             (parser.isSet(ignoreSettings) ? nullptr : &settings));
-    if (parser.isSet(buildDirOption))
-        qmlServer.codeModel()->setBuildPathsForRootUrl(QByteArray(), parser.values(buildDirOption));
+
+    const QStringList envPaths =
+            qEnvironmentVariable("QMLLS_BUILD_DIRS").split(u',', Qt::SkipEmptyParts);
+    for (const QString &envPath : envPaths) {
+        QFileInfo info(envPath);
+        if (!info.exists()) {
+            qWarning() << "Argument" << buildDir << "passed via QMLLS_BUILD_DIRS does not exist.";
+        } else if (!info.isDir()) {
+            qWarning() << "Argument" << buildDir
+                       << "passed via QMLLS_BUILD_DIRS is not a directory.";
+        }
+    }
+
+    QStringList buildDirs;
+    if (parser.isSet(buildDirOption)) {
+        buildDirs = parser.values(buildDirOption);
+        for (const QString &buildDir : buildDirs) {
+            QFileInfo info(buildDir);
+            if (!info.exists()) {
+                qWarning() << "Argument" << buildDir << "passed to --build-dir does not exist.";
+            } else if (!info.isDir()) {
+                qWarning() << "Argument" << buildDir << "passed to --build-dir is not a directory.";
+            }
+        }
+        qmlServer.codeModel()->setBuildPathsForRootUrl(QByteArray(), buildDirs);
+    }
+
+    if (!buildDirs.isEmpty()) {
+        qInfo() << "Using the build directories passed via the --build-dir option:"
+                << buildDirs.join(", ");
+    } else if (!envPaths.isEmpty()) {
+        qInfo() << "Using the build directories passed via the QMLLS_BUILD_DIRS environment "
+                   "variable"
+                << buildDirs.join(", ");
+    } else {
+        qInfo() << "Using the build directories found in the .qmlls.ini file. Your build folder "
+                   "might not be found if no .qmlls.ini files are present in the root source "
+                   "folder.";
+    }
+
+    if (buildDirs.isEmpty() && envPaths.isEmpty()) {
+        qInfo() << "Build directory path omitted: Your source folders will be searched for "
+                   ".qmlls.ini files.";
+    }
     StdinReader r;
     QObject::connect(&r, &StdinReader::receivedData,
                      qmlServer.server(), &QLanguageServer::receiveData);

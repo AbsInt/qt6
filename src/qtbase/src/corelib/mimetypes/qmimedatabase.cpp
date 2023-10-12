@@ -190,7 +190,7 @@ QMimeType QMimeDatabasePrivate::mimeTypeForName(const QString &nameOrAlias)
 {
     const QString mimeName = resolveAlias(nameOrAlias);
     for (const auto &provider : providers()) {
-        const QMimeType mime = provider->mimeTypeForName(mimeName);
+        QMimeType mime = provider->mimeTypeForName(mimeName);
         if (mime.isValid())
             return mime;
     }
@@ -560,7 +560,7 @@ bool QMimeDatabasePrivate::inherits(const QString &mime, const QString &parent)
 
     \snippet code/src_corelib_mimetype_qmimedatabase.cpp 0
 
-    \sa QMimeType, {MIME Type Browser Example}
+    \sa QMimeType, {MIME Type Browser}
  */
 
 /*!

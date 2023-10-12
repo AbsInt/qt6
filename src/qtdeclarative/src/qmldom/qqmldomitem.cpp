@@ -1,5 +1,7 @@
 // Copyright (C) 2020 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+#include "qqmldomitem_p.h"
+#include "qqmldompath_p.h"
 #include "qqmldomtop_p.h"
 #include "qqmldomelements_p.h"
 #include "qqmldomexternalitems_p.h"
@@ -11,6 +13,7 @@
 #include "qqmldomcompare_p.h"
 #include "qqmldomastdumper_p.h"
 #include "qqmldomlinewriter_p.h"
+#include "qqmldom_utils_p.h"
 
 #include <QtQml/private/qqmljslexer_p.h>
 #include <QtQml/private/qqmljsparser_p.h>
@@ -31,16 +34,9 @@
 #include <QtCore/QRegularExpression>
 #include <QtCore/QScopeGuard>
 #include <QtCore/QtGlobal>
-#if QT_VERSION < QT_VERSION_CHECK(6, 5, 0)
-namespace {
-static constexpr auto UTC = Qt::UTC;
-}
-#else
 #include <QtCore/QTimeZone>
-namespace {
-static constexpr auto UTC = QTimeZone::UTC;
-}
-#endif
+#include <optional>
+#include <type_traits>
 
 QT_BEGIN_NAMESPACE
 
@@ -49,6 +45,37 @@ namespace Dom {
 
 Q_LOGGING_CATEGORY(writeOutLog, "qt.qmldom.writeOut", QtWarningMsg);
 static Q_LOGGING_CATEGORY(refLog, "qt.qmldom.ref", QtWarningMsg);
+
+template<class... TypeList>
+struct CheckDomElementT;
+
+template<class... Ts>
+struct CheckDomElementT<std::variant<Ts...>> : std::conjunction<IsInlineDom<Ts>...>
+{
+};
+
+/*!
+   \internal
+   \class QQmljs::Dom::ElementT
+
+   \brief A variant that contains all the Dom elements that an DomItem can contain.
+
+   Types in this variant are divided in two categories: normal Dom elements and internal Dom
+   elements.
+   The first ones are inheriting directly or indirectly from DomBase, and are the usual elements
+   that a DomItem can wrap around, like a QmlFile or an QmlObject. They should all appear in
+   ElementT as pointers, e.g. QmlFile*.
+   The internal Dom elements are a little bit special. They appear in ElementT without pointer, do
+   not inherit from DomBase \b{but} should behave like a smart DomBase-pointer. That is, they should
+   dereference as if they were a DomBase* pointing to a normal DomElement by implementing
+   operator->() and operator*().
+   Adding types here that are neither inheriting from DomBase nor implementing a smartpointer to
+   DomBase will throw compilation errors in the std::visit()-calls on this type.
+*/
+static_assert(CheckDomElementT<ElementT>::value,
+              "Types in ElementT must either be a pointer to a class inheriting "
+              "from DomBase or (for internal Dom structures) implement a smart "
+              "pointer pointing to a class inheriting from DomBase");
 
 using std::shared_ptr;
 /*!
@@ -68,17 +95,36 @@ The subclass *must* have a
 \endcode
 entry with its kind to enable casting usng the DomItem::as DomItem::ownerAs templates.
 
-The minimal overload set to be usable is:
+The minimal overload set to be usable consists of following methods:
+\list
+\li \c{kind()} returns the kind of the current element:
 \code
-    Kind kind() const override {  return kindValue; } // returns the kind of the current element
-    Path pathFromOwner(DomItem &self) const override; // returns the path from the owner to the
-current element Path canonicalPath(DomItem &self) const override; // returns the path from virtual
-bool iterateDirectSubpaths(DomItem &self, function_ref<bool(Path, DomItem)>) const = 0; // iterates
-the *direct* subpaths, returns false if a quick end was requested \endcode But you probably want to
-subclass either DomElement of OwningItem for your element. DomElement stores its pathFromOwner, and
-computes the canonicalPath from it and its owner. OwningItem is the unit for updates to the Dom
-model, exposed changes always change at least one OwningItem. They have their lifetime handled with
-shared_ptr and own (i.e. are responsible of freeing) other items in them.
+    Kind kind() const override {  return kindValue; }
+\endcode
+
+\li \c{pathFromOwner()} returns the path from the owner to the current element
+\code
+    Path pathFromOwner(DomItem &self) const override;
+\endcode
+
+\li \c{canonicalPath()} returns the path
+\code
+    Path canonicalPath(DomItem &self) const override;
+\endcode
+
+\li \c{iterateDirectSubpaths} iterates the *direct* subpaths/children and returns false if a quick
+end was requested:
+\code
+bool iterateDirectSubpaths(DomItem &self, function_ref<bool(Path, DomItem)>) const = 0;
+\endcode
+
+\endlist
+
+But you probably want to subclass either \c DomElement or \c OwningItem for your element. \c
+DomElement stores its \c pathFromOwner, and computes the \c canonicalPath from it and its owner. \c
+OwningItem is the unit for updates to the Dom model, exposed changes always change at least one \c
+OwningItem. They have their lifetime handled with \c shared_ptr and own (i.e. are responsible of
+freeing) other items in them.
 
 \sa QQml::Dom::DomItem, QQml::Dom::DomElement, QQml::Dom::OwningItem
 */
@@ -311,6 +357,33 @@ It does not keep any pointers to internal elements, but rather the path to them,
 it every time it needs.
 */
 
+FileToLoad::FileToLoad(const std::weak_ptr<DomEnvironment> &environment,
+                       const QString &canonicalPath, const QString &logicalPath,
+                       std::optional<InMemoryContents> content, DomCreationOptions options)
+    : m_environment(environment),
+      m_canonicalPath(canonicalPath),
+      m_logicalPath(logicalPath),
+      m_content(content),
+      m_options(options)
+{
+}
+
+FileToLoad FileToLoad::fromMemory(const std::weak_ptr<DomEnvironment> &environment,
+                                  const QString &path, const QString &code,
+                                  DomCreationOptions options)
+{
+    const QString canonicalPath = QFileInfo(path).canonicalFilePath();
+    return { environment, canonicalPath, path, InMemoryContents{ code }, options };
+}
+
+FileToLoad FileToLoad::fromFileSystem(const std::weak_ptr<DomEnvironment> &environment,
+                                      const QString &path, DomCreationOptions options)
+{
+    // make the path canonical so the file content can be loaded from it later
+    const QString canonicalPath = QFileInfo(path).canonicalFilePath();
+    return { environment, canonicalPath, path, std::nullopt, options };
+}
+
 ErrorGroup DomItem::domErrorGroup = NewErrorGroup("Dom");
 DomItem DomItem::empty = DomItem();
 
@@ -342,6 +415,12 @@ DomItem DomItem::containingObject()
     return visitEl([this](auto &&el) { return el->containingObject(*this); });
 }
 
+/*!
+   \internal
+   \brief Returns the QmlObject that this belongs to.
+
+   qmlObject() might also return the object of a component if GoTo:MostLikely is used.
+ */
 DomItem DomItem::qmlObject(GoTo options, FilterUpOptions filterOptions)
 {
     if (DomItem res = filterUp([](DomType k, DomItem &) { return k == DomType::QmlObject; },
@@ -412,6 +491,10 @@ DomItem DomItem::globalScope()
     return DomItem();
 }
 
+/*!
+   \internal
+   \brief The owner of an element, for an qmlObject this is the containing qml file.
+ */
 DomItem DomItem::owner()
 {
     if (domTypeIsOwningItem(m_kind) || m_kind == DomType::Empty)
@@ -444,6 +527,52 @@ DomItem DomItem::universe()
     if (res.internalKind() == DomType::DomEnvironment)
         return res.field(Fields::universe);
     return DomItem(); // we should be in an empty DomItem already...
+}
+
+/*!
+   \internal
+   Shorthand to obtain the QmlFile DomItem, in which this DomItem is defined.
+   Returns an empty DomItem if the item is not defined in a QML file.
+   \sa goToFile()
+ */
+DomItem DomItem::containingFile()
+{
+    if (DomItem res = filterUp([](DomType k, DomItem &) { return k == DomType::QmlFile; },
+                               FilterUpOptions::ReturnOuter))
+        return res;
+    return DomItem();
+}
+
+/*!
+   \internal
+   Shorthand to obtain the QmlFile DomItem from a canonicalPath.
+   \sa containingFile()
+ */
+DomItem DomItem::goToFile(const QString &canonicalPath)
+{
+    Q_UNUSED(canonicalPath);
+    DomItem file =
+            top().field(Fields::qmlFileWithPath).key(canonicalPath).field(Fields::currentItem);
+    return file;
+}
+
+/*!
+   \internal
+   In the DomItem hierarchy, go \c n levels up.
+ */
+DomItem DomItem::goUp(int n)
+{
+    DomItem parent = owner().path(pathFromOwner().dropTail(n));
+    return parent;
+}
+
+/*!
+   \internal
+   In the DomItem hierarchy, go 1 level up to get the direct parent.
+ */
+DomItem DomItem::directParent()
+{
+    return goUp(1);
 }
 
 DomItem DomItem::filterUp(function_ref<bool(DomType k, DomItem &)> filter, FilterUpOptions options)
@@ -510,6 +639,34 @@ DomItem DomItem::scope(FilterUpOptions options)
 {
     DomItem res = filterUp([](DomType, DomItem &el) { return el.isScope(); }, options);
     return res;
+}
+
+std::optional<QQmlJSScope::Ptr> DomItem::nearestSemanticScope()
+{
+    std::optional<QQmlJSScope::Ptr> scope;
+    visitUp([&scope](DomItem &item) {
+        scope = item.semanticScope();
+        return !scope; // stop when scope was true
+    });
+    return scope;
+}
+
+std::optional<QQmlJSScope::Ptr> DomItem::semanticScope()
+{
+    std::optional<QQmlJSScope::Ptr> scope = std::visit(
+            [](auto &&e) -> std::optional<QQmlJSScope::Ptr> {
+                using T = std::remove_cv_t<std::remove_reference_t<decltype(e)>>;
+                if constexpr (std::is_same_v<T, QmlObject *>) {
+                    return e->semanticScope();
+                } else if constexpr (std::is_same_v<T, QmlComponent *>) {
+                    return e->semanticScope();
+                } else if constexpr (std::is_same_v<T, ScriptElementDomWrapper>) {
+                    return e.element().base()->semanticScope();
+                }
+                return {};
+            },
+            m_element);
+    return scope;
 }
 
 DomItem DomItem::get(ErrorHandler h, QList<Path> *visitedRefs)
@@ -1217,13 +1374,15 @@ DomItem DomItem::writeOut(QString path, int nBackups, const LineWriterOptions &o
 
 bool DomItem::isCanonicalChild(DomItem &item)
 {
+    bool isChild = false;
     if (item.isOwningItem()) {
-        return canonicalPath() == item.canonicalPath().dropTail();
+        isChild = canonicalPath() == item.canonicalPath().dropTail();
     } else {
         DomItem itemOw = item.owner();
         DomItem selfOw = owner();
-        return itemOw == selfOw && item.pathFromOwner().dropTail() == pathFromOwner();
+        isChild = itemOw == selfOw && item.pathFromOwner().dropTail() == pathFromOwner();
     }
+    return isChild;
 }
 
 bool DomItem::hasAnnotations()
@@ -1257,6 +1416,23 @@ bool DomItem::hasAnnotations()
     return hasAnnotations;
 }
 
+/*!
+    \internal
+    \brief Visits recursively all the children of this item using the given visitors.
+
+    First, the visitor is called and can continue or exit the visit by returning true or false.
+
+    Second, the openingVisitor is called and controls if the children of the current item needs to
+   be visited or not by returning true or false. In either case, the visitation of all the other
+   siblings is not affected. If both visitor and openingVisitor returned true, then the childrens of
+   the current item will be recursively visited.
+
+    Finally, after all the children were visited by visitor and openingVisitor, the closingVisitor
+   is called. Its return value is currently ignored.
+
+    Compared to the AST::Visitor*, openingVisitor and closingVisitor are called in the same order as
+   the visit() and endVisit()-calls.
+ */
 bool DomItem::visitTree(Path basePath, DomItem::ChildrenVisitor visitor, VisitOptions options,
                         DomItem::ChildrenVisitor openingVisitor,
                         DomItem::ChildrenVisitor closingVisitor)
@@ -1265,10 +1441,13 @@ bool DomItem::visitTree(Path basePath, DomItem::ChildrenVisitor visitor, VisitOp
         return true;
     if (options & VisitOption::VisitSelf && !visitor(basePath, *this, true))
         return false;
-    if (!openingVisitor(basePath, *this, true))
+    if (options & VisitOption::VisitSelf && !openingVisitor(basePath, *this, true))
         return true;
-    auto atEnd = qScopeGuard(
-            [closingVisitor, basePath, this]() { closingVisitor(basePath, *this, true); });
+    auto atEnd = qScopeGuard([closingVisitor, basePath, this, options]() {
+        if (options & VisitOption::VisitSelf) {
+            closingVisitor(basePath, *this, true);
+        }
+    });
     return visitEl([this, basePath, visitor, openingVisitor, closingVisitor, options](auto &&el) {
         return el->iterateDirectSubpathsConst(
                 *this,
@@ -1299,6 +1478,70 @@ bool DomItem::visitTree(Path basePath, DomItem::ChildrenVisitor visitor, VisitOp
                     return true;
                 });
     });
+}
+static bool visitPrototypeIndex(QList<DomItem> &toDo, DomItem &current,
+                                DomItem &derivedFromPrototype, ErrorHandler h,
+                                QList<Path> *visitedRefs, VisitPrototypesOptions options,
+                                DomItem &prototype)
+{
+    Path elId = prototype.canonicalPath();
+    if (visitedRefs->contains(elId))
+        return true;
+    else
+        visitedRefs->append(elId);
+    QList<DomItem> protos = prototype.getAll(h, visitedRefs);
+    if (protos.isEmpty()) {
+        if (std::shared_ptr<DomEnvironment> envPtr =
+                    derivedFromPrototype.environment().ownerAs<DomEnvironment>())
+            if (!(envPtr->options() & DomEnvironment::Option::NoDependencies))
+                derivedFromPrototype.myErrors()
+                        .warning(derivedFromPrototype.tr("could not resolve prototype %1 (%2)")
+                                         .arg(current.canonicalPath().toString(),
+                                              prototype.field(Fields::referredObjectPath)
+                                                      .value()
+                                                      .toString()))
+                        .withItem(derivedFromPrototype)
+                        .handle(h);
+    } else {
+        if (protos.size() > 1) {
+            QStringList protoPaths;
+            for (DomItem &p : protos)
+                protoPaths.append(p.canonicalPath().toString());
+            derivedFromPrototype.myErrors()
+                    .warning(derivedFromPrototype
+                                     .tr("Multiple definitions found, using first only, resolving "
+                                         "prototype %1 (%2): %3")
+                                     .arg(current.canonicalPath().toString(),
+                                          prototype.field(Fields::referredObjectPath)
+                                                  .value()
+                                                  .toString(),
+                                          protoPaths.join(QLatin1String(", "))))
+                    .withItem(derivedFromPrototype)
+                    .handle(h);
+        }
+        int nProtos = 1; // change to protos.length() to use all prototypes
+        // (sloppier)
+        for (int i = nProtos; i != 0;) {
+            DomItem proto = protos.at(--i);
+            if (proto.internalKind() == DomType::Export) {
+                if (!(options & VisitPrototypesOption::ManualProceedToScope))
+                    proto = proto.proceedToScope(h, visitedRefs);
+                toDo.append(proto);
+            } else if (proto.internalKind() == DomType::QmlObject) {
+                toDo.append(proto);
+            } else {
+                derivedFromPrototype.myErrors()
+                        .warning(derivedFromPrototype.tr("Unexpected prototype type %1 (%2)")
+                                         .arg(current.canonicalPath().toString(),
+                                              prototype.field(Fields::referredObjectPath)
+                                                      .value()
+                                                      .toString()))
+                        .withItem(derivedFromPrototype)
+                        .handle(h);
+            }
+        }
+    }
+    return true;
 }
 
 bool DomItem::visitPrototypeChain(function_ref<bool(DomItem &)> visitor,
@@ -1340,63 +1583,7 @@ bool DomItem::visitPrototypeChain(function_ref<bool(DomItem &)> visitor,
         shouldVisit = true;
         current.field(Fields::prototypes)
                 .visitIndexes([&toDo, &current, this, &h, visitedRefs, options](DomItem &el) {
-                    Path elId = el.canonicalPath();
-                    if (visitedRefs->contains(elId))
-                        return true;
-                    else
-                        visitedRefs->append(elId);
-                    QList<DomItem> protos = el.getAll(h, visitedRefs);
-                    if (protos.isEmpty()) {
-                        if (std::shared_ptr<DomEnvironment> envPtr =
-                                    environment().ownerAs<DomEnvironment>())
-                            if (!(envPtr->options() & DomEnvironment::Option::NoDependencies))
-                                myErrors()
-                                        .warning(tr("could not resolve prototype %1 (%2)")
-                                                         .arg(current.canonicalPath().toString(),
-                                                              el.field(Fields::referredObjectPath)
-                                                                      .value()
-                                                                      .toString()))
-                                        .withItem(*this)
-                                        .handle(h);
-                    } else {
-                        if (protos.size() > 1) {
-                            QStringList protoPaths;
-                            for (DomItem &p : protos)
-                                protoPaths.append(p.canonicalPath().toString());
-                            myErrors()
-                                    .warning(tr("Multiple definitions found, using first only, "
-                                                "resolving prototype %1 (%2): %3")
-                                                     .arg(current.canonicalPath().toString(),
-                                                          el.field(Fields::referredObjectPath)
-                                                                  .value()
-                                                                  .toString(),
-                                                          protoPaths.join(QLatin1String(", "))))
-                                    .withItem(*this)
-                                    .handle(h);
-                        }
-                        int nProtos = 1; // change to protos.length() to us all prototypes found
-                                         // (sloppier)
-                        for (int i = nProtos; i != 0;) {
-                            DomItem proto = protos.at(--i);
-                            if (proto.internalKind() == DomType::Export) {
-                                if (!(options & VisitPrototypesOption::ManualProceedToScope))
-                                    proto = proto.proceedToScope(h, visitedRefs);
-                                toDo.append(proto);
-                            } else if (proto.internalKind() == DomType::QmlObject) {
-                                toDo.append(proto);
-                            } else {
-                                myErrors()
-                                        .warning(tr("Unexpected prototype type %1 (%2)")
-                                                         .arg(current.canonicalPath().toString(),
-                                                              el.field(Fields::referredObjectPath)
-                                                                      .value()
-                                                                      .toString()))
-                                        .withItem(*this)
-                                        .handle(h);
-                            }
-                        }
-                    }
-                    return true;
+                    return visitPrototypeIndex(toDo, current, *this, h, visitedRefs, options, el);
                 });
     }
     return true;
@@ -1469,6 +1656,24 @@ bool DomItem::visitStaticTypePrototypeChains(function_ref<bool(DomItem &)> visit
     return true;
 }
 
+/*!
+    \brief Let the visitor visit the Dom Tree hierarchy of this DomItem.
+ */
+bool DomItem::visitUp(function_ref<bool(DomItem &)> visitor)
+{
+    Path p = canonicalPath();
+    while (p.length() > 0) {
+        DomItem current = top().path(p);
+        if (!visitor(current))
+            return false;
+        p = p.dropTail();
+    }
+    return true;
+}
+
+/*!
+    \brief Let the visitor visit the QML scope hierarchy of this DomItem.
+ */
 bool DomItem::visitScopeChain(function_ref<bool(DomItem &)> visitor, LookupOptions options,
                               ErrorHandler h, QSet<quintptr> *visited, QList<Path> *visitedRefs)
 {
@@ -1487,6 +1692,7 @@ bool DomItem::visitScopeChain(function_ref<bool(DomItem &)> visitor, LookupOptio
     bool visitFirst = !(options & LookupOption::SkipFirstScope);
     bool visitCurrent = visitFirst;
     bool first = true;
+    QSet<quintptr> alreadyAddedComponentMaps;
     while (!toDo.isEmpty()) {
         DomItem current = toDo.takeLast();
         if (visited->contains(current.id()))
@@ -1514,7 +1720,7 @@ bool DomItem::visitScopeChain(function_ref<bool(DomItem &)> visitor, LookupOptio
             if (DomItem next = current.scope(FilterUpOptions::ReturnOuterNoSelf))
                 toDo.append(next);
             break;
-        case DomType::QmlComponent: // ids/attached type
+        case DomType::QmlComponent: { // ids/attached type
             if ((options & LookupOption::Strict) == 0) {
                 if (DomItem comp = current.field(Fields::nextComponent))
                     toDo.append(comp);
@@ -1526,8 +1732,24 @@ bool DomItem::visitScopeChain(function_ref<bool(DomItem &)> visitor, LookupOptio
             }
             if (DomItem next = current.scope(FilterUpOptions::ReturnOuterNoSelf))
                 toDo.append(next);
+
+            DomItem owner = current.owner();
+            Path pathToComponentMap = current.pathFromOwner().dropTail(2);
+            DomItem componentMap = owner.path(pathToComponentMap);
+            if (alreadyAddedComponentMaps.contains(componentMap.id()))
+                break;
+            alreadyAddedComponentMaps.insert(componentMap.id());
+            for (QString x : componentMap.keys()) {
+                DomItem componentList = componentMap.key(x);
+                for (int i = 0; i < componentList.indexes(); ++i) {
+                    DomItem component = componentList.index(i);
+                    if (component != current && !visited->contains(component.id()))
+                        toDo.append(component);
+                }
+            }
             first = false;
             break;
+        }
         case DomType::QmlFile: // subComponents, imported types
             if (DomItem iScope =
                         current.field(Fields::importScope)) // treat file as a separate scope?
@@ -1655,26 +1877,6 @@ bool DomItem::visitLookup1(QString symbolName, function_ref<bool(DomItem &)> vis
                            LookupOptions opts, ErrorHandler h, QSet<quintptr> *visited,
                            QList<Path> *visitedRefs)
 {
-    bool typeLookupInQmlFile = symbolName.size() > 1 && symbolName.at(0).isUpper()
-            && fileObject().internalKind() == DomType::QmlFile;
-    if (typeLookupInQmlFile) {
-        // shortcut to lookup types (scope chain would find them too, but after looking
-        // the prototype chain)
-        DomItem importScope = fileObject().field(Fields::importScope);
-        if (const ImportScope *importScopePtr = importScope.as<ImportScope>()) {
-            if (importScopePtr->subImports().contains(symbolName)) {
-                DomItem subItem = importScope.field(Fields::qualifiedImports).key(symbolName);
-                if (!visitor(subItem))
-                    return false;
-            }
-            QList<DomItem> types = importScopePtr->importedItemsWithName(importScope, symbolName);
-            for (DomItem &t : types) {
-                if (!visitor(t))
-                    return false;
-            }
-        }
-        return true;
-    }
     return visitScopeChain(
             [symbolName, visitor](DomItem &obj) {
                 return obj.visitLocalSymbolsNamed(symbolName,
@@ -1695,11 +1897,7 @@ public:
         QRegularExpression reTarget = QRegularExpression(QRegularExpression::anchoredPattern(
                 uR"(QList<(?<list>[a-zA-Z_0-9:]+) *(?<listPtr>\*?)>|QMap< *(?<mapKey>[a-zA-Z_0-9:]+) *, *(?<mapValue>[a-zA-Z_0-9:]+) *(?<mapPtr>\*?)>|(?<baseType>[a-zA-Z_0-9:]+) *(?<ptr>\*?))"));
 
-#if QT_VERSION < QT_VERSION_CHECK(6, 4, 0)
-        QRegularExpressionMatch m = reTarget.match(target);
-#else
         QRegularExpressionMatch m = reTarget.matchView(target);
-#endif
         if (!m.hasMatch()) {
             DomItem::myResolveErrors()
                     .error(tr("Unexpected complex CppType %1").arg(target))
@@ -1732,6 +1930,90 @@ public:
     bool isList = false;
 };
 
+static bool visitForLookupType(DomItem el, LookupType lookupType,
+                               function_ref<bool(DomItem &)> visitor)
+{
+    bool correctType = false;
+    DomType iType = el.internalKind();
+    switch (lookupType) {
+    case LookupType::Binding:
+        correctType = (iType == DomType::Binding);
+        break;
+    case LookupType::Method:
+        correctType = (iType == DomType::MethodInfo);
+        break;
+    case LookupType::Property:
+        correctType = (iType == DomType::PropertyDefinition || iType == DomType::Binding);
+        break;
+    case LookupType::PropertyDef:
+        correctType = (iType == DomType::PropertyDefinition);
+        break;
+    case LookupType::Type:
+        correctType = (iType == DomType::Export); // accept direct QmlObject ref?
+        break;
+    default:
+        Q_ASSERT(false);
+        break;
+    }
+    if (correctType)
+        return visitor(el);
+    return true;
+}
+
+static bool visitQualifiedNameLookup(DomItem newIt, QStringList &subpath,
+                                     function_ref<bool(DomItem &)> visitor, LookupType lookupType,
+                                     ErrorHandler &errorHandler, QList<Path> *visitedRefs)
+{
+    QVector<ResolveToDo> lookupToDos(
+            { ResolveToDo{ newIt, 1 } }); // invariant: always increase pathIndex to guarantee
+    // end even with only partial visited match
+    QList<QSet<quintptr>> lookupVisited(subpath.size() + 1);
+    while (!lookupToDos.isEmpty()) {
+        ResolveToDo tNow = lookupToDos.takeFirst();
+        auto vNow = qMakePair(tNow.item.id(), tNow.pathIndex);
+        DomItem subNow = tNow.item;
+        int iSubPath = tNow.pathIndex;
+        Q_ASSERT(iSubPath < subpath.size());
+        QString subPathNow = subpath[iSubPath++];
+        DomItem scope = subNow.proceedToScope();
+        if (iSubPath < subpath.size()) {
+            if (vNow.first != 0) {
+                if (lookupVisited[vNow.second].contains(vNow.first))
+                    continue;
+                else
+                    lookupVisited[vNow.second].insert(vNow.first);
+            }
+            if (scope.internalKind() == DomType::QmlObject)
+                scope.visitDirectAccessibleScopes(
+                        [&lookupToDos, subPathNow, iSubPath](DomItem &el) {
+                            return el.visitLocalSymbolsNamed(
+                                    subPathNow, [&lookupToDos, iSubPath](DomItem &subEl) {
+                                        lookupToDos.append({ subEl, iSubPath });
+                                        return true;
+                                    });
+                        },
+                        VisitPrototypesOption::Normal, errorHandler, &(lookupVisited[vNow.second]),
+                        visitedRefs);
+        } else {
+            bool cont = scope.visitDirectAccessibleScopes(
+                    [&visitor, subPathNow, lookupType](DomItem &el) -> bool {
+                        if (lookupType == LookupType::Symbol)
+                            return el.visitLocalSymbolsNamed(subPathNow, visitor);
+                        else
+                            return el.visitLocalSymbolsNamed(
+                                    subPathNow, [lookupType, &visitor](DomItem &el) -> bool {
+                                        return visitForLookupType(el, lookupType, visitor);
+                                    });
+                    },
+                    VisitPrototypesOption::Normal, errorHandler, &(lookupVisited[vNow.second]),
+                    visitedRefs);
+            if (!cont)
+                return false;
+        }
+    }
+    return true;
+}
+
 bool DomItem::visitLookup(QString target, function_ref<bool(DomItem &)> visitor,
                           LookupType lookupType, LookupOptions opts, ErrorHandler errorHandler,
                           QSet<quintptr> *visited, QList<Path> *visitedRefs)
@@ -1751,101 +2033,10 @@ bool DomItem::visitLookup(QString target, function_ref<bool(DomItem &)> visitor,
         } else {
             return visitLookup1(
                     subpath.at(0),
-                    [&subpath, visitor, lookupType, &errorHandler, visitedRefs](DomItem &newIt) {
-                        QVector<ResolveToDo> lookupToDos({ ResolveToDo {
-                                newIt, 1 } }); // invariant: always increase pathIndex to guarantee
-                                               // end even with only partial visited match
-                        QList<QSet<quintptr>> lookupVisited(subpath.size() + 1);
-                        while (!lookupToDos.isEmpty()) {
-                            ResolveToDo tNow = lookupToDos.takeFirst();
-                            auto vNow = qMakePair(tNow.item.id(), tNow.pathIndex);
-                            DomItem subNow = tNow.item;
-                            int iSubPath = tNow.pathIndex;
-                            Q_ASSERT(iSubPath < subpath.size());
-                            QString subPathNow = subpath[iSubPath++];
-                            DomItem scope = subNow.proceedToScope();
-                            if (iSubPath < subpath.size()) {
-                                if (vNow.first != 0) {
-                                    if (lookupVisited[vNow.second].contains(vNow.first))
-                                        continue;
-                                    else
-                                        lookupVisited[vNow.second].insert(vNow.first);
-                                }
-                                if (scope.internalKind() == DomType::QmlObject)
-                                    scope.visitDirectAccessibleScopes(
-                                            [&lookupToDos, subPathNow, iSubPath](DomItem &el) {
-                                                return el.visitLocalSymbolsNamed(
-                                                        subPathNow,
-                                                        [&lookupToDos, iSubPath](DomItem &subEl) {
-                                                            lookupToDos.append({ subEl, iSubPath });
-                                                            return true;
-                                                        });
-                                            },
-                                            VisitPrototypesOption::Normal, errorHandler,
-                                            &(lookupVisited[vNow.second]), visitedRefs);
-                            } else {
-                                bool cont = scope.visitDirectAccessibleScopes(
-                                        [&visitor, subPathNow, lookupType](DomItem &el) -> bool {
-                                            if (lookupType == LookupType::Symbol)
-                                                return el.visitLocalSymbolsNamed(subPathNow,
-                                                                                 visitor);
-                                            else
-                                                return el.visitLocalSymbolsNamed(
-                                                        subPathNow,
-                                                        [lookupType,
-                                                         &visitor](DomItem &el) -> bool {
-                                                            bool correctType = false;
-                                                            DomType iType = el.internalKind();
-                                                            switch (lookupType) {
-                                                            case LookupType::Binding:
-                                                                correctType =
-                                                                        (iType == DomType::Binding);
-                                                                break;
-                                                            case LookupType::Method:
-                                                                correctType =
-                                                                        (iType
-                                                                         == DomType::MethodInfo);
-                                                                break;
-                                                            case LookupType::Property:
-                                                                correctType =
-                                                                        (iType
-                                                                                 == DomType::
-                                                                                         PropertyDefinition
-                                                                         || iType
-                                                                                 == DomType::
-                                                                                         Binding);
-                                                                break;
-                                                            case LookupType::PropertyDef:
-                                                                correctType =
-                                                                        (iType
-                                                                         == DomType::
-                                                                                 PropertyDefinition);
-                                                                break;
-                                                            case LookupType::Type:
-                                                                correctType =
-                                                                        (iType
-                                                                         == DomType::
-                                                                                 Export); // accept
-                                                                                          // direct
-                                                                                          // QmlObject
-                                                                                          // ref?
-                                                                break;
-                                                            default:
-                                                                Q_ASSERT(false);
-                                                                break;
-                                                            }
-                                                            if (correctType)
-                                                                return visitor(el);
-                                                            return true;
-                                                        });
-                                        },
-                                        VisitPrototypesOption::Normal, errorHandler,
-                                        &(lookupVisited[vNow.second]), visitedRefs);
-                                if (!cont)
-                                    return false;
-                            }
-                        }
-                        return true;
+                    [&subpath, visitor, lookupType, &errorHandler,
+                     visitedRefs](DomItem &newIt) -> bool {
+                        return visitQualifiedNameLookup(newIt, subpath, visitor, lookupType,
+                                                        errorHandler, visitedRefs);
                     },
                     opts, errorHandler, visited, visitedRefs);
         }
@@ -1888,6 +2079,14 @@ bool DomItem::visitLookup(QString target, function_ref<bool(DomItem &)> visitor,
     return true;
 }
 
+/*!
+   \internal
+   \brief Dereference DomItems pointing to other DomItems.
+
+   Dereferences DomItems with internalKind being References, Export and Id.
+   Also does multiple rounds of resolving for nested DomItems.
+   Prefer this over \l {DomItem::get}.
+ */
 DomItem DomItem::proceedToScope(ErrorHandler h, QList<Path> *visitedRefs)
 {
     // follow references, resolve exports
@@ -2157,9 +2356,7 @@ DomItem DomItem::operator[](Path p)
 
 QCborValue DomItem::value()
 {
-    if (internalKind() == DomType::ConstantData)
-        return std::get<ConstantData>(m_element).value();
-    return QCborValue();
+    return base()->value();
 }
 
 void DomItem::dumpPtr(Sink sink)
@@ -2232,7 +2429,7 @@ QDateTime DomItem::createdAt()
     if (m_owner)
         return std::visit([](auto &&ow) { return ow->createdAt(); }, *m_owner);
     else
-        return QDateTime::fromMSecsSinceEpoch(0, UTC);
+        return QDateTime::fromMSecsSinceEpoch(0, QTimeZone::UTC);
 }
 
 QDateTime DomItem::frozenAt()
@@ -2240,7 +2437,7 @@ QDateTime DomItem::frozenAt()
     if (m_owner)
         return std::visit([](auto &&ow) { return ow->frozenAt(); }, *m_owner);
     else
-        return QDateTime::fromMSecsSinceEpoch(0, UTC);
+        return QDateTime::fromMSecsSinceEpoch(0, QTimeZone::UTC);
 }
 
 QDateTime DomItem::lastDataUpdateAt()
@@ -2248,7 +2445,7 @@ QDateTime DomItem::lastDataUpdateAt()
     if (m_owner)
         return std::visit([](auto &&ow) { return ow->lastDataUpdateAt(); }, *m_owner);
     else
-        return QDateTime::fromMSecsSinceEpoch(0, UTC);
+        return QDateTime::fromMSecsSinceEpoch(0, QTimeZone::UTC);
 }
 
 void DomItem::addError(ErrorMessage msg)
@@ -2346,14 +2543,22 @@ shared_ptr<OwningItem> DomItem::owningItemPtr()
     return {};
 }
 
+/*!
+   \internal
+   Returns a pointer to the virtual base pointer to a DomBase.
+*/
 const DomBase *DomItem::base()
 {
-    return visitEl([](auto &&el) { return static_cast<const DomBase *>(&(*el)); });
+    return visitEl([](auto &&el) -> DomBase * { return el->domBase(); });
 }
 
+/*!
+   \internal
+   Returns a pointer to the virtual base pointer to a DomBase.
+*/
 DomBase *DomItem::mutableBase()
 {
-    return visitMutableEl([](auto &&el) { return static_cast<DomBase *>(&(*el)); });
+    return visitMutableEl([](auto &&el) -> DomBase * { return el->domBase(); });
 }
 
 DomItem::DomItem(std::shared_ptr<DomEnvironment> envPtr):
@@ -2366,52 +2571,26 @@ DomItem::DomItem(std::shared_ptr<DomUniverse> universePtr):
 {
 }
 
-void DomItem::loadFile(QString canonicalFilePath, QString logicalPath, QString code,
-                       QDateTime codeDate, DomTop::Callback callback, LoadOptions loadOptions,
+void DomItem::loadFile(const FileToLoad &file, DomTop::Callback callback, LoadOptions loadOptions,
                        std::optional<DomType> fileType)
 {
     DomItem topEl = top();
     if (topEl.internalKind() == DomType::DomEnvironment
         || topEl.internalKind() == DomType::DomUniverse) {
         if (auto univ = topEl.ownerAs<DomUniverse>())
-            univ->loadFile(*this, canonicalFilePath, logicalPath, code, codeDate, callback,
-                           loadOptions, fileType);
+            univ->loadFile(*this, file, callback, loadOptions, fileType);
         else if (auto env = topEl.ownerAs<DomEnvironment>()) {
             if (env->options() & DomEnvironment::Option::NoDependencies)
-                env->loadFile(topEl, canonicalFilePath, logicalPath, code, codeDate, callback,
-                              DomTop::Callback(), DomTop::Callback(), loadOptions, fileType);
+                env->loadFile(topEl, file, callback, DomTop::Callback(), DomTop::Callback(),
+                              loadOptions, fileType);
             else
-                env->loadFile(topEl, canonicalFilePath, logicalPath, code, codeDate,
-                              DomTop::Callback(), DomTop::Callback(), callback, loadOptions,
-                              fileType);
+                env->loadFile(topEl, file, DomTop::Callback(), DomTop::Callback(), callback,
+                              loadOptions, fileType);
         } else
             Q_ASSERT(false && "expected either DomUniverse or DomEnvironment cast to succeed");
     } else {
         addError(myErrors().warning(tr("loadFile called without DomEnvironment or DomUniverse.")));
-        callback(Paths::qmlFileInfoPath(canonicalFilePath), DomItem::empty, DomItem::empty);
-    }
-}
-
-void DomItem::loadFile(QString filePath, QString logicalPath, DomTop::Callback callback,
-                       LoadOptions loadOptions, std::optional<DomType> fileType)
-{
-    DomItem topEl = top();
-    if (topEl.internalKind() == DomType::DomEnvironment
-        || topEl.internalKind() == DomType::DomUniverse) {
-        if (auto univ = topEl.ownerAs<DomUniverse>())
-            univ->loadFile(*this, filePath, logicalPath, callback, loadOptions);
-        else if (auto env = topEl.ownerAs<DomEnvironment>()) {
-            if (env->options() & DomEnvironment::Option::NoDependencies)
-                env->loadFile(topEl, filePath, logicalPath, callback, DomTop::Callback(),
-                              DomTop::Callback(), loadOptions, fileType);
-            else
-                env->loadFile(topEl, filePath, logicalPath, DomTop::Callback(), DomTop::Callback(),
-                              callback, loadOptions, fileType);
-        } else
-            Q_ASSERT(false && "expected either DomUniverse or DomEnvironment cast to succeed");
-    } else {
-        addError(myErrors().warning(tr("loadFile called without DomEnvironment or DomUniverse.")));
-        callback(Paths::qmlFileInfoPath(filePath), DomItem::empty, DomItem::empty);
+        callback(Paths::qmlFileInfoPath(file.canonicalPath()), DomItem::empty, DomItem::empty);
     }
 }
 
@@ -2470,10 +2649,11 @@ DomItem DomItem::fromCode(QString code, DomType fileType)
                                            | QQmlJS::Dom::DomEnvironment::Option::NoDependencies);
 
     DomItem tFile;
+
     env.loadFile(
-            QString(), QString(), code, QDateTime::currentDateTimeUtc(),
+            FileToLoad::fromMemory(env.ownerAs<DomEnvironment>(), QString(), code),
             [&tFile](Path, const DomItem &, const DomItem &newIt) { tFile = newIt; },
-            LoadOption::DefaultLoad, fileType);
+            LoadOption::DefaultLoad, std::make_optional(fileType));
     env.loadPendingDependencies();
     return tFile.fileObject();
 }
@@ -2579,6 +2759,9 @@ void DomBase::dump(
     case DomKind::Map:
         sink(u"{");
         break;
+    case DomKind::ScriptElement:
+        // nothing to print
+        break;
     }
     auto closeParens = qScopeGuard(
                 [dK, sink, indent]{
@@ -2598,6 +2781,9 @@ void DomBase::dump(
         case DomKind::Map:
             sinkNewline(sink, indent);
             sink(u"}");
+            break;
+        case DomKind::ScriptElement:
+            // nothing to print
             break;
         }
     });
@@ -2968,7 +3154,7 @@ OwningItem::OwningItem(int derivedFrom)
       m_revision(nextRevision()),
       m_createdAt(QDateTime::currentDateTimeUtc()),
       m_lastDataUpdateAt(m_createdAt),
-      m_frozenAt(QDateTime::fromMSecsSinceEpoch(0, UTC))
+      m_frozenAt(QDateTime::fromMSecsSinceEpoch(0, QTimeZone::UTC))
 {}
 
 OwningItem::OwningItem(int derivedFrom, QDateTime lastDataUpdateAt)
@@ -2976,7 +3162,7 @@ OwningItem::OwningItem(int derivedFrom, QDateTime lastDataUpdateAt)
       m_revision(nextRevision()),
       m_createdAt(QDateTime::currentDateTimeUtc()),
       m_lastDataUpdateAt(lastDataUpdateAt),
-      m_frozenAt(QDateTime::fromMSecsSinceEpoch(0, UTC))
+      m_frozenAt(QDateTime::fromMSecsSinceEpoch(0, QTimeZone::UTC))
 {}
 
 OwningItem::OwningItem(const OwningItem &o)
@@ -2984,7 +3170,7 @@ OwningItem::OwningItem(const OwningItem &o)
       m_revision(nextRevision()),
       m_createdAt(QDateTime::currentDateTimeUtc()),
       m_lastDataUpdateAt(o.lastDataUpdateAt()),
-      m_frozenAt(QDateTime::fromMSecsSinceEpoch(0, UTC))
+      m_frozenAt(QDateTime::fromMSecsSinceEpoch(0, QTimeZone::UTC))
 {
     QMultiMap<Path, ErrorMessage> my_errors;
     {
@@ -3494,6 +3680,15 @@ void ListPBase::writeOut(DomItem &self, OutWriter &ow, bool compact) const
         ow.newline();
     ow.decreaseIndent(1, baseIndent);
     ow.writeRegion(u"rightSquareBrace", u"]");
+}
+
+std::optional<QQmlJSScope::Ptr> ScriptElement::semanticScope()
+{
+    return m_scope;
+}
+void ScriptElement::setSemanticScope(const QQmlJSScope::Ptr &scope)
+{
+    m_scope = scope;
 }
 
 } // end namespace Dom

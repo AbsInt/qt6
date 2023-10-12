@@ -21,6 +21,8 @@
 
 QT_BEGIN_NAMESPACE
 
+template <typename T>
+class QQmlRefCounted;
 
 class Q_QML_PRIVATE_EXPORT QQmlRefCount
 {
@@ -31,11 +33,19 @@ public:
     inline void release() const;
     inline int count() const;
 
-protected:
+private:
     inline virtual ~QQmlRefCount();
+    template <typename T> friend class QQmlRefCounted;
 
 private:
     mutable QAtomicInt refCount;
+};
+
+template <typename T>
+class QQmlRefCounted : public QQmlRefCount
+{
+protected:
+    ~QQmlRefCounted() = default;
 };
 
 template<class T>
@@ -46,10 +56,10 @@ public:
         AddRef,
         Adopt
     };
-    inline QQmlRefPointer();
-    inline QQmlRefPointer(T *, Mode m = AddRef);
-    inline QQmlRefPointer(const QQmlRefPointer<T> &);
-    inline QQmlRefPointer(QQmlRefPointer<T> &&);
+    Q_NODISCARD_CTOR inline QQmlRefPointer();
+    Q_NODISCARD_CTOR inline QQmlRefPointer(T *, Mode m = AddRef);
+    Q_NODISCARD_CTOR inline QQmlRefPointer(const QQmlRefPointer &);
+    Q_NODISCARD_CTOR inline QQmlRefPointer(QQmlRefPointer &&);
     inline ~QQmlRefPointer();
 
     void swap(QQmlRefPointer &other) noexcept { qt_ptr_swap(o, other.o); }
@@ -90,7 +100,7 @@ namespace QQml {
 /*!
     \internal
     Creates a QQmlRefPointer which takes ownership of a newly constructed T.
-    T must derive from QQmlRefCount (as we rely on an initial refcount of _1_).
+    T must derive from QQmlRefCounted<T> (as we rely on an initial refcount of _1_).
     T will be constructed by forwarding \a args to its constructor.
  */
 template <typename T, typename ...Args>

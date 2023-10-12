@@ -19,10 +19,10 @@
 
 QT_BEGIN_NAMESPACE
 
-class QQuickRectangleExtruder : public QQuickParticleExtruder
+class Q_QUICKPARTICLES_PRIVATE_EXPORT QQuickRectangleExtruder : public QQuickParticleExtruder
 {
     Q_OBJECT
-    Q_PROPERTY(bool fill READ fill WRITE setFill NOTIFY fillChanged)
+    Q_PROPERTY(bool fill READ fill WRITE setFill NOTIFY fillChanged FINAL)
     QML_NAMED_ELEMENT(RectangleShape)
     QML_ADDED_IN_VERSION(2, 0)
 

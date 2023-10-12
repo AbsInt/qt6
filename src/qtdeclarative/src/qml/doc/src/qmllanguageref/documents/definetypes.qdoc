@@ -336,6 +336,42 @@ JIT-compiled.
 
 With this pragma you can change the way value types and sequences are handled.
 
+Usually lower case names cannot be type names in JavaScript code. This is a
+problem because value type names are lower case. You can specify \c{Addressable}
+as value for this pragma to change this. If \c{Addressable} is specified a
+JavaScript can be explicitly coerced to a specific, named, value type. This is
+done using the \c as operator, like you would do with object types. Furthermore,
+you can also check for value types using the \c instanceof operator:
+
+\qml
+pragma ValueTypeBehavior: Addressable
+import QtQml
+
+QtObject {
+    property var a
+    property real b: (a as rect).x
+    property bool c: a instanceof rect
+
+    property var rect // inaccessible. "rect" is a type name.
+}
+\endqml
+
+If the type does not match, casting returns \c undefined. \c instanceof
+only checks for inheritance, not for all possible type coercions. So, for
+example, a \l{QRect} is not a \c rect value type since \c rect is \l{QRectF}
+in C++, and therefore not related by inheritance. With \c as you can cast
+to any type compatible via coercion.
+
+Since \c rect in the above example is now a type name, it will shadow any
+properties called \c{rect}.
+
+Explicitly casting to the desired type helps tooling. It can allow the
+\l{Qt Quick Compiler} generate efficient code where it otherwise would not be
+able to. You can use \l{qmllint} to find such occurrences.
+
+There is also a \c{Inaddressable} value you can use to explicitly specify the
+default behavior.
+
 Value types and sequences are generally treated as references. This means, if
 you retrieve a value type instance from a property into a local value, and then
 change the local value, the original property is also changed. Furthermore,
@@ -397,4 +433,5 @@ the QML engine automatically refreshes value type references each time you read
 from them. So this is not more expensive than the first version, but a clearer
 way to express the same operations.
 
+\sa {Type annotations and assertions}
 */

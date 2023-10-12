@@ -19,6 +19,7 @@
 #include <QtCore/qscopedpointer.h>
 
 #include <QtQmlCompiler/private/qqmlsa_p.h>
+#include <QtQmlCompiler/private/qqmljsloggingutils_p.h>
 
 #if QT_CONFIG(library)
 #    include <QtCore/qdiriterator.h>
@@ -184,13 +185,13 @@ bool QQmlJSLinter::Plugin::parseMetaData(const QJsonObject &metaData, QString pl
 
         const QString categoryId =
                 (m_isInternal ? u""_s : u"Plugin."_s) + m_name + u'.' + object[u"name"].toString();
-        m_categories << QQmlJSLogger::Category {
-                categoryId,
-                categoryId,
-                object["description"_L1].toString(),
-                QtWarningMsg,
-                ignored
-        };
+        const auto settingsNameIt = object.constFind(u"settingsName");
+        const QString settingsName = (settingsNameIt == object.constEnd())
+                ? categoryId
+                : settingsNameIt->toString(categoryId);
+        m_categories << QQmlJS::LoggerCategory{ categoryId, settingsName,
+                                                object["description"_L1].toString(), QtWarningMsg,
+                                                ignored };
     }
 
     return true;
@@ -198,7 +199,6 @@ bool QQmlJSLinter::Plugin::parseMetaData(const QJsonObject &metaData, QString pl
 
 std::vector<QQmlJSLinter::Plugin> QQmlJSLinter::loadPlugins(QStringList paths)
 {
-
     std::vector<Plugin> plugins;
 
     QDuplicateTracker<QString> seenPlugins;
@@ -273,7 +273,7 @@ void QQmlJSLinter::parseComments(QQmlJSLogger *logger,
             const QString category = words.at(i);
             const auto categoryExists = std::any_of(
                     loggerCategories.cbegin(), loggerCategories.cend(),
-                    [&](const QQmlJSLogger::Category &cat) { return cat.id().name() == category; });
+                    [&](const QQmlJS::LoggerCategory &cat) { return cat.id().name() == category; });
 
             if (categoryExists)
                 categories << category;
@@ -422,7 +422,7 @@ QQmlJSLinter::LintResult QQmlJSLinter::lintFile(const QString &filename,
                                                 QJsonArray *json, const QStringList &qmlImportPaths,
                                                 const QStringList &qmldirFiles,
                                                 const QStringList &resourceFiles,
-                                                const QList<QQmlJSLogger::Category> &categories)
+                                                const QList<QQmlJS::LoggerCategory> &categories)
 {
     // Make sure that we don't expose an old logger if we return before a new one is created.
     m_logger.reset();
@@ -519,17 +519,17 @@ QQmlJSLinter::LintResult QQmlJSLinter::lintFile(const QString &filename,
 
             if (m_enablePlugins) {
                 for (const Plugin &plugin : m_plugins) {
-                    for (const QQmlJSLogger::Category &category : plugin.categories())
+                    for (const QQmlJS::LoggerCategory &category : plugin.categories())
                         m_logger->registerCategory(category);
                 }
             }
 
             for (auto it = categories.cbegin(); it != categories.cend(); ++it) {
-                if (!it->changed)
+                if (auto logger = *it; !QQmlJS::LoggerCategoryPrivate::get(&logger)->hasChanged())
                     continue;
 
-                m_logger->setCategoryIgnored(it->id(), it->ignored);
-                m_logger->setCategoryLevel(it->id(), it->level);
+                m_logger->setCategoryIgnored(it->id(), it->isIgnored());
+                m_logger->setCategoryLevel(it->id(), it->level());
             }
 
             parseComments(m_logger.get(), engine.comments());
@@ -563,10 +563,11 @@ QQmlJSLinter::LintResult QQmlJSLinter::lintFile(const QString &filename,
 
                     QQmlSA::LintPlugin *instance = plugin.m_instance;
                     Q_ASSERT(instance);
-                    instance->registerPasses(passMan.get(), v.result());
+                    instance->registerPasses(passMan.get(),
+                                             QQmlJSScope::createQQmlSAElement(v.result()));
                 }
 
-                passMan->analyze(v.result());
+                passMan->analyze(QQmlJSScope::createQQmlSAElement(v.result()));
             }
 
             success = !m_logger->hasWarnings() && !m_logger->hasErrors();

@@ -23,11 +23,10 @@
 #include <QtCore/qhash.h>
 
 #include <QtQml/private/qqmljssourcelocation_p.h>
+#include <QtQml/private/qqmltranslation_p.h>
 
-#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
-#    include <QtQml/private/qqmltranslation_p.h>
-#endif
-
+#include "qqmlsaconstants.h"
+#include "qqmlsa.h"
 #include "qqmljsannotation_p.h"
 
 // MetaMethod and MetaProperty have both type names and actual QQmlJSScope types.
@@ -42,6 +41,13 @@
 
 QT_BEGIN_NAMESPACE
 
+enum ScriptBindingValueType : unsigned int {
+    ScriptValue_Unknown,
+    ScriptValue_Undefined // property int p: undefined
+};
+
+using QQmlJSMetaMethodType = QQmlSA::MethodType;
+
 class QQmlJSTypeResolver;
 class QQmlJSScope;
 class QQmlJSMetaEnum
@@ -50,6 +56,7 @@ class QQmlJSMetaEnum
     QList<int> m_values; // empty if values unknown.
     QString m_name;
     QString m_alias;
+    QString m_typeName;
     QSharedPointer<const QQmlJSScope> m_type;
     bool m_isFlag = false;
     bool m_scoped = true;
@@ -81,6 +88,9 @@ public:
     bool hasValues() const { return !m_values.isEmpty(); }
     int value(const QString &key) const { return m_values.value(m_keys.indexOf(key)); }
     bool hasKey(const QString &key) const { return m_keys.indexOf(key) != -1; }
+
+    QString typeName() const { return m_typeName; }
+    void setTypeName(const QString &typeName) { m_typeName = typeName; }
 
     QSharedPointer<const QQmlJSScope> type() const { return m_type; }
     void setType(const QSharedPointer<const QQmlJSScope> &type) { m_type = type; }
@@ -137,6 +147,8 @@ public:
     void setTypeQualifier(Constness typeQualifier) { m_typeQualifier = typeQualifier; }
     bool isPointer() const { return m_isPointer; }
     void setIsPointer(bool isPointer) { m_isPointer = isPointer; }
+    bool isList() const { return m_isList; }
+    void setIsList(bool isList) { m_isList = isList; }
 
     friend bool operator==(const QQmlJSMetaParameter &a, const QQmlJSMetaParameter &b)
     {
@@ -162,14 +174,14 @@ private:
     QWeakPointer<const QQmlJSScope> m_type;
     Constness m_typeQualifier = NonConst;
     bool m_isPointer = false;
+    bool m_isList = false;
 };
 
 class QQmlJSMetaMethod
 {
 public:
-    enum Type { Signal, Slot, Method, StaticMethod };
-
     enum Access { Private, Protected, Public };
+    using MethodType = QQmlJSMetaMethodType;
 
 public:
     /*! \internal
@@ -190,9 +202,9 @@ public:
 
     QQmlJSMetaMethod() = default;
     explicit QQmlJSMetaMethod(QString name, QString returnType = QString())
-        : m_name(std::move(name))
-        , m_returnTypeName(std::move(returnType))
-        , m_methodType(Method)
+        : m_name(std::move(name)),
+          m_returnTypeName(std::move(returnType)),
+          m_methodType(MethodType::Method)
     {}
 
     QString methodName() const { return m_name; }
@@ -221,8 +233,8 @@ public:
 
     void addParameter(const QQmlJSMetaParameter &p) { m_parameters.append(p); }
 
-    int methodType() const { return m_methodType; }
-    void setMethodType(Type methodType) { m_methodType = methodType; }
+    QQmlJSMetaMethodType methodType() const { return m_methodType; }
+    void setMethodType(MethodType methodType) { m_methodType = methodType; }
 
     Access access() const { return m_methodAccess; }
 
@@ -252,8 +264,29 @@ public:
     const QVector<QQmlJSAnnotation>& annotations() const { return m_annotations; }
     void setAnnotations(QVector<QQmlJSAnnotation> annotations) { m_annotations = annotations; }
 
-    void setJsFunctionIndex(RelativeFunctionIndex index) { m_jsFunctionIndex = index; }
-    RelativeFunctionIndex jsFunctionIndex() const { return m_jsFunctionIndex; }
+    void setJsFunctionIndex(RelativeFunctionIndex index)
+    {
+        Q_ASSERT(!m_isConstructor);
+        m_relativeFunctionIndex = index;
+    }
+
+    RelativeFunctionIndex jsFunctionIndex() const
+    {
+        Q_ASSERT(!m_isConstructor);
+        return m_relativeFunctionIndex;
+    }
+
+    void setConstructorIndex(RelativeFunctionIndex index)
+    {
+        Q_ASSERT(m_isConstructor);
+        m_relativeFunctionIndex = index;
+    }
+
+    RelativeFunctionIndex constructorIndex() const
+    {
+        Q_ASSERT(m_isConstructor);
+        return m_relativeFunctionIndex;
+    }
 
     friend bool operator==(const QQmlJSMetaMethod &a, const QQmlJSMetaMethod &b)
     {
@@ -297,10 +330,10 @@ private:
     QList<QQmlJSMetaParameter> m_parameters;
     QList<QQmlJSAnnotation> m_annotations;
 
-    Type m_methodType = Signal;
+    MethodType m_methodType = MethodType::Signal;
     Access m_methodAccess = Public;
     int m_revision = 0;
-    RelativeFunctionIndex m_jsFunctionIndex = RelativeFunctionIndex::Invalid;
+    RelativeFunctionIndex m_relativeFunctionIndex = RelativeFunctionIndex::Invalid;
     bool m_isCloned = false;
     bool m_isConstructor = false;
     bool m_isJavaScriptFunction = false;
@@ -424,37 +457,8 @@ public:
 */
 class Q_QMLCOMPILER_PRIVATE_EXPORT QQmlJSMetaPropertyBinding
 {
-public:
-    enum BindingType : unsigned int {
-        Invalid,
-        BoolLiteral,
-        NumberLiteral,
-        StringLiteral,
-        RegExpLiteral,
-        Null,
-        Translation,
-        TranslationById,
-        Script,
-        Object,
-        Interceptor,
-        ValueSource,
-        AttachedProperty,
-        GroupProperty,
-    };
-
-    enum ScriptBindingKind : unsigned int {
-        Script_Invalid,
-        Script_PropertyBinding, // property int p: 1 + 1
-        Script_SignalHandler, // onSignal: { ... }
-        Script_ChangeHandler, // onXChanged: { ... }
-    };
-
-    enum ScriptBindingValueType : unsigned int {
-        ScriptValue_Unknown,
-        ScriptValue_Undefined // property int p: undefined
-    };
-
-private:
+    using BindingType = QQmlSA::BindingType;
+    using ScriptBindingKind = QQmlSA::ScriptBindingKind;
 
     // needs to be kept in sync with the BindingType enum
     struct Content {
@@ -516,8 +520,8 @@ private:
             friend bool operator!=(Script a, Script b) { return !(a == b); }
             QQmlJSMetaMethod::RelativeFunctionIndex index =
                     QQmlJSMetaMethod::RelativeFunctionIndex::Invalid;
-            ScriptBindingKind kind = Script_Invalid;
-            ScriptBindingValueType valueType = ScriptValue_Unknown;
+            ScriptBindingKind kind = ScriptBindingKind::Invalid;
+            ScriptBindingValueType valueType = ScriptBindingValueType::ScriptValue_Unknown;
         };
         struct Object {
             friend bool operator==(Object a, Object b) { return a.value == b.value && a.typeName == b.typeName; }
@@ -619,6 +623,7 @@ public:
                 || type == BindingType::Null; // special. we record it as literal
     }
 
+    QQmlJSMetaPropertyBinding();
     QQmlJSMetaPropertyBinding(QQmlJS::SourceLocation location) : m_sourceLocation(location) { }
     explicit QQmlJSMetaPropertyBinding(QQmlJS::SourceLocation location, const QString &propName)
         : m_sourceLocation(location), m_propertyName(propName)
@@ -645,8 +650,9 @@ public:
         m_bindingContent = Content::StringLiteral { value.toString() };
     }
 
-    void setScriptBinding(QQmlJSMetaMethod::RelativeFunctionIndex value, ScriptBindingKind kind,
-                          ScriptBindingValueType valueType = ScriptValue_Unknown)
+    void
+    setScriptBinding(QQmlJSMetaMethod::RelativeFunctionIndex value, ScriptBindingKind kind,
+                     ScriptBindingValueType valueType = ScriptBindingValueType::ScriptValue_Unknown)
     {
         ensureSetBindingTypeOnce();
         m_bindingContent = Content::Script { value, kind, valueType };
@@ -730,9 +736,7 @@ public:
 
     QString regExpValue() const;
 
-#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
     QQmlTranslation translationDataValue(QString qmlFileNameForContext = QStringLiteral("")) const;
-#endif
 
     QSharedPointer<const QQmlJSScope> literalType(const QQmlJSTypeResolver *resolver) const;
 
@@ -749,7 +753,7 @@ public:
         if (auto *script = std::get_if<Content::Script>(&m_bindingContent))
             return script->kind;
         // warn
-        return ScriptBindingKind::Script_Invalid;
+        return ScriptBindingKind::Invalid;
     }
 
     ScriptBindingValueType scriptValueType() const

@@ -33,18 +33,29 @@
 
 QT_BEGIN_NAMESPACE
 
+namespace QQmlJS::Dom {
+class QQmlDomAstCreatorWithQQmlJSScope;
+}
+
 struct QQmlJSResourceFileMapper;
 class Q_QMLCOMPILER_PRIVATE_EXPORT QQmlJSImportVisitor : public QQmlJS::AST::Visitor
 {
 public:
+    QQmlJSImportVisitor();
     QQmlJSImportVisitor(const QQmlJSScope::Ptr &target,
                         QQmlJSImporter *importer, QQmlJSLogger *logger,
                         const QString &implicitImportDirectory,
                         const QStringList &qmldirFiles = QStringList());
     ~QQmlJSImportVisitor();
 
+    using QQmlJS::AST::Visitor::endVisit;
+    using QQmlJS::AST::Visitor::postVisit;
+    using QQmlJS::AST::Visitor::preVisit;
+    using QQmlJS::AST::Visitor::visit;
+
     QQmlJSScope::Ptr result() const { return m_exportedRootScope; }
 
+    const QQmlJSLogger *logger() const { return m_logger; }
     QQmlJSLogger *logger() { return m_logger; }
 
     QQmlJSImporter::ImportedTypes imports() const { return m_rootScopeImports; }
@@ -63,7 +74,9 @@ public:
     static QString implicitImportDirectory(
             const QString &localFile, QQmlJSResourceFileMapper *mapper);
 
-    QQmlJSImporter *importer() { return m_importer; } // ### should this be restricted?
+    // ### should this be restricted?
+    QQmlJSImporter *importer() { return m_importer; }
+    const QQmlJSImporter *importer() const { return m_importer; }
 
     struct UnfinishedBinding
     {
@@ -335,12 +348,15 @@ private:
     void populateCurrentScope(QQmlJSScope::ScopeType type, const QString &name,
                               const QQmlJS::SourceLocation &location);
     void enterRootScope(QQmlJSScope::ScopeType type, const QString &name,
-                        const QQmlJS::SourceLocation &location);
+                           const QQmlJS::SourceLocation &location);
 
     void importFromHost(const QString &path, const QString &prefix,
                         const QQmlJS::SourceLocation &location);
     void importFromQrc(const QString &path, const QString &prefix,
                        const QQmlJS::SourceLocation &location);
+
+public:
+    friend class QQmlJS::Dom::QQmlDomAstCreatorWithQQmlJSScope;
 };
 
 QT_END_NAMESPACE

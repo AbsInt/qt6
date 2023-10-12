@@ -1828,13 +1828,14 @@ void tst_QProperty::propertyAdaptorBinding()
     QCOMPARE(object.fooChangedCount, 7);
 
     // Check update group
-    Qt::beginPropertyUpdateGroup();
-    source.setValue(23);
-    source2.setValue(22);
-    QCOMPARE(object.foo(), 43);
-    QCOMPARE(dest1.value(), 43);
-    QCOMPARE(object.fooChangedCount, 7);
-    Qt::endPropertyUpdateGroup();
+    {
+        const QScopedPropertyUpdateGroup guard;
+        source.setValue(23);
+        source2.setValue(22);
+        QCOMPARE(object.foo(), 43);
+        QCOMPARE(dest1.value(), 43);
+        QCOMPARE(object.fooChangedCount, 7);
+    }
     QCOMPARE(object.foo(), 45);
     QCOMPARE(dest1.value(), 45);
     QCOMPARE(object.fooChangedCount, 8);
@@ -2131,27 +2132,29 @@ void tst_QProperty::groupedNotifications()
     QCOMPARE(nNotifications, 1);
 
     expected = 2;
-    Qt::beginPropertyUpdateGroup();
-    a = 1;
-    QCOMPARE(b.value(), 0);
-    QCOMPARE(c.value(), 0);
-    QCOMPARE(d.value(), 0);
-    QCOMPARE(nNotifications, 1);
-    Qt::endPropertyUpdateGroup();
+    {
+        const QScopedPropertyUpdateGroup guard;
+        a = 1;
+        QCOMPARE(b.value(), 0);
+        QCOMPARE(c.value(), 0);
+        QCOMPARE(d.value(), 0);
+        QCOMPARE(nNotifications, 1);
+    }
     QCOMPARE(b.value(), 1);
     QCOMPARE(c.value(), 1);
     QCOMPARE(e.value(), 2);
     QCOMPARE(nNotifications, 2);
 
     expected = 7;
-    Qt::beginPropertyUpdateGroup();
-    a = 2;
-    d = 3;
-    QCOMPARE(b.value(), 1);
-    QCOMPARE(c.value(), 1);
-    QCOMPARE(d.value(), 3);
-    QCOMPARE(nNotifications, 2);
-    Qt::endPropertyUpdateGroup();
+    {
+        const QScopedPropertyUpdateGroup guard;
+        a = 2;
+        d = 3;
+        QCOMPARE(b.value(), 1);
+        QCOMPARE(c.value(), 1);
+        QCOMPARE(d.value(), 3);
+        QCOMPARE(nNotifications, 2);
+    }
     QCOMPARE(b.value(), 2);
     QCOMPARE(c.value(), 2);
     QCOMPARE(e.value(), 7);
@@ -2174,10 +2177,11 @@ void tst_QProperty::groupedNotificationConsistency()
     j = 1;
     QVERIFY(!areEqual); // value changed runs before j = 1
 
-    Qt::beginPropertyUpdateGroup();
-    i = 2;
-    j = 2;
-    Qt::endPropertyUpdateGroup();
+    {
+        const QScopedPropertyUpdateGroup guard;
+        i = 2;
+        j = 2;
+    }
     QVERIFY(areEqual); // value changed runs after everything has been evaluated
 }
 
@@ -2312,6 +2316,8 @@ void tst_QProperty::selfBindingShouldNotCrash()
 
 void tst_QProperty::qpropertyAlias()
 {
+#if QT_DEPRECATED_SINCE(6, 6)
+    QT_WARNING_PUSH QT_WARNING_DISABLE_DEPRECATED
     std::unique_ptr<QProperty<int>> i {new QProperty<int>};
     QPropertyAlias<int> alias(i.get());
     QVERIFY(alias.isValid());
@@ -2326,6 +2332,8 @@ void tst_QProperty::qpropertyAlias()
     QCOMPARE(alias.value(), 42);
     i.reset();
     QVERIFY(!alias.isValid());
+    QT_WARNING_POP
+#endif
 }
 
 void tst_QProperty::scheduleNotify()

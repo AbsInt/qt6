@@ -5,12 +5,13 @@
 #include "qquickshape_p_p.h"
 #include "qquickshapegenericrenderer_p.h"
 #include "qquickshapesoftwarerenderer_p.h"
+#include "qquickshapecurverenderer_p.h"
 #include <private/qsgplaintexture_p.h>
 #include <private/qquicksvgparser_p.h>
 #include <QtGui/private/qdrawhelper_p.h>
 #include <QOpenGLFunctions>
 #include <QLoggingCategory>
-#include <QtGui/private/qrhi_p.h>
+#include <rhi/qrhi.h>
 
 static void initResources()
 {
@@ -639,6 +640,7 @@ void QQuickShapePrivate::_q_shapePathChanged()
     Q_Q(QQuickShape);
     spChanged = true;
     q->polish();
+    emit q->boundingRectChanged();
 }
 
 void QQuickShapePrivate::setStatus(QQuickShape::Status newStatus)
@@ -669,15 +671,45 @@ QQuickShape::~QQuickShape()
            The renderer is unknown.
 
     \value Shape.GeometryRenderer
-           The generic, driver independent solution for OpenGL. Uses the same
+           The generic, driver independent solution for GPU rendering. Uses the same
            CPU-based triangulation approach as QPainter's OpenGL 2 paint
-           engine. This is the default when the OpenGL Qt Quick scenegraph
+           engine. This is the default when the RHI-based Qt Quick scenegraph
            backend is in use.
 
     \value Shape.SoftwareRenderer
            Pure QPainter drawing using the raster paint engine. This is the
            default, and only, option when the Qt Quick scenegraph is running
            with the \c software backend.
+
+    \value Shape.CurveRenderer
+           Experimental GPU-based renderer, added as technology preview in Qt 6.6.
+           In contrast to \c Shape.GeometryRenderer, curves are not approximated by short straight
+           lines. Instead, curves are rendered using a specialized fragment shader. This improves
+           visual quality and avoids re-tesselation performance hit when zooming. Also,
+           \c Shape.CurveRenderer provides native, high-quality anti-aliasing, without the
+           performance cost of multi- or supersampling.
+
+    By default, \c Shape.GeometryRenderer will be selected unless the Qt Quick scenegraph is running
+    with the \c software backend. In that case, \c Shape.SoftwareRenderer will be used.
+    \c Shape.CurveRenderer may be requested using the \l preferredRendererType property.
+
+    Note that \c Shape.CurveRenderer is currently regarded as experimental. The enum name of
+    this renderer may change in future versions of Qt, and some shapes may render incorrectly.
+    Among the known limitations are:
+    \list 1
+      \li Only quadratic curves are inherently supported. Cubic curves will be approximated by
+          quadratic curves.
+      \li Shapes where elements intersect are not rendered correctly. The \l [QML] {Path::simplify}
+          {Path.simplify} property may be used to remove self-intersections from such shapes, but
+          may incur a performance cost and reduced visual quality.
+      \li Shapes that span a large numerical range, such as a long string of text, may have
+          issues. Consider splitting these shapes into multiple ones, for instance by making
+          a \l PathText for each individual word.
+      \li If the shape is being rendered into a Qt Quick 3D scene, the
+          \c GL_OES_standard_derivatives extension to OpenGL is required when the OpenGL
+          RHI backend is in use (this is available by default on OpenGL ES 3 and later, but
+          optional in OpenGL ES 2).
+    \endlist
 */
 
 QQuickShape::RendererType QQuickShape::rendererType() const
@@ -685,6 +717,56 @@ QQuickShape::RendererType QQuickShape::rendererType() const
     Q_D(const QQuickShape);
     return d->rendererType;
 }
+
+/*!
+    \qmlproperty enumeration QtQuick.Shapes::Shape::preferredRendererType
+    \since 6.6
+
+    Requests a specific backend to use for rendering the shape. The possible values are the same as
+    for \l rendererType. The default is \c Shape.UnknownRenderer, indicating no particular preference.
+
+    If the requested renderer type is not supported for the current Qt Quick backend, the default
+    renderer for that backend will be used instead. This will be reflected in the \l rendererType
+    when the backend is initialized.
+
+    \c Shape.SoftwareRenderer can currently not be selected without running the scenegraph with
+    the \c software backend, in which case it will be selected regardless of the
+    \c preferredRendererType.
+
+    \note This API is considered tech preview and may change or be removed in future versions of
+    Qt.
+
+    See \l rendererType for more information on the implications.
+*/
+
+QQuickShape::RendererType QQuickShape::preferredRendererType() const
+{
+    Q_D(const QQuickShape);
+    return d->preferredType;
+}
+
+void QQuickShape::setPreferredRendererType(QQuickShape::RendererType preferredType)
+{
+    Q_D(QQuickShape);
+    if (d->preferredType == preferredType)
+        return;
+
+    d->preferredType = preferredType;
+    // (could bail out here if selectRenderType shows no change?)
+
+    for (int i = 0; i < d->sp.size(); ++i) {
+        QQuickShapePath *p = d->sp[i];
+        QQuickShapePathPrivate *pp = QQuickShapePathPrivate::get(p);
+        pp->dirty |= QQuickShapePathPrivate::DirtyAll;
+    }
+    d->spChanged = true;
+    d->_q_shapePathChanged();
+    polish();
+    update();
+
+    emit preferredRendererTypeChanged();
+}
+
 
 /*!
     \qmlproperty bool QtQuick.Shapes::Shape::asynchronous
@@ -717,6 +799,23 @@ void QQuickShape::setAsynchronous(bool async)
         if (d->componentComplete)
             d->_q_shapePathChanged();
     }
+}
+
+/*!
+    \qmlproperty rect QtQuick.Shapes::Shape::boundingRect
+    \since 6.6
+
+    Contains the united bounding rect of all sub paths in the shape.
+ */
+QRectF QQuickShape::boundingRect() const
+{
+    Q_D(const QQuickShape);
+    QRectF brect;
+    for (QQuickShapePath *path : d->sp) {
+        brect = brect.united(path->path().boundingRect());
+    }
+
+    return brect;
 }
 
 /*!
@@ -902,6 +1001,12 @@ void QQuickShape::updatePolish()
     d->spChanged = false;
     d->effectRefCount = currentEffectRefCount;
 
+    QQuickShape::RendererType expectedRenderer = d->selectRendererType();
+    if (d->rendererType != expectedRenderer) {
+        delete d->renderer;
+        d->renderer = nullptr;
+    }
+
     if (!d->renderer) {
         d->createRenderer();
         if (!d->renderer)
@@ -936,36 +1041,74 @@ QSGNode *QQuickShape::updatePaintNode(QSGNode *node, UpdatePaintNodeData *)
 {
     // Called on the render thread, with the gui thread blocked. We can now
     // safely access gui thread data.
-
     Q_D(QQuickShape);
-    if (d->renderer) {
-        if (!node)
+
+    if (d->renderer || d->rendererChanged) {
+        if (!node || d->rendererChanged) {
+            d->rendererChanged = false;
+            delete node;
             node = d->createNode();
-        d->renderer->updateNode();
+        }
+        if (d->renderer)
+            d->renderer->updateNode();
     }
     return node;
+}
+
+QQuickShape::RendererType QQuickShapePrivate::selectRendererType()
+{
+    QQuickShape::RendererType res = QQuickShape::UnknownRenderer;
+    Q_Q(QQuickShape);
+    QSGRendererInterface *ri = q->window()->rendererInterface();
+    if (!ri)
+        return res;
+
+    static const bool environmentPreferCurve =
+        qEnvironmentVariable("QT_QUICKSHAPES_BACKEND").toLower() == QLatin1String("curverenderer");
+
+    switch (ri->graphicsApi()) {
+    case QSGRendererInterface::Software:
+        res = QQuickShape::SoftwareRenderer;
+        break;
+    default:
+        if (QSGRendererInterface::isApiRhiBased(ri->graphicsApi())) {
+            if (preferredType == QQuickShape::CurveRenderer || environmentPreferCurve) {
+                res = QQuickShape::CurveRenderer;
+            } else {
+                res = QQuickShape::GeometryRenderer;
+            }
+        } else {
+            qWarning("No path backend for this graphics API yet");
+        }
+        break;
+    }
+
+    return res;
 }
 
 // the renderer object lives on the gui thread
 void QQuickShapePrivate::createRenderer()
 {
     Q_Q(QQuickShape);
-    QSGRendererInterface *ri = q->window()->rendererInterface();
-    if (!ri)
+    QQuickShape::RendererType selectedType = selectRendererType();
+    if (selectedType == QQuickShape::UnknownRenderer)
         return;
 
-    switch (ri->graphicsApi()) {
-    case QSGRendererInterface::Software:
-        rendererType = QQuickShape::SoftwareRenderer;
+    rendererType = selectedType;
+    rendererChanged = true;
+
+    switch (selectedType) {
+    case QQuickShape::SoftwareRenderer:
         renderer = new QQuickShapeSoftwareRenderer;
         break;
+    case QQuickShape::GeometryRenderer:
+        renderer = new QQuickShapeGenericRenderer(q);
+        break;
+    case QQuickShape::CurveRenderer:
+        renderer = new QQuickShapeCurveRenderer(q);
+        break;
     default:
-        if (QSGRendererInterface::isApiRhiBased(ri->graphicsApi())) {
-            rendererType = QQuickShape::GeometryRenderer;
-            renderer = new QQuickShapeGenericRenderer(q);
-        } else {
-            qWarning("No path backend for this graphics API yet");
-        }
+        Q_UNREACHABLE();
         break;
     }
 }
@@ -975,7 +1118,7 @@ QSGNode *QQuickShapePrivate::createNode()
 {
     Q_Q(QQuickShape);
     QSGNode *node = nullptr;
-    if (!q->window())
+    if (!q->window() || !renderer)
         return node;
     QSGRendererInterface *ri = q->window()->rendererInterface();
     if (!ri)
@@ -989,9 +1132,14 @@ QSGNode *QQuickShapePrivate::createNode()
         break;
     default:
         if (QSGRendererInterface::isApiRhiBased(ri->graphicsApi())) {
-            node = new QQuickShapeGenericNode;
-            static_cast<QQuickShapeGenericRenderer *>(renderer)->setRootNode(
-                static_cast<QQuickShapeGenericNode *>(node));
+            if (rendererType == QQuickShape::CurveRenderer) {
+                node = new QSGNode;
+                static_cast<QQuickShapeCurveRenderer *>(renderer)->setRootNode(node);
+            } else {
+                node = new QQuickShapeGenericNode;
+                static_cast<QQuickShapeGenericRenderer *>(renderer)->setRootNode(
+                    static_cast<QQuickShapeGenericNode *>(node));
+            }
         } else {
             qWarning("No path backend for this graphics API yet");
         }

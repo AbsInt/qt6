@@ -37,16 +37,6 @@
 #define QML_FLICK_DISCARDSAMPLES 0
 #endif
 
-// The default maximum velocity of a flick.
-#ifndef QML_FLICK_DEFAULTMAXVELOCITY
-# define QML_FLICK_DEFAULTMAXVELOCITY 2500
-#endif
-
-// The default deceleration of a flick.
-#ifndef QML_FLICK_DEFAULTDECELERATION
-# define QML_FLICK_DEFAULTDECELERATION 1500
-#endif
-
 // How much faster to decelerate when overshooting
 #ifndef QML_FLICK_OVERSHOOTFRICTION
 #define QML_FLICK_OVERSHOOTFRICTION 8
@@ -74,5 +64,9 @@
 
 // Really slow flicks can be annoying.
 const qreal _q_MinimumFlickVelocity = 75.0;
+
+// If QQuickFlickablePrivate::wheelDeceleration (perhaps overridden via QT_QUICK_FLICKABLE_WHEEL_DECELERATION)
+// is greater than this, we switch to proportional wheel scrolling: no "acceleration" at all.
+const qreal _q_MaximumWheelDeceleration = 14999;
 
 #endif //QQUICKFLICKABLEBEHAVIOR_H

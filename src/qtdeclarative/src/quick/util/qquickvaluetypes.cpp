@@ -1047,6 +1047,40 @@ void QQuickFontValueType::setPreferShaping(bool enable)
         v.setStyleStrategy(static_cast<QFont::StyleStrategy>(v.styleStrategy() | QFont::PreferNoShaping));
 }
 
+void QQuickFontValueType::setFeatures(const QVariantMap &features)
+{
+    v.clearFeatures();
+    for (auto it = features.constBegin(); it != features.constEnd(); ++it) {
+        QString featureName = it.key();
+        quint32 tag = QFont::stringToTag(featureName.toUtf8());
+        if (tag == 0) {
+            qWarning() << "Invalid font feature" << featureName << "ignored";
+            continue;
+        }
+
+        bool ok;
+        quint32 value = it.value().toUInt(&ok);
+        if (!ok) {
+            qWarning() << "Font feature value" << it.value() << "is not an integer.";
+            continue;
+        }
+
+        v.setFeature(tag, value);
+    }
+}
+
+QVariantMap QQuickFontValueType::features() const
+{
+    QVariantMap ret;
+    for (quint32 tag : v.featureTags()) {
+        QString featureName = QString::fromUtf8(QFont::tagToString(tag));
+
+        ret.insert(featureName, v.featureValue(tag));
+    }
+
+    return ret;
+}
+
 QVariant QQuickColorSpaceValueType::create(const QJSValue &params)
 {
     if (!params.isObject())

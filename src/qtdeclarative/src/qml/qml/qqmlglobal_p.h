@@ -24,20 +24,24 @@
 
 QT_BEGIN_NAMESPACE
 
+inline bool qmlConvertBoolConfigOption(const char *v)
+{
+    return v != nullptr && qstrcmp(v, "0") != 0 && qstrcmp(v, "false") != 0;
+}
+
+template<typename T, T(*Convert)(const char *)>
+T qmlGetConfigOption(const char *var)
+{
+    if (Q_UNLIKELY(!qEnvironmentVariableIsEmpty(var)))
+        return Convert(qgetenv(var));
+    return Convert(nullptr);
+}
 
 #define DEFINE_BOOL_CONFIG_OPTION(name, var) \
     static bool name() \
     { \
-        static enum { Yes, No, Unknown } status = Unknown; \
-        if (status == Unknown) { \
-            status = No; \
-            if (Q_UNLIKELY(!qEnvironmentVariableIsEmpty(#var))) { \
-                const QByteArray v = qgetenv(#var); \
-                if (v != "0" && v != "false") \
-                    status = Yes; \
-            } \
-        } \
-        return status == Yes; \
+        static const bool result = qmlGetConfigOption<bool, qmlConvertBoolConfigOption>(#var); \
+        return result; \
     }
 
 /*!
@@ -118,6 +122,8 @@ do { \
     QMetaObject::disconnect(sender, signalIdx, receiver, methodIdx); \
 } while (0)
 
+Q_QML_PRIVATE_EXPORT bool qmlobject_can_cast(QObject *object, const QMetaObject *mo);
+
 /*!
     This method is identical to qobject_cast<T>() except that it does not require lazy
     QMetaObjects to be built, so should be preferred in all QML code that might interact
@@ -133,10 +139,23 @@ do { \
 template<class T>
 T qmlobject_cast(QObject *object)
 {
-    if (object && QQmlMetaObject::canConvert(object, &reinterpret_cast<T>(object)->staticMetaObject))
+    if (!object)
+        return nullptr;
+    if (qmlobject_can_cast(object, &(std::remove_pointer_t<T>::staticMetaObject)))
         return static_cast<T>(object);
     else
         return nullptr;
+}
+
+class QQuickItem;
+template<>
+inline QQuickItem *qmlobject_cast<QQuickItem *>(QObject *object)
+{
+    if (!object || !object->isQuickItemType())
+        return nullptr;
+    // QQuickItem is incomplete here -> can't use static_cast
+    // but we don't need any pointer adjustment, so reinterpret is safe
+    return reinterpret_cast<QQuickItem *>(object);
 }
 
 #define IS_SIGNAL_CONNECTED(Sender, SenderType, Name, Arguments) \
@@ -185,13 +204,18 @@ inline void QQml_setParent_noEvent(QObject *object, QObject *parent)
 class QQmlValueTypeProvider
 {
 public:
-    static bool constructFromJSValue(const QJSValue &, QMetaType, void *);
+    static bool createValueType(QMetaType targetMetaType, void *target, const QV4::Value &source);
+    static bool createValueType(
+        QMetaType targetMetaType, void *target, QMetaType sourceMetaType, void *source);
 
-    static bool createValueType(const QString &, QMetaType, void *);
-    static bool createValueType(const QJSValue &, QMetaType, void *);
-    static bool createValueType(const QV4::Value &, QMetaType, void *);
-    static bool createValueType(const QVariant &, QMetaType, void *);
-    static bool createValueType(QMetaType, void *, QMetaType, void *);
+    static QVariant constructValueType(
+            QMetaType targetMetaType, const QMetaObject *targetMetaObject,
+            int ctorIndex, void *ctorArg);
+
+    static QVariant createValueType(const QJSValue &, QMetaType);
+    static QVariant createValueType(const QString &, QMetaType);
+    static QVariant createValueType(const QV4::Value &, QMetaType);
+    static QVariant createValueType(const QVariant &, QMetaType);
 };
 
 class Q_QML_PRIVATE_EXPORT QQmlColorProvider

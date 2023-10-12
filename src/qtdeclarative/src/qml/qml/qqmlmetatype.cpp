@@ -318,6 +318,15 @@ void QQmlMetaType::clearTypeRegistrations()
     data->metaObjectToType.clear();
     data->undeletableTypes.clear();
     data->propertyCaches.clear();
+    data->inlineComponentTypes.clear();
+}
+
+void QQmlMetaType::registerTypeAlias(int typeIndex, const QString &name)
+{
+    QQmlMetaTypeDataPtr data;
+    const QQmlType type = data->types.value(typeIndex);
+    const QQmlTypePrivate *priv = type.priv();
+    data->nameToType.insert(name, priv);
 }
 
 int QQmlMetaType::registerAutoParentFunction(const QQmlPrivate::RegisterAutoParent &function)
@@ -1276,6 +1285,36 @@ QQmlType QQmlMetaType::qmlType(const QUrl &unNormalizedUrl, bool includeNonFileI
         return QQmlType();
 }
 
+QQmlType QQmlMetaType::inlineComponentType(const QQmlType &containingType, const QString &name)
+{
+    const QQmlMetaTypeDataPtr data;
+    return data->inlineComponentTypes[InlineComponentKey {containingType.priv(), name}];
+}
+
+void QQmlMetaType::associateInlineComponent(
+    const QQmlType &containingType, const QString &name,
+    const CompositeMetaTypeIds &metaTypeIds, QQmlType existingType)
+{
+    bool const reuseExistingType = existingType.isValid();
+    auto priv = reuseExistingType
+                    ? const_cast<QQmlTypePrivate *>(existingType.priv())
+                    : new QQmlTypePrivate { QQmlType::RegistrationType::InlineComponentType } ;
+    priv->setName( QString::fromUtf8(existingType.typeName()), name);
+    QUrl icUrl(existingType.sourceUrl());
+    icUrl.setFragment(name);
+    priv->extraData.id->url = icUrl;
+    priv->extraData.id->containingType = containingType.priv();
+    priv->typeId = metaTypeIds.id;
+    priv->listId = metaTypeIds.listId;
+    QQmlType icType(priv);
+
+    QQmlMetaTypeDataPtr data;
+    data->inlineComponentTypes.insert({containingType.priv(), name}, icType);
+
+    if (!reuseExistingType)
+        priv->release();
+}
+
 /*!
 Returns a QQmlPropertyCache for \a obj if one is available.
 
@@ -1347,9 +1386,12 @@ QQmlPropertyCache::ConstPtr QQmlMetaType::propertyCacheForType(QMetaType metaTyp
         return composite;
 
     const QQmlTypePrivate *type = data->idToType.value(metaType.id());
-    return (type && type->typeId == metaType)
-            ? data->propertyCache(QQmlType(type).metaObject(), type->version)
-            : QQmlPropertyCache::ConstPtr();
+    if (type && type->typeId == metaType) {
+        if (const QMetaObject *mo = QQmlType(type).metaObject())
+            return data->propertyCache(mo, type->version);
+    }
+
+    return QQmlPropertyCache::ConstPtr();
 }
 
 /*!
@@ -1389,8 +1431,11 @@ QQmlPropertyCache::ConstPtr QQmlMetaType::rawPropertyCacheForType(
         return QQmlPropertyCache::ConstPtr();
 
     const QQmlType type(typePriv);
-    if (type.containsRevisionedAttributes())
+    if (type.containsRevisionedAttributes()) {
+        // It can only have (revisioned) properties or methods if it has a metaobject
+        Q_ASSERT(type.metaObject());
         return data->propertyCache(type, version);
+    }
 
     if (const QMetaObject *metaObject = type.metaObject())
         return data->propertyCache(metaObject, version);
@@ -1403,6 +1448,8 @@ void QQmlMetaType::unregisterType(int typeIndex)
     QQmlMetaTypeDataPtr data;
     const QQmlType type = data->types.value(typeIndex);
     if (const QQmlTypePrivate *d = type.priv()) {
+        if (d->regType == QQmlType::CompositeType || d->regType == QQmlType::CompositeSingletonType)
+            removeFromInlineComponents(data->inlineComponentTypes, d);
         removeQQmlTypePrivate(data->idToType, d);
         removeQQmlTypePrivate(data->nameToType, d);
         removeQQmlTypePrivate(data->urlToType, d);
@@ -1424,10 +1471,14 @@ void QQmlMetaType::registerMetaObjectForType(const QMetaObject *metaobject, QQml
     data->metaObjectToType.insert(metaobject, type);
 }
 
-static bool hasActiveInlineComponents(const QQmlTypePrivate *d)
+static bool hasActiveInlineComponents(const QQmlMetaTypeData *data, const QQmlTypePrivate *d)
 {
-    for (const QQmlType &ic : std::as_const(d->objectIdToICType)) {
-        const QQmlTypePrivate *icPriv = ic.priv();
+    for (auto it = data->inlineComponentTypes.begin(), end = data->inlineComponentTypes.end();
+         it != end; ++it) {
+        if (it.key().containingType != d)
+            continue;
+
+        const QQmlTypePrivate *icPriv = it->priv();
         if (icPriv && icPriv->count() > 1)
             return true;
     }
@@ -1448,9 +1499,13 @@ void QQmlMetaType::freeUnusedTypesAndCaches()
         QList<QQmlType>::Iterator it = data->types.begin();
         while (it != data->types.end()) {
             const QQmlTypePrivate *d = (*it).priv();
-            if (d && d->count() == 1 && !hasActiveInlineComponents(d)) {
+            if (d && d->count() == 1 && !hasActiveInlineComponents(data, d)) {
                 deletedAtLeastOneType = true;
 
+                if (d->regType == QQmlType::CompositeType
+                        || d->regType == QQmlType::CompositeSingletonType) {
+                    removeFromInlineComponents(data->inlineComponentTypes, d);
+                }
                 removeQQmlTypePrivate(data->idToType, d);
                 removeQQmlTypePrivate(data->nameToType, d);
                 removeQQmlTypePrivate(data->urlToType, d);
@@ -1510,7 +1565,7 @@ QList<QQmlType> QQmlMetaType::qmlTypes()
     const QQmlMetaTypeDataPtr data;
 
     QList<QQmlType> types;
-    for (QQmlTypePrivate *t : data->nameToType)
+    for (const QQmlTypePrivate *t : data->nameToType)
         types.append(QQmlType(t));
 
     return types;
@@ -1541,8 +1596,23 @@ QList<QQmlType> QQmlMetaType::qmlSingletonTypes()
     return retn;
 }
 
-const QQmlPrivate::CachedQmlUnit *QQmlMetaType::findCachedCompilationUnit(const QUrl &uri, CachedUnitLookupError *status)
+static bool isFullyTyped(const QQmlPrivate::CachedQmlUnit *unit)
 {
+    quint32 numTypedFunctions = 0;
+    for (const QQmlPrivate::AOTCompiledFunction *function = unit->aotCompiledFunctions;
+         function; ++function) {
+        if (function->functionPtr)
+            ++numTypedFunctions;
+        else
+            return false;
+    }
+    return numTypedFunctions == unit->qmlData->functionTableSize;
+}
+
+const QQmlPrivate::CachedQmlUnit *QQmlMetaType::findCachedCompilationUnit(
+        const QUrl &uri, QQmlMetaType::CacheMode mode, CachedUnitLookupError *status)
+{
+    Q_ASSERT(mode != RejectAll);
     const QQmlMetaTypeDataPtr data;
 
     for (const auto lookup : std::as_const(data->lookupCachedQmlUnit)) {
@@ -1554,6 +1624,16 @@ const QQmlPrivate::CachedQmlUnit *QQmlMetaType::findCachedCompilationUnit(const 
                     *status = CachedUnitLookupError::VersionMismatch;
                 return nullptr;
             }
+
+            if (mode == RequireFullyTyped && !isFullyTyped(unit)) {
+                qCDebug(DBG_DISK_CACHE)
+                        << "Error loading pre-compiled file " << uri
+                        << ": compilation unit contains functions not compiled to native code.";
+                if (status)
+                    *status = CachedUnitLookupError::NotFullyTyped;
+                return nullptr;
+            }
+
             if (status)
                 *status = CachedUnitLookupError::NoError;
             return unit;

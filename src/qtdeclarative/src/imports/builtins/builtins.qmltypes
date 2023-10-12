@@ -24,6 +24,7 @@ Module {
 
     Component {
         name: "QVariantList"
+        extension: "Array"
         valueType: "QVariant"
         accessSemantics: "sequence"
     }
@@ -156,6 +157,7 @@ Module {
     Component {
         file: "qqmllist.h"
         name: "QQmlListProperty<QObject>"
+        extension: "Array"
         accessSemantics: "sequence"
         valueType: "QObject"
     }
@@ -163,8 +165,33 @@ Module {
     Component {
         file: "qobject.h"
         name: "QObjectList"
+        extension: "Array"
         accessSemantics: "sequence"
         valueType: "QObject"
+    }
+
+    Component {
+        name: "qint8"
+        extension: "Number"
+        accessSemantics: "value"
+    }
+
+    Component {
+        name: "quint8"
+        extension: "Number"
+        accessSemantics: "value"
+    }
+
+    Component {
+        name: "short"
+        extension: "Number"
+        accessSemantics: "value"
+    }
+
+    Component {
+        name: "ushort"
+        extension: "Number"
+        accessSemantics: "value"
     }
 
     Component {
@@ -182,13 +209,13 @@ Module {
     }
 
     Component {
-       name: "qlonglong"
-       accessSemantics: "value"
+        name: "qlonglong"
+        accessSemantics: "value"
     }
 
     Component {
-      name: "qulonglong"
-      accessSemantics: "value"
+        name: "qulonglong"
+        accessSemantics: "value"
     }
 
     Component {
@@ -220,6 +247,7 @@ Module {
 
     Component {
         name: "QStringList"
+        extension: "Array"
         valueType: "QString"
         accessSemantics: "sequence"
     }

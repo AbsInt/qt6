@@ -160,8 +160,8 @@ void QQuickItemView::setModel(const QVariant &m)
         disconnect(d->model, SIGNAL(createdItem(int,QObject*)), this, SLOT(createdItem(int,QObject*)));
         disconnect(d->model, SIGNAL(destroyingItem(QObject*)), this, SLOT(destroyingItem(QObject*)));
         if (QQmlDelegateModel *delegateModel = qobject_cast<QQmlDelegateModel*>(d->model)) {
-            disconnect(delegateModel, SIGNAL(itemPooled(int, QObject *)), this, SLOT(onItemPooled(int, QObject *)));
-            disconnect(delegateModel, SIGNAL(itemReused(int, QObject *)), this, SLOT(onItemReused(int, QObject *)));
+            disconnect(delegateModel, SIGNAL(itemPooled(int,QObject*)), this, SLOT(onItemPooled(int,QObject*)));
+            disconnect(delegateModel, SIGNAL(itemReused(int,QObject*)), this, SLOT(onItemReused(int,QObject*)));
         }
     }
 
@@ -199,8 +199,8 @@ void QQuickItemView::setModel(const QVariant &m)
         connect(d->model, SIGNAL(initItem(int,QObject*)), this, SLOT(initItem(int,QObject*)));
         connect(d->model, SIGNAL(destroyingItem(QObject*)), this, SLOT(destroyingItem(QObject*)));
         if (QQmlDelegateModel *delegateModel = qobject_cast<QQmlDelegateModel*>(d->model)) {
-            connect(delegateModel, SIGNAL(itemPooled(int, QObject *)), this, SLOT(onItemPooled(int, QObject *)));
-            connect(delegateModel, SIGNAL(itemReused(int, QObject *)), this, SLOT(onItemReused(int, QObject *)));
+            connect(delegateModel, SIGNAL(itemPooled(int,QObject*)), this, SLOT(onItemPooled(int,QObject*)));
+            connect(delegateModel, SIGNAL(itemReused(int,QObject*)), this, SLOT(onItemReused(int,QObject*)));
         }
         if (isComponentComplete()) {
             d->updateSectionCriteria();
@@ -1496,7 +1496,6 @@ QQuickItemViewPrivate::QQuickItemViewPrivate()
     , buffer(QML_VIEW_DEFAULTCACHEBUFFER), bufferMode(BufferBefore | BufferAfter)
     , displayMarginBeginning(0), displayMarginEnd(0)
     , layoutDirection(Qt::LeftToRight), verticalLayoutDirection(QQuickItemView::TopToBottom)
-    , moveReason(Other)
     , visibleIndex(0)
     , currentIndex(-1), currentItem(nullptr)
     , trackedItem(nullptr), requestedIndex(-1)

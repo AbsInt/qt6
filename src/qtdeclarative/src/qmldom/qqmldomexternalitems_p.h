@@ -23,9 +23,11 @@
 #include <QtQml/private/qqmljsast_p.h>
 #include <QtQml/private/qqmljsengine_p.h>
 #include <QtQml/private/qqmldirparser_p.h>
+#include <QtQmlCompiler/private/qqmljstyperesolver_p.h>
 #include <QtCore/QMetaType>
 
 #include <limits>
+#include <memory>
 
 Q_DECLARE_METATYPE(QQmlDirParser::Plugin)
 
@@ -113,7 +115,7 @@ public:
     constexpr static DomType kindValue = DomType::QmlDirectory;
     DomType kind() const override { return kindValue; }
     QmlDirectory(QString filePath = QString(), QStringList dirList = QStringList(),
-                 QDateTime lastDataUpdateAt = QDateTime::fromMSecsSinceEpoch(0, UTC),
+                 QDateTime lastDataUpdateAt = QDateTime::fromMSecsSinceEpoch(0, QTimeZone::UTC),
                  int derivedFrom = 0);
     QmlDirectory(const QmlDirectory &o) = default;
 
@@ -152,7 +154,7 @@ public:
     static ErrorGroups myParsingErrors();
 
     QmldirFile(QString filePath = QString(), QString code = QString(),
-               QDateTime lastDataUpdateAt = QDateTime::fromMSecsSinceEpoch(0, UTC),
+               QDateTime lastDataUpdateAt = QDateTime::fromMSecsSinceEpoch(0, QTimeZone::UTC),
                int derivedFrom = 0)
         : ExternalOwningItem(filePath, lastDataUpdateAt, Paths::qmldirFilePath(filePath),
                              derivedFrom, code)
@@ -217,7 +219,7 @@ public:
     constexpr static DomType kindValue = DomType::JsFile;
     DomType kind() const override { return kindValue; }
     JsFile(QString filePath = QString(),
-           QDateTime lastDataUpdateAt = QDateTime::fromMSecsSinceEpoch(0, UTC),
+           QDateTime lastDataUpdateAt = QDateTime::fromMSecsSinceEpoch(0, QTimeZone::UTC),
            Path pathFromTop = Path(), int derivedFrom = 0)
         : ExternalOwningItem(filePath, lastDataUpdateAt, pathFromTop, derivedFrom)
     {
@@ -248,7 +250,7 @@ public:
 
     QmlFile(const QmlFile &o);
     QmlFile(QString filePath = QString(), QString code = QString(),
-            QDateTime lastDataUpdate = QDateTime::fromMSecsSinceEpoch(0, UTC),
+            QDateTime lastDataUpdate = QDateTime::fromMSecsSinceEpoch(0, QTimeZone::UTC),
             int derivedFrom = 0);
     static ErrorGroups myParsingErrors();
     bool iterateDirectSubpaths(DomItem &self, DirectVisitor)
@@ -322,8 +324,17 @@ public:
     ImportScope &importScope() { return m_importScope; }
     const ImportScope &importScope() const { return m_importScope; }
 
+    std::optional<std::shared_ptr<QQmlJSTypeResolver>> typeResolver() const
+    {
+        return m_typeResolver;
+    }
+    void setTypeResolver(const std::shared_ptr<QQmlJSTypeResolver> &typeResolver)
+    {
+        m_typeResolver = typeResolver;
+    }
+
 private:
-    friend class QmlDomAstCreator;
+    friend class QQmlDomAstCreator;
     std::shared_ptr<Engine> m_engine;
     AST::UiProgram *m_ast; // avoid? would make moving away from it easier
     std::shared_ptr<AstComments> m_astComments;
@@ -333,6 +344,7 @@ private:
     QList<Pragma> m_pragmas;
     QList<Import> m_imports;
     ImportScope m_importScope;
+    std::optional<std::shared_ptr<QQmlJSTypeResolver>> m_typeResolver;
 };
 
 class QMLDOM_EXPORT QmltypesFile final : public ExternalOwningItem
@@ -349,7 +361,7 @@ public:
     DomType kind() const override { return kindValue; }
 
     QmltypesFile(QString filePath = QString(), QString code = QString(),
-                 QDateTime lastDataUpdateAt = QDateTime::fromMSecsSinceEpoch(0, UTC),
+                 QDateTime lastDataUpdateAt = QDateTime::fromMSecsSinceEpoch(0, QTimeZone::UTC),
                  int derivedFrom = 0)
         : ExternalOwningItem(filePath, lastDataUpdateAt, Paths::qmltypesFilePath(filePath),
                              derivedFrom, code)
@@ -417,7 +429,7 @@ public:
     DomType kind() const override { return kindValue; }
 
     GlobalScope(QString filePath = QString(),
-                QDateTime lastDataUpdateAt = QDateTime::fromMSecsSinceEpoch(0, UTC),
+                QDateTime lastDataUpdateAt = QDateTime::fromMSecsSinceEpoch(0, QTimeZone::UTC),
                 int derivedFrom = 0)
         : ExternalOwningItem(filePath, lastDataUpdateAt, Paths::globalScopePath(filePath),
                              derivedFrom)

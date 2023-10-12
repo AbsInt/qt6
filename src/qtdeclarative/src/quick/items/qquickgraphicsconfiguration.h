@@ -34,6 +34,9 @@ public:
     void setDebugMarkers(bool enable);
     bool isDebugMarkersEnabled() const;
 
+    void setTimestamps(bool enable);
+    bool timestampsEnabled() const;
+
     void setPreferSoftwareDevice(bool enable);
     bool prefersSoftwareDevice() const;
 

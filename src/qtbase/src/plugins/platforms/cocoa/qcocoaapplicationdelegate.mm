@@ -318,8 +318,34 @@ QT_USE_NAMESPACE
 {
     Q_UNUSED(replyEvent);
     NSString *urlString = [[event paramDescriptorForKeyword:keyDirectObject] stringValue];
-    QWindowSystemInterface::handleFileOpenEvent(QUrl(QString::fromNSString(urlString)));
+    // The string we get from the requesting application might not necessarily meet
+    // QUrl's requirement for a IDN-compliant host. So if we can't parse into a QUrl,
+    // then we pass the string on to the application as the name of a file (and
+    // QFileOpenEvent::file is not guaranteed to be the path to a local, open'able
+    // file anyway).
+    const QString qurlString = QString::fromNSString(urlString);
+    if (const QUrl url(qurlString); url.isValid())
+        QWindowSystemInterface::handleFileOpenEvent(url);
+    else
+        QWindowSystemInterface::handleFileOpenEvent(qurlString);
 }
+
+- (BOOL)applicationSupportsSecureRestorableState:(NSApplication *)application
+{
+    if (@available(macOS 12, *)) {
+        if ([reflectionDelegate respondsToSelector:_cmd])
+            return [reflectionDelegate applicationSupportsSecureRestorableState:application];
+    }
+
+    // We don't support or implement state restorations via the AppKit
+    // state restoration APIs, but if we did, we would/should support
+    // secure state restoration. This is the default for apps linked
+    // against the macOS 14 SDK, but as we target versions below that
+    // as well we need to return YES here explicitly to silence a runtime
+    // warning.
+    return YES;
+}
+
 @end
 
 @implementation QCocoaApplicationDelegate (Menus)

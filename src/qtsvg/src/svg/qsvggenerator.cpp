@@ -560,9 +560,6 @@ public:
     it is necessary to use the QPainter::begin() and \l{QPainter::}{end()} to
     explicitly begin and end painting on the device.
 
-    The \l{SVG Generator Example} shows how the same painting commands can be used
-    for painting a widget and writing an SVG file.
-
     \sa QSvgRenderer, QSvgWidget, {Qt SVG C++ Classes}
 */
 
@@ -577,15 +574,13 @@ public:
     \value Svg11 The generated document follows the SVG 1.1 specification.
 */
 
-#if QT_VERSION < QT_VERSION_CHECK(7, 0, 0)
 /*!
     Constructs a new generator using the SVG Tiny 1.2 profile.
 */
-QSvgGenerator::QSvgGenerator()
+QSvgGenerator::QSvgGenerator() // ### Qt 7: inline
     : QSvgGenerator(SvgVersion::SvgTiny12)
 {
 }
-#endif
 
 /*!
     \since 6.5

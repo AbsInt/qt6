@@ -201,7 +201,11 @@ public:
     QVariant property(const QString &name);
     QVariant property(const QString &name, const QVariant &defaultValue);
 
+#ifdef QT_PLATFORM_WINDOW_HAS_VIRTUAL_SET_BACKING_STORE
+    void setBackingStore(QPlatformBackingStore *store) override;
+#else
     void setBackingStore(QWaylandShmBackingStore *backingStore) { mBackingStore = backingStore; }
+#endif
     QWaylandShmBackingStore *backingStore() const { return mBackingStore; }
 
     void setShellIntegration(QWaylandShellIntegration *shellIntegration);
@@ -225,9 +229,10 @@ public:
     void beginFrame();
     void endFrame();
 
-    void addChildPopup(QWaylandWindow* child);
-    void removeChildPopup(QWaylandWindow* child);
     void closeChildPopups();
+
+    virtual void reinit();
+    void reset();
 
 public slots:
     void applyConfigure();
@@ -307,6 +312,11 @@ protected:
 
     Qt::WindowFlags mFlags;
     QRegion mMask;
+
+    // Empty QRegion maps to "infinite" input region, needs a dedicated "deliberately empty" state.
+    QRegion mInputRegion;
+    bool mTransparentInputRegion = false;
+
     QRegion mOpaqueArea;
     Qt::WindowStates mLastReportedWindowStates = Qt::WindowNoState;
     ToplevelWindowTilingStates mLastReportedToplevelWindowTilingStates = WindowNoState;
@@ -317,7 +327,11 @@ protected:
 
     QMargins mCustomMargins;
 
+    QPointer<QWaylandWindow> mTransientParent;
     QList<QPointer<QWaylandWindow>> mChildPopups;
+
+private slots:
+    void doApplyConfigureFromOtherThread();
 
 private:
     void setGeometry_helper(const QRect &rect);
@@ -325,16 +339,19 @@ private:
     void initializeWlSurface();
     bool shouldCreateShellSurface() const;
     bool shouldCreateSubSurface() const;
-    void reset();
-    static void closePopups(QWaylandWindow *parent);
     QPlatformScreen *calculateScreenFromSurfaceEvents() const;
     void setOpaqueArea(const QRegion &opaqueArea);
     bool isOpaque() const;
+    void updateInputRegion();
     void updateViewport();
 
     void handleMouseEventWithDecoration(QWaylandInputDevice *inputDevice, const QWaylandPointerEvent &e);
     void handleScreensChanged();
     void sendRecursiveExposeEvent();
+
+    QWaylandWindow *closestTransientParent() const;
+    void addChildPopup(QWaylandWindow *child);
+    void removeChildPopup(QWaylandWindow *child);
 
     bool mInResizeFromApplyConfigure = false;
     bool lastVisible = false;

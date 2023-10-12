@@ -11,6 +11,7 @@ endif()
 if(TARGET Qt::WaylandCompositor)
     #add_subdirectory(wip-cpp-compositor)
     add_subdirectory(scaling-compositor)
+    add_subdirectory(hwlayer-compositor)
 endif()
 
 if(QT_FEATURE_opengl AND TARGET Qt::Quick AND TARGET Qt::WaylandClient)

@@ -299,6 +299,10 @@ Q_QML_EXPORT int qmlRegisterUncreatableMetaObject(const QMetaObject &staticMetaO
 template<typename T>
 int qmlRegisterType(const char *uri, int versionMajor, int versionMinor, const char *qmlName)
 {
+    static_assert(!std::is_abstract_v<T>,
+        "It is not possible to register an abstract type with qmlRegisterType. "
+        "Maybe you wanted qmlRegisterUncreatableType or qmlRegisterInterface?");
+
     QQmlPrivate::RegisterType type = {
         QQmlPrivate::RegisterType::CurrentVersion,
         QQmlPrivate::QmlMetaType<T>::self(),
@@ -331,6 +335,10 @@ int qmlRegisterType(const char *uri, int versionMajor, int versionMinor, const c
 template<typename T, int metaObjectRevision>
 int qmlRegisterType(const char *uri, int versionMajor, int versionMinor, const char *qmlName)
 {
+    static_assert(!std::is_abstract_v<T>,
+        "It is not possible to register an abstract type with qmlRegisterType. "
+        "Maybe you wanted qmlRegisterUncreatableType or qmlRegisterInterface?");
+
     QQmlPrivate::RegisterType type = {
         QQmlPrivate::RegisterType::CurrentVersion,
         QQmlPrivate::QmlMetaType<T>::self(),
@@ -395,6 +403,13 @@ int qmlRegisterRevision(const char *uri, int versionMajor, int versionMinor)
 template<typename T, typename E>
 int qmlRegisterExtendedType(const char *uri, int versionMajor)
 {
+    static_assert(!std::is_abstract_v<T>,
+        "It is not possible to register an extension to an abstract type with qmlRegisterExtendedType.");
+
+    static_assert(!std::is_abstract_v<E>,
+        "It is not possible to register an abstract type with qmlRegisterExtendedType. "
+        "Maybe you wanted qmlRegisterExtendedUncreatableType?");
+
     QQmlPrivate::RegisterType type = {
         QQmlPrivate::RegisterType::CurrentVersion,
         QQmlPrivate::QmlMetaType<T>::self(),
@@ -430,6 +445,13 @@ template<typename T, typename E>
 int qmlRegisterExtendedType(const char *uri, int versionMajor, int versionMinor,
                             const char *qmlName)
 {
+    static_assert(!std::is_abstract_v<T>,
+        "It is not possible to register an extension to an abstract type with qmlRegisterExtendedType.");
+
+    static_assert(!std::is_abstract_v<E>,
+        "It is not possible to register an abstract type with qmlRegisterExtendedType. "
+        "Maybe you wanted qmlRegisterExtendedUncreatableType?");
+
     QQmlAttachedPropertiesFunc attached = QQmlPrivate::attachedPropertiesFunc<E>();
     const QMetaObject * attachedMetaObject = QQmlPrivate::attachedPropertiesMetaObject<E>();
     if (!attached) {
@@ -488,6 +510,10 @@ template<typename T>
 int qmlRegisterCustomType(const char *uri, int versionMajor, int versionMinor,
                           const char *qmlName, QQmlCustomParser *parser)
 {
+    static_assert(!std::is_abstract_v<T>,
+        "It is not possible to register an abstract type with qmlRegisterCustomType. "
+        "Maybe you wanted qmlRegisterUncreatableType or qmlRegisterInterface?");
+
     QQmlPrivate::RegisterType type = {
         QQmlPrivate::RegisterType::CurrentVersion,
         QQmlPrivate::QmlMetaType<T>::self(),
@@ -521,6 +547,10 @@ template<typename T, int metaObjectRevision>
 int qmlRegisterCustomType(const char *uri, int versionMajor, int versionMinor,
                           const char *qmlName, QQmlCustomParser *parser)
 {
+    static_assert(!std::is_abstract_v<T>,
+        "It is not possible to register an abstract type with qmlRegisterCustomType. "
+        "Maybe you wanted qmlRegisterUncreatableType or qmlRegisterInterface?");
+
     QQmlPrivate::RegisterType type = {
         QQmlPrivate::RegisterType::CurrentVersion,
         QQmlPrivate::QmlMetaType<T>::self(),
@@ -554,6 +584,12 @@ template<typename T, typename E>
 int qmlRegisterCustomExtendedType(const char *uri, int versionMajor, int versionMinor,
                           const char *qmlName, QQmlCustomParser *parser)
 {
+    static_assert(!std::is_abstract_v<T>,
+        "It is not possible to register an extension to an abstract type with qmlRegisterCustomExtendedType.");
+
+    static_assert(!std::is_abstract_v<E>,
+        "It is not possible to register an abstract type with qmlRegisterCustomExtendedType.");
+
     QQmlAttachedPropertiesFunc attached = QQmlPrivate::attachedPropertiesFunc<E>();
     const QMetaObject * attachedMetaObject = QQmlPrivate::attachedPropertiesMetaObject<E>();
     if (!attached) {
@@ -752,6 +788,9 @@ inline int qmlRegisterType(const QUrl &url, const char *uri, int versionMajor, i
 template<typename Container>
 inline int qmlRegisterAnonymousSequentialContainer(const char *uri, int versionMajor)
 {
+    static_assert(!std::is_abstract_v<Container>,
+        "It is not possible to register an abstract container with qmlRegisterAnonymousSequentialContainer.");
+
     QQmlPrivate::RegisterSequentialContainer type = {
         0,
         uri,

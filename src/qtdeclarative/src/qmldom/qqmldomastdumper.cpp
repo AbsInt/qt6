@@ -132,6 +132,14 @@ public:
     bool visit(UiHeaderItemList *) override { start(u"UiHeaderItemList"); return true; }
     void endVisit(AST::UiHeaderItemList *) override { stop(u"UiHeaderItemList"); }
 
+#if QT_VERSION >= QT_VERSION_CHECK(6, 6, 0)
+    bool visit(UiPragmaValueList *el) override {
+        start(QLatin1String("UiPragmaValueList value=%1").arg(el->value));
+        return true;
+    }
+    void endVisit(AST::UiPragmaValueList *) override { stop(u"UiPragmaValueList"); }
+#endif
+
     bool visit(UiPragma *el) override {
         start(QLatin1String("UiPragma name=%1 pragmaToken=%2%3")
                       .arg(quotedString(el->name), loc(el->pragmaToken),
@@ -162,19 +170,11 @@ public:
                             "typeModifierToken=%11 typeToken=%12 "
                             "identifierToken=%13 colonToken=%14%15")
                       .arg(quotedString(typeStr), quotedString(el->typeModifier),
-#if QT_VERSION >= QT_VERSION_CHECK(6, 3, 0)
                            quotedString(el->name), boolStr(el->isDefaultMember()),
                            boolStr(el->isReadonly()), boolStr(el->isRequired()),
                            loc(el->defaultToken()), loc(el->readonlyToken()),
                            loc(el->propertyToken()), loc(el->requiredToken()),
                            loc(el->typeModifierToken), loc(el->typeToken),
-#else
-                           quotedString(el->name), boolStr(el->defaultToken.isValid()),
-                           boolStr(el->readonlyToken.isValid()),
-                           boolStr(el->requiredToken.isValid()), loc(el->defaultToken),
-                           loc(el->readonlyToken), loc(el->propertyToken), loc(el->requiredToken),
-                           loc(el->typeModifierToken), loc(el->typeToken),
-#endif
                            loc(el->identifierToken), loc(el->colonToken),
                            semicolonToken(el->semicolonToken)));
         if (!noAnnotations()) // put annotations inside the node they refer to
@@ -338,7 +338,7 @@ public:
     void endVisit(AST::ThisExpression *) override { stop(u"ThisExpression"); }
 
     bool visit(AST::IdentifierExpression *el) override {
-        start(QLatin1String("IdentifierExpression name=%1 identiferToken=%2")
+        start(QLatin1String("IdentifierExpression name=%1 identifierToken=%2")
               .arg(quotedString(el->name), loc(el->identifierToken)));
         return true;
     }
@@ -989,20 +989,6 @@ public:
         return true;
     }
     void endVisit(AST::Type *) override { stop(u"Type"); }
-
-#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
-    bool visit(AST::TypeArgument *) override {
-        start(u"TypeArgument");
-        return true;
-    }
-    void endVisit(AST::TypeArgument *) override { stop(u"TypeArgument"); }
-#else
-    bool visit(AST::TypeArgumentList *) override {
-        start(u"TypeArgumentList");
-        return true;
-    }
-    void endVisit(AST::TypeArgumentList *) override { stop(u"TypeArgumentList"); }
-#endif
 
     bool visit(AST::TypeAnnotation *el) override {
         start(QLatin1String("TypeAnnotation colonToken=%1")

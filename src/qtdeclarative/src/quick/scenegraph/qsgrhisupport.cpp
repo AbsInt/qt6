@@ -50,19 +50,22 @@ void QSGRhiSupport::applySettings()
     if (m_requested.valid) {
         // explicit rhi backend request from C++ (e.g. via QQuickWindow)
         switch (m_requested.api) {
-        case QSGRendererInterface::OpenGLRhi:
+        case QSGRendererInterface::OpenGL:
             m_rhiBackend = QRhi::OpenGLES2;
             break;
-        case QSGRendererInterface::Direct3D11Rhi:
+        case QSGRendererInterface::Direct3D11:
             m_rhiBackend = QRhi::D3D11;
             break;
-        case QSGRendererInterface::VulkanRhi:
+        case QSGRendererInterface::Direct3D12:
+            m_rhiBackend = QRhi::D3D12;
+            break;
+        case QSGRendererInterface::Vulkan:
             m_rhiBackend = QRhi::Vulkan;
             break;
-        case QSGRendererInterface::MetalRhi:
+        case QSGRendererInterface::Metal:
             m_rhiBackend = QRhi::Metal;
             break;
-        case QSGRendererInterface::NullRhi:
+        case QSGRendererInterface::Null:
             m_rhiBackend = QRhi::Null;
             break;
         default:
@@ -79,6 +82,8 @@ void QSGRhiSupport::applySettings()
             m_rhiBackend = QRhi::OpenGLES2;
         } else if (rhiBackend == QByteArrayLiteral("d3d11") || rhiBackend == QByteArrayLiteral("d3d")) {
             m_rhiBackend = QRhi::D3D11;
+        } else if (rhiBackend == QByteArrayLiteral("d3d12")) {
+            m_rhiBackend = QRhi::D3D12;
         } else if (rhiBackend == QByteArrayLiteral("vulkan")) {
             m_rhiBackend = QRhi::Vulkan;
         } else if (rhiBackend == QByteArrayLiteral("metal")) {
@@ -111,21 +116,6 @@ void QSGRhiSupport::applySettings()
     // (QQuickWindow) may depend on the graphics API as well (surfaceType
     // f.ex.), and all that is based on what we report from here. So further
     // adjustments are not possible (or, at minimum, not safe and portable).
-
-    m_killDeviceFrameCount = qEnvironmentVariableIntValue("QSG_RHI_SIMULATE_DEVICE_LOSS");
-    if (m_killDeviceFrameCount > 0 && m_rhiBackend == QRhi::D3D11)
-        qDebug("Graphics device will be reset every %d frames", m_killDeviceFrameCount);
-
-    QByteArray hdrRequest = qgetenv("QSG_RHI_HDR");
-    if (!hdrRequest.isEmpty()) {
-        hdrRequest = hdrRequest.toLower();
-        if (hdrRequest == QByteArrayLiteral("scrgb") || hdrRequest == QByteArrayLiteral("extendedsrgblinear"))
-            m_swapChainFormat = QRhiSwapChain::HDRExtendedSrgbLinear;
-        else if (hdrRequest == QByteArrayLiteral("hdr10"))
-            m_swapChainFormat = QRhiSwapChain::HDR10;
-        else
-            qWarning("Unknown HDR mode '%s'", hdrRequest.constData());
-    }
 }
 
 void QSGRhiSupport::adjustToPlatformQuirks()
@@ -508,7 +498,7 @@ QRhiTexture::Format QSGRhiSupport::toRhiTextureFormatFromVulkan(uint format, QRh
 #endif
 
 #ifdef Q_OS_WIN
-QRhiTexture::Format QSGRhiSupport::toRhiTextureFormatFromD3D11(uint format, QRhiTexture::Flags *flags)
+QRhiTexture::Format QSGRhiSupport::toRhiTextureFormatFromDXGI(uint format, QRhiTexture::Flags *flags)
 {
     auto rhiFormat = QRhiTexture::UnknownFormat;
     bool sRGB = false;
@@ -655,15 +645,17 @@ QSGRendererInterface::GraphicsApi QSGRhiSupport::graphicsApi() const
 {
     switch (m_rhiBackend) {
     case QRhi::Null:
-        return QSGRendererInterface::NullRhi;
+        return QSGRendererInterface::Null;
     case QRhi::Vulkan:
-        return QSGRendererInterface::VulkanRhi;
+        return QSGRendererInterface::Vulkan;
     case QRhi::OpenGLES2:
-        return QSGRendererInterface::OpenGLRhi;
+        return QSGRendererInterface::OpenGL;
     case QRhi::D3D11:
-        return QSGRendererInterface::Direct3D11Rhi;
+        return QSGRendererInterface::Direct3D11;
+    case QRhi::D3D12:
+        return QSGRendererInterface::Direct3D12;
     case QRhi::Metal:
-        return QSGRendererInterface::MetalRhi;
+        return QSGRendererInterface::Metal;
     default:
         return QSGRendererInterface::Unknown;
     }
@@ -677,6 +669,7 @@ QSurface::SurfaceType QSGRhiSupport::windowSurfaceType() const
     case QRhi::OpenGLES2:
         return QSurface::OpenGLSurface;
     case QRhi::D3D11:
+    case QRhi::D3D12:
         return QSurface::Direct3DSurface;
     case QRhi::Metal:
         return QSurface::MetalSurface;
@@ -714,6 +707,10 @@ static const void *qsgrhi_vk_rifResource(QSGRendererInterface::Resource res,
             return &maybeVkRpNat->renderPass;
         else
             return nullptr;
+    case QSGRendererInterface::GraphicsQueueFamilyIndexResource:
+        return &vknat->gfxQueueFamilyIdx;
+    case QSGRendererInterface::GraphicsQueueIndexResource:
+        return &vknat->gfxQueueIdx;
     default:
         return nullptr;
     }
@@ -742,6 +739,19 @@ static const void *qsgrhi_d3d11_rifResource(QSGRendererInterface::Resource res, 
         return d3dnat->dev;
     case QSGRendererInterface::DeviceContextResource:
         return d3dnat->context;
+    default:
+        return nullptr;
+    }
+}
+
+static const void *qsgrhi_d3d12_rifResource(QSGRendererInterface::Resource res, const QRhiNativeHandles *nat)
+{
+    const QRhiD3D12NativeHandles *d3dnat = static_cast<const QRhiD3D12NativeHandles *>(nat);
+    switch (res) {
+    case QSGRendererInterface::DeviceResource:
+        return d3dnat->dev;
+    case QSGRendererInterface::CommandQueueResource:
+        return d3dnat->commandQueue;
     default:
         return nullptr;
     }
@@ -822,6 +832,8 @@ const void *QSGRhiSupport::rifResource(QSGRendererInterface::Resource res,
 #ifdef Q_OS_WIN
     case QRhi::D3D11:
         return qsgrhi_d3d11_rifResource(res, nat);
+    case QRhi::D3D12:
+        return qsgrhi_d3d12_rifResource(res, nat);
 #endif
 #if defined(Q_OS_MACOS) || defined(Q_OS_IOS)
     case QRhi::Metal:
@@ -1093,6 +1105,7 @@ QSGRhiSupport::RhiCreateResult QSGRhiSupport::createRhi(QQuickWindow *window, QS
 
     const bool debugLayer = wd->graphicsConfig.isDebugLayerEnabled();
     const bool debugMarkers = wd->graphicsConfig.isDebugMarkersEnabled();
+    const bool timestamps = wd->graphicsConfig.timestampsEnabled();
     const bool preferSoftware = wd->graphicsConfig.prefersSoftwareDevice();
     const bool pipelineCacheSave = !wd->graphicsConfig.pipelineCacheSaveFile().isEmpty()
             || (wd->graphicsConfig.isAutomaticPipelineCacheEnabled()
@@ -1103,13 +1116,17 @@ QSGRhiSupport::RhiCreateResult QSGRhiSupport::createRhi(QQuickWindow *window, QS
             "Creating QRhi with backend %s for window %p (wflags 0x%X)\n"
             "  Graphics API debug/validation layers: %d\n"
             "  Debug markers: %d\n"
+            "  Timestamps: %d\n"
             "  Prefer software device: %d\n"
             "  Shader/pipeline cache collection: %d",
-            qPrintable(backendName), window, int(window->flags()), debugLayer, debugMarkers, preferSoftware, pipelineCacheSave);
+            qPrintable(backendName), window, int(window->flags()), debugLayer,
+            debugMarkers, timestamps, preferSoftware, pipelineCacheSave);
 
     QRhi::Flags flags;
     if (debugMarkers)
         flags |= QRhi::EnableDebugMarkers;
+    if (timestamps)
+        flags |= QRhi::EnableTimestamps;
     if (preferSoftware)
         flags |= QRhi::PreferSoftwareRenderer;
     if (pipelineCacheSave)
@@ -1179,10 +1196,6 @@ QSGRhiSupport::RhiCreateResult QSGRhiSupport::createRhi(QQuickWindow *window, QS
     if (backend == QRhi::D3D11) {
         QRhiD3D11InitParams rhiParams;
         rhiParams.enableDebugLayer = debugLayer;
-        if (m_killDeviceFrameCount > 0) {
-            rhiParams.framesUntilKillingDeviceViaTdr = m_killDeviceFrameCount;
-            rhiParams.repeatDeviceKill = true;
-        }
         if (customDevD->type == QQuickGraphicsDevicePrivate::Type::DeviceAndContext) {
             QRhiD3D11NativeHandles importDev;
             importDev.dev = customDevD->u.deviceAndContext.device;
@@ -1197,6 +1210,31 @@ QSGRhiSupport::RhiCreateResult QSGRhiSupport::createRhi(QQuickWindow *window, QS
             importDev.featureLevel = customDevD->u.adapter.featureLevel;
             qCDebug(QSG_LOG_INFO, "Using D3D11 adapter LUID %u, %d and feature level %d",
                     importDev.adapterLuidLow, importDev.adapterLuidHigh, importDev.featureLevel);
+            rhi = QRhi::create(backend, &rhiParams, flags, &importDev);
+        } else {
+            rhi = QRhi::create(backend, &rhiParams, flags);
+            if (!rhi && !flags.testFlag(QRhi::PreferSoftwareRenderer)) {
+                qCDebug(QSG_LOG_INFO, "Failed to create a D3D device with default settings; "
+                                      "attempting to get a software rasterizer backed device instead");
+                flags |= QRhi::PreferSoftwareRenderer;
+                rhi = QRhi::create(backend, &rhiParams, flags);
+            }
+        }
+    } else if (backend == QRhi::D3D12) {
+        QRhiD3D12InitParams rhiParams;
+        rhiParams.enableDebugLayer = debugLayer;
+        if (customDevD->type == QQuickGraphicsDevicePrivate::Type::DeviceAndContext) {
+            QRhiD3D12NativeHandles importDev;
+            importDev.dev = customDevD->u.deviceAndContext.device;
+            qCDebug(QSG_LOG_INFO, "Using existing native D3D12 device %p", importDev.dev);
+            rhi = QRhi::create(backend, &rhiParams, flags, &importDev);
+        } else if (customDevD->type == QQuickGraphicsDevicePrivate::Type::Adapter) {
+            QRhiD3D12NativeHandles importDev;
+            importDev.adapterLuidLow = customDevD->u.adapter.luidLow;
+            importDev.adapterLuidHigh = customDevD->u.adapter.luidHigh;
+            importDev.minimumFeatureLevel = customDevD->u.adapter.featureLevel;
+            qCDebug(QSG_LOG_INFO, "Using D3D12 adapter LUID %u, %d and minimum feature level %d",
+                    importDev.adapterLuidLow, importDev.adapterLuidHigh, importDev.minimumFeatureLevel);
             rhi = QRhi::create(backend, &rhiParams, flags, &importDev);
         } else {
             rhi = QRhi::create(backend, &rhiParams, flags);
@@ -1470,10 +1508,23 @@ QImage QSGRhiSupport::grabOffscreenForProtectedContent(QQuickWindow *window)
 }
 #endif
 
-void QSGRhiSupport::applySwapChainFormat(QRhiSwapChain *scWithWindowSet)
+void QSGRhiSupport::applySwapChainFormat(QRhiSwapChain *scWithWindowSet, QQuickWindow *window)
 {
+    Q_ASSERT(scWithWindowSet->window() == window);
+
+    QRhiSwapChain::Format swapChainFormat = QRhiSwapChain::SDR;
+
+    QByteArray hdrRequest = qgetenv("QSG_RHI_HDR");
+    if (!hdrRequest.isEmpty()) {
+        hdrRequest = hdrRequest.toLower();
+        if (hdrRequest == QByteArrayLiteral("scrgb") || hdrRequest == QByteArrayLiteral("extendedsrgblinear"))
+            swapChainFormat = QRhiSwapChain::HDRExtendedSrgbLinear;
+        else if (hdrRequest == QByteArrayLiteral("hdr10"))
+            swapChainFormat = QRhiSwapChain::HDR10;
+    }
+
     const char *fmtStr = "unknown";
-    switch (m_swapChainFormat) {
+    switch (swapChainFormat) {
     case QRhiSwapChain::SDR:
         fmtStr = "SDR";
         break;
@@ -1487,8 +1538,8 @@ void QSGRhiSupport::applySwapChainFormat(QRhiSwapChain *scWithWindowSet)
         break;
     }
 
-    if (!scWithWindowSet->isFormatSupported(m_swapChainFormat)) {
-        if (m_swapChainFormat != QRhiSwapChain::SDR) {
+    if (!scWithWindowSet->isFormatSupported(swapChainFormat)) {
+        if (swapChainFormat != QRhiSwapChain::SDR) {
             qCDebug(QSG_LOG_INFO, "Requested a %s swapchain but it is reported to be unsupported with the current display(s). "
                                   "In multi-screen configurations make sure the window is located on a HDR-enabled screen. "
                                   "Request ignored, using SDR swapchain.", fmtStr);
@@ -1496,9 +1547,9 @@ void QSGRhiSupport::applySwapChainFormat(QRhiSwapChain *scWithWindowSet)
         return;
     }
 
-    scWithWindowSet->setFormat(m_swapChainFormat);
+    scWithWindowSet->setFormat(swapChainFormat);
 
-    if (m_swapChainFormat != QRhiSwapChain::SDR) {
+    if (swapChainFormat != QRhiSwapChain::SDR) {
         qCDebug(QSG_LOG_INFO, "Creating %s swapchain", fmtStr);
         qCDebug(QSG_LOG_INFO) << "HDR output info:" << scWithWindowSet->hdrInfo();
     }
@@ -1518,7 +1569,8 @@ QRhiTexture::Format QSGRhiSupport::toRhiTextureFormat(uint nativeFormat, QRhiTex
 #endif
 #ifdef Q_OS_WIN
     case QRhi::D3D11:
-        return toRhiTextureFormatFromD3D11(nativeFormat, flags);
+    case QRhi::D3D12:
+        return toRhiTextureFormatFromDXGI(nativeFormat, flags);
 #endif
 #if defined(Q_OS_MACOS) || defined(Q_OS_IOS)
     case QRhi::Metal:

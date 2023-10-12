@@ -1,13 +1,13 @@
 // Copyright (C) 2022 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
-#include <qdoc_catch_conversions.h>
+#include <catch_conversions/qdoc_catch_conversions.h>
 
-#include <catch.hpp>
+#include <catch/catch.hpp>
 
 #include <boundaries/filesystem/filepath.h>
 
-#include <qdoc_catch_generators.h>
+#include <catch_generators/generators/path_generator.h>
 
 #include <QFileInfo>
 #include <QTemporaryDir>

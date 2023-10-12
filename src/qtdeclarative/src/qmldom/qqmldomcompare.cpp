@@ -144,6 +144,11 @@ bool domCompare(DomItem &i1, DomItem &i2, function_ref<bool(Path, DomItem &, Dom
             if (v1 != v2)
                 return change(basePath, i1, i2);
         } break;
+        case DomKind::ScriptElement: {
+            // TODO: implement me
+            return false;
+
+        } break;
         }
     }
     return true;
@@ -151,7 +156,7 @@ bool domCompare(DomItem &i1, DomItem &i2, function_ref<bool(Path, DomItem &, Dom
 
 QStringList
 domCompareStrList(DomItem &i1, DomItem &i2,
-                  function_ref<bool(DomItem &, const PathEls::PathComponent &, DomItem &)> filter,
+                  function_ref<bool(DomItem &, const PathEls::PathComponent &, DomItem &) const> filter,
                   DomCompareStrList stopAtFirstDiff)
 {
     QStringList res;
@@ -206,6 +211,10 @@ domCompareStrList(DomItem &i1, DomItem &i2,
                                                    .arg(j2.toString()));
                             }
                         } break;
+                        case DomKind::ScriptElement: {
+                            // implement me
+                            break;
+                        }
                         }
                     }
                 }

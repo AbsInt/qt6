@@ -219,10 +219,7 @@ void QQuickImagePrivate::setImage(const QImage &image)
 {
     Q_Q(QQuickImage);
     pix.setImage(image);
-
     q->pixmapChange();
-    status = pix.isNull() ? QQuickImageBase::Null : QQuickImageBase::Ready;
-
     q->update();
 }
 
@@ -230,10 +227,7 @@ void QQuickImagePrivate::setPixmap(const QQuickPixmap &pixmap)
 {
     Q_Q(QQuickImage);
     pix.setPixmap(pixmap);
-
     q->pixmapChange();
-    status = pix.isNull() ? QQuickImageBase::Null : QQuickImageBase::Ready;
-
     q->update();
 }
 
@@ -495,7 +489,7 @@ qreal QQuickImage::paintedHeight() const
     \note \e {Changing this property dynamically causes the image source to be reloaded,
     potentially even from the network, if it is not in the disk cache.}
 
-    \sa {Pointer Handlers Example}
+    \sa {Qt Quick Examples - Pointer Handlers}
 */
 
 /*!

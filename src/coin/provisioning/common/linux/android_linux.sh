@@ -1,6 +1,43 @@
 #!/usr/bin/env bash
-# Copyright (C) 2022 The Qt Company Ltd.
-# SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+
+#############################################################################
+##
+## Copyright (C) 2022 The Qt Company Ltd.
+## Contact: https://www.qt.io/licensing/
+##
+## This file is part of the provisioning scripts of the Qt Toolkit.
+##
+## $QT_BEGIN_LICENSE:LGPL$
+## Commercial License Usage
+## Licensees holding valid commercial Qt licenses may use this file in
+## accordance with the commercial license agreement provided with the
+## Software or, alternatively, in accordance with the terms contained in
+## a written agreement between you and The Qt Company. For licensing terms
+## and conditions see https://www.qt.io/terms-conditions. For further
+## information use the contact form at https://www.qt.io/contact-us.
+##
+## GNU Lesser General Public License Usage
+## Alternatively, this file may be used under the terms of the GNU Lesser
+## General Public License version 3 as published by the Free Software
+## Foundation and appearing in the file LICENSE.LGPL3 included in the
+## packaging of this file. Please review the following information to
+## ensure the GNU Lesser General Public License version 3 requirements
+## will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+##
+## GNU General Public License Usage
+## Alternatively, this file may be used under the terms of the GNU
+## General Public License version 2.0 or (at your option) the GNU General
+## Public license version 3 or any later version approved by the KDE Free
+## Qt Foundation. The licenses are as published by the Free Software
+## Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+## included in the packaging of this file. Please review the following
+## information to ensure the GNU General Public License requirements will
+## be met: https://www.gnu.org/licenses/gpl-2.0.html and
+## https://www.gnu.org/licenses/gpl-3.0.html.
+##
+## $QT_END_LICENSE$
+##
+#############################################################################
 
 # This script install Android sdk and ndk.
 
@@ -33,8 +70,8 @@ toolsSha1="9172381ff070ee2a416723c1989770cf4b0d1076"
 ndkSha1Latest="e27dcb9c8bcaa77b78ff68c3f23abcf6867959eb"
 ndkSha1Default=$ndkSha1Latest
 # Android automotive
-sdkApiLevelAutomovie="android-30"
-androidAutomotive11Url="$basePath/${sdkApiLevelAutomovie}_automotive.tar.gz"
+sdkApiLevelAutomotive="android-30"
+androidAutomotive11Url="$basePath/${sdkApiLevelAutomotive}_automotive.tar.gz"
 androidAutomotive="android-automotive"
 android11Sha="4a5cd2bea7ce323b724c3ff1faab13d99f9d2be9"
 
@@ -132,12 +169,12 @@ echo "no" | ./avdmanager create avd -n emulator_x86_api_23 -c 2048M -f \
 echo "no" | ./avdmanager create avd -n emulator_x86_64_api_33 -c 2048M -f \
     -k "system-images;android-33;google_apis;x86_64"
 
-echo "Install $sdkApiLevelAutomovie $androidAutomotive"
+echo "Install $sdkApiLevelAutomotive $androidAutomotive"
 DownloadURL "$androidAutomotive11Url" "$androidAutomotive11Url" "$android11Sha" \
-    "/tmp/${sdkApiLevelAutomovie}_automotive.tar.gz"
-sudo tar -xzf "/tmp/${sdkApiLevelAutomovie}_automotive.tar.gz" -C $sdkTargetFolder/system-images
+    "/tmp/${sdkApiLevelAutomotive}_automotive.tar.gz"
+sudo tar -xzf "/tmp/${sdkApiLevelAutomotive}_automotive.tar.gz" -C $sdkTargetFolder/system-images
 echo "no" | ./avdmanager create avd -n automotive_emulator_x86_api_30 -c 2048M -f \
-    -k "system-images;${sdkApiLevelAutomovie};${androidAutomotive};x86"
+    -k "system-images;${sdkApiLevelAutomotive};${androidAutomotive};x86"
 
 # Purely informative, show the list of avd devices
 ./avdmanager list avd

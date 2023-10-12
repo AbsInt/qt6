@@ -92,7 +92,14 @@ protected:
         }
     }
 
+#if QT_VERSION >= QT_VERSION_CHECK(6, 6, 0)
     // we are not supposed to handle the ui
+    bool visit(UiPragmaValueList *) override
+    {
+        Q_ASSERT(false);
+        return false;
+    }
+#endif
     bool visit(UiPragma *) override
     {
         Q_ASSERT(false);
@@ -302,25 +309,34 @@ protected:
             PatternProperty *assignment = AST::cast<PatternProperty *>(it->property);
             if (assignment) {
                 preVisit(assignment);
-                bool isStringLike = AST::cast<StringLiteralPropertyName *>(assignment->name)
-                        || cast<IdentifierPropertyName *>(assignment->name);
+                const bool isStringLike = [this](const SourceLocation &loc) {
+                    const auto name = loc2Str(loc);
+                    if (name.first() == name.last()) {
+                        if (name.first() == QStringLiteral("\'")
+                            || name.first() == QStringLiteral("\""))
+                            return true;
+                    }
+                    return false;
+                }(assignment->name->propertyNameToken);
+
+                if (isStringLike)
+                    out("\"");
+
+                accept(assignment->name);
+                if (isStringLike)
+                    out("\"");
+
                 bool useInitializer = false;
                 const bool bindingIdentifierExist = !assignment->bindingIdentifier.isEmpty();
                 if (assignment->colonToken.length > 0) {
-                    if (isStringLike)
-                        out("\"");
-                    accept(assignment->name);
-                    if (isStringLike)
-                        out("\"");
                     out(": ");
                     useInitializer = true;
                     if (bindingIdentifierExist)
                         out(assignment->bindingIdentifier);
                     if (assignment->bindingTarget)
                         accept(assignment->bindingTarget);
-                } else {
-                    accept(assignment->name);
                 }
+
                 if (assignment->initializer) {
                     if (bindingIdentifierExist) {
                         out(" = ");
@@ -329,16 +345,17 @@ protected:
                     if (useInitializer)
                         accept(assignment->initializer);
                 }
+
                 if (it->next) {
                     out(",");
                     newLine();
                 }
-
                 postVisit(assignment);
                 continue;
             }
+
             PatternPropertyList *getterSetter = AST::cast<PatternPropertyList *>(it->next);
-            if (getterSetter->property) {
+            if (getterSetter && getterSetter->property) {
                 switch (getterSetter->property->type) {
                 case PatternElement::Getter:
                     out("get");
@@ -1008,7 +1025,7 @@ protected:
     bool visit(YieldExpression *) override { return true; }
     bool visit(ClassExpression *) override { return true; }
 
-    // Return false because we want to omit default function calls in accept0 implementation.
+    // Return false because we want to omit default function calls in accept0 implementation.
     bool visit(ClassDeclaration *ast) override
     {
         preVisit(ast);
@@ -1078,17 +1095,15 @@ protected:
     bool visit(ESModule *) override { return true; }
     bool visit(DebuggerStatement *) override { return true; }
     bool visit(Type *) override { return true; }
-#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
-    bool visit(TypeArgument *) override { return true; }
-#else
-    bool visit(TypeArgumentList *) override { return true; }
-#endif
     bool visit(TypeAnnotation *) override { return true; }
 
     // overridden to use BasicVisitor (and ensure warnings about new added AST)
     void endVisit(UiProgram *) override { }
     void endVisit(UiImport *) override { }
     void endVisit(UiHeaderItemList *) override { }
+#if QT_VERSION >= QT_VERSION_CHECK(6, 6, 0)
+    void endVisit(UiPragmaValueList *) override { }
+#endif
     void endVisit(UiPragma *) override { }
     void endVisit(UiPublicMember *) override { }
     void endVisit(UiSourceElement *) override { }
@@ -1199,11 +1214,6 @@ protected:
     void endVisit(ESModule *) override { }
     void endVisit(DebuggerStatement *) override { }
     void endVisit(Type *) override { }
-#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
-    void endVisit(TypeArgument *) override { }
-#else
-    void endVisit(TypeArgumentList *) override { }
-#endif
     void endVisit(TypeAnnotation *) override { }
 
     void throwRecursionDepthError() override

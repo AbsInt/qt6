@@ -330,6 +330,9 @@ QSet<int> VisitAll::uiKinds()
                            AST::Node::Kind_UiArrayBinding,     AST::Node::Kind_UiImport,
                            AST::Node::Kind_UiObjectBinding,    AST::Node::Kind_UiObjectDefinition,
                            AST::Node::Kind_UiInlineComponent,  AST::Node::Kind_UiObjectInitializer,
+#if QT_VERSION >= QT_VERSION_CHECK(6, 6, 0)
+                           AST::Node::Kind_UiPragmaValueList,
+#endif
                            AST::Node::Kind_UiPragma,           AST::Node::Kind_UiProgram,
                            AST::Node::Kind_UiPublicMember,     AST::Node::Kind_UiQualifiedId,
                            AST::Node::Kind_UiScriptBinding,    AST::Node::Kind_UiSourceElement,
@@ -418,11 +421,7 @@ const QSet<int> AstRangesVisitor::kindsToSkip()
                                              AST::Node::Kind_ClassElementList,
                                              AST::Node::Kind_PatternElementList,
                                              AST::Node::Kind_PatternPropertyList,
-#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
                                              AST::Node::Kind_TypeArgument,
-#else
-                                             AST::Node::Kind_TypeArgumentList,
-#endif
                                      })
                                    .unite(VisitAll::uiKinds());
     return res;
@@ -470,7 +469,7 @@ void AstComments::collectComments(MutableDomItem &item)
     if (std::shared_ptr<ScriptExpression> scriptPtr = item.ownerAs<ScriptExpression>()) {
         DomItem itemItem = item.item();
         return collectComments(scriptPtr->engine(), scriptPtr->ast(), scriptPtr->astComments(),
-                               item, FileLocations::treePtr(itemItem));
+                               item, FileLocations::treeOf(itemItem));
     } else if (std::shared_ptr<QmlFile> qmlFilePtr = item.ownerAs<QmlFile>()) {
         return collectComments(qmlFilePtr->engine(), qmlFilePtr->ast(), qmlFilePtr->astComments(),
                                item, qmlFilePtr->fileLocationsTree());

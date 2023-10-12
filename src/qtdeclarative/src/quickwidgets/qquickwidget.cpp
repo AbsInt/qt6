@@ -335,8 +335,10 @@ void QQuickWidgetPrivate::render(bool needsSync)
             q->createFramebufferObject();
         }
 
-        if (!rhi)
+        if (!rhi) {
+            qWarning("QQuickWidget: Attempted to render scene with no rhi");
             return;
+        }
 
         // createFramebufferObject() bails out when the size is empty. In this case
         // we cannot render either.
@@ -395,11 +397,6 @@ void QQuickWidgetPrivate::renderSceneGraph()
 
     if (!q->isVisible() || fakeHidden)
         return;
-
-    if (!useSoftwareRenderer && !rhi) {
-        qWarning("QQuickWidget: Attempted to render scene with no rhi");
-        return;
-    }
 
     render(true);
 
@@ -992,6 +989,8 @@ static inline QPlatformBackingStoreRhiConfig::Api graphicsApiToBackingStoreRhiAp
         return QPlatformBackingStoreRhiConfig::Vulkan;
     case QSGRendererInterface::Direct3D11:
         return QPlatformBackingStoreRhiConfig::D3D11;
+    case QSGRendererInterface::Direct3D12:
+        return QPlatformBackingStoreRhiConfig::D3D12;
     case QSGRendererInterface::Metal:
         return QPlatformBackingStoreRhiConfig::Metal;
     default:
@@ -1677,6 +1676,7 @@ bool QQuickWidget::event(QEvent *e)
 
     case QEvent::WindowAboutToChangeInternal:
         d->invalidateRenderControl();
+        d->deviceLost = true;
         d->rhi = nullptr;
         break;
 
@@ -1689,15 +1689,20 @@ bool QQuickWidget::event(QEvent *e)
         QScreen *newScreen = screen();
         if (d->offscreenWindow)
             d->offscreenWindow->setScreen(newScreen);
-
+        break;
+    }
+    case QEvent::DevicePixelRatioChange:
         if (d->useSoftwareRenderer || d->outputTexture) {
             // This will check the size taking the devicePixelRatio into account
             // and recreate if needed.
             createFramebufferObject();
             d->render(true);
         }
+        if (d->offscreenWindow) {
+            QEvent dprChangeEvent(QEvent::DevicePixelRatioChange);
+            QGuiApplication::sendEvent(d->offscreenWindow, &dprChangeEvent);
+        }
         break;
-    }
     case QEvent::Show:
     case QEvent::Move:
         d->updatePosition();
