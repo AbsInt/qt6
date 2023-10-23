@@ -940,7 +940,6 @@ QWindowsWindowData
 
     result.geometry = obtainedGeometry;
     result.restoreGeometry = frameGeometry(result.hwnd, topLevel);
-    result.preMoveGeometry = obtainedGeometry;
     result.fullFrameMargins = context->margins;
     result.embedded = embedded;
     result.hasFrame = hasFrame;
@@ -2157,56 +2156,11 @@ void QWindowsWindow::setGeometry(const QRect &rectIn)
     }
 }
 
-QWindow *QWindowsWindow::topTransientOf(QWindow *w)
-{
-    while (QWindow *transientParent = w->transientParent())
-        w = transientParent;
-    return w;
-}
-
-void QWindowsWindow::moveTransientChildren()
-{
-    // We need the topmost Transient parent since it is the window that will initiate
-    // the chain of moves, and is the only one with an already up to date DPI, which we
-    // need for the scaling.
-    const QWindowsWindow *topTransient = QWindowsWindow::windowsWindowOf(topTransientOf(window()));
-
-    const QWindow *currentWindow = window();
-    const QWindowList allWindows = QGuiApplication::allWindows();
-    for (QWindow *w : allWindows) {
-        if (w->transientParent() == currentWindow && w != currentWindow && w->isVisible()) {
-            QWindowsWindow *transientChild = QWindowsWindow::windowsWindowOf(w);
-
-            RECT oldChildPos{};
-            GetWindowRect(transientChild->handle(), &oldChildPos);
-            const RECT oldParentPos = RECTfromQRect(preMoveRect());
-
-            const qreal scale =
-                    QHighDpiScaling::roundScaleFactor(qreal(topTransient->savedDpi()) / QWindowsScreen::baseDpi) /
-                    QHighDpiScaling::roundScaleFactor(qreal(transientChild->savedDpi()) / QWindowsScreen::baseDpi);
-
-            const RECT offset =
-                    RECTfromQRect(QRect(scale * (oldChildPos.left - oldParentPos.left),
-                                        scale * (oldChildPos.top - oldParentPos.top), 0, 0));
-            const RECT newParentPos = RECTfromQRect(m_data.geometry);
-            const RECT newChildPos { newParentPos.left + offset.left,
-                                     newParentPos.top + offset.top,
-                                     transientChild->geometry().width(),
-                                     transientChild->geometry().height() };
-
-            SetWindowPos(transientChild->handle(), nullptr, newChildPos.left, newChildPos.top,
-                         newChildPos.right, newChildPos.bottom, SWP_NOZORDER | SWP_NOACTIVATE);
-        }
-    }
-}
-
 void QWindowsWindow::handleMoved()
 {
-    setPreMoveRect(geometry());
     // Minimize/Set parent can send nonsensical move events.
     if (!IsIconic(m_data.hwnd) && !testFlag(WithinSetParent))
         handleGeometryChange();
-    moveTransientChildren();
 }
 
 void QWindowsWindow::handleResized(int wParam, LPARAM lParam)
@@ -2744,10 +2698,17 @@ void QWindowsWindow::propagateSizeHints()
 bool QWindowsWindow::handleGeometryChangingMessage(MSG *message, const QWindow *qWindow, const QMargins &margins)
 {
     auto *windowPos = reinterpret_cast<WINDOWPOS *>(message->lParam);
+    const QRect suggestedFrameGeometry(windowPos->x, windowPos->y,
+                                       windowPos->cx, windowPos->cy);
+    const QRect suggestedGeometry = suggestedFrameGeometry - margins;
 
     // Tell Windows to discard the entire contents of the client area, as re-using
     // parts of the client area would lead to jitter during resize.
-    windowPos->flags |= SWP_NOCOPYBITS;
+    // Check the suggestedGeometry against the current one to only discard during
+    // resize, and not a plain move. We also look for SWP_NOSIZE since that, too,
+    // implies an identical size, and comparing QRects wouldn't work with null cx/cy
+    if (!(windowPos->flags & SWP_NOSIZE) && suggestedGeometry.size() != qWindow->geometry().size())
+        windowPos->flags |= SWP_NOCOPYBITS;
 
     if ((windowPos->flags & SWP_NOZORDER) == 0) {
         if (QWindowsWindow *platformWindow = QWindowsWindow::windowsWindowOf(qWindow)) {
@@ -2763,9 +2724,6 @@ bool QWindowsWindow::handleGeometryChangingMessage(MSG *message, const QWindow *
         return false;
     if (windowPos->flags & SWP_NOSIZE)
         return false;
-    const QRect suggestedFrameGeometry(windowPos->x, windowPos->y,
-                                       windowPos->cx, windowPos->cy);
-    const QRect suggestedGeometry = suggestedFrameGeometry - margins;
     const QRectF correctedGeometryF = QPlatformWindow::closestAcceptableGeometry(qWindow, suggestedGeometry);
     if (!correctedGeometryF.isValid())
         return false;

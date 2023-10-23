@@ -62,6 +62,8 @@ private slots:
     void proxyPage();
     void nonAsciiCharacterInput();
     void lineComments();
+    void tableAfterValue();
+    void modulestateCommand();
 
 private:
     QScopedPointer<QTemporaryDir> m_outputDir;
@@ -310,6 +312,16 @@ void tst_generatedOutput::illformated_documentation()
                    "another-page-with-comments-in-the-brief.html "
                    "page-with-comment-in-brief.html "
                    "brief-adventures.html");
+}
+
+void tst_generatedOutput::tableAfterValue()
+{
+    testAndCompare("testdata/tables/table-after-value.qdocconf",
+                   "tableaftervalue/tableaftervalue-members.html "
+                   "tableaftervalue/tableaftervalue.html "
+                   "tableaftervalue/tableaftervalue.index "
+                   "tableaftervalue/tableaftervalue.webxml "
+                   "tableaftervalue/tableaftervalue.xml");
 }
 
 void tst_generatedOutput::docBookFromQDocFile()
@@ -626,6 +638,21 @@ void tst_generatedOutput::lineComments()
             "linecomments/line-comment-adventures.webxml "
             "linecomments/line-comment-adventures.xml"
     );
+}
+
+void tst_generatedOutput::modulestateCommand()
+{
+    testAndCompare("testdata/modulestate/modulestate.qdocconf",
+                   "modulestate/boringclass.html "
+                   "modulestate/boringclass.webxml "
+                   "modulestate/boringclass.xml "
+                   "modulestate/excitingclass.html "
+                   "modulestate/excitingclass.webxml "
+                   "modulestate/excitingclass.xml "
+                   "modulestate/moduleinstate-module.html "
+                   "modulestate/moduleinstate-module.webxml "
+                   "modulestate/moduleinstate-module.xml "
+                   "modulestate/modulestate.index");
 }
 
 int main(int argc, char *argv[])

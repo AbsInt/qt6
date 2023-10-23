@@ -3847,13 +3847,13 @@ void tst_QFile::moveToTrash_data()
 
     // success cases
     {
-        QTemporaryFile temp("tst_qfile-moveToTrash-XXXXX");
+        QTemporaryFile temp(QDir::tempPath() + "/tst_qfile-moveToTrash-XXXXXX");
         if (!temp.open())
             QSKIP("Failed to create temporary file!");
         QTest::newRow("temporary file") << temp.fileName() << true << true;
     }
     {
-        QTemporaryDir tempDir("tst_qfile-moveToTrash-XXXXX");
+        QTemporaryDir tempDir(QDir::tempPath() + "/tst_qfile-moveToTrash-XXXXXX");
         if (!tempDir.isValid())
             QSKIP("Failed to create temporary directory!");
         tempDir.setAutoRemove(false);
@@ -3920,6 +3920,7 @@ void tst_QFile::moveToTrash()
     };
 
     ensureFile(source, create);
+    if (!QFileInfo::exists(source) && create) return;
 
     /* This test makes assumptions about the file system layout
        which might be wrong - moveToTrash may fail if the file lives
@@ -3967,6 +3968,7 @@ void tst_QFile::moveToTrash()
     // static version
     {
         ensureFile(source, create);
+        if (!QFileInfo::exists(source) && create) return;
         QString pathInTrash;
         const bool success = QFile::moveToTrash(source, &pathInTrash);
         QCOMPARE(success, result);

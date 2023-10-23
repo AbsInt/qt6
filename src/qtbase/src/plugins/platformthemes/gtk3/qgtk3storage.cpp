@@ -573,11 +573,22 @@ void QGtk3Storage::createMapping()
         ADD(All, AlternateBase);
 
         GTK(Default, Foreground, NORMAL);
-        ADD(All, ToolTipText);
         MODIFY(Normal, Text, 100, 100, 100);
         ADD(All, PlaceholderText, Light);
         MODIFY(Normal, Text, -100, -100, -100);
         ADD(All, PlaceholderText, Dark);
+
+        // Light, midlight, dark, mid, shadow colors
+        LIGHTER(Normal, Button, 125);
+        ADD(All, Light)
+        LIGHTER(Normal, Button, 113);
+        ADD(All, Midlight)
+        LIGHTER(Normal, Button, 113);
+        ADD(All, Mid)
+        LIGHTER(Normal, Button, 87);
+        ADD(All, Dark)
+        LIGHTER(Normal, Button, 5);
+        ADD(All, Shadow)
 
         SAVE(SystemPalette);
         CLEAR;

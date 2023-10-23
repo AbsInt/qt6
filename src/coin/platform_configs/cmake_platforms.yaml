@@ -12,7 +12,7 @@ Configurations:
     Id: 'ubuntu-22.04-documentation'
     Template: 'qtci-linux-Ubuntu-22.04-x86_64-51'
     Compiler: 'GCC'
-    Features: ['Sccache', 'Documentation', 'UseConfigure', 'DoNotRunTests', 'Insignificant']
+    Features: ['Sccache', 'Documentation', 'TestDocs', 'UseConfigure', 'DoNotRunTests']
     Configure arguments: '-make examples -developer-build -c++std c++20 -linker gold -no-warnings-are-errors -qtlibinfix TestInfix -qtnamespace TestNamespace'
     Environment variables: ['NON_QTBASE_CMAKE_ARGS=-DFFMPEG_DIR={{.Env.FFMPEG_DIR}}']
 -
@@ -30,7 +30,7 @@ Configurations:
     Id: 'ubuntu-22.04-documentation-x11-tests'
     Template: 'qtci-linux-Ubuntu-22.04-x86_64-51'
     Compiler: 'GCC'
-    Features: ['Sccache', 'TestDocs', 'TestOnly', 'InsignificantTests']
+    Features: ['Sccache', 'TestOnly']
     Platform dependency: 'ubuntu-22.04-documentation'
 -
     Id: 'ubuntu-22.04-x11-tests'
@@ -46,16 +46,6 @@ Configurations:
     Configure arguments: '-nomake examples -developer-build'
     Environment variables: [
         'PATH={{.Env.CMAKE_MIN_SUPPORTED_BIN_PATH}}:{{.Env.PATH}}',
-        'CMAKE_ARGS=-DOPENSSL_ROOT_DIR={{.Env.OPENSSL_HOME}}',
-        'NON_QTBASE_CMAKE_ARGS=-DFFMPEG_DIR={{.Env.FFMPEG_DIR}}'
-    ]
--
-    Id: 'sles-15_sp4-static'
-    Template: 'qtci-linux-SLES-15_SP4-x86_64-50'
-    Compiler: 'GCC'
-    Features: ['Sccache', 'DisableTests', 'UseConfigure']
-    Configure arguments: '-nomake examples -static -no-sql-mysql'
-    Environment variables: [
         'CMAKE_ARGS=-DOPENSSL_ROOT_DIR={{.Env.OPENSSL_HOME}}',
         'NON_QTBASE_CMAKE_ARGS=-DFFMPEG_DIR={{.Env.FFMPEG_DIR}}'
     ]
@@ -197,8 +187,8 @@ Configurations:
         'NON_QTBASE_CMAKE_ARGS=-DFFMPEG_DIR={{.Env.FFMPEG_DIR}}'
     ]
 -
-    Id: 'rhel-9.0'
-    Template: 'qtci-linux-RHEL-9.0-x86_64-50'
+    Id: 'rhel-9.2'
+    Template: 'qtci-linux-RHEL-9.2-x86_64-51'
     Compiler: 'GCC'
     Features: ['Sccache', 'UseConfigure', 'InstallQt5Dependencies']
     Configure arguments: '-nomake examples -release -force-debug-info -headersclean -separate-debug-info -qt-libjpeg -qt-libpng -qt-pcre -qt-harfbuzz -qt-doubleconversion -no-libudev -bundled-xcb-xinput'

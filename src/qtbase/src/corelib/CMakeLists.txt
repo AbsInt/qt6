@@ -175,7 +175,7 @@ qt_internal_add_module(Core
         kernel/qobjectcleanuphandler.cpp kernel/qobjectcleanuphandler.h
         kernel/qobjectdefs.h
         kernel/qobjectdefs_impl.h
-        kernel/qpointer.cpp kernel/qpointer.h
+        kernel/qpointer.h
         kernel/qproperty.cpp kernel/qproperty.h kernel/qproperty_p.h
         kernel/qpropertyprivate.h
         kernel/qsequentialiterable.cpp kernel/qsequentialiterable.h
@@ -1421,4 +1421,6 @@ qt_internal_extend_target(Core
     EXTRA_LINKER_SCRIPT_EXPORTS
         # QFutureInterfaceBase::setContinuation(std::function<void (QFutureInterfaceBase const&)>, QFutureInterfaceBasePrivate*)
         "_ZN20QFutureInterfaceBase15setContinuationE*P27QFutureInterfaceBasePrivate"
+        # QReadWriteLock::destroyRecursive(QReadWriteLockPrivate*)
+        "_ZN14QReadWriteLock16destroyRecursiveEP21QReadWriteLockPrivate"
 )

@@ -1295,9 +1295,15 @@ bool QFileSystemEngine::moveFileToTrash(const QFileSystemEntry &source,
         error = QSystemError(ENOENT, QSystemError::StandardLibraryError);
         return false;
     }
-    const QString sourcePath = sourceInfo.absoluteFilePath();
+    const QFileSystemEntry sourcePath = [&] {
+        if (QString path = source.filePath(); path.size() > 1 && path.endsWith(u'/')) {
+            path.chop(1);
+            return absoluteName(QFileSystemEntry(path));
+        }
+        return absoluteName(source);
+    }();
 
-    QDir trashDir(freeDesktopTrashLocation(sourcePath));
+    QDir trashDir(freeDesktopTrashLocation(sourcePath.filePath()));
     if (!trashDir.exists())
         return false;
     /*
@@ -1321,19 +1327,11 @@ bool QFileSystemEngine::moveFileToTrash(const QFileSystemEntry &source,
          file with the same name and location gets trashed many times, each subsequent
          trashing must not overwrite a previous copy."
     */
-    const QString trashedName = sourceInfo.isDir()
-                              ? QDir(sourcePath).dirName()
-                              : sourceInfo.fileName();
-    QString uniqueTrashedName = u'/' + trashedName;
+    QString uniqueTrashedName = u'/' + sourcePath.fileName();
     QString infoFileName;
-    int counter = 0;
     QFile infoFile;
-    auto makeUniqueTrashedName = [trashedName, &counter]() -> QString {
-        return QString::asprintf("/%ls-%04d", qUtf16Printable(trashedName), ++counter);
-    };
-    do {
-        while (QFile::exists(trashDir.filePath(filesDir) + uniqueTrashedName))
-            uniqueTrashedName = makeUniqueTrashedName();
+    auto openMode = QIODevice::NewOnly | QIODevice::WriteOnly | QIODevice::Text;
+    for (int counter = 0; !infoFile.open(openMode); ++counter) {
         /*
             "The $trash/info directory contains an "information file" for every file and directory
              in $trash/files. This file MUST have exactly the same name as the file or directory in
@@ -1346,21 +1344,19 @@ bool QFileSystemEngine::moveFileToTrash(const QFileSystemEntry &source,
              filename, and then opening with O_EXCL. If that succeeds the creation was atomic
              (at least on the same machine), if it fails you need to pick another filename."
         */
-        infoFileName = trashDir.filePath(infoDir)
+        uniqueTrashedName = QString::asprintf("/%ls-%04d", qUtf16Printable(sourcePath.fileName()),
+                                              counter);
+        QString infoFileName = trashDir.filePath(infoDir)
                      + uniqueTrashedName + ".trashinfo"_L1;
         infoFile.setFileName(infoFileName);
-        if (!infoFile.open(QIODevice::NewOnly | QIODevice::WriteOnly | QIODevice::Text))
-            uniqueTrashedName = makeUniqueTrashedName();
-    } while (!infoFile.isOpen());
+    }
 
-    QString pathForInfo;
-    const QStorageInfo storageInfo(sourcePath);
+    QString pathForInfo = sourcePath.filePath();
+    const QStorageInfo storageInfo(pathForInfo);
     if (storageInfo.isValid() && storageInfo.rootPath() != rootPath() && storageInfo != QStorageInfo(QDir::home())) {
-        pathForInfo = sourcePath.mid(storageInfo.rootPath().length());
+        pathForInfo = std::move(pathForInfo).mid(storageInfo.rootPath().length());
         if (pathForInfo.front() == u'/')
             pathForInfo = pathForInfo.mid(1);
-    } else {
-        pathForInfo = sourcePath;
     }
 
     /*
