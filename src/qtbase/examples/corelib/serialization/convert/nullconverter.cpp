@@ -6,7 +6,10 @@
 using namespace Qt::StringLiterals;
 
 static NullConverter nullConverter;
-Converter *Converter::null = &nullConverter;
+bool Converter::isNull(const Converter *converter)
+{
+    return converter == &nullConverter;
+}
 
 QString NullConverter::name() const
 {
@@ -46,9 +49,8 @@ void NullConverter::saveFile(QIODevice *f, const QVariant &contents,
                              const QStringList &options) const
 {
     if (!options.isEmpty()) {
-        fprintf(stderr, "Unknown option '%s' to null output. This format has no options.\n",
-                qPrintable(options.first()));
-        exit(EXIT_FAILURE);
+        qFatal("Unknown option '%s' to null output. This format has no options.",
+               qPrintable(options.first()));
     }
 
     Q_UNUSED(f);

@@ -112,6 +112,9 @@ public:
     const ButtonGroupHash &buttonGroups() const { return m_buttonGroups; }
     ButtonGroupHash &buttonGroups()  { return m_buttonGroups; }
 
+    static void getLayoutMargins(const QList<DomProperty*> &properties,
+                                 int *left, int *top, int *right, int *bottom);
+
     // return stretch as a comma-separated list
     static QString boxLayoutStretch(const QBoxLayout*);
     // apply stretch
@@ -144,6 +147,9 @@ public:
     static DomPalette *savePalette(const QPalette &palette);
     static QBrush setupBrush(const DomBrush *brush);
     static DomBrush *saveBrush(const QBrush &br);
+
+    static DomProperty *propertyByName(const QList<DomProperty*> &properties,
+                                       QAnyStringView needle);
 
     QStringList m_pluginPaths;
     QMap<QString, QDesignerCustomWidgetInterface*> m_customWidgets;
@@ -183,47 +189,13 @@ struct QDESIGNER_UILIB_EXPORT QFormBuilderStrings {
 
     static const QFormBuilderStrings &instance();
 
-    const QString buddyProperty;
-    const QString cursorProperty;
-    const QString objectNameProperty;
-    const QString trueValue;
-    const QString falseValue;
-    const QString horizontalPostFix;
-    const QString separator;
-    const QString defaultTitle;
-    const QString titleAttribute;
-    const QString labelAttribute;
-    const QString toolTipAttribute;
-    const QString whatsThisAttribute;
-    const QString flagsAttribute;
-    const QString iconAttribute;
-    const QString pixmapAttribute;
-    const QString textAttribute;
-    const QString currentIndexProperty;
-    const QString toolBarAreaAttribute;
-    const QString toolBarBreakAttribute;
-    const QString dockWidgetAreaAttribute;
-    const QString marginProperty;
-    const QString spacingProperty;
-    const QString leftMarginProperty;
-    const QString topMarginProperty;
-    const QString rightMarginProperty;
-    const QString bottomMarginProperty;
-    const QString horizontalSpacingProperty;
-    const QString verticalSpacingProperty;
-    const QString sizeHintProperty;
-    const QString sizeTypeProperty;
-    const QString orientationProperty;
-    const QString styleSheetProperty;
-    const QString qtHorizontal;
-    const QString qtVertical;
-    const QString currentRowProperty;
-    const QString tabSpacingProperty;
-    const QString qWidgetClass;
-    const QString lineClass;
-    const QString geometryProperty;
-    const QString scriptWidgetVariable;
-    const QString scriptChildWidgetsVariable;
+    static constexpr auto titleAttribute = QLatin1StringView("title");
+    static constexpr auto labelAttribute = QLatin1StringView("label");
+    static constexpr auto toolTipAttribute = QLatin1StringView("toolTip");
+    static constexpr auto whatsThisAttribute = QLatin1StringView("whatsThis");
+    static constexpr auto flagsAttribute = QLatin1StringView("flags");
+    static constexpr auto iconAttribute = QLatin1StringView("icon");
+    static constexpr auto textAttribute = QLatin1StringView("text") ;
 
     using RoleNName = QPair<Qt::ItemDataRole, QString>;
     QList<RoleNName> itemRoles;

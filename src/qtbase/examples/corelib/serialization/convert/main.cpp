@@ -43,8 +43,8 @@ static const Converter *prepareConverter(QString format, Converter::Direction di
         stream->open(mode);
 
     if (!stream->isOpen()) {
-        fprintf(stderr, "Could not open \"%s\" for %s: %s\n",
-                qPrintable(stream->fileName()), dirn, qPrintable(stream->errorString()));
+        qFatal("Could not open \"%s\" for %s: %s",
+               qPrintable(stream->fileName()), dirn, qPrintable(stream->errorString()));
     } else if (format == "auto"_L1) {
         for (const Converter *conv : std::as_const(*availableConverters)) {
             if (conv->directions().testFlag(direction) && conv->probeFile(stream))
@@ -54,21 +54,20 @@ static const Converter *prepareConverter(QString format, Converter::Direction di
             return nullptr;
 
         // Input format, however, we must know before we can call that:
-        fprintf(stderr, "Could not determine input format. Specify it with the -I option.\n");
+        qFatal("Could not determine input format. Specify it with the -I option.");
     } else {
         for (const Converter *conv : std::as_const(*availableConverters)) {
             if (conv->name() == format) {
                 if (!conv->directions().testFlag(direction)) {
-                    fprintf(stderr, "File format \"%s\" cannot be used for %s\n",
-                            qPrintable(format), dirn);
+                    qWarning("File format \"%s\" cannot be used for %s",
+                             qPrintable(format), dirn);
                     continue; // on the off chance there's another with the same name
                 }
                 return conv;
             }
         }
-        fprintf(stderr, "Unknown %s file format \"%s\"\n", dirn, qPrintable(format));
+        qFatal("Unknown %s file format \"%s\"", dirn, qPrintable(format));
     }
-    exit(EXIT_FAILURE);
     Q_UNREACHABLE_RETURN(nullptr);
 }
 
@@ -92,7 +91,7 @@ int main(int argc, char *argv[])
     outputFormats.prepend("auto"_L1);
 
     QCommandLineParser parser;
-    parser.setApplicationDescription("Qt file format conversion tool"_L1);
+    parser.setApplicationDescription("Qt serialization format conversion tool"_L1);
     parser.addHelpOption();
 
     QCommandLineOption inputFormatOption(QStringList{ "I"_L1, "input-format"_L1 });
@@ -135,17 +134,16 @@ int main(int argc, char *argv[])
             if (conv->name() == format) {
                 const char *help = conv->optionsHelp();
                 if (help) {
-                    printf("The following options are available for format '%s':\n\n%s",
-                           qPrintable(format), help);
+                    qInfo("The following options are available for format '%s':\n\n%s",
+                          qPrintable(format), help);
                 } else {
-                    printf("Format '%s' supports no options.\n", qPrintable(format));
+                    qInfo("Format '%s' supports no options.", qPrintable(format));
                 }
                 return EXIT_SUCCESS;
             }
         }
 
-        fprintf(stderr, "Unknown file format '%s'\n", qPrintable(format));
-        return EXIT_FAILURE;
+        qFatal("Unknown file format '%s'", qPrintable(format));
     }
 
     QStringList files = parser.positionalArguments();
@@ -156,9 +154,9 @@ int main(int argc, char *argv[])
     const Converter *outconv = prepareConverter(parser.value(outputFormatOption),
                                                 Converter::Direction::Out, &output);
 
-    // now finally perform the conversion
+    // Now finally perform the conversion:
     QVariant data = inconv->loadFile(&input, outconv);
-    Q_ASSERT_X(outconv, "Converter Tool",
+    Q_ASSERT_X(outconv, "Serialization Converter",
                "Internal error: converter format did not provide default");
     outconv->saveFile(&output, data, parser.values(optionOption));
     return EXIT_SUCCESS;
