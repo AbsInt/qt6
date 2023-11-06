@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR BSD-3-Clause
 
 #include "debugtextdumper.h"
+#include "variantorderedmap.h"
 
 #include <QDebug>
 #include <QTextStream>
@@ -56,25 +57,6 @@ Converter::Directions DebugTextDumper::directions() const
 Converter::Options DebugTextDumper::outputOptions() const
 {
     return SupportsArbitraryMapKeys;
-}
-
-const char *DebugTextDumper::optionsHelp() const
-{
-    return nullptr;
-}
-
-bool DebugTextDumper::probeFile(QIODevice *f) const
-{
-    Q_UNUSED(f);
-    return false;
-}
-
-QVariant DebugTextDumper::loadFile(QIODevice *f, const Converter *&outputConverter) const
-{
-    Q_UNREACHABLE();
-    Q_UNUSED(f);
-    Q_UNUSED(outputConverter);
-    return QVariant();
 }
 
 void DebugTextDumper::saveFile(QIODevice *f, const QVariant &contents,
