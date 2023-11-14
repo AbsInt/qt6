@@ -371,10 +371,6 @@ void QCocoaWindow::setVisible(bool visible)
         // Make the NSView visible first, before showing the NSWindow (in case of top level windows)
         m_view.hidden = NO;
 
-        // Explicitly mark the view as needing display, as we may
-        // not have drawn anything to the view when it was hidden.
-        [m_view setNeedsDisplay:YES];
-
         if (isContentView()) {
             QWindowSystemInterface::flushWindowSystemEvents(QEventLoop::ExcludeUserInputEvents);
 
@@ -440,6 +436,24 @@ void QCocoaWindow::setVisible(bool visible)
                 if (mainWindow && [mainWindow canBecomeKeyWindow])
                     [mainWindow makeKeyWindow];
             }
+        }
+
+        // AppKit will in some cases set up the key view loop for child views, even if we
+        // don't set autorecalculatesKeyViewLoop, nor call recalculateKeyViewLoop ourselves.
+        // When a child window is promoted to a top level, AppKit will maintain the key view
+        // loop between the views, even if these views now cross NSWindows, even after we
+        // explicitly call recalculateKeyViewLoop. When the top level is then hidden, AppKit
+        // will complain when -[NSView _setHidden:setNeedsDisplay:] tries to transfer first
+        // responder by reading the nextValidKeyView, and it turns out to live in a different
+        // window. We mitigate this by a last second reset of the first responder, which is
+        // what AppKit also falls back to. It's unclear if the original situation of views
+        // having their nextKeyView pointing to views in other windows is kosher or not.
+        if (m_view.window.firstResponder == m_view && m_view.nextValidKeyView
+            && m_view.nextValidKeyView.window != m_view.window) {
+            qCDebug(lcQpaWindow) << "Detected nextValidKeyView" << m_view.nextValidKeyView
+                << "in different window" << m_view.nextValidKeyView.window
+                << "Resetting" << m_view.window << "first responder to nil.";
+            [m_view.window makeFirstResponder:nil];
         }
 
         m_view.hidden = YES;
@@ -1308,8 +1322,14 @@ void QCocoaWindow::windowDidOrderOffScreen()
 
 void QCocoaWindow::windowDidChangeOcclusionState()
 {
+    // Note, we don't take the view's hiddenOrHasHiddenAncestor state into
+    // account here, but instead leave that up to handleExposeEvent, just
+    // like all the other signals that could potentially change the exposed
+    // state of the window.
     bool visible = m_view.window.occlusionState & NSWindowOcclusionStateVisible;
-    qCDebug(lcQpaWindow) << "QCocoaWindow::windowDidChangeOcclusionState" << window() << "is now" << (visible ? "visible" : "occluded");
+    qCDebug(lcQpaWindow) << "Occlusion state of" << m_view.window << "for"
+        << window() << "changed to" << (visible ? "visible" : "occluded");
+
     if (visible)
         [m_view setNeedsDisplay:YES];
     else
@@ -1479,6 +1499,10 @@ void QCocoaWindow::recreateWindowIfNeeded()
     QPlatformWindow *parentWindow = QPlatformWindow::parent();
     auto *parentCocoaWindow = static_cast<QCocoaWindow *>(parentWindow);
 
+    QCocoaWindow *oldParentCocoaWindow = nullptr;
+    if (QNSView *qnsView = qnsview_cast(m_view.superview))
+        oldParentCocoaWindow = qnsView.platformWindow;
+
     if (isForeignWindow()) {
         // A foreign window is created as such, and can never move between being
         // foreign and not, so we don't need to get rid of any existing NSWindows,
@@ -1488,16 +1512,14 @@ void QCocoaWindow::recreateWindowIfNeeded()
         // We do however need to manage the parent relationship
         if (parentCocoaWindow)
             [parentCocoaWindow->m_view addSubview:m_view];
+        else if (oldParentCocoaWindow)
+            [m_view removeFromSuperview];
 
         return;
     }
 
     const bool isEmbeddedView = isEmbedded();
     RecreationReasons recreateReason = RecreationNotNeeded;
-
-    QCocoaWindow *oldParentCocoaWindow = nullptr;
-    if (QNSView *qnsView = qnsview_cast(m_view.superview))
-        oldParentCocoaWindow = qnsView.platformWindow;
 
     if (parentWindow != oldParentCocoaWindow)
          recreateReason |= ParentChanged;

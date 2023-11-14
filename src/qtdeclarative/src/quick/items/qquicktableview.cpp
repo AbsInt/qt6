@@ -2477,20 +2477,21 @@ void QQuickTableViewPrivate::forceLayout(bool immediate)
 
     const QSize actualTableSize = calculateTableSize();
     if (tableSize != actualTableSize) {
-        // This can happen if the app is calling forceLayout while
-        // the model is updated, but before we're notified about it.
-        rebuildOptions = RebuildOption::All;
-    } else {
-        // Resizing a column (or row) can result in the table going from being
-        // e.g completely inside the viewport to go outside. And in the latter
-        // case, the user needs to be able to scroll the viewport, also if
-        // flags such as Flickable.StopAtBounds is in use. So we need to
-        // update contentWidth/Height to support that case.
-        rebuildOptions = RebuildOption::LayoutOnly
-                | RebuildOption::CalculateNewContentWidth
-                | RebuildOption::CalculateNewContentHeight
-                | checkForVisibilityChanges();
+        // The table size will have changed if forceLayout is called after
+        // the row count in the model has changed, but before we received
+        // a rowsInsertedCallback about it (and vice versa for columns).
+        rebuildOptions |= RebuildOption::ViewportOnly;
     }
+
+    // Resizing a column (or row) can result in the table going from being
+    // e.g completely inside the viewport to go outside. And in the latter
+    // case, the user needs to be able to scroll the viewport, also if
+    // flags such as Flickable.StopAtBounds is in use. So we need to
+    // update contentWidth/Height to support that case.
+    rebuildOptions |= RebuildOption::LayoutOnly
+            | RebuildOption::CalculateNewContentWidth
+            | RebuildOption::CalculateNewContentHeight
+            | checkForVisibilityChanges();
 
     scheduleRebuildTable(rebuildOptions);
 
@@ -4287,9 +4288,6 @@ QVariant QQuickTableViewPrivate::modelImpl() const
 
 void QQuickTableViewPrivate::setModelImpl(const QVariant &newModel)
 {
-    if (newModel == assignedModel)
-        return;
-
     assignedModel = newModel;
     scheduleRebuildTable(QQuickTableViewPrivate::RebuildOption::All);
     emit q_func()->modelChanged();
@@ -4297,7 +4295,7 @@ void QQuickTableViewPrivate::setModelImpl(const QVariant &newModel)
 
 void QQuickTableViewPrivate::syncModel()
 {
-    if (modelVariant == assignedModel)
+    if (compareModel(modelVariant, assignedModel))
         return;
 
     if (model) {
@@ -4571,6 +4569,13 @@ void QQuickTableViewPrivate::modelResetCallback()
     Q_Q(QQuickTableView);
     q->closeEditor();
     scheduleRebuildTable(RebuildOption::All);
+}
+
+bool QQuickTableViewPrivate::compareModel(const QVariant& model1, const QVariant& model2) const
+{
+    return (model1 == model2 ||
+            (model1.userType() == qMetaTypeId<QJSValue>() && model2.userType() == qMetaTypeId<QJSValue>() &&
+                                 model1.value<QJSValue>().strictlyEquals(model2.value<QJSValue>())));
 }
 
 void QQuickTableViewPrivate::positionViewAtRow(int row, Qt::Alignment alignment, qreal offset, const QRectF subRect)
@@ -5436,6 +5441,8 @@ QVariant QQuickTableView::model() const
 void QQuickTableView::setModel(const QVariant &newModel)
 {
     Q_D(QQuickTableView);
+    if (d->compareModel(newModel, d->assignedModel))
+        return;
 
     closeEditor();
     d->setModelImpl(newModel);

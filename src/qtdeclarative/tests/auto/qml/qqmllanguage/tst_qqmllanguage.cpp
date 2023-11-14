@@ -428,6 +428,7 @@ private slots:
 
     void typeAnnotationCycle();
     void objectInQmlListAndGc();
+    void deepAliasOnICOrReadonly();
 
 private:
     QQmlEngine engine;
@@ -8220,6 +8221,28 @@ void tst_qqmllanguage::objectInQmlListAndGc()
     QObject *child = children.at(&children, 0);
     QVERIFY(child);
     QCOMPARE(child->objectName(), QLatin1String("child"));
+}
+
+void tst_qqmllanguage::deepAliasOnICOrReadonly()
+{
+    QQmlEngine engine;
+    QQmlComponent c(&engine, testFileUrl("deepAliasOnICUser.qml"));
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+    QScopedPointer<QObject> o(c.create());
+    QVERIFY(!o.isNull());
+
+    QCOMPARE(o->property("borderColor").toString(), QLatin1String("black"));
+    QCOMPARE(o->property("borderObjectName").toString(), QLatin1String("theLeaf"));
+
+    const QVariant var = o->property("borderVarvar");
+    QCOMPARE(var.metaType(), QMetaType::fromType<QString>());
+    QCOMPARE(var.toString(), QLatin1String("mauve"));
+
+    QQmlComponent c2(&engine, testFileUrl("deepAliasOnReadonly.qml"));
+    QVERIFY(c2.isError());
+    QVERIFY(c2.errorString().contains(
+            QLatin1String(
+                    "Invalid property assignment: \"readonlyRectX\" is a read-only property")));
 }
 
 QTEST_MAIN(tst_qqmllanguage)
