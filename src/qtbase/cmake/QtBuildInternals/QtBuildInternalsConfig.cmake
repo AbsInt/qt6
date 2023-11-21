@@ -284,27 +284,6 @@ macro(qt_build_internals_set_up_private_api)
     qt_check_if_tools_will_be_built()
 endmacro()
 
-# find all targets defined in $subdir by recursing through all added subdirectories
-# populates $qt_repo_targets with a ;-list of non-UTILITY targets
-macro(qt_build_internals_get_repo_targets subdir)
-    get_directory_property(_targets DIRECTORY "${subdir}" BUILDSYSTEM_TARGETS)
-    if(_targets)
-        foreach(_target IN LISTS _targets)
-            get_target_property(_type ${_target} TYPE)
-            if(NOT ${_type} STREQUAL "UTILITY")
-                list(APPEND qt_repo_targets "${_target}")
-            endif()
-        endforeach()
-    endif()
-
-    get_directory_property(_directories DIRECTORY "${subdir}" SUBDIRECTORIES)
-    if (_directories)
-        foreach(_directory IN LISTS _directories)
-            qt_build_internals_get_repo_targets("${_directory}")
-        endforeach()
-    endif()
-endmacro()
-
 # add toplevel targets for each subdirectory, e.g. qtbase_src
 function(qt_build_internals_add_toplevel_targets)
     set(qt_repo_target_all "")
@@ -312,7 +291,7 @@ function(qt_build_internals_add_toplevel_targets)
     foreach(directory IN LISTS directories)
         set(qt_repo_targets "")
         get_filename_component(qt_repo_target_basename ${directory} NAME)
-        qt_build_internals_get_repo_targets("${directory}")
+        _qt_internal_collect_buildsystem_targets(qt_repo_targets "${directory}" EXCLUDE UTILITY)
         if (qt_repo_targets)
             set(qt_repo_target_name "${qt_repo_targets_name}_${qt_repo_target_basename}")
             message(DEBUG "${qt_repo_target_name} depends on ${qt_repo_targets}")
@@ -808,6 +787,17 @@ macro(qt_build_tests)
         endif()
         if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/manual/CMakeLists.txt" AND QT_BUILD_MANUAL_TESTS)
             add_subdirectory(manual)
+            # Adding this logic to all tests impacts the configure time ~3sec in addition. We still
+            # might want this in the future for other test types since currently we have a moderate
+            # subset of tests that require manual initialization of autotools.
+            _qt_internal_collect_buildsystem_targets(targets
+                "${CMAKE_CURRENT_SOURCE_DIR}/manual" EXCLUDE UTILITY ALIAS)
+            foreach(target ${targets})
+                qt_autogen_tools(${target} ENABLE_AUTOGEN_TOOLS "moc" "rcc")
+                if(TARGET Qt::Widgets)
+                    qt_autogen_tools(${target} ENABLE_AUTOGEN_TOOLS "uic")
+                endif()
+            endforeach()
         endif()
     endif()
 
@@ -1002,26 +992,8 @@ macro(qt_examples_build_end)
     # sure we do not fail on a fresh Qt build (e.g. the moc binary won't exist
     # yet because it is created at build time).
 
-    # This function gets all targets below this directory (excluding custom targets and aliases)
-    function(get_all_targets _result _dir)
-        get_property(_subdirs DIRECTORY "${_dir}" PROPERTY SUBDIRECTORIES)
-        foreach(_subdir IN LISTS _subdirs)
-            get_all_targets(${_result} "${_subdir}")
-        endforeach()
-        get_property(_sub_targets DIRECTORY "${_dir}" PROPERTY BUILDSYSTEM_TARGETS)
-        set(_real_targets "")
-        if(_sub_targets)
-            foreach(__target IN LISTS _sub_targets)
-                get_target_property(target_type ${__target} TYPE)
-                if(NOT target_type STREQUAL "UTILITY" AND NOT target_type STREQUAL "ALIAS")
-                    list(APPEND _real_targets ${__target})
-                endif()
-            endforeach()
-        endif()
-        set(${_result} ${${_result}} ${_real_targets} PARENT_SCOPE)
-    endfunction()
-
-    get_all_targets(targets "${CMAKE_CURRENT_SOURCE_DIR}")
+    _qt_internal_collect_buildsystem_targets(targets
+        "${CMAKE_CURRENT_SOURCE_DIR}" EXCLUDE UTILITY ALIAS)
 
     foreach(target ${targets})
         qt_autogen_tools(${target} ENABLE_AUTOGEN_TOOLS "moc" "rcc")
@@ -1185,39 +1157,13 @@ function(qt_internal_add_example_external_project subdir)
 
     cmake_parse_arguments(PARSE_ARGV 1 arg "${options}" "${singleOpts}" "${multiOpts}")
 
-    # TODO: Fix example builds when using Conan / install prefixes are different for each repo.
-    if(QT_SUPERBUILD OR QtBase_BINARY_DIR)
-        # When doing a top-level build or when building qtbase,
-        # always use the Config file from the current build directory, even for prefix builds.
-        # We strive to allow building examples without installing Qt first, which means we can't
-        # use the install or staging Config files.
-        set(qt_prefixes "${QT_BUILD_DIR}")
-        set(qt_cmake_dir "${QT_CONFIG_BUILD_DIR}/${QT_CMAKE_EXPORT_NAMESPACE}")
-    else()
-        # This is a per-repo build that isn't the qtbase repo, so we know that
-        # qtbase was found via find_package() and Qt6_DIR must be set
-        set(qt_cmake_dir "${${QT_CMAKE_EXPORT_NAMESPACE}_DIR}")
+    _qt_internal_get_build_vars_for_external_projects(
+        CMAKE_DIR_VAR qt_cmake_dir
+        PREFIXES_VAR qt_prefixes
+        ADDITIONAL_PACKAGES_PREFIXES_VAR qt_additional_packages_prefixes
+    )
 
-        # In a prefix build of a non-qtbase repo, we want to pick up the installed Config files
-        # for all repos except the one that is currently built. For the repo that is currently
-        # built, we pick up the Config files from the current repo build dir instead.
-        # For non-prefix builds, there's only one prefix, the main build dir.
-        # Both are handled by this assignment.
-        set(qt_prefixes "${QT_BUILD_DIR}")
-
-        # Appending to QT_ADDITIONAL_PACKAGES_PREFIX_PATH helps find Qt6 components in
-        # non-qtbase prefix builds because we use NO_DEFAULT_PATH in find_package calls.
-        # It also handles the cross-compiling scenario where we need to adjust both the root path
-        # and prefixes, with the prefixes containing lib/cmake. This leverages the infrastructure
-        # previously added for Conan.
-        list(APPEND QT_ADDITIONAL_PACKAGES_PREFIX_PATH ${qt_prefixes})
-
-        # In a prefix build, look up all repo Config files in the install prefix,
-        # except for the current repo, which will look in the build dir (handled above).
-        if(QT_WILL_INSTALL)
-            list(APPEND qt_prefixes "${QT6_INSTALL_PREFIX}")
-        endif()
-    endif()
+    list(APPEND QT_ADDITIONAL_PACKAGES_PREFIX_PATH "${qt_additional_packages_prefixes}")
 
     set(vars_to_pass_if_defined)
     set(var_defs)

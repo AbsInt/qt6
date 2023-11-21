@@ -176,6 +176,7 @@ private slots:
     void signatureIgnored();
     void simpleBinding();
     void storeElementSideEffects();
+    void storeMetaEnum();
     void stringArg();
     void stringLength();
     void stringToByteArray();
@@ -616,6 +617,16 @@ void tst_QmlCppCodegen::asCast()
     QCOMPARE(qvariant_cast<QObject *>(root->property("dummyAsItem")), dummy);
     QCOMPARE(qvariant_cast<QObject *>(root->property("dummyAsRectangle")), nullptr);
     QCOMPARE(qvariant_cast<QObject *>(root->property("dummyAsDummy")), dummy);
+
+    QCOMPARE(qvariant_cast<QObject *>(root->property("nullAsObject")), nullptr);
+    QCOMPARE(qvariant_cast<QObject *>(root->property("nullAsItem")), nullptr);
+    QCOMPARE(qvariant_cast<QObject *>(root->property("nullAsRectangle")), nullptr);
+    QCOMPARE(qvariant_cast<QObject *>(root->property("nullAsDummy")), nullptr);
+
+    QCOMPARE(qvariant_cast<QObject *>(root->property("undefinedAsObject")), nullptr);
+    QCOMPARE(qvariant_cast<QObject *>(root->property("undefinedAsItem")), nullptr);
+    QCOMPARE(qvariant_cast<QObject *>(root->property("undefinedAsRectangle")), nullptr);
+    QCOMPARE(qvariant_cast<QObject *>(root->property("undefinedAsDummy")), nullptr);
 }
 
 void tst_QmlCppCodegen::attachedBaseEnum()
@@ -3655,6 +3666,20 @@ void tst_QmlCppCodegen::storeElementSideEffects()
     const QJSValue prop = o->property("myItem").value<QJSValue>();
     QVERIFY(prop.isArray());
     QCOMPARE(prop.property(0).toInt(), 10);
+}
+
+void tst_QmlCppCodegen::storeMetaEnum()
+{
+    QQmlEngine engine;
+
+    QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/StoreMetaEnum.qml"_s));
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+
+    QScopedPointer<QObject> o(c.create());
+    QVERIFY(o);
+
+    QCOMPARE(o->property("bar").toInt(), 0);
+    QCOMPARE(o->property("baz").toInt(), 1);
 }
 
 void tst_QmlCppCodegen::stringArg()
