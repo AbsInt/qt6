@@ -629,12 +629,13 @@ void QDockWidgetPrivate::init()
 
     QAbstractButton *button = new QDockWidgetTitleButton(q);
     button->setObjectName("qt_dockwidget_floatbutton"_L1);
-    QObject::connect(button, SIGNAL(clicked()), q, SLOT(_q_toggleTopLevel()));
+    QObjectPrivate::connect(button, &QAbstractButton::clicked,
+                            this, &QDockWidgetPrivate::toggleTopLevel);
     layout->setWidgetForRole(QDockWidgetLayout::FloatButton, button);
 
     button = new QDockWidgetTitleButton(q);
     button->setObjectName("qt_dockwidget_closebutton"_L1);
-    QObject::connect(button, SIGNAL(clicked()), q, SLOT(close()));
+    QObject::connect(button, &QAbstractButton::clicked, q, &QDockWidget::close);
     layout->setWidgetForRole(QDockWidgetLayout::CloseButton, button);
 
     font = QApplication::font("QDockWidgetTitle");
@@ -645,8 +646,8 @@ void QDockWidgetPrivate::init()
     toggleViewAction->setMenuRole(QAction::NoRole);
     fixedWindowTitle = qt_setWindowTitle_helperHelper(q->windowTitle(), q);
     toggleViewAction->setText(fixedWindowTitle);
-    QObject::connect(toggleViewAction, SIGNAL(triggered(bool)),
-                        q, SLOT(_q_toggleView(bool)));
+    QObjectPrivate::connect(toggleViewAction, &QAction::triggered,
+                            this, &QDockWidgetPrivate::toggleView);
 #endif
 
     updateButtons();
@@ -681,7 +682,7 @@ void QDockWidget::initStyleOption(QStyleOptionDockWidget *option) const
     option->verticalTitleBar = l->verticalTitleBar;
 }
 
-void QDockWidgetPrivate::_q_toggleView(bool b)
+void QDockWidgetPrivate::toggleView(bool b)
 {
     Q_Q(QDockWidget);
     if (b == q->isHidden()) {
@@ -729,7 +730,7 @@ void QDockWidgetPrivate::updateButtons()
     layout->invalidate();
 }
 
-void QDockWidgetPrivate::_q_toggleTopLevel()
+void QDockWidgetPrivate::toggleTopLevel()
 {
     Q_Q(QDockWidget);
     q->setFloating(!q->isFloating());
@@ -810,7 +811,7 @@ void QDockWidgetPrivate::startDrag(DragScope scope)
             delete state;
             state = nullptr;
         } else {
-            endDrag();
+            endDrag(QDockWidgetPrivate::EndDragMode::LocationChange);
         }
     }
 #endif
@@ -821,7 +822,7 @@ void QDockWidgetPrivate::startDrag(DragScope scope)
     The \a abort parameter specifies that it ends because of programmatic state
     reset rather than mouse release event.
  */
-void QDockWidgetPrivate::endDrag(bool abort)
+void QDockWidgetPrivate::endDrag(EndDragMode mode)
 {
     Q_Q(QDockWidget);
     Q_ASSERT(state != nullptr);
@@ -833,7 +834,7 @@ void QDockWidgetPrivate::endDrag(bool abort)
         Q_ASSERT(mainWindow != nullptr);
         QMainWindowLayout *mwLayout = qt_mainwindow_layout(mainWindow);
 
-        if (abort || !mwLayout->plug(state->widgetItem)) {
+        if (mode == EndDragMode::Abort || !mwLayout->plug(state->widgetItem)) {
             if (hasFeature(this, QDockWidget::DockWidgetFloatable)) {
                 // This QDockWidget will now stay in the floating state.
                 if (state->ownWidgetItem) {
@@ -959,7 +960,7 @@ bool QDockWidgetPrivate::mouseDoubleClickEvent(QMouseEvent *event)
 
         if (event->button() == Qt::LeftButton && titleArea.contains(event->position().toPoint()) &&
             hasFeature(this, QDockWidget::DockWidgetFloatable)) {
-            _q_toggleTopLevel();
+            toggleTopLevel();
             return true;
         }
     }
@@ -1066,7 +1067,7 @@ bool QDockWidgetPrivate::mouseReleaseEvent(QMouseEvent *event)
         return false;
 
     if (event->button() == Qt::LeftButton && state && !state->nca) {
-        endDrag();
+        endDrag(EndDragMode::LocationChange);
         return true; //filter out the event
     }
 
@@ -1112,19 +1113,18 @@ void QDockWidgetPrivate::nonClientAreaMouseEvent(QMouseEvent *event)
                 break;
 
 #if !defined(Q_OS_MAC) && !defined(Q_OS_WASM)
-            if (state->nca) {
-                endDrag();
-            }
+            if (state->nca)
+                endDrag(EndDragMode::LocationChange);
 #endif
             break;
         case QEvent::NonClientAreaMouseButtonRelease:
 #if defined(Q_OS_MAC) || defined(Q_OS_WASM)
                         if (state)
-                                endDrag();
+                            endDrag(EndDragMode::LocationChange);
 #endif
                         break;
         case QEvent::NonClientAreaMouseButtonDblClick:
-            _q_toggleTopLevel();
+            toggleTopLevel();
             break;
         default:
             break;
@@ -1446,7 +1446,7 @@ void QDockWidget::setFloating(bool floating)
 
     // the initial click of a double-click may have started a drag...
     if (d->state != nullptr)
-        d->endDrag(true);
+        d->endDrag(QDockWidgetPrivate::EndDragMode::Abort);
 
     QRect r = d->undockedGeometry;
     // Keep position when undocking for the first time.
@@ -1534,7 +1534,7 @@ void QDockWidget::closeEvent(QCloseEvent *event)
 {
     Q_D(QDockWidget);
     if (d->state)
-        d->endDrag(true);
+        d->endDrag(QDockWidgetPrivate::EndDragMode::Abort);
 
     // For non-closable widgets, don't allow closing, except when the mainwindow
     // is hidden, as otherwise an application wouldn't be able to be shut down.
