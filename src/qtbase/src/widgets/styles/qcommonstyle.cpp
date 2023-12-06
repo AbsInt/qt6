@@ -189,20 +189,20 @@ void QCommonStyle::drawPrimitive(PrimitiveElement pe, const QStyleOption *opt, Q
     case PE_FrameFocusRect:
         if (const QStyleOptionFocusRect *fropt = qstyleoption_cast<const QStyleOptionFocusRect *>(opt)) {
             QColor bg = fropt->backgroundColor;
-            QPen oldPen = p->pen();
+            QColor color;
             if (bg.isValid()) {
                 int h, s, v;
                 bg.getHsv(&h, &s, &v);
                 if (v >= 128)
-                    p->setPen(Qt::black);
+                    color = Qt::black;
                 else
-                    p->setPen(Qt::white);
+                    color = Qt::white;
             } else {
-                p->setPen(opt->palette.windowText().color());
+                color = opt->palette.windowText().color();
             }
-            QRect focusRect = opt->rect.adjusted(1, 1, -1, -1);
-            p->drawRect(focusRect.adjusted(0, 0, -1, -1)); //draw pen inclusive
-            p->setPen(oldPen);
+            const QRect focusRect = opt->rect.adjusted(1, 1, -1, -1);
+            const QBrush fill(bg);
+            qDrawPlainRect(p, focusRect, color, 1, bg.isValid() ? &fill : nullptr);
         }
         break;
     case PE_IndicatorMenuCheckMark: {
@@ -1396,13 +1396,16 @@ void QCommonStyle::drawControl(ControlElement element, const QStyleOption *opt,
 
                 iconRect = visualRect(button->direction, textRect, iconRect);
 
-                if (button->direction == Qt::RightToLeft) {
-                    tf |= Qt::AlignRight;
+                if (button->direction == Qt::RightToLeft)
                     textRect.setRight(iconRect.left() - iconSpacing / 2);
-                } else {
-                    tf |= Qt::AlignLeft; //left align, we adjust the text-rect instead
+                else
                     textRect.setLeft(iconRect.left() + iconRect.width() + iconSpacing / 2);
-                }
+
+                // qt_format_text reverses again when  painter->layoutDirection is also RightToLeft
+                if (p->layoutDirection() == button->direction)
+                    tf |= Qt::AlignLeft;
+                else
+                    tf |= Qt::AlignRight;
 
                 if (button->state & (State_On | State_Sunken))
                     iconRect.translate(proxy()->pixelMetric(PM_ButtonShiftHorizontal, opt, widget),
