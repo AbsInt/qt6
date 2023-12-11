@@ -280,7 +280,6 @@ qt_internal_add_module(Core
         tools/qflatmap_p.h
         tools/qfreelist.cpp tools/qfreelist_p.h
         tools/qfunctionaltools_impl.h
-        tools/quniquehandle_p.h
         tools/qhashfunctions.h
         tools/qiterator.h
         tools/qline.cpp tools/qline.h
@@ -309,6 +308,7 @@ qt_internal_add_module(Core
         tools/qstack.h
         tools/qtaggedpointer.h
         tools/qtools_p.h
+        tools/quniquehandle_p.h
         tools/qvarlengtharray.h
         tools/qvector.h
         tools/qversionnumber.cpp tools/qversionnumber.h
@@ -956,8 +956,6 @@ qt_internal_extend_target(Core CONDITION QT_FEATURE_process AND UNIX
     SOURCES
         ../3rdparty/forkfd/forkfd.h
         io/forkfd_qt.cpp
-    NO_UNITY_BUILD_SOURCES
-        io/forkfd_qt.cpp    # EINTR_LOOP macro clashes
     INCLUDE_DIRECTORIES
         ../3rdparty/forkfd
 )
@@ -1422,7 +1420,7 @@ qt_internal_extend_target(Core
     # Function called by inline methods taking a pointer to a private class as a parameter
     EXTRA_LINKER_SCRIPT_EXPORTS
         # QFutureInterfaceBase::setContinuation(std::function<void (QFutureInterfaceBase const&)>, QFutureInterfaceBasePrivate*)
-        "_ZN20QFutureInterfaceBase15setContinuationE*P27QFutureInterfaceBasePrivate"
+        "_ZN*20QFutureInterfaceBase15setContinuationE*27QFutureInterfaceBasePrivate*"
         # QReadWriteLock::destroyRecursive(QReadWriteLockPrivate*)
-        "_ZN14QReadWriteLock16destroyRecursiveEP21QReadWriteLockPrivate"
+        "_ZN*14QReadWriteLock16destroyRecursiveEP*21QReadWriteLockPrivate*"
 )
