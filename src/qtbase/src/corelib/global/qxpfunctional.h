@@ -141,9 +141,11 @@ public:
 protected:
     template <
         class T,
-        std::enable_if_t<std::conjunction_v<
-            std::negation<std::is_same<q20::remove_cvref_t<T>, function_ref_base>>,
-            std::negation<std::is_pointer<T>>
+        std::enable_if_t<std::negation_v<
+            std::disjunction<
+                std::is_same<T, function_ref_base>,
+                std::is_pointer<T>
+            >
         >, bool> = true
     >
     function_ref_base& operator=(T) = delete;
@@ -182,7 +184,7 @@ QT_SPECIALIZE_FUNCTION_REF(const, true );
 
 template <
     class F,
-    std::enable_if_t<std::is_function_v<F>, bool> = true
+    detail::if_function<F> = true
 >
 function_ref(F*) -> function_ref<F>;
 

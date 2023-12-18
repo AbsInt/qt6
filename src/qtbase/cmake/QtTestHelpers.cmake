@@ -579,12 +579,12 @@ function(qt_internal_add_test name)
         endif()
     endif()
 
-    # Pass 95% of the timeout to allow the test runner time to do any cleanup
-    # before being killed.
-    set(percentage "95")
-    qt_internal_get_android_test_timeout("${arg_TIMEOUT}" "${percentage}" android_timeout)
-
     if (ANDROID)
+        # Pass 95% of the timeout to allow the test runner time to do any cleanup
+        # before being killed.
+        set(percentage "95")
+        qt_internal_get_android_test_timeout("${arg_TIMEOUT}" "${percentage}" android_timeout)
+
         if(arg_BUNDLE_ANDROID_OPENSSL_LIBS)
             if(NOT OPENSSL_ROOT_DIR)
                 message(WARNING "The argument BUNDLE_ANDROID_OPENSSL_LIBS is set "
@@ -695,6 +695,14 @@ function(qt_internal_add_test name)
             set_tests_properties(${testname} PROPERTIES TIMEOUT ${arg_TIMEOUT})
         endif()
 
+        if(ANDROID)
+            # Set timeout signal and some time for androidtestrunner to do cleanup
+            set_tests_properties(${testname} PROPERTIES
+                TIMEOUT_SIGNAL_NAME "SIGINT"
+                TIMEOUT_SIGNAL_GRACE_PERIOD 10.0
+            )
+        endif()
+
         # Add a ${target}/check makefile target, to more easily test one test.
 
         set(test_config_options "")
@@ -801,8 +809,13 @@ endfunction()
 function(qt_internal_get_android_test_timeout input_timeout percentage output_timeout_var)
     set(actual_timeout "${input_timeout}")
     if(NOT actual_timeout)
-        # Related: https://gitlab.kitware.com/cmake/cmake/-/issues/20450
-        if(DART_TESTING_TIMEOUT)
+        # we have coin ci timeout set use that to avoid having the emulator killed
+        # so we can at least get some logs from the android test runner.
+        set(coin_timeout $ENV{COIN_COMMAND_OUTPUT_TIMEOUT})
+        if(coin_timeout)
+            set(actual_timeout "${coin_timeout}")
+        elseif(DART_TESTING_TIMEOUT)
+            # Related: https://gitlab.kitware.com/cmake/cmake/-/issues/20450
             set(actual_timeout "${DART_TESTING_TIMEOUT}")
         elseif(CTEST_TEST_TIMEOUT)
             set(actual_timeout "${CTEST_TEST_TIMEOUT}")
