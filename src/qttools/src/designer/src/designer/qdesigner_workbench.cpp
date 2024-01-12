@@ -34,6 +34,7 @@
 #include <QtWidgets/qlayout.h>
 
 #include <QtGui/qactiongroup.h>
+#include <QtGui/qcursor.h>
 #include <QtGui/qevent.h>
 #include <QtGui/qscreen.h>
 #include <QtGui/qwindow.h>
@@ -72,9 +73,9 @@ static QDockWidget *dockWidgetOf(const QWidget *w)
 }
 
 // ------------ QDesignerWorkbench::Position
-QDesignerWorkbench::Position::Position(const QMdiSubWindow *mdiSubWindow, const QPoint &mdiAreaOffset) :
+QDesignerWorkbench::Position::Position(const QMdiSubWindow *mdiSubWindow) :
     m_minimized(mdiSubWindow->isShaded()),
-    m_position(mdiSubWindow->pos() + mdiAreaOffset)
+    m_position(mdiSubWindow->pos() + mdiSubWindow->mdiArea()->pos())
 {
 }
 
@@ -84,12 +85,12 @@ QDesignerWorkbench::Position::Position(const QDockWidget *dockWidget) :
 {
 }
 
-QDesignerWorkbench::Position::Position(const QWidget *topLevelWindow, const QPoint &desktopTopLeft)
+QDesignerWorkbench::Position::Position(const QWidget *topLevelWindow)
 {
-    const QWidget *window =topLevelWindow->window ();
+    const QWidget *window = topLevelWindow->window();
     Q_ASSERT(window);
     m_minimized = window->isMinimized();
-    m_position = window->pos() - desktopTopLeft;
+    m_position = window->pos() - window->screen()->availableGeometry().topLeft();
 }
 
 void QDesignerWorkbench::Position::applyTo(QMdiSubWindow *mdiSubWindow,
@@ -246,19 +247,17 @@ void QDesignerWorkbench::saveGeometriesForModeChange()
     case NeutralMode:
         break;
     case TopLevelMode: {
-        const QPoint desktopOffset = QGuiApplication::primaryScreen()->availableGeometry().topLeft();
         for (QDesignerToolWindow *tw : std::as_const(m_toolWindows))
-            m_Positions.insert(tw, Position(tw, desktopOffset));
+            m_Positions.insert(tw, Position(tw));
         for (QDesignerFormWindow *fw : std::as_const(m_formWindows))
-            m_Positions.insert(fw,  Position(fw, desktopOffset));
+            m_Positions.insert(fw, Position(fw));
     }
         break;
     case DockedMode: {
-        const QPoint mdiAreaOffset = m_dockedMainWindow->mdiArea()->pos();
         for (QDesignerToolWindow *tw : std::as_const(m_toolWindows))
             m_Positions.insert(tw, Position(dockWidgetOf(tw)));
         for (QDesignerFormWindow *fw : std::as_const(m_formWindows))
-            m_Positions.insert(fw, Position(mdiSubWindowOf(fw), mdiAreaOffset));
+            m_Positions.insert(fw, Position(mdiSubWindowOf(fw)));
     }
         break;
     }
@@ -444,6 +443,15 @@ void QDesignerWorkbench::adjustMDIFormPositions()
     }
 }
 
+static QScreen *screenUnderMouse()
+{
+    const auto &screens = QGuiApplication::screens();
+    const auto pos = QCursor::pos();
+    auto pred = [pos](const QScreen *s) { return s->geometry().contains(pos); };
+    auto it = std::find_if(screens.cbegin(), screens.cend(), pred);
+    return it != screens.cend() ? *it : QGuiApplication::primaryScreen();
+}
+
 void QDesignerWorkbench::switchToTopLevelMode()
 {
     if (m_mode == TopLevelMode)
@@ -455,7 +463,10 @@ void QDesignerWorkbench::switchToTopLevelMode()
 
     switchToNeutralMode();
     m_mode = TopLevelMode; // Set new mode before calling screen()
-    const auto *currentScreen = screen();
+    const QDesignerSettings settings(m_core);
+    const QByteArray mainWindowState = settings.mainWindowState(m_mode);
+    // Open on screen where the mouse is when no settings exist
+    const auto *currentScreen = mainWindowState.isEmpty() ? screenUnderMouse() : screen();
     const QRect availableGeometry = currentScreen->availableGeometry();
     const QPoint desktopOffset = availableGeometry.topLeft();
 
@@ -478,7 +489,6 @@ void QDesignerWorkbench::switchToTopLevelMode()
     widgetBoxWrapper->setWindowTitle(MainWindowBase::mainWindowTitle());
 #endif // !Q_OS_MACOS
 
-    const QDesignerSettings settings(m_core);
     m_topLevelData.toolbars = MainWindowBase::createToolBars(m_actionManager, false);
     m_topLevelData.toolbarManager = new ToolBarManager(widgetBoxWrapper, widgetBoxWrapper,
                                                        m_toolbarMenu, m_actionManager,
@@ -490,7 +500,7 @@ void QDesignerWorkbench::switchToTopLevelMode()
             widgetBoxWrapper->insertToolBarBreak(m_topLevelData.toolbars.at(i));
     }
     m_topLevelData.toolbarManager->restoreState(settings.toolBarsState(m_mode), MainWindowBase::settingsVersion());
-    widgetBoxWrapper->restoreState(settings.mainWindowState(m_mode), MainWindowBase::settingsVersion());
+    widgetBoxWrapper->restoreState(mainWindowState, MainWindowBase::settingsVersion());
 
     bool found_visible_window = false;
     for (QDesignerToolWindow *tw : std::as_const(m_toolWindows)) {
