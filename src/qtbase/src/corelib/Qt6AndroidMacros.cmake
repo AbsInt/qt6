@@ -236,6 +236,10 @@ function(qt6_android_generate_deployment_settings target)
     _qt_internal_add_android_deployment_property(file_contents "android-no-deploy-qt-libs"
         ${target} "QT_ANDROID_NO_DEPLOY_QT_LIBS")
 
+    __qt_internal_collect_plugin_targets_from_dependencies("${target}" plugin_targets)
+    __qt_internal_collect_plugin_library_files("${target}" "${plugin_targets}" plugin_targets)
+    string(APPEND file_contents "   \"android-deploy-plugins\":\"${plugin_targets}\",\n")
+
     # App binary
     string(APPEND file_contents
         "   \"application-binary\": \"${target_output_name}\",\n")
@@ -303,7 +307,7 @@ function(qt6_android_generate_deployment_settings target)
     # content end
     string(APPEND file_contents "}\n")
 
-    file(GENERATE OUTPUT ${deploy_file} CONTENT ${file_contents})
+    file(GENERATE OUTPUT ${deploy_file} CONTENT "${file_contents}")
 
     set_target_properties(${target}
         PROPERTIES
@@ -385,7 +389,34 @@ function(qt6_android_add_apk_target target)
     set(deployment_tool "${QT_HOST_PATH}/${QT6_HOST_INFO_BINDIR}/androiddeployqt")
     # No need to use genex for the BINARY_DIR since it's read-only.
     get_target_property(target_binary_dir ${target} BINARY_DIR)
-    set(apk_final_dir "${target_binary_dir}/android-build")
+
+    if($CACHE{QT_USE_TARGET_ANDROID_BUILD_DIR})
+        set(apk_final_dir "${target_binary_dir}/android-build-${target}")
+    else()
+        if(QT_USE_TARGET_ANDROID_BUILD_DIR)
+            message(WARNING "QT_USE_TARGET_ANDROID_BUILD_DIR needs to be set in CACHE")
+        endif()
+
+        get_property(known_android_build GLOBAL PROPERTY _qt_internal_known_android_build_dir)
+        get_property(already_warned GLOBAL PROPERTY _qt_internal_already_warned_android_build_dir)
+        set(apk_final_dir "${target_binary_dir}/android-build")
+        if(NOT QT_SKIP_ANDROID_BUILD_DIR_CHECK AND "${apk_final_dir}" IN_LIST known_android_build
+            AND NOT "${apk_final_dir}" IN_LIST already_warned)
+            message(WARNING "${CMAKE_CURRENT_SOURCE_DIR}/CMakeLists.txt contains multiple"
+                " Qt Android executable targets. This can lead to mixing of deployment artifacts"
+                " of targets defined there. Setting QT_USE_TARGET_ANDROID_BUILD_DIR=TRUE"
+                " allows building multiple executable targets within a single CMakeLists.txt."
+                " Note: This option is not supported by Qt Creator versions older than 13."
+                " Set QT_SKIP_ANDROID_BUILD_DIR_CHECK=TRUE to suppress this warning."
+            )
+            set_property(GLOBAL APPEND PROPERTY _qt_internal_already_warned_android_build_dir
+                "${apk_final_dir}")
+        else()
+            set_property(GLOBAL APPEND PROPERTY
+                _qt_internal_known_android_build_dir "${apk_final_dir}")
+        endif()
+    endif()
+
     set(apk_file_name "${target}.apk")
     set(dep_file_name "${target}.d")
     set(apk_final_file_path "${apk_final_dir}/${apk_file_name}")
@@ -1355,3 +1386,6 @@ function(_qt_internal_expose_android_package_source_dir_to_ide target)
         endforeach()
     endif()
 endfunction()
+
+set(QT_INTERNAL_ANDROID_TARGET_BUILD_DIR_SUPPORT ON CACHE INTERNAL
+    "Indicates that Qt supports per-target Android build directories")

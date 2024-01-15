@@ -2288,6 +2288,9 @@ void QObjectPrivate::setParent_helper(QObject *o)
     If multiple event filters are installed on a single object, the
     filter that was installed last is activated first.
 
+    If \a filterObj has already been installed for this object,
+    this function moves it so it acts as if it was installed last.
+
     Here's a \c KeyPressEater class that eats the key presses of its
     monitored objects:
 
@@ -4615,6 +4618,13 @@ QDebug operator<<(QDebug dbg, const QObject *o)
     Q_GADGET or Q_GADGET_EXPORT instead of Q_OBJECT to enable the meta object system's support
     for enums in a class that is not a QObject subclass.
 
+//! [qobject-macros-private-access-specifier]
+    \note This macro expansion ends with a \c private: access specifier, which makes member
+    declarations immediately after the macro private, too. If you want add public (or protected)
+    members immediately after the macro, you need to use a \c public: (or \c protected:)
+    access specifier.
+//! [qobject-macros-private-access-specifier]
+
     \sa {Meta-Object System}, {Signals and Slots}, {Qt's Property System}
 */
 
@@ -4633,6 +4643,8 @@ QDebug operator<<(QDebug dbg, const QObject *o)
     Q_GADGET makes a class member, \c{staticMetaObject}, available.
     \c{staticMetaObject} is of type QMetaObject and provides access to the
     enums declared with Q_ENUM.
+
+    \include qobject.cpp qobject-macros-private-access-specifier
 
     \sa Q_GADGET_EXPORT
 */
@@ -4658,6 +4670,8 @@ QDebug operator<<(QDebug dbg, const QObject *o)
         Q_PROPERTY(int y MEMBER y)
         ~~~
     \endcode
+
+    \include qobject.cpp qobject-macros-private-access-specifier
 
     \sa Q_GADGET, {Creating Shared Libraries}
 */
