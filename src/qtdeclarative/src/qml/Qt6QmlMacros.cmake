@@ -1617,6 +1617,35 @@ if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
     endfunction()
 endif()
 
+function(_qt_internal_set_qml_target_multi_config_output_directory target output_directory)
+    # In multi-config builds we need to make sure that at least one configuration has the dynamic
+    # plugin that is located next to qmldir file, otherwise QML engine won't be able to load the
+    # plugin.
+    get_cmake_property(is_multi_config GENERATOR_IS_MULTI_CONFIG)
+    if(is_multi_config)
+        # We don't care about static plugins here since, they are linked at build time and
+        # their location doesn't affect the runtime.
+        get_target_property(target_type ${target} TYPE)
+        if(target_type STREQUAL "SHARED_LIBRARY" OR target_type STREQUAL "MODULE_LIBRARY")
+            if(NOT "${output_directory}")
+                set(output_directory "${CMAKE_CURRENT_BINARY_DIR}")
+            endif()
+
+            list(GET CMAKE_CONFIGURATION_TYPES 0 default_config)
+            string(JOIN "" output_directory_with_default_config
+                "$<IF:$<CONFIG:${default_config}>,"
+                    "${output_directory},"
+                    "${output_directory}/$<CONFIG>"
+                ">"
+            )
+            set_target_properties(${target} PROPERTIES
+                RUNTIME_OUTPUT_DIRECTORY "${output_directory_with_default_config}"
+                LIBRARY_OUTPUT_DIRECTORY "${output_directory_with_default_config}"
+            )
+        endif()
+    endif()
+endfunction()
+
 function(qt6_add_qml_plugin target)
     set(args_option
         STATIC
@@ -1862,6 +1891,8 @@ function(qt6_add_qml_plugin target)
         )
     endif()
 
+    _qt_internal_set_qml_target_multi_config_output_directory(${target} "${arg_OUTPUT_DIRECTORY}")
+
     if(NOT arg_NO_GENERATE_PLUGIN_SOURCE)
         set(generated_cpp_file_name_base "${target}_${arg_CLASS_NAME}")
         set(register_types_function_name "qml_register_types_${escaped_uri}")
@@ -1958,8 +1989,9 @@ function(qt6_target_qml_sources target)
         message(FATAL_ERROR "Unknown/unexpected arguments: ${arg_UNPARSED_ARGUMENTS}")
     endif()
 
-    if (NOT arg_QML_FILES AND NOT arg_RESOURCES)
-        if(NOT arg_NO_LINT)
+    get_target_property(no_lint ${target} QT_QML_MODULE_NO_LINT)
+    if(NOT arg_QML_FILES AND NOT arg_RESOURCES)
+        if(NOT arg_NO_LINT AND NOT no_lint)
             _qt_internal_target_enable_qmllint(${target})
         endif()
 
@@ -1978,7 +2010,6 @@ function(qt6_target_qml_sources target)
         )
     endif()
 
-    get_target_property(no_lint                ${target} QT_QML_MODULE_NO_LINT)
     get_target_property(no_cachegen            ${target} QT_QML_MODULE_NO_CACHEGEN)
     get_target_property(no_qmldir              ${target} QT_QML_MODULE_NO_GENERATE_QMLDIR)
     get_target_property(resource_prefix        ${target} QT_QML_MODULE_RESOURCE_PREFIX)

@@ -4314,7 +4314,11 @@ void QQuickItem::dropEvent(QDropEvent *event)
     This method will only be called if filtersChildMouseEvents() is \c true.
 
     Return \c true if the specified \a event should not be passed on to the
-    specified child \a item, and \c false otherwise.
+    specified child \a item, and \c false otherwise. If you return \c true, you
+    should also \l {QEvent::accept()}{accept} or \l {QEvent::ignore()}{ignore}
+    the \a event, to signal if event propagation should stop or continue.
+    The \a event will, however, always be sent to all childMouseEventFilters
+    up the parent chain.
 
     \note Despite the name, this function filters all QPointerEvent instances
     during delivery to all children (typically mouse, touch, and tablet
@@ -4653,7 +4657,7 @@ static bool unwrapMapFromToFromItemArgs(QQmlV4Function *args, const QQuickItem *
     \input item.qdocinc mapping
 
     If \a item is a \c null value, this maps the point or rect from the coordinate system of
-    the root QML view.
+    the \l{Scene Coordinates}{scene}.
 
     The versions accepting point and rect are since Qt 5.15.
 */
@@ -4711,7 +4715,7 @@ QTransform QQuickItem::itemTransform(QQuickItem *other, bool *ok) const
     \input item.qdocinc mapping
 
     If \a item is a \c null value, this maps the point or rect to the coordinate system of the
-    root QML view.
+    \l{Scene Coordinates}{scene}.
 
     The versions accepting point and rect are since Qt 5.15.
 */

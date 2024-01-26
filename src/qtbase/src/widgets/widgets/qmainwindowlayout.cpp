@@ -1630,17 +1630,6 @@ inline static Qt::DockWidgetArea toDockWidgetArea(int pos)
     return QDockWidgetPrivate::toDockWidgetArea(static_cast<QInternal::DockPosition>(pos));
 }
 
-void QMainWindowLayout::showDockWidgets() const
-{
-    const auto dockWidgets = parent()->findChildren<QDockWidget *>(Qt::FindDirectChildrenOnly);
-    for (auto *dockWidget : dockWidgets)
-        dockWidget->show();
-
-    const auto groupWindows = parent()->findChildren<QDockWidgetGroupWindow *>(Qt::FindDirectChildrenOnly);
-    for (auto *groupWindow : groupWindows)
-        groupWindow->show();
-}
-
 // Checks if QDockWidgetGroupWindow or QDockWidget can be plugged the area indicated by path.
 // Returns false if called with invalid widget type or if compiled without dockwidget support.
 static bool isAreaAllowed(QWidget *widget, const QList<int> &path)
@@ -2856,7 +2845,7 @@ QLayoutItem *QMainWindowLayout::unplug(QWidget *widget, QDockWidgetPrivate::Drag
             const auto *layout = qobject_cast<QDockWidgetLayout *>(dw->layout());
             const bool verticalTitleBar = layout ? layout->verticalTitleBar : false;
             const int tbHeight = QApplication::style()
-                      ? QApplication::style()->pixelMetric(QStyle::PixelMetric::PM_TitleBarHeight)
+                      ? QApplication::style()->pixelMetric(QStyle::PixelMetric::PM_TitleBarHeight, nullptr, dw)
                       : 20;
             const int minHeight = verticalTitleBar ? 2 * tbHeight : tbHeight;
             const int minWidth = verticalTitleBar ? tbHeight : 2 * tbHeight;

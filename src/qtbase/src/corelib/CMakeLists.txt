@@ -1,7 +1,6 @@
 # Copyright (C) 2022 The Qt Company Ltd.
 # SPDX-License-Identifier: BSD-3-Clause
 
-qt_find_package(Threads PROVIDED_TARGETS Threads::Threads)
 qt_find_package(WrapPCRE2 PROVIDED_TARGETS WrapPCRE2::WrapPCRE2)
 qt_find_package(WrapZLIB PROVIDED_TARGETS WrapZLIB::WrapZLIB)
 
@@ -308,6 +307,7 @@ qt_internal_add_module(Core
         tools/qstack.h
         tools/qtaggedpointer.h
         tools/qtools_p.h
+        tools/qtyperevision.cpp tools/qtyperevision.h
         tools/quniquehandle_p.h
         tools/qvarlengtharray.h
         tools/qvector.h
@@ -412,7 +412,7 @@ set_source_files_properties(
 # Find ELF interpreter and define a macro for that:
 if ((LINUX OR HURD) AND NOT CMAKE_CROSSCOMPILING AND BUILD_SHARED_LIBS)
     if (NOT DEFINED ELF_INTERPRETER)
-        execute_process(COMMAND ${CMAKE_COMMAND} -E env LC_ALL=C readelf -l /bin/ls
+        execute_process(COMMAND ${CMAKE_COMMAND} -E env LC_ALL=C readelf -l /bin/sh
                         RESULT_VARIABLE readelf_ok
                         OUTPUT_VARIABLE readelf_output
                        )
@@ -592,8 +592,6 @@ qt_internal_extend_target(Core CONDITION APPLE
         # This makes sure that the tst_qmakelib passes. For some reason,
         # QtCore ends up returning a corrupted error message in
         # write_file(): fail
-        kernel/qelapsedtimer_mac.cpp # Temporary exclusion, until this,
-                                     # https://codereview.qt-project.org/c/qt/qtbase/+/462132, is merged
 )
 
 qt_internal_extend_target(Core CONDITION MACOS

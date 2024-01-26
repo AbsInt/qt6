@@ -343,6 +343,12 @@ void TestQmlformat::testFormat_data()
     QTest::newRow("ellipsisFunctionArgument")
             << "ellipsisFunctionArgument.qml"
             << "ellipsisFunctionArgument.formatted.qml" << QStringList{} << RunOption::OnCopy;
+    QTest::newRow("arrayEndComma")
+            << "arrayEndComma.qml"
+            << "arrayEndComma.formatted.qml" << QStringList{} << RunOption::OnCopy;
+    QTest::newRow("importStatements")
+            << "importStatements.qml"
+            << "importStatements.formatted.qml" << QStringList{} << RunOption::OnCopy;
 }
 
 void TestQmlformat::testFormat()

@@ -1315,9 +1315,7 @@ void QDockWidgetPrivate::setWindowState(bool floating, bool unplug, const QRect 
 /*!
     \enum QDockWidget::DockWidgetFeature
 
-    \value DockWidgetClosable   The dock widget can be closed. On some systems the dock
-                                widget always has a close button when it's floating
-                                (for example on MacOS 10.5).
+    \value DockWidgetClosable   The dock widget can be closed.
     \value DockWidgetMovable    The dock widget can be moved between docks
                                 by the user.
     \value DockWidgetFloatable  The dock widget can be detached from the
@@ -1843,16 +1841,17 @@ QDebug operator<<(QDebug dbg, const QDockWidget *dockWidget)
 {
     QDebugStateSaver saver(dbg);
     dbg.nospace();
+    return dockWidget ? dbg << *dockWidget : dbg << "QDockWidget(0x0)";
+}
 
-    if (!dockWidget) {
-        dbg << "QDockWidget(0x0)";
-        return dbg;
-    }
-
-    dbg << "QDockWidget(" << static_cast<const void *>(dockWidget);
-    dbg << "->(ObjectName=" << dockWidget->objectName();
-    dbg << "; floating=" << dockWidget->isFloating();
-    dbg << "; features=" << dockWidget->features();
+QDebug operator<<(QDebug dbg, const QDockWidget &dockWidget)
+{
+    QDebugStateSaver saver(dbg);
+    dbg.nospace();
+    dbg << "QDockWidget(" << static_cast<const void *>(&dockWidget);
+    dbg << "->(ObjectName=" << dockWidget.objectName();
+    dbg << "; floating=" << dockWidget.isFloating();
+    dbg << "; features=" << dockWidget.features();
     dbg << ";))";
     return dbg;
 }
