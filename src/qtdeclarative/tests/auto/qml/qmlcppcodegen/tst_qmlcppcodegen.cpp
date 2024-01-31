@@ -7,6 +7,7 @@
 #include <data/cppbaseclass.h>
 #include <data/enumproblems.h>
 #include <data/objectwithmethod.h>
+#include <data/resettable.h>
 
 #include <QtQml/private/qqmlengine_p.h>
 #include <QtQml/private/qqmlpropertycachecreator_p.h>
@@ -164,6 +165,10 @@ private slots:
     void registerElimination();
     void registerPropagation();
     void renameAdjust();
+
+    void resettableProperty();
+    void resettableProperty_data();
+
     void revisions();
     void scopeIdLookup();
     void scopeObjectDestruction();
@@ -3460,6 +3465,50 @@ void tst_QmlCppCodegen::renameAdjust()
 
     QScopedPointer<QObject> o(c.create());
     QVERIFY(o);
+}
+
+void tst_QmlCppCodegen::resettableProperty()
+{
+    QFETCH(QString, url);
+
+    QQmlEngine engine;
+    QQmlComponent c(&engine, QUrl(url));
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+
+    QTest::ignoreMessage(
+            QtWarningMsg, qPrintable(url + u":10:5: Unable to assign [undefined] to double"_s));
+
+    QScopedPointer<QObject> o(c.create());
+    QVERIFY(o);
+
+    QCOMPARE(o->property("value").toDouble(), 999);
+    QMetaObject::invokeMethod(o.data(), "doReset");
+    QCOMPARE(o->property("value").toDouble(), 0);
+
+    o->setProperty("value", double(82));
+    QCOMPARE(o->property("value").toDouble(), 82);
+    QMetaObject::invokeMethod(o.data(), "doReset2");
+    QCOMPARE(o->property("value").toDouble(), 0);
+
+    QTest::ignoreMessage(
+            QtWarningMsg, qPrintable(url + u":18: Error: Cannot assign [undefined] to double"_s));
+    QCOMPARE(o->property("notResettable").toDouble(), 10);
+    QMetaObject::invokeMethod(o.data(), "doNotReset");
+    QCOMPARE(o->property("notResettable").toDouble(), 10);
+    QCOMPARE(o->property("notResettable2").toDouble(), 0); // not NaN
+
+    o->setObjectName(u"namename"_s);
+    QTest::ignoreMessage(
+            QtWarningMsg, qPrintable(url + u":22: Error: Cannot assign [undefined] to QString"_s));
+    QMetaObject::invokeMethod(o.data(), "aaa");
+    QCOMPARE(o->objectName(), u"namename"_s);
+}
+
+void tst_QmlCppCodegen::resettableProperty_data()
+{
+    QTest::addColumn<QString>("url");
+    QTest::addRow("object lookups") << u"qrc:/qt/qml/TestTypes/resettable.qml"_s;
+    QTest::addRow("fallback lookups") << u"qrc:/qt/qml/TestTypes/fallbackresettable.qml"_s;
 }
 
 void tst_QmlCppCodegen::revisions()

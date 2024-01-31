@@ -15,6 +15,7 @@ set(cpp_sources
     multiforeign.h
     objectwithmethod.h
     person.cpp person.h
+    resettable.h
     sequenceToIterable.h
     sequencetypeexample.cpp sequencetypeexample.h
     state.h
@@ -121,6 +122,7 @@ set(qml_files
     extendedTypes.qml
     failures.qml
     fallbacklookups.qml
+    fallbackresettable.qml
     fileDialog.qml
     flagEnum.qml
     fromBoolValue.qml
@@ -199,6 +201,7 @@ set(qml_files
     registerPropagation.qml
     registerelimination.qml
     renameAdjust.qml
+    resettable.qml
     revisions.qml
     scopeIdLookup.qml
     scopeVsObject.qml
