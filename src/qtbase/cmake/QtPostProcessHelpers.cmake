@@ -551,9 +551,8 @@ function(qt_generate_build_internals_extra_cmake_code)
         if(CMAKE_BUILD_TYPE)
             string(APPEND QT_EXTRA_BUILD_INTERNALS_VARS
                 "
+# Used by qt_internal_set_cmake_build_type.
 set(__qt_internal_initial_qt_cmake_build_type \"${CMAKE_BUILD_TYPE}\")
-qt_internal_force_set_cmake_build_type_conditionally(
-    \"\${__qt_internal_initial_qt_cmake_build_type}\")
 ")
         endif()
         if(CMAKE_CONFIGURATION_TYPES)
@@ -574,17 +573,6 @@ qt_internal_force_set_cmake_build_type_conditionally(
         if(QT_MULTI_CONFIG_FIRST_CONFIG)
             string(APPEND QT_EXTRA_BUILD_INTERNALS_VARS
                 "\nset(QT_MULTI_CONFIG_FIRST_CONFIG \"${QT_MULTI_CONFIG_FIRST_CONFIG}\")\n")
-        endif()
-        # When building standalone tests against a multi-config Qt, we want to choose the first
-        # configuration, rather than use CMake's default value.
-        # In the case of Windows, we definitely don't it to default to Debug, because that causes
-        # issues in the CI.
-        if(multi_config_specific)
-            string(APPEND QT_EXTRA_BUILD_INTERNALS_VARS "
-if(QT_BUILD_STANDALONE_TESTS)
-    qt_internal_force_set_cmake_build_type_conditionally(
-        \"\${QT_MULTI_CONFIG_FIRST_CONFIG}\")
-endif()\n")
         endif()
 
         if(CMAKE_CROSS_CONFIGS)
@@ -726,6 +714,19 @@ set(OpenGL_GL_PREFERENCE \"${OpenGL_GL_PREFERENCE}\" CACHE STRING \"\")
 set(QT_COPYRIGHT_YEAR \"${QT_COPYRIGHT_YEAR}\" CACHE STRING \"\")
 set(QT_COPYRIGHT \"${QT_COPYRIGHT}\" CACHE STRING \"\")
 ")
+
+        # Add the apple version requirements to the BuildInternals extra code, so the info is
+        # available when configuring a standalone test.
+        # Otherwise when QtSetup is included after a
+        #   find_package(Qt6BuildInternals REQUIRED COMPONENTS STANDALONE_TEST)
+        # call, Qt6ConfigExtras.cmake is not included yet, the requirements are not available and
+        # _qt_internal_check_apple_sdk_and_xcode_versions() would fail.
+        _qt_internal_export_apple_sdk_and_xcode_version_requirements(apple_requirements)
+        if(apple_requirements)
+            string(APPEND QT_EXTRA_BUILD_INTERNALS_VARS "
+${apple_requirements}
+")
+        endif()
 
         qt_compute_relative_path_from_cmake_config_dir_to_prefix()
         configure_file(
