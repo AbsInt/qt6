@@ -2981,10 +2981,18 @@ void QQmlJSCodeGenerator::generateInPlaceOperation(const QString &cppOperator)
 void QQmlJSCodeGenerator::generateLookup(const QString &lookup, const QString &initialization,
                                         const QString &resultPreparation)
 {
+    m_body += u"#ifndef QT_NO_DEBUG\n"_s;
+    generateSetInstructionPointer();
+    m_body += u"#endif\n"_s;
+
     if (!resultPreparation.isEmpty())
         m_body += resultPreparation + u";\n"_s;
     m_body += u"while (!"_s + lookup + u") {\n"_s;
+
+    m_body += u"#ifdef QT_NO_DEBUG\n"_s;
     generateSetInstructionPointer();
+    m_body += u"#endif\n"_s;
+
     m_body += initialization + u";\n"_s;
     generateExceptionCheck();
     if (!resultPreparation.isEmpty())
@@ -3248,7 +3256,7 @@ QString QQmlJSCodeGenerator::convertStored(
         if (m_typeResolver->isUnsignedInteger(to))
             return u"uint(QJSNumberCoercion::toInteger("_s + variable + u"))"_s;
         if (m_typeResolver->equals(to, m_typeResolver->boolType()))
-            return u'(' + variable + u" && !std::isnan("_s + variable + u"))"_s;
+            return u"[](double moved){ return moved && !std::isnan(moved); }("_s + variable + u')';
     }
 
     if (isBoolOrNumber(from) && isBoolOrNumber(to))
