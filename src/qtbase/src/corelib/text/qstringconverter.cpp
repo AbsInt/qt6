@@ -24,6 +24,7 @@
 #ifndef QT_BOOTSTRAPPED
 #include <QtCore/qvarlengtharray.h>
 #include <QtCore/q20iterator.h>
+#include <QtCore/private/qnumeric_p.h>
 #endif // !QT_BOOTSTRAPPED
 #endif
 
@@ -1264,11 +1265,8 @@ QString QLocal8Bit::convertToUnicode_sys(QByteArrayView in, QStringConverter::St
 QString QLocal8Bit::convertToUnicode_sys(QByteArrayView in, quint32 codePage,
                                          QStringConverter::State *state)
 {
-    qsizetype length = in.size();
-
-    Q_ASSERT(length < INT_MAX); // ### FIXME
     const char *mb = in.data();
-    int mblen = length;
+    qsizetype mblen = in.size();
 
     if (state && state->flags & QStringConverter::Flag::Stateless)
         state = nullptr;
@@ -1332,11 +1330,35 @@ QString QLocal8Bit::convertToUnicode_sys(QByteArrayView in, quint32 codePage,
     Q_ASSERT(mblen > 0);
     Q_ASSERT(!state || state->remainingChars == 0);
 
-    constexpr int MaxStep = std::numeric_limits<int>::max();
-    const char *end = mb + mblen;
-    while (mb != end) {
-        const int nextIn = int(std::min(qsizetype(mblen), qsizetype(MaxStep)));
-        const int nextOut = int(std::min(outlen, qsizetype(MaxStep)));
+    // Return a pointer to storage where we have enough space for `size`
+    const auto growOut = [&](qsizetype size) -> std::tuple<wchar_t *, qsizetype> {
+        if (outlen >= size)
+            return {out, outlen};
+        const bool wasStackBuffer = sp.isEmpty();
+        const auto begin = wasStackBuffer ? buf.data() : reinterpret_cast<wchar_t *>(sp.data());
+        const qsizetype offset = qsizetype(std::distance(begin, out));
+        qsizetype newSize = 0;
+        if (Q_UNLIKELY(qAddOverflow(offset, size, &newSize))) {
+            Q_CHECK_PTR(false);
+            return {nullptr, 0};
+        }
+        sp.resize(newSize);
+        auto it = reinterpret_cast<wchar_t *>(sp.data());
+        if (wasStackBuffer)
+            it = std::copy_n(buf.data(), offset, it);
+        else
+            it += offset;
+        return {it, size};
+    };
+
+    // Need it in this scope, since we try to decrease our window size if we
+    // encounter an error
+    int nextIn = qt_saturate<int>(mblen);
+    while (mblen > 0) {
+        const int nextOut = qt_saturate<int>(outlen);
+        std::tie(out, outlen) = growOut(1); // Need space for at least one character
+        if (!out)
+            return {};
         len = MultiByteToWideChar(codePage, MB_ERR_INVALID_CHARS, mb, nextIn, out, nextOut);
         if (len) {
             mb += nextIn;
@@ -1346,30 +1368,56 @@ QString QLocal8Bit::convertToUnicode_sys(QByteArrayView in, quint32 codePage,
         } else {
             int r = GetLastError();
             if (r == ERROR_INSUFFICIENT_BUFFER) {
-                Q_ASSERT(QtPrivate::q_points_into_range(out, buf.data(), buf.data() + buf.size()));
                 const int wclen = MultiByteToWideChar(codePage, 0, mb, nextIn, 0, 0);
-                auto begin = buf.data();
-                const qsizetype offset = qsizetype(std::distance(begin, out));
-                qsizetype newSize = offset + wclen;
-                sp.resize(newSize);
-                auto it = reinterpret_cast<wchar_t *>(sp.data());
-                it = std::copy_n(buf.data(), offset, it);
-                out = it;
-                outlen = wclen;
-            } else if (r == ERROR_NO_UNICODE_TRANSLATION && state
-                    && state->remainingChars < q20::ssize(state->state_data)) {
-                ++state->remainingChars;
-                --mblen;
-                for (qsizetype i = 0; i < state->remainingChars; ++i)
-                    state->state_data[i] = mb[mblen + i];
-                if (mblen == 0)
+                std::tie(out, outlen) = growOut(wclen);
+                if (!out)
+                    return {};
+            } else if (r == ERROR_NO_UNICODE_TRANSLATION) {
+                // Can't decode the current window, so either store the state,
+                // reduce window size or output a replacement character.
+
+                // Check if we can store all remaining characters in the state
+                // to be used next time we're called:
+                if (state && mblen <= q20::ssize(state->state_data)) {
+                    state->remainingChars = mblen;
+                    std::copy_n(mb, mblen, state->state_data);
+                    mb += mblen;
+                    mblen = 0;
                     break;
+                }
+
+                // .. if not, try to find the last valid character in the window
+                // and try again with a shrunken window:
+                if (nextIn > 1) {
+                    // There may be some incomplete data at the end of our current
+                    // window, so decrease the window size and try again.
+                    // In the worst case scenario there is gigs of undecodable
+                    // garbage, but what are we supposed to do about that?
+                    const auto it = CharPrevExA(codePage, mb, mb + nextIn, 0);
+                    if (it != mb)
+                        nextIn = int(it - mb);
+                    else
+                        --nextIn;
+                    continue;
+                }
+
+                // Finally, we are forced to output a replacement character for
+                // the first byte in the window:
+                std::tie(out, outlen) = growOut(1);
+                if (!out)
+                    return {};
+                *out = QChar::ReplacementCharacter;
+                ++out;
+                --outlen;
+                ++mb;
+                --mblen;
             } else {
                 // Fail.
                 qWarning("MultiByteToWideChar: Cannot convert multibyte text");
                 break;
             }
         }
+        nextIn = qt_saturate<int>(mblen);
     }
 
     if (sp.isEmpty()) {
@@ -1384,8 +1432,11 @@ QString QLocal8Bit::convertToUnicode_sys(QByteArrayView in, quint32 codePage,
     if (sp.size() && sp.back().isNull())
         sp.chop(1);
 
-    if (!state && mblen > 0) // We have trailing characters that should be converted
+    if (!state && mblen > 0) {
+        // We have trailing character(s) that could not be converted, and
+        // nowhere to cache them
         sp.resize(sp.size() + mblen, QChar::ReplacementCharacter);
+    }
     return sp;
 }
 
@@ -1452,31 +1503,40 @@ QByteArray QLocal8Bit::convertFromUnicode_sys(QStringView in, quint32 codePage,
     Q_ASSERT(uclen > 0);
 
     int len = 0;
-    while (!(len = WideCharToMultiByte(codePage, 0, ch, int(uclen), out, int(outlen), nullptr,
-                                       nullptr))) {
-        int r = GetLastError();
-        if (r == ERROR_INSUFFICIENT_BUFFER) {
-            Q_ASSERT(mb.isEmpty());
-            int neededLength = WideCharToMultiByte(codePage, 0, ch, int(uclen), nullptr, 0, nullptr,
-                                                   nullptr);
-            const qsizetype currentLength = out - buf.data();
-            mb.resize(currentLength + neededLength);
-            memcpy(mb.data(), out, currentLength * sizeof(*out));
-            out = mb.data() + currentLength;
-            outlen = neededLength;
-            // and try again...
+    while (uclen > 0) {
+        const int nextIn = qt_saturate<int>(uclen);
+        const int nextOut = qt_saturate<int>(outlen);
+        len = WideCharToMultiByte(codePage, 0, ch, nextIn, out, nextOut, nullptr, nullptr);
+        if (len > 0) {
+            ch += nextIn;
+            uclen -= nextIn;
+            out += len;
+            outlen -= len;
         } else {
-            // Fail.  Probably can't happen in fact (dwFlags is 0).
+            int r = GetLastError();
+            if (r == ERROR_INSUFFICIENT_BUFFER) {
+                Q_ASSERT(mb.isEmpty());
+                int neededLength = WideCharToMultiByte(codePage, 0, ch, nextIn, nullptr, 0,
+                                                       nullptr, nullptr);
+                const qsizetype currentLength = out - buf.data();
+                mb.resize(currentLength + neededLength);
+                memcpy(mb.data(), out, currentLength * sizeof(*out));
+                out = mb.data() + currentLength;
+                outlen = neededLength;
+                // and try again...
+            } else {
+                // Fail.  Probably can't happen in fact (dwFlags is 0).
 #ifndef QT_NO_DEBUG
-            // Can't use qWarning(), as it'll recurse to handle %ls
-            fprintf(stderr, "WideCharToMultiByte: Cannot convert multibyte text (error %d): %ls\n",
-                    r,
-                    reinterpret_cast<const wchar_t *>(QStringView(ch, uclen).toString().utf16()));
+                // Can't use qWarning(), as it'll recurse to handle %ls
+                fprintf(stderr,
+                        "WideCharToMultiByte: Cannot convert multibyte text (error %d): %ls\n", r,
+                        reinterpret_cast<const wchar_t *>(
+                                QStringView(ch, uclen).left(100).toString().utf16()));
 #endif
-            break;
+                break;
+            }
         }
     }
-    out += len;
     if (mb.isEmpty()) {
         // We must have only used the stack buffer
         if (out != buf.data()) // else: we return null-array
