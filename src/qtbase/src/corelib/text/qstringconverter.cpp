@@ -1268,8 +1268,16 @@ QString QLocal8Bit::convertToUnicode_sys(QByteArrayView in, quint32 codePage,
     const char *mb = in.data();
     qsizetype mblen = in.size();
 
-    if (state && state->flags & QStringConverter::Flag::Stateless)
+    Q_ASSERT(state);
+    qsizetype &invalidChars = state->invalidChars;
+    using Flag = QStringConverter::Flag;
+    const bool useNullForReplacement = !!(state->flags & Flag::ConvertInvalidToNull);
+    const char16_t replacementCharacter = useNullForReplacement ? QChar::Null
+                                                                : QChar::ReplacementCharacter;
+    if (state->flags & Flag::Stateless) {
+        Q_ASSERT(state->remainingChars == 0);
         state = nullptr;
+    }
 
     if (!mb || !mblen)
         return QString();
@@ -1320,7 +1328,8 @@ QString QLocal8Bit::convertToUnicode_sys(QByteArrayView in, quint32 codePage,
             // We couldn't decode any of the characters in the saved state,
             // so output replacement characters
             for (int i = 0; i < state->remainingChars; ++i)
-                out[i] = QChar::ReplacementCharacter;
+                out[i] = replacementCharacter;
+            invalidChars += state->remainingChars;
             out += state->remainingChars;
             outlen -= state->remainingChars;
             state->remainingChars = 0;
@@ -1406,7 +1415,8 @@ QString QLocal8Bit::convertToUnicode_sys(QByteArrayView in, quint32 codePage,
                 std::tie(out, outlen) = growOut(1);
                 if (!out)
                     return {};
-                *out = QChar::ReplacementCharacter;
+                *out = replacementCharacter;
+                ++invalidChars;
                 ++out;
                 --outlen;
                 ++mb;
@@ -1435,7 +1445,8 @@ QString QLocal8Bit::convertToUnicode_sys(QByteArrayView in, quint32 codePage,
     if (!state && mblen > 0) {
         // We have trailing character(s) that could not be converted, and
         // nowhere to cache them
-        sp.resize(sp.size() + mblen, QChar::ReplacementCharacter);
+        sp.resize(sp.size() + mblen, replacementCharacter);
+        invalidChars += mblen;
     }
     return sp;
 }
@@ -1451,10 +1462,19 @@ QByteArray QLocal8Bit::convertFromUnicode_sys(QStringView in, quint32 codePage,
     const wchar_t *ch = reinterpret_cast<const wchar_t *>(in.data());
     qsizetype uclen = in.size();
 
-    Q_ASSERT(uclen < INT_MAX); // ### FIXME
     Q_ASSERT(state);
-    if (state->flags & QStringConverter::Flag::Stateless) // temporary
+    // The Windows API has a *boolean* out-parameter that says if a replacement
+    // character was used, but it gives us no way to know _how many_ were used.
+    // Since we cannot simply scan the string for replacement characters
+    // (which is potentially a question mark, and thus a valid character),
+    // we simply do not track the number of invalid characters here.
+    // auto &invalidChars = state->invalidChars;
+
+    using Flag = QStringConverter::Flag;
+    if (state->flags & Flag::Stateless) { // temporary
+        Q_ASSERT(state->remainingChars == 0);
         state = nullptr;
+    }
 
     if (!ch)
         return QByteArray();
@@ -1502,9 +1522,42 @@ QByteArray QLocal8Bit::convertFromUnicode_sys(QStringView in, quint32 codePage,
 
     Q_ASSERT(uclen > 0);
 
+    // Return a pointer to storage where we have enough space for `size`
+    const auto growOut = [&](qsizetype size) -> std::tuple<char *, qsizetype> {
+        if (outlen >= size)
+            return {out, outlen};
+        const bool wasStackBuffer = mb.isEmpty();
+        const auto begin = wasStackBuffer ? buf.data() : mb.data();
+        const qsizetype offset = qsizetype(std::distance(begin, out));
+        qsizetype newSize = 0;
+        if (Q_UNLIKELY(qAddOverflow(offset, size, &newSize))) {
+            Q_CHECK_PTR(false);
+            return {nullptr, 0};
+        }
+        mb.resize(newSize);
+        auto it = mb.data();
+        if (wasStackBuffer)
+            it = std::copy_n(buf.data(), offset, it);
+        else
+            it += offset;
+        return {it, size};
+    };
+
+    const auto getNextWindowSize = [&]() {
+        int nextIn = qt_saturate<int>(uclen);
+        // The Windows API has some issues if the current window ends in the
+        // middle of a surrogate pair, so we avoid that:
+        if (nextIn > 1 && QChar::isHighSurrogate(ch[nextIn - 1]))
+            --nextIn;
+        return nextIn;
+    };
+
     int len = 0;
     while (uclen > 0) {
-        const int nextIn = qt_saturate<int>(uclen);
+        const int nextIn = getNextWindowSize();
+        std::tie(out, outlen) = growOut(1); // We need at least one byte
+        if (!out)
+            return {};
         const int nextOut = qt_saturate<int>(outlen);
         len = WideCharToMultiByte(codePage, 0, ch, nextIn, out, nextOut, nullptr, nullptr);
         if (len > 0) {
@@ -1515,14 +1568,21 @@ QByteArray QLocal8Bit::convertFromUnicode_sys(QStringView in, quint32 codePage,
         } else {
             int r = GetLastError();
             if (r == ERROR_INSUFFICIENT_BUFFER) {
-                Q_ASSERT(mb.isEmpty());
                 int neededLength = WideCharToMultiByte(codePage, 0, ch, nextIn, nullptr, 0,
                                                        nullptr, nullptr);
-                const qsizetype currentLength = out - buf.data();
-                mb.resize(currentLength + neededLength);
-                memcpy(mb.data(), out, currentLength * sizeof(*out));
-                out = mb.data() + currentLength;
-                outlen = neededLength;
+                if (neededLength <= 0) {
+                    // Fail. Observed with UTF8 where the input window was max int and ended in an
+                    // incomplete sequence, probably a Windows bug. We try to avoid that from
+                    // happening by reducing the window size in that case. But let's keep this
+                    // branch just in case of other bugs.
+                    r = GetLastError();
+                    fprintf(stderr,
+                            "WideCharToMultiByte: Cannot convert multibyte text (error %d)\n", r);
+                    break;
+                }
+                std::tie(out, outlen) = growOut(neededLength);
+                if (!out)
+                    return {};
                 // and try again...
             } else {
                 // Fail.  Probably can't happen in fact (dwFlags is 0).
