@@ -794,6 +794,14 @@ singleTicks: ' \\' \\\\'
 expression: \${expr} \${expr} \\\${expr} \\\${expr}`)",
                                   16, 27 } },
                         { Result::ExitsNormally, Result::AutoFixable } };
+    QTest::addRow("multifix")
+            << QStringLiteral("multifix.qml")
+            << Result { {
+                    Message { QStringLiteral("Unqualified access"), 7,  19, QtWarningMsg},
+                    Message { QStringLiteral("Unqualified access"), 11, 19, QtWarningMsg},
+                }, {}, {
+                    Message { QStringLiteral("pragma ComponentBehavior: Bound\n"), 1, 1 }
+                }, { Result::AutoFixable }};
     QTest::newRow("unresolvedType")
             << QStringLiteral("unresolvedType.qml")
             << Result { { Message { QStringLiteral(
@@ -1274,6 +1282,7 @@ void TestQmllint::cleanQmlCode_data()
     QTest::newRow("AddressableValue") << QStringLiteral("addressableValue.qml");
     QTest::newRow("WriteListProperty") << QStringLiteral("writeListProperty.qml");
     QTest::newRow("dontConfuseMemberPrintWithGlobalPrint") << QStringLiteral("findMemberPrint.qml");
+    QTest::newRow("groupedAttachedLayout") << QStringLiteral("groupedAttachedLayout.qml");
 }
 
 void TestQmllint::cleanQmlCode()

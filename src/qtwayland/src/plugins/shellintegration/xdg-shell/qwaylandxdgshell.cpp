@@ -416,14 +416,15 @@ void QWaylandXdgSurface::setSizeHints()
         const int minHeight = qMax(0, minSize.height());
         int maxWidth = qMax(0, maxSize.width());
         int maxHeight = qMax(0, maxSize.height());
-        if (maxWidth == QWINDOWSIZE_MAX)
-            maxWidth = 0;
-        if (maxHeight == QWINDOWSIZE_MAX)
-            maxHeight = 0;
 
         // It will not change min/max sizes if invalid.
         if (minWidth > maxWidth || minHeight > maxHeight)
             return;
+
+        if (maxWidth == QWINDOWSIZE_MAX)
+            maxWidth = 0;
+        if (maxHeight == QWINDOWSIZE_MAX)
+            maxHeight = 0;
 
         m_toplevel->set_min_size(minWidth, minHeight);
         m_toplevel->set_max_size(maxWidth, maxHeight);
@@ -632,17 +633,20 @@ bool QWaylandXdgSurface::requestActivate()
             // focus stealing prevention indication, so requestXdgActivationToken call
             // is still necessary in that case.
             const auto wlWindow = focusWindow ? static_cast<QWaylandWindow*>(focusWindow->handle()) : m_window;
-            if (const auto xdgSurface = qobject_cast<QWaylandXdgSurface *>(wlWindow->shellSurface())) {
-                if (const auto seat = wlWindow->display()->lastInputDevice()) {
-                    const auto tokenProvider = activation->requestXdgActivationToken(
-                            wlWindow->display(), wlWindow->wlSurface(), seat->serial(), xdgSurface->m_appId);
-                    connect(tokenProvider, &QWaylandXdgActivationTokenV1::done, this,
-                            [this, tokenProvider](const QString &token) {
-                                m_shell->activation()->activate(token, window()->wlSurface());
-                                tokenProvider->deleteLater();
-                            });
-                    return true;
-                }
+
+            QString appId;
+            if (const auto xdgSurface = qobject_cast<QWaylandXdgSurface *>(wlWindow->shellSurface()))
+                appId = xdgSurface->m_appId;
+
+            if (const auto seat = wlWindow->display()->lastInputDevice()) {
+                const auto tokenProvider = activation->requestXdgActivationToken(
+                        wlWindow->display(), wlWindow->wlSurface(), seat->serial(), appId);
+                connect(tokenProvider, &QWaylandXdgActivationTokenV1::done, this,
+                        [this, tokenProvider](const QString &token) {
+                            m_shell->activation()->activate(token, window()->wlSurface());
+                            tokenProvider->deleteLater();
+                        });
+                return true;
             }
         }
     }
