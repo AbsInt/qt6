@@ -5377,8 +5377,16 @@ bool QGles2Texture::create()
                     }
                 }
             } else {
-                rhiD->f->glTexImage2D(target, 0, GLint(glintformat), size.width(), size.height(),
-                                      0, glformat, gltype, nullptr);
+                // 2D texture. For multisample textures the GLES 3.1
+                // glStorage2DMultisample must be used for portability.
+                if (m_sampleCount > 1 && rhiD->caps.multisampledTexture) {
+                    // internal format must be sized
+                    rhiD->f->glTexStorage2DMultisample(target, m_sampleCount, glsizedintformat,
+                                                       size.width(), size.height(), GL_TRUE);
+                } else {
+                    rhiD->f->glTexImage2D(target, 0, GLint(glintformat), size.width(), size.height(),
+                                          0, glformat, gltype, nullptr);
+                }
             }
         } else {
             // Must be specified with immutable storage functions otherwise
@@ -5389,6 +5397,9 @@ bool QGles2Texture::create()
             else if (!is1D && (is3D || isArray))
                 rhiD->f->glTexStorage3D(target, mipLevelCount, glsizedintformat, size.width(), size.height(),
                                         is3D ? qMax(1, m_depth) : qMax(0, m_arraySize));
+            else if (m_sampleCount > 1)
+                rhiD->f->glTexStorage2DMultisample(target, m_sampleCount, glsizedintformat,
+                                                   size.width(), size.height(), GL_TRUE);
             else
                 rhiD->f->glTexStorage2D(target, mipLevelCount, glsizedintformat, size.width(),
                                         is1D ? qMax(0, m_arraySize) : size.height());
@@ -5628,7 +5639,7 @@ bool QGles2TextureRenderTarget::create()
             }
             if (attIndex == 0) {
                 d.pixelSize = rhiD->q->sizeForMipLevel(colorAtt.level(), texD->pixelSize());
-                d.sampleCount = 1;
+                d.sampleCount = texD->sampleCount();
             }
         } else if (renderBuffer) {
             QGles2RenderBuffer *rbD = QRHI_RES(QGles2RenderBuffer, renderBuffer);
@@ -5666,7 +5677,7 @@ bool QGles2TextureRenderTarget::create()
                                             depthTexD->texture, 0);
             if (d.colorAttCount == 0) {
                 d.pixelSize = depthTexD->pixelSize();
-                d.sampleCount = 1;
+                d.sampleCount = depthTexD->sampleCount();
             }
         }
         d.dsAttCount = 1;
