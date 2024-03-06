@@ -206,6 +206,21 @@ static const char oneLetterTypes[] = "vsogybnqiuxtdh";
 static const char basicTypes[] =      "sogybnqiuxtdh";
 static const char fixedTypes[] =         "ybnqiuxtdh";
 
+/*
+    D-Bus signature grammar (in ABNF), as of 0.42 (2023-08-21):
+    https://dbus.freedesktop.org/doc/dbus-specification.html#type-system
+
+    <signature>            = *<single-complete-type>
+    <single-complete-type> = <basic-type> / <variant> / <struct> / <array>
+    <fixed-type>           = "y" / "b" / "n" / "q" / "i" / "u" / "x" / "t" / "d" / "h"
+    <variable-length-type> = "s" / "o" / "g"
+    <basic-type>           = <variable-length-type> / <fixed-type>
+    <variant>              = "v"
+    <struct>               = "(" 1*<single-complete-type> ")"
+    <array>                = "a" ( <single-complete-type> / <dict-entry> )
+    <dict-entry>           = "{" <basic-type> <single-complete-type> "}"
+*/
+
 static bool isBasicType(int c)
 {
     return c != DBUS_TYPE_INVALID && strchr(basicTypes, c) != nullptr;
@@ -445,9 +460,8 @@ namespace QDBusUtil
         \list
           \li start with the slash character ("/")
           \li do not end in a slash, unless the path is just the initial slash
-          \li do not contain any two slashes in sequence
-          \li contain slash-separated parts, each of which is composed of ASCII letters, digits and
-             underscores ("_")
+          \li contain slash-separated parts, each of which is not empty, and composed
+              only of ASCII letters, digits and underscores ("_").
         \endlist
     */
     bool isValidObjectPath(const QString &path)
