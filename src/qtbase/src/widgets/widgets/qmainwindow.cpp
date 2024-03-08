@@ -1296,10 +1296,16 @@ bool QMainWindow::event(QEvent *event)
             if (!d->layout->draggingWidget)
                 break;
             auto dragMoveEvent = static_cast<QDragMoveEvent *>(event);
-            d->layout->hover(d->layout->draggingWidget, dragMoveEvent->position().toPoint());
+            d->layout->hover(d->layout->draggingWidget,
+                             mapToGlobal(dragMoveEvent->position()).toPoint());
             event->accept();
             return true;
         }
+        case QEvent::DragLeave:
+            if (!d->layout->draggingWidget)
+                break;
+            d->layout->hover(d->layout->draggingWidget, pos() - QPoint(-1, -1));
+            return true;
 #endif
         default:
             break;
