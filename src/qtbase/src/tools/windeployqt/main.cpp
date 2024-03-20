@@ -694,13 +694,15 @@ static inline int parseArguments(const QStringList &arguments, QCommandLineParse
             for (const QString &library : libraries)
                 options->binaries.append(path + u'/' + library);
         } else {
-            if (fi.absolutePath() != options->directory)
+            if (!parser->isSet(dirOption) && fi.absolutePath() != options->directory)
                 multipleDirs = true;
             options->binaries.append(path);
         }
     }
-    if (multipleDirs)
-        std::wcerr << "Warning: using binaries from different directories\n";
+    if (multipleDirs) {
+        std::wcerr << "Warning: using binaries from different directories, deploying to following path: "
+        << options->directory << '\n' << "To disable this warning, use the --dir option\n";
+    }
     if (options->translationsDirectory.isEmpty())
         options->translationsDirectory = options->directory + "/translations"_L1;
     return 0;
@@ -932,11 +934,11 @@ static QString deployPlugin(const QString &plugin, const QDir &subDir, const boo
 {
     const QString subDirName = subDir.dirName();
     // Filter out disabled plugins
-    if (pluginSelections.disabledPluginTypes.contains(subDirName)) {
+    if (optVerboseLevel && pluginSelections.disabledPluginTypes.contains(subDirName)) {
         std::wcout << "Skipping plugin " << plugin << " due to skipped plugin type " << subDirName << '\n';
         return {};
     }
-    if (subDirName == u"generic" && plugin.contains(u"qinsighttracker")
+    if (optVerboseLevel && subDirName == u"generic" && plugin.contains(u"qinsighttracker")
         && !deployInsightTrackerPlugin) {
         std::wcout << "Skipping plugin " << plugin
                    << ". Use -deploy-insighttracker if you want to use it.\n";
@@ -951,7 +953,7 @@ static QString deployPlugin(const QString &plugin, const QDir &subDir, const boo
             : dotIndex;
     const QString pluginName = plugin.first(stripIndex);
 
-    if (pluginSelections.excludedPlugins.contains(pluginName)) {
+    if (optVerboseLevel && pluginSelections.excludedPlugins.contains(pluginName)) {
         std::wcout << "Skipping plugin " << plugin << " due to exclusion option" << '\n';
         return {};
     }
@@ -1053,7 +1055,8 @@ QStringList findQtPlugins(ModuleBitset *usedQtModules, const ModuleBitset &disab
                 ? MatchDebugOrRelease // QTBUG-44331: Debug detection does not work for webengine, deploy all.
                 : debugMatchModeIn;
             QDir subDir(subDirFi.absoluteFilePath());
-            std::wcout << "Adding in plugin type " << subDirFi.baseName() << " for module: " << qtModuleEntries.moduleById(module).name << '\n';
+            if (optVerboseLevel)
+                std::wcout << "Adding in plugin type " << subDirFi.baseName() << " for module: " << qtModuleEntries.moduleById(module).name << '\n';
 
             const bool isPlatformPlugin = subDirName == "platforms"_L1;
             const QStringList plugins =
