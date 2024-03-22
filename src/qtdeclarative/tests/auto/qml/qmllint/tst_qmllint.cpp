@@ -1057,8 +1057,8 @@ expression: \${expr} \${expr} \\\${expr} \\\${expr}`)",
     QTest::newRow("NotScopedEnumCpp")
             << QStringLiteral("NotScopedEnumCpp.qml")
             << Result{ { Message{
-                       QStringLiteral("You cannot access unscoped enum \"V1\" from here."), 5,
-                       57 } } };
+                       QStringLiteral("You cannot access unscoped enum \"TheEnum\" from here."), 5,
+                       49 } } };
 
     QTest::newRow("unresolvedArrayBinding")
             << QStringLiteral("unresolvedArrayBinding.qml")
@@ -1299,6 +1299,7 @@ void TestQmllint::cleanQmlCode_data()
     QTest::newRow("dontConfuseMemberPrintWithGlobalPrint") << QStringLiteral("findMemberPrint.qml");
     QTest::newRow("groupedAttachedLayout") << QStringLiteral("groupedAttachedLayout.qml");
     QTest::newRow("QEventPoint") << QStringLiteral("qEventPoint.qml");
+    QTest::newRow("constInvokable") << QStringLiteral("useConstInvokable.qml");
 }
 
 void TestQmllint::cleanQmlCode()
