@@ -10,7 +10,7 @@ $version = "n6.1.1"
 $ffmpeg_name = "ffmpeg-" + $version;
 $sha1 = "7AECCED8A0366BE407329B4E176167534233DA12"
 
-$url_cached = "http://ci-files01-hki.intra.qt.io/input/ffmpeg/" + $version + ".zip"
+$url_cached = "https://ci-files01-hki.ci.qt.io/input/ffmpeg/" + $version + ".zip"
 $url_public = "https://github.com/FFmpeg/FFmpeg/archive/refs/tags/" +$version + ".zip"
 $download_location = "C:\Windows\Temp\" + $ffmpeg_name + ".zip"
 $unzip_location = "C:\"
@@ -111,7 +111,7 @@ function InstallAndroidArmv7 {
     $target_cpu="armv7-a"
     $api_version="24"
 
-    $ndkVersionLatest = "r25b"
+    $ndkVersionLatest = "r26b"
     $ndkFolderLatest = "/c/Utils/Android/android-ndk-$ndkVersionLatest"
 
     $toolchain="${ndkFolderLatest}/toolchains/llvm/prebuilt/windows-x86_64"

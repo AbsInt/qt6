@@ -160,6 +160,8 @@ qt_internal_add_global_definition(QT_NO_AS_CONST)
 qt_internal_add_global_definition(QT_NO_QEXCHANGE)
 qt_internal_add_global_definition(QT_NO_NARROWING_CONVERSIONS_IN_CONNECT)
 qt_internal_add_global_definition(QT_EXPLICIT_QFILE_CONSTRUCTION_FROM_PATH)
+qt_internal_add_global_definition(QT_USE_QSTRINGBUILDER SCOPE PLUGIN TOOL MODULE)
+qt_internal_add_global_definition(QT_NO_FOREACH)
 
 if(WARNINGS_ARE_ERRORS)
     qt_internal_set_warnings_are_errors_flags(PlatformModuleInternal INTERFACE)
@@ -227,19 +229,28 @@ elseif(UIKIT)
     target_compile_definitions(PlatformCommonInternal INTERFACE GLES_SILENCE_DEPRECATION)
 endif()
 
-if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "AppleClang"
-    AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "14.0.0"
-)
-    # Xcode 14's Clang will emit objc_msgSend stubs by default, which ld
-    # from earlier Xcode versions will fail to understand when linking
-    # against static libraries with these stubs. Disable the stubs explicitly,
-    # for as long as we do support Xcode < 14.
-    set(is_static_lib "$<STREQUAL:$<TARGET_PROPERTY:TYPE>,STATIC_LIBRARY>")
-    set(is_objc "$<COMPILE_LANGUAGE:OBJC,OBJCXX>")
-    set(is_static_and_objc "$<AND:${is_static_lib},${is_objc}>")
-    target_compile_options(PlatformCommonInternal INTERFACE
-        "$<${is_static_and_objc}:-fno-objc-msgsend-selector-stubs>"
-    )
+if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "AppleClang")
+    if(CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "14.0.0")
+        # Xcode 14's Clang will emit objc_msgSend stubs by default, which ld
+        # from earlier Xcode versions will fail to understand when linking
+        # against static libraries with these stubs. Disable the stubs explicitly,
+        # for as long as we do support Xcode < 14.
+        set(is_static_lib "$<STREQUAL:$<TARGET_PROPERTY:TYPE>,STATIC_LIBRARY>")
+        set(is_objc "$<COMPILE_LANGUAGE:OBJC,OBJCXX>")
+        set(is_static_and_objc "$<AND:${is_static_lib},${is_objc}>")
+        target_compile_options(PlatformCommonInternal INTERFACE
+            "$<${is_static_and_objc}:-fno-objc-msgsend-selector-stubs>"
+        )
+    endif()
+
+    # A bug in Xcode 15 adds duplicate flags to the linker. In addition, the
+    # `-warn_duplicate_libraries` is now enabled by default which may result
+    # in several 'duplicate libraries warning'.
+    #   - https://gitlab.kitware.com/cmake/cmake/-/issues/25297 and
+    #   - https://indiestack.com/2023/10/xcode-15-duplicate-library-linker-warnings/
+    set(is_xcode15 "$<VERSION_GREATER_EQUAL:$<CXX_COMPILER_VERSION>,15>")
+    target_link_options(PlatformCommonInternal INTERFACE
+        "$<${is_xcode15}:LINKER:-no_warn_duplicate_libraries>")
 endif()
 
 if(MSVC)
@@ -254,7 +265,7 @@ if(WASM AND QT_FEATURE_sse2)
 endif()
 
 # Taken from mkspecs/common/msvc-version.conf and mkspecs/common/msvc-desktop.conf
-if (MSVC)
+if (MSVC AND NOT CLANG)
     if (MSVC_VERSION GREATER_EQUAL 1799)
         target_compile_options(PlatformCommonInternal INTERFACE
             -FS
@@ -265,20 +276,16 @@ if (MSVC)
     if (MSVC_VERSION GREATER_EQUAL 1899)
         target_compile_options(PlatformCommonInternal INTERFACE
             -Zc:strictStrings
+            -Zc:throwingNew
         )
-        if (NOT CLANG)
-            target_compile_options(PlatformCommonInternal INTERFACE
-                -Zc:throwingNew
-            )
-        endif()
     endif()
-    if (MSVC_VERSION GREATER_EQUAL 1909 AND NOT CLANG) # MSVC 2017
+    if (MSVC_VERSION GREATER_EQUAL 1909) # MSVC 2017
         target_compile_options(PlatformCommonInternal INTERFACE
             -Zc:referenceBinding
             -Zc:ternary
         )
     endif()
-    if (MSVC_VERSION GREATER_EQUAL 1919 AND NOT CLANG) # MSVC 2019
+    if (MSVC_VERSION GREATER_EQUAL 1919) # MSVC 2019
         target_compile_options(PlatformCommonInternal INTERFACE
             -Zc:externConstexpr
             #-Zc:lambda # Buggy. TODO: Enable again when stable enough.
@@ -358,6 +365,15 @@ endif()
 if(QT_FEATURE_enable_new_dtags)
     qt_internal_platform_link_options(PlatformCommonInternal INTERFACE "-Wl,--enable-new-dtags")
 endif()
+
+function(qt_internal_apply_coverage_flags)
+    if(QT_FEATURE_coverage_gcov)
+        target_compile_options(PlatformCommonInternal INTERFACE
+            "$<$<CONFIG:Debug>:--coverage>")
+        target_link_options(PlatformCommonInternal INTERFACE "$<$<CONFIG:Debug>:--coverage>")
+    endif()
+endfunction()
+qt_internal_apply_coverage_flags()
 
 function(qt_get_implicit_sse2_genex_condition out_var)
     set(is_shared_lib "$<STREQUAL:$<TARGET_PROPERTY:TYPE>,SHARED_LIBRARY>")

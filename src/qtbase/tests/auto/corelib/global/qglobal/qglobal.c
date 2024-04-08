@@ -1,8 +1,9 @@
 // Copyright (C) 2017 Intel Corporation.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <QtCore/qglobal.h>
 #include <QtCore/qtversion.h>
+#include <QtCore/qyieldcpu.h>
 #include <QtCore/qtypes.h>
 
 #ifdef Q_COMPILER_THREAD_LOCAL
@@ -13,6 +14,11 @@
  * Certain features of qglobal.h must work in C mode too. We test that
  * everything works.
  */
+
+#if defined(Q_OS_VXWORKS) && !defined(thread_local)
+// threads.h forgot to define this (should be fixed for version 23.11)
+#  define thread_local _Thread_local
+#endif
 
 /* Types and Q_UNUSED */
 void tst_GlobalTypes()
@@ -73,6 +79,12 @@ const char *tst_qVersion()
 #else
     return NULL;
 #endif
+}
+
+void tst_qYieldCpu(void) Q_DECL_NOEXCEPT;
+void tst_qYieldCpu(void)
+{
+    qYieldCpu();
 }
 
 /* Static assertion */

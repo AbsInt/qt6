@@ -1438,7 +1438,6 @@ size_t qHash(double key, size_t seed) noexcept
     }
 }
 
-#if !defined(Q_OS_DARWIN) || defined(Q_QDOC)
 /*! \relates QHash
     \since 5.3
 
@@ -1456,7 +1455,6 @@ size_t qHash(long double key, size_t seed) noexcept
         return murmurhash(&key, sizeof(key), seed);
     }
 }
-#endif
 
 /*! \fn size_t qHash(const QChar key, size_t seed = 0)
     \relates QHash
@@ -1514,7 +1512,7 @@ size_t qHash(long double key, size_t seed) noexcept
     Returns the hash value for the \a key, using \a seed to seed the calculation.
 */
 
-/*! \fn template <class T> size_t qHash(std::nullptr_t key, size_t seed = 0)
+/*! \fn size_t qHash(std::nullptr_t key, size_t seed = 0)
     \relates QHash
     \since 6.0
 
@@ -1785,8 +1783,8 @@ size_t qHash(long double key, size_t seed) noexcept
 
     Constructs a hash with a copy of each of the elements in the iterator range
     [\a begin, \a end). Either the elements iterated by the range must be
-    objects with \c{first} and \c{second} data members (like \c{QPair},
-    \c{std::pair}, etc.) convertible to \c Key and to \c T respectively; or the
+    objects with \c{first} and \c{second} data members (like \c{std::pair}),
+    convertible to \c Key and to \c T respectively; or the
     iterators must have \c{key()} and \c{value()} member functions, returning a
     key convertible to \c Key and a value convertible to \c T respectively.
 */
@@ -2021,7 +2019,7 @@ size_t qHash(long double key, size_t seed) noexcept
     Returns \c true if the hash contains an item with the \a key;
     otherwise returns \c false.
 
-    \sa count(), QMultiHash::contains()
+    \sa count()
 */
 
 /*! \fn template <class Key, class T> T QHash<Key, T>::value(const Key &key) const
@@ -2332,6 +2330,8 @@ size_t qHash(long double key, size_t seed) noexcept
 
     If there is already an item with the \a key, that item's value
     is replaced with \a value.
+
+    Returns an iterator pointing to the new/updated element.
 */
 
 /*!
@@ -2362,7 +2362,7 @@ size_t qHash(long double key, size_t seed) noexcept
     returns \c false.
 */
 
-/*! \fn template <class Key, class T> QPair<iterator, iterator> QMultiHash<Key, T>::equal_range(const Key &key)
+/*! \fn template <class Key, class T> std::pair<iterator, iterator> QMultiHash<Key, T>::equal_range(const Key &key)
     \since 5.7
 
     Returns a pair of iterators delimiting the range of values \c{[first, second)}, that
@@ -2370,7 +2370,7 @@ size_t qHash(long double key, size_t seed) noexcept
 */
 
 /*!
-    \fn template <class Key, class T> QPair<const_iterator, const_iterator> QMultiHash<Key, T>::equal_range(const Key &key) const
+    \fn template <class Key, class T> std::pair<const_iterator, const_iterator> QMultiHash<Key, T>::equal_range(const Key &key) const
     \overload
     \since 5.7
 */
@@ -2952,8 +2952,8 @@ size_t qHash(long double key, size_t seed) noexcept
 
     Constructs a multi-hash with a copy of each of the elements in the iterator range
     [\a begin, \a end). Either the elements iterated by the range must be
-    objects with \c{first} and \c{second} data members (like \c{QPair},
-    \c{std::pair}, etc.) convertible to \c Key and to \c T respectively; or the
+    objects with \c{first} and \c{second} data members (like \c{std::pair}),
+    convertible to \c Key and to \c T respectively; or the
     iterators must have \c{key()} and \c{value()} member functions, returning a
     key convertible to \c Key and a value convertible to \c T respectively.
 */
@@ -2968,6 +2968,8 @@ size_t qHash(long double key, size_t seed) noexcept
     If there are multiple items with the \a key, the most
     recently inserted item's value is replaced with \a value.
 
+    Returns an iterator pointing to the new/updated element.
+
     \sa insert()
 */
 
@@ -2979,6 +2981,8 @@ size_t qHash(long double key, size_t seed) noexcept
     function will simply create a new one. (This behavior is
     different from replace(), which overwrites the value of an
     existing item.)
+
+    Returns an iterator pointing to the new element.
 
     \sa replace()
 */

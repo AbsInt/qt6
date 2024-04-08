@@ -128,7 +128,7 @@ QWindow::QWindow(QScreen *targetScreen)
     , QSurface(QSurface::Window)
 {
     Q_D(QWindow);
-    d->init(targetScreen);
+    d->init(nullptr, targetScreen);
 }
 
 static QWindow *nonDesktopParent(QWindow *parent)
@@ -169,11 +169,11 @@ QWindow::QWindow(QWindow *parent)
     \sa setParent()
 */
 QWindow::QWindow(QWindowPrivate &dd, QWindow *parent)
-    : QObject(dd, nonDesktopParent(parent))
+    : QObject(dd, nullptr)
     , QSurface(QSurface::Window)
 {
     Q_D(QWindow);
-    d->init();
+    d->init(nonDesktopParent(parent));
 }
 
 /*!
@@ -183,6 +183,8 @@ QWindow::~QWindow()
 {
     Q_D(QWindow);
     d->destroy();
+    // Decouple from parent before window goes under
+    setParent(nullptr);
     QGuiApplicationPrivate::window_list.removeAll(this);
     if (!QGuiApplicationPrivate::is_app_closing)
         QGuiApplicationPrivate::instance()->modalWindowList.removeOne(this);
@@ -206,9 +208,11 @@ QWindowPrivate::QWindowPrivate()
 QWindowPrivate::~QWindowPrivate()
     = default;
 
-void QWindowPrivate::init(QScreen *targetScreen)
+void QWindowPrivate::init(QWindow *parent, QScreen *targetScreen)
 {
     Q_Q(QWindow);
+
+    q->QObject::setParent(parent);
 
     isWindow = true;
     parentWindow = static_cast<QWindow *>(q->QObject::parent());
@@ -242,6 +246,11 @@ void QWindowPrivate::init(QScreen *targetScreen)
 #endif
         updateDevicePixelRatio();
     });
+
+    if (parentWindow) {
+        QChildWindowEvent childAddedEvent(QEvent::ChildWindowAdded, q);
+        QCoreApplication::sendEvent(parentWindow, &childAddedEvent);
+    }
 }
 
 /*!
@@ -621,8 +630,7 @@ void QWindowPrivate::setMinOrMaxSize(QSize *oldSizeMember, const QSize &size,
         || minimumSize.height() <= maximumSize.height()) {
         const QSize currentSize = q->size();
         const QSize boundedSize = currentSize.expandedTo(minimumSize).boundedTo(maximumSize);
-        if (currentSize != boundedSize)
-            q->resize(boundedSize);
+        q->resize(boundedSize);
     }
 }
 
@@ -772,6 +780,10 @@ void QWindow::setParent(QWindow *parent)
         return;
     }
 
+    QEvent parentAboutToChangeEvent(QEvent::ParentWindowAboutToChange);
+    QCoreApplication::sendEvent(this, &parentAboutToChangeEvent);
+
+    const auto previousParent = d->parentWindow;
     QObject::setParent(parent);
     d->parentWindow = parent;
 
@@ -794,6 +806,19 @@ void QWindow::setParent(QWindow *parent)
     }
 
     QGuiApplicationPrivate::updateBlockedStatus(this);
+
+    if (previousParent) {
+        QChildWindowEvent childRemovedEvent(QEvent::ChildWindowRemoved, this);
+        QCoreApplication::sendEvent(previousParent, &childRemovedEvent);
+    }
+
+    if (parent) {
+        QChildWindowEvent childAddedEvent(QEvent::ChildWindowAdded, this);
+        QCoreApplication::sendEvent(parent, &childAddedEvent);
+    }
+
+    QEvent parentChangedEvent(QEvent::ParentWindowChange);
+    QCoreApplication::sendEvent(this, &parentChangedEvent);
 }
 
 /*!
@@ -1655,20 +1680,18 @@ void QWindow::setY(int arg)
     \property QWindow::width
     \brief the width of the window's geometry
 */
-void QWindow::setWidth(int arg)
+void QWindow::setWidth(int w)
 {
-    if (width() != arg)
-        resize(arg, height());
+    resize(w, height());
 }
 
 /*!
     \property QWindow::height
     \brief the height of the window's geometry
 */
-void QWindow::setHeight(int arg)
+void QWindow::setHeight(int h)
 {
-    if (height() != arg)
-        resize(width(), arg);
+    resize(width(), h);
 }
 
 /*!
@@ -1990,12 +2013,16 @@ void QWindow::resize(int w, int h)
 void QWindow::resize(const QSize &newSize)
 {
     Q_D(QWindow);
+
+    const QSize oldSize = size();
+    if (newSize == oldSize)
+        return;
+
     d->positionPolicy = QWindowPrivate::WindowFrameExclusive;
     if (d->platformWindow) {
         d->platformWindow->setGeometry(
             QHighDpi::toNativeWindowGeometry(QRect(position(), newSize), this));
     } else {
-        const QSize oldSize = d->geometry.size();
         d->geometry.setSize(newSize);
         if (newSize.width() != oldSize.width())
             emit widthChanged(newSize.width());
@@ -2204,20 +2231,26 @@ QObject *QWindow::focusObject() const
 /*!
     Shows the window.
 
-    This is equivalent to calling showFullScreen(), showMaximized(), or showNormal(),
+    For child windows, this is equivalent to calling showNormal().
+    Otherwise, it is equivalent to calling showFullScreen(), showMaximized(), or showNormal(),
     depending on the platform's default behavior for the window type and flags.
 
     \sa showFullScreen(), showMaximized(), showNormal(), hide(), QStyleHints::showIsFullScreen(), flags()
 */
 void QWindow::show()
 {
-    Qt::WindowState defaultState = QGuiApplicationPrivate::platformIntegration()->defaultWindowState(d_func()->windowFlags);
-    if (defaultState == Qt::WindowFullScreen)
-        showFullScreen();
-    else if (defaultState == Qt::WindowMaximized)
-        showMaximized();
-    else
+    if (parent()) {
         showNormal();
+    } else {
+        const auto *platformIntegration = QGuiApplicationPrivate::platformIntegration();
+        Qt::WindowState defaultState = platformIntegration->defaultWindowState(d_func()->windowFlags);
+        if (defaultState == Qt::WindowFullScreen)
+            showFullScreen();
+        else if (defaultState == Qt::WindowMaximized)
+            showMaximized();
+        else
+            showNormal();
+    }
 }
 
 /*!
@@ -2823,7 +2856,12 @@ QPointF QWindow::mapToGlobal(const QPointF &pos) const
     // Map the position (and the window's global position) to native coordinates, perform
     // the addition, and then map back to device independent coordinates.
     QPointF nativeLocalPos = QHighDpi::toNativeLocalPosition(pos, this);
-    QPointF nativeWindowGlobalPos = QHighDpi::toNativeGlobalPosition(QPointF(d->globalPosition()), this);
+    // Get the native window position directly from the platform window
+    // if available (it can be null if the window hasn't been shown yet),
+    // or fall back to scaling the QWindow position.
+    QPointF nativeWindowGlobalPos = d->platformWindow
+        ? d->platformWindow->mapToGlobal(QPoint(0,0)).toPointF()
+        : QHighDpi::toNativeGlobalPosition(QPointF(d->globalPosition()), this);
     QPointF nativeGlobalPos = nativeLocalPos + nativeWindowGlobalPos;
     QPointF deviceIndependentGlobalPos = QHighDpi::fromNativeGlobalPosition(nativeGlobalPos, this);
     return deviceIndependentGlobalPos;
@@ -2861,7 +2899,12 @@ QPointF QWindow::mapFromGlobal(const QPointF &pos) const
     // Calculate local position in the native coordinate system. (See comment for the
     // corresponding mapToGlobal() code above).
     QPointF nativeGlobalPos = QHighDpi::toNativeGlobalPosition(pos, this);
-    QPointF nativeWindowGlobalPos = QHighDpi::toNativeGlobalPosition(QPointF(d->globalPosition()), this);
+    // Get the native window position directly from the platform window
+    // if available (it can be null if the window hasn't been shown yet),
+    // or fall back to scaling the QWindow position.
+    QPointF nativeWindowGlobalPos = d->platformWindow
+        ? d->platformWindow->mapToGlobal(QPoint(0,0)).toPointF()
+        : QHighDpi::toNativeGlobalPosition(QPointF(d->globalPosition()), this);
     QPointF nativeLocalPos = nativeGlobalPos - nativeWindowGlobalPos;
     QPointF deviceIndependentLocalPos = QHighDpi::fromNativeLocalPosition(nativeLocalPos, this);
     return deviceIndependentLocalPos;
@@ -3092,7 +3135,7 @@ void *QWindow::resolveInterface(const char *name, int revision) const
     QT_NATIVE_INTERFACE_RETURN_IF(QCocoaWindow, platformWindow);
 #endif
 
-#if defined(Q_OS_UNIX)
+#if QT_CONFIG(wayland)
     QT_NATIVE_INTERFACE_RETURN_IF(QWaylandWindow, platformWindow);
 #endif
 

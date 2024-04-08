@@ -471,6 +471,12 @@ const QOperatingSystemVersionBase QOperatingSystemVersion::Windows11_21H2;
 const QOperatingSystemVersionBase QOperatingSystemVersion::Windows11_22H2;
 
 /*!
+    \variable QOperatingSystemVersion::Windows11_23H2
+    \brief a version corresponding to Windows 11 Version 23H2 (version 10.0.22631).
+    \since 6.6
+ */
+
+/*!
     \variable QOperatingSystemVersion::OSXMavericks
     \brief a version corresponding to OS X Mavericks (version 10.9).
     \since 5.9
@@ -691,6 +697,12 @@ const QOperatingSystemVersionBase QOperatingSystemVersion::Android12L;
     \since 6.5
  */
 const QOperatingSystemVersionBase QOperatingSystemVersion::Android13;
+
+/*!
+    \variable QOperatingSystemVersion::Android14
+    \brief a version corresponding to Android 14 (version 14.0, API level 34).
+    \since 6.7
+ */
 
 #endif // !QT_BOOTSTRAPPED
 

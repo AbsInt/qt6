@@ -5,6 +5,7 @@
 #include <xcb/xcb.h>
 #include "qxcbconnection.h"
 #include "qxcbclipboard.h"
+#include "qxcbkeyboard.h"
 #include "qxcbmime.h"
 #include "qxcbwindow.h"
 #include "qxcbscreen.h"
@@ -26,6 +27,8 @@
 #include <private/qhighdpiscaling_p.h>
 
 QT_BEGIN_NAMESPACE
+
+using namespace Qt::Literals::StringLiterals;
 
 const int xdnd_version = 5;
 
@@ -459,7 +462,7 @@ void QXcbDrag::move(const QPoint &globalPos, Qt::MouseButtons b, Qt::KeyboardMod
     static const bool isUnity = qgetenv("XDG_CURRENT_DESKTOP").toLower() == "unity";
     if (isUnity && xdndCollectionWindow == XCB_NONE) {
         QString name = QXcbWindow::windowTitle(connection(), target);
-        if (name == QStringLiteral("XdndCollectionWindowImp"))
+        if (name == "XdndCollectionWindowImp"_L1)
             xdndCollectionWindow = target;
     }
     if (target == xdndCollectionWindow) {
@@ -766,7 +769,7 @@ void QXcbDrag::handle_xdnd_position(QPlatformWindow *w, const xcb_client_message
     }
 
     auto buttons = currentDrag() ? b : connection()->queryMouseButtons();
-    auto modifiers = currentDrag() ? mods : connection()->queryKeyboardModifiers();
+    auto modifiers = currentDrag() ? mods : connection()->keyboard()->queryKeyboardModifiers();
 
     QPlatformDragQtResponse qt_response = QWindowSystemInterface::handleDrag(
                 w->window(), dropData, p, supported_actions, buttons, modifiers);
@@ -1006,7 +1009,7 @@ void QXcbDrag::handleDrop(QPlatformWindow *, const xcb_client_message_event_t *e
         return;
 
     auto buttons = currentDrag() ? b : connection()->queryMouseButtons();
-    auto modifiers = currentDrag() ? mods : connection()->queryKeyboardModifiers();
+    auto modifiers = currentDrag() ? mods : connection()->keyboard()->queryKeyboardModifiers();
 
     QPlatformDropQtResponse response = QWindowSystemInterface::handleDrop(
                 currentWindow.data(), dropData, currentPosition, supported_drop_actions,

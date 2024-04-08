@@ -212,7 +212,7 @@ namespace Qt {
         ToolTip = Popup | Sheet,
         SplashScreen = ToolTip | Dialog,
         Desktop = 0x00000010 | Window,
-        SubWindow = 0x00000012,
+        SubWindow = 0x00000012, // Note QTBUG-115729 before using
         ForeignWindow = 0x00000020 | Window,
         CoverWindow = 0x00000040 | Window,
 
@@ -422,7 +422,7 @@ namespace Qt {
     enum ApplicationAttribute
     {
         // AA_ImmediateWidgetCreation = 0,
-        // AA_MSWindowsUseDirect3DByDefault = 1,
+        AA_QtQuickUseDefaultSizePolicy = 1 QT_TECH_PREVIEW_API,
         AA_DontShowIconsInMenus = 2,
         AA_NativeWindows = 3,
         AA_DontCreateNativeWidgetSiblings = 4,
@@ -602,7 +602,11 @@ namespace Qt {
         Key_twosuperior = 0x0b2,
         Key_threesuperior = 0x0b3,
         Key_acute = 0x0b4,
-        Key_mu = 0x0b5,
+        Key_micro = 0x0b5,
+#if QT_DEPRECATED_SINCE(6, 11)
+        Key_mu Q_DECL_ENUMERATOR_DEPRECATED_X("This key was misnamed, use Key_micro instead")
+            = Key_micro,
+#endif
         Key_paragraph = 0x0b6,
         Key_periodcentered = 0x0b7,
         Key_cedilla = 0x0b8,

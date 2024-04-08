@@ -32,9 +32,11 @@ static void printLocalizationInformation()
     if (!lcLocale().isDebugEnabled())
         return;
 
+#if defined(Q_OS_MACOS)
     // Trigger initialization of standard user defaults, so that Foundation picks
     // up -AppleLanguages and -AppleLocale passed on the command line.
     Q_UNUSED(NSUserDefaults.standardUserDefaults);
+#endif
 
     auto singleLineDescription = [](NSArray *array) {
         NSString *str = [array description];
@@ -245,7 +247,7 @@ static QString macDateToStringImpl(QDate date, CFDateFormatterStyle style)
     QCFType<CFDateFormatterRef> myFormatter
         = CFDateFormatterCreate(kCFAllocatorDefault, mylocale, style,
                                 kCFDateFormatterNoStyle);
-    QCFType<CFStringRef> text = CFDateFormatterCreateStringWithDate(0, myFormatter, myDate);
+    QCFType<CFStringRef> text = CFDateFormatterCreateStringWithDate(nullptr, myFormatter, myDate);
     return QString::fromCFString(text);
 }
 
@@ -639,7 +641,7 @@ QVariant QSystemLocale::query(QueryType type, QVariant in) const
     case CurrencySymbol:
         return macCurrencySymbol(QLocale::CurrencySymbolFormat(in.toUInt()));
     case CurrencyToString:
-        return macFormatCurrency(in.value<QSystemLocale::CurrencyToStringArgument>());
+        return macFormatCurrency(in.value<CurrencyToStringArgument>());
     case UILanguages: {
         QStringList result;
         QCFType<CFArrayRef> languages = CFLocaleCopyPreferredLanguages();

@@ -152,21 +152,8 @@ bool QQuickControlPrivate::acceptTouch(const QTouchEvent::TouchPoint &point)
 }
 #endif
 
-static void setActiveFocus(QQuickControl *control, Qt::FocusReason reason)
-{
-    QQuickControlPrivate *d = QQuickControlPrivate::get(control);
-    if (d->subFocusItem && d->window && d->flags & QQuickItem::ItemIsFocusScope)
-        QQuickWindowPrivate::get(d->window)->clearFocusInScope(control, d->subFocusItem, reason);
-    control->forceActiveFocus(reason);
-}
-
 bool QQuickControlPrivate::handlePress(const QPointF &, ulong)
 {
-    Q_Q(QQuickControl);
-    if ((focusPolicy & Qt::ClickFocus) == Qt::ClickFocus && !QGuiApplication::styleHints()->setFocusOnTouchRelease()) {
-        setActiveFocus(q, Qt::MouseFocusReason);
-        return true;
-    }
     return true;
 }
 
@@ -183,14 +170,8 @@ bool QQuickControlPrivate::handleMove(const QPointF &point, ulong)
 
 bool QQuickControlPrivate::handleRelease(const QPointF &, ulong)
 {
-    Q_Q(QQuickControl);
-    bool accepted = true;
-    if ((focusPolicy & Qt::ClickFocus) == Qt::ClickFocus && QGuiApplication::styleHints()->setFocusOnTouchRelease()) {
-        setActiveFocus(q, Qt::MouseFocusReason);
-        accepted = true;
-    }
     touchId = -1;
-    return accepted;
+    return true;
 }
 
 void QQuickControlPrivate::handleUngrab()
@@ -354,12 +335,22 @@ void QQuickControlPrivate::resizeBackground()
     bool changeHeight = false;
     if (((!p->widthValid() || !extra.isAllocated() || !extra->hasBackgroundWidth) && qFuzzyIsNull(background->x()))
             || (extra.isAllocated() && (extra->hasLeftInset || extra->hasRightInset))) {
-        background->setX(getLeftInset());
+        const auto leftInset = getLeftInset();
+        if (!qt_is_nan(leftInset) && p->x.valueBypassingBindings() != leftInset) {
+            // We bypass the binding here to prevent it from being removed
+            p->x.setValueBypassingBindings(leftInset);
+            p->dirty(DirtyType::Position);
+        }
         changeWidth = !p->width.hasBinding();
     }
     if (((!p->heightValid() || !extra.isAllocated() || !extra->hasBackgroundHeight) && qFuzzyIsNull(background->y()))
             || (extra.isAllocated() && (extra->hasTopInset || extra->hasBottomInset))) {
-        background->setY(getTopInset());
+        const auto topInset = getTopInset();
+        if (!qt_is_nan(topInset) && p->y.valueBypassingBindings() != topInset) {
+            // We bypass the binding here to prevent it from being removed
+            p->y.setValueBypassingBindings(topInset);
+            p->dirty(DirtyType::Position);
+        }
         changeHeight = !p->height.hasBinding();
     }
     if (changeHeight || changeWidth) {
@@ -406,8 +397,7 @@ void QQuickControlPrivate::setContentItem_helper(QQuickItem *item, bool notify)
     QQuickItem *oldContentItem = contentItem;
     if (oldContentItem) {
         disconnect(oldContentItem, &QQuickItem::baselineOffsetChanged, this, &QQuickControlPrivate::updateBaselineOffset);
-        if (oldContentItem)
-            QQuickItemPrivate::get(oldContentItem)->removeItemChangeListener(this, QQuickControlPrivate::Focus);
+        QQuickItemPrivate::get(oldContentItem)->removeItemChangeListener(this, QQuickControlPrivate::Focus);
         removeImplicitSizeListener(oldContentItem);
     }
 
@@ -918,7 +908,7 @@ void QQuickControlPrivate::itemFocusChanged(QQuickItem *item, Qt::FocusReason re
 {
     Q_Q(QQuickControl);
     if (item == contentItem || item == q)
-        q->setFocusReason(reason);
+        setLastFocusChangeReason(reason);
 }
 
 QQuickControl::QQuickControl(QQuickItem *parent)
@@ -974,7 +964,7 @@ void QQuickControl::itemChange(QQuickItem::ItemChange change, const QQuickItem::
         }
         break;
     case ItemActiveFocusHasChanged:
-        if (isKeyFocusReason(d->focusReason))
+        if (isKeyFocusReason(static_cast<Qt::FocusReason>(d->focusReason)))
             emit visualFocusChanged();
         break;
     default:
@@ -1364,58 +1354,38 @@ bool QQuickControl::isMirrored() const
 }
 
 /*!
-    \qmlproperty enumeration QtQuick.Controls::Control::focusPolicy
-
-    This property determines the way the control accepts focus.
-
-    \value Qt.TabFocus    The control accepts focus by tabbing.
-    \value Qt.ClickFocus  The control accepts focus by clicking.
-    \value Qt.StrongFocus The control accepts focus by both tabbing and clicking.
-    \value Qt.WheelFocus  The control accepts focus by tabbing, clicking, and using the mouse wheel.
-    \value Qt.NoFocus     The control does not accept focus.
-*/
-Qt::FocusPolicy QQuickControl::focusPolicy() const
-{
-    Q_D(const QQuickControl);
-    uint policy = d->focusPolicy;
-    if (activeFocusOnTab())
-        policy |= Qt::TabFocus;
-    return static_cast<Qt::FocusPolicy>(policy);
-}
-
-void QQuickControl::setFocusPolicy(Qt::FocusPolicy policy)
-{
-    Q_D(QQuickControl);
-    if (d->focusPolicy == policy)
-        return;
-
-    d->focusPolicy = policy;
-    setActiveFocusOnTab(policy & Qt::TabFocus);
-    emit focusPolicyChanged();
-}
-
-/*!
     \qmlproperty enumeration QtQuick.Controls::Control::focusReason
     \readonly
 
-    \include qquickcontrol-focusreason.qdocinc
+    This property holds the reason of the last focus change.
+
+    \note This property does not indicate whether the item has \l {Item::activeFocus}
+        {active focus}, but the reason why the item either gained or lost focus.
+
+    \value Qt.MouseFocusReason         A mouse action occurred.
+    \value Qt.TabFocusReason           The Tab key was pressed.
+    \value Qt.BacktabFocusReason       A Backtab occurred. The input for this may include the Shift or Control keys; e.g. Shift+Tab.
+    \value Qt.ActiveWindowFocusReason  The window system made this window either active or inactive.
+    \value Qt.PopupFocusReason         The application opened/closed a pop-up that grabbed/released the keyboard focus.
+    \value Qt.ShortcutFocusReason      The user typed a label's buddy shortcut
+    \value Qt.MenuBarFocusReason       The menu bar took focus.
+    \value Qt.OtherFocusReason         Another reason, usually application-specific.
+
+    \sa Item::activeFocus
 
     \sa visualFocus
 */
 Qt::FocusReason QQuickControl::focusReason() const
 {
     Q_D(const QQuickControl);
-    return d->focusReason;
+    return d->lastFocusChangeReason();
 }
 
 void QQuickControl::setFocusReason(Qt::FocusReason reason)
 {
     Q_D(QQuickControl);
-    if (d->focusReason == reason)
-        return;
-
-    Qt::FocusReason oldReason = d->focusReason;
-    d->focusReason = reason;
+    Qt::FocusReason oldReason = static_cast<Qt::FocusReason>(d->focusReason);
+    d->setLastFocusChangeReason(reason);
     emit focusReasonChanged();
     if (isKeyFocusReason(oldReason) != isKeyFocusReason(reason))
         emit visualFocusChanged();
@@ -1433,12 +1403,12 @@ void QQuickControl::setFocusReason(Qt::FocusReason reason)
     \l Item::activeFocus. This ensures that key focus is only visualized when
     interacting with keys - not when interacting via touch or mouse.
 
-    \sa focusReason, Item::activeFocus
+    \sa Item::focusReason, Item::activeFocus
 */
 bool QQuickControl::hasVisualFocus() const
 {
     Q_D(const QQuickControl);
-    return d->activeFocus && isKeyFocusReason(d->focusReason);
+    return d->activeFocus && isKeyFocusReason(static_cast<Qt::FocusReason>(d->focusReason));
 }
 
 /*!
@@ -1999,14 +1969,22 @@ QFont QQuickControl::defaultFont() const
 
 void QQuickControl::focusInEvent(QFocusEvent *event)
 {
+    Q_D(QQuickControl);
+    Qt::FocusReason oldReason = static_cast<Qt::FocusReason>(d->focusReason);
     QQuickItem::focusInEvent(event);
-    setFocusReason(event->reason());
+    Qt::FocusReason reason = event->reason();
+    if (isKeyFocusReason(oldReason) != isKeyFocusReason(reason))
+        emit visualFocusChanged();
 }
 
 void QQuickControl::focusOutEvent(QFocusEvent *event)
 {
+    Q_D(QQuickControl);
+    Qt::FocusReason oldReason = static_cast<Qt::FocusReason>(d->focusReason);
     QQuickItem::focusOutEvent(event);
-    setFocusReason(event->reason());
+    Qt::FocusReason reason = event->reason();
+    if (isKeyFocusReason(oldReason) != isKeyFocusReason(reason))
+        emit visualFocusChanged();
 }
 
 #if QT_CONFIG(quicktemplates2_hover)
@@ -2104,9 +2082,6 @@ void QQuickControl::touchUngrabEvent()
 void QQuickControl::wheelEvent(QWheelEvent *event)
 {
     Q_D(QQuickControl);
-    if ((d->focusPolicy & Qt::WheelFocus) == Qt::WheelFocus)
-        setActiveFocus(this, Qt::MouseFocusReason);
-
     event->setAccepted(d->wheelEnabled);
 }
 #endif

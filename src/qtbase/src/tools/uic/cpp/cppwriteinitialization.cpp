@@ -42,6 +42,16 @@ namespace {
         return expandEnum(value, "QSizePolicy::Policy"_L1);
     }
 
+    inline QString expandToolBarArea(const QString &value)
+    {
+        return expandEnum(value, "Qt::ToolBarArea"_L1);
+    }
+
+    inline QString expandDockWidgetArea(const QString &value)
+    {
+        return expandEnum(value, "Qt::DockWidgetArea"_L1);
+    }
+
     // figure out the toolbar area of a DOM attrib list.
     // By legacy, it is stored as an integer. As of 4.3.0, it is the enumeration value.
     QString toolBarAreaStringFromDOMAttributes(const CPP::WriteInitialization::DomPropertyMap &attributes) {
@@ -59,9 +69,7 @@ namespace {
         default:
             break;
         }
-        if (!result.startsWith("Qt::"_L1))
-            result.prepend("Qt::"_L1);
-        return result + ", "_L1;
+        return expandToolBarArea(result) + ", "_L1;
     }
 
     // Write a statement to create a spacer item.
@@ -709,8 +717,8 @@ void WriteInitialization::acceptWidget(DomWidget *node)
         } else if (cwi->extends(className, "QDockWidget")) {
             m_output << m_indent << parentWidget << language::derefPointer << "addDockWidget(";
             if (DomProperty *pstyle = attributes.value("dockWidgetArea"_L1)) {
-                m_output << "Qt" << language::qualifier
-                    << language::dockWidgetArea(pstyle->elementNumber()) << ", ";
+                QString a = expandDockWidgetArea(language::dockWidgetArea(pstyle->elementNumber()));
+                m_output << language::enumValue(a) << ", ";
             }
             m_output << varName << ")" << language::eol;
         } else if (m_uic->customWidgetsInfo()->extends(className, "QStatusBar")) {
@@ -1292,9 +1300,9 @@ void WriteInitialization::writeProperties(const QString &varName,
         } else if (propertyName == "orientation"_L1
                     && m_uic->customWidgetsInfo()->extends(className, "Line")) {
             // Line support
-            QString shape = u"QFrame::HLine"_s;
+            QString shape = u"QFrame::Shape::HLine"_s;
             if (p->elementEnum().endsWith("::Vertical"_L1))
-                shape = u"QFrame::VLine"_s;
+                shape = u"QFrame::Shape::VLine"_s;
 
             m_output << m_indent << varName << language::derefPointer << "setFrameShape("
                 << language::enumValue(shape) << ')' << language::eol;
@@ -1302,7 +1310,7 @@ void WriteInitialization::writeProperties(const QString &varName,
             if (!frameShadowEncountered) {
                 m_output << m_indent << varName << language::derefPointer
                     << "setFrameShadow("
-                    << language::enumValue("QFrame::Sunken"_L1)
+                    << language::enumValue("QFrame::Shadow::Sunken"_L1)
                     << ')' << language::eol;
             }
             continue;

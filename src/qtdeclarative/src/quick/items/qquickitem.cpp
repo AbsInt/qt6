@@ -48,6 +48,8 @@
 # include <QtGui/qcursor.h>
 #endif
 
+#include <QtCore/qpointer.h>
+
 #include <algorithm>
 #include <limits>
 
@@ -84,6 +86,14 @@ void debugFocusTree(QQuickItem *item, QQuickItem *scope = nullptr, int depth = 1
                     item->isFocusScope() || !scope ? depth + 1 : depth);
         }
     }
+}
+
+static void setActiveFocus(QQuickItem *item, Qt::FocusReason reason)
+{
+    QQuickItemPrivate *d = QQuickItemPrivate::get(item);
+    if (d->subFocusItem && d->window && d->flags & QQuickItem::ItemIsFocusScope)
+        QQuickWindowPrivate::get(d->window)->clearFocusInScope(item, d->subFocusItem, reason);
+    item->forceActiveFocus(reason);
 }
 
 /*!
@@ -1695,6 +1705,53 @@ void QQuickItemPrivate::updateSubFocusItem(QQuickItem *scope, bool focus)
     }
 }
 
+
+bool QQuickItemPrivate::setFocusIfNeeded(QEvent::Type eventType)
+{
+    Q_Q(QQuickItem);
+    const bool setFocusOnRelease = QGuiApplication::styleHints()->setFocusOnTouchRelease();
+    Qt::FocusPolicy policy = Qt::ClickFocus;
+
+    switch (eventType) {
+        case QEvent::MouseButtonPress:
+        case QEvent::MouseButtonDblClick:
+        case QEvent::TouchBegin:
+            if (setFocusOnRelease)
+                return false;
+            break;
+        case QEvent::MouseButtonRelease:
+        case QEvent::TouchEnd:
+            if (!setFocusOnRelease)
+                return false;
+            break;
+        case QEvent::Wheel:
+            policy = Qt::WheelFocus;
+            break;
+        default:
+            break;
+    }
+
+    if ((focusPolicy & policy) == policy) {
+        setActiveFocus(q, Qt::MouseFocusReason);
+        return true;
+    }
+
+    return false;
+}
+
+Qt::FocusReason QQuickItemPrivate::lastFocusChangeReason() const
+{
+    return static_cast<Qt::FocusReason>(focusReason);
+}
+
+void QQuickItemPrivate::setLastFocusChangeReason(Qt::FocusReason reason)
+{
+    if (focusReason == reason)
+        return;
+
+    focusReason = reason;
+}
+
 /*!
     \class QQuickItem
     \brief The QQuickItem class provides the most basic of all visual items in \l {Qt Quick}.
@@ -2202,6 +2259,11 @@ void QQuickItemPrivate::updateSubFocusItem(QQuickItem *scope, bool focus)
 
 /*!
     \fn void QQuickItem::activeFocusChanged(bool)
+    \internal
+*/
+
+/*!
+    \fn void QQuickItem::focusPolicyChanged(Qt::FocusPolicy)
     \internal
 */
 
@@ -2801,8 +2863,8 @@ void QQuickItem::stackBefore(const QQuickItem *sibling)
 
     parentPrivate->childItems.move(myIndex, myIndex < siblingIndex ? siblingIndex - 1 : siblingIndex);
 
-    parentPrivate->dirty(QQuickItemPrivate::ChildrenStackingChanged);
     parentPrivate->markSortedChildrenDirty(this);
+    parentPrivate->dirty(QQuickItemPrivate::ChildrenStackingChanged);
 
     for (int ii = qMin(siblingIndex, myIndex); ii < parentPrivate->childItems.size(); ++ii)
         QQuickItemPrivate::get(parentPrivate->childItems.at(ii))->siblingOrderChanged();
@@ -2846,8 +2908,8 @@ void QQuickItem::stackAfter(const QQuickItem *sibling)
 
     parentPrivate->childItems.move(myIndex, myIndex > siblingIndex ? siblingIndex + 1 : siblingIndex);
 
-    parentPrivate->dirty(QQuickItemPrivate::ChildrenStackingChanged);
     parentPrivate->markSortedChildrenDirty(this);
+    parentPrivate->dirty(QQuickItemPrivate::ChildrenStackingChanged);
 
     for (int ii = qMin(myIndex, siblingIndex + 1); ii < parentPrivate->childItems.size(); ++ii)
         QQuickItemPrivate::get(parentPrivate->childItems.at(ii))->siblingOrderChanged();
@@ -3196,6 +3258,8 @@ QQuickItemPrivate::QQuickItemPrivate()
     , maybeHasSubsceneDeliveryAgent(true)
     , subtreeTransformChangedEnabled(true)
     , inDestructor(false)
+    , focusReason(Qt::OtherFocusReason)
+    , focusPolicy(Qt::NoFocus)
     , dirtyAttributes(0)
     , nextDirtyItem(nullptr)
     , prevDirtyItem(nullptr)
@@ -3213,6 +3277,7 @@ QQuickItemPrivate::QQuickItemPrivate()
     , baselineOffset(0)
     , itemNodeInstance(nullptr)
     , paintNode(nullptr)
+    , szPolicy(QLayoutPolicy::Fixed, QLayoutPolicy::Fixed)
 {
 }
 
@@ -3237,6 +3302,17 @@ void QQuickItemPrivate::init(QQuickItem *parent)
     }
 }
 
+QLayoutPolicy QQuickItemPrivate::sizePolicy() const
+{
+    return szPolicy;
+}
+
+void QQuickItemPrivate::setSizePolicy(const QLayoutPolicy::Policy& horizontalPolicy, const QLayoutPolicy::Policy& verticalPolicy)
+{
+    szPolicy.setHorizontalPolicy(horizontalPolicy);
+    szPolicy.setVerticalPolicy(verticalPolicy);
+}
+
 void QQuickItemPrivate::data_append(QQmlListProperty<QObject> *prop, QObject *o)
 {
     if (!o)
@@ -3246,34 +3322,15 @@ void QQuickItemPrivate::data_append(QQmlListProperty<QObject> *prop, QObject *o)
 
     if (QQuickItem *item = qmlobject_cast<QQuickItem *>(o)) {
         item->setParentItem(that);
-    } else {
-        if (QQuickPointerHandler *pointerHandler = qmlobject_cast<QQuickPointerHandler *>(o)) {
-            if (pointerHandler->parent() != that) {
-                qCDebug(lcHandlerParent) << "reparenting handler" << pointerHandler << ":" << pointerHandler->parent() << "->" << that;
-                pointerHandler->setParent(that);
-            }
-            QQuickItemPrivate::get(that)->addPointerHandler(pointerHandler);
-        } else {
-            QQuickWindow *thisWindow = qmlobject_cast<QQuickWindow *>(o);
-            QQuickItem *item = that;
-            QQuickWindow *itemWindow = that->window();
-            while (!itemWindow && item && item->parentItem()) {
-                item = item->parentItem();
-                itemWindow = item->window();
-            }
-
-            if (thisWindow) {
-                if (itemWindow) {
-                    qCDebug(lcTransient) << thisWindow << "is transient for" << itemWindow;
-                    thisWindow->setTransientParent(itemWindow);
-                } else {
-                    QObject::connect(item, SIGNAL(windowChanged(QQuickWindow*)),
-                                     thisWindow, SLOT(setTransientParent_helper(QQuickWindow*)));
-                }
-            }
-            o->setParent(that);
-            resources_append(prop, o);
+    } else if (QQuickPointerHandler *pointerHandler = qmlobject_cast<QQuickPointerHandler *>(o)) {
+        if (pointerHandler->parent() != that) {
+            qCDebug(lcHandlerParent) << "reparenting handler" << pointerHandler << ":" << pointerHandler->parent() << "->" << that;
+            pointerHandler->setParent(that);
         }
+        QQuickItemPrivate::get(that)->addPointerHandler(pointerHandler);
+    } else {
+        o->setParent(that);
+        resources_append(prop, o);
     }
 }
 
@@ -4061,7 +4118,7 @@ void QQuickItem::inputMethodEvent(QInputMethodEvent *event)
 
 /*!
     This event handler can be reimplemented in a subclass to receive focus-in
-    events for an item. The event information is provided by the \c event
+    events for an item. The event information is provided by the \a event
     parameter.
 
     \input item.qdocinc accepting-events
@@ -4069,8 +4126,9 @@ void QQuickItem::inputMethodEvent(QInputMethodEvent *event)
     If you do reimplement this function, you should call the base class
     implementation.
   */
-void QQuickItem::focusInEvent(QFocusEvent * /*event*/)
+void QQuickItem::focusInEvent(QFocusEvent *event)
 {
+    Q_D(QQuickItem);
 #if QT_CONFIG(accessibility)
     if (QAccessible::isActive()) {
         if (QObject *acc = QQuickAccessibleAttached::findAccessible(this)) {
@@ -4079,17 +4137,20 @@ void QQuickItem::focusInEvent(QFocusEvent * /*event*/)
         }
     }
 #endif
+    d->setLastFocusChangeReason(event->reason());
 }
 
 /*!
     This event handler can be reimplemented in a subclass to receive focus-out
-    events for an item. The event information is provided by the \c event
+    events for an item. The event information is provided by the \a event
     parameter.
 
     \input item.qdocinc accepting-events
   */
-void QQuickItem::focusOutEvent(QFocusEvent * /*event*/)
+void QQuickItem::focusOutEvent(QFocusEvent *event)
 {
+    Q_D(QQuickItem);
+    d->setLastFocusChangeReason(event->reason());
 }
 
 /*!
@@ -5379,7 +5440,8 @@ bool QQuickItemPrivate::transformChanged(QQuickItem *transformedItem)
     if (subtreeTransformChangedEnabled) {
         // Inform the children in paint order: by the time we visit leaf items,
         // they can see any consequences in their parents
-        for (auto child : paintOrderChildItems())
+        const auto children = paintOrderChildItems();
+        for (QQuickItem *child : children)
             childWantsIt |= QQuickItemPrivate::get(child)->transformChanged(transformedItem);
     }
 
@@ -5397,7 +5459,7 @@ bool QQuickItemPrivate::transformChanged(QQuickItem *transformedItem)
     }
     // If ItemObservesViewport, clipRect() calculates the intersection with the viewport;
     // so each time the item moves in the viewport, its clipnode needs to be updated.
-    if (thisWantsIt && q->clip())
+    if (thisWantsIt && q->clip() && !(dirtyAttributes & QQuickItemPrivate::Clip))
         dirty(QQuickItemPrivate::Clip);
     return ret;
 }
@@ -5549,6 +5611,41 @@ bool QQuickItemPrivate::filterKeyEvent(QKeyEvent *e, bool post)
         extra->keyHandler->keyReleased(e, post);
 
     return e->isAccepted();
+}
+
+void QQuickItemPrivate::deliverPointerEvent(QEvent *event)
+{
+    Q_Q(QQuickItem);
+    const auto eventType = event->type();
+    const bool focusAccepted = setFocusIfNeeded(eventType);
+
+    switch (eventType) {
+    case QEvent::MouseButtonPress:
+        q->mousePressEvent(static_cast<QMouseEvent *>(event));
+        break;
+    case QEvent::MouseButtonRelease:
+        q->mouseReleaseEvent(static_cast<QMouseEvent *>(event));
+        break;
+    case QEvent::MouseButtonDblClick:
+        q->mouseDoubleClickEvent(static_cast<QMouseEvent *>(event));
+        break;
+#if QT_CONFIG(wheelevent)
+    case QEvent::Wheel:
+        q->wheelEvent(static_cast<QWheelEvent*>(event));
+        break;
+#endif
+    case QEvent::TouchBegin:
+    case QEvent::TouchUpdate:
+    case QEvent::TouchEnd:
+    case QEvent::TouchCancel:
+        q->touchEvent(static_cast<QTouchEvent *>(event));
+        break;
+    default:
+        break;
+    }
+
+    if (focusAccepted)
+        event->accept();
 }
 
 void QQuickItemPrivate::deliverKeyEvent(QKeyEvent *e)
@@ -6022,8 +6119,8 @@ void QQuickItem::setZ(qreal v)
 
     d->dirty(QQuickItemPrivate::ZValue);
     if (d->parentItem) {
-        QQuickItemPrivate::get(d->parentItem)->dirty(QQuickItemPrivate::ChildrenStackingChanged);
         QQuickItemPrivate::get(d->parentItem)->markSortedChildrenDirty(this);
+        QQuickItemPrivate::get(d->parentItem)->dirty(QQuickItemPrivate::ChildrenStackingChanged);
     }
 
     emit zChanged();
@@ -6642,9 +6739,6 @@ QString QQuickItemPrivate::dirtyToString() const
 void QQuickItemPrivate::dirty(DirtyType type)
 {
     Q_Q(QQuickItem);
-    if (type & (TransformOrigin | Transform | BasicTransform | Position | Size))
-        transformChanged(q);
-
     if (!(dirtyAttributes & type) || (window && !prevDirtyItem)) {
         dirtyAttributes |= type;
         if (window && componentComplete) {
@@ -6652,6 +6746,8 @@ void QQuickItemPrivate::dirty(DirtyType type)
             QQuickWindowPrivate::get(window)->dirtyItem(q);
         }
     }
+    if (type & (TransformOrigin | Transform | BasicTransform | Position | Size | Clip))
+        transformChanged(q);
 }
 
 void QQuickItemPrivate::addToDirtyList()
@@ -6747,8 +6843,18 @@ void QQuickItemPrivate::itemChange(QQuickItem::ItemChange change, const QQuickIt
     switch (change) {
     case QQuickItem::ItemChildAddedChange: {
         q->itemChange(change, data);
-        if (!subtreeTransformChangedEnabled)
-            subtreeTransformChangedEnabled = true;
+        // The newly added child or any of its descendants may have
+        // ItemObservesViewport set, in which case we need to both
+        // inform the item that the transform has changed, and re-apply
+        // subtreeTransformChangedEnabled to both this item and its
+        // ancestors.
+        if (QQuickItemPrivate::get(data.item)->transformChanged(q)) {
+            if (!subtreeTransformChangedEnabled) {
+                qCDebug(lcVP) << "turned on transformChanged notification for subtree of" << q;
+                subtreeTransformChangedEnabled = true;
+            }
+            enableSubtreeChangeNotificationsForParentHierachy();
+        }
         notifyChangeListeners(QQuickItemPrivate::Children, &QQuickItemChangeListener::itemChildAdded, q, data.item);
         break;
     }
@@ -6860,6 +6966,7 @@ void QQuickItem::setSmooth(bool smooth)
     This property holds whether the item wants to be in the tab focus
     chain. By default, this is set to \c false.
 */
+// TODO FOCUS: Deprecate
 bool QQuickItem::activeFocusOnTab() const
 {
     Q_D(const QQuickItem);
@@ -6978,15 +7085,21 @@ void QQuickItem::setFlag(Flag flag, bool enabled)
 
     // We don't return early if the flag did not change. That's useful in case
     // we need to intentionally trigger this parent-chain traversal again.
-    if (enabled && flag == ItemObservesViewport) {
-        QQuickItem *par = parentItem();
-        while (par) {
-            auto parPriv = QQuickItemPrivate::get(par);
-            if (!parPriv->subtreeTransformChangedEnabled)
-                qCDebug(lcVP) << "turned on transformChanged notification for subtree of" << par;
-            parPriv->subtreeTransformChangedEnabled = true;
-            par = par->parentItem();
-        }
+    if (enabled && flag == ItemObservesViewport)
+        d->enableSubtreeChangeNotificationsForParentHierachy();
+}
+
+void QQuickItemPrivate::enableSubtreeChangeNotificationsForParentHierachy()
+{
+    Q_Q(QQuickItem);
+
+    QQuickItem *par = q->parentItem();
+    while (par) {
+        auto parPriv = QQuickItemPrivate::get(par);
+        if (!parPriv->subtreeTransformChangedEnabled)
+            qCDebug(lcVP) << "turned on transformChanged notification for subtree of" << par;
+        parPriv->subtreeTransformChangedEnabled = true;
+        par = par->parentItem();
     }
 }
 
@@ -7836,6 +7949,52 @@ QQuickItem *QQuickItem::scopedFocusItem() const
         return nullptr;
     else
         return d->subFocusItem;
+}
+
+/*!
+    \qmlproperty enumeration QtQuick::Item::focusPolicy
+    \since 6.7
+
+    This property determines the way the item accepts focus.
+
+    \value Qt.TabFocus    The item accepts focus by tabbing.
+    \value Qt.ClickFocus  The item accepts focus by clicking.
+    \value Qt.StrongFocus The item accepts focus by both tabbing and clicking.
+    \value Qt.WheelFocus  The item accepts focus by tabbing, clicking, and using the mouse wheel.
+    \value Qt.NoFocus     The item does not accept focus.
+
+    \note This property was a member of the \l[QML]{Control} QML type in Qt 6.6 and earlier.
+*/
+/*!
+    \property QQuickItem::focusPolicy
+    \since 6.7
+
+    This property determines the way the item accepts focus.
+
+*/
+Qt::FocusPolicy QQuickItem::focusPolicy() const
+{
+    Q_D(const QQuickItem);
+    uint policy = d->focusPolicy;
+    if (activeFocusOnTab())
+        policy |= Qt::TabFocus;
+    return static_cast<Qt::FocusPolicy>(policy);
+}
+
+/*!
+    Sets the focus policy of this item to \a policy.
+
+    \sa focusPolicy()
+*/
+void QQuickItem::setFocusPolicy(Qt::FocusPolicy policy)
+{
+    Q_D(QQuickItem);
+    if (d->focusPolicy == policy)
+        return;
+
+    d->focusPolicy = policy;
+    setActiveFocusOnTab(policy & Qt::TabFocus);
+    emit focusPolicyChanged(policy);
 }
 
 /*!
@@ -8859,8 +9018,14 @@ bool QQuickItem::event(QEvent *ev)
     case QEvent::TouchUpdate:
     case QEvent::TouchEnd:
     case QEvent::TouchCancel:
-        touchEvent(static_cast<QTouchEvent*>(ev));
-        break;
+    case QEvent::MouseButtonPress:
+    case QEvent::MouseButtonRelease:
+    case QEvent::MouseButtonDblClick:
+#if QT_CONFIG(wheelevent)
+    case QEvent::Wheel:
+#endif
+        d->deliverPointerEvent(ev);
+    break;
     case QEvent::StyleAnimationUpdate:
         if (isVisible()) {
             ev->accept();
@@ -8892,20 +9057,6 @@ bool QQuickItem::event(QEvent *ev)
     case QEvent::MouseMove:
         mouseMoveEvent(static_cast<QMouseEvent*>(ev));
         break;
-    case QEvent::MouseButtonPress:
-        mousePressEvent(static_cast<QMouseEvent*>(ev));
-        break;
-    case QEvent::MouseButtonRelease:
-        mouseReleaseEvent(static_cast<QMouseEvent*>(ev));
-        break;
-    case QEvent::MouseButtonDblClick:
-        mouseDoubleClickEvent(static_cast<QMouseEvent*>(ev));
-        break;
-#if QT_CONFIG(wheelevent)
-    case QEvent::Wheel:
-        wheelEvent(static_cast<QWheelEvent*>(ev));
-        break;
-#endif
 #if QT_CONFIG(quick_draganddrop)
     case QEvent::DragEnter:
         dragEnterEvent(static_cast<QDragEnterEvent*>(ev));

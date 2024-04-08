@@ -1,5 +1,5 @@
 // Copyright (C) 2021 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <QtTest/QtTest>
 #include <QtQuick/qquickview.h>
@@ -62,6 +62,10 @@ private slots:
 
     void changingOrientationResetsPreviousAxisValues_data();
     void changingOrientationResetsPreviousAxisValues();
+    void bindingDirectlyOnPositionInHeaderAndFooterDelegates_data();
+    void bindingDirectlyOnPositionInHeaderAndFooterDelegates();
+
+    void clearObjectListModel();
 
 private:
     void flickWithTouch(QQuickWindow *window, const QPoint &from, const QPoint &to);
@@ -1151,6 +1155,71 @@ void tst_QQuickListView2::changingOrientationResetsPreviousAxisValues() // QTBUG
     // X should be 0 for all delegates, but not Y.
     QVERIFY(listView->property("isXReset").toBool());
     QVERIFY(!listView->property("isYReset").toBool());
+}
+
+void tst_QQuickListView2::bindingDirectlyOnPositionInHeaderAndFooterDelegates_data()
+{
+    QTest::addColumn<QByteArray>("sourceFile");
+    QTest::addColumn<qreal(QQuickItem::*)()const>("pos");
+    QTest::addColumn<qreal(QQuickItem::*)()const>("size");
+    QTest::newRow("XPosition") << QByteArray("bindOnHeaderAndFooterXPosition.qml") << &QQuickItem::x << &QQuickItem::width;
+    QTest::newRow("YPosition") << QByteArray("bindOnHeaderAndFooterYPosition.qml") << &QQuickItem::y << &QQuickItem::height;
+}
+void tst_QQuickListView2::bindingDirectlyOnPositionInHeaderAndFooterDelegates()
+{
+
+    typedef qreal (QQuickItem::*position_func_t)() const;
+    QFETCH(QByteArray, sourceFile);
+    QFETCH(position_func_t, pos);
+    QFETCH(position_func_t, size);
+
+    QQuickView window;
+    QVERIFY(QQuickTest::showView(window, testFileUrl(QString::fromLatin1(sourceFile))));
+    auto *listView = qobject_cast<QQuickListView *>(window.rootObject());
+    QVERIFY(listView);
+
+    const qreal widthOrHeight = (listView->*size)();
+
+    QCOMPARE((listView->headerItem()->*pos)(), (widthOrHeight - 50) / 2);
+    QCOMPARE((listView->footerItem()->*pos)(), (widthOrHeight - 50) / 2);
+
+    // Verify that the "regular" delegate items, don't honor x and y bindings.
+    // This should only be allowed for header and footer delegates.
+    for (int i = 0; i < listView->count(); ++i)
+        QCOMPARE((listView->itemAtIndex(i)->*pos)(), 0);
+}
+
+void tst_QQuickListView2::clearObjectListModel()
+{
+    QQmlEngine engine;
+    QQmlComponent delegate(&engine);
+
+    // Need one required property to trigger the incremental rebuilding of metaobjects.
+    delegate.setData("import QtQuick\nItem { required property int index }", QUrl());
+
+    QQuickListView list;
+    engine.setContextForObject(&list, engine.rootContext());
+    list.setDelegate(&delegate);
+    list.setWidth(640);
+    list.setHeight(480);
+
+    QScopedPointer modelObject(new QObject);
+
+    // Use a list that might also carry something non-QObject
+
+    list.setModel(QVariantList {
+        QVariant::fromValue(modelObject.data()),
+        QVariant::fromValue(modelObject.data())
+    });
+
+    QVERIFY(list.itemAtIndex(0));
+
+    modelObject.reset();
+
+    // list should not access dangling pointer from old model data anymore.
+    list.setModel(QVariantList());
+
+    QVERIFY(!list.itemAtIndex(0));
 }
 
 QTEST_MAIN(tst_QQuickListView2)

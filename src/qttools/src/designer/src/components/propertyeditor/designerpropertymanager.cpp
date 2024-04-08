@@ -4,6 +4,7 @@
 #include "designerpropertymanager.h"
 #include "qtpropertymanager.h"
 #include "paletteeditorbutton.h"
+#include "pixmapeditor.h"
 #include "qlonglongvalidator.h"
 #include "stringlisteditorbutton.h"
 #include "qtresourceview_p.h"
@@ -35,9 +36,6 @@
 #include <QtWidgets/qkeysequenceedit.h>
 
 #include <QtGui/qaction.h>
-#if QT_CONFIG(clipboard)
-#include <QtGui/qclipboard.h>
-#endif
 #include <QtGui/qevent.h>
 
 #include <QtCore/qdebug.h>
@@ -48,13 +46,13 @@ QT_BEGIN_NAMESPACE
 
 using namespace Qt::StringLiterals;
 
-static const char resettableAttributeC[] = "resettable";
-static const char flagsAttributeC[] = "flags";
-static const char validationModesAttributeC[] = "validationMode";
-static const char superPaletteAttributeC[] = "superPalette";
-static const char defaultResourceAttributeC[] = "defaultResource";
-static const char fontAttributeC[] = "font";
-static const char themeAttributeC[] = "theme";
+static constexpr auto resettableAttributeC = "resettable"_L1;
+static constexpr auto flagsAttributeC = "flags"_L1;
+static constexpr auto validationModesAttributeC = "validationMode"_L1;
+static constexpr auto superPaletteAttributeC = "superPalette"_L1;
+static constexpr auto defaultResourceAttributeC = "defaultResource"_L1;
+static constexpr auto fontAttributeC = "font"_L1;
+static constexpr auto themeAttributeC = "theme"_L1;
 
 class DesignerFlagPropertyType
 {
@@ -248,7 +246,7 @@ int TranslatablePropertyManager<PropertySheetValue>::setValue(QtVariantPropertyM
 template <class PropertySheetValue>
 bool TranslatablePropertyManager<PropertySheetValue>::value(const QtProperty *property, QVariant *rc) const
 {
-    const auto it = m_values.constFind(const_cast<QtProperty *>(property));
+    const auto it = m_values.constFind(property);
     if (it == m_values.constEnd())
         return false;
     *rc = QVariant::fromValue(it.value());
@@ -460,314 +458,6 @@ void TextEditor::fileActionActivated()
     emit textChanged(newText);
 }
 
-// ------------ ThemeInputDialog
-
-class IconThemeDialog : public QDialog
-{
-    Q_OBJECT
-public:
-    static QString getTheme(QWidget *parent, const QString &theme, bool *ok);
-private:
-    IconThemeDialog(QWidget *parent);
-    IconThemeEditor *m_editor;
-};
-
-IconThemeDialog::IconThemeDialog(QWidget *parent)
-    : QDialog(parent)
-{
-    setWindowTitle(tr("Set Icon From Theme"));
-
-    QVBoxLayout *layout = new QVBoxLayout(this);
-    QLabel *label = new QLabel(tr("Select icon name from theme:"), this);
-    m_editor = new IconThemeEditor(this);
-    QDialogButtonBox *buttons = new QDialogButtonBox(this);
-    buttons->setStandardButtons(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-
-    layout->addWidget(label);
-    layout->addWidget(m_editor);
-    layout->addWidget(buttons);
-
-    connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
-    connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
-}
-
-QString IconThemeDialog::getTheme(QWidget *parent, const QString &theme, bool *ok)
-{
-    IconThemeDialog dlg(parent);
-    dlg.m_editor->setTheme(theme);
-    if (dlg.exec() == QDialog::Accepted) {
-        *ok = true;
-        return dlg.m_editor->theme();
-    }
-    *ok = false;
-    return QString();
-}
-
-// ------------ PixmapEditor
-class PixmapEditor : public QWidget
-{
-    Q_OBJECT
-public:
-    PixmapEditor(QDesignerFormEditorInterface *core, QWidget *parent);
-
-    void setSpacing(int spacing);
-    void setPixmapCache(DesignerPixmapCache *cache);
-    void setIconThemeModeEnabled(bool enabled);
-public slots:
-    void setPath(const QString &path);
-    void setTheme(const QString &theme);
-    void setDefaultPixmap(const QPixmap &pixmap);
-
-signals:
-    void pathChanged(const QString &path);
-    void themeChanged(const QString &theme);
-
-protected:
-    void contextMenuEvent(QContextMenuEvent *event) override;
-
-private slots:
-    void defaultActionActivated();
-    void resourceActionActivated();
-    void fileActionActivated();
-    void themeActionActivated();
-#if QT_CONFIG(clipboard)
-    void copyActionActivated();
-    void pasteActionActivated();
-    void clipboardDataChanged();
-#endif
-private:
-    void updateLabels();
-    bool m_iconThemeModeEnabled;
-    QDesignerFormEditorInterface *m_core;
-    QLabel *m_pixmapLabel;
-    QLabel *m_pathLabel;
-    QToolButton *m_button;
-    QAction *m_resourceAction;
-    QAction *m_fileAction;
-    QAction *m_themeAction;
-    QAction *m_copyAction;
-    QAction *m_pasteAction;
-    QHBoxLayout *m_layout;
-    QPixmap m_defaultPixmap;
-    QString m_path;
-    QString m_theme;
-    DesignerPixmapCache *m_pixmapCache;
-};
-
-PixmapEditor::PixmapEditor(QDesignerFormEditorInterface *core, QWidget *parent) :
-    QWidget(parent),
-    m_iconThemeModeEnabled(false),
-    m_core(core),
-    m_pixmapLabel(new QLabel(this)),
-    m_pathLabel(new QLabel(this)),
-    m_button(new QToolButton(this)),
-    m_resourceAction(new QAction(tr("Choose Resource..."), this)),
-    m_fileAction(new QAction(tr("Choose File..."), this)),
-    m_themeAction(new QAction(tr("Set Icon From Theme..."), this)),
-    m_copyAction(new QAction(createIconSet(u"editcopy.png"_s), tr("Copy Path"), this)),
-    m_pasteAction(new QAction(createIconSet(u"editpaste.png"_s), tr("Paste Path"), this)),
-    m_layout(new QHBoxLayout(this)),
-    m_pixmapCache(nullptr)
-{
-    m_layout->addWidget(m_pixmapLabel);
-    m_layout->addWidget(m_pathLabel);
-    m_button->setText(tr("..."));
-    m_button->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Ignored);
-    m_button->setFixedWidth(30);
-    m_button->setPopupMode(QToolButton::MenuButtonPopup);
-    m_layout->addWidget(m_button);
-    m_layout->setContentsMargins(QMargins());
-    m_layout->setSpacing(0);
-    m_pixmapLabel->setFixedWidth(16);
-    m_pixmapLabel->setAlignment(Qt::AlignCenter);
-    m_pathLabel->setSizePolicy(QSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed));
-    m_themeAction->setVisible(false);
-
-    QMenu *menu = new QMenu(this);
-    menu->addAction(m_resourceAction);
-    menu->addAction(m_fileAction);
-    menu->addAction(m_themeAction);
-
-    m_button->setMenu(menu);
-    m_button->setText(tr("..."));
-
-    connect(m_button, &QAbstractButton::clicked, this, &PixmapEditor::defaultActionActivated);
-    connect(m_resourceAction, &QAction::triggered, this, &PixmapEditor::resourceActionActivated);
-    connect(m_fileAction, &QAction::triggered, this, &PixmapEditor::fileActionActivated);
-    connect(m_themeAction, &QAction::triggered, this, &PixmapEditor::themeActionActivated);
-#if QT_CONFIG(clipboard)
-    connect(m_copyAction, &QAction::triggered, this, &PixmapEditor::copyActionActivated);
-    connect(m_pasteAction, &QAction::triggered, this, &PixmapEditor::pasteActionActivated);
-#endif
-    setSizePolicy(QSizePolicy(QSizePolicy::Preferred, QSizePolicy::Ignored));
-    setFocusProxy(m_button);
-
-#if QT_CONFIG(clipboard)
-    connect(QApplication::clipboard(), &QClipboard::dataChanged,
-            this, &PixmapEditor::clipboardDataChanged);
-    clipboardDataChanged();
-#endif
-}
-
-void PixmapEditor::setPixmapCache(DesignerPixmapCache *cache)
-{
-    m_pixmapCache = cache;
-}
-
-void PixmapEditor::setIconThemeModeEnabled(bool enabled)
-{
-    if (m_iconThemeModeEnabled == enabled)
-        return;
-    m_iconThemeModeEnabled = enabled;
-    m_themeAction->setVisible(enabled);
-}
-
-void PixmapEditor::setSpacing(int spacing)
-{
-    m_layout->setSpacing(spacing);
-}
-
-void PixmapEditor::setPath(const QString &path)
-{
-    m_path = path;
-    updateLabels();
-}
-
-void PixmapEditor::setTheme(const QString &theme)
-{
-    m_theme = theme;
-    updateLabels();
-}
-
-void PixmapEditor::updateLabels()
-{
-    if (m_iconThemeModeEnabled && QIcon::hasThemeIcon(m_theme)) {
-        m_pixmapLabel->setPixmap(QIcon::fromTheme(m_theme).pixmap(16, 16));
-        m_pathLabel->setText(tr("[Theme] %1").arg(m_theme));
-        m_copyAction->setEnabled(true);
-    } else {
-        if (m_path.isEmpty()) {
-            m_pathLabel->setText(m_path);
-            m_pixmapLabel->setPixmap(m_defaultPixmap);
-            m_copyAction->setEnabled(false);
-        } else {
-            m_pathLabel->setText(QFileInfo(m_path).fileName());
-            if (m_pixmapCache)
-                m_pixmapLabel->setPixmap(QIcon(m_pixmapCache->pixmap(PropertySheetPixmapValue(m_path))).pixmap(16, 16));
-            m_copyAction->setEnabled(true);
-        }
-    }
-}
-
-void PixmapEditor::setDefaultPixmap(const QPixmap &pixmap)
-{
-    m_defaultPixmap = QIcon(pixmap).pixmap(16, 16);
-    const bool hasThemeIcon = m_iconThemeModeEnabled && QIcon::hasThemeIcon(m_theme);
-    if (!hasThemeIcon && m_path.isEmpty())
-        m_pixmapLabel->setPixmap(m_defaultPixmap);
-}
-
-void PixmapEditor::contextMenuEvent(QContextMenuEvent *event)
-{
-    QMenu menu(this);
-    menu.addAction(m_copyAction);
-    menu.addAction(m_pasteAction);
-    menu.exec(event->globalPos());
-    event->accept();
-}
-
-void PixmapEditor::defaultActionActivated()
-{
-    if (m_iconThemeModeEnabled && QIcon::hasThemeIcon(m_theme)) {
-        themeActionActivated();
-        return;
-    }
-    // Default to resource
-    const PropertySheetPixmapValue::PixmapSource ps = m_path.isEmpty() ? PropertySheetPixmapValue::ResourcePixmap : PropertySheetPixmapValue::getPixmapSource(m_core, m_path);
-    switch (ps) {
-    case PropertySheetPixmapValue::LanguageResourcePixmap:
-    case PropertySheetPixmapValue::ResourcePixmap:
-        resourceActionActivated();
-        break;
-    case PropertySheetPixmapValue::FilePixmap:
-        fileActionActivated();
-        break;
-    }
-}
-
-void PixmapEditor::resourceActionActivated()
-{
-    const QString oldPath = m_path;
-    const  QString newPath = IconSelector::choosePixmapResource(m_core, m_core->resourceModel(), oldPath, this);
-    if (!newPath.isEmpty() &&  newPath != oldPath) {
-        setTheme(QString());
-        setPath(newPath);
-        emit pathChanged(newPath);
-    }
-}
-
-void PixmapEditor::fileActionActivated()
-{
-    const QString newPath = IconSelector::choosePixmapFile(m_path, m_core->dialogGui(), this);
-    if (!newPath.isEmpty() && newPath != m_path) {
-        setTheme(QString());
-        setPath(newPath);
-        emit pathChanged(newPath);
-    }
-}
-
-void PixmapEditor::themeActionActivated()
-{
-    bool ok;
-    const QString newTheme = IconThemeDialog::getTheme(this, m_theme, &ok);
-    if (ok && newTheme != m_theme) {
-        setTheme(newTheme);
-        setPath(QString());
-        emit themeChanged(newTheme);
-    }
-}
-
-#if QT_CONFIG(clipboard)
-void PixmapEditor::copyActionActivated()
-{
-    QClipboard *clipboard = QApplication::clipboard();
-    if (m_iconThemeModeEnabled && QIcon::hasThemeIcon(m_theme))
-        clipboard->setText(m_theme);
-    else
-        clipboard->setText(m_path);
-}
-
-void PixmapEditor::pasteActionActivated()
-{
-    QClipboard *clipboard = QApplication::clipboard();
-    QString subtype = u"plain"_s;
-    QString text = clipboard->text(subtype);
-    if (!text.isNull()) {
-        QStringList list = text.split(u'\n');
-        if (!list.isEmpty()) {
-            text = list.at(0);
-            if (m_iconThemeModeEnabled && QIcon::hasThemeIcon(text)) {
-                setTheme(text);
-                setPath(QString());
-                emit themeChanged(text);
-            } else {
-                setPath(text);
-                setTheme(QString());
-                emit pathChanged(text);
-            }
-        }
-    }
-}
-
-void PixmapEditor::clipboardDataChanged()
-{
-    QClipboard *clipboard = QApplication::clipboard();
-    QString subtype = u"plain"_s;
-    const QString text = clipboard->text(subtype);
-    m_pasteAction->setEnabled(!text.isNull());
-}
-#endif
-
 // --------------- ResetWidget
 class ResetWidget : public QWidget
 {
@@ -803,7 +493,7 @@ ResetWidget::ResetWidget(QtProperty *property, QWidget *parent) :
     m_textLabel->setSizePolicy(QSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed));
     m_iconLabel->setSizePolicy(QSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed));
     m_button->setToolButtonStyle(Qt::ToolButtonIconOnly);
-    m_button->setIcon(createIconSet(u"resetproperty.png"_s));
+    m_button->setIcon(createIconSet("resetproperty.png"_L1));
     m_button->setIconSize(QSize(8,8));
     m_button->setSizePolicy(QSizePolicy(QSizePolicy::Fixed, QSizePolicy::MinimumExpanding));
     connect(m_button, &QAbstractButton::clicked, this, &ResetWidget::slotClicked);
@@ -1082,7 +772,7 @@ void DesignerPropertyManager::slotValueChanged(QtProperty *property, const QVari
         PropertySheetIconValue icon = qvariant_cast<PropertySheetIconValue>(iconProperty->value());
         const auto itState = m_iconSubPropertyToState.constFind(property);
         if (itState != m_iconSubPropertyToState.constEnd()) {
-            QPair<QIcon::Mode, QIcon::State> pair = m_iconSubPropertyToState.value(property);
+            const auto pair = m_iconSubPropertyToState.value(property);
             icon.setPixmap(pair.first, pair.second, qvariant_cast<PropertySheetPixmapValue>(value));
         } else { // must be theme property
             icon.setTheme(value.toString());
@@ -1120,8 +810,8 @@ void DesignerPropertyManager::slotPropertyDestroyed(QtProperty *property)
             m_propertyToTheme.remove(iconProperty);
         } else {
             const auto it = m_propertyToIconSubProperties.find(iconProperty);
-            QPair<QIcon::Mode, QIcon::State> state = m_iconSubPropertyToState.value(property);
-            QMap<QPair<QIcon::Mode, QIcon::State>, QtProperty *> &propertyList = it.value();
+            const auto state = m_iconSubPropertyToState.value(property);
+            auto &propertyList = it.value();
             propertyList.remove(state);
             m_iconSubPropertyToState.remove(property);
         }
@@ -1140,19 +830,19 @@ QStringList DesignerPropertyManager::attributes(int propertyType) const
 
     QStringList list = QtVariantPropertyManager::attributes(propertyType);
     if (propertyType == designerFlagTypeId()) {
-        list.append(QLatin1StringView(flagsAttributeC));
+        list.append(flagsAttributeC);
     } else if (propertyType == designerPixmapTypeId()) {
-        list.append(QLatin1StringView(defaultResourceAttributeC));
+        list.append(defaultResourceAttributeC);
     } else if (propertyType == designerIconTypeId()) {
-        list.append(QLatin1StringView(defaultResourceAttributeC));
+        list.append(defaultResourceAttributeC);
     } else if (propertyType == designerStringTypeId() || propertyType == QMetaType::QString) {
-        list.append(QLatin1StringView(validationModesAttributeC));
-        list.append(QLatin1StringView(fontAttributeC));
-        list.append(QLatin1StringView(themeAttributeC));
+        list.append(validationModesAttributeC);
+        list.append(fontAttributeC);
+        list.append(themeAttributeC);
     } else if (propertyType == QMetaType::QPalette) {
-        list.append(QLatin1StringView(superPaletteAttributeC));
+        list.append(superPaletteAttributeC);
     }
-    list.append(QLatin1StringView(resettableAttributeC));
+    list.append(resettableAttributeC);
     return list;
 }
 
@@ -1161,23 +851,23 @@ int DesignerPropertyManager::attributeType(int propertyType, const QString &attr
     if (!isPropertyTypeSupported(propertyType))
         return 0;
 
-    if (propertyType == designerFlagTypeId() && attribute == QLatin1StringView(flagsAttributeC))
+    if (propertyType == designerFlagTypeId() && attribute == flagsAttributeC)
         return designerFlagListTypeId();
-    if (propertyType == designerPixmapTypeId() && attribute == QLatin1StringView(defaultResourceAttributeC))
+    if (propertyType == designerPixmapTypeId() && attribute == defaultResourceAttributeC)
         return QMetaType::QPixmap;
-    if (propertyType == designerIconTypeId() && attribute == QLatin1StringView(defaultResourceAttributeC))
+    if (propertyType == designerIconTypeId() && attribute == defaultResourceAttributeC)
         return QMetaType::QIcon;
-    if (attribute == QLatin1StringView(resettableAttributeC))
+    if (attribute == resettableAttributeC)
         return QMetaType::Bool;
     if (propertyType == designerStringTypeId() || propertyType == QMetaType::QString) {
-        if (attribute == QLatin1StringView(validationModesAttributeC))
+        if (attribute == validationModesAttributeC)
             return QMetaType::Int;
-        if (attribute == QLatin1StringView(fontAttributeC))
+        if (attribute == fontAttributeC)
             return QMetaType::QFont;
-        if (attribute == QLatin1StringView(themeAttributeC))
+        if (attribute == themeAttributeC)
             return QMetaType::Bool;
     }
-    if (propertyType == QMetaType::QPalette && attribute == QLatin1StringView(superPaletteAttributeC))
+    if (propertyType == QMetaType::QPalette && attribute == superPaletteAttributeC)
         return QMetaType::QPalette;
 
     return QtVariantPropertyManager::attributeType(propertyType, attribute);
@@ -1185,52 +875,50 @@ int DesignerPropertyManager::attributeType(int propertyType, const QString &attr
 
 QVariant DesignerPropertyManager::attributeValue(const QtProperty *property, const QString &attribute) const
 {
-    QtProperty *prop = const_cast<QtProperty *>(property);
-
-    if (attribute == QLatin1StringView(resettableAttributeC)) {
-        const auto it = m_resetMap.constFind(prop);
+    if (attribute == resettableAttributeC) {
+        const auto it = m_resetMap.constFind(property);
         if (it != m_resetMap.constEnd())
             return it.value();
     }
 
-    if (attribute == QLatin1StringView(flagsAttributeC)) {
-        const auto it = m_flagValues.constFind(prop);
+    if (attribute == flagsAttributeC) {
+        const auto it = m_flagValues.constFind(property);
         if (it != m_flagValues.constEnd()) {
             QVariant v;
             v.setValue(it.value().flags);
             return v;
         }
     }
-    if (attribute == QLatin1StringView(validationModesAttributeC)) {
-        const auto it = m_stringAttributes.constFind(prop);
+    if (attribute == validationModesAttributeC) {
+        const auto it = m_stringAttributes.constFind(property);
         if (it !=  m_stringAttributes.constEnd())
             return it.value();
     }
 
-    if (attribute == QLatin1StringView(fontAttributeC)) {
-        const auto it = m_stringFontAttributes.constFind(prop);
+    if (attribute == fontAttributeC) {
+        const auto it = m_stringFontAttributes.constFind(property);
         if (it !=  m_stringFontAttributes.constEnd())
             return it.value();
     }
 
-    if (attribute == QLatin1StringView(themeAttributeC)) {
-        const auto it = m_stringThemeAttributes.constFind(prop);
+    if (attribute == themeAttributeC) {
+        const auto it = m_stringThemeAttributes.constFind(property);
         if (it !=  m_stringThemeAttributes.constEnd())
             return it.value();
     }
 
-    if (attribute == QLatin1StringView(superPaletteAttributeC)) {
-        const auto it = m_paletteValues.constFind(prop);
+    if (attribute == superPaletteAttributeC) {
+        const auto it = m_paletteValues.constFind(property);
         if (it != m_paletteValues.cend())
             return it.value().superPalette;
     }
 
-    if (attribute == QLatin1StringView(defaultResourceAttributeC)) {
-        const auto itPix = m_defaultPixmaps.constFind(prop);
+    if (attribute == defaultResourceAttributeC) {
+        const auto itPix = m_defaultPixmaps.constFind(property);
         if (itPix != m_defaultPixmaps.constEnd())
             return itPix.value();
 
-        const auto itIcon = m_defaultIcons.constFind(prop);
+        const auto itIcon = m_defaultIcons.constFind(property);
         if (itIcon != m_defaultIcons.constEnd())
             return itIcon.value();
     }
@@ -1247,7 +935,7 @@ QVariant DesignerPropertyManager::attributeValue(const QtProperty *property, con
 void DesignerPropertyManager::setAttribute(QtProperty *property,
             const QString &attribute, const QVariant &value)
 {
-    if (attribute == QLatin1StringView(resettableAttributeC) && m_resetMap.contains(property)) {
+    if (attribute == resettableAttributeC && m_resetMap.contains(property)) {
         if (value.userType() != QMetaType::Bool)
             return;
         const bool val = value.toBool();
@@ -1258,7 +946,7 @@ void DesignerPropertyManager::setAttribute(QtProperty *property,
         emit attributeChanged(variantProperty(property), attribute, value);
         return;
     }
-    if (attribute == QLatin1StringView(flagsAttributeC) && m_flagValues.contains(property)) {
+    if (attribute == flagsAttributeC && m_flagValues.contains(property)) {
         if (value.userType() != designerFlagListTypeId())
             return;
 
@@ -1279,7 +967,7 @@ void DesignerPropertyManager::setAttribute(QtProperty *property,
 
         QList<uint> values;
 
-        for (const QPair<QString, uint> &pair : flags) {
+        for (const auto &pair : flags) {
             const QString flagName = pair.first;
             QtProperty *prop = addProperty(QMetaType::Bool);
             prop->setPropertyName(flagName);
@@ -1301,7 +989,7 @@ void DesignerPropertyManager::setAttribute(QtProperty *property,
 
         emit propertyChanged(property);
         emit QtVariantPropertyManager::valueChanged(property, data.val);
-    } else if (attribute == QLatin1StringView(validationModesAttributeC) && m_stringAttributes.contains(property)) {
+    } else if (attribute == validationModesAttributeC && m_stringAttributes.contains(property)) {
         if (value.userType() != QMetaType::Int)
             return;
 
@@ -1316,7 +1004,7 @@ void DesignerPropertyManager::setAttribute(QtProperty *property,
         it.value() = newValue;
 
         emit attributeChanged(property, attribute, newValue);
-    } else if (attribute == QLatin1StringView(fontAttributeC) && m_stringFontAttributes.contains(property)) {
+    } else if (attribute == fontAttributeC && m_stringFontAttributes.contains(property)) {
         if (value.userType() != QMetaType::QFont)
             return;
 
@@ -1331,7 +1019,7 @@ void DesignerPropertyManager::setAttribute(QtProperty *property,
         it.value() = newValue;
 
         emit attributeChanged(property, attribute, newValue);
-    } else if (attribute == QLatin1StringView(themeAttributeC) && m_stringThemeAttributes.contains(property)) {
+    } else if (attribute == themeAttributeC && m_stringThemeAttributes.contains(property)) {
         if (value.userType() != QMetaType::Bool)
             return;
 
@@ -1346,7 +1034,7 @@ void DesignerPropertyManager::setAttribute(QtProperty *property,
         it.value() = newValue;
 
         emit attributeChanged(property, attribute, newValue);
-    } else if (attribute == QLatin1StringView(superPaletteAttributeC) && m_paletteValues.contains(property)) {
+    } else if (attribute == superPaletteAttributeC && m_paletteValues.contains(property)) {
         if (value.userType() != QMetaType::QPalette)
             return;
 
@@ -1371,7 +1059,7 @@ void DesignerPropertyManager::setAttribute(QtProperty *property,
 
         emit propertyChanged(property);
         emit QtVariantPropertyManager::valueChanged(property, data.val); // if resolve was done, this is also for consistency
-    } else if (attribute == QLatin1StringView(defaultResourceAttributeC) && m_defaultPixmaps.contains(property)) {
+    } else if (attribute == defaultResourceAttributeC && m_defaultPixmaps.contains(property)) {
         if (value.userType() != QMetaType::QPixmap)
             return;
 
@@ -1388,7 +1076,7 @@ void DesignerPropertyManager::setAttribute(QtProperty *property,
         emit attributeChanged(property, attribute, v);
 
         emit propertyChanged(property);
-    } else if (attribute == QLatin1StringView(defaultResourceAttributeC) && m_defaultIcons.contains(property)) {
+    } else if (attribute == defaultResourceAttributeC && m_defaultIcons.contains(property)) {
         if (value.userType() != QMetaType::QIcon)
             return;
 
@@ -1403,11 +1091,11 @@ void DesignerPropertyManager::setAttribute(QtProperty *property,
 
         qdesigner_internal::PropertySheetIconValue icon = m_iconValues.value(property);
         if (icon.paths().isEmpty()) {
-            QMap<QPair<QIcon::Mode, QIcon::State>, QtProperty *> subIconProperties = m_propertyToIconSubProperties.value(property);
+            const auto &subIconProperties = m_propertyToIconSubProperties.value(property);
             for (auto itSub = subIconProperties.cbegin(), end = subIconProperties.cend(); itSub != end; ++itSub) {
-                QPair<QIcon::Mode, QIcon::State> pair = itSub.key();
+                const auto pair = itSub.key();
                 QtProperty *subProp = itSub.value();
-                setAttribute(subProp, QLatin1StringView(defaultResourceAttributeC),
+                setAttribute(subProp, defaultResourceAttributeC,
                              defaultIcon.pixmap(16, 16, pair.first, pair.second));
             }
         }
@@ -1509,8 +1197,8 @@ bool DesignerPropertyManager::isPropertyTypeSupported(int propertyType) const
 
 QString DesignerPropertyManager::valueText(const QtProperty *property) const
 {
-    if (m_flagValues.contains(const_cast<QtProperty *>(property))) {
-        const FlagData data = m_flagValues.value(const_cast<QtProperty *>(property));
+    if (m_flagValues.contains(property)) {
+        const FlagData data = m_flagValues.value(property);
         const uint v = data.val;
         QString valueStr;
         for (const DesignerIntPair &p : data.flags) {
@@ -1524,56 +1212,42 @@ QString DesignerPropertyManager::valueText(const QtProperty *property) const
         }
         return valueStr;
     }
-    if (m_alignValues.contains(const_cast<QtProperty *>(property))) {
-        const uint v = m_alignValues.value(const_cast<QtProperty *>(property));
+    if (m_alignValues.contains(property)) {
+        const uint v = m_alignValues.value(property);
         return tr("%1, %2").arg(indexHToString(alignToIndexH(v)),
                                 indexVToString(alignToIndexV(v)));
     }
-    if (m_paletteValues.contains(const_cast<QtProperty *>(property))) {
-        const PaletteData data = m_paletteValues.value(const_cast<QtProperty *>(property));
+    if (m_paletteValues.contains(property)) {
+        const PaletteData data = m_paletteValues.value(property);
         const auto mask = data.val.resolveMask();
         if (mask)
             return tr("Customized (%n roles)", nullptr, bitCount(mask));
         static const QString inherited = tr("Inherited");
         return inherited;
     }
-    if (m_iconValues.contains(const_cast<QtProperty *>(property))) {
-        const PropertySheetIconValue icon = m_iconValues.value(const_cast<QtProperty *>(property));
-        const QString theme = icon.theme();
-        if (!theme.isEmpty() && QIcon::hasThemeIcon(theme))
-            return tr("[Theme] %1").arg(theme);
-        const auto &paths = icon.paths();
-        const auto it = paths.constFind(qMakePair(QIcon::Normal, QIcon::Off));
-        if (it == paths.constEnd())
-            return QString();
-        return QFileInfo(it.value().path()).fileName();
-    }
-    if (m_pixmapValues.contains(const_cast<QtProperty *>(property))) {
-        const QString path =  m_pixmapValues.value(const_cast<QtProperty *>(property)).path();
+    if (m_iconValues.contains(property))
+        return PixmapEditor::displayText(m_iconValues.value(property));
+    if (m_pixmapValues.contains(property)) {
+        const QString path =  m_pixmapValues.value(property).path();
         if (path.isEmpty())
             return QString();
         return QFileInfo(path).fileName();
     }
-    if (m_uintValues.contains(const_cast<QtProperty *>(property))) {
-        return QString::number(m_uintValues.value(const_cast<QtProperty *>(property)));
-    }
-    if (m_longLongValues.contains(const_cast<QtProperty *>(property))) {
-        return QString::number(m_longLongValues.value(const_cast<QtProperty *>(property)));
-    }
-    if (m_uLongLongValues.contains(const_cast<QtProperty *>(property))) {
-        return QString::number(m_uLongLongValues.value(const_cast<QtProperty *>(property)));
-    }
-    if (m_urlValues.contains(const_cast<QtProperty *>(property))) {
-        return m_urlValues.value(const_cast<QtProperty *>(property)).toString();
-    }
-    if (m_byteArrayValues.contains(const_cast<QtProperty *>(property))) {
-        return QString::fromUtf8(m_byteArrayValues.value(const_cast<QtProperty *>(property)));
-    }
+    if (m_uintValues.contains(property))
+        return QString::number(m_uintValues.value(property));
+    if (m_longLongValues.contains(property))
+        return QString::number(m_longLongValues.value(property));
+    if (m_uLongLongValues.contains(property))
+        return QString::number(m_uLongLongValues.value(property));
+    if (m_urlValues.contains(property))
+        return m_urlValues.value(property).toString();
+    if (m_byteArrayValues.contains(property))
+        return QString::fromUtf8(m_byteArrayValues.value(property));
     const int vType = QtVariantPropertyManager::valueType(property);
     if (vType == QMetaType::QString || vType == designerStringTypeId()) {
         const QString str = (QtVariantPropertyManager::valueType(property) == QMetaType::QString)
             ? value(property).toString() : qvariant_cast<PropertySheetStringValue>(value(property)).value();
-        const int validationMode = attributeValue(property, QLatin1StringView(validationModesAttributeC)).toInt();
+        const int validationMode = attributeValue(property, validationModesAttributeC).toInt();
         return TextPropertyEditor::stringToEditorString(str, static_cast<TextPropertyValidationMode>(validationMode));
     }
     if (vType == QMetaType::QStringList || vType == designerStringListTypeId()) {
@@ -1599,7 +1273,7 @@ void DesignerPropertyManager::reloadResourceProperties()
 {
     DesignerIconCache *iconCache = nullptr;
     for (auto itIcon = m_iconValues.cbegin(), end = m_iconValues.cend(); itIcon!= end; ++itIcon) {
-        QtProperty *property = itIcon.key();
+        auto *property = itIcon.key();
         const PropertySheetIconValue &icon = itIcon.value();
 
         QIcon defaultIcon = m_defaultIcons.value(property);
@@ -1613,19 +1287,20 @@ void DesignerPropertyManager::reloadResourceProperties()
                 defaultIcon = iconCache->icon(icon);
         }
 
-        QMap<QPair<QIcon::Mode, QIcon::State>, QtProperty *> subProperties = m_propertyToIconSubProperties.value(property);
+        const auto &subProperties = m_propertyToIconSubProperties.value(property);
         for (auto itSub = subProperties.cbegin(), end = subProperties.cend(); itSub != end; ++itSub) {
-            const QPair<QIcon::Mode, QIcon::State> pair = itSub.key();
+            const auto pair = itSub.key();
             QtVariantProperty *subProperty = variantProperty(itSub.value());
-            subProperty->setAttribute(QLatin1StringView(defaultResourceAttributeC),
+            subProperty->setAttribute(defaultResourceAttributeC,
                                       defaultIcon.pixmap(16, 16, pair.first, pair.second));
         }
 
-        emit propertyChanged(property);
-        emit QtVariantPropertyManager::valueChanged(property, QVariant::fromValue(itIcon.value()));
+        auto *ncProperty = const_cast<QtProperty *>(property);
+        emit propertyChanged(ncProperty);
+        emit QtVariantPropertyManager::valueChanged(ncProperty, QVariant::fromValue(itIcon.value()));
     }
     for (auto itPix = m_pixmapValues.cbegin(), end = m_pixmapValues.cend(); itPix != end; ++itPix) {
-        QtProperty *property = itPix.key();
+        auto *property = const_cast<QtProperty *>(itPix.key());
         emit propertyChanged(property);
         emit QtVariantPropertyManager::valueChanged(property, QVariant::fromValue(itPix.value()));
     }
@@ -1633,21 +1308,21 @@ void DesignerPropertyManager::reloadResourceProperties()
 
 QIcon DesignerPropertyManager::valueIcon(const QtProperty *property) const
 {
-    if (m_iconValues.contains(const_cast<QtProperty *>(property))) {
+    if (m_iconValues.contains(property)) {
         if (!property->isModified())
-            return m_defaultIcons.value(const_cast<QtProperty *>(property)).pixmap(16, 16);
+            return m_defaultIcons.value(property).pixmap(16, 16);
         QDesignerFormWindowInterface *formWindow = QDesignerFormWindowInterface::findFormWindow(m_object);
         qdesigner_internal::FormWindowBase *fwb = qobject_cast<qdesigner_internal::FormWindowBase *>(formWindow);
         if (fwb)
-            return fwb->iconCache()->icon(m_iconValues.value(const_cast<QtProperty *>(property))).pixmap(16, 16);
-    } else if (m_pixmapValues.contains(const_cast<QtProperty *>(property))) {
+            return fwb->iconCache()->icon(m_iconValues.value(property)).pixmap(16, 16);
+    } else if (m_pixmapValues.contains(property)) {
         if (!property->isModified())
-            return m_defaultPixmaps.value(const_cast<QtProperty *>(property));
+            return m_defaultPixmaps.value(property);
         QDesignerFormWindowInterface *formWindow = QDesignerFormWindowInterface::findFormWindow(m_object);
         qdesigner_internal::FormWindowBase *fwb = qobject_cast<qdesigner_internal::FormWindowBase *>(formWindow);
         if (fwb)
-            return fwb->pixmapCache()->pixmap(m_pixmapValues.value(const_cast<QtProperty *>(property)));
-    } else if (m_stringThemeAttributes.value(const_cast<QtProperty *>(property), false)) {
+            return fwb->pixmapCache()->pixmap(m_pixmapValues.value(property));
+    } else if (m_stringThemeAttributes.value(property, false)) {
         return QIcon::fromTheme(value(property).toString());
     } else {
         QIcon rc;
@@ -1660,32 +1335,32 @@ QIcon DesignerPropertyManager::valueIcon(const QtProperty *property) const
 
 QVariant DesignerPropertyManager::value(const QtProperty *property) const
 {
-    if (m_flagValues.contains(const_cast<QtProperty *>(property)))
-        return m_flagValues.value(const_cast<QtProperty *>(property)).val;
-    if (m_alignValues.contains(const_cast<QtProperty *>(property)))
-        return m_alignValues.value(const_cast<QtProperty *>(property));
-    if (m_paletteValues.contains(const_cast<QtProperty *>(property)))
-        return m_paletteValues.value(const_cast<QtProperty *>(property)).val;
-    if (m_iconValues.contains(const_cast<QtProperty *>(property)))
-        return QVariant::fromValue(m_iconValues.value(const_cast<QtProperty *>(property)));
-    if (m_pixmapValues.contains(const_cast<QtProperty *>(property)))
-        return QVariant::fromValue(m_pixmapValues.value(const_cast<QtProperty *>(property)));
+    if (m_flagValues.contains(property))
+        return m_flagValues.value(property).val;
+    if (m_alignValues.contains(property))
+        return m_alignValues.value(property);
+    if (m_paletteValues.contains(property))
+        return m_paletteValues.value(property).val;
+    if (m_iconValues.contains(property))
+        return QVariant::fromValue(m_iconValues.value(property));
+    if (m_pixmapValues.contains(property))
+        return QVariant::fromValue(m_pixmapValues.value(property));
     QVariant rc;
     if (m_stringManager.value(property, &rc)
         || m_keySequenceManager.value(property, &rc)
         || m_stringListManager.value(property, &rc)
         || m_brushManager.value(property, &rc))
         return rc;
-    if (m_uintValues.contains(const_cast<QtProperty *>(property)))
-        return m_uintValues.value(const_cast<QtProperty *>(property));
-    if (m_longLongValues.contains(const_cast<QtProperty *>(property)))
-        return m_longLongValues.value(const_cast<QtProperty *>(property));
-    if (m_uLongLongValues.contains(const_cast<QtProperty *>(property)))
-        return m_uLongLongValues.value(const_cast<QtProperty *>(property));
-    if (m_urlValues.contains(const_cast<QtProperty *>(property)))
-        return m_urlValues.value(const_cast<QtProperty *>(property));
-    if (m_byteArrayValues.contains(const_cast<QtProperty *>(property)))
-        return m_byteArrayValues.value(const_cast<QtProperty *>(property));
+    if (m_uintValues.contains(property))
+        return m_uintValues.value(property);
+    if (m_longLongValues.contains(property))
+        return m_longLongValues.value(property);
+    if (m_uLongLongValues.contains(property))
+        return m_uLongLongValues.value(property);
+    if (m_urlValues.contains(property))
+        return m_urlValues.value(property);
+    if (m_byteArrayValues.contains(property))
+        return m_byteArrayValues.value(property);
 
     return QtVariantPropertyManager::value(property);
 }
@@ -1862,14 +1537,14 @@ void DesignerPropertyManager::setValue(QtProperty *property, const QVariant &val
 
         const auto &iconPaths = icon.paths();
 
-        QMap<QPair<QIcon::Mode, QIcon::State>, QtProperty *> subProperties = m_propertyToIconSubProperties.value(property);
+        const auto &subProperties = m_propertyToIconSubProperties.value(property);
         for (auto itSub = subProperties.cbegin(), end = subProperties.cend(); itSub != end; ++itSub) {
-            const QPair<QIcon::Mode, QIcon::State> pair = itSub.key();
+            const auto pair = itSub.key();
             QtVariantProperty *subProperty = variantProperty(itSub.value());
             bool hasPath = iconPaths.contains(pair);
             subProperty->setModified(hasPath);
             subProperty->setValue(QVariant::fromValue(iconPaths.value(pair)));
-            subProperty->setAttribute(QLatin1StringView(defaultResourceAttributeC),
+            subProperty->setAttribute(defaultResourceAttributeC,
                                       defaultIcon.pixmap(16, 16, pair.first, pair.second));
         }
         QtVariantProperty *themeSubProperty = variantProperty(m_propertyToTheme.value(property));
@@ -1883,7 +1558,7 @@ void DesignerPropertyManager::setValue(QtProperty *property, const QVariant &val
         emit propertyChanged(property);
 
         QString toolTip;
-        const auto itNormalOff = iconPaths.constFind(qMakePair(QIcon::Normal, QIcon::Off));
+        const auto itNormalOff = iconPaths.constFind({QIcon::Normal, QIcon::Off});
         if (itNormalOff != iconPaths.constEnd())
             toolTip = itNormalOff.value().path();
         // valueText() only show the file name; show full path as ToolTip.
@@ -2068,7 +1743,7 @@ void DesignerPropertyManager::initializeProperty(QtProperty *property)
             m_defaultIcons[property] = QIcon();
 
             QtVariantProperty *themeProp = addProperty(QMetaType::QString, tr("Theme"));
-            themeProp->setAttribute(QLatin1StringView(themeAttributeC), true);
+            themeProp->setAttribute(themeAttributeC, true);
             m_iconSubPropertyToProperty[themeProp] = property;
             m_propertyToTheme[property] = themeProp;
             m_resetMap[themeProp] = true;
@@ -2102,7 +1777,7 @@ void DesignerPropertyManager::initializeProperty(QtProperty *property)
 
 void DesignerPropertyManager::createIconSubProperty(QtProperty *iconProperty, QIcon::Mode mode, QIcon::State state, const QString &subName)
 {
-    QPair<QIcon::Mode, QIcon::State> pair = qMakePair(mode, state);
+    const auto pair = std::make_pair(mode, state);
     QtVariantProperty *subProp = addProperty(DesignerPropertyManager::designerPixmapTypeId(), subName);
     m_propertyToIconSubProperties[iconProperty][pair] = subProp;
     m_iconSubPropertyToState[subProp] = pair;
@@ -2159,7 +1834,7 @@ void DesignerPropertyManager::uninitializeProperty(QtProperty *property)
     m_pixmapValues.remove(property);
     m_defaultPixmaps.remove(property);
 
-    QMap<QPair<QIcon::Mode, QIcon::State>, QtProperty *> iconSubProperties = m_propertyToIconSubProperties.value(property);
+    const auto &iconSubProperties = m_propertyToIconSubProperties.value(property);
     for (auto itIcon = iconSubProperties.cbegin(), end = iconSubProperties.cend(); itIcon != end; ++itIcon) {
         QtProperty *subIcon = itIcon.value();
         delete subIcon;
@@ -2291,23 +1966,23 @@ void DesignerEditorFactory::slotAttributeChanged(QtProperty *property, const QSt
 {
     QtVariantPropertyManager *manager = propertyManager(property);
     const int type = manager->propertyType(property);
-    if (type == DesignerPropertyManager::designerPixmapTypeId() && attribute == QLatin1StringView(defaultResourceAttributeC)) {
+    if (type == DesignerPropertyManager::designerPixmapTypeId() && attribute == defaultResourceAttributeC) {
         const QPixmap pixmap = qvariant_cast<QPixmap>(value);
         applyToEditors(m_pixmapPropertyToEditors.value(property), &PixmapEditor::setDefaultPixmap, pixmap);
     } else if (type == DesignerPropertyManager::designerStringTypeId() || type == QMetaType::QString) {
-        if (attribute == QLatin1StringView(validationModesAttributeC)) {
+        if (attribute == validationModesAttributeC) {
             const TextPropertyValidationMode validationMode = static_cast<TextPropertyValidationMode>(value.toInt());
             applyToEditors(m_stringPropertyToEditors.value(property), &TextEditor::setTextPropertyValidationMode, validationMode);
         }
-        if (attribute == QLatin1StringView(fontAttributeC)) {
+        if (attribute == fontAttributeC) {
             const QFont font = qvariant_cast<QFont>(value);
             applyToEditors(m_stringPropertyToEditors.value(property), &TextEditor::setRichTextDefaultFont, font);
         }
-        if (attribute == QLatin1StringView(themeAttributeC)) {
+        if (attribute == themeAttributeC) {
             const bool themeEnabled = value.toBool();
             applyToEditors(m_stringPropertyToEditors.value(property), &TextEditor::setIconThemeModeEnabled, themeEnabled);
         }
-    } else if (type == QMetaType::QPalette && attribute == QLatin1StringView(superPaletteAttributeC)) {
+    } else if (type == QMetaType::QPalette && attribute == superPaletteAttributeC) {
         const QPalette palette = qvariant_cast<QPalette>(value);
         applyToEditors(m_palettePropertyToEditors.value(property), &PaletteEditorButton::setSuperPalette, palette);
     }
@@ -2318,14 +1993,17 @@ void DesignerEditorFactory::slotPropertyChanged(QtProperty *property)
     QtVariantPropertyManager *manager = propertyManager(property);
     const int type = manager->propertyType(property);
     if (type == DesignerPropertyManager::designerIconTypeId()) {
-        QPixmap defaultPixmap;
-        if (!property->isModified())
-            defaultPixmap = qvariant_cast<QIcon>(manager->attributeValue(property, QLatin1StringView(defaultResourceAttributeC))).pixmap(16, 16);
-        else if (m_fwb)
-            defaultPixmap = m_fwb->iconCache()->icon(qvariant_cast<PropertySheetIconValue>(manager->value(property))).pixmap(16, 16);
+        QIcon defaultPixmap;
+        if (!property->isModified()) {
+            const auto attributeValue = manager->attributeValue(property, defaultResourceAttributeC);
+            defaultPixmap = attributeValue.value<QIcon>();
+        } else if (m_fwb) {
+            const auto value = manager->value(property);
+            defaultPixmap = m_fwb->iconCache()->icon(value.value<PropertySheetIconValue>());
+        }
         const auto editors = m_iconPropertyToEditors.value(property);
         for (PixmapEditor *editor : editors)
-            editor->setDefaultPixmap(defaultPixmap);
+            editor->setDefaultPixmapIcon(defaultPixmap);
     }
 }
 
@@ -2403,12 +2081,13 @@ QWidget *DesignerEditorFactory::createEditor(QtVariantPropertyManager *manager, 
     }
         break;
     case QMetaType::QString: {
-        const TextPropertyValidationMode tvm = static_cast<TextPropertyValidationMode>(manager->attributeValue(property, QLatin1StringView(validationModesAttributeC)).toInt());
+        const int itvm = manager->attributeValue(property, validationModesAttributeC).toInt();
+        const auto tvm = static_cast<TextPropertyValidationMode>(itvm);
         TextEditor *ed = createTextEditor(parent, tvm, manager->value(property).toString());
-        const QVariant richTextDefaultFont = manager->attributeValue(property, QLatin1StringView(fontAttributeC));
+        const QVariant richTextDefaultFont = manager->attributeValue(property, fontAttributeC);
         if (richTextDefaultFont.metaType().id() == QMetaType::QFont)
             ed->setRichTextDefaultFont(qvariant_cast<QFont>(richTextDefaultFont));
-        const bool themeEnabled = manager->attributeValue(property, QLatin1StringView(themeAttributeC)).toBool();
+        const bool themeEnabled = manager->attributeValue(property, themeAttributeC).toBool();
         ed->setIconThemeModeEnabled(themeEnabled);
         m_stringPropertyToEditors[property].append(ed);
         m_editorToStringProperty[ed] = property;
@@ -2419,7 +2098,7 @@ QWidget *DesignerEditorFactory::createEditor(QtVariantPropertyManager *manager, 
         break;
     case QMetaType::QPalette: {
         PaletteEditorButton *ed = new PaletteEditorButton(m_core, qvariant_cast<QPalette>(manager->value(property)), parent);
-        ed->setSuperPalette(qvariant_cast<QPalette>(manager->attributeValue(property, QLatin1StringView(superPaletteAttributeC))));
+        ed->setSuperPalette(qvariant_cast<QPalette>(manager->attributeValue(property, superPaletteAttributeC)));
         m_palettePropertyToEditors[property].append(ed);
         m_editorToPaletteProperty[ed] = property;
         connect(ed, &QObject::destroyed, this, &DesignerEditorFactory::slotEditorDestroyed);
@@ -2484,7 +2163,7 @@ QWidget *DesignerEditorFactory::createEditor(QtVariantPropertyManager *manager, 
             PixmapEditor *ed = new PixmapEditor(m_core, parent);
             ed->setPixmapCache(m_fwb->pixmapCache());
             ed->setPath(qvariant_cast<PropertySheetPixmapValue>(manager->value(property)).path());
-            ed->setDefaultPixmap(qvariant_cast<QPixmap>(manager->attributeValue(property, QLatin1StringView(defaultResourceAttributeC))));
+            ed->setDefaultPixmap(qvariant_cast<QPixmap>(manager->attributeValue(property, defaultResourceAttributeC)));
             ed->setSpacing(m_spacing);
             m_pixmapPropertyToEditors[property].append(ed);
             m_editorToPixmapProperty[ed] = property;
@@ -2498,12 +2177,12 @@ QWidget *DesignerEditorFactory::createEditor(QtVariantPropertyManager *manager, 
             PropertySheetIconValue value = qvariant_cast<PropertySheetIconValue>(manager->value(property));
             ed->setTheme(value.theme());
             ed->setPath(value.pixmap(QIcon::Normal, QIcon::Off).path());
-            QPixmap defaultPixmap;
+            QIcon defaultPixmap;
             if (!property->isModified())
-                defaultPixmap = qvariant_cast<QIcon>(manager->attributeValue(property, QLatin1StringView(defaultResourceAttributeC))).pixmap(16, 16);
+                defaultPixmap = qvariant_cast<QIcon>(manager->attributeValue(property, defaultResourceAttributeC));
             else if (m_fwb)
-                defaultPixmap = m_fwb->iconCache()->icon(value).pixmap(16, 16);
-            ed->setDefaultPixmap(defaultPixmap);
+                defaultPixmap = m_fwb->iconCache()->icon(value);
+            ed->setDefaultPixmapIcon(defaultPixmap);
             ed->setSpacing(m_spacing);
             m_iconPropertyToEditors[property].append(ed);
             m_editorToIconProperty[ed] = property;
@@ -2512,9 +2191,9 @@ QWidget *DesignerEditorFactory::createEditor(QtVariantPropertyManager *manager, 
             connect(ed, &PixmapEditor::themeChanged, this, &DesignerEditorFactory::slotIconThemeChanged);
             editor = ed;
         } else if (type == DesignerPropertyManager::designerStringTypeId()) {
-            const TextPropertyValidationMode tvm = static_cast<TextPropertyValidationMode>(manager->attributeValue(property, QLatin1StringView(validationModesAttributeC)).toInt());
+            const TextPropertyValidationMode tvm = static_cast<TextPropertyValidationMode>(manager->attributeValue(property, validationModesAttributeC).toInt());
             TextEditor *ed = createTextEditor(parent, tvm, qvariant_cast<PropertySheetStringValue>(manager->value(property)).value());
-            const QVariant richTextDefaultFont = manager->attributeValue(property, QLatin1StringView(fontAttributeC));
+            const QVariant richTextDefaultFont = manager->attributeValue(property, fontAttributeC);
             if (richTextDefaultFont.metaType().id() == QMetaType::QFont)
                 ed->setRichTextDefaultFont(qvariant_cast<QFont>(richTextDefaultFont));
             m_stringPropertyToEditors[property].append(ed);
@@ -2546,13 +2225,13 @@ QWidget *DesignerEditorFactory::createEditor(QtVariantPropertyManager *manager, 
         break;
     }
     return m_resetDecorator->editor(editor,
-            manager->variantProperty(property)->attributeValue(QLatin1StringView(resettableAttributeC)).toBool(),
+            manager->variantProperty(property)->attributeValue(resettableAttributeC).toBool(),
             manager, property, parent);
 }
 
 template <class Editor>
 bool removeEditor(QObject *object,
-                  QHash<QtProperty *, QList<Editor>> *propertyToEditors,
+                  QHash<const QtProperty *, QList<Editor>> *propertyToEditors,
                   QHash<Editor, QtProperty *> *editorToProperty)
 {
     if (!propertyToEditors)

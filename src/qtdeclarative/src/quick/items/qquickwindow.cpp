@@ -8,6 +8,7 @@
 #include "qquickitem_p.h"
 #include "qquickevents_p_p.h"
 #include "qquickgraphicsdevice_p.h"
+#include "qquickwindowcontainer_p.h"
 
 #include <QtQuick/private/qsgrenderer_p.h>
 #include <QtQuick/private/qsgplaintexture_p.h>
@@ -37,7 +38,7 @@
 #include <QtQml/qqmlinfo.h>
 #include <QtQml/private/qqmlmetatype_p.h>
 
-#include <QtQuick/private/qquickpixmapcache_p.h>
+#include <QtQuick/private/qquickpixmap_p.h>
 
 #include <private/qqmldebugserviceinterfaces_p.h>
 #include <private/qqmldebugconnector_p.h>
@@ -49,8 +50,12 @@
 #ifndef QT_NO_DEBUG_STREAM
 #include <private/qdebug_p.h>
 #endif
+#include <QtCore/qpointer.h>
 
 #include <rhi/qrhi.h>
+
+#include <utility>
+#include <mutex>
 
 QT_BEGIN_NAMESPACE
 
@@ -59,6 +64,7 @@ Q_DECLARE_LOGGING_CATEGORY(lcMouse)
 Q_DECLARE_LOGGING_CATEGORY(lcTouch)
 Q_DECLARE_LOGGING_CATEGORY(lcPtr)
 Q_LOGGING_CATEGORY(lcDirty, "qt.quick.dirty")
+Q_LOGGING_CATEGORY(lcQuickWindow, "qt.quick.window")
 Q_LOGGING_CATEGORY(lcTransient, "qt.quick.window.transient")
 
 bool QQuickWindowPrivate::defaultAlphaBuffer = false;
@@ -82,8 +88,8 @@ public:
 
         QAnimationDriver *animationDriver = m_renderLoop->animationDriver();
         if (animationDriver) {
-            connect(animationDriver, SIGNAL(stopped()), this, SLOT(animationStopped()));
-            connect(m_renderLoop, SIGNAL(timeToIncubate()), this, SLOT(incubate()));
+            connect(animationDriver, &QAnimationDriver::stopped, this, &QQuickWindowIncubationController::animationStopped);
+            connect(m_renderLoop, &QSGRenderLoop::timeToIncubate, this, &QQuickWindowIncubationController::incubate);
         }
     }
 
@@ -327,6 +333,22 @@ struct PolishLoopDetector
     int numPolishLoopsInSequence = 0;
 };
 
+static const QQuickItem *firstItemWithDirtyChildrenStacking(const QQuickItem *item)
+{
+    if (QQuickItemPrivate::get(item)->dirtyAttributes
+        & QQuickItemPrivate::ChildrenStackingChanged) {
+        return item;
+    }
+
+    const auto childItems = item->childItems();
+    for (const auto *childItem : childItems) {
+        if (auto *dirtyItem = firstItemWithDirtyChildrenStacking(childItem))
+            return dirtyItem;
+    }
+
+    return nullptr;
+}
+
 void QQuickWindowPrivate::polishItems()
 {
     // An item can trigger polish on another item, or itself for that matter,
@@ -360,6 +382,11 @@ void QQuickWindowPrivate::polishItems()
             deliveryAgentPrivate()->updateFocusItemTransform();
     }
 #endif
+
+    if (auto *dirtyItem = firstItemWithDirtyChildrenStacking(contentItem)) {
+        qCDebug(lcQuickWindow) << dirtyItem << "has dirty child stacking order";
+        updateChildWindowStackingOrder();
+    }
 }
 
 /*!
@@ -678,7 +705,6 @@ QQuickWindowPrivate::QQuickWindowPrivate()
     , clearColor(Qt::white)
     , persistentGraphics(true)
     , persistentSceneGraph(true)
-    , componentComplete(true)
     , inDestructor(false)
     , incubationController(nullptr)
     , hasActiveSwapchain(false)
@@ -782,15 +808,14 @@ void QQuickWindowPrivate::init(QQuickWindow *c, QQuickRenderControl *control)
 
     animationController.reset(new QQuickAnimatorController(q));
 
-    QObject::connect(context, SIGNAL(initialized()), q, SIGNAL(sceneGraphInitialized()), Qt::DirectConnection);
-    QObject::connect(context, SIGNAL(invalidated()), q, SIGNAL(sceneGraphInvalidated()), Qt::DirectConnection);
-    QObject::connect(context, SIGNAL(invalidated()), q, SLOT(cleanupSceneGraph()), Qt::DirectConnection);
+    QObject::connect(context, &QSGRenderContext::initialized, q, &QQuickWindow::sceneGraphInitialized, Qt::DirectConnection);
+    QObject::connect(context, &QSGRenderContext::invalidated, q, &QQuickWindow::sceneGraphInvalidated, Qt::DirectConnection);
+    QObject::connect(context, &QSGRenderContext::invalidated, q, &QQuickWindow::cleanupSceneGraph, Qt::DirectConnection);
 
-    QObject::connect(q, SIGNAL(focusObjectChanged(QObject*)), q, SIGNAL(activeFocusItemChanged()));
-    QObject::connect(q, SIGNAL(screenChanged(QScreen*)), q, SLOT(handleScreenChanged(QScreen*)));
-    QObject::connect(qApp, SIGNAL(applicationStateChanged(Qt::ApplicationState)),
-                     q, SLOT(handleApplicationStateChanged(Qt::ApplicationState)));
-    QObject::connect(q, SIGNAL(frameSwapped()), q, SLOT(runJobsAfterSwap()), Qt::DirectConnection);
+    QObject::connect(q, &QQuickWindow::focusObjectChanged, q, &QQuickWindow::activeFocusItemChanged);
+    QObject::connect(q, &QQuickWindow::screenChanged, q, &QQuickWindow::handleScreenChanged);
+    QObject::connect(qApp, &QGuiApplication::applicationStateChanged, q, &QQuickWindow::handleApplicationStateChanged);
+    QObject::connect(q, &QQuickWindow::frameSwapped, q, &QQuickWindow::runJobsAfterSwap, Qt::DirectConnection);
 
     if (QQmlInspectorService *service = QQmlDebugConnector::service<QQmlInspectorService>())
         service->addWindow(q);
@@ -1133,18 +1158,15 @@ QQuickWindow::~QQuickWindow()
     delete root;
     d->deliveryAgent = nullptr; // avoid forwarding events there during destruction
 
-    d->renderJobMutex.lock();
-    qDeleteAll(d->beforeSynchronizingJobs);
-    d->beforeSynchronizingJobs.clear();
-    qDeleteAll(d->afterSynchronizingJobs);
-    d->afterSynchronizingJobs.clear();
-    qDeleteAll(d->beforeRenderingJobs);
-    d->beforeRenderingJobs.clear();
-    qDeleteAll(d->afterRenderingJobs);
-    d->afterRenderingJobs.clear();
-    qDeleteAll(d->afterSwapJobs);
-    d->afterSwapJobs.clear();
-    d->renderJobMutex.unlock();
+
+    {
+        const std::lock_guard locker(d->renderJobMutex);
+        qDeleteAll(std::exchange(d->beforeSynchronizingJobs, {}));
+        qDeleteAll(std::exchange(d->afterSynchronizingJobs, {}));
+        qDeleteAll(std::exchange(d->beforeRenderingJobs, {}));
+        qDeleteAll(std::exchange(d->afterRenderingJobs, {}));;
+        qDeleteAll(std::exchange(d->afterSwapJobs, {}));
+    }
 
     // It is important that the pixmap cache is cleaned up during shutdown.
     // Besides playing nice, this also solves a practical problem that
@@ -1585,6 +1607,23 @@ bool QQuickWindow::event(QEvent *event)
     case QEvent::DevicePixelRatioChange:
         physicalDpiChanged();
         break;
+    case QEvent::ChildWindowAdded: {
+        auto *childEvent = static_cast<QChildWindowEvent*>(event);
+        auto *childWindow = childEvent->child();
+        qCDebug(lcQuickWindow) << "Child window" << childWindow << "added to" << this;
+        if (childWindow->handle()) {
+            // The reparenting has already resulted in the native window
+            // being added to its parent, on top of all other windows. We need
+            // to do a synchronous re-stacking of the windows here, to avoid
+            // leaving the window in the wrong position while waiting for the
+            // asynchronous callback to QQuickWindow::polishItems().
+            d->updateChildWindowStackingOrder();
+        } else {
+            qCDebug(lcQuickWindow) << "No platform window yet."
+                << "Deferring child window stacking until surface creation";
+        }
+        break;
+    }
     default:
         break;
     }
@@ -1598,6 +1637,35 @@ bool QQuickWindow::event(QEvent *event)
         return true;
     else
         return QWindow::event(event);
+}
+
+void QQuickWindowPrivate::updateChildWindowStackingOrder(QQuickItem *item)
+{
+    Q_Q(QQuickWindow);
+
+    if (!item) {
+        qCDebug(lcQuickWindow) << "Updating child window stacking order for" << q;
+        item = contentItem;
+    }
+    auto *itemPrivate = QQuickItemPrivate::get(item);
+    const auto paintOrderChildItems = itemPrivate->paintOrderChildItems();
+    for (auto *child : paintOrderChildItems) {
+        if (auto *windowContainer = qobject_cast<QQuickWindowContainer*>(child)) {
+            auto *window = windowContainer->containedWindow();
+            if (!window) {
+                qCDebug(lcQuickWindow) << windowContainer << "has no contained window yet";
+                continue;
+            }
+            if (window->parent() != q) {
+                qCDebug(lcQuickWindow) << window << "is not yet child of this window";
+                continue;
+            }
+            qCDebug(lcQuickWindow) << "Raising" << window << "owned by" << windowContainer;
+            window->raise();
+        }
+
+        updateChildWindowStackingOrder(child);
+    }
 }
 
 /*! \reimp */
@@ -1786,10 +1854,6 @@ void QQuickWindowPrivate::data_append(QQmlListProperty<QObject> *property, QObje
     if (!o)
         return;
     QQuickWindow *that = static_cast<QQuickWindow *>(property->object);
-    if (QQuickWindow *window = qmlobject_cast<QQuickWindow *>(o)) {
-        qCDebug(lcTransient) << window << "is transient for" << that;
-        window->setTransientParent(that);
-    }
     QQmlListProperty<QObject> itemProperty = QQuickItemPrivate::get(that->contentItem())->data();
     itemProperty.append(&itemProperty, o);
 }
@@ -1849,9 +1913,7 @@ void QQuickWindowPrivate::rhiCreationFailureMessage(const QString &backendName,
 
 void QQuickWindowPrivate::cleanupNodes()
 {
-    for (int ii = 0; ii < cleanupNodeList.size(); ++ii)
-        delete cleanupNodeList.at(ii);
-    cleanupNodeList.clear();
+    qDeleteAll(std::exchange(cleanupNodeList, {}));
 }
 
 void QQuickWindowPrivate::cleanupNodesOnShutdown(QQuickItem *item)
@@ -2253,14 +2315,6 @@ void QQuickWindow::cleanupSceneGraph()
     d->runAndClearJobs(&d->beforeRenderingJobs);
     d->runAndClearJobs(&d->afterRenderingJobs);
     d->runAndClearJobs(&d->afterSwapJobs);
-}
-
-void QQuickWindow::setTransientParent_helper(QQuickWindow *window)
-{
-    qCDebug(lcTransient) << this << "is transient for" << window;
-    setTransientParent(window);
-    disconnect(sender(), SIGNAL(windowChanged(QQuickWindow*)),
-               this, SLOT(setTransientParent_helper(QQuickWindow*)));
 }
 
 QOpenGLContext *QQuickWindowPrivate::openglContext()
@@ -2692,9 +2746,16 @@ QQmlIncubationController *QQuickWindow::incubationController() const
     text. Using such features in combination with the NativeTextRendering
     render type will lend poor and sometimes pixelated results.
 
-    \value QtTextRendering Use Qt's own rasterization algorithm.
+    Both \c QtTextRendering and \c CurveTextRendering are hardware-accelerated techniques.
+    \c QtTextRendering is the faster of the two, but uses more memory and will exhibit rendering
+    artifacts at large sizes. \c CurveTextRendering should be considered as an alternative in cases
+    where \c QtTextRendering does not give good visual results or where reducing graphics memory
+    consumption is a priority.
 
+    \value QtTextRendering Use Qt's own rasterization algorithm.
     \value NativeTextRendering Use the operating system's native rasterizer for text.
+    \value CurveTextRendering  Text is rendered using a curve rasterizer running directly on
+                               the graphics hardware. (Introduced in Qt 6.7.0.)
 */
 
 /*!
@@ -3599,14 +3660,21 @@ void QQuickWindow::endExternalCommands()
     shown, that minimizing the parent window will also minimize the transient
     window, and so on; however results vary somewhat from platform to platform.
 
-    Declaring a Window inside an Item or inside another Window will automatically
-    set up a transient parent relationship to the containing Item or Window,
+    Declaring a Window inside an Item or another Window, either via the
+    \l{Window::data}{default property} or a dedicated property, will automatically
+    set up a transient parent relationship to the containing window,
     unless the \l transientParent property is explicitly set. This applies
-    when creating Window items via \l Qt.createComponent or \l Qt.createQmlObject
-    as well, if an Item or Window is passed as the \c parent argument.
+    when creating Window items via \l [QML] {QtQml::Qt::createComponent()}
+    {Qt.createComponent} or \l [QML] {QtQml::Qt::createQmlObject()}
+    {Qt.createQmlObject} as well, as long as an Item or Window is passed
+    as the \c parent argument.
 
     A Window with a transient parent will not be shown until its transient
-    parent is shown, even if the \l visible property is \c true. Setting
+    parent is shown, even if the \l visible property is \c true. This also
+    applies for the automatic transient parent relationship described above.
+    In particular, if the Window's containing element is an Item, the window
+    will not be shown until the containing item is added to a scene, via its
+    \l{Concepts - Visual Parent in Qt Quick}{visual parent hierarchy}. Setting
     the \l transientParent to \c null will override this behavior:
 
     \snippet qml/nestedWindowTransientParent.qml 0
@@ -3616,6 +3684,11 @@ void QQuickWindow::endExternalCommands()
     default, depending on the window manager, it may also be necessary to set
     the \l Window::flags property with a suitable \l Qt::WindowType (such as
     \c Qt::Dialog).
+
+    If a \l{QtQuick::Window::parent}{visual parent} is set on the Window
+    the visual parent will take precedence over the transientParent.
+
+    \sa QtQuick::Window::parent
 */
 
 /*!
@@ -4252,6 +4325,18 @@ QQuickGraphicsConfiguration QQuickWindow::graphicsConfiguration() const
 {
     Q_D(const QQuickWindow);
     return d->graphicsConfig;
+}
+
+/*!
+    Creates a text node. When the scenegraph is not initialized, the return value is null.
+
+    \since 6.7
+    \sa QSGTextNode
+ */
+QSGTextNode *QQuickWindow::createTextNode() const
+{
+    Q_D(const QQuickWindow);
+    return isSceneGraphInitialized() ? d->context->sceneGraphContext()->createTextNode(d->context) : nullptr;
 }
 
 /*!

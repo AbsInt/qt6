@@ -1,5 +1,5 @@
 // Copyright (C) 2016 Canonical Limited and/or its subsidiary(-ies).
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <QtTest/QtTest>
 #include <QtQml/qqmlengine.h>
@@ -38,6 +38,7 @@ private slots:
     void redirect();
     void qmlSingletonWithinModule();
     void multiSingletonModule();
+    void multiSingletonModuleNoWarning();
     void implicitComponentModule();
     void customDiskCachePath();
     void qrcRootPathUrl();
@@ -62,19 +63,18 @@ void tst_QQMLTypeLoader::testLoadComplete()
 #ifdef Q_OS_ANDROID
     QSKIP("Loading dynamic plugins does not work on Android");
 #endif
-    QQuickView *window = new QQuickView();
+    std::unique_ptr<QQuickView> window = std::make_unique<QQuickView>();
     window->engine()->addImportPath(QT_TESTCASE_BUILDDIR);
     qDebug() << window->engine()->importPathList();
     window->setGeometry(0,0,240,320);
     window->setSource(testFileUrl("test_load_complete.qml"));
     window->show();
-    QVERIFY(QTest::qWaitForWindowExposed(window));
+    QVERIFY(QTest::qWaitForWindowExposed(window.get()));
 
     QObject *rootObject = window->rootObject();
     QTRY_VERIFY(rootObject != nullptr);
     QTRY_COMPARE(rootObject->property("created").toInt(), 2);
     QTRY_COMPARE(rootObject->property("loaded").toInt(), 2);
-    delete window;
 }
 
 void tst_QQMLTypeLoader::loadComponentSynchronously()
@@ -532,6 +532,18 @@ void tst_QQMLTypeLoader::multiSingletonModule()
     QVERIFY(obj->property("ok").toBool());
 
     checkCleanCacheLoad(QLatin1String("multiSingletonModule"));
+}
+
+void tst_QQMLTypeLoader::multiSingletonModuleNoWarning()
+{
+    // Should not warn about a "cyclic" dependency between the singletons
+    QTest::failOnWarning(QRegularExpression(".*"));
+
+    QQmlEngine engine;
+    QQmlComponent component(&engine, testFileUrl("imports/multisingletonmodule/a.qml"));
+    QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+    QScopedPointer<QObject> o(component.create());
+    QVERIFY(!o.isNull());
 }
 
 void tst_QQMLTypeLoader::implicitComponentModule()

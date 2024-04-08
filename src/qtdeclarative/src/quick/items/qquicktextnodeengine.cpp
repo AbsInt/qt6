@@ -13,7 +13,6 @@
 #include <QtGui/qtextlist.h>
 
 #include <private/qquicktext_p.h>
-#include <private/qquicktextdocument_p.h>
 #include <private/qtextdocumentlayout_p.h>
 #include <private/qtextimagehandler_p.h>
 #include <private/qrawfont_p.h>
@@ -429,15 +428,8 @@ void QQuickTextNodeEngine::addTextObject(const QTextBlock &block, const QPointF 
 
         if (format.objectType() == QTextFormat::ImageObject) {
             QTextImageFormat imageFormat = format.toImageFormat();
-            if (QQuickTextDocumentWithImageResources *imageDoc = qobject_cast<QQuickTextDocumentWithImageResources *>(textDocument)) {
-                image = imageDoc->image(imageFormat);
-
-                if (image.isNull())
-                    return;
-            } else {
-                QTextImageHandler *imageHandler = static_cast<QTextImageHandler *>(handler);
-                image = imageHandler->image(textDocument, imageFormat);
-            }
+            QTextImageHandler *imageHandler = static_cast<QTextImageHandler *>(handler);
+            image = imageHandler->image(textDocument, imageFormat);
         }
 
         if (image.isNull()) {
@@ -702,6 +694,9 @@ void QQuickTextNodeEngine::mergeProcessedNodes(QList<BinaryTreeNode *> *regularN
         BinaryTreeNode *node = m_processedNodes.data() + i;
 
         if (node->image.isNull()) {
+            if (node->glyphRun.isEmpty())
+                continue;
+
             BinaryTreeNodeKey key(node);
 
             QList<BinaryTreeNode *> &nodes = map[key];
@@ -756,7 +751,7 @@ void QQuickTextNodeEngine::mergeProcessedNodes(QList<BinaryTreeNode *> *regularN
     }
 }
 
-void  QQuickTextNodeEngine::addToSceneGraph(QQuickTextNode *parentNode,
+void QQuickTextNodeEngine::addToSceneGraph(QSGInternalTextNode *parentNode,
                                             QQuickText::TextStyle style,
                                             const QColor &styleColor)
 {
@@ -801,7 +796,7 @@ void  QQuickTextNodeEngine::addToSceneGraph(QQuickTextNode *parentNode,
                 ? m_selectedTextColor
                 : textDecoration.color;
 
-        parentNode->addRectangleNode(textDecoration.rect, color);
+        parentNode->addDecorationNode(textDecoration.rect, color);
     }
 
     // Finally add the selected text on top of everything

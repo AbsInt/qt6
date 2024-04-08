@@ -64,7 +64,8 @@ depends += \
     ../../quickwidgets \
     ../../qmllocalstorage \
     ../../quicklayouts \
-    ../../labs
+    ../../labs \
+    ../../quick/jar/org/qtproject/qt/android
 
 # both have their own documentation project
 excludedirs += \
@@ -117,5 +118,5 @@ macro.QQEM = "Qt Quick Effect Maker"
 # suppress qdoc warnings for \instantiates entries
 spurious += "C\\+\\+ class .*\\\\instantiates .*"
 
-# Fail the documentation build if there are more warnings than the limit
-warninglimit = 1
+# Enforce zero documentation warnings
+warninglimit = 0

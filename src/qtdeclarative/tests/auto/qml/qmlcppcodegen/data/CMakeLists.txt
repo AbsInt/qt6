@@ -4,12 +4,14 @@
 set(cpp_sources
     ambiguous.h
     birthdayparty.cpp birthdayparty.h
+    convertQJSPrimitiveValueToIntegral.h
     cppbaseclass.h
     druggeljug.h
     dummyobjekt.h
     dynamicmeta.h
     enumproblems.h
     enumProperty.h
+    getOptionalLookup.h
     gadgetwithenum.h
     invisible.h
     listprovider.h
@@ -31,8 +33,11 @@ set(cpp_sources
 
 set(qml_files
     AccessModelMethodsFromOutside.qml
+    Action.qml
     ArraySequenceLengthInterop.qml
+    B.qml
     BadType.qml
+    BaseConstraint.qml
     BaseMember.qml
     BindingExpression.qml
     CxxTypeFromDir.qml
@@ -42,9 +47,15 @@ set(qml_files
     Cycle3.qml
     CppMethodListReturnType.qml
     Dummy.qml
+    Dummy2.qml
+    EditConstraint.qml
     Enums.qml
     Foozle.qml
+    GetOptionalLookupOnQJSValueNonStrict.qml
+    GetOptionalLookupShadowed.qml
     Loopy.qml
+    NotificationItem.qml
+    NotificationsUtils.js
     OkType.qml
     Panel.qml
     Planner.qml
@@ -55,12 +66,14 @@ set(qml_files
     ProgressBar/Timeline.qml
     ProgressBar/TimelineAnimation.qml
     RootWithoutId.qml
+    Satisfaction.qml
     SelectionRectangle.qml
     ShadowedObjectName.qml
     ShadowedObjectNameDerived.qml
     StoreMetaEnum.qml
     Test.qml
     TestCase.qml
+    Variable.qml
     WindowDerived.qml
     aliasLookup.qml
     ambiguous1/Ambiguous.qml
@@ -70,10 +83,12 @@ set(qml_files
     anchorsFill.qml
     argumentConversion.qml
     array.qml
+    arrayCtor.qml
     asCast.qml
     attachedBaseEnum.qml
     badSequence.qml
     basicBlocksWithBackJump.qml
+    basicBlocksWithBackJump_infinite.qml
     basicDTZ.qml
     bindToValueType.qml
     blockComments.qml
@@ -85,6 +100,7 @@ set(qml_files
     childobject.qml
     colorAsVariant.qml
     colorString.qml
+    compareOriginals.qml
     comparisonTypes.qml
     componentReturnType.qml
     compositeTypeMethod.qml
@@ -97,9 +113,12 @@ set(qml_files
     conversionInDeadCode.qml
     conversions.qml
     conversions2.qml
+    convertPrimitiveToVar.qml
+    convertQJSPrimitiveValueToIntegral.qml
     convertToOriginalReadAcumulatorForUnaryOperators.qml
     curlygrouped.qml
     cycleHead.qml
+    dateConstruction.qml
     dateConversions.qml
     deadShoeSize.qml
     deadStoreLoop.qml
@@ -133,10 +152,12 @@ set(qml_files
     functionLookup.qml
     functionReturningVoid.qml
     functionTakingVar.qml
+    getOptionalLookup.qml
     globals.qml
     hidden/Main.qml
     hidden/Style.qml
     idAccess.qml
+    ignoredFunctionReturn.qml
     immediateQuit.qml
     imports/QmlBench/Globals.qml
     importsFromImportPath.qml
@@ -148,10 +169,12 @@ set(qml_files
     intToEnum.qml
     interactive.qml
     interceptor.qml
+    internalConversion.qml
     invisibleBase.qml
     invisibleListElementType.qml
     invisibleTypes.qml
     isnan.qml
+    iteration.qml
     javaScriptArgument.qml
     jsArrayMethods.qml
     jsArrayMethodsUntyped.qml
@@ -174,6 +197,7 @@ set(qml_files
     mathOperations.qml
     mergedObjectRead.qml
     mergedObjectWrite.qml
+    methodOnListLookup.qml
     methods.qml
     modulePrefix.qml
     moveRegVoid.qml
@@ -187,11 +211,13 @@ set(qml_files
     notEqualsInt.qml
     notNotString.qml
     nullAccess.qml
+    nullAccessInsideSignalHandler.qml
     nullComparison.qml
     numbersInJsPrimitive.qml
     objectInVar.qml
     objectLookupOnListElement.qml
     objectWithStringListMethod.qml
+    optionalComparison.qml
     outOfBounds.qml
     overriddenMember.qml
     ownProperty.qml
@@ -206,6 +232,7 @@ set(qml_files
     registerelimination.qml
     renameAdjust.qml
     resettable.qml
+    returnAfterReject.qml
     revisions.qml
     scopeIdLookup.qml
     scopeVsObject.qml
@@ -214,8 +241,10 @@ set(qml_files
     script.mjs
     sequenceToIterable.qml
     setLookupConversion.qml
+    setLookupOriginalScope.qml
     shadowedAsCasts.qml
     shadowedMethod.qml
+    shadowedPrimitiveCmpEqNull.qml
     shared/Slider.qml
     shifts.qml
     signal.qml
@@ -228,6 +257,7 @@ set(qml_files
     stringArg.qml
     stringLength.qml
     stringToByteArray.qml
+    structuredValueType.qml
     testlogger.js
     text.qml
     themerbad.qml
@@ -237,6 +267,7 @@ set(qml_files
     toString.qml
     topLevelComponent.qml
     translation.qml
+    trigraphs.qml
     trivialSignalHandler.qml
     typePropagationLoop.qml
     typePropertyClash.qml
@@ -255,12 +286,14 @@ set(qml_files
     valueTypeLists.qml
     valueTypeProperty.qml
     valueTypeReference.qml
+    variantMap.qml
     variantMapLookup.qml
     variantReturn.qml
     variantlist.qml
     versionmismatch.qml
     voidConversion.qml
     voidfunction.qml
+    writeback.qml
     dummy_imports.qml
 )
 
@@ -282,9 +315,14 @@ qt_autogen_tools_initial_setup(codegen_test_module)
 set_target_properties(codegen_test_module PROPERTIES
     # We really want qmlcachegen here, even if qmlsc is available
     QT_QMLCACHEGEN_EXECUTABLE qmlcachegen
+    QT_QMLCACHEGEN_ARGUMENTS --validate-basic-blocks
 )
 
 qt_policy(SET QTP0001 NEW)
+
+target_compile_definitions(codegen_test_module PUBLIC
+    -DGENERATED_CPP_FOLDER="${CMAKE_CURRENT_BINARY_DIR}/.rcc/qmlcache"
+)
 
 qt6_add_qml_module(codegen_test_module
     VERSION 1.5
@@ -292,6 +330,7 @@ qt6_add_qml_module(codegen_test_module
     IMPORT_PATH "${CMAKE_CURRENT_SOURCE_DIR}/imports/"
     DEPENDENCIES
         QtQuick
+        QtQuick.Controls
         QtQuick.Templates
         QtQuick.Shapes
     SOURCES
@@ -314,6 +353,7 @@ qt_autogen_tools_initial_setup(codegen_test_module_verify)
 set_target_properties(codegen_test_module_verify PROPERTIES
     # We really want qmlcachegen here, even if qmlsc is available
     QT_QMLCACHEGEN_EXECUTABLE qmlcachegen
+    QT_QMLCACHEGEN_ARGUMENTS --validate-basic-blocks
 )
 
 
@@ -323,6 +363,7 @@ qt6_add_qml_module(codegen_test_module_verify
     IMPORT_PATH "${CMAKE_CURRENT_SOURCE_DIR}/imports/"
     DEPENDENCIES
         QtQuick
+        QtQuick.Controls
         QtQuick.Templates
         QtQuick.Shapes
     SOURCES

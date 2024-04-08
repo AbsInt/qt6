@@ -1,6 +1,5 @@
 // Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
-
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <QtCore/qglobal.h>
 #ifdef Q_OS_WIN
@@ -666,7 +665,7 @@ void tst_QAccessibility::textAttributes_data()
     defaultComplexFont.setStyle(QFont::StyleItalic);
     defaultComplexFont.setUnderline(true);
 
-    static QStringList defaults = QString("font-style:normal;font-weight:normal;text-align:left;text-position:baseline;font-size:13pt").split(';');
+    static QStringList defaults = QString("font-style:normal;font-weight:normal;text-align:left;text-position:baseline;font-size:13pt;text-line-through-type:none").split(';');
     static QStringList bold = defaults;
     bold[1] = QString::fromLatin1("font-weight:bold");
 
@@ -702,7 +701,7 @@ void tst_QAccessibility::textAttributes_data()
     defaultFontDifferentBoldItalic[1] = QString::fromLatin1("font-weight:bold");
 
     static QStringList defaultFontDifferentMonospace = defaultFontDifferent;
-    defaultFontDifferentMonospace[7] = (QLatin1String("font-family:\"monospace\""));
+    defaultFontDifferentMonospace[8] = (QLatin1String("font-family:\"monospace\""));
 
     static QStringList defaultFontDifferentFont8pt = defaultFontDifferent;
     defaultFontDifferentFont8pt[4] = (QLatin1String("font-size:8pt"));
@@ -3499,7 +3498,7 @@ void tst_QAccessibility::calendarWidgetTest()
     QCOMPARE(interface->rect(), globalGeometry);
 
     QWidget *navigationBar = 0;
-    foreach (QObject *child, calendarWidget.children()) {
+    for (QObject *child : calendarWidget.children()) {
         if (child->objectName() == QLatin1String("qt_calendar_navigationbar")) {
             navigationBar = static_cast<QWidget *>(child);
             break;
@@ -3509,7 +3508,7 @@ void tst_QAccessibility::calendarWidgetTest()
     QVERIFY(verifyChild(navigationBar, interface, 0, globalGeometry));
 
     QAbstractItemView *calendarView = 0;
-    foreach (QObject *child, calendarWidget.children()) {
+    for (QObject *child : calendarWidget.children()) {
         if (child->objectName() == QLatin1String("qt_calendar_calendarview")) {
             calendarView = static_cast<QAbstractItemView *>(child);
             break;

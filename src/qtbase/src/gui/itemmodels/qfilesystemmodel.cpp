@@ -1914,7 +1914,7 @@ void QFileSystemModelPrivate::removeVisibleFile(QFileSystemNode *parentNode, int
     update and emit dataChanged if it has actually changed.
  */
 void QFileSystemModelPrivate::_q_fileSystemChanged(const QString &path,
-                                                   const QList<QPair<QString, QFileInfo>> &updates)
+                                                   const QList<std::pair<QString, QFileInfo>> &updates)
 {
 #if QT_CONFIG(filesystemwatcher)
     Q_Q(QFileSystemModel);
@@ -2101,7 +2101,7 @@ void QFileSystemModelPrivate::init()
 
     delayedSortTimer.setSingleShot(true);
 
-    qRegisterMetaType<QList<QPair<QString, QFileInfo>>>();
+    qRegisterMetaType<QList<std::pair<QString, QFileInfo>>>();
 #if QT_CONFIG(filesystemwatcher)
     q->connect(fileInfoGatherer.get(), SIGNAL(newListOfFiles(QString,QStringList)),
                q, SLOT(_q_directoryChanged(QString,QStringList)));

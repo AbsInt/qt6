@@ -1,5 +1,5 @@
 // Copyright (C) 2021 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include "../../../../shared/fakedirmodel.h"
 
@@ -4820,6 +4820,9 @@ void tst_QTreeView::fetchMoreOnScroll()
     if (QGuiApplication::platformName().startsWith(QLatin1String("wayland"), Qt::CaseInsensitive))
         QSKIP("Wayland: This fails. Figure out why.");
 
+    if (QGuiApplication::platformName().startsWith(QLatin1String("eglfs"), Qt::CaseInsensitive))
+        QSKIP("EGLFS does not allow resizing on top level window");
+
     QTreeView tw;
     FetchMoreModel im;
     tw.setModel(&im);
@@ -4897,6 +4900,9 @@ void tst_QTreeView::checkIntersectedRect_data()
 
 void tst_QTreeView::checkIntersectedRect()
 {
+    if (QGuiApplication::platformName().startsWith(QLatin1String("eglfs"), Qt::CaseInsensitive))
+        QSKIP("EGLFS does not allow resizing on top level window");
+
     QFETCH(QStandardItemModel *, model);
     QFETCH(const QList<QModelIndex>, changedIndexes);
     QFETCH(bool, isEmpty);
@@ -5197,6 +5203,10 @@ void tst_QTreeView::fetchUntilScreenFull()
         };
         TreeItem* m_root;
     };
+
+    if (QGuiApplication::platformName().startsWith(QLatin1String("eglfs"), Qt::CaseInsensitive))
+        QSKIP("EGLFS does not allow resizing on top level window");
+
 
     QTreeView tv;
     TreeModel model;

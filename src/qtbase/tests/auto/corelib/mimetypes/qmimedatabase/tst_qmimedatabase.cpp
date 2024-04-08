@@ -1,5 +1,5 @@
 // Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include "tst_qmimedatabase.h"
 #include <qmimedatabase.h>
@@ -16,11 +16,12 @@
 #include <QtCore/QElapsedTimer>
 #include <QtCore/QFile>
 #include <QtCore/QFileInfo>
+#include <QtCore/qspan.h>
 #include <QtCore/QStandardPaths>
 #include <QtCore/QTemporaryDir>
 #include <QtCore/QTextStream>
 #include <QtConcurrent/QtConcurrentRun>
-#include <private/qspan_p.h>
+#include <QtCore/private/qduplicatetracker_p.h>
 
 #include <QTest>
 #include <QBuffer>
@@ -175,7 +176,7 @@ void tst_QMimeDatabase::mimeTypeForName()
     QMimeType s0 = db.mimeTypeForName(QString::fromLatin1("application/x-zerosize"));
     QVERIFY(s0.isValid());
     QCOMPARE(s0.name(), QString::fromLatin1("application/x-zerosize"));
-    QCOMPARE(s0.comment(), QString::fromLatin1("empty document"));
+    QCOMPARE(s0.comment(), QString::fromLatin1("Empty document"));
 
     QMimeType s0Again = db.mimeTypeForName(QString::fromLatin1("application/x-zerosize"));
     QCOMPARE(s0Again.name(), s0.name());
@@ -195,7 +196,7 @@ void tst_QMimeDatabase::mimeTypeForName()
 
     QMimeType bzip2 = db.mimeTypeForName(QString::fromLatin1("application/x-bzip2"));
     QVERIFY(bzip2.isValid());
-    QCOMPARE(bzip2.comment(), QString::fromLatin1("Bzip archive"));
+    QCOMPARE(bzip2.comment(), QString::fromLatin1("Bzip2 archive"));
 
     QMimeType defaultMime = db.mimeTypeForName(QString::fromLatin1("application/octet-stream"));
     QVERIFY(defaultMime.isValid());
@@ -241,8 +242,10 @@ void tst_QMimeDatabase::mimeTypeForFileName_data()
 
     QTest::newRow("desktop file") << "foo.desktop" << "application/x-desktop";
     QTest::newRow("old kdelnk file is x-desktop too") << "foo.kdelnk" << "application/x-desktop";
-    QTest::newRow("double-extension file") << "foo.tar.bz2" << "application/x-bzip-compressed-tar";
-    QTest::newRow("single-extension file") << "foo.bz2" << "application/x-bzip";
+    QTest::newRow("double-extension file") << "foo.tar.bz2"
+                                           << "application/x-bzip2-compressed-tar";
+    QTest::newRow("single-extension file") << "foo.bz2"
+                                           << "application/x-bzip2";
     QTest::newRow(".doc should assume msword") << "somefile.doc" << "application/msword"; // #204139
     QTest::newRow("glob that uses [] syntax, 1") << "Makefile" << "text/x-makefile";
     QTest::newRow("glob that uses [] syntax, 2") << "makefile" << "text/x-makefile";
@@ -263,7 +266,7 @@ static inline QByteArray msgMimeTypeForFileNameFailed(const QList<QMimeType> &ac
                                                       const QString &expected)
 {
     QByteArray result = "Actual (";
-    foreach (const QMimeType &m, actual) {
+    for (const QMimeType &m : actual) {
         result += m.name().toLocal8Bit();
         result +=  ' ';
     }
@@ -281,7 +284,7 @@ void tst_QMimeDatabase::mimeTypeForFileName()
     QVERIFY(mime.isValid());
     QCOMPARE(mime.name(), expectedMimeType);
 
-    QList<QMimeType> mimes = db.mimeTypesForFileName(fileName);
+    const QList<QMimeType> mimes = db.mimeTypesForFileName(fileName);
     if (expectedMimeType == "application/octet-stream") {
         QVERIFY(mimes.isEmpty());
     } else {
@@ -465,7 +468,10 @@ void tst_QMimeDatabase::comment()
     QMimeType directory = db.mimeTypeForName(s_inodeMimetype);
     QCOMPARE(directory.comment(), QStringLiteral("Ordner"));
     QLocale::setDefault(QLocale("fr"));
-    QCOMPARE(directory.comment(), QStringLiteral("dossier"));
+    // Missing in s-m-i 2.3 due to case changes
+    // QCOMPARE(directory.comment(), QStringLiteral("dossier"));
+    QMimeType cpp = db.mimeTypeForName("text/x-c++src");
+    QCOMPARE(cpp.comment(), QStringLiteral("code source C++"));
 }
 
 // In here we do the tests that need some content in a temporary file.
@@ -646,6 +652,9 @@ void tst_QMimeDatabase::mimeTypeForFileNameAndData()
 #ifdef Q_OS_UNIX
 void tst_QMimeDatabase::mimeTypeForUnixSpecials_data()
 {
+#ifndef AT_FDCWD
+    QSKIP("fdopendir and fstatat are not available");
+#else
     QTest::addColumn<QString>("name");
     QTest::addColumn<QString>("expected");
 
@@ -706,6 +715,7 @@ void tst_QMimeDatabase::mimeTypeForUnixSpecials_data()
 
     if (!found)
         nothingfound();
+#endif
 }
 
 void tst_QMimeDatabase::mimeTypeForUnixSpecials()
@@ -726,9 +736,9 @@ void tst_QMimeDatabase::allMimeTypes()
     QVERIFY(!lst.isEmpty());
 
     // Hardcoding this is the only way to check both providers find the same number of mimetypes.
-    QCOMPARE(lst.size(), 851);
+    QCOMPARE(lst.size(), 908);
 
-    foreach (const QMimeType &mime, lst) {
+    for (const QMimeType &mime : lst) {
         const QString name = mime.name();
         QVERIFY(!name.isEmpty());
         QCOMPARE(name.count(QLatin1Char('/')), 1);
@@ -747,7 +757,9 @@ void tst_QMimeDatabase::suffixes_data()
     QTest::newRow("mimetype with a single pattern") << "application/pdf" << "*.pdf" << "pdf";
     QTest::newRow("mimetype-with-multiple-patterns-kpr") << "application/x-kpresenter" << "*.kpr;*.kpt" << "kpr";
     // The preferred suffix for image/jpeg is *.jpg, as per https://bugs.kde.org/show_bug.cgi?id=176737
-    QTest::newRow("jpeg") << "image/jpeg" << "*.jpe;*.jpg;*.jpeg" << "jpg";
+    QTest::newRow("jpeg") << "image/jpeg"
+                          << "*.jfif;*.jpe;*.jpg;*.jpeg"
+                          << "jpg";
     QTest::newRow("mimetype with many patterns") << "application/vnd.wordperfect" << "*.wp;*.wp4;*.wp5;*.wp6;*.wpd;*.wpp" << "wp";
     QTest::newRow("oasis text mimetype") << "application/vnd.oasis.opendocument.text" << "*.odt" << "odt";
     QTest::newRow("oasis presentation mimetype") << "application/vnd.oasis.opendocument.presentation" << "*.odp" << "odp";
@@ -784,6 +796,26 @@ void tst_QMimeDatabase::knownSuffix()
     QCOMPARE(db.suffixForFileName(QString::fromLatin1("foo.TAR")), QString::fromLatin1("TAR")); // preserve case
     QCOMPARE(db.suffixForFileName(QString::fromLatin1("foo.flatpakrepo")), QString::fromLatin1("flatpakrepo"));
     QCOMPARE(db.suffixForFileName(QString::fromLatin1("foo.anim2")), QString()); // the glob is anim[0-9], no way to extract the extension without expensive regexp capturing
+}
+
+void tst_QMimeDatabase::filterString_data()
+{
+    QTest::addColumn<QString>("mimeType");
+    QTest::addColumn<QString>("expectedFilterString");
+
+    QTest::newRow("single-pattern") << "application/pdf"
+                                    << "PDF document (*.pdf)";
+    QTest::newRow("multiple-patterns-text-plain") << "text/plain"
+                                                  << "Plain text document (*.txt *.asc *,v)";
+}
+
+void tst_QMimeDatabase::filterString()
+{
+    QFETCH(QString, mimeType);
+    QFETCH(QString, expectedFilterString);
+
+    QMimeDatabase db;
+    QCOMPARE(db.mimeTypeForName(mimeType).filterString(), expectedFilterString);
 }
 
 void tst_QMimeDatabase::symlinkToFifo() // QTBUG-48529
@@ -825,6 +857,8 @@ void tst_QMimeDatabase::findByFileName_data()
 
     QByteArray line(1024, Qt::Uninitialized);
 
+    QDuplicateTracker<QString, 800> seen;
+
     while (!f.atEnd()) {
         const qint64 len = f.readLine(line.data(), 1023);
 
@@ -840,10 +874,16 @@ void tst_QMimeDatabase::findByFileName_data()
         QString xFail;
         if (list.size() >= 3)
             xFail = list.at(2);
+        QString rowTag = filePath;
+        if (seen.hasSeen(rowTag)) {
+            // Two testcases for the same file, e.g.
+            // test.ogg audio/ogg oxx
+            // test.ogg audio/x-vorbis+ogg x
+            rowTag += "_2";
+        }
 
-        QTest::newRow(filePath.toLatin1().constData())
-                      << QString(prefix + filePath)
-                      << mimeTypeType << xFail;
+        QTest::newRow(rowTag.toLatin1().constData())
+                << QString(prefix + filePath) << mimeTypeType << xFail;
     }
 }
 
@@ -1035,7 +1075,8 @@ static void checkHasMimeType(const QString &mimeType)
     QVERIFY(db.mimeTypeForName(mimeType).isValid());
 
     bool found = false;
-    foreach (const QMimeType &mt, db.allMimeTypes()) {
+    const auto all = db.allMimeTypes();
+    for (const QMimeType &mt : all) {
         if (mt.name() == mimeType) {
             found = true;
             break;
@@ -1231,7 +1272,7 @@ void tst_QMimeDatabase::installNewLocalMimeType()
 
     // QTBUG-116905: globPatterns() should merge all locations
     // add-extension.xml adds *.jnewext
-    const QStringList expectedJpegPatterns{ "*.jpg", "*.jpeg", "*.jpe", "*.jnewext" };
+    const QStringList expectedJpegPatterns{ "*.jpg", "*.jpeg", "*.jpe", "*.jfif", "*.jnewext" };
     QCOMPARE(db.mimeTypeForName(QStringLiteral("image/jpeg")).globPatterns(), expectedJpegPatterns);
 
     // Now that we have two directories with mime definitions, check that everything still works

@@ -1,5 +1,5 @@
 // Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <qtest.h>
 #include <QtQml/qqmlcomponent.h>
@@ -98,7 +98,7 @@ void tst_qquickapplication::active()
             QVERIFY(item->property("active2").toBool());
 
             // not active again
-            QWindowSystemInterface::handleWindowActivated(nullptr);
+            QWindowSystemInterface::handleFocusWindowChanged(nullptr);
             QTRY_VERIFY(QGuiApplication::focusWindow() != &window);
             QVERIFY(!item->property("active").toBool());
             QVERIFY(!item->property("active2").toBool());
@@ -171,7 +171,7 @@ void tst_qquickapplication::state()
             QCOMPARE(Qt::ApplicationState(item->property("state2").toInt()), Qt::ApplicationActive);
 
             // not active again
-            QWindowSystemInterface::handleWindowActivated(nullptr);
+            QWindowSystemInterface::handleFocusWindowChanged(nullptr);
             QTRY_VERIFY(QGuiApplication::focusWindow() != &window);
             QCOMPARE(Qt::ApplicationState(item->property("state").toInt()),
                      Qt::ApplicationInactive);

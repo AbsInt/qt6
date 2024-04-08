@@ -2,6 +2,7 @@ Version: 2
 Include: [
     cmake_platforms_qemu.yaml,
     cmake_platforms_qemu_qnx710.yaml,
+    cmake_platforms_qemu_vxworks.yaml,
     cmake_platforms_target_android.yaml,
     cmake_platforms_wasm.yaml,
     macos.yaml
@@ -12,8 +13,8 @@ Configurations:
     Id: 'ubuntu-22.04-documentation'
     Template: 'qtci-linux-Ubuntu-22.04-x86_64-51'
     Compiler: 'GCC'
-    Features: ['Sccache', 'Documentation', 'TestDocs', 'UseConfigure', 'DoNotRunTests']
-    Configure arguments: '-make examples -developer-build -c++std c++20 -linker gold -no-warnings-are-errors -qtlibinfix TestInfix -qtnamespace TestNamespace'
+    Features: ['Sccache', 'Documentation', 'UseConfigure', 'DoNotRunTests']
+    Configure arguments: '-make examples -developer-build -c++std c++20 -linker gold -qtlibinfix TestInfix -qtnamespace TestNamespace'
     Environment variables: ['NON_QTBASE_CMAKE_ARGS=-DFFMPEG_DIR={{.Env.FFMPEG_DIR}}']
 -
     Id: 'ubuntu-22.04'
@@ -30,7 +31,7 @@ Configurations:
     Id: 'ubuntu-22.04-documentation-x11-tests'
     Template: 'qtci-linux-Ubuntu-22.04-x86_64-51'
     Compiler: 'GCC'
-    Features: ['Sccache', 'TestOnly']
+    Features: ['Sccache', 'TestDocs', 'TestOnly']
     Platform dependency: 'ubuntu-22.04-documentation'
 -
     Id: 'ubuntu-22.04-x11-tests'
@@ -168,7 +169,7 @@ Configurations:
     Configure arguments: '-nomake examples -release -force-debug-info -headersclean -separate-debug-info -qt-libjpeg -qt-libpng -qt-pcre -qt-harfbuzz -qt-doubleconversion -no-libudev -bundled-xcb-xinput'
     Environment variables: [
         'CMAKE_ARGS=-DOpenGL_GL_PREFERENCE=LEGACY -DOPENSSL_ROOT_DIR={{.Env.OPENSSL_HOME}}',
-        'NON_QTBASE_CMAKE_ARGS=-DFFMPEG_DIR={{.Env.FFMPEG_DIR}}'
+        'NON_QTBASE_CMAKE_ARGS=-DFFMPEG_DIR={{.Env.FFMPEG_DIR}} -DFEATURE_native_grpc=OFF'
     ]
 -
     Id: 'rhel-9.2'
@@ -186,7 +187,7 @@ Configurations:
     Template: 'qtci-linux-Debian-11.6-aarch64-50'
     Compiler: 'GCC'
     Features: ['Packaging', 'UseConfigure', 'InstallQt5Dependencies', 'DoNotRunTests']
-    Configure arguments: '-nomake examples -release -force-debug-info -separate-debug-info -qt-libjpeg -qt-libpng -qt-pcre -qt-harfbuzz -no-libudev -bundled-xcb-xinput'
+    Configure arguments: '-nomake examples -release -force-debug-info -separate-debug-info -qt-libjpeg -qt-libpng -qt-pcre -qt-doubleconversion -qt-harfbuzz -no-libudev -bundled-xcb-xinput'
     Environment variables: [
         'CMAKE_ARGS=-DOpenGL_GL_PREFERENCE=LEGACY'
     ]
@@ -209,7 +210,7 @@ Configurations:
     Compiler: 'Clang'
     Target compiler: 'Clang'
     Platform dependency: 'macos-universal-on-x86_64'
-    Features: ['Packaging', 'Sccache', 'DebugAndRelease', 'DisableTests', 'UseConfigure']
+    Features: ['Packaging', 'Sccache', 'DebugAndRelease', 'DisableTests', 'UseConfigure', 'WarningsAreErrors']
     Environment variables: [
         'TARGET_CONFIGURE_ARGS=-debug-and-release -nomake examples -platform macx-ios-clang',
         'NON_QTBASE_TARGET_CMAKE_ARGS=-DFEATURE_native_grpc=OFF -DQT_PROTOBUF_WELL_KNOWN_TYPES_PROTO_DIR=/usr/local/include',
@@ -244,7 +245,7 @@ Configurations:
     Id: 'windows-11_22h2-llvm'
     Template: 'qtci-windows-11_22H2-x86_64-51'
     Compiler: 'Clang'
-    Features: ['Sccache', 'UseConfigure']
+    Features: ['Packaging','Sccache', 'UseConfigure']
     Configure arguments: '-release -force-debug-info -separate-debug-info -nomake examples'
     Environment variables: [
         'Path=C:\llvm-mingw\bin;{{.Env.Path}}',
@@ -280,26 +281,28 @@ Configurations:
         'Protobuf_ROOT={{.Env.Protobuf_ROOT_mingw}}',
     ]
 -
-    Id: 'focal-arm64-debian-pkg-packaging'
+    Id: 'jammy-arm64-debian-pkg-packaging'
     Template: 'qtci-linux-Debian-11.6-aarch64-50'
     Compiler: 'GCC'
     Features: ['Packaging','DebianPackaging','DisableTests', 'Insignificant']
     Environment variables: [
-        'DEBIAN_RULES_REF=6.6_dev',
+        'DEBIAN_RULES_REF=6.7_dev',
+        'COIN_TARGET_DIST=tqtc-jammy',
         'COIN_EXTRA_DEBIAN_PACKAGES={{.Env.HOME}}/debian_packages/',
-        'COIN_SBUILD_CHROOT=focal-arm64-sbuild',
-        'COIN_EXTRA_DEBIAN_REPO=deb http://ports.ubuntu.com/ubuntu-ports/ focal main universe multiverse',
+        'COIN_SBUILD_CHROOT=jammy-arm64-sbuild',
+        'COIN_EXTRA_DEBIAN_REPO=deb http://ports.ubuntu.com/ubuntu-ports/ jammy main universe multiverse',
         'COIN_SKIP_DEBIAN_MODULES=qt5 qtqa qtactiveqt qtdoc qtwebengine qtwebview',
     ]
 -
-    Id: 'focal-amd64-debian-pkg-packaging'
+    Id: 'jammy-amd64-debian-pkg-packaging'
     Template: 'qtci-linux-Ubuntu-22.04-x86_64-51'
     Compiler: 'GCC'
     Features: ['Packaging','DebianPackaging','DisableTests', 'Insignificant']
     Environment variables: [
-        'DEBIAN_RULES_REF=6.6_dev',
+        'DEBIAN_RULES_REF=6.7_dev',
+        'COIN_TARGET_DIST=tqtc-jammy',
         'COIN_EXTRA_DEBIAN_PACKAGES={{.Env.HOME}}/debian_packages/',
-        'COIN_SBUILD_CHROOT=focal-amd64-sbuild',
-        'COIN_EXTRA_DEBIAN_REPO=deb http://archive.ubuntu.com/ubuntu/ focal main universe multiverse',
+        'COIN_SBUILD_CHROOT=jammy-amd64-sbuild',
+        'COIN_EXTRA_DEBIAN_REPO=deb http://archive.ubuntu.com/ubuntu/ jammy main universe multiverse',
         'COIN_SKIP_DEBIAN_MODULES=qt5 qtqa qtactiveqt qtdoc qtwebengine qtwebview',
     ]

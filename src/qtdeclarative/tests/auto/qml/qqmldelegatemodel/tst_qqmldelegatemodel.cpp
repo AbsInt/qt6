@@ -1,7 +1,8 @@
 // Copyright (C) 2019 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <QtTest/qtest.h>
+#include <QtCore/qjsonobject.h>
 #include <QtCore/QConcatenateTablesProxyModel>
 #include <QtGui/QStandardItemModel>
 #include <QtQml/qqmlcomponent.h>
@@ -12,6 +13,8 @@
 #include <QtQuick/qquickitem.h>
 #include <QtQuickTestUtils/private/qmlutils_p.h>
 #include <QtTest/QSignalSpy>
+
+#include <forward_list>
 
 class tst_QQmlDelegateModel : public QQmlDataTest
 {
@@ -31,9 +34,11 @@ private slots:
     void nestedDelegates();
     void universalModelData();
     void typedModelData();
+    void requiredModelData();
     void overriddenModelData();
     void deleteRace();
     void persistedItemsStayInCache();
+    void unknownContainersAsModel();
     void doNotUnrefObjectUnderConstruction();
     void clearCacheDuringInsertion();
 };
@@ -447,6 +452,27 @@ void tst_QQmlDelegateModel::typedModelData()
             break;
         }
     }
+
+}
+
+void tst_QQmlDelegateModel::requiredModelData()
+{
+    QQmlEngine engine;
+    QQmlComponent c(&engine, testFileUrl("requiredModelData.qml"));
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+    QScopedPointer<QObject> o(c.create());
+
+    QQmlDelegateModel *delegateModel = qobject_cast<QQmlDelegateModel *>(o.data());
+    QVERIFY(delegateModel);
+
+    for (int i = 0; i < 4; ++i) {
+        delegateModel->setProperty("n", i);
+        QObject *delegate = delegateModel->object(0);
+        QVERIFY(delegate);
+        const QVariant a = delegate->property("a");
+        QCOMPARE(a.metaType(), QMetaType::fromType<QString>());
+        QCOMPARE(a.toString(), QLatin1String("a"));
+    }
 }
 
 void tst_QQmlDelegateModel::overriddenModelData()
@@ -468,15 +494,13 @@ void tst_QQmlDelegateModel::overriddenModelData()
         QVERIFY(delegate);
 
         if (i == 1 || i == 2) {
+            // You can actually not override if the model is a QObject or a JavaScript array.
             // Someone is certainly relying on this.
             // We need to find a migration mechanism to fix it.
-            QEXPECT_FAIL(
-                    "",
-                    "You can actually not override if the model is a QObject or a JavaScript array",
-                    Continue);
+            QCOMPARE(delegate->objectName(), QLatin1String(" 0 0  e 0"));
+        } else {
+            QCOMPARE(delegate->objectName(), QLatin1String("a b c d e f"));
         }
-
-        QCOMPARE(delegate->objectName(), QLatin1String("a b c d e f"));
     }
 }
 
@@ -504,6 +528,50 @@ void tst_QQmlDelegateModel::persistedItemsStayInCache()
     QTRY_COMPARE(object->property("createCount").toInt(), 3);
     listModel->clear();
     QTRY_COMPARE(object->property("destroyCount").toInt(), 3);
+}
+
+Q_DECLARE_SEQUENTIAL_CONTAINER_METATYPE(std::forward_list)
+void tst_QQmlDelegateModel::unknownContainersAsModel()
+{
+    QQmlEngine engine;
+
+    QQmlComponent modelComponent(&engine);
+    modelComponent.setData("import QtQml.Models\nDelegateModel {}\n", QUrl());
+    QCOMPARE(modelComponent.status(), QQmlComponent::Ready);
+
+    QScopedPointer<QObject> o(modelComponent.create());
+    QQmlDelegateModel *delegateModel = qobject_cast<QQmlDelegateModel*>(o.data());
+    QVERIFY(delegateModel);
+
+    QQmlComponent delegateComponent(&engine);
+    delegateComponent.setData("import QtQml\nQtObject { objectName: modelData }\n", QUrl());
+    QCOMPARE(delegateComponent.status(), QQmlComponent::Ready);
+
+    delegateModel->setDelegate(&delegateComponent);
+
+    QList<QJsonObject> json;
+    for (int i = 0; i < 10; ++i)
+        json.append(QJsonObject({{"foo", i}}));
+
+    // Recognized as list
+    delegateModel->setModel(QVariant::fromValue(json));
+    QObject *obj = delegateModel->object(0, QQmlIncubator::Synchronous);
+    QVERIFY(obj);
+    QCOMPARE(delegateModel->count(), 10);
+    QCOMPARE(delegateModel->model().metaType(), QMetaType::fromType<QList<QJsonObject>>());
+
+    QVERIFY(qMetaTypeId<std::forward_list<int>>() > 0);
+    std::forward_list<int> mess;
+    mess.push_front(4);
+    mess.push_front(5);
+    mess.push_front(6);
+
+    // Converted into QVariantList
+    delegateModel->setModel(QVariant::fromValue(mess));
+    obj = delegateModel->object(0, QQmlIncubator::Synchronous);
+    QVERIFY(obj);
+    QCOMPARE(delegateModel->count(), 3);
+    QCOMPARE(delegateModel->model().metaType(), QMetaType::fromType<QVariantList>());
 }
 
 void tst_QQmlDelegateModel::doNotUnrefObjectUnderConstruction()

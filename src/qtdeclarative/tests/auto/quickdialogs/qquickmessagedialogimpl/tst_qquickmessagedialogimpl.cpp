@@ -1,5 +1,5 @@
 // Copyright (C) 2021 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <QtTest/qtest.h>
 #include <QtTest/qsignalspy.h>
@@ -8,6 +8,7 @@
 #include <QtQuickDialogs2QuickImpl/private/qquickmessagedialogimpl_p.h>
 #include <QtQuickTest/quicktest.h>
 #include <QtQuickControls2/qquickstyle.h>
+#include <QtQuickTemplates2/private/qquickdialog_p_p.h>
 #include <QtQuickControlsTestUtils/private/controlstestutils_p.h>
 #include <QtQuickControlsTestUtils/private/dialogstestutils_p.h>
 
@@ -39,7 +40,7 @@ private slots:
     void changeInformativeText();
     void changeStandardButtons();
     void detailedText();
-    void emitCorrectAcceptedAndRejectedSignals();
+    void resultReflectsLastStandardButtonPressed();
 };
 
 // We don't want to fail on warnings until QTBUG-98964 is fixed,
@@ -270,38 +271,99 @@ void tst_QQuickMessageDialogImpl::detailedText()
     dialogHelper.dialog->close();
 }
 
-void tst_QQuickMessageDialogImpl::emitCorrectAcceptedAndRejectedSignals()
+void tst_QQuickMessageDialogImpl::resultReflectsLastStandardButtonPressed()
 {
     DialogTestHelper<QQuickMessageDialog, QQuickMessageDialogImpl> dialogHelper(
-            this, "messageDialogWithYesAndNoButtons.qml");
+            this, "messageDialogWithButtons.qml");
     QVERIFY2(dialogHelper.isWindowInitialized(), dialogHelper.failureMessage());
     QVERIFY(dialogHelper.waitForWindowActive());
+
     QVERIFY(dialogHelper.openDialog());
     QTRY_VERIFY(dialogHelper.isQuickDialogOpen());
 
-    auto *buttonBox = dialogHelper.quickDialog->findChild<QQuickDialogButtonBox *>("buttonBox");
-    QVERIFY(buttonBox);
-
     QSignalSpy acceptedSpy(dialogHelper.dialog, SIGNAL(accepted()));
     QSignalSpy rejectedSpy(dialogHelper.dialog, SIGNAL(rejected()));
+    QSignalSpy resultChangedSpy(dialogHelper.dialog, SIGNAL(resultChanged()));
 
-    for (int i = 0; i < buttonBox->count(); ++i){
-        dialogHelper.dialog->open();
-        QTRY_VERIFY(dialogHelper.isQuickDialogOpen());
+    auto buttonBox = dialogHelper.quickDialog->findChild<QQuickDialogButtonBox *>("buttonBox");
+    QVERIFY(buttonBox);
 
-        auto *button = qobject_cast<QQuickAbstractButton *>(buttonBox->itemAt(i));
-        QVERIFY(button);
+    QQuickTest::qWaitForPolish(dialogHelper.window());
 
-        if (QQuickTest::qIsPolishScheduled(dialogHelper.window()))
-            QVERIFY(QQuickTest::qWaitForPolish(dialogHelper.window()));
+    bool yesFound = false;
+    bool noFound = false;
+    bool discardFound = false;
+    bool applyFound = false;
 
-        QVERIFY(clickButton(button));
-        QTRY_VERIFY(!dialogHelper.isQuickDialogOpen());
+    int expectedNumberOfAcceptedSignals = 0;
+    int expectedNumberOfRejectedSignals = 0;
+
+    // The dialogButtonBox has different layouts depending on platform. This tries to account for all possible layouts.
+    // If the role of a button is YesRole, AcceptRole, NoRole or RejectRole, then pressing that button should emit accepted, or rejected.
+    // And since this is a MessageDialog, the result property should reflect the last button pressed, rather than the StandardCode.
+    for (int i = 0; i < buttonBox->count(); ++i) {
+        auto button = qobject_cast<QQuickAbstractButton *>(buttonBox->itemAt(i));
+        switch (QQuickDialogPrivate::buttonRole(button)) {
+        case QPlatformDialogHelper::YesRole:
+            yesFound = true;
+            expectedNumberOfAcceptedSignals++;
+
+            QTest::mouseClick(dialogHelper.window(), Qt::LeftButton, Qt::NoModifier, button->mapToScene({ button->width() / 2, button->height() / 2 }).toPoint());
+            QTRY_VERIFY(!dialogHelper.isQuickDialogOpen());
+
+            QCOMPARE(dialogHelper.dialog->result(), QPlatformDialogHelper::StandardButton::Yes);
+            QCOMPARE(resultChangedSpy.count(), i + 1);
+
+            QVERIFY(dialogHelper.openDialog());
+            QTRY_VERIFY(dialogHelper.isQuickDialogOpen());
+            break;
+        case QPlatformDialogHelper::NoRole:
+            noFound = true;
+            expectedNumberOfRejectedSignals++;
+
+            QTest::mouseClick(dialogHelper.window(), Qt::LeftButton, Qt::NoModifier, button->mapToScene({ button->width() / 2, button->height() / 2 }).toPoint());
+            QTRY_VERIFY(!dialogHelper.isQuickDialogOpen());
+
+            QCOMPARE(dialogHelper.dialog->result(), QPlatformDialogHelper::StandardButton::No);
+            QCOMPARE(resultChangedSpy.count(), i + 1);
+
+            QVERIFY(dialogHelper.openDialog());
+            QTRY_VERIFY(dialogHelper.isQuickDialogOpen());
+            break;
+        case QPlatformDialogHelper::DestructiveRole:
+            discardFound = true;
+
+            QTest::mouseClick(dialogHelper.window(), Qt::LeftButton, Qt::NoModifier, button->mapToScene({ button->width() / 2, button->height() / 2 }).toPoint());
+            QTRY_VERIFY(!dialogHelper.isQuickDialogOpen());
+
+            QCOMPARE(dialogHelper.dialog->result(), QPlatformDialogHelper::StandardButton::Discard);
+            QCOMPARE(resultChangedSpy.count(), i + 1);
+
+            QVERIFY(dialogHelper.openDialog());
+            QTRY_VERIFY(dialogHelper.isQuickDialogOpen());
+            break;
+        case QPlatformDialogHelper::ApplyRole:
+            applyFound = true;
+
+            QTest::mouseClick(dialogHelper.window(), Qt::LeftButton, Qt::NoModifier, button->mapToScene({ button->width() / 2, button->height() / 2 }).toPoint());
+            QTRY_VERIFY(!dialogHelper.isQuickDialogOpen());
+
+            QCOMPARE(dialogHelper.dialog->result(), QPlatformDialogHelper::StandardButton::Apply);
+            QCOMPARE(resultChangedSpy.count(), i + 1);
+
+            QVERIFY(dialogHelper.openDialog());
+            QTRY_VERIFY(dialogHelper.isQuickDialogOpen());
+            break;
+        default:
+            QFAIL(qPrintable(QStringLiteral("Unexpected role %1").arg(QQuickDialogPrivate::buttonRole(button))));
+        }
     }
 
-    // Ok and Yes should emit accepted(), Cancel and No should emit rejected()
-    QCOMPARE(acceptedSpy.count(), 2);
-    QCOMPARE(rejectedSpy.count(), 2);
+    QVERIFY2(yesFound && noFound && discardFound && applyFound, "A button that was expected to be present, wasn't found when iterating over all of them.");
+    QCOMPARE(acceptedSpy.count(), expectedNumberOfAcceptedSignals);
+    QCOMPARE(rejectedSpy.count(), expectedNumberOfRejectedSignals);
+
+    dialogHelper.dialog->close();
 }
 
 QTEST_MAIN(tst_QQuickMessageDialogImpl)

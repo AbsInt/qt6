@@ -14,7 +14,12 @@
 #include <qpa/qplatformintegration.h>
 #include <QtGui/qpainterpath.h>
 
-#include <dwrite_2.h>
+#if QT_CONFIG(directwrite3)
+#  include "qwindowsdirectwritefontdatabase_p.h"
+#  include <dwrite_3.h>
+#else
+#  include <dwrite_2.h>
+#endif
 
 #include <d2d1.h>
 
@@ -353,7 +358,7 @@ void QWindowsFontEngineDirectWrite::collectMetrics()
         fontFile->Release();
     }
 
-    QByteArray table = getSfntTable(MAKE_TAG('h', 'h', 'e', 'a'));
+    QByteArray table = getSfntTable(QFont::Tag("hhea").value());
     const int advanceWidthMaxLocation = 10;
     if (table.size() >= advanceWidthMaxLocation + int(sizeof(quint16))) {
         quint16 advanceWidthMax = qFromBigEndian<quint16>(table.constData() + advanceWidthMaxLocation);
@@ -1010,6 +1015,27 @@ void QWindowsFontEngineDirectWrite::initFontInfo(const QFontDef &request,
         fontDef.pointSize = fontDef.pixelSize * 72. / dpi;
     else if (fontDef.pixelSize == -1)
         fontDef.pixelSize = qRound(fontDef.pointSize * dpi / 72.);
+
+    m_faceId.variableAxes = request.variableAxisValues;
+
+#if QT_CONFIG(directwrite3)
+    IDWriteFontFace3 *face3 = nullptr;
+    if (SUCCEEDED(m_directWriteFontFace->QueryInterface(__uuidof(IDWriteFontFace3),
+                                                        reinterpret_cast<void **>(&face3)))) {
+        IDWriteLocalizedStrings *names;
+        if (SUCCEEDED(face3->GetFaceNames(&names))) {
+            wchar_t englishLocale[] = L"en-us";
+            fontDef.styleName = QWindowsDirectWriteFontDatabase::localeString(names, englishLocale);
+            names->Release();
+        }
+
+        // Color font
+        if (face3->GetPaletteEntryCount() > 0)
+            glyphFormat = QFontEngine::Format_ARGB;
+
+        face3->Release();
+    }
+#endif
 }
 
 QString QWindowsFontEngineDirectWrite::fontNameSubstitute(const QString &familyName)

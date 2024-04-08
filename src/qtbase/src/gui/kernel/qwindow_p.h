@@ -26,6 +26,8 @@
 #include <QtGui/qicon.h>
 #include <QtGui/qpalette.h>
 
+#include <QtCore/qpointer.h>
+
 QT_BEGIN_NAMESPACE
 
 class Q_GUI_EXPORT QWindowPrivate : public QObjectPrivate
@@ -42,7 +44,7 @@ public:
     QWindowPrivate();
     ~QWindowPrivate() override;
 
-    void init(QScreen *targetScreen = nullptr);
+    void init(QWindow *parent, QScreen *targetScreen = nullptr);
 
 #ifndef QT_NO_CURSOR
     void setCursor(const QCursor *c = nullptr);

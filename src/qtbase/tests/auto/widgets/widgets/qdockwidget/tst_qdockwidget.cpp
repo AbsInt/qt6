@@ -1,5 +1,5 @@
 // Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <QTest>
 #include <QSignalSpy>
@@ -1661,7 +1661,7 @@ void tst_QDockWidget::hideAndShow()
     unplugAndResize(mainWindow, d1, home1(mainWindow), size1(mainWindow));
     unplugAndResize(mainWindow, d2, home2(mainWindow), size2(mainWindow));
 
-     // Check hiding of undocked widgets
+    // Check hiding of undocked widgets
     qCDebug(lcTestDockWidget) << "Hiding mainWindow with unplugged dock widgets" << mainWindow;
     mainWindow->hide();
     QTRY_VERIFY(!mainWindow->isVisible());
@@ -1669,6 +1669,16 @@ void tst_QDockWidget::hideAndShow()
     QTRY_VERIFY(d2->isVisible());
     d1->hide();
     d2->hide();
+    QTRY_VERIFY(!d1->isVisible());
+    QTRY_VERIFY(!d2->isVisible());
+
+
+    // Check floating, hidden dock widgets remain hidden, when their state is restored
+    qCDebug(lcTestDockWidget) << "Restoring state of unplugged, hidden dock widgets" << mainWindow;
+    const QByteArray state = mainWindow->saveState();
+    mainWindow->restoreState(state);
+    mainWindow->show();
+    QVERIFY(QTest::qWaitForWindowExposed(mainWindow));
     QTRY_VERIFY(!d1->isVisible());
     QTRY_VERIFY(!d2->isVisible());
 

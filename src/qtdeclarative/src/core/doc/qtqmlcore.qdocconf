@@ -33,5 +33,5 @@ navigation.qmltypespage = "Qt QML Core QML Types"
 
 tagfile = qtqmlcore.tags
 
-# Fail the documentation build if there are more warnings than the limit
+# Enforce zero documentation warnings
 warninglimit = 0

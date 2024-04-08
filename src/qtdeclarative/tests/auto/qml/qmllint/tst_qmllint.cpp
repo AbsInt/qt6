@@ -1,6 +1,6 @@
 // Copyright (C) 2016 Klaralvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Sergio Martins <sergio.martins@kdab.com>
 // Copyright (C) 2021 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <QtTest/QtTest>
 #include <QProcess>
@@ -80,6 +80,9 @@ private Q_SLOTS:
     void additionalImplicitImport();
 
     void qrcUrlImport();
+
+    void incorrectImportFromHost_data();
+    void incorrectImportFromHost();
 
     void attachedPropertyReuse();
 
@@ -1096,7 +1099,13 @@ expression: \${expr} \${expr} \\\${expr} \\\${expr}`)",
 
     QTest::newRow("StoreNameMethod")
             << QStringLiteral("storeNameMethod.qml")
-            << Result{ { Message{ QStringLiteral("Cannot assign to method foo") } } };
+            << Result { { Message { QStringLiteral("Cannot assign to method foo") } } };
+
+    QTest::newRow("CoerceToVoid")
+            << QStringLiteral("coercetovoid.qml")
+            << Result { { Message {
+                    QStringLiteral("Function without return type annotation returns double")
+               } } };
 
     QTest::newRow("lowerCaseQualifiedImport")
             << QStringLiteral("lowerCaseQualifiedImport.qml")
@@ -1117,6 +1126,12 @@ expression: \${expr} \${expr} \\\${expr} \\\${expr}`)",
                                u"Namespace 'test' of 'test.color' must start with an upper case letter."_s },
                        Message{
                                u"Namespace 'test' of 'test.Grid' must start with an upper case letter."_s },
+               } };
+    QTest::newRow("notQmlRootMethods")
+            << QStringLiteral("notQmlRootMethods.qml")
+            << Result{ {
+                       Message{ u"Member \"deleteLater\" not found on type \"QtObject\""_s },
+                       Message{ u"Member \"destroyed\" not found on type \"QtObject\""_s },
                } };
 }
 
@@ -1241,6 +1256,7 @@ void TestQmllint::cleanQmlCode_data()
     QTest::newRow("QVariant") << QStringLiteral("qvariant.qml");
     QTest::newRow("Accessible") << QStringLiteral("accessible.qml");
     QTest::newRow("qjsroot") << QStringLiteral("qjsroot.qml");
+    QTest::newRow("qmlRootMethods") << QStringLiteral("qmlRootMethods.qml");
     QTest::newRow("InlineComponent") << QStringLiteral("inlineComponent.qml");
     QTest::newRow("InlineComponentWithComponents") << QStringLiteral("inlineComponentWithComponents.qml");
     QTest::newRow("InlineComponentsChained") << QStringLiteral("inlineComponentsChained.qml");
@@ -1298,7 +1314,9 @@ void TestQmllint::cleanQmlCode_data()
     QTest::newRow("WriteListProperty") << QStringLiteral("writeListProperty.qml");
     QTest::newRow("dontConfuseMemberPrintWithGlobalPrint") << QStringLiteral("findMemberPrint.qml");
     QTest::newRow("groupedAttachedLayout") << QStringLiteral("groupedAttachedLayout.qml");
+    QTest::newRow("QQmlScriptString") << QStringLiteral("scriptstring.qml");
     QTest::newRow("QEventPoint") << QStringLiteral("qEventPoint.qml");
+    QTest::newRow("locale") << QStringLiteral("locale.qml");
     QTest::newRow("constInvokable") << QStringLiteral("useConstInvokable.qml");
 }
 
@@ -1737,6 +1755,34 @@ void TestQmllint::qrcUrlImport()
     callQmllint(testFile("untitled/main.qml"), true, &warnings, {}, {},
                 { testFile("untitled/qrcUrlImport.qrc") });
     checkResult(warnings, Result::clean());
+}
+
+void TestQmllint::incorrectImportFromHost_data()
+{
+    QTest::addColumn<QString>("filename");
+    QTest::addColumn<Result>("result");
+
+    QTest::newRow("NonexistentFile")
+            << QStringLiteral("importNonexistentFile.qml")
+            << Result{ { Message{
+                       QStringLiteral("File or directory you are trying to import does not exist"),
+                       1, 1 } } };
+#ifndef Q_OS_WIN
+    // there is no /dev/null device on Win
+    QTest::newRow("NullDevice")
+            << QStringLiteral("importNullDevice.qml")
+            << Result{ { Message{ QStringLiteral("is neither a file nor a directory. Are sure the "
+                                                 "import path is correct?"),
+                                  1, 1 } } };
+#endif
+}
+
+void TestQmllint::incorrectImportFromHost()
+{
+    QFETCH(QString, filename);
+    QFETCH(Result, result);
+
+    runTest(filename, result);
 }
 
 void TestQmllint::attachedPropertyReuse()

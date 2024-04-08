@@ -1,5 +1,5 @@
 // Copyright (C) 2020 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <QByteArrayView>
 
@@ -171,6 +171,7 @@ private slots:
 
     void comparison() const;
     void compare() const;
+    void std_stringview_conversion();
 
 private:
     template <typename Data>
@@ -196,6 +197,10 @@ void tst_QByteArrayView::constExpr() const
         static_assert(bv.isEmpty());
         static_assert(bv.data() == nullptr);
 
+        constexpr std::string_view sv = bv;
+        static_assert(sv.size() == 0);
+        static_assert(sv.data() == nullptr);
+
         constexpr QByteArrayView bv2(bv.data(), bv.data() + bv.size());
         static_assert(bv2.isNull());
         static_assert(bv2.empty());
@@ -207,6 +212,10 @@ void tst_QByteArrayView::constExpr() const
         static_assert(bv.empty());
         static_assert(bv.isEmpty());
         static_assert(bv.data() != nullptr);
+
+        constexpr std::string_view sv = bv;
+        static_assert(sv.size() == bv.size());
+        static_assert(sv.data() == bv.data());
 
         constexpr QByteArrayView bv2(bv.data(), bv.data() + bv.size());
         static_assert(!bv2.isNull());
@@ -240,6 +249,14 @@ void tst_QByteArrayView::constExpr() const
         static_assert(bv.rbegin()  != bv.rend());
         static_assert(bv.crbegin() != bv.crend());
 
+        constexpr std::string_view sv = bv;
+        static_assert(sv.size() == bv.size());
+        static_assert(sv.data() == bv.data());
+#ifdef AMBIGUOUS_CALL // QTBUG-108805
+        static_assert(sv == bv);
+        static_assert(bv == sv);
+#endif
+
         constexpr QByteArrayView bv2(bv.data(), bv.data() + bv.size());
         static_assert(!bv2.isNull());
         static_assert(!bv2.empty());
@@ -265,6 +282,13 @@ void tst_QByteArrayView::constExpr() const
         static_assert(bv.at(4)   == 'o');
         static_assert(bv.back()  == 'o');
         static_assert(bv.last()  == 'o');
+
+        constexpr std::string_view sv = bv;
+        static_assert(bv.size() == sv.size());
+#ifdef AMBIGUOUS_CALL // QTBUG-108805
+        static_assert(bv == sv);
+        static_assert(sv == bv);
+#endif
     }
     {
         static constexpr char hello[] = { 'H', 'e', 'l', 'l', 'o' };
@@ -282,6 +306,13 @@ void tst_QByteArrayView::constExpr() const
         static_assert(bv.at(4)   == 'o');
         static_assert(bv.back()  == 'o');
         static_assert(bv.last()  == 'o');
+
+        constexpr std::string_view sv = bv;
+        static_assert(bv.size() == sv.size());
+#ifdef AMBIGUOUS_CALL // QTBUG-108805
+        static_assert(bv == sv);
+        static_assert(sv == bv);
+#endif
     }
 #endif
     {
@@ -290,6 +321,10 @@ void tst_QByteArrayView::constExpr() const
         static_assert(bv.isNull());
         static_assert(bv.isEmpty());
         static_assert(bv.size() == 0);
+
+        constexpr std::string_view sv = bv;
+        static_assert(sv.size() == 0);
+        static_assert(sv.data() == nullptr);
     }
 }
 
@@ -630,6 +665,31 @@ void tst_QByteArrayView::compare() const
     beta = "Unoriginal";
     QVERIFY(alpha.compare(beta, Qt::CaseInsensitive) < 0);
     QVERIFY(alpha.compare(beta, Qt::CaseSensitive) > 0);
+}
+
+void tst_QByteArrayView::std_stringview_conversion()
+{
+    static_assert(std::is_convertible_v<QByteArrayView, std::string_view>);
+
+    QByteArrayView bav;
+    std::string_view sv(bav);
+    QCOMPARE(sv, std::string_view());
+
+    bav = "";
+    sv = bav;
+    QCOMPARE(bav.size(), 0);
+    QCOMPARE(sv.size(), size_t(0));
+    QCOMPARE(sv, std::string_view());
+
+    bav = "Hello";
+    sv = bav;
+    QCOMPARE(sv, std::string_view("Hello"));
+
+    bav = QByteArrayView::fromArray("Hello\0world");
+    sv = bav;
+    QCOMPARE(bav.size(), 12);
+    QCOMPARE(sv.size(), size_t(12));
+    QCOMPARE(sv, std::string_view("Hello\0world", 12));
 }
 
 QTEST_APPLESS_MAIN(tst_QByteArrayView)

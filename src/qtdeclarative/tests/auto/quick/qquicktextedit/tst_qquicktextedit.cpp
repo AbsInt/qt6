@@ -1,5 +1,5 @@
 // Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 #include <qtest.h>
 #include <QtTest/QSignalSpy>
 #include <QtQuickTestUtils/private/testhttpserver_p.h>
@@ -19,7 +19,7 @@
 #include <private/qquicktextedit_p.h>
 #include <private/qquicktextedit_p_p.h>
 #include <private/qquicktext_p.h>
-#include <private/qquicktextdocument_p.h>
+#include <QtQuick/private/qquickpixmapcache_p.h>
 #include <QFontMetrics>
 #include <QtQuick/QQuickView>
 #include <QDir>
@@ -41,6 +41,21 @@ Q_DECLARE_METATYPE(QQuickTextEdit::SelectionMode)
 Q_DECLARE_METATYPE(Qt::Key)
 DEFINE_BOOL_CONFIG_OPTION(qmlDisableDistanceField, QML_DISABLE_DISTANCEFIELD)
 
+typedef QList<int> IntList;
+Q_DECLARE_METATYPE(IntList)
+
+typedef QPair<int, QChar> Key;
+typedef QList<Key> KeyList;
+Q_DECLARE_METATYPE(KeyList)
+
+Q_DECLARE_METATYPE(QQuickTextEdit::HAlignment)
+Q_DECLARE_METATYPE(QQuickTextEdit::VAlignment)
+Q_DECLARE_METATYPE(QQuickTextEdit::TextFormat)
+
+#if QT_CONFIG(shortcut)
+Q_DECLARE_METATYPE(QKeySequence::StandardKey)
+#endif
+
 Q_LOGGING_CATEGORY(lcTests, "qt.quick.tests")
 
 static bool isPlatformWayland()
@@ -48,7 +63,7 @@ static bool isPlatformWayland()
     return !QGuiApplication::platformName().compare(QLatin1String("wayland"), Qt::CaseInsensitive);
 }
 
-typedef QPair<int, QChar> Key;
+QT_BEGIN_NAMESPACE
 
 class tst_qquicktextedit : public QQmlDataTest
 
@@ -179,6 +194,7 @@ private slots:
     void baseUrl();
     void embeddedImages();
     void embeddedImages_data();
+    void remoteImagesInDocumentSource();
 
     void emptytags_QTBUG_22058();
     void cursorRectangle_QTBUG_38947();
@@ -212,7 +228,9 @@ private slots:
 
     void rtlAlignmentInColumnLayout_QTBUG_112858();
 
+    void fontManipulationWithCursorSelection();
     void resizeTextEditPolish();
+
 private:
     void simulateKeys(QWindow *window, const QList<Key> &keys);
 #if QT_CONFIG(shortcut)
@@ -238,16 +256,6 @@ private:
 
     QPointingDevice *touchDevice = QTest::createTouchDevice();
 };
-
-typedef QList<int> IntList;
-Q_DECLARE_METATYPE(IntList)
-
-typedef QList<Key> KeyList;
-Q_DECLARE_METATYPE(KeyList)
-
-Q_DECLARE_METATYPE(QQuickTextEdit::HAlignment)
-Q_DECLARE_METATYPE(QQuickTextEdit::VAlignment)
-Q_DECLARE_METATYPE(QQuickTextEdit::TextFormat)
 
 void tst_qquicktextedit::simulateKeys(QWindow *window, const QList<Key> &keys)
 {
@@ -2372,8 +2380,6 @@ void tst_qquicktextedit::selectByKeyboard()
 }
 
 #if QT_CONFIG(shortcut)
-
-Q_DECLARE_METATYPE(QKeySequence::StandardKey)
 
 void tst_qquicktextedit::keyboardSelection_data()
 {
@@ -6029,11 +6035,11 @@ void tst_qquicktextedit::embeddedImages_data()
     QTest::newRow("local") << testFileUrl("embeddedImagesLocal.qml") << "";
     QTest::newRow("local-error") << testFileUrl("embeddedImagesLocalError.qml")
         << testFileUrl("embeddedImagesLocalError.qml").toString()+":3:1: QML TextEdit: Cannot open: " + testFileUrl("http/notexists.png").toString();
-    QTest::newRow("local") << testFileUrl("embeddedImagesLocalRelative.qml") << "";
+    QTest::newRow("local-relative") << testFileUrl("embeddedImagesLocalRelative.qml") << "";
     QTest::newRow("remote") << testFileUrl("embeddedImagesRemote.qml") << "";
     QTest::newRow("remote-error") << testFileUrl("embeddedImagesRemoteError.qml")
         << testFileUrl("embeddedImagesRemoteError.qml").toString()+":3:1: QML TextEdit: Error transferring {{ServerBaseUrl}}/notexists.png - server replied: Not found";
-    QTest::newRow("remote") << testFileUrl("embeddedImagesRemoteRelative.qml") << "";
+    QTest::newRow("remote-relative") << testFileUrl("embeddedImagesRemoteRelative.qml") << "";
 }
 
 void tst_qquicktextedit::embeddedImages()
@@ -6051,30 +6057,87 @@ void tst_qquicktextedit::embeddedImages()
         QTest::ignoreMessage(QtWarningMsg, error.toLatin1());
 
     QQmlComponent textComponent(&engine, qmlfile);
-    QQuickTextEdit *textObject = qobject_cast<QQuickTextEdit*>(textComponent.beginCreate(engine.rootContext()));
-    QVERIFY(textObject != nullptr);
+    QScopedPointer<QQuickTextEdit> textObject(qobject_cast<QQuickTextEdit*>(textComponent.beginCreate(engine.rootContext())));
+    QVERIFY(!textObject.isNull());
 
     const int baseUrlPropertyIndex = textObject->metaObject()->indexOfProperty("serverBaseUrl");
     if (baseUrlPropertyIndex != -1) {
         QMetaProperty prop = textObject->metaObject()->property(baseUrlPropertyIndex);
-        QVERIFY(prop.write(textObject, server.baseUrl().toString()));
+        QVERIFY(prop.write(textObject.get(), server.baseUrl().toString()));
     }
 
     textComponent.completeCreate();
 
-    QTRY_COMPARE(QQuickTextEditPrivate::get(textObject)->document->resourcesLoading(), 0);
+    QTRY_COMPARE(textObject->resourcesLoading(), 0);
 
     QPixmap pm(testFile("http/exists.png"));
     if (error.isEmpty()) {
-        QCOMPARE(textObject->width(), double(pm.width()));
-        QCOMPARE(textObject->height(), double(pm.height()));
+        QCOMPARE(textObject->width(), pm.width());
+        QCOMPARE(textObject->height(), pm.height());
     } else {
         QVERIFY(16 != pm.width()); // check test is effective
-        QCOMPARE(textObject->width(), 16.0); // default size of QTextDocument broken image icon
-        QCOMPARE(textObject->height(), 16.0);
+        QCOMPARE(textObject->width(), 16); // default size of QTextDocument broken image icon
+        QCOMPARE(textObject->height(), 16);
     }
 
-    delete textObject;
+    // QTextDocument images are cached in QTextDocumentPrivate::cachedResources,
+    // so verify that we don't redundantly cache them in QQuickPixmapCache
+    QCOMPARE(QQuickPixmapCache::instance()->m_cache.size(), 0);
+}
+
+void tst_qquicktextedit::remoteImagesInDocumentSource()
+{
+    TestHTTPServer server;
+    QVERIFY2(server.listen(), qPrintable(server.errorString()));
+    server.serveDirectory(testFile("http"));
+    server.serveDirectory(testFile("httpfail"), TestHTTPServer::Disconnect);
+    server.serveDirectory(testFile("httpslow"), TestHTTPServer::Delay);
+
+    QTemporaryDir tmpDir;
+    QVERIFY(tmpDir.isValid());
+    QString tmpPath = tmpDir.filePath("multipleRemoteImages.md");
+    QByteArray markdownBuf;
+    {
+        QFile sf(QQmlFile::urlToLocalFileOrQrc(testFileUrl("multipleRemoteImages.md")));
+        QVERIFY(sf.open(QIODeviceBase::ReadOnly));
+        markdownBuf = sf.readAll();
+        qCDebug(lcTests) << sf.fileName() << "->" << tmpPath
+                         << "s/serverBaseUrl/" << server.baseUrl().toString()
+                         << "/ in markdown: size" << markdownBuf.size();
+    }
+    markdownBuf.replace("serverBaseUrl", server.baseUrl().toString().toLocal8Bit());
+    {
+        QFile of(tmpPath);
+        QVERIFY(of.open(QIODeviceBase::WriteOnly));
+        QCOMPARE(of.write(markdownBuf), markdownBuf.size());
+    }
+
+    QQuickView window;
+    QVERIFY(QQuickTest::showView(window, testFileUrl("textEdit.qml")));
+    auto *textEdit = qmlobject_cast<QQuickTextEdit *>(window.rootObject());
+    QVERIFY(textEdit);
+    QQuickTextEditPrivate *priv = QQuickTextEditPrivate::get(textEdit);
+    QSignalSpy implicitHeightChangedSpy(textEdit, &QQuickTextEdit::implicitHeightChanged);
+
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression(".*Protocol \"gopher\" is unknown"));
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression(".*Connection closed")); // httpfail/warning.png
+    textEdit->setTextFormat(QQuickTextEdit::MarkdownText);
+    textEdit->textDocument()->setSource(QUrl::fromLocalFile(tmpPath));
+
+    // the document gets loaded first, then the resources
+    QTRY_COMPARE(textEdit->textDocument()->status(), QQuickTextDocument::Status::Loaded);
+    const qreal implicitHeight = textEdit->implicitHeight();
+
+    // all resource-loading jobs complete or fail eventually
+    QTRY_COMPARE(priv->pixmapsInProgress.size(), 0);
+
+    // after httpslow/turtle.svg loads, implicitHeight increases
+    QCOMPARE(implicitHeightChangedSpy.size(), 2);
+    QCOMPARE_GT(textEdit->implicitHeight(), implicitHeight);
+
+    // QTextDocument images are cached in QTextDocumentPrivate::cachedResources,
+    // so verify that we don't redundantly cache them in QQuickPixmapCache
+    QCOMPARE(QQuickPixmapCache::instance()->m_cache.size(), 0);
 }
 
 void tst_qquicktextedit::emptytags_QTBUG_22058()
@@ -6589,6 +6652,73 @@ void tst_qquicktextedit::rtlAlignmentInColumnLayout_QTBUG_112858()
     }
 }
 
+void tst_qquicktextedit::fontManipulationWithCursorSelection()
+{
+    QString testStr = standard[0];//TODO: What should happen for multiline/rich text?
+    QString componentStr = "import QtQuick 2.0\nTextEdit {  text: \""+ testStr +"\"; }";
+    QQmlComponent texteditComponent(&engine);
+    texteditComponent.setData(componentStr.toLatin1(), QUrl());
+    QQuickTextEdit *textEditObject = qobject_cast<QQuickTextEdit *>(texteditComponent.create());
+    QVERIFY(textEditObject != nullptr);
+
+    const int originalStartPos = 0;
+    const int originalEndPos = (testStr.size() - 1) / 2;
+
+    textEditObject->select(originalStartPos, originalEndPos);
+    QCOMPARE(textEditObject->selectionStart(), originalStartPos);
+    QCOMPARE(textEditObject->selectionEnd(), originalEndPos);
+
+    QCOMPARE(textEditObject->cursorSelection()->text(), textEditObject->text().mid(originalStartPos, originalEndPos));
+
+    // test font manipulation
+    QFont font = textEditObject->cursorSelection()->font();
+    QVERIFY(!font.bold());
+    font.setBold(true);
+    textEditObject->cursorSelection()->setFont(font);
+    QVERIFY(textEditObject->cursorSelection()->font().bold());
+
+    // test color manipulation
+    QCOMPARE_NE(textEditObject->cursorSelection()->color(), QColorConstants::Cyan);
+    textEditObject->cursorSelection()->setColor(QColorConstants::Cyan);
+    QCOMPARE(textEditObject->cursorSelection()->color(), QColorConstants::Cyan);
+
+    // test alignment
+    QCOMPARE(textEditObject->cursorSelection()->alignment(), Qt::AlignLeft);
+    textEditObject->cursorSelection()->setAlignment(Qt::AlignRight);
+    QCOMPARE(textEditObject->cursorSelection()->alignment(), Qt::AlignRight);
+
+    // change seleciton and verify that we don't keep the same formatting
+    const int newStartPos = testStr.size() / 2;
+    const int newEndPos = testStr.size() - 1;
+
+    textEditObject->select(newStartPos, newEndPos);
+    QCOMPARE(textEditObject->selectionStart(), newStartPos);
+    QCOMPARE(textEditObject->selectionEnd(), newEndPos);
+    QVERIFY(!textEditObject->cursorSelection()->font().bold());
+    QCOMPARE_NE(textEditObject->cursorSelection()->color(), QColorConstants::Cyan);
+    QEXPECT_FAIL("", "The text alignment doesn't update when changing selection", Continue);
+    QCOMPARE(textEditObject->cursorSelection()->alignment(), Qt::AlignLeft);
+
+    // change back to the previous fragment, and verify that we have the old formatting
+    textEditObject->select(originalStartPos, originalEndPos);
+    QVERIFY(font.bold());
+    QCOMPARE(textEditObject->cursorSelection()->color(), QColorConstants::Cyan);
+    QCOMPARE(textEditObject->cursorSelection()->alignment(), Qt::AlignRight);
+
+    // test text manipulation
+    textEditObject->cursorSelection()->setText("Q");
+    QEXPECT_FAIL("", "QQuickTextSelection::text doesn't currently work correctly", Continue);
+    QCOMPARE(textEditObject->text(), QLatin1String("Q%1").arg(testStr.mid(newStartPos, newEndPos)));
+
+    // Make sure that QQuickTextEdit::setFont() affects all blocks
+    font.setItalic(true);
+    font.setWeight(QFont::Black);
+    textEditObject->setFont(font);
+    const auto *doc = textEditObject->textDocument()->textDocument();
+    for (QTextBlock block = doc->begin(); block != doc->end(); block = block.next())
+        QCOMPARE(block.charFormat().font(), font);
+}
+
 void tst_qquicktextedit::resizeTextEditPolish()
 {
     QQuickView window(testFileUrl("resizeTextEditPolish.qml"));
@@ -6617,6 +6747,8 @@ void tst_qquicktextedit::resizeTextEditPolish()
     QCOMPARE(editPriv->xoff, 0);
     QCOMPARE(editPriv->yoff, 0);
 }
+
+QT_END_NAMESPACE
 
 QTEST_MAIN(tst_qquicktextedit)
 

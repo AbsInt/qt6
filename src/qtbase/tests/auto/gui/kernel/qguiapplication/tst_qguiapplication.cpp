@@ -1,5 +1,5 @@
 // Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 
 #include <QTest>
@@ -47,6 +47,7 @@ private slots:
     void changeFocusWindow();
     void keyboardModifiers();
     void palette();
+    void paletteNoCrash();
     void font();
     void modalWindow();
     void quitOnLastWindowClosed();
@@ -552,6 +553,15 @@ void tst_QGuiApplication::palette()
     QCOMPARE(signalSpy.size(), 2);
 #endif
     QCOMPARE(QGuiApplication::palette(), QPalette());
+}
+
+void tst_QGuiApplication::paletteNoCrash()
+{
+    QGuiApplication::setDesktopSettingsAware(false);
+    int argc = 1;
+    char *argv[] = { const_cast<char*>("tst_qguiapplication") };
+    // this would crash on windows (QTBUG-111527)
+    QGuiApplication a(argc, argv);
 }
 
 void tst_QGuiApplication::font()

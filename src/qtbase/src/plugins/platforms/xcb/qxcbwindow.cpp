@@ -135,6 +135,7 @@ void QXcbWindow::setImageFormatForVisual(const xcb_visualtype_t *visual)
     case 16:
         qWarning("Using RGB16 fallback, if this works your X11 server is reporting a bad screen format.");
         m_imageFormat = QImage::Format_RGB16;
+        break;
     default:
         break;
     }
@@ -856,7 +857,7 @@ void QXcbWindow::doFocusIn()
         return;
     QWindow *w = static_cast<QWindowPrivate *>(QObjectPrivate::get(window()))->eventReceiver();
     connection()->setFocusWindow(w);
-    QWindowSystemInterface::handleWindowActivated(w, Qt::ActiveWindowFocusReason);
+    QWindowSystemInterface::handleFocusWindowChanged(w, Qt::ActiveWindowFocusReason);
 }
 
 void QXcbWindow::doFocusOut()
@@ -2501,15 +2502,15 @@ void QXcbWindow::sendXEmbedMessage(xcb_window_t window, quint32 message,
     xcb_send_event(xcb_connection(), false, window, XCB_EVENT_MASK_NO_EVENT, (const char *)&event);
 }
 
-static bool activeWindowChangeQueued(const QWindow *window)
+static bool focusWindowChangeQueued(const QWindow *window)
 {
     /* Check from window system event queue if the next queued activation
      * targets a window other than @window.
      */
-    QWindowSystemInterfacePrivate::ActivatedWindowEvent *systemEvent =
-        static_cast<QWindowSystemInterfacePrivate::ActivatedWindowEvent *>
-        (QWindowSystemInterfacePrivate::peekWindowSystemEvent(QWindowSystemInterfacePrivate::ActivatedWindow));
-    return systemEvent && systemEvent->activated != window;
+    QWindowSystemInterfacePrivate::FocusWindowEvent *systemEvent =
+        static_cast<QWindowSystemInterfacePrivate::FocusWindowEvent *>
+        (QWindowSystemInterfacePrivate::peekWindowSystemEvent(QWindowSystemInterfacePrivate::FocusWindow));
+    return systemEvent && systemEvent->focused != window;
 }
 
 void QXcbWindow::handleXEmbedMessage(const xcb_client_message_event_t *event)
@@ -2539,13 +2540,13 @@ void QXcbWindow::handleXEmbedMessage(const xcb_client_message_event_t *event)
             break;
         }
         connection()->setFocusWindow(window());
-        QWindowSystemInterface::handleWindowActivated(window(), reason);
+        QWindowSystemInterface::handleFocusWindowChanged(window(), reason);
         break;
     case XEMBED_FOCUS_OUT:
         if (window() == QGuiApplication::focusWindow()
-            && !activeWindowChangeQueued(window())) {
+            && !focusWindowChangeQueued(window())) {
             connection()->setFocusWindow(nullptr);
-            QWindowSystemInterface::handleWindowActivated(nullptr);
+            QWindowSystemInterface::handleFocusWindowChanged(nullptr);
         }
         break;
     }

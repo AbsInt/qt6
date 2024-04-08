@@ -13,7 +13,7 @@
 #include <QtQml/qqmlinfo.h>
 #include <QtGui/qevent.h>
 #include <QTextBoundaryFinder>
-#include "qquicktextnode_p.h"
+#include "qsginternaltextnode_p.h"
 #include <QtQuick/qsgsimplerectnode.h>
 
 #include <QtGui/qstylehints.h>
@@ -136,11 +136,19 @@ void QQuickTextInput::setText(const QString &s)
 
     \value TextInput.QtRendering     Text is rendered using a scalable distance field for each glyph.
     \value TextInput.NativeRendering Text is rendered using a platform-specific technique.
+    \value TextInput.CurveRendering  Text is rendered using a curve rasterizer running directly on
+                                     the graphics hardware. (Introduced in Qt 6.7.0.)
 
     Select \c TextInput.NativeRendering if you prefer text to look native on the target platform and do
     not require advanced features such as transformation of the text. Using such features in
     combination with the NativeRendering render type will lend poor and sometimes pixelated
     results.
+
+    Both \c TextInput.QtRendering and \c TextInput.CurveRendering are hardware-accelerated techniques.
+    \c QtRendering is the faster of the two, but uses more memory and will exhibit rendering
+    artifacts at large sizes. \c CurveRendering should be considered as an alternative in cases
+    where \c QtRendering does not give good visual results or where reducing graphics memory
+    consumption is a priority.
 
     The default rendering type is determined by \l QQuickWindow::textRenderType().
 */
@@ -380,6 +388,13 @@ QString QQuickTextInputPrivate::realText() const
     \qml
     TextInput { text: "Some text"; font.preferShaping: false }
     \endqml
+*/
+
+/*!
+    \qmlproperty object QtQuick::TextInput::font.variableAxes
+    \since 6.7
+
+    \include qquicktext.cpp qml-font-variable-axes
 */
 
 /*!
@@ -1959,9 +1974,9 @@ QSGNode *QQuickTextInput::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData 
 
     d->updateType = QQuickTextInputPrivate::UpdateNone;
 
-    QQuickTextNode *node = static_cast<QQuickTextNode *>(oldNode);
+    QSGInternalTextNode *node = static_cast<QSGInternalTextNode *>(oldNode);
     if (node == nullptr)
-        node = new QQuickTextNode(this);
+        node = d->sceneGraphContext()->createInternalTextNode(d->sceneGraphRenderContext());
     d->textNode = node;
 
     const bool showCursor = !isReadOnly() && d->cursorItem == nullptr && d->cursorVisible && d->m_blinkStatus;
@@ -1972,9 +1987,19 @@ QSGNode *QQuickTextInput::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData 
         else
             node->clearCursor();
     } else {
-        node->setUseNativeRenderer(d->renderType == NativeRendering);
-        node->deleteContent();
+        node->setRenderType(QSGTextNode::RenderType(d->renderType));
+        node->clear();
         node->setMatrix(QMatrix4x4());
+        node->setTextStyle(QSGInternalTextNode::Normal);
+        node->setColor(d->color);
+        node->setSelectionTextColor(d->selectedTextColor);
+        node->setSelectionColor(d->selectionColor);
+        node->setFiltering(smooth() ? QSGTexture::Linear : QSGTexture::Nearest);
+
+        if (flags().testFlag(ItemObservesViewport))
+            node->setViewport(clipRect());
+        else
+            node->setViewport(QRectF{});
 
         QPointF offset(leftPadding(), topPadding());
         if (d->autoScroll && d->m_textLayout.lineCount() > 0) {
@@ -1990,16 +2015,14 @@ QSGNode *QQuickTextInput::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData 
                 || !d->m_textLayout.preeditAreaText().isEmpty()
 #endif
                 ) {
-            node->addTextLayout(offset, &d->m_textLayout, d->color,
-                                QQuickText::Normal, QColor(), QColor(),
-                                d->selectionColor, d->selectedTextColor,
+            node->addTextLayout(offset, &d->m_textLayout,
                                 d->selectionStart(),
                                 d->selectionEnd() - 1); // selectionEnd() returns first char after
-                                                                 // selection
+                                                        // selection
         }
 
         if (showCursor)
-                node->setCursor(cursorRectangle(), d->color);
+            node->setCursor(cursorRectangle(), d->color);
 
         d->textLayoutDirty = false;
     }
@@ -2844,6 +2867,7 @@ void QQuickTextInputPrivate::init()
     }
 
     m_inputControl = new QInputControl(QInputControl::LineEdit, q);
+    setSizePolicy(QLayoutPolicy::Preferred, QLayoutPolicy::Fixed);
 }
 
 void QQuickTextInputPrivate::cancelInput()
@@ -3653,7 +3677,7 @@ void QQuickTextInputPrivate::selectWordAtPos(int cursor)
     moveCursor(c, false);
     // ## text layout should support end of words.
     int end = m_textLayout.nextCursorPosition(c, QTextLayout::SkipWords);
-    while (end > cursor && m_text[end-1].isSpace())
+    while (end > cursor && m_text.at(end - 1).isSpace())
         --end;
     moveCursor(end, true);
 }

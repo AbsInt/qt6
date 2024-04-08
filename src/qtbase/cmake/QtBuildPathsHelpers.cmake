@@ -7,7 +7,7 @@ macro(qt_internal_setup_default_install_prefix)
     # is specified.
     # This detection only happens when building qtbase, and later is propagated via the generated
     # QtBuildInternalsExtra.cmake file.
-    if (PROJECT_NAME STREQUAL "QtBase" AND NOT QT_BUILD_STANDALONE_TESTS)
+    if(PROJECT_NAME STREQUAL "QtBase" AND NOT QT_INTERNAL_BUILD_STANDALONE_PARTS)
         if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
             # Handle both FEATURE_ and QT_FEATURE_ cases when they are specified on the command line
             # explicitly. It's possible for one to be set, but not the other, because
@@ -56,7 +56,8 @@ function(qt_internal_setup_build_and_install_paths)
     # Compute the values of QT_BUILD_DIR, QT_INSTALL_DIR, QT_CONFIG_BUILD_DIR, QT_CONFIG_INSTALL_DIR
     # taking into account whether the current build is a prefix build or a non-prefix build,
     # and whether it is a superbuild or non-superbuild.
-    # A third case is when another module or standalone tests are built against a super-built Qt.
+    # A third case is when another module or standalone tests/examples are built against a
+    # super-built Qt.
     # The layout for the third case is the same as for non-superbuilds.
     #
     # These values should be prepended to file paths in commands or properties,
@@ -205,6 +206,18 @@ macro(qt_internal_set_qt_cmake_dir)
     set(QT_CMAKE_DIR "${CMAKE_CURRENT_LIST_DIR}")
 endmacro()
 
+macro(qt_internal_set_qt_apple_support_files_path)
+    # This is analogous to what we have in QtConfig.cmake.in. It's copied here so that iOS
+    # tests can be built in tree.
+    if(APPLE)
+        if(NOT CMAKE_SYSTEM_NAME OR CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+            set(__qt_internal_cmake_apple_support_files_path "${QT_CMAKE_DIR}/macos")
+        elseif(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+            set(__qt_internal_cmake_apple_support_files_path "${QT_CMAKE_DIR}/ios")
+        endif()
+    endif()
+endmacro()
+
 macro(qt_internal_set_qt_staging_prefix)
     if(NOT "${CMAKE_STAGING_PREFIX}" STREQUAL "")
         set(QT_STAGING_PREFIX "${CMAKE_STAGING_PREFIX}")
@@ -227,4 +240,6 @@ macro(qt_internal_setup_paths_and_prefixes)
     qt_internal_set_cmake_install_libdir()
 
     qt_internal_set_qt_cmake_dir()
+
+    qt_internal_set_qt_apple_support_files_path()
 endmacro()

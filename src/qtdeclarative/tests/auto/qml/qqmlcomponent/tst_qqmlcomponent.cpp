@@ -1,5 +1,5 @@
 // Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 #include <qtest.h>
 #include <QDebug>
 
@@ -90,13 +90,6 @@ public slots:
     }
 };
 
-static void gc(QQmlEngine &engine)
-{
-    engine.collectGarbage();
-    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
-    QCoreApplication::processEvents();
-}
-
 class tst_qqmlcomponent : public QQmlDataTest
 {
     Q_OBJECT
@@ -148,6 +141,7 @@ private slots:
     void loadFromQrc();
     void removeBinding();
     void complexObjectArgument();
+    void bindingEvaluationOrder();
 
 private:
     QQmlEngine engine;
@@ -185,14 +179,12 @@ void tst_qqmlcomponent::loadEmptyUrl()
 void tst_qqmlcomponent::qmlIncubateObject()
 {
     QQmlComponent component(&engine, testFileUrl("incubateObject.qml"));
-    QObject *object = component.create();
+    std::unique_ptr<QObject> object { component.create() };
     QVERIFY(object != nullptr);
     QCOMPARE(object->property("test1").toBool(), true);
     QCOMPARE(object->property("test2").toBool(), false);
 
     QTRY_VERIFY(object->property("test2").toBool());
-
-    delete object;
 }
 
 void tst_qqmlcomponent::qmlCreateWindow()
@@ -399,11 +391,11 @@ void tst_qqmlcomponent::qmlCreateParentReference()
 
     QQmlComponent component(&engine, testFileUrl("createParentReference.qml"));
     QVERIFY2(component.errorString().isEmpty(), component.errorString().toUtf8());
-    QObject *object = component.create();
+    std::unique_ptr<QObject> object { component.create() };
     QVERIFY(object != nullptr);
 
-    QVERIFY(QMetaObject::invokeMethod(object, "createChild"));
-    delete object;
+    QVERIFY(QMetaObject::invokeMethod(object.get(), "createChild"));
+    object.reset();
 
     engine.setOutputWarningsToStandardError(false);
     QCOMPARE(engine.outputWarningsToStandardError(), false);
@@ -425,10 +417,8 @@ void tst_qqmlcomponent::async()
     QCOMPARE(watcher.ready, 1);
     QCOMPARE(watcher.error, 0);
 
-    QObject *object = component.create();
+    std::unique_ptr<QObject> object { component.create() };
     QVERIFY(object != nullptr);
-
-    delete object;
 }
 
 void tst_qqmlcomponent::asyncHierarchy()
@@ -446,7 +436,7 @@ void tst_qqmlcomponent::asyncHierarchy()
     QCOMPARE(watcher.ready, 1);
     QCOMPARE(watcher.error, 0);
 
-    QObject *root = component.create();
+    std::unique_ptr<QObject> root { component.create() };
     QVERIFY(root != nullptr);
 
     // ensure that the parent-child relationship hierarchy is correct
@@ -470,8 +460,6 @@ void tst_qqmlcomponent::asyncHierarchy()
 
     // ensure that values and bindings are assigned correctly
     QVERIFY(root->property("success").toBool());
-
-    delete root;
 }
 
 void tst_qqmlcomponent::asyncForceSync()
@@ -1504,6 +1492,33 @@ void tst_qqmlcomponent::complexObjectArgument()
     QScopedPointer<QObject> o(c.create());
     QVERIFY(!o.isNull());
     QCOMPARE(o->objectName(), QStringLiteral("26 - 25"));
+}
+
+void tst_qqmlcomponent::bindingEvaluationOrder()
+{
+    // Note: This test explicitly tests the order in which bindings are
+    // evaluated, which is generally unspecified. This, however, exists
+    // as a regression test for QQmlObjectCreator code that is supposed
+    // to *not* mess with the QmlIR given to it.
+
+    QQmlEngine engine;
+    QQmlComponent component(&engine);
+    component.setData(R"(
+        import QtQml
+        QtObject {
+            property var myList: ["dummy"]
+            property int p1: { myList.push("p1"); return 0; }
+            property int p2: { myList.push("p2"); return 0; }
+        })", QUrl());
+    QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+    QScopedPointer<QObject> o(component.create());
+    QVERIFY(!o.isNull());
+
+    const QList<QVariant> myList = o->property("myList").toList();
+    QCOMPARE(myList.size(), 3);
+    QCOMPARE(myList[0].toString(), u"dummy"_s);
+    QCOMPARE(myList[1].toString(), u"p1"_s);
+    QCOMPARE(myList[2].toString(), u"p2"_s);
 }
 
 QTEST_MAIN(tst_qqmlcomponent)

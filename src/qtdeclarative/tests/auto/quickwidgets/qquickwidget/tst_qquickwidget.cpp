@@ -1,5 +1,5 @@
 // Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <qtest.h>
 #include <qtesttouch.h>
@@ -1083,9 +1083,6 @@ public:
 
 void tst_qquickwidget::cleanupRhi()
 {
-#ifdef Q_OS_ANDROID
-    QSKIP("This test crashes on Android (QTBUG-121133)");
-#endif
     CreateDestroyWidget topLevel;
     QQuickWidget quickWidget(&topLevel);
     quickWidget.setSource(testFileUrl("rectangle.qml"));

@@ -213,6 +213,8 @@ void QQmlJSTypeDescriptionReader::readComponent(UiObjectDefinition *ast)
                 scope->setIsSingleton(readBoolBinding(script));
             } else if (name == QLatin1String("isCreatable")) {
                 scope->setCreatableFlag(readBoolBinding(script));
+            } else if (name == QLatin1String("isStructured")) {
+                scope->setStructuredFlag(readBoolBinding(script));
             } else if (name == QLatin1String("isComposite")) {
                 scope->setIsComposite(readBoolBinding(script));
             } else if (name == QLatin1String("hasCustomParser")) {
@@ -233,6 +235,8 @@ void QQmlJSTypeDescriptionReader::readComponent(UiObjectDefinition *ast)
                 }
             } else if (name == QLatin1String("extension")) {
                 scope->setExtensionTypeName(readStringBinding(script));
+            } else if (name == QLatin1String("extensionIsJavaScript")) {
+                scope->setExtensionIsJavaScript(readBoolBinding(script));
             } else if (name == QLatin1String("extensionIsNamespace")) {
                 scope->setExtensionIsNamespace(readBoolBinding(script));
             } else if (name == QLatin1String("deferredNames")) {
@@ -243,8 +247,9 @@ void QQmlJSTypeDescriptionReader::readComponent(UiObjectDefinition *ast)
                 addWarning(script->firstSourceLocation(),
                            tr("Expected only name, prototype, defaultProperty, attachedType, "
                               "valueType, exports, interfaces, isSingleton, isCreatable, "
-                              "isComposite, hasCustomParser, exportMetaObjectRevisions, "
-                              "deferredNames, and immediateNames in script bindings, not \"%1\".")
+                              "isStructured, isComposite, hasCustomParser, "
+                              "exportMetaObjectRevisions, deferredNames, and immediateNames "
+                              "in script bindings, not \"%1\".")
                            .arg(name));
             }
         } else {

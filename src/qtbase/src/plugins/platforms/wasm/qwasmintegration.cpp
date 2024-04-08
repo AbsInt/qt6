@@ -14,9 +14,8 @@
 #include "qwasmwindow.h"
 #include "qwasmbackingstore.h"
 #include "qwasmfontdatabase.h"
-#if defined(Q_OS_UNIX)
-#include <QtGui/private/qgenericunixeventdispatcher_p.h>
-#endif
+#include "qwasmdrag.h"
+
 #include <qpa/qplatformwindow.h>
 #include <QtGui/qscreen.h>
 #include <qpa/qwindowsysteminterface.h>
@@ -137,7 +136,7 @@ QWasmIntegration::QWasmIntegration()
         visualViewport.call<void>("addEventListener", val("resize"),
                                   val::module_property("qtResizeAllScreens"));
     }
-    m_drag = std::make_unique<QSimpleDrag>();
+    m_drag = std::make_unique<QWasmDrag>();
 }
 
 QWasmIntegration::~QWasmIntegration()

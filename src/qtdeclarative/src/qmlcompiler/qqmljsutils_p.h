@@ -25,6 +25,7 @@
 #include <QtCore/qstring.h>
 #include <QtCore/qstringview.h>
 #include <QtCore/qstringbuilder.h>
+#include <QtQml/private/qqmlsignalnames_p.h>
 #include <private/qduplicatetracker_p.h>
 
 #include <optional>
@@ -73,7 +74,10 @@ struct Q_QMLCOMPILER_PRIVATE_EXPORT QQmlJSUtils
     static QString escapeString(QString s)
     {
         using namespace Qt::StringLiterals;
-        return s.replace(u'\\', u"\\\\"_s).replace(u'"', u"\\\""_s).replace(u'\n', u"\\n"_s);
+        return s.replace('\\'_L1, "\\\\"_L1)
+                .replace('"'_L1, "\\\""_L1)
+                .replace('\n'_L1, "\\n"_L1)
+                .replace('?'_L1, "\\?"_L1);
     }
 
     /*! \internal
@@ -99,26 +103,6 @@ struct Q_QMLCOMPILER_PRIVATE_EXPORT QQmlJSUtils
         return type;
     }
 
-    /*! \internal
-        Returns a signal name from \a handlerName string.
-    */
-    static std::optional<QString> signalName(QStringView handlerName)
-    {
-        if (handlerName.startsWith(u"on") && handlerName.size() > 2) {
-            QString signal = handlerName.mid(2).toString();
-            for (int i = 0; i < signal.size(); ++i) {
-                QChar &ch = signal[i];
-                if (ch.isLower())
-                    return {};
-                if (ch.isUpper()) {
-                    ch = ch.toLower();
-                    return signal;
-                }
-            }
-        }
-        return {};
-    }
-
     static std::optional<QQmlJSMetaProperty>
     changeHandlerProperty(const QQmlJSScope::ConstPtr &scope, QStringView signalName)
     {
@@ -127,6 +111,21 @@ struct Q_QMLCOMPILER_PRIVATE_EXPORT QQmlJSUtils
         constexpr int length = int(sizeof("Changed") / sizeof(char)) - 1;
         signalName.chop(length);
         auto p = scope->property(signalName.toString());
+        const bool isBindable = !p.bindable().isEmpty();
+        const bool canNotify = !p.notify().isEmpty();
+        if (p.isValid() && (isBindable || canNotify))
+            return p;
+        return {};
+    }
+
+    static std::optional<QQmlJSMetaProperty>
+    propertyFromChangedHandler(const QQmlJSScope::ConstPtr &scope, QStringView changedHandler)
+    {
+        auto signalName = QQmlSignalNames::changedHandlerNameToPropertyName(changedHandler);
+        if (!signalName)
+            return {};
+
+        auto p = scope->property(*signalName);
         const bool isBindable = !p.bindable().isEmpty();
         const bool canNotify = !p.notify().isEmpty();
         if (p.isValid() && (isBindable || canNotify))
@@ -368,16 +367,16 @@ struct Q_QMLCOMPILER_PRIVATE_EXPORT QQmlJSUtils
 };
 
 bool Q_QMLCOMPILER_PRIVATE_EXPORT canStrictlyCompareWithVar(
-        const QQmlJSTypeResolver *typeResolver, const QQmlJSRegisterContent &lhsContent,
-        const QQmlJSRegisterContent &rhsContent);
+        const QQmlJSTypeResolver *typeResolver, const QQmlJSScope::ConstPtr &lhsType,
+        const QQmlJSScope::ConstPtr &rhsType);
 
-bool Q_QMLCOMPILER_PRIVATE_EXPORT canCompareWithQObject(const QQmlJSTypeResolver *typeResolver,
-                                                        const QQmlJSRegisterContent &lhsContent,
-                                                        const QQmlJSRegisterContent &rhsContent);
+bool Q_QMLCOMPILER_PRIVATE_EXPORT canCompareWithQObject(
+        const QQmlJSTypeResolver *typeResolver, const QQmlJSScope::ConstPtr &lhsType,
+        const QQmlJSScope::ConstPtr &rhsType);
 
-bool Q_QMLCOMPILER_PRIVATE_EXPORT canCompareWithQUrl(const QQmlJSTypeResolver *typeResolver,
-                                                     const QQmlJSRegisterContent &lhsContent,
-                                                     const QQmlJSRegisterContent &rhsContent);
+bool Q_QMLCOMPILER_PRIVATE_EXPORT canCompareWithQUrl(
+        const QQmlJSTypeResolver *typeResolver, const QQmlJSScope::ConstPtr &lhsType,
+        const QQmlJSScope::ConstPtr &rhsType);
 
 QT_END_NAMESPACE
 

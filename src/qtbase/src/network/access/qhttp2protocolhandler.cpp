@@ -28,6 +28,7 @@
 
 #include <algorithm>
 #include <vector>
+#include <optional>
 
 QT_BEGIN_NAMESPACE
 
@@ -47,10 +48,10 @@ HPack::HttpHeader build_headers(const QHttpNetworkRequest &request, quint32 maxH
     // 1. Before anything - mandatory fields, if they do not fit into maxHeaderList -
     // then stop immediately with error.
     const auto auth = request.url().authority(QUrl::FullyEncoded | QUrl::RemoveUserInfo).toLatin1();
-    header.push_back(HeaderField(":authority", auth));
-    header.push_back(HeaderField(":method", request.methodName()));
-    header.push_back(HeaderField(":path", request.uri(useProxy)));
-    header.push_back(HeaderField(":scheme", request.url().scheme().toLatin1()));
+    header.emplace_back(":authority", auth);
+    header.emplace_back(":method", request.methodName());
+    header.emplace_back(":path", request.uri(useProxy));
+    header.emplace_back(":scheme", request.url().scheme().toLatin1());
 
     HeaderSize size = header_size(header);
     if (!size.first) // Ooops!
@@ -81,36 +82,10 @@ HPack::HttpHeader build_headers(const QHttpNetworkRequest &request, quint32 maxH
         // to their encoding in HTTP/2.
         // A request or response containing uppercase header field names
         // MUST be treated as malformed (Section 8.1.2.6)".
-        header.push_back(HeaderField(field.first.toLower(), field.second));
+        header.emplace_back(field.first.toLower(), field.second);
     }
 
     return header;
-}
-
-std::vector<uchar> assemble_hpack_block(const std::vector<Http2::Frame> &frames)
-{
-    std::vector<uchar> hpackBlock;
-
-    quint32 total = 0;
-    for (const auto &frame : frames) {
-        if (qAddOverflow(total, frame.hpackBlockSize(), &total))
-            return hpackBlock;
-    }
-
-    if (!total)
-        return hpackBlock;
-
-    hpackBlock.resize(total);
-    auto dst = hpackBlock.begin();
-    for (const auto &frame : frames) {
-        if (const auto hpackBlockSize = frame.hpackBlockSize()) {
-            const uchar *src = frame.hpackBlockBegin();
-            std::copy(src, src + hpackBlockSize, dst);
-            dst += hpackBlockSize;
-        }
-    }
-
-    return hpackBlock;
 }
 
 QUrl urlkey_from_request(const QHttpNetworkRequest &request)
@@ -124,20 +99,10 @@ QUrl urlkey_from_request(const QHttpNetworkRequest &request)
     return url;
 }
 
-bool sum_will_overflow(qint32 windowSize, qint32 delta)
-{
-    if (windowSize > 0)
-        return std::numeric_limits<qint32>::max() - windowSize < delta;
-    return std::numeric_limits<qint32>::min() - windowSize > delta;
-}
-
 }// Unnamed namespace
 
 // Since we anyway end up having this in every function definition:
 using namespace Http2;
-
-const std::deque<quint32>::size_type QHttp2ProtocolHandler::maxRecycledStreams = 10000;
-const quint32 QHttp2ProtocolHandler::maxAcceptableTableSize;
 
 QHttp2ProtocolHandler::QHttp2ProtocolHandler(QHttpNetworkConnectionChannel *channel)
     : QAbstractProtocolHandler(channel),
@@ -322,8 +287,7 @@ bool QHttp2ProtocolHandler::sendRequest()
     auto &requests = m_channel->h2RequestsToSend;
     for (auto it = requests.begin(), endIt = requests.end(); it != endIt;) {
         const auto &pair = *it;
-        const QString scheme(pair.first.url().scheme());
-        if (scheme == "preconnect-http"_L1 || scheme == "preconnect-https"_L1) {
+        if (pair.first.isPreConnect()) {
             m_connection->preConnectFinished();
             emit pair.second->finished();
             it = requests.erase(it);
@@ -361,11 +325,13 @@ bool QHttp2ProtocolHandler::sendRequest()
         initReplyFromPushPromise(message, key);
     }
 
-    const auto streamsToUse = std::min<quint32>(maxConcurrentStreams > quint32(activeStreams.size())
-                                                ? maxConcurrentStreams - quint32(activeStreams.size()) : 0,
-                                                requests.size());
+    const auto isClientSide = [](const auto &pair) -> bool { return (pair.first & 1) == 1; };
+    const auto activeClientSideStreams = std::count_if(
+            activeStreams.constKeyValueBegin(), activeStreams.constKeyValueEnd(), isClientSide);
+    const qint64 streamsToUse = qBound(0, qint64(maxConcurrentStreams) - activeClientSideStreams,
+                                       requests.size());
     auto it = requests.begin();
-    for (quint32 i = 0; i < streamsToUse; ++i) {
+    for (qint64 i = 0; i < streamsToUse; ++i) {
         const qint32 newStreamID = createNewStream(*it);
         if (!newStreamID) {
             // TODO: actually we have to open a new connection.
@@ -508,7 +474,7 @@ bool QHttp2ProtocolHandler::sendDATA(Stream &stream)
         }
 
         frameWriter.start(FrameType::DATA, FrameFlag::EMPTY, stream.streamID);
-        const qint32 bytesWritten = std::min<qint32>(slot, chunkSize);
+        const qint32 bytesWritten = qint32(std::min<qint64>(slot, chunkSize));
 
         if (!frameWriter.writeDATA(*m_socket, maxFrameSize, src, bytesWritten))
             return false;
@@ -580,8 +546,9 @@ void QHttp2ProtocolHandler::handleDATA()
 
     sessionReceiveWindowSize -= inboundFrame.payloadSize();
 
-    if (activeStreams.contains(streamID)) {
-        auto &stream = activeStreams[streamID];
+    auto it = activeStreams.find(streamID);
+    if (it != activeStreams.end()) {
+        Stream &stream = it.value();
 
         if (qint32(inboundFrame.payloadSize()) > stream.recvWindow) {
             finishStreamWithError(stream, QNetworkReply::ProtocolFailure, "flow control error"_L1);
@@ -887,16 +854,19 @@ void QHttp2ProtocolHandler::handleWINDOW_UPDATE()
     const auto streamID = inboundFrame.streamID();
 
     if (streamID == Http2::connectionStreamID) {
-        if (!valid || sum_will_overflow(sessionSendWindowSize, delta))
+        qint32 sum = 0;
+        if (!valid || qAddOverflow(sessionSendWindowSize, qint32(delta), &sum))
             return connectionError(PROTOCOL_ERROR, "WINDOW_UPDATE invalid delta");
-        sessionSendWindowSize += delta;
+        sessionSendWindowSize = sum;
     } else {
-        if (!activeStreams.contains(streamID)) {
+        auto it = activeStreams.find(streamID);
+        if (it == activeStreams.end()) {
             // WINDOW_UPDATE on closed streams can be ignored.
             return;
         }
-        auto &stream = activeStreams[streamID];
-        if (!valid || sum_will_overflow(stream.sendWindow, delta)) {
+        Stream &stream = it.value();
+        qint32 sum = 0;
+        if (!valid || qAddOverflow(stream.sendWindow, qint32(delta), &sum)) {
             finishStreamWithError(stream, QNetworkReply::ProtocolFailure,
                                   "invalid WINDOW_UPDATE delta"_L1);
             sendRST_STREAM(streamID, PROTOCOL_ERROR);
@@ -904,7 +874,7 @@ void QHttp2ProtocolHandler::handleWINDOW_UPDATE()
             deleteActiveStream(streamID);
             return;
         }
-        stream.sendWindow += delta;
+        stream.sendWindow = sum;
     }
 
     // Since we're in _q_receiveReply at the moment, let's first handle other
@@ -943,9 +913,10 @@ void QHttp2ProtocolHandler::handleContinuedHEADERS()
 
     const auto streamID = continuedFrames[0].streamID();
 
+    const auto streamIt = activeStreams.find(streamID);
     if (firstFrameType == FrameType::HEADERS) {
-        if (activeStreams.contains(streamID)) {
-            Stream &stream = activeStreams[streamID];
+        if (streamIt != activeStreams.end()) {
+            Stream &stream = streamIt.value();
             if (stream.state != Stream::halfClosedLocal
                 && stream.state != Stream::remoteReserved
                 && stream.state != Stream::open) {
@@ -967,38 +938,29 @@ void QHttp2ProtocolHandler::handleContinuedHEADERS()
         // has yet to see the reset.
     }
 
-    std::vector<uchar> hpackBlock(assemble_hpack_block(continuedFrames));
+    std::vector<uchar> hpackBlock(Http2::assemble_hpack_block(continuedFrames));
     const bool hasHeaderFields = !hpackBlock.empty();
     if (hasHeaderFields) {
         HPack::BitIStream inputStream{&hpackBlock[0], &hpackBlock[0] + hpackBlock.size()};
         if (!decoder.decodeHeaderFields(inputStream))
             return connectionError(COMPRESSION_ERROR, "HPACK decompression failed");
-    } else {
-        if (firstFrameType == FrameType::PUSH_PROMISE) {
-            // It could be a PRIORITY sent in HEADERS - already handled by this
-            // point in handleHEADERS. If it was PUSH_PROMISE (HTTP/2 8.2.1):
-            // "The header fields in PUSH_PROMISE and any subsequent CONTINUATION
-            // frames MUST be a valid and complete set of request header fields
-            // (Section 8.1.2.3) ... If a client receives a PUSH_PROMISE that does
-            // not include a complete and valid set of header fields or the :method
-            // pseudo-header field identifies a method that is not safe, it MUST
-            // respond with a stream error (Section 5.4.2) of type PROTOCOL_ERROR."
-            resetPromisedStream(continuedFrames[0], Http2::PROTOCOL_ERROR);
-            return;
-        }
-
-        // We got back an empty hpack block. Now let's figure out if there was an error.
-        constexpr auto hpackBlockHasContent = [](const auto &c) { return c.hpackBlockSize() > 0; };
-        const bool anyHpackBlock = std::any_of(continuedFrames.cbegin(), continuedFrames.cend(),
-                                               hpackBlockHasContent);
-        if (anyHpackBlock) // There was hpack block data, but returned empty => it overflowed.
-            return connectionError(FRAME_SIZE_ERROR, "HEADERS frame too large");
+    } else if (firstFrameType == FrameType::PUSH_PROMISE) {
+        // It could be a PRIORITY sent in HEADERS - already handled by this
+        // point in handleHEADERS. If it was PUSH_PROMISE (HTTP/2 8.2.1):
+        // "The header fields in PUSH_PROMISE and any subsequent CONTINUATION
+        // frames MUST be a valid and complete set of request header fields
+        // (Section 8.1.2.3) ... If a client receives a PUSH_PROMISE that does
+        // not include a complete and valid set of header fields or the :method
+        // pseudo-header field identifies a method that is not safe, it MUST
+        // respond with a stream error (Section 5.4.2) of type PROTOCOL_ERROR."
+        resetPromisedStream(continuedFrames[0], Http2::PROTOCOL_ERROR);
+        return;
     }
 
     switch (firstFrameType) {
     case FrameType::HEADERS:
-        if (activeStreams.contains(streamID)) {
-            Stream &stream = activeStreams[streamID];
+        if (streamIt != activeStreams.end()) {
+            Stream &stream = streamIt.value();
             if (hasHeaderFields)
                 updateStream(stream, decoder.decodedHeader());
             // Needs to resend the request; we should finish and delete the current stream
@@ -1043,11 +1005,12 @@ bool QHttp2ProtocolHandler::acceptSetting(Http2::Settings identifier, quint32 ne
         std::vector<quint32> brokenStreams;
         brokenStreams.reserve(activeStreams.size());
         for (auto &stream : activeStreams) {
-            if (sum_will_overflow(stream.sendWindow, delta)) {
+            qint32 sum = 0;
+            if (qAddOverflow(stream.sendWindow, delta, &sum)) {
                 brokenStreams.push_back(stream.streamID);
                 continue;
             }
-            stream.sendWindow += delta;
+            stream.sendWindow = sum;
         }
 
         for (auto id : brokenStreams) {
@@ -1114,7 +1077,7 @@ void QHttp2ProtocolHandler::updateStream(Stream &stream, const HPack::HttpHeader
     int statusCode = 0;
     for (const auto &pair : headers) {
         const auto &name = pair.name;
-        auto value = pair.value;
+        const auto value = QByteArrayView(pair.value);
 
         // TODO: part of this code copies what SPDY protocol handler does when
         // processing headers. Binary nature of HTTP/2 and SPDY saves us a lot
@@ -1134,10 +1097,8 @@ void QHttp2ProtocolHandler::updateStream(Stream &stream, const HPack::HttpHeader
             if (ok)
                 httpReply->setContentLength(length);
         } else {
-            QByteArray binder(", ");
-            if (name == "set-cookie")
-                binder = "\n";
-            httpReply->appendHeaderField(name, value.replace('\0', binder));
+            const auto binder = name == "set-cookie" ? QByteArrayView("\n") : QByteArrayView(", ");
+            httpReply->appendHeaderField(name, QByteArray(pair.value).replace('\0', binder));
         }
     }
 
@@ -1433,9 +1394,10 @@ quint32 QHttp2ProtocolHandler::popStreamToResume()
         auto &queue = suspendedStreams[rank];
         auto it = queue.begin();
         for (; it != queue.end(); ++it) {
-            if (!activeStreams.contains(*it))
+            auto stream = activeStreams.constFind(*it);
+            if (stream == activeStreams.cend())
                 continue;
-            if (activeStreams[*it].sendWindow > 0)
+            if (stream->sendWindow > 0)
                 break;
         }
 
@@ -1458,8 +1420,8 @@ void QHttp2ProtocolHandler::removeFromSuspended(quint32 streamID)
 
 void QHttp2ProtocolHandler::deleteActiveStream(quint32 streamID)
 {
-    if (activeStreams.contains(streamID)) {
-        auto &stream = activeStreams[streamID];
+    if (const auto it = activeStreams.constFind(streamID); it != activeStreams.cend()) {
+        const Stream &stream = it.value();
         if (stream.reply()) {
             stream.reply()->disconnect(this);
             streamIDs.remove(stream.reply());
@@ -1468,7 +1430,7 @@ void QHttp2ProtocolHandler::deleteActiveStream(quint32 streamID)
             stream.data()->disconnect(this);
             streamIDs.remove(stream.data());
         }
-        activeStreams.remove(streamID);
+        activeStreams.erase(it);
     }
 
     removeFromSuspended(streamID);
@@ -1491,10 +1453,11 @@ void QHttp2ProtocolHandler::resumeSuspendedStreams()
         if (!streamID)
             return;
 
-        if (!activeStreams.contains(streamID))
+        auto it = activeStreams.find(streamID);
+        if (it == activeStreams.end())
             continue;
+        Stream &stream = it.value();
 
-        Stream &stream = activeStreams[streamID];
         if (!sendDATA(stream)) {
             finishStreamWithError(stream, QNetworkReply::UnknownNetworkError,
                                   "failed to send DATA"_L1);
@@ -1523,42 +1486,18 @@ bool QHttp2ProtocolHandler::tryReserveStream(const Http2::Frame &pushPromiseFram
 {
     Q_ASSERT(pushPromiseFrame.type() == FrameType::PUSH_PROMISE);
 
-    QMap<QByteArray, QByteArray> pseudoHeaders;
-    for (const auto &field : requestHeader) {
-        if (field.name == ":scheme" || field.name == ":path"
-            || field.name == ":authority" || field.name == ":method") {
-            if (field.value.isEmpty() || pseudoHeaders.contains(field.name))
-                return false;
-            pseudoHeaders[field.name] = field.value;
-        }
-    }
-
-    if (pseudoHeaders.size() != 4) {
-        // All four required, HTTP/2 8.1.2.3.
-        return false;
-    }
-
-    const QByteArray method = pseudoHeaders[":method"];
-    if (method.compare("get", Qt::CaseInsensitive) != 0 &&
-            method.compare("head", Qt::CaseInsensitive) != 0)
-        return false;
-
-    QUrl url;
-    url.setScheme(QLatin1StringView(pseudoHeaders[":scheme"]));
-    url.setAuthority(QLatin1StringView(pseudoHeaders[":authority"]));
-    url.setPath(QLatin1StringView(pseudoHeaders[":path"]));
-
-    if (!url.isValid())
+    const auto url = HPack::makePromiseKeyUrl(requestHeader);
+    if (!url.has_value())
         return false;
 
     Q_ASSERT(activeStreams.contains(pushPromiseFrame.streamID()));
     const Stream &associatedStream = activeStreams[pushPromiseFrame.streamID()];
 
     const auto associatedUrl = urlkey_from_request(associatedStream.request());
-    if (url.adjusted(QUrl::RemovePath) != associatedUrl.adjusted(QUrl::RemovePath))
+    if (url->adjusted(QUrl::RemovePath) != associatedUrl.adjusted(QUrl::RemovePath))
         return false;
 
-    const auto urlKey = url.toString();
+    const auto urlKey = url->toString();
     if (promisedData.contains(urlKey)) // duplicate push promise
         return false;
 
@@ -1597,8 +1536,8 @@ void QHttp2ProtocolHandler::initReplyFromPushPromise(const HttpMessagePair &mess
 
     bool replyFinished = false;
     Stream *promisedStream = nullptr;
-    if (activeStreams.contains(promise.reservedID)) {
-        promisedStream = &activeStreams[promise.reservedID];
+    if (auto it = activeStreams.find(promise.reservedID); it != activeStreams.end()) {
+        promisedStream = &it.value();
         // Ok, we have an active (not closed yet) stream waiting for more frames,
         // let's pretend we requested it:
         promisedStream->httpPair = message;
@@ -1608,8 +1547,8 @@ void QHttp2ProtocolHandler::initReplyFromPushPromise(const HttpMessagePair &mess
                             streamInitialSendWindowSize,
                             streamInitialReceiveWindowSize);
         closedStream.state = Stream::halfClosedLocal;
-        activeStreams.insert(promise.reservedID, closedStream);
-        promisedStream = &activeStreams[promise.reservedID];
+        it = activeStreams.insert(promise.reservedID, closedStream);
+        promisedStream = &it.value();
         replyFinished = true;
     }
 

@@ -16,6 +16,7 @@
 #include <QtGui/qicon.h>
 #include <QtWidgets/qerrormessage.h>
 #include <QtCore/qmetaobject.h>
+#include <QtCore/qdir.h>
 #include <QtCore/qfile.h>
 #include <QtCore/qlibraryinfo.h>
 #include <QtCore/qlocale.h>
@@ -33,16 +34,16 @@ QT_BEGIN_NAMESPACE
 
 using namespace Qt::StringLiterals;
 
-static const char designerApplicationName[] = "Designer";
-static const char designerDisplayName[] = "Qt Designer";
-static const char designerWarningPrefix[] = "Designer: ";
+static constexpr auto designerApplicationName = "Designer"_L1;
+static constexpr auto designerDisplayName = "Qt Designer"_L1;
+static constexpr auto designerWarningPrefix = "Designer: "_L1;
 static QtMessageHandler previousMessageHandler = nullptr;
 
 static void designerMessageHandler(QtMsgType type, const QMessageLogContext &context, const QString &msg)
 {
     // Only Designer warnings are displayed as box
     QDesigner *designerApp = qDesigner;
-    if (type != QtWarningMsg || !designerApp || !msg.startsWith(QLatin1StringView(designerWarningPrefix))) {
+    if (type != QtWarningMsg || !designerApp || !msg.startsWith(designerWarningPrefix)) {
         previousMessageHandler(type, context, msg);
         return;
     }
@@ -53,8 +54,8 @@ QDesigner::QDesigner(int &argc, char **argv)
     : QApplication(argc, argv)
 {
     setOrganizationName(u"QtProject"_s);
-    QGuiApplication::setApplicationDisplayName(QLatin1StringView(designerDisplayName));
-    setApplicationName(QLatin1StringView(designerApplicationName));
+    QGuiApplication::setApplicationDisplayName(designerDisplayName);
+    setApplicationName(designerApplicationName);
     QDesignerComponents::initializeResources();
 
 #if !defined(Q_OS_MACOS) && !defined(Q_OS_WIN)
@@ -73,7 +74,7 @@ void QDesigner::showErrorMessage(const QString &message)
 {
     // strip the prefix
     const QString qMessage =
-        message.right(message.size() - int(qstrlen(designerWarningPrefix)));
+        message.right(message.size() - int(designerWarningPrefix.size()));
     // If there is no main window yet, just store the message.
     // The QErrorMessage would otherwise be hidden by the main window.
     if (m_mainWindow) {
@@ -98,7 +99,7 @@ void QDesigner::showErrorMessageBox(const QString &msg)
     if (!m_errorMessageDialog) {
         m_lastErrorMessage.clear();
         m_errorMessageDialog = new QErrorMessage(m_mainWindow);
-        const QString title = QCoreApplication::translate("QDesigner", "%1 - warning").arg(QLatin1StringView(designerApplicationName));
+        const QString title = QCoreApplication::translate("QDesigner", "%1 - warning").arg(designerApplicationName);
         m_errorMessageDialog->setWindowTitle(title);
         m_errorMessageDialog->setMinimumSize(QSize(600, 250));
     }
@@ -135,6 +136,7 @@ struct Options
 {
     QStringList files;
     QString resourceDir{QLibraryInfo::path(QLibraryInfo::TranslationsPath)};
+    QStringList pluginPaths;
     bool server{false};
     quint16 clientPort{0};
     bool enableInternalDynamicProperties{false};
@@ -161,6 +163,10 @@ static inline QDesigner::ParseArgumentsResult
     const QCommandLineOption internalDynamicPropertyOption(u"enableinternaldynamicproperties"_s,
                                           u"Enable internal dynamic properties"_s);
     parser.addOption(internalDynamicPropertyOption);
+    const QCommandLineOption pluginPathsOption(u"plugin-path"_s,
+                                               u"Default plugin path list"_s,
+                                               u"path"_s);
+    parser.addOption(pluginPathsOption);
 
     parser.addPositionalArgument(u"files"_s,
                                  u"The UI files to open."_s);
@@ -187,6 +193,10 @@ static inline QDesigner::ParseArgumentsResult
     }
     if (parser.isSet(resourceDirOption))
         options->resourceDir = parser.value(resourceDirOption);
+    const auto pluginPathValues = parser.values(pluginPathsOption);
+    for (const auto &pluginPath : pluginPathValues)
+        options->pluginPaths.append(pluginPath.split(QDir::listSeparator(), Qt::SkipEmptyParts));
+
     options->enableInternalDynamicProperties = parser.isSet(internalDynamicPropertyOption);
     options->files = parser.positionalArguments();
     return QDesigner::ParseArgumentsSuccess;
@@ -221,7 +231,7 @@ QDesigner::ParseArgumentsResult QDesigner::parseCommandLineArguments()
             installTranslator(qtTranslator.release());
     }
 
-    m_workbench = new QDesignerWorkbench();
+    m_workbench = new QDesignerWorkbench(options.pluginPaths);
 
     emit initialized();
     previousMessageHandler = qInstallMessageHandler(designerMessageHandler); // Warn when loading faulty forms

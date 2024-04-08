@@ -27,6 +27,7 @@
 #include <QtGui/qwindow.h>
 #include <QtGui/qregion.h>
 #include <QtGui/qopenglcontext.h>
+#include <QtGui/private/qwindowsthemecache_p.h>
 #include <private/qwindow_p.h> // QWINDOWSIZE_MAX
 #include <private/qguiapplication_p.h>
 #include <private/qhighdpiscaling_p.h>
@@ -837,6 +838,10 @@ void WindowCreationData::fromWindow(const QWindow *w, const Qt::WindowFlags flag
         // NOTE: WS_EX_TRANSPARENT flag can make mouse inputs fall through a layered window
         if (flagsIn & Qt::WindowTransparentForInput)
             exStyle |= WS_EX_LAYERED | WS_EX_TRANSPARENT;
+
+        // Currently only compatible with D3D surfaces, use it with care.
+        if (qEnvironmentVariableIntValue("QT_QPA_DISABLE_REDIRECTION_SURFACE"))
+            exStyle |= WS_EX_NOREDIRECTIONBITMAP;
     }
 }
 
@@ -1527,6 +1532,7 @@ QWindowsWindow::QWindowsWindow(QWindow *aWindow, const QWindowsWindowData &data)
 QWindowsWindow::~QWindowsWindow()
 {
     setFlag(WithinDestroy);
+    QWindowsThemeCache::clearThemeCache(m_data.hwnd);
     if (testFlag(TouchRegistered))
         UnregisterTouchWindow(m_data.hwnd);
     destroyWindow();
@@ -2005,6 +2011,9 @@ void QWindowsWindow::handleDpiChanged(HWND hwnd, WPARAM wParam, LPARAM lParam)
     const UINT dpi = HIWORD(wParam);
     const qreal scale = dpiRelativeScale(dpi);
     setSavedDpi(dpi);
+
+    QWindowsThemeCache::clearThemeCache(hwnd);
+
     // Send screen change first, so that the new screen is set during any following resize
     checkForScreenChanged(QWindowsWindow::FromDpiChange);
 

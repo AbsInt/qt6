@@ -128,33 +128,12 @@ bool QDockWidgetTitleButton::event(QEvent *event)
     return QAbstractButton::event(event);
 }
 
-static inline bool isWindowsStyle(const QStyle *style)
-{
-    // Note: QStyleSheetStyle inherits QWindowsStyle
-    const QStyle *effectiveStyle = style;
-
-#if QT_CONFIG(style_stylesheet)
-    if (style->inherits("QStyleSheetStyle"))
-      effectiveStyle = static_cast<const QStyleSheetStyle *>(style)->baseStyle();
-#endif
-#if !defined(QT_NO_STYLE_PROXY)
-    if (style->inherits("QProxyStyle"))
-      effectiveStyle = static_cast<const QProxyStyle *>(style)->baseStyle();
-#endif
-
-    return effectiveStyle->inherits("QWindowsStyle");
-}
-
 QSize QDockWidgetTitleButton::dockButtonIconSize() const
 {
     if (m_iconSize < 0) {
         m_iconSize = style()->pixelMetric(QStyle::PM_SmallIconSize, nullptr, this);
-        // Dock Widget title buttons on Windows where historically limited to size 10
-        // (from small icon size 16) since only a 10x10 XPM was provided.
-        // Adding larger pixmaps to the icons thus caused the icons to grow; limit
-        // this to qpiScaled(10) here.
-        if (isWindowsStyle(style()))
-            m_iconSize = qMin((10 * logicalDpiX()) / 96, m_iconSize);
+        if (style()->styleHint(QStyle::SH_DockWidget_ButtonsHaveFrame, nullptr, this))
+            m_iconSize = (m_iconSize * 5) / 8;  // 16 -> 10
     }
     return QSize(m_iconSize, m_iconSize);
 }
@@ -781,7 +760,9 @@ void QDockWidgetPrivate::startDrag(DragScope scope)
     QMainWindowLayout *layout = qt_mainwindow_layout_from_dock(q);
     Q_ASSERT(layout != nullptr);
 
+#if QT_CONFIG(draganddrop)
     bool wasFloating = q->isFloating();
+#endif
 
     state->widgetItem = layout->unplug(q, scope);
     if (state->widgetItem == nullptr) {
@@ -1080,10 +1061,12 @@ bool QDockWidgetPrivate::mouseMoveEvent(QMouseEvent *event)
 bool QDockWidgetPrivate::mouseReleaseEvent(QMouseEvent *event)
 {
 #if QT_CONFIG(mainwindow)
+#if QT_CONFIG(draganddrop)
     // if we are peforming a platform drag ignore the release here and end the drag when the actual
     // drag ends.
     if (QMainWindowLayout::needsPlatformDrag())
         return false;
+#endif
 
     if (event->button() == Qt::LeftButton && state && !state->nca) {
         endDrag(EndDragMode::LocationChange);
@@ -1230,10 +1213,12 @@ void QDockWidgetPrivate::setWindowState(bool floating, bool unplug, const QRect 
         flags |= Qt::FramelessWindowHint;
     }
 
+#if QT_CONFIG(draganddrop)
     // If we are performing a platform drag the flag is not needed and we want to avoid recreating
     // the platform window when it would be removed later
     if (unplug && !QMainWindowLayout::needsPlatformDrag())
         flags |= Qt::X11BypassWindowManagerHint;
+#endif
 
     q->setWindowFlags(flags);
 
@@ -1835,6 +1820,26 @@ QWidget *QDockWidget::titleBarWidget() const
         = qobject_cast<QDockWidgetLayout*>(this->layout());
     return layout->widgetForRole(QDockWidgetLayout::TitleBar);
 }
+
+#ifndef QT_NO_DEBUG_STREAM
+QDebug operator<<(QDebug dbg, const QDockWidget *dockWidget)
+{
+    QDebugStateSaver saver(dbg);
+    dbg.nospace();
+
+    if (!dockWidget) {
+        dbg << "QDockWidget(0x0)";
+        return dbg;
+    }
+
+    dbg << "QDockWidget(" << static_cast<const void *>(dockWidget);
+    dbg << "->(ObjectName=" << dockWidget->objectName();
+    dbg << "; floating=" << dockWidget->isFloating();
+    dbg << "; features=" << dockWidget->features();
+    dbg << ";))";
+    return dbg;
+}
+#endif // QT_NO_DEBUG_STREAM
 
 QT_END_NAMESPACE
 

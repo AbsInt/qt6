@@ -1,5 +1,5 @@
 // Copyright (C) 2021 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <QTest>
 #include <QTestEventLoop>
@@ -1355,9 +1355,6 @@ void tst_QThread::quitLock()
 
 void tst_QThread::create()
 {
-#if !QT_CONFIG(cxx11_future)
-    QSKIP("This test requires QThread::create");
-#else
     {
         const auto &function = [](){};
         QScopedPointer<QThread> thread(QThread::create(function));
@@ -1597,7 +1594,6 @@ void tst_QThread::create()
         QVERIFY(!thread);
     }
 #endif // QT_NO_EXCEPTIONS
-#endif // QT_CONFIG(cxx11_future)
 }
 
 void tst_QThread::createDestruction()

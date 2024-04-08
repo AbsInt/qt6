@@ -101,18 +101,8 @@ private:
     static constexpr bool isAsciiOnlyCharsAtCompileTime(Char *str, qsizetype sz) noexcept
     {
         // do not perform check if not at compile time
-#if !(defined(__cpp_lib_is_constant_evaluated) || defined(Q_CC_GNU))
-        Q_UNUSED(str);
-        Q_UNUSED(sz);
-        return false;
-#else
-#  if defined(__cpp_lib_is_constant_evaluated)
-        if (!std::is_constant_evaluated())
+        if (!q20::is_constant_evaluated())
             return false;
-#  elif defined(Q_CC_GNU) && !defined(Q_CC_CLANG)
-        if (!str || !__builtin_constant_p(*str))
-            return false;
-#  endif
         if constexpr (sizeof(Char) != sizeof(char)) {
             Q_UNUSED(str);
             Q_UNUSED(sz);
@@ -124,7 +114,6 @@ private:
             }
             return true;
         }
-#endif
     }
 
     template<typename Char>
@@ -140,34 +129,14 @@ private:
     }
 
     template <typename Char>
-    static qsizetype lengthHelperPointer(const Char *str) noexcept
+    static constexpr qsizetype lengthHelperPointer(const Char *str) noexcept
     {
-#if defined(Q_CC_GNU) && !defined(Q_CC_CLANG)
-        if (__builtin_constant_p(*str)) {
-            qsizetype result = 0;
-            while (*str++ != u'\0')
-                ++result;
-            return result;
-        }
-#endif
+        if (q20::is_constant_evaluated())
+            return qsizetype(std::char_traits<Char>::length(str));
         if constexpr (sizeof(Char) == sizeof(char16_t))
             return QtPrivate::qustrlen(reinterpret_cast<const char16_t*>(str));
         else
             return qsizetype(strlen(reinterpret_cast<const char*>(str)));
-    }
-
-    template <typename Container>
-    static constexpr qsizetype lengthHelperContainer(const Container &c) noexcept
-    {
-        return qsizetype(std::size(c));
-    }
-
-    template <typename Char, size_t N>
-    static constexpr qsizetype lengthHelperContainer(const Char (&str)[N]) noexcept
-    {
-        const auto it = std::char_traits<Char>::find(str, N, Char(0));
-        const auto end = it ? it : std::next(str, N);
-        return qsizetype(std::distance(str, end));
     }
 
     static QChar toQChar(char ch) noexcept { return toQChar(QLatin1Char{ch}); } // we don't handle UTF-8 multibytes
@@ -211,8 +180,8 @@ public:
     inline constexpr QAnyStringView(QLatin1StringView str) noexcept;
 
     template <typename Container, if_compatible_container<Container> = true>
-    constexpr QAnyStringView(const Container &c) noexcept
-        : QAnyStringView(std::data(c), lengthHelperContainer(c)) {}
+    constexpr Q_ALWAYS_INLINE QAnyStringView(const Container &c) noexcept
+        : QAnyStringView(std::data(c), QtPrivate::lengthHelperContainer(c)) {}
 
     template <typename Container, if_convertible_to<QString, Container> = true>
     constexpr QAnyStringView(Container &&c, QtPrivate::wrapped_t<Container, QString> &&capacity = {})
@@ -236,11 +205,11 @@ public:
         : QAnyStringView(capacity = QChar::fromUcs4(c)) {}
 
     constexpr QAnyStringView(QStringView v) noexcept
-        : QAnyStringView(std::data(v), lengthHelperContainer(v)) {}
+        : QAnyStringView(std::data(v), QtPrivate::lengthHelperContainer(v)) {}
 
     template <bool UseChar8T>
     constexpr QAnyStringView(QBasicUtf8StringView<UseChar8T> v) noexcept
-        : QAnyStringView(std::data(v), lengthHelperContainer(v)) {}
+        : QAnyStringView(std::data(v), QtPrivate::lengthHelperContainer(v)) {}
 
     template <typename Char, size_t Size, if_compatible_char<Char> = true>
     [[nodiscard]] constexpr static QAnyStringView fromArray(const Char (&string)[Size]) noexcept
@@ -273,20 +242,20 @@ public:
     }
 
     [[nodiscard]] constexpr QAnyStringView sliced(qsizetype pos) const
-    { verify(pos); auto r = *this; r.advanceData(pos); r.setSize(size() - pos); return r; }
+    { verify(pos, 0); auto r = *this; r.advanceData(pos); r.setSize(size() - pos); return r; }
     [[nodiscard]] constexpr QAnyStringView sliced(qsizetype pos, qsizetype n) const
     { verify(pos, n); auto r = *this; r.advanceData(pos); r.setSize(n); return r; }
     [[nodiscard]] constexpr QAnyStringView first(qsizetype n) const
-    { verify(n); return sliced(0, n); }
+    { verify(0, n); return sliced(0, n); }
     [[nodiscard]] constexpr QAnyStringView last(qsizetype n) const
-    { verify(n); return sliced(size() - n, n); }
+    { verify(0, n); return sliced(size() - n, n); }
     [[nodiscard]] constexpr QAnyStringView chopped(qsizetype n) const
-    { verify(n); return sliced(0, size() - n); }
+    { verify(0, n); return sliced(0, size() - n); }
 
     constexpr void truncate(qsizetype n)
-    { verify(n); setSize(n); }
+    { verify(0, n); setSize(n); }
     constexpr void chop(qsizetype n)
-    { verify(n); setSize(size() - n); }
+    { verify(0, n); setSize(size() - n); }
 
 
     [[nodiscard]] inline QString toString() const; // defined in qstring.h
@@ -299,12 +268,13 @@ public:
     [[nodiscard]] Q_CORE_EXPORT static bool equal(QAnyStringView lhs, QAnyStringView rhs) noexcept;
 
     static constexpr inline bool detects_US_ASCII_at_compile_time =
-#ifdef __cpp_lib_is_constant_evaluated
+#ifdef QT_SUPPORTS_IS_CONSTANT_EVALUATED
             true
 #else
             false
 #endif
             ;
+
     //
     // STL compatibility API:
     //
@@ -342,6 +312,10 @@ private:
     { return QAnyStringView::compare(lhs, rhs) > 0; }
 #endif
 
+#ifndef QT_NO_DEBUG_STREAM
+    Q_CORE_EXPORT friend QDebug operator<<(QDebug d, QAnyStringView s);
+#endif
+
     [[nodiscard]] constexpr Tag tag() const noexcept { return Tag{m_size & TypeMask}; }
     [[nodiscard]] constexpr bool isUtf16() const noexcept { return tag() == Tag::Utf16; }
     [[nodiscard]] constexpr bool isUtf8() const noexcept { return tag() == Tag::Utf8; }
@@ -355,7 +329,8 @@ private:
     constexpr void setSize(qsizetype sz) noexcept { m_size = size_t(sz) | tag(); }
     constexpr void advanceData(qsizetype delta) noexcept
     { m_data_utf8 += delta * charSize(); }
-    Q_ALWAYS_INLINE constexpr void verify(qsizetype pos, qsizetype n = 0) const
+    Q_ALWAYS_INLINE constexpr void verify([[maybe_unused]] qsizetype pos = 0,
+                                          [[maybe_unused]] qsizetype n = 1) const
     {
         Q_ASSERT(pos >= 0);
         Q_ASSERT(pos <= size());

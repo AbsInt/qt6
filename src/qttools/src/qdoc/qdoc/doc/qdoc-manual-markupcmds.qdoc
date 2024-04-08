@@ -1582,8 +1582,8 @@
     can link to using the \l {l-command} {\\l (link)} and \l
     {sa-command} {\\sa (see also)} commands.
 
-    The text up to the line break becomes the target name. Be sure to
-    follow the target name with a line break. Curly brackets are not
+    \e{The text up to the line break becomes the target name}. Be sure
+    to follow the target name with a line break. Curly brackets are not
     required around the target name, but they may be required when the
     target name is used in a link command. See below.
 
@@ -1608,6 +1608,25 @@
 
     \note The brackets in the link example are required because the
     target name contains spaces.
+
+    \section2 \\target in a \\table
+    When you use the \\target command in a table, make sure that the
+    \\target command follows a \l {li-command}{\\li}-command (table
+    cell), and that it's either on a separate line, or the last content
+    that occurs in the line it's in. This is due to how the \\target
+    command works; it consumes anything up to the next line break as
+    its parameter. In other words, if you have a table and need a
+    \\target within it, make sure that it follows the following
+    structure:
+
+    \badcode
+    \table
+        \row
+            \li \target my-target
+            My text goes here.
+            \li This is my next table cell.
+    \endtable
+    \endcode
 
     See also \l {l-command} {\\l}, \l {sa-command} {\\sa} and \l
     {keyword-command} {\\keyword}.
@@ -2634,9 +2653,17 @@
     \section2 \c qmltypesbymodule
 
     Similar to \c classesbymodule argument, but used for listing the
-    QML types from the QML module specified with the second argument.
+    QML types (excluding QML value types) from the QML module specified
+    with the second argument.
 
     \note Support for this argument was introduced in QDoc 5.6.
+
+    \section2 \c qmlvaluetypesbymodule
+
+    Similar to \c qmltypesbymodule argument, but lists QML value
+    types instead.
+
+    \note Support for this argument was introduced in QDoc 6.7.
 
     \section2 \c functionindex
 
@@ -3049,11 +3076,13 @@
     commands in your \l {table-command} {\\table} or \l {list-command}
     {\\list}.
 
-    The command takes an argument specifying the code's format. QDoc recognizes
-    the formats it can generate as input to the \\raw command.
+    The command takes an argument specifying the code's format.
 
-    The \\raw command can sometimes be useful if you need special HTML effects
-    in your documentation.
+    QDoc generates the given code only when generating the format that
+    was specified by the user.
+
+    For example, "\\raw HTML" will only generate code when QDoc
+    generates HTML documentation.
 
     \note You can often achieve the intended purpose by using QDoc commands,
     while reducing the chance of mistakes or content becoming unmaintained.

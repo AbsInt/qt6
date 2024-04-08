@@ -1,5 +1,5 @@
 // Copyright (C) 2020 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Marc Mutz <marc.mutz@kdab.com>
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <QStringView>
 #include <QStringTokenizer>
@@ -257,6 +257,8 @@ private Q_SLOTS:
 
     void tokenize_data() const;
     void tokenize() const;
+
+    void std_stringview_conversion();
 
 private:
     template <typename String>
@@ -881,6 +883,31 @@ void tst_QStringView::overloadResolution()
         QStringViewOverloadResolution::test(std::as_const(string));
         QStringViewOverloadResolution::test(std::move(string));
     }
+}
+
+void tst_QStringView::std_stringview_conversion()
+{
+    static_assert(std::is_convertible_v<QStringView, std::u16string_view>);
+
+    QStringView s;
+    std::u16string_view sv(s);
+    QCOMPARE(sv, std::u16string_view());
+
+    s = u"";
+    sv = s;
+    QCOMPARE(s.size(), 0);
+    QCOMPARE(sv.size(), size_t(0));
+    QCOMPARE(sv, std::u16string_view());
+
+    s = u"Hello";
+    sv = s;
+    QCOMPARE(sv, std::u16string_view(u"Hello"));
+
+    s = QStringView::fromArray(u"Hello\0world");
+    sv = s;
+    QCOMPARE(s.size(), 12);
+    QCOMPARE(sv.size(), size_t(12));
+    QCOMPARE(sv, std::u16string_view(u"Hello\0world\0", 12));
 }
 
 QTEST_APPLESS_MAIN(tst_QStringView)

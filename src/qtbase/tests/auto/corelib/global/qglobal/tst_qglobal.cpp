@@ -1,6 +1,8 @@
 // Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
+
+#undef QT_NO_FOREACH // this file tests Q_FOREACH!
 
 #include <QTest>
 
@@ -12,46 +14,6 @@
 
 #include <array>
 #include <cmath>
-
-QT_BEGIN_NAMESPACE
-namespace QTest {
-#ifdef QT_SUPPORTS_INT128
-namespace detail {
-    char *i128ToStringHelper(std::array<char, 64> &buffer, quint128 n)
-    {
-        auto dst = buffer.data() + buffer.size();
-        *--dst = '\0'; // NUL-terminate
-        if (n == 0) {
-            *--dst = '0'; // and done
-        } else {
-            while (n != 0) {
-                *--dst = "0123456789"[n % 10];
-                n /= 10;
-            }
-        }
-        return dst;
-    }
-}
-template <>
-char *toString(const qint128 &i)
-{
-    if (i == Q_INT128_MIN) // -i is not representable, hardcode:
-        return qstrdup("-170141183460469231731687303715884105728");
-    std::array<char, 64> buffer;
-    auto dst = detail::i128ToStringHelper(buffer, i < 0 ? -i : i);
-    if (i < 0)
-        *--dst = '-';
-    return qstrdup(dst);
-}
-template <>
-char *toString(const quint128 &i)
-{
-    std::array<char, 64> buffer;
-    return qstrdup(detail::i128ToStringHelper(buffer, i));
-}
-#endif // QT_SUPPORTS_INT128
-} // namespace QTest
-QT_END_NAMESPACE
 
 class tst_QGlobal: public QObject
 {
@@ -79,7 +41,7 @@ private slots:
     void qRoundDoubles();
     void PRImacros();
     void testqToUnderlying();
-    void nodiscardConstructor();
+    void nodiscard();
 };
 
 extern "C" {        // functions in qglobal.c
@@ -895,16 +857,19 @@ void tst_QGlobal::testqToUnderlying()
     QCOMPARE(qToUnderlying(EE2), 456UL);
 }
 
-void tst_QGlobal::nodiscardConstructor()
+void tst_QGlobal::nodiscard()
 {
-    // Syntax-only test, just to make sure that Q_NODISCARD_CTOR compiles
+    // Syntax-only test, just to make sure that the Q_NODISCARD_* compile
     // on all platforms.
     // Other code is just to silence all various compiler warnings about
     // unused private members or methods.
     class Test {
     public:
-        Q_NODISCARD_CTOR explicit Test(int val) : m_val(val) {}
+        Q_NODISCARD_CTOR_X("Why construct a Test instead of just passing the int through?")
+        explicit Test(int val) : m_val(val) {}
+        Q_NODISCARD_CTOR explicit Test(float val) : m_val(int(val)) {}
 
+        Q_NODISCARD_X("Why call get() if you don't use the returned value, hu?") // NOT idiomatic use!
         int get() const { return m_val; }
 
     private:
@@ -913,6 +878,8 @@ void tst_QGlobal::nodiscardConstructor()
 
     Test t{42};
     QCOMPARE(t.get(), 42);
+    Test t2{42.0f};
+    QCOMPARE(t2.get(), 42);
 }
 
 QTEST_APPLESS_MAIN(tst_QGlobal)

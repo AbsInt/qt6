@@ -7,6 +7,9 @@ set -ex
 # Remove update notifications and packagekit running in the background
 sudo yum -y remove PackageKit gnome-software
 
+# CI: All platforms should have up-to-date packages when new provision is made
+sudo yum -y update
+
 installPackages=()
 installPackages+=(git)
 installPackages+=(zlib-devel)
@@ -128,10 +131,13 @@ sudo dnf -y module install nodejs:12
 # We shouldn't use yum to install virtualenv. The one found from package repo is not
 # working, but we can use installed pip
 sudo pip3 install --upgrade pip
+# Configure pip
+sudo pip config --user set global.index https://ci-files01-hki.ci.qt.io/input/python_module_cache
+sudo pip config --user set global.extra-index-url https://pypi.org/simple/
+
 sudo pip3 install virtualenv wheel
 
 sudo /usr/bin/pip3 install wheel
 
 OpenSSLVersion="$(openssl version |cut -b 9-14)"
 echo "OpenSSL = $OpenSSLVersion" >> ~/versions.txt
-

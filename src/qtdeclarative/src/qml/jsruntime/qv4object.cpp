@@ -20,6 +20,7 @@
 #include <stdint.h>
 
 using namespace QV4;
+using namespace Qt::Literals::StringLiterals;
 
 Q_LOGGING_CATEGORY(lcJavaScriptGlobals, "qt.qml.js.globals")
 
@@ -182,16 +183,16 @@ void Object::defineAccessorProperty(StringOrSymbol *name, VTable::Call getter, V
     QV4::Scope scope(v4);
     ScopedProperty p(scope);
     QString n = name->toQString();
-    if (!n.isEmpty() && n.at(0) == QLatin1Char('@'))
-        n = QChar::fromLatin1('[') + QStringView{n}.mid(1) + QChar::fromLatin1(']');
+    if (!n.isEmpty() && n.at(0) == '@'_L1)
+        n = '['_L1 + QStringView{n}.mid(1) + ']'_L1;
     if (getter) {
-        ScopedString getName(scope, v4->newString(QString::fromLatin1("get ") + n));
+        ScopedString getName(scope, v4->newString("get "_L1 + n));
         p->setGetter(ScopedFunctionObject(scope, FunctionObject::createBuiltinFunction(v4, getName, getter, 0)));
     } else {
         p->setGetter(nullptr);
     }
     if (setter) {
-        ScopedString setName(scope, v4->newString(QString::fromLatin1("set ") + n));
+        ScopedString setName(scope, v4->newString("set "_L1 + n));
         p->setSetter(ScopedFunctionObject(scope, FunctionObject::createBuiltinFunction(v4, setName, setter, 0)));
     } else {
         p->setSetter(nullptr);
@@ -1183,6 +1184,7 @@ QStringList ArrayObject::toQStringList() const
     ScopedValue v(scope);
 
     uint length = getLength();
+    result.reserve(length);
     for (uint i = 0; i < length; ++i) {
         v = const_cast<ArrayObject *>(this)->get(i);
         result.append(v->toQStringNoThrow());

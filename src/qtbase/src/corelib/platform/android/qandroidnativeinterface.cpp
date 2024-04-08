@@ -68,7 +68,7 @@ QtJniTypes::Context QNativeInterface::QAndroidApplication::context()
 */
 bool QNativeInterface::QAndroidApplication::isActivityContext()
 {
-    return QtAndroidPrivate::activity();
+    return QtAndroidPrivate::activity().isValid();
 }
 
 /*!
@@ -94,8 +94,7 @@ int QNativeInterface::QAndroidApplication::sdkVersion()
 */
 void QNativeInterface::QAndroidApplication::hideSplashScreen(int duration)
 {
-    QJniObject::callStaticMethod<void>("org/qtproject/qt/android/QtNative",
-                                       "hideSplashScreen", "(I)V", duration);
+    QtAndroidPrivate::activity().callMethod<void>("hideSplashScreen", duration);
 }
 
 /*!

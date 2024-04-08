@@ -1,5 +1,5 @@
 // Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <QtCore/QString>
 #include <QtTest/QtTest>
@@ -25,7 +25,8 @@
 # define TST_GL
 #endif
 
-#if QT_CONFIG(vulkan)
+// Never attempt Vulkan on Android, to prevent the emulator in CI from crashing.
+#if QT_CONFIG(vulkan) && !defined(Q_OS_ANDROID)
 # include <QVulkanInstance>
 # define TST_VK
 #endif

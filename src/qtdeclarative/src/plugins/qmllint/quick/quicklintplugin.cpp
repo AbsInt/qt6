@@ -37,7 +37,7 @@ bool ForbiddenChildrenPropertyValidatorPass::shouldRun(const QQmlSA::Element &el
     if (!element.parentScope())
         return false;
 
-    for (const auto pair : m_types.asKeyValueRange()) {
+    for (const auto &pair : m_types.asKeyValueRange()) {
         if (element.parentScope().inherits(pair.first))
             return true;
     }
@@ -47,7 +47,7 @@ bool ForbiddenChildrenPropertyValidatorPass::shouldRun(const QQmlSA::Element &el
 
 void ForbiddenChildrenPropertyValidatorPass::run(const QQmlSA::Element &element)
 {
-    for (const auto elementPair : m_types.asKeyValueRange()) {
+    for (const auto &elementPair : m_types.asKeyValueRange()) {
         const QQmlSA::Element &type = elementPair.first;
         if (!element.parentScope().inherits(type))
             continue;
@@ -542,7 +542,7 @@ void AttachedPropertyReuse::onRead(const QQmlSA::Element &element, const QString
                                                            attachedLocation.startLine(),
                                                            attachedLocation.startColumn() };
             QQmlSA::FixSuggestion suggestion{ "Reference it by id instead:"_L1, idInsertLocation,
-                                              id.isEmpty() ? "<id>."_L1 : (id + '.'_L1) };
+                                              id.isEmpty() ? u"<id>."_s : (id + '.'_L1) };
 
             if (id.isEmpty())
                 suggestion.setHint("You first have to give the element an id"_L1);

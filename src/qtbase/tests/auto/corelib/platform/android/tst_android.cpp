@@ -1,5 +1,5 @@
 // Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <jni.h>
 
@@ -12,6 +12,8 @@
 #include <qpa/qplatformscreen.h>
 #include <qpa/qplatformnativeinterface.h>
 #include <QtCore/qdiriterator.h>
+#include <QWidget>
+#include <QSignalSpy>
 
 using namespace Qt::StringLiterals;
 
@@ -26,6 +28,8 @@ private slots:
     void testAndroidActivity();
     void testRunOnAndroidMainThread();
     void testFullScreenDimensions();
+    void orientationChange_data();
+    void orientationChange();
 };
 
 void tst_Android::assetsRead()
@@ -199,11 +203,14 @@ void tst_Android::testRunOnAndroidMainThread()
     }
 }
 
+Q_DECLARE_JNI_CLASS(QtActivityDelegateBase, "org/qtproject/qt/android/QtActivityDelegateBase")
+
 void setSystemUiVisibility(int visibility)
 {
     QNativeInterface::QAndroidApplication::runOnAndroidMainThread([visibility] {
-        QJniObject::callStaticMethod<void>("org/qtproject/qt/android/QtNative",
-                                           "setSystemUiVisibility", "(I)V", visibility);
+        auto context = QNativeInterface::QAndroidApplication::context();
+        auto activityDelegate = context.callMethod<QtJniTypes::QtActivityDelegateBase>("getActivityDelegate");
+        activityDelegate.callMethod<void>("setSystemUiVisibility", jint(visibility));
     }).waitForFinished();
 }
 
@@ -296,6 +303,42 @@ void tst_Android::testFullScreenDimensions()
     }
 }
 
+void tst_Android::orientationChange_data()
+{
+    QTest::addColumn<int>("nativeOrientation");
+    QTest::addColumn<Qt::ScreenOrientation>("expected");
+    QTest::addColumn<QSize>("screenSize");
+
+    const QSize portraitSize = QGuiApplication::primaryScreen()->size();
+    const QSize landscapeSize = QSize(portraitSize.height(), portraitSize.width());
+
+    QTest::newRow("InvertedLandscape") << 8 << Qt::InvertedLandscapeOrientation << landscapeSize;
+    QTest::newRow("InvertedPortrait") << 9 << Qt::InvertedPortraitOrientation << portraitSize;
+    QTest::newRow("Landscape") << 0 << Qt::LandscapeOrientation << landscapeSize;
+    // Leave Portrait till the end
+    QTest::newRow("Portrait") << 1 << Qt::PortraitOrientation << portraitSize;
+}
+
+void tst_Android::orientationChange()
+{
+    QFETCH(int, nativeOrientation);
+    QFETCH(Qt::ScreenOrientation, expected);
+    QFETCH(QSize, screenSize);
+
+    // For QTBUG-94459 to check that the widget size are consistent after orientation changes
+    QWidget widget;
+    widget.show();
+
+    auto context = QNativeInterface::QAndroidApplication::context();
+    context.callMethod<void>("setRequestedOrientation", nativeOrientation);
+
+    QScreen *screen = QGuiApplication::primaryScreen();
+    QSignalSpy orientationSpy(screen, SIGNAL(orientationChanged(Qt::ScreenOrientation)));
+    QTRY_COMPARE(screen->orientation(), expected);
+    QCOMPARE(orientationSpy.size(), 1);
+    QCOMPARE(screen->size(), screenSize);
+    QCOMPARE(widget.size(), screen->availableSize());
+}
+
 QTEST_MAIN(tst_Android)
 #include "tst_android.moc"
-

@@ -1,5 +1,5 @@
 // Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <private/qqmlengine_p.h>
 
@@ -805,7 +805,7 @@ void tst_qqmlqt::dateTimeFormatting()
         << component.url().toString() + ":40: TypeError: Passing incompatible arguments to C++ functions from JavaScript is not allowed."
         << component.url().toString() + ":43: TypeError: Passing incompatible arguments to C++ functions from JavaScript is not allowed.";
 
-    foreach (const QString &warning, warnings)
+    for (const QString &warning : std::as_const(warnings))
         QTest::ignoreMessage(QtWarningMsg, qPrintable(warning));
 
     warnings.clear();
@@ -820,7 +820,7 @@ void tst_qqmlqt::dateTimeFormatting()
         << "Could not convert argument 1 at"
         << "expression for err_dateTime2@";
 
-    foreach (const QString &warning, warnings)
+    for (const QString &warning : std::as_const(warnings))
         QTest::ignoreMessage(QtWarningMsg, QRegularExpression(warning));
 
     QScopedPointer<QObject> object(component.createWithInitialProperties({
@@ -833,7 +833,7 @@ void tst_qqmlqt::dateTimeFormatting()
 
     QVERIFY(inputProperties.size() > 0);
     QVariant result;
-    foreach(const QString &prop, inputProperties) {
+    for (const QString &prop : std::as_const(inputProperties)) {
         QVERIFY(QMetaObject::invokeMethod(object.data(), method.toUtf8().constData(),
                 Q_RETURN_ARG(QVariant, result),
                 Q_ARG(QVariant, prop)));
@@ -1285,7 +1285,7 @@ void tst_qqmlqt::later()
     QFETCH(QStringList, propNames);
     QFETCH(QVariantList, values);
 
-    foreach (const QString &w, expectedWarnings)
+    for (const QString &w : std::as_const(expectedWarnings))
         QTest::ignoreMessage(QtWarningMsg, qPrintable(w));
 
     QQmlComponent component(&engine, testFileUrl("later.qml"));
@@ -1300,7 +1300,7 @@ void tst_qqmlqt::later()
             QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
             QCoreApplication::processEvents();
         } else if (propNames.at(i) == QLatin1String("collectGarbage")) {
-            engine.collectGarbage();
+            gc(engine, GCFlags::DontSendPostedEvents);
         } else {
             QCOMPARE(root->property(qPrintable(propNames.at(i))), values.at(i));
         }

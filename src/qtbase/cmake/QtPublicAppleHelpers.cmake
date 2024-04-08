@@ -61,13 +61,7 @@ function(_qt_internal_handle_ios_launch_screen target)
 
             file(MAKE_DIRECTORY "${launch_screen_out_dir}")
 
-            # Replaces the value in the default template.
-            set(QT_IOS_LAUNCH_SCREEN_TEXT "${target}")
-            configure_file(
-                "${launch_screen_in_path}"
-                "${launch_screen_out_path}"
-                @ONLY
-            )
+            configure_file("${launch_screen_in_path}" "${launch_screen_out_path}" COPYONLY)
 
             set(final_launch_screen_path "${launch_screen_out_path}")
         else()
@@ -618,9 +612,12 @@ function(_qt_internal_set_apple_localizations target)
         return()
     endif()
 
-    get_target_property(supported_languages "${target}" _qt_apple_supported_languages)
-    if("${supported_languages}" STREQUAL "supported_languages-NOTFOUND")
-        return()
+    set(supported_languages "${QT_I18N_TRANSLATED_LANGUAGES}")
+    if("${QT_I18N_TRANSLATED_LANGUAGES}" STREQUAL "")
+        get_target_property(supported_languages "${target}" _qt_apple_supported_languages)
+        if("${supported_languages}" STREQUAL "supported_languages-NOTFOUND")
+            return()
+        endif()
     endif()
     get_target_property(plist_file "${target}" MACOSX_BUNDLE_INFO_PLIST)
     if (NOT plist_file)

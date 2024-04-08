@@ -1,7 +1,7 @@
 // Copyright (C) 2021 The Qt Company Ltd.
 // Copyright (C) 2016 Olivier Goffart <ogoffart@woboq.com>
 // Copyright (C) 2016 Intel Corporation.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <qvariant.h>
 
@@ -442,10 +442,20 @@ void tst_QVariant::constructor()
     QVERIFY(var3.isNull());
     QVERIFY(var3.isValid());
 
+    QVariant var3a = QVariant::fromMetaType(QMetaType::fromType<QString>());
+    QCOMPARE(var3a.typeName(), "QString");
+    QVERIFY(var3a.isNull());
+    QVERIFY(var3a.isValid());
+
     QVariant var4 {QMetaType()};
     QCOMPARE(var4.typeId(), QMetaType::UnknownType);
     QVERIFY(var4.isNull());
     QVERIFY(!var4.isValid());
+
+    QVariant var4a = QVariant::fromMetaType(QMetaType());
+    QCOMPARE(var4a.typeId(), QMetaType::UnknownType);
+    QVERIFY(var4a.isNull());
+    QVERIFY(!var4a.isValid());
 
     QVariant var5(QLatin1String("hallo"));
     QCOMPARE(var5.typeId(), QMetaType::QString);
@@ -482,6 +492,14 @@ void tst_QVariant::constructor_invalid()
     {
         QTest::ignoreMessage(QtWarningMsg, QRegularExpression("^Trying to construct an instance of an invalid type"));
         QVariant variant {QMetaType(typeId)};
+        QVERIFY(!variant.isValid());
+        QVERIFY(variant.isNull());
+        QCOMPARE(variant.typeId(), int(QMetaType::UnknownType));
+        QCOMPARE(variant.userType(), int(QMetaType::UnknownType));
+    }
+    {
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression("^Trying to construct an instance of an invalid type"));
+        QVariant variant = QVariant::fromMetaType(QMetaType(typeId));
         QVERIFY(!variant.isValid());
         QVERIFY(variant.isNull());
         QCOMPARE(variant.typeId(), int(QMetaType::UnknownType));
@@ -4373,7 +4391,8 @@ void tst_QVariant::dataStream_data(QDataStream::Version version)
     path = path.prepend(":/stream/").append("/");
     QDir dir(path);
     uint i = 0;
-    foreach (const QFileInfo &fileInfo, dir.entryInfoList(QStringList() << "*.bin")) {
+    const auto entries = dir.entryInfoList(QStringList{u"*.bin"_s});
+    for (const QFileInfo &fileInfo : entries) {
         QTest::newRow((path + fileInfo.fileName()).toLatin1()) << fileInfo.filePath();
         i += 1;
     }
@@ -5796,6 +5815,17 @@ void tst_QVariant::moveOperations()
         const MoveTester tester;
         QVariant::fromValue(std::move(tester));
         QVERIFY(!tester.wasMoved); // we don't want to move from const variables
+    }
+    {
+        QVariant var(std::in_place_type<MoveTester>);
+        const auto p = get_if<MoveTester>(&var);
+        QVERIFY(p);
+        auto &tester = *p;
+        QVERIFY(!tester.wasMoved);
+        [[maybe_unused]] auto copy = var.value<MoveTester>();
+        QVERIFY(!tester.wasMoved);
+        [[maybe_unused]] auto moved = std::move(var).value<MoveTester>();
+        QVERIFY(tester.wasMoved);
     }
 }
 

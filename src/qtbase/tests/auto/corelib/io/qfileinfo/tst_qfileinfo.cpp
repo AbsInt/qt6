@@ -1,5 +1,5 @@
 // Copyright (C) 2021 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <QTest>
 #include <QStandardPaths>
@@ -1518,9 +1518,9 @@ void tst_QFileInfo::isHidden_data()
 {
     QTest::addColumn<QString>("path");
     QTest::addColumn<bool>("isHidden");
-    foreach (const QFileInfo& info, QDir::drives()) {
+    const auto drives = QDir::drives();
+    for (const QFileInfo& info : drives)
         QTest::newRow(qPrintable("drive." + info.path())) << info.path() << false;
-    }
 
 #if defined(Q_OS_WIN)
     QVERIFY(QDir("./hidden-directory").exists() || QDir().mkdir("./hidden-directory"));

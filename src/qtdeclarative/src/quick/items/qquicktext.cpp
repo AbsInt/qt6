@@ -10,10 +10,9 @@
 #include <QtQuick/private/qsgcontext_p.h>
 #include <private/qqmlglobal_p.h>
 #include <private/qsgadaptationlayer_p.h>
-#include "qquicktextnode_p.h"
+#include "qsginternaltextnode_p.h"
 #include "qquickimage_p_p.h"
 #include "qquicktextutil_p.h"
-#include "qquicktextdocument_p.h"
 
 #include <QtQuick/private/qsgtexture_p.h>
 
@@ -29,7 +28,7 @@
 
 #include <private/qtextengine_p.h>
 #include <private/qquickstyledtext_p.h>
-#include <QtQuick/private/qquickpixmapcache_p.h>
+#include <QtQuick/private/qquickpixmap_p.h>
 
 #include <qmath.h>
 #include <limits.h>
@@ -37,6 +36,9 @@
 QT_BEGIN_NAMESPACE
 
 Q_DECLARE_LOGGING_CATEGORY(lcHoverTrace)
+Q_LOGGING_CATEGORY(lcText, "qt.quick.text")
+
+using namespace Qt::StringLiterals;
 
 const QChar QQuickTextPrivate::elideChar = QChar(0x2026);
 
@@ -273,6 +275,85 @@ void QQuickTextPrivate::updateLayout()
     q->polish();
 }
 
+/*! \internal
+    QTextDocument::loadResource() calls this to load inline images etc.
+    But if it's a local file, don't do it: let QTextDocument::loadResource()
+    load it in the default way. QQuickPixmap is for QtQuick-specific uses.
+*/
+QVariant QQuickText::loadResource(int type, const QUrl &source)
+{
+    Q_D(QQuickText);
+    const QUrl url = d->extra->doc->baseUrl().resolved(source);
+    if (url.isLocalFile()) {
+        // qmlWarning if the file doesn't exist (because QTextDocument::loadResource() can't do that)
+        const QFileInfo fi(QQmlFile::urlToLocalFileOrQrc(url));
+        if (!fi.exists())
+            qmlWarning(this) << "Cannot open: " << url.toString();
+        // let QTextDocument::loadResource() handle local file loading
+        return {};
+    }
+    // see if we already started a load job
+    for (auto it = d->extra->pixmapsInProgress.cbegin(); it != d->extra->pixmapsInProgress.cend();) {
+        auto *job = *it;
+        if (job->url() == url) {
+            if (job->isError()) {
+                qmlWarning(this) << job->error();
+                delete *it;
+                it = d->extra->pixmapsInProgress.erase(it);
+                return QImage();
+            }
+            qCDebug(lcText) << "already downloading" << url;
+            // existing job: return a null variant if it's not done yet
+            return job->isReady() ? job->image() : QVariant();
+        }
+        ++it;
+    }
+    qCDebug(lcText) << "loading" << source << "resolved" << url
+                    << "type" << static_cast<QTextDocument::ResourceType>(type);
+    QQmlContext *context = qmlContext(this);
+    Q_ASSERT(context);
+    // don't cache it in QQuickPixmapCache, because it's cached in QTextDocumentPrivate::cachedResources
+    QQuickPixmap *p = new QQuickPixmap(context->engine(), url, QQuickPixmap::Options{});
+    p->connectFinished(this, SLOT(resourceRequestFinished()));
+    d->extra->pixmapsInProgress.append(p);
+    // the new job is probably not done; return a null variant if the caller should poll again
+    return p->isReady() ? p->image() : QVariant();
+}
+
+/*! \internal
+    Handle completion of a download that QQuickText::loadResource() started.
+*/
+void QQuickText::resourceRequestFinished()
+{
+    Q_D(QQuickText);
+    bool allDone = true;
+    for (auto it = d->extra->pixmapsInProgress.cbegin(); it != d->extra->pixmapsInProgress.cend();) {
+        auto *job = *it;
+        if (job->isError()) {
+            // get QTextDocument::loadResource() to call QQuickText::loadResource() again, to return the placeholder
+            qCDebug(lcText) << "failed to load" << job->url();
+            d->extra->doc->resource(QTextDocument::ImageResource, job->url());
+        } else if (job->isReady()) {
+            // get QTextDocument::loadResource() to call QQuickText::loadResource() again, and cache the result
+            auto res = d->extra->doc->resource(QTextDocument::ImageResource, job->url());
+            // If QTextDocument::resource() returned a valid variant, it's been cached too. Either way, the job is done.
+            qCDebug(lcText) << (res.isValid() ? "done downloading" : "failed to load") << job->url();
+            delete *it;
+            it = d->extra->pixmapsInProgress.erase(it);
+        } else {
+            allDone = false;
+            ++it;
+        }
+    }
+    if (allDone) {
+        Q_ASSERT(d->extra->pixmapsInProgress.isEmpty());
+        d->updateLayout();
+    }
+}
+
+/*! \internal
+    Handle completion of StyledText image downloads (there's no QTextDocument instance in that case).
+*/
 void QQuickText::imageDownloadFinished()
 {
     Q_D(QQuickText);
@@ -1266,13 +1347,14 @@ void QQuickTextPrivate::ensureDoc()
 {
     if (!extra.isAllocated() || !extra->doc) {
         Q_Q(QQuickText);
-        extra.value().doc = new QQuickTextDocumentWithImageResources(q);
-        extra->doc->setPageSize(QSizeF(0, 0));
-        extra->doc->setDocumentMargin(0);
+        extra.value().doc = new QTextDocument(q);
+        auto *doc = extra->doc;
+        extra->imageHandler = new QQuickTextImageHandler(doc);
+        doc->documentLayout()->registerHandler(QTextFormat::ImageObject, extra->imageHandler);
+        doc->setPageSize(QSizeF(0, 0));
+        doc->setDocumentMargin(0);
         const QQmlContext *context = qmlContext(q);
-        extra->doc->setBaseUrl(context ? context->resolvedUrl(q->baseUrl()) : q->baseUrl());
-        qmlobject_connect(extra->doc, QQuickTextDocumentWithImageResources, SIGNAL(imagesLoaded()),
-                          q, QQuickText, SLOT(q_updateLayout()));
+        doc->setBaseUrl(context ? context->resolvedUrl(q->baseUrl()) : q->baseUrl());
     }
 }
 
@@ -1289,7 +1371,6 @@ void QQuickTextPrivate::updateDocumentText()
 #else
         extra->doc->setPlainText(text);
 #endif
-    extra->doc->clearResources();
     rightToLeftText = extra->doc->toPlainText().isRightToLeft();
 }
 
@@ -1375,6 +1456,11 @@ QQuickText::QQuickText(QQuickTextPrivate &dd, QQuickItem *parent)
 
 QQuickText::~QQuickText()
 {
+    Q_D(QQuickText);
+    if (d->extra.isAllocated()) {
+        qDeleteAll(d->extra->pixmapsInProgress);
+        d->extra->pixmapsInProgress.clear();
+    }
 }
 
 /*!
@@ -1642,6 +1728,54 @@ QQuickText::~QQuickText()
     Text { text: "Some text"; font.preferShaping: false }
     \endqml
 */
+
+/*!
+    \qmlproperty object QtQuick::Text::font.variableAxes
+    \since 6.7
+
+//! [qml-font-variable-axes]
+    Applies floating point values to variable axes in variable fonts.
+
+    Variable fonts provide a way to store multiple variations (with different weights, widths
+    or styles) in the same font file. The variations are given as floating point values for
+    a pre-defined set of parameters, called "variable axes". Specific instances are typically
+    given names by the font designer, and, in Qt, these can be selected using setStyleName()
+    just like traditional sub-families.
+
+    In some cases, it is also useful to provide arbitrary values for the different axes. For
+    instance, if a font has a Regular and Bold sub-family, you may want a weight in-between these.
+    You could then manually request this by supplying a custom value for the "wght" axis in the
+    font.
+
+    \qml
+        Text {
+            text: "Foobar"
+            font.family: "MyVariableFont"
+            font.variableAxes: { "wght": (Font.Normal + Font.Bold) / 2.0 }
+        }
+    \endqml
+
+    If the "wght" axis is supported by the font and the given value is within its defined range,
+    a font corresponding to the weight 550.0 will be provided.
+
+    There are a few standard axes than many fonts provide, such as "wght" (weight), "wdth" (width),
+    "ital" (italic) and "opsz" (optical size). They each have indivdual ranges defined in the font
+    itself. For instance, "wght" may span from 100 to 900 (QFont::Thin to QFont::Black) whereas
+    "ital" can span from 0 to 1 (from not italic to fully italic).
+
+    A font may also choose to define custom axes; the only limitation is that the name has to
+    meet the requirements for a QFont::Tag (sequence of four latin-1 characters.)
+
+    By default, no variable axes are set.
+
+    \note In order to use variable axes on Windows, the application has to run with either the
+    FreeType or DirectWrite font databases. See the documentation for
+    QGuiApplication::QGuiApplication() for more information on how to select these technologies.
+
+    \sa QFont::setVariableAxis()
+//! [qml-font-variable-axes]
+*/
+
 
 /*!
     \qmlproperty object QtQuick::Text::font.features
@@ -2574,40 +2708,43 @@ QSGNode *QQuickText::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *data
 
     const qreal dy = QQuickTextUtil::alignedY(d->layedOutTextRect.height() + d->lineHeightOffset(), d->availableHeight(), d->vAlign) + topPadding();
 
-    QQuickTextNode *node = nullptr;
+    QSGInternalTextNode *node = nullptr;
     if (!oldNode)
-        node = new QQuickTextNode(this);
+        node = d->sceneGraphContext()->createInternalTextNode(d->sceneGraphRenderContext());
     else
-        node = static_cast<QQuickTextNode *>(oldNode);
+        node = static_cast<QSGInternalTextNode *>(oldNode);
 
-    node->setUseNativeRenderer(d->renderType == NativeRendering);
+    node->setFiltering(smooth() ? QSGTexture::Linear : QSGTexture::Nearest);
+
+    node->setTextStyle(QSGTextNode::TextStyle(d->style));
+    node->setRenderType(QSGTextNode::RenderType(d->renderType));
     node->setRenderTypeQuality(d->renderTypeQuality());
-    node->deleteContent();
+    node->clear();
     node->setMatrix(QMatrix4x4());
 
-    const QColor color = QColor::fromRgba(d->color);
-    const QColor styleColor = QColor::fromRgba(d->styleColor);
-    const QColor linkColor = QColor::fromRgba(d->linkColor);
+    node->setColor(QColor::fromRgba(d->color));
+    node->setStyleColor(QColor::fromRgba(d->styleColor));
+    node->setLinkColor(QColor::fromRgba(d->linkColor));
 
     if (d->richText) {
+        node->setViewport(clipRect());
         const qreal dx = QQuickTextUtil::alignedX(d->layedOutTextRect.width(), d->availableWidth(), effectiveHAlign()) + leftPadding();
         d->ensureDoc();
-        node->addTextDocument(QPointF(dx, dy), d->extra->doc, color, d->style, styleColor, linkColor);
+        node->addTextDocument(QPointF(dx, dy), d->extra->doc);
     } else if (d->layedOutTextRect.width() > 0) {
+        if (flags().testFlag(ItemObservesViewport))
+            node->setViewport(clipRect());
+        else
+            node->setViewport(QRectF{});
         const qreal dx = QQuickTextUtil::alignedX(d->lineWidth, d->availableWidth(), effectiveHAlign()) + leftPadding();
         int unelidedLineCount = d->lineCount;
         if (d->elideLayout)
             unelidedLineCount -= 1;
-        if (unelidedLineCount > 0) {
-            node->addTextLayout(
-                        QPointF(dx, dy),
-                        &d->layout,
-                        color, d->style, styleColor, linkColor,
-                        QColor(), QColor(), -1, -1,
-                        0, unelidedLineCount);
-        }
+        if (unelidedLineCount > 0)
+            node->addTextLayout(QPointF(dx, dy), &d->layout, -1, -1,0, unelidedLineCount);
+
         if (d->elideLayout)
-            node->addTextLayout(QPointF(dx, dy), d->elideLayout, color, d->style, styleColor, linkColor);
+            node->addTextLayout(QPointF(dx, dy), d->elideLayout);
 
         if (d->extra.isAllocated()) {
             for (QQuickStyledTextImgTag *img : std::as_const(d->extra->visibleImgTags)) {
@@ -2849,8 +2986,8 @@ void QQuickText::setMinimumPointSize(int size)
 int QQuickText::resourcesLoading() const
 {
     Q_D(const QQuickText);
-    if (d->richText && d->extra.isAllocated() && d->extra->doc)
-        return d->extra->doc->resourcesLoading();
+    if (d->richText && d->extra.isAllocated())
+        return d->extra->pixmapsInProgress.size();
     return 0;
 }
 
@@ -3079,7 +3216,7 @@ void QQuickText::invalidate()
 bool QQuickTextPrivate::transformChanged(QQuickItem *transformedItem)
 {
     // If there's a lot of text, we may need QQuickText::updatePaintNode() to call
-    // QQuickTextNode::addTextLayout() again to populate a different range of lines
+    // QSGInternalTextNode::addTextLayout() again to populate a different range of lines
     if (flags & QQuickItem::ItemObservesViewport) {
         updateType = UpdatePaintNode;
         dirty(QQuickItemPrivate::Content);
@@ -3139,11 +3276,19 @@ void QQuickText::setRenderTypeQuality(int renderTypeQuality)
 
     \value Text.QtRendering     Text is rendered using a scalable distance field for each glyph.
     \value Text.NativeRendering Text is rendered using a platform-specific technique.
+    \value Text.CurveRendering  Text is rendered using a curve rasterizer running directly on the
+                                graphics hardware. (Introduced in Qt 6.7.0.)
 
     Select \c Text.NativeRendering if you prefer text to look native on the target platform and do
     not require advanced features such as transformation of the text. Using such features in
     combination with the NativeRendering render type will lend poor and sometimes pixelated
     results.
+
+    Both \c Text.QtRendering and \c Text.CurveRendering are hardware-accelerated techniques.
+    \c QtRendering is the faster of the two, but uses more memory and will exhibit rendering
+    artifacts at large sizes. \c CurveRendering should be considered as an alternative in cases
+    where \c QtRendering does not give good visual results or where reducing graphics memory
+    consumption is a priority.
 
     The default rendering type is determined by \l QQuickWindow::textRenderType().
 */

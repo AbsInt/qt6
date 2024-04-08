@@ -1,5 +1,5 @@
 // Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 
 #include <QtCore/QCoreApplication>
@@ -8,9 +8,7 @@
 #include <QCryptographicHash>
 #include <QtCore/QMetaEnum>
 
-#if QT_CONFIG(cxx11_future)
-#  include <thread>
-#endif
+#include <thread>
 
 Q_DECLARE_METATYPE(QCryptographicHash::Algorithm)
 
@@ -605,14 +603,7 @@ void tst_QCryptographicHash::moreThan4GiBOfData()
 {
     QFETCH(const QCryptographicHash::Algorithm, algorithm);
 
-# if QT_CONFIG(cxx11_future)
     using MaybeThread = std::thread;
-# else
-    struct MaybeThread {
-        std::function<void()> func;
-        void join() { func(); }
-    };
-# endif
 
     QElapsedTimer timer;
     timer.start();

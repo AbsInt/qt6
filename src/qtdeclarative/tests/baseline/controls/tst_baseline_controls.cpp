@@ -1,5 +1,5 @@
 // Copyright (C) 2022 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <qbaselinetest.h>
 
@@ -203,6 +203,7 @@ void tst_Baseline_Controls::runTest(const QString& style)
     QStringList args;
     if (!style.isEmpty())
         args.append({"-style", style});
+    args.append("-useAppWindow");
     if (renderAndGrab(qmlFile, args, &screenShot, &errorMessage)) {
         consecutiveErrors = 0;
     } else {

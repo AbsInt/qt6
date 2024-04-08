@@ -1,5 +1,5 @@
 // Copyright (C) 2022 Intel Corporation.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <QtCore/qcborvalue.h>
 #include <QTest>
@@ -473,6 +473,9 @@ void tst_QCborValue::copyCompare()
 
 QT_WARNING_PUSH
 QT_WARNING_DISABLE_CLANG("-Wself-move")
+#if defined(Q_CC_GNU_ONLY) && Q_CC_GNU >= 1301
+QT_WARNING_DISABLE_GCC("-Wself-move")
+#endif
     // self-moving
     v = std::move(v);
     QCOMPARE(v, other); // make sure it's still valid
@@ -2396,6 +2399,11 @@ void tst_QCborValue::hugeDeviceValidation_data()
 
 void tst_QCborValue::hugeDeviceValidation()
 {
+#if defined(Q_OS_WASM)
+    QSKIP("This test tries to allocate a huge memory buffer,"
+          " causes problem on WebAssembly platform which has limited resources.");
+#endif // Q_OS_WASM
+
     QFETCH(QSharedPointer<QIODevice>, device);
     QFETCH(CborError, expectedError);
     QCborError error = { QCborError::Code(expectedError) };

@@ -97,5 +97,8 @@ sudo zypper -nq install nodejs18
 # OpenSSL 3
 sudo zypper -nq install openssl-3
 
+# cifs-utils, for mounting smb drive
+sudo zypper -nq install cifs-utils
+
 gccVersion="$(gcc --version |grep gcc |cut -b 17-23)"
 echo "GCC = $gccVersion" >> versions.txt

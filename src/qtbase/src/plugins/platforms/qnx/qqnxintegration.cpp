@@ -1,6 +1,8 @@
 // Copyright (C) 2013 BlackBerry Limited. All rights reserved.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
+#undef QT_NO_FOREACH // this file contains unported legacy Q_FOREACH uses
+
 #include "qqnxglobal.h"
 
 #include "qqnxintegration.h"
@@ -98,7 +100,7 @@ static inline QQnxIntegration::Options parseOptions(const QStringList &paramList
 
 static inline int getContextCapabilities(const QStringList &paramList)
 {
-    QString contextCapabilitiesPrefix = QStringLiteral("screen-context-capabilities=");
+    constexpr auto contextCapabilitiesPrefix = "screen-context-capabilities="_L1;
     int contextCapabilities = SCREEN_APPLICATION_CONTEXT;
     for (const QString &param : paramList) {
         if (param.startsWith(contextCapabilitiesPrefix)) {

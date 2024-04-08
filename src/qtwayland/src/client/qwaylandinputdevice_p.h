@@ -84,6 +84,7 @@ public:
     ~QWaylandInputDevice() override;
 
     uint32_t capabilities() const { return mCaps; }
+    QString seatname()  const { return mSeatName; }
 
     QWaylandDisplay *display() const { return mQDisplay; }
     struct ::wl_seat *wl_seat() { return QtWayland::wl_seat::object(); }
@@ -143,6 +144,7 @@ protected:
     struct wl_display *mDisplay = nullptr;
 
     uint32_t mCaps = 0;
+    QString mSeatName;
 
 #if QT_CONFIG(cursor)
     struct CursorState {
@@ -179,6 +181,7 @@ protected:
     uint32_t mSerial = 0;
 
     void seat_capabilities(uint32_t caps) override;
+    void seat_name(const QString &name) override;
     void handleTouchPoint(int id, QEventPoint::State state, const QPointF &surfacePosition = QPoint());
 
     QPointingDevice *mTouchDevice = nullptr;
@@ -230,11 +233,11 @@ public:
     uint32_t mNativeModifiers = 0;
 
     struct repeatKey {
-        int key;
-        uint32_t code;
-        uint32_t time;
+        int key = 0;
+        uint32_t code = 0;
+        uint32_t time = 0 ;
         QString text;
-        uint32_t nativeVirtualKey;
+        uint32_t nativeVirtualKey = 0;
     } mRepeatKey;
 
     QTimer mRepeatTimer;
@@ -253,7 +256,7 @@ public:
     }
 #endif
 
-private slots:
+private Q_SLOTS:
     void handleFocusDestroyed();
     void handleFocusLost();
 
@@ -309,7 +312,7 @@ protected:
     void pointer_axis_value120(uint32_t axis, int32_t value120) override;
     void pointer_axis_relative_direction(uint32_t axis, uint32_t direction) override;
 
-private slots:
+private Q_SLOTS:
     void handleFocusDestroyed() { invalidateFocus(); }
 
 private:
@@ -335,10 +338,7 @@ public:
     QPointF mSurfacePos;
     QPointF mGlobalPos;
     Qt::MouseButtons mButtons = Qt::NoButton;
-#if QT_CONFIG(cursor)
-    wl_buffer *mCursorBuffer = nullptr;
-    Qt::CursorShape mCursorShape = Qt::BitmapCursor;
-#endif
+    Qt::MouseButton mLastButton = Qt::NoButton;
 
     struct FrameData {
         QWaylandPointerEvent *event = nullptr;

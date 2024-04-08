@@ -206,8 +206,6 @@ public:
     qreal spacing = 0;
     QLocale locale;
     QFont resolvedFont;
-    Qt::FocusPolicy focusPolicy = Qt::NoFocus;
-    Qt::FocusReason focusReason = Qt::OtherFocusReason;
     QQuickDeferredPointer<QQuickItem> background;
     QQuickDeferredPointer<QQuickItem> contentItem;
 };

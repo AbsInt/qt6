@@ -5,6 +5,7 @@
 #include "formwindow.h"
 #include "dynamicpropertysheet.h"
 #include "qdesigner_tabwidget_p.h"
+#include "iconloader_p.h"
 #include "qdesigner_toolbox_p.h"
 #include "qdesigner_stackedbox_p.h"
 #include "qdesigner_toolbar_p.h"
@@ -91,8 +92,8 @@ namespace {
     using DomPropertyList = QList<DomProperty *>;
 }
 
-static const char currentUiVersion[] = "4.0";
-static const char clipboardObjectName[] = "__qt_fake_top_level";
+static constexpr auto currentUiVersion = "4.0"_L1;
+static constexpr auto clipboardObjectName = "__qt_fake_top_level"_L1;
 
 #define OLD_RESOURCE_FORMAT // Support pre 4.4 format.
 
@@ -173,8 +174,15 @@ QVariant QDesignerResourceBuilder::loadResource(const QDir &workingDirectory, co
             PropertySheetIconValue icon;
             DomResourceIcon *di = property->elementIconSet();
             const bool hasTheme = di->hasAttributeTheme();
-            if (hasTheme)
-                icon.setTheme(di->attributeTheme());
+            if (hasTheme) {
+                const QString &theme = di->attributeTheme();
+                const qsizetype themeEnum = theme.startsWith("QIcon::"_L1)
+                    ? QDesignerResourceBuilder::themeIconIndex(theme) : -1;
+                if (themeEnum != -1)
+                    icon.setThemeEnum(themeEnum);
+                else
+                    icon.setTheme(theme);
+            }
             if (const int flags = iconStateFlags(di)) { // new, post 4.4 format
                 if (flags & NormalOff)
                     setIconPixmap(QIcon::Normal, QIcon::Off, workingDirectory, di->elementNormalOff()->text(), icon, m_lang);
@@ -250,8 +258,10 @@ DomProperty *QDesignerResourceBuilder::saveResource(const QDir &workingDirectory
     }
     if (value.canConvert<PropertySheetIconValue>()) {
         const PropertySheetIconValue icon = qvariant_cast<PropertySheetIconValue>(value);
-        const QMap<QPair<QIcon::Mode, QIcon::State>, PropertySheetPixmapValue> pixmaps = icon.paths();
-        const QString theme = icon.theme();
+        const auto &pixmaps = icon.paths();
+        const int themeEnum = icon.themeEnum();
+        const QString theme = themeEnum != -1
+            ? QDesignerResourceBuilder::fullyQualifiedThemeIconName(themeEnum) : icon.theme();
         if (!pixmaps.isEmpty() || !theme.isEmpty()) {
             DomResourceIcon *ri = new DomResourceIcon;
             if (!theme.isEmpty())
@@ -1679,7 +1689,7 @@ DomUI *QDesignerResource::copy(const FormBuilderClipboard &selection)
     m_copyWidget = true;
 
     DomWidget *ui_widget = new DomWidget();
-    ui_widget->setAttributeName(QLatin1StringView(clipboardObjectName));
+    ui_widget->setAttributeName(clipboardObjectName);
     bool hasItems = false;
     // Widgets
     if (!selection.m_widgets.isEmpty()) {
@@ -1718,7 +1728,7 @@ DomUI *QDesignerResource::copy(const FormBuilderClipboard &selection)
     }
     // UI
     DomUI *ui = new DomUI();
-    ui->setAttributeVersion(QLatin1StringView(currentUiVersion));
+    ui->setAttributeVersion(currentUiVersion);
     ui->setElementWidget(ui_widget);
     ui->setElementResources(saveResources(m_resourceBuilder->usedQrcFiles()));
     if (DomCustomWidgets *cws = saveCustomWidgets())

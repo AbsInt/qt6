@@ -17,6 +17,7 @@
 #include <qpa/qplatformnativeinterface.h>
 #include <qpa/qplatformtheme.h>
 #include <qpa/qplatformintegration.h>
+#include <qpa/qplatformkeymapper.h>
 
 #include <QtCore/QAbstractEventDispatcher>
 #include <QtCore/QFileInfo>
@@ -829,7 +830,7 @@ QWindow *QGuiApplication::modalWindow()
     CHECK_QAPP_INSTANCE(nullptr)
     if (QGuiApplicationPrivate::self->modalWindowList.isEmpty())
         return nullptr;
-    return QGuiApplicationPrivate::self->modalWindowList.first();
+    return QGuiApplicationPrivate::self->modalWindowList.constFirst();
 }
 
 static void updateBlockedStatusRecursion(QWindow *window, bool shouldBeBlocked)
@@ -1847,7 +1848,7 @@ Qt::KeyboardModifiers QGuiApplication::queryKeyboardModifiers()
 {
     CHECK_QAPP_INSTANCE(Qt::KeyboardModifiers{})
     QPlatformIntegration *pi = QGuiApplicationPrivate::platformIntegration();
-    return pi->queryKeyboardModifiers();
+    return pi->keyMapper()->queryKeyboardModifiers();
 }
 
 /*!
@@ -2026,6 +2027,7 @@ bool QGuiApplication::event(QEvent *e)
                 return true;
             }
         }
+        break;
     default:
         break;
     }
@@ -2086,8 +2088,8 @@ void Q_TRACE_INSTRUMENT(qtgui) QGuiApplicationPrivate::processWindowSystemEvent(
     case QWindowSystemInterfacePrivate::Leave:
         QGuiApplicationPrivate::processLeaveEvent(static_cast<QWindowSystemInterfacePrivate::LeaveEvent *>(e));
         break;
-    case QWindowSystemInterfacePrivate::ActivatedWindow:
-        QGuiApplicationPrivate::processActivatedEvent(static_cast<QWindowSystemInterfacePrivate::ActivatedWindowEvent *>(e));
+    case QWindowSystemInterfacePrivate::FocusWindow:
+        QGuiApplicationPrivate::processFocusWindowEvent(static_cast<QWindowSystemInterfacePrivate::FocusWindowEvent *>(e));
         break;
     case QWindowSystemInterfacePrivate::WindowStateChanged:
         QGuiApplicationPrivate::processWindowStateChangedEvent(static_cast<QWindowSystemInterfacePrivate::WindowStateChangedEvent *>(e));
@@ -2510,10 +2512,10 @@ void QGuiApplicationPrivate::processLeaveEvent(QWindowSystemInterfacePrivate::Le
     QCoreApplication::sendSpontaneousEvent(e->leave.data(), &event);
 }
 
-void QGuiApplicationPrivate::processActivatedEvent(QWindowSystemInterfacePrivate::ActivatedWindowEvent *e)
+void QGuiApplicationPrivate::processFocusWindowEvent(QWindowSystemInterfacePrivate::FocusWindowEvent *e)
 {
     QWindow *previous = QGuiApplicationPrivate::focus_window;
-    QWindow *newFocus = e->activated.data();
+    QWindow *newFocus = e->focused.data();
 
     if (previous == newFocus)
         return;
@@ -3505,7 +3507,8 @@ bool QGuiApplicationPrivate::setPalette(const QPalette &palette)
 */
 QPalette QGuiApplicationPrivate::basePalette() const
 {
-    return platformTheme() ? *platformTheme()->palette() : Qt::gray;
+    const auto pf = platformTheme();
+    return pf && pf->palette() ? *pf->palette() : Qt::gray;
 }
 
 void QGuiApplicationPrivate::handlePaletteChanged(const char *className)
@@ -4384,7 +4387,7 @@ void *QGuiApplication::resolveInterface(const char *name, int revision) const
 #if QT_CONFIG(xcb)
     QT_NATIVE_INTERFACE_RETURN_IF(QX11Application, platformNativeInterface());
 #endif
-#if defined(Q_OS_UNIX)
+#if QT_CONFIG(wayland)
     QT_NATIVE_INTERFACE_RETURN_IF(QWaylandApplication, platformNativeInterface());
 #endif
 

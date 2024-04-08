@@ -91,7 +91,7 @@ bool read_bit_pattern(const BitPattern &pattern, BitIStream &inputStream)
     return true;
 }
 
-bool is_request_pseudo_header(const QByteArray &name)
+bool is_request_pseudo_header(QByteArrayView name)
 {
     return name == ":method" || name == ":scheme" ||
            name == ":authority" || name == ":path";
@@ -194,8 +194,8 @@ bool Encoder::encodeRequestPseudoHeaders(BitOStream &outputStream,
     using size_type = decltype(header.size());
 
     bool methodFound = false;
-    const char *headerName[] = {":authority", ":scheme", ":path"};
-    const size_type nHeaders = sizeof headerName / sizeof headerName[0];
+    constexpr QByteArrayView headerName[] = {":authority", ":scheme", ":path"};
+    constexpr size_type nHeaders = std::size(headerName);
     bool headerFound[nHeaders] = {};
 
     for (const auto &field : header) {
@@ -502,6 +502,49 @@ void Decoder::handleStreamError(BitIStream &inputStream)
 
     // For now error handling not needed here,
     // HTTP2 layer will end with session error/COMPRESSION_ERROR.
+}
+
+std::optional<QUrl> makePromiseKeyUrl(const HttpHeader &requestHeader)
+{
+    constexpr QByteArrayView names[] = { ":authority", ":method", ":path", ":scheme" };
+    enum PseudoHeaderEnum
+    {
+        Authority,
+        Method,
+        Path,
+        Scheme
+    };
+    std::array<std::optional<QByteArrayView>, std::size(names)> pseudoHeaders{};
+    for (const auto &field : requestHeader) {
+        const auto *it = std::find(std::begin(names), std::end(names), QByteArrayView(field.name));
+        if (it != std::end(names)) {
+            const auto index = std::distance(std::begin(names), it);
+            if (field.value.isEmpty() || pseudoHeaders.at(index).has_value())
+                return {};
+            pseudoHeaders[index] = field.value;
+        }
+    }
+
+    auto optionalIsSet = [](const auto &x) { return x.has_value(); };
+    if (!std::all_of(pseudoHeaders.begin(), pseudoHeaders.end(), optionalIsSet)) {
+        // All four required, HTTP/2 8.1.2.3.
+        return {};
+    }
+
+    const QByteArrayView method = pseudoHeaders[Method].value();
+    if (method.compare("get", Qt::CaseInsensitive) != 0 &&
+        method.compare("head", Qt::CaseInsensitive) != 0) {
+        return {};
+    }
+
+    QUrl url;
+    url.setScheme(QLatin1StringView(pseudoHeaders[Scheme].value()));
+    url.setAuthority(QLatin1StringView(pseudoHeaders[Authority].value()));
+    url.setPath(QLatin1StringView(pseudoHeaders[Path].value()));
+
+    if (!url.isValid())
+        return {};
+    return url;
 }
 
 }

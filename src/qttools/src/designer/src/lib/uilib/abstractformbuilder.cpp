@@ -56,11 +56,11 @@
 
 Q_DECLARE_METATYPE(QWidgetList)
 
-static const char buttonGroupPropertyC[] = "buttonGroup";
-
 QT_BEGIN_NAMESPACE
 
 using namespace Qt::StringLiterals;
+
+static constexpr auto buttonGroupPropertyC = "buttonGroup"_L1;
 
 #ifdef QFORMINTERNAL_NAMESPACE
 using namespace QFormInternal;
@@ -696,27 +696,27 @@ static inline QString alignmentValue(Qt::Alignment a)
     QLatin1StringView v;
     switch (a & Qt::AlignHorizontal_Mask) {
     case Qt::AlignLeft:
-        h = "Qt::AlignLeft"_L1;
+        h = "Qt::AlignmentFlag::AlignLeft"_L1;
         break;
     case Qt::AlignRight:
-        h = "Qt::AlignRight"_L1;
+        h = "Qt::AlignmentFlag::AlignRight"_L1;
         break;
     case Qt::AlignHCenter:
-        h = "Qt::AlignHCenter"_L1;
+        h = "Qt::AlignmentFlag::AlignHCenter"_L1;
         break;
     case Qt::AlignJustify:
-        h = "Qt::AlignJustify"_L1;
+        h = "Qt::AlignmentFlag::AlignJustify"_L1;
         break;
     }
     switch (a & Qt::AlignVertical_Mask) {
     case Qt::AlignTop:
-        v = "Qt::AlignTop"_L1;
+        v = "Qt::AlignmentFlag::AlignTop"_L1;
         break;
     case Qt::AlignBottom:
-        v = "Qt::AlignBottom"_L1;
+        v = "Qt::AlignmentFlag::AlignBottom"_L1;
         break;
     case Qt::AlignVCenter:
-        v = "Qt::AlignVCenter"_L1;
+        v = "Qt::AlignmentFlag::AlignVCenter"_L1;
         break;
     }
 
@@ -961,7 +961,7 @@ QActionGroup *QAbstractFormBuilder::createActionGroup(QObject *parent, const QSt
     Saves an XML representation of the given \a widget to the
     specified \a device in the standard UI file format.
 
-    \note Unlike when saving a form in Qt Designer, all property values are
+    \note Unlike when saving a form in \QD, all property values are
     written. This is because, the state of whether a property value was
     modified or not isn't stored in the Qt property system. The widget that
     is being saved, could have been created dynamically, not loaded via
@@ -1349,7 +1349,7 @@ DomSpacer *QAbstractFormBuilder::createDom(QSpacerItem *spacer, DomLayout *ui_la
     prop = new DomProperty(); // ### we don't implemented the case where expandingDirections() is both Vertical and Horizontal
     prop->setAttributeName("orientation"_L1);
     prop->setElementEnum((spacer->expandingDirections() & Qt::Horizontal) != 0 ?
-                         "Qt::Horizontal"_L1 : "Qt::Vertical"_L1);
+                         "Qt:::Orientation::Horizontal"_L1 : "Qt:::Orientation::Vertical"_L1);
     properties.append(prop);
 
     ui_spacer->setElementProperty(properties);
@@ -1689,12 +1689,12 @@ void QAbstractFormBuilder::saveTreeWidgetExtraInfo(QTreeWidget *treeWidget, DomW
 
     auto items = ui_widget->elementItem();
 
-    QQueue<QPair<QTreeWidgetItem *, DomItem *> > pendingQueue;
+    QQueue<std::pair<QTreeWidgetItem *, DomItem *> > pendingQueue;
     for (int i = 0; i < treeWidget->topLevelItemCount(); i++)
-        pendingQueue.enqueue(qMakePair(treeWidget->topLevelItem(i), nullptr));
+        pendingQueue.enqueue(std::make_pair(treeWidget->topLevelItem(i), nullptr));
 
     while (!pendingQueue.isEmpty()) {
-        const QPair<QTreeWidgetItem *, DomItem *> pair = pendingQueue.dequeue();
+        const std::pair<QTreeWidgetItem *, DomItem *> pair = pendingQueue.dequeue();
         QTreeWidgetItem *item = pair.first;
         DomItem *parentDomItem = pair.second;
 
@@ -1725,7 +1725,7 @@ void QAbstractFormBuilder::saveTreeWidgetExtraInfo(QTreeWidget *treeWidget, DomW
             items.append(currentDomItem);
 
         for (int i = 0; i < item->childCount(); i++)
-            pendingQueue.enqueue(qMakePair(item->child(i), currentDomItem));
+            pendingQueue.enqueue(std::make_pair(item->child(i), currentDomItem));
     }
 
     ui_widget->setElementItem(items);
@@ -1852,7 +1852,7 @@ void QAbstractFormBuilder::saveButtonExtraInfo(const QAbstractButton *widget, Do
         domString->setText(buttonGroup->objectName());
         domString->setAttributeNotr(u"true"_s);
         DomProperty *domProperty = new DomProperty();
-        domProperty->setAttributeName(QLatin1StringView(buttonGroupPropertyC));
+        domProperty->setAttributeName(buttonGroupPropertyC);
         domProperty->setElementString(domString);
         attributes += domProperty;
         ui_widget->setElementAttribute(attributes);
@@ -2040,13 +2040,13 @@ void QAbstractFormBuilder::loadTreeWidgetExtraInfo(DomWidget *ui_widget, QTreeWi
         }
     }
 
-    QQueue<QPair<DomItem *, QTreeWidgetItem *> > pendingQueue;
+    QQueue<std::pair<DomItem *, QTreeWidgetItem *> > pendingQueue;
     const auto &widgetElementItem = ui_widget->elementItem();
     for (DomItem *ui_item : widgetElementItem)
-        pendingQueue.enqueue(qMakePair(ui_item, nullptr));
+        pendingQueue.enqueue(std::make_pair(ui_item, nullptr));
 
     while (!pendingQueue.isEmpty()) {
-        const QPair<DomItem *, QTreeWidgetItem *> pair = pendingQueue.dequeue();
+        const std::pair<DomItem *, QTreeWidgetItem *> pair = pendingQueue.dequeue();
         const DomItem *domItem = pair.first;
         QTreeWidgetItem *parentItem = pair.second;
 
@@ -2085,9 +2085,9 @@ void QAbstractFormBuilder::loadTreeWidgetExtraInfo(DomWidget *ui_widget, QTreeWi
                         if ((v = toVariant(&QAbstractFormBuilderGadget::staticMetaObject, property)).isValid())
                             currentItem->setData(col, role, v);
                     } else {
-                        QPair<Qt::ItemDataRole, Qt::ItemDataRole> rolePair =
+                        std::pair<Qt::ItemDataRole, Qt::ItemDataRole> rolePair =
                             strings.treeItemTextRoleHash.value(property->attributeName(),
-                                         qMakePair((Qt::ItemDataRole)-1, (Qt::ItemDataRole)-1));
+                                         std::make_pair((Qt::ItemDataRole)-1, (Qt::ItemDataRole)-1));
                         if (rolePair.first >= 0) {
                             QVariant textV = textBuilder()->loadText(property);
                             QVariant nativeValue = textBuilder()->toNativeValue(textV);
@@ -2101,7 +2101,7 @@ void QAbstractFormBuilder::loadTreeWidgetExtraInfo(DomWidget *ui_widget, QTreeWi
 
         const auto &elementItem = domItem->elementItem();
         for (DomItem *childItem : elementItem)
-            pendingQueue.enqueue(qMakePair(childItem, currentItem));
+            pendingQueue.enqueue(std::make_pair(childItem, currentItem));
 
     }
 }
@@ -2193,7 +2193,7 @@ static QString buttonGroupName(const DomWidget *ui_widget)
     const auto &attributes = ui_widget->elementAttribute();
     if (attributes.isEmpty())
         return QString();
-    const QString buttonGroupProperty = QLatin1StringView(buttonGroupPropertyC);
+    const QString buttonGroupProperty = buttonGroupPropertyC;
     for (const DomProperty *p : attributes) {
         if (p->attributeName() == buttonGroupProperty)
             return p->elementString()->text();

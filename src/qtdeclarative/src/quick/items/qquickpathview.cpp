@@ -76,6 +76,7 @@ QQuickPathViewPrivate::QQuickPathViewPrivate()
     , highlightRangeMode(QQuickPathView::StrictlyEnforceRange)
     , highlightMoveDuration(300), modelCount(0), snapMode(QQuickPathView::NoSnap)
 {
+    setSizePolicy(QLayoutPolicy::Preferred, QLayoutPolicy::Preferred);
 }
 
 void QQuickPathViewPrivate::init()
@@ -531,6 +532,8 @@ QQuickPathView::~QQuickPathView()
 
 /*!
     \qmlattachedproperty PathView QtQuick::PathView::view
+    \readonly
+
     This attached property holds the view that manages this delegate instance.
 
     It is attached to each instance of the delegate.
@@ -538,6 +541,8 @@ QQuickPathView::~QQuickPathView()
 
 /*!
     \qmlattachedproperty bool QtQuick::PathView::onPath
+    \readonly
+
     This attached property holds whether the item is currently on the path.
 
     If a pathItemCount has been set, it is possible that some items may
@@ -558,6 +563,8 @@ QQuickPathView::~QQuickPathView()
 
 /*!
     \qmlattachedproperty bool QtQuick::PathView::isCurrentItem
+    \readonly
+
     This attached property is true if this delegate is the current item; otherwise false.
 
     It is attached to each instance of the delegate.
@@ -1529,6 +1536,14 @@ QQuickItem *QQuickPathView::itemAtIndex(int index) const
     return nullptr;
 }
 
+/*!
+    \internal
+
+    Returns a point in the path, that has the closest distance from \a point.
+    A value in the range 0-1 will be written to \a nearPercent if given, which
+    represents where on the path the \a point is closest to. \c 0 means the very
+    beginning of the path, and \c 1 means the very end.
+*/
 QPointF QQuickPathViewPrivate::pointNear(const QPointF &point, qreal *nearPercent) const
 {
     const auto pathLength = path->path().length();

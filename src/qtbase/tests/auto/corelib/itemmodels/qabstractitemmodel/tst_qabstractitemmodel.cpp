@@ -1,7 +1,9 @@
 // Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <QTest>
+
+#include <QtTest/private/qcomparisontesthelper_p.h>
 
 #include <QtCore/QCoreApplication>
 #include <QtCore/QSortFilterProxyModel>
@@ -56,6 +58,7 @@ private slots:
     void reset();
 
     void complexChangesWithPersistent();
+    void modelIndexComparisons();
 
     void testMoveSameParentUp_data();
     void testMoveSameParentUp();
@@ -982,6 +985,27 @@ void tst_QAbstractItemModel::complexChangesWithPersistent()
         QVERIFY(!e[i].isValid());
     for (int i=6; i <10 ; i++)
         QVERIFY(e[i] == model.index(2, i-2 , QModelIndex()));
+}
+
+void tst_QAbstractItemModel::modelIndexComparisons()
+{
+    QTestPrivate::testEqualityOperatorsCompile<QModelIndex>();
+    QTestPrivate::testEqualityOperatorsCompile<QPersistentModelIndex>();
+    QTestPrivate::testEqualityOperatorsCompile<QPersistentModelIndex, QModelIndex>();
+
+    QtTestModel model(3, 3);
+
+    QModelIndex mi11 = model.index(1, 1);
+    QModelIndex mi22 = model.index(2, 2);
+    QPersistentModelIndex pmi11 = mi11;
+    QPersistentModelIndex pmi22 = mi22;
+
+    QT_TEST_EQUALITY_OPS(mi11, mi11, true);
+    QT_TEST_EQUALITY_OPS(mi11, mi22, false);
+    QT_TEST_EQUALITY_OPS(pmi11, pmi11, true);
+    QT_TEST_EQUALITY_OPS(pmi11, pmi22, false);
+    QT_TEST_EQUALITY_OPS(pmi11, mi11, true);
+    QT_TEST_EQUALITY_OPS(pmi11, mi22, false);
 }
 
 void tst_QAbstractItemModel::testMoveSameParentDown_data()

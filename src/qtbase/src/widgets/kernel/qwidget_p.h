@@ -42,12 +42,15 @@
 #include <qpa/qplatformbackingstore.h>
 #include <QtGui/private/qbackingstorerhisupport_p.h>
 
+#include <QtCore/qpointer.h>
+
 #include <vector>
 #include <memory>
 
 QT_BEGIN_NAMESPACE
 
 Q_DECLARE_LOGGING_CATEGORY(lcWidgetPainting);
+Q_DECLARE_LOGGING_CATEGORY(lcWidgetShowHide);
 
 // Extra QWidget data
 //  - to minimize memory usage for members that are seldom used.
@@ -72,10 +75,6 @@ class QUpdateLaterEvent : public QEvent
 public:
     explicit QUpdateLaterEvent(const QRegion& paintRegion)
         : QEvent(UpdateLater), m_region(paintRegion)
-    {
-    }
-
-    ~QUpdateLaterEvent()
     {
     }
 
@@ -385,6 +384,7 @@ public:
     void show_sys();
     void hide_sys();
     void hide_helper();
+    bool isExplicitlyHidden() const;
     void _q_showIfNotHidden();
     void setVisible(bool);
 

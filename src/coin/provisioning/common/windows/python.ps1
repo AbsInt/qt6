@@ -19,7 +19,7 @@ if ( $archVer -eq 64 ) {
 }
 $package = "C:\Windows\temp\python-$version.msi"
 $externalUrl = "https://www.python.org/ftp/python/$version/python-$version" + $arch + ".msi"
-$internalUrl = "\\ci-files01-hki.intra.qt.io\provisioning\windows\python-$version" + $arch + ".msi"
+$internalUrl = "\\ci-files01-hki.ci.qt.io\provisioning\windows\python-$version" + $arch + ".msi"
 
 Write-Host "Fetching from URL..."
 Download $externalUrl $internalUrl $package
@@ -68,6 +68,10 @@ Run-Executable "$targetDir\python.exe" "-m ensurepip"
 
 Write-Host "Upgrade pip to the latest version available."
 Run-Executable "$targetDir\python.exe" "-m pip install --upgrade pip"
+
+Write-Host "Configure pip"
+Run-Executable "$targetDir\python.exe" "-m pip config --user set global.index https://ci-files01-hki.ci.qt.io/input/python_module_cache"
+Run-Executable "$targetDir\python.exe" "-m pip config --user set global.extra-index-url https://pypi.org/simple/"
 
 # Install python virtual env
 if (IsProxyEnabled) {

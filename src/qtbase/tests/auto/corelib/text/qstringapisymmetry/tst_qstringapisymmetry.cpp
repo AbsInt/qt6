@@ -1,6 +1,6 @@
 // Copyright (C) 2020 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author Marc Mutz <marc.mutz@kdab.com>
 // Copyright (C) 2019 Mail.ru Group.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #undef QT_NO_CAST_FROM_ASCII
 #undef QT_NO_CAST_TO_ASCII
@@ -22,6 +22,8 @@
 #include <locale.h>
 
 Q_DECLARE_METATYPE(QLatin1String)
+
+namespace {
 
 struct QAnyStringViewUsingL1  : QAnyStringView {};  // QAnyStringView with Latin-1 content
 struct QAnyStringViewUsingU8  : QAnyStringView {};  // QAnyStringView with Utf-8 content
@@ -81,6 +83,8 @@ MAKE_ALL(QUtf8StringView, QLatin1String)
 #undef MAKE_ALL
 #undef MAKE_RELOP
 // END FIXME
+
+} // namespace
 
 static constexpr int sign(int i) noexcept
 {

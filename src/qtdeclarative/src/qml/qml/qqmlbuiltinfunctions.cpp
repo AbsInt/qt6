@@ -87,6 +87,7 @@ the \l Qt::LeftButton and \l Qt::RightButton enumeration values as \c Qt.LeftBut
 
 
 \section1 Types
+\target globalqtobjecttypes
 
 The Qt object also contains helper functions for creating objects of specific
 data types. This is primarily useful when setting the properties of an item
@@ -108,8 +109,6 @@ creating objects of specific data types are also available for clients to use:
 \li \c quaternion - use \l{Qt::quaternion()}{Qt.quaternion()}
 \li \c matrix4x4 - use \l{Qt::matrix4x4()}{Qt.matrix4x4()}
 \endlist
-
-There are also string based constructors for these types. See \l{qtqml-typesystem-valuetypes.html}{QML Value Types} for more information.
 
 \section1 Date/Time Formatters
 
@@ -190,7 +189,7 @@ The following functions are also on the Qt object.
 */
 
 /*!
-    \qmlproperty object Qt::application
+    \qmlproperty Application Qt::application
     \since 5.1
 
     The \c application object provides access to global application state
@@ -213,7 +212,7 @@ The following functions are also on the Qt object.
 */
 
 /*!
-    \qmlproperty object Qt::inputMethod
+    \qmlproperty InputMethod Qt::inputMethod
     \since 5.0
 
     It is the same as the \l InputMethod singleton.
@@ -808,12 +807,12 @@ static std::optional<QDate> dateFromString(const QString &string, QV4::Execution
     return std::nullopt;
 }
 
-QString QtObject::formatDate(const QDate &date, const QString &format) const
+QString QtObject::formatDate(QDate date, const QString &format) const
 {
     return date.toString(format);
 }
 
-QString QtObject::formatDate(const QDate &date, Qt::DateFormat format) const
+QString QtObject::formatDate(QDate date, Qt::DateFormat format) const
 {
     return formatDateTimeObjectUsingDateFormat(date, format);
 }
@@ -845,7 +844,7 @@ QString QtObject::formatDate(const QString &string, Qt::DateFormat format) const
 }
 
 #if QT_CONFIG(qml_locale)
-QString QtObject::formatDate(const QDate &date, const QLocale &locale,
+QString QtObject::formatDate(QDate date, const QLocale &locale,
                              QLocale::FormatType formatType) const
 {
     return locale.toString(date, formatType);
@@ -913,7 +912,7 @@ static std::optional<QTime> timeFromString(const QString &string, QV4::Execution
     return std::nullopt;
 }
 
-QString QtObject::formatTime(const QTime &time, const QString &format) const
+QString QtObject::formatTime(QTime time, const QString &format) const
 {
     return time.toString(format);
 }
@@ -932,7 +931,7 @@ QString QtObject::formatTime(const QString &time, const QString &format) const
     return QString();
 }
 
-QString QtObject::formatTime(const QTime &time, Qt::DateFormat format) const
+QString QtObject::formatTime(QTime time, Qt::DateFormat format) const
 {
     return formatDateTimeObjectUsingDateFormat(time, format);
 }
@@ -951,7 +950,7 @@ QString QtObject::formatTime(const QString &time, Qt::DateFormat format) const
 }
 
 #if QT_CONFIG(qml_locale)
-QString QtObject::formatTime(const QTime &time, const QLocale &locale,
+QString QtObject::formatTime(QTime time, const QLocale &locale,
                              QLocale::FormatType formatType) const
 {
     return locale.toString(time, formatType);
@@ -1995,7 +1994,7 @@ ReturnedValue ConsoleObject::method_trace(const FunctionObject *b, const Value *
     QV4::CppStackFrame *frame = v4->currentStackFrame;
     QMessageLogger(frame->source().toUtf8().constData(), frame->lineNumber(),
                    frame->function().toUtf8().constData())
-        .debug("%s", qPrintable(stack));
+        .debug(v4->qmlEngine() ? lcQml : lcJs, "%s", qPrintable(stack));
 
     return QV4::Encode::undefined();
 }
@@ -2176,8 +2175,12 @@ QString GlobalExtensions::currentTranslationContext(ExecutionEngine *engine)
 
     // The first non-empty source URL in the call stack determines the translation context.
     while (frame && context.isEmpty()) {
-        if (CompiledData::CompilationUnitBase *baseUnit = frame->v4Function->compilationUnit) {
-            const auto *unit = static_cast<const CompiledData::CompilationUnit *>(baseUnit);
+        if (ExecutableCompilationUnit *unit = frame->v4Function->executableCompilationUnit()) {
+            auto translationContextIndex = unit->data->translationContextIndex();
+            if (translationContextIndex)
+                context = unit->stringAt(*translationContextIndex);
+            if (!context.isEmpty())
+                break;
             QString fileName = unit->fileName();
             QUrl url(unit->fileName());
             if (url.isValid() && url.isRelative()) {

@@ -1,5 +1,6 @@
 // Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
+
 #include <qtest.h>
 #include <QtQml/qqmlengine.h>
 #include <QtQml/qqmlcomponent.h>
@@ -41,6 +42,7 @@ private slots:
     void testDotProperties();
     void testItemReparenting();
     void testPropertyNames();
+    void regressionTestAllProperties();
 };
 
 
@@ -557,14 +559,15 @@ void doComponentCompleteRecursive(QObject *object)
         QList<QObject*> childList = object->children();
 
         if (item) {
-            foreach (QQuickItem *childItem, item->childItems()) {
+            const auto childItems = item->childItems();
+            for (QQuickItem *childItem : childItems) {
                 if (!childList.contains(childItem))
                     childList.append(childItem);
             }
         }
 
-        foreach (QObject *child, childList)
-                doComponentCompleteRecursive(child);
+        for (QObject *child : std::as_const(childList))
+            doComponentCompleteRecursive(child);
 
         if (item) {
             static_cast<QQmlParserStatus*>(item)->componentComplete();
@@ -779,6 +782,37 @@ void tst_qquickdesignersupport::testPropertyNames()
     names = QQuickDesignerSupportProperties::propertyNameListForWritableProperties(recursiveProperty);
     QVERIFY(!names.isEmpty());
     QVERIFY(!names.contains("testProperty"));
+}
+
+void tst_qquickdesignersupport::regressionTestAllProperties()
+{
+    QScopedPointer<QQuickView> view(new QQuickView);
+    view->engine()->setOutputWarningsToStandardError(false);
+    view->setSource(testFileUrl("regTestProperties.qml"));
+
+    QVERIFY(view->errors().isEmpty());
+    QQuickItem *rootItem = view->rootObject();
+    QVERIFY(rootItem);
+
+    QObject *component = rootItem->findChild<QObject*>("testComponent");
+
+    QVERIFY(component);
+    QCOMPARE(component->objectName(), QLatin1String("testComponent"));
+
+    QVERIFY(component);
+
+    QQuickDesignerSupport::PropertyNameList names
+            = QQuickDesignerSupportProperties::allPropertyNames(component);
+    QVERIFY(!names.isEmpty());
+
+    const QByteArrayList expectedNames = QByteArrayList {
+        "objectName", "currentCategory", "materialsNames", "model"
+    };
+
+    QCOMPARE(names, expectedNames);
+    names = QQuickDesignerSupportProperties::propertyNameListForWritableProperties(component);
+    QVERIFY(!names.isEmpty());
+    QCOMPARE(names, expectedNames);
 }
 
 QTEST_MAIN(tst_qquickdesignersupport)

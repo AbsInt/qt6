@@ -338,6 +338,7 @@ bool QDockWidgetGroupWindow::event(QEvent *e)
     case QEvent::Resize:
         updateCurrentGapRect();
         emit resized();
+        break;
     default:
         break;
     }
@@ -1430,17 +1431,18 @@ bool QMainWindowLayoutState::restoreState(QDataStream &_stream,
 
 #if QT_CONFIG(toolbar)
 
-static inline void validateToolBarArea(Qt::ToolBarArea &area)
+static constexpr Qt::ToolBarArea validateToolBarArea(Qt::ToolBarArea area)
 {
     switch (area) {
     case Qt::LeftToolBarArea:
     case Qt::RightToolBarArea:
     case Qt::TopToolBarArea:
     case Qt::BottomToolBarArea:
-        break;
+        return area;
     default:
-        area = Qt::TopToolBarArea;
+        break;
     }
+    return Qt::TopToolBarArea;
 }
 
 static QInternal::DockPosition toDockPos(Qt::ToolBarArea area)
@@ -1476,7 +1478,7 @@ static inline Qt::ToolBarArea toToolBarArea(int pos)
 
 void QMainWindowLayout::addToolBarBreak(Qt::ToolBarArea area)
 {
-    validateToolBarArea(area);
+    area = validateToolBarArea(area);
 
     layoutState.toolBarAreaLayout.addToolBarBreak(toDockPos(area));
     if (savedState.isValid())
@@ -1530,7 +1532,7 @@ void QMainWindowLayout::addToolBar(Qt::ToolBarArea area,
                                    QToolBar *toolbar,
                                    bool)
 {
-    validateToolBarArea(area);
+    area = validateToolBarArea(area);
     // let's add the toolbar to the layout
     addChildWidget(toolbar);
     QLayoutItem *item = layoutState.toolBarAreaLayout.addToolBar(toDockPos(area), toolbar);

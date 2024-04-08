@@ -6,7 +6,7 @@
 #include "qabstracteventdispatcher.h"
 #include "qcoreapplication.h"
 #include "qcoreapplication_p.h"
-#include "qelapsedtimer.h"
+#include "qdeadlinetimer.h"
 
 #include "qobject_p.h"
 #include "qeventloop_p.h"
@@ -186,9 +186,27 @@ int QEventLoop::exec(ProcessEventsFlags flags)
 }
 
 /*!
+    \overload
+
     Process pending events that match \a flags for a maximum of \a
     maxTime milliseconds, or until there are no more events to
     process, whichever is shorter.
+
+    Equivalent to calling:
+    \code
+    processEvents(flags, QDeadlineTimer(maxTime));
+    \endcode
+*/
+void QEventLoop::processEvents(ProcessEventsFlags flags, int maxTime)
+{
+    processEvents(flags, QDeadlineTimer(maxTime));
+}
+
+/*!
+    \since 6.7
+
+    Process pending events that match \a flags until \a deadline has expired,
+    or until there are no more events to process, whichever happens first.
     This function is especially useful if you have a long running
     operation and want to show its progress without allowing user
     input, i.e. by using the \l ExcludeUserInputEvents flag.
@@ -201,16 +219,14 @@ int QEventLoop::exec(ProcessEventsFlags flags)
        and will be ignored.
     \endlist
 */
-void QEventLoop::processEvents(ProcessEventsFlags flags, int maxTime)
+void QEventLoop::processEvents(ProcessEventsFlags flags, QDeadlineTimer deadline)
 {
     Q_D(QEventLoop);
     if (!d->threadData.loadRelaxed()->hasEventDispatcher())
         return;
 
-    QElapsedTimer start;
-    start.start();
     while (processEvents(flags & ~WaitForMoreEvents)) {
-        if (start.elapsed() > maxTime)
+        if (deadline.hasExpired())
             break;
     }
 }
@@ -356,6 +372,42 @@ QEventLoopLocker::QEventLoopLocker(QThread *thread) noexcept
 {
 
 }
+
+/*!
+    \fn QEventLoopLocker::QEventLoopLocker(QEventLoopLocker &&other)
+    \since 6.7
+
+    Move-constructs an event-loop locker from \a other. \a other will have a
+    no-op destructor, while responsibility for preventing the
+    QEventLoop/QThread/QCoreApplication from quitting is transferred to the new
+    object.
+*/
+
+/*!
+    \fn QEventLoopLocker &QEventLoopLocker::operator=(QEventLoopLocker &&other)
+    \since 6.7
+
+    Move-assigns this event-loop locker from \a other. \a other will have a
+    no-op destructor, while responsibility for preventing the
+    QEventLoop/QThread/QCoreApplication from quitting is transferred to this
+    object.
+*/
+
+/*!
+    \fn QEventLoopLocker::swap(QEventLoopLocker &other)
+    \since 6.7
+
+    Swaps the object and the state of this QEventLoopLocker with \a other.
+    This operation is very fast and never fails.
+*/
+
+/*!
+    \fn QEventLoopLocker::swap(QEventLoopLocker &lhs, QEventLoopLocker &rhs)
+    \since 6.7
+
+    Swaps the object and the state of \a lhs with \a rhs.
+    This operation is very fast and never fails.
+*/
 
 /*!
     Destroys this event loop locker object

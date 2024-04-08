@@ -9,7 +9,9 @@
 #include "qquickapplicationwindow_p.h"
 #include "qquickoverlay_p_p.h"
 #include "qquickcontrol_p_p.h"
+#if QT_CONFIG(quicktemplates2_container)
 #include "qquickdialog_p.h"
+#endif
 
 #include <QtCore/qloggingcategory.h>
 #include <QtQml/qqmlinfo.h>
@@ -217,6 +219,47 @@ Q_LOGGING_CATEGORY(lcPopup, "qt.quick.controls.popup")
     To ensure that the popup is positioned within the bounds of the enclosing
     window, the \l margins property can be set to a non-negative value.
 
+    \section1 Showing Non-Child Items in Front of Popup
+
+    Popup sets its contentItem's
+    \l{qtquick-visualcanvas-visualparent.html}{visual parent}
+    to be the window's \l{Overlay::overlay}{overlay}, in order to ensure that
+    the popup appears in front of everything else in the scene.
+    In some cases, it might be useful to put an item in front of a popup,
+    such as a \l [QML QtVirtualKeyboard] {InputPanel} {virtual keyboard}.
+    This can be done by setting the item's parent to the overlay,
+    and giving the item a positive z value. The same result can also be
+    achieved by waiting until the popup is opened, before re-parenting the item
+    to the overlay.
+
+    \omit
+        This shouldn't be a snippet, since we don't want VKB to be a dependency to controls.
+    \endomit
+    \qml
+    Popup {
+        id: popup
+        visible: true
+        anchors.centerIn: parent
+        margins: 10
+        closePolicy: Popup.CloseOnEscape
+        ColumnLayout {
+            TextField {
+                placeholderText: qsTr("Username")
+            }
+            TextField {
+                placeholderText: qsTr("Password")
+                echoMode: TextInput.Password
+            }
+        }
+    }
+    InputPanel {
+        parent: Overlay.overlay
+        width: parent.width
+        y: popup.y + popup.topMargin + (window.activeFocusItem?.y ?? 0) + (window.activeFocusItem?.height ?? 0)
+        z: 1
+    }
+    \endqml
+
     \section1 Popup Transitions
 
     Since Qt 5.15.3 the following properties are restored to their original values from before
@@ -354,9 +397,11 @@ void QQuickPopupPrivate::init()
 void QQuickPopupPrivate::closeOrReject()
 {
     Q_Q(QQuickPopup);
+#if QT_CONFIG(quicktemplates2_container)
     if (QQuickDialog *dialog = qobject_cast<QQuickDialog*>(q))
         dialog->reject();
     else
+#endif
         q->close();
     touchId = -1;
 }
@@ -994,6 +1039,8 @@ QQuickPopup::QQuickPopup(QObject *parent)
 {
     Q_D(QQuickPopup);
     d->init();
+    // By default, allow popup to move beyond window edges
+    d->relaxEdgeConstraint = true;
 }
 
 QQuickPopup::QQuickPopup(QQuickPopupPrivate &dd, QObject *parent)

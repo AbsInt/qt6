@@ -106,22 +106,8 @@ void QWaylandWindow::initWindow()
     if (mDisplay->fractionalScaleManager() && qApp->highDpiScaleFactorRoundingPolicy() == Qt::HighDpiScaleFactorRoundingPolicy::PassThrough) {
         mFractionalScale.reset(new QWaylandFractionalScale(mDisplay->fractionalScaleManager()->get_fractional_scale(mSurface->object())));
 
-        connect(mFractionalScale.data(), &QWaylandFractionalScale::preferredScaleChanged, this, [this](qreal preferredScale) {
-            preferredScale = std::max(1.0, preferredScale);
-            if (mScale == preferredScale) {
-                return;
-            }
-            mScale = preferredScale;
-            QWindowSystemInterface::handleWindowDevicePixelRatioChanged(window());
-            ensureSize();
-            if (mViewport)
-                updateViewport();
-            if (isExposed()) {
-                // redraw at the new DPR
-                window()->requestUpdate();
-                sendExposeEvent(QRect(QPoint(), geometry().size()));
-            }
-        });
+        connect(mFractionalScale.data(), &QWaylandFractionalScale::preferredScaleChanged,
+                this, &QWaylandWindow::updateScale);
     }
 
     if (shouldCreateSubSurface()) {
@@ -238,6 +224,10 @@ void QWaylandWindow::initializeWlSurface()
         mSurface.reset(new QWaylandSurface(mDisplay));
         connect(mSurface.data(), &QWaylandSurface::screensChanged,
                 this, &QWaylandWindow::handleScreensChanged);
+        connect(mSurface.data(), &QWaylandSurface::preferredBufferScaleChanged,
+                this, &QWaylandWindow::updateScale);
+        connect(mSurface.data(), &QWaylandSurface::preferredBufferTransformChanged,
+                this, &QWaylandWindow::updateBufferTransform);
         mSurface->m_window = this;
     }
     emit wlSurfaceCreated();
@@ -374,25 +364,32 @@ void QWaylandWindow::setParent(const QPlatformWindow *parent)
     }
 }
 
+QString QWaylandWindow::windowTitle() const
+{
+    return mWindowTitle;
+}
+
 void QWaylandWindow::setWindowTitle(const QString &title)
 {
-    if (mShellSurface) {
-        const QString separator = QString::fromUtf8(" \xe2\x80\x94 "); // unicode character U+2014, EM DASH
-        const QString formatted = formatWindowTitle(title, separator);
+    const QString separator = QString::fromUtf8(" \xe2\x80\x94 "); // unicode character U+2014, EM DASH
+    const QString formatted = formatWindowTitle(title, separator);
 
-        const int libwaylandMaxBufferSize = 4096;
-        // Some parts of the buffer is used for metadata, so subtract 100 to be on the safe side.
-        // Also, QString is in utf-16, which means that in the worst case each character will be
-        // three bytes when converted to utf-8 (which is what libwayland uses), so divide by three.
-        const int maxLength = libwaylandMaxBufferSize / 3 - 100;
+    const int libwaylandMaxBufferSize = 4096;
+    // Some parts of the buffer is used for metadata, so subtract 100 to be on the safe side.
+    // Also, QString is in utf-16, which means that in the worst case each character will be
+    // three bytes when converted to utf-8 (which is what libwayland uses), so divide by three.
+    const int maxLength = libwaylandMaxBufferSize / 3 - 100;
 
-        auto truncated = QStringView{formatted}.left(maxLength);
-        if (truncated.size() < formatted.size()) {
-            qCWarning(lcQpaWayland) << "Window titles longer than" << maxLength << "characters are not supported."
-                                    << "Truncating window title (from" << formatted.size() << "chars)";
-        }
-        mShellSurface->setTitle(truncated.toString());
+    auto truncated = QStringView{formatted}.left(maxLength);
+    if (truncated.size() < formatted.size()) {
+        qCWarning(lcQpaWayland) << "Window titles longer than" << maxLength << "characters are not supported."
+                                << "Truncating window title (from" << formatted.size() << "chars)";
     }
+
+    mWindowTitle = truncated.toString();
+
+    if (mShellSurface)
+        mShellSurface->setTitle(mWindowTitle);
 
     if (mWindowDecorationEnabled && window()->isVisible())
         mWindowDecoration->update();
@@ -413,17 +410,7 @@ QRect QWaylandWindow::defaultGeometry() const
 
 void QWaylandWindow::setGeometry_helper(const QRect &rect)
 {
-    QSize minimum = windowMinimumSize();
-    QSize maximum = windowMaximumSize();
-    int width = windowGeometry().width();
-    int height = windowGeometry().height();
-    if (minimum.width() <= maximum.width()
-            && minimum.height() <= maximum.height()) {
-        width = qBound(minimum.width(), rect.width(), maximum.width());
-        height = qBound(minimum.height(), rect.height(), maximum.height());
-    }
-
-    QPlatformWindow::setGeometry(QRect(rect.x(), rect.y(), width, height));
+    QPlatformWindow::setGeometry(rect);
     if (mViewport)
         updateViewport();
 
@@ -464,7 +451,7 @@ void QWaylandWindow::setGeometry(const QRect &r)
     if (isExposed() && !mInResizeFromApplyConfigure && exposeGeometry != mLastExposeGeometry)
         sendExposeEvent(exposeGeometry);
 
-    if (mShellSurface && isExposed()) {
+    if (mShellSurface) {
         mShellSurface->setWindowGeometry(windowContentGeometry());
         if (!qt_window_private(window())->positionAutomatic)
             mShellSurface->setWindowPosition(windowGeometry().topLeft());
@@ -663,7 +650,7 @@ void QWaylandWindow::doApplyConfigureFromOtherThread()
     if (!mCanResize || !mWaitingToApplyConfigure)
         return;
     doApplyConfigure();
-    sendExposeEvent(QRect(QPoint(), geometry().size()));
+    sendRecursiveExposeEvent();
 }
 
 void QWaylandWindow::setCanResize(bool canResize)
@@ -679,7 +666,7 @@ void QWaylandWindow::setCanResize(bool canResize)
             bool inGuiThread = QThread::currentThreadId() == QThreadData::get2(thread())->threadId.loadRelaxed();
             if (inGuiThread) {
                 doApplyConfigure();
-                sendExposeEvent(QRect(QPoint(), geometry().size()));
+                sendRecursiveExposeEvent();
             } else {
                 QMetaObject::invokeMethod(this, &QWaylandWindow::doApplyConfigureFromOtherThread, Qt::QueuedConnection);
             }
@@ -704,9 +691,10 @@ void QWaylandWindow::applyConfigure()
 
 void QWaylandWindow::sendRecursiveExposeEvent()
 {
-    if (!window()->isVisible())
-        return;
-    sendExposeEvent(QRect(QPoint(), geometry().size()));
+    if (!isExposed())
+        sendExposeEvent(QRect());
+    else
+        sendExposeEvent(QRect(QPoint(), geometry().size()));
 
     for (QWaylandSubSurface *subSurface : std::as_const(mChildren)) {
         auto subWindow = subSurface->window();
@@ -724,8 +712,12 @@ void QWaylandWindow::attach(QWaylandBuffer *buffer, int x, int y)
         Q_ASSERT(!buffer->committed());
         handleUpdate();
         buffer->setBusy(true);
-
-        mSurface->attach(buffer->buffer(), x, y);
+        if (mSurface->version() >= WL_SURFACE_OFFSET_SINCE_VERSION) {
+            mSurface->offset(x, y);
+            mSurface->attach(buffer->buffer(), 0, 0);
+        } else {
+            mSurface->attach(buffer->buffer(), x, y);
+        }
     } else {
         mSurface->attach(nullptr, 0, 0);
     }
@@ -766,16 +758,6 @@ void QWaylandWindow::safeCommit(QWaylandBuffer *buffer, const QRegion &damage)
         mQueuedBuffer = buffer;
         mQueuedBuffer->setBusy(true);
         mQueuedBufferDamage = damage;
-    }
-}
-
-void QWaylandWindow::handleExpose(const QRegion &region)
-{
-    QWindowSystemInterface::handleExposeEvent(window(), region);
-    if (mQueuedBuffer) {
-        commit(mQueuedBuffer, mQueuedBufferDamage);
-        mQueuedBuffer = nullptr;
-        mQueuedBufferDamage = QRegion();
     }
 }
 
@@ -979,30 +961,48 @@ QWaylandScreen *QWaylandWindow::waylandScreen() const
 
 void QWaylandWindow::handleContentOrientationChange(Qt::ScreenOrientation orientation)
 {
+    mLastReportedContentOrientation = orientation;
+    updateBufferTransform();
+}
+
+void QWaylandWindow::updateBufferTransform()
+{
     QReadLocker locker(&mSurfaceLock);
     if (mSurface == nullptr || mSurface->version() < 2)
         return;
 
     wl_output_transform transform;
-    bool isPortrait = window()->screen() && window()->screen()->primaryOrientation() == Qt::PortraitOrientation;
-    switch (orientation) {
-        case Qt::PrimaryOrientation:
-            transform = WL_OUTPUT_TRANSFORM_NORMAL;
-            break;
-        case Qt::LandscapeOrientation:
-            transform = isPortrait ? WL_OUTPUT_TRANSFORM_270 : WL_OUTPUT_TRANSFORM_NORMAL;
-            break;
-        case Qt::PortraitOrientation:
-            transform = isPortrait ? WL_OUTPUT_TRANSFORM_NORMAL : WL_OUTPUT_TRANSFORM_90;
-            break;
-        case Qt::InvertedLandscapeOrientation:
-            transform = isPortrait ? WL_OUTPUT_TRANSFORM_90 : WL_OUTPUT_TRANSFORM_180;
-            break;
-        case Qt::InvertedPortraitOrientation:
-            transform = isPortrait ? WL_OUTPUT_TRANSFORM_180 : WL_OUTPUT_TRANSFORM_270;
-            break;
-        default:
-            Q_UNREACHABLE();
+    Qt::ScreenOrientation screenOrientation = Qt::PrimaryOrientation;
+
+    if (mSurface->version() >= 6) {
+        const auto transform = mSurface->preferredBufferTransform().value_or(WL_OUTPUT_TRANSFORM_NORMAL);
+        if (auto screen = waylandScreen())
+            screenOrientation = screen->toScreenOrientation(transform, Qt::PrimaryOrientation);
+    } else {
+        if (auto screen = window()->screen())
+            screenOrientation = screen->primaryOrientation();
+    }
+
+    const bool isPortrait = (screenOrientation == Qt::PortraitOrientation);
+
+    switch (mLastReportedContentOrientation) {
+    case Qt::PrimaryOrientation:
+        transform = WL_OUTPUT_TRANSFORM_NORMAL;
+        break;
+    case Qt::LandscapeOrientation:
+        transform = isPortrait ? WL_OUTPUT_TRANSFORM_270 : WL_OUTPUT_TRANSFORM_NORMAL;
+        break;
+    case Qt::PortraitOrientation:
+        transform = isPortrait ? WL_OUTPUT_TRANSFORM_NORMAL : WL_OUTPUT_TRANSFORM_90;
+        break;
+    case Qt::InvertedLandscapeOrientation:
+        transform = isPortrait ? WL_OUTPUT_TRANSFORM_90 : WL_OUTPUT_TRANSFORM_180;
+        break;
+    case Qt::InvertedPortraitOrientation:
+        transform = isPortrait ? WL_OUTPUT_TRANSFORM_180 : WL_OUTPUT_TRANSFORM_270;
+        break;
+    default:
+        Q_UNREACHABLE();
     }
     mSurface->set_buffer_transform(transform);
 }
@@ -1109,6 +1109,9 @@ bool QWaylandWindow::createDecoration()
             subsurf->set_position(pos.x() + m.left(), pos.y() + m.top());
         }
         setGeometry(geometry());
+
+        // creating a decoration changes our margins which in turn change size hints
+        propagateSizeHints();
 
         // This is a special case where the buffer is recreated, but since
         // the content rect remains the same, the widgets remain the same
@@ -1414,21 +1417,50 @@ void QWaylandWindow::handleScreensChanged()
         setGeometry(geometry);
     }
 
-    if (mFractionalScale)
+    updateScale();
+    updateBufferTransform();
+}
+
+void QWaylandWindow::updateScale()
+{
+    if (mFractionalScale) {
+        auto preferredScale = mFractionalScale->preferredScale().value_or(1.0);
+        preferredScale = std::max(1.0, preferredScale);
+        Q_ASSERT(mViewport);
+        setScale(preferredScale);
         return;
+    }
+
+    if (mSurface && mSurface->version() >= 6) {
+        auto preferredScale = mSurface->preferredBufferScale().value_or(1);
+        preferredScale = std::max(1, preferredScale);
+        setScale(preferredScale);
+        return;
+    }
 
     int scale = mLastReportedScreen->isPlaceholder() ? 1 : static_cast<QWaylandScreen *>(mLastReportedScreen)->scale();
+    setScale(scale);
+}
 
-    if (scale != mScale) {
-        mScale = scale;
-        QWindowSystemInterface::handleWindowDevicePixelRatioChanged(window());
-        if (mSurface) {
-            if (mViewport)
-                updateViewport();
-            else if (mSurface->version() >= 3)
-                mSurface->set_buffer_scale(std::ceil(mScale));
-        }
-        ensureSize();
+void QWaylandWindow::setScale(qreal newScale)
+{
+    if (qFuzzyCompare(mScale, newScale))
+        return;
+    mScale = newScale;
+
+    QWindowSystemInterface::handleWindowDevicePixelRatioChanged(window());
+    if (mSurface) {
+        if (mViewport)
+            updateViewport();
+        else if (mSurface->version() >= 3)
+            mSurface->set_buffer_scale(std::ceil(mScale));
+    }
+    ensureSize();
+
+    if (isExposed()) {
+        // redraw at the new DPR
+        window()->requestUpdate();
+        sendExposeEvent(QRect(QPoint(), geometry().size()));
     }
 }
 
@@ -1678,15 +1710,21 @@ void QWaylandWindow::propagateSizeHints()
 
 bool QWaylandWindow::startSystemResize(Qt::Edges edges)
 {
-    if (auto *seat = display()->lastInputDevice())
-        return mShellSurface && mShellSurface->resize(seat, edges);
+    if (auto *seat = display()->lastInputDevice()) {
+        bool rc = mShellSurface && mShellSurface->resize(seat, edges);
+        seat->handleEndDrag();
+        return rc;
+    }
     return false;
 }
 
 bool QtWaylandClient::QWaylandWindow::startSystemMove()
 {
-    if (auto seat = display()->lastInputDevice())
-        return mShellSurface && mShellSurface->move(seat);
+    if (auto seat = display()->lastInputDevice()) {
+        bool rc = mShellSurface && mShellSurface->move(seat);
+        seat->handleEndDrag();
+        return rc;
+    }
     return false;
 }
 
@@ -1747,6 +1785,17 @@ void QWaylandWindow::reinit()
         if (hasPendingUpdateRequest())
             deliverUpdateRequest();
     }
+}
+
+bool QWaylandWindow::windowEvent(QEvent *event)
+{
+    if (event->type() == QEvent::ApplicationPaletteChange
+        || event->type() == QEvent::ApplicationFontChange) {
+        if (mWindowDecorationEnabled && window()->isVisible())
+            mWindowDecoration->update();
+    }
+
+    return QPlatformWindow::windowEvent(event);
 }
 
 }

@@ -164,7 +164,7 @@ struct Options
     QString versionName;
     QString versionCode;
     QByteArray minSdkVersion{"23"};
-    QByteArray targetSdkVersion{"33"};
+    QByteArray targetSdkVersion{"34"};
 
     // lib c++ path
     QString stdCppPath;
@@ -225,7 +225,7 @@ struct Options
         qtPluginsDirectory = directories["qtPluginsDirectory"_L1];
         qtQmlDirectory = directories["qtQmlDirectory"_L1];
     }
-    typedef QPair<QString, QString> BundledFile;
+    using BundledFile = std::pair<QString, QString>;
     QHash<QString, QList<BundledFile>> bundledFiles;
     QHash<QString, QList<QtDependency>> qtDependencies;
     QHash<QString, QStringList> localLibs;
@@ -809,7 +809,7 @@ QString detectLatestAndroidPlatform(const QString &sdkPath)
 
     std::sort(fileInfos.begin(), fileInfos.end(), quasiLexicographicalReverseLessThan);
 
-    QFileInfo latestPlatform = fileInfos.first();
+    const QFileInfo& latestPlatform = fileInfos.constFirst();
     return latestPlatform.baseName();
 }
 
@@ -2608,7 +2608,7 @@ bool copyQtFiles(Options *options)
                                     *options)) {
             return false;
         }
-        options->bundledFiles[options->currentArchitecture] += qMakePair(destinationFileName, qtDependency.relativePath);
+        options->bundledFiles[options->currentArchitecture] += std::make_pair(destinationFileName, qtDependency.relativePath);
     }
 
     return true;
@@ -3337,7 +3337,7 @@ int main(int argc, char *argv[])
                                          it.value().qtDirectories);
 
         // All architectures have a copy of the gradle files but only one set needs to be copied.
-        if (!androidTemplatetCopied && options.build && !options.auxMode && !options.copyDependenciesOnly) {
+        if (!androidTemplatetCopied && options.build && !options.copyDependenciesOnly) {
             cleanAndroidFiles(options);
             if (Q_UNLIKELY(options.timing))
                 fprintf(stdout, "[TIMING] %lld ns: Cleaned Android file\n", options.timer.nsecsElapsed());
@@ -3374,13 +3374,12 @@ int main(int argc, char *argv[])
         if (Q_UNLIKELY(options.timing))
             fprintf(stdout, "[TIMING] %lld ns: Copied extra resources\n", options.timer.nsecsElapsed());
 
-        if (!options.auxMode) {
-            if (!copyStdCpp(&options))
-                return CannotCopyGnuStl;
+        if (!copyStdCpp(&options))
+            return CannotCopyGnuStl;
 
-            if (Q_UNLIKELY(options.timing))
-                fprintf(stdout, "[TIMING] %lld ns: Copied GNU STL\n", options.timer.nsecsElapsed());
-        }
+        if (Q_UNLIKELY(options.timing))
+            fprintf(stdout, "[TIMING] %lld ns: Copied GNU STL\n", options.timer.nsecsElapsed());
+
         // If Unbundled deployment is used, remove app lib as we don't want it packaged inside the APK
         if (options.deploymentMechanism == Options::Unbundled) {
             QString appLibPath = "%1/libs/%2/lib%3_%2.so"_L1.

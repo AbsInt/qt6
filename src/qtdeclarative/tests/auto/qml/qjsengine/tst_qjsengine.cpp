@@ -1,5 +1,5 @@
 // Copyright (C) 2016 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 
 #include <QtTest/QtTest>
@@ -18,6 +18,7 @@
 #include <QUrl>
 #include <QModelIndex>
 #include <QtQml/qqmllist.h>
+#include <QtQuickTestUtils/private/qmlutils_p.h>
 
 #ifdef Q_CC_MSVC
 #define NO_INLINE __declspec(noinline)
@@ -311,7 +312,10 @@ private slots:
 
     void garbageCollectedObjectMethodBase();
 
+    void optionalChainWithElementLookup();
+
     void deleteDefineCycle();
+    void deleteFromSparseArray();
 
 public:
     Q_INVOKABLE QJSValue throwingCppMethod1();
@@ -944,7 +948,7 @@ void tst_QJSEngine::newQObject_ownership()
         {
             QJSValue v = eng.newQObject(ptr);
         }
-        eng.collectGarbage();
+        gc(*eng.handle(), GCFlags::DontSendPostedEvents);
         if (ptr)
             QGuiApplication::sendPostedEvents(ptr, QEvent::DeferredDelete);
         QVERIFY(ptr.isNull());
@@ -961,11 +965,11 @@ void tst_QJSEngine::newQObject_ownership()
         delete ptr;
     }
     {
-        QObject *parent = new QObject();
-        QObject *child = new QObject(parent);
+        std::unique_ptr<QObject> parent = std::make_unique<QObject>();
+        QObject *child = new QObject(parent.get());
         QJSValue v = eng.newQObject(child);
         QCOMPARE(v.toQObject(), child);
-        delete parent;
+        parent.reset();
         QCOMPARE(v.toQObject(), (QObject *)nullptr);
     }
     {
@@ -981,8 +985,8 @@ void tst_QJSEngine::newQObject_ownership()
         QVERIFY(ptr.isNull());
     }
     {
-        QObject *parent = new QObject();
-        QPointer<QObject> child = new QObject(parent);
+        std::unique_ptr<QObject> parent = std::make_unique<QObject>();
+        QPointer<QObject> child = new QObject(parent.get());
         QVERIFY(child != nullptr);
         {
             QJSValue v = eng.newQObject(child);
@@ -990,7 +994,6 @@ void tst_QJSEngine::newQObject_ownership()
         eng.collectGarbage();
         // has parent, so it should be like QtOwnership
         QVERIFY(child != nullptr);
-        delete parent;
     }
     {
         QPointer<QObject> ptr = new QObject();
@@ -1732,6 +1735,8 @@ void tst_QJSEngine::valueConversion_QVariant()
     }
     // Checking nested QVariants
     {
+        // ### Qt 7: QVariant nesting is evil; we should check if we can get rid of it
+        // main use case for it was QSignalSpy
         QVariant tmp1;
         QVariant tmp2(QMetaType::fromType<QVariant>(), &tmp1);
         QCOMPARE(QMetaType::Type(tmp2.userType()), QMetaType::QVariant);
@@ -1930,7 +1935,7 @@ void tst_QJSEngine::collectGarbage()
     QPointer<QObject> ptr = new QObject();
     QVERIFY(ptr != nullptr);
     (void)eng.newQObject(ptr);
-    eng.collectGarbage();
+    gc(*eng.handle(), GCFlags::DontSendPostedEvents);
     if (ptr)
         QGuiApplication::sendPostedEvents(ptr, QEvent::DeferredDelete);
     QVERIFY(ptr.isNull());
@@ -1965,8 +1970,8 @@ void tst_QJSEngine::collectGarbageNestedWrappersTwoEngines()
     QCOMPARE(engine1.evaluate("foobar.dummy.baz").toInt(), 42);
     QCOMPARE(engine2.evaluate("foobar.dummy.baz").toInt(), 43);
 
-    engine1.collectGarbage();
-    engine2.collectGarbage();
+    gc(*engine1.handle());
+    gc(*engine2.handle());
 
     // The GC should not collect dummy object wrappers neither in engine1 nor engine2, we
     // verify that by checking whether the baz property still has its previous value.
@@ -3653,9 +3658,6 @@ void tst_QJSEngine::qRegularExpressionExport()
 // effect at a given date (QTBUG-9770).
 void tst_QJSEngine::dateRoundtripJSQtJS()
 {
-#ifdef Q_OS_WIN
-    QSKIP("This test fails on Windows due to a bug in QDateTime.");
-#endif
     qint64 secs = QDate(2009, 1, 1).startOfDay(QTimeZone::UTC).toSecsSinceEpoch();
     QJSEngine eng;
     for (int i = 0; i < 8000; ++i) {
@@ -3670,9 +3672,6 @@ void tst_QJSEngine::dateRoundtripJSQtJS()
 
 void tst_QJSEngine::dateRoundtripQtJSQt()
 {
-#ifdef Q_OS_WIN
-    QSKIP("This test fails on Windows due to a bug in QDateTime.");
-#endif
     QDateTime qtDate = QDate(2009, 1, 1).startOfDay();
     QJSEngine eng;
     for (int i = 0; i < 8000; ++i) {
@@ -3686,9 +3685,6 @@ void tst_QJSEngine::dateRoundtripQtJSQt()
 
 void tst_QJSEngine::dateConversionJSQt()
 {
-#ifdef Q_OS_WIN
-    QSKIP("This test fails on Windows due to a bug in QDateTime.");
-#endif
     qint64 secs = QDate(2009, 1, 1).startOfDay(QTimeZone::UTC).toSecsSinceEpoch();
     QJSEngine eng;
     for (int i = 0; i < 8000; ++i) {
@@ -3913,7 +3909,7 @@ void tst_QJSEngine::prototypeChainGc()
     QJSValue factory = engine.evaluate("(function() { return Object.create(Object.create({})); })");
     QVERIFY(factory.isCallable());
     QJSValue obj = factory.call();
-    engine.collectGarbage();
+    gc(*engine.handle());
 
     QJSValue proto = getProto.call(QJSValueList() << obj);
     proto = getProto.call(QJSValueList() << proto);
@@ -3932,7 +3928,7 @@ void tst_QJSEngine::prototypeChainGc_QTBUG38299()
                     "delete mapping.prop1\n"
                     "\n");
     // Don't hang!
-    engine.collectGarbage();
+    gc(*engine.handle());
 }
 
 void tst_QJSEngine::dynamicProperties()
@@ -4576,6 +4572,12 @@ void tst_QJSEngine::tracing()
     QTest::ignoreMessage(QtDebugMsg, "a (:1)\nb (:1)\nc (:1)\n%entry (:1)");
     engine.evaluate("function a() { console.trace(); } function b() { a(); } function c() { b(); }");
     engine.evaluate("c()");
+
+    QQmlTestMessageHandler messageHandler;
+    messageHandler.setIncludeCategoriesEnabled(true);
+    engine.evaluate("c()");
+    QCOMPARE(messageHandler.messageString(),
+             QLatin1String("js: a (:1)\nb (:1)\nc (:1)\n%entry (:1)"));
 }
 
 void tst_QJSEngine::asserts()
@@ -4670,7 +4672,6 @@ void tst_QJSEngine::privateMethods()
     }
 
     QVERIFY(privateMethods.contains("myPrivateMethod"));
-    QVERIFY(privateMethods.contains("_q_reregisterTimers"));
     privateMethods << QStringLiteral("deleteLater") << QStringLiteral("destroyed");
 
     QJSValueIterator it(jsWrapper);
@@ -6305,6 +6306,41 @@ void tst_QJSEngine::garbageCollectedObjectMethodBase()
     }
 }
 
+void tst_QJSEngine::optionalChainWithElementLookup()
+{
+    QJSEngine engine;
+
+    const QString program = R"js(
+        (function(xxx) { return xxx?.title["en"] ?? "A" })
+    )js";
+
+    QJSManagedValue func = QJSManagedValue(engine.evaluate(program), &engine);
+    QVERIFY(func.isFunction());
+
+    QCOMPARE(func.call({QJSValue::NullValue}).toString(), "A");
+    QCOMPARE(func.call({QJSValue::UndefinedValue}).toString(), "A");
+
+    const QJSValue nice
+            = engine.toScriptValue(QVariantMap { {"title", QVariantMap { {"en", "B"} } } });
+    QCOMPARE(func.call({nice}).toString(), "B");
+
+    const QJSValue naughty1
+            = engine.toScriptValue(QVariantMap { {"title", QVariantMap { {"fr", "B"} } } });
+    QCOMPARE(func.call({naughty1}).toString(), "A");
+
+    const QJSValue naughty2
+            = engine.toScriptValue(QVariantMap { {"foos", QVariantMap { {"en", "B"} } } });
+    QVERIFY(func.call({naughty2}).isUndefined());
+    QVERIFY(engine.hasError());
+    QCOMPARE(engine.catchError().toString(), "TypeError: Cannot read property 'en' of undefined");
+    QVERIFY(!engine.hasError());
+
+    QVERIFY(func.call({ QJSValue(4) }).isUndefined());
+    QVERIFY(engine.hasError());
+    QCOMPARE(engine.catchError().toString(), "TypeError: Cannot read property 'en' of undefined");
+    QVERIFY(!engine.hasError());
+}
+
 void tst_QJSEngine::deleteDefineCycle()
 {
   QJSEngine engine;
@@ -6322,6 +6358,26 @@ void tst_QJSEngine::deleteDefineCycle()
   }
   )"), {}, 1, &stackTrace);
   QVERIFY(stackTrace.isEmpty());
+}
+
+void tst_QJSEngine::deleteFromSparseArray()
+{
+    QJSEngine engine;
+
+    // Should not crash
+    const QJSValue result = engine.evaluate(QLatin1String(R"((function() {
+        let o = [];
+        o[10000] = 10;
+        o[20000] = 20;
+        for (let k in o)
+            delete o[k];
+        return o;
+    })())"));
+
+    QVERIFY(result.isArray());
+    QCOMPARE(result.property("length").toNumber(), 20001);
+    QVERIFY(result.property(10000).isUndefined());
+    QVERIFY(result.property(20000).isUndefined());
 }
 
 QTEST_MAIN(tst_QJSEngine)

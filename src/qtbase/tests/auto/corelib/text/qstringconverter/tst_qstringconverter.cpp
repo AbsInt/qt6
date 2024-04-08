@@ -1,6 +1,6 @@
 // Copyright (C) 2021 The Qt Company Ltd.
 // Copyright (C) 2016 Intel Corporation.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <QTest>
 
@@ -193,6 +193,8 @@ private slots:
 
     void encodingForHtml_data();
     void encodingForHtml();
+
+    void availableCodesAreAvailable();
 
 #ifdef Q_OS_WIN
     // On all other systems local 8-bit encoding is UTF-8
@@ -2468,6 +2470,13 @@ void tst_QStringConverter::encodingForHtml()
         decoder.isValid()) { // we got a valid decoder through ICU
         QCOMPARE(decoder.name(), name);
     }
+}
+
+void tst_QStringConverter::availableCodesAreAvailable()
+{
+    auto codecs = QStringConverter::availableCodecs();
+    for (const auto &codecName: codecs)
+        QVERIFY(QStringEncoder(codecName.toLatin1()).isValid());
 }
 
 class LoadAndConvert: public QRunnable

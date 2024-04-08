@@ -70,25 +70,7 @@ static void qClipboardPasteTo(val event)
 {
     event.call<void>("preventDefault"); // prevent browser from handling drop event
 
-    static std::shared_ptr<qstdweb::CancellationFlag> readDataCancellation = nullptr;
-    readDataCancellation = qstdweb::readDataTransfer(
-            event["clipboardData"],
-            [](QByteArray fileContent) {
-                QImage image;
-                image.loadFromData(fileContent, nullptr);
-                return image;
-            },
-            [event](std::unique_ptr<QMimeData> data) {
-                if (data->formats().isEmpty())
-                    return;
-
-                // Persist clipboard data so that the app can read it when handling the CTRL+V
-                QWasmIntegration::get()->clipboard()->QPlatformClipboard::setMimeData(
-                        data.release(), QClipboard::Clipboard);
-
-                QWindowSystemInterface::handleKeyEvent(0, QEvent::KeyPress, Qt::Key_V,
-                                                       Qt::ControlModifier, "V");
-            });
+    QWasmIntegration::get()->getWasmClipboard()->sendClipboardData(event);
 }
 
 EMSCRIPTEN_BINDINGS(qtClipboardModule) {
@@ -299,5 +281,24 @@ void QWasmClipboard::writeToClipboard()
     // interested in removing it. There is no replacement, so we use it here.
     val document = val::global("document");
     document.call<val>("execCommand", val("copy"));
+}
+
+void QWasmClipboard::sendClipboardData(emscripten::val event)
+{
+    qDebug() << "sendClipboardData";
+
+    dom::DataTransfer *transfer = new dom::DataTransfer(event["clipboardData"]);
+    const auto mimeCallback = std::function([transfer](QMimeData *data) {
+
+        // Persist clipboard data so that the app can read it when handling the CTRL+V
+        QWasmIntegration::get()->clipboard()->QPlatformClipboard::setMimeData(data, QClipboard::Clipboard);
+        QWindowSystemInterface::handleKeyEvent(0, QEvent::KeyPress, Qt::Key_V,
+                                               Qt::ControlModifier, "V");
+        QWindowSystemInterface::handleKeyEvent(0, QEvent::KeyRelease, Qt::Key_V,
+                                               Qt::ControlModifier, "V");
+        delete transfer;
+    });
+
+    transfer->toMimeDataWithFile(mimeCallback);
 }
 QT_END_NAMESPACE

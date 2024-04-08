@@ -184,6 +184,9 @@ QCocoaIntegration::~QCocoaIntegration()
         [[NSApplication sharedApplication] setDelegate:nil];
     }
 
+    // Stop global mouse event and app activation monitoring
+    QCocoaWindow::removePopupMonitor();
+
 #ifndef QT_NO_CLIPBOARD
     // Delete the clipboard integration and destroy mime type converters.
     // Deleting the clipboard integration flushes promised pastes using
@@ -232,6 +235,7 @@ bool QCocoaIntegration::hasCapability(QPlatformIntegration::Capability cap) cons
     case RasterGLSurface:
     case ApplicationState:
     case ApplicationIcon:
+    case BackingStoreStaticContents:
         return true;
     default:
         return QPlatformIntegration::hasCapability(cap);
@@ -401,14 +405,9 @@ QVariant QCocoaIntegration::styleHint(StyleHint hint) const
     return QPlatformIntegration::styleHint(hint);
 }
 
-Qt::KeyboardModifiers QCocoaIntegration::queryKeyboardModifiers() const
+QPlatformKeyMapper *QCocoaIntegration::keyMapper() const
 {
-    return QAppleKeyMapper::queryKeyboardModifiers();
-}
-
-QList<int> QCocoaIntegration::possibleKeys(const QKeyEvent *event) const
-{
-    return mKeyboardMapper->possibleKeys(event);
+    return mKeyboardMapper.data();
 }
 
 void QCocoaIntegration::setApplicationIcon(const QIcon &icon) const

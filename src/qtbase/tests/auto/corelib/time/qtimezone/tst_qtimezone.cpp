@@ -1,9 +1,10 @@
 // Copyright (C) 2022 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <QTest>
 #include <qtimezone.h>
 #include <private/qtimezoneprivate_p.h>
+#include <private/qcomparisontesthelper_p.h>
 
 #include <qlocale.h>
 
@@ -24,6 +25,8 @@ private Q_SLOTS:
     void createTest();
     void nullTest();
     void assign();
+    void compareCompiles();
+    void compare_data();
     void compare();
     void timespec();
     void offset();
@@ -331,19 +334,38 @@ void tst_QTimeZone::assign()
 #endif
 }
 
-void tst_QTimeZone::compare()
+void tst_QTimeZone::compareCompiles()
 {
+    QTestPrivate::testEqualityOperatorsCompile<QTimeZone>();
+}
+
+void tst_QTimeZone::compare_data()
+{
+    QTest::addColumn<QTimeZone>("left");
+    QTest::addColumn<QTimeZone>("right");
+    QTest::addColumn<bool>("expectedEqual");
+
     const QTimeZone local;
     const QTimeZone utc(QTimeZone::UTC);
     const auto secondEast = QTimeZone::fromSecondsAheadOfUtc(1);
+    const auto zeroOffset = QTimeZone::fromSecondsAheadOfUtc(0);
+    const auto durationEast = QTimeZone::fromDurationAheadOfUtc(std::chrono::seconds{1});
 
-    QCOMPARE_NE(local, utc);
-    QCOMPARE_NE(utc, secondEast);
-    QCOMPARE_NE(secondEast, local);
+    QTest::newRow("local vs default-constructed") << local << QTimeZone() << true;
+    QTest::newRow("local vs UTC") << local << utc << false;
+    QTest::newRow("local vs secondEast") << local << secondEast << false;
+    QTest::newRow("secondEast vs UTC") << secondEast << utc << false;
+    QTest::newRow("UTC vs zeroOffset") << utc << zeroOffset << true;
+    QTest::newRow("secondEast vs durationEast") << secondEast << durationEast << true;
+}
 
-    QCOMPARE(local, QTimeZone());
-    QCOMPARE(utc, QTimeZone::fromSecondsAheadOfUtc(0));
-    QCOMPARE(secondEast, QTimeZone::fromDurationAheadOfUtc(std::chrono::seconds{1}));
+void tst_QTimeZone::compare()
+{
+    QFETCH(QTimeZone, left);
+    QFETCH(QTimeZone, right);
+    QFETCH(bool, expectedEqual);
+
+    QT_TEST_EQUALITY_OPS(left, right, expectedEqual);
 }
 
 void tst_QTimeZone::timespec()
@@ -507,7 +529,9 @@ void tst_QTimeZone::asBackendZone()
 void tst_QTimeZone::systemZone()
 {
     const QTimeZone zone = QTimeZone::systemTimeZone();
-    QVERIFY2(zone.isValid(), "Invalid system zone setting, tests are doomed.");
+    QVERIFY2(zone.isValid(),
+             "Invalid system zone setting, tests are doomed on misconfigured system.");
+    // This may fail on Windows if CLDR data doesn't map system MS ID to IANA ID:
     QCOMPARE(zone.id(), QTimeZone::systemTimeZoneId());
     QCOMPARE(zone, QTimeZone(QTimeZone::systemTimeZoneId()));
     // Check it behaves the same as local-time:
@@ -535,12 +559,14 @@ void tst_QTimeZone::isTimeZoneIdAvailable()
     for (const QByteArray &id : available) {
         QVERIFY2(QTimeZone::isTimeZoneIdAvailable(id), id);
         QVERIFY2(QTimeZone(id).isValid(), id);
+        QCOMPARE(QTimeZone(id).id(), id);
     }
     for (qint32 offset = QTimeZone::MinUtcOffsetSecs;
          offset <= QTimeZone::MinUtcOffsetSecs; ++offset) {
         const QByteArray id = QTimeZone(offset).id();
         QVERIFY2(QTimeZone::isTimeZoneIdAvailable(id), id);
         QVERIFY2(QTimeZone(id).isValid(), id);
+        QCOMPARE(QTimeZone(id).id(), id);
     }
 }
 
@@ -605,7 +631,11 @@ void tst_QTimeZone::utcOffsetId_data()
     ROW("UTC-11", true, -39600);
     ROW("UTC-09", true, -32400);
     ROW("UTC-08", true, -28800);
+    ROW("UTC-8", true, -28800);
+    ROW("UTC-2:5", true, -7500);
     ROW("UTC-02", true, -7200);
+    ROW("UTC+2", true, 7200);
+    ROW("UTC+2:5", true, 7500);
     ROW("UTC+12", true, 43200);
     ROW("UTC+13", true, 46800);
     // Encountered in bug reports:
@@ -653,6 +683,19 @@ void tst_QTimeZone::utcOffsetId()
         QFETCH(int, offset);
         QCOMPARE(zone.offsetFromUtc(epoch), offset);
         QVERIFY(!zone.hasDaylightTime());
+
+        // zone.id() will be an IANA ID with zero minutes field if original was
+        // a UTC offset by a whole number of hours. It will also zero-pad a
+        // single-digit hour or minute to two digits.
+        if (const qsizetype cut = id.indexOf(':'); cut >= 0) {
+            if (id.size() == cut + 2) // "...:m" -> "...:0m"
+                id.insert(cut + 1, '0');
+        } else if (zone.id().contains(':')) {
+            id += ":00";
+        }
+        if (id.indexOf(':') == 5) // UTC±h:mm -> UTC±0h:mm
+            id.insert(4, '0');
+
         QCOMPARE(zone.id(), id);
     }
 }
@@ -1173,13 +1216,20 @@ void tst_QTimeZone::utcTest()
     QCOMPARE(tzp.hasDaylightTime(), false);
     QCOMPARE(tzp.hasTransitions(), false);
 
-    // Test create from UTC Offset (uses minimal id, skipping minutes if 0)
+    // Test create from UTC Offset:
     QDateTime now = QDateTime::currentDateTime();
     QTimeZone tz(36000);
     QVERIFY(tz.isValid());
-    QCOMPARE(tz.id(), QByteArray("UTC+10"));
+    QCOMPARE(tz.id(), QByteArray("UTC+10:00"));
     QCOMPARE(tz.offsetFromUtc(now), 36000);
     QCOMPARE(tz.standardTimeOffset(now), 36000);
+    QCOMPARE(tz.daylightTimeOffset(now), 0);
+
+    tz = QTimeZone(15 * 3600); // no IANA ID, so uses minimal id, skipping :00 minutes
+    QVERIFY(tz.isValid());
+    QCOMPARE(tz.id(), QByteArray("UTC+15"));
+    QCOMPARE(tz.offsetFromUtc(now), 15 * 3600);
+    QCOMPARE(tz.standardTimeOffset(now), 15 * 3600);
     QCOMPARE(tz.daylightTimeOffset(now), 0);
 
     // Test validity range of UTC offsets:

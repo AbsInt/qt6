@@ -64,6 +64,7 @@
 #include <memory>
 #include <mutex>
 #include <numeric>
+#include <optional>
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -113,6 +114,10 @@
 #include <mach/task.h>
 #include <mach/mach_init.h>
 #include <CoreFoundation/CFPreferences.h>
+#endif
+
+#if defined(Q_OS_WASM)
+#include <emscripten.h>
 #endif
 
 #include <vector>
@@ -375,7 +380,7 @@ static void generateStackTrace()
     if (debugger == None || alreadyDebugging())
         return;
 
-#  if defined(Q_OS_UNIX) && !defined(Q_OS_WASM) && !defined(Q_OS_INTEGRITY)
+#  if defined(Q_OS_UNIX) && !defined(Q_OS_WASM) && !defined(Q_OS_INTEGRITY) && !defined(Q_OS_VXWORKS)
     writeToStderr("\n=== Stack trace ===\n");
 
     // execlp() requires null-termination, so call the default constructor
@@ -412,7 +417,7 @@ static void generateStackTrace()
     }
 
     writeToStderr("=== End of stack trace ===\n");
-#  endif // Q_OS_UNIX && !Q_OS_WASM
+#  endif // Q_OS_UNIX && !Q_OS_WASM && !Q_OS_INTEGRITY && !Q_OS_VXWORKS
 }
 #endif  // !defined(Q_OS_WASM) || QT_CONFIG(thread)
 
@@ -489,7 +494,7 @@ public:
     static QMetaMethod findMethod(const QObject *obj, const char *signature);
 
 private:
-    bool invokeTest(int index, QLatin1StringView tag, WatchDog *watchDog) const;
+    bool invokeTest(int index, QLatin1StringView tag, std::optional<WatchDog> &watchDog) const;
     void invokeTestOnData(int index) const;
 
     QMetaMethod m_initTestCaseMethod; // might not exist, check isValid().
@@ -535,6 +540,9 @@ static int eventDelay = -1;
 static int timeout = -1;
 #endif
 static bool noCrashHandler = false;
+static int repetitions = 1;
+static bool repeatForever = false;
+static bool skipBlacklisted = false;
 
 static bool invokeTestMethodIfValid(QMetaMethod m, QObject *obj = QTest::currentTestObject)
 {
@@ -706,6 +714,9 @@ Q_TESTLIB_EXPORT void qtest_qParseArgs(int argc, const char *const argv[], bool 
     int logFormat = -1; // Not set
     const char *logFilename = nullptr;
 
+    repetitions = 1;
+    repeatForever = false;
+
     QTest::testFunctions.clear();
     QTest::testTags.clear();
 
@@ -760,6 +771,11 @@ Q_TESTLIB_EXPORT void qtest_qParseArgs(int argc, const char *const argv[], bool 
          " -maxwarnings n      : Sets the maximum amount of messages to output.\n"
          "                       0 means unlimited, default: 2000\n"
          " -nocrashhandler     : Disables the crash handler. Useful for debugging crashes.\n"
+         " -repeat n           : Run the testsuite n times or until the test fails.\n"
+         "                       Useful for finding flaky tests. If negative, the tests are\n"
+         "                       repeated forever. This is intended as a developer tool, and\n"
+         "                       is only supported with the plain text logger.\n"
+         " -skipblacklisted    : Skip blacklisted tests. Useful for measuring test coverage.\n"
          "\n"
          " Benchmarking options:\n"
 #if QT_CONFIG(valgrind)
@@ -909,8 +925,18 @@ Q_TESTLIB_EXPORT void qtest_qParseArgs(int argc, const char *const argv[], bool 
             } else {
                 QTestLog::setMaxWarnings(qToInt(argv[++i]));
             }
+        } else if (strcmp(argv[i], "-repeat") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "-repeat needs an extra parameter for the number of repetitions\n");
+                exit(1);
+            } else {
+                repetitions = qToInt(argv[++i]);
+                repeatForever = repetitions < 0;
+            }
         } else if (strcmp(argv[i], "-nocrashhandler") == 0) {
             QTest::noCrashHandler = true;
+        } else if (strcmp(argv[i], "-skipblacklisted") == 0) {
+            QTest::skipBlacklisted = true;
 #if QT_CONFIG(valgrind)
         } else if (strcmp(argv[i], "-callgrind") == 0) {
             if (!QBenchmarkValgrindUtils::haveValgrind()) {
@@ -1062,6 +1088,11 @@ Q_TESTLIB_EXPORT void qtest_qParseArgs(int argc, const char *const argv[], bool 
 
     if (addFallbackLogger)
         QTestLog::addLogger(QTestLog::Plain, logFilename);
+
+    if (repetitions != 1 && !QTestLog::isRepeatSupported()) {
+        fprintf(stderr, "-repeat is only supported with plain text logger\n");
+        exit(1);
+    }
 }
 
 // Temporary, backwards compatibility, until qtdeclarative's use of it is converted
@@ -1231,7 +1262,7 @@ class WatchDog : public QThread
     static constexpr Expectation combine(Expectation e, size_t gen) noexcept
     { return Expectation{e | (gen << GenerationShift)}; }
 
-    bool waitFor(std::unique_lock<QtPrivate::mutex> &m, Expectation e)
+    bool waitFor(std::unique_lock<std::mutex> &m, Expectation e)
     {
         auto expectationChanged = [this, e] { return expecting.load(std::memory_order_relaxed) != e; };
         switch (state(e)) {
@@ -1311,8 +1342,8 @@ public:
     }
 
 private:
-    QtPrivate::mutex mutex;
-    QtPrivate::condition_variable waitCondition;
+    std::mutex mutex;
+    std::condition_variable waitCondition;
     std::atomic<Expectation> expecting;
 };
 
@@ -1357,7 +1388,7 @@ static void printUnknownDataTagError(QLatin1StringView name, QLatin1StringView t
     If the function was successfully called, true is returned, otherwise
     false.
 */
-bool TestMethods::invokeTest(int index, QLatin1StringView tag, WatchDog *watchDog) const
+bool TestMethods::invokeTest(int index, QLatin1StringView tag, std::optional<WatchDog> &watchDog) const
 {
     QBenchmarkTestMethodData benchmarkData;
     QBenchmarkTestMethodData::current = &benchmarkData;
@@ -1389,6 +1420,7 @@ bool TestMethods::invokeTest(int index, QLatin1StringView tag, WatchDog *watchDo
                tag[global.size()] == ':';
     };
     bool foundFunction = false;
+    bool blacklisted = false;
 
     /* For each entry in the global data table, do: */
     do {
@@ -1415,18 +1447,28 @@ bool TestMethods::invokeTest(int index, QLatin1StringView tag, WatchDog *watchDo
             if (dataTagMatches(tag, QLatin1StringView(dataTag(curDataIndex)),
                                QLatin1StringView(globalDataTag(curGlobalDataIndex)))) {
                 foundFunction = true;
-                QTestPrivate::checkBlackLists(name.constData(), dataTag(curDataIndex),
-                                              globalDataTag(curGlobalDataIndex));
+                blacklisted = QTestPrivate::checkBlackLists(name.constData(), dataTag(curDataIndex),
+                                                            globalDataTag(curGlobalDataIndex));
+                if (blacklisted)
+                    QTestResult::setBlacklistCurrentTest(true);
 
-                QTestDataSetter s(curDataIndex >= dataCount ? nullptr : table.testData(curDataIndex));
+                if (blacklisted && skipBlacklisted) {
+                    QTest::qSkip("Skipping blacklisted test since -skipblacklisted option is set.",
+                                  NULL, 0);
+                    QTestResult::finishedCurrentTestData();
+                    QTestResult::finishedCurrentTestDataCleanup();
+                } else {
+                    QTestDataSetter s(
+                        curDataIndex >= dataCount ? nullptr : table.testData(curDataIndex));
 
-                QTestPrivate::qtestMouseButtons = Qt::NoButton;
-                if (watchDog)
-                    watchDog->beginTest();
-                QTest::lastMouseTimestamp += 500;   // Maintain at least 500ms mouse event timestamps between each test function call
-                invokeTestOnData(index);
-                if (watchDog)
-                    watchDog->testFinished();
+                    QTestPrivate::qtestMouseButtons = Qt::NoButton;
+                    if (watchDog)
+                        watchDog->beginTest();
+                    QTest::lastMouseTimestamp += 500;   // Maintain at least 500ms mouse event timestamps between each test function call
+                    invokeTestOnData(index);
+                    if (watchDog)
+                        watchDog->testFinished();
+                }
 
                 if (!tag.isEmpty() && !globalDataCount)
                     break;
@@ -1735,13 +1777,13 @@ void TestMethods::invokeTests(QObject *testObject) const
     QTestResult::setCurrentTestFunction("initTestCase");
     invokeTestMethodIfValid(m_initTestCaseDataMethod, testObject);
 
-    QScopedPointer<WatchDog> watchDog;
+    std::optional<WatchDog> watchDog = std::nullopt;
     if (!alreadyDebugging()
 #if QT_CONFIG(valgrind)
         && QBenchmarkGlobalData::current->mode() != QBenchmarkGlobalData::CallgrindChildProcess
 #endif
        ) {
-        watchDog.reset(new WatchDog);
+        watchDog.emplace();
     }
 
     QSignalDumper::startDump();
@@ -1760,7 +1802,7 @@ void TestMethods::invokeTests(QObject *testObject) const
                 const char *data = nullptr;
                 if (i < QTest::testTags.size() && !QTest::testTags.at(i).isEmpty())
                     data = qstrdup(QTest::testTags.at(i).toLatin1().constData());
-                const bool ok = invokeTest(i, QLatin1StringView(data), watchDog.data());
+                const bool ok = invokeTest(i, QLatin1StringView(data), watchDog);
                 delete [] data;
                 if (!ok)
                     break;
@@ -2281,6 +2323,14 @@ int QTest::qExec(QObject *testObject, int argc, char **argv)
     qInit(testObject, argc, argv);
     int ret = qRun();
     qCleanup();
+
+#if defined(Q_OS_WASM)
+    EM_ASM({
+        if (typeof Module != "undefined" && typeof Module.notifyTestFinished != "undefined")
+            Module.notifyTestFinished($0);
+    }, ret);
+#endif // Q_OS_WASM
+
     return ret;
 }
 
@@ -2325,10 +2375,7 @@ void QTest::qInit(QObject *testObject, int argc, char **argv)
 #if QT_CONFIG(valgrind)
     if (QBenchmarkGlobalData::current->mode() != QBenchmarkGlobalData::CallgrindParentProcess)
 #endif
-    {
-        QTestTable::globalTestTable();
         QTestLog::startLogging();
-    }
 }
 
 /*! \internal
@@ -2393,7 +2440,12 @@ int QTest::qRun()
                 return 1;
         }
         TestMethods test(currentTestObject, std::move(commandLineMethods));
-        test.invokeTests(currentTestObject);
+
+        while (QTestLog::failCount() == 0 && (repeatForever || repetitions-- > 0)) {
+            QTestTable::globalTestTable();
+            test.invokeTests(currentTestObject);
+            QTestTable::clearGlobalTestTable();
+        }
     }
 
 #ifndef QT_NO_EXCEPTIONS
@@ -2430,10 +2482,7 @@ void QTest::qCleanup()
 #if QT_CONFIG(valgrind)
     if (QBenchmarkGlobalData::current->mode() != QBenchmarkGlobalData::CallgrindParentProcess)
 #endif
-    {
         QTestLog::stopLogging();
-        QTestTable::clearGlobalTestTable();
-    }
 
     delete QBenchmarkGlobalData::current;
     QBenchmarkGlobalData::current = nullptr;
@@ -2559,6 +2608,39 @@ void QTest::qCaught(const char *expected, const char *what, const char *file, in
                                  exType, withMsg, protect(what));
     };
     qFail(message().toUtf8().constData(), file, line);
+}
+
+/*!
+    \internal
+
+    Contains the implementation of the catch(...) block of
+    QVERIFY_THROWS_EXCEPTION.
+
+    The function inspects std::current_exception() by rethrowing it using
+    std::rethrow_exception().
+
+    The function must be called from a catch handler.
+
+    If the exception inherits std::exception, its what() message is logged and
+    this function returns normally. The caller of this function must then
+    execute a \c{return} to exit from the test function.
+
+    Otherwise, a message saying an unknown exception was caught is logged and
+    this function rethrows the exception, skipping the \c{return} that follows
+    this function call in the caller.
+*/
+void QTest::qCaught(const char *expected, const char *file, int line)
+{
+    try {
+        // let's see what the cat brought us:
+        std::rethrow_exception(std::current_exception());
+    } catch (const std::exception &e) {
+        qCaught(expected, e.what(), file, line);
+    } catch (...) {
+        qCaught(expected, nullptr, file, line);
+        throw;
+    }
+    // caller shall invoke `return` if control reached here
 }
 
 
@@ -2733,12 +2815,17 @@ QSharedPointer<QTemporaryDir> QTest::qExtractTestData(const QString &dirName)
               const QString destination = dataPath + u'/' + QStringView{fileInfo.filePath()}.mid(resourcePath.size());
               QFileInfo destinationFileInfo(destination);
               QDir().mkpath(destinationFileInfo.path());
-              if (!QFile::copy(fileInfo.filePath(), destination)) {
-                  qWarning("Failed to copy '%s'.", qPrintable(fileInfo.filePath()));
+              QFile file(fileInfo.filePath());
+              if (!file.copy(destination)) {
+                  qWarning("Failed to copy '%ls': %ls.", qUtf16Printable(fileInfo.filePath()),
+                           qUtf16Printable(file.errorString()));
                   return result;
               }
-              if (!QFile::setPermissions(destination, QFile::ReadUser | QFile::WriteUser | QFile::ReadGroup)) {
-                  qWarning("Failed to set permissions on '%s'.", qPrintable(destination));
+
+              file.setFileName(destination);
+              if (!file.setPermissions(QFile::ReadUser | QFile::WriteUser | QFile::ReadGroup)) {
+                  qWarning("Failed to set permissions on '%ls': %ls.", qUtf16Printable(destination),
+                           qUtf16Printable(file.errorString()));
                   return result;
               }
           }

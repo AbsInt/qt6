@@ -8,6 +8,7 @@
 #ifndef QT_NO_QOBJECT
 #include "qabstracteventdispatcher.h"
 #include "qcoreevent.h"
+#include "qcoreevent_p.h"
 #include "qeventloop.h"
 #endif
 #include "qmetaobject.h"
@@ -34,8 +35,8 @@
 #include <private/qthreadpool_p.h>
 #endif
 #endif
-#include <qelapsedtimer.h>
 #include <qlibraryinfo.h>
+#include <qpointer.h>
 #include <qvarlengtharray.h>
 #include <private/qfactoryloader_p.h>
 #include <private/qfunctions_p.h>
@@ -56,7 +57,9 @@
 #   include "qeventdispatcher_glib_p.h"
 #  endif
 # endif
-# include "qeventdispatcher_unix_p.h"
+# if !defined(Q_OS_WASM)
+#  include "qeventdispatcher_unix_p.h"
+# endif
 #endif
 #ifdef Q_OS_WIN
 #include "qeventdispatcher_win_p.h"
@@ -624,6 +627,8 @@ void QCoreApplicationPrivate::initLocale()
 #  elif defined(Q_OS_ANDROID) && __ANDROID_API__ < __ANDROID_API_O__
     // Android 6 still lacks nl_langinfo(), so we can't check.
     // FIXME: Shouldn't we still setlocale("UTF-8")?
+#  elif defined(Q_OS_VXWORKS)
+    // VxWorks has no nl_langinfo, so we can't check.
 #  else
     // std::string's SSO usually saves this the need to allocate:
     const std::string oldEncoding = nl_langinfo(CODESET);
@@ -990,7 +995,10 @@ QCoreApplication::~QCoreApplication()
     and must be set before a QCoreApplication instance is created.
 
     \note It is strongly recommended not to enable this option since
-    it introduces security risks.
+    it introduces security risks. If this application does enable the flag and
+    starts child processes, it should drop the privileges as early as possible
+    by calling \c{setuid(2)} for itself, or at the latest by using the
+    QProcess::UnixProcessParameters::ResetIds flag.
 */
 void QCoreApplication::setSetuidAllowed(bool allow)
 {
@@ -1098,7 +1106,7 @@ void QCoreApplication::setQuitLockEnabled(bool enabled)
 bool QCoreApplication::notifyInternal2(QObject *receiver, QEvent *event)
 {
     bool selfRequired = QCoreApplicationPrivate::threadRequiresCoreApplication();
-    if (!self && selfRequired)
+    if (selfRequired && !self)
         return false;
 
     // Make it possible for Qt Script to hook into events even
@@ -1118,6 +1126,11 @@ bool QCoreApplication::notifyInternal2(QObject *receiver, QEvent *event)
     QScopedScopeLevelCounter scopeLevelCounter(threadData);
     if (!selfRequired)
         return doNotify(receiver, event);
+
+#if QT_VERSION >= QT_VERSION_CHECK(7, 0, 0)
+    if (threadData->thread.loadRelaxed() != QCoreApplicationPrivate::mainThread())
+        return false;
+#endif
     return self->notify(receiver, event);
 }
 
@@ -1176,7 +1189,7 @@ bool QCoreApplication::forwardEvent(QObject *receiver, QEvent *event, QEvent *or
   \endlist
 
   \b{Future direction:} This function will not be called for objects that live
-  outside the main thread in Qt 6. Applications that need that functionality
+  outside the main thread in Qt 7. Applications that need that functionality
   should find other solutions for their event inspection needs in the meantime.
   The change may be extended to the main thread, causing this function to be
   deprecated.
@@ -1193,6 +1206,11 @@ bool QCoreApplication::notify(QObject *receiver, QEvent *event)
 {
     Q_ASSERT(receiver);
     Q_ASSERT(event);
+
+#if QT_VERSION >= QT_VERSION_CHECK(7, 0, 0)
+    Q_ASSERT(receiver->d_func()->threadData.loadAcquire()->thread.loadRelaxed()
+             == QCoreApplicationPrivate::mainThread());
+#endif
 
     // no events are delivered after ~QCoreApplication() has started
     if (QCoreApplicationPrivate::is_app_closing)
@@ -1241,7 +1259,9 @@ bool QCoreApplicationPrivate::sendThroughApplicationEventFilters(QObject *receiv
 
 bool QCoreApplicationPrivate::sendThroughObjectEventFilters(QObject *receiver, QEvent *event)
 {
-    if (receiver != QCoreApplication::instance() && receiver->d_func()->extraData) {
+    if ((receiver->d_func()->threadData.loadRelaxed()->thread.loadAcquire() != mainThread()
+         || receiver != QCoreApplication::instance())
+        && receiver->d_func()->extraData) {
         for (qsizetype i = 0; i < receiver->d_func()->extraData->eventFilters.size(); ++i) {
             QObject *obj = receiver->d_func()->extraData->eventFilters.at(i);
             if (!obj)
@@ -1272,8 +1292,8 @@ bool QCoreApplicationPrivate::notify_helper(QObject *receiver, QEvent * event)
     Q_TRACE_EXIT(QCoreApplication_notify_exit, consumed, filtered);
 
     // send to all application event filters (only does anything in the main thread)
-    if (QCoreApplication::self
-            && receiver->d_func()->threadData.loadRelaxed()->thread.loadAcquire() == mainThread()
+    if (receiver->d_func()->threadData.loadRelaxed()->thread.loadAcquire() == mainThread()
+            && QCoreApplication::self
             && QCoreApplication::self->d_func()->sendThroughApplicationEventFilters(receiver, event)) {
         filtered = true;
         return filtered;
@@ -1351,11 +1371,28 @@ void QCoreApplication::processEvents(QEventLoop::ProcessEventsFlags flags)
 }
 
 /*!
-    \overload processEvents()
+    \overload
 
     Processes pending events for the calling thread for \a ms
     milliseconds or until there are no more events to process,
     whichever is shorter.
+
+    This is equivalent to calling:
+    \code
+    QCoreApplication::processEvents(flags, QDeadlineTimer(ms));
+    \endcode
+*/
+void QCoreApplication::processEvents(QEventLoop::ProcessEventsFlags flags, int ms)
+{
+    QCoreApplication::processEvents(flags, QDeadlineTimer(ms));
+}
+
+/*!
+    \since 6.7
+    \overload
+
+    Processes pending events for the calling thread untile \a deadline has expired,
+    or until there are no more events to process, whichever happens first.
 
     Use of this function is discouraged. Instead, prefer to move long
     operations out of the GUI thread into an auxiliary one and to completely
@@ -1374,7 +1411,7 @@ void QCoreApplication::processEvents(QEventLoop::ProcessEventsFlags flags)
 
     \sa exec(), QTimer, QEventLoop::processEvents()
 */
-void QCoreApplication::processEvents(QEventLoop::ProcessEventsFlags flags, int ms)
+void QCoreApplication::processEvents(QEventLoop::ProcessEventsFlags flags, QDeadlineTimer deadline)
 {
     // ### TODO: consider splitting this method into a public and a private
     //           one, so that a user-invoked processEvents can be detected
@@ -1382,10 +1419,9 @@ void QCoreApplication::processEvents(QEventLoop::ProcessEventsFlags flags, int m
     QThreadData *data = QThreadData::current();
     if (!data->hasEventDispatcher())
         return;
-    QElapsedTimer start;
-    start.start();
+
     while (data->eventDispatcher.loadRelaxed()->processEvents(flags & ~QEventLoop::WaitForMoreEvents)) {
-        if (start.elapsed() > ms)
+        if (deadline.hasExpired())
             break;
     }
 }
@@ -1641,9 +1677,6 @@ void QCoreApplication::postEvent(QObject *receiver, QEvent *event, int priority)
         return;
     }
 
-    if (event->type() == QEvent::DeferredDelete)
-        receiver->d_ptr->deleteLaterCalled = true;
-
     if (event->type() == QEvent::DeferredDelete && data == QThreadData::current()) {
         // remember the current running eventloop for DeferredDelete
         // events posted in the receiver's thread.
@@ -1663,7 +1696,10 @@ void QCoreApplication::postEvent(QObject *receiver, QEvent *event, int priority)
         int scopeLevel = data->scopeLevel;
         if (scopeLevel == 0 && loopLevel != 0)
             scopeLevel = 1;
-        static_cast<QDeferredDeleteEvent *>(event)->level = loopLevel + scopeLevel;
+
+        QDeferredDeleteEvent *deleteEvent = static_cast<QDeferredDeleteEvent *>(event);
+        deleteEvent->m_loopLevel = loopLevel;
+        deleteEvent->m_scopeLevel = scopeLevel;
     }
 
     // delete the event on exceptions to protect against memory leaks till the event is
@@ -1692,33 +1728,26 @@ bool QCoreApplication::compressEvent(QEvent *event, QObject *receiver, QPostEven
     Q_ASSERT(receiver);
     Q_ASSERT(postedEvents);
 
-#ifdef Q_OS_WIN
+    int receiverPostedEvents = receiver->d_func()->postedEvents.loadRelaxed();
     // compress posted timers to this object.
-    if (event->type() == QEvent::Timer && receiver->d_func()->postedEvents > 0) {
-        int timerId = ((QTimerEvent *) event)->timerId();
-        for (const QPostEvent &e : std::as_const(*postedEvents)) {
-            if (e.receiver == receiver && e.event && e.event->type() == QEvent::Timer
-                && ((QTimerEvent *) e.event)->timerId() == timerId) {
+    if (event->type() == QEvent::Timer && receiverPostedEvents > 0) {
+        int timerId = static_cast<QTimerEvent *>(event)->timerId();
+        auto sameReceiver = [receiver](const QPostEvent &e) { return e.receiver == receiver; };
+        auto it = std::find_if(postedEvents->cbegin(), postedEvents->cend(), sameReceiver);
+        while (receiverPostedEvents > 0 && it != postedEvents->cend()) {
+            if (it->event && it->event->type() == QEvent::Timer
+                && static_cast<QTimerEvent *>(it->event)->timerId() == timerId) {
                 delete event;
                 return true;
             }
+
+            if (--receiverPostedEvents)
+                it = std::find_if(it + 1, postedEvents->cend(), sameReceiver);
         }
         return false;
     }
-#endif
 
-    if (event->type() == QEvent::DeferredDelete) {
-        if (receiver->d_ptr->deleteLaterCalled) {
-            // there was a previous DeferredDelete event, so we can drop the new one
-            delete event;
-            return true;
-        }
-        // deleteLaterCalled is set to true in postedEvents when queueing the very first
-        // deferred deletion event.
-        return false;
-    }
-
-    if (event->type() == QEvent::Quit && receiver->d_func()->postedEvents > 0) {
+    if (event->type() == QEvent::Quit && receiverPostedEvents > 0) {
         for (const QPostEvent &cur : std::as_const(*postedEvents)) {
             if (cur.receiver != receiver
                     || cur.event == nullptr
@@ -1852,13 +1881,15 @@ void QCoreApplicationPrivate::sendPostedEvents(QObject *receiver, int event_type
             //    events posted by the current event loop; or
             // 3) if the event was posted before the outermost event loop.
 
-            int eventLevel = static_cast<QDeferredDeleteEvent *>(pe.event)->loopLevel();
-            int loopLevel = data->loopLevel + data->scopeLevel;
+            const int eventLoopLevel = static_cast<QDeferredDeleteEvent *>(pe.event)->loopLevel();
+            const int eventScopeLevel = static_cast<QDeferredDeleteEvent *>(pe.event)->scopeLevel();
+
+            const bool postedBeforeOutermostLoop = eventLoopLevel == 0;
             const bool allowDeferredDelete =
-                (eventLevel > loopLevel
-                 || (!eventLevel && loopLevel > 0)
+                (eventLoopLevel + eventScopeLevel > data->loopLevel + data->scopeLevel
+                 || (postedBeforeOutermostLoop && data->loopLevel > 0)
                  || (event_type == QEvent::DeferredDelete
-                     && eventLevel == loopLevel));
+                     && eventLoopLevel + eventScopeLevel == data->loopLevel + data->scopeLevel));
             if (!allowDeferredDelete) {
                 // cannot send deferred delete
                 if (!event_type && !receiver) {
@@ -2783,7 +2814,7 @@ Qt::PermissionStatus QCoreApplication::checkPermission(const QPermission &permis
 }
 
 /*!
-    \fn template<typename Functor> void QCoreApplication::requestPermission(
+    \fn template <typename Functor> void QCoreApplication::requestPermission(
         const QPermission &permission, Functor &&functor)
 
     Requests the given \a permission.
@@ -2859,76 +2890,56 @@ Qt::PermissionStatus QCoreApplication::checkPermission(const QPermission &permis
 void QCoreApplication::requestPermission(const QPermission &requestedPermission,
     QtPrivate::QSlotObjectBase *slotObjRaw, const QObject *context)
 {
-    QtPrivate::SlotObjSharedPtr slotObj(QtPrivate::SlotObjUniquePtr{slotObjRaw}); // adopts
+    QtPrivate::SlotObjUniquePtr slotObj{slotObjRaw}; // adopts
+    Q_ASSERT(slotObj);
+
     if (QThread::currentThread() != QCoreApplicationPrivate::mainThread()) {
         qWarning(lcPermissions, "Permissions can only be requested from the GUI (main) thread");
         return;
     }
 
-    Q_ASSERT(slotObj);
-
-    // Used as the signalID in the metacall event and only used to
-    // verify that we are not processing an unrelated event, not to
-    // emit the right signal. So using a value that can never clash
-    // with any signal index. Clang doesn't like this to be a static
-    // member of the PermissionReceiver.
-    static constexpr ushort PermissionReceivedID = 0xffff;
-
-    // If we have a context object, then we dispatch the permission response
-    // asynchronously through a received object that lives in the same thread
-    // as the context object. Otherwise we call the functor synchronously when
-    // we get a response (which might still be asynchronous for the caller).
     class PermissionReceiver : public QObject
     {
     public:
-        explicit PermissionReceiver(const QtPrivate::SlotObjSharedPtr &slotObject, const QObject *context)
-            : slotObject(slotObject), context(context)
-        {}
-
-    protected:
-        bool event(QEvent *event) override {
-            if (event->type() == QEvent::MetaCall) {
-                auto metaCallEvent = static_cast<QMetaCallEvent *>(event);
-                if (metaCallEvent->id() == PermissionReceivedID) {
-                    Q_ASSERT(slotObject);
-                    // only execute if context object is still alive
-                    if (context)
-                        slotObject->call(const_cast<QObject*>(context.data()), metaCallEvent->args());
-                    deleteLater();
-
-                    return true;
-                }
-            }
-            return QObject::event(event);
+        explicit PermissionReceiver(QtPrivate::SlotObjUniquePtr &&slotObject, const QObject *context)
+            : slotObject(std::move(slotObject)), context(context ? context : this)
+        {
+            Q_ASSERT(this->context);
+            moveToThread(this->context->thread());
         }
+
+        void finalizePermissionRequest(const QPermission &permission)
+        {
+            Q_ASSERT(slotObject);
+            // only execute if context object is still alive
+            if (context) {
+                void *args[] = { nullptr, const_cast<QPermission *>(&permission) };
+                slotObject->call(const_cast<QObject *>(context.data()), args);
+            }
+            deleteLater();
+        }
+
     private:
         QtPrivate::SlotObjSharedPtr slotObject;
         QPointer<const QObject> context;
     };
-    PermissionReceiver *receiver = nullptr;
-    if (context) {
-        receiver = new PermissionReceiver(slotObj, context);
-        receiver->moveToThread(context->thread());
-    }
+
+    PermissionReceiver *receiver = new PermissionReceiver(std::move(slotObj), context);
 
     QPermissions::Private::requestPermission(requestedPermission, [=](Qt::PermissionStatus status) {
-        Q_ASSERT_X(status != Qt::PermissionStatus::Undetermined, "QPermission",
-            "QCoreApplication::requestPermission() should never return Undetermined");
-        if (status == Qt::PermissionStatus::Undetermined)
+        if (status == Qt::PermissionStatus::Undetermined) {
+            Q_ASSERT_X(false, "QPermission",
+                "Internal error: requestPermission() should never return Undetermined");
             status = Qt::PermissionStatus::Denied;
+        }
 
         if (QCoreApplication::self) {
             QPermission permission = requestedPermission;
             permission.m_status = status;
-
-            if (receiver) {
-                auto metaCallEvent = QMetaCallEvent::create(slotObj.get(), qApp,
-                                                            PermissionReceivedID, permission);
-                qApp->postEvent(receiver, metaCallEvent);
-            } else {
-                void *argv[] = { nullptr, &permission };
-                slotObj->call(const_cast<QObject*>(context), argv);
-            }
+            QMetaObject::invokeMethod(receiver,
+                                      &PermissionReceiver::finalizePermissionRequest,
+                                      Qt::QueuedConnection,
+                                      permission);
         }
     });
 }

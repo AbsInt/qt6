@@ -422,6 +422,7 @@ QByteArray QGenericUnixServices::desktopEnvironment() const
 template<typename F>
 void runWithXdgActivationToken(F &&functionToCall)
 {
+#if QT_CONFIG(wayland)
     QWindow *window = qGuiApp->focusWindow();
 
     if (!window) {
@@ -443,6 +444,9 @@ void runWithXdgActivationToken(F &&functionToCall)
                      &QNativeInterface::Private::QWaylandWindow::xdgActivationTokenCreated,
                      waylandWindow, functionToCall, Qt::SingleShotConnection);
     waylandWindow->requestXdgActivationToken(waylandApp->lastInputSerial());
+#else
+    functionToCall({});
+#endif
 }
 
 bool QGenericUnixServices::openUrl(const QUrl &url)
@@ -560,9 +564,7 @@ QPlatformServiceColorPicker *QGenericUnixServices::colorPicker(QWindow *parent)
 
 QString QGenericUnixServices::portalWindowIdentifier(QWindow *window)
 {
-    if (QGuiApplication::platformName() == QLatin1String("xcb"))
-        return "x11:"_L1 + QString::number(window->winId(), 16);
-
+    Q_UNUSED(window);
     return QString();
 }
 

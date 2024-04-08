@@ -56,6 +56,8 @@ class QRhiRenderBuffer;
 class QRhiRenderPassDescriptor;
 class QRhiTexture;
 
+Q_DECLARE_LOGGING_CATEGORY(lcQuickWindow)
+
 //Make it easy to identify and customize the root item if needed
 class Q_QUICK_PRIVATE_EXPORT QQuickRootItem : public QQuickItem
 {
@@ -183,6 +185,8 @@ public:
 
     void clearGrabbers(QPointerEvent *event);
 
+    void updateChildWindowStackingOrder(QQuickItem *item = nullptr);
+
     QSGRenderContext *context;
     QSGRenderer *renderer;
     QByteArray visualizationMode; // Default renderer supports "clip", "overdraw", "changes", "batches" and blank.
@@ -195,7 +199,6 @@ public:
 
     uint persistentGraphics : 1;
     uint persistentSceneGraph : 1;
-    uint componentComplete : 1;
     uint inDestructor : 1;
 
     // Storage for setRenderTarget(QQuickRenderTarget).

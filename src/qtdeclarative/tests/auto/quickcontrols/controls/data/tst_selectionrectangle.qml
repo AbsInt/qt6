@@ -1,5 +1,5 @@
 // Copyright (C) 2021 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR BSD-3-Clause
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 import QtQuick
 import QtTest
@@ -173,9 +173,11 @@ TestCase {
         SignalSpy { }
     }
 
-    function test_defaults() {
+    function init() {
         failOnWarning(/.?/)
+    }
 
+    function test_defaults() {
         let control = createTemporaryObject(defaultSelectionRectangle, testCase)
         verify(control)
     }
@@ -658,8 +660,8 @@ TestCase {
         // Select four cells in the middle
         mouseDrag(tableView, cellWidth + 1, cellHeight + 1, (cellWidth * 2) - 2, (cellHeight * 2) - 2, Qt.LeftButton)
         compare(tableView.selectionModel.selectedIndexes.length, 4)
-        for (var x = 1; x < 3; ++x) {
-           for (var y = 1; y < 3; ++y) {
+        for (let x = 1; x < 3; ++x) {
+           for (let y = 1; y < 3; ++y) {
                verify(tableView.selectionModel.isSelected(tableView.model.index(x, y)))
            }
         }
@@ -667,8 +669,8 @@ TestCase {
         // Drag on the top left handle, so that the selection extends to cell 0, 0
         mouseDrag(tableView, cellWidth, cellHeight, -cellWidth / 2, -cellHeight / 2, Qt.LeftButton)
         compare(tableView.selectionModel.selectedIndexes.length, 9)
-        for (x = 0; x < 3; ++x) {
-           for (y = 0; y < 3; ++y) {
+        for (let x = 0; x < 3; ++x) {
+           for (let y = 0; y < 3; ++y) {
                verify(tableView.selectionModel.isSelected(tableView.model.index(x, y)))
            }
         }
@@ -686,8 +688,8 @@ TestCase {
         // Select four cells in the middle
         mouseDrag(tableView, cellWidth + 1, cellHeight + 1, (cellWidth * 2) - 2, (cellHeight * 2) - 2, Qt.LeftButton)
         compare(tableView.selectionModel.selectedIndexes.length, 4)
-        for (var x = 1; x < 3; ++x) {
-           for (var y = 1; y < 3; ++y) {
+        for (let x = 1; x < 3; ++x) {
+           for (let y = 1; y < 3; ++y) {
                verify(tableView.selectionModel.isSelected(tableView.model.index(x, y)))
            }
         }
@@ -710,8 +712,8 @@ TestCase {
         // Select four cells in the middle
         mouseDrag(tableView, cellWidth + 1, cellHeight + 1, (cellWidth * 2) - 2, (cellHeight * 2) - 2, Qt.LeftButton)
         compare(tableView.selectionModel.selectedIndexes.length, 4)
-        for (var x = 1; x < 3; ++x) {
-           for (var y = 1; y < 3; ++y) {
+        for (let x = 1; x < 3; ++x) {
+           for (let y = 1; y < 3; ++y) {
                verify(tableView.selectionModel.isSelected(tableView.model.index(x, y)))
            }
         }
@@ -719,11 +721,59 @@ TestCase {
         // Drag on the bottom right handle, so that the selection expands to cell 9 cells
         mouseDrag(tableView, cellWidth * 3, cellHeight * 3, 10, 10, Qt.LeftButton)
         compare(tableView.selectionModel.selectedIndexes.length, 9)
-        for (x = 1; x < 4; ++x) {
-           for (y = 1; y < 4; ++y) {
+        for (let x = 1; x < 4; ++x) {
+           for (let y = 1; y < 4; ++y) {
                verify(tableView.selectionModel.isSelected(tableView.model.index(x, y)))
            }
         }
     }
 
+    function test_programmatic_unselect() {
+        // Check that the SelectionRectangle will be deactivated if the
+        // selection is changed programatically.
+        let tableView = createTemporaryObject(tableviewComp, testCase)
+        verify(tableView)
+        let selectionRectangle = tableView.selectionRectangle
+        verify(selectionRectangle)
+
+        selectionRectangle.selectionMode = SelectionRectangle.Drag
+
+        verify(!tableView.selectionModel.hasSelection)
+        mouseDrag(tableView, 1, 1, (cellWidth * 2) - 2, 1, Qt.LeftButton)
+        compare(tableView.selectionModel.selectedIndexes.length, 2)
+        verify(selectionRectangle.active)
+
+        tableView.selectionModel.clearSelection()
+        verify(!selectionRectangle.active)
+    }
+
+    function test_extend_using_keyboard() {
+        // Check that the bottom-right selection handle will move if an
+        // acitve selection is extended with the keyboard
+        let tableView = createTemporaryObject(tableviewComp, testCase)
+        verify(tableView)
+        let selectionRectangle = tableView.selectionRectangle
+        verify(selectionRectangle)
+
+        selectionRectangle.bottomRightHandle = bottomRightHandleComp
+        selectionRectangle.selectionMode = SelectionRectangle.Drag
+
+        tableView.forceActiveFocus()
+        verify(!tableView.selectionModel.hasSelection)
+        mouseDrag(tableView, 1, 1, (cellWidth * 2) - 2, 1, Qt.LeftButton)
+        compare(tableView.selectionModel.selectedIndexes.length, 2)
+        verify(selectionRectangle.active)
+        verify(bottomRightHandle)
+        compare(bottomRightHandle.x, (cellWidth * 2) - (bottomRightHandle.width / 2))
+        compare(bottomRightHandle.y, cellHeight - (bottomRightHandle.height / 2))
+
+        keyPress(Qt.Key_Down, Qt.ShiftModifier)
+        keyRelease(Qt.Key_Down, Qt.ShiftModifier)
+        keyPress(Qt.Key_Right, Qt.ShiftModifier)
+        keyRelease(Qt.Key_Right, Qt.ShiftModifier)
+        verify(selectionRectangle.active)
+        compare(tableView.selectionModel.selectedIndexes.length, 6)
+        compare(bottomRightHandle.x, (cellWidth * 3) - (bottomRightHandle.width / 2))
+        compare(bottomRightHandle.y, (cellHeight * 2) - (bottomRightHandle.height / 2))
+    }
 }

@@ -1,5 +1,5 @@
 // Copyright (C) 2021 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <qtest.h>
 #include <QSignalSpy>
@@ -22,6 +22,8 @@
 #include <QtQuick/private/qquickmousearea_p.h>
 
 #include <QtGui/private/qeventpoint_p.h>
+
+#include <QtCore/qpointer.h>
 
 Q_LOGGING_CATEGORY(lcTests, "qt.quick.tests")
 
@@ -398,7 +400,7 @@ void tst_qquickdeliveryagent::undoDelegationWhenSubsceneFocusCleared() // QTBUG-
     SubsceneRootItem subscene(listView, listView->boundingRect(), window.rootObject());
 
     window.show();
-    QVERIFY(QTest::qWaitForWindowActive(&window));
+    QVERIFY(QTest::qWaitForWindowFocused(&window));
 
     // populate a delegate in ListView
     listView->setModel(1);
@@ -644,7 +646,7 @@ void tst_qquickdeliveryagent::compoundControlsFocusInSubscene()
     SubsceneRootItem subscene(spinboxFocusScope, spinboxFocusScope->boundingRect().translated(0, spinboxFocusScope->height() + 20), window.rootObject());
 
     window.show();
-    QVERIFY(QTest::qWaitForWindowActive(&window));
+    QVERIFY(QTest::qWaitForWindowFocused(&window));
 
     QVERIFY(!textField->hasActiveFocus());
     QVERIFY(!textField->hasFocus());

@@ -59,9 +59,9 @@ public:
     };
 
 public:
-    QSvgHandler(QIODevice *device);
-    QSvgHandler(const QByteArray &data);
-    QSvgHandler(QXmlStreamReader *const data);
+    QSvgHandler(QIODevice *device, QtSvg::Options options = {});
+    QSvgHandler(const QByteArray &data, QtSvg::Options options = {});
+    QSvgHandler(QXmlStreamReader *const data, QtSvg::Options options = {});
     ~QSvgHandler();
 
     QIODevice *device() const;
@@ -99,6 +99,7 @@ public:
     inline QPen defaultPen() const
     { return m_defaultPen; }
 
+    QtSvg::Options options() const;
     bool trustedSourceMode() const;
 
 public:
@@ -120,8 +121,7 @@ private:
     {
         Unknown,
         Graphics,
-        Style,
-        Doc
+        Style
     };
     QStack<CurrentNode> m_skipNodes;
 
@@ -147,7 +147,7 @@ private:
     QCss::Parser m_cssParser;
 #endif
     void parse();
-    void resolveGradients(QSvgNode *node, int nestedDepth = 0);
+    void resolvePaintServers(QSvgNode *node, int nestedDepth = 0);
     void resolveNodes();
 
     QPen m_defaultPen;
@@ -156,6 +156,8 @@ private:
      * we need to delete it.
      */
     const bool m_ownsReader;
+
+    const QtSvg::Options m_options;
 };
 
 Q_DECLARE_LOGGING_CATEGORY(lcSvgHandler)

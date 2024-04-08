@@ -50,6 +50,8 @@
 #endif
 #include <array>
 
+#include <QtCore/qpointer.h>
+
 QT_BEGIN_NAMESPACE
 
 using namespace Qt::StringLiterals;
@@ -2573,7 +2575,7 @@ bool QComboBoxPrivate::showNativePopup()
             currentItem = item;
 
         IndexSetter setter = { i, q };
-        QObject::connect(item, &QPlatformMenuItem::activated, setter);
+        QObject::connect(item, &QPlatformMenuItem::activated, q, setter);
 
         m_platformMenu->insertMenuItem(item, 0);
         m_platformMenu->syncMenuItem(item);
@@ -3001,9 +3003,26 @@ void QComboBox::changeEvent(QEvent *e)
     Q_D(QComboBox);
     switch (e->type()) {
     case QEvent::StyleChange:
-        if (d->container)
+        if (d->container) {
+// If on Windows, force recreation of ComboBox container, since
+// windows11 style depends on WA_TranslucentBackground
+#ifdef Q_OS_WIN
+            auto delegate = itemDelegate();
+            d->container->deleteLater();
+            // d->container needs to be set explicitly to nullptr
+            // since QComboBoxPrivate::viewContainer() only
+            // creates a new QComboBoxPrivateContainer when
+            // d->container has the value of nullptr
+            d->container = nullptr;
+            d->container = d->viewContainer();
+            delegate->setParent(d->container);
+            setItemDelegate(delegate);
+
+#endif
             d->container->updateStyleSettings();
+        }
         d->updateDelegate();
+
 #ifdef Q_OS_MAC
     case QEvent::MacSizeChange:
 #endif
