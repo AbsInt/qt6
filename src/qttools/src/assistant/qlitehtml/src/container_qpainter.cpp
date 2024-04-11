@@ -995,9 +995,14 @@ int DocumentContainer::anchorY(const QString &anchorName) const
     if (!element) {
         element = d->m_document->root()->select_one(QString("[name=%1]").arg(anchorName).toStdString());
     }
-    if (element)
-        return element->get_placement().y;
-    return -1;
+    if (!element)
+        return -1;
+    while (element) {
+        if (element->get_placement().y > 0)
+            return element->get_placement().y;
+        element = element->parent();
+    }
+    return 0;
 }
 
 QVector<QRect> DocumentContainer::mousePressEvent(const QPoint &documentPos,
