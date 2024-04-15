@@ -350,6 +350,8 @@ macro(qt_build_repo_end)
 
     qt_build_internals_add_toplevel_targets(${qt_repo_targets_name})
 
+    qt_internal_show_extra_ide_sources()
+
     if(NOT QT_SUPERBUILD)
         qt_print_build_instructions()
     endif()
@@ -375,6 +377,106 @@ macro(qt_build_repo_end)
     list(POP_BACK CMAKE_MESSAGE_CONTEXT)
 endmacro()
 
+function(qt_internal_show_extra_ide_sources)
+    if(CMAKE_VERSION VERSION_LESS 3.20)
+        set(ide_sources_default OFF)
+    else()
+        set(ide_sources_default ON)
+    endif()
+
+    option(QT_SHOW_EXTRA_IDE_SOURCES "Generate CMake targets exposing non-source files to IDEs" ${ide_sources_default})
+    if(CMAKE_VERSION VERSION_LESS 3.20 AND QT_SHOW_EXTRA_IDE_SOURCES)
+        message(WARNING "QT_SHOW_EXTRA_IDE_SOURCES requires cmake-3.20")
+        return()
+    endif()
+
+    if(NOT QT_SHOW_EXTRA_IDE_SOURCES)
+        return()
+    endif()
+
+    # coin
+    set(coin_target_name ${qt_repo_targets_name}_coin_files)
+    file(GLOB_RECURSE coin_files LIST_DIRECTORIES false FOLLOW_SYMLINKS coin/*)
+    if(coin_files)
+        source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/coin" FILES ${coin_files})
+        add_custom_target(${coin_target_name} SOURCES ${coin_files})
+    endif()
+
+    # config.test
+    set(config_tests_target_name ${qt_repo_targets_name}_config_tests)
+    file(GLOB_RECURSE config_tests_file LIST_DIRECTORIES false FOLLOW_SYMLINKS config.tests/*)
+    if(config_tests_file)
+        source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/config.tests" FILES ${config_tests_file})
+        add_custom_target(${config_tests_target_name} SOURCES ${config_tests_file})
+    endif()
+
+    # cmake
+    set(cmake_target_name ${qt_repo_targets_name}_cmake_files)
+    file(GLOB_RECURSE cmake_files LIST_DIRECTORIES false FOLLOW_SYMLINKS
+        cmake/*
+        configure.cmake
+        qt_cmdline.cmake
+        .cmake.conf
+        *.cmake
+        *.cmake.in)
+    foreach(cmake_file IN LISTS cmake_files)
+        if(NOT ((cmake_file IN_LIST coin_files) OR (file IN_LIST config_tests_files)))
+            list(APPEND cmake_target_files ${cmake_file})
+        endif()
+    endforeach()
+
+    if(cmake_target_files)
+        source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" FILES ${cmake_target_files})
+        add_custom_target(${cmake_target_name} SOURCES ${cmake_target_files})
+    endif()
+
+    # licenses
+    set(licenses_target_name ${qt_repo_targets_name}_licenses)
+    file(GLOB licenses_files LIST_DIRECTORIES false LICENSES/*)
+    if(licenses_files)
+        source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSES" FILES ${licenses_files})
+        add_custom_target(${licenses_target_name} SOURCES ${licenses_files})
+    endif()
+
+    # changelogs
+    set(changelogs_target_name ${qt_repo_targets_name}_changelogs)
+    file(GLOB change_logs_files LIST_DIRECTORIES false dist/*)
+    if(change_logs_files)
+        source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/dist" FILES ${change_logs_files})
+        add_custom_target(${changelogs_target_name} SOURCES ${change_logs_files})
+    endif()
+
+    # extra files
+    set(target_name ${qt_repo_targets_name}_extra_files)
+    add_custom_target(${target_name})
+
+    set(recursive_glob_patterns
+        ${QT_BUILD_EXTRA_IDE_FILE_RECURSIVE_PATTERNS}
+    )
+    set(simple_glob_patterns
+        .gitattributes
+        .gitignore
+        .tag
+        config_help.txt
+        ${QT_BUILD_EXTRA_IDE_FILE_PATTERNS}
+    )
+
+    if(recursive_glob_patterns)
+        file(GLOB_RECURSE files LIST_DIRECTORIES false FOLLOW_SYMLINKS ${recursive_glob_patterns})
+        if(files)
+            source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" FILES ${files})
+            target_sources(${target_name} PRIVATE ${files})
+        endif()
+    endif()
+
+    file(GLOB files LIST_DIRECTORIES false ${simple_glob_patterns})
+    if(files)
+        source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" FILES ${files})
+        target_sources(${target_name} PRIVATE ${files})
+    endif()
+endfunction()
+
+
 # Function called either at the end of per-repo configuration, or at the end of configuration of
 # a super build.
 # At the moment it is called before examples are configured in a per-repo build. We might want
@@ -383,7 +485,9 @@ function(qt_internal_qt_configure_end)
     # If Qt is configued via the configure script, remove the marker variable, so that any future
     # reconfigurations that are done by calling cmake directly don't trigger configure specific
     # logic.
-    unset(QT_INTERNAL_CALLED_FROM_CONFIGURE CACHE)
+    if(QT_INTERNAL_CALLED_FROM_CONFIGURE)
+        unset(QT_INTERNAL_CALLED_FROM_CONFIGURE CACHE)
+    endif()
 endfunction()
 
 macro(qt_build_repo)
