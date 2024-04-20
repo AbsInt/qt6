@@ -107,7 +107,7 @@ void tst_QRestAccessManager::requests()
     HttpData serverSideRequest;  // The request data the server received
     HttpData serverSideResponse; // The response data the server responds with
     serverSideResponse.status = 200;
-    server.setHandler([&](HttpData request, HttpData &response, ResponseControl&) {
+    server.setHandler([&](const HttpData &request, HttpData &response, ResponseControl&) {
         serverSideRequest = request;
         response = serverSideResponse;
 
@@ -471,7 +471,7 @@ void tst_QRestAccessManager::errors()
     QNetworkRequest request(server.url());
 
     HttpData serverSideResponse; // The response data the server responds with
-    server.setHandler([&](HttpData, HttpData &response, ResponseControl &) {
+    server.setHandler([&](const HttpData &, HttpData &response, ResponseControl &) {
         response  = serverSideResponse;
     });
 
@@ -538,7 +538,7 @@ void tst_QRestAccessManager::body()
 
     HttpData serverSideRequest;  // The request data the server received
     HttpData serverSideResponse; // The response data the server responds with
-    server.setHandler([&](HttpData request, HttpData &response, ResponseControl&) {
+    server.setHandler([&](const HttpData &request, HttpData &response, ResponseControl&) {
         serverSideRequest = request;
         response = serverSideResponse;
     });
@@ -599,7 +599,7 @@ void tst_QRestAccessManager::json()
     HttpData serverSideRequest;  // The request data the server received
     HttpData serverSideResponse; // The response data the server responds with
     serverSideResponse.status = 200;
-    server.setHandler([&](HttpData request, HttpData &response, ResponseControl&) {
+    server.setHandler([&](const HttpData &request, HttpData &response, ResponseControl&) {
         serverSideRequest = request;
         response = serverSideResponse;
     });
@@ -636,12 +636,13 @@ void tst_QRestAccessManager::json()
         QTRY_VERIFY(networkReply);
         QRestReply restReply(networkReply);
         parseError.error = QJsonParseError::ParseError::DocumentTooLarge;
-        QVERIFY(!restReply.readJson(&parseError).has_value()); // std::nullopt returned
+        const auto json = restReply.readJson(&parseError);
+        networkReply->deleteLater();
+        networkReply = nullptr;
+        QCOMPARE_EQ(json, std::nullopt);
         QCOMPARE_NE(parseError.error, QJsonParseError::ParseError::NoError);
         QCOMPARE_NE(parseError.error, QJsonParseError::ParseError::DocumentTooLarge);
         QCOMPARE_GT(parseError.offset, 0);
-        networkReply->deleteLater();
-        networkReply = nullptr;
     }
 
     {
@@ -652,6 +653,8 @@ void tst_QRestAccessManager::json()
         QRestReply restReply(networkReply);
         parseError.error = QJsonParseError::ParseError::DocumentTooLarge;
         json = restReply.readJson(&parseError);
+        networkReply->deleteLater();
+        networkReply = nullptr;
         QCOMPARE(parseError.error, QJsonParseError::ParseError::NoError);
         QVERIFY(json);
         responseJsonDocument = *json;
@@ -659,8 +662,6 @@ void tst_QRestAccessManager::json()
         QCOMPARE(responseJsonDocument.array().size(), 2);
         QCOMPARE(responseJsonDocument[0].toString(), "foo"_L1);
         QCOMPARE(responseJsonDocument[1].toString(), "bar"_L1);
-        networkReply->deleteLater();
-        networkReply = nullptr;
     }
 }
 
@@ -670,9 +671,9 @@ void tst_QRestAccessManager::json()
     QTRY_VERIFY(networkReply); \
     QRestReply restReply(networkReply); \
     responseString = restReply.readText(); \
-    QCOMPARE(responseString, sourceString); \
     networkReply->deleteLater(); \
     networkReply = nullptr; \
+    QCOMPARE(responseString, sourceString); \
 }
 
 #define VERIFY_TEXT_REPLY_ERROR(WARNING_MESSAGE) \
@@ -682,9 +683,9 @@ void tst_QRestAccessManager::json()
     QTest::ignoreMessage(QtWarningMsg, WARNING_MESSAGE); \
     QRestReply restReply(networkReply); \
     responseString = restReply.readText(); \
-    QVERIFY(responseString.isEmpty()); \
     networkReply->deleteLater(); \
     networkReply = nullptr; \
+    QVERIFY(responseString.isEmpty()); \
 }
 
 void tst_QRestAccessManager::text()
@@ -706,7 +707,7 @@ void tst_QRestAccessManager::text()
     HttpData serverSideRequest;  // The request data the server received
     HttpData serverSideResponse; // The response data the server responds with
     serverSideResponse.status = 200;
-    server.setHandler([&](HttpData request, HttpData &response, ResponseControl&) {
+    server.setHandler([&](const HttpData &request, HttpData &response, ResponseControl&) {
         serverSideRequest = request;
         response = serverSideResponse;
     });
@@ -790,7 +791,7 @@ void tst_QRestAccessManager::textStreaming()
     serverSideResponse.body = encUTF8(expectedData);
     serverSideResponse.status = 200;
 
-    server.setHandler([&](HttpData, HttpData &response, ResponseControl &control) {
+    server.setHandler([&](const HttpData &, HttpData &response, ResponseControl &control) {
         response = serverSideResponse;
         responseControl = &control; // store for later
         control.responseChunkSize = 5; // tell testserver to send data in chunks of this size

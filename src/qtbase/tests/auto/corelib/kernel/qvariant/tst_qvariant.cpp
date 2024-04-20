@@ -2997,9 +2997,11 @@ void tst_QVariant::compareNumerics_data() const
                         QString::number(v.toULongLong()) :
                         QString::number(v.toLongLong());
         switch (v.typeId()) {
-        case QMetaType::Char:
         case QMetaType::Char16:
+            return QString::number(qvariant_cast<char16_t>(v));
         case QMetaType::Char32:
+            return QString::number(qvariant_cast<char32_t>(v));
+        case QMetaType::Char:
         case QMetaType::UChar:
             return QString::number(v.toUInt());
         case QMetaType::SChar:
@@ -3143,7 +3145,7 @@ QT_WARNING_POP
     addComparePair(LLONG_MIN, quint64(LLONG_MIN) + 1);
     addComparePair(LLONG_MIN + 1, quint64(LLONG_MIN) + 1);
     addComparePair(LLONG_MIN, LLONG_MAX - 1);
-    addComparePair(LLONG_MIN, LLONG_MAX);
+    // addComparePair(LLONG_MIN, LLONG_MAX); // already added by addSingleType()
 
     // floating point
     addComparePair(0.f, 0);
@@ -3151,7 +3153,6 @@ QT_WARNING_POP
     addComparePair(0.f, Q_INT64_C(0));
     addComparePair(0.f, Q_UINT64_C(0));
     addComparePair(0.f, 0.);
-    addComparePair(0.f, 1.);
     addComparePair(0.f, 1.);
     addComparePair(float(1 << 24), 1 << 24);
     addComparePair(float(1 << 24) - 1, (1 << 24) - 1);
@@ -3162,7 +3163,7 @@ QT_WARNING_POP
     addComparePair(qQNaN(), std::numeric_limits<float>::quiet_NaN());
     if (sizeof(qreal) == sizeof(double)) {
         addComparePair(std::numeric_limits<float>::min(), std::numeric_limits<double>::min());
-        addComparePair(std::numeric_limits<float>::min(), std::numeric_limits<double>::min());
+        addComparePair(std::numeric_limits<float>::min(), std::numeric_limits<double>::max());
         addComparePair(std::numeric_limits<float>::max(), std::numeric_limits<double>::min());
         addComparePair(std::numeric_limits<float>::max(), std::numeric_limits<double>::max());
         addComparePair(double(Q_INT64_C(1) << 53), Q_INT64_C(1) << 53);
