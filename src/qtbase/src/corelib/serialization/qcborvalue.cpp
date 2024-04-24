@@ -1087,6 +1087,68 @@ QCborValue QCborContainerPrivate::extractAt_complex(Element e)
     return makeValue(e.type, 0, container);
 }
 
+// Similar to QStringIterator::next() but returns malformed surrogate pair
+// itself when one is detected, and returns the length in UTF-8.
+static auto nextUtf32Character(const char16_t *&ptr, const char16_t *end) noexcept
+{
+    Q_ASSERT(ptr != end);
+    struct R {
+        char32_t c;
+        qsizetype len = 1;  // in UTF-8 code units (bytes)
+    } r = { *ptr++ };
+
+    if (r.c < 0x0800) {
+        if (r.c >= 0x0080)
+            ++r.len;
+    } else if (!QChar::isHighSurrogate(r.c) || ptr == end) {
+        r.len += 2;
+    } else {
+        r.len += 3;
+        r.c = QChar::surrogateToUcs4(r.c, *ptr++);
+    }
+
+    return r;
+}
+
+static qsizetype stringLengthInUtf8(const char16_t *ptr, const char16_t *end) noexcept
+{
+    qsizetype len = 0;
+    while (ptr < end)
+        len += nextUtf32Character(ptr, end).len;
+    return len;
+}
+
+static int compareStringsInUtf8(QStringView lhs, QStringView rhs) noexcept
+{
+    // The UTF-16 length is *usually* comparable, but not always. There are
+    // pathological cases where they can be wrong, so we need to compare as if
+    // we were doing it in UTF-8. That includes the case of UTF-16 surrogate
+    // pairs, because qstring.cpp sorts them before U+E000-U+FFFF.
+    int diff = 0;
+    qsizetype len1 = 0;
+    qsizetype len2 = 0;
+    const char16_t *src1 = lhs.utf16();
+    const char16_t *src2 = rhs.utf16();
+    const char16_t *end1 = src1 + lhs.size();
+    const char16_t *end2 = src2 + rhs.size();
+
+    // first, scan until we find a difference (if any)
+    do {
+        auto r1 = nextUtf32Character(src1, end1);
+        auto r2 = nextUtf32Character(src2, end2);
+        len1 += r1.len;
+        len2 += r2.len;
+        diff = int(r1.c) - int(r2.c);       // no underflow due to limited range
+    } while (src1 < end1 && src2 < end2 && diff == 0);
+
+    // compute the full length past this first difference
+    len1 += stringLengthInUtf8(src1, end1);
+    len2 += stringLengthInUtf8(src2, end2);
+    if (len1 == len2)
+        return diff;
+    return len1 < len2 ? -1 : 1;
+}
+
 QT_WARNING_DISABLE_MSVC(4146)   // unary minus operator applied to unsigned type, result still unsigned
 static int compareContainer(const QCborContainerPrivate *c1, const QCborContainerPrivate *c2);
 static int compareElementNoData(const Element &e1, const Element &e2)
@@ -1157,54 +1219,33 @@ static int compareElementRecursive(const QCborContainerPrivate *c1, const Elemen
         Q_ASSERT(b2);
 
         // Officially with CBOR, we sort first the string with the shortest
-        // UTF-8 length. The length of an ASCII string is the same as its UTF-8
-        // and UTF-16 ones, but the UTF-8 length of a string is bigger than the
-        // UTF-16 equivalent. Combinations are:
-        //  1) UTF-16 and UTF-16
-        //  2) UTF-16 and UTF-8  <=== this is the problem case
-        //  3) UTF-16 and US-ASCII
-        //  4) UTF-8 and UTF-8
-        //  5) UTF-8 and US-ASCII
-        //  6) US-ASCII and US-ASCII
-        if ((e1.flags & Element::StringIsUtf16) && (e2.flags & Element::StringIsUtf16)) {
-            // Case 1: both UTF-16, so lengths are comparable.
-            // (we can't use memcmp in little-endian machines)
-            if (len1 == len2)
-                return QtPrivate::compareStrings(b1->asStringView(), b2->asStringView());
-            return len1 < len2 ? -1 : 1;
-        }
+        // UTF-8 length. Since US-ASCII is just a subset of UTF-8, its length
+        // is the UTF-8 length. But the UTF-16 length may not be directly
+        // comparable.
+        if ((e1.flags & Element::StringIsUtf16) && (e2.flags & Element::StringIsUtf16))
+            return compareStringsInUtf8(b1->asStringView(), b2->asStringView());
 
         if (!(e1.flags & Element::StringIsUtf16) && !(e2.flags & Element::StringIsUtf16)) {
-            // Cases 4, 5 and 6: neither is UTF-16, so lengths are comparable too
+            // Neither is UTF-16, so lengths are comparable too
             // (this case includes byte arrays too)
             if (len1 == len2)
                 return memcmp(b1->byte(), b2->byte(), size_t(len1));
             return len1 < len2 ? -1 : 1;
         }
 
-        if (!(e1.flags & Element::StringIsAscii) || !(e2.flags & Element::StringIsAscii)) {
-            // Case 2: one of them is UTF-8 and the other is UTF-16, so lengths
-            // are NOT comparable. We need to convert to UTF-8 first...
-            // (we can't use QUtf8::compareUtf8 because we need to compare lengths)
-            auto string = [](const Element &e, const ByteData *b) -> QByteArray {
-                if (e.flags & Element::StringIsUtf16)
-                    return b->asStringView().toUtf8();
-                return b->asByteArrayView();    // actually a QByteArray::fromRaw
-            };
+        // Only one is UTF-16
+        // (we can't use QUtf8::compareUtf8 because we need to compare lengths)
+        auto string = [](const Element &e, const ByteData *b) -> QByteArray {
+            if (e.flags & Element::StringIsUtf16)
+                return b->asStringView().toUtf8();
+            return b->asByteArrayView();    // actually a QByteArray::fromRaw
+        };
 
-            QByteArray s1 = string(e1, b1);
-            QByteArray s2 = string(e2, b2);
-            if (s1.size() == s2.size())
-                return memcmp(s1.constData(), s2.constData(), s1.size());
-            return s1.size() < s2.size() ? -1 : 1;
-        }
-
-        // Case 3 (UTF-16 and US-ASCII) remains, so lengths are comparable again
-        if (len1 != len2)
-            return len1 < len2 ? -1 : 1;
-        if (e1.flags & Element::StringIsUtf16)
-            return QtPrivate::compareStrings(b1->asStringView(), b2->asLatin1());
-        return QtPrivate::compareStrings(b1->asLatin1(), b2->asStringView());
+        QByteArray s1 = string(e1, b1);
+        QByteArray s2 = string(e2, b2);
+        if (s1.size() == s2.size())
+            return memcmp(s1.constData(), s2.constData(), s1.size());
+        return s1.size() < s2.size() ? -1 : 1;
     }
 
     return compareElementNoData(e1, e2);
