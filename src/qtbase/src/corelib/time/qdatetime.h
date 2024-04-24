@@ -354,10 +354,7 @@ public:
     QT_DEPRECATED_VERSION_X_6_9("Pass QTimeZone instead")
     QDateTime(QDate date, QTime time, Qt::TimeSpec spec, int offsetSeconds = 0);
 #endif
-#if QT_CORE_REMOVED_SINCE(6, 7)
-    QDateTime(QDate date, QTime time, const QTimeZone &timeZone);
-    QDateTime(QDate date, QTime time);
-#endif
+
     QDateTime(QDate date, QTime time, const QTimeZone &timeZone,
               TransitionResolution resolve = TransitionResolution::LegacyBehavior);
     QDateTime(QDate date, QTime time,

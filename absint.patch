@@ -1,0 +1,31 @@
+diff --git a/src/qtbase/src/corelib/compat/removed_api.cpp b/src/qtbase/src/corelib/compat/removed_api.cpp
+index 983a220da..86e17f5d8 100644
+--- a/src/qtbase/src/corelib/compat/removed_api.cpp
++++ b/src/qtbase/src/corelib/compat/removed_api.cpp
+@@ -698,10 +698,6 @@ QCborError QCborStreamReader::lastError()
+ 
+ #include "qdatetime.h"
+ 
+-QDateTime::QDateTime(QDate date, QTime time, const QTimeZone &timeZone)
+-    : QDateTime(date, time, timeZone, TransitionResolution::LegacyBehavior) {}
+-QDateTime::QDateTime(QDate date, QTime time)
+-    : QDateTime(date, time, TransitionResolution::LegacyBehavior) {}
+ void QDateTime::setDate(QDate date) { setDate(date, TransitionResolution::LegacyBehavior); }
+ void QDateTime::setTime(QTime time) { setTime(time, TransitionResolution::LegacyBehavior); }
+ void QDateTime::setTimeZone(const QTimeZone &toZone)
+diff --git a/src/qtbase/src/corelib/time/qdatetime.h b/src/qtbase/src/corelib/time/qdatetime.h
+index f8a9360fb..1682859ad 100644
+--- a/src/qtbase/src/corelib/time/qdatetime.h
++++ b/src/qtbase/src/corelib/time/qdatetime.h
+@@ -354,10 +354,7 @@ public:
+     QT_DEPRECATED_VERSION_X_6_9("Pass QTimeZone instead")
+     QDateTime(QDate date, QTime time, Qt::TimeSpec spec, int offsetSeconds = 0);
+ #endif
+-#if QT_CORE_REMOVED_SINCE(6, 7)
+-    QDateTime(QDate date, QTime time, const QTimeZone &timeZone);
+-    QDateTime(QDate date, QTime time);
+-#endif
++
+     QDateTime(QDate date, QTime time, const QTimeZone &timeZone,
+               TransitionResolution resolve = TransitionResolution::LegacyBehavior);
+     QDateTime(QDate date, QTime time,
