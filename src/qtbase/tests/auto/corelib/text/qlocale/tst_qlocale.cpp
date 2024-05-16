@@ -3317,6 +3317,11 @@ void tst_QLocale::timeFormat()
     const QLocale bra("pt_BR");
     QCOMPARE(bra.timeFormat(QLocale::ShortFormat), QLatin1String("HH:mm"));
     QCOMPARE(bra.timeFormat(QLocale::LongFormat), QLatin1String("HH:mm:ss t"));
+
+    // QTBUG-123872 - we kludge CLDR's B to AP:
+    const QLocale tw("zh_TW");
+    QCOMPARE(tw.timeFormat(QLocale::ShortFormat), "APh:mm"_L1);
+    QCOMPARE(tw.timeFormat(QLocale::LongFormat), "APh:mm:ss [t]"_L1);
 }
 
 void tst_QLocale::dateTimeFormat()
@@ -4097,6 +4102,8 @@ void tst_QLocale::mySystemLocale()
             qDebug("\n\t%s", qPrintable(QLocale::system().uiLanguages().join(u"\n\t")));
         });
         QCOMPARE(QLocale::system().uiLanguages(), uiLanguages);
+        QCOMPARE(QLocale::system().uiLanguages(QLocale::TagSeparator::Underscore),
+                 uiLanguages.replaceInStrings(u"-", u"_"));
         reporter.dismiss();
     }
 
