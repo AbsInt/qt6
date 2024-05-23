@@ -14,7 +14,9 @@
 #include <QtWidgets/qgraphicsview.h>
 #include <QtWidgets/qlistview.h>
 #include <QtWidgets/qmenu.h>
+#if QT_CONFIG(mdiarea)
 #include <QtWidgets/qmdiarea.h>
+#endif
 #include <QtWidgets/qtextedit.h>
 #include <QtWidgets/qtreeview.h>
 
@@ -134,6 +136,8 @@ static void drawArrow(const QStyle *style, const QStyleOptionToolButton *toolbut
 */
 QWindows11Style::QWindows11Style() : QWindowsVistaStyle(*new QWindows11StylePrivate)
 {
+    highContrastTheme = QGuiApplicationPrivate::styleHints->colorScheme() == Qt::ColorScheme::Unknown;
+    colorSchemeIndex = QGuiApplicationPrivate::styleHints->colorScheme() == Qt::ColorScheme::Light ? 0 : 1;
 }
 
 /*!
@@ -142,6 +146,8 @@ QWindows11Style::QWindows11Style() : QWindowsVistaStyle(*new QWindows11StylePriv
 */
 QWindows11Style::QWindows11Style(QWindows11StylePrivate &dd) : QWindowsVistaStyle(dd)
 {
+    highContrastTheme = QGuiApplicationPrivate::styleHints->colorScheme() == Qt::ColorScheme::Unknown;
+    colorSchemeIndex = QGuiApplicationPrivate::styleHints->colorScheme() == Qt::ColorScheme::Light ? 0 : 1;
 }
 
 /*!
@@ -2047,7 +2053,11 @@ void QWindows11Style::polish(QWidget* widget)
         pal.setColor(QPalette::Base, pal.window().color());
         widget->setPalette(pal);
     } else if (const auto *scrollarea = qobject_cast<QAbstractScrollArea *>(widget);
-               scrollarea && !qobject_cast<QMdiArea *>(widget)) {
+               scrollarea
+#if QT_CONFIG(mdiarea)
+               && !qobject_cast<QMdiArea *>(widget)
+#endif
+        ) {
         QPalette pal = scrollarea->viewport()->palette();
         const QPalette originalPalette = pal;
         pal.setColor(scrollarea->viewport()->backgroundRole(), Qt::transparent);
@@ -2066,7 +2076,11 @@ void QWindows11Style::unpolish(QWidget *widget)
 {
     QWindowsVistaStyle::unpolish(widget);
     if (const auto *scrollarea = qobject_cast<QAbstractScrollArea *>(widget);
-        scrollarea && !qobject_cast<QMdiArea *>(widget)) {
+        scrollarea
+#if QT_CONFIG(mdiarea)
+        && !qobject_cast<QMdiArea *>(widget)
+#endif
+        ) {
         const QPalette pal = scrollarea->viewport()->property("_q_original_background_palette").value<QPalette>();
         scrollarea->viewport()->setPalette(pal);
         scrollarea->viewport()->setProperty("_q_original_background_palette", QVariant());

@@ -149,7 +149,7 @@ void tst_QSpan::onlyZeroExtentSpansHaveDefaultCtors() const
     static_assert(std::is_nothrow_default_constructible_v<QSpan<int, 0>>);
     static_assert(std::is_nothrow_default_constructible_v<QSpan<const int, 0>>);
     static_assert(std::is_nothrow_default_constructible_v<QSpan<int>>);
-    static_assert(std::is_nothrow_default_constructible_v<QSpan<const int, 0>>);
+    static_assert(std::is_nothrow_default_constructible_v<QSpan<const int>>);
 
     QSpan<int, 0> si;
     check_null_span(si);
@@ -173,7 +173,7 @@ void tst_QSpan::onlyZeroExtentSpansHaveDefaultCtors() const
 
 void tst_QSpan::zeroExtentSpansMaintainADataPointer() const
 {
-    int i;
+    int i = 0;
     QSpan<int, 0> si{&i, 0};
     QCOMPARE(si.data(), &i);
     check_empty_span_incl_subspans(si);
