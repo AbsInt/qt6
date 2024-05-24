@@ -9,6 +9,13 @@ Configurations:
     Environment variables: []
     Environment script: ['%ProgramFiles(x86)%\Microsoft Visual Studio\2019\Professional\VC\Auxiliary\Build\vcvarsall.bat', 'amd64']
 -
+    Template: 'qtci-windows-10_22H2-x86_64-51'
+    Compiler: 'MSVC2019'
+    Features: ['Packaging', 'Sccache', 'DebugAndRelease', 'DisableTests']
+    Configure arguments: ''
+    Environment variables: []
+    Environment script: ['%ProgramFiles(x86)%\Microsoft Visual Studio\2019\Professional\VC\Auxiliary\Build\vcvarsall.bat', 'amd64']
+-
     Template: 'qtci-windows-10-x86-4'
     Compiler: 'MSVC2019'
     Features: ['Packaging', 'Sccache', 'DebugAndRelease', 'DisableTests']
@@ -19,12 +26,6 @@ Configurations:
     Template: 'qtci-linux-RHEL-8.8-x86_64-50'
     Compiler: 'GCC'
     Features: ['Packaging', 'Sccache', 'DebugAndRelease']
-    Configure arguments: ''
-    Environment variables: []
--
-    Template: 'qtci-linux-RHEL-9.2-x86_64-51'
-    Compiler: 'GCC'
-    Features: ['Qt5', 'Sccache', 'DebugAndRelease']
     Configure arguments: ''
     Environment variables: []
 -
