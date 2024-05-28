@@ -698,6 +698,10 @@ QCborError QCborStreamReader::lastError()
 
 #include "qdatetime.h"
 
+QDateTime::QDateTime(QDate date, QTime time, const QTimeZone &timeZone)
+    : QDateTime(date, time, timeZone, TransitionResolution::LegacyBehavior) {}
+QDateTime::QDateTime(QDate date, QTime time)
+    : QDateTime(date, time, TransitionResolution::LegacyBehavior) {}
 void QDateTime::setDate(QDate date) { setDate(date, TransitionResolution::LegacyBehavior); }
 void QDateTime::setTime(QTime time) { setTime(time, TransitionResolution::LegacyBehavior); }
 void QDateTime::setTimeZone(const QTimeZone &toZone)

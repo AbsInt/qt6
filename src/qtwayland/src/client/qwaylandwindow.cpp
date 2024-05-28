@@ -57,8 +57,6 @@ QWaylandWindow::QWaylandWindow(QWindow *window, QWaylandDisplay *display)
             mFrameCallbackTimeout = frameCallbackTimeout;
     }
 
-    mScale = waylandScreen() ? waylandScreen()->scale() : 1; // fallback to 1 if we don't have a real screen
-
     static WId id = 1;
     mWindowId = id++;
     initializeWlSurface();
@@ -317,6 +315,7 @@ void QWaylandWindow::reset()
     mWaitingToApplyConfigure = false;
     mCanResize = true;
     mResizeDirty = false;
+    mScale = std::nullopt;
 
     mOpaqueArea = QRegion();
     mMask = QRegion();
@@ -878,6 +877,7 @@ QMargins QWaylandWindow::clientSideMargins() const
 void QWaylandWindow::setCustomMargins(const QMargins &margins) {
     const QMargins oldMargins = mCustomMargins;
     mCustomMargins = margins;
+    propagateSizeHints();
     setGeometry(geometry().marginsRemoved(oldMargins).marginsAdded(margins));
 }
 
@@ -1153,8 +1153,13 @@ QWaylandWindow *QWaylandWindow::guessTransientParent() const
     if (auto transientParent = closestShellSurfaceWindow(window()->transientParent()))
         return transientParent;
 
-    if (QGuiApplication::focusWindow() && (window()->type() == Qt::ToolTip || window()->type() == Qt::Popup))
-        return closestShellSurfaceWindow(QGuiApplication::focusWindow());
+    if (window()->type() == Qt::Popup) {
+        if (mTopPopup)
+            return mTopPopup;
+    }
+
+    if (window()->type() == Qt::ToolTip || window()->type() == Qt::Popup)
+        return display()->lastInputWindow();
 
     return nullptr;
 }
@@ -1444,7 +1449,7 @@ void QWaylandWindow::updateScale()
 
 void QWaylandWindow::setScale(qreal newScale)
 {
-    if (qFuzzyCompare(mScale, newScale))
+    if (mScale.has_value() && qFuzzyCompare(mScale.value(), newScale))
         return;
     mScale = newScale;
 
@@ -1453,7 +1458,7 @@ void QWaylandWindow::setScale(qreal newScale)
         if (mViewport)
             updateViewport();
         else if (mSurface->version() >= 3)
-            mSurface->set_buffer_scale(std::ceil(mScale));
+            mSurface->set_buffer_scale(std::ceil(newScale));
     }
     ensureSize();
 
@@ -1515,7 +1520,7 @@ qreal QWaylandWindow::scale() const
 
 qreal QWaylandWindow::devicePixelRatio() const
 {
-    return qreal(mScale);
+    return mScale.value_or(waylandScreen() ? waylandScreen()->scale() : 1);
 }
 
 bool QWaylandWindow::setMouseGrabEnabled(bool grab)
