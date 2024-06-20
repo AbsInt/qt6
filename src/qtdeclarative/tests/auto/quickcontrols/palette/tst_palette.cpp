@@ -18,6 +18,7 @@
 #include <QtQuickTemplates2/private/qquickpopup_p_p.h>
 #include <QtQuickTemplates2/private/qquicktheme_p_p.h>
 #include <QtQuickTemplates2/private/qquickbutton_p.h>
+#include <QtQuickTemplates2/private/qquicktooltip_p.h>
 #include <QtQuickControls2/qquickstyle.h>
 #include <QSignalSpy>
 
@@ -58,6 +59,10 @@ private slots:
 
     void comboBoxPopup_data();
     void comboBoxPopup();
+    void comboBoxPopupWithThemeDefault_data();
+    void comboBoxPopupWithThemeDefault();
+
+    void toolTipPaletteUpdate();
 };
 
 tst_palette::tst_palette()
@@ -610,6 +615,65 @@ void tst_palette::comboBoxPopup()
     QCOMPARE(comboBoxInPopupBackground->property("color"), QColorConstants::Red);
     QCOMPARE(comboBoxInPopupBackground->property("palette").value<QQuickPalette*>()->toQPalette().window().color(),
         QColorConstants::Red);
+}
+
+void tst_palette::comboBoxPopupWithThemeDefault_data()
+{
+    QTest::addColumn<QString>("style");
+    QTest::addColumn<QColor>("expectedComboBoxPopupBackgroundColor");
+
+    QTest::newRow("Basic") << "Basic" << QColor::fromRgb(0xFFFFFF);
+
+    // We can't test Fusion because it uses the default application palette,
+    // which is the default-constructed QPalette, so the test would always pass.
+}
+
+void tst_palette::comboBoxPopupWithThemeDefault()
+{
+    QFETCH(QString, style);
+    QFETCH(QColor, expectedComboBoxPopupBackgroundColor);
+
+    qmlClearTypeRegistrations();
+    QQuickStyle::setStyle(style);
+
+    QQuickApplicationHelper helper(this, "comboBoxPopupWithThemeDefault.qml");
+    QVERIFY2(helper.ready, helper.failureMessage());
+    QQuickWindow *window = helper.window;
+    window->show();
+    QVERIFY(QTest::qWaitForWindowExposed(window));
+
+    const auto *comboBox = window->property("comboBox").value<QQuickComboBox *>();
+    QVERIFY(comboBox);
+    const auto *comboBoxBackground = comboBox->popup()->background();
+    QCOMPARE(comboBoxBackground->property("color"), expectedComboBoxPopupBackgroundColor);
+}
+
+void tst_palette::toolTipPaletteUpdate()
+{
+    QQuickApplicationHelper helper(this, "toolTipPaletteUpdate.qml");
+    QVERIFY2(helper.ready, helper.failureMessage());
+    QQuickWindow *window = helper.window;
+    window->show();
+    QVERIFY(QTest::qWaitForWindowExposed(window));
+
+    auto *button = window->findChild<QQuickButton *>("button");
+    QVERIFY(button);
+    auto *attachedToolTip = button->findChild<QQuickToolTipAttached *>();
+    QVERIFY(attachedToolTip);
+    auto *toolTip = attachedToolTip->toolTip();
+    QVERIFY(toolTip);
+
+    auto windowPalette = QQuickWindowPrivate::get(window)->palette();
+    auto toolTipPalette = QQuickPopupPrivate::get(toolTip)->palette();
+
+    QCOMPARE(toolTipPalette->toolTipBase(), windowPalette->toolTipBase());
+    QCOMPARE(toolTipPalette->toolTipText(), windowPalette->toolTipText());
+
+    windowPalette->setToolTipBase(Qt::blue);
+    windowPalette->setToolTipText(Qt::red);
+
+    QCOMPARE(toolTipPalette->toolTipBase(), windowPalette->toolTipBase());
+    QCOMPARE(toolTipPalette->toolTipText(), windowPalette->toolTipText());
 }
 
 QTEST_MAIN(tst_palette)
