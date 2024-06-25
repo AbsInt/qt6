@@ -3907,7 +3907,7 @@ void tst_QFuture::signalConnect()
     {
         SenderObject sender;
 
-#if defined(Q_CC_MSVC_ONLY) && (Q_CC_MSVC < 1940 || __cplusplus < 202002L)
+#if defined(Q_CC_MSVC_ONLY) && (Q_CC_MSVC < 1940 || !defined(_DEBUG))
 #define EXPECT_FUTURE_CONNECT_FAIL() QEXPECT_FAIL("", "QTBUG-101761, test fails on Windows/MSVC", Continue)
 #else
         QTest::ignoreMessage(QtWarningMsg, "QObject::connect: signal not found in SenderObject");
@@ -4624,6 +4624,9 @@ void testWhenAllDifferentTypes()
 
 void tst_QFuture::whenAllDifferentTypes()
 {
+#ifdef Q_OS_VXWORKS
+    QSKIP("std::variant implementation on VxWorks 24.03 is broken and doesn't work with duplicated types");
+#endif
     using Futures = std::variant<QFuture<int>, QFuture<int>, QFuture<void>>;
     testWhenAllDifferentTypes<QList<Futures>>();
     if (QTest::currentTestFailed())
@@ -4833,6 +4836,9 @@ void tst_QFuture::whenAnyIteratorsWithFailed()
 
 void tst_QFuture::whenAnyDifferentTypes()
 {
+#ifdef Q_OS_VXWORKS
+    QSKIP("std::variant implementation on VxWorks 24.03 is broken and doesn't work with duplicated types");
+#endif
     QPromise<int> pInt1;
     QPromise<int> pInt2;
     QPromise<void> pVoid;
