@@ -154,7 +154,7 @@ const QJsonDocument QGtk3Json::save(const QGtk3Storage::PaletteMap &map)
              ++brushIterator) {
             const QPalette::ColorRole role = brushIterator.key().colorRole;
             if (brushMaps.contains(role)) {
-                brushMaps.value(role).insert(brushIterator.key(), brushIterator.value());
+                brushMaps[role].insert(brushIterator.key(), brushIterator.value());
             } else {
                 QGtk3Storage::BrushMap newMap;
                 newMap.insert(brushIterator.key(), brushIterator.value());
@@ -208,6 +208,15 @@ const QJsonDocument QGtk3Json::save(const QGtk3Storage::PaletteMap &map)
                         sourceObject.insert(ceWidth, s.rec.width);
                         sourceObject.insert(ceHeight, s.rec.height);
                         sourceObject.insert(ceLighter, s.rec.lighter);
+                    }
+                    break;
+
+                case QGtk3Storage::SourceType::Mixed: {
+                        sourceObject.insert(ceColorGroup, fromColorGroup(s.mix.sourceGroup));
+                        QJsonArray colorRoles;
+                        colorRoles << fromColorRole(s.mix.colorRole1)
+                                   << fromColorRole(s.mix.colorRole2);
+                        sourceObject.insert(ceColorRole, colorRoles);
                     }
                     break;
 
@@ -384,6 +393,26 @@ bool QGtk3Json::load(QGtk3Storage::PaletteMap &map, const QJsonDocument &doc)
                         GETINT(sourceObject, ceGreen, green);
                         s = QGtk3Storage::Source(colorGroup, colorRole, colorScheme,
                                                  lighter, red, green, blue);
+                    }
+                    break;
+
+                case QGtk3Storage::SourceType::Mixed: {
+                        if (!sourceObject[ceColorRole].isArray()) {
+                            qCInfo(lcQGtk3Interface) << "Mixed brush missing the array of color roles for palette:" << paletteName
+                                                     << "Brush" << colorRoleName;
+                            return false;
+                        }
+                        QJsonArray colorRoles = sourceObject[ceColorRole].toArray();
+                        if (colorRoles.size() < 2) {
+                            qCInfo(lcQGtk3Interface) << "Mixed brush missing enough color roles for palette" << paletteName
+                                                     << "Brush" << colorRoleName;
+                            return false;
+                        }
+                        const QPalette::ColorRole colorRole1 = toColorRole(colorRoles[0].toString());
+                        const QPalette::ColorRole colorRole2 = toColorRole(colorRoles[1].toString());
+                        GETSTR(sourceObject, ceColorGroup);
+                        const QPalette::ColorGroup sourceGroup = toColorGroup(value);
+                        s = QGtk3Storage::Source(sourceGroup, colorRole1, colorRole2);
                     }
                     break;
 
