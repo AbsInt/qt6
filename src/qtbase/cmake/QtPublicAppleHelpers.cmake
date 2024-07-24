@@ -499,6 +499,55 @@ function(_qt_internal_set_xcode_install_path target)
     endif()
 endfunction()
 
+# Explicitly set the debug information format for each build configuration to match the values
+# of a new project created via Xcode directly. This ensures debug information is included during
+# archiving.
+function(_qt_internal_set_xcode_debug_information_format target)
+    if(NOT DEFINED CMAKE_XCODE_ATTRIBUTE_DEBUG_INFORMATION_FORMAT
+            AND NOT QT_NO_SET_XCODE_DEBUG_INFORMATION_FORMAT)
+        get_target_property(existing "${target}" XCODE_ATTRIBUTE_DEBUG_INFORMATION_FORMAT)
+        if(NOT existing)
+            # The CMake Xcode generator searches for [variant=${config}], removes that substring,
+            # and generates the attribute only for the config that is specified as the "variant".
+            set_target_properties("${target}" PROPERTIES
+                "XCODE_ATTRIBUTE_DEBUG_INFORMATION_FORMAT[variant=Debug]" "dwarf")
+            set_target_properties("${target}" PROPERTIES
+                "XCODE_ATTRIBUTE_DEBUG_INFORMATION_FORMAT[variant=Release]" "dwarf-with-dsym")
+            set_target_properties("${target}" PROPERTIES
+                "XCODE_ATTRIBUTE_DEBUG_INFORMATION_FORMAT[variant=MinSizeRel]" "dwarf-with-dsym")
+            set_target_properties("${target}" PROPERTIES
+                "XCODE_ATTRIBUTE_DEBUG_INFORMATION_FORMAT[variant=RelWithDebInfo]"
+                "dwarf-with-dsym")
+        endif()
+    endif()
+endfunction()
+
+# Make sure to always generate debug symbols, to match the values of a new project created via
+# Xcode directly.
+function(_qt_internal_set_xcode_generate_debugging_symbols target)
+    if(NOT DEFINED CMAKE_XCODE_ATTRIBUTE_GCC_GENERATE_DEBUGGING_SYMBOLS
+            AND NOT QT_NO_SET_XCODE_GCC_GENERATE_DEBUGGING_SYMBOLS)
+        get_target_property(existing "${target}" XCODE_ATTRIBUTE_GCC_GENERATE_DEBUGGING_SYMBOLS)
+        if(NOT existing)
+            set_target_properties("${target}" PROPERTIES
+                "XCODE_ATTRIBUTE_GCC_GENERATE_DEBUGGING_SYMBOLS" "YES")
+        endif()
+    endif()
+endfunction()
+
+# CMake generates a project where this setting is set to an absolute path build dir.
+# Provide an opt-in to work around an Xcode issue where archiving does not find the project dSYMs
+# unless the configuration build dir starts with $(BUILD_DIR) or is set to $(inherited).
+# It is an opt-in, because it breaks certain CMake behavior like $<TARGET_FILE:${target}> genex
+# evaluation as well as ignoring the value of CMAKE_RUNTIME_OUTPUT_DIRECTORY.
+# So projects have to do it at their own risk.
+function(_qt_internal_set_xcode_configuration_build_dir target)
+    if(QT_USE_RISKY_DSYM_ARCHIVING_WORKAROUND)
+        set_target_properties("${target}" PROPERTIES
+            XCODE_ATTRIBUTE_CONFIGURATION_BUILD_DIR "$(inherited)")
+    endif()
+endfunction()
+
 function(_qt_internal_set_xcode_bundle_display_name target)
     # We want the value of CFBundleDisplayName to be ${PRODUCT_NAME}, but we can't put that
     # into the Info.plist.in template file directly, because the implicit configure_file(Info.plist)
@@ -910,6 +959,9 @@ function(_qt_internal_finalize_apple_app target)
         _qt_internal_set_xcode_code_sign_style("${target}")
         _qt_internal_set_xcode_bundle_display_name("${target}")
         _qt_internal_set_xcode_install_path("${target}")
+        _qt_internal_set_xcode_configuration_build_dir("${target}")
+        _qt_internal_set_xcode_debug_information_format("${target}")
+        _qt_internal_set_xcode_generate_debugging_symbols("${target}")
     endif()
 
     _qt_internal_set_xcode_bundle_name("${target}")

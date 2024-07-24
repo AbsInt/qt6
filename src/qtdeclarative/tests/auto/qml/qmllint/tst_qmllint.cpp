@@ -752,9 +752,8 @@ void TestQmllint::dirtyQmlCode_data()
                        QStringLiteral("Cannot assign literal of type string to int") } } };
     QTest::newRow("badAttachedPropertyTypeQtObject")
             << QStringLiteral("badAttachedPropertyTypeQtObject.qml")
-            << Result { { Message { QStringLiteral(
-                       "Property \"count\" of type \"int\" is assigned an incompatible type "
-                       "\"QtObject\"") } } };
+            << Result{ { Message{
+                                  QStringLiteral("Cannot assign object of type QtObject to int") } } };
     // should succeed, but it does not:
     QTest::newRow("attachedPropertyAccess")
             << QStringLiteral("goodAttachedPropertyAccess.qml") << Result::clean();
@@ -1041,7 +1040,7 @@ expression: \${expr} \${expr} \\\${expr} \\\${expr}`)",
     QTest::newRow("callVarProp")
             << QStringLiteral("callVarProp.qml")
             << Result { { Message { QStringLiteral(
-                       "Property \"foo\" is a variant property. It may or may not be a "
+                       "Property \"foo\" is a var property. It may or may not be a "
                        "method. Use a regular function instead.") } } };
     QTest::newRow("callJSValue")
             << QStringLiteral("callJSValueProp.qml")

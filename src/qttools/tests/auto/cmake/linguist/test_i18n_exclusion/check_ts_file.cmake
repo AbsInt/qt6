@@ -25,6 +25,7 @@ set(forbidden_strings
     "<source>excluded2</source>"
     "<source>excluded3</source>"
     "<source>excluded4</source>"
+    "<source>excluded5</source>"
 )
 foreach(needle IN LISTS forbidden_strings)
     string(FIND "${ts_file_content}" "${needle}" pos)
