@@ -893,13 +893,14 @@ public:
     QByteArray shaderSource(const QRhiShaderStage &shaderStage, QShaderVersion *shaderVersion);
     bool compileShader(GLuint program, const QRhiShaderStage &shaderStage, QShaderVersion *shaderVersion);
     bool linkProgram(GLuint program);
+    using ActiveUniformLocationTracker = QDuplicateTracker<int, 32>;
     void registerUniformIfActive(const QShaderDescription::BlockVariable &var,
                                  const QByteArray &namePrefix, int binding, int baseOffset,
                                  GLuint program,
-                                 QDuplicateTracker<int, 256> *activeUniformLocations,
+                                 ActiveUniformLocationTracker *activeUniformLocations,
                                  QGles2UniformDescriptionVector *dst);
     void gatherUniforms(GLuint program, const QShaderDescription::UniformBlock &ub,
-                        QDuplicateTracker<int, 256> *activeUniformLocations, QGles2UniformDescriptionVector *dst);
+                        ActiveUniformLocationTracker *activeUniformLocations, QGles2UniformDescriptionVector *dst);
     void gatherSamplers(GLuint program, const QShaderDescription::InOutVariable &v,
                         QGles2SamplerDescriptionVector *dst);
     void gatherGeneratedSamplers(GLuint program,
@@ -1111,6 +1112,25 @@ public:
         QByteArray data;
     };
     QHash<QByteArray, PipelineCacheData> m_pipelineCache;
+
+    struct Scratch {
+        union data32_t {
+            float f;
+            qint32 i;
+        };
+        QVarLengthArray<data32_t, 128> packedArray;
+        struct SeparateTexture {
+            QGles2Texture *texture;
+            int binding;
+            int elem;
+        };
+        QVarLengthArray<SeparateTexture, 8> separateTextureBindings;
+        struct SeparateSampler {
+            QGles2Sampler *sampler;
+            int binding;
+        };
+        QVarLengthArray<SeparateSampler, 4> separateSamplerBindings;
+    } m_scratch;
 };
 
 Q_DECLARE_TYPEINFO(QRhiGles2::DeferredReleaseEntry, Q_RELOCATABLE_TYPE);

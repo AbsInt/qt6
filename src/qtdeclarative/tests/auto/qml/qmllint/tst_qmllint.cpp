@@ -630,9 +630,8 @@ void TestQmllint::dirtyQmlCode_data()
                                  << Result { { Message { QStringLiteral(
                                             "unknown attached property scope WrongAttached.") } } };
     QTest::newRow("BadBinding") << QStringLiteral("badBinding.qml")
-                                << Result { { Message { QStringLiteral(
-                                           "Binding assigned to \"doesNotExist\", but no property "
-                                           "\"doesNotExist\" exists in the current element.") } } };
+                                << Result{ { Message{ QStringLiteral(
+                                           "Property \"doesNotExist\" does not exist.") } } };
     QTest::newRow("bad template literal (simple)")
             << QStringLiteral("badTemplateStringSimple.qml")
             << Result { { Message {
@@ -652,16 +651,12 @@ void TestQmllint::dirtyQmlCode_data()
                        QStringLiteral("Cannot assign literal of type string to int") } } };
     QTest::newRow("BadScriptBindingOnGroup")
             << QStringLiteral("badScriptBinding.group.qml")
-            << Result { { Message {
-                       QStringLiteral("Binding assigned to \"bogusProperty\", but no "
-                                      "property \"bogusProperty\" exists in the current element."),
-                       3, 10 } } };
+            << Result{ { Message{ QStringLiteral("Property \"bogusProperty\" does not exist."), 3,
+                                  10 } } };
     QTest::newRow("BadScriptBindingOnAttachedType")
             << QStringLiteral("badScriptBinding.attached.qml")
-            << Result { { Message {
-                       QStringLiteral("Binding assigned to \"bogusProperty\", but no "
-                                      "property \"bogusProperty\" exists in the current element."),
-                       5, 12 } } };
+            << Result{ { Message{ QStringLiteral("Property \"bogusProperty\" does not exist."), 5,
+                                  12 } } };
     QTest::newRow("BadScriptBindingOnAttachedSignalHandler")
             << QStringLiteral("badScriptBinding.attachedSignalHandler.qml")
             << Result { { Message {
@@ -864,7 +859,7 @@ expression: \${expr} \${expr} \\\${expr} \\\${expr}`)",
             << QStringLiteral("unresolvedAttachedType.qml")
             << Result { { Message { QStringLiteral(
                                 "unknown attached property scope UnresolvedAttachedType.") } },
-                        { Message { QStringLiteral("Property \"property\" does not exist") } } };
+                        { Message { QStringLiteral("Property \"property\" does not exist.") } } };
     QTest::newRow("nestedInlineComponents")
             << QStringLiteral("nestedInlineComponents.qml")
             << Result { { Message {
@@ -914,9 +909,7 @@ expression: \${expr} \${expr} \\\${expr} \\\${expr}`)",
                        "MenuItem is part of an inheritance cycle: MenuItem -> MenuItem") } } };
     QTest::newRow("badGeneralizedGroup1")
             << QStringLiteral("badGeneralizedGroup1.qml")
-            << Result { { Message { QStringLiteral(
-                       "Binding assigned to \"aaaa\", "
-                       "but no property \"aaaa\" exists in the current element") } } };
+            << Result{ { Message{ QStringLiteral("Property \"aaaa\" does not exist.") } } };
     QTest::newRow("badGeneralizedGroup2")
             << QStringLiteral("badGeneralizedGroup2.qml")
             << Result { { Message { QStringLiteral("unknown grouped property scope aself") } } };
@@ -963,13 +956,9 @@ expression: \${expr} \${expr} \\\${expr} \\\${expr}`)",
                        "no matching signal found for handler \"onWannabeSignal\"") } } };
     QTest::newRow("didYouMean(binding)")
             << QStringLiteral("didYouMeanBinding.qml")
-            << Result {
-                   { Message { QStringLiteral(
-                           "Binding assigned to \"witdh\", but no property \"witdh\" exists in "
-                           "the current element.") } },
-                   {},
-                   { Message { QStringLiteral("width") } }
-               };
+            << Result{ { Message{ QStringLiteral("Property \"witdh\" does not exist.") } },
+                       {},
+                       { Message{ QStringLiteral("width") } } };
     QTest::newRow("didYouMean(unqualified)")
             << QStringLiteral("didYouMeanUnqualified.qml")
             << Result { { Message { QStringLiteral("Unqualified access") } },
@@ -1140,6 +1129,7 @@ expression: \${expr} \${expr} \\\${expr} \\\${expr}`)",
                        Message{ u"Member \"deleteLater\" not found on type \"QtObject\""_s },
                        Message{ u"Member \"destroyed\" not found on type \"QtObject\""_s },
                } };
+
     QTest::newRow("connectionsBinding")
             << QStringLiteral("autofix/ConnectionsHandler.qml")
             << Result{
@@ -1169,6 +1159,17 @@ expression: \${expr} \${expr} \\\${expr} \\\${expr}`)",
                            Message{ u"function onColorChanged(col) { console.log(\"new color:\", col) }"_s },
                    },
                    };
+    QTest::newRow("unresolvedTypeAnnotation")
+            << QStringLiteral("unresolvedTypeAnnotations.qml")
+            << Result{{
+                       { uR"("A" was not found for the type of parameter "a" in method "f".)"_s, 4, 17 },
+                       { uR"("B" was not found for the type of parameter "b" in method "f".)"_s, 4, 23 },
+                       { uR"("R" was not found for the return type of method "g".)"_s, 5, 18 },
+                       { uR"("C" was not found for the type of parameter "c" in method "h".)"_s, 6, 17 },
+                       { uR"("R" was not found for the return type of method "h".)"_s, 6, 22 },
+                       { uR"("D" was not found for the type of parameter "d" in method "i".)"_s, 7, 17 },
+                       { uR"("G" was not found for the type of parameter "g" in method "i".)"_s, 7, 26 },
+               }};
 }
 
 void TestQmllint::dirtyQmlCode()
