@@ -195,7 +195,7 @@ QImage QSvgFeColorMatrix::apply(QSvgNode *item, const QMap<QString, QImage> &sou
         return QImage();
 
     QImage result;
-    if (!QImageIOHandler::allocateImage(clipRectGlob.size(), QImage::Format_RGBA8888, &result)) {
+    if (!QImageIOHandler::allocateImage(clipRectGlob.size(), QImage::Format_ARGB32_Premultiplied, &result)) {
         qCWarning(lcSvgDraw) << "The requested filter buffer is too big, ignoring";
         return QImage();
     }
@@ -219,10 +219,11 @@ QImage QSvgFeColorMatrix::apply(QSvgNode *item, const QMap<QString, QImage> &sou
             if (sourceJ < 0 || sourceJ >= source.width())
                 continue;
 
-            qreal a = qAlpha(sourceLine[sourceJ]);
-            qreal r = qBlue(sourceLine[sourceJ]);
-            qreal g = qGreen(sourceLine[sourceJ]);
-            qreal b = qRed(sourceLine[sourceJ]);
+            QRgb sourceColor = qUnpremultiply(sourceLine[sourceJ]);
+            qreal a = qAlpha(sourceColor);
+            qreal r = qRed(sourceColor);
+            qreal g = qGreen(sourceColor);
+            qreal b = qBlue(sourceColor);
 
             qreal r2 = m_matrix.data()[0+0*5] * r +
                        m_matrix.data()[1+0*5] * g +
@@ -245,10 +246,11 @@ QImage QSvgFeColorMatrix::apply(QSvgNode *item, const QMap<QString, QImage> &sou
                        m_matrix.data()[3+3*5] * a +
                        m_matrix.data()[4+3*5] * 255.;
 
-            resultLine[j] = qRgba(qBound(0, int(b2), 255),
-                                  qBound(0, int(g2), 255),
-                                  qBound(0, int(r2), 255),
-                                  qBound(0, int(a2), 255));
+            QRgb rgba = qRgba(qBound(0, int(r2), 255),
+                              qBound(0, int(g2), 255),
+                              qBound(0, int(b2), 255),
+                              qBound(0, int(a2), 255));
+            resultLine[j] = qPremultiply(rgba);
         }
     }
 
@@ -293,8 +295,9 @@ QImage QSvgFeGaussianBlur::apply(QSvgNode *item, const QMap<QString, QImage> &so
         sigma_y *= itemBounds.height();
     }
 
-    int dx = int(floor(sigma_x * 3. * sqrt(2. * M_PI) / 4. + 0.5));
-    int dy = int(floor(sigma_y * 3. * sqrt(2. * M_PI) / 4. + 0.5));
+    constexpr double sd = 3. * M_SQRT1_2 / M_2_SQRTPI; // 3 * sqrt(2 * pi) / 4
+    const int dx = floor(sigma_x * sd + 0.5);
+    const int dy = floor(sigma_y * sd + 0.5);
 
     const QTransform scaleXr = QTransform::fromScale(scaleX, scaleY);
     const QTransform restXr = scaleXr.inverted() * p->transform();
@@ -304,7 +307,7 @@ QImage QSvgFeGaussianBlur::apply(QSvgNode *item, const QMap<QString, QImage> &so
         return QImage();
 
     QImage tempSource;
-    if (!QImageIOHandler::allocateImage(clipRectGlob.size(), QImage::Format_RGBA8888_Premultiplied, &tempSource)) {
+    if (!QImageIOHandler::allocateImage(clipRectGlob.size(), QImage::Format_ARGB32_Premultiplied, &tempSource)) {
         qCWarning(lcSvgDraw) << "The requested filter buffer is too big, ignoring";
         return QImage();
     }
@@ -347,38 +350,29 @@ QImage QSvgFeGaussianBlur::apply(QSvgNode *item, const QMap<QString, QImage> &so
             // between the output pixel and the one to the left, the second one centered on the pixel
             // boundary between the output pixel and the one to the right) and one box blur of size
             // 'd+1' centered on the output pixel.
-            auto adjustD = [=](int d, int *dleft, int *dright) {
-                if (d == 0) {
-                    *dleft = 1;
-                    *dright = 0;
-                } else if (d % 2 == 1) {
-                    *dleft = d / 2 + 1;
-                    *dright = d / 2;
-                } else {
-                    if (m == 0) {
-                        *dleft = d / 2 + 1;
-                        *dright = d / 2 - 1;
-                    } else if (m == 1) {
-                        *dleft = d / 2;
-                        *dright = d / 2;
-                    } else {
-                        *dleft = d / 2 + 1;
-                        *dright = d / 2;
-                    }
-                }
+            auto adjustD = [](int d, int iteration) {
+                d = qMax(1, d);     // Treat d == 0 just like d == 1
+                std::pair<int, int> result;
+                if (d % 2 == 1)
+                    result = {d / 2 + 1, d / 2};
+                else if (iteration == 0)
+                    result = {d / 2 + 1, d / 2 - 1};
+                else if (iteration == 1)
+                    result = {d / 2, d / 2};
+                else
+                    result = {d / 2 + 1, d / 2};
+                Q_ASSERT(result.first + result.second > 0);
+                return result;
             };
 
-            int dxleft, dxright;
-            adjustD(dx, &dxleft, &dxright);
-            int dytop, dybottom;
-            adjustD(dy, &dytop, &dybottom);
-
+            const auto [dxleft, dxright] = adjustD(dx, m);
+            const auto [dytop, dybottom] = adjustD(dy, m);
             for (int i = 0; i < sourceWidth; i++) {
                 for (int j = 0; j < sourceHeight; j++) {
-                    int i1 = qMax(0, i - dxleft);
-                    int i2 = qMin(sourceWidth - 1, i + dxright);
-                    int j1 = qMax(0, j - dytop);
-                    int j2 = qMin(sourceHeight - 1, j + dybottom);
+                    const int i1 = qMax(0, i - dxleft);
+                    const int i2 = qMin(sourceWidth - 1, i + dxright);
+                    const int j1 = qMax(0, j - dytop);
+                    const int j2 = qMin(sourceHeight - 1, j + dybottom);
 
                     uint64_t colorValue64 = buffer[i2 + j2 * sourceWidth];
                     colorValue64 -= buffer[i1 + j2 * sourceWidth];
@@ -386,7 +380,7 @@ QImage QSvgFeGaussianBlur::apply(QSvgNode *item, const QMap<QString, QImage> &so
                     colorValue64 += buffer[i1 + j1 * sourceWidth];
                     colorValue64 /= uint64_t(dxleft + dxright) * uint64_t(dytop + dybottom);
 
-                    unsigned int colorValue = colorValue64;
+                    const unsigned int colorValue = colorValue64;
                     rawImage[i + j * sourceWidth] &= ~(0xff << col);
                     rawImage[i + j * sourceWidth] |= colorValue << col;
 
@@ -398,7 +392,7 @@ QImage QSvgFeGaussianBlur::apply(QSvgNode *item, const QMap<QString, QImage> &so
     QRectF trueClipRectGlob = globalFilterBoundingBox(item, p, itemBounds, filterBounds, primitiveUnits, filterUnits);
 
     QImage result;
-    if (!QImageIOHandler::allocateImage(trueClipRectGlob.toRect().size(), QImage::Format_RGBA8888_Premultiplied, &result)) {
+    if (!QImageIOHandler::allocateImage(trueClipRectGlob.toRect().size(), QImage::Format_ARGB32_Premultiplied, &result)) {
         qCWarning(lcSvgDraw) << "The requested filter buffer is too big, ignoring";
         return QImage();
     }
@@ -453,7 +447,7 @@ QImage QSvgFeOffset::apply(QSvgNode *item, const QMap<QString, QImage> &sources,
         return QImage();
 
     QImage result;
-    if (!QImageIOHandler::allocateImage(clipRectGlob.size(), QImage::Format_RGBA8888, &result)) {
+    if (!QImageIOHandler::allocateImage(clipRectGlob.size(), QImage::Format_ARGB32_Premultiplied, &result)) {
         qCWarning(lcSvgDraw) << "The requested filter buffer is too big, ignoring";
         return QImage();
     }
@@ -500,7 +494,7 @@ QImage QSvgFeMerge::apply(QSvgNode *item, const QMap<QString, QImage> &sources, 
         return QImage();
 
     QImage result;
-    if (!QImageIOHandler::allocateImage(clipRectGlob.size(), QImage::Format_RGBA8888, &result)) {
+    if (!QImageIOHandler::allocateImage(clipRectGlob.size(), QImage::Format_ARGB32_Premultiplied, &result)) {
         qCWarning(lcSvgDraw) << "The requested filter buffer is too big, ignoring";
         return QImage();
     }
@@ -581,7 +575,7 @@ QImage QSvgFeComposite::apply(QSvgNode *item, const QMap<QString, QImage> &sourc
         return QImage();
 
     QImage result;
-    if (!QImageIOHandler::allocateImage(clipRectGlob.size(), QImage::Format_RGBA8888, &result)) {
+    if (!QImageIOHandler::allocateImage(clipRectGlob.size(), QImage::Format_ARGB32_Premultiplied, &result)) {
         qCWarning(lcSvgDraw) << "The requested filter buffer is too big, ignoring";
         return QImage();
     }
@@ -635,13 +629,11 @@ QImage QSvgFeComposite::apply(QSvgNode *item, const QMap<QString, QImage> &sourc
                 int b = k1 * s1.z() * s2.z() / 255. + k2 * s1.z() + k3 * s2.z() + k4 * 255.;
                 int a = k1 * s1.w() * s2.w() / 255. + k2 * s1.w() + k3 * s2.w() + k4 * 255.;
 
-                qreal alpha = qBound(0, a, 255) / 255.;
-                if (alpha == 0)
-                    alpha = 1;
-                resultLine[i] =  qRgba(qBound(0., r / alpha, 255.),
-                                       qBound(0., g / alpha, 255.),
-                                       qBound(0., b / alpha, 255.),
-                                       qBound(0, a, 255));
+                a = qBound(0, a, 255);
+                resultLine[i] =  qRgba(qBound(0, r, a),
+                                       qBound(0, g, a),
+                                       qBound(0, b, a),
+                                       a);
             }
         }
     } else {
@@ -709,7 +701,7 @@ QImage QSvgFeFlood::apply(QSvgNode *item, const QMap<QString, QImage> &,
     QRect clipRectGlob = p->transform().mapRect(clipRect).toRect();
 
     QImage result;
-    if (!QImageIOHandler::allocateImage(clipRectGlob.size(), QImage::Format_RGBA8888, &result)) {
+    if (!QImageIOHandler::allocateImage(clipRectGlob.size(), QImage::Format_ARGB32_Premultiplied, &result)) {
         qCWarning(lcSvgDraw) << "The requested filter buffer is too big, ignoring";
         return QImage();
     }
