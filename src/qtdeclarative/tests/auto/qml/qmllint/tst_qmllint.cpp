@@ -1889,24 +1889,14 @@ void TestQmllint::attachedPropertyReuse()
             {}, {}, {}, UseDefaultImports, &categories);
 
     runTest("attachedPropEnum.qml", Result::clean(), {}, {}, {}, UseDefaultImports, &categories);
-    runTest("MyStyle/ToolBar.qml", Result {
-        {
-            Message {
-                "Using attached type MyStyle already initialized in a parent scope"_L1,
-                10,
-                16
-            }
-        },
-        {},
-        {
-            Message {
-                "Reference it by id instead"_L1,
-                10,
-                16
-            }
-        },
-        Result::AutoFixable
-    });
+    runTest("MyStyle/ToolBar.qml",
+            Result{ { Message{
+                            "Using attached type MyStyle already initialized in a parent scope"_L1,
+                            10, 16 } },
+                    {},
+                    { Message{ "Reference it by id instead"_L1, 10, 16 } },
+                    Result::AutoFixable },
+            {}, {}, {}, UseDefaultImports, &categories);
     runTest("pluginQuick_multipleAttachedPropertyReuse.qml",
             Result{ { Message{ QStringLiteral(
                     "Using attached type Test already initialized in a parent scope") } } },
@@ -2135,10 +2125,13 @@ void TestQmllint::quickPlugin()
                       Message { u"TextArea must be attached to a Flickable"_s },
                       Message { u"StackLayout must be attached to an Item"_s },
                       Message {
-                              u"Tumbler: attached properties of Tumbler must be accessed through a delegate item"_s },
-                      Message {
                               u"Attached properties of SwipeDelegate must be accessed through an Item"_s },
                       Message { u"SwipeView must be attached to an Item"_s } } });
+
+    {
+        const Result result{ {}, { Message{ u"Tumbler"_s }, }, };
+        runTest("pluginQuick_tumblerGood.qml", result);
+    }
 
     runTest("pluginQuick_swipeDelegate.qml",
             Result { {
