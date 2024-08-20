@@ -1761,7 +1761,7 @@ void QQuickItemViewPrivate::refill(qreal from, qreal to)
     Q_Q(QQuickItemView);
     if (!model || !model->isValid() || !q->isComponentComplete())
         return;
-    if (q->size().isEmpty() && visibleItems.isEmpty())
+    if (q->size().isNull() && visibleItems.isEmpty())
         return;
     if (!model->count()) {
         updateHeader();
@@ -1860,7 +1860,10 @@ void QQuickItemViewPrivate::layout()
     // viewBounds contains bounds before any add/remove/move operation to the view
     QRectF viewBounds(q->contentX(),  q->contentY(), q->width(), q->height());
 
-    if (!isValid() && !visibleItems.size()) {
+    // We use isNull for the size check, because isEmpty returns true
+    // if either dimension is negative, but apparently we support negative-sized
+    // views (see tst_QQuickListView::resizeView).
+    if ((!isValid() && !visibleItems.size()) || q->size().isNull()) {
         clear();
         setPosition(contentStartOffset());
         updateViewport();
