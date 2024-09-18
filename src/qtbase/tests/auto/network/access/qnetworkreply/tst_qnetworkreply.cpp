@@ -35,8 +35,10 @@
 
 #include <QtNetwork/QTcpServer>
 #include <QtNetwork/QTcpSocket>
+#if QT_CONFIG(localserver)
 #include <QtNetwork/QLocalSocket>
 #include <QtNetwork/QLocalServer>
+#endif
 #include <QtNetwork/QHostInfo>
 #include <QtNetwork/QNetworkAccessManager>
 #include <QtNetwork/QNetworkRequest>
@@ -44,14 +46,18 @@
 #include <QtNetwork/QAbstractNetworkCache>
 #include <QtNetwork/qauthenticator.h>
 #include <QtNetwork/qnetworkaccessmanager.h>
+#if QT_CONFIG(networkdiskcache)
 #include <QtNetwork/qnetworkdiskcache.h>
+#endif
 #include <QtNetwork/qnetworkrequest.h>
 #include <QtNetwork/qnetworkreply.h>
-#include <QtNetwork/QHttp1Configuration>
 #include <QtNetwork/qnetworkcookie.h>
 #include <QtNetwork/QNetworkCookieJar>
+#if QT_CONFIG(http)
 #include <QtNetwork/QHttpPart>
 #include <QtNetwork/QHttpMultiPart>
+#include <QtNetwork/QHttp1Configuration>
+#endif
 #include <QtNetwork/QNetworkProxyQuery>
 #if QT_CONFIG(ssl)
 #include <QtNetwork/qsslerror.h>
@@ -129,14 +135,14 @@ class tst_QNetworkReply: public QObject
 
     static QString tempRedirectReplyStr() {
         QString s = "HTTP/1.1 307 Temporary Redirect\r\n"
-                    "Content-Type: text/plain\r\n"
+                    "content-type: text/plain\r\n"
                     "location: %1\r\n"
                     "\r\n";
         return s;
     }
     static QString movedReplyStr() {
         QString s = "HTTP/1.1 301 Moved Permanently\r\n"
-                    "Content-Type: text/plain\r\n"
+                    "content-type: text/plain\r\n"
                     "location: %1\r\n"
                     "\r\n";
         return s;
@@ -144,7 +150,7 @@ class tst_QNetworkReply: public QObject
 
     static QString foundReplyStr() {
         QString s = "HTTP/1.1 302 Found\r\n"
-                    "Content-Type: text/plain\r\n"
+                    "content-type: text/plain\r\n"
                     "location: %1\r\n"
                     "\r\n";
         return s;
@@ -152,7 +158,7 @@ class tst_QNetworkReply: public QObject
 
     static QString permRedirectReplyStr() {
         QString s = "HTTP/1.1 308 Permanent Redirect\r\n"
-                    "Content-Type: text/plain\r\n"
+                    "content-type: text/plain\r\n"
                     "location: %1\r\n"
                     "\r\n";
         return s;
@@ -194,8 +200,10 @@ public:
     ~tst_QNetworkReply();
     QString runSimpleRequest(QNetworkAccessManager::Operation op, const QNetworkRequest &request,
                              QNetworkReplyPtr &reply, const QByteArray &data = QByteArray());
+#if QT_CONFIG(http)
     QString runMultipartRequest(const QNetworkRequest &request, QNetworkReplyPtr &reply,
                                     QHttpMultiPart *multiPart, const QByteArray &verb);
+#endif
 
     QString runCustomRequest(const QNetworkRequest &request, QNetworkReplyPtr &reply,
                              const QByteArray &verb, QIODevice *data);
@@ -261,15 +269,23 @@ private Q_SLOTS:
     void putToHttp();
     void putToHttpSynchronous_data();
     void putToHttpSynchronous();
+#if QT_CONFIG(http)
     void putToHttpMultipart_data();
     void putToHttpMultipart();
+#endif
+    void putWithoutBody();
+    void putWithoutBody_data();
     void postToHttp_data();
     void postToHttp();
     void postToHttpSynchronous_data();
     void postToHttpSynchronous();
+#if QT_CONFIG(http)
     void postToHttpMultipart_data();
     void postToHttpMultipart();
     void multipartSkipIndices(); // QTBUG-32534
+#endif
+    void postWithoutBody_data();
+    void postWithoutBody();
 #if QT_CONFIG(ssl)
     void putToHttps_data();
     void putToHttps();
@@ -322,8 +338,8 @@ private Q_SLOTS:
 #endif
     void ioGetFromHttpBrokenServer_data();
     void ioGetFromHttpBrokenServer();
-    void ioGetFromHttpStatus100_data();
-    void ioGetFromHttpStatus100();
+    void ioGetFromHttpStatusInformational_data();
+    void ioGetFromHttpStatusInformational();
     void ioGetFromHttpNoHeaders_data();
     void ioGetFromHttpNoHeaders();
     void ioGetFromHttpWithCache_data();
@@ -338,8 +354,10 @@ private Q_SLOTS:
     void ioPutToFileFromFile();
     void ioPutToFileFromSocket_data();
     void ioPutToFileFromSocket();
+#if QT_CONFIG(localserver)
     void ioPutToFileFromLocalSocket_data();
     void ioPutToFileFromLocalSocket();
+#endif
     void ioPutToFileFromProcess_data();
     void ioPutToFileFromProcess();
     void ioPutToFtpFromFile_data();
@@ -445,7 +463,9 @@ private Q_SLOTS:
     void ioGetFromHttpWithoutContentLength();
 
     void ioGetFromHttpBrokenChunkedEncoding();
+#if QT_CONFIG(http)
     void qtbug12908compressedHttpReply();
+#endif
     void compressedHttpReplyBrokenGzip();
 
     void getFromUnreachableIp();
@@ -464,7 +484,9 @@ private Q_SLOTS:
     void qtbug27161httpHeaderMayBeDamaged_data();
     void qtbug27161httpHeaderMayBeDamaged();
 
+#if QT_CONFIG(networkdiskcache)
     void qtbug28035browserDoesNotLoadQtProjectOrgCorrectly();
+#endif
 
     void qtbug45581WrongReplyStatusCode();
 
@@ -480,8 +502,10 @@ private Q_SLOTS:
     void varyingCacheExpiry_data();
     void varyingCacheExpiry();
 
+#if QT_CONFIG(http)
     void amountOfHttp1ConnectionsQtbug25280_data();
     void amountOfHttp1ConnectionsQtbug25280();
+#endif
 
     void dontInsertPartialContentIntoTheCache();
 
@@ -517,12 +541,16 @@ private Q_SLOTS:
     void ioHttpCookiesDuringRedirect();
     void ioHttpRedirect_data();
     void ioHttpRedirect();
+#if QT_CONFIG(networkdiskcache)
     void ioHttpRedirectWithCache();
+#endif
     void ioHttpRedirectFromLocalToRemote();
     void ioHttpRedirectPostPut_data();
     void ioHttpRedirectPostPut();
+#if QT_CONFIG(http)
     void ioHttpRedirectMultipartPost_data();
     void ioHttpRedirectMultipartPost();
+#endif
     void ioHttpRedirectDelete();
     void ioHttpRedirectCustom();
     void ioHttpRedirectWithUploadDevice_data();
@@ -536,16 +564,20 @@ private Q_SLOTS:
     void autoDeleteReplies_data();
     void autoDeleteReplies();
 
+#if QT_CONFIG(http) || defined (Q_OS_WASM)
     void requestWithTimeout_data();
     void requestWithTimeout();
+#endif
 
     void moreActivitySignals_data();
     void moreActivitySignals();
 
     void contentEncoding_data();
     void contentEncoding();
+#if QT_CONFIG(http)
     void contentEncodingBigPayload_data();
     void contentEncodingBigPayload();
+#endif
     void cacheWithContentEncoding_data();
     void cacheWithContentEncoding();
     void downloadProgressWithContentEncoding_data();
@@ -556,8 +588,13 @@ private Q_SLOTS:
     void notFoundWithCompression_data();
     void notFoundWithCompression();
 
+#if QT_CONFIG(http)
+    void qhttpPartDebug_data();
+    void qhttpPartDebug();
+
     void qtbug68821proxyError_data();
     void qtbug68821proxyError();
+#endif
 
     void abortAndError();
 
@@ -646,6 +683,7 @@ public:
 
     bool stopTransfer = false;
     bool checkedContentLength = false;
+    bool foundContentLength = false;
     int contentRead = 0;
     int contentLength = 0;
 
@@ -677,6 +715,7 @@ public:
     {
         contentLength = 0;
         receivedData.clear();
+        foundContentLength = false;
     }
 
 protected:
@@ -733,11 +772,13 @@ private:
 
     void parseContentLength()
     {
-        int index = receivedData.indexOf("Content-Length:");
+        int index = receivedData.indexOf("content-length:");
         if (index == -1)
             return;
 
-        index += sizeof("Content-Length:") - 1;
+        foundContentLength = true;
+
+        index += sizeof("content-length:") - 1;
         const auto end = std::find(receivedData.cbegin() + index, receivedData.cend(), '\r');
         auto num = receivedData.mid(index, std::distance(receivedData.cbegin() + index, end));
         bool ok;
@@ -1429,6 +1470,7 @@ void tst_QNetworkReply::storeSslConfiguration()
 }
 #endif
 
+#if QT_CONFIG(http)
 QString tst_QNetworkReply::runMultipartRequest(const QNetworkRequest &request,
                                                    QNetworkReplyPtr &reply,
                                                    QHttpMultiPart *multiPart,
@@ -1460,6 +1502,7 @@ QString tst_QNetworkReply::runMultipartRequest(const QNetworkRequest &request,
     }
     return QString();
 }
+#endif
 
 QString tst_QNetworkReply::runSimpleRequest(QNetworkAccessManager::Operation op,
                                             const QNetworkRequest &request,
@@ -2693,6 +2736,48 @@ void tst_QNetworkReply::putToHttpSynchronous()
     QCOMPARE(uploadedData, data);
 }
 
+void tst_QNetworkReply::putWithoutBody_data()
+{
+    QTest::addColumn<bool>("client_data");
+
+    QTest::newRow("client_has_data") << true;
+    QTest::newRow("client_does_not_have_data") << false;
+}
+
+void tst_QNetworkReply::putWithoutBody()
+{
+    QFETCH(bool, client_data);
+
+    QBuffer buff;
+
+    if (client_data) {
+        buff.setData("Dummy data from client to server");
+        buff.open(QIODevice::ReadOnly);
+    }
+
+    QByteArray dataFromServerToClient = QByteArray("Some ridiculous dummy data");
+    QByteArray httpResponse = QByteArray("HTTP/1.0 200 OK\r\nContent-Length: ");
+    httpResponse += QByteArray::number(dataFromServerToClient.size());
+    httpResponse += "\r\n\r\n";
+    httpResponse += dataFromServerToClient;
+
+    MiniHttpServer server(httpResponse);
+    server.doClose = true;
+
+    QNetworkRequest request(QUrl("http://localhost:" + QString::number(server.serverPort())));
+    request.setHeader(QNetworkRequest::ContentTypeHeader, QVariant("text/plain"));
+
+    QNetworkReplyPtr reply;
+    if (client_data)
+        reply.reset(manager.put(request, &buff));
+    else
+        reply.reset(manager.put(request, nullptr));
+
+    QVERIFY2(waitForFinish(reply) == Success, msgWaitForFinished(reply));
+    QCOMPARE(server.foundContentLength, client_data);
+}
+
+
 void tst_QNetworkReply::postToHttp_data()
 {
     putToFile_data();
@@ -2703,7 +2788,7 @@ void tst_QNetworkReply::postToHttp()
     QUrl url("http://" + QtNetworkSettings::httpServerName() + "/qtest/cgi-bin/md5sum.cgi");
 
     QNetworkRequest request(url);
-    request.setRawHeader("Content-Type", "application/octet-stream");
+    request.setRawHeader("content-type", "application/octet-stream");
     QNetworkReplyPtr reply;
 
     QFETCH(QByteArray, data);
@@ -2730,7 +2815,7 @@ void tst_QNetworkReply::postToHttpSynchronous()
     QUrl url("http://" + QtNetworkSettings::httpServerName() + "/qtest/cgi-bin/md5sum.cgi");
 
     QNetworkRequest request(url);
-    request.setRawHeader("Content-Type", "application/octet-stream");
+    request.setRawHeader("content-type", "application/octet-stream");
 
     request.setAttribute(
             QNetworkRequest::SynchronousRequestAttribute,
@@ -2752,6 +2837,7 @@ void tst_QNetworkReply::postToHttpSynchronous()
     QCOMPARE(uploadedData, md5sum.toHex());
 }
 
+#if QT_CONFIG(http)
 void tst_QNetworkReply::postToHttpMultipart_data()
 {
     QTest::addColumn<QUrl>("url");
@@ -2791,8 +2877,8 @@ void tst_QNetworkReply::postToHttpMultipart_data()
 
     QHttpMultiPart *customMultiPart = new QHttpMultiPart;
     customMultiPart->append(textPart);
-    expectedData = "header: Content-Type, value: 'text/plain'\n"
-                   "header: Content-Disposition, value: 'form-data; name=\"text\"'\n"
+    expectedData = "header: content-type, value: 'text/plain'\n"
+                   "header: content-disposition, value: 'form-data; name=\"text\"'\n"
                    "content: 7 bytes\n"
                    "\n";
     QTest::newRow("text-custom") << url << customMultiPart << expectedData << QByteArray("custom");
@@ -2828,18 +2914,18 @@ void tst_QNetworkReply::postToHttpMultipart_data()
     multiPart3->append(textPart);
     multiPart3->append(textPart2);
     multiPart3->append(textPart3);
-    expectedData = "header: Content-Type, value: 'text/plain'\n"
-                   "header: Content-Disposition, value: 'form-data; name=\"text\"'\n"
+    expectedData = "header: content-type, value: 'text/plain'\n"
+                   "header: content-disposition, value: 'form-data; name=\"text\"'\n"
                    "content: 7 bytes\n"
                    "\n"
-                   "header: Content-Type, value: 'text/plain'\n"
-                   "header: myRawHeader, value: 'myValue'\n"
-                   "header: Content-Disposition, value: 'form-data; name=\"text2\"'\n"
+                   "header: content-type, value: 'text/plain'\n"
+                   "header: myrawheader, value: 'myValue'\n"
+                   "header: content-disposition, value: 'form-data; name=\"text2\"'\n"
                    "content: some more bytes\n"
                    "\n"
-                   "header: Content-Type, value: 'text/plain'\n"
-                   "header: Content-Disposition, value: 'form-data; name=\"text3\"'\n"
-                   "header: Content-Location, value: 'http://my.test.location.tld'\n"
+                   "header: content-type, value: 'text/plain'\n"
+                   "header: content-disposition, value: 'form-data; name=\"text3\"'\n"
+                   "header: content-location, value: 'http://my.test.location.tld'\n"
                    "content: even more bytes\n\n";
     QTest::newRow("text-text-text") << url << multiPart3 << expectedData << QByteArray("alternative");
 
@@ -3061,7 +3147,50 @@ void tst_QNetworkReply::multipartSkipIndices() // QTBUG-32534
     }
     multiPart->deleteLater();
 }
+#endif
 
+void tst_QNetworkReply::postWithoutBody_data()
+{
+    QTest::addColumn<bool>("client_data");
+
+    QTest::newRow("client_has_data") << true;
+    QTest::newRow("client_does_not_have_data") << false;
+}
+
+void tst_QNetworkReply::postWithoutBody()
+{
+    QFETCH(bool, client_data);
+
+    QBuffer buff;
+
+    if (client_data) {
+        buff.setData("Dummy data from client to server");
+        buff.open(QIODevice::ReadOnly);
+    }
+
+    QByteArray dataFromServerToClient = QByteArray("Some ridiculous dummy data");
+    QByteArray httpResponse = QByteArray("HTTP/1.0 200 OK\r\nContent-Length: ");
+    httpResponse += QByteArray::number(dataFromServerToClient.size());
+    httpResponse += "\r\n\r\n";
+    httpResponse += dataFromServerToClient;
+
+    MiniHttpServer server(httpResponse);
+    server.doClose = true;
+
+    QNetworkRequest request(QUrl("http://localhost:" + QString::number(server.serverPort())));
+    request.setHeader(QNetworkRequest::ContentTypeHeader, QVariant("text/plain"));
+
+    QNetworkReplyPtr reply;
+    if (client_data)
+        reply.reset(manager.post(request, &buff));
+    else
+        reply.reset(manager.post(request, nullptr));
+
+    QVERIFY2(waitForFinish(reply) == Success, msgWaitForFinished(reply));
+    QCOMPARE(server.foundContentLength, client_data);
+}
+
+#if QT_CONFIG(http)
 void tst_QNetworkReply::putToHttpMultipart_data()
 {
     postToHttpMultipart_data();
@@ -3106,6 +3235,7 @@ void tst_QNetworkReply::putToHttpMultipart()
 //    QEXPECT_FAIL("nested", "the server does not understand nested multipart messages", Continue); // see above
     QCOMPARE(replyData, expectedReplyData);
 }
+#endif
 
 #if QT_CONFIG(ssl)
 void tst_QNetworkReply::putToHttps_data()
@@ -3217,7 +3347,7 @@ void tst_QNetworkReply::postToHttps()
     QSslConfiguration conf;
     conf.setCaCertificates(certs);
     request.setSslConfiguration(conf);
-    request.setRawHeader("Content-Type", "application/octet-stream");
+    request.setRawHeader("content-type", "application/octet-stream");
     QNetworkReplyPtr reply;
 
     QFETCH(QByteArray, data);
@@ -3251,7 +3381,7 @@ void tst_QNetworkReply::postToHttpsSynchronous()
     QSslConfiguration conf;
     conf.setCaCertificates(certs);
     request.setSslConfiguration(conf);
-    request.setRawHeader("Content-Type", "application/octet-stream");
+    request.setRawHeader("content-type", "application/octet-stream");
 
     request.setAttribute(
                 QNetworkRequest::SynchronousRequestAttribute,
@@ -3273,6 +3403,7 @@ void tst_QNetworkReply::postToHttpsSynchronous()
     QCOMPARE(uploadedData, md5sum.toHex());
 }
 
+#if QT_CONFIG(http)
 void tst_QNetworkReply::postToHttpsMultipart_data()
 {
     if (isSecureTransport)
@@ -3323,7 +3454,7 @@ void tst_QNetworkReply::postToHttpsMultipart()
     expectedReplyData.prepend("content type: multipart/" + contentType + "; boundary=\"" + multiPart->boundary() + "\"\n");
     QCOMPARE(replyData, expectedReplyData);
 }
-
+#endif
 #endif // QT_CONFIG(ssl)
 
 void tst_QNetworkReply::deleteFromHttp_data()
@@ -3453,7 +3584,7 @@ void tst_QNetworkReply::connectToIPv6Address()
     if (!QtNetworkSettings::hasIPv6())
         QSKIP("system doesn't support ipv6!");
 
-    QByteArray httpResponse = QByteArray("HTTP/1.0 200 OK\r\nContent-Length: ");
+    QByteArray httpResponse = QByteArray("HTTP/1.0 200 OK\r\ncontent-length: ");
     httpResponse += QByteArray::number(dataToSend.size());
     httpResponse += "\r\n\r\n";
     httpResponse += dataToSend;
@@ -3468,7 +3599,7 @@ void tst_QNetworkReply::connectToIPv6Address()
     QVERIFY2(waitForFinish(reply) == Success, msgWaitForFinished(reply));
     QByteArray content = reply->readAll();
     //qDebug() << server.receivedData;
-    QByteArray hostinfo = "\r\nHost: " + hostfield + ':' + QByteArray::number(server.serverPort()) + "\r\n";
+    QByteArray hostinfo = "\r\nhost: " + hostfield + ':' + QByteArray::number(server.serverPort()) + "\r\n";
     QVERIFY(server.receivedData.contains(hostinfo));
     QCOMPARE(content, dataToSend);
     QCOMPARE(reply->url(), request.url());
@@ -3659,7 +3790,9 @@ void tst_QNetworkReply::ioGetFromFtp()
 {
     QFETCH(QString, fileName);
     QFile reference(fileName);
-    reference.open(QIODevice::ReadOnly); // will fail for bigfile
+    const bool ok = reference.open(QIODevice::ReadOnly); // will fail for bigfile
+    if (fileName != "bigfile")
+        QVERIFY(ok);
 
     QNetworkRequest request("ftp://" + QtNetworkSettings::ftpServerName() + "/qtest/" + fileName);
     QNetworkReplyPtr reply(manager.get(request));
@@ -3684,7 +3817,7 @@ void tst_QNetworkReply::ioGetFromFtpWithReuse()
         QSKIP("FTP is not supported");
     QString fileName = testDataDir + "/rfc3252.txt";
     QFile reference(fileName);
-    reference.open(QIODevice::ReadOnly);
+    QVERIFY(reference.open(QIODevice::ReadOnly));
 
     QNetworkRequest request(QUrl("ftp://" + QtNetworkSettings::ftpServerName() + "/qtest/rfc3252.txt"));
 
@@ -3814,7 +3947,7 @@ void tst_QNetworkReply::ioGetFromHttpWithAuth_data()
     QTest::addColumn<int>("expectedAuth");
 
     QFile reference(testDataDir + "/rfc3252.txt");
-    reference.open(QIODevice::ReadOnly);
+    QVERIFY(reference.open(QIODevice::ReadOnly));
     QByteArray referenceData = reference.readAll();
     QString httpServer = QtNetworkSettings::httpServerName();
     QTest::newRow("basic")
@@ -4282,7 +4415,7 @@ void tst_QNetworkReply::ioGetFromHttpBrokenServer()
     QVERIFY(reply->error() != QNetworkReply::NoError);
 }
 
-void tst_QNetworkReply::ioGetFromHttpStatus100_data()
+void tst_QNetworkReply::ioGetFromHttpStatusInformational_data()
 {
     QTest::addColumn<QByteArray>("dataToSend");
     QTest::addColumn<int>("statusCode");
@@ -4293,9 +4426,25 @@ void tst_QNetworkReply::ioGetFromHttpStatus100_data()
     QTest::newRow("minimal+404") << QByteArray("HTTP/1.1 100 Continue\n\nHTTP/1.0 204 No Content\r\n\r\n") << 204;
     QTest::newRow("with_headers") << QByteArray("HTTP/1.1 100 Continue\r\nBla: x\r\n\r\nHTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n") << 200;
     QTest::newRow("with_headers2") << QByteArray("HTTP/1.1 100 Continue\nBla: x\n\nHTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n") << 200;
+
+    QTest::newRow("normal-custom") << QByteArray("HTTP/1.1 133 Custom\r\n\r\nHTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n") << 200;
+    QTest::newRow("minimal-custom") << QByteArray("HTTP/1.1 133 Custom\n\nHTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n") << 200;
+    QTest::newRow("minimal2-custom") << QByteArray("HTTP/1.1 133 Custom\n\nHTTP/1.0 200 OK\r\n\r\n") << 200;
+    QTest::newRow("minimal3-custom") << QByteArray("HTTP/1.1 133 Custom\n\nHTTP/1.0 200 OK\n\n") << 200;
+    QTest::newRow("minimal+404-custom") << QByteArray("HTTP/1.1 133 Custom\n\nHTTP/1.0 204 No Content\r\n\r\n") << 204;
+    QTest::newRow("with_headers-custom") << QByteArray("HTTP/1.1 133 Custom\r\nBla: x\r\n\r\nHTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n") << 200;
+    QTest::newRow("with_headers2-custom") << QByteArray("HTTP/1.1 133 Custom\nBla: x\n\nHTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n") << 200;
+
+    QTest::newRow("normal-custom2") << QByteArray("HTTP/1.1 179 Custom2\r\n\r\nHTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n") << 200;
+    QTest::newRow("minimal-custom2") << QByteArray("HTTP/1.1 179 Custom2\n\nHTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n") << 200;
+    QTest::newRow("minimal2-custom2") << QByteArray("HTTP/1.1 179 Custom2\n\nHTTP/1.0 200 OK\r\n\r\n") << 200;
+    QTest::newRow("minimal3-custom2") << QByteArray("HTTP/1.1 179 Custom2\n\nHTTP/1.0 200 OK\n\n") << 200;
+    QTest::newRow("minimal+404-custom2") << QByteArray("HTTP/1.1 179 Custom2\n\nHTTP/1.0 204 No Content\r\n\r\n") << 204;
+    QTest::newRow("with_headers-custom2") << QByteArray("HTTP/1.1 179 Custom2\r\nBla: x\r\n\r\nHTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n") << 200;
+    QTest::newRow("with_headers2-custom2") << QByteArray("HTTP/1.1 179 Custom2\nBla: x\n\nHTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n") << 200;
 }
 
-void tst_QNetworkReply::ioGetFromHttpStatus100()
+void tst_QNetworkReply::ioGetFromHttpStatusInformational()
 {
     QFETCH(QByteArray, dataToSend);
     QFETCH(int, statusCode);
@@ -4349,7 +4498,7 @@ void tst_QNetworkReply::ioGetFromHttpWithCache_data()
     QByteArray reply200 =
             "HTTP/1.0 200\r\n"
             "Connection: keep-alive\r\n"
-            "Content-Type: text/plain\r\n"
+            "content-type: text/plain\r\n"
             "Cache-control: no-store\r\n"
             "Content-length: 8\r\n"
             "\r\n"
@@ -4484,7 +4633,7 @@ void tst_QNetworkReply::ioGetFromHttpWithCache_data()
     QByteArray reply206 =
             "HTTP/1.0 206\r\n"
             "Connection: keep-alive\r\n"
-            "Content-Type: text/plain\r\n"
+            "content-type: text/plain\r\n"
             "Cache-control: no-cache\r\n"
             "Content-Range: bytes 2-6/8\r\n"
             "Content-length: 4\r\n"
@@ -4887,6 +5036,7 @@ void tst_QNetworkReply::ioPutToFileFromSocket()
     QCOMPARE(contents, data);
 }
 
+#if QT_CONFIG(localserver)
 void tst_QNetworkReply::ioPutToFileFromLocalSocket_data()
 {
     putToFile_data();
@@ -4930,6 +5080,7 @@ void tst_QNetworkReply::ioPutToFileFromLocalSocket()
     QByteArray contents = file.readAll();
     QCOMPARE(contents, data);
 }
+#endif
 
 // Currently no stdin/out supported for Windows CE.
 void tst_QNetworkReply::ioPutToFileFromProcess_data()
@@ -4978,6 +5129,10 @@ void tst_QNetworkReply::ioPutToFileFromProcess()
     QCOMPARE(file.size(), qint64(data.size()));
     QByteArray contents = file.readAll();
     QCOMPARE(contents, data);
+
+    if (process.state() == QProcess::Running)
+        QVERIFY(process.waitForFinished());
+    QCOMPARE(process.exitCode(), 0);
 
 #endif // QT_CONFIG(process)
 }
@@ -5089,7 +5244,7 @@ void tst_QNetworkReply::ioPostToHttpFromFile()
 
     QUrl url("http://" + QtNetworkSettings::httpServerName() + "/qtest/cgi-bin/md5sum.cgi");
     QNetworkRequest request(url);
-    request.setRawHeader("Content-Type", "application/octet-stream");
+    request.setRawHeader("content-type", "application/octet-stream");
 
     QNetworkReplyPtr reply(manager.post(request, &sourceFile));
 
@@ -5166,7 +5321,7 @@ void tst_QNetworkReply::ioPostToHttpFromSocket()
     socketpair.endPoints[0]->write(data);
 
     QNetworkRequest request(url);
-    request.setRawHeader("Content-Type", "application/octet-stream");
+    request.setRawHeader("content-type", "application/octet-stream");
 
     manager.setProxy(proxy);
     QNetworkReplyPtr reply(manager.post(request, socketpair.endPoints[1]));
@@ -5240,7 +5395,7 @@ void tst_QNetworkReply::ioPostToHttpFromSocketSynchronous()
 
     QUrl url("http://" + QtNetworkSettings::httpServerName() + "/qtest/cgi-bin/md5sum.cgi");
     QNetworkRequest request(url);
-    request.setRawHeader("Content-Type", "application/octet-stream");
+    request.setRawHeader("content-type", "application/octet-stream");
     request.setAttribute(
             QNetworkRequest::SynchronousRequestAttribute,
             true);
@@ -5271,7 +5426,7 @@ void tst_QNetworkReply::ioPostToHttpFromMiddleOfFileToEnd()
 
     QUrl url = "http://" + QtNetworkSettings::httpServerName() + "/qtest/protected/cgi-bin/md5sum.cgi";
     QNetworkRequest request(url);
-    request.setRawHeader("Content-Type", "application/octet-stream");
+    request.setRawHeader("content-type", "application/octet-stream");
     QNetworkReplyPtr reply(manager.post(request, &sourceFile));
 
     connect(&manager, SIGNAL(authenticationRequired(QNetworkReply*,QAuthenticator*)),
@@ -5297,7 +5452,7 @@ void tst_QNetworkReply::ioPostToHttpFromMiddleOfFileFiveBytes()
 
     QUrl url = "http://" + QtNetworkSettings::httpServerName() + "/qtest/protected/cgi-bin/md5sum.cgi";
     QNetworkRequest request(url);
-    request.setRawHeader("Content-Type", "application/octet-stream");
+    request.setRawHeader("content-type", "application/octet-stream");
     // only send 5 bytes
     request.setHeader(QNetworkRequest::ContentLengthHeader, 5);
     QVERIFY(request.header(QNetworkRequest::ContentLengthHeader).isValid());
@@ -5328,7 +5483,7 @@ void tst_QNetworkReply::ioPostToHttpFromMiddleOfQBufferFiveBytes()
 
     QUrl url = "http://" + QtNetworkSettings::httpServerName() + "/qtest/protected/cgi-bin/md5sum.cgi";
     QNetworkRequest request(url);
-    request.setRawHeader("Content-Type", "application/octet-stream");
+    request.setRawHeader("content-type", "application/octet-stream");
     QNetworkReplyPtr reply(manager.post(request, &uploadBuffer));
 
     connect(&manager, SIGNAL(authenticationRequired(QNetworkReply*,QAuthenticator*)),
@@ -5356,7 +5511,7 @@ void tst_QNetworkReply::ioPostToHttpNoBufferFlag()
 
     QUrl url = "http://" + QtNetworkSettings::httpServerName() + "/qtest/protected/cgi-bin/md5sum.cgi";
     QNetworkRequest request(url);
-    request.setRawHeader("Content-Type", "application/octet-stream");
+    request.setRawHeader("content-type", "application/octet-stream");
     // disallow buffering
     request.setAttribute(QNetworkRequest::DoNotBufferUploadDataAttribute, true);
     request.setHeader(QNetworkRequest::ContentLengthHeader, data.size());
@@ -5441,7 +5596,7 @@ void tst_QNetworkReply::ioPostToHttpsUploadProgress()
     QUrl url = QUrl(QLatin1String("https://127.0.0.1:") + QString::number(server.serverPort()) + QLatin1Char('/'));
     QNetworkRequest request(url);
 
-    request.setRawHeader("Content-Type", "application/octet-stream");
+    request.setRawHeader("content-type", "application/octet-stream");
     QNetworkReplyPtr reply(manager.post(request, sourceFile));
 
     QSignalSpy spy(reply.data(), SIGNAL(uploadProgress(qint64,qint64)));
@@ -5595,7 +5750,7 @@ void tst_QNetworkReply::ioPostToHttpUploadProgress()
     // create the request
     QUrl url = QUrl(QString("http://127.0.0.1:%1/").arg(server.serverPort()));
     QNetworkRequest request(url);
-    request.setRawHeader("Content-Type", "application/octet-stream");
+    request.setRawHeader("content-type", "application/octet-stream");
     QNetworkReplyPtr reply(manager.post(request, &sourceFile));
     QSignalSpy spy(reply.data(), SIGNAL(uploadProgress(qint64,qint64)));
     connect(&server, SIGNAL(newConnection()), &QTestEventLoop::instance(), SLOT(exitLoop()));
@@ -5663,7 +5818,7 @@ void tst_QNetworkReply::emitAllUploadProgressSignals()
 
     QUrl url = QUrl(QLatin1String("http://127.0.0.1:") + QString::number(server.serverPort()) + QLatin1Char('/'));
     QNetworkRequest normalRequest(url);
-    normalRequest.setRawHeader("Content-Type", "application/octet-stream");
+    normalRequest.setRawHeader("content-type", "application/octet-stream");
 
     QNetworkRequest catchAllSignalsRequest(normalRequest);
     catchAllSignalsRequest.setAttribute(QNetworkRequest::EmitAllUploadProgressSignalsAttribute, true);
@@ -5714,7 +5869,7 @@ void tst_QNetworkReply::ioPostToHttpEmptyUploadProgress()
     // create the request
     QUrl url = QUrl(QLatin1String("http://127.0.0.1:") + QString::number(server.serverPort()) + QLatin1Char('/'));
     QNetworkRequest request(url);
-    request.setRawHeader("Content-Type", "application/octet-stream");
+    request.setRawHeader("content-type", "application/octet-stream");
     QNetworkReplyPtr reply(manager.post(request, &buffer));
     QSignalSpy spy(reply.data(), SIGNAL(uploadProgress(qint64,qint64)));
     connect(&server, SIGNAL(newConnection()), &QTestEventLoop::instance(), SLOT(exitLoop()));
@@ -5760,7 +5915,11 @@ void tst_QNetworkReply::lastModifiedHeaderForFile()
     QVERIFY2(waitForFinish(reply) == Success, msgWaitForFinished(reply));
 
     QDateTime header = reply->header(QNetworkRequest::LastModifiedHeader).toDateTime();
-    QCOMPARE(header, fileInfo.lastModified());
+    QDateTime expected = fileInfo.lastModified();
+    // remove msecs, HTTP dates don't support it
+    expected = expected.addMSecs(-expected.time().msec());
+
+    QCOMPARE(header.toUTC(), expected.toUTC());
 }
 
 void tst_QNetworkReply::lastModifiedHeaderForHttp()
@@ -6066,7 +6225,7 @@ void tst_QNetworkReply::receiveCookiesFromHttp()
     QByteArray data = cookieString.toLatin1() + '\n';
     QUrl url("http://" + QtNetworkSettings::httpServerName() + "/qtest/cgi-bin/set-cookie.cgi");
     QNetworkRequest request(url);
-    request.setRawHeader("Content-Type", "application/octet-stream");
+    request.setRawHeader("content-type", "application/octet-stream");
     QNetworkReplyPtr reply;
     RUN_REQUEST(runSimpleRequest(QNetworkAccessManager::PostOperation, request, reply, data));
 
@@ -6094,7 +6253,7 @@ void tst_QNetworkReply::receiveCookiesFromHttpSynchronous()
     QUrl url("http://" + QtNetworkSettings::httpServerName() + "/qtest/cgi-bin/set-cookie.cgi");
 
     QNetworkRequest request(url);
-    request.setRawHeader("Content-Type", "application/octet-stream");
+    request.setRawHeader("content-type", "application/octet-stream");
     request.setAttribute(
             QNetworkRequest::SynchronousRequestAttribute,
             true);
@@ -6277,7 +6436,7 @@ void tst_QNetworkReply::httpProxyCommands()
 
     manager.setProxy(proxy);
     QNetworkRequest request(url);
-    request.setRawHeader("User-Agent", "QNetworkReplyAutoTest/1.0");
+    request.setRawHeader("user-agent", "QNetworkReplyAutoTest/1.0");
     QNetworkReplyPtr reply(manager.get(request));
 
     // wait for the finished signal
@@ -6294,10 +6453,11 @@ void tst_QNetworkReply::httpProxyCommands()
     QCOMPARE(receivedHeader, expectedCommand);
 
     //QTBUG-17223 - make sure the user agent from the request is sent to proxy server even for CONNECT
-    int uapos = proxyServer.receivedData.indexOf("User-Agent");
+    const QByteArray cUserAgent = "user-agent: ";
+    int uapos = proxyServer.receivedData.toLower().indexOf(cUserAgent) + cUserAgent.size();
     int uaend = proxyServer.receivedData.indexOf("\r\n", uapos);
     QByteArray uaheader = proxyServer.receivedData.mid(uapos, uaend - uapos);
-    QCOMPARE(uaheader, QByteArray("User-Agent: QNetworkReplyAutoTest/1.0"));
+    QCOMPARE(uaheader, QByteArray("QNetworkReplyAutoTest/1.0"));
 }
 
 class ProxyChangeHelper : public QObject
@@ -7371,6 +7531,7 @@ void tst_QNetworkReply::ioGetFromHttpBrokenChunkedEncoding()
     QCOMPARE(reply->error(), QNetworkReply::NoError);
 }
 
+#if QT_CONFIG(http)
 // TODO:
 // Prepare a gzip that has one chunk that expands to the size mentioned in the bugreport.
 // Then have a custom HTTP server that waits after this chunk so the returning gets
@@ -7399,6 +7560,7 @@ void tst_QNetworkReply::qtbug12908compressedHttpReply()
     QCOMPARE(reply->size(), qint64(16384));
     QCOMPARE(reply->readAll(), QByteArray(16384, '\0'));
 }
+#endif
 
 void tst_QNetworkReply::compressedHttpReplyBrokenGzip()
 {
@@ -7925,11 +8087,12 @@ void tst_QNetworkReply::qtbug27161httpHeaderMayBeDamaged(){
     QCOMPARE(reply->readAll(), QByteArray("ABC"));
 }
 
+#if QT_CONFIG(networkdiskcache)
 void tst_QNetworkReply::qtbug28035browserDoesNotLoadQtProjectOrgCorrectly() {
     QByteArray getReply =
             "HTTP/1.1 200\r\n"
             "Connection: keep-alive\r\n"
-            "Content-Type: text/plain\r\n"
+            "content-type: text/plain\r\n"
             "Cache-control: max-age = 6000\r\n"
             "\r\n"
             "GET";
@@ -7937,7 +8100,7 @@ void tst_QNetworkReply::qtbug28035browserDoesNotLoadQtProjectOrgCorrectly() {
     QByteArray postReply =
             "HTTP/1.1 200\r\n"
             "Connection: keep-alive\r\n"
-            "Content-Type: text/plain\r\n"
+            "content-type: text/plain\r\n"
             "Cache-control: max-age = 6000\r\n"
             "Content-length: 4\r\n"
             "\r\n"
@@ -7946,7 +8109,7 @@ void tst_QNetworkReply::qtbug28035browserDoesNotLoadQtProjectOrgCorrectly() {
     QByteArray putReply =
             "HTTP/1.1 201\r\n"
             "Connection: keep-alive\r\n"
-            "Content-Type: text/plain\r\n"
+            "content-type: text/plain\r\n"
             "Cache-control: max-age = 6000\r\n"
             "\r\n";
 
@@ -7984,7 +8147,7 @@ void tst_QNetworkReply::qtbug28035browserDoesNotLoadQtProjectOrgCorrectly() {
 
     server.clearHeaderParserState();
     server.setDataToTransmit(postReply);
-    request.setRawHeader("Content-Type", "text/plain");
+    request.setRawHeader("content-type", "text/plain");
     reply.reset(manager.post(request, postData));
 
     QVERIFY2(waitForFinish(reply) == Success, msgWaitForFinished(reply));
@@ -8049,6 +8212,7 @@ void tst_QNetworkReply::qtbug28035browserDoesNotLoadQtProjectOrgCorrectly() {
     QCOMPARE(reply->readAll(), QByteArray("GET"));
     QCOMPARE(reply->attribute(QNetworkRequest::SourceIsFromCacheAttribute).toBool(), true);
 }
+#endif
 
 void tst_QNetworkReply::qtbug45581WrongReplyStatusCode()
 {
@@ -8171,7 +8335,7 @@ void tst_QNetworkReply::synchronousRequest()
     if (expected.startsWith("file:")) {
         QString path = expected.mid(5);
         QFile file(path);
-        file.open(QIODevice::ReadOnly);
+        QVERIFY(file.open(QIODevice::ReadOnly));
         expectedContent = file.readAll();
     } else if (expected.startsWith("data:")) {
         expectedContent = expected.mid(5).toUtf8();
@@ -8434,6 +8598,7 @@ public:
     }
 };
 
+#if QT_CONFIG(http)
 void tst_QNetworkReply::amountOfHttp1ConnectionsQtbug25280_data()
 {
     QTest::addColumn<int>("amount");
@@ -8474,13 +8639,14 @@ void tst_QNetworkReply::amountOfHttp1ConnectionsQtbug25280()
     }
     QCOMPARE(server.receivedSockets.size(), amount);
 }
+#endif
 
 void tst_QNetworkReply::dontInsertPartialContentIntoTheCache()
 {
     QByteArray reply206 =
             "HTTP/1.0 206\r\n"
             "Connection: keep-alive\r\n"
-            "Content-Type: text/plain\r\n"
+            "content-type: text/plain\r\n"
             "Cache-control: no-cache\r\n"
             "Content-Range: bytes 2-6/8\r\n"
             "Content-length: 4\r\n"
@@ -8520,7 +8686,7 @@ void tst_QNetworkReply::httpUserAgent()
 
     QVERIFY(reply->isFinished());
     QCOMPARE(reply->error(), QNetworkReply::NoError);
-    QVERIFY(server.receivedData.contains("\r\nUser-Agent: abcDEFghi\r\n"));
+    QVERIFY(server.receivedData.contains("\r\nuser-agent: abcDEFghi\r\n"));
 }
 
 void tst_QNetworkReply::synchronousAuthenticationCache()
@@ -8537,16 +8703,16 @@ void tst_QNetworkReply::synchronousAuthenticationCache()
                 "WWW-Authenticate: Basic realm=\"QNetworkAccessManager Test Realm\"\r\n"
                 "Content-Length: 4\r\n"
                 "Connection: close\r\n"
-                "Content-Type: text/plain\r\n"
+                "content-type: text/plain\r\n"
                 "\r\n"
                 "auth";
-            QRegularExpression rx("Authorization: Basic ([^\r\n]*)\r\n");
+            QRegularExpression rx("authorization: Basic ([^\r\n]*)\r\n");
             QRegularExpressionMatch match = rx.match(receivedData);
             if (match.hasMatch()) {
                 if (QByteArray::fromBase64(match.captured(1).toLatin1()) == "login:password") {
                     dataToTransmit =
                           "HTTP/1.0 200 OK\r\n"
-                          "Content-Type: text/plain\r\n"
+                          "content-type: text/plain\r\n"
                           "Content-Length: 2\r\n"
                           "\r\n"
                           "OK";
@@ -8795,7 +8961,7 @@ protected slots:
 void tst_QNetworkReply::putWithRateLimiting()
 {
     QFile reference(testDataDir + "/rfc3252.txt");
-    reference.open(QIODevice::ReadOnly);
+    QVERIFY(reference.open(QIODevice::ReadOnly));
     QByteArray data = reference.readAll();
     QVERIFY(data.size() > 0);
 
@@ -8916,7 +9082,7 @@ void tst_QNetworkReply::ioHttpRedirectErrors_data()
     QTest::addColumn<QNetworkReply::NetworkError>("error");
 
     QString tempRedirectReply = QString("HTTP/1.1 307 Temporary Redirect\r\n"
-                                        "Content-Type: text/plain\r\n"
+                                        "content-type: text/plain\r\n"
                                         "location: http://localhost:%1\r\n\r\n");
 
     QTest::newRow("too-many-redirects") << "http://localhost" << tempRedirectReply << QNetworkReply::TooManyRedirectsError;
@@ -9199,7 +9365,7 @@ void tst_QNetworkReply::ioHttpCookiesDuringRedirect()
     manager.setRedirectPolicy(oldRedirectPolicy);
 
     QVERIFY(waitForFinish(reply) == Success);
-    QVERIFY(target.receivedData.contains("\r\nCookie: hello=world\r\n"));
+    QVERIFY(target.receivedData.contains("\r\ncookie: hello=world\r\n"));
     QVERIFY(validateRedirectedResponseHeaders(reply));
 }
 
@@ -9224,7 +9390,7 @@ void tst_QNetworkReply::ioHttpRedirect()
     targetUrl.setPort(target.serverPort());
 
     QString redirectReply = QStringLiteral("HTTP/1.1 %1\r\n"
-                                           "Content-Type: text/plain\r\n"
+                                           "content-type: text/plain\r\n"
                                            "location: %2\r\n"
                                            "\r\n").arg(status, targetUrl.toString());
     MiniHttpServer redirectServer(redirectReply.toLatin1(), false);
@@ -9242,6 +9408,7 @@ void tst_QNetworkReply::ioHttpRedirect()
     QVERIFY(validateRedirectedResponseHeaders(reply));
 }
 
+#if QT_CONFIG(networkdiskcache)
 /*
     Test that, if we load a redirect from cache, we don't treat the request to
     the destination of the redirect as a redirect.
@@ -9252,7 +9419,7 @@ void tst_QNetworkReply::ioHttpRedirectWithCache()
 {
     // Disallow caching the result so that the second request must also send the request
     QByteArray http200ResponseNoCache = "HTTP/1.1 200 OK\r\n"
-                                        "Content-Type: text/plain\r\n"
+                                        "content-type: text/plain\r\n"
                                         "Cache-Control: no-cache\r\n"
                                         "\r\nHello";
 
@@ -9262,7 +9429,7 @@ void tst_QNetworkReply::ioHttpRedirectWithCache()
 
     // A cache-able redirect reply
     QString redirectReply = QStringLiteral("HTTP/1.1 308\r\n"
-                                           "Content-Type: text/plain\r\n"
+                                           "content-type: text/plain\r\n"
                                            "location: %1\r\n"
                                            "Cache-Control: max-age=3600\r\n"
                                            "\r\nYou're being redirected").arg(targetUrl.toString());
@@ -9299,6 +9466,7 @@ void tst_QNetworkReply::ioHttpRedirectWithCache()
     QCOMPARE(reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt(), 200);
     QVERIFY(validateRedirectedResponseHeaders(reply));
 }
+#endif
 
 void tst_QNetworkReply::ioHttpRedirectFromLocalToRemote()
 {
@@ -9374,7 +9542,7 @@ void tst_QNetworkReply::ioHttpRedirectPostPut()
     QUrl targetUrl("http://" + QtNetworkSettings::httpServerName() + "/qtest/cgi-bin/md5sum.cgi");
 
     QString redirectReply = QStringLiteral("HTTP/1.1 %1\r\n"
-                                           "Content-Type: text/plain\r\n"
+                                           "content-type: text/plain\r\n"
                                            "location: %2\r\n"
                                            "\r\n").arg(status, targetUrl.toString());
     MiniHttpServer redirectServer(redirectReply.toLatin1());
@@ -9393,6 +9561,7 @@ void tst_QNetworkReply::ioHttpRedirectPostPut()
     QCOMPARE(reply->readAll().trimmed(), md5sum(data).toHex());
 }
 
+#if QT_CONFIG(http)
 void tst_QNetworkReply::ioHttpRedirectMultipartPost_data()
 {
     postToHttpMultipart_data();
@@ -9453,6 +9622,7 @@ void tst_QNetworkReply::ioHttpRedirectMultipartPost()
 //    QEXPECT_FAIL("nested", "the server does not understand nested multipart messages", Continue); // see above
     QCOMPARE(replyData, expectedReplyData);
 }
+#endif
 
 void tst_QNetworkReply::ioHttpRedirectDelete()
 {
@@ -9528,7 +9698,7 @@ void tst_QNetworkReply::ioHttpRedirectWithUploadDevice()
     targetUrl.setPort(target.serverPort());
 
     QString redirectReply = QStringLiteral("HTTP/1.1 %1\r\n"
-                                           "Content-Type: text/plain\r\n"
+                                           "content-type: text/plain\r\n"
                                            "location: %2\r\n"
                                            "\r\n").arg(status, targetUrl.toString());
     MiniHttpServer redirectServer(redirectReply.toLatin1());
@@ -9562,8 +9732,8 @@ void tst_QNetworkReply::ioHttpRedirectWithUploadDevice()
         // we shouldn't send Content-Length with not content (esp. for GET)
         QVERIFY2(!target.receivedData.contains("Content-Length"),
                  "Target server should not have received a Content-Length header");
-        QVERIFY2(!target.receivedData.contains("Content-Type"),
-                 "Target server should not have received a Content-Type header");
+        QVERIFY2(!target.receivedData.contains("content-type"),
+                 "Target server should not have received a content-type header");
     }
 }
 
@@ -9894,6 +10064,7 @@ void tst_QNetworkReply::autoDeleteReplies()
     }
 }
 
+#if QT_CONFIG(http) || defined (Q_OS_WASM)
 void tst_QNetworkReply::requestWithTimeout_data()
 {
     using Operation = QNetworkAccessManager::Operation;
@@ -9931,7 +10102,7 @@ void tst_QNetworkReply::requestWithTimeout()
     server.stopTransfer = true;
 
     QNetworkRequest request(QUrl("http://localhost:" + QString::number(server.serverPort())));
-    request.setRawHeader("Content-Type", "application/octet-stream");
+    request.setRawHeader("content-type", "application/octet-stream");
     if (reqInt > 0)
         request.setTransferTimeout(reqInt);
     if (reqChrono > 0ms)
@@ -9953,6 +10124,7 @@ void tst_QNetworkReply::requestWithTimeout()
     QCOMPARE(spy.size(), 1);
     QCOMPARE(reply->error(), QNetworkReply::OperationCanceledError);
 }
+#endif
 
 void tst_QNetworkReply::moreActivitySignals_data()
 {
@@ -9983,7 +10155,7 @@ void tst_QNetworkReply::moreActivitySignals()
     QNetworkRequest request(url);
     QNetworkReplyPtr reply;
     if (postWithData) {
-        request.setRawHeader("Content-Type", "text/plain");
+        request.setRawHeader("content-type", "text/plain");
         reply.reset(manager.post(request, "Hello, world!"));
     } else {
         reply.reset(manager.get(request));
@@ -10007,7 +10179,7 @@ void tst_QNetworkReply::moreActivitySignals()
     // Second request will not send socketStartedConnecting because of keep-alive, so don't check it.
     QNetworkReplyPtr secondreply;
     if (postWithData) {
-        request.setRawHeader("Content-Type", "text/plain");
+        request.setRawHeader("content-type", "text/plain");
         secondreply.reset(manager.post(request, "Hello, world!"));
     } else {
         secondreply.reset(manager.get(request));
@@ -10091,7 +10263,7 @@ void tst_QNetworkReply::contentEncoding()
     QNetworkRequest request(QUrl("http://localhost:" + QString::number(server.serverPort())));
     if (!decompress) {
         // This disables decompression of the received content:
-        request.setRawHeader("Accept-Encoding", QLatin1String("%1").arg(encoding).toLatin1());
+        request.setRawHeader("accept-encoding", QLatin1String("%1").arg(encoding).toLatin1());
         // This disables the zerocopy optimization
         request.setAttribute(QNetworkRequest::MaximumDownloadBufferSizeAttribute, 0);
     }
@@ -10103,7 +10275,7 @@ void tst_QNetworkReply::contentEncoding()
     {
         // Check that we included the content encoding method in our Accept-Encoding header
         const QByteArray &receivedData = server.receivedData;
-        int start = receivedData.indexOf("Accept-Encoding");
+        int start = receivedData.indexOf("accept-encoding");
         QVERIFY(start != -1);
         int end = receivedData.indexOf("\r\n", start);
         QVERIFY(end != -1);
@@ -10125,6 +10297,7 @@ void tst_QNetworkReply::contentEncoding()
     }
 }
 
+#if QT_CONFIG(http)
 void tst_QNetworkReply::contentEncodingBigPayload_data()
 {
 #if Q_PROCESSOR_WORDSIZE <= 4
@@ -10167,7 +10340,7 @@ void tst_QNetworkReply::contentEncodingBigPayload()
     request.setDecompressedSafetyCheckThreshold(-1);
     QNetworkReplyPtr reply(manager.get(request));
 
-    QTRY_VERIFY2_WITH_TIMEOUT(reply->isFinished(), qPrintable(reply->errorString()), 15000);
+    QTRY_VERIFY2_WITH_TIMEOUT(reply->isFinished(), qPrintable(reply->errorString()), 15s);
     QCOMPARE(reply->error(), QNetworkReply::NoError);
 
     QFETCH(qint64, expectedSize);
@@ -10186,6 +10359,7 @@ void tst_QNetworkReply::contentEncodingBigPayload()
     }
     QCOMPARE(total, expectedSize);
 }
+#endif
 
 void tst_QNetworkReply::cacheWithContentEncoding_data()
 {
@@ -10291,7 +10465,7 @@ void tst_QNetworkReply::contentEncodingError()
             QUrl(QLatin1String("http://localhost:%1").arg(QString::number(server.serverPort()))));
     QNetworkReplyPtr reply(manager.get(request));
 
-    QTRY_VERIFY2_WITH_TIMEOUT(reply->isFinished(), qPrintable(reply->errorString()), 15000);
+    QTRY_VERIFY2_WITH_TIMEOUT(reply->isFinished(), qPrintable(reply->errorString()), 15s);
     QTEST(reply->error(), "expectedError");
 }
 
@@ -10361,11 +10535,65 @@ void tst_QNetworkReply::notFoundWithCompression()
             QUrl(QLatin1String("http://localhost:%1").arg(QString::number(server.serverPort()))));
     QNetworkReplyPtr reply(manager.get(request));
 
-    QTRY_VERIFY2_WITH_TIMEOUT(reply->isFinished(), qPrintable(reply->errorString()), 15000);
+    QTRY_VERIFY2_WITH_TIMEOUT(reply->isFinished(), qPrintable(reply->errorString()), 15s);
     QCOMPARE(reply->error(), QNetworkReply::ContentNotFoundError);
 
     QFETCH(QByteArray, expected);
     QCOMPARE(reply->readAll(), expected);
+}
+
+#if QT_CONFIG(http)
+void tst_QNetworkReply::qhttpPartDebug_data()
+{
+    QTest::addColumn<QByteArray>("header_data");
+    QTest::addColumn<QByteArray>("raw_header_data");
+    QTest::addColumn<QList<QByteArray>>("expected_header_values");
+    QTest::addColumn<bool>("overwrite");
+
+    QTest::newRow("header-data-set") << "form-data; name=\"prompt\""_ba << ""_ba
+                    << (QList<QByteArray>() << "form-data; name=\"prompt\""_ba) << false;
+    QTest::newRow("raw-header-data-set") << ""_ba << "thisismykeyherebutnotreally"_ba
+                    << (QList<QByteArray>() << "thisismykeyherebutnotreally"_ba) << false;
+    QTest::newRow("both-set") << "form-data; name=\"prompt\""_ba
+                              << "thisismykeyherebutnotreally"_ba
+                              << (QList<QByteArray>()
+                                    << "form-data; name=\"prompt\""_ba
+                                    << "thisismykeyherebutnotreally"_ba) << false;
+    QTest::newRow("overwrite") << "form-data; name=\"prompt\""_ba
+                               << "thisismykeyherebutnotreally"_ba
+                               << (QList<QByteArray>()
+                                    << "thisismykeyherebutnotreally"_ba
+                                    << "thisismykeyherebutnotreally"_ba) << true;
+}
+
+void tst_QNetworkReply::qhttpPartDebug()
+{
+    QFETCH(const QByteArray, header_data);
+    QFETCH(const QByteArray, raw_header_data);
+    QFETCH(const QList<QByteArray>, expected_header_values);
+    QFETCH(bool, overwrite);
+
+    QHttpPart httpPart;
+
+    if (!header_data.isEmpty())
+        httpPart.setHeader(QNetworkRequest::ContentDispositionHeader, header_data);
+
+    if (!raw_header_data.isEmpty())
+        httpPart.setRawHeader("Authorization", raw_header_data);
+
+    if (overwrite)
+        httpPart.setRawHeader("Content-Disposition", raw_header_data);
+
+    QByteArray msg;
+    {
+        QBuffer buf(&msg);
+        QVERIFY(buf.open(QIODevice::WriteOnly));
+        QDebug debug(&buf);
+        debug << httpPart;
+    }
+
+    for (const auto &value : expected_header_values)
+        QVERIFY2(msg.contains(value), "Missing header value: " + value);
 }
 
 void tst_QNetworkReply::qtbug68821proxyError_data()
@@ -10416,6 +10644,7 @@ void tst_QNetworkReply::qtbug68821proxyError()
     QCOMPARE(spy.count(), 1);
     QCOMPARE(spy.at(0).at(0), error);
 }
+#endif
 
 void tst_QNetworkReply::abortAndError()
 {

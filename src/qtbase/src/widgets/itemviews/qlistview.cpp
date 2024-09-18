@@ -352,7 +352,7 @@ int QListView::spacing() const
 /*!
     \property QListView::batchSize
     \brief the number of items laid out in each batch if \l layoutMode is
-    set to \l Batched
+    set to \l Batched.
 
     The default value is 100.
 
@@ -918,9 +918,10 @@ void QListView::dropEvent(QDropEvent *event)
                     // only generate a move when not same row or behind itself
                     if (r != pIndex.row() && r != pIndex.row() + 1) {
                         // try to move (preserves selection)
-                        dataMoved |= model()->moveRow(QModelIndex(), pIndex.row(), QModelIndex(), r);
-                        if (!dataMoved) // can't move - abort and let QAbstractItemView handle this
-                            break;
+                        const bool moved = model()->moveRow(QModelIndex(), pIndex.row(), QModelIndex(), r);
+                        if (!moved)
+                            continue; // maybe it'll work for other rows
+                        dataMoved = true; // success
                     } else {
                         // move onto itself is blocked, don't delete anything
                         dataMoved = true;

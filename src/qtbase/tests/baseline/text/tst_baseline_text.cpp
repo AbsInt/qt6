@@ -49,7 +49,7 @@ void tst_Text::loadTestFiles()
     for (const auto &htmlFile : htmlFiles) {
         QFileInfo fileInfo(htmlFile);
         QFile file(htmlFile);
-        file.open(QFile::ReadOnly);
+        QVERIFY(file.open(QFile::ReadOnly));
         QString html = QString::fromUtf8(file.readAll());
         QBaselineTest::newRow(fileInfo.baseName().toUtf8()) << html;
     }
@@ -103,17 +103,6 @@ void tst_Text::tst_differentScriptsBackgrounds()
 }
 
 
-#define main _realmain
-QTEST_MAIN(tst_Text)
-#undef main
-
-int main(int argc, char *argv[])
-{
-    // Avoid rendering variations caused by QHash randomization
-    QHashSeed::setDeterministicGlobalSeed();
-
-    QBaselineTest::handleCmdLineArgs(&argc, &argv);
-    return _realmain(argc, argv);
-}
+QBASELINETEST_MAIN(tst_Text)
 
 #include "tst_baseline_text.moc"

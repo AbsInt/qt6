@@ -14,7 +14,7 @@
 //
 // We mean it.
 
-#include <private/qtqmlcompilerexports_p.h>
+#include <qtqmlcompilerexports.h>
 
 #include "qqmljsmetatypes_p.h"
 #include "qdeferredpointer_p.h"
@@ -127,7 +127,7 @@ struct ContextualTypes;
 
 } // namespace QQmlJS
 
-class Q_QMLCOMPILER_PRIVATE_EXPORT QQmlJSScope
+class Q_QMLCOMPILER_EXPORT QQmlJSScope
 {
     friend QQmlSA::Element;
 
@@ -240,6 +240,7 @@ public:
 
     bool hasEnumeration(const QString &name) const;
     bool hasEnumerationKey(const QString &name) const;
+    bool hasOwnEnumerationKey(const QString &name) const;
     QQmlJSMetaEnum enumeration(const QString &name) const;
     QHash<QString, QQmlJSMetaEnum> enumerations() const;
 
@@ -259,6 +260,9 @@ public:
     static QString prettyName(QAnyStringView name);
 
     bool isComponentRootElement() const;
+
+    void setAliases(const QStringList &aliases) { m_aliases = aliases; }
+    QStringList aliases() const { return m_aliases; }
 
     void setInterfaceNames(const QStringList& interfaces) { m_interfaceNames = interfaces; }
     QStringList interfaceNames() const { return m_interfaceNames; }
@@ -281,8 +285,9 @@ public:
     QQmlJSScope::ConstPtr baseType() const { return m_baseType.scope; }
     QTypeRevision baseTypeRevision() const { return m_baseType.revision; }
 
-    QString moduleName() const { return m_moduleName; }
-    void setModuleName(const QString &moduleName) { m_moduleName = moduleName; }
+    QString moduleName() const;
+    QString ownModuleName() const { return m_moduleName; }
+    void setOwnModuleName(const QString &moduleName) { m_moduleName = moduleName; }
 
     void clearBaseType() { m_baseType = {}; }
     void setBaseTypeError(const QString &baseTypeError);
@@ -514,6 +519,7 @@ private:
     ImportedScope<QQmlJSScope::WeakConstPtr> m_baseType;
 
     ScopeType m_scopeType = ScopeType::QMLScope;
+    QStringList m_aliases;
     QStringList m_interfaceNames;
     QStringList m_ownDeferredNames;
     QStringList m_ownImmediateNames;
@@ -632,14 +638,16 @@ inline QQmlJSScope::ConstPtr QQmlJSScope::nonCompositeBaseType(const ConstPtr &t
 Q_DECLARE_TYPEINFO(QQmlJSScope::QmlIRCompatibilityBindingData, Q_RELOCATABLE_TYPE);
 
 template<>
-class Q_QMLCOMPILER_PRIVATE_EXPORT QDeferredFactory<QQmlJSScope>
+class Q_QMLCOMPILER_EXPORT QDeferredFactory<QQmlJSScope>
 {
 public:
+    using TypeReader = std::function<QList<QQmlJS::DiagnosticMessage>(
+            QQmlJSImporter *importer, const QString &filePath,
+            const QSharedPointer<QQmlJSScope> &scopeToPopulate)>;
     QDeferredFactory() = default;
 
-    QDeferredFactory(QQmlJSImporter *importer, const QString &filePath) :
-        m_filePath(filePath), m_importer(importer)
-    {}
+    QDeferredFactory(QQmlJSImporter *importer, const QString &filePath,
+                     const TypeReader &typeReader = {});
 
     bool isValid() const
     {
@@ -650,6 +658,10 @@ public:
     {
         return QFileInfo(m_filePath).baseName();
     }
+
+    QString filePath() const { return m_filePath; }
+
+    QQmlJSImporter* importer() const { return m_importer; }
 
     void setIsSingleton(bool isSingleton)
     {
@@ -671,6 +683,7 @@ private:
     QQmlJSImporter *m_importer = nullptr;
     bool m_isSingleton = false;
     QString m_moduleName;
+    TypeReader m_typeReader;
 };
 
 using QQmlJSExportedScope = QQmlJSScope::ExportedScope<QQmlJSScope::Ptr>;

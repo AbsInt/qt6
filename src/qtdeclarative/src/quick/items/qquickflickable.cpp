@@ -265,7 +265,7 @@ void QQuickFlickablePrivate::init()
     q->setFlag(QQuickItem::ItemIsViewport);
     QQuickItemPrivate *viewportPrivate = QQuickItemPrivate::get(contentItem);
     viewportPrivate->addItemChangeListener(this, QQuickItemPrivate::Geometry);
-    setSizePolicy(QLayoutPolicy::Preferred, QLayoutPolicy::Preferred);
+    setSizePolicy(QLayoutPolicy::Expanding, QLayoutPolicy::Expanding);
 }
 
 /*!
@@ -629,7 +629,7 @@ void QQuickFlickablePrivate::updateBeginningEnd()
 
 /*!
     \qmltype Flickable
-    \instantiates QQuickFlickable
+    \nativetype QQuickFlickable
     \inqmlmodule QtQuick
     \ingroup qtquick-input
     \ingroup qtquick-containers

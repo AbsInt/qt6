@@ -43,6 +43,7 @@
 #include <private/qlocale_p.h>
 #include <private/qlocking_p.h>
 #include <private/qhooks_p.h>
+#include <private/qnativeinterface_p.h>
 
 #if QT_CONFIG(permissions)
 #include <private/qpermissions_p.h>
@@ -110,6 +111,10 @@
 #include <string>
 
 QT_BEGIN_NAMESPACE
+
+#ifndef QT_NO_QOBJECT
+Q_LOGGING_CATEGORY(lcDeleteLater, "qt.core.qobject.deletelater")
+#endif
 
 using namespace Qt::StringLiterals;
 
@@ -237,7 +242,11 @@ void QCoreApplicationPrivate::processCommandLineArguments()
 
 // Support for introspection
 
-extern "C" void Q_DECL_EXPORT_OVERRIDABLE qt_startup_hook()
+extern "C" void
+#ifdef QT_SHARED
+Q_DECL_EXPORT_OVERRIDABLE
+#endif
+qt_startup_hook()
 {
 }
 
@@ -517,6 +526,7 @@ void QCoreApplicationPrivate::eventDispatcherReady()
 }
 
 Q_CONSTINIT QBasicAtomicPointer<QThread> QCoreApplicationPrivate::theMainThread = Q_BASIC_ATOMIC_INITIALIZER(nullptr);
+Q_CONSTINIT QBasicAtomicPointer<void> QCoreApplicationPrivate::theMainThreadId = Q_BASIC_ATOMIC_INITIALIZER(nullptr);
 QThread *QCoreApplicationPrivate::mainThread()
 {
     Q_ASSERT(theMainThread.loadRelaxed() != nullptr);
@@ -1028,7 +1038,6 @@ bool QCoreApplication::isSetuidAllowed()
     return QCoreApplicationPrivate::setuidAllowed;
 }
 
-
 /*!
     Sets the attribute \a attribute if \a on is true;
     otherwise clears the attribute.
@@ -1041,6 +1050,10 @@ bool QCoreApplication::isSetuidAllowed()
 */
 void QCoreApplication::setAttribute(Qt::ApplicationAttribute attribute, bool on)
 {
+    // Since we bit-shift these values, we can't go higher than 32 on 32 bit operating systems
+    // without changing the storage type of QCoreApplicationPrivate::attribs to quint64.
+    static_assert(Qt::AA_AttributeCount <= sizeof(QCoreApplicationPrivate::attribs) * CHAR_BIT);
+
     if (on)
         QCoreApplicationPrivate::attribs |= 1 << attribute;
     else
@@ -1378,7 +1391,8 @@ bool QCoreApplication::closingDown()
 
     \threadsafe
 
-    \sa exec(), QTimer, QEventLoop::processEvents(), sendPostedEvents()
+    \sa exec(), QTimer, QChronoTimer, QEventLoop::processEvents(),
+    sendPostedEvents()
 */
 void QCoreApplication::processEvents(QEventLoop::ProcessEventsFlags flags)
 {
@@ -1427,7 +1441,7 @@ void QCoreApplication::processEvents(QEventLoop::ProcessEventsFlags flags, int m
 
     \threadsafe
 
-    \sa exec(), QTimer, QEventLoop::processEvents()
+    \sa exec(), QTimer, QChronoTimer, QEventLoop::processEvents()
 */
 void QCoreApplication::processEvents(QEventLoop::ProcessEventsFlags flags, QDeadlineTimer deadline)
 {
@@ -1457,10 +1471,10 @@ void QCoreApplication::processEvents(QEventLoop::ProcessEventsFlags flags, QDead
     main event loop receives events from the window system and
     dispatches these to the application widgets.
 
-    To make your application perform idle processing (by executing a
-    special function whenever there are no pending events), use a
-    QTimer with 0 timeout. More advanced idle processing schemes can
-    be achieved using processEvents().
+    To make your application perform idle processing (by executing a special
+    function whenever there are no pending events), use a QChronoTimer
+    with 0ns timeout. More advanced idle processing schemes can be achieved
+    using processEvents().
 
     We recommend that you connect clean-up code to the
     \l{QCoreApplication::}{aboutToQuit()} signal, instead of putting it in
@@ -1512,6 +1526,8 @@ void QCoreApplicationPrivate::execCleanup()
 {
     threadData.loadRelaxed()->quitNow = false;
     in_exec = false;
+
+    qCDebug(lcDeleteLater) << "Sending deferred delete events as part of exec cleanup";
     QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
 }
 
@@ -1695,31 +1711,6 @@ void QCoreApplication::postEvent(QObject *receiver, QEvent *event, int priority)
         return;
     }
 
-    if (event->type() == QEvent::DeferredDelete && data == QThreadData::current()) {
-        // remember the current running eventloop for DeferredDelete
-        // events posted in the receiver's thread.
-
-        // Events sent by non-Qt event handlers (such as glib) may not
-        // have the scopeLevel set correctly. The scope level makes sure that
-        // code like this:
-        //     foo->deleteLater();
-        //     qApp->processEvents(); // without passing QEvent::DeferredDelete
-        // will not cause "foo" to be deleted before returning to the event loop.
-
-        // If the scope level is 0 while loopLevel != 0, we are called from a
-        // non-conformant code path, and our best guess is that the scope level
-        // should be 1. (Loop level 0 is special: it means that no event loops
-        // are running.)
-        int loopLevel = data->loopLevel;
-        int scopeLevel = data->scopeLevel;
-        if (scopeLevel == 0 && loopLevel != 0)
-            scopeLevel = 1;
-
-        QDeferredDeleteEvent *deleteEvent = static_cast<QDeferredDeleteEvent *>(event);
-        deleteEvent->m_loopLevel = loopLevel;
-        deleteEvent->m_scopeLevel = scopeLevel;
-    }
-
     // delete the event on exceptions to protect against memory leaks till the event is
     // properly owned in the postEventList
     std::unique_ptr<QEvent> eventDeleter(event);
@@ -1900,16 +1891,37 @@ void QCoreApplicationPrivate::sendPostedEvents(QObject *receiver, int event_type
             //    events posted by the current event loop; or
             // 3) if the event was posted before the outermost event loop.
 
-            const int eventLoopLevel = static_cast<QDeferredDeleteEvent *>(pe.event)->loopLevel();
-            const int eventScopeLevel = static_cast<QDeferredDeleteEvent *>(pe.event)->scopeLevel();
+            const auto *event = static_cast<QDeferredDeleteEvent *>(pe.event);
+            qCDebug(lcDeleteLater) << "Processing deferred delete event for" << pe.receiver
+                << "with loop level" << event->loopLevel() << "and scope level" << event->scopeLevel();
 
-            const bool postedBeforeOutermostLoop = eventLoopLevel == 0;
-            const bool allowDeferredDelete =
-                (eventLoopLevel + eventScopeLevel > data->loopLevel + data->scopeLevel
-                 || (postedBeforeOutermostLoop && data->loopLevel > 0)
-                 || (event_type == QEvent::DeferredDelete
-                     && eventLoopLevel + eventScopeLevel == data->loopLevel + data->scopeLevel));
+            qCDebug(lcDeleteLater) << "Checking" << data->thread << "with loop level"
+                << data->loopLevel << "and scope level" << data->scopeLevel;
+
+            bool allowDeferredDelete = false;
+            if (event->loopLevel() == 0 && data->loopLevel > 0) {
+                qCDebug(lcDeleteLater) << "Event was posted outside outermost event loop"
+                    << "and current thread has an event loop running.";
+                allowDeferredDelete = true;
+            } else {
+                const int totalEventLevel = event->loopLevel() + event->scopeLevel();
+                const int totalThreadLevel = data->loopLevel + data->scopeLevel;
+
+                if (totalEventLevel > totalThreadLevel) {
+                    qCDebug(lcDeleteLater) << "Combined levels of event" << totalEventLevel
+                        << "is higher than thread" << totalThreadLevel;
+                    allowDeferredDelete = true;
+                } else if (event_type == QEvent::DeferredDelete && totalEventLevel == totalThreadLevel) {
+                    qCDebug(lcDeleteLater) << "Explicit send of DeferredDelete and"
+                        << "levels of event" << totalEventLevel
+                        << "is same as thread" << totalThreadLevel;
+                    allowDeferredDelete = true;
+                }
+            }
+
             if (!allowDeferredDelete) {
+                qCDebug(lcDeleteLater) << "Failed conditions for deferred delete. Deferring again";
+
                 // cannot send deferred delete
                 if (!event_type && !receiver) {
                     // we must copy it first; we want to re-post the event
@@ -1926,6 +1938,8 @@ void QCoreApplicationPrivate::sendPostedEvents(QObject *receiver, int event_type
                     data->postEventList.addEvent(pe_copy);
                 }
                 continue;
+            } else {
+                qCDebug(lcDeleteLater) << "Sending deferred delete to" << pe.receiver;
             }
         }
 
@@ -2223,7 +2237,7 @@ void QCoreApplicationPrivate::quit()
     to all toplevel widgets, where a reimplementation of changeEvent can
     re-translate the user interface by passing user-visible strings via the
     tr() function to the respective property setters. User-interface classes
-    generated by Qt Designer provide a \c retranslateUi() function that can be
+    generated by \QD provide a \c retranslateUi() function that can be
     called.
 
     The function returns \c true on success and false on failure.
@@ -2508,7 +2522,7 @@ QString QCoreApplication::applicationFilePath()
 
     if (d->argc) {
         static QByteArray procName = QByteArray(d->argv[0]);
-        if (procName != d->argv[0]) {
+        if (procName != QByteArrayView(d->argv[0])) {
             // clear the cache if the procname changes, so we reprocess it.
             QCoreApplicationPrivate::clearApplicationFilePath();
             procName.assign(d->argv[0]);
@@ -3393,6 +3407,16 @@ void QCoreApplication::setEventDispatcher(QAbstractEventDispatcher *eventDispatc
 
 void *QCoreApplication::resolveInterface(const char *name, int revision) const
 {
+#if defined(Q_OS_ANDROID)
+    // The QAndroidApplication is wrongly using static methods for
+    // its native interface (QTBUG-128796). Until we fix that we at
+    // least want the preferred way of resolving a native interface
+    // to work, so provide a minimal subclass of the interface.
+    using namespace QNativeInterface;
+    struct AndroidApplication : public QAndroidApplication {};
+    static AndroidApplication androidApplication;
+    QT_NATIVE_INTERFACE_RETURN_IF(QAndroidApplication, &androidApplication);
+#endif
     Q_UNUSED(name); Q_UNUSED(revision);
     return nullptr;
 }

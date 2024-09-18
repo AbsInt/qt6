@@ -179,6 +179,7 @@ public:
     ~QThreadPrivate();
 
     void setPriority(QThread::Priority prio);
+    Qt::HANDLE threadId() const noexcept;
 
     mutable QMutex mutex;
     QAtomicInt quitLockRef;
@@ -337,11 +338,8 @@ class QScopedScopeLevelCounter
 {
     QThreadData *threadData;
 public:
-    inline QScopedScopeLevelCounter(QThreadData *threadData)
-        : threadData(threadData)
-    { ++threadData->scopeLevel; }
-    inline ~QScopedScopeLevelCounter()
-    { --threadData->scopeLevel; }
+    QScopedScopeLevelCounter(QThreadData *threadData);
+    ~QScopedScopeLevelCounter();
 };
 
 // thread wrapper for the main() thread

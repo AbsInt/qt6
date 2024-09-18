@@ -60,6 +60,7 @@ void tst_focus::init()
 void tst_focus::initTestCase()
 {
     SKIP_IF_NO_WINDOW_ACTIVATION
+    QCoreApplication::setAttribute(Qt::AA_DontUseNativeMenuWindows);
     QQuickStyle::setStyle("Basic");
     QQmlDataTest::initTestCase();
 }
@@ -206,6 +207,7 @@ void tst_focus::policy()
     control->setFocus(false);
     QVERIFY(!control->hasActiveFocus());
 
+#if QT_CONFIG(wheelevent)
     // Qt::WheelFocus
     QWheelEvent wheelEvent(QPointF(control->width() / 2, control->height() / 2), QPointF(),
                            QPoint(), QPoint(0, 10), Qt::NoButton, Qt::NoModifier,
@@ -220,6 +222,7 @@ void tst_focus::policy()
     QGuiApplication::sendEvent(control, &wheelEvent);
     QVERIFY(control->hasActiveFocus());
     QVERIFY(!control->hasVisualFocus());
+#endif
 }
 
 void tst_focus::reason()
@@ -430,6 +433,7 @@ void tst_focus::reason()
     QCOMPARE(customItemSpy.count(),++customItemSpyCount);
     customText->setFocusReason(Qt::NoFocusReason);
 
+#if QT_CONFIG(wheelevent)
     // Wheel focus -> MouseFocusReason
     QWheelEvent wheelEvent(QPointF(customItem->width() / 2, customItem->height() / 2), QPointF(),
                            QPoint(), QPoint(0, 10), Qt::NoButton, Qt::NoModifier,
@@ -445,6 +449,7 @@ void tst_focus::reason()
     QCOMPARE(customItem->focusReason(), Qt::PopupFocusReason);
     QCOMPARE(customItemSpy.count(),++customItemSpyCount);
     QTest::keyClick(&view, Qt::Key_Escape); // close the popup
+#endif
 }
 
 void tst_focus::visualFocus()
@@ -538,6 +543,7 @@ void tst_focus::scope()
     QVERIFY(child->hasActiveFocus());
     QVERIFY(control->hasActiveFocus());
 
+#if QT_CONFIG(wheelevent)
     // Qt::WheelFocus
     QWheelEvent wheelEvent(QPointF(control->width() / 2, control->height() / 2), QPointF(),
                            QPoint(), QPoint(0, 10), Qt::NoButton, Qt::NoModifier,
@@ -545,6 +551,7 @@ void tst_focus::scope()
     QGuiApplication::sendEvent(control, &wheelEvent);
     QVERIFY(!child->hasActiveFocus());
     QVERIFY(control->hasActiveFocus());
+#endif
 }
 
 QTEST_MAIN(tst_focus)

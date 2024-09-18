@@ -65,7 +65,7 @@ depends += \
     ../../qmllocalstorage \
     ../../quicklayouts \
     ../../labs \
-    ../../quick/jar/org/qtproject/qt/android \
+    ../../quick/platform/android/jar/src/org/qtproject/qt/android \
     ../../../examples/platforms
 
 # both have their own documentation project
@@ -87,7 +87,8 @@ imagedirs += images
 {headerdirs,sourcedirs} += \
     ../../particles \
     ../../quickshapes \
-    ../../effects
+    ../../effects \
+    ../../quickvectorimage
 
 # Add imports and plugins directories because of dependencies
 {headerdirs,sourcedirs} += \

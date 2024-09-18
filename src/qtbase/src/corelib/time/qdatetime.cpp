@@ -130,7 +130,7 @@ ParsedInt readInt(QStringView text)
 struct ParsedRfcDateTime {
     QDate date;
     QTime time;
-    int utcOffset;
+    int utcOffset = 0;
 };
 
 static int shortDayFromName(QStringView name)
@@ -3256,7 +3256,7 @@ static void checkValidDateTime(QDateTimeData &d, QDateTime::TransitionResolution
     }
 }
 
-static void reviseTimeZone(QDateTimeData &d, QTimeZone zone,
+static void reviseTimeZone(QDateTimeData &d, const QTimeZone &zone,
                            QDateTime::TransitionResolution resolve)
 {
     Qt::TimeSpec spec = zone.timeSpec();
@@ -5605,7 +5605,6 @@ QDateTime QDateTime::fromSecsSinceEpoch(qint64 secs, Qt::TimeSpec spec, int offs
 
 /*!
     \since 5.2
-    \overload
 
     Returns a datetime representing a moment the given number \a msecs of
     milliseconds after the start, in UTC, of the year 1970, described as
@@ -5627,7 +5626,6 @@ QDateTime QDateTime::fromMSecsSinceEpoch(qint64 msecs, const QTimeZone &timeZone
 }
 
 /*!
-    \since 6.5
     \overload
 */
 QDateTime QDateTime::fromMSecsSinceEpoch(qint64 msecs)
@@ -5637,7 +5635,6 @@ QDateTime QDateTime::fromMSecsSinceEpoch(qint64 msecs)
 
 /*!
     \since 5.8
-    \overload
 
     Returns a datetime representing a moment the given number \a secs of seconds
     after the start, in UTC, of the year 1970, described as specified by \a
@@ -5659,7 +5656,6 @@ QDateTime QDateTime::fromSecsSinceEpoch(qint64 secs, const QTimeZone &timeZone)
 }
 
 /*!
-    \since 6.5
     \overload
 */
 QDateTime QDateTime::fromSecsSinceEpoch(qint64 secs)

@@ -87,6 +87,8 @@ installPackages+=(gstreamer1.0-plugins-ugly)
 installPackages+=(libgstreamer-gl1.0-0)
 installPackages+=(gir1.2-gst-plugins-base-1.0)
 installPackages+=(gir1.2-gst-plugins-bad-1.0)
+installPackages+=(libpipewire-0.3-dev)
+installPackages+=(libspa-0.2-dev)
 
 ## Support for cross-building to x86 (needed by WebEngine boot2qt builds)
 #installPackages+=(g++-multilib)
@@ -256,6 +258,8 @@ sudo DEBIAN_FRONTEND=noninteractive apt-get -q -y install cmake apt-cacher-ng -t
 
 # Disable keyring password prompt
 keyring --disable
+
+pip install --user -r "${BASH_SOURCE%/*}/../common/shared/sbom_requirements.txt"
 
 # SetEnvVar "PATH" "/usr/lib/nodejs-mozilla/bin:\$PATH"
 

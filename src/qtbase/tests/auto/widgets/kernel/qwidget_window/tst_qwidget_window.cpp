@@ -691,7 +691,6 @@ void tst_QWidget_window::tst_dnd()
 
     dndTestWidget.show();
     QVERIFY(QTest::qWaitForWindowExposed(&dndTestWidget));
-    QApplicationPrivate::setActiveWindow(&dndTestWidget);
     QVERIFY(QTest::qWaitForWindowActive(&dndTestWidget));
 
     QMimeData mimeData;
@@ -1635,8 +1634,7 @@ void tst_QWidget_window::mouseMoveWithPopup()
 
     // but the release event will still be delivered to the first popup - dialogs might not get it
     QCOMPARE(mouseAction(Qt::LeftButton), QEvent::MouseButtonRelease);
-    if (topLevel.popup->mouseReleaseCount != 1
-        && !QGuiApplication::platformName().startsWith(QLatin1String("windows"), Qt::CaseInsensitive))
+    if (topLevel.popup->mouseReleaseCount != 1)
         QEXPECT_FAIL("Dialog", "Platform specific behavior", Continue);
     QCOMPARE(topLevel.popup->mouseReleaseCount, 1);
 }

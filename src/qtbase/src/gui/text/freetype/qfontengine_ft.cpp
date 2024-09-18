@@ -190,10 +190,15 @@ int QFreetypeFace::getPointInOutline(glyph_t glyph, int flags, quint32 point, QF
     return Err_Ok;
 }
 
+bool QFreetypeFace::isScalable() const
+{
+    return FT_IS_SCALABLE(face);
+}
+
 bool QFreetypeFace::isScalableBitmap() const
 {
 #ifdef FT_HAS_COLOR
-    return !FT_IS_SCALABLE(face) && FT_HAS_COLOR(face);
+    return !isScalable() && FT_HAS_COLOR(face);
 #else
     return false;
 #endif
@@ -415,12 +420,12 @@ static int computeFaceIndex(const QString &faceFileName, const QString &styleNam
             break;
         }
 
-        QString faceStyleName = QString::fromLatin1(face->style_name);
+        const bool found = QLatin1StringView(face->style_name) == styleName;
         numFaces = face->num_faces;
 
         FT_Done_Face(face);
 
-        if (faceStyleName == styleName)
+        if (found)
             return faceIndex;
     } while (++faceIndex < numFaces);
 
@@ -1592,7 +1597,7 @@ void QFontEngineFT::getUnscaledGlyph(glyph_t glyph, QPainterPath *path, glyph_me
 
 bool QFontEngineFT::supportsTransformation(const QTransform &transform) const
 {
-    return transform.type() <= QTransform::TxRotate;
+    return transform.type() <= QTransform::TxRotate && (freetype->isScalable() || freetype->isScalableBitmap());
 }
 
 void QFontEngineFT::addOutlineToPath(qreal x, qreal y, const QGlyphLayout &glyphs, QPainterPath *path, QTextItem::RenderFlags flags)
@@ -1673,15 +1678,16 @@ glyph_t QFontEngineFT::glyphIndex(uint ucs4) const
     return glyph;
 }
 
-bool QFontEngineFT::stringToCMap(const QChar *str, int len, QGlyphLayout *glyphs, int *nglyphs,
+int QFontEngineFT::stringToCMap(const QChar *str, int len, QGlyphLayout *glyphs, int *nglyphs,
                                  QFontEngine::ShaperFlags flags) const
 {
     Q_ASSERT(glyphs->numGlyphs >= *nglyphs);
     if (*nglyphs < len) {
         *nglyphs = len;
-        return false;
+        return -1;
     }
 
+    int mappedGlyphs = 0;
     int glyph_pos = 0;
     if (freetype->symbol_map) {
         FT_Face face = freetype->face;
@@ -1714,6 +1720,8 @@ bool QFontEngineFT::stringToCMap(const QChar *str, int len, QGlyphLayout *glyphs
                 if (uc < QFreetypeFace::cmapCacheSize)
                     freetype->cmapCache[uc] = glyph;
             }
+            if (glyphs->glyphs[glyph_pos] || isIgnorableChar(uc))
+                mappedGlyphs++;
             ++glyph_pos;
         }
     } else {
@@ -1735,6 +1743,8 @@ bool QFontEngineFT::stringToCMap(const QChar *str, int len, QGlyphLayout *glyphs
                         freetype->cmapCache[uc] = glyph;
                 }
             }
+            if (glyphs->glyphs[glyph_pos] || isIgnorableChar(uc))
+                mappedGlyphs++;
             ++glyph_pos;
         }
     }
@@ -1745,7 +1755,7 @@ bool QFontEngineFT::stringToCMap(const QChar *str, int len, QGlyphLayout *glyphs
     if (!(flags & GlyphIndicesOnly))
         recalcAdvances(glyphs, flags);
 
-    return true;
+    return mappedGlyphs;
 }
 
 bool QFontEngineFT::shouldUseDesignMetrics(QFontEngine::ShaperFlags flags) const

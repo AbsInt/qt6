@@ -26,6 +26,9 @@ qt_find_package(WrapSystemDoubleConversion
                 PROVIDED_TARGETS WrapSystemDoubleConversion::WrapSystemDoubleConversion
                 MODULE_NAME core QMAKE_LIB doubleconversion)
 qt_find_package(GLIB2 PROVIDED_TARGETS GLIB2::GLIB2 MODULE_NAME core QMAKE_LIB glib)
+qt_find_package_extend_sbom(TARGETS GLIB2::GLIB2
+    LICENSE_EXPRESSION "LGPL-2.1-or-later"
+)
 qt_find_package(ICU 50.1 COMPONENTS i18n uc data PROVIDED_TARGETS ICU::i18n ICU::uc ICU::data
     MODULE_NAME core QMAKE_LIB icu)
 
@@ -35,6 +38,9 @@ endif()
 qt_find_package(Libsystemd PROVIDED_TARGETS PkgConfig::Libsystemd MODULE_NAME core QMAKE_LIB journald)
 qt_find_package(WrapAtomic PROVIDED_TARGETS WrapAtomic::WrapAtomic MODULE_NAME core QMAKE_LIB libatomic)
 qt_find_package(Libb2 PROVIDED_TARGETS Libb2::Libb2 MODULE_NAME core QMAKE_LIB libb2)
+qt_find_package_extend_sbom(TARGETS Libb2::Libb2
+    LICENSE_EXPRESSION "CC0-1.0"
+)
 qt_find_package(WrapRt PROVIDED_TARGETS WrapRt::WrapRt MODULE_NAME core QMAKE_LIB librt)
 qt_find_package(WrapSystemPCRE2 10.20 PROVIDED_TARGETS WrapSystemPCRE2::WrapSystemPCRE2 MODULE_NAME core QMAKE_LIB pcre2)
 set_package_properties(WrapPCRE2 PROPERTIES TYPE REQUIRED)
@@ -324,6 +330,37 @@ linkat(AT_FDCWD, \"foo\", AT_FDCWD, \"bar\", AT_SYMLINK_FOLLOW);
 }
 ")
 
+# memmem
+qt_config_compile_test(memmem
+    LABEL "memmem()"
+    CODE
+#define _APPLE_SAUCE 1  /* Apple doesn't require anything */
+"#define _BSD_SOURCE 1   /* For FreeBSD */
+#define _GNU_SOURCE 1   /* For glibc, Bionic */
+#include <string.h>
+
+int main(void)
+{
+    const void *r = memmem(\"abc\", 3, \"bc\", 2);
+    (void)r;
+    return 0;
+}")
+
+# memrchr
+qt_config_compile_test(memrchr
+    LABEL "memrchr()"
+    CODE
+"#define _BSD_SOURCE 1   /* For FreeBSD */
+#define _GNU_SOURCE 1   /* For glibc, Bionic */
+#include <string.h>
+
+int main(void)
+{
+    const void *r = memrchr(\"abc\", 'a', 3);
+    (void)r;
+    return 0;
+}")
+
 # ppoll
 qt_config_compile_test(ppoll
     LABEL "ppoll()"
@@ -410,6 +447,25 @@ int main(void)
     return 0;
 }
 ")
+
+# <stacktrace>
+qt_config_compile_test(cxx23_stacktrace
+    LABEL "C++23 <stacktrace> support"
+    CODE
+"#include <stacktrace>
+#if !defined(__cpp_lib_stacktrace)
+#error
+#endif
+
+int main(void)
+{
+    /* BEGIN TEST: */
+const auto backtrace = std::stacktrace::current();
+    /* END TEST: */
+}
+"
+    CXX_STANDARD 23
+)
 
 # <future>
 qt_config_compile_test(cxx_std_async_noncopyable
@@ -535,6 +591,14 @@ qt_feature("std-atomic64" PUBLIC
     LABEL "64 bit atomic operations"
     CONDITION WrapAtomic_FOUND
 )
+qt_feature("memmem" PRIVATE
+    LABEL "C library function memmem()"
+    CONDITION TEST_memmem
+)
+qt_feature("memrchr" PRIVATE
+    LABEL "C library function memrchr()"
+    CONDITION TEST_memrchr
+)
 qt_feature("mimetype" PUBLIC
     SECTION "Utilities"
     LABEL "Mimetype handling"
@@ -580,7 +644,7 @@ qt_feature("poll_select" PRIVATE
 qt_feature_definition("poll_select" "QT_NO_NATIVE_POLL")
 qt_feature("posix_sem" PRIVATE
     LABEL "POSIX semaphores"
-    CONDITION TEST_posix_sem
+    CONDITION TEST_posix_sem AND QT_FEATURE_systemsemaphore
 )
 qt_feature("posix_shm" PRIVATE
     LABEL "POSIX shared memory"
@@ -605,7 +669,7 @@ qt_feature("syslog" PRIVATE
 )
 qt_feature("sysv_sem" PRIVATE
     LABEL "System V / XSI semaphores"
-    CONDITION TEST_sysv_sem
+    CONDITION TEST_sysv_sem AND QT_FEATURE_systemsemaphore
 )
 qt_feature("sysv_shm" PRIVATE
     LABEL "System V / XSI shared memory"
@@ -627,6 +691,10 @@ qt_feature_definition("regularexpression" "QT_NO_REGULAREXPRESSION" NEGATE VALUE
 qt_feature("backtrace" PRIVATE
     LABEL "backtrace"
     CONDITION UNIX AND QT_FEATURE_regularexpression AND WrapBacktrace_FOUND
+)
+qt_feature("cxx23_stacktrace" PRIVATE
+    LABEL "C++23 <stacktrace>"
+    CONDITION TEST_cxx23_stacktrace AND QT_FEATURE_cxx2b
 )
 qt_feature("sharedmemory" PUBLIC
     SECTION "Kernel"
@@ -833,6 +901,13 @@ qt_feature("timezone" PUBLIC
     PURPOSE "Provides support for time-zone handling."
     CONDITION NOT WASM AND NOT VXWORKS
 )
+qt_feature("timezone_locale" PRIVATE
+    SECTION "Utilities"
+    LABEL "QTimeZone"
+    PURPOSE "Provides support for localized time-zone display names."
+    CONDITION
+        QT_FEATURE_timezone AND ( ( UNIX AND NOT APPLE AND NOT ANDROID ) OR QT_FEATURE_icu )
+)
 qt_feature("datetimeparser" PRIVATE
     SECTION "Utilities"
     LABEL "QDateTimeParser"
@@ -898,6 +973,7 @@ qt_feature("openssl-hash" PRIVATE
 
 qt_configure_add_summary_section(NAME "Qt Core")
 qt_configure_add_summary_entry(ARGS "backtrace")
+qt_configure_add_summary_entry(ARGS "cxx23_stacktrace")
 qt_configure_add_summary_entry(ARGS "doubleconversion")
 qt_configure_add_summary_entry(ARGS "system-doubleconversion")
 qt_configure_add_summary_entry(ARGS "forkfd_pidfd" CONDITION LINUX)

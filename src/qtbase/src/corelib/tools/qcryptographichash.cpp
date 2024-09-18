@@ -1166,13 +1166,49 @@ void QCryptographicHashPrivate::State::finalizeUnchecked(QCryptographicHash::Alg
 
   \note In Qt versions prior to 6.3, this function took QByteArray,
   not QByteArrayView.
+
+  \sa hashInto()
 */
 QByteArray QCryptographicHash::hash(QByteArrayView data, Algorithm method)
 {
+    QByteArray ba(hashLengthInternal(method), Qt::Uninitialized);
+    [[maybe_unused]] const auto r = hashInto(ba, data, method);
+    Q_ASSERT(r.size() == ba.size());
+    return ba;
+}
+
+/*!
+    \since 6.8
+    \fn QCryptographicHash::hashInto(QSpan<char> buffer, QSpan<const QByteArrayView> data, Algorithm method);
+    \fn QCryptographicHash::hashInto(QSpan<uchar> buffer, QSpan<const QByteArrayView> data, Algorithm method);
+    \fn QCryptographicHash::hashInto(QSpan<std::byte> buffer, QSpan<const QByteArrayView> data, Algorithm method);
+    \fn QCryptographicHash::hashInto(QSpan<char> buffer, QByteArrayView data, Algorithm method);
+    \fn QCryptographicHash::hashInto(QSpan<uchar> buffer, QByteArrayView data, Algorithm method);
+    \fn QCryptographicHash::hashInto(QSpan<std::byte> buffer, QByteArrayView data, Algorithm method);
+
+    Returns the hash of \a data using \a method, using \a buffer to store the result.
+
+    If \a data is a span, adds all the byte array views to the hash, in the order given.
+
+    The return value will be a sub-span of \a buffer, unless \a buffer is of
+    insufficient size, in which case a null QByteArrayView is returned.
+
+    \sa hash()
+*/
+QByteArrayView QCryptographicHash::hashInto(QSpan<std::byte> buffer,
+                                            QSpan<const QByteArrayView> data,
+                                            Algorithm method) noexcept
+{
     QCryptographicHashPrivate hash(method);
-    hash.addData(data);
+    for (QByteArrayView part : data)
+        hash.addData(part);
     hash.finalizeUnchecked(); // no mutex needed: no-one but us has access to 'hash'
-    return hash.resultView().toByteArray();
+    auto result = hash.resultView();
+    if (buffer.size() < result.size())
+        return {}; // buffer too small
+    // ### optimize: have the method directly write into `buffer`
+    memcpy(buffer.data(), result.data(), result.size());
+    return buffer.first(result.size());
 }
 
 /*!
@@ -1648,15 +1684,52 @@ void QMessageAuthenticationCodePrivate::finalizeUnchecked() noexcept
     the key \a key and the method \a method.
 
     \include qcryptographichash.cpp {qba-to-qbav-6.6}
+
+    \sa hashInto()
 */
 QByteArray QMessageAuthenticationCode::hash(QByteArrayView message, QByteArrayView key,
                                             QCryptographicHash::Algorithm method)
 {
+    QByteArray ba(hashLengthInternal(method), Qt::Uninitialized);
+    [[maybe_unused]] const auto r = hashInto(ba, message, key, method);
+    Q_ASSERT(r.size() == ba.size());
+    return ba;
+}
+
+/*!
+    \since 6.8
+    \fn QMessageAuthenticationCode::hashInto(QSpan<char> buffer, QSpan<const QByteArrayView> messageParts, QByteArrayView key, QCryptographicHash::Algorithm method);
+    \fn QMessageAuthenticationCode::hashInto(QSpan<uchar> buffer, QSpan<const QByteArrayView> messageParts, QByteArrayView key, QCryptographicHash::Algorithm method);
+    \fn QMessageAuthenticationCode::hashInto(QSpan<std::byte> buffer, QSpan<const QByteArrayView> messageParts, QByteArrayView key, QCryptographicHash::Algorithm method);
+    \fn QMessageAuthenticationCode::hashInto(QSpan<char> buffer, QByteArrayView message, QByteArrayView key, QCryptographicHash::Algorithm method);
+    \fn QMessageAuthenticationCode::hashInto(QSpan<uchar> buffer, QByteArrayView message, QByteArrayView key, QCryptographicHash::Algorithm method);
+    \fn QMessageAuthenticationCode::hashInto(QSpan<std::byte> buffer, QByteArrayView message, QByteArrayView key, QCryptographicHash::Algorithm method);
+
+    Returns the authentication code for the message (\a message or, for the
+    QSpan overloads, the concatenation of \a messageParts) using the key \a key
+    and the method \a method.
+
+    The return value will be a sub-span of \a buffer, unless \a buffer is of
+    insufficient size, in which case a null QByteArrayView is returned.
+
+    \sa hash()
+*/
+QByteArrayView QMessageAuthenticationCode::hashInto(QSpan<std::byte> buffer,
+                                                    QSpan<const QByteArrayView> messageParts,
+                                                    QByteArrayView key,
+                                                    QCryptographicHash::Algorithm method) noexcept
+{
     QMessageAuthenticationCodePrivate mac(method);
     mac.setKey(key);
-    mac.messageHash.addData(message);
+    for (QByteArrayView part : messageParts)
+        mac.messageHash.addData(part);
     mac.finalizeUnchecked();
-    return mac.messageHash.resultView().toByteArray();
+    auto result = mac.messageHash.resultView();
+    if (buffer.size() < result.size())
+        return {}; // buffer too small
+    // ### optimize: have the method directly write into `buffer`
+    memcpy(buffer.data(), result.data(), result.size());
+    return buffer.first(result.size());
 }
 
 QT_END_NAMESPACE

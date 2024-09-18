@@ -9,7 +9,6 @@
 #include "qfile.h"
 #include "qstringlist.h"
 #include "qdir.h"
-#include "private/qbytearray_p.h"
 #include "private/qtools_p.h"
 
 #include <algorithm>
@@ -89,9 +88,9 @@ static void checkWarnMessage(const QIODevice *device, const char *function, cons
 
 #define CHECK_MAXBYTEARRAYSIZE(function) \
     do { \
-        if (maxSize >= MaxByteArraySize) { \
+        if (maxSize >= QByteArray::maxSize()) { \
             checkWarnMessage(this, #function, "maxSize argument exceeds QByteArray size limit"); \
-            maxSize = MaxByteArraySize - 1; \
+            maxSize = QByteArray::maxSize() - 1; \
         } \
     } while (0)
 
@@ -1243,7 +1242,7 @@ QByteArray QIODevice::readAll()
                                                       : d->buffer.size());
         qint64 readResult;
         do {
-            if (readBytes + readChunkSize >= MaxByteArraySize) {
+            if (readBytes + readChunkSize >= QByteArray::maxSize()) {
                 // If resize would fail, don't read more, return what we have.
                 break;
             }
@@ -1257,8 +1256,8 @@ QByteArray QIODevice::readAll()
     } else {
         // Read it all in one go.
         readBytes -= d->pos;
-        if (readBytes >= MaxByteArraySize)
-            readBytes = MaxByteArraySize;
+        if (readBytes >= QByteArray::maxSize())
+            readBytes = QByteArray::maxSize();
         result.resize(readBytes);
         readBytes = d->read(result.data(), readBytes);
     }
@@ -1431,6 +1430,12 @@ qint64 QIODevicePrivate::readLine(char *data, qint64 maxSize)
     Reads a line from the device, but no more than \a maxSize characters,
     and returns the result as a byte array.
 
+    If \a maxSize is 0 or not specified, the line can be of any length,
+    thereby enabling unlimited reading.
+
+    The resulting line can have trailing end-of-line characters ("\n" or "\r\n"),
+    so calling QByteArray::trimmed() may be necessary.
+
     This function has no way of reporting errors; returning an empty
     QByteArray can mean either that no data was currently available
     for reading, or that an error occurred.
@@ -1449,7 +1454,7 @@ QByteArray QIODevice::readLine(qint64 maxSize)
     qint64 readBytes = 0;
     if (maxSize == 0) {
         // Size is unknown, read incrementally.
-        maxSize = MaxByteArraySize - 1;
+        maxSize = QByteArray::maxSize() - 1;
 
         // The first iteration needs to leave an extra byte for the terminating null
         result.resize(1);

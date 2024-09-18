@@ -194,6 +194,7 @@ enum class DomType {
     ScriptBlockStatement = ScriptElementStart,
     ScriptIdentifierExpression,
     ScriptLiteral,
+    ScriptRegExpLiteral,
     ScriptForStatement,
     ScriptIfStatement,
     ScriptPostExpression,
@@ -219,6 +220,9 @@ enum class DomType {
     ScriptWhileStatement,
     ScriptDoWhileStatement,
     ScriptForEachStatement,
+    ScriptTemplateLiteral,
+    ScriptTemplateStringPart,
+    ScriptTaggedTemplate,
     ScriptTryCatchStatement,
     ScriptThrowStatement,
     ScriptLabelledStatement,
@@ -227,6 +231,12 @@ enum class DomType {
     ScriptConditionalExpression,
     ScriptEmptyStatement,
     ScriptParenthesizedExpression,
+    ScriptFunctionExpression,
+    ScriptYieldExpression,
+    ScriptNewExpression,
+    ScriptNewMemberExpression,
+    ScriptThisExpression,
+    ScriptSuperLiteral,
 
     ScriptElementStop, // marker to check if a DomType is a scriptelement or not
 };
@@ -248,14 +258,6 @@ enum class ListOptions {
     Reverse
 };
 Q_ENUM_NS(ListOptions)
-
-enum class LoadOption {
-    DefaultLoad = 0x0,
-    ForceLoad = 0x1,
-};
-Q_ENUM_NS(LoadOption)
-Q_DECLARE_FLAGS(LoadOptions, LoadOption)
-Q_DECLARE_OPERATORS_FOR_FLAGS(LoadOptions)
 
 enum class EscapeOptions{
     OuterQuotes,
@@ -362,6 +364,7 @@ enum FileLocationRegion : int {
     EllipsisTokenRegion,
     ElseKeywordRegion,
     EnumKeywordRegion,
+    EnumValueRegion,
     EqualTokenRegion,
     ForKeywordRegion,
     FinallyKeywordRegion,
@@ -371,6 +374,7 @@ enum FileLocationRegion : int {
     IdNameRegion,
     IdTokenRegion,
     IdentifierRegion,
+    IfKeywordRegion,
     ImportTokenRegion,
     ImportUriRegion,
     InOfTokenRegion,
@@ -378,6 +382,7 @@ enum FileLocationRegion : int {
     LeftBracketRegion,
     LeftParenthesisRegion,
     MainRegion,
+    NewKeywordRegion,
     OperatorTokenRegion,
     OnTargetRegion,
     OnTokenRegion,
@@ -394,10 +399,17 @@ enum FileLocationRegion : int {
     SecondSemicolonRegion,
     SemicolonTokenRegion,
     SignalKeywordRegion,
+    SuperKeywordRegion,
+    StarTokenRegion,
+    SwitchKeywordRegion,
+    ThisKeywordRegion,
     ThrowKeywordRegion,
     TryKeywordRegion,
     TypeIdentifierRegion,
+    TypeModifierRegion,
+    VersionRegion,
     WhileKeywordRegion,
+    YieldKeywordRegion,
 };
 Q_ENUM_NS(FileLocationRegion);
 

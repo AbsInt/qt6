@@ -33,13 +33,10 @@ import android.widget.PopupMenu;
 
 import java.util.HashMap;
 
-import org.qtproject.qt.android.accessibility.QtAccessibilityDelegate;
-
 abstract class QtActivityDelegateBase
 {
     protected Activity m_activity;
     protected HashMap<Integer, QtWindow> m_topLevelWindows;
-    protected QtAccessibilityDelegate m_accessibilityDelegate = null;
     protected QtDisplayManager m_displayManager = null;
     protected QtInputDelegate m_inputDelegate = null;
 
@@ -48,20 +45,12 @@ abstract class QtActivityDelegateBase
 
     // Subclass must implement these
     abstract void startNativeApplicationImpl(String appParams, String mainLib);
-    abstract QtAccessibilityDelegate createAccessibilityDelegate();
-    abstract QtLayout getQtLayout();
 
     // With these we are okay with default implementation doing nothing
     void setUpLayout() {}
     void setUpSplashScreen(int orientation) {}
     void hideSplashScreen(final int duration) {}
-    void openContextMenu(final int x, final int y, final int w, final int h) {}
     void setActionBarVisibility(boolean visible) {}
-    void addTopLevelWindow(final QtWindow window) {}
-    void removeTopLevelWindow(final int id) {}
-    void bringChildToFront(final int id) {}
-    void bringChildToBack(int id) {}
-    void setSystemUiVisibility(int systemUiVisibility) {}
 
     QtActivityDelegateBase(Activity activity)
     {
@@ -74,7 +63,6 @@ abstract class QtActivityDelegateBase
         return m_displayManager;
     }
 
-    @UsedFromNativeCode
     QtInputDelegate getInputDelegate() {
         return m_inputDelegate;
     }
@@ -89,7 +77,7 @@ abstract class QtActivityDelegateBase
         return m_contextMenuVisible;
     }
 
-    public void startNativeApplication(String appParams, String mainLib)
+    void startNativeApplication(String appParams, String mainLib)
     {
         if (m_membersInitialized)
             return;
@@ -120,65 +108,9 @@ abstract class QtActivityDelegateBase
         setUpLayout();
     }
 
-    public void hideSplashScreen()
+    void hideSplashScreen()
     {
         hideSplashScreen(0);
-    }
-
-    @UsedFromNativeCode
-    public void notifyLocationChange(int viewId)
-    {
-        if (m_accessibilityDelegate == null)
-            return;
-        m_accessibilityDelegate.notifyLocationChange(viewId);
-    }
-
-    @UsedFromNativeCode
-    public void notifyObjectHide(int viewId, int parentId)
-    {
-        if (m_accessibilityDelegate == null)
-            return;
-        m_accessibilityDelegate.notifyObjectHide(viewId, parentId);
-    }
-
-    @UsedFromNativeCode
-    public void notifyObjectShow(int parentId)
-    {
-        if (m_accessibilityDelegate == null)
-           return;
-        m_accessibilityDelegate.notifyObjectShow(parentId);
-    }
-
-    @UsedFromNativeCode
-    public void notifyObjectFocus(int viewId)
-    {
-        if (m_accessibilityDelegate == null)
-            return;
-        m_accessibilityDelegate.notifyObjectFocus(viewId);
-    }
-
-    @UsedFromNativeCode
-    public void notifyValueChanged(int viewId, String value)
-    {
-        if (m_accessibilityDelegate == null)
-            return;
-        m_accessibilityDelegate.notifyValueChanged(viewId, value);
-    }
-
-    @UsedFromNativeCode
-    public void notifyScrolledEvent(int viewId)
-    {
-        if (m_accessibilityDelegate == null)
-            return;
-        m_accessibilityDelegate.notifyScrolledEvent(viewId);
-    }
-
-    @UsedFromNativeCode
-    public void initializeAccessibility()
-    {
-        QtNative.runAction(() -> {
-            m_accessibilityDelegate = createAccessibilityDelegate();
-        });
     }
 
     void handleUiModeChange(int uiMode)
@@ -206,29 +138,5 @@ abstract class QtActivityDelegateBase
                 QtDisplayManager.handleUiDarkModeChanged(1);
                 break;
         }
-    }
-
-    @UsedFromNativeCode
-    public void resetOptionsMenu()
-    {
-        QtNative.runAction(() -> m_activity.invalidateOptionsMenu());
-    }
-
-    @UsedFromNativeCode
-    public void openOptionsMenu()
-    {
-        QtNative.runAction(() -> m_activity.openOptionsMenu());
-    }
-
-    public void onCreatePopupMenu(Menu menu)
-    {
-        QtNative.fillContextMenu(menu);
-        m_contextMenuVisible = true;
-    }
-
-    @UsedFromNativeCode
-    public void closeContextMenu()
-    {
-        QtNative.runAction(() -> m_activity.closeContextMenu());
     }
 }

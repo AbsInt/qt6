@@ -20,7 +20,7 @@ QT_BEGIN_NAMESPACE
 /*!
     \qmltype Overlay
     \inherits Item
-//!     \instantiates QQuickOverlay
+//!     \nativetype QQuickOverlay
     \inqmlmodule QtQuick.Controls
     \since 5.10
     \brief A window overlay for popups.
@@ -520,10 +520,7 @@ bool QQuickOverlay::eventFilter(QObject *object, QEvent *event)
         event->accept();
         // Since we eat the event, QQuickWindow::event never sees it to clean up the
         // grabber states. So we have to do so explicitly.
-        if (QQuickWindow *window = parentItem() ? parentItem()->window() : nullptr) {
-            QQuickWindowPrivate *d = QQuickWindowPrivate::get(window);
-            d->clearGrabbers(static_cast<QPointerEvent *>(event));
-        }
+        d->deliveryAgentPrivate()->clearGrabbers(static_cast<QPointerEvent *>(event));
         return true;
 #endif
 

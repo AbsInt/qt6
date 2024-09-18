@@ -1,0 +1,3 @@
+-f
+--branch
+--module-subset=qtbase,qtdeclarative,qttools,qtwayland,qtsvg

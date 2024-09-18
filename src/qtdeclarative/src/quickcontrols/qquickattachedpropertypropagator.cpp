@@ -9,6 +9,7 @@
 #include <QtQuick/private/qquickitemchangelistener_p.h>
 #include <QtQuickTemplates2/private/qquickpopup_p.h>
 #include <QtQuickTemplates2/private/qquickpopupitem_p_p.h>
+#include <QtQuickTemplates2/private/qquickpopupwindow_p_p.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -145,7 +146,13 @@ static QQuickAttachedPropertyPropagator *findAttachedParent(const QMetaObject *o
         QQuickPopup *popup = qobject_cast<QQuickPopup *>(objectWeAreAttachedTo);
         if (popup) {
             qCDebug(lcAttached).noquote() << "- attachee is a popup; checking its window";
-            return attachedObject(ourAttachedType, popup->popupItem()->window());
+            auto* popupWindow = popup->popupItem()->window();
+            auto *object = attachedObject(ourAttachedType, popupWindow);
+            // Check if the attached object exists for the popup window. If it
+            // doesn't, use transient parent attached object
+            if (!object && qobject_cast<QQuickPopupWindow *>(popupWindow))
+                return attachedObject(ourAttachedType, popupWindow->transientParent());
+            return object;
         }
     }
 
@@ -282,17 +289,6 @@ void QQuickAttachedPropertyPropagatorPrivate::detachFrom(QObject *object)
     }
 }
 
-static QString debugName(QQuickAttachedPropertyPropagator *attached)
-{
-    QString string;
-    QDebug stream(&string);
-    if (!attached)
-        stream << "(null)";
-    else
-        stream.nospace().noquote() << attached << " (which is attached to " << attached->parent() << ')';
-    return string;
-}
-
 /*!
     \internal
 
@@ -318,14 +314,14 @@ void QQuickAttachedPropertyPropagatorPrivate::setAttachedParent(QQuickAttachedPr
         return;
 
     QQuickAttachedPropertyPropagator *oldParent = attachedParent;
-    qCDebug(lcAttached).noquote() << "setAttachedParent called on" << debugName(q) << "with parent" << debugName(parent);
+    qCDebug(lcAttached).noquote() << "setAttachedParent called on" << q << "with parent" << parent;
     if (attachedParent) {
-        qCDebug(lcAttached).noquote() << "- removing ourselves as an attached child of" << debugName(attachedParent);
+        qCDebug(lcAttached).noquote() << "- removing ourselves as an attached child of" << attachedParent;
         QQuickAttachedPropertyPropagatorPrivate::get(attachedParent)->attachedChildren.removeOne(q);
     }
     attachedParent = parent;
     if (parent) {
-        qCDebug(lcAttached).noquote() << "- adding ourselves as an attached child of" << debugName(parent);
+        qCDebug(lcAttached).noquote() << "- adding ourselves as an attached child of" << parent;
         QQuickAttachedPropertyPropagatorPrivate::get(parent)->attachedChildren.append(q);
     }
     q->attachedParentChange(parent, oldParent);
@@ -352,6 +348,7 @@ void QQuickAttachedPropertyPropagatorPrivate::itemWindowChanged(QQuickWindow *wi
     Q_Q(QQuickAttachedPropertyPropagator);
     QQuickAttachedPropertyPropagator *attachedParent = nullptr;
     qCDebug(lcAttached).noquote() << "window of" << q << "changed to" << window;
+
     attachedParent = findAttachedParent(firstCppMetaObject(q), q->parent());
     if (!attachedParent)
         attachedParent = attachedObject(firstCppMetaObject(q), window);
@@ -484,6 +481,22 @@ void QQuickAttachedPropertyPropagator::attachedParentChange(QQuickAttachedProper
     Q_UNUSED(newParent);
     Q_UNUSED(oldParent);
 }
+
+#ifndef QT_NO_DEBUG_STREAM
+QDebug operator<<(QDebug debug, const QQuickAttachedPropertyPropagator *propagator)
+{
+    QDebugStateSaver saver(debug);
+    debug.nospace().noquote();
+    if (!propagator) {
+        debug << "QQuickAttachedPropertyPropagator(nullptr)";
+        return debug;
+    }
+
+    // Cast to QObject to avoid recursion.
+    debug << static_cast<const QObject *>(propagator) << " (which is attached to " << propagator->parent() << ')';
+    return debug;
+}
+#endif
 
 QT_END_NAMESPACE
 

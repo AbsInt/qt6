@@ -73,59 +73,65 @@ void tst_qmlls_qqmlcodemodel::findFilePathsFromFileNames_data()
 {
     QTest::addColumn<QStringList>("fileNames");
     QTest::addColumn<QStringList>("expectedPaths");
+    QTest::addColumn<QSet<QString>>("missingFiles");
 
     const QString folder = testFile("sourceFolder");
     const QString subfolder = testFile("sourceFolder/subSourceFolder/subsubSourceFolder");
+    const QSet<QString> noMissingFiles;
 
-    QTest::addRow("notExistingFile") << QStringList{ u"notExistingFile.h"_s } << QStringList{};
+    QTest::addRow("notExistingFile") << QStringList{ u"notExistingFile.h"_s } << QStringList{}
+                                     << QSet<QString>{ u"notExistingFile.h"_s };
 
     QTest::addRow("myqmlelement") << QStringList{ u"myqmlelement.h"_s }
                                   << QStringList{ folder + u"/myqmlelement.h"_s,
-                                                  subfolder + u"/myqmlelement.h"_s };
+                                                  subfolder + u"/myqmlelement.h"_s }
+                                  << noMissingFiles;
 
-    QTest::addRow("myqmlelement2") << QStringList{ u"myqmlelement2.hpp"_s }
-                                   << QStringList{ folder + u"/myqmlelement2.hpp"_s };
+    QTest::addRow("myqmlelement2")
+            << QStringList{ u"myqmlelement2.hpp"_s }
+            << QStringList{ folder + u"/myqmlelement2.hpp"_s } << noMissingFiles;
 
-    QTest::addRow("anotherqmlelement") << QStringList{ u"anotherqmlelement.cpp"_s }
-                                       << QStringList{ subfolder + u"/anotherqmlelement.cpp"_s };
+    QTest::addRow("anotherqmlelement")
+            << QStringList{ u"anotherqmlelement.cpp"_s }
+            << QStringList{ subfolder + u"/anotherqmlelement.cpp"_s } << noMissingFiles;
 }
 
 void tst_qmlls_qqmlcodemodel::findFilePathsFromFileNames()
 {
     QFETCH(QStringList, fileNames);
     QFETCH(QStringList, expectedPaths);
+    QFETCH(QSet<QString>, missingFiles);
 
     QmlLsp::QQmlCodeModel model;
     model.setRootUrls({ testFileUrl(u"sourceFolder"_s).toEncoded() });
 
     auto result = model.findFilePathsFromFileNames(fileNames);
+
     // the order only is required for the QCOMPARE
     std::sort(result.begin(), result.end());
     std::sort(expectedPaths.begin(), expectedPaths.end());
 
     QCOMPARE(result, expectedPaths);
+    QCOMPARE(model.ignoreForWatching(), missingFiles);
 }
 
 using namespace QQmlJS::Dom;
 
 void tst_qmlls_qqmlcodemodel::fileNamesToWatch()
 {
-    DomItem env = DomEnvironment::create(QStringList(),
-                                         DomEnvironment::Option::SingleThreaded
-                                                 | DomEnvironment::Option::NoDependencies);
-
     DomItem qmlFile;
     DomCreationOptions options;
     options.setFlag(DomCreationOption::WithSemanticAnalysis);
 
-    env.loadFile(
-            FileToLoad::fromFileSystem(env.ownerAs<DomEnvironment>(),
-                                       testFile("MyCppModule/Main.qml"), options),
-            [&qmlFile](Path, const DomItem &, const DomItem &newIt) {
-                qmlFile = newIt.fileObject();
-            },
-            LoadOption::DefaultLoad);
-    env.loadPendingDependencies();
+    auto envPtr = DomEnvironment::create(QStringList(),
+                                         DomEnvironment::Option::SingleThreaded
+                                                 | DomEnvironment::Option::NoDependencies, options);
+
+    envPtr->loadFile(FileToLoad::fromFileSystem(envPtr, testFile("MyCppModule/Main.qml")),
+                     [&qmlFile](Path, const DomItem &, const DomItem &newIt) {
+                         qmlFile = newIt.fileObject();
+                     });
+    envPtr->loadPendingDependencies();
 
     const auto fileNames = QmlLsp::QQmlCodeModel::fileNamesToWatch(qmlFile);
 
@@ -133,6 +139,67 @@ void tst_qmlls_qqmlcodemodel::fileNamesToWatch()
     // QSet("qqmlcomponentattached_p.h", "qqmlcomponent.h", "qobject.h", "qqmllist.h",
     // "helloworld.h", "qqmlengine_p.h")
     QVERIFY(fileNames.contains(u"helloworld.h"_s));
+
+    // test for no duplicates
+    QVERIFY(std::is_sorted(fileNames.begin(), fileNames.end()));
+    QVERIFY(std::adjacent_find(fileNames.begin(), fileNames.end()) == fileNames.end());
+
+    // should not contain any empty strings
+    QVERIFY(!fileNames.contains(QString()));
+}
+
+QString tst_qmlls_qqmlcodemodel::readFile(const QString &filename) const
+{
+    QFile f(testFile(filename));
+    if (!f.open(QFile::ReadOnly)) {
+        QTest::qFail("Can't read test file", __FILE__, __LINE__);
+        return {};
+    }
+    return f.readAll();
+}
+
+void tst_qmlls_qqmlcodemodel::openFiles()
+{
+    QmlLsp::QQmlCodeModel model;
+
+    const QByteArray fileAUrl = testFileUrl(u"FileA.qml"_s).toEncoded();
+    const QString fileAPath = testFile(u"FileA.qml"_s);
+
+    // open file A
+    model.newOpenFile(fileAUrl, 0, readFile(u"FileA.qml"_s));
+
+    QTRY_VERIFY_WITH_TIMEOUT(model.validEnv().field(Fields::qmlFileWithPath).key(fileAPath), 3000);
+
+    {
+        const DomItem fileAComponents = model.validEnv()
+                                                .field(Fields::qmlFileWithPath)
+                                                .key(fileAPath)
+                                                .field(Fields::currentItem)
+                                                .field(Fields::components);
+        // if there is no component then the lazy qml file was not loaded correctly.
+        QCOMPARE(fileAComponents.size(), 1);
+    }
+
+    model.newDocForOpenFile(fileAUrl, 1, readFile(u"FileA2.qml"_s));
+
+    {
+        const DomItem fileAComponents = model.validEnv()
+                                                .field(Fields::qmlFileWithPath)
+                                                .key(fileAPath)
+                                                .field(Fields::currentItem)
+                                                .field(Fields::components);
+        // if there is no component then the lazy qml file was not loaded correctly.
+        QCOMPARE(fileAComponents.size(), 1);
+
+        // also check if the property is there
+        const DomItem properties = fileAComponents.key(QString())
+                                           .index(0)
+                                           .field(Fields::objects)
+                                           .index(0)
+                                           .field(Fields::propertyDefs);
+        QVERIFY(properties);
+        QVERIFY(properties.key(u"helloProperty"_s));
+    }
 }
 
 QTEST_MAIN(tst_qmlls_qqmlcodemodel)

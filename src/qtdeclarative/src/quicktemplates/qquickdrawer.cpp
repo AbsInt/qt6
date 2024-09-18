@@ -19,7 +19,7 @@ QT_BEGIN_NAMESPACE
 /*!
     \qmltype Drawer
     \inherits Popup
-//!     \instantiates QQuickDrawer
+//!     \nativetype QQuickDrawer
     \inqmlmodule QtQuick.Controls
     \since 5.7
     \ingroup qtquickcontrols-navigation
@@ -597,6 +597,12 @@ bool QQuickDrawerPrivate::prepareExitTransition()
     Q_Q(QQuickDrawer);
     exitActions = prepareTransition(q, exit, 0.0);
     return QQuickPopupPrivate::prepareExitTransition();
+}
+
+QQuickPopup::PopupType QQuickDrawerPrivate::resolvedPopupType() const
+{
+    // For now, a drawer will always be shown in-scene
+    return QQuickPopup::Item;
 }
 
 bool QQuickDrawerPrivate::setEdge(Qt::Edge e)

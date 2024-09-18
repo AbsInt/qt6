@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "designerpropertymanager.h"
-#include "qtpropertymanager.h"
+#include "qtpropertymanager_p.h"
 #include "paletteeditorbutton.h"
 #include "pixmapeditor.h"
 #include "qlonglongvalidator.h"
@@ -1986,9 +1986,7 @@ bool DesignerPropertyManager::resetIconSubProperty(QtProperty *property)
 DesignerEditorFactory::DesignerEditorFactory(QDesignerFormEditorInterface *core, QObject *parent) :
     QtVariantEditorFactory(parent),
     m_resetDecorator(new ResetDecorator(core, this)),
-    m_changingPropertyValue(false),
-    m_core(core),
-    m_spacing(-1)
+    m_core(core)
 {
     connect(m_resetDecorator, &ResetDecorator::resetProperty,
             this, &DesignerEditorFactory::resetProperty);

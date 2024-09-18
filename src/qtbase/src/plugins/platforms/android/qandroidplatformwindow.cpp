@@ -16,11 +16,41 @@ QT_BEGIN_NAMESPACE
 
 Q_LOGGING_CATEGORY(lcQpaWindow, "qt.qpa.window")
 
+Q_DECLARE_JNI_CLASS(QtInputInterface, "org/qtproject/qt/android/QtInputInterface")
+Q_DECLARE_JNI_CLASS(QtInputConnectionListener,
+                    "org/qtproject/qt/android/QtInputConnection$QtInputConnectionListener")
+
 QAndroidPlatformWindow::QAndroidPlatformWindow(QWindow *window)
     : QPlatformWindow(window), m_nativeQtWindow(nullptr),
       m_surfaceContainerType(SurfaceContainer::TextureView), m_nativeParentQtWindow(nullptr),
       m_androidSurfaceObject(nullptr)
 {
+    // Please add any initialization in the function below
+}
+
+void QAndroidPlatformWindow::initialize()
+{
+    if (isEmbeddingContainer())
+        return;
+
+    QWindow *window = QPlatformWindow::window();
+
+    if (parent()) {
+        QAndroidPlatformWindow *androidParent = static_cast<QAndroidPlatformWindow*>(parent());
+        if (!androidParent->isEmbeddingContainer())
+            m_nativeParentQtWindow = androidParent->nativeWindow();
+    }
+
+    AndroidBackendRegister *reg = QtAndroid::backendRegister();
+    QtJniTypes::QtInputConnectionListener listener =
+            reg->callInterface<QtJniTypes::QtInputInterface, QtJniTypes::QtInputConnectionListener>(
+                    "getInputConnectionListener");
+
+    m_nativeQtWindow = QJniObject::construct<QtJniTypes::QtWindow>(
+            QNativeInterface::QAndroidApplication::context(),
+            isForeignWindow(), m_nativeParentQtWindow, listener);
+    m_nativeViewId = m_nativeQtWindow.callMethod<jint>("getId");
+
     m_windowFlags = Qt::Widget;
     m_windowState = Qt::WindowNoState;
     // the surfaceType is overwritten in QAndroidPlatformOpenGLWindow ctor so let's save
@@ -42,24 +72,8 @@ QAndroidPlatformWindow::QAndroidPlatformWindow(QWindow *window)
         const QRect finalNativeGeometry = QPlatformWindow::initialGeometry(
                 window, requestedNativeGeometry, availableDeviceIndependentGeometry.width(),
                 availableDeviceIndependentGeometry.height());
-        if (requestedNativeGeometry != finalNativeGeometry)
-            setGeometry(finalNativeGeometry);
+        setGeometry(finalNativeGeometry);
     }
-
-    if (isEmbeddingContainer())
-        return;
-
-    if (parent()) {
-        QAndroidPlatformWindow *androidParent = static_cast<QAndroidPlatformWindow*>(parent());
-        if (!androidParent->isEmbeddingContainer())
-            m_nativeParentQtWindow = androidParent->nativeWindow();
-    }
-
-    m_nativeQtWindow = QJniObject::construct<QtJniTypes::QtWindow>(
-        QNativeInterface::QAndroidApplication::context(),
-        m_nativeParentQtWindow,
-        QtAndroid::qtInputDelegate());
-    m_nativeViewId = m_nativeQtWindow.callMethod<jint>("getId");
 
     if (window->isTopLevel())
         platformScreen()->addWindow(this);
@@ -121,6 +135,23 @@ QMargins QAndroidPlatformWindow::safeAreaMargins() const
 void QAndroidPlatformWindow::setGeometry(const QRect &rect)
 {
     QPlatformWindow::setGeometry(rect);
+
+    if (!isEmbeddingContainer()) {
+        Q_ASSERT(m_nativeQtWindow.isValid());
+
+        jint x = 0;
+        jint y = 0;
+        jint w = -1;
+        jint h = -1;
+        if (!rect.isNull()) {
+            x = rect.x();
+            y = rect.y();
+            w = rect.width();
+            h = rect.height();
+        }
+        m_nativeQtWindow.callMethod<void>("setGeometry", x, y, w, h);
+    }
+
     QWindowSystemInterface::handleGeometryChange(window(), rect);
 }
 
@@ -253,19 +284,10 @@ void QAndroidPlatformWindow::applicationStateChanged(Qt::ApplicationState)
 
 void QAndroidPlatformWindow::createSurface()
 {
-    const QRect rect = geometry();
-    jint x = 0, y = 0, w = -1, h = -1;
-    if (!rect.isNull()) {
-        x = rect.x();
-        y = rect.y();
-        w = std::max(rect.width(), 1);
-        h = std::max(rect.height(), 1);
-    }
-
     const bool windowStaysOnTop = bool(window()->flags() & Qt::WindowStaysOnTopHint);
     const bool isOpaque = !format().hasAlpha() && qFuzzyCompare(window()->opacity(), 1.0);
 
-    m_nativeQtWindow.callMethod<void>("createSurface", windowStaysOnTop, x, y, w, h, 32, isOpaque,
+    m_nativeQtWindow.callMethod<void>("createSurface", windowStaysOnTop, 32, isOpaque,
                                       m_surfaceContainerType);
     m_surfaceCreated = true;
 }
@@ -276,24 +298,6 @@ void QAndroidPlatformWindow::destroySurface()
         m_nativeQtWindow.callMethod<void>("destroySurface");
         m_surfaceCreated = false;
     }
-}
-
-void QAndroidPlatformWindow::setNativeGeometry(const QRect &geometry)
-{
-    if (!isForeignWindow() && !m_surfaceCreated)
-        return;
-
-    jint x = 0;
-    jint y = 0;
-    jint w = -1;
-    jint h = -1;
-    if (!geometry.isNull()) {
-        x = geometry.x();
-        y = geometry.y();
-        w = geometry.width();
-        h = geometry.height();
-    }
-    m_nativeQtWindow.callMethod<void>("setGeometry", x, y, w, h);
 }
 
 void QAndroidPlatformWindow::onSurfaceChanged(QtJniTypes::Surface surface)

@@ -116,8 +116,8 @@ void tst_qmltyperegistrar::pastMajorVersions()
 
 void tst_qmltyperegistrar::implementsInterfaces()
 {
-    QVERIFY(qmltypesData.contains("interfaces: [\"Interface\"]"));
-    QVERIFY(qmltypesData.contains("interfaces: [\"Interface\", \"Interface2\"]"));
+    QVERIFY(qmltypesData.contains("interfaces: [\"Interface1\"]"));
+    QVERIFY(qmltypesData.contains("interfaces: [\"Interface1\", \"Interface2\"]"));
 }
 
 void tst_qmltyperegistrar::namespacedElement()
@@ -404,8 +404,8 @@ void tst_qmltyperegistrar::duplicateExportWarnings()
     MetaTypesJsonProcessor processor(true);
     QVERIFY(processor.processTypes({ ":/duplicatedExports.json" }));
     processor.postProcessTypes();
-    QVector<QCborMap> types = processor.types();
-    QVector<QCborMap> typesforeign = processor.foreignTypes();
+    QVector<MetaType> types = processor.types();
+    QVector<MetaType> typesforeign = processor.foreignTypes();
     r.setTypes(types, typesforeign);
 
     const auto expectWarning = [](const char *message) {
@@ -441,16 +441,22 @@ void tst_qmltyperegistrar::consistencyWarnings()
         QTest::ignoreMessage(QtWarningMsg, message);
     };
 
-    expectWarning("Warning: tst_qmltyperegistrar.h:: NotQObject is used but cannot be found.");
-    expectWarning("Warning: tst_qmltyperegistrar.h:: NotQObject is used but cannot be found.");
+    expectWarning("Warning: tst_qmltyperegistrar.h:: "
+                  "NotQObject is used as base type but cannot be found.");
+    expectWarning("Warning: tst_qmltyperegistrar.h:: NotQObject is used as base type "
+                  "but cannot be found.");
     expectWarning("Warning: tst_qmltyperegistrar.h:: Invisible is declared as foreign type, "
                   "but cannot be found.");
-    expectWarning("Warning: tst_qmltyperegistrar.h:: NotQByteArray is used but cannot be found.");
+    expectWarning("Warning: tst_qmltyperegistrar.h:: NotQByteArray is used as sequence value type "
+                  "but cannot be found.");
+    expectWarning("Warning: tst_qmltyperegistrar.h:: NotAnUnderlyingType is used as enum type "
+                  "but cannot be found.");
+    QTest::failOnWarning();
 
     processor.postProcessForeignTypes();
 
-    QVector<QCborMap> types = processor.types();
-    QVector<QCborMap> typesforeign = processor.foreignTypes();
+    QVector<MetaType> types = processor.types();
+    QVector<MetaType> typesforeign = processor.foreignTypes();
     r.setTypes(types, typesforeign);
 
     QString outputData;
@@ -464,7 +470,7 @@ void tst_qmltyperegistrar::consistencyWarnings()
     r.write(output, "tst_qmltyperegistrar_qmltyperegistrations.cpp");
 
     QTemporaryFile pluginTypes;
-    pluginTypes.open();
+    QVERIFY(pluginTypes.open());
 
     expectWarning("Warning: tst_qmltyperegistrar.h:: Refusing to generate non-lowercase name "
                   "Invisible for unknown foreign type");
@@ -540,45 +546,45 @@ void tst_qmltyperegistrar::uncreatable()
 #if QT_DEPRECATED_SINCE(6, 4)
     QTest::ignoreMessage(
                 QtWarningMsg,
-                "Singleton SingletonIncreatable needs either a default constructor or, "
-                "when adding a default constructor is infeasible, a public static "
-                "create(QQmlEngine *, QJSEngine *) method.");
+                "Singleton SingletonIncreatable needs to be a concrete class with either a "
+                "default constructor or, when adding a default constructor is infeasible, "
+                "a public static create(QQmlEngine *, QJSEngine *) method.");
     qmlRegisterTypesAndRevisions<SingletonIncreatable>("A", 1);
     QTest::ignoreMessage(
                 QtWarningMsg,
-                "Singleton SingletonIncreatable2 needs either a default constructor or, "
-                "when adding a default constructor is infeasible, a public static "
-                "create(QQmlEngine *, QJSEngine *) method.");
+                "Singleton SingletonIncreatable2 needs to be a concrete class with either a "
+                "default constructor or, when adding a default constructor is infeasible, "
+                "a public static create(QQmlEngine *, QJSEngine *) method.");
     qmlRegisterTypesAndRevisions<SingletonIncreatable2>("A", 1);
     QTest::ignoreMessage(
                 QtWarningMsg,
-                "Singleton SingletonIncreatable3 needs either a default constructor or, "
-                "when adding a default constructor is infeasible, a public static "
-                "create(QQmlEngine *, QJSEngine *) method.");
+                "Singleton SingletonIncreatable3 needs to be a concrete class with either a "
+                "default constructor or, when adding a default constructor is infeasible, "
+                "a public static create(QQmlEngine *, QJSEngine *) method.");
     qmlRegisterTypesAndRevisions<SingletonIncreatable3>("A", 1);
     QTest::ignoreMessage(
                 QtWarningMsg,
-                "Singleton SingletonIncreatable4 needs either a default constructor or, "
-                "when adding a default constructor is infeasible, a public static "
-                "create(QQmlEngine *, QJSEngine *) method.");
+                "Singleton SingletonIncreatable4 needs to be a concrete class with either a "
+                "default constructor or, when adding a default constructor is infeasible, "
+                "a public static create(QQmlEngine *, QJSEngine *) method.");
     qmlRegisterTypesAndRevisions<SingletonIncreatable4>("A", 1);
     QTest::ignoreMessage(
                 QtWarningMsg,
-                "Singleton SingletonIncreatableExtended needs either a default constructor or, "
-                "when adding a default constructor is infeasible, a public static "
-                "create(QQmlEngine *, QJSEngine *) method.");
+                "Singleton SingletonIncreatableExtended needs to be a concrete class with either a "
+                "default constructor or, when adding a default constructor is infeasible, "
+                "a public static create(QQmlEngine *, QJSEngine *) method.");
     qmlRegisterTypesAndRevisions<SingletonIncreatableExtended>("A", 1);
     QTest::ignoreMessage(
                 QtWarningMsg,
-                "Singleton SingletonForeign needs either a default constructor or, "
-                "when adding a default constructor is infeasible, a public static "
-                "create(QQmlEngine *, QJSEngine *) method.");
+                "Singleton SingletonForeign needs to be a concrete class with either a "
+                "default constructor or, when adding a default constructor is infeasible, "
+                "a public static create(QQmlEngine *, QJSEngine *) method.");
     qmlRegisterTypesAndRevisions<SingletonLocalUncreatable1>("A", 1);
     QTest::ignoreMessage(
                 QtWarningMsg,
-                "Singleton SingletonForeign needs either a default constructor or, "
-                "when adding a default constructor is infeasible, a public static "
-                "create(QQmlEngine *, QJSEngine *) method.");
+                "Singleton SingletonForeign needs to be a concrete class with either a "
+                "default constructor or, when adding a default constructor is infeasible, "
+                "a public static create(QQmlEngine *, QJSEngine *) method.");
     qmlRegisterTypesAndRevisions<SingletonLocalUncreatable2>("A", 1);
 #endif
 
@@ -648,6 +654,19 @@ void tst_qmltyperegistrar::baseVersionInQmltypes()
     // Since it has no QML_ADDED_IN_VERSION, WithMethod was added in .0 of the current version.
     // The current version is 1.1, so it's 1.0.
     QVERIFY(qmltypesData.contains("exports: [\"QmlTypeRegistrarTest/WithMethod 1.0\"]"));
+}
+
+void tst_qmltyperegistrar::unconstructibleValueType()
+{
+    QVERIFY(qmltypesData.contains(
+            R"(Component {
+        file: "tst_qmltyperegistrar.h"
+        name: "Unconstructible"
+        accessSemantics: "value"
+        exports: ["QmlTypeRegistrarTest/unconstructible 1.0"]
+        isCreatable: false
+        exportMetaObjectRevisions: [256]
+    })"));
 }
 
 void tst_qmltyperegistrar::constructibleValueType()
@@ -988,5 +1007,142 @@ void tst_qmltyperegistrar::constReturnType()
         Method { name: "getObject"; type: "QObject"; isPointer: true; isConstant: true }
     })"));
 }
+
+void tst_qmltyperegistrar::usingDeclaration()
+{
+    QVERIFY(qmltypesData.contains(R"(Component {
+        file: "tst_qmltyperegistrar.h"
+        name: "WithMyInt"
+        accessSemantics: "reference"
+        prototype: "QObject"
+        exports: ["QmlTypeRegistrarTest/WithMyInt 1.0"]
+        exportMetaObjectRevisions: [256]
+        Property { name: "a"; type: "int"; read: "a"; index: 0; isReadonly: true; isConstant: true }
+    })"));
+}
+
+void tst_qmltyperegistrar::enumsRegistered()
+{
+    QCOMPARE(QMetaType::fromName("SizeEnums::Unit"), QMetaType::fromType<SizeEnums::Unit>());
+    QCOMPARE(QMetaType::fromName("Local::Flag"), QMetaType::fromType<Local::Flag>());
+    QCOMPARE(QMetaType::fromName("Local::Flags"), QMetaType::fromType<Local::Flags>());
+    QCOMPARE(QMetaType::fromName("ValueTypeWithEnum1::Quality"),
+             QMetaType::fromType<ValueTypeWithEnum1::Quality>());
+    QCOMPARE(QMetaType::fromName("ValueTypeWithEnum2::Quality"),
+             QMetaType::fromType<ValueTypeWithEnum2::Quality>());
+    QCOMPARE(QMetaType::fromName("BaseNamespace::BBB"), QMetaType::fromType<BaseNamespace::BBB>());
+    QCOMPARE(QMetaType::fromName("ExtensionValueType::EEE"),
+             QMetaType::fromType<ExtensionValueType::EEE>());
+    QCOMPARE(QMetaType::fromName("TypedEnum::UChar"), QMetaType::fromType<TypedEnum::UChar>());
+    QCOMPARE(QMetaType::fromName("TypedEnum::Int8_T"), QMetaType::fromType<TypedEnum::Int8_T>());
+    QCOMPARE(QMetaType::fromName("TypedEnum::UInt8_T"), QMetaType::fromType<TypedEnum::UInt8_T>());
+    QCOMPARE(QMetaType::fromName("TypedEnum::Int16_T"), QMetaType::fromType<TypedEnum::Int16_T>());
+    QCOMPARE(QMetaType::fromName("TypedEnum::UInt16_T"), QMetaType::fromType<TypedEnum::UInt16_T>());
+    QCOMPARE(QMetaType::fromName("TypedEnum::Int32_T"), QMetaType::fromType<TypedEnum::Int32_T>());
+    QCOMPARE(QMetaType::fromName("TypedEnum::UInt32_T"), QMetaType::fromType<TypedEnum::UInt32_T>());
+    QCOMPARE(QMetaType::fromName("TypedEnum::S"), QMetaType::fromType<TypedEnum::S>());
+    QCOMPARE(QMetaType::fromName("TypedEnum::T"), QMetaType::fromType<TypedEnum::T>());
+    QCOMPARE(QMetaType::fromName("TypedEnum::U"), QMetaType::fromType<TypedEnum::U>());
+    QCOMPARE(QMetaType::fromName("TypedEnum::V"), QMetaType::fromType<TypedEnum::V>());
+    QCOMPARE(QMetaType::fromName("NetworkManager::NM"), QMetaType::fromType<NetworkManager::NM>());
+    QCOMPARE(QMetaType::fromName("NotNamespace::Abc"), QMetaType::fromType<NotNamespace::Abc>());
+}
+
+void tst_qmltyperegistrar::doNotDuplicateQtNamespace()
+{
+    QVERIFY(!qmltypesData.contains(R"(file: "qnamespace.h")"));
+}
+
+void tst_qmltyperegistrar::doNotDuplicateQObject()
+{
+    QVERIFY(!qmltypesData.contains(R"(file: "qobject.h")"));
+}
+
+void tst_qmltyperegistrar::slotsBeforeInvokables()
+{
+    QVERIFY(qmltypesData.contains(R"(Component {
+        file: "tst_qmltyperegistrar.h"
+        name: "SlotsBeforeInvokables"
+        accessSemantics: "reference"
+        prototype: "QObject"
+        Method { name: "bar" }
+        Method { name: "foo" }
+        Method { name: "baz" }
+    })"));
+}
+
+void tst_qmltyperegistrar::omitQQmlV4FunctionPtrArg()
+{
+    QVERIFY(qmltypesData.contains(R"(Component {
+        file: "tst_qmltyperegistrar.h"
+        name: "JavaScriptFunction"
+        accessSemantics: "reference"
+        prototype: "QObject"
+        exports: ["QmlTypeRegistrarTest/JavaScriptFunction 1.0"]
+        exportMetaObjectRevisions: [256]
+        Method { name: "jsfunc"; isJavaScriptFunction: true }
+    })"));
+}
+
+void tst_qmltyperegistrar::preserveVoidStarPropTypes()
+{
+    QVERIFY(qmltypesData.contains(R"(Component {
+        file: "tst_qmltyperegistrar.h"
+        name: "VoidProperties"
+        accessSemantics: "reference"
+        prototype: "QObject"
+        exports: ["QmlTypeRegistrarTest/VoidProperties 1.0"]
+        exportMetaObjectRevisions: [256]
+        Property {
+            name: "void1"
+            type: "void"
+            isPointer: true
+            read: "void1"
+            index: 0
+            isReadonly: true
+            isConstant: true
+        }
+        Property {
+            name: "void2"
+            type: "void"
+            isPointer: true
+            read: "void2"
+            index: 1
+            isReadonly: true
+            isConstant: true
+        }
+    })"));
+}
+void tst_qmltyperegistrar::allReferencedTypesCollected()
+{
+    // reproduce the issue from the comment in QTBUG-118112
+    // - and make sure we don't accidentally register a type we shouldn't.
+    QVERIFY(!qmltypesData.contains(R"(name: "SampleHeader")"));
+}
+
+void tst_qmltyperegistrar::inaccessibleBase()
+{
+    // This shows up in qmltypes but we're not actually including base.h
+    QVERIFY(qmltypesData.contains(R"(Component {
+        file: "base.h"
+        name: "InaccessibleBase"
+        accessSemantics: "reference"
+        prototype: "QObject"
+        Property { name: "a"; type: "int"; index: 0; isConstant: true }
+    })"));
+
+    QVERIFY(!qmltypesData.contains(R"(name: "InaccessibleProperty")"));
+
+    QVERIFY(qmltypesData.contains(R"(Component {
+        file: "tst_qmltyperegistrar.h"
+        name: "AccessibleDerived"
+        accessSemantics: "reference"
+        prototype: "InaccessibleBase"
+        exports: ["QmlTypeRegistrarTest/AccessibleDerived 1.0"]
+        exportMetaObjectRevisions: [256]
+        Property { name: "p"; type: "InaccessibleProperty"; isPointer: true; index: 0; isConstant: true }
+    })"));
+}
+
 
 QTEST_MAIN(tst_qmltyperegistrar)

@@ -14,6 +14,7 @@ set(cpp_sources
     getOptionalLookup.h
     gadgetwithenum.h
     invisible.h
+    largeValueType.h
     listprovider.h
     multiforeign.h
     objectwithmethod.h
@@ -73,6 +74,7 @@ set(qml_files
     StoreMetaEnum.qml
     Test.qml
     TestCase.qml
+    ValueTypeArgument.qml
     Variable.qml
     WindowDerived.qml
     aliasLookup.qml
@@ -125,6 +127,7 @@ set(qml_files
     dialog.qml
     dialogButtonBox.qml
     dynamicscene.qml
+    enforceSignature.qml
     enumConversion.qml
     enumFromBadSingleton.qml
     enumInvalid.qml
@@ -142,6 +145,7 @@ set(qml_files
     exceptionFromInner.qml
     excessiveParameters.qml
     extendedTypes.qml
+    extra/extra.qml
     failures.qml
     fallbacklookups.qml
     fallbackresettable.qml
@@ -154,8 +158,6 @@ set(qml_files
     functionTakingVar.qml
     getOptionalLookup.qml
     globals.qml
-    hidden/Main.qml
-    hidden/Style.qml
     idAccess.qml
     ignoredFunctionReturn.qml
     immediateQuit.qml
@@ -183,6 +185,7 @@ set(qml_files
     jsMathObject.qml
     jsimport.qml
     jsmoduleimport.qml
+    jsonArrayToStringList.qml
     layouts.qml
     letAndConst.qml
     library.js
@@ -191,10 +194,12 @@ set(qml_files
     listIndices.qml
     listOfInvisible.qml
     listPropertyAsModel.qml
+    listToString.qml
     listlength.qml
     math.qml
     mathMinMax.qml
     mathOperations.qml
+    mathStaticProperties.qml
     mergedObjectRead.qml
     mergedObjectWrite.qml
     methodOnListLookup.qml
@@ -213,6 +218,7 @@ set(qml_files
     nullAccess.qml
     nullAccessInsideSignalHandler.qml
     nullComparison.qml
+    nullishCoalescing.qml
     numbersInJsPrimitive.qml
     objectInVar.qml
     objectLookupOnListElement.qml
@@ -226,6 +232,7 @@ set(qml_files
     popContextAfterRet.qml
     prefixedMetaType.qml
     pressAndHoldButton.qml
+    qtbug113150.qml
     reduceWithNullThis.qml
     readEnumFromInstance.qml
     readonlyListProperty.qml
@@ -310,6 +317,68 @@ set_source_files_properties("shared/Slider.qml"
 set_source_files_properties("hidden/Style.qml"
     PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 
+# Do re-evaluate on each import, please
+set_source_files_properties("NotificationsUtils.js"
+    PROPERTIES QT_QML_SKIP_QMLDIR_ENTRY FALSE)
+
+qt_policy(SET QTP0001 NEW)
+qt_policy(SET QTP0004 NEW)
+
+qt_add_library(codegen_test_hidden STATIC)
+qt_autogen_tools_initial_setup(codegen_test_hidden)
+
+set_target_properties(codegen_test_hidden PROPERTIES
+    # We really want qmlcachegen here, even if qmlsc is available
+    QT_QMLCACHEGEN_EXECUTABLE qmlcachegen
+    QT_QMLCACHEGEN_ARGUMENTS --validate-basic-blocks
+)
+
+target_compile_definitions(codegen_test_hidden PUBLIC
+    -DGENERATED_CPP_FOLDER="${CMAKE_CURRENT_BINARY_DIR}/.rcc/qmlcache"
+)
+
+qt6_add_qml_module(codegen_test_hidden
+    URI HiddenTestTypes
+    QML_FILES
+        hidden/Main.qml
+        hidden/Style.qml
+    OUTPUT_DIRECTORY HiddenTestTypes
+    __QT_INTERNAL_DISAMBIGUATE_QMLDIR_RESOURCE
+
+    # Don't add a qmldir in "hidden". That  would defeat the purpose.
+    NO_GENERATE_EXTRA_QMLDIRS
+)
+
+add_dependencies(codegen_test_hidden Qt::Quick)
+
+qt_autogen_tools_initial_setup(codegen_test_hiddenplugin)
+
+qt_add_library(codegen_test_stringbuilder STATIC)
+qt_autogen_tools_initial_setup(codegen_test_stringbuilder)
+
+set_target_properties(codegen_test_stringbuilder PROPERTIES
+    # We really want qmlcachegen here, even if qmlsc is available
+    QT_QMLCACHEGEN_EXECUTABLE qmlcachegen
+    QT_QMLCACHEGEN_ARGUMENTS --validate-basic-blocks
+)
+
+target_compile_definitions(codegen_test_stringbuilder PRIVATE
+    -DGENERATED_CPP_FOLDER="${CMAKE_CURRENT_BINARY_DIR}/.rcc/qmlcache"
+    QT_USE_QSTRINGBUILDER
+)
+
+qt6_add_qml_module(codegen_test_stringbuilder
+    URI StringBuilderTestTypes
+    SOURCES
+        writableVariantMap.h
+    QML_FILES
+        writeVariantMap.qml
+    OUTPUT_DIRECTORY StringBuilderTestTypes
+    __QT_INTERNAL_DISAMBIGUATE_QMLDIR_RESOURCE
+)
+
+qt_autogen_tools_initial_setup(codegen_test_stringbuilderplugin)
+
 qt_add_library(codegen_test_module STATIC)
 qt_autogen_tools_initial_setup(codegen_test_module)
 
@@ -319,7 +388,7 @@ set_target_properties(codegen_test_module PROPERTIES
     QT_QMLCACHEGEN_ARGUMENTS --validate-basic-blocks
 )
 
-qt_policy(SET QTP0001 NEW)
+
 
 target_compile_definitions(codegen_test_module PUBLIC
     -DGENERATED_CPP_FOLDER="${CMAKE_CURRENT_BINARY_DIR}/.rcc/qmlcache"
@@ -341,7 +410,18 @@ qt6_add_qml_module(codegen_test_module
     RESOURCES
         ${resource_files}
     OUTPUT_DIRECTORY TestTypes # Make sure tst_qmlcachegen doesn't see our output
+    __QT_INTERNAL_DISAMBIGUATE_QMLDIR_RESOURCE
 )
+
+if(${CMAKE_VERSION} GREATER_EQUAL "3.19.0")
+    qt_target_qml_sources(codegen_test_module
+        QML_FILES extra2/extra.qml
+    )
+else()
+    target_compile_definitions(codegen_test_module PUBLIC
+        -DVERY_OLD_CMAKE=1
+    )
+endif()
 
 add_dependencies(codegen_test_module Qt::Quick Qt::QuickTemplates2 Qt::QuickShapesPrivate)
 
@@ -375,6 +455,7 @@ qt6_add_qml_module(codegen_test_module_verify
         ${resource_files}
     OUTPUT_DIRECTORY verify/TestTypes # Make sure tst_qmlcachegen doesn't see our output
     TARGET_PATH verify/TestTypes      # Different target path to avoid resource file name clashes
+    __QT_INTERNAL_DISAMBIGUATE_QMLDIR_RESOURCE
 )
 
 add_dependencies(codegen_test_module_verify Qt::Quick Qt::QuickTemplates2 Qt::QuickShapesPrivate)

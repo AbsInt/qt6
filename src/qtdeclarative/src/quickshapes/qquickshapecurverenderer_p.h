@@ -1,4 +1,4 @@
-// Copyright (C) 2022 The Qt Company Ltd.
+// Copyright (C) 2024 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #ifndef QQUICKSHAPECURVERENDERER_P_H
@@ -45,7 +45,7 @@ public:
 
     void beginSync(int totalCount, bool *countChanged) override;
     void setPath(int index, const QQuickPath *path) override;
-    void setPath(int index, const QPainterPath &path, QQuickShapePath::PathHints pathHints = {});
+    void setPath(int index, const QPainterPath &path, QQuickShapePath::PathHints pathHints = {}) override;
     void setStrokeColor(int index, const QColor &color) override;
     void setStrokeWidth(int index, qreal w) override;
     void setFillColor(int index, const QColor &color) override;
@@ -55,9 +55,12 @@ public:
     void setStrokeStyle(int index, QQuickShapePath::StrokeStyle strokeStyle,
                         qreal dashOffset, const QVector<qreal> &dashPattern) override;
     void setFillGradient(int index, QQuickShapeGradient *gradient) override;
+    void setFillTextureProvider(int index, QQuickItem *textureProviderItem) override;
+    void setFillTransform(int index, const QSGTransform &transform) override;
     void endSync(bool async) override;
     void setAsyncCallback(void (*)(void *), void *) override;
     Flags flags() const override { return SupportsAsync; }
+    void handleSceneChange(QQuickWindow *window) override;
 
     void updateNode() override;
 
@@ -86,7 +89,12 @@ public:
 private:
     struct PathData {
 
-        bool isFillVisible() const { return fillColor.alpha() > 0 || gradientType != QGradient::NoGradient; }
+        bool isFillVisible() const
+        {
+            return gradientType != QGradient::NoGradient
+                    || fillTextureProviderItem != nullptr
+                    || fillColor.alpha() > 0;
+        }
 
         bool isStrokeVisible() const
         {
@@ -95,6 +103,7 @@ private:
 
         QGradient::Type gradientType = QGradient::NoGradient;
         QSGGradientCache::GradientDesc gradient;
+        QSGTransform fillTransform;
         QColor fillColor;
         Qt::FillRule fillRule = Qt::OddEvenFill;
         QPen pen;
@@ -111,17 +120,17 @@ private:
         NodeList strokeNodes;
 
         QQuickShapeCurveRunnable *currentRunner = nullptr;
+        QQuickItem *fillTextureProviderItem = nullptr;
     };
 
     void createRunner(PathData *pathData);
     void maybeUpdateAsyncItem();
 
     static void processPath(PathData *pathData);
-    static NodeList addFillNodes(const PathData &pathData);
+    static NodeList addFillNodes(const QQuadPath &path);
     static NodeList addTriangulatingStrokerNodes(const PathData &pathData);
     static NodeList addCurveStrokeNodes(const PathData &pathData);
 
-    void solveIntersections(QQuadPath &path);
     QQuickItem *m_item;
     QSGNode *m_rootNode = nullptr;
     QVector<PathData> m_paths;
@@ -137,6 +146,7 @@ class QQuickShapeCurveRunnable : public QObject, public QRunnable
     Q_OBJECT
 
 public:
+    ~QQuickShapeCurveRunnable() override;
     void run() override;
 
     bool isAsync = false;

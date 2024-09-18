@@ -10,6 +10,8 @@
 
 \qmllintwarningcategory signal-handler-parameters
 
+This warning category has multiple warnings, described in the sections below:
+
 \section1 Type of parameter in signal was not found
 
 \section2 What happened?
@@ -131,6 +133,7 @@ You can fix this warning by TODO
 
 TODO: QML Lint cannot detect if you pass signal parameters by value, reference or pointer!
 Therefore, it will never print that warning.
+that warning
 \section1 Type of parameter in signal should be passed by value or const reference
 \section2 What happened?
 TODO

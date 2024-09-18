@@ -1388,7 +1388,6 @@ void tst_QGraphicsWidget::setTabOrder()
     QGraphicsScene scene;
     QGraphicsView view(&scene);
     view.show();
-    QApplicationPrivate::setActiveWindow(&view);
     QVERIFY(QTest::qWaitForWindowActive(&view));
 
     QGraphicsWidget *lastItem = nullptr;
@@ -1460,7 +1459,6 @@ void tst_QGraphicsWidget::setTabOrderAndReparent()
     QGraphicsScene scene;
     QGraphicsView view(&scene);
     view.show();
-    QApplicationPrivate::setActiveWindow(&view);
     QVERIFY(QTest::qWaitForWindowActive(&view));
     QCOMPARE(QApplication::activeWindow(), (QWidget*)&view);
 
@@ -1590,7 +1588,6 @@ void tst_QGraphicsWidget::verifyFocusChain()
     QGraphicsScene scene;
     QGraphicsView view(&scene);
     view.show();
-    QApplicationPrivate::setActiveWindow(&view);
     QVERIFY(QTest::qWaitForWindowActive(&view));
 
     {
@@ -1682,7 +1679,6 @@ void tst_QGraphicsWidget::verifyFocusChain()
         w1_2->setFocusPolicy(Qt::StrongFocus);
         scene.addItem(w1_2);
         window->show();
-        QApplicationPrivate::setActiveWindow(window.data());
         QVERIFY(QTest::qWaitForWindowActive(window.data()));
 
         lineEdit->setFocus();
@@ -2694,7 +2690,6 @@ void tst_QGraphicsWidget::task250119_shortcutContext()
     QGraphicsView view;
     view.setScene(&scene);
     view.show();
-    QApplicationPrivate::setActiveWindow(&view);
     QTRY_COMPARE(QApplication::activeWindow(), (QWidget*)&view);
 
 

@@ -172,15 +172,19 @@ bool QQmlJSScope::hasEnumeration(const QString &name) const
             this, [&](const QQmlJSScope *scope) { return scope->m_enumerations.contains(name); });
 }
 
+bool QQmlJSScope::hasOwnEnumerationKey(const QString &name) const
+{
+    for (const auto &e : m_enumerations) {
+        if (e.keys().contains(name))
+            return true;
+    }
+    return false;
+}
+
 bool QQmlJSScope::hasEnumerationKey(const QString &name) const
 {
-    return QQmlJSUtils::searchBaseAndExtensionTypes(this, [&](const QQmlJSScope *scope) {
-        for (const auto &e : scope->m_enumerations) {
-            if (e.keys().contains(name))
-                return true;
-        }
-        return false;
-    });
+    return QQmlJSUtils::searchBaseAndExtensionTypes(
+            this, [&](const QQmlJSScope *scope) { return scope->hasOwnEnumerationKey(name); });
 }
 
 QQmlJSMetaEnum QQmlJSScope::enumeration(const QString &name) const
@@ -1007,6 +1011,22 @@ void QQmlJSScope::setBaseTypeError(const QString &baseTypeError)
     m_baseTypeNameOrError = baseTypeError;
 }
 
+/*!
+\internal
+The name of the module is only saved in the QmlComponent. Iterate through the parent scopes until
+the QmlComponent or the root is reached to find out the module name of the component in which `this`
+resides.
+*/
+QString QQmlJSScope::moduleName() const
+{
+    for (const QQmlJSScope *it = this; it; it = it->parentScope().get()) {
+        const QString name = it->ownModuleName();
+        if (!name.isEmpty())
+            return name;
+    }
+    return {};
+}
+
 QString QQmlJSScope::baseTypeError() const
 {
     return m_flags.testFlag(HasBaseTypeError) ? m_baseTypeNameOrError : QString();
@@ -1123,12 +1143,27 @@ bool QQmlJSScope::Export::isValid() const
     return m_version.isValid() || !m_package.isEmpty() || !m_type.isEmpty();
 }
 
+QDeferredFactory<QQmlJSScope>::QDeferredFactory(QQmlJSImporter *importer, const QString &filePath,
+                                                const TypeReader &typeReader)
+    : m_filePath(filePath),
+      m_importer(importer),
+      m_typeReader(typeReader ? typeReader
+                              : [](QQmlJSImporter *importer, const QString &filePath,
+                                   const QSharedPointer<QQmlJSScope> &scopeToPopulate) {
+                                    QQmlJSTypeReader defaultTypeReader(importer, filePath);
+                                    defaultTypeReader(scopeToPopulate);
+                                    return defaultTypeReader.errors();
+                                })
+{
+}
+
 void QDeferredFactory<QQmlJSScope>::populate(const QSharedPointer<QQmlJSScope> &scope) const
 {
-    scope->setModuleName(m_moduleName);
-    QQmlJSTypeReader typeReader(m_importer, m_filePath);
-    typeReader(scope);
-    m_importer->m_globalWarnings.append(typeReader.errors());
+    scope->setOwnModuleName(m_moduleName);
+
+    QList<QQmlJS::DiagnosticMessage> errors = m_typeReader(m_importer, m_filePath, scope);
+    m_importer->m_globalWarnings.append(errors);
+
     scope->setInternalName(internalName());
     QQmlJSScope::resolveEnums(scope, m_importer->builtinInternalNames());
     QQmlJSScope::resolveList(scope, m_importer->builtinInternalNames().arrayType());

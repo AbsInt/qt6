@@ -354,54 +354,13 @@ set(lupdate_subproject${n}_autogen_dir \"${autogen_dir}\")
     endif()
 
     if(NOT arg_NO_GLOBAL_TARGET)
-        if(CMAKE_GENERATOR MATCHES "^Visual Studio ")
-            # For the Visual Studio generators we cannot use add_dependencies, because this would
-            # enable ${lupdate_target} in the default build of the solution. See QTBUG-115166 and
-            # upstream CMake issue #16668 for details. Instead, we record ${lupdate_target} and
-            # create an update_translations target at the end of the top-level directory scope.
-            if(${CMAKE_VERSION} VERSION_LESS "3.19.0")
-                if(NOT QT_NO_GLOBAL_LUPDATE_TARGET_CREATION_WARNING)
-                    message(WARNING
-                        "Cannot create target ${QT_GLOBAL_LUPDATE_TARGET} with this CMake version. "
-                        "Please upgrade to CMake 3.19.0 or newer. "
-                        "Set QT_NO_GLOBAL_LUPDATE_TARGET_CREATION_WARNING to ON to disable this "
-                        "warning."
-                    )
-                endif()
-                return()
-            endif()
-            set(property_name _qt_target_${QT_GLOBAL_LUPDATE_TARGET}_dependencies)
-            get_property(recorded_targets GLOBAL PROPERTY ${property_name})
-            if("${recorded_targets}" STREQUAL "")
-                cmake_language(EVAL CODE
-                    "cmake_language(DEFER DIRECTORY \"${CMAKE_SOURCE_DIR}\" CALL _qt_internal_add_global_lupdate_target_deferred \"${QT_GLOBAL_LUPDATE_TARGET}\")"
-                )
-            endif()
-            set_property(GLOBAL APPEND PROPERTY ${property_name} ${lupdate_target})
-
-            # Exclude ${lupdate_target} from the solution's default build to avoid it being enabled
-            # should the user add a dependency to it.
-            set_property(TARGET ${lupdate_target} PROPERTY EXCLUDE_FROM_DEFAULT_BUILD ON)
-        else()
-            if(NOT TARGET ${QT_GLOBAL_LUPDATE_TARGET})
-                add_custom_target(${QT_GLOBAL_LUPDATE_TARGET})
-            endif()
-            add_dependencies(${QT_GLOBAL_LUPDATE_TARGET} ${lupdate_target})
-        endif()
-    endif()
-endfunction()
-
-# Hack for the Visual Studio generator. Create the global lupdate target named ${target} and work
-# around the lack of a working add_dependencies by calling 'cmake --build' for every dependency.
-function(_qt_internal_add_global_lupdate_target_deferred target)
-    get_property(target_dependencies GLOBAL PROPERTY _qt_target_${target}_dependencies)
-    set(target_commands "")
-    foreach(dependency IN LISTS target_dependencies)
-        list(APPEND target_commands
-            COMMAND "${CMAKE_COMMAND}" --build "${CMAKE_BINARY_DIR}" -t ${dependency}
+        _qt_internal_add_phony_target(${QT_GLOBAL_LUPDATE_TARGET}
+            WARNING_VARIABLE QT_NO_GLOBAL_LUPDATE_TARGET_CREATION_WARNING
         )
-    endforeach()
-    add_custom_target(${target} ${target_commands})
+        _qt_internal_add_phony_target_dependencies(${QT_GLOBAL_LUPDATE_TARGET}
+            ${lupdate_target}
+        )
+    endif()
 endfunction()
 
 function(_qt_internal_store_languages_from_ts_files_in_targets targets ts_files)
@@ -497,9 +456,6 @@ function(qt6_add_lrelease)
     set(qm_files "")
     foreach(ts_file ${ts_files})
         if(NOT EXISTS "${ts_file}")
-            message(WARNING "Translation file '${ts_file}' does not exist. "
-                "Consider building the target 'update_translations' to create an initial "
-                "version of that file.")
             _qt_internal_ensure_ts_file(TS_FILE "${ts_file}")
         endif()
 
@@ -566,6 +522,7 @@ function(qt6_add_translations)
         __QT_INTERNAL_DEFAULT_QM_OUT_DIR
         LUPDATE_TARGET
         LRELEASE_TARGET
+        TS_FILES_OUTPUT_VARIABLE
         QM_FILES_OUTPUT_VARIABLE
         RESOURCE_PREFIX
         OUTPUT_TARGETS)
@@ -646,6 +603,11 @@ function(qt6_add_translations)
         endif()
     endif()
 
+    # Store all .ts file paths in a user-specified variable.
+    if(DEFINED arg_TS_FILES_OUTPUT_VARIABLE)
+        set("${arg_TS_FILES_OUTPUT_VARIABLE}" ${arg_PLURALS_TS_FILE} ${arg_TS_FILES} PARENT_SCOPE)
+    endif()
+
     # Defer the actual function call if SOURCE_TARGETS was not given and an immediate call was not
     # requested.
     set(source_targets "${arg_SOURCE_TARGETS}")
@@ -699,6 +661,7 @@ function(qt6_add_translations)
             set(ignored_variables
                 TS_FILE_BASE
                 TS_FILE_DIR
+                TS_FILES_OUTPUT_VARIABLE
             )
             list(REMOVE_ITEM to_forward ${path_variables} ${ignored_variables})
             foreach(keyword IN LISTS to_forward)
@@ -752,6 +715,14 @@ function(qt6_add_translations)
         OPTIONS "${arg_LRELEASE_OPTIONS}"
         __QT_INTERNAL_DEFAULT_QM_OUT_DIR "${arg___QT_INTERNAL_DEFAULT_QM_OUT_DIR}"
     )
+
+    # Make the .ts files visible in IDEs.
+    set(all_ts_files ${arg_TS_FILES} ${arg_PLURALS_TS_FILE})
+    foreach(target IN LISTS targets)
+        foreach(ts_file IN LISTS all_ts_files)
+            _qt_internal_expose_source_file_to_ide(${target} ${ts_file})
+        endforeach()
+    endforeach()
 
     if("${QT_I18N_TRANSLATED_LANGUAGES}" STREQUAL "")
         _qt_internal_store_languages_from_ts_files_in_targets("${targets}" "${arg_TS_FILES}")
@@ -837,9 +808,24 @@ if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
     function(qt_add_translations)
         if(QT_DEFAULT_MAJOR_VERSION EQUAL 6)
             qt6_add_translations(${ARGN})
-            cmake_parse_arguments(PARSE_ARGV 1 arg "" "OUTPUT_TARGETS;QM_FILES_OUTPUT_VARIABLE" "")
+
+            set(no_value_options "")
+            set(single_value_options
+                TS_FILES_OUTPUT_VARIABLE
+                QM_FILES_OUTPUT_VARIABLE
+            )
+            set(multi_value_options
+                OUTPUT_TARGETS
+            )
+            cmake_parse_arguments(PARSE_ARGV 0 arg
+                "${no_value_options}" "${single_value_options}" "${multi_value_options}"
+            )
+
             if(arg_OUTPUT_TARGETS)
                 set(${arg_OUTPUT_TARGETS} ${${arg_OUTPUT_TARGETS}} PARENT_SCOPE)
+            endif()
+            if(arg_TS_FILES_OUTPUT_VARIABLE)
+                set(${arg_TS_FILES_OUTPUT_VARIABLE} ${${arg_TS_FILES_OUTPUT_VARIABLE}} PARENT_SCOPE)
             endif()
             if(arg_QM_FILES_OUTPUT_VARIABLE)
                 set(${arg_QM_FILES_OUTPUT_VARIABLE} ${${arg_QM_FILES_OUTPUT_VARIABLE}} PARENT_SCOPE)

@@ -24,6 +24,10 @@ from dateconverter import convert_date
 # The github version of CLDR uses '↑↑↑' to indicate "inherit"
 INHERIT = '↑↑↑'
 
+def _attrsFromDom(dom):
+    return { k: (v if isinstance(v, str) else v.nodeValue)
+             for k, v in dom.attributes.items() }
+
 class Node (object):
     """Wrapper for an arbitrary DOM node.
 
@@ -52,6 +56,9 @@ class Node (object):
             self.draft = draft
         else:
             self.draft = max(draft, self.draftScore(attr))
+
+    def attributes(self):
+        return _attrsFromDom(self.dom)
 
     def findAllChildren(self, tag, wanted = None, allDull = False):
         """All children that do have the given tag and attributes.
@@ -187,12 +194,17 @@ class Supplement (XmlScanner):
                                 if not any(a in e.dom.attributes
                                            for a in exclude)):
             if elt.attributes:
-                yield (elt.nodeName,
-                       dict((k, v if isinstance(v, str) else v.nodeValue)
-                            for k, v in elt.attributes.items()))
+                yield elt.nodeName, _attrsFromDom(elt)
 
 class LocaleScanner (object):
     def __init__(self, name, nodes, root):
+        """Set up to scan data for a specified locale.
+
+        First parameter is the name of the locale; it will be used in
+        error messages. Second is a tuple of DOM root-nodes of files
+        with locale data, later ones serving as fall-backs for data
+        missing in earlier ones. Third parameter is the root locale's
+        DOM node."""
         self.name, self.nodes, self.base = name, nodes, root
 
     def find(self, xpath, default = None, draft = None):
@@ -346,6 +358,7 @@ class LocaleScanner (object):
 
     def endonyms(self, language, script, territory, variant):
         # TODO: take variant into account ?
+        # TODO: QTBUG-47892, support query for all combinations
         for seq in ((language, script, territory),
                     (language, script), (language, territory), (language,)):
             if not all(seq):
@@ -405,7 +418,7 @@ class LocaleScanner (object):
         ('long', 'format', 'wide'),
         ('short', 'format', 'abbreviated'),
         ('narrow', 'format', 'narrow'),
-        ) # Used for month and day names
+    ) # Used for month and day names
 
     def __find(self, xpath):
         retries, foundNone = [ xpath.split('/') ], True
@@ -473,7 +486,7 @@ class LocaleScanner (object):
             return self.find(stem + 'displayName')
         except Error:
             pass
-        for x in  ('zero', 'one', 'two', 'few', 'many', 'other'):
+        for x in ('zero', 'one', 'two', 'few', 'many', 'other'):
             try:
                 return self.find(f'{stem}displayName[count={x}]')
             except Error:

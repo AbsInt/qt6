@@ -28,7 +28,7 @@ QT_BEGIN_NAMESPACE
 /*!
     \qmltype ApplicationWindow
     \inherits Window
-//!     \instantiates QQuickApplicationWindow
+//!     \nativetype QQuickApplicationWindow
     \inqmlmodule QtQuick.Controls
     \since 5.7
     \ingroup qtquickcontrols-containers
@@ -91,7 +91,7 @@ QT_BEGIN_NAMESPACE
 static const QQuickItemPrivate::ChangeTypes ItemChanges = QQuickItemPrivate::Visibility
         | QQuickItemPrivate::Geometry | QQuickItemPrivate::ImplicitWidth | QQuickItemPrivate::ImplicitHeight;
 
-class Q_QUICKTEMPLATES2_PRIVATE_EXPORT QQuickApplicationWindowPrivate
+class Q_QUICKTEMPLATES2_EXPORT QQuickApplicationWindowPrivate
     : public QQuickWindowQmlImplPrivate
     , public QQuickItemChangeListener
 {

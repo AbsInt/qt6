@@ -188,8 +188,12 @@ QThreadData *QThreadData::current(bool createIfNecessary)
         data->deref();
         data->isAdopted = true;
         data->threadId.storeRelaxed(to_HANDLE(pthread_self()));
-        if (!QCoreApplicationPrivate::theMainThread.loadAcquire())
-            QCoreApplicationPrivate::theMainThread.storeRelease(data->thread.loadRelaxed());
+        if (!QCoreApplicationPrivate::theMainThreadId.loadAcquire()) {
+            auto *mainThread = data->thread.loadRelaxed();
+            mainThread->setObjectName("Qt mainThread");
+            QCoreApplicationPrivate::theMainThread.storeRelease(mainThread);
+            QCoreApplicationPrivate::theMainThreadId.storeRelaxed(data->threadId.loadRelaxed());
+        }
     }
     return data;
 }
@@ -277,8 +281,16 @@ void *QThreadPrivate::start(void *arg)
 #ifdef PTHREAD_CANCEL_DISABLE
     pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, nullptr);
 #endif
-    pthread_cleanup_push(QThreadPrivate::finish, arg);
-
+#if !defined(Q_OS_QNX) && !defined(Q_OS_VXWORKS)
+    // On QNX, calling finish() from a thread_local destructor causes the C
+    // library to hang.
+    // On VxWorks, its pthread implementation fails on call to `pthead_setspecific` which is made
+    // by first QObject constructor during `finish()`. This causes call to QThread::current, since
+    // QObject doesn't have parent, and since the pthread is already removed, it tries to set
+    // QThreadData for current pthread key, which crashes.
+    static thread_local
+#endif
+            auto cleanup = qScopeGuard([=] { finish(arg); });
     terminate_on_exception([&] {
         QThread *thr = reinterpret_cast<QThread *>(arg);
         QThreadData *data = QThreadData::get2(thr);
@@ -323,11 +335,7 @@ void *QThreadPrivate::start(void *arg)
         thr->run();
     });
 
-    // This pop runs finish() below. It's outside the try/catch (and has its
-    // own try/catch) to prevent finish() to be run in case an exception is
-    // thrown.
-    pthread_cleanup_pop(1);
-
+    // The qScopeGuard above call runs finish() below.
     return nullptr;
 }
 
@@ -337,6 +345,13 @@ void QThreadPrivate::finish(void *arg)
         QThread *thr = reinterpret_cast<QThread *>(arg);
         QThreadPrivate *d = thr->d_func();
 
+        // Disable cancellation; we're already in the finishing touches of this
+        // thread, and we don't want cleanup to be disturbed by
+        // abi::__forced_unwind being thrown from all kinds of functions.
+#ifdef PTHREAD_CANCEL_DISABLE
+        pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, nullptr);
+#endif
+
         QMutexLocker locker(&d->mutex);
 
         d->isInFinish = true;
@@ -344,6 +359,7 @@ void QThreadPrivate::finish(void *arg)
         void *data = &d->data->tls;
         locker.unlock();
         emit thr->finished(QThread::QPrivateSignal());
+        qCDebug(lcDeleteLater) << "Sending deferred delete events as part of finishing thread" << thr;
         QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
         QThreadStorageData::finish((void **)data);
         locker.relock();

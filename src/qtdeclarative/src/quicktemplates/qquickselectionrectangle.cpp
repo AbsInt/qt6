@@ -17,7 +17,7 @@ QT_BEGIN_NAMESPACE
 /*!
     \qmltype SelectionRectangle
     \inherits Control
-//!     \instantiates QQuickSelectionRectangle
+//!     \nativetype QQuickSelectionRectangle
     \inqmlmodule QtQuick.Controls
     \since 6.2
     \ingroup utilities
@@ -170,7 +170,7 @@ QQuickSelectionRectanglePrivate::QQuickSelectionRectanglePrivate()
         else
             m_selectable->setSelectionEndPos(m_scrollToPoint);
         updateHandles();
-        const QSizeF dist = m_selectable->scrollTowardsSelectionPoint(m_scrollToPoint, m_scrollSpeed);
+        const QSizeF dist = m_selectable->scrollTowardsPoint(m_scrollToPoint, m_scrollSpeed);
         m_scrollToPoint.rx() += dist.width() > 0 ? m_scrollSpeed.width() : -m_scrollSpeed.width();
         m_scrollToPoint.ry() += dist.height() > 0 ? m_scrollSpeed.height() : -m_scrollSpeed.height();
         m_scrollSpeed = QSizeF(qAbs(dist.width() * 0.007), qAbs(dist.height() * 0.007));
@@ -300,7 +300,7 @@ void QQuickSelectionRectanglePrivate::scrollTowardsPos(const QPointF &pos)
     if (m_scrollTimer.isActive())
         return;
 
-    const QSizeF dist = m_selectable->scrollTowardsSelectionPoint(m_scrollToPoint, m_scrollSpeed);
+    const QSizeF dist = m_selectable->scrollTowardsPoint(m_scrollToPoint, m_scrollSpeed);
     if (!dist.isNull())
         m_scrollTimer.start(1);
 }

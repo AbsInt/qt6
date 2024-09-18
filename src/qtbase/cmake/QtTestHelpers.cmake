@@ -38,8 +38,6 @@ function(qt_internal_add_benchmark target)
         endif()
     endif()
 
-    qt_internal_library_deprecation_level(deprecation_define)
-
     qt_internal_add_executable(${target}
         NO_INSTALL # we don't install benchmarks
         NO_UNITY_BUILD # excluded by default
@@ -251,7 +249,6 @@ function(qt_internal_add_test_to_batch batch_name name)
 
     # Lazy-init the test batch
     if(NOT TARGET ${target})
-        qt_internal_library_deprecation_level(deprecation_define)
         qt_internal_add_executable(${target}
             ${exceptions_text}
             ${gui_text}
@@ -513,7 +510,6 @@ function(qt_internal_add_test name)
         list(APPEND private_includes ${arg_INCLUDE_DIRECTORIES})
 
         qt_internal_prepare_test_target_flags(version_arg exceptions_text gui_text ${ARGN})
-        qt_internal_library_deprecation_level(deprecation_define)
 
         qt_internal_add_executable("${name}"
             ${exceptions_text}
@@ -566,12 +562,14 @@ function(qt_internal_add_test name)
             LIBRARIES ${QT_CMAKE_EXPORT_NAMESPACE}::QuickTest
         )
 
-        qt_internal_extend_target("${name}" CONDITION arg_QMLTEST AND NOT ANDROID
+        qt_internal_extend_target("${name}"
+            CONDITION arg_QMLTEST AND NOT ANDROID AND NOT QT_FORCE_BUILTIN_TESTDATA
             DEFINES
                 QUICK_TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
         )
 
-        qt_internal_extend_target("${name}" CONDITION arg_QMLTEST AND ANDROID
+        qt_internal_extend_target("${name}"
+            CONDITION arg_QMLTEST AND (ANDROID OR QT_FORCE_BUILTIN_TESTDATA)
             DEFINES
                 QUICK_TEST_SOURCE_DIR=":/"
         )
@@ -681,7 +679,11 @@ function(qt_internal_add_test name)
 
         # This tells cmake to run the tests with this script, since wasm files can't be
         # executed directly
-        set_property(TARGET "${name}" PROPERTY CROSSCOMPILING_EMULATOR "emrun")
+        if (CMAKE_HOST_WIN32)
+            set_property(TARGET "${name}" PROPERTY CROSSCOMPILING_EMULATOR "emrun.bat")
+        else()
+            set_property(TARGET "${name}" PROPERTY CROSSCOMPILING_EMULATOR "emrun")
+        endif()
     else()
         if(arg_QMLTEST AND NOT arg_SOURCES)
             set(test_working_dir "${CMAKE_CURRENT_SOURCE_DIR}")
@@ -770,7 +772,7 @@ function(qt_internal_add_test name)
         endif()
     endif()
 
-    if(ANDROID OR IOS OR WASM OR INTEGRITY OR arg_BUILTIN_TESTDATA)
+    if(ANDROID OR IOS OR WASM OR INTEGRITY OR arg_BUILTIN_TESTDATA OR QT_FORCE_BUILTIN_TESTDATA)
         set(builtin_testdata TRUE)
     endif()
 

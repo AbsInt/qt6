@@ -10,6 +10,7 @@
 #include "qiosscreen.h"
 #include "qioswindow.h"
 #include "qiosinputcontext.h"
+#include "quiwindow.h"
 #ifndef Q_OS_TVOS
 #include "qiosmenu.h"
 #endif
@@ -61,7 +62,7 @@ inline ulong getTimeStamp(UIEvent *event)
 
 + (void)load
 {
-#ifndef Q_OS_TVOS
+#if !defined(Q_OS_TVOS) && !defined(Q_OS_VISIONOS)
     if (QOperatingSystemVersion::current() < QOperatingSystemVersion(QOperatingSystemVersion::IOS, 11)) {
         // iOS 11 handles this though [UIView safeAreaInsetsDidChange], but there's no signal for
         // the corresponding top and bottom layout guides that we use on earlier versions. Note
@@ -91,7 +92,16 @@ inline ulong getTimeStamp(UIEvent *event)
 {
     if (self = [self initWithFrame:window->geometry().toCGRect()]) {
         self.platformWindow = window;
+
+        if (isQtApplication())
+            self.hidden = YES;
+
         m_accessibleElements = [[NSMutableArray<UIAccessibilityElement *> alloc] init];
+
+#ifndef Q_OS_TVOS
+        self.multipleTouchEnabled = YES;
+#endif
+
         m_scrollGestureRecognizer = [[UIPanGestureRecognizer alloc]
                                       initWithTarget:self
                                       action:@selector(handleScroll:)];
@@ -108,6 +118,7 @@ inline ulong getTimeStamp(UIEvent *event)
         m_lastScrollCursorPos = CGPointZero;
         [self addGestureRecognizer:m_scrollGestureRecognizer];
 
+        // Set up layer
         if ([self.layer isKindOfClass:CAMetalLayer.class]) {
             QWindow *window = self.platformWindow->window();
             if (QColorSpace colorSpace = window->format().colorSpace(); colorSpace.isValid()) {
@@ -118,17 +129,8 @@ inline ulong getTimeStamp(UIEvent *event)
                 qCDebug(lcQpaWindow) << "Set" << self << "color space to" << metalLayer.colorspace;
             }
         }
-    }
-
-    return self;
-}
-
-- (instancetype)initWithFrame:(CGRect)frame
-{
-    if ((self = [super initWithFrame:frame])) {
 #if QT_CONFIG(opengl)
-        if ([self.layer isKindOfClass:[CAEAGLLayer class]]) {
-            // Set up EAGL layer
+        else if ([self.layer isKindOfClass:[CAEAGLLayer class]]) {
             CAEAGLLayer *eaglLayer = static_cast<CAEAGLLayer *>(self.layer);
             eaglLayer.opaque = TRUE;
             eaglLayer.drawableProperties = @{
@@ -138,37 +140,13 @@ inline ulong getTimeStamp(UIEvent *event)
         }
 #endif
 
-        if (isQtApplication())
-            self.hidden = YES;
-
-#ifndef Q_OS_TVOS
-        self.multipleTouchEnabled = YES;
+#if defined(Q_OS_VISIONOS)
+        // Although the "Drawing sharp layer-based content in visionOS" docs
+        // claim that by default a CALayer rasterizes at a 2x scale this does
+        // not seem to be the case in practice. So we explicitly set the view's
+        // scale factor based on the screen, where we hard-code it to 2.0.
+        self.contentScaleFactor = self.platformWindow->screen()->devicePixelRatio();
 #endif
-
-        if (qEnvironmentVariableIntValue("QT_IOS_DEBUG_WINDOW_MANAGEMENT")) {
-            static CGFloat hue = 0.0;
-            CGFloat lastHue = hue;
-            for (CGFloat diff = 0; diff < 0.1 || diff > 0.9; diff = fabs(hue - lastHue))
-                hue = drand48();
-
-            #define colorWithBrightness(br) \
-                [UIColor colorWithHue:hue saturation:0.5 brightness:br alpha:1.0].CGColor
-
-            self.layer.borderColor = colorWithBrightness(1.0);
-            self.layer.borderWidth = 1.0;
-        }
-
-        if (qEnvironmentVariableIsSet("QT_IOS_DEBUG_WINDOW_SAFE_AREAS")) {
-            UIView *safeAreaOverlay = [[UIView alloc] initWithFrame:CGRectZero];
-            [safeAreaOverlay setBackgroundColor:[UIColor colorWithRed:0.3 green:0.7 blue:0.9 alpha:0.3]];
-            [self addSubview:safeAreaOverlay];
-
-            safeAreaOverlay.translatesAutoresizingMaskIntoConstraints = NO;
-            [safeAreaOverlay.topAnchor constraintEqualToAnchor:self.safeAreaLayoutGuide.topAnchor].active = YES;
-            [safeAreaOverlay.leftAnchor constraintEqualToAnchor:self.safeAreaLayoutGuide.leftAnchor].active = YES;
-            [safeAreaOverlay.rightAnchor constraintEqualToAnchor:self.safeAreaLayoutGuide.rightAnchor].active = YES;
-            [safeAreaOverlay.bottomAnchor constraintEqualToAnchor:self.safeAreaLayoutGuide.bottomAnchor].active = YES;
-        }
     }
 
     return self;
@@ -197,6 +175,7 @@ inline ulong getTimeStamp(UIEvent *event)
     return description;
 }
 
+#if !defined(Q_OS_VISIONOS)
 - (void)willMoveToWindow:(UIWindow *)newWindow
 {
     // UIKIt will normally set the scale factor of a view to match the corresponding
@@ -206,6 +185,7 @@ inline ulong getTimeStamp(UIEvent *event)
 
     // FIXME: Allow the scale factor to be customized through QSurfaceFormat.
 }
+#endif
 
 - (void)didAddSubview:(UIView *)subview
 {
@@ -353,9 +333,11 @@ inline ulong getTimeStamp(UIEvent *event)
 
     qImDebug() << self << "resigned first responder";
 
-    UIResponder *newResponder = FirstResponderCandidate::currentCandidate();
-    if ([self responderShouldTriggerWindowDeactivation:newResponder])
-        QWindowSystemInterface::handleFocusWindowChanged(nullptr, Qt::ActiveWindowFocusReason);
+    if (qGuiApp) {
+        UIResponder *newResponder = FirstResponderCandidate::currentCandidate();
+        if ([self responderShouldTriggerWindowDeactivation:newResponder])
+            QWindowSystemInterface::handleFocusWindowChanged(nullptr, Qt::ActiveWindowFocusReason);
+    }
 
     return YES;
 }
@@ -700,7 +682,7 @@ inline ulong getTimeStamp(UIEvent *event)
 
 - (BOOL)canPerformAction:(SEL)action withSender:(id)sender
 {
-#ifndef Q_OS_TVOS
+#if !defined(Q_OS_TVOS) && !defined(Q_OS_VISIONOS)
     // Check first if QIOSMenu should handle the action before continuing up the responder chain
     return [QIOSMenu::menuActionTarget() targetForAction:action withSender:sender] != 0;
 #else
@@ -713,7 +695,7 @@ inline ulong getTimeStamp(UIEvent *event)
 - (id)forwardingTargetForSelector:(SEL)selector
 {
     Q_UNUSED(selector);
-#ifndef Q_OS_TVOS
+#if !defined(Q_OS_TVOS) && !defined(Q_OS_VISIONOS)
     return QIOSMenu::menuActionTarget();
 #else
     return nil;
@@ -831,7 +813,7 @@ inline ulong getTimeStamp(UIEvent *event)
 
 @end
 
-#ifdef Q_OS_IOS
+#if QT_CONFIG(metal)
 @implementation QUIMetalView
 
 + (Class)layerClass

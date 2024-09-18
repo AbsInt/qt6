@@ -116,6 +116,9 @@ function(_qt_internal_get_cmake_test_configure_options out_var)
     if (NO_WIDGETS)
         list(APPEND option_list "-DNO_WIDGETS=True")
     endif()
+    if (NO_OPENGL)
+        list(APPEND option_list "-DNO_OPENGL=True")
+    endif()
     if (NO_DBUS)
         list(APPEND option_list "-DNO_DBUS=True")
     endif()
@@ -384,7 +387,7 @@ macro(_qt_internal_test_expect_pass _dir)
         endif()
         if(build_environment STREQUAL "ci"
             AND osx_arch_count GREATER_EQUAL 2
-            AND NOT QT_UIKIT_SDK
+            AND NOT QT_APPLE_SDK
             AND NOT QT_NO_IOS_BUILD_ADJUSTMENT_IN_CI)
             list(APPEND additional_configure_args
                 -DCMAKE_OSX_ARCHITECTURES=x86_64 -DCMAKE_OSX_SYSROOT=iphonesimulator)

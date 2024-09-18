@@ -14,7 +14,7 @@ Q_LOGGING_CATEGORY(lcDragHandler, "qt.quick.handler.drag")
 
 /*!
     \qmltype DragHandler
-    \instantiates QQuickDragHandler
+    \nativetype QQuickDragHandler
     \inherits MultiPointHandler
     \inqmlmodule QtQuick
     \ingroup qtquick-input-handlers
@@ -185,13 +185,15 @@ void QQuickDragHandler::handlePointerEventImpl(QPointerEvent *event)
         // and in approximately the same direction
         qreal minAngle =  361;
         qreal maxAngle = -361;
-        bool allOverThreshold = !event->isEndEvent();
+        bool allOverThreshold = QQuickDeliveryAgentPrivate::isTouchEvent(event) ?
+                static_cast<QTouchEvent *>(event)->touchPointStates() != QEventPoint::Released :
+                !event->isEndEvent();
         QVector<QEventPoint> chosenPoints;
 
         if (event->isBeginEvent())
             m_pressedInsideTarget = target() && currentPoints().size() > 0;
 
-        for (const QQuickHandlerPoint &p : currentPoints()) {
+        for (const QQuickHandlerPoint &p : std::as_const(currentPoints())) {
             if (!allOverThreshold)
                 break;
             auto point = event->pointById(p.id());

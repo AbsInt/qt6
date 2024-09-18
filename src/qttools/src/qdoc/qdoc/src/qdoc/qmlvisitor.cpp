@@ -22,6 +22,8 @@
 
 QT_BEGIN_NAMESPACE
 
+using namespace Qt::StringLiterals;
+
 /*!
   The constructor stores all the parameters in local data members.
  */
@@ -403,9 +405,7 @@ void QmlDocVisitor::applyMetacommands(QQmlJS::SourceLocation, Node *node, Doc &d
                     node->setAbstract(true);
                 }
             } else if (command == COMMAND_DEPRECATED) {
-                node->setStatus(Node::Deprecated);
-                if (!args[0].second.isEmpty())
-                    node->setDeprecatedSince(args[0].second);
+                node->setDeprecated(args[0].second);
             } else if (command == COMMAND_INQMLMODULE) {
                 qdb->addToQmlModule(args[0].first, node);
             } else if (command == COMMAND_QMLINHERITS) {
@@ -428,6 +428,14 @@ void QmlDocVisitor::applyMetacommands(QQmlJS::SourceLocation, Node *node, Doc &d
                 }
             } else if (command == COMMAND_QMLDEFAULT) {
                 node->markDefault();
+            } else if (command == COMMAND_QMLENUMERATORSFROM) {
+                if (!node->isQmlProperty()) {
+                    doc.location().warning("Ignored '\\%1', applies only to '\\%2'"_L1
+                            .arg(command, COMMAND_QMLPROPERTY));
+                } else if (!static_cast<QmlPropertyNode*>(node)->setEnumNode(args[0].first, args[0].second)) {
+                    doc.location().warning("Failed to find C++ enumeration '%2' passed to \\%1"_L1
+                            .arg(command, args[0].first), "Use \\value commands instead"_L1);
+                }
             } else if (command == COMMAND_QMLREADONLY) {
                 node->markReadOnly(1);
             } else if (command == COMMAND_QMLREQUIRED) {

@@ -54,16 +54,16 @@ void tst_qmldomconstruction::domConstructionTime()
 
     DomItem tFile;
     QBENCHMARK {
-        DomItem env = DomEnvironment::create(
+        auto envPtr = DomEnvironment::create(
                 importPaths,
                 QQmlJS::Dom::DomEnvironment::Option::SingleThreaded
-                        | QQmlJS::Dom::DomEnvironment::Option::NoDependencies);
+                        | QQmlJS::Dom::DomEnvironment::Option::NoDependencies, withScope);
 
-        env.loadFile(
-                FileToLoad::fromFileSystem(env.ownerAs<DomEnvironment>(), fileName, withScope),
-                [&tFile](Path, const DomItem &, const DomItem &newIt) { tFile = newIt.fileObject(); },
-                LoadOption::DefaultLoad);
-        env.loadPendingDependencies();
+        envPtr->loadFile(FileToLoad::fromFileSystem(envPtr, fileName),
+                         [&tFile](Path, const DomItem &, const DomItem &newIt) {
+                             tFile = newIt.fileObject();
+                         });
+        envPtr->loadPendingDependencies();
     }
 }
 

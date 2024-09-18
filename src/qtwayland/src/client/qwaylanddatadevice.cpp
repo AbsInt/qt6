@@ -43,6 +43,8 @@ QWaylandDataDevice::~QWaylandDataDevice()
 {
     if (version() >= WL_DATA_DEVICE_RELEASE_SINCE_VERSION)
         release();
+    else
+        wl_data_device_destroy(object());
 }
 
 QWaylandDataOffer *QWaylandDataDevice::selectionOffer() const
@@ -331,8 +333,7 @@ void QWaylandDataDevice::sendResponse(Qt::DropActions supportedActions, const QP
 
         m_dragOffer->accept(m_enterSerial, m_dragOffer->firstFormat());
     } else {
-        // qtwaylandscanner doesn't support null strings yet (sends empty string), call it directly.
-        ::wl_data_offer_accept(m_dragOffer->object(), m_enterSerial, nullptr);
+        m_dragOffer->accept(m_enterSerial, QString());
     }
 }
 

@@ -8,8 +8,6 @@
 \title Readonly property
 \brief A readonly property was written.
 
-\section1 read-only-property
-
 \qmllintwarningcategory read-only-property
 
 \section1 Cannot assign to read-only property

@@ -13,6 +13,207 @@ set(__qt_qml_macros_module_base_dir "${CMAKE_CURRENT_LIST_DIR}" CACHE INTERNAL "
 include(GNUInstallDirs)
 _qt_internal_add_deploy_support("${CMAKE_CURRENT_LIST_DIR}/Qt6QmlDeploySupport.cmake")
 
+# This function is used to parse DEPENDENCY and IMPORT entries passed to qt_add_qml_module
+# It takes the entry as a mandatory argument, and then sets the following
+# user provided properties in the callers scope
+# OUTPUT_URI <property>: the URI of the module; mandatory argument
+# OUTPUT_VERSION <property>: the requested version of the module; will potentially be empty; mandatory
+# OUTPUT_MODULE_LOCATION <property>: the folder in which the module is located; optional; can be used to extract potential import path
+# OUTPUT_MODULE_TARGET <property>: the target corresponding to the module
+
+function(_qt_internal_parse_qml_module_dependency dependency was_marked_as_target)
+    set(args_option "")
+    set(args_single OUTPUT_URI OUTPUT_VERSION OUTPUT_MODULE_LOCATION OUTPUT_MODULE_TARGET)
+    set(args_multi QML_FILES IMPORT_PATHS)
+
+    cmake_parse_arguments(PARSE_ARGV 2 arg
+        "${args_option}" "${args_single}" "${args_multi}"
+    )
+    if(arg_UNPARSED_ARGUMENTS)
+        message(FATAL_ERROR "Unknown/unexpected arguments: ${arg_UNPARSED_ARGUMENTS}")
+    endif()
+
+    if(NOT arg_OUTPUT_URI)
+        message(FATAL_ERROR "Missing output URI variable")
+    endif()
+    if(NOT arg_OUTPUT_VERSION)
+        message(FATAL_ERROR "Missing output version variable")
+    endif()
+
+    set(dep_version "")
+    set(dep_target_or_uri "")
+    string(FIND "${dependency}" "/" slash_position REVERSE)
+    if(slash_position EQUAL -1)
+        set(dep_target_or_uri "${dependency}")
+    else()
+        string(SUBSTRING "${dependency}" 0 ${slash_position} dep_module)
+        math(EXPR slash_position "${slash_position} + 1")
+        string(SUBSTRING "${dependency}" ${slash_position} -1 dep_version)
+        if(NOT dep_version MATCHES "^([0-9]+(\\.[0-9]+)?|auto)$")
+            message(FATAL_ERROR
+                "Invalid module dependency version number. "
+                "Expected 'VersionMajor', 'VersionMajor.VersionMinor' or 'auto'."
+            )
+        endif()
+        set(dep_target_or_uri "${dep_module}")
+    endif()
+    if("${was_marked_as_target}" AND NOT TARGET ${dep_target_or_uri})
+        message(FATAL_ERROR "Argument ${dep_target_or_uri} is not a target!")
+    endif()
+    if("${was_marked_as_target}")
+        qt6_query_qml_module(${dep_target_or_uri}
+            URI dependency_uri
+            QMLDIR qmldir_location
+        )
+        set(dep_module ${dependency_uri})
+    else()
+        set(dep_module "${dep_target_or_uri}")
+    endif()
+    set(${arg_OUTPUT_URI} ${dep_module} PARENT_SCOPE)
+    set(${arg_OUTPUT_VERSION} ${dep_version} PARENT_SCOPE)
+    if(arg_OUTPUT_MODULE_LOCATION)
+        if(was_marked_as_target)
+            if(NOT qmldir_location)
+                message(FATAL_ERROR "module has no qmldir! Given target was ${dep_target_or_uri}")
+            endif()
+            set(module_location "${qmldir_location}")
+            string(REGEX MATCHALL "\\." matches "${dependency_uri}")
+            list(LENGTH matches go_up_count)
+            # inclusive, which is what we want here: go up once for the qmldir,
+            # and then once per separated component
+            foreach(i RANGE ${go_up_count})
+                get_filename_component(module_location "${module_location}" DIRECTORY)
+            endforeach()
+            set(${arg_OUTPUT_MODULE_LOCATION} "${module_location}" PARENT_SCOPE)
+        else()
+            set(${arg_OUTPUT_MODULE_LOCATION} "NOTFOUND" PARENT_SCOPE)
+        endif()
+    endif()
+    if (arg_OUTPUT_MODULE_TARGET AND was_marked_as_target)
+        set(${arg_OUTPUT_MODULE_TARGET} "${dep_target_or_uri}" PARENT_SCOPE)
+    else()
+        set(${arg_OUTPUT_MODULE_TARGET} "" PARENT_SCOPE)
+    endif()
+endfunction()
+
+function(_qt_internal_write_qmldir_part target)
+    set(effective_outdir $<TARGET_FILE_DIR:${target}>)
+    set(qtconf_file "${effective_outdir}/${target}_qt.part.conf")
+    get_target_property(dependency_targets "${target}" QT_QML_DEPENDENT_QML_MODULE_TARGETS)
+    get_directory_property(counter
+         DIRECTORY ${PROJECT_SOURCE_DIR}
+         QT_QMLDIR_DEFERRED_WRITEOUT_COUNTER
+    )
+    math(EXPR counter "${counter} - 1")
+    set_property(
+        DIRECTORY ${PROJECT_SOURCE_DIR}
+        PROPERTY QT_QMLDIR_DEFERRED_WRITEOUT_COUNTER "${counter}"
+    )
+    if(dependency_targets)
+        foreach(dep_target ${dependency_targets})
+            qt6_query_qml_module(${dep_target}
+                QMLDIR qmldir_location
+            )
+            get_filename_component(module_location "${qmldir_location}" DIRECTORY)
+            get_filename_component(module_import_path "${module_location}" DIRECTORY)
+            list(APPEND qt_all_qml_output_dirs ${module_import_path})
+        endforeach()
+        if (qt_all_qml_output_dirs)
+            list(REMOVE_DUPLICATES qt_all_qml_output_dirs)
+            # TODO: this will break for paths containing a newline character..
+            list(JOIN qt_all_qml_output_dirs "\n"  qt_all_qml_output_dirs)
+
+            file(GENERATE
+                OUTPUT "${qtconf_file}"
+                CONTENT "${qt_all_qml_output_dirs}\n"
+            )
+            set_property(
+                DIRECTORY ${PROJECT_SOURCE_DIR}
+                APPEND
+                PROPERTY QT_QMLDIR_ALL_PARTS "${qtconf_file}"
+            )
+            set_property(
+                DIRECTORY ${PROJECT_SOURCE_DIR}
+                APPEND
+                PROPERTY QT_QMLDIR_DEFERRED_WRITEOUT_ALL_TARGETS "${target}")
+        endif()
+    endif()
+
+    if (counter EQUAL 0)
+        # counter reached zero, all relevant finalizers are done
+        get_directory_property(all_parts DIRECTORY ${PROJECT_SOURCE_DIR} QT_QMLDIR_ALL_PARTS)
+        if (NOT all_parts)
+            return()
+        endif()
+        list(JOIN all_parts "\n"  all_parts_string)
+        set(command_args_location "${PROJECT_BINARY_DIR}/.qt/qtconf_list_$<CONFIG>")
+        file(GENERATE
+            OUTPUT "${command_args_location}"
+            CONTENT "${all_parts_string}\n"
+        )
+        _qt_internal_get_tool_wrapper_script_path(tool_wrapper)
+        add_custom_command(
+            OUTPUT "${command_args_location}.done"
+            COMMAND
+            ${tool_wrapper}
+            $<TARGET_FILE:${QT_CMAKE_EXPORT_NAMESPACE}::qmltyperegistrar>
+            --merge-qt-conf "${command_args_location}"
+            COMMENT "Generating qt.conf file"
+            DEPENDS
+                ${all_parts}
+                ${QT_CMAKE_EXPORT_NAMESPACE}::qmltyperegistrar
+        )
+        # actually not specific to $target, but we need a unique identifier
+        set(customtargetname "generate_finalqtconf_${target}")
+        add_custom_target("${customtargetname}" DEPENDS "${command_args_location}.done")
+        get_directory_property(all_targets
+            DIRECTORY ${PROJECT_SOURCE_DIR}
+            QT_QMLDIR_DEFERRED_WRITEOUT_ALL_TARGETS
+        )
+        foreach (moduleTarget ${all_targets})
+            add_dependencies(${moduleTarget} "${customtargetname}")
+        endforeach()
+    endif()
+endfunction()
+
+function(_qt_internal_writebuilddir_qtconf_nondeferred property_folder writeout_folder)
+    set(qt_all_qml_output_dirs "")
+    get_directory_property(targets
+        DIRECTORY "${property_folder}"
+        QT_QML_TARGETS_FOR_DEFERRED_QTCONF_WRITEOUT
+    )
+    set(qtconf_file "${writeout_folder}/qt.conf")
+    foreach(target IN LISTS targets)
+        get_target_property(dependency_targets "${target}" QT_QML_DEPENDENT_QML_MODULE_TARGETS)
+        if(NOT dependency_targets)
+            continue()
+        endif()
+        foreach(dep_target ${dependency_targets})
+            qt6_query_qml_module(${dep_target}
+                QMLDIR qmldir_location
+            )
+            get_filename_component(module_location "${qmldir_location}" DIRECTORY)
+            get_filename_component(module_import_path "${module_location}" DIRECTORY)
+            list(APPEND qt_all_qml_output_dirs ${module_import_path})
+        endforeach()
+    endforeach()
+    if (NOT qt_all_qml_output_dirs)
+        return()
+    endif()
+
+    list(REMOVE_DUPLICATES qt_all_qml_output_dirs)
+    # add quotes to deal with whitespace
+    list(TRANSFORM qt_all_qml_output_dirs APPEND "\"")
+    list(TRANSFORM qt_all_qml_output_dirs PREPEND "\"")
+    list(JOIN qt_all_qml_output_dirs ","  qt_all_qml_output_dirs)
+
+    configure_file(
+        ${__qt_qml_macros_module_base_dir}/Qt6qt.conf.in ${qtconf_file}
+        @ONLY
+    )
+endfunction()
+
+
 function(qt6_add_qml_module target)
     set(args_option
         STATIC
@@ -26,18 +227,19 @@ function(qt6_add_qml_module target)
         NO_GENERATE_PLUGIN_SOURCE
         NO_GENERATE_QMLTYPES
         NO_GENERATE_QMLDIR
+        NO_GENERATE_EXTRA_QMLDIRS
         NO_LINT
         NO_CACHEGEN
         NO_RESOURCE_TARGET_PATH
         NO_IMPORT_SCAN
-        # TODO: Remove once all usages have also been removed
-        SKIP_TYPE_REGISTRATION
         ENABLE_TYPE_COMPILER
 
         # Used to mark modules as having static side effects (i.e. if they install an image provider)
         __QT_INTERNAL_STATIC_MODULE
         # Used to mark modules as being a system module that provides all builtins
         __QT_INTERNAL_SYSTEM_MODULE
+        # Give the resource for the qmldir a unique name; TODO: Remove once we can
+        __QT_INTERNAL_DISAMBIGUATE_QMLDIR_RESOURCE
     )
 
     set(args_single
@@ -110,18 +312,14 @@ function(qt6_add_qml_module target)
         )
     endif()
 
-    if(arg_SKIP_TYPE_REGISTRATION)
-        message(AUTHOR_WARNING
-            "SKIP_TYPE_REGISTRATION is no longer used and will be ignored."
-        )
-    endif()
-
     # Mandatory arguments
     if (NOT arg_URI)
         message(FATAL_ERROR
             "Called without a module URI. Please specify one using the URI argument."
         )
     endif()
+
+    _qt_internal_require_qml_uri_valid("${arg_URI}")
 
     if (NOT arg_VERSION)
         set(arg_VERSION "254.254")
@@ -336,19 +534,16 @@ function(qt6_add_qml_module target)
 
     # Sanity check that we are not trying to have two different QML modules use
     # the same output directory.
-    get_property(dirs GLOBAL PROPERTY _qt_all_qml_output_dirs)
-    if(dirs)
-        list(FIND dirs "${arg_OUTPUT_DIRECTORY}" index)
-        if(NOT index EQUAL -1)
-            get_property(qml_targets GLOBAL PROPERTY _qt_all_qml_targets)
-            list(GET qml_targets ${index} other_target)
-            message(FATAL_ERROR
-                "Output directory for target \"${target}\" is already used by "
-                "another QML module (target \"${other_target}\"). "
-                "Output directory is:\n  ${arg_OUTPUT_DIRECTORY}\n"
-            )
-        endif()
+    _qt_internal_find_qml_module(other_target BY_OUTPUT_DIR "${arg_OUTPUT_DIRECTORY}")
+    if(other_target)
+        message(FATAL_ERROR
+            "Output directory for target \"${target}\" is already used by "
+            "another QML module (target \"${other_target}\"). "
+            "Output directory is:\n  ${arg_OUTPUT_DIRECTORY}\n"
+        )
     endif()
+
+    set_property(GLOBAL APPEND PROPERTY _qt_all_qml_uris ${arg_URI})
     set_property(GLOBAL APPEND PROPERTY _qt_all_qml_output_dirs ${arg_OUTPUT_DIRECTORY})
     set_property(GLOBAL APPEND PROPERTY _qt_all_qml_targets     ${target})
 
@@ -396,53 +591,94 @@ function(qt6_add_qml_module target)
         set(arg_TYPEINFO ${target}.qmltypes)
     endif()
 
+    set(all_qml_import_paths "${arg_IMPORT_PATH}")
+    set(all_dependency_targets)
+
+    set(original_no_show_policy_value "${QT_NO_SHOW_OLD_POLICY_WARNINGS}")
+    # silent by default, we only warn if someone uses TARGET as a URI
+    set(QT_NO_SHOW_OLD_POLICY_WARNINGS TRUE)
+    __qt_internal_setup_policy(QTP0005 "6.8.0"
+    "" # intentionally empty as we silence the warning anyway
+    )
+    qt6_policy(GET QTP0005 allow_targets_for_dependencies_policy)
+    set(QT_NO_SHOW_OLD_POLICY_WARNINGS "${original_no_show_policy_value}")
+    string(COMPARE EQUAL "${allow_targets_for_dependencies_policy}" "NEW" target_is_keyword)
+
+
+    set(target_keyword_was_set FALSE)
     foreach(import_set IN ITEMS IMPORTS OPTIONAL_IMPORTS DEFAULT_IMPORTS)
         foreach(import IN LISTS arg_${import_set})
-            string(FIND ${import} "/" slash_position REVERSE)
-            if (slash_position EQUAL -1)
-                set_property(TARGET ${target} APPEND PROPERTY
-                    QT_QML_MODULE_${import_set} "${import}"
-                )
-            else()
-                string(SUBSTRING ${import} 0 ${slash_position} import_module)
-                math(EXPR slash_position "${slash_position} + 1")
-                string(SUBSTRING ${import} ${slash_position} -1 import_version)
-                if (import_version MATCHES "^([0-9]+(\\.[0-9]+)?|auto)$")
-                    set_property(TARGET ${target} APPEND PROPERTY
-                        QT_QML_MODULE_${import_set} "${import_module} ${import_version}"
-                    )
+            if (import STREQUAL "TARGET")
+                if (target_is_keyword)
+                    set(target_keyword_was_set TRUE)
+                    continue()
                 else()
-                    message(FATAL_ERROR
-                        "Invalid module ${import} version number. "
-                        "Expected 'VersionMajor', 'VersionMajor.VersionMinor' or 'auto'."
-                    )
+                    message(AUTHOR_WARNING "TARGET is treated as a URI because QTP0005 is set to OLD. This is deprecated behavior. Check https://doc.qt.io/qt-6/qt-cmake-policy-qtp0005.html for policy details.")
+                    set(target_keyword_was_set FALSE)
                 endif()
             endif()
+            _qt_internal_parse_qml_module_dependency(${import} ${target_keyword_was_set}
+                OUTPUT_URI import_uri
+                OUTPUT_VERSION import_version
+                OUTPUT_MODULE_LOCATION module_location
+                OUTPUT_MODULE_TARGET dependency_target
+            )
+            get_filename_component(module_import_path "${module_location}" DIRECTORY)
+            list(APPEND all_qml_import_paths "${module_import_path}")
+
+            if (NOT "${import_version}" STREQUAL "")
+                set_property(TARGET ${target} APPEND PROPERTY
+                    QT_QML_MODULE_${import_set} "${import_uri} ${import_version}"
+                )
+            else()
+                set_property(TARGET ${target} APPEND PROPERTY
+                    QT_QML_MODULE_${import_set} "${import_uri}"
+                )
+            endif()
+            if(TARGET "${dependency_target}")
+                list(APPEND all_dependency_targets "${dependency_target}")
+            endif()
+            set(target_keyword_was_set FALSE)
         endforeach()
     endforeach()
 
     foreach(dependency IN LISTS arg_DEPENDENCIES)
-        string(FIND ${dependency} "/" slash_position REVERSE)
-        if (slash_position EQUAL -1)
-            set_property(TARGET ${target} APPEND PROPERTY
-                QT_QML_MODULE_DEPENDENCIES "${dependency}"
-            )
-        else()
-            string(SUBSTRING ${dependency} 0 ${slash_position} dep_module)
-            math(EXPR slash_position "${slash_position} + 1")
-            string(SUBSTRING ${dependency} ${slash_position} -1 dep_version)
-            if (dep_version MATCHES "^([0-9]+(\\.[0-9]+)?|auto)$")
-                set_property(TARGET ${target} APPEND PROPERTY
-                    QT_QML_MODULE_DEPENDENCIES "${dep_module} ${dep_version}"
-                )
+
+        if (dependency STREQUAL "TARGET")
+            if (target_is_keyword)
+                set(target_keyword_was_set TRUE)
+                continue()
             else()
-                message(FATAL_ERROR
-                    "Invalid module dependency version number. "
-                    "Expected 'VersionMajor', 'VersionMajor.VersionMinor' or 'auto'."
-                )
+                message(AUTHOR_WARNING "TARGET is treated as a URI because QTP0005 is set to OLD. This is deprecated behavior. Check https://doc.qt.io/qt-6/qt-cmake-policy-qtp0005.html for policy details.")
+                set(target_keyword_was_set FALSE)
             endif()
         endif()
+        _qt_internal_parse_qml_module_dependency(${dependency} "${target_keyword_was_set}"
+            OUTPUT_URI dep_uri
+            OUTPUT_VERSION dep_version
+            OUTPUT_MODULE_LOCATION module_location
+            OUTPUT_MODULE_TARGET dependency_target
+        )
+        get_filename_component(module_import_path "${module_location}" DIRECTORY)
+        list(APPEND all_qml_import_paths "${module_import_path}")
+        if (NOT "${dep_version}" STREQUAL "")
+            set_property(TARGET ${target} APPEND PROPERTY
+                QT_QML_MODULE_DEPENDENCIES "${dep_uri} ${dep_version}"
+            )
+        else()
+            set_property(TARGET ${target} APPEND PROPERTY
+                QT_QML_MODULE_DEPENDENCIES "${dep_uri}"
+            )
+        endif()
+        set(target_keyword_was_set FALSE)
+        if(TARGET "${dependency_target}")
+            list(APPEND all_dependency_targets "${dependency_target}")
+        endif()
     endforeach()
+    ### TODO: add support for transitive dependencies, too
+    list(REMOVE_DUPLICATES all_dependency_targets)
+    set_property(TARGET ${target} PROPERTY QT_QML_DEPENDENT_QML_MODULE_TARGETS "${all_dependency_targets}")
+    _qt_internal_collect_qml_module_dependencies(${target})
 
     if(arg_AUTO_RESOURCE_PREFIX)
         if(arg_RESOURCE_PREFIX)
@@ -487,10 +723,13 @@ Check https://doc.qt.io/qt-6/qt-cmake-policy-qtp0001.html for policy details."
         endif()
     endif()
 
+    list(REMOVE_DUPLICATES all_qml_import_paths)
+
     set_target_properties(${target} PROPERTIES
         QT_QML_MODULE_NO_LINT "${arg_NO_LINT}"
         QT_QML_MODULE_NO_CACHEGEN "${arg_NO_CACHEGEN}"
         QT_QML_MODULE_NO_GENERATE_QMLDIR "${arg_NO_GENERATE_QMLDIR}"
+        QT_QML_MODULE_NO_GENERATE_EXTRA_QMLDIRS "${arg_NO_GENERATE_EXTRA_QMLDIRS}"
         QT_QML_MODULE_NO_PLUGIN "${arg_NO_PLUGIN}"
         QT_QML_MODULE_NO_PLUGIN_OPTIONAL "${arg_NO_PLUGIN_OPTIONAL}"
         QT_QML_MODULE_NO_IMPORT_SCAN "${arg_NO_IMPORT_SCAN}"
@@ -516,7 +755,7 @@ Check https://doc.qt.io/qt-6/qt-cmake-policy-qtp0001.html for policy details."
         QT_QML_MODULE_PAST_MAJOR_VERSIONS "${arg_PAST_MAJOR_VERSIONS}"
 
         # TODO: Check how this is used by qt6_android_generate_deployment_settings()
-        QT_QML_IMPORT_PATH "${arg_IMPORT_PATH}"
+        QT_QML_IMPORT_PATH "${all_qml_import_paths}"
     )
 
     if(arg_TYPEINFO)
@@ -551,21 +790,26 @@ Check https://doc.qt.io/qt-6/qt-cmake-policy-qtp0001.html for policy details."
             PROPERTIES GENERATED TRUE
         )
 
-        # Embed qmldir in qrc. The following comments relate mostly to Qt5->6 transition.
-        # The requirement to keep the same resource name might no longer apply, but it doesn't
-        # currently appear to cause any hinderance to keep it.
-        # The qmldir resource name needs to match the one generated by qmake's qml_module.prf, to
-        # ensure that all Q_INIT_RESOURCE(resource_name) calls in Qt code don't lead to undefined
-        # symbol errors when linking an application project.
-        # The Q_INIT_RESOURCE() calls are not strictly necessary anymore because the CMake Qt
-        # build passes around the compiled resources as object files.
-        # These object files have global initiliazers that don't get discared when linked into
-        # an application (as opposed to when the resource libraries were embedded into the static
-        # libraries when Qt was built with qmake).
-        # The reason to match the naming is to ensure that applications link successfully regardless
-        # if Qt was built with CMake or qmake, while the build system transition phase is still
-        # happening.
-        string(REPLACE "/" "_" qmldir_resource_name "qmake_${arg_TARGET_PATH}")
+        if(${arg___QT_INTERNAL_DISAMBIGUATE_QMLDIR_RESOURCE})
+            # TODO: Make this the default and remove the option
+            string(REPLACE "/" "_" qmldir_resource_name "${target}_qmldir_${arg_TARGET_PATH}")
+        else()
+            # Embed qmldir in qrc. The following comments relate mostly to Qt5->6 transition.
+            # The requirement to keep the same resource name might no longer apply, but it doesn't
+            # currently appear to cause any hinderance to keep it.
+            # The qmldir resource name needs to match the one generated by qmake's qml_module.prf,
+            # to ensure that all Q_INIT_RESOURCE(resource_name) calls in Qt code don't lead to
+            # undefined symbol errors when linking an application project.
+            # The Q_INIT_RESOURCE() calls are not strictly necessary anymore because the CMake Qt
+            # build passes around the compiled resources as object files.
+            # These object files have global initiliazers that don't get discared when linked into
+            # an application (as opposed to when the resource libraries were embedded into the
+            # static libraries when Qt was built with qmake).
+            # The reason to match the naming is to ensure that applications link successfully
+            # regardless if Qt was built with CMake or qmake, while the build system transition
+            # phase is still happening.
+            string(REPLACE "/" "_" qmldir_resource_name "qmake_${arg_TARGET_PATH}")
+        endif()
 
         # The qmldir file ALWAYS has to be under the target path, even in the
         # resources. If it isn't, an explicit import can't find it. We need a
@@ -747,20 +991,145 @@ Check https://doc.qt.io/qt-6/qt-cmake-policy-qtp0001.html for policy details."
             cmake_language(DEFER GET_CALL qmlls_ini_generation_id call)
             if("${call}" STREQUAL "")
                 cmake_language(EVAL CODE
-                    "cmake_language(DEFER ID qmlls_ini_generation_id CALL _qt_internal_write_deferred_qmlls_ini_file)"
+                    "cmake_language(DEFER ID qmlls_ini_generation_id CALL _qt_internal_write_deferred_qmlls_ini_file ${target})"
                 )
             endif()
         else()
-            get_property(__qt_internal_generate_qmlls_ini_warning GLOBAL PROPERTY __qt_internal_generate_qmlls_ini_warning)
+            get_property(__qt_internal_generate_qmlls_ini_warning
+                GLOBAL
+                PROPERTY __qt_internal_generate_qmlls_ini_warning
+            )
             if (NOT "${__qt_internal_generate_qmlls_ini_warning}")
                 message(WARNING "QT_QML_GENERATE_QMLLS_INI is not supported on CMake versions < 3.19, disabling...")
                 set_property(GLOBAL PROPERTY __qt_internal_generate_qmlls_ini_warning ON)
             endif()
         endif()
     endif()
+
+    # write out extra qtconf files for executables to automatically set up import paths;
+    # but avoid needless warnings and work if there are no relevant dependencies specified
+    if((backing_target_type STREQUAL "EXECUTABLE")
+        AND all_dependency_targets)
+        if (${CMAKE_VERSION} VERSION_GREATER_EQUAL "3.19.0")
+            # The general logic is that every target writes out a "partial" file,
+            # containing its needed imports.
+            # Once all partial files are written,
+            # we run a helper process which consolidates them.
+            # We need the counter to know when the last finalizer runs,
+            # as only then we'll know that all partial files have been
+            # written out, and we can start merging them.
+            get_directory_property(counter
+                DIRECTORY ${PROJECT_SOURCE_DIR}
+                QT_QMLDIR_DEFERRED_WRITEOUT_COUNTER
+            )
+            if (NOT counter)
+                set(counter "0")
+            endif()
+            math(EXPR counter "${counter} + 1")
+            set_property(
+                DIRECTORY ${PROJECT_SOURCE_DIR}
+                PROPERTY QT_QMLDIR_DEFERRED_WRITEOUT_COUNTER
+                "${counter}"
+            )
+            cmake_language(EVAL CODE "
+                    cmake_language(DEFER DIRECTORY [[${PROJECT_SOURCE_DIR}]]
+                        CALL _qt_internal_write_qmldir_part ${target})
+                ")
+        else()
+            # Before CMake 3.19, we don't have DEFER, so we immediately write out the qt.conf
+            # file, overwriting its content if necessary.
+            # That would be fine, as we build up a list and just end up overwriting the file again
+            # Unfortunately, CMake < 3.19 doesn't allow us to set directory properties on
+            # binary dirs, either.
+            # So we'll end up having to set the properties on the source directory
+            get_property(is_multi_config GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
+            if (is_multi_config)
+                message(FATAL
+                "Using TARGET based dependencies in qt_add_qml_module requires at least CMake 3.19 "
+                "when using multi-config generators")
+            else()
+                message(WARNING
+                "Using TARGET based dependencies in qt_add_qml_module with CMake < 3.19 "
+                "might result in missing import paths if they are not added manually.")
+            endif()
+            get_target_property(effective_outdir ${target} RUNTIME_OUTPUT_DIRECTORY)
+            if (NOT "${effective_outdir}")
+                set(effective_outdir "${CMAKE_CURRENT_BINARY_DIR}")
+            endif()
+
+            set_property(
+                DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+                APPEND
+                PROPERTY QT_QML_TARGETS_FOR_DEFERRED_QTCONF_WRITEOUT
+                ${target}
+            )
+            _qt_internal_writebuilddir_qtconf_nondeferred("${CMAKE_CURRENT_SOURCE_DIR}" "${effective_outdir}")
+        endif()
+    endif()
+
+    if("${CMAKE_VERSION}" VERSION_GREATER_EQUAL "3.19.0")
+        set(id qmlaotstats_aggregation)
+        cmake_language(DEFER DIRECTORY ${PROJECT_BINARY_DIR} GET_CALL ${id} call)
+
+        if("${call}" STREQUAL "")
+            cmake_language(EVAL CODE "cmake_language(DEFER DIRECTORY ${PROJECT_BINARY_DIR} "
+                "ID ${id} CALL _qt_internal_deferred_aggregate_aotstats_files ${target})")
+        endif()
+    else()
+        if(NOT TARGET all_aotstats)
+            add_custom_target(
+                all_aotstats
+                ${CMAKE_COMMAND} -E echo "aotstats is not supported on CMake versions < 3.19"
+            )
+        endif()
+    endif()
 endfunction()
 
-function(_qt_internal_write_deferred_qmlls_ini_file)
+function(_qt_internal_deferred_aggregate_aotstats_files target)
+    get_property(module_aotstats_targets GLOBAL PROPERTY _qt_module_aotstats_targets)
+    set(module_aotstats_files "")
+    foreach(module_target ${module_aotstats_targets})
+        get_target_property(file_path ${module_target} _qt_aotstats_file)
+        if(file_path)
+            string(APPEND module_aotstats_files "${file_path}\n")
+        endif()
+    endforeach()
+
+    set(aotstats_list_file "${PROJECT_BINARY_DIR}/.rcc/qmlcache/all_aotstats.aotstatslist")
+    file(WRITE ${aotstats_list_file} ${module_aotstats_files})
+
+    set(all_aotstats_file ${PROJECT_BINARY_DIR}/.rcc/qmlcache/all_aotstats.aotstats)
+    set(formatted_stats_file ${PROJECT_BINARY_DIR}/.rcc/qmlcache/all_aotstats.txt)
+
+    _qt_internal_get_tool_wrapper_script_path(tool_wrapper)
+    add_custom_command(
+        OUTPUT
+            ${all_aotstats_file}
+            ${formatted_stats_file}
+        DEPENDS ${module_aotstats_targets}
+        COMMAND
+            ${tool_wrapper}
+            $<TARGET_FILE:Qt6::qmlaotstats>
+            aggregate
+            ${aotstats_list_file}
+            ${all_aotstats_file}
+        COMMAND
+            ${tool_wrapper}
+            $<TARGET_FILE:Qt6::qmlaotstats>
+            format
+            ${all_aotstats_file}
+            ${formatted_stats_file}
+    )
+
+    if(NOT TARGET all_aotstats)
+        add_custom_target(all_aotstats
+            DEPENDS ${formatted_stats_file}
+            COMMAND ${CMAKE_COMMAND} -E cat ${formatted_stats_file}
+        )
+    endif()
+endfunction()
+
+function(_qt_internal_write_deferred_qmlls_ini_file target)
     set(qmlls_ini_file "${CMAKE_CURRENT_SOURCE_DIR}/.qmlls.ini")
     get_directory_property(_qmlls_ini_build_folders _qmlls_ini_build_folders)
     list(REMOVE_DUPLICATES _qmlls_ini_build_folders)
@@ -771,8 +1140,7 @@ function(_qt_internal_write_deferred_qmlls_ini_file)
         # cmake list separator and windows path separator are both ';', so no replacement needed
         set(concatenated_build_dirs "${_qmlls_ini_build_folders}")
     endif()
-    set(file_content "[General]\nbuildDir=${concatenated_build_dirs}\nno-cmake-calls=false\n")
-    file(CONFIGURE OUTPUT "${qmlls_ini_file}" CONTENT "${file_content}")
+    _populate_qmlls_ini_file(${target} "${qmlls_ini_file}" "${concatenated_build_dirs}")
 endfunction()
 
 if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
@@ -784,6 +1152,30 @@ if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
         endif()
     endfunction()
 endif()
+
+function(_populate_qmlls_ini_file target qmlls_ini_file concatenated_build_dirs)
+    get_target_property(qtpaths ${QT_CMAKE_EXPORT_NAMESPACE}::qtpaths LOCATION)
+    _qt_internal_get_tool_wrapper_script_path(tool_wrapper)
+    add_custom_command(
+        OUTPUT
+            ${qmlls_ini_file}
+        COMMAND ${CMAKE_COMMAND} -E echo "[General]" > ${qmlls_ini_file}
+        COMMAND ${CMAKE_COMMAND} -E echo "buildDir=${concatenated_build_dirs}" >> ${qmlls_ini_file}
+        COMMAND ${CMAKE_COMMAND} -E echo "no-cmake-calls=false" >> ${qmlls_ini_file}
+        COMMAND ${CMAKE_COMMAND} -E echo_append "docDir=" >> ${qmlls_ini_file}
+        COMMAND
+            ${tool_wrapper}
+            ${qtpaths}
+            --query QT_INSTALL_DOCS >> ${qmlls_ini_file}
+        COMMENT "Populating .qmlls.ini file"
+        VERBATIM
+    )
+    add_custom_target(${target}_generate_qmlls_ini_file
+        DEPENDS ${qmlls_ini_file}
+        VERBATIM
+    )
+    add_dependencies(${target} ${target}_generate_qmlls_ini_file)
+endfunction()
 
 # Make the prefix conform to the following:
 #   - Starts with a "/"
@@ -1114,39 +1506,11 @@ function(_qt_internal_add_all_qmllint_target target_var default_target_name lint
     if("${target_name}" STREQUAL "")
         set(target_name ${default_target_name})
     endif()
-    if(CMAKE_GENERATOR MATCHES "^Visual Studio ")
-        # For the Visual Studio generators we cannot use add_dependencies, because this would enable
-        # ${lint_target} in the default build of the solution. See QTBUG-115166 and upstream CMake
-        # issue #16668 for details. Instead, we record ${lint_target} and create an all_qmllint
-        # target at the end of the top-level directory scope.
-        if(${CMAKE_VERSION} VERSION_LESS "3.19.0")
-            if(NOT QT_NO_QMLLINT_CREATION_WARNING)
-                message(WARNING "Cannot create target ${target_name} with this CMake version. "
-                    "Please upgrade to CMake 3.19.0 or newer. "
-                    "Set QT_NO_QMLLINT_CREATION_WARNING to ON to disable this warning."
-                )
-            endif()
-            return()
-        endif()
-        set(property_name _qt_target_${target_name}_dependencies)
-        get_property(recorded_targets GLOBAL PROPERTY ${property_name})
-        if("${recorded_targets}" STREQUAL "")
-            cmake_language(EVAL CODE
-                "cmake_language(DEFER DIRECTORY \"${CMAKE_SOURCE_DIR}\" CALL _qt_internal_add_all_qmllint_target_deferred \"${target_name}\")"
-            )
-        endif()
-        set_property(GLOBAL APPEND PROPERTY ${property_name} ${lint_target})
-
-        # Exclude ${lint_target} from the solution's default build to avoid it being enabled should
-        # the user add a dependency to it.
-        set_property(TARGET ${lint_target} PROPERTY EXCLUDE_FROM_DEFAULT_BUILD ON)
-    else()
-        if(NOT TARGET ${target_name})
-            add_custom_target(${target_name})
-            _qt_internal_assign_to_qmllint_targets_folder(${target_name})
-        endif()
-        add_dependencies(${target_name} ${lint_target})
-    endif()
+    _qt_internal_add_phony_target(${target_name}
+        WARNING_VARIABLE QT_NO_QMLLINT_CREATION_WARNING
+        TARGET_CREATED_HOOK _qt_internal_assign_to_qmllint_targets_folder
+    )
+    _qt_internal_add_phony_target_dependencies(${target_name} ${lint_target})
 endfunction()
 
 # Hack for the Visual Studio generator. Create the all_qmllint target named ${target} and work
@@ -1940,6 +2304,8 @@ function(qt6_add_qml_plugin target)
         endif()
     endif()
 
+    _qt_internal_require_qml_uri_valid("${arg_URI}")
+
     # TODO: Probably should remove TARGET_PATH as a supported keyword now
     if(NOT arg_TARGET_PATH AND TARGET "${arg_BACKING_TARGET}")
         get_target_property(arg_TARGET_PATH ${arg_BACKING_TARGET} QT_QML_MODULE_TARGET_PATH)
@@ -2323,6 +2689,7 @@ function(qt6_target_qml_sources target)
 
     get_target_property(no_cachegen            ${target} QT_QML_MODULE_NO_CACHEGEN)
     get_target_property(no_qmldir              ${target} QT_QML_MODULE_NO_GENERATE_QMLDIR)
+    get_target_property(no_extra_qmldirs       ${target} QT_QML_MODULE_NO_GENERATE_EXTRA_QMLDIRS)
     get_target_property(resource_prefix        ${target} QT_QML_MODULE_RESOURCE_PREFIX)
     get_target_property(qml_module_version     ${target} QT_QML_MODULE_VERSION)
     get_target_property(past_major_versions    ${target} QT_QML_MODULE_PAST_MAJOR_VERSIONS)
@@ -2422,6 +2789,8 @@ function(qt6_target_qml_sources target)
             "$<${have_direct_calls}:--direct-calls>"
             "$<${have_arguments}:${arguments}>"
             ${qrc_resource_args}
+            "--dump-aot-stats"
+            "--module-id=${arg_URI}(${target})"
         )
 
         # For direct evaluation in if() below
@@ -2517,6 +2886,7 @@ function(qt6_target_qml_sources target)
     endforeach()
 
     set(generated_sources_other_scope)
+    set(extra_qmldirs)
     foreach(qml_file_src IN LISTS arg_QML_FILES)
         # This is to facilitate updating code that used the earlier tech preview
         # API function qt6_target_qml_files()
@@ -2536,6 +2906,11 @@ function(qt6_target_qml_sources target)
 
         get_filename_component(file_absolute ${qml_file_src} ABSOLUTE)
         __qt_get_relative_resource_path_for_file(file_resource_path ${qml_file_src})
+
+        get_filename_component(qml_file_resource_dir ${file_resource_path} DIRECTORY)
+        if(qml_file_resource_dir)
+            list(APPEND extra_qmldirs "${output_dir}/${qml_file_resource_dir}/qmldir")
+        endif()
 
         # For the tooling steps below, run the tools on the copied qml file in
         # the build directory, not the source directory. This is required
@@ -2643,6 +3018,17 @@ function(qt6_target_qml_sources target)
                 set_property(TARGET ${target} APPEND_STRING PROPERTY
                     _qt_internal_qmldir_content "${qmldir_file_contents}"
                 )
+
+                if(ANDROID AND QT_ANDROID_GENERATE_JAVA_QML_COMPONENTS)
+                    get_source_file_property(qml_file_generate_java_classes ${qml_file_src}
+                        QT_QML_GENERATE_ANDROID_JAVA_CLASS
+                    )
+                    if(qml_file_generate_java_classes)
+                        get_target_property(qml_module_uri ${target} QT_QML_MODULE_URI)
+                        set_property(TARGET ${target} APPEND PROPERTY
+                            _qt_qml_files_for_java_generator "${qml_module_uri}.${qml_file_typename}")
+                    endif()
+                endif()
             endif()
         endif()
 
@@ -2679,9 +3065,17 @@ function(qt6_target_qml_sources target)
                 set(qmlcachegen_cmd "${qmlcachegen}")
             endif()
 
+            set(aotstats_file "")
+            if("${qml_file_src}" MATCHES ".+\\.qml")
+                set(aotstats_file "${compiled_file}.aotstats")
+                list(APPEND aotstats_files ${aotstats_file})
+            endif()
+
             _qt_internal_get_tool_wrapper_script_path(tool_wrapper)
             add_custom_command(
-                OUTPUT ${compiled_file}
+                OUTPUT
+                    ${compiled_file}
+                    ${aotstats_file}
                 COMMAND ${CMAKE_COMMAND} -E make_directory ${out_dir}
                 COMMAND
                     ${tool_wrapper}
@@ -2724,6 +3118,46 @@ function(qt6_target_qml_sources target)
             endif()
         endif()
     endforeach()
+
+    if(NOT "${uri}" STREQUAL "")
+        list(JOIN aotstats_files "\n" aotstats_files_lines)
+        set(module_aotstats_list_file
+            "${CMAKE_CURRENT_BINARY_DIR}/.rcc/qmlcache/module_${uri}.aotstatslist")
+        file(WRITE ${module_aotstats_list_file} ${aotstats_files_lines})
+
+        # Aggregate qml file aotstats into module-level aotstats
+        _qt_internal_get_tool_wrapper_script_path(tool_wrapper)
+        set(output "${CMAKE_CURRENT_BINARY_DIR}/.rcc/qmlcache/module_${uri}.aotstats")
+        add_custom_command(
+            OUTPUT ${output}
+            DEPENDS ${aotstats_files}
+            COMMAND
+                ${tool_wrapper}
+                $<TARGET_FILE:Qt6::qmlaotstats>
+                aggregate
+                ${module_aotstats_list_file}
+                ${output}
+        )
+        set(module_aotstats_target_name "module_${target}_aotstats_targets")
+        if(NOT TARGET ${module_aotstats_target_name})
+            add_custom_target(${module_aotstats_target_name}
+                DEPENDS ${output}
+            )
+            if(TARGET ${target}_qmltyperegistration)
+                add_dependencies(${module_aotstats_target_name} ${target}_qmltyperegistration)
+            else()
+                add_dependencies(${module_aotstats_target_name} ${target})
+            endif()
+        endif()
+
+        set_target_properties(${module_aotstats_target_name}
+            PROPERTIES _qt_aotstats_file ${output}
+        )
+
+        # Collect module-level aotstats files for later aggregation at the project level
+        set_property(
+            GLOBAL APPEND PROPERTY _qt_module_aotstats_targets ${module_aotstats_target_name})
+    endif()
 
     if(ANDROID)
         _qt_internal_collect_qml_root_paths("${target}" ${arg_QML_FILES})
@@ -2790,8 +3224,7 @@ function(qt6_target_qml_sources target)
         FILES ${arg_QML_FILES} ${arg_RESOURCES}
         OUTPUT_TARGETS resource_targets
     )
-    math(EXPR counter "${counter} + 1")
-    set_target_properties(${target} PROPERTIES QT_QML_MODULE_RAW_QML_SETS ${counter})
+    list(APPEND output_targets ${resource_targets})
 
     # Save the resource name in a property so we can reference it later in a qml plugin
     # constructor, to avoid discarding the resource if it's in a static library.
@@ -2800,7 +3233,50 @@ function(qt6_target_qml_sources target)
     set_property(TARGET ${target}
         APPEND PROPERTY _qt_qml_module_sanitized_resource_names "${sanitized_resource_name}")
 
-    list(APPEND output_targets ${resource_targets})
+    if(extra_qmldirs AND NOT no_extra_qmldirs)
+        list(REMOVE_DUPLICATES extra_qmldirs)
+        __qt_internal_setup_policy(QTP0004 "6.8.0"
+"You need qmldir files for each extra directory that contains .qml files for your module. \
+Check https://doc.qt.io/qt-6/qt-cmake-policy-qtp0004.html for policy details."
+        )
+        qt6_policy(GET QTP0004 generate_extra_qmldirs_policy)
+        if ("${generate_extra_qmldirs_policy}" STREQUAL "NEW" AND NOT no_qmldir)
+            foreach(extra_qmldir IN LISTS extra_qmldirs)
+                set(__qt_qmldir_content "prefer :${arg_PREFIX}")
+                configure_file(
+                    ${__qt_qml_macros_module_base_dir}/Qt6qmldirTemplate.cmake.in
+                    "${extra_qmldir}"
+                    @ONLY
+                )
+
+                set_source_files_properties("${extra_qmldir}"
+                    PROPERTIES GENERATED TRUE
+                )
+            endforeach()
+
+            set(extra_qmldirs_targets)
+            qt6_add_resources(${target} "${resource_name}_extra_qmldirs"
+                PREFIX ${arg_PREFIX}
+                FILES ${extra_qmldirs}
+                BASE ${output_dir}
+                OUTPUT_TARGETS extra_qmldirs_targets
+            )
+            list(APPEND output_targets ${extra_qmldirs_targets})
+
+            set_property(TARGET ${target} PROPERTY _qt_internal_extra_qmldirs ${extra_qmldirs})
+
+            # Save the resource name in a property so we can reference it later in a qml plugin
+            # constructor, to avoid discarding the resource if it's in a static library.
+            __qt_internal_sanitize_resource_name(
+                sanitized_extra_qmldirs_resource_name "${resource_name}_extra_qmldirs")
+            set_property(TARGET ${target}
+                APPEND PROPERTY _qt_qml_module_sanitized_resource_names
+                "${sanitized_extra_qmldirs_resource_name}")
+        endif()
+    endif()
+
+    math(EXPR counter "${counter} + 1")
+    set_target_properties(${target} PROPERTIES QT_QML_MODULE_RAW_QML_SETS ${counter})
 
     if(arg_OUTPUT_TARGETS)
         set(${arg_OUTPUT_TARGETS} ${output_targets} PARENT_SCOPE)
@@ -3438,20 +3914,12 @@ function(qt6_import_qml_plugins target)
                 if(NOT entry_PLUGIN)
                     # Check if qml module is built within the build tree, and should have a plugin
                     # target, but its qmldir file is not generated yet.
-                    get_property(dirs GLOBAL PROPERTY _qt_all_qml_output_dirs)
-                    if(dirs)
-                        list(FIND dirs "${entry_PATH}" index)
-                        if(NOT index EQUAL -1)
-                            get_property(qml_targets GLOBAL PROPERTY _qt_all_qml_targets)
-                            list(GET qml_targets ${index} qml_module)
-                            if(qml_module AND TARGET ${qml_module})
-                                get_target_property(entry_LINKTARGET
-                                    ${qml_module} QT_QML_MODULE_PLUGIN_TARGET)
-                                if(entry_LINKTARGET AND TARGET ${entry_LINKTARGET})
-                                    get_target_property(entry_PLUGIN ${entry_LINKTARGET}
-                                        OUTPUT_NAME)
-                                endif()
-                            endif()
+                    _qt_internal_find_qml_module(qml_module BY_OUTPUT_DIRS "${entry_PATH}")
+                    if(qml_module)
+                        get_target_property(entry_LINKTARGET
+                            ${qml_module} QT_QML_MODULE_PLUGIN_TARGET)
+                        if(entry_LINKTARGET AND TARGET ${entry_LINKTARGET})
+                            get_target_property(entry_PLUGIN ${entry_LINKTARGET} OUTPUT_NAME)
                         endif()
                     endif()
                 endif()
@@ -3841,7 +4309,6 @@ endif()")
                 COMMAND ${CMAKE_COMMAND}
                 -D "${post_build_install_prefix}"
                 -D "${post_build_deploy_prefix}"
-                -D "__QT_DEPLOY_IMPL_DIR=${deploy_impl_dir}"
                 -D "__QT_DEPLOY_POST_BUILD=TRUE"
                 -P "${post_build_deploy_script}"
                 VERBATIM
@@ -4287,4 +4754,133 @@ function(_qt_internal_add_qml_static_plugin_dependency target dep_target)
         target_link_libraries("${target}" PRIVATE
             "$<${skip_prl_marker}:$<TARGET_NAME:${dep_target}>>")
     endif()
+endfunction()
+
+function(_qt_internal_collect_qml_module_dependencies target)
+    if(${CMAKE_VERSION} VERSION_GREATER_EQUAL "3.19.0")
+        string(JOIN " " collect_qml_module_dependencies_code
+            "cmake_language(DEFER DIRECTORY \"${CMAKE_BINARY_DIR}\""
+            "CALL _qt_internal_collect_qml_module_dependencies_deferred \"${target}\")"
+        )
+        cmake_language(EVAL CODE "${collect_qml_module_dependencies_code}")
+    else()
+        _qt_internal_collect_qml_module_dependencies_deferred("${target}")
+    endif()
+endfunction()
+
+function(_qt_internal_collect_qml_module_dependencies_deferred target)
+    # Add all dependencies that are known as targets first
+    get_target_property(dep_targets ${target} QT_QML_DEPENDENT_QML_MODULE_TARGETS)
+    set(known_dep_ids "")
+    if(dep_targets)
+        foreach(dep_target IN LISTS dep_targets)
+            if(NOT TARGET "${dep_target}")
+                message(FATAL_ERROR "${dep_target} is listed in"
+                    " QT_QML_DEPENDENT_QML_MODULE_TARGETS property of ${target}, but not a target")
+            endif()
+            get_target_property(is_imported ${dep_target} IMPORTED)
+            if(NOT is_imported)
+                add_dependencies(${target} ${dep_target})
+                qt6_query_qml_module(${dep_target} VERSION dep_target_version URI dep_target_URI)
+                if(dep_target_version)
+                    list(APPEND known_dep_ids "${dep_target_URI} ${dep_target_version}")
+                else()
+                    list(APPEND known_dep_ids "${dep_target_URI}")
+                endif()
+            endif()
+        endforeach()
+    endif()
+
+    # Attempt adding the dependencies that are specified as URI's next.
+    get_target_property(deps ${target} QT_QML_MODULE_DEPENDENCIES)
+    if(NOT deps)
+        return()
+    endif()
+    if(known_dep_ids)
+        list(REMOVE_ITEM deps ${known_dep_ids})
+    endif()
+    foreach(dep IN LISTS deps)
+        string(REPLACE " " ";" dep "${dep}")
+        list(GET dep 0 dep_module_uri)
+
+        list(LENGTH dep dep_length)
+        if(dep_length GREATER_EQUAL 2)
+            list(GET dep 1 dev_module_version)
+            if(dev_module_version MATCHES "^[0-9]+\\.[0-9]+$")
+                set(dev_module_version_arg VERSION "${dev_module_version}")
+            endif()
+        endif()
+        _qt_internal_find_qml_module(dep_module BY_URI "${dep_module_uri}"
+            ${dev_module_version_arg})
+        if(dep_module)
+            add_dependencies(${target} ${dep_module})
+        endif()
+    endforeach()
+endfunction()
+
+# Function searches the qml module target by the bound 'by' property.
+#
+# The supported 'by' arguments:
+# BY_OUTPUT_DIR - searches the module using the _qt_all_qml_output_dirs GLOBAL property
+# BY_URI - searches the module using _qt_all_qml_uris GLOBAL property
+# Single value arguments:
+# VERSION - look for the exact version or version higher then the VERSION
+# EXACT_VERSION - look for the exact version
+function(_qt_internal_find_qml_module out_target by filter)
+    if(NOT by MATCHES "^BY_(URI|OUTPUT_DIR)")
+        message(FATAL_ERROR "Unknow lookup argument ${by}")
+    else()
+        string(TOLOWER "${CMAKE_MATCH_1}" lookup_property)
+        set(lookup_property "_qt_all_qml_${lookup_property}s")
+    endif()
+
+    cmake_parse_arguments(arg "" "VERSION;EXACT_VERSION" "" ${ARGN})
+
+    if(arg_EXACT_VERSION AND arg_VERSION)
+        message(FATAL_ERROR "Both VERSION and EXACT_VERSION are specified.")
+    endif()
+
+    get_property(lookup_property_value GLOBAL PROPERTY ${lookup_property})
+    set(${out_target} "${out_target}-NOTFOUND")
+    set(prev_module_version 0)
+    if(lookup_property_value)
+        set(index 0)
+        foreach(lookup_value IN LISTS lookup_property_value)
+            set(module_index "${index}")
+            math(EXPR index "${index} + 1")
+            if(NOT "${lookup_value}" STREQUAL "${filter}")
+                continue()
+            endif()
+            get_property(qml_targets GLOBAL PROPERTY _qt_all_qml_targets)
+            list(GET qml_targets ${module_index} qml_target)
+            if(NOT TARGET "${qml_target}")
+                continue()
+            endif()
+            if(NOT arg_VERSION AND NOT arg_EXACT_VERSION)
+                set(${out_target} "${qml_target}")
+                break()
+            endif()
+
+            qt6_query_qml_module("${qml_target}" VERSION module_version)
+            if(arg_EXACT_VERSION)
+                if(module_version VERSION_EQUAL arg_EXACT_VERSION)
+                    set(${out_target} "${qml_target}")
+                    break()
+                endif()
+            else()
+                if(prev_module_version VERSION_GREATER module_version AND ${out_target})
+                    continue()
+                endif()
+                set(prev_module_version "${module_version}")
+                if(module_version VERSION_GREATER_EQUAL arg_VERSION)
+                    set(${out_target} "${qml_target}")
+                    if(module_version VERSION_EQUAL arg_VERSION)
+                        break()
+                    endif()
+                endif()
+            endif()
+        endforeach()
+    endif()
+
+    set(${out_target} "${${out_target}}" PARENT_SCOPE)
 endfunction()

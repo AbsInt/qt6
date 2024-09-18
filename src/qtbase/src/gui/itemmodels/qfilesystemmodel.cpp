@@ -31,6 +31,7 @@ using namespace Qt::StringLiterals;
     \value FilePathRole
     \value FileNameRole
     \value FilePermissions
+    \value FileInfoRole The QFileInfo object for the index
 */
 
 /*!
@@ -730,6 +731,8 @@ QVariant QFileSystemModel::data(const QModelIndex &index, int role) const
         return filePath(index);
     case FileNameRole:
         return d->name(index);
+    case FileInfoRole:
+        return QVariant::fromValue(fileInfo(index));
     case Qt::DecorationRole:
         if (index.column() == QFileSystemModelPrivate::NameColumn) {
             QIcon icon = d->icon(index);
@@ -998,7 +1001,7 @@ Qt::ItemFlags QFileSystemModel::flags(const QModelIndex &index) const
 /*!
     \internal
 */
-void QFileSystemModelPrivate::_q_performDelayedSort()
+void QFileSystemModelPrivate::performDelayedSort()
 {
     Q_Q(QFileSystemModel);
     q->sort(sortColumn, sortOrder);
@@ -1255,6 +1258,7 @@ QHash<int, QByteArray> QFileSystemModel::roleNames() const
     ret.insert(QFileSystemModel::FilePathRole, QByteArrayLiteral("filePath"));
     ret.insert(QFileSystemModel::FileNameRole, QByteArrayLiteral("fileName"));
     ret.insert(QFileSystemModel::FilePermissions, QByteArrayLiteral("filePermissions"));
+    ret.insert(QFileSystemModel::FileInfoRole, QByteArrayLiteral("fileInfo"));
     return ret;
 }
 
@@ -1765,7 +1769,7 @@ bool QFileSystemModel::rmdir(const QModelIndex &aindex)
     Performed quick listing and see if any files have been added or removed,
     then fetch more information on visible files.
  */
-void QFileSystemModelPrivate::_q_directoryChanged(const QString &directory, const QStringList &files)
+void QFileSystemModelPrivate::directoryChanged(const QString &directory, const QStringList &files)
 {
     QFileSystemModelPrivate::QFileSystemNode *parentNode = node(directory, false);
     if (parentNode->children.size() == 0)
@@ -1913,7 +1917,7 @@ void QFileSystemModelPrivate::removeVisibleFile(QFileSystemNode *parentNode, int
     The thread has received new information about files,
     update and emit dataChanged if it has actually changed.
  */
-void QFileSystemModelPrivate::_q_fileSystemChanged(const QString &path,
+void QFileSystemModelPrivate::fileSystemChanged(const QString &path,
                                                    const QList<std::pair<QString, QFileInfo>> &updates)
 {
 #if QT_CONFIG(filesystemwatcher)
@@ -2024,7 +2028,7 @@ void QFileSystemModelPrivate::_q_fileSystemChanged(const QString &path,
 /*!
     \internal
 */
-void QFileSystemModelPrivate::_q_resolvedName(const QString &fileName, const QString &resolvedName)
+void QFileSystemModelPrivate::resolvedName(const QString &fileName, const QString &resolvedName)
 {
     resolvedSymLinks[fileName] = resolvedName;
 }
@@ -2103,16 +2107,18 @@ void QFileSystemModelPrivate::init()
 
     qRegisterMetaType<QList<std::pair<QString, QFileInfo>>>();
 #if QT_CONFIG(filesystemwatcher)
-    q->connect(fileInfoGatherer.get(), SIGNAL(newListOfFiles(QString,QStringList)),
-               q, SLOT(_q_directoryChanged(QString,QStringList)));
-    q->connect(fileInfoGatherer.get(), SIGNAL(updates(QString,QList<std::pair<QString,QFileInfo>>)), q,
-               SLOT(_q_fileSystemChanged(QString,QList<std::pair<QString,QFileInfo>>)));
-    q->connect(fileInfoGatherer.get(), SIGNAL(nameResolved(QString,QString)),
-            q, SLOT(_q_resolvedName(QString,QString)));
-    q->connect(fileInfoGatherer.get(), SIGNAL(directoryLoaded(QString)),
-               q, SIGNAL(directoryLoaded(QString)));
+    QObjectPrivate::connect(fileInfoGatherer.get(), &QFileInfoGatherer::newListOfFiles,
+                            this, &QFileSystemModelPrivate::directoryChanged);
+    QObjectPrivate::connect(fileInfoGatherer.get(), &QFileInfoGatherer::updates,
+                            this, &QFileSystemModelPrivate::fileSystemChanged);
+    QObjectPrivate::connect(fileInfoGatherer.get(), &QFileInfoGatherer::nameResolved,
+                            this, &QFileSystemModelPrivate::resolvedName);
+    q->connect(fileInfoGatherer.get(), &QFileInfoGatherer::directoryLoaded,
+               q, &QFileSystemModel::directoryLoaded);
 #endif // filesystemwatcher
-    q->connect(&delayedSortTimer, SIGNAL(timeout()), q, SLOT(_q_performDelayedSort()), Qt::QueuedConnection);
+    QObjectPrivate::connect(&delayedSortTimer, &QTimer::timeout,
+                            this, &QFileSystemModelPrivate::performDelayedSort,
+                            Qt::QueuedConnection);
 }
 
 /*!

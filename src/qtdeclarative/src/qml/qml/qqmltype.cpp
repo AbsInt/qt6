@@ -65,7 +65,7 @@ QQmlTypePrivate::~QQmlTypePrivate()
     delete enums.fetchAndStoreAcquire(nullptr);
     delete proxyMetaObjects.fetchAndStoreAcquire(nullptr);
 
-    if (const auto &iface = typeId.iface()) {
+    if (const QtPrivate::QMetaTypeInterface *iface = typeId.iface()) {
         if (iface->metaObjectFn == &dynamicQmlMetaObject)
             QQmlMetaType::unregisterInternalCompositeType(typeId, listId);
     }
@@ -146,7 +146,7 @@ QQmlType QQmlTypePrivate::resolveCompositeBaseType(QQmlEnginePrivate *engine) co
     QQmlRefPointer<QQmlTypeData> td(engine->typeLoader.getType(sourceUrl()));
     if (td.isNull() || !td->isComplete())
         return QQmlType();
-    QV4::ExecutableCompilationUnit *compilationUnit = td->compilationUnit();
+    QV4::CompiledData::CompilationUnit *compilationUnit = td->compilationUnit();
     const QMetaObject *mo = compilationUnit->rootPropertyCache()->firstCppMetaObject();
     return QQmlMetaType::qmlType(mo);
 }
@@ -161,7 +161,7 @@ QQmlPropertyCache::ConstPtr QQmlTypePrivate::compositePropertyCache(
     QQmlRefPointer<QQmlTypeData> td(engine->typeLoader.getType(sourceUrl()));
     if (td.isNull() || !td->isComplete())
         return nullptr;
-    QV4::ExecutableCompilationUnit *compilationUnit = td->compilationUnit();
+    QV4::CompiledData::CompilationUnit *compilationUnit = td->compilationUnit();
     return compilationUnit->rootPropertyCache();
 }
 

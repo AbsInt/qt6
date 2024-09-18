@@ -26,7 +26,7 @@ Q_LOGGING_CATEGORY(lcQuickEffect, "qt.quick.effects")
 
 /*!
     \qmltype MultiEffect
-    \instantiates QQuickMultiEffect
+    \nativetype QQuickMultiEffect
     \inqmlmodule QtQuick.Effects
     \inherits Item
     \ingroup qtquick-effects
@@ -192,6 +192,8 @@ Q_LOGGING_CATEGORY(lcQuickEffect, "qt.quick.effects")
         the GPU. When applying the blur effect to the whole background, remember to set
         \l autoPaddingEnabled false or the effect grows "outside" the window / screen.
     \endlist
+
+    \include notes.qdocinc shadereffectsource and multieffect
 */
 
 /*!

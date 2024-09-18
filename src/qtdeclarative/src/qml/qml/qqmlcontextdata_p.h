@@ -30,7 +30,7 @@ class QQmlGuardedContextData;
 class QQmlJavaScriptExpression;
 class QQmlIncubatorPrivate;
 
-class Q_QML_PRIVATE_EXPORT QQmlContextData
+class Q_QML_EXPORT QQmlContextData
 {
 public:
     static QQmlRefPointer<QQmlContextData> createRefCounted(
@@ -290,6 +290,10 @@ public:
 
     bool valueTypesAreAddressable() const {
         return m_typeCompilationUnit && m_typeCompilationUnit->valueTypesAreAddressable();
+    }
+
+    bool valueTypesAreAssertable() const {
+        return m_typeCompilationUnit && m_typeCompilationUnit->valueTypesAreAssertable();
     }
 
 private:

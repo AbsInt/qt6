@@ -19,6 +19,7 @@
 #include <private/qv4mm_p.h>
 #include <private/qv4jscall_p.h>
 #include <private/qv4qobjectwrapper_p.h>
+#include <private/qv4qmetaobjectwrapper_p.h>
 #include <private/qv4urlobject_p.h>
 #include <private/qqmlbuiltins_p.h>
 
@@ -451,9 +452,19 @@ bool QJSValue::isCallable() const
     return QJSValuePrivate::asManagedType<FunctionObject>(this);
 }
 
+#if QT_DEPRECATED_SINCE(6, 9)
 /*!
+  \deprecated [6.9]
   Returns true if this QJSValue is a variant value;
   otherwise returns false.
+
+  \warning This function is likely to give unexpected results.
+  A variant value is only constructed by the QJSEngine in a very
+  limited number of cases. This used to be different before Qt
+  5.14, where \l{QJSEngine::toScriptValue} would have created
+  them for more types instead of corresponding ECMAScript types.
+  You can get a valid \l QVariant via \l toVariant for many values
+  for which \c{isVariant} returns false.
 
   \sa toVariant()
 */
@@ -466,6 +477,7 @@ bool QJSValue::isVariant() const
             return true;
     return false;
 }
+#endif
 
 /*!
   Returns the string value of this QJSValue, as defined in

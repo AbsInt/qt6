@@ -10,7 +10,7 @@
 #include <private/qqmlcomponent_p.h>
 #include <private/qqmlengine_p.h>
 #include <private/qqmlfinalizer_p.h>
-#include <private/qqmlloggingcategory_p.h>
+#include <private/qqmlloggingcategorybase_p.h>
 #include <private/qqmlmetatype_p.h>
 #include <private/qqmlmetatypedata_p.h>
 #include <private/qqmltype_p_p.h>
@@ -57,6 +57,9 @@ void qmlExecuteDeferred(QObject *object)
             || data->wasDeleted(object)) {
         return;
     }
+
+    if (!data->propertyCache)
+        data->propertyCache = QQmlMetaType::propertyCache(object->metaObject());
 
     QQmlEnginePrivate *ep = QQmlEnginePrivate::get(data->context->engine());
 
@@ -161,8 +164,8 @@ void QQmlPrivate::qmlRegistrationWarning(
     case UnconstructibleSingleton:
         qWarning()
                 << "Singleton" << metaType.name()
-                << "needs either a default constructor or, when adding a default"
-                << "constructor is infeasible, a public static"
+                << "needs to be a concrete class with either a default constructor"
+                << "or, when adding a default constructor is infeasible, a public static"
                 << "create(QQmlEngine *, QJSEngine *) method.";
         break;
     case NonQObjectWithAtached:
@@ -171,6 +174,22 @@ void QQmlPrivate::qmlRegistrationWarning(
                 << "is not a QObject, but has attached properties. This won't work.";
         break;
     }
+}
+
+QMetaType QQmlPrivate::compositeMetaType(
+        QV4::ExecutableCompilationUnit *unit, const QString &elementName)
+{
+    return QQmlTypePrivate::compositeQmlType(
+                   unit->baseCompilationUnit(), unit->engine->typeLoader(), elementName)
+            .typeId();
+}
+
+QMetaType QQmlPrivate::compositeListMetaType(
+        QV4::ExecutableCompilationUnit *unit, const QString &elementName)
+{
+    return QQmlTypePrivate::compositeQmlType(
+                   unit->baseCompilationUnit(), unit->engine->typeLoader(), elementName)
+            .qListTypeId();
 }
 
 int qmlRegisterUncreatableMetaObject(const QMetaObject &staticMetaObject,
@@ -1675,10 +1694,10 @@ const QLoggingCategory *AOTCompiledContext::resolveLoggingCategory(QObject *wrap
 {
     if (wrapper) {
         // We have to check this here because you may pass a plain QObject that only
-        // turns out to be a QQmlLoggingCategory at run time.
-        if (QQmlLoggingCategory *qQmlLoggingCategory
-                = qobject_cast<QQmlLoggingCategory *>(wrapper)) {
-            QLoggingCategory *loggingCategory = qQmlLoggingCategory->category();
+        // turns out to be a QQmlLoggingCategoryBase at run time.
+        if (QQmlLoggingCategoryBase *qQmlLoggingCategory
+                = qobject_cast<QQmlLoggingCategoryBase *>(wrapper)) {
+            const QLoggingCategory *loggingCategory = qQmlLoggingCategory->category();
             *ok = true;
             if (!loggingCategory) {
                 engine->handle()->throwError(
@@ -2008,17 +2027,21 @@ static void initTypeWrapperLookup(
     if (importNamespace != AOTCompiledContext::InvalidStringId) {
         QV4::Scope scope(context->engine->handle());
         QV4::ScopedString import(scope, context->compilationUnit->runtimeStrings[importNamespace]);
+
+        QQmlTypeLoader *typeLoader = scope.engine->typeLoader();
+        Q_ASSERT(typeLoader);
         if (const QQmlImportRef *importRef
-                = context->qmlContext->imports()->query(import).importNamespace) {
+                = context->qmlContext->imports()->query(import, typeLoader).importNamespace) {
+
             QV4::Scoped<QV4::QQmlTypeWrapper> wrapper(
                         scope, QV4::QQmlTypeWrapper::create(
                             scope.engine, nullptr, context->qmlContext->imports(), importRef));
             wrapper = l->qmlContextPropertyGetter(l, context->engine->handle(), wrapper);
             l->qmlContextPropertyGetter = qmlContextPropertyGetter;
             if (qmlContextPropertyGetter == QV4::QQmlContextWrapper::lookupSingleton)
-                l->qmlContextSingletonLookup.singletonObject = wrapper->heapObject();
+                l->qmlContextSingletonLookup.singletonObject.set(scope.engine, wrapper->heapObject());
             else if (qmlContextPropertyGetter == QV4::QQmlContextWrapper::lookupType)
-                l->qmlTypeLookup.qmlTypeWrapper = wrapper->heapObject();
+                l->qmlTypeLookup.qmlTypeWrapper.set(scope.engine, wrapper->heapObject());
             return;
         }
         scope.engine->throwTypeError();
@@ -2068,12 +2091,16 @@ void AOTCompiledContext::initLoadAttachedLookup(
     QV4::ScopedString name(scope, compilationUnit->runtimeStrings[l->nameIndex]);
 
     QQmlType type;
+    QQmlTypeLoader *typeLoader = scope.engine->typeLoader();
+    Q_ASSERT(typeLoader);
     if (importNamespace != InvalidStringId) {
         QV4::ScopedString import(scope, compilationUnit->runtimeStrings[importNamespace]);
-        if (const QQmlImportRef *importRef = qmlContext->imports()->query(import).importNamespace)
-            type = qmlContext->imports()->query(name, importRef).type;
+        if (const QQmlImportRef *importRef
+                = qmlContext->imports()->query(import, typeLoader).importNamespace) {
+            type = qmlContext->imports()->query(name, importRef, typeLoader).type;
+        }
     } else {
-        type = qmlContext->imports()->query<QQmlImport::AllowRecursion>(name).type;
+        type = qmlContext->imports()->query<QQmlImport::AllowRecursion>(name, typeLoader).type;
     }
 
     if (!type.isValid()) {
@@ -2085,7 +2112,7 @@ void AOTCompiledContext::initLoadAttachedLookup(
                 scope, QV4::QQmlTypeWrapper::create(scope.engine, object, type,
                                                     QV4::Heap::QQmlTypeWrapper::ExcludeEnums));
 
-    l->qmlTypeLookup.qmlTypeWrapper = wrapper->d();
+    l->qmlTypeLookup.qmlTypeWrapper.set(scope.engine, wrapper->d());
     l->getter = QV4::QObjectWrapper::lookupAttached;
 }
 
@@ -2096,7 +2123,7 @@ bool AOTCompiledContext::loadTypeLookup(uint index, void *target) const
         return false;
 
     const QV4::Heap::QQmlTypeWrapper *typeWrapper = static_cast<const QV4::Heap::QQmlTypeWrapper *>(
-                l->qmlTypeLookup.qmlTypeWrapper);
+                l->qmlTypeLookup.qmlTypeWrapper.get());
 
     QMetaType metaType = typeWrapper->type().typeId();
     *static_cast<const QMetaObject **>(target)

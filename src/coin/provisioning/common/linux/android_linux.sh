@@ -39,9 +39,9 @@ android14SystemZipSha="ede80c6901e8fad1895c97a86542b8e072bb1ee5"
 android14SystemPath="$basePath/$android14SystemZipName"
 
 # Android Automotive max SDK level image
-sdkApiLevelAutomotiveMax="android-33"
+sdkApiLevelAutomotiveMax="android-34"
 androidAutomotiveMaxUrl="$basePath/${sdkApiLevelAutomotiveMax}_automotive.tar.gz"
-androidAutomotiveMaxSha="b020a938ec46af2510047284406e9bed608cad03"
+androidAutomotiveMaxSha="2cc5dae4fd0bdefb188a3b84019d0d1e65501519"
 # Android Automotive min SDK level image
 sdkApiLevelAutomotiveMin="android-29"
 androidAutomotiveMinUrl="$basePath/${sdkApiLevelAutomotiveMin}_automotive.tar.gz"
@@ -82,6 +82,10 @@ if [ "$ndkVersionDefault" != "$ndkVersionLatest" ]; then
 fi
 SetEnvVar "ANDROID_NDK_ROOT_LATEST" "$androidNdkRoot"
 
+# To be used by vcpkg
+SetEnvVar "ANDROID_NDK_HOME" "$targetFolder/android-ndk-$ndkVersionDefault"
+export ANDROID_NDK_HOME="$targetFolder/android-ndk-$ndkVersionDefault"
+
 echo "Changing ownership of Android files."
 if uname -a |grep -q "el7"; then
     sudo chown -R qt:wheel "$targetFolder"
@@ -121,7 +125,7 @@ SetEnvVar "ANDROID_NDK_HOST" "linux-x86_64"
 SetEnvVar "ANDROID_API_VERSION" "$sdkApiLevel"
 
 # shellcheck disable=SC2129
-cat <<EOB >>~/versions.txt
+cat >>~/versions.txt <<EOB
 Android SDK tools = $toolsVersion
 Android SDK Build Tools = $sdkBuildToolsVersion
 Android SDK API level = $sdkApiLevel
@@ -143,7 +147,7 @@ echo "Unzipping the Android Emulator to '$sdkTargetFolder'"
 sudo unzip -o -q "$emulatorTargetFile" -d "$sdkTargetFolder"
 rm "$emulatorTargetFile"
 
-echo "y" | ./sdkmanager --install "system-images;android-26;google_apis;x86" \
+echo "y" | ./sdkmanager --install "system-images;android-28;google_apis;x86" \
     | eval "$sdkmanager_no_progress_bar_cmd"
 
 echo "Extract stored Android 14 Beta $android14SystemZipName"
@@ -154,8 +158,8 @@ sudo tar -xzf "/tmp/$android14SystemZipName" -C "$sdkTargetFolder/system-images"
 echo "Checking the contents of Android SDK again..."
 ls -l "$sdkTargetFolder"
 
-echo "no" | ./avdmanager create avd -n emulator_x86_api_26 -c 2048M -f \
-    -k "system-images;android-26;google_apis;x86"
+echo "no" | ./avdmanager create avd -n emulator_x86_api_28 -c 2048M -f \
+    -k "system-images;android-28;google_apis;x86"
 
 echo "no" | ./avdmanager create avd -n emulator_x86_64_api_34 -c 2048M -f \
     -k "system-images;android-34;google_apis;x86_64"
@@ -164,7 +168,7 @@ echo "Install maximum supported SDK level image for Android Automotive $sdkApiLe
 DownloadURL "$androidAutomotiveMaxUrl" "$androidAutomotiveMaxUrl" "$androidAutomotiveMaxSha" \
     "/tmp/${sdkApiLevelAutomotiveMax}_automotive.tar.gz"
 sudo tar -xzf "/tmp/${sdkApiLevelAutomotiveMax}_automotive.tar.gz" -C "$sdkTargetFolder/system-images"
-echo "no" | ./avdmanager create avd -n automotive_emulator_x86_64_api_33 -c 2048M -f \
+echo "no" | ./avdmanager create avd -n automotive_emulator_x86_64_api_34 -c 2048M -f \
     -k "system-images;${sdkApiLevelAutomotiveMax};android-automotive;x86_64"
 
 echo "Install minimum supported SDK level image for Android Automotive $sdkApiLevelAutomotiveMin"
@@ -189,13 +193,13 @@ cp -r "${scripts_dir_name}/android/gradle_project" /tmp/gradle_project
 cd /tmp/gradle_project
 # Get Gradle files from qtbase
 qtbaseGradleUrl="https://code.qt.io/cgit/qt/qtbase.git/plain/src/3rdparty/gradle"
-commit_sha="29a7560041734279bd1e55a79dd973af07a011fa"
-curl "$qtbaseGradleUrl"/gradle.properties\?h\=$commit_sha > gradle.properties
-curl "$qtbaseGradleUrl"/gradlew\?h\=$commit_sha > gradlew
-curl "$qtbaseGradleUrl"/gradlew.bat\?h\=$commit_sha > gradlew.bat
+commit_sha="f22e9795d9a32fc4e9f4d6f2a70c2f831028342b"
+curl "$qtbaseGradleUrl/gradle.properties?h=$commit_sha" > gradle.properties
+curl "$qtbaseGradleUrl/gradlew?h=$commit_sha" > gradlew
+curl "$qtbaseGradleUrl/gradlew.bat?h=$commit_sha" > gradlew.bat
 mkdir -p gradle/wrapper
-curl "$qtbaseGradleUrl"/gradle/wrapper/gradle-wrapper.jar\?h\=$commit_sha > gradle/wrapper/gradle-wrapper.jar
-curl "$qtbaseGradleUrl"/gradle/wrapper/gradle-wrapper.properties\?h\=$commit_sha > gradle/wrapper/gradle-wrapper.properties
+curl "$qtbaseGradleUrl/gradle/wrapper/gradle-wrapper.jar?h=$commit_sha" > gradle/wrapper/gradle-wrapper.jar
+curl "$qtbaseGradleUrl/gradle/wrapper/gradle-wrapper.properties?h=$commit_sha" > gradle/wrapper/gradle-wrapper.properties
 # Run Gradle
 chmod +x gradlew
 ANDROID_SDK_ROOT="$sdkTargetFolder" sh gradlew build

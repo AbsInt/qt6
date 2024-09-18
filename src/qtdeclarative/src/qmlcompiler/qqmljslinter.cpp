@@ -69,7 +69,7 @@ QQmlJSLinter::QQmlJSLinter(const QStringList &importPaths, const QStringList &pl
                            bool useAbsolutePath)
     : m_useAbsolutePath(useAbsolutePath),
       m_enablePlugins(true),
-      m_importer(importPaths, nullptr, true)
+      m_importer(importPaths, nullptr, UseOptionalImports)
 {
     m_plugins = loadPlugins(pluginPaths);
 }
@@ -244,7 +244,7 @@ std::vector<QQmlJSLinter::Plugin> QQmlJSLinter::loadPlugins(QStringList paths)
         }
     }
 #endif
-
+    Q_UNUSED(paths)
     return plugins;
 }
 
@@ -549,9 +549,6 @@ QQmlJSLinter::LintResult QQmlJSLinter::lintFile(const QString &filename,
 
             typeResolver.init(&v, parser.rootNode());
 
-            QQmlJSLiteralBindingCheck literalCheck;
-            literalCheck.run(&v, &typeResolver);
-
             const QStringList resourcePaths = mapper
                     ? mapper->resourcePaths(QQmlJSResourceFileMapper::localFileFilter(filename))
                     : QStringList();
@@ -563,11 +560,14 @@ QQmlJSLinter::LintResult QQmlJSLinter::lintFile(const QString &filename,
 
             using PassManagerPtr = std::unique_ptr<
                     QQmlSA::PassManager, decltype(&QQmlSA::PassManagerPrivate::deletePassManager)>;
-            PassManagerPtr passMan(nullptr, &QQmlSA::PassManagerPrivate::deletePassManager);
+            PassManagerPtr passMan(
+                    QQmlSA::PassManagerPrivate::createPassManager(&v, codegen.typeResolver()),
+                    &QQmlSA::PassManagerPrivate::deletePassManager);
+            passMan->registerPropertyPass(
+                    std::make_unique<QQmlJSLiteralBindingCheck>(passMan.get()), QString(),
+                    QString(), QString());
 
             if (m_enablePlugins) {
-                passMan.reset(QQmlSA::PassManagerPrivate::createPassManager(&v, codegen.typeResolver()));
-
                 for (const Plugin &plugin : m_plugins) {
                     if (!plugin.isValid() || !plugin.isEnabled())
                         continue;
@@ -577,9 +577,8 @@ QQmlJSLinter::LintResult QQmlJSLinter::lintFile(const QString &filename,
                     instance->registerPasses(passMan.get(),
                                              QQmlJSScope::createQQmlSAElement(v.result()));
                 }
-
-                passMan->analyze(QQmlJSScope::createQQmlSAElement(v.result()));
             }
+            passMan->analyze(QQmlJSScope::createQQmlSAElement(v.result()));
 
             success = !m_logger->hasWarnings() && !m_logger->hasErrors();
 
@@ -589,8 +588,11 @@ QQmlJSLinter::LintResult QQmlJSLinter::lintFile(const QString &filename,
                 return;
             }
 
-            if (passMan)
+            if (passMan) {
+                // passMan now has a pointer to the moved from type resolver
+                // we fix this in setPassManager
                 codegen.setPassManager(passMan.get());
+            }
             QQmlJSSaveFunction saveFunction = [](const QV4::CompiledData::SaveableUnitPointer &,
                                                  const QQmlJSAotFunctionMap &,
                                                  QString *) { return true; };

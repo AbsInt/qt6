@@ -20,6 +20,7 @@
 #include "propertynode.h"
 #include "qdocdatabase.h"
 #include "qmltypenode.h"
+#include "qmlpropertynode.h"
 #include "quoter.h"
 #include "sharedcommentnode.h"
 #include "tokenizer.h"
@@ -49,6 +50,7 @@ QList<Generator *> Generator::s_generators;
 QString Generator::s_outDir;
 QString Generator::s_outSubdir;
 QStringList Generator::s_outFileNames;
+QSet<QString> Generator::s_trademarks;
 QSet<QString> Generator::s_outputFormats;
 QHash<QString, QString> Generator::s_outputPrefixes;
 QHash<QString, QString> Generator::s_outputSuffixes;
@@ -167,20 +169,15 @@ int Generator::appendSortedQmlNames(Text &text, const Node *base, const NodeList
     QMap<QString, Text> classMap;
 
     for (const auto sub : subs) {
-        Text text;
-        if (!base->isQtQuickNode() || !sub->isQtQuickNode()
-            || (base->logicalModuleName() == sub->logicalModuleName())) {
-            appendFullName(text, sub, base);
-            classMap[text.toString().toLower()] = text;
-        }
+        Text full_name;
+        appendFullName(full_name, sub, base);
+        classMap[full_name.toString().toLower()] = full_name;
     }
 
     int index = 0;
-    const QStringList names = classMap.keys();
-    for (const auto &name : names) {
-        text << classMap[name];
-        text << Utilities::comma(index++, names.size());
-    }
+    const auto &names = classMap.keys();
+    for (const auto &name : names)
+        text << classMap[name] << Utilities::comma(index++, names.size());
     return index;
 }
 
@@ -197,12 +194,7 @@ QFile *Generator::openSubPageFile(const Node *node, const QString &fileName)
     if (s_outFileNames.contains(fileName))
         node->location().warning("Already generated %1 for this project"_L1.arg(fileName));
 
-    QString path = outputDir() + QLatin1Char('/');
-    if (Generator::useOutputSubdirs() && !node->outputSubdirectory().isEmpty()
-        && !outputDir().endsWith(node->outputSubdirectory())) {
-        path += node->outputSubdirectory() + QLatin1Char('/');
-    }
-    path += fileName;
+    QString path = outputDir() + QLatin1Char('/') + fileName;
 
     auto outPath = s_redirectDocumentationToDevNull ? QStringLiteral("/dev/null") : path;
     auto outFile = new QFile(outPath);
@@ -222,6 +214,7 @@ QFile *Generator::openSubPageFile(const Node *node, const QString &fileName)
 
     qCDebug(lcQdoc, "Writing: %s", qPrintable(path));
     s_outFileNames << fileName;
+    s_trademarks.clear();
     return outFile;
 }
 
@@ -442,7 +435,7 @@ QMap<QString, QString> &Generator::formattingRightMap()
 /*!
   Returns the full document location.
  */
-QString Generator::fullDocumentLocation(const Node *node, bool useSubdir)
+QString Generator::fullDocumentLocation(const Node *node)
 {
     if (node == nullptr)
         return QString();
@@ -451,18 +444,7 @@ QString Generator::fullDocumentLocation(const Node *node, bool useSubdir)
 
     QString parentName;
     QString anchorRef;
-    QString fdl;
 
-    /*
-      If the useSubdir parameter is set, then the output is
-      being sent to subdirectories of the output directory.
-      Prepend the subdirectory name + '/' to the result.
-     */
-    if (useSubdir) {
-        fdl = node->outputSubdirectory();
-        if (!fdl.isEmpty())
-            fdl.append(QLatin1Char('/'));
-    }
     if (node->isNamespace()) {
         /*
           The root namespace has no name - check for this before creating
@@ -510,8 +492,8 @@ QString Generator::fullDocumentLocation(const Node *node, bool useSubdir)
         default:
             if (fn->isDtor())
                 anchorRef = "#dtor." + fn->name().mid(1);
-            else if (fn->hasOneAssociatedProperty() && fn->doc().isEmpty())
-                return fullDocumentLocation(fn->associatedProperties()[0]);
+            else if (const auto *p = fn->primaryAssociatedProperty(); p && fn->doc().isEmpty())
+                return fullDocumentLocation(p);
             else if (fn->overloadNumber() > 0)
                 anchorRef = QLatin1Char('#') + cleanRef(fn->name()) + QLatin1Char('-')
                         + QString::number(fn->overloadNumber());
@@ -574,7 +556,7 @@ QString Generator::fullDocumentLocation(const Node *node, bool useSubdir)
                                "-obsolete." + currentGenerator()->fileExtension());
     }
 
-    return fdl + parentName.toLower() + anchorRef;
+    return parentName.toLower() + anchorRef;
 }
 
 void Generator::generateAlsoList(const Node *node, CodeMarker *marker)
@@ -767,7 +749,10 @@ void Generator::generateBody(const Node *node, CodeMarker *marker)
                 for (const auto &name : declaredNames) {
                     if (!documentedNames.contains(name)) {
                         if (fn->isActive() || fn->isPreliminary()) {
-                            if (!fn->isMarkedReimp() && !fn->isOverload()) {
+                            // Require no parameter documentation for overrides and overloads,
+                            // and only require it for non-overloaded constructors.
+                            if (!fn->isMarkedReimp() && !fn->isOverload() &&
+                                !(fn->isSomeCtor() && fn->hasOverloads())) {
                                 fn->doc().location().warning(
                                         QStringLiteral("Undocumented parameter '%1' in %2")
                                                 .arg(name, node->plainFullName()));
@@ -801,6 +786,7 @@ void Generator::generateBody(const Node *node, CodeMarker *marker)
             }
         }
     }
+    generateEnumValuesForQmlProperty(node, marker);
     generateRequiredLinks(node, marker);
 }
 
@@ -1136,6 +1122,7 @@ QString Generator::formatSince(const Node *node)
       \li Custom status set explicitly in node's documentation using
           \c {\meta {status} {<description>}},
       \li 'Deprecated [since <version>]' (\\deprecated [<version>]),
+      \li 'Until <version>',
       \li 'Preliminary' (\\preliminary), or
       \li The description adopted from associated module's state:
           \c {\modulestate {<description>}}.
@@ -1152,10 +1139,13 @@ std::optional<QString> formatStatus(const Node *node, QDocDatabase *qdb)
         if (!status.isEmpty())
             return {status};
     }
+    const auto since = node->deprecatedSince();
     if (node->status() == Node::Deprecated) {
         status = u"Deprecated"_s;
-        if (const auto since = node->deprecatedSince(); !since.isEmpty())
+        if (!since.isEmpty())
             status += " since %1"_L1.arg(since);
+    } else if (!since.isEmpty()) {
+        status = "Until %1"_L1.arg(since);
     } else if (node->status() == Node::Preliminary) {
         status = u"Preliminary"_s;
     } else if (const auto collection = qdb->getModuleNode(node); collection) {
@@ -1214,7 +1204,13 @@ void Generator::generateStatus(const Node *node, CodeMarker *marker)
                      << Atom(Atom::FormattingLeft, ATOM_FORMATTING_ITALIC) << state
                      << Atom(Atom::FormattingRight, ATOM_FORMATTING_ITALIC) << " state."
                      << Atom::ParaRight;
+                break;
             }
+        }
+        if (const auto version = node->deprecatedSince(); !version.isEmpty()) {
+            text << Atom::ParaLeft << "This " << typeString(node)
+                 << " is scheduled for deprecation in version "
+                 << version << "." << Atom::ParaRight;
         }
         break;
     case Node::Preliminary:
@@ -1393,6 +1389,36 @@ bool Generator::hasExceptions(const Node *node, NodeList &reentrant, NodeList &t
         }
     }
     return result;
+}
+
+/*!
+    Returns \c true if a trademark symbol should be appended to the
+    output as determined by \a atom. Trademarks are tracked via the
+    use of the \\tm formatting command.
+
+    Returns true if:
+
+    \list
+        \li \a atom is of type Atom::FormattingRight containing
+            ATOM_FORMATTING_TRADEMARK, and
+        \li The trademarked string is the first appearance on the
+            current sub-page.
+    \endlist
+*/
+bool Generator::appendTrademark(const Atom *atom)
+{
+    if (atom->type() != Atom::FormattingRight)
+        return false;
+    if (atom->string() != ATOM_FORMATTING_TRADEMARK)
+        return false;
+
+    if (atom->count() > 1) {
+        if (s_trademarks.contains(atom->string(1)))
+            return false;
+        s_trademarks << atom->string(1);
+    }
+
+    return true;
 }
 
 static void startNote(Text &text)
@@ -2040,6 +2066,37 @@ void Generator::supplementAlsoList(const Node *node, QList<Text> &alsoList)
             }
         }
     }
+}
+
+void Generator::generateEnumValuesForQmlProperty(const Node *node, CodeMarker *marker)
+{
+    if (!node->isQmlProperty())
+        return;
+
+    const auto *qpn = static_cast<const QmlPropertyNode*>(node);
+
+    if (!qpn->enumNode())
+        return;
+
+    // Retrieve atoms from C++ enum \value list
+    const auto body{qpn->enumNode()->doc().body()};
+    const auto *start{body.firstAtom()};
+    Text text;
+
+    while ((start = start->find(Atom::ListLeft, ATOM_LIST_VALUE))) {
+        const auto end = start->find(Atom::ListRight, ATOM_LIST_VALUE);
+        // Skip subsequent ListLeft atoms, collating multiple lists into one
+        text << body.subText(text.isEmpty() ? start : start->next(), end);
+        start = end;
+    }
+    if (text.isEmpty())
+        return;
+
+    text << Atom(Atom::ListRight, ATOM_LIST_VALUE);
+    if (marker)
+        generateText(text, qpn, marker);
+    else
+        generateText(text, qpn);
 }
 
 void Generator::terminate()

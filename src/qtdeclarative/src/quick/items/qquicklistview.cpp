@@ -1110,7 +1110,7 @@ QQuickItem * QQuickListViewPrivate::getSectionItem(const QString &section)
                 sectionItem->setParentItem(contentItem);
             }
             // sections are not controlled by FxListItemSG, so apply attached properties here
-            QQuickItemViewAttached *attached = static_cast<QQuickItemViewAttached*>(qmlAttachedPropertiesObject<QQuickListView>(sectionItem));
+            auto *attached = static_cast<QQuickListViewAttached*>(qmlAttachedPropertiesObject<QQuickListView>(sectionItem));
             attached->setView(q);
         } else if (!reuseExistingContext) {
             delete context;
@@ -2036,7 +2036,7 @@ QQuickItemViewAttached *QQuickListViewPrivate::getAttachedObject(const QObject *
 
 /*!
     \qmltype ListView
-    \instantiates QQuickListView
+    \nativetype QQuickListView
     \inqmlmodule QtQuick
     \ingroup qtquick-views
     \inherits Flickable

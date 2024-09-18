@@ -176,7 +176,7 @@ static void QT_FASTCALL convertRGBA32FPMToRGBA64PM(QRgba64 *buffer, int count)
     }
 }
 
-static Convert64Func convert64ToRGBA64PM[QImage::NImageFormats] = {
+static Convert64Func convert64ToRGBA64PM[] = {
     nullptr,
     nullptr,
     nullptr,
@@ -213,7 +213,10 @@ static Convert64Func convert64ToRGBA64PM[QImage::NImageFormats] = {
     convertRGBA32FPMToRGBA64PM,
     convertRGBA32FToRGBA64PM,
     convertRGBA32FPMToRGBA64PM,
+    nullptr,
 };
+
+static_assert(std::size(convert64ToRGBA64PM) == QImage::NImageFormats);
 #endif
 
 #if QT_CONFIG(raster_fp)
@@ -247,7 +250,7 @@ static void QT_FASTCALL convertRGBA16FToRGBA32F(QRgbaFloat32 *buffer, const quin
     qFloatFromFloat16((float *)buffer, (const qfloat16 *)src, count * 4);
 }
 
-static Convert64ToFPFunc convert64ToRGBA32F[QImage::NImageFormats] = {
+static Convert64ToFPFunc convert64ToRGBA32F[] = {
     nullptr,
     nullptr,
     nullptr,
@@ -284,7 +287,10 @@ static Convert64ToFPFunc convert64ToRGBA32F[QImage::NImageFormats] = {
     nullptr,
     nullptr,
     nullptr,
+    nullptr,
 };
+
+static_assert(std::size(convert64ToRGBA32F) == QImage::NImageFormats);
 
 static void convertRGBA32FToRGBA32FPM(QRgbaFloat32 *buffer, int count)
 {
@@ -353,7 +359,7 @@ static uint *QT_FASTCALL destFetchUndefined(uint *buffer, QRasterBuffer *, int, 
     return buffer;
 }
 
-static DestFetchProc destFetchProc[QImage::NImageFormats] =
+static DestFetchProc destFetchProc[] =
 {
     nullptr,            // Format_Invalid
     destFetchMono,      // Format_Mono,
@@ -391,7 +397,10 @@ static DestFetchProc destFetchProc[QImage::NImageFormats] =
     destFetch,          // Format_RGBX32FPx4
     destFetch,          // Format_RGBA32FPx4
     destFetch,          // Format_RGBA32FPx4_Premultiplied
+    destFetch,          // Format_CMYK8888
 };
+
+static_assert(std::size(destFetchProc) == QImage::NImageFormats);
 
 #if QT_CONFIG(raster_64bit)
 static QRgba64 *QT_FASTCALL destFetch64(QRgba64 *buffer, QRasterBuffer *rasterBuffer, int x, int y, int length)
@@ -410,7 +419,7 @@ static QRgba64 * QT_FASTCALL destFetch64Undefined(QRgba64 *buffer, QRasterBuffer
     return buffer;
 }
 
-static DestFetchProc64 destFetchProc64[QImage::NImageFormats] =
+static DestFetchProc64 destFetchProc64[] =
 {
     nullptr,            // Format_Invalid
     nullptr,            // Format_Mono,
@@ -448,7 +457,10 @@ static DestFetchProc64 destFetchProc64[QImage::NImageFormats] =
     destFetch64,        // Format_RGBX32FPx4
     destFetch64,        // Format_RGBA32FPx4
     destFetch64,        // Format_RGBA32FPx4_Premultiplied
+    destFetch64,        // Format_CMYK8888
 };
+
+static_assert(std::size(destFetchProc64) == QImage::NImageFormats);
 #endif
 
 #if QT_CONFIG(raster_fp)
@@ -466,7 +478,7 @@ static QRgbaFloat32 *QT_FASTCALL destFetchFPUndefined(QRgbaFloat32 *buffer, QRas
 {
     return buffer;
 }
-static DestFetchProcFP destFetchProcFP[QImage::NImageFormats] =
+static DestFetchProcFP destFetchProcFP[] =
 {
     nullptr,            // Format_Invalid
     nullptr,            // Format_Mono,
@@ -504,7 +516,10 @@ static DestFetchProcFP destFetchProcFP[QImage::NImageFormats] =
     destFetchRGBFP,     // Format_RGBX32FPx4
     destFetchFP,        // Format_RGBA32FPx4
     destFetchRGBFP,     // Format_RGBA32FPx4_Premultiplied
+    destFetchFP,        // Format_CMYK8888
 };
+
+static_assert(std::size(destFetchProcFP) == QImage::NImageFormats);
 #endif
 
 /*
@@ -657,7 +672,7 @@ static void QT_FASTCALL destStoreGray16(QRasterBuffer *rasterBuffer, int x, int 
     }
 }
 
-static DestStoreProc destStoreProc[QImage::NImageFormats] =
+static DestStoreProc destStoreProc[] =
 {
     nullptr,            // Format_Invalid
     destStoreMono,      // Format_Mono,
@@ -695,7 +710,10 @@ static DestStoreProc destStoreProc[QImage::NImageFormats] =
     destStore,          // Format_RGBX32FPx4
     destStore,          // Format_RGBA32FPx4
     destStore,          // Format_RGBA32FPx4_Premultiplied
+    destStore,          // Format_CMYK8888
 };
+
+static_assert(std::size(destStoreProc) == QImage::NImageFormats);
 
 #if QT_CONFIG(raster_64bit)
 static void QT_FASTCALL destStore64(QRasterBuffer *rasterBuffer, int x, int y, const QRgba64 *buffer, int length)
@@ -757,7 +775,7 @@ static void QT_FASTCALL destStore64Gray16(QRasterBuffer *rasterBuffer, int x, in
     }
 }
 
-static DestStoreProc64 destStoreProc64[QImage::NImageFormats] =
+static DestStoreProc64 destStoreProc64[] =
 {
     nullptr,            // Format_Invalid
     nullptr,            // Format_Mono,
@@ -795,7 +813,10 @@ static DestStoreProc64 destStoreProc64[QImage::NImageFormats] =
     destStore64,        // Format_RGBX32FPx4
     destStore64,        // Format_RGBA32FPx4
     destStore64,        // Format_RGBA32FPx4_Premultiplied
+    destStore64,        // Format_CMYK8888
 };
+
+static_assert(std::size(destStoreProc64) == QImage::NImageFormats);
 #endif
 
 #if QT_CONFIG(raster_fp)
@@ -1560,9 +1581,10 @@ static void QT_FASTCALL fetchTransformedBilinearARGB32PM_downscale_helper(uint *
         const int32x4_t v_ffff_mask = vdupq_n_s32(0x0000ffff);
         const int32x4_t v_fx_r = vdupq_n_s32(0x0800);
 
+         // Pre-initialize to work-around code-analysis warnings/crashes in MSVC:
+        uint32x4x2_t v_top = {};
+        uint32x4x2_t v_bot = {};
         while (b < boundedEnd - 3) {
-            uint32x4x2_t v_top, v_bot;
-
             int x1 = (fx >> 16);
             fx += fdx;
             v_top = vld2q_lane_u32(s1 + x1, v_top, 0);
@@ -1776,9 +1798,10 @@ static void QT_FASTCALL fetchTransformedBilinearARGB32PM_fast_rotate_helper(uint
         const int32x4_t v_ffff_mask = vdupq_n_s32(0x0000ffff);
         const int32x4_t v_round = vdupq_n_s32(0x0800);
 
+         // Pre-initialize to work-around code-analysis warnings/crashes in MSVC:
+        uint32x4x2_t v_top = {};
+        uint32x4x2_t v_bot = {};
         while (b < boundedEnd - 3) {
-            uint32x4x2_t v_top, v_bot;
-
             int x1 = (fx >> 16);
             int y1 = (fy >> 16);
             fx += fdx; fy += fdy;
@@ -3070,7 +3093,7 @@ static const QRgbaFloat32 *QT_FASTCALL fetchTransformedBilinearFP(QRgbaFloat32 *
 #endif // QT_CONFIG(raster_fp)
 
 // FetchUntransformed can have more specialized methods added depending on SIMD features.
-static SourceFetchProc sourceFetchUntransformed[QImage::NImageFormats] = {
+static SourceFetchProc sourceFetchUntransformed[] = {
     nullptr,                    // Invalid
     fetchUntransformed,         // Mono
     fetchUntransformed,         // MonoLsb
@@ -3107,9 +3130,12 @@ static SourceFetchProc sourceFetchUntransformed[QImage::NImageFormats] = {
     fetchUntransformed,         // RGBX32Px4
     fetchUntransformed,         // RGBA32FPx4
     fetchUntransformed,         // RGBA32FPx4_Premultiplied
+    fetchUntransformed,         // CMYK8888
 };
 
-static const SourceFetchProc sourceFetchGeneric[NBlendTypes] = {
+static_assert(std::size(sourceFetchUntransformed) == QImage::NImageFormats);
+
+static const SourceFetchProc sourceFetchGeneric[] = {
     fetchUntransformed,                                                             // Untransformed
     fetchUntransformed,                                                             // Tiled
     fetchTransformed<BlendTransformed, QPixelLayout::BPPNone>,                      // Transformed
@@ -3118,7 +3144,9 @@ static const SourceFetchProc sourceFetchGeneric[NBlendTypes] = {
     fetchTransformedBilinear<BlendTransformedBilinearTiled, QPixelLayout::BPPNone>  // TransformedBilinearTiled
 };
 
-static SourceFetchProc sourceFetchARGB32PM[NBlendTypes] = {
+static_assert(std::size(sourceFetchGeneric) == NBlendTypes);
+
+static SourceFetchProc sourceFetchARGB32PM[] = {
     fetchUntransformedARGB32PM,                                     // Untransformed
     fetchUntransformedARGB32PM,                                     // Tiled
     fetchTransformed<BlendTransformed, QPixelLayout::BPP32>,        // Transformed
@@ -3127,7 +3155,9 @@ static SourceFetchProc sourceFetchARGB32PM[NBlendTypes] = {
     fetchTransformedBilinearARGB32PM<BlendTransformedBilinearTiled> // BilinearTiled
 };
 
-static SourceFetchProc sourceFetchAny16[NBlendTypes] = {
+static_assert(std::size(sourceFetchARGB32PM) == NBlendTypes);
+
+static SourceFetchProc sourceFetchAny16[] = {
     fetchUntransformed,                                                             // Untransformed
     fetchUntransformed,                                                             // Tiled
     fetchTransformed<BlendTransformed, QPixelLayout::BPP16>,                        // Transformed
@@ -3136,7 +3166,9 @@ static SourceFetchProc sourceFetchAny16[NBlendTypes] = {
     fetchTransformedBilinear<BlendTransformedBilinearTiled, QPixelLayout::BPP16>    // TransformedBilinearTiled
 };
 
-static SourceFetchProc sourceFetchAny32[NBlendTypes] = {
+static_assert(std::size(sourceFetchAny16) == NBlendTypes);
+
+static SourceFetchProc sourceFetchAny32[] = {
     fetchUntransformed,                                                             // Untransformed
     fetchUntransformed,                                                             // Tiled
     fetchTransformed<BlendTransformed, QPixelLayout::BPP32>,                        // Transformed
@@ -3144,6 +3176,8 @@ static SourceFetchProc sourceFetchAny32[NBlendTypes] = {
     fetchTransformedBilinear<BlendTransformedBilinear, QPixelLayout::BPP32>,        // TransformedBilinear
     fetchTransformedBilinear<BlendTransformedBilinearTiled, QPixelLayout::BPP32>    // TransformedBilinearTiled
 };
+
+static_assert(std::size(sourceFetchAny32) == NBlendTypes);
 
 static inline SourceFetchProc getSourceFetch(TextureBlendType blendType, QImage::Format format)
 {
@@ -3159,7 +3193,7 @@ static inline SourceFetchProc getSourceFetch(TextureBlendType blendType, QImage:
 }
 
 #if QT_CONFIG(raster_64bit)
-static const SourceFetchProc64 sourceFetchGeneric64[NBlendTypes] = {
+static const SourceFetchProc64 sourceFetchGeneric64[] = {
     fetchUntransformed64,                                     // Untransformed
     fetchUntransformed64,                                     // Tiled
     fetchTransformed64<BlendTransformed>,                     // Transformed
@@ -3168,7 +3202,9 @@ static const SourceFetchProc64 sourceFetchGeneric64[NBlendTypes] = {
     fetchTransformedBilinear64<BlendTransformedBilinearTiled> // BilinearTiled
 };
 
-static const SourceFetchProc64 sourceFetchRGBA64PM[NBlendTypes] = {
+static_assert(std::size(sourceFetchGeneric64) == NBlendTypes);
+
+static const SourceFetchProc64 sourceFetchRGBA64PM[] = {
     fetchUntransformedRGBA64PM,                               // Untransformed
     fetchUntransformedRGBA64PM,                               // Tiled
     fetchTransformed64<BlendTransformed>,                     // Transformed
@@ -3176,6 +3212,8 @@ static const SourceFetchProc64 sourceFetchRGBA64PM[NBlendTypes] = {
     fetchTransformedBilinear64<BlendTransformedBilinear>,     // Bilinear
     fetchTransformedBilinear64<BlendTransformedBilinearTiled> // BilinearTiled
 };
+
+static_assert(std::size(sourceFetchRGBA64PM) == NBlendTypes);
 
 static inline SourceFetchProc64 getSourceFetch64(TextureBlendType blendType, QImage::Format format)
 {
@@ -3186,7 +3224,7 @@ static inline SourceFetchProc64 getSourceFetch64(TextureBlendType blendType, QIm
 #endif
 
 #if QT_CONFIG(raster_fp)
-static const SourceFetchProcFP sourceFetchGenericFP[NBlendTypes] = {
+static const SourceFetchProcFP sourceFetchGenericFP[] = {
     fetchUntransformedFP,                                     // Untransformed
     fetchUntransformedFP,                                     // Tiled
     fetchTransformedFP<BlendTransformed>,                     // Transformed
@@ -3194,6 +3232,8 @@ static const SourceFetchProcFP sourceFetchGenericFP[NBlendTypes] = {
     fetchTransformedBilinearFP<BlendTransformedBilinear>,     // Bilinear
     fetchTransformedBilinearFP<BlendTransformedBilinearTiled> // BilinearTiled
 };
+
+static_assert(std::size(sourceFetchGenericFP) == NBlendTypes);
 
 static inline SourceFetchProcFP getSourceFetchFP(TextureBlendType blendType, QImage::Format /*format*/)
 {
@@ -3612,7 +3652,6 @@ static inline Operator getOperator(const QSpanData *data, const QT_FT_Span *span
 {
     Operator op;
     bool solidSource = false;
-
     switch(data->type) {
     case QSpanData::Solid:
         solidSource = data->solidColor.alphaF() >= 1.0f;
@@ -3656,7 +3695,7 @@ static inline Operator getOperator(const QSpanData *data, const QT_FT_Span *span
         solidSource = !data->texture.hasAlpha;
         op.srcFetch = getSourceFetch(getBlendType(data), data->texture.format);
 #if QT_CONFIG(raster_64bit)
-        op.srcFetch64 = getSourceFetch64(getBlendType(data), data->texture.format);;
+        op.srcFetch64 = getSourceFetch64(getBlendType(data), data->texture.format);
 #endif
 #if QT_CONFIG(raster_fp)
         op.srcFetchFP = getSourceFetchFP(getBlendType(data), data->texture.format);
@@ -5981,7 +6020,7 @@ static void qt_rectfill_fp32x4(QRasterBuffer *rasterBuffer,
 // Map table for destination image format. Contains function pointers
 // for blends of various types unto the destination
 
-DrawHelper qDrawHelper[QImage::NImageFormats] =
+DrawHelper qDrawHelper[] =
 {
     // Format_Invalid,
     { nullptr, nullptr, nullptr, nullptr, nullptr },
@@ -6257,6 +6296,8 @@ DrawHelper qDrawHelper[QImage::NImageFormats] =
         qt_rectfill_fp32x4
     },
 };
+
+static_assert(std::size(qDrawHelper) == QImage::NImageFormats);
 
 #if !defined(Q_PROCESSOR_X86)
 void qt_memfill64(quint64 *dest, quint64 color, qsizetype count)

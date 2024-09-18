@@ -71,22 +71,37 @@ build_ffmpeg() {
 }
 
 if [ "$os" == "linux" ]; then
+  build_type="$2"
+
   install_ff_nvcodec_headers
 
   ffmpeg_config_options+=" --enable-openssl"
+
+  if [ "$build_type" != "static" ]; then
+    ffmpeg_config_options+=" --enable-shared --disable-static"
+  fi
+
   build_ffmpeg
-  sudo mv "$ffmpeg_source_dir/build/installed/usr/local/$ffmpeg_name" "/usr/local"
+
+  output_dir="$ffmpeg_source_dir/build/installed/usr/local/$ffmpeg_name"
+
+  if [ "$build_type" != "static" ]; then
+    fix_dependencies="${BASH_SOURCE%/*}/../shared/fix_ffmpeg_dependencies.sh"
+    "$fix_dependencies" "$output_dir"
+  fi
+
+  sudo mv "$output_dir" "/usr/local"
   SetEnvVar "FFMPEG_DIR" "/usr/local/$ffmpeg_name"
 
 elif [ "$os" == "macos" ] || [ "$os" == "macos-universal" ]; then
   ffmpeg_config_options+=" --enable-shared --disable-static"
 
   brew install yasm
-  export MACOSX_DEPLOYMENT_TARGET=11
+  export MACOSX_DEPLOYMENT_TARGET=12
   fix_relative_dependencies="${BASH_SOURCE%/*}/../macos/fix_relative_dependencies.sh"
 
   xcode_major_version=$(xcodebuild -version | awk 'NR==1 {split($2, a, "."); print a[1]}')
-  if [ $xcode_major_version -ge 15 ]; then
+  if [ "$xcode_major_version" -ge 15 ]; then
     # fix the error: duplicate symbol '_av_ac3_parse_header'
     ffmpeg_config_options+=" --extra-ldflags=-Wl,-ld_classic"
   fi
@@ -111,3 +126,5 @@ elif [ "$os" == "macos" ] || [ "$os" == "macos-universal" ]; then
 
   SetEnvVar "FFMPEG_DIR" "/usr/local/$ffmpeg_name"
 fi
+
+

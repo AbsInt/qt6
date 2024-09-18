@@ -3893,8 +3893,8 @@ void tst_qqmlecmascript::scriptConnect()
         QCOMPARE(object->property("a"), 1);
 
         QMetaObject::invokeMethod(object, "destroyObj", Qt::DirectConnection);
-        QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
-        QApplication::processEvents();
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+        QCoreApplication::processEvents();
 
         QMetaObject::invokeMethod(object, "someSignal");
 
@@ -6244,9 +6244,8 @@ void tst_qqmlecmascript::sequenceConversionBindings()
     }
 
     {
+        // This is not an error anymore. Lists are converted element-by-element now.
         QUrl qmlFile = testFileUrl("sequenceConversion.bindings.error.qml");
-        QString warning = QString(QLatin1String("%1:17:9: Unable to assign QList<int> to QList<bool>")).arg(qmlFile.toString());
-        QTest::ignoreMessage(QtWarningMsg, warning.toLatin1().constData());
         QQmlComponent component(&engine, qmlFile);
         QScopedPointer<QObject> object(component.create());
         QVERIFY2(object, qPrintable(component.errorString()));
@@ -8125,12 +8124,9 @@ void tst_qqmlecmascript::onDestructionViaGC()
         v4->memoryManager->allocate<QV4::WeakReferenceSentinel>(weakRef.data(), &sentinelResult);
     }
     gc(engine);
-
+    QVERIFY2(weakRef->isNullOrUndefined(), "The weak value was not cleared");
     QVERIFY2(mutatorResult, "We failed to re-assign the weak reference a new value during GC");
-    QVERIFY2(!sentinelResult, "The weak value was cleared on first GC run");
-    QVERIFY2(!weakRef->isNullOrUndefined(), "The weak value was cleared on first GC run");
-    gc(engine);
-    QVERIFY2(weakRef->isNullOrUndefined(), "The weak value was not cleared on second gc run");
+    QVERIFY2(sentinelResult, "The weak reference was not cleared properly");
 }
 
 struct EventProcessor : public QObject

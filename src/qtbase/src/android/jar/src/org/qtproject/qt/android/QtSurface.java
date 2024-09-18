@@ -12,11 +12,11 @@ import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 
 @SuppressLint("ViewConstructor")
-public class QtSurface extends SurfaceView implements SurfaceHolder.Callback
+class QtSurface extends SurfaceView implements SurfaceHolder.Callback
 {
-    private QtSurfaceInterface m_surfaceCallback;
+    private final QtSurfaceInterface m_surfaceCallback;
 
-    public QtSurface(Context context, QtSurfaceInterface surfaceCallback, boolean onTop, int imageDepth)
+    QtSurface(Context context, QtSurfaceInterface surfaceCallback, boolean onTop, int imageDepth)
     {
         super(context);
         setFocusable(false);

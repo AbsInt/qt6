@@ -14,7 +14,7 @@
 //
 // We mean it.
 
-#include <private/qtqmlcompilerexports_p.h>
+#include <qtqmlcompilerexports.h>
 
 #include <QtCore/qstring.h>
 #include <QtCore/qstringlist.h>
@@ -136,10 +136,13 @@ public:
         Const,
     };
 
-    QQmlJSMetaParameter(const QString &name = QString(), const QString &typeName = QString(),
+    QQmlJSMetaParameter(QString name = QString(), QString typeName = QString(),
                         Constness typeQualifier = NonConst,
                         QWeakPointer<const QQmlJSScope> type = {})
-        : m_name(name), m_typeName(typeName), m_type(type), m_typeQualifier(typeQualifier)
+        : m_name(std::move(name)),
+          m_typeName(std::move(typeName)),
+          m_type(type),
+          m_typeQualifier(typeQualifier)
     {
     }
 
@@ -217,6 +220,9 @@ public:
 
     QString methodName() const { return m_name; }
     void setMethodName(const QString &name) { m_name = name; }
+
+    QQmlJS::SourceLocation sourceLocation() const { return m_sourceLocation; }
+    void setSourceLocation(QQmlJS::SourceLocation location) { m_sourceLocation = location; }
 
     QQmlJSMetaReturnType returnValue() const { return m_returnType; }
     void setReturnValue(const QQmlJSMetaReturnType returnValue) { m_returnType = returnValue; }
@@ -334,6 +340,8 @@ public:
 
 private:
     QString m_name;
+
+    QQmlJS::SourceLocation m_sourceLocation;
 
     QQmlJSMetaReturnType m_returnType;
     QList<QQmlJSMetaParameter> m_parameters;
@@ -464,7 +472,7 @@ public:
     create a new binding, you know all the details of it already, so you should
     just set all the data at once.
 */
-class Q_QMLCOMPILER_PRIVATE_EXPORT QQmlJSMetaPropertyBinding
+class Q_QMLCOMPILER_EXPORT QQmlJSMetaPropertyBinding
 {
     using BindingType = QQmlSA::BindingType;
     using ScriptBindingKind = QQmlSA::ScriptBindingKind;
@@ -734,8 +742,6 @@ public:
         m_bindingContent = Content::ValueSource { typeName, type };
     }
 
-    QString literalTypeName() const;
-
     // ### TODO: here and below: Introduce an allowConversion parameter, if yes, enable conversions e.g. bool -> number?
     bool boolValue() const;
 
@@ -869,7 +875,7 @@ public:
     }
 };
 
-struct Q_QMLCOMPILER_PRIVATE_EXPORT QQmlJSMetaSignalHandler
+struct Q_QMLCOMPILER_EXPORT QQmlJSMetaSignalHandler
 {
     QStringList signalParameters;
     bool isMultiline;

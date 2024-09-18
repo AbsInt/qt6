@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <QtQmlToolingSettings/private/qqmltoolingsettings_p.h>
+#include <QtQmlToolingSettings/private/qqmltoolingutils_p.h>
 
 #include <QtQmlCompiler/private/qqmljscompiler_p.h>
 #include <QtQmlCompiler/private/qqmljslinter_p.h>
@@ -123,6 +124,11 @@ All warnings can be set to three levels:
     const QString qmlImportPathsSetting = QLatin1String("AdditionalQmlImportPaths");
     settings.addOption(qmlImportPathsSetting);
 
+    QCommandLineOption environmentOption(
+            QStringList() << "E",
+            QLatin1String("Use the QML_IMPORT_PATH environment variable to look for QML Modules"));
+    parser.addOption(environmentOption);
+
     QCommandLineOption qmlImportNoDefault(
                 QStringList() << "bare",
                 QLatin1String("Do not include default import directories or the current directory. "
@@ -180,6 +186,18 @@ All warnings can be set to three levels:
             QLatin1String("Look for qmllint plugins in specified directory"),
             QLatin1String("directory"));
     parser.addOption(pluginPathsOption);
+
+    QCommandLineOption maxWarnings(
+            QStringList() << "W"
+                          << "max-warnings",
+            QLatin1String("Exit with an error code if more than \"count\" many"
+                          "warnings are found by qmllint. By default or if \"count\" "
+                          "is -1, warnings do not cause qmllint "
+                          "to return with an error exit code."),
+            "count"
+            );
+    parser.addOption(maxWarnings);
+    settings.addOption("MaxWarnings", -1);
 
     auto addCategory = [&](const QQmlJS::LoggerCategory &category) {
         categories.push_back(category);
@@ -346,6 +364,34 @@ All warnings can be set to three levels:
 
         if (parser.isSet(qmlImportPathsOption))
             qmlImportPaths << parser.values(qmlImportPathsOption);
+        if (parser.isSet(environmentOption)) {
+            if (silent) {
+                qmlImportPaths << qEnvironmentVariable("QML_IMPORT_PATH")
+                                          .split(QDir::separator(), Qt::SkipEmptyParts)
+                               << qEnvironmentVariable("QML2_IMPORT_PATH")
+                                          .split(QDir::separator(), Qt::SkipEmptyParts);
+            } else {
+                if (const QStringList dirsFromEnv =
+                            QQmlToolingUtils::getAndWarnForInvalidDirsFromEnv(u"QML_IMPORT_PATH"_s);
+                    !dirsFromEnv.isEmpty()) {
+                    qInfo().nospace().noquote()
+                            << "Using import directories passed from environment variable "
+                               "\"QML_IMPORT_PATH\": \""
+                            << dirsFromEnv.join(u"\", \""_s) << "\".";
+                    qmlImportPaths << dirsFromEnv;
+                }
+                if (const QStringList dirsFromEnv =
+                            QQmlToolingUtils::getAndWarnForInvalidDirsFromEnv(
+                                    u"QML2_IMPORT_PATH"_s);
+                    !dirsFromEnv.isEmpty()) {
+                    qInfo().nospace().noquote() << "Using import directories passed from the "
+                                                   "deprecated environment variable "
+                                                   "\"QML2_IMPORT_PATH\": \""
+                                                << dirsFromEnv.join(u"\", \""_s) << "\".";
+                    qmlImportPaths << dirsFromEnv;
+                }
+            }
+        }
 
         addAbsolutePaths(qmlImportPaths, settings.value(qmlImportPathsSetting).toStringList());
 
@@ -383,7 +429,13 @@ All warnings can be set to three levels:
                                          useJson ? &jsonFiles : nullptr, qmlImportPaths,
                                          qmldirFiles, resourceFiles, categories);
         }
-        success &= (lintResult == QQmlJSLinter::LintSuccess);
+        success &= (lintResult == QQmlJSLinter::LintSuccess || lintResult == QQmlJSLinter::HasWarnings);
+        if (success && parser.isSet(maxWarnings))
+        {
+            int value = parser.value(maxWarnings).toInt();
+            if (value != -1 && value < linter.logger()->warnings().size())
+                success = false;
+        }
 
         if (isFixing) {
             if (lintResult != QQmlJSLinter::LintSuccess && lintResult != QQmlJSLinter::HasWarnings)
@@ -465,8 +517,10 @@ All warnings can be set to three levels:
             QTextStream(stdout) << QString::fromUtf8(json);
         } else {
             QFile file(fileName);
-            file.open(QFile::WriteOnly);
-            file.write(json);
+            if (file.open(QFile::WriteOnly))
+                file.write(json);
+            else
+                success = false;
         }
     }
 

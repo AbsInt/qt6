@@ -15,7 +15,7 @@
 // We mean it.
 
 #include <private/qqmljscontextualtypes_p.h>
-#include <private/qtqmlcompilerexports_p.h>
+#include <qtqmlcompilerexports.h>
 
 #include "qqmljsannotation_p.h"
 #include "qqmljsimporter_p.h"
@@ -39,7 +39,7 @@ class QQmlDomAstCreatorWithQQmlJSScope;
 }
 
 struct QQmlJSResourceFileMapper;
-class Q_QMLCOMPILER_PRIVATE_EXPORT QQmlJSImportVisitor : public QQmlJS::AST::Visitor
+class Q_QMLCOMPILER_EXPORT QQmlJSImportVisitor : public QQmlJS::AST::Visitor
 {
 public:
     QQmlJSImportVisitor();
@@ -85,6 +85,8 @@ public:
         std::function<QQmlJSMetaPropertyBinding()> create;
         QQmlJSScope::BindingTargetSpecifier specifier = QQmlJSScope::SimplePropertyTarget;
     };
+
+    QStringList seenModuleQualifiers() const { return m_seenModuleQualifiers; }
 
 protected:
     // Linter warnings, we might want to move this at some point
@@ -343,6 +345,7 @@ protected:
     QHash<QQmlJS::SourceLocation, QQmlJSMetaSignalHandler> m_signalHandlers;
     QSet<QQmlJSScope::ConstPtr> m_literalScopesToCheck;
     QQmlJS::SourceLocation m_pendingSignalHandler;
+    QStringList m_seenModuleQualifiers;
 
 private:
     void checkSignal(

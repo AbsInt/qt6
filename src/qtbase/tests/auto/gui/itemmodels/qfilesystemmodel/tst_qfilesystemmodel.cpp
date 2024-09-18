@@ -716,8 +716,7 @@ void tst_QFileSystemModel::showFilesOnly()
     // THEN: setting the root path to the previous (parent) dir, the model should
     // still only show files.
     // Doubling the default timeout (5s) as this test to fails on macos on the CI
-    QTRY_COMPARE_WITH_TIMEOUT(model.rowCount(model.setRootPath(tmp)), files.size(),
-                              (10000ms).count());
+    QTRY_COMPARE_WITH_TIMEOUT(model.rowCount(model.setRootPath(tmp)), files.size(), 10s);
 }
 
 void tst_QFileSystemModel::nameFilters()
@@ -806,6 +805,7 @@ void tst_QFileSystemModel::setData()
         QCOMPARE(spy.size(), 1);
         QList<QVariant> arguments = spy.takeFirst();
         QCOMPARE(model->data(idx, QFileSystemModel::FileNameRole).toString(), newFileName);
+        QCOMPARE(model->data(idx, QFileSystemModel::FileInfoRole).value<QFileInfo>().fileName(), newFileName);
         QCOMPARE(model->fileInfo(idx).filePath(), tmp + '/' + newFileName);
         QCOMPARE(model->fileName(idx), newFileName);
         QCOMPARE(model->fileName(idx.siblingAtColumn(1)), newFileName);
@@ -874,13 +874,13 @@ void tst_QFileSystemModel::sort()
     //Create a file that will be at the end when sorting by name (For Mac, the default)
     //but if we sort by size descending it will be the first
     QFile tempFile(dirPath + "/plop2.txt");
-    tempFile.open(QIODevice::WriteOnly | QIODevice::Text);
+    QVERIFY(tempFile.open(QIODevice::WriteOnly | QIODevice::Text));
     QTextStream out(&tempFile);
     out << "The magic number is: " << 49 << "\n";
     tempFile.close();
 
     QFile tempFile2(dirPath + "/plop.txt");
-    tempFile2.open(QIODevice::WriteOnly | QIODevice::Text);
+    QVERIFY(tempFile2.open(QIODevice::WriteOnly | QIODevice::Text));
     QTextStream out2(&tempFile2);
     out2 << "The magic number is : " << 49 << " but i write some stuff in the file \n";
     tempFile2.close();

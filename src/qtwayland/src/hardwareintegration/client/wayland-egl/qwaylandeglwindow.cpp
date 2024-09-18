@@ -51,8 +51,8 @@ QWaylandWindow::WindowType QWaylandEglWindow::windowType() const
 void QWaylandEglWindow::ensureSize()
 {
     // this is always called on the main thread
-    QMargins margins = mWindowDecoration ? frameMargins() : QMargins{};
     QRect rect = geometry();
+    QMargins margins = clientSideMargins();
     QSize sizeWithMargins = (rect.size() + QSize(margins.left() + margins.right(), margins.top() + margins.bottom())) * scale();
     {
         QWriteLocker lock(&m_bufferSizeLock);
@@ -74,7 +74,6 @@ void QWaylandEglWindow::setGeometry(const QRect &rect)
 
 void QWaylandEglWindow::updateSurface(bool create)
 {
-
     QSize sizeWithMargins;
     {
         QReadLocker lock(&m_bufferSizeLock);
@@ -142,7 +141,7 @@ void QWaylandEglWindow::updateSurface(bool create)
 QRect QWaylandEglWindow::contentsRect() const
 {
     QRect r = geometry();
-    QMargins m = frameMargins();
+    QMargins m = clientSideMargins();
     return QRect(m.left(), m.bottom(), r.width(), r.height());
 }
 

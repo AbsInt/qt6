@@ -2427,7 +2427,7 @@ bool Codegen::traverseOptionalChain(Node *node)
     return true;
 }
 
-void Codegen::optionalChainFinalizer(Reference expressionResult, bool tailOfChain,
+void Codegen::optionalChainFinalizer(const Reference &expressionResult, bool tailOfChain,
                                      bool isDeleteExpression)
 {
     auto &chainState = m_optionalChainsStates.top();
@@ -4132,14 +4132,16 @@ QQmlJS::DiagnosticMessage Codegen::error() const
     return _error;
 }
 
-QV4::CompiledData::CompilationUnit Codegen::generateCompilationUnit(
+QQmlRefPointer<QV4::CompiledData::CompilationUnit> Codegen::generateCompilationUnit(
         bool generateUnitData)
 {
-    return QV4::CompiledData::CompilationUnit(
-            generateUnitData ? jsUnitGenerator->generateUnit() : nullptr);
+    return QQmlRefPointer<QV4::CompiledData::CompilationUnit>(
+            new QV4::CompiledData::CompilationUnit(
+                    generateUnitData ? jsUnitGenerator->generateUnit() : nullptr),
+            QQmlRefPointer<QV4::CompiledData::CompilationUnit>::Adopt);
 }
 
-CompiledData::CompilationUnit Codegen::compileModule(
+QQmlRefPointer<QV4::CompiledData::CompilationUnit> Codegen::compileModule(
         bool debugMode, const QString &url, const QString &sourceCode,
         const QDateTime &sourceTimeStamp, QList<QQmlJS::DiagnosticMessage> *diagnostics)
 {
@@ -4154,7 +4156,7 @@ CompiledData::CompilationUnit Codegen::compileModule(
         *diagnostics = parser.diagnosticMessages();
 
     if (!parsed)
-        return CompiledData::CompilationUnit();
+        return QQmlRefPointer<CompiledData::CompilationUnit>();
 
     QQmlJS::AST::ESModule *moduleNode = QQmlJS::AST::cast<QQmlJS::AST::ESModule*>(parser.rootNode());
     if (!moduleNode) {
@@ -4175,7 +4177,7 @@ CompiledData::CompilationUnit Codegen::compileModule(
     if (cg.hasError()) {
         if (diagnostics)
             *diagnostics << cg.error();
-        return CompiledData::CompilationUnit();
+        return QQmlRefPointer<CompiledData::CompilationUnit>();
     }
 
     return cg.generateCompilationUnit();

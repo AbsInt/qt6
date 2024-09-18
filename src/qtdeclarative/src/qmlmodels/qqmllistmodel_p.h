@@ -41,7 +41,7 @@ namespace QV4 {
 struct ModelObject;
 }
 
-class Q_QMLMODELS_PRIVATE_EXPORT QQmlListModel : public QAbstractListModel
+class Q_QMLMODELS_EXPORT QQmlListModel : public QAbstractListModel
 {
     Q_OBJECT
     Q_PROPERTY(int count READ count NOTIFY countChanged)
@@ -65,9 +65,9 @@ public:
     int count() const;
 
     Q_INVOKABLE void clear();
-    Q_INVOKABLE void remove(QQmlV4Function *args);
-    Q_INVOKABLE void append(QQmlV4Function *args);
-    Q_INVOKABLE void insert(QQmlV4Function *args);
+    Q_INVOKABLE void remove(QQmlV4FunctionPtr args);
+    Q_INVOKABLE void append(QQmlV4FunctionPtr args);
+    Q_INVOKABLE void insert(QQmlV4FunctionPtr args);
     Q_INVOKABLE QJSValue get(int index) const;
     Q_INVOKABLE void set(int index, const QJSValue &value);
     Q_INVOKABLE void setProperty(int index, const QString& property, const QVariant& value);

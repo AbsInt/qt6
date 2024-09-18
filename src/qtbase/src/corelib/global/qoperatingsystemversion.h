@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include <QtCore/qglobal.h>
+#include <QtCore/qcompare.h>
 #include <QtCore/qversionnumber.h>
 
 #ifndef QOPERATINGSYSTEMVERSION_H
@@ -29,7 +30,8 @@ public:
         IOS,
         TvOS,
         WatchOS,
-        Android
+        Android,
+        VisionOS,
     };
 
     constexpr QOperatingSystemVersionBase(OSType osType,
@@ -56,6 +58,8 @@ public:
         return TvOS;
 #elif defined(Q_OS_WATCHOS)
         return WatchOS;
+#elif defined(Q_OS_VISIONOS)
+        return VisionOS;
 #elif defined(Q_OS_ANDROID)
         return Android;
 #else
@@ -79,22 +83,39 @@ public:
     constexpr OSType type() const { return m_os; }
     inline QString name() const { return name(*this); }
 
-    friend bool operator>(QOperatingSystemVersionBase lhs, QOperatingSystemVersionBase rhs)
-    { return lhs.type() == rhs.type() && QOperatingSystemVersionBase::compare(lhs, rhs) > 0; }
-
-    friend bool operator>=(QOperatingSystemVersionBase lhs, QOperatingSystemVersionBase rhs)
-    { return lhs.type() == rhs.type() && QOperatingSystemVersionBase::compare(lhs, rhs) >= 0; }
-
-    friend bool operator<(QOperatingSystemVersionBase lhs, QOperatingSystemVersionBase rhs)
-    { return lhs.type() == rhs.type() && QOperatingSystemVersionBase::compare(lhs, rhs) < 0; }
-
-    friend bool operator<=(QOperatingSystemVersionBase lhs, QOperatingSystemVersionBase rhs)
-    { return lhs.type() == rhs.type() && QOperatingSystemVersionBase::compare(lhs, rhs) <= 0; }
-
-
 protected:
     static Q_CORE_EXPORT int compare(QOperatingSystemVersionBase v1,
-                                     QOperatingSystemVersionBase v2);
+                                     QOperatingSystemVersionBase v2) noexcept;
+
+    friend Qt::partial_ordering compareThreeWay(const QOperatingSystemVersionBase &lhs,
+                                                const QOperatingSystemVersionBase &rhs) noexcept
+    {
+        if (lhs.type() != rhs.type())
+            return Qt::partial_ordering::unordered;
+        const int res = QOperatingSystemVersionBase::compare(lhs, rhs);
+        return Qt::compareThreeWay(res, 0);
+    }
+#ifdef __cpp_lib_three_way_comparison
+    friend std::partial_ordering
+    operator<=>(QOperatingSystemVersionBase lhs, QOperatingSystemVersionBase rhs) noexcept
+    { return compareThreeWay(lhs, rhs); }
+#else
+    friend bool
+    operator>(QOperatingSystemVersionBase lhs, QOperatingSystemVersionBase rhs) noexcept
+    { return is_gt(compareThreeWay(lhs, rhs)); }
+
+    friend bool
+    operator>=(QOperatingSystemVersionBase lhs, QOperatingSystemVersionBase rhs) noexcept
+    { return is_gteq(compareThreeWay(lhs, rhs)); }
+
+    friend bool
+    operator<(QOperatingSystemVersionBase lhs, QOperatingSystemVersionBase rhs) noexcept
+    { return is_lt(compareThreeWay(lhs, rhs)); }
+
+    friend bool
+    operator<=(QOperatingSystemVersionBase lhs, QOperatingSystemVersionBase rhs) noexcept
+    { return is_lteq(compareThreeWay(lhs, rhs)); }
+#endif
 
     QOperatingSystemVersionBase() = default;
 private:
@@ -141,7 +162,8 @@ public:
         IOS,
         TvOS,
         WatchOS,
-        Android
+        Android,
+        VisionOS,
     };
 #endif
 

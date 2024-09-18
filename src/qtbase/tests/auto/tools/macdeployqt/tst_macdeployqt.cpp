@@ -162,7 +162,7 @@ bool deploy(const QString &name, const QStringList &options, QString *errorMessa
     QString bundle = name + ".app";
     QString path = buildPath(name);
     QStringList args = QStringList() << bundle << options;
-#if defined(QT_DEBUG)
+#if defined(QT_DEBUG) && QT_CONFIG(debug_and_release)
     args << "-use-debug-libs";
 #endif
     if (lcTests().isDebugEnabled())
@@ -223,6 +223,9 @@ void tst_macdeployqt::initTestCase()
 #ifdef QT_NO_PROCESS
     QSKIP("This test requires QProcess support");
 #endif
+
+    if (QProcess::execute("xcode-select", { "-p" }) != 0)
+        QSKIP("Xcode or Xcode command line tools not installed");
 
     // Set up test-global unique temporary directory
     g_temporaryDirectory = new QTemporaryDir();

@@ -145,13 +145,10 @@ function(qt_get_direct_module_dependencies target out_var)
             continue()
         endif()
         get_target_property(lib_type ${lib} TYPE)
-        get_target_property(is_versionless_target ${lib} _qt_is_versionless_target)
-        if (lib_type STREQUAL "INTERFACE_LIBRARY" AND is_versionless_target)
-            # Found a version-less target like Qt::Core outside of qtbase.
-            # Skip this one and use what this target points to, e.g. Qt6::Core.
-            # Make sure to process Private interface libraries as-is.
-            get_target_property(ifacelibs ${lib} INTERFACE_LINK_LIBRARIES)
-            list(PREPEND libs ${ifacelibs})
+        get_target_property(aliased_target ${lib} ALIASED_TARGET)
+        if(TARGET "${aliased_target}")
+            # If versionless target is alias, use what the alias points to.
+            list(PREPEND libs "${aliased_target}")
             continue()
         endif()
         if(lib_type STREQUAL "OBJECT_LIBRARY")
@@ -845,7 +842,7 @@ function(qt_generate_global_device_pri_file)
         file(TO_CMAKE_PATH ${ANDROID_NDK} ANDROID_NDK)
         string(APPEND content "DEFAULT_ANDROID_NDK_ROOT = ${ANDROID_NDK}\n")
 
-        set(android_platform "android-23")
+        set(android_platform "android-28")
         if(ANDROID_PLATFORM)
             set(android_platform "${ANDROID_PLATFORM}")
         elseif(ANDROID_NATIVE_API_LEVEL)
@@ -866,8 +863,8 @@ function(qt_generate_global_device_pri_file)
         endif()
     endif()
 
-    if(QT_UIKIT_SDK)
-        string(APPEND content "QMAKE_MAC_SDK = ${QT_UIKIT_SDK}\n")
+    if(QT_APPLE_SDK)
+        string(APPEND content "QMAKE_MAC_SDK = ${QT_APPLE_SDK}\n")
     endif()
 
     set(gcc_machine_dump "")

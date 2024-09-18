@@ -25,9 +25,10 @@ qt_internal_add_plugin(QWaylandBrcmClientBufferIntegrationPlugin
         Qt::WaylandCompositorPrivate
 )
 
-_qt_internal_generate_wayland_protocol_server_sources(QWaylandBrcmClientBufferIntegrationPlugin
+qt6_generate_wayland_protocol_server_sources(QWaylandBrcmClientBufferIntegrationPlugin
+    PRIVATE_CODE
     FILES
-        ${CMAKE_CURRENT_SOURCE_DIR}/../../../../hardwareintegration/compositor/brcm-egl/../../../extensions/brcm.xml
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../../../extensions/brcm.xml
 )
 
 #### Keys ignored in scope 1:.:.:brcm-egl.pro:<TRUE>:

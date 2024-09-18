@@ -75,7 +75,7 @@ namespace QV4 { struct QObjectMethod; }
 //     class MyClass : public QObject {
 //         Q_OBJECT
 //         ...
-//         Q_INVOKABLE void myMethod(QQmlV4Function*);
+//         Q_INVOKABLE void myMethod(QQmlV4FunctionPtr);
 //     };
 // The QQmlV8Function - and consequently the arguments and return value - only remains
 // valid during the call.  If the return value isn't set within myMethod(), the will return
@@ -109,6 +109,7 @@ class QQmlError;
 class QJSEngine;
 class QQmlEngine;
 class QQmlContextData;
+class QQmlTypeLoader;
 
 namespace QV4 {
 namespace Debugging {
@@ -173,6 +174,14 @@ public:
     QQmlEngine *qmlEngine() const { return m_qmlEngine; }
     QJSEngine *publicEngine;
 
+    template<typename TypeLoader = QQmlTypeLoader>
+    TypeLoader *typeLoader()
+    {
+        if (m_qmlEngine)
+            return TypeLoader::get(m_qmlEngine);
+        return nullptr;
+    }
+
     enum JSObjects {
         RootContext,
         ScriptContext,
@@ -208,6 +217,7 @@ public:
         MapProto,
         IntrinsicTypedArrayProto,
         ValueTypeProto,
+        TypeWrapperProto,
         SignalHandlerProto,
         IteratorProto,
         ForInIteratorProto,
@@ -333,6 +343,7 @@ public:
 
     Object *valueTypeWrapperPrototype() const { return reinterpret_cast<Object *>(jsObjects + ValueTypeProto); }
     Object *signalHandlerPrototype() const { return reinterpret_cast<Object *>(jsObjects + SignalHandlerProto); }
+    Object *typeWrapperPrototype() const { return reinterpret_cast<Object *>(jsObjects + TypeWrapperProto); }
     Object *iteratorPrototype() const { return reinterpret_cast<Object *>(jsObjects + IteratorProto); }
     Object *forInIteratorPrototype() const { return reinterpret_cast<Object *>(jsObjects + ForInIteratorProto); }
     Object *setIteratorPrototype() const { return reinterpret_cast<Object *>(jsObjects + SetIteratorProto); }
@@ -486,8 +497,6 @@ public:
     Symbol *symbol_toStringTag() const { return reinterpret_cast<Symbol *>(jsSymbols + Symbol_toStringTag); }
     Symbol *symbol_unscopables() const { return reinterpret_cast<Symbol *>(jsSymbols + Symbol_unscopables); }
     Symbol *symbol_revokableProxy() const { return reinterpret_cast<Symbol *>(jsSymbols + Symbol_revokableProxy); }
-
-    QIntrusiveList<ExecutableCompilationUnit, &ExecutableCompilationUnit::nextCompilationUnit> compilationUnits;
 
     quint32 m_engineId;
 
@@ -746,7 +755,20 @@ public:
     QQmlRefPointer<ExecutableCompilationUnit> compileModule(
             const QUrl &url, const QString &sourceCode, const QDateTime &sourceTimeStamp);
 
-    void injectCompiledModule(const QQmlRefPointer<ExecutableCompilationUnit> &moduleUnit);
+    QQmlRefPointer<ExecutableCompilationUnit> compilationUnitForUrl(const QUrl &url) const;
+
+    QQmlRefPointer<ExecutableCompilationUnit> executableCompilationUnit(
+            QQmlRefPointer<QV4::CompiledData::CompilationUnit> &&unit);
+
+    QQmlRefPointer<ExecutableCompilationUnit> insertCompilationUnit(
+            QQmlRefPointer<QV4::CompiledData::CompilationUnit> &&unit);
+
+    QMultiHash<QUrl, QQmlRefPointer<ExecutableCompilationUnit>> compilationUnits() const
+    {
+        return m_compilationUnits;
+    }
+    void trimCompilationUnits();
+
     QV4::Value *registerNativeModule(const QUrl &url, const QV4::Value &module);
 
     struct Module {
@@ -862,8 +884,7 @@ private:
 
     QVector<Deletable *> m_extensionData;
 
-    mutable QMutex moduleMutex;
-    QHash<QUrl, QQmlRefPointer<ExecutableCompilationUnit>> modules;
+    QMultiHash<QUrl, QQmlRefPointer<ExecutableCompilationUnit>> m_compilationUnits;
 
     // QV4::PersistentValue would be preferred, but using QHash will create copies,
     // and QV4::PersistentValue doesn't like creating copies.

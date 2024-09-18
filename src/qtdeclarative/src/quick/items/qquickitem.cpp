@@ -98,7 +98,7 @@ static void setActiveFocus(QQuickItem *item, Qt::FocusReason reason)
 
 /*!
     \qmltype Transform
-    \instantiates QQuickTransform
+    \nativetype QQuickTransform
     \inqmlmodule QtQuick
     \ingroup qtquick-visual-transforms
     \brief For specifying advanced transformations on Items.
@@ -343,7 +343,7 @@ void QQuickItemKeyFilter::componentComplete()
 }
 /*!
     \qmltype KeyNavigation
-    \instantiates QQuickKeyNavigationAttached
+    \nativetype QQuickKeyNavigationAttached
     \inqmlmodule QtQuick
     \ingroup qtquick-input-handlers
     \brief Supports key navigation by arrow keys.
@@ -800,7 +800,7 @@ bool QQuickKeysAttached::isConnected(const char *signalName) const
 
 /*!
     \qmltype Keys
-    \instantiates QQuickKeysAttached
+    \nativetype QQuickKeysAttached
     \inqmlmodule QtQuick
     \ingroup qtquick-input-handlers
     \brief Provides key handling to Items.
@@ -1407,7 +1407,7 @@ QQuickKeysAttached *QQuickKeysAttached::qmlAttachedProperties(QObject *obj)
 
 /*!
     \qmltype LayoutMirroring
-    \instantiates QQuickLayoutMirroringAttached
+    \nativetype QQuickLayoutMirroringAttached
     \inqmlmodule QtQuick
     \ingroup qtquick-positioners
     \ingroup qml-utility-elements
@@ -1589,7 +1589,7 @@ void QQuickItemPrivate::setLayoutMirror(bool mirror)
 
 /*!
     \qmltype EnterKey
-    \instantiates QQuickEnterKeyAttached
+    \nativetype QQuickEnterKeyAttached
     \inqmlmodule QtQuick
     \ingroup qtquick-input
     \since 5.6
@@ -1874,7 +1874,7 @@ bool QQuickItemPrivate::setLastFocusChangeReason(Qt::FocusReason reason)
 
 /*!
     \qmltype Item
-    \instantiates QQuickItem
+    \nativetype QQuickItem
     \inherits QtObject
     \inqmlmodule QtQuick
     \ingroup qtquick-visual
@@ -2471,12 +2471,32 @@ bool QQuickItemPrivate::canAcceptTabFocus(QQuickItem *item)
 */
 bool QQuickItemPrivate::focusNextPrev(QQuickItem *item, bool forward)
 {
-    QQuickItem *next = QQuickItemPrivate::nextPrevItemInTabFocusChain(item, forward);
+    QQuickWindow *window = item->window();
+    const bool wrap = !window || window->isTopLevel();
+
+    QQuickItem *next = QQuickItemPrivate::nextPrevItemInTabFocusChain(item, forward, wrap);
 
     if (next == item)
         return false;
 
-    next->forceActiveFocus(forward ? Qt::TabFocusReason : Qt::BacktabFocusReason);
+    const auto reason = forward ? Qt::TabFocusReason : Qt::BacktabFocusReason;
+
+    if (!wrap && !next) {
+        // Focus chain wrapped and we are not top-level window
+        // Give focus to parent window
+        Q_ASSERT(window);
+        Q_ASSERT(window->parent());
+
+
+        qt_window_private(window->parent())->setFocusToTarget(
+            forward ? QWindowPrivate::FocusTarget::Next
+                    : QWindowPrivate::FocusTarget::Prev,
+            reason);
+        window->parent()->requestActivate();
+        return true;
+    }
+
+    next->forceActiveFocus(reason);
 
     return true;
 }
@@ -2525,7 +2545,7 @@ QQuickItem *QQuickItemPrivate::prevTabChildItem(const QQuickItem *item, int star
     return nullptr;
 }
 
-QQuickItem* QQuickItemPrivate::nextPrevItemInTabFocusChain(QQuickItem *item, bool forward)
+QQuickItem* QQuickItemPrivate::nextPrevItemInTabFocusChain(QQuickItem *item, bool forward, bool wrap)
 {
     Q_ASSERT(item);
     qCDebug(lcFocus) << "QQuickItemPrivate::nextPrevItemInTabFocusChain: item:" << item << ", forward:" << forward;
@@ -2619,6 +2639,14 @@ QQuickItem* QQuickItemPrivate::nextPrevItemInTabFocusChain(QQuickItem *item, boo
             }
             current = parent;
         } else if (hasChildren) {
+            if (!wrap && (forward || firstFromItem != from)) {
+                qCDebug(lcFocus) << "QQuickItemPrivate::nextPrevItemInTabFocusChain:"
+                                 << "Focus chain about to wrap.";
+                // If focus chain wraps, we should give the parent window
+                // a chance to get focus, so we should stop here
+                return nullptr;
+            }
+
             // Wrap around after checking all items forward
             if (forward) {
                 current = firstChild;
@@ -2706,6 +2734,13 @@ void QQuickItem::setParentItem(QQuickItem *parentItem)
                 return;
             }
             itemAncestor = itemAncestor->parentItem();
+        }
+        auto engine = qmlEngine(this);
+        if (engine) {
+            QV4::ExecutionEngine *v4 = engine->handle();
+            QV4::WriteBarrier::markCustom(v4, [this](QV4::MarkStack *ms){
+                QV4::QObjectWrapper::markWrapper(this, ms);
+            });
         }
     }
 
@@ -3172,34 +3207,6 @@ void QQuickItemPrivate::itemToParentTransform(QTransform *t) const
         t->rotate(rotation());
         t->translate(-tp.x(), -tp.y());
     }
-}
-
-/*!
-    Returns a transform that maps points from window space into global space.
-*/
-QTransform QQuickItemPrivate::windowToGlobalTransform() const
-{
-    if (Q_UNLIKELY(window == nullptr))
-        return QTransform();
-
-    QPoint quickWidgetOffset;
-    QWindow *renderWindow = QQuickRenderControl::renderWindowFor(window, &quickWidgetOffset);
-    QPointF pos = (renderWindow ? renderWindow : window)->mapToGlobal(quickWidgetOffset);
-    return QTransform::fromTranslate(pos.x(), pos.y());
-}
-
-/*!
-    Returns a transform that maps points from global space into window space.
-*/
-QTransform QQuickItemPrivate::globalToWindowTransform() const
-{
-    if (Q_UNLIKELY(window == nullptr))
-        return QTransform();
-
-    QPoint quickWidgetOffset;
-    QWindow *renderWindow = QQuickRenderControl::renderWindowFor(window, &quickWidgetOffset);
-    QPointF pos = (renderWindow ? renderWindow : window)->mapToGlobal(quickWidgetOffset);
-    return QTransform::fromTranslate(-pos.x(), -pos.y());
 }
 
 /*!
@@ -3893,11 +3900,9 @@ void QQuickItem::geometryChange(const QRectF &newGeometry, const QRectF &oldGeom
     if (change.heightChange())
         d->height.notify();
 #if QT_CONFIG(accessibility)
-    if (QAccessible::isActive()) {
-        if (QObject *acc = QQuickAccessibleAttached::findAccessible(this)) {
-            QAccessibleEvent ev(acc, QAccessible::LocationChanged);
-            QAccessible::updateAccessibility(&ev);
-        }
+    if (d->isAccessible && QAccessible::isActive() && d->effectiveVisible) {
+        QAccessibleEvent ev(this, QAccessible::LocationChanged);
+        QAccessible::updateAccessibility(&ev);
     }
 #endif
 }
@@ -4622,7 +4627,7 @@ void QQuickItem::ensurePolished()
 }
 
 #if QT_DEPRECATED_SINCE(6, 5)
-static bool unwrapMapFromToFromItemArgs(QQmlV4Function *args, const QQuickItem *itemForWarning, const QString &functionNameForWarning,
+static bool unwrapMapFromToFromItemArgs(QQmlV4FunctionPtr args, const QQuickItem *itemForWarning, const QString &functionNameForWarning,
                                         QQuickItem **itemObj, qreal *x, qreal *y, qreal *w, qreal *h, bool *isRect)
 {
     QV4::ExecutionEngine *v4 = args->v4engine();
@@ -4728,7 +4733,7 @@ static bool unwrapMapFromToFromItemArgs(QQmlV4Function *args, const QQuickItem *
 /*!
     \internal
   */
-void QQuickItem::mapFromItem(QQmlV4Function *args) const
+void QQuickItem::mapFromItem(QQmlV4FunctionPtr args) const
 {
     QV4::ExecutionEngine *v4 = args->v4engine();
     QV4::Scope scope(v4);
@@ -4786,7 +4791,7 @@ QTransform QQuickItem::itemTransform(QQuickItem *other, bool *ok) const
 /*!
     \internal
   */
-void QQuickItem::mapToItem(QQmlV4Function *args) const
+void QQuickItem::mapToItem(QQmlV4FunctionPtr args) const
 {
     QV4::ExecutionEngine *v4 = args->v4engine();
     QV4::Scope scope(v4);
@@ -4804,7 +4809,7 @@ void QQuickItem::mapToItem(QQmlV4Function *args) const
     args->setReturnValue(rv.asReturnedValue());
 }
 
-static bool unwrapMapFromToFromGlobalArgs(QQmlV4Function *args, const QQuickItem *itemForWarning, const QString &functionNameForWarning, qreal *x, qreal *y)
+static bool unwrapMapFromToFromGlobalArgs(QQmlV4FunctionPtr args, const QQuickItem *itemForWarning, const QString &functionNameForWarning, qreal *x, qreal *y)
 {
     QV4::ExecutionEngine *v4 = args->v4engine();
     if (args->length() != 1 && args->length() != 2) {
@@ -4862,7 +4867,7 @@ static bool unwrapMapFromToFromGlobalArgs(QQmlV4Function *args, const QQuickItem
 /*!
     \internal
   */
-void QQuickItem::mapFromGlobal(QQmlV4Function *args) const
+void QQuickItem::mapFromGlobal(QQmlV4FunctionPtr args) const
 {
     QV4::ExecutionEngine *v4 = args->v4engine();
     QV4::Scope scope(v4);
@@ -4892,7 +4897,7 @@ void QQuickItem::mapFromGlobal(QQmlV4Function *args) const
 /*!
     \internal
   */
-void QQuickItem::mapToGlobal(QQmlV4Function *args) const
+void QQuickItem::mapToGlobal(QQmlV4FunctionPtr args) const
 {
     QV4::ExecutionEngine *v4 = args->v4engine();
     QV4::Scope scope(v4);
@@ -8750,8 +8755,13 @@ void QQuickItem::setContainmentMask(QObject *mask)
 QPointF QQuickItem::mapToItem(const QQuickItem *item, const QPointF &point) const
 {
     QPointF p = mapToScene(point);
-    if (item)
+    if (item) {
+        const QQuickWindow *itemWindow = item->window();
+        if (itemWindow != nullptr && itemWindow != window())
+            p = itemWindow->mapFromGlobal(window()->mapToGlobal(p));
+
         p = item->mapFromScene(p);
+    }
     return p;
 }
 
@@ -8790,7 +8800,14 @@ QPointF QQuickItem::mapToScene(const QPointF &point) const
 QPointF QQuickItem::mapToGlobal(const QPointF &point) const
 {
     Q_D(const QQuickItem);
-    return d->windowToGlobalTransform().map(mapToScene(point));
+
+    if (Q_UNLIKELY(d->window == nullptr))
+        return mapToScene(point);
+
+    QPoint renderOffset;
+    QWindow *renderWindow = QQuickRenderControl::renderWindowFor(d->window, &renderOffset);
+    QWindow *effectiveWindow = renderWindow ? renderWindow : d->window;
+    return effectiveWindow->mapToGlobal((mapToScene(point) + renderOffset));
 }
 
 /*!
@@ -8843,7 +8860,13 @@ QRectF QQuickItem::mapRectToScene(const QRectF &rect) const
 */
 QPointF QQuickItem::mapFromItem(const QQuickItem *item, const QPointF &point) const
 {
-    QPointF p = item?item->mapToScene(point):point;
+    QPointF p = point;
+    if (item) {
+        p = item->mapToScene(point);
+
+        if (item->window() != window())
+            p = window()->mapFromGlobal(item->window()->mapToGlobal(p));
+    }
     return mapFromScene(p);
 }
 
@@ -8888,7 +8911,17 @@ QPointF QQuickItem::mapFromScene(const QPointF &point) const
 QPointF QQuickItem::mapFromGlobal(const QPointF &point) const
 {
     Q_D(const QQuickItem);
-    QPointF scenePoint = d->globalToWindowTransform().map(point);
+
+    QPointF scenePoint;
+    if (Q_LIKELY(d->window)) {
+        QPoint renderOffset;
+        QWindow *renderWindow = QQuickRenderControl::renderWindowFor(d->window, &renderOffset);
+        QWindow *effectiveWindow = renderWindow ? renderWindow : d->window;
+        scenePoint = effectiveWindow->mapFromGlobal(point) - renderOffset;
+    } else {
+        scenePoint = point;
+    }
+
     if (auto da = QQuickDeliveryAgentPrivate::currentOrItemDeliveryAgent(this)) {
         if (auto sceneTransform = da->sceneTransform())
             scenePoint = sceneTransform->map(scenePoint);
@@ -9279,12 +9312,12 @@ void QQuickItemPrivate::localizedTouchEvent(const QTouchEvent *event, bool isFil
         bool hasAnotherGrabber = pointGrabber && pointGrabber != q;
         // if there's no exclusive grabber, look for passive grabbers during filtering
         if (isFiltering && !pointGrabber) {
-            auto pg = event->passiveGrabbers(p);
+            const auto pg = event->passiveGrabbers(p);
             if (!pg.isEmpty()) {
                 // It seems unlikely to have multiple passive grabbers of one eventpoint with different grandparents.
                 // So hopefully if we start from one passive grabber and go up the parent chain from there,
                 // we will find any filtering parent items that exist.
-                auto handler = qmlobject_cast<QQuickPointerHandler *>(pg.first());
+                auto handler = qmlobject_cast<QQuickPointerHandler *>(pg.constFirst());
                 if (handler)
                     pointGrabber = handler->parentItem();
             }
@@ -10008,7 +10041,7 @@ void QV4::Heap::QQuickItemWrapper::markObjects(QV4::Heap::Base *that, QV4::MarkS
     QObjectWrapper::markObjects(that, markStack);
 }
 
-quint64 QQuickItemPrivate::_q_createJSWrapper(QV4::ExecutionEngine *engine)
+quint64 QQuickItemPrivate::_q_createJSWrapper(QQmlV4ExecutionEnginePtr engine)
 {
     return (engine->memoryManager->allocate<QQuickItemWrapper>(q_func()))->asReturnedValue();
 }

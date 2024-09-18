@@ -31,7 +31,7 @@ namespace QV4 {
 namespace Heap {
 
 struct DelegateModelGroupFunction : FunctionObject {
-    void init(QV4::ExecutionContext *scope, uint flag, QV4::ReturnedValue (*code)(QQmlDelegateModelItem *item, uint flag, const QV4::Value &arg));
+    void init(ExecutionEngine *engine, uint flag, QV4::ReturnedValue (*code)(QQmlDelegateModelItem *item, uint flag, const QV4::Value &arg));
 
     QV4::ReturnedValue (*code)(QQmlDelegateModelItem *item, uint flag, const QV4::Value &arg);
     uint flag;
@@ -60,9 +60,11 @@ struct DelegateModelGroupFunction : QV4::FunctionObject
 {
     V4_OBJECT2(DelegateModelGroupFunction, FunctionObject)
 
-    static Heap::DelegateModelGroupFunction *create(QV4::ExecutionContext *scope, uint flag, QV4::ReturnedValue (*code)(QQmlDelegateModelItem *item, uint flag, const QV4::Value &arg))
+    static Heap::DelegateModelGroupFunction *create(
+            QV4::ExecutionEngine *engine, uint flag,
+            QV4::ReturnedValue (*code)(QQmlDelegateModelItem *, uint, const QV4::Value &))
     {
-        return scope->engine()->memoryManager->allocate<DelegateModelGroupFunction>(scope, flag, code);
+        return engine->memoryManager->allocate<DelegateModelGroupFunction>(engine, flag, code);
     }
 
     static ReturnedValue virtualCall(const QV4::FunctionObject *that, const Value *thisObject, const Value *argv, int argc)
@@ -78,9 +80,11 @@ struct DelegateModelGroupFunction : QV4::FunctionObject
     }
 };
 
-void Heap::DelegateModelGroupFunction::init(QV4::ExecutionContext *scope, uint flag, QV4::ReturnedValue (*code)(QQmlDelegateModelItem *item, uint flag, const QV4::Value &arg))
+void Heap::DelegateModelGroupFunction::init(
+        QV4::ExecutionEngine *engine, uint flag,
+        QV4::ReturnedValue (*code)(QQmlDelegateModelItem *item, uint flag, const QV4::Value &arg))
 {
-    QV4::Heap::FunctionObject::init(scope, QStringLiteral("DelegateModelGroupFunction"));
+    QV4::Heap::FunctionObject::init(engine, QStringLiteral("DelegateModelGroupFunction"));
     this->flag = flag;
     this->code = code;
 }
@@ -130,7 +134,7 @@ QQmlDelegateModelParts::QQmlDelegateModelParts(QQmlDelegateModel *parent)
 
 /*!
     \qmltype DelegateModel
-//!    \instantiates QQmlDelegateModel
+//!    \nativetype QQmlDelegateModel
     \inqmlmodule QtQml.Models
     \brief Encapsulates a model and delegate.
 
@@ -352,26 +356,15 @@ void QQmlDelegateModelPrivate::connectToAbstractItemModel()
 
     auto aim = m_adaptorModel.aim();
 
-    qmlobject_connect(aim, QAbstractItemModel, SIGNAL(rowsInserted(QModelIndex,int,int)),
-                      q, QQmlDelegateModel, SLOT(_q_rowsInserted(QModelIndex,int,int)));
-    qmlobject_connect(aim, QAbstractItemModel, SIGNAL(rowsRemoved(QModelIndex,int,int)),
-                      q,  QQmlDelegateModel, SLOT(_q_rowsRemoved(QModelIndex,int,int)));
-    qmlobject_connect(aim, QAbstractItemModel, SIGNAL(rowsAboutToBeRemoved(QModelIndex,int,int)),
-                      q,  QQmlDelegateModel, SLOT(_q_rowsAboutToBeRemoved(QModelIndex,int,int)));
-    qmlobject_connect(aim, QAbstractItemModel, SIGNAL(columnsInserted(QModelIndex,int,int)),
-                      q, QQmlDelegateModel, SLOT(_q_columnsInserted(QModelIndex,int,int)));
-    qmlobject_connect(aim, QAbstractItemModel, SIGNAL(columnsRemoved(QModelIndex,int,int)),
-                      q, QQmlDelegateModel, SLOT(_q_columnsRemoved(QModelIndex,int,int)));
-    qmlobject_connect(aim, QAbstractItemModel, SIGNAL(columnsMoved(QModelIndex,int,int,QModelIndex,int)),
-                      q, QQmlDelegateModel, SLOT(_q_columnsMoved(QModelIndex,int,int,QModelIndex,int)));
-    qmlobject_connect(aim, QAbstractItemModel, SIGNAL(dataChanged(QModelIndex,QModelIndex,QList<int>)),
-                      q, QQmlDelegateModel, SLOT(_q_dataChanged(QModelIndex,QModelIndex,QList<int>)));
-    qmlobject_connect(aim, QAbstractItemModel, SIGNAL(rowsMoved(QModelIndex,int,int,QModelIndex,int)),
-                      q, QQmlDelegateModel, SLOT(_q_rowsMoved(QModelIndex,int,int,QModelIndex,int)));
-
+    QObject::connect(aim, &QAbstractItemModel::rowsInserted, q, &QQmlDelegateModel::_q_rowsInserted);
+    QObject::connect(aim, &QAbstractItemModel::rowsRemoved, q, &QQmlDelegateModel::_q_rowsRemoved);
+    QObject::connect(aim, &QAbstractItemModel::rowsAboutToBeRemoved, q, &QQmlDelegateModel::_q_rowsAboutToBeRemoved);
+    QObject::connect(aim, &QAbstractItemModel::columnsInserted, q, &QQmlDelegateModel::_q_columnsInserted);
+    QObject::connect(aim, &QAbstractItemModel::columnsRemoved, q, &QQmlDelegateModel::_q_columnsRemoved);
+    QObject::connect(aim, &QAbstractItemModel::columnsMoved, q, &QQmlDelegateModel::_q_columnsMoved);
+    QObject::connect(aim, &QAbstractItemModel::dataChanged, q, &QQmlDelegateModel::_q_dataChanged);
+    QObject::connect(aim, &QAbstractItemModel::rowsMoved, q, &QQmlDelegateModel::_q_rowsMoved);
     QObject::connect(aim, &QAbstractItemModel::modelAboutToBeReset, q, &QQmlDelegateModel::_q_modelAboutToBeReset);
-    qmlobject_connect(aim, QAbstractItemModel, SIGNAL(layoutChanged(QList<QPersistentModelIndex>,QAbstractItemModel::LayoutChangeHint)),
-                      q, QQmlDelegateModel, SLOT(_q_layoutChanged(QList<QPersistentModelIndex>,QAbstractItemModel::LayoutChangeHint)));
     QObject::connect(aim, &QAbstractItemModel::modelReset, q, &QQmlDelegateModel::handleModelReset);
     QObject::connect(aim, &QAbstractItemModel::layoutChanged, q, &QQmlDelegateModel::_q_layoutChanged);
 }
@@ -384,25 +377,15 @@ void QQmlDelegateModelPrivate::disconnectFromAbstractItemModel()
 
     auto aim = m_adaptorModel.aim();
 
-    QObject::disconnect(aim, SIGNAL(rowsInserted(QModelIndex,int,int)),
-                        q, SLOT(_q_rowsInserted(QModelIndex,int,int)));
-    QObject::disconnect(aim, SIGNAL(rowsAboutToBeRemoved(QModelIndex,int,int)),
-                        q, SLOT(_q_rowsAboutToBeRemoved(QModelIndex,int,int)));
-    QObject::disconnect(aim, SIGNAL(rowsRemoved(QModelIndex,int,int)),
-                        q, SLOT(_q_rowsRemoved(QModelIndex,int,int)));
-    QObject::disconnect(aim, SIGNAL(columnsInserted(QModelIndex,int,int)), q,
-                        SLOT(_q_columnsInserted(QModelIndex,int,int)));
-    QObject::disconnect(aim, SIGNAL(columnsRemoved(QModelIndex,int,int)), q,
-                        SLOT(_q_columnsRemoved(QModelIndex,int,int)));
-    QObject::disconnect(aim, SIGNAL(columnsMoved(QModelIndex,int,int,QModelIndex,int)), q,
-                        SLOT(_q_columnsMoved(QModelIndex,int,int,QModelIndex,int)));
-    QObject::disconnect(aim, SIGNAL(dataChanged(QModelIndex,QModelIndex,QList<int>)),
-                        q, SLOT(_q_dataChanged(QModelIndex,QModelIndex,QList<int>)));
-    QObject::disconnect(aim, SIGNAL(rowsMoved(QModelIndex,int,int,QModelIndex,int)),
-                        q, SLOT(_q_rowsMoved(QModelIndex,int,int,QModelIndex,int)));
+    QObject::disconnect(aim, &QAbstractItemModel::rowsInserted, q, &QQmlDelegateModel::_q_rowsInserted);
+    QObject::disconnect(aim, &QAbstractItemModel::rowsAboutToBeRemoved, q, &QQmlDelegateModel::_q_rowsAboutToBeRemoved);
+    QObject::disconnect(aim, &QAbstractItemModel::rowsRemoved, q, &QQmlDelegateModel::_q_rowsRemoved);
+    QObject::disconnect(aim, &QAbstractItemModel::columnsInserted, q, &QQmlDelegateModel::_q_columnsInserted);
+    QObject::disconnect(aim, &QAbstractItemModel::columnsRemoved, q, &QQmlDelegateModel::_q_columnsRemoved);
+    QObject::disconnect(aim, &QAbstractItemModel::columnsMoved, q, &QQmlDelegateModel::_q_columnsMoved);
+    QObject::disconnect(aim, &QAbstractItemModel::dataChanged, q, &QQmlDelegateModel::_q_dataChanged);
+    QObject::disconnect(aim, &QAbstractItemModel::rowsMoved, q, &QQmlDelegateModel::_q_rowsMoved);
     QObject::disconnect(aim, &QAbstractItemModel::modelAboutToBeReset, q, &QQmlDelegateModel::_q_modelAboutToBeReset);
-    QObject::disconnect(aim, SIGNAL(layoutChanged(QList<QPersistentModelIndex>,QAbstractItemModel::LayoutChangeHint)),
-                        q, SLOT(_q_layoutChanged(QList<QPersistentModelIndex>,QAbstractItemModel::LayoutChangeHint)));
     QObject::disconnect(aim, &QAbstractItemModel::modelReset, q, &QQmlDelegateModel::handleModelReset);
     QObject::disconnect(aim, &QAbstractItemModel::layoutChanged, q, &QQmlDelegateModel::_q_layoutChanged);
 }
@@ -2235,27 +2218,27 @@ void QQmlDelegateModelItemMetaType::initializePrototype()
 
     s = v4Engine->newString(QStringLiteral("isUnresolved"));
     QV4::ScopedFunctionObject f(scope);
-    QV4::ExecutionContext *global = scope.engine->rootContext();
-    p->setGetter((f = QV4::DelegateModelGroupFunction::create(global, 30, QQmlDelegateModelItem::get_member)));
+    QV4::ExecutionEngine *engine = scope.engine;
+    p->setGetter((f = QV4::DelegateModelGroupFunction::create(engine, 30, QQmlDelegateModelItem::get_member)));
     p->setSetter(nullptr);
     proto->insertMember(s, p, QV4::Attr_Accessor|QV4::Attr_NotConfigurable|QV4::Attr_NotEnumerable);
 
     s = v4Engine->newString(QStringLiteral("inItems"));
-    p->setGetter((f = QV4::DelegateModelGroupFunction::create(global, QQmlListCompositor::Default, QQmlDelegateModelItem::get_member)));
-    p->setSetter((f = QV4::DelegateModelGroupFunction::create(global, QQmlListCompositor::Default, QQmlDelegateModelItem::set_member)));
+    p->setGetter((f = QV4::DelegateModelGroupFunction::create(engine, QQmlListCompositor::Default, QQmlDelegateModelItem::get_member)));
+    p->setSetter((f = QV4::DelegateModelGroupFunction::create(engine, QQmlListCompositor::Default, QQmlDelegateModelItem::set_member)));
     proto->insertMember(s, p, QV4::Attr_Accessor|QV4::Attr_NotConfigurable|QV4::Attr_NotEnumerable);
 
     s = v4Engine->newString(QStringLiteral("inPersistedItems"));
-    p->setGetter((f = QV4::DelegateModelGroupFunction::create(global, QQmlListCompositor::Persisted, QQmlDelegateModelItem::get_member)));
-    p->setSetter((f = QV4::DelegateModelGroupFunction::create(global, QQmlListCompositor::Persisted, QQmlDelegateModelItem::set_member)));
+    p->setGetter((f = QV4::DelegateModelGroupFunction::create(engine, QQmlListCompositor::Persisted, QQmlDelegateModelItem::get_member)));
+    p->setSetter((f = QV4::DelegateModelGroupFunction::create(engine, QQmlListCompositor::Persisted, QQmlDelegateModelItem::set_member)));
     proto->insertMember(s, p, QV4::Attr_Accessor|QV4::Attr_NotConfigurable|QV4::Attr_NotEnumerable);
 
     s = v4Engine->newString(QStringLiteral("itemsIndex"));
-    p->setGetter((f = QV4::DelegateModelGroupFunction::create(global, QQmlListCompositor::Default, QQmlDelegateModelItem::get_index)));
+    p->setGetter((f = QV4::DelegateModelGroupFunction::create(engine, QQmlListCompositor::Default, QQmlDelegateModelItem::get_index)));
     proto->insertMember(s, p, QV4::Attr_Accessor|QV4::Attr_NotConfigurable|QV4::Attr_NotEnumerable);
 
     s = v4Engine->newString(QStringLiteral("persistedItemsIndex"));
-    p->setGetter((f = QV4::DelegateModelGroupFunction::create(global, QQmlListCompositor::Persisted, QQmlDelegateModelItem::get_index)));
+    p->setGetter((f = QV4::DelegateModelGroupFunction::create(engine, QQmlListCompositor::Persisted, QQmlDelegateModelItem::get_index)));
     p->setSetter(nullptr);
     proto->insertMember(s, p, QV4::Attr_Accessor|QV4::Attr_NotConfigurable|QV4::Attr_NotEnumerable);
 
@@ -2263,14 +2246,14 @@ void QQmlDelegateModelItemMetaType::initializePrototype()
         QString propertyName = QLatin1String("in") + groupNames.at(i);
         propertyName.replace(2, 1, propertyName.at(2).toUpper());
         s = v4Engine->newString(propertyName);
-        p->setGetter((f = QV4::DelegateModelGroupFunction::create(global, i + 1, QQmlDelegateModelItem::get_member)));
-        p->setSetter((f = QV4::DelegateModelGroupFunction::create(global, i + 1, QQmlDelegateModelItem::set_member)));
+        p->setGetter((f = QV4::DelegateModelGroupFunction::create(engine, i + 1, QQmlDelegateModelItem::get_member)));
+        p->setSetter((f = QV4::DelegateModelGroupFunction::create(engine, i + 1, QQmlDelegateModelItem::set_member)));
         proto->insertMember(s, p, QV4::Attr_Accessor|QV4::Attr_NotConfigurable|QV4::Attr_NotEnumerable);
     }
     for (int i = 2; i < groupNames.size(); ++i) {
         const QString propertyName = groupNames.at(i) + QLatin1String("Index");
         s = v4Engine->newString(propertyName);
-        p->setGetter((f = QV4::DelegateModelGroupFunction::create(global, i + 1, QQmlDelegateModelItem::get_index)));
+        p->setGetter((f = QV4::DelegateModelGroupFunction::create(engine, i + 1, QQmlDelegateModelItem::get_index)));
         p->setSetter(nullptr);
         proto->insertMember(s, p, QV4::Attr_Accessor|QV4::Attr_NotConfigurable|QV4::Attr_NotEnumerable);
     }
@@ -2923,7 +2906,7 @@ void QQmlDelegateModelGroupPrivate::destroyingPackage(QQuickPackage *package)
 
 /*!
     \qmltype DelegateModelGroup
-    \instantiates QQmlDelegateModelGroup
+    \nativetype QQmlDelegateModelGroup
     \inqmlmodule QtQml.Models
     \ingroup qtquick-models
     \brief Encapsulates a filtered set of visual data items.
@@ -3152,7 +3135,7 @@ bool QQmlDelegateModelGroupPrivate::parseIndex(const QV4::Value &value, int *ind
     items that are later replaced by actual data.
 */
 
-void QQmlDelegateModelGroup::insert(QQmlV4Function *args)
+void QQmlDelegateModelGroup::insert(QQmlV4FunctionPtr args)
 {
     Q_D(QQmlDelegateModelGroup);
     QQmlDelegateModelPrivate *model = QQmlDelegateModelPrivate::get(d->model);
@@ -3215,7 +3198,7 @@ void QQmlDelegateModelGroup::insert(QQmlV4Function *args)
     group remain instantiated when not referenced by any view.
 */
 
-void QQmlDelegateModelGroup::create(QQmlV4Function *args)
+void QQmlDelegateModelGroup::create(QQmlV4FunctionPtr args)
 {
     Q_D(QQmlDelegateModelGroup);
     if (!d->model)
@@ -3293,7 +3276,7 @@ void QQmlDelegateModelGroup::create(QQmlV4Function *args)
     that the previously unresolved item has simply moved.
 
 */
-void QQmlDelegateModelGroup::resolve(QQmlV4Function *args)
+void QQmlDelegateModelGroup::resolve(QQmlV4FunctionPtr args)
 {
     Q_D(QQmlDelegateModelGroup);
     if (!d->model)
@@ -3397,7 +3380,7 @@ void QQmlDelegateModelGroup::resolve(QQmlV4Function *args)
     Removes \a count items starting at \a index from the group.
 */
 
-void QQmlDelegateModelGroup::remove(QQmlV4Function *args)
+void QQmlDelegateModelGroup::remove(QQmlV4FunctionPtr args)
 {
     Q_D(QQmlDelegateModelGroup);
     if (!d->model)
@@ -3437,7 +3420,7 @@ void QQmlDelegateModelGroup::remove(QQmlV4Function *args)
 }
 
 bool QQmlDelegateModelGroupPrivate::parseGroupArgs(
-        QQmlV4Function *args, Compositor::Group *group, int *index, int *count, int *groups) const
+        QQmlV4FunctionPtr args, Compositor::Group *group, int *index, int *count, int *groups) const
 {
     if (!model || !QQmlDelegateModelPrivate::get(model)->m_cacheMetaType)
         return false;
@@ -3471,7 +3454,7 @@ bool QQmlDelegateModelGroupPrivate::parseGroupArgs(
     Adds \a count items starting at \a index to \a groups.
 */
 
-void QQmlDelegateModelGroup::addGroups(QQmlV4Function *args)
+void QQmlDelegateModelGroup::addGroups(QQmlV4FunctionPtr args)
 {
     Q_D(QQmlDelegateModelGroup);
     Compositor::Group group = d->group;
@@ -3501,7 +3484,7 @@ void QQmlDelegateModelGroup::addGroups(QQmlV4Function *args)
     Removes \a count items starting at \a index from \a groups.
 */
 
-void QQmlDelegateModelGroup::removeGroups(QQmlV4Function *args)
+void QQmlDelegateModelGroup::removeGroups(QQmlV4FunctionPtr args)
 {
     Q_D(QQmlDelegateModelGroup);
     Compositor::Group group = d->group;
@@ -3532,7 +3515,7 @@ void QQmlDelegateModelGroup::removeGroups(QQmlV4Function *args)
     their existing groups and added to \a groups.
 */
 
-void QQmlDelegateModelGroup::setGroups(QQmlV4Function *args)
+void QQmlDelegateModelGroup::setGroups(QQmlV4FunctionPtr args)
 {
     Q_D(QQmlDelegateModelGroup);
     Compositor::Group group = d->group;
@@ -3567,7 +3550,7 @@ void QQmlDelegateModelGroup::setGroups(QQmlV4Function *args)
     reordering you have done via this function.
 */
 
-void QQmlDelegateModelGroup::move(QQmlV4Function *args)
+void QQmlDelegateModelGroup::move(QQmlV4FunctionPtr args)
 {
     Q_D(QQmlDelegateModelGroup);
 

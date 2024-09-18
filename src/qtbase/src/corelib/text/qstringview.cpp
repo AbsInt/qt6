@@ -592,7 +592,7 @@ QT_BEGIN_NAMESPACE
     \a length is negative (default), the function returns all characters that
     are available from \a start.
 
-    \sa first(), last(), sliced(), chopped(), chop(), truncate()
+    \sa first(), last(), sliced(), chopped(), chop(), truncate(), slice()
 */
 
 /*!
@@ -606,7 +606,7 @@ QT_BEGIN_NAMESPACE
     The entire string view is returned if \a length is greater than or equal
     to size(), or less than zero.
 
-    \sa first(), last(), sliced(), startsWith(), chopped(), chop(), truncate()
+    \sa first(), last(), sliced(), startsWith(), chopped(), chop(), truncate(), slice()
 */
 
 /*!
@@ -620,7 +620,7 @@ QT_BEGIN_NAMESPACE
     The entire string view is returned if \a length is greater than or equal
     to size(), or less than zero.
 
-    \sa first(), last(), sliced(), endsWith(), chopped(), chop(), truncate()
+    \sa first(), last(), sliced(), endsWith(), chopped(), chop(), truncate(), slice()
 */
 
 /*!
@@ -632,7 +632,7 @@ QT_BEGIN_NAMESPACE
 
     \note The behavior is undefined when \a n < 0 or \a n > size().
 
-    \sa last(), sliced(), startsWith(), chopped(), chop(), truncate()
+    \sa last(), sliced(), startsWith(), chopped(), chop(), truncate(), slice()
 */
 
 /*!
@@ -644,7 +644,7 @@ QT_BEGIN_NAMESPACE
 
     \note The behavior is undefined when \a n < 0 or \a n > size().
 
-    \sa first(), sliced(), endsWith(), chopped(), chop(), truncate()
+    \sa first(), sliced(), endsWith(), chopped(), chop(), truncate(), slice()
 */
 
 /*!
@@ -659,7 +659,7 @@ QT_BEGIN_NAMESPACE
     or \a pos + \a n > size().
 //! [UB-sliced-index-length]
 
-    \sa first(), last(), chopped(), chop(), truncate()
+    \sa first(), last(), chopped(), chop(), truncate(), slice()
 */
 
 /*!
@@ -674,7 +674,32 @@ QT_BEGIN_NAMESPACE
     \note The behavior is undefined when \a pos < 0 or \a pos > size().
 //! [UB-sliced-index-only]
 
-    \sa first(), last(), chopped(), chop(), truncate()
+    \sa first(), last(), chopped(), chop(), truncate(), slice()
+*/
+
+/*!
+    \fn QStringView &QStringView::slice(qsizetype pos, qsizetype n)
+    \since 6.8
+
+    Modifies this string view to start from position \a pos, extending
+    for \a n code points.
+
+    \include qstringview.cpp UB-sliced-index-length
+
+    \sa sliced(), first(), last(), chopped(), chop(), truncate()
+*/
+
+/*!
+    \fn QStringView &QStringView::slice(qsizetype pos)
+    \since 6.8
+    \overload
+
+    Modifies this string view to start from position \a pos, extending
+    to its end.
+
+    \include qstringview.cpp UB-sliced-index-only
+
+    \sa sliced(), first(), last(), chopped(), chop(), truncate()
 */
 
 /*!
@@ -687,7 +712,7 @@ QT_BEGIN_NAMESPACE
 
     \note The behavior is undefined when \a length < 0 or \a length > size().
 
-    \sa mid(), left(), right(), chop(), truncate()
+    \sa mid(), left(), right(), chop(), truncate(), slice()
 */
 
 /*!
@@ -711,7 +736,7 @@ QT_BEGIN_NAMESPACE
 
     \note The behavior is undefined when \a length < 0 or \a length > size().
 
-    \sa mid(), left(), right(), chopped(), truncate()
+    \sa mid(), left(), right(), chopped(), truncate(), slice()
 */
 
 /*!
@@ -766,12 +791,12 @@ QT_BEGIN_NAMESPACE
 */
 
 /*!
-    \fn QStringView::operator==(QStringView lhs, QStringView rhs)
-    \fn QStringView::operator!=(QStringView lhs, QStringView rhs)
-    \fn QStringView::operator< (QStringView lhs, QStringView rhs)
-    \fn QStringView::operator<=(QStringView lhs, QStringView rhs)
-    \fn QStringView::operator> (QStringView lhs, QStringView rhs)
-    \fn QStringView::operator>=(QStringView lhs, QStringView rhs)
+    \fn QStringView::operator==(const QStringView &lhs, const QStringView &rhs)
+    \fn QStringView::operator!=(const QStringView &lhs, const QStringView &rhs)
+    \fn QStringView::operator< (const QStringView &lhs, const QStringView &rhs)
+    \fn QStringView::operator<=(const QStringView &lhs, const QStringView &rhs)
+    \fn QStringView::operator> (const QStringView &lhs, const QStringView &rhs)
+    \fn QStringView::operator>=(const QStringView &lhs, const QStringView &rhs)
 
     Operators for comparing \a lhs to \a rhs.
 
@@ -1451,6 +1476,24 @@ or the character \a ch
     Converts this QStringView object to a \c{std::u16string_view} object.
     The returned view will have the same data pointer and length of
     this view.
+*/
+
+/*!
+    \fn QStringView::maxSize()
+    \since 6.8
+
+    It returns the maximum number of elements that the view can
+    theoretically represent. In practice, the number can be much smaller,
+    limited by the amount of memory available to the system.
+*/
+
+/*!
+    \fn QStringView::max_size() const
+    \since 6.8
+
+    This function is provided for STL compatibility.
+
+    Returns maxSize().
 */
 
 QT_END_NAMESPACE

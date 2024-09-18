@@ -367,6 +367,8 @@ void QWindowsFontEngineDirectWrite::collectMetrics()
         quint16 advanceWidthMax = qFromBigEndian<quint16>(table.constData() + advanceWidthMaxLocation);
         m_maxAdvanceWidth = DESIGN_TO_LOGICAL(advanceWidthMax);
     }
+
+    loadKerningPairs(emSquareSize() / QFixed::fromReal(fontDef.pixelSize));
 }
 
 QFixed QWindowsFontEngineDirectWrite::underlinePosition() const
@@ -433,13 +435,13 @@ glyph_t QWindowsFontEngineDirectWrite::glyphIndex(uint ucs4) const
     return glyphIndex;
 }
 
-bool QWindowsFontEngineDirectWrite::stringToCMap(const QChar *str, int len, QGlyphLayout *glyphs,
-                                                 int *nglyphs, QFontEngine::ShaperFlags flags) const
+int QWindowsFontEngineDirectWrite::stringToCMap(const QChar *str, int len, QGlyphLayout *glyphs,
+                                                int *nglyphs, QFontEngine::ShaperFlags flags) const
 {
     Q_ASSERT(glyphs->numGlyphs >= *nglyphs);
     if (*nglyphs < len) {
         *nglyphs = len;
-        return false;
+        return -1;
     }
 
     QVarLengthArray<UINT32> codePoints(len);
@@ -453,11 +455,15 @@ bool QWindowsFontEngineDirectWrite::stringToCMap(const QChar *str, int len, QGly
                                                          glyphIndices.data());
     if (FAILED(hr)) {
         qErrnoWarning("%s: GetGlyphIndicesW failed", __FUNCTION__);
-        return false;
+        return -1;
     }
 
-    for (int i = 0; i < actualLength; ++i)
+    int mappedGlyphs = 0;
+    for (int i = 0; i < actualLength; ++i) {
         glyphs->glyphs[i] = glyphIndices.at(i);
+        if (glyphs->glyphs[i] != 0 || isIgnorableChar(codePoints.at(i)))
+            mappedGlyphs++;
+    }
 
     *nglyphs = actualLength;
     glyphs->numGlyphs = actualLength;
@@ -465,7 +471,7 @@ bool QWindowsFontEngineDirectWrite::stringToCMap(const QChar *str, int len, QGly
     if (!(flags & GlyphIndicesOnly))
         recalcAdvances(glyphs, {});
 
-    return true;
+    return mappedGlyphs;
 }
 
 QFontEngine::FaceId QWindowsFontEngineDirectWrite::faceId() const
@@ -678,7 +684,9 @@ QImage QWindowsFontEngineDirectWrite::alphaMapForGlyph(glyph_t glyph,
 bool QWindowsFontEngineDirectWrite::supportsHorizontalSubPixelPositions() const
 {
     DWRITE_RENDERING_MODE renderMode = hintingPreferenceToRenderingMode(fontDef);
-    return renderMode != DWRITE_RENDERING_MODE_ALIASED;
+    return  (renderMode != DWRITE_RENDERING_MODE_GDI_CLASSIC
+            && renderMode != DWRITE_RENDERING_MODE_GDI_NATURAL
+            && renderMode != DWRITE_RENDERING_MODE_ALIASED);
 }
 
 QFontEngine::Properties QWindowsFontEngineDirectWrite::properties() const

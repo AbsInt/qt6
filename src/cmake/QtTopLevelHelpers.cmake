@@ -1,3 +1,62 @@
+# Copyright (C) 2024 The Qt Company Ltd.
+# SPDX-License-Identifier: BSD-3-Clause
+
+macro(qt_tl_include_all_helpers)
+    include(QtIRHelpers)
+    qt_ir_include_all_helpers()
+endmacro()
+
+function(qt_tl_run_toplevel_configure top_level_src_path)
+    cmake_parse_arguments(arg "ALREADY_INITIALIZED" "" "" ${ARGV})
+
+    qt_ir_get_cmake_flag(ALREADY_INITIALIZED arg_ALREADY_INITIALIZED)
+
+    # Filter out init-repository specific arguments before passing them to
+    # configure.
+    qt_ir_get_args_from_optfile_configure_filtered("${OPTFILE}" configure_args
+        ${arg_ALREADY_INITIALIZED})
+    # Get the path to the qtbase configure script.
+    set(qtbase_dir_name "qtbase")
+    set(configure_path "${top_level_src_path}/${qtbase_dir_name}/configure")
+    if(CMAKE_HOST_WIN32)
+        string(APPEND configure_path ".bat")
+    endif()
+
+    if(NOT EXISTS "${configure_path}")
+        message(FATAL_ERROR
+            "The required qtbase/configure script was not found: ${configure_path}\n"
+            "Try re-running configure with --init-submodules")
+    endif()
+
+    # Make a build directory for qtbase in the current build directory.
+    set(qtbase_build_dir "${CMAKE_CURRENT_BINARY_DIR}/${qtbase_dir_name}")
+    file(MAKE_DIRECTORY "${qtbase_build_dir}")
+
+    qt_ir_execute_process_and_log_and_handle_error(
+        COMMAND_ARGS "${configure_path}" -top-level ${configure_args}
+        WORKING_DIRECTORY "${qtbase_build_dir}"
+        FORCE_VERBOSE
+    )
+endfunction()
+
+function(qt_tl_run_main_script)
+    if(NOT TOP_LEVEL_SRC_PATH)
+        message(FATAL_ERROR "Assertion: configure TOP_LEVEL_SRC_PATH is not set")
+    endif()
+
+    # Tell init-repository it is called from configure.
+    qt_ir_set_option_value(from-configure TRUE)
+
+    # Run init-repository in-process.
+    qt_ir_run_main_script("${TOP_LEVEL_SRC_PATH}" exit_reason)
+    if(exit_reason AND NOT exit_reason STREQUAL "ALREADY_INITIALIZED")
+        return()
+    endif()
+
+    # Then run configure out-of-process.
+    qt_tl_run_toplevel_configure("${TOP_LEVEL_SRC_PATH}" ${exit_reason})
+endfunction()
+
 # Populates $out_module_list with all subdirectories that have a CMakeLists.txt file
 function(qt_internal_find_modules out_module_list)
     set(module_list "")
@@ -15,7 +74,7 @@ endfunction()
 # poor man's yaml parser, populating $out_dependencies with all dependencies
 # in the $depends_file
 # Each entry will be in the format dependency/sha1/required
-function(qt_internal_parse_dependencies depends_file out_dependencies)
+function(qt_internal_parse_dependencies_yaml depends_file out_dependencies)
     file(STRINGS "${depends_file}" lines)
     set(eof_marker "---EOF---")
     list(APPEND lines "${eof_marker}")
@@ -48,7 +107,7 @@ function(qt_internal_parse_dependencies depends_file out_dependencies)
         endif()
     endforeach()
     message(DEBUG
-        "qt_internal_parse_dependencies for ${depends_file}\n    dependencies: ${dependencies}")
+        "qt_internal_parse_dependencies_yaml for ${depends_file}\n    dependencies: ${dependencies}")
     set(${out_dependencies} "${dependencies}" PARENT_SCOPE)
 endfunction()
 
@@ -99,8 +158,22 @@ endfunction()
 # Keyword arguments:
 #
 # PARSED_DEPENDENCIES is a list of dependencies of module in the format that
-# qt_internal_parse_dependencies returns. If this argument is not provided, dependencies.yaml of the
-# module is parsed.
+# qt_internal_parse_dependencies_yaml returns.
+# If this argument is not provided, either a module's dependencies.yaml or .gitmodules file is
+# used as the source of dependencies, depending on whether PARSE_GITMODULES option is enabled.
+#
+# PARSE_GITMODULES is a boolean that controls whether the .gitmodules or the dependencies.yaml
+# file of the repo are used for extracting dependencies. Defaults to FALSE, so uses
+# dependencies.yaml by default.
+#
+# EXCLUDE_OPTIONAL_DEPS is a boolean that controls whether optional dependencies are excluded from
+# the final result.
+#
+# GITMODULES_PREFIX_VAR is the prefix of all the variables containing dependencies for the
+# PARSE_GITMODULES mode.
+# The function expects the following variables to be set in the parent scope
+#  ${arg_GITMODULES_PREFIX_VAR}_${submodule_name}_depends
+#  ${arg_GITMODULES_PREFIX_VAR}_${submodule_name}_recommends
 #
 # IN_RECURSION is an internal option that is set when the function is in recursion.
 #
@@ -114,8 +187,9 @@ endfunction()
 #
 # SKIP_MODULES Modules that should be skipped from evaluation completely.
 function(qt_internal_resolve_module_dependencies module out_ordered out_revisions)
-    set(options IN_RECURSION NORMALIZE_REPO_NAME_IF_NEEDED)
-    set(oneValueArgs REVISION SKIPPED_VAR)
+    set(options IN_RECURSION NORMALIZE_REPO_NAME_IF_NEEDED PARSE_GITMODULES
+                EXCLUDE_OPTIONAL_DEPS)
+    set(oneValueArgs REVISION SKIPPED_VAR GITMODULES_PREFIX_VAR)
     set(multiValueArgs PARSED_DEPENDENCIES SKIP_MODULES)
     cmake_parse_arguments(arg "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
@@ -143,10 +217,42 @@ function(qt_internal_resolve_module_dependencies module out_ordered out_revision
     if(DEFINED arg_PARSED_DEPENDENCIES)
         set(dependencies "${arg_PARSED_DEPENDENCIES}")
     else()
-        set(depends_file "${CMAKE_CURRENT_SOURCE_DIR}/${module}/dependencies.yaml")
         set(dependencies "")
-        if(EXISTS "${depends_file}")
-            qt_internal_parse_dependencies("${depends_file}" dependencies)
+
+        if(NOT arg_PARSE_GITMODULES)
+            set(depends_file "${CMAKE_CURRENT_SOURCE_DIR}/${module}/dependencies.yaml")
+            if(EXISTS "${depends_file}")
+                qt_internal_parse_dependencies_yaml("${depends_file}" dependencies)
+
+                if(arg_EXCLUDE_OPTIONAL_DEPS)
+                    set(filtered_dependencies "")
+                    foreach(dependency IN LISTS dependencies)
+                        string(REPLACE "/" ";" dependency_split "${dependency}")
+                        list(GET dependency_split 2 required)
+                        if(required)
+                            list(APPEND filtered_dependencies "${dependency}")
+                        endif()
+                    endforeach()
+                    set(dependencies "${filtered_dependencies}")
+                endif()
+            endif()
+        else()
+            set(depends "${${arg_GITMODULES_PREFIX_VAR}_${dependency}_depends}")
+            foreach(dependency IN LISTS depends)
+                if(dependency)
+                    # The HEAD value is not really used, but we need to add something.
+                    list(APPEND dependencies "${dependency}/HEAD/TRUE")
+                endif()
+            endforeach()
+
+            set(recommends "${${arg_GITMODULES_PREFIX_VAR}_${dependency}_recommends}")
+            if(NOT arg_EXCLUDE_OPTIONAL_DEPS)
+                foreach(dependency IN LISTS recommends)
+                    if(dependency)
+                        list(APPEND dependencies "${dependency}/HEAD/FALSE")
+                    endif()
+                endforeach()
+            endif()
         endif()
     endif()
 
@@ -173,6 +279,16 @@ function(qt_internal_resolve_module_dependencies module out_ordered out_revision
             set_property(GLOBAL APPEND PROPERTY QT_REQUIRED_DEPS_FOR_${module} ${dependency})
         endif()
 
+        set(parse_gitmodules "")
+        if(arg_PARSE_GITMODULES)
+            set(parse_gitmodules "PARSE_GITMODULES")
+        endif()
+
+        set(exclude_optional_deps "")
+        if(arg_EXCLUDE_OPTIONAL_DEPS)
+            set(exclude_optional_deps "EXCLUDE_OPTIONAL_DEPS")
+        endif()
+
         set(extra_options "")
         if(arg_SKIP_MODULES)
             list(APPEND extra_options SKIP_MODULES ${arg_SKIP_MODULES})
@@ -183,6 +299,9 @@ function(qt_internal_resolve_module_dependencies module out_ordered out_revision
             SKIPPED_VAR skipped
             IN_RECURSION
             ${normalize_arg}
+            ${parse_gitmodules}
+            ${exclude_optional_deps}
+            GITMODULES_PREFIX_VAR ${arg_GITMODULES_PREFIX_VAR}
             ${extra_options}
         )
         if(NOT skipped)
@@ -205,18 +324,32 @@ endfunction()
 # Arguments:
 # modules is the initial list of repos.
 # out_all_ordered is the variable name where the result is stored.
+# PARSE_GITMODULES and GITMODULES_PREFIX_VAR are keyowrd arguments that change the
+# source of dependencies parsing from dependencies.yaml to .gitmodules.
+# EXCLUDE_OPTIONAL_DEPS is a keyword argument that excludes optional dependencies from the result.
+# See qt_internal_resolve_module_dependencies for details.
 #
 # SKIP_MODULES Modules that should be skipped from evaluation completely.
 #
 # See qt_internal_resolve_module_dependencies for side effects.
 function(qt_internal_sort_module_dependencies modules out_all_ordered)
-    set(options "")
-    set(oneValueArgs "")
+    set(options PARSE_GITMODULES EXCLUDE_OPTIONAL_DEPS)
+    set(oneValueArgs GITMODULES_PREFIX_VAR)
     set(multiValueArgs SKIP_MODULES)
     cmake_parse_arguments(arg "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
+    set(parse_gitmodules "")
+    if(arg_PARSE_GITMODULES)
+        set(parse_gitmodules "PARSE_GITMODULES")
+    endif()
+
+    set(exclude_optional_deps "")
+    if(arg_EXCLUDE_OPTIONAL_DEPS)
+        set(exclude_optional_deps "EXCLUDE_OPTIONAL_DEPS")
+    endif()
+
     # Create a fake repository "all_selected_repos" that has all repositories from the input as
-    # required dependency. The format must match what qt_internal_parse_dependencies produces.
+    # required dependency. The format must match what qt_internal_parse_dependencies_yaml produces.
     set(all_selected_repos_as_parsed_dependencies)
     foreach(module IN LISTS modules)
         list(APPEND all_selected_repos_as_parsed_dependencies "${module}/HEAD/FALSE")
@@ -230,6 +363,9 @@ function(qt_internal_sort_module_dependencies modules out_all_ordered)
     qt_internal_resolve_module_dependencies(all_selected_repos ordered unused_revisions
         PARSED_DEPENDENCIES ${all_selected_repos_as_parsed_dependencies}
         NORMALIZE_REPO_NAME_IF_NEEDED
+        ${exclude_optional_deps}
+        ${parse_gitmodules}
+        GITMODULES_PREFIX_VAR ${arg_GITMODULES_PREFIX_VAR}
         ${extra_args}
     )
 

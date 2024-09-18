@@ -80,7 +80,7 @@ void QQuickWindowQmlImpl::classBegin()
         // The content item has CppOwnership policy (set in QQuickWindow). Ensure the presence of a JS
         // wrapper so that the garbage collector can see the policy.
         QV4::ExecutionEngine *v4 = e->handle();
-        QV4::QObjectWrapper::wrap(v4, d->contentItem);
+        QV4::QObjectWrapper::ensureWrapper(v4, d->contentItem);
     }
 }
 
@@ -286,7 +286,7 @@ bool QQuickWindowQmlImpl::transientParentVisible()
 /*!
     \qmlproperty var QtQuick::Window::parent
     \since 6.7
-    \preliminary
+    \internal
 
     This property holds the visual parent of the window.
 
@@ -492,7 +492,7 @@ int QQuickWindowQmlImpl::y() const
 
 /*!
     \qmlproperty real QtQuick::Window::z
-    \preliminary
+    \internal
 
     Sets the stacking order of sibling windows.
 

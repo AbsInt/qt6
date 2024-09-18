@@ -32,6 +32,8 @@ public:
     };
 
     explicit QAndroidPlatformWindow(QWindow *window);
+    void initialize() override;
+
     ~QAndroidPlatformWindow();
     void lower() override;
     void raise() override;
@@ -71,7 +73,6 @@ protected:
     void unlockSurface() { m_surfaceMutex.unlock(); }
     void createSurface();
     void destroySurface();
-    void setNativeGeometry(const QRect &geometry);
     void sendExpose() const;
     bool blockedByModal() const;
     bool isEmbeddingContainer() const;

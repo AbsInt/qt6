@@ -12,7 +12,7 @@ QT_BEGIN_NAMESPACE
 /*!
     \qmltype Slider
     \inherits Control
-//!     \instantiates QQuickSlider
+//!     \nativetype QQuickSlider
     \inqmlmodule QtQuick.Controls
     \since 5.7
     \ingroup qtquickcontrols-input
@@ -251,7 +251,7 @@ QQuickSlider::QQuickSlider(QQuickItem *parent)
     : QQuickControl(*(new QQuickSliderPrivate), parent)
 {
     Q_D(QQuickSlider);
-    d->setSizePolicy(QLayoutPolicy::Preferred, QLayoutPolicy::Fixed);
+    d->setSizePolicy(QLayoutPolicy::Expanding, QLayoutPolicy::Fixed);
     setActiveFocusOnTab(true);
 #ifdef Q_OS_MACOS
     setFocusPolicy(Qt::TabFocus);
@@ -536,9 +536,9 @@ void QQuickSlider::setOrientation(Qt::Orientation orientation)
         return;
 
     if (orientation == Qt::Horizontal)
-        d->setSizePolicy(QLayoutPolicy::Preferred, QLayoutPolicy::Fixed);
+        d->setSizePolicy(QLayoutPolicy::Expanding, QLayoutPolicy::Fixed);
     else
-        d->setSizePolicy(QLayoutPolicy::Fixed, QLayoutPolicy::Preferred);
+        d->setSizePolicy(QLayoutPolicy::Fixed, QLayoutPolicy::Expanding);
 
     d->orientation = orientation;
     emit orientationChanged();
@@ -837,7 +837,7 @@ void QQuickSlider::wheelEvent(QWheelEvent *event)
     if (d->wheelEnabled) {
         const qreal oldValue = d->value;
         const QPointF angle = event->angleDelta();
-        const qreal delta = (qFuzzyIsNull(angle.y()) ? angle.x() : (event->inverted() ? -angle.y() : angle.y())) / int(QWheelEvent::DefaultDeltasPerStep);
+        const qreal delta = (qAbs(angle.y()) < qAbs(angle.x()) ? angle.x() : (event->inverted() ? -angle.y() : angle.y())) / int(QWheelEvent::DefaultDeltasPerStep);
         const qreal step = qFuzzyIsNull(d->stepSize) ? 0.1 : d->stepSize;
         setValue(oldValue + step * delta);
         const bool wasMoved = !qFuzzyCompare(d->value, oldValue);

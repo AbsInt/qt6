@@ -40,7 +40,7 @@ namespace QV4 {
 struct String;
 }
 
-class Q_QML_PRIVATE_EXPORT QQmlType
+class Q_QML_EXPORT QQmlType
 {
 public:
     QQmlType();
@@ -50,10 +50,6 @@ public:
     QQmlType &operator =(QQmlType &&other);
     explicit QQmlType(const QQmlTypePrivate *priv);
     ~QQmlType();
-
-    bool operator ==(const QQmlType &other) const {
-        return d.data() == other.d.data();
-    }
 
     bool isValid() const { return !d.isNull(); }
 
@@ -124,7 +120,7 @@ public:
 
     bool isInlineComponentType() const;
 
-    struct Q_QML_PRIVATE_EXPORT SingletonInstanceInfo final
+    struct Q_QML_EXPORT SingletonInstanceInfo final
         : public QQmlRefCounted<SingletonInstanceInfo>
     {
         using Ptr = QQmlRefPointer<SingletonInstanceInfo>;
@@ -176,6 +172,15 @@ public:
 private:
     friend class QQmlTypePrivate;
     friend size_t qHash(const QQmlType &t, size_t seed);
+    friend bool operator==(const QQmlType &a, const QQmlType &b) noexcept
+    {
+        return a.d.data() == b.d.data();
+    }
+    friend bool operator!=(const QQmlType &a, const QQmlType &b) noexcept
+    {
+        return !(a == b);
+    }
+
     QQmlRefPointer<const QQmlTypePrivate> d;
 };
 

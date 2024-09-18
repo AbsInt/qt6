@@ -1921,7 +1921,7 @@ void DynamicRoleModelNodeMetaObject::propertyWritten(int index)
 
 /*!
     \qmltype ListModel
-    \instantiates QQmlListModel
+    \nativetype QQmlListModel
     \inherits AbstractListModel
     \inqmlmodule QtQml.Models
     \ingroup qtquick-models
@@ -2379,9 +2379,10 @@ int QQmlListModel::count() const
 /*!
     \qmlmethod ListModel::clear()
 
-    Deletes all content from the model.
+    Deletes all content from the model. In particular this invalidates all objects you may have
+    retrieved using \l get().
 
-    \sa append(), remove()
+    \sa append(), remove(), get()
 */
 void QQmlListModel::clear()
 {
@@ -2395,7 +2396,7 @@ void QQmlListModel::clear()
 
     \sa clear()
 */
-void QQmlListModel::remove(QQmlV4Function *args)
+void QQmlListModel::remove(QQmlV4FunctionPtr args)
 {
     int argLength = args->length();
 
@@ -2483,7 +2484,7 @@ void QQmlListModel::updateTranslations()
     \sa set(), append()
 */
 
-void QQmlListModel::insert(QQmlV4Function *args)
+void QQmlListModel::insert(QQmlV4FunctionPtr args)
 {
     if (args->length() == 2) {
         QV4::Scope scope(args->v4engine());
@@ -2599,7 +2600,7 @@ void QQmlListModel::move(int from, int to, int n)
 
     \sa set(), remove()
 */
-void QQmlListModel::append(QQmlV4Function *args)
+void QQmlListModel::append(QQmlV4FunctionPtr args)
 {
     if (args->length() == 1) {
         QV4::Scope scope(args->v4engine());
@@ -2675,9 +2676,10 @@ void QQmlListModel::append(QQmlV4Function *args)
     \endcode
 
     \warning The returned object is not guaranteed to remain valid. It
-    should not be used in \l{Property Binding}{property bindings}.
+    should not be used in \l{Property Binding}{property bindings} or for
+    storing data across modifications of its origin ListModel.
 
-    \sa append()
+    \sa append(), clear()
 */
 QJSValue QQmlListModel::get(int index) const
 {
@@ -2999,7 +3001,7 @@ bool QQmlListModelParser::definesEmptyList(const QString &s)
 
 /*!
     \qmltype ListElement
-    \instantiates QQmlListElement
+    \nativetype QQmlListElement
     \inqmlmodule QtQml.Models
     \brief Defines a data item in a ListModel.
     \ingroup qtquick-models

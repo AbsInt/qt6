@@ -47,6 +47,7 @@ namespace QtWaylandClient {
 
 QWaylandShmBuffer::QWaylandShmBuffer(QWaylandDisplay *display,
                      const QSize &size, QImage::Format format, qreal scale)
+    : mDirtyRegion(QRect(QPoint(0, 0), size / scale))
 {
     int stride = size.width() * 4;
     int alloc = stride * size.height();
@@ -70,6 +71,7 @@ QWaylandShmBuffer::QWaylandShmBuffer(QWaylandDisplay *display,
         file->open(fd, QIODevice::ReadWrite | QIODevice::Unbuffered, QFile::AutoCloseHandle);
         filePointer.reset(file);
     }
+    // NOTE beginPaint assumes a new buffer be all zeroes, which QFile::resize does.
     if (!filePointer->isOpen() || !filePointer->resize(alloc)) {
         qWarning("QWaylandShmBuffer: failed: %s", qUtf8Printable(filePointer->errorString()));
         return;
@@ -143,9 +145,9 @@ QWaylandShmBackingStore::QWaylandShmBackingStore(QWindow *window, QWaylandDispla
         // contents from the back buffer
         mBuffers.clear();
         mFrontBuffer = nullptr;
-        // resize always resets mBackBuffer
+        // recreateBackBufferIfNeeded always resets mBackBuffer
         if (mRequestedSize.isValid() && waylandWindow())
-            resize(mRequestedSize);
+            recreateBackBufferIfNeeded();
         qDeleteAll(copy);
     });
 }
@@ -166,12 +168,29 @@ QPaintDevice *QWaylandShmBackingStore::paintDevice()
     return contentSurface();
 }
 
+void QWaylandShmBackingStore::updateDirtyStates(const QRegion &region)
+{
+    // Update dirty state of buffers based on what was painted. The back buffer will
+    // not be dirty since we already painted on it, while other buffers will become dirty.
+    for (QWaylandShmBuffer *b : std::as_const(mBuffers)) {
+        if (b != mBackBuffer)
+            b->dirtyRegion() += region;
+    }
+}
+
 void QWaylandShmBackingStore::beginPaint(const QRegion &region)
 {
     mPainting = true;
-    ensureSize();
+    waylandWindow()->setBackingStore(this);
+    const bool bufferWasRecreated = recreateBackBufferIfNeeded();
 
-    if (mBackBuffer->image()->hasAlphaChannel()) {
+    const QMargins margins = windowDecorationMargins();
+    updateDirtyStates(region.translated(margins.left(), margins.top()));
+
+    // Although undocumented, QBackingStore::beginPaint expects the painted region
+    // to be cleared before use if the window has a surface format with an alpha.
+    // Fresh QWaylandShmBuffer are already cleared, so we don't need to clear those.
+    if (!bufferWasRecreated && mBackBuffer->image()->hasAlphaChannel()) {
         QPainter p(paintDevice());
         p.setCompositionMode(QPainter::CompositionMode_Source);
         const QColor blank = Qt::transparent;
@@ -185,12 +204,6 @@ void QWaylandShmBackingStore::endPaint()
     mPainting = false;
     if (mPendingFlush)
         flush(window(), mPendingRegion, QPoint());
-}
-
-void QWaylandShmBackingStore::ensureSize()
-{
-    waylandWindow()->setBackingStore(this);
-    resize(mRequestedSize);
 }
 
 void QWaylandShmBackingStore::flush(QWindow *window, const QRegion &region, const QPoint &offset)
@@ -229,8 +242,10 @@ void QWaylandShmBackingStore::resize(const QSize &size, const QRegion &)
     mRequestedSize = size;
 }
 
-QWaylandShmBuffer *QWaylandShmBackingStore::getBuffer(const QSize &size)
+QWaylandShmBuffer *QWaylandShmBackingStore::getBuffer(const QSize &size, bool &bufferWasRecreated)
 {
+    bufferWasRecreated = false;
+
     const auto copy = mBuffers; // remove when ported to vector<unique_ptr> + remove_if
     for (QWaylandShmBuffer *b : copy) {
         if (!b->busy()) {
@@ -249,40 +264,61 @@ QWaylandShmBuffer *QWaylandShmBackingStore::getBuffer(const QSize &size)
     if (mBuffers.size() < MAX_BUFFERS) {
         QImage::Format format = QPlatformScreen::platformScreenForWindow(window())->format();
         QWaylandShmBuffer *b = new QWaylandShmBuffer(mDisplay, size, format, waylandWindow()->scale());
+        bufferWasRecreated = true;
         mBuffers.push_front(b);
         return b;
     }
     return nullptr;
 }
 
-void QWaylandShmBackingStore::resize(const QSize &size)
+bool QWaylandShmBackingStore::recreateBackBufferIfNeeded()
 {
+    bool bufferWasRecreated = false;
     QMargins margins = windowDecorationMargins();
     qreal scale = waylandWindow()->scale();
-    QSize sizeWithMargins = (size + QSize(margins.left()+margins.right(),margins.top()+margins.bottom())) * scale;
+    const QSize sizeWithMargins = (mRequestedSize + QSize(margins.left() + margins.right(), margins.top() + margins.bottom())) * scale;
 
     // We look for a free buffer to draw into. If the buffer is not the last buffer we used,
-    // that is mBackBuffer, and the size is the same we memcpy the old content into the new
+    // that is mBackBuffer, and the size is the same we copy the damaged content into the new
     // buffer so that QPainter is happy to find the stuff it had drawn before. If the new
     // buffer has a different size it needs to be redrawn completely anyway, and if the buffer
     // is the same the stuff is there already.
     // You can exercise the different codepaths with weston, switching between the gl and the
     // pixman renderer. With the gl renderer release events are sent early so we can effectively
     // run single buffered, while with the pixman renderer we have to use two.
-    QWaylandShmBuffer *buffer = getBuffer(sizeWithMargins);
+    QWaylandShmBuffer *buffer = getBuffer(sizeWithMargins, bufferWasRecreated);
     while (!buffer) {
         qCDebug(lcWaylandBackingstore, "QWaylandShmBackingStore: stalling waiting for a buffer to be released from the compositor...");
 
         mDisplay->blockingReadEvents();
-        buffer = getBuffer(sizeWithMargins);
+        buffer = getBuffer(sizeWithMargins, bufferWasRecreated);
     }
 
     qsizetype oldSizeInBytes = mBackBuffer ? mBackBuffer->image()->sizeInBytes() : 0;
     qsizetype newSizeInBytes = buffer->image()->sizeInBytes();
 
     // mBackBuffer may have been deleted here but if so it means its size was different so we wouldn't copy it anyway
-    if (mBackBuffer != buffer && oldSizeInBytes == newSizeInBytes)
-        memcpy(buffer->image()->bits(), mBackBuffer->image()->constBits(), newSizeInBytes);
+    if (mBackBuffer != buffer && oldSizeInBytes == newSizeInBytes) {
+        Q_ASSERT(mBackBuffer);
+        const QImage *sourceImage = mBackBuffer->image();
+        QImage *targetImage = buffer->image();
+
+        QPainter painter(targetImage);
+        painter.setCompositionMode(QPainter::CompositionMode_Source);
+
+        // Let painter operate in device pixels, to make it easier to compare coordinates
+        const qreal sourceDevicePixelRatio = sourceImage->devicePixelRatio();
+        const qreal targetDevicePixelRatio = painter.device()->devicePixelRatio();
+        painter.scale(1.0 / targetDevicePixelRatio, 1.0 / targetDevicePixelRatio);
+
+        for (const QRect &rect : buffer->dirtyRegion()) {
+            QRectF sourceRect(QPointF(rect.topLeft()) * sourceDevicePixelRatio,
+                              QSizeF(rect.size()) * sourceDevicePixelRatio);
+            QRectF targetRect(QPointF(rect.topLeft()) * targetDevicePixelRatio,
+                              QSizeF(rect.size()) * targetDevicePixelRatio);
+            painter.drawImage(targetRect, *sourceImage, sourceRect);
+        }
+    }
 
     mBackBuffer = buffer;
 
@@ -295,6 +331,10 @@ void QWaylandShmBackingStore::resize(const QSize &size)
 
     if (windowDecoration() && window()->isVisible() && oldSizeInBytes != newSizeInBytes)
         windowDecoration()->update();
+
+    buffer->dirtyRegion() = QRegion();
+
+    return bufferWasRecreated;
 }
 
 QImage *QWaylandShmBackingStore::entireSurface() const
@@ -319,6 +359,7 @@ void QWaylandShmBackingStore::updateDecorations()
     QTransform sourceMatrix;
     sourceMatrix.scale(dp, dp);
     QRect target; // needs to be in device independent pixels
+    QRegion dirtyRegion;
 
     //Top
     target.setX(0);
@@ -326,16 +367,19 @@ void QWaylandShmBackingStore::updateDecorations()
     target.setWidth(dpWidth);
     target.setHeight(windowDecorationMargins().top());
     decorationPainter.drawImage(target, sourceImage, sourceMatrix.mapRect(target));
+    dirtyRegion += target;
 
     //Left
     target.setWidth(windowDecorationMargins().left());
     target.setHeight(dpHeight);
     decorationPainter.drawImage(target, sourceImage, sourceMatrix.mapRect(target));
+    dirtyRegion += target;
 
     //Right
     target.setX(dpWidth - windowDecorationMargins().right());
     target.setWidth(windowDecorationMargins().right());
     decorationPainter.drawImage(target, sourceImage, sourceMatrix.mapRect(target));
+    dirtyRegion += target;
 
     //Bottom
     target.setX(0);
@@ -343,6 +387,9 @@ void QWaylandShmBackingStore::updateDecorations()
     target.setWidth(dpWidth);
     target.setHeight(windowDecorationMargins().bottom());
     decorationPainter.drawImage(target, sourceImage, sourceMatrix.mapRect(target));
+    dirtyRegion += target;
+
+    updateDirtyStates(dirtyRegion);
 }
 
 QWaylandAbstractDecoration *QWaylandShmBackingStore::windowDecoration() const

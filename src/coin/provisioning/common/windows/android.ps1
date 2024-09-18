@@ -55,6 +55,9 @@ New-Item -ItemType Directory -Path C:\Windows\Temp\android_extract
 Write-Host "Installing Android NDK $ndkVersionDefault"
 $ndkFolderDefault = Install $ndkCachedUrlDefault $ndkZip $ndkChecksumDefault $ndkOfficialUrlDefault
 Set-EnvironmentVariable "ANDROID_NDK_ROOT_DEFAULT" $ndkFolderDefault
+# To be used by vcpkg
+Set-EnvironmentVariable "ANDROID_NDK_HOME" $ndkFolderDefault
+$env:ANDROID_NDK_HOME = "$ndkFolderDefault"
 
 if ($ndkVersionDefault -eq $ndkVersionLatest) {
     Write-Host "Android Latest version is the same than Default. NDK installation done."

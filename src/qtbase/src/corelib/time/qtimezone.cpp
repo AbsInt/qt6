@@ -22,13 +22,6 @@ using namespace Qt::StringLiterals;
 // Create default time zone using appropriate backend
 static QTimeZonePrivate *newBackendTimeZone()
 {
-#ifdef QT_NO_SYSTEMLOCALE
-#if QT_CONFIG(icu)
-    return new QIcuTimeZonePrivate();
-#else
-    return new QUtcTimeZonePrivate();
-#endif
-#else
 #if defined(Q_OS_DARWIN)
     return new QMacTimeZonePrivate();
 #elif defined(Q_OS_ANDROID)
@@ -41,21 +34,13 @@ static QTimeZonePrivate *newBackendTimeZone()
     return new QWinTimeZonePrivate();
 #else
     return new QUtcTimeZonePrivate();
-#endif // System Locales
-#endif // QT_NO_SYSTEMLOCALE
+#endif // Backend selection
 }
 
 // Create named time zone using appropriate backend
 static QTimeZonePrivate *newBackendTimeZone(const QByteArray &ianaId)
 {
     Q_ASSERT(!ianaId.isEmpty());
-#ifdef QT_NO_SYSTEMLOCALE
-#if QT_CONFIG(icu)
-    return new QIcuTimeZonePrivate(ianaId);
-#else
-    return new QUtcTimeZonePrivate(ianaId);
-#endif
-#else
 #if defined(Q_OS_DARWIN)
     return new QMacTimeZonePrivate(ianaId);
 #elif defined(Q_OS_ANDROID)
@@ -68,8 +53,7 @@ static QTimeZonePrivate *newBackendTimeZone(const QByteArray &ianaId)
     return new QWinTimeZonePrivate(ianaId);
 #else
     return new QUtcTimeZonePrivate(ianaId);
-#endif // System Locales
-#endif // QT_NO_SYSTEMLOCALE
+#endif // Backend selection
 }
 
 class QTimeZoneSingleton
@@ -77,10 +61,11 @@ class QTimeZoneSingleton
 public:
     QTimeZoneSingleton() : backend(newBackendTimeZone()) {}
 
-    // The global_tz is the tz to use in static methods such as availableTimeZoneIds() and
-    // isTimeZoneIdAvailable() and to create named IANA time zones.  This is usually the host
-    // system, but may be different if the host resources are insufficient or if
-    // QT_NO_SYSTEMLOCALE is set.  A simple UTC backend is used if no alternative is available.
+    // The global_tz is the tz to use in static methods such as
+    // availableTimeZoneIds() and isTimeZoneIdAvailable() and to create named
+    // IANA time zones. This is usually the host system, but may be different if
+    // the host resources are insufficient. A simple UTC backend is used if no
+    // alternative is available.
     QExplicitlySharedDataPointer<QTimeZonePrivate> backend;
 };
 
@@ -317,11 +302,14 @@ Q_GLOBAL_STATIC(QTimeZoneSingleton, global_tz);
     The type of time zone name.
 
     \value DefaultName
-           The default form of the time zone name, e.g. LongName, ShortName or OffsetName
+           The default form of the time zone name, one of LongName, ShortName or
+           OffsetName
     \value LongName
            The long form of the time zone name, e.g. "Central European Time"
     \value ShortName
-           The short form of the time zone name, usually an abbreviation, e.g. "CET"
+           The short form of the time zone name, usually an abbreviation,
+           e.g. "CET", in locales that have one for the zone, otherwise a
+           compact GMT-offset form, e.g. "GMT+1"
     \value OffsetName
            The standard ISO offset form of the time zone name, e.g. "UTC+01:00"
 
@@ -470,10 +458,17 @@ QTimeZone::QTimeZone(const QByteArray &ianaId)
     d = new QUtcTimeZonePrivate(ianaId);
     // If not recognized, try creating it with the system backend.
     if (!d->isValid()) {
-        if (ianaId.isEmpty())
+        if (ianaId.isEmpty()) {
             d = newBackendTimeZone();
-        else // Constructor MUST produce invalid for unsupported ID.
+        } else { // Constructor MUST produce invalid for unsupported ID.
             d = newBackendTimeZone(ianaId);
+            if (!d->isValid()) {
+                // We may have a legacy alias for a supported IANA ID:
+                const QByteArray name = QTimeZonePrivate::aliasToIana(ianaId);
+                if (!name.isEmpty() && name != ianaId)
+                    d = newBackendTimeZone(name);
+            }
+        }
     }
     // Can also handle UTC with arbitrary (valid) offset, but only do so as
     // fall-back, since either of the above may handle it more informatively.
@@ -838,6 +833,34 @@ QByteArray QTimeZone::id() const
 }
 
 /*!
+    \since 6.8
+    Returns \c true if \a alias is an alternative name for this timezone.
+
+    The IANA (formerly Olson) database has renamed some zones during its
+    history. There are also some zones that only differed prior to 1970 but are
+    now treated as synonymous. Some backends may have data reaching to before
+    1970 and produce distinct zones in the latter case. Others may produce zones
+    indistinguishable except by id(). This method determines whether an ID
+    refers (at least since 1970) to the same zone that this timezone object
+    describes.
+
+    This method is only available when feature \c timezone is enabled.
+*/
+bool QTimeZone::hasAlternativeName(QByteArrayView alias) const
+{
+    if (alias == id())
+        return true;
+    QByteArray mine = QTimeZonePrivate::aliasToIana(id());
+    // Empty if id() aliases to itself, which we've already checked:
+    if (!mine.isEmpty() && alias == mine)
+        return true;
+    QByteArray its = QTimeZonePrivate::aliasToIana(alias);
+    // Empty if alias aliases to itself, which we've already compared to id()
+    // and, where relevant, mine.
+    return !its.isEmpty() && its == (mine.isEmpty() ? id() : mine);
+}
+
+/*!
     \since 6.2
 
     Returns the territory for the time zone.
@@ -923,7 +946,7 @@ QString QTimeZone::displayName(const QDateTime &atDateTime, NameType nameType,
             return systemTimeZone().displayName(atDateTime, nameType, locale);
         case Qt::UTC:
         case Qt::OffsetFromUTC:
-            return QUtcTimeZonePrivate(d.s.offset).QTimeZonePrivate::displayName(
+            return QUtcTimeZonePrivate(d.s.offset).displayName(
                 atDateTime.toMSecsSinceEpoch(), nameType, locale);
         case Qt::TimeZone:
             Q_UNREACHABLE();
@@ -1441,7 +1464,7 @@ bool QTimeZone::isTimeZoneIdAvailable(const QByteArray &ianaId)
 #if defined(Q_OS_UNIX) && !(defined(Q_OS_ANDROID) || defined(Q_OS_DARWIN))
     // Keep #if-ery consistent with selection of QTzTimeZonePrivate in
     // newBackendTimeZone(). Skip the pre-check, as the TZ backend accepts POSIX
-    // zone IDs, which need not be valid IANA IDs.
+    // zone IDs, which need not be valid IANA IDs. See also QTBUG-112006.
 #else
     // isValidId is not strictly required, but faster to weed out invalid
     // IDs as availableTimeZoneIds() may be slow

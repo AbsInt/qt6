@@ -133,29 +133,25 @@ function(qt_internal_add_global_definition definition)
     endif()
 endfunction()
 
-add_library(PlatformCommonInternal INTERFACE)
-qt_internal_add_target_aliases(PlatformCommonInternal)
+qt_internal_add_platform_internal_target(PlatformCommonInternal)
 target_link_libraries(PlatformCommonInternal INTERFACE Platform)
 
-add_library(PlatformModuleInternal INTERFACE)
-qt_internal_add_target_aliases(PlatformModuleInternal)
+qt_internal_add_platform_internal_target(PlatformModuleInternal)
 target_link_libraries(PlatformModuleInternal INTERFACE PlatformCommonInternal)
 
-add_library(PlatformPluginInternal INTERFACE)
-qt_internal_add_target_aliases(PlatformPluginInternal)
+qt_internal_add_platform_internal_target(PlatformPluginInternal)
 target_link_libraries(PlatformPluginInternal INTERFACE PlatformCommonInternal)
 
-add_library(PlatformAppInternal INTERFACE)
-qt_internal_add_target_aliases(PlatformAppInternal)
+qt_internal_add_platform_internal_target(PlatformAppInternal)
 target_link_libraries(PlatformAppInternal INTERFACE PlatformCommonInternal)
 
-add_library(PlatformToolInternal INTERFACE)
-qt_internal_add_target_aliases(PlatformToolInternal)
+qt_internal_add_platform_internal_target(PlatformToolInternal)
 target_link_libraries(PlatformToolInternal INTERFACE PlatformAppInternal)
 
 qt_internal_add_global_definition(QT_NO_JAVA_STYLE_ITERATORS)
-qt_internal_add_global_definition(QT_NO_AS_CONST)
+qt_internal_add_global_definition(QT_NO_QASCONST)
 qt_internal_add_global_definition(QT_NO_QEXCHANGE)
+qt_internal_add_global_definition(QT_NO_QSNPRINTF)
 qt_internal_add_global_definition(QT_NO_NARROWING_CONVERSIONS_IN_CONNECT)
 qt_internal_add_global_definition(QT_EXPLICIT_QFILE_CONSTRUCTION_FROM_PATH)
 qt_internal_add_global_definition(QT_USE_QSTRINGBUILDER SCOPE PLUGIN TOOL MODULE)
@@ -315,17 +311,46 @@ if (GCC AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "9.2")
     target_compile_options(PlatformCommonInternal INTERFACE $<$<COMPILE_LANGUAGE:CXX>:-Wsuggest-override>)
 endif()
 
-if(QT_FEATURE_intelcet)
-    if(MSVC)
-        qt_internal_platform_link_options(PlatformCommonInternal INTERFACE
-            -CETCOMPAT
-        )
+# Hardening options
+
+qt_internal_apply_intel_cet_harderning(PlatformCommonInternal)
+
+if(QT_FEATURE_glibc_fortify_source)
+    set(is_optimized_build "$<OR:$<NOT:$<CONFIG:Debug>>,$<BOOL:${QT_FEATURE_optimize_debug}>>")
+    # Some compilers may define _FORTIFY_SOURCE by default when optimizing, remove it
+    # before defining our own
+    target_compile_options(PlatformCommonInternal BEFORE INTERFACE "$<${is_optimized_build}:-U_FORTIFY_SOURCE>")
+    if(TEST_glibc_234)
+        target_compile_options(PlatformCommonInternal INTERFACE "$<${is_optimized_build}:-D_FORTIFY_SOURCE=3>")
     else()
-        target_compile_options(PlatformCommonInternal INTERFACE
-            -fcf-protection=full
-        )
+        target_compile_options(PlatformCommonInternal INTERFACE "$<${is_optimized_build}:-D_FORTIFY_SOURCE=2>")
     endif()
 endif()
+
+if(QT_FEATURE_trivial_auto_var_init_pattern)
+    target_compile_options(PlatformCommonInternal INTERFACE -ftrivial-auto-var-init=pattern)
+endif()
+
+if(QT_FEATURE_stack_protector)
+    target_compile_options(PlatformCommonInternal INTERFACE -fstack-protector-strong)
+endif()
+
+if(QT_FEATURE_stack_clash_protection)
+    target_compile_options(PlatformCommonInternal INTERFACE -fstack-clash-protection)
+endif()
+
+if(QT_FEATURE_libstdcpp_assertions)
+    target_compile_definitions(PlatformCommonInternal INTERFACE _GLIBCXX_ASSERTIONS)
+endif()
+
+if(QT_FEATURE_libcpp_hardening)
+    target_compile_definitions(PlatformCommonInternal INTERFACE -D_LIBCPP_HARDENING_MODE=$<IF:$<CONFIG:Debug>,_LIBCPP_HARDENING_MODE_EXTENSIVE,_LIBCPP_HARDENING_MODE_FAST>)
+endif()
+
+if(QT_FEATURE_relro_now_linker)
+    qt_internal_platform_link_options(PlatformCommonInternal INTERFACE "-Wl,-z,relro,-z,now")
+endif()
+
 
 if(QT_FEATURE_force_asserts)
     target_compile_definitions(PlatformCommonInternal INTERFACE QT_FORCE_ASSERTS)

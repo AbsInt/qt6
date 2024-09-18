@@ -5,7 +5,7 @@
 
 #include <qdesigner_utils_p.h>
 #include <iconloader_p.h>
-#include <qtcolorbutton.h>
+#include <qtcolorbutton_p.h>
 
 #include <private/formbuilderextra_p.h>
 #include <private/ui4_p.h>
@@ -235,7 +235,7 @@ QPalette PaletteEditor::getPalette(QDesignerFormEditorInterface *core, QWidget* 
     return result == QDialog::Accepted ? dlg.palette() : init;
 }
 
-void PaletteEditor::viewContextMenuRequested(const QPoint &pos)
+void PaletteEditor::viewContextMenuRequested(QPoint pos)
 {
     const auto index = ui.paletteView->indexAt(pos);
     if (!index.isValid())

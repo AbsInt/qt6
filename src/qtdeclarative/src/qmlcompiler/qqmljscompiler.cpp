@@ -6,10 +6,12 @@
 #include <private/qqmlirbuilder_p.h>
 #include <private/qqmljsbasicblocks_p.h>
 #include <private/qqmljscodegenerator_p.h>
+#include <private/qqmljscompilerstats_p.h>
 #include <private/qqmljsfunctioninitializer_p.h>
 #include <private/qqmljsimportvisitor_p.h>
 #include <private/qqmljslexer_p.h>
 #include <private/qqmljsloadergenerator_p.h>
+#include <private/qqmljsoptimizations_p.h>
 #include <private/qqmljsparser_p.h>
 #include <private/qqmljsshadowcheck_p.h>
 #include <private/qqmljsstoragegeneralizer_p.h>
@@ -363,8 +365,8 @@ bool qCompileQmlFile(QmlIR::Document &irDocument, const QString &inputFileName,
         const quint32 saveFlags
                 = QV4::CompiledData::Unit::StaticData
                 | QV4::CompiledData::Unit::PendingTypeCompilation;
-        QV4::CompiledData::SaveableUnitPointer saveable(irDocument.javaScriptCompilationUnit.data,
-                                                        saveFlags);
+        QV4::CompiledData::SaveableUnitPointer saveable(
+                irDocument.javaScriptCompilationUnit->unitData(), saveFlags);
         if (!saveFunction(saveable, aotFunctionsByIndex, &error->message))
             return false;
     }
@@ -373,7 +375,7 @@ bool qCompileQmlFile(QmlIR::Document &irDocument, const QString &inputFileName,
 
 bool qCompileJSFile(const QString &inputFileName, const QString &inputFileUrl, QQmlJSSaveFunction saveFunction, QQmlJSCompileError *error)
 {
-    QV4::CompiledData::CompilationUnit unit;
+    QQmlRefPointer<QV4::CompiledData::CompilationUnit> unit;
 
     QString sourceCode;
     {
@@ -397,7 +399,7 @@ bool qCompileJSFile(const QString &inputFileName, const QString &inputFileUrl, Q
         unit = QV4::Compiler::Codegen::compileModule(/*debugMode*/false, url, sourceCode,
                                                      QDateTime(), &diagnostics);
         error->appendDiagnostics(inputFileName, diagnostics);
-        if (!unit.unitData())
+        if (!unit || !unit->unitData())
             return false;
     } else {
         QmlIR::Document irDocument(/*debugMode*/false);
@@ -455,32 +457,14 @@ bool qCompileJSFile(const QString &inputFileName, const QString &inputFileUrl, Q
     }
 
     QQmlJSAotFunctionMap empty;
-    return saveFunction(QV4::CompiledData::SaveableUnitPointer(unit.data), empty, &error->message);
+    return saveFunction(
+            QV4::CompiledData::SaveableUnitPointer(unit->unitData()), empty, &error->message);
 }
-
-static const char *wrapCallCode = R"(
-template <typename Binding>
-void wrapCall(const QQmlPrivate::AOTCompiledContext *aotContext, void *dataPtr, void **argumentsPtr, Binding &&binding)
-{
-    using return_type = std::invoke_result_t<Binding, const QQmlPrivate::AOTCompiledContext *, void **>;
-    if constexpr (std::is_same_v<return_type, void>) {
-       Q_UNUSED(dataPtr)
-       binding(aotContext, argumentsPtr);
-    } else {
-        if (dataPtr) {
-           *static_cast<return_type *>(dataPtr) = binding(aotContext, argumentsPtr);
-        } else {
-           binding(aotContext, argumentsPtr);
-        }
-    }
-}
-)";
 
 static const char *funcHeaderCode = R"(
-    [](const QQmlPrivate::AOTCompiledContext *context, void *data, void **argv) {
-        wrapCall(context, data, argv, [](const QQmlPrivate::AOTCompiledContext *aotContext, void **argumentsPtr) {
+    [](const QQmlPrivate::AOTCompiledContext *aotContext, void **argv) {
 Q_UNUSED(aotContext)
-Q_UNUSED(argumentsPtr)
+Q_UNUSED(argv)
 )";
 
 bool qSaveQmlJSUnitAsCpp(const QString &inputFileName, const QString &outputFileName, const QV4::CompiledData::SaveableUnitPointer &unit, const QQmlJSAotFunctionMap &aotFunctions, QString *errorString)
@@ -577,13 +561,12 @@ bool qSaveQmlJSUnitAsCpp(const QString &inputFileName, const QString &outputFile
     if (aotFunctions.size() <= 1) {
         // FileScopeCodeIndex is always there, but it may be the only one.
         writeStr("extern const QQmlPrivate::AOTCompiledFunction aotBuiltFunctions[];\n"
-                 "extern const QQmlPrivate::AOTCompiledFunction aotBuiltFunctions[] = { { 0, QMetaType::fromType<void>(), {}, nullptr } };");
+                 "extern const QQmlPrivate::AOTCompiledFunction aotBuiltFunctions[] = { { 0, 0, nullptr, nullptr } };\n");
     } else {
-        writeStr(wrapCallCode);
         writeStr("extern const QQmlPrivate::AOTCompiledFunction aotBuiltFunctions[];\n"
                  "extern const QQmlPrivate::AOTCompiledFunction aotBuiltFunctions[] = {\n");
 
-        QString footer = QStringLiteral("});}\n");
+        QString footer = QStringLiteral("}\n");
 
         for (QQmlJSAotFunctionMap::ConstIterator func = aotFunctions.constBegin(),
              end = aotFunctions.constEnd();
@@ -592,25 +575,18 @@ bool qSaveQmlJSUnitAsCpp(const QString &inputFileName, const QString &outputFile
             if (func.key() == FileScopeCodeIndex)
                 continue;
 
-            QString function = QString::fromUtf8(funcHeaderCode) + func.value().code + footer;
+            const QString function = QString::fromUtf8(funcHeaderCode) + func.value().code + footer;
 
-            QString argumentTypes = func.value().argumentTypes.join(
-                        QStringLiteral(">(), QMetaType::fromType<"));
-            if (!argumentTypes.isEmpty()) {
-                argumentTypes = QStringLiteral("QMetaType::fromType<")
-                        + argumentTypes + QStringLiteral(">()");
-            }
-
-            writeStr(QStringLiteral("{ %1, QMetaType::fromType<%2>(), { %3 }, %4 },")
+            writeStr(QStringLiteral("{ %1, %2, [](QV4::ExecutableCompilationUnit *unit, "
+                                    "QMetaType *argTypes) {\n%3}, %4 },")
                      .arg(func.key())
-                     .arg(func.value().returnType)
-                     .arg(argumentTypes)
-                     .arg(function)
+                     .arg(func->numArguments)
+                     .arg(func->signature, function)
                      .toUtf8().constData());
         }
 
         // Conclude the list with a nullptr
-        writeStr("{ 0, QMetaType::fromType<void>(), {}, nullptr }");
+        writeStr("{ 0, 0, nullptr, nullptr }");
         writeStr("};\n");
     }
 
@@ -704,7 +680,8 @@ std::variant<QQmlJSAotFunction, QQmlJS::DiagnosticMessage> QQmlJSAotCompiler::co
     const QString name = m_document->stringAt(irBinding.propertyNameIndex);
     QQmlJSCompilePass::Function function = initializer.run(
                 context, name, astNode, irBinding, &error);
-    const QQmlJSAotFunction aotFunction = doCompile(context, &function, &error);
+    const QQmlJSAotFunction aotFunction = doCompileAndRecordAotStats(
+            context, &function, &error, name, astNode->firstSourceLocation());
 
     if (error.isValid()) {
         // If it's a signal and the function just returns a closure, it's harmless.
@@ -728,7 +705,8 @@ std::variant<QQmlJSAotFunction, QQmlJS::DiagnosticMessage> QQmlJSAotCompiler::co
                 &m_typeResolver, m_currentObject->location, m_currentScope->location);
     QQmlJS::DiagnosticMessage error;
     QQmlJSCompilePass::Function function = initializer.run(context, name, astNode, &error);
-    const QQmlJSAotFunction aotFunction = doCompile(context, &function, &error);
+    const QQmlJSAotFunction aotFunction = doCompileAndRecordAotStats(
+            context, &function, &error, name, astNode->firstSourceLocation());
 
     if (error.isValid())
         return diagnose(error.message, QtWarningMsg, error.loc);
@@ -773,33 +751,61 @@ QQmlJSAotFunction QQmlJSAotCompiler::doCompile(
         return QQmlJSAotFunction();
     };
 
-    QQmlJSTypePropagator propagator(m_unitGenerator, &m_typeResolver, m_logger);
-    auto typePropagationResult = propagator.run(function, error);
-    if (error->isValid())
-        return compileError();
-
-    QQmlJSShadowCheck shadowCheck(m_unitGenerator, &m_typeResolver, m_logger);
-    shadowCheck.run(&typePropagationResult, function, error);
     if (error->isValid())
         return compileError();
 
     bool basicBlocksValidationFailed = false;
     QQmlJSBasicBlocks basicBlocks(context, m_unitGenerator, &m_typeResolver, m_logger);
-    typePropagationResult = basicBlocks.run(function, typePropagationResult, error, m_flags, basicBlocksValidationFailed);
+    auto passResult = basicBlocks.run(function, m_flags, basicBlocksValidationFailed);
+    auto &[blocks, annotations] = passResult;
+
+    QQmlJSTypePropagator propagator(m_unitGenerator, &m_typeResolver, m_logger, blocks, annotations);
+    passResult = propagator.run(function, error);
+    if (error->isValid())
+        return compileError();
+
+    QQmlJSShadowCheck shadowCheck(m_unitGenerator, &m_typeResolver, m_logger, blocks, annotations);
+    passResult = shadowCheck.run(function, error);
+    if (error->isValid())
+        return compileError();
+
+    QQmlJSOptimizations optimizer(m_unitGenerator, &m_typeResolver, m_logger, blocks, annotations,
+                                  basicBlocks.objectAndArrayDefinitions());
+    passResult = optimizer.run(function, error);
     if (error->isValid())
         return compileError();
 
     // Generalize all arguments, registers, and the return type.
-    QQmlJSStorageGeneralizer generalizer(
-                m_unitGenerator, &m_typeResolver, m_logger);
-    typePropagationResult = generalizer.run(typePropagationResult, function, error);
+    QQmlJSStorageGeneralizer generalizer(m_unitGenerator, &m_typeResolver, m_logger, blocks, annotations);
+    passResult = generalizer.run(function, error);
     if (error->isValid())
         return compileError();
 
-    QQmlJSCodeGenerator codegen(
-                context, m_unitGenerator, &m_typeResolver, m_logger);
-    QQmlJSAotFunction result = codegen.run(function, &typePropagationResult, error, basicBlocksValidationFailed);
+    QQmlJSCodeGenerator codegen(context, m_unitGenerator, &m_typeResolver, m_logger, blocks, annotations);
+    QQmlJSAotFunction result = codegen.run(function, error, basicBlocksValidationFailed);
     return error->isValid() ? compileError() : result;
+}
+
+QQmlJSAotFunction QQmlJSAotCompiler::doCompileAndRecordAotStats(
+        const QV4::Compiler::Context *context, QQmlJSCompilePass::Function *function,
+        QQmlJS::DiagnosticMessage *error, const QString &name, QQmlJS::SourceLocation location)
+{
+    auto t1 = std::chrono::high_resolution_clock::now();
+    auto &&result = doCompile(context, function, error);
+    auto t2 = std::chrono::high_resolution_clock::now();
+
+    if (QQmlJS::QQmlJSAotCompilerStats::recordAotStats()) {
+        QQmlJS::AotStatsEntry entry;
+        entry.codegenDuration = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1);
+        entry.functionName = name;
+        entry.errorMessage = error->message;
+        entry.line = location.startLine;
+        entry.column = location.startColumn;
+        entry.codegenSuccessful = !error->isValid();
+        QQmlJS::QQmlJSAotCompilerStats::addEntry(function->qmlScope->filePath(), entry);
+    }
+
+    return result;
 }
 
 QT_END_NAMESPACE

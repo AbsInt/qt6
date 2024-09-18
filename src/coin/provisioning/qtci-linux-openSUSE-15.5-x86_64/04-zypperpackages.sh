@@ -49,7 +49,7 @@ sudo zypper -nq install libxml2-devel libxslt-devel
 sudo zypper -nq install yasm
 
 # GStreamer (qtwebkit and qtmultimedia), pulseaudio (qtmultimedia)
-sudo zypper -nq install gstreamer-devel gstreamer-plugins-base-devel libpulse-devel
+sudo zypper -nq install gstreamer-devel gstreamer-plugins-base-devel libpulse-devel pipewire-devel
 
 # cups
 sudo zypper -nq install cups-devel
@@ -63,8 +63,14 @@ sudo zypper -nq install make
 # Tools to build Git
 sudo zypper -nq install autoconf libcurl-devel libexpat-devel
 
+# zip, needed for vcpkg caching
+sudo zypper -nq install zip
+
 # OpenSSL 3
 sudo zypper -nq install openssl-3
+
+# used for reading vcpkg packages version, from vcpkg.json
+sudo zypper -nq install jq
 
 # Valgrind (Needed for testlib selftests)
 sudo zypper -nq install valgrind-devel
@@ -76,4 +82,4 @@ gccVersion="$(gcc --version |grep gcc |cut -b 17-23)"
 echo "GCC = $gccVersion" >> versions.txt
 
 OpenSSLVersion="$(openssl-3 version |cut -b 9-14)"
-echo "OpenSSL = $OpenSSLVersion" >> ~/versions.txt
+echo "System's OpenSSL = $OpenSSLVersion" >> ~/versions.txt

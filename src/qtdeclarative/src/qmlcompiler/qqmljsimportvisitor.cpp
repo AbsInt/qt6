@@ -34,6 +34,11 @@ using namespace Qt::StringLiterals;
 
 using namespace QQmlJS::AST;
 
+static const QLatin1StringView wasNotFound
+        = "was not found."_L1;
+static const QLatin1StringView didYouAddAllImports
+        = "Did you add all imports and dependencies?"_L1;
+
 /*!
     \internal
     Returns if assigning \a assignedType to \a property would require an
@@ -313,7 +318,7 @@ void QQmlJSImportVisitor::resolveAliasesAndIds()
                 newProperty.setIsWritable(targetProperty.isWritable());
                 newProperty.setIsPointer(targetProperty.isPointer());
 
-                if (!typeScope.isNull()) {
+                if (!typeScope.isNull() && !object->isPropertyLocallyRequired(property.propertyName())) {
                     object->setPropertyLocallyRequired(
                             newProperty.propertyName(),
                             typeScope->isPropertyRequired(targetProperty.propertyName()));
@@ -629,8 +634,7 @@ void QQmlJSImportVisitor::processDefaultProperties()
         if (!isTypeResolved(propType, handleUnresolvedDefaultProperty))
             continue;
 
-        const auto scopes = *it;
-        for (const auto &scope : scopes) {
+        for (const QQmlJSScope::Ptr &scope : std::as_const(*it)) {
             if (!isTypeResolved(scope))
                 continue;
 
@@ -660,8 +664,7 @@ void QQmlJSImportVisitor::processPropertyTypes()
             property.setType(propertyType);
             type.scope->addOwnProperty(property);
         } else {
-            m_logger->log(property.typeName()
-                                  + QStringLiteral(" was not found. Did you add all import paths?"),
+            m_logger->log(property.typeName() + ' '_L1 + wasNotFound + ' '_L1 + didYouAddAllImports,
                           qmlImport, type.location);
         }
     }
@@ -1052,10 +1055,10 @@ void QQmlJSImportVisitor::checkSignal(
         auto type = p.type();
         if (!type) {
             m_logger->log(
-                    QStringLiteral(
-                            "Type %1 of parameter %2 in signal%3 was not found, but is "
-                            "required to compile %4. Did you add all import paths?")
-                            .arg(p.typeName(), p.name(), signalName(), handlerName),
+                    "Type %1 of parameter %2 in signal %3 %4, but is required to compile "
+                    "%4. %5"_L1.arg(
+                            p.typeName(), p.name(), signalName(), wasNotFound,
+                            handlerName, didYouAddAllImports),
                     qmlSignalParameters, location);
             continue;
         }
@@ -1201,7 +1204,7 @@ void QQmlJSImportVisitor::breakInheritanceCycles(const QQmlJSScope::Ptr &origina
                 m_logger->log(error, qmlImport, scope->sourceLocation(), true, true);
             } else if (!name.isEmpty()) {
                 m_logger->log(
-                        name + QStringLiteral(" was not found. Did you add all import paths?"),
+                        name + ' '_L1 + wasNotFound + ' '_L1 + didYouAddAllImports,
                         qmlImport, scope->sourceLocation(), true, true,
                         QQmlJSUtils::didYouMean(scope->baseTypeName(),
                                                 m_rootScopeImports.types().keys(),
@@ -1509,7 +1512,7 @@ bool QQmlJSImportVisitor::visit(UiObjectDefinition *definition)
             const QString &name = std::get<InlineComponentNameType>(m_currentRootName);
             m_currentScope->setIsInlineComponent(true);
             m_currentScope->setInlineComponentName(name);
-            m_currentScope->setModuleName(m_exportedRootScope->moduleName());
+            m_currentScope->setOwnModuleName(m_exportedRootScope->moduleName());
             m_rootScopeImports.setType(name, { m_currentScope, revision });
             m_nextIsInlineComponent = false;
         }
@@ -1574,6 +1577,8 @@ bool QQmlJSImportVisitor::visit(UiPublicMember *publicMember)
         QQmlJSMetaMethod method;
         method.setMethodType(QQmlJSMetaMethodType::Signal);
         method.setMethodName(publicMember->name.toString());
+        method.setSourceLocation(combine(publicMember->firstSourceLocation(),
+                                         publicMember->lastSourceLocation()));
         while (param) {
             method.addParameter(
                     QQmlJSMetaParameter(
@@ -1708,6 +1713,7 @@ void QQmlJSImportVisitor::visitFunctionExpressionHelper(QQmlJS::AST::FunctionExp
     if (!name.isEmpty()) {
         QQmlJSMetaMethod method(name);
         method.setMethodType(QQmlJSMetaMethodType::Method);
+        method.setSourceLocation(combine(fexpr->firstSourceLocation(), fexpr->lastSourceLocation()));
 
         if (!m_pendingMethodAnnotations.isEmpty()) {
             method.setAnnotations(m_pendingMethodAnnotations);
@@ -1876,7 +1882,10 @@ QQmlJSImportVisitor::parseBindingExpression(const QString &name,
         QQmlJSMetaPropertyBinding binding(location, name);
         binding.setScriptBinding(addFunctionOrExpression(m_currentScope, name),
                                  QQmlSA::ScriptBindingKind::PropertyBinding);
-        m_bindings.append(UnfinishedBinding { m_currentScope, [=]() { return binding; } });
+        m_bindings.append(UnfinishedBinding {
+            m_currentScope,
+            [binding = std::move(binding)]() { return binding; }
+        });
         return BindingExpressionParseResult::Script;
     }
 
@@ -2223,8 +2232,11 @@ void QQmlJSImportVisitor::endVisit(UiArrayBinding *arrayBinding)
         QQmlJSMetaPropertyBinding binding(element->firstSourceLocation(), propertyName);
         binding.setObject(getScopeName(type, QQmlSA::ScopeType::QMLScope),
                           QQmlJSScope::ConstPtr(type));
-        m_bindings.append(UnfinishedBinding { m_currentScope, [=]() { return binding; },
-                                              QQmlJSScope::ListPropertyTarget });
+        m_bindings.append(UnfinishedBinding {
+            m_currentScope,
+            [binding = std::move(binding)]() { return binding; },
+            QQmlJSScope::ListPropertyTarget
+        });
     }
 }
 
@@ -2320,9 +2332,10 @@ bool QQmlJSImportVisitor::visit(QQmlJS::AST::UiImport *import)
                                   import->importId),
                           qmlImport, import->importIdToken, true, true);
         }
+        m_seenModuleQualifiers.append(prefix);
     }
 
-    auto filename = import->fileName.toString();
+    const QString filename = import->fileName.toString();
     if (!filename.isEmpty()) {
         const QUrl url(filename);
         const QString scheme = url.scheme();

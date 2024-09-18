@@ -5,6 +5,7 @@
 
 #include <AppKit/AppKit.h>
 #include <MetalKit/MetalKit.h>
+#include <UniformTypeIdentifiers/UTCoreTypes.h>
 
 #include "qnsview.h"
 #include "qcocoawindow.h"
@@ -20,7 +21,6 @@
 #include <QtCore/QDebug>
 #include <QtCore/QPointer>
 #include <QtCore/QSet>
-#include <QtCore/qsysinfo.h>
 #include <QtCore/private/qcore_mac_p.h>
 #include <QtGui/QAccessible>
 #include <QtGui/QImage>
@@ -35,6 +35,9 @@
 #endif
 #include "qcocoaintegration.h"
 #include <QtGui/private/qmacmimeregistry_p.h>
+#include <QtGui/private/qmetallayer_p.h>
+
+#include <QuartzCore/CATransaction.h>
 
 @interface QNSView (Drawing) <CALayerDelegate>
 - (void)initDrawing;
@@ -77,6 +80,9 @@ QT_NAMESPACE_ALIAS_OBJC_CLASS(QNSViewMouseMoveHelper);
 
 @interface QNSView (ComplexText) <NSTextInputClient>
 @property (readonly) QObject* focusObject;
+@end
+
+@interface QNSView (ServicesMenu) <NSServicesMenuRequestor>
 @end
 
 @interface QT_MANGLE_NAMESPACE(QNSViewMenuHelper) : NSObject

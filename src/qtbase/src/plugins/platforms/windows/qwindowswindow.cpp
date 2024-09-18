@@ -5,6 +5,7 @@
 
 #include "qwindowswindow.h"
 #include "qwindowscontext.h"
+#include "qwindowstheme.h"
 #if QT_CONFIG(draganddrop)
 #  include "qwindowsdrag.h"
 #endif
@@ -850,7 +851,8 @@ static inline bool shouldApplyDarkFrame(const QWindow *w)
 {
     if (!w->isTopLevel() || w->flags().testFlag(Qt::FramelessWindowHint))
         return false;
-    // the application has explicitly opted out of dark frames
+
+    // the user of the application has explicitly opted out of dark frames
     if (!QWindowsIntegration::instance()->darkModeHandling().testFlag(QWindowsApplication::DarkModeWindowFrames))
         return false;
 
@@ -930,7 +932,7 @@ QWindowsWindowData
         return result;
     }
 
-    if (QWindowsContext::isDarkMode() && shouldApplyDarkFrame(w))
+    if (QWindowsTheme::instance()->colorScheme() == Qt::ColorScheme::Dark && shouldApplyDarkFrame(w))
         QWindowsWindow::setDarkBorderToWindow(result.hwnd, true);
 
     if (mirrorParentWidth != 0) {
@@ -1362,16 +1364,24 @@ QWindowsForeignWindow::QWindowsForeignWindow(QWindow *window, HWND hwnd)
         setParent(QPlatformWindow::parent());
 }
 
+QWindowsForeignWindow::~QWindowsForeignWindow()
+{
+    if (QPlatformWindow::parent())
+        setParent(nullptr);
+}
+
 void QWindowsForeignWindow::setParent(const QPlatformWindow *newParentWindow)
 {
     const bool wasTopLevel = isTopLevel_sys();
     const HWND newParent = newParentWindow ? reinterpret_cast<HWND>(newParentWindow->winId()) : HWND(nullptr);
     const bool isTopLevel = !newParent;
     const DWORD oldStyle = style();
+
     qCDebug(lcQpaWindow) << __FUNCTION__ << window() << "newParent="
         << newParentWindow << newParent << "oldStyle=" << debugWinStyle(oldStyle);
-    SetParent(m_hwnd, newParent);
-    if (wasTopLevel != isTopLevel) { // Top level window flags need to be set/cleared manually.
+
+    auto updateWindowFlags = [=]{
+        // Top level window flags need to be set/cleared manually.
         DWORD newStyle = oldStyle;
         if (isTopLevel) {
             newStyle = m_topLevelStyle;
@@ -1381,6 +1391,20 @@ void QWindowsForeignWindow::setParent(const QPlatformWindow *newParentWindow)
             newStyle |= WS_CHILD;
         }
         SetWindowLongPtr(m_hwnd, GWL_STYLE, newStyle);
+    };
+
+    if (wasTopLevel && !isTopLevel) {
+        // Becoming a child window requires the style
+        // flags to be updated before reparenting.
+        updateWindowFlags();
+    }
+
+    SetParent(m_hwnd, newParent);
+
+    if (!wasTopLevel && isTopLevel) {
+        // Becoming a top level window requires the style
+        // flags to be updated after reparenting.
+        updateWindowFlags();
     }
 }
 
@@ -2712,7 +2736,7 @@ bool QWindowsWindow::windowEvent(QEvent *event)
 {
     switch (event->type()) {
     case QEvent::ApplicationPaletteChange:
-        setDarkBorder(QWindowsContext::isDarkMode());
+        setDarkBorder(QWindowsTheme::instance()->colorScheme() == Qt::ColorScheme::Dark);
         break;
     case QEvent::WindowBlocked: // Blocked by another modal window.
         setEnabled(false);
@@ -3308,17 +3332,6 @@ enum : WORD {
     DwmwaUseImmersiveDarkModeBefore20h1 = 19
 };
 
-static bool queryDarkBorder(HWND hwnd)
-{
-    BOOL result = FALSE;
-    const bool ok =
-        SUCCEEDED(DwmGetWindowAttribute(hwnd, DwmwaUseImmersiveDarkMode, &result, sizeof(result)))
-        || SUCCEEDED(DwmGetWindowAttribute(hwnd, DwmwaUseImmersiveDarkModeBefore20h1, &result, sizeof(result)));
-    if (!ok)
-        qCWarning(lcQpaWindow, "%s: Unable to retrieve dark window border setting.", __FUNCTION__);
-    return result == TRUE;
-}
-
 bool QWindowsWindow::setDarkBorderToWindow(HWND hwnd, bool d)
 {
     const BOOL darkBorder = d ? TRUE : FALSE;
@@ -3334,8 +3347,6 @@ void QWindowsWindow::setDarkBorder(bool d)
 {
     // respect explicit opt-out and incompatible palettes or styles
     d = d && shouldApplyDarkFrame(window());
-    if (queryDarkBorder(m_data.hwnd) == d)
-        return;
 
     setDarkBorderToWindow(m_data.hwnd, d);
 }

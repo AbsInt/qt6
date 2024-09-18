@@ -531,7 +531,6 @@ void tst_QMenu::overrideMenuAction()
     m->addAction(aQuit);
 
     w.show();
-    QApplicationPrivate::setActiveWindow(&w);
     w.setFocus();
     QVERIFY(QTest::qWaitForWindowActive(&w));
     QVERIFY(w.hasFocus());
@@ -1613,7 +1612,6 @@ void tst_QMenu::transientParent()
     QWindow *topLevel = window.windowHandle();
     QVERIFY(topLevel);
 
-    QApplicationPrivate::setActiveWindow(&window);
     window.setFocus();
     QVERIFY(QTest::qWaitForWindowActive(&window));
     QVERIFY(window.hasFocus());
