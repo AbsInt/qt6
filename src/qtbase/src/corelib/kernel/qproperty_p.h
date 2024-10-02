@@ -242,21 +242,13 @@ struct CompatPropertySafePoint
 struct CurrentCompatPropertyThief
 {
     Q_DISABLE_COPY_MOVE(CurrentCompatPropertyThief)
+    QScopedValueRollback<CompatPropertySafePoint *> m_guard;
 public:
+    Q_NODISCARD_CTOR
     CurrentCompatPropertyThief(QBindingStatus *status)
-        : status(&status->currentCompatProperty)
-        , stolen(std::exchange(status->currentCompatProperty, nullptr))
+        : m_guard(status->currentCompatProperty, nullptr)
     {
     }
-
-    ~CurrentCompatPropertyThief()
-    {
-        *status = stolen;
-    }
-
-private:
-    CompatPropertySafePoint **status = nullptr;
-    CompatPropertySafePoint *stolen = nullptr;
 };
 
 }
@@ -394,11 +386,11 @@ public:
     QPropertyBindingSourceLocation sourceLocation() const
     {
         if (!hasCustomVTable())
-            return this->location;
-        QPropertyBindingSourceLocation location;
+            return location;
+        QPropertyBindingSourceLocation result;
         constexpr auto msg = "Custom location";
-        location.fileName = msg;
-        return location;
+        result.fileName = msg;
+        return result;
     }
     QPropertyBindingError bindingError() const { return m_error; }
     QMetaType valueMetaType() const { return metaType; }

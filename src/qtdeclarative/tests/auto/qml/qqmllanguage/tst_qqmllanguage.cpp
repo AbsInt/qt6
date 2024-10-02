@@ -49,7 +49,7 @@ DEFINE_BOOL_CONFIG_OPTION(qmlCheckTypes, QML_CHECK_TYPES)
 static inline bool isCaseSensitiveFileSystem(const QString &path) {
     Q_UNUSED(path);
 #if defined(Q_OS_DARWIN)
-    return pathconf(path.toLatin1().constData(), _PC_CASE_SENSITIVE);
+    return pathconf(path.toLatin1().constData(), _PC_CASE_SENSITIVE) == 1;
 #elif defined(Q_OS_WIN)
     return false;
 #else
@@ -9005,6 +9005,7 @@ public:
         QVERIFY2(component.isReady(), qPrintable(component.errorString()));
         object.reset(component.create());
         QVERIFY(object);
+        QCOMPARE(object->property("logger"), QVariant::fromValue<int>(12));
     }
 
     void wreck(const QUrl &inner) {

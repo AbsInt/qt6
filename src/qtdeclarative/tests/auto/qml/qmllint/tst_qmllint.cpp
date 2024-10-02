@@ -121,6 +121,8 @@ private Q_SLOTS:
     void importRelScript();
 #endif
 
+    void replayImportWarnings();
+
 private:
     enum DefaultImportOption { NoDefaultImports, UseDefaultImports };
     enum ContainOption { StringNotContained, StringContained };
@@ -967,8 +969,26 @@ expression: \${expr} \${expr} \\\${expr} \\\${expr}`)",
             << Result { { Message { QStringLiteral("QML types file does not exist") } } };
     QTest::newRow("enumInvalid")
             << QStringLiteral("enumInvalid.qml")
-            << Result { { Message {
-                       QStringLiteral("Member \"red\" not found on type \"QtObject\"") } } };
+            << Result { {
+                Message { QStringLiteral("Member \"red\" not found on type \"QtObject\""), 5, 25 },
+                Message { QStringLiteral("Member \"red\" not found on type \"QtObject\""), 6, 25 },
+                Message {
+                    QStringLiteral("You cannot access unscoped enum \"Unscoped\" from here."),
+                    8, 32
+                },
+                Message {
+                    QStringLiteral("You cannot access unscoped enum \"Unscoped\" from here."),
+                    9, 38
+                },
+                Message {
+                    QStringLiteral("Member \"S2\" not found on type \"EnumTesterScoped\""),
+                    10, 38
+                },
+               }, {
+                Message { QStringLiteral("Did you mean \"S2\"?"), 0, 0, QtInfoMsg }
+               }, {
+                Message { QStringLiteral("Did you mean \"U2\"?"), 10, 38, QtInfoMsg }
+               } };
     QTest::newRow("inaccessibleId")
             << QStringLiteral("inaccessibleId.qml")
             << Result { { Message {
@@ -1413,6 +1433,8 @@ void TestQmllint::cleanQmlCode_data()
     QTest::newRow("jsonObjectIsRecognized") << QStringLiteral("jsonObjectIsRecognized.qml");
     QTest::newRow("jsonArrayIsRecognized") << QStringLiteral("jsonArrayIsRecognized.qml");
     QTest::newRow("itemviewattached") << QStringLiteral("itemViewAttached.qml");
+    QTest::newRow("scopedAndUnscopedEnums") << QStringLiteral("enumValid.qml");
+    QTest::newRow("dependsOnDuplicateType") << QStringLiteral("dependsOnDuplicateType.qml");
 }
 
 void TestQmllint::cleanQmlCode()
@@ -1654,7 +1676,6 @@ void TestQmllint::callQmllint(const QString &fileToLint, bool shouldSucceed, QJs
     }
 
     bool success = lintResult == QQmlJSLinter::LintSuccess;
-    QEXPECT_FAIL("qtquickdialog", "Will fail until QTBUG-104091 is implemented", Abort);
     QVERIFY2(success == shouldSucceed, QJsonDocument(jsonOutput).toJson());
 
     if (warnings) {
@@ -2360,6 +2381,21 @@ void TestQmllint::importRelScript()
     QVERIFY(proc.readAllStandardError().isEmpty());
 }
 #endif
+
+void TestQmllint::replayImportWarnings()
+{
+    QJsonArray warnings;
+    callQmllint(testFile(u"duplicateTypeUserUser.qml"_s), true, &warnings);
+
+    // No warning because the offending import is indirect.
+    QVERIFY2(warnings.isEmpty(), qPrintable(QJsonDocument(warnings).toJson()));
+
+    // No cache clearing here. We want the warnings restored.
+    callQmllint(testFile(u"DuplicateTypeUser.qml"_s), false, &warnings);
+
+    // Warning because the offending import is now direct.
+    searchWarnings(warnings, "Ambiguous type detected. T 1.0 is defined multiple times.");
+}
 
 QTEST_GUILESS_MAIN(TestQmllint)
 #include "tst_qmllint.moc"

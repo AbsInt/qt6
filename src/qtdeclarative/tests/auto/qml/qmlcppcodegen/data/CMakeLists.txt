@@ -166,12 +166,14 @@ set(qml_files
     indirectlyShadowable.qml
     infinities.qml
     infinitiesToInt.qml
+    insertContextOnInvalidType.qml
     intEnumCompare.qml
     intOverflow.qml
     intToEnum.qml
     interactive.qml
     interceptor.qml
     internalConversion.qml
+    invalidateCompositeType.qml
     invisibleBase.qml
     invisibleListElementType.qml
     invisibleTypes.qml

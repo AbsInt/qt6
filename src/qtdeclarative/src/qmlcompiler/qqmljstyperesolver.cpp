@@ -176,7 +176,7 @@ void QQmlJSTypeResolver::init(QQmlJSImportVisitor *visitor, QQmlJS::AST::Node *p
 
     m_objectsById.clear();
     m_objectsByLocation.clear();
-    m_imports.clearTypes();
+    m_imports.clear();
     m_signalHandlers.clear();
 
     if (program)
@@ -1143,7 +1143,8 @@ bool QQmlJSTypeResolver::checkEnums(const QQmlJSScope::ConstPtr &scope, const QS
             return true;
         }
 
-        if (!enumeration.isScoped() && enumeration.hasKey(name)) {
+        if ((!enumeration.isScoped() || enumeration.isQml() || !scope->enforcesScopedEnums())
+                && enumeration.hasKey(name)) {
             *result = QQmlJSRegisterContent::create(
                     storedType(enumeration.type()), enumeration, name,
                     inExtension ? QQmlJSRegisterContent::ExtensionObjectEnum

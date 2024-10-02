@@ -348,6 +348,16 @@ inline void QFactoryLoaderPrivate::updateSinglePath(const QString &path)
         if (!metaDataOk)
             continue;
 
+        static constexpr qint64 QtVersionNoPatch = QT_VERSION_CHECK(QT_VERSION_MAJOR, QT_VERSION_MINOR, 0);
+        int thisVersion = library->metaData.value(QtPluginMetaDataKeys::QtVersion).toInteger();
+        if (iid.startsWith(QStringLiteral("org.qt-project.Qt.QPA"))) {
+            // QPA plugins must match Qt Major.Minor
+            if (thisVersion != QtVersionNoPatch) {
+                qCDebug(lcFactoryLoader) << "Ignoring QPA plugin due to mismatching Qt versions" << QtVersionNoPatch << thisVersion;
+                continue;
+            }
+        }
+
         int keyUsageCount = 0;
         for (const QString &key : std::as_const(keys)) {
             QLibraryPrivate *&keyMapEntry = keyMap[key];
@@ -363,9 +373,7 @@ inline void QFactoryLoaderPrivate::updateSinglePath(const QString &path)
                 // If the existing library was built with a future Qt version,
                 // whereas the one we're considering has a Qt version that fits
                 // better, we prioritize the better match.
-                static constexpr qint64 QtVersionNoPatch = QT_VERSION_CHECK(QT_VERSION_MAJOR, QT_VERSION_MINOR, 0);
                 int existingVersion = existingLibrary->metaData.value(QtPluginMetaDataKeys::QtVersion).toInteger();
-                int thisVersion = library->metaData.value(QtPluginMetaDataKeys::QtVersion).toInteger();
                 if (!(existingVersion > QtVersionNoPatch && thisVersion <= QtVersionNoPatch))
                     continue; // Existing version is a better match
             }

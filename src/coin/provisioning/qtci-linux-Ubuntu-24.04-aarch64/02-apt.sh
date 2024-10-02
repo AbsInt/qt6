@@ -231,6 +231,10 @@ installPackages+=(jq)
 installPackages+=(cmake)
 # extra linkers
 installPackages+=(lld)
+# Fix dependencies in shared ffmpeg libs
+installPackages+=(patchelf)
+# For qp-apps/qdb
+installPackages+=(libusb-1.0-0-dev)
 
 echo "Running update for apt"
 waitLoop

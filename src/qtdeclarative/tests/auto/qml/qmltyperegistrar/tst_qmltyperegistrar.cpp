@@ -10,6 +10,7 @@
 #include <QtQml/qqmlprivate.h>
 
 #include "hppheader.hpp"
+#include "tst_qmltyperegistrar_namespaced_tst_qmltyperegistrar_namespaced_module.h"
 #include "UnregisteredTypes/uncreatable.h"
 
 void tst_qmltyperegistrar::initTestCase()
@@ -474,6 +475,47 @@ void tst_qmltyperegistrar::consistencyWarnings()
 
     expectWarning("Warning: tst_qmltyperegistrar.h:: Refusing to generate non-lowercase name "
                   "Invisible for unknown foreign type");
+
+    r.generatePluginTypes(pluginTypes.fileName());
+}
+
+void tst_qmltyperegistrar::enumWarnings()
+{
+    QmlTypeRegistrar r;
+    r.setModuleVersions(QTypeRevision::fromVersion(1, 1), {}, false);
+    QString moduleName = "tstmodule";
+    QString targetNamespace = "tstnamespace";
+    r.setModuleNameAndNamespace(moduleName, targetNamespace);
+
+    const auto expectWarning = [](const char *message) {
+        QTest::ignoreMessage(QtWarningMsg, message);
+    };
+
+    expectWarning("Warning: tst_qmltyperegistrar.h:885: "
+                  "Unrecognized value for RegisterEnumClassesUnscoped: horst");
+    expectWarning("Warning: tst_qmltyperegistrar.h:878: "
+                  "Setting RegisterEnumClassesUnscoped to true has no effect.");
+
+    QTest::failOnWarning();
+
+
+    MetaTypesJsonProcessor processor(true);
+
+    QVERIFY(processor.processTypes({ ":/brokenEnums.json" }));
+    processor.postProcessTypes();
+    processor.postProcessForeignTypes();
+
+    QVector<MetaType> types = processor.types();
+    QVector<MetaType> typesforeign = processor.foreignTypes();
+    r.setTypes(types, typesforeign);
+
+    QString outputData;
+    QTextStream output(&outputData, QIODeviceBase::ReadWrite);
+
+    r.write(output, "tst_qmltyperegistrar_qmltyperegistrations.cpp");
+
+    QTemporaryFile pluginTypes;
+    QVERIFY(pluginTypes.open());
 
     r.generatePluginTypes(pluginTypes.fileName());
 }
@@ -1144,5 +1186,32 @@ void tst_qmltyperegistrar::inaccessibleBase()
     })"));
 }
 
+void tst_qmltyperegistrar::enumsExplicitlyScoped()
+{
+    QVERIFY(qmltypesData.contains(R"(Component {
+        file: "tst_qmltyperegistrar.h"
+        name: "EnumsExplicitlyScoped"
+        accessSemantics: "reference"
+        prototype: "QObject"
+        exports: ["QmlTypeRegistrarTest/EnumsExplicitlyScoped 1.0"]
+        enforcesScopedEnums: true
+        exportMetaObjectRevisions: [256]
+    })"));
+}
+
+void tst_qmltyperegistrar::namespacedExtracted()
+{
+    // Make sure that the foreign type declaration is in the namespace "nnn"
+    static_assert(std::is_same_v<
+        decltype(nnn::NamespacedForeign::staticMetaObject),
+        const QMetaObject
+    >);
+
+    QQmlEngine engine;
+    QQmlComponent c(&engine, "Namespaced", "Namespaced");
+    QVERIFY(c.isReady());
+    QScopedPointer<QObject> o(c.create());
+    QVERIFY(!o.isNull());
+}
 
 QTEST_MAIN(tst_qmltyperegistrar)

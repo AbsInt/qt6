@@ -753,6 +753,7 @@ Check https://doc.qt.io/qt-6/qt-cmake-policy-qtp0001.html for policy details."
         QT_QML_MODULE_OUTPUT_DIRECTORY "${arg_OUTPUT_DIRECTORY}"
         QT_QML_MODULE_RESOURCE_PREFIX "${qt_qml_module_resource_prefix}"
         QT_QML_MODULE_PAST_MAJOR_VERSIONS "${arg_PAST_MAJOR_VERSIONS}"
+        QT_QML_MODULE_NAMESPACE "${arg_NAMESPACE}"
 
         # TODO: Check how this is used by qt6_android_generate_deployment_settings()
         QT_QML_IMPORT_PATH "${all_qml_import_paths}"
@@ -986,6 +987,7 @@ Check https://doc.qt.io/qt-6/qt-cmake-policy-qtp0001.html for policy details."
             get_directory_property(_qmlls_ini_build_folders _qmlls_ini_build_folders)
             list(APPEND _qmlls_ini_build_folders "${build_folder}")
             set_directory_properties(PROPERTIES _qmlls_ini_build_folders "${_qmlls_ini_build_folders}")
+            set_property(DIRECTORY APPEND PROPERTY _qmlls_ini_import_path_targets "${target}")
 
             # if no call with id 'qmlls_ini_generation_id' was deferred for this directory, do it now
             cmake_language(DEFER GET_CALL qmlls_ini_generation_id call)
@@ -1069,10 +1071,10 @@ Check https://doc.qt.io/qt-6/qt-cmake-policy-qtp0001.html for policy details."
 
     if("${CMAKE_VERSION}" VERSION_GREATER_EQUAL "3.19.0")
         set(id qmlaotstats_aggregation)
-        cmake_language(DEFER DIRECTORY ${PROJECT_BINARY_DIR} GET_CALL ${id} call)
+        cmake_language(DEFER DIRECTORY "${PROJECT_BINARY_DIR}" GET_CALL ${id} call)
 
         if("${call}" STREQUAL "")
-            cmake_language(EVAL CODE "cmake_language(DEFER DIRECTORY ${PROJECT_BINARY_DIR} "
+            cmake_language(EVAL CODE "cmake_language(DEFER DIRECTORY \"${PROJECT_BINARY_DIR}\" "
                 "ID ${id} CALL _qt_internal_deferred_aggregate_aotstats_files ${target})")
         endif()
     else()
@@ -1096,35 +1098,35 @@ function(_qt_internal_deferred_aggregate_aotstats_files target)
     endforeach()
 
     set(aotstats_list_file "${PROJECT_BINARY_DIR}/.rcc/qmlcache/all_aotstats.aotstatslist")
-    file(WRITE ${aotstats_list_file} ${module_aotstats_files})
+    file(WRITE "${aotstats_list_file}" "${module_aotstats_files}")
 
-    set(all_aotstats_file ${PROJECT_BINARY_DIR}/.rcc/qmlcache/all_aotstats.aotstats)
-    set(formatted_stats_file ${PROJECT_BINARY_DIR}/.rcc/qmlcache/all_aotstats.txt)
+    set(all_aotstats_file "${PROJECT_BINARY_DIR}/.rcc/qmlcache/all_aotstats.aotstats")
+    set(formatted_stats_file "${PROJECT_BINARY_DIR}/.rcc/qmlcache/all_aotstats.txt")
 
     _qt_internal_get_tool_wrapper_script_path(tool_wrapper)
     add_custom_command(
         OUTPUT
-            ${all_aotstats_file}
-            ${formatted_stats_file}
+            "${all_aotstats_file}"
+            "${formatted_stats_file}"
         DEPENDS ${module_aotstats_targets}
         COMMAND
             ${tool_wrapper}
             $<TARGET_FILE:Qt6::qmlaotstats>
             aggregate
-            ${aotstats_list_file}
-            ${all_aotstats_file}
+            "${aotstats_list_file}"
+            "${all_aotstats_file}"
         COMMAND
             ${tool_wrapper}
             $<TARGET_FILE:Qt6::qmlaotstats>
             format
-            ${all_aotstats_file}
-            ${formatted_stats_file}
+            "${all_aotstats_file}"
+            "${formatted_stats_file}"
     )
 
     if(NOT TARGET all_aotstats)
         add_custom_target(all_aotstats
-            DEPENDS ${formatted_stats_file}
-            COMMAND ${CMAKE_COMMAND} -E cat ${formatted_stats_file}
+            DEPENDS "${formatted_stats_file}"
+            COMMAND "${CMAKE_COMMAND}" -E cat "${formatted_stats_file}"
         )
     endif()
 endfunction()
@@ -1133,14 +1135,28 @@ function(_qt_internal_write_deferred_qmlls_ini_file target)
     set(qmlls_ini_file "${CMAKE_CURRENT_SOURCE_DIR}/.qmlls.ini")
     get_directory_property(_qmlls_ini_build_folders _qmlls_ini_build_folders)
     list(REMOVE_DUPLICATES _qmlls_ini_build_folders)
+    get_directory_property(_qmlls_ini_import_path_targets _qmlls_ini_import_path_targets)
+    set(_import_paths "")
+    foreach(import_path_target IN LISTS _qmlls_ini_import_path_targets)
+        get_target_property(import_path ${import_path_target} QT_QML_IMPORT_PATH)
+        list(APPEND _import_paths "${import_path}")
+    endforeach()
+
     if(NOT CMAKE_HOST_SYSTEM_NAME STREQUAL "Windows")
         # replace cmake list separator ';' with unix path separator ':'
         string(REPLACE ";" ":" concatenated_build_dirs "${_qmlls_ini_build_folders}")
+        list(JOIN _import_paths ":" concatenated_import_paths)
     else()
         # cmake list separator and windows path separator are both ';', so no replacement needed
         set(concatenated_build_dirs "${_qmlls_ini_build_folders}")
+        set(concatenated_import_paths "${_import_paths}")
     endif()
-    _populate_qmlls_ini_file(${target} "${qmlls_ini_file}" "${concatenated_build_dirs}")
+
+    _populate_qmlls_ini_file(
+        ${target}
+        "${qmlls_ini_file}"
+        "${concatenated_build_dirs}"
+        "${concatenated_import_paths}")
 endfunction()
 
 if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
@@ -1153,9 +1169,10 @@ if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
     endfunction()
 endif()
 
-function(_populate_qmlls_ini_file target qmlls_ini_file concatenated_build_dirs)
+function(_populate_qmlls_ini_file target qmlls_ini_file concatenated_build_dirs import_paths)
     get_target_property(qtpaths ${QT_CMAKE_EXPORT_NAMESPACE}::qtpaths LOCATION)
     _qt_internal_get_tool_wrapper_script_path(tool_wrapper)
+
     add_custom_command(
         OUTPUT
             ${qmlls_ini_file}
@@ -1167,6 +1184,7 @@ function(_populate_qmlls_ini_file target qmlls_ini_file concatenated_build_dirs)
             ${tool_wrapper}
             ${qtpaths}
             --query QT_INSTALL_DOCS >> ${qmlls_ini_file}
+        COMMAND ${CMAKE_COMMAND} -E echo "importPaths=${import_paths}" >> ${qmlls_ini_file}
         COMMENT "Populating .qmlls.ini file"
         VERBATIM
     )
@@ -1350,7 +1368,7 @@ function(_qt_internal_target_enable_qmllint target)
     )
 
     set(cmd
-        ${tool_wrapper}
+       "${tool_wrapper}"
         $<TARGET_FILE:${QT_CMAKE_EXPORT_NAMESPACE}::qmllint>
         @${qmllint_rsp_path}
     )
@@ -1382,7 +1400,7 @@ function(_qt_internal_target_enable_qmllint target)
     )
 
     set(cmd
-        ${tool_wrapper}
+        "${tool_wrapper}"
         $<TARGET_FILE:${QT_CMAKE_EXPORT_NAMESPACE}::qmllint>
         @${qmllint_rsp_path}
     )
@@ -1420,7 +1438,7 @@ function(_qt_internal_target_enable_qmllint target)
    )
 
    set(cmd
-       ${tool_wrapper}
+       "${tool_wrapper}"
        $<TARGET_FILE:${QT_CMAKE_EXPORT_NAMESPACE}::qmllint>
        @${qmllint_rsp_path}
    )
@@ -1569,7 +1587,7 @@ function(_qt_internal_target_enable_qmlcachegen target qmlcachegen)
 
     _qt_internal_get_tool_wrapper_script_path(tool_wrapper)
     set(cmd
-        ${tool_wrapper}
+        "${tool_wrapper}"
         ${qmlcachegen}
         --resource-name "${qmlcache_resource_name}"
         -o "${qmlcache_loader_cpp}"
@@ -3314,6 +3332,12 @@ function(qt6_generate_foreign_qml_types source_target destination_qml_target)
         "${CMAKE_CURRENT_BINARY_DIR}/${registration_files_base}.h"
     )
 
+    set(namespace_args "")
+    get_target_property(namespace ${destination_qml_target} QT_QML_MODULE_NAMESPACE)
+    if (namespace)
+        list(APPEND namespace_args "--namespace" "${namespace}")
+    endif()
+
     _qt_internal_get_tool_wrapper_script_path(tool_wrapper)
     add_custom_command(
         OUTPUT
@@ -3326,6 +3350,7 @@ function(qt6_generate_foreign_qml_types source_target destination_qml_target)
             ${tool_wrapper}
             $<TARGET_FILE:${QT_CMAKE_EXPORT_NAMESPACE}::qmltyperegistrar>
             "--extract"
+            ${namespace_args}
             -o ${registration_files_base}
             ${target_metatypes_json_file}
         COMMENT "Generate QML registration code for target ${source_target}"

@@ -1165,8 +1165,10 @@ void QDeferredFactory<QQmlJSScope>::populate(const QSharedPointer<QQmlJSScope> &
     m_importer->m_globalWarnings.append(errors);
 
     scope->setInternalName(internalName());
-    QQmlJSScope::resolveEnums(scope, m_importer->builtinInternalNames());
-    QQmlJSScope::resolveList(scope, m_importer->builtinInternalNames().arrayType());
+    QQmlJSScope::resolveEnums(
+            scope, m_importer->builtinInternalNames().contextualTypes());
+    QQmlJSScope::resolveList(
+            scope, m_importer->builtinInternalNames().contextualTypes().arrayType());
 
     if (m_isSingleton && !scope->isSingleton()) {
         m_importer->m_globalWarnings.append(
@@ -1279,6 +1281,22 @@ QVector<QQmlJSScope::ConstPtr> QQmlJSScope::childScopes() const
     for (const auto &child : m_childScopes)
         result.append(child);
     return result;
+}
+
+/*!
+    \internal
+
+    Returns true if this type or any base type of it has the "EnforcesScopedEnums" flag.
+    The rationale is that you can turn on enforcement of scoped enums, but you cannot turn
+    it off explicitly.
+ */
+bool QQmlJSScope::enforcesScopedEnums() const
+{
+    for (const QQmlJSScope *scope = this; scope; scope = scope->baseType().get()) {
+        if (scope->hasEnforcesScopedEnumsFlag())
+            return true;
+    }
+    return false;
 }
 
 /*!

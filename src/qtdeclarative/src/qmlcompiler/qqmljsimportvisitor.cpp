@@ -131,8 +131,10 @@ QQmlJSImportVisitor::QQmlJSImportVisitor(
       m_importer(importer),
       m_logger(logger),
       m_rootScopeImports(
-          QQmlJSImporter::ImportedTypes::QML, {},
-          importer->builtinInternalNames().arrayType())
+              QQmlJS::ContextualTypes(
+                      QQmlJS::ContextualTypes::QML, {},
+                      importer->builtinInternalNames().contextualTypes().arrayType()),
+              {})
 {
     m_currentScope->setScopeType(QQmlSA::ScopeType::JSFunctionScope);
     Q_ASSERT(logger); // must be valid
@@ -340,7 +342,8 @@ void QQmlJSImportVisitor::resolveAliasesAndIds()
                     const QQmlJSScope::ConstPtr deferred = m_scopesById.scope(name, childScope);
                     if (!deferred.isNull()) {
                         QQmlJSScope::resolveGeneralizedGroup(
-                                    childScope, deferred, m_rootScopeImports, &m_usedTypes);
+                                childScope, deferred, m_rootScopeImports.contextualTypes(),
+                                &m_usedTypes);
                     }
                 }
             }
@@ -387,9 +390,9 @@ QString QQmlJSImportVisitor::implicitImportDirectory(
 }
 
 void QQmlJSImportVisitor::processImportWarnings(
-        const QString &what, const QQmlJS::SourceLocation &srcLocation)
+        const QString &what, const QList<QQmlJS::DiagnosticMessage> &warnings,
+        const QQmlJS::SourceLocation &srcLocation)
 {
-    const auto warnings = m_importer->takeWarnings();
     if (warnings.isEmpty())
         return;
 
@@ -400,24 +403,21 @@ void QQmlJSImportVisitor::processImportWarnings(
 
 void QQmlJSImportVisitor::importBaseModules()
 {
-    Q_ASSERT(m_rootScopeImports.types().isEmpty());
+    Q_ASSERT(m_rootScopeImports.isEmpty());
     m_rootScopeImports = m_importer->importBuiltins();
 
     const QQmlJS::SourceLocation invalidLoc;
-    for (auto it = m_rootScopeImports.types().keyBegin(), end = m_rootScopeImports.types().keyEnd();
-         it != end; it++) {
+    const auto types = m_rootScopeImports.types();
+    for (auto it = types.keyBegin(), end = types.keyEnd(); it != end; it++)
         addImportWithLocation(*it, invalidLoc);
-    }
 
     if (!m_qmldirFiles.isEmpty())
-        m_importer->importQmldirs(m_qmldirFiles);
+        m_rootScopeImports.addWarnings(m_importer->importQmldirs(m_qmldirFiles));
 
     // Pulling in the modules and neighboring qml files of the qmltypes we're trying to lint is not
     // something we need to do.
     if (!m_logger->fileName().endsWith(u".qmltypes"_s)) {
-        QQmlJS::ContextualTypes fromDirectory =
-                m_importer->importDirectory(m_implicitImportDirectory);
-        m_rootScopeImports.addTypes(std::move(fromDirectory));
+        m_rootScopeImports.add(m_importer->importDirectory(m_implicitImportDirectory));
 
         // Import all possible resource directories the file may belong to.
         // This is somewhat fuzzy, but if you're mapping the same file to multiple resource
@@ -429,12 +429,12 @@ void QQmlJSImportVisitor::importBaseModules()
                 const qsizetype lastSlash = path.lastIndexOf(QLatin1Char('/'));
                 if (lastSlash == -1)
                     continue;
-                m_rootScopeImports.addTypes(m_importer->importDirectory(path.first(lastSlash)));
+                m_rootScopeImports.add(m_importer->importDirectory(path.first(lastSlash)));
             }
         }
     }
 
-    processImportWarnings(QStringLiteral("base modules"));
+    processImportWarnings(QStringLiteral("base modules"), m_rootScopeImports.warnings());
 }
 
 bool QQmlJSImportVisitor::visit(QQmlJS::AST::UiProgram *)
@@ -610,6 +610,12 @@ void QQmlJSImportVisitor::processDefaultProperties()
         const QQmlJSMetaProperty defaultProp = parentScope->property(defaultPropertyName);
         auto propType = defaultProp.type();
         const auto handleUnresolvedDefaultProperty = [&](const QQmlJSScope::ConstPtr &) {
+
+            // Since we don't know the property type, we need to assume it's QQmlComponent and that
+            // IDs from the inner scopes are inaccessible.
+            for (const QQmlJSScope::Ptr &scope : std::as_const(*it))
+                scope->setIsWrappedInImplicitComponent(true);
+
             // Property type is not fully resolved we cannot tell any more than this
             m_logger->log(QStringLiteral("Property \"%1\" has incomplete type \"%2\". You may be "
                                          "missing an import.")
@@ -659,8 +665,8 @@ void QQmlJSImportVisitor::processPropertyTypes()
 
         auto property = type.scope->ownProperty(type.name);
 
-        if (const auto propertyType =
-                    QQmlJSScope::findType(property.typeName(), m_rootScopeImports).scope) {
+        if (const auto propertyType = QQmlJSScope::findType(
+                property.typeName(), m_rootScopeImports.contextualTypes()).scope) {
             property.setType(propertyType);
             type.scope->addOwnProperty(property);
         } else {
@@ -676,8 +682,8 @@ void QQmlJSImportVisitor::processMethodTypes()
         for (auto [it, end] = method.scope->mutableOwnMethodsRange(method.methodName); it != end; ++it) {
             const auto [parameterBegin, parameterEnd] = it->mutableParametersRange();
             for (auto parameter = parameterBegin; parameter != parameterEnd; ++parameter) {
-                if (const auto parameterType =
-                    QQmlJSScope::findType(parameter->typeName(), m_rootScopeImports) .scope) {
+                if (const auto parameterType = QQmlJSScope::findType(
+                            parameter->typeName(), m_rootScopeImports.contextualTypes()).scope) {
                     parameter->setType({ parameterType });
                 } else {
                     m_logger->log(
@@ -687,8 +693,8 @@ void QQmlJSImportVisitor::processMethodTypes()
                 }
             }
 
-            if (const auto returnType =
-                        QQmlJSScope::findType(it->returnTypeName(), m_rootScopeImports).scope) {
+            if (const auto returnType = QQmlJSScope::findType(
+                        it->returnTypeName(), m_rootScopeImports.contextualTypes()).scope) {
                 it->setReturnType({ returnType });
             } else {
                 m_logger->log(u"\"%1\" was not found for the return type of method \"%2\"."_s.arg(
@@ -735,9 +741,20 @@ void QQmlJSImportVisitor::processPropertyBindingObjects()
     for (const PendingPropertyObjectBinding &objectBinding :
          std::as_const(m_pendingPropertyObjectBindings)) {
         const QString propertyName = objectBinding.name;
-        QQmlJSScope::ConstPtr childScope = objectBinding.childScope;
+        QQmlJSScope::Ptr childScope = objectBinding.childScope;
 
-        if (!isTypeResolved(objectBinding.scope)) // guarantees property lookup
+        const auto handleUnresolvedType = [&](const QQmlJSScope::ConstPtr &type) {
+            // Since we don't know the property type we need to assume that it's QQmlComponent and
+            // that IDs from the child scope are inaccessible outside of it.
+            childScope->setIsWrappedInImplicitComponent(true);
+
+            m_logger->log(QStringLiteral("Type %1 is used but it is not resolved")
+                                  .arg(getScopeName(type, type->scopeType())),
+                                  qmlUnresolvedType, type->sourceLocation());
+        };
+
+        // guarantees property lookup
+        if (!isTypeResolved(objectBinding.scope, handleUnresolvedType))
             continue;
 
         QQmlJSMetaProperty property = objectBinding.scope->property(propertyName);
@@ -748,6 +765,11 @@ void QQmlJSImportVisitor::processPropertyBindingObjects()
             continue;
         }
         const auto handleUnresolvedProperty = [&](const QQmlJSScope::ConstPtr &) {
+
+            // Since we don't know the property type we need to assume that it's QQmlComponent and
+            // that IDs from the child scope are inaccessible outside of it.
+            childScope->setIsWrappedInImplicitComponent(true);
+
             // Property type is not fully resolved we cannot tell any more than this
             m_logger->log(QStringLiteral("Property \"%1\" has incomplete type \"%2\". You may be "
                                          "missing an import.")
@@ -774,7 +796,7 @@ void QQmlJSImportVisitor::processPropertyBindingObjects()
             continue;
         }
 
-        objectBinding.childScope->setIsWrappedInImplicitComponent(
+        childScope->setIsWrappedInImplicitComponent(
                 causesImplicitComponentWrapping(property, childScope));
 
         // unique because it's per-scope and per-property
@@ -1056,7 +1078,7 @@ void QQmlJSImportVisitor::checkSignal(
         if (!type) {
             m_logger->log(
                     "Type %1 of parameter %2 in signal %3 %4, but is required to compile "
-                    "%4. %5"_L1.arg(
+                    "%5. %6"_L1.arg(
                             p.typeName(), p.name(), signalName(), wasNotFound,
                             handlerName, didYouAddAllImports),
                     qmlSignalParameters, location);
@@ -1488,7 +1510,7 @@ bool QQmlJSImportVisitor::visit(UiObjectDefinition *definition)
         }
 
         const QTypeRevision revision = QQmlJSScope::resolveTypes(
-                    m_currentScope, m_rootScopeImports, &m_usedTypes);
+                    m_currentScope, m_rootScopeImports.contextualTypes(), &m_usedTypes);
         if (auto base = m_currentScope->baseType(); base) {
             if (isRoot && base->internalName() == u"QQmlComponent") {
                 m_logger->log(u"Qml top level type cannot be 'Component'."_s, qmlTopLevelComponent,
@@ -1527,7 +1549,8 @@ bool QQmlJSImportVisitor::visit(UiObjectDefinition *definition)
                                   definition->firstSourceLocation());
         m_bindings.append(createNonUniqueScopeBinding(m_currentScope, superType,
                                                       definition->firstSourceLocation()));
-        QQmlJSScope::resolveTypes(m_currentScope, m_rootScopeImports, &m_usedTypes);
+        QQmlJSScope::resolveTypes(
+                m_currentScope, m_rootScopeImports.contextualTypes(), &m_usedTypes);
     }
 
     m_currentScope->setAnnotations(parseAnnotations(definition->annotations));
@@ -1537,7 +1560,7 @@ bool QQmlJSImportVisitor::visit(UiObjectDefinition *definition)
 
 void QQmlJSImportVisitor::endVisit(UiObjectDefinition *)
 {
-    QQmlJSScope::resolveTypes(m_currentScope, m_rootScopeImports, &m_usedTypes);
+    QQmlJSScope::resolveTypes(m_currentScope, m_rootScopeImports.contextualTypes(), &m_usedTypes);
     leaveEnvironment();
 }
 
@@ -2218,6 +2241,12 @@ void QQmlJSImportVisitor::endVisit(UiArrayBinding *arrayBinding)
     const auto propertyName = getScopeName(m_currentScope, QQmlSA::ScopeType::QMLScope);
     leaveEnvironment();
 
+    if (m_currentScope->isInCustomParserParent()) {
+        // These warnings do not apply for custom parsers and their children and need to be handled
+        // on a case by case basis
+        return;
+    }
+
     qsizetype i = 0;
     for (auto element = arrayBinding->members; element; element = element->next, ++i) {
         const auto &type = children[i];
@@ -2270,14 +2299,14 @@ void QQmlJSImportVisitor::addImportWithLocation(const QString &name,
         m_importLocations.insert(loc);
 }
 
-void QQmlJSImportVisitor::importFromHost(const QString &path, const QString &prefix,
-                                         const QQmlJS::SourceLocation &location)
+QList<QQmlJS::DiagnosticMessage> QQmlJSImportVisitor::importFromHost(
+        const QString &path, const QString &prefix, const QQmlJS::SourceLocation &location)
 {
     QFileInfo fileInfo(path);
     if (!fileInfo.exists()) {
         m_logger->log("File or directory you are trying to import does not exist: %1."_L1.arg(path),
                       qmlImport, location);
-        return;
+        return {};
     }
 
     if (fileInfo.isFile()) {
@@ -2285,40 +2314,53 @@ void QQmlJSImportVisitor::importFromHost(const QString &path, const QString &pre
         const QString actualPrefix = prefix.isEmpty() ? scope->internalName() : prefix;
         m_rootScopeImports.setType(actualPrefix, { scope, QTypeRevision() });
         addImportWithLocation(actualPrefix, location);
-    } else if (fileInfo.isDir()) {
-        const auto scopes = m_importer->importDirectory(path, prefix);
-        m_rootScopeImports.addTypes(scopes);
-        for (auto it = scopes.types().keyBegin(), end = scopes.types().keyEnd(); it != end; it++)
-            addImportWithLocation(*it, location);
-    } else {
-        m_logger->log(
-                "%1 is neither a file nor a directory. Are sure the import path is correct?"_L1.arg(
-                        path),
-                qmlImport, location);
+        return {};
     }
+
+    if (fileInfo.isDir()) {
+        auto scopes = m_importer->importDirectory(path, prefix);
+        const auto types = scopes.types();
+        const auto warnings = scopes.warnings();
+        m_rootScopeImports.add(std::move(scopes));
+        for (auto it = types.keyBegin(), end = types.keyEnd(); it != end; it++)
+            addImportWithLocation(*it, location);
+        return warnings;
+    }
+
+    m_logger->log(
+            "%1 is neither a file nor a directory. Are sure the import path is correct?"_L1.arg(
+                    path),
+            qmlImport, location);
+    return {};
 }
 
-void QQmlJSImportVisitor::importFromQrc(const QString &path, const QString &prefix,
-                                        const QQmlJS::SourceLocation &location)
+QList<QQmlJS::DiagnosticMessage> QQmlJSImportVisitor::importFromQrc(
+        const QString &path, const QString &prefix, const QQmlJS::SourceLocation &location)
 {
     Q_ASSERT(path.startsWith(u':'));
-    if (const QQmlJSResourceFileMapper *mapper = m_importer->resourceFileMapper()) {
-        const auto pathNoColon = path.mid(1);
-        if (mapper->isFile(pathNoColon)) {
-            const auto entry = m_importer->resourceFileMapper()->entry(
-                    QQmlJSResourceFileMapper::resourceFileFilter(pathNoColon));
-            const auto scope = m_importer->importFile(entry.filePath);
-            const QString actualPrefix =
-                    prefix.isEmpty() ? QFileInfo(entry.resourcePath).baseName() : prefix;
-            m_rootScopeImports.setType(actualPrefix, { scope, QTypeRevision() });
-            addImportWithLocation(actualPrefix, location);
-        } else {
-            const auto scopes = m_importer->importDirectory(path, prefix);
-            m_rootScopeImports.addTypes(scopes);
-            for (auto it = scopes.types().keyBegin(), end = scopes.types().keyEnd(); it != end; it++)
-                addImportWithLocation(*it, location);
-        }
+    const QQmlJSResourceFileMapper *mapper = m_importer->resourceFileMapper();
+    if (!mapper)
+        return {};
+
+    const auto pathNoColon = path.mid(1);
+    if (mapper->isFile(pathNoColon)) {
+        const auto entry = m_importer->resourceFileMapper()->entry(
+                QQmlJSResourceFileMapper::resourceFileFilter(pathNoColon));
+        const auto scope = m_importer->importFile(entry.filePath);
+        const QString actualPrefix =
+                prefix.isEmpty() ? QFileInfo(entry.resourcePath).baseName() : prefix;
+        m_rootScopeImports.setType(actualPrefix, { scope, QTypeRevision() });
+        addImportWithLocation(actualPrefix, location);
+        return {};
     }
+
+    auto scopes = m_importer->importDirectory(path, prefix);
+    const auto types = scopes.types();
+    const auto warnings = scopes.warnings();
+    m_rootScopeImports.add(std::move(scopes));
+    for (auto it = types.keyBegin(), end = types.keyEnd(); it != end; it++)
+        addImportWithLocation(*it, location);
+    return warnings;
 }
 
 bool QQmlJSImportVisitor::visit(QQmlJS::AST::UiImport *import)
@@ -2345,20 +2387,18 @@ bool QQmlJSImportVisitor::visit(QQmlJS::AST::UiImport *import)
             QString absolute = fileInfo.isRelative()
                     ? QDir::cleanPath(QDir(m_implicitImportDirectory).filePath(filename))
                     : filename;
-            if (absolute.startsWith(u':')) {
-                importFromQrc(absolute, prefix, importLocation);
-            } else {
-                importFromHost(absolute, prefix, importLocation);
-            }
-            processImportWarnings("path \"%1\""_L1.arg(url.path()), importLocation);
+            auto warnings = absolute.startsWith(u':')
+                    ? importFromQrc(absolute, prefix, importLocation)
+                    : importFromHost(absolute, prefix, importLocation);
+            processImportWarnings("path \"%1\""_L1.arg(url.path()), warnings, importLocation);
             return true;
         } else if (scheme == "file"_L1) {
-            importFromHost(url.path(), prefix, importLocation);
-            processImportWarnings("URL \"%1\""_L1.arg(url.path()), importLocation);
+            auto warnings = importFromHost(url.path(), prefix, importLocation);
+            processImportWarnings("URL \"%1\""_L1.arg(url.path()), warnings, importLocation);
             return true;
         } else if (scheme == "qrc"_L1) {
-            importFromQrc(":"_L1 + url.path(), prefix, importLocation);
-            processImportWarnings("URL \"%1\""_L1.arg(url.path()), importLocation);
+            auto warnings = importFromQrc(":"_L1 + url.path(), prefix, importLocation);
+            processImportWarnings("URL \"%1\""_L1.arg(url.path()), warnings, importLocation);
             return true;
         } else {
             m_logger->log("Unknown import syntax. Imports can be paths, qrc urls or file urls"_L1,
@@ -2370,11 +2410,13 @@ bool QQmlJSImportVisitor::visit(QQmlJS::AST::UiImport *import)
 
     QStringList staticModulesProvided;
 
-    const auto imported = m_importer->importModule(
+    auto imported = m_importer->importModule(
             path, prefix, import->version ? import->version->version : QTypeRevision(),
             &staticModulesProvided);
-    m_rootScopeImports.addTypes(imported);
-    for (auto it = imported.types().keyBegin(), end = imported.types().keyEnd(); it != end; it++)
+    const auto types = imported.types();
+    const auto warnings = imported.warnings();
+    m_rootScopeImports.add(std::move(imported));
+    for (auto it = types.keyBegin(), end = types.keyEnd(); it != end; it++)
         addImportWithLocation(*it, import->firstSourceLocation());
 
     if (prefix.isEmpty()) {
@@ -2387,7 +2429,8 @@ bool QQmlJSImportVisitor::visit(QQmlJS::AST::UiImport *import)
         }
     }
 
-    processImportWarnings(QStringLiteral("module \"%1\"").arg(path), import->firstSourceLocation());
+    processImportWarnings(
+            QStringLiteral("module \"%1\"").arg(path), warnings, import->firstSourceLocation());
     return true;
 }
 
@@ -2649,12 +2692,14 @@ bool QQmlJSImportVisitor::visit(QQmlJS::AST::UiObjectBinding *uiob)
     }
 
     // recursively resolve types for current scope if new scopes are found
-    if (needsResolution)
-        QQmlJSScope::resolveTypes(m_currentScope, m_rootScopeImports, &m_usedTypes);
+    if (needsResolution) {
+        QQmlJSScope::resolveTypes(
+                m_currentScope, m_rootScopeImports.contextualTypes(), &m_usedTypes);
+    }
 
     enterEnvironment(QQmlSA::ScopeType::QMLScope, typeName,
                      uiob->qualifiedTypeNameId->identifierToken);
-    QQmlJSScope::resolveTypes(m_currentScope, m_rootScopeImports, &m_usedTypes);
+    QQmlJSScope::resolveTypes(m_currentScope, m_rootScopeImports.contextualTypes(), &m_usedTypes);
 
     m_qmlTypes.append(m_currentScope); // new QMLScope is created here, so add it
     m_objectBindingScopes << m_currentScope;
@@ -2663,7 +2708,7 @@ bool QQmlJSImportVisitor::visit(QQmlJS::AST::UiObjectBinding *uiob)
 
 void QQmlJSImportVisitor::endVisit(QQmlJS::AST::UiObjectBinding *uiob)
 {
-    QQmlJSScope::resolveTypes(m_currentScope, m_rootScopeImports, &m_usedTypes);
+    QQmlJSScope::resolveTypes(m_currentScope, m_rootScopeImports.contextualTypes(), &m_usedTypes);
     // must be mutable, as we might mark it as implicitly wrapped in a component
     const QQmlJSScope::Ptr childScope = m_currentScope;
     leaveEnvironment();
@@ -2778,7 +2823,8 @@ bool QQmlJSImportVisitor::visit(ESModule *module)
 
 void QQmlJSImportVisitor::endVisit(ESModule *)
 {
-    QQmlJSScope::resolveTypes(m_exportedRootScope, m_rootScopeImports, &m_usedTypes);
+    QQmlJSScope::resolveTypes(
+            m_exportedRootScope, m_rootScopeImports.contextualTypes(), &m_usedTypes);
 }
 
 bool QQmlJSImportVisitor::visit(Program *)
@@ -2794,7 +2840,8 @@ bool QQmlJSImportVisitor::visit(Program *)
 
 void QQmlJSImportVisitor::endVisit(Program *)
 {
-    QQmlJSScope::resolveTypes(m_exportedRootScope, m_rootScopeImports, &m_usedTypes);
+    QQmlJSScope::resolveTypes(
+            m_exportedRootScope, m_rootScopeImports.contextualTypes(), &m_usedTypes);
 }
 
 void QQmlJSImportVisitor::endVisit(QQmlJS::AST::FieldMemberExpression *fieldMember)
