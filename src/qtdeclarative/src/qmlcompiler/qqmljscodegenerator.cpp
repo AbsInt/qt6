@@ -76,13 +76,17 @@ QString QQmlJSCodeGenerator::metaTypeFromName(const QQmlJSScope::ConstPtr &type)
 QString QQmlJSCodeGenerator::compositeListMetaType(const QString &elementName) const
 {
     return u"QQmlPrivate::compositeListMetaType(aotContext->compilationUnit, "_s
-            + QString::number(m_jsUnitGenerator->getStringId(elementName)) + u")"_s;
+            + (m_jsUnitGenerator->hasStringId(elementName)
+                       ? QString::number(m_jsUnitGenerator->getStringId(elementName))
+                       : u'"' + elementName + u'"') + u")"_s;
 }
 
 QString QQmlJSCodeGenerator::compositeMetaType(const QString &elementName) const
 {
     return u"QQmlPrivate::compositeMetaType(aotContext->compilationUnit, "_s
-            + QString::number(m_jsUnitGenerator->getStringId(elementName)) + u")"_s;
+            + (m_jsUnitGenerator->hasStringId(elementName)
+                       ? QString::number(m_jsUnitGenerator->getStringId(elementName))
+                       : u'"' + elementName + u'"') + u")"_s;
 }
 
 QString QQmlJSCodeGenerator::metaObject(const QQmlJSScope::ConstPtr &objectType)
@@ -107,14 +111,17 @@ QString QQmlJSCodeGenerator::metaType(const QQmlJSScope::ConstPtr &type)
 {
     if (type->isComposite()) {
         const QString name = m_typeResolver->nameForType(type);
-        if (!name.isEmpty())
-            return compositeMetaType(name);
+        if (name.isEmpty()) {
+            reject(u"retrieving the metaType of a composite type without an element name."_s);
+            return QString();
+        }
+        return compositeMetaType(name);
     }
 
     if (type->isListProperty() && type->valueType()->isComposite()) {
         const QString name = m_typeResolver->nameForType(type->valueType());
-        if (!name.isEmpty())
-            return compositeListMetaType(name);
+        Q_ASSERT(!name.isEmpty()); // There can't be a list with anonymous composite value type
+        return compositeListMetaType(name);
     }
 
     return m_typeResolver->equals(m_typeResolver->genericType(type), type)

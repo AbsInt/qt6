@@ -70,6 +70,8 @@ abstract class QtView extends ViewGroup {
                 }
             }
         });
+        if (getId() == -1)
+            setId(View.generateViewId());
     }
     /**
      * Create a QtView for embedding a QWindow, and load the Qt libraries if they have not already
@@ -90,15 +92,14 @@ abstract class QtView extends ViewGroup {
     @Override
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
-        m_viewInterface.setView(this);
-        m_viewInterface.queueLoadWindow();
+        m_viewInterface.addView(this);
     }
 
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
         destroyWindow();
-        m_viewInterface.setView(null);
+        m_viewInterface.removeView(this);
     }
 
     @Override
@@ -153,11 +154,12 @@ abstract class QtView extends ViewGroup {
         }
 
         loader.setMainLibraryName(appLibName);
-        if (loader.loadQtLibraries()) {
+        QtLoader.LoadingResult result = loader.loadQtLibraries();
+        if (result == QtLoader.LoadingResult.Succeeded) {
             // Start Native Qt application
             m_viewInterface.startQtApplication(loader.getApplicationParameters(),
                                                loader.getMainLibraryPath());
-        } else {
+        } else if (result == QtLoader.LoadingResult.Failed) {
             // If we weren't able to load the libraries, remove the delegate from the factory
             // as it's holding a reference to the Context, and we don't want it leaked
             QtEmbeddedViewInterfaceFactory.remove(getContext());

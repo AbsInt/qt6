@@ -3,6 +3,7 @@
 
 #include <QtTest/qtest.h>
 #include <QtCore/qjsonobject.h>
+#include <QtCore/qsortfilterproxymodel.h>
 #include <QtCore/QConcatenateTablesProxyModel>
 #include <QtCore/qtimer.h>
 #include <QtGui/QStandardItemModel>
@@ -51,6 +52,7 @@ private slots:
     void doNotUnrefObjectUnderConstruction();
     void clearCacheDuringInsertion();
     void viewUpdatedOnDelegateChoiceAffectingRoleChange();
+    void proxyModelWithDelayedSourceModelInListView();
 };
 
 class BaseAbstractItemModel : public QAbstractItemModel
@@ -729,6 +731,79 @@ void tst_QQmlDelegateModel::viewUpdatedOnDelegateChoiceAffectingRoleChange()
     QTRY_VERIFY(listview->property("count").toInt() > 0);
     QMetaObject::invokeMethod(object.get(), "verify", Q_RETURN_ARG(bool, returnedValue));
     QVERIFY(returnedValue);
+}
+
+class ProxySourceModel : public QAbstractListModel
+{
+    Q_OBJECT
+    QML_ELEMENT
+public:
+    explicit ProxySourceModel(QObject *parent = nullptr)
+        : QAbstractListModel(parent)
+    {
+        for (int i = 0; i < rows; ++i) {
+            beginInsertRows(QModelIndex(), i, i);
+            endInsertRows();
+        }
+    }
+
+    ~ProxySourceModel() override = default;
+
+    int rowCount(const QModelIndex &) const override
+    {
+        return rows;
+    }
+
+    QVariant data(const QModelIndex &, int ) const override
+    {
+        return "Hello";
+    }
+
+    QHash<int, QByteArray> roleNames() const override
+    {
+        QHash<int, QByteArray> roles = QAbstractListModel::roleNames();
+        roles[Qt::UserRole + 1] = "Name";
+
+        return roles;
+    }
+
+    static const int rows = 1;
+};
+
+class ProxyModel : public QSortFilterProxyModel
+{
+    Q_OBJECT
+    QML_ELEMENT
+    Q_PROPERTY(QAbstractItemModel *sourceModel READ sourceModel WRITE setSourceModel)
+
+public:
+    explicit ProxyModel(QObject *parent = nullptr)
+        : QSortFilterProxyModel(parent)
+    {
+    }
+
+    ~ProxyModel() override = default;
+};
+
+// Checks that the correct amount of delegates are created when using a proxy
+// model whose source model is set after a delay.
+void tst_QQmlDelegateModel::proxyModelWithDelayedSourceModelInListView()
+{
+    QTest::failOnWarning();
+
+    qmlRegisterTypesAndRevisions<ProxySourceModel>("Test", 1);
+    qmlRegisterTypesAndRevisions<ProxyModel>("Test", 1);
+
+    QQuickApplicationHelper helper(this, "proxyModelWithDelayedSourceModelInListView.qml");
+    QVERIFY2(helper.ready, helper.failureMessage());
+    QQuickWindow *window = helper.window;
+    window->show();
+    QVERIFY(QTest::qWaitForWindowExposed(window));
+
+    auto *listView = window->property("listView").value<QQuickListView *>();
+    QVERIFY(listView);
+    const auto delegateModel = QQuickItemViewPrivate::get(listView)->model;
+    QTRY_COMPARE(listView->count(), 1);
 }
 
 QTEST_MAIN(tst_QQmlDelegateModel)

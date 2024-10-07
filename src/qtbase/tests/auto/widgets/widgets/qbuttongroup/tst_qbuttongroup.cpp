@@ -203,8 +203,7 @@ void tst_QButtonGroup::keyNavigationPushButtons()
     buttonGroup->addButton(pb3);
 
     dlg.show();
-    if (!QTest::qWaitForWindowActive(&dlg))
-        QSKIP("Window activation failed, skipping test");
+    QVERIFY(QTest::qWaitForWindowFocused(&dlg));
 
     QVERIFY2(le1->hasFocus(), qPrintable(qApp->focusWidget()->objectName()));
     QTest::keyClick(qApp->focusWidget(), Qt::Key_Tab);
@@ -540,18 +539,18 @@ void tst_QButtonGroup::autoIncrementId()
     QRadioButton *radio3 = new QRadioButton(&dlg);
     radio3->setText("radio3");
 
-    buttons->addButton(radio1);
+    buttons->addButton(radio1, 2);
     vbox->addWidget(radio1);
-    buttons->addButton(radio2);
+    buttons->addButton(radio2, -1);
     vbox->addWidget(radio2);
     buttons->addButton(radio3);
     vbox->addWidget(radio3);
 
     radio1->setChecked(true);
 
-    QCOMPARE(buttons->id(radio1), -2);
-    QCOMPARE(buttons->id(radio2), -3);
-    QCOMPARE(buttons->id(radio3), -4);
+    QCOMPARE(buttons->id(radio1), 2);
+    QCOMPARE(buttons->id(radio2), -2);
+    QCOMPARE(buttons->id(radio3), -3);
 
     dlg.show();
 }
