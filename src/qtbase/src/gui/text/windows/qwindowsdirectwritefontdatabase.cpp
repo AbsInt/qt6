@@ -136,7 +136,7 @@ void QWindowsDirectWriteFontDatabase::populateFamily(const QString &familyName)
                                                DWRITE_FONT_STYLE_NORMAL,
                                                &matchingFonts))) {
         for (uint j = 0; j < matchingFonts->GetFontCount(); ++j) {
-            IDWriteFont *font;
+            DirectWriteScope<IDWriteFont> font;
             if (SUCCEEDED(matchingFonts->GetFont(j, &font))) {
                 DirectWriteScope<IDWriteFont1> font1;
                 if (!SUCCEEDED(font->QueryInterface(__uuidof(IDWriteFont1),
@@ -789,11 +789,6 @@ void QWindowsDirectWriteFontDatabase::populateFontDatabase()
     }
 }
 
-QFont QWindowsDirectWriteFontDatabase::defaultFont() const
-{
-    return QFont(QStringLiteral("Segoe UI"));
-}
-
 bool QWindowsDirectWriteFontDatabase::supportsVariableApplicationFonts() const
 {
     QSharedPointer<QWindowsFontEngineData> fontEngineData = data();
@@ -804,6 +799,19 @@ bool QWindowsDirectWriteFontDatabase::supportsVariableApplicationFonts() const
     }
 
     return false;
+}
+
+void QWindowsDirectWriteFontDatabase::invalidate()
+{
+    QWindowsFontDatabase::invalidate();
+
+    for (IDWriteFontFamily *value : m_populatedFonts)
+        value->Release();
+    m_populatedFonts.clear();
+    m_populatedFonts.squeeze();
+
+    m_populatedBitmapFonts.clear();
+    m_populatedBitmapFonts.squeeze();
 }
 
 QT_END_NAMESPACE

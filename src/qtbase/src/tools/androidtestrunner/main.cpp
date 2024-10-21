@@ -116,6 +116,7 @@ struct Options
     int timeoutSecs = 600; // 10 minutes
     QString buildPath;
     QString adbCommand{"adb"_L1};
+    QString serial;
     QString makeCommand;
     QString package;
     QString activity;
@@ -156,7 +157,7 @@ static bool execCommand(const QString &program, const QStringList &args,
     const auto command = program + " "_L1 + args.join(u' ');
 
     if (verbose && g_options.verbose)
-        qDebug("Execute %s.", command.toUtf8().constData());
+        fprintf(stdout,"Execute %s.\n", command.toUtf8().constData());
 
     QProcess process;
     process.start(program, args);
@@ -178,7 +179,7 @@ static bool execCommand(const QString &program, const QStringList &args,
         output->append(stdOut);
 
     if (verbose && g_options.verbose)
-        qDebug() << stdOut.constData();
+        fprintf(stdout, "%s\n", stdOut.constData());
 
     return process.exitCode() == 0;
 }
@@ -186,7 +187,13 @@ static bool execCommand(const QString &program, const QStringList &args,
 static bool execAdbCommand(const QStringList &args, QByteArray *output = nullptr,
                            bool verbose = true)
 {
-    return execCommand(g_options.adbCommand, args, output, verbose);
+    if (g_options.serial.isEmpty())
+        return execCommand(g_options.adbCommand, args, output, verbose);
+
+    QStringList argsWithSerial = {"-s"_L1, g_options.serial};
+    argsWithSerial.append(args);
+
+    return execCommand(g_options.adbCommand, argsWithSerial, output, verbose);
 }
 
 static bool execCommand(const QString &command, QByteArray *output = nullptr, bool verbose = true)
@@ -259,9 +266,7 @@ static bool parseOptions()
     if (g_options.helpRequested || g_options.buildPath.isEmpty() || g_options.apkPath.isEmpty())
         return false;
 
-    QString serial = qEnvironmentVariable("ANDROID_DEVICE_SERIAL");
-    if (!serial.isEmpty())
-        g_options.adbCommand += " -s %1"_L1.arg(serial);
+    g_options.serial = qEnvironmentVariable("ANDROID_DEVICE_SERIAL");
 
     if (g_options.ndkStackPath.isEmpty()) {
         const QString ndkPath = qEnvironmentVariable("ANDROID_NDK_ROOT");
@@ -403,11 +408,11 @@ static bool parseTestArgs()
     testAppArgs = "\"%1\""_L1.arg(testAppArgs.trimmed());
     const QString activityName = "%1/%2"_L1.arg(g_options.package).arg(g_options.activity);
 
-    // Pass over any testlib env vars if set
+    // Pass over any qt or testlib env vars if set
     QString testEnvVars;
     const QStringList envVarsList = QProcessEnvironment::systemEnvironment().toStringList();
     for (const QString &var : envVarsList) {
-        if (var.startsWith("QTEST_"_L1))
+        if (var.startsWith("QTEST_"_L1) || var.startsWith("QT_"_L1))
             testEnvVars += "%1 "_L1.arg(var);
     }
 
@@ -531,7 +536,7 @@ static bool pullFiles()
         auto checkerIt = g_options.checkFiles.find(outSuffix);
         ret &= (checkerIt != g_options.checkFiles.end() && checkerIt.value()(output));
         if (it.value() == "-"_L1) {
-            qDebug() << output.constData();
+            fprintf(stdout, "%s\n", output.constData());
         } else {
             QFile out{it.value()};
             if (!out.open(QIODevice::WriteOnly))
@@ -610,7 +615,10 @@ void printLogcatCrashBuffer(const QString &formattedTime)
         ndkStackProcess.start(g_options.ndkStackPath, { "-sym"_L1, libsPath });
     }
 
-    const QStringList adbCrashArgs = { "logcat"_L1, "-b"_L1, "crash"_L1, "-t"_L1, formattedTime };
+    QStringList adbCrashArgs = { "logcat"_L1, "-b"_L1, "crash"_L1, "-t"_L1, formattedTime };
+    if (!g_options.serial.isEmpty())
+        adbCrashArgs = QStringList{"-s"_L1 + g_options.serial} + adbCrashArgs;
+
     adbCrashProcess.start(g_options.adbCommand, adbCrashArgs);
 
     if (!adbCrashProcess.waitForStarted()) {

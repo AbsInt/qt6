@@ -19,6 +19,7 @@ You can download jing from https://relaxng.org/jclark/jing.html if your
 package manager lacks the jing package.
 """
 
+from typing import Iterator
 from xml.sax.saxutils import escape
 
 from localetools import Error
@@ -137,7 +138,7 @@ class QLocaleXmlReader (object):
             yield ('_'.join(tag(have)), ids(have),
                    '_'.join(tag(give)), ids(give))
 
-    def defaultMap(self):
+    def defaultMap(self) -> Iterator[tuple[tuple[int, int], int]]:
         """Map language and script to their default territory by ID.
 
         Yields ((language, script), territory) wherever the likely
@@ -349,7 +350,7 @@ class QLocaleXmlWriter (object):
         self.__openTag('zoneAliases')
         # iana is a single IANA ID
         # name has the same form, but has been made redundant
-        for name, iana in sorted(alias.items()):
+        for name, iana in sorted(alias.items(), key = lambda s: (s[0].lower(), s[1])):
             self.__openTag('zoneAlias')
             self.inTag('alias', name)
             self.inTag('iana', iana)

@@ -30,10 +30,10 @@
 #endif
 
 #include <array>
-
 #if __has_include(<bit>) && __cplusplus > 201703L
 #include <bit>
 #endif
+#include <string>
 
 QT_BEGIN_NAMESPACE
 
@@ -1910,20 +1910,26 @@ const QStringConverter::Interface QStringConverter::encodingInterfaces[QStringCo
 };
 
 // match names case insensitive and skipping '-' and '_'
-static bool nameMatch_impl(const char *a, QLatin1StringView rhs)
+template <typename Char>
+static bool nameMatch_impl_impl(const char *a, const Char *b, const Char *b_end)
 {
-    const char *b = rhs.data();
-    const char *b_end = rhs.end();
     do {
         while (*a == '-' || *a == '_')
             ++a;
-        while (b != b_end && (*b == '-' || *b == '_'))
+        while (b != b_end && (*b == Char{'-'} || *b == Char{'_'}))
             ++b;
         if (!*a && b == b_end) // end of both strings
             return true;
-    } while (QtMiscUtils::toAsciiLower(*a++) == QtMiscUtils::toAsciiLower(*b++));
+        if (char16_t(*b) > 127)
+            return false; // non-US-ASCII cannot match US-ASCII (prevents narrowing below)
+    } while (QtMiscUtils::toAsciiLower(*a++) == QtMiscUtils::toAsciiLower(char(*b++)));
 
     return false;
+}
+
+static bool nameMatch_impl(const char *a, QLatin1StringView b)
+{
+    return nameMatch_impl_impl(a, b.begin(), b.end());
 }
 
 static bool nameMatch_impl(const char *a, QUtf8StringView b)
@@ -1933,7 +1939,7 @@ static bool nameMatch_impl(const char *a, QUtf8StringView b)
 
 static bool nameMatch_impl(const char *a, QStringView b)
 {
-    return nameMatch_impl(a, QLatin1StringView{b.toString().toLatin1()}); // ### optimize
+    return nameMatch_impl_impl(a, b.utf16(), b.utf16() + b.size()); // uses char16_t*, not QChar*
 }
 
 static bool nameMatch(const char *a, QAnyStringView b)
@@ -2146,9 +2152,35 @@ struct QStringConverterICU : QStringConverter
         return conv;
     }
 
+    static std::string nul_terminate_impl(QLatin1StringView name)
+    { return name.isNull() ? std::string() : std::string{name.data(), size_t(name.size())}; }
+
+    static std::string nul_terminate_impl(QUtf8StringView name)
+    { return nul_terminate_impl(QLatin1StringView{QByteArrayView{name}}); }
+
+    static std::string nul_terminate_impl(QStringView name)
+    {
+        std::string result;
+        const auto convert = [&](char *p, size_t n) {
+                const auto sz = QLatin1::convertFromUnicode(p, name) - p;
+                Q_ASSERT(size_t(sz) <= n);
+                return sz;
+            };
+#ifdef __cpp_lib_string_resize_and_overwrite
+        result.resize_and_overwrite(size_t(name.size()), convert);
+#else
+        result.resize(size_t(name.size()));
+        result.resize(convert(result.data(), result.size()));
+#endif // __cpp_lib_string_resize_and_overwrite
+        return result;
+    }
+
+    static std::string nul_terminate(QAnyStringView name)
+    { return name.visit([](auto name) { return nul_terminate_impl(name); }); }
+
     static const QStringConverter::Interface *
     make_icu_converter(QStringConverterBase::State *state, QAnyStringView name)
-    { return make_icu_converter(state, name.toString().toLatin1().constData()); } // ### optimize
+    { return make_icu_converter(state, nul_terminate(name).data()); }
 
     static const QStringConverter::Interface *make_icu_converter(
             QStringConverterBase::State *state,
