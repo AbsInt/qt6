@@ -143,6 +143,22 @@ int pipes[2];
 }
 ")
 
+# Check if __cxa_thread_atexit{,_impl} are present in the C library (hence why
+# PROJECT_PATH instead of CODE for C++). Either one suffices to disable
+# FEATURE_broken_threadlocal_dtors. See details in qthread_unix.cpp.
+qt_config_compile_test(cxa_thread_atexit
+    # Seen on Darwin and FreeBSD
+    LABEL "__cxa_thread_atexit in C library"
+    PROJECT_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../config.tests/cxa_thread_atexit"
+    CMAKE_FLAGS -DTEST_FUNC=__cxa_thread_atexit
+)
+qt_config_compile_test(cxa_thread_atexit_impl
+    # Seen on Bionic, FreeBSD, glibc
+    LABEL "__cxa_thread_atexit_impl in C library"
+    PROJECT_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../config.tests/cxa_thread_atexit"
+    CMAKE_FLAGS -DTEST_FUNC=__cxa_thread_atexit_impl
+)
+
 # cxx17_filesystem
 qt_config_compile_test(cxx17_filesystem
     LABEL "C++17 <filesystem>"
@@ -528,6 +544,11 @@ qt_feature("cxx11_future" PUBLIC
 qt_feature("cxx17_filesystem" PUBLIC
     LABEL "C++17 <filesystem>"
     CONDITION TEST_cxx17_filesystem
+)
+qt_feature("broken-threadlocal-dtors" PRIVATE
+    LABEL "Broken execution of thread_local destructors at exit() time"
+    # Windows broken in different ways from Unix
+    CONDITION WIN32 OR NOT (TEST_cxa_thread_atexit OR TEST_cxa_thread_atexit_impl)
 )
 qt_feature("dladdr" PRIVATE
     LABEL "dladdr"

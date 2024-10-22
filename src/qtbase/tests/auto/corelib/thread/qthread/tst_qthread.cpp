@@ -1380,9 +1380,10 @@ void tst_QThread::customEventDispatcher()
 
     QSemaphore threadLocalSemaphore;
     QMetaObject::invokeMethod(&obj, [&]() {
-#ifndef Q_OS_WIN
+#if !QT_CONFIG(broken_threadlocal_dtors)
         // On Windows, the thread_locals are unsequenced between DLLs, so this
-        // could run after QThreadPrivate::finish()
+        // could run after QThreadPrivate::finish().
+        // On Unix, QThread doesn't use thread_local if support is broken.
         static thread_local
 #endif
                 ThreadLocalContent d(&obj, &threadLocalSemaphore);
