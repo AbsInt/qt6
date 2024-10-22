@@ -608,7 +608,7 @@ static void compilePropertyInitializer(QmltcType &current, const QQmlJSScope::Co
                 current.propertyInitializer.component.name, property.write(), name);
         }
 
-        compiledSetter.body << u"%1.insert(\"%2\");"_s.arg(
+        compiledSetter.body << u"%1.insert(QStringLiteral(\"%2\"));"_s.arg(
             current.propertyInitializer.initializedCache.name, name);
     }
 }
@@ -2029,7 +2029,7 @@ void QmltcCompiler::compileScriptBinding(QmltcType &current,
         current.children << compileScriptBindingPropertyChangeHandler(
                 binding, objectType, m_urlMethodName, bindingFunctorName, objectClassName);
 
-        current.setComplexBindings.body << u"if (!%1.contains(\"%2\"))"_s.arg(
+        current.setComplexBindings.body << u"if (!%1.contains(QStringLiteral(\"%2\")))"_s.arg(
             current.propertyInitializer.initializedCache.name, propertyName);
 
         // TODO: this could be dropped if QQmlEngine::setContextForObject() is
