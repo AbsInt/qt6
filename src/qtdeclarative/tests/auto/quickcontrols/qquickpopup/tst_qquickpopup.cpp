@@ -114,12 +114,14 @@ private slots:
     void fadeDimmer_data();
     void fadeDimmer();
     void noDimmer();
+    void pointerEventsNotBlockedForNonPopupChildrenOfOverlayWithHigherZ();
 
     void popupWindowPositioning();
     void popupWindowAnchorsCenterIn_data();
     void popupWindowAnchorsCenterIn();
     void popupWindowModality();
     void popupWindowClosesOnParentWindowClosing();
+    void popupWindowClosingPolicy();
     void initialPopupSize_data();
     void initialPopupSize();
     void popupWindowChangingParent();
@@ -1332,7 +1334,7 @@ void tst_QQuickPopup::modelessOnModalOnModeless()
     QQuickPopup *modalPopup = window->property("modalPopup").value<QQuickPopup *>();
     QVERIFY(modalPopup);
     QQuickPopup *tooltip = window->property("tooltip").value<QQuickPopup *>();
-    QVERIFY(modalPopup);
+    QVERIFY(tooltip);
 
     modelessPopup->open();
     QCOMPARE(modelessPopup->isVisible(), true);
@@ -2441,6 +2443,52 @@ void tst_QQuickPopup::noDimmer()
     QTRY_VERIFY(!drawer->isModal());
 }
 
+// The test verifies that press and release events for items that are ancestors of the overlay,
+// but not a popup item, are not filtered by modal popups.
+void tst_QQuickPopup::pointerEventsNotBlockedForNonPopupChildrenOfOverlayWithHigherZ()
+{
+    QQuickApplicationHelper helper(this, "parentToOverlay.qml");
+    QVERIFY2(helper.ready, helper.failureMessage());
+
+    QQuickWindow *window = helper.window;
+    window->show();
+    QVERIFY(QTest::qWaitForWindowExposed(window));
+
+    auto *popup = window->contentItem()->findChild<QQuickPopup *>();
+    QVERIFY(popup);
+    QQuickMouseArea *lowerMouseArea = window->property("lowerMouseArea").value<QQuickMouseArea *>();
+    QVERIFY(lowerMouseArea);
+    QQuickMouseArea *upperMouseArea = window->property("upperMouseArea").value<QQuickMouseArea *>();
+    QVERIFY(upperMouseArea);
+    QQuickAbstractButton *button = window->property("button").value<QQuickAbstractButton *>();
+    QVERIFY(button);
+
+    QSignalSpy lowerMouseAreaSpy(lowerMouseArea, &QQuickMouseArea::clicked);
+    QSignalSpy upperMouseAreaSpy(upperMouseArea, &QQuickMouseArea::clicked);
+    QSignalSpy buttonSpy(button, &QQuickAbstractButton::clicked);
+
+    popup->open();
+    QTRY_VERIFY(popup->isOpened());
+
+    QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, button->mapToScene(button->boundingRect().center()).toPoint());
+
+    // The event should have been consumed by the upperMouseArea,
+    // since it's in the same hierarchy as the popup item, with a higher z.
+    QTRY_COMPARE(upperMouseAreaSpy.count(), 1);
+    QCOMPARE(lowerMouseAreaSpy.count(), 0);
+    QCOMPARE(buttonSpy.count(), 0);
+
+    upperMouseArea->setEnabled(false);
+
+    QVERIFY(clickButton(button));
+    // Since the upperMouseArea is disabled, the event should be sent to the button inside the popup.
+    QCOMPARE(buttonSpy.count(), 1);
+    QCOMPARE(lowerMouseAreaSpy.count(), 0);
+    QCOMPARE(upperMouseAreaSpy.count(), 1);
+
+    popup->close();
+}
+
 #define VERIFY_LOCAL_POS(POPUP, EXPECTED)                                                                     \
     QTRY_VERIFY2(qAbs(POPUP->x() - qreal(EXPECTED.x())) <= 1,                                                 \
         qPrintable(QStringLiteral("QQuickPopup::x() = %1, expected = %2").arg(POPUP->x()).arg(EXPECTED.x())));\
@@ -2645,6 +2693,101 @@ void tst_QQuickPopup::popupWindowClosesOnParentWindowClosing()
 
     QTRY_VERIFY(!window->isVisible());
     QTRY_VERIFY(!popupWindow->isVisible());
+}
+
+void tst_QQuickPopup::popupWindowClosingPolicy()
+{
+    if (!popupWindowsSupported)
+        QSKIP("The platform doesn't support popup windows. Skipping test.");
+
+    QQuickApplicationHelper helper(this, "simplepopup.qml");
+    QVERIFY2(helper.ready, helper.failureMessage());
+    QQuickWindow *window = helper.window;
+    const QRect screenGeometry = window->screen()->availableGeometry();
+    const QPoint offset = QPoint(window->width() / 2, window->height() / 2);
+    window->setFramePosition(screenGeometry.center() - offset);
+
+    const QPoint outsideWindow = window->geometry().topRight() + QPoint(100, 100);
+
+    QQuickVisualTestUtils::moveMouseAway(window);
+
+    window->show();
+    QVERIFY(QTest::qWaitForWindowExposed(window));
+
+    auto *popup = window->contentItem()->findChild<QQuickPopup *>();
+    QVERIFY(popup);
+    auto *popupPrivate = QQuickPopupPrivate::get(popup);
+    QVERIFY(popupPrivate);
+
+    popup->setPopupType(QQuickPopup::Window);
+    popup->setClosePolicy(QQuickPopup::CloseOnEscape);
+
+    popup->open();
+    QTRY_VERIFY(popup->isOpened());
+
+    auto *popupWindow = popupPrivate->popupWindow;
+    QVERIFY(popupWindow);
+    QVERIFY(popupWindow->isVisible());
+
+    // Escape should work like normal.
+    QTest::keyClick(window, Qt::Key_Escape);
+
+    QTRY_VERIFY(!popup->isVisible());
+    QVERIFY(!popupWindow->isVisible());
+
+    // Test MousePress events
+    popup->setClosePolicy(QQuickPopup::CloseOnPressOutside);
+
+    popup->open();
+    QTRY_VERIFY(popup->isOpened());
+    QVERIFY(QTest::qWaitForWindowExposed(popupWindow));
+
+    // Should not close, since point is inside the popup window.
+    QTest::mousePress(window, Qt::LeftButton, Qt::NoModifier, QPoint(popup->x() + popup->width() / 2, popup->y() + popup->height() / 2));
+
+    QQuickTest::qWaitForPolish(popupWindow);
+    QVERIFY(popup->isVisible());
+    QVERIFY(popupWindow->isVisible());
+
+    // Releasing outside: should not close due to closePolicy.
+    QTest::mouseRelease(window, Qt::LeftButton, Qt::NoModifier, outsideWindow);
+
+    QQuickTest::qWaitForPolish(popupWindow);
+    QVERIFY(popup->isVisible());
+    QVERIFY(popupWindow->isVisible());
+
+    // Pressing outside: should close!
+    QTest::mousePress(window, Qt::LeftButton, Qt::NoModifier, outsideWindow);
+
+    QTRY_VERIFY(!popup->isVisible());
+    QVERIFY(!popupWindow->isVisible());
+
+    // Test MouseRelease events
+    popup->setClosePolicy(QQuickPopup::CloseOnReleaseOutside);
+
+    popup->open();
+    QTRY_VERIFY(popup->isOpened());
+    QVERIFY(QTest::qWaitForWindowExposed(popupWindow));
+
+    // Should not close, since the point is inside the popup window.
+    QTest::mouseRelease(window, Qt::LeftButton, Qt::NoModifier, QPoint(popup->x() + popup->width() / 2, popup->y() + popup->height() / 2));
+
+    QQuickTest::qWaitForPolish(popupWindow);
+    QVERIFY(popup->isVisible());
+    QVERIFY(popupWindow->isVisible());
+
+    // Pressing outside: should not close due to closePolicy.
+    QTest::mousePress(window, Qt::LeftButton, Qt::NoModifier, outsideWindow);
+
+    QQuickTest::qWaitForPolish(popupWindow);
+    QVERIFY(popup->isVisible());
+    QVERIFY(popupWindow->isVisible());
+
+    // Releasing outside: should close!
+    QTest::mouseRelease(window, Qt::LeftButton, Qt::NoModifier, outsideWindow);
+
+    QTRY_VERIFY(!popup->isVisible());
+    QVERIFY(!popupWindow->isVisible());
 }
 
 void tst_QQuickPopup::initialPopupSize_data()

@@ -7,8 +7,8 @@
 #include "../models/errorlistmodel.h"
 #include <QWidget>
 
-class QListView;
 class QQuickView;
+class QQuickWidget;
 
 class PreviewWidget : public QWidget
 {
@@ -32,7 +32,7 @@ private slots:
 
 private:
     ErrorListModel m_errorListModel;
-    QListView *m_errorListView = nullptr;
+    QQuickWidget *m_errorListWidget = nullptr;
     QQuickView *m_quickView = nullptr;
 };
 

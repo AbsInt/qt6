@@ -195,7 +195,7 @@ QObject *QQmlObjectCreator::create(int subComponentIndex, QObject *parent, QQmlI
 
     if (!isComponentRoot && sharedState->creationContext) {
         // otherwise QQmlEnginePrivate::createInternalContext() handles it
-        context->setImportedScripts(sharedState->creationContext->importedScripts());
+        context->setImportedScripts(v4, sharedState->creationContext->importedScripts());
     }
 
     QObject *instance = createInstance(objectToCreate, parent, /*isContextObject*/true);
@@ -671,7 +671,8 @@ void QQmlObjectCreator::setPropertyValue(const QQmlPropertyData *property, const
                 break;
             }
 
-            QVariant target = QQmlValueTypeProvider::createValueType(source, propertyType);
+            QVariant target = QQmlValueTypeProvider::createValueType(
+                    source, propertyType, engine->handle());
             if (target.isValid()) {
                 property->writeProperty(_qobject, target.data(), propertyWriteFlags);
                 break;

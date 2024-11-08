@@ -788,8 +788,11 @@ function(_qt_internal_sbom_add_target target)
         endif()
 
         if(qa_chosen_attribution_file_path)
+            _qt_internal_sbom_map_path_to_reproducible_relative_path(relative_attribution_path
+                PATH "${qa_chosen_attribution_file_path}"
+            )
             string(APPEND package_comment
-                "    Information extracted from:\n     ${qa_chosen_attribution_file_path}\n")
+                "    Information extracted from:\n     ${relative_attribution_path}\n")
         endif()
 
         if(NOT "${qa_chosen_attribution_entry_index}" STREQUAL "")
@@ -1486,12 +1489,90 @@ function(_qt_internal_sbom_add_binary_file target file_path)
     )
 endfunction()
 
+# Takes a relative or absolute path and maps it to a reproducible path that is relative to
+# the project source or build dir.
+function(_qt_internal_sbom_map_path_to_reproducible_relative_path out_var)
+    set(opt_args "")
+    set(single_args
+        PATH
+        REPO_PROJECT_NAME_LOWERCASE
+        OUT_SUCCESS
+    )
+    set(multi_args "")
+    cmake_parse_arguments(PARSE_ARGV 1 arg "${opt_args}" "${single_args}" "${multi_args}")
+    _qt_internal_validate_all_args_are_parsed(arg)
+
+    set(is_in_source_dir FALSE)
+    set(is_in_build_dir FALSE)
+
+    if(NOT arg_REPO_PROJECT_NAME_LOWERCASE)
+        _qt_internal_sbom_get_root_project_name_lower_case(repo_project_name)
+    else()
+        set(repo_project_name "${arg_REPO_PROJECT_NAME_LOWERCASE}")
+    endif()
+
+    if(NOT DEFINED arg_PATH)
+        message(FATAL_ERROR "PATH must be set")
+    endif()
+    set(path "${arg_PATH}")
+
+    set(handled FALSE)
+
+    if(path MATCHES "$<.+>")
+        # TODO: Paths wrapped in genexes are usually absolute paths that we also want to handle,
+        # but can't at configure time. We'll need a separate processing step at build time.
+        # Keep these as is for now, but signal failure of handling.
+        set(path_out "${path}")
+    else()
+        if(IS_ABSOLUTE "${path}")
+            set(path_in "${path}")
+            if(path MATCHES "^${PROJECT_SOURCE_DIR}/")
+                set(is_in_source_dir TRUE)
+            elseif(path MATCHES "^${PROJECT_BINARY_DIR}/")
+                set(is_in_build_dir TRUE)
+            endif()
+        else()
+            # We consider relative paths to be relative to the current source dir.
+            set(is_in_source_dir TRUE)
+            set(path_in "${CMAKE_CURRENT_SOURCE_DIR}/${path}")
+        endif()
+
+        # Resolve any .. and replace the absolute path with a path relative to the source dir
+        # or build dir, prefixed with a root marker.
+        get_filename_component(path_in_real "${path_in}" REALPATH)
+
+        # Replace the absolute prefixes with markers.
+        if(is_in_source_dir)
+            set(handled TRUE)
+            set(marker "/src_dir")
+            string(REPLACE "${PROJECT_SOURCE_DIR}/" "${marker}/${repo_project_name}/"
+                path_out "${path_in_real}")
+        elseif(is_in_build_dir)
+            set(handled TRUE)
+            set(marker "/build_dir")
+            string(REPLACE "${PROJECT_BINARY_DIR}/" "${marker}/${repo_project_name}/"
+                path_out "${path_in_real}")
+        else()
+            # If it's not a source dir or a build dir, it might be some kind of weird genex
+            # or marker that we don't handle yet.
+            set(path_out "${path_in_real}")
+        endif()
+    endif()
+
+    set(${out_var} "${path_out}" PARENT_SCOPE)
+    if(arg_OUT_SUCCESS)
+        set(${arg_OUT_SUCCESS} "${handled}" PARENT_SCOPE)
+    endif()
+endfunction()
+
 # Adds source file "generated from" relationship comments to the sbom for a given target.
 function(_qt_internal_sbom_add_source_files target spdx_id out_relationships)
     get_target_property(sources ${target} SOURCES)
     list(REMOVE_DUPLICATES sources)
 
     set(relationships "")
+
+    _qt_internal_sbom_get_root_project_name_lower_case(repo_project_name_lowercase)
 
     foreach(source IN LISTS sources)
         # Filter out $<TARGET_OBJECTS: genexes>.
@@ -1504,10 +1585,25 @@ function(_qt_internal_sbom_add_source_files target spdx_id out_relationships)
             continue()
         endif()
 
-        set(source_entry
-"${spdx_id} GENERATED_FROM NOASSERTION\nRelationshipComment: ${CMAKE_CURRENT_SOURCE_DIR}/${source}"
+        # Filter out pkg-config. pc files.
+        if(source MATCHES "\.pc$")
+            continue()
+        endif()
+
+        # Filter out metatypes .json.gen files.
+        if(source MATCHES "\.json\.gen$")
+            continue()
+        endif()
+
+        _qt_internal_sbom_map_path_to_reproducible_relative_path(source_path
+            PATH "${source}"
+            REPO_PROJECT_NAME_LOWERCASE "${repo_project_name_lowercase}"
         )
-        set(source_non_empty "$<BOOL:${source}>")
+
+        set(source_entry
+"${spdx_id} GENERATED_FROM NOASSERTION\nRelationshipComment: ${source_path}"
+        )
+        set(source_non_empty "$<BOOL:${source_path}>")
         # Some sources are conditional on genexes, so we evaluate them.
         set(relationship "$<${source_non_empty}:$<GENEX_EVAL:${source_entry}>>")
         list(APPEND relationships "${relationship}")

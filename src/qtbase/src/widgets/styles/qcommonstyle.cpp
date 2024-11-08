@@ -2248,7 +2248,8 @@ void QCommonStyle::drawControl(ControlElement element, const QStyleOption *opt,
                     editRect.translate(cb->iconSize.width() + 4, 0);
             }
             if (!cb->currentText.isEmpty() && !cb->editable) {
-                proxy()->drawItemText(p, editRect.adjusted(1, 0, -1, 0),
+                // keep in sync with QLineEditPrivate::horizontalMargin = 2
+                proxy()->drawItemText(p, editRect.adjusted(2, 0, -2, 0),
                              visualAlignment(cb->direction, cb->textAlignment),
                              cb->palette, cb->state & State_Enabled, cb->currentText);
             }

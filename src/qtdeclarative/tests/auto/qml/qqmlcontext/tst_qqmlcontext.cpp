@@ -816,12 +816,12 @@ void tst_qqmlcontext::contextLeak()
         QQmlRefPointer<QQmlContextData> context = ddata->context;
         QVERIFY(context);
         QVERIFY(!context->importedScripts().isNullOrUndefined());
-        QCOMPARE(int(context->importedScripts().valueRef()->as<QV4::Object>()->getLength()), 1);
+        QCOMPARE(int(context->importedScripts().as<QV4::Object>()->getLength()), 1);
 
         QV4::Scope scope(ddata->jsWrapper.engine());
         QV4::ScopedValue scriptContextWrapper(scope);
-        scriptContextWrapper = context->importedScripts().valueRef()
-                ->as<QV4::Object>()->get(uint(0));
+        scriptContextWrapper = context->importedScripts()
+                .as<QV4::Object>()->get(uint(0));
         scriptContext = scriptContextWrapper->as<QV4::QQmlContextWrapper>()->getContext();
     }
 

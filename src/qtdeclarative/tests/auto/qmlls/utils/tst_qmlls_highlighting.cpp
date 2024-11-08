@@ -505,18 +505,16 @@ void tst_qmlls_highlighting::highlights_data()
                 << fileItem
                 << Token(QQmlJS::SourceLocation(517, 9, 23, 10),
                          int(SemanticTokenProtocolTypes::Method), 0);
-        QTest::addRow("propchanged-handler")
-                << fileItem
-                << Token(QQmlJS::SourceLocation(572, 13, 27, 5),
-                         int(SemanticTokenProtocolTypes::Method), 0);
+        QTest::addRow("propchanged-handler") << fileItem
+                                             << Token(QQmlJS::SourceLocation(572, 13, 27, 5),
+                                                      int(SemanticTokenProtocolTypes::Property), 0);
         QTest::addRow("method-id")
                 << fileItem
                 << Token(QQmlJS::SourceLocation(597, 1, 28, 9),
                          int(SemanticTokenProtocolTypes::Method), 0);
-        QTest::addRow("signal-handler")
-                << fileItem
-                << Token(QQmlJS::SourceLocation(656, 9, 32, 5),
-                         int(SemanticTokenProtocolTypes::Method), 0);
+        QTest::addRow("signal-handler") << fileItem
+                                        << Token(QQmlJS::SourceLocation(656, 9, 32, 5),
+                                                 int(SemanticTokenProtocolTypes::Property), 0);
 
         QTest::addRow("enum-name-usage") << fileItem
                                          << Token(QQmlJS::SourceLocation(790, 1, 36, 35),

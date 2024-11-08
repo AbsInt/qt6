@@ -257,6 +257,9 @@ void QWaylandDataDevice::data_device_motion(uint32_t time, wl_fixed_t x, wl_fixe
     if (!drag && !m_dragOffer)
         return;
 
+    if (!m_dragWindow)
+        return;
+
     m_dragPoint = calculateDragPosition(x, y, m_dragWindow);
 
     QMimeData *dragData = nullptr;

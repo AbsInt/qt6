@@ -1667,15 +1667,7 @@ void QFusionStyle::drawControl(ControlElement element, const QStyleOption *optio
                                 && tab->position == QStyleOptionTab::Beginning));
             bool onlyOne = tab->position == QStyleOptionTab::OnlyOneTab;
             int tabOverlap = pixelMetric(PM_TabBarTabOverlap, option, widget);
-            rect = option->rect.adjusted(0, 0, (onlyOne || lastTab) ? 0 : tabOverlap, 0);
-
-            QRect r2(rect);
-            int x1 = r2.left();
-            int x2 = r2.right();
-            int y1 = r2.top();
-            int y2 = r2.bottom();
-
-            painter->setPen(d->innerContrastLine());
+            QRect rect = option->rect.adjusted(0, 0, (onlyOne || lastTab) ? 0 : tabOverlap, 0);
 
             QTransform rotMatrix;
             bool flip = false;
@@ -1708,16 +1700,8 @@ void QFusionStyle::drawControl(ControlElement element, const QStyleOption *optio
                 return;
             }
 
-            if (flip) {
-                QRect tmp = rect;
-                rect = QRect(tmp.y(), tmp.x(), tmp.height(), tmp.width());
-                int temp = x1;
-                x1 = y1;
-                y1 = temp;
-                temp = x2;
-                x2 = y2;
-                y2 = temp;
-            }
+            if (flip)
+                rect = QRect(rect.y(), rect.x(), rect.height(), rect.width());
 
             painter->setRenderHint(QPainter::Antialiasing, true);
             painter->translate(0.5, 0.5);

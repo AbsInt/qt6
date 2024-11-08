@@ -241,6 +241,11 @@ int main(int argc, char **argv)
                 error.augment("Error compiling qml file: "_L1).print();
                 return EXIT_FAILURE;
             }
+
+            if (parser.isSet(onlyBytecode)) {
+                QQmlJS::AotStats emptyStats;
+                emptyStats.saveToDisk(outputFileName + u".aotstats"_s);
+            }
         } else {
             QStringList importPaths;
 
@@ -258,6 +263,7 @@ int main(int argc, char **argv)
             QQmlJSImporter importer(
                         importPaths, parser.isSet(resourceOption) ? &fileMapper : nullptr);
             QQmlJSLogger logger;
+            logger.setFilePath(inputFile);
 
             // Always trigger the qFatal() on "pragma Strict" violations.
             logger.setCategoryLevel(qmlCompiler, QtWarningMsg);
@@ -274,6 +280,7 @@ int main(int argc, char **argv)
             if (parser.isSet(dumpAotStatsOption)) {
                 QQmlJS::QQmlJSAotCompilerStats::setRecordAotStats(true);
                 QQmlJS::QQmlJSAotCompilerStats::setModuleId(parser.value(moduleIdOption));
+                QQmlJS::QQmlJSAotCompilerStats::registerFile(inputFile);
             }
 
             if (parser.isSet(validateBasicBlocksOption))

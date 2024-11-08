@@ -168,6 +168,7 @@ private slots:
     void importScripts_data();
     void importScripts();
     void importCreationContext();
+    void canAccsseScriptFromClosureAfterContextWasInvalidated();
     void scarceResources();
     void scarceResources_data();
     void scarceResources_other();
@@ -4755,7 +4756,7 @@ void tst_qqmlecmascript::verifyContextLifetime(const QQmlRefPointer<QQmlContextD
     if (!ctxt->importedScripts().isNullOrUndefined()) {
         QV4::ExecutionEngine *v4 = ctxt->engine()->handle();
         QV4::Scope scope(v4);
-        QV4::ScopedArrayObject scripts(scope, ctxt->importedScripts().value());
+        QV4::ScopedArrayObject scripts(scope, ctxt->importedScripts());
         QV4::Scoped<QV4::QQmlContextWrapper> qml(scope);
         for (quint32 i = 0; i < scripts->getLength(); ++i) {
             QQmlRefPointer<QQmlContextData> scriptContext, newContext;
@@ -5075,6 +5076,21 @@ void tst_qqmlecmascript::importCreationContext()
     }
     success = object->property("success").toBool();
     QVERIFY(success);
+}
+
+void tst_qqmlecmascript::canAccsseScriptFromClosureAfterContextWasInvalidated()
+{
+    QQmlEngine engine;
+    QQmlComponent component(&engine, testFileUrl("scriptCapturingClosure/useScriptCapturingClosure.qml"));
+    QScopedPointer<QObject> object(component.create());
+    QVERIFY2(object, qPrintable(component.errorString()));
+    QCOMPARE(object->property("state").toInt(), -1);
+    gc(engine); // not only does the context store a weak reference, it also is kept alive
+    // the weak reference might have outlived one collection, especially if gc was already running (incrementally)
+    // run a full gc cycle again to make sure it's gone
+    gc(engine);
+    QMetaObject::invokeMethod(object.get(), "run");
+    QCOMPARE(object->property("state").toInt(), 1);
 }
 
 void tst_qqmlecmascript::scarceResources_other()
@@ -8716,7 +8732,6 @@ void tst_qqmlecmascript::importedScriptsAccessOnObjectWithInvalidContext()
 {
     QQmlEngine engine;
     const QUrl url = testFileUrl("importedScriptsAccessOnObjectWithInvalidContext.qml");
-    QTest::ignoreMessage(QtWarningMsg, qPrintable(url.toString() + ":29: TypeError: Cannot read property 'Foo' of null"));
     QQmlComponent component(&engine, url);
     QScopedPointer<QObject> obj(component.create());
     QVERIFY2(obj, qPrintable(component.errorString()));

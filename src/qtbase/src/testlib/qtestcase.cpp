@@ -111,6 +111,10 @@
 #include <emscripten.h>
 #endif
 
+#ifdef Q_OS_ANDROID
+#include <QtCore/QStandardPaths>
+#endif
+
 #include <vector>
 
 QT_BEGIN_NAMESPACE
@@ -1790,6 +1794,14 @@ static void initEnvironment()
     qputenv("QT_QTESTLIB_RUNNING", "1");
 }
 
+#ifdef Q_OS_ANDROID
+static QFile androidExitCodeFile()
+{
+    const QString testHome = QStandardPaths::writableLocation(QStandardPaths::HomeLocation);
+    return QFile(testHome + "/qtest_last_exit_code"_L1);
+}
+#endif
+
 /*!
     Executes tests declared in \a testObject. In addition, the private slots
     \c{initTestCase()}, \c{cleanupTestCase()}, \c{init()} and \c{cleanup()}
@@ -1890,6 +1902,10 @@ void QTest::qInit(QObject *testObject, int argc, char **argv)
     if (QBenchmarkGlobalData::current->mode() != QBenchmarkGlobalData::CallgrindParentProcess)
 #endif
         QTestLog::startLogging();
+
+#ifdef Q_OS_ANDROID
+    androidExitCodeFile().remove();
+#endif
 }
 
 /*! \internal
@@ -1984,7 +2000,19 @@ int QTest::qRun()
 #endif
     // make sure our exit code is never going above 127
     // since that could wrap and indicate 0 test fails
-    return qMin(QTestLog::failCount(), 127);
+    const int exitCode = qMin(QTestLog::failCount(), 127);
+
+#ifdef Q_OS_ANDROID
+    QFile exitCodeFile = androidExitCodeFile();
+    if (exitCodeFile.open(QIODevice::WriteOnly)) {
+        exitCodeFile.write(qPrintable(QString::number(exitCode)));
+    } else {
+        qWarning("Failed to open %s for writing test exit code: %s",
+                 qPrintable(exitCodeFile.fileName()), qPrintable(exitCodeFile.errorString()));
+    }
+#endif
+
+    return exitCode;
 }
 
 /*! \internal

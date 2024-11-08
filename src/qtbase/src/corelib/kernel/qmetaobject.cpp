@@ -163,6 +163,8 @@ static auto parse_scope(QByteArrayView qualifiedKey) noexcept
         std::optional<QByteArrayView> scope;
         QByteArrayView key;
     };
+    if (qualifiedKey.startsWith("QFlags<") && qualifiedKey.endsWith('>'))
+        qualifiedKey.slice(7, qualifiedKey.length() - 8);
     const auto scopePos = qualifiedKey.lastIndexOf("::"_L1);
     if (scopePos < 0)
         return R{std::nullopt, qualifiedKey};

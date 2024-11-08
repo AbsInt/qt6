@@ -1051,6 +1051,15 @@ bool QQuickMenuPrivate::blockInput(QQuickItem *item, const QPointF &point) const
     return (cascade && parentMenu && contains(point)) || QQuickPopupPrivate::blockInput(item, point);
 }
 
+bool QQuickMenuPrivate::handlePress(QQuickItem *item, const QPointF &point, ulong timestamp)
+{
+    // Don't propagate mouse event as it can cause underlying item to receive
+    // events
+    return QQuickPopupPrivate::handlePress(item, point, timestamp)
+            || (popupItem == item);
+}
+
+
 /*! \internal
     QQuickPopupWindow::event() calls this to handle the release event of a
     menu drag-press-release gesture, because the \a eventPoint does not have

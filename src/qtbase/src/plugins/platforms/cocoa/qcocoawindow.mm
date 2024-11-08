@@ -472,14 +472,10 @@ void QCocoaWindow::setVisible(bool visible)
     } else {
         // Window not visible, hide it
         if (isContentView()) {
-            if (eventDispatcher()->hasModalSession()) {
+            if (eventDispatcher()->hasModalSession())
                 eventDispatcher()->endModalSession(window());
-            } else {
-                if ([m_view.window isSheet]) {
-                    Q_ASSERT_X(parentCocoaWindow, "QCocoaWindow", "Window modal dialog has no transient parent.");
-                    [parentCocoaWindow->nativeWindow() endSheet:m_view.window];
-                }
-            }
+            else if ([m_view.window isSheet])
+                [m_view.window.sheetParent endSheet:m_view.window];
 
             // Note: We do not guard the order out by checking NSWindow.visible, as AppKit will
             // in some cases, such as when hiding the application, order out and make a window

@@ -33,6 +33,7 @@ QQmlRefPointer<QQmlContextData> QQmlScriptData::qmlContextDataForContext(
         qmlContextData->setPragmaLibraryContext(parentQmlContextData->isPragmaLibraryContext());
     qmlContextData->setBaseUrl(url);
     qmlContextData->setBaseUrlString(urlString);
+    QV4::ExecutionEngine *v4 = parentQmlContextData->engine()->handle();
 
     // For backward compatibility, if there are no imports, we need to use the
     // imports from the parent context.  See QTBUG-17518.
@@ -40,21 +41,19 @@ QQmlRefPointer<QQmlContextData> QQmlScriptData::qmlContextDataForContext(
         qmlContextData->setImports(typeNameCache);
     } else if (!m_precompiledScript->isSharedLibrary()) {
         qmlContextData->setImports(parentQmlContextData->imports());
-        qmlContextData->setImportedScripts(parentQmlContextData->importedScripts());
+        qmlContextData->setImportedScripts(v4,  parentQmlContextData->importedScripts());
     }
 
     if (m_precompiledScript->isSharedLibrary())
         qmlContextData->setEngine(parentQmlContextData->engine()); // Fix for QTBUG-21620
 
-    QV4::ExecutionEngine *v4 = parentQmlContextData->engine()->handle();
     QV4::Scope scope(v4);
     QV4::ScopedObject scriptsArray(scope);
     if (qmlContextData->importedScripts().isNullOrUndefined()) {
         scriptsArray = v4->newArrayObject(scripts.size());
-        qmlContextData->setImportedScripts(
-                    QV4::PersistentValue(v4, scriptsArray.asReturnedValue()));
+        qmlContextData->setImportedScripts(v4, scriptsArray);
     } else {
-        scriptsArray = qmlContextData->importedScripts().valueRef();
+        scriptsArray = qmlContextData->importedScripts();
     }
     QV4::ScopedValue v(scope);
     for (int ii = 0; ii < scripts.size(); ++ii) {

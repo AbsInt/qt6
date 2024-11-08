@@ -14,6 +14,11 @@ bool ErrorListModel::isIndexValid(const QModelIndex &index) const
     return index.isValid() && (0 <= index.row()) && (index.row() < rowCount());
 }
 
+void ErrorListModel::selectRow(int row)
+{
+    return selectIndex(index(row));
+}
+
 void ErrorListModel::setErrorList(const QList<QQmlError> &errorList)
 {
     beginResetModel();

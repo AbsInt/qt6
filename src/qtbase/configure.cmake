@@ -331,7 +331,10 @@ int main(void)
 "# FIXME: qmake: ['TEMPLATE = lib', 'CONFIG += dll bsymbolic_functions', 'isEmpty(QMAKE_LFLAGS_BSYMBOLIC_FUNC): error("Nope")']
 )
 
-if(NOT MSVC AND NOT APPLE)
+if(MSVC OR APPLE)
+    # These platforms / toolchains support separate debug information. Skip the compile test.
+    set(TEST_separate_debug_info ON CACHE INTERNAL "separate debug information support")
+else()
     qt_config_compile_test("separate_debug_info"
                        LABEL "separate debug information support"
                        PROJECT_PATH "${CMAKE_CURRENT_SOURCE_DIR}/config.tests/separate_debug_info"
@@ -641,7 +644,7 @@ qt_feature_config("force_debug_info" QMAKE_PRIVATE_CONFIG)
 qt_feature("separate_debug_info" PUBLIC
     LABEL "Split off debug information"
     AUTODETECT OFF
-    CONDITION ( QT_FEATURE_shared ) AND ( QT_FEATURE_debug OR QT_FEATURE_debug_and_release OR QT_FEATURE_force_debug_info ) AND ( MSVC OR APPLE OR TEST_separate_debug_info )
+    CONDITION ( QT_FEATURE_shared ) AND ( QT_FEATURE_debug OR QT_FEATURE_debug_and_release OR QT_FEATURE_force_debug_info ) AND TEST_separate_debug_info
 )
 qt_feature_config("separate_debug_info" QMAKE_PUBLIC_QT_CONFIG)
 qt_feature("appstore-compliant" PUBLIC
@@ -1458,13 +1461,18 @@ qt_configure_add_report_entry(
 )
 qt_configure_add_report_entry(
     TYPE NOTE
-    MESSAGE "Enable thread support"
+    MESSAGE "WASM Thread support enabled."
     CONDITION QT_FEATURE_thread AND WASM
 )
 qt_configure_add_report_entry(
     TYPE WARNING
     MESSAGE "You should use the recommended Emscripten version ${QT_EMCC_RECOMMENDED_VERSION} with this Qt. You have ${EMCC_VERSION}."
     CONDITION WASM AND NOT ${EMCC_VERSION} MATCHES ${QT_EMCC_RECOMMENDED_VERSION}
+)
+qt_configure_add_report_entry(
+    TYPE WARNING
+    MESSAGE "Some tests might fail to build when targeting WASM without -feature-thread."
+    CONDITION WASM AND QT_BUILD_TESTS AND NOT QT_FEATURE_thread
 )
 qt_configure_add_report_entry(
     TYPE ERROR

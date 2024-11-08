@@ -409,7 +409,7 @@ void QMenuPrivate::updateActionRects(const QRect &screen) const
           sz = w->sizeHint().expandedTo(w->minimumSize()).expandedTo(w->minimumSizeHint()).boundedTo(w->maximumSize());
         } else {
             //calc what I think the size is..
-            if (action->isSeparator()) {
+            if (action->isSeparator() && action->text().isEmpty()) {
                 sz = QSize(2, 2);
             } else {
                 QString s = action->text();

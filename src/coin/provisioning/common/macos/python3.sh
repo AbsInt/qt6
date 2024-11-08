@@ -30,6 +30,7 @@ echo "Configure pip"
 
 SetEnvVar "PYTHON3_PATH" "/Library/Frameworks/Python.framework/Versions/3.9/bin"
 SetEnvVar "PIP3_PATH" "/Library/Frameworks/Python.framework/Versions/3.9/bin"
+SetEnvVar "SBOM_PYTHON_APPS_PATH" "/Library/Frameworks/Python.framework/Versions/3.9/bin"
 
 # Install Python certificates. Required at least for emsdk installation
 open /Applications/Python\ 3.9/Install\ Certificates.command

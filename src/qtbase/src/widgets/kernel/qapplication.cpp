@@ -124,6 +124,8 @@ QApplicationPrivate *QApplicationPrivate::self = nullptr;
 
 bool QApplicationPrivate::autoSipEnabled = true;
 
+bool QApplicationPrivate::replayMousePress = false;
+
 QApplicationPrivate::QApplicationPrivate(int &argc, char **argv)
     : QGuiApplicationPrivate(argc, argv)
 {
@@ -3349,6 +3351,12 @@ void QApplicationPrivate::closePopup(QWidget *popup)
 
         if (popupGrabOk) {
             popupGrabOk = false;
+
+            if (active_window && active_window->windowHandle()
+                && !popup->geometry().contains(QGuiApplicationPrivate::lastCursorPosition.toPoint())
+                && !popup->testAttribute(Qt::WA_NoMouseReplay)) {
+                QApplicationPrivate::replayMousePress = true;
+            }
 
             // transfer grab back to mouse grabber if any, otherwise release the grab
             ungrabMouseForPopup(popup);

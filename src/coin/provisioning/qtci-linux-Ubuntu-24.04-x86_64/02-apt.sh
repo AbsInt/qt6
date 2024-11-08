@@ -258,5 +258,10 @@ pip config --user set global.extra-index-url https://pypi.org/simple/
 source "${BASH_SOURCE%/*}/../common/unix/SetEnvVar.sh"
 # SetEnvVar "PATH" "/usr/lib/nodejs-mozilla/bin:\$PATH"
 
+# Provisioning during installation says:
+# 'The script sbom2doc is installed in '/home/qt/.local/bin' which is not on PATH.'
+# hence the explicit assignment to SBOM_PYTHON_APPS_PATH.
+SetEnvVar "SBOM_PYTHON_APPS_PATH" "/home/qt/.local/bin"
+
 OpenSSLVersion="$(openssl version |cut -b 9-14)"
 echo "System's OpenSSL = $OpenSSLVersion" >> ~/versions.txt

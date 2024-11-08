@@ -282,14 +282,14 @@ void tst_QQuickMessageDialogImpl::resultReflectsLastStandardButtonPressed()
     QVERIFY(dialogHelper.openDialog());
     QTRY_VERIFY(dialogHelper.isQuickDialogOpen());
 
+    QVERIFY(dialogHelper.waitForPopupWindowActiveAndPolished());
+
     QSignalSpy acceptedSpy(dialogHelper.dialog, SIGNAL(accepted()));
     QSignalSpy rejectedSpy(dialogHelper.dialog, SIGNAL(rejected()));
     QSignalSpy resultChangedSpy(dialogHelper.dialog, SIGNAL(resultChanged()));
 
     auto buttonBox = dialogHelper.quickDialog->findChild<QQuickDialogButtonBox *>("buttonBox");
     QVERIFY(buttonBox);
-
-    QVERIFY(dialogHelper.waitForPopupWindowActiveAndPolished());
 
     bool yesFound = false;
     bool noFound = false;

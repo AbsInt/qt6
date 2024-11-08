@@ -38,6 +38,10 @@
 #include <QtTest/QSignalSpy>
 #include <QtQml/QQmlFileSelector>
 
+#ifdef Q_OS_ANDROID
+#include <QtCore/QStandardPaths>
+#endif
+
 #include <private/qqmlcomponent_p.h>
 #include <private/qv4resolvedtypereference_p.h>
 
@@ -429,11 +433,23 @@ int quick_test_main(int argc, char **argv, const char *name, const char *sourceD
     return quick_test_main_with_setup(argc, argv, name, sourceDir, nullptr);
 }
 
+#ifdef Q_OS_ANDROID
+static QFile androidExitCodeFile()
+{
+    const QString testHome = QStandardPaths::writableLocation(QStandardPaths::HomeLocation);
+    return QFile(testHome + "/qtest_last_exit_code");
+}
+#endif
+
 int quick_test_main_with_setup(int argc, char **argv, const char *name, const char *sourceDir, QObject *setup)
 {
     QScopedPointer<QCoreApplication> app;
     if (!QCoreApplication::instance())
         app.reset(new QGuiApplication(argc, argv));
+
+#ifdef Q_OS_ANDROID
+    androidExitCodeFile().remove();
+#endif
 
     if (setup)
         maybeInvokeSetupMethod(setup, "applicationAvailable()");
@@ -696,8 +712,20 @@ int quick_test_main_with_setup(int argc, char **argv, const char *name, const ch
         return commandLineTestFunctions.size();
     }
 
+    const int exitCode = QuickTestResult::exitCode();
+
+#ifdef Q_OS_ANDROID
+    QFile exitCodeFile = androidExitCodeFile();
+    if (exitCodeFile.open(QIODevice::WriteOnly)) {
+        exitCodeFile.write(qPrintable(QString::number(exitCode)));
+    } else {
+        qWarning("Failed to open %s for writing test exit code: %s",
+                 qPrintable(exitCodeFile.fileName()), qPrintable(exitCodeFile.errorString()));
+    }
+#endif
+
     // Return the number of failures as the exit code.
-    return QuickTestResult::exitCode();
+    return exitCode;
 }
 
 QT_END_NAMESPACE

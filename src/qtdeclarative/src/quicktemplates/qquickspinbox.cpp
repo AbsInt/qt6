@@ -239,7 +239,7 @@ void QQuickSpinBoxPrivate::contentItemTextChanged()
         return;
     QString text = inputTextItem->text();
 #if QT_CONFIG(validator)
-    if (validator)
+    if (validator && live)
         validator->fixup(text);
 #endif
 

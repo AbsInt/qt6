@@ -464,10 +464,8 @@ bool QQuickDrawerPrivate::handlePress(QQuickItem *item, const QPointF &point, ul
     offset = 0;
     velocityCalculator.startMeasuring(point, timestamp);
 
-    if (!QQuickPopupPrivate::handlePress(item, point, timestamp))
-        return interactive && popupItem == item;
-
-    return true;
+    return QQuickPopupPrivate::handlePress(item, point, timestamp)
+        || (interactive && popupItem == item);
 }
 
 bool QQuickDrawerPrivate::handleMove(QQuickItem *item, const QPointF &point, ulong timestamp)

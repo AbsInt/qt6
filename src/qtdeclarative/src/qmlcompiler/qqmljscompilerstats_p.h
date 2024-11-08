@@ -50,9 +50,11 @@ public:
         return m_entries;
     }
 
-    void addEntry(const QString &moduleId, const QString &filepath, AotStatsEntry entry);
-    void insert(AotStats other);
+    void registerFile(const QString &moduleId, const QString &filepath);
+    void addEntry(const QString &moduleId, const QString &filepath, const AotStatsEntry &entry);
+    void insert(const AotStats &other);
 
+    static std::optional<QStringList> readAllLines(const QString &path);
     bool saveToDisk(const QString &filepath) const;
 
     static std::optional<AotStats> parseAotstatsFile(const QString &aotstatsPath);
@@ -77,7 +79,8 @@ public:
     static const QString &moduleId() { return s_moduleId; }
     static void setModuleId(QString moduleId) { s_moduleId = moduleId; }
 
-    static void addEntry(QString filepath, QQmlJS::AotStatsEntry entry);
+    static void registerFile(const QString &filepath);
+    static void addEntry(const QString &filepath, const QQmlJS::AotStatsEntry &entry);
 
 private:
     static std::unique_ptr<AotStats> s_instance;

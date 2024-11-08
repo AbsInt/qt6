@@ -2234,7 +2234,7 @@ void DomEnvironment::populateFromQmlFile(MutableDomItem &&qmlFile)
 {
     if (std::shared_ptr<QmlFile> qmlFilePtr = qmlFile.ownerAs<QmlFile>()) {
         auto logger = std::make_shared<QQmlJSLogger>();
-        logger->setFileName(qmlFile.canonicalFilePath());
+        logger->setFilePath(qmlFile.canonicalFilePath());
         logger->setCode(qmlFilePtr->code());
         logger->setSilent(true);
 

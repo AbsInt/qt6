@@ -22,6 +22,10 @@
 #     TRY_RUN_FLAGS
 #         Command line flags that are going to be passed to the tool for testing its correctness.
 #         If no flags were given, we default to `-v`.
+#     REQUIRED_FOR_DOCS
+#         Specifies that the built tool is required to generate documentation. Examples are qdoc,
+#         and qvkgen (because they participate in header file generation, which are needed for
+#         documentation generation).
 #
 # One-value Arguments:
 #     EXTRA_CMAKE_FILES
@@ -51,6 +55,7 @@ function(qt_internal_add_tool target_name)
         EXCEPTIONS
         NO_UNITY_BUILD
         TRY_RUN
+        REQUIRED_FOR_DOCS
         ${__qt_internal_sbom_optional_args}
     )
     set(one_value_keywords
@@ -170,6 +175,9 @@ function(qt_internal_add_tool target_name)
 
     if(TARGET host_tools)
         add_dependencies(host_tools "${target_name}")
+        if(arg_REQUIRED_FOR_DOCS)
+            add_dependencies(doc_tools "${target_name}")
+        endif()
         if(arg_CORE_LIBRARY STREQUAL "Bootstrap")
             add_dependencies(bootstrap_tools "${target_name}")
         endif()
@@ -215,7 +223,9 @@ function(qt_internal_add_tool target_name)
         qt_get_cmake_configurations(cmake_configs)
 
         set(install_initial_call_args
-            EXPORT "${INSTALL_CMAKE_NAMESPACE}${arg_TOOLS_TARGET}ToolsTargets")
+            EXPORT "${INSTALL_CMAKE_NAMESPACE}${arg_TOOLS_TARGET}ToolsTargets"
+            COMPONENT host_tools
+        )
 
         foreach(cmake_config ${cmake_configs})
             qt_get_install_target_default_args(

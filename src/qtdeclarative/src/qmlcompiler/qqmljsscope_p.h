@@ -155,18 +155,19 @@ public:
     enum Flag {
         Creatable = 0x1,
         Composite = 0x2,
-        Singleton = 0x4,
-        Script = 0x8,
-        CustomParser = 0x10,
-        Array = 0x20,
-        InlineComponent = 0x40,
-        WrappedInImplicitComponent = 0x80,
-        HasBaseTypeError = 0x100,
-        ExtensionIsNamespace = 0x200,
-        IsListProperty = 0x400,
-        Structured = 0x800,
-        ExtensionIsJavaScript = 0x1000,
-        EnforcesScopedEnums = 0x2000,
+        JavaScriptBuiltin = 0x4,
+        Singleton = 0x8,
+        Script = 0x10,
+        CustomParser = 0x20,
+        Array = 0x40,
+        InlineComponent = 0x80,
+        WrappedInImplicitComponent = 0x100,
+        HasBaseTypeError = 0x200,
+        ExtensionIsNamespace = 0x400,
+        IsListProperty = 0x800,
+        Structured = 0x1000,
+        ExtensionIsJavaScript = 0x2000,
+        EnforcesScopedEnums = 0x4000,
     };
     Q_DECLARE_FLAGS(Flags, Flag)
     Q_FLAGS(Flags);
@@ -372,41 +373,57 @@ public:
      *
      * Returns true for objects defined from Qml, and false for objects declared from C++.
      */
-    bool isComposite() const { return m_flags & Composite; }
-    bool isScript() const { return m_flags & Script; }
-    bool hasCustomParser() const { return m_flags & CustomParser; }
-    bool isArrayScope() const { return m_flags & Array; }
-    bool isInlineComponent() const { return m_flags & InlineComponent; }
-    bool isWrappedInImplicitComponent() const { return m_flags & WrappedInImplicitComponent; }
-    bool extensionIsJavaScript() const { return m_flags & ExtensionIsJavaScript; }
-    bool extensionIsNamespace() const { return m_flags & ExtensionIsNamespace; }
+    bool isComposite() const { return m_flags.testFlag(Composite); }
+    void setIsComposite(bool v) { m_flags.setFlag(Composite, v); }
+
+    /*!
+     * \internal
+     *
+     * Returns true for JavaScript types, false for QML and C++ types.
+     */
+    bool isJavaScriptBuiltin() const { return m_flags.testFlag(JavaScriptBuiltin); }
+    void setIsJavaScriptBuiltin(bool v) { m_flags.setFlag(JavaScriptBuiltin, v); }
+
+    bool isScript() const { return m_flags.testFlag(Script); }
+    void setIsScript(bool v) { m_flags.setFlag(Script, v); }
+
+    bool hasCustomParser() const { return m_flags.testFlag(CustomParser); }
+    void setHasCustomParser(bool v) { m_flags.setFlag(CustomParser, v); }
+
+    bool isArrayScope() const { return m_flags.testFlag(Array); }
+    void setIsArrayScope(bool v) { m_flags.setFlag(Array, v); }
+
+    bool isInlineComponent() const { return m_flags.testFlag(InlineComponent); }
+    void setIsInlineComponent(bool v) { m_flags.setFlag(InlineComponent, v); }
+
+    bool isWrappedInImplicitComponent() const { return m_flags.testFlag(WrappedInImplicitComponent); }
+    void setIsWrappedInImplicitComponent(bool v) { m_flags.setFlag(WrappedInImplicitComponent, v); }
+
+    bool extensionIsJavaScript() const { return m_flags.testFlag(ExtensionIsJavaScript); }
+    void setExtensionIsJavaScript(bool v) { m_flags.setFlag(ExtensionIsJavaScript, v); }
+
+    bool extensionIsNamespace() const { return m_flags.testFlag(ExtensionIsNamespace); }
+    void setExtensionIsNamespace(bool v) { m_flags.setFlag(ExtensionIsNamespace, v); }
+
     bool isListProperty() const { return m_flags.testFlag(IsListProperty); }
     void setIsListProperty(bool v) { m_flags.setFlag(IsListProperty, v); }
-    bool isSingleton() const { return m_flags & Singleton; }
+
+    bool isSingleton() const { return m_flags.testFlag(Singleton); }
+    void setIsSingleton(bool v) { m_flags.setFlag(Singleton, v); }
 
     bool enforcesScopedEnums() const;
     void setEnforcesScopedEnumsFlag(bool v) { m_flags.setFlag(EnforcesScopedEnums, v); }
 
     bool isCreatable() const;
-    bool isStructured() const;
-    bool isReferenceType() const { return m_semantics == QQmlJSScope::AccessSemantics::Reference; }
-    bool isValueType() const { return m_semantics == QQmlJSScope::AccessSemantics::Value; }
-
-    void setIsSingleton(bool v) { m_flags.setFlag(Singleton, v); }
     void setCreatableFlag(bool v) { m_flags.setFlag(Creatable, v); }
-    void setStructuredFlag(bool v) { m_flags.setFlag(Structured, v); }
-    void setIsComposite(bool v) { m_flags.setFlag(Composite, v); }
-    void setIsScript(bool v) { m_flags.setFlag(Script, v); }
-    void setHasCustomParser(bool v);
-    void setIsArrayScope(bool v) { m_flags.setFlag(Array, v); }
-    void setIsInlineComponent(bool v) { m_flags.setFlag(InlineComponent, v); }
-    void setIsWrappedInImplicitComponent(bool v) { m_flags.setFlag(WrappedInImplicitComponent, v); }
-    void setExtensionIsJavaScript(bool v) { m_flags.setFlag(ExtensionIsJavaScript, v); }
-    void setExtensionIsNamespace(bool v) { m_flags.setFlag(ExtensionIsNamespace, v); }
 
+    bool isStructured() const;
+    void setStructuredFlag(bool v) { m_flags.setFlag(Structured, v); }
 
     void setAccessSemantics(AccessSemantics semantics) { m_semantics = semantics; }
     AccessSemantics accessSemantics() const { return m_semantics; }
+    bool isReferenceType() const { return m_semantics == QQmlJSScope::AccessSemantics::Reference; }
+    bool isValueType() const { return m_semantics == QQmlJSScope::AccessSemantics::Value; }
 
     std::optional<JavaScriptIdentifier> jsIdentifier(const QString &id) const;
     std::optional<JavaScriptIdentifier> ownJSIdentifier(const QString &id) const;
@@ -433,7 +450,7 @@ public:
             QSet<QString> *usedTypes = nullptr);
     static void resolveList(
             const QQmlJSScope::Ptr &self, const QQmlJSScope::ConstPtr &arrayType);
-    static void resolveGeneralizedGroup(
+    static void resolveGroup(
             const QQmlJSScope::Ptr &self, const QQmlJSScope::ConstPtr &baseType,
             const QQmlJS::ContextualTypes &contextualTypes,
             QSet<QString> *usedTypes = nullptr);
@@ -604,11 +621,6 @@ inline QQmlJSMetaMethod::AbsoluteFunctionIndex QQmlJSScope::ownRuntimeFunctionIn
     Q_ASSERT(i >= 0);
     Q_ASSERT(i < int(m_runtimeFunctionIndices.size()));
     return m_runtimeFunctionIndices[i];
-}
-
-inline void QQmlJSScope::setHasCustomParser(bool v)
-{
-    m_flags.setFlag(CustomParser, v);;
 }
 
 inline void QQmlJSScope::setInlineComponentName(const QString &inlineComponentName)

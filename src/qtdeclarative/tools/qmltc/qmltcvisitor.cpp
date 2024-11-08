@@ -74,7 +74,7 @@ QmltcVisitor::QmltcVisitor(const QQmlJSScope::Ptr &target, QQmlJSImporter *impor
                            const QStringList &qmldirFiles)
     : QQmlJSImportVisitor(target, importer, logger, implicitImportDirectory, qmldirFiles)
 {
-    m_qmlTypeNames.append(QFileInfo(logger->fileName()).baseName()); // put document root
+    m_qmlTypeNames.append(QFileInfo(logger->filePath()).baseName()); // put document root
 }
 
 void QmltcVisitor::findCppIncludes()

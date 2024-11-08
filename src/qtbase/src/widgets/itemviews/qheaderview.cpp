@@ -1518,6 +1518,7 @@ void QHeaderView::setDefaultSectionSize(int size)
     Q_D(QHeaderView);
     if (size < 0 || size > maxSizeSection)
         return;
+    d->oldDefaultSectionSize = d->defaultSectionSize;
     d->setDefaultSectionSize(size);
 }
 
@@ -1525,7 +1526,9 @@ void QHeaderView::resetDefaultSectionSize()
 {
     Q_D(QHeaderView);
     if (d->customDefaultSectionSize) {
+        d->oldDefaultSectionSize = d->defaultSectionSize;
         d->updateDefaultSectionSizeFromStyle();
+        d->setDefaultSectionSize(d->defaultSectionSize);
         d->customDefaultSectionSize = false;
     }
 }
@@ -2376,8 +2379,12 @@ bool QHeaderView::event(QEvent *e)
         }
         break; }
     case QEvent::StyleChange:
-        if (!d->customDefaultSectionSize)
+        if (!d->customDefaultSectionSize) {
+            d->oldDefaultSectionSize = d->defaultSectionSize;
             d->updateDefaultSectionSizeFromStyle();
+            d->setDefaultSectionSize(d->defaultSectionSize);
+            d->customDefaultSectionSize = false;
+        }
         break;
     default:
         break;
@@ -3850,7 +3857,11 @@ void QHeaderViewPrivate::setDefaultSectionSize(int size)
     for (int i = 0; i < sectionItems.size(); ++i) {
         QHeaderViewPrivate::SectionItem &section = sectionItems[i];
         if (hiddenSectionSize.isEmpty() || !isVisualIndexHidden(i)) { // resize on not hidden.
-            const int newSize = size;
+            // Resize to the new default if the current size is the old default,
+            // or 0. Otherwise don't change.
+            const int newSize = (section.size == oldDefaultSectionSize || !section.size)
+                              ? size
+                              : section.size;
             if (newSize != section.size) {
                 length += newSize - section.size; //the whole length is changed
                 const int oldSectionSize = section.sectionSize();

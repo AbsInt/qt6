@@ -184,37 +184,33 @@ public:
     mutable QMutex mutex;
     QAtomicInt quitLockRef;
 
-    enum State : quint8 {
-        // All state changes are imprecise
-        NotStarted = 0,     // before start() or if failed to start
-        Running = 1,        // in run()
-        Finishing = 2,      // in QThreadPrivate::finish()
-        Finished = 3,       // QThreadPrivate::finish() is done
-    };
-
-    State threadState = NotStarted;
-    bool exited = false;
+    bool running;
+    bool finished;
+    bool isInFinish; //when in QThreadPrivate::finish
     std::atomic<bool> interruptionRequested = false;
 #ifdef Q_OS_UNIX
     bool terminated = false; // when (the first) terminate has been called
 #endif
 
-    int returnCode = -1;
+    bool exited;
+    int returnCode;
 
-    uint stackSize = 0;
-    std::underlying_type_t<QThread::Priority> priority = QThread::InheritPriority;
+    uint stackSize;
+    std::underlying_type_t<QThread::Priority> priority;
+
+    bool wait(QMutexLocker<QMutex> &locker, QDeadlineTimer deadline);
 
 #ifdef Q_OS_UNIX
     QWaitCondition thread_done;
 
     static void *start(void *arg);
-    static void finish(void *);     // happens early (before thread-local dtors)
-    static void cleanup(void *);    // happens late (as a thread-local dtor, if possible)
+    void finish();          // happens early (before thread-local dtors)
+    void cleanup();         // happens late (as a thread-local dtor, if possible)
 #endif // Q_OS_UNIX
 
 #ifdef Q_OS_WIN
     static unsigned int __stdcall start(void *) noexcept;
-    static void finish(void *, bool lockAnyway = true) noexcept;
+    void finish(bool lockAnyway = true) noexcept;
 
     Qt::HANDLE handle;
     unsigned int id;
@@ -235,7 +231,7 @@ public:
 
     void deref()
     {
-        if (!quitLockRef.deref() && threadState == Running) {
+        if (!quitLockRef.deref() && running) {
             QCoreApplication::instance()->postEvent(q_ptr, new QEvent(QEvent::Quit));
         }
     }

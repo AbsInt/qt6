@@ -583,7 +583,8 @@ void QListViewPrivate::selectAll(QItemSelectionModel::SelectionFlags command)
     QModelIndex topLeft;
     int row = 0;
     const int colCount = model->columnCount(root);
-    for(; row < model->rowCount(root); ++row) {
+    const int rowCount = model->rowCount(root);
+    for ( ; row < rowCount; ++row) {
         if (isHidden(row)) {
             //it might be the end of a selection range
             if (topLeft.isValid()) {

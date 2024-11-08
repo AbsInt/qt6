@@ -268,7 +268,7 @@ int main(int argc, char **argv)
     importer.setImportVisitor(qmltcVisitor);
 
     QQmlJSLogger logger;
-    logger.setFileName(url);
+    logger.setFilePath(url);
     logger.setCode(sourceCode);
     setupLogger(logger);
 

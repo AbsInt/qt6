@@ -34,8 +34,8 @@ QWaylandXdgSurface::Toplevel::Toplevel(QWaylandXdgSurface *xdgSurface)
     requestWindowStates(window->windowStates());
     requestWindowFlags(window->flags());
     if (auto transientParent = xdgSurface->window()->transientParent()) {
-        if (auto parentSurface =
-                    qobject_cast<QWaylandXdgSurface *>(transientParent->shellSurface())) {
+        auto parentSurface = qobject_cast<QWaylandXdgSurface *>(transientParent->shellSurface());
+        if (parentSurface && parentSurface->m_toplevel) {
             set_parent(parentSurface->m_toplevel->object());
             if (window->modality() != Qt::NonModal && m_xdgSurface->m_shell->m_xdgDialogWm) {
                 m_xdgDialog.reset(m_xdgSurface->m_shell->m_xdgDialogWm->getDialog(object()));

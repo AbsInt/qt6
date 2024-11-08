@@ -42,6 +42,7 @@ private slots:
     void recursive();
     void date();
     void constructors();
+    void constructFromJSValue();
 };
 
 void tst_qqmlvaluetypeproviders::initTestCase()
@@ -562,6 +563,46 @@ void tst_qqmlvaluetypeproviders::constructors()
         QCOMPARE(Padding::log[2].left, 10);
         QCOMPARE(Padding::log[2].right, 20);
     }
+}
+
+void tst_qqmlvaluetypeproviders::constructFromJSValue()
+{
+    QQmlEngine engine;
+    QQmlComponent component(&engine);
+    component.setData(R"(
+        import QtQml
+        import Test
+        QtObject {
+            property fromJSValue js: "abcdefg"
+            property fromJSPrimitive primitive: "aaaa"
+            property fromJSManaged managed: "bbbb"
+        }
+    )", QUrl());
+
+    QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+
+    FromJSValue::constructorCalls = 0;
+    FromJSManaged::constructorCalls = 0;
+    FromJSPrimitive::constructorCalls = 0;
+
+    QScopedPointer<QObject> o(component.create());
+    QVERIFY(!o.isNull());
+
+    QCOMPARE(FromJSValue::constructorCalls, 1);
+    QCOMPARE(FromJSPrimitive::constructorCalls, 1);
+    QCOMPARE(FromJSManaged::constructorCalls, 1);
+
+    const QVariant fromJSValue = o->property("js");
+    QCOMPARE(fromJSValue.metaType(), QMetaType::fromType<FromJSValue>());
+    QCOMPARE(fromJSValue.value<FromJSValue>().toString(), QStringLiteral("abcdefg"));
+
+    const QVariant fromJSPrimitive = o->property("primitive");
+    QCOMPARE(fromJSPrimitive.metaType(), QMetaType::fromType<FromJSPrimitive>());
+    QCOMPARE(fromJSPrimitive.value<FromJSPrimitive>().toString(), QStringLiteral("aaaa"));
+
+    const QVariant fromJSManaged = o->property("managed");
+    QCOMPARE(fromJSManaged.metaType(), QMetaType::fromType<FromJSManaged>());
+    QCOMPARE(fromJSManaged.value<FromJSManaged>().toString(), QStringLiteral("bbbb"));
 }
 
 QTEST_MAIN(tst_qqmlvaluetypeproviders)

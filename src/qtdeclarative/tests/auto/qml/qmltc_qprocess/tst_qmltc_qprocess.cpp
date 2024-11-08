@@ -107,7 +107,7 @@ QString tst_qmltc_qprocess::runQmltc(const QString &inputFile,
     QProcess process;
     process.start(m_qmltcPath, args);
     handleResult(process); // may fail the test
-    errors = process.readAllStandardError();
+    errors = QString::fromLocal8Bit(process.readAllStandardError());
 
     if (QTest::currentTestFailed()) {
         qDebug() << "Command:" << process.program() << args.join(u' ');
@@ -178,22 +178,22 @@ void tst_qmltc_qprocess::singleton()
 {
     {
         const auto errors = runQmltc(u"singletonUncreatable.qml"_s, false);
-        QVERIFY(errors.contains("singletonUncreatable.qml:4:1: Type UncreatableType is not "
-                                "creatable. [uncreatable-type]"));
+        QVERIFY(errors.contains(u"singletonUncreatable.qml:4:1: Type UncreatableType is not "_s
+                                u"creatable. [uncreatable-type]"_s));
     }
     {
         const auto errors = runQmltc(u"uncreatable.qml"_s, false);
         QVERIFY(errors.contains(
-                "uncreatable.qml:6:5: Type UncreatableType is not creatable. [uncreatable-type]"));
-        QVERIFY(errors.contains("uncreatable.qml:7:5: Singleton Type SingletonThing is not "
-                                "creatable. [uncreatable-type]"));
-        QVERIFY(errors.contains("uncreatable.qml:8:5: Singleton Type SingletonType is not "
-                                "creatable. [uncreatable-type]"));
-        QVERIFY(errors.contains("uncreatable.qml:10:18: Singleton Type SingletonThing is not "
-                                "creatable. [uncreatable-type]"));
-        QVERIFY(errors.contains("uncreatable.qml:15:18: Singleton Type SingletonType is not "
-                                "creatable. [uncreatable-type]"));
-        QVERIFY(!errors.contains("NotSingletonType"));
+                u"uncreatable.qml:6:5: Type UncreatableType is not creatable. [uncreatable-type]"_s));
+        QVERIFY(errors.contains(u"uncreatable.qml:7:5: Singleton Type SingletonThing is not "_s
+                                u"creatable. [uncreatable-type]"_s));
+        QVERIFY(errors.contains(u"uncreatable.qml:8:5: Singleton Type SingletonType is not "_s
+                                u"creatable. [uncreatable-type]"_s));
+        QVERIFY(errors.contains(u"uncreatable.qml:10:18: Singleton Type SingletonThing is not "_s
+                                u"creatable. [uncreatable-type]"_s));
+        QVERIFY(errors.contains(u"uncreatable.qml:15:18: Singleton Type SingletonType is not "_s
+                                u"creatable. [uncreatable-type]"_s));
+        QVERIFY(!errors.contains(u"NotSingletonType"_s));
     }
 }
 
@@ -289,10 +289,10 @@ void tst_qmltc_qprocess::exports()
 {
     const QString fileName = u"dummy.qml"_s;
     QStringList extraArgs;
-    extraArgs << "--export"
-              << "MYLIB_EXPORT_MACRO"
-              << "--exportInclude"
-              << "exportheader.h";
+    extraArgs << u"--export"_s
+              << u"MYLIB_EXPORT_MACRO"_s
+              << u"--exportInclude"_s
+              << u"exportheader.h"_s;
     const auto errors = runQmltc(fileName, true, extraArgs);
 
     const QString headerName = m_tmpPath + u"/"_s + QFileInfo(fileName).baseName() + u".h"_s;

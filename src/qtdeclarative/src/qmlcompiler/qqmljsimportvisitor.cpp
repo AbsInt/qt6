@@ -6,7 +6,6 @@
 #include "qqmljsmetatypes_p.h"
 #include "qqmljsresourcefilemapper_p.h"
 
-#include <QtCore/qfileinfo.h>
 #include <QtCore/qdir.h>
 #include <QtCore/qqueue.h>
 #include <QtCore/qscopedvaluerollback.h>
@@ -177,7 +176,7 @@ void QQmlJSImportVisitor::populateCurrentScope(
     m_currentScope->setScopeType(type);
     setScopeName(m_currentScope, type, name);
     m_currentScope->setIsComposite(true);
-    m_currentScope->setFilePath(QFileInfo(m_logger->fileName()).absoluteFilePath());
+    m_currentScope->setFilePath(m_logger->filePath());
     m_currentScope->setSourceLocation(location);
     m_scopesByIrLocation.insert({ location.startLine, location.startColumn }, m_currentScope);
 }
@@ -240,12 +239,12 @@ bool QQmlJSImportVisitor::isTypeResolved(const QQmlJSScope::ConstPtr &type)
     return isTypeResolved(type, handleUnresolvedType);
 }
 
-static bool mayBeUnresolvedGeneralizedGroupedProperty(const QQmlJSScope::ConstPtr &scope)
+static bool mayBeUnresolvedGroupedProperty(const QQmlJSScope::ConstPtr &scope)
 {
     return scope->scopeType() == QQmlSA::ScopeType::GroupedPropertyScope && !scope->baseType();
 }
 
-void QQmlJSImportVisitor::resolveAliasesAndIds()
+void QQmlJSImportVisitor::resolveAliases()
 {
     QQueue<QQmlJSScope::Ptr> objects;
     objects.enqueue(m_exportedRootScope);
@@ -302,11 +301,11 @@ void QQmlJSImportVisitor::resolveAliasesAndIds()
                 if (foundProperty) {
                     m_logger->log(QStringLiteral("Cannot deduce type of alias \"%1\"")
                                           .arg(property.propertyName()),
-                                  qmlMissingType, object->sourceLocation());
+                                  qmlMissingType, property.sourceLocation());
                 } else {
                     m_logger->log(QStringLiteral("Cannot resolve alias \"%1\"")
                                           .arg(property.propertyName()),
-                                  qmlUnresolvedAlias, object->sourceLocation());
+                                  qmlUnresolvedAlias, property.sourceLocation());
                 }
 
                 Q_ASSERT(property.index() >= 0); // this property is already in object
@@ -335,20 +334,8 @@ void QQmlJSImportVisitor::resolveAliasesAndIds()
         }
 
         const auto childScopes = object->childScopes();
-        for (const auto &childScope : childScopes) {
-            if (mayBeUnresolvedGeneralizedGroupedProperty(childScope)) {
-                const QString name = childScope->internalName();
-                if (object->isNameDeferred(name)) {
-                    const QQmlJSScope::ConstPtr deferred = m_scopesById.scope(name, childScope);
-                    if (!deferred.isNull()) {
-                        QQmlJSScope::resolveGeneralizedGroup(
-                                childScope, deferred, m_rootScopeImports.contextualTypes(),
-                                &m_usedTypes);
-                    }
-                }
-            }
+        for (const auto &childScope : childScopes)
             objects.enqueue(childScope);
-        }
 
         if (doRequeue)
             requeue.enqueue(object);
@@ -367,7 +354,36 @@ void QQmlJSImportVisitor::resolveAliasesAndIds()
                 continue;
             m_logger->log(QStringLiteral("Alias \"%1\" is part of an alias cycle")
                                   .arg(property.propertyName()),
-                          qmlAliasCycle, object->sourceLocation());
+                          qmlAliasCycle, property.sourceLocation());
+        }
+    }
+}
+
+void QQmlJSImportVisitor::resolveGroupProperties()
+{
+    QQueue<QQmlJSScope::Ptr> objects;
+    objects.enqueue(m_exportedRootScope);
+
+    while (!objects.isEmpty()) {
+        const QQmlJSScope::Ptr object = objects.dequeue();
+        const auto childScopes = object->childScopes();
+        for (const auto &childScope : childScopes) {
+            if (mayBeUnresolvedGroupedProperty(childScope)) {
+                const QString name = childScope->internalName();
+                if (object->isNameDeferred(name)) {
+                    const QQmlJSScope::ConstPtr deferred = m_scopesById.scope(name, childScope);
+                    if (!deferred.isNull()) {
+                        QQmlJSScope::resolveGroup(
+                                childScope, deferred, m_rootScopeImports.contextualTypes(),
+                                &m_usedTypes);
+                    }
+                } else if (const QQmlJSScope::ConstPtr propType = object->property(name).type()) {
+                    QQmlJSScope::resolveGroup(
+                            childScope, propType, m_rootScopeImports.contextualTypes(),
+                            &m_usedTypes);
+                }
+            }
+            objects.enqueue(childScope);
         }
     }
 }
@@ -416,7 +432,7 @@ void QQmlJSImportVisitor::importBaseModules()
 
     // Pulling in the modules and neighboring qml files of the qmltypes we're trying to lint is not
     // something we need to do.
-    if (!m_logger->fileName().endsWith(u".qmltypes"_s)) {
+    if (!m_logger->filePath().endsWith(u".qmltypes"_s)) {
         m_rootScopeImports.add(m_importer->importDirectory(m_implicitImportDirectory));
 
         // Import all possible resource directories the file may belong to.
@@ -424,7 +440,7 @@ void QQmlJSImportVisitor::importBaseModules()
         // locations, you're on your own anyway.
         if (QQmlJSResourceFileMapper *mapper = m_importer->resourceFileMapper()) {
             const QStringList resourcePaths = mapper->resourcePaths(QQmlJSResourceFileMapper::Filter {
-                    m_logger->fileName(), QStringList(), QQmlJSResourceFileMapper::Resource });
+                    m_logger->filePath(), QStringList(), QQmlJSResourceFileMapper::Resource });
             for (const QString &path : resourcePaths) {
                 const qsizetype lastSlash = path.lastIndexOf(QLatin1Char('/'));
                 if (lastSlash == -1)
@@ -462,7 +478,8 @@ void QQmlJSImportVisitor::endVisit(UiProgram *)
         checkDeprecation(scope);
     }
 
-    resolveAliasesAndIds();
+    resolveAliases();
+    resolveGroupProperties();
 
     for (const auto &scope : m_objectDefinitionScopes)
         checkGroupedAndAttachedScopes(scope);
@@ -1666,6 +1683,8 @@ bool QQmlJSImportVisitor::visit(UiPublicMember *publicMember)
         prop.setIsList(publicMember->typeModifier == QLatin1String("list"));
         prop.setIsWritable(!publicMember->isReadonly());
         prop.setAliasExpression(aliasExpr);
+        prop.setSourceLocation(
+                combine(publicMember->firstSourceLocation(), publicMember->colonToken));
         const auto type =
                 isAlias ? QQmlJSScope::ConstPtr() : m_rootScopeImports.type(typeName).scope;
         if (type) {
@@ -2831,6 +2850,7 @@ bool QQmlJSImportVisitor::visit(Program *)
 {
     Q_ASSERT(m_globalScope == m_currentScope);
     Q_ASSERT(!rootScopeIsValid());
+    m_currentScope->setFilePath(m_logger->filePath());
     *m_exportedRootScope = std::move(*QQmlJSScope::clone(m_currentScope));
     m_exportedRootScope->setIsScript(true);
     m_currentScope = m_exportedRootScope;

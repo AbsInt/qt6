@@ -332,6 +332,10 @@ function(qt6_add_qml_module target)
         )
     endif()
 
+    if(QT_QML_NO_CACHEGEN)
+        set(arg_NO_CACHEGEN TRUE)
+    endif()
+
     # Other arguments and checking for invalid combinations
     if (NOT arg_TARGET_PATH)
         # NOTE: This will always be used for copying things to the build
@@ -895,6 +899,7 @@ Check https://doc.qt.io/qt-6/qt-cmake-policy-qtp0001.html for policy details."
         RESOURCES ${arg_RESOURCES}
         OUTPUT_TARGETS cache_target
         PREFIX "${qt_qml_module_resource_prefix}"
+        ADDING_QML_MODULE
     )
     list(APPEND output_targets ${cache_target})
 
@@ -1070,12 +1075,11 @@ Check https://doc.qt.io/qt-6/qt-cmake-policy-qtp0001.html for policy details."
     endif()
 
     if("${CMAKE_VERSION}" VERSION_GREATER_EQUAL "3.19.0")
-        set(id qmlaotstats_aggregation)
-        cmake_language(DEFER DIRECTORY "${PROJECT_BINARY_DIR}" GET_CALL ${id} call)
-
-        if("${call}" STREQUAL "")
-            cmake_language(EVAL CODE "cmake_language(DEFER DIRECTORY \"${PROJECT_BINARY_DIR}\" "
-                "ID ${id} CALL _qt_internal_deferred_aggregate_aotstats_files ${target})")
+        get_cmake_property(aotstats_setup_called _qt_internal_deferred_aotstats_setup)
+        if(NOT aotstats_setup_called)
+            set_property(GLOBAL PROPERTY _qt_internal_deferred_aotstats_setup TRUE)
+            cmake_language(EVAL CODE "cmake_language(DEFER DIRECTORY \"${CMAKE_BINARY_DIR}\" "
+                "CALL _qt_internal_deferred_aotstats_setup)")
         endif()
     else()
         if(NOT TARGET all_aotstats)
@@ -1087,28 +1091,90 @@ Check https://doc.qt.io/qt-6/qt-cmake-policy-qtp0001.html for policy details."
     endif()
 endfunction()
 
-function(_qt_internal_deferred_aggregate_aotstats_files target)
-    get_property(module_aotstats_targets GLOBAL PROPERTY _qt_module_aotstats_targets)
+function(_qt_internal_deferred_aotstats_setup)
+    get_property(module_targets GLOBAL PROPERTY _qt_qml_aotstats_module_targets)
+
+    set(onlybytecode_modules "")
+    set(empty_modules "")
+    set(module_aotstats_targets "")
     set(module_aotstats_files "")
-    foreach(module_target ${module_aotstats_targets})
-        get_target_property(file_path ${module_target} _qt_aotstats_file)
-        if(file_path)
-            string(APPEND module_aotstats_files "${file_path}\n")
+
+    _qt_internal_get_tool_wrapper_script_path(tool_wrapper)
+    foreach(module_target IN LISTS module_targets)
+        get_target_property(qmlcachegen_args    ${module_target} QT_QMLCACHEGEN_ARGUMENTS)
+        get_target_property(uri                 ${module_target} QT_QML_MODULE_URI)
+        get_target_property(aotstats_files      ${module_target} QT_QML_MODULE_AOTSTATS_FILES)
+        get_target_property(rcc_qmlcache_path   ${module_target} QT_QML_MODULE_RCC_QMLCACHE_PATH)
+
+        if("--only-bytecode" IN_LIST qmlcachegen_args)
+            list(APPEND onlybytecode_modules "${uri}(${module_target})")
+            continue()
+        elseif(NOT aotstats_files)
+            list(APPEND empty_modules "${uri}(${module_target})")
+            continue()
         endif()
+
+        list(JOIN aotstats_files "\n" aotstats_files_lines)
+        set(module_aotstats_list_file "${rcc_qmlcache_path}/module_${module_target}.aotstatslist")
+        file(WRITE ${module_aotstats_list_file} "${aotstats_files_lines}")
+
+        set(output "${rcc_qmlcache_path}/module_${module_target}.aotstats")
+        add_custom_command(
+            OUTPUT ${output}
+            DEPENDS ${aotstats_files} ${module_aotstats_list_file}
+            COMMAND
+                ${tool_wrapper}
+                $<TARGET_FILE:Qt6::qmlaotstats>
+                aggregate
+                ${module_aotstats_list_file}
+                ${output}
+        )
+
+        set(module_aotstats_target_name "module_${module_target}_aotstats_target")
+        add_custom_target(${module_aotstats_target_name}
+            DEPENDS ${output}
+        )
+        _qt_internal_assign_to_internal_targets_folder(${module_aotstats_target_name})
+        if(TARGET ${module_target}_qmltyperegistration)
+            add_dependencies(${module_aotstats_target_name} ${module_target}_qmltyperegistration)
+        else()
+            add_dependencies(${module_aotstats_target_name} ${module_target})
+        endif()
+
+        list(APPEND module_aotstats_targets ${module_aotstats_target_name})
+        list(APPEND module_aotstats_files ${output})
     endforeach()
 
-    set(aotstats_list_file "${PROJECT_BINARY_DIR}/.rcc/qmlcache/all_aotstats.aotstatslist")
-    file(WRITE "${aotstats_list_file}" "${module_aotstats_files}")
 
-    set(all_aotstats_file "${PROJECT_BINARY_DIR}/.rcc/qmlcache/all_aotstats.aotstats")
-    set(formatted_stats_file "${PROJECT_BINARY_DIR}/.rcc/qmlcache/all_aotstats.txt")
+    set(project_rcc_qmlcache "${PROJECT_BINARY_DIR}/.rcc/qmlcache")
+
+    set(qmlaotstats_options "")
+    if(onlybytecode_modules)
+        set(onlybytecode_modules_file "${project_rcc_qmlcache}/aotstats_onlybytecode_modules.txt")
+        list(JOIN onlybytecode_modules "\n" onlybytecode_modules_lines)
+        file(WRITE ${onlybytecode_modules_file} "${onlybytecode_modules_lines}")
+        list(APPEND qmlaotstats_options "--only-bytecode-modules" "${onlybytecode_modules_file}")
+    endif()
+    if(empty_modules)
+        set(empty_modules_file "${project_rcc_qmlcache}/aotstats_empty_modules.txt")
+        list(JOIN empty_modules "\n" empty_modules_lines)
+        file(WRITE ${empty_modules_file} "${empty_modules_lines}")
+        list(APPEND qmlaotstats_options "--empty-modules" "${empty_modules_file}")
+    endif()
+
+    list(JOIN module_aotstats_files "\n" module_aotstats_lines)
+    set(aotstats_list_file "${project_rcc_qmlcache}/all_aotstats.aotstatslist")
+    file(WRITE "${aotstats_list_file}" "${module_aotstats_lines}")
+
+    set(all_aotstats_file "${project_rcc_qmlcache}/all_aotstats.aotstats")
+    set(formatted_stats_file "${project_rcc_qmlcache}/all_aotstats.txt")
 
     _qt_internal_get_tool_wrapper_script_path(tool_wrapper)
     add_custom_command(
         OUTPUT
             "${all_aotstats_file}"
             "${formatted_stats_file}"
-        DEPENDS ${module_aotstats_targets}
+        DEPENDS ${module_aotstats_targets} ${module_aotstats_files}
         COMMAND
             ${tool_wrapper}
             $<TARGET_FILE:Qt6::qmlaotstats>
@@ -1121,6 +1187,8 @@ function(_qt_internal_deferred_aggregate_aotstats_files target)
             format
             "${all_aotstats_file}"
             "${formatted_stats_file}"
+            "${qmlaotstats_options}"
+        COMMAND_EXPAND_LISTS
     )
 
     if(NOT TARGET all_aotstats)
@@ -2665,6 +2733,7 @@ function(qt6_target_qml_sources target)
         NO_CACHEGEN
         NO_QMLDIR_TYPES
         __QT_INTERNAL_FORCE_DEFER_QMLDIR  # Used only by qt6_add_qml_module()
+        ADDING_QML_MODULE
     )
 
     set(args_single
@@ -2682,6 +2751,10 @@ function(qt6_target_qml_sources target)
     )
     if(arg_UNPARSED_ARGUMENTS)
         message(FATAL_ERROR "Unknown/unexpected arguments: ${arg_UNPARSED_ARGUMENTS}")
+    endif()
+
+    if(NOT arg_QML_FILES)
+        set_property(GLOBAL APPEND PROPERTY _qt_qml_aotstats_module_targets ${target})
     endif()
 
     get_target_property(no_lint ${target} QT_QML_MODULE_NO_LINT)
@@ -2758,7 +2831,7 @@ function(qt6_target_qml_sources target)
     if(arg_NO_LINT)
         set(no_lint TRUE)
     endif()
-    if(arg_NO_CACHEGEN)
+    if(arg_NO_CACHEGEN OR QT_QML_NO_CACHEGEN)
         set(no_cachegen TRUE)
     endif()
     if(no_qmldir MATCHES "NOTFOUND" OR arg_NO_QMLDIR_TYPES)
@@ -2807,8 +2880,10 @@ function(qt6_target_qml_sources target)
             "$<${have_direct_calls}:--direct-calls>"
             "$<${have_arguments}:${arguments}>"
             ${qrc_resource_args}
-            "--dump-aot-stats"
-            "--module-id=${arg_URI}(${target})"
+            # The --only-bytecode argument is mutually exclusive with aotstats and can
+            # be added after qt_add_qml_module. Conditionally add aotstats flags via genex.
+            "$<$<NOT:$<IN_LIST:--only-bytecode,${arguments}>>:--dump-aot-stats>"
+            "$<$<NOT:$<IN_LIST:--only-bytecode,${arguments}>>:--module-id=${uri}(${target})>"
         )
 
         # For direct evaluation in if() below
@@ -3137,44 +3212,12 @@ function(qt6_target_qml_sources target)
         endif()
     endforeach()
 
-    if(NOT "${uri}" STREQUAL "")
-        list(JOIN aotstats_files "\n" aotstats_files_lines)
-        set(module_aotstats_list_file
-            "${CMAKE_CURRENT_BINARY_DIR}/.rcc/qmlcache/module_${uri}.aotstatslist")
-        file(WRITE ${module_aotstats_list_file} ${aotstats_files_lines})
-
-        # Aggregate qml file aotstats into module-level aotstats
-        _qt_internal_get_tool_wrapper_script_path(tool_wrapper)
-        set(output "${CMAKE_CURRENT_BINARY_DIR}/.rcc/qmlcache/module_${uri}.aotstats")
-        add_custom_command(
-            OUTPUT ${output}
-            DEPENDS ${aotstats_files}
-            COMMAND
-                ${tool_wrapper}
-                $<TARGET_FILE:Qt6::qmlaotstats>
-                aggregate
-                ${module_aotstats_list_file}
-                ${output}
+    if(arg_ADDING_QML_MODULE AND "${CMAKE_VERSION}" VERSION_GREATER_EQUAL "3.19.0")
+        set_property(GLOBAL APPEND PROPERTY _qt_qml_aotstats_module_targets ${target})
+        set_target_properties(${target} PROPERTIES
+            QT_QML_MODULE_AOTSTATS_FILES "${aotstats_files}"
+            QT_QML_MODULE_RCC_QMLCACHE_PATH "${CMAKE_CURRENT_BINARY_DIR}/.rcc/qmlcache"
         )
-        set(module_aotstats_target_name "module_${target}_aotstats_targets")
-        if(NOT TARGET ${module_aotstats_target_name})
-            add_custom_target(${module_aotstats_target_name}
-                DEPENDS ${output}
-            )
-            if(TARGET ${target}_qmltyperegistration)
-                add_dependencies(${module_aotstats_target_name} ${target}_qmltyperegistration)
-            else()
-                add_dependencies(${module_aotstats_target_name} ${target})
-            endif()
-        endif()
-
-        set_target_properties(${module_aotstats_target_name}
-            PROPERTIES _qt_aotstats_file ${output}
-        )
-
-        # Collect module-level aotstats files for later aggregation at the project level
-        set_property(
-            GLOBAL APPEND PROPERTY _qt_module_aotstats_targets ${module_aotstats_target_name})
     endif()
 
     if(ANDROID)

@@ -144,7 +144,7 @@ FilesAnalyzed: false
 PackageSummary: <text>The compiler as identified by CMake, running on ${CMAKE_HOST_SYSTEM_NAME} (${CMAKE_HOST_SYSTEM_PROCESSOR})</text>
 PrimaryPackagePurpose: APPLICATION
 Relationship: SPDXRef-compiler BUILD_DEPENDENCY_OF ${project_spdx_id}
-RelationshipComment: <text>${project_spdx_id} is built by compiler ${CMAKE_CXX_COMPILER_ID} (${CMAKE_CXX_COMPILER}) version ${CMAKE_CXX_COMPILER_VERSION}</text>
+RelationshipComment: <text>${project_spdx_id} is built by compiler ${CMAKE_CXX_COMPILER_ID} version ${CMAKE_CXX_COMPILER_VERSION}</text>
 
 PackageName: ${arg_PROJECT}
 SPDXID: ${project_spdx_id}

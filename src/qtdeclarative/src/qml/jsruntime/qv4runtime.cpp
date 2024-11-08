@@ -285,9 +285,28 @@ ReturnedValue Runtime::Closure::call(ExecutionEngine *engine, int functionId)
                                   ->runtimeFunctions[functionId];
     Q_ASSERT(clos);
     ExecutionContext *current = engine->currentContext();
+    Scope s(engine);
+    QV4::ScopedObject closure(s);
+
     if (clos->isGenerator())
-        return GeneratorFunction::create(current, clos)->asReturnedValue();
-    return FunctionObject::createScriptFunction(current, clos)->asReturnedValue();
+        closure = GeneratorFunction::create(current, clos)->asReturnedValue();
+    else
+        closure = FunctionObject::createScriptFunction(current, clos)->asReturnedValue();
+    // ### TODO: only keep reference to scripts if actually needed; see QTBUG-130795
+    Scoped<QV4::QmlContext> callingQmlContext(s, s.engine->qmlContext());
+    if (callingQmlContext) {
+        // ### TODO: It would be more efficient to use custom Function prototypes instead of setting a property
+        // ==> QTBUG-130798
+        Scoped<QV4::QQmlContextWrapper> qmlContextWrapper(s, callingQmlContext->d()->qml());
+        const QV4::QQmlContextWrapper *resource = qmlContextWrapper;
+        QQmlRefPointer<QQmlContextData> context = resource->getContext();
+        if (!context->importedScripts().isNullOrUndefined()) {
+            QV4::ScopedString name(s, engine->newString(QLatin1StringView("$importedScripts")));
+            QV4::ScopedObject scripts(s, context->importedScripts());
+            closure->insertMember(name, scripts, Attr_Invalid);
+        }
+    }
+    return closure.asReturnedValue();
 }
 
 Bool Runtime::DeleteProperty_NoThrow::call(ExecutionEngine *engine, const Value &base, const Value &index)

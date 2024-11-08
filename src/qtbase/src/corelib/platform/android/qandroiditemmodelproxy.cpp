@@ -201,8 +201,7 @@ jobject QAndroidItemModelProxy::jni_roleNames(JNIEnv *env, jobject object)
     HashMap jRoleNames{};
     for (auto [role, roleName] : roleNames.asKeyValueRange()) {
         const Integer jRole(role);
-        const QJniObject jRoleName = QJniObject::fromString(roleName);
-        jRoleNames.callMethod<jobject>("put", jRole.object(), jRoleName.object());
+        jRoleNames.callMethod<jobject>("put", jRole.object(), QString::fromUtf8(roleName));
     }
     return env->NewLocalRef(jRoleNames.object());
 }

@@ -26,17 +26,17 @@ bool QQmlJS::AotStatsEntry::operator<(const AotStatsEntry &other) const
     return line < other.line;
 }
 
-void AotStats::insert(AotStats other)
+void AotStats::insert(const AotStats &other)
 {
     for (const auto &[moduleUri, moduleStats] : other.m_entries.asKeyValueRange()) {
         m_entries[moduleUri].insert(moduleStats);
     }
 }
 
-std::optional<QList<QString>> extractAotstatsFilesList(const QString &aotstatsListPath)
+std::optional<QList<QString>> AotStats::readAllLines(const QString &path)
 {
-    QFile aotstatsListFile(aotstatsListPath);
-    if (!aotstatsListFile.open(QIODevice::ReadOnly | QIODevice::ReadOnly | QIODevice::Text)) {
+    QFile aotstatsListFile(path);
+    if (!aotstatsListFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
         qDebug().noquote() << u"Could not open \"%1\" for reading"_s.arg(aotstatsListFile.fileName());
         return std::nullopt;
     }
@@ -62,7 +62,7 @@ std::optional<AotStats> AotStats::parseAotstatsFile(const QString &aotstatsPath)
 
 std::optional<AotStats> AotStats::aggregateAotstatsList(const QString &aotstatsListPath)
 {
-    const auto aotstatsFiles = extractAotstatsFilesList(aotstatsListPath);
+    const auto aotstatsFiles = readAllLines(aotstatsListPath);
     if (!aotstatsFiles.has_value())
         return std::nullopt;
 
@@ -160,7 +160,13 @@ QJsonDocument AotStats::toJsonDocument() const
     return QJsonDocument(modulesArray);
 }
 
-void AotStats::addEntry(const QString &moduleId, const QString &filepath, AotStatsEntry entry)
+void AotStats::registerFile(const QString &moduleId, const QString &filepath)
+{
+    m_entries[moduleId][filepath] = {};
+}
+
+void AotStats::addEntry(const QString &moduleId, const QString &filepath,
+                        const AotStatsEntry &entry)
 {
     m_entries[moduleId][filepath].append(entry);
 }
@@ -177,7 +183,12 @@ bool AotStats::saveToDisk(const QString &filepath) const
     return true;
 }
 
-void QQmlJSAotCompilerStats::addEntry(QString filepath, QQmlJS::AotStatsEntry entry)
+void QQmlJSAotCompilerStats::registerFile(const QString &filepath)
+{
+    QQmlJSAotCompilerStats::instance()->registerFile(s_moduleId, filepath);
+}
+
+void QQmlJSAotCompilerStats::addEntry(const QString &filepath, const QQmlJS::AotStatsEntry &entry)
 {
     auto *aotstats = QQmlJSAotCompilerStats::instance();
     aotstats->addEntry(s_moduleId, filepath, entry);

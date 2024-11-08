@@ -392,11 +392,10 @@ inline QDebugIfHasDebugStreamContainer<QMultiHash<Key, T>, Key, T> operator<<(QD
 template <class T>
 inline QDebugIfHasDebugStream<T> operator<<(QDebug debug, const std::optional<T> &opt)
 {
-    const QDebugStateSaver saver(debug);
     if (!opt)
-        debug.nospace() << std::nullopt;
-    else
-        debug.nospace() << "std::optional(" << *opt << ')';
+        return debug << std::nullopt;
+    const QDebugStateSaver saver(debug);
+    debug.nospace() << "std::optional(" << *opt << ')';
     return debug;
 }
 

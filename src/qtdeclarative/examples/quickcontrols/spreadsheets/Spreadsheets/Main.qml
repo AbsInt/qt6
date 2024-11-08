@@ -348,6 +348,7 @@ ApplicationWindow {
 
                         anchors.fill: parent
                         Drag.active: dragArea.drag.active
+                        enabled: dragArea.drag.active
 
                         function startDragging()
                         {

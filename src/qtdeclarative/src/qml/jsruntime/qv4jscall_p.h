@@ -389,7 +389,7 @@ inline ReturnedValue coerce(
             return value.asReturnedValue();
     }
 
-    if (void *target = QQmlValueTypeProvider::heapCreateValueType(qmlType, value)) {
+    if (void *target = QQmlValueTypeProvider::heapCreateValueType(qmlType, value, engine)) {
         Heap::QQmlValueTypeWrapper *wrapper = engine->memoryManager->allocate<QQmlValueTypeWrapper>(
                 nullptr, metaType, qmlType.metaObjectForValueType(),
                 nullptr, -1, Heap::ReferenceObject::NoFlag);

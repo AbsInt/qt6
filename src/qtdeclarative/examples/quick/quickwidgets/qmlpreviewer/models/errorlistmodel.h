@@ -17,6 +17,8 @@ public:
 
     void setErrorList(const QList<QQmlError> &errorList);
 
+    Q_INVOKABLE void selectRow(int row);
+
 private:
     bool isIndexValid(const QModelIndex &index) const;
 

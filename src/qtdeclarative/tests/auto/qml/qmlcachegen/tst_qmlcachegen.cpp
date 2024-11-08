@@ -1017,6 +1017,7 @@ void tst_qmlcachegen::aotstatsGeneration()
     QVERIFY(aotstats.entries().size() == 1);  // One module
     const auto &moduleEntries = aotstats.entries()["Aotstats"];
     QVERIFY(moduleEntries.size() == 1);     // Only one qml file was compiled
+    QCOMPARE(moduleEntries.keys().first(), testFile("aotstats/" + qmlFile));
     const auto &fileEntries = moduleEntries[moduleEntries.keys().first()];
 
     for (const auto &entry : entries) {

@@ -48,7 +48,7 @@ bool QQmlJSTypeReader::operator ()(const QSharedPointer<QQmlJSScope> &scope)
     QQmlJS::AST::Node *rootNode = parser.rootNode();
 
     QQmlJSLogger logger;
-    logger.setFileName(m_file);
+    logger.setFilePath(m_file);
     logger.setCode(code);
     logger.setSilent(true);
 

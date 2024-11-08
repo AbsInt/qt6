@@ -117,7 +117,7 @@ remove the signal handler or add the missing signal.
 \section1 Implicitly defining signal handler in Connections is deprecated
 
 \section2 What happened?
-You used a signal handler on a \l{qml-qtqml-connections.html}{Connections type}.
+You used a signal handler on a \l[Qml]{Connections} type.
 
 \section2 Why is this bad?
 This is deprecated.

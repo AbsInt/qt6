@@ -623,7 +623,8 @@ void QQmlJSAotCompiler::setDocument(
     Q_UNUSED(codegen);
     m_document = irDocument;
     const QFileInfo resourcePathInfo(m_resourcePath);
-    m_logger->setFileName(resourcePathInfo.fileName());
+    if (m_logger->filePath().isEmpty())
+        m_logger->setFilePath(resourcePathInfo.fileName());
     m_logger->setCode(irDocument->code);
     m_unitGenerator = &irDocument->jsGenerator;
     QQmlJSScope::Ptr target = QQmlJSScope::create();

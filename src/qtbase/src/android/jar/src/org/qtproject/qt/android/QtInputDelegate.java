@@ -43,7 +43,7 @@ class QtInputDelegate implements QtInputConnection.QtInputConnectionListener, Qt
     // handle methods
 
     private QtEditText m_currentEditText = null;
-    private final InputMethodManager m_imm;
+    private InputMethodManager m_imm;
 
     private boolean m_keyboardIsVisible = false;
     private boolean m_isKeyboardHidingAnimationOngoing = false;
@@ -72,9 +72,13 @@ class QtInputDelegate implements QtInputConnection.QtInputConnectionListener, Qt
 
     private final KeyboardVisibilityListener m_keyboardVisibilityListener;
 
-    QtInputDelegate(Activity activity, KeyboardVisibilityListener listener)
+    QtInputDelegate(KeyboardVisibilityListener listener)
     {
-        this.m_keyboardVisibilityListener = listener;
+        m_keyboardVisibilityListener = listener;
+    }
+
+    void initInputMethodManager(Activity activity)
+    {
         m_imm = (InputMethodManager) activity.getSystemService(Context.INPUT_METHOD_SERVICE);
     }
 
@@ -84,10 +88,10 @@ class QtInputDelegate implements QtInputConnection.QtInputConnectionListener, Qt
                                 final int candidatesStart, final int candidatesEnd)
     {
         QtNative.runAction(() -> {
-            if (m_imm == null)
-                return;
-
-            m_imm.updateSelection(m_currentEditText, selStart, selEnd, candidatesStart, candidatesEnd);
+            if (m_imm != null) {
+                m_imm.updateSelection(m_currentEditText, selStart, selEnd,
+                        candidatesStart, candidatesEnd);
+            }
         });
     }
 
@@ -104,12 +108,11 @@ class QtInputDelegate implements QtInputConnection.QtInputConnectionListener, Qt
                 return;
 
             m_currentEditText.setEditTextOptions(enterKeyType, inputHints);
-
             m_currentEditText.setLayoutParams(new QtLayout.LayoutParams(width, height, x, y));
-
             m_currentEditText.requestFocus();
-
             m_currentEditText.postDelayed(() -> {
+                if (m_imm == null)
+                    return;
                 m_imm.showSoftInput(m_currentEditText, 0, new ResultReceiver(new Handler()) {
                     @Override
                     protected void onReceiveResult(int resultCode, Bundle resultData) {
@@ -269,7 +272,8 @@ class QtInputDelegate implements QtInputConnection.QtInputConnectionListener, Qt
         if (!visibility) {
             // Hiding the keyboard clears the immersive mode, so we need to set it again.
             m_keyboardVisibilityListener.onKeyboardVisibilityChange();
-            m_currentEditText.clearFocus();
+            if (m_currentEditText != null)
+                m_currentEditText.clearFocus();
         }
     }
 

@@ -476,7 +476,8 @@ bool QQuickAccessibleAttached::doAction(const QString &actionName)
         bool ret = false;
         if (m_proxying)
             ret = sig->invoke(m_proxying);
-        ret |= sig->invoke(this);
+        if (!ret)
+            ret = sig->invoke(this);
         return ret;
     }
     return false;

@@ -76,3 +76,8 @@ pip3 install --user -r "${BASH_SOURCE%/*}/../common/shared/sbom_requirements.txt
 # shellcheck source=../common/unix/SetEnvVar.sh
 source "${BASH_SOURCE%/*}/../common/unix/SetEnvVar.sh"
 SetEnvVar "PYTHON3_PATH" "/usr/local/bin"
+
+# Provisioning during installation says:
+# 'The script sbom2doc is installed in '/home/qt/.local/bin' which is not on PATH.'
+# hence the explicit assignment to SBOM_PYTHON_APPS_PATH.
+SetEnvVar "SBOM_PYTHON_APPS_PATH" "/home/qt/.local/bin"

@@ -588,6 +588,40 @@ void QWidgetWindow::handleMouseEvent(QMouseEvent *event)
             }
         }
 
+        if (QApplication::activePopupWidget() != activePopupWidget
+            && QApplicationPrivate::replayMousePress
+            && QGuiApplicationPrivate::platformIntegration()->styleHint(QPlatformIntegration::ReplayMousePressOutsidePopup).toBool()) {
+            if (m_widget->windowType() != Qt::Popup)
+                qt_button_down = nullptr;
+            if (event->type() == QEvent::MouseButtonPress) {
+                // the popup disappeared: replay the mouse press event to whatever is behind it
+                QWidget *w = QApplication::widgetAt(event->globalPosition().toPoint());
+                if (w && !QApplicationPrivate::isBlockedByModal(w)) {
+                    // activate window of the widget under mouse pointer
+                    if (!w->isActiveWindow()) {
+                        w->activateWindow();
+                        w->window()->raise();
+                    }
+
+                    if (auto win = qt_widget_private(w)->windowHandle(QWidgetPrivate::WindowHandleMode::Closest)) {
+                        const QRect globalGeometry = win->isTopLevel()
+                        ? win->geometry()
+                        : QRect(win->mapToGlobal(QPoint(0, 0)), win->size());
+                        if (globalGeometry.contains(event->globalPosition().toPoint())) {
+                            // Use postEvent() to ensure the local QEventLoop terminates when called from QMenu::exec()
+                            const QPoint localPos = win->mapFromGlobal(event->globalPosition().toPoint());
+                            QMouseEvent *e = new QMouseEvent(QEvent::MouseButtonPress, localPos, localPos, event->globalPosition().toPoint(),
+                                                             event->button(), event->buttons(), event->modifiers(), event->source());
+                            QCoreApplicationPrivate::setEventSpontaneous(e, true);
+                            e->setTimestamp(event->timestamp());
+                            QCoreApplication::postEvent(win, e);
+                        }
+                    }
+                }
+            }
+            QApplicationPrivate::replayMousePress = false;
+        }
+
         if (releaseAfter) {
             qt_button_down = nullptr;
             qt_popup_down_closed = false;

@@ -17,11 +17,11 @@ The ISO 639-3 data file can be downloaded from the SIL website:
 import datetime
 import argparse
 from pathlib import Path
-from typing import Iterator, Optional
+from typing import Callable, Iterator, Optional, TextIO
 
-from qlocalexml import QLocaleXmlReader
+from qlocalexml import Locale, QLocaleXmlReader
 from localetools import *
-from iso639_3 import LanguageCodeData
+from iso639_3 import LanguageCodeData, LanguageCodeEntry
 from zonedata import utcIdList, windowsIdList
 
 
@@ -66,30 +66,31 @@ class LocaleKeySorter:
 
 class ByteArrayData:
     # Only for use with ASCII data, e.g. IANA IDs.
-    def __init__(self):
-        self.data, self.hash = [], {}
+    def __init__(self) -> None:
+        self.data: list[str] = []
+        self.hash: dict[str, int] = {}
 
-    def append(self, s):
+    def append(self, s: str) -> int:
         assert s.isascii(), s
         s += '\0'
         if s in self.hash:
             return self.hash[s]
 
-        index = len(self.data)
+        index: int = len(self.data)
         if index > 0xffff:
             raise Error(f'Index ({index}) outside the uint16 range !')
         self.hash[s] = index
         self.data += unicode2hex(s)
         return index
 
-    def write(self, out, name):
+    def write(self, out: Callable[[str], int], name: str) -> None:
         out(f'\nstatic constexpr char {name}[] = {{\n')
         out(wrap_list(self.data, 16)) # 16 == 100 // len('0xhh, ')
         # All data is ASCII, so only two-digit hex is ever needed.
         out('\n};\n')
 
 class StringDataToken:
-    def __init__(self, index, length, lenbits, indbits):
+    def __init__(self, index: int, length: int, lenbits: int, indbits: int) -> None:
         if index >= (1 << indbits):
             raise ValueError(f'Start-index ({index}) exceeds the {indbits}-bit range!')
         if length >= (1 << lenbits):
@@ -99,22 +100,22 @@ class StringDataToken:
         self.length = length
 
 class StringData:
-    def __init__(self, name, lenbits = 8, indbits = 16):
-        self.data = []
-        self.hash = {}
+    def __init__(self, name: str, lenbits: int = 8, indbits: int = 16) -> None:
+        self.data: list[str] = []
+        self.hash: dict[str, StringDataToken] = {}
         self.name = name
         self.text = '' # Used in quick-search for matches in data
-        self.__bits = lenbits, indbits
+        self.__bits: tuple[int, int] = lenbits, indbits
 
-    def append(self, s):
+    def append(self, s: str) -> StringDataToken:
         try:
-            token = self.hash[s]
+            token: StringDataToken = self.hash[s]
         except KeyError:
-            token = self.__store(s)
+            token: StringDataToken = self.__store(s)
             self.hash[s] = token
         return token
 
-    def __store(self, s):
+    def __store(self, s: str) -> StringDataToken:
         """Add string s to known data.
 
         Seeks to avoid duplication, where possible.
@@ -122,9 +123,9 @@ class StringData:
         """
         if not s:
             return StringDataToken(0, 0, *self.__bits)
-        ucs2 = unicode2hex(s)
+        ucs2: list[str] = unicode2hex(s)
         try:
-            index = self.text.index(s) - 1
+            index: int = self.text.index(s) - 1
             matched = 0
             while matched < len(ucs2):
                 index, matched = self.data.index(ucs2[0], index + 1), 1
@@ -144,23 +145,23 @@ class StringData:
             e.args += (self.name, s)
             raise
 
-    def write(self, fd):
-        indbits = self.__bits[1]
+    def write(self, out: Callable[[str], int]) -> None:
+        indbits: int = self.__bits[1]
         if len(self.data) >= (1 << indbits):
             raise ValueError(f'Data is too big ({len(self.data)}) '
                              f'for {indbits}-bit index to its end!',
                              self.name)
-        fd.write(f"\nstatic constexpr char16_t {self.name}[] = {{\n")
-        fd.write(wrap_list(self.data, 12)) # 12 == 100 // len('0xhhhh, ')
-        fd.write("\n};\n")
+        out(f"\nstatic constexpr char16_t {self.name}[] = {{\n")
+        out(wrap_list(self.data, 12)) # 12 == 100 // len('0xhhhh, ')
+        out("\n};\n")
 
-def currencyIsoCodeData(s):
+def currencyIsoCodeData(s: str) -> str:
     if s:
         return '{' + ",".join(str(ord(x)) for x in s) + '}'
     return "{0,0,0}"
 
 class LocaleSourceEditor (SourceFileEditor):
-    def __init__(self, path: Path, temp: Path, version: str):
+    def __init__(self, path: Path, temp: Path, version: str) -> None:
         super().__init__(path, temp)
         self.version = version
 
@@ -181,7 +182,7 @@ class LocaleSourceEditor (SourceFileEditor):
 """)
 
 class TimeZoneDataWriter (LocaleSourceEditor):
-    def __init__(self, path: Path, temp: Path, version: str):
+    def __init__(self, path: Path, temp: Path, version: str) -> None:
         super().__init__(path, temp, version)
         self.__ianaTable = ByteArrayData() # Single IANA IDs
         self.__ianaListTable = ByteArrayData() # Space-joined lists of IDs
@@ -191,23 +192,25 @@ class TimeZoneDataWriter (LocaleSourceEditor):
         self.windowsKey = {name: (key, off) for key, (name, off)
                            in enumerate(self.__windowsList, 1)}
 
-    def utcTable(self):
-        offsetMap, out = {}, self.writer.write
+    def utcTable(self) -> None:
+        offsetMap: dict[int, tuple[str, ...]] = {}
+        out: Callable[[str], int] = self.writer.write
         for name in utcIdList:
-            offset = self.__offsetOf(name)
+            offset: int = self.__offsetOf(name)
             offsetMap[offset] = offsetMap.get(offset, ()) + (name,)
 
         # Write UTC ID key table
         out('// IANA ID Index, UTC Offset\n')
         out('static constexpr UtcData utcDataTable[] = {\n')
         for offset in sorted(offsetMap.keys()): # Sort so C++ can binary-chop.
-            names = offsetMap[offset];
-            joined = self.__ianaListTable.append(' '.join(names))
+            names: tuple[str, ...] = offsetMap[offset]
+            joined: int = self.__ianaListTable.append(' '.join(names))
             out(f'    {{ {joined:6d},{offset:6d} }}, // {names[0]}\n')
         out('};\n')
 
-    def aliasToIana(self, pairs):
-        out, store = self.writer.write, self.__ianaTable.append
+    def aliasToIana(self, pairs: Iterator[tuple[str, str]]) -> None:
+        out: Callable[[str], int] = self.writer.write
+        store: Callable[[str], int] = self.__ianaTable.append
 
         out('// Alias ID Index, Alias ID Index\n')
         out('static constexpr AliasData aliasMappingTable[] = {\n')
@@ -217,10 +220,11 @@ class TimeZoneDataWriter (LocaleSourceEditor):
                     f' // {name} -> {iana}\n')
         out('};\n\n')
 
-    def msToIana(self, pairs):
-        out, winStore = self.writer.write, self.__windowsTable.append
-        ianaStore = self.__ianaListTable.append # TODO: Should be __ianaTable
-        alias = dict(pairs) # {MS name: IANA ID}
+    def msToIana(self, pairs: Iterator[tuple[str, str]]) -> None:
+        out: Callable[[str], int] = self.writer.write
+        winStore: Callable[[str], int] = self.__windowsTable.append
+        ianaStore: Callable[[str], int] = self.__ianaListTable.append
+        alias: dict[str, str] = dict(pairs) # {MS name: IANA ID}
 
         out('// Windows ID Key, Windows ID Index, IANA ID Index, UTC Offset\n')
         out('static constexpr WindowsData windowsDataTable[] = {\n')
@@ -231,12 +235,16 @@ class TimeZoneDataWriter (LocaleSourceEditor):
                 f'{ianaStore(alias[name]):6d},{offset:6d} }}, // {name}\n')
         out('};\n\n')
 
-    def msLandIanas(self, triples): # (MS name, territory code, IANA list)
-        out, store = self.writer.write, self.__ianaListTable.append
+    def msLandIanas(self, triples: Iterator[tuple[str, str, str]]) -> None:
+        # triples (MS name, territory code, IANA list)
+        out: Callable[[str], int] = self.writer.write
+        store: Callable[[str], int] = self.__ianaListTable.append
         from enumdata import territory_map
-        landKey = {code: (i, name) for i, (name, code) in territory_map.items()}
-        seq = sorted((self.windowsKey[name][0], landKey[land][0], name, landKey[land][1], ianas)
-                     for name, land, ianas in triples)
+        landKey: dict[str, tuple[int, str]] = {code: (i, name) for i, (name, code)
+                                               in territory_map.items()}
+        seq: list[tuple[int, int, str, str, str]] = sorted(
+            (self.windowsKey[name][0], landKey[land][0], name, landKey[land][1], ianas)
+                for name, land, ianas in triples)
 
         out('// Windows ID Key, Territory Enum, IANA ID Index\n')
         out('static constexpr ZoneData zoneDataTable[] = {\n')
@@ -246,7 +254,7 @@ class TimeZoneDataWriter (LocaleSourceEditor):
                 f' // {name} / {land}\n')
         out('};\n\n')
 
-    def writeTables(self):
+    def writeTables(self) -> None:
         self.__windowsTable.write(self.writer.write, 'windowsIdData')
         # TODO: these are misnamed, entries in the first are lists,
         # those in the next are single IANA IDs
@@ -255,7 +263,7 @@ class TimeZoneDataWriter (LocaleSourceEditor):
 
     # Implementation details:
     @staticmethod
-    def __offsetOf(utcName):
+    def __offsetOf(utcName: str) -> int:
         "Maps a UTC±HH:mm name to its offset in seconds"
         assert utcName.startswith('UTC')
         if len(utcName) == 3:
@@ -267,7 +275,7 @@ class TimeZoneDataWriter (LocaleSourceEditor):
         return sign * (hour * 60 + mins) * 60
 
 class LocaleDataWriter (LocaleSourceEditor):
-    def likelySubtags(self, likely):
+    def likelySubtags(self, likely: Iterator[tuple[str, tuple, str, tuple]]) -> None:
         # First sort likely, so that we can use binary search in C++
         # code. Although the entries are (lang, script, region), sort
         # as (lang, region, script) and sort 0 after all non-zero
@@ -282,6 +290,7 @@ class LocaleDataWriter (LocaleSourceEditor):
 
         i = 0
         self.writer.write('static constexpr QLocaleId likely_subtags[] = {\n')
+        # have and give are both triplets of ints
         for had, have, got, give in likely:
             i += 1
             self.writer.write('    {{ {:3d}, {:3d}, {:3d} }}'.format(*have))
@@ -290,14 +299,15 @@ class LocaleDataWriter (LocaleSourceEditor):
             self.writer.write(f' // {had} -> {got}\n')
         self.writer.write('};\n\n')
 
-    def localeIndex(self, indices):
+    def localeIndex(self, indices: Iterator[tuple[int, str]]) -> None:
         self.writer.write('static constexpr quint16 locale_index[] = {\n')
         for index, name in indices:
             self.writer.write(f'{index:6d}, // {name}\n')
         self.writer.write('     0 // trailing 0\n')
         self.writer.write('};\n\n')
 
-    def localeData(self, locales, names):
+    def localeData(self, locales: dict[tuple[int, int, int], Locale],
+                   names: list[tuple[int, int, int]]) -> None:
         list_pattern_part_data = StringData('list_pattern_part_data')
         single_character_data = StringData('single_character_data')
         date_format_data = StringData('date_format_data')
@@ -402,9 +412,10 @@ class LocaleDataWriter (LocaleSourceEditor):
             ',{:6d}' * 3,
             ' }}')).format
         for key in names:
-            locale = locales[key]
+            locale: Locale = locales[key]
             # Sequence of StringDataToken:
-            ranges = (tuple(list_pattern_part_data.append(p) for p in # 5 entries:
+            ranges: tuple[StringDataToken, ...] = (
+                      tuple(list_pattern_part_data.append(p) for p in # 5 entries:
                             (locale.listPatternPartStart, locale.listPatternPartMiddle,
                              locale.listPatternPartEnd, locale.listPatternPartTwo,
                              locale.listDelim)) +
@@ -458,10 +469,10 @@ class LocaleDataWriter (LocaleSourceEditor):
                      byte_unit_data, am_data, pm_data, currency_symbol_data,
                      currency_display_name_data, currency_format_data,
                      endonyms_data):
-            data.write(self.writer)
+            data.write(self.writer.write)
 
     @staticmethod
-    def __writeNameData(out, book, form):
+    def __writeNameData(out, book: dict[int, tuple[str, str, str]], form: str) -> None:
         out(f'static constexpr char {form}_name_list[] =\n')
         out('"Default\\0"\n')
         for key, value in book.items():
@@ -485,7 +496,7 @@ class LocaleDataWriter (LocaleSourceEditor):
         out('};\n\n')
 
     @staticmethod
-    def __writeCodeList(out, book, form, width):
+    def __writeCodeList(out, book: dict[int, tuple[str, str, str]], form: str, width: int) -> None:
         out(f'static constexpr unsigned char {form}_code_list[] =\n')
         for key, value in book.items():
             code = value[1]
@@ -493,7 +504,7 @@ class LocaleDataWriter (LocaleSourceEditor):
             out(f'"{code}" // {value[0]}\n')
         out(';\n\n')
 
-    def languageNames(self, languages):
+    def languageNames(self, languages: dict[int, tuple[str, str, str]]) -> None:
         self.__writeNameData(self.writer.write, languages, 'language')
 
     def scriptNames(self, scripts):
@@ -505,26 +516,27 @@ class LocaleDataWriter (LocaleSourceEditor):
     # TODO: unify these next three into the previous three; kept
     # separate for now to verify we're not changing data.
 
-    def languageCodes(self, languages, code_data: LanguageCodeData):
-        out = self.writer.write
+    def languageCodes(self, languages: dict[int, tuple[str, str, str]],
+                      code_data: LanguageCodeData) -> None:
+        out: Callable[[str], int] = self.writer.write
 
         out(f'constexpr std::array<LanguageCodeEntry, {len(languages)}> languageCodeList {{\n')
 
         def q(val: Optional[str], size: int) -> str:
             """Quote the value and adjust the result for tabular view."""
-            s = '' if val is None else ', '.join(f"'{c}'" for c in val)
+            s: str = '' if val is None else ', '.join(f"'{c}'" for c in val)
             return f'{{{s}}}' if size == 0 else f'{{{s}}},'.ljust(size * 5 + 2)
 
         for key, value in languages.items():
-            code = value[1]
+            code: str = value[1]
             if key < 2:
-                result = code_data.query('und')
+                result: LanguageCodeEntry = code_data.query('und')
             else:
-                result = code_data.query(code)
+                result: LanguageCodeEntry = code_data.query(code)
                 assert code == result.id()
             assert result is not None
 
-            codeString = q(result.part1Code, 2)
+            codeString: str = q(result.part1Code, 2)
             codeString += q(result.part2BCode, 3)
             codeString += q(result.part2TCode, 3)
             codeString += q(result.part3Code, 0)
@@ -532,10 +544,11 @@ class LocaleDataWriter (LocaleSourceEditor):
 
         out('};\n\n')
 
-    def scriptCodes(self, scripts):
+    def scriptCodes(self, scripts: dict[int, tuple[str, str, str]]) -> None:
         self.__writeCodeList(self.writer.write, scripts, 'script', 4)
 
-    def territoryCodes(self, territories): # TODO: unify with territoryNames()
+    # TODO: unify with territoryNames()
+    def territoryCodes(self, territories: dict[int, tuple[str, str, str]]) -> None:
         self.__writeCodeList(self.writer.write, territories, 'territory', 3)
 
 class CalendarDataWriter (LocaleSourceEditor):
@@ -543,7 +556,8 @@ class CalendarDataWriter (LocaleSourceEditor):
         '      {{'
         + ','.join(('{:6d}',) * 3 + ('{:5d}',) * 6 + ('{:3d}',) * 6)
         + ' }},').format
-    def write(self, calendar, locales, names):
+    def write(self, calendar: str, locales: dict[tuple[int, int, int], Locale],
+              names: list[tuple[int, int, int]]) -> None:
         months_data = StringData('months_data', 16)
 
         self.writer.write('static constexpr QCalendarLocale locale_data[] = {\n')
@@ -564,7 +578,7 @@ class CalendarDataWriter (LocaleSourceEditor):
             'Sizes...'
             '\n')
         for key in names:
-            locale = locales[key]
+            locale: Locale = locales[key]
             # Sequence of StringDataToken:
             try:
                 # Twelve long month names can add up to more than 256 (e.g. kde_TZ: 264)
@@ -585,11 +599,11 @@ class CalendarDataWriter (LocaleSourceEditor):
         self.writer.write(self.formatCalendar(*( (0,) * (3 + 6 * 2) ))
                           + '// trailing zeros\n')
         self.writer.write('};\n')
-        months_data.write(self.writer)
+        months_data.write(self.writer.write)
 
 
 class TestLocaleWriter (LocaleSourceEditor):
-    def localeList(self, locales):
+    def localeList(self, locales: list[tuple[int, int, int]]) -> None:
         self.writer.write('const LocaleListItem g_locale_list[] = {\n')
         from enumdata import language_map, territory_map
         # TODO: update testlocales/ to include script.
@@ -605,19 +619,19 @@ class TestLocaleWriter (LocaleSourceEditor):
 
 
 class LocaleHeaderWriter (SourceFileEditor):
-    def __init__(self, path, temp, enumify):
+    def __init__(self, path: Path, temp: Path, enumify: Callable[[str, str], str]) -> None:
         super().__init__(path, temp)
         self.__enumify = enumify
 
-    def languages(self, languages):
+    def languages(self, languages: dict[int, tuple[str, str, str]]) -> None:
         self.__enum('Language', languages, self.__language)
         self.writer.write('\n')
 
-    def territories(self, territories):
+    def territories(self, territories: dict[int, tuple[str, str, str]]) -> None:
         self.writer.write("    // ### Qt 7: Rename to Territory\n")
         self.__enum('Country', territories, self.__territory, 'Territory')
 
-    def scripts(self, scripts):
+    def scripts(self, scripts: dict[int, tuple[str, str, str]]) -> None:
         self.__enum('Script', scripts, self.__script)
         self.writer.write('\n')
 
@@ -626,13 +640,15 @@ class LocaleHeaderWriter (SourceFileEditor):
                           territory_aliases as __territory,
                           script_aliases as __script)
 
-    def __enum(self, name, book, alias, suffix = None):
+    def __enum(self, name: str, book: dict[int, tuple[str, str, str]],
+               alias: dict[str, str], suffix: str = None) -> None:
         assert book
 
         if suffix is None:
             suffix = name
 
-        out, enumify = self.writer.write, self.__enumify
+        out: Callable[[str], int] = self.writer.write
+        enumify: Callable[[str, str], str] = self.__enumify
         out(f'    enum {name} : ushort {{\n')
         for key, value in book.items():
             member = enumify(value[0], suffix)
@@ -650,7 +666,7 @@ class LocaleHeaderWriter (SourceFileEditor):
         out('\n    };\n')
 
 
-def main(argv, out, err):
+def main(argv: list[str], out: TextIO, err: TextIO) -> int:
     """Updates QLocale's CLDR data from a QLocaleXML file.
 
     Takes sys.argv, sys.stdout, sys.stderr (or equivalents) as
@@ -663,7 +679,7 @@ def main(argv, out, err):
 
     Updates various src/corelib/t*/q*_data_p.h files within the qtbase
     checkout to contain data extracted from the QLocaleXML file."""
-    calendars_map = {
+    calendars_map: dict[str, str] = {
         # CLDR name: Qt file name fragment
         'gregorian': 'roman',
         'persian': 'jalali',
@@ -684,11 +700,11 @@ def main(argv, out, err):
     parser.add_argument('--calendars', help='select calendars to emit data for',
                         nargs='+', metavar='CALENDAR',
                         choices=all_calendars, default=all_calendars)
-    args = parser.parse_args(argv[1:])
+    args: argparse.Namespace = parser.parse_args(argv[1:])
 
-    qlocalexml = args.input_file
+    qlocalexml: str = args.input_file
     qtsrcdir = Path(args.qtbase_path)
-    calendars = {cal: calendars_map[cal] for cal in args.calendars}
+    calendars: dict[str, str] = {cal: calendars_map[cal] for cal in args.calendars}
 
     if not (qtsrcdir.is_dir()
             and all(qtsrcdir.joinpath('src/corelib/text', leaf).is_file()

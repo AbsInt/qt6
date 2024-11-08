@@ -24,6 +24,9 @@
 #if QT_CONFIG(datetimeedit)
 #  include <QtWidgets/qdatetimeedit.h>
 #endif
+#if QT_CONFIG(tabwidget)
+#  include <QtWidgets/qtabwidget.h>
+#endif
 #include "qdrawutil.h"
 #include <chrono>
 
@@ -454,7 +457,7 @@ void QWindows11Style::drawComplexControl(ComplexControl control, const QStyleOpt
             painter->setPen(highContrastTheme == true ? combobox->palette.buttonText().color() : WINUI3Colors[colorSchemeIndex][frameColorLight]);
             painter->drawRoundedRect(rect, secondLevelRoundingRadius, secondLevelRoundingRadius);
             if (sub & SC_ComboBoxArrow) {
-                QRectF rect = proxy()->subControlRect(CC_ComboBox, option, SC_ComboBoxArrow, widget).adjusted(-4, 0, -4, 1);
+                QRectF rect = proxy()->subControlRect(CC_ComboBox, option, SC_ComboBoxArrow, widget).adjusted(4, 0, -4, 1);
                 painter->setFont(assetFont);
                 painter->setPen(combobox->palette.text().color());
                 painter->drawText(rect,"\uE70D", Qt::AlignVCenter | Qt::AlignHCenter);
@@ -820,6 +823,18 @@ void QWindows11Style::drawPrimitive(PrimitiveElement element, const QStyleOption
             }
         }
         break;
+    case PE_IndicatorHeaderArrow:
+        if (const QStyleOptionHeader *header = qstyleoption_cast<const QStyleOptionHeader *>(option)) {
+            painter->setPen(header->palette.text().color());
+            painter->setFont(assetFont);
+            QRectF rect = option->rect;
+            if (header->sortIndicator & QStyleOptionHeader::SortUp) {
+                painter->drawText(rect,Qt::AlignCenter,"\uE96D");
+            } else if (header->sortIndicator & QStyleOptionHeader::SortDown) {
+                painter->drawText(rect,Qt::AlignCenter,"\uE96E");
+            }
+        }
+        break;
     case PE_IndicatorCheckBox:
         {
             QNumberStyleAnimation* animation = qobject_cast<QNumberStyleAnimation*>(d->animation(option->styleObject));
@@ -1124,6 +1139,13 @@ void QWindows11Style::drawControl(ControlElement element, const QStyleOption *op
     painter->save();
     painter->setRenderHint(QPainter::Antialiasing);
     switch (element) {
+    case QStyle::CE_ComboBoxLabel:
+        if (const QStyleOptionComboBox *cb = qstyleoption_cast<const QStyleOptionComboBox *>(option)) {
+            QStyleOptionComboBox newOption = *cb;
+            newOption.rect.adjust(4,0,-4,0);
+            QCommonStyle::drawControl(element, &newOption, painter,widget);
+        }
+        break;
     case QStyle::CE_TabBarTabShape:
         if (const QStyleOptionTab *tab = qstyleoption_cast<const QStyleOptionTab *>(option)) {
             QRectF tabRect = tab->rect.marginsRemoved(QMargins(2,2,0,0));
@@ -1354,10 +1376,24 @@ void QWindows11Style::drawControl(ControlElement element, const QStyleOption *op
 
             if (btn->features & QStyleOptionButton::HasMenu) {
                 int indicatorSize = proxy()->pixelMetric(PM_MenuButtonIndicator, btn, widget);
-                if (btn->direction == Qt::LeftToRight)
+                QLineF menuSplitter;
+                QRectF indicatorRect;
+                painter->setFont(assetFont);
+
+                if (btn->direction == Qt::LeftToRight) {
+                    indicatorRect = QRect(textRect.x() + textRect.width() - indicatorSize - 4, textRect.y(),2 * 4 + indicatorSize, textRect.height());
+                    indicatorRect.adjust(0.5,-0.5,0.5,0.5);
+                    menuSplitter = QLineF(indicatorRect.topLeft(),indicatorRect.bottomLeft());
                     textRect = textRect.adjusted(0, 0, -indicatorSize, 0);
-                else
+                } else {
+                    indicatorRect = QRect(textRect.x(), textRect.y(), textRect.x() + indicatorSize + 4, textRect.height());
+                    indicatorRect.adjust(-0.5,-0.5,-0.5,0.5);
+                    menuSplitter = QLineF(indicatorRect.topRight(),indicatorRect.bottomRight());
                     textRect = textRect.adjusted(indicatorSize, 0, 0, 0);
+                }
+                painter->drawText(indicatorRect,"\uE70D",Qt::AlignVCenter|Qt::AlignHCenter);
+                painter->setPen(QPen(WINUI3Colors[colorSchemeIndex][controlStrokePrimary]));
+                painter->drawLine(menuSplitter);
             }
             if (!btn->icon.isNull()) {
                 //Center both icon and text
@@ -1409,6 +1445,8 @@ void QWindows11Style::drawControl(ControlElement element, const QStyleOption *op
         if (const QStyleOptionButton *btn = qstyleoption_cast<const QStyleOptionButton *>(option))  {
             if (btn->features.testFlag(QStyleOptionButton::Flat)) {
                 painter->setPen(Qt::NoPen);
+                painter->setBrush(btn->palette.button());
+                painter->drawRoundedRect(rect, secondLevelRoundingRadius, secondLevelRoundingRadius);
                 if (flags & (State_Sunken | State_On)) {
                     painter->setBrush(WINUI3Colors[colorSchemeIndex][subtlePressedColor]);
                 }
@@ -1767,20 +1805,28 @@ QRect QWindows11Style::subElementRect(QStyle::SubElement element, const QStyleOp
     QRect ret;
     switch (element) {
     case QStyle::SE_LineEditContents:
-        ret = option->rect.adjusted(8,0,-8,0);
+        ret = option->rect.adjusted(4,0,-4,0);
         break;
     case QStyle::SE_ItemViewItemText:
         if (const auto *item = qstyleoption_cast<const QStyleOptionViewItem *>(option)) {
             const int decorationOffset = item->features.testFlag(QStyleOptionViewItem::HasDecoration) ? item->decorationSize.width() : 0;
+            const int checkboxOffset = item->features.testFlag(QStyleOptionViewItem::HasCheckIndicator) ? 16 : 0;
             if (widget && widget->parentWidget()
              && widget->parentWidget()->inherits("QComboBoxPrivateContainer")) {
-                ret = option->rect.adjusted(decorationOffset + 5, 0, -5, 0);
+                if (option->direction == Qt::LeftToRight)
+                    ret = option->rect.adjusted(decorationOffset + checkboxOffset + 5, 0, -5, 0);
+                else
+                    ret = option->rect.adjusted(5, 0, decorationOffset - checkboxOffset - 5, 0);
             } else {
                 ret = QWindowsVistaStyle::subElementRect(element, option, widget);
             }
         } else {
             ret = QWindowsVistaStyle::subElementRect(element, option, widget);
         }
+        break;
+    case QStyle::SE_HeaderLabel:
+    case QStyle::SE_HeaderArrow:
+        ret = QCommonStyle::subElementRect(element, option, widget);
         break;
     default:
         ret = QWindowsVistaStyle::subElementRect(element, option, widget);
@@ -1975,7 +2021,10 @@ QSize QWindows11Style::sizeFromContents(ContentsType type, const QStyleOption *o
             constexpr int hPadding = 2 * 11;
             constexpr int itemHeight = 32;
             contentSize.setWidth(contentSize.width() + hMargin + hPadding);
-            contentSize.setHeight(itemHeight);
+#if QT_CONFIG(tabwidget)
+            if (widget->parent() && !qobject_cast<const QTabWidget *>(widget->parent()))
+#endif
+                contentSize.setHeight(itemHeight);
         }
         break;
 #endif
@@ -2017,41 +2066,30 @@ QSize QWindows11Style::sizeFromContents(ContentsType type, const QStyleOption *o
         }
         break;
 #endif // QT_CONFIG(menu)
+#if QT_CONFIG(spinbox)
     case QStyle::CT_SpinBox: {
         if (const auto *spinBoxOpt = qstyleoption_cast<const QStyleOptionSpinBox *>(option)) {
             // Add button + frame widths
-            int width = 0;
-#if QT_CONFIG(datetimeedit)
-            if (const QDateTimeEdit *spinBox = qobject_cast<const QDateTimeEdit *>(widget)) {
-                const QSize textSizeMin = spinBoxOpt->fontMetrics.size(Qt::TextSingleLine, spinBox->minimumDateTime().toString(spinBox->displayFormat()));
-                const QSize textSizeMax = spinBoxOpt->fontMetrics.size(Qt::TextSingleLine, spinBox->maximumDateTime().toString(spinBox->displayFormat()));
-                width = qMax(textSizeMin.width(),textSizeMax.width());
-            } else
-#endif
-            if (const QSpinBox *spinBox = qobject_cast<const QSpinBox *>(widget)) {
-                const QSize textSizeMin = spinBoxOpt->fontMetrics.size(Qt::TextSingleLine, QString::number(spinBox->minimum()));
-                const QSize textSizeMax = spinBoxOpt->fontMetrics.size(Qt::TextSingleLine, QString::number(spinBox->maximum()));
-                width = qMax(textSizeMin.width(),textSizeMax.width());
-                width += spinBoxOpt->fontMetrics.size(Qt::TextSingleLine, spinBox->prefix()).width();
-                width += spinBoxOpt->fontMetrics.size(Qt::TextSingleLine, spinBox->suffix()).width();
-
-            } else if (const QDoubleSpinBox *spinBox = qobject_cast<const QDoubleSpinBox *>(widget)) {
-                const QSize textSizeMin = spinBoxOpt->fontMetrics.size(Qt::TextSingleLine, QString::number(spinBox->minimum()));
-                const QSize textSizeMax = spinBoxOpt->fontMetrics.size(Qt::TextSingleLine, QString::number(spinBox->maximum()));
-                width = qMax(textSizeMin.width(),textSizeMax.width());
-                width += spinBoxOpt->fontMetrics.size(Qt::TextSingleLine, spinBox->prefix()).width();
-                width += spinBoxOpt->fontMetrics.size(Qt::TextSingleLine, spinBox->suffix()).width();
-            }
             const qreal dpi = QStyleHelper::dpi(option);
             const bool hasButtons = (spinBoxOpt->buttonSymbols != QAbstractSpinBox::NoButtons);
-            const int buttonWidth = hasButtons ? 2 * qRound(QStyleHelper::dpiScaled(16, dpi)) : 0;
+            const int margins = 8;
+            const int buttonWidth = hasButtons ? qRound(QStyleHelper::dpiScaled(16, dpi)) : 0;
             const int frameWidth = spinBoxOpt->frame ? proxy()->pixelMetric(PM_SpinBoxFrameWidth,
                                                                             spinBoxOpt, widget) : 0;
-            contentSize.setWidth(2 * 12 + width);
-            contentSize += QSize(buttonWidth + 2 * frameWidth, 2 * frameWidth);
+
+            contentSize += QSize(2 * buttonWidth + 2 * frameWidth + 2 * margins, 2 * frameWidth);
         }
         break;
     }
+#endif
+    case CT_ComboBox:
+        if (const auto *comboBoxOpt = qstyleoption_cast<const QStyleOptionComboBox *>(option)) {
+            contentSize = QWindowsStyle::sizeFromContents(type, option, size, widget);  // don't rely on QWindowsThemeData
+            contentSize += QSize(4, 4);     // default win11 style margins
+            if (comboBoxOpt->subControls & SC_ComboBoxArrow)
+                contentSize += QSize(8, 0); // arrow margins
+        }
+        break;
     default:
         contentSize = QWindowsVistaStyle::sizeFromContents(type, option, size, widget);
         break;
@@ -2106,7 +2144,8 @@ void QWindows11Style::polish(QWidget* widget)
         bool layoutDirection = widget->testAttribute(Qt::WA_RightToLeft);
         widget->setAttribute(Qt::WA_OpaquePaintEvent,false);
         widget->setAttribute(Qt::WA_TranslucentBackground);
-        widget->setWindowFlag(Qt::FramelessWindowHint);
+        if (!isScrollBar)
+            widget->setWindowFlag(Qt::FramelessWindowHint);
         widget->setWindowFlag(Qt::NoDropShadowWindowHint);
         widget->setAttribute(Qt::WA_RightToLeft, layoutDirection);
         widget->setAttribute(Qt::WA_WState_Created, wasCreated);
@@ -2141,6 +2180,10 @@ void QWindows11Style::polish(QWidget* widget)
     } else if (widget->inherits("QAbstractButton") || widget->inherits("QToolButton")) {
         widget->setAutoFillBackground(false);
         auto pal = widget->palette();
+        if (QPushButton *btn = qobject_cast<QPushButton*>(widget)) {
+            if (btn->isFlat() && !pal.isBrushSet(QPalette::Active, QPalette::Button))
+                pal.setColor(QPalette::Active, QPalette::Button, pal.window().color());
+        }
         if (colorSchemeIndex == 0) {
             pal.setColor(QPalette::Disabled, QPalette::ButtonText, QColor(0x00,0x00,0x00,0x5C));
             pal.setColor(QPalette::Disabled, QPalette::Button, QColor(0xF9,0xF9,0xF9,0x4D));
@@ -2211,22 +2254,39 @@ static void populateLightSystemBasePalette(QPalette &result)
     const QColor btnHighlight = result.accent().color();
     const QColor btnColor = result.button().color();
 
-    SET_IF_UNRESOLVED(QPalette::All, QPalette::Highlight, btnHighlight);
-    SET_IF_UNRESOLVED(QPalette::All, QPalette::WindowText, textColor);
-    SET_IF_UNRESOLVED(QPalette::All, QPalette::Button, btnFace);
-    SET_IF_UNRESOLVED(QPalette::All, QPalette::Light, btnColor.lighter(150));
-    SET_IF_UNRESOLVED(QPalette::All, QPalette::Dark, btnColor.darker(200));
-    SET_IF_UNRESOLVED(QPalette::All, QPalette::Mid, btnColor.darker(150));
-    SET_IF_UNRESOLVED(QPalette::All, QPalette::Text, textColor);
-    SET_IF_UNRESOLVED(QPalette::All, QPalette::BrightText, btnHighlight);
-    SET_IF_UNRESOLVED(QPalette::All, QPalette::Base, btnFace);
-    SET_IF_UNRESOLVED(QPalette::All, QPalette::Window, QColor(0xF3,0xF3,0xF3,0xFF));
-    SET_IF_UNRESOLVED(QPalette::All, QPalette::ButtonText, textColor);
-    SET_IF_UNRESOLVED(QPalette::All, QPalette::Midlight, btnColor.lighter(125));
-    SET_IF_UNRESOLVED(QPalette::All, QPalette::Shadow, Qt::black);
-    SET_IF_UNRESOLVED(QPalette::All, QPalette::ToolTipBase, result.window().color());
-    SET_IF_UNRESOLVED(QPalette::All, QPalette::ToolTipText, result.windowText().color());
-    SET_IF_UNRESOLVED(QPalette::All, QPalette::AlternateBase, alternateBase);
+    SET_IF_UNRESOLVED(QPalette::Active, QPalette::Highlight, btnHighlight);
+    SET_IF_UNRESOLVED(QPalette::Active, QPalette::WindowText, textColor);
+    SET_IF_UNRESOLVED(QPalette::Active, QPalette::Button, btnFace);
+    SET_IF_UNRESOLVED(QPalette::Active, QPalette::Light, btnColor.lighter(150));
+    SET_IF_UNRESOLVED(QPalette::Active, QPalette::Dark, btnColor.darker(200));
+    SET_IF_UNRESOLVED(QPalette::Active, QPalette::Mid, btnColor.darker(150));
+    SET_IF_UNRESOLVED(QPalette::Active, QPalette::Text, textColor);
+    SET_IF_UNRESOLVED(QPalette::Active, QPalette::BrightText, btnHighlight);
+    SET_IF_UNRESOLVED(QPalette::Active, QPalette::Base, btnFace);
+    SET_IF_UNRESOLVED(QPalette::Active, QPalette::Window, QColor(0xF3,0xF3,0xF3,0xFF));
+    SET_IF_UNRESOLVED(QPalette::Active, QPalette::ButtonText, textColor);
+    SET_IF_UNRESOLVED(QPalette::Active, QPalette::Midlight, btnColor.lighter(125));
+    SET_IF_UNRESOLVED(QPalette::Active, QPalette::Shadow, Qt::black);
+    SET_IF_UNRESOLVED(QPalette::Active, QPalette::ToolTipBase, result.window().color());
+    SET_IF_UNRESOLVED(QPalette::Active, QPalette::ToolTipText, result.windowText().color());
+    SET_IF_UNRESOLVED(QPalette::Active, QPalette::AlternateBase, alternateBase);
+
+    SET_IF_UNRESOLVED(QPalette::Inactive, QPalette::Highlight, btnHighlight);
+    SET_IF_UNRESOLVED(QPalette::Inactive, QPalette::WindowText, textColor);
+    SET_IF_UNRESOLVED(QPalette::Inactive, QPalette::Button, btnFace);
+    SET_IF_UNRESOLVED(QPalette::Inactive, QPalette::Light, btnColor.lighter(150));
+    SET_IF_UNRESOLVED(QPalette::Inactive, QPalette::Dark, btnColor.darker(200));
+    SET_IF_UNRESOLVED(QPalette::Inactive, QPalette::Mid, btnColor.darker(150));
+    SET_IF_UNRESOLVED(QPalette::Inactive, QPalette::Text, textColor);
+    SET_IF_UNRESOLVED(QPalette::Inactive, QPalette::BrightText, btnHighlight);
+    SET_IF_UNRESOLVED(QPalette::Inactive, QPalette::Base, btnFace);
+    SET_IF_UNRESOLVED(QPalette::Inactive, QPalette::Window, QColor(0xF3,0xF3,0xF3,0xFF));
+    SET_IF_UNRESOLVED(QPalette::Inactive, QPalette::ButtonText, textColor);
+    SET_IF_UNRESOLVED(QPalette::Inactive, QPalette::Midlight, btnColor.lighter(125));
+    SET_IF_UNRESOLVED(QPalette::Inactive, QPalette::Shadow, Qt::black);
+    SET_IF_UNRESOLVED(QPalette::Inactive, QPalette::ToolTipBase, result.window().color());
+    SET_IF_UNRESOLVED(QPalette::Inactive, QPalette::ToolTipText, result.windowText().color());
+    SET_IF_UNRESOLVED(QPalette::Inactive, QPalette::AlternateBase, alternateBase);
 
     result.setColor(QPalette::Disabled, QPalette::WindowText, textDisabled);
 

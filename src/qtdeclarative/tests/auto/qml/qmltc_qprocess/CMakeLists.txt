@@ -72,6 +72,7 @@ _qt_internal_genex_getjoinedproperty(qrc_args tst_qmltc_qprocess
 )
 target_compile_definitions(tst_qmltc_qprocess PRIVATE
     TST_QMLTC_QPROCESS_RESOURCES="${qrc_args}"
+    QT_NO_CAST_FROM_ASCII
 )
 
 qt_internal_extend_target(tst_qmltc_qprocess CONDITION ANDROID OR IOS

@@ -65,7 +65,7 @@ T.Menu {
                 visible: false
             }
             shadowScale: 1
-            shadowOpacity: Application.styleHints.colorScheme === Qt.Light ? 0.45 : 0.6
+            shadowOpacity: Application.styleHints.colorScheme === Qt.Light ? 0.15 : 0.2
             shadowColor: 'black'
             shadowEnabled: true
             shadowHorizontalOffset: 0

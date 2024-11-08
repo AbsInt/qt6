@@ -308,6 +308,37 @@ macro(qt_build_repo_begin)
     if(NOT TARGET host_tools)
         add_custom_target(host_tools)
         add_custom_target(bootstrap_tools)
+        add_custom_target(doc_tools)
+
+        # TODO: Investigate complexity of installing tools for shared builds.
+        # Currently installing host tools without libraries only really makes sense for static
+        # builds. Tracking dependencies for shared builds is more involved.
+        if(NOT BUILD_SHARED_LIBS)
+            add_custom_target(install_tools
+                COMMAND ${CMAKE_COMMAND}
+                    --install ${CMAKE_BINARY_DIR} --component host_tools
+            )
+            add_custom_target(install_tools_stripped
+                COMMAND ${CMAKE_COMMAND}
+                    --install ${CMAKE_BINARY_DIR} --component host_tools --strip
+            )
+
+            add_custom_target(install_doc_tools
+                COMMAND ${CMAKE_COMMAND}
+                    --install ${CMAKE_BINARY_DIR} --component doc_tools
+            )
+            add_custom_target(install_doc_tools_stripped
+                COMMAND ${CMAKE_COMMAND}
+                    --install ${CMAKE_BINARY_DIR} --component doc_tools --strip
+            )
+
+            if(NOT QT_INTERNAL_NO_INSTALL_TOOLS_BUILD_DEPS)
+                add_dependencies(install_tools host_tools)
+                add_dependencies(install_tools_stripped host_tools)
+                add_dependencies(install_doc_tools doc_tools)
+                add_dependencies(install_doc_tools_stripped doc_tools)
+            endif()
+        endif()
     endif()
 
     # Add benchmark meta target. It's collection of all benchmarks added/registered by
@@ -760,6 +791,12 @@ macro(qt_build_tests)
                 endif()
             endforeach()
         endif()
+    endif()
+
+    if(NOT QT_SUPERBUILD)
+        # In a super build, we don't want to finalize the batch blacklist at the end of each repo,
+        # but rather once at the end of the top-level configuration.
+        qt_internal_finalize_test_batch_blacklist()
     endif()
 
     set(CMAKE_UNITY_BUILD ${QT_UNITY_BUILD})

@@ -93,6 +93,7 @@ public:
     bool prepareEnterTransition() override;
     bool prepareExitTransition() override;
     bool blockInput(QQuickItem *item, const QPointF &point) const override;
+    bool handlePress(QQuickItem *item, const QPointF &point, ulong timestamp) override;
     bool handleReleaseWithoutGrab(const QEventPoint &eventPoint) override;
 
     void onItemHovered();

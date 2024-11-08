@@ -833,7 +833,7 @@ QVariant SequencePrototype::toVariant(const QV4::Value &array, QMetaType targetT
 
         // Try value type constructors.
         const QVariant converted = QQmlValueTypeProvider::createValueType(
-                variant, valueMetaType);
+                variant, valueMetaType, scope.engine);
         if (converted.isValid()) {
             meta.addValue(result.data(), converted.constData());
             continue;

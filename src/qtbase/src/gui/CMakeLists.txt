@@ -565,6 +565,7 @@ qt_internal_extend_target(Gui CONDITION atspi_accessibility
     DBUS_INTERFACE_SOURCES
         accessible/linux/dbusxml/Bus.xml
         accessible/linux/dbusxml/Socket.xml
+        accessible/linux/dbusxml/org.freedesktop.DBus.Properties.xml
     DBUS_INTERFACE_FLAGS
         "-i" "QtGui/private/qspi_struct_marshallers_p.h"
 )
@@ -939,6 +940,11 @@ if (QT_FEATURE_vulkan)
         qt_path_join(qvkgen
             "${QT_HOST_PATH}"
             "${QT${PROJECT_VERSION_MAJOR}_HOST_INFO_LIBEXECDIR}"
+            "qvkgen${host_executable_suffix}")
+    elseif(QT_OPTIONAL_TOOLS_PATH)
+        qt_path_join(qvkgen
+            "${QT_OPTIONAL_TOOLS_PATH}"
+            "${INSTALL_LIBEXECDIR}"
             "qvkgen${host_executable_suffix}")
     else()
         set(qvkgen "${QT_CMAKE_EXPORT_NAMESPACE}::qvkgen")

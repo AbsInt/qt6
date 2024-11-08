@@ -23,7 +23,7 @@ Item {
         function *myGeneratorDeclaration(a, b) { yield 5 };
         let myGenerator = function*(tic, tac, toe) { yield tic + tac - toe };
     }
-    
+
     function *generatorInQmlObject() {
         function nested(q,w,e,r) { return q + w + e - r; }
         function *nested2(a,z,e,r) { yield a + z + e - r; yield 42; }
@@ -37,5 +37,9 @@ Item {
         const tradition = (function (a) {
             return a + 100;
         });
+    }
+
+    Component.onCompleted: {
+        function a() { return 45;}
     }
 }

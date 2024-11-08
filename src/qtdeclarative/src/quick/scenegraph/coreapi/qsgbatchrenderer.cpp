@@ -39,6 +39,7 @@ DECLARE_DEBUG_VAR(change)
 DECLARE_DEBUG_VAR(upload)
 DECLARE_DEBUG_VAR(roots)
 DECLARE_DEBUG_VAR(dump)
+DECLARE_DEBUG_VAR(pools)
 DECLARE_DEBUG_VAR(noalpha)
 DECLARE_DEBUG_VAR(noopaque)
 DECLARE_DEBUG_VAR(noclip)
@@ -86,6 +87,8 @@ const int ZORDER_BUFFER_BINDING = VERTEX_BUFFER_BINDING + 1;
 
 const float VIEWPORT_MIN_DEPTH = 0.0f;
 const float VIEWPORT_MAX_DEPTH = 1.0f;
+
+const quint32 DEFAULT_BUFFER_POOL_SIZE_LIMIT = 2 * 1024 * 1024; // 2 MB for m_vboPool and m_iboPool each
 
 template <class Int>
 inline Int aligned(Int v, Int byteAlign)
@@ -852,6 +855,8 @@ Renderer::Renderer(QSGDefaultRenderContext *ctx, QSGRendererInterface::RenderMod
     , m_tmpOpaqueElements(16)
     , m_vboPool(16)
     , m_iboPool(16)
+    , m_vboPoolCost(0)
+    , m_iboPoolCost(0)
     , m_rebuild(FullRebuild)
     , m_zRange(0)
 #if defined(QSGBATCHRENDERER_INVALIDATE_WEDGED_NODES)
@@ -890,10 +895,11 @@ Renderer::Renderer(QSGDefaultRenderContext *ctx, QSGRendererInterface::RenderMod
     m_batchNodeThreshold = qt_sg_envInt("QSG_RENDERER_BATCH_NODE_THRESHOLD", 64);
     m_batchVertexThreshold = qt_sg_envInt("QSG_RENDERER_BATCH_VERTEX_THRESHOLD", 1024);
     m_srbPoolThreshold = qt_sg_envInt("QSG_RENDERER_SRB_POOL_THRESHOLD", 1024);
+    m_bufferPoolSizeLimit = qt_sg_envInt("QSG_RENDERER_BUFFER_POOL_LIMIT", DEFAULT_BUFFER_POOL_SIZE_LIMIT);
 
-    if (Q_UNLIKELY(debug_build() || debug_render())) {
-        qDebug("Batch thresholds: nodes: %d vertices: %d Srb pool threshold: %d",
-               m_batchNodeThreshold, m_batchVertexThreshold, m_srbPoolThreshold);
+    if (Q_UNLIKELY(debug_build() || debug_render() || debug_pools())) {
+        qDebug("Batch thresholds: nodes: %d vertices: %d srb pool: %d buffer pool: %d",
+               m_batchNodeThreshold, m_batchVertexThreshold, m_srbPoolThreshold, m_bufferPoolSizeLimit);
     }
 }
 
@@ -992,18 +998,28 @@ void Renderer::releaseCachedResources()
     for (int i = 0; i < m_vboPool.size(); ++i)
         delete m_vboPool.at(i);
     m_vboPool.reset();
+    m_vboPoolCost = 0;
 
     for (int i = 0; i < m_iboPool.size(); ++i)
         delete m_iboPool.at(i);
     m_iboPool.reset();
+    m_iboPoolCost = 0;
 }
 
 void Renderer::invalidateAndRecycleBatch(Batch *b)
 {
-    if (b->vbo.buf != nullptr)
+    if (b->vbo.buf != nullptr && m_vboPoolCost + b->vbo.buf->size() <= quint32(m_bufferPoolSizeLimit)) {
         m_vboPool.add(b->vbo.buf);
-    if (b->ibo.buf != nullptr)
+        m_vboPoolCost += b->vbo.buf->size();
+    } else {
+        delete b->vbo.buf;
+    }
+    if (b->ibo.buf != nullptr && m_iboPoolCost + b->ibo.buf->size() <= quint32(m_bufferPoolSizeLimit)) {
         m_iboPool.add(b->ibo.buf);
+        m_iboPoolCost += b->ibo.buf->size();
+    } else {
+        delete b->ibo.buf;
+    }
     b->vbo.buf = nullptr;
     b->ibo.buf = nullptr;
     b->invalidate();
@@ -1061,10 +1077,15 @@ void Renderer::unmap(Buffer *buffer, bool isIndexBuf)
                 }
             }
 
-            if (foundBufferIndex < bufferPool->size() - 1) {
+            const qsizetype lastBufferIndex = bufferPool->size() - 1;
+            if (foundBufferIndex < lastBufferIndex) {
                 qSwap(bufferPool->data()[foundBufferIndex],
-                      bufferPool->data()[bufferPool->size() - 1]);
+                      bufferPool->data()[lastBufferIndex]);
             }
+            if (isIndexBuf)
+                m_iboPoolCost -= bufferPool->data()[lastBufferIndex]->size();
+            else
+                m_vboPoolCost -= bufferPool->data()[lastBufferIndex]->size();
             bufferPool->pop_back();
         }
 
@@ -2288,7 +2309,8 @@ void Renderer::uploadBatch(Batch *b)
     unmap(&b->vbo);
     unmap(&b->ibo, true);
 
-    if (Q_UNLIKELY(debug_upload())) qDebug() << "  --- vertex/index buffers unmapped, batch upload completed...";
+    if (Q_UNLIKELY(debug_upload() || debug_pools()))
+        qDebug() << "  --- vertex/index buffers unmapped, batch upload completed... vbo pool size" << m_vboPoolCost << "ibo pool size" << m_iboPoolCost;
 
     b->needsUpload = false;
 

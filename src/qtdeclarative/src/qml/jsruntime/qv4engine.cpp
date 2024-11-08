@@ -1637,7 +1637,8 @@ static QVariant toVariant(const QV4::Value &value, QMetaType metaType, JSToQVari
 #endif
 
     if (metaType.isValid() && !(metaType.flags() & QMetaType::PointerToQObject)) {
-        const QVariant result = QQmlValueTypeProvider::createValueType(value, metaType);
+        const QVariant result
+                = QQmlValueTypeProvider::createValueType(value, metaType, scope.engine);
         if (result.isValid())
             return result;
     }
@@ -2683,14 +2684,18 @@ bool ExecutionEngine::metaTypeFromJS(const Value &value, QMetaType metaType, voi
             d->readReference();
 
         if (void *gadgetPtr = d->gadgetPtr()) {
-            if (QQmlValueTypeProvider::populateValueType(metaType, data, valueType, gadgetPtr))
+            if (QQmlValueTypeProvider::populateValueType(
+                        metaType, data, valueType, gadgetPtr, vtw->engine())) {
                 return true;
+            }
             if (QMetaType::canConvert(valueType, metaType))
                 return QMetaType::convert(valueType, gadgetPtr, metaType, data);
         } else {
             QVariant empty(valueType);
-            if (QQmlValueTypeProvider::populateValueType(metaType, data, valueType, empty.data()))
+            if (QQmlValueTypeProvider::populateValueType(
+                        metaType, data, valueType, empty.data(), vtw->engine())) {
                 return true;
+            }
             if (QMetaType::canConvert(valueType, metaType))
                 return QMetaType::convert(valueType, empty.data(), metaType, data);
         }
@@ -2756,7 +2761,7 @@ bool ExecutionEngine::metaTypeFromJS(const Value &value, QMetaType metaType, voi
                 }
             }
         } else if (QQmlValueTypeProvider::populateValueType(
-                           metaType, data, var.metaType(), var.data())) {
+                           metaType, data, var.metaType(), var.data(), variantObject->engine())) {
             return true;
         }
     } else if (value.isNull() && isPointer) {
@@ -2769,8 +2774,11 @@ bool ExecutionEngine::metaTypeFromJS(const Value &value, QMetaType metaType, voi
         *reinterpret_cast<QJSPrimitiveValue *>(data) = createPrimitive(&value);
         return true;
     } else if (!isPointer) {
-        if (QQmlValueTypeProvider::populateValueType(metaType, data, value))
+        const QV4::Managed *managed = value.as<QV4::Managed>();
+        if (QQmlValueTypeProvider::populateValueType(
+                    metaType, data, value, managed ? managed->engine() : nullptr)) {
             return true;
+        }
     }
 
     if (const QV4::Sequence *sequence = value.as<Sequence>()) {

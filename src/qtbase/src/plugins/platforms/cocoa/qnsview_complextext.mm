@@ -568,10 +568,15 @@
     // the range ourselves, based on the current state of the input context.
 
     const auto markedRange = [self markedRange];
-    if (markedRange.location != NSNotFound)
+    const auto selectedRange = [self selectedRange];
+
+    if (markedRange.length)
         return markedRange;
+    else if (selectedRange.length)
+        return selectedRange;
     else
-        return [self selectedRange];
+        return markedRange; // Represents cursor position when length is 0
+
 }
 
 /*
@@ -580,30 +585,56 @@
 
     The two APIs have different semantics.
 */
-- (std::pair<long long, long long>)inputMethodRangeForRange:(NSRange)range
+- (std::pair<long long, long long>)inputMethodRangeForRange:(NSRange)replacementRange
 {
-    long long replaceFrom = range.location;
-    long long replaceLength = range.length;
+    long long replaceFrom = replacementRange.location;
+    long long replaceLength = replacementRange.length;
 
     const auto markedRange = [self markedRange];
     const auto selectedRange = [self selectedRange];
 
-    // The QInputMethodEvent replacement start is relative to the start
-    // of the marked text (the location of the preedit string).
-    if (markedRange.location != NSNotFound)
+    if (markedRange.length && selectedRange.length) {
+        // We assume below that we have either marked text or selected text
+        qCWarning(lcQpaKeys) << "Got both markedRange" << markedRange
+                             << "and selectedRange" << selectedRange;
+    }
+
+    if (markedRange.length) {
+        // The replacement length of QInputMethodEvent already includes
+        // the preedit string, as the documentation says that "When doing
+        // replacement, the area of the preedit string is ignored".
+        replaceLength -= markedRange.length;
+
+        // The QInputMethodEvent replacement start is relative to the start
+        // of the marked text (the location of the preedit string).
         replaceFrom -= markedRange.location;
-    else
+    } else if (selectedRange.length) {
+        if (!NSEqualRanges(NSIntersectionRange(replacementRange, selectedRange), selectedRange)) {
+            qCWarning(lcQpaKeys) << "Replacement range" << replacementRange
+                                 << "is a subset of selection" << selectedRange;
+            // FIXME: To support this case we would need to extract parts of the
+            // selection into the committed text. But for now we ignore it, as we
+            // don't know if it happens in practice.
+        }
+
+        // Our input method protocol specifies that the entire selection
+        // should be removed as the first step, and the replacement length
+        // of the QInputMethodEvent refers to any additional text that should
+        // be removed/replaced.
+        replaceLength -= selectedRange.length;
+
+        // Once the selection has been removed the cursor position will be
+        // at the leftmost point of the selection, regardless of whether the
+        // cursor was at the start or end of the selection. The replacement
+        // start of QInputMethodEvent should be relative to this position.
+        replaceFrom -= selectedRange.location;
+    } else if (markedRange.location != NSNotFound) {
+        // The QInputMethodEvent replacement start is relative to the cursor
+        // position.
+        replaceFrom -= markedRange.location;
+    } else{
         replaceFrom = 0;
-
-    // The replacement length of QInputMethodEvent already includes
-    // the selection, as the documentation says that "If the widget
-    // has selected text, the selected text should get removed."
-    replaceLength -= selectedRange.length;
-
-    // The replacement length of QInputMethodEvent already includes
-    // the preedit string, as the documentation says that "When doing
-    // replacement, the area of the preedit string is ignored".
-    replaceLength -= markedRange.length;
+    }
 
     // What we're left with is any _additional_ replacement.
     // Make sure it's valid before passing it on.

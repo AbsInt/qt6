@@ -1092,14 +1092,12 @@ QSize QDateTimeEdit::sizeHint() const
         w += 2; // cursor blinking space
 
         QSize hint(w, h);
-
-#ifdef Q_OS_MAC
         if (d->calendarPopupEnabled()) {
             QStyleOptionComboBox opt;
+            opt.initFrom(this);
+            opt.frame = d->frame;
             d->cachedSizeHint = style()->sizeFromContents(QStyle::CT_ComboBox, &opt, hint, this);
-        } else
-#endif
-        {
+        } else {
             QStyleOptionSpinBox opt;
             initStyleOption(&opt);
             d->cachedSizeHint = style()->sizeFromContents(QStyle::CT_SpinBox, &opt, hint, this);

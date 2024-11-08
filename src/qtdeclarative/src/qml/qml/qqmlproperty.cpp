@@ -1369,7 +1369,7 @@ struct ConvertAndAssignResult {
 static ConvertAndAssignResult tryConvertAndAssign(
         QObject *object, const QQmlPropertyData &property, const QVariant &value,
         QQmlPropertyData::WriteFlags flags, QMetaType propertyMetaType, QMetaType variantMetaType,
-        bool isUrl) {
+        bool isUrl, QQmlEnginePrivate *enginePriv) {
 
     if (isUrl
             || variantMetaType == QMetaType::fromType<QString>()
@@ -1423,7 +1423,8 @@ static ConvertAndAssignResult tryConvertAndAssign(
     }
     }
 
-    QVariant converted = QQmlValueTypeProvider::createValueType(value, propertyMetaType);
+    QVariant converted = QQmlValueTypeProvider::createValueType(
+            value, propertyMetaType, enginePriv ? enginePriv->v4engine() : nullptr);
     if (!converted.isValid()) {
         converted = QVariant(propertyMetaType);
         if (!QMetaType::convert(value.metaType(), value.constData(),
@@ -1542,7 +1543,8 @@ bool QQmlPropertyPrivate::write(
             return false;
         }
     } else if (ConvertAndAssignResult result = tryConvertAndAssign(
-                   object, property, value, flags, propertyMetaType, variantMetaType, isUrl)) {
+                       object, property, value, flags, propertyMetaType, variantMetaType, isUrl,
+                       enginePriv)) {
         return result.couldWrite;
     } else if (propertyMetaType == QMetaType::fromType<QVariant>()) {
         return property.writeProperty(object, const_cast<QVariant *>(&value), flags);

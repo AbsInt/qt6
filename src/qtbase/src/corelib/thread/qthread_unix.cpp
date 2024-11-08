@@ -80,7 +80,7 @@ enum { ThreadPriorityResetFlag = 0x80000000 };
 
 #if QT_CONFIG(broken_threadlocal_dtors)
 // On most modern platforms, the C runtime has a helper function that helps the
-// C++ runtime run the thraed_local non-trivial destructors when threads exit
+// C++ runtime run the thread_local non-trivial destructors when threads exit
 // and that code ensures that they are run in the correct order on program exit
 // too ([basic.start.term]/2: "The destruction of all constructed objects with
 // thread storage duration within that thread strongly happens before
@@ -112,15 +112,15 @@ static void destroy_current_thread_data(void *p)
         // this is very likely the last reference. These pointers cannot be
         // null and there is no race.
         QThreadPrivate *thread_p = static_cast<QThreadPrivate *>(QObjectPrivate::get(thread));
-        thread_p->finish(thread);
+        thread_p->finish();
         if constexpr (!QT_CONFIG(broken_threadlocal_dtors))
-            thread_p->cleanup(thread);
+            thread_p->cleanup();
     } else if constexpr (!QT_CONFIG(broken_threadlocal_dtors)) {
         // We may be racing the QThread destructor in another thread. With
-        // two-phase clean-up enabled, there's also no race because it will it
+        // two-phase clean-up enabled, there's also no race because it will
         // stop in a call to QThread::wait() until we call cleanup().
         QThreadPrivate *thread_p = static_cast<QThreadPrivate *>(QObjectPrivate::get(thread));
-        thread_p->cleanup(thread);
+        thread_p->cleanup();
     } else {
         // We may be racing the QThread destructor in another thread and it may
         // have begun destruction; we must not dereference the QThread pointer.
@@ -205,7 +205,7 @@ QThreadData *QThreadData::current(bool createIfNecessary)
         data = new QThreadData;
         QT_TRY {
             set_thread_data(data);
-            data->thread = new QAdoptedThread(data);
+            data->thread.storeRelease(new QAdoptedThread(data));
         } QT_CATCH(...) {
             clear_thread_data();
             data->deref();
@@ -214,7 +214,7 @@ QThreadData *QThreadData::current(bool createIfNecessary)
         }
         data->deref();
         data->isAdopted = true;
-        data->threadId.storeRelaxed(to_HANDLE(pthread_self()));
+        data->threadId.storeRelaxed(QThread::currentThreadId());
         if (!QCoreApplicationPrivate::theMainThreadId.loadAcquire()) {
             auto *mainThread = data->thread.loadRelaxed();
             mainThread->setObjectName("Qt mainThread");
@@ -314,7 +314,7 @@ void *QThreadPrivate::start(void *arg)
     // this ensures the thread-local is created as early as possible
     set_thread_data(data);
 
-    pthread_cleanup_push(QThreadPrivate::finish, arg);
+    pthread_cleanup_push([](void *arg) { static_cast<QThread *>(arg)->d_func()->finish(); }, arg);
     terminate_on_exception([&] {
         {
             QMutexLocker locker(&thr->d_func()->mutex);
@@ -325,8 +325,7 @@ void *QThreadPrivate::start(void *arg)
             }
 
             // threadId is set in QThread::start()
-            Q_ASSERT(pthread_equal(from_HANDLE<pthread_t>(data->threadId.loadRelaxed()),
-                                   pthread_self()));
+            Q_ASSERT(data->threadId.loadRelaxed() == QThread::currentThreadId());
 
             data->ref();
             data->quitNow = thr->d_func()->exited;
@@ -361,11 +360,11 @@ void *QThreadPrivate::start(void *arg)
     return nullptr;
 }
 
-void QThreadPrivate::finish(void *arg)
+void QThreadPrivate::finish()
 {
     terminate_on_exception([&] {
-        QThread *thr = reinterpret_cast<QThread *>(arg);
-        QThreadPrivate *d = thr->d_func();
+        QThreadPrivate *d = this;
+        QThread *thr = q_func();
 
         // Disable cancellation; we're already in the finishing touches of this
         // thread, and we don't want cleanup to be disturbed by
@@ -376,7 +375,8 @@ void QThreadPrivate::finish(void *arg)
 
         QMutexLocker locker(&d->mutex);
 
-        d->threadState = QThreadPrivate::Finishing;
+        d->isInFinish = true;
+        d->priority = QThread::InheritPriority;
         locker.unlock();
         emit thr->finished(QThread::QPrivateSignal());
         qCDebug(lcDeleteLater) << "Sending deferred delete events as part of finishing thread" << thr;
@@ -387,14 +387,13 @@ void QThreadPrivate::finish(void *arg)
     });
 
     if constexpr (QT_CONFIG(broken_threadlocal_dtors))
-        cleanup(arg);
+        cleanup();
 }
 
-void QThreadPrivate::cleanup(void *arg)
+void QThreadPrivate::cleanup()
 {
     terminate_on_exception([&] {
-        QThread *thr = reinterpret_cast<QThread *>(arg);
-        QThreadPrivate *d = thr->d_func();
+        QThreadPrivate *d = this;
 
         // Disable cancellation again: we did it above, but some user code
         // running between finish() and cleanup() may have turned them back on.
@@ -414,9 +413,11 @@ void QThreadPrivate::cleanup(void *arg)
             locker.relock();
         }
 
-        d->threadState = QThreadPrivate::Finished;
+        d->running = false;
+        d->finished = true;
         d->interruptionRequested.store(false, std::memory_order_relaxed);
 
+        d->isInFinish = false;
         d->data->threadId.storeRelaxed(nullptr);
 
         d->thread_done.wakeAll();
@@ -675,13 +676,14 @@ void QThread::start(Priority priority)
     Q_D(QThread);
     QMutexLocker locker(&d->mutex);
 
-    if (d->threadState == QThreadPrivate::Finishing)
+    if (d->isInFinish)
         d->thread_done.wait(locker.mutex());
 
-    if (d->threadState == QThreadPrivate::Running)
+    if (d->running)
         return;
 
-    d->threadState = QThreadPrivate::Running;
+    d->running = true;
+    d->finished = false;
     d->returnCode = 0;
     d->exited = false;
     d->interruptionRequested.store(false, std::memory_order_relaxed);
@@ -748,7 +750,8 @@ void QThread::start(Priority priority)
 
             // we failed to set the stacksize, and as the documentation states,
             // the thread will fail to run...
-            d->threadState = QThreadPrivate::NotStarted;
+            d->running = false;
+            d->finished = false;
             return;
         }
     }
@@ -781,7 +784,8 @@ void QThread::start(Priority priority)
     if (code) {
         qErrnoWarning(code, "QThread::start: Thread creation error");
 
-        d->threadState = QThreadPrivate::NotStarted;
+        d->running = false;
+        d->finished = false;
         d->data->threadId.storeRelaxed(nullptr);
     }
 }
@@ -824,15 +828,23 @@ bool QThread::wait(QDeadlineTimer deadline)
     Q_D(QThread);
     QMutexLocker locker(&d->mutex);
 
-    if (from_HANDLE<pthread_t>(d->data->threadId.loadRelaxed()) == pthread_self()) {
+    if (isCurrentThread()) {
         qWarning("QThread::wait: Thread tried to wait on itself");
         return false;
     }
 
-    if (d->threadState == QThreadPrivate::NotStarted)
+    if (d->finished || !d->running)
         return true;
 
-    while (d->threadState != QThreadPrivate::Finished) {
+    return d->wait(locker, deadline);
+}
+
+bool QThreadPrivate::wait(QMutexLocker<QMutex> &locker, QDeadlineTimer deadline)
+{
+    Q_ASSERT(locker.isLocked());
+    QThreadPrivate *d = this;
+
+    while (d->running) {
         if (!d->thread_done.wait(locker.mutex(), deadline))
             return false;
     }

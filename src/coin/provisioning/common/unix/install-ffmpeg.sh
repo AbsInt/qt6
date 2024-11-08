@@ -5,6 +5,12 @@
 # This script will build and install FFmpeg static libs
 set -ex
 os="$1"
+build_type="$2"
+
+if [ ! -n "$build_type" ] && [ "$build_type" != "static" ] && [ "$build_type" != "shared" ]; then
+  >&2 echo "Invalid build_type: $build_type. The shared build type will be used."
+  build_type="shared"
+fi
 
 # shellcheck source=../unix/InstallFromCompressedFileFromURL.sh
 source "${BASH_SOURCE%/*}/../unix/InstallFromCompressedFileFromURL.sh"
@@ -27,6 +33,9 @@ then
 fi
 
 ffmpeg_config_options=$(cat "${BASH_SOURCE%/*}/../shared/ffmpeg_config_options.txt")
+if [ "$build_type" != "static" ]; then
+  ffmpeg_config_options+=" --enable-shared --disable-static"
+fi
 
 install_ff_nvcodec_headers() {
   nv_codec_version="11.1" # use 11.1 to ensure compatibility with 470 nvidia drivers; might be upated to 12.0
@@ -44,6 +53,35 @@ install_ff_nvcodec_headers() {
 
   # Might be not detected by default on RHEL
   export PKG_CONFIG_PATH="$PKG_CONFIG_PATH:/usr/local/lib/pkgconfig"
+}
+
+fix_openssl3_pc_files() {
+  # On RHEL 8, openssl3 pc files are libopenssl3.pc, libssl3.pc, libcrypto3.pc,
+  # and FFmpeg cannot find them. Instead, it finds FFmpeg 1.x.x if it's installed.
+  # The function fixes the files with copying them to a custom directory
+
+  local openssl3_pcfiledir=$(pkg-config --variable=pcfiledir openssl3)
+  if [ ! -n  "$openssl3_pcfiledir" ]; then
+    return
+  fi
+
+  local pcfiles=("libssl" "libcrypto" "openssl")
+
+  for pcfile in ${pcfiles[@]}; do
+    if [ ! -f "$openssl3_pcfiledir/${pcfile}3.pc" ]; then
+      echo "pkgconfig has found openssl3 but the file $openssl3_pcfiledir/${pcfile}3.pc does't exist"
+      return
+    fi
+  done
+
+  local new_pkgconfig_dir="$ffmpeg_source_dir/openssl3_pkgconfig"
+  mkdir -p $new_pkgconfig_dir
+
+  for pcfile in ${pcfiles[@]}; do
+    sed -E '/^Requires(\.private)?:/s/ (libssl|libcrypto)3/ \1/g;' "$openssl3_pcfiledir/${pcfile}3.pc" > "$new_pkgconfig_dir/${pcfile}.pc"
+  done
+
+  export PKG_CONFIG_PATH="$new_pkgconfig_dir:$PKG_CONFIG_PATH"
 }
 
 build_ffmpeg() {
@@ -71,15 +109,11 @@ build_ffmpeg() {
 }
 
 if [ "$os" == "linux" ]; then
-  build_type="$2"
-
   install_ff_nvcodec_headers
 
   ffmpeg_config_options+=" --enable-openssl"
-
-  if [ "$build_type" != "static" ]; then
-    ffmpeg_config_options+=" --enable-shared --disable-static"
-  fi
+  fix_openssl3_pc_files
+  echo "pkg-config openssl version: $(pkg-config --modversion openssl)"
 
   build_ffmpeg
 
@@ -94,8 +128,6 @@ if [ "$os" == "linux" ]; then
   SetEnvVar "FFMPEG_DIR" "/usr/local/$ffmpeg_name"
 
 elif [ "$os" == "macos" ] || [ "$os" == "macos-universal" ]; then
-  ffmpeg_config_options+=" --enable-shared --disable-static"
-
   brew install yasm
   export MACOSX_DEPLOYMENT_TARGET=12
   fix_relative_dependencies="${BASH_SOURCE%/*}/../macos/fix_relative_dependencies.sh"

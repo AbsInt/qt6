@@ -4005,11 +4005,11 @@ void QRhiBuffer::endFullDynamicBufferUpdateForCurrentFrame()
 /*!
     \internal
  */
-void QRhiBuffer::fullDynamicBufferUpdateForCurrentFrame(const void *data)
+void QRhiBuffer::fullDynamicBufferUpdateForCurrentFrame(const void *data, quint32 size)
 {
     char *p = beginFullDynamicBufferUpdateForCurrentFrame();
     if (p) {
-        memcpy(p, data, m_size);
+        memcpy(p, data, size > 0 ? size : m_size);
         endFullDynamicBufferUpdateForCurrentFrame();
     }
 }
@@ -9439,8 +9439,8 @@ void QRhiResourceUpdateBatchPrivate::merge(QRhiResourceUpdateBatchPrivate *other
 
 bool QRhiResourceUpdateBatchPrivate::hasOptimalCapacity() const
 {
-    return activeBufferOpCount < BUFFER_OPS_STATIC_ALLOC - 16
-            && activeTextureOpCount < TEXTURE_OPS_STATIC_ALLOC - 16;
+    return activeBufferOpCount < BUFFER_OPS_STATIC_ALLOC - 4
+            && activeTextureOpCount < TEXTURE_OPS_STATIC_ALLOC - 4;
 }
 
 void QRhiResourceUpdateBatchPrivate::trimOpLists()

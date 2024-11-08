@@ -229,6 +229,7 @@ function(qt_internal_get_qt_build_private_files_to_install out_var)
         QtBaseTopLevelHelpers.cmake
         QtBuild.cmake
         QtBuildHelpers.cmake
+        QtBuildStaticDocToolsScript.cmake
         QtCMakePackageVersionFile.cmake.in
         QtCompilerFlags.cmake
         QtCompilerOptimization.cmake

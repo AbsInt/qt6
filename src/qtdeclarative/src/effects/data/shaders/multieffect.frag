@@ -100,7 +100,6 @@ void main() {
 #if defined(BL3)
     shadow += texture(blurSrc5, shadowTexCoord).a * shadowBlurWeight2[1];
 #endif
-    shadow *= shadowColor.a;
     float aa = color.a + (1.0 - color.a) * (1.0 - shadow);
     aa = min(1.0, aa);
     color = mix(shadowColor, color, aa);

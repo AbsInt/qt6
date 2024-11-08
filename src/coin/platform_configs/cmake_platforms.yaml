@@ -183,7 +183,7 @@ Configurations:
     Id: 'windows-11_23H2-msvc2022-developer-build'
     Template: 'qtci-windows-11_23H2-x86_64-53'
     Compiler: 'MSVC2022'
-    Features: ['Sccache', 'DebugAndRelease', 'WarningsAreErrors', 'UseConfigure']
+    Features: ['Sccache', 'DebugAndRelease', 'WarningsAreErrors', 'UseConfigure', 'StandaloneExamples']
     Configure arguments: '-debug-and-release -make examples -developer-build -force-debug-info -qt-zlib -c++std c++20'
     Environment variables: [
         'CMAKE_ARGS=-DFEATURE_msvc_obj_debug_info=ON -DOPENSSL_ROOT_DIR={{.Env.OPENSSL_INCLUDE_x64}}\.. -DMySQL_ROOT={{.Env.ENV_MySQL_ROOT}} -DMySQL_LIBRARY_DIR={{.Env.ENV_MySQL_LIBRARY_DIR}}',
@@ -213,8 +213,18 @@ Configurations:
         'NON_QTBASE_CMAKE_ARGS=-DFFMPEG_DIR={{.Env.FFMPEG_DIR}} -DQT_DEPLOY_FFMPEG=TRUE -DINPUT_headersclean=ON'
     ]
 -
+    Id: 'rhel-9.4'
+    Template: 'qtci-linux-RHEL-9.4-x86_64-50'
+    Compiler: 'GCC'
+    Features: ['Sccache', 'UseConfigure', 'InstallQt5Dependencies', 'GenerateSBOM', 'VerifySBOM', 'InsignificantTests']
+    Configure arguments: '-nomake examples -release -force-debug-info -headersclean -separate-debug-info -qt-libjpeg -qt-libpng -qt-pcre -qt-harfbuzz -qt-doubleconversion -no-libudev -bundled-xcb-xinput'
+    Environment variables: [
+        'CMAKE_ARGS=-DOpenGL_GL_PREFERENCE=LEGACY',
+        'NON_QTBASE_CMAKE_ARGS=-DFFMPEG_DIR={{.Env.FFMPEG_DIR}} -DQT_DEPLOY_FFMPEG=TRUE -DINPUT_headersclean=ON'
+    ]
+-
     Id: 'ios-universal'
-    Template: 'qtci-macos-13-x86_64-103'
+    Template: 'qtci-macos-14-arm-106'
     Target os: 'IOS_ANY'
     Target arch: 'arm64'
     Compiler: 'Clang'
@@ -256,7 +266,7 @@ Configurations:
     Template: 'qtci-windows-11_23H2-x86_64-53'
     Compiler: 'Mingw'
     Features: ['Sccache', 'WarningsAreErrors', 'UseConfigure']
-    Configure arguments: '-developer-build -release -force-debug-info -separate-debug-info -make examples'
+    Configure arguments: '-developer-build -release -force-asserts -force-debug-info -separate-debug-info -make examples'
     Environment variables: [
         'Path={{.Env.MINGW_PATH}}\bin;{{.Env.Path}}',
         'CMAKE_ARGS=-DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DOPENSSL_ROOT_DIR={{.Env.OPENSSL_INCLUDE_x64}}\.. -DCMAKE_IGNORE_PREFIX_PATH=C:/strawberry/c -DMySQL_ROOT={{.Env.ENV_MySQL_ROOT}} -DMySQL_LIBRARY_DIR={{.Env.ENV_MySQL_LIBRARY_DIR}}',

@@ -16,6 +16,7 @@
 #include <QtQml/qqmlcontext.h>
 #include <QtQuick/qquickview.h>
 #include <QtQuick/private/qquickitem_p.h>
+#include <QtQuick/private/qquickmousearea_p.h>
 #include <QtQuick/private/qquickrectangle_p.h>
 #include <QtQuickTest/quicktest.h>
 #include <QtQuickTestUtils/private/qmlutils_p.h>
@@ -118,6 +119,7 @@ private slots:
     void textPadding();
     void resetCurrentIndexUponPopup_data();
     void resetCurrentIndexUponPopup();
+    void mousePropagationWithinPopup();
 
 private:
     bool nativeMenuSupported = false;
@@ -3323,6 +3325,46 @@ void tst_QQuickMenu::resetCurrentIndexUponPopup()
     QTRY_VERIFY(menu->isOpened());
     QCOMPARE(menu->currentIndex(), -1);
     QCOMPARE(menu->contentItem()->property("currentIndex"), QVariant(-1));
+}
+
+void tst_QQuickMenu::mousePropagationWithinPopup()
+{
+    QQuickControlsApplicationHelper helper(this, QLatin1String("mousePropagationWithinPopup.qml"));
+    QVERIFY2(helper.ready, helper.failureMessage());
+
+    QQuickApplicationWindow *window = helper.appWindow;
+    centerOnScreen(window);
+    window->show();
+    QVERIFY(QTest::qWaitForWindowActive(window));
+
+    QQuickPopup *popup = window->property("popup").value<QQuickPopup*>();
+    QVERIFY(popup);
+    popup->open();
+    QTRY_VERIFY(popup->isOpened());
+
+    QQuickMenu *nestedMenu = window->property("nestedMenu").value<QQuickMenu*>();
+    QVERIFY(nestedMenu);
+    nestedMenu->open();
+    QTRY_VERIFY(nestedMenu->isOpened());
+
+    QQuickMouseArea *mouseArea = window->property("mouseArea").value<QQuickMouseArea *>();
+    QVERIFY(mouseArea);
+
+    QSignalSpy clickedSpy(mouseArea, &QQuickMouseArea::clicked);
+    QQuickMenuItem *menuItem2 = qobject_cast<QQuickMenuItem *>(nestedMenu->itemAt(1));
+    QVERIFY(menuItem2);
+    QVERIFY(!menuItem2->isEnabled());
+
+    QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, mapCenterToWindow(menuItem2));
+    QCOMPARE(clickedSpy.size(), 0);
+
+    // Check on the gap area between menu and its item
+    auto menuItem1 = qobject_cast<QQuickMenuItem *>(nestedMenu->itemAt(0));
+    QVERIFY(menuItem1);
+    auto menuItem1Pos = mapCenterToWindow(menuItem1);
+    QPoint gapPoint(menuItem1Pos.x() - menuItem1->size().width() / 2 - 1, menuItem1Pos.y());
+    QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, gapPoint);
+    QCOMPARE(clickedSpy.size(), 0);
 }
 
 QTEST_QUICKCONTROLS_MAIN(tst_QQuickMenu)

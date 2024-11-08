@@ -243,7 +243,7 @@ void tst_QMetaObjectBuilder::method()
     method1.setParameterNames(QList<QByteArray>() << "a" << "b");
     method1.setTag("tag");
     method1.setAccess(QMetaMethod::Private);
-    method1.setAttributes(42);
+    method1.setAttributes(QMetaMethod::Cloned);
     method1.setRevision(123);
 
     // Check that method1 is changed, but method2 is not.
@@ -254,7 +254,7 @@ void tst_QMetaObjectBuilder::method()
     QCOMPARE(method1.parameterNames(), QList<QByteArray>() << "a" << "b");
     QCOMPARE(method1.tag(), QByteArray("tag"));
     QCOMPARE(method1.access(), QMetaMethod::Private);
-    QCOMPARE(method1.attributes(), 42);
+    QCOMPARE(method1.attributes(), QMetaMethod::Cloned);
     QCOMPARE(method1.revision(), 123);
     QCOMPARE(method1.index(), 0);
     QCOMPARE(method2.signature(), QByteArray("bar(QString)"));
@@ -274,7 +274,7 @@ void tst_QMetaObjectBuilder::method()
     method2.setParameterNames(QList<QByteArray>() << "c");
     method2.setTag("Q_FOO");
     method2.setAccess(QMetaMethod::Protected);
-    method2.setAttributes(24);
+    method2.setAttributes(QMetaMethod::Scriptable);
     method2.setRevision(321);
 
     // This time check that only method2 changed.
@@ -285,7 +285,7 @@ void tst_QMetaObjectBuilder::method()
     QCOMPARE(method1.parameterNames(), QList<QByteArray>() << "a" << "b");
     QCOMPARE(method1.tag(), QByteArray("tag"));
     QCOMPARE(method1.access(), QMetaMethod::Private);
-    QCOMPARE(method1.attributes(), 42);
+    QCOMPARE(method1.attributes(), QMetaMethod::Cloned);
     QCOMPARE(method1.revision(), 123);
     QCOMPARE(method1.index(), 0);
     QCOMPARE(method2.signature(), QByteArray("bar(QString)"));
@@ -295,7 +295,7 @@ void tst_QMetaObjectBuilder::method()
     QCOMPARE(method2.parameterNames(), QList<QByteArray>() << "c");
     QCOMPARE(method2.tag(), QByteArray("Q_FOO"));
     QCOMPARE(method2.access(), QMetaMethod::Protected);
-    QCOMPARE(method2.attributes(), 24);
+    QCOMPARE(method2.attributes(), QMetaMethod::Scriptable);
     QCOMPARE(method2.revision(), 321);
     QCOMPARE(method2.index(), 1);
     QCOMPARE(builder.methodCount(), 2);
@@ -311,7 +311,7 @@ void tst_QMetaObjectBuilder::method()
     QCOMPARE(method2.parameterNames(), QList<QByteArray>() << "c");
     QCOMPARE(method2.tag(), QByteArray("Q_FOO"));
     QCOMPARE(method2.access(), QMetaMethod::Protected);
-    QCOMPARE(method2.attributes(), 24);
+    QCOMPARE(method2.attributes(), QMetaMethod::Scriptable);
     QCOMPARE(method2.revision(), 321);
     QCOMPARE(method2.index(), 0);
 
@@ -446,7 +446,7 @@ void tst_QMetaObjectBuilder::constructor()
     ctor1.setParameterNames(QList<QByteArray>() << "a" << "b");
     ctor1.setTag("tag");
     ctor1.setAccess(QMetaMethod::Private);
-    ctor1.setAttributes(42);
+    ctor1.setAttributes(QMetaMethod::Scriptable);
 
     // Check that ctor1 is changed, but ctor2 is not.
     QCOMPARE(ctor1.signature(), QByteArray("foo(QString,int)"));
@@ -456,7 +456,7 @@ void tst_QMetaObjectBuilder::constructor()
     QCOMPARE(ctor1.parameterNames(), QList<QByteArray>() << "a" << "b");
     QCOMPARE(ctor1.tag(), QByteArray("tag"));
     QCOMPARE(ctor1.access(), QMetaMethod::Private);
-    QCOMPARE(ctor1.attributes(), 42);
+    QCOMPARE(ctor1.attributes(), QMetaMethod::Scriptable);
     QCOMPARE(ctor1.index(), 0);
     QCOMPARE(ctor2.signature(), QByteArray("bar(QString)"));
     QCOMPARE(ctor2.methodType(), QMetaMethod::Constructor);
@@ -474,7 +474,7 @@ void tst_QMetaObjectBuilder::constructor()
     ctor2.setParameterNames(QList<QByteArray>() << "c");
     ctor2.setTag("Q_FOO");
     ctor2.setAccess(QMetaMethod::Protected);
-    ctor2.setAttributes(24);
+    ctor2.setAttributes(QMetaMethod::Compatibility);
 
     // This time check that only ctor2 changed.
     QCOMPARE(ctor1.signature(), QByteArray("foo(QString,int)"));
@@ -484,7 +484,7 @@ void tst_QMetaObjectBuilder::constructor()
     QCOMPARE(ctor1.parameterNames(), QList<QByteArray>() << "a" << "b");
     QCOMPARE(ctor1.tag(), QByteArray("tag"));
     QCOMPARE(ctor1.access(), QMetaMethod::Private);
-    QCOMPARE(ctor1.attributes(), 42);
+    QCOMPARE(ctor1.attributes(), QMetaMethod::Scriptable);
     QCOMPARE(ctor1.index(), 0);
     QCOMPARE(ctor2.signature(), QByteArray("bar(QString)"));
     QCOMPARE(ctor2.methodType(), QMetaMethod::Constructor);
@@ -493,7 +493,7 @@ void tst_QMetaObjectBuilder::constructor()
     QCOMPARE(ctor2.parameterNames(), QList<QByteArray>() << "c");
     QCOMPARE(ctor2.tag(), QByteArray("Q_FOO"));
     QCOMPARE(ctor2.access(), QMetaMethod::Protected);
-    QCOMPARE(ctor2.attributes(), 24);
+    QCOMPARE(ctor2.attributes(), QMetaMethod::Compatibility);
     QCOMPARE(ctor2.index(), 1);
     QCOMPARE(builder.constructorCount(), 2);
 
@@ -508,7 +508,7 @@ void tst_QMetaObjectBuilder::constructor()
     QCOMPARE(ctor2.parameterNames(), QList<QByteArray>() << "c");
     QCOMPARE(ctor2.tag(), QByteArray("Q_FOO"));
     QCOMPARE(ctor2.access(), QMetaMethod::Protected);
-    QCOMPARE(ctor2.attributes(), 24);
+    QCOMPARE(ctor2.attributes(), QMetaMethod::Compatibility);
     QCOMPARE(ctor2.index(), 0);
 
     // Perform index-based lookup again.

@@ -121,7 +121,7 @@ void tst_QQuickDragAttached::imageSourceSize_data()
 
     QTest::addRow("size first: default size") << true << QSize() << QSize(462, 339) << QSize(462, 339);
     QTest::addRow("size first: shrunken elongated") << true << QSize(214, 114) << QSize(214, 114) << QSize(214, 114);
-    QTest::addRow("size first: width, neg height") << true << QSize(154, -1) << QSize(154, 113) << QSize(154, 113);
+    QTest::addRow("size first: width, neg height") << true << QSize(154, -1) << QSize(154, 339) << QSize(462, 339);
     QTest::addRow("size first: width, zero height") << true << QSize(154, 0) << QSize(154, 0) << QSize(154, 113);
 }
 

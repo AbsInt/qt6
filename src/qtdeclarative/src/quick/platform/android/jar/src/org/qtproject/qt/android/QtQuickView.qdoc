@@ -145,6 +145,39 @@
     \note QML views embedded within a Service context do not
     support keyboard input or accessibility features.
 
+    \section1 Multiple QtQuickViews in an Activity
+
+    Instantiating multiple QtQuickViews at once is also possible:
+
+    \badcode
+    import org.qtproject.qt.qml.target.Main;
+    import org.qtproject.qt.qml.target.Second;
+    ...
+
+    private Main m_mainQmlContent;
+    private Second m_secondQmlContent;
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_main);
+        ...
+
+        m_mainQmlContent = new Main();
+        m_secondQmlContent = new Second();
+
+        QtQuickView qmlView = new QtQuickView(this);
+        QtQuickView secondQmlView = new QtQuickView(this);
+
+        layout.addView(qmlView, params);
+        layout.addView(secondQmlView, secondParams);
+
+        qmlView.loadContent(m_mainQmlContent);
+        secondQmlView.loadContent(m_secondQmlContent);
+        ...
+    }
+    \endcode
+
     \section1 Constructors
 
     \section2 public QtQuickView(Context parent, String qmlUri, String appName)

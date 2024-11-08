@@ -8,10 +8,10 @@ lib_dir="$1/lib"
 additional_suffix="${2:-}"
 set_rpath="${3:-yes}"
 
-if uname -a |grep -q "Darwin"; then
-    readelf() {
-        /usr/local/opt/binutils/bin/readelf "$@"
-    }
+if [ "$(uname -s)" = "Darwin" ]; then
+    # Under Homebrew, binutils package is not symlinked into PATH.
+    # This lets us use readelf provided by Homebrew.
+    readelf() { "$(brew --prefix binutils)/bin/readelf" "$@"; }
 fi
 
 ffmpeg_libs=("avcodec" "avdevice" "avfilter" "avformat" "avutil" "swresample" "swscale")

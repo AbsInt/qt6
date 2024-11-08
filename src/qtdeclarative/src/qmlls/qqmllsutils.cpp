@@ -1866,6 +1866,23 @@ std::optional<ExpressionType> resolveExpressionType(const QQmlJS::Dom::DomItem &
         const auto name = item.field(Fields::base).value().toString();
         return ExpressionType{ name, {}, JavaScriptIdentifier };
     }
+    case DomType::ScriptCallExpression: {
+        const DomItem callee = item.field(Fields::callee);
+        const auto calleeExpressionType = resolveExpressionType(callee, ResolveOwnerType);
+
+        if (!calleeExpressionType || !calleeExpressionType->semanticScope
+            || !calleeExpressionType->name || calleeExpressionType->type != MethodIdentifier) {
+            return {};
+        }
+
+        const auto methods =
+                calleeExpressionType->semanticScope->methods(*calleeExpressionType->name);
+        if (methods.isEmpty())
+            return {};
+
+        const auto returnType = methods.front().returnType();
+        return ExpressionType{ {}, returnType, NotAnIdentifier };
+    }
     default: {
         qCDebug(QQmlLSUtilsLog) << "Type" << item.internalKindStr()
                                 << "is unimplemented in QQmlLSUtils::resolveExpressionType";
@@ -2027,6 +2044,7 @@ std::optional<Location> findDefinitionOf(const DomItem &item)
     case EnumeratorValueIdentifier:
     case GroupedPropertyIdentifier:
     case LambdaMethodIdentifier:
+    case NotAnIdentifier:
         qCDebug(QQmlLSUtilsLog) << "QQmlLSUtils::findDefinitionOf was not implemented for type"
                                 << resolvedExpression->type;
         return {};
@@ -2104,6 +2122,7 @@ static QQmlJSScope::ConstPtr expressionTypeWithDefinition(const ExpressionType &
     case QmlComponentIdentifier:
     case QualifiedModuleIdentifier:
     case LambdaMethodIdentifier:
+    case NotAnIdentifier:
         return ownerType.semanticScope;
     }
     return {};

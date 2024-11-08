@@ -4,16 +4,17 @@
 #include "previewwidget.h"
 #include "../states/statecontroller.h"
 
-#include <QListView>
+#include <QQmlContext>
 #include <QQmlEngine>
 #include <QQuickView>
+#include <QQuickWidget>
 #include <QSplitter>
 #include <QVBoxLayout>
 
 PreviewWidget::PreviewWidget(QWidget *parent)
     : QWidget{parent}
     , m_errorListModel{this}
-    , m_errorListView{new QListView}
+    , m_errorListWidget{new QQuickWidget}
     , m_quickView{new QQuickView}
 {
     initUI();
@@ -33,10 +34,10 @@ void PreviewWidget::setSourcePath(const QString &path)
 
 void PreviewWidget::initUI()
 {
-    m_errorListView->setModel(&m_errorListModel);
-    m_errorListView->setEditTriggers(QAbstractItemView::NoEditTriggers);
-    m_errorListView->setWordWrap(true);
-    m_errorListView->setSpacing(4);
+    qmlRegisterType<ErrorListModel>("ErrorListModel", 1, 0, "ErrorListModel");
+    m_errorListWidget->rootContext()->setContextProperty("errorModel", &m_errorListModel);
+    m_errorListWidget->setResizeMode(QQuickWidget::SizeRootObjectToView);
+    m_errorListWidget->setSource(QUrl::fromLocalFile(":/resources/ErrorListView.qml"));
 
     m_quickView->setResizeMode(QQuickView::SizeRootObjectToView);
 
@@ -47,7 +48,7 @@ void PreviewWidget::initUI()
     QSplitter *splitter = new QSplitter{this};
     splitter->setOrientation(Qt::Vertical);
     splitter->addWidget(container);
-    splitter->addWidget(m_errorListView);
+    splitter->addWidget(m_errorListWidget);
 
     QVBoxLayout *layout = new QVBoxLayout;
     layout->setContentsMargins(0, 0, 0, 0);
@@ -61,8 +62,6 @@ void PreviewWidget::setupConnections()
             &PreviewWidget::onAppStateChanged);
     connect(m_quickView, &QQuickView::statusChanged, this,
             &PreviewWidget::onQuickWidetStatusChanged);
-    connect(m_errorListView, &QAbstractItemView::doubleClicked, &m_errorListModel,
-            &ErrorListModel::selectIndex);
     connect(&m_errorListModel, &ErrorListModel::errorPositionSelected, this,
             &PreviewWidget::errorPositionSelected);
 }

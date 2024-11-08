@@ -229,21 +229,12 @@ All warnings can be set to three levels:
         return 1;
     }
 
-    if (!parser.parse(arguments)) {
-        qWarning().noquote() << parser.errorText();
-        return 1;
-    }
+    parser.parse(arguments); // parse but ignore unknown options temporarily: plugins might add some
+                             // later
 
     // Since we can't use QCommandLineParser::process(), we need to handle version and help manually
     if (parser.isSet("version"))
         parser.showVersion();
-
-    if (parser.isSet("help") || parser.isSet("help-all"))
-        parser.showHelp(0);
-
-    if (parser.isSet(writeDefaultsOption)) {
-        return settings.writeDefaults() ? 0 : 1;
-    }
 
     auto updateLogLevels = [&]() {
         QQmlJS::LoggingUtils::updateLogLevels(categories, settings, &parser);
@@ -303,6 +294,13 @@ All warnings can be set to three levels:
         for (const QQmlJS::LoggerCategory &category : plugin.categories())
             addCategory(category);
     }
+
+    if (parser.isSet(writeDefaultsOption)) {
+        return settings.writeDefaults() ? 0 : 1;
+    }
+
+    if (parser.isSet("help") || parser.isSet("help-all"))
+        parser.showHelp(0);
 
     if (!parser.unknownOptionNames().isEmpty())
         parser.process(app);

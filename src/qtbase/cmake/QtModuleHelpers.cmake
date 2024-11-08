@@ -362,7 +362,7 @@ function(qt_internal_add_module target)
         qt_set_target_info_properties(${target} ${ARGN})
         qt_handle_multi_config_output_dirs("${target}")
 
-        if(NOT BUILD_SHARED_LIBS AND LINUX)
+        if(NOT BUILD_SHARED_LIBS AND (LINUX OR VXWORKS))
             # Horrible workaround for static build failures due to incorrect static library link
             # order. By increasing the multiplicity to 3, each library cycle will be repeated
             # 3 times on the link line, reducing the probability of undefined symbols at

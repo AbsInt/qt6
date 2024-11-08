@@ -81,6 +81,8 @@ private slots:
     void connectThreadFinishedSignalToObjectDeleteLaterSlot();
     void wait2();
     void wait3_slowDestructor();
+    void multiThreadWait_data();
+    void multiThreadWait();
     void destroyFinishRace();
     void startFinishRace();
     void startAndQuitCustomEventLoop();
@@ -1195,6 +1197,113 @@ void tst_QThread::wait3_slowDestructor()
                  qPrintable(QString::fromLatin1("elapsed: %1").arg(elapsed)));
     }
     QVERIFY(thread.wait(one_minute));
+}
+
+void tst_QThread::multiThreadWait_data()
+{
+    QTest::addColumn<QList<int>>("deadlines");
+    auto addRow = [](auto &&... list) {
+        static_assert(sizeof...(list) <= 5,
+                "Limited by std::array in tst_QThread::multiThreadWait()");
+        QList<int> deadlines = { std::move(list)... };
+        QByteArrayList name;
+        for (int value : deadlines) {
+            if (value < 0)
+                name.append("Forever");
+            else
+                name.append(QByteArray::number(value));
+        }
+        QTest::newRow(name.join('-').constData()) << deadlines;
+    };
+
+    addRow(0, 0);
+    addRow(0, 0, 0, 0, 0);
+    addRow(-1, -1);
+    addRow(-1, -1, -1, -1, -1);
+
+    // this is probably too fast and the Forever gets in too quickly
+    addRow(0, -1);
+
+    addRow(100, -1);
+    addRow(100, 200, -1);
+    addRow(200, 100, -1);
+    addRow(-1, 100, 100, 100);
+}
+
+void tst_QThread::multiThreadWait()
+{
+    class TargetThread : public QThread {
+    public:
+        QSemaphore sync;
+        void run() override
+        {
+            sync.acquire();
+            msleep(Waiting_Thread::WaitTime);
+        }
+    };
+
+    class WaiterThread : public QThread {
+    public:
+        QSemaphore *startSema, *endSema;
+        QThread *target;
+        QDeadlineTimer deadline;
+        QElapsedTimer::Duration waitedDuration = {};
+        int result = -1;
+        void run() override
+        {
+            QElapsedTimer elapsed;
+            elapsed.start();
+            startSema->acquire();
+            result = target->wait(deadline);
+            waitedDuration = elapsed.durationElapsed();
+            endSema->release();
+        }
+    };
+
+    QFETCH(QList<int>, deadlines);
+    TargetThread target;
+    target.start();
+
+    QSemaphore startSema, endSema;
+    std::array<std::unique_ptr<WaiterThread>, 5> threads;   // 5 threads is enough
+    for (int i = 0; i < deadlines.size(); ++i) {
+        threads[i] = std::make_unique<WaiterThread>();
+        threads[i]->startSema = &startSema;
+        threads[i]->endSema = &endSema;
+        threads[i]->target = &target;
+        threads[i]->deadline = QDeadlineTimer(deadlines.at(i));
+        threads[i]->start();
+    }
+
+    // release the waiting threads first, then the target thread they're waiting on
+    startSema.release(deadlines.size());
+    target.sync.release();
+
+    // wait for our waiting threads on a semaphore instead of QThread::wait()
+    // to make debugging easier
+    QVERIFY(endSema.tryAcquire(deadlines.size(), QDeadlineTimer::Forever));
+
+    // wait for all the threads to end, before QVERIFY/QCOMPAREs
+    for (int i = 0; i < deadlines.size(); ++i)
+        threads[i]->wait();
+    target.wait();
+
+    std::chrono::milliseconds expectedDuration{Waiting_Thread::WaitTime};
+    for (int i = 0; i < deadlines.size(); ++i) {
+        auto printI = qScopeGuard([i] { qWarning("i = %i", i); });
+        if (unsigned(deadlines.at(i)) < Waiting_Thread::WaitTime / 2) {
+            QCOMPARE(threads[i]->result, false);
+            QCOMPARE_LT(threads[i]->waitedDuration, expectedDuration);
+        } else if (unsigned(deadlines.at(i)) > Waiting_Thread::WaitTime * 3 / 2) {
+            QCOMPARE(threads[i]->result, true);
+            QCOMPARE_GE(threads[i]->waitedDuration, expectedDuration);
+        } else {
+            qWarning("Wait time %i (index %i) is too close to the target time; test would be flaky",
+                     deadlines.at(i), i);
+        }
+        printI.dismiss();
+        threads[i].reset();
+    }
 }
 
 void tst_QThread::destroyFinishRace()

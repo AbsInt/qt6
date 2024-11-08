@@ -1562,12 +1562,12 @@ void QQuickMultiEffectPrivate::updateShadowColor()
     if (!m_shaderEffect)
         return;
 
-    float alpha = std::clamp(float(m_shadowColor.alphaF() * m_shadowOpacity), 0.0f, 1.0f);
-    QVector4D shadowColor(m_shadowColor.redF(),
-                          m_shadowColor.greenF(),
-                          m_shadowColor.blueF(),
-                          alpha);
-
+    // Shader shadowColor has premultiplied alpha
+    float alpha = std::clamp(float(m_shadowOpacity), 0.0f, 1.0f);
+    QVector4D shadowColor(m_shadowColor.redF() * alpha,
+                          m_shadowColor.greenF() * alpha,
+                          m_shadowColor.blueF() * alpha,
+                          m_shadowColor.alphaF() * alpha);
     m_shaderEffect->setProperty("shadowColor", shadowColor);
 }
 

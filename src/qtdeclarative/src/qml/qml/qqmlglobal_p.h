@@ -207,20 +207,22 @@ class QQmlValueTypeProvider
 {
 public:
     static bool populateValueType(
-            QMetaType targetMetaType, void *target, const QV4::Value &source);
+            QMetaType targetMetaType, void *target, const QV4::Value &source,
+            QV4::ExecutionEngine *engine);
     static bool populateValueType(
-            QMetaType targetMetaType, void *target, QMetaType sourceMetaType, void *source);
+            QMetaType targetMetaType, void *target, QMetaType sourceMetaType, void *source,
+            QV4::ExecutionEngine *engine);
 
     static Q_QML_EXPORT void *heapCreateValueType(
-            const QQmlType &targetType, const QV4::Value &source);
+            const QQmlType &targetType, const QV4::Value &source, QV4::ExecutionEngine *engine);
     static QVariant constructValueType(
             QMetaType targetMetaType, const QMetaObject *targetMetaObject,
             int ctorIndex, void *ctorArg);
 
     static QVariant createValueType(const QJSValue &, QMetaType);
     static QVariant createValueType(const QString &, QMetaType);
-    static QVariant createValueType(const QV4::Value &, QMetaType);
-    static QVariant createValueType(const QVariant &, QMetaType);
+    static QVariant createValueType(const QV4::Value &, QMetaType, QV4::ExecutionEngine *);
+    static QVariant createValueType(const QVariant &, QMetaType, QV4::ExecutionEngine *);
 };
 
 class Q_QML_EXPORT QQmlColorProvider

@@ -17,3 +17,8 @@ python3.11 -m pip install selenium netifaces scache webdriver-manager
 python3.11 -m pip install -r "${BASH_SOURCE%/*}/../common/shared/sbom_requirements.txt"
 
 SetEnvVar "PYTHON3_EXECUTABLE" "/usr/bin/python3.11"
+
+# Provisioning during installation says:
+# 'Defaulting to user installation because normal site-packages is not writeable'
+# So it implicitly uses pip install --user, hence the path.
+SetEnvVar "SBOM_PYTHON_APPS_PATH" "/home/qt/.local/bin"

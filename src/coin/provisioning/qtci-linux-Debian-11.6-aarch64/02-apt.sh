@@ -262,6 +262,10 @@ keyring --disable
 
 pip install --user -r "${BASH_SOURCE%/*}/../common/shared/sbom_requirements.txt"
 
+source "${BASH_SOURCE%/*}/../common/unix/SetEnvVar.sh"
+
+SetEnvVar "SBOM_PYTHON_APPS_PATH" "/home/qt/.local/bin"
+
 # SetEnvVar "PATH" "/usr/lib/nodejs-mozilla/bin:\$PATH"
 
 #OpenSSLVersion="$(openssl version |cut -b 9-14)"

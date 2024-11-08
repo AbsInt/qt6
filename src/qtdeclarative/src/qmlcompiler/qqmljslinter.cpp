@@ -508,13 +508,13 @@ QQmlJSLinter::LintResult QQmlJSLinter::lintFile(const QString &filename,
             m_importer.setResourceFileMapper(mapper);
 
             m_logger.reset(new QQmlJSLogger);
-            m_logger->setFileName(m_useAbsolutePath ? info.absoluteFilePath() : filename);
+            m_logger->setFilePath(m_useAbsolutePath ? info.absoluteFilePath() : filename);
             m_logger->setCode(code);
             m_logger->setSilent(silent || json);
             QQmlJSScope::Ptr target = QQmlJSScope::create();
             QQmlJSImportVisitor v { target, &m_importer, m_logger.get(),
                                     QQmlJSImportVisitor::implicitImportDirectory(
-                                            m_logger->fileName(), m_importer.resourceFileMapper()),
+                                            m_logger->filePath(), m_importer.resourceFileMapper()),
                                     qmldirFiles };
 
             if (m_enablePlugins) {
@@ -667,7 +667,7 @@ QQmlJSLinter::LintResult QQmlJSLinter::lintModule(
     });
 
     m_logger.reset(new QQmlJSLogger);
-    m_logger->setFileName(module);
+    m_logger->setFilePath(module);
     m_logger->setCode(u""_s);
     m_logger->setSilent(silent || json);
 
@@ -807,7 +807,7 @@ QQmlJSLinter::FixResult QQmlJSLinter::applyFixes(QString *fixedCode, bool silent
 
     QList<QQmlJSFixSuggestion> fixesToApply;
 
-    QFileInfo info(m_logger->fileName());
+    QFileInfo info(m_logger->filePath());
     const QString currentFileAbsolutePath = info.absoluteFilePath();
 
     const QString lowerSuffix = info.suffix().toLower();
@@ -887,7 +887,7 @@ QQmlJSLinter::FixResult QQmlJSLinter::applyFixes(QString *fixedCode, bool silent
 
         for (const QQmlJS::DiagnosticMessage &m : diagnosticMessages) {
             qWarning().noquote() << QString::fromLatin1("%1:%2:%3: %4")
-                                            .arg(m_logger->fileName())
+                                            .arg(m_logger->filePath())
                                             .arg(m.loc.startLine)
                                             .arg(m.loc.startColumn)
                                             .arg(m.message);

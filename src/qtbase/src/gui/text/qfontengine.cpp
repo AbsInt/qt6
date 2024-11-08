@@ -868,7 +868,7 @@ QFontEngine::Glyph *QFontEngine::glyphData(glyph_t,
     return nullptr;
 }
 
-QImage QFontEngine::alphaMapForGlyph(glyph_t glyph)
+QImage QFontEngine::renderedPathForGlyph(glyph_t glyph, const QColor &color)
 {
     glyph_metrics_t gm = boundingBox(glyph);
     int glyph_x = qFloor(gm.x.toReal());
@@ -889,10 +889,16 @@ QImage QFontEngine::alphaMapForGlyph(glyph_t glyph)
     p.setRenderHint(QPainter::Antialiasing);
     addGlyphsToPath(&glyph, &pt, 1, &path, { });
     p.setPen(Qt::NoPen);
-    p.setBrush(Qt::black);
+    p.setBrush(color);
     p.drawPath(path);
     p.end();
 
+    return im;
+}
+
+QImage QFontEngine::alphaMapForGlyph(glyph_t glyph)
+{
+    QImage im = renderedPathForGlyph(glyph, Qt::black);
     QImage alphaMap(im.width(), im.height(), QImage::Format_Alpha8);
 
     for (int y=0; y<im.height(); ++y) {

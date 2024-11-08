@@ -2005,7 +2005,7 @@ QQmlEnginePrivate::createInternalContext(const QQmlRefPointer<QV4::ExecutableCom
         QV4::Scope scope(v4);
 
         QV4::ScopedObject scripts(scope, v4->newArrayObject(dependentScriptsSize));
-        context->setImportedScripts(QV4::PersistentValue(v4, scripts.asReturnedValue()));
+        context->setImportedScripts(v4, scripts);
         QV4::ScopedValue v(scope);
         for (qsizetype i = 0; i < dependentScriptsSize; ++i)
             scripts->put(i, (v = dependentScripts->at(i)->scriptValueForContext(context)));

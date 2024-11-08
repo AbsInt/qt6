@@ -486,6 +486,7 @@ const auto backtrace = std::stacktrace::current();
 # <future>
 qt_config_compile_test(cxx_std_async_noncopyable
     LABEL "std::async() NonCopyable"
+    LIBRARIES Threads::Threads
     CODE
 "// Calling std::async with lambda which takes non-copyable argument causes compilation error on
 // some platforms (VxWorks 24.03 and older with C++17-compatibility for example)

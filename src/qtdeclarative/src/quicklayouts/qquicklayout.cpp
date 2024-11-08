@@ -354,7 +354,7 @@ void QQuickLayoutAttached::setFillHeight(bool fill)
     \value Layout.SizePolicyImplicit
         The item in the layout uses implicit or built-in size policy
     \value Layout.SizePolicyExplicit
-        The item in the layout don't use implicit size policies.
+        The item in the layout doesn't use implicit size policies.
 */
 void QQuickLayoutAttached::setUseDefaultSizePolicy(QQuickLayout::SizePolicy sizePolicy)
 {

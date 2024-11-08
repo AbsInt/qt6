@@ -880,6 +880,8 @@ private:
 
     QDataBuffer<QRhiBuffer *> m_vboPool;
     QDataBuffer<QRhiBuffer *> m_iboPool;
+    quint32 m_vboPoolCost;
+    quint32 m_iboPoolCost;
 
     uint m_rebuild;
     qreal m_zRange;
@@ -891,6 +893,7 @@ private:
     int m_batchNodeThreshold;
     int m_batchVertexThreshold;
     int m_srbPoolThreshold;
+    int m_bufferPoolSizeLimit;
 
     Visualizer *m_visualizer;
 

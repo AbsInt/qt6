@@ -57,8 +57,8 @@ build_ffmpeg_android() {
     libs_prefix="_arm64-v8a"
   fi
 
-  ln -s "${openssl_libs}/libcrypto_3.so" "${openssl_libs}/libcrypto.so"
-  ln -s "${openssl_libs}/libssl_3.so" "${openssl_libs}/libssl.so"
+  ln -Ffs "${openssl_libs}/libcrypto_3.so" "${openssl_libs}/libcrypto.so"
+  ln -Ffs "${openssl_libs}/libssl_3.so" "${openssl_libs}/libssl.so"
 
   api_version=24
 
@@ -95,6 +95,8 @@ build_ffmpeg_android() {
 
   sudo make install -j4
 
+  popd
+
   rm -f "${openssl_libs}/libcrypto.so"
   rm -f "${openssl_libs}/libssl.so"
 
@@ -102,8 +104,6 @@ build_ffmpeg_android() {
       fix_dependencies="${BASH_SOURCE%/*}/../shared/fix_ffmpeg_dependencies.sh"
       sudo "${fix_dependencies}" "${target_dir}" "${libs_prefix}" "no"
   fi
-
-  popd
 }
 
 if  [ "$os" == "android-x86" ]; then

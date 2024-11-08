@@ -682,6 +682,7 @@ public:
     virtual int visualRowIndex(const int logicalIndex) const;
     virtual int visualColumnIndex(const int logicalIndex) const;
     void setContainsDragOnDelegateItem(const QModelIndex &modelIndex, bool overlay);
+    int getEditCellIndex(const QModelIndex &index) const;
 };
 
 class FxTableItem : public QQuickItemViewFxItem

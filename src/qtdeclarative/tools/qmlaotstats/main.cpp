@@ -54,6 +54,10 @@ int main(int argc, char **argv)
     parser.addPositionalArgument("output", "Aggregate mode: the path where to store the "
                                            "aggregated aotstats. Format mode: the the path where "
                                            "the formatted output will be saved.");
+    QCommandLineOption emptyModulesOption("empty-modules", QCoreApplication::translate("main", "Format mode: File containing a list of modules with no QML files."), "file");
+    parser.addOption(emptyModulesOption);
+    QCommandLineOption onlyBytecodeModulesOption("only-bytecode-modules", QCoreApplication::translate("main", "Format mode: File containing a list of modules for which only the bytecode is generated."), "file");
+    parser.addOption(onlyBytecodeModulesOption);
     parser.process(app);
 
     const auto &positionalArgs = parser.positionalArguments();
@@ -74,7 +78,18 @@ int main(int argc, char **argv)
         const auto aotstats = QQmlJS::AotStats::parseAotstatsFile(positionalArgs[1]);
         if (!aotstats.has_value())
             return EXIT_FAILURE;
-        const QQmlJS::AotStatsReporter reporter(aotstats.value());
+
+        const auto emptyModules = parser.isSet(emptyModulesOption)
+                ? QQmlJS::AotStats::readAllLines(parser.value(emptyModulesOption))
+                : QStringList();
+        const auto onlyBytecodeModules = parser.isSet(onlyBytecodeModulesOption)
+                ? QQmlJS::AotStats::readAllLines(parser.value(onlyBytecodeModulesOption))
+                : QStringList();
+        if (!emptyModules || !onlyBytecodeModules)
+            return EXIT_FAILURE;
+
+        const QQmlJS::AotStatsReporter reporter(aotstats.value(), emptyModules.value(),
+                                                onlyBytecodeModules.value());
         if (!saveFormattedStats(reporter.format(), positionalArgs[2]))
             return EXIT_FAILURE;
     }

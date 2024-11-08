@@ -304,6 +304,7 @@ qt_internal_add_module(Core
         tools/qsharedpointer.cpp tools/qsharedpointer.h
         tools/qsharedpointer_impl.h
         tools/qsize.cpp tools/qsize.h
+        tools/qsmallbytearray_p.h
         tools/qspan.h
         tools/qspan_p.h
         tools/qstack.h
@@ -1530,6 +1531,8 @@ function(qt_internal_library_deprecation_level)
     # QT_DISABLE_DEPRECATED_UP_TO controls which version we use as a cut-off
     # compiling in to the library. E.g. if it is set to QT_VERSION then no
     # code which was deprecated before QT_VERSION will be compiled in.
+    set(digit "[0-9a-fA-F]")
+    string(REPEAT "${digit}" 6 six_digits)
     if(NOT DEFINED QT_DISABLE_DEPRECATED_UP_TO)
         if(WIN32)
             # On Windows, due to the way DLLs work, we need to export all functions,
@@ -1539,7 +1542,7 @@ function(qt_internal_library_deprecation_level)
             # On other platforms, Qt's own compilation does need to compile the Qt 5.0 API
             set(QT_DISABLE_DEPRECATED_UP_TO "0x050000")
         endif()
-    elseif(NOT QT_DISABLE_DEPRECATED_UP_TO MATCHES "^0x[0-9][0-9][0-9][0-9][0-9][0-9]$")
+    elseif(NOT QT_DISABLE_DEPRECATED_UP_TO MATCHES "^0x${six_digits}$")
         message(FATAL_ERROR "Ivalid format of the QT_DISABLE_DEPRECATED_UP_TO macro:"
             " ${QT_DISABLE_DEPRECATED_UP_TO}. The expected format is the hexadecimal number,"
             " e.g. 0x060102")

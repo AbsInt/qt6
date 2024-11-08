@@ -388,7 +388,7 @@ ReturnedValue QQmlTypeWrapper::virtualGet(const Managed *m, PropertyKey id, cons
             if (r.type.isValid()) {
                 return create(scope.engine, object, r.type, w->d()->typeNameMode());
             } else if (r.scriptIndex != -1) {
-                QV4::ScopedObject scripts(scope, context->importedScripts().valueRef());
+                QV4::ScopedObject scripts(scope, context->importedScripts());
                 return scripts->get(r.scriptIndex);
             } else if (r.importNamespace) {
                 return create(scope.engine, object, context->imports(), r.importNamespace);

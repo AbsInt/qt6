@@ -145,7 +145,7 @@ class QtEmbeddedDelegate extends QtActivityDelegateBase
     @Override
     public void removeView(QtView view)
     {
-        m_views.remove(view.getId());
+        m_views.remove(view);
     }
     // QtEmbeddedViewInterface implementation end
 

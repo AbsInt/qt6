@@ -63,6 +63,7 @@ installPackages+=(dbus-devel)
 installPackages+=(gstreamer1-plugins-bad-free)
 installPackages+=(gstreamer1-devel)
 installPackages+=(gstreamer1-plugins-base-devel)
+installPackages+=(gstreamer1-plugin-openh264)
 # pipewire for QtMultimedia
 installPackages+=(pipewire-devel)
 # yasm for QtMultimedia
@@ -185,6 +186,12 @@ sudo python -m pip install -r "${BASH_SOURCE%/*}/../common/shared/sbom_requireme
 
 sudo /usr/bin/pip3 install wheel
 sudo /usr/bin/pip3 install -r "${BASH_SOURCE%/*}/../common/shared/sbom_requirements.txt"
+
+# Provisioning during installation says:
+# 'The script sbom2doc is installed in '/usr/local/bin' which is not on PATH.'
+# hence the explicit assignment to SBOM_PYTHON_APPS_PATH.
+source "${BASH_SOURCE%/*}/../common/unix/SetEnvVar.sh"
+SetEnvVar "SBOM_PYTHON_APPS_PATH" "/usr/local/bin"
 
 # Make FindPython3.cmake to find python3
 sudo ln -s /usr/bin/python3 /usr/local/bin/python3

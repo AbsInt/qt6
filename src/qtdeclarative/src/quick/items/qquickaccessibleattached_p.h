@@ -87,7 +87,7 @@ public:
     QString name() const {
         if (m_state.passwordEdit)
             return QString();
-        if (m_proxying)
+        if (!m_nameExplicitlySet && m_proxying && m_proxying->wasNameExplicitlySet())
             return m_proxying->name();
         return m_name;
     }

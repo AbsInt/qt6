@@ -108,7 +108,7 @@ class CldrReader (object):
                 'They could be removed at the next major version.\n')
 
         # Check for duplicate entries in winIds:
-        last = ('', '', '')
+        last: tuple[str, str, str] = ('', '', '')
         winDup = {}
         for triple in sorted(winIds):
             if triple[:2] == last[:2]:
@@ -117,6 +117,7 @@ class CldrReader (object):
                 except KeyError:
                     seq = winDup[triple[:2]] = []
                 seq.append(triple[-1])
+            last = triple
         if winDup:
             joined = '\n\t'.join(f'{t}, {w}: ", ".join(ids)'
                                  for (w, t), ids in winDup.items())
@@ -280,7 +281,7 @@ class CldrReader (object):
                       currencyRounding = int(rounding))
 
         locale.update(scan.currencyData(iso))
-        locale.update(scan.numericData(self.root.numberSystem, self.whitter))
+        locale.update(scan.numericData(self.root.numberSystem))
         locale.update(scan.textPatternData())
         locale.update(scan.endonyms(language, script, territory, variant))
         locale.update(scan.unitData()) # byte, kB, MB, GB, ..., KiB, MiB, GiB, ...
@@ -353,7 +354,7 @@ class CldrAccess (object):
         for ignore, attrs in self.supplement('likelySubtags.xml').find('likelySubtags'):
             yield attrs['from'], attrs['to']
 
-    def numberSystem(self, system):
+    def numberSystem(self, system: str) -> dict[str, str]:
         """Get a description of a numbering system.
 
         Returns a mapping, with keys 'digits', 'type' and 'id'; the

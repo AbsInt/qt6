@@ -27,7 +27,8 @@ namespace QQmlJS {
 class Q_QMLCOMPILER_EXPORT AotStatsReporter
 {
 public:
-    AotStatsReporter(const QQmlJS::AotStats &);
+    AotStatsReporter(const QQmlJS::AotStats &stats, const QStringList &emptyModules,
+                     const QStringList &onlyBytecodeModules);
 
     QString format() const;
 
@@ -37,6 +38,8 @@ private:
     QString formatSuccessRate(int codegens, int successes) const;
 
     const AotStats &m_aotstats;
+    const QStringList &m_emptyModules;
+    const QStringList &m_onlyBytecodeModules;
 
     struct Counters
     {

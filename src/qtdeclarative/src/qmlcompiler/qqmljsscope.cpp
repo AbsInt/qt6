@@ -703,7 +703,7 @@ void QQmlJSScope::resolveList(const QQmlJSScope::Ptr &self, const QQmlJSScope::C
     self->m_listType = listType;
 }
 
-void QQmlJSScope::resolveGeneralizedGroup(
+void QQmlJSScope::resolveGroup(
         const Ptr &self, const ConstPtr &baseType,
         const QQmlJS::ContextualTypes &contextualTypes, QSet<QString> *usedTypes)
 {
@@ -1161,6 +1161,7 @@ QDeferredFactory<QQmlJSScope>::QDeferredFactory(QQmlJSImporter *importer, const 
 void QDeferredFactory<QQmlJSScope>::populate(const QSharedPointer<QQmlJSScope> &scope) const
 {
     scope->setOwnModuleName(m_moduleName);
+    scope->setFilePath(m_filePath);
 
     QList<QQmlJS::DiagnosticMessage> errors = m_typeReader(m_importer, m_filePath, scope);
     m_importer->m_globalWarnings.append(errors);

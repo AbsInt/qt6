@@ -240,7 +240,8 @@ struct Options
 
     // Per package collected information
     QStringList initClasses;
-    QStringList permissions;
+    // permissions 'name' => 'optional additional attributes'
+    QMap<QString, QString> permissions;
     QStringList features;
 
     // Override qml import scanner path
@@ -1754,10 +1755,21 @@ bool updateLibsXml(Options *options)
 
         QStringList localLibs;
         localLibs = options->localLibs[it.key()];
+        const QList<QtDependency>& deps = options->qtDependencies[it.key()];
+        auto notExistsInDependencies = [&deps] (const QString &lib) {
+            return std::none_of(deps.begin(), deps.end(), [&lib] (const QtDependency &dep) {
+                return QFileInfo(dep.absolutePath).fileName() == QFileInfo(lib).fileName();
+            });
+        };
+
+        // Clean up localLibs: remove libs that were not added to qtDependecies
+        localLibs.erase(std::remove_if(localLibs.begin(), localLibs.end(), notExistsInDependencies),
+                        localLibs.end());
+
         // If .pro file overrides dependency detection, we need to see which platform plugin they picked
         if (localLibs.isEmpty()) {
             QString plugin;
-            for (const QtDependency &qtDependency : options->qtDependencies[it.key()]) {
+            for (const QtDependency &qtDependency : deps) {
                 if (qtDependency.relativePath.contains("libplugins_platforms_qtforandroid_"_L1))
                     plugin = qtDependency.relativePath;
 
@@ -1854,9 +1866,24 @@ bool updateAndroidManifest(Options &options)
     replacements[QStringLiteral("-- %%INSERT_VERSION_CODE%% --")] = options.versionCode;
     replacements[QStringLiteral("package=\"org.qtproject.example\"")] = "package=\"%1\""_L1.arg(options.packageName);
 
+    const QString androidManifestPath = options.outputDirectory + "/AndroidManifest.xml"_L1;
+    QFile androidManifestXml(androidManifestPath);
+    // User may have manually defined permissions in the AndroidManifest.xml
+    // Read these permissions in order to remove any duplicates, as otherwise the
+    // application build would fail.
+    if (androidManifestXml.exists() && androidManifestXml.open(QIODevice::ReadOnly)) {
+        QXmlStreamReader reader(&androidManifestXml);
+        while (!reader.atEnd()) {
+            reader.readNext();
+            if (reader.isStartElement() && reader.name() == "uses-permission"_L1)
+                options.permissions.remove(QString(reader.attributes().value("android:name"_L1)));
+        }
+        androidManifestXml.close();
+    }
+
     QString permissions;
-    for (const QString &permission : std::as_const(options.permissions))
-        permissions += "    <uses-permission android:name=\"%1\" />\n"_L1.arg(permission);
+    for (auto [name, extras] : options.permissions.asKeyValueRange())
+        permissions += "    <uses-permission android:name=\"%1\" %2 />\n"_L1.arg(name).arg(extras);
     replacements[QStringLiteral("<!-- %%INSERT_PERMISSIONS -->")] = permissions.trimmed();
 
     QString features;
@@ -1867,13 +1894,11 @@ bool updateAndroidManifest(Options &options)
 
     replacements[QStringLiteral("<!-- %%INSERT_FEATURES -->")] = features.trimmed();
 
-    QString androidManifestPath = options.outputDirectory + "/AndroidManifest.xml"_L1;
     if (!updateFile(androidManifestPath, replacements))
         return false;
 
     // read the package, min & target sdk API levels from manifest file.
     bool checkOldAndroidLabelString = false;
-    QFile androidManifestXml(androidManifestPath);
     if (androidManifestXml.exists()) {
         if (!androidManifestXml.open(QIODevice::ReadOnly)) {
             fprintf(stderr, "Cannot open %s for reading.\n", qPrintable(androidManifestPath));
@@ -2127,7 +2152,13 @@ bool readAndroidDependencyXml(Options *options,
                     }
                 } else if (reader.name() == "permission"_L1) {
                     QString name = reader.attributes().value("name"_L1).toString();
-                    options->permissions.append(name);
+                    QString extras = reader.attributes().value("extras"_L1).toString();
+                    // With duplicate permissions prioritize the one without any attributes,
+                    // as that is likely the most permissive
+                    if (!options->permissions.contains(name)
+                        || !options->permissions.value(name).isEmpty()) {
+                        options->permissions.insert(name, extras);
+                    }
                 } else if (reader.name() == "feature"_L1) {
                     QString name = reader.attributes().value("name"_L1).toString();
                     options->features.append(name);
@@ -2142,7 +2173,6 @@ bool readAndroidDependencyXml(Options *options,
     } else if (options->verbose) {
         fprintf(stdout, "No android dependencies for %s\n", qPrintable(moduleName));
     }
-    options->permissions.removeDuplicates();
     options->features.removeDuplicates();
 
     return true;

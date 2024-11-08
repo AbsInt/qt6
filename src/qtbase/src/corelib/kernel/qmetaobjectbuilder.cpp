@@ -1699,7 +1699,7 @@ int QMetaMethodBuilder::attributes() const
 {
     QMetaMethodBuilderPrivate *d = d_func();
     if (d)
-        return (d->attributes >> 4);
+        return (d->attributes >> 4) & 0x7;
     else
         return 0;
 }
@@ -1712,8 +1712,10 @@ int QMetaMethodBuilder::attributes() const
 void QMetaMethodBuilder::setAttributes(int value)
 {
     QMetaMethodBuilderPrivate *d = d_func();
-    if (d)
-        d->attributes = ((d->attributes & 0x0f) | (value << 4));
+    if (d) {
+        d->attributes &= ~0x70;
+        d->attributes |= (value & 0x7) << 4;
+    }
 }
 
 /*!

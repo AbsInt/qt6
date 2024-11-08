@@ -73,4 +73,39 @@ subdirectories} that define QML Modules.
 
 */
 
+/*!
+\page cmake-variable-qt-qml-no-cachegen.html
+\ingroup cmake-variables-qtqml
+
+\title QT_QML_NO_CACHEGEN
+
+\brief Disables compilation of QML files into bytecode or C++ code.
+\cmakevariablesince 6.8.1
+
+\c QT_QML_NO_CACHEGEN is a CMake variable that can be set to disable the compilation of QML files
+into bytecode or C++ code for QML targets created by
+\l{qt6_add_qml_module}{qt6_add_qml_module()}.
+
+It has the same effect as setting the \c{NO_CACHEGEN} option of
+\l{qt6_add_qml_module}{qt6_add_qml_module()}, but allows doing so on a per-directory or project
+basis.
+
+Turn on this option to reduce the number of build steps necessary to complete a build, and
+thereby shorten the develop-debug iteration cycle.
+
+To minimize application size, turn off this option, and instead use
+\l{QT_DISCARD_FILE_CONTENTS}{QT_DISCARD_FILE_CONTENTS} to remove the QML files embedded into the
+resource system.
+
+The variable can be set in the project's CMakeLists.txt as follows:
+\badcode
+set(QT_QML_NO_CACHEGEN TRUE)
+qt_add_qml_module(MyModule
+    URI MyModule
+    VERSION 1.0
+    ...
+)
+\endcode
+
+*/
 

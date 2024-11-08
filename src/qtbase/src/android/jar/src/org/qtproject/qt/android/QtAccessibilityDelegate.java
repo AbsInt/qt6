@@ -35,8 +35,8 @@ class QtAccessibilityDelegate extends View.AccessibilityDelegate
     private static final String DEFAULT_CLASS_NAME = "$VirtualChild";
 
     private View m_view = null;
-    private final AccessibilityManager m_manager;
-    private final QtLayout m_layout;
+    private AccessibilityManager m_manager;
+    private QtLayout m_layout;
 
     // The accessible object that currently has the "accessibility focus"
     // usually indicated by a yellow rectangle on screen.
@@ -63,11 +63,16 @@ class QtAccessibilityDelegate extends View.AccessibilityDelegate
     // e.g. one per window?
     // FIXME make QtAccessibilityDelegate window based or verify current way works
     // also for child windows: QTBUG-120685
-    QtAccessibilityDelegate(QtLayout layout)
+    QtAccessibilityDelegate() { }
+
+    void initLayoutAccessibility(QtLayout layout)
     {
+        if (m_layout == null)
+            Log.w(TAG, "Unable to initialize the accessibility delegate with a null layout");
+
         m_layout = layout;
 
-        m_manager = (AccessibilityManager) m_layout.getContext().getSystemService(Context.ACCESSIBILITY_SERVICE);
+        m_manager = m_layout.getContext().getSystemService(AccessibilityManager.class);
         if (m_manager != null) {
             AccessibilityManagerListener accServiceListener = new AccessibilityManagerListener();
             if (!m_manager.addAccessibilityStateChangeListener(accServiceListener))
@@ -82,7 +87,7 @@ class QtAccessibilityDelegate extends View.AccessibilityDelegate
         @Override
         public void onAccessibilityStateChanged(boolean enabled)
         {
-            if (Os.getenv("QT_ANDROID_DISABLE_ACCESSIBILITY") != null)
+            if (m_layout == null || Os.getenv("QT_ANDROID_DISABLE_ACCESSIBILITY") != null)
                 return;
             if (enabled) {
                 try {
@@ -136,7 +141,7 @@ class QtAccessibilityDelegate extends View.AccessibilityDelegate
     // (user moves finger over screen to discover items on screen).
     private boolean dispatchHoverEvent(MotionEvent event)
     {
-        if (!m_manager.isTouchExplorationEnabled()) {
+        if (m_manager == null || !m_manager.isTouchExplorationEnabled()) {
             return false;
         }
 
@@ -177,7 +182,7 @@ class QtAccessibilityDelegate extends View.AccessibilityDelegate
             // Note: This code is mostly copied from
             // AccessibilityNodeProvider::performAction, but we remove the
             // focus only if the focused view id matches the one that was hidden.
-            if (m_focusedVirtualViewId == viewId) {
+            if (m_view != null && m_focusedVirtualViewId == viewId) {
                 m_focusedVirtualViewId = INVALID_ID;
                 m_view.invalidate();
                 sendEventForVirtualViewId(viewId,
@@ -212,7 +217,13 @@ class QtAccessibilityDelegate extends View.AccessibilityDelegate
 
     void notifyValueChanged(int viewId, String value)
     {
+        if (m_manager == null)
+            return;
+
         QtNative.runAction(() -> {
+            if (m_view == null)
+                return;
+
             // Send a TYPE_ANNOUNCEMENT event with the new value
 
             if ((viewId == INVALID_ID) || !m_manager.isEnabled()) {
@@ -255,7 +266,7 @@ class QtAccessibilityDelegate extends View.AccessibilityDelegate
 
     void sendAccessibilityEvent(AccessibilityEvent event)
     {
-        if (event == null)
+        if (m_view == null || event == null)
             return;
 
         final ViewGroup group = (ViewGroup) m_view.getParent();
@@ -292,12 +303,13 @@ class QtAccessibilityDelegate extends View.AccessibilityDelegate
 
     private AccessibilityEvent getEventForVirtualViewId(int virtualViewId, int eventType)
     {
-        if ((virtualViewId == INVALID_ID) || !m_manager.isEnabled()) {
+        final boolean isManagerEnabled = m_manager != null && m_manager.isEnabled();
+        if (m_view == null || !isManagerEnabled || (virtualViewId == INVALID_ID)) {
             Log.w(TAG, "getEventForVirtualViewId for invalid view");
             return null;
         }
 
-        if (m_layout.getChildCount() == 0)
+        if (m_layout == null || m_layout.getChildCount() == 0)
             return null;
 
         final AccessibilityEvent event = AccessibilityEvent.obtain(eventType);
@@ -330,6 +342,9 @@ class QtAccessibilityDelegate extends View.AccessibilityDelegate
 
     private AccessibilityNodeInfo getNodeForView()
     {
+        if (m_view == null || m_layout == null)
+            return AccessibilityNodeInfo.obtain();
+
         // Since we don't want the parent to be focusable, but we can't remove
         // actions from a node, copy over the necessary fields.
         final AccessibilityNodeInfo result = AccessibilityNodeInfo.obtain(m_view);
@@ -391,6 +406,9 @@ class QtAccessibilityDelegate extends View.AccessibilityDelegate
 
     private AccessibilityNodeInfo getNodeForVirtualViewId(int virtualViewId)
     {
+        if (m_view == null || m_layout == null)
+            return AccessibilityNodeInfo.obtain();
+
         final AccessibilityNodeInfo node = AccessibilityNodeInfo.obtain();
 
         node.setClassName(m_view.getClass().getName() + DEFAULT_CLASS_NAME);
@@ -456,6 +474,11 @@ class QtAccessibilityDelegate extends View.AccessibilityDelegate
         @Override
         public boolean performAction(int virtualViewId, int action, Bundle arguments)
         {
+            if (m_view == null) {
+                Log.e(TAG, "Unable to perform action with a null view");
+                return false;
+            }
+
             boolean handled = false;
             //Log.i(TAG, "PERFORM ACTION: " + action + " on " + virtualViewId);
             switch (action) {

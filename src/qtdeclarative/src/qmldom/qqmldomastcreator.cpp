@@ -1114,6 +1114,7 @@ void QQmlDomAstCreator::endVisit(AST::UiObjectBinding *)
 
 bool QQmlDomAstCreator::visit(AST::UiScriptBinding *el)
 {
+    ++m_nestedFunctionDepth;
     QStringView code = qmlFilePtr->code();
     SourceLocation loc = combineLocations(el->statement);
     auto script = std::make_shared<ScriptExpression>(
@@ -1210,6 +1211,7 @@ void QQmlDomAstCreator::setScriptExpression (const std::shared_ptr<ScriptExpress
 
 void QQmlDomAstCreator::endVisit(AST::UiScriptBinding *)
 {
+    --m_nestedFunctionDepth;
     DomValue &lastEl = currentNode();
     index_type idx = currentIndex();
     if (lastEl.kind == DomType::Binding) {
@@ -3102,7 +3104,7 @@ QQmlDomAstCreatorWithQQmlJSScope::QQmlDomAstCreatorWithQQmlJSScope(const QQmlJSS
       m_logger(logger),
       m_importer(importer),
       m_implicitImportDirectory(QQmlJSImportVisitor::implicitImportDirectory(
-              m_logger->fileName(), m_importer->resourceFileMapper())),
+              m_logger->filePath(), m_importer->resourceFileMapper())),
       m_scopeCreator(m_root, m_importer, m_logger, m_implicitImportDirectory,
                      qmldirFilesFrom(qmlFile)),
       m_domCreator(qmlFile)

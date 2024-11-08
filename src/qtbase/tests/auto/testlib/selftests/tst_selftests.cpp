@@ -675,6 +675,10 @@ bool TestLogger::shouldIgnoreTest(const QString &test) const
 
     if (test == "benchlibcallgrind") {
 #if defined(__GNUC__) && (defined(__i386) || defined(__x86_64)) && defined(Q_OS_LINUX)
+#  ifdef __AVX512F__
+        WARN("Valgrind does not support AVX512/AVX10 as of the time of this writing");
+        return true;
+#  endif
         // Check that it's actually available
         QProcess checkProcess;
         QStringList args{u"--version"_s};
