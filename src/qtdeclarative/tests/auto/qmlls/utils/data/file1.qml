@@ -58,4 +58,8 @@ Item {
             let xyz = c.children;
         };
     }
+
+    // Hello World!
+    Item {}
+    // Goodbye World!
 }

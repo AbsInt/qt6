@@ -3,8 +3,10 @@
 
 /*!
 \page qtqml-tooling-qmllint.html
-\title qmllint Reference
+\title qmllint
+\keyword qmllint Reference
 \ingroup qtqml-tooling
+\ingroup qtqml-tooling-devtools
 \brief A tool for verifying the syntax of QML files and warning about
 anti-patterns.
 

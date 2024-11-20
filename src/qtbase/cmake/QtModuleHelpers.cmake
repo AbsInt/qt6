@@ -606,6 +606,13 @@ function(qt_internal_add_module target)
         set(arg_EXTERNAL_HEADERS "")
     endif()
 
+    _qt_internal_forward_function_args(
+        FORWARD_PREFIX arg
+        FORWARD_OUT_VAR extend_target_args
+        FORWARD_SINGLE
+            PRECOMPILED_HEADER
+    )
+
     qt_internal_extend_target("${target}"
         ${arg_NO_UNITY_BUILD}
         SOURCES
@@ -639,8 +646,8 @@ function(qt_internal_add_module target)
         MOC_OPTIONS ${arg_MOC_OPTIONS}
         ENABLE_AUTOGEN_TOOLS ${arg_ENABLE_AUTOGEN_TOOLS}
         DISABLE_AUTOGEN_TOOLS ${arg_DISABLE_AUTOGEN_TOOLS}
-        PRECOMPILED_HEADER ${arg_PRECOMPILED_HEADER}
         NO_PCH_SOURCES ${arg_NO_PCH_SOURCES}
+        ${extend_target_args}
     )
 
     # The public module define is not meant to be used when building the module itself,
@@ -759,6 +766,9 @@ set(QT_ALLOW_MISSING_TOOLS_PACKAGES TRUE)")
         set(args "")
         if(QT_WILL_INSTALL)
             set(metatypes_install_dir "${INSTALL_ARCHDATADIR}/metatypes")
+            if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.31")
+                cmake_path(SET metatypes_install_dir NORMALIZE "${metatypes_install_dir}")
+            endif()
             list(APPEND args
                 __QT_INTERNAL_INSTALL __QT_INTERNAL_INSTALL_DIR "${metatypes_install_dir}")
         endif()

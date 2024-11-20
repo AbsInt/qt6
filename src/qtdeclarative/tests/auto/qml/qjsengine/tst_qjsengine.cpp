@@ -334,6 +334,8 @@ private slots:
     void setDeleteDuringForEach();
     void mapDeleteDuringForEach();
 
+    void multiMatchingRegularExpression();
+
 public:
     Q_INVOKABLE QJSValue throwingCppMethod1();
     Q_INVOKABLE void throwingCppMethod2();
@@ -6600,6 +6602,17 @@ void tst_QJSEngine::mapDeleteDuringForEach() {
 
   QJsonArray visited = engine.fromScriptValue<QJsonArray>(result);
   QCOMPARE(visited, QJsonArray({1, 2, 3}));
+}
+
+void tst_QJSEngine::multiMatchingRegularExpression()
+{
+    QJSEngine engine;
+    const QJSValue result = engine.evaluate(R"(
+        "33312345.897".replace(/\./g, ",").replace(/\B(?=(\d{3})+(?!\d))/g, ".")
+    )");
+
+    QVERIFY(result.isString());
+    QCOMPARE(result.toString(), "33.312.345,897"_L1);
 }
 
 QTEST_MAIN(tst_QJSEngine)

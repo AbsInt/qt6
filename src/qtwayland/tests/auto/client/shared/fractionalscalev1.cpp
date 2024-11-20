@@ -16,7 +16,7 @@ void FractionalScaleManager::wp_fractional_scale_manager_v1_get_fractional_scale
     auto *scaler = new FractionalScale(s, resource->client(), id, resource->version());
     connect(scaler, &QObject::destroyed, this, [this, scaler]() {
         m_fractionalScales.removeOne(scaler);
-    });
+    }, Qt::DirectConnection);
     m_fractionalScales << scaler;
 }
 

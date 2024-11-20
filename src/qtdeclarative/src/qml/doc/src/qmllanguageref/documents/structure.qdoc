@@ -220,7 +220,7 @@ properties called \c{rect}.
 
 Explicitly casting to the desired type helps tooling. It can allow the
 \l{Qt Quick Compiler} generate efficient code where it otherwise would not be
-able to. You can use \l{qmllint Reference}{qmllint} to find such occurrences.
+able to. You can use \l{qmllint} to find such occurrences.
 
 There is also a \c{Inaddressable} value you can use to explicitly specify the
 default behavior.
@@ -257,7 +257,7 @@ Specifying \c{Reference} explicitly states the default behavior.
 Rather than using \c{Copy} you should explicitly re-load references to value
 types and sequences any time they can have been affected by side effects. Side
 effects can happen whenever you call a function or imperatively set a property.
-\l qmllint provides guidance on this. For example, in the following code
+\l{qmllint} provides guidance on this. For example, in the following code
 the variable \c f is affected by side effects after writing \c width. This is
 because there may be a binding in a derived type or in a \c Binding element
 that updates \c font when \c width is changed.

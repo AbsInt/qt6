@@ -4804,18 +4804,26 @@ QMutableTouchEvent::~QMutableTouchEvent()
 /*! \internal
     Add the given \a point.
 */
-void QMutableTouchEvent::addPoint(const QEventPoint &point)
+void QMutableTouchEvent::addPoint(QTouchEvent *e, const QEventPoint &point)
 {
-    m_points.append(point);
-    auto &added = m_points.last();
+    e->m_points.append(point);
+    auto &added = e->m_points.last();
     if (!added.device())
-        QMutableEventPoint::setDevice(added, pointingDevice());
-    m_touchPointStates |= point.state();
+        QMutableEventPoint::setDevice(added, e->pointingDevice());
+    e->m_touchPointStates |= point.state();
 }
 
 
 QMutableSinglePointEvent::~QMutableSinglePointEvent()
     = default;
+
+/*! \internal
+    Add the given \a point.
+*/
+void QMutableTouchEvent::addPoint(const QEventPoint &point)
+{
+    addPoint(this, point);
+}
 
 QT_END_NAMESPACE
 

@@ -3359,12 +3359,20 @@ void tst_QQuickMenu::mousePropagationWithinPopup()
     QCOMPARE(clickedSpy.size(), 0);
 
     // Check on the gap area between menu and its item
-    auto menuItem1 = qobject_cast<QQuickMenuItem *>(nestedMenu->itemAt(0));
+    // Note: Skip verifying this case for the styles (such as Imagine) that doesn't have gap
+    // between menu and its item
+    const auto menuItem1 = qobject_cast<QQuickMenuItem *>(nestedMenu->itemAt(0));
     QVERIFY(menuItem1);
-    auto menuItem1Pos = mapCenterToWindow(menuItem1);
-    QPoint gapPoint(menuItem1Pos.x() - menuItem1->size().width() / 2 - 1, menuItem1Pos.y());
-    QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, gapPoint);
-    QCOMPARE(clickedSpy.size(), 0);
+    const QPointF point = menuItem1->mapToItem(nestedMenu->background(), QPointF(0, 0));
+    const bool xAxis = (point.x() + nestedMenu->leftInset()) > 0;
+    const bool yAxis = (point.y() + nestedMenu->topInset()) > 0;
+    if (xAxis || yAxis) {
+        const auto menuItem1Pos = mapCenterToWindow(menuItem1);
+        QPoint gapPoint(xAxis ? menuItem1Pos.x() - menuItem1->width() / 2 - 1 : menuItem1Pos.x(),
+                        yAxis ? menuItem1Pos.y() : menuItem1Pos.y() - menuItem1->height() / 2 - 1);
+        QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, gapPoint);
+        QCOMPARE(clickedSpy.size(), 0);
+    }
 }
 
 QTEST_QUICKCONTROLS_MAIN(tst_QQuickMenu)

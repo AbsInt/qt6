@@ -330,6 +330,8 @@ bool QWaylandGLContext::makeCurrent(QPlatformSurface *surface)
     }
 
     m_currentWindow = static_cast<QWaylandEglWindow *>(surface);
+
+    QMutexLocker lock(m_currentWindow->eglSurfaceLock());
     EGLSurface eglSurface = m_currentWindow->eglSurface();
 
     if (!m_currentWindow->needToUpdateContentFBO() && (eglSurface != EGL_NO_SURFACE)) {

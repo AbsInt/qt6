@@ -242,7 +242,7 @@
 #if defined(__SIZEOF_INT128__)
 // Compiler used in VxWorks SDK declares __SIZEOF_INT128__ but VxWorks doesn't support this type,
 // so we can't rely solely on compiler here.
-#if !defined(Q_OS_WIN)
+#if !defined(Q_OS_VXWORKS)
 #  define QT_COMPILER_SUPPORTS_INT128 __SIZEOF_INT128__
 #endif
 #endif // defined(__SIZEOF_INT128__)

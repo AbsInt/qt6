@@ -918,7 +918,7 @@ private:
 };
 \endcode
 
-Defining the parent property affords \l qmllint and other tools better insight
+Defining the parent property affords \l{qmllint} and other tools better insight
 into the intention of your code and avoids false positive warnings on some
 property accesses.
 

@@ -4,8 +4,9 @@
 /*!
 \page qtqml-tooling-svgtoqml.html
 \title svgtoqml
-\brief The SVG to QML converter tool
+\brief A tool that converts an SVG document to a QML file.
 \ingroup qtqml-tooling
+\ingroup qtqml-tooling-design
 
 \c svgtoqml is a command line tool shipped with Qt that converts an SVG document
 to a QML file. This QML file can then be used as a component in Qt Quick

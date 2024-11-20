@@ -28,6 +28,7 @@
 #include <qwayland-ivi-application.h>
 #include <QtWaylandCompositor/private/qwaylandoutput_p.h>
 #include <QtWaylandCompositor/private/qwaylandsurface_p.h>
+#include <QtWaylandCompositor/private/qwaylandxdgoutputv1_p.h>
 
 #include <QtTest/QtTest>
 
@@ -1755,7 +1756,7 @@ void tst_WaylandCompositor::xdgOutput()
     QVERIFY(wlOutput);
 
     // Output is not associated yet
-    QCOMPARE(QWaylandOutputPrivate::get(compositor.defaultOutput())->xdgOutput.isNull(), true);
+    QVERIFY(QWaylandXdgOutputManagerV1Private::get(&compositor.xdgOutputManager)->xdgOutput(compositor.defaultOutput()) == nullptr);
 
     // Create xdg-output on the server
     auto *xdgOutputServer = new QWaylandXdgOutputV1(compositor.defaultOutput(), &compositor.xdgOutputManager);
@@ -1769,7 +1770,7 @@ void tst_WaylandCompositor::xdgOutput()
     QVERIFY(client.m_xdgOutputs.contains(wlOutput));
 
     // Now it should be associated
-    QCOMPARE(QWaylandOutputPrivate::get(compositor.defaultOutput())->xdgOutput.isNull(), false);
+    QVERIFY(QWaylandXdgOutputManagerV1Private::get(&compositor.xdgOutputManager)->xdgOutput(compositor.defaultOutput()) != nullptr);
 
     // Verify initial values
     QTRY_COMPARE(xdgOutput->name, "OUTPUT1");

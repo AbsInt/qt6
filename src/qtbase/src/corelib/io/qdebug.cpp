@@ -516,9 +516,7 @@ void QDebug::putUInt128([[maybe_unused]] const void *p)
 /*!
     \fn QDebug::swap(QDebug &other)
     \since 5.0
-
-    Swaps this debug stream instance with \a other. This function is
-    very fast and never fails.
+    \memberswap{debug stream instance}
 */
 
 /*!

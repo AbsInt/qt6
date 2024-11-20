@@ -407,7 +407,7 @@ void QPointingDevicePrivate::sendTouchCancelEvent(QTouchEvent *cancelEvent)
     if (cancelEvent->points().isEmpty()) {
         for (auto &epd : activePoints.values()) {
             if (epd.exclusiveGrabber)
-                QMutableTouchEvent::from(cancelEvent)->addPoint(epd.eventPoint);
+                QMutableTouchEvent::addPoint(cancelEvent, epd.eventPoint);
         }
     }
     for (auto &epd : activePoints.values()) {

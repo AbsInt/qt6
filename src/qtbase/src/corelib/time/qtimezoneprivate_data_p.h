@@ -90,9 +90,6 @@ struct UtcData
     constexpr QByteArrayView id() const; // Space-joined list of IANA IDs
 };
 
-QT_WARNING_PUSH // QTBUG-128930
-QT_WARNING_DISABLE_CLANG("-Wunused-const-variable")
-
 // GENERATED PART STARTS HERE
 
 /*
@@ -107,7 +104,7 @@ QT_WARNING_DISABLE_CLANG("-Wunused-const-variable")
 */
 
 // Alias ID Index, Alias ID Index
-static constexpr AliasData aliasMappingTable[] = {
+static inline constexpr AliasData aliasMappingTable[] = {
     {      0,    14 }, // Africa/Asmera -> Africa/Asmara
     {     28,    44 }, // Africa/Timbuktu -> Africa/Bamako
     {     58,    91 }, // America/Argentina/ComodRivadavia -> America/Argentina/Catamarca
@@ -255,7 +252,7 @@ static constexpr AliasData aliasMappingTable[] = {
 };
 
 // Windows ID Key, Territory Enum, IANA ID Index
-static constexpr ZoneData zoneDataTable[] = {
+static inline constexpr ZoneData zoneDataTable[] = {
     {      1,     1,     0 }, // Afghanistan Standard Time / Afghanistan
     {      2,   248,    11 }, // Alaskan Standard Time / United States
     {      3,   248,   106 }, // Aleutian Standard Time / United States
@@ -624,7 +621,7 @@ static constexpr ZoneData zoneDataTable[] = {
 };
 
 // Windows ID Key, Windows ID Index, IANA ID Index, UTC Offset
-static constexpr WindowsData windowsDataTable[] = {
+static inline constexpr WindowsData windowsDataTable[] = {
     {      1,     0,     0, 16200 }, // Afghanistan Standard Time
     {      2,    26,  7184,-32400 }, // Alaskan Standard Time
     {      3,    48,   106,-36000 }, // Aleutian Standard Time
@@ -767,7 +764,7 @@ static constexpr WindowsData windowsDataTable[] = {
 };
 
 // IANA ID Index, UTC Offset
-static constexpr UtcData utcDataTable[] = {
+static inline constexpr UtcData utcDataTable[] = {
     {   7625,-50400 }, // UTC-14:00
     {   7635,-46800 }, // UTC-13:00
     {   7645,-43200 }, // UTC-12:00
@@ -812,7 +809,7 @@ static constexpr UtcData utcDataTable[] = {
     {   8049, 50400 }, // UTC+14:00
 };
 
-static constexpr char windowsIdData[] = {
+static inline constexpr char windowsIdData[] = {
 0x41, 0x66, 0x67, 0x68, 0x61, 0x6e, 0x69, 0x73, 0x74, 0x61, 0x6e, 0x20, 0x53, 0x74, 0x61, 0x6e,
 0x64, 0x61, 0x72, 0x64, 0x20, 0x54, 0x69, 0x6d, 0x65, 0x0, 0x41, 0x6c, 0x61, 0x73, 0x6b, 0x61,
 0x6e, 0x20, 0x53, 0x74, 0x61, 0x6e, 0x64, 0x61, 0x72, 0x64, 0x20, 0x54, 0x69, 0x6d, 0x65, 0x0,
@@ -1017,7 +1014,7 @@ static constexpr char windowsIdData[] = {
 0x6d, 0x65, 0x0
 };
 
-static constexpr char ianaIdData[] = {
+static inline constexpr char ianaIdData[] = {
 0x41, 0x73, 0x69, 0x61, 0x2f, 0x4b, 0x61, 0x62, 0x75, 0x6c, 0x0, 0x41, 0x6d, 0x65, 0x72, 0x69,
 0x63, 0x61, 0x2f, 0x41, 0x6e, 0x63, 0x68, 0x6f, 0x72, 0x61, 0x67, 0x65, 0x20, 0x41, 0x6d, 0x65,
 0x72, 0x69, 0x63, 0x61, 0x2f, 0x4a, 0x75, 0x6e, 0x65, 0x61, 0x75, 0x20, 0x41, 0x6d, 0x65, 0x72,
@@ -1524,7 +1521,7 @@ static constexpr char ianaIdData[] = {
 0x0, 0x55, 0x54, 0x43, 0x2b, 0x31, 0x34, 0x3a, 0x30, 0x30, 0x0
 };
 
-static constexpr char aliasIdData[] = {
+static inline constexpr char aliasIdData[] = {
 0x41, 0x66, 0x72, 0x69, 0x63, 0x61, 0x2f, 0x41, 0x73, 0x6d, 0x65, 0x72, 0x61, 0x0, 0x41, 0x66,
 0x72, 0x69, 0x63, 0x61, 0x2f, 0x41, 0x73, 0x6d, 0x61, 0x72, 0x61, 0x0, 0x41, 0x66, 0x72, 0x69,
 0x63, 0x61, 0x2f, 0x54, 0x69, 0x6d, 0x62, 0x75, 0x6b, 0x74, 0x75, 0x0, 0x41, 0x66, 0x72, 0x69,
@@ -1744,8 +1741,6 @@ static constexpr char aliasIdData[] = {
 0x0, 0x5a, 0x75, 0x6c, 0x75, 0x0
 };
 // GENERATED PART ENDS HERE
-
-QT_WARNING_POP // QTBUG-128930
 
 constexpr QByteArrayView AliasData::aliasId() const { return aliasIdData + aliasIdIndex; }
 constexpr QByteArrayView AliasData::ianaId() const { return aliasIdData + ianaIdIndex; }

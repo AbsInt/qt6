@@ -462,6 +462,7 @@ void tst_QQuickListView2::tapDelegateDuringFlicking() // QTBUG-103832
     flickWithTouch(&window, {100, 400}, {100, 100});
     QTRY_VERIFY(listView->contentY() > 501); // let it flick some distance
     QVERIFY(listView->isFlicking()); // we want to test the case when it's still moving while we tap
+    QVERIFY(listView->isMoving());
     // @y = 400 we pressed the 4th delegate; started flicking, and the press was canceled
     QCOMPARE(listView->property("pressedDelegates").toList().first(), 4);
     // At first glance one would expect MouseArea and Button would be consistent about this;
@@ -478,8 +479,18 @@ void tst_QQuickListView2::tapDelegateDuringFlicking() // QTBUG-103832
     // press a delegate during flicking (at y > 501 + 100, so likely delegate 6)
     QTest::touchEvent(&window, touchDevice.data()).press(0, {100, 100});
     QQuickTouchUtils::flush(&window);
+    // The press will stop listView from flicking, but it will still be "moving", which
+    // means that the user is still interacting with it
+    QVERIFY(!listView->isFlicking());
+    QVERIFY(!listView->isDragging());
+    QVERIFY(listView->isMoving());
     QTest::touchEvent(&window, touchDevice.data()).release(0, {100, 100});
     QQuickTouchUtils::flush(&window);
+    // Releasing while "flicking" is false will stop the flicking
+    // session, and set "moving" to false
+    QVERIFY(!listView->isMoving());
+    QVERIFY(!listView->isFlicking());
+    QVERIFY(!listView->isDragging());
 
     const QVariantList pressedDelegates = listView->property("pressedDelegates").toList();
     const QVariantList releasedDelegates = listView->property("releasedDelegates").toList();
@@ -491,11 +502,13 @@ void tst_QQuickListView2::tapDelegateDuringFlicking() // QTBUG-103832
     qCDebug(lcTests) << "tapped" << tappedDelegates;
     qCDebug(lcTests) << "canceled" << canceledDelegates;
 
-    // which delegate received the second press, during flicking?
+    // Since the flickable was already moving (that is, the user was interacting with
+    // it), the second tap was only used to stop the flicking. Hence, no delegates
+    // received any pointer events.
     const int lastPressed = pressedDelegates.last().toInt();
-    QVERIFY(lastPressed > 5);
-    QCOMPARE(releasedDelegates.last(), lastPressed);
-    QCOMPARE(tappedDelegates.last(), lastPressed);
+    QCOMPARE(lastPressed, 4); // Nothing changed since the beginning
+    QVERIFY(releasedDelegates.isEmpty());
+    QVERIFY(tappedDelegates.isEmpty());
     QCOMPARE(canceledDelegates.size(), expectCanceled ? 1 : 0); // only the first press was canceled, not the second
 }
 

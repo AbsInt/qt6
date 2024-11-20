@@ -9,12 +9,21 @@
 #include <qfuture.h>
 #include <qfuturewatcher.h>
 #include <qpromise.h>
+#include <QtCore/qsemaphore.h>
 
 #include <algorithm>
 #include <memory>
+#include <QtCore/q20type_traits.h>
 #include <chrono>
 
 using namespace std::chrono_literals;
+
+template <typename T>
+struct promise_type {};
+template <typename T>
+struct promise_type<QPromise<T>> : q20::type_identity<T> {};
+template <typename T>
+using promise_type_t = typename promise_type<T>::type;
 
 class tst_QPromise : public QObject
 {
@@ -28,6 +37,8 @@ private slots:
     void addResultOutOfOrder();
 #ifndef QT_NO_EXCEPTIONS
     void setException();
+    void setExceptionAfterCancelDoesNothing(); // QTBUG-128405
+    void setExceptionAfterFinishDoesNothing();
 #endif
     void cancel();
     void progress();
@@ -86,7 +97,6 @@ do { \
         QFAIL("Test case " #test "(" #__VA_ARGS__ ") failed"); \
 } while (false)
 
-#if QT_CONFIG(cxx11_future)
 // std::thread-like wrapper that ensures that the thread is joined at the end of
 // a scope to prevent potential std::terminate
 struct ThreadWrapper
@@ -103,7 +113,6 @@ struct ThreadWrapper
         join();
     }
 };
-#endif
 
 struct FutureWatcher
 {
@@ -322,6 +331,69 @@ void tst_QPromise::setException()
     RUN_TEST_FUNC(testExceptionCaught, QPromise<MoveOnlyType>(),
                        std::make_exception_ptr(TestException()));
 }
+
+void tst_QPromise::setExceptionAfterCancelDoesNothing()
+{
+    struct TestException {};
+
+    auto test = [](auto promise, auto exception) {
+        auto f = promise.future();
+        FutureWatcher r(f);
+        QSemaphore sem;
+        QSemaphoreReleaser rel(sem);
+        ThreadWrapper t([&] {
+            auto p = std::move(promise);
+            p.start();
+            sem.acquire(); // wait for cancel() in main thread
+            p.setException(std::move(exception));
+        });
+
+        f.cancel();
+        rel.cancel()->release(); // give a go for setException() in worker thread
+
+        t.join();
+
+        QVERIFY(f.isCanceled());
+        QVERIFY(!r.thenCalled);
+        QVERIFY(!r.onFailedCalled);
+        QVERIFY(r.onCanceledCalled);
+    };
+
+    RUN_TEST_FUNC(test, QPromise<void>(), QException());
+    RUN_TEST_FUNC(test, QPromise<int>(),  QException());
+    RUN_TEST_FUNC(test, QPromise<void>(), std::make_exception_ptr(TestException()));
+    RUN_TEST_FUNC(test, QPromise<int>(), std::make_exception_ptr(TestException()));
+    RUN_TEST_FUNC(test, QPromise<CopyOnlyType>(), std::make_exception_ptr(TestException()));
+    RUN_TEST_FUNC(test, QPromise<MoveOnlyType>(), std::make_exception_ptr(TestException()));
+}
+
+void tst_QPromise::setExceptionAfterFinishDoesNothing()
+{
+    struct TestException {};
+
+    auto test = [](auto promise, auto exception) {
+        auto f = promise.future();
+        FutureWatcher r(f);
+        promise.start();
+        using T = promise_type_t<decltype(promise)>;
+        if constexpr (!std::is_void_v<T>)
+            promise.addResult(T());
+        promise.finish();
+        promise.setException(std::move(exception));
+
+        QVERIFY(f.isFinished());
+        QVERIFY(r.thenCalled);
+        QVERIFY(!r.onFailedCalled);
+        QVERIFY(!r.onCanceledCalled);
+    };
+
+    RUN_TEST_FUNC(test, QPromise<void>(), QException());
+    RUN_TEST_FUNC(test, QPromise<int>(),  QException());
+    RUN_TEST_FUNC(test, QPromise<void>(), std::make_exception_ptr(TestException()));
+    RUN_TEST_FUNC(test, QPromise<int>(), std::make_exception_ptr(TestException()));
+    RUN_TEST_FUNC(test, QPromise<CopyOnlyType>(), std::make_exception_ptr(TestException()));
+    RUN_TEST_FUNC(test, QPromise<MoveOnlyType>(), std::make_exception_ptr(TestException()));
+}
 #endif
 
 void tst_QPromise::cancel()
@@ -332,10 +404,10 @@ void tst_QPromise::cancel()
         QCOMPARE(promise.isCanceled(), true);
     };
 
-    testCancel(QPromise<void>());
-    testCancel(QPromise<int>());
-    testCancel(QPromise<CopyOnlyType>());
-    testCancel(QPromise<MoveOnlyType>());
+    RUN_TEST_FUNC(testCancel, QPromise<void>());
+    RUN_TEST_FUNC(testCancel, QPromise<int>());
+    RUN_TEST_FUNC(testCancel, QPromise<CopyOnlyType>());
+    RUN_TEST_FUNC(testCancel, QPromise<MoveOnlyType>());
 }
 
 void tst_QPromise::progress()
@@ -369,7 +441,9 @@ void tst_QPromise::progress()
 
 void tst_QPromise::addInThread()
 {
-#if QT_CONFIG(cxx11_future)
+#if !QT_CONFIG(cxx11_future)
+    QSKIP("This test requires C++11 std threading enabled (and working) in the standard library.");
+#endif
     const auto testAddResult = [] (auto promise, const auto &result) {
         promise.start();
         auto f = promise.future();
@@ -387,12 +461,13 @@ void tst_QPromise::addInThread()
     RUN_TEST_FUNC(testAddResult, QPromise<int>(), 42);
     RUN_TEST_FUNC(testAddResult, QPromise<QString>(), u8"42");
     RUN_TEST_FUNC(testAddResult, QPromise<CopyOnlyType>(), CopyOnlyType{99});
-#endif
 }
 
 void tst_QPromise::addInThreadMoveOnlyObject()
 {
-#if QT_CONFIG(cxx11_future)
+#if !QT_CONFIG(cxx11_future)
+    QSKIP("This test requires C++11 std threading enabled (and working) in the standard library.");
+#endif
     QPromise<MoveOnlyType> promise;
     promise.start();
     auto f = promise.future();
@@ -405,12 +480,13 @@ void tst_QPromise::addInThreadMoveOnlyObject()
     // Iterators wait for result first
     for (auto& result : f)
         QCOMPARE(result, MoveOnlyType{-11});
-#endif
 }
 
 void tst_QPromise::reportFromMultipleThreads()
 {
-#if QT_CONFIG(cxx11_future)
+#if !QT_CONFIG(cxx11_future)
+    QSKIP("This test requires C++11 std threading enabled (and working) in the standard library.");
+#endif
     QPromise<int> promise;
     auto f = promise.future();
     promise.start();
@@ -429,12 +505,13 @@ void tst_QPromise::reportFromMultipleThreads()
         QVERIFY(std::find(expected.begin(), expected.end(), actual) != expected.end());
         expected.removeOne(actual);
     }
-#endif
 }
 
 void tst_QPromise::reportFromMultipleThreadsByMovedPromise()
 {
-#if QT_CONFIG(cxx11_future)
+#if !QT_CONFIG(cxx11_future)
+    QSKIP("This test requires C++11 std threading enabled (and working) in the standard library.");
+#endif
     QPromise<int> initialPromise;
     auto f = initialPromise.future();
     {
@@ -461,12 +538,13 @@ void tst_QPromise::reportFromMultipleThreadsByMovedPromise()
         QVERIFY(std::find(expected.begin(), expected.end(), actual) != expected.end());
         expected.removeOne(actual);
     }
-#endif
 }
 
 void tst_QPromise::doNotCancelWhenFinished()
 {
-#if QT_CONFIG(cxx11_future)
+#if !QT_CONFIG(cxx11_future)
+    QSKIP("This test requires C++11 std threading enabled (and working) in the standard library.");
+#endif
     const auto testFinishedPromise = [] (auto promise) {
         auto f = promise.future();
         promise.start();
@@ -485,13 +563,14 @@ void tst_QPromise::doNotCancelWhenFinished()
     RUN_TEST_FUNC(testFinishedPromise, QPromise<QString>());
     RUN_TEST_FUNC(testFinishedPromise, QPromise<CopyOnlyType>());
     RUN_TEST_FUNC(testFinishedPromise, QPromise<MoveOnlyType>());
-#endif
 }
 
 #ifndef QT_NO_EXCEPTIONS
 void tst_QPromise::cancelWhenDestroyed()
 {
-#if QT_CONFIG(cxx11_future)
+#if !QT_CONFIG(cxx11_future)
+    QSKIP("This test requires C++11 std threading enabled (and working) in the standard library.");
+#endif
     QPromise<int> initialPromise;
     auto f = initialPromise.future();
 
@@ -519,13 +598,14 @@ void tst_QPromise::cancelWhenDestroyed()
         QVERIFY(std::find(expected.begin(), expected.end(), actual) != expected.end());
         expected.removeOne(actual);
     }
-#endif
 }
 #endif
 
 void tst_QPromise::cancelWhenReassigned()
 {
-#if QT_CONFIG(cxx11_future)
+#if !QT_CONFIG(cxx11_future)
+    QSKIP("This test requires C++11 std threading enabled (and working) in the standard library.");
+#endif
     QPromise<int> promise;
     auto f = promise.future();
     promise.start();
@@ -540,7 +620,6 @@ void tst_QPromise::cancelWhenReassigned()
 
     QCOMPARE(f.isFinished(), true);
     QCOMPARE(f.isCanceled(), true);
-#endif
 }
 
 template <typename T>
@@ -642,7 +721,9 @@ void tst_QPromise::continuationsRunWhenFinished()
 
 void tst_QPromise::finishWhenSwapped()
 {
-#if QT_CONFIG(cxx11_future)
+#if !QT_CONFIG(cxx11_future)
+    QSKIP("This test requires C++11 std threading enabled (and working) in the standard library.");
+#endif
     QPromise<int> promise1;
     auto f1 = promise1.future();
     promise1.start();
@@ -677,13 +758,14 @@ void tst_QPromise::finishWhenSwapped()
 
     QCOMPARE(f2.resultAt(0), 1);
     QCOMPARE(f2.resultAt(1), 2);
-#endif
 }
 
 template <typename T>
 void testCancelWhenMoved()
 {
-#if QT_CONFIG(cxx11_future)
+#if !QT_CONFIG(cxx11_future)
+    QSKIP("This test requires C++11 std threading enabled (and working) in the standard library.");
+#endif
     QPromise<T> promise1;
     auto f1 = promise1.future();
     promise1.start();
@@ -711,7 +793,6 @@ void testCancelWhenMoved()
     // Future #2 is explicitly finished inside thread
     QCOMPARE(f2.isFinished(), true);
     QCOMPARE(f2.isCanceled(), false);
-#endif
 }
 
 void tst_QPromise::cancelWhenMoved()
@@ -754,7 +835,9 @@ void tst_QPromise::waitUntilResumed()
 
 void tst_QPromise::waitUntilCanceled()
 {
-#if QT_CONFIG(cxx11_future)
+#if !QT_CONFIG(cxx11_future)
+    QSKIP("This test requires C++11 std threading enabled (and working) in the standard library.");
+#endif
     QPromise<int> promise;
     promise.start();
     auto f = promise.future();
@@ -776,7 +859,6 @@ void tst_QPromise::waitUntilCanceled()
     f.waitForFinished();
 
     QCOMPARE(f.resultCount(), 0);
-#endif
 }
 
 // Below is a quick and dirty hack to make snippets a part of a test suite

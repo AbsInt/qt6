@@ -2390,7 +2390,7 @@ void tst_QQuickPopup::fadeDimmer_data()
     QTest::addColumn<bool>("modality");
 
     QTest::addRow("modal") << true;
-    QTest::addRow("modeless") << true;
+    QTest::addRow("modeless") << false;
 }
 
 void tst_QQuickPopup::fadeDimmer()
@@ -2519,16 +2519,21 @@ void tst_QQuickPopup::popupWindowPositioning()
 
     popup->setPopupType(QQuickPopup::Window);
 
-    popup->open();
-    QTRY_VERIFY(popup->isVisible());
-
     QSignalSpy xSpy(popup, SIGNAL(xChanged()));
     QSignalSpy ySpy(popup, SIGNAL(yChanged()));
 
-    auto *popupWindow = popupPrivate->popupWindow;
-    QVERIFY(popupWindow);
+    popup->open();
+    QTRY_VERIFY(popup->isOpened());
 
-    // x and y properties should be 50 initially
+    QTRY_VERIFY(popupPrivate->popupWindow);
+    auto *popupWindow = popupPrivate->popupWindow;
+    QVERIFY(QTest::qWaitForWindowExposed(popupPrivate->popupWindow));
+    QQuickTest::qWaitForPolish(popupPrivate->popupWindow);
+
+    QTRY_COMPARE(xSpy.count(), 1);
+    QTRY_COMPARE(ySpy.count(), 1);
+
+    // x and y properties should be 50 initially (from simplepopup.qml)
     const QPoint initialPos(50, 50);
 
     VERIFY_GLOBAL_POS(popup->parentItem(), popupWindow, initialPos);
@@ -2538,8 +2543,8 @@ void tst_QQuickPopup::popupWindowPositioning()
     const QPoint secondPosition(100, 100);
     popup->setPosition(secondPosition.toPointF());
 
-    QTRY_COMPARE(xSpy.count(), 1);
-    QCOMPARE(ySpy.count(), 1);
+    QTRY_COMPARE(xSpy.count(), 2);
+    QCOMPARE(ySpy.count(), 2);
 
     VERIFY_GLOBAL_POS(popup->parentItem(), popupWindow, secondPosition);
     VERIFY_LOCAL_POS(popup, secondPosition);
@@ -2548,8 +2553,8 @@ void tst_QQuickPopup::popupWindowPositioning()
     const QPoint thirdPosition(150, 150);
     popupWindow->setPosition(popup->parentItem()->mapToGlobal(thirdPosition.x(), thirdPosition.y()).toPoint());
 
-    QTRY_COMPARE(xSpy.count(), 2);
-    QCOMPARE(ySpy.count(), 2);
+    QTRY_COMPARE(xSpy.count(), 3);
+    QCOMPARE(ySpy.count(), 3);
 
     VERIFY_GLOBAL_POS(popup->parentItem(), popupWindow, thirdPosition);
     VERIFY_LOCAL_POS(popup, thirdPosition);
@@ -2559,9 +2564,8 @@ void tst_QQuickPopup::popupWindowPositioning()
     const QPoint oldPos = window->position();
     window->setPosition(oldPos + movement);
 
-    // TODO: Figure out these signals are emitted twice
-    // QTRY_COMPARE(xSpy.count(), 3);
-    // QCOMPARE(ySpy.count(), 3);
+    QTRY_COMPARE(xSpy.count(), 4);
+    QCOMPARE(ySpy.count(), 4);
 
     VERIFY_GLOBAL_POS(popup->parentItem(), popupWindow, (thirdPosition - movement));
 }

@@ -140,12 +140,20 @@ static QThreadData *get_thread_data()
     return currentThreadData;
 }
 
+#if QT_CONFIG(broken_threadlocal_dtors)
+// The destructors registered with pthread_key_create() below are NOT run from
+// exit(), so we must also use atexit().
+static void destroy_main_thread_data()
+{
+    if (QThreadData *d = get_thread_data())
+        destroy_current_thread_data(d);
+}
+Q_DESTRUCTOR_FUNCTION(destroy_main_thread_data)
+#endif
+
 static void set_thread_data(QThreadData *data)
 {
-    // Only activate the late cleanup for auxiliary threads. We can't use
-    // QThread::isMainThread() here because theMainThreadId will not have been
-    // set yet.
-    if (data && QCoreApplicationPrivate::theMainThreadId.loadAcquire()) {
+    if (data) {
         if constexpr (QT_CONFIG(broken_threadlocal_dtors)) {
             static pthread_key_t tls_key;
             struct TlsKey {
@@ -418,7 +426,6 @@ void QThreadPrivate::cleanup()
         d->interruptionRequested.store(false, std::memory_order_relaxed);
 
         d->isInFinish = false;
-        d->data->threadId.storeRelaxed(nullptr);
 
         d->thread_done.wakeAll();
     });
@@ -828,13 +835,13 @@ bool QThread::wait(QDeadlineTimer deadline)
     Q_D(QThread);
     QMutexLocker locker(&d->mutex);
 
+    if (d->finished || !d->running)
+        return true;
+
     if (isCurrentThread()) {
         qWarning("QThread::wait: Thread tried to wait on itself");
         return false;
     }
-
-    if (d->finished || !d->running)
-        return true;
 
     return d->wait(locker, deadline);
 }
@@ -848,7 +855,6 @@ bool QThreadPrivate::wait(QMutexLocker<QMutex> &locker, QDeadlineTimer deadline)
         if (!d->thread_done.wait(locker.mutex(), deadline))
             return false;
     }
-    Q_ASSERT(d->data->threadId.loadRelaxed() == nullptr);
 
     return true;
 }

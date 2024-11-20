@@ -192,29 +192,7 @@ QLspSpecification::Range qmlLocationToLspLocation(Location qmlLocation)
 */
 qsizetype textOffsetFrom(const QString &text, int row, int column)
 {
-    int targetLine = row;
-    qsizetype i = 0;
-    while (i != text.size() && targetLine != 0) {
-        QChar c = text.at(i++);
-        if (c == u'\n') {
-            --targetLine;
-        }
-        if (c == u'\r') {
-            if (i != text.size() && text.at(i) == u'\n')
-                ++i;
-            --targetLine;
-        }
-    }
-    qsizetype leftChars = column;
-    while (i != text.size() && leftChars) {
-        QChar c = text.at(i);
-        if (c == u'\n' || c == u'\r')
-            break;
-        ++i;
-        if (!c.isLowSurrogate())
-            --leftChars;
-    }
-    return i;
+    return QQmlJS::SourceLocation::offsetFrom(text, row + 1, column + 1);
 }
 
 /*!
@@ -229,22 +207,13 @@ qsizetype textOffsetFrom(const QString &text, int row, int column)
 */
 TextPosition textRowAndColumnFrom(const QString &text, qsizetype offset)
 {
-    int row = 0;
-    int column = 0;
-    qsizetype currentLineOffset = 0;
-    for (qsizetype i = 0; i < offset; i++) {
-        QChar c = text[i];
-        if (c == u'\n') {
-            row++;
-            currentLineOffset = i + 1;
-        } else if (c == u'\r') {
-            if (i > 0 && text[i - 1] == u'\n')
-                currentLineOffset++;
-        }
-    }
-    column = offset - currentLineOffset;
+    auto [row, column] = QQmlJS::SourceLocation::rowAndColumnFrom(text, offset);
 
-    return { row, column };
+    // special case: return last character when accessing after end of file
+    if (offset >= text.size())
+        --column;
+
+    return TextPosition{ int(row - 1), int(column - 1) };
 }
 
 static QList<ItemLocation>::const_iterator
@@ -385,8 +354,12 @@ QList<ItemLocation> itemsFromTextLocation(const DomItem &file, int line, int cha
         // Exclude the position behind the source location in ScriptBinaryExpressions to avoid
         // returning `owner` in `owner.member` when completion is triggered on the \c{.}. This
         // tells the code for the completion if the completion was triggered on `owner` or on `.`.
+        // Same is true for templateliterals, where ScriptTemplateExpressionParts and
+        // ScriptTemplateStringParts stop overlapping when using ExcludePositionAfterLast.
         const ComparisonOption comparisonOption =
-                iLoc.domItem.internalKind() == QQmlJS::Dom::DomType::ScriptBinaryExpression
+                iLoc.domItem.internalKind() == DomType::ScriptBinaryExpression
+                        || iLoc.domItem.directParent().internalKind()
+                                == DomType::ScriptTemplateLiteral
                 ? ExcludePositionAfterLast
                 : Normal;
 

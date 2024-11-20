@@ -3232,7 +3232,8 @@ void QQuickPopup::geometryChange(const QRectF &newGeometry, const QRectF &oldGeo
 {
     Q_D(QQuickPopup);
     qCDebug(lcQuickPopup) << "geometryChange called on" << this << "with newGeometry" << newGeometry << "oldGeometry" << oldGeometry;
-    d->reposition();
+    if (!d->usePopupWindow())
+        d->reposition();
     if (!qFuzzyCompare(newGeometry.width(), oldGeometry.width())) {
         emit widthChanged();
         emit availableWidthChanged();

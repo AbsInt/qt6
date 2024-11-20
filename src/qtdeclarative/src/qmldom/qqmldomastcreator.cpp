@@ -578,7 +578,7 @@ bool QQmlDomAstCreator::visit(AST::UiPublicMember *el)
             Binding *bPtr;
             Path bPathFromOwner = current<QmlObject>().addBinding(Binding(p.name, script, bType),
                                                                   AddOption::KeepExisting, &bPtr);
-            FileLocations::Tree bLoc = createMap(DomType::Binding, bPathFromOwner, el);
+            FileLocations::Tree bLoc = createMap(DomType::Binding, bPathFromOwner, el->statement);
             FileLocations::addRegion(bLoc, ColonTokenRegion, el->colonToken);
             FileLocations::Tree valueLoc = FileLocations::ensure(bLoc, Path::Field(Fields::value),
                                                                  AttachedInfo::PathType::Relative);
@@ -2496,6 +2496,108 @@ void QQmlDomAstCreator::endVisit(AST::TaggedTemplate *literal)
     pushScriptElement(current);
 }
 
+/*!
+\internal
+Denotes the position of a template part in a template string. For example, in \c{`a${b}c${d}`}, \c a
+is \c AtBeginning and \c{${d}} is \c AtEnd while the others are \c InMiddle, and in \c{`a`}, \c a is
+\c AtBeginning and \c AtEnd.
+ */
+enum TemplatePartPosition : quint8 {
+    InMiddle = 0,
+    AtBeginning = 0x1,
+    AtEnd = 0x2,
+};
+
+Q_DECLARE_FLAGS(TemplatePartPositions, TemplatePartPosition)
+
+/*!
+\internal
+Sets the DollarLeftBraceTokenRegion sourcelocation in currentExpression if templatePartLocation
+claims that toBeSplit ends in \c{${}.
+*/
+static void extractDollarBraceSourceLocationInto(
+        const std::shared_ptr<ScriptElements::GenericScriptElement> &currentExpression,
+        const SourceLocation &toBeSplit, QStringView code,
+        TemplatePartPositions templatePartLocation)
+{
+    if (templatePartLocation & AtEnd || !currentExpression)
+        return;
+
+    const auto offset = toBeSplit.offset + toBeSplit.length - 2;
+    constexpr auto length = quint32(std::char_traits<char>::length("${"));
+    const auto [row, column] = SourceLocation::rowAndColumnFrom(code, offset, toBeSplit);
+    currentExpression->addLocation(FileLocationRegion::DollarLeftBraceTokenRegion,
+                                   SourceLocation{ offset, length, row, column });
+    return;
+}
+
+/*!
+\internal
+See also \l extractDollarBraceSourceLocationInto.
+*/
+static void extractRightBacktickSourceLocationInto(
+        const std::shared_ptr<ScriptElements::GenericScriptElement> &currentTemplate,
+        const SourceLocation &toBeSplit, QStringView code,
+        TemplatePartPositions templatePartLocation)
+{
+    if (!(templatePartLocation & AtEnd))
+        return;
+
+    const auto offset = toBeSplit.offset + toBeSplit.length - 1;
+    constexpr auto length = quint32(std::char_traits<char>::length("`"));
+    const auto [row, column] = SourceLocation::rowAndColumnFrom(code, offset, toBeSplit);
+    currentTemplate->addLocation(FileLocationRegion::RightBacktickTokenRegion,
+                                 SourceLocation{ offset, length, row, column });
+}
+
+/*!
+\internal
+See also \l extractDollarBraceSourceLocationInto.
+*/
+static void extractLeftBacktickSourceLocationInto(
+        const std::shared_ptr<ScriptElements::GenericScriptElement> &currentTemplate,
+        const SourceLocation &toBeSplit, TemplatePartPositions templatePartLocation)
+{
+    if (!(templatePartLocation & AtBeginning))
+        return;
+
+    constexpr auto length = quint32(std::char_traits<char>::length("`"));
+    const QQmlJS::SourceLocation leftBacktick{ toBeSplit.offset, length, toBeSplit.startLine,
+                                               toBeSplit.startColumn };
+    currentTemplate->addLocation(FileLocationRegion::LeftBacktickTokenRegion, leftBacktick);
+}
+
+/*!
+\internal
+See also \l extractDollarBraceSourceLocationInto, but returns the extracted right brace instead of
+inserting right away.
+*/
+static SourceLocation extractRightBraceSourceLocation(const SourceLocation &toBeSplit,
+                                                      TemplatePartPositions templatePartLocation)
+{
+    if (templatePartLocation & AtBeginning)
+        return SourceLocation{};
+
+    // extract } at the beginning and insert in next loop iteration
+    return SourceLocation{ toBeSplit.offset, 1, toBeSplit.startLine, toBeSplit.startColumn };
+}
+
+/*!
+\internal
+Cleans the toBeSplit sourcelocation from potential backticks, dollar braces and right braces to only
+contain the location of the string part.
+*/
+static SourceLocation extractStringLocation(const SourceLocation &toBeSplit, QStringView code,
+                                            TemplatePartPositions location)
+{
+
+    // remove "`" or "}" at beginning and "`" or "${" at the end of this location.
+    const quint32 length = toBeSplit.length - (location & AtEnd ? 2 : 3);
+    const quint32 offset = toBeSplit.offset + 1;
+    const auto [row, column] = SourceLocation::rowAndColumnFrom(code, offset, toBeSplit);
+    return SourceLocation{ offset, length, row, column };
+}
+
 void QQmlDomAstCreator::endVisit(AST::TemplateLiteral *literal)
 {
     if (!m_enableScriptExpressions)
@@ -2504,6 +2606,7 @@ void QQmlDomAstCreator::endVisit(AST::TemplateLiteral *literal)
     // AST::TemplateLiteral is a list and a TemplateLiteral at the same time:
     // in the Dom representation wrap the list into a separate TemplateLiteral Item.
     auto currentList = makeScriptList(literal);
+    auto currentTemplate = makeGenericScriptElement(literal, DomType::ScriptTemplateLiteral);
 
     const auto children = [&literal]() {
         std::vector<AST::TemplateLiteral *> result;
@@ -2512,23 +2615,62 @@ void QQmlDomAstCreator::endVisit(AST::TemplateLiteral *literal)
         }
         return result;
     }();
+
+    SourceLocation rightBrace;
     for (auto it = children.crbegin(); it != children.crend(); ++it) {
+        // literalToken contains "`", "${", "}", for example "`asdf${" or "}asdf${"
+        const QQmlJS::SourceLocation toBeSplit = (*it)->literalToken;
+        std::shared_ptr<ScriptElements::GenericScriptElement> currentExpression;
+
         if ((*it)->expression) {
             Q_SCRIPTELEMENT_EXIT_IF(!stackHasScriptVariant());
-            currentList.append(scriptNodeStack.takeLast().takeVariant());
-        }
-        if (!(*it)->rawValue.isEmpty()) {
-            auto currentExpression = makeGenericScriptElement(
-                    (*it)->literalToken, DomType::ScriptTemplateStringPart);
-            currentExpression->insertValue(Fields::value, (*it)->rawValue);
+            currentExpression = makeGenericScriptElement((*it)->expression,
+                                                         DomType::ScriptTemplateExpressionPart);
+
+            currentExpression->insertChild(Fields::expression,
+                                           scriptNodeStack.takeLast().takeVariant());
+            if (rightBrace.isValid()) {
+                currentExpression->addLocation(FileLocationRegion::RightBraceRegion,
+                                               std::exchange(rightBrace, SourceLocation{}));
+            }
             currentList.append(ScriptElementVariant::fromElement(currentExpression));
         }
+
+        if (!toBeSplit.isValid())
+            continue;
+
+        const TemplatePartPositions location = [&it, &children]() {
+            TemplatePartPositions result;
+            if (it == children.crbegin())
+                result |= AtEnd;
+            if (it == std::prev(children.crend()))
+                result |= AtBeginning;
+            return result;
+        }();
+
+        extractRightBacktickSourceLocationInto(currentTemplate, toBeSplit, qmlFilePtr->code(),
+                                               location);
+        extractLeftBacktickSourceLocationInto(currentTemplate, toBeSplit, location);
+
+        extractDollarBraceSourceLocationInto(currentExpression, toBeSplit, qmlFilePtr->code(),
+                                             location);
+        rightBrace = extractRightBraceSourceLocation(toBeSplit, location);
+
+        if ((*it)->rawValue.isEmpty())
+            continue;
+
+        const SourceLocation stringLocation =
+                extractStringLocation(toBeSplit, qmlFilePtr->code(), location);
+        auto currentString =
+                makeGenericScriptElement(stringLocation, DomType::ScriptTemplateStringPart);
+        currentString->insertValue(Fields::value, (*it)->rawValue);
+
+        currentList.append(ScriptElementVariant::fromElement(currentString));
     }
     currentList.reverse();
 
-    auto current = makeGenericScriptElement(literal, DomType::ScriptTemplateLiteral);
-    current->insertChild(Fields::components, currentList);
-    pushScriptElement(current);
+    currentTemplate->insertChild(Fields::components, currentList);
+    pushScriptElement(currentTemplate);
 }
 
 bool QQmlDomAstCreator::visit(AST::TryStatement *)

@@ -52,7 +52,8 @@ QAtSpiDBusConnection::QAtSpiDBusConnection(QObject *parent)
     m_dbusProperties = new OrgFreedesktopDBusPropertiesInterface(A11Y_SERVICE, A11Y_PATH, c, this);
 
     dbusWatcher = new QDBusServiceWatcher(A11Y_SERVICE, c, QDBusServiceWatcher::WatchForRegistration, this);
-    connect(dbusWatcher, SIGNAL(checkEnabledState(QString)), this, SLOT(checkEnabledState()));
+    connect(dbusWatcher, &QDBusServiceWatcher::serviceRegistered,
+            this, &QAtSpiDBusConnection::checkEnabledState);
 
     // If it is registered already, setup a11y right away
     if (c.interface()->isServiceRegistered(A11Y_SERVICE))

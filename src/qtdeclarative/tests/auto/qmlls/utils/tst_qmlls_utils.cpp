@@ -99,17 +99,33 @@ void tst_qmlls_utils::textOffsetRowColumnConversions_data()
     // try to access '\r'
     QTest::newRow("newlines3") << u"A\nB\r\nC\n\r\nD\r\n\r"_s << 1 << 1 << 3ll << QChar('\r') << -1
                                << -1;
-    // try to access '\n', should return the last character of the line (which is '\r' in this case)
-    QTest::newRow("newlines4") << u"A\nB\r\nC\n\r\nD\r\n\r"_s << 1 << 2 << 3ll << QChar('\r') << -1
-                               << 1;
+    // try to access '\n', should return the last character of the line (which is '\n' in this case)
+    QTest::newRow("newlines4") << u"A\nB\r\nC\n\r\nD\r\n\r"_s << 1 << 2 << 4ll << QChar('\n') << -1
+                               << -1;
     // try to access after the end of the line, should return the last character of the line (which
-    // is '\r' in this case)
-    QTest::newRow("afterLineEnd") << u"A\nB\r\nC\n\r\nD\r\n\r"_s << 1 << 42 << 3ll << QChar('\r')
-                                  << -1 << 1;
+    // is '\n' in this case)
+    QTest::newRow("afterLineEnd") << u"A\nB\r\nC\n\r\nD\r\n\r"_s << 1 << 42 << 4ll << QChar('\n')
+                                  << -1 << 2;
 
     // try to access an inexisting column, seems to return the last character of the last line.
     QTest::newRow("afterColumnEnd")
-            << u"A\nB\r\nC\n\r\nD\r\n\rAX"_s << 42 << 0 << 15ll << QChar('X') << 5 << 2;
+            << u"A\nB\r\nC\n\r\nD\r\n\rAX"_s << 42 << 0 << 15ll << QChar('X') << 6 << 1;
+
+    // \n\r are two newlines
+    QTest::newRow("\\n\\r")
+            << u"A\n\rB"_s << 2 << 0 << 3ll << QChar('B') << -1 << -1;
+    // \r\n is a newline
+    QTest::newRow("\\r\\n")
+            << u"A\r\nB"_s << 1 << 0 << 3ll << QChar('B') << -1 << -1;
+
+    QTest::newRow("windowsNewlineAfterColumnEnd")
+            << u"A\r\nB\r\n"_s << 0 << 42 << 2ll << QChar('\n') << 0 << 2;
+    QTest::newRow("windowsNewlineAfterLineEnd")
+            << u"A\r\nB\r\n"_s << 42 << 0 << 5ll << QChar('\n') << 1 << 2;
+
+    QTest::newRow("windowsNewlineR")
+            << u"A\r\nB\r\n"_s << 0 << 1 << 1ll << QChar('\r') << 0 << 1;
+
 }
 
 void tst_qmlls_utils::textOffsetRowColumnConversions()
@@ -260,6 +276,14 @@ void tst_qmlls_utils::findItemFromLocation_data()
     QTest::addRow("rectangle-property")
             << file1Qml << 44 << 31 << firstResult << outOfOne
             << QQmlJS::Dom::DomType::ScriptIdentifierExpression << -1 << 29;
+
+    // check comment
+    QTest::addRow("pre-comment")
+            << file1Qml << 62 << 15 << firstResult << outOfOne
+            << QQmlJS::Dom::DomType::Comment << -1 << 5;
+    QTest::addRow("post-comment")
+            << file1Qml << 64 << 15 << firstResult << outOfOne
+            << QQmlJS::Dom::DomType::Comment << -1 << 5;
 }
 
 void tst_qmlls_utils::findItemFromLocation()
@@ -4316,6 +4340,13 @@ void tst_qmlls_utils::completions_data()
     QTest::newRow("Qt.Point") << testFile("completions/QtPoint.qml") << 5 << 34
                               << ExpectedCompletions{ { u"y"_s, CompletionItemKind::Property } }
                               << QStringList{ u"f"_s, forStatementCompletion };
+
+    QTest::newRow("insideComment1")
+            << testFile("completions/Comments.qml") << 4 << 9 << ExpectedCompletions{}
+            << QStringList{ u"f"_s, forStatementCompletion };
+    QTest::newRow("insideComment2")
+            << testFile("completions/Comments.qml") << 6 << 9 << ExpectedCompletions{}
+            << QStringList{ u"x"_s, u"Item"_s, forStatementCompletion };
 }
 
 void tst_qmlls_utils::completions()

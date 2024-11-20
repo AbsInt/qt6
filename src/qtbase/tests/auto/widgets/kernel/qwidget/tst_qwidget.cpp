@@ -11803,10 +11803,26 @@ void tst_QWidget::childAt()
     grandChild->setAutoFillBackground(true);
     grandChild->setGeometry(-20, -20, 220, 220);
 
+    QWidget *emptyChild = new QWidget(child);
+    emptyChild->setPalette(Qt::green);
+    emptyChild->setAutoFillBackground(true);
+    emptyChild->setGeometry(0, 159, 160, 0);
+
     QVERIFY(!parent.childAt(19, 19));
     QVERIFY(!parent.childAt(180, 180));
     QCOMPARE(parent.childAt(20, 20), grandChild);
     QCOMPARE(parent.childAt(179, 179), grandChild);
+
+    QCOMPARE(parent.childAt(120, 179), grandChild);
+    QCOMPARE(parent.childAt(QPointF(120.0, 178.9)), grandChild);
+    QVERIFY(!parent.childAt(120, 180));
+    QVERIFY(!parent.childAt(QPointF(120, 179.1)));
+
+    emptyChild->setGeometry(100, 0, 0, 160);
+
+    QCOMPARE(parent.childAt(120, 120), grandChild);
+    QCOMPARE(parent.childAt(QPointF(120.5, 120.0)), grandChild);
+    QCOMPARE(parent.childAt(QPointF(119.5, 120.0)), grandChild);
 
     grandChild->setAttribute(Qt::WA_TransparentForMouseEvents);
     QCOMPARE(parent.childAt(20, 20), child);

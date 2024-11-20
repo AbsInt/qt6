@@ -318,11 +318,11 @@ void QmltcVisitor::endVisit(QQmlJS::AST::UiProgram *program)
         return;
 
     QHash<QQmlJSScope::ConstPtr, QList<QQmlJSMetaPropertyBinding>> bindings;
-    for (const QQmlJSScope::ConstPtr &type : std::as_const(m_qmlTypes)) {
-        if (isOrUnderComponent(type))
-            continue;
+
+    // Yes, we want absolutely all bindings in the document.
+    // Not only the ones immediately assigned to QML types.
+    for (const QQmlJSScope::ConstPtr &type : std::as_const(m_scopesByIrLocation))
         bindings.insert(type, type->ownPropertyBindingsInQmlIROrder());
-    }
 
     postVisitResolve(bindings);
     setupAliases();
@@ -346,8 +346,10 @@ QQmlJSScope::ConstPtr fetchType(const QQmlJSMetaPropertyBinding &binding)
         return binding.interceptorType();
     case QQmlSA::BindingType::ValueSource:
         return binding.valueSourceType();
-    // TODO: AttachedProperty and GroupProperty are not supported yet,
-    // but have to also be acknowledged here
+    case QQmlSA::BindingType::AttachedProperty:
+        return binding.attachingType();
+    case QQmlSA::BindingType::GroupProperty:
+        return binding.groupType();
     default:
         return {};
     }

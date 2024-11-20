@@ -538,9 +538,9 @@ void QWinTimeZonePrivate::init(const QByteArray &ianaId)
             QWinRegistryKey dynamicKey(HKEY_LOCAL_MACHINE, dynamicKeyPath);
             if (dynamicKey.isValid()) {
                 // Find out the start and end years stored, then iterate over them
-                const auto startYear = dynamicKey.dwordValue(L"FirstEntry");
-                const auto endYear = dynamicKey.dwordValue(L"LastEntry");
-                for (int year = int(startYear.first); year <= int(endYear.first); ++year) {
+                const int startYear = dynamicKey.value<int>(L"FirstEntry").value_or(0);
+                const int endYear = dynamicKey.value<int>(L"LastEntry").value_or(0);
+                for (int year = startYear; year <= endYear; ++year) {
                     bool ruleOk;
                     QWinTransitionRule rule =
                         readRegistryRule(dynamicKey,

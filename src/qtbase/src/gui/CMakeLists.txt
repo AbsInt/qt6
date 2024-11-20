@@ -315,10 +315,6 @@ if(QT_FEATURE_pdf)
         ATTRIBUTION_FILE_DIR_PATHS
             ../3rdparty/icc
     )
-    qt_internal_sbom_add_license(
-        LICENSE_ID "ICC-License"
-        LICENSE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../3rdparty/icc/LICENSE.txt"
-    )
 
     qt_internal_add_resource(Gui "qpdf"
        PREFIX

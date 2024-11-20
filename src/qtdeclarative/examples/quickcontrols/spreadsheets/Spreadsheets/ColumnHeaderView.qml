@@ -18,7 +18,7 @@ HorizontalHeaderView {
 
     selectionBehavior: HorizontalHeaderView.SelectionDisabled
     movableColumns: true
-    onColumnMoved: (index, old_column, new_column) => model.mapColumn(index, new_column)
+    onColumnMoved: (index, old_column, new_column) => SpreadModel.mapColumn(index, new_column)
 
     selectionModel: HeaderSelectionModel {
         id: headerSelectionModel

@@ -405,7 +405,7 @@ void QWaylandDisplay::ensureScreen()
     if (!mScreens.empty() || mPlaceholderScreen)
         return; // There are real screens or we already have a fake one
 
-    qCInfo(lcQpaWayland) << "Creating a fake screen in order for Qt not to crash";
+    qCInfo(lcQpaWayland) << "There are no outputs - creating placeholder screen";
 
     mPlaceholderScreen = new QPlatformPlaceholderScreen();
     QWindowSystemInterface::handleScreenAdded(mPlaceholderScreen);

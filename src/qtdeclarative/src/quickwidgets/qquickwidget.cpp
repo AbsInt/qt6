@@ -1103,6 +1103,7 @@ void QQuickWidget::createFramebufferObject()
     // Note: The position will be update when we get a move event (see: updatePosition()).
     const QPoint &globalPos = mapToGlobal(QPoint(0, 0));
     d->offscreenWindow->setGeometry(globalPos.x(), globalPos.y(), width(), height());
+    d->offscreenWindow->contentItem()->setSize(QSizeF(width(), height()));
 
     if (d->useSoftwareRenderer) {
         const QSize imageSize = size() * devicePixelRatio();

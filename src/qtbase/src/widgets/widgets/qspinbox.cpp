@@ -484,10 +484,12 @@ QString QSpinBox::textFromValue(int value) const
         const auto prefix = value < 0 ? "-"_L1 : ""_L1;
         str = prefix + QString::number(qAbs(value), d->displayIntegerBase);
     } else {
-        str = locale().toString(value);
-        if (!d->showGroupSeparator && (qAbs(value) >= 1000 || value == INT_MIN)) {
-            str.remove(locale().groupSeparator());
-        }
+        QLocale loc = locale();
+        if (d->showGroupSeparator)
+            loc.setNumberOptions(loc.numberOptions() & ~QLocale::OmitGroupSeparator);
+        else
+            loc.setNumberOptions(loc.numberOptions() | QLocale::OmitGroupSeparator);
+        str = loc.toString(value);
     }
 
     return str;
@@ -959,11 +961,12 @@ void QDoubleSpinBox::setDecimals(int decimals)
 QString QDoubleSpinBox::textFromValue(double value) const
 {
     Q_D(const QDoubleSpinBox);
-    QString str = locale().toString(value, 'f', d->decimals);
-    if (!d->showGroupSeparator && qAbs(value) >= 1000.0)
-        str.remove(locale().groupSeparator());
-
-    return str;
+    QLocale loc = locale();
+    if (d->showGroupSeparator)
+        loc.setNumberOptions(loc.numberOptions() & ~QLocale::OmitGroupSeparator);
+    else
+        loc.setNumberOptions(loc.numberOptions() | QLocale::OmitGroupSeparator);
+    return loc.toString(value, 'f', d->decimals);
 }
 
 /*!

@@ -18,3 +18,19 @@ function(_qt_internal_require_qml_uri_valid uri)
         message(FATAL_ERROR "URI must start with letter. Please specify a valid URI for ${target}.")
     endif()
 endfunction()
+
+# Copies the file from src to dest.
+# Creates missing directories at dest if they do not exist.
+function(_qt_internal_qml_copy_file src dest)
+    # Create the dest directory, it might not exist.
+    get_filename_component(dest_out_dir "${dest}" DIRECTORY)
+    file(MAKE_DIRECTORY "${dest_out_dir}")
+
+    if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.21")
+        # Significantly increases copying speed according to profiling, presumably
+        # because we bypass process creation.
+        file(COPY_FILE "${src}" "${dest}" ONLY_IF_DIFFERENT)
+    else()
+        execute_process(COMMAND ${CMAKE_COMMAND} -E copy_if_different "${src}" "${dest}")
+    endif()
+endfunction()

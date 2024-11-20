@@ -16,7 +16,7 @@ void Viewporter::wp_viewporter_get_viewport(Resource *resource, uint32_t id, wl_
     auto *viewport = new Viewport(s, resource->client(), id, resource->version());
     connect(viewport, &QObject::destroyed, this, [this, viewport]() {
         m_viewports.removeOne(viewport);
-    });
+    }, Qt::DirectConnection);
     m_viewports << viewport;
 }
 

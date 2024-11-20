@@ -14,5 +14,8 @@ line 2
 line 3`;
         let afterManyLines = ""
         let taggedTemplate = its`a normal string`
+        let manyLines2 = `line 1
+line 2 ${helloWorld}
+`;
     }
 }

@@ -196,6 +196,8 @@ private slots:
     void clickAndDragWhenTransformed();
     void flickTwiceUsingTouches();
     void nestedStopAtBounds();
+    void nestedDraggingFlickingMoving_data();
+    void nestedDraggingFlickingMoving();
     void nestedStopAtBounds_data();
     void stopAtBounds();
     void stopAtBounds_data();
@@ -2152,6 +2154,77 @@ void tst_qquickflickable::nestedStopAtBounds()
     QTRY_VERIFY(!outer->isMoving());
     QVERIFY(!inner->isDragging());
     QVERIFY(!inner->isMoving());
+}
+
+void tst_qquickflickable::nestedDraggingFlickingMoving_data()
+{
+    QTest::addColumn<const QPointingDevice *>("device");
+
+    const QPointingDevice *constTouchDevice = touchDevice;
+    QTest::newRow("mouse") << mouseDevice;
+    QTest::newRow("touch") << constTouchDevice;
+}
+
+void tst_qquickflickable::nestedDraggingFlickingMoving()
+{
+    // Check that you can start a flick on the outer flickable, and then, while
+    // it's flicking, try to start a new flick on the inner flickable. Since
+    // the outer flickable is already moving from user interaction, this should
+    // simply lead to the outer flickable continue being flicked.
+    QFETCH(const QPointingDevice *, device);
+
+    QQuickView window;
+    QVERIFY(QQuickTest::showView(window, testFileUrl("nestedFlickables.qml")));
+    QVERIFY(window.rootObject() != nullptr);
+    QQuickFlickable *outer = qobject_cast<QQuickFlickable*>(window.rootObject());
+    QVERIFY(outer);
+    QQuickFlickable *inner = outer->findChild<QQuickFlickable*>("innerFlickable");
+    QVERIFY(inner);
+
+    QSignalSpy outerDraggingSpy(outer, &QQuickFlickable::draggingChanged);
+    QSignalSpy innerDraggingSpy(inner, &QQuickFlickable::draggingChanged);
+
+    const auto flickDistance = qApp->styleHints()->startDragDistance();
+    const auto dragThreshold = QPoint(flickDistance * 2, flickDistance * 2);
+
+    const auto outerPos = QPoint(inner->x() + inner->width() + 10, inner->y() + inner->height() + 10);
+    QQuickTest::pointerFlick(device, &window, 0, outerPos, outerPos - dragThreshold, 100);
+    QVERIFY(!outer->isDragging());
+    QVERIFY(outer->isFlicking());
+    QVERIFY(outer->isMoving());
+    QVERIFY(!inner->isDragging());
+    QVERIFY(!inner->isFlicking());
+    QVERIFY(!inner->isMoving());
+    QCOMPARE(outerDraggingSpy.count(), 2);
+    QCOMPARE(innerDraggingSpy.count(), 0);
+
+    // The outer flickable is in a "moving" state at this point, which means that it's
+    // moving because of user interaction. Now, drag on top of the inner flickable. This
+    // should only lead to outer flickable being flicked once more.
+    auto innerPos = QPoint(inner->x() + inner->width() - 10, inner->y() + inner->height() - 10);
+    QQuickTest::pointerMoveAndPress(device, &window, 0, innerPos);
+    innerPos += dragThreshold;
+    QQuickTest::pointerMove(device, &window, 0, innerPos);
+    innerPos += QPoint(10, 10);
+    QQuickTest::pointerMove(device, &window, 0, innerPos);
+    innerPos += QPoint(10, 10);
+    QQuickTest::pointerMove(device, &window, 0, innerPos);
+    QVERIFY(outer->isDragging());
+    QVERIFY(outer->isMoving());
+    QVERIFY(!outer->isFlicking());
+    QVERIFY(!inner->isDragging());
+    QVERIFY(!inner->isMoving());
+    QVERIFY(!inner->isFlicking());
+    QCOMPARE(outerDraggingSpy.count(), 3);
+    QCOMPARE(innerDraggingSpy.count(), 0);
+    QQuickTest::pointerRelease(device, &window, 0, innerPos);
+    QCOMPARE(innerDraggingSpy.count(), 0);
+    QVERIFY(outer->isFlicking());
+    QVERIFY(outer->isMoving());
+    QVERIFY(!outer->isDragging());
+    QVERIFY(!inner->isDragging());
+    QVERIFY(!inner->isMoving());
+    QVERIFY(!inner->isFlicking());
 }
 
 void tst_qquickflickable::stopAtBounds_data()

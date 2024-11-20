@@ -467,10 +467,7 @@ QCryptographicHash::~QCryptographicHash()
 
 /*!
     \fn void QCryptographicHash::swap(QCryptographicHash &other)
-
-    Swaps cryptographic hash \a other with this cryptographic hash. This
-    operation is very fast and never fails.
-
+    \memberswap{cryptographic hash}
     \since 6.5
 */
 
@@ -1479,10 +1476,7 @@ QMessageAuthenticationCode::~QMessageAuthenticationCode()
 
 /*!
     \fn void QMessageAuthenticationCode::swap(QMessageAuthenticationCode &other)
-
-    Swaps message authentication code \a other with this message authentication
-    code. This operation is very fast and never fails.
-
+    \memberswap{message authentication code}
     \since 6.6
 */
 

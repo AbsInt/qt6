@@ -825,8 +825,10 @@ void QWindows11Style::drawPrimitive(PrimitiveElement element, const QStyleOption
         break;
     case PE_IndicatorHeaderArrow:
         if (const QStyleOptionHeader *header = qstyleoption_cast<const QStyleOptionHeader *>(option)) {
+            QFont f(assetFont);
+            f.setPointSize(6);
+            painter->setFont(f);
             painter->setPen(header->palette.text().color());
-            painter->setFont(assetFont);
             QRectF rect = option->rect;
             if (header->sortIndicator & QStyleOptionHeader::SortUp) {
                 painter->drawText(rect,Qt::AlignCenter,"\uE96D");
@@ -869,7 +871,21 @@ void QWindows11Style::drawPrimitive(PrimitiveElement element, const QStyleOption
                 painter->drawText(rect, Qt::AlignVCenter | Qt::AlignHCenter,"\uE73C");
         }
         break;
-
+    case PE_IndicatorBranch: {
+            if (option->state & State_Children) {
+                const bool isReverse = option->direction == Qt::RightToLeft;
+                const bool isOpen = option->state & QStyle::State_Open;
+                QFont f(assetFont);
+                f.setPointSize(6);
+                painter->setFont(f);
+                painter->setPen(option->palette.color(isOpen ? QPalette::Active : QPalette::Disabled,
+                                                      QPalette::WindowText));
+                const auto str = isOpen ? QStringLiteral(u"\uE96E") :
+                                          (isReverse ? QStringLiteral(u"\uE96F") : QStringLiteral(u"\uE970"));
+                painter->drawText(option->rect, Qt::AlignCenter, str);
+            }
+        }
+        break;
     case PE_IndicatorRadioButton:
         {
             if (option->styleObject->property("_q_end_radius").isNull())
@@ -881,6 +897,7 @@ void QWindows11Style::drawPrimitive(PrimitiveElement element, const QStyleOption
                 option->styleObject->setProperty("_q_inner_radius", option->styleObject->property("_q_end_radius"));
             int innerRadius = option->styleObject->property("_q_inner_radius").toFloat();
 
+            QPainterPath path;
             QRectF rect = option->rect;
             QPointF center = QPoint(rect.x() + rect.width() / 2, rect.y() + rect.height() / 2);
             rect.setWidth(15);
@@ -893,17 +910,13 @@ void QWindows11Style::drawPrimitive(PrimitiveElement element, const QStyleOption
 
             painter->setPen(Qt::NoPen);
             painter->setBrush(option->palette.accent());
-            if (option->state & State_MouseOver && option->state & State_Enabled)
-                painter->setBrush(QBrush(option->palette.accent().color().lighter(107)));
-            painter->drawEllipse(center, 7, 7);
+            path.addEllipse(center,7,7);
+            path.addEllipse(center,innerRadius,innerRadius);
+            painter->drawPath(path);
 
             painter->setPen(QPen(WINUI3Colors[colorSchemeIndex][frameColorStrong]));
             painter->setBrush(Qt::NoBrush);
             painter->drawEllipse(center, 7.5, 7.5);
-
-            painter->setPen(Qt::NoPen);
-            painter->setBrush(QBrush(option->palette.window()));
-            painter->drawEllipse(center,innerRadius, innerRadius);
 
             painter->setPen(QPen(WINUI3Colors[colorSchemeIndex][frameColorStrong]));
             painter->setBrush(Qt::NoBrush);
@@ -2152,7 +2165,8 @@ void QWindows11Style::polish(QWidget* widget)
         auto pal = widget->palette();
         pal.setColor(widget->backgroundRole(), Qt::transparent);
         widget->setPalette(pal);
-        if (!isScrollBar) { // for menus and combobox containers...
+        if (!isScrollBar
+            && widget->graphicsProxyWidget() == nullptr) { // for menus and combobox containers...
             QGraphicsDropShadowEffect* dropshadow = new QGraphicsDropShadowEffect(widget);
             dropshadow->setBlurRadius(3);
             dropshadow->setXOffset(3);

@@ -1714,8 +1714,19 @@ int MatchVariant(QMetaType conversionMetaType, Retrieve &&retrieve) {
             return 1;
     }
 
-    if (QMetaType::canConvert(type, conversionMetaType))
+    if (QMetaType::canConvert(type, conversionMetaType)) {
+        if (conversionMetaType == QMetaType::fromType<QJSValue>()
+                || conversionMetaType == QMetaType::fromType<double>()
+                || conversionMetaType == QMetaType::fromType<QString>()) {
+            // Unspecific conversions receive lower score. You can convert anything
+            // to QString or double via toString() and valueOf(), respectively.
+            // And anything can be wrapped into QJSValue, but that's inefficient.
+            return 6;
+        }
+
+        // We have an explicitly defined conversion method to a non-boring type.
         return 5;
+    }
 
     return 10;
 };
@@ -1729,6 +1740,33 @@ int MatchVariant(QMetaType conversionMetaType, Retrieve &&retrieve) {
 static int MatchScore(const Value &actual, QMetaType conversionMetaType)
 {
     const int conversionType = conversionMetaType.id();
+    const auto convertibleScore = [&](QMetaType actualType) {
+        // There are a number of things we can do in JavaScript to subvert this, but
+        // if the conversion is not explicitly defined in C++, we don't want to prioritize it.
+        if (!QMetaType::canConvert(actualType, conversionMetaType))
+            return 10;
+
+        // You can convert anything to QJSValue, but that's inefficient.
+        // If we have a better option, we should use it.
+        if (conversionMetaType == QMetaType::fromType<QJSValue>())
+            return 9;
+
+        // You can also convert anything to QVariant, but that's also suboptimal.
+        // You can convert anything to string or double via toString() and valueOf().
+        // Those are also rather unspecific.
+        switch (conversionType) {
+        case QMetaType::QVariant:
+        case QMetaType::Double:
+        case QMetaType::QString:
+            return 9;
+        default:
+            break;
+        }
+
+        // We have an explicitly defined conversion method to a non-boring type.
+        return 8;
+    };
+
     if (actual.isNumber()) {
         switch (conversionType) {
         case QMetaType::Double:
@@ -1754,7 +1792,9 @@ static int MatchScore(const Value &actual, QMetaType conversionMetaType)
         case QMetaType::QJsonValue:
             return 5;
         default:
-            return 10;
+            return convertibleScore(actual.isInteger()
+                                            ? QMetaType::fromType<int>()
+                                            : QMetaType::fromType<double>());
         }
     } else if (actual.isString()) {
         switch (conversionType) {
@@ -1764,8 +1804,21 @@ static int MatchScore(const Value &actual, QMetaType conversionMetaType)
             return 5;
         case QMetaType::QUrl:
             return 6; // we like to convert strings to URLs in QML
-        default:
+        case QMetaType::Double:
+        case QMetaType::Float:
+        case QMetaType::LongLong:
+        case QMetaType::ULongLong:
+        case QMetaType::Int:
+        case QMetaType::UInt:
+        case QMetaType::Short:
+        case QMetaType::UShort:
+        case QMetaType::Char:
+        case QMetaType::UChar:
+            // QMetaType can natively convert strings to numbers.
+            // However, in the general case it's of course extremely lossy.
             return 10;
+        default:
+            return convertibleScore(QMetaType::fromType<QString>());
         }
     } else if (actual.isBoolean()) {
         switch (conversionType) {
@@ -1774,7 +1827,7 @@ static int MatchScore(const Value &actual, QMetaType conversionMetaType)
         case QMetaType::QJsonValue:
             return 5;
         default:
-            return 10;
+            return convertibleScore(QMetaType::fromType<bool>());
         }
     } else if (actual.as<DateObject>()) {
         switch (conversionType) {
@@ -1785,23 +1838,26 @@ static int MatchScore(const Value &actual, QMetaType conversionMetaType)
         case QMetaType::QTime:
             return 2;
         default:
-            return 10;
+            return convertibleScore(QMetaType::fromType<QDateTime>());
         }
     } else if (actual.as<RegExpObject>()) {
         switch (conversionType) {
 #if QT_CONFIG(regularexpression)
         case QMetaType::QRegularExpression:
             return 0;
-#endif
         default:
-            return 10;
+            return convertibleScore(QMetaType::fromType<QRegularExpression>());
+#else
+        default:
+            return convertibleScore(QMetaType());
+#endif
         }
     } else if (actual.as<ArrayBuffer>()) {
         switch (conversionType) {
         case QMetaType::QByteArray:
             return 0;
         default:
-            return 10;
+            return convertibleScore(QMetaType::fromType<QByteArray>());
         }
     } else if (actual.as<ArrayObject>()) {
         switch (conversionType) {
@@ -1816,7 +1872,7 @@ static int MatchScore(const Value &actual, QMetaType conversionMetaType)
         case QMetaType::QVector3D:
             return 7;
         default:
-            return 10;
+            return convertibleScore(QMetaType());
         }
     } else if (actual.isNull()) {
         switch (conversionType) {
@@ -1829,7 +1885,7 @@ static int MatchScore(const Value &actual, QMetaType conversionMetaType)
             if (conversionMetaType.flags().testFlag(QMetaType::IsPointer))
                 return 0;
             else
-                return 10;
+                return convertibleScore(QMetaType());
         }
         }
     } else if (const Object *obj = actual.as<Object>()) {
@@ -1852,7 +1908,8 @@ static int MatchScore(const Value &actual, QMetaType conversionMetaType)
                         return 0;
                 }
             }
-            return 10;
+
+            return convertibleScore(QMetaType::fromType<QObject *>());
         }
 
         if (const QQmlTypeWrapper *wrapper = obj->as<QQmlTypeWrapper>()) {
@@ -1874,14 +1931,15 @@ static int MatchScore(const Value &actual, QMetaType conversionMetaType)
                 }
             }
 
-            return 10;
+            return convertibleScore(QMetaType());
         }
 
         if (const Sequence *sequence = obj->as<Sequence>()) {
-            if (SequencePrototype::metaTypeForSequence(sequence) == conversionMetaType)
+            const QMetaType sequenceType = SequencePrototype::metaTypeForSequence(sequence);
+            if (sequenceType == conversionMetaType)
                 return 1;
-            else
-                return 10;
+
+            return convertibleScore(sequenceType);
         }
 
         if (const QQmlValueTypeWrapper *wrapper = obj->as<QQmlValueTypeWrapper>()) {
@@ -1892,15 +1950,20 @@ static int MatchScore(const Value &actual, QMetaType conversionMetaType)
             });
         }
 
-        if (conversionType == QMetaType::QJsonObject)
-            return 5;
-        if (conversionType == qMetaTypeId<QJSValue>())
+        if (conversionMetaType == QMetaType::fromType<QJSValue>())
             return 0;
-        if (conversionType == QMetaType::QVariantMap)
+
+        switch (conversionType) {
+        case QMetaType::QJsonObject:
+        case QMetaType::QVariantMap:
             return 5;
+        default:
+            break;
+        }
+
     }
 
-    return 10;
+    return convertibleScore(QMetaType());
 }
 
 static int numDefinedArguments(CallData *callArgs)

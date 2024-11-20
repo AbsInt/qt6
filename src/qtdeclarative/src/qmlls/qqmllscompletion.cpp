@@ -1937,6 +1937,9 @@ void QQmlLSCompletion::collectCompletions(const DomItem &currentItem,
         case DomType::ScriptSuperLiteral:
             // suppress completions on `super`
             return;
+        case DomType::Comment:
+            // no completion inside of comments
+            return;
 
         // TODO: Implement those statements.
         // In the meanwhile, suppress completions to avoid weird behaviors.

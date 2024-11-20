@@ -80,12 +80,6 @@ public:
     {QShortcut} documentation for details. To display an actual ampersand,
     use '&&'.
 
-    Important inherited functions: text(), setText(), text(), pixmap(),
-    setPixmap(), accel(), setAccel(), isToggleButton(), setDown(), isDown(),
-    isOn(), checkState(), autoRepeat(), isExclusiveToggle(), group(),
-    setAutoRepeat(), toggle(), pressed(), released(), clicked(), toggled(),
-    checkState(), and checkStateChanged().
-
     \sa QAbstractButton, QRadioButton
 */
 

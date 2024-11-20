@@ -345,7 +345,12 @@ void QFusionStyle::drawPrimitive(PrimitiveElement elem,
     // No frame drawn
     case PE_FrameGroupBox:
     {
-        QPixmap pixmap(":/qt-project.org/styles/commonstyle/images/fusion_groupbox.png"_L1);
+        const auto strFrameGroupBox = QStringLiteral(u"fusion_groupbox");
+        QPixmap pixmap;
+        if (!QPixmapCache::find(strFrameGroupBox, &pixmap)) {
+            pixmap.load(":/qt-project.org/styles/commonstyle/images/fusion_groupbox.png"_L1);
+            QPixmapCache::insert(strFrameGroupBox, pixmap);
+        }
         qDrawBorderPixmap(painter, option->rect, QMargins(6, 6, 6, 6), pixmap);
         break;
     }

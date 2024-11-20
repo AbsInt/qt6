@@ -4,8 +4,9 @@
 /*!
 \page qtqml-tooling-qmlprofiler.html
 \title qmlprofiler
-\brief Overview of the qmlprofiler tool.
+\brief A tool that retrieves QML tracing data from your application.
 \ingroup qtqml-tooling
+\ingroup qtqml-tooling-devtools
 
 \section1 qmlprofiler
 

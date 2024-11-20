@@ -126,7 +126,7 @@ Configurations:
         Template: 'qtci-macos-14-arm-106'
         Compiler: 'Clang'
         Features: ['DoNotRunTests', 'WarningsAreErrors', 'UseConfigure']
-        Configure arguments: '-developer-build -nomake examples -release -force-asserts -force-debug-info -separate-debug-info -framework'
+        Configure arguments: '-developer-build -nomake examples -debug -framework'
         Environment variables: [
             'CMAKE_ARGS=-DOPENSSL_ROOT_DIR={{.Env.OPENSSL_DIR}}',
             'Protobuf_ROOT=/usr/local/lib/cmake/protobuf',

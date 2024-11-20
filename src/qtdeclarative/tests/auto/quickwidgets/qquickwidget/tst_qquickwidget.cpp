@@ -224,6 +224,7 @@ void tst_qquickwidget::resizemodeitem()
     QCOMPARE(view->size(), QSize(200, 200));
     QCOMPARE(view->size(), view->sizeHint());
     QCOMPARE(view->size(), view->initialSize());
+    QCOMPARE(view->quickWindow()->contentItem()->size(), view->size());
 
     // size update from view
     view->resize(QSize(80,100));
@@ -232,6 +233,8 @@ void tst_qquickwidget::resizemodeitem()
     QCOMPARE(item->height(), 100.0);
     QCOMPARE(view->size(), QSize(80, 100));
     QCOMPARE(view->size(), view->sizeHint());
+    QCOMPARE(view->quickWindow()->contentItem()->size(), view->size());
+
 
     view->setResizeMode(QQuickWidget::SizeViewToRootObject);
 
@@ -240,6 +243,8 @@ void tst_qquickwidget::resizemodeitem()
     QCOMPARE(item->width(), 80.0);
     QCOMPARE(item->height(), 100.0);
     QTRY_COMPARE(view->size(), QSize(60, 80));
+    QCOMPARE(view->quickWindow()->contentItem()->size(), view->size());
+
 
     // size update from root object
     item->setWidth(250);
@@ -249,6 +254,7 @@ void tst_qquickwidget::resizemodeitem()
     QTRY_COMPARE(view->size(), QSize(250, 350));
     QCOMPARE(view->size(), QSize(250, 350));
     QCOMPARE(view->size(), view->sizeHint());
+    QCOMPARE(view->quickWindow()->contentItem()->size(), view->size());
 
     // reset window
     window.hide();
@@ -266,6 +272,7 @@ void tst_qquickwidget::resizemodeitem()
     QCOMPARE(item->height(), 200.0);
     QCOMPARE(view->size(), view->sizeHint());
     QCOMPARE(view->size(), view->initialSize());
+    QCOMPARE(view->quickWindow()->contentItem()->size(), view->size());
 
     // size update from root object
     item->setWidth(80);
@@ -274,6 +281,7 @@ void tst_qquickwidget::resizemodeitem()
     QCOMPARE(item->height(), 100.0);
     QTRY_COMPARE(view->size(), QSize(80, 100));
     QCOMPARE(view->size(), view->sizeHint());
+    QCOMPARE(view->quickWindow()->contentItem()->size(), view->size());
 
     // size update from root object disabled
     view->setResizeMode(QQuickWidget::SizeRootObjectToView);
@@ -282,6 +290,7 @@ void tst_qquickwidget::resizemodeitem()
     QCOMPARE(view->width(), 80);
     QCOMPARE(view->height(), 100);
     QCOMPARE(QSize(item->width(), item->height()), view->sizeHint());
+    QCOMPARE(view->quickWindow()->contentItem()->size(), view->size());
 
     // size update from view
     view->resize(QSize(200,300));
@@ -289,6 +298,7 @@ void tst_qquickwidget::resizemodeitem()
     QCOMPARE(item->height(), 300.0);
     QCOMPARE(view->size(), QSize(200, 300));
     QCOMPARE(view->size(), view->sizeHint());
+    QCOMPARE(view->quickWindow()->contentItem()->size(), view->size());
 
     window.hide();
 
@@ -312,6 +322,8 @@ void tst_qquickwidget::resizemodeitem()
     QTRY_COMPARE(view->size(), QSize(300, 300));
     QCOMPARE(view->size(), view->sizeHint());
     QCOMPARE(view->initialSize(), QSize(200, 200)); // initial object size
+    QCOMPARE(view->quickWindow()->contentItem()->size(), view->size());
+
 }
 
 void tst_qquickwidget::layoutSizeChange()

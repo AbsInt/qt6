@@ -250,8 +250,8 @@ int main(int argc, char **argv)
             QStringList importPaths;
 
             if (parser.isSet(resourceOption)) {
-                importPaths.append("qt-project.org/imports"_L1);
-                importPaths.append("qt/qml"_L1);
+                importPaths.append(":/qt-project.org/imports"_L1);
+                importPaths.append(":/qt/qml"_L1);
             };
 
             if (parser.isSet(importPathOption))

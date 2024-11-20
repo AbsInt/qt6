@@ -1491,7 +1491,8 @@ void QmltcCompiler::compileAttachedPropertyBinding(QmltcType &current,
     auto &attachedMemberName =
             m_uniques[UniqueStringId(current, propertyName)].attachedVariableName;
     if (attachedMemberName.isEmpty()) {
-        attachedMemberName = u"m_" + attachingTypeName;
+        attachedMemberName = uniqueVariableName(attachingTypeName);
+
         // add attached type as a member variable to allow noop lookup
         current.variables.emplaceBack(attachedTypeName + u" *", attachedMemberName, u"nullptr"_s);
 
@@ -1789,8 +1790,8 @@ void QmltcCompiler::compileBindingByType(QmltcType &current,
         break;
     }
     case QQmlSA::BindingType::Script: {
-        QString bindingSymbolName = type->internalName() + u'_' + propertyName + u"_binding";
-        bindingSymbolName.replace(u'.', u'_'); // can happen with group properties
+        QString bindingSymbolName
+                = uniqueVariableName(type->internalName() + u'_' + propertyName + u"_binding");
         compileScriptBinding(current, binding, bindingSymbolName, type, propertyName, propertyType,
                              accessor);
         break;

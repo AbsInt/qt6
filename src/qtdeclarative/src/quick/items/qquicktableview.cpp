@@ -7226,6 +7226,7 @@ void QQuickTableViewSectionDragHandler::handleDrop(QQuickDragEvent *event)
         resetSectionOverlay();
         if (m_scrollTimer.isActive())
             m_scrollTimer.stop();
+        event->accept();
     }
 }
 
@@ -7398,8 +7399,10 @@ void QQuickTableViewPrivate::initSectionDragHandler(Qt::Orientation orientation)
 
 void QQuickTableViewPrivate::destroySectionDragHandler()
 {
-    if (sectionDragHandler)
+    if (sectionDragHandler) {
         delete sectionDragHandler;
+        sectionDragHandler = nullptr;
+    }
 }
 
 void QQuickTableViewPrivate::initializeIndexMapping()

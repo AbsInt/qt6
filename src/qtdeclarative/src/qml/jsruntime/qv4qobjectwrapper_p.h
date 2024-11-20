@@ -222,6 +222,19 @@ private:
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QObjectWrapper::Flags)
 
+// We generally musn't pass ReturnedValue as arguments to other functions.
+// In this case, we do it solely for marking purposes so it's fine.
+inline void markIfPastMarkWeakValues(ExecutionEngine *engine, ReturnedValue rv)
+{
+    const auto gcState = engine->memoryManager->gcStateMachine->state;
+    if (gcState != GCStateMachine::Invalid && gcState >= GCState::MarkWeakValues) {
+        QV4::WriteBarrier::markCustom(engine, [rv](QV4::MarkStack *ms) {
+            auto *m = StaticValue::fromReturnedValue(rv).m();
+            m->mark(ms);
+        });
+    }
+}
+
 inline ReturnedValue QObjectWrapper::wrap(ExecutionEngine *engine, QObject *object)
 {
     if (Q_UNLIKELY(QQmlData::wasDeleted(object)))
@@ -233,7 +246,9 @@ inline ReturnedValue QObjectWrapper::wrap(ExecutionEngine *engine, QObject *obje
         return ddata->jsWrapper.value();
     }
 
-    return wrap_slowPath(engine, object);
+    const auto rv = wrap_slowPath(engine, object);
+    markIfPastMarkWeakValues(engine, rv);
+    return rv;
 }
 
 // Unfortunately we still need a non-const QObject* here because QQmlData needs to register itself in QObjectPrivate.
@@ -242,7 +257,9 @@ inline ReturnedValue QObjectWrapper::wrapConst(ExecutionEngine *engine, QObject 
     if (Q_UNLIKELY(QQmlData::wasDeleted(object)))
         return QV4::Encode::null();
 
-    return wrapConst_slowPath(engine, object);
+    const auto rv = wrapConst_slowPath(engine, object);
+    markIfPastMarkWeakValues(engine, rv);
+    return rv;
 }
 
 inline bool canConvert(const QQmlPropertyCache *fromMo, const QQmlPropertyCache *toMo)

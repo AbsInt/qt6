@@ -576,7 +576,6 @@ bool QWindowSystemInterface::handleWheelEvent(QWindow *window, ulong timestamp, 
 */
 void QWindowSystemInterface::registerInputDevice(const QInputDevice *device)
 {
-    qCDebug(lcQpaInputDevices) << "register" << device;
     QInputDevicePrivate::registerDevice(device);
 }
 

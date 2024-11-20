@@ -41,6 +41,7 @@ function(qt_internal_add_benchmark target)
     qt_internal_add_executable(${target}
         NO_INSTALL # we don't install benchmarks
         NO_UNITY_BUILD # excluded by default
+        QT_BENCHMARK_TEST
         OUTPUT_DIRECTORY "${arg_OUTPUT_DIRECTORY}" # avoid polluting bin directory
         ${exec_args}
     )
@@ -1119,6 +1120,14 @@ function(qt_internal_collect_command_environment out_path out_plugin_path)
 endfunction()
 
 function(qt_internal_add_test_finalizers target)
+    # Opt out to skip the new way of running test finalizers, and instead use the old way for
+    # specific platforms.
+    # TODO: Remove once we confirm that the new way of running test finalizers for all platforms
+    # doesn't cause any issues.
+    if(QT_INTERNAL_SKIP_TEST_FINALIZERS_V2)
+        return()
+    endif()
+
     # It might not be safe to run all the finalizers of _qt_internal_finalize_executable
     # within the context of a Qt build (not a user project) when targeting a host build.
     # At least one issue is missing qmlimportscanner at configure time.

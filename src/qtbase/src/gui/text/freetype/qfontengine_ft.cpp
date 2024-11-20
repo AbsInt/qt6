@@ -2095,7 +2095,7 @@ QImage QFontEngineFT::alphaMapForGlyph(glyph_t g,
 
     QImage img = alphaMapFromGlyphData(glyph, neededFormat);
     if (needsImageTransform)
-        img = img.transformed(t, Qt::SmoothTransformation);
+        img = img.transformed(t, Qt::FastTransformation);
     else
         img = img.copy();
 
@@ -2112,12 +2112,19 @@ QImage QFontEngineFT::alphaRGBMapForGlyph(glyph_t g,
     if (t.type() > QTransform::TxRotate)
         return QFontEngine::alphaRGBMapForGlyph(g, subPixelPosition, t);
 
+    const bool needsImageTransform = !FT_IS_SCALABLE(freetype->face)
+                                     && t.type() > QTransform::TxTranslate;
+
+
     const GlyphFormat neededFormat = Format_A32;
 
     Glyph *glyph = loadGlyphFor(g, subPixelPosition, neededFormat, t, false, true);
 
     QImage img = alphaMapFromGlyphData(glyph, neededFormat);
-    img = img.copy();
+    if (needsImageTransform)
+        img = img.transformed(t, Qt::FastTransformation);
+    else
+        img = img.copy();
 
     if (!cacheEnabled && glyph != &emptyGlyph)
         delete glyph;

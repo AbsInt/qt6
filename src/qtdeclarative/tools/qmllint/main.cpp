@@ -197,7 +197,8 @@ All warnings can be set to three levels:
             "count"
             );
     parser.addOption(maxWarnings);
-    settings.addOption("MaxWarnings", -1);
+    const QString maxWarningsSetting = QLatin1String("MaxWarnings");
+    settings.addOption(maxWarningsSetting, -1);
 
     auto addCategory = [&](const QQmlJS::LoggerCategory &category) {
         categories.push_back(category);
@@ -428,9 +429,10 @@ All warnings can be set to three levels:
                                          qmldirFiles, resourceFiles, categories);
         }
         success &= (lintResult == QQmlJSLinter::LintSuccess || lintResult == QQmlJSLinter::HasWarnings);
-        if (success && parser.isSet(maxWarnings))
+        if (success)
         {
-            int value = parser.value(maxWarnings).toInt();
+            int value = parser.isSet(maxWarnings) ? parser.value(maxWarnings).toInt()
+                                                  : settings.value(maxWarningsSetting).toInt();
             if (value != -1 && value < linter.logger()->warnings().size())
                 success = false;
         }

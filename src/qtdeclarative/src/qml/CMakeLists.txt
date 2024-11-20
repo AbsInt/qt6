@@ -426,6 +426,7 @@ qt_internal_add_qml_module(Qml
     EXTRA_CMAKE_FILES
         "${CMAKE_CURRENT_LIST_DIR}/${INSTALL_CMAKE_NAMESPACE}qmldirTemplate.cmake.in"
         "${CMAKE_CURRENT_LIST_DIR}/${INSTALL_CMAKE_NAMESPACE}qt.conf.in"
+        "${CMAKE_CURRENT_LIST_DIR}/${INSTALL_CMAKE_NAMESPACE}QmlCopyFiles.cmake"
         "${CMAKE_CURRENT_LIST_DIR}/${INSTALL_CMAKE_NAMESPACE}QmlPluginTemplate.cpp.in"
         "${CMAKE_CURRENT_LIST_DIR}/${INSTALL_CMAKE_NAMESPACE}QmlFindQmlscInternal.cmake"
         "${CMAKE_CURRENT_LIST_DIR}/${INSTALL_CMAKE_NAMESPACE}QmlDeploySupport.cmake"
@@ -446,6 +447,7 @@ qt_internal_add_qml_module(Qml
 )
 
 _qt_internal_add_qml_deploy_info_finalizer(Qml)
+_qt_internal_add_import_qml_plugins_finalizer(Qml)
 
 qt_path_join(qml_root_dir "${QT_BUILD_DIR}" "${INSTALL_QMLDIR}")
 get_target_property(qml_build_dir Qml QT_QML_MODULE_OUTPUT_DIRECTORY)

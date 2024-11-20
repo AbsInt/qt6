@@ -36,16 +36,13 @@ struct TerritoryLanguage
     QLocale::MeasurementSystem system;
 };
 
-QT_WARNING_PUSH // QTBUG-128930
-QT_WARNING_DISABLE_CLANG("-Wunused-const-variable")
-static constexpr TerritoryLanguage ImperialMeasurementSystems[] = {
+static inline constexpr TerritoryLanguage ImperialMeasurementSystems[] = {
     { QLocale::English, QLocale::UnitedStates, QLocale::ImperialUSSystem },
     { QLocale::English, QLocale::UnitedStatesMinorOutlyingIslands, QLocale::ImperialUSSystem },
     { QLocale::Spanish, QLocale::UnitedStates, QLocale::ImperialUSSystem },
     { QLocale::Hawaiian, QLocale::UnitedStates, QLocale::ImperialUSSystem },
     { QLocale::English, QLocale::UnitedKingdom, QLocale::ImperialUKSystem }
 };
-QT_WARNING_POP // QTBUG-128930
 
 /*
   Storage for alpha codes with length of up to 4 allowing efficient comparison.
@@ -61,8 +58,8 @@ struct AlphaCode {
     std::array<char, 4> decode() const { return {m2c(c1), m2c(c2), m2c(c3), 0}; }
 
 private:
-    static constexpr uint16_t c2m(char c) { return c ? c - 'a' + 1 : 0; }
-    static constexpr char m2c (uint16_t c) { return c ? c + 'a' - 1 : 0; }
+    static inline constexpr uint16_t c2m(char c) { return c ? c - 'a' + 1 : 0; }
+    static inline constexpr char m2c (uint16_t c) { return c ? c + 'a' - 1 : 0; }
 
     friend bool operator==(AlphaCode lhs, AlphaCode rhs) noexcept
     {
@@ -80,9 +77,6 @@ struct LanguageCodeEntry {
     AlphaCode part3;
 };
 
-QT_WARNING_PUSH // QTBUG-128930
-QT_WARNING_DISABLE_CLANG("-Wunused-const-variable")
-
 // GENERATED PART STARTS HERE
 
 /*
@@ -96,7 +90,7 @@ QT_WARNING_DISABLE_CLANG("-Wunused-const-variable")
     edited) CLDR data; see qtbase/util/locale_database/.
 */
 
-static constexpr QLocaleId likely_subtags[] = {
+static inline constexpr QLocaleId likely_subtags[] = {
     {   2,   0,   0 }, {   2,  27,  90 }, // ab -> ab_Cyrl_GE
     {   3,   0,   0 }, {   3,  66,  77 }, // aa -> aa_Latn_ET
     {   4,   0,   0 }, {   4,  66, 216 }, // af -> af_Latn_ZA
@@ -1060,7 +1054,7 @@ static constexpr QLocaleId likely_subtags[] = {
     {   0, 142,   0 }, { 339, 142, 161 }  // und_Rohg -> rhg_Rohg_MM
 };
 
-static constexpr quint16 locale_index[] = {
+static inline constexpr quint16 locale_index[] = {
      0, // AnyLanguage
      0, // C
      1, // Abkhazian
@@ -1409,7 +1403,7 @@ static constexpr quint16 locale_index[] = {
      0 // trailing 0
 };
 
-static constexpr QLocaleData locale_data[] = {
+static inline constexpr QLocaleData locale_data[] = {
    //  lang  script   terr lStrt lpMid lpEnd lPair lDelm  dec  group prcnt  zero minus plus   exp  qtOpn qtEnd altQO altQE lDFmt sDFmt lTFmt sTFmt slDay lDays ssDys sDays snDay nDays   am    pm   byte siQnt iecQn crSym crDsp crFmt crFNg ntLng ntTer                                                                                                                                                        currISO   curDgt curRnd dow1st  wknd+  wknd- grpTop grpMid grpEnd
     {      1,     0,     0,    0,    0,    0,    0,    6,    0,    1,    2,    3,    4,    5,    6,    7,    7,    8,    8,    0,   17,    0,    0,    0,    0,   56,   56,   83,   96,    0,    0,    0,    5,   22,    0,    0,    0,    0,    0,    0,  6,  6,  6,  6,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1, 17, 10, 10,  8, 56, 56, 27, 27, 13, 13,  2,  2,  5, 17, 23,  0,  0,  4,  0,  0,  0,    {0,0,0},      2,     1,     1,     6,     7,     1,     3,     3 }, // C/AnyScript/AnyTerritory
     {      2,    27,    90,    0,    0,    7,    7,    6,    1,    9,    2,    3,    4,    5,   10,   11,   12,   13,   14,   27,   49,   10,    0,  109,  109,  157,  157,  179,  179,    0,    0,    0,    5,   22,    0,    0,    4,    0,    0,    6,  6,  6,  9,  9,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1, 22, 10, 13,  5, 48, 48, 22, 22, 15, 15,  2,  2,  4, 17, 23,  1,  0,  5,  0,  6,  9, {71,69,76},      2,     1,     1,     6,     7,     1,     3,     3 }, // Abkhazian/Cyrillic/Georgia
@@ -2087,7 +2081,7 @@ static constexpr QLocaleData locale_data[] = {
     {      0,     0,     0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,    {0,0,0},      0,     0,     0,     0,     0,     0,     0,     0 } // trailing zeros
 };
 
-static constexpr char16_t list_pattern_part_data[] = {
+static inline constexpr char16_t list_pattern_part_data[] = {
 0x25, 0x31, 0x2c, 0x20, 0x25, 0x32, 0x3b, 0x25, 0x31, 0x2d, 0x438, 0x20,
 0x25, 0x32, 0x2d, 0x438, 0x25, 0x31, 0x20, 0x65, 0x6e, 0x20, 0x25, 0x32,
 0x25, 0x31, 0x20, 0x25, 0x32, 0x25, 0x31, 0x20, 0x64, 0x68, 0x65, 0x20,
@@ -2206,7 +2200,7 @@ static constexpr char16_t list_pattern_part_data[] = {
 0x32
 };
 
-static constexpr char16_t single_character_data[] = {
+static inline constexpr char16_t single_character_data[] = {
 0x2e, 0x2c, 0x25, 0x30, 0x2d, 0x2b, 0x65, 0x22, 0x27, 0xa0, 0x45, 0xab,
 0xbb, 0x201e, 0x201c, 0x201d, 0x2018, 0x2019, 0x201a, 0x2039, 0x203a, 0x66b, 0x66c, 0x66a,
 0x61c, 0x660, 0x61c, 0x2d, 0x61c, 0x2b, 0x623, 0x633, 0x200e, 0x25, 0x200e, 0x200e,
@@ -2217,7 +2211,7 @@ static constexpr char16_t single_character_data[] = {
 0x1c50, 0x415
 };
 
-static constexpr char16_t date_format_data[] = {
+static inline constexpr char16_t date_format_data[] = {
 0x64, 0x64, 0x64, 0x64, 0x2c, 0x20, 0x64, 0x20, 0x4d, 0x4d, 0x4d, 0x4d,
 0x20, 0x79, 0x79, 0x79, 0x79, 0x64, 0x20, 0x4d, 0x4d, 0x4d, 0x20, 0x79,
 0x79, 0x79, 0x79, 0x64, 0x64, 0x64, 0x64, 0x2c, 0x20, 0x64, 0x20, 0x4d,
@@ -2403,7 +2397,7 @@ static constexpr char16_t date_format_data[] = {
 0x79, 0x79
 };
 
-static constexpr char16_t time_format_data[] = {
+static inline constexpr char16_t time_format_data[] = {
 0x48, 0x48, 0x3a, 0x6d, 0x6d, 0x3a, 0x73, 0x73, 0x20, 0x74, 0x48, 0x48,
 0x3a, 0x6d, 0x6d, 0x3a, 0x73, 0x73, 0x20, 0x74, 0x74, 0x74, 0x74, 0x68,
 0x3a, 0x6d, 0x6d, 0x3a, 0x73, 0x73, 0x202f, 0x41, 0x70, 0x20, 0x74, 0x74,
@@ -2457,7 +2451,7 @@ static constexpr char16_t time_format_data[] = {
 0x6d, 0x20, 0x27, 0x68, 0x6f, 0x64, 0x17a, 0x27, 0x2e
 };
 
-static constexpr char16_t days_data[] = {
+static inline constexpr char16_t days_data[] = {
 0x53, 0x75, 0x6e, 0x64, 0x61, 0x79, 0x3b, 0x4d, 0x6f, 0x6e, 0x64, 0x61,
 0x79, 0x3b, 0x54, 0x75, 0x65, 0x73, 0x64, 0x61, 0x79, 0x3b, 0x57, 0x65,
 0x64, 0x6e, 0x65, 0x73, 0x64, 0x61, 0x79, 0x3b, 0x54, 0x68, 0x75, 0x72,
@@ -4819,7 +4813,7 @@ static constexpr char16_t days_data[] = {
 0xc35, 0xc30, 0xc3e
 };
 
-static constexpr char16_t byte_unit_data[] = {
+static inline constexpr char16_t byte_unit_data[] = {
 0x62, 0x79, 0x74, 0x65, 0x73, 0x6b, 0x42, 0x3b, 0x4d, 0x42, 0x3b, 0x47,
 0x42, 0x3b, 0x54, 0x42, 0x3b, 0x50, 0x42, 0x3b, 0x45, 0x42, 0x4b, 0x69,
 0x42, 0x3b, 0x4d, 0x69, 0x42, 0x3b, 0x47, 0x69, 0x42, 0x3b, 0x54, 0x69,
@@ -4938,7 +4932,7 @@ static constexpr char16_t byte_unit_data[] = {
 0x69, 0x74, 0x61
 };
 
-static constexpr char16_t am_data[] = {
+static inline constexpr char16_t am_data[] = {
 0x41, 0x4d, 0x76, 0x6d, 0x2e, 0x61, 0x2e, 0x67, 0x41, 0x4e, 0x65, 0x20,
 0x70, 0x61, 0x72, 0x61, 0x64, 0x69, 0x74, 0x65, 0x73, 0x1325, 0x12cb, 0x1275,
 0x635, 0x9aa, 0x9c2, 0x9f0, 0x9cd, 0x9ac, 0x9be, 0x9b9, 0x9cd, 0x9a8, 0x64, 0x65,
@@ -5017,7 +5011,7 @@ static constexpr char16_t am_data[] = {
 0x20, 0xc0e, 0xc2e, 0xc4d
 };
 
-static constexpr char16_t pm_data[] = {
+static inline constexpr char16_t pm_data[] = {
 0x50, 0x4d, 0x6e, 0x6d, 0x2e, 0x61, 0x2e, 0x6b, 0x45, 0x57, 0x65, 0x20,
 0x70, 0x61, 0x73, 0x64, 0x69, 0x74, 0x65, 0x73, 0x12a8, 0x1230, 0x12d3, 0x1275,
 0x645, 0x985, 0x9aa, 0x9f0, 0x9be, 0x9b9, 0x9cd, 0x9a8, 0x64, 0x65, 0x20, 0x6c,
@@ -5100,7 +5094,7 @@ static constexpr char16_t pm_data[] = {
 0xc0e, 0xc2e, 0xc4d
 };
 
-static constexpr char16_t currency_symbol_data[] = {
+static inline constexpr char16_t currency_symbol_data[] = {
 0x20be, 0x42, 0x72, 0x46, 0x64, 0x6a, 0x4e, 0x66, 0x6b, 0x52, 0x24, 0x46,
 0x43, 0x46, 0x41, 0x47, 0x48, 0x20b5, 0x4c, 0x65, 0x6b, 0xeb, 0x20ac, 0x64,
 0x65, 0x6e, 0x1265, 0x122d, 0x62c, 0x2e, 0x645, 0x2e, 0x200f, 0x62f, 0x2e, 0x62c,
@@ -5130,7 +5124,7 @@ static constexpr char16_t currency_symbol_data[] = {
 0x2e, 0x4e, 0x54, 0x24, 0xe3f, 0x73, 0x6f, 0x2bb, 0x6d, 0x441, 0x45e, 0x43c
 };
 
-static constexpr char16_t currency_display_name_data[] = {
+static inline constexpr char16_t currency_display_name_data[] = {
 0x53, 0x75, 0x69, 0x64, 0x2d, 0x41, 0x66, 0x72, 0x69, 0x6b, 0x61, 0x61,
 0x6e, 0x73, 0x65, 0x20, 0x72, 0x61, 0x6e, 0x64, 0x4e, 0x61, 0x6d, 0x69,
 0x62, 0x69, 0x65, 0x73, 0x65, 0x20, 0x64, 0x6f, 0x6c, 0x6c, 0x61, 0x72,
@@ -5615,7 +5609,7 @@ static constexpr char16_t currency_display_name_data[] = {
 0x72, 0x61, 0x74, 0x20, 0x74, 0x69, 0x20, 0x1e6d, 0x6e, 0x6b, 0x101
 };
 
-static constexpr char16_t currency_format_data[] = {
+static inline constexpr char16_t currency_format_data[] = {
 0x25, 0x31, 0x25, 0x32, 0x25, 0x31, 0xa0, 0x25, 0x32, 0x28, 0x25, 0x32,
 0x25, 0x31, 0x29, 0x25, 0x32, 0xa0, 0x25, 0x31, 0x28, 0x25, 0x31, 0xa0,
 0x25, 0x32, 0x29, 0x200f, 0x25, 0x31, 0xa0, 0x25, 0x32, 0x61c, 0x25, 0x31,
@@ -5629,7 +5623,7 @@ static constexpr char16_t currency_format_data[] = {
 0x25, 0x32
 };
 
-static constexpr char16_t endonyms_data[] = {
+static inline constexpr char16_t endonyms_data[] = {
 0x410, 0x525, 0x441, 0x448, 0x4d9, 0x430, 0x49a, 0x44b, 0x440, 0x4ad, 0x442, 0x4d9,
 0x44b, 0x43b, 0x430, 0x51, 0x61, 0x66, 0x61, 0x72, 0x4f, 0x74, 0x6f, 0x62,
 0x62, 0x69, 0x61, 0x59, 0x61, 0x62, 0x75, 0x75, 0x74, 0x69, 0x45, 0x72,
@@ -6238,7 +6232,7 @@ static constexpr char16_t endonyms_data[] = {
 0xc26, 0xc46, 0xc38, 0xc3e, 0xc02
 };
 
-static constexpr char language_name_list[] =
+static inline constexpr char language_name_list[] =
 "Default\0"
 "C\0"
 "Abkhazian\0"
@@ -6586,7 +6580,7 @@ static constexpr char language_name_list[] =
 "Kuvi\0"
 ;
 
-static constexpr quint16 language_name_index[] = {
+static inline constexpr quint16 language_name_index[] = {
      0, // AnyLanguage
      8, // C
     10, // Abkhazian
@@ -6934,7 +6928,7 @@ static constexpr quint16 language_name_index[] = {
   2913, // Kuvi
 };
 
-static constexpr char script_name_list[] =
+static inline constexpr char script_name_list[] =
 "Default\0"
 "Adlam\0"
 "Ahom\0"
@@ -7080,7 +7074,7 @@ static constexpr char script_name_list[] =
 "Hanifi Rohingya\0"
 ;
 
-static constexpr quint16 script_name_index[] = {
+static inline constexpr quint16 script_name_index[] = {
      0, // AnyScript
      8, // Adlam
     14, // Ahom
@@ -7226,7 +7220,7 @@ static constexpr quint16 script_name_index[] = {
   1361, // Hanifi
 };
 
-static constexpr char territory_name_list[] =
+static inline constexpr char territory_name_list[] =
 "Default\0"
 "Afghanistan\0"
 "Åland Islands\0"
@@ -7491,7 +7485,7 @@ static constexpr char territory_name_list[] =
 "Zimbabwe\0"
 ;
 
-static constexpr quint16 territory_name_index[] = {
+static inline constexpr quint16 territory_name_index[] = {
      0, // AnyTerritory
      8, // Afghanistan
     20, // Aland Islands
@@ -8104,7 +8098,7 @@ constexpr std::array<LanguageCodeEntry, 345> languageCodeList {
     LanguageCodeEntry {{},         {},              {},              {'k', 'x', 'v'}}, // Kuvi
 };
 
-static constexpr unsigned char script_code_list[] =
+static inline constexpr unsigned char script_code_list[] =
 "Zzzz" // AnyScript
 "Adlm" // Adlam
 "Ahom" // Ahom
@@ -8250,7 +8244,7 @@ static constexpr unsigned char script_code_list[] =
 "Rohg" // Hanifi
 ;
 
-static constexpr unsigned char territory_code_list[] =
+static inline constexpr unsigned char territory_code_list[] =
 "ZZ\0" // AnyTerritory
 "AF\0" // Afghanistan
 "AX\0" // Aland Islands
@@ -8516,8 +8510,6 @@ static constexpr unsigned char territory_code_list[] =
 ;
 
 // GENERATED PART ENDS HERE
-
-QT_WARNING_POP // QTBUG-128930
 
 QT_END_NAMESPACE
 

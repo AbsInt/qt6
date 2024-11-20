@@ -229,8 +229,9 @@ int main(int argv, char *argc[])
     parser.addOption(noCMakeCallsOption);
     settings.addOption("no-cmake-calls", "false");
 
-    QCommandLineOption docDir(QStringList() << "p",
-                              QLatin1String("Documentation path to use for the documentation hints feature"));
+    QCommandLineOption docDir(QStringList() << "d" << "doc-dir",
+                              QLatin1String("Documentation path to use for the documentation hints feature"),
+                              "path", QString());
     parser.addOption(docDir);
     settings.addOption("docDir");
 

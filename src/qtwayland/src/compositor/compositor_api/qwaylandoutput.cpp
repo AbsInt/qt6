@@ -12,7 +12,6 @@
 #include <QtWaylandCompositor/private/qwaylandcompositor_p.h>
 #include <QtWaylandCompositor/private/qwaylandview_p.h>
 #include <QtWaylandCompositor/private/qwaylandutils_p.h>
-#include <QtWaylandCompositor/private/qwaylandxdgoutputv1_p.h>
 
 #include <QtCore/QCoreApplication>
 #include <QtCore/QtMath>
@@ -127,9 +126,6 @@ void QWaylandOutputPrivate::sendGeometryInfo()
         if (resource->version() >= 2)
             send_done(resource->handle);
     }
-
-    if (xdgOutput)
-        QWaylandXdgOutputV1Private::get(xdgOutput)->sendDone();
 }
 
 void QWaylandOutputPrivate::sendMode(const Resource *resource, const QWaylandOutputMode &mode)
@@ -153,9 +149,15 @@ void QWaylandOutputPrivate::sendModesInfo()
         if (resource->version() >= 2)
             send_done(resource->handle);
     }
+}
 
-    if (xdgOutput)
-        QWaylandXdgOutputV1Private::get(xdgOutput)->sendDone();
+void QWaylandOutputPrivate::sendDone()
+{
+    const auto values = resourceMap().values();
+    for (auto *resource : values) {
+        if (resource->version() >= 2)
+            send_done(resource->handle);
+    }
 }
 
 void QWaylandOutputPrivate::handleWindowPixelSizeChanged()
@@ -816,9 +818,6 @@ void QWaylandOutput::setScaleFactor(int scale)
     }
 
     Q_EMIT scaleFactorChanged();
-
-    if (d->xdgOutput)
-        QWaylandXdgOutputV1Private::get(d->xdgOutput)->sendDone();
 }
 
 /*!

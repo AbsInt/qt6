@@ -46,6 +46,7 @@ private slots:
     void jittedStoreLocalMarksValue();
     void forInOnProxyMarksTarget();
     void allocWithMemberDataMidwayDrain();
+    void markObjectWrappersAfterMarkWeakValues();
 };
 
 tst_qv4mm::tst_qv4mm()
@@ -793,6 +794,41 @@ void tst_qv4mm::allocWithMemberDataMidwayDrain()
     // engine shutdown
     o->internalClass.set(&v4, QV4::Object::defaultInternalClass(&v4));
     QVERIFY(o); // dummy check
+}
+
+void tst_qv4mm::markObjectWrappersAfterMarkWeakValues()
+{
+    // Advance gc to just after MarkWeakValues
+    const auto setupGC = [](QV4::ExecutionEngine *v4) {
+        QCOMPARE(v4->memoryManager->gcBlocked, QV4::MemoryManager::Unblocked);
+        auto sm = v4->memoryManager->gcStateMachine.get();
+        sm->reset();
+        v4->memoryManager->gcBlocked = QV4::MemoryManager::NormalBlocked;
+        const QV4::GCState targetState = QV4::GCState(QV4::GCState::MarkWeakValues + 1);
+        while (sm->state != targetState) {
+            QV4::GCStateInfo& stateInfo = sm->stateInfoMap[int(sm->state)];
+            sm->state = stateInfo.execute(sm, sm->stateData);
+        }
+        QCOMPARE(sm->state,  targetState);
+    };
+
+    QQmlEngine engine;
+    QV4::ExecutionEngine *v4 = engine.handle();
+    setupGC(v4);
+
+    QObject *object = new QObject;
+    object->setObjectName("yep");
+    QJSEngine::setObjectOwnership(object, QJSEngine::JavaScriptOwnership);
+    engine.rootContext()->setContextProperty("prop", object);
+    (void) QV4::QObjectWrapper::wrap(v4, object);
+    QVERIFY(v4->memoryManager->tryForceGCCompletion());
+
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    QCoreApplication::processEvents();
+
+    const QVariant retrieved = engine.rootContext()->contextProperty("prop");
+    QVERIFY(qvariant_cast<QObject *>(retrieved));
+    QCOMPARE(qvariant_cast<QObject *>(retrieved)->objectName(), "yep");
 }
 
 QTEST_MAIN(tst_qv4mm)

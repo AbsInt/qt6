@@ -7,6 +7,7 @@
 \brief A tool to compile functions and expressions in QML.
 \keyword qmlsc
 \ingroup qtqml-tooling
+\ingroup qtqml-tooling-internal
 
 The QML script compiler compiles functions and expressions in QML and JavaScript
 files to a byte code that can be interpreted or Just-in-time compiled by the

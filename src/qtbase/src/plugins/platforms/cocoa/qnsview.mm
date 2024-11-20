@@ -173,6 +173,10 @@ QT_NAMESPACE_ALIAS_OBJC_CLASS(QNSViewMenuHelper);
     [[NSNotificationCenter defaultCenter] removeObserver:self];
     [m_mouseMoveHelper release];
 
+    // FIXME: Replace with __weak or someting equivalent
+    QCocoaDrag* nativeDrag = QCocoaIntegration::instance()->drag();
+    nativeDrag->viewDestroyed(self);
+
     [super dealloc];
 }
 

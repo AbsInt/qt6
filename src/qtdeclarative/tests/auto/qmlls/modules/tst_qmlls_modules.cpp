@@ -1307,6 +1307,25 @@ void tst_qmlls_modules::rangeFormatting_data()
         QTest::addRow("selectUnbalanced") << filePath << selectedRange << expectedRange
                                           << u"formatting/rangeFormatting.formatted5.qml"_s;
     }
+
+    {
+        QLspSpecification::Range selectedRange = { { 0, 1 }, { 7, 40 } };
+        QLspSpecification::Range expectedRange = { { 0, 0 }, { 7, 0 } };
+        QTest::addRow("NoNewlineAtEnd")
+                << u"formatting/WeirdNewlines.qml"_s << selectedRange << expectedRange
+                << u"formatting/WeirdNewlines.formatted.qml"_s;
+    }
+    {
+        QLspSpecification::Range selectedRange = { { 0, 1 }, { 3, 1 } };
+        QLspSpecification::Range expectedRange = { { 0, 0 }, { 7, 0 } };
+        QTest::addRow("WindowsNewlineAtEnd")
+                << u"formatting/WeirdNewlines.qml"_s << selectedRange << expectedRange
+#ifdef Q_OS_WIN
+                << u"formatting/WeirdNewlines.formatted2.windows.qml"_s;
+#else
+                << u"formatting/WeirdNewlines.formatted2.qml"_s;
+#endif
+    }
 }
 
 void tst_qmlls_modules::rangeFormatting()
@@ -1342,7 +1361,8 @@ void tst_qmlls_modules::rangeFormatting()
         QCOMPARE(text.range.start.character, expectedRange.start.character);
         QCOMPARE(text.range.end.line, expectedRange.end.line);
         QCOMPARE(text.range.end.character, expectedRange.end.character);
-        QCOMPARE(text.newText, file.readAll());
+        const QString fileContent = file.readAll();
+        QCOMPARE(text.newText, fileContent);
     };
 
     auto &&errorHandler = [&clean](auto &error) {

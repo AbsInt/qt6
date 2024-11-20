@@ -18,7 +18,7 @@ VerticalHeaderView {
 
     selectionBehavior: VerticalHeaderView.SelectionDisabled
     movableRows: true
-    onRowMoved: (index, old_row, new_row) => model.mapRow(index, new_row)
+    onRowMoved: (index, old_row, new_row) => SpreadModel.mapRow(index, new_row)
 
     selectionModel: HeaderSelectionModel {
         id: headerSelectionModel

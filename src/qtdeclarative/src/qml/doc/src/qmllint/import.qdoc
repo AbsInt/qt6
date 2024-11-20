@@ -45,12 +45,12 @@ Item {
 
 \section3 User-defined module that was not built
 
-Some tooling like \l{\QMLLS Reference}{\QMLLS} or \l{qmllint Reference}{qmllint}
+Some tooling like \l{\QMLLS} or \l{qmllint}
 can't find user-defined modules when they
 are not built. If your project defines the QML Module you are trying to import, then
 the QML tooling will not find it until you build it.
 
-\note If building the module does not help when using \l{\QMLLS Reference}{\QMLLS}, follow the
+\note If building the module does not help when using \l{\QMLLS}, follow the
 instructions in
 \l{Setting up the \QMLLS in Your Editor}{\QMLLS setup instructions}
 and make sure that you communicate the correct build folder to \QMLLS.

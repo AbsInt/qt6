@@ -313,17 +313,11 @@ bool QWaylandShmBackingStore::recreateBackBufferIfNeeded()
         QPainter painter(targetImage);
         painter.setCompositionMode(QPainter::CompositionMode_Source);
 
-        // Let painter operate in device pixels, to make it easier to compare coordinates
         const qreal sourceDevicePixelRatio = sourceImage->devicePixelRatio();
-        const qreal targetDevicePixelRatio = painter.device()->devicePixelRatio();
-        painter.scale(1.0 / targetDevicePixelRatio, 1.0 / targetDevicePixelRatio);
-
         for (const QRect &rect : buffer->dirtyRegion()) {
             QRectF sourceRect(QPointF(rect.topLeft()) * sourceDevicePixelRatio,
                               QSizeF(rect.size()) * sourceDevicePixelRatio);
-            QRectF targetRect(QPointF(rect.topLeft()) * targetDevicePixelRatio,
-                              QSizeF(rect.size()) * targetDevicePixelRatio);
-            painter.drawImage(targetRect, *sourceImage, sourceRect);
+            painter.drawImage(rect, *sourceImage, sourceRect);
         }
     }
 

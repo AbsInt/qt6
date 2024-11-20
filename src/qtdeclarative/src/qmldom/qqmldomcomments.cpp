@@ -739,12 +739,20 @@ void CommentCollector::collectComments(
             auto &commentedElement = astComments->commentedElements()[*commentNode];
             commentedElement.addComment(comment);
         } else if (const auto * const regionRef = std::get_if<RegionRef>(&elementToBeLinked.element)) {
-            MutableDomItem regionComments = m_rootItem.item()
-                                        .path(regionRef->path)
-                                        .field(Fields::comments);
-            if (auto *regionCommentsPtr = regionComments.mutableAs<RegionComments>())
-                regionCommentsPtr->addComment(comment, regionRef->regionName);
-            else
+            DomItem currentItem = m_rootItem.item().path(regionRef->path);
+            MutableDomItem regionComments = currentItem.field(Fields::comments);
+            if (auto *regionCommentsPtr = regionComments.mutableAs<RegionComments>()) {
+                const Path commentPath = regionCommentsPtr->addComment(comment, regionRef->regionName);
+
+                // update file locations with the comment region
+                const auto base = FileLocations::treeOf(currentItem);
+                const auto fileLocations =
+                        FileLocations::ensure(base, Path::Field(Fields::comments).path(commentPath),
+                                              AttachedInfo::PathType::Relative);
+
+                FileLocations::addRegion(fileLocations, MainRegion,
+                                         comment.info().sourceLocation());
+            } else
                 Q_ASSERT(false && "Cannot attach to region comments");
         } else {
             qCWarning(commentsLog)

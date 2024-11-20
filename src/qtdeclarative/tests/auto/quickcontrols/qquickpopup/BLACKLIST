@@ -24,9 +24,5 @@ opensuse-leap
 [cursorShape]
 opensuse-leap
 
-# QTBUG-126667
-[popupWindowPositioning]
-linux
-
 [popupWindowFocus]
 offscreen # QTBUG-128321

@@ -224,7 +224,9 @@ static void printHelp()
                     "\n"
                     "    --skip-install-root: Do not append INSTALL_ROOT=... to the make command.\n"
                     "\n"
-                    "    --show-logcat: Print Logcat output to stdout.\n"
+                    "    --show-logcat: Print Logcat output to stdout. If an ANR occurs during\n"
+                    "       the test run, logs from the system_server process are included.\n"
+                    "       This argument is implied if a test fails.\n"
                     "\n"
                     "    --ndk-stack: Path to ndk-stack tool that symbolizes crash stacktraces.\n"
                     "       By default, ANDROID_NDK_ROOT env var is used to deduce the tool path.\n"
@@ -357,9 +359,10 @@ static bool parseTestArgs()
     return true;
 }
 
-static bool obtainPid() {
+static int getPid(const QString &package)
+{
     QByteArray output;
-    const QStringList psArgs = { "shell"_L1, "ps | grep ' %1'"_L1.arg(g_options.package) };
+    const QStringList psArgs = { "shell"_L1, "ps | grep ' %1'"_L1.arg(package) };
     if (!execAdbCommand(psArgs, &output, false))
         return false;
 
@@ -371,14 +374,12 @@ static bool obtainPid() {
     if (columns.size() < 3)
         return false;
 
-    if (g_testInfo.pid == -1) {
-        bool ok = false;
-        int pid = columns.at(1).toInt(&ok);
-        if (ok)
-            g_testInfo.pid = pid;
-    }
+    bool ok = false;
+    int pid = columns.at(1).toInt(&ok);
+    if (ok)
+        return pid;
 
-    return true;
+    return -1;
 }
 
 static QString runCommandAsUserArgs(const QString &cmd)
@@ -409,7 +410,8 @@ static void waitForStarted()
     // wait to start and set PID
     QDeadlineTimer startDeadline(10000);
     do {
-        if (obtainPid())
+        g_testInfo.pid = getPid(g_options.package);
+        if (g_testInfo.pid > 0)
             break;
         QThread::msleep(100);
     } while (!startDeadline.hasExpired() && !g_testInfo.isTestRunnerInterrupted.load());
@@ -576,34 +578,6 @@ static bool pullResults()
     return true;
 }
 
-void printLogcat(const QString &formattedTime)
-{
-    QStringList logcatArgs = { "logcat"_L1, "-v"_L1, "brief"_L1 };
-
-    if (qEnvironmentVariable("QTEST_ENVIRONMENT") != "ci"_L1)
-        logcatArgs << "-v"_L1 << "color"_L1;
-
-    if (g_testInfo.sdkVersion <= 23 || g_testInfo.pid == -1)
-        logcatArgs << "-t"_L1 << formattedTime;
-    else
-        logcatArgs << "-d"_L1 << "--pid=%1"_L1.arg(QString::number(g_testInfo.pid));
-
-    QByteArray logcat;
-    if (!execAdbCommand(logcatArgs, &logcat, false)) {
-        qCritical() << "Error: failed to fetch logcat of the test";
-        return;
-    }
-
-    if (logcat.isEmpty()) {
-        qWarning() << "The retrieved logcat is empty";
-        return;
-    }
-
-    qDebug() << "********** logcat dump **********";
-    qDebug().noquote() << logcat;
-    qDebug() << "********** End logcat dump **********";
-}
-
 static QString getAbiLibsPath()
 {
     QString libsPath = "%1/libs/"_L1.arg(g_options.buildPath);
@@ -632,30 +606,23 @@ static QString getAbiLibsPath()
     return libsPath + QString::fromUtf8(abi);
 }
 
-void printLogcatCrashBuffer(const QString &formattedTime)
+void printLogcatCrash(const QByteArray &logcat)
 {
-    QStringList adbCrashArgs = {"logcat"_L1, "-d"_L1, "-b"_L1, "crash"_L1, "-t"_L1, formattedTime};
-    QByteArray crashOutput;
-
-    if (!execAdbCommand(adbCrashArgs, &crashOutput, false)) {
-        qCritical() << "Error: failed to run adb logcat crash command";
-        return;
-    }
-
     // No crash report, do nothing
-    if (crashOutput.isEmpty())
+    if (logcat.isEmpty())
         return;
 
+    QByteArray crashLogcat(logcat);
     if (!g_options.ndkStackPath.isEmpty()) {
         QProcess ndkStackProc;
         ndkStackProc.start(g_options.ndkStackPath, { "-sym"_L1, getAbiLibsPath() });
 
         if (ndkStackProc.waitForStarted()) {
-            ndkStackProc.write(crashOutput);
+            ndkStackProc.write(crashLogcat);
             ndkStackProc.closeWriteChannel();
 
             if (ndkStackProc.waitForReadyRead())
-                crashOutput = ndkStackProc.readAllStandardOutput();
+                crashLogcat = ndkStackProc.readAllStandardOutput();
 
             ndkStackProc.terminate();
             if (!ndkStackProc.waitForFinished())
@@ -669,10 +636,91 @@ void printLogcatCrashBuffer(const QString &formattedTime)
                       "using the ANDROID_NDK_ROOT environment variable.";
     }
 
-    if (!crashOutput.startsWith("********** Crash dump"))
+    if (!crashLogcat.startsWith("********** Crash dump"))
         qDebug() << "********** Crash dump: **********";
-    qDebug().noquote() << crashOutput;
+    qDebug().noquote() << crashLogcat.trimmed();
     qDebug() << "********** End crash dump **********";
+}
+
+void analyseLogcat(const QString &timeStamp, int *exitCode)
+{
+    QStringList logcatArgs = { "shell"_L1, "logcat"_L1, "-t"_L1, "'%1'"_L1.arg(timeStamp),
+                               "-v"_L1, "brief"_L1 };
+
+    const bool useColor = qEnvironmentVariable("QTEST_ENVIRONMENT") != "ci"_L1;
+    if (useColor)
+        logcatArgs << "-v"_L1 << "color"_L1;
+
+    QByteArray logcat;
+    if (!execAdbCommand(logcatArgs, &logcat, false)) {
+        qCritical() << "Error: failed to fetch logcat of the test";
+        return;
+    }
+
+    if (logcat.isEmpty()) {
+        qWarning() << "The retrieved logcat is empty";
+        return;
+    }
+
+    const QByteArray crashMarker("*** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***");
+    int crashMarkerIndex = logcat.indexOf(crashMarker);
+    QByteArray crashLogcat;
+
+    if (crashMarkerIndex != -1) {
+        crashLogcat = logcat.mid(crashMarkerIndex);
+        logcat = logcat.left(crashMarkerIndex);
+    }
+
+    // Check for ANRs
+    const bool anrOccurred = logcat.contains("ANR in %1"_L1.arg(g_options.package).toUtf8());
+    if (anrOccurred) {
+        // Treat a found ANR as a test failure.
+        *exitCode = *exitCode < 1 ? 1 : *exitCode;
+        qCritical("An ANR has occurred while running the test %s. The logcat will include "
+                  "additional logs from the system_server process.",
+                  qPrintable(g_options.package));
+    }
+
+    int systemServerPid = getPid("system_server"_L1);
+
+    static const QRegularExpression logcatRegEx{
+        "(?:^\\x1B\\[[0-9]+m)?" // color
+        "(\\w)/"                // message type  1. capture
+        ".*"                    // source
+        "(\\(\\s*\\d*\\)):"     // pid           2. capture
+        "\\s*"
+        ".*"                    // message
+        "(?:\\x1B\\[[0-9]+m)?"  // color
+        "[\\n\\r]*$"_L1
+    };
+
+    QByteArrayList testLogcat;
+    for (const QByteArray &line : logcat.split(u'\n')) {
+        QRegularExpressionMatch match = logcatRegEx.match(QString::fromUtf8(line));
+        if (match.hasMatch()) {
+            const QString msgType = match.captured(1);
+            const QString pidStr = match.captured(2);
+            const int capturedPid = pidStr.mid(1, pidStr.size() - 2).trimmed().toInt();
+            if (capturedPid == g_testInfo.pid || msgType == u'F')
+                testLogcat.append(line);
+            else if (anrOccurred && capturedPid == systemServerPid)
+                testLogcat.append(line);
+        } else {
+            // If we can't match then just print everything
+            testLogcat.append(line);
+        }
+    }
+
+    // If we have a failure, attempt to print both logcat and the crash buffer which
+    // includes the crash stacktrace that is not included in the default logcat.
+    if (g_options.showLogcatOutput || *exitCode != 0) {
+        qDebug() << "********** logcat dump **********";
+        qDebug().noquote() << testLogcat.join(u'\n').trimmed();
+        qDebug() << "********** End logcat dump **********";
+    }
+
+    if (!crashLogcat.isEmpty() && *exitCode != 0)
+        printLogcatCrash(crashLogcat);
 }
 
 static QString getCurrentTimeString()
@@ -814,8 +862,10 @@ int main(int argc, char *argv[])
     if (!g_testInfo.isPackageInstalled)
         return EXIT_ERROR;
 
-    // start the tests
-    const QString formattedTime = getCurrentTimeString();
+    // Pre test start
+    const QString formattedStartTime = getCurrentTimeString();
+
+    // Start the test
     if (!execAdbCommand(g_options.amStarttestArgs, nullptr))
         return EXIT_ERROR;
 
@@ -827,17 +877,13 @@ int main(int argc, char *argv[])
 
     waitForFinished();
 
+    // Post test run
     if (!stopStdoutLogger())
         return EXIT_ERROR;
 
     int exitCode = testExitCode();
 
-    // If we have a failure, attempt to print both logcat and the crash buffer which
-    // includes the crash stacktrace that is not included in the default logcat.
-    if (exitCode != 0 || g_options.showLogcatOutput)
-        printLogcat(formattedTime);
-    if (exitCode != 0)
-        printLogcatCrashBuffer(formattedTime);
+    analyseLogcat(formattedStartTime, &exitCode);
 
     exitCode = pullResults() ? exitCode : EXIT_ERROR;
 

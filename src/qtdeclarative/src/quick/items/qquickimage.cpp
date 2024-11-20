@@ -25,7 +25,15 @@ QQuickImageTextureProvider::QQuickImageTextureProvider()
 void QQuickImageTextureProvider::updateTexture(QSGTexture *texture) {
     if (m_texture == texture)
         return;
+
+    if (m_texture)
+        disconnect(m_texture, &QSGTexture::destroyed, this, nullptr);
+
     m_texture = texture;
+
+    if (m_texture)
+        connect(m_texture, &QSGTexture::destroyed, this, [this]() { updateTexture(nullptr); });
+
     emit textureChanged();
 }
 

@@ -902,6 +902,11 @@ private slots:
         DomItem a = rootQmlObject.path(".bindings[\"a\"][0].value.scriptElement.value");
         QCOMPARE(a.value().toDouble(), 42);
 
+        auto aLoc = FileLocations::treeOf(rootQmlObject.path(".bindings[\"a\"][0]"));
+        QVERIFY(aLoc);
+        QCOMPARE(aLoc->info().fullRegion.startLine, 7);
+        QCOMPARE(aLoc->info().fullRegion.startColumn, 19);
+
         DomItem b = rootQmlObject.path(".bindings[\"b\"][0].value.scriptElement.identifier");
         QCOMPARE(b.value().toString(), "a");
 
@@ -4034,8 +4039,9 @@ private slots:
         {
             auto checkIdentifier = [](const DomItem &component, const QStringView value) {
                 QVERIFY(component);
-                QCOMPARE(component.internalKind(), DomType::ScriptIdentifierExpression);
-                QCOMPARE(component.value().toString(), value);
+                QCOMPARE(component.internalKind(), DomType::ScriptTemplateExpressionPart);
+                QCOMPARE(component[Fields::expression].internalKind(), DomType::ScriptIdentifierExpression);
+                QCOMPARE(component[Fields::expression].value().toString(), value);
             };
             auto checkLiteral = [](const DomItem &component, const QStringView value) {
                 QVERIFY(component);
@@ -4049,6 +4055,7 @@ private slots:
                                                     .field(Fields::initializer);
                 QVERIFY(initializer);
                 QCOMPARE(initializer.internalKind(), DomType::ScriptTemplateLiteral);
+
                 const DomItem components = initializer.field(Fields::components);
                 QVERIFY(components);
 
@@ -4066,6 +4073,199 @@ private slots:
                     checkLiteral(components.index(currentIndex++), u"e");
             }
         }
+    }
+
+    static QString fileContent(const QString& path)
+    {
+        QFile file(path);
+        [&file] () { QVERIFY(file.open(QFile::ReadOnly)); }();
+        return file.readAll();
+    }
+
+    static SourceLocation fromText(QStringView code, quint32 line, quint32 column, quint32 length)
+    {
+        auto offset = SourceLocation::offsetFrom(code, line, column);
+        return SourceLocation {offset, length, line, column};
+    }
+
+    void templateLiteralExpression_data()
+    {
+        QTest::addColumn<int>("variableIndex");
+        QTest::addColumn<SourceLocation>("expectedLeftBacktick");
+        QTest::addColumn<SourceLocation>("expectedRightBacktick");
+
+        const QString code = fileContent(baseDir + u"/templateLiterals.qml"_s);
+
+        QTest::addRow("normality") << 0 << fromText(code, 7, 25, 1) << fromText(code, 7, 37, 1);
+        QTest::addRow("noHeadNoTail")
+                << 3 << fromText(code, 10, 28, 1) << fromText(code, 10, 38, 1);
+        QTest::addRow("empty") << 4 << fromText(code, 11, 21, 1) << fromText(code, 11, 22, 1);
+        QTest::addRow("manyLines2") << 8 << fromText(code, 17, 26, 1) << fromText(code, 19, 1, 1);
+    }
+
+    void templateLiteralExpression()
+    {
+        QFETCH(int, variableIndex);
+        QFETCH(SourceLocation, expectedLeftBacktick);
+        QFETCH(SourceLocation, expectedRightBacktick);
+
+        using namespace Qt::StringLiterals;
+        const QString testFile = baseDir + u"/templateLiterals.qml"_s;
+        const DomItem fileObject = rootQmlObjectFromFile(testFile, qmltypeDirs).fileObject();
+        const DomItem component = fileObject.field(Fields::components)
+                .key(QString())
+                .index(0)
+                .field(Fields::objects)
+                .index(0)
+                .field(Fields::methods)
+                .key(u"f"_s)
+                .index(0)
+                .field(Fields::body)
+                .field(Fields::scriptElement)
+                .field(Fields::statements)
+                .index(variableIndex)
+                .field(Fields::declarations)
+                .index(0)
+                .field(Fields::initializer);
+
+        QVERIFY(component);
+        QCOMPARE(component.internalKind(), DomType::ScriptTemplateLiteral);
+
+        auto fileLocations = FileLocations::fileLocationsOf(component);
+
+        const auto left = fileLocations->regions[FileLocationRegion::LeftBacktickTokenRegion];
+        QCOMPARE(left, expectedLeftBacktick);
+
+        const auto right = fileLocations->regions[FileLocationRegion::RightBacktickTokenRegion];
+        QCOMPARE(right, expectedRightBacktick);
+
+        QCOMPARE(fileLocations->regions.size(), 3); // left and right "`" and "main" region
+    }
+    void templateLiteralExpressionParts_data()
+    {
+        QTest::addColumn<int>("variableIndex");
+        QTest::addColumn<int>("literalPartIndex");
+        QTest::addColumn<SourceLocation>("expectedDollarLeftBrace");
+        QTest::addColumn<SourceLocation>("expectedRightBrace");
+
+        const QString code = fileContent(baseDir + u"/templateLiterals.qml"_s);
+
+        QTest::addRow("bInNormality")
+                << 0 << 1 << fromText(code, 7, 27, 2) << fromText(code, 7, 30, 1);
+        QTest::addRow("bInNohead")
+                << 1 << 0 << fromText(code, 8, 23, 2) << fromText(code, 8, 26, 1);
+        QTest::addRow("dInNoTail")
+                << 2 << 3 << fromText(code, 9, 29, 2) << fromText(code, 9, 32, 1);
+
+        QTest::addRow("helloWorldInmanyLines2")
+                << 8 << 1 << fromText(code, 18, 8, 2) << fromText(code, 18, 20, 1);
+    }
+
+    void templateLiteralExpressionParts()
+    {
+        QFETCH(int, variableIndex);
+        QFETCH(int, literalPartIndex);
+        QFETCH(SourceLocation, expectedDollarLeftBrace);
+        QFETCH(SourceLocation, expectedRightBrace);
+
+        using namespace Qt::StringLiterals;
+        const QString testFile = baseDir + u"/templateLiterals.qml"_s;
+        const DomItem fileObject = rootQmlObjectFromFile(testFile, qmltypeDirs).fileObject();
+        const DomItem component = fileObject.field(Fields::components)
+                .key(QString())
+                .index(0)
+                .field(Fields::objects)
+                .index(0)
+                .field(Fields::methods)
+                .key(u"f"_s)
+                .index(0)
+                .field(Fields::body)
+                .field(Fields::scriptElement)
+                .field(Fields::statements)
+                .index(variableIndex)
+                .field(Fields::declarations)
+                .index(0)
+                .field(Fields::initializer)
+                .field(Fields::components)
+                .index(literalPartIndex);
+
+        QVERIFY(component);
+        QCOMPARE(component.internalKind(), DomType::ScriptTemplateExpressionPart);
+
+        auto fileLocations = FileLocations::fileLocationsOf(component);
+
+        const auto left = fileLocations->regions[FileLocationRegion::DollarLeftBraceTokenRegion];
+        QCOMPARE(left, expectedDollarLeftBrace);
+
+        const auto right = fileLocations->regions[FileLocationRegion::RightBraceRegion];
+        QCOMPARE(right, expectedRightBrace);
+
+        QCOMPARE(fileLocations->regions.size(), 3); // "${", "}" and "main" region
+    }
+
+    void templateLiteralStringParts_data()
+    {
+        QTest::addColumn<int>("variableIndex");
+        QTest::addColumn<int>("literalPartIndex");
+        QTest::addColumn<SourceLocation>("expectedLocation");
+
+        const QString code = fileContent(baseDir + u"/templateLiterals.qml"_s);
+
+        QTest::addRow("aInNormality") << 0 << 0 << fromText(code, 7, 26, 1);
+        QTest::addRow("cInNormality") << 0 << 2 << fromText(code, 7, 31, 1);
+        QTest::addRow("eInNormality") << 0 << 4 << fromText(code, 7, 36, 1);
+        const constexpr quint32 newlineSize =
+        #ifdef Q_OS_WIN
+                2;
+        #else
+                1;
+        #endif
+        QTest::addRow("manyLinesFirstPart")
+                << 5 << 0 << fromText(code, 12, 26, 18 + 2 * newlineSize);
+        QTest::addRow("manyLines2FirstPart") << 8 << 0 << fromText(code, 17, 27, 13 + newlineSize);
+        QTest::addRow("manyLines2LastPart") << 8 << 2 << fromText(code, 18, 21, newlineSize);
+    }
+
+    void templateLiteralStringParts()
+    {
+        QFETCH(int, variableIndex);
+        QFETCH(int, literalPartIndex);
+        QFETCH(SourceLocation, expectedLocation);
+
+        using namespace Qt::StringLiterals;
+        const QString testFile = baseDir + u"/templateLiterals.qml"_s;
+        const DomItem fileObject = rootQmlObjectFromFile(testFile, qmltypeDirs).fileObject();
+        const DomItem component = fileObject.field(Fields::components)
+                .key(QString())
+                .index(0)
+                .field(Fields::objects)
+                .index(0)
+                .field(Fields::methods)
+                .key(u"f"_s)
+                .index(0)
+                .field(Fields::body)
+                .field(Fields::scriptElement)
+                .field(Fields::statements)
+                .index(variableIndex)
+                .field(Fields::declarations)
+                .index(0)
+                .field(Fields::initializer)
+                .field(Fields::components)
+                .index(literalPartIndex);
+
+        QVERIFY(component);
+        QCOMPARE(component.internalKind(), DomType::ScriptTemplateStringPart);
+
+        auto fileLocations = FileLocations::fileLocationsOf(component);
+
+        const auto location = fileLocations->regions[FileLocationRegion::MainRegion];
+        qDebug() << location.startLine;
+        qDebug() << location.startColumn;
+        qDebug() << location.offset;
+        qDebug() << location.length;
+        QCOMPARE(location, expectedLocation);
+
+        QCOMPARE(fileLocations->regions.size(), 1); // "main" region
     }
 
     void newExpression()
@@ -4343,6 +4543,67 @@ private slots:
         envPtr->setLoadPaths(QStringList { baseDir + u"/buildFolderWithQrc"_s });
         QVERIFY(!semanticAnalysis.m_mapper->isEmpty());
         QVERIFY(semanticAnalysis.m_mapper->isFile(u"/qt/qml/MyModule/qml/HelloWorld.qml"_s));
+    }
+
+    void commentsFileLocations()
+    {
+        const QString testFile = baseDir + u"/Comments.qml"_s;
+        const DomItem fileLocations = rootQmlObjectFromFile(testFile, qmltypeDirs).fileObject().fileLocationsTree();
+        const DomItem commentsForItem = fileLocations
+                .field(Fields::subItems).key(u".components")
+                .field(Fields::subItems).key(u"[\"\"]")
+                .field(Fields::subItems).key(u"[0]")
+                .field(Fields::subItems).key(u".objects")
+                .field(Fields::subItems).key(u"[0]")
+                .field(Fields::subItems).key(u".children")
+                .field(Fields::subItems).key(u"[0]")
+                .field(Fields::subItems).key(u".comments")
+                .field(Fields::subItems).key(u".regionComments")
+                .field(Fields::subItems);
+
+        QVERIFY(commentsForItem);
+        {
+            // Hello World! comment
+            const FileLocations *preComment = commentsForItem
+                    .key(u"[\"IdentifierRegion\"]")
+                    .field(Fields::subItems)
+                    .key(u".preComments")
+                    .field(Fields::subItems)
+                    .key(u"[0]")
+                    .field(Fields::infoItem)
+                    .as<FileLocations>();
+            QVERIFY(preComment);
+            QCOMPARE(preComment->fullRegion.startLine, 4);
+            QCOMPARE(preComment->fullRegion.startColumn, 5);
+        }
+        {
+            // Goodbye World! comment
+            const FileLocations *postComment = commentsForItem
+                    .key(u"[\"MainRegion\"]")
+                    .field(Fields::subItems)
+                    .key(u".postComments")
+                    .field(Fields::subItems)
+                    .key(u"[0]")
+                    .field(Fields::infoItem)
+                    .as<FileLocations>();
+            QVERIFY(postComment);
+            QCOMPARE(postComment->fullRegion.startLine, 6);
+            QCOMPARE(postComment->fullRegion.startColumn, 5);
+        }
+        {
+            // multi line comment
+            const FileLocations *postComment = commentsForItem
+                    .key(u"[\"MainRegion\"]")
+                    .field(Fields::subItems)
+                    .key(u".postComments")
+                    .field(Fields::subItems)
+                    .key(u"[1]")
+                    .field(Fields::infoItem)
+                    .as<FileLocations>();
+            QVERIFY(postComment);
+            QCOMPARE(postComment->fullRegion.startLine, 7);
+            QCOMPARE(postComment->fullRegion.startColumn, 5);
+        }
     }
 
 private:

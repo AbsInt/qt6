@@ -3,9 +3,11 @@
 
 /*!
 \page qtqml-tooling-qmlls.html
-\title \QMLLS Reference
-\brief Overview of \QMLLS (qmlls).
+\title \QMLLS
+\keyword \QMLLS Reference
+\brief A tool that helps you write code in your favorite LSP-supporting editor.
 \ingroup qtqml-tooling
+\ingroup qtqml-tooling-devtools
 
 \QMLLS is a tool shipped with Qt that helps you write code
 in your favorite (LSP-supporting) editor.
@@ -23,7 +25,7 @@ Currently, it enables your editor to:
     \li Get help from Qt Documentation
 \endlist
 
-\note qmlls is currently in development, see
+\note \c qmlls is currently in development, see
 \l{#Known Limitations}{Known Limitations} for more details.
 
 \section1 Supported Features
@@ -32,7 +34,7 @@ Currently, it enables your editor to:
 
 \QMLLS can automatically lint opened QML files
 and display warnings or errors straight in the editor. See
-\l{qmllint Reference}{qmllint} for more information about the linting process.
+\l{qmllint} for more information about the linting process.
 
 \section2 Formatting
 
@@ -173,6 +175,5 @@ The QML code model in the \QMLLS does not yet
 support all of the JavaScript language constructs, which means that
 some features like navigating to definition and finding usages might not
 work on these language constructs.
-
 
 */

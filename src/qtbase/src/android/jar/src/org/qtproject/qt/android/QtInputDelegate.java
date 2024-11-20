@@ -80,6 +80,8 @@ class QtInputDelegate implements QtInputConnection.QtInputConnectionListener, Qt
     void initInputMethodManager(Activity activity)
     {
         m_imm = (InputMethodManager) activity.getSystemService(Context.INPUT_METHOD_SERVICE);
+        if (m_imm == null)
+            Log.w(TAG, "getSystemService() returned a null InputMethodManager instance");
     }
 
     // QtInputInterface implementation begin
@@ -87,12 +89,14 @@ class QtInputDelegate implements QtInputConnection.QtInputConnectionListener, Qt
     public void updateSelection(final int selStart, final int selEnd,
                                 final int candidatesStart, final int candidatesEnd)
     {
-        QtNative.runAction(() -> {
-            if (m_imm != null) {
-                m_imm.updateSelection(m_currentEditText, selStart, selEnd,
-                        candidatesStart, candidatesEnd);
-            }
-        });
+        if (m_imm != null) {
+            QtNative.runAction(() -> {
+                if (m_imm != null) {
+                    m_imm.updateSelection(m_currentEditText, selStart, selEnd,
+                            candidatesStart, candidatesEnd);
+                }
+            });
+        }
     }
 
     @Override
@@ -100,6 +104,9 @@ class QtInputDelegate implements QtInputConnection.QtInputConnectionListener, Qt
                                      final int x, final int y, final int width, final int height,
                                      final int inputHints, final int enterKeyType)
     {
+        if (m_imm == null)
+            return;
+
         QtNative.runAction(() -> {
             if (m_imm == null || m_currentEditText == null)
                 return;
@@ -174,6 +181,8 @@ class QtInputDelegate implements QtInputConnection.QtInputConnectionListener, Qt
         if (m_imm == null || m_currentEditText == null)
             return;
         m_currentEditText.postDelayed(() -> {
+            if (m_imm == null || m_currentEditText == null)
+                return;
             m_imm.restartInput(m_currentEditText);
             m_currentEditText.m_optionsChanged = false;
         }, 5);
@@ -182,6 +191,9 @@ class QtInputDelegate implements QtInputConnection.QtInputConnectionListener, Qt
     @Override
     public void hideSoftwareKeyboard()
     {
+        if (m_imm == null || m_currentEditText == null)
+            return;
+
         m_isKeyboardHidingAnimationOngoing = true;
         QtNative.runAction(() -> {
             if (m_imm == null || m_currentEditText == null)

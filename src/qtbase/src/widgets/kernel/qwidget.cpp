@@ -1581,6 +1581,7 @@ QWidget::~QWidget()
 #if QT_CONFIG(graphicseffect)
     delete d->graphicsEffect;
 #endif
+    d->deleteExtra();
 
     d->isWidget = false;
 }
