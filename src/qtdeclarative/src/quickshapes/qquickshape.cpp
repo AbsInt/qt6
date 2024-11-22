@@ -531,6 +531,22 @@ void QQuickShapePathPrivate::_q_fillGradientChanged()
     texture provider (such as a \l {Item Layers} {layered item}, a \l{ShaderEffectSource} or an
     \l{Image}). If it is not a valid texture provider, this property will be ignored.
 
+    The visual parent of \c fillItem must be a Qt Quick \l{Item}. In particular, since \c{ShapePath}
+    is not an \l{Item}, its children cannot be used as fill items. Manually setting the
+    \c{fillItem}'s parent is needed when it is created as a child of the \c{ShapePath}.
+
+    For instance, creating an \l{Image} object directly in the \c{fillItem} property assignment will
+    make it a child of the \c{ShapePath}. In this case, its parent must be set manually. In the
+    following example we use the window's \l{Window::contentItem}{contentItem} as the parent.
+
+    \code
+        fillItem: Image {
+            visible: false
+            source: "contents.png"
+            parent: window.contentItem
+        }
+    \endcode
+
     \note When using a layered item as a \c fillItem, you may see pixelation effects when
     transforming the fill. Setting the \l {QtQuick::Item::}{layer.smooth} property to true will
     give better visual results in this case.

@@ -42,7 +42,7 @@ installPackages+=(git)
 installPackages+=(p7zip-full)
 
 # Packages needed for RTA and Squish
-installPackages+=(default-jdk)
+installPackages+=(openjdk-17-jdk)
 installPackages+=(gcc)
 
 echo "Running update for apt"
