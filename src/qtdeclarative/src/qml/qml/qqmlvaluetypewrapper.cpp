@@ -692,6 +692,22 @@ bool QQmlValueTypeWrapper::lookupSetter(
     return QV4::Lookup::setterFallback(l, engine, object, value);
 }
 
+bool QQmlValueTypeWrapper::lookupSetterAsVariant(
+        Lookup *l, ExecutionEngine *engine, Value &object, const Value &value)
+{
+    if (&QQmlValueTypeWrapper::lookupSetterAsVariant == &QQmlValueTypeWrapper::lookupSetter) {
+        // Certain compilers, e.g. MSVC, will "helpfully" deduplicate methods that are completely
+        // equal. As a result, the pointers are the same, which wreaks havoc on the logic that
+        // decides how to retrieve the property.
+        qFatal("Your C++ compiler is broken.");
+    }
+
+    // This setter marks the presence of a value type setter lookup with QVariant conversion.
+    // It falls back to the fallback lookup when run through the interpreter, but AOT-compiled
+    // code can get clever with it.
+    return lookupSetter(l, engine, object, value);
+}
+
 bool QQmlValueTypeWrapper::virtualResolveLookupSetter(Object *object, ExecutionEngine *engine, Lookup *lookup,
                                                       const Value &value)
 {
@@ -831,7 +847,15 @@ bool QQmlValueTypeWrapper::virtualPut(Managed *m, PropertyKey id, const Value &v
         v = v.toInt();
 
     void *gadget = r->d()->gadgetPtr();
-    property.writeOnGadget(gadget, std::move(v));
+    const QMetaType type = v.metaType();
+    if (!property.writeOnGadget(gadget, std::move(v))) {
+        const QString error = QLatin1String("Cannot assign ") +
+                QLatin1String(type.name()) +
+                QLatin1String(" to ") +
+                QLatin1String(property.metaType().name());
+        scope.engine->throwError(error);
+        return true;
+    }
 
     if (heapObject)
         r->d()->writeBack(pd.coreIndex());

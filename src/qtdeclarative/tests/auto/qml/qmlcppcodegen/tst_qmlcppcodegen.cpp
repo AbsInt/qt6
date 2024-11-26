@@ -4192,7 +4192,8 @@ void tst_QmlCppCodegen::propertyOfParent()
 void tst_QmlCppCodegen::qmlUsing()
 {
     QQmlEngine engine;
-    QQmlComponent component(&engine, QUrl(u"qrc:/qt/qml/TestTypes/qmlUsing.qml"_s));
+    const QString url = u"qrc:/qt/qml/TestTypes/qmlUsing.qml"_s;
+    QQmlComponent component(&engine, QUrl(url));
     QVERIFY2(component.isReady(), component.errorString().toUtf8());
     QScopedPointer<QObject> object(component.create());
     QVERIFY(!object.isNull());
@@ -4210,11 +4211,22 @@ void tst_QmlCppCodegen::qmlUsing()
     QCOMPARE(u->property("myA2").toInt(), 7);
     QCOMPARE(u->property("myB2").toInt(), 5);
 
+    QCOMPARE(u->u(), 9u);
+    QCOMPARE(u->val().u(), 26u);
+    QCOMPARE(u->property("valU").toUInt(), 26u);
+    QCOMPARE(u->property("myU").toUInt(), 9u);
+    QCOMPARE(u->property("myU2").toUInt(), 9u);
+
     QList<int> as;
     QList<int> bs;
+    QList<uint> us;
     QObject::connect(u, &UsingUserObject::aChanged, this, [&]() {
         as.append(u->a());
         bs.append(u->getB());
+    });
+
+    QObject::connect(u, &UsingUserObject::uChanged, this, [&]() {
+        us.append(u->u());
     });
 
     QMetaObject::invokeMethod(object.data(), "twiddle");
@@ -4225,6 +4237,9 @@ void tst_QmlCppCodegen::qmlUsing()
     const QList<int> expectedB = { 5, 58 };
     QCOMPARE(bs, expectedB);
 
+    const QList<uint> expectedU = { 62, 63 };
+    QCOMPARE(us, expectedU);
+
     QCOMPARE(u->a(), 59);
     QCOMPARE(u->getB(), 60);
     QCOMPARE(u->val().a(), 55);
@@ -4234,6 +4249,65 @@ void tst_QmlCppCodegen::qmlUsing()
     QCOMPARE(u->property("myB").toInt(), 5);  // Remains 5, due to lack of signaling
     QCOMPARE(u->property("myA2").toInt(), 59);
     QCOMPARE(u->property("myB2").toInt(), 5); // Remains 5, due to lack of signaling
+
+    QCOMPARE(u->u(), 63u);
+    QCOMPARE(u->val().u(), 61u);
+    QCOMPARE(u->property("valU").toUInt(), 61u);
+    QCOMPARE(u->property("myU").toUInt(), 63u);
+    QCOMPARE(u->property("myU2").toUInt(), 63u);
+
+
+    QMetaObject::invokeMethod(object.data(), "burn");
+
+    const uint huge = 4294967295;
+
+    const QList<uint> expectedU2 = { 62, 63, huge, 64, huge };
+    QCOMPARE(us, expectedU2);
+
+    QCOMPARE(u->u(), huge);
+    QCOMPARE(u->val().u(), huge);
+    QCOMPARE(u->property("valU").toUInt(), huge);
+    QCOMPARE(u->property("myU").toUInt(), huge);
+    QCOMPARE(u->property("myU2").toUInt(), huge);
+
+    QMetaObject::invokeMethod(object.data(), "twiddle");
+
+    const QString iError = u" Error: Cannot assign QString to TransparentWrapper<int,int_tag>"_s;
+    const QString uError = u" Error: Cannot assign QString to TransparentWrapper<uint,int_tag>"_s;
+
+    QTest::ignoreMessage(QtWarningMsg, qPrintable(url + u":46:"_s + iError));
+    QMetaObject::invokeMethod(object.data(), "impossibleValA");
+    QCOMPARE(u->val().a(), 55);
+    QCOMPARE(u->property("valA").toInt(), 55);
+
+    QTest::ignoreMessage(QtWarningMsg, qPrintable(url + u":50:"_s + iError));
+    QMetaObject::invokeMethod(object.data(), "impossibleA");
+    QCOMPARE(u->a(), 59);
+    QCOMPARE(u->property("myA").toInt(), 59);
+    QCOMPARE(u->property("myA2").toInt(), 59);
+
+    QTest::ignoreMessage(QtWarningMsg, qPrintable(url + u":54:"_s + iError));
+    QMetaObject::invokeMethod(object.data(), "impossibleSelfA");
+    QCOMPARE(u->a(), 59);
+    QCOMPARE(u->property("myA").toInt(), 59);
+    QCOMPARE(u->property("myA2").toInt(), 59);
+
+    QTest::ignoreMessage(QtWarningMsg, qPrintable(url + u":58:"_s + uError));
+    QMetaObject::invokeMethod(object.data(), "impossibleValU");
+    QCOMPARE(u->val().u(), 61u);
+    QCOMPARE(u->property("valU").toUInt(), 61u);
+
+    QTest::ignoreMessage(QtWarningMsg, qPrintable(url + u":62:"_s + uError));
+    QMetaObject::invokeMethod(object.data(), "impossibleU");
+    QCOMPARE(u->u(), 63u);
+    QCOMPARE(u->property("myU").toUInt(), 63u);
+    QCOMPARE(u->property("myU2").toUInt(), 63u);
+
+    QTest::ignoreMessage(QtWarningMsg, qPrintable(url + u":66:"_s + uError));
+    QMetaObject::invokeMethod(object.data(), "impossibleSelfU");
+    QCOMPARE(u->u(), 63u);
+    QCOMPARE(u->property("myU").toUInt(), 63u);
+    QCOMPARE(u->property("myU2").toUInt(), 63u);
 }
 
 void tst_QmlCppCodegen::reduceWithNullThis()

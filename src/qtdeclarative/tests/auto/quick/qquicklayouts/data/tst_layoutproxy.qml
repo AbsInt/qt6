@@ -88,6 +88,50 @@ Item {
 
         }
 
+        Component {
+            id: layout_destroyProxy_Component
+            Item {
+                id: item
+                width: 100
+                height: 100
+
+                property Item rect1: Rectangle {
+                    id: redRectangle
+                    objectName: "red"
+                    parent: item
+                    Layout.margins: 0
+                    property var itemSize: [width, height]
+                    color: "red"
+                }
+                property Item proxy1 : LayoutItemProxy { target: redRectangle }
+                property Item proxy2 : LayoutItemProxy {  }
+            }
+        }
+
+        function test_Proxy_destruction()
+        {
+            var item = createTemporaryObject(layout_destroyProxy_Component, container);
+
+            item.proxy1.width = 80
+            item.proxy1.height = 80
+            compare(item.rect1.itemSize, [80, 80])
+
+            item.proxy1.destroy()
+            item.proxy1 = null
+            // Wait for the js engine to actually destruct the proxy1 instance
+            gc()
+            wait(0)
+            // ...then wait for deleteLater() to be processed (called from QQuickLayoutItemProxyAttachedData::releaseProxy() )
+            wait(0)
+            // rect1's QQuickLayoutItemProxyAttachedData should be destroyed by now
+
+            // proxy2 will take control over rect1, and should not crash...
+            item.proxy2.target = item.rect1
+            item.proxy2.width = 42
+            item.proxy2.height = 80
+            compare(item.rect1.itemSize, [42, 80])
+        }
+
         function test_Proxy_layout_destruction1()
         {
             var item = createTemporaryObject(layout_proxy_Component, container);

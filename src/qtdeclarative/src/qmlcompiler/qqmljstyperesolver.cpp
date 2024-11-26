@@ -790,14 +790,18 @@ QQmlJSScope::ConstPtr QQmlJSTypeResolver::merge(const QQmlJSScope::ConstPtr &a,
         return b;
 
     const auto isInt32Compatible = [&](const QQmlJSScope::ConstPtr &type) {
-        return (isIntegral(type) && !equals(type, uint32Type())) || equals(type, boolType());
+        return (isIntegral(type)
+                    && !equals(type, uint32Type())
+                    && !equals(type, int64Type())
+                    && !equals(type, uint64Type()))
+                || equals(type, boolType());
     };
 
     if (isInt32Compatible(a) && isInt32Compatible(b))
         return int32Type();
 
     const auto isUInt32Compatible = [&](const QQmlJSScope::ConstPtr &type) {
-        return isUnsignedInteger(type) || equals(type, boolType());
+        return (isUnsignedInteger(type) && !equals(type, uint64Type())) || equals(type, boolType());
     };
 
     if (isUInt32Compatible(a) && isUInt32Compatible(b))

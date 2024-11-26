@@ -83,6 +83,7 @@ class Q_WAYLANDCLIENT_EXPORT QWaylandTabletV2 : public QPointingDevice, public Q
     Q_OBJECT
 public:
     explicit QWaylandTabletV2(::zwp_tablet_v2 *tablet, const QString &seatName);
+    ~QWaylandTabletV2();
 
 protected:
     // callbacks which act as setters
@@ -98,7 +99,7 @@ class Q_WAYLANDCLIENT_EXPORT QWaylandTabletToolV2 : public QPointingDevice, publ
     Q_OBJECT
 public:
     QWaylandTabletToolV2(QWaylandTabletSeatV2 *tabletSeat, ::zwp_tablet_tool_v2 *tool);
-    ~QWaylandTabletToolV2() override;
+    ~QWaylandTabletToolV2();
 
     void updateCursor();
 
@@ -181,6 +182,7 @@ class Q_WAYLANDCLIENT_EXPORT QWaylandTabletPadV2 : public QPointingDevice, publi
     Q_OBJECT
 public:
     explicit QWaylandTabletPadV2(::zwp_tablet_pad_v2 *pad);
+    ~QWaylandTabletPadV2();
 
 protected:
 //    void zwp_tablet_pad_v2_group(struct ::zwp_tablet_pad_group_v2 *pad_group) override;

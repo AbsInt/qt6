@@ -200,7 +200,7 @@
     example runs a Qt Quick Controls application with the Material style:
 
     \code
-    ./app -style material
+    ./app -style Material
     \endcode
 
     \section3 Environment variable
@@ -211,7 +211,7 @@
     the Universal style:
 
     \code
-    QT_QUICK_CONTROLS_STYLE=universal ./app
+    QT_QUICK_CONTROLS_STYLE=Universal ./app
     \endcode
 
     See \l {Supported Environment Variables in Qt Quick Controls} for the full list
