@@ -440,15 +440,21 @@ inline void QmltcCodeGenerator::generate_endInitCode(QmltcType &current,
     generate_qmltcInstructionCallCode(&current.endInit, type, u"engine"_s, u"creator, engine"_s);
 
     if (visitor->hasDeferredBindings(type)) {
+        QString icName;
+        if (auto potentialICName = type->enclosingInlineComponentName();
+            std::holds_alternative<QQmlJSScope::InlineComponentNameType>(potentialICName))
+            icName =get<QQmlJSScope::InlineComponentNameType>(potentialICName);
+        else
+            icName = u"{}"_s;
         current.endInit.body << u"{ // defer bindings"_s;
         current.endInit.body << u"auto ddata = QQmlData::get(this);"_s;
         current.endInit.body << u"auto thisContext = ddata->outerContext;"_s;
         current.endInit.body << u"Q_ASSERT(thisContext);"_s;
         current.endInit.body << QStringLiteral("ddata->deferData(%1, "
                                                "QQmlEnginePrivate::get(engine)->"
-                                               "compilationUnitFromUrl(%2()), thisContext);")
+                                               "compilationUnitFromUrl(%2()), thisContext, %3);")
                                         .arg(QString::number(visitor->qmlIrObjectIndex(type)),
-                                             QmltcCodeGenerator::urlMethodName());
+                                             QmltcCodeGenerator::urlMethodName(), icName);
         current.endInit.body << u"}"_s;
     }
 }

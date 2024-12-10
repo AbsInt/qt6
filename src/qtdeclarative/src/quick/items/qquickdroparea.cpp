@@ -158,8 +158,8 @@ QObject *QQuickDropAreaDrag::source() const
 
 /*!
     \qmlpropertygroup QtQuick::DropArea::drag
-    \qmlproperty qreal QtQuick::DropArea::drag.x
-    \qmlproperty qreal QtQuick::DropArea::drag.y
+    \qmlproperty real QtQuick::DropArea::drag.x
+    \qmlproperty real QtQuick::DropArea::drag.y
 
     These properties hold the coordinates of the last drag event.
 */

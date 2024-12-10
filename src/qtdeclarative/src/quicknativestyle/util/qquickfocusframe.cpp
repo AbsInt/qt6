@@ -3,6 +3,8 @@
 
 #include "qquickfocusframe.h"
 
+#include <private/qquickitem_p.h>
+
 #include <QtCore/qmetaobject.h>
 
 #include <QtGui/qguiapplication.h>
@@ -46,6 +48,7 @@ void QQuickFocusFrame::moveToItem(QQuickItem *item)
             qWarning() << "Failed to create FocusFrame";
             return;
         }
+        QQuickItemPrivate::get(m_focusFrame.get())->setTransparentForPositioner(true);
     }
 
     const QQuickFocusFrameDescription &config = getDescriptionForItem(item);

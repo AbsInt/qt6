@@ -90,6 +90,7 @@ private slots:
     void deferredPropertiesErrors();
     void deferredPropertiesInComponents();
     void deferredPropertiesInDestruction();
+    void deferredPropertiesInInlineComponent();
     void extensionObjects();
     void overrideExtensionProperties();
     void attachedProperties();
@@ -1385,6 +1386,19 @@ void tst_qqmlecmascript::deferredPropertiesInDestruction()
     // QTBUG-33112 - deleting this used to cause a crash:
     QScopedPointer<QObject> object(component.create());
     QVERIFY2(object, qPrintable(component.errorString()));
+}
+
+void tst_qqmlecmascript::deferredPropertiesInInlineComponent()
+{
+    QQmlEngine engine;
+    QQmlComponent component(&engine, testFileUrl("DeferredInICUsage.qml"));
+    QScopedPointer<QObject> object(component.create());
+    QVERIFY2(object, qPrintable(component.errorString()));
+
+    auto *deferred =  object->property("usage").value<QObject *>();
+    QVERIFY(deferred);
+    qmlExecuteDeferred(deferred);
+    QVERIFY(object->findChild<QObject *>("foo"));
 }
 
 void tst_qqmlecmascript::extensionObjects()

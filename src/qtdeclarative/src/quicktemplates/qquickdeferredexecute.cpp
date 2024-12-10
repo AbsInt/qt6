@@ -9,6 +9,8 @@
 #include <QtQml/private/qqmlcomponent_p.h>
 #include <QtQml/private/qqmlobjectcreator_p.h>
 
+#include <private/qv4resolvedtypereference_p.h>
+
 #include <deque>
 
 QT_BEGIN_NAMESPACE
@@ -82,7 +84,8 @@ static bool beginDeferred(QQmlEnginePrivate *enginePriv, const QQmlProperty &pro
         state.setCompletePending(true);
 
         QQmlContextData *creationContext = nullptr;
-        state.initCreator(deferData->context->parent(), deferData->compilationUnit, creationContext);
+
+        state.initCreator(deferData->context->parent(), deferData->compilationUnit, creationContext, deferData->inlineComponentName);
 
         enginePriv->inProgressCreations++;
 

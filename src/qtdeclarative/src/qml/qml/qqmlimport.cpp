@@ -381,7 +381,8 @@ QList<QQmlImports::ScriptReference> QQmlImports::resolvedScripts() const
         for (const QQmlDirParser::Script &script : import->qmlDirScripts) {
             ScriptReference ref;
             ref.nameSpace = script.nameSpace;
-            ref.location = QUrl(import->url).resolved(QUrl(script.fileName));
+            ref.fileName = QUrl(script.fileName);
+            ref.location = QUrl(import->url).resolved(ref.fileName);
             scripts.append(ref);
         }
     }
@@ -396,7 +397,8 @@ QList<QQmlImports::ScriptReference> QQmlImports::resolvedScripts() const
                 ScriptReference ref;
                 ref.nameSpace = script.nameSpace;
                 ref.qualifier = set.prefix;
-                ref.location = QUrl(import->url).resolved(QUrl(script.fileName));
+                ref.fileName = QUrl(script.fileName);
+                ref.location = QUrl(import->url).resolved(ref.fileName);
                 scripts.append(ref);
             }
         }

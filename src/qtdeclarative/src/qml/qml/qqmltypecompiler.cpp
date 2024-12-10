@@ -581,10 +581,12 @@ bool QQmlEnumTypeResolver::tryQualifiedEnumAssignment(
     } else {
         // Otherwise we have to search the whole type
         if (type.isValid()) {
-            if (!scopedEnumName.isEmpty())
-                value = type.scopedEnumValue(compiler->enginePrivate(), scopedEnumName, enumValue, &ok);
-            else
-                value = type.enumValue(compiler->enginePrivate(), QHashedStringRef(enumValue), &ok);
+            if (!scopedEnumName.isEmpty()) {
+                value = type.scopedEnumValue(
+                        compiler->typeLoader(), scopedEnumName, enumValue, &ok);
+            } else {
+                value = type.enumValue(compiler->typeLoader(), QHashedStringRef(enumValue), &ok);
+            }
         } else {
             QByteArray enumName = enumValue.toUtf8();
             const QMetaObject *metaObject = &Qt::staticMetaObject;
@@ -608,13 +610,14 @@ int QQmlEnumTypeResolver::evaluateEnum(const QString &scope, QStringView enumNam
 
     if (scope != QLatin1String("Qt")) {
         QQmlType type;
-        imports->resolveType(
-                QQmlTypeLoader::get(compiler->enginePrivate()), scope, &type, nullptr, nullptr);
+        imports->resolveType(compiler->typeLoader(), scope, &type, nullptr, nullptr);
         if (!type.isValid())
             return -1;
         if (!enumName.isEmpty())
-            return type.scopedEnumValue(compiler->enginePrivate(), enumName, enumValue, ok);
-        return type.enumValue(compiler->enginePrivate(), QHashedStringRef(enumValue.constData(), enumValue.size()), ok);
+            return type.scopedEnumValue(compiler->typeLoader(), enumName, enumValue, ok);
+        return type.enumValue(
+                compiler->typeLoader(),
+                QHashedStringRef(enumValue.constData(), enumValue.size()), ok);
     }
 
     const QMetaObject *mo = &Qt::staticMetaObject;

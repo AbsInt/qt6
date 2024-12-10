@@ -43,9 +43,9 @@ Q_LOGGING_CATEGORY(lcPA, "qt.quick.pincharea")
 */
 
 /*!
-    \qmlproperty QPointF QtQuick::PinchEvent::center
-    \qmlproperty QPointF QtQuick::PinchEvent::startCenter
-    \qmlproperty QPointF QtQuick::PinchEvent::previousCenter
+    \qmlproperty point QtQuick::PinchEvent::center
+    \qmlproperty point QtQuick::PinchEvent::startCenter
+    \qmlproperty point QtQuick::PinchEvent::previousCenter
 
     These properties hold the position of the center point between the two touch points.
 
@@ -87,10 +87,10 @@ Q_LOGGING_CATEGORY(lcPA, "qt.quick.pincharea")
 */
 
 /*!
-    \qmlproperty QPointF QtQuick::PinchEvent::point1
-    \qmlproperty QPointF QtQuick::PinchEvent::startPoint1
-    \qmlproperty QPointF QtQuick::PinchEvent::point2
-    \qmlproperty QPointF QtQuick::PinchEvent::startPoint2
+    \qmlproperty point QtQuick::PinchEvent::point1
+    \qmlproperty point QtQuick::PinchEvent::startPoint1
+    \qmlproperty point QtQuick::PinchEvent::point2
+    \qmlproperty point QtQuick::PinchEvent::startPoint2
 
     These properties provide the actual touch points generating the pinch.
 

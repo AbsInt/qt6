@@ -764,7 +764,7 @@ static void initCreator(
         immediateState->setCompletePending(true);
         immediateState->initCreator(
                 deferredData->context->parent(), deferredData->compilationUnit,
-                contextData);
+                contextData, deferredData->inlineComponentName);
         immediateState->creator()->beginPopulateDeferred(deferredData->context);
     }
 }

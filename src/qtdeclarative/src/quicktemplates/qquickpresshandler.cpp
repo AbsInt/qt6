@@ -45,20 +45,20 @@ void QQuickPressHandler::mouseMoveEvent(QMouseEvent *event)
 
 void QQuickPressHandler::mouseReleaseEvent(QMouseEvent *event)
 {
-    if (!longPress) {
+    if (!longPress)
         timer.stop();
 
-        if (isSignalConnected(control, "released(QQuickMouseEvent*)", releasedSignalIndex)) {
-            QQuickMouseEvent mev;
-            mev.reset(pressPos.x(), pressPos.y(), event->button(), event->buttons(),
-                      event->modifiers(), false/*isClick*/, false/*wasHeld*/);
-            mev.setAccepted(true);
-            QQuickMouseEvent *mevPtr = &mev;
-            void *args[] = { nullptr, &mevPtr };
-            QMetaObject::metacall(control, QMetaObject::InvokeMetaMethod, releasedSignalIndex, args);
-            event->setAccepted(mev.isAccepted());
-        }
+    if (isSignalConnected(control, "released(QQuickMouseEvent*)", releasedSignalIndex)) {
+        QQuickMouseEvent mev;
+        mev.reset(pressPos.x(), pressPos.y(), event->button(), event->buttons(),
+                  event->modifiers(), false/*isClick*/, false/*wasHeld*/);
+        mev.setAccepted(true);
+        QQuickMouseEvent *mevPtr = &mev;
+        void *args[] = { nullptr, &mevPtr };
+        QMetaObject::metacall(control, QMetaObject::InvokeMetaMethod, releasedSignalIndex, args);
+        event->setAccepted(mev.isAccepted());
     }
+
 }
 
 void QQuickPressHandler::timerEvent(QTimerEvent *)

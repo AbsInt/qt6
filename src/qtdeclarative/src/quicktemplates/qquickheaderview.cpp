@@ -53,13 +53,13 @@
 */
 
 /*!
-    \qmlproperty QString QtQuick.Controls::HorizontalHeaderView::textRole
+    \qmlproperty string QtQuick.Controls::HorizontalHeaderView::textRole
 
     \include qquickheaderview.qdocinc {textRole}
 */
 
 /*!
-    \qmlproperty QString QtQuick.Controls::VerticalHeaderView::textRole
+    \qmlproperty string QtQuick.Controls::VerticalHeaderView::textRole
 
     \include qquickheaderview.qdocinc {textRole}
 */

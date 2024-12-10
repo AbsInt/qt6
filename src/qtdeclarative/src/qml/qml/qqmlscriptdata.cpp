@@ -64,14 +64,6 @@ QQmlRefPointer<QQmlContextData> QQmlScriptData::qmlContextDataForContext(
     return qmlContextData;
 }
 
-QV4::ReturnedValue QQmlScriptData::ownScriptValue(QV4::ExecutionEngine *v4) const
-{
-    return handleOwnScriptValueOrExecutableCU(
-            v4, [](const QQmlRefPointer<QV4::ExecutableCompilationUnit> &executableCU) {
-        return executableCU->value();
-    });
-}
-
 QV4::ReturnedValue QQmlScriptData::scriptValueForContext(
         const QQmlRefPointer<QQmlContextData> &parentQmlContextData)
 {

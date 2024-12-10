@@ -579,22 +579,25 @@ QJSValue QJSEngine::importModule(const QString &fileName)
     if (m_v4Engine->hasException)
         return QJSValuePrivate::fromReturnedValue(m_v4Engine->catchException());
 
+    // If there is neither a native nor a compiled module, we should have seen an exception
+    Q_ASSERT(module);
+
     QV4::Scope scope(m_v4Engine);
-    if (const auto compiled = module.compiled) {
-        QV4::Scoped<QV4::Module> moduleNamespace(scope, compiled->instantiate());
-        if (m_v4Engine->hasException)
-            return QJSValuePrivate::fromReturnedValue(m_v4Engine->catchException());
-        compiled->evaluate();
-        if (!m_v4Engine->isInterrupted.loadRelaxed())
-            return QJSValuePrivate::fromReturnedValue(moduleNamespace->asReturnedValue());
+    QV4::ScopedValue value(scope, module->value());
+    if (!value->isEmpty())
+        return QJSValuePrivate::fromReturnedValue(value->asReturnedValue());
+
+    QV4::Scoped<QV4::Module> moduleNamespace(scope, module->instantiate());
+    if (m_v4Engine->hasException)
+        return QJSValuePrivate::fromReturnedValue(m_v4Engine->catchException());
+
+    module->evaluate();
+    if (m_v4Engine->isInterrupted.loadRelaxed()) {
         return QJSValuePrivate::fromReturnedValue(
-                    m_v4Engine->newErrorObject(QStringLiteral("Interrupted"))->asReturnedValue());
+                m_v4Engine->newErrorObject(QStringLiteral("Interrupted"))->asReturnedValue());
     }
 
-    // If there is neither a native nor a compiled module, we should have seen an exception
-    Q_ASSERT(module.native);
-
-    return QJSValuePrivate::fromReturnedValue(module.native->asReturnedValue());
+    return QJSValuePrivate::fromReturnedValue(moduleNamespace->asReturnedValue());
 }
 
 /*!

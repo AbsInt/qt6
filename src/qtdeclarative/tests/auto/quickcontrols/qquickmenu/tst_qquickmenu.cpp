@@ -215,13 +215,10 @@ void tst_QQuickMenu::mouse_data()
 
 void tst_QQuickMenu::mouse()
 {
-    SKIP_IF_NO_WINDOW_ACTIVATION
+    SKIP_IF_NO_WINDOW_ACTIVATION;
+    SKIP_IF_NO_MOUSE_HOVER;
 
     QFETCH(QQuickPopup::PopupType, popupType);
-
-    if ((QGuiApplication::platformName() == QLatin1String("offscreen"))
-        || (QGuiApplication::platformName() == QLatin1String("minimal")))
-        QSKIP("Mouse hovering not functional on offscreen/minimal platforms");
 
     QQuickControlsApplicationHelper helper(this, QLatin1String("applicationwindow.qml"));
     QVERIFY2(helper.ready, helper.failureMessage());
@@ -1488,9 +1485,7 @@ void tst_QQuickMenu::subMenuMouse_data()
 
 void tst_QQuickMenu::subMenuMouse()
 {
-    if ((QGuiApplication::platformName() == QLatin1String("offscreen"))
-        || (QGuiApplication::platformName() == QLatin1String("minimal")))
-        QSKIP("Mouse hovering not functional on offscreen/minimal platforms");
+    SKIP_IF_NO_MOUSE_HOVER;
 
     QFETCH(bool, cascade);
     QFETCH(QQuickPopup::PopupType, popupType);
@@ -1637,9 +1632,7 @@ void tst_QQuickMenu::subMenuDisabledMouse_data()
 // QTBUG-69540
 void tst_QQuickMenu::subMenuDisabledMouse()
 {
-    if ((QGuiApplication::platformName() == QLatin1String("offscreen"))
-        || (QGuiApplication::platformName() == QLatin1String("minimal")))
-        QSKIP("Mouse hovering not functional on offscreen/minimal platforms");
+    SKIP_IF_NO_MOUSE_HOVER;
 
     QFETCH(bool, cascade);
 
@@ -2365,9 +2358,7 @@ void tst_QQuickMenu::disableWhenTriggered_data()
 // Tests that the menu is dismissed when a menu item sets "enabled = false" in onTriggered().
 void tst_QQuickMenu::disableWhenTriggered()
 {
-    if ((QGuiApplication::platformName() == QLatin1String("offscreen"))
-        || (QGuiApplication::platformName() == QLatin1String("minimal")))
-        QSKIP("Mouse hovering not functional on offscreen/minimal platforms");
+    SKIP_IF_NO_MOUSE_HOVER;
 
     QFETCH(int, menuItemIndex);
     QFETCH(int, subMenuItemIndex);

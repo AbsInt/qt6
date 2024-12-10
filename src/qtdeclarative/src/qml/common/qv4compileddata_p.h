@@ -1117,6 +1117,7 @@ public:
     int enumCount() const { return nEnums; }
     int signalCount() const { return nSignals; }
     int functionCount() const { return nFunctions; }
+    int inlineComponentCount() const { return nInlineComponents; }
 
     const Binding *bindingsBegin() const { return bindingTable(); }
     const Binding *bindingsEnd() const { return bindingTable() + nBindings; }
@@ -1482,7 +1483,6 @@ struct CompilationUnit final : public QQmlRefCounted<CompilationUnit>
     int m_totalParserStatusCount = 0; // Number of instantiated types that are QQmlParserStatus subclasses
     int m_totalObjectCount = 0; // Number of objects explicitly instantiated
 
-    std::unique_ptr<QString> icRootName;
     QHash<QString, InlineComponentData> inlineComponentData;
 
     // index is object index. This allows fast access to the
@@ -1654,9 +1654,9 @@ public:
     int objectCount() const { return qmlData->nObjects; }
     const CompiledObject *objectAt(int index) const { return qmlData->objectAt(index); }
 
-    int totalBindingsCount() const;
-    int totalParserStatusCount() const;
-    int totalObjectCount() const;
+    int totalBindingsCount(const QString &inlineComponentRootName) const;
+    int totalParserStatusCount(const QString &inlineComponentRootName) const;
+    int totalObjectCount(const QString &inlineComponentRootName) const;
 
     int inlineComponentId(const QString &inlineComponentName) const
     {

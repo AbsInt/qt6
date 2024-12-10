@@ -179,6 +179,7 @@ public:
     {
         QString nameSpace;
         QString qualifier;
+        QUrl fileName;
         QUrl location;
     };
 

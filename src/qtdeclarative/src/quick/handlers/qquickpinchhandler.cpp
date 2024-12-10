@@ -141,7 +141,7 @@ void QQuickPinchHandler::setActiveScale(qreal scale)
 
 /*!
     \readonly
-    \qmlproperty QVector2D QtQuick::PinchHandler::scale
+    \qmlproperty vector2d QtQuick::PinchHandler::scale
     \deprecated [6.5] Use persistentScale
 */
 
@@ -220,7 +220,7 @@ void QQuickPinchHandler::setMaximumRotation(qreal maximumRotation)
 
 /*!
     \readonly
-    \qmlproperty QVector2D QtQuick::PinchHandler::rotation
+    \qmlproperty vector2d QtQuick::PinchHandler::rotation
     \deprecated [6.5] Use activeRotation
 */
 
@@ -286,12 +286,12 @@ void QQuickPinchHandler::setPersistentRotation(qreal rot)
 
 /*!
     \readonly
-    \qmlproperty QVector2D QtQuick::PinchHandler::translation
+    \qmlproperty vector2d QtQuick::PinchHandler::translation
     \deprecated [6.5] Use activeTranslation
 */
 /*!
     \readonly
-    \qmlproperty QPointF QtQuick::PinchHandler::activeTranslation
+    \qmlproperty point QtQuick::PinchHandler::activeTranslation
 
     The translation of the cluster of points while the pinch gesture is being
     performed. It is \c {0, 0} when the gesture begins, and increases as the
@@ -304,7 +304,7 @@ void QQuickPinchHandler::setPersistentRotation(qreal rot)
 */
 
 /*!
-    \qmlproperty QPointF QtQuick::PinchHandler::persistentTranslation
+    \qmlproperty point QtQuick::PinchHandler::persistentTranslation
 
     The translation to be applied to the \l target if it is not \c null.
     Otherwise, bindings can be used to do arbitrary things with this value.

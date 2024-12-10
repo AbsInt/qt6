@@ -1531,8 +1531,10 @@ bool QQuickWindow::event(QEvent *event)
                     }
                 }
 
-                if (ret)
+                if (ret) {
+                    d->deliveryAgentPrivate()->clearGrabbers(pe);
                     return true;
+                }
             } else if (!synthMouse) {
                 // clear passive grabbers unless it's a system synth-mouse event
                 // QTBUG-104890: Windows sends synth mouse events (which should be ignored) after touch events

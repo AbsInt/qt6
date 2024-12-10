@@ -1371,7 +1371,7 @@ void QQuickRow::reportConflictingAnchors()
     \sa add, populate, ViewTransition, {Qt Quick Examples - Positioners}
 */
 /*!
-  \qmlproperty qreal QtQuick::Grid::spacing
+  \qmlproperty real QtQuick::Grid::spacing
 
   The spacing is the amount in pixels left empty between adjacent
   items. The amount of spacing applied will be the same in the
@@ -1510,7 +1510,7 @@ void QQuickGrid::setFlow(Flow flow)
 }
 
 /*!
-    \qmlproperty qreal QtQuick::Grid::rowSpacing
+    \qmlproperty real QtQuick::Grid::rowSpacing
 
     This property holds the spacing in pixels between rows.
 
@@ -1532,7 +1532,7 @@ void QQuickGrid::setRowSpacing(const qreal rowSpacing)
 }
 
 /*!
-    \qmlproperty qreal QtQuick::Grid::columnSpacing
+    \qmlproperty real QtQuick::Grid::columnSpacing
 
     This property holds the spacing in pixels between columns.
 

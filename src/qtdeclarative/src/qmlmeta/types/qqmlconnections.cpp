@@ -329,7 +329,9 @@ void QQmlConnections::setIgnoreUnknownSignals(bool ignore)
     d->ignoreUnknownSignals = ignore;
 }
 
-void QQmlConnectionsParser::verifyBindings(const QQmlRefPointer<QV4::ExecutableCompilationUnit> &compilationUnit, const QList<const QV4::CompiledData::Binding *> &props)
+void QQmlConnectionsParser::verifyBindings(
+        const QQmlRefPointer<QV4::CompiledData::CompilationUnit> &compilationUnit,
+        const QList<const QV4::CompiledData::Binding *> &props)
 {
     for (int ii = 0; ii < props.size(); ++ii) {
         const QV4::CompiledData::Binding *binding = props.at(ii);

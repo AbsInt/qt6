@@ -42,7 +42,6 @@ public:
     QQmlRefPointer<QQmlTypeNameCache> typeNameCache;
     QVector<QQmlRefPointer<QQmlScriptBlob>> scripts;
 
-    QV4::ReturnedValue ownScriptValue(QV4::ExecutionEngine *v4) const;
     QV4::ReturnedValue scriptValueForContext(const QQmlRefPointer<QQmlContextData> &parentCtxt);
 
     QQmlRefPointer<QV4::CompiledData::CompilationUnit> compilationUnit() const
@@ -62,10 +61,6 @@ private:
             WithExecutableCU &&withExecutableCU) const
     {
         QV4::Scope scope(v4);
-
-        QV4::ScopedValue value(scope, v4->nativeModule(url));
-        if (!value->isEmpty())
-            return value->asReturnedValue();
 
         if (!m_precompiledScript)
             return QV4::Value::emptyValue().asReturnedValue();

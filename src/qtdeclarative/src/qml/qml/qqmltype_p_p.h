@@ -97,7 +97,7 @@ public:
     }
 
     QQmlType resolveCompositeBaseType(QQmlEnginePrivate *engine) const;
-    QQmlPropertyCache::ConstPtr compositePropertyCache(QQmlEnginePrivate *engine) const;
+    QQmlPropertyCache::ConstPtr compositePropertyCache(QQmlTypeLoader *typeLoader) const;
 
     struct QQmlCppTypeData
     {
@@ -157,30 +157,30 @@ public:
 
     template<typename String>
     static int enumValue(
-            const QQmlRefPointer<const QQmlTypePrivate> &d, QQmlEnginePrivate *engine,
+            const QQmlRefPointer<const QQmlTypePrivate> &d, QQmlTypeLoader *typeLoader,
             const String &name, bool *ok)
     {
-        return doGetEnumValue(d, engine, [&](const QQmlTypePrivate::Enums *enums) {
+        return doGetEnumValue(d, typeLoader, [&](const QQmlTypePrivate::Enums *enums) {
             return enums->enums.value(name);
         }, ok);
     }
 
     template<typename String>
     static int scopedEnumIndex(
-            const QQmlRefPointer<const QQmlTypePrivate> &d, QQmlEnginePrivate *engine,
+            const QQmlRefPointer<const QQmlTypePrivate> &d, QQmlTypeLoader *typeLoader,
             const String &name, bool *ok)
     {
-        return doGetEnumValue(d, engine, [&](const QQmlTypePrivate::Enums *enums) {
+        return doGetEnumValue(d, typeLoader, [&](const QQmlTypePrivate::Enums *enums) {
             return enums->scopedEnumIndex.value(name);
         }, ok);
     }
 
     template<typename String>
     static int scopedEnumValue(
-            const QQmlRefPointer<const QQmlTypePrivate> &d, QQmlEnginePrivate *engine, int index,
+            const QQmlRefPointer<const QQmlTypePrivate> &d, QQmlTypeLoader *typeLoader, int index,
             const String &name, bool *ok)
     {
-        return doGetEnumValue(d, engine, [&](const QQmlTypePrivate::Enums *enums) {
+        return doGetEnumValue(d, typeLoader, [&](const QQmlTypePrivate::Enums *enums) {
             Q_ASSERT(index > -1 && index < enums->scopedEnums.size());
             return enums->scopedEnums.at(index)->value(name);
         }, ok);
@@ -188,10 +188,10 @@ public:
 
     template<typename String1, typename String2>
     static int scopedEnumValue(
-            const QQmlRefPointer<const QQmlTypePrivate> &d, QQmlEnginePrivate *engine,
+            const QQmlRefPointer<const QQmlTypePrivate> &d, QQmlTypeLoader *typeLoader,
             const String1 &scopedEnumName, const String2 &name, bool *ok)
     {
-        return doGetEnumValue(d, engine, [&](const QQmlTypePrivate::Enums *enums) -> const int * {
+        return doGetEnumValue(d, typeLoader, [&](const QQmlTypePrivate::Enums *enums) -> const int * {
             const int *rv = enums->scopedEnumIndex.value(scopedEnumName);
             if (!rv)
                 return nullptr;
@@ -299,12 +299,12 @@ private:
 
     template<typename Op>
     static int doGetEnumValue(
-            const QQmlRefPointer<const QQmlTypePrivate> &d, QQmlEnginePrivate *engine,
+            const QQmlRefPointer<const QQmlTypePrivate> &d, QQmlTypeLoader *typeLoader,
             Op &&op, bool *ok)
     {
         Q_ASSERT(ok);
         if (d) {
-            if (const QQmlTypePrivate::Enums *enums = d->initEnums(engine)) {
+            if (const QQmlTypePrivate::Enums *enums = d->initEnums(typeLoader)) {
                 if (const int *rv = op(enums)) {
                     *ok = true;
                     return *rv;
@@ -316,7 +316,7 @@ private:
         return -1;
     }
 
-    const Enums *initEnums(QQmlEnginePrivate *engine) const;
+    const Enums *initEnums(QQmlTypeLoader *typeLoader) const;
     void insertEnums(Enums *enums, const QMetaObject *metaObject) const;
     void insertEnumsFromPropertyCache(Enums *enums, const QQmlPropertyCache::ConstPtr &cache) const;
 

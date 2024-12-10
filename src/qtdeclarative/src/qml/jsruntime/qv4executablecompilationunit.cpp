@@ -352,8 +352,8 @@ Heap::Module *ExecutableCompilationUnit::instantiate()
         const auto dependentModuleUnit = engine->loadModule(url, this);
         if (engine->hasException)
             return nullptr;
-        if (dependentModuleUnit.compiled)
-            dependentModuleUnit.compiled->instantiate();
+        if (dependentModuleUnit)
+            dependentModuleUnit->instantiate();
     }
 
     ScopedString importName(scope);
@@ -368,56 +368,18 @@ Heap::Module *ExecutableCompilationUnit::instantiate()
         QUrl url = urlAt(entry.moduleRequest);
         importName = runtimeStrings[entry.importName];
 
-        const auto module = engine->loadModule(url, this);
-        if (module.compiled) {
-            const Value *valuePtr = module.compiled->resolveExport(importName);
+        if (const auto module = engine->loadModule(url, this)) {
+            const Value *valuePtr = module->resolveExport(importName);
             if (!valuePtr) {
                 QString referenceErrorMessage = QStringLiteral("Unable to resolve import reference ");
                 referenceErrorMessage += importName->toQString();
+                QV4::ScopedValue compiledValue(scope, module->value());
                 engine->throwReferenceError(
                         referenceErrorMessage, fileName(),
                         entry.location.line(), entry.location.column());
                 return nullptr;
             }
             imports[i] = valuePtr;
-        } else if (Value *value = module.native) {
-            const QString name = importName->toQString();
-            if (value->isNullOrUndefined()) {
-                QString errorMessage = name;
-                errorMessage += QStringLiteral(" from ");
-                errorMessage += url.toString();
-                errorMessage += QStringLiteral(" is null");
-                engine->throwError(errorMessage);
-                return nullptr;
-            }
-
-            if (name == QStringLiteral("default")) {
-                imports[i] = value;
-            } else {
-                url.setFragment(name);
-                const auto fragment = engine->moduleForUrl(url, this);
-                if (fragment.native) {
-                    imports[i] = fragment.native;
-                } else {
-                    Scope scope(this->engine);
-                    ScopedObject o(scope, value);
-                    if (!o) {
-                        QString referenceErrorMessage = QStringLiteral("Unable to resolve import reference ");
-                        referenceErrorMessage += name;
-                        referenceErrorMessage += QStringLiteral(" because ");
-                        referenceErrorMessage += url.toString(QUrl::RemoveFragment);
-                        referenceErrorMessage += QStringLiteral(" is not an object");
-                        engine->throwReferenceError(
-                                referenceErrorMessage, fileName(),
-                                entry.location.line(), entry.location.column());
-                        return nullptr;
-                    }
-
-                    const ScopedPropertyKey key(scope, scope.engine->identifierTable->asPropertyKey(name));
-                    const ScopedValue result(scope, o->get(key));
-                    imports[i] = engine->registerNativeModule(url, result);
-                }
-            }
         }
     }
 
@@ -431,18 +393,9 @@ Heap::Module *ExecutableCompilationUnit::instantiate()
 
     for (uint i = 0; i < data->indirectExportEntryTableSize; ++i) {
         const CompiledData::ExportEntry &entry = data->indirectExportEntryTable()[i];
-        auto dependentModule = engine->loadModule(urlAt(entry.moduleRequest), this);
-        ScopedString importName(scope, runtimeStrings[entry.importName]);
-        if (const auto dependentModuleUnit = dependentModule.compiled) {
-            if (!dependentModuleUnit->resolveExport(importName)) {
-                throwReferenceError(entry, importName->toQString());
-                return nullptr;
-            }
-        } else if (const auto native = dependentModule.native) {
-            ScopedObject o(scope, native);
-            const ScopedPropertyKey key(scope, scope.engine->identifierTable->asPropertyKey(importName));
-            const ScopedValue result(scope, o->get(key));
-            if (result->isUndefined()) {
+        if (auto dependentModule = engine->loadModule(urlAt(entry.moduleRequest), this)) {
+            ScopedString importName(scope, runtimeStrings[entry.importName]);
+            if (!dependentModule->resolveExport(importName)) {
                 throwReferenceError(entry, importName->toQString());
                 return nullptr;
             }
@@ -488,29 +441,11 @@ const Value *ExecutableCompilationUnit::resolveExportRecursively(
     if (auto indirectExport = lookupNameInExportTable(
                 data->indirectExportEntryTable(), data->indirectExportEntryTableSize, exportName)) {
         QUrl request = urlAt(indirectExport->moduleRequest);
-        auto dependentModule = engine->loadModule(request, this);
-        ScopedString importName(scope, runtimeStrings[indirectExport->importName]);
-        if (dependentModule.compiled) {
-            return dependentModule.compiled->resolveExportRecursively(importName, resolveSet);
-        } else if (dependentModule.native) {
-            if (exportName->toQString() == QLatin1String("*"))
-                return dependentModule.native;
-            if (exportName->toQString() == QLatin1String("default"))
-                return nullptr;
-
-            request.setFragment(importName->toQString());
-            const auto fragment = engine->moduleForUrl(request);
-            if (fragment.native)
-                return fragment.native;
-
-            ScopedObject o(scope, dependentModule.native);
-            if (o)
-                return engine->registerNativeModule(request, o->get(importName));
-
-            return nullptr;
-        } else {
-            return nullptr;
+        if (auto dependentModule = engine->loadModule(request, this)) {
+            ScopedString importName(scope, runtimeStrings[indirectExport->importName]);
+            return dependentModule->resolveExportRecursively(importName, resolveSet);
         }
+        return nullptr;
     }
 
     if (exportName->toQString() == QLatin1String("default"))
@@ -521,26 +456,9 @@ const Value *ExecutableCompilationUnit::resolveExportRecursively(
     for (uint i = 0; i < data->starExportEntryTableSize; ++i) {
         const CompiledData::ExportEntry &entry = data->starExportEntryTable()[i];
         QUrl request = urlAt(entry.moduleRequest);
-        auto dependentModule = engine->loadModule(request, this);
         const Value *resolution = nullptr;
-        if (dependentModule.compiled) {
-            resolution = dependentModule.compiled->resolveExportRecursively(
-                        exportName, resolveSet);
-        } else if (dependentModule.native) {
-            if (exportName->toQString() == QLatin1String("*")) {
-                resolution = dependentModule.native;
-            } else if (exportName->toQString() != QLatin1String("default")) {
-                request.setFragment(exportName->toQString());
-                const auto fragment = engine->moduleForUrl(request);
-                if (fragment.native) {
-                    resolution = fragment.native;
-                } else {
-                    ScopedObject o(scope, dependentModule.native);
-                    if (o)
-                        resolution = engine->registerNativeModule(request, o->get(exportName));
-                }
-            }
-        }
+        if (auto dependentModule = engine->loadModule(request, this))
+            resolution = dependentModule->resolveExportRecursively(exportName, resolveSet);
 
         // ### handle ambiguous
         if (resolution) {
@@ -599,20 +517,9 @@ void ExecutableCompilationUnit::getExportedNamesRecursively(
 
     for (uint i = 0; i < data->starExportEntryTableSize; ++i) {
         const CompiledData::ExportEntry &entry = data->starExportEntryTable()[i];
-        auto dependentModule = engine->loadModule(urlAt(entry.moduleRequest), this);
-        if (dependentModule.compiled) {
-            dependentModule.compiled->getExportedNamesRecursively(
-                        names, exportNameSet, /*includeDefaultExport*/false);
-        } else if (dependentModule.native) {
-            Scope scope(engine);
-            ScopedObject o(scope, dependentModule.native);
-            ObjectIterator iterator(scope, o, ObjectIterator::EnumerableOnly);
-            while (true) {
-                ScopedValue val(scope, iterator.nextPropertyNameAsString());
-                if (val->isNull())
-                    break;
-                append(val->toQString());
-            }
+        if (auto dependentModule = engine->loadModule(urlAt(entry.moduleRequest), this)) {
+            dependentModule->getExportedNamesRecursively(
+                    names, exportNameSet, /*includeDefaultExport*/false);
         }
     }
 }
@@ -633,14 +540,12 @@ void ExecutableCompilationUnit::evaluateModuleRequests()
     const QStringList moduleRequests = m_compilationUnit->moduleRequests();
     for (const QString &request: moduleRequests) {
         auto dependentModule = engine->loadModule(QUrl(request), this);
-        if (dependentModule.native)
-            continue;
 
         if (engine->hasException)
             return;
 
-        Q_ASSERT(dependentModule.compiled);
-        dependentModule.compiled->evaluate();
+        Q_ASSERT(dependentModule);
+        dependentModule->evaluate();
         if (engine->hasException)
             return;
     }

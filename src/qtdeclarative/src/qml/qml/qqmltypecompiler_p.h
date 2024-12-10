@@ -88,6 +88,7 @@ public:
 
     QUrl url() const { return typeData->finalUrl(); }
     QQmlEnginePrivate *enginePrivate() const { return engine; }
+    QQmlTypeLoader *typeLoader() const { return &engine->typeLoader; }
     const QQmlImports *imports() const;
     QVector<QmlIR::Object *> *qmlObjects() const;
     QQmlPropertyCacheVector *propertyCaches();

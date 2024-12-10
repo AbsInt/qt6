@@ -468,6 +468,8 @@ private slots:
 
     void engineTypeCrossTalk();
 
+    void onlyInlineComponent();
+
 private:
     QQmlEngine engine;
     QStringList defaultImportPathList;
@@ -5203,7 +5205,7 @@ static void beginDeferredOnce(QQmlEnginePrivate *enginePriv,
         state.setCompletePending(true);
 
         state.initCreator(deferData->context->parent(), deferData->compilationUnit,
-                                 QQmlRefPointer<QQmlContextData>());
+                                 QQmlRefPointer<QQmlContextData>(), deferData->inlineComponentName);
 
         enginePriv->inProgressCreations++;
 
@@ -9042,6 +9044,17 @@ void tst_qqmllanguage::engineTypeCrossTalk()
     const QUrl inner("qrc:/StaticTest/data/InnerObject.qml");
     first.wreck(inner);
     second.wreck(inner);
+}
+
+void tst_qqmllanguage::onlyInlineComponent()
+{
+    QQmlEngine e;
+    QQmlComponent c(&e, testFileUrl("onlyInlineComponent.qml"));
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+    QScopedPointer<QObject> o(c.create());
+    QVERIFY(!o.isNull());
+
+    QCOMPARE(o->objectName(), QLatin1String("yes"));
 }
 
 QTEST_MAIN(tst_qqmllanguage)

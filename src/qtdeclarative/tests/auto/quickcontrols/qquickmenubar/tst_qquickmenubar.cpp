@@ -147,11 +147,8 @@ void tst_qquickmenubar::mouse()
     QCoreApplication::setAttribute(Qt::AA_DontUseNativeMenuBar);
     QCoreApplication::setAttribute(Qt::AA_DontUseNativeMenuWindows);
 
-    SKIP_IF_NO_WINDOW_ACTIVATION
-
-    if ((QGuiApplication::platformName() == QLatin1String("offscreen"))
-        || (QGuiApplication::platformName() == QLatin1String("minimal")))
-        QSKIP("Mouse highlight not functional on offscreen/minimal platforms");
+    SKIP_IF_NO_WINDOW_ACTIVATION;
+    SKIP_IF_NO_MOUSE_HOVER;
 
     QQmlApplicationEngine engine(testFileUrl("menubaritems.qml"));
 
@@ -1144,13 +1141,12 @@ void tst_qquickmenubar::checkHighlightWhenMenuDismissed_data()
 
 void tst_qquickmenubar::checkHighlightWhenMenuDismissed()
 {
+    SKIP_IF_NO_MOUSE_HOVER;
+
     QFETCH(QQuickPopup::PopupType, popupType);
 
     QCoreApplication::setAttribute(Qt::AA_DontUseNativeMenuBar);
     QCoreApplication::setAttribute(Qt::AA_DontUseNativeMenuWindows);
-    if ((QGuiApplication::platformName() == QLatin1String("offscreen"))
-        || (QGuiApplication::platformName() == QLatin1String("minimal")))
-        QSKIP("Mouse highlight not functional on offscreen/minimal platforms");
 
     QQmlApplicationEngine engine(testFileUrl("checkHighlightWhenDismissed.qml"));
     QScopedPointer<QQuickApplicationWindow> window(qobject_cast<QQuickApplicationWindow *>(engine.rootObjects().value(0)));
@@ -1217,11 +1213,10 @@ void tst_qquickmenubar::hoverAfterClosingWithEscape_data()
 
 void tst_qquickmenubar::hoverAfterClosingWithEscape()
 {
+    SKIP_IF_NO_MOUSE_HOVER;
+
     QCoreApplication::setAttribute(Qt::AA_DontUseNativeMenuBar);
     QCoreApplication::setAttribute(Qt::AA_DontUseNativeMenuWindows);
-    if ((QGuiApplication::platformName() == QLatin1String("offscreen"))
-        || (QGuiApplication::platformName() == QLatin1String("minimal")))
-        QSKIP("Mouse highlight not functional on offscreen/minimal platforms");
 
     QQuickControlsApplicationHelper helper(this, QLatin1String("hoverAfterClosingWithEscape.qml"));
     QVERIFY2(helper.ready, helper.failureMessage());
@@ -1261,12 +1256,11 @@ void tst_qquickmenubar::closeByClickingOutside_data()
 
 void tst_qquickmenubar::closeByClickingOutside()
 {
+    SKIP_IF_NO_MOUSE_HOVER;
+
     QFETCH(QQuickPopup::PopupType, popupType);
 
     QCoreApplication::setAttribute(Qt::AA_DontUseNativeMenuBar);
-    if ((QGuiApplication::platformName() == QLatin1String("offscreen"))
-        || (QGuiApplication::platformName() == QLatin1String("minimal")))
-        QSKIP("Mouse highlight not functional on offscreen/minimal platforms");
 
     QQuickControlsApplicationHelper helper(this, QLatin1String("hoverAfterClosingWithEscape.qml"));
     QVERIFY2(helper.ready, helper.failureMessage());

@@ -659,11 +659,11 @@ void QCommonStyle::drawPrimitive(PrimitiveElement pe, const QStyleOption *opt, Q
 
                 if (!(opt->state & State_Enabled)) {
                     imagePainter.translate(1, 1);
-                    imagePainter.setBrush(opt->palette.light().color());
+                    imagePainter.setBrush(opt->palette.light());
                     imagePainter.setPen(opt->palette.light().color());
                     imagePainter.drawPolygon(a);
                     imagePainter.translate(-1, -1);
-                    imagePainter.setBrush(opt->palette.mid().color());
+                    imagePainter.setBrush(opt->palette.mid());
                     imagePainter.setPen(opt->palette.mid().color());
                 }
 
@@ -1367,7 +1367,7 @@ void QCommonStyle::drawControl(ControlElement element, const QStyleOption *opt, 
             QPalette pal2 = pb->palette;
             // Correct the highlight color if it is the same as the background
             if (pal2.highlight() == pal2.window())
-                pal2.setColor(QPalette::Highlight, pb->palette.color(QPalette::Active,
+                pal2.setBrush(QPalette::Highlight, pb->palette.brush(QPalette::Active,
                                                                      QPalette::Highlight));
             bool reverse = pb->direction == Qt::RightToLeft;
             if (inverted)

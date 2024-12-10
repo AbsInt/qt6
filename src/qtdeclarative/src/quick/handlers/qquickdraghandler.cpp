@@ -346,12 +346,12 @@ void QQuickDragHandler::setActiveTranslation(const QVector2D &trans)
 
 /*!
     \readonly
-    \qmlproperty QVector2D QtQuick::DragHandler::translation
+    \qmlproperty vector2d QtQuick::DragHandler::translation
     \deprecated [6.2] Use activeTranslation
 */
 
 /*!
-    \qmlproperty QVector2D QtQuick::DragHandler::persistentTranslation
+    \qmlproperty vector2d QtQuick::DragHandler::persistentTranslation
 
     The translation to be applied to the \l target if it is not \c null.
     Otherwise, bindings can be used to do arbitrary things with this value.
@@ -361,7 +361,7 @@ void QQuickDragHandler::setActiveTranslation(const QVector2D &trans)
 
 /*!
     \readonly
-    \qmlproperty QVector2D QtQuick::DragHandler::activeTranslation
+    \qmlproperty vector2d QtQuick::DragHandler::activeTranslation
 
     The translation while the drag gesture is being performed.
     It is \c {0, 0} when the gesture begins, and increases as the event

@@ -146,7 +146,7 @@ void QWaylandTextInputv3::zwp_text_input_v3_done(uint32_t serial)
             // Current supported cursor shape is just line.
             // It means, cursorEnd and cursorBegin are the same.
             QInputMethodEvent::Attribute attribute1(QInputMethodEvent::Cursor,
-                                                    m_pendingPreeditString.text.length(),
+                                                    m_pendingPreeditString.cursorBegin,
                                                     1);
             attributes.append(attribute1);
         }

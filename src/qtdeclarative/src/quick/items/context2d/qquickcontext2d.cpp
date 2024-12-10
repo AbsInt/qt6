@@ -2206,7 +2206,7 @@ QV4::ReturnedValue QQuickJSContext2D::method_set_shadowColor(const QV4::Function
 
 
 /*!
-    \qmlproperty qreal QtQuick::Context2D::shadowOffsetX
+    \qmlproperty real QtQuick::Context2D::shadowOffsetX
      Holds the current shadow offset in the positive horizontal distance.
 
      \sa shadowOffsetY
@@ -2234,7 +2234,7 @@ QV4::ReturnedValue QQuickJSContext2D::method_set_shadowOffsetX(const QV4::Functi
     RETURN_UNDEFINED();
 }
 /*!
-    \qmlproperty qreal QtQuick::Context2D::shadowOffsetY
+    \qmlproperty real QtQuick::Context2D::shadowOffsetY
      Holds the current shadow offset in the positive vertical distance.
 
      \sa shadowOffsetX

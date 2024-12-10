@@ -29,12 +29,13 @@
 QT_BEGIN_NAMESPACE
 
 class QHashedCStringRef;
-class QQmlTypePrivate;
 class QHashedString;
 class QHashedStringRef;
 class QQmlCustomParser;
 class QQmlEnginePrivate;
 class QQmlPropertyCache;
+class QQmlTypeLoader;
+class QQmlTypePrivate;
 
 namespace QV4 {
 struct String;
@@ -141,15 +142,15 @@ public:
 
     QUrl sourceUrl() const;
 
-    int enumValue(QQmlEnginePrivate *engine, const QHashedStringRef &, bool *ok) const;
-    int enumValue(QQmlEnginePrivate *engine, const QHashedCStringRef &, bool *ok) const;
-    int enumValue(QQmlEnginePrivate *engine, const QV4::String *, bool *ok) const;
+    int enumValue(QQmlTypeLoader *typeLoader, const QHashedStringRef &, bool *ok) const;
+    int enumValue(QQmlTypeLoader *typeLoader, const QHashedCStringRef &, bool *ok) const;
+    int enumValue(QQmlTypeLoader *typeLoader, const QV4::String *, bool *ok) const;
 
-    int scopedEnumIndex(QQmlEnginePrivate *engine, const QV4::String *, bool *ok) const;
-    int scopedEnumIndex(QQmlEnginePrivate *engine, const QString &, bool *ok) const;
-    int scopedEnumValue(QQmlEnginePrivate *engine, int index, const QV4::String *, bool *ok) const;
-    int scopedEnumValue(QQmlEnginePrivate *engine, int index, const QString &, bool *ok) const;
-    int scopedEnumValue(QQmlEnginePrivate *engine, const QHashedStringRef &, const QHashedStringRef &, bool *ok) const;
+    int scopedEnumIndex(QQmlTypeLoader *typeLoader, const QV4::String *, bool *ok) const;
+    int scopedEnumIndex(QQmlTypeLoader *typeLoader, const QString &, bool *ok) const;
+    int scopedEnumValue(QQmlTypeLoader *typeLoader, int index, const QV4::String *, bool *ok) const;
+    int scopedEnumValue(QQmlTypeLoader *typeLoader, int index, const QString &, bool *ok) const;
+    int scopedEnumValue(QQmlTypeLoader *typeLoader, const QHashedStringRef &, const QHashedStringRef &, bool *ok) const;
 
     const QQmlTypePrivate *priv() const { return d.data(); }
     static void refHandle(const QQmlTypePrivate *priv);

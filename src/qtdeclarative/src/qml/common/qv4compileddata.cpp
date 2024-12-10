@@ -14,6 +14,7 @@
 #include <QtCore/qdir.h>
 #include <QtCore/qscopeguard.h>
 #include <QtCore/qstandardpaths.h>
+#include <QtCore/qxpfunctional.h>
 
 static_assert(QV4::CompiledData::QmlCompileHashSpace > QML_COMPILE_HASH_LENGTH);
 
@@ -245,44 +246,30 @@ ResolvedTypeReference *CompilationUnit::resolvedType(QMetaType type) const
 
 }
 
-int CompilationUnit::totalBindingsCount() const
+int CompilationUnit::totalBindingsCount(const QString &inlineComponentRootName) const
 {
-    if (!icRootName)
+    if (inlineComponentRootName.isEmpty())
         return m_totalBindingsCount;
-    return inlineComponentData[*icRootName].totalBindingCount;
+    return inlineComponentData[inlineComponentRootName].totalBindingCount;
 }
 
-int CompilationUnit::totalObjectCount() const
+int CompilationUnit::totalObjectCount(const QString &inlineComponentRootName) const
 {
-    if (!icRootName)
+    if (inlineComponentRootName.isEmpty())
         return m_totalObjectCount;
-    return inlineComponentData[*icRootName].totalObjectCount;
+    return inlineComponentData[inlineComponentRootName].totalObjectCount;
 }
 
-template<typename F>
-void processInlinComponentType(
+
+static void processInlinComponentType(
         const QQmlType &type,
-        const QQmlRefPointer<QV4::CompiledData::CompilationUnit> &compilationUnit,
-        F &&populateIcData)
+        qxp::function_ref<void(const QString&)> &&populateIcData)
 {
+    QString icRootName;
     if (type.isInlineComponentType()) {
-        QString icRootName;
-        if (compilationUnit->icRootName) {
-            icRootName = type.elementName();
-            std::swap(*compilationUnit->icRootName, icRootName);
-        } else {
-            compilationUnit->icRootName = std::make_unique<QString>(type.elementName());
-        }
-
-        populateIcData();
-
-        if (icRootName.isEmpty())
-            compilationUnit->icRootName.reset();
-        else
-            std::swap(*compilationUnit->icRootName, icRootName);
-    } else {
-        populateIcData();
+        icRootName = type.elementName();
     }
+    populateIcData(icRootName);
 }
 
 void CompiledData::CompilationUnit::finalizeCompositeType(const QQmlType &type)
@@ -357,11 +344,11 @@ void CompiledData::CompilationUnit::finalizeCompositeType(const QQmlType &type)
                     // if the type is an inline component type, we have to extract the information
                     // from it.
                     // This requires that inline components are visited in the correct order.
-                    processInlinComponentType(type, compilationUnit, [&]() {
+                    processInlinComponentType(type, [&](const QString &currentlyVisitedICName) {
                         auto &icData = inlineComponentData[lastICRootName];
-                        icData.totalBindingCount += compilationUnit->totalBindingsCount();
-                        icData.totalParserStatusCount += compilationUnit->totalParserStatusCount();
-                        icData.totalObjectCount += compilationUnit->totalObjectCount();
+                        icData.totalBindingCount += compilationUnit->totalBindingsCount(currentlyVisitedICName);
+                        icData.totalParserStatusCount += compilationUnit->totalParserStatusCount(currentlyVisitedICName);
+                        icData.totalObjectCount += compilationUnit->totalObjectCount(currentlyVisitedICName);
                     });
                 }
             }
@@ -382,10 +369,10 @@ void CompiledData::CompilationUnit::finalizeCompositeType(const QQmlType &type)
                 ++parserStatusCount;
             ++objectCount;
             if (const auto compilationUnit = typeRef->compilationUnit()) {
-                processInlinComponentType(type, compilationUnit, [&](){
-                    bindingCount += compilationUnit->totalBindingsCount();
-                    parserStatusCount += compilationUnit->totalParserStatusCount();
-                    objectCount += compilationUnit->totalObjectCount();
+                processInlinComponentType(type, [&](const QString &currentlyVisitedICName){
+                    bindingCount += compilationUnit->totalBindingsCount(currentlyVisitedICName);
+                    parserStatusCount += compilationUnit->totalParserStatusCount(currentlyVisitedICName);
+                    objectCount += compilationUnit->totalObjectCount(currentlyVisitedICName);
                 });
             }
         }
@@ -396,11 +383,11 @@ void CompiledData::CompilationUnit::finalizeCompositeType(const QQmlType &type)
     m_totalObjectCount = objectCount;
 }
 
-int CompilationUnit::totalParserStatusCount() const
+int CompilationUnit::totalParserStatusCount(const QString &inlineComponentRootName) const
 {
-    if (!icRootName)
+    if (inlineComponentRootName.isEmpty())
         return m_totalParserStatusCount;
-    return inlineComponentData[*icRootName].totalParserStatusCount;
+    return inlineComponentData[inlineComponentRootName].totalParserStatusCount;
 }
 
 bool CompilationUnit::verifyChecksum(const DependentTypesHasher &dependencyHasher) const

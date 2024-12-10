@@ -915,15 +915,23 @@ class MyCustomParserType : public QObject
 class MyCustomParserTypeParser : public QQmlCustomParser
 {
 public:
-    void verifyBindings(const QQmlRefPointer<QV4::ExecutableCompilationUnit> &, const QList<const QV4::CompiledData::Binding *> &) override {}
-    void applyBindings(QObject *, const QQmlRefPointer<QV4::ExecutableCompilationUnit> &, const QList<const QV4::CompiledData::Binding *> &) override {}
+    void verifyBindings(
+            const QQmlRefPointer<QV4::CompiledData::CompilationUnit> &,
+            const QList<const QV4::CompiledData::Binding *> &) override {}
+    void applyBindings(
+            QObject *, const QQmlRefPointer<QV4::ExecutableCompilationUnit> &,
+            const QList<const QV4::CompiledData::Binding *> &) override {}
 };
 
 class EnumSupportingCustomParser : public QQmlCustomParser
 {
 public:
-    void verifyBindings(const QQmlRefPointer<QV4::ExecutableCompilationUnit> &, const QList<const QV4::CompiledData::Binding *> &) override;
-    void applyBindings(QObject *, const QQmlRefPointer<QV4::ExecutableCompilationUnit> &, const QList<const QV4::CompiledData::Binding *> &) override {}
+    void verifyBindings(
+            const QQmlRefPointer<QV4::CompiledData::CompilationUnit> &,
+            const QList<const QV4::CompiledData::Binding *> &) override;
+    void applyBindings(
+            QObject *, const QQmlRefPointer<QV4::ExecutableCompilationUnit> &,
+            const QList<const QV4::CompiledData::Binding *> &) override {}
 };
 
 class MyParserStatus : public QObject, public QQmlParserStatus
@@ -1450,8 +1458,12 @@ public:
 
 class CustomBindingParser : public QQmlCustomParser
 {
-    void verifyBindings(const QQmlRefPointer<QV4::ExecutableCompilationUnit> &, const QList<const QV4::CompiledData::Binding *> &) override {}
-    void applyBindings(QObject *, const QQmlRefPointer<QV4::ExecutableCompilationUnit> &, const QList<const QV4::CompiledData::Binding *> &) override;
+    void verifyBindings(
+            const QQmlRefPointer<QV4::CompiledData::CompilationUnit> &,
+            const QList<const QV4::CompiledData::Binding *> &) override {}
+    void applyBindings(
+            QObject *, const QQmlRefPointer<QV4::ExecutableCompilationUnit> &,
+            const QList<const QV4::CompiledData::Binding *> &) override;
 };
 
 class SimpleObjectWithCustomParser : public QObject
@@ -1496,8 +1508,12 @@ private:
 
 class SimpleObjectCustomParser : public QQmlCustomParser
 {
-    void verifyBindings(const QQmlRefPointer<QV4::ExecutableCompilationUnit> &, const QList<const QV4::CompiledData::Binding *> &) override {}
-    void applyBindings(QObject *, const QQmlRefPointer<QV4::ExecutableCompilationUnit> &, const QList<const QV4::CompiledData::Binding *> &) override;
+    void verifyBindings(
+            const QQmlRefPointer<QV4::CompiledData::CompilationUnit> &,
+            const QList<const QV4::CompiledData::Binding *> &) override {}
+    void applyBindings(
+            QObject *, const QQmlRefPointer<QV4::ExecutableCompilationUnit> &,
+            const QList<const QV4::CompiledData::Binding *> &) override;
 };
 
 class RootObjectInCreationTester : public QObject

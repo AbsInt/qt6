@@ -3,8 +3,9 @@
 
 import Qt.labs.folderlistmodel
 import QtQuick
-import QtQuick.Controls
 import QtQuick.Controls.impl
+import QtQuick.Controls.Basic
+import QtQuick.Controls.Basic.impl
 import QtQuick.Dialogs
 import QtQuick.Dialogs.quickimpl
 import QtQuick.Layouts

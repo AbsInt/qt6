@@ -31,6 +31,7 @@ public:
     void setColor(QColor col) override
     {
         m_color = col;
+        markDirty(DirtyMaterial);
     }
 
     QColor color() const
@@ -41,6 +42,7 @@ public:
     void setStrokeWidth(float width)
     {
         m_strokeWidth = width;
+        markDirty(DirtyMaterial);
     }
 
     float strokeWidth() const

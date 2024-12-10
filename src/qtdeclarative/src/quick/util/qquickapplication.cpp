@@ -108,7 +108,7 @@ QT_BEGIN_NAMESPACE
 
 
 /*!
-    \qmlproperty QString Application::displayName
+    \qmlproperty string Application::displayName
 
     This property represents the application display name set on the
     QGuiApplication instance. This property can be written to in order to set
@@ -142,34 +142,34 @@ QT_BEGIN_NAMESPACE
 */
 
 /*!
-    \qmlproperty QStringList Application::arguments
+    \qmlproperty list<string> Application::arguments
 
     This is a string list of the arguments the executable was invoked with.
  */
 
 /*!
-    \qmlproperty QString Application::name
+    \qmlproperty string Application::name
 
     This is the application name set on the QCoreApplication instance. This
     property can be written to in order to set the application name.
  */
 
 /*!
-    \qmlproperty QString Application::version
+    \qmlproperty string Application::version
 
     This is the application version set on the QCoreApplication instance. This
     property can be written to in order to set the application version.
  */
 
 /*!
-    \qmlproperty QString Application::organization
+    \qmlproperty string Application::organization
 
     This is the organization name set on the QCoreApplication instance.
     This property can be written to in order to set the organization name.
  */
 
 /*!
-    \qmlproperty QString Application::domain
+    \qmlproperty string Application::domain
 
     This is the organization domain set on the QCoreApplication instance.
     This property can be written to in order to set the organization domain.

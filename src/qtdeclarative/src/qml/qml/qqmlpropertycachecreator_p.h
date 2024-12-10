@@ -289,8 +289,10 @@ inline QQmlError QQmlPropertyCacheCreator<ObjectContainer>::buildMetaObjectRecur
     };
 
     const CompiledObject *obj = objectContainer->objectAt(objectIndex);
-    bool needVMEMetaObject = isVMERequired == VMEMetaObjectIsRequired::Always || obj->propertyCount() != 0 || obj->aliasCount() != 0
-            || obj->signalCount() != 0 || obj->functionCount() != 0 || obj->enumCount() != 0
+    bool needVMEMetaObject = isVMERequired == VMEMetaObjectIsRequired::Always
+            || obj->propertyCount() != 0 || obj->aliasCount() != 0 || obj->signalCount() != 0
+            || obj->functionCount() != 0 || obj->enumCount() != 0
+            || obj->inlineComponentCount() != 0
             || ((obj->hasFlag(QV4::CompiledData::Object::IsComponent)
                  || (objectIndex == 0 && isAddressable(objectContainer->url())))
                 && !objectContainer->resolvedType(obj->inheritedTypeNameIndex)->isFullyDynamicType());

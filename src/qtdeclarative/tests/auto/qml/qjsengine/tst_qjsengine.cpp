@@ -5255,7 +5255,7 @@ void tst_QJSEngine::registerModule()
     ret = engine.registerModule("qt_info", obj);
     QVERIFY2(ret, "Error registering qt_info");
     QJSValue result = engine.importModule(QStringLiteral(":/testregister.mjs"));
-    QVERIFY(!result.isError());
+    QVERIFY2(!result.isError(), qPrintable(result.toString()));
 
     QJSValue nameVal = result.property("getName").call();
     QJSValue magicVal = result.property("getMagic").call();
@@ -5305,7 +5305,7 @@ void tst_QJSEngine::registerModuleNamedError() {
     QVERIFY(ret);
 
     QJSValue result = engine.importModule(QStringLiteral(":/testregister3.mjs"));
-    QCOMPARE(result.toString(), QString("ReferenceError: Unable to resolve import reference subval because notanobject is not an object"));
+    QCOMPARE(result.toString(), QString("ReferenceError: Unable to resolve import reference subval"));
 }
 
 void tst_QJSEngine::equality()

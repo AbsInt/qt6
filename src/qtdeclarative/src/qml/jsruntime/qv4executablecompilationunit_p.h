@@ -99,9 +99,9 @@ public:
     QHash<int, IdentifierHash> namedObjectsPerComponentCache;
     inline IdentifierHash namedObjectsPerComponent(int componentObjectIndex);
 
-    int totalBindingsCount() const { return m_compilationUnit->totalBindingsCount(); }
-    int totalParserStatusCount() const { return m_compilationUnit->totalParserStatusCount(); }
-    int totalObjectCount() const { return m_compilationUnit->totalObjectCount(); }
+    int totalBindingsCount(const QString &inlineComponentRoot) const { return m_compilationUnit->totalBindingsCount(inlineComponentRoot); }
+    int totalParserStatusCount(const QString &inlineComponentRoot) const { return m_compilationUnit->totalParserStatusCount(inlineComponentRoot); }
+    int totalObjectCount(const QString &inlineComponentRoot) const { return m_compilationUnit->totalObjectCount(inlineComponentRoot); }
 
     ResolvedTypeReference *resolvedType(int id) const
     {

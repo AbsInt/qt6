@@ -35,6 +35,7 @@ private Q_SLOTS:
     void initTestCase();
     void init();
     void cleanup();
+    void cleanupTestCase();
 
     void basic_data() { setupTestSuite(); }
     void basic() { runTest("Basic"); }
@@ -165,6 +166,11 @@ void tst_Baseline_Controls::cleanup()
     // Allow subsystems time to settle
     if (!aborted)
         QTest::qWait(20);
+}
+
+void tst_Baseline_Controls::cleanupTestCase()
+{
+    QBaselineTest::finalizeAndDisconnect();
 }
 
 void tst_Baseline_Controls::setupTestSuite()

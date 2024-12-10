@@ -28,9 +28,10 @@ QT_FOR_EACH_STATIC_PRIMITIVE_TYPE(HANDLE_PRIMITIVE);
     }
 }
 
-QQmlPropertyValidator::QQmlPropertyValidator(QQmlEnginePrivate *enginePrivate, const QQmlImports *imports,
+QQmlPropertyValidator::QQmlPropertyValidator(
+        QQmlTypeLoader *typeLoader, const QQmlImports *imports,
         const QQmlRefPointer<QV4::CompiledData::CompilationUnit> &compilationUnit)
-    : enginePrivate(enginePrivate)
+    : m_typeLoader(typeLoader)
     , compilationUnit(compilationUnit)
     , imports(imports)
     , qmlUnit(compilationUnit->unitData())
@@ -200,7 +201,7 @@ QVector<QQmlError> QQmlPropertyValidator::validateObject(
             QQmlType type;
             QQmlImportNamespace *typeNamespace = nullptr;
             imports->resolveType(
-                    QQmlTypeLoader::get(enginePrivate), stringAt(binding->propertyNameIndex),
+                    m_typeLoader, stringAt(binding->propertyNameIndex),
                     &type, nullptr, &typeNamespace);
             if (typeNamespace)
                 return recordError(binding->location, tr("Invalid use of namespace"));
@@ -348,14 +349,9 @@ QVector<QQmlError> QQmlPropertyValidator::validateObject(
     if (customParser && !customBindings.isEmpty()) {
         customParser->clearErrors();
         customParser->validator = this;
-        customParser->engine = enginePrivate;
         customParser->imports = imports;
-        customParser->verifyBindings(
-                enginePrivate->v4engine()->executableCompilationUnit(
-                        QQmlRefPointer<QV4::CompiledData::CompilationUnit>(compilationUnit)),
-                customBindings);
+        customParser->verifyBindings(compilationUnit, customBindings);
         customParser->validator = nullptr;
-        customParser->engine = nullptr;
         customParser->imports = (QQmlImports*)nullptr;
         QVector<QQmlError> parserErrors = customParser->errors();
         if (!parserErrors.isEmpty())

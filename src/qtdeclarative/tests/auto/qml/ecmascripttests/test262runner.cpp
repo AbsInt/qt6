@@ -344,16 +344,15 @@ void Test262Runner::executeTest(QV4::ExecutionEngine &vm, const QString &testDat
             const QStringList moduleRequests = module->baseCompilationUnit()->moduleRequests();
             for (const QString &request: moduleRequests) {
                 const QUrl absoluteRequest = module->finalUrl().resolved(QUrl(request));
-                const auto module = vm.moduleForUrl(absoluteRequest);
-                if (module.native == nullptr && module.compiled == nullptr)
+                if (!vm.moduleForUrl(absoluteRequest))
                     modulesToLoad << absoluteRequest;
             }
         }
 
         if (!vm.hasException) {
             const auto rootModule = vm.loadModule(rootModuleUrl);
-            if (rootModule.compiled && rootModule.compiled->instantiate())
-                rootModule.compiled->evaluate();
+            if (rootModule && rootModule->instantiate())
+                rootModule->evaluate();
         }
     } else {
         QV4::ScopedContext ctx(scope, vm.rootContext());

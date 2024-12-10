@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 #include <qv4engine_p.h>
 
-#include <private/qv4compileddata_p.h>
-#include <private/qv4codegen_p.h>
 #include <private/qqmljsdiagnosticmessage_p.h>
+#include <private/qv4codegen_p.h>
+#include <private/qv4compileddata_p.h>
+#include <private/qv4module_p.h>
 
 #include <QtCore/QTextStream>
 #include <QDateTime>
@@ -853,10 +854,6 @@ ExecutionEngine::ExecutionEngine(QJSEngine *jsEngine)
 
 ExecutionEngine::~ExecutionEngine()
 {
-    for (auto val : nativeModules) {
-        PersistentValueStorage::free(val);
-    }
-    nativeModules.clear();
     qDeleteAll(m_extensionData);
     delete m_multiplyWrappedQObjects;
     m_multiplyWrappedQObjects = nullptr;
@@ -2123,56 +2120,94 @@ void ExecutionEngine::trimCompilationUnits()
     }
 }
 
+template<typename NotFound>
+ExecutionEngine::Module doFindModule(
+        const QMultiHash<QUrl, QQmlRefPointer<ExecutableCompilationUnit>> &compilationUnits,
+        const QUrl &url, const ExecutableCompilationUnit *referrer, NotFound &&notFound)
+{
+    const QUrl resolved = referrer
+            ? referrer->finalUrl().resolved(QQmlTypeLoader::normalize(url))
+            : QQmlTypeLoader::normalize(url);
+    auto existingModule = compilationUnits.constFind(resolved);
+    if (existingModule != compilationUnits.constEnd())
+        return *existingModule;
+
+    if (resolved != url) {
+        // Also try with the relative url, to support native modules.
+        existingModule = compilationUnits.constFind(url);
+        if (existingModule != compilationUnits.constEnd())
+            return *existingModule;
+    }
+
+    return notFound(resolved);
+}
+
 ExecutionEngine::Module ExecutionEngine::moduleForUrl(
         const QUrl &url, const ExecutableCompilationUnit *referrer) const
 {
-    const auto nativeModule = nativeModules.find(url);
-    if (nativeModule != nativeModules.end())
-        return Module { nullptr, *nativeModule };
-
-    const QUrl resolved = referrer
-            ? referrer->finalUrl().resolved(QQmlTypeLoader::normalize(url))
-            : QQmlTypeLoader::normalize(url);
-    auto existingModule = m_compilationUnits.find(resolved);
-    if (existingModule == m_compilationUnits.end())
-        return Module { nullptr, nullptr };
-    return Module { *existingModule, nullptr };
+    return doFindModule(m_compilationUnits, url, referrer, [](const QUrl &) {
+        return Module();
+    });
 }
 
-ExecutionEngine::Module ExecutionEngine::loadModule(const QUrl &url, const ExecutableCompilationUnit *referrer)
+ExecutionEngine::Module ExecutionEngine::loadModule(
+        const QUrl &url, const ExecutableCompilationUnit *referrer)
 {
-    const auto nativeModule = nativeModules.constFind(url);
-    if (nativeModule != nativeModules.cend())
-        return Module { nullptr, *nativeModule };
-
-    const QUrl resolved = referrer
-            ? referrer->finalUrl().resolved(QQmlTypeLoader::normalize(url))
-            : QQmlTypeLoader::normalize(url);
-    auto existingModule = m_compilationUnits.constFind(resolved);
-    if (existingModule != m_compilationUnits.cend())
-        return Module { *existingModule, nullptr };
-
-    auto newModule = compileModule(resolved);
-    Q_ASSERT(!newModule || m_compilationUnits.contains(resolved, newModule));
-
-    return Module { newModule, nullptr };
+    return doFindModule(m_compilationUnits, url, referrer, [this](const QUrl &resolved) {
+        return compileModule(resolved);
+    });
 }
 
-QV4::Value *ExecutionEngine::registerNativeModule(const QUrl &url, const QV4::Value &module)
+ExecutionEngine::Module ExecutionEngine::registerNativeModule(
+        const QUrl &url, const QV4::Value &value)
 {
-    const auto existingModule = nativeModules.constFind(url);
-    if (existingModule != nativeModules.cend())
-        return nullptr;
+    Q_ASSERT(!m_compilationUnits.contains(url));
 
-    QV4::Value *val = this->memoryManager->m_persistentValues->allocate();
-    *val = module.asReturnedValue();
-    nativeModules.insert(url, val);
+    const QV4::CompiledData::Unit *unit = Compiler::Codegen::generateNativeModuleUnitData(
+            /*debugMode*/debugger() != nullptr, url.toString(), value);
+    if (!unit)
+        return Module();
 
-    // Make sure the type loader doesn't try to resolve the script anymore.
-    if (m_qmlEngine)
-        QQmlEnginePrivate::get(m_qmlEngine)->typeLoader.injectScript(url);
+    QQmlRefPointer<CompiledData::CompilationUnit> cu;
+    if (m_qmlEngine) {
+        // Make sure the type loader doesn't try to resolve the script anymore.
+        cu = QQmlEnginePrivate::get(m_qmlEngine)->typeLoader.injectScript(url, unit);
+    } else {
+        cu = QQml::makeRefPointer<CompiledData::CompilationUnit>(unit);
+    }
 
-    return val;
+    QQmlRefPointer<ExecutableCompilationUnit> newModule = insertCompilationUnit(std::move(cu));
+
+    Q_ASSERT(m_compilationUnits.contains(url, newModule));
+
+    Scope scope(this);
+    Scoped<QV4::Module> instance(scope, newModule->instantiate());
+    Scoped<CallContext> context(scope, instance->d()->scope);
+
+    const CompiledData::Unit *unitData = newModule->baseCompilationUnit()->data;
+    const CompiledData::ExportEntry *exportEntries = unitData->localExportEntryTable();
+
+    ScopedObject object(scope, value);
+    for (uint i = 0, end = unitData->localExportEntryTableSize; i < end; ++i) {
+        const CompiledData::ExportEntry *localExport = exportEntries + i;
+        ScopedString localName(scope, newModule->runtimeStrings[localExport->localName]);
+        const uint index
+                = context->internalClass()->indexOfValueOrGetter(localName->toPropertyKey());
+        QV4::Heap::CallContext *cc = context->d();
+        Q_ASSERT(index < cc->locals.size);
+        if (localName->toQString() == QLatin1String("default")) {
+            cc->locals.set(this, index, value);
+            continue;
+        }
+
+        Q_ASSERT(object);
+
+        ScopedValue localValue(scope, object->get(localName));
+        cc->locals.set(this, index, localValue);
+    }
+
+    instance->d()->evaluated = true;
+    return newModule;
 }
 
 static ExecutionEngine::DiskCacheOptions transFormDiskCache(const char *v)

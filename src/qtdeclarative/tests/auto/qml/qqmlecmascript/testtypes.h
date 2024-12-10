@@ -357,7 +357,7 @@ public:
     int millipedeLegs() const { return 1000; }
 };
 
-class MyDeferredObject : public QObject
+class MyDeferredObject : public QObject, public QQmlParserStatus
 {
     Q_OBJECT
     Q_PROPERTY(int value READ value WRITE setValue NOTIFY valueChanged)
@@ -376,6 +376,8 @@ public:
 
     QObject *objectProperty2() const { return m_object2; }
     void setObjectProperty2(QObject *obj) { m_object2 = obj; }
+    void classBegin() {};
+    void componentComplete() {};
 
 signals:
     void valueChanged();

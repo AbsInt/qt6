@@ -267,10 +267,10 @@ ReturnedValue QQmlTypeWrapper::create(
     return w.asReturnedValue();
 }
 
-static int enumForSingleton(QV4::ExecutionEngine *v4, String *name, const QQmlType &type, bool *ok)
+static int enumForSingleton(QQmlTypeLoader *typeLoader, String *name, const QQmlType &type, bool *ok)
 {
     Q_ASSERT(ok != nullptr);
-    const int value = type.enumValue(QQmlEnginePrivate::get(v4->qmlEngine()), name, ok);
+    const int value = type.enumValue(typeLoader, name, ok);
     return *ok ? value : -1;
 }
 
@@ -310,11 +310,11 @@ ReturnedValue QQmlTypeWrapper::virtualGet(const Managed *m, PropertyKey id, cons
                             = w->d()->typeNameMode() == Heap::QQmlTypeWrapper::IncludeEnums;
                     if (includeEnums && name->startsWithUpper()) {
                         bool ok = false;
-                        int value = enumForSingleton(v4, name, type, &ok);
+                        int value = enumForSingleton(&enginePrivate->typeLoader, name, type, &ok);
                         if (ok)
                             return QV4::Value::fromInt32(value).asReturnedValue();
 
-                        value = type.scopedEnumIndex(enginePrivate, name, &ok);
+                        value = type.scopedEnumIndex(&enginePrivate->typeLoader, name, &ok);
                         if (ok) {
                             Scoped<QQmlScopedEnumWrapper> enumWrapper(scope, v4->memoryManager->allocate<QQmlScopedEnumWrapper>());
                             enumWrapper->d()->typePrivate = type.priv();
@@ -350,11 +350,11 @@ ReturnedValue QQmlTypeWrapper::virtualGet(const Managed *m, PropertyKey id, cons
 
             if (name->startsWithUpper()) {
                 bool ok = false;
-                int value = type.enumValue(enginePrivate, name, &ok);
+                int value = type.enumValue(&enginePrivate->typeLoader, name, &ok);
                 if (ok)
                     return QV4::Value::fromInt32(value).asReturnedValue();
 
-                value = type.scopedEnumIndex(enginePrivate, name, &ok);
+                value = type.scopedEnumIndex(&enginePrivate->typeLoader, name, &ok);
                 if (ok) {
                     Scoped<QQmlScopedEnumWrapper> enumWrapper(scope, v4->memoryManager->allocate<QQmlScopedEnumWrapper>());
                     enumWrapper->d()->typePrivate = type.priv();
@@ -634,7 +634,8 @@ ReturnedValue QQmlTypeWrapper::virtualResolveLookupGetter(const Object *object, 
 
         if (name->startsWithUpper()) {
             bool ok = false;
-            int value = type.enumValue(QQmlEnginePrivate::get(engine->qmlEngine()), name, &ok);
+            QQmlTypeLoader *typeLoader = &QQmlEnginePrivate::get(engine->qmlEngine())->typeLoader;
+            int value = type.enumValue(typeLoader, name, &ok);
             if (ok) {
                 lookup->qmlEnumValueLookup.ic.set(engine, This->internalClass());
                 lookup->qmlEnumValueLookup.encodedEnumValue
@@ -643,7 +644,7 @@ ReturnedValue QQmlTypeWrapper::virtualResolveLookupGetter(const Object *object, 
                 return lookup->getter(lookup, engine, *object);
             }
 
-            value = type.scopedEnumIndex(QQmlEnginePrivate::get(engine->qmlEngine()), name, &ok);
+            value = type.scopedEnumIndex(typeLoader, name, &ok);
             if (ok) {
                 Scoped<QQmlScopedEnumWrapper> enumWrapper(
                             scope, engine->memoryManager->allocate<QQmlScopedEnumWrapper>());
@@ -838,7 +839,8 @@ ReturnedValue QQmlScopedEnumWrapper::virtualGet(const Managed *m, PropertyKey id
     int index = resource->d()->scopeEnumIndex;
 
     bool ok = false;
-    int value = type.scopedEnumValue(QQmlEnginePrivate::get(v4->qmlEngine()), index, name, &ok);
+    int value = type.scopedEnumValue(
+            &QQmlEnginePrivate::get(v4->qmlEngine())->typeLoader, index, name, &ok);
     if (hasProperty)
         *hasProperty = ok;
     if (ok)

@@ -3,6 +3,8 @@
 
 #include "qquickfluentwinui3focusframe_p.h"
 
+#include <private/qquickitem_p.h>
+
 #include <QtCore/qmetaobject.h>
 
 #include <QtGui/qguiapplication.h>
@@ -52,6 +54,7 @@ void QQuickFluentWinUI3FocusFrame::moveToItem(QQuickControl *item)
         if (!context || !context->engine())
             return;
         m_focusFrame.reset(createFocusFrame(context));
+        QQuickItemPrivate::get(m_focusFrame.get())->setTransparentForPositioner(true);
         if (!m_focusFrame) {
             qWarning() << "Failed to create FocusFrame";
             return;

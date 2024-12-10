@@ -2568,6 +2568,17 @@ void tst_QQuickPopup::popupWindowPositioning()
     QCOMPARE(ySpy.count(), 4);
 
     VERIFY_GLOBAL_POS(popup->parentItem(), popupWindow, (thirdPosition - movement));
+    VERIFY_LOCAL_POS(popup, (thirdPosition - movement));
+
+    // QTBUG-131098: Resizing the parent should not affect the popup's position.
+    const QPoint finalPos = popup->position().toPoint();
+    window->setWidth(window->width() - 10);
+
+    QCOMPARE(xSpy.count(), 4);
+    QCOMPARE(ySpy.count(), 4);
+
+    VERIFY_GLOBAL_POS(popup->parentItem(), popupWindow, finalPos);
+    VERIFY_LOCAL_POS(popup, finalPos);
 }
 
 void tst_QQuickPopup::popupWindowAnchorsCenterIn_data()

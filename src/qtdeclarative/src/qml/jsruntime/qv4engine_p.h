@@ -771,15 +771,10 @@ public:
     }
     void trimCompilationUnits();
 
-    QV4::Value *registerNativeModule(const QUrl &url, const QV4::Value &module);
 
-    struct Module {
-        QQmlRefPointer<ExecutableCompilationUnit> compiled;
+    using Module = QQmlRefPointer<ExecutableCompilationUnit>;
 
-        // We can pass a raw value pointer here, but nowhere else. See below.
-        Value *native = nullptr;
-    };
-
+    Module registerNativeModule(const QUrl &url, const QV4::Value &value);
     Module moduleForUrl(const QUrl &_url, const ExecutableCompilationUnit *referrer = nullptr) const;
     Module loadModule(const QUrl &_url, const ExecutableCompilationUnit *referrer = nullptr);
 
@@ -814,14 +809,6 @@ public:
         bool ok;
         const QString result = v->toQString(&ok);
         return ok ? QJSPrimitiveValue(result) : QJSPrimitiveValue(QJSPrimitiveUndefined());
-    }
-
-    ReturnedValue nativeModule(const QUrl &url) const
-    {
-        const auto it = nativeModules.find(url);
-        return it == nativeModules.end()
-                ? QV4::Value::emptyValue().asReturnedValue()
-                : (*it)->asReturnedValue();
     }
 
 private:
@@ -895,12 +882,6 @@ private:
     QVector<Deletable *> m_extensionData;
 
     QMultiHash<QUrl, QQmlRefPointer<ExecutableCompilationUnit>> m_compilationUnits;
-
-    // QV4::PersistentValue would be preferred, but using QHash will create copies,
-    // and QV4::PersistentValue doesn't like creating copies.
-    // Instead, we allocate a raw pointer using the same manual memory management
-    // technique in QV4::PersistentValue.
-    QHash<QUrl, Value *> nativeModules;
 };
 
 #define CHECK_STACK_LIMITS(v4) \

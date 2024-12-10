@@ -708,7 +708,7 @@ void QQuickRangeSlider::setTo(qreal to)
 
 /*!
     \since QtQuick.Controls 2.5 (Qt 5.12)
-    \qmlproperty qreal QtQuick.Controls::RangeSlider::touchDragThreshold
+    \qmlproperty real QtQuick.Controls::RangeSlider::touchDragThreshold
 
     This property holds the threshold (in logical pixels) at which a touch drag event will be initiated.
     The mouse drag threshold won't be affected.

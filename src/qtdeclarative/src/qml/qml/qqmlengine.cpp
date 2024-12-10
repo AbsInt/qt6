@@ -1231,12 +1231,13 @@ void QQmlData::NotifyList::layout()
 
 void QQmlData::deferData(
         int objectIndex, const QQmlRefPointer<QV4::ExecutableCompilationUnit> &compilationUnit,
-        const QQmlRefPointer<QQmlContextData> &context)
+        const QQmlRefPointer<QQmlContextData> &context, const QString &inlineComponentName)
 {
     QQmlData::DeferredData *deferData = new QQmlData::DeferredData;
     deferData->deferredIdx = objectIndex;
     deferData->compilationUnit = compilationUnit;
     deferData->context = context;
+    deferData->inlineComponentName = inlineComponentName;
 
     const QV4::CompiledData::Object *compiledObject = compilationUnit->objectAt(objectIndex);
     const QV4::CompiledData::BindingPropertyData *propertyData

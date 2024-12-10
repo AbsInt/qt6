@@ -181,13 +181,17 @@ public:
 
         // Could be either context or outerContext
         QQmlRefPointer<QQmlContextData> context;
+        /* set if the deferred binding originates in an inline component,
+           necessary to adjust the compilationUnit; null if there was no
+           inline component */
+        QString inlineComponentName;
         Q_DISABLE_COPY(DeferredData);
     };
     QQmlRefPointer<QV4::ExecutableCompilationUnit> compilationUnit;
     QVector<DeferredData *> deferredData;
 
     void deferData(int objectIndex, const QQmlRefPointer<QV4::ExecutableCompilationUnit> &,
-                   const QQmlRefPointer<QQmlContextData> &);
+                   const QQmlRefPointer<QQmlContextData> &, const QString &inlineComponentName);
     void releaseDeferredData();
 
     QV4::WeakValue jsWrapper;

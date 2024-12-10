@@ -29,13 +29,15 @@ class QQmlPropertyValidator
     Q_DECLARE_TR_FUNCTIONS(QQmlPropertyValidator)
 public:
     QQmlPropertyValidator(
-            QQmlEnginePrivate *enginePrivate, const QQmlImports *imports,
+            QQmlTypeLoader *typeLoader, const QQmlImports *imports,
             const QQmlRefPointer<QV4::CompiledData::CompilationUnit> &compilationUnit);
 
     QVector<QQmlError> validate();
 
     QQmlPropertyCache::ConstPtr rootPropertyCache() const { return propertyCaches.at(0); }
     QUrl documentSourceUrl() const { return compilationUnit->url(); }
+
+    QQmlTypeLoader *typeLoader() const { return m_typeLoader; }
 
 private:
     QVector<QQmlError> validateObject(
@@ -59,7 +61,7 @@ private:
         return compilationUnit->resolvedType(id);
     }
 
-    QQmlEnginePrivate *enginePrivate;
+    QQmlTypeLoader *m_typeLoader;
     QQmlRefPointer<QV4::CompiledData::CompilationUnit> compilationUnit;
     const QQmlImports *imports;
     const QV4::CompiledData::Unit *qmlUnit;

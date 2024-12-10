@@ -317,8 +317,9 @@ void QQuickPopupPositioner::reposition()
 
 void QQuickPopupPositioner::itemGeometryChanged(QQuickItem *, QQuickGeometryChange, const QRectF &)
 {
-    if (m_parentItem && m_popup->popupItem()->isVisible())
-        QQuickPopupPrivate::get(m_popup)->reposition();
+    auto *popupPrivate = QQuickPopupPrivate::get(m_popup);
+    if (m_parentItem && m_popup->popupItem()->isVisible() && popupPrivate->resolvedPopupType() == QQuickPopup::PopupType::Item)
+        popupPrivate->reposition();
 }
 
 void QQuickPopupPositioner::itemParentChanged(QQuickItem *, QQuickItem *parent)

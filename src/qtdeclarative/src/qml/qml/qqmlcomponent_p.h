@@ -130,7 +130,8 @@ public:
         inline QQmlObjectCreator *initCreator(
                 const QQmlRefPointer<QQmlContextData> &parentContext,
                 const QQmlRefPointer<QV4::ExecutableCompilationUnit> &compilationUnit,
-                const QQmlRefPointer<QQmlContextData> &creationContext);
+                const QQmlRefPointer<QQmlContextData> &creationContext,
+                const QString &inlineComponentName);
 
         QList<AnnotatedQmlError> errors;
         inline bool isCompletePending() const;
@@ -287,14 +288,15 @@ inline void QQmlComponentPrivate::ConstructionState::clear()
 inline QQmlObjectCreator *QQmlComponentPrivate::ConstructionState::initCreator(
         const QQmlRefPointer<QQmlContextData> &parentContext,
         const QQmlRefPointer<QV4::ExecutableCompilationUnit> &compilationUnit,
-        const QQmlRefPointer<QQmlContextData> &creationContext)
+        const QQmlRefPointer<QQmlContextData> &creationContext,
+        const QString &inlineComponentName)
 {
     if (m_creatorOrRequiredProperties.isT1())
         delete m_creatorOrRequiredProperties.asT1();
     else
         delete m_creatorOrRequiredProperties.asT2();
     m_creatorOrRequiredProperties = new QQmlObjectCreator(
-            parentContext, compilationUnit, creationContext);
+            parentContext, compilationUnit, creationContext, inlineComponentName);
     return m_creatorOrRequiredProperties.asT1();
 }
 

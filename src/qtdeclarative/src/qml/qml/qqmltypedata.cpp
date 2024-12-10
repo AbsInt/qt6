@@ -532,11 +532,10 @@ void QQmlTypeData::done()
     }
 
     {
-        QQmlEnginePrivate *const enginePrivate = QQmlEnginePrivate::get(typeLoader()->engine());
         m_compiledData->inlineComponentData = m_inlineComponentData;
         {
             // Sanity check property bindings
-            QQmlPropertyValidator validator(enginePrivate, m_importCache.data(), m_compiledData);
+            QQmlPropertyValidator validator(typeLoader(), m_importCache.data(), m_compiledData);
             QVector<QQmlError> errors = validator.validate();
             if (!errors.isEmpty()) {
                 setError(errors);
@@ -886,7 +885,8 @@ void QQmlTypeData::resolveTypes()
     // Add any imported scripts to our resolved set
     const auto resolvedScripts = m_importCache->resolvedScripts();
     for (const QQmlImports::ScriptReference &script : resolvedScripts) {
-        QQmlRefPointer<QQmlScriptBlob> blob = typeLoader()->getScript(script.location);
+        QQmlRefPointer<QQmlScriptBlob> blob
+                = typeLoader()->getScript(script.location, script.fileName);
         addDependency(blob.data());
 
         ScriptReference ref;

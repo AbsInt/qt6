@@ -184,6 +184,8 @@ private slots:
     void movingAndFlicking();
     void movingAndFlicking_data();
     void movingAndDragging();
+    void dragAndSwitchDirection_data();
+    void dragAndSwitchDirection();
     void movingAndDragging_data();
     void flickOnRelease();
     void pressWhileFlicking();
@@ -1538,6 +1540,80 @@ void tst_qquickflickable::movingAndDragging()
      QCOMPARE(flickable->contentY(), 0.0);
 }
 
+void tst_qquickflickable::dragAndSwitchDirection_data()
+{
+    QTest::addColumn<const QPointingDevice *>("device");
+    QTest::addColumn<bool>("dragH");
+
+    const QPointingDevice *constTouchDevice = touchDevice;
+    QTest::newRow("mouse, drag horizontally") << mouseDevice << true;
+    QTest::newRow("device, drag horizontally") << constTouchDevice << true;
+    QTest::newRow("mouse, drag vertically") << mouseDevice << false;
+    QTest::newRow("device, drag vertically") << constTouchDevice << false;
+}
+
+void tst_qquickflickable::dragAndSwitchDirection()
+{
+    // Check that you can start a drag in one direction, but then, without
+    // lifting the mouse/finger, drag in the opposite direction, passing the
+    // initial starting point of the drag.
+    QFETCH(const QPointingDevice *, device);
+    QFETCH(const bool, dragH);
+
+    QQuickView window;
+    QVERIFY(QQuickTest::showView(window, testFileUrl("flickable01.qml")));
+    QVERIFY(window.rootObject() != nullptr);
+    QQuickFlickable *flickable = qobject_cast<QQuickFlickable*>(window.rootObject());
+    QVERIFY(flickable != nullptr);
+
+    // Flick the content item at bit away from the origin, to avoid
+    // overshooting it while executing the rest of the test.
+    flickable->setWidth(window.width());
+    flickable->setHeight(window.height());
+    flickable->setContentWidth(flickable->width() * 2);
+    flickable->setContentHeight(flickable->height() * 2);
+    flickable->setContentX(flickable->width() / 2);
+    flickable->setContentY(flickable->height() / 2);
+
+    const QPoint initialContentPos = QPoint(flickable->contentX(), flickable->contentY());
+    const QPoint dragDirection = QPoint(dragH ? 1 : 0, dragH ? 0 : 1);
+    const QPoint dragIncrement = dragDirection * qApp->styleHints()->startDragDistance() / 2;
+    const QPoint dragFrom = QPoint(flickable->width(), flickable->height()) / 2;
+    QPoint dragTo = dragFrom;
+
+    // Start a drag in the direction we're testing
+    QVERIFY(!flickable->isDragging());
+    QQuickTest::pointerMoveAndPress(device, &window, 0, dragTo);
+    for (int i = 0; i <= 6; ++i) {
+        dragTo += dragIncrement;
+        QQuickTest::pointerMove(device, &window, 0, dragTo);
+    }
+
+    // At this point, we don't care about the exact position of the contentItem.
+    // What matters is that the flickable is now in a dragging state, and that
+    // the contentItem has moved a bit in the expected direction.
+    QVERIFY(flickable->isDragging());
+    QPoint expectedContentPos(flickable->contentX(), flickable->contentY());
+    QCOMPARE_NE(initialContentPos, expectedContentPos);
+
+    // We now reverse the drag direction, and drag beyond the initial starting
+    // position. We expect the content item to move for each movement of the
+    // pointer, even if the expectedContentPos lands exactly on the initialContentPos.
+    // If the flickable were to only look at the delta moved since the start of the
+    // drag, it could easily be fooled into beliving that the drag threshold has yet
+    // to be exceeded, and therefore not move.
+    for (int i = 0; i <= 6; ++i) {
+        dragTo -= dragIncrement;
+        expectedContentPos += dragIncrement;
+        QQuickTest::pointerMove(device, &window, 0, dragTo);
+        QCOMPARE(flickable->contentX(), expectedContentPos.x());
+        QCOMPARE(flickable->contentY(), expectedContentPos.y());
+    }
+
+    QQuickTest::pointerRelease(device, &window, 0, dragTo);
+    QVERIFY(!flickable->isDragging());
+}
+
 void tst_qquickflickable::flickOnRelease()
 {
     auto device = mouseDevice;
@@ -1801,8 +1877,8 @@ void tst_qquickflickable::margins()
     QTRY_COMPARE(obj->contentX(), -30.);
 
     // Reduce top margin
-    obj->setTopMargin(20);
-    QTRY_COMPARE(obj->contentY(), -20.);
+    obj->setTopMargin(10);
+    QTRY_COMPARE(obj->contentY(), -10.);
 
     // position to the far right, including margin
     obj->setContentX(1600 + 50 - obj->width());

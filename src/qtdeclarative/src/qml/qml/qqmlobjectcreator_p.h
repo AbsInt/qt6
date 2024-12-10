@@ -130,11 +130,11 @@ class Q_QML_EXPORT QQmlObjectCreator
 {
     Q_DECLARE_TR_FUNCTIONS(QQmlObjectCreator)
 public:
-    QQmlObjectCreator(
-            const QQmlRefPointer<QQmlContextData> &parentContext,
-            const QQmlRefPointer<QV4::ExecutableCompilationUnit> &compilationUnit,
-            const QQmlRefPointer<QQmlContextData> &creationContext,
-            QQmlIncubatorPrivate  *incubator = nullptr);
+    QQmlObjectCreator(const QQmlRefPointer<QQmlContextData> &parentContext,
+                      const QQmlRefPointer<QV4::ExecutableCompilationUnit> &compilationUnit,
+                      const QQmlRefPointer<QQmlContextData> &creationContext,
+                      const QString &inlineComponentName,
+                      QQmlIncubatorPrivate  *incubator = nullptr);
     ~QQmlObjectCreator();
 
     enum CreationFlags { NormalObject = 1, InlineComponent = 2 };
@@ -186,6 +186,7 @@ private:
     QQmlObjectCreator(
             const QQmlRefPointer<QQmlContextData> &contextData,
             const QQmlRefPointer<QV4::ExecutableCompilationUnit> &compilationUnit,
+            const QString inlineComponentName,
             QQmlObjectCreatorSharedState *inheritedSharedState, bool isContextObject);
 
     void init(const QQmlRefPointer<QQmlContextData> &parentContext);
@@ -237,6 +238,7 @@ private:
 
     QQmlEngine *engine;
     QV4::ExecutionEngine *v4;
+    QString m_inlineComponentName;
     QQmlRefPointer<QV4::ExecutableCompilationUnit> compilationUnit;
     const QV4::CompiledData::Unit *qmlUnit;
     QQmlGuardedContextData parentContext;
@@ -284,7 +286,7 @@ private:
         QV4::Scope valueScope(v4);
         QScopedValueRollback<ObjectInCreationGCAnchorList> jsObjectGuard(
                 sharedState->allJavaScriptObjects,
-                ObjectInCreationGCAnchorList(valueScope, compilationUnit->totalObjectCount()));
+                ObjectInCreationGCAnchorList(valueScope, compilationUnit->totalObjectCount(m_inlineComponentName)));
 
         Q_ASSERT(topLevelCreator);
         QV4::QmlContext *qmlContext = static_cast<QV4::QmlContext *>(valueScope.alloc());

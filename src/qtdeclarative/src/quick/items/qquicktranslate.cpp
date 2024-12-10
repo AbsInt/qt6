@@ -452,7 +452,7 @@ QQuickMatrix4x4::QQuickMatrix4x4(QObject *parent)
 }
 
 /*!
-    \qmlproperty QMatrix4x4 QtQuick::Matrix4x4::matrix
+    \qmlproperty matrix4x4 QtQuick::Matrix4x4::matrix
 
     4x4-matrix which will be used in the tranformation of an \l Item
 */

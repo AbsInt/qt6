@@ -103,12 +103,10 @@ int main(int argc, char *argv[])
     for (const QString &fn : args) {
         QV4::ScopedValue result(scope);
         if (runAsModule) {
-            auto module = vm.loadModule(QUrl::fromLocalFile(QFileInfo(fn).absoluteFilePath()));
-            if (module.compiled) {
-                if (module.compiled->instantiate())
-                    module.compiled->evaluate();
-            } else if (module.native) {
-                // Nothing to do. Native modules have no global code.
+            if (auto module
+                    = vm.loadModule(QUrl::fromLocalFile(QFileInfo(fn).absoluteFilePath()))) {
+                if (module->instantiate())
+                    module->evaluate();
             } else {
                 vm.throwError(QStringLiteral("Could not load module file"));
             }

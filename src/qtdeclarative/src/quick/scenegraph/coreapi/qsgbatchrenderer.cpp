@@ -1115,7 +1115,7 @@ void Renderer::unmap(Buffer *buffer, bool isIndexBuf)
             buffer->nonDynamicChangeCount += 1;
         } else {
             if (m_rhi->resourceLimit(QRhi::FramesInFlight) == 1)
-                buffer->buf->fullDynamicBufferUpdateForCurrentFrame(buffer->data);
+                buffer->buf->fullDynamicBufferUpdateForCurrentFrame(buffer->data, buffer->size);
             else
                 m_resourceUpdates->updateDynamicBuffer(buffer->buf, 0, buffer->size, buffer->data);
         }

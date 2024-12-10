@@ -13,4 +13,11 @@ Item {
     property string d: "multi\n\n
     newlines\n\n
     "
+
+    property string emptyTemplateLiteral: `start
+    ${b + k()}
+    end
+    `
+
+    function k(){}
 }

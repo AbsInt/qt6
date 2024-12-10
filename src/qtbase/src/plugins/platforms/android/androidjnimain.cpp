@@ -45,10 +45,7 @@ using namespace Qt::StringLiterals;
 
 QT_BEGIN_NAMESPACE
 
-static JavaVM *m_javaVM = nullptr;
 static jclass m_applicationClass  = nullptr;
-static jobject m_classLoaderObject = nullptr;
-static jmethodID m_loadClassMethodID = nullptr;
 static AAssetManager *m_assetManager = nullptr;
 static jobject m_assets = nullptr;
 static jobject m_resourcesObj = nullptr;
@@ -164,11 +161,6 @@ namespace QtAndroid
     double pixelDensity()
     {
         return m_density;
-    }
-
-    JavaVM *javaVM()
-    {
-        return m_javaVM;
     }
 
     AAssetManager *assetManager()
@@ -513,7 +505,6 @@ static void terminateQt(JNIEnv *env, jclass /*clazz*/)
     sem_destroy(&m_terminateSemaphore);
 
     env->DeleteGlobalRef(m_applicationClass);
-    env->DeleteGlobalRef(m_classLoaderObject);
     if (m_resourcesObj)
         env->DeleteGlobalRef(m_resourcesObj);
     if (m_bitmapClass)
@@ -828,11 +819,6 @@ static bool registerNatives(QJniEnvironment &env)
         env->DeleteLocalRef(contextObject);
     });
 
-    GET_AND_CHECK_STATIC_METHOD(methodID, m_applicationClass, "classLoader", "()Ljava/lang/ClassLoader;");
-    m_classLoaderObject = env->NewGlobalRef(env->CallStaticObjectMethod(m_applicationClass, methodID));
-    clazz = env->GetObjectClass(m_classLoaderObject);
-    GET_AND_CHECK_METHOD(m_loadClassMethodID, clazz, "loadClass", "(Ljava/lang/String;)Ljava/lang/Class;");
-
     FIND_AND_CHECK_CLASS("android/content/ContextWrapper");
     GET_AND_CHECK_METHOD(methodID, clazz, "getAssets", "()Landroid/content/res/AssetManager;");
     m_assets = env->NewGlobalRef(env->CallObjectMethod(contextObject, methodID));
@@ -868,7 +854,7 @@ static bool registerNatives(QJniEnvironment &env)
 
 QT_END_NAMESPACE
 
-Q_DECL_EXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void */*reserved*/)
+Q_DECL_EXPORT jint JNICALL JNI_OnLoad(JavaVM */*vm*/, void */*reserved*/)
 {
     static bool initialized = false;
     if (initialized)
@@ -876,10 +862,8 @@ Q_DECL_EXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void */*reserved*/)
     initialized = true;
 
     QT_USE_NAMESPACE
-    m_javaVM = vm;
     QJniEnvironment env;
     if (!env.isValid()) {
-        m_javaVM = nullptr;
         __android_log_print(ANDROID_LOG_FATAL, "Qt", "Failed to initialize the JNI Environment");
         return -1;
     }

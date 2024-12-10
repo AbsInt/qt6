@@ -1239,7 +1239,7 @@ void QQuickFlickablePrivate::drag(qint64 currentTimestamp, QEvent::Type eventTyp
                     }
                 }
             }
-            if (!rejectY && stealMouse && dy != 0.0 && dy != vData.previousDragDelta) {
+            if (!rejectY && stealMouse && dy != vData.previousDragDelta) {
                 clearTimeline();
                 vData.move.setValue(newY);
                 vMoved = true;
@@ -1312,8 +1312,7 @@ void QQuickFlickablePrivate::drag(qint64 currentTimestamp, QEvent::Type eventTyp
                     }
                 }
             }
-
-            if (!rejectX && stealMouse && dx != 0.0 && dx != hData.previousDragDelta) {
+            if (!rejectX && stealMouse && dx != hData.previousDragDelta) {
                 clearTimeline();
                 hData.move.setValue(newX);
                 hMoved = true;

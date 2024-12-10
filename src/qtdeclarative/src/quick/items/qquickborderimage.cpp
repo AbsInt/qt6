@@ -233,7 +233,7 @@ QQuickBorderImage::~QQuickBorderImage()
 */
 
 /*!
-    \qmlproperty QSize QtQuick::BorderImage::sourceSize
+    \qmlproperty size QtQuick::BorderImage::sourceSize
 
     This property holds the actual width and height of the loaded image.
 

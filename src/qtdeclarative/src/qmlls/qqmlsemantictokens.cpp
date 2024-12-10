@@ -712,12 +712,28 @@ void HighlightingVisitor::highlightScriptExpressions(const DomItem &item)
     case DomType::ScriptNewExpression:
         m_highlights.addHighlight(regions[NewKeywordRegion], QmlHighlightKind::QmlKeyword);
         return;
-    default:
-        qCDebug(semanticTokens)
-                << "Script Expressions with kind" << item.internalKind() << "not implemented";
+    case DomType::ScriptTemplateExpressionPart:
+        m_highlights.addHighlight(regions[DollarLeftBraceTokenRegion], QmlHighlightKind::Operator);
+        operator()(Path(), item.field(Fields::expression), false);
+        m_highlights.addHighlight(regions[RightBraceRegion], QmlHighlightKind::Operator);
+        return;
+    case DomType::ScriptTemplateLiteral:
+        m_highlights.addHighlight(regions[LeftBacktickTokenRegion], QmlHighlightKind::String);
+        m_highlights.addHighlight(regions[RightBacktickTokenRegion], QmlHighlightKind::String);
+        return;
+    case DomType::ScriptTemplateStringPart: {
+        // handle multiline case
+        QString code = item.field(Fields::value).value().toString();
+        const auto &locs = HighlightingUtils::sourceLocationsFromMultiLineToken(
+            code, regions[MainRegion]);
+        for (const auto &loc : locs)
+            m_highlights.addHighlight(loc, QmlHighlightKind::String);
         return;
     }
-    Q_UNREACHABLE_RETURN();
+    default:
+        qCDebug(semanticTokens) << "Script Expressions with kind" << item.internalKind()
+                                << "not implemented";
+    }
 }
 
 /*!

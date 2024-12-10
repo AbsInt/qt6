@@ -352,7 +352,7 @@ void tst_primaryselectionv1::pasteUtf8()
         pointer()->sendButton(client(), BTN_MIDDLE, 0);
         pointer()->sendFrame(client());
     });
-    QTRY_COMPARE(window.m_formats, QStringList({"text/plain", "text/plain;charset=utf-8"}));
+    QTRY_COMPARE(window.m_formats, QStringList({"text/plain"}));
     QTRY_COMPARE(window.m_text, "face with tears of joy: 😂");
 }
 

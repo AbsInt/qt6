@@ -225,7 +225,9 @@ void CustomBinding::componentComplete()
     }
 }
 
-void EnumSupportingCustomParser::verifyBindings(const QQmlRefPointer<QV4::ExecutableCompilationUnit> &compilationUnit, const QList<const QV4::CompiledData::Binding *> &bindings)
+void EnumSupportingCustomParser::verifyBindings(
+        const QQmlRefPointer<QV4::CompiledData::CompilationUnit> &compilationUnit,
+        const QList<const QV4::CompiledData::Binding *> &bindings)
 {
     if (bindings.size() != 1) {
         error(bindings.first(), QStringLiteral("Custom parser invoked incorrectly for unit test"));

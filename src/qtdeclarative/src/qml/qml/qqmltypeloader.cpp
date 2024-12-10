@@ -6,10 +6,14 @@
 #include <private/qqmldirdata_p.h>
 #include <private/qqmlprofiler_p.h>
 #include <private/qqmlscriptblob_p.h>
+#include <private/qqmlscriptdata_p.h>
+#include <private/qqmlsourcecoordinate_p.h>
 #include <private/qqmltypedata_p.h>
 #include <private/qqmltypeloaderqmldircontent_p.h>
 #include <private/qqmltypeloaderthread_p.h>
-#include <private/qqmlsourcecoordinate_p.h>
+#include <private/qv4compiler_p.h>
+#include <private/qv4compilercontext_p.h>
+#include <private/qv4runtimecodegen_p.h>
 
 #include <QtQml/qqmlabstracturlinterceptor.h>
 #include <QtQml/qqmlengine.h>
@@ -500,8 +504,9 @@ void QQmlTypeLoader::Blob::importQmldirScripts(
 {
     const auto qmldirScripts = qmldir.scripts();
     for (const QQmlDirParser::Script &script : qmldirScripts) {
-        const QUrl scriptUrl = qmldirUrl.resolved(QUrl(script.fileName));
-        QQmlRefPointer<QQmlScriptBlob> blob = typeLoader()->getScript(scriptUrl);
+        const QUrl plainUrl = QUrl(script.fileName);
+        const QUrl scriptUrl = qmldirUrl.resolved(plainUrl);
+        QQmlRefPointer<QQmlScriptBlob> blob = typeLoader()->getScript(scriptUrl, plainUrl);
         addDependency(blob.data());
         scriptImported(blob, import->location, script.nameSpace, import->qualifier);
     }
@@ -561,11 +566,7 @@ bool QQmlTypeLoader::Blob::addScriptImport(const QQmlTypeLoader::Blob::PendingIm
 {
     const QUrl url(import->uri);
     QQmlTypeLoader *loader = typeLoader();
-    QQmlRefPointer<QQmlScriptBlob> blob = loader->injectedScript(url);
-    if (!blob)
-        blob = loader->getScript(finalUrl().resolved(url));
-    else
-        Q_ASSERT(blob->status() == QQmlDataBlob::Status::Complete);
+    QQmlRefPointer<QQmlScriptBlob> blob = loader->getScript(finalUrl().resolved(url), url);
     addDependency(blob.data());
     scriptImported(blob, import->location, import->qualifier, QString());
     return true;
@@ -1013,30 +1014,24 @@ QQmlRefPointer<QQmlTypeData> QQmlTypeLoader::getType(const QByteArray &data, con
     return QQmlRefPointer<QQmlTypeData>(typeData, QQmlRefPointer<QQmlTypeData>::Adopt);
 }
 
-void QQmlTypeLoader::injectScript(const QUrl &relativeUrl)
+QQmlRefPointer<QV4::CompiledData::CompilationUnit> QQmlTypeLoader::injectScript(
+        const QUrl &relativeUrl, const QV4::CompiledData::Unit *unit)
 {
-    LockHolder<QQmlTypeLoader> holder(this);
-
     QQmlScriptBlob *blob = new QQmlScriptBlob(relativeUrl, this);
-    blob->initializeFromNative();
-    blob->m_isDone = true;
-    blob->m_data.setStatus(QQmlDataBlob::Complete);
-    m_scriptCache.insert(relativeUrl, blob);
-}
 
-QQmlRefPointer<QQmlScriptBlob> QQmlTypeLoader::injectedScript(const QUrl &relativeUrl)
-{
     LockHolder<QQmlTypeLoader> holder(this);
-    const auto it = m_scriptCache.constFind(relativeUrl);
-    return (it != m_scriptCache.constEnd() && (*it)->hasScriptValue())
-            ? *it
-            : QQmlRefPointer<QQmlScriptBlob>();
+    QQmlPrivate::CachedQmlUnit cached { unit, nullptr, nullptr};
+    loadWithCachedUnit(blob, &cached, Synchronous);
+    Q_ASSERT(blob->isComplete());
+    m_scriptCache.insert(relativeUrl, blob);
+    return blob->scriptData()->compilationUnit();
 }
 
 /*!
 Return a QQmlScriptBlob for \a url.  The QQmlScriptData may be cached.
 */
-QQmlRefPointer<QQmlScriptBlob> QQmlTypeLoader::getScript(const QUrl &unNormalizedUrl)
+QQmlRefPointer<QQmlScriptBlob> QQmlTypeLoader::getScript(
+        const QUrl &unNormalizedUrl, const QUrl &relativeUrl)
 {
     Q_ASSERT(!unNormalizedUrl.isRelative() &&
             (QQmlFile::urlToLocalFileOrQrc(unNormalizedUrl).isEmpty() ||
@@ -1047,6 +1042,11 @@ QQmlRefPointer<QQmlScriptBlob> QQmlTypeLoader::getScript(const QUrl &unNormalize
     LockHolder<QQmlTypeLoader> holder(this);
 
     QQmlScriptBlob *scriptBlob = m_scriptCache.value(url);
+
+    // Also try the relative URL since manually registering native modules doesn't require
+    // passing an absolute URL and we don't have a reference URL for native modules.
+    if (!scriptBlob && unNormalizedUrl != relativeUrl)
+        scriptBlob = m_scriptCache.value(relativeUrl);
 
     if (!scriptBlob) {
         scriptBlob = new QQmlScriptBlob(url, this);
