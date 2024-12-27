@@ -46,6 +46,11 @@ struct Q_QML_EXPORT Value : public StaticValue
         return {staticValue._val};
     }
 
+    static constexpr Value undefinded()
+    {
+        return fromStaticValue(Encode::undefined());
+    }
+
     inline bool isString() const;
     inline bool isStringOrSymbol() const;
     inline bool isSymbol() const;
@@ -414,6 +419,9 @@ struct HeapValue : Value {
     }
     void set(EngineBase *e, HeapBasePtr b) {
         WriteBarrier::write(e, base(), data_ptr(), b->asReturnedValue());
+    }
+    void set(EngineBase *e, ReturnedValue rv) {
+        WriteBarrier::write(e, base(), data_ptr(), rv);
     }
 };
 

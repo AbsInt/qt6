@@ -31,9 +31,6 @@ private Q_SLOTS:
 
 private:
     void runLex(const QString &fileToLex);
-
-    QString m_qmljsrootgenPath;
-    QString m_qmltyperegistrarPath;
 };
 
 TestLineByLineLex::TestLineByLineLex()

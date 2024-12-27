@@ -47,6 +47,24 @@ Item {
     required property string name
 
     /*!
+        Magic numbers.
+    */
+    property list<int> numbers
+
+
+    /*!
+        \qmlproperty list<Item> items
+        List of items.
+    */
+    property list<Item> items
+
+    /*!
+        \qmlproperty list<bool> boolNumbers
+        Property with overridden type.
+    */
+    property list<int> boolNumbers
+
+    /*!
         Whether the test is active.
         \default true
 

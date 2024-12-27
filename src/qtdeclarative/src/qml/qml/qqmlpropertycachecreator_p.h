@@ -23,7 +23,8 @@
 #include <private/qqmlsourcecoordinate_p.h>
 #include <private/qqmlsignalnames_p.h>
 
-#include <QScopedValueRollback>
+#include <QtCore/qloggingcategory.h>
+#include <QtCore/qscopedvaluerollback.h>
 
 #if QT_CONFIG(regularexpression)
 #include <QtCore/qregularexpression.h>
@@ -32,6 +33,8 @@
 #include <vector>
 
 QT_BEGIN_NAMESPACE
+
+Q_DECLARE_LOGGING_CATEGORY(invalidOverride);
 
 inline QQmlError qQmlCompileError(const QV4::CompiledData::Location &location,
                                                   const QString &description)
@@ -621,7 +624,7 @@ inline QQmlError QQmlPropertyCacheCreator<ObjectContainer>::createMetaObject(
                 return message;
             case AllowOverride::Yes:
                 message.setUrl(objectContainer->url());
-                enginePrivate->warning(message);
+                qCWarning(invalidOverride).noquote() << message.toString();
                 *it = AllowOverride::No; // No further overriding allowed.
                 break;
             }
@@ -651,7 +654,7 @@ inline QQmlError QQmlPropertyCacheCreator<ObjectContainer>::createMetaObject(
                 return message;
             case AllowOverride::Yes:
                 message.setUrl(objectContainer->url());
-                enginePrivate->warning(message);
+                qCWarning(invalidOverride).noquote() << message.toString();
                 break;
             }
         }

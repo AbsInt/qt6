@@ -32,6 +32,7 @@ class QQuickPopupWindowPrivate : public QQuickWindowQmlImplPrivate
 public:
     QPointer<QQuickItem> m_popupItem;
     QPointer<QQuickPopup> m_popup;
+    QPointer<QWindow> m_popupParentItemWindow;
     bool m_inHideEvent = false;
 
 protected:
@@ -53,9 +54,11 @@ QQuickPopupWindow::QQuickPopupWindow(QQuickPopup *popup, QWindow *parent)
     connect(d->m_popup, &QQuickPopup::windowChanged, this, &QQuickPopupWindow::windowChanged);
     connect(d->m_popup, &QQuickPopup::implicitWidthChanged, this, &QQuickPopupWindow::implicitWidthChanged);
     connect(d->m_popup, &QQuickPopup::implicitHeightChanged, this, &QQuickPopupWindow::implicitHeightChanged);
-    connect(d->m_popup->window(), &QWindow::xChanged, this, &QQuickPopupWindow::parentWindowXChanged);
-    connect(d->m_popup->window(), &QWindow::yChanged, this, &QQuickPopupWindow::parentWindowYChanged);
-
+    if (QQuickWindow *nearestParentItemWindow = d->m_popup->window()) {
+        d->m_popupParentItemWindow = nearestParentItemWindow;
+        connect(d->m_popupParentItemWindow, &QWindow::xChanged, this, &QQuickPopupWindow::parentWindowXChanged);
+        connect(d->m_popupParentItemWindow, &QWindow::yChanged, this, &QQuickPopupWindow::parentWindowYChanged);
+    }
     setWidth(d->m_popupItem->implicitWidth());
     setHeight(d->m_popupItem->implicitHeight());
 
@@ -68,18 +71,6 @@ QQuickPopupWindow::QQuickPopupWindow(QQuickPopup *popup, QWindow *parent)
     setFlags(flags);
 
     qCDebug(lcPopupWindow) << "Created popup window with parent:" << parent << "flags:" << flags;
-}
-
-QQuickPopupWindow::~QQuickPopupWindow()
-{
-    Q_D(QQuickPopupWindow);
-    disconnect(d->m_popup, &QQuickPopup::windowChanged, this, &QQuickPopupWindow::windowChanged);
-    disconnect(d->m_popup, &QQuickPopup::implicitWidthChanged, this, &QQuickPopupWindow::implicitWidthChanged);
-    disconnect(d->m_popup, &QQuickPopup::implicitHeightChanged, this, &QQuickPopupWindow::implicitHeightChanged);
-    if (d->m_popup->window()) {
-        disconnect(d->m_popup->window(), &QWindow::xChanged, this, &QQuickPopupWindow::parentWindowXChanged);
-        disconnect(d->m_popup->window(), &QWindow::yChanged, this, &QQuickPopupWindow::parentWindowYChanged);
-    }
 }
 
 QQuickPopup *QQuickPopupWindow::popup() const
@@ -124,8 +115,11 @@ void QQuickPopupWindow::resizeEvent(QResizeEvent *e)
     // does not move the window
     const auto oldX = popupPrivate->x;
     const auto oldY = popupPrivate->y;
-    popupPrivate->x = topLeftFromSystem.x();
-    popupPrivate->y = topLeftFromSystem.y();
+
+    if (Q_LIKELY(topLeftFromSystem)) {
+        popupPrivate->x = topLeftFromSystem->x();
+        popupPrivate->y = topLeftFromSystem->y();
+    }
 
     const QMarginsF windowInsets = popupPrivate->windowInsets();
     d->m_popupItem->setWidth(e->size().width() - windowInsets.left() - windowInsets.right());
@@ -329,18 +323,32 @@ bool QQuickPopupWindow::event(QEvent *e)
 
 void QQuickPopupWindow::windowChanged(QWindow *window)
 {
+    Q_D(QQuickPopupWindow);
+    if (!d->m_popupParentItemWindow.isNull()) {
+        disconnect(d->m_popupParentItemWindow, &QWindow::xChanged, this, &QQuickPopupWindow::parentWindowXChanged);
+        disconnect(d->m_popupParentItemWindow, &QWindow::yChanged, this, &QQuickPopupWindow::parentWindowYChanged);
+    }
     if (window) {
+        d->m_popupParentItemWindow = window;
         connect(window, &QWindow::xChanged, this, &QQuickPopupWindow::parentWindowXChanged);
         connect(window, &QWindow::yChanged, this, &QQuickPopupWindow::parentWindowYChanged);
+    } else {
+        d->m_popupParentItemWindow.clear();
     }
 }
 
-QPoint QQuickPopupWindow::global2Local(const QPoint &pos) const
+std::optional<QPoint> QQuickPopupWindow::global2Local(const QPoint &pos) const
 {
     Q_D(const QQuickPopupWindow);
     QQuickPopup *popup = d->m_popup;
     Q_ASSERT(popup);
-    const QPoint scenePos = popup->window()->mapFromGlobal(pos);
+    QWindow *mainWindow = d->m_popupParentItemWindow;
+    if (!mainWindow)
+        mainWindow = transientParent();
+    if (Q_UNLIKELY((!mainWindow || mainWindow != popup->window())))
+        return std::nullopt;
+
+    const QPoint scenePos = mainWindow->mapFromGlobal(pos);
     // Popup's coordinates are relative to the nearest parent item.
     return popup->parentItem() ? popup->parentItem()->mapFromScene(scenePos).toPoint() : scenePos;
 }
@@ -348,26 +356,31 @@ QPoint QQuickPopupWindow::global2Local(const QPoint &pos) const
 void QQuickPopupWindow::parentWindowXChanged(int newX)
 {
     const auto popupLocalPos = global2Local({x(), y()});
-    handlePopupPositionChangeFromWindowSystem({newX + popupLocalPos.x(), y()});
+    if (Q_UNLIKELY(!popupLocalPos))
+        return;
+    handlePopupPositionChangeFromWindowSystem({ newX + popupLocalPos->x(), y() });
 }
 
 void QQuickPopupWindow::parentWindowYChanged(int newY)
 {
     const auto popupLocalPos = global2Local({x(), y()});
-    handlePopupPositionChangeFromWindowSystem({x(), newY + popupLocalPos.y()});
+    if (Q_UNLIKELY(!popupLocalPos))
+        return;
+    handlePopupPositionChangeFromWindowSystem({ x(), newY + popupLocalPos->y() });
 }
 
 void QQuickPopupWindow::handlePopupPositionChangeFromWindowSystem(const QPoint &pos)
 {
     Q_D(QQuickPopupWindow);
     QQuickPopup *popup = d->m_popup;
-    if (!popup || !popup->window())
+    if (!popup)
         return;
-    QQuickPopupPrivate *popupPrivate = QQuickPopupPrivate::get(popup);
 
     const auto windowPos = global2Local(pos);
-    qCDebug(lcPopupWindow) << "A window system event changed the popup's position to be " << windowPos;
-    popupPrivate->setEffectivePosFromWindowPos(windowPos);
+    if (Q_LIKELY(windowPos)) {
+        qCDebug(lcPopupWindow) << "A window system event changed the popup's position to be " << *windowPos;
+        QQuickPopupPrivate::get(popup)->setEffectivePosFromWindowPos(*windowPos);
+    }
 }
 
 void QQuickPopupWindow::implicitWidthChanged()

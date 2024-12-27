@@ -34,7 +34,9 @@ Currently, it enables your editor to:
 
 \QMLLS can automatically lint opened QML files
 and display warnings or errors straight in the editor. See
-\l{qmllint} for more information about the linting process.
+\l{qmllint} for more information about the linting process,
+and \l{QML Lint Warning and Errors} on how to fix warnings and
+errors.
 
 \section2 Formatting
 
@@ -97,18 +99,56 @@ made with \QOI.
 \section2 Setting up the Build Directory
 
 \QMLLS needs to know the location of your build
-folder. You can pass it the following ways:
+folder. You can pass it in the following ways:
 \list
     \li The \c{--build-dir} command line option. In this case
 your editor should invoke \c{qmlls} as following:
 \badcode
-<path/to/qmlls> --build-dir <path/to/build-directory>
+<path/to/qmlls> ... --build-dir <path/to/build-directory> ...
 \endcode
     \li The \c{QMLLS_BUILD_DIRS} environment variable.
     \li The \c{.qmlls.ini} settings file, see \l {Configuration File}.
 \endlist
 
 \note When the build directory is specified in multiple ways, the
+command line option takes preference over the environment variable
+that takes precedence over the setting file.
+
+\section2 Setting up the import paths
+
+\QMLLS needs to know the import paths of the Qt version that you
+are using in your project. You can pass the import paths in the
+following ways:
+\list
+    \li The \c{-I} command line option. In this case
+your editor should invoke \c{qmlls} as following:
+\badcode
+<path/to/qmlls> ... -I /path/to/imports -I /optional/path/to/another/import ...
+\endcode
+    \li The \c{QML_IMPORT_PATH} environment variable. In this case you
+        should pass the \c{-E} option to \QMLLS.
+    \li The \c{.qmlls.ini} settings file, see \l {Configuration File}.
+\endlist
+
+\note When the import path is specified in multiple ways, the
+command line option takes preference over the environment variable
+that takes precedence over the setting file.
+
+\section2 Setting up the documentation path
+
+\QMLLS can show documentation hints when it knows the documentation
+path of the Qt version that you are using in your project. You can pass
+the documentation path in the following ways:
+\list
+    \li The \c{-d} or \c{-p} command line option. In this case
+your editor should invoke \c{qmlls} as following:
+\badcode
+<path/to/qmlls> ... -d /path/to/docs ...
+\endcode
+    \li The \c{.qmlls.ini} settings file, see \l {Configuration File}.
+\endlist
+
+\note When the documentation path is specified in multiple ways, the
 command line option takes preference over the environment variable
 that takes precedence over the setting file.
 
@@ -144,6 +184,7 @@ The configuration file should look like this:
 buildDir=<path/to/build-directory>
 no-cmake-calls=<true-or-false>
 docDir=<path/to/qt-documentation>
+importPaths=<path/to/imports>
 \endcode
 
 Currently, the configuration file can be used to set the build

@@ -30,7 +30,6 @@ class Q_QUICKTEMPLATES2_EXPORT QQuickPopupWindow : public QQuickWindowQmlImpl
 
 public:
     explicit QQuickPopupWindow(QQuickPopup *popup, QWindow *parent = nullptr);
-    ~QQuickPopupWindow();
     QQuickPopup *popup() const;
 
 protected:
@@ -41,7 +40,7 @@ protected:
 
 private:
     void windowChanged(QWindow *window);
-    QPoint global2Local(const QPoint& pos) const;
+    std::optional<QPoint> global2Local(const QPoint &pos) const;
     void parentWindowXChanged(int newX);
     void parentWindowYChanged(int newY);
     void handlePopupPositionChangeFromWindowSystem(const QPoint &pos);

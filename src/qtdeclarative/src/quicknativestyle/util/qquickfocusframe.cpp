@@ -30,7 +30,7 @@ QQuickFocusFrame::QQuickFocusFrame()
         if (auto item = qobject_cast<QQuickItem *>(focusObject))
             moveToItem(item);
         else
-            m_focusFrame.reset();
+            moveToItem(nullptr);
     });
 }
 
@@ -60,6 +60,9 @@ void QQuickFocusFrame::moveToItem(QQuickItem *item)
 
 QQuickFocusFrameDescription QQuickFocusFrame::getDescriptionForItem(QQuickItem *focusItem) const
 {
+    if (!focusItem)
+        return QQuickFocusFrameDescription::Invalid;
+
     qCDebug(lcFocusFrame) << "new focusobject:" << focusItem;
     const auto parentItem = focusItem->parentItem();
     if (!parentItem)

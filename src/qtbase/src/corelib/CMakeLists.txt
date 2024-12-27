@@ -328,9 +328,11 @@ qt_internal_add_module(Core
         text/qstringconverter.cpp # enum Data
         tools/qcryptographichash.cpp # KeccakNISTInterface/Final
         io/qdebug.cpp # undef qDebug
+        io/qresource.cpp # QTBUG-132114
     NO_PCH_SOURCES
         compat/removed_api.cpp
         global/qsimd.cpp
+        kernel/qsocketnotifier.cpp # defines BUILDING_QSOCKETNOTIFIER
     DEFINES
         QT_NO_CONTEXTLESS_CONNECT
         QT_NO_FOREACH

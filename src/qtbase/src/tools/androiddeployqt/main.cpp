@@ -800,7 +800,14 @@ GradleBuildConfigs gradleBuildConfigs(const QString &path)
         } else if (trimmedLine.contains("compileSdkVersion androidCompileSdkVersion.toInteger()")) {
             configs.usesIntegerCompileSdkVersion = true;
         } else if (trimmedLine.contains("namespace")) {
-            configs.appNamespace = QString::fromUtf8(extractValue(trimmedLine));
+            const QString value = QString::fromUtf8(extractValue(trimmedLine));
+            const bool singleQuoted = value.startsWith(u'\'') && value.endsWith(u'\'');
+            const bool doubleQuoted = value.startsWith(u'\"') && value.endsWith(u'\"');
+
+            if (singleQuoted || doubleQuoted)
+                configs.appNamespace = value.mid(1, value.length() - 2);
+            else
+                configs.appNamespace = value;
         }
     }
 
@@ -1755,10 +1762,15 @@ bool updateLibsXml(Options *options)
 
         QStringList localLibs;
         localLibs = options->localLibs[it.key()];
+        const QString archSuffix = it.key() + ".so"_L1;
+
         const QList<QtDependency>& deps = options->qtDependencies[it.key()];
-        auto notExistsInDependencies = [&deps] (const QString &lib) {
+        auto notExistsInDependencies = [&deps, archSuffix] (const QString &libName) {
+            QString lib = QFileInfo(libName).fileName();
+            if (lib.endsWith(archSuffix))
+                lib.chop(archSuffix.length());
             return std::none_of(deps.begin(), deps.end(), [&lib] (const QtDependency &dep) {
-                return QFileInfo(dep.absolutePath).fileName() == QFileInfo(lib).fileName();
+                return QFileInfo(dep.absolutePath).fileName().contains(lib);
             });
         };
 

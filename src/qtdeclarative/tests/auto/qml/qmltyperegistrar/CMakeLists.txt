@@ -56,6 +56,15 @@ qt_internal_add_test(tst_qmltyperegistrar
         UnregisteredTypes
 )
 
+if (TARGET qmljsrootgen)
+    qt_internal_extend_target(tst_qmltyperegistrar
+        DEFINES
+            QT_QMLJSROOTGEN_PRESENT
+    )
+
+    add_dependencies(tst_qmltyperegistrar Qt::qmljsrootgen)
+endif()
+
 qt_internal_extend_target(tst_qmltyperegistrar CONDITION TARGET Qt::Quick
     LIBRARIES
         Qt::Quick

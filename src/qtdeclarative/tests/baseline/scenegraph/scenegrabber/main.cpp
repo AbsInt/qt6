@@ -62,7 +62,7 @@ public:
         qCDebug(lcGrabber) << "Using ApplicationWindow as visual parent" << this;
 
         appwindow = qobject_cast<QQuickApplicationWindow *>(window);
-        if (preferAppWindow)
+        if (preferAppWindow && !justShow)
             QObject::connect(appwindow, &QQuickWindow::afterRendering, this, &GrabbingView::startGrabbing);
     }
     QQuickApplicationWindow* appWindow() { return appwindow; }

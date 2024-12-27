@@ -71,10 +71,6 @@ private Q_SLOTS:
     void qmltypes_data();
     void qmltypes();
 
-#ifdef QT_QMLJSROOTGEN_PRESENT
-    void verifyJsRoot();
-#endif
-
     void autoqmltypes();
     void resources();
 
@@ -179,8 +175,6 @@ private:
                  QList<QQmlJS::LoggerCategory> *categories = nullptr);
 
     QString m_qmllintPath;
-    QString m_qmljsrootgenPath;
-    QString m_qmltyperegistrarPath;
 
     QStringList m_defaultImportPaths;
     QQmlJSLinter m_linter;
@@ -200,30 +194,14 @@ void TestQmllint::initTestCase()
 {
     QQmlDataTest::initTestCase();
     m_qmllintPath = QLibraryInfo::path(QLibraryInfo::BinariesPath) + QLatin1String("/qmllint");
-    m_qmljsrootgenPath = QLibraryInfo::path(QLibraryInfo::LibraryExecutablesPath)
-            + QLatin1String("/qmljsrootgen");
-    m_qmltyperegistrarPath = QLibraryInfo::path(QLibraryInfo::LibraryExecutablesPath)
-            + QLatin1String("/qmltyperegistrar");
+
 #ifdef Q_OS_WIN
     m_qmllintPath += QLatin1String(".exe");
-    m_qmljsrootgenPath += QLatin1String(".exe");
-    m_qmltyperegistrarPath += QLatin1String(".exe");
 #endif
     if (!QFileInfo(m_qmllintPath).exists()) {
         QString message = QStringLiteral("qmllint executable not found (looked for %0)").arg(m_qmllintPath);
         QFAIL(qPrintable(message));
     }
-
-#ifdef QT_QMLJSROOTGEN_PRESENT
-    if (!QFileInfo(m_qmljsrootgenPath).exists()) {
-        QString message = QStringLiteral("qmljsrootgen executable not found (looked for %0)").arg(m_qmljsrootgenPath);
-        QFAIL(qPrintable(message));
-    }
-    if (!QFileInfo(m_qmltyperegistrarPath).exists()) {
-        QString message = QStringLiteral("qmltypesregistrar executable not found (looked for %0)").arg(m_qmltyperegistrarPath);
-        QFAIL(qPrintable(message));
-    }
-#endif
 }
 
 void TestQmllint::testUnqualified()
@@ -370,70 +348,6 @@ void TestQmllint::qmltypes()
     QJsonArray warnings;
     callQmllint(file, true, &warnings);
 }
-
-#ifdef QT_QMLJSROOTGEN_PRESENT
-void TestQmllint::verifyJsRoot()
-{
-    QProcess process;
-
-    const QString importsPath = QLibraryInfo::path(QLibraryInfo::QmlImportsPath);
-    QDirIterator it(importsPath, { "jsroot.qmltypes" },
-                    QDir::Files, QDirIterator::Subdirectories);
-
-    QVERIFY(it.hasNext());
-
-    QString currentJsRootPath = it.next();
-
-    QTemporaryDir dir;
-
-    QProcess jsrootProcess;
-    connect(&jsrootProcess, &QProcess::errorOccurred, [&](QProcess::ProcessError error) {
-        qWarning() << error << jsrootProcess.errorString();
-    });
-    jsrootProcess.setWorkingDirectory(dir.path());
-    jsrootProcess.start(m_qmljsrootgenPath, {"jsroot.json"});
-
-    jsrootProcess.waitForFinished();
-
-    QCOMPARE(jsrootProcess.exitStatus(), QProcess::NormalExit);
-    QCOMPARE(jsrootProcess.exitCode(), 0);
-
-
-    QProcess typeregistrarProcess;
-    typeregistrarProcess.setWorkingDirectory(dir.path());
-    typeregistrarProcess.start(m_qmltyperegistrarPath, {"jsroot.json", "--generate-qmltypes", "jsroot.qmltypes"});
-
-    typeregistrarProcess.waitForFinished();
-
-    QCOMPARE(typeregistrarProcess.exitStatus(), QProcess::NormalExit);
-    QCOMPARE(typeregistrarProcess.exitCode(), 0);
-
-    QString currentJsRootContent, generatedJsRootContent;
-
-    QFile currentJsRoot(currentJsRootPath);
-    QVERIFY(currentJsRoot.open(QFile::ReadOnly | QIODevice::Text));
-    currentJsRootContent = QString::fromUtf8(currentJsRoot.readAll());
-    currentJsRoot.close();
-
-    QFile generatedJsRoot(dir.path() + QDir::separator() + "jsroot.qmltypes");
-    QVERIFY(generatedJsRoot.open(QFile::ReadOnly | QIODevice::Text));
-    generatedJsRootContent = QString::fromUtf8(generatedJsRoot.readAll());
-    generatedJsRoot.close();
-
-    // If any of the following asserts fail you need to update jsroot.qmltypes using the following commands:
-    //
-    // qmljsrootgen jsroot.json
-    // qmltyperegistrar jsroot.json --generate-qmltypes src/imports/builtins/jsroot.qmltypes
-    QStringList currentLines = currentJsRootContent.split(QLatin1Char('\n'));
-    QStringList generatedLines = generatedJsRootContent.split(QLatin1Char('\n'));
-
-    QCOMPARE(currentLines.size(), generatedLines.size());
-
-    for (qsizetype i = 0; i < currentLines.size(); i++) {
-        QCOMPARE(currentLines[i], generatedLines[i]);
-    }
-}
-#endif
 
 void TestQmllint::autoqmltypes()
 {
@@ -771,7 +685,7 @@ void TestQmllint::dirtyQmlCode_data()
     QTest::newRow("InvalidImport")
             << QStringLiteral("invalidImport.qml")
             << Result { { Message { QStringLiteral(
-                       "Failed to import FooBar. Are your import paths set up properly?") } } };
+                       "Failed to import FooBar. Are your import paths set up properly?"), 2, 1 } } };
     QTest::newRow("Unused Import (simple)")
             << QStringLiteral("unused_simple.qml")
             << Result { { Message { QStringLiteral("Unused import"), 1, 1, QtInfoMsg } },

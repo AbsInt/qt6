@@ -289,7 +289,8 @@ void QQmlJSLogger::log(const QString &message, QQmlJS::LoggerWarningId id,
 }
 
 void QQmlJSLogger::processMessages(const QList<QQmlJS::DiagnosticMessage> &messages,
-                                   QQmlJS::LoggerWarningId id)
+                                   QQmlJS::LoggerWarningId id,
+                                   const QQmlJS::SourceLocation &sourceLocation)
 {
     if (messages.isEmpty() || isCategoryIgnored(id))
         return;
@@ -299,7 +300,7 @@ void QQmlJSLogger::processMessages(const QList<QQmlJS::DiagnosticMessage> &messa
     // TODO: we should instead respect message's category here (potentially, it
     // should hold a category instead of type)
     for (const QQmlJS::DiagnosticMessage &message : messages)
-        log(message.message, id, QQmlJS::SourceLocation(), false, false);
+        log(message.message, id, sourceLocation, false, false);
 
     m_output.write(QStringLiteral("---\n\n"));
 }

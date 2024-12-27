@@ -17,6 +17,7 @@ add_subdirectory(SomeSubfolder)
 add_subdirectory(Dotted)
 add_subdirectory(Dependency)
 add_subdirectory(ModuleWithDependency)
+add_subdirectory(quotesInPath)
 
 qt_add_qml_module(tst_generate_qmlls_ini
     URI MainModule

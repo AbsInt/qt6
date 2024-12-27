@@ -31,6 +31,7 @@ qt_internal_add_test(tst_qmllint
         Qt::Gui
         Qt::QuickTestUtilsPrivate
         Qt::QmlCompilerPrivate
+        Qt::QmlTypeRegistrarPrivate
         LintPlugin
     TESTDATA ${test_data}
 )
@@ -58,15 +59,6 @@ if (TARGET QuickControls2Basic)
         DEFINES
             HAS_QC_BASIC=1
     )
-endif()
-
-if (TARGET qmljsrootgen)
-    qt_internal_extend_target(tst_qmllint
-        DEFINES
-            QT_QMLJSROOTGEN_PRESENT
-    )
-
-    add_dependencies(tst_qmllint Qt::qmljsrootgen)
 endif()
 
 if(QT_FEATURE_process)

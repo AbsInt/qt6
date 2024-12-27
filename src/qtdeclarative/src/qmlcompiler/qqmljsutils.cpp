@@ -254,30 +254,14 @@ bool canCompareWithQUrl(
             && typeResolver->equals(rhsType, typeResolver->urlType());
 }
 
-static QVarLengthArray<QString, 2> resourceFoldersFromBuildFolder(const QString &buildFolder)
-{
-    QVarLengthArray<QString, 2> result;
-    const QDir dir(buildFolder);
-    if (dir.exists(u".rcc"_s)) {
-        result.append(dir.filePath(u".rcc"_s));
-    }
-    if (dir.exists(u".qt/rcc"_s)) {
-        result.append(dir.filePath(u".qt/rcc"_s));
-    }
-    return result;
-}
-
-
 QStringList QQmlJSUtils::resourceFilesFromBuildFolders(const QStringList &buildFolders)
 {
     QStringList result;
     for (const QString &path : buildFolders) {
-        for (const QString &resourceFolder : resourceFoldersFromBuildFolder(path)) {
-            QDirIterator it(resourceFolder, QStringList{ u"*.qrc"_s }, QDir::Files,
-                            QDirIterator::Subdirectories);
-            while (it.hasNext()) {
-                result.append(it.next());
-            }
+        QDirIterator it(path, QStringList{ u"*.qrc"_s }, QDir::Files | QDir::Hidden,
+                        QDirIterator::Subdirectories);
+        while (it.hasNext()) {
+            result.append(it.next());
         }
     }
     return result;

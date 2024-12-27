@@ -1763,6 +1763,8 @@ bool QQuickTableViewPrivate::startSelection(const QPointF &pos, Qt::KeyboardModi
     selectionFlag = QItemSelectionModel::Select;
     if (modifiers & Qt::ControlModifier) {
         QPoint startCell = clampedCellAtPos(pos);
+        if (!cellIsValid(startCell))
+            return false;
         const QModelIndex startIndex = q->index(startCell.y(), startCell.x());
         if (selectionModel->isSelected(startIndex))
             selectionFlag = QItemSelectionModel::Deselect;
@@ -1891,6 +1893,9 @@ QPoint QQuickTableViewPrivate::clampedCellAtPos(const QPointF &pos) const
     if (cellIsValid(cell))
         return cell;
 
+    if (loadedTableOuterRect.width() == 0 || loadedTableOuterRect.height() == 0)
+        return QPoint(-1, -1);
+
     // Clamp the cell to the loaded table and the viewport, whichever is the smallest
     QPointF clampedPos(
                 qBound(loadedTableOuterRect.x(), pos.x(), loadedTableOuterRect.right() - 1),
@@ -2004,6 +2009,9 @@ void QQuickTableViewPrivate::normalizeSelection()
 QRectF QQuickTableViewPrivate::selectionRectangle() const
 {
     Q_Q(const QQuickTableView);
+
+    if (loadedColumns.isEmpty() || loadedRows.isEmpty())
+        return QRectF();
 
     QPoint topLeftCell = selectionStartCell;
     QPoint bottomRightCell = selectionEndCell;
@@ -5209,11 +5217,13 @@ bool QQuickTableViewPrivate::setCurrentIndexFromKeyEvent(QKeyEvent *e)
         case Qt::Key_End:
         case Qt::Key_Tab:
         case Qt::Key_Backtab:
-            // Special case: the current index doesn't map to a cell in the view (perhaps
-            // because it isn't set yet). In that case, we set it to be the top-left cell.
-            const QModelIndex topLeftIndex = q->index(topRow(), leftColumn());
-            selectionModel->setCurrentIndex(topLeftIndex, QItemSelectionModel::NoUpdate);
-            return true;
+            if (!loadedRows.isEmpty() && !loadedColumns.isEmpty()) {
+                // Special case: the current index doesn't map to a cell in the view (perhaps
+                // because it isn't set yet). In that case, we set it to be the top-left cell.
+                const QModelIndex topLeftIndex = q->index(topRow(), leftColumn());
+                selectionModel->setCurrentIndex(topLeftIndex, QItemSelectionModel::NoUpdate);
+                return true;
+            }
         }
         return false;
     }

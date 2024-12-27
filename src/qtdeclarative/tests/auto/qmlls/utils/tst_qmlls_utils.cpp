@@ -1819,11 +1819,11 @@ void tst_qmlls_utils::findDefinitionFromLocation_data()
     QTest::addColumn<int>("expectedLine");
     QTest::addColumn<int>("expectedCharacter");
     QTest::addColumn<size_t>("expectedLength");
-    QTest::addColumn<QString>("extraBuildDir");
+    QTest::addColumn<QStringList>("extraBuildDirs");
 
     const QString JSDefinitionsQml = testFile(u"JSDefinitions.qml"_s);
     const QString BaseTypeQml = testFile(u"BaseType.qml"_s);
-    const QString noExtraBuildDir;
+    const QStringList noExtraBuildDir;
 
     QTest::addRow("JSIdentifierX")
             << JSDefinitionsQml << 14 << 11 << JSDefinitionsQml << 13 << 13 << strlen("x") << noExtraBuildDir;
@@ -1959,10 +1959,22 @@ void tst_qmlls_utils::findDefinitionFromLocation_data()
         const QString myComponentQml = testFile(u"findDefinition/mymodule-source/MyModule/X/Y/Z/MyComponent.qml"_s);
 
         QTest::addRow("nestedFromOwnModule") << mainQml << 4 << 5 << myComponentQml << 3 << 1
-                                             << strlen("Item") << testFile(u"findDefinition/mymodule-build"_s);
+                                             << strlen("Item") << QStringList { testFile(u"findDefinition/mymodule-build"_s) };
         QTest::addRow("nestedFromOwnModuleWithoutQmldirPrefer") << mainQml << 4 << 5 << myComponentQml << 3 << 1
                                                                 << strlen("Item")
-                                                                << testFile(u"findDefinition/mymodule-build-without-qmldir-prefer"_s);
+                                                                << QStringList { testFile(u"findDefinition/mymodule-build-without-qmldir-prefer"_s) };
+    }
+
+    {
+        const QString mainQml = testFile(u"findDefinition/TestAppWithBuildFolder/TestApp/Main.qml"_s);
+        const QString myComponentQml = testFile(u"findDefinition/TestAppWithBuildFolder/TestApp/somesubfolder/anothersubfolder/MyModule/MyItem.qml"_s);
+        QTest::addRow("componentFromOtherModule")
+                << mainQml << 5 << 8 << myComponentQml << 3 << 1 << strlen("Item")
+                << QStringList{
+                       testFile(u"findDefinition/TestAppWithBuildFolder/build"_s),
+                       testFile(
+                           u"findDefinition/TestAppWithBuildFolder/build/somesubfolder/anothersubfolder"_s)
+                   };
     }
 }
 
@@ -1975,7 +1987,7 @@ void tst_qmlls_utils::findDefinitionFromLocation()
     QFETCH(int, expectedLine);
     QFETCH(int, expectedCharacter);
     QFETCH(size_t, expectedLength);
-    QFETCH(QString, extraBuildDir);
+    QFETCH(QStringList, extraBuildDirs);
 
     if (expectedLine == -1)
         expectedLine = line;
@@ -1988,7 +2000,7 @@ void tst_qmlls_utils::findDefinitionFromLocation()
     Q_ASSERT(expectedLine > 0);
     Q_ASSERT(expectedCharacter > 0);
 
-    auto [env, file] = createEnvironmentAndLoadFile(filePath, QStringList { extraBuildDir });
+    auto [env, file] = createEnvironmentAndLoadFile(filePath, extraBuildDirs);
 
     auto locations = QQmlLSUtils::itemsFromTextLocation(
             file.field(QQmlJS::Dom::Fields::currentItem), line - 1, character - 1);

@@ -182,7 +182,8 @@ public:
     }
 
     void processMessages(const QList<QQmlJS::DiagnosticMessage> &messages,
-                         const QQmlJS::LoggerWarningId id);
+                         const QQmlJS::LoggerWarningId id,
+                         const QQmlJS::SourceLocation &sourceLocation = QQmlJS::SourceLocation{});
 
     void ignoreWarnings(uint32_t line, const QSet<QString> &categories)
     {

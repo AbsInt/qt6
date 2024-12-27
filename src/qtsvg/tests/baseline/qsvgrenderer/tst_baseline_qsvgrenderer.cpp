@@ -23,6 +23,7 @@ public:
 private Q_SLOTS:
     void initTestCase();
     void cleanup();
+    void cleanupTestCase();
     void testRendering_data();
     void testRendering();
 
@@ -66,6 +67,10 @@ void tst_QSvgRenderer::cleanup()
 
 }
 
+void tst_QSvgRenderer::cleanupTestCase()
+{
+    QBaselineTest::finalizeAndDisconnect();
+}
 
 void tst_QSvgRenderer::testRendering_data()
 {
@@ -141,7 +146,11 @@ quint16 tst_QSvgRenderer::checksumFileOrDir(const QString &path)
         return 0;
     if (fi.isFile()) {
         QFile f(path);
-        f.open(QIODevice::ReadOnly | QIODevice::Text);
+        if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            qWarning("Cannot open %ls: %ls",
+                     qUtf16Printable(path), qUtf16Printable(f.errorString()));
+            return 0;
+        }
         QByteArray contents = f.readAll();
         return qChecksum(contents);
     }

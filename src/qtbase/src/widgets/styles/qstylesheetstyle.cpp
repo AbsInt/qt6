@@ -4050,8 +4050,6 @@ void QStyleSheetStyle::drawControl(ControlElement ce, const QStyleOption *opt, Q
 
 #if QT_CONFIG(combobox)
     case CE_ComboBoxLabel:
-        if (!rule.hasBox())
-            break;
         if (const QStyleOptionComboBox *cb = qstyleoption_cast<const QStyleOptionComboBox *>(opt)) {
             QRect editRect = subControlRect(CC_ComboBox, cb, SC_ComboBoxEditField, w);
             p->save();
@@ -6467,9 +6465,9 @@ void QStyleSheetStyle::updateStyleSheetFont(QWidget* w) const
         font.setResolveMask(wf.resolveMask() | rule.font.resolveMask());
 
         if ((!w->isWindow() || w->testAttribute(Qt::WA_WindowPropagation))
-            && isNaturalChild(w) && qobject_cast<QWidget *>(w->parent())) {
-
-            font = font.resolve(static_cast<QWidget *>(w->parent())->font());
+            && isNaturalChild(w) && w->parentWidget()) {
+            const auto parentFont = w->parentWidget()->font();
+            font = rule.hasFont ? font.resolve(parentFont) : parentFont;
         }
 
         if (wf.resolveMask() == font.resolveMask() && wf == font)

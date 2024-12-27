@@ -4839,6 +4839,10 @@ void tst_QmlCppCodegen::structuredValueType()
     w.setStrings(QStringList({"one", "two", "three"}));
 
     QCOMPARE(o->property("w").value<WeatherModelUrl>(), w);
+
+    WeatherModelUrlDerived w1;
+    w1.setStrings(QStringList({u"four"_s, u"five"_s, u"six"_s}));
+    QCOMPARE(o->property("w1").value<WeatherModelUrlDerived>(), w1);
 }
 
 void tst_QmlCppCodegen::testIsnan()

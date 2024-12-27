@@ -35,14 +35,14 @@ void tst_generate_qmlls_ini::qmllsIniAreCorrect()
                       .toLatin1());
 
     const QString qmllsIniTemplate = uR"([General]
-buildDir=%1
+buildDir="%1"
 no-cmake-calls=false
-docDir=%3
-importPaths=%4
+docDir=%2
+importPaths="%3"
 )"_s;
 
     const QString &docPath = QLibraryInfo::path(QLibraryInfo::DocumentationPath);
-    const QString emptyImportPath;
+    const QString defaultImportPath = QLibraryInfo::path(QLibraryInfo::QmlImportsPath);
     {
         auto file = QFile(source.absoluteFilePath(qmllsIniName));
         QVERIFY(file.exists());
@@ -54,21 +54,22 @@ importPaths=%4
                  qmllsIniTemplate.arg(build.absolutePath()
                                               .append(QDir::listSeparator())
                                               .append(secondFolder.absolutePath()),
-                                      docPath, emptyImportPath));
+                                      docPath, defaultImportPath));
     }
 
     {
-    QDir sourceSubfolder = source;
-    QVERIFY(sourceSubfolder.cd(u"SomeSubfolder"_s));
-    QDir buildSubfolder(build.absolutePath().append(u"/SomeSubfolder/qml/Some/Sub/Folder"_s));
-    {
-        auto file = QFile(sourceSubfolder.absoluteFilePath(qmllsIniName));
-        QVERIFY(file.exists());
-        QVERIFY(file.open(QFile::ReadOnly | QFile::Text));
-        const auto fileContent = QString::fromUtf8(file.readAll());
-        QCOMPARE(fileContent,
-                 qmllsIniTemplate.arg(buildSubfolder.absolutePath(), docPath, emptyImportPath));
-    }
+        QDir sourceSubfolder = source;
+        QVERIFY(sourceSubfolder.cd(u"SomeSubfolder"_s));
+        QDir buildSubfolder(build.absolutePath().append(u"/SomeSubfolder/qml/Some/Sub/Folder"_s));
+        {
+            auto file = QFile(sourceSubfolder.absoluteFilePath(qmllsIniName));
+            QVERIFY(file.exists());
+            QVERIFY(file.open(QFile::ReadOnly | QFile::Text));
+            const auto fileContent = QString::fromUtf8(file.readAll());
+            QCOMPARE(fileContent,
+                     qmllsIniTemplate.arg(buildSubfolder.absolutePath(), docPath,
+                                          defaultImportPath));
+        }
     }
 
     {
@@ -81,7 +82,7 @@ importPaths=%4
             QVERIFY(file.open(QFile::ReadOnly | QFile::Text));
             const auto fileContent = QString::fromUtf8(file.readAll());
             QCOMPARE(fileContent,
-                     qmllsIniTemplate.arg(build.absolutePath(), docPath, emptyImportPath));
+                     qmllsIniTemplate.arg(build.absolutePath(), docPath, defaultImportPath));
         }
     }
     {
@@ -96,7 +97,7 @@ importPaths=%4
             QVERIFY(file.open(QFile::ReadOnly | QFile::Text));
             const auto fileContent = QString::fromUtf8(file.readAll());
             QCOMPARE(fileContent,
-                     qmllsIniTemplate.arg(build.absolutePath(), docPath, emptyImportPath));
+                     qmllsIniTemplate.arg(build.absolutePath(), docPath, defaultImportPath));
         }
     }
     {
@@ -110,7 +111,24 @@ importPaths=%4
             const auto fileContent = QString::fromUtf8(file.readAll());
             QCOMPARE(fileContent,
                      qmllsIniTemplate.arg(build.absoluteFilePath(u"ModuleWithDependency"_s),
-                                          docPath, build.absoluteFilePath(u"Dependency"_s)));
+                                          docPath,
+                                          build.absoluteFilePath(u"Dependency"_s)
+                                                  + QDir::listSeparator() + defaultImportPath));
+        }
+    }
+    {
+        QDir quotesInPath = source;
+        QVERIFY(quotesInPath.cd(u"quotesInPath"_s));
+        {
+            auto file = QFile(quotesInPath.absoluteFilePath(qmllsIniName));
+            QVERIFY(file.exists());
+            QVERIFY(file.open(QFile::ReadOnly | QFile::Text));
+            const auto fileContent = QString::fromUtf8(file.readAll());
+            QCOMPARE(fileContent,
+                     qmllsIniTemplate.arg(build.absolutePath(),
+                                          docPath,
+                                          uR"(\"hello\"\"world\")"_s
+                                                  + QDir::listSeparator() + defaultImportPath));
         }
     }
 }

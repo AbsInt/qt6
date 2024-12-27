@@ -549,6 +549,15 @@ property is only invoked when the property is reassigned to a different object v
 */
 
 /*!
+   \qmlvaluetype regex
+   \ingroup qmlvaluetypes
+   \internal
+   \brief Represents regular expressions.
+
+   \sa {QML Value Types}
+*/
+
+/*!
     \qmlvaluetype enumeration
     \ingroup qmlvaluetypes
     \brief a named enumeration value.

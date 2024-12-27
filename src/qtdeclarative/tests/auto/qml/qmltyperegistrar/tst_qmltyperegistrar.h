@@ -986,8 +986,13 @@ private slots:
     void namespacedExtracted();
     void derivedFromInvisible();
 
+#ifdef QT_QMLJSROOTGEN_PRESENT
+    void verifyJsRoot();
+#endif
+
 private:
     QByteArray qmltypesData;
+    QString m_qmljsrootgenPath;
 };
 
 #endif // TST_QMLTYPEREGISTRAR_H

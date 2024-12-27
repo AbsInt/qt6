@@ -138,8 +138,8 @@ void* OSAllocator::reserveAndCommit(size_t bytes, Usage usage, bool writable, bo
         protection |= PROT_EXEC;
 
     int flags = MAP_PRIVATE | MAP_ANON;
-#if PLATFORM(IOS)
-    if (executable)
+#if OS(DARWIN)
+    if (executable || usage == OSAllocator::JSJITCodePages)
         flags |= MAP_JIT;
 #endif
 
@@ -271,12 +271,30 @@ void OSAllocator::releaseDecommitted(void* address, size_t bytes)
         CRASH();
 }
 
+#if OS(MAC_OS_X) && CPU(X86_64)
+
+// For unknown reasons, the correct detection (see below) causes crashes on macOS on x86_64.
+// Use the known good one from Qt 6.8.0 for now.
+// TODO: Delete this when macOS on x86_64 is not a thing anymore.
+bool OSAllocator::canAllocateExecutableMemory()
+{
+    int flags = MAP_PRIVATE | MAP_ANON;
+    const auto size = pageSize();
+    void *testPage = mmap(
+            nullptr, size, PROT_READ | PROT_WRITE | PROT_EXEC, flags, /*fd*/-1, /*offset*/0);
+    if (testPage == MAP_FAILED)
+        return false;
+    munmap(testPage, size);
+    return true;
+}
+
+#else
+
 bool OSAllocator::canAllocateExecutableMemory()
 {
     int flags = MAP_PRIVATE;
-#if PLATFORM(IOS)
-    if (executable)
-        flags |= MAP_JIT;
+#if OS(DARWIN)
+    flags |= MAP_JIT;
 #endif
 
     // Get a read/write memfd page
@@ -304,6 +322,8 @@ bool OSAllocator::canAllocateExecutableMemory()
     munmap(testPage, size);
     return result;
 }
+
+#endif
 
 } // namespace WTF
 

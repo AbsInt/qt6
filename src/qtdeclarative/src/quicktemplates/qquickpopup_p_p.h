@@ -137,6 +137,8 @@ public:
 
     QPalette defaultPalette() const override;
 
+    void updateChildrenPalettes(const QPalette &parentPalette) override;
+
     enum TransitionState {
         NoTransition, EnterTransition, ExitTransition
     };

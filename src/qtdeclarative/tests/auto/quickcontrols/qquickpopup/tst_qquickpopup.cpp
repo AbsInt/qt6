@@ -125,6 +125,7 @@ private slots:
     void initialPopupSize_data();
     void initialPopupSize();
     void popupWindowChangingParent();
+    void popupWindowChangingParentWindow();
     void popupWindowFocus();
     void popupTypeChangeFromWindowToItem();
     void popupTypeChangeFromItemToWindow();
@@ -2903,6 +2904,62 @@ void tst_QQuickPopup::popupWindowChangingParent()
 
     VERIFY_GLOBAL_POS(item3, popupWindow, initialPos);
     VERIFY_LOCAL_POS(popup, initialPos);
+}
+
+void tst_QQuickPopup::popupWindowChangingParentWindow()
+{
+    if (!popupWindowsSupported)
+        QSKIP("The platform doesn't support popup windows. Skipping test.");
+
+    QQuickApplicationHelper helper(this, "reparentingPopupToDifferentWindows.qml");
+    QVERIFY2(helper.ready, helper.failureMessage());
+    QQuickWindow *window = helper.window;
+    auto *popup = window->contentItem()->findChild<QQuickPopup *>();
+    QVERIFY(popup);
+    auto *popupPrivate = QQuickPopupPrivate::get(popup);
+    QVERIFY(popupPrivate);
+
+    window->show();
+    QVERIFY(QTest::qWaitForWindowExposed(window));
+    QVERIFY(!popup->isVisible());
+
+    QQuickWindow *childWindow = window->property("childWindow").value<QQuickWindow *>();
+    QVERIFY(childWindow);
+
+    childWindow->show();
+    QVERIFY(QTest::qWaitForWindowExposed(childWindow));
+    QVERIFY(!popup->isVisible());
+
+    popup->open();
+    QTRY_VERIFY(popup->isOpened());
+    QTRY_VERIFY(popupPrivate->popupWindow);
+    auto *popupWindow = popupPrivate->popupWindow;
+    QVERIFY(QTest::qWaitForWindowExposed(popupWindow));
+    QQuickTest::qWaitForPolish(popupWindow);
+
+    QCOMPARE(popup->parentItem(), window->contentItem());
+    // The expected value is 0, but we allow for 1 pixel of leniency,
+    // similar to VERIFY_GLOBAL_POS.
+    QCOMPARE_LT(qAbs(popup->x()), 2);
+    QCOMPARE_LT(qAbs(popup->y()), 2);
+
+    popup->close();
+    QVERIFY(!popup->isVisible());
+    popup->setParentItem(childWindow->contentItem());
+    popup->open();
+    QTRY_VERIFY(popup->isOpened());
+    QVERIFY(QTest::qWaitForWindowExposed(popupWindow));
+    QQuickTest::qWaitForPolish(popupWindow);
+    QCOMPARE(popup->parentItem(), childWindow->contentItem());
+
+    QSignalSpy windowMoveSpy(window, &QWindow::yChanged);
+    window->setY(window->y() + 100);
+    QTRY_COMPARE(windowMoveSpy.count(), 1);
+    QCOMPARE_LT(qAbs(popup->x()), 2);
+    QCOMPARE_LT(qAbs(popup->y()), 2);
+
+    popup->close();
+    QTRY_VERIFY(!popup->isVisible());
 }
 
 void tst_QQuickPopup::popupWindowFocus()

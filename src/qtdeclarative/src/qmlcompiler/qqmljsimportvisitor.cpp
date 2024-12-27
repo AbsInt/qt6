@@ -414,7 +414,7 @@ void QQmlJSImportVisitor::processImportWarnings(
 
     m_logger->log(QStringLiteral("Warnings occurred while importing %1:").arg(what), qmlImport,
                   srcLocation);
-    m_logger->processMessages(warnings, qmlImport);
+    m_logger->processMessages(warnings, qmlImport, srcLocation);
 }
 
 void QQmlJSImportVisitor::importBaseModules()
@@ -562,11 +562,12 @@ QVector<QQmlJSAnnotation> QQmlJSImportVisitor::parseAnnotations(QQmlJS::AST::UiA
 
 void QQmlJSImportVisitor::setAllBindings()
 {
+    QDuplicateTracker<QQmlJSScope::ConstPtr> seenBadOwners;
     for (auto it = m_bindings.cbegin(); it != m_bindings.cend(); ++it) {
         // ensure the scope is resolved, if not - it is an error
         auto type = it->owner;
-        if (!type->isFullyResolved()) {
-            if (!type->isInCustomParserParent()) { // special otherwise
+        if (!type->isFullyResolved() && !type->isInCustomParserParent()) { // special otherwise
+            if (!seenBadOwners.hasSeen(type)) {
                 m_logger->log(QStringLiteral("'%1' is used but it is not resolved")
                                       .arg(getScopeName(type, type->scopeType())),
                               qmlUnresolvedType, type->sourceLocation());

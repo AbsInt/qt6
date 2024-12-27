@@ -2,16 +2,21 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include "tst_qmltyperegistrar.h"
-#include <QtTest/qtest.h>
-#include <QtCore/qcoreapplication.h>
-#include <QtCore/qfile.h>
-#include <QtQml/QQmlEngine>
-#include <QtQml/QQmlComponent>
-#include <QtQml/qqmlprivate.h>
 
+#include "UnregisteredTypes/uncreatable.h"
 #include "hppheader.hpp"
 #include "tst_qmltyperegistrar_namespaced_tst_qmltyperegistrar_namespaced_module.h"
-#include "UnregisteredTypes/uncreatable.h"
+
+#include <QtTest/qtest.h>
+
+#include <QtQml/qqmlcomponent.h>
+#include <QtQml/qqmlengine.h>
+#include <QtQml/qqmlprivate.h>
+
+#include <QtCore/qcoreapplication.h>
+#include <QtCore/qfile.h>
+#include <QtCore/qlibraryinfo.h>
+#include <QtCore/qprocess.h>
 
 void tst_qmltyperegistrar::initTestCase()
 {
@@ -21,6 +26,21 @@ void tst_qmltyperegistrar::initTestCase()
     qmltypesData = file.readAll();
     QVERIFY(file.atEnd());
     QCOMPARE(file.error(), QFile::NoError);
+
+    m_qmljsrootgenPath = QLibraryInfo::path(QLibraryInfo::LibraryExecutablesPath)
+            + QLatin1String("/qmljsrootgen");
+
+#ifdef Q_OS_WIN
+    m_qmljsrootgenPath += QLatin1String(".exe");
+#endif
+
+#ifdef QT_QMLJSROOTGEN_PRESENT
+    if (!QFileInfo(m_qmljsrootgenPath).exists()) {
+        QString message = QStringLiteral("qmljsrootgen executable not found (looked for %0)")
+                                  .arg(m_qmljsrootgenPath);
+        QFAIL(qPrintable(message));
+    }
+#endif
 }
 
 void tst_qmltyperegistrar::qmltypesHasForeign()
@@ -1226,5 +1246,50 @@ void tst_qmltyperegistrar::derivedFromInvisible()
         Property { name: "b"; type: "int"; read: "b"; index: 0; isReadonly: true; isConstant: true }
     })"));
 }
+
+#ifdef QT_QMLJSROOTGEN_PRESENT
+void tst_qmltyperegistrar::verifyJsRoot()
+{
+    QProcess process;
+
+    QTemporaryDir dir;
+
+    QProcess jsrootProcess;
+    connect(&jsrootProcess, &QProcess::errorOccurred, [&](QProcess::ProcessError error) {
+        qWarning() << error << jsrootProcess.errorString();
+    });
+    jsrootProcess.setWorkingDirectory(dir.path());
+    jsrootProcess.start(m_qmljsrootgenPath, {"jsroot.json"});
+
+    jsrootProcess.waitForFinished();
+
+    QCOMPARE(jsrootProcess.exitStatus(), QProcess::NormalExit);
+    QCOMPARE(jsrootProcess.exitCode(), 0);
+
+    QString currentJsRootContent, generatedJsRootContent;
+
+    QFile currentJsRoot(":/qt-project.org/meta_types/jsroot_metatypes.json");
+    QVERIFY(currentJsRoot.open(QFile::ReadOnly | QIODevice::Text));
+    currentJsRootContent = QString::fromUtf8(currentJsRoot.readAll());
+    currentJsRoot.close();
+
+    QFile generatedJsRoot(dir.path() + QDir::separator() + "jsroot.json");
+    QVERIFY(generatedJsRoot.open(QFile::ReadOnly | QIODevice::Text));
+    generatedJsRootContent = QString::fromUtf8(generatedJsRoot.readAll());
+    generatedJsRoot.close();
+
+           // If any of the following asserts fail you need to update
+           // src/qmltyperegistrar/jsroot_metatypes.json to reflect the changes.
+           // You can generate the jsroot metatypes with qmljsrootgen.
+    QStringList currentLines = currentJsRootContent.split(QLatin1Char('\n'));
+    QStringList generatedLines = generatedJsRootContent.split(QLatin1Char('\n'));
+
+    QCOMPARE(currentLines.size(), generatedLines.size());
+
+    for (qsizetype i = 0; i < currentLines.size(); i++) {
+        QCOMPARE(currentLines[i], generatedLines[i]);
+    }
+}
+#endif
 
 QTEST_MAIN(tst_qmltyperegistrar)

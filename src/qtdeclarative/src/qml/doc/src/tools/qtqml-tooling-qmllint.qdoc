@@ -37,6 +37,8 @@ qmllint warns about:
   \li And many other things
 \endlist
 
+See \l{QML Lint Warning and Errors} on how to fix qmllint warnings and errors.
+
 \note In order for qmllint to work properly, it requires type information.
 That information is provided by QML modules in the import paths.
 The current directory, as well as the import paths for Qt's built-in types,

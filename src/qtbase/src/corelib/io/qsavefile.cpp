@@ -57,8 +57,8 @@ QSaveFilePrivate::~QSaveFilePrivate()
     an error happened, and will discard the temporary file in commit().
 
     Much like with QFile, the file is opened with open(). Data is usually read
-    and written using QDataStream or QTextStream, but you can also call the
-    QIODevice-inherited functions read(), readLine(), readAll(), write().
+    and written using QDataStream or QTextStream, but you can also directly call
+    \l write().
 
     Unlike QFile, calling close() is not allowed. commit() replaces it. If commit()
     was not called and the QSaveFile instance is destroyed, the temporary file is
@@ -302,10 +302,15 @@ bool QSaveFile::commit()
     // Sync to disk if possible. Ignore errors (e.g. not supported).
     fe->syncToDisk();
 
+    // ensure we act on either a close()/flush() failure or a previous write()
+    // problem
+    if (d->error == QFileDevice::NoError)
+        d->error = d->writeError;
+    d->writeError = QFileDevice::NoError;
+
     if (d->useTemporaryFile) {
-        if (d->writeError != QFileDevice::NoError) {
+        if (d->error != QFileDevice::NoError) {
             fe->remove();
-            d->writeError = QFileDevice::NoError;
             return false;
         }
         // atomically replace old file with new file
@@ -317,7 +322,10 @@ bool QSaveFile::commit()
             return false;
         }
     }
-    return true;
+
+    // return true if all previous write() calls succeeded and if close() and
+    // flush() succeeded.
+    return d->error == QFileDevice::NoError;
 }
 
 /*!

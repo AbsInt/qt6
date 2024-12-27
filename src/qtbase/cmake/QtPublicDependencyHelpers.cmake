@@ -34,6 +34,9 @@ macro(_qt_internal_find_third_party_dependencies target target_dep_list)
             find_package(${__qt_${target}_find_package_args})
         else()
             find_dependency(${__qt_${target}_find_package_args})
+            if(NOT ${__qt_${target}_pkg}_FOUND)
+                list(APPEND __qt_${target}_missing_deps "${__qt_${target}_pkg}")
+            endif()
         endif()
 
         _qt_internal_get_package_components_id(
@@ -129,7 +132,6 @@ macro(_qt_internal_find_qt_dependencies target target_dep_list find_dependency_p
         list(GET __qt_${target}_target_dep 1 __qt_${target}_version)
 
         if (NOT ${__qt_${target}_pkg}_FOUND)
-
             # TODO: Remove Private handling once sufficient time has passed, aka all developers
             # updated their builds not to contain stale FooDependencies.cmake files without the
             # _qt_package_name property.
@@ -149,17 +151,11 @@ macro(_qt_internal_find_qt_dependencies target target_dep_list find_dependency_p
                     ${_qt_additional_packages_prefix_paths}
                 ${__qt_use_no_default_path_for_qt_packages}
             )
+            if(NOT ${__qt_${target}_pkg}_FOUND)
+                list(APPEND __qt_${target}_missing_deps "${__qt_${target}_pkg}")
+            endif()
         endif()
     endforeach()
-endmacro()
-
-
-# TODO: Remove once a dependency update completes and most developers have the Dependencies.cmake
-# files updated in their builds.
-# The name is too generic, it doesn't look for any kind of dependencies but only Qt package
-# dependencies.
-macro(_qt_internal_find_dependencies target_dep_list find_dependency_path_list)
-    _qt_internal_find_qt_dependencies("none" "${target_dep_list}" "${find_dependency_path_list}")
 endmacro()
 
 # If a dependency package was not found, provide some hints in the error message on how to debug

@@ -143,12 +143,12 @@ void tst_qquickmenubar::mouse_data()
 
 void tst_qquickmenubar::mouse()
 {
+    SKIP_IF_NO_WINDOW_ACTIVATION;
+    SKIP_IF_NO_MOUSE_HOVER;
+
     QFETCH(QQuickPopup::PopupType, popupType);
     QCoreApplication::setAttribute(Qt::AA_DontUseNativeMenuBar);
     QCoreApplication::setAttribute(Qt::AA_DontUseNativeMenuWindows);
-
-    SKIP_IF_NO_WINDOW_ACTIVATION;
-    SKIP_IF_NO_MOUSE_HOVER;
 
     QQmlApplicationEngine engine(testFileUrl("menubaritems.qml"));
 

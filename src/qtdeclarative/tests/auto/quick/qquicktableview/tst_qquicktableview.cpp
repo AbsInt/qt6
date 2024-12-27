@@ -11,6 +11,8 @@
 #include <QtQuick/private/qquickdraghandler_p.h>
 #include <QtQuick/private/qquicktextinput_p.h>
 
+#include <QtQuickTemplates2/private/qquickselectionrectangle_p.h>
+
 #include <QtQml/qqmlengine.h>
 #include <QtQml/qqmlcontext.h>
 #include <QtQml/qqmlexpression.h>
@@ -34,11 +36,18 @@ static const char *kModelDataBindingProp = "modelDataBinding";
 
 Q_DECLARE_METATYPE(QMarginsF);
 
-#define GET_QML_TABLEVIEW(PROPNAME) \
-    auto PROPNAME = view->rootObject()->property(#PROPNAME).value<QQuickTableView *>(); \
-    QVERIFY(PROPNAME); \
-    auto PROPNAME ## Private = QQuickTableViewPrivate::get(PROPNAME); \
-    Q_UNUSED(PROPNAME ## Private)
+#define LOAD_WINDOW()                          \
+  auto *window = view->rootObject()->window(); \
+  QVERIFY(window)
+
+#define GET_QML_PROPERTY(PROPTYPE, PROPNAME)                                    \
+  auto *PROPNAME = view->rootObject()->property(#PROPNAME).value<PROPTYPE *>(); \
+  QVERIFY(PROPNAME)
+
+#define GET_QML_TABLEVIEW(PROPNAME)                                \
+  GET_QML_PROPERTY(QQuickTableView, PROPNAME);                     \
+  auto *PROPNAME##Private = QQuickTableViewPrivate::get(PROPNAME); \
+  Q_UNUSED(PROPNAME##Private)
 
 #define LOAD_TABLEVIEW(fileName) \
     view->setSource(testFileUrl(fileName)); \
@@ -116,6 +125,8 @@ private slots:
     void checkExtents_moveTableToEdge();
     void checkContentXY();
     void noDelegate();
+    void selectionWhenNoDelegate_data();
+    void selectionWhenNoDelegate();
     void changeDelegateDuringUpdate();
     void changeModelDuringUpdate();
     void countDelegateItems_data();
@@ -1341,6 +1352,105 @@ void tst_QQuickTableView::noDelegate()
 
     items = tableViewPrivate->loadedItems;
     QVERIFY(items.isEmpty());
+}
+
+namespace NoDelegate {
+enum class EventType {
+    Click,
+    Drag,
+    PressAndHold,
+    PressAndRelease,
+};
+}
+
+void tst_QQuickTableView::selectionWhenNoDelegate_data()
+{
+    QTest::addColumn<NoDelegate::EventType>("eventType");
+    QTest::addColumn<Qt::KeyboardModifier>("modifier");
+    QTest::addColumn<QPoint>("point1");
+    QTest::addColumn<QPoint>("point2");
+
+    using namespace NoDelegate;
+
+    QTest::newRow("click") << EventType::Click << Qt::NoModifier << QPoint() << QPoint();
+    QTest::newRow("shift_click") << EventType::Click << Qt::ShiftModifier << QPoint() << QPoint();
+    QTest::newRow("control_click")
+            << EventType::Click << Qt::ControlModifier << QPoint() << QPoint();
+    QTest::newRow("drag") << EventType::Drag << Qt::NoModifier << QPoint(10, 10)
+                          << QPoint(100, 100);
+    QTest::newRow("shift_drag") << EventType::Drag << Qt::ShiftModifier << QPoint(10, 10)
+                                << QPoint(100, 100);
+    QTest::newRow("control_drag") << EventType::Drag << Qt::ControlModifier << QPoint(10, 10)
+                                  << QPoint(100, 100);
+    QTest::newRow("pressAndHold") << EventType::PressAndHold << Qt::NoModifier << QPoint()
+                                  << QPoint();
+    QTest::newRow("shift_pressAndHold")
+            << EventType::PressAndHold << Qt::ShiftModifier << QPoint() << QPoint();
+    QTest::newRow("control_pressAndHold")
+            << EventType::PressAndHold << Qt::ControlModifier << QPoint() << QPoint();
+    QTest::newRow("pressAndRelease")
+            << EventType::PressAndRelease << Qt::NoModifier << QPoint() << QPoint();
+    QTest::newRow("shift_pressAndRelease")
+            << EventType::PressAndRelease << Qt::ShiftModifier << QPoint() << QPoint();
+    QTest::newRow("control_pressAndRelease")
+            << EventType::PressAndRelease << Qt::ControlModifier << QPoint() << QPoint();
+}
+
+void tst_QQuickTableView::selectionWhenNoDelegate()
+{
+    QFETCH(NoDelegate::EventType, eventType);
+    QFETCH(Qt::KeyboardModifier, modifier);
+    QFETCH(QPoint, point1);
+    QFETCH(QPoint, point2);
+
+    // Check selection on the TableView which its delegate isn't set
+    LOAD_TABLEVIEW("uninitializeddelegate.qml");
+    LOAD_WINDOW();
+    GET_QML_PROPERTY(QQuickSelectionRectangle, selectionRectangle);
+
+    using namespace NoDelegate;
+
+    const auto simulateDrag = [window, startPoint = point1, stopPoint = point2,
+                               modifier](int delay) {
+        const qreal startDragDistance = qApp->styleHints()->startDragDistance();
+        const QPoint startDragPoint =
+                startPoint + QPoint(startDragDistance + 1, startDragDistance + 1);
+        QTest::mousePress(window, Qt::LeftButton, modifier, startPoint);
+        QTest::mouseMove(window, startDragPoint, delay);
+        for (qreal t = 0.2; t < 1.; t += .2) {
+            const auto &point = QQuickVisualTestUtils::lerpPoints(startDragPoint, stopPoint, t);
+            QTest::mouseMove(window, point, delay);
+        }
+        QTest::mouseMove(window, stopPoint, delay);
+        QTest::mouseRelease(window, Qt::LeftButton, modifier, stopPoint, delay);
+    };
+
+    bool shouldRelease = false;
+
+    switch (eventType) {
+    case EventType::Click:
+        QTest::mouseClick(window, Qt::LeftButton, modifier, point1);
+        break;
+    case EventType::Drag:
+        simulateDrag(100);
+        break;
+    case EventType::PressAndHold:
+        QTest::mousePress(window, Qt::LeftButton, modifier, point1);
+        QTest::qWait(QGuiApplication::styleHints()->mousePressAndHoldInterval());
+        shouldRelease = true;
+        break;
+    case EventType::PressAndRelease:
+        QTest::mousePress(window, Qt::LeftButton, modifier, point1);
+        shouldRelease = true;
+        break;
+    }
+
+    QVERIFY(!selectionRectangle->active());
+
+    if (shouldRelease) {
+        QTest::mouseRelease(window, Qt::LeftButton, modifier, point1);
+        QVERIFY(!selectionRectangle->active());
+    }
 }
 
 void tst_QQuickTableView::changeDelegateDuringUpdate()

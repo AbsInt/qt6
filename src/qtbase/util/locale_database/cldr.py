@@ -59,8 +59,6 @@ class CldrReader (object):
                 else:
                     self.grumble(f'Skipping likelySubtag "{got}" -> "{use}" ({e})\n')
                 continue
-            if all(code.startswith('Any') and code[3].isupper() for code in have[:-1]):
-                continue
 
             give = (give[0],
                     # Substitute according to http://www.unicode.org/reports/tr35/#Likely_Subtags
@@ -334,7 +332,8 @@ class CldrAccess (object):
         inheritance, where relevant."""
         return LocaleScanner(name, self.__localeRoots(name), self.__rootLocale)
 
-    def englishNaming(self, tag: str) -> Callable[[str], str]: # see QLocaleXmlWriter.enumData()
+    # see QLocaleXmlWriter.enumData()
+    def englishNaming(self, tag: str) -> Callable[[str, str], str]:
         return self.__codeMap(tag).get
 
     @property

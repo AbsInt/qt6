@@ -24,3 +24,7 @@ android
 android
 [baselineOffset]
 android
+
+# QTBUG-132075
+[multilengthStrings]
+windows

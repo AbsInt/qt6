@@ -2779,12 +2779,13 @@ void QQmlJSCodeGenerator::generate_DefineObjectLiteral(int internalClassId, int 
         if (index == -1)
             continue;
 
+        const QString indexString = QString::number(index);
         m_body += u"        void *argv[] = { %1, nullptr };\n"_s
                           .arg(contentPointer(propType, argument));
-        m_body += u"        meta->d.static_metacall(reinterpret_cast<QObject *>(";
+        m_body += u"        meta->property("_s + indexString;
+        m_body += u").enclosingMetaObject()->d.static_metacall(reinterpret_cast<QObject *>(";
         m_body += contentPointer(m_state.accumulatorOut(), m_state.accumulatorVariableOut);
-        m_body += u"), QMetaObject::WriteProperty, ";
-        m_body += QString::number(index) + u", argv);\n";
+        m_body += u"), QMetaObject::WriteProperty, " + indexString + u", argv);\n";
         m_body += u"    }\n";
     }
 

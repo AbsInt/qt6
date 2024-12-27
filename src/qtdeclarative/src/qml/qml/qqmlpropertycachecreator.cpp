@@ -7,6 +7,8 @@
 
 QT_BEGIN_NAMESPACE
 
+Q_LOGGING_CATEGORY(invalidOverride, "qt.qml.invalidOverride");
+
 QAtomicInt QQmlPropertyCacheCreatorBase::classIndexCounter(0);
 
 template<typename BaseNameHandler, typename FailHandler>
