@@ -19,6 +19,7 @@
 #include <QtCore/qassert.h>
 
 #include <memory>
+#include <utility>
 
 QT_BEGIN_NAMESPACE
 
@@ -151,7 +152,7 @@ public:
         return m_handle;
     }
 
-    void reset(const Type& handle) noexcept
+    void reset(const Type& handle = HandleTraits::invalidValue()) noexcept
     {
         if (handle == m_handle)
             return;
@@ -162,9 +163,7 @@ public:
 
     [[nodiscard]] Type release() noexcept
     {
-        Type handle = m_handle;
-        m_handle = HandleTraits::invalidValue();
-        return handle;
+        return std::exchange(m_handle, HandleTraits::invalidValue());
     }
 
     [[nodiscard]] Type *operator&() noexcept  // NOLINT(google-runtime-operator)

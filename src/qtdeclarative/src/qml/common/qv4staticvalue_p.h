@@ -478,11 +478,7 @@ struct StaticValue
 
     static double toInteger(double d)
     {
-        if (std::isnan(d))
-            return +0;
-        if (!d || std::isinf(d))
-            return d;
-        return d >= 0 ? std::floor(d) : std::ceil(d);
+        return QJSNumberCoercion::roundTowards0(d);
     }
 
     static int toInt32(double d)

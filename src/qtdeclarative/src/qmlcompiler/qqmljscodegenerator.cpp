@@ -1593,8 +1593,7 @@ void QQmlJSCodeGenerator::generate_SetLookup(int index, int baseReg)
     if (!m_typeResolver->equals(specific.storedType(), valueType)) {
         if (m_typeResolver->isPrimitive(specific.storedType())
                 && m_typeResolver->isPrimitive(valueType)) {
-            // Preferably store in QJSPrimitiveValue since we need the content pointer below.
-            property = property.storedIn(m_typeResolver->jsPrimitiveType());
+            // Nothing to do here. We can store all primitive types as is.
         } else {
             property = property.storedIn(m_typeResolver->merge(specific.storedType(), valueType));
         }
@@ -1608,7 +1607,7 @@ void QQmlJSCodeGenerator::generate_SetLookup(int index, int baseReg)
     QString argType;
     if (!m_typeResolver->registerContains(
                 m_state.accumulatorIn(), m_typeResolver->containedType(property))) {
-        m_body += u"auto converted = "_s
+        m_body += property.storedType()->augmentedInternalName() + u" converted = "_s
                 + conversion(m_state.accumulatorIn(), property, consumedAccumulatorVariableIn())
                 + u";\n"_s;
         variableIn = contentPointer(property, u"converted"_s);
@@ -2762,8 +2761,17 @@ void QQmlJSCodeGenerator::generate_DefineObjectLiteral(int internalClassId, int 
         m_body += u"    {\n";
         const QString propName = m_jsUnitGenerator->jsClassMember(internalClassId, i);
         const int currentArg = args + i;
-        const QQmlJSRegisterContent propType = m_state.readRegister(currentArg);
+        const QQmlJSRegisterContent readType = m_state.readRegister(currentArg);
         const QQmlJSRegisterContent argType = registerType(currentArg);
+
+        // Merging the stored types makes sure that
+        // a, the type is expressible in C++ (since we can express argType)
+        // b, the type can hold readType.
+        const QQmlJSScope::ConstPtr readStored = readType.storedType();
+        const QQmlJSRegisterContent propType = m_typeResolver->isPrimitive(readStored)
+                ? readType
+                : readType.storedIn(m_typeResolver->merge(readStored, argType.storedType()));
+
         const QQmlJSMetaProperty property = contained->property(propName);
         const QString consumedArg = consumedRegisterVariable(currentArg);
         QString argument = conversion(argType, propType, consumedArg);
@@ -2771,7 +2779,8 @@ void QQmlJSCodeGenerator::generate_DefineObjectLiteral(int internalClassId, int 
         if (argument == consumedArg) {
             argument = registerVariable(currentArg);
         } else {
-            m_body += u"        auto arg = "_s + argument + u";\n";
+            m_body += u"        "_s + propType.storedType()->augmentedInternalName()
+                    + u" arg = "_s + argument + u";\n";
             argument = u"arg"_s;
         }
 
@@ -4040,6 +4049,12 @@ QString QQmlJSCodeGenerator::convertStored(
 
     if (m_typeResolver->equals(from, m_typeResolver->realType())
             || m_typeResolver->equals(from, m_typeResolver->floatType())) {
+        if (m_typeResolver->equals(to, m_typeResolver->int64Type())
+                || m_typeResolver->equals(to, m_typeResolver->uint64Type())) {
+            return to->internalName() + u"(QJSNumberCoercion::roundTowards0("_s
+                    + variable + u"))"_s;
+        }
+
         if (m_typeResolver->isSignedInteger(to))
             return u"QJSNumberCoercion::toInteger("_s + variable + u')';
         if (m_typeResolver->isUnsignedInteger(to))

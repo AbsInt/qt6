@@ -292,7 +292,7 @@ void tst_primaryselectionv1::pasteAscii()
         auto *offer = device->sendDataOffer({"text/plain"});
         connect(offer, &PrimarySelectionOfferV1::receive, offer, [](QString mimeType, int fd) {
             QFile file;
-            file.open(fd, QIODevice::WriteOnly, QFile::FileHandleFlag::AutoCloseHandle);
+            QVERIFY(file.open(fd, QIODevice::WriteOnly, QFile::FileHandleFlag::AutoCloseHandle));
             QCOMPARE(mimeType, "text/plain");
             file.write(QByteArray("normal ascii"));
             file.close();
@@ -338,7 +338,7 @@ void tst_primaryselectionv1::pasteUtf8()
         auto *offer = device->sendDataOffer({"text/plain", "text/plain;charset=utf-8"});
         connect(offer, &PrimarySelectionOfferV1::receive, offer, [](QString mimeType, int fd) {
             QFile file;
-            file.open(fd, QIODevice::WriteOnly, QFile::FileHandleFlag::AutoCloseHandle);
+            QVERIFY(file.open(fd, QIODevice::WriteOnly, QFile::FileHandleFlag::AutoCloseHandle));
             QCOMPARE(mimeType, "text/plain;charset=utf-8");
             file.write(QByteArray("face with tears of joy: 😂"));
             file.close();

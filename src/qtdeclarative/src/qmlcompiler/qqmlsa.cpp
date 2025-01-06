@@ -1245,14 +1245,18 @@ void PassManagerPrivate::analyzeBinding(const Element &element, const QQmlSA::El
     const QQmlSA::Binding &binding = info->second.binding;
     const QString &propertyName = info->second.fullPropertyName;
 
-    for (PropertyPass *pass : findPropertyUsePasses(element, propertyName))
+    const auto elementPasses = findPropertyUsePasses(element, propertyName);
+    for (PropertyPass *pass : elementPasses)
         pass->onBinding(element, propertyName, binding, bindingScope, value);
 
     if (!info->second.isAttached || bindingScope.baseType().isNull())
         return;
 
-    for (PropertyPass *pass : findPropertyUsePasses(bindingScope.baseType(), propertyName))
-        pass->onBinding(element, propertyName, binding, bindingScope, value);
+    const auto bindingScopePasses = findPropertyUsePasses(bindingScope.baseType(), propertyName);
+    for (PropertyPass *pass : bindingScopePasses) {
+        if (!elementPasses.contains(pass))
+            pass->onBinding(element, propertyName, binding, bindingScope, value);
+    }
 }
 
 /*!

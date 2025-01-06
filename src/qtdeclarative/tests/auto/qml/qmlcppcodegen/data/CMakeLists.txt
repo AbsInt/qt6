@@ -24,6 +24,7 @@ set(cpp_sources
     sequenceToIterable.h
     sequencetypeexample.cpp sequencetypeexample.h
     state.h
+    takenumber.cpp takenumber.h
     theme.cpp theme.h
     timelinetheme.cpp timelinetheme.h
     variantMapLookup.h
@@ -272,6 +273,7 @@ set(qml_files
     stringLength.qml
     stringToByteArray.qml
     structuredValueType.qml
+    takenumber.qml
     testlogger.js
     text.qml
     themerbad.qml

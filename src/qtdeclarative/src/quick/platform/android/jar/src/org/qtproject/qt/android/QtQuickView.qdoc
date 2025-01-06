@@ -95,7 +95,7 @@
 
     See {https://bugreports.qt.io/browse/QTBUG-123711}{QTBUG-123711} for more information.
 
-    See \l{QML in Android Studio Projects} for an example of how to handle rotation
+    See \l{Qt Quick for Android Studio Projects} for an example of how to handle rotation
     manually inside an application without recreating the Activity.
 
     \section1 QtQuickView in an Android Service

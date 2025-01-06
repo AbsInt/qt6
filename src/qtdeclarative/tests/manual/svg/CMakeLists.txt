@@ -5,8 +5,8 @@ cmake_minimum_required(VERSION 3.5)
 
 project(svg VERSION 0.1 LANGUAGES CXX)
 
-set(CMAKE_AUTOUIC ON)
-set(CMAKE_AUTOMOC ON)
+qt_standard_project_setup(REQUIRES 6.8)
+
 set(CMAKE_AUTORCC ON)
 
 set(CMAKE_CXX_STANDARD 17)

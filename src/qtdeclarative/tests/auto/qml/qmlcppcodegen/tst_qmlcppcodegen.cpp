@@ -9,10 +9,11 @@
 #include <data/getOptionalLookup.h>
 #include <data/listprovider.h>
 #include <data/objectwithmethod.h>
+#include <data/qmlusing.h>
 #include <data/resettable.h>
+#include <data/takenumber.h>
 #include <data/weathermoduleurl.h>
 #include <data/withlength.h>
-#include <data/qmlusing.h>
 
 #include <QtQml/private/qqmlengine_p.h>
 #include <QtQml/private/qqmlpropertycachecreator_p.h>
@@ -236,6 +237,8 @@ private slots:
     void stringLength();
     void stringToByteArray();
     void structuredValueType();
+    void takeNumbers();
+    void takeNumbers_data();
     void testIsnan();
     void thisObject();
     void throwObjectName();
@@ -4844,6 +4847,59 @@ void tst_QmlCppCodegen::structuredValueType()
     w1.setStrings(QStringList({u"four"_s, u"five"_s, u"six"_s}));
     QCOMPARE(o->property("w1").value<WeatherModelUrlDerived>(), w1);
 }
+
+void tst_QmlCppCodegen::takeNumbers()
+{
+    QFETCH(QByteArray, method);
+    QFETCH(int, expectedInt);
+    QFETCH(qsizetype, expectedSizeType);
+    QFETCH(qlonglong, expectedLongLong);
+
+    QQmlEngine engine;
+    QQmlComponent c(&engine, QUrl(u"qrc:/qt/qml/TestTypes/takenumber.qml"_s));
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+    QScopedPointer<QObject> o(c.create());
+    QVERIFY(!o.isNull());
+
+    TakeNumber *takeNumber = qobject_cast<TakeNumber *>(o.data());
+    QVERIFY(takeNumber != nullptr);
+
+    o->metaObject()->invokeMethod(o.data(), method);
+
+    QCOMPARE(takeNumber->takenInt, expectedInt);
+    QCOMPARE(takeNumber->takenNegativeInt, -expectedInt);
+    QCOMPARE(takeNumber->takenQSizeType, expectedSizeType);
+    QCOMPARE(takeNumber->takenQLongLong, expectedLongLong);
+    QCOMPARE(takeNumber->takenNumbers,
+             (Numbers {expectedInt, -expectedInt, expectedSizeType, expectedLongLong}));
+    QCOMPARE(takeNumber->propertyInt, expectedInt);
+    QCOMPARE(takeNumber->propertyNegativeInt, -expectedInt);
+    QCOMPARE(takeNumber->propertyQSizeType, expectedSizeType);
+    QCOMPARE(takeNumber->propertyQLongLong, expectedLongLong);
+    QCOMPARE(takeNumber->propertyNumbers,
+             (Numbers {expectedInt, -expectedInt, expectedSizeType, expectedLongLong}));
+}
+
+void tst_QmlCppCodegen::takeNumbers_data()
+{
+    QTest::addColumn<QByteArray>("method");
+    QTest::addColumn<int>("expectedInt");
+    QTest::addColumn<qsizetype>("expectedSizeType");
+    QTest::addColumn<qlonglong>("expectedLongLong");
+
+    QTest::addRow("literal0") << "literal0"_ba << 0 << qsizetype(0) << 0ll;
+    QTest::addRow("literal56") << "literal56"_ba << 56 << qsizetype(56) << 56ll;
+
+    QTest::addRow("variable0") << "variable0"_ba << 0 << qsizetype(0) << 0ll;
+    QTest::addRow("variable484") << "variable484"_ba << 484 << qsizetype(484) << 484ll;
+
+    QTest::addRow("literal3B")
+            << "literal3B"_ba << int(3000000000ll) << qsizetype(3000000000ll) << 3000000000ll;
+    QTest::addRow("variable3B")
+            << "variable3B"_ba << int(3000000000ll) << qsizetype(3000000000ll) << 3000000000ll;
+
+}
+
 
 void tst_QmlCppCodegen::testIsnan()
 {

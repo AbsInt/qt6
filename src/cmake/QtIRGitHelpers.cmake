@@ -93,9 +93,15 @@ function(qt_ir_run_git_submodule_init submodules working_directory)
     qt_ir_setup_commit_template("${working_directory}" "${working_directory}")
 endfunction()
 
-# Add gerrit remotes to the repository.
-function(qt_ir_add_git_remotes repo_name working_directory)
-    set(gerrit_ssh_base "ssh://@USER@codereview.qt-project.org@PORT@/qt/")
+# Add gerrit remotes to the repository located in the working_directory.
+# repo_relative_url is the relative URL of the repository.
+# Examples:
+# - qt5
+# - qttools.git
+# - ../playground/qlitehtml.git
+# - ../qt/qttools-litehtml.git
+function(qt_ir_add_git_remotes repo_relative_url working_directory)
+    set(gerrit_ssh_base "ssh://@USER@codereview.qt-project.org@PORT@/")
     set(gerrit_repo_url "${gerrit_ssh_base}")
 
     qt_ir_get_option_value(codereview-username username)
@@ -110,7 +116,10 @@ function(qt_ir_add_git_remotes repo_name working_directory)
         string(REPLACE "@PORT@" "" gerrit_repo_url "${gerrit_repo_url}")
     endif()
 
-    string(APPEND gerrit_repo_url "${repo_name}")
+    set(namespace "qt")
+    set(repo_relative_url_with_namespace "${namespace}/${repo_relative_url}")
+    qt_ir_normalize_git_url("${repo_relative_url_with_namespace}" normalized_url)
+    string(APPEND gerrit_repo_url "${normalized_url}")
 
     qt_ir_execute_process_and_log_and_handle_error(
         COMMAND_ARGS git config remote.gerrit.url "${gerrit_repo_url}"
@@ -193,15 +202,21 @@ function(qt_ir_clone_one_submodule submodule_name)
     set(submodule_base_git_path "${${prefix}_${submodule_name}_base_git_path}")
 
     set(submodule_url "${submodule_base_git_path}")
-    qt_ir_has_url_scheme("${submodule_url}" has_url_scheme)
+    qt_ir_parse_git_url(
+        URL "${submodule_url}"
+        OUT_VAR_HAS_URL_SCHEME has_url_scheme
+    )
+
     if(NOT has_url_scheme AND arg_BASE_URL)
         set(submodule_url "${arg_BASE_URL}${submodule_url}")
+        qt_ir_normalize_git_url("${submodule_url}" submodule_url)
     endif()
 
     qt_ir_get_mirror(mirror_url)
     set(mirror "")
     if(NOT has_url_scheme AND mirror_url AND (should_clone OR arg_FETCH))
         set(mirror "${mirror_url}${submodule_base_git_path}")
+        qt_ir_normalize_git_url("${mirror}" mirror)
     endif()
 
     set(mirror_or_original_url "${submodule_url}")

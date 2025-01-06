@@ -291,7 +291,11 @@ QString getIconSvg(const QString &iconName)
                 if (fileInfo.fileName() == iconName) {
                     qCDebug(lcQWaylandAdwaitaDecorationLog) << "Using " << iconName << " from " << themeName << " theme";
                     QFile readFile(fileInfo.filePath());
-                    readFile.open(QFile::ReadOnly);
+                    if (!readFile.open(QFile::ReadOnly)) {
+                        qCWarning(lcQWaylandAdwaitaDecorationLog, "Failed to open %ls: %ls",
+                                  qUtf16Printable(readFile.fileName()),
+                                  qUtf16Printable(readFile.errorString()));
+                    }
                     return readFile.readAll();
                 }
             }

@@ -103,7 +103,7 @@ namespace QtAndroidQuickViewEmbedding
 
         if (!variantToWrite.isValid()) {
             qWarning("Setting the property type of %s is not supported.",
-                     qPrintable(propertyValue.className()));
+                     propertyValue.className().data());
         } else {
             metaProperty.write(rootObject, variantToWrite);
         }

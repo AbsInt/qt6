@@ -30,7 +30,8 @@ endif()
 
 # This can't use the find_package(Qt6 COMPONENTS) signature, because Qt6Config uses NO_DEFAULT and
 # won't look at the prepended extra find root paths.
-find_package(Qt6QmlCompilerPlusPrivateTools ${PROJECT_VERSION} QUIET CONFIG
+get_target_property(_qt_qml_package_version Qt6::Qml _qt_package_version)
+find_package(Qt6QmlCompilerPlusPrivateTools ${_qt_qml_package_version} QUIET CONFIG
     PATHS
             ${_qt_additional_host_packages_prefix_paths}
 )

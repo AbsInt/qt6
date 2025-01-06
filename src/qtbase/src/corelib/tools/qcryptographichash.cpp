@@ -111,8 +111,13 @@ static inline int SHA384_512AddLength(SHA512Context *context, unsigned int lengt
 #if QT_CONFIG(system_libb2)
 #include <blake2.h>
 #else
+QT_WARNING_PUSH
+QT_WARNING_DISABLE_CLANG("-Wunused-function")
+QT_WARNING_DISABLE_GCC("-Wunused-function")
+QT_WARNING_DISABLE_MSVC(4505)
 #include "../../3rdparty/blake2/src/blake2b-ref.c"
 #include "../../3rdparty/blake2/src/blake2s-ref.c"
+QT_WARNING_POP
 #endif
 #endif // QT_CRYPTOGRAPHICHASH_ONLY_SHA1
 
@@ -1127,13 +1132,15 @@ QByteArrayView QCryptographicHash::hashInto(QSpan<std::byte> buffer,
                                             QSpan<const QByteArrayView> data,
                                             Algorithm method) noexcept
 {
+    if (buffer.size() < hashLengthInternal(method))
+        return {}; // buffer too small
+
     QCryptographicHashPrivate hash(method);
     for (QByteArrayView part : data)
         hash.addData(part);
     hash.finalizeUnchecked(); // no mutex needed: no-one but us has access to 'hash'
     auto result = hash.resultView();
-    if (buffer.size() < result.size())
-        return {}; // buffer too small
+    Q_ASSERT(buffer.size() >= result.size());
     // ### optimize: have the method directly write into `buffer`
     memcpy(buffer.data(), result.data(), result.size());
     return buffer.first(result.size());

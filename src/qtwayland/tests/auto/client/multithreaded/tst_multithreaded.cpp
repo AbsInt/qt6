@@ -83,8 +83,7 @@ protected:
 
             if (fds[1].revents & POLLIN) {
                 char pipeIn;
-                read(m_pipefd[0], &pipeIn, 1);
-                if (pipeIn == 'q')
+                if (read(m_pipefd[0], &pipeIn, 1) == 1 && pipeIn == 'q')
                     break;
             }
         }

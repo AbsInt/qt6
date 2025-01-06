@@ -40,16 +40,77 @@ function(qt_ir_get_git_config_contents out_var)
     set(${out_var} "${git_output}" PARENT_SCOPE)
 endfunction()
 
-# Checks whether the given url has a scheme like https:// or is just a
-# relative path.
-function(qt_ir_has_url_scheme url out_var)
-    string(REGEX MATCH "^[a-z][a-z0-9+\-.]*://" has_url_scheme "${url}")
+# Parses a git repo url to:
+# - check if the given url has a scheme like https:// or git:// or is just a
+# relative path with no scheme (possibly containing '../' segments)
+# - extracts the scheme if it exists
+# - extracts the url without the scheme
+function(qt_ir_parse_git_url)
+    set(options "")
+    set(oneValueArgs
+        URL
+        OUT_VAR_HAS_URL_SCHEME
+        OUT_VAR_SCHEME
+        OUT_VAR_URL_WITHOUT_SCHEME
+    )
+    set(multiValueArgs "")
+    cmake_parse_arguments(arg "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
+
+    string(REGEX MATCH "^([a-z][a-z0-9+\-.]*://)(.+)" url_scheme_match "${arg_URL}")
+
+    if(url_scheme_match)
+        set(has_url_scheme TRUE)
+        set(scheme "${CMAKE_MATCH_1}")
+        set(url_without_scheme "${CMAKE_MATCH_2}")
+    else()
+        set(has_url_scheme FALSE)
+        set(scheme "")
+        set(url_without_scheme "${url}")
+    endif()
+
+    if(arg_OUT_VAR_HAS_URL_SCHEME)
+        set(${arg_OUT_VAR_HAS_URL_SCHEME} "${has_url_scheme}" PARENT_SCOPE)
+    endif()
+
+    if(arg_OUT_VAR_SCHEME)
+        set(${arg_OUT_VAR_SCHEME} "${scheme}" PARENT_SCOPE)
+    endif()
+
+    if(arg_OUT_VAR_URL_WITHOUT_SCHEME)
+        set(${arg_OUT_VAR_URL_WITHOUT_SCHEME} "${url_without_scheme}" PARENT_SCOPE)
+    endif()
+endfunction()
+
+# Normalizes a url that contains '../' path segments.
+# Removes the '../' segments and the directories that they precede.
+# Example:
+#  git://code.qt.io/qt/../playground/qlitehtml.git
+# will be normalized to:
+#  git://code.qt.io/playground/qlitehtml.git
+function(qt_ir_normalize_git_url url out_var)
+    # The exact perl code was while ($base =~ s,(?!\.\./)[^/]+/\.\./,,g) {}
+    # That got rid of ../ and ../../ in the path, but it broke down
+    # when more than two '../' segments were present.
+    #
+    # In CMake, we instead parse the url to get the non-scheme suffix,
+    # use get_filename_component(ABSOLUTE) to resolve the url as if it was a relative path
+    # and then re-add the scheme if it was present.
+    qt_ir_parse_git_url(
+        URL "${url}"
+        OUT_VAR_HAS_URL_SCHEME has_url_scheme
+        OUT_VAR_SCHEME url_scheme
+        OUT_VAR_URL_WITHOUT_SCHEME url_without_scheme
+    )
+
+    # Note the empty BASE_DIR is important, otherwise the path is relative to
+    # ${CMAKE_CURRENT_SOURCE_DIR}.
+    get_filename_component(normalized_url "${url_without_scheme}" ABSOLUTE BASE_DIR "")
 
     if(has_url_scheme)
-        set(${out_var} TRUE PARENT_SCOPE)
-    else()
-        set(${out_var} FALSE PARENT_SCOPE)
+        string(PREPEND normalized_url "${url_scheme}")
     endif()
+
+    set(${out_var} "${normalized_url}" PARENT_SCOPE)
 endfunction()
 
 # Parses a key-value line from a .git/config or .gitmodules file
@@ -79,14 +140,22 @@ endmacro()
 # url_value
 #   the url where to clone a repo from
 #   in perl script it was called $base
-#   e.g. '../qtbase.git', 'https://code.qt.io/playground/qlitehtml.git'
+#   Examples:
+#    - '../qtbase.git'
+#    - 'https://code.qt.io/playground/qlitehtml.git'
+#    - '../../playground/qlitehtml.git'
 # parent_repo_base_git_path
 #   the base git path of the parent of the submodule
 #   it is either a relative dir or a full url
 #   in the perl script it was called $my_repo_base,
 #   it was passed as first arg to git_clone_all_submodules,
 #   it was passed the value of $subbases{$module} when doing recursive submodule cloning
-#   e.g. 'qt5', 'tqtc-qt5', 'qtdeclarative.git', 'https://code.qt.io/playground/qlitehtml.git'
+#   Examples:
+#    - 'qt5'
+#    - 'tqtc-qt5'
+#    - 'qtdeclarative.git'
+#    - 'qttools.git'
+#    - 'https://code.qt.io/playground/qlitehtml.git'
 #
 # Outputs
 #
@@ -94,21 +163,21 @@ endmacro()
 #   just the value of ${url_value}
 # ${out_var_prefix}_${submodule_name}_base_git_path
 #   the whole url if it has a scheme, otherwise it's the value of
-#   ${url_value} relative to ${parent_repo_base_git_path}, so all the ../ are collapsed
-#   e.g. 'qtdeclarative.git'
-#        'https://code.qt.io/playground/qlitehtml.git',
+#   ${url_value} relative to ${parent_repo_base_git_path}, so some of the '../' segments
+#   are collapsed depending on how many path segments are available in
+#   ${parent_repo_base_git_path}.
+#   Examples:
+#    - 'qtdeclarative.git'
+#    - 'https://code.qt.io/playground/qlitehtml.git'
+#    - '../playground/qlitehtml.git'
 macro(qt_ir_parse_git_url_key out_var_prefix submodule_name url_value parent_repo_base_git_path)
-    qt_ir_has_url_scheme("${url_value}" has_url_scheme)
+    qt_ir_parse_git_url(
+        URL "${url_value}"
+        OUT_VAR_HAS_URL_SCHEME has_url_scheme
+    )
     if(NOT has_url_scheme)
         set(base_git_path "${parent_repo_base_git_path}/${url_value}")
-
-        # The exact code perl code was while ($base =~ s,(?!\.\./)[^/]+/\.\./,,g) {}
-        # That got rid of ../ and ../../ in the path, but it broke down
-        # when more than two ../ were present.
-        # We just use ABSOLUTE to resolve the path and get rid of all ../
-        # Note the empty BASE_DIR is important, otherwise the path is relative to
-        # ${CMAKE_CURRENT_SOURCE_DIR}.
-        get_filename_component(base_git_path "${base_git_path}" ABSOLUTE BASE_DIR "")
+        qt_ir_normalize_git_url("${base_git_path}" base_git_path)
     else()
         set(base_git_path "${url_value}")
     endif()

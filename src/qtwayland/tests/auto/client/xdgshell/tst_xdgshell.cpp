@@ -748,14 +748,14 @@ void tst_xdgshell::suspended()
     QVERIFY(!window.isExposed()); // not exposed until we're configured
     QCOMPOSITOR_TRY_VERIFY(xdgToplevel());
 
-    exec([=] { xdgToplevel()->sendCompleteConfigure(); });
+    exec([&] { xdgToplevel()->sendCompleteConfigure(); });
     QCOMPOSITOR_TRY_VERIFY(xdgToplevel()->m_xdgSurface->m_committedConfigureSerial);
     QTRY_VERIFY(window.isExposed());
 
-    exec([=] { xdgToplevel()->sendCompleteConfigure(QSize(), {XdgToplevel::state_suspended}); });
+    exec([&] { xdgToplevel()->sendCompleteConfigure(QSize(), {XdgToplevel::state_suspended}); });
     QTRY_VERIFY(!window.isExposed());
 
-    exec([=] { xdgToplevel()->sendCompleteConfigure(QSize(), {}); });
+    exec([&] { xdgToplevel()->sendCompleteConfigure(QSize(), {}); });
     QTRY_VERIFY(window.isExposed());
 }
 
@@ -766,7 +766,7 @@ void tst_xdgshell::initiallySuspended()
     window.show();
     QVERIFY(!window.isExposed());
     QCOMPOSITOR_TRY_VERIFY(xdgToplevel());
-    exec([=] { xdgToplevel()->sendCompleteConfigure(QSize(), {XdgToplevel::state_suspended}); });
+    exec([&] { xdgToplevel()->sendCompleteConfigure(QSize(), {XdgToplevel::state_suspended}); });
     QVERIFY(!window.isExposed());
 }
 

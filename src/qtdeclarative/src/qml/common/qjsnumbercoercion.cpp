@@ -59,4 +59,11 @@ QT_BEGIN_NAMESPACE
   Returns the \c true if they are equal, or \c false if not.
  */
 
+/*!
+  \fn double QJSNumberCoercion::roundTowards0(double d)
+  \internal
+
+  Rounds \a d towards 0 by JavaScript \e ToInteger rules and returns the result.
+*/
+
 QT_END_NAMESPACE

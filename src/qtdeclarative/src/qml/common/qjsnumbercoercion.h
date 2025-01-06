@@ -65,6 +65,18 @@ public:
         QT_WARNING_POP
     }
 
+    static constexpr double roundTowards0(double d)
+    {
+        // Check for NaN
+        if (!equals(d, d))
+            return +0;
+
+        if (equals(d, 0) || std::isinf(d))
+            return d;
+
+        return d >= 0 ? std::floor(d) : std::ceil(d);
+    }
+
 private:
     constexpr QJSNumberCoercion(double dbl)
     {
