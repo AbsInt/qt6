@@ -551,6 +551,8 @@ private slots:
 
     void visibilityDoesntClobberWindowState();
 
+    void showMethodSetsVisibility();
+
     void eventTypes();
 
     void dataIsNotAList();
@@ -4175,6 +4177,36 @@ void tst_qquickwindow::visibilityDoesntClobberWindowState()
     window->setWindowState(Qt::WindowMaximized);
     QTRY_VERIFY(eventFilter.events.contains(QEvent::WindowStateChange));
     QTRY_COMPARE(window->windowState(), Qt::WindowMaximized);
+}
+
+void tst_qquickwindow::showMethodSetsVisibility()
+{
+    QQmlEngine engine;
+    QQmlComponent component(&engine);
+    component.loadUrl(testFileUrl("showMethodSetsVisibility.qml"));
+    QObject *created = component.create();
+    QScopedPointer<QObject> cleanup(created);
+    QVERIFY(created);
+
+    QQuickWindow *rootWindow = qobject_cast<QQuickWindow *>(created);
+    QVERIFY(rootWindow);
+    QCOMPARE(rootWindow->isVisible(), true);
+
+    QQuickWindow *childWindow = rootWindow->findChild<QQuickWindow *>("childWindow");
+    QVERIFY(childWindow);
+    QCOMPARE(childWindow->isVisible(), false);
+
+    QQuickWindow *anotherWindow = rootWindow->findChild<QQuickWindow *>("anotherWindow");
+    QVERIFY(anotherWindow);
+
+    anotherWindow->show();
+    QCOMPARE(anotherWindow->isVisible(), true);
+
+    childWindow->show();
+    QCOMPARE(childWindow->isVisible(), true);
+
+    childWindow->setTransientParent(anotherWindow);
+    QCOMPARE(childWindow->isVisible(), true);
 }
 
 void tst_qquickwindow::eventTypes()

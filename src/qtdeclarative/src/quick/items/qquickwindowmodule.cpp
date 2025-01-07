@@ -34,7 +34,11 @@ QQuickWindowQmlImpl::QQuickWindowQmlImpl(QWindow *parent)
 QQuickWindowQmlImpl::QQuickWindowQmlImpl(QQuickWindowQmlImplPrivate &dd, QWindow *parent)
     : QQuickWindow(dd, parent)
 {
-    connect(this, &QWindow::visibleChanged, this, &QQuickWindowQmlImpl::visibleChanged);
+    connect(this, &QWindow::visibleChanged, this, [&] {
+        Q_D(QQuickWindowQmlImpl);
+        d->visible = QWindow::isVisible();
+        emit QQuickWindowQmlImpl::visibleChanged(d->visible);
+    });
     connect(this, &QWindow::visibilityChanged, this, [&]{
         Q_D(QQuickWindowQmlImpl);
         // Update the window's actual visibility and turn off visibilityExplicitlySet,
