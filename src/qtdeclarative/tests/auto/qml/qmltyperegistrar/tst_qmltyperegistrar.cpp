@@ -1247,6 +1247,25 @@ void tst_qmltyperegistrar::derivedFromInvisible()
     })"));
 }
 
+void tst_qmltyperegistrar::foreignNamespacedWithEnum()
+{
+    QVERIFY(qmltypesData.contains(R"(Component {
+        file: "tst_qmltyperegistrar.h"
+        name: "F::ForeignQObject"
+        accessSemantics: "reference"
+        prototype: "QObject"
+        exports: ["QmlTypeRegistrarTest/ForeignQObject 1.0"]
+        isCreatable: false
+        exportMetaObjectRevisions: [256]
+        Enum {
+            name: "Enum"
+            isScoped: true
+            values: ["ValueA", "ValueB"]
+        }
+    })"));
+}
+
+
 #ifdef QT_QMLJSROOTGEN_PRESENT
 void tst_qmltyperegistrar::verifyJsRoot()
 {
@@ -1290,6 +1309,7 @@ void tst_qmltyperegistrar::verifyJsRoot()
         QCOMPARE(currentLines[i], generatedLines[i]);
     }
 }
+
 #endif
 
 QTEST_MAIN(tst_qmltyperegistrar)

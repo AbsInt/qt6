@@ -765,18 +765,10 @@ function(qt_internal_add_test name)
             )
         endif()
 
-        # Add a ${target}/check makefile target, to more easily test one test.
-
-        set(test_config_options "")
-        get_cmake_property(is_multi_config GENERATOR_IS_MULTI_CONFIG)
-        if(is_multi_config)
-            set(test_config_options -C $<CONFIG>)
-        endif()
-        add_custom_target("${testname}_check"
-            VERBATIM
-            COMMENT "Running ${CMAKE_CTEST_COMMAND} -V -R \"^${name}$\" ${test_config_options}"
-            COMMAND "${CMAKE_CTEST_COMMAND}" -V -R "^${name}$" ${test_config_options}
-        )
+        # Add a ${target}_check makefile target, to more easily test one test.
+        # TODO: Note in batch mode testname tests would execute all batched tests defined in name
+        _qt_internal_make_check_target(${testname} CTEST_TEST_NAME ${name})
+        # Add appropriate dependencies to the targets as needed
         if(TARGET "${name}")
             add_dependencies("${testname}_check" "${name}")
             if(ANDROID)
@@ -870,6 +862,20 @@ function(qt_internal_add_test name)
                         DESTINATION "${testdata_install_dir}")
                 endif()
             endforeach()
+        endif()
+    endif()
+
+    if(MACOS AND NOT CMAKE_GENERATOR STREQUAL "Xcode")
+        # Add com.apple.security.get-task-allow entitlement to each
+        # test binary, so we can hook into the Swift crash handling.
+        if(NOT arg_QMLTEST AND arg_SOURCES)
+            set(entitlements_file
+                "${__qt_internal_cmake_apple_support_files_path}/test.entitlements.plist")
+            add_custom_command(TARGET "${name}"
+                POST_BUILD COMMAND codesign --sign -
+                    --entitlements "${entitlements_file}"
+                    "$<TARGET_FILE:${name}>"
+                )
         endif()
     endif()
 

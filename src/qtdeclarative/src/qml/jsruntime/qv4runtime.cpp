@@ -300,7 +300,10 @@ ReturnedValue Runtime::Closure::call(ExecutionEngine *engine, int functionId)
         Scoped<QV4::QQmlContextWrapper> qmlContextWrapper(s, callingQmlContext->d()->qml());
         const QV4::QQmlContextWrapper *resource = qmlContextWrapper;
         QQmlRefPointer<QQmlContextData> context = resource->getContext();
-        if (!context->importedScripts().isNullOrUndefined()) {
+        /* we can use fromReturnedValue here, as isNullOrUndefined doesn't allocate.
+           fetching importedScripts twvice is less overhead than unconditionally creating a scope,
+           as script imports are rather rare*/
+        if (!QV4::Value::fromReturnedValue(context->importedScripts()).isNullOrUndefined()) {
             QV4::ScopedString name(s, engine->newString(QLatin1StringView("$importedScripts")));
             QV4::ScopedObject scripts(s, context->importedScripts());
             closure->insertMember(name, scripts, Attr_Invalid);

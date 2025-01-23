@@ -69,6 +69,7 @@ void QWaylandTextInputv3::zwp_text_input_v3_leave(struct ::wl_surface *surface)
     m_surface = nullptr;
 
     disable();
+    commit();
     qCDebug(qLcQpaWaylandTextInput) << Q_FUNC_INFO << "Done";
 }
 

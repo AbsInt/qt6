@@ -1790,12 +1790,20 @@ void QWaylandWindow::setOpaqueArea(const QRegion &opaqueArea)
 
 void QWaylandWindow::requestXdgActivationToken(uint serial)
 {
+    if (!mShellSurface) {
+        qCWarning(lcQpaWayland) << "requestXdgActivationToken is called with no surface role created, emitting synthetic signal";
+        Q_EMIT xdgActivationTokenCreated({});
+        return;
+    }
     mShellSurface->requestXdgActivationToken(serial);
 }
 
 void QWaylandWindow::setXdgActivationToken(const QString &token)
 {
-    mShellSurface->setXdgActivationToken(token);
+    if (mShellSurface)
+        mShellSurface->setXdgActivationToken(token);
+    else
+        qCWarning(lcQpaWayland) << "setXdgActivationToken is called with no surface role created, token" << token << "discarded";
 }
 
 void QWaylandWindow::addChildPopup(QWaylandWindow *child)

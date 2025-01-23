@@ -229,14 +229,11 @@ void QQmlJSImportVisitor::leaveEnvironment()
     m_currentScope = m_currentScope->parentScope();
 }
 
-bool QQmlJSImportVisitor::isTypeResolved(const QQmlJSScope::ConstPtr &type)
+void QQmlJSImportVisitor::warnUnresolvedType(const QQmlJSScope::ConstPtr &type) const
 {
-    const auto handleUnresolvedType = [this](const QQmlJSScope::ConstPtr &type) {
-        m_logger->log(QStringLiteral("Type %1 is used but it is not resolved")
-                              .arg(getScopeName(type, type->scopeType())),
-                      qmlUnresolvedType, type->sourceLocation());
-    };
-    return isTypeResolved(type, handleUnresolvedType);
+    m_logger->log(QStringLiteral("Type %1 is used but it is not resolved")
+                          .arg(getScopeName(type, type->scopeType())),
+                          qmlUnresolvedType, type->sourceLocation());
 }
 
 static bool mayBeUnresolvedGroupedProperty(const QQmlJSScope::ConstPtr &scope)
@@ -562,18 +559,12 @@ QVector<QQmlJSAnnotation> QQmlJSImportVisitor::parseAnnotations(QQmlJS::AST::UiA
 
 void QQmlJSImportVisitor::setAllBindings()
 {
-    QDuplicateTracker<QQmlJSScope::ConstPtr> seenBadOwners;
     for (auto it = m_bindings.cbegin(); it != m_bindings.cend(); ++it) {
-        // ensure the scope is resolved, if not - it is an error
-        auto type = it->owner;
-        if (!type->isFullyResolved() && !type->isInCustomParserParent()) { // special otherwise
-            if (!seenBadOwners.hasSeen(type)) {
-                m_logger->log(QStringLiteral("'%1' is used but it is not resolved")
-                                      .arg(getScopeName(type, type->scopeType())),
-                              qmlUnresolvedType, type->sourceLocation());
-            }
+        // ensure the scope is resolved. If not, produce a warning.
+        const QQmlJSScope::Ptr type = it->owner;
+        if (!checkTypeResolved(type))
             continue;
-        }
+
         auto binding = it->create();
         if (binding.isValid())
             type->addOwnPropertyBinding(binding, it->specifier);
@@ -628,12 +619,6 @@ void QQmlJSImportVisitor::processDefaultProperties()
         const QQmlJSMetaProperty defaultProp = parentScope->property(defaultPropertyName);
         auto propType = defaultProp.type();
         const auto handleUnresolvedDefaultProperty = [&](const QQmlJSScope::ConstPtr &) {
-
-            // Since we don't know the property type, we need to assume it's QQmlComponent and that
-            // IDs from the inner scopes are inaccessible.
-            for (const QQmlJSScope::Ptr &scope : std::as_const(*it))
-                scope->setIsWrappedInImplicitComponent(true);
-
             // Property type is not fully resolved we cannot tell any more than this
             m_logger->log(QStringLiteral("Property \"%1\" has incomplete type \"%2\". You may be "
                                          "missing an import.")
@@ -642,8 +627,16 @@ void QQmlJSImportVisitor::processDefaultProperties()
                           qmlUnresolvedType, it.value().constFirst()->sourceLocation());
         };
 
+        const auto wrapInImplicitComponent = [&]() {
+            // Since we don't know the property type, we need to assume it's QQmlComponent and that
+            // IDs from the inner scopes are inaccessible.
+            for (const QQmlJSScope::Ptr &scope : std::as_const(*it))
+                scope->setIsWrappedInImplicitComponent(true);
+        };
+
         if (propType.isNull()) {
             handleUnresolvedDefaultProperty(propType);
+            wrapInImplicitComponent();
             continue;
         }
 
@@ -655,11 +648,13 @@ void QQmlJSImportVisitor::processDefaultProperties()
                     qmlNonListProperty, it.value().constFirst()->sourceLocation());
         }
 
-        if (!isTypeResolved(propType, handleUnresolvedDefaultProperty))
+        if (!checkTypeResolved(propType, handleUnresolvedDefaultProperty)) {
+            wrapInImplicitComponent();
             continue;
+        }
 
         for (const QQmlJSScope::Ptr &scope : std::as_const(*it)) {
-            if (!isTypeResolved(scope))
+            if (!checkTypeResolved(scope))
                 continue;
 
             // Assigning any element to a QQmlComponent property implicitly wraps it into a Component
@@ -761,19 +756,13 @@ void QQmlJSImportVisitor::processPropertyBindingObjects()
         const QString propertyName = objectBinding.name;
         QQmlJSScope::Ptr childScope = objectBinding.childScope;
 
-        const auto handleUnresolvedType = [&](const QQmlJSScope::ConstPtr &type) {
+        // guarantees property lookup
+        if (!checkTypeResolved(objectBinding.scope)) {
             // Since we don't know the property type we need to assume that it's QQmlComponent and
             // that IDs from the child scope are inaccessible outside of it.
             childScope->setIsWrappedInImplicitComponent(true);
-
-            m_logger->log(QStringLiteral("Type %1 is used but it is not resolved")
-                                  .arg(getScopeName(type, type->scopeType())),
-                                  qmlUnresolvedType, type->sourceLocation());
-        };
-
-        // guarantees property lookup
-        if (!isTypeResolved(objectBinding.scope, handleUnresolvedType))
             continue;
+        }
 
         QQmlJSMetaProperty property = objectBinding.scope->property(propertyName);
 
@@ -783,11 +772,6 @@ void QQmlJSImportVisitor::processPropertyBindingObjects()
             continue;
         }
         const auto handleUnresolvedProperty = [&](const QQmlJSScope::ConstPtr &) {
-
-            // Since we don't know the property type we need to assume that it's QQmlComponent and
-            // that IDs from the child scope are inaccessible outside of it.
-            childScope->setIsWrappedInImplicitComponent(true);
-
             // Property type is not fully resolved we cannot tell any more than this
             m_logger->log(QStringLiteral("Property \"%1\" has incomplete type \"%2\". You may be "
                                          "missing an import.")
@@ -795,14 +779,24 @@ void QQmlJSImportVisitor::processPropertyBindingObjects()
                                   .arg(property.typeName()),
                           qmlUnresolvedType, objectBinding.location);
         };
+
+        const auto wrapInImplicitComponent = [&]() {
+            // Since we don't know the property type we need to assume that it's QQmlComponent and
+            // that IDs from the child scope are inaccessible outside of it.
+            childScope->setIsWrappedInImplicitComponent(true);
+        };
+
         if (property.type().isNull()) {
+            wrapInImplicitComponent();
             handleUnresolvedProperty(property.type());
             continue;
         }
 
         // guarantee that canAssign() can be called
-        if (!isTypeResolved(property.type(), handleUnresolvedProperty)
-            || !isTypeResolved(childScope)) {
+        if (!checkTypeResolved(property.type(), handleUnresolvedProperty)) {
+            wrapInImplicitComponent();
+            continue;
+        } else if (!checkTypeResolved(childScope)) {
             continue;
         }
 
@@ -1242,7 +1236,7 @@ void QQmlJSImportVisitor::breakInheritanceCycles(const QQmlJSScope::Ptr &origina
             const QString name = scope->baseTypeName();
             if (!error.isEmpty()) {
                 m_logger->log(error, qmlImport, scope->sourceLocation(), true, true);
-            } else if (!name.isEmpty()) {
+            } else if (!name.isEmpty() && !m_unresolvedTypes.hasSeen(scope)) {
                 m_logger->log(
                         name + ' '_L1 + wasNotFound + ' '_L1 + didYouAddAllImports,
                         qmlImport, scope->sourceLocation(), true, true,

@@ -345,7 +345,7 @@ bool QQmlJSTypeResolver::isIntegral(const QQmlJSScope::ConstPtr &type) const
 
 bool QQmlJSTypeResolver::isPrimitive(const QQmlJSScope::ConstPtr &type) const
 {
-    return isNumeric(type)
+    return (isNumeric(type) && !equals(type, m_int64Type) && !equals(type, m_uint64Type))
             || equals(type, m_boolType) || equals(type, m_voidType) || equals(type, m_nullType)
             || equals(type, m_stringType) || equals(type, m_jsPrimitiveType);
 }
@@ -1580,13 +1580,7 @@ QQmlJSRegisterContent QQmlJSTypeResolver::memberType(
                 QQmlJSRegisterContent::GenericObjectProperty, jsValueType());
     }
     if (type.isImportNamespace()) {
-        if (type.scopeType()->accessSemantics() != QQmlJSScope::AccessSemantics::Reference) {
-            m_logger->log(u"Cannot use a non-QObject type %1 to access prefixed import"_s.arg(
-                                  type.scopeType()->internalName()),
-                          qmlPrefixedImportType, type.scopeType()->sourceLocation());
-            return {};
-        }
-
+        Q_ASSERT(type.scopeType()->isReferenceType());
         return registerContentForName(
                     name, type.scopeType(),
                     type.variant() == QQmlJSRegisterContent::ObjectModulePrefix);

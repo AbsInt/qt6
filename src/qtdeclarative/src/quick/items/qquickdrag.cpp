@@ -296,7 +296,7 @@ QObject *QQuickDragAttached::target() const
 }
 
 /*!
-    \qmlattachedproperty QPointF QtQuick::Drag::hotSpot
+    \qmlattachedproperty point QtQuick::Drag::hotSpot
 
     This property holds the drag position relative to the top left of the item.
 
@@ -325,7 +325,7 @@ void QQuickDragAttached::setHotSpot(const QPointF &hotSpot)
 }
 
 /*!
-    \qmlattachedproperty QUrl QtQuick::Drag::imageSource
+    \qmlattachedproperty url QtQuick::Drag::imageSource
     \since 5.8
 
     This property holds the URL of the image which will be used to represent

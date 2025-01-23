@@ -21,6 +21,8 @@ qt_internal_add_test(tst_qmlcppcodegen
         codegen_test_hiddenplugin
         codegen_test_stringbuilder
         codegen_test_stringbuilderplugin
+        confused_test_module
+        confused_test_moduleplugin
 )
 
 qt_internal_add_test(tst_qmlcppcodegen_interpreted
@@ -35,6 +37,8 @@ qt_internal_add_test(tst_qmlcppcodegen_interpreted
         codegen_test_hiddenplugin
         codegen_test_stringbuilder
         codegen_test_stringbuilderplugin
+        confused_test_module
+        confused_test_moduleplugin
     DEFINES
         QT_TEST_FORCE_INTERPRETER
 )

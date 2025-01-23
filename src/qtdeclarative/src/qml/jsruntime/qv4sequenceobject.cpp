@@ -758,9 +758,12 @@ bool convertToIterable(QMetaType metaType, void *data, QV4::Object *sequence)
         return false;
 
     const QMetaType elementMetaType = iterable.valueMetaType();
+    QV4::Scope scope(sequence->engine());
+    QV4::ScopedValue v(scope);
     for (qsizetype i = 0, end = sequence->getLength(); i < end; ++i) {
         QVariant element(elementMetaType);
-        ExecutionEngine::metaTypeFromJS(sequence->get(i), elementMetaType, element.data());
+        v = sequence->get(i);
+        ExecutionEngine::metaTypeFromJS(v, elementMetaType, element.data());
         iterable.addValue(element, QSequentialIterable::AtEnd);
     }
     return true;

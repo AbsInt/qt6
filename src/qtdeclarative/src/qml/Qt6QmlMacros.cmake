@@ -899,7 +899,6 @@ Check https://doc.qt.io/qt-6/qt-cmake-policy-qtp0001.html for policy details."
         RESOURCES ${arg_RESOURCES}
         OUTPUT_TARGETS cache_target
         PREFIX "${qt_qml_module_resource_prefix}"
-        ADDING_QML_MODULE
     )
     list(APPEND output_targets ${cache_target})
 
@@ -1075,6 +1074,11 @@ Check https://doc.qt.io/qt-6/qt-cmake-policy-qtp0001.html for policy details."
     endif()
 
     if("${CMAKE_VERSION}" VERSION_GREATER_EQUAL "3.19.0")
+        set_property(GLOBAL APPEND PROPERTY _qt_qml_aotstats_module_targets ${target})
+        set_target_properties(${target} PROPERTIES
+            QT_QML_MODULE_RCC_QMLCACHE_PATH "${CMAKE_CURRENT_BINARY_DIR}/.rcc/qmlcache"
+        )
+
         get_cmake_property(aotstats_setup_called _qt_internal_deferred_aotstats_setup)
         if(NOT aotstats_setup_called)
             set_property(GLOBAL PROPERTY _qt_internal_deferred_aotstats_setup TRUE)
@@ -2870,7 +2874,6 @@ function(qt6_target_qml_sources target)
         NO_CACHEGEN
         NO_QMLDIR_TYPES
         __QT_INTERNAL_FORCE_DEFER_QMLDIR  # Used only by qt6_add_qml_module()
-        ADDING_QML_MODULE
     )
 
     set(args_single
@@ -2888,10 +2891,6 @@ function(qt6_target_qml_sources target)
     )
     if(arg_UNPARSED_ARGUMENTS)
         message(FATAL_ERROR "Unknown/unexpected arguments: ${arg_UNPARSED_ARGUMENTS}")
-    endif()
-
-    if(NOT arg_QML_FILES)
-        set_property(GLOBAL APPEND PROPERTY _qt_qml_aotstats_module_targets ${target})
     endif()
 
     get_target_property(no_lint ${target} QT_QML_MODULE_NO_LINT)
@@ -3390,12 +3389,9 @@ function(qt6_target_qml_sources target)
         endif()
     endforeach()
 
-    if(arg_ADDING_QML_MODULE AND "${CMAKE_VERSION}" VERSION_GREATER_EQUAL "3.19.0")
-        set_property(GLOBAL APPEND PROPERTY _qt_qml_aotstats_module_targets ${target})
-        set_target_properties(${target} PROPERTIES
-            QT_QML_MODULE_AOTSTATS_FILES "${aotstats_files}"
-            QT_QML_MODULE_RCC_QMLCACHE_PATH "${CMAKE_CURRENT_BINARY_DIR}/.rcc/qmlcache"
-        )
+    if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.19)
+        set_property(TARGET ${target} APPEND PROPERTY
+            QT_QML_MODULE_AOTSTATS_FILES ${aotstats_files})
     endif()
 
     if(ANDROID)

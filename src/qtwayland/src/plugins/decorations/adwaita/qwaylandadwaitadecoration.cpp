@@ -46,7 +46,6 @@ static constexpr int ceCornerRadius = 12;
 static constexpr int ceShadowsWidth = 10;
 static constexpr int ceTitlebarHeight = 38;
 static constexpr int ceWindowBorderWidth = 1;
-static constexpr qreal ceTitlebarSeperatorWidth = 0.5;
 
 static QMap<QWaylandAdwaitaDecoration::ButtonIcon, QString> buttonMap = {
     { QWaylandAdwaitaDecoration::CloseIcon, "window-close-symbolic"_L1 },
@@ -129,35 +128,29 @@ void QWaylandAdwaitaDecoration::paint(QPaintDevice *device)
     /*
      * Titlebar and window border
      */
-    const int titleBarWidth = surfaceRect.width() - margins().left() - margins().right();
     QPainterPath path;
+    const QPointF topLeft = { margins(ShadowsOnly).left() + 0.5,
+                              margins(ShadowsOnly).top() - 0.5 };
+    const int titleBarWidth = surfaceRect.width() - margins(ShadowsOnly).left()
+            - margins(ShadowsOnly).right() - 0.5;
+    const int borderRectHeight =
+            surfaceRect.height() - margins().top() - margins().bottom() + 0.5;
 
     // Maximized or tiled won't have rounded corners
     if (waylandWindow()->windowStates() & Qt::WindowMaximized
-        || waylandWindow()->toplevelWindowTilingStates() != QWaylandWindow::WindowNoState)
-        path.addRect(margins().left(), margins().bottom(), titleBarWidth, margins().top());
-    else
-        path.addRoundedRect(margins().left(), margins().bottom(), titleBarWidth,
-                            margins().top() + ceCornerRadius, ceCornerRadius, ceCornerRadius);
+        || waylandWindow()->toplevelWindowTilingStates() != QWaylandWindow::WindowNoState) {
+        path.addRect(QRectF(topLeft, QSizeF(titleBarWidth, margins().top())));
+    } else {
+        path.addRoundedRect(QRectF(topLeft, QSizeF(titleBarWidth, margins().top() + ceCornerRadius)),
+                            ceCornerRadius, ceCornerRadius);
+    }
 
     p.save();
     p.setPen(color(Border));
     p.fillPath(path.simplified(), color(Background));
     p.drawPath(path);
-    p.drawRect(margins().left(), margins().top(), titleBarWidth, surfaceRect.height() - margins().top() - margins().bottom());
+    p.drawRect(QRectF(topLeft.x(), margins().top(), titleBarWidth, borderRectHeight));
     p.restore();
-
-
-    /*
-     * Titlebar separator
-     */
-    p.save();
-    p.setPen(color(Border));
-    p.drawLine(QLineF(margins().left(), margins().top() - ceTitlebarSeperatorWidth,
-                        surfaceRect.width() - margins().right(),
-                        margins().top() - ceTitlebarSeperatorWidth));
-    p.restore();
-
 
     /*
      * Window title

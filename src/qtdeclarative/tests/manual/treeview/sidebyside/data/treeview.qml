@@ -143,7 +143,7 @@ ApplicationWindow {
             required property TreeView treeView
             required property bool isTreeNode
             required property bool expanded
-            required property int hasChildren
+            required property bool hasChildren
             required property int depth
 
             color: selected ? "lightblue" : "transparent"

@@ -2427,6 +2427,7 @@ void tst_qquicktext::dependentImplicitSizes()
     QQuickText *cappedWidthAndHeight = object->findChild<QQuickText *>("cappedWidthAndHeight");
     QQuickText *cappedWidthFixedHeight = object->findChild<QQuickText *>("cappedWidthFixedHeight");
     QQuickText *fixedWidthCappedHeight = object->findChild<QQuickText *>("fixedWidthCappedHeight");
+    QQuickText *defaultWidthNoWrapNoElide = object->findChild<QQuickText *>("defaultWidthNoWrapNoElide");
 
     QVERIFY(reference);
     QVERIFY(fixedWidthAndHeight);
@@ -2468,6 +2469,12 @@ void tst_qquicktext::dependentImplicitSizes()
     QVERIFY(fixedWidthCappedHeight->height() < fixedWidthCappedHeight->implicitHeight());
     QCOMPARE(fixedWidthCappedHeight->implicitWidth(), reference->implicitWidth());
     QCOMPARE(fixedWidthCappedHeight->implicitHeight(), fixedWidthAndHeight->implicitHeight());
+
+    // QTBUG-129143
+    // If we don't define width or height, width should be the same as implicitWidth
+    QCOMPARE(defaultWidthNoWrapNoElide->width(), defaultWidthNoWrapNoElide->implicitWidth());
+    QCOMPARE(defaultWidthNoWrapNoElide->height(), defaultWidthNoWrapNoElide->implicitHeight());
+    QCOMPARE(fixedWidthCappedHeight->implicitWidth(), reference->implicitWidth());
 }
 
 void tst_qquicktext::contentSize()

@@ -274,13 +274,25 @@ public:
     bool isRootObjectInCreation() const { return m_isRootObjectInCreation; }
     void setRootObjectInCreation(bool rootInCreation) { m_isRootObjectInCreation = rootInCreation; }
 
-    QV4::Value importedScripts() const {
+    QV4::ReturnedValue importedScripts() const
+    {
         if (m_hasWeakImportedScripts)
             return m_weakImportedScripts.value();
         else
             return m_importedScripts.value();
     }
     void setImportedScripts(QV4::ExecutionEngine *engine, QV4::Value scripts) {
+        // setImportedScripts should not be called on an invalidated context
+        Q_ASSERT(!m_hasWeakImportedScripts);
+        m_importedScripts.set(engine, scripts);
+    }
+
+    /*
+       we can safely pass a ReturnedValue here, as setImportedScripts will directly store
+       scripts in a persistentValue, without any intermediate allocation that could trigger
+       a gc run
+    */
+    void setImportedScripts(QV4::ExecutionEngine *engine, QV4::ReturnedValue scripts) {
         // setImportedScripts should not be called on an invalidated context
         Q_ASSERT(!m_hasWeakImportedScripts);
         m_importedScripts.set(engine, scripts);

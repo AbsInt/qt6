@@ -23,7 +23,6 @@
 #include <QtQml/private/qqmlincubator_p.h>
 #include <QtQmlModels/private/qqmlchangeset_p.h>
 #include <QtQml/qqmlinfo.h>
-#include <QtGui/qdrag.h>
 
 #include <QtQuick/private/qquickflickable_p_p.h>
 #include <QtQuick/private/qquickitemviewfxitem_p_p.h>
@@ -32,9 +31,13 @@
 #include <QtQuick/private/qquicksinglepointhandler_p.h>
 #include <QtQuick/private/qquickhoverhandler_p.h>
 #include <QtQuick/private/qquicktaphandler_p.h>
-#include <QtQuick/private/qquickdroparea_p.h>
 
 #include <QtCore/private/qminimalflatset_p.h>
+
+#if QT_CONFIG(quick_draganddrop)
+#include <QtGui/qdrag.h>
+#include <QtQuick/private/qquickdroparea_p.h>
+#endif
 
 QT_BEGIN_NAMESPACE
 
@@ -125,6 +128,7 @@ protected:
                        QPointerEvent *ev, QEventPoint &point) override;
 };
 
+#if QT_CONFIG(quick_draganddrop)
 class QQuickTableViewSectionDragHandler : public QQuickTableViewPointerHandler
 {
     Q_OBJECT
@@ -161,6 +165,7 @@ private:
     QSizeF m_step = QSizeF(1, 1);
     QTimer m_scrollTimer;
 };
+#endif // quick_draganddrop
 
 /*! \internal
  *  QQuickTableViewTapHandler used to handle tap events explicitly for table view
@@ -450,7 +455,9 @@ public:
 
     QQuickTableViewHoverHandler *hoverHandler = nullptr;
     QQuickTableViewResizeHandler *resizeHandler = nullptr;
+#if QT_CONFIG(quick_draganddrop)
     QQuickTableViewSectionDragHandler *sectionDragHandler = nullptr;
+#endif
     QQuickTableViewPointerHandler *activePtrHandler = nullptr;
 
     QQmlTableInstanceModel *editModel = nullptr;
@@ -652,6 +659,7 @@ public:
 
     // QQuickSelectable
     QQuickItem *selectionPointerHandlerTarget() const override;
+    bool hasSelection() const override;
     bool startSelection(const QPointF &pos, Qt::KeyboardModifiers modifiers) override;
     void setSelectionStartPos(const QPointF &pos) override;
     void setSelectionEndPos(const QPointF &pos) override;
@@ -668,8 +676,10 @@ public:
     // ----------------
 
     // Section drag handler
+#if QT_CONFIG(quick_draganddrop)
     void initSectionDragHandler(Qt::Orientation orientation);
     void destroySectionDragHandler();
+#endif
     inline void setActivePointerHandler(QQuickTableViewPointerHandler *handler) { activePtrHandler = handler; }
     inline QQuickTableViewPointerHandler* activePointerHandler() const { return activePtrHandler; }
     // Row/Column reordering

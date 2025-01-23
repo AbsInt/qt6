@@ -824,18 +824,26 @@ void QQmlJSTypePropagator::propagatePropertyLookup(const QString &propertyName, 
 
     if (!m_state.accumulatorOut().isValid()) {
         if (m_typeResolver->isPrefix(propertyName)) {
-            Q_ASSERT(m_state.accumulatorIn().isValid());
-            addReadAccumulator(m_state.accumulatorIn());
-            setAccumulator(QQmlJSRegisterContent::create(
-                        m_state.accumulatorIn().storedType(),
-                        m_jsUnitGenerator->getStringId(propertyName),
-                        QQmlJSRegisterContent::ObjectModulePrefix,
-                        m_typeResolver->containedType(m_state.accumulatorIn())));
-            return;
-        }
-        if (m_state.accumulatorIn().isImportNamespace())
+            const QQmlJSRegisterContent accumulatorIn = m_state.accumulatorIn();
+            Q_ASSERT(accumulatorIn.isValid());
+
+            const QQmlJSScope::ConstPtr contained = m_typeResolver->containedType(accumulatorIn);
+            if (contained->isReferenceType()) {
+                addReadAccumulator(accumulatorIn);
+                setAccumulator(QQmlJSRegisterContent::create(
+                        accumulatorIn.storedType(), m_jsUnitGenerator->getStringId(propertyName),
+                        QQmlJSRegisterContent::ObjectModulePrefix, contained));
+                return;
+            }
+
+            m_logger->log(u"Cannot use non-QObject type %1 to access prefixed import"_s.arg(
+                                  contained->internalName()),
+                          qmlPrefixedImportType,
+                          currentSourceLocation());
+        } else if (m_state.accumulatorIn().isImportNamespace()) {
             m_logger->log(u"Type not found in namespace"_s, qmlUnresolvedType,
                           getCurrentSourceLocation());
+        }
     } else if (m_state.accumulatorOut().variant() == QQmlJSRegisterContent::Singleton
                && m_state.accumulatorIn().variant() == QQmlJSRegisterContent::ObjectModulePrefix) {
         m_logger->log(

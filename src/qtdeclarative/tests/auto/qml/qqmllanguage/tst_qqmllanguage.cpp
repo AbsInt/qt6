@@ -470,6 +470,8 @@ private slots:
 
     void onlyInlineComponent();
 
+    void jsSelfImport();
+
 private:
     QQmlEngine engine;
     QStringList defaultImportPathList;
@@ -9055,6 +9057,17 @@ void tst_qqmllanguage::onlyInlineComponent()
     QVERIFY(!o.isNull());
 
     QCOMPARE(o->objectName(), QLatin1String("yes"));
+}
+
+void tst_qqmllanguage::jsSelfImport()
+{
+    QQmlEngine engine;
+    engine.addImportPath(dataDirectory());
+    QQmlComponent c(&engine, "JsSelfImport", "Main");
+    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
+    QScopedPointer<QObject> o(c.create());
+    QVERIFY(o);
+    QCOMPARE(o->objectName(), "customPrint");
 }
 
 QTEST_MAIN(tst_qqmllanguage)

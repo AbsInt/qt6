@@ -223,6 +223,7 @@ private:
     QT_WARNING_PUSH
     // https://gcc.gnu.org/bugzilla/show_bug.cgi?id=100903
     QT_WARNING_DISABLE_GCC("-Wzero-as-null-pointer-constant")
+    QT_WARNING_DISABLE_CLANG("-Wzero-as-null-pointer-constant")
     friend constexpr bool is_eq  (partial_ordering o) noexcept { return o == 0; }
     friend constexpr bool is_neq (partial_ordering o) noexcept { return o != 0; }
     friend constexpr bool is_lt  (partial_ordering o) noexcept { return o <  0; }
@@ -408,6 +409,7 @@ private:
     QT_WARNING_PUSH
     // https://gcc.gnu.org/bugzilla/show_bug.cgi?id=100903
     QT_WARNING_DISABLE_GCC("-Wzero-as-null-pointer-constant")
+    QT_WARNING_DISABLE_CLANG("-Wzero-as-null-pointer-constant")
     friend constexpr bool is_eq  (weak_ordering o) noexcept { return o == 0; }
     friend constexpr bool is_neq (weak_ordering o) noexcept { return o != 0; }
     friend constexpr bool is_lt  (weak_ordering o) noexcept { return o <  0; }
@@ -603,6 +605,7 @@ public:
     QT_WARNING_PUSH
     // https://gcc.gnu.org/bugzilla/show_bug.cgi?id=100903
     QT_WARNING_DISABLE_GCC("-Wzero-as-null-pointer-constant")
+    QT_WARNING_DISABLE_CLANG("-Wzero-as-null-pointer-constant")
     friend constexpr bool is_eq  (strong_ordering o) noexcept { return o == 0; }
     friend constexpr bool is_neq (strong_ordering o) noexcept { return o != 0; }
     friend constexpr bool is_lt  (strong_ordering o) noexcept { return o <  0; }
@@ -638,14 +641,15 @@ auto qCompareThreeWay(const LeftType &lhs, const RightType &rhs);
 
 template <typename LT, typename RT,
           std::enable_if_t<
-                  QtOrderingPrivate::CompareThreeWayTester::hasCompareThreeWay<LT, RT>
-                    || QtOrderingPrivate::CompareThreeWayTester::hasCompareThreeWay<RT, LT>,
+                  std::disjunction_v<
+                          QtOrderingPrivate::CompareThreeWayTester::HasCompareThreeWay<LT, RT>,
+                          QtOrderingPrivate::CompareThreeWayTester::HasCompareThreeWay<RT, LT>>,
                   bool> = true>
 auto qCompareThreeWay(const LT &lhs, const RT &rhs)
         noexcept(QtOrderingPrivate::CompareThreeWayTester::compareThreeWayNoexcept<LT, RT>())
 {
     using Qt::compareThreeWay;
-    if constexpr (QtOrderingPrivate::CompareThreeWayTester::hasCompareThreeWay<LT, RT>) {
+    if constexpr (QtOrderingPrivate::CompareThreeWayTester::hasCompareThreeWay_v<LT, RT>) {
         return compareThreeWay(lhs, rhs);
     } else {
         const auto retval = compareThreeWay(rhs, lhs);
@@ -852,6 +856,7 @@ private:
     QT_WARNING_PUSH
     // https://gcc.gnu.org/bugzilla/show_bug.cgi?id=100903
     QT_WARNING_DISABLE_GCC("-Wzero-as-null-pointer-constant")
+    QT_WARNING_DISABLE_CLANG("-Wzero-as-null-pointer-constant")
     friend constexpr bool is_eq  (QPartialOrdering o) noexcept { return o == 0; }
     friend constexpr bool is_neq (QPartialOrdering o) noexcept { return o != 0; }
     friend constexpr bool is_lt  (QPartialOrdering o) noexcept { return o <  0; }

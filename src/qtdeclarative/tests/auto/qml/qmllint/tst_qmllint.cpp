@@ -854,7 +854,12 @@ expression: \${expr} \${expr} \\\${expr} \\\${expr}`)",
     QTest::newRow("BadModulePrefix2")
             << QStringLiteral("badModulePrefix2.qml")
             << Result { { Message { QStringLiteral(
-                       "Cannot use a non-QObject type QRectF to access prefixed import") } } };
+                       "Cannot use non-QObject type QRectF to access prefixed import") } },
+                        { Message { QStringLiteral(
+                       "Type not found in namespace") },
+                          Message { QStringLiteral(
+                       "Member \"BirthdayParty\" not found on type \"QRectF\"") } },
+               };
     QTest::newRow("AssignToReadOnlyProperty")
             << QStringLiteral("assignToReadOnlyProperty.qml")
             << Result { { Message {
@@ -1156,6 +1161,17 @@ expression: \${expr} \${expr} \\\${expr} \\\${expr}`)",
                        { uR"("D" was not found for the type of parameter "d" in method "i".)"_s, 7, 17 },
                        { uR"("G" was not found for the type of parameter "g" in method "i".)"_s, 7, 26 },
                }};
+
+    // We want to see the warning about the missing type only once.
+    QTest::newRow("unresolvedType2")
+            << QStringLiteral("unresolvedType2.qml")
+            << Result { { Message { QStringLiteral(
+                           "QQC2.Label was not found. Did you add all imports and dependencies?") } },
+                       { Message { QStringLiteral(
+                           "'QQC2.Label' is used but it is not resolved") },
+                         Message { QStringLiteral(
+                           "Type QQC2.Label is used but it is not resolved") } },
+                       };
 }
 
 void TestQmllint::dirtyQmlCode()
@@ -1356,6 +1372,8 @@ void TestQmllint::cleanQmlCode_data()
 #endif
     QTest::newRow("thisObject") << QStringLiteral("thisObject.qml");
     QTest::newRow("aliasGroup") << QStringLiteral("aliasGroup.qml");
+
+    QTest::addRow("deceptiveLayout") << u"deceptiveLayout.qml"_s;
 }
 
 void TestQmllint::cleanQmlCode()

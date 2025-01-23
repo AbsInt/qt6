@@ -198,7 +198,8 @@ QObject *QQmlObjectCreator::create(int subComponentIndex, QObject *parent, QQmlI
 
     if (!isComponentRoot && sharedState->creationContext) {
         // otherwise QQmlEnginePrivate::createInternalContext() handles it
-        context->setImportedScripts(v4, sharedState->creationContext->importedScripts());
+        QV4::ScopedValue scripts(scope, sharedState->creationContext->importedScripts());
+        context->setImportedScripts(v4, scripts);
     }
 
     QObject *instance = createInstance(objectToCreate, parent, /*isContextObject*/true);

@@ -507,6 +507,11 @@ void QQmlTypeLoader::Blob::importQmldirScripts(
         const QUrl plainUrl = QUrl(script.fileName);
         const QUrl scriptUrl = qmldirUrl.resolved(plainUrl);
         QQmlRefPointer<QQmlScriptBlob> blob = typeLoader()->getScript(scriptUrl, plainUrl);
+
+        // Self-import via qmldir is OK-ish. We ignore it.
+        if (blob.data() == this)
+            continue;
+
         addDependency(blob.data());
         scriptImported(blob, import->location, script.nameSpace, import->qualifier);
     }

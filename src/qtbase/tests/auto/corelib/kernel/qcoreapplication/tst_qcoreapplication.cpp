@@ -1001,6 +1001,29 @@ void tst_QCoreApplication::threadedEventDelivery()
 
 }
 
+#if QT_CONFIG(process)
+#if defined(Q_OS_WIN)
+#  define EXE ".exe"
+#else
+#  define EXE ""
+#endif
+void tst_QCoreApplication::runHelperTest()
+{
+#  ifdef Q_OS_ANDROID
+    QSKIP("Skipped on Android: helper not present");
+#  endif
+    int argc = 0;
+    QCoreApplication app(argc, nullptr);
+    QProcess process;
+    process.start(QFINDTESTDATA("apphelper" EXE), { QTest::currentTestFunction() });
+    QVERIFY2(process.waitForFinished(5000), qPrintable(process.errorString()));
+    QCOMPARE(process.readAllStandardError(), QString());
+    QCOMPARE(process.exitStatus(), QProcess::NormalExit);
+    QCOMPARE(process.exitCode(), 0);
+}
+#undef EXE
+#endif
+
 void tst_QCoreApplication::testTrWithPercantegeAtTheEnd()
 {
     QCoreApplication::translate("testcontext", "this will crash%", "testdisamb", 3);
@@ -1064,26 +1087,6 @@ static void createQObjectOnDestruction()
     // Make sure that we can create a QObject (and thus have an associated
     // QThread) after the last QObject has been destroyed (especially after
     // QCoreApplication has).
-
-#if defined(QT_QGUIAPPLICATIONTEST)
-    // If we've linked to QtGui, we make no representations about there being
-    // global static (not Q_GLOBAL_STATIC) variables that are QObject.
-#elif QT_CONFIG(broken_threadlocal_dtors)
-    // With broken thread-local destructors, we cannot guarantee the ordering
-    // between thread_local destructors and static-lifetime destructors (hence
-    // why they're broken).
-    //
-    // On Unix systems, we use a Q_DESTRUCTOR_FUNCTION in qthread_unix.cpp to
-    // work around the issue, but that means it cannot have run yet.
-    //
-    // This variable is set on Windows too, even though the nature of the
-    // problem is different.
-#else
-    // The thread_local destructor in qthread_unix.cpp has run so the
-    // QAdoptedThread must have been cleaned up.
-    if (theMainThreadIsSet())
-        qFatal("theMainThreadIsSet() returned true; some QObject must have leaked");
-#endif
 
     // Before the fixes, this would cause a dangling pointer dereference. If
     // the problem comes back, it's possible that the following causes no

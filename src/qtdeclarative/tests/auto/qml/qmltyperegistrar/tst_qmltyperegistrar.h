@@ -896,6 +896,26 @@ private:
     int m_b = 7;
 };
 
+namespace F {
+class ForeignQObject : public QObject {
+    Q_OBJECT
+public:
+    enum class Enum{
+        ValueA,
+        ValueB
+    };
+    Q_ENUM(Enum)
+};
+
+class ForeignQOjbectQml
+{
+    Q_GADGET
+    QML_FOREIGN(ForeignQObject)
+    QML_NAMED_ELEMENT(ForeignQObject)
+    QML_UNCREATABLE("can only be created in C++")
+};
+}
+
 class tst_qmltyperegistrar : public QObject
 {
     Q_OBJECT
@@ -985,6 +1005,7 @@ private slots:
     void enumsExplicitlyScoped();
     void namespacedExtracted();
     void derivedFromInvisible();
+    void foreignNamespacedWithEnum();
 
 #ifdef QT_QMLJSROOTGEN_PRESENT
     void verifyJsRoot();

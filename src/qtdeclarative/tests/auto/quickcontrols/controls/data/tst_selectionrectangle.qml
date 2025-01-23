@@ -627,6 +627,7 @@ TestCase {
             verify(tableView.selectionModel.isSelected(tableView.model.index(0, 1)))
             verify(tableView.selectionModel.isSelected(tableView.model.index(0, 3)))
             verify(tableView.selectionModel.isSelected(tableView.model.index(1, 0)))
+            verify(selectionRectangle.active)
         } else {
             verify(!selectionRectangle.active)
             verify(!topLeftHandle)
@@ -1169,5 +1170,60 @@ TestCase {
             verify(!topLeftHandle)
             verify(!bottomRightHandle)
         }
+    }
+
+    function test_inactive_after_unselecting_last_cell_data() {
+        const mouse_ctrl_click = (item, x, y) => {
+            mouseClick(item, x, y, Qt.LeftButton, Qt.ControlModifier)
+        }
+        const mouse_ctrl_press_and_hold = (item, x, y) => {
+            const holdInterval = Qt.styleHints.mousePressAndHoldInterval + 1
+            mousePress(item, x, y, Qt.LeftButton, Qt.ControlModifier)
+            mouseRelease(item, x, y, Qt.LeftButton, Qt.ControlModifier, holdInterval)
+        }
+
+        return [
+            { tag: "controlClick", doMouseEvent: mouse_ctrl_click },
+            { tag: "pressAndHold", doMouseEvent: mouse_ctrl_press_and_hold },
+        ]
+    }
+
+    function test_inactive_after_unselecting_last_cell(data) {
+        // Deselecting the only selected cell should
+        // make the selection rectangle inactive
+        let tableView = createTemporaryObject(tableviewComp, testCase)
+        verify(tableView)
+        let selectionRectangle = tableView.selectionRectangle
+        verify(selectionRectangle)
+
+        selectionRectangle.topLeftHandle = topLeftHandleComp
+        selectionRectangle.bottomRightHandle = bottomRightHandleComp
+        selectionRectangle.selectionMode = SelectionRectangle.Drag
+
+        const index_0_0 = tableView.model.index(0, 0)
+        const index_0_1 = tableView.model.index(0, 1)
+
+        const do_mouse_event_on = (index) => {
+            const item = tableView.itemAtIndex(index)
+            data.doMouseEvent(tableView, item.x + cellWidth / 2, item.y + 1)
+        }
+
+        do_mouse_event_on(index_0_0)
+        do_mouse_event_on(index_0_1)
+        verify(tableView.selectionModel.hasSelection)
+        compare(tableView.selectionModel.selectedIndexes.length, 2)
+        verify(tableView.selectionModel.isSelected(index_0_0))
+        verify(tableView.selectionModel.isSelected(index_0_1))
+        verify(selectionRectangle.active)
+        verify(topLeftHandle && topLeftHandle.visible)
+        verify(bottomRightHandle && bottomRightHandle.visible)
+
+        do_mouse_event_on(index_0_0)
+        do_mouse_event_on(index_0_1)
+        verify(!tableView.selectionModel.hasSelection)
+        compare(tableView.selectionModel.selectedIndexes.length, 0)
+        verify(!selectionRectangle.active)
+        verify(!topLeftHandle || !topLeftHandle.visible)
+        verify(!bottomRightHandle || !bottomRightHandle.visible)
     }
 }

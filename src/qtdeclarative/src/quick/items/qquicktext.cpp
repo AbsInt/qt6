@@ -508,7 +508,7 @@ void QQuickTextPrivate::updateSize()
         option.setUseDesignMetrics(renderType != QQuickText::NativeRendering);
         extra->doc->setDefaultTextOption(option);
         qreal naturalWidth = 0;
-        if (requireImplicitSize && q->widthValid()) {
+        if (requireImplicitSize) {
             extra->doc->setTextWidth(-1);
             naturalWidth = extra->doc->idealWidth();
             const bool wasInLayout = internalWidthUpdate;

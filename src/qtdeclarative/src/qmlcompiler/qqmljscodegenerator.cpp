@@ -786,6 +786,8 @@ void QQmlJSCodeGenerator::generate_LoadElement(int base)
             conversion(m_typeResolver->globalType(m_typeResolver->voidType()),
                        m_state.accumulatorOut(), QString()) + u";\n"_s;
 
+    AccumulatorConverter registers(this);
+
     QString indexName = m_state.accumulatorVariableIn;
     QQmlJSScope::ConstPtr indexType;
     if (m_typeResolver->isNumeric(m_state.accumulatorIn())) {
@@ -805,7 +807,6 @@ void QQmlJSCodeGenerator::generate_LoadElement(int base)
         }
     }
 
-    AccumulatorConverter registers(this);
     const QString baseName = registerVariable(base);
 
     if (!m_typeResolver->isNativeArrayIndex(indexType)) {
@@ -1592,8 +1593,8 @@ void QQmlJSCodeGenerator::generate_SetLookup(int index, int baseReg)
     QQmlJSRegisterContent property = specific;
     if (!m_typeResolver->equals(specific.storedType(), valueType)) {
         if (m_typeResolver->isPrimitive(specific.storedType())
-                && m_typeResolver->isPrimitive(valueType)) {
-            // Nothing to do here. We can store all primitive types as is.
+                || m_typeResolver->isNumeric(specific.storedType())) {
+            // Nothing to do here. We can store all primitive types and 64bit intergers as-is.
         } else {
             property = property.storedIn(m_typeResolver->merge(specific.storedType(), valueType));
         }
@@ -2768,9 +2769,10 @@ void QQmlJSCodeGenerator::generate_DefineObjectLiteral(int internalClassId, int 
         // a, the type is expressible in C++ (since we can express argType)
         // b, the type can hold readType.
         const QQmlJSScope::ConstPtr readStored = readType.storedType();
-        const QQmlJSRegisterContent propType = m_typeResolver->isPrimitive(readStored)
-                ? readType
-                : readType.storedIn(m_typeResolver->merge(readStored, argType.storedType()));
+        const QQmlJSRegisterContent propType
+                = (m_typeResolver->isPrimitive(readStored) || m_typeResolver->isNumeric(readStored))
+                    ? readType
+                    : readType.storedIn(m_typeResolver->merge(readStored, argType.storedType()));
 
         const QQmlJSMetaProperty property = contained->property(propName);
         const QString consumedArg = consumedRegisterVariable(currentArg);
@@ -3414,6 +3416,8 @@ void QQmlJSCodeGenerator::generateEqualityOperation(
             = isStrict && canStrictlyCompareWithVar(m_typeResolver, lhsContained, rhsContained);
     auto isComparable = [&]() {
         if (m_typeResolver->isPrimitive(lhsContent) && m_typeResolver->isPrimitive(rhsContent))
+            return true;
+        if (m_typeResolver->isNumeric(lhsContent) && m_typeResolver->isNumeric(rhsContent))
             return true;
         if (m_typeResolver->isNumeric(lhsContent) && rhsContent.isEnumeration())
             return true;

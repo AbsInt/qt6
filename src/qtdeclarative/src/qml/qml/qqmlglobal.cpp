@@ -548,9 +548,11 @@ static QVariant byProperties(
 
     if (source.metaType() == QMetaType::fromType<QJSValue>()) {
         QJSValue val = source.value<QJSValue>();
+        // persistent to the GC and thus fromReturnedValue is safe.
         return byProperties(
                 targetMetaObject, targetMetaType,
-                QV4::Value(QJSValuePrivate::asReturnedValue(&val)), engine);
+                QV4::Value::fromReturnedValue(QJSValuePrivate::asReturnedValue(&val)),
+                engine);
     }
 
     if (source.metaType() == QMetaType::fromType<QVariantMap>()) {
@@ -697,8 +699,14 @@ bool QQmlValueTypeProvider::populateValueType(
 {
     if (sourceMetaType == QMetaType::fromType<QJSValue>()) {
         const QJSValue *val = static_cast<const QJSValue *>(source);
+        // Generally, the GC might collect a Value at any point so that
+        // a `ScopedValue` should be used.
+        // In this case, the Value is tied to a `QJSValue` which is
+        // persistent to the GC and thus fromReturnedValue is safe.
         return populateValueType(
-            targetMetaType, target, QV4::Value(QJSValuePrivate::asReturnedValue(val)), engine);
+            targetMetaType, target,
+            QV4::Value::fromReturnedValue(QJSValuePrivate::asReturnedValue(val)),
+            engine);
     }
 
     if (!isConstructibleMetaType(targetMetaType))

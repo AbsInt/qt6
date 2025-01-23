@@ -49,6 +49,15 @@ void ForbiddenChildrenPropertyValidatorPass::run(const QQmlSA::Element &element)
 {
     for (const auto &elementPair : std::as_const(m_types).asKeyValueRange()) {
         const QQmlSA::Element &type = elementPair.first;
+        const QQmlSA::Element parentScope = element.parentScope();
+
+        // If the parent's default property is not what we think it is, then we can't say whether
+        // the element in question is actually a visual child of the (document) parent scope.
+        const QQmlSA::Property defaultProperty
+                = parentScope.property(parentScope.defaultPropertyName());
+        if (defaultProperty != type.property(type.defaultPropertyName()))
+            continue;
+
         if (!element.parentScope().inherits(type))
             continue;
 

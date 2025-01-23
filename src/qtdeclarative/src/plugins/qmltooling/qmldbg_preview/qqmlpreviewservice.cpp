@@ -22,9 +22,6 @@ using QQmlDebugPacket = QVersionedPacket<QQmlDebugConnector>;
 QQmlPreviewServiceImpl::QQmlPreviewServiceImpl(QObject *parent) :
     QQmlDebugService(s_key, 1.0f, parent)
 {
-    m_loader.reset(new QQmlPreviewFileLoader(this));
-    connect(this, &QQmlPreviewServiceImpl::load,
-            m_loader.data(), &QQmlPreviewFileLoader::whitelist, Qt::DirectConnection);
     connect(this, &QQmlPreviewServiceImpl::load, &m_handler, &QQmlPreviewHandler::loadUrl);
     connect(this, &QQmlPreviewServiceImpl::rerun, &m_handler, &QQmlPreviewHandler::rerun);
     connect(this, &QQmlPreviewServiceImpl::zoom, &m_handler, &QQmlPreviewHandler::zoom);
@@ -121,11 +118,15 @@ void QQmlPreviewServiceImpl::engineAboutToBeRemoved(QJSEngine *engine)
 void QQmlPreviewServiceImpl::stateChanged(QQmlDebugService::State state)
 {
     if (state == Enabled) {
+        m_loader.reset(new QQmlPreviewFileLoader(this));
+        connect(this, &QQmlPreviewServiceImpl::load,
+                m_loader.data(), &QQmlPreviewFileLoader::whitelist, Qt::DirectConnection);
         QV4::ExecutionEngine::setPreviewing(true);
         m_fileEngine.reset(new QQmlPreviewFileEngineHandler(m_loader.data()));
     } else {
         QV4::ExecutionEngine::setPreviewing(false);
         m_fileEngine.reset();
+        m_loader.reset();
     }
 }
 

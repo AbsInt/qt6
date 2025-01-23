@@ -420,6 +420,17 @@ QJSValue::ErrorType QJSValue::errorType() const
   Returns true if this QJSValue is an object of the Array class;
   otherwise returns false.
 
+  \note This method is the equivalent of \e Array.isArray() in JavaScript. You
+        can use it to identify JavaScript arrays, but it will return \c false
+        for any array-like objects that are not JavaScript arrays. This includes
+        QML \e list objects for either value types or object types, JavaScript
+        typed arrays, JavaScript ArrayBuffer objects, and any custom array-like
+        objects you may create yourself. All of these \e behave like JavaScript
+        arrays, though: They generally expose the same methods and the
+        subscript operator can be used on them. Therefore, using this method to
+        determine whether an object could be used like an array is not
+        advisable.
+
   \sa QJSEngine::newArray()
 */
 bool QJSValue::isArray() const
@@ -909,7 +920,10 @@ QJSValue& QJSValue::operator=(const QJSValue& other)
     if (const QString *string = QJSValuePrivate::asQString(&other))
         QJSValuePrivate::setString(this, *string);
     else
-        QJSValuePrivate::setValue(this, QJSValuePrivate::asReturnedValue(&other));
+        // fomReturnedValue is safe, as the QJSValue still has a persistent reference
+        QJSValuePrivate::setValue(
+            this,
+            QV4::Value::fromReturnedValue(QJSValuePrivate::asReturnedValue(&other)));
 
     return *this;
 }
@@ -997,17 +1011,19 @@ static bool js_equal(const QString &string, const QV4::Value &value)
 */
 bool QJSValue::equals(const QJSValue& other) const
 {
+    // QJSValue stores heap items in persistent values, which already ensures marking
+    // therefore, fromReturnedValue below is safe
     if (const QString *string = QJSValuePrivate::asQString(this)) {
         if (const QString *otherString = QJSValuePrivate::asQString(&other))
             return *string == *otherString;
-        return js_equal(*string, QJSValuePrivate::asReturnedValue(&other));
+        return js_equal(*string, Value::fromReturnedValue(QJSValuePrivate::asReturnedValue(&other)));
     }
 
     if (const QString *otherString = QJSValuePrivate::asQString(&other))
-        return js_equal(*otherString, QJSValuePrivate::asReturnedValue(this));
+        return js_equal(*otherString, Value::fromReturnedValue(QJSValuePrivate::asReturnedValue(this)));
 
-    return Runtime::CompareEqual::call(QJSValuePrivate::asReturnedValue(this),
-                                       QJSValuePrivate::asReturnedValue(&other));
+    return Runtime::CompareEqual::call(Value::fromReturnedValue(QJSValuePrivate::asReturnedValue(this)),
+                                       Value::fromReturnedValue(QJSValuePrivate::asReturnedValue(&other)));
 }
 
 /*!
@@ -1048,8 +1064,10 @@ bool QJSValue::strictlyEquals(const QJSValue& other) const
         return false;
     }
 
-    return RuntimeHelpers::strictEqual(QJSValuePrivate::asReturnedValue(this),
-                                       QJSValuePrivate::asReturnedValue(&other));
+    // QJSValue stores heap objects persistently, so we can be sure that they'll be marked
+    // thus we can safely use fromReturnedValue
+    return RuntimeHelpers::strictEqual(Value::fromReturnedValue(QJSValuePrivate::asReturnedValue(this)),
+                                       Value::fromReturnedValue(QJSValuePrivate::asReturnedValue(&other)));
 }
 
 /*!

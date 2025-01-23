@@ -1189,6 +1189,11 @@ std::shared_ptr<ScriptExpression> Binding::scriptExpressionValue()
     return nullptr;
 }
 
+void Binding::setValue(std::unique_ptr<BindingValue> &&value)
+{
+    m_value = std::move(value);
+}
+
 Path Binding::addAnnotation(const Path &selfPathFromOwner, const QmlObject &annotation, QmlObject **aPtr)
 {
     return appendUpdatableElementInQList(selfPathFromOwner.field(Fields::annotations),

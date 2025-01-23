@@ -16,11 +16,13 @@
 #include <QtCore/QDebug>
 #include <QtCore/QMetaType>
 #include <QtCore/QScopeGuard>
+#include <QtCore/qoperatingsystemversion.h>
 #include <QtNetwork/QHostInfo>
 
 #include <qplatformdefs.h>
 #ifdef Q_OS_UNIX
 #  include <private/qcore_unix_p.h>
+#  include <sys/resource.h>
 #  include <sys/wait.h>
 #endif
 
@@ -1490,8 +1492,25 @@ void tst_QProcess::createProcessArgumentsModifier()
 static constexpr int sigs[] = { SIGABRT, SIGILL, SIGSEGV };
 struct DisableCrashLogger
 {
+#if defined(RLIMIT_CORE)
     // disable core dumps too
-    tst_QProcessCrash::NoCoreDumps disableCoreDumps {};
+    struct NoCoreDumps {
+        struct rlimit rlim;
+        NoCoreDumps()
+        {
+            if (getrlimit(RLIMIT_CORE, &rlim) == 0 && rlim.rlim_cur != 0) {
+                struct rlimit newrlim = rlim;
+                newrlim.rlim_cur = 0;
+                setrlimit(RLIMIT_CORE, &newrlim);
+            }
+        }
+        ~NoCoreDumps()
+        {
+            setrlimit(RLIMIT_CORE, &rlim);
+        }
+    } disableCoreDumps;
+#endif // RLIMIT_CORE
+
     std::array<struct sigaction, std::size(sigs)> oldhandlers;
     DisableCrashLogger()
     {
@@ -1658,9 +1677,6 @@ void tst_QProcess::terminateInChildProcessModifier()
     QFETCH(QProcess::ExitStatus, exitStatus);
     QFETCH(bool, stderrIsEmpty);
 
-    // temporarily disable QTest's crash logger
-    DisableCrashLogger disableCrashLogging;
-
     // testForwardingHelper prints to both stdout and stderr, so if we fail to
     // fail we should be able to tell too
     QProcess process;
@@ -1680,13 +1696,22 @@ void tst_QProcess::terminateInChildProcessModifier()
     QCOMPARE(process.readAllStandardOutput(), QByteArray());
 
     // some environments print extra stuff to stderr when we crash
-#ifndef Q_OS_QNX
-    if (!QTestPrivate::isRunningArmOnX86()) {
-        QByteArray standardError = process.readAllStandardError();
-        QVERIFY2(standardError.isEmpty() == stderrIsEmpty,
-                 "stderr was: " + standardError);
+
+#if defined(Q_OS_QNX)
+    return;
+#elif defined(Q_OS_MACOS)
+    if (QOperatingSystemVersion::current() >= QOperatingSystemVersion::MacOSSequoia) {
+        if (qEnvironmentVariableIsSet("SWIFT_BACKTRACE"))
+            return; // Swift's crash reporting is printed to stderr
     }
+#else
+    if (QTestPrivate::isRunningArmOnX86())
+        return;
 #endif
+
+    QByteArray standardError = process.readAllStandardError();
+    QVERIFY2(standardError.isEmpty() == stderrIsEmpty,
+             "stderr was: " + standardError);
 }
 
 void tst_QProcess::raiseInChildProcessModifier()

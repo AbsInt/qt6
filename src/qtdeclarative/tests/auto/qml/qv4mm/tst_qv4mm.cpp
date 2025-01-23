@@ -74,7 +74,8 @@ void tst_qv4mm::arrayDataWriteBarrierInteraction()
     QV4::ScopedArrayObject array(scope, engine.newArrayObject());
     constexpr int initialCapacity = 8; // compare qv4arraydata.cpp
     for (int i = 0; i < initialCapacity; ++i) {
-        array->push_back(unprotectedObject->asReturnedValue());
+        // fromReturnedValue would generally be unsafe, but the gc is blocked here anyway
+        array->push_back(QV4::Value::fromReturnedValue(unprotectedObject->asReturnedValue()));
     }
     QVERIFY(!unprotectedObject->isMarked());
     engine.memoryManager->gcBlocked = QV4::MemoryManager::Unblocked;
@@ -521,7 +522,7 @@ void tst_qv4mm::mapAndSetKeepValuesAlive()
         QV4::Scope scope(&engine);
         auto map = jsEngine.evaluate("new Map()");
         QV4::ScopedFunctionObject afunction(scope, engine.memoryManager->alloc<QV4::FunctionObject>()); // hack, we just need about any function object
-        QV4::Value thisObject = QJSValuePrivate::asReturnedValue(&map);
+        QV4::Value thisObject = QV4::Value::fromReturnedValue(QJSValuePrivate::asReturnedValue(&map));
 
         QVERIFY(!engine.memoryManager->gcBlocked);
         // no scoped classes, as that would defeat the point of the test
@@ -565,7 +566,7 @@ void tst_qv4mm::mapAndSetKeepValuesAlive()
         QV4::Scope scope(&engine);
         auto map = jsEngine.evaluate("new WeakMap()");
         QV4::ScopedFunctionObject afunction(scope, engine.memoryManager->alloc<QV4::FunctionObject>()); // hack, we just need about any function object
-        QV4::Value thisObject = QJSValuePrivate::asReturnedValue(&map);
+        QV4::Value thisObject = QV4::Value::fromReturnedValue(QJSValuePrivate::asReturnedValue(&map));
 
         QVERIFY(!engine.memoryManager->gcBlocked);
         // no scoped classes, as that would defeat the point of the test
@@ -602,7 +603,7 @@ void tst_qv4mm::mapAndSetKeepValuesAlive()
         QV4::Scope scope(&engine);
         auto map = jsEngine.evaluate("new Set()");
         QV4::ScopedFunctionObject afunction(scope, engine.memoryManager->alloc<QV4::FunctionObject>()); // hack, we just need about any function object
-        QV4::Value thisObject = QJSValuePrivate::asReturnedValue(&map);
+        QV4::Value thisObject = QV4::Value::fromReturnedValue(QJSValuePrivate::asReturnedValue(&map));
 
         QVERIFY(!engine.memoryManager->gcBlocked);
         // no scoped classes, as that would defeat the point of the test
@@ -637,7 +638,7 @@ void tst_qv4mm::mapAndSetKeepValuesAlive()
         QV4::Scope scope(&engine);
         auto map = jsEngine.evaluate("new WeakSet()");
         QV4::ScopedFunctionObject afunction(scope, engine.memoryManager->alloc<QV4::FunctionObject>()); // hack, we just need about any function object
-        QV4::Value thisObject = QJSValuePrivate::asReturnedValue(&map);
+        QV4::Value thisObject = QV4::Value::fromReturnedValue(QJSValuePrivate::asReturnedValue(&map));
 
         QVERIFY(!engine.memoryManager->gcBlocked);
         // no scoped classes, as that would defeat the point of the test

@@ -288,8 +288,9 @@ inline ReturnedValue coerceListType(
 
         const qsizetype length = array->getLength();
         qsizetype i = 0;
+        ScopedValue v(scope);
         for (; i < length; ++i) {
-            ScopedValue v(scope, array->get(i));
+            v = array->get(i);
             listProperty->append(listProperty, coerceQObject(v, qmlType));
         }
 
@@ -299,8 +300,11 @@ inline ReturnedValue coerceListType(
     QV4::Scoped<Sequence> sequence(
             scope, SequencePrototype::fromData(engine, type, metaSequence(), nullptr));
     const qsizetype length = array->getLength();
-    for (qsizetype i = 0; i < length; ++i)
-        sequence->containerPutIndexed(i, array->get(i));
+    ScopedValue v(scope);
+    for (qsizetype i = 0; i < length; ++i) {
+        v =  array->get(i);
+        sequence->containerPutIndexed(i, v);
+    }
     return sequence->asReturnedValue();
 }
 
@@ -413,7 +417,7 @@ ReturnedValue coerceAndCall(
     const CompiledData::Parameter *formals = compiledFunction->formalsTable();
     for (qsizetype i = 0; i < jsCallData.argc; ++i) {
         jsCallData.args[i] = coerce(
-            engine, i < argc ? argv[i] : Encode::undefined(),
+            engine, i < argc ? argv[i] : QV4::Value::fromReturnedValue(Encode::undefined()),
             typedFunction->types[i + 1], formals[i].type.isList());
     }
 

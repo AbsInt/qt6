@@ -343,6 +343,11 @@ void QmlTypeRegistrar::write(QTextStream &output, QAnyStringView outFileName) co
         const FoundType target = QmlTypesClassDescription::findType(
                 m_types, m_foreignTypes, targetName, namespaces);
 
+        // The target may be in a namespace we've resolved already.
+        // Update the targetName accordingly.
+        if (!target.native.isEmpty())
+            targetName = target.native.qualifiedClassName().toString();
+
         if (targetIsNamespace) {
             // We need to figure out if the _target_ is a namespace. If not, it already has a
             // QMetaType and we don't need to generate one.

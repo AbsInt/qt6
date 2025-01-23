@@ -671,6 +671,11 @@ void QQmlTypeData::initializeFromCachedUnit(const QQmlPrivate::CachedQmlUnit *un
             return;
     }
 
+    if (unit->qmlData->qmlUnit()->nObjects == 0) {
+        setError(QQmlTypeLoader::tr("Cached QML Unit has no objects"));
+        return;
+    }
+
     m_document.reset(new QmlIR::Document(isDebugging()));
     QQmlIRLoader loader(unit->qmlData, m_document.data());
     loader.load();

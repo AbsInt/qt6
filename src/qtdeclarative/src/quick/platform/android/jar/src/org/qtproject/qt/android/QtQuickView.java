@@ -43,8 +43,8 @@ public class QtQuickView extends QtView {
                                 long viewReference, String[] qmlImportPaths);
     native void setRootObjectProperty(long windowReference, String propertyName, Object value);
     native Object getRootObjectProperty(long windowReference, String propertyName);
-    native int addRootObjectSignalListener(long windowReference, String signalName, Class argType,
-                                          Object listener);
+    native int addRootObjectSignalListener(long windowReference, String signalName,
+                                           Class<?> argType, Object listener);
     native boolean removeRootObjectSignalListener(long windowReference, int signalListenerId);
 
     /**
@@ -93,8 +93,8 @@ public class QtQuickView extends QtView {
 
     /**
      * Creates a QtQuickView that can later load and view a QML component by calling
-     * {@link QtQuickView#loadComponent() loadComponent}
-     * <p>
+     * {@link #loadContent(QtQuickViewContent, String[])}
+     *
      * @param context the parent Context
      **/
     public QtQuickView(Context context)

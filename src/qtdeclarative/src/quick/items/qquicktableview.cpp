@@ -1727,6 +1727,11 @@ QQuickItem *QQuickTableViewPrivate::selectionPointerHandlerTarget() const
     return const_cast<QQuickTableView *>(q_func())->contentItem();
 }
 
+bool QQuickTableViewPrivate::hasSelection() const
+{
+    return selectionModel && selectionModel->hasSelection();
+}
+
 bool QQuickTableViewPrivate::startSelection(const QPointF &pos, Qt::KeyboardModifiers modifiers)
 {
     Q_Q(QQuickTableView);
@@ -7164,6 +7169,8 @@ void QQuickTableViewResizeHandler::updateDrag(QPointerEvent *event, QEventPoint 
 }
 
 // ----------------------------------------------
+#if QT_CONFIG(quick_draganddrop)
+
 QQuickTableViewSectionDragHandler::QQuickTableViewSectionDragHandler(QQuickTableView *view)
     : QQuickTableViewPointerHandler(view)
 {
@@ -7416,6 +7423,7 @@ void QQuickTableViewPrivate::destroySectionDragHandler()
         sectionDragHandler = nullptr;
     }
 }
+#endif // quick_draganddrop
 
 void QQuickTableViewPrivate::initializeIndexMapping()
 {

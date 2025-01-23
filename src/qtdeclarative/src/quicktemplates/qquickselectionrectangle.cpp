@@ -177,8 +177,15 @@ QQuickSelectionRectanglePrivate::QQuickSelectionRectanglePrivate()
     });
 
     QObject::connect(m_tapHandler, &QQuickTapHandler::pressedChanged, [this]() {
-        if (!m_tapHandler->isPressed())
+        Q_Q(QQuickSelectionRectangle);
+
+        if (!m_tapHandler->isPressed()) {
+            // Deactivate the selection rectangle when the tap handler
+            // is released and there's no selection
+            if (q->active() && !m_selectable->hasSelection())
+                updateActiveState(false);
             return;
+        }
         if (m_effectiveSelectionMode != QQuickSelectionRectangle::Drag)
             return;
 

@@ -111,10 +111,10 @@ number to the project file. For example, to make the type available in the
 \c com.mycompany.messaging namespace with version 1.0:
 
 \if defined(onlinedocs)
-    \tab {build-qt-app}{tab-cmake}{CMake}{selected}
+    \tab {build-qt-app}{tab-cmake}{CMake}{checked}
     \tab {build-qt-app}{tab-qmake}{qmake}{}
     \tabcontent {tab-cmake}
- \else
+\else
     \section3 Using CMake
 \endif
     \badcode
@@ -131,7 +131,7 @@ number to the project file. For example, to make the type available in the
 \else
     \section3 Using QMake
 \endif
-    \code
+    \badcode
     CONFIG += qmltypes
     QML_IMPORT_NAME = com.mycompany.messaging
     QML_IMPORT_MAJOR_VERSION = 1
@@ -141,7 +141,7 @@ number to the project file. For example, to make the type available in the
     include path, you may have to amend the include path so that the generated
     registration code can be compiled.
 
-    \code
+    \badcode
     INCLUDEPATH += com/mycompany/messaging
     \endcode
 \if defined(onlinedocs)
