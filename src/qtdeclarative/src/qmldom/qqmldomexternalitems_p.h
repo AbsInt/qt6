@@ -421,7 +421,7 @@ public:
         members.m_typeResolverDependencies = dependencies;
     }
 
-    DomCreationOptions creationOptions() const { return lazyMembers().m_creationOptions; }
+    DomCreationOption creationOption() const { return lazyMembers().m_creationOption; }
 
     QQmlJSScope::ConstPtr handleForPopulation() const
     {
@@ -449,7 +449,7 @@ private:
         ImportScope m_importScope;
         FileLocations::Tree m_fileLocationsTree;
         std::shared_ptr<AstComments> m_astComments;
-        DomCreationOptions m_creationOptions;
+        DomCreationOption m_creationOption;
         std::shared_ptr<QQmlJSTypeResolver> m_typeResolver;
         QQmlJSTypeResolverDependencies m_typeResolverDependencies;
     };

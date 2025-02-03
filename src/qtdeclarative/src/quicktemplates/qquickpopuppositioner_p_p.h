@@ -44,6 +44,8 @@ protected:
     void removeAncestorListeners(QQuickItem *item);
     void addAncestorListeners(QQuickItem *item);
 
+    void repositionPopupWindow();
+
     bool m_positioning = false;
     QQuickItem *m_parentItem = nullptr;
     QQuickPopup *m_popup = nullptr;

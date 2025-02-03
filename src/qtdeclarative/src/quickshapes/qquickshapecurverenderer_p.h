@@ -133,6 +133,7 @@ private:
     QQuickItem *m_item;
     QSGNode *m_rootNode = nullptr;
     QVector<PathData> m_paths;
+    QVector<PathData> m_removedPaths;
     void (*m_asyncCallback)(void *) = nullptr;
     void *m_asyncCallbackData = nullptr;
     static int debugVisualizationFlags;

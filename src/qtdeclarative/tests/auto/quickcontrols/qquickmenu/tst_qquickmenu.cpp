@@ -89,6 +89,8 @@ private slots:
     void subMenuDisabledKeyboard();
     void subMenuPosition_data();
     void subMenuPosition();
+    void subMenuFlipsPositionWhenOutOfBounds_data();
+    void subMenuFlipsPositionWhenOutOfBounds();
     void subMenuWithIcon();
     void addRemoveSubMenus();
     void subMenuPopupType();
@@ -2120,6 +2122,72 @@ void tst_QQuickMenu::subMenuPosition()
 }
 
 #undef FLOAT_EQ
+
+void tst_QQuickMenu::subMenuFlipsPositionWhenOutOfBounds_data()
+{
+    QTest::addColumn<QQuickPopup::PopupType>("popupType");
+    QTest::newRow("PopupType::Item") << QQuickPopup::Item;
+    if (popupWindowsSupported)
+        QTest::newRow("PopupType::Window") << QQuickPopup::Window;
+}
+
+void tst_QQuickMenu::subMenuFlipsPositionWhenOutOfBounds()
+{
+    QFETCH(QQuickPopup::PopupType, popupType);
+
+    QQuickControlsApplicationHelper helper(this, QLatin1String("SubMenusNearScreenBound.qml"));
+    QVERIFY2(helper.ready, helper.failureMessage());
+    QQuickApplicationWindow *window = helper.appWindow;
+
+    QQuickMenu *mainMenu = window->property("mainMenu").value<QQuickMenu *>();
+    QVERIFY(mainMenu);
+
+    QQuickMenu *subMenu = window->property("subMenu").value<QQuickMenu *>();
+    QVERIFY(subMenu);
+
+    mainMenu->setPopupType(popupType);
+
+    window->show();
+    QVERIFY(QTest::qWaitForWindowExposed(window));
+
+    mainMenu->open();
+    QTRY_VERIFY(mainMenu->isOpened());
+
+    const auto *mainMenu_d = QQuickPopupPrivate::get(mainMenu);
+    QVERIFY(mainMenu_d);
+
+    if (mainMenu_d->usePopupWindow()) {
+        SKIP_IF_NO_WINDOW_ACTIVATION;
+        QVERIFY(QTest::qWaitForWindowActive(mainMenu->contentItem()->window()));
+        QCOMPARE(mainMenu->contentItem()->window(), mainMenu_d->popupWindow);
+    }
+
+    QVERIFY(QQuickTest::qWaitForPolish(mainMenu->contentItem()->window()));
+
+    for (int i = 0; i < mainMenu->count(); ++i) {
+        QTest::keyClick(window, Qt::Key_Down);
+        QTRY_COMPARE(mainMenu->currentIndex(), i);
+    }
+
+    QTest::keyClick(window, Qt::Key_Right);
+
+    QTRY_VERIFY(subMenu->isOpened());
+    const auto *subMenu_d = QQuickPopupPrivate::get(subMenu);
+    QVERIFY(subMenu_d);
+
+    if (subMenu_d->usePopupWindow()) {
+        SKIP_IF_NO_WINDOW_ACTIVATION;
+        QVERIFY(QTest::qWaitForWindowActive(subMenu->contentItem()->window()));
+        QCOMPARE(subMenu->contentItem()->window(), subMenu_d->popupWindow);
+        QVERIFY(QQuickTest::qWaitForPolish(subMenu->contentItem()->window()));
+    }
+
+    const QPointF mainMenuGlobalPos = mainMenu->contentItem()->mapToGlobal({mainMenu->leftMargin(), mainMenu->topMargin()});
+    const QPointF subMenuGlobalPos = subMenu->contentItem()->mapToGlobal({subMenu->leftMargin(), subMenu->topMargin()});
+    const qreal expectedGlobalSubMenuPositionX = mainMenuGlobalPos.x() - subMenu->width() + mainMenu->overlap();
+
+    QCOMPARE(subMenuGlobalPos.x(), mainMenu->cascade() ? expectedGlobalSubMenuPositionX : mainMenuGlobalPos.x());
+}
 
 void tst_QQuickMenu::subMenuWithIcon()
 {

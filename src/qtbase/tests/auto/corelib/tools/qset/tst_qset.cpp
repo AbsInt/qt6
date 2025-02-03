@@ -29,6 +29,8 @@ private slots:
     void clear();
     void cpp17ctad();
     void remove();
+    void removeOnlyDetachesIfSomethingGetsRemoved();
+    void removeIfDoesNotAllowThePredicateToModifyTheElement();
     void contains();
     void containsSet();
     void begin();
@@ -368,6 +370,40 @@ void tst_QSet::remove()
         set.remove(QString::number((j * 17) % 500));
         QCOMPARE(set.size(), 500 - j - 1);
     }
+}
+
+void tst_QSet::removeOnlyDetachesIfSomethingGetsRemoved()
+{
+    const QSet<int> set = {0, 1, 2, 3, 4};
+
+    auto copy = set;
+    QVERIFY(!copy.isDetached());
+
+    QVERIFY(!copy.remove(42));
+    QVERIFY(!copy.isDetached());
+
+    QCOMPARE(copy.removeIf([] (auto) { return false; }), 0);
+    QVERIFY(!copy.isDetached());
+
+    QVERIFY(copy.remove(4));
+    QVERIFY(copy.isDetached());
+
+    copy = set;
+    QVERIFY(!copy.isDetached());
+
+    QCOMPARE(copy.removeIf([] (int e) { return e == 3; }), 1);
+    QVERIFY(copy.isDetached());
+}
+
+void tst_QSet::removeIfDoesNotAllowThePredicateToModifyTheElement()
+{
+    QSet<int> set = {0, 1, 2, 3};
+    set.removeIf([](auto &&e) {
+            if constexpr (!std::is_const_v<std::remove_reference_t<decltype(e)>>)
+                e *= 2;
+            return false;
+        });
+    QCOMPARE(set, QSet({0, 1, 2, 3}));
 }
 
 void tst_QSet::contains()

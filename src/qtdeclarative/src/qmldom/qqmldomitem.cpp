@@ -2147,7 +2147,7 @@ MutableDomItem DomItem::makeCopy(DomItem::CopyOption option) const
     std::shared_ptr<DomEnvironment> newEnvPtr;
     if (std::shared_ptr<DomEnvironment> envPtr = env.ownerAs<DomEnvironment>()) {
         newEnvPtr = std::make_shared<DomEnvironment>(envPtr, envPtr->loadPaths(), envPtr->options(),
-                                                     envPtr->domCreationOptions());
+                                                     envPtr->domCreationOption());
         DomBase *eBase = envPtr.get();
         if (std::holds_alternative<const DomEnvironment *>(m_element) && eBase
             && std::get<const DomEnvironment *>(m_element) == eBase)
@@ -2156,7 +2156,7 @@ MutableDomItem DomItem::makeCopy(DomItem::CopyOption option) const
         newEnvPtr = std::make_shared<DomEnvironment>(
                 QStringList(),
                 DomEnvironment::Option::SingleThreaded | DomEnvironment::Option::NoDependencies,
-                DomCreationOption::None, univPtr);
+                DomCreationOption::Default, univPtr);
     } else {
         Q_ASSERT(false);
         return {};

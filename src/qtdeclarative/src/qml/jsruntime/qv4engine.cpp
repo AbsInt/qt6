@@ -2712,10 +2712,20 @@ bool ExecutionEngine::metaTypeFromJS(const Value &value, QMetaType metaType, voi
         }
 
         const auto wrapperPrivate = wrapper->d();
-        if (wrapperPrivate->propertyType() == metaType) {
+        if (metaType == QMetaType::fromType<QQmlListProperty<QObject> *>()
+                || metaType == wrapperPrivate->propertyType()) {
             *reinterpret_cast<QQmlListProperty<QObject> *>(data) = *wrapperPrivate->property();
             return true;
         }
+
+        if (metaType == QMetaType::fromType<QObjectList>()) {
+            *reinterpret_cast<QObjectList *>(data)
+                    = wrapperPrivate->property()->toList<QObjectList>();
+            return true;
+        }
+
+        if (convertToIterable(metaType, data, wrapper))
+            return true;
     }
 
     if (const QQmlValueTypeWrapper *vtw = value.as<QQmlValueTypeWrapper>()) {

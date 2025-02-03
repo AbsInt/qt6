@@ -462,6 +462,8 @@ void TestQmlformat::plainJS_data()
                                       << "directives.formatted.js";
     QTest::newRow("legacyDirectivesWithComments") << "directivesWithComments.js"
                                                   << "directivesWithComments.formatted.js";
+    QTest::newRow("preserveOptionalTokens") << "preserveOptionalTokens.js"
+                                            << "preserveOptionalTokens.formatted.js";
 }
 
 void TestQmlformat::plainJS()

@@ -4,6 +4,7 @@
 #include "qwaylandwindow_p.h"
 
 #include "qwaylandbuffer_p.h"
+#include "qwaylandcursor_p.h"
 #include "qwaylanddisplay_p.h"
 #include "qwaylandsurface_p.h"
 #include "qwaylandinputdevice_p.h"
@@ -1211,6 +1212,9 @@ void QWaylandWindow::handleMouse(QWaylandInputDevice *inputDevice, const QWaylan
         switch (e.type) {
             case QEvent::Enter:
                 QWindowSystemInterface::handleEnterEvent(window(), e.local, e.global);
+#if QT_CONFIG(cursor)
+                mDisplay->waylandCursor()->setPosFromEnterEvent(e.global.toPoint());
+#endif
                 break;
             case QEvent::MouseButtonPress:
             case QEvent::MouseButtonRelease:
@@ -1414,6 +1418,9 @@ void QWaylandWindow::handleMouseEventWithDecoration(QWaylandInputDevice *inputDe
         switch (e.type) {
             case QEvent::Enter:
                 QWindowSystemInterface::handleEnterEvent(window(), localTranslated, globalTranslated);
+#if QT_CONFIG(cursor)
+                mDisplay->waylandCursor()->setPosFromEnterEvent(e.global.toPoint());
+#endif
                 break;
             case QEvent::MouseButtonPress:
             case QEvent::MouseButtonRelease:

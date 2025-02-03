@@ -144,6 +144,10 @@ void QQuickShapeCurveRenderer::beginSync(int totalCount, bool *countChanged)
 {
     if (countChanged != nullptr && totalCount != m_paths.size())
         *countChanged = true;
+    for (int i = totalCount; i < m_paths.size(); i++) { // Handle removal of paths
+        setFillTextureProvider(i, nullptr); // deref window
+        m_removedPaths.append(m_paths.at(i));
+    }
     m_paths.resize(totalCount);
 }
 
@@ -419,6 +423,12 @@ void QQuickShapeCurveRenderer::updateNode()
     };
 
     NodeList toBeDeleted;
+
+    for (const PathData &pathData : std::as_const(m_removedPaths)) {
+        toBeDeleted += pathData.fillNodes;
+        toBeDeleted += pathData.strokeNodes;
+    }
+    m_removedPaths.clear();
 
     for (int i = 0; i < m_paths.size(); i++) {
         PathData &pathData = m_paths[i];

@@ -116,6 +116,10 @@ Q_LOGGING_CATEGORY(lcPermissions, "qt.permissions", QtWarningMsg);
         </manifest>
     \endcode
 
+    To ensure the relevant permission backend is included with your
+    application, please \l {QT_ANDROID_PACKAGE_SOURCE_DIR}
+    {point the build system to your custom \c AndroidManifest.xml}.
+
     The relevant permission names are described in the documentation
     for each permission type.
 
@@ -194,7 +198,7 @@ Q_LOGGING_CATEGORY(lcPermissions, "qt.permissions", QtWarningMsg);
 
     \code
     qApp->requestPermission(QCameraPermission{}, [](const QPermission &permission) {
-        if (permission.status() == Qt::PermissionStatus:Granted)
+        if (permission.status() == Qt::PermissionStatus::Granted)
             takePhoto();
     });
     \endcode
@@ -211,7 +215,7 @@ Q_LOGGING_CATEGORY(lcPermissions, "qt.permissions", QtWarningMsg);
     \code
     void LocationWidget::permissionUpdated(const QPermission &permission)
     {
-        if (permission.status() != Qt::PermissionStatus:Granted)
+        if (permission.status() != Qt::PermissionStatus::Granted)
             return;
         auto locationPermission = permission.value<QLocationPermission>();
         if (!locationPermission || locationPermission->accuracy() != QLocationPermission::Precise)

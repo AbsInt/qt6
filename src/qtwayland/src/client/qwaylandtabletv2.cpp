@@ -617,6 +617,13 @@ void QWaylandTabletPadV2::zwp_tablet_pad_v2_buttons(uint32_t buttons)
     d->buttonCount = buttons;
 }
 
+void QWaylandTabletPadV2::zwp_tablet_pad_v2_group(zwp_tablet_pad_group_v2 *pad_group)
+{
+    // As of writing Qt does not handle tablet pads group and the controls on it
+    // This proxy is server created so it is just deleted here to not leak it
+    zwp_tablet_pad_group_v2_destroy(pad_group);
+}
+
 void QWaylandTabletPadV2::zwp_tablet_pad_v2_done()
 {
     QWindowSystemInterface::registerInputDevice(this);

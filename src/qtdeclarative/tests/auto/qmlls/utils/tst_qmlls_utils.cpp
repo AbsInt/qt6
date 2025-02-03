@@ -48,15 +48,9 @@ tst_qmlls_utils::createEnvironmentAndLoadFile(const QString &filePath, const QSt
                           dataDirectory() + u"/sophisticatedBuildFolder"_s,
                         }) += extraBuildDir;
 
-    // This should be exactly the same options as qmlls uses in qqmlcodemodel.
-    // Otherwise, this test will not test the codepaths also used by qmlls and will be useless.
-    const QQmlJS::Dom::DomCreationOptions options = QQmlJS::Dom::DomCreationOptions{}
-            | QQmlJS::Dom::DomCreationOption::WithSemanticAnalysis
-            | QQmlJS::Dom::DomCreationOption::WithScriptExpressions
-            | QQmlJS::Dom::DomCreationOption::WithRecovery;
-
     auto envPtr = QQmlJS::Dom::DomEnvironment::create(
-            qmltypeDirs, QQmlJS::Dom::DomEnvironment::Option::SingleThreaded, options);
+            qmltypeDirs, QQmlJS::Dom::DomEnvironment::Option::SingleThreaded,
+            QQmlJS::Dom::Extended);
 
     QQmlJS::Dom::DomItem file;
     QQmlJS::Dom::DomItem env(envPtr);

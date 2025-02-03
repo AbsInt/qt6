@@ -346,7 +346,7 @@ bool QQmlDomAstCreator::visit(UiProgram *program)
         qmlFilePtr->addImport(selfDirImport);
 
         if (loadDependencies) {
-            const QString currentFile = envPtr->domCreationOptions().testFlag(WithSemanticAnalysis)
+            const QString currentFile = envPtr->domCreationOption() == Extended
                     ? QQmlJSUtils::qmlBuildPathFromSourcePath(
                               envPtr->semanticAnalysis().m_mapper.get(),
                               qmlFile.canonicalFilePath())

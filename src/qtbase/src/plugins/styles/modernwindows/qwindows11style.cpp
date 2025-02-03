@@ -313,11 +313,11 @@ void QWindows11Style::drawComplexControl(ComplexControl control, const QStyleOpt
 
                 if (slider->orientation == Qt::Horizontal) {
                     rect = QRect(slrect.left(), rect.center().y() - 2, slrect.width() - 5, 4);
-                    leftRect = QRect(rect.left(), rect.top(), (handlePos.x() - rect.left()), rect.height());
+                    leftRect = QRect(rect.left() + 1, rect.top(), (handlePos.x() - rect.left()), rect.height());
                     rightRect = QRect(handlePos.x(), rect.top(), (rect.width() - handlePos.x()), rect.height());
                 } else {
                     rect = QRect(rect.center().x() - 2, slrect.top(), 4, slrect.height() - 5);
-                    rightRect = QRect(rect.left(), rect.top(), rect.width(), (handlePos.y() - rect.top()));
+                    rightRect = QRect(rect.left(), rect.top() + 1, rect.width(), (handlePos.y() - rect.top()));
                     leftRect = QRect(rect.left(), handlePos.y(), rect.width(), (rect.height() - handlePos.y()));
                 }
 
@@ -843,14 +843,14 @@ void QWindows11Style::drawPrimitive(PrimitiveElement element, const QStyleOption
         break;
     case PE_IndicatorRadioButton:
         {
-            if (option->styleObject->property("_q_end_radius").isNull())
-                option->styleObject->setProperty("_q_end_radius", option->state & State_On ? 4.0f :7.0f);
-            QNumberStyleAnimation* animation = qobject_cast<QNumberStyleAnimation*>(d->animation(option->styleObject));
-            if (animation != nullptr)
-                option->styleObject->setProperty("_q_inner_radius", animation->currentValue());
-            else
-                option->styleObject->setProperty("_q_inner_radius", option->styleObject->property("_q_end_radius"));
-            int innerRadius = option->styleObject->property("_q_inner_radius").toFloat();
+            qreal innerRadius = option->state & State_On ? 4.0f :7.0f;
+            if (option->styleObject) {
+                if (option->styleObject->property("_q_end_radius").isNull())
+                    option->styleObject->setProperty("_q_end_radius", innerRadius);
+                QNumberStyleAnimation *animation = qobject_cast<QNumberStyleAnimation *>(d->animation(option->styleObject));
+                innerRadius = animation ? animation->currentValue() : option->styleObject->property("_q_end_radius").toFloat();
+                option->styleObject->setProperty("_q_inner_radius", innerRadius);
+            }
 
             QPainterPath path;
             QRectF rect = option->rect;

@@ -185,7 +185,7 @@ public:
     ~QWaylandTabletPadV2();
 
 protected:
-//    void zwp_tablet_pad_v2_group(struct ::zwp_tablet_pad_group_v2 *pad_group) override;
+    void zwp_tablet_pad_v2_group(struct ::zwp_tablet_pad_group_v2 *pad_group) override;
     void zwp_tablet_pad_v2_path(const QString &path) override;
     void zwp_tablet_pad_v2_buttons(uint32_t buttons) override;
     void zwp_tablet_pad_v2_done() override;

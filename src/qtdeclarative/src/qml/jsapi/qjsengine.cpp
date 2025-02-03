@@ -397,7 +397,7 @@ QJSEngine::~QJSEngine()
  */
 void QJSEngine::collectGarbage()
 {
-    m_v4Engine->memoryManager->runGC();
+    m_v4Engine->memoryManager->runFullGC();
 }
 
 /*!

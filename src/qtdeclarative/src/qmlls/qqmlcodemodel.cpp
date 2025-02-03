@@ -85,15 +85,9 @@ QQmlCodeModel::QQmlCodeModel(QObject *parent, QQmlToolingSettings *settings)
     : QObject { parent },
       m_importPaths(QLibraryInfo::path(QLibraryInfo::QmlImportsPath)),
       m_currentEnv(std::make_shared<DomEnvironment>(
-              m_importPaths, DomEnvironment::Option::SingleThreaded,
-              DomCreationOptions{} | DomCreationOption::WithRecovery
-                      | DomCreationOption::WithScriptExpressions
-                      | DomCreationOption::WithSemanticAnalysis)),
+              m_importPaths, DomEnvironment::Option::SingleThreaded, DomCreationOption::Extended)),
       m_validEnv(std::make_shared<DomEnvironment>(
-              m_importPaths, DomEnvironment::Option::SingleThreaded,
-              DomCreationOptions{} | DomCreationOption::WithRecovery
-                      | DomCreationOption::WithScriptExpressions
-                      | DomCreationOption::WithSemanticAnalysis)),
+              m_importPaths, DomEnvironment::Option::SingleThreaded, DomCreationOption::Extended)),
       m_settings(settings),
       m_pluginLoader(QmlLSPluginInterface_iid, u"/qmlls"_s)
 {

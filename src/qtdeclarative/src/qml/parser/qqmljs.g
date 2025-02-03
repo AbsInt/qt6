@@ -2268,6 +2268,7 @@ MemberExpression: MemberExpression T_QUESTION_DOT T_LBRACKET Expression_In T_RBR
 /.
     case $rule_number: {
         AST::ArrayMemberExpression *node = new (pool) AST::ArrayMemberExpression(sym(1).Expression, sym(4).Expression);
+        node->optionalToken = loc(2);
         node->lbracketToken = loc(3);
         node->rbracketToken = loc(5);
         node->isOptional = true;
@@ -2359,6 +2360,7 @@ CallExpression: MemberExpression T_QUESTION_DOT T_LPAREN Arguments T_RPAREN;
 /.
     case $rule_number: {
         AST::CallExpression *node = new (pool) AST::CallExpression(sym(1).Expression, sym(4).ArgumentList);
+        node->optionalToken = loc(2);
         node->lparenToken = loc(3);
         node->rparenToken = loc(5);
         node->isOptional = true;
@@ -2382,6 +2384,7 @@ CallExpression: CallExpression T_QUESTION_DOT T_LPAREN Arguments T_RPAREN;
 /.
     case $rule_number: {
         AST::CallExpression *node = new (pool) AST::CallExpression(sym(1).Expression, sym(4).ArgumentList);
+        node->optionalToken = loc(2);
         node->lparenToken = loc(3);
         node->rparenToken = loc(5);
         node->isOptional = true;
@@ -2404,6 +2407,7 @@ CallExpression: CallExpression T_QUESTION_DOT T_LBRACKET Expression_In T_RBRACKE
 /.
     case $rule_number: {
         AST::ArrayMemberExpression *node = new (pool) AST::ArrayMemberExpression(sym(1).Expression, sym(4).Expression);
+        node->optionalToken = loc(2);
         node->lbracketToken = loc(3);
         node->rbracketToken = loc(5);
         node->isOptional = true;

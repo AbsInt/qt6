@@ -66,6 +66,7 @@ private slots:
     void oss_fuzz_24131();
     void oss_fuzz_24738();
     void oss_fuzz_61586();
+    void oss_fuzz_42532991();
     void imageRendering();
     void illegalAnimateTransform_data();
     void illegalAnimateTransform();
@@ -83,6 +84,7 @@ private slots:
     void testFeMerge();
     void testFeComposite();
     void testFeGaussian();
+    void testUseCycles();
 
 #ifndef QT_NO_COMPRESS
     void testGzLoading();
@@ -1730,6 +1732,12 @@ void tst_QSvgRenderer::oss_fuzz_61586()
     QSvgRenderer().load(QByteArray("<svg><style>*{font-family:q}<linearGradient><stop>"));
 }
 
+void tst_QSvgRenderer::oss_fuzz_42532991()
+{
+    // resulted in stack overflow
+    QSvgRenderer().load(QByteArray("<svg><pattern height=\"3\" width=\"9\" id=\"c\"><path d=\"v4T1-\" stroke=\"url(#c)\"><symbol>"));
+}
+
 QByteArray image_data_url(QImage &image) {
     QByteArray data;
     QBuffer buffer(&data);
@@ -2030,6 +2038,21 @@ void tst_QSvgRenderer::testCycles()
                       "<rect x=\"0\" y=\"0\" width=\"10\" height=\"10\" fill=\"url(#pattern)\"/>"
                       "</pattern>"
                       "</svg>");
+
+    QSvgRenderer renderer(svgDoc);
+    QVERIFY(!renderer.isValid());
+}
+
+void tst_QSvgRenderer::testUseCycles()
+{
+    QByteArray svgDoc(R"(<svg viewBox="0 0 200 200">
+        <g xml:id="group-1">
+          <use xml:id="use-1" xlink:href="#group-2" />
+        </g>
+        <g xml:id="group-2">
+          <use xml:id="use-2" xlink:href="#group-1" />
+        </g>
+    </svg>)");
 
     QSvgRenderer renderer(svgDoc);
     QVERIFY(!renderer.isValid());

@@ -155,12 +155,10 @@ public:
         return (m_factory && m_factory->isValid()) ? m_factory.data() : nullptr;
     }
 
-    void resetFactory(const Factory& newFactory) const
+    void resetFactory(const Factory& newFactory)
     {
-        const bool wasAlreadyLoaded = !factory();
+        m_data.reset();
         *m_factory = newFactory;
-        if (wasAlreadyLoaded)
-            lazyLoad();
     }
 
 private:

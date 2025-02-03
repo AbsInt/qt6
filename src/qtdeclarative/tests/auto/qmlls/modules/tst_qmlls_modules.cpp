@@ -1647,15 +1647,13 @@ static QQmlJS::Dom::DomItem fileObject(const QString &filePath)
     if (!f.open(QIODevice::ReadOnly))
         return file;
     QString code = f.readAll();
-    QQmlJS::Dom::DomCreationOptions options;
-    options.setFlag(QQmlJS::Dom::DomCreationOption::WithScriptExpressions);
-    options.setFlag(QQmlJS::Dom::DomCreationOption::WithSemanticAnalysis);
-    options.setFlag(QQmlJS::Dom::DomCreationOption::WithRecovery);
 
     QStringList dirs = {QLibraryInfo::path(QLibraryInfo::Qml2ImportsPath)};
-    auto envPtr = QQmlJS::Dom::DomEnvironment::create(dirs,
+    auto envPtr = QQmlJS::Dom::DomEnvironment::create(
+            dirs,
             QQmlJS::Dom::DomEnvironment::Option::SingleThreaded
-                    | QQmlJS::Dom::DomEnvironment::Option::NoDependencies, options);
+                    | QQmlJS::Dom::DomEnvironment::Option::NoDependencies,
+            QQmlJS::Dom::Extended);
     envPtr->loadBuiltins();
     envPtr->loadFile(QQmlJS::Dom::FileToLoad::fromMemory(envPtr, filePath, code),
                         [&file](QQmlJS::Dom::Path, const QQmlJS::Dom::DomItem &, const QQmlJS::Dom::DomItem &newIt) {

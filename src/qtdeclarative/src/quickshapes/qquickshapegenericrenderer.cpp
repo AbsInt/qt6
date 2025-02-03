@@ -115,6 +115,9 @@ QQuickShapeGenericRenderer::~QQuickShapeGenericRenderer()
 
 void QQuickShapeGenericRenderer::beginSync(int totalCount, bool *countChanged)
 {
+    for (int i = totalCount; i < m_sp.size(); i++) // Handle removal of paths
+        setFillTextureProvider(i, nullptr); // deref window
+
     if (m_sp.size() != totalCount) {
         m_sp.resize(totalCount);
         m_accDirty |= DirtyList;
@@ -597,6 +600,15 @@ void QQuickShapeGenericRenderer::updateNode()
         prevNode->removeChildNode(*nodePtr);
         delete *nodePtr;
         *nodePtr = nullptr;
+    }
+
+    if (m_sp.isEmpty()) {
+        delete m_rootNode->m_fillNode;
+        m_rootNode->m_fillNode = nullptr;
+        delete m_rootNode->m_strokeNode;
+        m_rootNode->m_strokeNode = nullptr;
+        delete m_rootNode->m_next;
+        m_rootNode->m_next = nullptr;
     }
 
     m_accDirty = 0;

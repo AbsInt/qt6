@@ -1207,6 +1207,7 @@ public:
 // attributes
     ExpressionNode *base;
     ExpressionNode *expression;
+    SourceLocation optionalToken;
     SourceLocation lbracketToken;
     SourceLocation rbracketToken;
     bool isOptional = false;
@@ -1325,6 +1326,7 @@ public:
 // attributes
     ExpressionNode *base;
     ArgumentList *arguments;
+    SourceLocation optionalToken;
     SourceLocation lparenToken;
     SourceLocation rparenToken;
     bool isOptional = false;

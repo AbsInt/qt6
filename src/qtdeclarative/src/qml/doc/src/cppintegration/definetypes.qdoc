@@ -532,8 +532,8 @@ When considering the above example, there are several parties involved:
 
 \list
 \li There is an instance of an anonymous \e {attached object type}, with
-an \c enabled and a \c returnPressed signal, that has been attached to the
-\l Item object to enable it to access and set these attributes.
+an \c enabled property and a \c returnPressed signal, that has been attached to
+the \l Item object to enable it to access and set these attributes.
 \li The \l Item object is the \e {attachee}, to which the instance of the \e
 {attached object type} has been attached.
 \li \l Keys is the \e {attaching type}, which provides the \e {attachee} with a
@@ -604,7 +604,7 @@ terms of the concepts described earlier, the parties involved here are:
 
 \list
 \li An instance of an anonymous \e{attached object type}, which provides a
-    \c published signal and an expired property. This type is implemented by
+    \c published signal and an \c expired property. This type is implemented by
     \c MessageBoardAttachedType below
 \li A \c Message object, which will be the \e attachee
 \li The \c MessageBoard type, which will be the \e {attaching type} that is

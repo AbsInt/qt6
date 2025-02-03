@@ -295,6 +295,7 @@ bool ScriptFormatter::visit(TemplateLiteral *ast)
 bool ScriptFormatter::visit(ArrayMemberExpression *ast)
 {
     accept(ast->base);
+    out(ast->optionalToken);
     out(ast->lbracketToken);
     int indent = lw.increaseIndent(1);
     accept(ast->expression);
@@ -331,6 +332,7 @@ bool ScriptFormatter::visit(NewExpression *ast)
 bool ScriptFormatter::visit(CallExpression *ast)
 {
     accept(ast->base);
+    out(ast->optionalToken);
     out(ast->lparenToken);
     accept(ast->arguments);
     out(ast->rparenToken);

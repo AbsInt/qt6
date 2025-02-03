@@ -376,8 +376,8 @@ public:
 
     QObject *objectProperty2() const { return m_object2; }
     void setObjectProperty2(QObject *obj) { m_object2 = obj; }
-    void classBegin() {};
-    void componentComplete() {};
+    void classBegin() override {};
+    void componentComplete() override {};
 
 signals:
     void valueChanged();

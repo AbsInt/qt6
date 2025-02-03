@@ -15,12 +15,15 @@
 #include <data/weathermoduleurl.h>
 #include <data/withlength.h>
 
-#include <QtQml/private/qqmlengine_p.h>
-#include <QtQml/private/qqmlpropertycachecreator_p.h>
+#include <private/qqmlbind_p.h>
+#include <private/qqmlengine_p.h>
+#include <private/qqmlpropertycachecreator_p.h>
 
-#include <QtTest>
-#include <QtQml>
+#include <QtTest/qsignalspy.h>
+#include <QtTest/qtest.h>
+
 #include <QtGui/qcolor.h>
+#include <QtGui/qfont.h>
 #include <QtGui/qpa/qplatformdialoghelper.h>
 
 #if QT_CONFIG(process)
@@ -3102,9 +3105,19 @@ void tst_QmlCppCodegen::listAsArgument()
 void tst_QmlCppCodegen::listConversion()
 {
     QQmlEngine e;
-    QQmlComponent c(&e, QUrl(u"qrc:/qt/qml/TestTypes/listConversion.qml"_s));
-    QVERIFY2(c.isReady(), qPrintable(c.errorString()));
-    QScopedPointer<QObject> o(c.create());
+    QQmlComponent component(&e, QUrl(u"qrc:/qt/qml/TestTypes/listConversion.qml"_s));
+    QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+
+    QTest::ignoreMessage(
+                QtWarningMsg,
+                QRegularExpression(u"Cannot append QObject\\(0x[0-9a-f]+, name = \"a\"\\) "
+                                   "to a QML list of QQmlBind\\*"_s));
+    QTest::ignoreMessage(
+                QtWarningMsg,
+                QRegularExpression(u"Cannot append QObject\\(0x[0-9a-f]+, name = \"b\"\\) "
+                                   "to a QML list of QQmlBind\\*"_s));
+
+    QScopedPointer<QObject> o(component.create());
     QVERIFY(!o.isNull());
 
     QQmlListProperty<QObject> list = o->property("o").value<QQmlListProperty<QObject>>();
@@ -3125,6 +3138,39 @@ void tst_QmlCppCodegen::listConversion()
         QVariant::fromValue<qsizetype>(3),
         QVariant::fromValue<Person *>(nullptr)
     }));
+
+    QCOMPARE(o->property("numbers").value<QList<int>>(), (QList<int>{1, 2}));
+    auto objects = o->property("objects").value<QQmlListProperty<QObject>>();
+    QCOMPARE(objects.count(&objects), 2);
+
+    const QObject *a = objects.at(&objects, 0);
+    QVERIFY(a);
+    QCOMPARE(a->objectName(), u"a"_s);
+
+    const QObject *b = objects.at(&objects, 1);
+    QVERIFY(b);
+    QCOMPARE(b->objectName(), u"b"_s);
+
+    auto bindings = o->property("bindings").value<QQmlListProperty<QQmlBind>>();
+    QCOMPARE(bindings.count(&bindings), 2);
+
+    const QQmlBind *c = bindings.at(&bindings, 0);
+    QVERIFY(c);
+    QCOMPARE(c->objectName(), u"c"_s);
+
+    const QQmlBind *d = bindings.at(&bindings, 1);
+    QVERIFY(d);
+    QCOMPARE(d->objectName(), u"d"_s);
+
+    auto objectsFromBindings = o->property("objectsFromBindings").value<QQmlListProperty<QObject>>();
+    QCOMPARE(objectsFromBindings.count(&objectsFromBindings), 2);
+    QCOMPARE(objectsFromBindings.at(&objectsFromBindings, 0), c);
+    QCOMPARE(objectsFromBindings.at(&objectsFromBindings, 1), d);
+
+    auto nulls = o->property("nulls").value<QQmlListProperty<QQmlBind>>();
+    QCOMPARE(nulls.count(&nulls), 2);
+    QCOMPARE(nulls.at(&nulls, 0), nullptr);
+    QCOMPARE(nulls.at(&nulls, 1), nullptr);
 }
 
 void tst_QmlCppCodegen::listIndices()

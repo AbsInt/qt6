@@ -14,6 +14,7 @@ qt_internal_add_test(tst_qmlcppcodegen
         tst_qmlcppcodegen.cpp
     LIBRARIES
         Qt::QmlPrivate
+        Qt::QmlMetaPrivate
         Qt::GuiPrivate
         codegen_test_module
         codegen_test_moduleplugin
@@ -30,6 +31,7 @@ qt_internal_add_test(tst_qmlcppcodegen_interpreted
         tst_qmlcppcodegen.cpp
     LIBRARIES
         Qt::QmlPrivate
+        Qt::QmlMetaPrivate
         Qt::GuiPrivate
         codegen_test_module
         codegen_test_moduleplugin
