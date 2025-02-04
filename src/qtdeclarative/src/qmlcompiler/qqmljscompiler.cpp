@@ -681,11 +681,8 @@ std::variant<QQmlJSAotFunction, QQmlJS::DiagnosticMessage> QQmlJSAotCompiler::co
     const QString name = m_document->stringAt(irBinding.propertyNameIndex);
     QQmlJSCompilePass::Function function = initializer.run(
                 context, name, astNode, irBinding, &error);
-    QQmlJSAotFunction aotFunction;
-    if (!error.isValid()) {
-        aotFunction = doCompileAndRecordAotStats(
-                context, &function, &error, name, astNode->firstSourceLocation());
-    }
+    const QQmlJSAotFunction aotFunction = doCompileAndRecordAotStats(
+            context, &function, &error, name, astNode->firstSourceLocation());
 
     if (error.isValid()) {
         // If it's a signal and the function just returns a closure, it's harmless.
@@ -795,7 +792,9 @@ QQmlJSAotFunction QQmlJSAotCompiler::doCompileAndRecordAotStats(
         QQmlJS::DiagnosticMessage *error, const QString &name, QQmlJS::SourceLocation location)
 {
     auto t1 = std::chrono::high_resolution_clock::now();
-    auto &&result = doCompile(context, function, error);
+    QQmlJSAotFunction result;
+    if (!error->isValid())
+        result = doCompile(context, function, error);
     auto t2 = std::chrono::high_resolution_clock::now();
 
     if (QQmlJS::QQmlJSAotCompilerStats::recordAotStats()) {

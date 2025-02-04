@@ -162,10 +162,10 @@ void QmlComponent::writeOut(const DomItem &self, OutWriter &lw) const
         // inline component
         lw.ensureNewline()
                 .writeRegion(ComponentKeywordRegion)
-                .space()
+                .ensureSpace()
                 .writeRegion(IdentifierRegion, name().split(QLatin1Char('.')).last())
                 .writeRegion(ColonTokenRegion)
-                .space();
+                .ensureSpace();
     }
     self.field(Fields::objects).index(0).writeOut(lw);
 }
@@ -348,15 +348,17 @@ void Import::writeOut(const DomItem &self, OutWriter &ow) const
         ++preNewlines;
 
     ow.ensureNewline(preNewlines);
-    ow.writeRegion(ImportTokenRegion).space();
+    ow.writeRegion(ImportTokenRegion).ensureSpace();
     ow.writeRegion(ImportUriRegion, uri.toString());
     if (uri.isModule()) {
         QString vString = version.stringValue();
         if (!vString.isEmpty())
-            ow.space().write(vString);
+            ow.ensureSpace().write(vString);
     }
-    if (!importId.isEmpty())
-        ow.space().writeRegion(AsTokenRegion).space().writeRegion(IdNameRegion, importId);
+    if (!importId.isEmpty()) {
+        ow.ensureSpace().writeRegion(AsTokenRegion).ensureSpace().writeRegion(IdNameRegion,
+                                                                              importId);
+    }
 }
 
 Id::Id(const QString &idName, const Path &referredObject) : name(idName), referredObjectPath(referredObject) { }
@@ -722,8 +724,10 @@ void QmlObject::writeOut(const DomItem &self, OutWriter &ow, const QString &onTa
     if (std::shared_ptr<QmlFile> qmlFilePtr = self.ownerAs<QmlFile>())
         code = qmlFilePtr->code();
     ow.writeRegion(IdentifierRegion, name());
-    if (!onTarget.isEmpty())
-        ow.space().writeRegion(OnTokenRegion).space().writeRegion(OnTargetRegion, onTarget);
+    if (!onTarget.isEmpty()) {
+        ow.ensureSpace().writeRegion(OnTokenRegion).ensureSpace().writeRegion(OnTargetRegion,
+                                                                              onTarget);
+    }
     ow.writeRegion(LeftBraceRegion, u" {");
     int baseIndent = ow.increaseIndent();
     int spacerId = 0;
@@ -734,7 +738,7 @@ void QmlObject::writeOut(const DomItem &self, OutWriter &ow, const QString &onTa
         ow.ensureNewline()
                 .writeRegion(IdTokenRegion)
                 .writeRegion(IdColonTokenRegion)
-                .space()
+                .ensureSpace()
                 .writeRegion(IdNameRegion, idStr());
         if (ow.lineWriter.options().attributesSequence
             == LineWriterOptions::AttributesSequence::Normalize) {
@@ -929,7 +933,8 @@ void QmlObject::writeOut(const DomItem &self, OutWriter &ow, const QString &onTa
             }
             pDef.writeOut(ow);
             if (b) {
-                ow.write(u": ");
+                ow.write(u":");
+                ow.ensureSpace();
                 if (const Binding *bPtr = b.as<Binding>())
                     bPtr->writeOutValue(b, ow);
                 else {
@@ -1036,6 +1041,7 @@ void QmlObject::writeOut(const DomItem &self, OutWriter &ow, const QString &onTa
         }
         ow.removeTextAddCallback(spacerId);
     }
+
     ow.decreaseIndent(1, baseIndent);
     ow.ensureNewline().writeRegion(RightBraceRegion);
 }
@@ -1213,7 +1219,7 @@ void Binding::writeOut(const DomItem &self, OutWriter &lw) const
     lw.ensureNewline();
     if (m_bindingType == BindingType::Normal) {
         lw.writeRegion(IdentifierRegion, name());
-        lw.writeRegion(ColonTokenRegion).space();
+        lw.writeRegion(ColonTokenRegion).ensureSpace();
         writeOutValue(self, lw);
     } else {
         DomItem v = valueItem(self);
@@ -1344,9 +1350,9 @@ Path EnumDecl::addAnnotation(const QmlObject &annotation, QmlObject **aPtr)
 void EnumDecl::writeOut(const DomItem &self, OutWriter &ow) const
 {
     ow.writeRegion(EnumKeywordRegion)
-            .space()
+            .ensureSpace()
             .writeRegion(IdentifierRegion, name())
-            .space()
+            .ensureSpace()
             .writeRegion(LeftBraceRegion);
     int iLevel = ow.increaseIndent(1);
     const auto values = self.field(Fields::values).values();
@@ -1817,14 +1823,14 @@ void PropertyDefinition::writeOut(const DomItem &, OutWriter &lw) const
 {
     lw.ensureNewline();
     if (isDefaultMember)
-        lw.writeRegion(DefaultKeywordRegion).space();
+        lw.writeRegion(DefaultKeywordRegion).ensureSpace();
     if (isRequired)
-        lw.writeRegion(RequiredKeywordRegion).space();
+        lw.writeRegion(RequiredKeywordRegion).ensureSpace();
     if (isReadonly)
-        lw.writeRegion(ReadonlyKeywordRegion).space();
+        lw.writeRegion(ReadonlyKeywordRegion).ensureSpace();
     if (!typeName.isEmpty()) {
-        lw.writeRegion(PropertyKeywordRegion).space();
-        lw.writeRegion(TypeIdentifierRegion, typeName).space();
+        lw.writeRegion(PropertyKeywordRegion).ensureSpace();
+        lw.writeRegion(TypeIdentifierRegion, typeName).ensureSpace();
     }
     lw.writeRegion(IdentifierRegion, name);
 }
@@ -1862,14 +1868,16 @@ QString MethodInfo::preCode(const DomItem &self) const
     MockObject standinObj(self.pathFromOwner());
     DomItem standin = self.copy(&standinObj);
     ow.itemStart(standin);
-    ow.writeRegion(FunctionKeywordRegion).space().writeRegion(IdentifierRegion, name);
+    ow.writeRegion(FunctionKeywordRegion).ensureSpace().writeRegion(IdentifierRegion, name);
     bool first = true;
     ow.writeRegion(LeftParenthesisRegion);
     for (const MethodParameter &mp : parameters) {
-        if (first)
+        if (first) {
             first = false;
-        else
-            ow.write(u", ");
+        } else {
+            ow.write(u",");
+            ow.ensureSpace();
+        }
         ow.write(mp.value->code());
     }
     ow.writeRegion(RightParenthesisRegion);
@@ -1890,7 +1898,7 @@ void MethodInfo::writeOut(const DomItem &self, OutWriter &ow) const
     case MethodType::Signal: {
         if (body)
             qCWarning(domLog) << "signal should not have a body in" << self.canonicalPath();
-        ow.writeRegion(SignalKeywordRegion).space().writeRegion(IdentifierRegion, name);
+        ow.writeRegion(SignalKeywordRegion).ensureSpace().writeRegion(IdentifierRegion, name);
         if (parameters.isEmpty())
             return;
         bool first = true;
@@ -1915,7 +1923,7 @@ void MethodInfo::writeOut(const DomItem &self, OutWriter &ow) const
         return;
     } break;
     case MethodType::Method: {
-        ow.writeRegion(FunctionKeywordRegion).space().writeRegion(IdentifierRegion, name);
+        ow.writeRegion(FunctionKeywordRegion).ensureSpace().writeRegion(IdentifierRegion, name);
         bool first = true;
         ow.writeRegion(LeftParenthesisRegion);
         for (const DomItem &arg : self.field(Fields::parameters).values()) {
@@ -1928,7 +1936,7 @@ void MethodInfo::writeOut(const DomItem &self, OutWriter &ow) const
         ow.writeRegion(RightParenthesisRegion);
         if (!typeName.isEmpty()) {
             ow.writeRegion(ColonTokenRegion);
-            ow.space();
+            ow.ensureSpace();
             ow.writeRegion(TypeIdentifierRegion, typeName);
         }
         ow.ensureSpace().writeRegion(LeftBraceRegion);
@@ -1974,9 +1982,9 @@ void MethodParameter::writeOut(const DomItem &self, OutWriter &ow) const
             ow.writeRegion(EllipsisTokenRegion);
         ow.writeRegion(IdentifierRegion, name);
         if (!typeName.isEmpty())
-            ow.writeRegion(ColonTokenRegion).space().writeRegion(TypeIdentifierRegion, typeName);
+            ow.writeRegion(ColonTokenRegion).ensureSpace().writeRegion(TypeIdentifierRegion, typeName);
         if (defaultValue) {
-            ow.space().writeRegion(EqualTokenRegion).space();
+            ow.ensureSpace().writeRegion(EqualTokenRegion).ensureSpace();
             self.subOwnerItem(PathEls::Field(Fields::defaultValue), defaultValue).writeOut(ow);
         }
     } else {
@@ -1990,7 +1998,7 @@ void MethodParameter::writeOutSignal(const DomItem &self, OutWriter &ow) const
 {
     self.writeOutPre(ow);
     if (!typeName.isEmpty())
-        ow.writeRegion(TypeIdentifierRegion, typeName).space();
+        ow.writeRegion(TypeIdentifierRegion, typeName).ensureSpace();
     ow.writeRegion(IdentifierRegion, name);
     self.writeOutPost(ow);
 }
@@ -1998,18 +2006,18 @@ void MethodParameter::writeOutSignal(const DomItem &self, OutWriter &ow) const
 void Pragma::writeOut(const DomItem &, OutWriter &ow) const
 {
     ow.ensureNewline();
-    ow.writeRegion(PragmaKeywordRegion).space().writeRegion(IdentifierRegion, name);
+    ow.writeRegion(PragmaKeywordRegion).ensureSpace().writeRegion(IdentifierRegion, name);
 
     bool isFirst = true;
     for (const auto &value : values) {
         if (isFirst) {
             isFirst = false;
-            ow.writeRegion(ColonTokenRegion).space();
+            ow.writeRegion(ColonTokenRegion).ensureSpace();
             ow.writeRegion(PragmaValuesRegion, value);
             continue;
         }
 
-        ow.writeRegion(CommaTokenRegion).space();
+        ow.writeRegion(CommaTokenRegion).ensureSpace();
         ow.writeRegion(PragmaValuesRegion, value);
     }
     ow.ensureNewline();
@@ -2033,7 +2041,7 @@ void EnumItem::writeOut(const DomItem &self, OutWriter &ow) const
         QString v = QString::number(value(), 'f', 0);
         if (abs(value() - v.toDouble()) > 1.e-10)
             v = QString::number(value());
-        ow.space().writeRegion(EqualTokenRegion).space().writeRegion(EnumValueRegion, v);
+        ow.ensureSpace().writeRegion(EqualTokenRegion).ensureSpace().writeRegion(EnumValueRegion, v);
     }
     if (myIndex >= 0 && self.container().indexes() != myIndex + 1)
         ow.writeRegion(CommaTokenRegion);

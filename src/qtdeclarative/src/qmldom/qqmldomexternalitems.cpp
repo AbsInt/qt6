@@ -373,7 +373,7 @@ void JsFile::addModuleImport(const QString &uri, const QString &version, const Q
 
 void JsFile::LegacyPragmaLibrary::writeOut(OutWriter &lw) const
 {
-    lw.write(u".pragma").space().write(u"library").ensureNewline();
+    lw.write(u".pragma").ensureSpace().write(u"library").ensureNewline();
 }
 
 void JsFile::LegacyImport::writeOut(OutWriter &lw) const
@@ -381,16 +381,16 @@ void JsFile::LegacyImport::writeOut(OutWriter &lw) const
     // either filename or module uri must be present
     Q_ASSERT(!fileName.isEmpty() || !uri.isEmpty());
 
-    lw.write(u".import").space();
+    lw.write(u".import").ensureSpace();
     if (!uri.isEmpty()) {
-        lw.write(uri).space();
+        lw.write(uri).ensureSpace();
         if (!version.isEmpty()) {
-            lw.write(version).space();
+            lw.write(version).ensureSpace();
         }
     } else {
-        lw.write(u"\"").write(fileName).write(u"\"").space();
+        lw.write(u"\"").write(fileName).write(u"\"").ensureSpace();
     }
-    lw.writeRegion(AsTokenRegion).space().write(asIdentifier);
+    lw.writeRegion(AsTokenRegion).ensureSpace().write(asIdentifier);
 
     lw.ensureNewline();
 }
